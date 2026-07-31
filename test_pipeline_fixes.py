@@ -1699,9 +1699,15 @@ check("메모리 초과 유발 패키지(torch·easyocr) 여전히 제외",
 check("apt 로 Tesseract 엔진·한국어 데이터 배포",
       "tesseract-ocr" in _pkg43 and "tesseract-ocr-kor" in _pkg43)
 check("한글 폰트 패키지 유지", "fonts-nanum" in _pkg43)
-check("엔진 선택은 pytesseract 우선 → easyocr 대체",
-      _insp.getsource(pf.ocr_backend).index("pytesseract")
-      < _insp.getsource(pf.ocr_backend).index("easyocr"))
+# 엔진 우선순위: 정확한 easyocr 먼저, 없으면(클라우드) Tesseract.
+# 예전엔 pytesseract 우선이라, 로컬에 Tesseract 가 깔린 사용자는 easyocr 을
+# 설치하고도 부정확한 엔진으로 인식되고 있었다.
+check("엔진 선택은 easyocr 우선 → pytesseract 대체",
+      _insp.getsource(pf.ocr_backend).index("easyocr")
+      < _insp.getsource(pf.ocr_backend).index("pytesseract"))
+check("Tesseract 도 낱말 좌표(image_to_data)로 열을 복원",
+      "image_to_data" in open(_os.path.join(PROJ, "portfolio.py"),
+                              encoding='utf-8').read())
 
 
 section("44. HTS 잔고 화면 인식률 — 열 분해 · 코드 복원 · 오독 차단")
@@ -1788,6 +1794,38 @@ _txt44c = ("종목명\t종목번호\t평가손익\t잔고\t매수평균\t현재�
 _rows44c, _warn44c = pf.parse_table_with_header(_txt44c, resolve_name=None)
 check("애매하면 수량을 채우지 않고 건너뜀",
       len(_rows44c) == 0 and any('건너뜀' in w for w in _warn44c))
+
+# ⑩ 수량 역산의 기준은 손익분기 (HTS 평가손익 = (현재가−손익분기)×수량)
+#    평단가로 나누면 수수료만큼 어긋난 그럴듯한 오답이 나온다 (33주 → 91주 실사례).
+check("손익분기 → breakeven 검증 열로 매핑",
+      pf.classify_header_cells(['종목명', '손익분기', '잔고', '매수평균']).get('breakeven') == 1)
+check("손익분기는 여전히 평단가(price)로는 못 잡음",
+      pf.classify_header_cells(['종목명', '손익분기', '잔고']).get('price') is None)
+_txt44d = ("종목명\t종목번호\t평가손익\t잔고\t손익분기\t매수평균\t현재가\n"
+           "금호건설\t002990\t-462,205\t\t10,265\t10,246\t9,110\n")
+_rows44d, _warn44d = pf.parse_table_with_header(_txt44d, resolve_name=None)
+check("역산 기준 = 손익분기 (400주 정답, 평단 기준이면 407주 오답)",
+      len(_rows44d) == 1 and int(_rows44d[0]['보유수량']) == 400, str(_rows44d))
+check("역산 기준을 문구로 표기", any('손익분기로 역산' in w for w in _warn44d))
+_txt44e = ("종목명\t종목번호\t평가손익\t잔고\t손익분기\t매수평균\t현재가\n"
+           "영원무역\t111770\t-9,379\t\t87,873\t87,703\t87,600\n")
+_rows44e, _warn44e = pf.parse_table_with_header(_txt44e, resolve_name=None)
+check("검증에 어긋난 역산은 채우지 않음 (91주 오답 방지)",
+      len(_rows44e) == 0 and any('건너뜀' in w for w in _warn44e), str(_rows44e))
+
+# ⑪ Tesseract 음절 병합 — '금 호 건설' 을 한 낱말로, 열 간격은 유지
+_mb44 = pf._merge_line_boxes([
+    {'x': 10, 'x1': 22, 'w': 12, 'xc': 16, 'yc': 5, 'h': 12, 'text': '금'},
+    {'x': 24, 'x1': 36, 'w': 12, 'xc': 30, 'yc': 5, 'h': 12, 'text': '호'},
+    {'x': 38, 'x1': 52, 'w': 14, 'xc': 45, 'yc': 5, 'h': 12, 'text': '건설'},
+    {'x': 120, 'x1': 170, 'w': 50, 'xc': 145, 'yc': 5, 'h': 12, 'text': 'A002990'},
+], 12)
+check("음절 병합 — 붙은 한글은 한 낱말", _mb44[0]['text'] == '금호건설',
+      str([b['text'] for b in _mb44]))
+check("음절 병합 — 열 간격은 유지 (2덩어리)", len(_mb44) == 2)
+check("병합은 Tesseract 전용 (easyocr 은 구절 박스라 켜면 옆 열을 삼킴)",
+      "merge_syllables=True" in open(_os.path.join(PROJ, "portfolio.py"),
+                                     encoding='utf-8').read())
 
 
 section("45. 시장·글로벌·뉴스 컨텍스트 · 판정 성적표")

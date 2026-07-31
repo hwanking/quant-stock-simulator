@@ -157,17 +157,23 @@ def parse_clipboard_table(text):
 # 로컬 OCR 엔진이 있을 때만 동작한다. 엔진이 없으면 지어내지 않고 사유를 돌려준다.
 # ─────────────────────────────────────────────────────────────────────────────
 def ocr_backend():
-    """사용 가능한 OCR 백엔드 이름 또는 None."""
+    """
+    사용 가능한 OCR 백엔드 이름 또는 None.
+
+    easyocr 을 먼저 찾는다 — 한글 인식 정확도가 Tesseract 보다 확실히 높다.
+    (클라우드에는 torch 를 못 올려 easyocr 이 없으므로 자연히 pytesseract 로 간다.
+     둘 다 있는 로컬에서는 정확한 쪽을 써야 한다.)
+    """
+    try:
+        import easyocr  # noqa: F401
+        return "easyocr"
+    except Exception:
+        pass
     try:
         import pytesseract
         import shutil as _sh
         if _sh.which("tesseract") or getattr(pytesseract.pytesseract, "tesseract_cmd", None):
             return "pytesseract"
-    except Exception:
-        pass
-    try:
-        import easyocr  # noqa: F401
-        return "easyocr"
     except Exception:
         pass
     return None
@@ -247,96 +253,193 @@ def extract_text_from_image(image_bytes, langs=("ko", "en")):
 
     try:
         if backend == "pytesseract":
-            import pytesseract
-            text = pytesseract.image_to_string(img, lang="kor+eng")
-            return text, backend, None
-
-        global _EASYOCR_READER
-        import easyocr
-        import numpy as _np
-        if _EASYOCR_READER is None:
-            _EASYOCR_READER = easyocr.Reader(list(langs), gpu=False, verbose=False)
-        results = _EASYOCR_READER.readtext(_np.array(img), detail=1, paragraph=False)
-        # 신뢰도 하한은 낮게 잡는다. 어차피 확정 전에 미리보기 표에서 사람이 검수하므로,
-        # 글자를 흘리는 쪽이 잘못 읽는 쪽보다 손해가 크다(종목명이 통째로 사라진다).
-        boxes = []
-        for box, txt, conf in results:
-            if conf < 0.20 or not str(txt).strip():
-                continue
-            ys = [p[1] for p in box]
-            xs = [p[0] for p in box]
-            boxes.append({
-                'yc': sum(ys) / len(ys),
-                'h': max(ys) - min(ys),
-                'x': min(xs),
-                'x1': max(xs),
-                'w': max(xs) - min(xs),
-                'xc': sum(xs) / len(xs),
-                'text': str(txt).strip(),
-            })
+            boxes = _boxes_from_tesseract(img)
+            if boxes is None:
+                # 좌표 추출이 안 되는 옛 버전 — 통짜 텍스트라도 돌려준다
+                import pytesseract
+                text = pytesseract.image_to_string(img, lang="kor+eng")
+                return text, backend, None
+            if not boxes:
+                return "", backend, None
+            # Tesseract 는 한글을 음절 단위로 쪼개므로 낱말 병합이 필요하다.
+            # easyocr 은 구절 단위 박스라 병합하면 오히려 옆 열과 붙는다.
+            return _layout_boxes_to_text(boxes, merge_syllables=True), backend, None
+        boxes = _boxes_from_easyocr(img, langs)
         if not boxes:
             return "", backend, None
-
-        # 줄 묶기: 고정 격자로 나누면 경계값에서 같은 줄이 둘로 쪼개진다
-        # (예: 중심 104.9 와 105.1 이 서로 다른 칸으로 감). 글자 높이에 비례한
-        # 허용오차로 순차 군집화한다.
-        boxes.sort(key=lambda b: b['yc'])
-        med_h = sorted(b['h'] for b in boxes)[len(boxes) // 2]
-        tol = max(6.0, med_h * 0.6)
-        lines, cur, ref = [], [boxes[0]], boxes[0]['yc']
-        for b in boxes[1:]:
-            if abs(b['yc'] - ref) <= tol:
-                cur.append(b)
-                ref = sum(c['yc'] for c in cur) / len(cur)   # 줄 중심을 갱신
-            else:
-                lines.append(cur)
-                cur, ref = [b], b['yc']
-        lines.append(cur)
-
-        # HTS 잔고 화면처럼 헤더가 있는 표는 열 위치를 살려야 한다. 토큰을 그냥
-        # 왼쪽부터 이어붙이면 '잔고 400 / 가능 200 / 손익분기 10,267 / … / 매수평균
-        # 10,246' 같은 줄에서 몇 번째 숫자가 평단가인지 알 방법이 없다.
-        #
-        # ⚠️ 열을 '헤더 칸'에만 맞추면 안 된다. 헤더는 글자가 작아 OCR 이 한 칸을
-        #    통째로 흘리는 일이 잦은데(예: '수익률' 누락), 그러면 그 열의 값이 옆 열로
-        #    빨려 들어가 이후 열이 전부 한 칸씩 밀린다 — 수량 자리에 수익률이 들어온다.
-        #    그래서 열은 **데이터 토큰의 x 구간**으로 직접 묶고, 헤더 이름은 그렇게 만든
-        #    열에 나중에 얹는다. 헤더가 없는 열은 이름만 비어 있을 뿐 자리는 지킨다.
-        hdr_i, hdr_cols = _detect_header_line(lines)
-        data_lines = [ln for i, ln in enumerate(lines) if i != hdr_i]
-        columns = _cluster_columns(data_lines)
-        if columns and len(columns) >= 3:
-            names = _label_columns(columns, hdr_cols)
-            out = ["\t".join(names)]
-            for ln in data_lines:
-                cells = [[] for _ in columns]
-                for b in sorted(ln, key=lambda b: b['x']):
-                    cells[_nearest_column(b, columns)].append(b['text'])
-                row = "\t".join(" ".join(c) for c in cells)
-                if row.strip():
-                    out.append(row)
-            return "\n".join(out), backend, None
-
-        if hdr_cols:
-            out = ["\t".join(c['text'] for c in hdr_cols)]
-            for i, ln in enumerate(lines):
-                if i == hdr_i:
-                    continue
-                cells = [[] for _ in hdr_cols]
-                for b in sorted(ln, key=lambda b: b['x']):
-                    j = min(range(len(hdr_cols)),
-                            key=lambda k: abs(b['xc'] - hdr_cols[k]['xc']))
-                    cells[j].append(b['text'])
-                out.append("\t".join(" ".join(c) for c in cells))
-            return "\n".join(out), backend, None
-
-        out = []
-        for ln in lines:
-            parts = [b['text'] for b in sorted(ln, key=lambda b: b['x'])]
-            out.append("  ".join(parts))            # 2칸 공백 = 열 구분자
-        return "\n".join(out), backend, None
+        return _layout_boxes_to_text(boxes), backend, None
     except Exception as exc:
         return None, backend, f"{type(exc).__name__}: {exc}"
+
+
+def _boxes_from_easyocr(img, langs=("ko", "en")):
+    """easyocr → 표준 박스 목록. 신뢰도 하한은 낮게 잡는다 — 어차피 미리보기에서
+    사람이 검수하므로, 글자를 흘리는 쪽이 잘못 읽는 쪽보다 손해가 크다."""
+    global _EASYOCR_READER
+    import easyocr
+    import numpy as _np
+    if _EASYOCR_READER is None:
+        _EASYOCR_READER = easyocr.Reader(list(langs), gpu=False, verbose=False)
+    results = _EASYOCR_READER.readtext(_np.array(img), detail=1, paragraph=False)
+    boxes = []
+    for box, txt, conf in results:
+        if conf < 0.20 or not str(txt).strip():
+            continue
+        ys = [p[1] for p in box]
+        xs = [p[0] for p in box]
+        boxes.append({
+            'yc': sum(ys) / len(ys),
+            'h': max(ys) - min(ys),
+            'x': min(xs),
+            'x1': max(xs),
+            'w': max(xs) - min(xs),
+            'xc': sum(xs) / len(xs),
+            'text': str(txt).strip(),
+        })
+    return boxes
+
+
+def _boxes_from_tesseract(img):
+    """
+    Tesseract → 표준 박스 목록 (낱말 단위 좌표 포함). 실패 시 None.
+
+    ⚠️ image_to_string(통짜 텍스트)을 쓰면 낱말의 x 좌표가 사라져 열을 복원할 수
+       없다 — 클라우드에서 10종목 중 3종목만 인식되던 원인이 바로 이것이다.
+       image_to_data 는 낱말마다 (left, top, width, height, conf) 를 주므로
+       easyocr 과 같은 열 분해 파이프라인을 그대로 태울 수 있다.
+    """
+    try:
+        import pytesseract
+        from pytesseract import Output
+        data = pytesseract.image_to_data(img, lang="kor+eng", output_type=Output.DICT)
+    except Exception:
+        return None
+    boxes = []
+    n = len(data.get('text') or [])
+    for i in range(n):
+        txt = str(data['text'][i]).strip()
+        if not txt:
+            continue
+        try:
+            conf = float(data['conf'][i])
+        except (TypeError, ValueError):
+            conf = -1.0
+        # Tesseract 신뢰도는 0~100. 하한을 너무 올리면 흐린 숫자가 통째로 사라진다.
+        if conf < 20:
+            continue
+        try:
+            x0 = float(data['left'][i]); y0 = float(data['top'][i])
+            w = float(data['width'][i]); h = float(data['height'][i])
+        except (TypeError, ValueError, KeyError):
+            continue
+        boxes.append({
+            'yc': y0 + h / 2.0, 'h': h,
+            'x': x0, 'x1': x0 + w, 'w': w, 'xc': x0 + w / 2.0,
+            'text': txt,
+        })
+    return boxes
+
+
+def _is_hangul(ch):
+    return '가' <= ch <= '힣'
+
+
+def _merge_line_boxes(line, med_h):
+    """
+    한 줄 안에서 바짝 붙은 박스를 한 덩어리로 합친다.
+
+    Tesseract 는 한글 낱말을 음절 단위로 쪼갠다('금 호' '건설' → 열이 넷).
+    글자 간격 수준의 틈은 같은 낱말로 보고 붙인다 — 열 사이 간격은 이보다
+    훨씬 넓어 컬럼 구분은 유지된다. 한글끼리는 붙이고 그 외에는 공백으로 잇는다.
+    """
+    line = sorted(line, key=lambda b: b['x'])
+    tol = max(4.0, med_h * 0.55)
+    out = [dict(line[0])]
+    for b in line[1:]:
+        prev = out[-1]
+        gap = b['x'] - prev['x1']
+        if gap <= tol:
+            joiner = '' if (prev['text'] and b['text']
+                            and _is_hangul(prev['text'][-1])
+                            and _is_hangul(b['text'][0])) else ' '
+            prev['text'] = (prev['text'] + joiner + b['text']).strip()
+            prev['x1'] = max(prev['x1'], b['x1'])
+            prev['w'] = prev['x1'] - prev['x']
+            prev['xc'] = (prev['x'] + prev['x1']) / 2.0
+            prev['h'] = max(prev['h'], b['h'])
+        else:
+            out.append(dict(b))
+    return out
+
+
+def _layout_boxes_to_text(boxes, merge_syllables=False):
+    """
+    좌표 박스 목록 → 표 형태 텍스트. easyocr·Tesseract 공용 파이프라인.
+
+    줄 묶기: 고정 격자로 나누면 경계값에서 같은 줄이 둘로 쪼개진다
+    (예: 중심 104.9 와 105.1 이 서로 다른 칸으로 감). 글자 높이에 비례한
+    허용오차로 순차 군집화한다.
+
+    merge_syllables: Tesseract 전용. 음절 단위로 쪼개진 낱말을 다시 붙인다.
+    easyocr 에 켜면 구절 박스끼리 붙어 옆 열을 삼키므로 꺼 둔다.
+    """
+    boxes = sorted(boxes, key=lambda b: b['yc'])
+    med_h = sorted(b['h'] for b in boxes)[len(boxes) // 2]
+    tol = max(6.0, med_h * 0.6)
+    lines, cur, ref = [], [boxes[0]], boxes[0]['yc']
+    for b in boxes[1:]:
+        if abs(b['yc'] - ref) <= tol:
+            cur.append(b)
+            ref = sum(c['yc'] for c in cur) / len(cur)   # 줄 중심을 갱신
+        else:
+            lines.append(cur)
+            cur, ref = [b], b['yc']
+    lines.append(cur)
+    if merge_syllables:
+        lines = [_merge_line_boxes(ln, med_h) for ln in lines]
+
+    # HTS 잔고 화면처럼 헤더가 있는 표는 열 위치를 살려야 한다. 토큰을 그냥
+    # 왼쪽부터 이어붙이면 '잔고 400 / 가능 200 / 손익분기 10,267 / … / 매수평균
+    # 10,246' 같은 줄에서 몇 번째 숫자가 평단가인지 알 방법이 없다.
+    #
+    # ⚠️ 열을 '헤더 칸'에만 맞추면 안 된다. 헤더는 글자가 작아 OCR 이 한 칸을
+    #    통째로 흘리는 일이 잦은데(예: '수익률' 누락), 그러면 그 열의 값이 옆 열로
+    #    빨려 들어가 이후 열이 전부 한 칸씩 밀린다 — 수량 자리에 수익률이 들어온다.
+    #    그래서 열은 **데이터 토큰의 x 구간**으로 직접 묶고, 헤더 이름은 그렇게 만든
+    #    열에 나중에 얹는다. 헤더가 없는 열은 이름만 비어 있을 뿐 자리는 지킨다.
+    hdr_i, hdr_cols = _detect_header_line(lines)
+    data_lines = [ln for i, ln in enumerate(lines) if i != hdr_i]
+    columns = _cluster_columns(data_lines)
+    if columns and len(columns) >= 3:
+        names = _label_columns(columns, hdr_cols)
+        out = ["\t".join(names)]
+        for ln in data_lines:
+            cells = [[] for _ in columns]
+            for b in sorted(ln, key=lambda b: b['x']):
+                cells[_nearest_column(b, columns)].append(b['text'])
+            row = "\t".join(" ".join(c) for c in cells)
+            if row.strip():
+                out.append(row)
+        return "\n".join(out)
+
+    if hdr_cols:
+        out = ["\t".join(c['text'] for c in hdr_cols)]
+        for i, ln in enumerate(lines):
+            if i == hdr_i:
+                continue
+            cells = [[] for _ in hdr_cols]
+            for b in sorted(ln, key=lambda b: b['x']):
+                j = min(range(len(hdr_cols)),
+                        key=lambda k: abs(b['xc'] - hdr_cols[k]['xc']))
+                cells[j].append(b['text'])
+            out.append("\t".join(" ".join(c) for c in cells))
+        return "\n".join(out)
+
+    out = []
+    for ln in lines:
+        parts = [b['text'] for b in sorted(ln, key=lambda b: b['x'])]
+        out.append("  ".join(parts))            # 2칸 공백 = 열 구분자
+    return "\n".join(out)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -366,6 +469,10 @@ COLUMN_SYNONYMS = {
     'pnl':           ('평가손익', '평가손실', '손익금액', '평가손익금액'),
     'market_value':  ('평가금액', '평가금'),
     'cost_basis':    ('매입금액', '매수금액', '매입금', '취득금액'),
+    # 손익분기 = 수수료·세금 포함 본전가. 평단가로 잡으면 절대 안 되지만(배제어),
+    # HTS 의 평가손익은 (현재가−손익분기)×수량 이라 **수량 역산의 기준**으로는
+    # 이 열이 정본이다. 검증 전용으로만 읽는다.
+    'breakeven':     ('손익분기',),
 }
 
 #: 저장하지 않고 검증에만 쓰는 필드
@@ -417,7 +524,9 @@ def classify_header_cells(cells):
         is_core = field in ('code', 'name', 'quantity', 'price')
         for cand in cands:                       # 앞쪽 후보가 우선
             for i, n in enumerate(norm):
-                if i in blocked or i in mapping.values() or not n:
+                # breakeven 은 배제어('손익분기') 그 자체가 목표 열이다
+                if (i in blocked and field != 'breakeven') \
+                        or i in mapping.values() or not n:
                     continue
                 if is_core and any(x in n for x in COLUMN_EXCLUDE_FOR_CORE):
                     continue
@@ -1021,21 +1130,27 @@ def parse_table_with_header(text, resolve_name=None):
         if any(k in _norm_header(name) for k in ('합계', '소계', '총계', '평가합계')):
             continue
         # 한 자리 수량('6')처럼 짧은 토큰은 OCR 이 통째로 놓치는 일이 흔하다.
-        # 화면에는 같은 사실이 여러 열로 중복돼 있으므로 되살릴 수 있다:
-        #     평가손익 = (현재가 − 평단가) × 수량
+        # 화면에는 같은 사실이 여러 열로 중복돼 있으므로 되살릴 수 있다.
+        # ⚠️ 기준가는 손익분기(수수료·세금 포함 본전가)가 정본이다 — 실측해 보면
+        #    HTS 평가손익 = (현재가 − 손익분기) × 수량 이고, 평단가로 나누면
+        #    수수료만큼 어긋난 그럴듯한 오답이 나온다 (33주가 91주로 나온 사례).
+        #    손익분기 열이 화면에 있으면 그것만 쓰고, 어긋나면 채우지 않는다.
         # 지어내는 것이 아니라 **화면에 있는 다른 숫자에서 역산**하는 것이며,
         # 정수로 딱 떨어질 때만 채우고 확인이 필요하다고 반드시 알린다.
         if qty is None and price:
             _pnl = _signed_number(cell('pnl'))
             _cur = _cell_number(cell('current_price'))
-            if _pnl is not None and _cur and abs(_cur - price) > 1e-9:
-                _q = _pnl / (_cur - price)
+            _bev = _cell_number(cell('breakeven'))
+            _basis = _bev if _bev is not None else price
+            _basis_name = "손익분기" if _bev is not None else "평단가"
+            if _pnl is not None and _cur and _basis and abs(_cur - _basis) > 1e-9:
+                _q = _pnl / (_cur - _basis)
                 _qi = round(_q)
-                if _qi >= 1 and abs(_q - _qi) <= max(0.05, _qi * 0.02):
+                if _qi >= 1 and abs(_q - _qi) <= max(0.1, _qi * 0.01):
                     qty = float(_qi)
                     warnings.append(
                         f"'{(name or code)[:20]}' 수량을 읽지 못해 화면의 평가손익·현재가·"
-                        f"평단가로 역산했습니다 → {_qi}주 (확인 필요)")
+                        f"{_basis_name}로 역산했습니다 → {_qi}주 (확인 필요)")
 
         if qty is None or price is None:
             warnings.append(f"건너뜀 (수량·평단가를 읽지 못함): {(name or code)[:20]}")
