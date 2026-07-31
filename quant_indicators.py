@@ -2189,7 +2189,49 @@ class QuantIndicatorsEngine:
         # 원시 적정가 산출
         raw_target_val = weighted_median * 0.98
         raw_upside_pct = (raw_target_val / (curr_price + 1e-8) - 1.0) * 100.0
-        
+
+        # ── 모델 적용 범위(Out-of-Domain) 게이트 ─────────────────────────
+        # 멀티플·잔여이익 모델은 이익·자산이 가격의 주요 설명변수일 때만 성립한다
+        # (Damodaran, 고성장·스토리 기업 가치평가; SR 11-7 은 모델을 설계 범위 밖에서
+        # 쓰는 것 자체를 모델 리스크로 본다). 모델 적정가가 시장가격과 ±70% 넘게
+        # 벌어지면, 그것은 '저평가/고평가' 가 아니라 **모델이 이 종목의 가격을
+        # 설명하지 못한다**는 뜻이다 — 가격의 대부분이 미래 성장 기대인 종목에서
+        # 현재 이익·장부가로 만든 적정가는 숫자만 그럴듯한 오답이 된다
+        # (실사례: 레인보우로보틱스 현재가 433,000원에 적정가 10,501원, PER 6,766배).
+        # 이때는 수축·보정할 것이 아니라 '산출 불가'를 말하는 것이 맞다.
+        _ood_gap = float(self.FV_CONF.get('out_of_domain_gap_pct', 70.0))
+        if abs(raw_upside_pct) > _ood_gap:
+            _ood_ctx = []
+            try:
+                if per and float(per) > 100:
+                    _ood_ctx.append(f"PER {float(per):,.0f}배")
+                if pbr and float(pbr) > 10:
+                    _ood_ctx.append(f"PBR {float(pbr):,.1f}배")
+            except (TypeError, ValueError):
+                pass
+            _ood_note = (
+                f"산출 불가 — 멀티플 모델 적용 범위 밖. 모델 적정가가 시장가격과 "
+                f"{raw_upside_pct:+.0f}% 괴리"
+                + (f" ({', '.join(_ood_ctx)} — 이익·자산이 아니라 성장 기대가 "
+                   f"가격을 지배)" if _ood_ctx else "")
+                + ". 이 구간에서는 현재 이익·장부가 기반 적정가가 성립하지 않아 "
+                  "숫자를 제시하지 않습니다.")
+            return {
+                'target_fundamental': curr_price, 'base_fair_value': curr_price,
+                'displayed_fair_value': None,
+                'preliminary_range_str': "미산출 (모델 적용 범위 밖)",
+                'recommended_buy_price': None, 'margin_of_safety_pct': 15.0,
+                'market_adjustment_pct': 0.0, 'upside_pct': None,
+                'raw_upside_pct': float(raw_upside_pct),
+                'upside_eval': "모델 적용 범위 밖 — 가치판단 보류",
+                'fair_value_confidence': 0.0, 'enterprise_class': ent_class,
+                'fair_value_status_note': _ood_note,
+                'type_probabilities': type_probs,
+                'model_results': model_results,
+                'fair_value_status': "OUT_OF_DOMAIN",
+                'roe': float(roe), 'per': float(per), 'pbr': float(pbr),
+            }
+
         # 극단적 모델 편차/이상치 윈저화(Winsorization) 수축 방정식
         if raw_upside_pct > 45.0:
             # 45% 초과 극단 저평가 수치는 현실적 12개월 펀더멘털 상한(+25%~+48%)으로 로그 수축

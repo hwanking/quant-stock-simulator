@@ -150,6 +150,11 @@ min_signal_consensus = 55
 normal_display_min = 75
 caution_min = 60
 reference_only_min = 45
+# 모델 적정가가 시장가격과 이 비율(%) 넘게 벌어지면 '저평가/고평가'가 아니라
+# 모델이 이 종목의 가격을 설명하지 못하는 것이다(적용 범위 밖) — 숫자를 제시하지 않는다.
+# 근거: Damodaran(고성장·스토리 기업은 이익·자산 멀티플이 성립하지 않음),
+#       SR 11-7(모델을 설계 범위 밖에서 쓰는 것 자체가 모델 리스크).
+out_of_domain_gap_pct = 70
 
 # 유효표본 구간 (명세 §11)
 [RULES_SAMPLE_TIERS]

@@ -2148,7 +2148,13 @@ _vscore = verdict['score']
 
 # 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만; 상세 카드에서는 중복 표기하지 않음)
 rec_buy_val = four_scores.get('recommended_buy_price')
-rec_buy_display = f"{rec_buy_val:,.0f}원 이하" if rec_buy_val is not None else "신뢰도 미달"
+if rec_buy_val is not None:
+    rec_buy_display = f"{rec_buy_val:,.0f}원 이하"
+elif four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN':
+    # 성장 기대가 가격을 지배하는 종목 — 신뢰도 문제가 아니라 모델이 성립하지 않는다
+    rec_buy_display = "산출 불가 (모델 범위 밖)"
+else:
+    rec_buy_display = "신뢰도 미달"
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 

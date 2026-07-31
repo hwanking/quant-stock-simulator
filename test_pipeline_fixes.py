@@ -2365,6 +2365,68 @@ check("시점 신호임을 명시(가격 기준과 구분)", "시점</b> 신호�
 check("신호 없을 때 하한선 숨김 처리", "_dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING')" in _w51)
 
 
+section("52. 적정가 케이스 스터디 — 모델 적용 범위 게이트 · 권장매수가 정합")
+
+# ⚠️ 실사례: 레인보우로보틱스 현재가 433,000원에 '시장조정 펀더멘털 적정가
+#    10,501원'(-98%) 이 표시됐다. PER 6,766배·PBR 63배 성장주는 이익·자산이
+#    가격을 설명하지 않는 멀티플 모델 적용 범위 밖이다(Damodaran; SR 11-7).
+#    이 구간에서는 수축·보정이 아니라 '산출 불가'를 말해야 한다.
+
+check("범위 밖 임계값이 규칙집에 존재",
+      float(qi.QuantIndicatorsEngine.FV_CONF.get('out_of_domain_gap_pct', 0)) == 70.0)
+
+_CASES52 = [("005930.KS", "삼성전자"), ("069500.KS", "KODEX200(ETF)"),
+            ("277810.KS", "레인보우로보틱스"), ("003490.KS", "대한항공")]
+_snaps52 = {}
+for _sym52, _nm52 in _CASES52:
+    _snaps52[_sym52] = q.run_full_pipeline(_sym52, T_REF, b_engine=engine,
+                                           rho_cutoff=0.80)
+
+# ① 고성장 스토리주 — 범위 밖 선언, 숫자 미제시
+_fs_rb = _snaps52["277810.KS"]['four_scores']
+check("레인보우: OUT_OF_DOMAIN 선언",
+      _fs_rb.get('fair_value_status') == 'OUT_OF_DOMAIN')
+check("레인보우: 적정가 숫자를 제시하지 않음",
+      _fs_rb.get('displayed_fair_value') is None)
+check("레인보우: 권장매수가도 없음", _fs_rb.get('recommended_buy_price') is None)
+check("레인보우: 괴리율도 없음", _fs_rb.get('upside_pct') is None)
+_note_rb = str(_snaps52["277810.KS"]['val_eval'].get('fair_value_status_note'))
+check("레인보우: 사유에 근거(성장 기대 지배) 명시",
+      "성장 기대" in _note_rb and "적용 범위 밖" in _note_rb, _note_rb[:80])
+
+# ② 멀티플이 유효한 종목들 — 정상 산출 + 불변식
+for _sym52, _nm52 in [("005930.KS", "삼성전자"), ("003490.KS", "대한항공")]:
+    _fs52 = _snaps52[_sym52]['four_scores']
+    _px52 = _snaps52[_sym52]['rt_price']
+    _dfv52, _rec52 = _fs52.get('displayed_fair_value'), _fs52.get('recommended_buy_price')
+    _up52 = _fs52.get('upside_pct')
+    check(f"{_nm52}: 적정가 정상 산출 (CALIBRATED)",
+          _fs52.get('fair_value_status') == 'CALIBRATED' and _dfv52 is not None)
+    check(f"{_nm52}: 수축 후 괴리 ±48% 이내",
+          _up52 is not None and abs(_up52) <= 48.5, str(_up52))
+    check(f"{_nm52}: 표시 적정가와 현재가 괴리 70% 이내 (범위 밖 미노출)",
+          _px52 and abs(_dfv52 / _px52 - 1) <= 0.70)
+    check(f"{_nm52}: 권장매수가 < 적정가 (안전마진)",
+          _rec52 is not None and _rec52 < _dfv52)
+
+# ③ ETF — 기존 계약 유지 (게이트가 ETF 경로를 건드리지 않음)
+_fs_etf = _snaps52["069500.KS"]['four_scores']
+check("ETF: 적정가 비적용 유지", _fs_etf.get('displayed_fair_value') is None
+      and _fs_etf.get('fair_value_status') != 'OUT_OF_DOMAIN')
+
+# ④ 전 케이스 공통 불변식 — 적정가 없이 권장매수가가 존재할 수 없다
+for _sym52, _nm52 in _CASES52:
+    _f = _snaps52[_sym52]['four_scores']
+    if _f.get('displayed_fair_value') is None:
+        check(f"{_nm52}: 적정가 없으면 권장매수가도 없음",
+              _f.get('recommended_buy_price') is None)
+
+# ⑤ 화면 — 범위 밖일 때 '신뢰도 미달' 이 아니라 정확한 사유를 표기
+_w52 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("배너가 범위 밖을 구분 표기", "산출 불가 (모델 범위 밖)" in _w52)
+check("OUT_OF_DOMAIN 분기 존재", "OUT_OF_DOMAIN" in _w52)
+
+
 print()
 print("=" * 72)
 if FAILURES:
