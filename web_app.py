@@ -2085,6 +2085,22 @@ if verdict['vetoes']:
              "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
              + "\n".join(f"- {x}" for x in verdict['vetoes']))
 
+# 신호 간 이견이 있었지만 판정을 폐기하지 않고 보수적으로 화해시킨 경우 그 내역을 보여준다.
+_soft_notes = four_scores.get('soft_conflict_notes') or []
+if _soft_notes:
+    st.info("**🤝 신호 간 이견을 화해시켰습니다** — 모듈들이 다른 방향을 가리켰지만, "
+            "이견은 '판정 불가'가 아니라 '확신을 낮출 이유'입니다. 보수적인 쪽으로 "
+            "결론을 내렸습니다.\n\n" + "\n".join(f"- {x}" for x in _soft_notes))
+
+_up_raw = four_scores.get('upside_pct')
+_up_shr = four_scores.get('upside_shrunk_pct')
+if (_up_raw is not None and _up_shr is not None
+        and abs(float(_up_raw) - float(_up_shr)) >= 3.0):
+    st.caption(f"ℹ️ 적정가 괴리율 {float(_up_raw):+.1f}% 는 신뢰도 "
+               f"{four_scores.get('fair_value_confidence', 0):.0f}점을 반영해 "
+               f"**{float(_up_shr):+.1f}%** 로 수축시켜 판단에 씁니다 "
+               f"(신뢰도가 낮을수록 시장가격 쪽으로 끌어당김 — Black–Litterman 방식).")
+
 _vc1, _vc2 = st.columns([1.15, 1])
 with _vc1:
     st.markdown("**📊 이 점수는 이렇게 나왔습니다**")

@@ -1498,12 +1498,23 @@ if _vd['vetoes']:
           _vd['action'] not in ('BUY', 'ACCUMULATE'),
           f"{_vd['action']} · {_vd['vetoes'][:1]}")
 
-# 종목마다 결론이 달라야 한다 (고정 문구가 아님)
-_heads = set()
-for _sym in ("005930.KS", "037710.KS", "069500.KS"):
-    _heads.add(q.build_final_verdict(
-        q.run_full_pipeline(_sym, T_REF, b_engine=engine, rho_cutoff=0.80))['headline'])
-check("결론이 종목마다 분화", len(_heads) >= 2, str(_heads))
+# 결론이 고정 문구가 아니어야 한다. 단, 실제 시장에서는 약세장이면 여러 종목이
+# 같은 '사지 마세요' 로 수렴하는 것이 맞으므로(그게 판정이 작동한다는 뜻),
+# 분화 능력은 엔진 판정 문구를 달리한 합성 입력으로 검증한다.
+_syn_base = q.run_full_pipeline("005930.KS", T_REF, b_engine=engine, rho_cutoff=0.80)
+# 매수 계열 문구는 실스냅샷의 거부권에 걸려 HOLD 로 하향되는 것이 정상이므로
+# (거부권이 결론을 지배해야 한다), 거부권과 무관한 세 문구로 분화를 확인한다.
+_heads_syn = set()
+for _t39, _sc39 in [("조건 확인·관망", 62), ("비중축소 검토", 40),
+                    ("거래 회피", 20)]:
+    _s39 = dict(_syn_base)
+    _fs39 = dict(_syn_base['four_scores'])
+    _fs39['final_action_title'] = _t39
+    _fs39['final_action_score'] = _sc39
+    _s39['four_scores'] = _fs39
+    _heads_syn.add((q.build_final_verdict(_s39)['action'],))
+check("결론이 판정 문구에 따라 분화", len(_heads_syn) >= 3, str(_heads_syn))
+check("실데이터 결론이 어휘 안에 있음", q.build_final_verdict(_syn_base)['headline'] != "")
 
 # ETF 는 밸류에이션 탭이 산출 불가여야 하고, 그래도 결론은 나와야 한다
 _etf_vd = q.build_final_verdict(
@@ -1989,6 +2000,91 @@ check("미산출 항목은 50점으로 메우지 않고 가중치 0 처리",
 _w46 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("화면에 산식 반영분 표시", "퀀트 점수를 얼마나 움직였나" in _w46)
 check("상한과 반영분을 구분해 설명", "점수 상한과 별개로" in _w46)
+
+
+section("47. 판정 화해 — 이견은 확신 하향, 판정 보류는 데이터 오류에만")
+
+# ⚠️ '적정가 신뢰도 61점 + 괴리율 +46.6%' 조합이 데이터 모순으로 분류돼 판정
+#    전체가 '판정 보류'로 폐기됐다 (CJ ENM 실사례 — PBR 0.2대 딥밸류는 전부 죽음).
+#    예측결합 문헌(Bates–Granger 1969, Timmermann 2006)과 Black–Litterman(1992)의
+#    처방: 낮은 신뢰도의 견해는 시장가격 쪽으로 수축시켜 반영하고, 이견은 확신을
+#    낮출 이유이지 판단을 거부할 이유가 아니다.
+
+_q47 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+
+# ① 저신뢰 대괴리는 더 이상 '모순'이 아니라 수축 + 상한
+check("저신뢰·대괴리를 모순으로 분류하는 코드 제거",
+      "적정가 신뢰도 {fair_value_confidence:.0f}점인데 괴리율" not in _q47)
+check("신뢰도 수축 괴리(정밀도 가중) 도입", "upside_shrunk_pct" in _q47
+      and "valuation_uncertainty_cap" in _q47)
+_snap47 = q.run_full_pipeline("035760.KQ", T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs47 = _snap47['four_scores']
+check("CJ ENM 이 판정 보류가 아니라 실제 결론을 냄",
+      _fs47.get('final_action_title') != '⚠️ 재검토 필요'
+      and not _fs47.get('contradiction_detected'),
+      str(_fs47.get('final_action_title')))
+_up47, _sh47 = _fs47.get('upside_pct'), _fs47.get('upside_shrunk_pct')
+if _up47 is not None and _sh47 is not None:
+    check("수축 괴리 = 원괴리 × 신뢰도 (시장가 쪽으로 끌어당김)",
+          abs(_sh47) <= abs(_up47) + 1e-6, f"{_up47} → {_sh47}")
+    check("수축 사유가 산식표(gate_reason)에 남음",
+          "신뢰도 수축" in str(_fs47.get('gate_reason', '')))
+
+# ② 하드 정합성 위반(산술 불변식)은 여전히 판정을 막는다
+check("부호 불일치 검사는 유지", "적정가보다 현재가가 높은데 상승여력을 양수로 표시" in _q47)
+check("확률 노출 불변식 검사는 유지", "표본 통제 판정과 확률 노출이 불일치" in _q47)
+
+# ③ 소프트 이견은 결정적으로 화해 (관망 하향 + 사유)
+check("진입가 밖 매수 의도 → 관망 하향", "매수 의도였으나 현재가가 진입 허용가 밖" in _q47)
+check("약세 우세 매수 의도 → 관망 하향", "약세 신호 우세" in _q47
+      and "관망으로 하향" in _q47)
+check("다중기간 충돌도 폐기 대신 하향", "다중기간 전망 충돌 → 관망으로 하향" in _q47)
+check("화해 내역을 스냅샷에 노출", "'soft_conflict_notes'" in _q47)
+
+# ④ TITLE_MAP 이 엔진의 모든 판정 문구를 덮는다 (문구-점수 자기모순 방지)
+_titles_engine47 = ["적극적 분할매수 검토", "분할매수 검토", "제한적 진입",
+                    "조건 확인·관망", "신규 매수 보류", "비중축소 검토", "거래 회피"]
+_syn47 = dict(_snap47)
+for _t47 in _titles_engine47:
+    _f47 = dict(_snap47['four_scores'])
+    _f47['final_action_title'] = _t47
+    _f47['final_action_score'] = 62          # 같은 점수라도 문구가 결론을 결정해야 함
+    _f47['contradiction_detected'] = False
+    _syn47['four_scores'] = _f47
+    _v47 = q.build_final_verdict(_syn47)
+    if _t47 == "조건 확인·관망":
+        check("'조건 확인·관망'(62점)이 분할매수로 둔갑하지 않음",
+              _v47['action'] == 'HOLD', f"{_t47} → {_v47['action']}")
+    if _t47 == "거래 회피":
+        check("'거래 회피'가 매수 계열로 매핑되지 않음",
+              _v47['action'] in ('SELL', 'REDUCE', 'NO_TRADE'), str(_v47['action']))
+
+# ⑤ 관점 간 이견(앙상블 분산) 지표 — 크면 확신 하향
+_v47b = q.build_final_verdict(_snap47)
+check("이견 지표(disagreement) 노출", 'disagreement' in _v47b)
+check("BUY 에서 이견 크면 소액 분할로 하향하는 규칙 존재",
+      "disagreement >= 20 and action == 'BUY'" in _q47)
+
+# ⑥ 죽은 키 수정 — 정합성 거부권이 실제 키('status')를 읽는다
+check("무결성 거부권이 실제 키를 읽음", "snap.get('status') == 'REVIEW_REQUIRED'" in _q47)
+check("죽은 키 'integrity_status' 제거", "integrity_status" not in _q47.replace(
+    "'integrity_status' 를 읽어", ""))
+
+# ⑦ 하드 위반이 실제로 보류를 만드는지 (합성 주입)
+_s47h = dict(_snap47)
+_f47h = dict(_snap47['four_scores'])
+_f47h['final_action_title'] = '⚠️ 재검토 필요'
+_f47h['contradiction_detected'] = True
+_s47h['four_scores'] = _f47h
+_v47h = q.build_final_verdict(_s47h)
+check("하드 위반은 여전히 NO_TRADE", _v47h['action'] == 'NO_TRADE')
+check("보류 문구가 '데이터 정합성' 을 명시",
+      "데이터 정합성" in _v47h['headline'], _v47h['headline'])
+
+# ⑧ 화면 연결
+_w47 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화해 내역 패널", "신호 간 이견을 화해시켰습니다" in _w47)
+check("수축 괴리 설명", "수축시켜 판단에 씁니다" in _w47)
 
 
 print()

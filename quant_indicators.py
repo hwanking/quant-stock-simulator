@@ -1649,20 +1649,30 @@ class QuantIndicatorsEngine:
             vetoes.append(f"진입 위치 '{ez}' — 적정가를 크게 초과")
         if (fs.get('analysis_confidence') or 0) < 50:
             vetoes.append(f"분석 신뢰도 {fs.get('analysis_confidence')}점 (50 미만)")
-        if snap.get('integrity_status') == 'REVIEW_REQUIRED':
-            vetoes.append("모듈 간 판정 충돌 — 재검토 필요")
+        # ⚠️ 키는 apply_integrity_gates 가 쓰는 'status' 다.
+        #    (예전 코드는 존재하지 않는 'integrity_status' 를 읽어 이 거부권이
+        #     한 번도 발동한 적이 없었다 — 죽은 키 계열 4번째)
+        if snap.get('status') == 'REVIEW_REQUIRED':
+            vetoes.append("데이터 정합성 문제 감지 — 숫자 검증 전까지 판단 보류")
 
         # ── 결론 ────────────────────────────────────────────────────────
         # ⚠️ 판정 문구도 **엔진의 final_action_title 하나**에서 나와야 한다.
         #    점수는 맞췄는데 문구를 따로 만들면, 같은 종목이 위에서는 '사지 마세요',
         #    아래에서는 '재검토 필요' 로 갈린다 (실제로 그랬다).
         title = str(fs.get('final_action_title') or '').strip()
+        # ⚠️ 엔진이 낼 수 있는 모든 판정 문구를 매핑한다. 빠진 문구가 점수 구간
+        #    분기로 떨어지면 '조건 확인·관망'(65점)이 '분할매수 검토 가능'으로
+        #    둔갑하는 식의 자기모순이 생긴다 (실제로 그랬다).
         TITLE_MAP = {
             '적극적 분할매수 검토': ('BUY', "사도 됩니다 — 적극적 분할매수 검토"),
             '분할매수 검토':       ('ACCUMULATE', "분할매수 검토 가능"),
             '제한적 진입':         ('ACCUMULATE', "제한적으로만 진입"),
+            '조건 확인·관망':      ('HOLD', "지금은 사지 마세요 — 조건이 갖춰지면 후보"),
             '신규 매수 보류':      ('HOLD', "지금은 사지 마세요"),
-            '⚠️ 재검토 필요':      ('NO_TRADE', "판정 보류 — 모듈 간 판정이 어긋납니다"),
+            '비중축소 검토':       ('REDUCE', "비중 축소 검토"),
+            '거래 회피':           ('SELL', "사지 마세요 (보유 중이면 축소 검토)"),
+            # 하드 정합성 위반 전용 — 신호 간 이견은 여기로 오지 않고 관망으로 화해된다
+            '⚠️ 재검토 필요':      ('NO_TRADE', "판정 보류 — 데이터 정합성 문제가 감지됐습니다"),
         }
         if base is None:
             action, headline = 'NO_TRADE', "판단할 데이터가 부족합니다"
@@ -1684,6 +1694,19 @@ class QuantIndicatorsEngine:
         else:
             action, headline = 'SELL', "사지 마세요 (보유 중이면 축소 검토)"
 
+        # ── 관점 간 이견(앙상블 분산) — 확신의 척도 ─────────────────────
+        # 이견이 크면 판정을 뒤집는 게 아니라 **확신을 낮춘다** (fractional Kelly:
+        # 추정 불확실성이 크면 포지션을 줄인다). BUY 는 소액 분할로 한 단계 하향.
+        _scored_vals = [t['score'] for t in tabs if t['score'] is not None]
+        disagreement = None
+        if len(_scored_vals) >= 3:
+            _mu = sum(_scored_vals) / len(_scored_vals)
+            disagreement = (sum((v - _mu) ** 2 for v in _scored_vals)
+                            / len(_scored_vals)) ** 0.5
+        if disagreement is not None and disagreement >= 20 and action == 'BUY':
+            action = 'ACCUMULATE'
+            headline = "분할매수 검토 가능 — 관점 간 이견이 커 소액 분할만 권장"
+
         summary = []
         scored = [t for t in tabs if t['score'] is not None]
         if scored:
@@ -1693,6 +1716,10 @@ class QuantIndicatorsEngine:
             summary.append(f"가장 부정적: {low['label']} {low['score']}점")
         if cap_applied:
             summary.append(f"가중합 {raw_sum:.0f}점이 게이트 상한에 걸려 {base}점으로 제한됨")
+        if disagreement is not None and disagreement >= 20:
+            summary.append(f"관점 간 이견 큼 (표준편차 {disagreement:.0f}점) — 확신을 낮춰 잡으세요")
+        for _n in (fs.get('soft_conflict_notes') or []):
+            summary.append("신호 이견 화해: " + str(_n))
         if vetoes:
             summary.append("거부 조건 " + str(len(vetoes)) + "건이 매수 결론을 막고 있습니다")
         na = [t['label'] for t in tabs if t['score'] is None]
@@ -1711,6 +1738,7 @@ class QuantIndicatorsEngine:
             'gate_reason': fs.get('gate_reason'),
             'vetoes': vetoes,
             'summary': summary,
+            'disagreement': (None if disagreement is None else round(disagreement, 1)),
             'tabs': tabs,                      # 관점별 독립 판정 (합산하지 않음)
         }
 
@@ -2778,6 +2806,23 @@ class QuantIndicatorsEngine:
             valuation_cap = 59
             cap_reasons.append("현재가가 적정가를 10% 이상 초과 → 상한 59점")
 
+        # ── 신뢰도 수축 괴리 (Black–Litterman 방식) ──────────────────────
+        # 신뢰도가 낮은 큰 괴리는 '모순'이 아니라 '불확실한 견해'다. 예측결합 문헌
+        # (Bates–Granger 1969, Timmermann 2006)의 처방대로, 견해를 정밀도(신뢰도)
+        # 비율로 시장가격 쪽에 수축시켜 쓰고, 확신이 필요한 만큼 점수에 상한을 건다.
+        # 예전에는 이 조합(신뢰도<75 & |괴리|>25%)을 데이터 모순으로 분류해 판정
+        # 전체를 폐기했다 — PBR 0.2대 딥밸류 종목이 전부 '판정 보류'로 죽었다.
+        upside_shrunk_pct = None
+        valuation_uncertainty_cap = 100
+        if fair_value_usable and upside_pct is not None:
+            _conf_w = max(0.0, min(1.0, float(fair_value_confidence) / 100.0))
+            upside_shrunk_pct = float(upside_pct) * _conf_w
+            if fair_value_confidence < 75 and abs(upside_pct) > 25:
+                valuation_uncertainty_cap = 64
+                cap_reasons.append(
+                    f"적정가 신뢰도 {fair_value_confidence:.0f}점에 괴리율 {upside_pct:+.1f}% — "
+                    f"신뢰도 수축 괴리 {upside_shrunk_pct:+.1f}% 기준으로 판단 → 상한 64점")
+
         risk_event_cap = 100
         if bearish_consensus > bullish_consensus * 2 and bearish_consensus >= 2:
             risk_event_cap = 49
@@ -2809,6 +2854,7 @@ class QuantIndicatorsEngine:
             expected_return_cap,
             chase_buy_cap,
             valuation_cap,
+            valuation_uncertainty_cap,
             risk_event_cap,
             m10_overheat_cap,
             context_cap
@@ -2835,34 +2881,51 @@ class QuantIndicatorsEngine:
             final_action_title = "거래 회피"
             
         # ========================================================
-        # [명세 §18] 반드시 막아야 할 모순 검사
+        # [명세 §18] 모순 검사 — 두 종류를 구분한다
+        #
+        # ① 하드(데이터 정합성): 산술·논리 불변식이 깨진 경우. 어느 한쪽 숫자가
+        #    틀렸다는 뜻이므로 판정을 보류하는 것이 맞다.
+        # ② 소프트(신호 간 이견): 모듈들이 서로 다른 방향을 가리키는 경우. 앙상블
+        #    에서 이견은 정상이며(예측결합: Bates–Granger 1969, Timmermann 2006),
+        #    처방은 '판정 거부'가 아니라 확신 하향 — 보수적인 쪽으로 결정적으로
+        #    화해시키고 사유를 남긴다. 예전에는 ②까지 전부 '판정 보류'로 폐기해
+        #    화면이 결론 없이 끝났다.
         # ========================================================
         contradiction_detected = False
         contradiction_reasons = []
 
-        if fair_value_usable and fair_value_confidence < 75 and upside_pct is not None and abs(upside_pct) > 25:
-            contradiction_detected = True
-            contradiction_reasons.append(f"적정가 신뢰도 {fair_value_confidence:.0f}점인데 괴리율 {upside_pct:+.1f}%")
-
+        # ── 하드: 내부 불변식 위반 ──────────────────────────────────────
         # 자기유사 엔진이 '확률 미표시' 판정을 내렸는데도 확률값이 남아 있으면 내부 불일치다.
         # (hist_pred의 유효표본과 sim_res의 표본은 서로 다른 풀이므로 교차 비교하지 않는다)
         if sim_res and not sim_res.get('probabilities_shown', False) and sim_res.get('tp_first_prob') is not None:
             contradiction_detected = True
             contradiction_reasons.append("표본 통제 판정과 확률 노출이 불일치")
 
-        is_buy_intent = final_action_title in self.BUY_INTENT_TITLES
-
-        if is_buy_intent and bearish_consensus > 2 * bullish_consensus:
-            contradiction_detected = True
-            contradiction_reasons.append("매수 신호 대비 과도한 약세 컨센서스")
-
-        if is_buy_intent and (buy_entry_max is None or curr_price > buy_entry_max):
-            contradiction_detected = True
-            contradiction_reasons.append("현재가가 매수 허용범위 밖인데 분할매수 판정")
-
+        # 부호 불일치: 적정가 < 현재가인데 상승여력이 양수면 산술이 깨진 것이다.
         if fair_value_usable and curr_price > target_fundamental and upside_pct is not None and upside_pct > 0:
             contradiction_detected = True
             contradiction_reasons.append("적정가보다 현재가가 높은데 상승여력을 양수로 표시")
+
+        # ── 소프트: 신호 간 이견 → 보수적으로 화해 (판정은 반드시 낸다) ──
+        soft_conflict_notes = []
+        is_buy_intent = final_action_title in self.BUY_INTENT_TITLES
+
+        if is_buy_intent and (buy_entry_max is None or curr_price > buy_entry_max):
+            final_action_title = "조건 확인·관망"
+            final_action_score = min(final_action_score, 67)
+            soft_conflict_notes.append(
+                "매수 의도였으나 현재가가 진입 허용가 밖 → 관망으로 하향 (상한 67점)")
+            is_buy_intent = False
+
+        if is_buy_intent and bearish_consensus > 2 * bullish_consensus:
+            final_action_title = "조건 확인·관망"
+            final_action_score = min(final_action_score, 67)
+            soft_conflict_notes.append(
+                f"매수 의도였으나 약세 신호 우세({bearish_consensus} vs {bullish_consensus}) "
+                f"→ 관망으로 하향 (상한 67점)")
+            is_buy_intent = False
+
+        cap_reasons.extend(soft_conflict_notes)
 
         if contradiction_detected:
             final_action_score = min(final_action_score, 49)
@@ -3083,7 +3146,11 @@ class QuantIndicatorsEngine:
             'm10_score': m10_score,
             'm10_trend_eval': "양호 (상승추세)" if (m10_status == "위" and m10_slope > 0) else ("관망 (평행)" if m10_status == "위" else "약함 (하락추세)"),
             'contradiction_detected': contradiction_detected,
-            'contradiction_reasons': contradiction_reasons
+            'contradiction_reasons': contradiction_reasons,
+            # 신뢰도 수축 괴리(Black–Litterman 식 정밀도 가중) · 소프트 이견 화해 내역
+            'upside_shrunk_pct': (None if upside_shrunk_pct is None
+                                  else round(float(upside_shrunk_pct), 1)),
+            'soft_conflict_notes': soft_conflict_notes
         }
 
     def check_20sma_settlement(self, tech_df):
@@ -3981,14 +4048,18 @@ class QuantIndicatorsEngine:
         if str(tech['trade_date'].iloc[-1]) != str(meta.get('price_asof')):
             issues.append("가격 기준시각이 메타와 시계열에서 다름")
 
-        # 6) 다중기간 전망이 충돌하는데 단일 방향 강한 판정
+        # 6) 다중기간 전망이 충돌하는데 매수 판정 — 이것은 데이터 오류가 아니라
+        #    신호 간 이견이다. 판정을 폐기하지 않고 관망으로 화해시킨다 (§18 과 동일 원칙).
         hz = sim.get('horizons_data') or {}
         scored = [h['win_rate'] for h in hz.values() if h.get('win_rate') is not None]
         if len(scored) >= 3:
             up = sum(1 for w in scored if w >= 50.0)
             conflicted = 0.35 <= (up / len(scored)) <= 0.65
             if conflicted and fs.get('final_action_title') in self.BUY_INTENT_TITLES:
-                issues.append("다중기간 전망이 충돌하는데 매수 판정")
+                fs['final_action_title'] = "조건 확인·관망"
+                fs['final_action_score'] = min(fs.get('final_action_score', 0), 67)
+                fs.setdefault('soft_conflict_notes', []).append(
+                    "매수 의도였으나 다중기간 전망 충돌 → 관망으로 하향 (상한 67점)")
 
         # 7) 데이터 출처 실패인데 정상으로 표기
         for row in (snap.get('source_matrix') or []):
