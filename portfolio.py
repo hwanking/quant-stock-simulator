@@ -237,10 +237,13 @@ def extract_text_from_image(image_bytes, langs=("ko", "en")):
 
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-    # 저해상도 캡처는 확대하면 인식률이 크게 올라간다
-    if max(img.size) < 1400:
-        scale = 1400 / max(img.size)
-        img = img.resize((int(img.width * scale), int(img.height * scale)))
+    # 저해상도 캡처는 확대하면 인식률이 올라간다. HTS 잔고 화면은 글자가 9~11px 이라
+    # 1400px 로는 종목번호의 0/O 구분이 자주 깨진다. 같은 표본에서 2400px 이 가장
+    # 좋았고(코드 6/10 → 7/10), 그 이상은 오히려 나빠져 여기서 멈춘다.
+    if max(img.size) < 2400:
+        scale = 2400 / max(img.size)
+        img = img.resize((int(img.width * scale), int(img.height * scale)),
+                         Image.LANCZOS)
 
     try:
         if backend == "pytesseract":
@@ -266,6 +269,8 @@ def extract_text_from_image(image_bytes, langs=("ko", "en")):
                 'yc': sum(ys) / len(ys),
                 'h': max(ys) - min(ys),
                 'x': min(xs),
+                'x1': max(xs),
+                'w': max(xs) - min(xs),
                 'xc': sum(xs) / len(xs),
                 'text': str(txt).strip(),
             })
@@ -291,8 +296,27 @@ def extract_text_from_image(image_bytes, langs=("ko", "en")):
         # HTS 잔고 화면처럼 헤더가 있는 표는 열 위치를 살려야 한다. 토큰을 그냥
         # 왼쪽부터 이어붙이면 '잔고 400 / 가능 200 / 손익분기 10,267 / … / 매수평균
         # 10,246' 같은 줄에서 몇 번째 숫자가 평단가인지 알 방법이 없다.
-        # 헤더 줄을 찾아 그 x중심을 열 기준으로 삼고, 각 토큰을 가장 가까운 열에 넣는다.
+        #
+        # ⚠️ 열을 '헤더 칸'에만 맞추면 안 된다. 헤더는 글자가 작아 OCR 이 한 칸을
+        #    통째로 흘리는 일이 잦은데(예: '수익률' 누락), 그러면 그 열의 값이 옆 열로
+        #    빨려 들어가 이후 열이 전부 한 칸씩 밀린다 — 수량 자리에 수익률이 들어온다.
+        #    그래서 열은 **데이터 토큰의 x 구간**으로 직접 묶고, 헤더 이름은 그렇게 만든
+        #    열에 나중에 얹는다. 헤더가 없는 열은 이름만 비어 있을 뿐 자리는 지킨다.
         hdr_i, hdr_cols = _detect_header_line(lines)
+        data_lines = [ln for i, ln in enumerate(lines) if i != hdr_i]
+        columns = _cluster_columns(data_lines)
+        if columns and len(columns) >= 3:
+            names = _label_columns(columns, hdr_cols)
+            out = ["\t".join(names)]
+            for ln in data_lines:
+                cells = [[] for _ in columns]
+                for b in sorted(ln, key=lambda b: b['x']):
+                    cells[_nearest_column(b, columns)].append(b['text'])
+                row = "\t".join(" ".join(c) for c in cells)
+                if row.strip():
+                    out.append(row)
+            return "\n".join(out), backend, None
+
         if hdr_cols:
             out = ["\t".join(c['text'] for c in hdr_cols)]
             for i, ln in enumerate(lines):
@@ -328,7 +352,9 @@ def extract_text_from_image(image_bytes, langs=("ko", "en")):
 #:     평가손익 = (현재가 − 평단가) × 수량,  수익률 = 현재가 ÷ 평단가 − 1
 #: 이 중복이 OCR 오독을 잡아내는 유일한 근거다. 예전에는 이 열들을 읽고도 버렸다.
 COLUMN_SYNONYMS = {
-    'code':     ('종목코드', '단축코드', '표준코드', '코드'),
+    # '종목번호' 는 HTS(4202 잔고 등) 표준 표기다. 이게 없으면 코드 열을 못 찾아
+    # 표 인식이 통째로 자유형식 추정으로 떨어진다.
+    'code':     ('종목코드', '종목번호', '단축코드', '표준코드', '종목no', '코드'),
     'name':     ('종목명', '상품명', '종목', '종목이름'),
     'quantity': ('보유수량', '잔고수량', '결제잔고', '잔고', '보유주식수', '주식수',
                  '보유량', '수량', '보유'),
@@ -360,6 +386,10 @@ COLUMN_EXCLUDE_FOR_CORE = ('현재가', '수익률', '평가손익', '평가금�
 _HEADER_VOCAB = tuple(set(
     sum((list(v) for v in COLUMN_SYNONYMS.values()), []) + list(COLUMN_EXCLUDE)))
 
+#: 배제어와 붙어 읽혀도 그 열을 살려야 하는 강한 이름.
+#: '잔고' 는 일부러 넣지 않는다 — '매도가능잔고' 가 수량으로 잡히면 안 된다.
+_HEADER_STRONG = ('종목명', '종목코드', '종목번호', '매수평균', '매입평균', '평균단가')
+
 
 def _norm_header(text):
     return re.sub(r'[\s\-_/()\[\]]', '', str(text or ''))
@@ -375,7 +405,11 @@ def classify_header_cells(cells):
     norm = [_norm_header(c) for c in cells]
     blocked = set()
     for i, n in enumerate(norm):
-        if any(x in n for x in COLUMN_EXCLUDE):
+        # 배제어가 있어도 핵심 열 이름이 함께 붙어 있으면 살린다. OCR 은 좁은 칸의
+        # 헤더를 옆 칸과 붙여 읽는 일이 잦다 — '구분'+'종목명' → '구분종목명'.
+        # 이때 통째로 버리면 종목명 열을 잃고 표 인식 자체가 무너진다.
+        # (배제 대상인 '손익분기'·'매도가능'에는 이 강한 이름이 들어 있지 않다.)
+        if any(x in n for x in COLUMN_EXCLUDE) and not any(s in n for s in _HEADER_STRONG):
             blocked.add(i)
 
     mapping = {}
@@ -393,6 +427,103 @@ def classify_header_cells(cells):
             if field in mapping:
                 break
     return mapping
+
+
+def _cluster_columns(data_lines, min_rows=2):
+    """
+    표의 데이터 토큰을 x 구간으로 묶어 열을 만든다. 반환: [{'x0','x1','xc'}, …]
+
+    같은 열의 값들은 화면에서 세로로 겹친다(숫자는 우측정렬, 이름은 좌측정렬).
+    구간이 겹치면 같은 열로 본다 — 헤더가 몇 칸 빠져도 열 자리는 유지된다.
+    """
+    toks = [b for ln in data_lines for b in ln]
+    if len(toks) < min_rows * 2:
+        return None
+    toks.sort(key=lambda b: b['x'])
+
+    def _med(v):
+        s = sorted(v)
+        return s[len(s) // 2]
+
+    # ⚠️ 열 경계를 합집합(min/max)으로 넓히면 안 된다. 긴 종목명 한 줄이 열을 오른쪽으로
+    #    늘려 옆의 종목번호 열을 삼키고, 그 뒤로 연쇄적으로 열이 합쳐진다.
+    #    각 열은 소속 토큰들의 **중앙값 구간**으로 대표시켜 한 줄의 예외에 흔들리지 않게 한다.
+    cols = []
+    for b in toks:
+        x0 = b['x']
+        x1 = b.get('x1', b['x'] + max(1.0, b.get('w', 0)))
+        width = max(1.0, x1 - x0)
+        best, best_ratio = None, 0.0
+        for c in cols:
+            c0, c1 = _med(c['x0s']), _med(c['x1s'])
+            overlap = min(x1, c1) - max(x0, c0)
+            if overlap <= 0:
+                continue
+            ratio = overlap / min(width, max(1.0, c1 - c0))
+            if ratio > best_ratio:
+                best, best_ratio = c, ratio
+        if best is not None and best_ratio >= 0.40:
+            best['x0s'].append(x0)
+            best['x1s'].append(x1)
+        else:
+            cols.append({'x0s': [x0], 'x1s': [x1]})
+
+    # 한두 번만 등장한 구간은 열이 아니라 잡음(줄바꿈된 주석 등)일 수 있다.
+    cols = [c for c in cols if len(c['x0s']) >= min_rows]
+    if not cols:
+        return None
+    out = []
+    for c in cols:
+        x0, x1 = _med(c['x0s']), _med(c['x1s'])
+        out.append({'x0': x0, 'x1': x1, 'xc': (x0 + x1) / 2.0, 'n': len(c['x0s'])})
+    out.sort(key=lambda c: c['x0'])
+    return out
+
+
+def _nearest_column(box, columns):
+    """토큰이 들어갈 열 번호. 구간이 겹치면 그 열, 아니면 가장 가까운 열."""
+    x0 = box['x']
+    x1 = box.get('x1', box['x'] + max(1.0, box.get('w', 0)))
+    best, best_ov = None, 0.0
+    for i, c in enumerate(columns):
+        ov = min(x1, c['x1']) - max(x0, c['x0'])
+        if ov > best_ov:
+            best, best_ov = i, ov
+    if best is not None:
+        return best
+    return min(range(len(columns)), key=lambda k: abs(box['xc'] - columns[k]['xc']))
+
+
+def _label_columns(columns, hdr_cols):
+    """
+    만들어 둔 열에 헤더 이름을 얹는다. 짝이 없는 열은 자리표시자를 넣는다.
+
+    ⚠️ 헤더는 글자가 작고 칸 간격이 좁아 OCR 이 이웃한 두 머리말을 한 덩어리로
+       읽는다('종목번호 평가손익'). 그대로 한 열에 붙이면 종목코드 열의 이름이
+       사라져 코드를 못 찾는다. 여러 열에 걸친 헤더 덩어리는 낱말로 쪼개
+       각 열에 나눠 준다.
+    """
+    names = [""] * len(columns)
+
+    def _put(i, text):
+        names[i] = (names[i] + " " + text).strip() if names[i] else text
+
+    for h in (hdr_cols or []):
+        x0 = h['x']
+        x1 = h.get('x1', h['x'] + max(1.0, h.get('w', 0)))
+        words = str(h['text']).split()
+        spanned = [i for i, c in enumerate(columns)
+                   if min(x1, c['x1']) - max(x0, c['x0']) > 0]
+        if len(words) >= 2 and len(spanned) >= 2:
+            # 덩어리 구간을 낱말 수만큼 균등 분할해, 각 조각의 중심에 가장 가까운 열에 넣는다
+            step = (x1 - x0) / len(words)
+            for k, w in enumerate(words):
+                mid = x0 + step * (k + 0.5)
+                j = min(spanned, key=lambda i: abs(columns[i]['xc'] - mid))
+                _put(j, w)
+        else:
+            _put(_nearest_column(h, columns), h['text'])
+    return [n if n else f"열{i + 1}" for i, n in enumerate(names)]
 
 
 def _detect_header_line(lines):
@@ -479,16 +610,33 @@ _OCR_DIGIT_LOOKALIKE = {
 }
 
 
+#: HTS 종목번호 열의 접두 문자. 'A005930' 처럼 붙어 나오고, OCR 은 이 A 를
+#: 숫자 4 로 읽는 일이 잦다('4005930'). 7자리일 때만 접두로 보고 떼어낸다.
+_CODE_PREFIX_CHARS = "AaÀ4^"
+
+
+def strip_code_prefix(token):
+    """'A005930' · '4005930' → '005930'. 접두가 없으면 그대로."""
+    t = str(token or "").replace(" ", "")
+    if len(t) == 7 and t[0] in _CODE_PREFIX_CHARS:
+        return t[1:]
+    return t
+
+
 def repair_ocr_code(token):
     """
-    OCR이 흘린 종목코드를 되살린다. 예: '0OO66O' → '000660'.
+    OCR이 흘린 종목코드를 되살린다. 예: '0OO66O' → '000660', '401888D' → '018880'.
 
     종목코드 자리(맨 앞 토큰 또는 A접두)에서만 호출해야 한다. 6자리이고 절반 이상이
     이미 숫자일 때만 손대며, 그 밖의 글자가 하나라도 섞이면 포기한다 — 종목명을
     숫자로 망가뜨리는 쪽이 못 읽고 넘어가는 쪽보다 훨씬 위험하다.
+
+    ⚠️ 최근 KRX 는 문자를 포함한 6자리 코드도 발급한다(예: ETF '0040Y0').
+       그래서 '문자가 있으면 무조건 오독' 으로 보면 안 되고, 숫자가 4개 이상이고
+       남은 문자가 코드에 쓰이는 대문자면 그대로 살린다.
     반환: 교정된 6자리 문자열 또는 None.
     """
-    t = str(token or "").replace(" ", "")
+    t = strip_code_prefix(token)
     if len(t) != 6:
         return None
     if sum(c.isdigit() for c in t) < 3:
@@ -502,7 +650,53 @@ def repair_ocr_code(token):
         else:
             return None
     fixed = "".join(out)
-    return fixed if fixed != t else None
+    return fixed if fixed != str(token or "").replace(" ", "") else None
+
+
+def read_code_cell(cell):
+    """
+    종목번호 열의 셀 → (코드, 교정했는가) 또는 (None, False).
+
+    표에서 '이 칸은 종목번호' 라고 헤더로 이미 확정한 자리에서만 쓴다. 그래서
+    일반 텍스트보다 과감하게 접두 제거·글자 교정을 적용할 수 있다.
+
+    ⚠️ 좁은 칸에서는 옆 열 값이 같이 딸려 들어온다('A002990 -462,205').
+       칸 전체를 한 덩어리로 보면 길이가 안 맞아 통째로 버리게 되므로,
+       낱말마다 시도해 처음으로 코드가 되는 것을 쓴다.
+    """
+    for tok in str(cell or "").split():
+        code, repaired = _read_code_token(tok)
+        if code:
+            return code, repaired
+    return None, False
+
+
+def _read_code_token(token):
+    t = strip_code_prefix(token)
+    if not t or len(t) != 6:
+        return None, False
+    up = t.upper()
+    # ① 순수 6자리 숫자 — 손댈 것 없음
+    if re.fullmatch(r'\d{6}', up):
+        return up, False
+
+    others = [c for c in up if not c.isdigit()]
+    if not others or len(up) - len(others) < 3:
+        return None, False
+
+    # ② 섞인 글자가 전부 '숫자로 오해받는 글자' 면 OCR 오독으로 보고 되돌린다.
+    #    (D→0, O→0, I→1 …). KRX 코드에 쓰이는 글자라도 이 경우가 훨씬 흔하고,
+    #    바로잡은 코드는 종목명 대조와 미리보기 확인을 다시 거친다.
+    if all(c in _OCR_DIGIT_LOOKALIKE for c in others):
+        fixed = repair_ocr_code(up)
+        return (fixed, True) if fixed else (None, False)
+
+    # ③ 그 밖의 글자가 있으면 실제 문자 포함 KRX 코드로 본다 (예: ETF '0040Y0').
+    #    다만 O 는 어느 자리에서든 0 의 오독일 가능성이 커서 바꿔 준다.
+    cand = up.replace('O', '0')
+    if re.fullmatch(r'[0-9][0-9A-Z]{5}', cand) and sum(c.isdigit() for c in cand) >= 4:
+        return cand, cand != up
+    return None, False
 
 
 def _signed_number(cell):
@@ -529,12 +723,41 @@ def _signed_number(cell):
     return -v if neg else v
 
 
+def repair_ocr_digits(cell):
+    """
+    숫자만 들어가는 칸의 글자 오독을 되돌린다. '40O' → '400', '87,60O' → '87,600'.
+
+    수량·금액 열은 애초에 숫자만 오는 자리이므로 이 교정이 안전하다.
+    글자가 절반을 넘으면 숫자 칸이 아니라고 보고 손대지 않는다 — 종목명이
+    숫자로 뭉개지는 쪽이 훨씬 위험하다.
+    """
+    s = str(cell or '').strip()
+    if not s:
+        return s
+    core = re.sub(r'[\s,.\-+%▲▼△▽~]', '', s)
+    if not core:
+        return s
+    digits = sum(c.isdigit() for c in core)
+    fixable = sum(1 for c in core if c in _OCR_DIGIT_LOOKALIKE)
+    # 숫자가 하나라도 있고 나머지가 전부 '숫자로 오해받는 글자' 일 때만 고친다.
+    # ('SOL' 처럼 숫자가 하나도 없는 덩어리는 종목명이므로 건드리지 않는다.)
+    if digits == 0 or digits + fixable != len(core):
+        return s
+    return "".join(_OCR_DIGIT_LOOKALIKE.get(c, c) for c in s)
+
+
 def _cell_number(cell):
     """표 셀에서 수치만 뽑는다. '▲ 1,100' → 1100, '-2,50%' → None(부호·%는 제외)."""
-    s = str(cell or '').strip()
+    s = repair_ocr_digits(cell).strip()
     if not s:
         return None
     if '%' in s or s.lstrip('▲▼△▽+').startswith('-'):
+        return None
+    # ⚠️ 고쳐지지 않은 알파벳이 남아 있으면 숫자만 뽑아내면 안 된다.
+    #    '4OO' 에서 글자를 지우면 4 가 되어, 400주가 4주로 조용히 둔갑한다.
+    #    잘못된 값을 만드는 것보다 못 읽었다고 알리는 편이 낫다 —
+    #    수량은 화면의 평가손익·현재가로 되살릴 여지도 남는다.
+    if re.search(r'[A-Za-z]', s):
         return None
     s = re.sub(r'[^\d,.\-]', '', s)
     s = re.sub(r'(?<=\d),(?=\d{3}(?!\d))', '', s)      # 천 단위 구분자 제거
@@ -544,6 +767,36 @@ def _cell_number(cell):
     except ValueError:
         return None
     return v if v > 0 else None
+
+
+def _redistribute_row_cells(cells):
+    """
+    한 칸에 두 값이 붙어 들어온 것을 옆의 빈 칸으로 돌려놓는다.
+
+    좁은 표에서 OCR 이 이웃한 두 값을 한 덩어리로 읽으면, 그 값의 원래 칸은
+    비고 옆 칸은 두 개가 된다('A066570 -178568' | '' ). 그대로 두면 평가손익을
+    잃어 검증(역산)을 못 한다.
+
+    숫자가 들어 있는 토큰만 옮긴다 — 종목명이 여러 낱말인 경우('SOL 팔란 티어')를
+    쪼개면 이름을 망가뜨린다.
+    """
+    out = list(cells)
+    for i, c in enumerate(out):
+        toks = str(c or '').split()
+        if len(toks) < 2:
+            continue
+        # 오른쪽 빈 칸으로 마지막 토큰을 민다
+        if i + 1 < len(out) and not str(out[i + 1] or '').strip() \
+                and any(ch.isdigit() for ch in toks[-1]):
+            out[i + 1] = toks[-1]
+            out[i] = " ".join(toks[:-1])
+            continue
+        # 왼쪽 빈 칸으로 첫 토큰을 민다
+        if i > 0 and not str(out[i - 1] or '').strip() \
+                and any(ch.isdigit() for ch in toks[0]):
+            out[i - 1] = toks[0]
+            out[i] = " ".join(toks[1:])
+    return out
 
 
 def _split_cells(line):
@@ -745,21 +998,18 @@ def parse_table_with_header(text, resolve_name=None):
         cells = _align_cells(line, n_cols, name_i, code_i)
         if not cells:
             continue
+        cells = _redistribute_row_cells(cells)
 
         def cell(field):
             i = mapping.get(field)
             return cells[i] if (i is not None and i < len(cells)) else ''
 
         code = None
-        raw_code = cell('code').replace(' ', '')
+        raw_code = cell('code').strip()
         if raw_code:
-            if re.fullmatch(r'A?\d{6}', raw_code):
-                code = normalize_code(raw_code)
-            else:
-                fixed = repair_ocr_code(raw_code)
-                if fixed:
-                    code = normalize_code(fixed)
-                    warnings.append(f"종목코드 인식 교정: '{raw_code}' → '{fixed}' (확인 필요)")
+            code, repaired = read_code_cell(raw_code)
+            if code and repaired:
+                warnings.append(f"종목코드 인식 교정: '{raw_code}' → '{code}' (확인 필요)")
 
         name = cell('name').strip()
         qty = _cell_number(cell('quantity'))
@@ -770,21 +1020,51 @@ def parse_table_with_header(text, resolve_name=None):
         # 합계·소계 줄은 종목이 아니다
         if any(k in _norm_header(name) for k in ('합계', '소계', '총계', '평가합계')):
             continue
+        # 한 자리 수량('6')처럼 짧은 토큰은 OCR 이 통째로 놓치는 일이 흔하다.
+        # 화면에는 같은 사실이 여러 열로 중복돼 있으므로 되살릴 수 있다:
+        #     평가손익 = (현재가 − 평단가) × 수량
+        # 지어내는 것이 아니라 **화면에 있는 다른 숫자에서 역산**하는 것이며,
+        # 정수로 딱 떨어질 때만 채우고 확인이 필요하다고 반드시 알린다.
+        if qty is None and price:
+            _pnl = _signed_number(cell('pnl'))
+            _cur = _cell_number(cell('current_price'))
+            if _pnl is not None and _cur and abs(_cur - price) > 1e-9:
+                _q = _pnl / (_cur - price)
+                _qi = round(_q)
+                if _qi >= 1 and abs(_q - _qi) <= max(0.05, _qi * 0.02):
+                    qty = float(_qi)
+                    warnings.append(
+                        f"'{(name or code)[:20]}' 수량을 읽지 못해 화면의 평가손익·현재가·"
+                        f"평단가로 역산했습니다 → {_qi}주 (확인 필요)")
+
         if qty is None or price is None:
             warnings.append(f"건너뜀 (수량·평단가를 읽지 못함): {(name or code)[:20]}")
             continue
 
         ticker = f"{code}.KS" if code else None
-        if ticker is None and name and resolve_name:
+
+        # ⚠️ 종목코드는 6글자뿐이라 한 글자만 잘못 읽어도 **다른 실재 종목**이 된다
+        #    (예: A111770 영원무역 → '771770'). 숫자만 보면 멀쩡해 보여서 그대로
+        #    저장되면 엉뚱한 종목을 분석하게 된다. 종목명은 글자가 많아 훨씬
+        #    튼튼하므로, 이름으로도 조회해 보고 코드와 다르면 이름 쪽을 택한다.
+        #    (조회기는 확신이 없으면 티커 대신 후보를 돌려주므로, 티커가 나왔다는
+        #     것은 이름이 정확히 맞았다는 뜻이다.)
+        if name and resolve_name:
             try:
                 t, real = resolve_name(name)
-                if t:
-                    ticker = t
-                    code = str(t).split('.')[0]
-                    if real:
-                        name = real
             except Exception:
-                pass
+                t, real = None, None
+            if t:
+                t_code = str(t).split('.')[0]
+                if code and t_code != code:
+                    warnings.append(
+                        f"종목코드와 종목명이 서로 다른 종목을 가리킵니다 — "
+                        f"코드 '{code}' vs 종목명 '{name}'({t_code}). "
+                        f"글자 수가 많은 종목명 쪽을 택했습니다. 미리보기에서 확인하세요.")
+                ticker = t
+                code = t_code
+                if real:
+                    name = real
         if ticker is None:
             # 이름 오독(예: '코텍'→'코택')으로 조회에 실패해도 행을 버리지 않는다.
             # 수량·평단가는 제대로 읽었으므로, 미리보기에서 이름·코드만 고치면 살릴 수 있다.

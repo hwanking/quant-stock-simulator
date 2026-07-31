@@ -1704,6 +1704,92 @@ check("엔진 선택은 pytesseract 우선 → easyocr 대체",
       < _insp.getsource(pf.ocr_backend).index("easyocr"))
 
 
+section("44. HTS 잔고 화면 인식률 — 열 분해 · 코드 복원 · 오독 차단")
+
+# ⚠️ 실사용 캡처(4202 주식잔고 10종목)에서 인식 0건이 나왔다. 원인은 OCR 품질이
+#    아니라 표 해석이었다: 헤더 한 칸('수익률')을 OCR 이 놓치자 그 뒤 열이 통째로
+#    밀렸고, '종목번호' 가 코드 열 이름으로 등록돼 있지 않았다.
+
+# ① 열은 헤더가 아니라 데이터 x 구간으로 묶는다 (헤더가 빠져도 자리 유지)
+_box = lambda x0, x1, y, t: {'x': x0, 'x1': x1, 'w': x1 - x0, 'xc': (x0 + x1) / 2,
+                             'yc': y, 'h': 10, 'text': t}
+_lines44 = [
+    [_box(10, 60, 10, '금호건설'), _box(100, 140, 10, 'A002990'),
+     _box(200, 240, 10, '400'), _box(300, 340, 10, '10,246')],
+    [_box(10, 90, 30, 'SOL 팔란티어'), _box(100, 140, 30, 'A0040Y0'),
+     _box(205, 240, 30, '739'), _box(305, 340, 30, '8,343')],
+    [_box(10, 55, 50, '코텍'), _box(100, 140, 50, 'A052330'),
+     _box(210, 240, 50, '173'), _box(300, 340, 50, '12,326')],
+]
+_cols44 = pf._cluster_columns(_lines44)
+check("긴 종목명이 옆 열을 삼키지 않음 (열 4개 유지)",
+      _cols44 is not None and len(_cols44) == 4, str(_cols44 and len(_cols44)))
+
+# ② 헤더 덩어리는 낱말로 쪼개 각 열에 나눠 준다
+_hdr44 = [_box(10, 60, 0, '종목명'), _box(100, 240, 0, '종목번호 평가손익')]
+_names44 = pf._label_columns(_cols44, _hdr44)
+check("한 덩어리로 읽힌 헤더가 열별로 분배됨",
+      '종목번호' in _names44[1] and '종목번호' not in _names44[2], str(_names44))
+
+# ③ 종목번호 열 이름이 등록돼 있어야 코드 열을 찾는다
+check("'종목번호' 가 코드 열 이름", 'code' in pf.classify_header_cells(
+    ['구분', '종목명', '종목번호', '잔고', '매수평균']))
+check("'구분종목명' 처럼 붙어 읽혀도 종목명 열을 살림",
+      pf.classify_header_cells(['구분종목명', '종목번호', '잔고', '매수평균']).get('name') == 0)
+check("'손익분기' 는 여전히 평단가로 잡히지 않음",
+      pf.classify_header_cells(['종목명', '손익분기', '매수평균']).get('price') == 2)
+check("'매도가능잔고' 는 여전히 수량으로 잡히지 않음",
+      pf.classify_header_cells(['종목명', '매도가능잔고', '잔고']).get('quantity') == 2)
+
+# ④ A접두·문자 포함 코드·글자 오독
+check("A접두 제거", pf.read_code_cell('A005930')[0] == '005930')
+check("A를 4로 오독한 접두도 제거", pf.read_code_cell('4005930')[0] == '005930')
+check("문자 포함 KRX 코드 보존", pf.read_code_cell('A0040Y0')[0] == '0040Y0')
+check("글자 오독 교정", pf.read_code_cell('A01888D')[0] == '018880')
+check("옆 값이 딸려 와도 코드만 집음",
+      pf.read_code_cell('A066570 -178568')[0] == '066570')
+check("코드가 아닌 칸은 None", pf.read_code_cell('금호건설')[0] is None)
+
+# ⑤ 숫자 칸의 글자 오독 — 고치되, 못 고치면 조용히 자르지 않는다
+check("'4OO' → 400", pf._cell_number('4OO') == 400)
+check("'87,60O' → 87600", pf._cell_number('87,60O') == 87600)
+check("고치지 못한 글자가 남으면 값을 만들지 않음 (4OOX → None)",
+      pf._cell_number('4OOX') is None)
+check("정상 숫자는 그대로", pf._cell_number('1,157') == 1157)
+
+# ⑥ 한 칸에 붙어 온 값을 빈 이웃 칸으로 되돌린다 (숫자 토큰만)
+check("붙어 온 숫자를 빈 칸으로 이동",
+      pf._redistribute_row_cells(['LG전자', 'A066570 -178568', '', '6']) ==
+      ['LG전자', 'A066570', '-178568', '6'])
+check("여러 낱말 종목명은 쪼개지 않음",
+      pf._redistribute_row_cells(['', 'SOL 팔란 티어', 'A0040Y0'])[1] == 'SOL 팔란 티어')
+
+# ⑦ 코드와 종목명이 다른 종목을 가리키면 종목명을 택하고 반드시 알린다
+#    (A111770 영원무역 → '771770' 처럼 한 글자 오독이 실재하는 다른 코드가 된다)
+_txt44 = ("종목명\t종목번호\t평가손익\t잔고\t매수평균\t현재가\n"
+          "영원무역\t771770\t-9,379\t33\t87,703\t87,600\n")
+_rows44, _warn44 = pf.parse_table_with_header(
+    _txt44, resolve_name=lambda n: ("111770.KS", "영원무역") if n == "영원무역" else (None, None))
+check("종목명 기준으로 코드를 바로잡음",
+      len(_rows44) == 1 and _rows44[0]['종목코드'] == '111770', str(_rows44))
+check("불일치를 경고로 알림", any('서로 다른 종목' in w for w in _warn44))
+
+# ⑧ 수량을 못 읽으면 화면의 다른 숫자로 역산하고, 역산했다고 밝힌다
+_txt44b = ("종목명\t종목번호\t평가손익\t잔고\t매수평균\t현재가\n"
+           "LG전자\t066570\t-178,568\t\t188,133\t158,700\n")
+_rows44b, _warn44b = pf.parse_table_with_header(_txt44b, resolve_name=None)
+check("평가손익·현재가·평단가로 수량 역산",
+      len(_rows44b) == 1 and int(_rows44b[0]['보유수량']) == 6, str(_rows44b))
+check("역산 사실을 반드시 표기", any('역산' in w for w in _warn44b))
+
+# ⑨ 역산이 정수로 떨어지지 않으면 채우지 않는다 (지어내기 금지)
+_txt44c = ("종목명\t종목번호\t평가손익\t잔고\t매수평균\t현재가\n"
+           "테스트\t005930\t-1,234\t\t10,000\t9,000\n")
+_rows44c, _warn44c = pf.parse_table_with_header(_txt44c, resolve_name=None)
+check("애매하면 수량을 채우지 않고 건너뜀",
+      len(_rows44c) == 0 and any('건너뜀' in w for w in _warn44c))
+
+
 print()
 print("=" * 72)
 if FAILURES:
