@@ -1516,6 +1516,47 @@ check("탭 가중치 합 = 1.0", abs(sum(q.TAB_WEIGHTS.values()) - 1.0) < 1e-9,
       str(sum(q.TAB_WEIGHTS.values())))
 
 
+section("40. 배포 전 정합성 — 교차검증 게이트 · 합성값 위장 금지")
+
+# ① 스캐너에도 시세 교차검증 게이트가 있어야 한다 (예전엔 상세화면만 방어)
+_snap40 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_cc = _snap40.get('price_cross_check') or {}
+check("스냅샷에 교차검증 결과 탑재", 'passed' in _cc, str(_cc)[:80])
+check("정상 시세는 통과", _cc.get('passed') in (True, None), str(_cc.get('passed')))
+_scan_src40 = _insp.getsource(q.run_screener_scan)
+check("스캐너가 교차검증 게이트를 적용",
+      "price_cross_check" in _scan_src40 and "continue" in _scan_src40)
+check("허용 오차는 규칙집이 정의", q.PRICE_CROSS_TOL_PCT == qi.rb(
+    'RULES_DATA_INTEGRITY', 'price_cross_tolerance_pct', -1), str(q.PRICE_CROSS_TOL_PCT))
+
+# 벌어진 시세를 흉내 내면 실패로 판정해야 한다
+_fake_mtx = [{'source': 'A', 'price': 10000.0}, {'source': 'B', 'price': 10300.0}]
+_cc_bad = q._price_cross_check(_fake_mtx)
+check("3% 오차는 교차검증 실패", _cc_bad['passed'] is False, _cc_bad['note'])
+_cc_one = q._price_cross_check([{'source': 'A', 'price': 10000.0}])
+check("출처 1개면 '대조 불가' (통과로 위장하지 않음)", _cc_one['passed'] is None)
+
+# ② BPS·EPS 합성 금지 — PBR·PER 역산(항등식)만 허용
+_esrc40 = open(_os.path.join(PROJ, "bitemporal_engine.py"), encoding='utf-8').read()
+_active = [l for l in _esrc40.splitlines()
+           if 'price * 0.8' in l and not l.strip().startswith('#')]
+check("bps = price*0.8 합성 코드 제거 (주석만 남음)", not _active, str(_active[:1]))
+check("역산 불가 시 None 처리", 'bps = None' in _esrc40 and 'eps = None' in _esrc40)
+
+# ③ 유사도 결합 가중치가 규칙집에서 온다
+check("규칙집에 RULES_SIMILARITY 존재",
+      'RULES_SIMILARITY' in qi.RULEBOOK, str(qi.RULEBOOK.get('RULES_SIMILARITY')))
+_qsrc40 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("결합식이 rb() 로 규칙집을 읽음",
+      "rb('RULES_SIMILARITY', 'pearson_weight'" in _qsrc40)
+check("리터럴 'rho * 0.7 +' 제거", "combined = rho * 0.7 +" not in _qsrc40)
+
+# ④ 탭 가중치도 규칙집과 일치
+for _k, _v in q.TAB_WEIGHTS.items():
+    check(f"탭 가중치 {_k} = 규칙집",
+          abs(_v - qi.rb('RULES_TAB_WEIGHTS', _k, -1)) < 1e-9, f"{_v}")
+
+
 print()
 print("=" * 72)
 if FAILURES:

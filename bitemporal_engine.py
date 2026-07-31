@@ -594,16 +594,23 @@ class BitemporalEngine:
                 roe = None
                 debt = None
             else:
+                # PBR·PER 로부터의 역산은 항등식이라 허용한다 (BPS = 주가 ÷ PBR).
+                # 그러나 둘 다 없을 때 `price * 0.8` 로 BPS 를 **지어내면 안 된다**.
+                # 그 값이 in_bps 로 넘어가면 missing_inputs 에 BPS 가 안 잡혀
+                # 신뢰도 감점을 피해가고, 합성값이 '수신된 값'으로 위장된다.
                 if bps <= 0 and pbr > 0:
                     bps = price / pbr
                 elif bps <= 0:
-                    bps = price * 0.8
+                    bps = None          # 미수신 — 상위 단계가 결측으로 처리한다
 
                 if eps == 0 and per > 0:
                     eps = price / per
+                elif eps == 0:
+                    eps = None
 
             # ROE 를 못 구하면 12.5% 같은 리터럴로 채우지 않는다 (펀드는 아예 없는 지표다)
-            roe = (eps / bps * 100.0) if (not is_fund and bps > 0) else None
+            roe = ((eps / bps * 100.0)
+                   if (not is_fund and bps and eps is not None and bps > 0) else None)
 
             # ── 배당은 여기서 계산하지 않는다 ──────────────────────────────
             # 배당 지표의 소유자는 fetch_dividend_info() 하나다.

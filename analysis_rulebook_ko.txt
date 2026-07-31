@@ -127,3 +127,24 @@ limited_below = 30
 [RULES_LIQUIDITY]
 min_avg_turnover_krw = 2000000000
 min_price_krw = 1000
+
+# 자기유사 패턴 매칭 (명세 §5)
+# Pearson 상관과 DTW 유사도를 결합해 판정한다. 코드에 박아두면 규칙집과 어긋난다.
+[RULES_SIMILARITY]
+pearson_weight = 0.7
+dtw_weight = 0.3
+dtw_scale_divisor = 3.0
+
+# 데이터 무결성 게이트 (명세 §2)
+# 출처 간 현재가 오차가 이 값을 넘으면 시세를 신뢰하지 않고 분석에서 제외한다.
+[RULES_DATA_INTEGRITY]
+price_cross_tolerance_pct = 1.0
+
+# 탭별 관점 가중치 (참고용 — 종합 점수는 RULES_TOP_WEIGHTS 로 산출한다)
+[RULES_TAB_WEIGHTS]
+pattern = 0.25
+valuation = 0.22
+scenario = 0.15
+demark = 0.13
+technical = 0.13
+integrity = 0.12

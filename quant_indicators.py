@@ -464,7 +464,9 @@ class QuantIndicatorsEngine:
                     continue
                 if H <= 40:
                     dtw_sim = self.compute_dtw_distance(t_norm, sub_norm)
-                    combined = rho * 0.7 + dtw_sim * 0.3
+                    # 결합 가중치는 규칙집이 단일 출처다 (코드 리터럴 금지)
+                    combined = (rho * rb('RULES_SIMILARITY', 'pearson_weight', 0.7)
+                                + dtw_sim * rb('RULES_SIMILARITY', 'dtw_weight', 0.3))
                     if combined < rho_cutoff:
                         continue
                 raw_matches.append((i, rho))
@@ -3656,9 +3658,37 @@ class QuantIndicatorsEngine:
             'rt_price': rt_price,
             'rt_status': rt_status,
             'source_matrix': matrix_data,
+            # 교차검증 결과를 스냅샷에 실어 둔다.
+            # 예전에는 상세화면만 1% 게이트를 걸고 스캐너는 그냥 통과시켰다.
+            # 출처 간 가격이 벌어진 종목이 추천 후보로 올라올 수 있었다.
+            'price_cross_check': self._price_cross_check(matrix_data),
         })
         self.apply_integrity_gates(snap)
         return snap
+
+    #: 출처 간 현재가 허용 오차 (이 이상 벌어지면 시세를 신뢰할 수 없다)
+    PRICE_CROSS_TOL_PCT = rb('RULES_DATA_INTEGRITY', 'price_cross_tolerance_pct', 1.0)
+
+    @classmethod
+    def _price_cross_check(cls, matrix_data):
+        """
+        출처 매트릭스 → 교차검증 결과.
+        반환: {'base','compare','diff_pct','passed','note'}
+        가격을 가진 출처가 하나뿐이면 '대조 불가' 로 남기고 통과시키지 않는다
+        (없는 검증을 통과로 위장하지 않는다).
+        """
+        priced = [r for r in (matrix_data or []) if r.get('price') is not None]
+        if len(priced) < 2:
+            return {'base': priced[0]['price'] if priced else None, 'compare': None,
+                    'diff_pct': None, 'passed': None,
+                    'note': f"가격 보유 출처 {len(priced)}개 — 교차 대조 불가"}
+        base = float(priced[0]['price'])
+        comp = float(priced[1]['price'])
+        diff = abs(comp - base) / max(base, 1e-9) * 100.0
+        return {'base': base, 'compare': comp, 'diff_pct': round(diff, 4),
+                'passed': diff <= cls.PRICE_CROSS_TOL_PCT,
+                'note': (f"{priced[0]['source'][:12]} {base:,.0f} vs "
+                         f"{priced[1]['source'][:12]} {comp:,.0f} → 오차 {diff:.2f}%")}
 
     # ══════════════════════════════════════════════════════════════════════
     # 개인화 계층 — 평균 매수가는 여기서만 쓴다.
@@ -3889,6 +3919,17 @@ class QuantIndicatorsEngine:
                 self.last_scan_failures.append({
                     "symbol": symbol, "name": stock.get("name", symbol),
                     "reason": f"{type(exc).__name__}: {exc}"
+                })
+                continue
+
+            # 시세 교차검증 게이트 — 상세화면에만 있던 방어를 스캔 경로에도 건다.
+            # 출처 간 가격이 벌어진 종목은 그 위에 쌓은 점수·적정가를 믿을 수 없다.
+            _cc = snap.get('price_cross_check') or {}
+            if _cc.get('passed') is False:
+                self.last_scan_failures.append({
+                    "symbol": symbol, "name": stock.get("name", symbol),
+                    "reason": f"시세 교차검증 실패 — {_cc.get('note')} "
+                              f"(허용 {self.PRICE_CROSS_TOL_PCT:.1f}%)"
                 })
                 continue
 
