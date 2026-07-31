@@ -1227,7 +1227,17 @@ if st.session_state.get('show_portfolio'):
         st.markdown("---")
         st.markdown("### 📸 스크린샷으로 가져오기")
         _ocr = portfolio.ocr_backend()
-        if _ocr is None:
+        if _ocr is None and not ALLOW_LOCAL_STORE:
+            # 온라인(클라우드) 실행. OCR 엔진은 서버에 '설치가 안 된' 게 아니라
+            # 의도적으로 뺐다 — torch 한 패키지가 컨테이너 메모리 한도를 넘겨 배포가 실패한다.
+            # 사용자의 PC 상태 문제로 오해하지 않도록 사유를 그대로 밝힌다.
+            st.warning("⚠️ **온라인 실행에서는 스크린샷 인식을 제공하지 않습니다** — "
+                       "여러분 PC의 문제가 아닙니다. 이 앱이 도는 클라우드 서버는 메모리가 약 1GB인데, "
+                       "OCR 엔진(torch)만 2GB를 넘어 함께 배포할 수 없습니다.")
+            st.caption("온라인에서는 아래 **표 붙여넣기**를 이용하세요 — 증권사 화면에서 표를 드래그해 "
+                       "복사하면 그대로 읽습니다. 스크린샷 인식이 필요하면 이 앱을 내 PC에서 실행한 뒤 "
+                       "`pip install easyocr` 로 활성화할 수 있습니다.")
+        elif _ocr is None:
             st.warning("⚠️ **스크린샷 인식 불가** — 이 PC에 OCR 엔진이 설치되어 있지 않습니다.")
             st.code("pip install easyocr", language="bash")
             st.caption(portfolio.OCR_INSTALL_HINT)
