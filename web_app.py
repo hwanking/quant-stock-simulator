@@ -1850,6 +1850,69 @@ with st.expander(f"📈 [클릭] [{resolved_name}] 실시간 주가 차트 (5·2
     plt.tight_layout()
     st.pyplot(fig_top)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 🧭 최종 결론 — "이 주식 사? 말어?"
+# 6개 탭의 독립 판정을 가중 평균하되, 거부 조건은 평균으로 상쇄되지 않게 따로 본다.
+# ═══════════════════════════════════════════════════════════════════════════
+verdict = q_engine.build_final_verdict(snap)
+
+_ACTION_STYLE = {
+    'BUY':        ("#30d158", "🟢", "매수"),
+    'ACCUMULATE': ("#7bd88f", "🟢", "분할매수"),
+    'HOLD':       ("#ff9f0a", "🟡", "관망"),
+    'REDUCE':     ("#ff7a45", "🟠", "비중 축소"),
+    'SELL':       ("#ff453a", "🔴", "매도"),
+    'NO_TRADE':   ("#ff453a", "🔴", "매수 안 함"),
+}
+_vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#86868b", "⚪", "판단 보류"))
+_vscore = verdict['score']
+
+st.markdown(f"""
+<div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
+            border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
+            box-shadow:0 10px 34px {_vc}22;'>
+  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;'>
+    <div>
+      <p style='margin:0; font-size:0.85rem; color:#86868b; font-weight:700;'>
+        {resolved_name} — 퀀트 종합 결론</p>
+      <p style='margin:4px 0 0 0; font-size:2.5rem; font-weight:900; color:{_vc}; line-height:1.15;'>
+        {_vi} {verdict['headline']}</p>
+    </div>
+    <div style='text-align:right;'>
+      <p style='margin:0; font-size:0.8rem; color:#86868b;'>종합 점수</p>
+      <p style='margin:0; font-size:3rem; font-weight:900; color:{_vc}; line-height:1;'>
+        {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:1.1rem; color:#86868b;'> / 100</span></p>
+      <p style='margin:2px 0 0 0; font-size:0.9rem; font-weight:800; color:{_vc};'>{_vshort}</p>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+if verdict['vetoes']:
+    st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
+             "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
+             + "\n".join(f"- {x}" for x in verdict['vetoes']))
+
+_vc1, _vc2 = st.columns([1.15, 1])
+with _vc1:
+    st.markdown("**📊 무엇이 이 결론을 만들었나** — 탭 점수 × 비중")
+    st.dataframe(pd.DataFrame([{
+        "분석 항목": c['label'],
+        "점수": "—" if c['score'] is None else f"{c['score']}",
+        "비중": "—" if c['contribution'] is None else f"{c['weight_pct']:.1f}%",
+        "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
+        "비고": c['note'],
+    } for c in verdict['contributions']]), use_container_width=True, hide_index=True)
+    st.caption("산출되지 않은 항목은 0점으로 넣지 않고 **비중을 나머지에 재분배**합니다. "
+               "없는 값을 0으로 세면 멀쩡한 종목이 부당하게 낮아집니다.")
+with _vc2:
+    st.markdown("**🧾 한눈에**")
+    for s in verdict['summary']:
+        st.markdown(f"- {s}")
+    st.caption("⚠️ 투자 권유가 아닙니다. 최종 판단과 손익 책임은 투자자 본인에게 있습니다.")
+
+st.markdown("---")
+
 # 🚨 [사용자 요청] 뉴스·공시·촉매의 시간축 3단계 분리 분석을 한줄핵심결론 위로 배치
 news_tf = engine_init.get_timeframe_news_analysis(target_ticker)
 st.markdown(f"### 📰 [{resolved_name}] 뉴스·공시·촉매의 시간축 3단계 분리 분석")
@@ -2222,68 +2285,6 @@ st.markdown(f"""
 
 st.markdown("---")
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 🧭 최종 결론 — "이 주식 사? 말어?"
-# 6개 탭의 독립 판정을 가중 평균하되, 거부 조건은 평균으로 상쇄되지 않게 따로 본다.
-# ═══════════════════════════════════════════════════════════════════════════
-verdict = q_engine.build_final_verdict(snap)
-
-_ACTION_STYLE = {
-    'BUY':        ("#30d158", "🟢", "매수"),
-    'ACCUMULATE': ("#7bd88f", "🟢", "분할매수"),
-    'HOLD':       ("#ff9f0a", "🟡", "관망"),
-    'REDUCE':     ("#ff7a45", "🟠", "비중 축소"),
-    'SELL':       ("#ff453a", "🔴", "매도"),
-    'NO_TRADE':   ("#ff453a", "🔴", "매수 안 함"),
-}
-_vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#86868b", "⚪", "판단 보류"))
-_vscore = verdict['score']
-
-st.markdown(f"""
-<div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
-            border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
-            box-shadow:0 10px 34px {_vc}22;'>
-  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;'>
-    <div>
-      <p style='margin:0; font-size:0.85rem; color:#86868b; font-weight:700;'>
-        {resolved_name} — 퀀트 종합 결론</p>
-      <p style='margin:4px 0 0 0; font-size:2.5rem; font-weight:900; color:{_vc}; line-height:1.15;'>
-        {_vi} {verdict['headline']}</p>
-    </div>
-    <div style='text-align:right;'>
-      <p style='margin:0; font-size:0.8rem; color:#86868b;'>종합 점수</p>
-      <p style='margin:0; font-size:3rem; font-weight:900; color:{_vc}; line-height:1;'>
-        {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:1.1rem; color:#86868b;'> / 100</span></p>
-      <p style='margin:2px 0 0 0; font-size:0.9rem; font-weight:800; color:{_vc};'>{_vshort}</p>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-if verdict['vetoes']:
-    st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
-             "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
-             + "\n".join(f"- {x}" for x in verdict['vetoes']))
-
-_vc1, _vc2 = st.columns([1.15, 1])
-with _vc1:
-    st.markdown("**📊 무엇이 이 결론을 만들었나** — 탭 점수 × 비중")
-    st.dataframe(pd.DataFrame([{
-        "분석 항목": c['label'],
-        "점수": "—" if c['score'] is None else f"{c['score']}",
-        "비중": "—" if c['contribution'] is None else f"{c['weight_pct']:.1f}%",
-        "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
-        "비고": c['note'],
-    } for c in verdict['contributions']]), use_container_width=True, hide_index=True)
-    st.caption("산출되지 않은 항목은 0점으로 넣지 않고 **비중을 나머지에 재분배**합니다. "
-               "없는 값을 0으로 세면 멀쩡한 종목이 부당하게 낮아집니다.")
-with _vc2:
-    st.markdown("**🧾 한눈에**")
-    for s in verdict['summary']:
-        st.markdown(f"- {s}")
-    st.caption("⚠️ 투자 권유가 아닙니다. 최종 판단과 손익 책임은 투자자 본인에게 있습니다.")
-
-st.markdown("---")
 
 # 탭마다 그 탭의 독립 판정을 맨 위에 띄운다. 종합 결론과 다르면 그 사실이 보여야 한다.
 _TAB_VERDICT = {t['key']: t for t in verdict['tabs']}
