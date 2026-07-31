@@ -1281,6 +1281,45 @@ check("시세 조회 실패를 흡수", _dok == 0 and len(_dfail) == 1
       and _dead[0]['_price_source'] == '조회실패', str(_dfail))
 
 
+section("36. 지표 None 안전성 — dict.get 기본값 함정")
+
+# ⚠️ dict.get(key, default) 는 **키가 없을 때만** 기본값을 쓴다.
+#    ETF 처럼 키는 있는데 값이 None 이면 None 이 그대로 나와 float(None) 로 터진다.
+#    실제로 헤더(roe_val)와 뉴스 서사(roe >= 15)에서 두 번 터졌다.
+check("get 함정 재현", {'roe': None}.get('roe', 18.4) is None)
+
+_wsrc = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("헤더에 _metric 헬퍼 도입", "def _metric(" in _wsrc)
+for _lit, _pat in (("18.4", "latest_fund.get('roe', 18.4)"),
+                   ("1973.0", "latest_fund.get('eps', 1973.0)"),
+                   ("6584.0", "latest_fund.get('bps', 6584.0)"),
+                   ("42.5", "latest_fund.get('debt_to_equity', 42.5)")):
+    check(f"지어낸 기본값 {_lit} 제거", _pat not in _wsrc)
+check("적정가 'curr_price * 1.15' 폴백 제거",
+      "val_eval.get('target_1st', curr_price * 1.15)" not in _wsrc)
+
+# ETF 는 EPS·BPS·ROE 가 아예 없다 — 화면이 죽지 않고 '미수신' 으로 나와야 한다
+engine.fetch_and_update_naver_realtime("069500.KS")
+_etf_meta = be.STOCK_METRICS_DB.get("069500.KS") or {}
+check("ETF 의 ROE 는 None", _etf_meta.get('roe') is None, str(_etf_meta.get('roe')))
+
+# 뉴스 서사가 None 지표로 터지지 않고, 없는 값으로 단정하지도 않아야 한다
+_news_etf = engine.get_timeframe_news_analysis("069500.KS")
+check("ETF 뉴스 서사가 예외 없이 생성", isinstance(_news_etf, dict))
+check("ROE 없으면 장기 서사를 단정하지 않음",
+      "판단 보류" in str(_news_etf.get('long_narratives', {}).get('sentiment', '')),
+      str(_news_etf.get('long_narratives', {}).get('title'))[:60])
+check("PER 없으면 밸류에이션 판단 보류",
+      "미수신" in str(_news_etf.get('medium_catalysts', {}).get('impact', '')),
+      str(_news_etf.get('medium_catalysts', {}).get('impact'))[:60])
+
+# 일반 종목은 예전처럼 수치 기반 서사가 나와야 한다 (회귀 방지)
+_news_now = engine.get_timeframe_news_analysis(SYMBOL)
+check("일반 종목은 ROE 기반 서사 유지",
+      "판단 보류" not in str(_news_now.get('long_narratives', {}).get('sentiment', '')),
+      str(_news_now.get('long_narratives', {}).get('sentiment')))
+
+
 print()
 print("=" * 72)
 if FAILURES:

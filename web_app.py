@@ -1702,11 +1702,37 @@ chg_sign = "▲ +" if pct_change >= 0 else "▼ "
 chg_text = f"{chg_sign}{pct_change:.2f}% ({diff_price:+,.0f}원)" if unit_currency=="KRW" else f"{chg_sign}{pct_change:.2f}% (${diff_price:+.2f})"
 
 # 펀더멘털 & 밸류에이션 핵심 지표 추출
-per_val = float(four_scores.get('fwd_per', stock_info.get('per', val_eval.get('fwd_per', 12.4)) or 12.4))
-pbr_val = float(four_scores.get('pbr', stock_info.get('pbr', latest_fund.get('pbr', 1.35)) if isinstance(latest_fund, dict) else 1.35))
-roe_val = float(stock_info.get('roe', latest_fund.get('roe', 18.4)) if isinstance(latest_fund, dict) else 18.4)
-eps_val = float(stock_info.get('eps', latest_fund.get('eps', 1973.0)) if isinstance(latest_fund, dict) else 1973.0)
-bps_val = float(stock_info.get('bps', latest_fund.get('bps', 6584.0)) if isinstance(latest_fund, dict) else 6584.0)
+#
+# ⚠️ dict.get(key, default) 는 **키가 없을 때만** 기본값을 쓴다.
+#    키가 있고 값이 None 이면 None 이 그대로 나와 float(None) 로 터진다.
+#    ETF 는 EPS·BPS·ROE 가 아예 없어서 None 이 들어오므로 실제로 터졌다.
+# ⚠️ 그리고 12.4·18.4·1973.0 같은 리터럴 기본값은 '지어낸 값'이다.
+#    수신하지 못한 지표는 숫자를 만들지 않고 None 으로 두고 화면에 '미수신'으로 적는다.
+def _metric(*vals, positive_only=False):
+    """첫 유효 수치를 돌려준다. 전부 없으면 None (리터럴로 채우지 않는다)."""
+    for v in vals:
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if np.isnan(f):
+            continue
+        if positive_only and f <= 0:
+            continue          # 이 코드베이스에서 PER/BPS 등의 0 은 '미수신' 을 뜻한다
+        return f
+    return None
+
+
+_lf = latest_fund if isinstance(latest_fund, dict) else {}
+per_val = _metric(four_scores.get('fwd_per'), stock_info.get('per'),
+                  val_eval.get('fwd_per'), _lf.get('per'), positive_only=True)
+pbr_val = _metric(four_scores.get('pbr'), stock_info.get('pbr'),
+                  _lf.get('pbr'), positive_only=True)
+roe_val = _metric(stock_info.get('roe'), _lf.get('roe'))          # ROE 는 음수도 유효
+eps_val = _metric(stock_info.get('eps'), _lf.get('eps'), positive_only=True)
+bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
 
 # 배당은 fetch_dividend_info 하나만 쓴다.
 # 구버전은 헤더와 하단 패널이 서로 다른 경로로 계산해 같은 종목의 DPS 가 두 값이었다
@@ -1716,8 +1742,9 @@ div_payout = div_info.get('dps') if div_info.get('available') else None
 div_yield = div_info.get('dividend_yield_pct') if div_info.get('available') else None
 div_date = div_info.get('estimated_ex_date') if div_info.get('available') else None
 
-debt_val = float(stock_info.get('debt', latest_fund.get('debt_to_equity', 42.5)) if isinstance(latest_fund, dict) else 42.5)
-fair_target = float(four_scores.get('target_fundamental', val_eval.get('target_1st', curr_price * 1.15) or curr_price * 1.15))
+debt_val = _metric(stock_info.get('debt'), _lf.get('debt_to_equity'))
+# (예전에 있던 fair_target 은 어디서도 쓰이지 않는 죽은 변수였고,
+#  없으면 '현재가 × 1.15' 를 지어내는 폴백까지 달려 있어 함께 제거했다.)
 
 # [1] 가격 헤더 모듈 (최상단)
 
@@ -1746,23 +1773,23 @@ st.markdown(f"""
     <div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px;'>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>PER (주가수익비율)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #30d158; font-weight: bold;'>{per_val:.1f}배</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #30d158; font-weight: bold;'>{fmt_num(per_val, '.1f', '배', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>PBR (주가순자산비율)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #64d2ff; font-weight: bold;'>{pbr_val:.2f}배</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #64d2ff; font-weight: bold;'>{fmt_num(pbr_val, '.2f', '배', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>ROE (자기자본이익률)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #ff9f0a; font-weight: bold;'>{roe_val:.1f}%</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #ff9f0a; font-weight: bold;'>{fmt_num(roe_val, '.1f', '%', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>EPS (주당순이익)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #f5f5f7; font-weight: bold;'>{eps_val:,.0f}원</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #f5f5f7; font-weight: bold;'>{fmt_num(eps_val, ',.0f', '원', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>BPS (주당순자산)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #f5f5f7; font-weight: bold;'>{bps_val:,.0f}원</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #f5f5f7; font-weight: bold;'>{fmt_num(bps_val, ',.0f', '원', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>주당 배당금 (수익률)</p>
@@ -1775,7 +1802,7 @@ st.markdown(f"""
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #2c2c2e; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #86868b; font-weight: bold;'>부채비율 (재무안전)</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #30d158; font-weight: bold;'>{debt_val:.1f}%</p>
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #30d158; font-weight: bold;'>{fmt_num(debt_val, '.1f', '%', na='미수신')}</p>
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #bf5af2; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #bf5af2; font-weight: bold;'>💎 시장조정 펀더멘털 적정가</p>

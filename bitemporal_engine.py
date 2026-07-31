@@ -809,9 +809,19 @@ class BitemporalEngine:
         pct = meta.get("pct_change", 0.0)
         diff = meta.get("diff_price", 0.0)
         
-        roe = meta.get('roe', 10.0)
-        per = meta.get('per', 12.0)
-        pbr = meta.get('pbr', 1.0)
+        # ⚠️ dict.get(key, default) 는 키가 없을 때만 기본값을 쓴다.
+        #    ETF 처럼 키는 있는데 값이 None 이면 None 이 그대로 나와 비교·포맷에서 터진다.
+        def _num(key):
+            v = meta.get(key)
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                return None
+            return None if (np.isnan(v) or v == 0) else v
+
+        roe = _num('roe')
+        per = _num('per')
+        pbr = _num('pbr')
         
         now_date = datetime.datetime.now().strftime("%Y-%m-%d")
         
@@ -843,7 +853,10 @@ class BitemporalEngine:
         ]
         m_theme, m_desc, m_sent = med_themes[sym_hash]
         
-        if per < 8:
+        if per is None:
+            # ETF·ETN 이거나 PER 미수신 — 없는 값으로 밸류에이션을 논하지 않는다
+            med_impact = f"{m_desc} (PER 미수신 — 밸류에이션 판단 보류)"
+        elif per < 8:
             med_impact = f"{m_desc} (PER {per:.1f}배 극심한 저평가 구간으로 하방 경직성 확보)"
         elif per > 25:
             med_impact = f"{m_desc} (PER {per:.1f}배 고평가 부담으로 실적 증명 전까지 변동성 주의)"
@@ -853,7 +866,13 @@ class BitemporalEngine:
         med_title = f"⚡ {m_theme}"
 
         # 3. 장기 구조적 서사 (펀더멘털 ROE 중심)
-        if roe >= 15:
+        if roe is None:
+            long_title = f"ℹ️ [{stock_name}] 자기자본이익률(ROE) 미수신 — 장기 서사 판단 보류"
+            long_impact = ("ETF·ETN 이거나 재무 지표를 받지 못한 종목입니다. "
+                           "ROE 없이 장기 펀더멘털을 단정하지 않습니다. "
+                           "추세·경로·표본 분석은 그대로 유효합니다.")
+            long_sentiment = "판단 보류"
+        elif roe >= 15:
             long_title = f"💎 [{stock_name}] 독보적 자본효율성 기반의 장기 고성장 궤도 진입"
             long_impact = f"지속적인 두 자릿수 ROE({roe:.1f}%) 창출력 입증. 산업 내 강력한 해자(Moat) 구축으로 장기 투자 매력도 최상."
             long_sentiment = "매우 긍정"
