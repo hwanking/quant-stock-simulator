@@ -1912,6 +1912,85 @@ check("온라인 저장 불가 사실 고지", "판정 기록이 쌓이지 않�
 check("뉴스 비해석 원칙 문구", "요약·해석해" in _w45)
 
 
+section("46. 시장·글로벌·뉴스가 퀀트 점수 산식에 실제로 들어가는가")
+
+# ⚠️ 이전 단계에서는 시장·글로벌·뉴스가 '상한(cap)' 으로만 걸려 있었다. 상한은
+#    좋은 점수를 깎을 뿐이라, 판이 나빠도 점수 자체는 그대로였다. 이제 산식 안으로
+#    들어간다: 시장 국면 = 국내 국면 + 글로벌 위험 합성(매매 적합도 8%),
+#    뉴스 위험 = 리스크 안전성 12%.
+import market_context as mcx46
+
+_R46 = qi.RULEBOOK.get('RULES_MARKET_CONTEXT', {})
+check("규칙집이 산식의 단일 출처", len(_R46) >= 10)
+check("국내/글로벌 가중치 합 1.0",
+      abs(float(_R46.get('weight_domestic_regime', 0))
+          + float(_R46.get('weight_global_risk', 0)) - 1.0) < 1e-9)
+_WR46 = qi.RULEBOOK.get('RULES_RISK_SAFETY_WEIGHTS', {})
+check("뉴스 위험이 리스크 항목으로 신설", 'weight_news_risk' in _WR46)
+check("리스크 가중치 합 여전히 1.0",
+      abs(sum(float(v) for v in _WR46.values()) - 1.0) < 1e-9)
+
+_calm46 = {'sp500': {'available': True, 'price': 100, 'sma60': 90, 'above_sma60': True},
+           'nasdaq': {'available': True, 'drawdown_pct': -2.0},
+           'vix': {'available': True, 'price': 15.0},
+           'usdkrw': {'available': True, 'chg20_pct': 0.5}}
+_panic46 = {'sp500': {'available': True, 'price': 80, 'sma60': 95, 'above_sma60': False},
+            'nasdaq': {'available': True, 'drawdown_pct': -18.0},
+            'vix': {'available': True, 'price': 40.0},
+            'usdkrw': {'available': True, 'chg20_pct': 6.0}}
+_sc46, _hits46, _ = mcx46.score_global_risk(_calm46, _R46)
+_sp46, _hitsp46, _ = mcx46.score_global_risk(_panic46, _R46)
+check("평온한 글로벌은 감점 없음", _sc46 == 100 and not _hits46)
+check("위험 신호마다 감점되고 내역이 남음", _sp46 < 50 and len(_hitsp46) == 4,
+      f"{_sp46} / {len(_hitsp46)}건")
+check("글로벌 전부 미수신이면 None (0점으로 치지 않음)",
+      mcx46.score_global_risk({}, _R46)[0] is None)
+
+_bull46 = {'available': True, 'regime_code': 'BULL_STRONG'}
+_bear46 = {'available': True, 'regime_code': 'BEAR_PANIC'}
+_rbc, _ = mcx46.score_market_regime(_bull46, _calm46, _R46)
+_rbp, _ = mcx46.score_market_regime(_bull46, _panic46, _R46)
+_rxp, _ = mcx46.score_market_regime(_bear46, _panic46, _R46)
+check("국내가 강세라도 글로벌이 무너지면 점수가 내려간다", _rbp < _rbc - 15,
+      f"{_rbc} → {_rbp}")
+check("국내·글로벌 모두 나쁘면 최저", _rxp < _rbp)
+_ronly, _d46 = mcx46.score_market_regime(_bull46, {}, _R46)
+check("한쪽 미수신이면 나머지로 재정규화", _ronly == 78.0 and _d46['renormalized'])
+check("양쪽 미수신이면 점수를 만들지 않음",
+      mcx46.score_market_regime({}, {}, _R46)[0] is None)
+
+# 뉴스: 감점만 있고 가점은 없다
+check("위험 낱말 없으면 만점", mcx46.score_news_risk(
+    {'risk_count': 0, 'total': 10}, True, _R46)[0] == 100)
+check("위험 낱말 1건당 감점", mcx46.score_news_risk(
+    {'risk_count': 2, 'total': 10}, True, _R46)[0] == 50)
+check("감점 하한 유지", mcx46.score_news_risk(
+    {'risk_count': 99, 'total': 100}, True, _R46)[0] == 25)
+_nu46 = mcx46.score_news_risk(None, False, _R46)
+check("뉴스 미수신은 중립값 — 만점으로 치지 않음", 0 < _nu46[0] < 100)
+_mcsrc46 = _insp.getsource(mcx46)
+check("가점 경로 없음 (좋은 뉴스로 점수를 올리지 않음)",
+      'watch_hits' not in _insp.getsource(mcx46.score_news_risk))
+
+# 파이프라인 반영 — 실제 스냅샷에 재계산 내역이 실린다
+_snap46 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs46 = _snap46['four_scores']
+check("시장 국면 점수가 스냅샷에", _fs46.get('market_regime_score') is not None)
+check("국내·글로벌 합성 내역 노출",
+      (_fs46.get('market_regime_detail') or {}).get('global_score') is not None)
+check("뉴스 위험 점수가 스냅샷에", _fs46.get('news_risk_score') is not None)
+check("매매적합 가중치 합 1.0 (항목 제외 없을 때)",
+      abs(float(_fs46.get('timing_weight_sum', 0)) - 1.0) < 1e-6)
+_qsrc46 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("시장 국면이 매매적합도 항목으로 합산됨", "market_regime_score_for_sum" in _qsrc46)
+check("뉴스 위험이 리스크 안전성에 합산됨", "news_risk_score * WR.get" in _qsrc46)
+check("미산출 항목은 50점으로 메우지 않고 가중치 0 처리",
+      "regime_weight = 0.0" in _qsrc46)
+_w46 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면에 산식 반영분 표시", "퀀트 점수를 얼마나 움직였나" in _w46)
+check("상한과 반영분을 구분해 설명", "점수 상한과 별개로" in _w46)
+
+
 print()
 print("=" * 72)
 if FAILURES:

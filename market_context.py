@@ -249,6 +249,161 @@ def summarize_news_flags(news):
 # 4. 종합 — 점수 상한(cap)과 사유
 # ─────────────────────────────────────────────────────────────────────────────
 
+def score_global_risk(glob, rules=None):
+    """
+    글로벌 지표 → 0~100 위험 점수(높을수록 안전) + 감점 내역.
+
+    규칙집 [RULES_MARKET_CONTEXT] 의 감점표를 그대로 적용한다. 지표를 못 받으면
+    그 항목은 감점하지 않고 '미수신'으로 남긴다 — 못 받은 것을 나쁘게도, 좋게도
+    치지 않는다. 하나도 못 받으면 None 을 돌려주고 호출자가 항목을 뺀다.
+    반환: (점수 또는 None, [감점 내역], [미수신 항목])
+    """
+    r = dict(rules or {})
+
+    def g(k, d):
+        try:
+            return float(r.get(k, d))
+        except (TypeError, ValueError):
+            return d
+
+    score = g('global_base', 100.0)
+    hits, missing, seen = [], [], 0
+
+    sp = (glob or {}).get('sp500') or {}
+    if sp.get('available'):
+        seen += 1
+        if sp.get('above_sma60') is False:
+            p = g('penalty_sp500_below_sma60', 12)
+            score -= p
+            hits.append((f"S&P500 이 60일선 아래 ({sp['price']:,.0f} < {sp['sma60']:,.0f})", p))
+    else:
+        missing.append("S&P500")
+
+    nq = (glob or {}).get('nasdaq') or {}
+    if nq.get('available'):
+        seen += 1
+        dd = nq.get('drawdown_pct')
+        if dd is not None and dd <= g('nasdaq_drawdown_pct', -10.0):
+            p = g('penalty_nasdaq_drawdown', 15)
+            score -= p
+            hits.append((f"나스닥 최근 고점 대비 {dd:.1f}%", p))
+    else:
+        missing.append("나스닥")
+
+    vx = (glob or {}).get('vix') or {}
+    if vx.get('available'):
+        seen += 1
+        v = vx.get('price')
+        if v is not None and v >= g('vix_extreme', 35.0):
+            p = g('penalty_vix_extreme', 25)
+            score -= p
+            hits.append((f"VIX {v:.1f} (공포 구간)", p))
+        elif v is not None and v >= g('vix_warn', 25.0):
+            p = g('penalty_vix_warn', 10)
+            score -= p
+            hits.append((f"VIX {v:.1f} (경계 구간)", p))
+    else:
+        missing.append("VIX")
+
+    fx = (glob or {}).get('usdkrw') or {}
+    if fx.get('available'):
+        seen += 1
+        c = fx.get('chg20_pct')
+        if c is not None and c >= g('fx_spike_20d_pct', 3.0):
+            p = g('penalty_fx_spike', 10)
+            score -= p
+            hits.append((f"원/달러 20일 {c:+.1f}% (원화 약세)", p))
+    else:
+        missing.append("원/달러")
+
+    if seen == 0:
+        return None, [], missing
+    return max(0.0, min(100.0, score)), hits, missing
+
+
+def score_news_risk(news_flags, news_available, rules=None):
+    """
+    뉴스 위험 낱말 → 0~100 점수(높을수록 안전).
+
+    제목에 위험 낱말이 있는 기사 1건마다 감점한다. 기사를 못 받았으면
+    중립값을 쓰고 그 사실을 함께 돌려준다 — 못 받은 것을 안전하다고 치지 않는다.
+    반환: (점수, 설명)
+    """
+    r = dict(rules or {})
+
+    def g(k, d):
+        try:
+            return float(r.get(k, d))
+        except (TypeError, ValueError):
+            return d
+
+    if not news_available:
+        return g('news_unavailable_score', 60), "뉴스 미수신 — 중립값 적용"
+    n = int((news_flags or {}).get('risk_count', 0) or 0)
+    total = int((news_flags or {}).get('total', 0) or 0)
+    if n == 0:
+        return g('news_base', 100), f"최근 기사 {total}건에 위험 낱말 없음"
+    score = max(g('news_score_floor', 25),
+                g('news_base', 100) - n * g('news_penalty_per_article', 25))
+    return score, f"위험 낱말 기사 {n}건 (기사 {total}건 중) — 1건당 " \
+                  f"{g('news_penalty_per_article', 25):.0f}점 감점"
+
+
+def score_market_regime(domestic, glob, rules=None):
+    """
+    상장시장 국면 + 글로벌 위험 → 시장 국면 점수(0~100).
+
+    한쪽이 미수신이면 그 가중치를 0으로 두고 나머지로 재정규화한다.
+    둘 다 미수신이면 None — 이 항목을 빼고 나머지 항목으로 판정한다.
+    반환: (점수 또는 None, 내역 dict)
+    """
+    r = dict(rules or {})
+
+    def g(k, d):
+        try:
+            return float(r.get(k, d))
+        except (TypeError, ValueError):
+            return d
+
+    dom_score = None
+    if (domestic or {}).get('available'):
+        dom_score = {
+            'BULL_STRONG': g('score_bull_strong', 78),
+            'BULL_MILD': g('score_bull_mild', 70),
+            'SIDEWAYS': g('score_sideways', 55),
+            'BEAR_PANIC': g('score_bear_panic', 32),
+        }.get(domestic.get('regime_code'))
+
+    glob_score, glob_hits, glob_missing = score_global_risk(glob, r)
+
+    w_dom = g('weight_domestic_regime', 0.60)
+    w_glob = g('weight_global_risk', 0.40)
+    parts, wsum, total = [], 0.0, 0.0
+    if dom_score is not None:
+        total += dom_score * w_dom
+        wsum += w_dom
+        parts.append(('국내 지수 국면', dom_score, w_dom))
+    if glob_score is not None:
+        total += glob_score * w_glob
+        wsum += w_glob
+        parts.append(('글로벌 위험', glob_score, w_glob))
+
+    detail = {
+        'domestic_score': dom_score,
+        'domestic_label': (domestic or {}).get('regime_label'),
+        'domestic_basis': (domestic or {}).get('basis'),
+        'global_score': glob_score,
+        'global_hits': glob_hits,
+        'global_missing': glob_missing,
+        'parts': parts,
+        'renormalized': (dom_score is None) != (glob_score is None),
+    }
+    if wsum <= 0:
+        detail['reason'] = "국내 지수·글로벌 지표를 모두 받지 못해 시장 국면을 산출하지 않습니다."
+        return None, detail
+    return round(total / wsum, 1), detail
+
+
 #: 상한 규칙. (조건 이름, 상한점수) — 여러 개가 걸리면 가장 낮은 값이 적용된다.
 CONTEXT_CAPS = {
     'domestic_bear': 55,      # 상장 시장 지수가 20·60일선 아래

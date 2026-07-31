@@ -2258,6 +2258,47 @@ with _ctx_c2:
 for _note in (_mkt_ctx.get('notes') or []):
     st.caption("ℹ️ " + str(_note))
 
+# ── 이 컨텍스트가 퀀트 점수를 얼마나 움직였는지 (상한과는 별개의 산식 반영분) ──
+_rgd = four_scores.get('market_regime_detail') or {}
+with st.expander("🧮 이 시장·뉴스가 퀀트 점수를 얼마나 움직였나 (산식 반영분)", expanded=False):
+    st.caption("아래는 **점수 상한과 별개로**, 시장·글로벌·뉴스가 점수 산식 안에서 "
+               "차지한 몫입니다. 좋은 뉴스로 점수를 올리는 경로는 없습니다 — 위험 낱말이 "
+               "있을 때만 깎입니다.")
+    _rows_ctx = []
+    if four_scores.get('market_regime_excluded'):
+        st.warning("시장 국면 점수를 산출하지 못해 **매매 적합도에서 이 항목을 빼고** "
+                   "나머지 항목으로 재정규화했습니다 — 못 받은 값을 중립 50점으로 "
+                   "메우지 않습니다. 사유: " + str(_rgd.get('reason', '지수·글로벌 미수신')))
+    else:
+        _rows_ctx.append({
+            "항목": "시장 국면 (매매 적합도 안)",
+            "점수": fmt_num(four_scores.get('market_regime_score'), '.1f'),
+            "가중치": f"{float(four_scores.get('market_regime_weight') or 0) * 100:.0f}%",
+            "구성": (f"국내 {fmt_num(_rgd.get('domestic_score'), '.0f')} × "
+                     f"{float(q_engine.W_MARKET_CTX.get('weight_domestic_regime', 0.6)) * 100:.0f}% + "
+                     f"글로벌 {fmt_num(_rgd.get('global_score'), '.0f')} × "
+                     f"{float(q_engine.W_MARKET_CTX.get('weight_global_risk', 0.4)) * 100:.0f}%"
+                     + ("  (한쪽 미수신 → 재정규화)" if _rgd.get('renormalized') else "")),
+        })
+    _rows_ctx.append({
+        "항목": "뉴스 위험 (리스크 안전성 안)",
+        "점수": fmt_num(four_scores.get('news_risk_score'), '.1f'),
+        "가중치": f"{float(four_scores.get('news_risk_weight') or 0) * 100:.0f}%",
+        "구성": str(four_scores.get('news_risk_note', '')),
+    })
+    st.dataframe(pd.DataFrame(_rows_ctx), use_container_width=True, hide_index=True)
+
+    if _rgd.get('global_hits'):
+        st.markdown("**글로벌 감점 내역** (규칙집 [RULES_MARKET_CONTEXT] 기준)")
+        st.dataframe(pd.DataFrame([{"사유": t, "감점": f"-{p:.0f}점"}
+                                   for t, p in _rgd['global_hits']]),
+                     use_container_width=True, hide_index=True)
+    if _rgd.get('global_missing'):
+        st.caption("미수신 지표(감점도 가점도 하지 않음): " + ", ".join(_rgd['global_missing']))
+    if four_scores.get('context_cap', 100) < 100:
+        st.markdown(f"위 반영분과 **별개로**, 상한 규칙이 최종 점수를 "
+                    f"**{four_scores.get('context_cap')}점 이하**로 제한했습니다.")
+
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:
     import prediction_log as _plog

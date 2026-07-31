@@ -166,6 +166,8 @@ class QuantIndicatorsEngine:
     W_OPP = RULEBOOK.get('RULES_OPPORTUNITY_WEIGHTS', {})
     W_EXEC = RULEBOOK.get('RULES_EXECUTION_WEIGHTS', {})
     W_CONF = RULEBOOK.get('RULES_ANALYSIS_CONFIDENCE_WEIGHTS', {})
+    #: 시장 국면·글로벌·뉴스 점수화 규칙 (단일 출처: analysis_rulebook_ko.txt)
+    W_MARKET_CTX = RULEBOOK.get('RULES_MARKET_CONTEXT', {})
     GATES = RULEBOOK.get('RULES_TOP3_GATES', {})
     FV_CONF = RULEBOOK.get('RULES_FAIR_VALUE_CONFIDENCE', {})
     RULEBOOK_VERSION = rb('RULES_GENERAL', 'version', '미상')
@@ -2441,19 +2443,38 @@ class QuantIndicatorsEngine:
 
         flow_volume_score = 55 + (volume_flow_bullish_signal * 15) - (volume_flow_bearish_signal * 15)
 
-        # 시장 국면 — classify_market_regime() 실제 배선 (구버전은 60점 고정)
-        # regime_ctx 는 run_full_pipeline 이 주입한다. 없으면 판정 보류(중립 50).
+        # 시장 국면 — 상장시장(코스피/코스닥) 국면 + 글로벌 위험을 합성한다.
+        # 종목만 보고 매수를 판단하면 판 전체가 무너지는 국면을 놓친다. 가중치와
+        # 감점표는 규칙집 [RULES_MARKET_CONTEXT] 가 단일 출처다.
+        # 한쪽을 못 받으면 그쪽 가중치를 0으로 두고 재정규화하고, 둘 다 못 받으면
+        # 점수를 만들지 않는다(항목 제외) — 못 받은 값을 50점으로 채우지 않는다.
         regime_ctx = getattr(self, 'market_regime_ctx', None)
+        _mctx_now = getattr(self, 'market_context', None) or {}
+        regime_code, regime_label = 'DECISION_PENDING', '판정 보류 (지수 데이터 미수신)'
         if regime_ctx and regime_ctx.get('available'):
             regime_code, regime_label, _rw = self.classify_market_regime(
                 regime_ctx.get('price'), regime_ctx.get('sma20'), regime_ctx.get('sma60'))
-            market_regime_score = {
-                'BULL_STRONG': 78, 'BULL_MILD': 70, 'SIDEWAYS': 55,
-                'BEAR_PANIC': 32, 'DECISION_PENDING': 50,
-            }.get(regime_code, 50)
+
+        market_regime_score = None
+        regime_detail = {}
+        try:
+            import market_context as _mc_score
+            _dom_for_score = dict(_mctx_now.get('domestic') or {})
+            if _dom_for_score.get('available') and regime_code != 'DECISION_PENDING':
+                _dom_for_score['regime_code'] = regime_code
+            market_regime_score, regime_detail = _mc_score.score_market_regime(
+                _dom_for_score, _mctx_now.get('global') or {}, self.W_MARKET_CTX)
+        except Exception as _rexc:
+            regime_detail = {'reason': f'시장 국면 산출 실패 ({type(_rexc).__name__})'}
+
+        # 시장 국면을 못 만들면 그 항목의 가중치를 0으로 두고 나머지 항목으로
+        # 매매 적합도를 재정규화한다 (중립 50점으로 메우지 않는다).
+        regime_weight = self.W_TIMING.get('weight_market_regime', 0.08)
+        if market_regime_score is None:
+            regime_weight = 0.0
+            market_regime_score_for_sum = 0.0
         else:
-            regime_code, regime_label = 'DECISION_PENDING', '판정 보류 (지수 데이터 미수신)'
-            market_regime_score = 50
+            market_regime_score_for_sum = market_regime_score
 
         # 통계 신뢰도는 실제 유효표본 수에 비례한다 (구버전은 존재하지 않는 'total_trades' 키를
         # 읽어 항상 0 → probability_edge_score가 언제나 정확히 50점으로 고정되어 있었음)
@@ -2504,17 +2525,24 @@ class QuantIndicatorsEngine:
             historical_pattern_score = 50 # 미산출 시 중립
 
         WT = self.W_TIMING
+        # 항목별 (점수, 가중치). 시장 국면을 못 만든 경우 그 가중치가 0이 되고
+        # 아래 나눗셈이 남은 항목으로 자동 재정규화한다 — 빠진 항목을 50점으로
+        # 메우면 '중립'이라는 없는 정보를 만들어 넣는 셈이 된다.
+        _timing_terms = [
+            (historical_pattern_score, WT.get('weight_historical_pattern', 0.22)),
+            (path_expected_value_score, WT.get('weight_path_expected_value', 0.16)),
+            (demark_confluence_score, WT.get('weight_demark_confluence', 0.14)),
+            (technical_structure_score, WT.get('weight_technical_structure', 0.13)),
+            (flow_volume_score, WT.get('weight_flow_volume', 0.11)),
+            (market_regime_score_for_sum, regime_weight),
+            (probability_edge_score, WT.get('weight_probability_edge', 0.07)),
+            (price_location_score, WT.get('weight_price_location', 0.05)),
+            (event_timing_score, WT.get('weight_event_timing', 0.04)),
+        ]
+        _timing_wsum = sum(w for _s, w in _timing_terms)
         trading_timing_score = (
-            historical_pattern_score * WT.get('weight_historical_pattern', 0.22)
-            + path_expected_value_score * WT.get('weight_path_expected_value', 0.16)
-            + demark_confluence_score * WT.get('weight_demark_confluence', 0.14)
-            + technical_structure_score * WT.get('weight_technical_structure', 0.13)
-            + flow_volume_score * WT.get('weight_flow_volume', 0.11)
-            + market_regime_score * WT.get('weight_market_regime', 0.08)
-            + probability_edge_score * WT.get('weight_probability_edge', 0.07)
-            + price_location_score * WT.get('weight_price_location', 0.05)
-            + event_timing_score * WT.get('weight_event_timing', 0.04)
-        )
+            sum(s * w for s, w in _timing_terms) / _timing_wsum
+            if _timing_wsum > 0 else 50.0)
         
         # ========================================================
         # 3. 리스크 안전성 (Risk Safety Score)
@@ -2586,13 +2614,26 @@ class QuantIndicatorsEngine:
         elif avg_turnover_20d >= 5e8:     liquidity_score = 45
         else:                             liquidity_score = 20
 
+        # 뉴스 위험 — 실제 수집한 종목 기사 제목의 낱말 일치만 센다.
+        # 기사 내용을 해석하지 않으며, 좋은 뉴스로 점수를 올리지도 않는다
+        # (감점만 있고 가점은 없다). 미수신이면 규칙집의 중립값을 쓴다.
+        try:
+            import market_context as _mc_news
+            news_risk_score, news_risk_note = _mc_news.score_news_risk(
+                _mctx_now.get('news_flags'),
+                bool((_mctx_now.get('news') or {}).get('available')),
+                self.W_MARKET_CTX)
+        except Exception:
+            news_risk_score, news_risk_note = 60.0, "뉴스 위험 산출 실패 — 중립값 적용"
+
         WR = self.W_RISK
         risk_safety_score = (
-            reward_risk_score * WR.get('weight_reward_risk', 0.30)
-            + volatility_mdd_score * WR.get('weight_volatility_mdd', 0.25)
-            + financial_risk_score * WR.get('weight_financial_risk', 0.20)
-            + event_risk_score * WR.get('weight_event_risk', 0.15)
-            + liquidity_score * WR.get('weight_liquidity', 0.10)
+            reward_risk_score * WR.get('weight_reward_risk', 0.27)
+            + volatility_mdd_score * WR.get('weight_volatility_mdd', 0.22)
+            + financial_risk_score * WR.get('weight_financial_risk', 0.18)
+            + event_risk_score * WR.get('weight_event_risk', 0.13)
+            + liquidity_score * WR.get('weight_liquidity', 0.08)
+            + news_risk_score * WR.get('weight_news_risk', 0.12)
         )
 
         # ========================================================
@@ -2966,6 +3007,17 @@ class QuantIndicatorsEngine:
             'blind_test_status': "미수행" if blind_test_not_completed else "수행완료",
             'sq_cap': sq_cap,
 
+            # 시장·글로벌·뉴스가 점수에 실제로 들어간 내역 (상한과는 별개)
+            'market_regime_score': (None if market_regime_score is None
+                                    else round(float(market_regime_score), 1)),
+            'market_regime_weight': round(float(regime_weight), 4),
+            'market_regime_detail': regime_detail,
+            'market_regime_excluded': market_regime_score is None,
+            'news_risk_score': round(float(news_risk_score), 1),
+            'news_risk_weight': float(self.W_RISK.get('weight_news_risk', 0.12)),
+            'news_risk_note': news_risk_note,
+            'timing_weight_sum': round(float(_timing_wsum), 4),
+
             # 시장·글로벌·뉴스 컨텍스트 (화면 표시 + 상한 근거)
             'context_cap': context_cap,
             'context_caps': dict(_ctx.get('caps') or {}),
@@ -3011,7 +3063,6 @@ class QuantIndicatorsEngine:
             'liquidity_score': int(liquidity_score),
             'market_regime_code': regime_code,
             'market_regime_label': regime_label,
-            'market_regime_score': int(market_regime_score),
             # 목표가·손절가 모두 미도달한 비중 (구버전은 20.0 고정)
             'non_reach': (round(max(0.0, 100.0 - float(sim_res.get('tp_first_prob') or 0.0)
                                     - float(sim_res.get('sl_first_prob') or 0.0)), 1)

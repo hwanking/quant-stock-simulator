@@ -38,11 +38,46 @@ weight_event_timing = 0.04
 
 # 리스크 안전성 내부 가중치 (합 1.00)
 [RULES_RISK_SAFETY_WEIGHTS]
-weight_reward_risk = 0.30
-weight_volatility_mdd = 0.25
-weight_financial_risk = 0.20
-weight_event_risk = 0.15
-weight_liquidity = 0.10
+weight_reward_risk = 0.27
+weight_volatility_mdd = 0.22
+weight_financial_risk = 0.18
+weight_event_risk = 0.13
+weight_liquidity = 0.08
+# 종목 뉴스에서 확인이 필요한 낱말이 잡힌 경우의 위험 (market_context 낱말 일치)
+weight_news_risk = 0.12
+
+# 시장 국면 점수 = 상장시장(코스피/코스닥) 국면 + 글로벌 위험 합성
+# 한 쪽이 미수신이면 그쪽 가중치를 0으로 두고 나머지로 재정규화한다.
+# 둘 다 미수신이면 점수를 만들지 않고 이 항목을 통째로 뺀다 (추측 금지).
+[RULES_MARKET_CONTEXT]
+weight_domestic_regime = 0.60
+weight_global_risk = 0.40
+
+# 국내 지수 국면별 점수
+score_bull_strong = 78
+score_bull_mild = 70
+score_sideways = 55
+score_bear_panic = 32
+
+# 글로벌 위험 점수 = 100 에서 아래 감점을 차례로 뺀다 (하한 0)
+global_base = 100
+penalty_sp500_below_sma60 = 12
+penalty_nasdaq_drawdown = 15
+penalty_vix_warn = 10
+penalty_vix_extreme = 25
+penalty_fx_spike = 10
+nasdaq_drawdown_pct = -10.0
+vix_warn = 25.0
+vix_extreme = 35.0
+fx_spike_20d_pct = 3.0
+
+# 뉴스 위험 점수 = 100 에서 위험 낱말 기사 1건당 감점 (하한 25)
+# 기사 내용을 해석하지 않는다. 제목의 낱말 일치만 센다.
+news_base = 100
+news_penalty_per_article = 25
+news_score_floor = 25
+# 뉴스를 받지 못했을 때 쓰는 값. 벌점도 가점도 아닌 중립.
+news_unavailable_score = 60
 
 # 최종 행동 원점수 가중치 (합 1.00)
 [RULES_FINAL_ACTION_WEIGHTS]
