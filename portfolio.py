@@ -957,6 +957,98 @@ def _cell_number(cell):
     return v if v > 0 else None
 
 
+def solve_row_by_invariants(numbers, tol_rel=0.02, tol_ret_pp=0.5):
+    """
+    한 줄의 숫자들만 보고 '어느 값이 수량·평단가·현재가인지' 관계식으로 풀어낸다.
+
+    열 위치를 맞히는 방식은 행마다 토큰 수가 달라지면 그대로 무너진다
+    (실사례: 코텍이 수량 12·평단 173 으로 뒤바뀜 — 실제는 173주·12,326원).
+    반면 잔고 화면의 숫자들은 서로 강한 항등식으로 묶여 있다:
+
+        평가손익 = (현재가 − 기준가) × 수량
+        수익률   = 현재가 ÷ 기준가 − 1
+
+    그래서 순서를 몰라도 **어떤 조합이 이 식을 만족하는지 풀면** 각 숫자의
+    정체가 정해진다. 후보 조합을 전부 대입해 잔차가 가장 작은 해를 고르고,
+    허용 오차 안에 드는 해가 없으면 아무것도 돌려주지 않는다(추측 금지).
+
+    numbers: 그 줄에서 읽은 숫자 목록 (부호 포함, 퍼센트도 그대로)
+    반환: {'quantity','price','current','pnl','return_pct','residual_pct'} 또는 None
+    """
+    vals = []
+    for v in numbers:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f == 0:
+            continue
+        vals.append(f)
+    if len(vals) < 4:
+        return None
+
+    # 수익률 후보: |값| < 100 이면서 소수부가 있는 값 (예: -6.81, +0.95)
+    ret_cands = [v for v in vals if abs(v) < 100 and abs(v - round(v)) > 1e-9]
+    # 수량 후보: 양의 정수
+    qty_cands = [v for v in vals if v > 0 and abs(v - round(v)) < 1e-9 and v <= 5_000_000]
+    # 가격 후보: 양수
+    price_cands = [v for v in vals if v > 0]
+
+    best = None
+    for q in qty_cands:
+        for base in price_cands:
+            if base == q or base < 10:          # 기준가가 수량과 같거나 너무 작으면 제외
+                continue
+            for cur in price_cands:
+                if cur is base or cur == base or cur < 10 or cur == q:
+                    continue
+                # 가격끼리는 자릿수가 비슷해야 한다 (현재가와 평단가가 10배 차이날 수 없다)
+                if not (0.2 <= cur / base <= 5.0):
+                    continue
+                pnl_calc = (cur - base) * q
+                # 이 계산값과 맞아떨어지는 숫자가 줄 안에 있는가
+                for p in vals:
+                    if p in (q, base, cur):
+                        continue
+                    denom = max(abs(p), 1.0)
+                    resid = abs(pnl_calc - p) / denom
+                    if resid > tol_rel:
+                        continue
+                    # 수익률이 함께 있으면 그것도 맞아야 한다
+                    ret_calc = (cur / base - 1.0) * 100.0
+                    ret_ok, ret_used = True, None
+                    if ret_cands:
+                        ret_ok = False
+                        for r in ret_cands:
+                            if abs(r - ret_calc) <= tol_ret_pp:
+                                ret_ok, ret_used = True, r
+                                break
+                    if not ret_ok:
+                        continue
+                    score = resid + (0.0 if ret_used is not None else 0.005)
+                    if best is None or score < best['score']:
+                        best = {'score': score, 'quantity': q, 'price': base,
+                                'current': cur, 'pnl': p, 'return_pct': ret_used,
+                                'residual_pct': resid * 100.0}
+    if best is None:
+        return None
+    best.pop('score', None)
+
+    # 풀어낸 기준가는 보통 '손익분기'(수수료·세금 포함 본전가)다 — HTS 수익률이
+    # 그 값 기준이기 때문이다. 매수평균은 항상 손익분기보다 조금 낮으므로,
+    # 바로 아래에 붙어 있는 값(1% 이내)이 있으면 그것을 평단가로 본다.
+    base = best['price']
+    twins = [v for v in vals
+             if v not in (best['quantity'], best['current'], best['pnl'])
+             and 0.985 <= v / base <= 0.9999]
+    if twins:
+        best['breakeven'] = base
+        best['price'] = max(twins)          # 손익분기 바로 아래 값 = 매수평균
+    else:
+        best['breakeven'] = base
+    return best
+
+
 def _redistribute_row_cells(cells):
     """
     한 칸에 두 값이 붙어 들어온 것을 옆의 빈 칸으로 돌려놓는다.
@@ -1256,6 +1348,33 @@ def parse_table_with_header(text, resolve_name=None):
                     f"→ 역산값 {implied_price:,.0f}원으로 대체했습니다 (확인 필요)")
                 price = float(round(implied_price))
 
+        # ── 관계식 교차검증 — 열 위치가 어긋나면 숫자 관계로 바로잡는다 ──
+        # 열을 맞히는 방식은 행마다 토큰 수가 달라지면 통째로 밀린다(수량↔평단 뒤바뀜).
+        # 그 줄의 숫자들이 만족해야 하는 항등식을 풀어 정답을 되찾는다.
+        _row_nums = []
+        for _c in cells:
+            for _tok in re.findall(r'[-+]?[\d,]*\.?\d+', str(_c or '')):
+                _v = _signed_number(_tok)
+                if _v is not None:
+                    _row_nums.append(_v)
+        _need_solve = (qty is None or price is None)
+        if not _need_solve and _cur_p and qty and price:
+            # 읽은 값끼리 관계가 성립하는지 본다 (평가손익 대조)
+            _pnl_read = _signed_number(cell('pnl'))
+            if _pnl_read is not None:
+                _calc = (_cur_p - price) * qty
+                if abs(_calc - _pnl_read) > max(100.0, abs(_pnl_read) * 0.05):
+                    _need_solve = True
+        if _need_solve and len(_row_nums) >= 4:
+            _sol = solve_row_by_invariants(_row_nums)
+            if _sol:
+                _before = (qty, price)
+                qty, price = float(_sol['quantity']), float(_sol['price'])
+                warnings.append(
+                    f"'{(name or code)[:20]}' 열 위치가 어긋나 숫자 관계식으로 다시 풀었습니다 "
+                    f"— 수량 {_before[0]}→{qty:,.0f}주, 평단가 {_before[1]}→{price:,.0f}원 "
+                    f"(평가손익·수익률과 오차 {_sol['residual_pct']:.2f}%, 확인 필요)")
+
         if qty is None or price is None:
             warnings.append(f"건너뜀 (수량·평단가를 읽지 못함): {(name or code)[:20]}")
             continue
@@ -1406,8 +1525,19 @@ def parse_freeform_holdings(text, resolve_name=None):
                 if v is not None:
                     numbers.append(('num', v))
                 continue
-            if name is None and not re.fullmatch(r'[\d.,+\-%원₩]+', tok):
-                name = tok
+            # 종목명은 여러 낱말일 수 있다 ('SOL 팔란티어', 'TIGER 미국나스닥100').
+            # 첫 낱말만 잡으면 이름이 잘려 조회에 실패한다. 숫자·코드가 나오기 전까지의
+            # 연속된 글자 토큰을 이어 붙이되, 종목번호(A002990)는 이름에 넣지 않는다.
+            if not re.fullmatch(r'[\d.,+\-%원₩]+', tok):
+                _tok_code = read_code_cell(tok)[0]
+                if _tok_code:
+                    if code is None:
+                        code = _tok_code
+                    continue
+                if name is None:
+                    name = tok
+                elif not numbers:            # 아직 숫자가 안 나왔으면 같은 이름의 뒷부분
+                    name = (name + " " + tok).strip()
 
         if code is None and not name:
             warnings.append(f"건너뜀 (종목 식별 불가): {line[:40]}")
@@ -1422,16 +1552,33 @@ def parse_freeform_holdings(text, resolve_name=None):
         #    앞의 두 개만 쓴다 (표는 보통 [종목명, 수량, 평단가, 금액...] 순서)
         #  - 둘 중 작은 값을 수량, 큰 값을 평단가로 본다 (순서가 뒤바뀐 표도 흡수)
         if qty is None and price is None and len(plain) >= AMBIGUOUS_NUMBER_COUNT:
-            # 헤더 없이 숫자만 대여섯 개인 줄(HTS 잔고 화면을 헤더 없이 복사한 경우)에서
+            # 헤더 없이 숫자만 대여섯 개인 줄(HTS 잔고 화면을 헤더 없이 복사한 경우).
             # '앞의 두 개'를 골라잡으면 매도가능수량을 평단가로 넣는 식으로 반드시 틀린다.
-            # 틀린 값을 조용히 넣느니 읽지 못했다고 말하고 사람이 지정하게 한다.
-            warnings.append(
-                f"'{(name or code or line[:14])}' — 한 줄에 숫자가 {len(plain)}개라 "
-                f"어느 것이 수량·평단가인지 알 수 없습니다. **헤더 줄(종목명·잔고·매수평균 …)을 "
-                f"함께 복사**하거나 아래 표에서 직접 입력하세요.")
-            rows.append({'종목코드': code or '', '종목명': name or (code or ''),
-                         '보유수량': None, '평균매수가': None, '_ticker': None})
-            continue
+            #
+            # 대신 그 줄의 숫자들이 만족해야 하는 항등식을 푼다:
+            #     평가손익 = (현재가 − 기준가) × 수량,  수익률 = 현재가 ÷ 기준가 − 1
+            # 순서를 몰라도 이 관계를 만족하는 조합은 사실상 하나뿐이라 정체가 정해진다.
+            # 풀리지 않으면 예전처럼 '읽지 못했다'고 말하고 사람이 지정하게 한다.
+            _all_nums = [v for k, v in numbers if v is not None]
+            for _tok in re.findall(r'[-+]?[\d,]*\.?\d+', line):
+                _sv = _signed_number(_tok)
+                if _sv is not None:
+                    _all_nums.append(_sv)
+            _sol = solve_row_by_invariants(_all_nums)
+            if _sol:
+                qty, price = float(_sol['quantity']), float(_sol['price'])
+                warnings.append(
+                    f"'{(name or code or line[:14])}' — 헤더가 없어 숫자 관계식으로 풀었습니다 "
+                    f"→ {qty:,.0f}주 · 평단 {price:,.0f}원 "
+                    f"(평가손익·수익률과 오차 {_sol['residual_pct']:.2f}%, 확인 필요)")
+            else:
+                warnings.append(
+                    f"'{(name or code or line[:14])}' — 한 줄에 숫자가 {len(plain)}개인데 "
+                    f"평가손익·수익률과 맞아떨어지는 조합이 없습니다. **헤더 줄(종목명·잔고·"
+                    f"매수평균 …)을 함께 복사**하거나 아래 표에서 직접 입력하세요.")
+                rows.append({'종목코드': code or '', '종목명': name or (code or ''),
+                             '보유수량': None, '평균매수가': None, '_ticker': None})
+                continue
         if qty is None and price is None and len(plain) >= 2:
             head = plain[:2]
             qty, price = min(head), max(head)

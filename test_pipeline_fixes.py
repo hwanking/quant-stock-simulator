@@ -704,14 +704,24 @@ check("공백 포함 종목명이 잘리지 않음",
       any(r['종목명'] == 'SOL 팔란티' for r in _sp_rows),
       str([r['종목명'] for r in _sp_rows]))
 
-# ⚠️ 헤더 없이 숫자만 많은 줄은 추측하면 반드시 틀린다 (매도가능수량을 평단가로 넣는다).
-#    틀린 값을 조용히 넣지 말고 읽지 못했다고 말해야 한다.
+# ⚠️ 헤더 없이 숫자만 많은 줄에서 '앞의 두 개' 식으로 **추측하면** 반드시 틀린다
+#    (매도가능수량을 평단가로 넣는다). 그래서 추측은 여전히 금지다.
+#    다만 이제는 추측 대신 **관계식을 풀어 검증**한다(§50):
+#      · 평가손익·수익률과 맞아떨어지면 값을 채우고 오차를 밝힌다
+#      · 맞아떨어지지 않으면 예전처럼 읽지 못했다고 말한다
 _amb_rows, _amb_warns = pf.parse_freeform_holdings(_BODY.splitlines()[0], resolve_name=_RS)
-check("헤더 없이 숫자 다수면 추측하지 않음",
-      len(_amb_rows) == 1 and _amb_rows[0]['보유수량'] is None
-      and _amb_rows[0]['평균매수가'] is None, str(_amb_rows)[:90])
+check("관계식이 성립하면 값을 채우되 근거를 밝힘",
+      len(_amb_rows) == 1 and _amb_rows[0]['보유수량'] is not None
+      and any("관계식으로 풀었습니다" in w and "오차" in w for w in _amb_warns),
+      str(_amb_rows)[:90])
+_amb2_rows, _amb2_warns = pf.parse_freeform_holdings(
+    "이상한종목 111 222 333 444 555", resolve_name=_RS)
+check("관계가 성립하지 않으면 여전히 채우지 않음",
+      len(_amb2_rows) == 1 and _amb2_rows[0]['보유수량'] is None
+      and _amb2_rows[0]['평균매수가'] is None, str(_amb2_rows)[:90])
 check("추측 불가를 사용자에게 알림",
-      any("알 수 없습니다" in w for w in _amb_warns), str(_amb_warns[:1])[:90])
+      any("맞아떨어지는 조합이 없습니다" in w for w in _amb2_warns),
+      str(_amb2_warns[:1])[:110])
 
 # 열 직접 지정 — 추측하지 않으므로 지정이 맞으면 결과도 맞다
 _n, _cells = pf.preview_columns(_H + "\n" + _BODY)
@@ -2212,6 +2222,87 @@ for _code49, _label49 in [("069500", "ETF"), ("035760", "저신뢰 적정가")]:
     _at49.run()
     check(f"{_label49}({_code49}) 렌더 예외 없음", len(_at49.exception) == 0,
           str(_at49.exception[:1])[:150])
+
+
+section("50. 열 추측을 버리고 관계식으로 푼다 — 수량·평단가 자동 판별")
+
+# ⚠️ 열 위치를 맞히는 방식은 행마다 토큰 수가 달라지면 통째로 밀린다.
+#    실사례: 코텍이 '수량 12 · 평단 173' 으로 뒤바뀌어 수익률 +6709% 가 나왔다
+#    (실제는 173주 · 12,326원). 사람이 열을 직접 지정해도 행마다 어긋나면 소용없다.
+#
+#    잔고 화면의 숫자들은 항등식으로 묶여 있다:
+#        평가손익 = (현재가 − 기준가) × 수량,  수익률 = 현재가 ÷ 기준가 − 1
+#    순서를 몰라도 이 관계를 만족하는 조합은 사실상 하나뿐이므로 정체가 정해진다.
+#    (외부 LLM 에 보내지 않는다 — 보유종목은 이 앱 밖으로 나가지 않는다.)
+
+_REAL50 = [
+    ("금호건설", [-462205, -11.28, 400, 10265, 10246, 9110, 380], 400, 10246),
+    ("대한항공", [-71989, -6.83, 38, 27794, 27740, 25900, 1250], 38, 27740),
+    ("코텍", [-98733, -4.63, 173, 12350, 12326, 11780, 360], 173, 12326),
+    ("LG전자", [-178568, -15.82, 6, 188461, 188133, 158700, 10700], 6, 188133),
+    ("금호타이어", [9396, 0.95, 143, 6954, 6939, 7020, 940], 143, 6939),
+    ("영원무역", [-9379, -0.32, 33, 87884, 87703, 87600, 1500], 33, 87703),
+]
+_solved50 = 0
+for _nm50, _nums50, _tq50, _tp50 in _REAL50:
+    # 순서 정보를 없앤 상태로 넣는다 (열 위치를 전혀 모른다는 가정)
+    _sol50 = pf.solve_row_by_invariants(sorted(_nums50, key=lambda v: abs(v) % 11))
+    _hit = (_sol50 is not None and int(_sol50['quantity']) == _tq50
+            and abs(_sol50['price'] - _tp50) / _tp50 < 0.01)
+    _solved50 += _hit
+check("실제 잔고 6행을 순서 없이도 전부 복원", _solved50 == len(_REAL50),
+      f"{_solved50}/{len(_REAL50)}")
+
+# 오답을 만들어내지 않아야 한다 — 관계가 없으면 해도 없다
+check("무작위 숫자에는 해를 만들지 않음",
+      pf.solve_row_by_invariants([3, 17, 91, 4200, 55]) is None)
+check("숫자가 모자라면 해 없음", pf.solve_row_by_invariants([100, 200]) is None)
+check("가격만 있으면 해 없음",
+      pf.solve_row_by_invariants([10000, 10500, 11000, 9800]) is None)
+
+# 평단가와 손익분기를 구분한다 (손익분기 = 수수료 포함, 항상 평단가보다 크다)
+_sol50b = pf.solve_row_by_invariants([-462205, -11.28, 400, 10265, 10246, 9110, 380])
+check("평단가와 손익분기를 구분", _sol50b is not None
+      and _sol50b['price'] == 10246 and _sol50b['breakeven'] == 10265,
+      str(_sol50b and (_sol50b['price'], _sol50b.get('breakeven'))))
+
+# 헤더 없는 붙여넣기 — 예전에는 '숫자가 N개라 알 수 없음' 으로 전부 버렸다
+_paste50 = ("금호건설 A002990 -462,205 -11.28% 400 10,265 10,246 9,110 380\n"
+            "SOL 팔란티 A0040Y0 -416,675 -6.76% 739 8,343 8,343 7,780 5\n"
+            "코텍 A052330 -98,733 -4.63% 173 12,350 12,326 11,780 360\n")
+_rows50, _warn50 = pf.parse_freeform_holdings(_paste50, resolve_name=None)
+_by50 = {str(r.get('종목명')): r for r in _rows50}
+check("헤더 없이도 3행 모두 값을 채움",
+      all(r.get('보유수량') is not None and r.get('평균매수가') is not None
+          for r in _rows50) and len(_rows50) == 3, str(len(_rows50)))
+_kotek = next((r for r in _rows50 if '코텍' in str(r.get('종목명'))), None)
+check("코텍 수량·평단가가 뒤바뀌지 않음 (173주 / 12,326원)",
+      _kotek is not None and int(_kotek['보유수량']) == 173
+      and abs(_kotek['평균매수가'] - 12326) < 1,
+      str(_kotek and (_kotek['보유수량'], _kotek['평균매수가'])))
+check("관계식으로 풀었다는 사실을 알림", any('관계식으로 풀었습니다' in w for w in _warn50))
+
+# 여러 낱말 종목명이 잘리지 않고, 종목번호가 이름에 섞이지 않는다
+_sol_row50 = next((r for r in _rows50 if 'SOL' in str(r.get('종목명'))), None)
+check("여러 낱말 종목명 보존 ('SOL 팔란티')",
+      _sol_row50 is not None and '팔란티' in str(_sol_row50['종목명']),
+      str(_sol_row50 and _sol_row50['종목명']))
+check("종목번호가 종목명에 섞이지 않음",
+      _sol_row50 is not None and 'A0040Y0' not in str(_sol_row50['종목명']))
+
+# 헤더가 있는 표에서도 열이 어긋나면 관계식이 바로잡는다
+_bad50 = ("종목명\t종목번호\t평가손익\t수익률\t잔고\t손익분기\t매수평균\t현재가\n"
+          "코텍\t052330\t-98,733\t-4.63%\t12\t12,350\t173\t11,780\n")   # 수량↔평단 뒤바뀜
+_r50c, _w50c = pf.parse_table_with_header(_bad50, resolve_name=None)
+check("헤더 표에서도 뒤바뀐 열을 관계식으로 교정",
+      len(_r50c) == 1 and int(_r50c[0]['보유수량']) == 173,
+      str(_r50c and _r50c[0]['보유수량']))
+check("교정 사실을 알림", any('관계식으로 다시 풀었습니다' in w for w in _w50c))
+
+# 보유종목은 외부로 나가지 않는다 (LLM·외부 API 호출 없음)
+_pf50src = _insp.getsource(pf.solve_row_by_invariants)
+check("풀이는 로컬 계산 — 외부 전송 없음",
+      all(x not in _pf50src for x in ("requests", "urlopen", "http", "api_key")))
 
 
 print()
