@@ -302,6 +302,34 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── 브라우저 클립보드 붙여넣기 컴포넌트 ──────────────────────────────────────
+# 사용자 브라우저의 paste 이벤트로 이미지를 받는다. 서버 클립보드를 읽는 방식과 달리
+# 온라인(클라우드) 접속에서도 그대로 동작하고, 이미지는 이 앱 서버까지만 전달된다.
+# 정적 HTML 하나라 별도 빌드가 필요 없다.
+_PASTE_COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "components", "paste_image")
+_paste_component = None
+if os.path.isdir(_PASTE_COMPONENT_DIR):
+    try:
+        import streamlit.components.v1 as _st_components
+        _paste_component = _st_components.declare_component(
+            "paste_image", path=_PASTE_COMPONENT_DIR)
+    except Exception:
+        _paste_component = None
+
+
+def paste_image_box(key="paste_box"):
+    """붙여넣은 이미지 정보를 담은 dict 또는 None. 컴포넌트를 못 쓰면 None."""
+    if _paste_component is None:
+        st.caption("ℹ️ 이 환경에서는 붙여넣기 상자를 띄우지 못했습니다 — 아래 파일 올리기를 이용하세요.")
+        return None
+    try:
+        return _paste_component(key=key, default=None)
+    except Exception as exc:
+        st.caption(f"ℹ️ 붙여넣기 상자를 띄우지 못했습니다 ({type(exc).__name__}) — 아래 파일 올리기를 이용하세요.")
+        return None
+
+
 # ── 미산출(None) 값 표기 헬퍼 ────────────────────────────────────────────────
 # 엔진은 표본·신뢰도가 부족하면 숫자 대신 None을 돌려준다.
 # 화면은 0으로 채우지 않고 '미산출'로 적는다. (모든 화면보다 먼저 정의되어야 한다)
@@ -1228,15 +1256,15 @@ if st.session_state.get('show_portfolio'):
         st.markdown("### 📸 스크린샷으로 가져오기")
         _ocr = portfolio.ocr_backend()
         if _ocr is None and not ALLOW_LOCAL_STORE:
-            # 온라인(클라우드) 실행. OCR 엔진은 서버에 '설치가 안 된' 게 아니라
-            # 의도적으로 뺐다 — torch 한 패키지가 컨테이너 메모리 한도를 넘겨 배포가 실패한다.
-            # 사용자의 PC 상태 문제로 오해하지 않도록 사유를 그대로 밝힌다.
-            st.warning("⚠️ **온라인 실행에서는 스크린샷 인식을 제공하지 않습니다** — "
-                       "여러분 PC의 문제가 아닙니다. 이 앱이 도는 클라우드 서버는 메모리가 약 1GB인데, "
-                       "OCR 엔진(torch)만 2GB를 넘어 함께 배포할 수 없습니다.")
-            st.caption("온라인에서는 아래 **표 붙여넣기**를 이용하세요 — 증권사 화면에서 표를 드래그해 "
-                       "복사하면 그대로 읽습니다. 스크린샷 인식이 필요하면 이 앱을 내 PC에서 실행한 뒤 "
-                       "`pip install easyocr` 로 활성화할 수 있습니다.")
+            # 온라인(클라우드) 실행인데 엔진이 안 잡힌 경우. 서버에 Tesseract 를 함께
+            # 배포하도록 되어 있으므로(packages.txt) 여기까지 왔다면 그 설치가 아직
+            # 반영되지 않았다는 뜻이다. 사용자 PC 문제로 오해하지 않도록 밝혀 둔다.
+            st.warning("⚠️ **지금은 서버에서 스크린샷 인식 엔진을 찾지 못했습니다** — "
+                       "여러분 PC의 문제가 아닙니다. 서버에 OCR 엔진(Tesseract)을 함께 배포하도록 "
+                       "설정돼 있으나, 방금 배포된 경우 반영까지 몇 분 걸릴 수 있습니다.")
+            st.caption("그 사이에는 아래 **표 붙여넣기**를 이용하세요 — 증권사 화면에서 표를 드래그해 "
+                       "복사하면 그대로 읽습니다. 내 PC에서 실행할 때는 `pip install easyocr` 로 "
+                       "더 정확한 엔진을 쓸 수 있습니다.")
         elif _ocr is None:
             st.warning("⚠️ **스크린샷 인식 불가** — 이 PC에 OCR 엔진이 설치되어 있지 않습니다.")
             st.code("pip install easyocr", language="bash")
@@ -1277,31 +1305,41 @@ if st.session_state.get('show_portfolio'):
                     st.error("종목을 인식하지 못했습니다. 표 영역만 크게 캡처하거나 "
                              "아래 '표 붙여넣기'를 이용하세요.")
 
-            # ── ① 클립보드에서 바로 붙여넣기 (로컬 실행일 때만) ──────────────
-            # 이 기능은 **서버 프로세스의 클립보드**를 읽는다. 로컬 실행에서는 그게 곧
-            # 사용자의 클립보드지만, 클라우드에서는 남의 서버 클립보드를 읽으려 드는
-            # 무의미한 동작이 된다. 원격 접속이면 아예 노출하지 않는다.
-            if is_local_session():
-                st.markdown("**① 캡처해서 바로 붙여넣기** — 파일로 저장할 필요 없습니다.")
-                st.caption("`Win`+`Shift`+`S` 로 보유종목 표 영역만 드래그해 캡처한 뒤, "
-                           "아래 버튼을 누르면 클립보드의 이미지를 그대로 읽습니다.")
-                if st.button("📋 클립보드 이미지 붙여넣기", type="primary", key="btn_clip_ocr"):
-                    _img, _cerr = portfolio.grab_clipboard_image()
-                    if _cerr:
-                        st.error(_cerr)
-                    else:
-                        st.session_state['clip_image'] = _img
-                        _recognize_image(_img)
-                if st.session_state.get('clip_image'):
-                    with st.expander("붙여넣은 이미지 보기"):
-                        st.image(st.session_state['clip_image'], use_container_width=True)
-            else:
-                st.caption("ℹ️ 원격 접속이라 클립보드 붙여넣기는 제공하지 않습니다 "
-                           "(서버 PC의 클립보드를 읽게 되므로). "
-                           "아래 **이미지 파일 올리기**를 쓰세요.")
+            # ── ① 브라우저에서 바로 붙여넣기 (로컬·온라인 모두) ────────────────
+            # 브라우저의 paste 이벤트로 사용자 클립보드를 읽으므로 원격 접속에서도
+            # 동작한다. (서버 클립보드를 읽던 기존 방식은 아래 ②로 남겨 둔다.)
+            st.markdown("**① 캡처해서 바로 붙여넣기** — 파일로 저장할 필요 없습니다.")
+            _pasted = paste_image_box(key="paste_box_holdings")
+            if _pasted:
+                _img, _perr = portfolio.decode_pasted_image(_pasted)
+                if _perr:
+                    st.error(_perr)
+                elif _img and st.session_state.get('paste_nonce') != _pasted.get('nonce'):
+                    st.session_state['paste_nonce'] = _pasted.get('nonce')
+                    st.session_state['clip_image'] = _img
+                    _recognize_image(_img)
+                elif _img:
+                    st.caption("↑ 위 상자에 다시 붙여넣으면 새 이미지로 인식합니다.")
 
-            # ── ② 파일로 올리기 ────────────────────────────────────────────
-            st.markdown("**② 이미지 파일로 올리기**")
+            # ── ② 서버 클립보드 직접 읽기 (로컬 실행 전용) ─────────────────────
+            # 이 경로는 **서버 프로세스의 클립보드**를 읽는다. 로컬 실행에서는 그게 곧
+            # 사용자의 클립보드지만, 클라우드에서는 남의 서버 클립보드를 읽으려 드는
+            # 무의미한 동작이라 원격에서는 노출하지 않는다.
+            if is_local_session():
+                with st.expander("붙여넣기가 안 될 때 — 클립보드에서 직접 읽기 (이 PC 실행 전용)"):
+                    if st.button("📋 클립보드 이미지 읽기", key="btn_clip_ocr"):
+                        _img2, _cerr = portfolio.grab_clipboard_image()
+                        if _cerr:
+                            st.error(_cerr)
+                        else:
+                            st.session_state['clip_image'] = _img2
+                            _recognize_image(_img2)
+            if st.session_state.get('clip_image'):
+                with st.expander("붙여넣은 이미지 보기"):
+                    st.image(st.session_state['clip_image'], use_container_width=True)
+
+            # ── ③ 파일로 올리기 ────────────────────────────────────────────
+            st.markdown("**② 이미지 파일로 올리기** (붙여넣기가 막힌 브라우저용)")
             shot = st.file_uploader("스크린샷 이미지 (PNG/JPG)", type=["png", "jpg", "jpeg"],
                                     key="shot_uploader")
             if shot is not None:

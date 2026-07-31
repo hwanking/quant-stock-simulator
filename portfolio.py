@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
@@ -181,6 +182,41 @@ OCR_INSTALL_HINT = (
 )
 
 _EASYOCR_READER = None
+
+# 브라우저에서 붙여넣은 이미지의 상한. 캡처 한 장은 보통 100KB~2MB 이고,
+# 이보다 큰 값은 사용자가 의도한 화면 캡처가 아닐 가능성이 높다.
+PASTE_MAX_BYTES = 12 * 1024 * 1024
+
+
+def decode_pasted_image(payload):
+    """
+    브라우저 붙여넣기 컴포넌트가 돌려준 값 → (image_bytes, error).
+
+    payload 는 {'data_url': 'data:image/png;base64,...', ...} 형태다.
+    서버 클립보드가 아니라 **사용자 브라우저의 클립보드**에서 온 것이므로
+    원격 접속에서도 안전하게 쓸 수 있다. 이미지는 이 앱 서버까지만 가고
+    외부 서비스로 보내지 않는다.
+    """
+    if not isinstance(payload, dict):
+        return None, None
+    url = payload.get('data_url')
+    if not url or not isinstance(url, str):
+        return None, None
+    if not url.startswith("data:image/"):
+        return None, "이미지가 아닙니다. 화면을 캡처한 그림을 붙여넣어 주세요."
+    try:
+        header, _, b64 = url.partition(",")
+        if "base64" not in header or not b64:
+            return None, "붙여넣은 데이터를 해석하지 못했습니다."
+        raw = base64.b64decode(b64, validate=False)
+    except Exception as exc:
+        return None, f"붙여넣은 이미지를 해석하지 못했습니다 ({type(exc).__name__})."
+    if not raw:
+        return None, "붙여넣은 이미지가 비어 있습니다."
+    if len(raw) > PASTE_MAX_BYTES:
+        return None, (f"이미지가 너무 큽니다 ({len(raw) / 1048576:.1f}MB). "
+                      f"{PASTE_MAX_BYTES // 1048576}MB 이하로 표 영역만 캡처해 주세요.")
+    return raw, None
 
 
 def extract_text_from_image(image_bytes, langs=("ko", "en")):

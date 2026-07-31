@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin:0; padding:0; background:transparent;
+               font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; }
+  #drop {
+    border:2px dashed #48484a; border-radius:12px; background:#1c1c1e;
+    padding:18px 16px; text-align:center; color:#d2d2d7; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  #drop:focus { outline:none; border-color:#0a84ff; background:#16233a; }
+  #drop.armed { border-color:#0a84ff; background:#16233a; }
+  #drop.ok    { border-color:#30d158; background:#14261a; }
+  .t   { font-size:0.95rem; font-weight:700; margin:0 0 4px 0; }
+  .s   { font-size:0.8rem; color:#86868b; margin:0; line-height:1.45; }
+  .ok  { color:#30d158; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="drop" tabindex="0">
+  <p class="t" id="title">📋 여기를 클릭한 뒤 Ctrl+V — 캡처한 이미지를 그대로 붙여넣으세요</p>
+  <p class="s" id="sub">Win+Shift+S 로 보유종목 표만 드래그해 캡처 → 이 상자 클릭 → Ctrl+V<br>
+     이미지 파일을 이 상자로 끌어다 놓아도 됩니다.</p>
+</div>
+
+<script>
+// Streamlit 컴포넌트 프로토콜 (postMessage). 별도 빌드 없이 정적 파일로 동작한다.
+const send = (v) => window.parent.postMessage(
+  {isStreamlitMessage: true, type: "streamlit:setComponentValue", value: v, dataType: "json"}, "*");
+const setHeight = (h) => window.parent.postMessage(
+  {isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h}, "*");
+const ready = () => window.parent.postMessage(
+  {isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
+
+const drop  = document.getElementById("drop");
+const title = document.getElementById("title");
+const sub   = document.getElementById("sub");
+
+function report() { setHeight(document.body.scrollHeight + 8); }
+
+// 붙여넣은/끌어다 놓은 이미지를 data URL 로 만들어 파이썬으로 넘긴다.
+// 이미지는 이 브라우저 세션에서 앱 서버로만 전달되며 외부로 보내지 않는다.
+function deliver(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) {
+    title.textContent = "⚠️ 이미지가 아닙니다 — 캡처한 그림을 붙여넣어 주세요";
+    report();
+    return;
+  }
+  const r = new FileReader();
+  r.onload = () => {
+    drop.classList.add("ok");
+    title.innerHTML = '<span class="ok">✅ 이미지를 받았습니다</span> — 아래에서 인식 결과를 확인하세요';
+    sub.textContent = "다시 붙여넣으면 새 이미지로 교체됩니다. (" +
+                      Math.round(file.size / 1024) + " KB)";
+    report();
+    send({name: file.name || "clipboard.png", type: file.type,
+          size: file.size, data_url: r.result, nonce: Date.now()});
+  };
+  r.readAsDataURL(file);
+}
+
+drop.addEventListener("click", () => { drop.focus(); drop.classList.add("armed"); });
+drop.addEventListener("blur",  () => drop.classList.remove("armed"));
+
+// paste 는 문서 단위로도 받는다 — iframe 안에서 포커스만 잡히면 동작한다.
+const onPaste = (e) => {
+  const items = (e.clipboardData || window.clipboardData)?.items || [];
+  for (const it of items) {
+    if (it.kind === "file" && /^image\//.test(it.type)) {
+      deliver(it.getAsFile());
+      e.preventDefault();
+      return;
+    }
+  }
+  title.textContent = "⚠️ 클립보드에 이미지가 없습니다 — 화면을 캡처한 뒤 다시 시도하세요";
+  report();
+};
+document.addEventListener("paste", onPaste);
+drop.addEventListener("paste", onPaste);
+
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("armed"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("armed"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("armed");
+  deliver(e.dataTransfer?.files?.[0]);
+});
+
+window.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "streamlit:render") report();
+});
+
+ready();
+report();
+</script>
+</body>
+</html>

@@ -1649,6 +1649,61 @@ check("홈 버튼이 관심종목을 지우지 않음", "'watchlist'" not in _w4
     "btn_home")[1].split("st.rerun()")[0])
 
 
+section("43. 온라인 붙여넣기 — 브라우저 클립보드 · 클라우드 OCR 엔진")
+
+# ⚠️ 기존 붙여넣기는 **서버 프로세스의 클립보드**를 읽어 로컬에서만 동작했다.
+#    온라인 사용자는 스크린샷 경로 자체가 막혀 있었다. 브라우저 paste 이벤트로
+#    받은 이미지를 같은 인식 파이프라인에 태운다.
+import base64 as _b64
+import io as _io43
+
+from PIL import Image as _Img43
+
+_buf43 = _io43.BytesIO()
+_Img43.new("RGB", (40, 20), (255, 255, 255)).save(_buf43, format="PNG")
+_png43 = _buf43.getvalue()
+_url43 = "data:image/png;base64," + _b64.b64encode(_png43).decode()
+
+_raw43, _err43 = pf.decode_pasted_image({'data_url': _url43})
+check("붙여넣은 data URL → 원본 바이트 복원", _err43 is None and _raw43 == _png43)
+check("None·빈 입력 방어", pf.decode_pasted_image(None) == (None, None)
+      and pf.decode_pasted_image({}) == (None, None))
+_r43, _e43 = pf.decode_pasted_image({'data_url': 'data:text/plain;base64,aGk='})
+check("이미지 아닌 붙여넣기 거부", _r43 is None and _e43 is not None)
+_r43b, _e43b = pf.decode_pasted_image({'data_url': 'data:image/png;base64,%%%'})
+check("깨진 데이터는 예외 대신 사유 반환", _r43b is None and _e43b is not None)
+_big43 = "data:image/png;base64," + _b64.b64encode(
+    b"\0" * (pf.PASTE_MAX_BYTES + 1)).decode()
+check("용량 상한 초과 거부", pf.decode_pasted_image({'data_url': _big43})[0] is None)
+
+_comp43 = _os.path.join(PROJ, "components", "paste_image", "index.html")
+check("붙여넣기 컴포넌트 파일 존재", _os.path.exists(_comp43))
+_html43 = open(_comp43, encoding='utf-8').read() if _os.path.exists(_comp43) else ""
+check("컴포넌트가 Streamlit 값 반환 규약을 지킴",
+      "streamlit:componentReady" in _html43 and "streamlit:setComponentValue" in _html43)
+check("컴포넌트가 이미지를 외부로 보내지 않음",
+      "fetch(" not in _html43 and "XMLHttpRequest" not in _html43)
+check("원격에서도 붙여넣기 상자 노출 (로컬 전용 분기 아님)",
+      "paste_image_box(" in _w42 and "if is_local_session():\n                st.markdown"
+      not in _w42)
+
+# 클라우드 OCR 은 torch 없이 — Tesseract(apt) + pytesseract(pip)
+_req43 = [x.strip().lower() for x in
+          open(_os.path.join(PROJ, "requirements.txt"), encoding='utf-8').read().splitlines()
+          if x.strip() and not x.strip().startswith("#")]
+_pkg43 = open(_os.path.join(PROJ, "packages.txt"), encoding='utf-8').read()
+check("클라우드 OCR 바인딩(pytesseract) 포함",
+      any(x.startswith("pytesseract") for x in _req43))
+check("메모리 초과 유발 패키지(torch·easyocr) 여전히 제외",
+      not any(x.startswith("torch") or x.startswith("easyocr") for x in _req43))
+check("apt 로 Tesseract 엔진·한국어 데이터 배포",
+      "tesseract-ocr" in _pkg43 and "tesseract-ocr-kor" in _pkg43)
+check("한글 폰트 패키지 유지", "fonts-nanum" in _pkg43)
+check("엔진 선택은 pytesseract 우선 → easyocr 대체",
+      _insp.getsource(pf.ocr_backend).index("pytesseract")
+      < _insp.getsource(pf.ocr_backend).index("easyocr"))
+
+
 print()
 print("=" * 72)
 if FAILURES:
