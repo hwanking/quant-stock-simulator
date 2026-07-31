@@ -1817,6 +1817,22 @@ class QuantIndicatorsEngine:
             'buy_countdown': buy_cd,
         }
 
+    @staticmethod
+    def momentum_12_1(closes):
+        """
+        12-1 개월 가격 모멘텀 (Jegadeesh–Titman 1993): 최근 1개월을 뺀
+        지난 12개월 수익률(%). 최근 1개월은 단기 반전이 있어 제외하는 것이
+        문헌 표준이다. 표본(253봉) 부족이면 None — 만들어내지 않는다.
+        """
+        try:
+            arr = np.asarray(closes, dtype=float)
+            arr = arr[~np.isnan(arr)]
+            if len(arr) < 253 or arr[-252] <= 0:
+                return None
+            return float((arr[-22] / arr[-252] - 1.0) * 100.0)
+        except Exception:
+            return None
+
     # ── 기업유형 사전 ────────────────────────────────────────────────────
     ARCHETYPES = {
         'A_STABLE': '안정적 흑자·현금창출형',
@@ -2963,6 +2979,29 @@ class QuantIndicatorsEngine:
                 if '상한 미적용' not in _r:
                     cap_reasons.append(f"{_r} → 상한 {context_cap}점")
 
+        # 상대 모멘텀(12-1) 열위 상한 — Jegadeesh–Titman(1993): 직전 12-1개월의
+        # 뚜렷한 패자는 이후에도 저성과가 이어진다. 시장 대비 -25%p 이상 뒤처진
+        # 종목의 신규 매수를 제한한다 (가점 없음 — 승자 추격은 하지 않는다).
+        rel_mom = getattr(self, '_rel_mom_ctx', None)
+        momentum_cap = 100
+        if rel_mom and rel_mom.get('relative') is not None and rel_mom['relative'] <= -25.0:
+            momentum_cap = 64
+            cap_reasons.append(
+                f"상대 모멘텀(12-1) {rel_mom['relative']:+.0f}%p 열위 "
+                f"(종목 {rel_mom['stock']:+.0f}% vs {rel_mom['market']} "
+                f"{rel_mom['index']:+.0f}%) → 상한 64점")
+
+        # 실전 적중률 자기보정 상한 — 판정 성적표에서 판정 완료 5건 이상이고
+        # 적중률이 낮으면 확신을 낮춘다 (TipRanks 트랙레코드 가중 방식).
+        track = getattr(self, '_track_summary', None)
+        track_cap = 100
+        if track and track.get('hit_rate') is not None and track.get('decided', 0) >= 5 \
+                and track['hit_rate'] < 45.0:
+            track_cap = 59
+            cap_reasons.append(
+                f"실전 판정 적중률 {track['hit_rate']:.0f}% ({track['decided']}건 판정 완료) "
+                f"→ 상한 59점 (자기 성적 보정)")
+
         final_action_score = min(
             final_action_raw_score,
             sq_cap,
@@ -2974,7 +3013,9 @@ class QuantIndicatorsEngine:
             valuation_uncertainty_cap,
             risk_event_cap,
             m10_overheat_cap,
-            context_cap
+            context_cap,
+            momentum_cap,
+            track_cap
         )
         
         final_action_score = int(max(0, final_action_score))
@@ -3209,6 +3250,22 @@ class QuantIndicatorsEngine:
             
             # DeMARK 매수 포인트 — 종합 결론에 그대로 싣는다
             'demark_entry': self.build_demark_entry(dm, curr_price),
+
+            # 변동성 관리 비중 제안 (Moreira–Muir 2017: 실현 변동성이 높을 때
+            # 노출을 줄이면 위험조정수익이 개선된다). 목표 연변동성 20% ÷ 실현.
+            'suggested_position_pct': (
+                round(min(100.0, max(10.0, 20.0 / (float(vol_20) * (252 ** 0.5) * 100.0)
+                                     * 100.0)), 0)
+                if vol_20 and vol_20 > 0 else None),
+            'suggested_position_basis': (
+                f"연환산 변동성 {float(vol_20) * (252 ** 0.5) * 100.0:.0f}% · 목표 20% "
+                f"(Moreira–Muir 변동성 관리)"
+                if vol_20 and vol_20 > 0 else "변동성 미산출"),
+
+            # 상대 모멘텀(12-1)·실전 성적 — 화면 표시 + 상한 근거
+            'relative_momentum_12_1': (rel_mom or {}).get('relative'),
+            'rel_mom_detail': rel_mom,
+            'track_record': track,
 
             'tdst_support_str': ("N/A" if not tdst_available
                                  else ("지지 유지" if curr_price >= tdst_support else "이탈")),
@@ -3915,6 +3972,38 @@ class QuantIndicatorsEngine:
         oos_result = self.run_blind_oos_backtest(tech_df, horizon=20, rho_cutoff=rho_cutoff)
         strategy_quality = self.compute_strategy_quality(oos_result)
         self.current_oos_result = oos_result
+
+        # 상대 모멘텀(12-1) — Jegadeesh–Titman(1993). 벤치마크는 상장 시장 지수.
+        # 지수를 못 받으면 None 으로 남기고 점수에 개입하지 않는다.
+        self._rel_mom_ctx = None
+        try:
+            _stk_mom = self.momentum_12_1(tech_df['adj_close'].values)
+            _mkt_name = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
+            if not hasattr(self, '_idx_daily_cache'):
+                self._idx_daily_cache = {}
+            if _mkt_name not in self._idx_daily_cache:
+                self._idx_daily_cache[_mkt_name] = b_engine.fetch_index_daily(_mkt_name, 400)
+            _idx = self._idx_daily_cache[_mkt_name]
+            _idx_mom = self.momentum_12_1(_idx[1]) if _idx is not None else None
+            if _stk_mom is not None and _idx_mom is not None:
+                self._rel_mom_ctx = {
+                    'stock': round(_stk_mom, 1), 'index': round(_idx_mom, 1),
+                    'relative': round(_stk_mom - _idx_mom, 1), 'market': _mkt_name}
+        except Exception:
+            self._rel_mom_ctx = None
+
+        # 실전 판정 성적 자기보정 — TipRanks Smart Score 방식: 예측 주체의 과거
+        # 적중률로 신호를 가중한다. 여기서 '주체'는 이 앱 자신이다(판정 성적표).
+        # 기록이 없으면(클라우드) None 으로 두고 개입하지 않는다.
+        if not hasattr(self, '_track_summary'):
+            self._track_summary = None
+            try:
+                import prediction_log as _plog_tr
+                if _plog_tr.load_predictions():
+                    _g_tr, _s_tr = _plog_tr.evaluate_all(b_engine, max_rows=80)
+                    self._track_summary = _s_tr
+            except Exception:
+                self._track_summary = None
 
         four_scores = self.compute_four_separated_scores(symbol, tech_df, fund_df, sim_res, val_eval)
         price_pos = self.compute_decoupled_price_position(tech_df, val_eval)

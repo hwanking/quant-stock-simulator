@@ -2222,6 +2222,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
+_extra_bits = []
+_pos_sug = four_scores.get('suggested_position_pct')
+if _pos_sug:
+    _extra_bits.append(f"📐 변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
+                       f"({four_scores.get('suggested_position_basis', '')})")
+_rm = four_scores.get('rel_mom_detail')
+if _rm and _rm.get('relative') is not None:
+    _extra_bits.append(f"🏁 상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
+                       f"(종목 {_rm['stock']:+.1f}% vs {_rm['market']} {_rm['index']:+.1f}%)")
+_tr = four_scores.get('track_record')
+if _tr and _tr.get('hit_rate') is not None:
+    _extra_bits.append(f"🎯 실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
+                       f"({_tr.get('decided', 0)}건 판정 완료 — 점수 확신에 반영)")
+if _extra_bits:
+    st.caption("  ·  ".join(_extra_bits))
+
 if verdict['vetoes']:
     st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
              "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"

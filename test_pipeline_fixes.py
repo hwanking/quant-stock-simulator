@@ -2427,6 +2427,64 @@ check("배너가 범위 밖을 구분 표기", "산출 불가 (모델 범위 밖
 check("OUT_OF_DOMAIN 분기 존재", "OUT_OF_DOMAIN" in _w52)
 
 
+section("53. 상용 3사 벤치마크 이식 — 모멘텀·변동성 비중·자기 성적 보정")
+
+# 케이스 스터디(TipRanks·Danelfin·Zacks)에서 문헌 근거가 있는 것만 이식:
+#  ① Jegadeesh–Titman(1993) 12-1 가격 모멘텀 — 시장 대비 열위 종목 매수 제한
+#     (Zacks 의 이익추정 수정 모멘텀은 컨센서스 미연동이라 넣지 않는다 — 정직하게)
+#  ② Moreira–Muir(2017) 변동성 관리 — 실현 변동성 기반 비중 제안
+#  ③ TipRanks Smart Score 방식 — 예측 주체(이 앱)의 실전 적중률로 확신 보정
+
+# ① 모멘텀 산식 — 최근 1개월 제외(단기 반전), 표본 부족이면 None
+import numpy as _np53
+
+_up53 = _np53.linspace(100, 200, 260)              # 꾸준한 상승
+check("12-1 모멘텀 양수 (상승 종목)", qi.QuantIndicatorsEngine.momentum_12_1(_up53) > 0)
+_flat53 = _np53.concatenate([_np53.full(238, 100.0), _np53.linspace(100, 150, 22)])
+check("최근 1개월 급등은 제외 (반전 효과)",
+      abs(qi.QuantIndicatorsEngine.momentum_12_1(_flat53)) < 1.0,
+      str(qi.QuantIndicatorsEngine.momentum_12_1(_flat53)))
+check("표본 253봉 미만이면 None",
+      qi.QuantIndicatorsEngine.momentum_12_1(_np53.ones(200)) is None)
+
+_snap53 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs53 = _snap53['four_scores']
+_rm53 = _fs53.get('rel_mom_detail')
+check("상대 모멘텀이 스냅샷에 (종목·지수·차이·시장)",
+      _rm53 is None or all(k in _rm53 for k in ('stock', 'index', 'relative', 'market')))
+_q53src = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("모멘텀 열위는 상한만 (승자 추격 가점 없음)",
+      "momentum_cap = 64" in _q53src and "momentum_bonus" not in _q53src)
+
+# ② 변동성 관리 비중 — 10~100% 사이, 근거 문구 포함
+_sp53 = _fs53.get('suggested_position_pct')
+check("비중 제안 존재", _sp53 is not None)
+check("비중 제안 10~100% 범위", _sp53 is None or 10 <= _sp53 <= 100, str(_sp53))
+check("근거에 변동성·목표 명시", "목표 20%" in str(_fs53.get('suggested_position_basis')))
+
+# ③ 자기 성적 보정 — 적중률이 낮으면 상한, 기록 없으면 개입 없음
+_q53b = qi.QuantIndicatorsEngine()
+_q53b._track_summary = {'hit_rate': 30.0, 'decided': 8}
+_s53b = _q53b.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+check("적중률 30% → 자기 성적 보정 상한 발동",
+      '자기 성적 보정' in str(_s53b['four_scores'].get('gate_reason')))
+_q53c = qi.QuantIndicatorsEngine()
+_q53c._track_summary = {'hit_rate': 30.0, 'decided': 3}       # 표본 부족
+_s53c = _q53c.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+check("판정 완료 5건 미만이면 보정하지 않음 (소표본 과신 방지)",
+      '자기 성적 보정' not in str(_s53c['four_scores'].get('gate_reason')))
+check("기록 없으면(클라우드) 개입 없음",
+      _fs53.get('track_record') is None
+      or _fs53['track_record'].get('hit_rate') is None
+      or '자기 성적 보정' not in str(_fs53.get('gate_reason'))
+      or _fs53['track_record'].get('decided', 0) >= 5)
+
+# 화면 연결
+_w53 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("배너 아래 비중·모멘텀·적중률 요약", "변동성 관리 비중 제안" in _w53
+      and "상대 모멘텀(12-1)" in _w53 and "실전 판정 적중률" in _w53)
+
+
 print()
 print("=" * 72)
 if FAILURES:
