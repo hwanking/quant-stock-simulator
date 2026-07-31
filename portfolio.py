@@ -129,16 +129,95 @@ def suggest_column_mapping(columns):
 
 
 def read_table(file_bytes, filename):
-    """CSV/Excel 바이트 → DataFrame. 한글 인코딩 자동 판별."""
+    """
+    CSV/Excel 바이트 → DataFrame. 한글 인코딩 자동 판별.
+
+    HTS 가 내보낸 엑셀은 제목·계좌 요약이 위쪽 몇 줄을 차지하고 표 머리말이
+    3~6행쯤에서 시작하는 일이 흔하다. 첫 행을 무조건 머리말로 쓰면 열 이름이
+    'Unnamed: 3' 이 되어 매핑이 통째로 실패한다. 머리말 행을 찾아서 읽는다.
+    """
     name = (filename or "").lower()
     if name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(io.BytesIO(file_bytes))
+        raw = pd.read_excel(io.BytesIO(file_bytes), header=None)
+        return _reframe_with_header_row(raw)
+    last_err = None
     for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8"):
         try:
-            return pd.read_csv(io.BytesIO(file_bytes), encoding=enc)
-        except (UnicodeDecodeError, pd.errors.ParserError):
+            raw = pd.read_csv(io.BytesIO(file_bytes), encoding=enc, header=None,
+                              dtype=str, keep_default_na=False)
+            return _reframe_with_header_row(raw)
+        except (UnicodeDecodeError, pd.errors.ParserError) as exc:
+            last_err = exc
             continue
-    raise ValueError("CSV 인코딩을 판별하지 못했습니다 (utf-8 / cp949 / euc-kr 시도).")
+    raise ValueError("CSV 인코딩을 판별하지 못했습니다 (utf-8 / cp949 / euc-kr 시도)."
+                     + (f" 마지막 오류: {last_err}" if last_err else ""))
+
+
+def _reframe_with_header_row(raw, max_scan=12):
+    """머리말처럼 보이는 행을 찾아 그 행을 열 이름으로 삼는다. 못 찾으면 첫 행."""
+    if raw is None or raw.empty:
+        return raw
+    best_i, best_hits = 0, 0
+    for i in range(min(max_scan, len(raw))):
+        cells = [str(c) for c in raw.iloc[i].tolist()]
+        hits = sum(1 for c in cells
+                   if any(v in _norm_header(c) for v in _HEADER_VOCAB))
+        if hits > best_hits:
+            best_i, best_hits = i, hits
+    if best_hits < 2:
+        best_i = 0
+    df = raw.iloc[best_i + 1:].reset_index(drop=True)
+    df.columns = [str(c).strip() for c in raw.iloc[best_i].tolist()]
+    # 완전히 빈 열·행 제거 (엑셀 내보내기의 빈 칸)
+    df = df.dropna(axis=1, how='all').dropna(axis=0, how='all')
+    df = df.loc[:, [c for c in df.columns if str(c).strip()
+                    and not str(c).lower().startswith('unnamed')]]
+    return df
+
+
+#: 사용자가 채워 넣을 표준 양식의 열 (필수 4 + 선택 2)
+TEMPLATE_COLUMNS = ["종목코드", "종목명", "보유수량", "평균매수가", "증권사", "취득일"]
+
+
+def build_template_bytes(example_rows=True):
+    """
+    보유종목 입력용 엑셀 양식(xlsx) 바이트. openpyxl 이 없으면 CSV 로 대체한다.
+    반환: (bytes, filename, mime)
+    """
+    rows = []
+    if example_rows:
+        rows = [
+            {"종목코드": "005930", "종목명": "삼성전자", "보유수량": 10,
+             "평균매수가": 210000, "증권사": "예시-지우고 입력", "취득일": "2026-01-15"},
+            {"종목코드": "035760", "종목명": "CJ ENM", "보유수량": 5,
+             "평균매수가": 31000, "증권사": "", "취득일": ""},
+        ]
+    df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS)
+    try:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as xl:
+            df.to_excel(xl, index=False, sheet_name="보유종목")
+        return (buf.getvalue(), "보유종목_양식.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception:
+        return (df.to_csv(index=False).encode("utf-8-sig"),
+                "보유종목_양식.csv", "text/csv")
+
+
+def positions_to_dataframe(positions):
+    """보유종목 목록 → 내보내기용 DataFrame (양식과 같은 열 순서)."""
+    rows = []
+    for p in positions or []:
+        code = str(getattr(p, 'ticker', '') or '').split('.')[0]
+        rows.append({
+            "종목코드": code,
+            "종목명": getattr(p, 'stock_name', '') or '',
+            "보유수량": getattr(p, 'quantity', None),
+            "평균매수가": getattr(p, 'average_buy_price', None),
+            "증권사": getattr(p, 'broker_name', '') or '',
+            "취득일": getattr(p, 'acquisition_date', '') or '',
+        })
+    return pd.DataFrame(rows, columns=TEMPLATE_COLUMNS)
 
 
 def parse_clipboard_table(text):
@@ -1151,6 +1230,31 @@ def parse_table_with_header(text, resolve_name=None):
                     warnings.append(
                         f"'{(name or code)[:20]}' 수량을 읽지 못해 화면의 평가손익·현재가·"
                         f"{_basis_name}로 역산했습니다 → {_qi}주 (확인 필요)")
+
+        # 평단가 자릿수 오독 교정 — 화면의 현재가·수익률로 역산해 대조한다.
+        #   수익률 = 현재가 ÷ 기준가 − 1  →  기준가 = 현재가 ÷ (1 + 수익률)
+        # OCR 이 평단가 칸에서 옆 열 숫자를 집어오면 '평단 462원 / 수익률 +1871%'
+        # 같은 값이 만들어진다. 사람이 보면 명백히 틀렸지만 숫자만 보면 멀쩡하다.
+        # 역산값과 20% 넘게 어긋나면 역산값으로 바꾸고 반드시 알린다.
+        _cur_p = _cell_number(cell('current_price'))
+        _ret_p = _signed_number(cell('return_pct'))
+        implied_price = None
+        if _cur_p and _ret_p is not None and abs(1.0 + _ret_p / 100.0) > 1e-6:
+            _imp = _cur_p / (1.0 + _ret_p / 100.0)
+            if _imp > 0:
+                implied_price = _imp
+        if implied_price is not None:
+            if price is None:
+                price = float(round(implied_price))
+                warnings.append(
+                    f"'{(name or code)[:20]}' 평단가를 읽지 못해 화면의 현재가·수익률로 "
+                    f"역산했습니다 → {price:,.0f}원 (확인 필요)")
+            elif abs(price - implied_price) / implied_price > 0.20:
+                warnings.append(
+                    f"'{(name or code)[:20]}' 평단가 오독 교정: 읽은 값 {price:,.0f}원은 "
+                    f"화면의 현재가 {_cur_p:,.0f}원·수익률 {_ret_p:+.2f}% 와 맞지 않습니다 "
+                    f"→ 역산값 {implied_price:,.0f}원으로 대체했습니다 (확인 필요)")
+                price = float(round(implied_price))
 
         if qty is None or price is None:
             warnings.append(f"건너뜀 (수량·평단가를 읽지 못함): {(name or code)[:20]}")

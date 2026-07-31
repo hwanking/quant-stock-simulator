@@ -1295,8 +1295,119 @@ if st.session_state.get('show_portfolio'):
                 return t, real
             return _r
 
+        # ═══ 📗 엑셀로 가져오기 — OCR 을 아예 거치지 않는 가장 정확한 경로 ═══
+        st.markdown("---")
+        st.markdown("### 📗 엑셀 파일로 가져오기 (가장 정확)")
+        st.caption("스크린샷 인식은 글자를 잘못 읽을 수 있습니다. **증권사 HTS 에서 내려받은 "
+                   "엑셀** 이나 아래 **양식**을 채워 올리면 숫자를 그대로 읽어 오독이 없습니다.")
+
+        _xc1, _xc2 = st.columns(2)
+        with _xc1:
+            _tpl_bytes, _tpl_name, _tpl_mime = portfolio.build_template_bytes()
+            st.download_button("📥 입력 양식 내려받기", data=_tpl_bytes,
+                               file_name=_tpl_name, mime=_tpl_mime,
+                               use_container_width=True, key="btn_dl_template")
+            st.caption("종목코드·종목명·보유수량·평균매수가 네 칸만 채우면 됩니다.")
+        with _xc2:
+            _cur_pos = st.session_state.get('positions') or []
+            _exp_df = portfolio.positions_to_dataframe(_cur_pos)
+            st.download_button(
+                f"📤 지금 보유종목 내보내기 ({len(_cur_pos)}종목)",
+                data=_exp_df.to_csv(index=False).encode("utf-8-sig"),
+                file_name="내_보유종목.csv", mime="text/csv",
+                use_container_width=True, disabled=not _cur_pos,
+                key="btn_export_positions")
+            st.caption("백업하거나 엑셀에서 수정한 뒤 다시 올릴 수 있습니다.")
+
+        _xls = st.file_uploader("엑셀·CSV 파일 (HTS 내보내기 또는 위 양식)",
+                                type=["xlsx", "xls", "csv"], key="xls_uploader")
+        if _xls is not None:
+            try:
+                _df_x = portfolio.read_table(_xls.getvalue(), _xls.name)
+                st.success(f"{len(_df_x)}행 읽음 · 인식된 열: "
+                           + ", ".join(map(str, _df_x.columns))[:200])
+                _auto = portfolio.suggest_column_mapping(list(_df_x.columns))
+                _hdr_map = portfolio.classify_header_cells([str(c) for c in _df_x.columns])
+                _cols_x = ["(사용 안 함)"] + [str(c) for c in _df_x.columns]
+
+                def _pick(field, alt_idx):
+                    """자동 매핑 → 없으면 표 헤더 분류기 결과로 채운다."""
+                    cur = _auto.get(field)
+                    if cur is None and alt_idx is not None and alt_idx < len(_df_x.columns):
+                        cur = str(_df_x.columns[alt_idx])
+                    return _cols_x.index(str(cur)) if cur and str(cur) in _cols_x else 0
+
+                _mx = {}
+                _mcol = st.columns(2)
+                for _i, (_fld, _ko, _alt) in enumerate([
+                        ('ticker', '종목코드 *', _hdr_map.get('code')),
+                        ('stock_name', '종목명 *', _hdr_map.get('name')),
+                        ('quantity', '보유수량 *', _hdr_map.get('quantity')),
+                        ('average_buy_price', '평균매수가 *', _hdr_map.get('price'))]):
+                    with _mcol[_i % 2]:
+                        _sel = st.selectbox(_ko, _cols_x, index=_pick(_fld, _alt),
+                                            key=f"xmap_{_fld}")
+                    _mx[_fld] = None if _sel == "(사용 안 함)" else _sel
+
+                if st.button("📗 엑셀에서 가져오기", type="primary", key="btn_xls_import"):
+                    _missing = [k for k in ('ticker', 'stock_name', 'quantity',
+                                            'average_buy_price') if not _mx.get(k)]
+                    # 종목코드가 없어도 종목명이 있으면 이름으로 찾을 수 있다
+                    if 'ticker' in _missing and _mx.get('stock_name'):
+                        _missing.remove('ticker')
+                    if _missing:
+                        st.error("필수 열을 선택하세요: " + ", ".join(_missing))
+                    else:
+                        _resolver = make_name_resolver()
+                        _rows_x, _warn_x = [], []
+                        for _ridx, _r in _df_x.iterrows():
+                            _nm = (str(_r.get(_mx['stock_name'], '')).strip()
+                                   if _mx.get('stock_name') else '')
+                            _cd = (portfolio.read_code_cell(_r.get(_mx['ticker']))[0]
+                                   if _mx.get('ticker') else None)
+                            _qt = portfolio._cell_number(_r.get(_mx['quantity']))
+                            _pr = portfolio._cell_number(_r.get(_mx['average_buy_price']))
+                            if not _nm and not _cd:
+                                continue
+                            if _qt is None or _pr is None:
+                                _warn_x.append(f"{_ridx + 2}행 건너뜀 — 수량·평단가를 "
+                                               f"숫자로 읽지 못했습니다: {_nm or _cd}")
+                                continue
+                            _tk = f"{_cd}.KS" if _cd else None
+                            if _nm and _resolver:
+                                try:
+                                    _t2, _real2 = _resolver(_nm)
+                                except Exception:
+                                    _t2, _real2 = None, None
+                                if _t2:
+                                    if _cd and str(_t2).split('.')[0] != _cd:
+                                        _warn_x.append(
+                                            f"'{_nm}' 종목코드({_cd})와 종목명이 다른 종목을 "
+                                            f"가리켜 종목명 기준({str(_t2).split('.')[0]})으로 "
+                                            f"잡았습니다.")
+                                    _tk = _t2
+                                    _cd = str(_t2).split('.')[0]
+                                    if _real2:
+                                        _nm = _real2
+                            _rows_x.append({'종목코드': _cd or '', '종목명': _nm or (_cd or ''),
+                                            '보유수량': _qt, '평균매수가': _pr,
+                                            '_ticker': _tk})
+                        st.session_state['paste_preview'] = _rows_x
+                        for _w in _warn_x[:6]:
+                            st.warning(_w)
+                        if _rows_x:
+                            st.success(f"✅ {len(_rows_x)}종목을 읽었습니다 — 아래 "
+                                       f"**미리보기**에서 확인한 뒤 '반영'을 누르세요. "
+                                       f"엑셀 숫자를 그대로 쓰므로 OCR 오독이 없습니다.")
+                        else:
+                            st.error("가져올 행이 없습니다. 열 선택을 확인해 주세요.")
+            except Exception as _xexc:
+                st.error(f"파일을 읽지 못했습니다 ({type(_xexc).__name__}): {_xexc}")
+
         st.markdown("---")
         st.markdown("### 📸 스크린샷으로 가져오기")
+        st.caption("⚠️ 인식 결과는 반드시 미리보기에서 확인하세요. 정확도가 중요하면 위 "
+                   "**엑셀 가져오기**를 쓰는 편이 안전합니다.")
         _ocr = portfolio.ocr_backend()
         if _ocr is None and not ALLOW_LOCAL_STORE:
             # 온라인(클라우드) 실행인데 엔진이 안 잡힌 경우. 서버에 Tesseract 를 함께

@@ -2087,6 +2087,87 @@ check("화해 내역 패널", "신호 간 이견을 화해시켰습니다" in _w
 check("수축 괴리 설명", "수축시켜 판단에 씁니다" in _w47)
 
 
+section("48. 엑셀 가져오기 · 평단가 자릿수 오독 교정")
+
+# ⚠️ 스크린샷 인식은 글자를 잘못 읽을 수 있다. 숫자가 그대로 들어 있는 엑셀 경로를
+#    1급 시민으로 두어 OCR 을 아예 우회할 수 있게 한다. 동시에, OCR 이 평단가 칸에서
+#    옆 열 숫자를 집어와 '평단 462원 / 수익률 +1871%' 같은 값을 만들던 것을
+#    화면의 현재가·수익률로 역산해 교정한다 (실사례: 금호건설).
+import io as _io48
+
+import pandas as _pd48
+
+# ① 입력 양식 — 생성 → 다시 읽기 → 자동 매핑까지 왕복
+_tb48, _tn48, _tm48 = pf.build_template_bytes()
+check("입력 양식 생성", len(_tb48) > 0 and _tn48.endswith((".xlsx", ".csv")))
+_tdf48 = pf.read_table(_tb48, _tn48)
+check("양식 필수 4열", all(c in list(_tdf48.columns)
+                       for c in ("종목코드", "종목명", "보유수량", "평균매수가")))
+_tm = pf.suggest_column_mapping(list(_tdf48.columns))
+check("양식이 자동 매핑됨", all(_tm.get(k) for k in
+                          ('ticker', 'stock_name', 'quantity', 'average_buy_price')))
+
+# ② HTS 내보내기 — 제목·요약이 위에 붙어 머리말이 4행에 있는 경우
+_raw48 = _pd48.DataFrame([
+    ["4202 주식잔고", "", "", "", "", ""],
+    ["계좌 7085150410-01", "", "", "", "", ""],
+    ["", "", "", "", "", ""],
+    ["종목명", "종목번호", "평가손익", "잔고", "손익분기", "매수평균"],
+    ["금호건설", "A002990", "-462,205", "400", "10,265", "10,246"],
+    ["대한항공", "A003490", "-71,989", "38", "27,794", "27,740"],
+])
+_buf48 = _io48.BytesIO()
+with _pd48.ExcelWriter(_buf48, engine="openpyxl") as _xl48:
+    _raw48.to_excel(_xl48, index=False, header=False, sheet_name="잔고")
+_hdf48 = pf.read_table(_buf48.getvalue(), "hts.xlsx")
+check("머리말 행을 찾아 열 이름으로 사용 (첫 행 고정 금지)",
+      "종목번호" in list(_hdf48.columns), str(list(_hdf48.columns))[:80])
+check("제목·요약 줄은 데이터에서 제외", len(_hdf48) == 2, str(len(_hdf48)))
+_hm48 = pf.classify_header_cells([str(c) for c in _hdf48.columns])
+check("엑셀에서도 종목번호→코드, 잔고→수량, 매수평균→평단",
+      _hm48.get('code') is not None and _hm48.get('quantity') is not None
+      and str(_hdf48.columns[_hm48['price']]) == "매수평균")
+
+# ③ 보유종목 내보내기 — 양식과 같은 열로 나가야 다시 올릴 수 있다
+_pos48 = [pf.PortfolioPosition(ticker="005930.KS", stock_name="삼성전자",
+                               market="KOSPI", quantity=10,
+                               average_buy_price=210000, source_type="manual_entry")]
+_edf48 = pf.positions_to_dataframe(_pos48)
+check("내보내기 열 = 양식 열", list(_edf48.columns) == pf.TEMPLATE_COLUMNS)
+check("내보낸 코드에 시장접미사 없음", _edf48.iloc[0]['종목코드'] == '005930')
+
+# ④ 평단가 자릿수 오독 교정 — 화면의 현재가·수익률로 역산
+_bad48 = ("종목명\t종목번호\t평가손익\t수익률\t잔고\t손익분기\t매수평균\t현재가\n"
+          "금호건설\t002990\t-462,205\t-11.28%\t400\t10,265\t462\t9,110\n")
+_r48, _w48 = pf.parse_table_with_header(_bad48, resolve_name=None)
+check("말도 안 되는 평단가를 역산값으로 교체",
+      len(_r48) == 1 and 9000 < float(_r48[0]['평균매수가']) < 11000,
+      str(_r48 and _r48[0]['평균매수가']))
+check("교정 사실을 반드시 알림", any('평단가 오독 교정' in w for w in _w48))
+
+_ok48 = ("종목명\t종목번호\t평가손익\t수익률\t잔고\t손익분기\t매수평균\t현재가\n"
+         "금호건설\t002990\t-462,205\t-11.28%\t400\t10,265\t10,246\t9,110\n")
+_r48b, _w48b = pf.parse_table_with_header(_ok48, resolve_name=None)
+check("정상 평단가는 건드리지 않음", _r48b[0]['평균매수가'] == 10246.0)
+check("정상일 때 교정 경고 없음", not any('오독 교정' in w for w in _w48b))
+
+_miss48 = ("종목명\t종목번호\t평가손익\t수익률\t잔고\t매수평균\t현재가\n"
+           "테스트\t005930\t-1,000\t-10.00%\t50\t\t9,000\n")
+_r48c, _w48c = pf.parse_table_with_header(_miss48, resolve_name=None)
+check("평단가를 못 읽으면 역산으로 살림",
+      len(_r48c) == 1 and abs(float(_r48c[0]['평균매수가']) - 10000) <= 2,
+      str(_r48c and _r48c[0]['평균매수가']))
+check("역산 사실 표기", any('역산' in w for w in _w48c))
+
+# ⑤ 화면 연결 — 스크린샷과 같은 자리에 엑셀 경로가 있어야 한다
+_w48ui = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("엑셀 가져오기 섹션 존재", "엑셀 파일로 가져오기 (가장 정확)" in _w48ui)
+check("양식 내려받기 버튼", "입력 양식 내려받기" in _w48ui)
+check("보유종목 내보내기 버튼", "지금 보유종목 내보내기" in _w48ui)
+check("엑셀 업로더", 'key="xls_uploader"' in _w48ui)
+check("엑셀은 오독이 없음을 안내", "OCR 오독이 없습니다" in _w48ui)
+
+
 print()
 print("=" * 72)
 if FAILURES:
