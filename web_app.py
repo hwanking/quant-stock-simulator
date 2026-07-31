@@ -52,8 +52,11 @@ from report_generator import QuantReportGenerator
 from leakage_guard import LeakageGuard
 
 # 1. 스트림릿 페이지 설정 및 애플(Apple.com) 스타일 다크모드 고대비 CSS
+#: 앱 이름은 여기 하나만 고친다. 사이드바 홈 버튼과 본문 대제목이 같은 값을 쓴다.
+#: (예전에는 '퀀트 주식 시뮬레이터' / '차세대 AI 퀀트 주가 예측 시뮬레이터' 로 달랐다)
+APP_TITLE = "AI 퀀트 주가 예측 시뮬레이터"
+APP_NAME = f"⚙️ {APP_TITLE}"
 #: 화면·기능을 바꿀 때 이 날짜도 함께 갱신한다 (사이드바 제목 아래에 표시된다)
-APP_NAME = "⚙️ 퀀트 주식 시뮬레이터"
 APP_UPDATED = "2026-07-31"
 
 def is_remote_exposed():
@@ -147,7 +150,7 @@ def check_password():
     st.stop()
 
 st.set_page_config(
-    page_title="퀀트 주식 시뮬레이터",
+    page_title=APP_TITLE,
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -402,31 +405,45 @@ st.sidebar.markdown("""
       color: #ffffff !important;
   }
 
-  /* ② 제목(홈 버튼) — 화면에서 가장 큰 글자여야 한다.
-        위 규칙과 겹치므로 선택자를 두 벌 써서 어느 DOM 구조에서도 이기게 한다. */
+  /* ② 제목(홈 버튼) — 사이드바에서 가장 큰 글자이고, 눌리는 버튼임이 보여야 한다.
+        st-key- 클래스는 Streamlit 버전에 따라 위치가 달라질 수 있으므로,
+        '사이드바의 첫 번째 버튼' 이라는 구조 선택자를 함께 걸어 항상 잡히게 한다. */
   section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button,
   section[data-testid="stSidebar"] .st-key-btn_home div[data-testid="stButton"] > button,
   section[data-testid="stSidebar"] .st-key-btn_home > button,
-  section[data-testid="stSidebar"] .st-key-btn_home button {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
+  section[data-testid="stSidebar"] .st-key-btn_home button,
+  section[data-testid="stSidebar"] div[data-testid="stSidebarUserContent"]
+      > div > div > div[data-testid="element-container"]:first-of-type
+      div[data-testid="stButton"] > button {
+      background: #16171a !important;
+      border: 2px solid #3a3f4b !important;
+      border-radius: 12px !important;
+      box-shadow: 0 2px 0 #0a0b0d !important;
       color: #f5f5f7 !important;
-      font-size: 2.0rem !important;
-      line-height: 1.25 !important;
+      font-size: 1.75rem !important;
+      line-height: 1.3 !important;
       font-weight: 900 !important;
       letter-spacing: -0.5px !important;
-      padding: 2px 0 0 0 !important;
+      padding: 12px 14px !important;
       text-align: left !important;
       justify-content: flex-start !important;
       white-space: normal !important;
+      width: 100% !important;
+      transition: transform .05s ease, border-color .15s ease !important;
   }
   section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button:hover,
   section[data-testid="stSidebar"] .st-key-btn_home div[data-testid="stButton"] > button:hover,
   section[data-testid="stSidebar"] .st-key-btn_home > button:hover,
   section[data-testid="stSidebar"] .st-key-btn_home button:hover {
-      background: transparent !important;
+      background: #1f2126 !important;
+      border-color: #64d2ff !important;
       color: #64d2ff !important;
+  }
+  /* 눌리는 느낌 — 클릭 순간 살짝 내려앉는다 */
+  section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button:active,
+  section[data-testid="stSidebar"] .st-key-btn_home button:active {
+      transform: translateY(2px) !important;
+      box-shadow: 0 0 0 #0a0b0d !important;
   }
 </style>
 """, unsafe_allow_html=True)
@@ -798,7 +815,11 @@ if st.session_state.pop('pending_scan', False):
 import uuid
 import datetime
 run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{target_ticker.split('.')[0][-5:]}"
-st.title("🎯 차세대 AI 퀀트 주가 예측 시뮬레이터")
+# 본문 대제목 — 사이드바 홈 버튼과 같은 이름을 쓴다 (APP_TITLE 하나로 관리)
+st.markdown(
+    f"<h1 style='font-size:2.6rem; font-weight:900; letter-spacing:-1px; "
+    f"margin:0 0 4px 0; color:#f5f5f7;'>🎯 {APP_TITLE}</h1>",
+    unsafe_allow_html=True)
 st.caption(f"⚡ 네이버·다음 실데이터 기반 · 표본/신뢰도 게이트 적용 · "
            f"Purged Walk-Forward 표본외 검증 수행 (Run ID: `{run_id}`)\n")
 
