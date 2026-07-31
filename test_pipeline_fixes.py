@@ -2305,6 +2305,66 @@ check("풀이는 로컬 계산 — 외부 전송 없음",
       all(x not in _pf50src for x in ("requests", "urlopen", "http", "api_key")))
 
 
+section("51. DeMARK 매수 포인트를 종합 결론에 싣는다")
+
+# DeMARK 9-13 은 '언제·어느 선에서' 를 말하는 시점 신호다. 탭 안에만 두면
+# 종합 결론과 따로 놀아, 결론은 '사지 마세요' 인데 탭에는 매수 신호가 떠 있는
+# 식으로 읽힌다. 결론 배너와 요약에 같은 값을 싣는다.
+
+_C51 = [
+    ("완성", {'buy_setup_count': 9, 'buy_countdown': 13, 'tdst_support': 9000,
+            'demark_label': '강한 분할매수', 'bullish_score': 70, 'bearish_score': 20},
+     9500, 'COMPLETE', True),
+    ("셋업만", {'buy_setup_count': 9, 'buy_countdown': 3, 'tdst_support': 9000,
+             'demark_label': '매수 확인', 'bullish_score': 55, 'bearish_score': 25},
+     9500, 'SETUP_DONE', True),
+    ("진행중", {'buy_setup_count': 5, 'buy_countdown': 0, 'tdst_support': 9000,
+             'demark_label': '예비 매수', 'bullish_score': 40, 'bearish_score': 30},
+     9500, 'FORMING', True),
+    ("지지이탈", {'buy_setup_count': 9, 'buy_countdown': 13, 'tdst_support': 9000,
+              'demark_label': '강한 분할매수', 'bullish_score': 70, 'bearish_score': 20},
+     8500, 'COMPLETE', False),
+    ("신호없음", {'buy_setup_count': 0, 'buy_countdown': 0, 'tdst_support': 9000,
+              'demark_label': '예비 매도', 'bullish_score': 20, 'bearish_score': 60},
+     9500, 'NONE', True),
+]
+for _lb51, _dm51, _px51, _st51, _vd51 in _C51:
+    _e51 = q.build_demark_entry(_dm51, _px51)
+    check(f"{_lb51} → state={_st51}", _e51 and _e51['state'] == _st51,
+          str(_e51 and _e51['state']))
+    check(f"{_lb51} → 지지 유효 판정 {_vd51}", _e51 and _e51['valid'] is _vd51)
+
+check("진행중은 완성까지 남은 봉 수를 알려줌",
+      "완성까지 4봉" in q.build_demark_entry(_C51[2][1], 9500)['headline'])
+check("산출 불가 입력에는 값을 만들지 않음",
+      q.build_demark_entry({'demark_label': '산출 불가 (데이터 부족)'}, 1000) is None
+      and q.build_demark_entry(None, 1000) is None)
+
+# 실제 파이프라인 — 스냅샷과 결론 요약에 실린다
+_snap51 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs51 = _snap51['four_scores']
+check("스냅샷에 demark_entry", isinstance(_fs51.get('demark_entry'), dict))
+_v51 = q.build_final_verdict(_snap51)
+check("결론 요약에 DeMARK 매수 포인트 포함",
+      any('DeMARK 매수 포인트' in s for s in _v51['summary']),
+      str(_v51['summary'])[:120])
+
+# 신호가 없을 때 유효 하한선을 내밀지 않는다 (진입 근거처럼 읽히면 안 됨)
+_snap51b = dict(_snap51)
+_fs51b = dict(_fs51)
+_fs51b['demark_entry'] = q.build_demark_entry(_C51[4][1], 9500)   # NONE 상태
+_snap51b['four_scores'] = _fs51b
+_v51b = q.build_final_verdict(_snap51b)
+_line51 = next((s for s in _v51b['summary'] if 'DeMARK' in s), '')
+check("신호 없음일 때 유효 하한선을 표시하지 않음", '유효 하한' not in _line51, _line51)
+
+# 화면 연결 — 종합 결론 배너 안에 카드가 있어야 한다
+_w51 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("배너에 DeMARK 매수 포인트 카드", "DeMARK 매수 포인트" in _w51)
+check("시점 신호임을 명시(가격 기준과 구분)", "시점</b> 신호이며" in _w51)
+check("신호 없을 때 하한선 숨김 처리", "_dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING')" in _w51)
+
+
 print()
 print("=" * 72)
 if FAILURES:

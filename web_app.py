@@ -2152,6 +2152,25 @@ rec_buy_display = f"{rec_buy_val:,.0f}원 이하" if rec_buy_val is not None els
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 
+# ⏱️ DeMARK 매수 포인트 — 신호 상태와 유효 하한선(TDST 지지)을 함께 보여준다.
+_dme = four_scores.get('demark_entry') or {}
+_dm_state = _dme.get('state')
+_dm_color = {'COMPLETE': '#30d158', 'SETUP_DONE': '#30d158',
+             'FORMING': '#ff9f0a'}.get(_dm_state, '#86868b')
+if _dme:
+    _dm_head = _dme.get('headline', '')
+    # 유효 하한선은 신호가 있을 때만 보여준다. 신호가 없는데 선만 띄우면
+    # 진입 근거가 있는 것처럼 읽힌다.
+    if _dme.get('trigger_line') and _dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING'):
+        _dm_line = (f"유효 하한 {_dme['trigger_line']:,.0f}원 "
+                    f"({'지지 유지 중' if _dme.get('valid') else '이탈 — 신호 무효'})")
+    elif _dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING'):
+        _dm_line = "유효 하한(TDST 지지) 산출 불가"
+    else:
+        _dm_line = str(_dme.get('detail', ''))[:60]
+else:
+    _dm_head, _dm_line = "산출 불가 (데이터 부족)", "DeMARK 신호를 만들지 못했습니다"
+
 st.markdown(f"""
 <div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
             border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
@@ -2184,10 +2203,16 @@ st.markdown(f"""
       <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🔴 손절가 <span style='font-weight:400;'>(현재가 기준 — 보유자용)</span></p>
       <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#ff453a;'>{_ex_stop}</p>
     </div>
+    <div style='background:#141416; border:1px solid {_dm_color}55; border-radius:12px; padding:10px 14px;'>
+      <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>⏱️ DeMARK 매수 포인트 <span style='font-weight:400;'>(9-13 추세 소진)</span></p>
+      <p style='margin:2px 0 0 0; font-size:1.0rem; font-weight:800; color:{_dm_color}; line-height:1.3;'>{_dm_head}</p>
+      <p style='margin:3px 0 0 0; font-size:0.78rem; color:#d2d2d7;'>{_dm_line}</p>
+    </div>
   </div>
   <p style='margin:10px 0 0 0; font-size:0.78rem; color:#ff9f0a;'>
     ⚠️ 실행 가격 기준: 목표·손절은 현재가 기준 기술 레벨이고 권장 매수가는 신규 진입 기준입니다.
-    신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.</p>
+    신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.
+    DeMARK 매수 포인트는 <b>시점</b> 신호이며, 위 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
 

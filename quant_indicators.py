@@ -1718,6 +1718,18 @@ class QuantIndicatorsEngine:
             summary.append(f"가중합 {raw_sum:.0f}점이 게이트 상한에 걸려 {base}점으로 제한됨")
         if disagreement is not None and disagreement >= 20:
             summary.append(f"관점 간 이견 큼 (표준편차 {disagreement:.0f}점) — 확신을 낮춰 잡으세요")
+        # DeMARK 매수 포인트는 '시점' 판단이라 결론 요약에 함께 실어 준다
+        _dme_s = fs.get('demark_entry') or {}
+        if _dme_s.get('headline'):
+            _tl = _dme_s.get('trigger_line')
+            # 유효 하한선은 신호가 있을 때만 의미가 있다 — 신호가 없는데 선만
+            # 보여주면 진입 근거가 있는 것처럼 읽힌다.
+            _show_line = _tl and _dme_s.get('state') in ('COMPLETE', 'SETUP_DONE', 'FORMING')
+            summary.append(
+                "DeMARK 매수 포인트: " + _dme_s['headline']
+                + (f" · 유효 하한 {_tl:,.0f}원"
+                   f"({'지지 유지' if _dme_s.get('valid') else '이탈 — 무효'})"
+                   if _show_line else ""))
         for _n in (fs.get('soft_conflict_notes') or []):
             summary.append("신호 이견 화해: " + str(_n))
         if vetoes:
@@ -1740,6 +1752,69 @@ class QuantIndicatorsEngine:
             'summary': summary,
             'disagreement': (None if disagreement is None else round(disagreement, 1)),
             'tabs': tabs,                      # 관점별 독립 판정 (합산하지 않음)
+        }
+
+    @staticmethod
+    def build_demark_entry(dm, curr_price):
+        """
+        DeMARK 9-13 신호 → '매수 포인트' 한 덩어리. 종합 결론에 그대로 싣는다.
+
+        DeMARK 는 추세 소진을 세는 기법이라 '언제·어느 선에서' 가 핵심이다:
+          · Buy Setup 9 → 매도 소진 준비 완료
+          · Buy Countdown 13 → 소진 확인, 반전 진입 시점
+          · TDST 지지선 → 이 선을 지키는 동안만 매수 신호가 유효하다
+        그래서 신호 상태와 함께 **유효 하한선(TDST 지지)** 을 같이 내보낸다.
+        산출 불가일 때 숫자를 만들지 않는다.
+
+        반환: {'state','headline','trigger_line','valid','detail','label'} 또는 None
+        """
+        if not dm or dm.get('demark_label', '').startswith('산출 불가'):
+            return None
+        buy_setup = int(dm.get('buy_setup_count', 0) or 0)
+        buy_cd = int(dm.get('buy_countdown', 0) or 0)
+        tdst = dm.get('tdst_support')
+        label = dm.get('demark_label', '중립')
+        bull = int(dm.get('bullish_score', 0) or 0)
+        bear = int(dm.get('bearish_score', 0) or 0)
+
+        # TDST 지지선 유지 여부 — 매수 신호의 유효 조건
+        valid = None
+        if tdst and curr_price:
+            valid = float(curr_price) >= float(tdst)
+
+        if buy_cd >= 13:
+            state = 'COMPLETE'
+            headline = "매수 카운트다운 13 완성 — 소진 확인"
+        elif buy_setup >= 9:
+            state = 'SETUP_DONE'
+            headline = f"매수 셋업 9 완성 · 카운트다운 {buy_cd}/13 진행"
+        elif buy_setup > 0:
+            state = 'FORMING'
+            headline = f"매수 셋업 {buy_setup}/9 진행 — 완성까지 {9 - buy_setup}봉"
+        elif bear > bull:
+            state = 'NONE'
+            headline = "매수 신호 없음 — 매도 소진 카운트가 우세"
+        else:
+            state = 'NONE'
+            headline = "매수 신호 없음 — 셋업 미시작"
+
+        if state in ('COMPLETE', 'SETUP_DONE'):
+            detail = ("TDST 지지선을 지키는 동안 유효합니다. 이탈하면 신호는 무효입니다."
+                      if tdst else "TDST 지지선을 산출하지 못해 유효 하한을 제시할 수 없습니다.")
+        elif state == 'FORMING':
+            detail = "아직 셋업이 완성되지 않아 진입 신호가 아닙니다. 완성 후 판단하세요."
+        else:
+            detail = "DeMARK 기준으로는 지금 매수 진입 근거가 없습니다."
+
+        return {
+            'state': state,
+            'headline': headline,
+            'trigger_line': (float(tdst) if tdst else None),
+            'valid': valid,
+            'detail': detail,
+            'label': label,
+            'buy_setup': buy_setup,
+            'buy_countdown': buy_cd,
         }
 
     # ── 기업유형 사전 ────────────────────────────────────────────────────
@@ -3090,6 +3165,9 @@ class QuantIndicatorsEngine:
             'context_news_risk_count': (_ctx.get('news_flags') or {}).get('risk_count', 0),
             'context_news_total': (_ctx.get('news_flags') or {}).get('total', 0),
             
+            # DeMARK 매수 포인트 — 종합 결론에 그대로 싣는다
+            'demark_entry': self.build_demark_entry(dm, curr_price),
+
             'tdst_support_str': ("N/A" if not tdst_available
                                  else ("지지 유지" if curr_price >= tdst_support else "이탈")),
             'tdst_resist_str': ("N/A" if not tdst_available
