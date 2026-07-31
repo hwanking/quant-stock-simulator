@@ -1557,6 +1557,73 @@ for _k, _v in q.TAB_WEIGHTS.items():
           abs(_v - qi.rb('RULES_TAB_WEIGHTS', _k, -1)) < 1e-9, f"{_v}")
 
 
+section("41. 최종 출시 감사 — 날조 제거 · 원천 정제 · 시장접미사 · 확률 100%")
+
+# ① 뉴스 모듈이 수집하지 않은 사건·출처를 만들지 않는다
+_news41 = engine.get_timeframe_news_analysis(SYMBOL)
+_srcs41 = " ".join(str(_news41[k].get('source', '')) for k in _news41)
+for _fake in ("KRX & 실시간", "리서치 컨센서스", "IR 공식 보고서"):
+    check(f"날조 출처 제거: '{_fake}'", _fake not in _srcs41)
+check("미연동·관찰 표기 존재", "미연동" in _srcs41 and "관찰" in _srcs41)
+_body41 = " ".join(str(_news41[k].get('impact', '')) + str(_news41[k].get('title', ''))
+                   for k in _news41)
+for _fab in ("매수세 유입", "차익매물", "컨센서스 상향", "독보적", "턴어라운드 기대"):
+    check(f"근거 없는 서술 제거: '{_fab}'", _fab not in _body41)
+check("수급 미단정 고지 포함", "단정하지 않" in _body41)
+_esrc41 = open(_os.path.join(PROJ, "bitemporal_engine.py"), encoding='utf-8').read()
+check("TIMEFRAME_NEWS_DB 날조 블록 제거",
+      "'주력 사업 실적 턴어라운드 컨센서스" not in _esrc41)
+
+# ② 원천 봉 정제 — 거래정지 0원 봉 제외, 피드 반올림 불일치 복원
+_p41, _ = engine.load_bitemporal_data(SYMBOL, "2014-01-01", T_REF)
+_o = _p41['open_raw'].values.astype(float)
+_h = _p41['high_raw'].values.astype(float)
+_l = _p41['low_raw'].values.astype(float)
+_c41 = _p41['close_raw'].values.astype(float)
+check("거래정지(0원) 봉 제외", not ((_o <= 0) & (_h <= 0) & (_l <= 0)).any())
+_viol = int(((_l > _o + 1e-9) | (_o > _h + 1e-9)
+             | (_l > _c41 + 1e-9) | (_c41 > _h + 1e-9)).sum())
+check("OHLC 불변조건 전체 통과", _viol == 0, f"위반 {_viol}봉")
+
+# ③ 시장 접미사 보존 — .KQ 로 조회하면 .KQ 키에 저장돼야 한다
+_t41, _n41, _i41 = engine.fetch_and_update_naver_realtime("086520.KQ")
+check("KQ 접미사 보존", _t41 == "086520.KQ", str(_t41))
+_px_kq, _st_kq, _mx_kq = engine.get_realtime_stock_price_triple_check("086520.KQ")
+_cc_kq = q._price_cross_check(_mx_kq)
+check("KQ 종목 교차검증 통과 (시드 위장 제거)", _cc_kq.get('passed') is True,
+      str(_cc_kq.get('note'))[:70])
+
+# ④ 선도달 확률 3범주 합 100%
+if snap['sim_res'].get('tp_first_prob') is not None:
+    _tp41 = snap['sim_res']['tp_first_prob']
+    _sl41 = snap['sim_res']['sl_first_prob']
+    _nt41 = snap['sim_res'].get('no_touch_prob')
+    check("미도달 범주 존재", _nt41 is not None)
+    check("tp+sl+미도달 = 100%", _nt41 is not None
+          and abs(_tp41 + _sl41 + _nt41 - 100.0) <= 0.35,
+          f"{_tp41}+{_sl41}+{_nt41}")
+
+# ⑤ 패턴 탭이 죽은 키(win_rate) 대신 엔진 판정을 쓴다
+_vd41 = q.build_final_verdict(snap)
+_pat41 = next(t for t in _vd41['tabs'] if t['key'] == 'pattern')
+if snap['sim_res'].get('probabilities_shown'):
+    check("확률 허용 시 패턴 탭이 산출됨 (산출불가 모순 제거)",
+          _pat41['available'] and _pat41['score'] is not None,
+          f"{_pat41['verdict']} {_pat41['score']}")
+
+# ⑥ 시장 국면 라벨에 판정 근거 포함 (당일 등락과 모순처럼 보이지 않게)
+check("국면 라벨에 근거(이동평균) 표기",
+      "일선" in str(snap['four_scores'].get('market_regime_label', '')),
+      str(snap['four_scores'].get('market_regime_label'))[:60])
+
+# ⑦ 출처·저장 문구 사실성
+check("DART '제출 원본 재공시' 단정 제거", "제출 원본을 재공시한 값을 사용" not in _esrc41)
+_w41 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("재무기준일을 보고서 기준일로 위장하지 않음", "보고서 기준일 아님" in _w41)
+check("실행 가격에 기준(신규/보유자) 라벨", "현재가 기준 — 보유자용" in _w41)
+check("저장 문구가 원격에서 거짓이 되지 않음", "이 브라우저 세션에만 유지" in _w41)
+
+
 print()
 print("=" * 72)
 if FAILURES:

@@ -328,23 +328,28 @@ class QuantIndicatorsEngine:
         except Exception:
             return "DECISION_PENDING", "판정 보류 (KOSPI·KOSDAQ 최신 데이터 미수신)", {"F": 0.25, "V": 0.20, "T": 0.15, "S": 0.15, "R": 0.15, "M": 0.10}
 
+        # 라벨에 판정 근거(지수 vs 이동평균)를 함께 적는다.
+        # 근거 없이 '급락장·고변동성'만 표시하면, 당일 지수가 급등한 날에는
+        # 상단 지수 카드(+17%)와 모순처럼 보인다. 이 판정은 당일 등락이 아니라
+        # 지수의 20·60일 이동평균 대비 위치로 내리는 것이다.
+        basis = f"(KOSPI {kp:,.0f} vs 20일선 {ks20:,.0f}·60일선 {ks60:,.0f} 기준)"
         if kp >= ks20 and ks20 >= ks60:
             regime_code = "BULL_STRONG"
-            regime_label = "강한 상승장·과열장"
+            regime_label = f"강한 상승장·과열장 {basis}"
             weights = {"F": 0.20, "V": 0.20, "T": 0.20, "S": 0.15, "R": 0.10, "M": 0.15}
         elif kp >= ks20:
             regime_code = "BULL_MILD"
-            regime_label = "완만한 상승장"
+            regime_label = f"완만한 상승장 {basis}"
             weights = {"F": 0.25, "V": 0.15, "T": 0.20, "S": 0.15, "R": 0.10, "M": 0.15}
         elif kp < ks20 and kp < ks60:
             regime_code = "BEAR_PANIC"
-            regime_label = "급락장·고변동성"
+            regime_label = f"하락 국면 — 지수가 20·60일선 아래 {basis}"
             weights = {"F": 0.15, "V": 0.10, "T": 0.25, "S": 0.25, "R": 0.15, "M": 0.10}
         else:
             regime_code = "SIDEWAYS"
-            regime_label = "횡보장"
+            regime_label = f"횡보장 {basis}"
             weights = {"F": 0.25, "V": 0.25, "T": 0.10, "S": 0.15, "R": 0.15, "M": 0.10}
-            
+
         return regime_code, regime_label, weights
 
     def compute_dtw_distance(self, seq_a, seq_b):
@@ -552,6 +557,10 @@ class QuantIndicatorsEngine:
                 'mdd': round(float(np.mean(mdd_list)) * 100, 1),
                 'tp_first_prob': round((tp_cnt / match_cnt) * 100, 1),
                 'sl_first_prob': round((sl_cnt / match_cnt) * 100, 1),
+                # 목표·손절 어느 쪽도 기간 내 닿지 않은 사례. 이 범주를 빼면
+                # tp+sl 합이 52% 처럼 보여 '나머지 48%는 뭔가' 라는 의문이 남는다.
+                # 세 범주는 같은 분모(match_cnt)를 쓰며 합이 100% 다.
+                'no_touch_prob': round((match_cnt - tp_cnt - sl_cnt) / match_cnt * 100, 1),
                 'profit_factor': profit_factor,
                 'status': tier_code,
                 'tier_label': tier_label,
@@ -712,6 +721,7 @@ class QuantIndicatorsEngine:
             'bear_trajectory': h20['trajectory_p20'],
             'tp_first_prob': h20['tp_first_prob'] if show_prob else None,
             'sl_first_prob': h20['sl_first_prob'] if show_prob else None,
+            'no_touch_prob': h20.get('no_touch_prob') if show_prob else None,
             'profit_factor': h20.get('profit_factor'),
             # 앙상블 지표는 제거했다. 사후확률 하나를 9등분해 '9개 모델 중 N개 상승'으로
             # 표시하던 값이며, 실제 다중 모델 앙상블은 구현되어 있지 않다.
@@ -1480,18 +1490,25 @@ class QuantIndicatorsEngine:
                          'reasons': reasons, 'available': available})
 
         # ── ① 자기유사 예측 ──────────────────────────────────────────────
-        wr = sim.get('win_rate')
+        # ⚠️ 예전에는 sim['win_rate'] 를 읽었는데 그 키는 최상위에 존재하지 않는다.
+        #    표본 23건(확률 허용)인데도 이 탭만 '산출 불가 — 기준 미달' 로 표시되어,
+        #    바로 옆의 베이지안 47%·선도달 확률과 화면이 모순됐다.
+        #    확률 허용 여부는 엔진의 probabilities_shown 하나로 판정한다.
+        wr = sim.get('bayes_prob')
+        obs = sim.get('obs_win_ratio')
         mp = sim.get('mean_perf')
         mc = sim.get('match_count') or 0
-        allowed = self.probabilities_allowed(sim.get('sample_tier') or sim.get('status', ''))
+        allowed = bool(sim.get('probabilities_shown'))
         if not allowed or wr is None:
             add('pattern', '🔮 자기유사 예측',
-                None, [f"유효표본 {mc}건 — 확률 산출 기준 미달"], available=False)
+                None, [f"유효표본 {mc}건 — 확률 산출 기준(10건) 미달, 관찰값만 참고"],
+                available=False)
         else:
             net = (mp or 0.0) - self.TOTAL_COST_PCT
             s = float(np.clip(50 + (wr - 50) * 1.6 + net * 6.0, 0, 100))
             add('pattern', '🔮 자기유사 예측', s, [
-                f"과거 유사구간 {mc}건 · 관찰 승률 {wr:.1f}%",
+                f"과거 유사구간 {mc}건 · 관찰 승률 {fmt_or(obs, digits=1)}% · "
+                f"베이지안 사후 {wr:.1f}%",
                 f"평균 수익률 {mp:+.2f}% → 거래비용 {self.TOTAL_COST_PCT:.2f}% 차감 후 {net:+.2f}%",
             ])
 
@@ -1519,9 +1536,12 @@ class QuantIndicatorsEngine:
             add('scenario', '🎯 대응 시나리오', None,
                 ["표본 부족으로 목표·손절 선도달 확률 미산출"], available=False)
         else:
+            nt = sim.get('no_touch_prob')
+            if nt is None:
+                nt = round(max(0.0, 100.0 - tp - sl), 1)
             s = float(np.clip(50 + (tp - sl) * 1.2, 0, 100))
             add('scenario', '🎯 대응 시나리오', s, [
-                f"목표가 선도달 {tp:.1f}% vs 손절가 선도달 {sl:.1f}%",
+                f"목표 선도달 {tp:.1f}% · 손절 선도달 {sl:.1f}% · 미도달 {nt:.1f}% (합 100%)",
                 f"손익비 {fmt_or(fs.get('reward_risk_ratio'))}",
             ])
 

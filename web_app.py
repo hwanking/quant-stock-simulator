@@ -745,7 +745,10 @@ show_portfolio = st.sidebar.toggle(
     help="CSV·Excel 가져오기, 다중기간 전망 비교, 보유자 행동판정을 본문에서 봅니다.")
 st.session_state['show_portfolio'] = show_portfolio
 st.sidebar.caption("증권사 CSV·Excel 가져오기 또는 직접 입력. "
-                   "로그인 정보·쿠키를 수집하지 않으며 데이터는 이 PC에만 저장됩니다."
+                   + ("로그인 정보·쿠키를 수집하지 않으며 데이터는 이 PC에만 저장됩니다."
+                      if ALLOW_LOCAL_STORE else
+                      "로그인 정보·쿠키를 수집하지 않습니다. 원격 접속에서는 서버에 저장하지 않고 "
+                      "이 브라우저 세션에만 유지됩니다.")
                    + (f" · 저장 {st.session_state.get('positions_saved_at')}"
                       if st.session_state.get('positions_saved_at') else " · 미저장"))
 
@@ -1675,7 +1678,8 @@ _origin_txt = {"scan": "상단 스캔 결과와 **동일한 스냅샷**", "cache
 st.caption(
     f"🔗 {_origin_txt} · 생성 {_m['generated_at']} · Run `{_m['run_id']}` · "
     f"분석기준일 `{_m['analysis_date']}` · 가격기준 `{_m['price_asof']}` ({_m['price_type']}) · "
-    f"재무기준 `{_m['fiscal_asof']}`{' (추정)' if _m.get('fiscal_is_estimated') else ''} · "
+    f"재무: 현재 게시값 스냅샷 `{_m['fiscal_asof']}` 수집"
+    f"{' (보고서 기준일 아님 — 공시 원문 미연동)' if _m.get('fiscal_is_estimated') else ''} · "
     f"calc `{_m['calc_version']}` / model `{_m['model_version']}` / rulebook `{_m['rulebook_version']}`")
 
 if snap.get('status') == 'REVIEW_REQUIRED':
@@ -1929,7 +1933,8 @@ st.markdown("---")
 
 # 🚨 [사용자 요청] 뉴스·공시·촉매의 시간축 3단계 분리 분석을 한줄핵심결론 위로 배치
 news_tf = engine_init.get_timeframe_news_analysis(target_ticker)
-st.markdown(f"### 📰 [{resolved_name}] 뉴스·공시·촉매의 시간축 3단계 분리 분석")
+st.caption("ℹ️ 뉴스 기사·증권사 리서치·IR 원문은 미연동입니다. 아래는 실제 수집한 가격·거래량·게시 투자지표의 관찰과 정량 해석이며, 사건·원인을 추정해 서술하지 않습니다.")
+st.markdown(f"### 📰 [{resolved_name}] 가격·지표 관찰의 시간축 3단계 정리")
 
 n1, n2, n3 = st.columns(3)
 with n1:
@@ -1938,7 +1943,7 @@ with n1:
     <div style='background: #1c1c1e; padding: 18px; border-radius: 14px; border: 1px solid #ff453a;'>
         <h4 style='color: #ff453a !important; margin-top:0;'>1. 오늘의 변동 요인 ({dd.get('date', '2026-07-30')})</h4>
         <p style='font-weight: bold; color: #f5f5f7;'>{dd['title']}</p>
-        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>원인 분석</b>: {dd['impact']}</p>
+        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>관찰 내용</b>: {dd['impact']}</p>
         <span style='font-size: 0.8rem; color: #86868b;'>출처: {dd['source']} | 성향: {dd['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -1949,7 +1954,7 @@ with n2:
     <div style='background: #1c1c1e; padding: 18px; border-radius: 14px; border: 1px solid #ff9f0a;'>
         <h4 style='color: #ff9f0a !important; margin-top:0;'>2. 중기 촉매 ({mc.get('timeframe', '1~3개월')})</h4>
         <p style='font-weight: bold; color: #f5f5f7;'>{mc['title']}</p>
-        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>영향 파급</b>: {mc['impact']}</p>
+        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>정량 해석</b>: {mc['impact']}</p>
         <span style='font-size: 0.8rem; color: #86868b;'>출처: {mc['source']} | 성향: {mc['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -1960,7 +1965,7 @@ with n3:
     <div style='background: #1c1c1e; padding: 18px; border-radius: 14px; border: 1px solid #30d158;'>
         <h4 style='color: #30d158 !important; margin-top:0;'>3. 장기 구조적 서사 ({ln.get('timeframe', '6~12개월')})</h4>
         <p style='font-weight: bold; color: #f5f5f7;'>{ln['title']}</p>
-        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>장기 전망</b>: {ln['impact']}</p>
+        <p style='font-size: 0.9em; color: #d2d2d7;'>💡 <b>정량 해석</b>: {ln['impact']}</p>
         <span style='font-size: 0.8rem; color: #86868b;'>출처: {ln['source']} | 성향: {ln['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -2068,9 +2073,10 @@ st.markdown(f'''
 <div style="text-align:right; background: #141416; padding: 14px 22px; border-radius: 12px; border: 2px solid {action_border_color}; min-width: 220px;">
     <p style="margin:0; font-size: 0.85rem; color:#86868b; font-weight:bold;">실행 가격 기준</p>
     <div style="border-top:1px solid #2c2c2e; padding-top:6px; margin-top:6px; font-size:0.88rem; text-align:right;">
-        <p style="margin:2px 0; color:#d2d2d7;"><b>권장 매수가</b>: <b style="color:#30d158;">{rec_buy_display}</b></p>
-        <p style="margin:2px 0; color:#d2d2d7;"><b>1차 목표가</b>: <b style="color:#64d2ff;">{four_scores['target_tech_1st']:,.0f}원</b></p>
-        <p style="margin:2px 0; color:#d2d2d7;"><b>손절가</b>: <b style="color:#ff453a;">{four_scores['stop_loss_price']:,.0f}원</b></p>
+        <p style="margin:2px 0; color:#d2d2d7;"><b>권장 매수가</b> <span style="color:#86868b;font-size:0.78rem;">(신규 진입 기준)</span>: <b style="color:#30d158;">{rec_buy_display}</b></p>
+        <p style="margin:2px 0; color:#d2d2d7;"><b>1차 목표가</b> <span style="color:#86868b;font-size:0.78rem;">(현재가 기준 기술 레벨)</span>: <b style="color:#64d2ff;">{four_scores['target_tech_1st']:,.0f}원</b></p>
+        <p style="margin:2px 0; color:#d2d2d7;"><b>손절가</b> <span style="color:#86868b;font-size:0.78rem;">(현재가 기준 — 보유자용)</span>: <b style="color:#ff453a;">{four_scores['stop_loss_price']:,.0f}원</b></p>
+        <p style="margin:6px 0 0 0; color:#ff9f0a; font-size:0.75rem;">⚠️ 목표·손절은 현재가 기준 기술 레벨이고 권장 매수가는 신규 진입 기준입니다.<br>신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.</p>
     </div>
 </div>
 </div>
