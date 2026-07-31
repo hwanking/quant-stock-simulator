@@ -12,6 +12,7 @@
 
 # 개발 잔여물
 _archive/
+_probe/
 __pycache__/
 *.pyc
 *.pyo

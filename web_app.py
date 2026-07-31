@@ -5,14 +5,28 @@ import pandas as pd
 import numpy as np
 import datetime
 import importlib
-import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use("Agg")          # 헤드리스 서버에는 GUI 백엔드가 없다
+import matplotlib.pyplot as plt
 import urllib.request
 import json
 import os
 
-# Matplotlib 한글 폰트 설정 (Windows Malgun Gothic 폰트 사용)
-matplotlib.rcParams['font.family'] = 'Malgun Gothic'
+# ── Matplotlib 한글 폰트 ────────────────────────────────────────────────
+# 'Malgun Gothic' 을 그대로 박아두면 리눅스(클라우드)에는 그 폰트가 없어
+# 차트마다 경고가 쏟아지고 한글이 네모로 깨진다. 설치된 것 중에서 고른다.
+# (클라우드에는 packages.txt 의 fonts-nanum 이 설치된다)
+def _pick_korean_font():
+    from matplotlib import font_manager
+    installed = {f.name for f in font_manager.fontManager.ttflist}
+    for name in ("Malgun Gothic", "AppleGothic", "NanumGothic", "NanumBarunGothic",
+                 "Noto Sans CJK KR", "Noto Sans KR", "DejaVu Sans"):
+        if name in installed:
+            return name
+    return "DejaVu Sans"
+
+
+matplotlib.rcParams['font.family'] = _pick_korean_font()
 matplotlib.rcParams['axes.unicode_minus'] = False
 
 # 모듈 핫 리로딩

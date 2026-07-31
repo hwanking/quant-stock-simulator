@@ -7,9 +7,9 @@ showErrorDetails = true
 toolbarMode = "minimal"
 
 [server]
-# 로컬 실행 기본값. Streamlit Cloud 는 이 값들을 무시하고 자체 설정을 쓴다.
-headless = false
-port = 8501
+# ⚠️ port·headless 는 여기에 두지 않는다.
+#    Streamlit Cloud 도 이 파일을 읽기 때문에, 포트를 고정하면 클라우드가 할당한
+#    포트와 충돌해 앱이 뜨지 않는다. 로컬 포트는 .claude/launch.json 이 넘긴다.
 # 업로드 이미지 상한 (스크린샷은 보통 1MB 미만)
 maxUploadSize = 20
 
