@@ -850,7 +850,8 @@ def find_attention_candidates(strategy='composite', top_n=15,
         if not codes:
             return {'rows': [], 'pool_size': 0, 'deep_count': 0, 'sources': [],
                     'failures': [], 'unavailable':
-                        "관심종목이 비어 있습니다. 보유종목을 등록하거나 종목을 추가하세요."}
+                        "관심종목이 비어 있습니다. 스캔 결과에서 '⭐ 이 목록을 관심종목으로 "
+                        "저장'을 누르거나 보유종목을 등록하세요."}
         pool = {c: {'code': c, 'name': c, 'price': None, 'change_pct': None,
                     'volume': None, 'turnover_mil': None, 'market_cap_eok': None,
                     'sources': {'watchlist'}} for c in codes}

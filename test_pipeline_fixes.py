@@ -1624,6 +1624,31 @@ check("실행 가격에 기준(신규/보유자) 라벨", "현재가 기준 — 
 check("저장 문구가 원격에서 거짓이 되지 않음", "이 브라우저 세션에만 유지" in _w41)
 
 
+section("42. 관심종목 카드 행동점수 · 관심종목 저장")
+
+# ⚠️ 스캔 결과 행의 키는 'final_score' 인데 카드가 없는 키 'final_action_score' 를
+#    읽어 모든 후보가 '퀀트 행동점수 미산출' 로 표시됐다 (죽은 키 계열 3번째).
+_scan_src42 = _insp.getsource(q.run_screener_scan)
+check("스캔 행에 final_score 키 존재", '"final_score"' in _scan_src42)
+_w42 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("카드가 final_score 를 조회", "r.get('final_score')" in _w42)
+check("죽은 키 조회 제거", "r.get('final_action_score')" not in _w42)
+check("미산출 후보는 사유와 함께 분리", "행동점수 미산출로 본 목록에서 제외" in _w42)
+
+# 관심종목 저장 — 보유종목과 같은 원칙 (로컬 파일, 무효 코드 정규화·제외)
+_wlp = _os.path.join(PROJ, "_probe", "_wl_reg.json")
+pf.save_watchlist([{'code': '28670', 'name': '팬오션'}, {'code': '', 'name': 'X'}],
+                  path=_wlp)
+_wl42, _ = pf.load_watchlist(path=_wlp)
+check("관심종목 저장·복원 왕복", len(_wl42) == 1 and _wl42[0]['code'] == '028670',
+      str(_wl42))
+check("관심종목 삭제", pf.delete_watchlist(path=_wlp))
+check("빈 파일 로드 방어", pf.load_watchlist(path=_wlp) == ([], None))
+check("스캔 대상에 관심종목 포함", "watch = [w['code']" in _w42)
+check("홈 버튼이 관심종목을 지우지 않음", "'watchlist'" not in _w42.split(
+    "btn_home")[1].split("st.rerun()")[0])
+
+
 print()
 print("=" * 72)
 if FAILURES:

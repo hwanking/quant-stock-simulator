@@ -1505,6 +1505,44 @@ def delete_positions(path=PORTFOLIO_FILE):
     return False
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 관심종목(watchlist) — 스캔 결과를 저장해 두었다가 '사용자 관심종목' 방식으로
+# 다시 발굴할 때 쓴다. 보유종목과 같은 원칙: 로컬 파일에만, 서버 전송 없음.
+# ─────────────────────────────────────────────────────────────────────────────
+WATCHLIST_FILE = os.path.join(PORTFOLIO_DIR, "watchlist.json")
+
+
+def save_watchlist(items, path=WATCHLIST_FILE):
+    """items: [{'code': '028670', 'name': '팬오션'}, ...]"""
+    clean = []
+    for it in (items or []):
+        code = normalize_code((it or {}).get('code'))
+        if not code:
+            continue
+        clean.append({'code': code, 'name': str((it or {}).get('name') or code)})
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {"saved_at": datetime.now().isoformat(timespec="seconds"),
+               "items": clean}
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    return path
+
+
+def load_watchlist(path=WATCHLIST_FILE):
+    if not os.path.exists(path):
+        return [], None
+    with open(path, encoding="utf-8") as fh:
+        payload = json.load(fh)
+    return payload.get("items", []), payload.get("saved_at")
+
+
+def delete_watchlist(path=WATCHLIST_FILE):
+    if os.path.exists(path):
+        os.remove(path)
+        return True
+    return False
+
+
 def export_positions_csv(positions):
     buf = io.StringIO()
     w = csv.writer(buf)

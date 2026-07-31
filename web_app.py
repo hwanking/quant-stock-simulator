@@ -559,6 +559,13 @@ if 'positions' not in st.session_state:
         st.session_state['positions'] = []          # 방문자별로 비어서 시작
         st.session_state['positions_saved_at'] = None
 
+if 'watchlist' not in st.session_state:
+    if ALLOW_LOCAL_STORE:
+        _wl, _ = portfolio.load_watchlist()
+        st.session_state['watchlist'] = _wl
+    else:
+        st.session_state['watchlist'] = []
+
 QUOTE_TTL_SEC = 60
 
 
@@ -770,7 +777,10 @@ def run_market_scan():
         _bar.caption(f"⏳ {msg}")
 
     # 1단계 — 오늘의 관심종목 발굴 (순위 페이지 → 후보에만 일봉)
-    watch = [p.ticker.split('.')[0] for p in (st.session_state.get('positions') or [])]
+    # '사용자 관심종목' 방식은 저장된 관심종목 + 보유종목을 대상으로 한다
+    watch = [w['code'] for w in (st.session_state.get('watchlist') or [])]
+    watch += [p.ticker.split('.')[0] for p in (st.session_state.get('positions') or [])
+              if p.ticker.split('.')[0] not in watch]
     att = market_attention.find_attention_candidates(
         attention_strategy, top_n=scan_depth, progress=_progress, watchlist=watch)
     st.session_state['attention_result'] = att
@@ -938,10 +948,48 @@ if st.session_state.get('show_screener', False):
                 st.caption("관심점수는 **지금 시장이 주목하는가**이고, 행동점수는 "
                            "**지금 매매할 가치가 있는가**입니다. 둘은 다릅니다 — "
                            "관심점수가 높다고 추천에 넣지 않습니다.")
+                # ⚠️ 스캔 행의 키는 'final_score' 다. 예전에는 없는 키
+                #    'final_action_score' 를 읽어 전 종목이 '미산출' 로 표시됐다.
                 _action_by_code = {str(r.get('symbol', '')).split('.')[0]:
-                                   r.get('final_action_score')
+                                   r.get('final_score')
                                    for r in scan_results}
-                for _r in _att['rows']:
+                # 정밀분석에서 제외된 종목의 사유 (유동성·교차검증·데이터 실패)
+                _fail_by_code = {str(f.get('symbol', '')).split('.')[0]:
+                                 str(f.get('reason', ''))
+                                 for f in scan_failures}
+
+                # 행동점수가 나온 후보를 먼저, 제외 후보는 접힌 목록으로 분리한다
+                # (점수를 계산할 수 없는 카드가 본 목록에 섞이면 판단에 쓸 수 없다)
+                _scored_rows = [r for r in _att['rows']
+                                if _action_by_code.get(r['code']) is not None]
+                _excluded_rows = [r for r in _att['rows']
+                                  if _action_by_code.get(r['code']) is None]
+
+                # ── 관심종목 저장 ─────────────────────────────────────────
+                _wl_c1, _wl_c2 = st.columns([1, 2.2])
+                with _wl_c1:
+                    if st.button("⭐ 이 목록을 관심종목으로 저장",
+                                 use_container_width=True, key="btn_save_watchlist"):
+                        _items = [{'code': r['code'], 'name': r['name']}
+                                  for r in _att['rows']]
+                        st.session_state['watchlist'] = _items
+                        if ALLOW_LOCAL_STORE:
+                            try:
+                                portfolio.save_watchlist(_items)
+                                st.success(f"⭐ {len(_items)}종목 저장 — 후보 발굴 방식에서 "
+                                           f"'사용자 관심종목'으로 다시 스캔할 수 있습니다.")
+                            except Exception as _ex:
+                                st.warning(f"로컬 저장 실패: {_ex}")
+                        else:
+                            st.success(f"⭐ {len(_items)}종목 저장 (이 브라우저 세션에만 유지)")
+                with _wl_c2:
+                    _wl_now = st.session_state.get('watchlist') or []
+                    if _wl_now:
+                        st.caption("현재 관심종목 " + str(len(_wl_now)) + "개: "
+                                   + ", ".join(w['name'] for w in _wl_now[:8])
+                                   + (" 외" if len(_wl_now) > 8 else ""))
+
+                for _r in _scored_rows:
                     _a = _r['attention']
                     _c = _r['components']
                     _act = _action_by_code.get(_r['code'])
@@ -984,6 +1032,31 @@ if st.session_state.get('show_screener', False):
                                      use_container_width=True):
                             st.session_state['pending_search'] = f"{_r['name']} ({_r['code']})"
                             st.rerun()
+
+                if not _scored_rows:
+                    st.info("행동점수까지 산출된 후보가 없습니다. 아래 제외 사유를 확인하세요.")
+
+                # 행동점수를 산출하지 못한 후보 — '미산출' 로 섞지 않고 사유와 함께 분리
+                if _excluded_rows:
+                    with st.expander(f"⛔ 행동점수 미산출로 본 목록에서 제외된 "
+                                     f"{len(_excluded_rows)}종목 (사유 보기)"):
+                        st.caption("관심점수는 있으나 정밀 퀀트 분석이 유동성·데이터·"
+                                   "교차검증 게이트에 걸려 행동점수를 내지 못한 종목입니다. "
+                                   "점수 없이 카드에 섞으면 판단에 쓸 수 없어 분리했습니다.")
+                        for _r in _excluded_rows:
+                            _why = _fail_by_code.get(_r['code']) or "정밀분석 결과 없음"
+                            _ec1, _ec2 = st.columns([3, 1])
+                            _ec1.markdown(
+                                f"**{_r['name']}** `{_r['code']}` · "
+                                f"관심 {_r['attention']['adjusted_attention_score']:.0f}점  \n"
+                                f"<span style='color:#ff9f0a;font-size:0.82rem;'>"
+                                f"제외 사유: {_why[:120]}</span>",
+                                unsafe_allow_html=True)
+                            if _ec2.button("분석 →", key=f"attx_{_r['code']}",
+                                           use_container_width=True):
+                                st.session_state['pending_search'] = \
+                                    f"{_r['name']} ({_r['code']})"
+                                st.rerun()
                 st.markdown("---")
 
             if scan_failures:
