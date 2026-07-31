@@ -42,10 +42,27 @@ from leakage_guard import LeakageGuard
 APP_NAME = "⚙️ 퀀트 주식 시뮬레이터"
 APP_UPDATED = "2026-07-31"
 
-#: 비밀번호를 걸고 싶으면 Streamlit Cloud 의 Secrets 에 app_password 를 넣으면 된다.
-#: (Settings → Secrets 에  app_password = "원하는비밀번호"  한 줄)
-#: 값이 없으면 인증 없이 열린다 — 현재 선택된 동작이다.
-REQUIRE_PASSWORD = True
+def is_remote_exposed():
+    """
+    지금 접속이 이 PC 밖에서 온 것인가? (클라우드·터널·LAN 모두 포함)
+
+    판정 근거를 여러 개 쓴다. 하나라도 '외부'를 가리키면 외부로 본다 —
+    인증은 **막는 쪽으로 틀려야** 안전하기 때문이다.
+    """
+    # Streamlit Community Cloud 는 앱을 /mount/src 아래에 마운트한다
+    try:
+        if os.path.isdir("/mount/src"):
+            return True
+    except Exception:
+        pass
+    try:
+        host = str(st.context.headers.get("host") or "").split(":")[0].lower()
+    except Exception:
+        host = ""
+    if host.endswith(".streamlit.app"):
+        return True
+    # 호스트가 있는데 localhost 가 아니면 외부 접속이다 (LAN·터널 포함)
+    return bool(host) and host not in ("localhost", "127.0.0.1", "::1")
 
 
 def is_local_session():
@@ -72,26 +89,47 @@ def is_local_session():
 
 
 def check_password():
-    """Secrets 에 app_password 가 있을 때만 인증을 요구한다."""
-    if not REQUIRE_PASSWORD:
+    """
+    외부 접속이면 반드시 인증을 통과해야 한다.
+
+    ⚠️ **fail-closed 로 동작한다.** 비밀번호가 설정돼 있지 않은데 외부에서
+       접속하면 화면을 열어주지 않는다. 예전에는 '비밀번호 없으면 공개'였는데,
+       그 상태로 클라우드에 올리면 보유종목·평단가가 URL 만 알면 다 보인다.
+
+    이 함수는 set_page_config 직후, 엔진 생성·보유종목 로드보다 **먼저** 불린다.
+    통과하지 못하면 st.stop() 이므로 그 아래 코드는 실행되지 않는다.
+    """
+    if st.session_state.get("_authed"):
         return True
+
     try:
         expected = st.secrets.get("app_password")
     except Exception:
         expected = None
-    if not expected:
-        return True                      # 비밀번호 미설정 → 공개 (현재 설정)
-    if st.session_state.get("_authed"):
-        return True
+    remote = is_remote_exposed()
+
+    if not remote and not expected:
+        return True                      # 로컬 실행 — 인증 없이 사용
+
     st.title(APP_NAME)
     st.caption(f"업데이트 {APP_UPDATED}")
-    pw = st.text_input("접속 비밀번호", type="password")
+
+    if remote and not expected:
+        st.error(
+            "**접속 비밀번호가 설정되지 않아 화면을 열 수 없습니다.**\n\n"
+            "이 앱에는 보유종목·평균매수가가 들어 있어, 비밀번호 없이 외부에 "
+            "공개하지 않습니다.\n\n"
+            "Streamlit Cloud → **Settings → Secrets** 에 아래 한 줄을 넣고 "
+            "앱을 재시작하세요.")
+        st.code('app_password = "원하는비밀번호"', language="toml")
+        st.stop()
+
+    pw = st.text_input("접속 비밀번호", type="password", key="_pw_input")
     if pw:
         if pw == expected:
             st.session_state["_authed"] = True
             st.rerun()
-        else:
-            st.error("비밀번호가 맞지 않습니다.")
+        st.error("비밀번호가 맞지 않습니다.")
     st.stop()
 
 st.set_page_config(
@@ -447,10 +485,19 @@ st.sidebar.info(f"🛡️ **자산/통화 스키마 검증**:\n- **자산 구별
 # 💼 내 보유종목 — 사이드바 상시 표시
 # 현재가만 가볍게 조회한다 (전체 파이프라인은 본문 화면에서만 실행)
 # ═══════════════════════════════════════════════════════════════════════════
+# 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
+# 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
+# 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
+ALLOW_LOCAL_STORE = not is_remote_exposed()
+
 if 'positions' not in st.session_state:
-    _loaded, _saved_at = portfolio.load_positions()
-    st.session_state['positions'] = _loaded
-    st.session_state['positions_saved_at'] = _saved_at
+    if ALLOW_LOCAL_STORE:
+        _loaded, _saved_at = portfolio.load_positions()
+        st.session_state['positions'] = _loaded
+        st.session_state['positions_saved_at'] = _saved_at
+    else:
+        st.session_state['positions'] = []          # 방문자별로 비어서 시작
+        st.session_state['positions_saved_at'] = None
 
 QUOTE_TTL_SEC = 60
 
@@ -1350,14 +1397,21 @@ if st.session_state.get('show_portfolio'):
                     [r for r, _ in _savable], resolve_market=_resolve_mkt)
                 st.session_state['positions'] = pos
                 st.session_state.pop('paste_preview', None)
-                # 세션에만 두면 새로고침에 사라진다 — 반영 즉시 로컬에 저장한다
-                try:
-                    portfolio.save_positions(pos)
-                    st.session_state['positions_saved_at'] = \
-                        datetime.datetime.now().isoformat(timespec="seconds")
-                except Exception as _ex:
-                    st.warning(f"로컬 저장 실패: {_ex}")
-                st.success(f"✅ {len(pos)}종목 반영·저장")
+                # 로컬에서만 파일로 저장한다. 원격에서는 `.portfolio/positions.json` 이
+                # 방문자 전원의 공용 파일이 되어 서로의 보유종목을 덮어쓴다.
+                if ALLOW_LOCAL_STORE:
+                    try:
+                        portfolio.save_positions(pos)
+                        st.session_state['positions_saved_at'] = \
+                            datetime.datetime.now().isoformat(timespec="seconds")
+                        st.success(f"✅ {len(pos)}종목 반영·저장")
+                    except Exception as _ex:
+                        st.success(f"✅ {len(pos)}종목 반영")
+                        st.warning(f"로컬 저장 실패: {_ex}")
+                else:
+                    st.success(f"✅ {len(pos)}종목 반영 (이 브라우저 세션에만 유지)")
+                    st.caption("원격 접속이라 서버에 저장하지 않습니다. 보관하려면 "
+                               "**저장·삭제 탭 → CSV 내보내기**를 쓰세요.")
                 for w in warns:
                     st.warning(w)
                 st.rerun()
@@ -1380,38 +1434,53 @@ if st.session_state.get('show_portfolio'):
             pos, warns = portfolio.rows_to_positions(
                 edited_direct.to_dict('records'), source_type="manual_entry")
             st.session_state['positions'] = pos
-            # 세션에만 두면 새로고침에 사라진다 (실제로 저장본이 0건이었다)
-            try:
-                portfolio.save_positions(pos)
-                st.session_state['positions_saved_at'] = \
-                    datetime.datetime.now().isoformat(timespec="seconds")
-                st.success(f"✅ {len(pos)}종목 반영·저장")
-            except Exception as _ex:
-                st.success(f"✅ {len(pos)}종목 반영")
-                st.warning(f"로컬 저장 실패: {_ex}")
+            if ALLOW_LOCAL_STORE:
+                try:
+                    portfolio.save_positions(pos)
+                    st.session_state['positions_saved_at'] = \
+                        datetime.datetime.now().isoformat(timespec="seconds")
+                    st.success(f"✅ {len(pos)}종목 반영·저장")
+                except Exception as _ex:
+                    st.success(f"✅ {len(pos)}종목 반영")
+                    st.warning(f"로컬 저장 실패: {_ex}")
+            else:
+                st.success(f"✅ {len(pos)}종목 반영 (이 브라우저 세션에만 유지)")
             for w in warns:
                 st.warning(w)
             st.rerun()
 
     # ── 저장 / 삭제 ────────────────────────────────────────────────────
     with p_tab_manage:
-        st.markdown("보유 정보는 **이 PC의 `.portfolio/positions.json`** 에만 저장됩니다. "
-                    "서버 전송·외부 API 전달을 하지 않으며, 계좌번호는 마스킹되어 저장됩니다.")
-        mg1, mg2, mg3 = st.columns(3)
-        if mg1.button("💾 로컬 저장"):
-            path = portfolio.save_positions(st.session_state['positions'])
-            st.session_state['positions_saved_at'] = datetime.datetime.now().isoformat(timespec="seconds")
-            st.success(f"저장 완료: {path}")
-        if mg2.button("📂 저장본 불러오기"):
-            loaded, saved_at = portfolio.load_positions()
-            st.session_state['positions'] = loaded
-            st.session_state['positions_saved_at'] = saved_at
-            st.success(f"{len(loaded)}종목 불러옴 (저장 시각 {saved_at})")
-        if mg3.button("🗑️ 전체 삭제", type="secondary"):
-            portfolio.delete_positions()
-            st.session_state['positions'] = []
-            st.session_state['positions_saved_at'] = None
-            st.success("삭제 완료")
+        if ALLOW_LOCAL_STORE:
+            st.markdown("보유 정보는 **이 PC의 `.portfolio/positions.json`** 에만 저장됩니다. "
+                        "서버 전송·외부 API 전달을 하지 않으며, 계좌번호는 마스킹되어 저장됩니다.")
+            mg1, mg2, mg3 = st.columns(3)
+            if mg1.button("💾 로컬 저장"):
+                path = portfolio.save_positions(st.session_state['positions'])
+                st.session_state['positions_saved_at'] = datetime.datetime.now().isoformat(timespec="seconds")
+                st.success(f"저장 완료: {path}")
+            if mg2.button("📂 저장본 불러오기"):
+                loaded, saved_at = portfolio.load_positions()
+                st.session_state['positions'] = loaded
+                st.session_state['positions_saved_at'] = saved_at
+                st.success(f"{len(loaded)}종목 불러옴 (저장 시각 {saved_at})")
+            if mg3.button("🗑️ 전체 삭제", type="secondary"):
+                portfolio.delete_positions()
+                st.session_state['positions'] = []
+                st.session_state['positions_saved_at'] = None
+                st.success("삭제 완료")
+        else:
+            # 원격에서는 서버 파일에 쓰지 않는다 — 앱 인스턴스가 하나라 방문자
+            # 전원의 공용 파일이 되어 서로의 보유종목을 덮어쓴다.
+            st.info("**원격 접속 — 보유종목은 이 브라우저 세션에만 유지됩니다.**\n\n"
+                    "서버에 저장하지 않으므로 다른 접속자와 자료가 섞이지 않습니다. "
+                    "탭을 닫거나 앱이 재시작되면 사라지니, 보관하려면 아래 "
+                    "**CSV 내보내기**로 받아 두었다가 다음에 "
+                    "'가져오기 / 입력' 탭에서 다시 올리세요.")
+            if st.button("🗑️ 이 세션 보유종목 지우기", type="secondary"):
+                st.session_state['positions'] = []
+                st.session_state['positions_saved_at'] = None
+                st.success("삭제 완료")
         if st.session_state['positions']:
             st.download_button("⬇️ CSV 내보내기",
                                portfolio.export_positions_csv(st.session_state['positions']),
