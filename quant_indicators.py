@@ -40,6 +40,16 @@ def load_rulebook(path=None):
 RULEBOOK = load_rulebook()
 
 
+def fmt_or(v, na="미산출", digits=2):
+    """수치를 문자열로. None 이면 '미산출' (0 으로 위장하지 않는다)."""
+    if v is None:
+        return na
+    try:
+        return f"{float(v):,.{digits}f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
 def rb(section, key, default):
     """규칙집 값을 읽되, 없으면 코드 기본값으로 안전하게 되돌아간다."""
     return RULEBOOK.get(section, {}).get(key, default)
@@ -1224,38 +1234,90 @@ class QuantIndicatorsEngine:
         tdst_support_maintained = closes[t] >= tdst_support
         tdst_resistance_rejection = closes[t] <= tdst_resistance
         
-        # 6. Bullish / Bearish Scoring Logic (100 points max)
-        bullish_score = 0
-        if buy_setup_count[t] == 9: bullish_score += 10
-        if is_perfected_buy and latest_buy_setup_idx and (t - latest_buy_setup_idx <= 5): bullish_score += 10
-        if 8 <= buy_countdown <= 12: bullish_score += 10
-        if buy_countdown >= 13 and buy_13_confirmed: bullish_score += 20
-        
-        if bollinger_lower_reentry: bullish_score += 12
-        if williams_r_buy_reversal: bullish_score += 10
-        if rsi_bullish_reversal: bullish_score += 8
-        if vol_confirmed: bullish_score += 8
-        if tdst_support_maintained and buy_countdown >= 8: bullish_score += 7
+        # ── 볼린저 밴드 내 위치 (0=하단, 100=상단) ─────────────────────────
+        _bw = float(bb_upper[t] - bb_lower[t])
+        bb_position_pct = (float(closes[t] - bb_lower[t]) / _bw * 100.0) if _bw > 0 else None
+        bb_width_pct = (_bw / float(closes[t]) * 100.0) if closes[t] else None
+        if bb_position_pct is None:
+            bb_state = "산출 불가"
+        elif bb_position_pct < 0:
+            bb_state = "하단 이탈 (과매도)"
+        elif bb_position_pct < 25:
+            bb_state = "하단권"
+        elif bb_position_pct <= 75:
+            bb_state = "중앙권"
+        elif bb_position_pct <= 100:
+            bb_state = "상단권"
+        else:
+            bb_state = "상단 돌파 (과열)"
+
+        # 6. Bullish / Bearish Scoring (100점 만점)
+        #
+        # ⚠️ 구버전은 '오늘 봉에서 특정 사건이 일어났는가'만 셌다.
+        #    셋업이 정확히 9, 볼린저 재진입 같은 희귀 이벤트뿐이라 거의 모든 종목이
+        #    bullish 8 / bearish 0 으로 고정되고 라벨은 늘 '방향성 탐색 중' 이었다.
+        #    (매수셋업 5/9 로 진행 중인 종목도 0점)
+        #    이제 **상태(state)** 를 점수화한다 — 진행도·밴드 위치·지표 수준.
+        bullish_score = 0.0
+        # 셋업 진행도 (0~9) — 9 완성이면 만점
+        bullish_score += min(buy_setup_count[t], 9) / 9.0 * 14.0
+        if is_perfected_buy and latest_buy_setup_idx and (t - latest_buy_setup_idx <= 5):
+            bullish_score += 10
+        # 카운트다운 진행도 (0~13)
+        bullish_score += min(buy_countdown, 13) / 13.0 * 16.0
+        if buy_countdown >= 13 and buy_13_confirmed:
+            bullish_score += 10
+        # 볼린저 위치 — 아래쪽일수록 반등 여지
+        if bb_position_pct is not None:
+            bullish_score += float(np.clip((50.0 - bb_position_pct) / 50.0, 0, 1)) * 12.0
+        if bollinger_lower_reentry:
+            bullish_score += 6
+        # Williams %R 침체권 (-80 이하) 및 회복
+        if not np.isnan(williams_r[t]):
+            bullish_score += float(np.clip((-williams_r[t] - 50.0) / 40.0, 0, 1)) * 10.0
+        if williams_r_buy_reversal:
+            bullish_score += 5
+        # RSI 낮을수록 가점 (30 이하에서 최대)
+        if not np.isnan(rsi[t]):
+            bullish_score += float(np.clip((50.0 - rsi[t]) / 25.0, 0, 1)) * 8.0
+        if rsi_bullish_reversal:
+            bullish_score += 5
+        if vol_confirmed:
+            bullish_score += 6
+        if tdst_support_maintained:
+            bullish_score += 6
         # 수급 확인은 실제 값이 있을 때만 가점한다 (NaN이면 가점도 감점도 없음)
         _inst = df['institution_net'].iloc[-1] if 'institution_net' in df.columns else np.nan
         _forg = df['foreign_net'].iloc[-1] if 'foreign_net' in df.columns else np.nan
         if not pd.isna(_inst) and _inst > 0: bullish_score += 5
         elif not pd.isna(_forg) and _forg > 0: bullish_score += 5
-        
-        bearish_score = 0
-        if sell_setup_count[t] == 9: bearish_score += 10
-        if is_perfected_sell and latest_sell_setup_idx and (t - latest_sell_setup_idx <= 5): bearish_score += 10
-        if 8 <= sell_countdown <= 12: bearish_score += 10
-        if sell_countdown >= 13 and sell_13_confirmed: bearish_score += 20
-        
-        if bollinger_upper_reentry: bearish_score += 12
-        if williams_r_sell_reversal: bearish_score += 10
-        if rsi_bearish_reversal: bearish_score += 8
-        if down_vol_confirmed: bearish_score += 8
-        if tdst_resistance_rejection and sell_countdown >= 8: bearish_score += 7
+
+        bearish_score = 0.0
+        bearish_score += min(sell_setup_count[t], 9) / 9.0 * 14.0
+        if is_perfected_sell and latest_sell_setup_idx and (t - latest_sell_setup_idx <= 5):
+            bearish_score += 10
+        bearish_score += min(sell_countdown, 13) / 13.0 * 16.0
+        if sell_countdown >= 13 and sell_13_confirmed:
+            bearish_score += 10
+        if bb_position_pct is not None:
+            bearish_score += float(np.clip((bb_position_pct - 50.0) / 50.0, 0, 1)) * 12.0
+        if bollinger_upper_reentry:
+            bearish_score += 6
+        if not np.isnan(williams_r[t]):
+            bearish_score += float(np.clip((williams_r[t] + 50.0) / 40.0, 0, 1)) * 10.0
+        if williams_r_sell_reversal:
+            bearish_score += 5
+        if not np.isnan(rsi[t]):
+            bearish_score += float(np.clip((rsi[t] - 50.0) / 25.0, 0, 1)) * 8.0
+        if rsi_bearish_reversal:
+            bearish_score += 5
+        if down_vol_confirmed:
+            bearish_score += 6
+        if not tdst_support_maintained:
+            bearish_score += 6
         if not pd.isna(_inst) and _inst < 0: bearish_score += 5
         elif not pd.isna(_forg) and _forg < 0: bearish_score += 5
-        
+
         # ADX Trend Filter (Cap scores at 60 if counter-trend)
         curr_adx = adx[t]
         if curr_adx >= 30:
@@ -1265,19 +1327,31 @@ class QuantIndicatorsEngine:
                 bearish_score = min(bearish_score, 60)
                 
         # 7. Final Output Construction
-        bullish_score = min(100, bullish_score)
-        bearish_score = min(100, bearish_score)
-        
-        if bullish_score >= 85: demark_label = "강한 분할매수"
-        elif bullish_score >= 70: demark_label = "매수 확인"
-        elif bullish_score >= 58: demark_label = "예비 매수"
-        elif bullish_score >= 43: demark_label = "중립·확인 대기"
-        elif bearish_score >= 70: demark_label = "매도 확인"
-        elif bearish_score >= 58: demark_label = "예비 매도"
-        else: demark_label = "방향성 탐색 중"
-        
-        if bullish_score >= 70 and bearish_score >= 70:
+        bullish_score = int(round(min(100, bullish_score)))
+        bearish_score = int(round(min(100, bearish_score)))
+
+        # 라벨은 **우열(edge)** 로 정한다.
+        # 구버전은 bullish 를 먼저 다 훑은 뒤 bearish 를 봐서, bullish 가 43 미만이면
+        # bearish 가 아무리 높아도 '방향성 탐색 중' 으로 떨어졌다.
+        # 우열(edge)뿐 아니라 **절대 확신도**도 함께 본다.
+        # 우열만 보면 11 대 3 같은 약한 신호도 '강한 분할매수'가 되어 과장된다.
+        edge = bullish_score - bearish_score
+        if bullish_score >= 65 and bearish_score >= 65:
             demark_label = "변동성 확대·방향 충돌 (신규 진입 보류)"
+        elif edge >= 30 and bullish_score >= 55:
+            demark_label = "강한 분할매수"
+        elif edge >= 18 and bullish_score >= 38:
+            demark_label = "매수 확인"
+        elif edge >= 10:
+            demark_label = "예비 매수 (신호 약함)" if bullish_score < 30 else "예비 매수"
+        elif edge <= -30 and bearish_score >= 55:
+            demark_label = "강한 매도"
+        elif edge <= -18 and bearish_score >= 38:
+            demark_label = "매도 확인"
+        elif edge <= -10:
+            demark_label = "예비 매도 (신호 약함)" if bearish_score < 30 else "예비 매도"
+        else:
+            demark_label = "중립 (매수·매도 우열 없음)"
             
         # Update strategy scores mapping from old variables
         demark_signal_score = int(max(bullish_score, bearish_score))
@@ -1300,6 +1374,14 @@ class QuantIndicatorsEngine:
             'tdst_support': tdst_support,
             'bollinger_lower_reentry': bollinger_lower_reentry,
             'bollinger_upper_reentry': bollinger_upper_reentry,
+            # 밴드 내 위치를 그대로 내보낸다. 예전에는 '재진입 여부'만 있어서
+            # 화면이 항상 '특이사항 없음' 으로 떨어졌다 (하단 24% 종목도 마찬가지).
+            'bb_position_pct': bb_position_pct,
+            'bb_width_pct': bb_width_pct,
+            'bb_state': bb_state,
+            'bb_upper': float(bb_upper[t]), 'bb_lower': float(bb_lower[t]),
+            'rsi_value': float(rsi[t]) if not np.isnan(rsi[t]) else None,
+            'williams_r_value': float(williams_r[t]) if not np.isnan(williams_r[t]) else None,
             'williams_r_buy_reversal': williams_r_buy_reversal,
             'rsi_bullish_reversal': rsi_bullish_reversal,
             'williams_r_val': float(williams_r[t]),
@@ -1325,13 +1407,262 @@ class QuantIndicatorsEngine:
             'buy_countdown': 0, 'sell_countdown': 0, 'buy_13_status': "N/A", 'sell_13_status': "N/A",
             'tdst_resistance': None, 'tdst_support': None,
             'bollinger_lower_reentry': False, 'bollinger_upper_reentry': False,
+            'bb_position_pct': None, 'bb_width_pct': None, 'bb_state': "산출 불가",
+            'bb_upper': None, 'bb_lower': None,
+            'rsi_value': None, 'williams_r_value': None,
             'williams_r_buy_reversal': False, 'rsi_bullish_reversal': False, 'vol_confirmed': False,
             'adx': 20.0,
-            'bullish_score': 50, 'bearish_score': 50,
-            'demark_signal_score': 50, 'demark_label': "중립",
+            # 표본이 없어 산출하지 못한 상태를 '50점 중립'으로 위장하지 않는다
+            'bullish_score': 0, 'bearish_score': 0,
+            'demark_signal_score': 0, 'demark_label': "산출 불가 (데이터 부족)",
             'direction_edge': 0,
             'buy_setup_series': [], 'sell_setup_series': [],
             'buy_countdown_idx_13': None, 'sell_countdown_idx_13': None
+        }
+
+    # ═════════════════════════════════════════════════════════════════════
+    # 탭별 판정 + 최종 종합 결론
+    #
+    # 설계 원칙:
+    #   ① 각 탭은 **독립된 근거**로 0~100 점과 매수/매도 판정을 낸다.
+    #      한 탭이 좋아도 다른 탭이 반대면 그 사실이 보여야 한다.
+    #   ② 종합 점수는 가중 평균이되, **가중치를 화면에 그대로 보여준다**.
+    #      숫자만 던지고 근거를 숨기면 판단에 쓸 수 없다.
+    #   ③ 가중 평균 위에 **거부권(veto)** 을 둔다. 표본이 없거나 순기대수익이
+    #      음수면 아무리 다른 점수가 높아도 매수 결론을 내지 않는다.
+    #      평균은 나쁜 조건을 좋은 조건으로 상쇄해버리기 때문이다.
+    # ═════════════════════════════════════════════════════════════════════
+
+    #: 탭 → 종합 점수 가중치 (합 1.0). 규칙집에서 읽고 없으면 아래 기본값.
+    TAB_WEIGHTS = {
+        'pattern':    rb('RULES_TAB_WEIGHTS', 'pattern', 0.25),    # 자기유사 예측
+        'valuation':  rb('RULES_TAB_WEIGHTS', 'valuation', 0.22),  # 밸류에이션
+        'scenario':   rb('RULES_TAB_WEIGHTS', 'scenario', 0.15),   # 대응 시나리오
+        'demark':     rb('RULES_TAB_WEIGHTS', 'demark', 0.13),     # DeMARK
+        'technical':  rb('RULES_TAB_WEIGHTS', 'technical', 0.13),  # 수급·기술
+        'integrity':  rb('RULES_TAB_WEIGHTS', 'integrity', 0.12),  # 무결성·전략품질
+    }
+
+    @staticmethod
+    def _verdict_from_score(score, strong_buy=72, buy=60, hold=45, sell=32):
+        """0~100 점 → 다섯 단계 판정."""
+        if score is None:
+            return "산출 불가", "#86868b"
+        if score >= strong_buy:
+            return "매수", "#30d158"
+        if score >= buy:
+            return "매수 우위", "#7bd88f"
+        if score >= hold:
+            return "중립·관망", "#ff9f0a"
+        if score >= sell:
+            return "매도 우위", "#ff7a45"
+        return "매도", "#ff453a"
+
+    def build_tab_verdicts(self, snap):
+        """
+        탭마다 독립 점수·판정·근거를 만든다.
+        반환: [{key, label, score, verdict, color, reasons[], available}]
+        """
+        fs = snap.get('four_scores') or {}
+        sim = snap.get('sim_res') or {}
+        val = snap.get('val_eval') or {}
+        oos = snap.get('oos_result') or {}
+        tabs = []
+
+        def add(key, label, score, reasons, available=True):
+            v, c = self._verdict_from_score(score)
+            tabs.append({'key': key, 'label': label,
+                         'score': None if score is None else int(round(score)),
+                         'verdict': v if available else "산출 불가",
+                         'color': c if available else "#86868b",
+                         'reasons': reasons, 'available': available})
+
+        # ── ① 자기유사 예측 ──────────────────────────────────────────────
+        wr = sim.get('win_rate')
+        mp = sim.get('mean_perf')
+        mc = sim.get('match_count') or 0
+        allowed = self.probabilities_allowed(sim.get('sample_tier') or sim.get('status', ''))
+        if not allowed or wr is None:
+            add('pattern', '🔮 자기유사 예측',
+                None, [f"유효표본 {mc}건 — 확률 산출 기준 미달"], available=False)
+        else:
+            net = (mp or 0.0) - self.TOTAL_COST_PCT
+            s = float(np.clip(50 + (wr - 50) * 1.6 + net * 6.0, 0, 100))
+            add('pattern', '🔮 자기유사 예측', s, [
+                f"과거 유사구간 {mc}건 · 관찰 승률 {wr:.1f}%",
+                f"평균 수익률 {mp:+.2f}% → 거래비용 {self.TOTAL_COST_PCT:.2f}% 차감 후 {net:+.2f}%",
+            ])
+
+        # ── ② 밸류에이션 ────────────────────────────────────────────────
+        up = val.get('upside_pct')
+        conf = val.get('fair_value_confidence')
+        if val.get('is_fund'):
+            add('valuation', '💎 밸류에이션', None,
+                ["ETF·ETN 은 펀더멘털 적정가가 성립하지 않습니다"], available=False)
+        elif up is None or conf is None or conf < 45:
+            add('valuation', '💎 밸류에이션', None,
+                [f"적정가 신뢰도 {fmt_or(conf)} — 산출 보류"], available=False)
+        else:
+            s = float(np.clip(50 + up * 0.8, 0, 100))
+            s = s * (0.6 + 0.4 * min(conf, 95) / 95.0)     # 신뢰도로 감쇠
+            add('valuation', '💎 밸류에이션', s, [
+                f"적정가 대비 상승여력 {up:+.1f}% (신뢰도 {conf:.0f}점)",
+                f"진입 위치: {fs.get('entry_zone', '판정 불가')}",
+            ])
+
+        # ── ③ 대응 시나리오 (목표·손절 선도달) ────────────────────────────
+        tp = sim.get('tp_first_prob')
+        sl = sim.get('sl_first_prob')
+        if tp is None or sl is None:
+            add('scenario', '🎯 대응 시나리오', None,
+                ["표본 부족으로 목표·손절 선도달 확률 미산출"], available=False)
+        else:
+            s = float(np.clip(50 + (tp - sl) * 1.2, 0, 100))
+            add('scenario', '🎯 대응 시나리오', s, [
+                f"목표가 선도달 {tp:.1f}% vs 손절가 선도달 {sl:.1f}%",
+                f"손익비 {fmt_or(fs.get('reward_risk_ratio'))}",
+            ])
+
+        # ── ④ DeMARK ───────────────────────────────────────────────────
+        bull = fs.get('demark_bullish_score')
+        bear = fs.get('demark_bearish_score')
+        if bull is None or bear is None:
+            add('demark', '⏱️ DeMARK', None, ["지표 산출 불가"], available=False)
+        else:
+            s = float(np.clip(50 + (bull - bear) * 0.9, 0, 100))
+            add('demark', '⏱️ DeMARK', s, [
+                f"Bullish {bull} vs Bearish {bear} → {fs.get('demark_direction_text', '')}",
+                f"TDST 지지 {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}",
+            ])
+
+        # ── ⑤ 수급·기술 ─────────────────────────────────────────────────
+        bbp = fs.get('bb_position_pct')
+        rsi_v = fs.get('rsi_value')
+        reasons5, parts = [], []
+        if bbp is not None:
+            parts.append(float(np.clip(100 - bbp, 0, 100)))    # 하단일수록 유리
+            reasons5.append(f"볼린저 밴드 내 위치 {bbp:.0f}% ({fs.get('bb_state', '')})")
+        if rsi_v is not None:
+            parts.append(float(np.clip(100 - rsi_v * 1.2, 0, 100)))
+            reasons5.append(f"RSI {rsi_v:.0f}")
+        if fs.get('market_regime_label'):
+            reasons5.append(f"시장 국면: {fs['market_regime_label']}")
+        if parts:
+            add('technical', '🌊 수급·기술', float(np.mean(parts)), reasons5)
+        else:
+            add('technical', '🌊 수급·기술', None, ["기술적 지표 산출 불가"], available=False)
+
+        # ── ⑥ 무결성·전략품질 ────────────────────────────────────────────
+        sq = fs.get('strategy_quality_score')
+        ac = fs.get('analysis_confidence')
+        if sq is None and ac is None:
+            add('integrity', '🏛️ 무결성·전략품질', None, ["미산출"], available=False)
+        else:
+            s = float(np.mean([x for x in (sq, ac) if x is not None]))
+            r6 = []
+            if sq is not None:
+                r6.append(f"표본외(OOS) 전략품질 {sq:.0f}점"
+                          + (f" · Sharpe {oos.get('sharpe')}" if oos.get('sharpe') is not None else ""))
+            if ac is not None:
+                r6.append(f"분석 신뢰도 {ac:.0f}점")
+            add('integrity', '🏛️ 무결성·전략품질', s, r6)
+
+        return tabs
+
+    def build_final_verdict(self, snap):
+        """
+        탭 판정을 모아 **하나의 결론**을 만든다.
+
+        반환:
+            headline      : '사도 됩니다' / '지금은 사지 마세요' 등 한 줄 결론
+            action        : BUY | ACCUMULATE | HOLD | REDUCE | SELL | NO_TRADE
+            score         : 0~100 종합 점수 (가중 평균)
+            contributions : 탭별 [점수 × 가중치 = 기여] 내역
+            vetoes        : 매수 결론을 막은 조건들 (있으면 그것이 결론을 지배한다)
+            summary       : 사람이 읽는 근거 2~4줄
+        """
+        fs = snap.get('four_scores') or {}
+        sim = snap.get('sim_res') or {}
+        tabs = self.build_tab_verdicts(snap)
+        by_key = {t['key']: t for t in tabs}
+
+        # ── 가중 평균 (산출된 탭만, 가중치는 재정규화) ──────────────────
+        contributions, wsum, acc = [], 0.0, 0.0
+        for key, w in self.TAB_WEIGHTS.items():
+            t = by_key.get(key)
+            if not t or t['score'] is None:
+                contributions.append({'label': t['label'] if t else key, 'score': None,
+                                      'weight_pct': w * 100, 'contribution': None,
+                                      'note': '산출 불가 — 가중치 재분배'})
+                continue
+            wsum += w
+            acc += t['score'] * w
+            contributions.append({'label': t['label'], 'score': t['score'],
+                                  'weight_pct': w * 100, 'contribution': t['score'] * w,
+                                  'note': ''})
+        base = (acc / wsum) if wsum > 0 else None
+        for c in contributions:
+            if c['contribution'] is not None and wsum > 0:
+                c['weight_pct'] = c['weight_pct'] / (wsum * 100) * 100   # 재정규화 후 비중
+                c['contribution'] = c['score'] * (c['weight_pct'] / 100)
+
+        # ── 거부권 — 평균으로 상쇄되면 안 되는 조건들 ────────────────────
+        vetoes = []
+        net = (sim.get('mean_perf') or 0.0) - self.TOTAL_COST_PCT
+        if not self.probabilities_allowed(sim.get('sample_tier') or sim.get('status', '')):
+            vetoes.append(f"유효표본 {sim.get('match_count', 0)}건 — 확률 판단 기준 미달")
+        if sim.get('mean_perf') is not None and net <= 0:
+            vetoes.append(f"거래비용 차감 후 기대수익 {net:+.2f}% (0 이하)")
+        ez = fs.get('entry_zone', '')
+        if '추격매수 위험' in ez or '크게 초과' in ez:
+            vetoes.append(f"진입 위치 '{ez}' — 적정가를 크게 초과")
+        if (fs.get('analysis_confidence') or 0) < 50:
+            vetoes.append(f"분석 신뢰도 {fs.get('analysis_confidence')}점 (50 미만)")
+        if snap.get('integrity_status') == 'REVIEW_REQUIRED':
+            vetoes.append("모듈 간 판정 충돌 — 재검토 필요")
+
+        # ── 결론 ────────────────────────────────────────────────────────
+        if base is None:
+            action, headline = 'NO_TRADE', "판단할 데이터가 부족합니다"
+        elif vetoes:
+            if base >= 60:
+                action = 'HOLD'
+                headline = "지금은 사지 마세요 — 조건이 갖춰지면 후보"
+            else:
+                action = 'NO_TRADE'
+                headline = "사지 마세요"
+        elif base >= 72:
+            action, headline = 'BUY', "사도 됩니다"
+        elif base >= 60:
+            action, headline = 'ACCUMULATE', "분할매수 검토 가능"
+        elif base >= 45:
+            action, headline = 'HOLD', "지금은 관망"
+        elif base >= 32:
+            action, headline = 'REDUCE', "비중 축소 검토"
+        else:
+            action, headline = 'SELL', "사지 마세요 (보유 중이면 축소 검토)"
+
+        summary = []
+        best = [c for c in contributions if c['score'] is not None]
+        if best:
+            top = max(best, key=lambda c: c['score'])
+            low = min(best, key=lambda c: c['score'])
+            summary.append(f"가장 우호적: {top['label']} {top['score']}점")
+            summary.append(f"가장 부정적: {low['label']} {low['score']}점")
+        if vetoes:
+            summary.append("거부 조건 " + str(len(vetoes)) + "건이 매수 결론을 막고 있습니다")
+        na = [c['label'] for c in contributions if c['score'] is None]
+        if na:
+            summary.append("산출 불가 탭: " + ", ".join(na) + " (가중치 재분배)")
+
+        return {
+            'headline': headline,
+            'action': action,
+            'score': None if base is None else int(round(base)),
+            'contributions': contributions,
+            'vetoes': vetoes,
+            'summary': summary,
+            'tabs': tabs,
         }
 
     # ── 기업유형 사전 ────────────────────────────────────────────────────
@@ -2541,6 +2872,12 @@ class QuantIndicatorsEngine:
             'demark_bullish_score': int(dm.get('bullish_score', 0)),
             'demark_bearish_score': int(dm.get('bearish_score', 0)),
             'demark_direction_text': str(dm.get('demark_label', '중립')),
+            # 볼린저 상태를 화면에 그대로 전달한다 (예전에는 키가 없어 늘 '특이사항 없음')
+            'bb_position_pct': dm.get('bb_position_pct'),
+            'bb_width_pct': dm.get('bb_width_pct'),
+            'bb_state': dm.get('bb_state', '산출 불가'),
+            'rsi_value': dm.get('rsi_value'),
+            'williams_r_value': dm.get('williams_r_value'),
             'buy_setup_count': int(dm.get('buy_setup_count', 0)),
             'sell_setup_count': int(dm.get('sell_setup_count', 0)),
             'buy_countdown': int(dm.get('buy_countdown', 0)),

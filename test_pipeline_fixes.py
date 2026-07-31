@@ -1395,6 +1395,104 @@ check("공시 유형별 무게 차등", _sc_big > _sc_small, f"수주 {_sc_big} 
 check("공시 점수 0~100", 0 <= _sc_big <= 100 and 0 <= _sc_small <= 100)
 
 
+section("38. Bollinger·DeMARK 신호가 종목마다 분화되는가")
+
+# ⚠️ 구버전 결함 두 가지
+#   ① 화면이 four_scores['bollinger_...'] 라는 **없는 키**를 읽어
+#      밴드 하단 23% 종목도 늘 '특이사항 없음' 으로 나왔다.
+#   ② DeMARK 가 '오늘 봉에서 희귀 사건이 있었나'만 세어 전 종목이
+#      Bullish 8 / Bearish 0 고정, 라벨은 늘 '방향성 탐색 중' 이었다.
+_bb_states, _bull, _bear, _labels = [], [], [], []
+for _sym in ("005930.KS", "003490.KS", "018880.KS", "037710.KS"):
+    _sn = q.run_full_pipeline(_sym, T_REF, b_engine=engine, rho_cutoff=0.80)
+    _f = _sn['four_scores']
+    _bb_states.append(_f.get('bb_state'))
+    _bull.append(_f.get('demark_bullish_score'))
+    _bear.append(_f.get('demark_bearish_score'))
+    _labels.append(_f.get('demark_direction_text'))
+    check(f"{_sym} 볼린저 위치 산출", _f.get('bb_position_pct') is not None,
+          f"{_f.get('bb_position_pct')} · {_f.get('bb_state')}")
+
+check("볼린저 상태가 four_scores 에 노출됨", all(s for s in _bb_states), str(_bb_states))
+check("볼린저 상태가 종목마다 다를 수 있음", len(set(_bb_states)) >= 2, str(_bb_states))
+check("Bearish 가 0 고정이 아님", len(set(_bear)) >= 2, str(_bear))
+check("Bullish 가 8 고정이 아님", len(set(_bull)) >= 2, str(_bull))
+check("DeMARK 라벨이 '방향성 탐색 중' 하나로 고정되지 않음",
+      len(set(_labels)) >= 2, str(_labels))
+check("점수는 0~100", all(0 <= x <= 100 for x in _bull + _bear))
+
+# 데이터가 아주 부족하면 '50점 중립' 으로 위장하지 않고 산출 불가로 남긴다.
+# (구버전 폴백은 bullish 50 / bearish 50 / '중립' 이라 실제 중립과 구분되지 않았다)
+_tiny = pd.DataFrame({
+    'trade_date': pd.date_range('2025-01-01', periods=5, freq='B').strftime('%Y-%m-%d'),
+    'adj_close': np.linspace(100, 102, 5)})
+_tiny['open'] = _tiny['adj_close']
+_tiny['high'] = _tiny['adj_close'] * 1.01
+_tiny['low'] = _tiny['adj_close'] * 0.99
+_tiny['volume'] = 1e6
+_dm_tiny = q.compute_demark_indicators(q.compute_technical_indicators(_tiny))
+_is_fallback = '산출 불가' in str(_dm_tiny.get('demark_label', ''))
+if _is_fallback:
+    check("산출 불가를 50점 중립으로 위장하지 않음",
+          _dm_tiny.get('bullish_score') == 0 and _dm_tiny.get('bearish_score') == 0,
+          f"{_dm_tiny.get('bullish_score')}/{_dm_tiny.get('bearish_score')}")
+else:
+    # 폴백을 타지 않았다면 최소한 옛 하드코딩 50/50 은 아니어야 한다
+    check("옛 하드코딩 50/50 이 아님",
+          not (_dm_tiny.get('bullish_score') == 50 and _dm_tiny.get('bearish_score') == 50),
+          f"{_dm_tiny.get('bullish_score')}/{_dm_tiny.get('bearish_score')}")
+check("폴백 사전이 0점·산출불가로 정의됨",
+      "'bullish_score': 0" in open(_os.path.join(PROJ, "quant_indicators.py"),
+                                   encoding='utf-8').read())
+
+
+section("39. 탭별 판정 + 최종 종합 결론")
+
+_vd = q.build_final_verdict(snap)
+check("결론 한 줄이 나옴", bool(_vd.get('headline')), str(_vd.get('headline')))
+check("행동 코드가 정의된 값", _vd['action'] in
+      ('BUY', 'ACCUMULATE', 'HOLD', 'REDUCE', 'SELL', 'NO_TRADE'), _vd['action'])
+check("탭이 6개", len(_vd['tabs']) == 6, str(len(_vd['tabs'])))
+check("탭마다 판정 문구", all(t['verdict'] for t in _vd['tabs']))
+check("탭마다 근거 제시", all(t['reasons'] for t in _vd['tabs']))
+check("종합 점수 0~100", _vd['score'] is None or 0 <= _vd['score'] <= 100, str(_vd['score']))
+
+# 산출 불가 탭을 0점으로 넣지 않고 비중을 재분배한다
+_avail = [c for c in _vd['contributions'] if c['contribution'] is not None]
+check("가중치 재정규화 합 100%",
+      abs(sum(c['weight_pct'] for c in _avail) - 100.0) < 0.5,
+      f"{sum(c['weight_pct'] for c in _avail):.1f}%")
+_na = [c for c in _vd['contributions'] if c['contribution'] is None]
+check("산출 불가 탭은 0점으로 세지 않음", all(c['score'] is None for c in _na))
+check("종합 점수 = 가중 기여 합",
+      _vd['score'] is None or abs(sum(c['contribution'] for c in _avail) - _vd['score']) <= 1.0,
+      f"{sum(c['contribution'] for c in _avail):.1f} vs {_vd['score']}")
+
+# ⚠️ 거부권 — 평균으로 상쇄되면 안 되는 조건
+check("거부 조건 목록 존재", isinstance(_vd['vetoes'], list))
+if _vd['vetoes']:
+    check("거부 조건이 있으면 매수 결론이 아님",
+          _vd['action'] not in ('BUY', 'ACCUMULATE'),
+          f"{_vd['action']} · {_vd['vetoes'][:1]}")
+
+# 종목마다 결론이 달라야 한다 (고정 문구가 아님)
+_heads = set()
+for _sym in ("005930.KS", "037710.KS", "069500.KS"):
+    _heads.add(q.build_final_verdict(
+        q.run_full_pipeline(_sym, T_REF, b_engine=engine, rho_cutoff=0.80))['headline'])
+check("결론이 종목마다 분화", len(_heads) >= 2, str(_heads))
+
+# ETF 는 밸류에이션 탭이 산출 불가여야 하고, 그래도 결론은 나와야 한다
+_etf_vd = q.build_final_verdict(
+    q.run_full_pipeline("069500.KS", T_REF, b_engine=engine, rho_cutoff=0.80))
+check("ETF 밸류에이션 탭 산출 불가",
+      any(t['key'] == 'valuation' and not t['available'] for t in _etf_vd['tabs']))
+check("ETF 도 결론은 나옴", bool(_etf_vd['headline']))
+
+check("탭 가중치 합 = 1.0", abs(sum(q.TAB_WEIGHTS.values()) - 1.0) < 1e-9,
+      str(sum(q.TAB_WEIGHTS.values())))
+
+
 print()
 print("=" * 72)
 if FAILURES:

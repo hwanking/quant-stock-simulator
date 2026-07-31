@@ -2222,6 +2222,89 @@ st.markdown(f"""
 
 st.markdown("---")
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 🧭 최종 결론 — "이 주식 사? 말어?"
+# 6개 탭의 독립 판정을 가중 평균하되, 거부 조건은 평균으로 상쇄되지 않게 따로 본다.
+# ═══════════════════════════════════════════════════════════════════════════
+verdict = q_engine.build_final_verdict(snap)
+
+_ACTION_STYLE = {
+    'BUY':        ("#30d158", "🟢", "매수"),
+    'ACCUMULATE': ("#7bd88f", "🟢", "분할매수"),
+    'HOLD':       ("#ff9f0a", "🟡", "관망"),
+    'REDUCE':     ("#ff7a45", "🟠", "비중 축소"),
+    'SELL':       ("#ff453a", "🔴", "매도"),
+    'NO_TRADE':   ("#ff453a", "🔴", "매수 안 함"),
+}
+_vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#86868b", "⚪", "판단 보류"))
+_vscore = verdict['score']
+
+st.markdown(f"""
+<div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
+            border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
+            box-shadow:0 10px 34px {_vc}22;'>
+  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;'>
+    <div>
+      <p style='margin:0; font-size:0.85rem; color:#86868b; font-weight:700;'>
+        {resolved_name} — 퀀트 종합 결론</p>
+      <p style='margin:4px 0 0 0; font-size:2.5rem; font-weight:900; color:{_vc}; line-height:1.15;'>
+        {_vi} {verdict['headline']}</p>
+    </div>
+    <div style='text-align:right;'>
+      <p style='margin:0; font-size:0.8rem; color:#86868b;'>종합 점수</p>
+      <p style='margin:0; font-size:3rem; font-weight:900; color:{_vc}; line-height:1;'>
+        {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:1.1rem; color:#86868b;'> / 100</span></p>
+      <p style='margin:2px 0 0 0; font-size:0.9rem; font-weight:800; color:{_vc};'>{_vshort}</p>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+if verdict['vetoes']:
+    st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
+             "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
+             + "\n".join(f"- {x}" for x in verdict['vetoes']))
+
+_vc1, _vc2 = st.columns([1.15, 1])
+with _vc1:
+    st.markdown("**📊 무엇이 이 결론을 만들었나** — 탭 점수 × 비중")
+    st.dataframe(pd.DataFrame([{
+        "분석 항목": c['label'],
+        "점수": "—" if c['score'] is None else f"{c['score']}",
+        "비중": "—" if c['contribution'] is None else f"{c['weight_pct']:.1f}%",
+        "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
+        "비고": c['note'],
+    } for c in verdict['contributions']]), use_container_width=True, hide_index=True)
+    st.caption("산출되지 않은 항목은 0점으로 넣지 않고 **비중을 나머지에 재분배**합니다. "
+               "없는 값을 0으로 세면 멀쩡한 종목이 부당하게 낮아집니다.")
+with _vc2:
+    st.markdown("**🧾 한눈에**")
+    for s in verdict['summary']:
+        st.markdown(f"- {s}")
+    st.caption("⚠️ 투자 권유가 아닙니다. 최종 판단과 손익 책임은 투자자 본인에게 있습니다.")
+
+st.markdown("---")
+
+# 탭마다 그 탭의 독립 판정을 맨 위에 띄운다. 종합 결론과 다르면 그 사실이 보여야 한다.
+_TAB_VERDICT = {t['key']: t for t in verdict['tabs']}
+
+
+def show_tab_verdict(key):
+    t = _TAB_VERDICT.get(key)
+    if not t:
+        return
+    score_txt = "—" if t['score'] is None else f"{t['score']}점"
+    st.markdown(
+        f"<div style='background:#1c1c1e;border-left:6px solid {t['color']};"
+        f"border-radius:10px;padding:12px 16px;margin-bottom:12px;'>"
+        f"<span style='font-size:1.5rem;font-weight:900;color:{t['color']};'>{t['verdict']}</span>"
+        f"<span style='font-size:1.1rem;font-weight:800;color:#f5f5f7;margin-left:12px;'>{score_txt}</span>"
+        f"<span style='color:#86868b;font-size:0.85rem;margin-left:10px;'>이 탭 단독 판정</span>"
+        + "".join(f"<br><span style='color:#d2d2d7;font-size:0.88rem;'>· {r}</span>"
+                  for r in t['reasons'])
+        + "</div>", unsafe_allow_html=True)
+
+
 # 🚨 [사용자 요청] 5대 핵심 분석 탭을 교차검증 상태표 위로 이동!
 tab_pred, tab_val, tab_scen, tab_demark, tab_flow, tab_audit = st.tabs([
     "🔮 20일 자기유사 예측 (표본 통제)", 
@@ -2234,6 +2317,7 @@ tab_pred, tab_val, tab_scen, tab_demark, tab_flow, tab_audit = st.tabs([
 
 # [Section 5 & 6 & 19] 자기유사 패턴 과거 백테스트 결과 (7대 적중률 극대화 파이프라인 가동)
 with tab_pred:
+    show_tab_verdict('pattern')
     st.subheader(f"🔮 [{resolved_name}] - 자기유사 예측 & 7대 적중률 극대화 엔진 파이프라인")
     
     # [19-10] 거래 회피(Abstain) 알림
@@ -2509,6 +2593,7 @@ with tab_pred:
 
 # [Section 8 & 8-1] 밸류에이션 및 적정가 (시장조정 펀더멘털 적정가 단일 체제)
 with tab_val:
+    show_tab_verdict('valuation')
     st.subheader(f"💎 [{resolved_name}] - 시장조정 펀더멘털 적정가")
     
     target_price = four_scores.get('target_fundamental', realtime_price)
@@ -2645,6 +2730,7 @@ with tab_val:
 
 # [Section 11] 조건별 3가지 시나리오 & 가격 대응 전략
 with tab_scen:
+    show_tab_verdict('scenario')
     st.subheader(f"🎯 [{resolved_name}] - 조건별 20일 대응 시나리오 대시보드")
     
     atr_val = tech_df['vol_20'].iloc[-1] if 'vol_20' in tech_df.columns else 0.02
@@ -2753,6 +2839,7 @@ with tab_scen:
 
 # DeMARK 9-13 추세 소진 분석 탭
 with tab_demark:
+    show_tab_verdict('demark')
     dm = four_scores['demark_res']
     
     st.markdown(f"""
@@ -2771,9 +2858,9 @@ with tab_demark:
             </div>
             <div style="flex:1; min-width:250px;">
                 <b style="color:#0a84ff;">[다중 지표 확인]</b><br>
-                Bollinger: {'하단 이탈 후 재진입' if dm.get('bollinger_lower_reentry') else '상단 이탈 후 재진입' if dm.get('bollinger_upper_reentry') else '특이사항 없음'}<br>
+                Bollinger: {dm.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(dm.get('bb_position_pct'), '.0f', '%')} · 폭 {fmt_num(dm.get('bb_width_pct'), '.1f', '%')}){'  ← 하단 재진입' if dm.get('bollinger_lower_reentry') else ('  ← 상단 재진입' if dm.get('bollinger_upper_reentry') else '')}<br>
                 Williams %R: {'-80 상향 회복 (매수형)' if dm.get('williams_r_buy_reversal') else '-20 하향 이탈 (매도형)' if dm.get('williams_r_sell_reversal') else f"{dm.get('williams_r_val', 0):.1f}"}<br>
-                RSI: {'침체권 반등' if dm.get('rsi_bullish_reversal') else '과열권 반락' if dm.get('rsi_bearish_reversal') else '중립'}<br>
+                RSI: {fmt_num(dm.get('rsi_value'), '.0f')}{' (침체권 반등)' if dm.get('rsi_bullish_reversal') else (' (과열권 반락)' if dm.get('rsi_bearish_reversal') else '')}<br>
                 거래량: {'조건 충족 (20일 평균 1.2배 상회)' if dm.get('vol_confirmed') else '평이함'}<br>
                 ADX 추세강도: {dm.get('adx', 0):.1f}<br>
             </div>
@@ -2934,6 +3021,7 @@ with tab_demark:
     st.pyplot(fig_dm)
 
 with tab_flow:
+    show_tab_verdict('technical')
     st.subheader(f"🌊 [{resolved_name}] - 기술적 캔들/이동평균선 & 수급 차트 점검")
     
     is_settled, settled_msg = q_engine.check_20sma_settlement(tech_df)
@@ -3010,6 +3098,7 @@ with tab_flow:
 
 # [Section 7, 12, 13] SR 11-7 무결성 감사 및 모델 성능 검증 대시보드
 with tab_audit:
+    show_tab_verdict('integrity')
     st.subheader(f"🏛️ [{resolved_name}] - SR 11-7 무결성 감사 및 모델 성능 대시보드")
     
     is_large_cap = (val_eval.get("enterprise_class") in ["대형 우량 기술주 (Large Quality)", "대형 경기민감 제조기업 (Automotive / Cyclical Mfg)"] or curr_price > 100000.0)
