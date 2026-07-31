@@ -487,8 +487,19 @@ class BitemporalEngine:
                 
         if not code:
             return None, query, STOCK_METRICS_DB.get("005930.KS", {})
-            
-        ticker = f"{code}.KS"
+
+        # ⚠️ 시장 접미사를 무조건 .KS 로 만들면 안 된다 (최종 감사에서 실측된 결함).
+        #    '086520.KQ' 로 조회하면 신선한 시세가 '086520.KS' 키에 저장되고,
+        #    파이프라인은 '.KQ' 키에서 **낡은 시드 값**을 읽었다 — 에코프로 기준가가
+        #    358,500원(시드)으로 표시되고 다음 79,100원(실측)과 78% 어긋난 원인.
+        #    입력에 접미사가 있으면 보존하고, 없으면 기존 등록 시장을 따른다.
+        if query.upper().endswith(".KQ"):
+            ticker = f"{code}.KQ"
+        elif query.upper().endswith(".KS"):
+            ticker = f"{code}.KS"
+        else:
+            _prev = str(STOCK_NAME_MAP.get(code) or "")
+            ticker = f"{code}.KQ" if _prev.endswith(".KQ") else f"{code}.KS"
         url_main = f"https://finance.naver.com/item/main.naver?code={code}"
         
         try:
@@ -640,31 +651,10 @@ class BitemporalEngine:
             STOCK_NAME_MAP[f"{stock_name} ({code})"] = ticker
             STOCK_NAME_MAP[code] = ticker
             
-            if ticker not in TIMEFRAME_NEWS_DB:
-                sign_str = "+" if pct_p >= 0 else "-"
-                TIMEFRAME_NEWS_DB[ticker] = {
-                    "daily_drivers": {
-                        "title": f"🚀 [{stock_name}] 당일 수급 및 주가 변동성 출회로 {sign_str}{abs(pct_p):.2f}% 변동 ({price:,.0f}원)",
-                        "date": "2026-07-30",
-                        "source": "한국거래소(KRX) & 네이버증권",
-                        "impact": f"당일 {price:,.0f}원 마감 (거래량 {vol_p/10000:,.1f}만 주 및 기관/외국인 수급 유입)",
-                        "sentiment": "긍정" if pct_p >= 0 else "부정"
-                    },
-                    "medium_catalysts": {
-                        "title": f"⚡ 주력 사업 실적 턴어라운드 컨센서스 상향 & 신규 공급 공시 모멘텀",
-                        "timeframe": "1~3개월",
-                        "source": "DART 전자공시 & 증권사 리서치",
-                        "impact": f"PER {per:.1f}배 및 PBR {pbr:.2f}배 저평가 리레이팅 모멘텀",
-                        "sentiment": "긍정"
-                    },
-                    "long_narratives": {
-                        "title": f"💎 사업 구조 고도화 & 글로벌 시장 점유율 확대를 통한 펀더멘털 고성장",
-                        "timeframe": "6~12개월",
-                        "source": "기업 IR 공식 보고서",
-                        "impact": "장기 밸류에이션 리레이팅 및 펀더멘털 우상향",
-                        "sentiment": "긍정"
-                    }
-                }
+            # ⚠️ 예전에는 여기서 TIMEFRAME_NEWS_DB 에 '컨센서스 상향', '신규 공급 공시',
+            #    '기관/외국인 수급 유입' 같은 **수집한 적 없는 사건**을 KRX·DART·IR 출처를
+            #    달아 저장했다. 어디서도 읽지 않는 죽은 코드였지만, 날조 자체가 원칙 위반이라
+            #    통째로 제거했다. 뉴스·공시·수급 서술은 실제 수집한 데이터가 있을 때만 만든다.
             return ticker, stock_name, info
         except Exception:
             pass
@@ -782,7 +772,8 @@ class BitemporalEngine:
                 "fetch_time": "-", "trade_date": "-", "price": None,
                 "price_type": "공시·재무 전용 (가격 출처 아님)", "status": "간접 활용",
                 "delay": "-", "diff": "해당 없음",
-                "role": ("재무 수치(EPS·BPS·ROE·부채비율)는 DART 제출 원본을 재공시한 값을 사용 · "
+                "role": ("재무 수치(EPS·BPS·ROE·부채비율)는 네이버 종목페이지에 게시된 값을 파싱 — "
+                         "그 계보가 DART 제출 자료인지는 이 앱이 검증하지 않음 · "
                          "DART API 직접 조회는 미연동이라 공시 이벤트·뉴스 촉매 점수는 산출하지 않음")
             },
             # '기업 IR 공식 자료' 행은 삭제했다.
@@ -831,90 +822,92 @@ class BitemporalEngine:
         pbr = _num('pbr')
         
         now_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        
-        # 1. 일간 요인 (가격 변동 기반)
+
+        # ⚠️ 전면 재작성 (최종 감사에서 날조 판정).
+        #    구버전의 문제:
+        #      · 종목코드 해시로 '신사업 진출', '공급망 재편 수주 확대' 같은
+        #        **수집한 적 없는 사건**을 4개 문구 중에서 골라 붙였다.
+        #      · 출처를 'KRX & 실시간 종합 시황', 'DART 공시 & 증권사 리서치 컨센서스',
+        #        '기업 IR 공식 보고서' 로 표기했지만 **그 어떤 것도 조회하지 않았다**.
+        #      · 수급 데이터 없이 '강한 매수세 유입', '차익매물 출회' 같은 원인을 단정했다.
+        #      · 모든 고ROE 종목에 '독보적 해자', '매력도 최상' 템플릿이 자동 생성됐다.
+        #    이제 각 단계는 **실제로 관찰한 수치**만 서술하고, 출처는 실제 데이터 경로만 적는다.
+        #    뉴스 기사·리서치·IR 문서는 미연동이므로 그 사실을 그대로 표시한다.
+
+        # 1. 일간 — 가격·거래량 관찰 (원인을 단정하지 않는다)
+        vol_p = _num('volume')
+        vol_txt = f" · 거래량 {vol_p:,.0f}주" if vol_p else ""
         if pct >= 3.0:
-            daily_title = f"🚀 [{stock_name}] 강한 매수세 유입, 급등 흐름 (+{pct:.2f}%)"
-            daily_impact = f"당일 {price:,.0f}원 ({diff:+,.0f}원) 강세. 주요 저항선 돌파 여부 확인 구간."
-            daily_sentiment = "매우 긍정"
+            daily_title = f"[{stock_name}] 당일 {pct:+.2f}% 상승 관찰"
         elif pct >= 0:
-            daily_title = f"📈 [{stock_name}] 투심 호전 속 완만한 상승 마감 (+{pct:.2f}%)"
-            daily_impact = f"당일 {price:,.0f}원 ({diff:+,.0f}원) 상승 흐름. 하방 지지 후 반등 모색 구간."
-            daily_sentiment = "긍정"
+            daily_title = f"[{stock_name}] 당일 {pct:+.2f}% 보합·소폭 상승 관찰"
         elif pct >= -3.0:
-            daily_title = f"📉 [{stock_name}] 단기 차익매물 출회, 쉬어가는 장세 ({pct:.2f}%)"
-            daily_impact = f"당일 {price:,.0f}원 ({diff:+,.0f}원) 약보합 마감. 단기 랠리 후 건전한 숨고르기 진행."
-            daily_sentiment = "중립 (단기 눌림)"
+            daily_title = f"[{stock_name}] 당일 {pct:+.2f}% 보합·소폭 하락 관찰"
         else:
-            daily_title = f"⚠️ [{stock_name}] 투자심리 위축, 급락세 연출 ({pct:.2f}%)"
-            daily_impact = f"당일 {price:,.0f}원 ({diff:+,.0f}원) 급락 마감. 단기 주요 지지선 이탈 및 손절 매물 출회 우려."
-            daily_sentiment = "부정"
+            daily_title = f"[{stock_name}] 당일 {pct:+.2f}% 하락 관찰"
+        daily_impact = (f"현재가 {price:,.0f}원 (전일 대비 {diff:+,.0f}원){vol_txt}. "
+                        f"가격·거래량 관찰값이며, 매수세·매도세 등 원인은 "
+                        f"투자자별 수급 데이터 없이 단정하지 않습니다.")
+        daily_sentiment = "상승 관찰" if pct >= 0 else "하락 관찰"
 
-        # 2. 중기 촉매 (해시 기반 동적 생성 + 밸류에이션 조합)
-        sym_hash = sum(ord(c) for c in symbol) % 4
-        med_themes = [
-            ("신사업 진출 및 제품 라인업 다각화 모멘텀", "수요 회복 시 가파른 실적 턴어라운드 기대", "긍정"),
-            ("업황 부진 및 경쟁 심화에 따른 마진 압박", "시장 컨센서스 하회 우려 및 비용 통제 과제 직면", "주의"),
-            ("주요 공급망 재편 및 수주 확대 사이클 진입", "고수익성 프로젝트 본격화로 인한 마진 스프레드 개선", "긍정"),
-            ("거시 경제 불확실성 속 실적 가시성 저하", "글로벌 수요 둔화에 따른 재고 조정 장기화 염려", "부정")
-        ]
-        m_theme, m_desc, m_sent = med_themes[sym_hash]
-        
+        # 2. 중기 — 게시된 투자지표(PER·PBR)의 정량 해석만
         if per is None:
-            # ETF·ETN 이거나 PER 미수신 — 없는 값으로 밸류에이션을 논하지 않는다
-            med_impact = f"{m_desc} (PER 미수신 — 밸류에이션 판단 보류)"
-        elif per < 8:
-            med_impact = f"{m_desc} (PER {per:.1f}배 극심한 저평가 구간으로 하방 경직성 확보)"
-        elif per > 25:
-            med_impact = f"{m_desc} (PER {per:.1f}배 고평가 부담으로 실적 증명 전까지 변동성 주의)"
+            med_title = "밸류에이션 수준 — 산출 불가"
+            med_impact = "PER 미수신 (ETF·ETN 이거나 게시값 없음) — 밸류에이션 판단 보류."
+            m_sent = "판단 보류"
         else:
-            med_impact = f"{m_desc} (PER {per:.1f}배 수준의 적정 밸류에이션 유지)"
-            
-        med_title = f"⚡ {m_theme}"
+            pbr_txt = f", PBR {pbr:.2f}배" if pbr is not None else ""
+            if per < 8:
+                lvl, m_sent = "시장 평균 대비 낮은 구간", "저PER 관찰"
+            elif per > 25:
+                lvl, m_sent = "시장 평균 대비 높은 구간", "고PER 관찰"
+            else:
+                lvl, m_sent = "중간 구간", "중립"
+            med_title = f"밸류에이션 수준 — PER {per:.1f}배{pbr_txt}"
+            med_impact = (f"게시된 투자지표 기준 {lvl}입니다. 낮은 PER 이 저평가를, 높은 PER 이 "
+                          f"고평가를 보장하지 않으며 업종·성장률 맥락이 필요합니다. "
+                          f"실적 컨센서스·공시 촉매는 미연동이라 반영되지 않았습니다.")
 
-        # 3. 장기 구조적 서사 (펀더멘털 ROE 중심)
+        # 3. 장기 — ROE 수치의 정량 해석만 (서사·전망을 만들지 않는다)
         if roe is None:
-            long_title = f"ℹ️ [{stock_name}] 자기자본이익률(ROE) 미수신 — 장기 서사 판단 보류"
+            long_title = f"[{stock_name}] ROE 미수신 — 장기 수익성 판단 보류"
             long_impact = ("ETF·ETN 이거나 재무 지표를 받지 못한 종목입니다. "
-                           "ROE 없이 장기 펀더멘털을 단정하지 않습니다. "
-                           "추세·경로·표본 분석은 그대로 유효합니다.")
+                           "ROE 없이 장기 펀더멘털을 단정하지 않습니다.")
             long_sentiment = "판단 보류"
-        elif roe >= 15:
-            long_title = f"💎 [{stock_name}] 독보적 자본효율성 기반의 장기 고성장 궤도 진입"
-            long_impact = f"지속적인 두 자릿수 ROE({roe:.1f}%) 창출력 입증. 산업 내 강력한 해자(Moat) 구축으로 장기 투자 매력도 최상."
-            long_sentiment = "매우 긍정"
-        elif roe >= 8:
-            long_title = f"🟢 [{stock_name}] 안정적 이익 체력 확보 및 점진적 주주환원 확대"
-            long_impact = f"ROE {roe:.1f}% 수준의 견조한 펀더멘털 유지. 중장기 핵심 사업 포트폴리오 다각화 및 점유율 방어 기대."
-            long_sentiment = "긍정"
-        elif roe > 0:
-            long_title = f"🟡 [{stock_name}] 자본 효율성 개선 지연, 성장 동력 확보 과제"
-            long_impact = f"현재 ROE {roe:.1f}%로 자본 수익성이 다소 아쉬운 상태. 산업 패러다임 변화에 대응하는 강력한 R&D 투자 및 체질 개선 시급."
-            long_sentiment = "보수적 관망"
         else:
-            long_title = f"🚨 [{stock_name}] 심각한 수익성 악화 및 재무구조 리스크 상존"
-            long_impact = f"현재 ROE {roe:.1f}%로 적자 기조 또는 자본 잠식 우려. 장기 펀더멘털 훼손이 염려되며, 강력한 사업 구조조정 전까지 리스크 큼."
-            long_sentiment = "매우 부정 (위험)"
-            
+            if roe >= 15:
+                band = "높은 수준 (15% 이상)"
+            elif roe >= 8:
+                band = "보통 수준 (8~15%)"
+            elif roe > 0:
+                band = "낮은 수준 (0~8%)"
+            else:
+                band = "음수 (적자)"
+            long_title = f"[{stock_name}] 자기자본이익률 {roe:.1f}% — {band}"
+            long_impact = (f"게시된 재무지표 기준 ROE {roe:.1f}% 관찰. 이는 과거 수익성 지표이며 "
+                           f"미래 성장성·경쟁우위는 이 수치만으로 판단할 수 없습니다. "
+                           f"사업보고서·IR 원문은 미연동입니다.")
+            long_sentiment = "관찰"
+
         return {
             "daily_drivers": {
                 "title": daily_title,
                 "date": now_date,
-                "source": "KRX & 실시간 종합 시황",
+                "source": "네이버증권 시세 파싱 (가격·거래량 관찰)",
                 "impact": daily_impact,
                 "sentiment": daily_sentiment
             },
             "medium_catalysts": {
                 "title": med_title,
-                "timeframe": "1~3개월",
-                "source": "DART 공시 & 증권사 리서치 컨센서스",
+                "timeframe": "게시 투자지표 기준",
+                "source": "네이버 게시 투자지표(FnGuide 제공분) 정량 해석 — 뉴스·컨센서스 미연동",
                 "impact": med_impact,
                 "sentiment": m_sent
             },
             "long_narratives": {
                 "title": long_title,
-                "timeframe": "6~12개월",
-                "source": "기업 IR 공식 보고서",
+                "timeframe": "게시 재무지표 기준",
+                "source": "네이버 게시 재무지표 정량 해석 — 사업보고서·IR 원문 미연동",
                 "impact": long_impact,
                 "sentiment": long_sentiment
             }
@@ -976,7 +969,8 @@ class BitemporalEngine:
 
     def fetch_dividend_info(self, symbol_or_code, current_price=None, today=None):
         """
-        배당 정보. 네이버 종목페이지의 주당배당금(DART 제출 원본 재공시)을 파싱한다.
+        배당 정보. 네이버 종목페이지에 게시된 주당배당금을 파싱한다
+        (공시 원문 대조는 미연동 — 게시값을 그대로 신뢰한다는 한계가 있다).
 
         ⚠️ **배당락일은 단정하지 않는다.**
            2024년 배당절차 개선 이후 배당기준일을 주주총회 뒤(2~4월)로 옮긴 기업이 많아,
@@ -1209,8 +1203,24 @@ class BitemporalEngine:
                                 'volume': float(parts[5])
                             })
                 df_real = pd.DataFrame(records)
-                
+
                 if len(df_real) > 100:
+                    # ── 원천 봉 정제 (최종 감사에서 실측된 원천 결함 2종) ──────
+                    # ① 거래정지 봉: 네이버가 o=h=l=0, 종가만 채워 내려보낸다
+                    #    (예: 삼성전자 2018-04-30~05-03 액면분할 정지 기간).
+                    #    0원 시가·저가가 ATR·DeMARK·저점 계산을 오염시키므로
+                    #    가격을 지어내지 않고 **해당 봉을 제외**한다.
+                    _halt = (df_real['open_raw'] <= 0) & (df_real['high_raw'] <= 0) \
+                            & (df_real['low_raw'] <= 0)
+                    if _halt.any():
+                        df_real = df_real[~_halt].reset_index(drop=True)
+                    # ② 피드 반올림 불일치: 종가가 고가보다 1원 높은 봉이 드물게 있다
+                    #    (예: 2015-01-27 h=27,999 c=28,000). 같은 봉의 자기 값으로
+                    #    고가·저가 정의를 복원한다 — 새 값을 만들지 않는다.
+                    df_real['high_raw'] = df_real[
+                        ['open_raw', 'high_raw', 'low_raw', 'close_raw']].max(axis=1)
+                    df_real['low_raw'] = df_real[
+                        ['open_raw', 'high_raw', 'low_raw', 'close_raw']].min(axis=1)
                     prices_df = df_real
         except Exception as e:
             print("[Data Fetch Error] Naver Finance fallback failed:", e)
