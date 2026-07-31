@@ -2168,6 +2168,52 @@ check("엑셀 업로더", 'key="xls_uploader"' in _w48ui)
 check("엑셀은 오독이 없음을 안내", "OCR 오독이 없습니다" in _w48ui)
 
 
+section("49. None 포맷 폭탄 — 표본 부족이 화면 전체를 죽이지 않는가")
+
+# ⚠️ 클라우드 실사고: 표본이 부족해 mean_perf 가 None 인 종목에서
+#    f"{cost_metrics['raw_perf']:.1f}%" 가 TypeError 를 내고 앱 전체가 죽었다.
+#    이 프로젝트는 '못 구한 값은 None' 이 원칙이므로, 숫자 포맷은 반드시
+#    None 안전한 fmt_num/fmt_pct 를 통해야 한다.
+_w49 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 엔진은 표본이 없으면 실제로 None 을 돌려준다 (그게 정상)
+_cm49 = q.calculate_backtest_costs_and_metrics({}, oos=None, is_large_cap=True)
+check("표본 없으면 raw_perf None", _cm49['raw_perf'] is None)
+check("표본 없으면 net_perf None", _cm49['net_perf'] is None)
+_cm49b = q.calculate_backtest_costs_and_metrics(
+    {'mean_perf': 3.5, 'probabilities_shown': True}, oos=None)
+check("표본 있으면 실제 값", _cm49b['raw_perf'] == 3.5 and _cm49b['net_perf'] is not None)
+
+# ② 사고 지점이 None 안전 표기로 바뀌었는가
+check("raw_perf 직접 포맷 제거", "cost_metrics['raw_perf']:" not in _w49)
+check("net_perf 직접 포맷 제거", "cost_metrics['net_perf']:" not in _w49)
+check("부호를 하드코딩하지 않음 (손실에 + 가 붙지 않게)",
+      "+{cost_metrics" not in _w49)
+
+# ③ 같은 계열 — 값이 None 일 수 있는 가격 레벨·배당도 안전 표기
+for _k49 in ("target_tech_1st", "target_tech_2nd", "stop_loss_price", "atr_risk_level"):
+    check(f"{_k49} 직접 포맷 제거", f"four_scores['{_k49}']:" not in _w49)
+check("DPS 직접 포맷 제거", "_div['dps']:" not in _w49)
+
+# ④ 포맷 헬퍼 자체가 None 을 견디는가 (이 계약이 깨지면 위 수정이 무의미)
+import importlib.util as _ilu49
+
+_spec49 = _ilu49.spec_from_file_location("_wa49", _os.path.join(PROJ, "web_app.py"))
+check("fmt 헬퍼 계약 — None → 문구",
+      "def fmt_num(v, spec=\",.0f\", suffix=\"\", na=\"미산출\")" in _w49
+      and "return f\"{v:{spec}}{suffix}\" if v is not None else na" in _w49)
+
+# ⑤ 실제 렌더 — 성격이 다른 종목 4종에서 예외 0건
+from streamlit.testing.v1 import AppTest as _AT49
+
+for _code49, _label49 in [("069500", "ETF"), ("035760", "저신뢰 적정가")]:
+    _at49 = _AT49.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
+    _at49.session_state['selected_ticker'] = _code49
+    _at49.run()
+    check(f"{_label49}({_code49}) 렌더 예외 없음", len(_at49.exception) == 0,
+          str(_at49.exception[:1])[:150])
+
+
 print()
 print("=" * 72)
 if FAILURES:

@@ -3267,23 +3267,23 @@ with tab_scen:
             </tr>
             <tr>
                 <td><b>3. 기술적 1차 목표가</b></td>
-                <td><b style='color:#64d2ff;'>{four_scores['target_tech_1st']:,.0f}원</b></td>
-                <td>{four_scores['target_tech_1st_note']}</td>
+                <td><b style='color:#64d2ff;'>{fmt_num(four_scores.get('target_tech_1st'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td>{four_scores.get('target_tech_1st_note', '')}</td>
             </tr>
             <tr>
                 <td><b>4. 기술적 2차 목표가</b></td>
-                <td><b style='color:#2997ff;'>{four_scores['target_tech_2nd']:,.0f}원</b></td>
-                <td>{four_scores['target_tech_2nd_note']}</td>
+                <td><b style='color:#2997ff;'>{fmt_num(four_scores.get('target_tech_2nd'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td>{four_scores.get('target_tech_2nd_note', '')}</td>
             </tr>
             <tr>
                 <td><b>5. 손절가 (Stop-Loss)</b></td>
-                <td><b style='color:#ff453a;'>{four_scores['stop_loss_price']:,.0f}원</b></td>
-                <td>{four_scores['stop_loss_note']}</td>
+                <td><b style='color:#ff453a;'>{fmt_num(four_scores.get('stop_loss_price'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td>{four_scores.get('stop_loss_note', '')}</td>
             </tr>
             <tr>
                 <td><b>6. ATR / DeMARK 구조적 위험선</b></td>
-                <td><b style='color:#ff9f0a;'>{four_scores['atr_risk_level']:,.0f}원</b></td>
-                <td>{four_scores['atr_risk_level_note']}</td>
+                <td><b style='color:#ff9f0a;'>{fmt_num(four_scores.get('atr_risk_level'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td>{four_scores.get('atr_risk_level_note', '')}</td>
             </tr>
         </tbody>
     </table>
@@ -3588,12 +3588,18 @@ with tab_audit:
     
     c1, c2 = st.columns(2)
     with c1:
+        # ⚠️ 표본이 부족하면 mean_perf 가 None 이다. 여기에 :.1f 를 직접 쓰면
+        #    화면 전체가 TypeError 로 죽는다 (실제로 클라우드에서 발생).
+        #    부호도 하드코딩하면 안 된다 — 손실인데 '+' 가 붙는다.
+        _raw_perf = cost_metrics.get('raw_perf')
+        _net_perf = cost_metrics.get('net_perf')
+        _net_color = "#30d158" if (_net_perf or 0) >= 0 else "#ff453a"
         st.markdown(f"""
         <div style='background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 16px; padding: 20px;'>
             <h4 style='color: #2997ff !important; margin-top:0;'>📊 백테스트 거래비용 차감 후 모델 성과 (Section 7 & 12)</h4>
-            <p>- <b>비용 반영 전 수익률</b>: <b>+{cost_metrics['raw_perf']:.1f}%</b></p>
-            <p>- <b>총 거래비용 (수수료+세금+슬리피지)</b>: <b>-{cost_metrics['total_cost_pct']:.3f}%</b></p>
-            <p>- <b>비용 반영 후 실질 수익률</b>: <span style='color:#30d158;'><b>+{cost_metrics['net_perf']:.1f}%</b></span></p>
+            <p>- <b>비용 반영 전 수익률</b>: <b>{fmt_pct(_raw_perf)}</b></p>
+            <p>- <b>총 거래비용 (수수료+세금+슬리피지)</b>: <b>-{fmt_num(cost_metrics.get('total_cost_pct'), '.3f', '%')}</b></p>
+            <p>- <b>비용 반영 후 실질 수익률</b>: <span style='color:{_net_color};'><b>{fmt_pct(_net_perf)}</b></span></p>
             <hr style='border-color:#2c2c2e;'>
             <p>- <b>20일 관찰 승률</b>: <b>{fmt_pct(cost_metrics['win_rate_20d'], signed=False)}</b> | <b>Profit Factor</b>: <b>{fmt_num(cost_metrics['profit_factor'], spec='.2f')}</b></p>
             <p>- <b>Brier Score</b>: <b>{fmt_num(cost_metrics['brier_score'], spec='.3f')}</b> | <b>MAE</b>: <b>{fmt_pct(cost_metrics['mae_pct'], signed=False)}</b></p>
@@ -3751,9 +3757,9 @@ with tab_audit:
 
         st.markdown(f"""
         <div style='background:#1c1c1e; border:1px solid {_vcol}; border-radius:14px; padding:16px;'>
-            <p style='margin:2px 0;'>- <b>주당배당금(DPS)</b>: <b>{_div['dps']:,.0f}원</b>
-               · <b>배당수익률</b>: <b>{fmt_pct(_div['dividend_yield_pct'], digits=2)}</b>
-               (현재가 {realtime_price:,.0f}원 기준)</p>
+            <p style='margin:2px 0;'>- <b>주당배당금(DPS)</b>: <b>{fmt_num(_div.get('dps'), ',.0f', '원', na='미공시')}</b>
+               · <b>배당수익률</b>: <b>{fmt_pct(_div.get('dividend_yield_pct'), digits=2)}</b>
+               (현재가 {fmt_num(realtime_price, ',.0f', '원')} 기준)</p>
             <p style='margin:2px 0;'>- <b>추정 배당락일</b>: <b>{_div['estimated_ex_date']}</b>
                (D-{_dte}) · 추정 배당기준일 {_div['estimated_record_date']}</p>
             <p style='margin:2px 0;'>- <b>배당락 이론 하락폭</b>: 약 <b>{fmt_pct(_div['expected_drop_pct'], digits=2)}</b>
