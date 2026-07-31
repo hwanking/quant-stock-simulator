@@ -1,0 +1,31 @@
+# ── 개인 자료 — 절대 커밋하지 않는다 ──────────────────────────────────
+# 보유종목·평균매수가가 들어 있다. 공개 저장소에 올라가면 되돌릴 수 없다.
+.portfolio/
+*.positions.json
+
+# Streamlit 로컬 자격증명
+.streamlit/credentials.toml
+.streamlit/secrets.toml
+
+# 로컬 실행 설정 (실행 경로·개인 승인 목록 포함)
+.claude/
+
+# 개발 잔여물
+_archive/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OCR 모델 캐시
+.EasyOCR/
+*.onnx
+*.pdmodel
+*.pdiparams
+
+# 임시·산출물
+*.log
+*.tmp
+holdings.png
+hts.png

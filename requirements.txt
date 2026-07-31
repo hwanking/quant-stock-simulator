@@ -1,0 +1,16 @@
+# 클라우드 배포용 최소 의존성.
+#
+# ⚠️ easyocr / torch / paddleocr 는 **일부러 제외**했다.
+#    Streamlit Community Cloud 는 컨테이너 메모리가 약 1GB 인데
+#    torch 한 패키지만 2GB 를 넘어 배포 자체가 실패한다.
+#    이 프로젝트는 OCR 을 지연 import 로 다루므로, 없으면
+#    portfolio.ocr_backend() 가 None 을 돌려주고 화면은
+#    '표 붙여넣기 / CSV 가져오기' 경로로 자동 전환된다.
+#    스크린샷 인식이 필요하면 로컬에서 `pip install easyocr` 후 로컬로 실행할 것.
+
+streamlit>=1.40
+pandas>=2.0
+numpy>=1.26
+matplotlib>=3.8
+Pillow>=10.0
+openpyxl>=3.1

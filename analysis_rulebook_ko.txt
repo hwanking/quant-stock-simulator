@@ -1,0 +1,129 @@
+# -----------------------------------------------------------------------------
+# AntiGravity AI Quant Simulator - Static Analysis Rulebook
+# 이 파일은 quant_indicators.load_rulebook() 이 실제로 읽어 들이는 단일 출처다.
+# 값을 바꾸면 엔진 산식이 그대로 따라간다. (구버전은 코드와 이 파일이 서로 달랐다)
+# -----------------------------------------------------------------------------
+
+[RULES_GENERAL]
+version = "v2026.07.31"
+currency_krx = "KRW"
+currency_us = "USD"
+currency_fx = "USD/KRW"
+
+# 원시 종합점수 = 기본매력 * w_quality + 매매적합 * w_timing + 리스크 * w_risk
+[RULES_TOP_LEVEL_WEIGHTS]
+weight_stock_quality = 0.35
+weight_trading_timing = 0.45
+weight_risk_safety = 0.20
+
+# 종목 기본 매력도 내부 가중치 (합 1.00)
+[RULES_STOCK_QUALITY_WEIGHTS]
+weight_fundamental = 0.30
+weight_valuation = 0.25
+weight_financial_safety = 0.20
+weight_industry_competitiveness = 0.15
+weight_long_term_structure = 0.10
+
+# 현재 매매 적합도 내부 가중치 (합 1.00)
+[RULES_TRADING_TIMING_WEIGHTS]
+weight_historical_pattern = 0.22
+weight_path_expected_value = 0.16
+weight_demark_confluence = 0.14
+weight_technical_structure = 0.13
+weight_flow_volume = 0.11
+weight_market_regime = 0.08
+weight_probability_edge = 0.07
+weight_price_location = 0.05
+weight_event_timing = 0.04
+
+# 리스크 안전성 내부 가중치 (합 1.00)
+[RULES_RISK_SAFETY_WEIGHTS]
+weight_reward_risk = 0.30
+weight_volatility_mdd = 0.25
+weight_financial_risk = 0.20
+weight_event_risk = 0.15
+weight_liquidity = 0.10
+
+# 최종 행동 원점수 가중치 (합 1.00)
+[RULES_FINAL_ACTION_WEIGHTS]
+weight_confidence_adjusted = 0.45
+weight_opportunity = 0.30
+weight_execution = 0.15
+weight_signal_consensus = 0.10
+
+# 기회점수 내부 가중치 (합 1.00)
+[RULES_OPPORTUNITY_WEIGHTS]
+weight_expected_return = 0.30
+weight_reward_risk = 0.20
+weight_path_edge = 0.20
+weight_historical_pattern = 0.15
+weight_upside_room = 0.10
+weight_liquidity = 0.05
+
+# 실행가능성 내부 가중치 (합 1.00)
+[RULES_EXECUTION_WEIGHTS]
+weight_entry_range = 0.35
+weight_chase_risk = 0.25
+weight_liquidity = 0.20
+weight_stop_structure = 0.10
+weight_event = 0.10
+
+# 분석 신뢰도 가중치 (합 1.00) — 명세 §14
+[RULES_ANALYSIS_CONFIDENCE_WEIGHTS]
+weight_data_confidence = 0.50
+weight_stat_confidence = 0.30
+weight_model_validation_confidence = 0.20
+
+# 전략 품질 가중치 (Blind/OOS 구현 후 사용)
+[RULES_STRATEGY_QUALITY_WEIGHTS]
+weight_blind_oos = 0.20
+weight_sharpe = 0.15
+weight_sortino = 0.10
+weight_mdd = 0.15
+weight_net_return = 0.10
+weight_turnover = 0.10
+weight_regime_stability = 0.10
+weight_alpha_persistence = 0.05
+weight_benchmark_consistency = 0.05
+
+# 경로 확률 판정 임계값 (%)
+[RULES_PATH_THRESHOLDS]
+take_profit_pct = 8.0
+stop_loss_pct = 6.0
+
+# 거래비용 가정 (%, 왕복)
+[RULES_TRADING_COSTS]
+commission_round_trip = 0.03
+transaction_tax = 0.20
+slippage = 0.18
+
+# TOP3 추천 게이트 (명세 §15)
+[RULES_TOP3_GATES]
+min_action_score = 68
+min_stock_quality = 60
+min_trading_timing = 65
+min_risk_safety = 55
+min_opportunity = 65
+min_execution = 60
+min_expected_return_pct = 2.0
+min_reward_risk = 1.3
+min_effective_samples = 10
+min_signal_consensus = 55
+
+# 적정가 신뢰도 구간 (명세 §7)
+[RULES_FAIR_VALUE_CONFIDENCE]
+normal_display_min = 75
+caution_min = 60
+reference_only_min = 45
+
+# 유효표본 구간 (명세 §11)
+[RULES_SAMPLE_TIERS]
+insufficient_below = 5
+observation_only_below = 10
+low_confidence_below = 20
+limited_below = 30
+
+# 유동성 필터
+[RULES_LIQUIDITY]
+min_avg_turnover_krw = 2000000000
+min_price_krw = 1000
