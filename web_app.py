@@ -1944,6 +1944,12 @@ _ACTION_STYLE = {
 _vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#86868b", "⚪", "판단 보류"))
 _vscore = verdict['score']
 
+# 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만; 상세 카드에서는 중복 표기하지 않음)
+rec_buy_val = four_scores.get('recommended_buy_price')
+rec_buy_display = f"{rec_buy_val:,.0f}원 이하" if rec_buy_val is not None else "신뢰도 미달"
+_ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
+_ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
+
 st.markdown(f"""
 <div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
             border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
@@ -1962,6 +1968,24 @@ st.markdown(f"""
       <p style='margin:2px 0 0 0; font-size:0.9rem; font-weight:800; color:{_vc};'>{_vshort}</p>
     </div>
   </div>
+  <div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px;
+              margin-top:16px; padding-top:14px; border-top:1px solid #2c2c2e;'>
+    <div style='background:#141416; border:1px solid #30d15855; border-radius:12px; padding:10px 14px;'>
+      <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🟢 권장 매수가 <span style='font-weight:400;'>(신규 진입 기준)</span></p>
+      <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#30d158;'>{rec_buy_display}</p>
+    </div>
+    <div style='background:#141416; border:1px solid #64d2ff55; border-radius:12px; padding:10px 14px;'>
+      <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🔵 1차 목표가 <span style='font-weight:400;'>(현재가 기준 기술 레벨)</span></p>
+      <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#64d2ff;'>{_ex_tgt}</p>
+    </div>
+    <div style='background:#141416; border:1px solid #ff453a55; border-radius:12px; padding:10px 14px;'>
+      <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🔴 손절가 <span style='font-weight:400;'>(현재가 기준 — 보유자용)</span></p>
+      <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#ff453a;'>{_ex_stop}</p>
+    </div>
+  </div>
+  <p style='margin:10px 0 0 0; font-size:0.78rem; color:#ff9f0a;'>
+    ⚠️ 실행 가격 기준: 목표·손절은 현재가 기준 기술 레벨이고 권장 매수가는 신규 진입 기준입니다.
+    신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -2001,6 +2025,71 @@ with _vc2:
     for s in verdict['summary']:
         st.markdown(f"- {s}")
     st.caption("⚠️ 투자 권유가 아닙니다. 최종 판단과 손익 책임은 투자자 본인에게 있습니다.")
+
+st.markdown("---")
+
+# 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
+action_bg_color = "#1c1c1e"
+
+st.markdown(f'''
+<div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #3a3a3c;">
+<div style="margin-bottom:20px;">
+    <h3 style="margin:0; color:#f5f5f7;">🎯 판정 근거 상세</h3>
+    <p style="margin:4px 0 0 0; color:#86868b; font-size:0.85rem;">종합 결론·점수·실행 가격 기준(권장 매수가/1차 목표가/손절가)은 화면 맨 위 배너에 있습니다. 여기서는 그 근거만 봅니다.</p>
+</div>
+
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:15px;">
+<div style="background:#2c2c2e; padding:15px; border-radius:8px; border-left: 4px solid #bf5af2;">
+    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">🛡️ 신뢰도 통제 상한</h4>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 분석 신뢰도: {four_scores.get('analysis_confidence', 0)}점</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 전략 품질: {fmt_num(four_scores.get('strategy_quality_score'), suffix='점', na='미검증')}</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Blind Test: {four_scores.get('blind_test_status', '미수행')}</p>
+    <p style="color:#ff9f0a; margin:10px 0 2px 0; font-size:0.9rem; font-weight:bold;">- 최종점수 상한 캡: {four_scores.get('sq_cap', 100)}점</p>
+</div>
+</div>
+
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px;">
+<div style="background:#2c2c2e; padding:15px; border-radius:8px;">
+    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">⏱️ DeMARK 신호</h4>
+    <p style="color:#30d158; margin:2px 0; font-size:0.9rem;">- Bullish: {four_scores.get('demark_bullish_score', 0)}점</p>
+    <p style="color:#ff453a; margin:2px 0; font-size:0.9rem;">- Bearish: {four_scores.get('demark_bearish_score', 0)}점</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 방향: {four_scores.get('demark_direction_text', '중립')}</p>
+</div>
+
+<div style="background:#2c2c2e; padding:15px; border-radius:8px;">
+    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">✅ 확인 지표</h4>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- TDST: {four_scores.get('tdst_support_str', '')} / {four_scores.get('tdst_resist_str', '')}</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Bollinger: {four_scores.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(four_scores.get('bb_position_pct'), '.0f', '%')})</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Williams %R: {fmt_num(four_scores.get('williams_r_value'), '.0f')}</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- RSI: {fmt_num(four_scores.get('rsi_value'), '.0f')}</p>
+</div>
+</div>
+
+<div style="background:#2c2c2e; padding:15px; border-radius:8px; margin-top:15px;">
+<h4 style="color:#f5f5f7; margin:0 0 8px 0;">📌 최종 근거</h4>
+<p style="color:#d2d2d7; margin:0; line-height:1.5; font-size:0.95rem;">{four_scores.get('final_action_explain', '')}</p>
+</div>
+</div>
+''', unsafe_allow_html=True)
+
+_zone = four_scores.get('entry_zone', four_scores.get('chase_buy_status'))
+_bem_str = fmt_num(four_scores.get('buy_entry_max'), suffix='원')
+if _zone == "판정 불가":
+    st.warning("⚠️ **[진입 판정 불가]**: 적정가 신뢰도가 기준에 미달하여 권장 매수가를 산출하지 못했습니다. "
+               "현재가가 적정 진입구간 안인지 판단할 수 없으므로 신규 진입을 권하지 않습니다.")
+elif _zone == "안전마진 확보":
+    st.success(f"🟢 **[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 권장 매수가({_bem_str}) 이하입니다.")
+elif _zone == "적정가 이하 (안전마진 미확보)":
+    st.info(f"🔵 **[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래이지만 "
+            f"권장 매수가({_bem_str})보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+elif _zone:
+    st.error(f"⚠️ **[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
+             f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
+             f"신규 추격매수보다 눌림목 또는 지지선 안착 확인을 권장합니다.")
+
+if four_scores.get('contradiction_detected', False):
+    reasons_str = " / ".join(four_scores.get('contradiction_reasons', []))
+    st.error(f"🚨 **[무결성 게이트 발동 — 재검토 필요]**: 이 종목에서 데이터 모순이 탐지되었습니다. 추천 결과를 신뢰하기 전에 아래 사유를 확인하세요.\n\n**탐지 사유**: {reasons_str}")
 
 st.markdown("---")
 
@@ -2129,84 +2218,6 @@ if user_entry_price > 0 and user_quantity > 0:
         {water_msg}
     </div>
     """, unsafe_allow_html=True)
-# 🎯 [최종 행동 결합 판정 배너 (최상단 배치)]
-action_bg_color = "#1c1c1e"
-action_border_color = "#30d158" if "매수" in four_scores['final_action_title'] else ("#ff9f0a" if "관망" in four_scores['final_action_title'] else "#ff453a")
-
-rec_buy_val = four_scores.get('recommended_buy_price')
-rec_buy_display = f"{rec_buy_val:,.0f}원 이하" if rec_buy_val is not None else "신뢰도 미달"
-
-st.markdown(f'''
-<div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #3a3a3c;">
-<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:20px;">
-<div>
-    <h3 style="margin:0; color:#f5f5f7;">🎯 판정 근거 상세</h3>
-    <p style="margin:4px 0 0 0; color:#86868b; font-size:0.85rem;">종합 결론과 점수는 화면 맨 위 배너에 있습니다. 여기서는 그 근거와 실행 가격만 봅니다.</p>
-</div>
-<div style="text-align:right; background: #141416; padding: 14px 22px; border-radius: 12px; border: 2px solid {action_border_color}; min-width: 220px;">
-    <p style="margin:0; font-size: 0.85rem; color:#86868b; font-weight:bold;">실행 가격 기준</p>
-    <div style="border-top:1px solid #2c2c2e; padding-top:6px; margin-top:6px; font-size:0.88rem; text-align:right;">
-        <p style="margin:2px 0; color:#d2d2d7;"><b>권장 매수가</b> <span style="color:#86868b;font-size:0.78rem;">(신규 진입 기준)</span>: <b style="color:#30d158;">{rec_buy_display}</b></p>
-        <p style="margin:2px 0; color:#d2d2d7;"><b>1차 목표가</b> <span style="color:#86868b;font-size:0.78rem;">(현재가 기준 기술 레벨)</span>: <b style="color:#64d2ff;">{four_scores['target_tech_1st']:,.0f}원</b></p>
-        <p style="margin:2px 0; color:#d2d2d7;"><b>손절가</b> <span style="color:#86868b;font-size:0.78rem;">(현재가 기준 — 보유자용)</span>: <b style="color:#ff453a;">{four_scores['stop_loss_price']:,.0f}원</b></p>
-        <p style="margin:6px 0 0 0; color:#ff9f0a; font-size:0.75rem;">⚠️ 목표·손절은 현재가 기준 기술 레벨이고 권장 매수가는 신규 진입 기준입니다.<br>신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.</p>
-    </div>
-</div>
-</div>
-
-<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:15px;">
-<div style="background:#2c2c2e; padding:15px; border-radius:8px; border-left: 4px solid #bf5af2;">
-    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">🛡️ 신뢰도 통제 상한</h4>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 분석 신뢰도: {four_scores.get('analysis_confidence', 0)}점</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 전략 품질: {fmt_num(four_scores.get('strategy_quality_score'), suffix='점', na='미검증')}</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Blind Test: {four_scores.get('blind_test_status', '미수행')}</p>
-    <p style="color:#ff9f0a; margin:10px 0 2px 0; font-size:0.9rem; font-weight:bold;">- 최종점수 상한 캡: {four_scores.get('sq_cap', 100)}점</p>
-</div>
-</div>
-
-<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px;">
-<div style="background:#2c2c2e; padding:15px; border-radius:8px;">
-    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">⏱️ DeMARK 신호</h4>
-    <p style="color:#30d158; margin:2px 0; font-size:0.9rem;">- Bullish: {four_scores.get('demark_bullish_score', 0)}점</p>
-    <p style="color:#ff453a; margin:2px 0; font-size:0.9rem;">- Bearish: {four_scores.get('demark_bearish_score', 0)}점</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 방향: {four_scores.get('demark_direction_text', '중립')}</p>
-</div>
-
-<div style="background:#2c2c2e; padding:15px; border-radius:8px;">
-    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">✅ 확인 지표</h4>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- TDST: {four_scores.get('tdst_support_str', '')} / {four_scores.get('tdst_resist_str', '')}</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Bollinger: {four_scores.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(four_scores.get('bb_position_pct'), '.0f', '%')})</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Williams %R: {fmt_num(four_scores.get('williams_r_value'), '.0f')}</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- RSI: {fmt_num(four_scores.get('rsi_value'), '.0f')}</p>
-</div>
-</div>
-
-<div style="background:#2c2c2e; padding:15px; border-radius:8px; margin-top:15px;">
-<h4 style="color:#f5f5f7; margin:0 0 8px 0;">📌 최종 근거</h4>
-<p style="color:#d2d2d7; margin:0; line-height:1.5; font-size:0.95rem;">{four_scores.get('final_action_explain', '')}</p>
-</div>
-</div>
-''', unsafe_allow_html=True)
-
-_zone = four_scores.get('entry_zone', four_scores.get('chase_buy_status'))
-_bem_str = fmt_num(four_scores.get('buy_entry_max'), suffix='원')
-if _zone == "판정 불가":
-    st.warning("⚠️ **[진입 판정 불가]**: 적정가 신뢰도가 기준에 미달하여 권장 매수가를 산출하지 못했습니다. "
-               "현재가가 적정 진입구간 안인지 판단할 수 없으므로 신규 진입을 권하지 않습니다.")
-elif _zone == "안전마진 확보":
-    st.success(f"🟢 **[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 권장 매수가({_bem_str}) 이하입니다.")
-elif _zone == "적정가 이하 (안전마진 미확보)":
-    st.info(f"🔵 **[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래이지만 "
-            f"권장 매수가({_bem_str})보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
-elif _zone:
-    st.error(f"⚠️ **[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
-             f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
-             f"신규 추격매수보다 눌림목 또는 지지선 안착 확인을 권장합니다.")
-
-if four_scores.get('contradiction_detected', False):
-    reasons_str = " / ".join(four_scores.get('contradiction_reasons', []))
-    st.error(f"🚨 **[무결성 게이트 발동 — 재검토 필요]**: 이 종목에서 데이터 모순이 탐지되었습니다. 추천 결과를 신뢰하기 전에 아래 사유를 확인하세요.\n\n**탐지 사유**: {reasons_str}")
-
 # 🏆 [상단 핵심 카드 5종 (Section 17 UI 표준)]
 st.markdown("### 📊 AI 퀀트 4대 분리 점수 & 독립 가격 위치 전광판")
 m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
