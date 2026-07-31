@@ -383,20 +383,49 @@ rep_gen_init = QuantReportGenerator()
 
 # 2. 사이드바 - 종목 검색 & 파라미터
 # 제목 자체를 홈 버튼으로 쓴다 (Streamlit 의 title 은 클릭할 수 없다).
+# ⚠️ 사이드바 버튼 CSS 는 **이 한 곳에서만** 정의한다.
+#    두 곳에서 주입하면 나중에 삽입된 규칙이 이겨서, 제목이 소제목보다 작아진다.
+#    제목 규칙은 일반 버튼 규칙보다 선택자를 더 구체적으로 써서 항상 이기게 한다.
 st.sidebar.markdown("""
 <style>
+  /* ① 일반 사이드바 버튼 — 보유종목 등. 어두운 배경에 묻히지 않게 대비를 올린다 */
+  section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
+      color: #f5f5f7 !important;
+      font-weight: 700 !important;
+      font-size: 0.95rem !important;
+      background: #2c2c2e !important;
+      border: 1px solid #48484a !important;
+  }
+  section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
+      background: #3a3a3c !important;
+      border-color: #64d2ff !important;
+      color: #ffffff !important;
+  }
+
+  /* ② 제목(홈 버튼) — 화면에서 가장 큰 글자여야 한다.
+        위 규칙과 겹치므로 선택자를 두 벌 써서 어느 DOM 구조에서도 이기게 한다. */
+  section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button,
+  section[data-testid="stSidebar"] .st-key-btn_home div[data-testid="stButton"] > button,
+  section[data-testid="stSidebar"] .st-key-btn_home > button,
   section[data-testid="stSidebar"] .st-key-btn_home button {
       background: transparent !important;
       border: none !important;
       box-shadow: none !important;
       color: #f5f5f7 !important;
-      font-size: 1.45rem !important;
-      font-weight: 800 !important;
-      padding: 4px 0 0 0 !important;
+      font-size: 2.0rem !important;
+      line-height: 1.25 !important;
+      font-weight: 900 !important;
+      letter-spacing: -0.5px !important;
+      padding: 2px 0 0 0 !important;
       text-align: left !important;
       justify-content: flex-start !important;
+      white-space: normal !important;
   }
+  section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button:hover,
+  section[data-testid="stSidebar"] .st-key-btn_home div[data-testid="stButton"] > button:hover,
+  section[data-testid="stSidebar"] .st-key-btn_home > button:hover,
   section[data-testid="stSidebar"] .st-key-btn_home button:hover {
+      background: transparent !important;
       color: #64d2ff !important;
   }
 </style>
@@ -574,24 +603,10 @@ else:
         f"평가 {fmt_num(_tot_val, ',.0f', '원')}</div></div>",
         unsafe_allow_html=True)
 
-    # 종목명 버튼 글자가 배경에 묻히지 않게 대비를 올린다 (기본 secondary 버튼은
-    # 어두운 배경에 회색 글자라 종목명이 거의 보이지 않았다)
-    st.sidebar.markdown("""
-        <style>
-        section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
-            color: #f5f5f7 !important;
-            font-weight: 700 !important;
-            font-size: 0.95rem !important;
-            background: #2c2c2e !important;
-            border: 1px solid #48484a !important;
-        }
-        section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
-            background: #3a3a3c !important;
-            border-color: #64d2ff !important;
-            color: #ffffff !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # 사이드바 버튼 스타일은 여기서 주입하지 않는다.
+    # 예전에는 이 자리에서 모든 사이드바 버튼에 font-size:0.95rem !important 를 걸었는데,
+    # 그 규칙이 제목(홈 버튼) 규칙보다 구체적이고 나중에 삽입돼서 제목 글자를
+    # 본문 소제목보다 작게 만들어버렸다. 스타일은 파일 상단 한 곳에서만 정의한다.
 
     for _m, _px, _ret in _rows:
         _c1, _c2 = st.sidebar.columns([1.35, 1])
