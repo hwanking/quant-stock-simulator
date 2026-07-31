@@ -1895,17 +1895,31 @@ if verdict['vetoes']:
 
 _vc1, _vc2 = st.columns([1.15, 1])
 with _vc1:
-    st.markdown("**📊 무엇이 이 결론을 만들었나** — 탭 점수 × 비중")
+    st.markdown("**📊 이 점수는 이렇게 나왔습니다**")
     st.dataframe(pd.DataFrame([{
-        "분석 항목": c['label'],
+        "구성 항목": c['label'],
         "점수": "—" if c['score'] is None else f"{c['score']}",
-        "비중": "—" if c['contribution'] is None else f"{c['weight_pct']:.1f}%",
+        "비중": f"{c['weight_pct']:.0f}%",
         "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
-        "비고": c['note'],
-    } for c in verdict['contributions']]), use_container_width=True, hide_index=True)
-    st.caption("산출되지 않은 항목은 0점으로 넣지 않고 **비중을 나머지에 재분배**합니다. "
-               "없는 값을 0으로 세면 멀쩡한 종목이 부당하게 낮아집니다.")
+    } for c in verdict['composition']]), use_container_width=True, hide_index=True)
+    if verdict['cap_applied']:
+        st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** → 게이트 상한 적용 → "
+                    f"**{verdict['score']}점**")
+        if verdict.get('gate_reason'):
+            st.caption("상한 사유: " + str(verdict['gate_reason'])[:300])
+    else:
+        st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** = 최종 **{verdict['score']}점** "
+                    f"(상한 미적용)")
+    st.caption("이 표가 **유일한 종합 점수 산식**입니다. 아래 관점별 판정은 근거를 보여줄 뿐 "
+               "따로 합산하지 않습니다 — 점수가 둘이면 어느 쪽을 믿을지 알 수 없습니다.")
 with _vc2:
+    st.markdown("**🧭 관점별 독립 판정** (합산하지 않음)")
+    _pv = pd.DataFrame([{
+        "관점": t['label'],
+        "점수": "—" if t['score'] is None else f"{t['score']}",
+        "판정": t['verdict'],
+    } for t in verdict['tabs']])
+    st.dataframe(_pv, use_container_width=True, hide_index=True)
     st.markdown("**🧾 한눈에**")
     for s in verdict['summary']:
         st.markdown(f"- {s}")
@@ -2048,12 +2062,12 @@ st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #3a3a3c;">
 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:20px;">
 <div>
-    <h3 style="margin:0; color:#f5f5f7;">🎯 퀀트 최종 행동 결합 판정</h3>
+    <h3 style="margin:0; color:#f5f5f7;">🎯 판정 근거 상세</h3>
+    <p style="margin:4px 0 0 0; color:#86868b; font-size:0.85rem;">종합 결론과 점수는 화면 맨 위 배너에 있습니다. 여기서는 그 근거와 실행 가격만 봅니다.</p>
 </div>
 <div style="text-align:right; background: #141416; padding: 14px 22px; border-radius: 12px; border: 2px solid {action_border_color}; min-width: 220px;">
-    <p style="margin:0; font-size: 0.85rem; color:#86868b; font-weight:bold;">최종 매매 의견</p>
-    <h2 style="margin:2px 0 8px 0; color:{action_border_color}; font-size: 1.7rem; font-weight:900;">{four_scores.get('final_action_title', 'HOLD')}</h2>
-    <div style="border-top:1px solid #2c2c2e; padding-top:6px; font-size:0.88rem; text-align:right;">
+    <p style="margin:0; font-size: 0.85rem; color:#86868b; font-weight:bold;">실행 가격 기준</p>
+    <div style="border-top:1px solid #2c2c2e; padding-top:6px; margin-top:6px; font-size:0.88rem; text-align:right;">
         <p style="margin:2px 0; color:#d2d2d7;"><b>권장 매수가</b>: <b style="color:#30d158;">{rec_buy_display}</b></p>
         <p style="margin:2px 0; color:#d2d2d7;"><b>1차 목표가</b>: <b style="color:#64d2ff;">{four_scores['target_tech_1st']:,.0f}원</b></p>
         <p style="margin:2px 0; color:#d2d2d7;"><b>손절가</b>: <b style="color:#ff453a;">{four_scores['stop_loss_price']:,.0f}원</b></p>
@@ -2062,14 +2076,6 @@ st.markdown(f'''
 </div>
 
 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:15px;">
-<div style="background:#2c2c2e; padding:15px; border-radius:8px; border-left: 4px solid #00f0ff;">
-    <h4 style="color:#f5f5f7; margin:0 0 10px 0;">📊 종합 점수</h4>
-    <h2 style="color:#00f0ff; margin:0; font-size:2rem;">{four_scores.get('final_quant_score', 0)} <span style="font-size:1rem; color:#86868b;">/ 100점</span></h2>
-    <p style="color:#d2d2d7; margin:10px 0 2px 0; font-size:0.9rem;">- 종목 기본 매력도: {four_scores.get('stock_quality_score', 0)}점</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 현재 매매 적합도: {four_scores.get('trading_timing_score', 0)}점</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 리스크 안전성: {four_scores.get('risk_safety_score', 0)}점</p>
-</div>
-
 <div style="background:#2c2c2e; padding:15px; border-radius:8px; border-left: 4px solid #bf5af2;">
     <h4 style="color:#f5f5f7; margin:0 0 10px 0;">🛡️ 신뢰도 통제 상한</h4>
     <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- 분석 신뢰도: {four_scores.get('analysis_confidence', 0)}점</p>
@@ -2090,9 +2096,9 @@ st.markdown(f'''
 <div style="background:#2c2c2e; padding:15px; border-radius:8px;">
     <h4 style="color:#f5f5f7; margin:0 0 10px 0;">✅ 확인 지표</h4>
     <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- TDST: {four_scores.get('tdst_support_str', '')} / {four_scores.get('tdst_resist_str', '')}</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Bollinger: { '하단 부근' if four_scores.get('bollinger_score_bull', 0) > 0 else ('상단 부근' if four_scores.get('bollinger_score_bear', 0) > 0 else '중립구간') }</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Williams %R: { '침체권 회복' if four_scores.get('momentum_bull', 0) > 0 else ('과열권 이탈' if four_scores.get('momentum_bear', 0) > 0 else '중립') }</p>
-    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- RSI: { '중립 이상' if four_scores.get('rsi', 50) > 40 else '침체' }</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Bollinger: {four_scores.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(four_scores.get('bb_position_pct'), '.0f', '%')})</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- Williams %R: {fmt_num(four_scores.get('williams_r_value'), '.0f')}</p>
+    <p style="color:#d2d2d7; margin:2px 0; font-size:0.9rem;">- RSI: {fmt_num(four_scores.get('rsi_value'), '.0f')}</p>
 </div>
 </div>
 

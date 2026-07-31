@@ -1584,27 +1584,34 @@ class QuantIndicatorsEngine:
         fs = snap.get('four_scores') or {}
         sim = snap.get('sim_res') or {}
         tabs = self.build_tab_verdicts(snap)
-        by_key = {t['key']: t for t in tabs}
 
-        # ── 가중 평균 (산출된 탭만, 가중치는 재정규화) ──────────────────
-        contributions, wsum, acc = [], 0.0, 0.0
-        for key, w in self.TAB_WEIGHTS.items():
-            t = by_key.get(key)
-            if not t or t['score'] is None:
-                contributions.append({'label': t['label'] if t else key, 'score': None,
-                                      'weight_pct': w * 100, 'contribution': None,
-                                      'note': '산출 불가 — 가중치 재분배'})
-                continue
-            wsum += w
-            acc += t['score'] * w
-            contributions.append({'label': t['label'], 'score': t['score'],
-                                  'weight_pct': w * 100, 'contribution': t['score'] * w,
-                                  'note': ''})
-        base = (acc / wsum) if wsum > 0 else None
-        for c in contributions:
-            if c['contribution'] is not None and wsum > 0:
-                c['weight_pct'] = c['weight_pct'] / (wsum * 100) * 100   # 재정규화 후 비중
-                c['contribution'] = c['score'] * (c['weight_pct'] / 100)
+        # ⚠️ 종합 점수는 **하나만** 존재해야 한다.
+        #    한때 이 함수가 탭 가중평균으로 별도 점수를 만들어, 화면에 49점과 65점이
+        #    동시에 떴다 (광주신세계 16점 차이). 어느 쪽을 믿어야 할지 알 수 없다.
+        #    규칙집 기반 final_action_score 가 스캐너·TOP3·게이트를 모두 구동하는
+        #    시스템의 정본이므로 그것을 유일한 종합 점수로 삼는다.
+        #    탭 점수는 '관점별 독립 판정' 으로만 쓰고 합산하지 않는다.
+        base = fs.get('final_action_score')
+
+        # 화면에 보여줄 산식은 **실제로 점수를 만든 그 산식**이어야 한다.
+        wq = self.W_TOP.get('weight_stock_quality', 0.35)
+        wt = self.W_TOP.get('weight_trading_timing', 0.45)
+        wr_ = self.W_TOP.get('weight_risk_safety', 0.20)
+        q_s = fs.get('stock_quality_score')
+        t_s = fs.get('trading_timing_score')
+        r_s = fs.get('risk_safety_score')
+        composition = [
+            {'label': '종목 기본 매력도', 'score': q_s, 'weight_pct': wq * 100,
+             'contribution': None if q_s is None else q_s * wq},
+            {'label': '현재 매매 적합도', 'score': t_s, 'weight_pct': wt * 100,
+             'contribution': None if t_s is None else t_s * wt},
+            {'label': '리스크 안전성', 'score': r_s, 'weight_pct': wr_ * 100,
+             'contribution': None if r_s is None else r_s * wr_},
+        ]
+        raw_sum = sum(c['contribution'] for c in composition
+                      if c['contribution'] is not None)
+        cap = fs.get('final_score_cap')
+        cap_applied = (base is not None and raw_sum - base > 0.5)
 
         # ── 거부권 — 평균으로 상쇄되면 안 되는 조건들 ────────────────────
         vetoes = []
@@ -1622,15 +1629,26 @@ class QuantIndicatorsEngine:
             vetoes.append("모듈 간 판정 충돌 — 재검토 필요")
 
         # ── 결론 ────────────────────────────────────────────────────────
+        # ⚠️ 판정 문구도 **엔진의 final_action_title 하나**에서 나와야 한다.
+        #    점수는 맞췄는데 문구를 따로 만들면, 같은 종목이 위에서는 '사지 마세요',
+        #    아래에서는 '재검토 필요' 로 갈린다 (실제로 그랬다).
+        title = str(fs.get('final_action_title') or '').strip()
+        TITLE_MAP = {
+            '적극적 분할매수 검토': ('BUY', "사도 됩니다 — 적극적 분할매수 검토"),
+            '분할매수 검토':       ('ACCUMULATE', "분할매수 검토 가능"),
+            '제한적 진입':         ('ACCUMULATE', "제한적으로만 진입"),
+            '신규 매수 보류':      ('HOLD', "지금은 사지 마세요"),
+            '⚠️ 재검토 필요':      ('NO_TRADE', "판정 보류 — 모듈 간 판정이 어긋납니다"),
+        }
         if base is None:
             action, headline = 'NO_TRADE', "판단할 데이터가 부족합니다"
+        elif title in TITLE_MAP:
+            action, headline = TITLE_MAP[title]
+            # 거부 조건이 있으면 매수 결론으로 나갈 수 없다
+            if vetoes and action in ('BUY', 'ACCUMULATE'):
+                action, headline = 'HOLD', "지금은 사지 마세요 — 조건이 갖춰지면 후보"
         elif vetoes:
-            if base >= 60:
-                action = 'HOLD'
-                headline = "지금은 사지 마세요 — 조건이 갖춰지면 후보"
-            else:
-                action = 'NO_TRADE'
-                headline = "사지 마세요"
+            action, headline = 'HOLD', "지금은 사지 마세요 — 조건이 갖춰지면 후보"
         elif base >= 72:
             action, headline = 'BUY', "사도 됩니다"
         elif base >= 60:
@@ -1643,26 +1661,33 @@ class QuantIndicatorsEngine:
             action, headline = 'SELL', "사지 마세요 (보유 중이면 축소 검토)"
 
         summary = []
-        best = [c for c in contributions if c['score'] is not None]
-        if best:
-            top = max(best, key=lambda c: c['score'])
-            low = min(best, key=lambda c: c['score'])
+        scored = [t for t in tabs if t['score'] is not None]
+        if scored:
+            top = max(scored, key=lambda t: t['score'])
+            low = min(scored, key=lambda t: t['score'])
             summary.append(f"가장 우호적: {top['label']} {top['score']}점")
             summary.append(f"가장 부정적: {low['label']} {low['score']}점")
+        if cap_applied:
+            summary.append(f"가중합 {raw_sum:.0f}점이 게이트 상한에 걸려 {base}점으로 제한됨")
         if vetoes:
             summary.append("거부 조건 " + str(len(vetoes)) + "건이 매수 결론을 막고 있습니다")
-        na = [c['label'] for c in contributions if c['score'] is None]
+        na = [t['label'] for t in tabs if t['score'] is None]
         if na:
-            summary.append("산출 불가 탭: " + ", ".join(na) + " (가중치 재분배)")
+            summary.append("산출 불가 관점: " + ", ".join(na))
 
         return {
             'headline': headline,
             'action': action,
             'score': None if base is None else int(round(base)),
-            'contributions': contributions,
+            'title': fs.get('final_action_title'),
+            'composition': composition,        # 실제 점수를 만든 산식
+            'raw_weighted_sum': round(raw_sum, 1),
+            'cap': cap,
+            'cap_applied': cap_applied,
+            'gate_reason': fs.get('gate_reason'),
             'vetoes': vetoes,
             'summary': summary,
-            'tabs': tabs,
+            'tabs': tabs,                      # 관점별 독립 판정 (합산하지 않음)
         }
 
     # ── 기업유형 사전 ────────────────────────────────────────────────────

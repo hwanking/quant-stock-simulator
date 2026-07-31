@@ -1457,16 +1457,39 @@ check("탭마다 판정 문구", all(t['verdict'] for t in _vd['tabs']))
 check("탭마다 근거 제시", all(t['reasons'] for t in _vd['tabs']))
 check("종합 점수 0~100", _vd['score'] is None or 0 <= _vd['score'] <= 100, str(_vd['score']))
 
-# 산출 불가 탭을 0점으로 넣지 않고 비중을 재분배한다
-_avail = [c for c in _vd['contributions'] if c['contribution'] is not None]
-check("가중치 재정규화 합 100%",
-      abs(sum(c['weight_pct'] for c in _avail) - 100.0) < 0.5,
-      f"{sum(c['weight_pct'] for c in _avail):.1f}%")
-_na = [c for c in _vd['contributions'] if c['contribution'] is None]
-check("산출 불가 탭은 0점으로 세지 않음", all(c['score'] is None for c in _na))
-check("종합 점수 = 가중 기여 합",
-      _vd['score'] is None or abs(sum(c['contribution'] for c in _avail) - _vd['score']) <= 1.0,
-      f"{sum(c['contribution'] for c in _avail):.1f} vs {_vd['score']}")
+# ⚠️ 종합 점수는 **하나만** 존재해야 한다.
+#    한때 배너(탭 가중평균)와 하단 카드(규칙집 산식)가 각자 점수를 만들어
+#    같은 종목에 49점과 65점이 동시에 떴다 (광주신세계 16점 차).
+check("종합 점수는 규칙집 final_action_score 와 동일",
+      _vd['score'] == fs.get('final_action_score'),
+      f"{_vd['score']} vs {fs.get('final_action_score')}")
+check("판정 문구도 엔진 판정에서 파생",
+      _vd.get('title') == fs.get('final_action_title'),
+      f"{_vd.get('title')} vs {fs.get('final_action_title')}")
+
+# 화면에 보여주는 산식이 실제로 점수를 만든 그 산식인가
+_comp = _vd['composition']
+check("산식 구성이 3요소", len(_comp) == 3, str([c['label'] for c in _comp]))
+check("산식 비중 합 100%", abs(sum(c['weight_pct'] for c in _comp) - 100.0) < 0.5,
+      f"{sum(c['weight_pct'] for c in _comp):.1f}%")
+_raw = sum(c['contribution'] for c in _comp if c['contribution'] is not None)
+check("가중합이 규칙집 가중치와 일치",
+      abs(_raw - _vd['raw_weighted_sum']) < 0.2, f"{_raw:.1f} vs {_vd['raw_weighted_sum']}")
+check("상한이 적용되면 최종 점수 ≤ 가중합",
+      (not _vd['cap_applied']) or _vd['score'] <= _vd['raw_weighted_sum'] + 0.5,
+      f"cap={_vd['cap_applied']} {_vd['score']} vs {_vd['raw_weighted_sum']}")
+check("탭 점수는 합산하지 않는다 (관점별 판정 전용)",
+      'contributions' not in _vd)
+
+# 여러 종목에서도 두 값이 갈리지 않아야 한다
+for _sym in ("005930.KS", "000660.KS", "037710.KS"):
+    _s2 = q.run_full_pipeline(_sym, T_REF, b_engine=engine, rho_cutoff=0.80)
+    _v2 = q.build_final_verdict(_s2)
+    check(f"{_sym} 점수 일치",
+          _v2['score'] == _s2['four_scores'].get('final_action_score'),
+          f"{_v2['score']} vs {_s2['four_scores'].get('final_action_score')}")
+    check(f"{_sym} 문구 일치",
+          _v2.get('title') == _s2['four_scores'].get('final_action_title'))
 
 # ⚠️ 거부권 — 평균으로 상쇄되면 안 되는 조건
 check("거부 조건 목록 존재", isinstance(_vd['vetoes'], list))
