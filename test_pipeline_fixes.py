@@ -1790,6 +1790,90 @@ check("애매하면 수량을 채우지 않고 건너뜀",
       len(_rows44c) == 0 and any('건너뜀' in w for w in _warn44c))
 
 
+section("45. 시장·글로벌·뉴스 컨텍스트 · 판정 성적표")
+
+# 이 종목만 보지 않고 판(코스피/코스닥 국면·글로벌 지표·실제 뉴스)을 함께 본다.
+# 원칙: 뉴스로 점수를 올리지 않는다(위험 신호일 때 상한만), 미수신은 미수신으로,
+#        판정 기록은 추가 전용(사후 수정 금지).
+import market_context as mcx
+import prediction_log as plog45
+
+# ① 상장 시장 판별
+check("KQ → KOSDAQ", mcx.market_of_ticker("035760.KQ") == "KOSDAQ")
+check("KS → KOSPI", mcx.market_of_ticker("005930.KS") == "KOSPI")
+
+# ② 뉴스 요약은 낱말 일치일 뿐 해석하지 않는다
+_fake_news = {'available': True, 'items': [
+    {'title': 'A사 유상증자 결정', 'risk_hits': ['유상증자'], 'watch_hits': []},
+    {'title': 'B사 신제품 출시', 'risk_hits': [], 'watch_hits': ['신제품']},
+]}
+_fl = mcx.summarize_news_flags(_fake_news)
+check("위험 낱말 기사 집계", _fl['risk_count'] == 1 and _fl['watch_count'] == 1)
+check("위험 제목에 걸린 낱말을 그대로 보존",
+      _fl['risk_titles'][0][1] == ['유상증자'])
+
+# ③ 상한 규칙 — 좋은 뉴스는 점수를 올리지 않는다 (CAPS 에 가점 항목이 없어야 한다)
+check("상한 규칙은 전부 100 미만 (감점 전용)",
+      all(v < 100 for v in mcx.CONTEXT_CAPS.values()), str(mcx.CONTEXT_CAPS))
+_src45 = _insp.getsource(mcx)
+check("점수를 올리는 코드 없음 (bonus/uplift 부재)",
+      'bonus' not in _src45 and 'uplift' not in _src45)
+check("HTML 엔티티 정리(&quot; 등)", "_html.unescape" in _src45)
+
+# ④ 파이프라인 연결 — context_cap 이 최종 min() 에 들어가는가
+_qi_src45 = _insp.getsource(q.calculate_four_scores) \
+    if hasattr(q, 'calculate_four_scores') else open(
+        _os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("context_cap 이 최종 상한 min() 에 포함", 'context_cap' in _qi_src45)
+check("컨텍스트 사유가 cap_reasons 로 합류", 'context_reasons' in _qi_src45)
+_qi_full45 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("시장별 국면 캐시 분리 (_regime_by_market)", "_regime_by_market" in _qi_full45)
+check("컨텍스트 수집 실패해도 분석은 계속 (예외 격리)",
+      "시장·뉴스 컨텍스트 수집 실패" in _qi_full45)
+
+# ⑤ 판정 기록 — 추가 전용, 중복 차단, 표본 부족 시 비율 미표기
+_pp45 = _os.path.join(PROJ, "_probe", "_pred45.jsonl")
+if _os.path.exists(_pp45):
+    _os.remove(_pp45)
+check("기록 저장", plog45.record_prediction(
+    {'ticker': '005930.KS', 'date': '2026-06-02', 'price': 200000,
+     'action': 'BUY', 'score': 75, 'target': 220000, 'stop': 188000},
+    path=_pp45))
+check("같은 날 중복 기록 차단", not plog45.record_prediction(
+    {'ticker': '005930.KS', 'date': '2026-06-02', 'price': 201000,
+     'action': 'BUY', 'score': 70}, path=_pp45))
+check("필수값 없으면 기록 거부", not plog45.record_prediction(
+    {'ticker': '005930.KS', 'date': None, 'price': 1, 'action': 'BUY',
+     'score': 1}, path=_pp45))
+_rows45 = plog45.load_predictions(path=_pp45)
+check("로드 1건", len(_rows45) == 1)
+
+# ⑥ 채점 — 같은 봉에서 목표·손절 동시 도달이면 보수적으로 손절 우선
+import pandas as _pd45
+
+_df45 = _pd45.DataFrame([
+    {'trade_date': '2026-06-03', 'high_raw': 230000, 'low_raw': 185000,
+     'close_raw': 210000},
+])
+_g45 = plog45.grade_prediction(_rows45[0], _df45)
+check("동시 도달 → 손절 우선 (성적 부풀리기 방지)",
+      _g45 is not None and _g45['outcome'] == 'STOP', str(_g45))
+_sum45 = plog45.summarize([{'row': _rows45[0], 'grade': _g45}])
+check("표본 5건 미만 → 적중률 None", _sum45['hit_rate'] is None)
+check("미표기 사유 문구", bool(_sum45['min_sample_note']))
+check("HOLD/NO_TRADE 는 진입 적중률에서 제외",
+      'HOLD' not in plog45.ENTRY_ACTIONS and 'NO_TRADE' not in plog45.ENTRY_ACTIONS)
+_os.remove(_pp45)
+
+# ⑦ 화면 연결 — 컨텍스트 패널·성적표·기록 호출
+_w45 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("컨텍스트 패널 존재", "시장·글로벌·뉴스 컨텍스트" in _w45)
+check("성적표 패널 존재", "판정 성적표" in _w45)
+check("판정 기록 호출", "record_prediction" in _w45)
+check("온라인 저장 불가 사실 고지", "판정 기록이 쌓이지 않습니다" in _w45)
+check("뉴스 비해석 원칙 문구", "요약·해석해" in _w45)
+
+
 print()
 print("=" * 72)
 if FAILURES:

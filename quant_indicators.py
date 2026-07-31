@@ -2750,6 +2750,16 @@ class QuantIndicatorsEngine:
             m10_overheat_cap = 67  # 월봉 10선 대비 +25% 이상 이격 과열 시 추격매수 제한
             cap_reasons.append(f"월봉 10선 이격 +{m10_disparity:.1f}% (과열) → 상한 67점")
 
+        # 시장·글로벌·뉴스 상한 — 종목이 좋아도 판이 나쁘면 점수를 제한한다.
+        # 올리는 데는 쓰지 않는다(좋은 뉴스로 점수를 얹지 않는다). 사유는 항상 남긴다.
+        _ctx = getattr(self, 'market_context', None) or {}
+        context_cap = 100
+        if _ctx.get('cap_score') is not None:
+            context_cap = int(_ctx['cap_score'])
+            for _r in _ctx.get('reasons', []):
+                if '상한 미적용' not in _r:
+                    cap_reasons.append(f"{_r} → 상한 {context_cap}점")
+
         final_action_score = min(
             final_action_raw_score,
             sq_cap,
@@ -2759,7 +2769,8 @@ class QuantIndicatorsEngine:
             chase_buy_cap,
             valuation_cap,
             risk_event_cap,
-            m10_overheat_cap
+            m10_overheat_cap,
+            context_cap
         )
         
         final_action_score = int(max(0, final_action_score))
@@ -2954,6 +2965,15 @@ class QuantIndicatorsEngine:
             'strategy_quality_score': strategy_quality_score,
             'blind_test_status': "미수행" if blind_test_not_completed else "수행완료",
             'sq_cap': sq_cap,
+
+            # 시장·글로벌·뉴스 컨텍스트 (화면 표시 + 상한 근거)
+            'context_cap': context_cap,
+            'context_caps': dict(_ctx.get('caps') or {}),
+            'context_reasons': list(_ctx.get('reasons') or []),
+            'context_market': _ctx.get('market'),
+            'context_regime_label': (_ctx.get('domestic') or {}).get('regime_label'),
+            'context_news_risk_count': (_ctx.get('news_flags') or {}).get('risk_count', 0),
+            'context_news_total': (_ctx.get('news_flags') or {}).get('total', 0),
             
             'tdst_support_str': ("N/A" if not tdst_available
                                  else ("지지 유지" if curr_price >= tdst_support else "이탈")),
@@ -3593,10 +3613,33 @@ class QuantIndicatorsEngine:
             b_engine = BitemporalEngine()
         from bitemporal_engine import STOCK_METRICS_DB
 
-        # 시장 국면 컨텍스트는 종목마다 같으므로 한 번만 받아 캐시한다
-        if getattr(self, 'market_regime_ctx', None) is None:
-            self.market_regime_ctx = b_engine.get_index_regime(
-                "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI")
+        # 시장 국면 컨텍스트는 같은 시장 안에서는 종목마다 같으므로 캐시한다.
+        # ⚠️ 시장별로 따로 캐시해야 한다. 하나만 들고 있으면 코스피 종목을 먼저 본 뒤
+        #    코스닥 종목을 볼 때 코스피 국면이 그대로 재사용된다.
+        _mkt = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
+        if not hasattr(self, '_regime_by_market'):
+            self._regime_by_market = {}
+        if _mkt not in self._regime_by_market:
+            self._regime_by_market[_mkt] = b_engine.get_index_regime(_mkt)
+        self.market_regime_ctx = self._regime_by_market[_mkt]
+
+        # 시장·글로벌·뉴스 컨텍스트 — 이 종목만 보지 않고 판을 함께 본다.
+        # 실패해도 분석 자체는 계속한다(미수신으로 남기고 상한도 걸지 않는다).
+        try:
+            import market_context as _mctx
+            self.market_context = _mctx.build_market_context(
+                b_engine, symbol, str(symbol).split('.')[0])
+        except Exception as _cexc:
+            self.market_context = {
+                'market': _mkt, 'domestic': {'available': False},
+                'global': {}, 'global_warnings': [],
+                'news': {'available': False, 'items': [],
+                         'reason': f'{type(_cexc).__name__}: {_cexc}'},
+                'news_flags': {'risk_titles': [], 'risk_count': 0,
+                               'watch_count': 0, 'total': 0},
+                'caps': {}, 'cap_score': None, 'reasons': [],
+                'notes': [f'시장·뉴스 컨텍스트 수집 실패 ({type(_cexc).__name__})'],
+            }
 
         prices_df, fund_df = b_engine.generate_synthetic_bitemporal_data(
             symbol=symbol, start_date='2020-01-01', end_date=t_ref_str)
@@ -3682,6 +3725,8 @@ class QuantIndicatorsEngine:
             # 예전에는 상세화면만 1% 게이트를 걸고 스캐너는 그냥 통과시켰다.
             # 출처 간 가격이 벌어진 종목이 추천 후보로 올라올 수 있었다.
             'price_cross_check': self._price_cross_check(matrix_data),
+            # 시장·글로벌·뉴스 컨텍스트 원본 (화면이 그대로 보여준다)
+            'market_context': getattr(self, 'market_context', None),
         })
         self.apply_integrity_gates(snap)
         return snap

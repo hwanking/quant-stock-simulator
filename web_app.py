@@ -712,6 +712,49 @@ if user_entry_price > 0 and user_quantity > 0 and _reg is None:
                 source_type="manual_entry")]
         st.rerun()
 
+# 🧾 판정 성적표 — 화면에 내보낸 판정이 이후 실제로 맞았는지 스스로 채점
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🧾 판정 성적표 (자기 검증)")
+try:
+    import prediction_log as _plog_sb
+    _pred_rows = _plog_sb.load_predictions() if ALLOW_LOCAL_STORE else []
+    if not ALLOW_LOCAL_STORE:
+        st.sidebar.caption("온라인 실행에서는 서버 저장소가 세션마다 초기화되어 "
+                           "판정 기록이 쌓이지 않습니다. 성적표는 내 PC 실행에서 확인하세요.")
+    elif not _pred_rows:
+        st.sidebar.caption("기록된 판정이 아직 없습니다. 종목을 분석할 때마다 그날의 "
+                           "판정(행동·점수·목표가·손절가)이 자동으로 기록되고, 예측 기간이 "
+                           "지나면 실제 주가와 대조해 채점됩니다.")
+    else:
+        st.sidebar.caption(f"기록된 판정 {len(_pred_rows)}건 — 판정은 기록 후 절대 "
+                           f"고쳐 쓰지 않으며, 채점은 실제 일봉과 대조해 계산합니다.")
+        if st.sidebar.button("📊 지금 채점하기", use_container_width=True, key="btn_grade"):
+            with st.spinner("기록된 판정을 실제 주가와 대조하는 중..."):
+                _graded, _gsum = _plog_sb.evaluate_all(engine_init)
+            st.session_state['pred_grade'] = (_graded, _gsum)
+        if st.session_state.get('pred_grade'):
+            _graded, _gsum = st.session_state['pred_grade']
+            if _gsum['hit_rate'] is not None:
+                st.sidebar.metric("진입 판정 적중률 (목표가 먼저 도달)",
+                                  f"{_gsum['hit_rate']:.0f}%",
+                                  f"적중 {_gsum['hit']} / 실패 {_gsum['miss']} / 미결 {_gsum['open']}")
+            else:
+                st.sidebar.caption(_gsum.get('min_sample_note') or
+                                   "채점 가능한 진입 기록이 부족합니다.")
+            if _gsum.get('avg_return') is not None:
+                st.sidebar.caption(f"진입 판정 평균 수익률: {_gsum['avg_return']:+.1f}% "
+                                   f"(진입 {_gsum['n_entry']}건 기준)")
+            with st.sidebar.expander("최근 판정과 결과 보기"):
+                _OUT_KO = {'TARGET': '🟢 목표 도달', 'STOP': '🔴 손절 터치', 'OPEN': '⏳ 미결'}
+                for _g in _graded[-10:][::-1]:
+                    _r, _gr = _g['row'], _g['grade']
+                    _res = _OUT_KO.get((_gr or {}).get('outcome'), '⏳ 집계 전')
+                    st.markdown(f"**{_r.get('name') or _r.get('ticker')}** {_r.get('date')} · "
+                                f"{_r.get('action_label') or _r.get('action')} "
+                                f"({_r.get('score')}점) → {_res}")
+except Exception as _pex:
+    st.sidebar.caption(f"성적표 모듈 오류: {type(_pex).__name__}")
+
 
 # --- 분석 파라미터 (스캐너와 상세화면이 동일 값을 써야 하므로 먼저 정의한다) ---
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2141,9 +2184,105 @@ if four_scores.get('contradiction_detected', False):
 
 st.markdown("---")
 
+# ── 🌐 시장·글로벌·뉴스 컨텍스트 — 이 종목만 보지 않고 판을 함께 본다 ─────────
+_mkt_ctx = snap.get('market_context') or {}
+st.markdown(f"### 🌐 [{resolved_name}] 시장·글로벌·뉴스 컨텍스트")
+st.caption("이 판이 나쁠 때는 종목 점수가 좋아도 최종 점수에 상한이 걸립니다. "
+           "좋아 보이는 뉴스로 점수를 **올리지는 않습니다** — 뉴스 해석은 사람이 합니다.")
+
+_ctx_c1, _ctx_c2 = st.columns([1, 1])
+with _ctx_c1:
+    _dom = _mkt_ctx.get('domestic') or {}
+    if _dom.get('available'):
+        _reg_icon = {"BULL_STRONG": "🟢", "BULL_MILD": "🟡",
+                     "SIDEWAYS": "⚪", "BEAR_PANIC": "🔴"}.get(_dom.get('regime_code'), "⚪")
+        st.markdown(f"**{_reg_icon} 상장시장 국면 — {_dom.get('market')}**")
+        st.markdown(f"{_dom.get('regime_label')}")
+        st.caption(_dom.get('basis', '') + " · " + _dom.get('source', ''))
+    else:
+        st.markdown(f"**⚪ 상장시장 국면 — {_mkt_ctx.get('market', '')}**")
+        st.caption("미수신 — " + str(_dom.get('reason', '지수 데이터 없음')))
+
+    _glob = _mkt_ctx.get('global') or {}
+    if _glob:
+        _grows = []
+        for _gk in ('sp500', 'nasdaq', 'vix', 'usdkrw'):
+            _gv = _glob.get(_gk) or {}
+            if _gv.get('available'):
+                _grows.append({
+                    "지표": _gv['label'],
+                    "현재": f"{_gv['price']:,.2f}",
+                    "20일 변화": fmt_pct(_gv.get('chg20_pct')),
+                    "60일선": "위" if _gv.get('above_sma60') else "아래",
+                })
+            else:
+                _grows.append({"지표": _gv.get('label', _gk), "현재": "미수신",
+                               "20일 변화": "—", "60일선": "—"})
+        st.dataframe(pd.DataFrame(_grows), use_container_width=True, hide_index=True)
+        st.caption("출처: Yahoo Finance 일봉 (10분 캐시)")
+    _gw = _mkt_ctx.get('global_warnings') or []
+    if _gw:
+        st.warning("**글로벌 위험 신호 " + str(len(_gw)) + "건**\n\n" +
+                   "\n".join(f"- {w}" for w in _gw) +
+                   ("\n\n→ 2건 이상이면 종합 점수에 상한이 걸립니다." if len(_gw) < 2
+                    else "\n\n→ **종합 점수 상한 적용됨** (위 산식표의 상한 사유 참조)"))
+
+with _ctx_c2:
+    _news = _mkt_ctx.get('news') or {}
+    _nfl = _mkt_ctx.get('news_flags') or {}
+    if _news.get('available'):
+        st.markdown(f"**📰 실제 종목 뉴스 (최근 {len(_news.get('items', []))}건)**")
+        if _nfl.get('risk_count'):
+            st.error(f"⚠️ 제목에 확인이 필요한 낱말이 있는 기사 **{_nfl['risk_count']}건** — "
+                     "종합 점수에 상한이 걸렸습니다. 기사 원문을 직접 확인하세요.")
+        for _it in (_news.get('items') or [])[:6]:
+            _flag = " 🔴" + "·".join(_it['risk_hits']) if _it.get('risk_hits') else ""
+            _link = f"[{_it['title']}]({_it['url']})" if _it.get('url') else _it['title']
+            st.markdown(f"- {_link}{_flag}")
+            _meta_line = f"{_it.get('press', '')} · {_it.get('datetime', '')}"
+            if _it.get('related_count'):
+                _meta_line += f" · 연관기사 {_it['related_count']}건"
+            st.caption("  " + _meta_line)
+            if _it.get('related'):
+                with st.expander(f"연관 뉴스 {_it['related_count']}건 보기"):
+                    for _r in _it['related'][:8]:
+                        _rl = f"[{_r['title']}]({_r['url']})" if _r.get('url') else _r['title']
+                        st.markdown(f"- {_rl}  \n  {_r.get('press','')} · {_r.get('datetime','')}")
+        st.caption("출처: " + str(_news.get('source', '')) +
+                   " — 제목·언론사·시각을 원문 그대로 표시하며, 기사 내용을 요약·해석해 "
+                   "만들어 내지 않습니다. 위험 표시는 제목의 낱말 일치일 뿐입니다.")
+    else:
+        st.markdown("**📰 실제 종목 뉴스**")
+        st.caption("미수신 — " + str(_news.get('reason', '')))
+
+for _note in (_mkt_ctx.get('notes') or []):
+    st.caption("ℹ️ " + str(_note))
+
+# ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
+try:
+    import prediction_log as _plog
+    if ALLOW_LOCAL_STORE:
+        _tp_rec = four_scores.get('target_tech_1st')
+        _sl_rec = four_scores.get('stop_loss_price')
+        _recorded = _plog.record_prediction({
+            'ticker': target_ticker, 'name': resolved_name,
+            'date': snap.get('t_ref'), 'price': curr_price,
+            'action': verdict.get('action'), 'action_label': verdict.get('headline'),
+            'score': verdict.get('score'),
+            'target': _tp_rec, 'stop': _sl_rec,
+            'horizon_days': 20,
+        })
+        if _recorded:
+            st.caption("📌 오늘 판정을 기록했습니다 — 예측 기간이 지나면 사이드바 "
+                       "'판정 성적표'에서 실제 주가와 대조해 채점됩니다.")
+except Exception:
+    pass
+
+st.markdown("---")
+
 # 🚨 [사용자 요청] 뉴스·공시·촉매의 시간축 3단계 분리 분석을 한줄핵심결론 위로 배치
 news_tf = engine_init.get_timeframe_news_analysis(target_ticker)
-st.caption("ℹ️ 뉴스 기사·증권사 리서치·IR 원문은 미연동입니다. 아래는 실제 수집한 가격·거래량·게시 투자지표의 관찰과 정량 해석이며, 사건·원인을 추정해 서술하지 않습니다.")
+st.caption("ℹ️ 증권사 리서치·IR 원문은 미연동입니다. 아래는 실제 수집한 가격·거래량·게시 투자지표의 관찰과 정량 해석이며, 사건·원인을 추정해 서술하지 않습니다. (실제 뉴스 기사는 위 '시장·글로벌·뉴스 컨텍스트'에 원문 링크로 표시됩니다.)")
 st.markdown(f"### 📰 [{resolved_name}] 가격·지표 관찰의 시간축 3단계 정리")
 
 n1, n2, n3 = st.columns(3)

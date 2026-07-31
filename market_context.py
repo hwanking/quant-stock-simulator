@@ -1,0 +1,346 @@
+# -*- coding: utf-8 -*-
+"""
+시장·글로벌·뉴스 컨텍스트 — '이 종목만' 보지 않고 판을 함께 본다.
+
+여기서 다루는 것:
+  1. 국내 지수 국면 — 그 종목이 실제로 상장된 시장(KOSPI/KOSDAQ)으로 본다.
+     (이전에는 코스닥 종목도 코스피 국면으로 판정했다.)
+  2. 글로벌 스트레스 — S&P500 · 나스닥 · VIX · 원/달러.
+  3. 종목 뉴스 — 네이버 종목뉴스 API 로 제목·언론사·시각·연관기사를 그대로 받는다.
+
+원칙 (이 파일 전체에 적용):
+  · 받지 못한 값은 **미수신**으로 남긴다. 기본값·가정값으로 채우지 않는다.
+  · 뉴스는 **받은 그대로** 보여준다. 기사 내용을 요약·해석해 지어내지 않는다.
+    판정에 쓰는 것은 규칙집에 적힌 키워드가 제목에 있는지뿐이고,
+    어떤 키워드가 걸렸는지 항상 함께 보여준다.
+  · 점수는 올리는 쪽으로 쓰지 않는다. 위험 신호일 때 **상한(cap)** 만 건다.
+    좋은 뉴스처럼 보인다고 점수를 얹으면 그 순간 이 앱은 뉴스 해석기가 된다.
+"""
+from __future__ import annotations
+
+import html as _html
+import re
+import time
+
+import numpy as np
+
+import bitemporal_engine as be
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 캐시 — 지수·뉴스는 종목마다 다시 받을 필요가 없다
+# ─────────────────────────────────────────────────────────────────────────────
+_CACHE: dict = {}
+_TTL_GLOBAL = 600      # 글로벌 지수 10분
+_TTL_NEWS = 300        # 종목 뉴스 5분
+
+
+def _cached(key, ttl, producer):
+    now = time.time()
+    hit = _CACHE.get(key)
+    if hit and (now - hit[0]) < ttl:
+        return hit[1]
+    val = producer()
+    _CACHE[key] = (now, val)
+    return val
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. 글로벌 지표
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: (야후 심볼, 표시명, 소수자리)
+GLOBAL_SYMBOLS = (
+    ("%5EGSPC", "sp500", "S&P 500", 2),
+    ("%5EIXIC", "nasdaq", "나스닥", 2),
+    ("%5EVIX", "vix", "VIX (변동성지수)", 2),
+    ("KRW=X", "usdkrw", "원/달러 환율", 2),
+)
+
+
+def _yahoo_series(symbol, rng="6mo"):
+    """야후 차트 API → 종가 배열. 실패하면 None (빈 배열을 만들어 내지 않는다)."""
+    j = be.fetch_json_with_retry(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        f"?interval=1d&range={rng}")
+    try:
+        res = j['chart']['result'][0]
+        closes = [c for c in res['indicators']['quote'][0]['close'] if c is not None]
+        if len(closes) < 20:
+            return None, None
+        return np.array(closes, dtype=float), res.get('meta', {})
+    except Exception:
+        return None, None
+
+
+def _series_stats(arr):
+    """종가 배열 → 추세·낙폭 요약."""
+    last = float(arr[-1])
+    sma20 = float(arr[-20:].mean())
+    sma60 = float(arr[-60:].mean()) if len(arr) >= 60 else None
+    chg5 = (last / float(arr[-6]) - 1.0) * 100.0 if len(arr) >= 6 else None
+    chg20 = (last / float(arr[-21]) - 1.0) * 100.0 if len(arr) >= 21 else None
+    peak = float(arr[-120:].max()) if len(arr) >= 20 else last
+    drawdown = (last / peak - 1.0) * 100.0 if peak else None
+    return {
+        'price': last, 'sma20': sma20, 'sma60': sma60,
+        'chg5_pct': chg5, 'chg20_pct': chg20,
+        'drawdown_pct': drawdown,
+        'above_sma20': last > sma20,
+        'above_sma60': (last > sma60) if sma60 is not None else None,
+        'bars': int(len(arr)),
+    }
+
+
+def fetch_global_context():
+    """글로벌 지표 묶음. 각 항목은 성공/실패를 스스로 밝힌다."""
+    def _build():
+        out = {}
+        for sym, key, label, _dec in GLOBAL_SYMBOLS:
+            arr, meta = _yahoo_series(sym)
+            if arr is None:
+                out[key] = {'available': False, 'label': label,
+                            'reason': '시세 수신 실패 (Yahoo Finance)'}
+                continue
+            st = _series_stats(arr)
+            st.update({'available': True, 'label': label,
+                       'source': 'Yahoo Finance 일봉'})
+            out[key] = st
+        return out
+    return _cached("global", _TTL_GLOBAL, _build)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. 국내 지수 국면 — 종목이 상장된 시장으로 본다
+# ─────────────────────────────────────────────────────────────────────────────
+
+def market_of_ticker(ticker):
+    """'035760.KQ' → 'KOSDAQ'. 접미사가 없으면 KOSPI 로 본다."""
+    return "KOSDAQ" if str(ticker or "").upper().endswith(".KQ") else "KOSPI"
+
+
+def fetch_domestic_context(engine, market="KOSPI"):
+    def _build():
+        r = engine.get_index_regime(market)
+        if not r or not r.get('available'):
+            return {'available': False, 'market': market,
+                    'reason': (r or {}).get('reason', '지수 데이터 미수신')}
+        price, sma20, sma60 = r['price'], r['sma20'], r['sma60']
+        if price > sma20 > sma60:
+            code, label = 'BULL_STRONG', '강세 (지수 20일선·60일선 위)'
+        elif price > sma20:
+            code, label = 'BULL_MILD', '약강세 (20일선 위·60일선 아래)'
+        elif price < sma20 < sma60 and price < sma60:
+            code, label = 'BEAR_PANIC', '약세 (20일선·60일선 아래)'
+        else:
+            code, label = 'SIDEWAYS', '중립 (이동평균 혼조)'
+        return {
+            'available': True, 'market': market, 'regime_code': code,
+            'regime_label': label, 'price': price, 'sma20': sma20, 'sma60': sma60,
+            'basis': (f"{market} {price:,.2f} vs 20일선 {sma20:,.2f}·"
+                      f"60일선 {sma60:,.2f} 기준"),
+            'source': '네이버 금융 지수 일봉',
+        }
+    return _cached(f"dom:{market}", _TTL_GLOBAL, _build)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. 종목 뉴스 (연관기사 포함)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: 제목에 이 말이 있으면 '확인이 필요한 위험 신호'로 본다. 해석이 아니라 낱말 일치다.
+NEWS_RISK_KEYWORDS = (
+    "유상증자", "무상감자", "감자", "전환사채", "신주인수권", "메자닌",
+    "횡령", "배임", "분식", "회계처리 위반", "감사의견 거절", "한정의견",
+    "상장폐지", "관리종목", "거래정지", "불성실공시", "투자경고", "투자위험",
+    "영업정지", "리콜", "화재", "폭발", "파업", "소송", "특허침해",
+    "회생절차", "파산", "워크아웃", "채무불이행", "디폴트",
+    "블록딜", "지분매각", "대량매도", "최대주주 변경", "경영권 분쟁",
+    "실적 쇼크", "어닝쇼크", "적자전환", "하향 조정", "목표주가 하향",
+)
+
+#: 참고로만 표시하는 낱말. 점수를 올리는 데는 절대 쓰지 않는다.
+NEWS_WATCH_KEYWORDS = (
+    "수주", "계약", "공급", "인수", "합병", "자사주", "배당", "액면분할",
+    "신제품", "승인", "허가", "특허", "증설", "흑자전환", "어닝서프라이즈",
+    "목표주가 상향", "상향 조정", "무상증자",
+)
+
+
+def _clean_title(s):
+    """제목 정리 — HTML 엔티티(&quot; 등)를 원래 글자로 되돌리고 공백을 정리한다."""
+    return re.sub(r'\s+', ' ', _html.unescape(str(s or ''))).strip()
+
+
+def _parse_news_datetime(s):
+    """'202607312027' → '2026-07-31 20:27'."""
+    t = str(s or "")
+    if len(t) >= 12 and t.isdigit():
+        return f"{t[0:4]}-{t[4:6]}-{t[6:8]} {t[8:10]}:{t[10:12]}"
+    if len(t) >= 8 and t[:8].isdigit():
+        return f"{t[0:4]}-{t[4:6]}-{t[6:8]}"
+    return t
+
+
+def fetch_stock_news(code, limit=15):
+    """
+    종목 뉴스 목록. 반환: {'available', 'items': [...], 'source', 'reason'}
+
+    각 item: title, press, datetime, url, related(연관기사 목록), related_count
+    네이버 종목뉴스 API 는 같은 사건을 다룬 기사를 하나로 묶어 준다.
+    그 묶음을 그대로 살려 '연관 뉴스'로 보여준다.
+    """
+    c = re.sub(r'\D', '', str(code or ''))[:6]
+    if len(c) != 6:
+        return {'available': False, 'items': [], 'reason': '종목코드를 알 수 없습니다.'}
+
+    def _build():
+        j = be.fetch_json_with_retry(
+            f"https://m.stock.naver.com/api/news/stock/{c}?pageSize={int(limit)}&page=1")
+        if not isinstance(j, list) or not j:
+            return {'available': False, 'items': [],
+                    'reason': '네이버 종목뉴스 응답 없음',
+                    'source': '네이버 금융 종목뉴스'}
+        items = []
+        for group in j:
+            arts = (group or {}).get('items') or []
+            if not arts:
+                continue
+            head = arts[0]
+            rest = [{
+                'title': _clean_title(a.get('titleFull') or a.get('title')),
+                'press': str(a.get('officeName') or '').strip(),
+                'datetime': _parse_news_datetime(a.get('datetime')),
+                'url': a.get('mobileNewsUrl') or '',
+            } for a in arts[1:]]
+            title = _clean_title(head.get('titleFull') or head.get('title'))
+            items.append({
+                'title': title,
+                'press': str(head.get('officeName') or '').strip(),
+                'datetime': _parse_news_datetime(head.get('datetime')),
+                'url': head.get('mobileNewsUrl') or '',
+                'related': rest,
+                'related_count': len(rest),
+                'risk_hits': [k for k in NEWS_RISK_KEYWORDS if k in title],
+                'watch_hits': [k for k in NEWS_WATCH_KEYWORDS if k in title],
+            })
+        return {'available': bool(items), 'items': items,
+                'source': '네이버 금융 종목뉴스 (제목·언론사·시각 원문)',
+                'reason': '' if items else '표시할 기사가 없습니다.'}
+    return _cached(f"news:{c}", _TTL_NEWS, _build)
+
+
+def summarize_news_flags(news):
+    """
+    뉴스 목록 → 위험 낱말 요약. 기사 내용을 해석하지 않는다.
+    반환: {'risk_titles': [(제목, [걸린 낱말])], 'risk_count', 'watch_count', 'total'}
+    """
+    items = (news or {}).get('items') or []
+    risk = [(it['title'], it['risk_hits']) for it in items if it.get('risk_hits')]
+    watch = sum(1 for it in items if it.get('watch_hits'))
+    return {
+        'risk_titles': risk,
+        'risk_count': len(risk),
+        'watch_count': watch,
+        'total': len(items),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. 종합 — 점수 상한(cap)과 사유
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: 상한 규칙. (조건 이름, 상한점수) — 여러 개가 걸리면 가장 낮은 값이 적용된다.
+CONTEXT_CAPS = {
+    'domestic_bear': 55,      # 상장 시장 지수가 20·60일선 아래
+    'global_stress_high': 58,  # 글로벌 위험지표 2개 이상 경고
+    'vix_extreme': 50,        # VIX 35 이상
+    'news_risk': 55,          # 제목에 위험 낱말이 있는 기사 존재
+}
+
+VIX_WARN = 25.0
+VIX_EXTREME = 35.0
+FX_SPIKE_20D_PCT = 3.0        # 원/달러 20일 상승률
+NASDAQ_DRAWDOWN_PCT = -10.0   # 나스닥 최근 고점 대비
+
+
+def build_market_context(engine, ticker, code=None, with_news=True):
+    """
+    한 종목을 판정할 때 함께 볼 판(板)을 모은다.
+
+    반환 dict:
+      domestic / global / news / flags / caps / cap_score / reasons / notes
+    """
+    market = market_of_ticker(ticker)
+    dom = fetch_domestic_context(engine, market)
+    glob = fetch_global_context()
+    news = fetch_stock_news(code or str(ticker or '').split('.')[0]) if with_news \
+        else {'available': False, 'items': [], 'reason': '뉴스 조회를 건너뜀'}
+    nflags = summarize_news_flags(news)
+
+    caps, reasons, warns = {}, [], []
+
+    # ① 국내 — 그 종목이 상장된 시장 기준
+    if dom.get('available'):
+        if dom['regime_code'] == 'BEAR_PANIC':
+            caps['domestic_bear'] = CONTEXT_CAPS['domestic_bear']
+            reasons.append(f"{market} 지수가 20일선·60일선 아래 ({dom['basis']})")
+    else:
+        warns.append(f"{market} 지수 국면 미수신 — {dom.get('reason', '')}")
+
+    # ② 글로벌 — 경고 항목을 세어 본다
+    g_warn = []
+    vix = glob.get('vix', {})
+    if vix.get('available'):
+        if vix['price'] >= VIX_EXTREME:
+            caps['vix_extreme'] = CONTEXT_CAPS['vix_extreme']
+            g_warn.append(f"VIX {vix['price']:.1f} (≥{VIX_EXTREME:.0f} 공포 구간)")
+        elif vix['price'] >= VIX_WARN:
+            g_warn.append(f"VIX {vix['price']:.1f} (≥{VIX_WARN:.0f} 경계)")
+    else:
+        warns.append("VIX 미수신")
+
+    sp = glob.get('sp500', {})
+    if sp.get('available'):
+        if sp.get('above_sma60') is False:
+            g_warn.append(f"S&P500 이 60일선 아래 ({sp['price']:,.0f} < {sp['sma60']:,.0f})")
+    else:
+        warns.append("S&P500 미수신")
+
+    nq = glob.get('nasdaq', {})
+    if nq.get('available') and nq.get('drawdown_pct') is not None:
+        if nq['drawdown_pct'] <= NASDAQ_DRAWDOWN_PCT:
+            g_warn.append(f"나스닥 최근 고점 대비 {nq['drawdown_pct']:.1f}%")
+
+    fx = glob.get('usdkrw', {})
+    if fx.get('available') and fx.get('chg20_pct') is not None:
+        if fx['chg20_pct'] >= FX_SPIKE_20D_PCT:
+            g_warn.append(f"원/달러 20일 {fx['chg20_pct']:+.1f}% (원화 약세)")
+
+    if len(g_warn) >= 2:
+        caps['global_stress_high'] = CONTEXT_CAPS['global_stress_high']
+        reasons.append("글로벌 위험 신호 " + str(len(g_warn)) + "건 — " + " / ".join(g_warn))
+    elif g_warn:
+        reasons.append("글로벌 위험 신호 1건 — " + g_warn[0] + " (상한 미적용)")
+
+    # ③ 뉴스 — 낱말 일치만으로 위험을 표시한다
+    if nflags['risk_count'] > 0:
+        caps['news_risk'] = CONTEXT_CAPS['news_risk']
+        first = nflags['risk_titles'][0]
+        reasons.append(f"뉴스 제목에 확인이 필요한 낱말 {nflags['risk_count']}건 — "
+                       f"'{first[0][:40]}' ({', '.join(first[1])})")
+    elif not news.get('available'):
+        warns.append("종목 뉴스 미수신 — " + str(news.get('reason', '')))
+
+    cap_score = min(caps.values()) if caps else None
+    return {
+        'market': market,
+        'domestic': dom,
+        'global': glob,
+        'global_warnings': g_warn,
+        'news': news,
+        'news_flags': nflags,
+        'caps': caps,
+        'cap_score': cap_score,
+        'reasons': reasons,
+        'notes': warns,
+    }
