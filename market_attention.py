@@ -41,18 +41,20 @@ COMPONENT_SPEC = [
      'availability': 'full',
      'detail': '최근 확정 거래대금 ÷ 20일 평균 거래대금'},
     {'key': 'event_catalyst', 'label': '뉴스·공시 촉매', 'weight': 0.20,
-     'availability': 'none',
-     'detail': 'DART·KIND 공시 API 미연동 — 기사 건수를 임의로 세지 않는다'},
+     'availability': 'partial',
+     'detail': 'DART 최근 공시(RSS)를 유형별로 반영 — 수주·실적·M&A 등. '
+               '다만 RSS 는 최근 50건만 주고 회사명으로 매칭하며, '
+               '뉴스 기사는 여전히 미연동이라 기사 수를 세지 않는다'},
     {'key': 'price_volatility', 'label': '가격·변동성 변화', 'weight': 0.15,
      'availability': 'full',
      'detail': '갭, ATR 확대(ATR5÷ATR20), 당일 변동폭'},
     {'key': 'investor_flow', 'label': '외국인·기관 수급', 'weight': 0.15,
-     'availability': 'partial',
-     'detail': '투자자별 순매수 "상위 목록 진입 여부"만 반영. '
-               '전 종목 5·20일 누적 순매수 시계열은 미연동'},
+     'availability': 'full',
+     'detail': '종목별 5·20일 누적 외국인·기관 순매수와 방향 전환. '
+               '거래량 대비 강도로 정규화한다'},
     {'key': 'sector_rs', 'label': '업종 상대강도', 'weight': 0.10,
-     'availability': 'none',
-     'detail': '업종 분류가 종목당 개별 조회라 전 종목 상대강도 산출 불가'},
+     'availability': 'full',
+     'detail': 'KRX 업종 79개의 등락률 분포에서 해당 업종의 백분위'},
     {'key': 'trend_breakout', 'label': '기술적 돌파', 'weight': 0.10,
      'availability': 'full',
      'detail': '20·60일 고점 돌파 여부와 고점 대비 위치'},
@@ -271,6 +273,218 @@ def fetch_candidate_pool(pages_per_source=2, progress=None):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 1.5단계 — 업종·수급·공시 연동
+#
+# 셋 다 "종목당 개별 조회라 불가"라고 판단했었는데, 실제로 조사해 보니 틀렸다.
+#   · 업종: 업종 목록 1페이지에 79개 업종과 등락률이 다 있고, 구성종목도 업종당 1회면 된다
+#   · 수급: 종목 페이지에 일자별 기관·외국인 순매매가 표로 있다
+#   · 공시: DART RSS 가 API 키 없이 열린다 (최근 50건)
+# ─────────────────────────────────────────────────────────────────────────────
+_SECTOR_CACHE = {'ts': 0.0, 'by_code': {}, 'sectors': {}}
+
+
+def fetch_sector_map(max_age_sec=3600, progress=None):
+    """
+    업종 분류와 업종별 등락률을 한 번에 받는다.
+
+    반환: (by_code, sectors)
+        by_code[코드]  = {'sector': 업종명, 'sector_change_pct': 업종 등락률}
+        sectors[업종명] = {'no': 업종번호, 'change_pct': 등락률, 'count': 종목수}
+
+    업종 목록 1회 + 업종 상세 79회. 결과는 1시간 캐시한다.
+    """
+    import time as _t
+    cache = _SECTOR_CACHE
+    if cache['by_code'] and (_t.time() - cache['ts']) < max_age_sec:
+        return cache['by_code'], cache['sectors']
+
+    try:
+        html = be.fetch_html_with_retry(
+            "https://finance.naver.com/sise/sise_group.naver?type=upjong")
+    except Exception:
+        return cache['by_code'], cache['sectors']
+
+    groups = []
+    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', html or '', re.S):
+        m = re.search(r'sise_group_detail\.naver\?type=upjong&no=(\d+)[^>]*>([^<]+)<', tr)
+        if not m:
+            continue
+        tds = [_clean(t) for t in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S)]
+        chg = None
+        for c in tds:
+            if '%' in c:
+                chg = _num(c.replace('%', ''))
+                if c.strip().startswith('-'):
+                    chg = -abs(chg) if chg is not None else None
+                break
+        groups.append((m.group(1), m.group(2).strip(), chg))
+
+    by_code, sectors = {}, {}
+    for i, (no, name, chg) in enumerate(groups):
+        if progress:
+            progress(f"업종 상대강도 {i + 1}/{len(groups)} · {name}")
+        try:
+            h2 = be.fetch_html_with_retry(
+                f"https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}")
+        except Exception:
+            continue
+        codes = sorted(set(re.findall(r'code=(\d{6})', h2 or '')))
+        sectors[name] = {'no': no, 'change_pct': chg, 'count': len(codes)}
+        for c in codes:
+            by_code[c] = {'sector': name, 'sector_change_pct': chg}
+
+    if by_code:
+        cache.update({'ts': _t.time(), 'by_code': by_code, 'sectors': sectors})
+    return by_code, sectors
+
+
+def fetch_investor_flow(code, days=20):
+    """
+    종목별 일자별 기관·외국인 순매매(주). 최근 days 일 누적을 돌려준다.
+
+    네이버 종목 페이지의 '외국인·기관' 표를 읽는다.
+    열: 날짜 · 종가 · 전일비 · 등락률 · 거래량 · 기관순매매 · 외국인순매매
+    반환: {'inst_5d','frgn_5d','inst_20d','frgn_20d','rows'} 또는 None
+    """
+    try:
+        html = be.fetch_html_with_retry(
+            f"https://finance.naver.com/item/frgn.naver?code={code}")
+    except Exception:
+        return None
+
+    rows = []
+    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', html or '', re.S):
+        cells = [_clean(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S)]
+        if len(cells) < 7 or not re.match(r'\d{4}\.\d{2}\.\d{2}', cells[0]):
+            continue
+        inst = _signed(cells[5])
+        frgn = _signed(cells[6])
+        if inst is None and frgn is None:
+            continue
+        rows.append({'date': cells[0], 'inst': inst or 0.0, 'frgn': frgn or 0.0})
+        if len(rows) >= days:
+            break
+    if not rows:
+        return None
+    return {
+        'inst_5d': float(sum(r['inst'] for r in rows[:5])),
+        'frgn_5d': float(sum(r['frgn'] for r in rows[:5])),
+        'inst_20d': float(sum(r['inst'] for r in rows)),
+        'frgn_20d': float(sum(r['frgn'] for r in rows)),
+        'days': len(rows),
+    }
+
+
+def _signed(text):
+    """'+656,680' / '-237,928' → float. 부호를 살린다."""
+    s = str(text or '').strip()
+    if not s:
+        return None
+    neg = s.startswith('-')
+    d = re.sub(r'[^\d.]', '', s)
+    if not d:
+        return None
+    try:
+        v = float(d)
+    except ValueError:
+        return None
+    return -v if neg else v
+
+
+#: 공시 제목에서 읽어내는 이벤트 유형 (앞쪽이 우선)
+DISCLOSURE_TYPES = (
+    ('실적', ('매출액또는손익구조', '영업실적', '결산실적', '분기보고서', '반기보고서', '사업보고서')),
+    ('수주·공급계약', ('공급계약', '수주', '단일판매')),
+    ('증자·CB·BW', ('유상증자', '전환사채', '신주인수권부사채', '교환사채')),
+    ('자사주·배당', ('자기주식', '주식소각', '현금·현물배당', '배당')),
+    ('M&A·분할', ('합병', '분할', '영업양수', '영업양도', '주식교환')),
+    ('인허가·임상', ('임상', '품목허가', '승인')),
+    ('투자·설비', ('신규시설투자', '타법인주식')),
+    ('IR·안내', ('기업설명회', '안내공시')),
+)
+
+#: 관심도 관점에서 무게가 다른 유형 (0~1)
+_DISCLOSURE_WEIGHT = {
+    '수주·공급계약': 1.0, '실적': 0.9, 'M&A·분할': 0.9, '인허가·임상': 0.9,
+    '자사주·배당': 0.7, '투자·설비': 0.7, '증자·CB·BW': 0.5, 'IR·안내': 0.3,
+    '기타': 0.3,
+}
+
+_DISCLOSURE_CACHE = {'ts': 0.0, 'by_name': {}}
+
+
+def _classify_disclosure(title):
+    for label, keys in DISCLOSURE_TYPES:
+        if any(k in title for k in keys):
+            return label
+    return '기타'
+
+
+def fetch_disclosures(pages=3, max_age_sec=600):
+    """
+    DART 당일 공시. API 키 없이 공개 목록 페이지를 읽는다.
+
+    ⚠️ 한계 (화면에도 그대로 밝힌다):
+       · 당일 **최근 %d00건 남짓**이다. 하루 전체 공시가 아니다.
+       · 종목코드가 없어 **회사명으로 매칭**한다 (동명 회사 혼동 여지).
+       · 뉴스 기사는 여전히 미연동 — 여기서 세는 것은 '확정 공시'뿐이다.
+
+    반환: {회사명: [{'type','title','time'}, ...]}
+    """
+    import time as _t
+    cache = _DISCLOSURE_CACHE
+    if cache['by_name'] and (_t.time() - cache['ts']) < max_age_sec:
+        return cache['by_name']
+
+    out = {}
+    for page in range(1, max(1, int(pages)) + 1):
+        url = ("https://dart.fss.or.kr/dsac001/mainAll.do"
+               + (f"?currentPage={page}" if page > 1 else ""))
+        try:
+            html = be.fetch_html_with_retry(url)
+        except Exception:
+            break
+        found = 0
+        for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', html or '', re.S):
+            cells = [_clean(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S)]
+            if len(cells) < 3 or not re.match(r'\d{1,2}:\d{2}', cells[0]):
+                continue
+            # 열1 = '유/코/기 회사명' (앞 한 글자는 시장 구분)
+            raw_name = cells[1]
+            name = re.sub(r'^[유코기넥]\s+', '', raw_name).strip()
+            # 회사명 뒤에 붙는 배지(IR 등)를 떼어낸다
+            name = re.sub(r'\s+(IR|공)$', '', name).strip()
+            title = cells[2]
+            if not name or not title:
+                continue
+            out.setdefault(name, []).append(
+                {'type': _classify_disclosure(title), 'title': title, 'time': cells[0]})
+            found += 1
+        if found == 0:
+            break
+
+    # 목록 페이지가 막히면 RSS(최근 50건)로라도 받는다
+    if not out:
+        try:
+            root = ET.fromstring(be.fetch_html_with_retry(
+                "https://dart.fss.or.kr/api/todayRSS.xml"))
+            NS = '{http://purl.org/dc/elements/1.1/}'
+            for item in root.findall('.//item'):
+                nm = (item.findtext(NS + 'creator') or '').strip()
+                ti = (item.findtext('title') or '').strip()
+                if nm:
+                    out.setdefault(nm, []).append(
+                        {'type': _classify_disclosure(ti), 'title': ti,
+                         'time': (item.findtext(NS + 'date') or '')[:16]})
+        except Exception:
+            pass
+
+    if out:
+        cache.update({'ts': _t.time(), 'by_name': out})
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2단계 — 후보에만 일봉을 받아 실제 지표 계산
 # ─────────────────────────────────────────────────────────────────────────────
 def fetch_daily_bars(code, count=260):
@@ -306,6 +520,57 @@ def _score_from_ratio(ratio, lo=1.0, hi=5.0):
         return 0.0
     r = float(np.clip(ratio, lo, hi))
     return float(100.0 * (np.log(r) - np.log(lo)) / (np.log(hi) - np.log(lo) + 1e-12))
+
+
+def score_sector_rs(sector_info, all_sectors):
+    """업종 등락률이 전체 업종 분포에서 몇 번째인가 → 0~100 백분위."""
+    if not sector_info or not all_sectors:
+        return None, None
+    chg = sector_info.get('sector_change_pct')
+    if chg is None:
+        return None, sector_info.get('sector')
+    vals = [v['change_pct'] for v in all_sectors.values() if v.get('change_pct') is not None]
+    if len(vals) < 5:
+        return None, sector_info.get('sector')
+    pct = float(sum(1 for v in vals if v <= chg) / len(vals) * 100.0)
+    return pct, sector_info.get('sector')
+
+
+def score_investor_flow(flow, avg_volume):
+    """
+    5·20일 누적 외국인·기관 순매수 → 0~100.
+
+    금액이 큰 대형주가 유리해지지 않도록 **평균 거래량 대비 강도**로 정규화한다.
+    방향 전환(20일 순매도 → 5일 순매수)에는 가산점을 준다.
+    """
+    if not flow or not avg_volume or avg_volume <= 0:
+        return None, {}
+    base = avg_volume * 5.0            # 5일치 거래량을 기준 단위로
+    f5 = (flow['frgn_5d'] + flow['inst_5d']) / base
+    f20 = (flow['frgn_20d'] + flow['inst_20d']) / (avg_volume * 20.0)
+    # 강도 -0.2 ~ +0.2 를 0~100 으로 (그 밖은 포화)
+    s5 = float(np.clip((f5 + 0.2) / 0.4, 0, 1) * 100.0)
+    s20 = float(np.clip((f20 + 0.2) / 0.4, 0, 1) * 100.0)
+    score = s5 * 0.6 + s20 * 0.4
+    detail = {'frgn_5d': flow['frgn_5d'], 'inst_5d': flow['inst_5d'],
+              'frgn_20d': flow['frgn_20d'], 'inst_20d': flow['inst_20d'],
+              'both_buying': flow['frgn_5d'] > 0 and flow['inst_5d'] > 0,
+              'turned_positive': f20 <= 0 < f5}
+    if detail['both_buying']:
+        score = min(100.0, score + 10.0)
+    if detail['turned_positive']:
+        score = min(100.0, score + 10.0)
+    return float(score), detail
+
+
+def score_disclosures(items):
+    """공시 목록 → 0~100. 유형 가중치 중 가장 높은 것을 기준으로 삼고 건수로 소폭 가산."""
+    if not items:
+        return 0.0, []
+    weights = [_DISCLOSURE_WEIGHT.get(i['type'], 0.3) for i in items]
+    top = max(weights)
+    score = float(np.clip(top * 100.0 + (len(items) - 1) * 5.0, 0, 100))
+    return score, [i['type'] for i in items]
 
 
 def compute_components(bars, in_flow_list=False, drop_unconfirmed=False,
@@ -533,6 +798,14 @@ def strategy_filter(strategy, row):
         hits.append(f"5일 거래대금 {c['turnover_ratio_5d']:.1f}배")
     if c.get('in_flow_list'):
         hits.append("외국인·기관 순매수 상위")
+    elif (c.get('flow_detail') or {}).get('both_buying'):
+        hits.append("외국인·기관 동시 순매수")
+    elif (c.get('flow_detail') or {}).get('turned_positive'):
+        hits.append("수급 순매수 전환")
+    if c.get('disclosure_types'):
+        hits.append("공시 " + "·".join(sorted(set(c['disclosure_types']))[:2]))
+    if s.get('sector_rs', 0) >= 80 and c.get('sector'):
+        hits.append(f"{c['sector']} 업종 강세")
     if c.get('break_60d_high'):
         hits.append("60일 신고가")
     elif c.get('break_20d_high'):
@@ -605,6 +878,14 @@ def find_attention_candidates(strategy='composite', top_n=15,
     except Exception:
         live = False
 
+    # 업종·공시는 종목 수와 무관하게 한 번만 받는다 (업종은 1시간 캐시)
+    if progress:
+        progress("업종 상대강도 자료 수집")
+    sector_by_code, sector_all = fetch_sector_map(progress=progress)
+    if progress:
+        progress("DART 최근 공시 수집")
+    disclosures = fetch_disclosures()
+
     rows, failures = [], []
     for i, base in enumerate(deep):
         if progress:
@@ -617,6 +898,29 @@ def find_attention_candidates(strategy='composite', top_n=15,
         comp = compute_components(bars, in_flow_list=base['name'] in flow_names,
                                   drop_unconfirmed=live,
                                   live_turnover_krw=_live_to)
+
+        # ── 업종 상대강도 ──────────────────────────────────────────────
+        rs, sector_name = score_sector_rs(sector_by_code.get(base['code']), sector_all)
+        comp['sector'] = sector_name
+        comp['sector_change_pct'] = (sector_by_code.get(base['code']) or {}).get('sector_change_pct')
+        if rs is not None:
+            comp['scores']['sector_rs'] = rs
+
+        # ── 외국인·기관 수급 (종목별 시계열) ────────────────────────────
+        flow = fetch_investor_flow(base['code'])
+        _avg_vol = float(np.mean(bars[5][-20:])) if len(bars[5]) >= 20 else None
+        fs, fdetail = score_investor_flow(flow, _avg_vol)
+        if fs is not None:
+            comp['scores']['investor_flow'] = fs
+            comp['flow_detail'] = fdetail
+        elif base['name'] in flow_names:
+            comp['scores']['investor_flow'] = 100.0   # 순매수 상위 목록 진입은 유지
+
+        # ── 공시 촉매 ─────────────────────────────────────────────────
+        ds, dtypes = score_disclosures(disclosures.get(base['name']))
+        comp['scores']['event_catalyst'] = ds
+        comp['disclosure_types'] = dtypes
+
         att = score_candidate(comp, change_pct=base.get('change_pct'))
         row = {**base, 'components': comp, 'attention': att,
                'sources': sorted(base['sources'])}

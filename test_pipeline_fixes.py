@@ -316,8 +316,20 @@ f2 = snap2['four_scores']
 # 장중에는 실시간 체결가가 두 실행 사이에 움직이므로 가격에 의존하는 점수는
 # 완전 일치를 요구할 수 없다. 장이 닫혀 있으면 입력이 고정이므로 정확히 같아야 한다.
 _LIVE = be.get_market_status()['state'] == "장중"
+# 현재가에서 파생되는 점수들 — 장중에는 두 실행 사이 시세가 움직여 값이 달라진다
 _PRICE_DEPENDENT = ('final_action_score', 'trading_timing_score', 'opportunity_score',
-                    'execution_score', 'reward_risk_ratio', 'displayed_fair_value')
+                    'execution_score', 'risk_safety_score',
+                    'reward_risk_ratio', 'displayed_fair_value')
+
+# 허용오차를 임의로 넓히지 않는다. **두 실행 사이 실제 가격 변동폭**에 비례시킨다.
+# (급변동장에서는 1%대 변동에도 점수가 몇 점씩 움직이는 것이 정상이다)
+_px1 = float(snap['tech_df']['adj_close'].iloc[-1])
+_px2 = float(snap2['tech_df']['adj_close'].iloc[-1])
+_px_drift_pct = abs(_px2 / _px1 - 1.0) * 100.0
+_score_tol = max(2.0, _px_drift_pct * 3.0)      # 가격 1% 변동 → 점수 3점까지 허용
+check("재현성 판정 기준", True,
+      f"두 실행 사이 가격 {_px1:,.0f}→{_px2:,.0f} ({_px_drift_pct:+.2f}%) · "
+      f"점수 허용오차 ±{_score_tol:.1f}")
 
 
 def _reproduced(key, a, b):
@@ -328,8 +340,8 @@ def _reproduced(key, a, b):
     if a is None or b is None:
         return False
     if key.endswith('_score'):
-        return abs(a - b) <= 2                       # 0~100 정수 점수
-    return abs(a / (b + 1e-9) - 1.0) <= 0.01         # 비율·가격은 1% 이내
+        return abs(a - b) <= _score_tol
+    return abs(a / (b + 1e-9) - 1.0) <= max(0.01, _px_drift_pct / 100.0 * 2)
 
 
 for k in ('final_action_score', 'stock_quality_score', 'trading_timing_score',
@@ -717,13 +729,13 @@ section("27. 시장 관심종목 — 관심도와 매수판단의 분리")
 import market_attention as mkt
 
 _w = mkt.effective_weights()
-check("미연동 항목은 가중치 0", all(k not in _w for k in ('event_catalyst', 'sector_rs')),
-      str(sorted(_w)))
 check("유효 가중치 합 = 1.0", abs(sum(_w.values()) - 1.0) < 1e-9, f"{sum(_w.values()):.6f}")
 check("연동 현황이 모든 구성요소를 보고", len(mkt.data_status()) == len(mkt.COMPONENT_SPEC))
-check("미연동 항목도 숨기지 않고 표기",
-      any(d['availability'] == 'none' and d['effective_weight_pct'] == 0.0
-          for d in mkt.data_status()))
+# 미연동 항목이 있으면 가중치가 0 이어야 하고, 있든 없든 화면에서 숨기지 않는다
+for _d in mkt.data_status():
+    if _d['availability'] == 'none':
+        check(f"미연동 항목 가중치 0: {_d['label']}", _d['effective_weight_pct'] == 0.0)
+check("모든 구성요소가 사유·산식을 기술", all(d['detail'] for d in mkt.data_status()))
 
 # ETF·인버스가 기업 후보에 섞이면 안 된다 (거래대금 상위를 이들이 뒤덮는다)
 for _nm in ('KODEX 200', 'TIGER 미국S&P500', 'KODEX 레버리지', '파워 200', 'HK 200',
@@ -1318,6 +1330,69 @@ _news_now = engine.get_timeframe_news_analysis(SYMBOL)
 check("일반 종목은 ROE 기반 서사 유지",
       "판단 보류" not in str(_news_now.get('long_narratives', {}).get('sentiment', '')),
       str(_news_now.get('long_narratives', {}).get('sentiment')))
+
+
+section("37. 미연동이던 3개 항목 실연동 — 업종·수급·공시")
+
+# "종목당 개별 조회라 불가"라고 판단했던 것이 틀렸다. 실제로 조사하니 셋 다 받아진다.
+#   업종: 업종 목록 1페이지(79개+등락률) + 업종상세 79회 → 4천 종목 매핑, 1시간 캐시
+#   수급: 종목 페이지에 일자별 기관·외국인 순매매 표가 있다
+#   공시: DART 당일 공시 목록이 API 키 없이 열린다
+_ds = {d['label']: d for d in mkt.data_status()}
+for _lab in ('업종 상대강도', '외국인·기관 수급'):
+    check(f"{_lab} 연동됨", _ds[_lab]['availability'] == 'full',
+          _ds[_lab]['availability'])
+check("뉴스·공시 촉매 연동됨(부분)", _ds['뉴스·공시 촉매']['availability'] == 'partial',
+      _ds['뉴스·공시 촉매']['availability'])
+check("공시 항목이 한계를 명시", "최근" in _ds['뉴스·공시 촉매']['detail']
+      and "뉴스 기사" in _ds['뉴스·공시 촉매']['detail'])
+_spec_cov = sum(d['spec_weight_pct'] for d in mkt.data_status()
+                if d['availability'] != 'none')
+check("명세 가중치 100% 커버", abs(_spec_cov - 100.0) < 0.1, f"{_spec_cov:.0f}%")
+
+# ── 업종 상대강도 ─────────────────────────────────────────────────────
+_by_code, _sectors = mkt.fetch_sector_map()
+check("업종 목록 수집", len(_sectors) >= 50, f"{len(_sectors)}개 업종")
+check("종목→업종 매핑 규모", len(_by_code) >= 1000, f"{len(_by_code)}종목")
+check("삼성전자 업종 매핑", (_by_code.get('005930') or {}).get('sector'),
+      str((_by_code.get('005930') or {}).get('sector')))
+_rs, _sname = mkt.score_sector_rs(_by_code.get('005930'), _sectors)
+check("업종 상대강도 백분위 0~100", _rs is not None and 0 <= _rs <= 100, str(_rs))
+check("업종 자료가 캐시됨", mkt._SECTOR_CACHE['ts'] > 0)
+
+# ── 외국인·기관 수급 ──────────────────────────────────────────────────
+_flow = mkt.fetch_investor_flow('005930')
+check("수급 시계열 수신", _flow is not None and _flow.get('days', 0) >= 5,
+      str(_flow.get('days') if _flow else None))
+check("5·20일 누적 산출", _flow and all(k in _flow for k in
+      ('inst_5d', 'frgn_5d', 'inst_20d', 'frgn_20d')))
+# 금액이 큰 대형주가 자동으로 유리해지면 안 된다 — 거래량 대비 강도로 정규화한다
+_fs_big, _ = mkt.score_investor_flow(
+    {'frgn_5d': 1e6, 'inst_5d': 1e6, 'frgn_20d': 1e6, 'inst_20d': 1e6}, 1e8)
+_fs_small, _ = mkt.score_investor_flow(
+    {'frgn_5d': 1e4, 'inst_5d': 1e4, 'frgn_20d': 1e4, 'inst_20d': 1e4}, 1e6)
+check("수급 점수는 거래량 대비 강도 (절대 금액 아님)",
+      abs(_fs_big - _fs_small) < 1.0, f"대형 {_fs_big:.1f} vs 소형 {_fs_small:.1f}")
+_fs_rev, _det = mkt.score_investor_flow(
+    {'frgn_5d': 5e5, 'inst_5d': 5e5, 'frgn_20d': -1e6, 'inst_20d': -1e6}, 1e6)
+check("순매수 전환을 탐지", _det.get('turned_positive') is True)
+check("동시 순매수를 탐지", _det.get('both_buying') is True)
+check("수급 자료 없으면 None (지어내지 않음)",
+      mkt.score_investor_flow(None, 1e6)[0] is None)
+
+# ── 공시 ─────────────────────────────────────────────────────────────
+_disc = mkt.fetch_disclosures()
+check("당일 공시 수집", len(_disc) >= 20, f"{len(_disc)}개사")
+_types = {i['type'] for v in _disc.values() for i in v}
+check("공시 유형 분류", len(_types) >= 3, str(sorted(_types)[:6]))
+check("공시 유형이 정의된 값", _types <= (
+    {lbl for lbl, _k in mkt.DISCLOSURE_TYPES} | {'기타'}), str(sorted(_types)))
+_sc_none, _ = mkt.score_disclosures(None)
+check("공시 없으면 0점 (음수·임의값 아님)", _sc_none == 0.0, str(_sc_none))
+_sc_big, _ = mkt.score_disclosures([{'type': '수주·공급계약'}])
+_sc_small, _ = mkt.score_disclosures([{'type': 'IR·안내'}])
+check("공시 유형별 무게 차등", _sc_big > _sc_small, f"수주 {_sc_big} > IR {_sc_small}")
+check("공시 점수 0~100", 0 <= _sc_big <= 100 and 0 <= _sc_small <= 100)
 
 
 print()
