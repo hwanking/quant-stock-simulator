@@ -3180,12 +3180,38 @@ check("주요 이슈 토글 — 접힌 제목에 건수·최상위 노출",
 check("모델 상태 — 사용자 요청으로 토글 없이 상시 표시",
       "토글 없이 항상 펼쳐 보인다" in _w68)
 check("매수권(60점+) 스캔 강조 — 트렌드 탐색기 연동",
-      "매수권(60점+) 신호" in _w68 and "_bz_rows" in _w68)
+      "고신뢰 매수권(60점+)" in _w68 and "_bz_rows" in _w68)
 check("매수권 없음 = 관망 결론 (날조 금지)",
       "없는 날은 관망이 결론입니다" in _w68)
 check("v5 폴리시 — 접이식 카드화·pill 버튼",
       "border-radius: 999px" in _w68
       and 'stExpander' in _w68)
+
+
+section("69. 신호 게이트 라운드 2 — 사전등록 대결 · 확장 신호 2계층")
+
+_ss69 = open(_os.path.join(PROJ, "scripts", "signal_study.py"),
+             encoding='utf-8').read()
+check("사전등록 — 후보·선정 규칙이 코드에 먼저 명문화",
+      'CANDIDATES' in _ss69 and '선정 규칙' in _ss69)
+check("규율 — 블라인드는 승자 확정 후 1회만", '승자 확정 후 단 1회' in _ss69)
+check("규율 — 억지 채택 금지 (통과 없으면 기준선 유지)",
+      '기준선을 유지한다' in _ss69)
+check("규율 — 미공개 원칙 (선택에 못 쓰면 보지 않는다)",
+      '볼 이유가 없다' in _ss69)
+
+_w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("스캔 2계층 — 고신뢰(60+)·확장(58~59) 분리 표시",
+      '고신뢰 매수권(60점+)' in _w69 and '확장 신호(58~59점)' in _w69)
+check("확장 신호 정직 표기 — 재현 실측·비용후 0·보장 아님",
+      '블라인드 60.7%(n=122)' in _w69 and '수익 보장이 아닙니다' in _w69)
+_mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("MODEL_VERSIONS 라운드 2 기록 — 채택 범위·KPI 불변",
+      '신호 게이트 대결 라운드 2' in _mv69
+      and 'KPI 정의(매수권=60+' in _mv69)
+check("차기 후보 기록 (E 재대결·D 기각)", '차기 후보' in _mv69
+      and 'D 실패로 기각' in _mv69)
 
 
 print()

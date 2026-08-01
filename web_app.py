@@ -1228,20 +1228,35 @@ if st.session_state.get('show_screener', False):
             </div>
             """, unsafe_allow_html=True)
 
-            # ── 매수권(60점+) 신호 — 실측 3,059건에서 이 구간만 매수권이다 ──
+            # ── 신호 2계층 (사전등록 라운드 2 채택 — docs/MODEL_VERSIONS.md) ──
+            # 고신뢰 매수권(60+)은 드물고, 확장 신호(58~59)는 검증 62.7%(n=217)
+            # → 블라인드 60.7%(n=122)로 재현된 탐색층이다. 비용후 기대값은 0
+            # 수준이므로 '후보 탐색'이지 수익 보장이 아니다 — 그대로 말한다.
             _bz_rows = sorted(
                 [r for r in scan_results if (r.get('final_score') or 0) >= 60],
                 key=lambda r: r.get('final_score') or 0, reverse=True)
+            _ext_rows = sorted(
+                [r for r in scan_results
+                 if 58 <= (r.get('final_score') or 0) < 60],
+                key=lambda r: r.get('final_score') or 0, reverse=True)
             if _bz_rows:
                 st.success(
-                    f"**매수권(60점+) 신호 {len(_bz_rows)}종목** — "
+                    f"**고신뢰 매수권(60점+) {len(_bz_rows)}종목** — "
                     + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
                                  for r in _bz_rows[:5])
-                    + "  \n케이스 실측(3,059건)에서 매수권은 이 구간뿐입니다 "
-                      "(신호율 2.9%). 아래 표에서 종목을 눌러 조건을 확인하세요.")
-            else:
-                st.caption("이번 스캔에는 매수권(60점+) 신호가 없습니다 — 실측 "
-                           "신호율 2.9%로 원래 드뭅니다. 없는 날은 관망이 결론입니다.")
+                    + "  \n실측 신호율 2.9%의 드문 구간입니다. 아래 표에서 "
+                      "종목을 눌러 조건을 확인하세요.")
+            if _ext_rows:
+                st.info(
+                    f"**확장 신호(58~59점) {len(_ext_rows)}종목** — "
+                    + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
+                                 for r in _ext_rows[:6])
+                    + "  \n사전등록 검증에서 이 구간은 검증 62.7%(n=217) → "
+                      "블라인드 60.7%(n=122)로 재현됐습니다. 단 비용 차감 후 "
+                      "기대값은 0 수준 — 진입 후보 탐색용이며 수익 보장이 아닙니다.")
+            if not _bz_rows and not _ext_rows:
+                st.caption("이번 스캔에는 매수권(60점+)·확장 신호(58~59점)가 모두 "
+                           "없습니다 — 없는 날은 관망이 결론입니다.")
 
             _att = st.session_state.get('attention_result') or {}
             if _att.get('used_confirmed_bars_only'):
