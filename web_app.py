@@ -2256,7 +2256,22 @@ if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
 elif _cb and _cb.get('n', 0) < 5:
     _extra_bits.append(f"🧪 이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
                        f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
-_calib_all = getattr(q_engine, '_calibration', None) or {}
+# ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
+@st.cache_data(ttl=600)
+def _load_calibration_meta():
+    try:
+        import json as _json_cal
+        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          ".portfolio", "calibration.json")
+        with open(_p, encoding='utf-8') as _f:
+            _c = _json_cal.load(_f)
+        return {'total_cases': _c.get('total_cases'),
+                'rulebook_version': _c.get('rulebook_version')}
+    except Exception:
+        return {}
+
+
+_calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
     _extra_bits.append(f"📚 모델 {_calib_all.get('rulebook_version', '')} · "
                        f"누적 케이스 {_calib_all['total_cases']:,}건")
