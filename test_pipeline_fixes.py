@@ -3241,6 +3241,8 @@ check("배너 — 검토가 계층 라벨 (적정가 검증 없음 명시)",
 check("배너 — 지지선조차 없으면 없다고 말한다",
       '유효 지지선도 없음' in _w70)
 check("적정가 미산출 카드 — 사유 캡션", 'fair_value_status_note' in _w70)
+check("오늘의 추천 카드 → 분석 화면 전환 버튼",
+      '분석 보기' in _w70 and 'pm_go_' in _w70)
 
 
 print()

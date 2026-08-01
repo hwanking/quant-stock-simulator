@@ -1543,6 +1543,12 @@ if _pmr:
                 {' · '.join(_news_txt) if _news_txt else '특이 뉴스 없음'}<br>
                 <span style='color:#86868b;'>{_conf_txt}</span></p>
             </div>""", unsafe_allow_html=True)
+            # 카드 클릭 → 아래 종목 분석 화면이 이 종목으로 전환된다
+            if st.button("분석 보기", key=f"pm_go_{_p.get('symbol')}_{_pi}",
+                         use_container_width=True):
+                st.session_state['pending_search'] = \
+                    f"{_p.get('name')} ({_p.get('code')})"
+                st.rerun()
     with st.expander("📈 지난 개장 전 추천의 실제 성과 (사후 검증)"):
         _hist = _pm_view.grade_history(engine_init)
         if _hist:
