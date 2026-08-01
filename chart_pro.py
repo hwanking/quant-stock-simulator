@@ -6,9 +6,11 @@
   · 라이브러리 JS는 vendor/ 에 통째로 내장한다 — 시세·종목 데이터가 외부로
     나가지 않고(전부 iframe 안에 인라인), 오프라인·클라우드 어디서든 뜬다.
   · 지표는 이미 검증된 tech_df 값을 그대로 쓴다(차트가 따로 계산해 어긋나는
-    것을 막는다). 여기서 새로 계산하는 것은 MA120·MACD 뿐이다.
+    것을 막는다). 여기서 새로 계산하는 것은 MA120·EMA20·MACD·스토캐스틱·OBV 뿐.
   · 실행 가격선(손절/목표/추천매수/TDST)은 four_scores 의 값 — 화면 배너와
     같은 숫자다.
+  · 지표 선택창: 사용자가 원하는 지표만 골라 켠다. 선택은 브라우저
+    localStorage 에 남아 다음 방문에도 유지된다.
 """
 from __future__ import annotations
 
@@ -26,9 +28,9 @@ _DN = '#0a84ff'
 
 _THEMES = {
     'dark': dict(bg='#16181d', panel='#16181d', text='#d5d8e0', grid='#23262e',
-                 border='#2d3139', legend='#a0a5b5', wm='rgba(160,165,181,0.12)'),
+                 border='#2d3139', legend='#a0a5b5'),
     'light': dict(bg='#ffffff', panel='#ffffff', text='#3a3f4a', grid='#eef1f6',
-                  border='#dde2ea', legend='#5a5f6b', wm='rgba(90,95,107,0.10)'),
+                  border='#dde2ea', legend='#5a5f6b'),
 }
 
 
@@ -79,24 +81,28 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
         volume.append({'time': t, 'value': vols[i] or 0.0,
                        'color': (_UP if c >= o else _DN) + '66'})
 
-    # 이동평균 — 5/20/60 은 검증된 컬럼, 120 만 여기서 계산
+    # ── 오버레이 지표 ─────────────────────────────────────
     mas = {}
     for col, key in (('sma_5', 'ma5'), ('sma_20', 'ma20'), ('sma_60', 'ma60')):
         if col in df.columns:
             mas[key] = _series(times, [_f(x) for x in df[col]])
-    _closes_full = [c for c in closes]
+
+    cl = [c if c is not None else 0.0 for c in closes]
     ma120 = []
-    for i in range(len(_closes_full)):
-        w = [c for c in _closes_full[max(0, i - 119):i + 1] if c is not None]
+    for i in range(len(cl)):
+        w = [c for c in closes[max(0, i - 119):i + 1] if c is not None]
         ma120.append(sum(w) / len(w) if len(w) >= 120 else None)
     mas['ma120'] = _series(times, ma120)
+    _e20 = _ema(cl, 20)
+    mas['ema20'] = _series(times, ([None] * 19 + _e20[19:])
+                           if len(_e20) > 19 else [])
 
     bb_u = _series(times, [_f(x) for x in df['bb_upper']]) if 'bb_upper' in df.columns else []
     bb_l = _series(times, [_f(x) for x in df['bb_lower']]) if 'bb_lower' in df.columns else []
+
+    # ── 하단 패널 지표 ────────────────────────────────────
     rsi = _series(times, [_f(x) for x in df['rsi_14']]) if 'rsi_14' in df.columns else []
 
-    # MACD(12, 26, 9)
-    cl = [c if c is not None else 0.0 for c in closes]
     macd_line = [a - b for a, b in zip(_ema(cl, 12), _ema(cl, 26))]
     sig_line = _ema(macd_line, 9)
     macd = _series(times, macd_line)
@@ -105,7 +111,37 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
              'color': (_UP if m - s >= 0 else _DN) + '99'}
             for t, m, s in zip(times, macd_line, sig_line)]
 
-    # DeMARK 마커 — 엔진이 만든 시리즈 그대로 (셋업 9 / 카운트다운 13)
+    # 스토캐스틱 슬로우 (14, 3, 3)
+    k_raw = []
+    for i in range(len(cl)):
+        if i < 13:
+            k_raw.append(None)
+            continue
+        hh = max(x for x in highs[i - 13:i + 1] if x is not None)
+        ll = min(x for x in lows[i - 13:i + 1] if x is not None)
+        k_raw.append(50.0 if hh == ll else (cl[i] - ll) / (hh - ll) * 100.0)
+
+    def _sma3(seq):
+        out = []
+        for i in range(len(seq)):
+            w = [x for x in seq[max(0, i - 2):i + 1] if x is not None]
+            out.append(sum(w) / len(w) if len(w) == 3 else None)
+        return out
+
+    stoch_k = _sma3(k_raw)
+    stoch_d = _sma3(stoch_k)
+
+    # OBV (거래량 누적)
+    obv_vals, acc = [], 0.0
+    for i in range(len(cl)):
+        if i > 0 and closes[i] is not None and closes[i - 1] is not None:
+            if closes[i] > closes[i - 1]:
+                acc += (vols[i] or 0.0)
+            elif closes[i] < closes[i - 1]:
+                acc -= (vols[i] or 0.0)
+        obv_vals.append(acc)
+
+    # ── DeMARK 마커 (셋업 9 / 카운트다운 13) ──────────────
     dm = (four_scores or {}).get('demark_res') or {}
     markers = []
 
@@ -133,7 +169,7 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
         except (TypeError, ValueError):
             continue
 
-    # 실행 가격선 — 배너와 같은 숫자만 쓴다
+    # ── 실행 가격선 — 배너와 같은 숫자만 쓴다 ─────────────
     fs = four_scores or {}
     plines = []
     for val, label, color, style in (
@@ -153,6 +189,8 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
         'candles': candles, 'volume': volume, 'mas': mas,
         'bbU': bb_u, 'bbL': bb_l, 'rsi': rsi,
         'macd': macd, 'signal': signal, 'hist': hist,
+        'stochK': _series(times, stoch_k), 'stochD': _series(times, stoch_d),
+        'obv': _series(times, obv_vals),
         'markers': markers, 'plines': plines,
         'name': str(name), 'unit': str(unit_str),
     }, ensure_ascii=False)
@@ -165,11 +203,10 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
         except Exception:
             pass
 
-    colors = json.dumps(th)
     return _HTML_TEMPLATE \
         .replace('__LIB__', lib_tag) \
         .replace('__DATA__', payload) \
-        .replace('__COLORS__', colors) \
+        .replace('__COLORS__', json.dumps(th)) \
         .replace('__HEIGHT__', str(int(height)))
 
 
@@ -179,18 +216,33 @@ __LIB__
 <style>
   html, body { margin:0; padding:0; background: transparent;
     font-family: 'Pretendard', -apple-system, 'Malgun Gothic', sans-serif; }
-  #wrap { border: 1px solid var(--bd); border-radius: 14px; overflow: hidden;
+  #wrap { border: 1px solid var(--bd); border-radius: 12px; overflow: hidden;
     background: var(--bg); }
-  #toolbar { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center;
+  #toolbar { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center;
     padding: 10px 14px; border-bottom: 1px solid var(--bd);
     color: var(--lg); font-size: 12.5px; }
   #toolbar b.ttl { color: var(--tx); font-size: 13.5px; margin-right: 6px; }
-  #toolbar label { display:flex; align-items:center; gap:4px; cursor:pointer;
-    user-select:none; }
-  #toolbar input { accent-color:#2997ff; }
   .rngbtn { border:1px solid var(--bd); background:transparent; color:var(--lg);
     border-radius:7px; padding:2px 9px; cursor:pointer; font-size:12px; }
   .rngbtn.on { background:#2997ff; color:#fff; border-color:#2997ff; }
+  /* 지표 선택창 */
+  #indWrap { position: relative; }
+  #indBtn { border:1px solid var(--bd); background:transparent; color:var(--tx);
+    border-radius:7px; padding:3px 11px; cursor:pointer; font-size:12.5px; }
+  #indPanel { display:none; position:absolute; right:0; top:30px; z-index:50;
+    background: var(--bg); border:1px solid var(--bd); border-radius:10px;
+    padding: 12px 16px; min-width: 380px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  #indPanel.open { display:block; }
+  #indPanel h5 { margin: 8px 0 5px 0; color: var(--tx); font-size: 12px;
+    letter-spacing: .04em; }
+  #indPanel h5:first-child { margin-top: 0; }
+  .indGrid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 4px 12px; }
+  .indGrid label { display:flex; align-items:center; gap:5px; cursor:pointer;
+    color: var(--lg); font-size: 12.5px; white-space:nowrap;
+    user-select:none; padding: 2px 0; }
+  .indGrid input { accent-color:#2997ff; }
+  .sw { display:inline-block; width:9px; height:9px; border-radius:2px; }
   #legend { padding: 4px 14px 0 14px; font-size: 12px; color: var(--lg);
     min-height: 17px; }
   .pane { position: relative; }
@@ -208,16 +260,25 @@ __LIB__
     <button class="rngbtn on" data-m="12">1년</button>
     <button class="rngbtn" data-m="0">전체</button>
     <span style="flex:1"></span>
-    <label><input type="checkbox" id="ckMA" checked>이동평균</label>
-    <label><input type="checkbox" id="ckBB" checked>볼린저</label>
-    <label><input type="checkbox" id="ckDM" checked>DeMARK 9·13</label>
-    <label><input type="checkbox" id="ckPL" checked>실행 가격선</label>
+    <div id="indWrap">
+      <button id="indBtn">📐 지표 선택 ▾</button>
+      <div id="indPanel">
+        <h5>가격 오버레이</h5>
+        <div class="indGrid" id="gOverlay"></div>
+        <h5>보조 패널</h5>
+        <div class="indGrid" id="gPane"></div>
+        <h5>신호·가격선</h5>
+        <div class="indGrid" id="gSig"></div>
+      </div>
+    </div>
   </div>
   <div id="legend"></div>
-  <div class="pane"><div id="cMain"></div></div>
-  <div class="pane"><span class="plabel">거래량</span><div id="cVol"></div></div>
-  <div class="pane"><span class="plabel">RSI 14 (30/70)</span><div id="cRsi"></div></div>
-  <div class="pane"><span class="plabel">MACD 12·26·9</span><div id="cMacd"></div></div>
+  <div class="pane" id="pMain"><div id="cMain"></div></div>
+  <div class="pane" id="pVol"><span class="plabel">거래량</span><div id="cVol"></div></div>
+  <div class="pane" id="pRsi"><span class="plabel">RSI 14 (30/70)</span><div id="cRsi"></div></div>
+  <div class="pane" id="pMacd"><span class="plabel">MACD 12·26·9</span><div id="cMacd"></div></div>
+  <div class="pane" id="pStoch"><span class="plabel">스토캐스틱 슬로우 14·3·3 (20/80)</span><div id="cStoch"></div></div>
+  <div class="pane" id="pObv"><span class="plabel">OBV (거래량 누적)</span><div id="cObv"></div></div>
   <div id="attrib"><a href="https://www.tradingview.com/" target="_blank"
     rel="noopener">Charts: TradingView Lightweight Charts™</a></div>
 </div>
@@ -230,7 +291,7 @@ root.style.setProperty('--bg', C.bg); root.style.setProperty('--bd', C.border);
 root.style.setProperty('--tx', C.text); root.style.setProperty('--lg', C.legend);
 document.getElementById('ttl').textContent = D.name + ' 종합 차트';
 
-const mainH = Math.round(H * 0.55), subH = Math.round(H * 0.15);
+const mainH = Math.round(H * 0.52), subH = Math.round(H * 0.15);
 const base = {
   layout: { background: { color: C.panel }, textColor: C.text,
             fontFamily: "'Pretendard', sans-serif", fontSize: 11 },
@@ -243,18 +304,20 @@ const base = {
 function mk(id, h, hideTime) {
   const el = document.getElementById(id);
   const o = JSON.parse(JSON.stringify(base));
-  o.width = el.parentElement.clientWidth || el.clientWidth || 900;
+  o.width = document.getElementById('wrap').clientWidth || 900;
   o.height = h;
   if (hideTime) o.timeScale.visible = false;
   return LightweightCharts.createChart(el, o);
 }
-const chMain = mk('cMain', mainH, false);
-const chVol  = mk('cVol',  subH, true);
-const chRsi  = mk('cRsi',  subH, true);
-const chMacd = mk('cMacd', subH, false);
-const charts = [chMain, chVol, chRsi, chMacd];
+const chMain  = mk('cMain',  mainH, false);
+const chVol   = mk('cVol',   subH, true);
+const chRsi   = mk('cRsi',   subH, true);
+const chMacd  = mk('cMacd',  subH, true);
+const chStoch = mk('cStoch', subH, true);
+const chObv   = mk('cObv',   subH, false);
+const charts = [chMain, chVol, chRsi, chMacd, chStoch, chObv];
 
-// ── 시리즈 ──────────────────────────────────────────────
+// ── 메인 시리즈 ─────────────────────────────────────────
 const sCandle = chMain.addCandlestickSeries({
   upColor: '#ff453a', downColor: '#0a84ff',
   borderUpColor: '#ff453a', borderDownColor: '#0a84ff',
@@ -265,58 +328,123 @@ sCandle.setData(D.candles);
 chMain.priceScale('right').applyOptions({
   scaleMargins: { top: 0.05, bottom: 0.05 } });
 
-const maDefs = [['ma5','#ff9f0a','MA5'], ['ma20','#32ade6','MA20'],
-                ['ma60','#30d158','MA60'], ['ma120','#bf5af2','MA120']];
-const maSeries = [];
-for (const [k, col, lb] of maDefs) {
-  if (!D.mas[k] || !D.mas[k].length) continue;
-  const s = chMain.addLineSeries({ color: col, lineWidth: k==='ma20'?2:1,
-    priceLineVisible:false, lastValueVisible:false, title: lb });
-  s.setData(D.mas[k]); maSeries.push(s);
-}
-const bbSeries = [];
-for (const dat of [D.bbU, D.bbL]) {
-  if (!dat.length) continue;
-  const s = chMain.addLineSeries({ color: '#bf5af299', lineWidth: 1,
-    lineStyle: 1, priceLineVisible:false, lastValueVisible:false });
-  s.setData(dat); bbSeries.push(s);
+function line(ch, data, col, w, style) {
+  const s = ch.addLineSeries({ color: col, lineWidth: w || 1,
+    lineStyle: style || 0, priceLineVisible: false, lastValueVisible: false });
+  s.setData(data); return s;
 }
 
-// 실행 가격선
+// 오버레이 지표 정의 — 지표 선택창의 '가격 오버레이' 그룹
+const overlayDefs = [
+  { id:'ma5',   label:'MA 5',    col:'#ff9f0a', mk:() => line(chMain, D.mas.ma5||[],   '#ff9f0a', 1) },
+  { id:'ma20',  label:'MA 20',   col:'#32ade6', mk:() => line(chMain, D.mas.ma20||[],  '#32ade6', 2) },
+  { id:'ma60',  label:'MA 60',   col:'#30d158', mk:() => line(chMain, D.mas.ma60||[],  '#30d158', 1) },
+  { id:'ma120', label:'MA 120',  col:'#bf5af2', mk:() => line(chMain, D.mas.ma120||[], '#bf5af2', 1) },
+  { id:'ema20', label:'EMA 20',  col:'#64d2ff', mk:() => line(chMain, D.mas.ema20||[], '#64d2ff', 1, 2) },
+  { id:'bb',    label:'볼린저밴드', col:'#bf5af2', mk:() => [
+      line(chMain, D.bbU, '#bf5af299', 1, 1), line(chMain, D.bbL, '#bf5af299', 1, 1)] },
+];
+// 보조 패널 정의 — '보조 패널' 그룹 (켜고 끄면 패널 자체가 나타나고 사라진다)
+const paneDefs = [
+  { id:'vol',   label:'거래량',    col:'#2997ff', pane:'pVol',   ch:chVol,
+    mk:() => { const s = chVol.addHistogramSeries({ priceFormat:{type:'volume'},
+      priceLineVisible:false, lastValueVisible:false }); s.setData(D.volume); return s; } },
+  { id:'rsi',   label:'RSI',      col:'#bf5af2', pane:'pRsi',   ch:chRsi,
+    mk:() => { const s = line(chRsi, D.rsi, '#bf5af2', 2);
+      [30, 70].forEach(lv => s.createPriceLine({ price: lv, color: C.legend+'55',
+        lineWidth: 1, lineStyle: 2, title: String(lv) })); return s; } },
+  { id:'macd',  label:'MACD',     col:'#2997ff', pane:'pMacd',  ch:chMacd,
+    mk:() => { const h = chMacd.addHistogramSeries({ priceLineVisible:false,
+        lastValueVisible:false }); h.setData(D.hist);
+      return [h, line(chMacd, D.macd, '#2997ff', 2), line(chMacd, D.signal, '#ff9f0a', 1)]; } },
+  { id:'stoch', label:'스토캐스틱', col:'#ffd60a', pane:'pStoch', ch:chStoch,
+    mk:() => { const k = line(chStoch, D.stochK, '#ffd60a', 2);
+      line(chStoch, D.stochD, '#ff453a', 1);
+      [20, 80].forEach(lv => k.createPriceLine({ price: lv, color: C.legend+'55',
+        lineWidth: 1, lineStyle: 2, title: String(lv) })); return k; } },
+  { id:'obv',   label:'OBV',      col:'#30d158', pane:'pObv',   ch:chObv,
+    mk:() => line(chObv, D.obv, '#30d158', 2) },
+];
+// 신호·가격선 정의
+const sigDefs = [
+  { id:'demark', label:'DeMARK 9·13', col:'#30d158' },
+  { id:'plines', label:'실행 가격선',  col:'#ffd60a' },
+];
+
+// 기본 켜짐 + localStorage 복원
+const DEFAULT_ON = ['ma5','ma20','ma60','ma120','bb','vol','rsi','macd','demark','plines'];
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem('qchart_ind_v1')); } catch (e) {}
+const isOn = id => Array.isArray(saved) ? saved.includes(id) : DEFAULT_ON.includes(id);
+function persist() {
+  const on = [...document.querySelectorAll('#indPanel input:checked')].map(i => i.dataset.id);
+  try { localStorage.setItem('qchart_ind_v1', JSON.stringify(on)); } catch (e) {}
+}
+
+const live = {};                     // id → 시리즈(또는 배열)
+function setSeriesVisible(obj, vis) {
+  (Array.isArray(obj) ? obj : [obj]).forEach(s =>
+    s.applyOptions({ visible: vis }));
+}
 let priceLines = [];
 function applyPLines(on) {
   priceLines.forEach(pl => sCandle.removePriceLine(pl)); priceLines = [];
   if (!on) return;
-  for (const p of D.plines) {
+  for (const p of D.plines)
     priceLines.push(sCandle.createPriceLine({ price: p.price, color: p.color,
-      lineWidth: 1, lineStyle: p.lineStyle, axisLabelVisible: true,
-      title: p.title }));
-  }
+      lineWidth: 1, lineStyle: p.lineStyle, axisLabelVisible: true, title: p.title }));
 }
-applyPLines(true);
-
 function applyMarkers(on) { sCandle.setMarkers(on ? D.markers : []); }
-applyMarkers(true);
 
-const sVol = chVol.addHistogramSeries({ priceFormat: { type: 'volume' },
-  priceLineVisible:false, lastValueVisible:false });
-sVol.setData(D.volume);
+function addCheck(grid, def, checked, onChange) {
+  const lb = document.createElement('label');
+  lb.innerHTML = `<input type="checkbox" data-id="${def.id}"` +
+    `${checked ? ' checked' : ''}><span class="sw" style="background:${def.col}">` +
+    `</span>${def.label}`;
+  lb.querySelector('input').addEventListener('change', e => {
+    onChange(e.target.checked); persist(); });
+  document.getElementById(grid).appendChild(lb);
+}
 
-const sRsi = chRsi.addLineSeries({ color: '#bf5af2', lineWidth: 2,
-  priceLineVisible:false, lastValueVisible:false });
-sRsi.setData(D.rsi);
-for (const lv of [30, 70]) sRsi.createPriceLine({ price: lv,
-  color: C.legend + '55', lineWidth: 1, lineStyle: 2, title: String(lv) });
+for (const d of overlayDefs) {
+  live[d.id] = d.mk();
+  const on = isOn(d.id);
+  setSeriesVisible(live[d.id], on);
+  addCheck('gOverlay', d, on, v => setSeriesVisible(live[d.id], v));
+}
+for (const d of paneDefs) {
+  live[d.id] = d.mk();
+  const on = isOn(d.id);
+  document.getElementById(d.pane).style.display = on ? '' : 'none';
+  addCheck('gPane', d, on, v => {
+    document.getElementById(d.pane).style.display = v ? '' : 'none';
+    relayout();
+  });
+}
+addCheck('gSig', sigDefs[0], isOn('demark'), v => applyMarkers(v));
+addCheck('gSig', sigDefs[1], isOn('plines'), v => applyPLines(v));
+applyMarkers(isOn('demark'));
+applyPLines(isOn('plines'));
 
-const sHist = chMacd.addHistogramSeries({ priceLineVisible:false,
-  lastValueVisible:false });
-sHist.setData(D.hist);
-const sMacd = chMacd.addLineSeries({ color: '#2997ff', lineWidth: 2,
-  priceLineVisible:false, lastValueVisible:false });
-sMacd.setData(D.macd);
-const sSig = chMacd.addLineSeries({ color: '#ff9f0a', lineWidth: 1,
-  priceLineVisible:false, lastValueVisible:false });
-sSig.setData(D.signal);
+// 마지막으로 보이는 보조 패널에만 시간축을 보여준다
+function relayout() {
+  const visPanes = paneDefs.filter(d =>
+    document.getElementById(d.pane).style.display !== 'none');
+  paneDefs.forEach(d => d.ch.timeScale().applyOptions({ visible: false }));
+  if (visPanes.length)
+    visPanes[visPanes.length - 1].ch.timeScale().applyOptions({ visible: true });
+  else
+    chMain.timeScale().applyOptions({ visible: true });
+  window.dispatchEvent(new Event('resize'));
+}
+relayout();
+
+// 지표 선택창 열고 닫기
+const indBtn = document.getElementById('indBtn');
+const indPanel = document.getElementById('indPanel');
+indBtn.onclick = e => { e.stopPropagation(); indPanel.classList.toggle('open'); };
+document.addEventListener('click', e => {
+  if (!indPanel.contains(e.target)) indPanel.classList.remove('open'); });
 
 // ── 팬·줌 동기화 ────────────────────────────────────────
 let syncing = false;
@@ -328,12 +456,12 @@ for (const src of charts) {
     syncing = false;
   });
 }
-// 십자선 동기화 + 범례
+// 십자선 범례
 const legend = document.getElementById('legend');
 const fmt = v => v == null ? '—' : Number(v).toLocaleString('ko-KR',
   { maximumFractionDigits: 2 });
 chMain.subscribeCrosshairMove(p => {
-  if (!p || !p.time || !p.seriesData) { return; }
+  if (!p || !p.time || !p.seriesData) return;
   const c = p.seriesData.get(sCandle);
   if (c) legend.innerHTML =
     `<b style="color:${C.text}">${p.time}</b>&nbsp; ` +
@@ -342,14 +470,7 @@ chMain.subscribeCrosshairMove(p => {
     `<b style="color:${C.text}">${fmt(c.close)}</b> ${D.unit}`;
 });
 
-// ── 토글·기간 버튼 ──────────────────────────────────────
-document.getElementById('ckMA').onchange = e =>
-  maSeries.forEach(s => s.applyOptions({ visible: e.target.checked }));
-document.getElementById('ckBB').onchange = e =>
-  bbSeries.forEach(s => s.applyOptions({ visible: e.target.checked }));
-document.getElementById('ckDM').onchange = e => applyMarkers(e.target.checked);
-document.getElementById('ckPL').onchange = e => applyPLines(e.target.checked);
-
+// ── 기간 버튼 ───────────────────────────────────────────
 function setRange(months) {
   const n = D.candles.length;
   const bars = months === 0 ? n : Math.min(n, Math.round(months * 21));

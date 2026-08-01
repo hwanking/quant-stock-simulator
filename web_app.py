@@ -192,6 +192,18 @@ st.markdown(f"""
     .stApp div[style*="border-radius:14px"]:hover {{
         transform: translateY(-1px);
     }}
+    /* Hasselblad풍 절제 — 콘텐츠 최대 폭·여백·타이포 위계
+       (페이지 제목 28~32 / 섹션 18~22 / 본문 14~16 / 보조 12~13px) */
+    .stMainBlockContainer {{
+        max-width: 1360px !important;
+        padding-top: 1.6rem !important;
+    }}
+    .stApp h1 {{ font-size: 30px !important; font-weight: 800 !important;
+                letter-spacing: -0.02em !important; }}
+    .stApp h2 {{ font-size: 24px !important; font-weight: 800 !important; }}
+    .stApp h3 {{ font-size: 20px !important; font-weight: 750 !important; }}
+    .stApp hr {{ margin: 26px 0 !important; opacity: .75; }}
+    .stApp [data-testid="stCaptionContainer"] p {{ font-size: 12.5px !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -237,7 +249,7 @@ st.markdown("""
     [data-testid="stSidebar"] input {
         background-color: #22252c !important;
         color: #ffffff !important;
-        border: 1.5px solid #64d2ff !important;
+        border: 1px solid #3a4049 !important;
         border-radius: 8px !important;
         font-weight: bold !important;
         font-size: 1.0rem !important;

@@ -2902,6 +2902,55 @@ check("타이포 개선 (tabular-nums·Pretendard 계열)",
       "tnum" in _w61 and "Pretendard" in _w61)
 
 
+section("62. 종합 인터랙티브 차트 — 지표 선택창 · 데이터 내장 · 실행선 정합")
+
+import chart_pro as cp62
+import pandas as _pd62
+
+check("차트 라이브러리 로컬 내장 (외부 CDN 의존 아님)",
+      _os.path.exists(cp62._VENDOR_JS))
+_tdf62 = _pd62.DataFrame({
+    'trade_date': _pd62.date_range('2025-01-01', periods=150, freq='D'),
+    'adj_close': [100.0 + i * 0.5 for i in range(150)],
+    'open': [100.0 + i * 0.5 - 0.2 for i in range(150)],
+    'high': [100.0 + i * 0.5 + 1.0 for i in range(150)],
+    'low': [100.0 + i * 0.5 - 1.0 for i in range(150)],
+    'volume': [1000.0 + i for i in range(150)],
+    'sma_5': [100.0 + i * 0.5 for i in range(150)],
+    'sma_20': [99.0 + i * 0.5 for i in range(150)],
+    'sma_60': [98.0 + i * 0.5 for i in range(150)],
+    'bb_upper': [103.0 + i * 0.5 for i in range(150)],
+    'bb_lower': [97.0 + i * 0.5 for i in range(150)],
+    'rsi_14': [55.0] * 150,
+})
+_fs62 = {'recommended_buy_price': 120.0, 'target_tech_1st': 190.0,
+         'target_tech_2nd': 200.0, 'stop_loss_price': 110.0,
+         'demark_res': {'buy_setup_series': [0] * 149 + [9],
+                        'tdst_support': 115.0}}
+_html62 = cp62.build_chart_html(_tdf62, _fs62, name='시험', theme='dark',
+                                user_avg=130.0)
+check("HTML 문자열 생성", isinstance(_html62, str) and len(_html62) > 100_000)
+check("지표 선택창 존재 (사용자가 원하는 지표를 고른다)",
+      'indPanel' in _html62 and '지표 선택' in _html62)
+check("추가 지표 — 스토캐스틱·OBV·EMA20",
+      all(k in _html62 for k in ('stochK', 'obv', 'ema20')))
+check("선택 상태 저장 (localStorage)", 'qchart_ind_v1' in _html62)
+check("실행 가격선 = 배너와 같은 숫자 (추천매수·목표·손절·평단)",
+      all(s in _html62 for s in ('추천 매수가', '1차 목표가', '손절가',
+                                 '내 평단가')))
+check("DeMARK 마커 시리즈 내장", '"text": "9"' in _html62)
+check("라이선스 표기 (Apache 2.0 attribution)",
+      'TradingView Lightweight Charts' in _html62)
+_html62L = cp62.build_chart_html(_tdf62, _fs62, name='시험', theme='light')
+check("라이트 테마 팔레트 분기", '#ffffff' in _html62L and
+      _html62L != _html62)
+check("웹앱 통합 — 판정 근거 위 종합 차트", '종합 차트' in _w61 and
+      'chart_pro' in _w61)
+check("수치 무단 생성 금지 — tech_df 검증 컬럼 재사용 원칙 주석",
+      '어긋나는' in open(_os.path.join(PROJ, "chart_pro.py"),
+                     encoding='utf-8').read())
+
+
 print()
 print("=" * 72)
 if FAILURES:
