@@ -2598,7 +2598,31 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ═══ 🧭 아주 쉬운 결론 — 신규 매수자와 보유자를 절대 섞지 않는다 ═══════════
+# ═══ 아주 쉬운 결론 — 신규 매수자와 보유자를 절대 섞지 않는다 ═══════════════
+# 사용자 상태 선택기 (v2): 분석 화면 안에서 미보유/보유를 고른다.
+# '보유 중' 선택 시 여기 입력값이 이후 모든 보유자 판정(쉬운 결론·포지션 진단)에
+# 쓰인다 — 사이드바 입력은 기본값 공급원이다.
+_pos_default = 1 if user_entry_price > 0 else 0
+_pos_mode = st.radio("이 종목을 갖고 계신가요?", ["아직 없음", "보유 중"],
+                     index=_pos_default, horizontal=True, key="pos_mode_main")
+if _pos_mode == "보유 중":
+    _pc1, _pc2 = st.columns(2)
+    with _pc1:
+        _main_avg = st.number_input(
+            "평균 매수가 (원)", min_value=0,
+            value=int(user_entry_price) if user_entry_price > 0 else 0,
+            step=1000, key="pos_avg_main",
+            help="보유 판단에만 사용합니다 — 예측·적정가·점수에는 절대 반영되지 않습니다.")
+    with _pc2:
+        _main_qty = st.number_input(
+            "보유 수량 (주)", min_value=0,
+            value=int(user_quantity) if user_quantity > 0 else 0,
+            step=10, key="pos_qty_main")
+    if _main_avg > 0:
+        user_entry_price, user_quantity = _main_avg, _main_qty
+else:
+    user_entry_price, user_quantity = 0, 0
+
 _easy = q_engine.build_easy_advice(
     four_scores, verdict, realtime_price,
     user_avg=(user_entry_price if user_entry_price > 0 else None),
@@ -2626,7 +2650,7 @@ with _ec2:
         <div style='background:#141416; border:2px dashed #2c2c2e; border-radius:14px; padding:14px 16px; height:100%;'>
           <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>💼 보유 중이라면</p>
           <p style='margin:6px 0; font-size:0.95rem; color:#d2d2d7; line-height:1.6;'>
-            사이드바의 <b>내 포지션 입력</b>에 평균 매수가와 수량을 넣으면<br>
+            위에서 <b>'보유 중'</b>을 선택하고 평균 매수가를 넣으면<br>
             보유·일부 매도·손절·추가 매수 여부를 <b>내 평단 기준</b>으로 알려드립니다.</p>
         </div>""", unsafe_allow_html=True)
 st.caption("⚠️ 신규 매수 기준과 보유자 기준은 서로 다릅니다 — 신규 진입가와 보유자 손절가가 "
@@ -3288,61 +3312,52 @@ if user_entry_price > 0 and user_quantity > 0:
         {water_msg}
     </div>
     """, unsafe_allow_html=True)
-# 🏆 [상단 핵심 카드 5종 (Section 17 UI 표준)]
+# 세부 점수 — v2 3단계 위계: 큰 숫자 카드 5장 대신 작은 수평 막대 (종합점수는
+# 위 배너 한 곳뿐이며, 여기는 관찰용 세부 지표다)
 st.markdown('<div id="nav-scores"></div>', unsafe_allow_html=True)
-st.markdown("### 퀀트 세부 점수 & 가격 위치 전광판")
-m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
 
-with m_col1:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #ffd60a; border-radius: 14px; padding: 14px; text-align: center;'>
-        <h4 style='color: #86868b !important; margin: 0; font-size: 0.85rem;'>🏆 종목 기본 매력도</h4>
-        <h1 style='color: #f5f5f7; margin: 4px 0; font-size: 1.8rem;'>{four_scores['stock_quality_score']} <span style='font-size:0.8rem; color:#86868b;'>/ 100</span></h1>
-        <p style='color: #30d158; margin: 0; font-weight: bold; font-size: 0.8rem;'>{four_scores['stock_quality_grade']}</p>
-        <p style='color: #86868b; margin: 2px 0 0 0; font-size: 0.7rem;'>기업 가치 및 펀더멘털</p>
-    </div>
-    """, unsafe_allow_html=True)
 
-with m_col2:
-    fit_color = "#30d158" if four_scores['trading_timing_score']>=70 else ("#ff9f0a" if four_scores['trading_timing_score']>=50 else "#ff453a")
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #ff375f; border-radius: 14px; padding: 14px; text-align: center;'>
-        <h4 style='color: #86868b !important; margin: 0; font-size: 0.85rem;'>🎯 현재 매매 적합도</h4>
-        <h1 style='color: #f5f5f7; margin: 4px 0; font-size: 1.8rem;'>{four_scores['trading_timing_score']} <span style='font-size:0.8rem; color:#86868b;'>/ 100</span></h1>
-        <p style='color: {fit_color}; margin: 0; font-weight: bold; font-size: 0.8rem;'>{four_scores['trading_action']}</p>
-        <p style='color: #86868b; margin: 2px 0 0 0; font-size: 0.7rem;'>진입 타이밍 & 기대값</p>
-    </div>
-    """, unsafe_allow_html=True)
+def _score_bar_row(label, val, note=''):
+    v = None
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        pass
+    if v is None:
+        bar, txt, col = 0, '미산출', _TOK['tx2']
+    else:
+        bar = max(0, min(100, v))
+        txt = f"{v:.0f}"
+        col = _TOK['pos'] if v >= 70 else (_TOK['warn'] if v >= 50 else _TOK['neg'])
+    return (
+        f"<div style='display:flex; align-items:center; gap:12px; margin:7px 0;'>"
+        f"<span style='width:150px; font-size:13px; color:{_TOK['tx2']};'>{label}</span>"
+        f"<span style='flex:1; height:6px; background:{_TOK['border']}; border-radius:3px; overflow:hidden;'>"
+        f"<span style='display:block; width:{bar}%; height:100%; background:{col};'></span></span>"
+        f"<span style='width:36px; text-align:right; font-size:13px; font-weight:700; color:{_TOK['tx1']};'>{txt}</span>"
+        f"<span style='width:220px; font-size:12px; color:{_TOK['tx2']};'>{note}</span>"
+        f"</div>")
 
-with m_col3:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #2997ff; border-radius: 14px; padding: 14px; text-align: center;'>
-        <h4 style='color: #86868b !important; margin: 0; font-size: 0.85rem;'>🛡️ 분석 신뢰도</h4>
-        <h1 style='color: #f5f5f7; margin: 4px 0; font-size: 1.8rem;'>{four_scores['analysis_confidence']} <span style='font-size:0.8rem; color:#86868b;'>/ 100</span></h1>
-        <p style='color: #2997ff; margin: 0; font-weight: bold; font-size: 0.8rem;'>{four_scores['conf_grade']}</p>
-        <p style='color: #86868b; margin: 2px 0 0 0; font-size: 0.7rem;'>데이터·통계 무결성</p>
-    </div>
-    """, unsafe_allow_html=True)
 
-with m_col4:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #00f0ff; border-radius: 14px; padding: 14px; text-align: center;'>
-        <h4 style='color: #00f0ff !important; margin: 0; font-size: 0.85rem;'>🧪 전략 품질점수 (표본외)</h4>
-        <h1 style='color: #00f0ff; margin: 4px 0; font-size: 1.8rem;'>{fmt_num(four_scores.get('strategy_quality_score'), spec='.0f', na='—')} <span style='font-size:0.8rem; color:#86868b;'>/ 100</span></h1>
-        <p style='color: #ff9f0a; margin: 0; font-weight: bold; font-size: 0.8rem;'>{four_scores['sq_grade']}</p>
-        <p style='color: #86868b; margin: 2px 0 0 0; font-size: 0.7rem;'>OOS Sharpe {fmt_num((snap.get('oos_result') or {}).get('sharpe'), spec='.2f')} | OOS MDD {fmt_pct((snap.get('oos_result') or {}).get('mdd_pct'))} → 상한 {four_scores.get('sq_cap')}점</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with m_col5:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #bf5af2; border-radius: 14px; padding: 14px; text-align: center;'>
-        <h4 style='color: #86868b !important; margin: 0; font-size: 0.85rem;'>💎 현재 가격 위치</h4>
-        <h1 style='color: #bf5af2; margin: 4px 0; font-size: 1.5rem;'>{price_pos['range_name']}</h1>
-        <p style='color: #f5f5f7; margin: 0; font-weight: bold; font-size: 0.8rem;'>52주 범위 {price_pos['range_pos_pct']}%</p>
-        <p style='color: #86868b; margin: 2px 0 0 0; font-size: 0.7rem;'>독립 가격 위치 산출</p>
-    </div>
-    """, unsafe_allow_html=True)
+_sq_note = (f"OOS Sharpe {fmt_num((snap.get('oos_result') or {}).get('sharpe'), spec='.2f')} · "
+            f"상한 {four_scores.get('sq_cap')}점")
+st.markdown(f"""
+<div style='background:#1c1c1e; border:1px solid #2c2c2e; border-radius:12px;
+            padding:20px 24px; margin-bottom:12px;'>
+  <p style='margin:0 0 8px 0; font-size:15px; font-weight:800; color:{_TOK['tx1']};'>
+    세부 점수 <span style='font-size:12px; font-weight:600; color:{_TOK['tx2']};'>
+    — 종합점수 산식은 위 '이 점수는 이렇게 나왔습니다' 표가 유일합니다</span></p>
+  {_score_bar_row('종목 기본 매력도', four_scores['stock_quality_score'], four_scores['stock_quality_grade'])}
+  {_score_bar_row('현재 매매 적합도', four_scores['trading_timing_score'], four_scores['trading_action'])}
+  {_score_bar_row('분석 신뢰도', four_scores['analysis_confidence'], four_scores['conf_grade'])}
+  {_score_bar_row('전략 품질 (표본외)', four_scores.get('strategy_quality_score'), _sq_note)}
+  <div style='display:flex; align-items:center; gap:12px; margin:7px 0;'>
+    <span style='width:150px; font-size:13px; color:{_TOK['tx2']};'>현재 가격 위치</span>
+    <span style='flex:1; font-size:13px; color:{_TOK['tx1']}; font-weight:700;'>
+      {price_pos['range_name']} <span style='color:{_TOK['tx2']}; font-weight:600;'>· 52주 범위 {price_pos['range_pos_pct']}%</span></span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 # # 🏢 [주요 가점·감점 및 기여도 세부 보기 (Section 18)]
 with st.expander("📊 [클릭] 4대 분리 점수별 주요 긍정 기여 및 제한 요인 세부 내역 보기", expanded=False):
