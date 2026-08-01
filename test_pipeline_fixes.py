@@ -3142,6 +3142,35 @@ check("이슈=지금/업데이트=과거 역할 구분 문서화",
                           encoding='utf-8').read())
 
 
+section("67. 무료 언어모델 주간 관찰 — 자동 갱신 · 관찰 전용 · 전송 금지")
+
+import llm_watch as lw67
+
+check("주단위 TTL (7일)", lw67._TTL_SECONDS == 7 * 24 * 3600)
+_lw_src = open(_os.path.join(PROJ, "llm_watch.py"), encoding='utf-8').read()
+check("관찰 전용 — 자동 연결 금지 명문화", '자동 연결하지 않는다' in _lw_src
+      and '§58' in _lw_src)
+check("전송 금지 — GET 조회뿐", '아무것도 보내지 않는다' in _lw_src)
+check("실패 시 옛 캐시 유지 (빈 화면·날조 금지)", 'stale' in _lw_src)
+check("배포용 캐시 동봉", _os.path.exists(
+    _os.path.join(PROJ, "data", "llm_watch.json")))
+with open(_os.path.join(PROJ, "data", "llm_watch.json"),
+          encoding='utf-8') as _f67:
+    _lwd67 = _json64.load(_f67)
+check("관찰 데이터 — 모델·라이선스·갱신일 구조",
+      len(_lwd67.get('models', [])) >= 5
+      and all(k in _lwd67['models'][0] for k in ('id', 'downloads', 'license'))
+      and _lwd67.get('fetched_at'))
+check("웹앱 관찰 패널 — 포트폴리오 전송 금지 명시",
+      '무료 언어모델 주간 관찰' in _w66.replace(_w66, open(
+          _os.path.join(PROJ, "web_app.py"), encoding='utf-8').read())
+      and '어떤 외부 모델에도 전송하지 않습니다' in open(
+          _os.path.join(PROJ, "web_app.py"), encoding='utf-8').read())
+check("운영 문서 주간 항목", '무료 언어모델 관찰' in open(
+    _os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md"),
+    encoding='utf-8').read())
+
+
 print()
 print("=" * 72)
 if FAILURES:

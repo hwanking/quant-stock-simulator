@@ -1,0 +1,79 @@
+{
+ "fetched_at": "2026-08-01 19:46",
+ "fetched_ts": 1785581219.0816422,
+ "source": "HuggingFace 공개 모델 API (text-generation · 다운로드순 · 무인증 GET)",
+ "models": [
+  {
+   "id": "Qwen/Qwen3-0.6B",
+   "downloads": 28290155,
+   "likes": 1471,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "facebook/opt-125m",
+   "downloads": 17259914,
+   "likes": 286,
+   "license": "other"
+  },
+  {
+   "id": "Qwen/Qwen3-8B",
+   "downloads": 15076048,
+   "likes": 1266,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "Qwen/Qwen2.5-1.5B-Instruct",
+   "downloads": 13883160,
+   "likes": 786,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "openai-community/gpt2",
+   "downloads": 13392389,
+   "likes": 3383,
+   "license": "mit"
+  },
+  {
+   "id": "Qwen/Qwen2.5-7B-Instruct",
+   "downloads": 11883439,
+   "likes": 1451,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+   "downloads": 10255063,
+   "likes": 526,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "meta-llama/Llama-3.2-1B-Instruct",
+   "downloads": 10002758,
+   "likes": 1549,
+   "license": "llama3.2"
+  },
+  {
+   "id": "deepseek-ai/DeepSeek-R1",
+   "downloads": 9399065,
+   "likes": 13530,
+   "license": "mit"
+  },
+  {
+   "id": "Qwen/Qwen3-32B",
+   "downloads": 9171663,
+   "likes": 727,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "openai/gpt-oss-20b",
+   "downloads": 8250813,
+   "likes": 4866,
+   "license": "apache-2.0"
+  },
+  {
+   "id": "meta-llama/Llama-3.1-8B-Instruct",
+   "downloads": 7809391,
+   "likes": 6443,
+   "license": "llama3.1"
+  }
+ ]
+}

@@ -3287,6 +3287,28 @@ with st.expander("자주 겪는 문제와 대처법 · 문제 신고 (펼쳐보�
 업데이트 내역은 위 '최근 업데이트'에서, 알려진 한계는 '주요 이슈'에서 확인할 수 있습니다.
 """)
 
+# ── 무료 언어모델 주간 관찰 — 7일마다 자동 갱신 (관찰 전용·채택은 검증 후) ────
+try:
+    import llm_watch as _lw
+    _lw_data = _lw.get_llm_watch()
+except Exception:
+    _lw_data = {'models': []}
+if _lw_data.get('models'):
+    with st.expander(f"무료 언어모델 주간 관찰 ({len(_lw_data['models'])}종 · "
+                     f"갱신 {_lw_data.get('fetched_at', '—')})", expanded=False):
+        st.caption("공개 API에서 **주 1회 자동 갱신**합니다 (우리 데이터는 아무것도 "
+                   "보내지 않는 조회 전용). 여기 나온 모델을 파이프라인에 자동 연결하지 "
+                   "않습니다 — 채택은 다른 방법과 똑같이 표본외·블라인드 검증을 통과해야 "
+                   "하며, **포트폴리오 정보는 어떤 외부 모델에도 전송하지 않습니다.**"
+                   + (" ⚠️ 이번 주 재조회 실패 — 마지막 성공 캐시를 표시 중입니다."
+                      if _lw_data.get('stale') else ""))
+        st.dataframe(pd.DataFrame([{
+            '모델': m['id'], '다운로드': f"{m['downloads']:,}",
+            '좋아요': m['likes'], '라이선스': m['license'],
+        } for m in _lw_data['models']]), use_container_width=True,
+            hide_index=True)
+        st.caption(f"출처: {_lw_data.get('source', '')}")
+
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:
     import prediction_log as _plog
