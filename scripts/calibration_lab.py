@@ -50,6 +50,15 @@ TICKERS = [
     "111770.KS",  # 영원무역
 ]
 
+#: 홀드아웃 — 산식(기하·필터)을 위 8종목으로 진단·수정한 뒤, 손대지 않은 종목에서
+#: 같은 성적이 나오는지 확인한다. 여기서 무너지면 과적합이다.
+HOLDOUT_TICKERS = [
+    "000660.KS",  # SK하이닉스
+    "005380.KS",  # 현대차
+    "035420.KS",  # NAVER
+    "036570.KS",  # 엔씨소프트
+]
+
 #: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
 def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25):
     dates = list(prices_df['trade_date'].astype(str))
@@ -90,7 +99,7 @@ def main(limit=200):
 
     todo = []
     price_cache = {}
-    for tk in TICKERS:
+    for tk in TICKERS + HOLDOUT_TICKERS:
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
                 symbol=tk, start_date='2020-01-01', end_date=None)
@@ -115,6 +124,7 @@ def main(limit=200):
             assert snap.get('is_replay'), "리플레이 모드가 아니면 누수다"
             row = {
                 'ticker': tk, 'date': d,
+                'cohort': 'holdout' if tk in HOLDOUT_TICKERS else 'main',
                 'price': float(fs.get('curr_price') or snap['rt_price']),
                 'score': int(fs.get('final_action_score')),
                 'action_title': fs.get('final_action_title'),
@@ -210,10 +220,37 @@ def main(limit=200):
         lift(lambda r: '초과' not in str(r.get('entry_zone') or ''), "적정가 이하 진입"),
     ]
 
+    # ── 진입 후보 KPI — 앱이 실제로 '진입해도 된다'고 보는 조건의 성적 ────────
+    # (적정가 이하 진입 & 순기대수익 양수 — 이 둘은 앱의 매수 거부권 조건과 동일)
+    def _is_entry(r):
+        return ('초과' not in str(r.get('entry_zone') or '')
+                and (r.get('net_expected') or -1) > 0)
+
+    print("\n" + "=" * 74)
+    print("진입 후보 KPI (적정가 이하 & 순기대수익 양수) — 코호트별")
+    print("=" * 74)
+    entry_out = {}
+    for cohort in ('main', 'holdout', 'all'):
+        sub = [g for g in decided
+               if _is_entry(g['row'])
+               and (cohort == 'all' or g['row'].get('cohort', 'main') == cohort)]
+        hitc = sum(1 for g in sub if g['grade']['outcome'] == 'TARGET')
+        rets = [g['grade']['return_pct'] for g in sub]
+        hr = hitc / len(sub) * 100 if sub else None
+        wl = wilson_low(hitc, len(sub)) if sub else None
+        avg = float(np.mean(rets)) if rets else None
+        entry_out[cohort] = {'n': len(sub), 'hit': hitc, 'hit_rate': hr,
+                             'wilson_low': wl, 'avg_return': avg}
+        print(f"  {cohort:<8} n={len(sub):<3} 적중률 "
+              f"{hr if hr is None else round(hr, 1)}% "
+              f"(Wilson 하한 {wl if wl is None else round(wl, 1)}%) "
+              f"평균수익 {avg if avg is None else round(avg, 2)}%")
+
     calib = {
         'generated_from': f"{len(rows)}건 가상 판정 · 판정 완료 {len(decided)}건",
         'bands': bands_out,
         'lifts': lifts,
+        'entry_candidates': entry_out,
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

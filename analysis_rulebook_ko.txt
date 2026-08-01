@@ -10,6 +10,17 @@ currency_krx = "KRW"
 currency_us = "USD"
 currency_fx = "USD/KRW"
 
+# 실행 가격 레벨 — 가상 백테스트 112회 진단으로 재설계 (2026-08-01)
+# 진단: 목표/손절 비율 2.0 → 무추세 선도달확률 이론값 33% — 기하 자체가 적중률 상한.
+# 처방(트레이더 관행): 손절은 변동성 2σ 바닥(노이즈 손절 방지, Wilder/Kaufman),
+# 1차 목표는 '1차 분할익절'로 재정의해 손절거리×0.7 (무추세 이론 P≈59%),
+# 구조적 저항 목표(기존 1차 로직)는 2차 목표가 담당한다.
+[RULES_EXECUTION_LEVELS]
+stop_vol_mult = 2.0
+stop_floor_pct = 3.0
+target1_of_stop = 0.7
+target1_vol_floor_mult = 0.8
+
 # 원시 종합점수 = 기본매력 * w_quality + 매매적합 * w_timing + 리스크 * w_risk
 [RULES_TOP_LEVEL_WEIGHTS]
 weight_stock_quality = 0.35

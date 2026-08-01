@@ -2712,18 +2712,27 @@ class QuantIndicatorsEngine:
         vol_20 = float(tech_df['vol_20'].iloc[-1]) if 'vol_20' in tech_df.columns else 0.02
 
         # 목표가·손절가를 먼저 확정하고 손익비를 그로부터 산출한다.
-        # (구버전은 reward_risk_ratio = 1.5 고정 Mock — 리스크 점수 30%와 기회점수 20%가 상수였음)
+        # 산식은 규칙집 [RULES_EXECUTION_LEVELS] 가 단일 출처다.
         #
-        # 1) 손절: 변동성 1.5σ 기준. TDST 지지가 0.5R~1.5R 구간에 있으면 그 지지선을 쓴다.
-        base_risk = curr_price * max(0.025, vol_20 * 1.5)
+        # 가상 백테스트 112회 진단(2026-08-01): 종전 기하(목표/손절 비율 2.0)는
+        # 무추세 선도달확률 이론값이 33% — 적중률의 상한을 기하가 막고 있었다.
+        # 재설계: 손절은 변동성 2σ 바닥(노이즈 손절 방지), 1차 목표는 '1차 분할익절'
+        # (손절거리×0.7, 무추세 이론 P≈59%), 구조적 저항 목표는 2차 목표로 이동.
+        _XL = RULEBOOK.get('RULES_EXECUTION_LEVELS', {})
+        _stop_mult = float(_XL.get('stop_vol_mult', 2.0))
+        _stop_floor = float(_XL.get('stop_floor_pct', 3.0)) / 100.0
+        _t1_of_stop = float(_XL.get('target1_of_stop', 0.7))
+        _t1_vol_floor = float(_XL.get('target1_vol_floor_mult', 0.8))
+
+        # 1) 손절: 변동성 2σ 바닥. TDST 지지가 0.5R~1.5R 구간에 있으면 그 지지선을 쓴다.
+        base_risk = curr_price * max(_stop_floor, vol_20 * _stop_mult)
         stop_loss_price = float(curr_price - base_risk)
         if tdst_available and (curr_price - 1.5 * base_risk) <= tdst_support <= (curr_price - 0.5 * base_risk):
             stop_loss_price = float(tdst_support)
         risk_abs = curr_price - stop_loss_price
 
-        # 2) 1차 목표: 가격 구조상 가장 가까운 저항(TDST 저항 / 20일 고가 / 60일 고가) 중
-        #    현재가 +1R 이상인 최근접 지점. 없으면 2R. 3R을 넘지 않도록 제한.
-        #    (저항선을 무제한으로 목표가로 쓰면 손익비가 비현실적으로 부풀려진다)
+        # 2) 2차 목표(구조): 가장 가까운 저항(TDST 저항 / 20일 고가 / 60일 고가) 중
+        #    현재가 +1R 이상인 최근접 지점. 없으면 2R. 3R 제한.
         if risk_abs > 0:
             highs_series = tech_df['high'] if 'high' in tech_df.columns else tech_df['adj_close']
             resistance_candidates = []
@@ -2737,15 +2746,26 @@ class QuantIndicatorsEngine:
             lo, hi = curr_price + 1.0 * risk_abs, curr_price + 3.0 * risk_abs
             in_window = [r for r in resistance_candidates if lo <= r <= hi]
             if in_window:
-                target_tech_1st = float(min(in_window))       # 가장 가까운 저항이 1차 목표
+                target_struct = float(min(in_window))         # 가장 가까운 구조적 저항
             else:
-                target_tech_1st = float(curr_price + 2.0 * risk_abs)
+                target_struct = float(curr_price + 2.0 * risk_abs)
         else:
-            target_tech_1st = float(curr_price * 1.05)
-        target_tech_2nd = float(curr_price + (target_tech_1st - curr_price) * 1.8)
+            target_struct = float(curr_price * 1.05)
+
+        # 3) 1차 목표(분할익절): 손절거리 × 0.7 — 도달확률 우선.
+        #    구조적 저항이 그보다 가까우면 그 저항을 쓰되, 변동성 0.8σ 안쪽(노이즈)으로는
+        #    내려가지 않는다. 2차 목표보다 위로 올라가지도 않는다.
+        if risk_abs > 0:
+            _t1_dist = min(_t1_of_stop * risk_abs, target_struct - curr_price)
+            _t1_dist = max(_t1_dist, _t1_vol_floor * vol_20 * curr_price)
+            target_tech_1st = float(min(curr_price + _t1_dist, target_struct))
+        else:
+            target_tech_1st = float(curr_price * 1.03)
+        target_tech_2nd = float(max(target_struct, target_tech_1st))
         atr_risk_level = float(curr_price - base_risk * 2.0)
 
-        reward_abs = target_tech_1st - curr_price
+        # 손익비는 구조적 목표(2차) 기준 — 1차는 분할익절이라 손익비 지표가 아니다
+        reward_abs = target_tech_2nd - curr_price
         reward_risk_ratio = round(float(reward_abs / risk_abs), 2) if risk_abs > 0 else None
 
         if reward_risk_ratio is None:  reward_risk_score = 30
@@ -3210,13 +3230,13 @@ class QuantIndicatorsEngine:
             'market_adjustment_pct': float(market_adjustment_pct),
             'fair_value_confidence': float(fair_value_confidence),
             'target_tech_1st': target_tech_1st,
-            'target_tech_1st_note': '1차 기술적 목표가',
+            'target_tech_1st_note': '1차 분할익절 목표 (도달확률 우선 — 손절거리 0.7배·변동성 기반)',
             'target_tech_2nd': target_tech_2nd,
-            'target_tech_2nd_note': '2차 기술적 목표가',
+            'target_tech_2nd_note': '2차 구조적 목표 (최근접 저항 1R~3R)',
             'target_trajectory_20d': float(curr_price * 1.03),
             'target_trajectory_20d_note': '20일 궤적 목표가',
             'stop_loss_price': stop_loss_price,
-            'stop_loss_note': '기술적 손절가',
+            'stop_loss_note': '변동성 2σ 손절 (노이즈 손절 방지)',
             'atr_risk_level': atr_risk_level,
             'atr_risk_level_note': '위험 관리 구간',
             

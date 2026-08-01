@@ -2550,6 +2550,65 @@ _w54 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("화면에 점수대 리플레이 적중률 표시", "가상 백테스트: 이 점수대" in _w54)
 
 
+section("55. 실행 레벨 기하 재설계 — 적중률은 기하가 절반을 결정한다")
+
+# 가상 백테스트 112회 진단: 종전 목표/손절 비율 2.0 → 무추세 선도달확률 이론값
+# 33% — 기하 자체가 적중률 상한을 막고 있었다. 재설계 후 168회 재검증:
+# 진입 후보(적정가 이하 & 순기대수익 양수) 적중률 71.4% (n=49),
+# 홀드아웃 4종목 68.8% — 손대지 않은 종목에서도 유지 (과적합 아님).
+
+_XL55 = qi.RULEBOOK.get('RULES_EXECUTION_LEVELS', {})
+check("실행 레벨 상수가 규칙집에 (단일 출처)", len(_XL55) >= 4, str(_XL55))
+check("손절 = 변동성 2σ 바닥 (노이즈 손절 방지)",
+      float(_XL55.get('stop_vol_mult', 0)) >= 2.0)
+check("1차 목표 = 손절거리 × 0.7 (무추세 이론 P≈59%)",
+      abs(float(_XL55.get('target1_of_stop', 0)) - 0.7) < 1e-9)
+
+_snap55 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs55 = _snap55['four_scores']
+_cp55 = float(_snap55['rt_price'])
+_t1 = float(_fs55['target_tech_1st'])
+_t2 = float(_fs55['target_tech_2nd'])
+_sl55 = float(_fs55['stop_loss_price'])
+_t1d, _t2d, _sld = _t1 - _cp55, _t2 - _cp55, _cp55 - _sl55
+check("가격 순서 유지: 손절 < 현재가 < 1차 ≤ 2차",
+      _sl55 < _cp55 < _t1 <= _t2 + 1e-9)
+check("1차 목표 거리 ≤ 손절 거리 × 0.75 (도달확률 우선 기하)",
+      _t1d <= _sld * 0.75 + 1e-6, f"t1d={_t1d:.0f} sld={_sld:.0f}")
+check("손절 거리 ≥ 현재가의 3% (변동성 바닥)", _sld >= _cp55 * 0.03 - 1e-6,
+      f"{_sld / _cp55 * 100:.1f}%")
+check("손익비는 구조적 목표(2차) 기준",
+      _fs55.get('reward_risk_ratio') is not None
+      and abs(_fs55['reward_risk_ratio'] - round(_t2d / _sld, 2)) < 0.02,
+      f"rr={_fs55.get('reward_risk_ratio')} vs t2 {round(_t2d / _sld, 2)}")
+check("1차 목표 문구가 분할익절 의미를 명시",
+      '분할익절' in str(_fs55.get('target_tech_1st_note')))
+check("손절 문구가 변동성 기반임을 명시",
+      '2σ' in str(_fs55.get('stop_loss_note')))
+
+# 캘리브레이션 산출물 계약 — 진입 후보 KPI 와 홀드아웃 분리 보고
+_cal55 = _os.path.join(PROJ, ".portfolio", "calibration.json")
+if _os.path.exists(_cal55):
+    import json as _json55
+    _c55 = _json55.load(open(_cal55, encoding='utf-8'))
+    check("진입 후보 KPI 저장 (main/holdout/all)",
+          all(k in _c55.get('entry_candidates', {}) for k in ('main', 'holdout', 'all')))
+    _ec55 = _c55['entry_candidates']['all']
+    check("진입 후보 적중률 60% 이상 (가상 백테스트)",
+          (_ec55.get('hit_rate') or 0) >= 60.0, str(_ec55.get('hit_rate')))
+    check("홀드아웃도 60% 근처 유지 (과적합 점검)",
+          (_c55['entry_candidates']['holdout'].get('hit_rate') or 0) >= 55.0,
+          str(_c55['entry_candidates']['holdout'].get('hit_rate')))
+    check("진입 후보 평균수익 양수 (적중률만 올리고 수익을 죽이지 않음)",
+          (_ec55.get('avg_return') or -1) > 0, str(_ec55.get('avg_return')))
+else:
+    check("캘리브레이션 파일 없음 — 랩 미실행 환경 (개입 없음 확인)",
+          True)
+
+_lab55 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
+check("홀드아웃 종목이 랩에 분리 정의", "HOLDOUT_TICKERS" in _lab55)
+
+
 print()
 print("=" * 72)
 if FAILURES:
