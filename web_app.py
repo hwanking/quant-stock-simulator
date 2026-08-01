@@ -2242,7 +2242,25 @@ def _load_case_ledger():
         return None
 
 
-# 🚨 [사용자 요청] 실시간 글로벌/국내 주요 증시 지수 전광판 최상단배치
+# 홈 1순위: 개장 전 한 줄 결론 (v2 — 지수보다 먼저, 리포트 없으면 만들지 않는다)
+try:
+    import premarket as _pm_home
+    _pm_today = st.session_state.get('premarket_report') or _pm_home.load_today_report()
+except Exception:
+    _pm_today = None
+if _pm_today and _pm_today.get('picks'):
+    _cls_cnt = {}
+    for _pk in _pm_today['picks']:
+        _cls_cnt[_pk.get('reco_class', '?')] = _cls_cnt.get(_pk.get('reco_class', '?'), 0) + 1
+    _buyable = _cls_cnt.get('오늘 사도 되는 종목', 0) + _cls_cnt.get('조건부로 사도 되는 종목', 0)
+    _oneline = ("오늘은 매수 후보가 있습니다 — 아래 '오늘의 추천'에서 조건을 확인하세요."
+                if _buyable else
+                "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
+    st.info(f"**개장 전 한 줄 결론** · {_oneline}  \n"
+            + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
+            + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
+
+# 시장 지수 — 배경정보 (v2: 홈의 주인공이 아니다)
 m_indices = engine_init.get_market_indices()
 idx_col1, idx_col2, idx_col3, idx_col4 = st.columns(4)
 
@@ -2291,24 +2309,6 @@ if _home_cal.get('total_cases'):
                   f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0)}건", delta_color="off")
     st.caption("🧪 가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
                "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
-
-# 개장 전 한 줄 결론 — 오늘 고정된 리포트가 있을 때만 (없으면 만들어내지 않는다)
-try:
-    import premarket as _pm_home
-    _pm_today = st.session_state.get('premarket_report') or _pm_home.load_today_report()
-except Exception:
-    _pm_today = None
-if _pm_today and _pm_today.get('picks'):
-    _cls_cnt = {}
-    for _pk in _pm_today['picks']:
-        _cls_cnt[_pk.get('reco_class', '?')] = _cls_cnt.get(_pk.get('reco_class', '?'), 0) + 1
-    _buyable = _cls_cnt.get('오늘 사도 되는 종목', 0) + _cls_cnt.get('조건부로 사도 되는 종목', 0)
-    _oneline = ("오늘은 매수 후보가 있습니다 — 아래 '오늘의 추천'에서 조건을 확인하세요."
-                if _buyable else
-                "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
-    st.info(f"**🌅 개장 전 한 줄 결론** · {_oneline}  \n"
-            + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
-            + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
 with st.spinner(f"[{resolved_name}] 동적 무결성 점수 및 시계열 연산 중..."):
