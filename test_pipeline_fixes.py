@@ -2609,6 +2609,42 @@ _lab55 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='ut
 check("홀드아웃 종목이 랩에 분리 정의", "HOLDOUT_TICKERS" in _lab55)
 
 
+section("56. 확장 케이스 스터디(327건) 반영 — 52주 저점권 상한 · 추천 정렬·배지")
+
+# 24종목 × 14기준일 = 336회(판정 327건) 확장 리플레이의 실증만 반영한다:
+#   · 52주 저점권(<30%) 매수 적중률 57.1%(−5.5%p) vs 고점권 66.4%(+3.7%p)
+#     — George–Hwang(2004) 52주 고점 모멘텀과 일치 → 저점권 상한 64점 신설
+#   · 진입 후보(적정가 이하 & 순기대수익 양수) 68.0%(+5.3%p) → 추천 정렬 우선
+#   · RSI 침체/DeMARK 극단값은 리프트가 없거나 소표본 → 반영하지 않음 (정직)
+
+_XL56 = qi.RULEBOOK.get('RULES_EXECUTION_LEVELS', {})
+check("52주 저점권 상수는 규칙집이 단일 출처",
+      'range_low_pct' in _XL56 and 'range_low_cap' in _XL56)
+_q56src = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("저점권 상한이 실측 근거를 명시", "리플레이 327건 실측" in _q56src)
+check("저점권은 상한만 — 고점권 가점 없음",
+      "range_low_cap" in _q56src and "range_high_bonus" not in _q56src)
+
+# 실사례 발동: 삼성전자 2025-04-07 은 52주 하위 8.7% 였다 (리플레이)
+_q56 = qi.QuantIndicatorsEngine()
+_s56 = _q56.run_full_pipeline("005930.KS", "2025-04-07", b_engine=engine, rho_cutoff=0.80)
+check("저점권 리플레이 사례에서 상한 발동",
+      '52주 범위 하위' in str(_s56['four_scores'].get('gate_reason')),
+      str(_s56['four_scores'].get('gate_reason'))[:80])
+# 고점권 사례에서는 발동하지 않는다 (엔씨소프트 2026-01-30 = 88.4%)
+_s56b = _q56.run_full_pipeline("036570.KS", "2026-01-30", b_engine=engine, rho_cutoff=0.80)
+check("고점권에서는 미발동",
+      '52주 범위 하위' not in str(_s56b['four_scores'].get('gate_reason')))
+
+# 추천주(스캐너) — 진입 후보 우선 정렬 + 차트 배지
+check("스캔 행에 entry_candidate 노출", '"entry_candidate"' in _q56src)
+check("스캔 행에 DeMARK 상태 노출", '"demark_entry_state"' in _q56src)
+check("정렬 1순위 = 진입 후보", 'x.get("entry_candidate")' in _q56src)
+_w56 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("카드에 진입 후보 배지(🎯)", "_entry_badge" in _w56)
+check("카드 월봉10선 열에 DeMARK 배지 병기", "⏱️매수신호" in _w56)
+
+
 print()
 print("=" * 72)
 if FAILURES:

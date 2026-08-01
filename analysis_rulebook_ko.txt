@@ -20,6 +20,10 @@ stop_vol_mult = 2.0
 stop_floor_pct = 3.0
 target1_of_stop = 0.7
 target1_vol_floor_mult = 0.8
+# 52주 저점권 매수 제한 — George–Hwang(2004) 52주 고점 모멘텀의 역면.
+# 자체 리플레이 327건 실측: 저점권(<30%) 적중 57.1%(-5.5%p), 고점권 66.4%(+3.7%p).
+range_low_pct = 30.0
+range_low_cap = 64
 
 # 원시 종합점수 = 기본매력 * w_quality + 매매적합 * w_timing + 리스크 * w_risk
 [RULES_TOP_LEVEL_WEIGHTS]

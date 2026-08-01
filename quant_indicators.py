@@ -3012,6 +3012,27 @@ class QuantIndicatorsEngine:
                 f"(종목 {rel_mom['stock']:+.0f}% vs {rel_mom['market']} "
                 f"{rel_mom['index']:+.0f}%) → 상한 64점")
 
+        # 52주 저점권 매수 제한 — George–Hwang(2004) 52주 고점 모멘텀의 역면.
+        # 자체 리플레이 327건 실측: 저점권(<30%) 적중 57.1%(−5.5%p), 고점권 66.4%(+3.7%p).
+        # '떨어지는 칼'은 확률이 낮다 — 저점권 신규 매수의 확신을 낮춘다 (가점 없음).
+        range_low_cap = 100
+        range_pos_52w = None
+        try:
+            _hi_col = tech_df['high'] if 'high' in tech_df.columns else tech_df['adj_close']
+            _lo_col = tech_df['low'] if 'low' in tech_df.columns else tech_df['adj_close']
+            _hi252 = float(_hi_col.tail(252).max())
+            _lo252 = float(_lo_col.tail(252).min())
+            if _hi252 > _lo252 > 0:
+                range_pos_52w = (curr_price - _lo252) / (_hi252 - _lo252) * 100.0
+                _rlow = float(_XL.get('range_low_pct', 30.0))
+                if range_pos_52w < _rlow:
+                    range_low_cap = int(_XL.get('range_low_cap', 64))
+                    cap_reasons.append(
+                        f"52주 범위 하위 {range_pos_52w:.0f}% (저점권 낙폭 추격 제한 — "
+                        f"리플레이 327건 실측 적중률 −5.5%p) → 상한 {range_low_cap}점")
+        except Exception:
+            range_low_cap = 100
+
         # 실전 적중률 자기보정 상한 — 판정 성적표에서 판정 완료 5건 이상이고
         # 적중률이 낮으면 확신을 낮춘다 (TipRanks 트랙레코드 가중 방식).
         track = getattr(self, '_track_summary', None)
@@ -3036,6 +3057,7 @@ class QuantIndicatorsEngine:
             m10_overheat_cap,
             context_cap,
             momentum_cap,
+            range_low_cap,
             track_cap
         )
 
@@ -4477,18 +4499,29 @@ class QuantIndicatorsEngine:
                 "m10_status": scores.get('m10_status', '위'),
                 "m10_disparity": scores.get('m10_disparity', 0.0),
                 "m10_trend_eval": scores.get('m10_trend_eval', '양호'),
+                # 차트 관점 배지 — 월봉 10선 위 여부 · DeMARK 매수 신호 상태.
+                # 진입 후보 = 적정가 이하 진입 & 순기대수익 양수 (리플레이 327건에서
+                # 적중률 68.0%, 기준 대비 +5.3%p 로 실증된 결합 조건)
+                "m10_above": bool(float(scores.get('m10_disparity', 0) or 0) >= 0),
+                "demark_entry_state": ((scores.get('demark_entry') or {}).get('state')),
+                "entry_candidate": bool(
+                    '초과' not in str(scores.get('entry_zone') or '')
+                    and (scores.get('net_expected_return') or -1) > 0),
                 "top3_block_reasons": scores.get('top3_block_reasons', []),
                 "scores_obj": scores,
                 # [§17] 상세화면이 재계산 없이 그대로 쓰는 단일 스냅샷
                 "snapshot": snap,
             })
 
-        # [명세 §15] 정렬 우선순위: 최종 행동점수 → 기회점수 → 순기대수익 → 손익비 → 분석 신뢰도
+        # [명세 §15] 정렬 우선순위: 진입 후보 → 최종 행동점수 → 기회점수 → 순기대수익
+        # → 손익비 → 분석 신뢰도. 진입 후보를 앞세우는 근거는 리플레이 327건 실측
+        # (후보 68.0% vs 기준 62.7%). 점수가 같으면 실제로 살 수 있는 종목이 먼저다.
         # (미산출 항목은 -inf로 두어 산출된 종목보다 뒤로 보낸다)
         def _n(v):
             return float(v) if v is not None else float('-inf')
 
         results.sort(key=lambda x: (
+            1 if x.get("entry_candidate") else 0,
             _n(x["final_score"]),
             _n(x["opp"]),
             _n(x["net_ev"]),

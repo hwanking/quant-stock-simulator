@@ -1163,7 +1163,12 @@ if st.session_state.get('show_screener', False):
                     cols[0].markdown(f"<div style='text-align:center; padding-top:10px;'><span style='background:#bf5af2; color:#fff; padding:3px 8px; border-radius:12px; font-weight:bold;'>{i+1}</span></div>", unsafe_allow_html=True)
                     
                     with cols[1]:
-                        if st.button(f"{r['name']}", key=f"btn_{r['symbol']}_{i}", use_container_width=True):
+                        _entry_badge = "🎯" if r.get('entry_candidate') else ""
+                        if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
+                                     use_container_width=True,
+                                     help=("진입 후보 — 적정가 이하 & 순기대수익 양수 "
+                                           "(리플레이 327건 적중률 68%)" if r.get('entry_candidate')
+                                           else None)):
                             # 스냅샷은 st.session_state['scan_results'] 안에 그대로 있으므로
                             # 종목만 전환하면 상세화면이 같은 객체를 찾아 재사용한다 (§17)
                             st.session_state['pending_search'] = f"{r['name']} ({r['symbol'].split('.')[0]})"
@@ -1186,6 +1191,12 @@ if st.session_state.get('show_screener', False):
                     m10_disp = r.get('m10_disparity', 0.0)
                     m10_col = "#30d158" if m10_stat == "위" else "#ff453a"
                     m10_str = f"{m10_stat} ({m10_disp:+.1f}%)"
+                    # 차트 관점 배지: DeMARK 매수 신호가 살아 있으면 함께 표기
+                    _dstate = r.get('demark_entry_state')
+                    if _dstate in ('COMPLETE', 'SETUP_DONE'):
+                        m10_str += " · ⏱️매수신호"
+                    elif _dstate == 'FORMING':
+                        m10_str += " · ⏱️셋업중"
 
                     # 컬럼 헤더가 '손익비'이므로 실제 손익비를 넣는다 (구버전은 승률을 표시했음)
                     rr_val = r.get('reward_risk_ratio')

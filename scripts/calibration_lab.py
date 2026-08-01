@@ -57,6 +57,19 @@ HOLDOUT_TICKERS = [
     "005380.KS",  # 현대차
     "035420.KS",  # NAVER
     "036570.KS",  # 엔씨소프트
+    # 2차 확장 (2026-08-01) — 업종·시총 다변화로 표본을 넓힌다
+    "005490.KS",  # POSCO홀딩스 (철강)
+    "055550.KS",  # 신한지주 (금융)
+    "068270.KS",  # 셀트리온 (바이오)
+    "015760.KS",  # 한국전력 (유틸리티)
+    "017670.KS",  # SK텔레콤 (통신)
+    "097950.KS",  # CJ제일제당 (음식료)
+    "247540.KQ",  # 에코프로비엠 (코스닥 2차전지)
+    "196170.KQ",  # 알테오젠 (코스닥 바이오)
+    "042700.KS",  # 한미반도체 (중형 장비)
+    "064350.KS",  # 현대로템 (방산·기계)
+    "009830.KS",  # 한화솔루션 (화학·태양광)
+    "030200.KS",  # KT (통신)
 ]
 
 #: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
@@ -136,6 +149,15 @@ def main(limit=200):
                 'demark_state': ((fs.get('demark_entry') or {}).get('state')),
                 'entry_zone': fs.get('entry_zone'),
                 'net_expected': fs.get('net_expected_return'),
+                # 2차 확장 특징 — 어떤 상태가 적중을 예측하는지 볼 재료
+                'rsi': (fs.get('demark_res') or {}).get('rsi_value'),
+                'bb_pos': (fs.get('demark_res') or {}).get('bb_position_pct'),
+                'vol20': fs.get('vol_20') or None,
+                'range_pos': (snap.get('price_pos') or {}).get('range_pos_pct'),
+                'demark_bull': (fs.get('demark_res') or {}).get('bullish_score'),
+                'demark_bear': (fs.get('demark_res') or {}).get('bearish_score'),
+                'win_rate': (snap.get('sim_res') or {}).get('obs_win_ratio'),
+                'eff_sample': fs.get('eff_sample_size'),
             }
             with open(VIRT_FILE, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
