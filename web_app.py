@@ -334,24 +334,93 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 라이트 모드 오버라이드 — 구형 다크 규칙 뒤에 와야 이긴다.
-# 정보 카드는 자체 다크 배경을 유지한다 (흰 바탕 + 다크 카드 대시보드 스타일).
+# 핵심 원리: 다크 카드 내부 글자는 전부 인라인 color 를 갖고 있다. 그래서
+# **인라인 color 가 없는 요소만** 어둡게 바꾸면, 흰 바탕의 일반 본문은 읽히고
+# 다크 카드 내부는 그대로 보존된다 (:not([style*="color"]) 선택자).
 if _theme == 'light':
-    st.markdown("""
+    # 가드 원칙: ① 인라인 color 를 가진 요소는 건드리지 않는다 ② 인라인 background
+    # 를 가진 요소(다크 카드)의 **자손 전체**를 건드리지 않는다 — <b>·<span> 이
+    # 부모의 밝은 색을 상속받아야 하기 때문 ③ 버튼·알림·코드칩은 별도 규칙.
+    _G = (':not([style*="color"]):not(div[style*="background"] *)'
+          ':not(table[style*="background"] *):not(.cross-val-matrix *)'
+          ':not([data-testid="stAlert"] *):not(button *):not(code):not(kbd)')
+    st.markdown(f"""
     <style>
-        .stApp { background-color: #f4f6fa !important; }
-        .stApp > header { background-color: transparent !important; }
-        h1, h2, h3 { color: #14161c !important; }
-        .stApp .block-container > div > div > .stMarkdown p,
-        .stApp .block-container > div > div > .stMarkdown li {
-            color: #2a2d36;
-        }
-        .stApp .stCaption, .stApp [data-testid="stCaptionContainer"] p {
-            color: #5a5f6b !important;
-        }
-        [data-testid="stSidebar"] { background-color: #ffffff !important;
-                                    border-right: 1px solid #e2e6ee !important; }
-        [data-testid="stSidebar"] * { color: #1a1c22 !important; }
-        hr { border-color: #dde2ea !important; }
+        .stApp {{ background-color: #f4f6fa !important; }}
+        .stApp > header {{ background-color: transparent !important; }}
+
+        /* 흰 바탕의 일반 텍스트 → 어둡게 (다크 카드 자손·버튼·알림 제외) */
+        .stApp p{_G}, .stApp span{_G}, .stApp li{_G}, .stApp label{_G},
+        .stApp em{_G}, .stApp strong{_G}, .stApp b{_G},
+        .stApp td{_G}, .stApp th{_G} {{
+            color: #23262e !important;
+        }}
+        .stApp h1{_G}, .stApp h2{_G}, .stApp h3{_G},
+        .stApp h4{_G}, .stApp h5{_G}, .stApp h6{_G} {{
+            color: #14161c !important;
+        }}
+        .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: #5a5f6b !important; }}
+
+        /* 메트릭 숫자 */
+        [data-testid="stMetricValue"] {{ color: #14161c !important; }}
+        [data-testid="stMetricLabel"] {{ color: #5a5f6b !important; }}
+
+        /* 알림 박스: 배경이 반투명 틴트라 라이트 모드에선 밝아진다 → 글자는 어둡게 */
+        .stApp [data-testid="stAlert"] p, .stApp [data-testid="stAlert"] span,
+        .stApp [data-testid="stAlert"] li, .stApp [data-testid="stAlert"] b,
+        .stApp [data-testid="stAlert"] strong {{
+            color: #1d2129 !important;
+        }}
+        /* 코드·키 칩: 어두운 칩으로 고정 — 어느 바탕에서든 읽힌다 */
+        .stApp code, .stApp kbd,
+        [data-testid="stSidebar"] code, [data-testid="stSidebar"] kbd {{
+            background-color: #23262e !important; color: #4cd97b !important;
+            border-radius: 5px; padding: 1px 6px;
+        }}
+        /* 버튼: 다크 스타일 유지 — 글자는 밝게 고정 */
+        .stApp .stButton > button p, .stApp .stButton > button span,
+        .stApp [data-testid="stDownloadButton"] button p {{
+            color: #f2f4f8 !important;
+        }}
+        /* 탭 라벨 */
+        .stApp [data-testid="stTabs"] button p {{ color: #3a3f4a !important; }}
+        .stApp [data-testid="stTabs"] button[aria-selected="true"] p {{
+            color: #0a5bd3 !important; font-weight: 800 !important; }}
+
+        [data-testid="stSidebar"] {{ background-color: #ffffff !important;
+                                    border-right: 1px solid #e2e6ee !important; }}
+        [data-testid="stSidebar"] p{_G}, [data-testid="stSidebar"] span{_G},
+        [data-testid="stSidebar"] li{_G}, [data-testid="stSidebar"] label{_G},
+        [data-testid="stSidebar"] b{_G}, [data-testid="stSidebar"] strong{_G},
+        [data-testid="stSidebar"] h1{_G}, [data-testid="stSidebar"] h2{_G},
+        [data-testid="stSidebar"] h3{_G}, [data-testid="stSidebar"] h4{_G} {{
+            color: #1a1c22 !important;
+        }}
+        hr {{ border-color: #dde2ea !important; }}
+        .stApp [data-testid="stWidgetLabel"] p{_G} {{ color: #23262e !important; }}
+
+        /* 탭: 다크용 #2d3139 배경(선택 탭·패널 모두)을 라이트로 교체 */
+        .stApp .stTabs [data-baseweb="tab-list"] {{
+            background-color: #e9edf4 !important; border-color: #d7dce6 !important; }}
+        .stApp .stTabs [aria-selected="true"] {{
+            background-color: #ffffff !important; }}
+
+        /* 반투명 틴트 카드: 라이트 바탕에선 배경이 밝아져 다크용 인라인 색이
+           안 보인다 → 어두운 솔리드로 고정 (내부 텍스트는 가드로 원색 유지) */
+        .stApp div[style*="background: rgba(48, 209, 88"],
+        .stApp div[style*="background-color: rgba(48, 209, 88"],
+        .stApp div[style*="background: rgba(255, 159, 10"],
+        .stApp div[style*="background-color: rgba(255, 159, 10"],
+        .stApp div[style*="background: rgba(255, 69, 58"],
+        .stApp div[style*="background-color: rgba(255, 69, 58"],
+        .stApp div[style*="background: rgba(100, 210, 255"],
+        .stApp div[style*="background-color: rgba(100, 210, 255"],
+        .stApp div[style*="background: rgba(191, 90, 242"],
+        .stApp div[style*="background-color: rgba(191, 90, 242"],
+        .stApp div[style*="background: rgba(142, 142, 147"],
+        .stApp div[style*="background-color: rgba(142, 142, 147"] {{
+            background: #1b1e25 !important;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -2459,6 +2528,24 @@ with _vc2:
     for s in verdict['summary']:
         st.markdown(f"- {s}")
     st.caption("⚠️ 투자 권유가 아닙니다. 최종 판단과 손익 책임은 투자자 본인에게 있습니다.")
+
+st.markdown("---")
+
+# 📈 [종합 인터랙티브 차트 — 판정 근거보다 위. 배너와 같은 실행 가격선을 눈으로 확인]
+st.markdown(f"### 📈 [{resolved_name}] 종합 차트")
+try:
+    import chart_pro as _cp
+    _chart_html = _cp.build_chart_html(
+        tech_df, four_scores, name=resolved_name, unit_str=unit_str,
+        theme=st.session_state.get('ui_theme', 'dark'),
+        user_avg=(user_entry_price if user_entry_price and user_entry_price > 0
+                  else None))
+    st.components.v1.html(_chart_html, height=880, scrolling=False)
+    st.caption("휠 확대·드래그 이동 · 상단 체크박스로 지표 켜고 끄기. "
+               "실행 가격선(추천 매수가·1·2차 목표가·손절가·TDST)은 위 배너와 같은 숫자입니다. "
+               "차트 데이터는 이 화면 안에만 있고 외부로 전송되지 않습니다.")
+except Exception as _cp_err:
+    st.caption(f"⚠️ 종합 차트를 그리지 못했습니다: {_cp_err}")
 
 st.markdown("---")
 
