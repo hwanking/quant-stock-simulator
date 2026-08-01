@@ -2537,6 +2537,15 @@ roe_val = _metric(stock_info.get('roe'), _lf.get('roe'))          # ROE 는 음�
 eps_val = _metric(stock_info.get('eps'), _lf.get('eps'), positive_only=True)
 bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
 
+# 적정가 미산출 사유 캡션 — 템플릿 안 조건식이 빈 줄을 만들면 markdown 이
+# 이어지는 HTML 을 코드 블록으로 바꾼다. 미리 만들어 같은 줄에 붙인다.
+_fv_note_html = ""
+if (four_scores.get('displayed_fair_value') is None
+        and four_scores.get('fair_value_status_note')):
+    _fv_note_html = (f"<p style='margin: 2px 0 0 0; font-size: 0.62rem; "
+                     f"color: #86868b;'>"
+                     f"{str(four_scores.get('fair_value_status_note'))[:48]}</p>")
+
 # 배당은 fetch_dividend_info 하나만 쓴다.
 # 구버전은 헤더와 하단 패널이 서로 다른 경로로 계산해 같은 종목의 DPS 가 두 값이었다
 # (헤더 1,668원 / 하단 1,444원). 리터럴 폴백(200원·2.11%·'2026-12-28 (연배당)')도 제거한다.
@@ -2609,8 +2618,7 @@ st.markdown(f"""
         </div>
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #bf5af2; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #bf5af2; font-weight: bold;'>💎 시장조정 펀더멘털 적정가</p>
-            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #bf5af2; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>
-            {f"<p style='margin: 2px 0 0 0; font-size: 0.62rem; color: #86868b;'>{str(four_scores.get('fair_value_status_note') or '')[:48]}</p>" if four_scores.get('displayed_fair_value') is None and four_scores.get('fair_value_status_note') else ""}
+            <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #bf5af2; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>{_fv_note_html}
         </div>
     </div>
     <!-- 🛡️ 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
@@ -2662,6 +2670,10 @@ elif four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN':
 else:
     rec_buy_display = "신뢰도 미달"
     rec_buy_sub = "현재가 아래 유효 지지선도 없음 — 근거가 생길 때까지 관망"
+# 주의: f-string 템플릿 안에 조건부로 '빈 줄'을 남기면 markdown 이 이어지는
+# HTML 을 코드 블록으로 렌더한다 — 반드시 앞 요소와 같은 줄에 붙인다.
+_rec_sub_html = (f"<p style='margin:3px 0 0 0; font-size:0.72rem; "
+                 f"color:#9DAABC;'>{rec_buy_sub}</p>" if rec_buy_sub else "")
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 
@@ -2707,8 +2719,7 @@ st.markdown(f"""
               margin-top:16px; padding-top:14px; border-top:1px solid #2c2c2e;'>
     <div style='background:#141416; border:1px solid #30d15855; border-radius:12px; padding:10px 14px;'>
       <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🟢 권장 매수가 <span style='font-weight:400;'>(신규 진입 기준)</span></p>
-      <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#30d158;'>{rec_buy_display}</p>
-      {f"<p style='margin:3px 0 0 0; font-size:0.72rem; color:#9DAABC;'>{rec_buy_sub}</p>" if rec_buy_sub else ""}
+      <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#30d158;'>{rec_buy_display}</p>{_rec_sub_html}
     </div>
     <div style='background:#141416; border:1px solid #64d2ff55; border-radius:12px; padding:10px 14px;'>
       <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🔵 1차 목표가 <span style='font-weight:400;'>(현재가 기준 기술 레벨)</span></p>
