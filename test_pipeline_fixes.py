@@ -2951,6 +2951,41 @@ check("수치 무단 생성 금지 — tech_df 검증 컬럼 재사용 원칙 �
                      encoding='utf-8').read())
 
 
+section("63. 재설계 2단계 — 홈 지휘센터 · 모델 성과 감사 · 점수 요인")
+
+_w63 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 홈 지휘센터 — 실측 카드에 표본 수(n) 병기, 보장 문구 금지
+check("홈 카드 — 검증/블라인드/고신뢰/신호율", all(s in _w63 for s in (
+    '검증(표본외) 적중률', '블라인드 적중률', '고신뢰(60점+) 블라인드',
+    '매수권 신호율')))
+check("홈 카드 — 표본 수 병기", 'n={_v.get' in _w63 and 'n={_b.get' in _w63)
+check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
+check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
+      '_pm_today and _pm_today.get' in _w63)
+
+# ② 모델 성과 섹션 — 감사 화면 4표 + 한계 경고
+check("모델 성과 섹션 존재", '모델 성과 — 가상 백테스트 감사' in _w63)
+check("시간 분할 성과 표", '시간 분할 성과' in _w63)
+check("매수권(60+) 분해 표", '매수권(60점 이상) 신호만' in _w63)
+check("점수대 캘리브레이션 표", '점수대별 실측 적중률' in _w63)
+check("실패 원인 분류 표", '실패 원인 분류' in _w63)
+check("블라인드는 선택에 쓰지 않는다 문구", '모델 선택에 쓰지 않습니다' in _w63)
+check("한계 경고 — 괴리·표본 부족 조건부 표시",
+      '반드시 함께 읽어야 하는 한계' in _w63 and '표본 100건 이상' in _w63)
+check("표본 부족 임계 30건 미만 표기", "n'] < 30" in _w63 or "n < 30" in _w63)
+
+# ③ 점수 요인 — verdict.composition 실측만 사용
+check("점수 요인 상·하위 3 카드", '점수를 끌어올린 요인 3' in _w63
+      and '점수를 끌어내린 요인 3' in _w63)
+check("요인은 composition 실측에서만",
+      "verdict.get('composition'" in _w63)
+
+# ④ 내비게이션 — 모델 성과 링크와 앵커
+check("내비 모델 성과 링크", 'href="#nav-perf"' in _w63
+      and 'id="nav-perf"' in _w63)
+
+
 print()
 print("=" * 72)
 if FAILURES:

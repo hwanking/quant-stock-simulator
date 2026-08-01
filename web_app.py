@@ -236,6 +236,7 @@ st.markdown(f"""
   <a href="#nav-chart">차트</a>
   <a href="#nav-context">시장·뉴스</a>
   <a href="#nav-scores">퀀트 점수</a>
+  <a href="#nav-perf">모델 성과</a>
 </div>
 <div id="nav-top"></div>
 """, unsafe_allow_html=True)
@@ -2140,6 +2141,20 @@ if st.session_state.get('show_portfolio'):
                                          use_container_width=True, hide_index=True)
     st.markdown("---")
 
+# ── 캘리브레이션 산출물 로더 — 홈 카드·판정 캡션·모델 성과 섹션이 공유 ──────
+# rerun 마다 엔진이 새로 만들어져 속성이 비므로, 파일을 직접 읽어 캐시한다.
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_calibration_meta():
+    try:
+        import json as _json_cal
+        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          ".portfolio", "calibration.json")
+        with open(_p, encoding='utf-8') as _f:
+            return _json_cal.load(_f)
+    except Exception:
+        return {}
+
+
 # 🚨 [사용자 요청] 실시간 글로벌/국내 주요 증시 지수 전광판 최상단배치
 m_indices = engine_init.get_market_indices()
 idx_col1, idx_col2, idx_col3, idx_col4 = st.columns(4)
@@ -2157,6 +2172,56 @@ if m_indices['kospi']['price'] == 'N/A' or m_indices['kosdaq']['price'] == 'N/A'
     st.warning("⚠️ **KOSPI·KOSDAQ 데이터 미수신 알림**: 최신 지수 수치가 연동되지 않아 **`[시장 국면: 판정 보류]`** 상태가 적용되었으며, 매매 적합도 상한(59점) 게이트 통제가 활성화되었습니다.")
 
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+
+# ── 🏠 홈 지휘센터 — 모델 상태 + 개장 전 한 줄 결론 (전부 실측, n 병기) ─────
+_home_cal = _load_calibration_meta()
+if _home_cal.get('total_cases'):
+    _sp = _home_cal.get('splits') or {}
+    _bz = (_sp.get('buy_zone') or {})
+    _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
+    _sig = _home_cal.get('signal_frequency') or {}
+    _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns(5)
+    with _hc1:
+        st.metric("모델 버전",
+                  str(_home_cal.get('rulebook_version', '—')).replace('v2026.', "v'26."),
+                  f"누적 케이스 {_home_cal['total_cases']:,}건", delta_color="off")
+    with _hc2:
+        st.metric("검증(표본외) 적중률",
+                  f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None else "미산출",
+                  f"n={_v.get('n', 0)}", delta_color="off")
+    with _hc3:
+        st.metric("블라인드 적중률",
+                  f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None else "미산출",
+                  f"n={_b.get('n', 0)}", delta_color="off")
+    with _hc4:
+        st.metric("고신뢰(60점+) 블라인드",
+                  f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None else "미산출",
+                  f"n={_bzb.get('n', 0)} — 표본 부족" if (_bzb.get('n') or 0) < 30
+                  else f"n={_bzb.get('n', 0)}", delta_color="off")
+    with _hc5:
+        st.metric("매수권 신호율",
+                  f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None else "미산출",
+                  f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0)}건", delta_color="off")
+    st.caption("🧪 가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
+               "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
+
+# 개장 전 한 줄 결론 — 오늘 고정된 리포트가 있을 때만 (없으면 만들어내지 않는다)
+try:
+    import premarket as _pm_home
+    _pm_today = st.session_state.get('premarket_report') or _pm_home.load_today_report()
+except Exception:
+    _pm_today = None
+if _pm_today and _pm_today.get('picks'):
+    _cls_cnt = {}
+    for _pk in _pm_today['picks']:
+        _cls_cnt[_pk.get('reco_class', '?')] = _cls_cnt.get(_pk.get('reco_class', '?'), 0) + 1
+    _buyable = _cls_cnt.get('오늘 사도 되는 종목', 0) + _cls_cnt.get('조건부로 사도 되는 종목', 0)
+    _oneline = ("오늘은 매수 후보가 있습니다 — 아래 '오늘의 추천'에서 조건을 확인하세요."
+                if _buyable else
+                "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
+    st.info(f"**🌅 개장 전 한 줄 결론** · {_oneline}  \n"
+            + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
+            + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
 with st.spinner(f"[{resolved_name}] 동적 무결성 점수 및 시계열 연산 중..."):
@@ -2503,26 +2568,31 @@ elif _cb and _cb.get('n', 0) < 5:
     _extra_bits.append(f"🧪 이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
                        f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
-@st.cache_data(ttl=600)
-def _load_calibration_meta():
-    try:
-        import json as _json_cal
-        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          ".portfolio", "calibration.json")
-        with open(_p, encoding='utf-8') as _f:
-            _c = _json_cal.load(_f)
-        return {'total_cases': _c.get('total_cases'),
-                'rulebook_version': _c.get('rulebook_version')}
-    except Exception:
-        return {}
-
-
 _calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
     _extra_bits.append(f"📚 모델 {_calib_all.get('rulebook_version', '')} · "
                        f"누적 케이스 {_calib_all['total_cases']:,}건")
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
+
+# ── 원칙 3: 결론·가격 다음에 '이유' — 점수를 움직인 요인 상·하위 3개 ────────
+# verdict['composition'] 실측만 사용한다 (label/score/weight_pct/contribution).
+_comp_scored = [c for c in verdict.get('composition', [])
+                if c.get('score') is not None]
+if len(_comp_scored) >= 3:
+    _comp_hi = sorted(_comp_scored, key=lambda c: c['score'], reverse=True)[:3]
+    _comp_lo = sorted(_comp_scored, key=lambda c: c['score'])[:3]
+    _fc1, _fc2 = st.columns(2)
+    with _fc1:
+        st.markdown("**⬆️ 점수를 끌어올린 요인 3**")
+        for c in _comp_hi:
+            st.markdown(f"- {c['label']} — **{c['score']}점** "
+                        f"(비중 {c['weight_pct']:.0f}%)")
+    with _fc2:
+        st.markdown("**⬇️ 점수를 끌어내린 요인 3**")
+        for c in _comp_lo:
+            st.markdown(f"- {c['label']} — **{c['score']}점** "
+                        f"(비중 {c['weight_pct']:.0f}%)")
 
 if verdict['vetoes']:
     st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
@@ -2778,6 +2848,89 @@ with st.expander("🧮 이 시장·뉴스가 퀀트 점수를 얼마나 움직�
     if four_scores.get('context_cap', 100) < 100:
         st.markdown(f"위 반영분과 **별개로**, 상한 규칙이 최종 점수를 "
                     f"**{four_scores.get('context_cap')}점 이하**로 제한했습니다.")
+
+# ── 🧪 모델 성과 — 적중률을 과장하지 않는 감사 화면 (calibration.json 실측) ──
+st.markdown('<div id="nav-perf"></div>', unsafe_allow_html=True)
+_perf_cal = _load_calibration_meta()
+if _perf_cal.get('total_cases'):
+    st.markdown("### 🧪 모델 성과 — 가상 백테스트 감사")
+    st.caption(f"과거 기준일 리플레이 **{_perf_cal['total_cases']:,}건** · "
+               f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
+               "시간 분할: 학습 <2025-07 / 검증 ~2026-01 / 블라인드 ≥2026-02 "
+               "(블라인드는 보고 전용 — 모델 선택에 쓰지 않습니다)")
+    with st.expander("성과 분해 · 점수대 캘리브레이션 · 실패 원인 (펼쳐보기)",
+                     expanded=False):
+        _sp_p = _perf_cal.get('splits') or {}
+        _rows_sp = []
+        for _k, _lab in (('train', '학습(표본내)'), ('valid', '검증(표본외)'),
+                         ('blind', '블라인드')):
+            _s = _sp_p.get(_k) or {}
+            if not _s.get('n'):
+                continue
+            _rows_sp.append({
+                '구간': _lab, '표본': _s['n'],
+                '적중률': f"{_s['hit_rate']:.1f}%",
+                'Wilson 하한': f"{_s['wilson_low']:.1f}%",
+                'Profit Factor': f"{_s['profit_factor']:.2f}",
+                '비용 차감 평균수익': f"{_s['avg_return_after_cost']:+.2f}%",
+            })
+        if _rows_sp:
+            st.markdown("**① 시간 분할 성과** — 검증·블라인드가 실력입니다")
+            st.dataframe(pd.DataFrame(_rows_sp), use_container_width=True,
+                         hide_index=True)
+        _bz_p = (_sp_p.get('buy_zone') or {})
+        _rows_bz = []
+        for _k, _lab in (('train', '학습'), ('valid', '검증'), ('blind', '블라인드')):
+            _s = _bz_p.get(_k) or {}
+            if not _s.get('n'):
+                continue
+            _rows_bz.append({
+                '구간': _lab, '표본': _s['n'],
+                '적중률': f"{_s['hit_rate']:.1f}%",
+                'Wilson 하한': f"{_s['wilson_low']:.1f}%",
+                '비고': '표본 부족 — 확대 축적 중' if _s['n'] < 30 else '',
+            })
+        if _rows_bz:
+            st.markdown("**② 매수권(60점 이상) 신호만** — 실제 추천이 나가는 구간")
+            st.dataframe(pd.DataFrame(_rows_bz), use_container_width=True,
+                         hide_index=True)
+        _bands_p = [b for b in (_perf_cal.get('bands') or []) if b.get('n')]
+        if _bands_p:
+            st.markdown("**③ 점수대별 실측 적중률** — 점수가 확률로 이어지는가")
+            st.dataframe(pd.DataFrame([{
+                '점수대': f"{b['lo']}~{b['hi']}", '표본': b['n'],
+                '적중률': f"{b['hit_rate']:.1f}%",
+                'Wilson 하한': (f"{b['wilson_low']:.1f}%"
+                              if b.get('wilson_low') is not None else '—'),
+                '평균수익': (f"{b['avg_return']:+.2f}%"
+                          if b.get('avg_return') is not None else '—'),
+                '비고': '표본 부족' if b['n'] < 30 else '',
+            } for b in _bands_p]), use_container_width=True, hide_index=True)
+        _fails_p = _perf_cal.get('failure_classes') or []
+        if _fails_p:
+            st.markdown("**④ 실패 원인 분류** — 어디서 잃었는가 (손실 기여 순)")
+            st.dataframe(pd.DataFrame([{
+                '실패 유형': f['class'], '건수': f['n'],
+                '누적 손실 기여': f"{f['total_loss']:+.1f}%p",
+            } for f in _fails_p]), use_container_width=True, hide_index=True)
+        _warn_lines = []
+        _v_p, _b_p = _sp_p.get('valid') or {}, _sp_p.get('blind') or {}
+        if (_v_p.get('hit_rate') is not None and _b_p.get('hit_rate') is not None
+                and _v_p['hit_rate'] - _b_p['hit_rate'] >= 10):
+            _warn_lines.append(
+                f"검증({_v_p['hit_rate']:.1f}%)과 블라인드({_b_p['hit_rate']:.1f}%) "
+                "적중률 괴리가 큽니다 — 특정 장세 편중·과최적화 가능성을 감시 중입니다.")
+        _bzb_p = (_bz_p.get('blind') or {})
+        if (_bzb_p.get('n') or 0) < 30:
+            _warn_lines.append(
+                f"고신뢰(60점+) 블라인드 표본이 {_bzb_p.get('n', 0)}건으로 부족합니다 "
+                "— 90% 목표 달성 여부는 표본 100건 이상에서 판정합니다.")
+        _note_p = str(_perf_cal.get('note') or '')
+        if _note_p:
+            _warn_lines.append(_note_p)
+        if _warn_lines:
+            st.warning("**반드시 함께 읽어야 하는 한계**\n\n"
+                       + "\n".join(f"- {w}" for w in _warn_lines))
 
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:
