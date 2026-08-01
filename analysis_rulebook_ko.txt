@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 
 [RULES_GENERAL]
-version = "v2026.07.31"
+version = "v2026.08.02"
 currency_krx = "KRW"
 currency_us = "USD"
 currency_fx = "USD/KRW"
@@ -24,6 +24,9 @@ target1_vol_floor_mult = 0.8
 # 자체 리플레이 327건 실측: 저점권(<30%) 적중 57.1%(-5.5%p), 고점권 66.4%(+3.7%p).
 range_low_pct = 30.0
 range_low_cap = 64
+# 월봉 10선 아래 = 추세 역행 (시계열 모멘텀, Moskowitz–Ooi–Pedersen 2012 계열).
+# 리플레이 1,073건 실측: 10선 위 60.5% vs 아래 51.8% (-8.7%p, n=612/461).
+m10_below_cap = 64
 
 # 원시 종합점수 = 기본매력 * w_quality + 매매적합 * w_timing + 리스크 * w_risk
 [RULES_TOP_LEVEL_WEIGHTS]

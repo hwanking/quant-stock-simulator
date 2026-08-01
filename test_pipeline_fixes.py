@@ -2655,6 +2655,50 @@ check("카드에 진입 후보 배지(🎯)", "_entry_badge" in _w56)
 check("카드 월봉10선 열에 DeMARK 배지 병기", "⏱️매수신호" in _w56)
 
 
+section("57. 80% 검증 체계 — 시간 분할·실패 분류·세분화 보정·추세 게이트")
+
+# 80%는 보장값이 아니라 검증 목표다. 이 절은 그 검증이 정직하게 돌아가기 위한
+# 구조(분할·분류·보정·빈도 감시)와, 실측 근거로 신설한 추세 게이트를 잠근다.
+
+_lab57 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
+check("시간 분할 경계 정의 (학습/검증/블라인드)",
+      "SPLIT_VALID_FROM" in _lab57 and "SPLIT_BLIND_FROM" in _lab57)
+check("매수권(60+) 분할 성과 별도 보고", "60+ {sp}" in _lab57 or "60+ train" in _lab57
+      or 'f"60+ {sp}"' in _lab57)
+check("실패 원인 분류기 존재 (7종 이상)",
+      _lab57.count("return '") >= 7 and "classify_failure" in _lab57)
+check("실패를 손실 규모 순으로 정렬 (개선 우선순위)",
+      "kv[1]['loss']" in _lab57)
+check("신호 빈도 감시 (적중률만 올리는 왜곡 방지)", "신호 빈도" in _lab57)
+check("세분화 점수대 (60·65·70대 분리)",
+      "(60, 64), (65, 69), (70, 100)" in _lab57)
+
+# 월봉 10선 아래 상한 — 실패 2위 '추세 역행' 을 겨냥한 신설 게이트
+_XL57 = qi.RULEBOOK.get('RULES_EXECUTION_LEVELS', {})
+check("m10 아래 상한 상수는 규칙집", 'm10_below_cap' in _XL57)
+_q57src = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("m10 아래 상한이 실측 근거 명시", "추세 역행 매수 제한" in _q57src
+      and "−8.7%p" in _q57src)
+check("인버스는 m10 게이트 비적용", "asset_type != 'ETF_INV'" in _q57src)
+check("vol_20 을 케이스 원장에 노출", "'vol_20':" in _q57src)
+
+# 규칙집 버전 승격 + 버전 기록 문서
+check("규칙집 버전 v2026.08.02",
+      str(qi.RULEBOOK.get('RULES_GENERAL', {}).get('version')) == "v2026.08.02")
+_mv57 = _os.path.join(PROJ, "docs", "MODEL_VERSIONS.md")
+check("모델 버전 기록 문서 존재", _os.path.exists(_mv57))
+if _os.path.exists(_mv57):
+    _mvtxt57 = open(_mv57, encoding='utf-8').read()
+    check("버전 기록에 변경·이유·기준선·한계 포함",
+          all(k in _mvtxt57 for k in ("변경 내용과 이유", "변경 전 기준선", "알려진 한계",
+                                      "블라인드")))
+
+# 화면 — 모델 버전·누적 케이스·표본 부족 정직 표기
+_w57 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면에 모델 버전·누적 케이스", "누적 케이스" in _w57)
+check("표본 부족 점수대는 적중률 미표시", "표본 부족으로 적중률 미표시" in _w57)
+
+
 print()
 print("=" * 72)
 if FAILURES:

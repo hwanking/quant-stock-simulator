@@ -2253,6 +2253,13 @@ if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
     _extra_bits.append(
         f"🧪 가상 백테스트: 이 점수대({_cb['lo']}~{_cb['hi']}점)의 과거 리플레이 적중률 "
         f"**{_cb['hit_rate']:.0f}%** (n={_cb['n']}, Wilson 하한 {_cb['wilson_low']:.0f}%)")
+elif _cb and _cb.get('n', 0) < 5:
+    _extra_bits.append(f"🧪 이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
+                       f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
+_calib_all = getattr(q_engine, '_calibration', None) or {}
+if _calib_all.get('total_cases'):
+    _extra_bits.append(f"📚 모델 {_calib_all.get('rulebook_version', '')} · "
+                       f"누적 케이스 {_calib_all['total_cases']:,}건")
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
 

@@ -104,7 +104,32 @@ HOLDOUT_TICKERS = [
     "233740.KS",  # KODEX 코스닥150레버리지
     "114800.KS",  # KODEX 인버스
     "252670.KS",  # KODEX 200선물인버스2X
+    # 4차 확장 (2026-08-02) — 2,000건 방향: 중형·경기방어·바이오 보강
+    "010950.KS",  # S-Oil
+    "034020.KS",  # 두산에너빌리티
+    "018260.KS",  # 삼성에스디에스
+    "032640.KS",  # LG유플러스
+    "000810.KS",  # 삼성화재
+    "009150.KS",  # 삼성전기
+    "006400.KS",  # 삼성SDI
+    "128940.KS",  # 한미약품
+    "008930.KS",  # 한솔케미칼 (중형)
+    "095700.KQ",  # 제넥신 (코스닥 바이오 소형)
 ]
+
+#: 시간 분할 — 모델 개선은 학습·검증 구간의 통계로만 하고, 블라인드 구간은
+#: 성능 보고에만 쓴다 (개선 근거로 사용 금지). 경계는 사례 기준일 기준.
+SPLIT_VALID_FROM = "2025-07-01"
+SPLIT_BLIND_FROM = "2026-02-01"
+
+
+def split_of(date_str):
+    d = str(date_str)
+    if d >= SPLIT_BLIND_FROM:
+        return 'blind'
+    if d >= SPLIT_VALID_FROM:
+        return 'valid'
+    return 'train'
 
 #: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
 def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25):
@@ -173,7 +198,7 @@ def main(limit=200):
             pdf, _f = eng.generate_synthetic_bitemporal_data(
                 symbol=tk, start_date='2020-01-01', end_date=None)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=20):
+            for d in make_asof_dates(pdf, n_dates=30):
                 if (tk, d) not in done:
                     todo.append((tk, d))
         except Exception as exc:
@@ -255,8 +280,8 @@ def main(limit=200):
     print(f"판정 완료(목표 또는 손절 도달): {len(decided)}건 · "
           f"미결 {len(graded) - len(decided)}건")
 
-    # 점수대 캘리브레이션
-    BANDS = [(0, 39), (40, 49), (50, 59), (60, 100)]
+    # 점수대 캘리브레이션 — 세분화 (60·65·70·75·80대의 실제 성공률 검증 요구)
+    BANDS = [(0, 39), (40, 49), (50, 54), (55, 59), (60, 64), (65, 69), (70, 100)]
     bands_out = []
     print("\n" + "=" * 74)
     print("점수대별 실제 적중률 (가상 백테스트 · 목표가 선도달 기준)")
@@ -382,6 +407,74 @@ def main(limit=200):
         breakdowns['by_regime'].append(b)
         show_block(b)
 
+    # ── 시간 분할 성과 — 학습/검증/블라인드 (개선은 train+valid 통계만 사용) ──
+    print("\n" + "=" * 74)
+    print(f"시간 분할 성과 (학습 <{SPLIT_VALID_FROM} ≤ 검증 <{SPLIT_BLIND_FROM} ≤ 블라인드)")
+    print("=" * 74)
+    splits_out = {}
+    for sp in ('train', 'valid', 'blind'):
+        b = perf_block([g for g in decided if split_of(g['row']['date']) == sp], sp)
+        splits_out[sp] = b
+        show_block(b)
+    # 매수권(60점+) 분할 성과 — 80% 목표의 정직한 잣대
+    print("  --- 매수권(60점+) 만 ---")
+    splits_out['buy_zone'] = {}
+    for sp in ('train', 'valid', 'blind'):
+        b = perf_block([g for g in decided if split_of(g['row']['date']) == sp
+                        and g['row']['score'] >= 60], f"60+ {sp}")
+        splits_out['buy_zone'][sp] = b
+        show_block(b)
+
+    # ── 실패 원인 분류 — 빈도와 손실 규모, 큰 손실부터 ─────────────────────
+    def classify_failure(g):
+        r, gr = g['row'], g['grade']
+        if gr['outcome'] == 'OPEN':
+            return '기간 내 미도달'
+        if gr['outcome'] == 'TARGET':
+            return None
+        tp_d = ((r.get('target') or 0) / max(r.get('price') or 1, 1) - 1) * 100
+        mfe = gr.get('mfe_pct') or 0
+        at = r.get('asset_type', 'STOCK')
+        if at == 'ETF_INV':
+            return '인버스 방향 해석'
+        if at == 'ETF_LEV':
+            return '레버리지 변동성'
+        if (r.get('eff_sample') or 99) < 5:
+            return '자기유사 표본 부족'
+        if (r.get('rsi') or 0) >= 70 and (r.get('bb_pos') or 0) > 85:
+            return '과열 추격'
+        if r.get('regime') == 'BEAR':
+            return '시장 국면 역풍'
+        if mfe >= 0.5 * tp_d and tp_d > 0:
+            return '노이즈 손절(목표 절반까지 갔다 반락)'
+        if not r.get('m10_above'):
+            return '추세 역행(월10선 아래)'
+        return '방향 오판'
+
+    from collections import defaultdict
+    fail_stats = defaultdict(lambda: {'n': 0, 'loss': 0.0})
+    for g in decided:
+        cls = classify_failure(g)
+        if cls:
+            fail_stats[cls]['n'] += 1
+            fail_stats[cls]['loss'] += min(0.0, g['grade']['return_pct'])
+    print("\n" + "=" * 74)
+    print("실패 원인 분류 — 손실 규모 순 (다음 개선 우선순위)")
+    print("=" * 74)
+    fail_out = []
+    for cls, st in sorted(fail_stats.items(), key=lambda kv: kv[1]['loss']):
+        print(f"  {cls:<32} {st['n']:>4}건 · 누적손실 {st['loss']:+9.1f}%p")
+        fail_out.append({'class': cls, 'n': st['n'], 'total_loss': round(st['loss'], 1)})
+
+    # ── 신호 빈도 — 적중률만 높이려 신호를 말려 죽이지 않는지 감시 ─────────
+    n_buy = sum(1 for g in graded if g['row']['score'] >= 60)
+    print("\n" + "=" * 74)
+    print("신호 빈도 (매수권 = 점수 60+)")
+    print("=" * 74)
+    print(f"  전체 분석 {len(graded)}건 · 매수권 {n_buy}건 · 발생률 {n_buy/len(graded)*100:.1f}%")
+    freq_out = {'total': len(graded), 'buy_zone': n_buy,
+                'rate_pct': round(n_buy / len(graded) * 100, 1)}
+
     # ── 케이스 스터디 원장 — 17개 항목을 채운 채점 결과를 그대로 남긴다 ──────
     graded_file = os.path.join(PROJ, ".portfolio", "virtual_graded.jsonl")
     with open(graded_file, 'w', encoding='utf-8') as gf:
@@ -395,13 +488,8 @@ def main(limit=200):
                 'mfe_pct': round(g['grade'].get('mfe_pct') or 0, 2),
                 'mae_pct': round(g['grade'].get('mae_pct') or 0, 2),
                 'success': g['grade']['outcome'] == 'TARGET',
-                'failure_class': (
-                    None if g['grade']['outcome'] == 'TARGET'
-                    else ('노이즈 손절(MFE가 목표 절반 이상)' if
-                          (g['grade'].get('mfe_pct') or 0) >= 0.5 *
-                          ((g['row'].get('target') or 0) / max(g['row'].get('price') or 1, 1) - 1) * 100
-                          else '방향 오판(초기부터 하락)')
-                    if g['grade']['outcome'] == 'STOP' else '기간 내 미도달'),
+                'split': split_of(g['row']['date']),
+                'failure_class': classify_failure(g),
             })
             gf.write(json.dumps(rec, ensure_ascii=False) + "\n")
     print(f"\n케이스 원장 저장: {graded_file} ({len(graded)}건)")
@@ -412,6 +500,11 @@ def main(limit=200):
         'lifts': lifts,
         'entry_candidates': entry_out,
         'breakdowns': breakdowns,
+        'splits': splits_out,
+        'failure_classes': fail_out,
+        'signal_frequency': freq_out,
+        'total_cases': len(graded),
+        'rulebook_version': "v2026.08.02",
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

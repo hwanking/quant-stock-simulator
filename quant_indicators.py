@@ -3037,6 +3037,13 @@ class QuantIndicatorsEngine:
         if m10_disparity > 25.0:
             m10_overheat_cap = 67  # 월봉 10선 대비 +25% 이상 이격 과열 시 추격매수 제한
             cap_reasons.append(f"월봉 10선 이격 +{m10_disparity:.1f}% (과열) → 상한 67점")
+        elif m10_disparity < 0 and asset_type != 'ETF_INV':
+            # 10선 아래 = 추세 역행 매수 (시계열 모멘텀 문헌 + 리플레이 1,073건 실측
+            # −8.7%p). 인버스는 역방향 상품이라 비적용.
+            m10_overheat_cap = int(_XL.get('m10_below_cap', 64))
+            cap_reasons.append(
+                f"월봉 10선 아래 ({m10_disparity:+.1f}%) — 추세 역행 매수 제한 "
+                f"(리플레이 실측 −8.7%p) → 상한 {m10_overheat_cap}점")
 
         # 시장·글로벌·뉴스 상한 — 종목이 좋아도 판이 나쁘면 점수를 제한한다.
         # 올리는 데는 쓰지 않는다(좋은 뉴스로 점수를 얹지 않는다). 사유는 항상 남긴다.
@@ -3380,6 +3387,7 @@ class QuantIndicatorsEngine:
             # 자산 유형 — 화면 표시 + 유형별 게이트 근거
             'asset_type': asset_type,
             'asset_type_note': asset_type_note,
+            'vol_20': (float(vol_20) if vol_20 else None),   # 케이스 원장 기록용
 
             # 변동성 관리 비중 제안 (Moreira–Muir 2017: 실현 변동성이 높을 때
             # 노출을 줄이면 위험조정수익이 개선된다). 목표 연변동성 20% ÷ 실현.
