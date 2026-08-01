@@ -3214,6 +3214,35 @@ check("차기 후보 기록 (E 재대결·D 기각)", '차기 후보' in _mv69
       and 'D 실패로 기각' in _mv69)
 
 
+section("70. 진입 검토가 폴백 — 기술 지지 계층 · 미산출 사유 · 억지 산출 금지")
+
+# ① 엔진 — 권장 매수가 없을 때 기술 지지 기반 진입 검토가 (실계산 검증)
+_fs70 = snap['four_scores']
+check("entry_review 필드 존재", 'entry_review_price' in _fs70
+      and 'entry_review_basis' in _fs70)
+if _fs70.get('recommended_buy_price') is not None:
+    check("권장 매수가 있으면 검토가는 None (계층 혼용 금지)",
+          _fs70.get('entry_review_price') is None)
+else:
+    _erp70 = _fs70.get('entry_review_price')
+    check("검토가는 항상 현재가 아래 지지선 (억지 산출 금지)",
+          _erp70 is None or _erp70 > 0)
+_qi70 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("엔진 원칙 주석 — 지어내지 않는다·억지로 만들지 않는다",
+      '지어내지 않는다' in _qi70 and '억지로 만들지 않는다' in _qi70)
+check("후보 = 기존 계산된 지지선만 (TDST·20일선·볼린저)",
+      "'TDST 지지선'" in _qi70 and "'20일 이동평균선'" in _qi70
+      and "'볼린저 하단'" in _qi70)
+
+# ② 화면 — 계층 라벨·미산출 사유
+_w70 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("배너 — 검토가 계층 라벨 (적정가 검증 없음 명시)",
+      '기술 지지 기준:' in _w70 and '적정가 검증 없음' in _w70)
+check("배너 — 지지선조차 없으면 없다고 말한다",
+      '유효 지지선도 없음' in _w70)
+check("적정가 미산출 카드 — 사유 캡션", 'fair_value_status_note' in _w70)
+
+
 print()
 print("=" * 72)
 if FAILURES:

@@ -3423,6 +3423,24 @@ class QuantIndicatorsEngine:
             stop_first_prob = f"{min(95, max(5, int(100 - win_rate)))}%"
             hist_status = "Valid"
 
+        # 진입 검토가 (기술 지지 기준) — 적정가 기반 권장 매수가가 없을 때의 폴백
+        # 계층. 값을 지어내지 않는다: 이미 계산된 지지 후보(TDST 지지·20일선·
+        # 볼린저 하단) 중 현재가 아래(0.5% 여유) 최근접만 고르고, '적정가 검증이
+        # 없는 기술적 기준'임을 basis 로 함께 내보낸다. 지지 후보가 전부 현재가
+        # 위면 여기서도 None — 억지로 만들지 않는다.
+        entry_review_price, entry_review_basis = None, ''
+        if recommended_buy_price is None:
+            _er_cands = [(float(dm.get('tdst_support') or 0), 'TDST 지지선')]
+            if 'sma_20' in tech_df.columns:
+                _er_cands.append((float(tech_df['sma_20'].iloc[-1]), '20일 이동평균선'))
+            if 'bb_lower' in tech_df.columns:
+                _er_cands.append((float(tech_df['bb_lower'].iloc[-1]), '볼린저 하단'))
+            _er_below = [(p, b) for p, b in _er_cands
+                         if p and p > 0 and p < curr_price * 0.995]
+            if _er_below:
+                entry_review_price, entry_review_basis = max(
+                    _er_below, key=lambda x: x[0])
+
         return {
             # ETF·ETN 은 적정가를 산출하지 않는다 (None). float(None) 로 죽지 않게 한다.
             'target_fundamental': (float(target_fundamental)
@@ -3435,6 +3453,8 @@ class QuantIndicatorsEngine:
             'target_fundamental_note': f"시장조정 펀더멘털 적정가 ({upside_eval})",
             'base_fair_value': float(base_fair_value) if base_fair_value is not None else float(curr_price),
             'recommended_buy_price': float(recommended_buy_price) if recommended_buy_price is not None else None,
+            'entry_review_price': entry_review_price,
+            'entry_review_basis': entry_review_basis,
             'margin_of_safety_pct': float(margin_of_safety_pct) if margin_of_safety_pct is not None else 15.0,
             'upside_pct': upside_pct,
             'upside_eval': upside_eval,

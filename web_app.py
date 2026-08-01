@@ -2604,6 +2604,7 @@ st.markdown(f"""
         <div style='background: #141416; padding: 10px 12px; border-radius: 12px; border: 1px solid #bf5af2; text-align: center;'>
             <p style='margin: 0; font-size: 0.75rem; color: #bf5af2; font-weight: bold;'>💎 시장조정 펀더멘털 적정가</p>
             <p style='margin: 4px 0 0 0; font-size: 1.15rem; color: #bf5af2; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>
+            {f"<p style='margin: 2px 0 0 0; font-size: 0.62rem; color: #86868b;'>{str(four_scores.get('fair_value_status_note') or '')[:48]}</p>" if four_scores.get('displayed_fair_value') is None and four_scores.get('fair_value_status_note') else ""}
         </div>
     </div>
     <!-- 🛡️ 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
@@ -2635,14 +2636,26 @@ _vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#86868b", "⚪", "판
 _vscore = verdict['score']
 
 # 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만; 상세 카드에서는 중복 표기하지 않음)
+# 적정가 기반 권장 매수가가 없으면 기술 지지 기반 '진입 검토가'를 대신 보여준다
+# (엔진이 이미 계산한 지지선 재사용 — 계층이 다름을 라벨로 명시, 없으면 없다고 말한다).
 rec_buy_val = four_scores.get('recommended_buy_price')
+_er_price = four_scores.get('entry_review_price')
+_er_basis = four_scores.get('entry_review_basis') or ''
+rec_buy_sub = ''
 if rec_buy_val is not None:
     rec_buy_display = f"{rec_buy_val:,.0f}원 이하"
+elif _er_price:
+    rec_buy_display = f"{_er_price:,.0f}원 부근"
+    _er_why = ("모델 범위 밖" if four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN'
+               else "적정가 신뢰도 미달")
+    rec_buy_sub = f"기술 지지 기준: {_er_basis} — 적정가 검증 없음 ({_er_why})"
 elif four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN':
     # 성장 기대가 가격을 지배하는 종목 — 신뢰도 문제가 아니라 모델이 성립하지 않는다
     rec_buy_display = "산출 불가 (모델 범위 밖)"
+    rec_buy_sub = "현재가 아래 유효 지지선도 없음 — 진입 기준 자체가 없습니다"
 else:
     rec_buy_display = "신뢰도 미달"
+    rec_buy_sub = "현재가 아래 유효 지지선도 없음 — 근거가 생길 때까지 관망"
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 
@@ -2689,6 +2702,7 @@ st.markdown(f"""
     <div style='background:#141416; border:1px solid #30d15855; border-radius:12px; padding:10px 14px;'>
       <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🟢 권장 매수가 <span style='font-weight:400;'>(신규 진입 기준)</span></p>
       <p style='margin:2px 0 0 0; font-size:1.3rem; font-weight:900; color:#30d158;'>{rec_buy_display}</p>
+      {f"<p style='margin:3px 0 0 0; font-size:0.72rem; color:#9DAABC;'>{rec_buy_sub}</p>" if rec_buy_sub else ""}
     </div>
     <div style='background:#141416; border:1px solid #64d2ff55; border-radius:12px; padding:10px 14px;'>
       <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🔵 1차 목표가 <span style='font-weight:400;'>(현재가 기준 기술 레벨)</span></p>
