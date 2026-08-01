@@ -269,6 +269,35 @@ st.markdown(f"""
     /* 지수·모델 카드 숫자는 배경정보 — 첫 화면 최대 요소로 만들지 않는다 (v2) */
     .stApp [data-testid="stMetricValue"] {{ font-size: 26px !important; }}
     .stApp [data-testid="stMetricLabel"] {{ font-size: 13px !important; }}
+
+    /* v5 — 애플·삼성풍 정돈: 접이식 패널을 카드 언어로 통일, pill 버튼, 여백 */
+    .stApp [data-testid="stExpander"] {{
+        background: {_TOK['surface']};
+        border: 1px solid {_TOK['border']} !important;
+        border-radius: 12px !important;
+        margin-bottom: 10px;
+        overflow: hidden;
+    }}
+    .stApp [data-testid="stExpander"] summary {{
+        font-size: 14.5px !important; font-weight: 700 !important;
+        padding: 13px 18px !important;
+    }}
+    .stApp [data-testid="stExpander"] summary:hover {{
+        background: {_TOK['hover']};
+    }}
+    .stApp [data-testid="stExpander"] details {{ border: none !important; }}
+    .stApp .stButton > button,
+    .stApp [data-testid="stDownloadButton"] button {{
+        border-radius: 999px !important;
+        border: 1px solid {_TOK['border']} !important;
+        font-weight: 700 !important;
+    }}
+    .stApp .stButton > button:hover {{
+        border-color: {_TOK['brand']} !important;
+        color: {_TOK['brand']} !important;
+    }}
+    .stApp hr {{ border-color: {_TOK['border']} !important; }}
+    .stApp [data-testid="stRadio"] label {{ font-size: 14px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1198,6 +1227,21 @@ if st.session_state.get('show_screener', False):
                 </ul>
             </div>
             """, unsafe_allow_html=True)
+
+            # ── 매수권(60점+) 신호 — 실측 3,059건에서 이 구간만 매수권이다 ──
+            _bz_rows = sorted(
+                [r for r in scan_results if (r.get('final_score') or 0) >= 60],
+                key=lambda r: r.get('final_score') or 0, reverse=True)
+            if _bz_rows:
+                st.success(
+                    f"**매수권(60점+) 신호 {len(_bz_rows)}종목** — "
+                    + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
+                                 for r in _bz_rows[:5])
+                    + "  \n케이스 실측(3,059건)에서 매수권은 이 구간뿐입니다 "
+                      "(신호율 2.9%). 아래 표에서 종목을 눌러 조건을 확인하세요.")
+            else:
+                st.caption("이번 스캔에는 매수권(60점+) 신호가 없습니다 — 실측 "
+                           "신호율 2.9%로 원래 드뭅니다. 없는 날은 관망이 결론입니다.")
 
             _att = st.session_state.get('attention_result') or {}
             if _att.get('used_confirmed_bars_only'):
@@ -2285,23 +2329,26 @@ _issues_global = _pops.build_global_issues(_gi_calib, _gi_mkt)
 _SEV_BADGE = {'높음': ('#F26161', '높음'), '중간': ('#F2B84B', '중간'),
               '낮음': ('#9DAABC', '낮음')}
 if _issues_global:
-    st.markdown("#### 주요 이슈 — 오늘 꼭 봐야 할 핵심 변화")
-    for _is in _issues_global[:3]:
-        _bc, _bt = _SEV_BADGE.get(_is['severity'], ('#9DAABC', '—'))
-        st.markdown(
-            f"<div style='background:{_TOK['surface']}; border:1px solid "
-            f"{_bc if _is['severity'] == '높음' else _TOK['border']}; "
-            f"border-radius:12px; padding:12px 16px; margin-bottom:8px;'>"
-            f"<span style='background:{_bc}22; color:{_bc}; font-size:11px; "
-            f"font-weight:800; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
-            f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
-            f"font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
-            f"{_is['type']}</span> "
-            f"<b style='font-size:14px; color:{_TOK['tx1']};'> {_is['title']}</b>"
-            f"<p style='margin:5px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
-            f"{_is['detail']}</p></div>", unsafe_allow_html=True)
-    if len(_issues_global) > 3:
-        with st.expander(f"전체 이슈 보기 ({len(_issues_global)}건)", expanded=False):
+    # 토글형 (v5) — 접힌 상태에서도 건수·최상위 이슈가 제목에 보인다
+    with st.expander(f"주요 이슈 {len(_issues_global)}건 — "
+                     f"{_issues_global[0]['title']}", expanded=False):
+        st.caption("주요 이슈 — 오늘 꼭 봐야 할 핵심 변화 (실측·실경고에서만 생성)")
+        for _is in _issues_global[:3]:
+            _bc, _bt = _SEV_BADGE.get(_is['severity'], ('#9DAABC', '—'))
+            st.markdown(
+                f"<div style='background:{_TOK['surface']}; border:1px solid "
+                f"{_bc if _is['severity'] == '높음' else _TOK['border']}; "
+                f"border-radius:12px; padding:12px 16px; margin-bottom:8px;'>"
+                f"<span style='background:{_bc}22; color:{_bc}; font-size:11px; "
+                f"font-weight:800; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
+                f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
+                f"font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
+                f"{_is['type']}</span> "
+                f"<b style='font-size:14px; color:{_TOK['tx1']};'> {_is['title']}</b>"
+                f"<p style='margin:5px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
+                f"{_is['detail']}</p></div>", unsafe_allow_html=True)
+        if len(_issues_global) > 3:
+            st.markdown("**전체 이슈**")
             st.dataframe(pd.DataFrame([{
                 '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
                 '내용': i['detail'], '범위': i['scope'], '생성': i['created'],
@@ -2365,30 +2412,37 @@ if _home_cal.get('total_cases'):
     _bz = (_sp.get('buy_zone') or {})
     _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
     _sig = _home_cal.get('signal_frequency') or {}
-    _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns(5)
-    with _hc1:
-        st.metric("모델 버전",
-                  str(_home_cal.get('rulebook_version', '—')).replace('v2026.', "v'26."),
-                  f"누적 케이스 {_home_cal['total_cases']:,}건", delta_color="off")
-    with _hc2:
-        st.metric("검증(표본외) 적중률",
-                  f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None else "미산출",
-                  f"n={_v.get('n', 0)}", delta_color="off")
-    with _hc3:
-        st.metric("블라인드 적중률",
-                  f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None else "미산출",
-                  f"n={_b.get('n', 0)}", delta_color="off")
-    with _hc4:
-        st.metric("고신뢰(60점+) 블라인드",
-                  f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None else "미산출",
-                  f"n={_bzb.get('n', 0)} — 표본 부족" if (_bzb.get('n') or 0) < 30
-                  else f"n={_bzb.get('n', 0)}", delta_color="off")
-    with _hc5:
-        st.metric("매수권 신호율",
-                  f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None else "미산출",
-                  f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0)}건", delta_color="off")
-    st.caption("🧪 가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
-               "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
+    # v5 재검토: 홈에서는 한 줄 요약만 — 상세 분해는 아래 '모델 검증' 한 곳에서.
+    # (같은 적중률 숫자를 두 화면에 크게 반복하지 않는다)
+    with st.expander(
+            f"모델 상태 — {str(_home_cal.get('rulebook_version', '—'))} · "
+            f"케이스 {_home_cal['total_cases']:,}건 · "
+            f"검증 {_v.get('hit_rate', 0):.1f}% · 블라인드 {_b.get('hit_rate', 0):.1f}% "
+            f"(자세히)", expanded=False):
+        _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns(5)
+        with _hc1:
+            st.metric("모델 버전",
+                      str(_home_cal.get('rulebook_version', '—')).replace('v2026.', "v'26."),
+                      f"누적 케이스 {_home_cal['total_cases']:,}건", delta_color="off")
+        with _hc2:
+            st.metric("검증(표본외) 적중률",
+                      f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None else "미산출",
+                      f"n={_v.get('n', 0)}", delta_color="off")
+        with _hc3:
+            st.metric("블라인드 적중률",
+                      f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None else "미산출",
+                      f"n={_b.get('n', 0)}", delta_color="off")
+        with _hc4:
+            st.metric("고신뢰(60점+) 블라인드",
+                      f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None else "미산출",
+                      f"n={_bzb.get('n', 0)} — 표본 부족" if (_bzb.get('n') or 0) < 30
+                      else f"n={_bzb.get('n', 0)}", delta_color="off")
+        with _hc5:
+            st.metric("매수권 신호율",
+                      f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None else "미산출",
+                      f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0)}건", delta_color="off")
+        st.caption("가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
+                   "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
 with st.spinner(f"[{resolved_name}] 동적 무결성 점수 및 시계열 연산 중..."):

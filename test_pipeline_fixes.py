@@ -3171,6 +3171,23 @@ check("운영 문서 주간 항목", '무료 언어모델 관찰' in open(
     encoding='utf-8').read())
 
 
+section("68. v5 — 이슈 토글 · 모델 상태 요약 축소 · 매수권 스캔 추천")
+
+_w68 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+check("주요 이슈 토글 — 접힌 제목에 건수·최상위 노출",
+      "주요 이슈 {len(_issues_global)}건" in _w68)
+check("모델 상태 — 홈은 접이식 한 줄 요약 (중복 재검토)",
+      "모델 상태 — " in _w68 and "(자세히)" in _w68)
+check("매수권(60점+) 스캔 강조 — 트렌드 탐색기 연동",
+      "매수권(60점+) 신호" in _w68 and "_bz_rows" in _w68)
+check("매수권 없음 = 관망 결론 (날조 금지)",
+      "없는 날은 관망이 결론입니다" in _w68)
+check("v5 폴리시 — 접이식 카드화·pill 버튼",
+      "border-radius: 999px" in _w68
+      and 'stExpander' in _w68)
+
+
 print()
 print("=" * 72)
 if FAILURES:
