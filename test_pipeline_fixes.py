@@ -3177,8 +3177,8 @@ _w68 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 
 check("주요 이슈 토글 — 접힌 제목에 건수·최상위 노출",
       "주요 이슈 {len(_issues_global)}건" in _w68)
-check("모델 상태 — 홈은 접이식 한 줄 요약 (중복 재검토)",
-      "모델 상태 — " in _w68 and "(자세히)" in _w68)
+check("모델 상태 — 사용자 요청으로 토글 없이 상시 표시",
+      "토글 없이 항상 펼쳐 보인다" in _w68)
 check("매수권(60점+) 스캔 강조 — 트렌드 탐색기 연동",
       "매수권(60점+) 신호" in _w68 and "_bz_rows" in _w68)
 check("매수권 없음 = 관망 결론 (날조 금지)",
