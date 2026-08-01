@@ -104,6 +104,7 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
             'score': r.get('final_score'),
             'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)
             'rec_buy': fs.get('recommended_buy_price'),
+            'entry_zone': fs.get('entry_zone'),
             'chase_max': fs.get('buy_entry_max'),
             'target': fs.get('target_tech_1st'),
             'target2': fs.get('target_tech_2nd'),

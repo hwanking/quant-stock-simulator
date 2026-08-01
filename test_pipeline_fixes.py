@@ -3203,8 +3203,8 @@ check("규율 — 미공개 원칙 (선택에 못 쓰면 보지 않는다)",
 _w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("스캔 2계층 — 고신뢰(60+)·확장(58~59) 분리 표시",
       '고신뢰 매수권(60점+)' in _w69 and '확장 신호(58~59점)' in _w69)
-check("확장 신호 정직 표기 — 최신 실측·비용후 음수·보장 아님",
-      '블라인드 58.2%(n=146)' in _w69 and '수익 보장이 아닙니다' in _w69)
+check("확장 신호 정직 표기 — 최신 실측·비용후 음수·탐색용",
+      '블라인드 58.2%(n=146)' in _w69 and '탐색용' in _w69)
 _mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("MODEL_VERSIONS 라운드 2 기록 — 채택 범위·KPI 불변",
@@ -3295,6 +3295,29 @@ check("배너 쉬운 결론 병기 + 현재가 조건 관계",
       '_banner_sub' in _w72 and '조건 위' in _w72)
 check("중복 문구 방지 (헤드라인과 같으면 생략)",
       "not in str(verdict['headline'])" in _w72)
+
+
+section("73. 진입 갭 라운드 2.5 — 갭 표기 · 적정가 이하 구분 · 사전등록 채택")
+
+_gs73 = open(_os.path.join(PROJ, "scripts", "entry_gap_study.py"),
+             encoding='utf-8').read()
+check("사전등록 — 후보·선정 규칙 명문화", 'CANDIDATES' in _gs73
+      and '선정 규칙' in _gs73)
+check("규율 — 통과 없으면 기준선 유지·블라인드 미공개",
+      '기준선 유지' in _gs73)
+_w73 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("추천 카드 갭% 표기", '_gap_pct' in _w73 and '권장보다' in _w73)
+check("갭 큰 조건부 — 사실상 관망 경고 (표시 임계 7%)",
+      '단기 도달 가능성이 낮습니다' in _w73)
+check("확장 신호 — 적정가 이하 구분·실측 병기",
+      '적정가 이하 진입' in _w73 and '61.9%(n=63)' in _w73)
+_pm73 = open(_os.path.join(PROJ, "premarket.py"), encoding='utf-8').read()
+check("premarket — entry_zone 저장 (다음 리포트부터)",
+      "'entry_zone': fs.get('entry_zone')" in _pm73)
+_mv73 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("MODEL_VERSIONS 라운드 2.5 — train 불일치 주의 기록",
+      '라운드 2.5' in _mv73 and 'train 방향 불일치' in _mv73)
 
 
 print()

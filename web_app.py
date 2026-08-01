@@ -1265,13 +1265,22 @@ if st.session_state.get('show_screener', False):
                     + "  \n실측 신호율 2.9%의 드문 구간입니다. 아래 표에서 "
                       "종목을 눌러 조건을 확인하세요.")
             if _ext_rows:
-                st.info(
+                # 라운드 2.5: 이 중 '적정가 이하' 종목이 실측상 가장 좋다
+                # (검증 64.2% → 블라인드 61.9%·비용후 +1.15%)
+                _ext_below = [r for r in _ext_rows if r.get('entry_candidate')]
+                _ext_msg = (
                     f"**확장 신호(58~59점) {len(_ext_rows)}종목** — "
                     + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
                                  for r in _ext_rows[:6])
                     + "  \n사전등록 실측(4,229건): 검증 61.2%(n=304) → "
-                      "블라인드 58.2%(n=146). 비용 차감 후 기대값은 소폭 음수 — "
-                      "진입 후보 탐색용이며 수익 보장이 아닙니다.")
+                      "블라인드 58.2%(n=146), 비용 차감 후 소폭 음수 — 탐색용.")
+                if _ext_below:
+                    _ext_msg += (
+                        f"  \n⭐ 이 중 **적정가 이하 진입 {len(_ext_below)}종목** ("
+                        + " · ".join(r.get('name') for r in _ext_below[:4])
+                        + ") — 이 조건은 블라인드 61.9%(n=63)·비용후 +1.15%로 "
+                          "가장 좋았습니다 (라운드 2.5 실측).")
+                st.info(_ext_msg)
             if not _bz_rows and not _ext_rows:
                 st.caption("이번 스캔에는 매수권(60점+)·확장 신호(58~59점)가 모두 "
                            "없습니다 — 없는 날은 관망이 결론입니다.")
@@ -1567,6 +1576,17 @@ if _pmr:
             _news_txt.append(f"⚠️위험 낱말 {_p['news_risk']}건")
         if _p.get('news_lagging'):
             _news_txt.append(f"후행 보도 {_p['news_lagging']}건 제외")
+        # 갭 표기 (라운드 2.5) — 조건부 매수가와 현재 기준가의 거리. 갭이 크면
+        # 실측상 '추격 위험' 구간 성과가 최악(54.6%·비용후 -0.98%)임을 경고한다.
+        _gap_html = ""
+        if _p.get('rec_buy') and _p.get('price') and '이하로 내려올 때만' in str(_p.get('easy_line')):
+            _gap_pct = (float(_p['price']) / float(_p['rec_buy']) - 1) * 100
+            if _gap_pct > 0:
+                _gap_warn = (" — 갭이 커서 단기 도달 가능성이 낮습니다. 사실상 관망"
+                             if _gap_pct >= 7 else "")
+                _gap_html = (f"<p style='margin:0 0 6px 0; font-size:11.5px; "
+                             f"color:{'#F2B84B' if _gap_pct >= 7 else _TOK['tx2']};'>"
+                             f"기준가가 권장보다 {_gap_pct:+.1f}% 위{_gap_warn}</p>")
         with _pm_cols[_pi]:
             st.markdown(f"""
             <div style='background:{_TOK['surface']}; border:1px solid {_TOK['border']};
@@ -1579,7 +1599,7 @@ if _pmr:
                  color:{_TOK['tx1']};'>{_p.get('name')}</p>
               <p style='margin:0; font-size:11.5px; color:{_TOK['tx2']};'>{_p.get('code')} · {_p.get('asset_type')} · {_p.get('score')}점</p>
               <p style='margin:9px 0 6px 0; font-size:13.5px; font-weight:800;
-                 color:{_cc}; line-height:1.45;'>{_p.get('easy_line')}</p>
+                 color:{_cc}; line-height:1.45;'>{_p.get('easy_line')}</p>{_gap_html}
               <p style='margin:0; font-size:12.5px; color:{_TOK['tx2']}; line-height:1.7;'>
                 권장 <b style='color:{_TOK['tx1']};'>{'{:,.0f}원'.format(_p['rec_buy']) if _p.get('rec_buy') else '미산출'}</b><br>
                 목표 {'{:,.0f}원'.format(_p['target']) if _p.get('target') else '—'} · 손절 {'{:,.0f}원'.format(_p['stop']) if _p.get('stop') else '—'}<br>
