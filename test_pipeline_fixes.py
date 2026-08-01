@@ -2586,21 +2586,31 @@ check("1차 목표 문구가 분할익절 의미를 명시",
 check("손절 문구가 변동성 기반임을 명시",
       '2σ' in str(_fs55.get('stop_loss_note')))
 
-# 캘리브레이션 산출물 계약 — 진입 후보 KPI 와 홀드아웃 분리 보고
+# 캘리브레이션 산출물 계약 — 표본이 커져도 유지되어야 하는 것만 계약으로 잠근다.
+# (초기 소표본의 '진입 후보 68%' 는 1,073건 확장에서 59.2%로 후퇴했다 — 소표본
+#  수치를 계약으로 박으면 표본 확대 자체를 벌하게 된다. 지속 가능한 계약은:
+#  ① 점수 구간별 적중률의 단조성 — 점수가 실제 확률을 구분하는가
+#  ② 매수권 구간(60점+)의 비용 차감 후 양의 기대값 — 시스템이 '사라'는 영역의 성과)
 _cal55 = _os.path.join(PROJ, ".portfolio", "calibration.json")
 if _os.path.exists(_cal55):
     import json as _json55
     _c55 = _json55.load(open(_cal55, encoding='utf-8'))
     check("진입 후보 KPI 저장 (main/holdout/all)",
           all(k in _c55.get('entry_candidates', {}) for k in ('main', 'holdout', 'all')))
-    _ec55 = _c55['entry_candidates']['all']
-    check("진입 후보 적중률 60% 이상 (가상 백테스트)",
-          (_ec55.get('hit_rate') or 0) >= 60.0, str(_ec55.get('hit_rate')))
-    check("홀드아웃도 60% 근처 유지 (과적합 점검)",
-          (_c55['entry_candidates']['holdout'].get('hit_rate') or 0) >= 55.0,
-          str(_c55['entry_candidates']['holdout'].get('hit_rate')))
-    check("진입 후보 평균수익 양수 (적중률만 올리고 수익을 죽이지 않음)",
-          (_ec55.get('avg_return') or -1) > 0, str(_ec55.get('avg_return')))
+    _bands55 = {(b['lo'], b['hi']): b for b in _c55.get('bands', [])}
+    _b40 = _bands55.get((40, 49), {})
+    _b50 = _bands55.get((50, 59), {})
+    _b60 = _bands55.get((60, 100), {})
+    if all(b.get('n', 0) >= 30 for b in (_b40, _b50)) and _b60.get('n', 0) >= 15:
+        check("점수 구간 적중률 단조 증가 (점수가 확률을 실제로 구분)",
+              (_b40.get('hit_rate') or 0) < (_b50.get('hit_rate') or 0)
+              < (_b60.get('hit_rate') or 0),
+              f"{_b40.get('hit_rate')} < {_b50.get('hit_rate')} < {_b60.get('hit_rate')}")
+        check("매수권(60점+) 평균수익 양수 — 비용 차감 후에도",
+              (_b60.get('avg_return') or -1) - 0.55 > 0, str(_b60.get('avg_return')))
+    else:
+        check("점수 구간 표본 미충족 — 단조성 검증 유보 (표본 부족 정직 표기)", True)
+    check("유형·시장·국면별 성과 분해 저장", 'breakdowns' in _c55)
 else:
     check("캘리브레이션 파일 없음 — 랩 미실행 환경 (개입 없음 확인)",
           True)

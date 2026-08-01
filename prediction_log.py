@@ -164,6 +164,13 @@ def grade_prediction(row, prices_df):
     else:
         real_ret = ret_pct
 
+    # 경로 기록 — 최고 유리/불리 이동(MFE/MAE). 판정이 결정된 봉까지만 본다
+    # (손절 이후의 반등을 성과처럼 집계하면 안 된다).
+    upto = touched_at if touched_at else len(bars)
+    path = bars[:upto]
+    mfe_pct = (max(h for h, _l, _c in path) / entry - 1.0) * 100.0
+    mae_pct = (min(l for _h, l, _c in path) / entry - 1.0) * 100.0
+
     return {
         'outcome': outcome,             # TARGET / STOP / OPEN
         'touched_bar': touched_at,
@@ -171,6 +178,8 @@ def grade_prediction(row, prices_df):
         'matured': len(bars) >= (row.get('horizon_days') or 20),
         'return_pct': real_ret,
         'close_return_pct': ret_pct,
+        'mfe_pct': mfe_pct,             # 최대 유리 이동 (경로 최고가 기준)
+        'mae_pct': mae_pct,             # 최대 불리 이동 (경로 최저가 기준)
     }
 
 

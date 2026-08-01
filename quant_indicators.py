@@ -1819,6 +1819,26 @@ class QuantIndicatorsEngine:
         }
 
     @staticmethod
+    def classify_asset_type(name, is_fund):
+        """
+        자산 유형: STOCK / ETF / ETF_LEV / ETF_INV.
+
+        레버리지·인버스는 같은 ETF 라도 성질이 다르다:
+          · 인버스는 시장과 반대로 움직여 시장 대비 상대 모멘텀이 무의미하고,
+          · 레버리지·인버스 모두 일일 재조정 복리손실(volatility decay)이 있어
+            20일 보유 전제의 판정에 별도 경고와 비중 축소가 필요하다.
+        이름 기반 판별이다 — 상품 분류 공시가 미연동이므로 그 한계를 명시한다.
+        """
+        nm = str(name or '')
+        if not is_fund:
+            return 'STOCK'
+        if '인버스' in nm:
+            return 'ETF_INV'
+        if '레버리지' in nm or '2X' in nm.upper().replace(' ', ''):
+            return 'ETF_LEV'
+        return 'ETF'
+
+    @staticmethod
     def momentum_12_1(closes):
         """
         12-1 개월 가격 모멘텀 (Jegadeesh–Titman 1993): 최근 1개월을 뺀
@@ -2925,10 +2945,27 @@ class QuantIndicatorsEngine:
         if sq_reason:
             cap_reasons.append(sq_reason)
 
+        # 자산 유형 — ETF 는 적정가 개념이 성립하지 않으므로(펀드) 적정가 계열
+        # 게이트를 비적용한다. 레버리지·인버스는 일일 재조정 복리손실 때문에
+        # 20일 보유 전제 판정에 별도 상한을 건다.
+        asset_type = self.classify_asset_type(
+            getattr(self, '_asset_type_name', ''), bool(val_eval.get('is_fund')))
+        is_fund_asset = asset_type in ('ETF', 'ETF_LEV', 'ETF_INV')
+        asset_type_note = {
+            'STOCK': '',
+            'ETF': 'ETF — 적정가 게이트 비적용, 기술·추세 기준으로 판단',
+            'ETF_LEV': '레버리지 ETF — 일일 재조정 복리손실(변동성 잠식), 단기 전술용',
+            'ETF_INV': '인버스 ETF — 시장과 역방향·복리손실, 단기 헤지용 (장기보유 부적합)',
+        }[asset_type]
+
         data_integrity_cap = 100
         if not fair_value_usable:
-            data_integrity_cap = 64
-            cap_reasons.append(f"적정가 신뢰도 미달({fair_value_confidence:.0f}점) → 상한 64점")
+            if is_fund_asset:
+                # 감점이 아니라 '비적용' — ETF 를 적정가 미달로 이중 처벌하지 않는다
+                cap_reasons.append("ETF — 적정가 게이트 비적용 (기술·추세 기준)")
+            else:
+                data_integrity_cap = 64
+                cap_reasons.append(f"적정가 신뢰도 미달({fair_value_confidence:.0f}점) → 상한 64점")
 
         statistical_cap = 100
         eff_sample_size = hist_pred.get('eff_sample', 0) if hist_pred.get('status') == 'Success' else eff_trades
@@ -2947,13 +2984,24 @@ class QuantIndicatorsEngine:
             expected_return_cap = 59
             cap_reasons.append(f"순기대수익 {expected_path_yield:+.1f}% (2.0% 미만) → 상한 59점")
 
-        chase_buy_cap = {
-            "판정 불가": 59, "안전마진 확보": 100, "적정가 이하 (안전마진 미확보)": 100,
-            "적정가 소폭 초과": 67, "적정가 초과 (추격매수 경고)": 59,
-            "적정가 크게 초과 (추격매수 위험)": 49,
-        }.get(entry_zone, 59)
-        if chase_buy_cap < 100:
-            cap_reasons.append(f"진입 위치 [{entry_zone}] → 상한 {chase_buy_cap}점")
+        if is_fund_asset:
+            # ETF: 적정가가 없으므로 '판정 불가' 상한을 걸지 않는다 (비적용)
+            chase_buy_cap = 100
+        else:
+            chase_buy_cap = {
+                "판정 불가": 59, "안전마진 확보": 100, "적정가 이하 (안전마진 미확보)": 100,
+                "적정가 소폭 초과": 67, "적정가 초과 (추격매수 경고)": 59,
+                "적정가 크게 초과 (추격매수 위험)": 49,
+            }.get(entry_zone, 59)
+            if chase_buy_cap < 100:
+                cap_reasons.append(f"진입 위치 [{entry_zone}] → 상한 {chase_buy_cap}점")
+
+        # 레버리지·인버스 상한 — 일일 재조정 복리손실은 보유일이 길수록 커진다.
+        # 20일 지평 판정과 근본적으로 상충하므로 상한 67점 + 비중 절반 하향.
+        leverage_cap = 100
+        if asset_type in ('ETF_LEV', 'ETF_INV'):
+            leverage_cap = 67
+            cap_reasons.append(f"{asset_type_note} → 상한 67점")
 
         valuation_cap = 100
         if fair_value_usable and curr_price > target_fundamental * 1.10:
@@ -3005,6 +3053,9 @@ class QuantIndicatorsEngine:
         # 종목의 신규 매수를 제한한다 (가점 없음 — 승자 추격은 하지 않는다).
         rel_mom = getattr(self, '_rel_mom_ctx', None)
         momentum_cap = 100
+        if asset_type == 'ETF_INV':
+            # 인버스는 시장과 역방향 — 시장 대비 상대 모멘텀 열위가 정상 상태다
+            rel_mom = None
         if rel_mom and rel_mom.get('relative') is not None and rel_mom['relative'] <= -25.0:
             momentum_cap = 64
             cap_reasons.append(
@@ -3058,6 +3109,7 @@ class QuantIndicatorsEngine:
             context_cap,
             momentum_cap,
             range_low_cap,
+            leverage_cap,
             track_cap
         )
 
@@ -3325,11 +3377,17 @@ class QuantIndicatorsEngine:
             # DeMARK 매수 포인트 — 종합 결론에 그대로 싣는다
             'demark_entry': self.build_demark_entry(dm, curr_price),
 
+            # 자산 유형 — 화면 표시 + 유형별 게이트 근거
+            'asset_type': asset_type,
+            'asset_type_note': asset_type_note,
+
             # 변동성 관리 비중 제안 (Moreira–Muir 2017: 실현 변동성이 높을 때
             # 노출을 줄이면 위험조정수익이 개선된다). 목표 연변동성 20% ÷ 실현.
+            # 레버리지·인버스는 복리손실 때문에 여기서 다시 절반으로 줄인다.
             'suggested_position_pct': (
                 round(min(100.0, max(10.0, 20.0 / (float(vol_20) * (252 ** 0.5) * 100.0)
-                                     * 100.0)), 0)
+                                     * 100.0))
+                      * (0.5 if asset_type in ('ETF_LEV', 'ETF_INV') else 1.0), 0)
                 if vol_20 and vol_20 > 0 else None),
             'suggested_position_basis': (
                 f"연환산 변동성 {float(vol_20) * (252 ** 0.5) * 100.0:.0f}% · 목표 20% "
@@ -4033,6 +4091,10 @@ class QuantIndicatorsEngine:
 
         prices_df, fund_df = b_engine.generate_synthetic_bitemporal_data(
             symbol=symbol, start_date='2020-01-01', end_date=t_ref_str)
+
+        # 자산 유형 판별 — 주식/일반 ETF/레버리지/인버스는 게이트를 다르게 탄다
+        _sm_name = (STOCK_METRICS_DB.get(symbol) or {}).get('name', '')
+        self._asset_type_name = _sm_name
 
         if is_replay:
             # 과거 기준일: 오늘 시세를 주입하면 그 자체가 미래 누수다.

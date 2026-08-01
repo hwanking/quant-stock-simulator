@@ -70,6 +70,40 @@ HOLDOUT_TICKERS = [
     "064350.KS",  # 현대로템 (방산·기계)
     "009830.KS",  # 한화솔루션 (화학·태양광)
     "030200.KS",  # KT (통신)
+    # 3차 확장 (2026-08-02) — 1,000건 목표: 중·소형, 저유동성, ETF 유형까지 전방위
+    "051910.KS",  # (기존 유지 자리표시 — 중복은 자동 건너뜀)
+    "032830.KS",  # 삼성생명 (보험)
+    "010130.KS",  # 고려아연 (비철금속)
+    "011200.KS",  # HMM (해운)
+    "086790.KS",  # 하나금융지주
+    "000270.KS",  # 기아
+    "012330.KS",  # 현대모비스
+    "051900.KS",  # LG생활건강 (경기소비)
+    "090430.KS",  # 아모레퍼시픽
+    "047810.KS",  # 한국항공우주 (방산)
+    "028670.KS",  # 팬오션 (중형 해운)
+    "004000.KS",  # 롯데정밀화학 (중형 화학)
+    "336260.KS",  # 두산퓨얼셀 (중형 성장)
+    "112610.KS",  # 씨에스윈드 (중형 풍력)
+    "025900.KQ",  # 동화기업 (코스닥 중소형)
+    "036930.KQ",  # 주성엔지니어링 (코스닥 장비)
+    "058470.KQ",  # 리노공업 (코스닥 부품)
+    "215200.KQ",  # 메가스터디교육 (코스닥 교육)
+    "078340.KQ",  # 컴투스 (코스닥 게임)
+    "041510.KQ",  # 에스엠 (코스닥 엔터)
+    "035900.KQ",  # JYP Ent.
+    "095340.KQ",  # ISC (코스닥 소형)
+    "137400.KQ",  # 피엔티 (코스닥 소형 장비)
+    "900140.KQ",  # 엘브이엠씨홀딩스 (저유동성)
+    # ETF 유형 — 일반 / 해외지수 / 레버리지 / 인버스
+    "069500.KS",  # KODEX 200 (일반)
+    "229200.KS",  # KODEX 코스닥150 (일반)
+    "360750.KS",  # TIGER 미국S&P500 (해외지수)
+    "133690.KS",  # TIGER 미국나스닥100 (해외지수)
+    "122630.KS",  # KODEX 레버리지
+    "233740.KS",  # KODEX 코스닥150레버리지
+    "114800.KS",  # KODEX 인버스
+    "252670.KS",  # KODEX 200선물인버스2X
 ]
 
 #: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
@@ -110,14 +144,36 @@ def main(limit=200):
     done = load_done()
     os.makedirs(os.path.dirname(VIRT_FILE), exist_ok=True)
 
+    # 시장 국면(그 날짜 기준) — 지수 시계열을 기준일 이하로 잘라 계산한다 (누수 없음)
+    idx_series = {}
+    for mkt in ("KOSPI", "KOSDAQ"):
+        idx_series[mkt] = eng.fetch_index_daily(mkt, 1200)
+
+    def regime_at(mkt, d):
+        s = idx_series.get(mkt)
+        if s is None:
+            return None
+        dates_i, closes_i = s
+        import numpy as _np
+        mask = dates_i.astype(str) <= str(d).replace('-', '')
+        c = closes_i[mask] if mask.any() else closes_i[:0]
+        if len(c) < 60:
+            return None
+        p, s20, s60 = float(c[-1]), float(c[-20:].mean()), float(c[-60:].mean())
+        if p > s20 > s60:
+            return 'BULL'
+        if p < s20 and p < s60:
+            return 'BEAR'
+        return 'SIDEWAYS'
+
     todo = []
     price_cache = {}
-    for tk in TICKERS + HOLDOUT_TICKERS:
+    for tk in dict.fromkeys(TICKERS + HOLDOUT_TICKERS):     # 중복 자동 제거
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
                 symbol=tk, start_date='2020-01-01', end_date=None)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=14):
+            for d in make_asof_dates(pdf, n_dates=20):
                 if (tk, d) not in done:
                     todo.append((tk, d))
         except Exception as exc:
@@ -138,6 +194,9 @@ def main(limit=200):
             row = {
                 'ticker': tk, 'date': d,
                 'cohort': 'holdout' if tk in HOLDOUT_TICKERS else 'main',
+                'asset_type': fs.get('asset_type', 'STOCK'),
+                'market': 'KOSDAQ' if tk.endswith('.KQ') else 'KOSPI',
+                'regime': regime_at('KOSDAQ' if tk.endswith('.KQ') else 'KOSPI', d),
                 'price': float(fs.get('curr_price') or snap['rt_price']),
                 'score': int(fs.get('final_action_score')),
                 'action_title': fs.get('final_action_title'),
@@ -268,11 +327,91 @@ def main(limit=200):
               f"(Wilson 하한 {wl if wl is None else round(wl, 1)}%) "
               f"평균수익 {avg if avg is None else round(avg, 2)}%")
 
+    # ── 유형·시장·국면별 성과 + PF·비용차감·MAE ─────────────────────────────
+    def perf_block(sub, label):
+        if not sub:
+            return {'label': label, 'n': 0}
+        hitb = sum(1 for g in sub if g['grade']['outcome'] == 'TARGET')
+        rets = [g['grade']['return_pct'] for g in sub]
+        wins = sum(r for r in rets if r > 0)
+        losses = -sum(r for r in rets if r < 0)
+        maes = [g['grade'].get('mae_pct') for g in sub if g['grade'].get('mae_pct') is not None]
+        out = {
+            'label': label, 'n': len(sub), 'hit': hitb,
+            'hit_rate': round(hitb / len(sub) * 100, 1),
+            'wilson_low': round(wilson_low(hitb, len(sub)) or 0, 1),
+            'avg_return': round(float(np.mean(rets)), 2),
+            'median_return': round(float(np.median(rets)), 2),
+            'profit_factor': round(wins / losses, 2) if losses > 0 else None,
+            'avg_mae': round(float(np.mean(maes)), 2) if maes else None,
+            # 왕복 거래비용 차감 (수수료+세금+슬리피지 총합의 보수적 추정 0.55%)
+            'avg_return_after_cost': round(float(np.mean(rets)) - 0.55, 2),
+        }
+        return out
+
+    def show_block(b):
+        if b['n'] == 0:
+            print(f"  {b['label']:<26} n=0")
+            return
+        print(f"  {b['label']:<26} n={b['n']:<4} 적중 {b['hit_rate']:5.1f}% "
+              f"(W하한 {b['wilson_low']:4.1f}%) 평균 {b['avg_return']:+5.2f}% "
+              f"중앙값 {b['median_return']:+5.2f}% PF {b['profit_factor']} "
+              f"MAE {b['avg_mae']}% 비용후 {b['avg_return_after_cost']:+5.2f}%")
+
+    breakdowns = {}
+    print("\n" + "=" * 74)
+    print("자산 유형별 성과")
+    print("=" * 74)
+    breakdowns['by_asset_type'] = []
+    for at in ('STOCK', 'ETF', 'ETF_LEV', 'ETF_INV'):
+        b = perf_block([g for g in decided if g['row'].get('asset_type') == at], at)
+        breakdowns['by_asset_type'].append(b)
+        show_block(b)
+
+    print("\n" + "=" * 74)
+    print("시장·국면별 성과")
+    print("=" * 74)
+    breakdowns['by_market'] = []
+    for mk in ('KOSPI', 'KOSDAQ'):
+        b = perf_block([g for g in decided if g['row'].get('market') == mk], mk)
+        breakdowns['by_market'].append(b)
+        show_block(b)
+    breakdowns['by_regime'] = []
+    for rg in ('BULL', 'SIDEWAYS', 'BEAR'):
+        b = perf_block([g for g in decided if g['row'].get('regime') == rg], rg)
+        breakdowns['by_regime'].append(b)
+        show_block(b)
+
+    # ── 케이스 스터디 원장 — 17개 항목을 채운 채점 결과를 그대로 남긴다 ──────
+    graded_file = os.path.join(PROJ, ".portfolio", "virtual_graded.jsonl")
+    with open(graded_file, 'w', encoding='utf-8') as gf:
+        for g in graded:
+            rec = dict(g['row'])
+            rec.update({
+                'outcome': g['grade']['outcome'],
+                'touched_bar': g['grade'].get('touched_bar'),
+                'return_pct': round(g['grade']['return_pct'], 2),
+                'close_return_pct': round(g['grade']['close_return_pct'], 2),
+                'mfe_pct': round(g['grade'].get('mfe_pct') or 0, 2),
+                'mae_pct': round(g['grade'].get('mae_pct') or 0, 2),
+                'success': g['grade']['outcome'] == 'TARGET',
+                'failure_class': (
+                    None if g['grade']['outcome'] == 'TARGET'
+                    else ('노이즈 손절(MFE가 목표 절반 이상)' if
+                          (g['grade'].get('mfe_pct') or 0) >= 0.5 *
+                          ((g['row'].get('target') or 0) / max(g['row'].get('price') or 1, 1) - 1) * 100
+                          else '방향 오판(초기부터 하락)')
+                    if g['grade']['outcome'] == 'STOP' else '기간 내 미도달'),
+            })
+            gf.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print(f"\n케이스 원장 저장: {graded_file} ({len(graded)}건)")
+
     calib = {
         'generated_from': f"{len(rows)}건 가상 판정 · 판정 완료 {len(decided)}건",
         'bands': bands_out,
         'lifts': lifts,
         'entry_candidates': entry_out,
+        'breakdowns': breakdowns,
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

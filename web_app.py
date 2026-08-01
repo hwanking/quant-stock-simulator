@@ -1166,9 +1166,10 @@ if st.session_state.get('show_screener', False):
                         _entry_badge = "🎯" if r.get('entry_candidate') else ""
                         if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
                                      use_container_width=True,
-                                     help=("진입 후보 — 적정가 이하 & 순기대수익 양수 "
-                                           "(리플레이 327건 적중률 68%)" if r.get('entry_candidate')
-                                           else None)):
+                                     help=("진입 후보 — 적정가 이하 & 순기대수익 양수. "
+                                           "점수대별 실측 적중률은 종합 결론의 "
+                                           "'가상 백테스트' 표기를 보세요."
+                                           if r.get('entry_candidate') else None)):
                             # 스냅샷은 st.session_state['scan_results'] 안에 그대로 있으므로
                             # 종목만 전환하면 상세화면이 같은 객체를 찾아 재사용한다 (§17)
                             st.session_state['pending_search'] = f"{r['name']} ({r['symbol'].split('.')[0]})"
