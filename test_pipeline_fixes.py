@@ -1924,12 +1924,16 @@ check("HOLD/NO_TRADE 는 진입 적중률에서 제외",
       'HOLD' not in plog45.ENTRY_ACTIONS and 'NO_TRADE' not in plog45.ENTRY_ACTIONS)
 _os.remove(_pp45)
 
-# ⑦ 화면 연결 — 컨텍스트 패널·성적표·기록 호출
+# ⑦ 화면 연결 — 컨텍스트 패널·실측 성적·기록 호출
+# ('판정 성적표' 대기형 패널은 기록이 없으면 빈 화면이라 제거하고, 이미 채점이
+#  끝난 가상 백테스트 실측 표시로 교체했다. 기록 축적(record_prediction)과
+#  자기보정 상한은 백엔드에서 계속 돈다.)
 _w45 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("컨텍스트 패널 존재", "시장·글로벌·뉴스 컨텍스트" in _w45)
-check("성적표 패널 존재", "판정 성적표" in _w45)
-check("판정 기록 호출", "record_prediction" in _w45)
-check("온라인 저장 불가 사실 고지", "판정 기록이 쌓이지 않습니다" in _w45)
+check("실측 성적 패널로 교체 (대기형 성적표 제거)",
+      "검증된 실측 성적" in _w45 and "지금 채점하기" not in _w45)
+check("판정 기록 호출은 유지 (자기보정 백엔드)", "record_prediction" in _w45)
+check("표본 부족 구간 정직 표기", "적중률 미표시" in _w45)
 check("뉴스 비해석 원칙 문구", "요약·해석해" in _w45)
 
 
@@ -2725,6 +2729,71 @@ check("블라인드 성적으로 채택하지 않는 원칙 명시",
 check("결론 = 현행 조합 유지", "현행 종합점수 조합 유지" in _mv58)
 check("차기 사전 등록 후보 기록 (E 조합)", "차기 라운드" in _mv58 or "사전 등록 후보" in _mv58)
 check("산출 보류 부속 연구 기록", "산출 보류" in _mv58 and "58.1%" in _mv58)
+
+
+section("59. 아주 쉬운 결론 — 신규/보유 기준 분리 · 90% 정직 정책")
+
+# 사용자 요구: 안 샀으면 사도 되는지, 샀으면(평단 기준) 팔지/더 살지/물타기 금지를
+# 한 줄로. 신규 매수자와 보유자의 기준을 절대 섞지 않는다.
+
+_fs59 = {'recommended_buy_price': 10000, 'buy_entry_max': 11000,
+         'target_tech_1st': 10800, 'target_tech_2nd': 11500,
+         'stop_loss_price': 9400, 'm10_disparity': 5.0,
+         'calibration_band': {'lo': 55, 'hi': 59, 'n': 921, 'hit_rate': 61.0}}
+_v59 = {'score': 62, 'action': 'HOLD', 'vetoes': []}
+
+_e59 = q.build_easy_advice(_fs59, _v59, 10500)
+check("비보유·추격 구간 → '이하로 내려올 때만'",
+      '이하로 내려올 때만' in _e59['new_buyer']['line'])
+check("신규 기준 가격 세트 (분할·추격금지·목표·손절·기간)",
+      all(k in _e59['new_buyer']['prices'] for k in
+          ('권장 매수가(1차 분할)', '추격매수 금지선', '1차 목표가', '예상 보유기간')))
+
+_e59b = q.build_easy_advice(_fs59, {'score': 70, 'action': 'BUY', 'vetoes': []}, 9800)
+check("매수 가능 → '지금 사도 됩니다 (나눠서)'",
+      '지금 사도 됩니다' in _e59b['new_buyer']['line'])
+check("틀릴 가능성을 실측으로 명시",
+      '틀릴 가능성' in _e59b['new_buyer']['detail'])
+
+_e59c = q.build_easy_advice({'recommended_buy_price': None, 'm10_disparity': 0},
+                            {'score': 50, 'action': 'HOLD', 'vetoes': []}, 10000)
+check("신뢰도 미달 → 판단 보류 (억지 판단 금지)",
+      '판단을 보류' in _e59c['new_buyer']['line'])
+
+# 보유자 분기
+_h1 = q.build_easy_advice(_fs59, _v59, 10500, user_avg=9500)['holder']
+check("수익 중 정상 → 계속 보유 + 손절 유지", '계속 보유' in _h1['line'])
+_h2 = q.build_easy_advice(_fs59, _v59, 9300, user_avg=10500)['holder']
+check("손절선 이탈 → 정리 검토", '손절' in _h2['line'] and '이탈' in _h2['line'])
+_fs59o = dict(_fs59); _fs59o['m10_disparity'] = 30.0
+_h3 = q.build_easy_advice(_fs59o, _v59, 10500, user_avg=8000)['holder']
+check("수익+과열 → 일부 매도(절반)", '일부 매도' in _h3['line'])
+_fs59d = dict(_fs59); _fs59d['m10_disparity'] = -8.0
+_v59d = {'score': 45, 'action': 'HOLD', 'vetoes': ['순기대수익 음수']}
+_h4 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=11500)['holder']
+check("손실+하락추세 → 물타기 금지", '물타기' in _h4['line'] and '마세요' in _h4['line'])
+_h5 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=13000)['holder']
+check("깊은 손실 → 반등 시 비중 축소", '비중 축소' in _h5['line'])
+_h6 = q.build_easy_advice(_fs59, _v59, 9800, user_avg=11500)['holder']
+check("조건 충족 손실 → 가격 지정 분할 추가매수 허용",
+      '이하에서만' in _h6['line'])
+check("보유자 가격 세트가 신규와 분리",
+      '손절가(보유 기준)' in _h6['prices'] and _h6['prices']['평균 매수가'] == 11500)
+check("비보유 응답에는 보유자 블록 없음",
+      q.build_easy_advice(_fs59, _v59, 10500)['holder'] is None)
+
+# 화면·정책 연결
+_w59 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("쉬운 결론 2단 배치 (비보유/보유)", "아직 이 종목이 없다면" in _w59
+      and "보유 중이라면" in _w59)
+check("기준 분리 경고 문구", "신규 매수 기준과 보유자 기준은 서로 다릅니다" in _w59)
+_lab59 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
+check("고신뢰(65+) 계층 상시 보고", "고신뢰 신호 계층" in _lab59)
+check("표본 미달 시 과장 금지 로직", "표본 부족' 으로 보고" in _lab59
+      or "표본 부족\\' 으로 보고" in _lab59 or "과장 없이" in _lab59)
+_mv59 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"), encoding='utf-8').read()
+check("90% 인정 기준 13개항 공식화", "90% 인정 기준" in _mv59 and "⑬" in _mv59)
+check("현재 실측·필요 표본 정직 보고", "71.4%" in _mv59 and "필요 표본" in _mv59)
 
 
 print()

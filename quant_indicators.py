@@ -1819,6 +1819,126 @@ class QuantIndicatorsEngine:
         }
 
     @staticmethod
+    def build_easy_advice(fs, verdict, curr_price, user_avg=None, user_qty=None):
+        """
+        사용자 상황별 '아주 쉬운 결론'. 신규 매수자와 보유자의 기준을 절대 섞지 않는다.
+
+        반환:
+          new_buyer: {'emoji','line','detail'(쉬운 문단),'prices'{...}}
+          holder   : 평단가·수량 입력 시 {'emoji','line','detail','ret_pct','prices'{...}}
+        모든 가격·조건은 엔진이 이미 계산한 값만 조합한다 — 여기서 새 숫자를
+        만들지 않는다. 산출 불가면 그대로 '판단 보류'로 말한다.
+        """
+        score = (verdict or {}).get('score')
+        action = (verdict or {}).get('action')
+        vetoes = list((verdict or {}).get('vetoes') or [])
+        rec = fs.get('recommended_buy_price')
+        chase_max = fs.get('buy_entry_max')
+        t1, t2 = fs.get('target_tech_1st'), fs.get('target_tech_2nd')
+        stop = fs.get('stop_loss_price')
+        m10 = float(fs.get('m10_disparity', 0) or 0)
+        overheat = m10 > 25.0
+        downtrend = m10 < 0
+        cb = fs.get('calibration_band') or {}
+
+        def w(v):
+            return f"{v:,.0f}원" if v is not None else "산출 불가"
+
+        # 과거 실측으로 '틀릴 가능성'을 함께 말한다 (표본 부족이면 말하지 않는다)
+        if cb.get('hit_rate') is not None and cb.get('n', 0) >= 30:
+            odds = (f"비슷한 점수({cb['lo']}~{cb['hi']}점)의 과거 사례 {cb['n']}건 중 "
+                    f"{cb['hit_rate']:.0f}%가 목표가에 먼저 닿았습니다 "
+                    f"(틀릴 가능성 약 {100 - cb['hit_rate']:.0f}%).")
+        else:
+            odds = "이 점수대는 과거 사례가 적어 적중률을 제시하지 않습니다."
+
+        # ── 신규 매수자 ────────────────────────────────────────────────
+        if score is None:
+            nb = {'emoji': '⚪', 'line': '데이터가 부족해 판단할 수 없습니다.',
+                  'detail': "분석에 필요한 데이터가 모자랍니다. 무리해서 사지 마세요."}
+        elif action in ('BUY', 'ACCUMULATE') and not vetoes:
+            nb = {'emoji': '🟢', 'line': '지금 사도 됩니다 (나눠서).',
+                  'detail': (f"한 번에 다 사지 말고 나눠 사세요. 1차는 지금, "
+                             f"손절선(잃음을 멈추는 선) {w(stop)}을 지키세요. "
+                             f"1차 목표(먼저 일부 이익실현) {w(t1)}, 2차 목표 {w(t2)}. {odds}")}
+        elif rec is not None and curr_price and curr_price > rec:
+            nb = {'emoji': '🟡', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
+                  'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
+                             f"쫓아가서 사지 마세요(추격매수 금지"
+                             + (f" — {w(chase_max)} 위에서는 특히 금지" if chase_max else "")
+                             + f"). {w(rec)} 아래로 오면 나눠서 검토하세요. {odds}")}
+        elif rec is None:
+            nb = {'emoji': '⚪', 'line': '분석 신뢰도가 낮아 판단을 보류하세요.',
+                  'detail': "적정 매수 가격을 믿을 만하게 계산하지 못했습니다. "
+                            "이 종목은 근거가 더 생길 때까지 관망이 안전합니다."}
+        else:
+            _why = vetoes[0] if vetoes else "매수 조건 미충족"
+            nb = {'emoji': '🟡', 'line': '지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.',
+                  'detail': (f"막는 조건: {_why}. 가격은 매수 구간({w(rec)} 이하)이어도 "
+                             f"이 조건이 풀려야 삽니다. {odds}")}
+        nb['prices'] = {'권장 매수가(1차 분할)': rec,
+                        '2차 분할가': (rec - 0.5 * (rec - stop)
+                                   if rec is not None and stop is not None and rec > stop
+                                   else None),
+                        '추격매수 금지선': chase_max,
+                        '1차 목표가': t1, '2차 목표가': t2,
+                        '손절가(신규 진입 기준으로 재설정)': stop,
+                        '예상 보유기간': '약 20거래일'}
+
+        # ── 보유자 ────────────────────────────────────────────────────
+        holder = None
+        if user_avg and user_avg > 0 and curr_price:
+            ret = (curr_price / float(user_avg) - 1.0) * 100.0
+            add_ok = (score is not None and score >= 58 and not downtrend
+                      and not vetoes and rec is not None and curr_price <= rec)
+            if stop is not None and curr_price < stop:
+                holder = {'emoji': '🔴',
+                          'line': '손절 기준을 이탈했습니다 — 정리(손절)를 검토하세요.',
+                          'detail': (f"현재가가 손절선 {w(stop)} 아래입니다. "
+                                     f"현재 {ret:+.1f}%. 손실이 더 커지기 전에 정리하는 것이 "
+                                     f"원칙입니다. 반등을 기다리는 선택은 '기대'이지 근거가 아닙니다.")}
+            elif ret > 0 and overheat:
+                holder = {'emoji': '🟠',
+                          'line': '수익 중 — 일부 매도(절반 이익실현)를 권합니다.',
+                          'detail': (f"현재 {ret:+.1f}% 수익. 단기 과열 신호(장기 추세선 대비 "
+                                     f"+{m10:.0f}%)가 강합니다. 절반은 지금 팔고, 나머지는 "
+                                     f"손절선을 {w(stop)}으로 올려 지키며 {w(t2)}까지 보유하세요.")}
+            elif ret > 0:
+                holder = {'emoji': '🔵',
+                          'line': '계속 보유하세요 — 목표가까지, 손절가는 지키면서.',
+                          'detail': (f"현재 {ret:+.1f}% 수익. {w(t1)} 도달 시 일부 매도, "
+                                     f"{w(t2)}가 최종 목표입니다. 종가가 {w(stop)} 아래로 "
+                                     f"내려가면 원칙대로 정리하세요. 추가 매수는 "
+                                     + ("가능 구간입니다 (나눠서)." if add_ok else "지금은 하지 마세요."))}
+            elif add_ok:
+                holder = {'emoji': '🔵',
+                          'line': f'보유 유지 — 추가 매수는 {w(rec)} 이하에서만 나눠서.',
+                          'detail': (f"현재 {ret:+.1f}%. 추세가 살아 있고 매수 구간 안이라 "
+                                     f"분할 추가매수를 검토할 수 있습니다. 단, 손절선 {w(stop)}은 "
+                                     f"반드시 지키세요. {odds}")}
+            else:
+                _deep = ret <= -15.0
+                holder = {'emoji': '🟠',
+                          'line': ('물타기(평단 낮추기 목적의 추가 매수)는 하지 마세요.'
+                                   if not _deep else
+                                   '추가 매수 금지 — 반등 시 비중 축소를 검토하세요.'),
+                          'detail': (f"현재 {ret:+.1f}% 손실. "
+                                     + ("하락 추세가 끝나지 않았습니다. " if downtrend else "")
+                                     + (f"기술적 반등이 나오면 {w(t1)} 부근에서 비중을 줄이는 "
+                                        f"쪽을 검토하세요. " if _deep else "")
+                                     + f"평단을 낮추려는 추가 매수는 손실을 키우는 경우가 더 "
+                                       f"많습니다. 추세 회복({'월 추세선 회복' if downtrend else '조건 충족'})과 "
+                                       f"거래량 확인 후에만 재검토하세요. 종가 {w(stop)} 이탈 시 정리.")}
+            holder['ret_pct'] = round(ret, 2)
+            holder['prices'] = {'평균 매수가': float(user_avg),
+                                '현재가': float(curr_price),
+                                '손절가(보유 기준)': stop,
+                                '반등 시 축소 가격': t1, '최종 목표가': t2,
+                                '추가 매수 허용가': (rec if add_ok else None)}
+
+        return {'new_buyer': nb, 'holder': holder, 'odds_note': odds}
+
+    @staticmethod
     def classify_asset_type(name, is_fund):
         """
         자산 유형: STOCK / ETF / ETF_LEV / ETF_INV.

@@ -712,48 +712,36 @@ if user_entry_price > 0 and user_quantity > 0 and _reg is None:
                 source_type="manual_entry")]
         st.rerun()
 
-# 🧾 판정 성적표 — 화면에 내보낸 판정이 이후 실제로 맞았는지 스스로 채점
+# 🧪 검증된 실측 성적 — 가상 백테스트 1,950건 (과거 기준일 리플레이 채점)
+# 예전의 '판정 성적표'(실사용 기록 대기형)는 기록이 쌓이기 전엔 빈 화면이라 제거.
+# 대신 이미 채점이 끝난 대규모 리플레이 실측을 보여준다. 상세 수치는 calibration.json.
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧾 판정 성적표 (자기 검증)")
+st.sidebar.markdown("### 🧪 검증된 실측 성적 (가상 백테스트)")
 try:
-    import prediction_log as _plog_sb
-    _pred_rows = _plog_sb.load_predictions() if ALLOW_LOCAL_STORE else []
-    if not ALLOW_LOCAL_STORE:
-        st.sidebar.caption("온라인 실행에서는 서버 저장소가 세션마다 초기화되어 "
-                           "판정 기록이 쌓이지 않습니다. 성적표는 내 PC 실행에서 확인하세요.")
-    elif not _pred_rows:
-        st.sidebar.caption("기록된 판정이 아직 없습니다. 종목을 분석할 때마다 그날의 "
-                           "판정(행동·점수·목표가·손절가)이 자동으로 기록되고, 예측 기간이 "
-                           "지나면 실제 주가와 대조해 채점됩니다.")
+    import json as _json_sb
+    _cal_sb_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".portfolio", "calibration.json")
+    if os.path.exists(_cal_sb_path):
+        with open(_cal_sb_path, encoding='utf-8') as _cf_sb:
+            _cal_sb = _json_sb.load(_cf_sb)
+        _bands_sb = {(b['lo'], b['hi']): b for b in _cal_sb.get('bands', [])}
+        st.sidebar.caption(f"과거 기준일 리플레이 **{_cal_sb.get('total_cases', 0):,}건** 채점 "
+                           f"(모델 {_cal_sb.get('rulebook_version', '')}) — 그 날 알 수 있었던 "
+                           f"데이터만으로 판정하고 이후 실제 주가로 채점한 결과입니다.")
+        for (_lo_sb, _hi_sb), _lab_sb in [((55, 59), "55~59점(관망 상단)"),
+                                          ((60, 64), "60~64점(매수권)"),
+                                          ((65, 69), "65~69점(고신뢰)")]:
+            _b_sb = _bands_sb.get((_lo_sb, _hi_sb))
+            if _b_sb and _b_sb.get('hit_rate') is not None and _b_sb.get('n', 0) >= 10:
+                st.sidebar.caption(f"· {_lab_sb}: 적중 **{_b_sb['hit_rate']:.0f}%** "
+                                   f"(n={_b_sb['n']}, 하한 {_b_sb.get('wilson_low', 0):.0f}%)")
+            elif _b_sb:
+                st.sidebar.caption(f"· {_lab_sb}: 표본 {_b_sb.get('n', 0)}건 — 적중률 미표시")
     else:
-        st.sidebar.caption(f"기록된 판정 {len(_pred_rows)}건 — 판정은 기록 후 절대 "
-                           f"고쳐 쓰지 않으며, 채점은 실제 일봉과 대조해 계산합니다.")
-        if st.sidebar.button("📊 지금 채점하기", use_container_width=True, key="btn_grade"):
-            with st.spinner("기록된 판정을 실제 주가와 대조하는 중..."):
-                _graded, _gsum = _plog_sb.evaluate_all(engine_init)
-            st.session_state['pred_grade'] = (_graded, _gsum)
-        if st.session_state.get('pred_grade'):
-            _graded, _gsum = st.session_state['pred_grade']
-            if _gsum['hit_rate'] is not None:
-                st.sidebar.metric("진입 판정 적중률 (목표가 먼저 도달)",
-                                  f"{_gsum['hit_rate']:.0f}%",
-                                  f"적중 {_gsum['hit']} / 실패 {_gsum['miss']} / 미결 {_gsum['open']}")
-            else:
-                st.sidebar.caption(_gsum.get('min_sample_note') or
-                                   "채점 가능한 진입 기록이 부족합니다.")
-            if _gsum.get('avg_return') is not None:
-                st.sidebar.caption(f"진입 판정 평균 수익률: {_gsum['avg_return']:+.1f}% "
-                                   f"(진입 {_gsum['n_entry']}건 기준)")
-            with st.sidebar.expander("최근 판정과 결과 보기"):
-                _OUT_KO = {'TARGET': '🟢 목표 도달', 'STOP': '🔴 손절 터치', 'OPEN': '⏳ 미결'}
-                for _g in _graded[-10:][::-1]:
-                    _r, _gr = _g['row'], _g['grade']
-                    _res = _OUT_KO.get((_gr or {}).get('outcome'), '⏳ 집계 전')
-                    st.markdown(f"**{_r.get('name') or _r.get('ticker')}** {_r.get('date')} · "
-                                f"{_r.get('action_label') or _r.get('action')} "
-                                f"({_r.get('score')}점) → {_res}")
+        st.sidebar.caption("실측 파일이 없습니다 (클라우드 실행은 저장소가 초기화됩니다). "
+                           "내 PC에서 `python scripts/calibration_lab.py` 로 생성됩니다.")
 except Exception as _pex:
-    st.sidebar.caption(f"성적표 모듈 오류: {type(_pex).__name__}")
+    st.sidebar.caption(f"실측 표시 오류: {type(_pex).__name__}")
 
 
 # --- 분석 파라미터 (스캐너와 상세화면이 동일 값을 써야 하므로 먼저 정의한다) ---
@@ -2233,6 +2221,40 @@ st.markdown(f"""
     DeMARK 매수 포인트는 <b>시점</b> 신호이며, 위 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ═══ 🧭 아주 쉬운 결론 — 신규 매수자와 보유자를 절대 섞지 않는다 ═══════════
+_easy = q_engine.build_easy_advice(
+    four_scores, verdict, realtime_price,
+    user_avg=(user_entry_price if user_entry_price > 0 else None),
+    user_qty=(user_quantity if user_quantity > 0 else None))
+_ec1, _ec2 = st.columns(2)
+with _ec1:
+    _nb = _easy['new_buyer']
+    st.markdown(f"""
+    <div style='background:#141416; border:2px solid #2c2c2e; border-radius:14px; padding:14px 16px; height:100%;'>
+      <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>🧭 아직 이 종목이 없다면</p>
+      <p style='margin:6px 0; font-size:1.15rem; font-weight:900; color:#f5f5f7;'>{_nb['emoji']} {_nb['line']}</p>
+      <p style='margin:0; font-size:0.88rem; color:#d2d2d7; line-height:1.55;'>{_nb['detail']}</p>
+    </div>""", unsafe_allow_html=True)
+with _ec2:
+    _hd = _easy['holder']
+    if _hd:
+        st.markdown(f"""
+        <div style='background:#141416; border:2px solid #2c2c2e; border-radius:14px; padding:14px 16px; height:100%;'>
+          <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>💼 보유 중이라면 (평단 {user_entry_price:,.0f}원 · 현재 {_hd['ret_pct']:+.1f}%)</p>
+          <p style='margin:6px 0; font-size:1.15rem; font-weight:900; color:#f5f5f7;'>{_hd['emoji']} {_hd['line']}</p>
+          <p style='margin:0; font-size:0.88rem; color:#d2d2d7; line-height:1.55;'>{_hd['detail']}</p>
+        </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='background:#141416; border:2px dashed #2c2c2e; border-radius:14px; padding:14px 16px; height:100%;'>
+          <p style='margin:0; font-size:0.78rem; color:#86868b; font-weight:700;'>💼 보유 중이라면</p>
+          <p style='margin:6px 0; font-size:0.95rem; color:#d2d2d7; line-height:1.6;'>
+            사이드바의 <b>내 포지션 입력</b>에 평균 매수가와 수량을 넣으면<br>
+            보유·일부 매도·손절·추가 매수 여부를 <b>내 평단 기준</b>으로 알려드립니다.</p>
+        </div>""", unsafe_allow_html=True)
+st.caption("⚠️ 신규 매수 기준과 보유자 기준은 서로 다릅니다 — 신규 진입가와 보유자 손절가가 "
+           "다른 값인 것이 정상입니다. 투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
 
 # 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
 _extra_bits = []

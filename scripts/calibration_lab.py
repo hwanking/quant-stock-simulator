@@ -475,6 +475,16 @@ def main(limit=200):
     freq_out = {'total': len(graded), 'buy_zone': n_buy,
                 'rate_pct': round(n_buy / len(graded) * 100, 1)}
 
+    # ── 고신뢰 신호 계층 (90% 검증 목표의 잣대) — 점수 65+ ────────────────────
+    hc = perf_block([g for g in decided if g['row']['score'] >= 65], "고신뢰(65+)")
+    print("\n" + "=" * 74)
+    print("고신뢰 신호 계층 (점수 65+) — 90% 는 이 계층의 장기 표본외 검증 목표")
+    print("=" * 74)
+    show_block(hc)
+    if hc['n'] < 30:
+        print(f"  ⚠️ 표본 {hc['n']}건 — 90% 도달 여부를 논할 최소 표본(30건+)에 미달. "
+              f"과장 없이 '표본 부족' 으로 보고한다.")
+
     # ── 케이스 스터디 원장 — 17개 항목을 채운 채점 결과를 그대로 남긴다 ──────
     graded_file = os.path.join(PROJ, ".portfolio", "virtual_graded.jsonl")
     with open(graded_file, 'w', encoding='utf-8') as gf:
@@ -503,6 +513,7 @@ def main(limit=200):
         'splits': splits_out,
         'failure_classes': fail_out,
         'signal_frequency': freq_out,
+        'high_confidence': hc,
         'total_cases': len(graded),
         'rulebook_version': "v2026.08.02",
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
