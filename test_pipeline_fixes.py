@@ -3245,6 +3245,35 @@ check("오늘의 추천 카드 → 분석 화면 전환 버튼",
       '분석 보기' in _w70 and 'pm_go_' in _w70)
 
 
+section("71. 추천-결론 정합 · 제외 분리 · 뉴스 관련성 구분")
+
+# ① 분류는 쉬운 결론과 모순되지 않는다 (야스 사례: 제목 '조건부'·본문 '보류')
+check("보류 결론 → '사도 됨' 분류 금지", pm61._classify_reco(
+    {'entry_candidate': True, 'final_score': 61},
+    "분석 신뢰도가 낮아 판단을 보류하세요.") == '오늘은 기다려야 하는 종목')
+check("가격 조건부 매수 → 조건부 분류", pm61._classify_reco(
+    {'entry_candidate': True, 'final_score': 61},
+    "31,665원 이하로 내려올 때만 사세요.") == '조건부로 사도 되는 종목')
+check("사도 됩니다 + 60점 + 후보 → 사도 되는 종목", pm61._classify_reco(
+    {'entry_candidate': True, 'final_score': 62},
+    "지금 사도 됩니다.") == '오늘 사도 되는 종목')
+check("사지 마세요 → 사면 안 되는 종목", pm61._classify_reco(
+    {'entry_candidate': False, 'final_score': 55},
+    "지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.")
+    == '오늘은 사면 안 되는 종목')
+
+_w71 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+# ② 표시 정합 가드 + 사면 안 되는 종목은 추천 카드에서 분리
+check("표시 정합 가드 존재 (고정 리포트의 옛 라벨도 결론 따름)",
+      '_pm_display_class' in _w71 and "'보류' in easy" in _w71)
+check("추천 카드에서 '사면 안 되는 종목' 제외·별도 목록",
+      '오늘 제외된 종목' in _w71 and '_picks_ban' in _w71)
+# ③ 뉴스 — 종목명 직접 언급만 '직접', 나머지는 '참고' (낱말 일치만)
+check("뉴스 관련성 구분 — 직접/참고 뱃지", '_direct_items' in _w71
+      and '`참고`' in _w71)
+check("직접 기사 없으면 그렇다고 말한다", '직접 언급된 기사가 없습니다' in _w71)
+
+
 print()
 print("=" * 72)
 if FAILURES:

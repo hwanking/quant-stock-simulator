@@ -41,12 +41,23 @@ def load_today_report(date_key=None):
 
 
 def _classify_reco(row, easy_line):
-    """추천 4분류 — 사용자 어휘 그대로."""
-    if row.get('entry_candidate') and (row.get('final_score') or 0) >= 60:
+    """
+    추천 4분류 — 사용자 어휘 그대로.
+
+    분류는 반드시 '아주 쉬운 결론'(easy_line)과 모순되지 않아야 한다.
+    예전에는 entry_candidate+점수만으로 '조건부로 사도 되는 종목'을 붙여서,
+    카드 제목은 사도 된다는데 본문은 '판단 보류'인 어긋남이 생겼다.
+    """
+    s = str(easy_line or '')
+    if '사도 됩니다' in s and row.get('entry_candidate') \
+            and (row.get('final_score') or 0) >= 60:
         return '오늘 사도 되는 종목'
-    if row.get('entry_candidate'):
-        return '조건부로 사도 되는 종목'
-    if '이하로 내려올 때만' in str(easy_line):
+    if '이하로 내려올 때만' in s:
+        # 가격 조건이 붙은 매수 — 조건부
+        return ('조건부로 사도 되는 종목' if row.get('entry_candidate')
+                else '오늘은 기다려야 하는 종목')
+    if '보류' in s:
+        # 신뢰도·표본 부족 보류 — 사도 된다고 말하지 않는다
         return '오늘은 기다려야 하는 종목'
     return '오늘은 사면 안 되는 종목'
 

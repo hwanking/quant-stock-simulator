@@ -1514,8 +1514,29 @@ if _pmr:
                f"🔒 {_pmr.get('note')}")
     _CLS_COLOR = {'오늘 사도 되는 종목': '#30d158', '조건부로 사도 되는 종목': '#64d2ff',
                   '오늘은 기다려야 하는 종목': '#ff9f0a', '오늘은 사면 안 되는 종목': '#ff453a'}
-    _pm_cols = st.columns(min(5, max(1, len(_pmr.get('picks') or []))))
-    for _pi, _p in enumerate((_pmr.get('picks') or [])[:5]):
+
+    # 표시 정합 가드 — 분류 라벨이 '아주 쉬운 결론'과 모순되면 결론 쪽을 따른다
+    # (제목은 사도 된다는데 본문이 '판단 보류'인 카드를 만들지 않는다. 가격·점수는 불변)
+    def _pm_display_class(p):
+        cls, easy = str(p.get('reco_class') or ''), str(p.get('easy_line') or '')
+        if '보류' in easy and cls in ('오늘 사도 되는 종목', '조건부로 사도 되는 종목'):
+            return '오늘은 기다려야 하는 종목'
+        if '사지 마세요' in easy and cls != '오늘은 사면 안 되는 종목':
+            return '오늘은 사면 안 되는 종목'
+        return cls
+
+    _picks_all = [{**p, 'reco_class': _pm_display_class(p)}
+                  for p in (_pmr.get('picks') or [])]
+    # 추천 카드에는 '사면 안 되는 종목'을 올리지 않는다 — 그건 추천이 아니라 제외다
+    _picks_show = [p for p in _picks_all
+                   if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
+    _picks_ban = [p for p in _picks_all
+                  if p['reco_class'] == '오늘은 사면 안 되는 종목']
+    if not _picks_show:
+        st.info("오늘은 사도 되는·기다릴 후보가 없습니다 — 전 종목이 제외됐습니다. "
+                "없는 날은 관망이 결론입니다 (아래 제외 목록에서 이유를 확인하세요).")
+    _pm_cols = st.columns(min(5, max(1, len(_picks_show) or 1)))
+    for _pi, _p in enumerate(_picks_show):
         _cc = _CLS_COLOR.get(_p.get('reco_class'), '#86868b')
         _cb_p = _p.get('confidence_band') or {}
         _conf_txt = (f"과거 동점수대 적중 {_cb_p['hit_rate']:.0f}% (n={_cb_p['n']})"
@@ -1530,18 +1551,21 @@ if _pmr:
             _news_txt.append(f"후행 보도 {_p['news_lagging']}건 제외")
         with _pm_cols[_pi]:
             st.markdown(f"""
-            <div style='background:#141416; border:1px solid {_cc}55; border-top:3px solid {_cc};
-                        border-radius:14px; padding:12px 14px; min-height:240px;'>
-              <p style='margin:0; font-size:0.72rem; color:{_cc}; font-weight:800;'>{_p.get('reco_class')}</p>
-              <p style='margin:4px 0 2px 0; font-size:1.05rem; font-weight:900; color:#f5f5f7;'>{_p.get('name')}</p>
-              <p style='margin:0; font-size:0.72rem; color:#86868b;'>{_p.get('code')} · {_p.get('asset_type')} · {_p.get('score')}점</p>
-              <p style='margin:8px 0 4px 0; font-size:0.85rem; font-weight:800; color:{_cc};'>{_p.get('easy_emoji')} {_p.get('easy_line')}</p>
-              <p style='margin:0; font-size:0.75rem; color:#d2d2d7; line-height:1.6;'>
-                권장 {'{:,.0f}원'.format(_p['rec_buy']) if _p.get('rec_buy') else '미산출'} ·
-                목표 {'{:,.0f}원'.format(_p['target']) if _p.get('target') else '—'} ·
-                손절 {'{:,.0f}원'.format(_p['stop']) if _p.get('stop') else '—'}<br>
-                {' · '.join(_news_txt) if _news_txt else '특이 뉴스 없음'}<br>
-                <span style='color:#86868b;'>{_conf_txt}</span></p>
+            <div style='background:{_TOK['surface']}; border:1px solid {_TOK['border']};
+                        border-top:3px solid {_cc}; border-radius:12px;
+                        padding:14px 16px; min-height:236px;'>
+              <p style='margin:0;'><span style='background:{_cc}22; color:{_cc};
+                 font-size:11px; font-weight:800; padding:2px 8px;
+                 border-radius:6px;'>{_p.get('reco_class')}</span></p>
+              <p style='margin:8px 0 1px 0; font-size:16px; font-weight:800;
+                 color:{_TOK['tx1']};'>{_p.get('name')}</p>
+              <p style='margin:0; font-size:11.5px; color:{_TOK['tx2']};'>{_p.get('code')} · {_p.get('asset_type')} · {_p.get('score')}점</p>
+              <p style='margin:9px 0 6px 0; font-size:13.5px; font-weight:800;
+                 color:{_cc}; line-height:1.45;'>{_p.get('easy_line')}</p>
+              <p style='margin:0; font-size:12.5px; color:{_TOK['tx2']}; line-height:1.7;'>
+                권장 <b style='color:{_TOK['tx1']};'>{'{:,.0f}원'.format(_p['rec_buy']) if _p.get('rec_buy') else '미산출'}</b><br>
+                목표 {'{:,.0f}원'.format(_p['target']) if _p.get('target') else '—'} · 손절 {'{:,.0f}원'.format(_p['stop']) if _p.get('stop') else '—'}<br>
+                {' · '.join(_news_txt) if _news_txt else '특이 뉴스 없음'}<br>{_conf_txt}</p>
             </div>""", unsafe_allow_html=True)
             # 카드 클릭 → 아래 종목 분석 화면이 이 종목으로 전환된다
             if st.button("분석 보기", key=f"pm_go_{_p.get('symbol')}_{_pi}",
@@ -1549,6 +1573,15 @@ if _pmr:
                 st.session_state['pending_search'] = \
                     f"{_p.get('name')} ({_p.get('code')})"
                 st.rerun()
+    if _picks_ban:
+        with st.expander(f"오늘 제외된 종목 {len(_picks_ban)}건 — 사면 안 되는 이유",
+                         expanded=False):
+            for _b in _picks_ban:
+                st.markdown(f"- **{_b.get('name')}** ({_b.get('code')} · "
+                            f"{_b.get('score')}점) — {_b.get('easy_line')}  \n"
+                            f"  <span style='font-size:12px; color:{_TOK['tx2']};'>"
+                            f"{' / '.join(_b.get('reasons') or []) or '게이트 차단'}"
+                            f"</span>", unsafe_allow_html=True)
     with st.expander("📈 지난 개장 전 추천의 실제 성과 (사후 검증)"):
         _hist = _pm_view.grade_history(engine_init)
         if _hist:
@@ -3102,10 +3135,25 @@ with _ctx_c2:
         if _nfl.get('risk_count'):
             st.error(f"⚠️ 제목에 확인이 필요한 낱말이 있는 기사 **{_nfl['risk_count']}건** — "
                      "종합 점수에 상한이 걸렸습니다. 기사 원문을 직접 확인하세요.")
-        for _it in (_news.get('items') or [])[:6]:
+        # 관련성 뱃지 — 제목에 종목명이 실제로 들어간 기사만 '직접'.
+        # 나머지는 업종·시장 참고 기사다 (낱말 일치만 — 해석하지 않는다).
+        _nm_keys = [resolved_name]
+        if len(resolved_name) >= 4:
+            _nm_keys.append(resolved_name[:3])
+        _direct_items = [_it for _it in (_news.get('items') or [])
+                         if any(k in str(_it.get('title', '')) for k in _nm_keys)]
+        _indirect_items = [_it for _it in (_news.get('items') or [])
+                           if _it not in _direct_items]
+        if not _direct_items:
+            st.caption(f"제목에 '{resolved_name}'이(가) 직접 언급된 기사가 없습니다 "
+                       "— 아래는 업종·시장 참고 기사입니다.")
+
+        def _render_news_item(_it, direct):
             _flag = " 🔴" + "·".join(_it['risk_hits']) if _it.get('risk_hits') else ""
-            _link = f"[{_it['title']}]({_it['url']})" if _it.get('url') else _it['title']
-            st.markdown(f"- {_link}{_flag}")
+            _tag = "" if direct else " `참고`"
+            _link = (f"[{_it['title']}]({_it['url']})" if _it.get('url')
+                     else _it['title'])
+            st.markdown(f"- {_link}{_tag}{_flag}")
             _meta_line = f"{_it.get('press', '')} · {_it.get('datetime', '')}"
             if _it.get('related_count'):
                 _meta_line += f" · 연관기사 {_it['related_count']}건"
@@ -3113,8 +3161,16 @@ with _ctx_c2:
             if _it.get('related'):
                 with st.expander(f"연관 뉴스 {_it['related_count']}건 보기"):
                     for _r in _it['related'][:8]:
-                        _rl = f"[{_r['title']}]({_r['url']})" if _r.get('url') else _r['title']
-                        st.markdown(f"- {_rl}  \n  {_r.get('press','')} · {_r.get('datetime','')}")
+                        _rl = (f"[{_r['title']}]({_r['url']})" if _r.get('url')
+                               else _r['title'])
+                        st.markdown(f"- {_rl}  \n  "
+                                    f"{_r.get('press', '')} · {_r.get('datetime', '')}")
+
+        _n_direct_shown = len(_direct_items[:5])
+        for _it in _direct_items[:5]:
+            _render_news_item(_it, True)
+        for _it in _indirect_items[:max(1, 6 - _n_direct_shown)]:
+            _render_news_item(_it, False)
         st.caption("출처: " + str(_news.get('source', '')) +
                    " — 제목·언론사·시각을 원문 그대로 표시하며, 기사 내용을 요약·해석해 "
                    "만들어 내지 않습니다. 위험 표시는 제목의 낱말 일치일 뿐입니다.")
