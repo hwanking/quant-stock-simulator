@@ -266,6 +266,9 @@ st.markdown(f"""
     .stApp hr {{ margin: 26px 0 !important; opacity: .75; }}
     .stApp .stMarkdown p, .stApp .stMarkdown li {{ font-size: 15px; }}
     .stApp [data-testid="stCaptionContainer"] p {{ font-size: 13px !important; }}
+    /* 지수·모델 카드 숫자는 배경정보 — 첫 화면 최대 요소로 만들지 않는다 (v2) */
+    .stApp [data-testid="stMetricValue"] {{ font-size: 26px !important; }}
+    .stApp [data-testid="stMetricLabel"] {{ font-size: 13px !important; }}
 </style>
 """, unsafe_allow_html=True)
 
