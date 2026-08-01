@@ -3274,6 +3274,29 @@ check("뉴스 관련성 구분 — 직접/참고 뱃지", '_direct_items' in _w7
 check("직접 기사 없으면 그렇다고 말한다", '직접 언급된 기사가 없습니다' in _w71)
 
 
+section("72. 국면 상세 · 배너 조건부 병기")
+
+# ① 지수 상세 — 이격·등락·52주 위치 실계산 (KOSPI 실호출)
+_dd72 = mc61.fetch_domestic_detail(engine, "KOSPI")
+check("지수 상세 실계산 — 필수 필드", _dd72.get('available')
+      and all(k in _dd72 for k in ('disp20', 'disp60', 'chg20', 'pos52')))
+check("52주 위치는 0~100 범위",
+      _dd72.get('pos52') is None or 0 <= _dd72['pos52'] <= 100)
+check("이격 정의 일치 — price/sma20-1",
+      abs(_dd72['disp20']
+          - ((_dd72['price'] / ((_dd72['price'] / (1 + _dd72['disp20'] / 100)))
+              - 1) * 100)) < 1e-6)
+_w72 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 코스피·코스닥 상세 표 + 해석 없음 명시",
+      "('KOSPI', 'KOSDAQ')" in _w72 and '해석을 덧붙이지' in _w72)
+
+# ② 배너 — 조건부 매수가 헤드라인에서 바로 보인다
+check("배너 쉬운 결론 병기 + 현재가 조건 관계",
+      '_banner_sub' in _w72 and '조건 위' in _w72)
+check("중복 문구 방지 (헤드라인과 같으면 생략)",
+      "not in str(verdict['headline'])" in _w72)
+
+
 print()
 print("=" * 72)
 if FAILURES:

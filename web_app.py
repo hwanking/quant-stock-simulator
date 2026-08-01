@@ -2730,6 +2730,22 @@ else:
     _dm_head, _dm_line = "산출 불가 (데이터 부족)", "DeMARK 신호를 만들지 못했습니다"
 
 st.markdown('<div id="nav-verdict"></div>', unsafe_allow_html=True)
+# 헤드라인만으로는 '조건부'가 안 보인다 — 신규 매수자용 쉬운 결론 한 줄을
+# 배너 안에 병기해, "지금은 사지 마세요"가 '31,665원 이하로 내려오면 산다'는
+# 조건부인지 완전 회피인지 배너에서 바로 구분되게 한다.
+try:
+    _easy_nb_banner = q_engine.build_easy_advice(
+        four_scores, verdict, realtime_price,
+        user_avg=None, user_qty=None)['new_buyer']
+    _banner_sub = str(_easy_nb_banner.get('line') or '')
+    if '이하로 내려올 때만' in _banner_sub:
+        _banner_sub += f" (현재가 {realtime_price:,.0f}원은 조건 위)"
+except Exception:
+    _banner_sub = ''
+_banner_sub_html = (
+    f"<p style='margin:6px 0 0 0; font-size:1.05rem; font-weight:800; "
+    f"color:#F3F6FA;'>{_banner_sub}</p>" if _banner_sub
+    and _banner_sub not in str(verdict['headline']) else "")
 st.markdown(f"""
 <div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
             border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
@@ -2739,7 +2755,7 @@ st.markdown(f"""
       <p style='margin:0; font-size:0.85rem; color:#86868b; font-weight:700;'>
         {resolved_name} — 퀀트 종합 결론</p>
       <p style='margin:4px 0 0 0; font-size:2.5rem; font-weight:900; color:{_vc}; line-height:1.15;'>
-        {_vi} {verdict['headline']}</p>
+        {_vi} {verdict['headline']}</p>{_banner_sub_html}
     </div>
     <div style='text-align:right;'>
       <p style='margin:0; font-size:0.8rem; color:#86868b;'>종합 점수</p>
@@ -3102,6 +3118,32 @@ with _ctx_c1:
     else:
         st.markdown(f"**⚪ 상장시장 국면 — {_mkt_ctx.get('market', '')}**")
         st.caption("미수신 — " + str(_dom.get('reason', '지수 데이터 없음')))
+
+    # 국내 지수 상세 — 코스피·코스닥 이격도·최근 등락·52주 위치 (전부 일봉 실계산)
+    try:
+        import market_context as _mc_dd
+        _dd_rows = []
+        for _mk in ('KOSPI', 'KOSDAQ'):
+            _dd = _mc_dd.fetch_domestic_detail(engine_init, _mk)
+            if _dd.get('available'):
+                _dd_rows.append({
+                    "지수": _mk,
+                    "현재": f"{_dd['price']:,.2f}",
+                    "20일선 이격": f"{_dd['disp20']:+.1f}%",
+                    "60일선 이격": f"{_dd['disp60']:+.1f}%",
+                    "5일 등락": fmt_pct(_dd.get('chg5')),
+                    "20일 등락": fmt_pct(_dd.get('chg20')),
+                    "52주 위치": (f"{_dd['pos52']:.0f}%"
+                                if _dd.get('pos52') is not None else "—"),
+                })
+        if _dd_rows:
+            st.dataframe(pd.DataFrame(_dd_rows), use_container_width=True,
+                         hide_index=True)
+            st.caption("이격 = 현재가÷이동평균−1 · 52주 위치 = 저점 0%~고점 100% "
+                       "구간에서의 현재 위치. 전부 일봉 실계산이며 해석을 덧붙이지 "
+                       "않습니다.")
+    except Exception:
+        pass
 
     _glob = _mkt_ctx.get('global') or {}
     if _glob:

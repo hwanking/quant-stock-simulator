@@ -143,6 +143,44 @@ def fetch_domestic_context(engine, market="KOSPI"):
     return _cached(f"dom:{market}", _TTL_GLOBAL, _build)
 
 
+def fetch_domestic_detail(engine, market="KOSPI"):
+    """
+    지수 상세 — 이격도·최근 등락·52주 위치. 전부 일봉 실계산이다 (해석 없음).
+    반환: {'available', 'market', 'price', 'disp20', 'disp60',
+           'chg5', 'chg20', 'pos52', 'hi52', 'lo52'}
+    """
+    def _build():
+        try:
+            r = engine.fetch_index_daily(market, count=280)
+        except Exception:
+            r = None
+        if not r:
+            return {'available': False, 'market': market}
+        _dates, closes = r
+        try:
+            c = [float(x) for x in closes]
+        except Exception:
+            return {'available': False, 'market': market}
+        if len(c) < 60:
+            return {'available': False, 'market': market}
+        price = c[-1]
+        sma20 = sum(c[-20:]) / 20.0
+        sma60 = sum(c[-60:]) / 60.0
+        w52 = c[-252:] if len(c) >= 252 else c
+        hi52, lo52 = max(w52), min(w52)
+        return {
+            'available': True, 'market': market, 'price': price,
+            'disp20': (price / sma20 - 1) * 100,
+            'disp60': (price / sma60 - 1) * 100,
+            'chg5': ((price / c[-6] - 1) * 100) if len(c) >= 6 else None,
+            'chg20': ((price / c[-21] - 1) * 100) if len(c) >= 21 else None,
+            'pos52': (((price - lo52) / (hi52 - lo52) * 100)
+                      if hi52 > lo52 else None),
+            'hi52': hi52, 'lo52': lo52,
+        }
+    return _cached(f"domd:{market}", _TTL_GLOBAL, _build)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. 종목 뉴스 (연관기사 포함)
 # ─────────────────────────────────────────────────────────────────────────────
