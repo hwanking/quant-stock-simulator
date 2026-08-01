@@ -1229,9 +1229,9 @@ if st.session_state.get('show_screener', False):
             """, unsafe_allow_html=True)
 
             # ── 신호 2계층 (사전등록 라운드 2 채택 — docs/MODEL_VERSIONS.md) ──
-            # 고신뢰 매수권(60+)은 드물고, 확장 신호(58~59)는 검증 62.7%(n=217)
-            # → 블라인드 60.7%(n=122)로 재현된 탐색층이다. 비용후 기대값은 0
-            # 수준이므로 '후보 탐색'이지 수익 보장이 아니다 — 그대로 말한다.
+            # 고신뢰 매수권(60+)은 드물고, 확장 신호(58~59)는 4,229건 실측에서
+            # 검증 61.2%(n=304) → 블라인드 58.2%(n=146)인 탐색층이다.
+            # 비용후 기대값은 소폭 음수 — '후보 탐색'이지 수익 보장이 아니다.
             _bz_rows = sorted(
                 [r for r in scan_results if (r.get('final_score') or 0) >= 60],
                 key=lambda r: r.get('final_score') or 0, reverse=True)
@@ -1251,9 +1251,9 @@ if st.session_state.get('show_screener', False):
                     f"**확장 신호(58~59점) {len(_ext_rows)}종목** — "
                     + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
                                  for r in _ext_rows[:6])
-                    + "  \n사전등록 검증에서 이 구간은 검증 62.7%(n=217) → "
-                      "블라인드 60.7%(n=122)로 재현됐습니다. 단 비용 차감 후 "
-                      "기대값은 0 수준 — 진입 후보 탐색용이며 수익 보장이 아닙니다.")
+                    + "  \n사전등록 실측(4,229건): 검증 61.2%(n=304) → "
+                      "블라인드 58.2%(n=146). 비용 차감 후 기대값은 소폭 음수 — "
+                      "진입 후보 탐색용이며 수익 보장이 아닙니다.")
             if not _bz_rows and not _ext_rows:
                 st.caption("이번 스캔에는 매수권(60점+)·확장 신호(58~59점)가 모두 "
                            "없습니다 — 없는 날은 관망이 결론입니다.")

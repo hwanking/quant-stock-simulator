@@ -3203,8 +3203,8 @@ check("규율 — 미공개 원칙 (선택에 못 쓰면 보지 않는다)",
 _w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("스캔 2계층 — 고신뢰(60+)·확장(58~59) 분리 표시",
       '고신뢰 매수권(60점+)' in _w69 and '확장 신호(58~59점)' in _w69)
-check("확장 신호 정직 표기 — 재현 실측·비용후 0·보장 아님",
-      '블라인드 60.7%(n=122)' in _w69 and '수익 보장이 아닙니다' in _w69)
+check("확장 신호 정직 표기 — 최신 실측·비용후 음수·보장 아님",
+      '블라인드 58.2%(n=146)' in _w69 and '수익 보장이 아닙니다' in _w69)
 _mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("MODEL_VERSIONS 라운드 2 기록 — 채택 범위·KPI 불변",
