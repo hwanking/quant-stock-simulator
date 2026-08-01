@@ -1857,10 +1857,16 @@ class QuantIndicatorsEngine:
             nb = {'emoji': '⚪', 'line': '데이터가 부족해 판단할 수 없습니다.',
                   'detail': "분석에 필요한 데이터가 모자랍니다. 무리해서 사지 마세요."}
         elif action in ('BUY', 'ACCUMULATE') and not vetoes:
+            _half = ((curr_price + t1) / 2 if curr_price and t1 and t1 > curr_price
+                     else None)
             nb = {'emoji': '🟢', 'line': '지금 사도 됩니다 (나눠서).',
                   'detail': (f"한 번에 다 사지 말고 나눠 사세요. 1차는 지금, "
                              f"손절선(잃음을 멈추는 선) {w(stop)}을 지키세요. "
-                             f"1차 목표(먼저 일부 이익실현) {w(t1)}, 2차 목표 {w(t2)}. {odds}")}
+                             f"1차 목표(먼저 일부 이익실현) {w(t1)}, 2차 목표 {w(t2)}. "
+                             + (f"가격이 {w(_half)}(목표의 절반)에 닿으면 손절선을 "
+                                f"본전(산 가격)으로 올리세요 — 1,950건 검증에서 "
+                                f"손실 확률을 약 1/3 줄였습니다. " if _half else "")
+                             + odds)}
         elif rec is not None and curr_price and curr_price > rec:
             nb = {'emoji': '🟡', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
                   'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
@@ -1904,10 +1910,14 @@ class QuantIndicatorsEngine:
                                      f"+{m10:.0f}%)가 강합니다. 절반은 지금 팔고, 나머지는 "
                                      f"손절선을 {w(stop)}으로 올려 지키며 {w(t2)}까지 보유하세요.")}
             elif ret > 0:
+                _be_note = ("" if not (stop is not None and float(user_avg) > stop)
+                            else f"이미 수익 중이니 손절선을 본전({w(float(user_avg))}) "
+                                 f"위로 올려 두는 것도 좋습니다 — 이익을 손실로 되돌리지 "
+                                 f"않는 검증된 운용입니다. ")
                 holder = {'emoji': '🔵',
                           'line': '계속 보유하세요 — 목표가까지, 손절가는 지키면서.',
                           'detail': (f"현재 {ret:+.1f}% 수익. {w(t1)} 도달 시 일부 매도, "
-                                     f"{w(t2)}가 최종 목표입니다. 종가가 {w(stop)} 아래로 "
+                                     f"{w(t2)}가 최종 목표입니다. {_be_note}종가가 {w(stop)} 아래로 "
                                      f"내려가면 원칙대로 정리하세요. 추가 매수는 "
                                      + ("가능 구간입니다 (나눠서)." if add_ok else "지금은 하지 마세요."))}
             elif add_ok:

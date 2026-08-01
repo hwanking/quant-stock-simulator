@@ -712,36 +712,10 @@ if user_entry_price > 0 and user_quantity > 0 and _reg is None:
                 source_type="manual_entry")]
         st.rerun()
 
-# 🧪 검증된 실측 성적 — 가상 백테스트 1,950건 (과거 기준일 리플레이 채점)
-# 예전의 '판정 성적표'(실사용 기록 대기형)는 기록이 쌓이기 전엔 빈 화면이라 제거.
-# 대신 이미 채점이 끝난 대규모 리플레이 실측을 보여준다. 상세 수치는 calibration.json.
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧪 검증된 실측 성적 (가상 백테스트)")
-try:
-    import json as _json_sb
-    _cal_sb_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                ".portfolio", "calibration.json")
-    if os.path.exists(_cal_sb_path):
-        with open(_cal_sb_path, encoding='utf-8') as _cf_sb:
-            _cal_sb = _json_sb.load(_cf_sb)
-        _bands_sb = {(b['lo'], b['hi']): b for b in _cal_sb.get('bands', [])}
-        st.sidebar.caption(f"과거 기준일 리플레이 **{_cal_sb.get('total_cases', 0):,}건** 채점 "
-                           f"(모델 {_cal_sb.get('rulebook_version', '')}) — 그 날 알 수 있었던 "
-                           f"데이터만으로 판정하고 이후 실제 주가로 채점한 결과입니다.")
-        for (_lo_sb, _hi_sb), _lab_sb in [((55, 59), "55~59점(관망 상단)"),
-                                          ((60, 64), "60~64점(매수권)"),
-                                          ((65, 69), "65~69점(고신뢰)")]:
-            _b_sb = _bands_sb.get((_lo_sb, _hi_sb))
-            if _b_sb and _b_sb.get('hit_rate') is not None and _b_sb.get('n', 0) >= 10:
-                st.sidebar.caption(f"· {_lab_sb}: 적중 **{_b_sb['hit_rate']:.0f}%** "
-                                   f"(n={_b_sb['n']}, 하한 {_b_sb.get('wilson_low', 0):.0f}%)")
-            elif _b_sb:
-                st.sidebar.caption(f"· {_lab_sb}: 표본 {_b_sb.get('n', 0)}건 — 적중률 미표시")
-    else:
-        st.sidebar.caption("실측 파일이 없습니다 (클라우드 실행은 저장소가 초기화됩니다). "
-                           "내 PC에서 `python scripts/calibration_lab.py` 로 생성됩니다.")
-except Exception as _pex:
-    st.sidebar.caption(f"실측 표시 오류: {type(_pex).__name__}")
+# (사이드바 실측 성적 패널은 사용자 요청으로 제거 — 전문 수치는 혼란만 준다.
+#  '틀릴 가능성 약 N% (과거 사례 n건)' 형태로 본문 쉬운 결론에만 녹여 표시하고,
+#  상세 수치는 .portfolio/calibration.json 과 docs/MODEL_VERSIONS.md 가 정본이다.
+#  판정 기록(record_prediction)·자기보정 상한은 백엔드에서 계속 동작한다.)
 
 
 # --- 분석 파라미터 (스캐너와 상세화면이 동일 값을 써야 하므로 먼저 정의한다) ---
