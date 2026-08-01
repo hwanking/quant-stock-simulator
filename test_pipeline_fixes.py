@@ -2485,6 +2485,71 @@ check("배너 아래 비중·모멘텀·적중률 요약", "변동성 관리 비
       and "상대 모멘텀(12-1)" in _w53 and "실전 판정 적중률" in _w53)
 
 
+section("54. 가상 백테스트 리플레이 — 과거 기준일 판정에 오늘 데이터가 새지 않는가")
+
+# '예전 데이터로 100번 돌려 학습' 의 전제는 리플레이가 정직해야 한다는 것이다.
+# 과거 기준일 판정에 오늘의 시세·지수 국면·뉴스·상대모멘텀이 섞이면
+# 그 캘리브레이션은 성적을 부풀린 가짜가 된다.
+
+_q54 = qi.QuantIndicatorsEngine()
+_snap54 = _q54.run_full_pipeline(SYMBOL, "2026-01-15", b_engine=engine, rho_cutoff=0.80)
+check("과거 기준일이면 리플레이 모드", _snap54.get('is_replay') is True)
+check("현재가 = 기준일 종가 (오늘 시세 미주입)",
+      '리플레이' in str(_snap54.get('rt_status')), str(_snap54.get('rt_status'))[:60])
+_last54 = str(_snap54['tech_df']['trade_date'].iloc[-1])
+check("가격 시계열이 기준일에서 끝남", _last54 <= "2026-01-15", _last54)
+_mc54 = _snap54.get('market_context') or {}
+check("오늘의 뉴스 컨텍스트 차단",
+      not (_mc54.get('news') or {}).get('available', False))
+check("오늘의 지수 국면 차단 (컨텍스트 캡 없음)",
+      _snap54['four_scores'].get('context_cap', 100) == 100
+      or '리플레이' in str(_mc54.get('news', {}).get('reason', '')))
+check("오늘 기준 상대 모멘텀 차단",
+      _snap54['four_scores'].get('rel_mom_detail') is None)
+import datetime as _dt54
+
+_dt_now54 = _dt54.datetime.now().strftime('%Y-%m-%d')
+check("오늘(실시간) 기준일이면 리플레이 아님",
+      (q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine,
+                           rho_cutoff=0.80).get('is_replay') is False)
+      if T_REF >= _dt_now54 else True)
+
+# 캘리브레이션 소비 — 점수대 표를 읽어 현재 점수의 과거 적중률을 싣는다
+_q54b = qi.QuantIndicatorsEngine()
+_q54b._calibration = {'bands': [
+    {'lo': 0, 'hi': 39, 'n': 20, 'hit': 4, 'hit_rate': 20.0, 'wilson_low': 8.1,
+     'avg_return': -5.0},
+    {'lo': 40, 'hi': 49, 'n': 30, 'hit': 12, 'hit_rate': 40.0, 'wilson_low': 24.6,
+     'avg_return': -1.0},
+    {'lo': 50, 'hi': 59, 'n': 25, 'hit': 14, 'hit_rate': 56.0, 'wilson_low': 37.1,
+     'avg_return': 2.0},
+    {'lo': 60, 'hi': 100, 'n': 18, 'hit': 12, 'hit_rate': 66.7, 'wilson_low': 43.7,
+     'avg_return': 4.5}]}
+_s54b = _q54b.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_fs54b = _s54b['four_scores']
+_cb54 = _fs54b.get('calibration_band')
+check("현재 점수가 속한 점수대의 과거 적중률을 스냅샷에 실음",
+      _cb54 is not None
+      and _cb54['lo'] <= _fs54b['final_action_score'] <= _cb54['hi'],
+      str(_cb54))
+_q54c = qi.QuantIndicatorsEngine()
+_q54c._calibration = None
+_s54c = _q54c.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+check("캘리브레이션 파일이 없으면 개입하지 않음",
+      '가상 백테스트' not in str(_s54c['four_scores'].get('gate_reason')))
+
+# 상한 규칙 계약: n≥15 & Wilson 하한<35% & 점수>59 일 때만 59로 제한
+_q54src = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("상한은 표본 충분(n≥15)일 때만", "calib_band.get('n', 0) >= 15" in _q54src)
+check("Wilson 하한 기준 사용 (소표본 낙관 방지)",
+      "calib_band['wilson_low'] < 35.0" in _q54src)
+check("랩 스크립트가 리플레이 모드를 강제",
+      "assert snap.get('is_replay')" in open(
+          _os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read())
+_w54 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면에 점수대 리플레이 적중률 표시", "가상 백테스트: 이 점수대" in _w54)
+
+
 print()
 print("=" * 72)
 if FAILURES:

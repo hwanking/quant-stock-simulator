@@ -1,0 +1,231 @@
+# -*- coding: utf-8 -*-
+"""
+가상 백테스트 캘리브레이션 랩 — 실제 판정 엔진을 과거 기준일로 ~100회 돌려 채점한다.
+
+무엇을 하나:
+  1. 종목 × 과거 기준일 격자에서 run_full_pipeline(리플레이 모드)을 돌린다.
+     리플레이 모드는 그 날 알 수 있었던 것만 쓴다(오늘 시세·지수·뉴스 차단).
+  2. 각 가상 판정을 이후 실제 봉과 대조해 채점한다 (목표가/손절가 선도달).
+  3. 점수대별 실제 적중률(캘리브레이션 표)과 조건별 리프트를 집계해
+     .portfolio/calibration.json 으로 저장한다 — 엔진이 이 표를 읽어
+     종합점수 확신에 되먹인다.
+
+정직성 원칙:
+  · 채점 기준(목표가·손절가·기간)은 엔진이 그 시점에 내놓은 값 그대로다.
+    사후에 유리하게 고르지 않는다.
+  · 표본이 적은 점수대는 적중률을 내밀지 않는다 (Wilson 하한 병기).
+  · 결과 파일은 중간 산출물을 체크포인트로 남겨 재실행 시 이어서 돈다.
+
+실행:  python scripts/calibration_lab.py [--limit N]
+"""
+import json
+import os
+import sys
+import time
+import warnings
+
+warnings.filterwarnings("ignore")
+sys.stdout.reconfigure(encoding="utf-8")
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJ)
+
+import numpy as np
+
+import bitemporal_engine as be
+import prediction_log as plog
+import quant_indicators as qi
+
+VIRT_FILE = os.path.join(PROJ, ".portfolio", "virtual_predictions.jsonl")
+CALIB_FILE = os.path.join(PROJ, ".portfolio", "calibration.json")
+
+#: 종목 풀 — 시총·업종·시장이 섞이도록 고정 (감사 §41 FIXED_SET 계열)
+TICKERS = [
+    "005930.KS",  # 삼성전자 (대형 기술)
+    "003490.KS",  # 대한항공 (대형 경기민감)
+    "051910.KS",  # LG화학 (대형 소재)
+    "035760.KQ",  # CJ ENM (코스닥 대형)
+    "052330.KQ",  # 코텍 (코스닥 중소형)
+    "002990.KS",  # 금호건설 (소형 건설)
+    "073240.KS",  # 금호타이어
+    "111770.KS",  # 영원무역
+]
+
+#: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
+def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25):
+    dates = list(prices_df['trade_date'].astype(str))
+    # 마지막 판정도 채점 가능해야 하므로 horizon 봉 이전에서 끊는다
+    usable = dates[260:len(dates) - horizon - 1]
+    picked = usable[::-spacing][:n_dates]     # 최근에서 과거로 spacing 간격
+    return sorted(picked)
+
+
+def load_done():
+    done = set()
+    if os.path.exists(VIRT_FILE):
+        with open(VIRT_FILE, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                    done.add((r['ticker'], r['date']))
+                except Exception:
+                    continue
+    return done
+
+
+def wilson_low(hit, n, z=1.96):
+    if n == 0:
+        return None
+    p = hit / n
+    denom = 1 + z * z / n
+    centre = p + z * z / (2 * n)
+    margin = z * ((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5
+    return max(0.0, (centre - margin) / denom) * 100.0
+
+
+def main(limit=200):
+    q = qi.QuantIndicatorsEngine()
+    eng = be.BitemporalEngine()
+    done = load_done()
+    os.makedirs(os.path.dirname(VIRT_FILE), exist_ok=True)
+
+    todo = []
+    price_cache = {}
+    for tk in TICKERS:
+        try:
+            pdf, _f = eng.generate_synthetic_bitemporal_data(
+                symbol=tk, start_date='2020-01-01', end_date=None)
+            price_cache[tk] = pdf
+            for d in make_asof_dates(pdf, n_dates=14):
+                if (tk, d) not in done:
+                    todo.append((tk, d))
+        except Exception as exc:
+            print(f"  [건너뜀] {tk} — {type(exc).__name__}: {exc}")
+
+    total_planned = len(done) + len(todo)
+    print(f"가상 판정 계획: 완료 {len(done)}건 · 남음 {len(todo)}건 (계획 {total_planned}건)")
+    t0 = time.time()
+    ran = 0
+    for tk, d in todo:
+        if ran >= limit:
+            print(f"  이번 실행 한도({limit}건) 도달 — 체크포인트에서 이어서 실행 가능")
+            break
+        try:
+            snap = q.run_full_pipeline(tk, d, b_engine=eng, rho_cutoff=0.80)
+            fs = snap['four_scores']
+            assert snap.get('is_replay'), "리플레이 모드가 아니면 누수다"
+            row = {
+                'ticker': tk, 'date': d,
+                'price': float(fs.get('curr_price') or snap['rt_price']),
+                'score': int(fs.get('final_action_score')),
+                'action_title': fs.get('final_action_title'),
+                'target': fs.get('target_tech_1st'),
+                'stop': fs.get('stop_loss_price'),
+                'horizon_days': 20,
+                # 조건 리프트 분석용 특징 (그 시점 값)
+                'm10_above': bool(float(fs.get('m10_disparity', 0) or 0) >= 0),
+                'demark_state': ((fs.get('demark_entry') or {}).get('state')),
+                'entry_zone': fs.get('entry_zone'),
+                'net_expected': fs.get('net_expected_return'),
+            }
+            with open(VIRT_FILE, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            ran += 1
+            if ran % 10 == 0:
+                el = time.time() - t0
+                print(f"  {ran}/{len(todo)}건 · {el:,.0f}s 경과 · 건당 {el/ran:.1f}s")
+        except Exception as exc:
+            print(f"  [실패] {tk} @ {d} — {type(exc).__name__}: {str(exc)[:80]}")
+
+    # ── 채점 & 집계 ──────────────────────────────────────────────────────
+    rows = []
+    with open(VIRT_FILE, encoding='utf-8') as f:
+        for line in f:
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    print(f"\n채점 대상 가상 판정: {len(rows)}건")
+
+    graded = []
+    for r in rows:
+        pdf = price_cache.get(r['ticker'])
+        if pdf is None:
+            try:
+                pdf, _ = eng.generate_synthetic_bitemporal_data(
+                    symbol=r['ticker'], start_date='2020-01-01', end_date=None)
+                price_cache[r['ticker']] = pdf
+            except Exception:
+                continue
+        g = plog.grade_prediction(r, pdf)
+        if g:
+            graded.append({'row': r, 'grade': g})
+
+    decided = [g for g in graded if g['grade']['outcome'] in ('TARGET', 'STOP')]
+    print(f"판정 완료(목표 또는 손절 도달): {len(decided)}건 · "
+          f"미결 {len(graded) - len(decided)}건")
+
+    # 점수대 캘리브레이션
+    BANDS = [(0, 39), (40, 49), (50, 59), (60, 100)]
+    bands_out = []
+    print("\n" + "=" * 74)
+    print("점수대별 실제 적중률 (가상 백테스트 · 목표가 선도달 기준)")
+    print("=" * 74)
+    for lo, hi in BANDS:
+        sub = [g for g in decided if lo <= g['row']['score'] <= hi]
+        hit = sum(1 for g in sub if g['grade']['outcome'] == 'TARGET')
+        rets = [g['grade']['return_pct'] for g in graded
+                if lo <= g['row']['score'] <= hi]
+        n = len(sub)
+        hr = hit / n * 100.0 if n else None
+        wl = wilson_low(hit, n) if n else None
+        avg = float(np.mean(rets)) if rets else None
+        bands_out.append({'lo': lo, 'hi': hi, 'n': n, 'hit': hit,
+                          'hit_rate': hr, 'wilson_low': wl, 'avg_return': avg})
+        print(f"  {lo:>3}~{hi:<3}점: n={n:<3} 적중 {hit:<3} "
+              f"적중률 {hr if hr is None else round(hr, 1)}% "
+              f"(Wilson 하한 {wl if wl is None else round(wl, 1)}%) "
+              f"평균수익 {avg if avg is None else round(avg, 2)}%")
+
+    # 조건 리프트
+    def lift(cond_fn, label):
+        yes = [g for g in decided if cond_fn(g['row'])]
+        no = [g for g in decided if not cond_fn(g['row'])]
+        hy = sum(1 for g in yes if g['grade']['outcome'] == 'TARGET')
+        hn = sum(1 for g in no if g['grade']['outcome'] == 'TARGET')
+        ry = hy / len(yes) * 100 if yes else None
+        rn = hn / len(no) * 100 if no else None
+        print(f"  {label:<28} 충족 {ry if ry is None else round(ry,1)}% (n={len(yes)}) "
+              f"vs 미충족 {rn if rn is None else round(rn,1)}% (n={len(no)})")
+        return {'label': label, 'yes_n': len(yes), 'yes_rate': ry,
+                'no_n': len(no), 'no_rate': rn}
+
+    print("\n" + "=" * 74)
+    print("조건별 리프트 (충족 vs 미충족 적중률)")
+    print("=" * 74)
+    lifts = [
+        lift(lambda r: r.get('m10_above'), "월봉 10선 위"),
+        lift(lambda r: r.get('demark_state') in ('COMPLETE', 'SETUP_DONE'),
+             "DeMARK 매수 신호"),
+        lift(lambda r: (r.get('net_expected') or -1) > 0, "순기대수익 양수"),
+        lift(lambda r: '초과' not in str(r.get('entry_zone') or ''), "적정가 이하 진입"),
+    ]
+
+    calib = {
+        'generated_from': f"{len(rows)}건 가상 판정 · 판정 완료 {len(decided)}건",
+        'bands': bands_out,
+        'lifts': lifts,
+        'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
+                 "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
+                 "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "
+                 "쓰인다는 한계가 있다."),
+    }
+    with open(CALIB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(calib, f, ensure_ascii=False, indent=1)
+    print(f"\n캘리브레이션 저장: {CALIB_FILE}")
+
+
+if __name__ == "__main__":
+    lim = 200
+    if "--limit" in sys.argv:
+        lim = int(sys.argv[sys.argv.index("--limit") + 1])
+    main(lim)

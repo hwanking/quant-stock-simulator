@@ -2236,6 +2236,11 @@ _tr = four_scores.get('track_record')
 if _tr and _tr.get('hit_rate') is not None:
     _extra_bits.append(f"🎯 실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
                        f"({_tr.get('decided', 0)}건 판정 완료 — 점수 확신에 반영)")
+_cb = four_scores.get('calibration_band')
+if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
+    _extra_bits.append(
+        f"🧪 가상 백테스트: 이 점수대({_cb['lo']}~{_cb['hi']}점)의 과거 리플레이 적중률 "
+        f"**{_cb['hit_rate']:.0f}%** (n={_cb['n']}, Wilson 하한 {_cb['wilson_low']:.0f}%)")
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
 

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import json
 import os
 import re
 
@@ -3017,8 +3018,39 @@ class QuantIndicatorsEngine:
             momentum_cap,
             track_cap
         )
-        
+
         final_action_score = int(max(0, final_action_score))
+
+        # 가상 백테스트 캘리브레이션 — 같은 엔진을 과거 기준일 리플레이로 ~100회
+        # 돌려 채점한 점수대별 실제 적중률(scripts/calibration_lab.py 산출)을 읽는다.
+        # 지금 점수가 속한 점수대의 표본이 충분한데(n≥15) Wilson 하한이 35% 미만이면
+        # 확신을 낮춘다. 파일이 없으면(캘리브레이션 미수행) 개입하지 않는다.
+        calib_band = None
+        try:
+            if not hasattr(self, '_calibration'):
+                self._calibration = None
+                _cal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         ".portfolio", "calibration.json")
+                if os.path.exists(_cal_path):
+                    with open(_cal_path, encoding='utf-8') as _cf:
+                        self._calibration = json.load(_cf)
+            if self._calibration:
+                for _b in self._calibration.get('bands', []):
+                    if _b['lo'] <= final_action_score <= _b['hi']:
+                        calib_band = _b
+                        break
+                if (calib_band and calib_band.get('n', 0) >= 15
+                        and calib_band.get('wilson_low') is not None
+                        and calib_band['wilson_low'] < 35.0
+                        and final_action_score > 59):
+                    cap_reasons.append(
+                        f"가상 백테스트: 이 점수대({calib_band['lo']}~{calib_band['hi']}점) "
+                        f"적중률 {calib_band['hit_rate']:.0f}% "
+                        f"(n={calib_band['n']}, Wilson 하한 {calib_band['wilson_low']:.0f}%) "
+                        f"→ 상한 59점")
+                    final_action_score = 59
+        except Exception:
+            calib_band = None
         
         # ========================================================
         # 8. 최종 행동 판정
@@ -3266,6 +3298,8 @@ class QuantIndicatorsEngine:
             'relative_momentum_12_1': (rel_mom or {}).get('relative'),
             'rel_mom_detail': rel_mom,
             'track_record': track,
+            # 가상 백테스트 캘리브레이션 — 이 점수대의 과거 리플레이 적중률
+            'calibration_band': calib_band,
 
             'tdst_support_str': ("N/A" if not tdst_available
                                  else ("지지 유지" if curr_price >= tdst_support else "이탈")),
@@ -3908,19 +3942,38 @@ class QuantIndicatorsEngine:
             b_engine = BitemporalEngine()
         from bitemporal_engine import STOCK_METRICS_DB
 
+        # ── 리플레이(과거 기준일) 판정 ──────────────────────────────────
+        # t_ref 가 과거면 '그 날 알 수 있었던 것'만 써야 한다. 오늘의 실시간
+        # 시세·지수 국면·뉴스를 과거 판정에 섞으면 전부 미래 누수다.
+        # 리플레이에서는 이 셋을 모두 끄고(미수신 처리), 현재가는 기준일 종가를 쓴다.
+        #
+        # 단, 주말·연휴에는 t_ref(마지막 거래일)가 어제·그제가 되는 것이 정상 운영이다.
+        # 그때 라이브 데이터를 끄면 앱이 주말마다 반쪽이 된다. 5일 이내는 라이브,
+        # 그보다 오래된 기준일만 리플레이로 본다 (캘리브레이션 랩은 전부 1달 이상 과거).
+        try:
+            _tref_dt = _dt.datetime.strptime(str(t_ref_str)[:10], '%Y-%m-%d')
+            is_replay = (_dt.datetime.now() - _tref_dt).days > 5
+        except ValueError:
+            is_replay = False
+
         # 시장 국면 컨텍스트는 같은 시장 안에서는 종목마다 같으므로 캐시한다.
         # ⚠️ 시장별로 따로 캐시해야 한다. 하나만 들고 있으면 코스피 종목을 먼저 본 뒤
         #    코스닥 종목을 볼 때 코스피 국면이 그대로 재사용된다.
         _mkt = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
-        if not hasattr(self, '_regime_by_market'):
-            self._regime_by_market = {}
-        if _mkt not in self._regime_by_market:
-            self._regime_by_market[_mkt] = b_engine.get_index_regime(_mkt)
-        self.market_regime_ctx = self._regime_by_market[_mkt]
+        if is_replay:
+            self.market_regime_ctx = None      # 오늘 지수 국면은 과거 판정에 못 쓴다
+        else:
+            if not hasattr(self, '_regime_by_market'):
+                self._regime_by_market = {}
+            if _mkt not in self._regime_by_market:
+                self._regime_by_market[_mkt] = b_engine.get_index_regime(_mkt)
+            self.market_regime_ctx = self._regime_by_market[_mkt]
 
         # 시장·글로벌·뉴스 컨텍스트 — 이 종목만 보지 않고 판을 함께 본다.
         # 실패해도 분석 자체는 계속한다(미수신으로 남기고 상한도 걸지 않는다).
         try:
+            if is_replay:
+                raise RuntimeError("리플레이 — 오늘의 시장·뉴스 컨텍스트를 쓰지 않는다")
             import market_context as _mctx
             self.market_context = _mctx.build_market_context(
                 b_engine, symbol, str(symbol).split('.')[0])
@@ -3939,30 +3992,46 @@ class QuantIndicatorsEngine:
         prices_df, fund_df = b_engine.generate_synthetic_bitemporal_data(
             symbol=symbol, start_date='2020-01-01', end_date=t_ref_str)
 
-        rt_price, rt_status, matrix_data = b_engine.get_realtime_stock_price_triple_check(symbol)
-        sm = STOCK_METRICS_DB.get(symbol, {})
-        open_p = float(sm.get('open_p', rt_price))
-        high_p = float(sm.get('high_p', max(rt_price, open_p)))
-        low_p = float(sm.get('low_p', min(rt_price, open_p)))
-        vol_p = float(sm.get('volume', 1000000.0))
+        if is_replay:
+            # 과거 기준일: 오늘 시세를 주입하면 그 자체가 미래 누수다.
+            # 기준일까지의 마지막 종가가 '그 날의 현재가'다.
+            # ⚠️ 데이터 계층이 종목별 전체 이력을 캐시하므로 end_date 를 믿지 말고
+            #    여기서 기준일 초과 봉을 직접 잘라낸다 — 이걸 빼먹으면 리플레이
+            #    판정에 미래 봉이 섞인다 (실제로 §54 가 잡아낸 누수).
+            if prices_df is not None and not prices_df.empty:
+                prices_df = prices_df[
+                    prices_df['trade_date'].astype(str) <= str(t_ref_str)
+                ].reset_index(drop=True)
+            if prices_df is None or prices_df.empty:
+                raise ValueError(f"{symbol}: {t_ref_str} 이전 가격 이력이 없습니다")
+            rt_price = float(prices_df['adj_close'].iloc[-1])
+            rt_status = f"리플레이 — {prices_df['trade_date'].iloc[-1]} 종가 기준"
+            matrix_data = []
+        else:
+            rt_price, rt_status, matrix_data = b_engine.get_realtime_stock_price_triple_check(symbol)
+            sm = STOCK_METRICS_DB.get(symbol, {})
+            open_p = float(sm.get('open_p', rt_price))
+            high_p = float(sm.get('high_p', max(rt_price, open_p)))
+            low_p = float(sm.get('low_p', min(rt_price, open_p)))
+            vol_p = float(sm.get('volume', 1000000.0))
 
-        # 이상치 보정: 현재가 대비 ±25% 밖의 OHLC는 신뢰하지 않는다
-        if not (rt_price * 0.75 <= high_p <= rt_price * 1.25): high_p = rt_price * 1.005
-        if not (rt_price * 0.75 <= low_p <= rt_price * 1.25):  low_p = rt_price * 0.995
-        if not (rt_price * 0.75 <= open_p <= rt_price * 1.25): open_p = rt_price
+            # 이상치 보정: 현재가 대비 ±25% 밖의 OHLC는 신뢰하지 않는다
+            if not (rt_price * 0.75 <= high_p <= rt_price * 1.25): high_p = rt_price * 1.005
+            if not (rt_price * 0.75 <= low_p <= rt_price * 1.25):  low_p = rt_price * 0.995
+            if not (rt_price * 0.75 <= open_p <= rt_price * 1.25): open_p = rt_price
 
-        rt_row = pd.DataFrame([{
-            'trade_date': t_ref_str,
-            'open': open_p, 'high': high_p, 'low': low_p,
-            'close': rt_price, 'adj_close': rt_price, 'volume': vol_p,
-            # 수급이 미연동이면 NaN — 0이나 임의값으로 채우지 않는다
-            'foreign_net': float(sm['net_f']) if sm.get('net_f') is not None else np.nan,
-            'institution_net': float(sm['net_i']) if sm.get('net_i') is not None else np.nan,
-            'retail_net': float(sm['net_r']) if sm.get('net_r') is not None else np.nan,
-        }])
-        if not prices_df.empty and prices_df['trade_date'].iloc[-1] == t_ref_str:
-            prices_df = prices_df.iloc[:-1]
-        prices_df = pd.concat([prices_df, rt_row], ignore_index=True)
+            rt_row = pd.DataFrame([{
+                'trade_date': t_ref_str,
+                'open': open_p, 'high': high_p, 'low': low_p,
+                'close': rt_price, 'adj_close': rt_price, 'volume': vol_p,
+                # 수급이 미연동이면 NaN — 0이나 임의값으로 채우지 않는다
+                'foreign_net': float(sm['net_f']) if sm.get('net_f') is not None else np.nan,
+                'institution_net': float(sm['net_i']) if sm.get('net_i') is not None else np.nan,
+                'retail_net': float(sm['net_r']) if sm.get('net_r') is not None else np.nan,
+            }])
+            if not prices_df.empty and prices_df['trade_date'].iloc[-1] == t_ref_str:
+                prices_df = prices_df.iloc[:-1]
+            prices_df = pd.concat([prices_df, rt_row], ignore_index=True)
 
         tech_df = self.compute_technical_indicators(prices_df)
         sim_res = self.run_self_similarity_backtest(tech_df, t_ref_str, 20, rho_cutoff)
@@ -3975,8 +4044,11 @@ class QuantIndicatorsEngine:
 
         # 상대 모멘텀(12-1) — Jegadeesh–Titman(1993). 벤치마크는 상장 시장 지수.
         # 지수를 못 받으면 None 으로 남기고 점수에 개입하지 않는다.
+        # 리플레이에서는 지수 시계열이 오늘 기준이라(과거 구간 대조 불가) 쓰지 않는다.
         self._rel_mom_ctx = None
         try:
+            if is_replay:
+                raise RuntimeError("리플레이 — 오늘 기준 지수 시계열을 쓰지 않는다")
             _stk_mom = self.momentum_12_1(tech_df['adj_close'].values)
             _mkt_name = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
             if not hasattr(self, '_idx_daily_cache'):
@@ -3995,7 +4067,9 @@ class QuantIndicatorsEngine:
         # 실전 판정 성적 자기보정 — TipRanks Smart Score 방식: 예측 주체의 과거
         # 적중률로 신호를 가중한다. 여기서 '주체'는 이 앱 자신이다(판정 성적표).
         # 기록이 없으면(클라우드) None 으로 두고 개입하지 않는다.
-        if not hasattr(self, '_track_summary'):
+        if is_replay:
+            self._track_summary = getattr(self, '_track_summary', None)
+        elif not hasattr(self, '_track_summary'):
             self._track_summary = None
             try:
                 import prediction_log as _plog_tr
@@ -4047,6 +4121,7 @@ class QuantIndicatorsEngine:
             'strategy_quality': strategy_quality,
             'rt_price': rt_price,
             'rt_status': rt_status,
+            'is_replay': is_replay,
             'source_matrix': matrix_data,
             # 교차검증 결과를 스냅샷에 실어 둔다.
             # 예전에는 상세화면만 1% 게이트를 걸고 스캐너는 그냥 통과시켰다.
