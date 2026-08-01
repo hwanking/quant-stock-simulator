@@ -2832,6 +2832,76 @@ _h60 = q.build_easy_advice(_fs60, {'score': 62, 'action': 'HOLD', 'vetoes': []},
 check("수익 중 보유자에게 본전 손절 상향 조언", '본전' in _h60['detail'])
 
 
+section("61. 뉴스 범위·후행 분류 · 개장 전 확정 리포트 · 테마 토글")
+
+# ① 뉴스 분류 — 낱말 일치만 (해석 금지), 후행 보도(가격 결과 설명)는 재료가 아니다
+import market_context as mc61
+
+check("거시 분류", mc61.classify_news_scope("연준 금리 인하 시사") == '거시')
+check("시장 분류", mc61.classify_news_scope("코스피 외국인 순매수 전환") == '시장')
+check("업종 분류", mc61.classify_news_scope("반도체주 일제히 강세") == '업종')
+check("종목 분류(기본)", mc61.classify_news_scope("삼성전자 신제품 공개") == '종목')
+check("후행 보도 탐지 — 급등 설명 기사", mc61.is_lagging_report("삼성전자 5% 급등 마감"))
+check("후행 아님 — 재료 기사", not mc61.is_lagging_report("삼성전자 대규모 수주 계약"))
+_nf61 = mc61.summarize_news_flags({'items': [
+    {'title': 'A 수주', 'risk_hits': [], 'watch_hits': ['수주'], 'scope': '종목',
+     'lagging': False},
+    {'title': 'B 급등', 'risk_hits': [], 'watch_hits': ['수주'], 'scope': '종목',
+     'lagging': True},
+    {'title': '코스피 상승', 'risk_hits': [], 'watch_hits': [], 'scope': '시장',
+     'lagging': True}]})
+check("신선 재료 = 종목+참고낱말+비후행만", _nf61['fresh_watch_count'] == 1)
+check("범위별 집계", _nf61['by_scope']['종목'] == 2 and _nf61['by_scope']['시장'] == 1)
+check("뉴스는 가점 없음 원칙 유지 (위험 낱말 감점만)",
+      "가점하지 않는다" in open(_os.path.join(PROJ, "premarket.py"),
+                          encoding='utf-8').read())
+
+# ② 개장 전 리포트 — 고정·이력·재계산 금지
+import premarket as pm61
+
+_rows61 = [{
+    'symbol': '005930.KS', 'name': '삼성전자', 'base_price': 262500,
+    'final_score': 61, 'entry_candidate': True, 'm10_above': True,
+    'scores_obj': {}, 'snapshot': {'t_ref': '2026-08-01', 'four_scores': {
+        'recommended_buy_price': 147590, 'buy_entry_max': 150000,
+        'target_tech_1st': 295050, 'target_tech_2nd': 320000,
+        'stop_loss_price': 216000, 'asset_type': 'STOCK',
+        'final_action_score': 61, 'final_action_title': '조건 확인·관망',
+        'gate_reason': '테스트', 'm10_disparity': 5.0}},
+}]
+_dk61 = "2099-01-01"          # 실제 날짜와 충돌하지 않는 시험용 날짜
+_p61 = pm61._pm_path(_dk61)
+if _os.path.exists(_p61):
+    _os.remove(_p61)
+_rep61, _new61 = pm61.build_report(q, _rows61, date_key=_dk61, market_label="시험")
+check("리포트 생성·고정 저장", _new61 and _os.path.exists(_p61))
+check("생성 시각·기준일 박제", _rep61.get('generated_at') and _rep61.get('data_asof'))
+check("장중 재계산 금지 문구", '다시 계산하지 않습니다' in str(_rep61.get('note')))
+_rep61b, _new61b = pm61.build_report(q, [], date_key=_dk61)   # 빈 스캔으로 재호출
+check("같은 날 재호출 시 기존 리포트 반환 (고정)",
+      not _new61b and len(_rep61b.get('picks', [])) == 1)
+_pick61 = _rep61['picks'][0]
+check("추천 4분류 어휘", _pick61['reco_class'] in (
+    '오늘 사도 되는 종목', '조건부로 사도 되는 종목',
+    '오늘은 기다려야 하는 종목', '오늘은 사면 안 되는 종목'))
+check("추천 근거 저장 (가격 3종·사유·뉴스)",
+      all(k in _pick61 for k in ('rec_buy', 'target', 'stop', 'reasons',
+                                 'news_risk', 'news_fresh')))
+_hist61 = [l for l in open(pm61.PM_HISTORY, encoding='utf-8')
+           if '"2099-01-01"' in l] if _os.path.exists(pm61.PM_HISTORY) else []
+check("이력(jsonl) 추가 저장", len(_hist61) >= 1)
+_os.remove(_p61)              # 시험용 파일 정리 (이력은 append-only 로 남긴다)
+
+# ③ 화면 — 리포트 섹션·테마 토글
+_w61 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("개장 전 리포트 섹션", "개장 전 확정 리포트" in _w61)
+check("사후 검증 패널 (숨김 금지)", "지난 개장 전 추천의 실제 성과" in _w61)
+check("적중률 분모 명시", "분모 = 목표+손절" in _w61)
+check("라이트/다크 토글", "라이트 모드" in _w61 and "ui_theme" in _w61)
+check("타이포 개선 (tabular-nums·Pretendard 계열)",
+      "tnum" in _w61 and "Pretendard" in _w61)
+
+
 print()
 print("=" * 72)
 if FAILURES:

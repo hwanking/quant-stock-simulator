@@ -159,14 +159,45 @@ st.set_page_config(
 # Secrets 에 app_password 가 설정돼 있을 때만 인증을 요구한다 (없으면 그대로 공개)
 check_password()
 
+# ── 테마 토글 (라이트/다크) ────────────────────────────────────────────────
+# 화면 배경·본문 텍스트·카드 여백을 전환한다. 기존 정보 카드는 자체 배경(다크)을
+# 유지해 라이트 모드에서는 '흰 바탕 위 다크 카드' 대시보드 스타일이 된다.
+if 'ui_theme' not in st.session_state:
+    st.session_state['ui_theme'] = 'dark'
+_theme = st.session_state['ui_theme']
+_APP_BG = "#0d0e11" if _theme == 'dark' else "#f4f6fa"
+_APP_TX = "#ffffff" if _theme == 'dark' else "#1a1c22"
+_SB_BG = "#16181d" if _theme == 'dark' else "#ffffff"
+
+st.markdown(f"""
+<style>
+    /* 프리미엄 타이포그래피 — 숫자는 고정폭 자릿수(tabular-nums)로 정렬 */
+    .stApp {{
+        background-color: {_APP_BG};
+        color: {_APP_TX};
+        font-family: "Pretendard", "Pretendard Variable", -apple-system,
+                     BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic",
+                     Helvetica, Arial, sans-serif;
+        font-feature-settings: "tnum" 1;
+        letter-spacing: -0.01em;
+    }}
+    .stApp b, .stApp strong {{ font-weight: 750; }}
+    /* 카드 공통 폴리시 — 부드러운 그림자 + 미세 호버 */
+    .stApp div[style*="border-radius:14px"],
+    .stApp div[style*="border-radius:16px"],
+    .stApp div[style*="border-radius:20px"] {{
+        box-shadow: 0 2px 14px rgba(0,0,0,{0.35 if _theme == 'dark' else 0.10});
+        transition: transform .12s ease, box-shadow .12s ease;
+    }}
+    .stApp div[style*="border-radius:14px"]:hover {{
+        transform: translateY(-1px);
+    }}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
     /* 전체 다크 모드 고대비 시각성 극대화 최적화 */
-    .stApp {
-        background-color: #0d0e11;
-        color: #ffffff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
     
     /* 사이드바 고대비(High-Contrast) 가독성 100% 최적화 */
     [data-testid="stSidebar"] {
@@ -301,6 +332,28 @@ st.markdown("""
     p, span, li, label { color: #f0f2f8; font-size: 0.98rem; }
 </style>
 """, unsafe_allow_html=True)
+
+# 라이트 모드 오버라이드 — 구형 다크 규칙 뒤에 와야 이긴다.
+# 정보 카드는 자체 다크 배경을 유지한다 (흰 바탕 + 다크 카드 대시보드 스타일).
+if _theme == 'light':
+    st.markdown("""
+    <style>
+        .stApp { background-color: #f4f6fa !important; }
+        .stApp > header { background-color: transparent !important; }
+        h1, h2, h3 { color: #14161c !important; }
+        .stApp .block-container > div > div > .stMarkdown p,
+        .stApp .block-container > div > div > .stMarkdown li {
+            color: #2a2d36;
+        }
+        .stApp .stCaption, .stApp [data-testid="stCaptionContainer"] p {
+            color: #5a5f6b !important;
+        }
+        [data-testid="stSidebar"] { background-color: #ffffff !important;
+                                    border-right: 1px solid #e2e6ee !important; }
+        [data-testid="stSidebar"] * { color: #1a1c22 !important; }
+        hr { border-color: #dde2ea !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ── 브라우저 클립보드 붙여넣기 컴포넌트 ──────────────────────────────────────
 # 사용자 브라우저의 paste 이벤트로 이미지를 받는다. 서버 클립보드를 읽는 방식과 달리
@@ -490,6 +543,13 @@ if st.sidebar.button(APP_NAME, use_container_width=True, key="btn_home",
     st.rerun()
 
 st.sidebar.caption(f"업데이트 {APP_UPDATED} · 제목을 누르면 첫 화면으로 돌아갑니다")
+
+# 라이트/다크 테마 토글
+_theme_is_light = st.sidebar.toggle("☀️ 라이트 모드", value=(_theme == 'light'),
+                                    key="tgl_theme")
+if _theme_is_light != (_theme == 'light'):
+    st.session_state['ui_theme'] = 'light' if _theme_is_light else 'dark'
+    st.rerun()
 
 default_stock_no1 = engine_init.fetch_realtime_market_cap_no1_stock()
 
@@ -1186,8 +1246,81 @@ if st.session_state.get('show_screener', False):
             </div>
             """, unsafe_allow_html=True)
 
-    
+            # ── 📋 개장 전 확정 리포트 — 스캔 결과를 당일 파일로 고정 ──────────
+            import premarket as _pm
+            _pm_mkt = ""
+            try:
+                _pm_fs0 = (scan_results[0].get('snapshot') or {}).get('four_scores') or {}
+                _pm_mkt = str(_pm_fs0.get('context_regime_label') or
+                              _pm_fs0.get('market_regime_label') or '')
+            except Exception:
+                _pm_mkt = ""
+            _pm_report, _pm_new = _pm.build_report(q_engine, scan_results,
+                                                   market_label=_pm_mkt)
+            if _pm_new:
+                st.toast("📋 오늘의 개장 전 리포트를 고정 저장했습니다")
+            st.session_state['premarket_report'] = _pm_report
+
     st.markdown("---")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 📋 오늘의 추천 — 개장 전 확정 리포트 (전일 확정 데이터 기준 · 장중 재계산 금지)
+# ═══════════════════════════════════════════════════════════════════════════
+import premarket as _pm_view
+
+_pmr = st.session_state.get('premarket_report') or _pm_view.load_today_report()
+if _pmr:
+    st.markdown("## 📋 오늘의 추천 — 개장 전 확정 리포트")
+    st.caption(f"기준 데이터 **{_pmr.get('data_asof')}** · 생성 **{_pmr.get('generated_at')}** · "
+               f"{_pmr.get('market_label') or ''}  \n"
+               f"🔒 {_pmr.get('note')}")
+    _CLS_COLOR = {'오늘 사도 되는 종목': '#30d158', '조건부로 사도 되는 종목': '#64d2ff',
+                  '오늘은 기다려야 하는 종목': '#ff9f0a', '오늘은 사면 안 되는 종목': '#ff453a'}
+    _pm_cols = st.columns(min(5, max(1, len(_pmr.get('picks') or []))))
+    for _pi, _p in enumerate((_pmr.get('picks') or [])[:5]):
+        _cc = _CLS_COLOR.get(_p.get('reco_class'), '#86868b')
+        _cb_p = _p.get('confidence_band') or {}
+        _conf_txt = (f"과거 동점수대 적중 {_cb_p['hit_rate']:.0f}% (n={_cb_p['n']})"
+                     if _cb_p.get('hit_rate') is not None and (_cb_p.get('n') or 0) >= 30
+                     else "적중률 표본 부족")
+        _news_txt = []
+        if _p.get('news_fresh'):
+            _news_txt.append(f"신선 재료 {_p['news_fresh']}건")
+        if _p.get('news_risk'):
+            _news_txt.append(f"⚠️위험 낱말 {_p['news_risk']}건")
+        if _p.get('news_lagging'):
+            _news_txt.append(f"후행 보도 {_p['news_lagging']}건 제외")
+        with _pm_cols[_pi]:
+            st.markdown(f"""
+            <div style='background:#141416; border:1px solid {_cc}55; border-top:3px solid {_cc};
+                        border-radius:14px; padding:12px 14px; min-height:240px;'>
+              <p style='margin:0; font-size:0.72rem; color:{_cc}; font-weight:800;'>{_p.get('reco_class')}</p>
+              <p style='margin:4px 0 2px 0; font-size:1.05rem; font-weight:900; color:#f5f5f7;'>{_p.get('name')}</p>
+              <p style='margin:0; font-size:0.72rem; color:#86868b;'>{_p.get('code')} · {_p.get('asset_type')} · {_p.get('score')}점</p>
+              <p style='margin:8px 0 4px 0; font-size:0.85rem; font-weight:800; color:{_cc};'>{_p.get('easy_emoji')} {_p.get('easy_line')}</p>
+              <p style='margin:0; font-size:0.75rem; color:#d2d2d7; line-height:1.6;'>
+                권장 {'{:,.0f}원'.format(_p['rec_buy']) if _p.get('rec_buy') else '미산출'} ·
+                목표 {'{:,.0f}원'.format(_p['target']) if _p.get('target') else '—'} ·
+                손절 {'{:,.0f}원'.format(_p['stop']) if _p.get('stop') else '—'}<br>
+                {' · '.join(_news_txt) if _news_txt else '특이 뉴스 없음'}<br>
+                <span style='color:#86868b;'>{_conf_txt}</span></p>
+            </div>""", unsafe_allow_html=True)
+    with st.expander("📈 지난 개장 전 추천의 실제 성과 (사후 검증)"):
+        _hist = _pm_view.grade_history(engine_init)
+        if _hist:
+            st.markdown(f"지난 추천 **{_hist['n']}건** — 목표 도달 {_hist['target']} · "
+                        f"손절 {_hist['stop']} · 미결 {_hist['open']} "
+                        f"(분모 = 목표+손절, 미결은 별도)")
+            for _h in _hist['rows'][::-1]:
+                _oe = {'TARGET': '🟢', 'STOP': '🔴', 'OPEN': '⏳'}.get(_h['outcome'], '·')
+                st.caption(f"{_oe} {_h['date']} {_h['name']} ({_h['reco_class']}) → "
+                           f"{_h['outcome']} {_h['return_pct']:+.1f}%")
+        else:
+            st.caption("아직 채점할 과거 추천이 없습니다. 리포트가 쌓이면 여기서 "
+                       "실제 성과를 그대로 보여줍니다 — 숨기지 않습니다.")
+elif st.session_state.get('scan_results') is None:
+    st.caption("📋 오늘의 개장 전 리포트는 위 **트렌드 탐색기**에서 스캔을 실행하면 "
+               "전일 확정 데이터 기준으로 생성·고정됩니다.")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 💼 내 보유종목 화면

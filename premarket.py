@@ -1,0 +1,195 @@
+# -*- coding: utf-8 -*-
+"""
+개장 전 확정 추천 리포트 — 전일까지 확정된 데이터로 장 시작 전에 결론을 내린다.
+
+원칙:
+  · 하루에 한 번 생성해 파일로 고정한다. 장중에 다시 열어도 점수를 바꾸지 않는다
+    (사후에 좋아 보이는 종목을 고르는 것을 구조적으로 차단).
+  · 생성 시각·기준 데이터 날짜를 리포트에 박제한다.
+  · 모든 추천은 이력(jsonl)에 남고, 이후 실제 경로로 채점된다 — 성과를 숨길 수 없다.
+  · 뉴스는 보조 신호다: 위험 낱말은 감점(기존 컨텍스트 상한), '신선한 재료'
+    (종목 뉴스 + 참고 낱말 + 시세 후행 보도 아님)는 표기만 하고 가점하지 않는다.
+
+저장: .portfolio/premarket_YYYY-MM-DD.json (당일 고정)
+      .portfolio/premarket_history.jsonl (전체 이력 — 추가 전용)
+"""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+
+PM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".portfolio")
+PM_HISTORY = os.path.join(PM_DIR, "premarket_history.jsonl")
+
+
+def _pm_path(date_key):
+    return os.path.join(PM_DIR, f"premarket_{date_key}.json")
+
+
+def load_today_report(date_key=None):
+    """오늘 리포트가 이미 고정돼 있으면 그대로 돌려준다 (장중 재계산 금지)."""
+    date_key = date_key or datetime.now().strftime('%Y-%m-%d')
+    p = _pm_path(date_key)
+    if os.path.exists(p):
+        try:
+            with open(p, encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+
+def _classify_reco(row, easy_line):
+    """추천 4분류 — 사용자 어휘 그대로."""
+    if row.get('entry_candidate') and (row.get('final_score') or 0) >= 60:
+        return '오늘 사도 되는 종목'
+    if row.get('entry_candidate'):
+        return '조건부로 사도 되는 종목'
+    if '이하로 내려올 때만' in str(easy_line):
+        return '오늘은 기다려야 하는 종목'
+    return '오늘은 사면 안 되는 종목'
+
+
+def build_report(q_engine, scan_rows, date_key=None, market_label=""):
+    """
+    스캔 결과(전일 확정 데이터 기반) → 개장 전 리포트. 이미 있으면 기존 것을 반환.
+
+    scan_rows: run_screener_scan 이 만든 행 목록 (스냅샷 포함).
+    """
+    date_key = date_key or datetime.now().strftime('%Y-%m-%d')
+    existing = load_today_report(date_key)
+    if existing:
+        return existing, False               # (리포트, 새로 생성했는가)
+
+    picks = []
+    for r in (scan_rows or [])[:5]:
+        snap = r.get('snapshot') or {}
+        fs = (snap.get('four_scores') or r.get('scores_obj') or {})
+        verdict = None
+        try:
+            verdict = q_engine.build_final_verdict(snap) if snap else None
+        except Exception:
+            verdict = None
+        try:
+            easy = q_engine.build_easy_advice(
+                fs, verdict or {'score': r.get('final_score'),
+                                'action': 'HOLD', 'vetoes': []},
+                r.get('base_price'))
+            easy_nb = easy['new_buyer']
+        except Exception:
+            easy_nb = {'emoji': '⚪', 'line': '판단 보류', 'detail': ''}
+
+        nf = ((snap.get('market_context') or {}).get('news_flags') or {})
+        cb = fs.get('calibration_band') or {}
+        picks.append({
+            'code': str(r.get('symbol', '')).split('.')[0],
+            'symbol': r.get('symbol'),
+            'name': r.get('name'),
+            'asset_type': fs.get('asset_type', 'STOCK'),
+            'reco_class': _classify_reco(r, easy_nb.get('line')),
+            'easy_emoji': easy_nb.get('emoji'),
+            'easy_line': easy_nb.get('line'),
+            'score': r.get('final_score'),
+            'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)
+            'rec_buy': fs.get('recommended_buy_price'),
+            'chase_max': fs.get('buy_entry_max'),
+            'target': fs.get('target_tech_1st'),
+            'target2': fs.get('target_tech_2nd'),
+            'stop': fs.get('stop_loss_price'),
+            'horizon_days': 20,
+            'entry_candidate': bool(r.get('entry_candidate')),
+            'm10_above': bool(r.get('m10_above')),
+            'news_risk': int(nf.get('risk_count', 0) or 0),
+            'news_fresh': int(nf.get('fresh_watch_count', 0) or 0),
+            'news_lagging': int(nf.get('lagging_count', 0) or 0),
+            'confidence_band': ({'lo': cb.get('lo'), 'hi': cb.get('hi'),
+                                 'hit_rate': cb.get('hit_rate'), 'n': cb.get('n')}
+                                if cb else None),
+            'reasons': [str(x)[:90] for x in
+                        (str(fs.get('gate_reason', '')).split(' / ')[:3])],
+        })
+
+    report = {
+        'date': date_key,
+        'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'data_asof': str((scan_rows[0].get('snapshot') or {}).get('t_ref', date_key)
+                         if scan_rows else date_key),
+        'market_label': market_label,
+        'frozen': True,
+        'note': ("이 리포트는 생성 시각의 확정 데이터 기준이며, 오늘 장중에는 "
+                 "다시 계산하지 않습니다 (사후 선택 방지)."),
+        'picks': picks,
+    }
+    try:
+        os.makedirs(PM_DIR, exist_ok=True)
+        with open(_pm_path(date_key), 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=1)
+        # 이력에도 추가 (같은 날짜+종목은 중복 저장하지 않음)
+        seen = set()
+        if os.path.exists(PM_HISTORY):
+            with open(PM_HISTORY, encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        h = json.loads(line)
+                        seen.add((h.get('date'), h.get('symbol')))
+                    except Exception:
+                        continue
+        with open(PM_HISTORY, 'a', encoding='utf-8') as f:
+            for p in picks:
+                if (date_key, p['symbol']) not in seen:
+                    f.write(json.dumps({**p, 'date': date_key,
+                                        'generated_at': report['generated_at']},
+                                       ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    return report, True
+
+
+def grade_history(b_engine, max_rows=100):
+    """
+    지난 추천들의 실제 성과 — 목표/손절 선도달 채점 (prediction_log 재사용).
+    반환: {'n','target','stop','open','rows':[...]} 또는 None(이력 없음)
+    """
+    if not os.path.exists(PM_HISTORY):
+        return None
+    import prediction_log as plog
+    rows = []
+    with open(PM_HISTORY, encoding='utf-8') as f:
+        for line in f:
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    rows = rows[-max_rows:]
+    today = datetime.now().strftime('%Y-%m-%d')
+    cache, out = {}, []
+    for r in rows:
+        if r.get('date') == today or not r.get('target') or not r.get('stop'):
+            continue
+        tk = r.get('symbol')
+        if tk not in cache:
+            try:
+                cache[tk], _ = b_engine.generate_synthetic_bitemporal_data(
+                    symbol=tk, start_date='2020-01-01', end_date=None)
+            except Exception:
+                cache[tk] = None
+        if cache[tk] is None:
+            continue
+        g = plog.grade_prediction(
+            {'date': r['date'], 'price': r.get('price'),
+             'target': r.get('target'), 'stop': r.get('stop'),
+             'horizon_days': r.get('horizon_days') or 20}, cache[tk])
+        if g:
+            out.append({'name': r.get('name'), 'date': r.get('date'),
+                        'reco_class': r.get('reco_class'),
+                        'outcome': g['outcome'], 'return_pct': g['return_pct']})
+    if not out:
+        return None
+    return {
+        'n': len(out),
+        'target': sum(1 for o in out if o['outcome'] == 'TARGET'),
+        'stop': sum(1 for o in out if o['outcome'] == 'STOP'),
+        'open': sum(1 for o in out if o['outcome'] == 'OPEN'),
+        'rows': out[-10:],
+    }

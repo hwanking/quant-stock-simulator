@@ -171,6 +171,36 @@ def _clean_title(s):
     return re.sub(r'\s+', ' ', _html.unescape(str(s or ''))).strip()
 
 
+#: 뉴스 범위 분류 낱말 (제목 낱말 일치 — 기사 내용 해석이 아니다)
+_SCOPE_MACRO = ("금리", "연준", "Fed", "환율", "달러", "국채", "물가", "CPI", "관세",
+                "무역", "GDP", "경기침체", "유가")
+_SCOPE_MARKET = ("코스피", "코스닥", "증시", "주식시장", "외국인 순매", "기관 순매",
+                 "시가총액", "공매도", "밸류업")
+_SCOPE_SECTOR = ("업종", "반도체주", "바이오주", "2차전지주", "금융주", "건설주",
+                 "게임주", "엔터주", "방산주", "조선주", "화학주")
+#: 시세 후행 보도 패턴 — 이미 움직인 가격을 설명하는 기사 (재료가 아니라 결과 보도)
+_LAGGING_PAT = re.compile(
+    r'급등|급락|상한가|하한가|신고가|신저가|[+\-]?\d+(\.\d+)?%|상승 마감|하락 마감|'
+    r'52주 최고|52주 최저|불기둥|폭등|폭락')
+
+
+def classify_news_scope(title):
+    """제목 → 범위(거시/시장/업종/종목). 낱말 일치만 쓴다."""
+    t = str(title or '')
+    if any(k in t for k in _SCOPE_MACRO):
+        return '거시'
+    if any(k in t for k in _SCOPE_MARKET):
+        return '시장'
+    if any(k in t for k in _SCOPE_SECTOR):
+        return '업종'
+    return '종목'
+
+
+def is_lagging_report(title):
+    """시세 후행 보도인가 — 가격이 이미 움직인 것을 설명하는 기사는 '재료'가 아니다."""
+    return bool(_LAGGING_PAT.search(str(title or '')))
+
+
 def _parse_news_datetime(s):
     """'202607312027' → '2026-07-31 20:27'."""
     t = str(s or "")
@@ -222,6 +252,10 @@ def fetch_stock_news(code, limit=15):
                 'related_count': len(rest),
                 'risk_hits': [k for k in NEWS_RISK_KEYWORDS if k in title],
                 'watch_hits': [k for k in NEWS_WATCH_KEYWORDS if k in title],
+                # 범위·후행 분류 — 낱말 일치만. 연관 묶음(related)이 이미 반복
+                # 기사 중복을 걷어낸 상태다.
+                'scope': classify_news_scope(title),
+                'lagging': is_lagging_report(title),
             })
         return {'available': bool(items), 'items': items,
                 'source': '네이버 금융 종목뉴스 (제목·언론사·시각 원문)',
@@ -237,10 +271,19 @@ def summarize_news_flags(news):
     items = (news or {}).get('items') or []
     risk = [(it['title'], it['risk_hits']) for it in items if it.get('risk_hits')]
     watch = sum(1 for it in items if it.get('watch_hits'))
+    # 신선한 참고 재료 = 종목 뉴스 + 참고 낱말 + 시세 후행 보도가 아님.
+    # (이미 급등한 걸 설명하는 기사는 '재료'가 아니라 '결과'다)
+    fresh_watch = sum(1 for it in items
+                      if it.get('watch_hits') and not it.get('lagging')
+                      and it.get('scope') == '종목')
     return {
         'risk_titles': risk,
         'risk_count': len(risk),
         'watch_count': watch,
+        'fresh_watch_count': fresh_watch,
+        'lagging_count': sum(1 for it in items if it.get('lagging')),
+        'by_scope': {s: sum(1 for it in items if it.get('scope') == s)
+                     for s in ('종목', '업종', '시장', '거시')},
         'total': len(items),
     }
 
