@@ -2471,38 +2471,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 📈 [상단 차트 추가] 실시간 주가 캔들/이동평균선(5·20·60·120일) 차트 바로보기
-with st.expander(f"📈 [클릭] [{resolved_name}] 실시간 주가 차트 (5·20·60·120일선 & RSI/거래량) 바로보기", expanded=False):
-    recent_tech_top = tech_df.tail(90)
-    x_dates_top = pd.to_datetime(recent_tech_top['trade_date'])
-    
-    fig_top, (ax_p_top, ax_r_top, ax_v_top) = plt.subplots(3, 1, figsize=(12, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1, 1]})
-    fig_top.patch.set_facecolor('#000000')
-    
-    for ax in (ax_p_top, ax_r_top, ax_v_top):
-        ax.set_facecolor('#1c1c1e')
-        ax.tick_params(colors='#f5f5f7')
-        ax.grid(True, color='#2c2c2e', linestyle='--')
-        
-    ax_p_top.plot(x_dates_top, recent_tech_top['adj_close'], label=f"{resolved_name} 수정종가", color='#f5f5f7', linewidth=2.5)
-    ax_p_top.plot(x_dates_top, recent_tech_top['sma_5'], label="5일선", color='#64d2ff', linewidth=1.5)
-    ax_p_top.plot(x_dates_top, recent_tech_top['sma_20'], label="20일선", color='#ff9f0a', linewidth=2.0)
-    ax_p_top.plot(x_dates_top, recent_tech_top['sma_60'], label="60일선", color='#bf5af2', linestyle='--', linewidth=1.5)
-    ax_p_top.plot(x_dates_top, recent_tech_top['sma_120'], label="120일선", color='#ff3b30', linestyle=':', linewidth=1.5)
-    ax_p_top.set_title(f"📈 [{resolved_name}] 기술적 차트 (이동평균선 & RSI/거래량)", color='#f5f5f7', fontsize=12)
-    ax_p_top.legend(facecolor='#1c1c1e', edgecolor='#2c2c2e', labelcolor='#f5f5f7', loc='upper left')
-    
-    ax_r_top.plot(x_dates_top, recent_tech_top['rsi_14'], label="RSI 14", color='#bf5af2', linewidth=1.8)
-    ax_r_top.axhline(70, color='#ff453a', linestyle='--', alpha=0.7)
-    ax_r_top.axhline(30, color='#30d158', linestyle='--', alpha=0.7)
-    ax_r_top.set_ylabel("RSI")
-    
-    ax_v_top.bar(x_dates_top, recent_tech_top['volume'], color='#2997ff', alpha=0.7)
-    ax_v_top.plot(x_dates_top, recent_tech_top['vol_20_avg'], color='#ff9f0a', linewidth=1.5)
-    ax_v_top.set_ylabel("거래량")
-    
-    plt.tight_layout()
-    st.pyplot(fig_top)
+# (감사 처분: 상단 matplotlib 3단 차트 expander는 아래 '종합 차트'와 완전 중복이라
+#  제거했다 — 같은 지표(MA 5·20·60·120, RSI, 거래량)를 종합 차트가 인터랙티브로 제공.)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 🧭 최종 결론 — "이 주식 사? 말어?"
