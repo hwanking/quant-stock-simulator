@@ -2699,6 +2699,34 @@ check("화면에 모델 버전·누적 케이스", "누적 케이스" in _w57)
 check("표본 부족 점수대는 적중률 미표시", "표본 부족으로 적중률 미표시" in _w57)
 
 
+section("58. 조합 대결 규율 — 블라인드는 선택에 쓰지 않는다")
+
+# 대표 퀀트 스타일과의 조합 대결에서 검증 1위(역발상 74.6%)가 블라인드에서
+# 23.5%로 붕괴했다. 이 절은 그 규율(사전 정의·검증 선정·블라인드 보고 전용)이
+# 코드와 기록에 남아 있음을 잠근다. 결론: 현행 종합점수 조합 유지.
+
+_cs58 = _os.path.join(PROJ, "scripts", "combo_study.py")
+check("조합 대결 스크립트 존재", _os.path.exists(_cs58))
+if _os.path.exists(_cs58):
+    _cstxt58 = open(_cs58, encoding='utf-8').read()
+    check("후보는 사전 정의 (원장 보고 만들지 않음)",
+          "사전 정의" in _cstxt58 and "COMBOS" in _cstxt58)
+    check("승자 선정은 학습+검증만", "블라인드 미사용" in _cstxt58)
+    check("블라인드는 승자 확정 후 보고만", "승자 확정 후에만 블라인드 공개" in _cstxt58)
+    check("적중률 외 지표 병행 (비용후·PF·신호율)",
+          "after_cost" in _cstxt58 and "signal_rate" in _cstxt58)
+
+_mv58 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"), encoding='utf-8').read()
+check("대결 결과가 버전 대장에 기록", "조합 대결 라운드 1" in _mv58)
+check("검증 승자의 블라인드 붕괴를 은폐하지 않음",
+      "블라인드 붕괴" in _mv58 and "23.5%" in _mv58)
+check("블라인드 성적으로 채택하지 않는 원칙 명시",
+      "블라인드로 채택 불가" in _mv58)
+check("결론 = 현행 조합 유지", "현행 종합점수 조합 유지" in _mv58)
+check("차기 사전 등록 후보 기록 (E 조합)", "차기 라운드" in _mv58 or "사전 등록 후보" in _mv58)
+check("산출 보류 부속 연구 기록", "산출 보류" in _mv58 and "58.1%" in _mv58)
+
+
 print()
 print("=" * 72)
 if FAILURES:
