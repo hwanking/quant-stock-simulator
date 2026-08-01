@@ -165,22 +165,84 @@ check_password()
 if 'ui_theme' not in st.session_state:
     st.session_state['ui_theme'] = 'dark'
 _theme = st.session_state['ui_theme']
-_APP_BG = "#0d0e11" if _theme == 'dark' else "#f4f6fa"
-_APP_TX = "#ffffff" if _theme == 'dark' else "#1a1c22"
-_SB_BG = "#16181d" if _theme == 'dark' else "#ffffff"
+# ── 디자인 토큰 (docs/REDESIGN_BRIEF_v2_ko.md — 사용자 지정 hex 그대로) ────
+_TOK = {
+    'dark': dict(bg1='#0B0F17', bg2='#111827', surface='#161D2A',
+                 hover='#1C2635', border='#273244', tx1='#F3F6FA',
+                 tx2='#9DAABC', brand='#4C8DFF', pos='#35C98B',
+                 warn='#F2B84B', neg='#F26161'),
+    'light': dict(bg1='#F5F7FA', bg2='#FFFFFF', surface='#FFFFFF',
+                  hover='#F7F9FC', border='#E1E6ED', tx1='#172033',
+                  tx2='#667085', brand='#2563EB', pos='#16875D',
+                  warn='#B7791F', neg='#D14343'),
+}[_theme]
+_APP_BG = _TOK['bg1']
+_APP_TX = _TOK['tx1']
+_SB_BG = _TOK['bg2']
+
+# 흩어진 인라인 다크 표면·경계선을 토큰으로 접합한다 — 카드마다 다른 색 금지 (v2)
+_OLD_SURFACES = ['#1c1c1e', '#141416', '#16181d', '#181a20', '#1b1e25',
+                 '#22252c', '#242731', '#1a1a1c', '#111214']
+_OLD_ELEVATED = ['#2c2c2e', '#23262e', '#2d3139']
+_OLD_BORDERS = ['#2c2c2e', '#3a3a3c', '#2d3139', '#333333', '#444444']
+_ACCENT_BORDERS = ['#64d2ff', '#0a84ff', '#2997ff', '#bf5af2', '#30d158',
+                   '#ff9f0a', '#ffd60a', '#5e5ce6', '#00f0ff']
+
+
+def _sel(prop, colors, extra=''):
+    out = []
+    for c in colors:
+        for sp in ('', ' '):
+            out.append(f'.stApp div[style*="{prop}:{sp}{c}"]{extra}')
+    return ',\n'.join(out)
+
+
+_CSS_SURFACE_MAP = f"""
+    {_sel('background-color', _OLD_SURFACES)},
+    {_sel('background', _OLD_SURFACES)} {{
+        background-color: {_TOK['surface']} !important;
+        background-image: none !important;
+    }}
+    {_sel('background-color', _OLD_ELEVATED)},
+    {_sel('background', _OLD_ELEVATED)} {{
+        background-color: {_TOK['hover']} !important;
+    }}
+    .stApp div[style*="linear-gradient(135deg,#141416"] {{
+        background: {_TOK['surface']} !important;
+    }}
+"""
+_CSS_BORDER_MAP = ',\n'.join(
+    f'.stApp div[style*="border:{w} solid {c}"],'
+    f'.stApp div[style*="border: {w} solid {c}"]'
+    for w in ('1px', '1.5px', '2px')
+    for c in (_OLD_BORDERS + _ACCENT_BORDERS)
+) + f' {{ border-color: {_TOK["border"]} !important; }}'
 
 st.markdown(f"""
 <style>
+    /* v2 디자인 토큰 */
+    :root {{
+        --q-bg1: {_TOK['bg1']}; --q-bg2: {_TOK['bg2']};
+        --q-surface: {_TOK['surface']}; --q-hover: {_TOK['hover']};
+        --q-border: {_TOK['border']};
+        --q-tx1: {_TOK['tx1']}; --q-tx2: {_TOK['tx2']};
+        --q-brand: {_TOK['brand']}; --q-pos: {_TOK['pos']};
+        --q-warn: {_TOK['warn']}; --q-neg: {_TOK['neg']};
+    }}
     /* 프리미엄 타이포그래피 — 숫자는 고정폭 자릿수(tabular-nums)로 정렬 */
     .stApp {{
         background-color: {_APP_BG};
         color: {_APP_TX};
-        font-family: "Pretendard", "Pretendard Variable", -apple-system,
-                     BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic",
-                     Helvetica, Arial, sans-serif;
+        font-family: "Pretendard", "Pretendard Variable", "Inter",
+                     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                     "Malgun Gothic", Helvetica, Arial, sans-serif;
         font-feature-settings: "tnum" 1;
+        font-variant-numeric: tabular-nums;
         letter-spacing: -0.01em;
     }}
+    /* 표면·경계선 접합 — 카드마다 다른 색 금지 */
+    {_CSS_SURFACE_MAP}
+    {_CSS_BORDER_MAP}
     .stApp b, .stApp strong {{ font-weight: 750; }}
     /* 카드 공통 폴리시 — 부드러운 그림자 + 미세 호버 */
     .stApp div[style*="border-radius:14px"],
@@ -192,10 +254,9 @@ st.markdown(f"""
     .stApp div[style*="border-radius:14px"]:hover {{
         transform: translateY(-1px);
     }}
-    /* Hasselblad풍 절제 — 콘텐츠 최대 폭·여백·타이포 위계
-       (페이지 제목 28~32 / 섹션 18~22 / 본문 14~16 / 보조 12~13px) */
+    /* 절제된 위계 (v2) — 본문 15px+ / 보조 13px+ / 섹션 18~22 / 최대 폭 1440 */
     .stMainBlockContainer {{
-        max-width: 1360px !important;
+        max-width: 1440px !important;
         padding-top: 1.6rem !important;
     }}
     .stApp h1 {{ font-size: 30px !important; font-weight: 800 !important;
@@ -203,7 +264,8 @@ st.markdown(f"""
     .stApp h2 {{ font-size: 24px !important; font-weight: 800 !important; }}
     .stApp h3 {{ font-size: 20px !important; font-weight: 750 !important; }}
     .stApp hr {{ margin: 26px 0 !important; opacity: .75; }}
-    .stApp [data-testid="stCaptionContainer"] p {{ font-size: 12.5px !important; }}
+    .stApp .stMarkdown p, .stApp .stMarkdown li {{ font-size: 15px; }}
+    .stApp [data-testid="stCaptionContainer"] p {{ font-size: 13px !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -228,16 +290,13 @@ st.markdown(f"""
 [id^="nav-"] {{ scroll-margin-top: 64px; }}
 </style>
 <div class="qnav">
-  <span class="brand">⚙️ 퀀트 분석</span>
+  <span class="brand">퀀트 분석</span>
   <a href="#nav-top">홈</a>
-  <a href="#nav-premarket">오늘의 추천</a>
+  <a href="#nav-premarket">개장 전 추천</a>
+  <a href="#nav-verdict">종목 분석</a>
   <a href="#nav-holdings">내 보유종목</a>
-  <a href="#nav-verdict">종합 결론</a>
-  <a href="#nav-chart">차트</a>
   <a href="#nav-context">시장·뉴스</a>
-  <a href="#nav-scores">퀀트 점수</a>
-  <a href="#nav-perf">모델 성과</a>
-  <a href="#nav-cases">케이스</a>
+  <a href="#nav-perf">모델 검증</a>
 </div>
 <div id="nav-top"></div>
 """, unsafe_allow_html=True)
@@ -1387,7 +1446,7 @@ import premarket as _pm_view
 _pmr = st.session_state.get('premarket_report') or _pm_view.load_today_report()
 st.markdown('<div id="nav-premarket"></div>', unsafe_allow_html=True)
 if _pmr:
-    st.markdown("## 📋 오늘의 추천 — 개장 전 확정 리포트")
+    st.markdown("## 오늘의 추천 — 개장 전 확정 리포트")
     st.caption(f"기준 데이터 **{_pmr.get('data_asof')}** · 생성 **{_pmr.get('generated_at')}** · "
                f"{_pmr.get('market_label') or ''}  \n"
                f"🔒 {_pmr.get('note')}")
@@ -2341,23 +2400,23 @@ debt_val = _metric(stock_info.get('debt'), _lf.get('debt_to_equity'))
 # [1] 가격 헤더 모듈 (최상단)
 
 st.markdown(f"""
-<div style='background: #1c1c1e; border: 2px solid #64d2ff; border-radius: 18px; padding: 24px 28px; margin-bottom: 20px; box-shadow: 0 8px 30px rgba(100, 210, 255, 0.12);'>
-    <div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;'>
+<div style='background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 22px 26px; margin-bottom: 20px;'>
+    <div style='display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;'>
         <div>
-            <div style='background: rgba(100, 210, 255, 0.12); border: 2px solid #64d2ff; border-radius: 14px; padding: 10px 22px; display: inline-block; margin-bottom: 12px;'>
-                <span style='font-size: 3.4rem; font-weight: 900; color: #64d2ff; letter-spacing: -0.5px;'>{resolved_name}</span>
-                <span style='font-size: 2.2rem; font-weight: 800; color: #ffffff; margin-left: 12px;'>({target_ticker})</span>
+            <p style='margin:0; font-size: 20px; font-weight: 800; color: #F3F6FA;'>
+                {resolved_name} <span style='font-size: 15px; font-weight: 700; color: #9DAABC;'>{target_ticker}</span>
+            </p>
+            <div style='font-size: 34px; font-weight: 900; color: {chg_color}; margin: 4px 0 0 0;'>
+                {curr_p_formatted} <span style='font-size: 17px; font-weight: 800; margin-left: 8px;'>{chg_text}</span>
             </div>
-            <div style='font-size: 3.2rem; font-weight: 900; color: {chg_color}; margin: 6px 0;'>
-                {curr_p_formatted} <span style='font-size: 1.8rem; font-weight: 800; margin-left: 8px;'>{chg_text}</span>
-            </div>
-            <p style='margin: 8px 0 0 0; color: #30d158; font-size: 1.0rem; font-weight: bold;'>
-                <b>통화 코드</b>: <code>{unit_currency}</code> | <b>가격 단위</b>: <code>{unit_str}</code> | <b>시장 상태</b>: {_mkt['state']} | <b>분석 기준일</b>: {t_ref_str}
+            <p style='margin: 8px 0 0 0; color: #9DAABC; font-size: 13px;'>
+                {_mkt['state']} · 분석 기준일 {t_ref_str} · 통화 {unit_currency} · 단위 {unit_str}
             </p>
         </div>
-        <div style='text-align: right; color: #d2d2d7; font-size: 1.05rem;'>
-            <p style='margin:0; font-weight: bold;'><b>시가</b>: {open_p:,.0f}{unit_str} | <b style='color:#ff453a;'>고가</b>: {high_p:,.0f}{unit_str} | <b style='color:#30d158;'>저가</b>: {low_p:,.0f}{unit_str}</p>
-            <p style='margin:8px 0 0 0;'><b>거래량</b>: <b style='color:#64d2ff;'>{volume_p:,.0f}주</b> (20일 평균 대비 {fmt_num(tech_df['volume_ratio'].iloc[-1] if 'volume_ratio' in tech_df.columns else None, '.2f', '배')}) | <b>20일 평균 거래대금</b>: {fmt_num((four_scores.get('avg_turnover_20d') or 0) / 1e8, ',.0f', '억원', na='미산출')}</p>
+        <div style='text-align: right; color: #9DAABC; font-size: 13px;'>
+            <p style='margin:0;'>시가 {open_p:,.0f} · 고가 <span style='color:#ff453a;'>{high_p:,.0f}</span> · 저가 <span style='color:#0a84ff;'>{low_p:,.0f}</span>{unit_str}</p>
+            <p style='margin:6px 0 0 0;'>거래량 {volume_p:,.0f}주 (20일 평균 대비 {fmt_num(tech_df['volume_ratio'].iloc[-1] if 'volume_ratio' in tech_df.columns else None, '.2f', '배')})</p>
+            <p style='margin:6px 0 0 0;'>20일 평균 거래대금 {fmt_num((four_scores.get('avg_turnover_20d') or 0) / 1e8, ',.0f', '억원', na='미산출')}</p>
         </div>
     </div>
     <hr style='border: 0; border-top: 1px solid #2c2c2e; margin: 14px 0 14px 0;'>
@@ -2600,6 +2659,39 @@ if _calib_all.get('total_cases'):
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
 
+# ── 우측 고정 요약 패널 (v2) — 긴 분석을 읽어도 핵심 판단은 계속 보인다 ─────
+# 넓은 화면에서만 표시 (본문 1440px + 사이드바 + 패널 폭이 확보될 때).
+_sum_conf = four_scores.get('analysis_confidence')
+_sum_band = (f"{_cb['hit_rate']:.0f}% (n={_cb['n']})"
+             if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5
+             else "표본 부족")
+st.markdown(f"""
+<style>
+.qside {{ position: fixed; right: 22px; top: 120px; width: 248px; z-index: 90;
+  background: {_TOK['surface']}; border: 1px solid {_TOK['border']};
+  border-radius: 12px; padding: 18px 20px; }}
+.qside .act {{ color: {_vc}; font-size: 17px; font-weight: 800;
+  margin: 0 0 10px 0; line-height: 1.3; }}
+.qside table {{ width: 100%; border-collapse: collapse; }}
+.qside td {{ padding: 3px 0; font-size: 13px; color: {_TOK['tx2']}; }}
+.qside td:last-child {{ text-align: right; color: {_TOK['tx1']};
+  font-weight: 700; font-variant-numeric: tabular-nums; }}
+@media (max-width: 1760px) {{ .qside {{ display: none; }} }}
+</style>
+<div class="qside">
+  <p class="act">{verdict['headline']}</p>
+  <table>
+    <tr><td>종합점수</td><td>{verdict['score']}점</td></tr>
+    <tr><td>현재가</td><td>{realtime_price:,.0f}{unit_str}</td></tr>
+    <tr><td>진입 검토가</td><td>{fmt_num(four_scores.get('recommended_buy_price'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>1차 목표가</td><td>{fmt_num(four_scores.get('target_tech_1st'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>손절가</td><td>{fmt_num(four_scores.get('stop_loss_price'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>분석 신뢰도</td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
+    <tr><td>이 점수대 실측</td><td>{_sum_band}</td></tr>
+  </table>
+</div>
+""", unsafe_allow_html=True)
+
 # ── 원칙 3: 결론·가격 다음에 '이유' — 점수를 움직인 요인 상·하위 3개 ────────
 # verdict['composition'] 실측만 사용한다 (label/score/weight_pct/contribution).
 _comp_scored = [c for c in verdict.get('composition', [])
@@ -2676,7 +2768,7 @@ st.markdown("---")
 
 # 📈 [종합 인터랙티브 차트 — 판정 근거보다 위. 배너와 같은 실행 가격선을 눈으로 확인]
 st.markdown('<div id="nav-chart"></div>', unsafe_allow_html=True)
-st.markdown(f"### 📈 [{resolved_name}] 종합 차트")
+st.markdown(f"### [{resolved_name}] 종합 차트")
 try:
     import chart_pro as _cp
     _chart_html = _cp.build_chart_html(
@@ -2699,7 +2791,7 @@ action_bg_color = "#1c1c1e"
 st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #3a3a3c;">
 <div style="margin-bottom:20px;">
-    <h3 style="margin:0; color:#f5f5f7;">🎯 판정 근거 상세</h3>
+    <h3 style="margin:0; color:#f5f5f7;">판정 근거 상세</h3>
     <p style="margin:4px 0 0 0; color:#86868b; font-size:0.85rem;">종합 결론·점수·실행 가격 기준(권장 매수가/1차 목표가/손절가)은 화면 맨 위 배너에 있습니다. 여기서는 그 근거만 봅니다.</p>
 </div>
 
@@ -2761,7 +2853,7 @@ st.markdown("---")
 # ── 🌐 시장·글로벌·뉴스 컨텍스트 — 이 종목만 보지 않고 판을 함께 본다 ─────────
 _mkt_ctx = snap.get('market_context') or {}
 st.markdown('<div id="nav-context"></div>', unsafe_allow_html=True)
-st.markdown(f"### 🌐 [{resolved_name}] 시장·글로벌·뉴스 컨텍스트")
+st.markdown(f"### [{resolved_name}] 시장·글로벌·뉴스 컨텍스트")
 st.caption("이 판이 나쁠 때는 종목 점수가 좋아도 최종 점수에 상한이 걸립니다. "
            "좋아 보이는 뉴스로 점수를 **올리지는 않습니다** — 뉴스 해석은 사람이 합니다.")
 
@@ -2878,7 +2970,7 @@ with st.expander("🧮 이 시장·뉴스가 퀀트 점수를 얼마나 움직�
 st.markdown('<div id="nav-perf"></div>', unsafe_allow_html=True)
 _perf_cal = _load_calibration_meta()
 if _perf_cal.get('total_cases'):
-    st.markdown("### 🧪 모델 성과 — 가상 백테스트 감사")
+    st.markdown("### 모델 성과 — 가상 백테스트 감사")
     st.caption(f"과거 기준일 리플레이 **{_perf_cal['total_cases']:,}건** · "
                f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
                "시간 분할: 학습 <2025-07 / 검증 ~2026-01 / 블라인드 ≥2026-02 "
@@ -2961,7 +3053,7 @@ if _perf_cal.get('total_cases'):
 st.markdown('<div id="nav-cases"></div>', unsafe_allow_html=True)
 _ledger_df = _load_case_ledger()
 if _ledger_df is not None:
-    st.markdown("### 📚 케이스 스터디 — 리플레이 원장 탐색")
+    st.markdown("### 케이스 스터디 — 리플레이 원장 탐색")
     st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
                "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
@@ -3195,7 +3287,7 @@ if user_entry_price > 0 and user_quantity > 0:
     """, unsafe_allow_html=True)
 # 🏆 [상단 핵심 카드 5종 (Section 17 UI 표준)]
 st.markdown('<div id="nav-scores"></div>', unsafe_allow_html=True)
-st.markdown("### 📊 AI 퀀트 4대 분리 점수 & 독립 가격 위치 전광판")
+st.markdown("### 퀀트 세부 점수 & 가격 위치 전광판")
 m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
 
 with m_col1:
@@ -3299,61 +3391,68 @@ with st.expander("🔍 4대 분리 점수 세부 산출 근거 및 실시간 정
     st.write("- *DeMARK 9-13 및 밴드/모멘텀 신호는 현재 매매 적합도에 14% 비중으로 반영됩니다.*\n")
     st.write(f"- **💎 독립 가격 위치 ({price_pos['range_name']} - 52주 범위 {price_pos['range_pos_pct']}%)**: 52주 고저 범위({price_pos['low_52w']:,.0f}~{price_pos['high_52w']:,.0f}{unit_str}) 및 60일선 이격률({price_pos['disparity_60']:+.1f}%).\n")
 
-# 🏛️ [유니스트 김민겸 퀀트 챔피언 인사이트 반영] 퀀터멘탈(Quantamental) 무결성 & 밸류체인 분석 확장 모듈
-qm_score = q_engine.calculate_quantamental_hybrid_score(tech_df, fund_df, target_ticker, four_scores=four_scores)
-sharpe_turnover = q_engine.calculate_sharpe_and_turnover(sim_res, four_scores=four_scores)
-per_upside = q_engine.calculate_sector_per_upside(val_eval, target_ticker)
-profile = q_engine.get_company_profile(target_ticker, val_eval=val_eval, four_scores=four_scores)
+# 기업 분석(퀀터멘탈·프로필·PER 비교)은 전문가 옵션으로 격리한다 (브리프 v2 §7).
+# ETF·ETN은 기업 재무 개념이 적용되지 않으므로 아예 표시하지 않는다.
+_is_stock_asset = str(four_scores.get('asset_type', 'STOCK')) == 'STOCK'
+if not _is_stock_asset:
+    st.caption("기업 재무·퀀터멘탈 분석은 개별 주식 전용입니다 — "
+               "ETF·ETN에는 적용하지 않습니다 (자산 유형별 분리 원칙).")
+else:
+  with st.expander("기업 재무·퀀터멘탈 분석 (전문가 보기 — 주식 전용)",
+                   expanded=False):
+    qm_score = q_engine.calculate_quantamental_hybrid_score(tech_df, fund_df, target_ticker, four_scores=four_scores)
+    sharpe_turnover = q_engine.calculate_sharpe_and_turnover(sim_res, four_scores=four_scores)
+    per_upside = q_engine.calculate_sector_per_upside(val_eval, target_ticker)
+    profile = q_engine.get_company_profile(target_ticker, val_eval=val_eval, four_scores=four_scores)
 
-st.markdown("### 🏛️ 퀀터멘탈(Quantamental) 무결성 & AI 밸류체인 확장 모듈")
-q_col1, q_col2, q_col3 = st.columns(3)
+    q_col1, q_col2, q_col3 = st.columns(3)
 
-with q_col1:
+    with q_col1:
+        st.markdown(f"""
+        <div style='background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 18px;'>
+            <h4 style='margin-top:0;'>1. 시장 국면 & 밸류에이션 위치</h4>
+            <p style='margin: 4px 0; font-size:0.9rem;'>- <b>섹터 10년 평균 PER</b>: <b>{fmt_num(per_upside['sector_10yr_per'], '.1f', '배')}</b> | <b>현재 PER</b>: <b>{fmt_num(per_upside['curr_per'], '.1f', '배')}</b></p>
+            <p style='margin: 4px 0; font-size:0.9rem;'>- <b>상대적 밸류에이션 룸</b>: <b style='color:#30d158;'>{fmt_pct(per_upside['upside_room_pct'])}</b></p>
+            <p style='margin: 4px 0; font-size:0.85rem; color:#ff9f0a;'><b>FOMO 방지 지수</b>: {per_upside['fomo_status']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with q_col2:
+        st.markdown(f"""
+        <div style='background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 18px;'>
+            <h4 style='margin-top:0;'>2. 백테스트 품질 평가 지표</h4>
+            <p style='margin: 4px 0; font-size:0.9rem;'>- <b>표본내 Sharpe</b> (유사패턴 분포 기준): <b>{fmt_num(sharpe_turnover['sharpe_ratio'], spec='.2f')}</b>
+               <span style='font-size:0.78rem; color:#86868b;'>— 표본외 Sharpe는 아래 Blind/OOS 섹션 참조</span></p>
+            <p style='margin: 4px 0; font-size:0.9rem;'>- <b>연환산 회전율 (Turnover)</b>: <b>{fmt_num(sharpe_turnover['turnover_pct'], spec='.0f', suffix='%')}</b> (권장 보유 {fmt_num(sharpe_turnover['holding_days'], suffix='영업일')})</p>
+            <p style='margin: 4px 0; font-size:0.85rem; color:#86868b;'>- <b>Profit Factor</b>: <b>{fmt_num(sharpe_turnover['real_profit_factor'], spec='.2f')}</b> | <b>비용 차감 수익</b>: {fmt_pct(sharpe_turnover['net_excess_return'], digits=2)}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with q_col3:
+        st.markdown(f"""
+        <div style='background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 18px;'>
+            <h4 style='margin-top:0;'>3. 퀀터멘탈(Quantamental) 점수</h4>
+            <h2 style='color: #30d158; margin: 4px 0; font-size: 1.8rem;'>{qm_score['hybrid_score']}점 <span style='font-size:0.9rem; color:#86868b;'>(하이브리드)</span></h2>
+            <p style='margin: 4px 0; font-size:0.8rem; color:#d2d2d7;'><code>{qm_score['formula_str']}</code></p>
+            <p style='margin: 4px 0; font-size:0.8rem; color:#86868b;'>가격은 실제 일봉만 사용하며, 수신 실패 시 합성값으로 대체하지 않습니다. 과거 분기 재무 시계열은 미연동입니다.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    _mix = " · ".join(f"{t['name']} {t['probability_pct']:.0f}%" for t in profile['type_mix'])
+    _applied = " · ".join(f"{m['model']} {m['weight_pct']:.0f}%" for m in profile['applied_models']) or "없음"
+    _excluded = ", ".join(profile['excluded_models']) or "없음"
     st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #00f0ff; border-radius: 14px; padding: 18px;'>
-        <h4 style='color: #00f0ff !important; margin-top:0;'>1. 시장 국면 & 밸류에이션 위치</h4>
-        <p style='margin: 4px 0; font-size:0.9rem;'>- <b>섹터 10년 평균 PER</b>: <b>{fmt_num(per_upside['sector_10yr_per'], '.1f', '배')}</b> | <b>현재 PER</b>: <b>{fmt_num(per_upside['curr_per'], '.1f', '배')}</b></p>
-        <p style='margin: 4px 0; font-size:0.9rem;'>- <b>상대적 밸류에이션 룸</b>: <b style='color:#30d158;'>{fmt_pct(per_upside['upside_room_pct'])}</b></p>
-        <p style='margin: 4px 0; font-size:0.85rem; color:#ff9f0a;'>💡 <b>FOMO 방지 지수</b>: {per_upside['fomo_status']}</p>
+    <div style='background: #161618; border: 1px solid #2c2c2e; border-radius: 12px; padding: 18px; margin: 12px 0;'>
+        <h4 style='margin-top:0;'>기업 프로필 (수치 기반 · 주식 전용 산출)</h4>
+        <p style='margin:4px 0; font-size:0.95rem;'>- <b>기업유형 분류</b>: {profile['enterprise_class']} &nbsp;|&nbsp; <code>{_mix}</code></p>
+        <p style='margin:4px 0; font-size:0.95rem;'>- <b>적용 평가모델</b>: {_applied}</p>
+        <p style='margin:4px 0; font-size:0.95rem; color:#86868b;'>- <b>유효성 미통과 모델</b>: {_excluded}</p>
+        <p style='margin:4px 0; font-size:0.95rem;'>- <b>20일 평균 거래대금</b>: {fmt_num((profile['metrics']['avg_turnover_20d'] or 0)/1e8, ',.0f', '억원', na='미산출')}
+           &nbsp;|&nbsp; <b>유동성 점수</b>: {fmt_num(profile['metrics']['liquidity_score'], suffix='점')}
+           &nbsp;|&nbsp; <b>미수신 입력</b>: {', '.join(profile['missing_inputs']) or '없음'}</p>
+        <p style='margin:10px 0 0 0; font-size:0.82rem; color:#ff9f0a;'>{profile['qualitative_note']}</p>
     </div>
     """, unsafe_allow_html=True)
-
-with q_col2:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #bf5af2; border-radius: 14px; padding: 18px;'>
-        <h4 style='color: #bf5af2 !important; margin-top:0;'>2. 백테스트 품질 평가 지표</h4>
-        <p style='margin: 4px 0; font-size:0.9rem;'>- <b>표본내 Sharpe</b> (유사패턴 분포 기준): <b>{fmt_num(sharpe_turnover['sharpe_ratio'], spec='.2f')}</b>
-           <span style='font-size:0.78rem; color:#86868b;'>— 표본외 Sharpe는 아래 Blind/OOS 섹션 참조</span></p>
-        <p style='margin: 4px 0; font-size:0.9rem;'>- <b>연환산 회전율 (Turnover)</b>: <b>{fmt_num(sharpe_turnover['turnover_pct'], spec='.0f', suffix='%')}</b> (권장 보유 {fmt_num(sharpe_turnover['holding_days'], suffix='영업일')})</p>
-        <p style='margin: 4px 0; font-size:0.85rem; color:#86868b;'>- <b>Profit Factor</b>: <b>{fmt_num(sharpe_turnover['real_profit_factor'], spec='.2f')}</b> | <b>비용 차감 수익</b>: {fmt_pct(sharpe_turnover['net_excess_return'], digits=2)}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with q_col3:
-    st.markdown(f"""
-    <div style='background: #1c1c1e; border: 1px solid #30d158; border-radius: 14px; padding: 18px;'>
-        <h4 style='color: #30d158 !important; margin-top:0;'>3. 퀀터멘탈(Quantamental) 점수</h4>
-        <h2 style='color: #30d158; margin: 4px 0; font-size: 1.8rem;'>{qm_score['hybrid_score']}점 <span style='font-size:0.9rem; color:#86868b;'>(하이브리드)</span></h2>
-        <p style='margin: 4px 0; font-size:0.8rem; color:#d2d2d7;'><code>{qm_score['formula_str']}</code></p>
-        <p style='margin: 4px 0; font-size:0.8rem; color:#86868b;'>ℹ️ 가격은 실제 일봉만 사용하며, 수신 실패 시 합성값으로 대체하지 않습니다. 과거 분기 재무 시계열은 미연동입니다.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-_mix = " · ".join(f"{t['name']} {t['probability_pct']:.0f}%" for t in profile['type_mix'])
-_applied = " · ".join(f"{m['model']} {m['weight_pct']:.0f}%" for m in profile['applied_models']) or "없음"
-_excluded = ", ".join(profile['excluded_models']) or "없음"
-st.markdown(f"""
-<div style='background: #161618; border: 1px solid #2c2c2e; border-radius: 14px; padding: 18px; margin: 12px 0;'>
-    <h4 style='color: #2997ff !important; margin-top:0;'>🏷️ 기업 프로필 (수치 기반 · 전 종목 공통 산출)</h4>
-    <p style='margin:4px 0; font-size:0.95rem;'>- <b>기업유형 분류</b>: {profile['enterprise_class']} &nbsp;|&nbsp; <code>{_mix}</code></p>
-    <p style='margin:4px 0; font-size:0.95rem;'>- <b>적용 평가모델</b>: {_applied}</p>
-    <p style='margin:4px 0; font-size:0.95rem; color:#86868b;'>- <b>유효성 미통과 모델</b>: {_excluded}</p>
-    <p style='margin:4px 0; font-size:0.95rem;'>- <b>20일 평균 거래대금</b>: {fmt_num((profile['metrics']['avg_turnover_20d'] or 0)/1e8, ',.0f', '억원', na='미산출')}
-       &nbsp;|&nbsp; <b>유동성 점수</b>: {fmt_num(profile['metrics']['liquidity_score'], suffix='점')}
-       &nbsp;|&nbsp; <b>미수신 입력</b>: {', '.join(profile['missing_inputs']) or '없음'}</p>
-    <p style='margin:10px 0 0 0; font-size:0.82rem; color:#ff9f0a;'>ℹ️ {profile['qualitative_note']}</p>
-</div>
-""", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -3379,13 +3478,14 @@ def show_tab_verdict(key):
 
 
 # 🚨 [사용자 요청] 5대 핵심 분석 탭을 교차검증 상태표 위로 이동!
+# 탭 이름은 사용자 언어로 (내부 용어는 각 탭 안에서 설명) — 브리프 v2 §6
 tab_pred, tab_val, tab_scen, tab_demark, tab_flow, tab_audit = st.tabs([
-    "🔮 20일 자기유사 예측 (표본 통제)", 
-    "💎 밸류에이션 & 2중 적정가 범위", 
-    "🎯 조건별 3가지 대응 시나리오", 
-    "⏱️ DeMARK 9-13 추세 소진 분석",
-    "🌊 수급 & 기술적 차트 점검", 
-    "🏛️ SR 11-7 무결성 감사 및 모델 성능"
+    "과거 비슷한 사례",
+    "현재 가격 위치",
+    "오르면 · 횡보하면 · 내리면",
+    "추세 소진 신호",
+    "차트와 거래량",
+    "모델 신뢰도 · 데이터 검사"
 ])
 
 # [Section 5 & 6 & 19] 자기유사 패턴 과거 백테스트 결과 (7대 적중률 극대화 파이프라인 가동)

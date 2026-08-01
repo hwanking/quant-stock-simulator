@@ -3020,8 +3020,9 @@ check("표본 30건 미만 경고", '표본이 30건 미만' in _w64)
 check("빈 결과 안내 (날조 금지)", '해당하는 사례가 없습니다' in _w64)
 check("사례 목록 — MFE/MAE·실패 원인 노출", '최대이익 MFE' in _w64
       and '최대손실 MAE' in _w64)
-check("내비 케이스 링크", 'href="#nav-cases"' in _w64
-      and 'id="nav-cases"' in _w64)
+# v2 정보구조: 전역 메뉴는 6개 — 케이스 스터디는 모델 검증 내부(앵커만 유지)
+check("케이스 앵커 유지 · 전역 메뉴 6개", 'id="nav-cases"' in _w64
+      and _w64.count('<a href="#nav-') == 6)
 
 
 print()
