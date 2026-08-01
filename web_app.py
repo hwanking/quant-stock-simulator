@@ -237,6 +237,7 @@ st.markdown(f"""
   <a href="#nav-context">시장·뉴스</a>
   <a href="#nav-scores">퀀트 점수</a>
   <a href="#nav-perf">모델 성과</a>
+  <a href="#nav-cases">케이스</a>
 </div>
 <div id="nav-top"></div>
 """, unsafe_allow_html=True)
@@ -2143,16 +2144,40 @@ if st.session_state.get('show_portfolio'):
 
 # ── 캘리브레이션 산출물 로더 — 홈 카드·판정 캡션·모델 성과 섹션이 공유 ──────
 # rerun 마다 엔진이 새로 만들어져 속성이 비므로, 파일을 직접 읽어 캐시한다.
+# 경로: .portfolio/ (로컬 최신) 우선, 없으면 data/ (저장소 동봉 — 클라우드 배포용).
+def _artifact_path(fname):
+    _base = os.path.dirname(os.path.abspath(__file__))
+    for _d in (".portfolio", "data"):
+        _p = os.path.join(_base, _d, fname)
+        if os.path.exists(_p):
+            return _p
+    return None
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_calibration_meta():
     try:
         import json as _json_cal
-        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          ".portfolio", "calibration.json")
+        _p = _artifact_path("calibration.json")
+        if not _p:
+            return {}
         with open(_p, encoding='utf-8') as _f:
             return _json_cal.load(_f)
     except Exception:
         return {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_case_ledger():
+    """가상 백테스트 원장(1,950건) — 케이스 스터디 화면 전용. 없으면 None."""
+    try:
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+        _df = pd.read_json(_p, lines=True)
+        return _df if len(_df) else None
+    except Exception:
+        return None
 
 
 # 🚨 [사용자 요청] 실시간 글로벌/국내 주요 증시 지수 전광판 최상단배치
@@ -2931,6 +2956,95 @@ if _perf_cal.get('total_cases'):
         if _warn_lines:
             st.warning("**반드시 함께 읽어야 하는 한계**\n\n"
                        + "\n".join(f"- {w}" for w in _warn_lines))
+
+# ── 📚 케이스 스터디 — 리플레이 원장을 직접 뒤져본다 (필터·사례 상세) ─────────
+st.markdown('<div id="nav-cases"></div>', unsafe_allow_html=True)
+_ledger_df = _load_case_ledger()
+if _ledger_df is not None:
+    st.markdown("### 📚 케이스 스터디 — 리플레이 원장 탐색")
+    st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
+               "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.")
+    with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
+        _cf1, _cf2, _cf3, _cf4 = st.columns(4)
+        with _cf1:
+            _f_split = st.selectbox("시간 분할", ["전체", "train(학습)",
+                                    "valid(검증)", "blind(블라인드)"], key="cs_split")
+        with _cf2:
+            _f_out = st.selectbox("결과", ["전체", "성공(목표 선도달)",
+                                  "실패(손절 선도달)", "미도달(만기)"], key="cs_out")
+        with _cf3:
+            _f_score = st.selectbox("점수대", ["전체", "60점 이상(매수권)",
+                                    "55~59", "50~54", "50 미만"], key="cs_score")
+        with _cf4:
+            _f_reg = st.selectbox("시장 국면", ["전체", "BULL", "NEUTRAL", "BEAR"],
+                                  key="cs_regime")
+        _cs = _ledger_df
+        if _f_split != "전체":
+            _cs = _cs[_cs['split'] == _f_split.split('(')[0]]
+        if _f_out == "성공(목표 선도달)":
+            _cs = _cs[_cs['outcome'] == 'TARGET']
+        elif _f_out == "실패(손절 선도달)":
+            _cs = _cs[_cs['outcome'] == 'STOP']
+        elif _f_out == "미도달(만기)":
+            _cs = _cs[~_cs['outcome'].isin(['TARGET', 'STOP'])]
+        if _f_score == "60점 이상(매수권)":
+            _cs = _cs[_cs['score'] >= 60]
+        elif _f_score == "55~59":
+            _cs = _cs[(_cs['score'] >= 55) & (_cs['score'] <= 59)]
+        elif _f_score == "50~54":
+            _cs = _cs[(_cs['score'] >= 50) & (_cs['score'] <= 54)]
+        elif _f_score == "50 미만":
+            _cs = _cs[_cs['score'] < 50]
+        if _f_reg != "전체":
+            _cs = _cs[_cs['regime'] == _f_reg]
+
+        if len(_cs) == 0:
+            st.info("이 조건에 해당하는 사례가 없습니다 — 필터를 넓혀 보세요.")
+        else:
+            _n_t = int((_cs['outcome'] == 'TARGET').sum())
+            _n_s = int((_cs['outcome'] == 'STOP').sum())
+            _cm1, _cm2, _cm3, _cm4 = st.columns(4)
+            _cm1.metric("사례 수", f"{len(_cs):,}건", delta_color="off")
+            _cm2.metric("성공(목표 선도달)",
+                        f"{_n_t / len(_cs) * 100:.1f}%", f"{_n_t}건",
+                        delta_color="off")
+            _cm3.metric("실패(손절 선도달)",
+                        f"{_n_s / len(_cs) * 100:.1f}%", f"{_n_s}건",
+                        delta_color="off")
+            _cm4.metric("평균 수익률(판정 봉)",
+                        f"{_cs['return_pct'].mean():+.2f}%",
+                        f"평균 MAE {_cs['mae_pct'].mean():.1f}%",
+                        delta_color="off")
+            if len(_cs) < 30:
+                st.caption("⚠️ 표본이 30건 미만입니다 — 이 비율로 결론을 내리지 마세요.")
+            _fail_cs = _cs[_cs['failure_class'].astype(str).str.len() > 0] \
+                if 'failure_class' in _cs.columns else _cs.iloc[0:0]
+            if len(_fail_cs):
+                _fc_top = (_fail_cs.groupby('failure_class')['return_pct']
+                           .agg(['count', 'sum']).sort_values('sum'))
+                st.markdown("**이 조건에서의 실패 원인** (손실 기여 순)")
+                st.dataframe(pd.DataFrame([{
+                    '실패 유형': idx, '건수': int(r['count']),
+                    '누적 손실': f"{r['sum']:+.1f}%p",
+                } for idx, r in _fc_top.iterrows()]),
+                    use_container_width=True, hide_index=True)
+            st.markdown("**사례 목록** (최근 50건 — 당시 판정과 이후 실제 경로)")
+            _show = _cs.sort_values('date', ascending=False).head(50)
+            st.dataframe(pd.DataFrame([{
+                '기준일': str(r['date'])[:10], '종목': r['ticker'],
+                '국면': r['regime'], '점수': int(r['score']),
+                '당시 판정': r['action_title'],
+                '결과': {'TARGET': '✅ 목표', 'STOP': '❌ 손절'}.get(
+                    r['outcome'], '⏳ 미도달'),
+                '수익률': f"{r['return_pct']:+.1f}%",
+                '최대이익 MFE': f"{r['mfe_pct']:+.1f}%",
+                '최대손실 MAE': f"{r['mae_pct']:+.1f}%",
+                '실패 원인': str(r.get('failure_class') or ''),
+            } for _, r in _show.iterrows()]),
+                use_container_width=True, hide_index=True)
+            st.caption("성공 = 목표가를 손절가보다 먼저 터치. 수익률은 판정 봉 기준, "
+                       "MFE/MAE는 보유 구간의 최대 이익/손실입니다. "
+                       "블라인드 구간은 모델 선택에 쓰지 않은 순수 검증분입니다.")
 
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:

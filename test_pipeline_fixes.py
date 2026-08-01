@@ -2986,6 +2986,44 @@ check("내비 모델 성과 링크", 'href="#nav-perf"' in _w63
       and 'id="nav-perf"' in _w63)
 
 
+section("64. 케이스 스터디 화면 — 원장 필터 · 배포용 산출물 동봉")
+
+_w64 = _w63
+
+# ① 산출물 폴백 — 로컬(.portfolio) 우선, 저장소 동봉(data/) 폴백
+check("산출물 경로 폴백 함수", '_artifact_path' in _w64
+      and '".portfolio", "data"' in _w64)
+check("배포용 calibration.json 동봉",
+      _os.path.exists(_os.path.join(PROJ, "data", "calibration.json")))
+check("배포용 원장 동봉",
+      _os.path.exists(_os.path.join(PROJ, "data", "virtual_graded.jsonl")))
+import json as _json64
+with open(_os.path.join(PROJ, "data", "calibration.json"),
+          encoding='utf-8') as _f64:
+    _cal64 = _json64.load(_f64)
+check("동봉 산출물이 실측 구조 (splits·bands·failure_classes)",
+      all(k in _cal64 for k in ('splits', 'bands', 'failure_classes',
+                                'total_cases')))
+# 민감정보 미포함 — 원장 첫 줄에 보유종목·평단가 계열 키가 없어야 한다
+with open(_os.path.join(PROJ, "data", "virtual_graded.jsonl"),
+          encoding='utf-8') as _f64b:
+    _row64 = _json64.loads(_f64b.readline())
+check("원장에 개인 정보 없음 (평단가·수량·계좌 금지)",
+      not any(k in _row64 for k in ('user_avg', 'avg_price', 'quantity',
+                                    'account', 'entry_price')))
+
+# ② 화면 — 필터·요약·표본 부족 경고·사례 목록
+check("케이스 스터디 섹션", '케이스 스터디 — 리플레이 원장 탐색' in _w64)
+check("필터 4종 (분할·결과·점수대·국면)", all(s in _w64 for s in (
+    'cs_split', 'cs_out', 'cs_score', 'cs_regime')))
+check("표본 30건 미만 경고", '표본이 30건 미만' in _w64)
+check("빈 결과 안내 (날조 금지)", '해당하는 사례가 없습니다' in _w64)
+check("사례 목록 — MFE/MAE·실패 원인 노출", '최대이익 MFE' in _w64
+      and '최대손실 MAE' in _w64)
+check("내비 케이스 링크", 'href="#nav-cases"' in _w64
+      and 'id="nav-cases"' in _w64)
+
+
 print()
 print("=" * 72)
 if FAILURES:
