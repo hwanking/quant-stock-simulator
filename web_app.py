@@ -2231,13 +2231,26 @@ def _load_calibration_meta():
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_case_ledger():
-    """가상 백테스트 원장(1,950건) — 케이스 스터디 화면 전용. 없으면 None."""
+    """가상 백테스트 원장 — 케이스 스터디 화면 전용. 없으면 None."""
     try:
         _p = _artifact_path("virtual_graded.jsonl")
         if not _p:
             return None
         _df = pd.read_json(_p, lines=True)
         return _df if len(_df) else None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_update_history():
+    try:
+        import json as _json_uh
+        _p = _artifact_path("update_history.json")
+        if not _p:
+            return None
+        with open(_p, encoding='utf-8') as _f:
+            return _json_uh.load(_f)
     except Exception:
         return None
 
@@ -2260,8 +2273,75 @@ if _pm_today and _pm_today.get('picks'):
             + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
             + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
 
-# 시장 지수 — 배경정보 (v2: 홈의 주인공이 아니다)
 m_indices = engine_init.get_market_indices()
+
+# ── 주요 이슈 (v4) — 지금 꼭 봐야 할 것: 요약 3건 + 전체 보기. 실경고에서만 생성 ──
+import product_ops as _pops
+
+_gi_calib = _load_calibration_meta()
+_gi_mkt = {'index_missing': (m_indices['kospi']['price'] == 'N/A'
+                             or m_indices['kosdaq']['price'] == 'N/A')}
+_issues_global = _pops.build_global_issues(_gi_calib, _gi_mkt)
+_SEV_BADGE = {'높음': ('#F26161', '높음'), '중간': ('#F2B84B', '중간'),
+              '낮음': ('#9DAABC', '낮음')}
+if _issues_global:
+    st.markdown("#### 주요 이슈 — 오늘 꼭 봐야 할 핵심 변화")
+    for _is in _issues_global[:3]:
+        _bc, _bt = _SEV_BADGE.get(_is['severity'], ('#9DAABC', '—'))
+        st.markdown(
+            f"<div style='background:{_TOK['surface']}; border:1px solid "
+            f"{_bc if _is['severity'] == '높음' else _TOK['border']}; "
+            f"border-radius:12px; padding:12px 16px; margin-bottom:8px;'>"
+            f"<span style='background:{_bc}22; color:{_bc}; font-size:11px; "
+            f"font-weight:800; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
+            f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
+            f"font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
+            f"{_is['type']}</span> "
+            f"<b style='font-size:14px; color:{_TOK['tx1']};'> {_is['title']}</b>"
+            f"<p style='margin:5px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
+            f"{_is['detail']}</p></div>", unsafe_allow_html=True)
+    if len(_issues_global) > 3:
+        with st.expander(f"전체 이슈 보기 ({len(_issues_global)}건)", expanded=False):
+            st.dataframe(pd.DataFrame([{
+                '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
+                '내용': i['detail'], '범위': i['scope'], '생성': i['created'],
+            } for i in _issues_global]), use_container_width=True, hide_index=True)
+
+# ── 최근 업데이트 (v4) — 제품형 릴리스 노트: 요약 5건 + 전체 보기·필터 ────────
+_uh_home = _load_update_history()
+if _uh_home and _uh_home.get('days'):
+    _days_enr = _pops.enrich_update_history(_uh_home)
+    _flat_upd = [{**it, 'date': d['date'], 'version': d['version']}
+                 for d in _days_enr for it in d['items']]
+    _n_upd = len(_flat_upd)
+    _latest_ver = str((_gi_calib or {}).get('rulebook_version', '')) or \
+        (_days_enr[0]['version'] if _days_enr else '')
+    st.markdown("#### 최근 업데이트 · 업데이트 히스토리")
+    st.caption(f"누적 개선 **{_n_upd}건** · 운영 모델 **{_latest_ver}** · "
+               "원천: 커밋 이력 원문 (손으로 쓰지 않아 누락·과장이 없습니다)")
+    for _u in _flat_upd[:5]:
+        st.markdown(
+            f"<div style='display:flex; gap:10px; align-items:baseline; "
+            f"padding:5px 2px; border-bottom:1px solid {_TOK['border']};'>"
+            f"<span style='font-size:12px; color:{_TOK['tx2']}; width:84px; "
+            f"flex-shrink:0;'>{_u['date']}</span>"
+            f"<span style='background:{_TOK['hover']}; color:{_TOK['brand']}; "
+            f"font-size:11px; font-weight:700; padding:1px 8px; border-radius:6px; "
+            f"flex-shrink:0;'>{_u['category']}</span>"
+            f"<span style='font-size:13.5px; color:{_TOK['tx1']};'>"
+            f"{_u['subject']}</span></div>", unsafe_allow_html=True)
+    with st.expander(f"전체 업데이트 보기 ({_n_upd}건 · 카테고리 필터)",
+                     expanded=False):
+        _cats = ['전체'] + sorted({u['category'] for u in _flat_upd})
+        _f_cat = st.selectbox("카테고리", _cats, key="upd_cat_filter")
+        _sel_upd = [u for u in _flat_upd
+                    if _f_cat == '전체' or u['category'] == _f_cat]
+        st.dataframe(pd.DataFrame([{
+            '날짜': u['date'], '버전': u['version'], '카테고리': u['category'],
+            '내용': u['subject'],
+        } for u in _sel_upd]), use_container_width=True, hide_index=True)
+
+# 시장 지수 — 배경정보 (v2: 홈의 주인공이 아니다)
 idx_col1, idx_col2, idx_col3, idx_col4 = st.columns(4)
 
 with idx_col1:
@@ -2707,6 +2787,35 @@ if len(_comp_scored) >= 3:
         for c in _comp_lo:
             st.markdown(f"- {c['label']} — **{c['score']}점** "
                         f"(비중 {c['weight_pct']:.0f}%)")
+
+# ── 이 종목의 주요 이슈 (v4) — 이미 계산된 경고의 재표현만, 요약 + 전체 보기 ──
+_nf_iss = ((snap.get('market_context') or {}).get('news_flags') or {})
+_issues_stock = _pops.build_stock_issues(four_scores, verdict, _nf_iss,
+                                         name=resolved_name)
+if _issues_stock:
+    st.markdown("#### 이 종목의 주요 이슈")
+    for _is in _issues_stock[:3]:
+        _bc, _bt = _SEV_BADGE.get(_is['severity'], ('#9DAABC', '—'))
+        st.markdown(
+            f"<div style='background:{_TOK['surface']}; border:1px solid "
+            f"{_bc if _is['severity'] == '높음' else _TOK['border']}; "
+            f"border-radius:12px; padding:11px 15px; margin-bottom:7px;'>"
+            f"<span style='background:{_bc}22; color:{_bc}; font-size:11px; "
+            f"font-weight:800; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
+            f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
+            f"font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
+            f"{_is['type']}</span> "
+            f"<b style='font-size:13.5px; color:{_TOK['tx1']};'> {_is['title']}</b>"
+            f"<p style='margin:4px 0 0 0; font-size:12.5px; color:{_TOK['tx2']};'>"
+            f"{_is['detail']}</p></div>", unsafe_allow_html=True)
+    if len(_issues_stock) > 3:
+        with st.expander(f"전체 이슈 보기 ({len(_issues_stock)}건)",
+                         expanded=False):
+            st.dataframe(pd.DataFrame([{
+                '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
+                '내용': i['detail'],
+            } for i in _issues_stock]), use_container_width=True,
+                hide_index=True)
 
 if verdict['vetoes']:
     st.error("**⛔ 매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
@@ -3158,34 +3267,25 @@ if _ledger_df is not None:
                        "MFE/MAE는 보유 구간의 최대 이익/손실입니다. "
                        "블라인드 구간은 모델 선택에 쓰지 않은 순수 검증분입니다.")
 
-# ── 업데이트 히스토리 — 무엇이 언제 개선됐는지 (원천 = git 커밋 로그) ─────────
-@st.cache_data(ttl=600, show_spinner=False)
-def _load_update_history():
-    try:
-        import json as _json_uh
-        _p = _artifact_path("update_history.json")
-        if not _p:
-            return None
-        with open(_p, encoding='utf-8') as _f:
-            return _json_uh.load(_f)
-    except Exception:
-        return None
+# ── 고객센터 — 안 될 때 여기부터 (실제 대처법만, 빈 약속 금지) ───────────────
+st.markdown("### 고객센터 — 안 될 때 여기부터")
+with st.expander("자주 겪는 문제와 대처법 · 문제 신고 (펼쳐보기)", expanded=False):
+    st.markdown("""
+**자주 겪는 문제**
 
+| 증상 | 원인 | 대처 |
+|---|---|---|
+| 스크린샷 인식이 틀림 | OCR이 1↔7 등 숫자를 오독 | 현재가·수익률·평가손익 열이 **함께 보이게** 캡처하면 교차검증이 오독을 걸러냅니다. 미리보기 표에서 직접 수정도 됩니다 |
+| 추천 종목이 0개 | 게이트가 전부 차단 — **오류 아님** | 조건 미달이면 추천하지 않는 것이 설계입니다. '제외 사유'를 확인하세요 |
+| 지수·시세 미수신 경고 | 네이버·다음 응답 지연 | 잠시 후 새로고침. 미수신 동안은 상한 게이트가 보수적으로 작동합니다 |
+| 차트가 안 뜸 | 브라우저 캐시 | 새로고침(Ctrl+F5). 그래도 안 되면 아래로 신고해 주세요 |
+| 글자가 안 보임 | 구버전 배포 캐시 | 새로고침 후에도 지속되면 화면 캡처와 함께 신고해 주세요 |
+| 보유종목이 사라짐 | 로컬 저장(.portfolio)은 기기별 | 같은 기기·브라우저에서 열어야 합니다. 클라우드 배포에는 저장되지 않습니다 |
 
-_uh = _load_update_history()
-if _uh and _uh.get('days'):
-    st.markdown("### 업데이트 히스토리 — 무엇이 언제 개선됐나")
-    _n_uh = sum(len(d['items']) for d in _uh['days'])
-    st.caption(f"총 **{_n_uh}건**의 개선 기록 (원천: 커밋 이력 원문 — 손으로 쓰지 "
-               "않아 누락·과장이 없습니다). 모델 산식 변경의 상세 근거는 "
-               "docs/MODEL_VERSIONS.md 에 있습니다.")
-    with st.expander("날짜별 개선 내역 (펼쳐보기)", expanded=False):
-        for _day in _uh['days'][:30]:
-            st.markdown(f"**{_day['date']}** — {len(_day['items'])}건")
-            for _it in _day['items']:
-                st.markdown(f"- {_it['subject']} "
-                            f"<span style='font-size:11px; color:#9DAABC;'>"
-                            f"({_it['hash']})</span>", unsafe_allow_html=True)
+**문제 신고** — 화면 캡처와 함께
+[GitHub Issues](https://github.com/hwanking/quant-stock-simulator/issues)에 남겨 주세요.
+업데이트 내역은 위 '최근 업데이트'에서, 알려진 한계는 '주요 이슈'에서 확인할 수 있습니다.
+""")
 
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:

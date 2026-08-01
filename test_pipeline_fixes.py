@@ -3084,6 +3084,64 @@ check("차트 기본값 전체 이력 (n_bars=None)", 'n_bars=None' in _cp65
       and "'전체' 버튼이 진짜 전체" in _cp65)
 
 
+section("66. v4 제품형 UX — 주요 이슈 · 업데이트 패널 · 고객센터")
+
+import product_ops as po66
+
+_w66 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 업데이트 카테고리 — 커밋 제목 낱말 규칙 (내용 재작성 금지)
+check("카테고리 분류 — 모델", po66.classify_update_category(
+    "블라인드 검증 리포트 구조 개선") == '모델')
+check("카테고리 분류 — UI/UX", po66.classify_update_category(
+    "라이트 모드 대비 0건 달성") == 'UI/UX')
+check("카테고리 분류 — 케이스", po66.classify_update_category(
+    "케이스 축적 재가동") == '케이스 스터디')
+check("카테고리 분류 — 미매칭은 기타", po66.classify_update_category(
+    "안녕하세요") == '기타')
+_enr66 = po66.enrich_update_history({'days': [
+    {'date': '2026-08-01', 'items': [{'hash': 'abc', 'subject': '뉴스 범위 분류'}]}]})
+check("히스토리 보강 — 버전 표기·카테고리·원문 불변",
+      _enr66[0]['version'] == 'v26.08.01'
+      and _enr66[0]['items'][0]['category'] == '뉴스 분석'
+      and _enr66[0]['items'][0]['subject'] == '뉴스 범위 분류')
+
+# ② 전역 이슈 — 실측·실경고에서만 파생 (날조 금지)
+_cal66 = {'splits': {'valid': {'hit_rate': 66.8}, 'blind': {'hit_rate': 51.4},
+                     'buy_zone': {'blind': {'n': 13, 'hit_rate': 84.6}}},
+          'signal_frequency': {'rate_pct': 2.9, 'total': 3059, 'buy_zone': 90}}
+_gi66 = po66.build_global_issues(_cal66, {'index_missing': False})
+check("전역 이슈 — 표본 부족·괴리·신호율 생성", len(_gi66) == 3)
+check("전역 이슈 — 중요도 정렬 (높음 우선)", _gi66[0]['severity'] == '높음')
+check("표본 충분+괴리 없음이면 해당 이슈 미생성", len(po66.build_global_issues(
+    {'splits': {'valid': {'hit_rate': 66.0}, 'blind': {'hit_rate': 60.0},
+                'buy_zone': {'blind': {'n': 120, 'hit_rate': 70.0}}},
+     'signal_frequency': {'rate_pct': 8.0}}, {})) == 0)
+check("지수 미수신 → 데이터 이슈 높음", any(
+    i['type'] == '데이터' and i['severity'] == '높음'
+    for i in po66.build_global_issues({}, {'index_missing': True})))
+
+# ③ 종목 이슈 — 이미 계산된 게이트·경고 재표현만
+_si66 = po66.build_stock_issues(
+    {'gate_reason': '월10 과열', 'calibration_band': {'n': 2}},
+    {'vetoes': ['거래비용 차감 기대값 음수'], 'cap_applied': True, 'score': 49},
+    {'risk_count': 2}, name='시험')
+check("종목 이슈 — 차단·상한·뉴스·표본 생성", len(_si66) >= 4)
+check("종목 이슈 — 차단 조건이 최상위(높음)", _si66[0]['severity'] == '높음')
+check("경고 없으면 이슈 없음", po66.build_stock_issues({}, {}, {}) == [])
+
+# ④ 화면 — v4 패널·전체 보기·고객센터
+check("홈 주요 이슈 섹션", '주요 이슈 — 오늘 꼭 봐야 할 핵심 변화' in _w66)
+check("종목 이슈 섹션", '이 종목의 주요 이슈' in _w66)
+check("업데이트 패널 — 요약+필터+전체 보기", '최근 업데이트 · 업데이트 히스토리' in _w66
+      and '전체 업데이트 보기' in _w66 and 'upd_cat_filter' in _w66)
+check("고객센터 — 실제 대처법·신고 채널", '고객센터 — 안 될 때 여기부터' in _w66
+      and 'github.com/hwanking/quant-stock-simulator/issues' in _w66)
+check("이슈=지금/업데이트=과거 역할 구분 문서화",
+      '지금 중요한 것' in open(_os.path.join(PROJ, "product_ops.py"),
+                          encoding='utf-8').read())
+
+
 print()
 print("=" * 72)
 if FAILURES:
