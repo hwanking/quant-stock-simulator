@@ -298,6 +298,24 @@ st.markdown(f"""
     }}
     .stApp hr {{ border-color: {_TOK['border']} !important; }}
     .stApp [data-testid="stRadio"] label {{ font-size: 14px; }}
+
+    /* 종목 검색 입력 — 사이드바에서 가장 눈에 띄는 요소로 (사용자 요청) */
+    [data-testid="stSidebar"] input[aria-label*="종목명"] {{
+        border: 2px solid {_TOK['brand']} !important;
+        box-shadow: 0 0 0 3px {_TOK['brand']}30 !important;
+        background-color: #1a2334 !important;
+        color: #ffffff !important;
+        font-size: 15px !important;
+        font-weight: 800 !important;
+        padding: 11px 13px !important;
+        border-radius: 10px !important;
+    }}
+    [data-testid="stSidebar"] input[aria-label*="종목명"]::placeholder {{
+        color: #8fa3c8 !important; font-weight: 600 !important;
+    }}
+    [data-testid="stSidebar"] input[aria-label*="종목명"]:focus {{
+        box-shadow: 0 0 0 4px {_TOK['brand']}55 !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
