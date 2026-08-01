@@ -3025,6 +3025,65 @@ check("케이스 앵커 유지 · 전역 메뉴 6개", 'id="nav-cases"' in _w64
       and _w64.count('<a href="#nav-') == 6)
 
 
+section("65. 운영 체계 v3 — 공시 연동 · 업데이트 히스토리 · 케이스 축적 규율")
+
+_w65 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 공시 — 원문 나열만, 해석·요약 생성 금지, 점수 미반영
+check("공시 수집 함수 존재", hasattr(mc61, 'fetch_stock_disclosures'))
+_disc_src = open(_os.path.join(PROJ, "market_context.py"), encoding='utf-8').read()
+check("공시 — 날조 금지 원칙 명문화", '원문 그대로' in _disc_src
+      and '날조 금지' in _disc_src)
+_fake_html = ('<td class="title"> <a href="/item/read?no=1&code=005930" x>'
+              'AA(주) 유상증자 결정</a></td> <td class="info">KOSCOM</td> '
+              '<td class="date">2026.07.30</td>')
+import re as _re65
+_rows65 = _re65.findall(
+    r'<td class="title">\s*<a href="([^"]+)"[^>]*>([^<]+)</a>.*?'
+    r'<td[^>]*>\s*([^<]*?)\s*</td>\s*<td[^>]*>\s*([\d.]+)\s*</td>',
+    _fake_html, _re65.S)
+check("공시 파서 — 제목·정보제공·날짜 3열", len(_rows65) == 1
+      and _rows65[0][1] == 'AA(주) 유상증자 결정'
+      and _rows65[0][3] == '2026.07.30')
+check("웹앱 공시 섹션 — 점수 미반영 명시", '최근 기업 공시' in _w65
+      and '점수에 자동 반영하지 않습니다' in _w65)
+
+# ② 업데이트 히스토리 — 원천은 커밋 로그 (손으로 쓰지 않는다)
+check("히스토리 생성 스크립트", _os.path.exists(
+    _os.path.join(PROJ, "scripts", "gen_update_history.py")))
+check("히스토리 데이터 동봉", _os.path.exists(
+    _os.path.join(PROJ, "data", "update_history.json")))
+with open(_os.path.join(PROJ, "data", "update_history.json"),
+          encoding='utf-8') as _f65:
+    _uh65 = _json64.load(_f65)
+check("히스토리 — git 원천 명시·비어있지 않음",
+      'git' in str(_uh65.get('generated_from', ''))
+      and len(_uh65.get('days', [])) >= 1)
+check("웹앱 히스토리 섹션", '업데이트 히스토리' in _w65)
+
+# ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
+check("케이스 축적 목표 표시 (3,000 → 5,000 → 10,000)",
+      '3,000건' in _w65 and '중단하지 않습니다' in _w65)
+check("운영 루틴 문서", _os.path.exists(
+    _os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md")))
+_ops65 = open(_os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md"),
+              encoding='utf-8').read()
+check("운영 문서 — 3계층 분리·승격 조건·정직 문구",
+      '운영 모델' in _ops65 and '후보 모델' in _ops65
+      and '확정 성능으로 볼 수 없습니다' in _ops65)
+check("블라인드 갭 보고서 존재", _os.path.exists(
+    _os.path.join(PROJ, "docs", "BLIND_GAP_REPORT.md")))
+_bg65 = open(_os.path.join(PROJ, "docs", "BLIND_GAP_REPORT.md"),
+             encoding='utf-8').read()
+check("갭 보고서 — 블라인드로 모델을 고치지 않는다 규율",
+      '고치지 않는다' in _bg65 and '국면' in _bg65)
+
+# ④ 차트 '전체' — 전체 이력 탑재 (n_bars 기본 None)
+_cp65 = open(_os.path.join(PROJ, "chart_pro.py"), encoding='utf-8').read()
+check("차트 기본값 전체 이력 (n_bars=None)", 'n_bars=None' in _cp65
+      and "'전체' 버튼이 진짜 전체" in _cp65)
+
+
 print()
 print("=" * 72)
 if FAILURES:

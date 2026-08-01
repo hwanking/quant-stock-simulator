@@ -2922,6 +2922,25 @@ with _ctx_c2:
 for _note in (_mkt_ctx.get('notes') or []):
     st.caption("ℹ️ " + str(_note))
 
+# ── 기업 공시 — 원문 나열만 (해석·요약 생성 금지, 점수 미반영) ──────────────
+try:
+    import market_context as _mc_disc
+    _disc = _mc_disc.fetch_stock_disclosures(target_ticker, limit=8)
+except Exception as _de:
+    _disc = {'available': False, 'items': [], 'reason': str(_de)}
+with st.expander(f"📄 최근 기업 공시 ({len(_disc.get('items', []))}건) — 원문 제목 그대로",
+                 expanded=False):
+    if _disc.get('available'):
+        for _d in _disc['items']:
+            st.markdown(f"- [{_d['title']}]({_d['url']})  \n"
+                        f"  <span style='font-size:12px; color:#9DAABC;'>"
+                        f"{_d['provider']} · {_d['date']}</span>",
+                        unsafe_allow_html=True)
+        st.caption(f"출처: {_disc.get('source')} — 공시 내용을 요약·해석해 만들어 내지 "
+                   "않으며, 점수에 자동 반영하지 않습니다. 원문을 직접 확인하세요.")
+    else:
+        st.caption("공시 미수신 — " + str(_disc.get('reason', '')))
+
 # ── 이 컨텍스트가 퀀트 점수를 얼마나 움직였는지 (상한과는 별개의 산식 반영분) ──
 _rgd = four_scores.get('market_regime_detail') or {}
 with st.expander("🧮 이 시장·뉴스가 퀀트 점수를 얼마나 움직였나 (산식 반영분)", expanded=False):
@@ -3051,8 +3070,12 @@ st.markdown('<div id="nav-cases"></div>', unsafe_allow_html=True)
 _ledger_df = _load_case_ledger()
 if _ledger_df is not None:
     st.markdown("### 케이스 스터디 — 리플레이 원장 탐색")
+    _lg_last = str(_ledger_df['date'].max())[:10] if 'date' in _ledger_df.columns else '—'
     st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
-               "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.")
+               "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.  \n"
+               f"🔄 **운영 상태**: 마지막 케이스 기준일 {_lg_last} · "
+               f"다음 목표 **3,000건** (1단계) → 5,000 → 10,000 — 축적은 중단하지 않습니다. "
+               "동일 종목·인접 기준일 중복은 25봉 간격 규칙으로 통제합니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
         _cf1, _cf2, _cf3, _cf4 = st.columns(4)
         with _cf1:
@@ -3134,6 +3157,35 @@ if _ledger_df is not None:
             st.caption("성공 = 목표가를 손절가보다 먼저 터치. 수익률은 판정 봉 기준, "
                        "MFE/MAE는 보유 구간의 최대 이익/손실입니다. "
                        "블라인드 구간은 모델 선택에 쓰지 않은 순수 검증분입니다.")
+
+# ── 업데이트 히스토리 — 무엇이 언제 개선됐는지 (원천 = git 커밋 로그) ─────────
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_update_history():
+    try:
+        import json as _json_uh
+        _p = _artifact_path("update_history.json")
+        if not _p:
+            return None
+        with open(_p, encoding='utf-8') as _f:
+            return _json_uh.load(_f)
+    except Exception:
+        return None
+
+
+_uh = _load_update_history()
+if _uh and _uh.get('days'):
+    st.markdown("### 업데이트 히스토리 — 무엇이 언제 개선됐나")
+    _n_uh = sum(len(d['items']) for d in _uh['days'])
+    st.caption(f"총 **{_n_uh}건**의 개선 기록 (원천: 커밋 이력 원문 — 손으로 쓰지 "
+               "않아 누락·과장이 없습니다). 모델 산식 변경의 상세 근거는 "
+               "docs/MODEL_VERSIONS.md 에 있습니다.")
+    with st.expander("날짜별 개선 내역 (펼쳐보기)", expanded=False):
+        for _day in _uh['days'][:30]:
+            st.markdown(f"**{_day['date']}** — {len(_day['items'])}건")
+            for _it in _day['items']:
+                st.markdown(f"- {_it['subject']} "
+                            f"<span style='font-size:11px; color:#9DAABC;'>"
+                            f"({_it['hash']})</span>", unsafe_allow_html=True)
 
 # ── 📌 판정 기록 — 이 판정이 나중에 맞았는지 스스로 채점하기 위한 원본 ─────────
 try:

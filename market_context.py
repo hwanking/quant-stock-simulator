@@ -263,6 +263,45 @@ def fetch_stock_news(code, limit=15):
     return _cached(f"news:{c}", _TTL_NEWS, _build)
 
 
+def fetch_stock_disclosures(code, limit=10):
+    """
+    종목 공시 목록 — 네이버 금융 공시정보(원천 KOSCOM/거래소 게시) 스크래핑.
+
+    제목·정보제공·날짜를 **원문 그대로** 나열만 한다. 공시 내용을 요약·해석해
+    만들어 내지 않는다 (날조 금지 원칙). 반환:
+    {'available', 'items': [{'title','provider','date','url'}], 'source', 'reason'}
+    """
+    c = re.sub(r'\D', '', str(code or ''))[:6]
+    if len(c) != 6:
+        return {'available': False, 'items': [], 'reason': '종목코드를 알 수 없습니다.'}
+
+    def _build():
+        import urllib.request
+        url = f"https://finance.naver.com/item/news_notice.naver?code={c}&page=1"
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                body = r.read().decode('euc-kr', 'replace')
+        except Exception as e:
+            return {'available': False, 'items': [],
+                    'reason': f'공시 페이지 수신 실패: {e}',
+                    'source': '네이버 금융 공시정보'}
+        rows = re.findall(
+            r'<td class="title">\s*<a href="([^"]+)"[^>]*>([^<]+)</a>.*?'
+            r'<td[^>]*>\s*([^<]*?)\s*</td>\s*<td[^>]*>\s*([\d.]+)\s*</td>',
+            body, re.S)
+        items = [{
+            'title': t.strip(),
+            'provider': prov.strip(),
+            'date': d.strip(),
+            'url': 'https://finance.naver.com' + href,
+        } for href, t, prov, d in rows[:int(limit)]]
+        return {'available': bool(items), 'items': items,
+                'source': '네이버 금융 공시정보 (제목·정보제공·날짜 원문)',
+                'reason': '' if items else '표시할 공시가 없습니다.'}
+    return _cached(f"disc:{c}", _TTL_NEWS, _build)
+
+
 def summarize_news_flags(news):
     """
     뉴스 목록 → 위험 낱말 요약. 기사 내용을 해석하지 않는다.

@@ -56,10 +56,15 @@ def _series(times, vals):
 
 
 def build_chart_html(tech_df, four_scores, name='', unit_str='원',
-                     theme='dark', user_avg=None, n_bars=360, height=780):
-    """전체 차트 HTML(문자열)을 만든다. st.components.v1.html 로 넣는다."""
+                     theme='dark', user_avg=None, n_bars=None, height=780):
+    """전체 차트 HTML(문자열)을 만든다. st.components.v1.html 로 넣는다.
+
+    n_bars=None 이면 보유한 전체 이력을 싣는다 — '전체' 버튼이 진짜 전체를
+    보여야 하기 때문이다 (기본 화면은 JS 쪽에서 1년으로 시작).
+    """
     th = _THEMES.get(theme, _THEMES['dark'])
-    df = tech_df.tail(n_bars).copy().reset_index(drop=True)
+    df = (tech_df.tail(int(n_bars)) if n_bars else tech_df).copy() \
+        .reset_index(drop=True)
 
     times = [str(t)[:10] for t in df['trade_date']]
     closes = [_f(x) for x in df['adj_close']]
