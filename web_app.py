@@ -207,6 +207,39 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# ── 글로벌 내비게이션 (정보구조 1단계 — 섹션 앵커 바) ─────────────────────
+# 화면 분리 전 단계: 단일 페이지의 주요 섹션을 상단 바에서 바로 이동한다.
+# 메뉴 이름은 docs/REDESIGN_BRIEF_ko.md 의 정보구조를 따른다.
+_NAV_BG = '#16181d' if _theme == 'dark' else '#ffffff'
+_NAV_BD = '#2d3139' if _theme == 'dark' else '#dde2ea'
+_NAV_TX = '#d5d8e0' if _theme == 'dark' else '#3a3f4a'
+_NAV_HV = '#23262e' if _theme == 'dark' else '#eef1f6'
+st.markdown(f"""
+<style>
+.qnav {{ position: sticky; top: 0; z-index: 999; display: flex; gap: 2px;
+  flex-wrap: wrap; align-items: center; padding: 7px 12px;
+  background: {_NAV_BG}; border: 1px solid {_NAV_BD}; border-radius: 12px;
+  margin-bottom: 12px; }}
+.qnav a {{ color: {_NAV_TX} !important; text-decoration: none !important;
+  font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 8px; }}
+.qnav a:hover {{ background: {_NAV_HV}; }}
+.qnav .brand {{ font-weight: 800; margin-right: 8px; font-size: 13.5px;
+  color: {'#ffffff' if _theme == 'dark' else '#14161c'}; }}
+[id^="nav-"] {{ scroll-margin-top: 64px; }}
+</style>
+<div class="qnav">
+  <span class="brand">⚙️ 퀀트 분석</span>
+  <a href="#nav-top">홈</a>
+  <a href="#nav-premarket">오늘의 추천</a>
+  <a href="#nav-holdings">내 보유종목</a>
+  <a href="#nav-verdict">종합 결론</a>
+  <a href="#nav-chart">차트</a>
+  <a href="#nav-context">시장·뉴스</a>
+  <a href="#nav-scores">퀀트 점수</a>
+</div>
+<div id="nav-top"></div>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
     /* 전체 다크 모드 고대비 시각성 극대화 최적화 */
@@ -1350,6 +1383,7 @@ if st.session_state.get('show_screener', False):
 import premarket as _pm_view
 
 _pmr = st.session_state.get('premarket_report') or _pm_view.load_today_report()
+st.markdown('<div id="nav-premarket"></div>', unsafe_allow_html=True)
 if _pmr:
     st.markdown("## 📋 오늘의 추천 — 개장 전 확정 리포트")
     st.caption(f"기준 데이터 **{_pmr.get('data_asof')}** · 생성 **{_pmr.get('generated_at')}** · "
@@ -1406,6 +1440,7 @@ elif st.session_state.get('scan_results') is None:
 # ═══════════════════════════════════════════════════════════════════════════
 # 💼 내 보유종목 화면
 # ═══════════════════════════════════════════════════════════════════════════
+st.markdown('<div id="nav-holdings"></div>', unsafe_allow_html=True)
 if st.session_state.get('show_portfolio'):
     st.markdown("---")
     st.header("💼 내 보유종목")
@@ -2365,6 +2400,7 @@ if _dme:
 else:
     _dm_head, _dm_line = "산출 불가 (데이터 부족)", "DeMARK 신호를 만들지 못했습니다"
 
+st.markdown('<div id="nav-verdict"></div>', unsafe_allow_html=True)
 st.markdown(f"""
 <div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
             border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
@@ -2544,6 +2580,7 @@ with _vc2:
 st.markdown("---")
 
 # 📈 [종합 인터랙티브 차트 — 판정 근거보다 위. 배너와 같은 실행 가격선을 눈으로 확인]
+st.markdown('<div id="nav-chart"></div>', unsafe_allow_html=True)
 st.markdown(f"### 📈 [{resolved_name}] 종합 차트")
 try:
     import chart_pro as _cp
@@ -2628,6 +2665,7 @@ st.markdown("---")
 
 # ── 🌐 시장·글로벌·뉴스 컨텍스트 — 이 종목만 보지 않고 판을 함께 본다 ─────────
 _mkt_ctx = snap.get('market_context') or {}
+st.markdown('<div id="nav-context"></div>', unsafe_allow_html=True)
 st.markdown(f"### 🌐 [{resolved_name}] 시장·글로벌·뉴스 컨텍스트")
 st.caption("이 판이 나쁠 때는 종목 점수가 좋아도 최종 점수에 상한이 걸립니다. "
            "좋아 보이는 뉴스로 점수를 **올리지는 않습니다** — 뉴스 해석은 사람이 합니다.")
@@ -2889,6 +2927,7 @@ if user_entry_price > 0 and user_quantity > 0:
     </div>
     """, unsafe_allow_html=True)
 # 🏆 [상단 핵심 카드 5종 (Section 17 UI 표준)]
+st.markdown('<div id="nav-scores"></div>', unsafe_allow_html=True)
 st.markdown("### 📊 AI 퀀트 4대 분리 점수 & 독립 가격 위치 전광판")
 m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
 
