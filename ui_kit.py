@@ -90,28 +90,52 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
         f"<span style='color:{t['brand']};'>.</span></span>{subhtml}</div>")
 
 
-#: 내비 아이콘 — 선 아이콘만 쓴다 (참조 화면과 같다). 이모지는 쓰지 않는다.
+#: 아이콘 — Lucide 규격 하나로 통일한다 (24 그리드 · 선 2 · 둥근 끝).
+#  직접 그린 장식 아이콘과 이모지는 쓰지 않는다. 의미가 모호하면 아예 안 쓴다.
+#  선택 상태에서만 브랜드색을 쓰고, 평소엔 보조색 단색이다.
 _ICONS = {
-    'home': 'M3 11l9-8 9 8M5 10v10h14V10',
-    'compass': 'M12 21a9 9 0 100-18 9 9 0 000 18zM15.5 8.5l-2 5-5 2 2-5 5-2z',
-    'doc': 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z'
-           'M14 3v5h5',
-    'chart': 'M4 19h16M7 16V9M12 16V5M17 16v-4',
-    'bell': 'M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0',
-    'life': 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 16a4 4 0 100-8 4 4 0 000 8'
-            'M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
-    'news': 'M4 6h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2zM8 10h8M8 14h5',
-    'wallet': 'M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 7l2-3h12l2 3'
-              'M16 13h2',
+    'target': 'M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 '
+              '6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z',
+    'wallet': 'M19 7V5a2 2 0 00-2-2H5a2 2 0 000 4h14a2 2 0 012 2v8'
+              'a2 2 0 01-2 2H5a2 2 0 01-2-2V5M16 12h.01',
+    'chart': 'M3 3v16a2 2 0 002 2h16M7 15l4-4 3 3 5-6',
+    'sliders': 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3'
+               'M1 14h6M9 8h6M17 16h6',
+    'search': 'M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35',
+    'bell': 'M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9'
+            'M13.73 21a2 2 0 01-3.46 0',
+    'help': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
+            'M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01',
 }
 
 
-def _icon(name: str, color: str, size: int = 17) -> str:
-    d = _ICONS.get(name, _ICONS['doc'])
+def _icon(name, color, size=16):
+    """단일 규격 아이콘. 없는 이름이면 아무것도 그리지 않는다 (억지로 붙이지 않는다)."""
+    d = _ICONS.get(name)
+    if not d:
+        return ''
     return (f"<svg width='{size}' height='{size}' viewBox='0 0 24 24' "
-            f"fill='none' stroke='{color}' stroke-width='1.7' "
+            f"fill='none' stroke='{color}' stroke-width='2' "
             f"stroke-linecap='round' stroke-linejoin='round' "
             f"style='flex:0 0 auto;'><path d='{d}'/></svg>")
+
+
+def nav_links(items, theme='dark'):
+    """
+    아코디언 안의 이동 링크 — 아이콘 없이 글자만.
+
+    메뉴마다 아이콘을 붙이면 의미가 흐려진다. 1차 단계에만 아이콘을 두고
+    그 안의 항목은 글자로만 구분한다 (참조 화면도 그렇게 한다).
+    """
+    t = tokens(theme)
+    out = []
+    for label, href in items:
+        out.append(
+            f"<a href='{_esc(href)}' style='display:block; padding:7px 12px "
+            f"7px 34px; font-size:13px; color:{t['tx2']}; "
+            f"text-decoration:none; border-radius:7px; "
+            f"white-space:nowrap;'>{_esc(label)}</a>")
+    return ("<div style='margin:2px 0 8px 0;'>" + ''.join(out) + "</div>")
 
 
 def nav_list(items: Sequence[dict], active: str = '',
@@ -219,11 +243,15 @@ def acc_row(step, active='', busy='', state_key='sb_step'):
     반환: 이 줄이 지금 열려 있는가
     """
     on = (step['key'] == active)
-    mark = ('   ✓' if step.get('done') is True
-            else '   ○' if step.get('done') is False else '')
-    run = '   ●' if step['key'] == busy else ''
-    arrow = '   ▾' if on else '   ▸'
-    label = str(step['no']) + '   ' + str(step['title']) + run + mark + arrow
+    # 아이콘은 Streamlit 내장 Material Symbols 하나로 통일한다 —
+    # 직접 그린 SVG 는 버튼 라벨에 못 넣고, 세트를 섞으면 아마추어처럼 보인다.
+    ico = step.get('icon') or ''
+    head = f":material/{ico}: " if ico else ''
+    # 완료는 ✓, 미설정은 표시 안 함(빈 원은 실패처럼 보인다), 처리 중은 ●
+    mark = '  ✓' if step.get('done') is True else ''
+    run = '  ●' if step['key'] == busy else ''
+    arrow = '  ▾' if on else '  ▸'
+    label = head + str(step['title']) + run + mark + arrow
     if st.sidebar.button(label, key='_acc_' + step['key'],
                          use_container_width=True,
                          help=step.get('hint') or None):

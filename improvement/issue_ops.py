@@ -128,6 +128,27 @@ PLAYBOOK = {
         safeguard="현행 산식 유지. 근거 없이 넓히지 않습니다.",
         target="국면 판정의 블라인드 성적이 먼저 개선될 것",
         eta_days=60),
+    'model|validation_not_wired': dict(
+        cause="모델 검증 결과가 매매 판단에 연결되는지 코드로 전수 감사한 결과 "
+              "10개 항목 중 7개는 연결돼 있고 3개는 없습니다"
+              "(scripts/validation_linkage_audit.py). 없는 것: ① 표본외 성과가 "
+              "나쁜 전략의 가중치 하향 ② 국면별 성능이 낮은 엔진의 해당 장세 제한 "
+              "③ 버전별 확률 개선 자동 비교.",
+        user_impact="지금도 검증은 판단에 쓰입니다 — 점수대별 표본외 적중률이 "
+                    "낮으면 상한이 걸리고, 표본이 모자라면 확률을 표시하지 "
+                    "않습니다. 다만 국면별 엔진 제한이 없어 하락장에서 판단이 "
+                    "더 자주 빗나갑니다.",
+        fixable_now=False,
+        status=ST_LONGTERM,
+        module='quant_indicators · scripts/validation_linkage_audit.py',
+        action="③ 버전별 비교는 이번에 만들었습니다(gen_version_compare.py). "
+               "①②는 국면별 엔진 성과가 먼저 검증돼야 합니다 — 라운드 12에서 "
+               "국면별 대결을 돌렸으나 채택 후보가 없었습니다. 근거 없이 "
+               "가중치를 손대면 그게 곧 과최적화입니다.",
+        safeguard="미연결 항목을 화면에 그대로 적었습니다 — '아직 연결되지 않은 "
+                  "것도 있습니다'라고 판단 화면에서 밝힙니다.",
+        target="국면별 엔진 성과가 블라인드에서 재현되면 ①② 연결",
+        eta_days=45),
     'data|index_missing': dict(
         cause="지수 데이터 출처(네이버 금융)에서 응답을 받지 못했습니다.",
         user_impact="시장 국면 판정이 보류되고, 매매 적합도에 상한이 걸립니다. "

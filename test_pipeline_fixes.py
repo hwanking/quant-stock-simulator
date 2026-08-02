@@ -2991,7 +2991,7 @@ check("요인은 composition 실측에서만",
 
 # ④ 내비게이션 — 모델 성과 링크와 앵커
 check("내비 모델 성과 링크 — 좌측 내비에 정의, 앵커는 본문에",
-      "'href': '#nav-perf'" in _w63 and 'id="nav-perf"' in _w63)
+      "'#nav-perf'" in _w63 and 'id="nav-perf"' in _w63)
 
 
 section("64. 케이스 스터디 화면 — 원장 필터 · 배포용 산출물 동봉")
@@ -3029,9 +3029,8 @@ check("빈 결과 안내 (날조 금지)", '해당하는 사례가 없습니다'
 check("사례 목록 — MFE/MAE·실패 원인 노출", '최대이익 MFE' in _w64
       and '최대손실 MAE' in _w64)
 # v2 정보구조: 전역 메뉴는 6개 — 케이스 스터디는 모델 검증 내부(앵커만 유지)
-check("케이스 앵커 유지 · 좌측 내비 1차 5개 + 서브 8개",
-      'id="nav-cases"' in _w64
-      and _w64.count("'href': '#nav-") >= 12)
+check("케이스 앵커 유지 · 좌측 메뉴 링크 8개+",
+      'id="nav-cases"' in _w64 and _w64.count("'#nav-") >= 8)
 
 
 section("65. 운영 체계 v3 — 공시 연동 · 업데이트 히스토리 · 케이스 축적 규율")
@@ -4063,18 +4062,23 @@ check("expander 로는 자동 접힘을 만들 수 없다는 이유가 적혀 �
       '서로 독립이라' in _u87 or '자동 접힘이 성립' in _u87)
 check("열린 것을 다시 누르면 닫힌다 (전부 닫힘 허용)",
       "st.session_state[state_key] = ('' if on else step['key'])" in _u87)
-check("완료 여부를 제목 줄에 표시 (참/거짓/표시안함 3상태)",
-      "step.get('done') is True" in _u87 and "step.get('done') is False" in _u87)
+check("완료 여부를 제목 줄에 표시 (완료만 ✓ · 미설정은 표시 안 함)",
+      "step.get('done') is True" in _u87
+      and '빈 원은 실패처럼 보인다' in _u87)
+check("아이콘은 단일 세트 — Material Symbols 하나로 통일",
+      ':material/' in _u87 and '세트를 섞으면' in _u87)
 check("처리 중인 단계를 강조한다", "busy" in _u87 and "step['key'] == busy" in _u87)
 check("활성 단계 셀렉터 특이도를 일반 규칙과 맞춘다",
       'div.st-key-_acc_' in _u87)
 
 _w87 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("좌측 설정이 4단계로 묶였다",
-      "'key': 'pick'" in _w87 and "'key': 'hold'" in _w87
-      and "'key': 'find'" in _w87 and "'key': 'crit'" in _w87)
-check("단계 제목이 사용자 말 (분석할 종목·내 보유종목·종목 찾기·분석 기준)",
-      "'title': '분석할 종목'" in _w87 and "'title': '분석 기준'" in _w87)
+check("좌측 메뉴가 사용자 지정 4단계다",
+      "'key': 'today'" in _w87 and "'key': 'mine'" in _w87
+      and "'key': 'history'" in _w87 and "'key': 'setup'" in _w87)
+check("판단 확인이 먼저, 설정이 마지막 — 사용자 지정 순서",
+      _w87.index("'title': '오늘의 판단·근거 확인'")
+      < _w87.index("'title': '설정·분석 조건'"))
+check("각 단계에 한 줄 설명이 있다", "'sub': '무엇을 사고 왜 그런지'" in _w87)
 check("완료 여부를 실제 상태에서 판정한다 (지어내지 않는다)",
       "st.session_state.get('positions')" in _w87
       and "st.session_state.get('scan_results')" in _w87)
@@ -4106,7 +4110,7 @@ section("88. 아코디언 단계별 렌더 — 어느 단계를 접어도 화면
 # 그 단계를 접는 순간 화면이 죽는다. 눈으로 찾지 말고 **네 단계를 다 열어 본다**.
 from streamlit.testing.v1 import AppTest as _AT88
 
-for _step88 in ('pick', 'hold', 'find', 'crit', ''):
+for _step88 in ('today', 'mine', 'history', 'setup', ''):
     _at88 = _AT88.from_file(_os.path.join(PROJ, "web_app.py"),
                             default_timeout=1800)
     _at88.session_state['selected_ticker'] = '005930'
@@ -4119,7 +4123,7 @@ for _step88 in ('pick', 'hold', 'find', 'crit', ''):
 # 값 유지 — 4단계에서 rho 를 바꾸고 접어도 값이 살아 있어야 한다
 _at88b = _AT88.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
 _at88b.session_state['selected_ticker'] = '005930'
-_at88b.session_state['sb_step'] = 'crit'
+_at88b.session_state['sb_step'] = 'setup'
 _at88b.session_state['_sb_keep'] = {'rho': 0.9}
 _at88b.run()
 check("접힌 단계의 설정이 _KEEP 에 보존된다",

@@ -1,0 +1,28 @@
+{
+ "versions": [
+  {
+   "version": "v2026.08.02.19",
+   "status": "운영",
+   "valid": {
+    "n": 530,
+    "hit": 61.5,
+    "net": 0.07,
+    "mdd": 4.11,
+    "signal_rate": 33.6,
+    "pf": 1.18
+   },
+   "blind": {
+    "n": 280,
+    "hit": 56.1,
+    "net": -0.28,
+    "mdd": 7.06,
+    "signal_rate": 26.9,
+    "pf": 1.0
+   },
+   "verdict": "비교 불가",
+   "verdict_why": [
+    "이전 버전 측정값이 없습니다"
+   ]
+  }
+ ]
+}

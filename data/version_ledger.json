@@ -1,12 +1,51 @@
 {
  "axes": {
-  "model": "v2026.08.02.19",
+  "model": "v2026.08.02.22",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.22",
+   "previous": "v2026.08.02.21",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "모델 검증 반영 카드 — 이번 판단에 쓰인 근거와 미연결 항목 명시",
+   "note": "",
+   "created_at": "2026-08-02T14:09:59+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.21",
+   "previous": "v2026.08.02.20",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "아이콘 단일 세트 통일 (Material Symbols)",
+   "note": "",
+   "created_at": "2026-08-02T14:09:59+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.20",
+   "previous": "v2026.08.02.19",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "좌측 메뉴 4단계 재편 — 판단 확인 먼저, 설정 마지막",
+   "note": "",
+   "created_at": "2026-08-02T14:09:59+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
