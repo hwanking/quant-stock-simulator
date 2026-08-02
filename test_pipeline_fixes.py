@@ -3465,6 +3465,23 @@ check("파이프라인 상태 UI — 대기 건수·마지막 실행·수동 실
 check("클라우드 영속성 정직 경고", '재배포 시 초기화' in _w75)
 
 
+section("76. v6 애플 정돈 — rgb 정규화 접합 · 알림 중립화 · 소음 제거")
+
+_w76 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("접합 셀렉터 — Streamlit rgb 정규화 커버 (hex만 매칭하면 헛돈다)",
+      '_hex_to_rgb_str' in _w76 and '셀렉터가 통째로 헛돈다' in _w76)
+check("알림 박스 — 표면 중립 + 좌측 액센트만",
+      'stAlertContentSuccess' in _w76 and 'border-left-width: 3px' in _w76)
+check("코드 조각 — 칩 해체 (배경 투명)",
+      'background: transparent !important' in _w76
+      and '#2c2e36' not in _w76)
+check("실행 메타 — 접힌 실행 정보로", '실행 정보 — 분석기준일' in _w76)
+check("결론 배너 — 양 테마 다크 카드 고정 (흰 글자 보호)",
+      '라이트 surface(흰색)로 바꾸면 글자가 사라진다' in _w76)
+check("사이드바 헤더 — 이모지 제거", '### 종목 검색' in _w76
+      and '### 시장 트렌드 탐색기' in _w76)
+
+
 print()
 print("=" * 72)
 if FAILURES:

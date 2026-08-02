@@ -189,11 +189,19 @@ _ACCENT_BORDERS = ['#64d2ff', '#0a84ff', '#2997ff', '#bf5af2', '#30d158',
                    '#ff9f0a', '#ffd60a', '#5e5ce6', '#00f0ff']
 
 
+def _hex_to_rgb_str(c):
+    c = c.lstrip('#')
+    return f"rgb({int(c[0:2], 16)}, {int(c[2:4], 16)}, {int(c[4:6], 16)})"
+
+
 def _sel(prop, colors, extra=''):
+    # 주의: Streamlit 이 인라인 hex 를 'prop: rgb(r, g, b)' 로 정규화한다 —
+    # hex 형태만 매칭하면 셀렉터가 통째로 헛돈다. 두 표기를 모두 커버한다.
     out = []
     for c in colors:
-        for sp in ('', ' '):
-            out.append(f'.stApp div[style*="{prop}:{sp}{c}"]{extra}')
+        for v in (c, _hex_to_rgb_str(c)):
+            for sp in ('', ' '):
+                out.append(f'.stApp div[style*="{prop}:{sp}{v}"]{extra}')
     return ',\n'.join(out)
 
 
@@ -207,15 +215,19 @@ _CSS_SURFACE_MAP = f"""
     {_sel('background', _OLD_ELEVATED)} {{
         background-color: {_TOK['hover']} !important;
     }}
-    .stApp div[style*="linear-gradient(135deg,#141416"] {{
-        background: {_TOK['surface']} !important;
+    .stApp div[style*="linear-gradient(135deg,#141416"],
+    .stApp div[style*="linear-gradient(135deg, rgb(20, 20, 22)"] {{
+        /* 결론 배너는 양 테마 모두 다크 카드 — 내부 글자가 밝은 색 하드코딩이라
+           라이트 surface(흰색)로 바꾸면 글자가 사라진다 */
+        background: #161D2A !important;
     }}
 """
 _CSS_BORDER_MAP = ',\n'.join(
-    f'.stApp div[style*="border:{w} solid {c}"],'
-    f'.stApp div[style*="border: {w} solid {c}"]'
+    f'.stApp div[style*="border:{w} solid {v}"],'
+    f'.stApp div[style*="border: {w} solid {v}"]'
     for w in ('1px', '1.5px', '2px')
     for c in (_OLD_BORDERS + _ACCENT_BORDERS)
+    for v in (c, _hex_to_rgb_str(c))
 ) + f' {{ border-color: {_TOK["border"]} !important; }}'
 
 st.markdown(f"""
@@ -298,6 +310,32 @@ st.markdown(f"""
     }}
     .stApp hr {{ border-color: {_TOK['border']} !important; }}
     .stApp [data-testid="stRadio"] label {{ font-size: 14px; }}
+
+    /* v6 애플 정돈 — 알림·코드·구분선의 색 소음 제거 */
+    .stApp [data-testid="stAlert"] {{
+        background: {_TOK['surface']} !important;
+        border: 1px solid {_TOK['border']} !important;
+        border-left-width: 3px !important;
+        border-radius: 12px !important;
+        box-shadow: none !important;
+    }}
+    .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentSuccess"]) {{
+        border-left-color: {_TOK['pos']} !important; }}
+    .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentInfo"]) {{
+        border-left-color: {_TOK['brand']} !important; }}
+    .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentWarning"]) {{
+        border-left-color: {_TOK['warn']} !important; }}
+    .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentError"]) {{
+        border-left-color: {_TOK['neg']} !important; }}
+    /* 코드 조각은 칩이 아니라 조용한 보조 텍스트다 */
+    .stApp code, [data-testid="stSidebar"] code {{
+        background: transparent !important;
+        color: {_TOK['tx2']} !important;
+        padding: 0 !important;
+        font-size: 0.88em !important;
+        font-weight: 600;
+    }}
+    [data-testid="stSidebar"] hr {{ margin: 14px 0 !important; }}
 
     /* 종목 검색 입력 — 사이드바에서 가장 눈에 띄는 요소로 (사용자 요청) */
     [data-testid="stSidebar"] input[aria-label*="종목명"] {{
@@ -411,13 +449,7 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    [data-testid="stSidebar"] code {
-        background-color: #2c2e36 !important;
-        color: #30d158 !important;
-        font-weight: 800 !important;
-        font-size: 0.95rem !important;
-        padding: 2px 6px !radius: 4px;
-    }
+    /* (v6) 사이드바 code 는 칩이 아니라 조용한 보조 텍스트 — 토큰 블록에서 통일 */
 
     /* 메인 지표 카드 고대비 스타일 */
     [data-testid="stMetricValue"] {
@@ -527,11 +559,11 @@ if _theme == 'light':
         .stApp [data-testid="stAlert"] strong {{
             color: #1d2129 !important;
         }}
-        /* 코드·키 칩: 어두운 칩으로 고정 — 어느 바탕에서든 읽힌다 */
+        /* 코드 조각: 라이트에서도 칩이 아니라 조용한 보조 텍스트 (v6) */
         .stApp code, .stApp kbd,
         [data-testid="stSidebar"] code, [data-testid="stSidebar"] kbd {{
-            background-color: #23262e !important; color: #4cd97b !important;
-            border-radius: 5px; padding: 1px 6px;
+            background-color: transparent !important; color: #667085 !important;
+            padding: 0 !important;
         }}
         /* 버튼: 다크 스타일 유지 — 글자는 밝게 고정 */
         .stApp .stButton > button p, .stApp .stButton > button span,
@@ -778,7 +810,7 @@ if _theme_is_light != (_theme == 'light'):
 
 default_stock_no1 = engine_init.fetch_realtime_market_cap_no1_stock()
 
-st.sidebar.markdown("### 🔍 실시간 종목 자동완성 검색")
+st.sidebar.markdown("### 종목 검색")
 st.sidebar.caption(f"👑 **오늘의 국내 시총 1위 대장주**: `{default_stock_no1}`")
 
 if 'search_text_input' not in st.session_state:
@@ -900,7 +932,7 @@ def light_quote(ticker):
 
 st.sidebar.markdown("---")
 _positions = st.session_state.get('positions') or []
-st.sidebar.markdown(f"### 💼 내 보유종목 ({len(_positions)})")
+st.sidebar.markdown(f"### 내 보유종목 ({len(_positions)})")
 
 if not _positions:
     st.sidebar.caption("등록된 보유종목이 없습니다. 증권사 앱 보유종목 화면을 "
@@ -967,7 +999,7 @@ else:
 
 # 📌 선택 종목 1건만 빠르게 넣어보는 입력 (포트폴리오 등록 없이 임시 확인용)
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📌 내 포지션 입력 (선택)")
+st.sidebar.markdown("### 내 포지션 입력 (선택)")
 
 _reg = next((p for p in (st.session_state.get('positions') or [])
              if p.ticker == target_ticker), None)
@@ -1009,7 +1041,7 @@ if user_entry_price > 0 and user_quantity > 0 and _reg is None:
 # 위젯만 여기서 그리고, 실제 스캔은 분석 파라미터(t_ref·rho)가 확정된 뒤에 돌린다.
 # ═══════════════════════════════════════════════════════════════════════════
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔥 AI 퀀트 시장 트렌드 탐색기")
+st.sidebar.markdown("### 시장 트렌드 탐색기")
 st.sidebar.caption("코스피·코스닥 전체에서 거래대금·수급·추세가 변화하는 **관심종목**을 먼저 발굴하고, "
                    "그중 **퀀트 최종 행동조건**을 통과한 종목만 추천합니다. "
                    "관심도와 매수 판단은 별개입니다.")
@@ -1048,7 +1080,7 @@ if st.sidebar.button("🚀 오늘의 관심종목 스캔 / 닫기", use_containe
     st.session_state['pending_scan'] = st.session_state['show_screener']
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧮 분석 파라미터")
+st.sidebar.markdown("### 분석 파라미터")
 
 # [명세 §3] 확정 분석 기준일 — 장중·장 시작 전·휴장일이면 직전 거래일로 되돌린다
 _mkt = bitemporal_engine.get_market_status()
@@ -1148,11 +1180,11 @@ import datetime
 run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{target_ticker.split('.')[0][-5:]}"
 # 본문 대제목 — 사이드바 홈 버튼과 같은 이름을 쓴다 (APP_TITLE 하나로 관리)
 st.markdown(
-    f"<h1 style='font-size:2.6rem; font-weight:900; letter-spacing:-1px; "
-    f"margin:0 0 4px 0; color:#f5f5f7;'>🎯 {APP_TITLE}</h1>",
+    f"<h1 style='font-size:2.1rem; font-weight:800; letter-spacing:-0.5px; "
+    f"margin:0 0 2px 0;'>{APP_TITLE}</h1>",
     unsafe_allow_html=True)
-st.caption(f"⚡ 네이버·다음 실데이터 기반 · 표본/신뢰도 게이트 적용 · "
-           f"Purged Walk-Forward 표본외 검증 수행 (Run ID: `{run_id}`)\n")
+st.caption("네이버·다음 실데이터 · 표본/신뢰도 게이트 · Purged Walk-Forward "
+           f"표본외 검증 (Run `{run_id}`)")
 
 # --- 종목 검색기 렌더링 ---
 if st.session_state.get('show_screener', False):
@@ -2545,12 +2577,15 @@ matrix_data = snap['source_matrix']
 
 _m = snap['meta']
 _origin_txt = {"scan": "상단 스캔 결과와 **동일한 스냅샷**", "cache": "캐시된 스냅샷", "fresh": "새로 산출한 스냅샷"}[snap_origin]
-st.caption(
-    f"🔗 {_origin_txt} · 생성 {_m['generated_at']} · Run `{_m['run_id']}` · "
-    f"분석기준일 `{_m['analysis_date']}` · 가격기준 `{_m['price_asof']}` ({_m['price_type']}) · "
-    f"재무: 현재 게시값 스냅샷 `{_m['fiscal_asof']}` 수집"
-    f"{' (보고서 기준일 아님 — 공시 원문 미연동)' if _m.get('fiscal_is_estimated') else ''} · "
-    f"calc `{_m['calc_version']}` / model `{_m['model_version']}` / rulebook `{_m['rulebook_version']}`")
+# 개발자용 실행 메타는 접어 둔다 — 첫인상은 결론이 지배해야 한다 (v6)
+with st.expander(f"실행 정보 — 분석기준일 {_m['analysis_date']} · "
+                 f"{_origin_txt.replace('**', '')}", expanded=False):
+    st.caption(
+        f"{_origin_txt} · 생성 {_m['generated_at']} · Run `{_m['run_id']}` · "
+        f"분석기준일 `{_m['analysis_date']}` · 가격기준 `{_m['price_asof']}` ({_m['price_type']}) · "
+        f"재무: 현재 게시값 스냅샷 `{_m['fiscal_asof']}` 수집"
+        f"{' (보고서 기준일 아님 — 공시 원문 미연동)' if _m.get('fiscal_is_estimated') else ''} · "
+        f"calc `{_m['calc_version']}` / model `{_m['model_version']}` / rulebook `{_m['rulebook_version']}`")
 
 if snap.get('status') == 'REVIEW_REQUIRED':
     st.error("🚨 **[무결성 게이트 발동 — 재검토 필요]** 모듈 간 대조에서 모순이 발견되어 이 종목의 추천을 중단했습니다.\n\n"
