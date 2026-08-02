@@ -1,12 +1,38 @@
 {
  "axes": {
-  "model": "v2026.08.02.25",
+  "model": "v2026.08.03.1",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.03.1",
+   "previous": "v2026.08.03.0",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "현재 국면 안내 + 6칸 성적표 · 소표본은 신뢰구간",
+   "note": "",
+   "created_at": "2026-08-02T15:26:21+00:00",
+   "effective_from": "2026-08-03"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.03.0",
+   "previous": "v2026.08.02.25",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "국면 분류를 변동성 축으로 세분 (3국면 → 6국면) — 연습-실전 격차 31.8%p → 6.5%p",
+   "note": "",
+   "created_at": "2026-08-02T15:26:21+00:00",
+   "effective_from": "2026-08-03"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

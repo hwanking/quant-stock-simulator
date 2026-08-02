@@ -3306,7 +3306,73 @@ if _home_cal.get('total_cases'):
             _rb = json.load(_rf)
     except Exception:
         _rb = None
-    if _rb and _rb.get('buy_zone'):
+    if _rb and _rb.get('cells6') and _rb.get('mode') == '6':
+        # 국면을 변동성으로 쪼갠 6칸 (라운드 14). 같은 판단을 더 정확한
+        # 이름으로 묶으니 연습-실전 격차가 31.8%p → 6.5%p 로 줄었다.
+        # 지수가 옆으로 가는 것과 개별 종목이 조용한 것은 다른 이야기다.
+        _uk.spacer(20)
+        _rows_rg = []
+        _RG_ORDER = [('BULL', 'calm'), ('BULL', 'rough'),
+                     ('SIDEWAYS', 'calm'), ('SIDEWAYS', 'rough'),
+                     ('BEAR', 'calm'), ('BEAR', 'rough')]
+        for _rg, _vb in _RG_ORDER:
+            _c = (_rb['cells6'].get(f'{_rg}|{_vb}') or {})
+            _v, _b2 = _c.get('valid') or {}, _c.get('blind') or {}
+            if not (_v.get('n') or _b2.get('n')):
+                continue
+            _ko = (f"{_rb['vol_ko'].get(_vb, _vb)} "
+                   f"{_rb['regime_ko'].get(_rg, _rg)}")
+            _thin = ((_v.get('n') or 0) < 30 or (_b2.get('n') or 0) < 30)
+
+            def _fmt(_m):
+                if not _m or _m.get('hit') is None:
+                    return '표본 없음'
+                if (_m.get('n') or 0) >= 30:
+                    return f"{_m['hit']:.0f}%"
+                return f"{_m.get('ci_low', 0):.0f}~{_m.get('ci_high', 0):.0f}%"
+
+            _rows_rg.append((
+                _ko,
+                f"연습 {_fmt(_v)} (n={_v.get('n', 0)}) · "
+                f"실전 {_fmt(_b2)} (n={_b2.get('n', 0)})",
+                'warn' if _thin else ''))
+        if _rows_rg:
+            # 지금이 어느 칸인지 — 표만 보여 주면 사용자가 자기 상황을 못 찾는다
+            try:
+                _ir = bitemporal_engine.BitemporalEngine().get_index_regime('KOSPI')
+                _gi_mkt_label = ('하락' if (_ir.get('price') and _ir.get('sma60')
+                                          and _ir['price'] < _ir['sma60'])
+                                 else '상승' if (_ir.get('price') and _ir.get('sma20')
+                                               and _ir['price'] > _ir['sma20'])
+                                 else '옆걸음')
+            except Exception:
+                _gi_mkt_label = ''
+            _now_rg = ('BEAR' if '하락' in str(_gi_mkt_label)
+                       else 'BULL' if ('상승' in str(_gi_mkt_label)
+                                       or '과열' in str(_gi_mkt_label))
+                       else 'SIDEWAYS' if _gi_mkt_label else '')
+            if _now_rg:
+                _now_ko = _rb['regime_ko'].get(_now_rg, '')
+                _uk.card(
+                    f"<p style='margin:0; font-size:15px; line-height:1.7; "
+                    f"color:{_TOK['tx1']};'>지금은 <b>{_now_ko}</b> 국면입니다. "
+                    f"아래 표에서 '{_now_ko}' 로 시작하는 두 줄이 지금 상황의 "
+                    f"성적입니다 — 종목 변동성에 따라 차분한 쪽과 거친 쪽이 "
+                    f"다릅니다.</p>", theme=_theme, accent='brand')
+                _uk.spacer(12)
+            _uk.rows(_rows_rg, theme=_theme,
+                     title='시장 국면별 추천 성적 — 지수 방향 × 종목 변동성')
+            _uk.note(
+                f"국면을 지수 방향(상승·옆걸음·하락)만이 아니라 **종목 변동성**"
+                f"으로도 나눴습니다. 같은 '옆걸음'이라도 하루 2%씩 움직이는 장과 "
+                f"5%씩 흔들리는 장은 전혀 다른 시장인데, 그동안 한 칸에 묶여 "
+                f"있었습니다. 나누고 나니 연습과 실전의 차이가 "
+                f"{_rb.get('gap3', 0):.0f}%p에서 {_rb.get('gap6', 0):.0f}%p로 "
+                f"줄었습니다 — 모델이 갑자기 좋아진 게 아니라, 그동안 서로 다른 "
+                f"시장을 비교하고 있었던 것입니다. 주황색은 표본 30건 미만이라 "
+                f"하나의 숫자 대신 95% 신뢰구간을 보여 드립니다.",
+                theme=_theme)
+    elif _rb and _rb.get('buy_zone'):
         _rows_rg = []
         for _rg, _ko in (('BULL', '상승 추세'), ('SIDEWAYS', '옆걸음(횡보)'),
                          ('BEAR', '하락 추세')):
