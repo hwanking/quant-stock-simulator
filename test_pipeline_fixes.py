@@ -1641,7 +1641,8 @@ check("국면 라벨에 근거(이동평균) 표기",
 check("DART '제출 원본 재공시' 단정 제거", "제출 원본을 재공시한 값을 사용" not in _esrc41)
 _w41 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("재무기준일을 보고서 기준일로 위장하지 않음", "보고서 기준일 아님" in _w41)
-check("실행 가격에 기준(신규/보유자) 라벨", "현재가 기준 — 보유자용" in _w41)
+check("실행 가격에 기준(신규/보유자) 라벨 — 쉬운 말이어도 기준은 남는다",
+      "이미 갖고 계신 분 기준" in _w41 and "아직 안 샀다면" in _w41)
 check("저장 문구가 원격에서 거짓이 되지 않음", "이 브라우저 세션에만 유지" in _w41)
 
 
@@ -2786,8 +2787,8 @@ check("비보유 응답에는 보유자 블록 없음",
 
 # 화면·정책 연결
 _w59 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("쉬운 결론 2단 배치 (비보유/보유)", "아직 이 종목이 없다면" in _w59
-      and "보유 중이라면" in _w59)
+check("쉬운 결론 2단 배치 (비보유/보유)", "처음 사는 분께" in _w59
+      and "이미 갖고 계신 분께" in _w59)
 check("기준 분리 경고 문구", "신규 매수 기준과 보유자 기준은 서로 다릅니다" in _w59)
 _lab59 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
 check("고신뢰(65+) 계층 상시 보고", "고신뢰 신호 계층" in _lab59)
@@ -2957,17 +2958,19 @@ _w63 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 
 # ① 홈 지휘센터 — 실측 카드에 표본 수(n) 병기, 보장 문구 금지
 # UI 킷 타일로 렌더 — 5개 지표가 모두 있고, 표본 수를 보조에 적는다
-check("홈 카드 — 케이스/검증/블라인드/고신뢰/신호율", all(s in _w63 for s in (
-    "'누적 케이스'", "'검증 적중률'", "'블라인드'", "'고신뢰 60+'", "'신호율'")))
+check("홈 카드 5종 — 사용자 언어 라벨", all(s in _w63 for s in (
+    "'되돌려 본 판단'", "'연습 적중률'", "'실전 적중률'",
+    "'추천만 골랐을 때'", "'매수 기회'")))
 check("홈 카드 — 킷 컴포넌트로 렌더 (인라인 HTML 금지)",
       '_uk.stat_tiles(' in _w63 and '_uk.section(' in _w63)
-check("홈 카드 — 표본 수 병기", 'n={_v.get' in _w63 and 'n={_b.get' in _w63)
+check("홈 카드 — 표본 수 병기 (세는 단위로)",
+      '과거 {_v.get' in _w63 and '안 본 기간 {_b.get' in _w63)
 check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
 check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
       '_pm_today and _pm_today.get' in _w63)
 
 # ② 모델 성과 섹션 — 감사 화면 4표 + 한계 경고
-check("모델 성과 섹션 존재", '모델 성과 — 가상 백테스트 감사' in _w63)
+check("모델 성과 섹션 존재", '모델 자체 점검' in _w63)
 check("시간 분할 성과 표", '시간 분할 성과' in _w63)
 check("매수권(60+) 분해 표", '매수권(60점 이상) 신호만' in _w63)
 check("점수대 캘리브레이션 표", '점수대별 실측 적중률' in _w63)
@@ -3015,7 +3018,7 @@ check("원장에 개인 정보 없음 (평단가·수량·계좌 금지)",
                                     'account', 'entry_price')))
 
 # ② 화면 — 필터·요약·표본 부족 경고·사례 목록
-check("케이스 스터디 섹션", '케이스 스터디 — 리플레이 원장 탐색' in _w64)
+check("케이스 스터디 섹션", '과거 판단 하나하나 열어 보기' in _w64)
 check("필터 4종 (분할·결과·점수대·국면)", all(s in _w64 for s in (
     'cs_split', 'cs_out', 'cs_score', 'cs_regime')))
 check("표본 30건 미만 경고", '표본이 30건 미만' in _w64)
@@ -3437,7 +3440,7 @@ section("75. 확률 최우선 — 배너 실측 확률 격상 · 연구 후보 �
 
 _w75 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("배너 — 실측 성공률을 점수 옆 1등으로",
-      '과거 같은 점수대 실측 성공률' in _w75 and '_prob_html' in _w75)
+      '비슷했던 과거에서 맞은 비율' in _w75 and '_prob_html' in _w75)
 check("배너 — 표본<30이면 %를 숨기고 '표본 부족' 표시",
       '표시 보류' in _w75 and '>= 30' in _w75)
 check("확률 원천은 리플레이 실측뿐 (요행 수치 금지 주석)",

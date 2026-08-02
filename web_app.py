@@ -54,8 +54,9 @@ from leakage_guard import LeakageGuard
 # 1. 스트림릿 페이지 설정 및 애플(Apple.com) 스타일 다크모드 고대비 CSS
 #: 앱 이름은 여기 하나만 고친다. 사이드바 홈 버튼과 본문 대제목이 같은 값을 쓴다.
 #: (예전에는 '퀀트 주식 시뮬레이터' / '차세대 AI 퀀트 주가 예측 시뮬레이터' 로 달랐다)
-APP_TITLE = "AI 퀀트 주가 예측 시뮬레이터"
-APP_NAME = f"⚙️ {APP_TITLE}"
+APP_TITLE = "가늠"
+APP_TAGLINE = "사기 전에, 재봅니다"
+APP_NAME = APP_TITLE
 #: 화면·기능을 바꿀 때 이 날짜도 함께 갱신한다 (사이드바 제목 아래에 표시된다)
 APP_UPDATED = "2026-07-31"
 
@@ -1215,11 +1216,14 @@ import datetime
 run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{target_ticker.split('.')[0][-5:]}"
 # 본문 대제목 — 사이드바 홈 버튼과 같은 이름을 쓴다 (APP_TITLE 하나로 관리)
 st.markdown(
-    f"<h1 style='font-size:34px; font-weight:700; letter-spacing:-0.5px; "
-    f"margin:0 0 2px 0;'>{APP_TITLE}</h1>",
+    f"<h1 style='font-size:34px; font-weight:700; letter-spacing:-0.028em; "
+    f"margin:0 0 4px 0;'>{APP_TITLE}</h1>"
+    f"<p style='margin:0 0 4px 0; font-size:17px; color:#9DAABC; "
+    f"letter-spacing:-0.01em;'>{APP_TAGLINE}</p>",
     unsafe_allow_html=True)
-st.caption("네이버·다음 실데이터 · 표본/신뢰도 게이트 · Purged Walk-Forward "
-           f"표본외 검증 (Run `{run_id}`)")
+st.caption("과거로 되돌려 실제로 맞았는지 세어 본 뒤에 판단합니다 · "
+           "미래 정보를 잘라낸 검증 · 네이버·다음 실시간 데이터 "
+           f"(실행 `{run_id}`)")
 
 # --- 종목 검색기 렌더링 ---
 if st.session_state.get('show_screener', False):
@@ -2466,27 +2470,27 @@ if _home_cal.get('total_cases'):
     _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
     _sig = _home_cal.get('signal_frequency') or {}
     # UI 킷 타일 — 한 카드 안에서 헤어라인으로 나눈다 (테두리 없음)
-    _uk.section("모델 신뢰도",
-                "과거 기준일 리플레이 실측 · 표본 수 병기", theme=_theme, top=8)
+    _uk.section("이 판단, 얼마나 믿을 수 있나",
+                "과거로 되돌려 실제로 맞았는지 세어 본 결과입니다", theme=_theme, top=8)
     _uk.stat_tiles([
-        {'label': '누적 케이스',
+        {'label': '되돌려 본 판단',
          'value': f"{_home_cal['total_cases']:,}",
          'sub': f"모델 {str(_home_cal.get('rulebook_version', '—')).lstrip('v')}"},
-        {'label': '검증 적중률',
+        {'label': '연습 적중률',
          'value': (f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None
                    else "미산출"),
-         'sub': f"표본외 n={_v.get('n', 0):,}"},
-        {'label': '블라인드',
+         'sub': f"과거 {_v.get('n', 0):,}번 중"},
+        {'label': '실전 적중률',
          'value': (f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None
                    else "미산출"),
-         'sub': f"미사용 구간 n={_b.get('n', 0):,}"},
-        {'label': '고신뢰 60+',
+         'sub': f"안 본 기간 {_b.get('n', 0):,}번 중"},
+        {'label': '추천만 골랐을 때',
          'value': (f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None
                    else "미산출"),
          'sub': (f"n={_bzb.get('n', 0)} · 표본 부족" if (_bzb.get('n') or 0) < 30
                  else f"n={_bzb.get('n', 0)}"),
          'tone': 'warn' if (_bzb.get('n') or 0) < 30 else ''},
-        {'label': '신호율',
+        {'label': '매수 기회',
          'value': (f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None
                    else "미산출"),
          'sub': f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0):,}건"},
@@ -2873,7 +2877,7 @@ if (_cb_banner.get('hit_rate') is not None
         and (_cb_banner.get('n') or 0) >= 30):
     _prob_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#86868b;'>"
-        f"과거 같은 점수대 실측 성공률</p>"
+        f"비슷했던 과거에서 맞은 비율</p>"
         f"<p style='margin:0; font-size:28px; font-weight:700; "
         f"color:#F3F6FA; line-height:1.1;'>{_cb_banner['hit_rate']:.0f}%"
         f"<span style='font-size:13px; color:#86868b;'> "
@@ -2892,12 +2896,12 @@ st.markdown(f"""
   <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;'>
     <div>
       <p style='margin:0; font-size:13px; color:#86868b; font-weight:700;'>
-        {resolved_name} — 퀀트 종합 결론</p>
+        {resolved_name} · 오늘의 판단</p>
       <p style='margin:4px 0 0 0; font-size:40px; font-weight:800; color:{_vc}; line-height:1.15;'>
         {_vi} {verdict['headline']}</p>{_banner_sub_html}
     </div>
     <div style='text-align:right;'>
-      <p style='margin:0; font-size:13px; color:#86868b;'>종합 점수</p>
+      <p style='margin:0; font-size:13px; color:#86868b;'>판단 점수</p>
       <p style='margin:0; font-size:34px; font-weight:700; color:{_vc}; line-height:1;'>
         {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:17px; color:#86868b;'> / 100</span></p>{_prob_html}
       <p style='margin:2px 0 0 0; font-size:15px; font-weight:700; color:{_vc};'>{_vshort}</p>
@@ -2906,19 +2910,19 @@ st.markdown(f"""
   <div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px;
               margin-top:16px; padding-top:14px; border-top:1px solid #2c2c2e;'>
     <div style='background:#141416; border-radius:12px; padding:10px 14px;'>
-      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>🟢 권장 매수가 <span style='font-weight:400;'>(신규 진입 기준)</span></p>
+      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>살 가격 <span style='font-weight:400;'>· 아직 안 샀다면 이 값 이하에서</span></p>
       <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#30d158;'>{rec_buy_display}</p>{_rec_sub_html}
     </div>
     <div style='background:#141416; border-radius:12px; padding:10px 14px;'>
-      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>🔵 1차 목표가 <span style='font-weight:400;'>(현재가 기준 기술 레벨)</span></p>
+      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>팔 가격 1차 <span style='font-weight:400;'>· 여기까지 오르면 일부 정리</span></p>
       <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#64d2ff;'>{_ex_tgt}</p>
     </div>
     <div style='background:#141416; border-radius:12px; padding:10px 14px;'>
-      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>🔴 손절가 <span style='font-weight:400;'>(현재가 기준 — 보유자용)</span></p>
+      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>버틸 수 없는 가격 <span style='font-weight:400;'>· 이미 갖고 계신 분 기준 — 여기 아래면 손실을 끊습니다</span></p>
       <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#ff453a;'>{_ex_stop}</p>
     </div>
     <div style='background:#141416; border-radius:12px; padding:10px 14px;'>
-      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>⏱️ DeMARK 매수 포인트 <span style='font-weight:400;'>(9-13 추세 소진)</span></p>
+      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>매수 타이밍 신호 <span style='font-weight:400;'>· 하락세가 힘 빠지는 지점</span></p>
       <p style='margin:2px 0 0 0; font-size:16px; font-weight:700; color:{_dm_color}; line-height:1.3;'>{_dm_head}</p>
       <p style='margin:3px 0 0 0; font-size:12px; color:#d2d2d7;'>{_dm_line}</p>
     </div>
@@ -2964,7 +2968,7 @@ with _ec1:
     _nb = _easy['new_buyer']
     st.markdown(f"""
     <div style='background:#141416; border-radius:14px; padding:14px 16px; height:100%;'>
-      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>🧭 아직 이 종목이 없다면</p>
+      <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>처음 사는 분께</p>
       <p style='margin:6px 0; font-size:17px; font-weight:700; color:#f5f5f7;'>{_nb['emoji']} {_nb['line']}</p>
       <p style='margin:0; font-size:15px; color:#d2d2d7; line-height:1.55;'>{_nb['detail']}</p>
     </div>""", unsafe_allow_html=True)
@@ -2973,14 +2977,14 @@ with _ec2:
     if _hd:
         st.markdown(f"""
         <div style='background:#141416; border-radius:14px; padding:14px 16px; height:100%;'>
-          <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>💼 보유 중이라면 (평단 {user_entry_price:,.0f}원 · 현재 {_hd['ret_pct']:+.1f}%)</p>
+          <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>이미 갖고 계신 분께 (평단 {user_entry_price:,.0f}원 · 현재 {_hd['ret_pct']:+.1f}%)</p>
           <p style='margin:6px 0; font-size:17px; font-weight:700; color:#f5f5f7;'>{_hd['emoji']} {_hd['line']}</p>
           <p style='margin:0; font-size:15px; color:#d2d2d7; line-height:1.55;'>{_hd['detail']}</p>
         </div>""", unsafe_allow_html=True)
     else:
         st.markdown("""
         <div style='background:#141416; border-radius:14px; padding:14px 16px; height:100%;'>
-          <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>💼 보유 중이라면</p>
+          <p style='margin:0; font-size:12px; color:#86868b; font-weight:700;'>이미 갖고 계신 분께</p>
           <p style='margin:6px 0; font-size:15px; color:#d2d2d7; line-height:1.6;'>
             위에서 <b>'보유 중'</b>을 선택하고 평균 매수가를 넣으면<br>
             보유·일부 매도·손절·추가 매수 여부를 <b>내 평단 기준</b>으로 알려드립니다.</p>
@@ -3425,7 +3429,7 @@ with st.expander("🧮 이 시장·뉴스가 퀀트 점수를 얼마나 움직�
 st.markdown('<div id="nav-perf"></div>', unsafe_allow_html=True)
 _perf_cal = _load_calibration_meta()
 if _perf_cal.get('total_cases'):
-    st.markdown("### 모델 성과 — 가상 백테스트 감사")
+    st.markdown("### 모델 자체 점검")
     st.caption(f"과거 기준일 리플레이 **{_perf_cal['total_cases']:,}건** · "
                f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
                "시간 분할: 학습 <2025-07 / 검증 ~2026-01 / 블라인드 ≥2026-02 "
@@ -3508,7 +3512,7 @@ if _perf_cal.get('total_cases'):
 st.markdown('<div id="nav-cases"></div>', unsafe_allow_html=True)
 _ledger_df = _load_case_ledger()
 if _ledger_df is not None:
-    st.markdown("### 케이스 스터디 — 리플레이 원장 탐색")
+    st.markdown("### 과거 판단 하나하나 열어 보기")
     _lg_last = str(_ledger_df['date'].max())[:10] if 'date' in _ledger_df.columns else '—'
     st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
                "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.  \n"
