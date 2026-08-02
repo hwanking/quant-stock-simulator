@@ -57,8 +57,19 @@ from leakage_guard import LeakageGuard
 APP_TITLE = "가늠"
 APP_TAGLINE = "사기 전에, 재봅니다"
 APP_NAME = APP_TITLE
-#: 화면·기능을 바꿀 때 이 날짜도 함께 갱신한다 (사이드바 제목 아래에 표시된다)
-APP_UPDATED = "2026-07-31"
+def _last_update_date():
+    """업데이트 날짜는 손으로 적지 않는다 — 커밋 이력이 원천이다."""
+    try:
+        import json as _j
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'data', 'update_history.json'),
+                  encoding='utf-8') as _f:
+            return str(_j.load(_f)['days'][0]['date'])
+    except Exception:
+        return datetime.date.today().isoformat()
+
+
+APP_UPDATED = _last_update_date()
 
 def is_remote_exposed():
     """
@@ -602,11 +613,11 @@ if _theme == 'light':
         .stApp h4{_G}, .stApp h5{_G}, .stApp h6{_G} {{
             color: #0B0F17 !important;
         }}
-        .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: #6B7A90 !important; }}
+        .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: #7C8AA0 !important; }}
 
         /* 메트릭 숫자 */
         [data-testid="stMetricValue"] {{ color: #0B0F17 !important; }}
-        [data-testid="stMetricLabel"] {{ color: #6B7A90 !important; }}
+        [data-testid="stMetricLabel"] {{ color: #7C8AA0 !important; }}
 
         /* 알림 박스: 배경이 반투명 틴트라 라이트 모드에선 밝아진다 → 글자는 어둡게 */
         .stApp [data-testid="stAlert"] p, .stApp [data-testid="stAlert"] span,
@@ -617,7 +628,7 @@ if _theme == 'light':
         /* 코드 조각: 라이트에서도 칩이 아니라 조용한 보조 텍스트 (v6) */
         .stApp code, .stApp kbd,
         [data-testid="stSidebar"] code, [data-testid="stSidebar"] kbd {{
-            background-color: transparent !important; color: #6B7A90 !important;
+            background-color: transparent !important; color: #7C8AA0 !important;
             padding: 0 !important;
         }}
         /* 버튼: 다크 스타일 유지 — 글자는 밝게 고정 */
@@ -1446,8 +1457,8 @@ if st.session_state.get('show_screener', False):
                     _bcol = {'🏆 실전 추천 후보': '#35C98B',
                              '🔥 관심 급증·추격주의': '#F2B84B',
                              '🌱 조용한 선행 후보': '#4C8DFF',
-                             '👀 관찰 후보': '#6B7A90',
-                             '🚫 추천 제외': '#ff453a'}.get(_bucket, '#6B7A90')
+                             '👀 관찰 후보': '#7C8AA0',
+                             '🚫 추천 제외': '#ff453a'}.get(_bucket, '#7C8AA0')
                     # HTML 안에서 조건식을 조립하면 읽을 수 없어진다 — 먼저 문자열로 만든다
                     _raw_txt = f"원점수 {_a['market_attention_score']:.0f}"
                     if _a['penalty']:
@@ -2519,6 +2530,41 @@ if _home_cal.get('total_cases'):
     _uk.note("미래 수익을 보장하지 않습니다. 분해·실패 원인은 아래 모델 성과 "
              "섹션에 있습니다.", theme=_theme)
 
+    # ── 국면별 성적 (라운드 7 실측) ────────────────────────────────────
+    # 평균 한 줄은 사용자가 오늘 자기 상황에 적용할 수 없다. 적중률을
+    # 지배하는 것은 점수가 아니라 시장 국면이라는 것이 실측으로 확인됐다
+    # (docs/MODEL_VERSIONS.md 라운드 4~7). 그래서 나눠서 보여 준다.
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               '.portfolio', 'regime_breakdown.json'),
+                  encoding='utf-8') as _rf:
+            _rb = json.load(_rf)
+    except Exception:
+        _rb = None
+    if _rb and _rb.get('buy_zone'):
+        _rows_rg = []
+        for _rg, _ko in (('BULL', '상승 추세'), ('SIDEWAYS', '옆걸음(횡보)'),
+                         ('BEAR', '하락 추세')):
+            _bv = (_rb['buy_zone'].get('valid') or {}).get(_rg) or {}
+            _bb2 = (_rb['buy_zone'].get('blind') or {}).get(_rg) or {}
+            if not (_bv or _bb2):
+                continue
+            _vtxt = (f"연습 {_bv['hit']:.0f}% (n={_bv['n']})"
+                     if _bv.get('hit') is not None else '연습 표본 없음')
+            _btxt = (f"실전 {_bb2['hit']:.0f}% (n={_bb2['n']})"
+                     if _bb2.get('hit') is not None else '실전 표본 없음')
+            # 표본이 30건 미만이면 수치를 강조하지 않는다 (우연일 수 있다)
+            _thin = ((_bv.get('n') or 0) < 30 or (_bb2.get('n') or 0) < 30)
+            _rows_rg.append((_ko, f"{_vtxt} · {_btxt}",
+                             'warn' if _thin else ''))
+        if _rows_rg:
+            _uk.rows(_rows_rg, theme=_theme,
+                     title='시장 국면별 추천 성적 — 같은 모델도 장세에 따라 다릅니다')
+            _uk.note("주황색은 표본 30건 미만이라 성적으로 인정하지 않는 구간입니다. "
+                     "특히 하락 추세는 연습과 실전이 크게 엇갈려(연습에서는 잘 맞고 "
+                     "실전에서는 크게 틀렸습니다) 이 국면의 판단은 신뢰하지 마세요.",
+                     theme=_theme)
+
 # 개장 전 한 줄 결론 (리포트가 있을 때만 — 없으면 만들지 않는다)
 try:
     import premarket as _pm_home
@@ -2580,9 +2626,12 @@ if _issues_global:
                 st.markdown(
                     f"<div style='background:{_TOK['surface']}; "
                     f"border-radius:14px; padding:16px 20px; margin-bottom:8px;'>"
-                    f"<span style='background:{_tone}22; color:{_tone}; "
-                    f"font-size:12px; font-weight:700; padding:2px 8px; "
-                    f"border-radius:6px;'>{_ws}</span>"
+                    f"<span style='background:{_TOK['hover']}; "
+                    f"color:{_TOK['tx1']}; font-size:12px; font-weight:600; "
+                    f"padding:2px 8px; border-radius:6px; display:inline-flex; "
+                    f"align-items:center; gap:6px;'>"
+                    f"<span style='width:6px; height:6px; border-radius:50%; "
+                    f"background:{_tone};'></span>{_ws}</span>"
                     f"<span style='margin-left:8px; font-size:12px; "
                     f"color:{_TOK['tx2']};'>{_tr.get('age_days', 0)}일 경과 · "
                     f"{_fix} · 다음 점검 {_tr.get('next_review') or _tr.get('eta') or '—'}</span>"

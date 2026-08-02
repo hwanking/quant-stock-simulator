@@ -3686,6 +3686,105 @@ _c80.close()
 _os.remove(_p80)
 
 
+section("81. 접근성 — 글자 3단 대비 실측 · 팔레트 단일 출처")
+import ui_kit as _uk81
+
+
+def _lum81(h):
+    h = h.lstrip('#')
+    v = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = [f(x) for x in v]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _ratio81(a, b):
+    la, lb = _lum81(a), _lum81(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+for _nm81, _pal81 in (('다크', _uk81.DARK), ('라이트', _uk81.LIGHT)):
+    for _srf81 in ('bg', 'card'):
+        for _tx81, _min81 in (('tx1', 7.0), ('tx2', 4.5), ('tx3', 4.5)):
+            _r81 = _ratio81(_pal81[_tx81], _pal81[_srf81])
+            check(f"{_nm81} {_tx81} on {_srf81} — 대비 {_r81:.2f} ≥ {_min81}",
+                  _r81 >= _min81)
+    # 3단이 실제로 구별되어야 위계다 — 값이 붙어 있으면 단계가 아니다
+    check(f"{_nm81} 글자 3단이 서로 구별된다",
+          _ratio81(_pal81['tx1'], _pal81['card'])
+          > _ratio81(_pal81['tx2'], _pal81['card']) + 2.0
+          > _ratio81(_pal81['tx3'], _pal81['card']) + 2.0)
+
+_w81 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("팔레트는 킷이 유일 출처 — web_app 이 직접 정의하지 않는다",
+      '_pal(_uk.DARK)' in _w81 and '_pal(_uk.LIGHT)' in _w81)
+_cfg81 = open(_os.path.join(PROJ, ".streamlit", "config.toml"),
+              encoding='utf-8').read()
+check("Streamlit 자체 크롬도 같은 토큰 — 배경·강조색 일치",
+      '#0B0F17' in _cfg81 and '#4C8DFF' in _cfg81 and '#161D2A' in _cfg81)
+check("업데이트 날짜는 손으로 쓰지 않는다 (커밋 이력 파생)",
+      'def _last_update_date' in _w81 and 'update_history.json' in _w81)
+check("타일 라벨을 …으로 자르지 않는다 (정보 손실 금지)",
+      "text-overflow:ellipsis;'>{_esc(it['label'])}" not in open(
+          _os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read())
+
+
+section("82. 라운드 4~7 — 사전등록 절차 준수 · 국면 분해 · 기각 기록")
+_mv82 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("라운드 3 기각 사유가 '측정 불가'로 정확히 기록됐다",
+      'build_final_verdict` 를 호출하지 않는다' in _mv82
+      and '측정면을 잘못 골랐다' in _mv82)
+check("점수가 60을 못 넘는 것이 진짜 병목임을 기록",
+      '70점 이상 4건' in _mv82 and '52.6% vs 59.3%' in _mv82)
+check("구간별 기준선이 다르다는 사실을 명시 (55.8 / 63.6 / 44.9)",
+      '55.8%' in _mv82 and '63.6%' in _mv82 and '44.9%' in _mv82)
+check("검증 70% 가 장세 효과라는 판정 근거 기록",
+      '같은 규칙이 학습에서는 50% 안팎' in _mv82)
+check("라운드 6 종목 홀드아웃 결과 기록 (본 적 없는 종목)",
+      '홀드아웃' in _mv82 and '67.8%' in _mv82)
+check("블라인드 lift 음수로 채택 취소했음을 기록",
+      '채택 취소' in _mv82 and '−9.04%' in _mv82)
+check("70% 미달을 숨기지 않는다", '무조건적 검증 70%는 달성하지 못했다' in _mv82)
+check("수치를 만들 수 있었지만 하지 않았다고 밝힌다",
+      '그렇게 하지 않았다' in _mv82 and '89%' in _mv82)
+check("KPI 정의 불변 재확인", 'KPI 정의 불변' in _mv82)
+
+for _f82 in ('layer_study_r4.py', 'lift_study_r5.py', 'regime_rule_r6.py',
+             'regime_breakdown_r7.py', 'promotion_round3.py'):
+    _pp82 = _os.path.join(PROJ, 'scripts', _f82)
+    check(f"연구 스크립트 보존 — {_f82}", _os.path.exists(_pp82))
+    _src82 = open(_pp82, encoding='utf-8').read()
+    check(f"{_f82} — 판정 규칙이 측정 전에 코드로 선명시",
+          '사전등록' in _src82)
+
+_rb82 = _os.path.join(PROJ, '.portfolio', 'regime_breakdown.json')
+check("국면별 실적 산출물 존재", _os.path.exists(_rb82))
+if _os.path.exists(_rb82):
+    import json as _j82
+    with open(_rb82, encoding='utf-8') as _f:
+        _rbd82 = _j82.load(_f)
+    check("국면 3종이 모두 분해돼 있다",
+          all(_k in (_rbd82.get('buy_zone', {}).get('valid') or {})
+              for _k in ('BULL', 'SIDEWAYS', 'BEAR')))
+    check("약세장 게이트는 채택하지 않았다 (양쪽 동시 통과 실패)",
+          _rbd82.get('bear_gate_adopted') is False)
+
+_w82 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 국면별 성적을 나눠 보여준다",
+      '시장 국면별 추천 성적' in _w82 and 'regime_breakdown.json' in _w82)
+check("화면 — 표본 30건 미만은 성적으로 인정하지 않는다고 밝힌다",
+      '표본 30건 미만이라 성적으로 인정하지 않는' in _w82)
+check("화면 — 하락 추세 신뢰 경고", '이 국면의 판단은 신뢰하지 마세요' in _w82)
+
+from improvement import issue_ops as _io82
+check("이슈 계획이 실측으로 갱신됐다 (거부권 → 점수 상한)",
+      '점수 자체가 60점을 넘지 못하기 때문' in
+      _io82.PLAYBOOK['usability|signal_rate']['cause'])
+check("국면 의존 이슈가 계획에 추가됐다",
+      'model|regime_dependence' in _io82.PLAYBOOK)
+
+
 print()
 print("=" * 72)
 if FAILURES:

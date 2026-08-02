@@ -22,13 +22,16 @@ import streamlit as st
 
 # ── 표면 3단계 (테두리 없음 — 이 대비만으로 층이 보인다) ──────────────────
 DARK = dict(bg='#0B0F17', card='#161D2A', raised='#1C2635',
-            line='#222C3C', tx1='#F3F6FA', tx2='#9DAABC', tx3='#6B7A90',
+            line='#222C3C', tx1='#F3F6FA', tx2='#9DAABC', tx3='#7C8AA0',
             brand='#4C8DFF', up='#FF453A', down='#0A84FF',
             pos='#35C98B', warn='#F2B84B', neg='#F26161')
 LIGHT = dict(bg='#EFF1F6', card='#FFFFFF', raised='#F2F5F9',
-             line='#E6EAF0', tx1='#111827', tx2='#5B6676', tx3='#8A94A3',
+             line='#E6EAF0', tx1='#111827', tx2='#4A4D53', tx3='#666873',
              brand='#2563EB', up='#D93025', down='#1A73E8',
              pos='#16875D', warn='#B7791F', neg='#D14343')
+# 글자 3단은 눈대중이 아니라 실측으로 정했다 (WCAG 대비, 회색 배경·흰 카드 양쪽):
+#   다크  tx1 15.6 · tx2 7.2 · tx3 4.8   |  라이트 tx1 15.7 · tx2 7.5 · tx3 4.9
+# tx3 는 보조 설명 전용이며 4.5 미만으로 내려가면 안 된다 (작은 12px 글자가 많다).
 
 
 def tokens(theme: str = 'dark') -> dict:
@@ -106,9 +109,11 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
                f"{_esc(it.get('sub'))}</p>" if it.get('sub') else '')
         cells.append(
             f"<div style='flex:1 1 0; min-width:0; padding:4px 16px; {border}'>"
+            # 라벨을 …으로 자르지 않는다. 좁으면 두 줄로 흐르게 둔다 —
+            # 무슨 지표인지 모르게 만드는 것이 공간 절약보다 나쁘다.
             f"<p style='margin:0; font-size:13px; color:{t['tx2']}; "
-            f"font-weight:500; white-space:nowrap; overflow:hidden; "
-            f"text-overflow:ellipsis;'>{_esc(it['label'])}</p>"
+            f"font-weight:500; line-height:1.35; word-break:keep-all; "
+            f"min-height:2.7em;'>{_esc(it['label'])}</p>"
             # 값은 절대 줄바꿈하지 않는다 — 폭이 좁으면 글자를 줄인다(clamp).
             # 경계값 20·28 은 타입 스케일 안이다.
             f"<p style='margin:8px 0 0 0; font-size:clamp(20px, 2.4vw, 28px); "
@@ -256,6 +261,11 @@ def global_css(theme: str = 'dark') -> str:
         background: {t['line']} !important; }}
     .stApp [data-testid="stSlider"] [data-baseweb="slider"] > div > div > div {{
         background: {t['brand']} !important; }}
+    /* 손잡이 위 숫자는 브랜드색 배경에 얹히므로 흰 글자로 고정한다.
+       기본값(보조 회색)이면 대비 1.4 로 읽히지 않는다 (실측). */
+    [data-testid="stSliderThumbValue"],
+    [data-testid="stSliderThumbValue"] * {{
+        color: #FFFFFF !important; font-weight: 600 !important; }}
 
     /* 수직 리듬 — 8pt 그리드 */
     .stApp hr {{ margin: 40px 0 !important; border-color: {t['line']} !important;
