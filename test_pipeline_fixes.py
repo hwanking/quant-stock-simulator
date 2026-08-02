@@ -3578,6 +3578,35 @@ check("애플 UI 스펙 문서 존재",
       _os.path.exists(_os.path.join(PROJ, "docs", "APPLE_UI_SPEC.md")))
 
 
+section("79. 라운드 3 — 매수 차단 거부권의 근거 검증 · 후보 플래그 격리")
+
+check("ESS 게이트 연구 (1차 가설 기각 기록)", _os.path.exists(
+    _os.path.join(PROJ, "scripts", "ess_gate_study.py")))
+check("거부권 연구 (진짜 차단자 규명)", _os.path.exists(
+    _os.path.join(PROJ, "scripts", "veto_study.py")))
+_vs79 = open(_os.path.join(PROJ, "scripts", "veto_study.py"),
+             encoding='utf-8').read()
+check("사전등록 — 판정 규칙을 먼저 명문화", '판정 규칙' in _vs79
+      and '즉시 반영하지 않는다' in _vs79)
+
+check("후보 모드는 환경변수로만 (운영 기본 strict)",
+      q.VETO_NET_MODE == 'strict'
+      and "os.environ.get('QUANT_VETO_NET_MODE'" in _qi70)
+_qi79 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+check("완화 조건 — 표본 30건+·Wilson 하한 50%+ 일 때만",
+      "(_band.get('n') or 0) < 30" in _qi79
+      and "float(_band['wilson_low']) < 50.0" in _qi79)
+check("차단하지 않은 사실을 화면에 남긴다 (은폐 금지)",
+      "'soft_conflict_notes'" in _qi79 and '매수 차단까지는 하지 않았습니다' in _qi79)
+check("KPI·산식 불변 명시", 'KPI 정의는 **불변**' in open(
+    _os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"), encoding='utf-8').read())
+_mv79 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("실측 근거 기록 (차단 42.3% · 차이 0.9%p)",
+      '42.3%' in _mv79 and '+0.9%p' in _mv79)
+check("기각된 가설도 기록 (ESS 게이트)", '1차 가설 기각' in _mv79)
+
+
 print()
 print("=" * 72)
 if FAILURES:

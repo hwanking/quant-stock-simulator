@@ -1643,8 +1643,27 @@ class QuantIndicatorsEngine:
         net = (sim.get('mean_perf') or 0.0) - self.TOTAL_COST_PCT
         if not self.probabilities_allowed(sim.get('sample_tier') or sim.get('status', '')):
             vetoes.append(f"유효표본 {sim.get('match_count', 0)}건 — 확률 판단 기준 미달")
+        # [라운드 3] 이 거부권은 매수 결론의 42%를 막는 최대 차단자인데,
+        # 원장 4,011건 실측에서 net>0 과 net<=0 의 성과 차이가 적중률 +0.9%p ·
+        # 비용후 +0.03%p 로 사실상 없었다(블라인드에서는 오히려 역전).
+        # 즉 자기유사 평균수익 한 점 추정은 잡음이다.
+        # 대안: 잡음 하나로 막지 않고, **더 큰 표본인 점수대 캘리브레이션이
+        # 함께 약할 때만** 막는다. 산식·KPI 정의는 그대로다.
+        # 기본값은 현행(strict) — 후보 원장으로 검증한 뒤에만 승격한다.
         if sim.get('mean_perf') is not None and net <= 0:
-            vetoes.append(f"거래비용 차감 후 기대수익 {net:+.2f}% (0 이하)")
+            _band = fs.get('calibration_band') or {}
+            _band_weak = (_band.get('wilson_low') is None
+                          or (_band.get('n') or 0) < 30
+                          or float(_band['wilson_low']) < 50.0)
+            if self.VETO_NET_MODE == 'strict' or _band_weak:
+                vetoes.append(f"거래비용 차감 후 기대수익 {net:+.2f}% (0 이하)")
+            else:
+                # 차단하지 않은 사실을 화면에 남긴다 (숨기지 않는다)
+                fs.setdefault('soft_conflict_notes', []).append(
+                    f"자기유사 기대수익은 {net:+.2f}%로 약하지만, 이 점수대의 "
+                    f"과거 실측(n={_band.get('n')}, 하한 "
+                    f"{float(_band['wilson_low']):.0f}%)이 이를 상쇄해 "
+                    "매수 차단까지는 하지 않았습니다.")
         ez = fs.get('entry_zone', '')
         if '추격매수 위험' in ez or '크게 초과' in ez:
             vetoes.append(f"진입 위치 '{ez}' — 적정가를 크게 초과")
@@ -3761,6 +3780,13 @@ class QuantIndicatorsEngine:
         "슬리피지": rb('RULES_TRADING_COSTS', 'slippage', 0.18),
     }
     TOTAL_COST_PCT = round(sum(COST_BREAKDOWN.values()), 3)
+
+    #: [라운드 3] 기대수익 거부권 모드 — 'strict'(현행 운영) | 'calibrated'(후보).
+    #  calibrated 는 자기유사 기대수익이 음수여도 점수대 캘리브레이션이 충분히
+    #  강하면(표본 30건+ · Wilson 하한 50%+) 매수를 차단하지 않는다.
+    #  환경변수 QUANT_VETO_NET_MODE 로 후보 원장을 만들 때만 바꾼다.
+    #  운영 모델은 검증 통과 전까지 절대 자동 전환하지 않는다 (승격 규율).
+    VETO_NET_MODE = os.environ.get('QUANT_VETO_NET_MODE', 'strict')
 
     def calculate_sharpe_and_turnover(self, sim_res, four_scores=None):
         """
