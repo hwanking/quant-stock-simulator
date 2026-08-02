@@ -1,5 +1,6 @@
 import sys
 import textwrap
+import time
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1452,27 +1453,46 @@ st.sidebar.markdown("""
 # ── 좌측 내비 (참조 화면 구조) — 로고 · 1차 탭 · 서브 항목 ────────────────
 # 내비는 앵커 링크다. 눌리면 그 구역으로 이동한다. 화면이 한 장이라
 # 라우팅 대신 앵커를 쓰지만, 보이는 구조와 동작은 참조와 같다.
-# ── 좌측 메뉴 (사용자 지정 순서) ─────────────────────────────────────────
-# 조건을 만지는 것보다 **오늘 어떤 판단이 나왔고 왜 그런지**가 먼저다.
-# 그래서 설정이 맨 아래(4번)로 간다.
-_NAV_LINKS = {
-    'today': [
-        ('한 줄 결론', '#nav-verdict'),
-        ('가늠 AI', '#nav-gaeum'),
-        ('판정 근거', '#nav-basis'),
-        ('시장·뉴스', '#nav-context'),
-        ('오늘의 추천', '#nav-premarket'),
-    ],
-    'mine': [
-        ('내 보유종목', '#nav-holdings'),
-    ],
-    'history': [
-        ('모델 성적', '#nav-perf'),
-        ('업데이트 내역', '#nav-updates'),
-    ],
-}
+_NAV_MAIN = [
+    {'key': 'top', 'label': '홈', 'icon': 'home', 'href': '#nav-top'},
+    {'key': 'verdict', 'label': '종목 분석', 'icon': 'compass',
+     'href': '#nav-verdict'},
+    {'key': 'perf', 'label': '모델 성적', 'icon': 'chart', 'href': '#nav-perf'},
+    {'key': 'updates', 'label': '업데이트', 'icon': 'bell',
+     'href': '#nav-updates'},
+    {'key': 'support', 'label': '고객센터', 'icon': 'life',
+     'href': '#nav-support'},
+]
+_NAV_SUB = [
+    {'title': '1. 오늘의 판단', 'items': [
+        {'key': 'verdict', 'label': '한 줄 결론', 'icon': 'doc',
+         'href': '#nav-verdict'},
+        {'key': 'gaeum', 'label': '가늠 AI', 'icon': 'compass',
+         'href': '#nav-gaeum'},
+        {'key': 'premarket', 'label': '오늘의 추천', 'icon': 'chart',
+         'href': '#nav-premarket'},
+    ]},
+    {'title': '2. 근거 확인', 'items': [
+        {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
+         'href': '#nav-context'},
+        {'key': 'basis', 'label': '판정 근거', 'icon': 'doc',
+         'href': '#nav-basis'},
+    ]},
+    {'title': '3. 내 자산', 'items': [
+        {'key': 'holdings', 'label': '내 보유종목', 'icon': 'wallet',
+         'href': '#nav-holdings'},
+    ]},
+    {'title': '4. 검증과 이력', 'items': [
+        {'key': 'perf', 'label': '모델 성적', 'icon': 'chart',
+         'href': '#nav-perf'},
+        {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
+         'href': '#nav-updates'},
+    ]},
+]
 st.sidebar.markdown(
-    f"<div style='padding:4px 0 16px 0;'>{_uk.logo(_theme, size=30)}</div>",
+    f"<div style='padding:4px 0 14px 0;'>{_uk.logo(_theme, size=30)}</div>"
+    + _uk.nav_list(_NAV_MAIN, active='top', theme=_theme)
+    + _uk.nav_groups(_NAV_SUB, theme=_theme),
     unsafe_allow_html=True)
 st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 if st.sidebar.button("처음으로", use_container_width=False, key="btn_home",
@@ -1518,99 +1538,110 @@ def _kept(name, default):
 
 _sb_busy = st.session_state.get('_sb_busy', '')
 _SB_STEPS = [
-    {'key': 'today', 'no': '1', 'title': '오늘의 판단·근거 확인',
-     'sub': '무엇을 사고 왜 그런지', 'done': None, 'icon': 'query_stats'},
-    {'key': 'mine', 'no': '2', 'title': '내 자산 검증',
-     'sub': '보유 중이면 판단이 달라집니다',
-     'done': bool(st.session_state.get('positions')),
-     'icon': 'account_balance_wallet'},
-    {'key': 'history', 'no': '3', 'title': '분석 및 판정 이력',
-     'sub': '과거에 얼마나 맞았는지', 'done': None, 'icon': 'history'},
-    {'key': 'setup', 'no': '4', 'title': '설정·분석 조건',
-     'sub': '종목·기준일·임계값',
+    {'key': 'pick', 'no': '1', 'title': '분석할 종목',
      'done': bool(st.session_state.get('search_text_input')
                   or st.session_state.get('selected_ticker')),
-     'icon': 'tune'},
+     'icon': 'search',
+     'hint': '종목명 일부나 티커로 찾습니다'},
+    {'key': 'hold', 'no': '2', 'title': '내 보유종목',
+     'done': bool(st.session_state.get('positions')),
+     'icon': 'account_balance_wallet',
+     'hint': '보유 중이면 판단이 달라집니다'},
+    {'key': 'find', 'no': '3', 'title': '종목 찾기',
+     'done': bool(st.session_state.get('scan_results')),
+     'icon': 'query_stats',
+     'hint': '조건에 맞는 후보를 발굴합니다'},
+    {'key': 'crit', 'no': '4', 'title': '분석 기준',
+     'done': None,
+     'icon': 'tune',
+     'hint': '기준일과 유사도 임계값'},
 ]
-_sb_open = st.session_state.setdefault('sb_step', 'today')
+_sb_open = st.session_state.setdefault('sb_step', 'pick')
 _uk.acc_css(_SB_STEPS, _sb_open, _sb_busy, _theme)
 
-if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
-    st.sidebar.markdown(_uk.nav_links(_NAV_LINKS['today'], _theme),
-                        unsafe_allow_html=True)
 
-if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
-    st.sidebar.markdown(_uk.nav_links(_NAV_LINKS['mine'], _theme),
-                        unsafe_allow_html=True)
+# ── 종목 검색·선택 (아코디언 밖 · 항상 보인다) ──────────────────────────
+# 검색은 이 앱의 입구다. 설정 단계 안에 두면 접힌 순간 사라져서 사용자가
+# 아무것도 시작할 수 없다. 접힘 상태와 무관하게 항상 그린다.
+# (if/elif/else 체인이라 검색만 떼어낼 수 없다 — 종목 확정까지 함께 뺀다)
 
-if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
-    st.sidebar.markdown(_uk.nav_links(_NAV_LINKS['history'], _theme),
-                        unsafe_allow_html=True)
+_uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme, top=18)
 
-# 4번(설정) — 기존 종목·보유·찾기·기준 위젯이 전부 여기 들어간다
-_uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy)
-if _sb_open == 'setup':
+if 'search_text_input' not in st.session_state:
+    st.session_state['search_text_input'] = ''
 
-    _uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme, top=18)
+if 'pending_search' in st.session_state and st.session_state['pending_search']:
+    st.session_state['search_text_input'] = st.session_state['pending_search']
+    st.session_state['pending_search'] = ""
 
-    if 'search_text_input' not in st.session_state:
-        st.session_state['search_text_input'] = ''
+search_text_input = st.sidebar.text_input(
+    '종목명 일부 또는 티커 입력',
+    key='search_text_input',
+    placeholder='예: 하이닉스, 타이어, 건설, 페이, 포스코, 073240...',
+    help='단어 일부(예: 하이닉스, 타이어, 페이)를 입력하시면 연동 후보 리스트가 하단에 즉시 생성되어 선택할 수 있습니다.'
+)
 
-    if 'pending_search' in st.session_state and st.session_state['pending_search']:
-        st.session_state['search_text_input'] = st.session_state['pending_search']
-        st.session_state['pending_search'] = ""
+matched_stocks = []
+if search_text_input.strip():
+    # 네이버 조회가 섞여 있어 1~2초 걸린다. 아무 표시도 없으면 멈춘 것처럼
+    # 보이므로 검색 중임을 사이드바에 그대로 알린다.
+    _sp = st.sidebar.empty()
+    _sp.markdown(
+        f"<div style='display:flex; align-items:center; gap:8px; "
+        f"padding:8px 2px; font-size:12px; color:{_TOK['tx3']};'>"
+        f"<span style='width:12px; height:12px; border-radius:50%; "
+        f"display:inline-block; animation:gspin .7s linear infinite; "
+        f"background:conic-gradient({_TOK['brand']} 0 90deg, "
+        f"{_TOK['line']} 90deg 360deg); "
+        f"mask:radial-gradient(circle, transparent 3px, #000 3.5px); "
+        f"-webkit-mask:radial-gradient(circle, transparent 3px, #000 3.5px);'>"
+        f"</span>"
+        f"'{_uk._esc(search_text_input.strip())}' 찾는 중…</div>"
+        f"<style>@keyframes gspin{{to{{transform:rotate(360deg)}}}}</style>",
+        unsafe_allow_html=True)
+    kw = search_text_input.strip().lower()
+    for name, ticker in STOCK_NAME_MAP.items():
+        if '(' in name: continue
+        if kw in name.lower() or kw in ticker.lower():
+            code_num = ticker.split('.')[0]
+            label = f"{name} ({code_num})"
+            if label not in matched_stocks:
+                matched_stocks.append(label)
+            
+    naver_matches = engine_init.search_naver_stocks_realtime(search_text_input.strip())
+    for nm in naver_matches:
+        if nm not in matched_stocks:
+            matched_stocks.append(nm)
+    _sp.empty()          # 결과가 나오면 조용히 사라진다
 
-    search_text_input = st.sidebar.text_input(
-        '종목명 일부 또는 티커 입력',
-        key='search_text_input',
-        placeholder='예: 하이닉스, 타이어, 건설, 페이, 포스코, 073240...',
-        help='단어 일부(예: 하이닉스, 타이어, 페이)를 입력하시면 연동 후보 리스트가 하단에 즉시 생성되어 선택할 수 있습니다.'
-    )
+if matched_stocks:
+    st.sidebar.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
+    selected_from_matches = st.sidebar.selectbox("검색 종목 선택", matched_stocks)
+    final_query = selected_from_matches
+elif search_text_input.strip():
+    final_query = search_text_input.strip()
+else:
+    st.sidebar.caption("시가총액 상위에서 고르기")
+    # 종목 목록을 코드에 박아두지 않는다 — 시총 상위에서 매번 가져온다
+    if 'quick_top' not in st.session_state:
+        st.session_state['quick_top'] = engine_init.fetch_market_cap_top(10)
+    QUICK_PLACEHOLDER = "--- 시총 상위 종목 선택 ---"     # 안내문구 (검색어로 넘기지 않는다)
+    quick_select_options = [QUICK_PLACEHOLDER] + st.session_state['quick_top']
+    selected_quick_item = st.sidebar.selectbox("시총 상위 퀵 선택", quick_select_options)
 
-    matched_stocks = []
-    if search_text_input.strip():
-        kw = search_text_input.strip().lower()
-        for name, ticker in STOCK_NAME_MAP.items():
-            if '(' in name: continue
-            if kw in name.lower() or kw in ticker.lower():
-                code_num = ticker.split('.')[0]
-                label = f"{name} ({code_num})"
-                if label not in matched_stocks:
-                    matched_stocks.append(label)
-                
-        naver_matches = engine_init.search_naver_stocks_realtime(search_text_input.strip())
-        for nm in naver_matches:
-            if nm not in matched_stocks:
-                matched_stocks.append(nm)
-
-    if matched_stocks:
-        st.sidebar.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
-        selected_from_matches = st.sidebar.selectbox("검색 종목 선택", matched_stocks)
-        final_query = selected_from_matches
-    elif search_text_input.strip():
-        final_query = search_text_input.strip()
+    if st.session_state.get('selected_ticker'):
+        final_query = st.session_state['selected_ticker']
+    elif selected_quick_item and selected_quick_item != QUICK_PLACEHOLDER:
+        final_query = selected_quick_item
     else:
-        st.sidebar.caption("시가총액 상위에서 고르기")
-        # 종목 목록을 코드에 박아두지 않는다 — 시총 상위에서 매번 가져온다
-        if 'quick_top' not in st.session_state:
-            st.session_state['quick_top'] = engine_init.fetch_market_cap_top(10)
-        QUICK_PLACEHOLDER = "--- 시총 상위 종목 선택 ---"     # 안내문구 (검색어로 넘기지 않는다)
-        quick_select_options = [QUICK_PLACEHOLDER] + st.session_state['quick_top']
-        selected_quick_item = st.sidebar.selectbox("시총 상위 퀵 선택", quick_select_options)
-
-        if st.session_state.get('selected_ticker'):
-            final_query = st.session_state['selected_ticker']
-        elif selected_quick_item and selected_quick_item != QUICK_PLACEHOLDER:
-            final_query = selected_quick_item
-        else:
-            final_query = default_stock_no1
+        final_query = default_stock_no1
 
 
 # ── 종목 확정 · 시세 조회 (아코디언 밖) ──────────────────────────────────
 # 아코디언 안에는 **사용자가 조작하는 위젯만** 둔다. 그 결과로 계산되는 값은
 # 여기서, 접혔든 펼쳐졌든 항상 구한다 — 본문 전체가 이 값들을 쓴다.
 # 접혀 있을 때는 마지막으로 고른 검색어를 그대로 쓴다.
-if _sb_open != 'setup':
+if not final_query:
     final_query = (_KEEP.get('final_query')
                    or st.session_state.get('selected_ticker')
                    or default_stock_no1)
@@ -1633,18 +1664,21 @@ unit_str = asset_meta["unit_str"]
 
 realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price_triple_check(target_ticker)
 
-_uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
-                 _theme, tone="brand")
-# 상단 툴바 오른쪽 끝에도 같은 사실을 둔다 — 스크롤 중에도 어느 종목을 보고
-# 있는지 잊지 않게 한다 (툴바는 sticky).
+# 상단 툴바 오른쪽 끝에 지금 보는 종목 — 스크롤 중에도 잊지 않게 (sticky)
 _render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
                 f"{_uk._esc(target_ticker)}")
-_uk.sidebar_fact("현재가",
-                 (f"{realtime_price:,.0f} {unit_str}" if unit_currency == "KRW"
-                  else f"${realtime_price:,.2f}"), _theme)
-with st.sidebar.expander("자산·통화 확인"):
-    st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
-               f"가격 단위 {unit_str}")
+
+# 1단계 — 지금 무엇을 보고 있는지. 검색은 위에 있고 여기엔 결과만 담는다.
+if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
+    _uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
+                     _theme, tone="brand")
+    _uk.sidebar_fact("현재가",
+                     (f"{realtime_price:,.0f} {unit_str}"
+                      if unit_currency == "KRW"
+                      else f"${realtime_price:,.2f}"), _theme)
+    with st.sidebar.expander("자산·통화 확인"):
+        st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
+                   f"가격 단위 {unit_str}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1693,7 +1727,7 @@ def light_quote(ticker):
 
 _positions = st.session_state.get('positions') or []
 
-if _sb_open == 'setup':
+if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
     _uk.sidebar_section(f"내 보유종목 · {len(_positions)}", theme=_theme)
 
@@ -1803,7 +1837,7 @@ if _sb_open == 'setup':
     # 위젯만 여기서 그리고, 실제 스캔은 분석 파라미터(t_ref·rho)가 확정된 뒤에 돌린다.
     # ═══════════════════════════════════════════════════════════════════════════
 
-if _sb_open == 'setup':
+if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
 
     _uk.sidebar_section("종목 찾기", theme=_theme)
     st.sidebar.caption("코스피·코스닥 전체에서 거래대금·수급·추세가 변화하는 **관심종목**을 먼저 발굴하고, "
@@ -1844,7 +1878,7 @@ if _sb_open == 'setup':
         st.session_state['pending_scan'] = st.session_state['show_screener']
 
 
-if _sb_open == 'setup':
+if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
 
     _uk.sidebar_section("분석 기준", theme=_theme)
 
@@ -3525,15 +3559,21 @@ st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
 # 기본 스피너는 '무언가 돌고 있다'만 말한다. 어느 단계인지 보여야 기다릴 수 있다.
 _prog = st.empty()
+_t0 = time.time()
 _prog.markdown(_uk.progress(0, label=f"{resolved_name} · 데이터 수집",
-                            theme=_theme), unsafe_allow_html=True)
+                            theme=_theme, elapsed=0.0),
+               unsafe_allow_html=True)
 try:
     snap, snap_origin = get_shared_snapshot(target_ticker, t_ref_str, rho_cutoff)
     _prog.markdown(_uk.progress(4, label=f"{resolved_name} · 과거 유사사례 탐색",
-                                theme=_theme), unsafe_allow_html=True)
-    report_text, snapshot, latest_fund, sr117_audit, guard_res = build_report_context(snap)
-    _prog.markdown(_uk.progress(6, label="완료", theme=_theme),
+                                theme=_theme, elapsed=time.time() - _t0),
                    unsafe_allow_html=True)
+    report_text, snapshot, latest_fund, sr117_audit, guard_res = build_report_context(snap)
+    _elapsed = time.time() - _t0
+    _prog.markdown(_uk.progress(6, label="완료", theme=_theme,
+                                elapsed=_elapsed), unsafe_allow_html=True)
+    # 다음 분석의 예상 시간을 알려주기 위해 기억해 둔다
+    st.session_state['_last_analysis_sec'] = _elapsed
 finally:
     _prog.empty()          # 끝나면 조용히 사라진다
 

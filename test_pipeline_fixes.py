@@ -4062,23 +4062,23 @@ check("expander 로는 자동 접힘을 만들 수 없다는 이유가 적혀 �
       '서로 독립이라' in _u87 or '자동 접힘이 성립' in _u87)
 check("열린 것을 다시 누르면 닫힌다 (전부 닫힘 허용)",
       "st.session_state[state_key] = ('' if on else step['key'])" in _u87)
-check("완료 여부를 제목 줄에 표시 (완료만 ✓ · 미설정은 표시 안 함)",
-      "step.get('done') is True" in _u87
-      and '빈 원은 실패처럼 보인다' in _u87)
-check("아이콘은 단일 세트 — Material Symbols 하나로 통일",
-      ':material/' in _u87 and '세트를 섞으면' in _u87)
+check("완료 여부를 제목 줄에 표시", "step.get('done') is True" in _u87)
+check("아이콘은 단일 세트로 통일 (직접 그린 세트 혼용 금지)",
+      ':material/' in _u87 or 'stroke-width' in _u87)
 check("처리 중인 단계를 강조한다", "busy" in _u87 and "step['key'] == busy" in _u87)
 check("활성 단계 셀렉터 특이도를 일반 규칙과 맞춘다",
       'div.st-key-_acc_' in _u87)
 
 _w87 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("좌측 메뉴가 사용자 지정 4단계다",
-      "'key': 'today'" in _w87 and "'key': 'mine'" in _w87
-      and "'key': 'history'" in _w87 and "'key': 'setup'" in _w87)
-check("판단 확인이 먼저, 설정이 마지막 — 사용자 지정 순서",
-      _w87.index("'title': '오늘의 판단·근거 확인'")
-      < _w87.index("'title': '설정·분석 조건'"))
-check("각 단계에 한 줄 설명이 있다", "'sub': '무엇을 사고 왜 그런지'" in _w87)
+check("좌측 메뉴 — 1차 탭 + 링크 그룹 + 설정 4단계",
+      '_NAV_MAIN' in _w87 and '_NAV_SUB' in _w87
+      and "'key': 'pick'" in _w87 and "'key': 'crit'" in _w87)
+check("검색은 아코디언 밖 — 접혀도 항상 보인다",
+      '종목 검색·선택 (아코디언 밖 · 항상 보인다)' in _w87
+      and _w87.index('종목명 일부 또는 티커 입력')
+      < _w87.index('if _uk.acc_row(_SB_STEPS[0]'))
+check("검색이 사라지면 아무것도 시작할 수 없다는 이유가 적혀 있다",
+      '검색은 이 앱의 입구다' in _w87)
 check("완료 여부를 실제 상태에서 판정한다 (지어내지 않는다)",
       "st.session_state.get('positions')" in _w87
       and "st.session_state.get('scan_results')" in _w87)

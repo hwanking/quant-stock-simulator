@@ -1,12 +1,51 @@
 {
  "axes": {
-  "model": "v2026.08.02.22",
+  "model": "v2026.08.02.25",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.25",
+   "previous": "v2026.08.02.24",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "검색 중 표시 · 분석 진행에 경과·예상 시간 표시",
+   "note": "",
+   "created_at": "2026-08-02T14:54:50+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.24",
+   "previous": "v2026.08.02.23",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "좌측 메뉴를 이전 형태로 복원 (1차 탭 + 링크 그룹 + 설정 4단계)",
+   "note": "",
+   "created_at": "2026-08-02T14:54:50+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.23",
+   "previous": "v2026.08.02.22",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "검색창이 설정 단계 안에 접혀 사라지던 문제 — 아코디언 밖으로",
+   "note": "",
+   "created_at": "2026-08-02T14:54:50+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

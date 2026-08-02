@@ -371,7 +371,7 @@ STEPS = [
 
 
 def progress(done: int, total: int = 0, label: str = '',
-             theme: str = 'dark') -> str:
+             theme: str = 'dark', elapsed: float | None = None) -> str:
     """
     절제된 진행 표시 — 얇은 막대와 단계 이름만. 회전하는 장식은 쓰지 않는다.
 
@@ -391,14 +391,24 @@ def progress(done: int, total: int = 0, label: str = '',
         dots.append(
             f"<span style='font-size:12px; color:{col}; white-space:nowrap;'>"
             f"{mark} {_esc(ko)}</span>")
+    # 얼마나 걸렸고 얼마나 남았는지 — '멈춘 건가' 를 없애는 유일한 정보
+    el = ''
+    if elapsed is not None:
+        _left = ''
+        if done > 0 and done < total:
+            _eta = elapsed / done * (total - done)
+            _left = f" · 약 {_eta:.0f}초 남음"
+        el = (f"<span style='font-size:12px; color:{t['tx3']}; "
+              f"font-variant-numeric:tabular-nums;'>"
+              f"{elapsed:.0f}초 경과{_left}</span>")
     return (
         f"<div style='background:{t['card']}; border-radius:14px; "
         f"padding:16px 20px;'>"
         f"<div style='display:flex; align-items:baseline; gap:10px; "
-        f"margin-bottom:12px;'>"
+        f"margin-bottom:12px; flex-wrap:wrap;'>"
         f"<span style='font-size:15px; font-weight:600; color:{t['tx1']};'>"
         f"{_esc(label or (STEPS[done][1] if done < len(STEPS) else '완료'))}"
-        f"</span>"
+        f"</span>{el}"
         f"<span style='font-size:12px; color:{t['tx3']}; margin-left:auto; "
         f"font-variant-numeric:tabular-nums;'>{done}/{total}</span></div>"
         f"<div style='height:3px; background:{t['raised']}; border-radius:2px; "
