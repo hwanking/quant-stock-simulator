@@ -2956,11 +2956,11 @@ section("63. 재설계 2단계 — 홈 지휘센터 · 모델 성과 감사 · �
 _w63 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 
 # ① 홈 지휘센터 — 실측 카드에 표본 수(n) 병기, 보장 문구 금지
-# 라벨은 짧게(잘림 방지)·정의는 툴팁으로 — 5개 지표가 모두 있어야 한다
-check("홈 카드 — 검증/블라인드/고신뢰/신호율", all(s in _w63 for s in (
-    '"검증 적중률"', '"블라인드"', '"고신뢰 60+"', '"신호율"')))
-check("홈 카드 — 짧은 라벨의 정의를 툴팁으로 보완",
-      _w63.count('help="') >= 4 and '모델 선택에 전혀 쓰지 않은 구간' in _w63)
+# UI 킷 타일로 렌더 — 5개 지표가 모두 있고, 표본 수를 보조에 적는다
+check("홈 카드 — 케이스/검증/블라인드/고신뢰/신호율", all(s in _w63 for s in (
+    "'누적 케이스'", "'검증 적중률'", "'블라인드'", "'고신뢰 60+'", "'신호율'")))
+check("홈 카드 — 킷 컴포넌트로 렌더 (인라인 HTML 금지)",
+      '_uk.stat_tiles(' in _w63 and '_uk.section(' in _w63)
 check("홈 카드 — 표본 수 병기", 'n={_v.get' in _w63 and 'n={_b.get' in _w63)
 check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
 check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
@@ -3523,6 +3523,59 @@ check("광학 자간 — 대형 텍스트 트래킹 보정",
 check("행간 — 본문 1.6 계열", 'line-height: 1.62' in _w77)
 check("스케일 정규화 도구 보존 (재발 시 재실행)",
       _os.path.exists(_os.path.join(PROJ, "scripts", "normalize_type_scale.py")))
+
+
+section("78. UI 킷 — 테두리 말살 · 표면 대비 · 사이드바 위계 (애플 스펙)")
+
+import ui_kit as uk78
+
+_w78 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 테두리: 카드 인라인 border 는 최종 결론 카드 1개만.
+#    (CSS 블록 규칙 `!important` 은 위젯 스타일이라 대상 아님. 액센트는
+#     border-left 로만 쓴다 — 전체를 두르지 않는다.)
+_inline_borders = _re77.findall(
+    r"border:\s*([0-9.]+)px\s+(?:solid|dashed)\s+(?![^;\n]*!important)", _w78)
+check("카드 인라인 테두리 = 최종 결론 카드 1개뿐",
+      len(_inline_borders) == 1 and _inline_borders[0] == '3',
+      f"{len(_inline_borders)}개: {_inline_borders[:6]}")
+
+# ② 표면 3단계가 실제로 층으로 보이는가 (인접 명도비 1.10 이상)
+def _rel_lum78(hexs):
+    c = hexs.lstrip('#')
+    ch = [int(c[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    ch = [(x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4) for x in ch]
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+
+
+def _ratio78(a, b):
+    la, lb = _rel_lum78(a) + 0.05, _rel_lum78(b) + 0.05
+    return max(la, lb) / min(la, lb)
+
+
+for _thm in ('dark', 'light'):
+    _t = uk78.tokens(_thm)
+    check(f"{_thm} 표면 층 대비 (배경↔카드 ≥1.10)",
+          _ratio78(_t['bg'], _t['card']) >= 1.10,
+          f"{_ratio78(_t['bg'], _t['card']):.3f}")
+
+# ③ 사이드바 위계 파괴 규칙 제거 (전 요소 흰색·굵게 금지)
+check("사이드바 전역 색 강제 규칙 삭제",
+      '[data-testid="stSidebar"] * {\n        color: #ffffff' not in _w78)
+check("사이드바 3단 위계 복원 (제목 tx1 / 본문 tx2)",
+      '#9DAABC !important' in _w78 and '#F3F6FA !important' in _w78)
+
+# ④ 킷을 통해 그린다 — 위젯 기본 스타일 방치 금지
+check("킷 전역 규칙 주입", '_uk.global_css(_theme)' in _w78)
+check("킷 컴포넌트 사용 (섹션·타일)",
+      _w78.count('_uk.section(') >= 2 and _w78.count('_uk.stat_tiles(') >= 2)
+check("한국 관례 색 — 상승 빨강·하락 파랑",
+      uk78.DARK['up'] == '#FF453A' and uk78.DARK['down'] == '#0A84FF')
+
+# ⑤ 팔레트 밖 색 제거
+check("팔레트 밖 보라(#bf5af2) 0건", '#bf5af2' not in _w78)
+check("애플 UI 스펙 문서 존재",
+      _os.path.exists(_os.path.join(PROJ, "docs", "APPLE_UI_SPEC.md")))
 
 
 print()
