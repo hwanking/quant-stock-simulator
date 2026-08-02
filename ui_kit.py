@@ -218,7 +218,10 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
                f"line-height:1.45; word-break:keep-all;'>"
                f"{_esc(it.get('sub'))}</p>" if it.get('sub') else '')
         cells.append(
-            f"<div style='flex:1 1 0; min-width:0; padding:4px 16px; {border}'>"
+            # 좁은 화면에서 값이 잘리지 않게 최소폭을 준다. 모자라면 카드가
+            # 가로로 스크롤된다 — 숫자를 …으로 지우는 것보다 낫다.
+            f"<div style='flex:1 1 0; min-width:124px; padding:4px 16px; "
+            f"{border}'>"
             # 라벨을 …으로 자르지 않는다. 좁으면 두 줄로 흐르게 둔다 —
             # 무슨 지표인지 모르게 만드는 것이 공간 절약보다 나쁘다.
             f"<p style='margin:0; font-size:13px; color:{t['tx2']}; "
@@ -233,7 +236,8 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
             f"{_esc(it['value'])}</p>{sub}</div>")
     st.markdown(
         f"<div style='background:{t['card']}; border-radius:18px; "
-        f"padding:20px 8px; display:flex; align-items:stretch;'>"
+        f"padding:20px 8px; display:flex; align-items:stretch; "
+        f"overflow-x:auto; scrollbar-width:none;'>"
         + ''.join(cells) + "</div>", unsafe_allow_html=True)
 
 

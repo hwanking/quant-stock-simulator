@@ -165,7 +165,9 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon="⚙️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    # 좁은 화면에서는 자동으로 접힌다 — 모바일에서 사이드바가 본문을 덮으면
+    # 결론을 볼 수가 없다
+    initial_sidebar_state="auto"
 )
 
 # Secrets 에 app_password 가 설정돼 있을 때만 인증을 요구한다 (없으면 그대로 공개)
@@ -4070,6 +4072,62 @@ _uk.card(
     f"지금 판단의 한계</p>"
     f"<ul style='margin:0; padding-left:18px; font-size:15px; line-height:1.7; "
     f"color:{_TOK['tx2']};'>{_lim_html}</ul>", theme=_theme)
+
+# ── 엔진들은 서로 뭐라고 하나 (라운드 10) ──────────────────────────────
+# 사용자 요구: "최종 결론에는 각 엔진의 판단을 보여주세요."
+# 단, 이 엔진들은 **채택되지 않았다** — 6개 전부 블라인드에서 현행보다
+# 나빴다. 그래서 판단에 반영하지 않고, '다른 원리는 뭐라고 하는지' 참고로만
+# 보여 준다. 신뢰도 칸에는 그 엔진의 실제 블라인드 성적을 적는다.
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           '.portfolio', 'engine_bakeoff.json'),
+              encoding='utf-8') as _ef:
+        _bake = json.load(_ef)
+except Exception:
+    _bake = None
+if _bake and _bake.get('engines'):
+    _uk.spacer(20)
+
+    def _eng_says(key):
+        """이 종목에 대해 그 엔진이라면 뭐라고 할지 — 원장과 같은 규칙으로."""
+        _m10 = bool(four_scores.get('m10_above'))
+        _rsi = four_scores.get('rsi_value')
+        _bbp = four_scores.get('bb_position_pct')
+        _rp = four_scores.get('range_position_pct') or price_pos.get('pct')
+        _v = four_scores.get('vol_20')
+        _sc = int(four_scores.get('final_action_score') or 0)
+        if key == 'base':
+            return _sc >= 58
+        if key == 'tsmom':
+            return _m10 and _sc >= 50
+        if key == 'meanrev':
+            return ((_rsi is not None and _rsi < 40)
+                    or (_bbp is not None and _bbp < 25)) and _sc >= 45
+        if key == 'volbreak':
+            return (_v is not None and _v < 0.020) and (
+                _rp is not None and _rp >= 70) and _sc >= 50
+        return None
+
+    _ENG_KO = {'base': '현행 종합점수', 'tsmom': '추세 지속',
+               'meanrev': '눌림 되돌림', 'volbreak': '변동성 돌파'}
+    _rows_e = []
+    for _k, _ko in _ENG_KO.items():
+        _e = (_bake['engines'].get(_k) or {})
+        _bl = (_e.get('blind') or {})
+        _say = _eng_says(_k)
+        _lab = ('산다' if _say is True else '관망' if _say is False else '판단 보류')
+        _hit = (f"{_bl['hit']:.0f}%" if _bl.get('hit') is not None else '—')
+        _rows_e.append((f"{_ko}", f"{_lab} · 실전 적중 {_hit}",
+                        'pos' if _say is True else ''))
+    _uk.rows(_rows_e, theme=_theme,
+             title='다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)')
+    _uk.note(
+        "이 엔진들은 채택되지 않았습니다. 6개 후보를 같은 데이터로 겨뤄 봤고 "
+        "전부 실전(안 본 기간)에서 현행보다 나빴습니다 — 특히 눌림 되돌림은 "
+        "연습에서 가장 좋았는데(67%) 실전에서 가장 나빴습니다(31%). "
+        "연습에서 좋을수록 실전에서 더 무너진다는 뜻이라, 여기 보이는 판단이 "
+        "엇갈린다고 해서 현행 결론을 뒤집지 마세요. 상세: 모델 성적 화면.",
+        theme=_theme)
 
 # ── 얼마나 먹을 것인가 — 무릎·어깨·머리 (라운드 9 실측) ────────────────
 # 사용자 요구: "확률로 몇 프로 정도 먹을건지 정해야 한다. 머리도 발도 아니고

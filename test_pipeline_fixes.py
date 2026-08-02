@@ -3932,6 +3932,72 @@ check("이전 버전 케이스를 덮어쓰지 않는다고 명시",
       '이전 버전 케이스는 덮어쓰지 않는다' in _d84)
 
 
+section("85. 라운드 10 — 후보 엔진 대결 · 과최적화 증거 · 설계 문서")
+_bk85 = _os.path.join(PROJ, '.portfolio', 'engine_bakeoff.json')
+check("엔진 대결 산출물 존재", _os.path.exists(_bk85))
+if _os.path.exists(_bk85):
+    with open(_bk85, encoding='utf-8') as _f:
+        _b85 = _j84.load(_f)
+    check("후보 엔진 7종(기준선 포함)이 모두 평가됐다",
+          len(_b85['engines']) >= 7)
+    check("채택된 엔진이 없다 (사전등록 기준 미달)", _b85['adopted'] == [])
+    check("기준선이 블라인드에서 가장 높다 — 덜 무너진다",
+          all(_b85['engines']['base']['blind']['hit'] >= _e['blind']['hit']
+              for _k, _e in _b85['engines'].items()
+              if _e.get('blind', {}).get('hit') is not None))
+    check("과최적화 증거 — 평균회귀가 검증 1위, 블라인드 꼴찌",
+          _b85['engines']['meanrev']['valid']['hit']
+          > _b85['engines']['base']['valid']['hit']
+          and _b85['engines']['meanrev']['blind']['hit']
+          < _b85['engines']['base']['blind']['hit'] - 20)
+    check("로지스틱이 배운 최대 가중치는 국면이다",
+          abs(_b85['logistic_weights']['상승장'])
+          > abs(_b85['logistic_weights']['점수']))
+    check("판정 기준이 산출물에 함께 저장됐다", 'criteria' in _b85)
+
+_mv85 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("라운드 9 어깨 구간 기록 (3~5%)", '**어깨 = 3~5%.**' in _mv85)
+check("라운드 9c 손절 0.45σ 진단 기록", '0.45σ' in _mv85)
+check("손절 기각 사유 — 급락장에서 안 끊어준다", '급락장에서 안 끊어주기' in _mv85)
+check("9b 의 잘못된 채택을 정정했음을 기록", '기준선을 **고정 3%** 로 잘못 잡은' in _mv85)
+check("라운드 10 — 6개 전부 기각 기록", '**6개 전부 탈락.**' in _mv85)
+check("과최적화 결론 기록",
+      '학습·검증에서 좋을수록 블라인드에서 더 크게 무너진다' in _mv85)
+check("현행이 '덜 무너진다' 는 표현으로 정확히 기록", '덜 무너진다' in _mv85)
+check("알고리즘 교체로 풀 문제가 아니라고 명시",
+      '알고리즘을 바꿔서 올릴 수 있는 상황이 아니다' in _mv85)
+
+_pd85 = _os.path.join(PROJ, "docs", "PRODUCT_DESIGN_ko.md")
+check("제품 설계 문서 존재", _os.path.exists(_pd85))
+_pdt85 = open(_pd85, encoding='utf-8').read()
+check("와이어프레임 — 홈·종목분석·모바일", '3.1 홈' in _pdt85
+      and '3.3 모바일' in _pdt85)
+check("디자인 토큰 14색 표", '| bg |' in _pdt85 and '| neg |' in _pdt85)
+check("브루탈리즘 방향 폐기 명시", '폐기**: 차가운 브루탈리즘' in _pdt85)
+check("사용성 검증 흐름 10단계", '10. 모바일 375px' in _pdt85)
+
+_ec85 = _os.path.join(PROJ, "docs", "ENGINE_CANDIDATES_ko.md")
+check("후보 엔진 비교 문서 존재", _os.path.exists(_ec85))
+_ect85 = open(_ec85, encoding='utf-8').read()
+check("비교표에 학습·검증·블라인드가 모두 있다",
+      '학습 | 검증 | **블라인드**' in _ect85)
+check("안 넣은 후보와 그 이유를 밝힌다",
+      'XGBoost' in _ect85 and '정직하게 검정할 수 없어서' in _ect85)
+
+_w85 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 엔진 판단 비교가 '참고'로만 표시된다",
+      '다른 원리는 뭐라고 하나' in _w85 and '판단에는 반영하지 않습니다' in _w85)
+check("화면 — 엇갈려도 결론을 뒤집지 말라고 적었다",
+      '현행 결론을 뒤집지 마세요' in _w85)
+
+from improvement import issue_ops as _io85
+check("과최적화 이슈가 계획에 등록됐다", 'model|overfit_gap' in _io85.PLAYBOOK)
+check("손절 폭 이슈가 계획에 등록됐다", 'model|stop_width' in _io85.PLAYBOOK)
+check("과최적화 이슈에 실측 근거가 들어 있다",
+      '67.0%' in _io85.PLAYBOOK['model|overfit_gap']['cause'])
+
+
 print()
 print("=" * 72)
 if FAILURES:

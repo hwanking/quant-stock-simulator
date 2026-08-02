@@ -4,9 +4,35 @@
   "scoring": "v2026.08.03.0",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1",
-  "model": "v2026.08.04.3"
+  "model": "v2026.08.04.5"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.5",
+   "previous": "v2026.08.04.4",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "모바일 타일 최소폭·사이드바 자동 접힘",
+   "note": "",
+   "created_at": "2026-08-02T09:47:22+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.4",
+   "previous": "v2026.08.04.3",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "후보 엔진 판단 비교 패널 추가 — 참고 표시, 판단 미반영",
+   "note": "",
+   "created_at": "2026-08-02T09:47:22+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
