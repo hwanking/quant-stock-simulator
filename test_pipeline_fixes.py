@@ -4270,6 +4270,40 @@ check("이슈에 실측 수치가 들어 있다",
       '0.72:1' in _io90.PLAYBOOK['model|negative_edge']['cause'])
 
 
+section("91. 토큰 키 정적 검사 · 검색 경로 렌더")
+# 이 검사를 만든 이유: _TOK['line'] 오타가 '검색어를 입력했을 때만' 실행되는
+# 경로에 있어서 회귀 1,217건이 전부 통과하는데도 화면이 죽었다.
+# 실행해 봐야만 알 수 있는 버그는 정적 검사로 잡는다.
+import re as _re91
+_VALID91 = {'bg1', 'bg2', 'surface', 'hover', 'border', 'tx1', 'tx2', 'tx3',
+            'brand', 'up', 'down', 'pos', 'warn', 'neg'}
+_w91 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_bad91 = sorted({m.group(1) for m in _re91.finditer(r"_TOK\['(\w+)'\]", _w91)}
+                - _VALID91)
+check("_TOK 키가 전부 유효하다 (오타 없음)", not _bad91, str(_bad91))
+
+# ui_kit 팔레트 키도 같은 방식으로 잠근다
+_UK91 = {'bg', 'card', 'raised', 'line', 'tx1', 'tx2', 'tx3', 'brand',
+         'up', 'down', 'pos', 'warn', 'neg'}
+# ⚠️ ui_kit 에는 t(팔레트) 말고 it/step(항목 dict)도 있다. 팔레트만 봐야
+#    하므로 `t['...']` 중 앞이 식별자가 아닌 것만 센다 (it['key'] 제외).
+_u91 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+_badu91 = sorted({m.group(1)
+                  for m in _re91.finditer(r"(?<![A-Za-z_])t\['(\w+)'\]", _u91)}
+                 - _UK91)
+check("ui_kit 팔레트 키가 전부 유효하다", not _badu91, str(_badu91))
+check("두 이름 공간이 다르다는 것을 코드가 밝힌다 (line ↔ border)",
+      "border=_p['line']" in _w91)
+
+# 검색어가 있는 상태로도 렌더해 본다 — 스피너 경로가 실행된다
+from streamlit.testing.v1 import AppTest as _AT91
+_at91 = _AT91.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
+_at91.session_state['search_text_input'] = '하이닉스'
+_at91.run()
+check("검색어를 입력한 상태에서 렌더 예외 없음", len(_at91.exception) == 0,
+      str(_at91.exception[:1])[:200])
+
+
 print()
 print("=" * 72)
 if FAILURES:

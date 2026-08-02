@@ -1592,7 +1592,7 @@ if search_text_input.strip():
         f"<span style='width:12px; height:12px; border-radius:50%; "
         f"display:inline-block; animation:gspin .7s linear infinite; "
         f"background:conic-gradient({_TOK['brand']} 0 90deg, "
-        f"{_TOK['line']} 90deg 360deg); "
+        f"{_TOK['border']} 90deg 360deg); "
         f"mask:radial-gradient(circle, transparent 3px, #000 3.5px); "
         f"-webkit-mask:radial-gradient(circle, transparent 3px, #000 3.5px);'>"
         f"</span>"

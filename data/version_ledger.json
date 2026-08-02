@@ -1,12 +1,25 @@
 {
  "axes": {
-  "model": "v2026.08.03.3",
+  "model": "v2026.08.03.4",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.03.4",
+   "previous": "v2026.08.03.3",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "검색 중 스피너의 _TOK['line'] 오타로 검색 시 화면이 죽던 문제",
+   "note": "",
+   "created_at": "2026-08-02T16:42:43+00:00",
+   "effective_from": "2026-08-03"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
