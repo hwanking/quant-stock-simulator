@@ -4055,6 +4055,52 @@ check("상태바는 가장 조용한 줄이어야 한다고 명시",
       '가장 조용한 줄이어야 한다' in _u86)
 
 
+section("87. 좌측 아코디언 — 자동 접힘 · 값 유지 · 과거 장세 축적")
+_u87 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+check("아코디언은 줄 단위로 그린다 (제목 바로 밑에 내용)",
+      'def acc_css(' in _u87 and 'def acc_row(' in _u87)
+check("expander 로는 자동 접힘을 만들 수 없다는 이유가 적혀 있다",
+      '서로 독립이라' in _u87 or '자동 접힘이 성립' in _u87)
+check("열린 것을 다시 누르면 닫힌다 (전부 닫힘 허용)",
+      "st.session_state[state_key] = ('' if on else step['key'])" in _u87)
+check("완료 여부를 제목 줄에 표시 (참/거짓/표시안함 3상태)",
+      "step.get('done') is True" in _u87 and "step.get('done') is False" in _u87)
+check("처리 중인 단계를 강조한다", "busy" in _u87 and "step['key'] == busy" in _u87)
+check("활성 단계 셀렉터 특이도를 일반 규칙과 맞춘다",
+      'div.st-key-_acc_' in _u87)
+
+_w87 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("좌측 설정이 4단계로 묶였다",
+      "'key': 'pick'" in _w87 and "'key': 'hold'" in _w87
+      and "'key': 'find'" in _w87 and "'key': 'crit'" in _w87)
+check("단계 제목이 사용자 말 (분석할 종목·내 보유종목·종목 찾기·분석 기준)",
+      "'title': '분석할 종목'" in _w87 and "'title': '분석 기준'" in _w87)
+check("완료 여부를 실제 상태에서 판정한다 (지어내지 않는다)",
+      "st.session_state.get('positions')" in _w87
+      and "st.session_state.get('scan_results')" in _w87)
+check("접힌 단계의 값이 사라지지 않게 별도 키에 보관한다",
+      '_KEEP' in _w87 and 'def _keep(' in _w87 and 'def _kept(' in _w87)
+check("접혔을 때 본문이 쓰는 이름을 한 곳에서 모두 채운다",
+      '접힌 단계의 값 확정' in _w87 and "for _nm, _dv in (" in _w87)
+check("빠뜨리면 화면이 죽는다는 경고를 남겼다",
+      '그 단계를 접는 순간 화면이 죽는다' in _w87)
+
+# 과거 장세가 실제로 학습에 들어왔는지 — 이번 확장의 목적
+_bk87 = _os.path.join(PROJ, '.portfolio', 'engine_bakeoff.json')
+if _os.path.exists(_bk87):
+    with open(_bk87, encoding='utf-8') as _f:
+        _b87 = _j84.load(_f)
+    _yrs = _b87.get('years') or {}
+    for _y in ('2018', '2020', '2022'):
+        check(f"과거 장세 포함 — {_y}년 사례 500건+",
+              int(_yrs.get(_y, 0)) >= 500)
+    check("학습 표본이 1만 건을 넘는다",
+          _b87['baseline']['train']['n'] > 0
+          and sum(int(v) for v in _yrs.values()) >= 15000)
+    check("과거 장세를 넣고도 교체 후보가 없었음을 기록",
+          _b87.get('adopted') is None)
+
+
 print()
 print("=" * 72)
 if FAILURES:

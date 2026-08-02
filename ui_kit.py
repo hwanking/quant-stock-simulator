@@ -169,6 +169,69 @@ def nav_groups(groups: Sequence[dict], active: str = '',
     return ''.join(out)
 
 
+def acc_css(steps, active='', busy='', theme='dark'):
+    """
+    아코디언 줄 모양 — 한 번만 주입한다. 버튼을 제목 줄처럼 보이게 한다.
+
+    왜 st.expander 를 안 쓰나: expander 는 **서로 독립**이라 '하나를 열면
+    나머지가 닫히는' 동작을 만들 수 없다. 열림 상태를 밖에서 통제할 수도
+    없어서 자동 접힘이 성립하지 않는다. 그래서 제목 줄을 버튼으로 그리고
+    열린 단계를 session_state 하나로 관리한다.
+    """
+    t = tokens(theme)
+    sb = 'section[data-testid="stSidebar"]'
+    css = [
+        sb + ' div[class*="st-key-_acc_"] button,',
+        sb + ' div[class*="st-key-_acc_"] [data-testid^="stBaseButton"] {',
+        '  background: transparent !important; border: none !important;',
+        '  box-shadow: none !important; text-align: left !important;',
+        '  justify-content: flex-start !important;',
+        '  padding: 9px 11px !important; border-radius: 9px !important;',
+        '  min-height: 0 !important; width: 100% !important; }',
+        sb + ' div[class*="st-key-_acc_"] button p {',
+        '  font-size: 13px !important; font-weight: 500 !important;',
+        '  margin: 0 !important; text-align: left !important;',
+        '  width: 100% !important; letter-spacing: 0 !important;',
+        '  color: ' + t['tx2'] + ' !important; }',
+        sb + ' div[class*="st-key-_acc_"] button:hover {',
+        '  background: ' + t['raised'] + ' !important; }',
+    ]
+    for s in steps:
+        # 일반 규칙(div[class*=...] button p)과 특이도를 맞춘다 —
+        # 낮으면 활성 색이 눌려서 어느 단계가 열렸는지 안 보인다
+        sel = sb + ' div.st-key-_acc_' + s['key']
+        if s['key'] == active:
+            css.append(sel + ' button { background: ' + t['raised']
+                       + ' !important; }')
+            css.append(sel + ' button p { color: ' + t['brand']
+                       + ' !important; font-weight: 600 !important; }')
+        elif s['key'] == busy:
+            css.append(sel + ' button p { color: ' + t['brand']
+                       + ' !important; }')
+    st.sidebar.markdown('<style>' + '\n'.join(css) + '</style>',
+                        unsafe_allow_html=True)
+
+
+def acc_row(step, active='', busy='', state_key='sb_step'):
+    """
+    아코디언 제목 줄 하나. 눌리면 그 단계를 열고 나머지는 자동으로 닫는다.
+    이미 열린 것을 다시 누르면 닫는다 (전부 닫힌 상태도 허용).
+    반환: 이 줄이 지금 열려 있는가
+    """
+    on = (step['key'] == active)
+    mark = ('   ✓' if step.get('done') is True
+            else '   ○' if step.get('done') is False else '')
+    run = '   ●' if step['key'] == busy else ''
+    arrow = '   ▾' if on else '   ▸'
+    label = str(step['no']) + '   ' + str(step['title']) + run + mark + arrow
+    if st.sidebar.button(label, key='_acc_' + step['key'],
+                         use_container_width=True,
+                         help=step.get('hint') or None):
+        st.session_state[state_key] = ('' if on else step['key'])
+        st.rerun()
+    return on
+
+
 def plan_card(plan: str, usage_pct: int, engine: str, version: str,
               theme: str = 'dark') -> str:
     """사이드바 하단 상태 카드 — 참조 화면의 플랜 카드 자리."""

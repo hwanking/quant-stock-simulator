@@ -1518,295 +1518,363 @@ if _theme_is_light != (_theme == 'light'):
 
 default_stock_no1 = engine_init.fetch_realtime_market_cap_no1_stock()
 
-_uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme, top=18)
+# ── 좌측 설정 아코디언 (1~4단계) ─────────────────────────────────────────
+# 평소엔 제목만 보이고, 누른 단계만 펼쳐진다. 다른 단계는 자동으로 접힌다.
+# ⚠️ 접힌 단계의 위젯은 렌더되지 않아 Streamlit 이 상태를 비운다.
+#    그래서 값을 _KEEP 에 복사해 두고, 접혔을 때는 그 값을 쓴다 —
+#    "접었다 펼쳐도 설정이 유지된다"를 보장하는 유일한 방법이다.
+_KEEP = st.session_state.setdefault('_sb_keep', {})
 
-if 'search_text_input' not in st.session_state:
-    st.session_state['search_text_input'] = ''
 
-if 'pending_search' in st.session_state and st.session_state['pending_search']:
-    st.session_state['search_text_input'] = st.session_state['pending_search']
-    st.session_state['pending_search'] = ""
+def _keep(name, value):
+    _KEEP[name] = value
+    return value
 
-search_text_input = st.sidebar.text_input(
-    '종목명 일부 또는 티커 입력',
-    key='search_text_input',
-    placeholder='예: 하이닉스, 타이어, 건설, 페이, 포스코, 073240...',
-    help='단어 일부(예: 하이닉스, 타이어, 페이)를 입력하시면 연동 후보 리스트가 하단에 즉시 생성되어 선택할 수 있습니다.'
-)
 
-matched_stocks = []
-if search_text_input.strip():
-    kw = search_text_input.strip().lower()
-    for name, ticker in STOCK_NAME_MAP.items():
-        if '(' in name: continue
-        if kw in name.lower() or kw in ticker.lower():
-            code_num = ticker.split('.')[0]
-            label = f"{name} ({code_num})"
-            if label not in matched_stocks:
-                matched_stocks.append(label)
+def _kept(name, default):
+    return _KEEP.get(name, default)
+
+
+_sb_busy = st.session_state.get('_sb_busy', '')
+_SB_STEPS = [
+    {'key': 'pick', 'no': '1', 'title': '분석할 종목',
+     'done': bool(st.session_state.get('search_text_input')
+                  or st.session_state.get('selected_ticker')),
+     'hint': '종목명 일부나 티커로 찾습니다'},
+    {'key': 'hold', 'no': '2', 'title': '내 보유종목',
+     'done': bool(st.session_state.get('positions')),
+     'hint': '보유 중이면 판단이 달라집니다'},
+    {'key': 'find', 'no': '3', 'title': '종목 찾기',
+     'done': bool(st.session_state.get('scan_results')),
+     'hint': '조건에 맞는 후보를 발굴합니다'},
+    {'key': 'crit', 'no': '4', 'title': '분석 기준',
+     'done': None,
+     'hint': '기준일과 유사도 임계값'},
+]
+_sb_open = st.session_state.setdefault('sb_step', 'pick')
+_uk.acc_css(_SB_STEPS, _sb_open, _sb_busy, _theme)
+
+if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
+
+    _uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme, top=18)
+
+    if 'search_text_input' not in st.session_state:
+        st.session_state['search_text_input'] = ''
+
+    if 'pending_search' in st.session_state and st.session_state['pending_search']:
+        st.session_state['search_text_input'] = st.session_state['pending_search']
+        st.session_state['pending_search'] = ""
+
+    search_text_input = st.sidebar.text_input(
+        '종목명 일부 또는 티커 입력',
+        key='search_text_input',
+        placeholder='예: 하이닉스, 타이어, 건설, 페이, 포스코, 073240...',
+        help='단어 일부(예: 하이닉스, 타이어, 페이)를 입력하시면 연동 후보 리스트가 하단에 즉시 생성되어 선택할 수 있습니다.'
+    )
+
+    matched_stocks = []
+    if search_text_input.strip():
+        kw = search_text_input.strip().lower()
+        for name, ticker in STOCK_NAME_MAP.items():
+            if '(' in name: continue
+            if kw in name.lower() or kw in ticker.lower():
+                code_num = ticker.split('.')[0]
+                label = f"{name} ({code_num})"
+                if label not in matched_stocks:
+                    matched_stocks.append(label)
                 
-    naver_matches = engine_init.search_naver_stocks_realtime(search_text_input.strip())
-    for nm in naver_matches:
-        if nm not in matched_stocks:
-            matched_stocks.append(nm)
+        naver_matches = engine_init.search_naver_stocks_realtime(search_text_input.strip())
+        for nm in naver_matches:
+            if nm not in matched_stocks:
+                matched_stocks.append(nm)
 
-if matched_stocks:
-    st.sidebar.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
-    selected_from_matches = st.sidebar.selectbox("검색 종목 선택", matched_stocks)
-    final_query = selected_from_matches
-elif search_text_input.strip():
-    final_query = search_text_input.strip()
-else:
-    st.sidebar.caption("시가총액 상위에서 고르기")
-    # 종목 목록을 코드에 박아두지 않는다 — 시총 상위에서 매번 가져온다
-    if 'quick_top' not in st.session_state:
-        st.session_state['quick_top'] = engine_init.fetch_market_cap_top(10)
-    QUICK_PLACEHOLDER = "--- 시총 상위 종목 선택 ---"     # 안내문구 (검색어로 넘기지 않는다)
-    quick_select_options = [QUICK_PLACEHOLDER] + st.session_state['quick_top']
-    selected_quick_item = st.sidebar.selectbox("시총 상위 퀵 선택", quick_select_options)
-
-    if st.session_state.get('selected_ticker'):
-        final_query = st.session_state['selected_ticker']
-    elif selected_quick_item and selected_quick_item != QUICK_PLACEHOLDER:
-        final_query = selected_quick_item
+    if matched_stocks:
+        st.sidebar.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
+        selected_from_matches = st.sidebar.selectbox("검색 종목 선택", matched_stocks)
+        final_query = selected_from_matches
+    elif search_text_input.strip():
+        final_query = search_text_input.strip()
     else:
-        final_query = default_stock_no1
+        st.sidebar.caption("시가총액 상위에서 고르기")
+        # 종목 목록을 코드에 박아두지 않는다 — 시총 상위에서 매번 가져온다
+        if 'quick_top' not in st.session_state:
+            st.session_state['quick_top'] = engine_init.fetch_market_cap_top(10)
+        QUICK_PLACEHOLDER = "--- 시총 상위 종목 선택 ---"     # 안내문구 (검색어로 넘기지 않는다)
+        quick_select_options = [QUICK_PLACEHOLDER] + st.session_state['quick_top']
+        selected_quick_item = st.sidebar.selectbox("시총 상위 퀵 선택", quick_select_options)
 
-target_ticker, resolved_name = engine_init.resolve_symbol(final_query)
+        if st.session_state.get('selected_ticker'):
+            final_query = st.session_state['selected_ticker']
+        elif selected_quick_item and selected_quick_item != QUICK_PLACEHOLDER:
+            final_query = selected_quick_item
+        else:
+            final_query = default_stock_no1
 
-# 종목 해석 실패는 앱 전체를 중단시키지 않는다 — 명확히 알리고 멈춘다
-if not target_ticker:
-    st.error(f"**종목을 해석하지 못했습니다**: `{final_query}`\n\n"
-             f"종목명 또는 6자리 종목코드를 입력해 주세요. "
-             f"네이버증권 검색이 일시적으로 실패했을 수도 있습니다.")
-    st.stop()
-# 🚨 [무결성 보장] 네이버 증권 실시간 웹 파서 강제 동적 수신
-engine_init.fetch_and_update_naver_realtime(target_ticker)
+    target_ticker, resolved_name = engine_init.resolve_symbol(final_query)
 
-asset_meta = engine_init.get_asset_currency_and_unit(target_ticker)
-unit_currency = asset_meta["currency"]
-unit_str = asset_meta["unit_str"]
+    # 종목 해석 실패는 앱 전체를 중단시키지 않는다 — 명확히 알리고 멈춘다
+    if not target_ticker:
+        st.error(f"**종목을 해석하지 못했습니다**: `{final_query}`\n\n"
+                 f"종목명 또는 6자리 종목코드를 입력해 주세요. "
+                 f"네이버증권 검색이 일시적으로 실패했을 수도 있습니다.")
+        st.stop()
+    # 🚨 [무결성 보장] 네이버 증권 실시간 웹 파서 강제 동적 수신
+    engine_init.fetch_and_update_naver_realtime(target_ticker)
 
-realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price_triple_check(target_ticker)
+    asset_meta = engine_init.get_asset_currency_and_unit(target_ticker)
+    unit_currency = asset_meta["currency"]
+    unit_str = asset_meta["unit_str"]
 
-_uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
-                 _theme, tone="brand")
-# 상단 툴바 오른쪽 끝에도 같은 사실을 둔다 — 스크롤 중에도 어느 종목을 보고
-# 있는지 잊지 않게 한다 (툴바는 sticky).
-_render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
-                f"{_uk._esc(target_ticker)}")
-_uk.sidebar_fact("현재가",
-                 (f"{realtime_price:,.0f} {unit_str}" if unit_currency == "KRW"
-                  else f"${realtime_price:,.2f}"), _theme)
-with st.sidebar.expander("자산·통화 확인"):
-    st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
-               f"가격 단위 {unit_str}")
+    realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price_triple_check(target_ticker)
+
+    _uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
+                     _theme, tone="brand")
+    # 상단 툴바 오른쪽 끝에도 같은 사실을 둔다 — 스크롤 중에도 어느 종목을 보고
+    # 있는지 잊지 않게 한다 (툴바는 sticky).
+    _render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
+                    f"{_uk._esc(target_ticker)}")
+    _uk.sidebar_fact("현재가",
+                     (f"{realtime_price:,.0f} {unit_str}" if unit_currency == "KRW"
+                      else f"${realtime_price:,.2f}"), _theme)
+    with st.sidebar.expander("자산·통화 확인"):
+        st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
+                   f"가격 단위 {unit_str}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 💼 내 보유종목 — 사이드바 상시 표시
-# 현재가만 가볍게 조회한다 (전체 파이프라인은 본문 화면에서만 실행)
-# ═══════════════════════════════════════════════════════════════════════════
-# 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
-# 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
-# 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
-ALLOW_LOCAL_STORE = not is_remote_exposed()
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 💼 내 보유종목 — 사이드바 상시 표시
+    # 현재가만 가볍게 조회한다 (전체 파이프라인은 본문 화면에서만 실행)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
+    # 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
+    # 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
+    ALLOW_LOCAL_STORE = not is_remote_exposed()
 
-if 'positions' not in st.session_state:
-    if ALLOW_LOCAL_STORE:
-        _loaded, _saved_at = portfolio.load_positions()
-        st.session_state['positions'] = _loaded
-        st.session_state['positions_saved_at'] = _saved_at
+    if 'positions' not in st.session_state:
+        if ALLOW_LOCAL_STORE:
+            _loaded, _saved_at = portfolio.load_positions()
+            st.session_state['positions'] = _loaded
+            st.session_state['positions_saved_at'] = _saved_at
+        else:
+            st.session_state['positions'] = []          # 방문자별로 비어서 시작
+            st.session_state['positions_saved_at'] = None
+
+    if 'watchlist' not in st.session_state:
+        if ALLOW_LOCAL_STORE:
+            _wl, _ = portfolio.load_watchlist()
+            st.session_state['watchlist'] = _wl
+        else:
+            st.session_state['watchlist'] = []
+
+    QUOTE_TTL_SEC = 60
+
+
+    def light_quote(ticker):
+        """사이드바용 경량 현재가 조회 (60초 캐시). 실패 시 None."""
+        cache = st.session_state.setdefault('quote_cache', {})
+        now = datetime.datetime.now().timestamp()
+        hit = cache.get(ticker)
+        if hit and (now - hit[1]) < QUOTE_TTL_SEC:
+            return hit[0]
+        try:
+            px, _st, _mx = engine_init.get_realtime_stock_price_triple_check(ticker)
+            px = float(px) if px else None
+        except Exception:
+            px = None
+        cache[ticker] = (px, now)
+        return px
+
+
+    _positions = st.session_state.get('positions') or []
+
+if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
+
+    _uk.sidebar_section(f"내 보유종목 · {len(_positions)}", theme=_theme)
+
+    if not _positions:
+        st.sidebar.caption("등록된 보유종목이 없습니다. 증권사 앱 보유종목 화면을 "
+                           "`Win`+`Shift`+`S` 로 캡처해 두고 아래 버튼을 누르면, "
+                           "본문에서 클립보드 이미지를 그대로 읽어 등록할 수 있습니다.")
+        if st.sidebar.button("스크린샷으로 등록하기", use_container_width=True,
+                             key="btn_open_pf_from_empty"):
+            st.session_state['show_portfolio'] = True
+            st.rerun()
     else:
-        st.session_state['positions'] = []          # 방문자별로 비어서 시작
-        st.session_state['positions_saved_at'] = None
+        _merged = portfolio.merge_duplicate_positions(_positions)
+        _tot_cost = _tot_val = 0.0
+        _rows = []
+        for _m in _merged:
+            _px = light_quote(_m['ticker'])
+            _cost = _m['quantity'] * _m['average_buy_price']
+            _val = _m['quantity'] * _px if _px else None
+            _ret = ((_px / _m['average_buy_price'] - 1) * 100) if _px else None
+            _tot_cost += _cost
+            if _val:
+                _tot_val += _val
+            _rows.append((_m, _px, _ret))
 
-if 'watchlist' not in st.session_state:
-    if ALLOW_LOCAL_STORE:
-        _wl, _ = portfolio.load_watchlist()
-        st.session_state['watchlist'] = _wl
-    else:
-        st.session_state['watchlist'] = []
+        # 수익률 내림차순
+        _rows.sort(key=lambda r: (r[2] if r[2] is not None else -1e9), reverse=True)
 
-QUOTE_TTL_SEC = 60
-
-
-def light_quote(ticker):
-    """사이드바용 경량 현재가 조회 (60초 캐시). 실패 시 None."""
-    cache = st.session_state.setdefault('quote_cache', {})
-    now = datetime.datetime.now().timestamp()
-    hit = cache.get(ticker)
-    if hit and (now - hit[1]) < QUOTE_TTL_SEC:
-        return hit[0]
-    try:
-        px, _st, _mx = engine_init.get_realtime_stock_price_triple_check(ticker)
-        px = float(px) if px else None
-    except Exception:
-        px = None
-    cache[ticker] = (px, now)
-    return px
-
-
-_positions = st.session_state.get('positions') or []
-_uk.sidebar_section(f"내 보유종목 · {len(_positions)}", theme=_theme)
-
-if not _positions:
-    st.sidebar.caption("등록된 보유종목이 없습니다. 증권사 앱 보유종목 화면을 "
-                       "`Win`+`Shift`+`S` 로 캡처해 두고 아래 버튼을 누르면, "
-                       "본문에서 클립보드 이미지를 그대로 읽어 등록할 수 있습니다.")
-    if st.sidebar.button("스크린샷으로 등록하기", use_container_width=True,
-                         key="btn_open_pf_from_empty"):
-        st.session_state['show_portfolio'] = True
-        st.rerun()
-else:
-    _merged = portfolio.merge_duplicate_positions(_positions)
-    _tot_cost = _tot_val = 0.0
-    _rows = []
-    for _m in _merged:
-        _px = light_quote(_m['ticker'])
-        _cost = _m['quantity'] * _m['average_buy_price']
-        _val = _m['quantity'] * _px if _px else None
-        _ret = ((_px / _m['average_buy_price'] - 1) * 100) if _px else None
-        _tot_cost += _cost
-        if _val:
-            _tot_val += _val
-        _rows.append((_m, _px, _ret))
-
-    # 수익률 내림차순
-    _rows.sort(key=lambda r: (r[2] if r[2] is not None else -1e9), reverse=True)
-
-    _tot_ret = ((_tot_val / _tot_cost - 1) * 100) if (_tot_cost and _tot_val) else None
-    _pnl = _tot_val - _tot_cost if _tot_val else None
-    _col = "#35C98B" if (_pnl or 0) >= 0 else "#ff453a"
-    st.sidebar.markdown(
-        f"<div style='background:#161D2A;border-radius:10px;"
-        f"padding:8px 12px;margin-bottom:8px;'>"
-        f"<div style='font-size:12px;color:#9DAABC;'>총 평가손익</div>"
-        f"<div style='font-size:20px;font-weight:700;color:{_col};'>"
-        f"{fmt_num(_pnl, '+,.0f', '원')}</div>"
-        f"<div style='font-size:13px;color:#9DAABC;'>수익률 {fmt_pct(_tot_ret)} · "
-        f"평가 {fmt_num(_tot_val, ',.0f', '원')}</div></div>",
-        unsafe_allow_html=True)
-
-    # 사이드바 버튼 스타일은 여기서 주입하지 않는다.
-    # 예전에는 이 자리에서 모든 사이드바 버튼에 font-size:15px !important 를 걸었는데,
-    # 그 규칙이 제목(홈 버튼) 규칙보다 구체적이고 나중에 삽입돼서 제목 글자를
-    # 본문 소제목보다 작게 만들어버렸다. 스타일은 파일 상단 한 곳에서만 정의한다.
-
-    for _m, _px, _ret in _rows:
-        _c1, _c2 = st.sidebar.columns([1.35, 1])
-        _is_cur = (_m['ticker'] == target_ticker)
-        with _c1:
-            if st.button(("▶ " if _is_cur else "") + _m['stock_name'],
-                         key=f"pos_{_m['ticker']}", use_container_width=True,
-                         type="primary" if _is_cur else "secondary",
-                         help=f"{_m['quantity']:,.0f}주 · 평단 {_m['average_buy_price']:,.0f}원"):
-                st.session_state['pending_search'] = f"{_m['stock_name']} ({_m['ticker'].split('.')[0]})"
-                st.rerun()
-        with _c2:
-            _rc = "#35C98B" if (_ret or 0) >= 0 else "#ff453a"
-            st.markdown(
-                f"<div style='text-align:right;padding-top:8px;'>"
-                f"<span style='color:{_rc};font-weight:700;font-size:15px;'>{fmt_pct(_ret)}</span><br>"
-                f"<span style='color:#9DAABC;font-size:12px;'>{fmt_num(_px, ',.0f', '원', na='조회실패')}</span>"
-                f"</div>", unsafe_allow_html=True)
-
-    st.sidebar.caption("※ 평단가는 보유 판단에만 사용하며 예측·적정가·점수에는 반영되지 않습니다.")
-
-# 📌 선택 종목 1건만 빠르게 넣어보는 입력 (포트폴리오 등록 없이 임시 확인용)
-_uk.sidebar_section("이 종목만 임시로 계산", theme=_theme)
-
-_reg = next((p for p in (st.session_state.get('positions') or [])
-             if p.ticker == target_ticker), None)
-if _reg is not None:
-    st.sidebar.success(
-        f"✅ **{resolved_name}** — 보유종목에서 자동으로 채웠습니다 "
-        f"({_reg.quantity:,.0f}주 · 평단 {_reg.average_buy_price:,.0f}원). "
-        f"위 목록에서 다른 종목을 누르면 그 종목으로 바뀝니다.")
-else:
-    st.sidebar.caption(f"지금 보고 있는 **{resolved_name}** 한 종목만 임시로 확인합니다. "
-                       f"여러 종목을 계속 관리하려면 위 '내 보유종목'에 등록하세요.")
-user_entry_price = st.sidebar.number_input(
-    "평균 매수가 (원)", min_value=0,
-    value=int(_reg.average_buy_price) if _reg else 0, step=1000,
-    help="보유 중인 주당 평균 매수가 (0원 = 미보유)")
-user_quantity = st.sidebar.number_input(
-    "보유 수량 (주)", min_value=0,
-    value=int(_reg.quantity) if _reg else 0, step=10,
-    help="보유 중인 총 주식 수량 (0주 = 미보유)")
-if user_entry_price > 0 and user_quantity > 0 and _reg is None:
-    if st.sidebar.button("보유종목에 등록", use_container_width=True):
-        st.session_state['positions'] = (st.session_state.get('positions') or []) + [
-            portfolio.PortfolioPosition(
-                ticker=target_ticker, stock_name=resolved_name,
-                market="KOSDAQ" if target_ticker.endswith(".KQ") else "KOSPI",
-                quantity=float(user_quantity), average_buy_price=float(user_entry_price),
-                source_type="manual_entry")]
-        st.rerun()
-
-# (사이드바 실측 성적 패널은 사용자 요청으로 제거 — 전문 수치는 혼란만 준다.
-#  '틀릴 가능성 약 N% (과거 사례 n건)' 형태로 본문 쉬운 결론에만 녹여 표시하고,
-#  상세 수치는 .portfolio/calibration.json 과 docs/MODEL_VERSIONS.md 가 정본이다.
-#  판정 기록(record_prediction)·자기보정 상한은 백엔드에서 계속 동작한다.)
-
-
-# --- 분석 파라미터 (스캐너와 상세화면이 동일 값을 써야 하므로 먼저 정의한다) ---
-# ═══════════════════════════════════════════════════════════════════════════
-# 🔥 AI 퀀트 시장 트렌드 탐색기
-# 위젯만 여기서 그리고, 실제 스캔은 분석 파라미터(t_ref·rho)가 확정된 뒤에 돌린다.
-# ═══════════════════════════════════════════════════════════════════════════
-_uk.sidebar_section("종목 찾기", theme=_theme)
-st.sidebar.caption("코스피·코스닥 전체에서 거래대금·수급·추세가 변화하는 **관심종목**을 먼저 발굴하고, "
-                   "그중 **퀀트 최종 행동조건**을 통과한 종목만 추천합니다. "
-                   "관심도와 매수 판단은 별개입니다.")
-
-if 'show_screener' not in st.session_state:
-    st.session_state['show_screener'] = False
-
-_strat_labels = [lbl for _k, lbl in market_attention.STRATEGIES]
-_strat_by_label = {lbl: k for k, lbl in market_attention.STRATEGIES}
-_sel_strat_label = st.sidebar.selectbox(
-    "후보 발굴 방식", _strat_labels, index=0,
-    help="시총 상위는 대형주가 반복되므로 기본값은 '종합 이슈'입니다.")
-attention_strategy = _strat_by_label[_sel_strat_label]
-if attention_strategy in market_attention.STRATEGY_UNAVAILABLE:
-    st.sidebar.warning(market_attention.STRATEGY_UNAVAILABLE[attention_strategy])
-
-scan_depth = st.sidebar.selectbox(
-    f"정밀분석 후보 수 ({_sel_strat_label} 순)", [5, 10, 15, 20, 30], index=0,
-    help="관심점수 상위 N개에만 종목별 정밀 파이프라인을 돌립니다. "
-         "종목당 일봉·시세 조회가 필요해 N이 클수록 오래 걸립니다. "
-         "기본 5개는 빠르게 훑어보기용이며, 넓게 보려면 15~30개로 올리세요.")
-
-with st.sidebar.expander("관심 데이터 연동 현황"):
-    st.caption("수집하지 못한 항목은 값을 만들어내지 않고 가중치를 0으로 둔 뒤, "
-               "나머지 항목에 재정규화합니다.")
-    for _d in market_attention.data_status():
-        _mark = {'full': '🟢 연동', 'partial': '🟡 부분', 'none': '🔴 미연동'}[_d['availability']]
-        st.markdown(
-            f"**{_d['label']}** {_mark}  \n"
-            f"명세 {_d['spec_weight_pct']:.0f}% → 적용 **{_d['effective_weight_pct']:.1f}%**  \n"
-            f"<span style='color:#9DAABC;font-size:12px;'>{_d['detail']}</span>",
+        _tot_ret = ((_tot_val / _tot_cost - 1) * 100) if (_tot_cost and _tot_val) else None
+        _pnl = _tot_val - _tot_cost if _tot_val else None
+        _col = "#35C98B" if (_pnl or 0) >= 0 else "#ff453a"
+        st.sidebar.markdown(
+            f"<div style='background:#161D2A;border-radius:10px;"
+            f"padding:8px 12px;margin-bottom:8px;'>"
+            f"<div style='font-size:12px;color:#9DAABC;'>총 평가손익</div>"
+            f"<div style='font-size:20px;font-weight:700;color:{_col};'>"
+            f"{fmt_num(_pnl, '+,.0f', '원')}</div>"
+            f"<div style='font-size:13px;color:#9DAABC;'>수익률 {fmt_pct(_tot_ret)} · "
+            f"평가 {fmt_num(_tot_val, ',.0f', '원')}</div></div>",
             unsafe_allow_html=True)
 
-if st.sidebar.button("오늘의 관심종목 스캔 / 닫기", use_container_width=True):
-    st.session_state['show_screener'] = not st.session_state['show_screener']
-    st.session_state['pending_scan'] = st.session_state['show_screener']
+        # 사이드바 버튼 스타일은 여기서 주입하지 않는다.
+        # 예전에는 이 자리에서 모든 사이드바 버튼에 font-size:15px !important 를 걸었는데,
+        # 그 규칙이 제목(홈 버튼) 규칙보다 구체적이고 나중에 삽입돼서 제목 글자를
+        # 본문 소제목보다 작게 만들어버렸다. 스타일은 파일 상단 한 곳에서만 정의한다.
 
-_uk.sidebar_section("분석 기준", theme=_theme)
+        for _m, _px, _ret in _rows:
+            _c1, _c2 = st.sidebar.columns([1.35, 1])
+            _is_cur = (_m['ticker'] == target_ticker)
+            with _c1:
+                if st.button(("▶ " if _is_cur else "") + _m['stock_name'],
+                             key=f"pos_{_m['ticker']}", use_container_width=True,
+                             type="primary" if _is_cur else "secondary",
+                             help=f"{_m['quantity']:,.0f}주 · 평단 {_m['average_buy_price']:,.0f}원"):
+                    st.session_state['pending_search'] = f"{_m['stock_name']} ({_m['ticker'].split('.')[0]})"
+                    st.rerun()
+            with _c2:
+                _rc = "#35C98B" if (_ret or 0) >= 0 else "#ff453a"
+                st.markdown(
+                    f"<div style='text-align:right;padding-top:8px;'>"
+                    f"<span style='color:{_rc};font-weight:700;font-size:15px;'>{fmt_pct(_ret)}</span><br>"
+                    f"<span style='color:#9DAABC;font-size:12px;'>{fmt_num(_px, ',.0f', '원', na='조회실패')}</span>"
+                    f"</div>", unsafe_allow_html=True)
 
-# [명세 §3] 확정 분석 기준일 — 장중·장 시작 전·휴장일이면 직전 거래일로 되돌린다
-_mkt = bitemporal_engine.get_market_status()
-_resolved_date = bitemporal_engine.resolve_analysis_date(market_status=_mkt)
-st.sidebar.caption(
-    f"🕒 시장 상태: **{_mkt['state']}** 확정 분석 기준일 **{_resolved_date}**"
-    + ("" if _mkt['holiday_data_available'] else "  ⚠️ 해당 연도 공휴일 미등록 (주말만 판정)")
-)
-t_ref_date = st.sidebar.date_input("백테스트 기준일 (t_ref)", value=_resolved_date)
-if t_ref_date != _resolved_date:
-    st.sidebar.warning(f"기준일을 수동 변경했습니다 (권장: {_resolved_date}).")
-rho_cutoff = st.sidebar.slider("자기유사 상관계수 기준 (rho)", min_value=0.70, max_value=0.95, value=0.80, step=0.05)
+        st.sidebar.caption("※ 평단가는 보유 판단에만 사용하며 예측·적정가·점수에는 반영되지 않습니다.")
+
+    # 📌 선택 종목 1건만 빠르게 넣어보는 입력 (포트폴리오 등록 없이 임시 확인용)
+    _uk.sidebar_section("이 종목만 임시로 계산", theme=_theme)
+
+    _reg = next((p for p in (st.session_state.get('positions') or [])
+                 if p.ticker == target_ticker), None)
+    if _reg is not None:
+        st.sidebar.success(
+            f"✅ **{resolved_name}** — 보유종목에서 자동으로 채웠습니다 "
+            f"({_reg.quantity:,.0f}주 · 평단 {_reg.average_buy_price:,.0f}원). "
+            f"위 목록에서 다른 종목을 누르면 그 종목으로 바뀝니다.")
+    else:
+        st.sidebar.caption(f"지금 보고 있는 **{resolved_name}** 한 종목만 임시로 확인합니다. "
+                           f"여러 종목을 계속 관리하려면 위 '내 보유종목'에 등록하세요.")
+    user_entry_price = st.sidebar.number_input(
+        "평균 매수가 (원)", min_value=0,
+        value=int(_reg.average_buy_price) if _reg else 0, step=1000,
+        help="보유 중인 주당 평균 매수가 (0원 = 미보유)")
+    user_quantity = st.sidebar.number_input(
+        "보유 수량 (주)", min_value=0,
+        value=int(_reg.quantity) if _reg else 0, step=10,
+        help="보유 중인 총 주식 수량 (0주 = 미보유)")
+    if user_entry_price > 0 and user_quantity > 0 and _reg is None:
+        if st.sidebar.button("보유종목에 등록", use_container_width=True):
+            st.session_state['positions'] = (st.session_state.get('positions') or []) + [
+                portfolio.PortfolioPosition(
+                    ticker=target_ticker, stock_name=resolved_name,
+                    market="KOSDAQ" if target_ticker.endswith(".KQ") else "KOSPI",
+                    quantity=float(user_quantity), average_buy_price=float(user_entry_price),
+                    source_type="manual_entry")]
+            st.rerun()
+
+    # (사이드바 실측 성적 패널은 사용자 요청으로 제거 — 전문 수치는 혼란만 준다.
+    #  '틀릴 가능성 약 N% (과거 사례 n건)' 형태로 본문 쉬운 결론에만 녹여 표시하고,
+    #  상세 수치는 .portfolio/calibration.json 과 docs/MODEL_VERSIONS.md 가 정본이다.
+    #  판정 기록(record_prediction)·자기보정 상한은 백엔드에서 계속 동작한다.)
+
+
+    # --- 분석 파라미터 (스캐너와 상세화면이 동일 값을 써야 하므로 먼저 정의한다) ---
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 🔥 AI 퀀트 시장 트렌드 탐색기
+    # 위젯만 여기서 그리고, 실제 스캔은 분석 파라미터(t_ref·rho)가 확정된 뒤에 돌린다.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
+
+    _uk.sidebar_section("종목 찾기", theme=_theme)
+    st.sidebar.caption("코스피·코스닥 전체에서 거래대금·수급·추세가 변화하는 **관심종목**을 먼저 발굴하고, "
+                       "그중 **퀀트 최종 행동조건**을 통과한 종목만 추천합니다. "
+                       "관심도와 매수 판단은 별개입니다.")
+
+    if 'show_screener' not in st.session_state:
+        st.session_state['show_screener'] = False
+
+    _strat_labels = [lbl for _k, lbl in market_attention.STRATEGIES]
+    _strat_by_label = {lbl: k for k, lbl in market_attention.STRATEGIES}
+    _sel_strat_label = st.sidebar.selectbox(
+        "후보 발굴 방식", _strat_labels, index=0,
+        help="시총 상위는 대형주가 반복되므로 기본값은 '종합 이슈'입니다.")
+    attention_strategy = _strat_by_label[_sel_strat_label]
+    if attention_strategy in market_attention.STRATEGY_UNAVAILABLE:
+        st.sidebar.warning(market_attention.STRATEGY_UNAVAILABLE[attention_strategy])
+
+    scan_depth = st.sidebar.selectbox(
+        f"정밀분석 후보 수 ({_sel_strat_label} 순)", [5, 10, 15, 20, 30], index=0,
+        help="관심점수 상위 N개에만 종목별 정밀 파이프라인을 돌립니다. "
+             "종목당 일봉·시세 조회가 필요해 N이 클수록 오래 걸립니다. "
+             "기본 5개는 빠르게 훑어보기용이며, 넓게 보려면 15~30개로 올리세요.")
+
+    with st.sidebar.expander("관심 데이터 연동 현황"):
+        st.caption("수집하지 못한 항목은 값을 만들어내지 않고 가중치를 0으로 둔 뒤, "
+                   "나머지 항목에 재정규화합니다.")
+        for _d in market_attention.data_status():
+            _mark = {'full': '🟢 연동', 'partial': '🟡 부분', 'none': '🔴 미연동'}[_d['availability']]
+            st.markdown(
+                f"**{_d['label']}** {_mark}  \n"
+                f"명세 {_d['spec_weight_pct']:.0f}% → 적용 **{_d['effective_weight_pct']:.1f}%**  \n"
+                f"<span style='color:#9DAABC;font-size:12px;'>{_d['detail']}</span>",
+                unsafe_allow_html=True)
+
+    if st.sidebar.button("오늘의 관심종목 스캔 / 닫기", use_container_width=True):
+        st.session_state['show_screener'] = not st.session_state['show_screener']
+        st.session_state['pending_scan'] = st.session_state['show_screener']
+
+
+if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
+
+    _uk.sidebar_section("분석 기준", theme=_theme)
+
+    # [명세 §3] 확정 분석 기준일 — 장중·장 시작 전·휴장일이면 직전 거래일로 되돌린다
+    _mkt = bitemporal_engine.get_market_status()
+    _resolved_date = bitemporal_engine.resolve_analysis_date(market_status=_mkt)
+    st.sidebar.caption(
+        f"🕒 시장 상태: **{_mkt['state']}** 확정 분석 기준일 **{_resolved_date}**"
+        + ("" if _mkt['holiday_data_available'] else "  ⚠️ 해당 연도 공휴일 미등록 (주말만 판정)")
+    )
+    t_ref_date = _keep('t_ref', st.sidebar.date_input(
+        "백테스트 기준일 (t_ref)", value=_kept('t_ref', _resolved_date)))
+    if t_ref_date != _resolved_date:
+        st.sidebar.warning(f"기준일을 수동 변경했습니다 (권장: {_resolved_date}).")
+    rho_cutoff = _keep('rho', st.sidebar.slider(
+        "자기유사 상관계수 기준 (rho)", min_value=0.70, max_value=0.95,
+        value=_kept('rho', 0.80), step=0.05))
+
+# ── 접힌 단계의 값 확정 ──────────────────────────────────────────────────
+# 아코디언이 접히면 그 안의 위젯이 렌더되지 않는다. 본문이 쓰는 이름은
+# 전부 여기서 채운다 — 하나라도 빠뜨리면 그 단계를 접는 순간 화면이 죽는다.
+_g = globals()
+if '_mkt' not in _g:
+    _mkt = bitemporal_engine.get_market_status()
+if '_resolved_date' not in _g:
+    _resolved_date = bitemporal_engine.resolve_analysis_date(market_status=_mkt)
+for _nm, _dv in (
+        ('search_text_input', ''), ('matched_stocks', []),
+        ('selected_from_matches', None), ('selected_quick_item', None),
+        ('user_entry_price', 0.0), ('user_quantity', 0),
+        ('attention_strategy', 'composite'), ('scan_depth', 5),
+        ('t_ref_date', _resolved_date), ('rho_cutoff', 0.80)):
+    if _nm not in _g:
+        _g[_nm] = _KEEP.get(_nm, _dv)
 t_ref_str = t_ref_date.strftime("%Y-%m-%d")
+
 
 # --- 💼 보유종목 상세 화면 열기 ---
 show_portfolio = st.sidebar.toggle(

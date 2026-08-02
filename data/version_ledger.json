@@ -1,12 +1,38 @@
 {
  "axes": {
-  "model": "v2026.08.02.16",
+  "model": "v2026.08.02.18",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.18",
+   "previous": "v2026.08.02.17",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "과거 장세 확장 축적 (2015~, 19,883건) 후 엔진 재판정",
+   "note": "",
+   "created_at": "2026-08-02T12:58:57+00:00",
+   "effective_from": "2026-08-02"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.17",
+   "previous": "v2026.08.02.16",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "좌측 1~4단계 아코디언 — 자동 접힘·완료 표시·값 유지",
+   "note": "",
+   "created_at": "2026-08-02T12:58:57+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
