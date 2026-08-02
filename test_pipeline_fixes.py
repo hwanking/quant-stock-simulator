@@ -3062,8 +3062,8 @@ check("히스토리 — git 원천 명시·비어있지 않음",
 check("웹앱 히스토리 섹션", '업데이트 히스토리' in _w65)
 
 # ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
-check("케이스 축적 목표 표시 (3,000 → 5,000 → 10,000)",
-      '3,000건' in _w65 and '중단하지 않습니다' in _w65)
+check("케이스 축적 목표 표시 (단계 목표·중단 금지)",
+      '10,000건' in _w65 and '중단하지 않습니다' in _w65)
 check("운영 루틴 문서", _os.path.exists(
     _os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md")))
 _ops65 = open(_os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md"),
@@ -3204,7 +3204,7 @@ _w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("스캔 2계층 — 고신뢰(60+)·확장(58~59) 분리 표시",
       '고신뢰 매수권(60점+)' in _w69 and '확장 신호(58~59점)' in _w69)
 check("확장 신호 정직 표기 — 최신 실측·비용후 음수·탐색용",
-      '블라인드 58.2%(n=146)' in _w69 and '탐색용' in _w69)
+      '블라인드 55.3%(n=226)' in _w69 and '탐색용' in _w69)
 _mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("MODEL_VERSIONS 라운드 2 기록 — 채택 범위·KPI 불변",
@@ -3310,7 +3310,7 @@ check("추천 카드 갭% 표기", '_gap_pct' in _w73 and '권장보다' in _w73
 check("갭 큰 조건부 — 사실상 관망 경고 (표시 임계 7%)",
       '단기 도달 가능성이 낮습니다' in _w73)
 check("확장 신호 — 적정가 이하 구분·실측 병기",
-      '적정가 이하 진입' in _w73 and '61.9%(n=63)' in _w73)
+      '적정가 이하 진입' in _w73 and '58.9%(n=95)' in _w73)
 _pm73 = open(_os.path.join(PROJ, "premarket.py"), encoding='utf-8').read()
 check("premarket — entry_zone 저장 (다음 리포트부터)",
       "'entry_zone': fs.get('entry_zone')" in _pm73)
@@ -3318,6 +3318,112 @@ _mv73 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("MODEL_VERSIONS 라운드 2.5 — train 불일치 주의 기록",
       '라운드 2.5' in _mv73 and 'train 방향 불일치' in _mv73)
+
+
+section("74. 지속 개선 엔진 — 동결·중복 방지·동일봉 unresolved·승격 게이트")
+
+import tempfile as _tmp74
+from datetime import date as _date74
+
+from improvement import database as idb
+from improvement import case_tracker as ict
+from improvement import issue_tracker as iit
+from improvement.performance import resolve_long_case as _rlc
+from improvement.promotion import (PromotionMetrics as _PM,
+                                   evaluate_promotion as _ep)
+from improvement.schemas import Decision as _Dec
+
+_db74 = _os.path.join(_tmp74.gettempdir(), "improvement_test74.db")
+if _os.path.exists(_db74):
+    _os.remove(_db74)
+idb.initialize_database(_db74)
+_conn74 = idb.get_connection(_db74)
+
+# ① 케이스 동결 — case_id 결정성·중복 무시
+_case74 = ict.create_prediction_case(
+    ticker="005930.KS", asset_type="STOCK",
+    signal_date=_date74(2026, 8, 1), model_version="vT",
+    rulebook_version="vT", decision=_Dec.CONDITIONAL_BUY,
+    total_score=58, confidence_score=60, reference_price=100.0,
+    entry_price=95.0, target_price=110.0, stop_price=90.0,
+    holding_days=20, market_regime="테스트", strategy_type="조건부",
+    source_payload={'a': 1})
+check("case_id 결정적 해시", _case74.case_id == ict.make_case_id(
+    "005930.KS", _date74(2026, 8, 1), "vT", _Dec.CONDITIONAL_BUY))
+check("첫 저장 성공", ict.save_prediction_case(_conn74, _case74))
+check("같은 종목·날짜·모델·판단 중복 무시",
+      not ict.save_prediction_case(_conn74, _case74))
+try:
+    ict.create_prediction_case(
+        ticker="X", asset_type="STOCK", signal_date=_date74(2026, 8, 1),
+        model_version="v", rulebook_version="v", decision=_Dec.BUY,
+        total_score=1, confidence_score=1, reference_price=0,
+        entry_price=None, target_price=None, stop_price=None,
+        holding_days=20, market_regime="", strategy_type="",
+        source_payload={})
+    check("reference_price<=0 거부", False)
+except ValueError:
+    check("reference_price<=0 거부", True)
+
+# ② 결과 판정 — 같은 봉 목표+손절 동시 도달은 성공으로 세지 않는다
+import pandas as _pd74
+_bar = lambda h, l, c: {'high': h, 'low': l, 'close': c}
+_res_both = _rlc(price_data=_pd74.DataFrame([_bar(112, 88, 100)]),
+                 entry_price=95.0, target_price=110.0, stop_price=90.0)
+check("동일봉 목표·손절 → unresolved (임의 성공 금지)",
+      _res_both.status == 'unresolved')
+_res_stop = _rlc(price_data=_pd74.DataFrame([_bar(105, 88, 92)]),
+                 entry_price=95.0, target_price=110.0, stop_price=90.0)
+check("손절 선도달 → failure", _res_stop.status == 'failure'
+      and abs(_res_stop.realized_return - (90 / 95 - 1)) < 1e-9)
+_res_tgt = _rlc(price_data=_pd74.DataFrame([_bar(111, 94, 108)]),
+                entry_price=95.0, target_price=110.0, stop_price=90.0)
+check("목표 선도달 → success", _res_tgt.status == 'success')
+_res_none = _rlc(price_data=_pd74.DataFrame([_bar(100, 94, 96)] * 3),
+                 entry_price=95.0, target_price=110.0, stop_price=90.0)
+check("기간 내 미도달 → unresolved + 종가 수익률",
+      _res_none.status == 'unresolved'
+      and abs(_res_none.realized_return - (96 / 95 - 1)) < 1e-9)
+check("빈 데이터 → data_error (모델 실패와 분리)",
+      _rlc(price_data=_pd74.DataFrame(columns=['high', 'low', 'close']),
+           entry_price=95, target_price=110, stop_price=90
+           ).status == 'data_error')
+
+# ③ 승격 게이트 — 자동 교체 방지
+_cur74 = _PM(blind_count=500, blind_accuracy=0.55, expected_return=0.001,
+             profit_factor=1.0, max_drawdown=-0.05, signal_rate=0.03)
+check("표본 부족 후보 기각", not _ep(
+    current=_cur74, candidate=_PM(50, 0.99, 0.05, 3.0, -0.03, 0.05)).approved)
+check("신호율 과소 후보 기각", not _ep(
+    current=_cur74, candidate=_PM(300, 0.60, 0.01, 1.5, -0.04, 0.001)).approved)
+check("전 조건 통과 시에만 승인", _ep(
+    current=_cur74, candidate=_PM(300, 0.60, 0.01, 1.5, -0.04, 0.03)).approved)
+
+# ④ 이슈 dedup — 같은 키 재생성 금지, 해소 후 재생성 가능
+_i1 = iit.create_issue(_conn74, category='model', severity='high',
+                       title='T', summary='S', issue_key='k1')
+_i2 = iit.create_issue(_conn74, category='model', severity='high',
+                       title='T', summary='S', issue_key='k1')
+check("이슈 중복 생성 방지 (issue_key)", _i1 is not None and _i2 is None)
+iit.resolve_by_key(_conn74, 'k1')
+_i3 = iit.create_issue(_conn74, category='model', severity='high',
+                       title='T', summary='S', issue_key='k1')
+check("해소 후 재발 시 재생성 가능", _i3 is not None)
+_conn74.commit()
+_conn74.close()
+
+# ⑤ 실연결 — 일일 파이프라인이 실제 추천 이력을 동결했고 멱등이다
+_impdb = idb.get_connection()
+try:
+    _n_cases = _impdb.execute(
+        "SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+    _n_runs = _impdb.execute(
+        "SELECT COUNT(*) FROM pipeline_runs WHERE status='success'"
+    ).fetchone()[0]
+finally:
+    _impdb.close()
+check("실전 케이스 동결 저장 (개장 전 추천 → DB)", _n_cases >= 1)
+check("파이프라인 실행 로그 기록", _n_runs >= 2)
 
 
 print()

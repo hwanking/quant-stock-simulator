@@ -250,8 +250,14 @@ def ocr_backend():
         pass
     try:
         import pytesseract
+        import os as _os_ocr
         import shutil as _sh
-        if _sh.which("tesseract") or getattr(pytesseract.pytesseract, "tesseract_cmd", None):
+        # 바인딩 존재가 아니라 '실행 파일 존재'를 검사한다.
+        # tesseract_cmd 기본값은 'tesseract' 문자열이라 그것만 보면
+        # 엔진이 없어도 백엔드로 선택되는 버그가 있었다 (TesseractNotFound).
+        _cmd = getattr(pytesseract.pytesseract, "tesseract_cmd", "") or ""
+        if _sh.which("tesseract") or (_os_ocr.sep in _cmd
+                                      and _os_ocr.path.isfile(_cmd)):
             return "pytesseract"
     except Exception:
         pass

@@ -1,5 +1,5 @@
 {
- "generated_from": "4229건 가상 판정 · 판정 완료 4108건",
+ "generated_from": "6508건 가상 판정 · 판정 완료 6338건",
  "bands": [
   {
    "lo": 0,
@@ -13,47 +13,47 @@
   {
    "lo": 40,
    "hi": 49,
-   "n": 1565,
-   "hit": 855,
-   "hit_rate": 54.632587859424916,
-   "wilson_low": 52.15765079350759,
-   "avg_return": -0.6406680905629327
+   "n": 2444,
+   "hit": 1349,
+   "hit_rate": 55.196399345335514,
+   "wilson_low": 53.21818186396771,
+   "avg_return": -0.5613083427270973
   },
   {
    "lo": 50,
    "hi": 54,
-   "n": 467,
-   "hit": 267,
-   "hit_rate": 57.17344753747323,
-   "wilson_low": 52.64489757317898,
-   "avg_return": -0.28202594821461907
+   "n": 736,
+   "hit": 425,
+   "hit_rate": 57.74456521739131,
+   "wilson_low": 54.14466940398602,
+   "avg_return": -0.1815386009522916
   },
   {
    "lo": 55,
    "hi": 59,
-   "n": 1950,
-   "hit": 1175,
-   "hit_rate": 60.256410256410255,
-   "wilson_low": 58.066216408910776,
-   "avg_return": 0.01775461125613065
+   "n": 2976,
+   "hit": 1764,
+   "hit_rate": 59.2741935483871,
+   "wilson_low": 57.498080711662794,
+   "avg_return": -0.048878596694796876
   },
   {
    "lo": 60,
    "hi": 64,
-   "n": 93,
-   "hit": 49,
-   "hit_rate": 52.68817204301075,
-   "wilson_low": 42.63683964671289,
-   "avg_return": -0.5778380593754288
+   "n": 137,
+   "hit": 72,
+   "hit_rate": 52.55474452554745,
+   "wilson_low": 44.23782454608222,
+   "avg_return": -0.8047659581969216
   },
   {
    "lo": 65,
    "hi": 69,
-   "n": 29,
-   "hit": 20,
-   "hit_rate": 68.96551724137932,
-   "wilson_low": 50.76952952728146,
-   "avg_return": 1.5407786686741698
+   "n": 41,
+   "hit": 25,
+   "hit_rate": 60.97560975609756,
+   "wilson_low": 45.72658389869256,
+   "avg_return": 0.4334372987152297
   },
   {
    "lo": 70,
@@ -68,31 +68,31 @@
  "lifts": [
   {
    "label": "월봉 10선 위",
-   "yes_n": 2260,
-   "yes_rate": 60.442477876106196,
-   "no_n": 1848,
-   "no_rate": 54.27489177489178
+   "yes_n": 3462,
+   "yes_rate": 59.90756787983824,
+   "no_n": 2876,
+   "no_rate": 54.381084840055635
   },
   {
    "label": "DeMARK 매수 신호",
-   "yes_n": 232,
-   "yes_rate": 59.05172413793104,
-   "no_n": 3876,
-   "no_rate": 57.585139318885446
+   "yes_n": 360,
+   "yes_rate": 60.0,
+   "no_n": 5978,
+   "no_rate": 57.24322515891602
   },
   {
    "label": "순기대수익 양수",
-   "yes_n": 1677,
-   "yes_rate": 58.497316636851515,
-   "no_n": 2431,
-   "no_rate": 57.09584533113945
+   "yes_n": 2591,
+   "yes_rate": 58.201466615206485,
+   "no_n": 3747,
+   "no_rate": 56.84547638110489
   },
   {
    "label": "적정가 이하 진입",
-   "yes_n": 3091,
-   "yes_rate": 58.395341313490775,
-   "no_n": 1017,
-   "no_rate": 55.45722713864307
+   "yes_n": 4766,
+   "yes_rate": 58.20394460763744,
+   "no_n": 1572,
+   "no_rate": 54.961832061068705
   }
  ],
  "entry_candidates": {
@@ -104,33 +104,33 @@
    "avg_return": 0.7992117382932077
   },
   "holdout": {
-   "n": 1162,
-   "hit": 697,
-   "hit_rate": 59.98278829604131,
-   "wilson_low": 57.137327595981105,
-   "avg_return": -0.03811559987069284
+   "n": 1835,
+   "hit": 1095,
+   "hit_rate": 59.67302452316077,
+   "wilson_low": 57.410543657464885,
+   "avg_return": -0.07811168969516134
   },
   "all": {
-   "n": 1227,
-   "hit": 740,
-   "hit_rate": 60.30969845150774,
-   "wilson_low": 57.54400947784723,
-   "avg_return": 0.006241594082570002
+   "n": 1900,
+   "hit": 1138,
+   "hit_rate": 59.89473684210527,
+   "wilson_low": 57.673094430958336,
+   "avg_return": -0.04809799347450661
   }
  },
  "breakdowns": {
   "by_asset_type": [
    {
     "label": "STOCK",
-    "n": 3877,
-    "hit": 2234,
-    "hit_rate": 57.6,
+    "n": 6107,
+    "hit": 3503,
+    "hit_rate": 57.4,
     "wilson_low": 56.1,
-    "avg_return": -0.21,
+    "avg_return": -0.23,
     "median_return": 2.1,
-    "profit_factor": 0.92,
-    "avg_mae": -4.13,
-    "avg_return_after_cost": -0.76
+    "profit_factor": 0.91,
+    "avg_mae": -4.22,
+    "avg_return_after_cost": -0.78
    },
    {
     "label": "ETF",
@@ -172,169 +172,169 @@
   "by_market": [
    {
     "label": "KOSPI",
-    "n": 3227,
-    "hit": 1910,
-    "hit_rate": 59.2,
-    "wilson_low": 57.5,
-    "avg_return": -0.01,
+    "n": 4748,
+    "hit": 2793,
+    "hit_rate": 58.8,
+    "wilson_low": 57.4,
+    "avg_return": -0.03,
     "median_return": 2.1,
-    "profit_factor": 1.0,
-    "avg_mae": -3.73,
-    "avg_return_after_cost": -0.56
+    "profit_factor": 0.99,
+    "avg_mae": -3.78,
+    "avg_return_after_cost": -0.58
    },
    {
     "label": "KOSDAQ",
-    "n": 881,
-    "hit": 459,
-    "hit_rate": 52.1,
-    "wilson_low": 48.8,
-    "avg_return": -0.94,
+    "n": 1590,
+    "hit": 845,
+    "hit_rate": 53.1,
+    "wilson_low": 50.7,
+    "avg_return": -0.82,
     "median_return": 2.1,
-    "profit_factor": 0.72,
-    "avg_mae": -5.38,
-    "avg_return_after_cost": -1.49
+    "profit_factor": 0.76,
+    "avg_mae": -5.42,
+    "avg_return_after_cost": -1.37
    }
   ],
   "by_regime": [
    {
     "label": "BULL",
-    "n": 1398,
-    "hit": 831,
-    "hit_rate": 59.4,
-    "wilson_low": 56.8,
-    "avg_return": -0.04,
+    "n": 2131,
+    "hit": 1263,
+    "hit_rate": 59.3,
+    "wilson_low": 57.2,
+    "avg_return": -0.05,
     "median_return": 2.1,
     "profit_factor": 0.98,
-    "avg_mae": -3.84,
-    "avg_return_after_cost": -0.59
+    "avg_mae": -3.91,
+    "avg_return_after_cost": -0.6
    },
    {
     "label": "SIDEWAYS",
-    "n": 1918,
-    "hit": 1064,
-    "hit_rate": 55.5,
+    "n": 2988,
+    "hit": 1644,
+    "hit_rate": 55.0,
     "wilson_low": 53.2,
-    "avg_return": -0.39,
+    "avg_return": -0.45,
     "median_return": 2.1,
-    "profit_factor": 0.85,
-    "avg_mae": -4.33,
-    "avg_return_after_cost": -0.94
+    "profit_factor": 0.83,
+    "avg_mae": -4.46,
+    "avg_return_after_cost": -1.0
    },
    {
     "label": "BEAR",
-    "n": 763,
-    "hit": 456,
-    "hit_rate": 59.8,
-    "wilson_low": 56.2,
-    "avg_return": -0.09,
-    "median_return": 2.13,
-    "profit_factor": 0.96,
-    "avg_mae": -4.0,
-    "avg_return_after_cost": -0.64
+    "n": 1190,
+    "hit": 713,
+    "hit_rate": 59.9,
+    "wilson_low": 57.1,
+    "avg_return": -0.02,
+    "median_return": 2.21,
+    "profit_factor": 0.99,
+    "avg_mae": -4.08,
+    "avg_return_after_cost": -0.57
    }
   ]
  },
  "splits": {
   "train": {
    "label": "train",
-   "n": 2796,
-   "hit": 1598,
-   "hit_rate": 57.2,
-   "wilson_low": 55.3,
-   "avg_return": -0.13,
+   "n": 4294,
+   "hit": 2442,
+   "hit_rate": 56.9,
+   "wilson_low": 55.4,
+   "avg_return": -0.15,
    "median_return": 2.1,
-   "profit_factor": 0.94,
-   "avg_mae": -3.64,
-   "avg_return_after_cost": -0.68
+   "profit_factor": 0.93,
+   "avg_mae": -3.77,
+   "avg_return_after_cost": -0.7
   },
   "valid": {
    "label": "valid",
-   "n": 799,
-   "hit": 518,
-   "hit_rate": 64.8,
-   "wilson_low": 61.5,
-   "avg_return": 0.42,
-   "median_return": 2.19,
-   "profit_factor": 1.22,
-   "avg_mae": -3.74,
-   "avg_return_after_cost": -0.13
+   "n": 1243,
+   "hit": 815,
+   "hit_rate": 65.6,
+   "wilson_low": 62.9,
+   "avg_return": 0.5,
+   "median_return": 2.25,
+   "profit_factor": 1.26,
+   "avg_mae": -3.68,
+   "avg_return_after_cost": -0.05
   },
   "blind": {
    "label": "blind",
-   "n": 513,
-   "hit": 253,
-   "hit_rate": 49.3,
-   "wilson_low": 45.0,
-   "avg_return": -1.6,
-   "median_return": -3.0,
-   "profit_factor": 0.66,
-   "avg_mae": -7.05,
-   "avg_return_after_cost": -2.15
+   "n": 801,
+   "hit": 381,
+   "hit_rate": 47.6,
+   "wilson_low": 44.1,
+   "avg_return": -1.77,
+   "median_return": -3.52,
+   "profit_factor": 0.63,
+   "avg_mae": -7.26,
+   "avg_return_after_cost": -2.32
   },
   "buy_zone": {
    "train": {
     "label": "60+ train",
-    "n": 76,
-    "hit": 41,
-    "hit_rate": 53.9,
-    "wilson_low": 42.8,
-    "avg_return": -0.66,
-    "median_return": 2.1,
-    "profit_factor": 0.75,
-    "avg_mae": -4.02,
-    "avg_return_after_cost": -1.21
+    "n": 115,
+    "hit": 57,
+    "hit_rate": 49.6,
+    "wilson_low": 40.6,
+    "avg_return": -1.21,
+    "median_return": -2.98,
+    "profit_factor": 0.63,
+    "avg_mae": -5.13,
+    "avg_return_after_cost": -1.76
    },
    "valid": {
     "label": "60+ valid",
-    "n": 34,
-    "hit": 18,
-    "hit_rate": 52.9,
-    "wilson_low": 36.7,
-    "avg_return": -0.92,
-    "median_return": 2.19,
-    "profit_factor": 0.7,
-    "avg_mae": -5.65,
-    "avg_return_after_cost": -1.47
+    "n": 49,
+    "hit": 29,
+    "hit_rate": 59.2,
+    "wilson_low": 45.2,
+    "avg_return": -0.26,
+    "median_return": 2.53,
+    "profit_factor": 0.9,
+    "avg_mae": -5.01,
+    "avg_return_after_cost": -0.81
    },
    "blind": {
     "label": "60+ blind",
-    "n": 16,
-    "hit": 13,
-    "hit_rate": 81.2,
-    "wilson_low": 57.0,
-    "avg_return": 4.86,
+    "n": 18,
+    "hit": 14,
+    "hit_rate": 77.8,
+    "wilson_low": 54.8,
+    "avg_return": 3.7,
     "median_return": 4.92,
-    "profit_factor": 4.37,
-    "avg_mae": -3.05,
-    "avg_return_after_cost": 4.31
+    "profit_factor": 2.69,
+    "avg_mae": -3.82,
+    "avg_return_after_cost": 3.15
    }
   }
  },
  "failure_classes": [
   {
    "class": "방향 오판",
-   "n": 410,
-   "total_loss": -2703.2
+   "n": 638,
+   "total_loss": -4306.5
   },
   {
    "class": "노이즈 손절(목표 절반까지 갔다 반락)",
-   "n": 428,
-   "total_loss": -2299.0
+   "n": 695,
+   "total_loss": -3847.3
   },
   {
    "class": "추세 역행(월10선 아래)",
-   "n": 402,
-   "total_loss": -2162.9
+   "n": 635,
+   "total_loss": -3396.9
   },
   {
    "class": "시장 국면 역풍",
-   "n": 286,
-   "total_loss": -1686.1
+   "n": 446,
+   "total_loss": -2612.6
   },
   {
    "class": "과열 추격",
-   "n": 157,
-   "total_loss": -988.8
+   "n": 230,
+   "total_loss": -1497.6
   },
   {
    "class": "레버리지 변동성",
@@ -348,23 +348,23 @@
   }
  ],
  "signal_frequency": {
-  "total": 4229,
-  "buy_zone": 128,
-  "rate_pct": 3.0
+  "total": 6508,
+  "buy_zone": 185,
+  "rate_pct": 2.8
  },
  "high_confidence": {
   "label": "고신뢰(65+)",
-  "n": 33,
-  "hit": 23,
-  "hit_rate": 69.7,
-  "wilson_low": 52.7,
-  "avg_return": 1.42,
-  "median_return": 2.4,
-  "profit_factor": 1.72,
-  "avg_mae": -4.26,
-  "avg_return_after_cost": 0.87
+  "n": 45,
+  "hit": 28,
+  "hit_rate": 62.2,
+  "wilson_low": 47.6,
+  "avg_return": 0.45,
+  "median_return": 2.29,
+  "profit_factor": 1.17,
+  "avg_mae": -4.99,
+  "avg_return_after_cost": -0.1
  },
- "total_cases": 4229,
+ "total_cases": 6508,
  "rulebook_version": "v2026.08.02",
  "note": "실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. 리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 쓰인다는 한계가 있다."
 }
