@@ -4101,6 +4101,33 @@ if _os.path.exists(_bk87):
           _b87.get('adopted') is None)
 
 
+section("88. 아코디언 단계별 렌더 — 어느 단계를 접어도 화면이 살아 있는가")
+# 접힌 단계의 위젯은 렌더되지 않는다. 그 안에서만 정의된 이름을 본문이 쓰면
+# 그 단계를 접는 순간 화면이 죽는다. 눈으로 찾지 말고 **네 단계를 다 열어 본다**.
+from streamlit.testing.v1 import AppTest as _AT88
+
+for _step88 in ('pick', 'hold', 'find', 'crit', ''):
+    _at88 = _AT88.from_file(_os.path.join(PROJ, "web_app.py"),
+                            default_timeout=1800)
+    _at88.session_state['selected_ticker'] = '005930'
+    _at88.session_state['sb_step'] = _step88
+    _at88.run()
+    _nm88 = _step88 or '전부 접힘'
+    check(f"{_nm88} 상태에서 렌더 예외 없음", len(_at88.exception) == 0,
+          str(_at88.exception[:1])[:200])
+
+# 값 유지 — 4단계에서 rho 를 바꾸고 접어도 값이 살아 있어야 한다
+_at88b = _AT88.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
+_at88b.session_state['selected_ticker'] = '005930'
+_at88b.session_state['sb_step'] = 'crit'
+_at88b.session_state['_sb_keep'] = {'rho': 0.9}
+_at88b.run()
+check("접힌 단계의 설정이 _KEEP 에 보존된다",
+      len(_at88b.exception) == 0
+      and '_sb_keep' in _at88b.session_state,
+      str(_at88b.exception[:1])[:150])
+
+
 print()
 print("=" * 72)
 if FAILURES:

@@ -1,12 +1,25 @@
 {
  "axes": {
-  "model": "v2026.08.02.18",
+  "model": "v2026.08.02.19",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.19",
+   "previous": "v2026.08.02.18",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "아코디언 단계 간 참조로 화면이 죽던 문제 — 종목 확정·시세 조회를 아코디언 밖으로",
+   "note": "",
+   "created_at": "2026-08-02T13:24:42+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

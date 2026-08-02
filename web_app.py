@@ -1610,82 +1610,93 @@ if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
         else:
             final_query = default_stock_no1
 
-    target_ticker, resolved_name = engine_init.resolve_symbol(final_query)
 
-    # 종목 해석 실패는 앱 전체를 중단시키지 않는다 — 명확히 알리고 멈춘다
-    if not target_ticker:
-        st.error(f"**종목을 해석하지 못했습니다**: `{final_query}`\n\n"
-                 f"종목명 또는 6자리 종목코드를 입력해 주세요. "
-                 f"네이버증권 검색이 일시적으로 실패했을 수도 있습니다.")
-        st.stop()
-    # 🚨 [무결성 보장] 네이버 증권 실시간 웹 파서 강제 동적 수신
-    engine_init.fetch_and_update_naver_realtime(target_ticker)
+# ── 종목 확정 · 시세 조회 (아코디언 밖) ──────────────────────────────────
+# 아코디언 안에는 **사용자가 조작하는 위젯만** 둔다. 그 결과로 계산되는 값은
+# 여기서, 접혔든 펼쳐졌든 항상 구한다 — 본문 전체가 이 값들을 쓴다.
+# 접혀 있을 때는 마지막으로 고른 검색어를 그대로 쓴다.
+if _sb_open != 'pick':
+    final_query = (_KEEP.get('final_query')
+                   or st.session_state.get('selected_ticker')
+                   or default_stock_no1)
+_KEEP['final_query'] = final_query
 
-    asset_meta = engine_init.get_asset_currency_and_unit(target_ticker)
-    unit_currency = asset_meta["currency"]
-    unit_str = asset_meta["unit_str"]
+target_ticker, resolved_name = engine_init.resolve_symbol(final_query)
 
-    realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price_triple_check(target_ticker)
+# 종목 해석 실패는 앱 전체를 중단시키지 않는다 — 명확히 알리고 멈춘다
+if not target_ticker:
+    st.error(f"**종목을 해석하지 못했습니다**: `{final_query}`\n\n"
+             f"종목명 또는 6자리 종목코드를 입력해 주세요. "
+             f"네이버증권 검색이 일시적으로 실패했을 수도 있습니다.")
+    st.stop()
+# 🚨 [무결성 보장] 네이버 증권 실시간 웹 파서 강제 동적 수신
+engine_init.fetch_and_update_naver_realtime(target_ticker)
 
-    _uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
-                     _theme, tone="brand")
-    # 상단 툴바 오른쪽 끝에도 같은 사실을 둔다 — 스크롤 중에도 어느 종목을 보고
-    # 있는지 잊지 않게 한다 (툴바는 sticky).
-    _render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
-                    f"{_uk._esc(target_ticker)}")
-    _uk.sidebar_fact("현재가",
-                     (f"{realtime_price:,.0f} {unit_str}" if unit_currency == "KRW"
-                      else f"${realtime_price:,.2f}"), _theme)
-    with st.sidebar.expander("자산·통화 확인"):
-        st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
-                   f"가격 단위 {unit_str}")
+asset_meta = engine_init.get_asset_currency_and_unit(target_ticker)
+unit_currency = asset_meta["currency"]
+unit_str = asset_meta["unit_str"]
 
+realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price_triple_check(target_ticker)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 💼 내 보유종목 — 사이드바 상시 표시
-    # 현재가만 가볍게 조회한다 (전체 파이프라인은 본문 화면에서만 실행)
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
-    # 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
-    # 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
-    ALLOW_LOCAL_STORE = not is_remote_exposed()
-
-    if 'positions' not in st.session_state:
-        if ALLOW_LOCAL_STORE:
-            _loaded, _saved_at = portfolio.load_positions()
-            st.session_state['positions'] = _loaded
-            st.session_state['positions_saved_at'] = _saved_at
-        else:
-            st.session_state['positions'] = []          # 방문자별로 비어서 시작
-            st.session_state['positions_saved_at'] = None
-
-    if 'watchlist' not in st.session_state:
-        if ALLOW_LOCAL_STORE:
-            _wl, _ = portfolio.load_watchlist()
-            st.session_state['watchlist'] = _wl
-        else:
-            st.session_state['watchlist'] = []
-
-    QUOTE_TTL_SEC = 60
+_uk.sidebar_fact("보고 있는 종목", f"{resolved_name} · {target_ticker}",
+                 _theme, tone="brand")
+# 상단 툴바 오른쪽 끝에도 같은 사실을 둔다 — 스크롤 중에도 어느 종목을 보고
+# 있는지 잊지 않게 한다 (툴바는 sticky).
+_render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
+                f"{_uk._esc(target_ticker)}")
+_uk.sidebar_fact("현재가",
+                 (f"{realtime_price:,.0f} {unit_str}" if unit_currency == "KRW"
+                  else f"${realtime_price:,.2f}"), _theme)
+with st.sidebar.expander("자산·통화 확인"):
+    st.caption(f"자산 구별 {asset_meta['type']} · 통화 {unit_currency} · "
+               f"가격 단위 {unit_str}")
 
 
-    def light_quote(ticker):
-        """사이드바용 경량 현재가 조회 (60초 캐시). 실패 시 None."""
-        cache = st.session_state.setdefault('quote_cache', {})
-        now = datetime.datetime.now().timestamp()
-        hit = cache.get(ticker)
-        if hit and (now - hit[1]) < QUOTE_TTL_SEC:
-            return hit[0]
-        try:
-            px, _st, _mx = engine_init.get_realtime_stock_price_triple_check(ticker)
-            px = float(px) if px else None
-        except Exception:
-            px = None
-        cache[ticker] = (px, now)
-        return px
+# ═══════════════════════════════════════════════════════════════════════════
+# 💼 내 보유종목 — 사이드바 상시 표시
+# 현재가만 가볍게 조회한다 (전체 파이프라인은 본문 화면에서만 실행)
+# ═══════════════════════════════════════════════════════════════════════════
+# 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
+# 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
+# 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
+ALLOW_LOCAL_STORE = not is_remote_exposed()
+
+if 'positions' not in st.session_state:
+    if ALLOW_LOCAL_STORE:
+        _loaded, _saved_at = portfolio.load_positions()
+        st.session_state['positions'] = _loaded
+        st.session_state['positions_saved_at'] = _saved_at
+    else:
+        st.session_state['positions'] = []          # 방문자별로 비어서 시작
+        st.session_state['positions_saved_at'] = None
+
+if 'watchlist' not in st.session_state:
+    if ALLOW_LOCAL_STORE:
+        _wl, _ = portfolio.load_watchlist()
+        st.session_state['watchlist'] = _wl
+    else:
+        st.session_state['watchlist'] = []
+
+QUOTE_TTL_SEC = 60
 
 
-    _positions = st.session_state.get('positions') or []
+def light_quote(ticker):
+    """사이드바용 경량 현재가 조회 (60초 캐시). 실패 시 None."""
+    cache = st.session_state.setdefault('quote_cache', {})
+    now = datetime.datetime.now().timestamp()
+    hit = cache.get(ticker)
+    if hit and (now - hit[1]) < QUOTE_TTL_SEC:
+        return hit[0]
+    try:
+        px, _st, _mx = engine_init.get_realtime_stock_price_triple_check(ticker)
+        px = float(px) if px else None
+    except Exception:
+        px = None
+    cache[ticker] = (px, now)
+    return px
+
+
+_positions = st.session_state.get('positions') or []
 
 if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
