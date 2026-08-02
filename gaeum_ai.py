@@ -107,7 +107,11 @@ def build(four_scores: dict, sim_res: dict, verdict: dict,
     if vd.get('vetoes'):
         risk = str(vd['vetoes'][0])
     elif fs.get('gate_reason'):
-        risk = str(fs['gate_reason'])[:160]
+        # gate_reason 은 상한 사유를 ' / ' 로 이어붙인 목록이다. 글자수로
+        # 자르면 낱말 한가운데서 끊긴 문장이 화면에 남는다 — 가장 먼저 걸린
+        # 사유 하나만 고른다. 그게 '가장 큰' 위험요인이기도 하다.
+        _first = str(fs['gate_reason']).split(' / ')[0].strip()
+        risk = _first if _first else None
     elif sim.get('mdd') is not None:
         risk = f"비슷한 사례에서 보유 중 평균 {abs(float(sim['mdd'])):.1f}% 까지 밀렸습니다"
 

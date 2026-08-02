@@ -25,8 +25,12 @@ import streamlit as st
 # 사이드바가 본문보다 살짝 밝고, 카드가 그 사이에 놓인다.
 DARK = dict(bg='#0A0B0F', card='#16181F', raised='#1E2129',
             line='#282C35', tx1='#E9EBEF', tx2='#9BA1AC', tx3='#858C99',
-            brand='#3B82F6', up='#F0483C', down='#3B82F6',
-            pos='#2FBF71', warn='#E0A33E', neg='#E05252')
+            brand='#488AF7', up='#F1574C', down='#488AF7',
+            pos='#2FBF71', warn='#E0A33E', neg='#E36363')
+# 의미색 4개(brand·up·down·neg)는 명도를 조금씩 올린 값이다. 원래 값은
+# 가장 밝은 카드면(#1C2635) 위에서 3.99~4.14 로 4.5:1 에 못 미쳤다 — 12·13px
+# 글자가 많아 그냥 두면 안 된다. 색상·채도는 그대로 두고 명도만 올려
+# 다크의 모든 표면에서 4.5 를 넘긴다 (_probe/fix_dark_contrast.py 로 계산).
 #: 사이드바는 본문보다 한 단계 밝은 면 — 참조 화면과 같은 층 구조
 DARK_NAV = '#101216'
 LIGHT_NAV = '#F7F8FA'
@@ -253,7 +257,7 @@ def acc_row(step, active='', busy='', state_key='sb_step'):
     arrow = '  ▾' if on else '  ▸'
     label = head + str(step['title']) + run + mark + arrow
     if st.sidebar.button(label, key='_acc_' + step['key'],
-                         use_container_width=True,
+                         width='stretch',
                          help=step.get('hint') or None):
         st.session_state[state_key] = ('' if on else step['key'])
         st.rerun()

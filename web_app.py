@@ -797,6 +797,12 @@ if _theme == 'light':
         .stApp div[style*="rgb(22, 29, 42)"] span,
         .stApp div[style*="rgb(28, 38, 53)"] p,
         .stApp div[style*="rgb(28, 38, 53)"] span,
+        /* code 가 이 목록에 없어서 코드 칩만 라이트 글자색으로 남아
+           다크 카드 위에서 대비 1.99 였다 (p·span 은 이미 되돌아감). */
+        .stApp div[style*="rgb(22, 29, 42)"] code,
+        .stApp div[style*="rgb(28, 38, 53)"] code,
+        .stApp div[style*="rgb(28, 38, 53)"] li,
+        .stApp div[style*="rgb(22, 29, 42)"] li,
         .stApp div[style*="rgba(48, 209, 88"] *,
         .stApp div[style*="rgba(255, 69, 58"] *,
         .stApp div[style*="rgba(76, 141, 255"] *,
@@ -1495,7 +1501,7 @@ st.sidebar.markdown(
     + _uk.nav_groups(_NAV_SUB, theme=_theme),
     unsafe_allow_html=True)
 st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-if st.sidebar.button("처음으로", use_container_width=False, key="btn_home",
+if st.sidebar.button("처음으로", width='content', key="btn_home",
                      help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
                           "보유종목은 지워지지 않습니다."):
     # 보유종목(positions)과 저장본은 건드리지 않는다 — 사용자의 자료다.
@@ -1735,7 +1741,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
         st.sidebar.caption("등록된 보유종목이 없습니다. 증권사 앱 보유종목 화면을 "
                            "`Win`+`Shift`+`S` 로 캡처해 두고 아래 버튼을 누르면, "
                            "본문에서 클립보드 이미지를 그대로 읽어 등록할 수 있습니다.")
-        if st.sidebar.button("스크린샷으로 등록하기", use_container_width=True,
+        if st.sidebar.button("스크린샷으로 등록하기", width='stretch',
                              key="btn_open_pf_from_empty"):
             st.session_state['show_portfolio'] = True
             st.rerun()
@@ -1779,7 +1785,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
             _is_cur = (_m['ticker'] == target_ticker)
             with _c1:
                 if st.button(("▶ " if _is_cur else "") + _m['stock_name'],
-                             key=f"pos_{_m['ticker']}", use_container_width=True,
+                             key=f"pos_{_m['ticker']}", width='stretch',
                              type="primary" if _is_cur else "secondary",
                              help=f"{_m['quantity']:,.0f}주 · 평단 {_m['average_buy_price']:,.0f}원"):
                     st.session_state['pending_search'] = f"{_m['stock_name']} ({_m['ticker'].split('.')[0]})"
@@ -1816,7 +1822,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
         value=int(_reg.quantity) if _reg else 0, step=10,
         help="보유 중인 총 주식 수량 (0주 = 미보유)")
     if user_entry_price > 0 and user_quantity > 0 and _reg is None:
-        if st.sidebar.button("보유종목에 등록", use_container_width=True):
+        if st.sidebar.button("보유종목에 등록", width='stretch'):
             st.session_state['positions'] = (st.session_state.get('positions') or []) + [
                 portfolio.PortfolioPosition(
                     ticker=target_ticker, stock_name=resolved_name,
@@ -1873,7 +1879,7 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
                 f"<span style='color:#9DAABC;font-size:12px;'>{_d['detail']}</span>",
                 unsafe_allow_html=True)
 
-    if st.sidebar.button("오늘의 관심종목 스캔 / 닫기", use_container_width=True):
+    if st.sidebar.button("오늘의 관심종목 스캔 / 닫기", width='stretch'):
         st.session_state['show_screener'] = not st.session_state['show_screener']
         st.session_state['pending_scan'] = st.session_state['show_screener']
 
@@ -2186,7 +2192,7 @@ if st.session_state.get('show_screener', False):
                 _wl_c1, _wl_c2 = st.columns([1, 2.2])
                 with _wl_c1:
                     if st.button("이 목록을 관심종목으로 저장",
-                                 use_container_width=True, key="btn_save_watchlist"):
+                                 width='stretch', key="btn_save_watchlist"):
                         _items = [{'code': r['code'], 'name': r['name']}
                                   for r in _att['rows']]
                         st.session_state['watchlist'] = _items
@@ -2246,7 +2252,7 @@ if st.session_state.get('show_screener', False):
                             f"{_pen_html}</div>", unsafe_allow_html=True)
                     with _cc2:
                         if st.button("분석 →", key=f"att_{_r['code']}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             st.session_state['pending_search'] = f"{_r['name']} ({_r['code']})"
                             st.rerun()
 
@@ -2270,7 +2276,7 @@ if st.session_state.get('show_screener', False):
                                 f"제외 사유: {_why[:120]}</span>",
                                 unsafe_allow_html=True)
                             if _ec2.button("분석 →", key=f"attx_{_r['code']}",
-                                           use_container_width=True):
+                                           width='stretch'):
                                 st.session_state['pending_search'] = \
                                     f"{_r['name']} ({_r['code']})"
                                 st.rerun()
@@ -2311,7 +2317,7 @@ if st.session_state.get('show_screener', False):
                     with cols[1]:
                         _entry_badge = "🎯" if r.get('entry_candidate') else ""
                         if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
-                                     use_container_width=True,
+                                     width='stretch',
                                      help=("진입 후보 — 적정가 이하 & 순기대수익 양수. "
                                            "점수대별 실측 적중률은 종합 결론의 "
                                            "'가상 백테스트' 표기를 보세요."
@@ -2466,7 +2472,7 @@ if _pmr:
             </div>""", unsafe_allow_html=True)
             # 카드 클릭 → 아래 종목 분석 화면이 이 종목으로 전환된다
             if st.button("분석 보기", key=f"pm_go_{_p.get('symbol')}_{_pi}",
-                         use_container_width=True):
+                         width='stretch'):
                 st.session_state['pending_search'] = \
                     f"{_p.get('name')} ({_p.get('code')})"
                 st.rerun()
@@ -2588,7 +2594,7 @@ if st.session_state.get('show_portfolio'):
             _tpl_bytes, _tpl_name, _tpl_mime = portfolio.build_template_bytes()
             st.download_button("📥 입력 양식 내려받기", data=_tpl_bytes,
                                file_name=_tpl_name, mime=_tpl_mime,
-                               use_container_width=True, key="btn_dl_template")
+                               width='stretch', key="btn_dl_template")
             st.caption("종목코드·종목명·보유수량·평균매수가 네 칸만 채우면 됩니다.")
         with _xc2:
             _cur_pos = st.session_state.get('positions') or []
@@ -2597,7 +2603,7 @@ if st.session_state.get('show_portfolio'):
                 f"📤 지금 보유종목 내보내기 ({len(_cur_pos)}종목)",
                 data=_exp_df.to_csv(index=False).encode("utf-8-sig"),
                 file_name="내_보유종목.csv", mime="text/csv",
-                use_container_width=True, disabled=not _cur_pos,
+                width='stretch', disabled=not _cur_pos,
                 key="btn_export_positions")
             st.caption("백업하거나 엑셀에서 수정한 뒤 다시 올릴 수 있습니다.")
 
@@ -2772,14 +2778,14 @@ if st.session_state.get('show_portfolio'):
                             _recognize_image(_img2)
             if st.session_state.get('clip_image'):
                 with st.expander("붙여넣은 이미지 보기"):
-                    st.image(st.session_state['clip_image'], use_container_width=True)
+                    st.image(st.session_state['clip_image'], width='stretch')
 
             # ── ③ 파일로 올리기 ────────────────────────────────────────────
             st.markdown("**② 이미지 파일로 올리기** (붙여넣기가 막힌 브라우저용)")
             shot = st.file_uploader("스크린샷 이미지 (PNG/JPG)", type=["png", "jpg", "jpeg"],
                                     key="shot_uploader")
             if shot is not None:
-                st.image(shot, caption="업로드한 스크린샷", use_container_width=True)
+                st.image(shot, caption="업로드한 스크린샷", width='stretch')
                 if st.button("이미지에서 인식하기", key="btn_file_ocr"):
                     _recognize_image(shot.getvalue())
 
@@ -2824,7 +2830,7 @@ if st.session_state.get('show_portfolio'):
                                f"추측하지 않으므로 지정이 맞으면 결과도 맞습니다.")
                     st.dataframe(pd.DataFrame(
                         _cells, columns=[f"{i}" for i in range(_ncol)]),
-                        use_container_width=True, hide_index=True)
+                        width='stretch', hide_index=True)
                     _opts = list(range(_ncol))
                     _mc1, _mc2, _mc3, _mc4 = st.columns(4)
                     _skip = _mc1.number_input("건너뛸 윗줄 수", 0, 10, 1, key="mancol_skip")
@@ -2968,7 +2974,7 @@ if st.session_state.get('show_portfolio'):
             edited = st.data_editor(
                 pd.DataFrame([{k: v for k, v in r.items()
                                if not k.startswith('_')} for r in preview]),
-                num_rows="dynamic", use_container_width=True, key="paste_editor",
+                num_rows="dynamic", width='stretch', key="paste_editor",
                 column_config={
                     "보유수량": st.column_config.NumberColumn(format="%.0f"),
                     "평균매수가": st.column_config.NumberColumn(format="%.0f"),
@@ -3036,7 +3042,7 @@ if st.session_state.get('show_portfolio'):
         editor_df = pd.DataFrame(cur_rows) if cur_rows else pd.DataFrame(
             columns=["종목코드", "종목명", "보유수량", "평균매수가", "_ticker"])
         edited_direct = st.data_editor(
-            editor_df, num_rows="dynamic", use_container_width=True, key="direct_editor",
+            editor_df, num_rows="dynamic", width='stretch', key="direct_editor",
             column_config={"_ticker": None,
                            "보유수량": st.column_config.NumberColumn(format="%.0f"),
                            "평균매수가": st.column_config.NumberColumn(format="%.0f")})
@@ -3159,7 +3165,7 @@ if st.session_state.get('show_portfolio'):
                                f"최대 단일종목 비중 **{weights[0]:.1f}%**")
 
                 st.markdown("포트폴리오 전체 요약 (기간별: 중앙 예상수익률 · 예측등급 · ESS)")
-                st.dataframe(pd.DataFrame(port_rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(port_rows), width='stretch', hide_index=True)
 
                 st.markdown("종목별 상세")
                 for ticker, (m, s) in snaps.items():
@@ -3184,7 +3190,7 @@ if st.session_state.get('show_portfolio'):
                         st.markdown("**보유자 행동점수 구성**")
                         st.dataframe(pd.DataFrame(
                             [{"구성요소": k, "점수": v} for k, v in pv['components'].items()]),
-                            use_container_width=True, hide_index=True)
+                            width='stretch', hide_index=True)
 
                         st.markdown("**추가매수(물타기) 허용 조건** — 전부 통과해야 허용")
                         for label, ok in pv['averaging_down_checks']:
@@ -3196,7 +3202,7 @@ if st.session_state.get('show_portfolio'):
                         if m.get('is_multi_account'):
                             st.caption("복수 계좌 보유 — 계좌별 내역")
                             st.dataframe(pd.DataFrame(m['accounts']),
-                                         use_container_width=True, hide_index=True)
+                                         width='stretch', hide_index=True)
     _uk.spacer(28)
 
 # ── 캘리브레이션 산출물 로더 — 홈 카드·판정 캡션·모델 성과 섹션이 공유 ──────
@@ -3272,16 +3278,16 @@ if _home_cal.get('total_cases'):
          'value': (f"{_bzv['hit_rate']:.1f}%"
                    if _bzv.get('hit_rate') is not None else "미산출"),
          'sub': f"매수 신호 {_bzv.get('n', 0):,}건 중"},
+        # '추천만 골랐을 때' 타일은 이 타일과 **같은 값**(buy_zone·blind)을
+        # 읽고 있었다. 같은 측정이 두 번 서 있으면 두 번 확인된 것처럼
+        # 읽힌다 — 표본 부족 경고만 이 타일로 합치고 중복은 지운다.
         {'label': '추천했을 때 실전 적중률',
          'value': (f"{_bzb2['hit_rate']:.1f}%"
                    if _bzb2.get('hit_rate') is not None else "미산출"),
-         'sub': f"안 본 기간 {_bzb2.get('n', 0):,}건 중"},
-        {'label': '추천만 골랐을 때',
-         'value': (f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None
-                   else "미산출"),
-         'sub': (f"n={_bzb.get('n', 0)} · 표본 부족" if (_bzb.get('n') or 0) < 30
-                 else f"n={_bzb.get('n', 0)}"),
-         'tone': 'warn' if (_bzb.get('n') or 0) < 30 else ''},
+         'sub': (f"안 본 기간 {_bzb2.get('n', 0):,}건 중 · 표본 부족"
+                 if (_bzb2.get('n') or 0) < 30
+                 else f"안 본 기간 {_bzb2.get('n', 0):,}건 중"),
+         'tone': 'warn' if (_bzb2.get('n') or 0) < 30 else ''},
         {'label': '매수 기회',
          'value': (f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None
                    else "미산출"),
@@ -3396,6 +3402,7 @@ if _home_cal.get('total_cases'):
                 'warn' if _thin else ''))
         if _rows_rg:
             # 지금이 어느 칸인지 — 표만 보여 주면 사용자가 자기 상황을 못 찾는다
+            _now_basis = ''
             try:
                 _ir = bitemporal_engine.BitemporalEngine().get_index_regime('KOSPI')
                 _gi_mkt_label = ('하락' if (_ir.get('price') and _ir.get('sma60')
@@ -3403,6 +3410,20 @@ if _home_cal.get('total_cases'):
                                  else '상승' if (_ir.get('price') and _ir.get('sma20')
                                                and _ir['price'] > _ir['sma20'])
                                  else '옆걸음')
+                # 위 시장 타일은 **하루** 등락이고 국면은 **60일 추세**다.
+                # 근거를 안 적으면 '+17% 인데 하락 국면?' 으로 읽혀 화면이
+                # 앞뒤가 안 맞는 말을 하는 것처럼 보인다.
+                _pp, _s20, _s60 = (_ir.get('price'), _ir.get('sma20'),
+                                   _ir.get('sma60'))
+                if _pp and _s60:
+                    _ref, _refko = ((_s60, '60일 평균') if _gi_mkt_label == '하락'
+                                    else (_s20, '20일 평균') if _s20 else
+                                    (_s60, '60일 평균'))
+                    _gapp = (_pp / _ref - 1) * 100
+                    _now_basis = (
+                        f"코스피가 {_refko}보다 {abs(_gapp):.1f}% "
+                        f"{'아래' if _gapp < 0 else '위'}에 있습니다 — "
+                        f"하루 등락이 아니라 60일 추세로 봅니다. ")
             except Exception:
                 _gi_mkt_label = ''
             _now_rg = ('BEAR' if '하락' in str(_gi_mkt_label)
@@ -3414,9 +3435,13 @@ if _home_cal.get('total_cases'):
                 _uk.card(
                     f"<p style='margin:0; font-size:15px; line-height:1.7; "
                     f"color:{_TOK['tx1']};'>지금은 <b>{_now_ko}</b> 국면입니다. "
-                    f"아래 표에서 '{_now_ko}' 로 시작하는 두 줄이 지금 상황의 "
-                    f"성적입니다 — 종목 변동성에 따라 차분한 쪽과 거친 쪽이 "
-                    f"다릅니다.</p>", theme=_theme, accent='brand')
+                    f"{_now_basis}"
+                    # 표의 행 이름은 '차분한 하락'·'거친 하락' 처럼 국면이
+                    # 뒤에 온다. '~로 시작하는' 은 표와 맞지 않는 안내였다.
+                    f"아래 표에서 <b>차분한 {_now_ko}</b> · <b>거친 {_now_ko}</b> "
+                    f"두 줄이 지금 상황의 성적입니다 — 같은 {_now_ko} 장이라도 "
+                    f"종목이 얼마나 흔들리느냐에 따라 성적이 다릅니다."
+                    f"</p>", theme=_theme, accent='brand')
                 _uk.spacer(12)
             _uk.rows(_rows_rg, theme=_theme,
                      title='시장 국면별 추천 성적 — 지수 방향 × 종목 변동성')
@@ -3582,7 +3607,7 @@ if _issues_global:
             st.dataframe(pd.DataFrame([{
                 '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
                 '내용': i['detail'], '범위': i['scope'], '생성': i['created'],
-            } for i in _issues_global]), use_container_width=True, hide_index=True)
+            } for i in _issues_global]), width='stretch', hide_index=True)
 
 # ── 최근 업데이트 (v4) — 제품형 릴리스 노트: 요약 5건 + 전체 보기·필터 ────────
 _uh_home = _load_update_history()
@@ -3653,7 +3678,7 @@ if _uh_home and _uh_home.get('days'):
             st.dataframe(pd.DataFrame([{
                 '날짜': u['date'], '버전': u['version'],
                 '카테고리': u['category'], '내용': u['subject'],
-            } for u in _sel_upd[40:]]), use_container_width=True,
+            } for u in _sel_upd[40:]]), width='stretch',
                 hide_index=True)
 
 # 시장 지수 — 배경정보 (v2: 홈의 주인공이 아니다). 킷 타일로 통일.
@@ -4143,20 +4168,37 @@ st.markdown(f"""
 # verdict['composition'] 실측만 사용한다 (label/score/weight_pct/contribution).
 _comp_scored = [c for c in verdict.get('composition', [])
                 if c.get('score') is not None]
-if len(_comp_scored) >= 3:
-    _comp_hi = sorted(_comp_scored, key=lambda c: c['score'], reverse=True)[:3]
-    _comp_lo = sorted(_comp_scored, key=lambda c: c['score'])[:3]
-    _fc1, _fc2 = st.columns(2)
-    with _fc1:
-        st.markdown("**점수를 끌어올린 요인 3**")
-        for c in _comp_hi:
-            st.markdown(f"- {c['label']} — **{c['score']}점** "
-                        f"(비중 {c['weight_pct']:.0f}%)")
-    with _fc2:
-        st.markdown("**점수를 끌어내린 요인 3**")
-        for c in _comp_lo:
-            st.markdown(f"- {c['label']} — **{c['score']}점** "
-                        f"(비중 {c['weight_pct']:.0f}%)")
+# 상·하위 3개씩 잘라 놓으면 요인이 3개뿐일 때 **같은 세 줄이 양쪽에** 선다 —
+# 실제로 그랬다. 기준은 개수가 아니라 가중평균이어야 한다. 그보다 높으면 올린
+# 요인, 낮으면 내린 요인이고, 한쪽이 비면 나누지 않고 한 줄로 세운다.
+_comp_w = sum((c.get('weight_pct') or 0) for c in _comp_scored)
+_comp_avg = (sum(c['score'] * (c.get('weight_pct') or 0)
+                 for c in _comp_scored) / _comp_w) if _comp_w else None
+if _comp_scored and _comp_avg is not None:
+    def _comp_line(c):
+        return (f"- {c['label']} — **{c['score']}점** "
+                f"(비중 {c['weight_pct']:.0f}% · 평균 대비 "
+                f"{c['score'] - _comp_avg:+.0f}점)")
+
+    _comp_hi = sorted([c for c in _comp_scored if c['score'] > _comp_avg],
+                      key=lambda c: c['score'], reverse=True)
+    _comp_lo = sorted([c for c in _comp_scored if c['score'] < _comp_avg],
+                      key=lambda c: c['score'])
+    if _comp_hi and _comp_lo:
+        _fc1, _fc2 = st.columns(2)
+        with _fc1:
+            st.markdown(f"**점수를 끌어올린 요인 {len(_comp_hi)}**")
+            for c in _comp_hi[:3]:
+                st.markdown(_comp_line(c))
+        with _fc2:
+            st.markdown(f"**점수를 끌어내린 요인 {len(_comp_lo)}**")
+            for c in _comp_lo[:3]:
+                st.markdown(_comp_line(c))
+    else:
+        st.markdown(f"**점수를 만든 요인 {len(_comp_scored)}** — "
+                    f"가중평균 {_comp_avg:.0f}점 기준")
+        for c in sorted(_comp_scored, key=lambda c: c['score'], reverse=True):
+            st.markdown(_comp_line(c))
 
 # ── 이 종목의 주요 이슈 (v4) — 이미 계산된 경고의 재표현만, 요약 + 전체 보기 ──
 _nf_iss = ((snap.get('market_context') or {}).get('news_flags') or {})
@@ -4184,7 +4226,7 @@ if _issues_stock:
             st.dataframe(pd.DataFrame([{
                 '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
                 '내용': i['detail'],
-            } for i in _issues_stock]), use_container_width=True,
+            } for i in _issues_stock]), width='stretch',
                 hide_index=True)
 
 if verdict['vetoes']:
@@ -4216,7 +4258,7 @@ with _vc1:
         "점수": "—" if c['score'] is None else f"{c['score']}",
         "비중": f"{c['weight_pct']:.0f}%",
         "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
-    } for c in verdict['composition']]), use_container_width=True, hide_index=True)
+    } for c in verdict['composition']]), width='stretch', hide_index=True)
     if verdict['cap_applied']:
         st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** 게이트 상한 적용 → "
                     f"**{verdict['score']}점**")
@@ -4234,7 +4276,7 @@ with _vc2:
         "점수": "—" if t['score'] is None else f"{t['score']}",
         "판정": t['verdict'],
     } for t in verdict['tabs']])
-    st.dataframe(_pv, use_container_width=True, hide_index=True)
+    st.dataframe(_pv, width='stretch', hide_index=True)
     st.markdown("**한눈에**")
     for s in verdict['summary']:
         st.markdown(f"- {s}")
@@ -4252,7 +4294,11 @@ try:
         theme=st.session_state.get('ui_theme', 'dark'),
         user_avg=(user_entry_price if user_entry_price and user_entry_price > 0
                   else None))
-    st.components.v1.html(_chart_html, height=880, scrolling=False)
+    # st.components.v1.html 은 2026-06-01 제거 예정이었고 그 날짜가 이미
+    # 지났다 — 스트림릿을 올리는 순간 차트가 통째로 사라진다. 같은 iframe
+    # 임베드인 st.iframe 으로 바꾼다 (HTML 문자열도 그대로 받는다).
+    # 이 HTML 은 우리가 만든 것이고 외부 입력을 넣지 않는다.
+    st.iframe(_chart_html, height=880)
     st.caption("휠 확대·드래그 이동 · 상단 체크박스로 지표 켜고 끄기. "
                "실행 가격선(추천 매수가·1·2차 목표가·손절가·TDST)은 위 배너와 같은 숫자입니다. "
                "차트 데이터는 이 화면 안에만 있고 외부로 전송되지 않습니다.")
@@ -4293,8 +4339,10 @@ if _bear_now and ((_rsi_now is not None and _rsi_now < 35)
 # 이름만 AI 처럼 보이지 않게, 실제로 잰 것을 전부 펼친다. 계산은 여기서 새로
 # 하지 않는다 — 엔진이 낸 값을 모아 번역할 뿐이다(두 개의 진실 금지).
 import gaeum_ai as _gai
-_g = _gai.build(four_scores, sim_res, snap.get('verdict') or {},
-                price=realtime_price)
+# 최종 판정(verdict)을 그대로 넘긴다. 스냅샷의 원본 verdict 에는 거부권·
+# 최종점수가 없어서, 카드가 '가장 큰 위험요인'으로 거부 조건 대신 상한 사유
+# 뭉치를 잘라 보여 주고 있었다 — 화면 위아래가 서로 다른 말을 하던 원인이다.
+_g = _gai.build(four_scores, sim_res, verdict, price=realtime_price)
 st.markdown("<div id='nav-gaeum'></div>", unsafe_allow_html=True)
 _uk.section("가늠 AI", "이 종목을 어떻게 가늠했는지 그대로 보여 드립니다",
             theme=_theme, top=28)
@@ -4545,7 +4593,7 @@ st.markdown(f'''
 <div style="background:#1C2635; padding:16px; border-radius:8px;">
     <h4 style="color:#F3F6FA; margin:0 0 8px 0;">⏱️ DeMARK 신호</h4>
     <p style="color:#35C98B; margin:2px 0; font-size:15px;">- Bullish: {four_scores.get('demark_bullish_score', 0)}점</p>
-    <p style="color:#ff453a; margin:2px 0; font-size:15px;">- Bearish: {four_scores.get('demark_bearish_score', 0)}점</p>
+    <p style="color:{_TOK['up']}; margin:2px 0; font-size:15px;">- Bearish: {four_scores.get('demark_bearish_score', 0)}점</p>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 방향: {four_scores.get('demark_direction_text', '중립')}</p>
 </div>
 
@@ -4624,7 +4672,7 @@ with _ctx_c1:
                                 if _dd.get('pos52') is not None else "—"),
                 })
         if _dd_rows:
-            st.dataframe(pd.DataFrame(_dd_rows), use_container_width=True,
+            st.dataframe(pd.DataFrame(_dd_rows), width='stretch',
                          hide_index=True)
             st.caption("이격 = 현재가÷이동평균−1 · 52주 위치 = 저점 0%~고점 100% "
                        "구간에서의 현재 위치. 전부 일봉 실계산이며 해석을 덧붙이지 "
@@ -4647,7 +4695,7 @@ with _ctx_c1:
             else:
                 _grows.append({"지표": _gv.get('label', _gk), "현재": "미수신",
                                "20일 변화": "—", "60일선": "—"})
-        st.dataframe(pd.DataFrame(_grows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(_grows), width='stretch', hide_index=True)
         st.caption("출처: Yahoo Finance 일봉 (10분 캐시)")
     _gw = _mkt_ctx.get('global_warnings') or []
     if _gw:
@@ -4757,13 +4805,13 @@ with st.expander("이 시장·뉴스가 퀀트 점수를 얼마나 움직였나 
         "가중치": f"{float(four_scores.get('news_risk_weight') or 0) * 100:.0f}%",
         "구성": str(four_scores.get('news_risk_note', '')),
     })
-    st.dataframe(pd.DataFrame(_rows_ctx), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(_rows_ctx), width='stretch', hide_index=True)
 
     if _rgd.get('global_hits'):
         st.markdown("**글로벌 감점 내역** (규칙집 [RULES_MARKET_CONTEXT] 기준)")
         st.dataframe(pd.DataFrame([{"사유": t, "감점": f"-{p:.0f}점"}
                                    for t, p in _rgd['global_hits']]),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
     if _rgd.get('global_missing'):
         st.caption("미수신 지표(감점도 가점도 하지 않음): " + ", ".join(_rgd['global_missing']))
     if four_scores.get('context_cap', 100) < 100:
@@ -4797,7 +4845,7 @@ if _perf_cal.get('total_cases'):
             })
         if _rows_sp:
             st.markdown("**① 시간 분할 성과** — 검증·블라인드가 실력입니다")
-            st.dataframe(pd.DataFrame(_rows_sp), use_container_width=True,
+            st.dataframe(pd.DataFrame(_rows_sp), width='stretch',
                          hide_index=True)
         _bz_p = (_sp_p.get('buy_zone') or {})
         _rows_bz = []
@@ -4813,7 +4861,7 @@ if _perf_cal.get('total_cases'):
             })
         if _rows_bz:
             st.markdown("**② 매수권(60점 이상) 신호만** — 실제 추천이 나가는 구간")
-            st.dataframe(pd.DataFrame(_rows_bz), use_container_width=True,
+            st.dataframe(pd.DataFrame(_rows_bz), width='stretch',
                          hide_index=True)
         _bands_p = [b for b in (_perf_cal.get('bands') or []) if b.get('n')]
         if _bands_p:
@@ -4826,14 +4874,14 @@ if _perf_cal.get('total_cases'):
                 '평균수익': (f"{b['avg_return']:+.2f}%"
                           if b.get('avg_return') is not None else '—'),
                 '비고': '표본 부족' if b['n'] < 30 else '',
-            } for b in _bands_p]), use_container_width=True, hide_index=True)
+            } for b in _bands_p]), width='stretch', hide_index=True)
         _fails_p = _perf_cal.get('failure_classes') or []
         if _fails_p:
             st.markdown("**④ 실패 원인 분류** — 어디서 잃었는가 (손실 기여 순)")
             st.dataframe(pd.DataFrame([{
                 '실패 유형': f['class'], '건수': f['n'],
                 '누적 손실 기여': f"{f['total_loss']:+.1f}%p",
-            } for f in _fails_p]), use_container_width=True, hide_index=True)
+            } for f in _fails_p]), width='stretch', hide_index=True)
         _warn_lines = []
         _v_p, _b_p = _sp_p.get('valid') or {}, _sp_p.get('blind') or {}
         if (_v_p.get('hit_rate') is not None and _b_p.get('hit_rate') is not None
@@ -4891,16 +4939,23 @@ if _ledger_df is not None:
                        "닿으면 성공으로 세지 않습니다 (선도달 확인 불가).")
         with _pc2:
             if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
-                         use_container_width=True):
+                         width='stretch'):
                 import subprocess as _sp_imp
                 with st.spinner("일일 파이프라인 실행 중 (동결→판정→지표→이슈)..."):
+                    # encoding 을 안 주면 윈도우 기본(cp949)으로 읽어
+                    # 한글 출력에서 UnicodeDecodeError 로 죽는다.
+                    # errors='replace' — 로그 한 글자 때문에 실행 결과를
+                    # 통째로 잃지 않는다.
                     _rr = _sp_imp.run(
                         [sys.executable,
                          os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                       'scripts', 'run_daily_improvement.py')],
-                        capture_output=True, text=True, timeout=600)
+                        capture_output=True, text=True, timeout=600,
+                        encoding='utf-8', errors='replace')
                 st.toast(("파이프라인 완료: " + (_rr.stdout or '').strip()[-120:])
-                         if _rr.returncode == 0 else "실행 실패 — 로그 확인")
+                         if _rr.returncode == 0
+                         else ("실행 실패 — " +
+                               (_rr.stderr or '').strip()[-120:]))
                 st.rerun()
         try:
             if is_remote_exposed():
@@ -4975,7 +5030,7 @@ if _ledger_df is not None:
                     '실패 유형': idx, '건수': int(r['count']),
                     '누적 손실': f"{r['sum']:+.1f}%p",
                 } for idx, r in _fc_top.iterrows()]),
-                    use_container_width=True, hide_index=True)
+                    width='stretch', hide_index=True)
             st.markdown("**사례 목록** (최근 50건 — 당시 판정과 이후 실제 경로)")
             _show = _cs.sort_values('date', ascending=False).head(50)
             st.dataframe(pd.DataFrame([{
@@ -4989,7 +5044,7 @@ if _ledger_df is not None:
                 '최대손실 MAE': f"{r['mae_pct']:+.1f}%",
                 '실패 원인': str(r.get('failure_class') or ''),
             } for _, r in _show.iterrows()]),
-                use_container_width=True, hide_index=True)
+                width='stretch', hide_index=True)
             st.caption("성공 = 목표가를 손절가보다 먼저 터치. 수익률은 판정 봉 기준, "
                        "MFE/MAE는 보유 구간의 최대 이익/손실입니다. "
                        "블라인드 구간은 모델 선택에 쓰지 않은 순수 검증분입니다.")
@@ -5032,7 +5087,7 @@ if _lw_data.get('models'):
         st.dataframe(pd.DataFrame([{
             '모델': m['id'], '다운로드': f"{m['downloads']:,}",
             '좋아요': m['likes'], '라이선스': m['license'],
-        } for m in _lw_data['models']]), use_container_width=True,
+        } for m in _lw_data['models']]), width='stretch',
             hide_index=True)
         st.caption(f"출처: {_lw_data.get('source', '')}")
 
@@ -5468,7 +5523,7 @@ with tab_pred:
                 f"손절(-{TP_SL[1]:.0f}%) 선도달": fmt_pct(h.get('sl_first_prob'), signed=False),
             })
         if hz_rows:
-            st.dataframe(pd.DataFrame(hz_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(hz_rows), width='stretch', hide_index=True)
 
         _uk.stat_tiles([
             {'label': '기간 간 방향 일치도',
@@ -5499,7 +5554,7 @@ with tab_pred:
                         "자격": "통과" if v['eligible'] else "미달",
                         "미달 사유": " · ".join(v['reasons']) or "—",
                     } for H, v in sorted(_elig.items())]),
-                        use_container_width=True, hide_index=True)
+                        width='stretch', hide_index=True)
                 if _near:
                     st.markdown(
                         f"**가장 근접한 지평: {_near['horizon']}일** — "
@@ -6026,21 +6081,21 @@ with tab_demark:
             ax_main.text(dates[i], lows[i] - p_range*0.8, str(b_cnt), color='#35C98B', fontsize=9, ha='center', va='top', fontweight='bold')
             if b_cnt == 9:
                 ax_main.scatter(dates[i], lows[i] - p_range*1.6, color='#35C98B', marker='^', s=160, zorder=5)
-                ax_main.annotate('⚡매수준비(9)', xy=(dates[i], lows[i] - p_range*2.8), color='#35C98B', fontsize=10, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
+                ax_main.annotate('매수준비 9', xy=(dates[i], lows[i] - p_range*2.8), color='#35C98B', fontsize=10, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
                 
         if s_cnt > 0:
             ax_main.text(dates[i], highs[i] + p_range*0.8, str(s_cnt), color='#ff453a', fontsize=9, ha='center', va='bottom', fontweight='bold')
             if s_cnt == 9:
                 ax_main.scatter(dates[i], highs[i] + p_range*1.6, color='#ff453a', marker='v', s=160, zorder=5)
-                ax_main.annotate('⚡매도경계(9)', xy=(dates[i], highs[i] + p_range*2.8), color='#ff453a', fontsize=10, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
+                ax_main.annotate('매도경계 9', xy=(dates[i], highs[i] + p_range*2.8), color='#ff453a', fontsize=10, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
         
         # Countdown 13 Markers (High Priority)
         if b_c_cnt >= 13:
             ax_main.scatter(dates[i], lows[i] - p_range*2.0, color='#35C98B', marker='D', s=200, zorder=8)
-            ax_main.annotate('🔥Countdown 13 확정 매수타이밍', xy=(dates[i], lows[i] - p_range*3.8), color='#35C98B', fontsize=11, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
+            ax_main.annotate('13 확정 · 매수 타이밍', xy=(dates[i], lows[i] - p_range*3.8), color='#35C98B', fontsize=11, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
         elif s_c_cnt >= 13:
             ax_main.scatter(dates[i], highs[i] + p_range*2.0, color='#ff453a', marker='D', s=200, zorder=8)
-            ax_main.annotate('🔥Countdown 13 확정 매도타이밍', xy=(dates[i], highs[i] + p_range*3.8), color='#ff453a', fontsize=11, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
+            ax_main.annotate('13 확정 · 매도 타이밍', xy=(dates[i], highs[i] + p_range*3.8), color='#ff453a', fontsize=11, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
 
     # Info Box inside Chart (Top Left overlay)
     info_str = f"[DeMARK 9-13 현황]\n" \
@@ -6123,7 +6178,7 @@ with tab_flow:
     ax_price.plot(x_dates, recent_tech['sma_60'], label="60일선 (수급선)", color='#4C8DFF', linestyle='--', linewidth=1.5)
     ax_price.plot(x_dates, recent_tech['sma_120'], label="120일선 (장기)", color='#FF453A', linestyle=':', linewidth=1.5)
     
-    ax_price.set_title(f"📈 [{resolved_name}] 이동평균선(5·20·60·120일) & 기술적 분석 차트", color='#F3F6FA', fontsize=13, fontweight='bold')
+    ax_price.set_title(f"[{resolved_name}] 이동평균선(5·20·60·120일) & 기술적 분석 차트", color='#F3F6FA', fontsize=13, fontweight='bold')
     ax_price.set_ylabel(f"주가 ({unit_str})", color='#9DAABC')
     ax_price.legend(facecolor='#161D2A', edgecolor='#1C2635', labelcolor='#F3F6FA', loc='upper left')
     
@@ -6208,7 +6263,7 @@ with tab_audit:
             st.dataframe(pd.DataFrame([
                 {"항목": k, "환산점수": v, "가중치": _sq['weights'].get(k)}
                 for k, v in _sq['components'].items()]),
-                use_container_width=True, hide_index=True)
+                width='stretch', hide_index=True)
     _uk.spacer(28)
     
     c1, c2 = st.columns(2)

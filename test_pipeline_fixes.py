@@ -2998,8 +2998,16 @@ check("한계 경고 — 괴리·표본 부족 조건부 표시",
 check("표본 부족 임계 30건 미만 표기", "n'] < 30" in _w63 or "n < 30" in _w63)
 
 # ③ 점수 요인 — verdict.composition 실측만 사용
-check("점수 요인 상·하위 3 카드", '점수를 끌어올린 요인 3' in _w63
-      and '점수를 끌어내린 요인 3' in _w63)
+# 예전에는 상·하위 3개씩 잘라 썼는데, 요인이 3개뿐이면 같은 세 줄이 양쪽에
+# 서는 것이 화면에서 확인됐다. 이제 기준은 개수가 아니라 **가중평균**이다.
+check("점수 요인은 가중평균 기준으로 갈린다 (개수로 자르지 않는다)",
+      "_comp_avg" in _w63
+      and "c['score'] > _comp_avg" in _w63
+      and "c['score'] < _comp_avg" in _w63)
+check("한쪽이 비면 나누지 않고 한 줄로 세운다",
+      '점수를 만든 요인' in _w63)
+check("요인마다 평균 대비 차이를 병기 — 갈린 근거를 확인할 수 있게",
+      '평균 대비' in _w63)
 check("요인은 composition 실측에서만",
       "verdict.get('composition'" in _w63)
 
@@ -4302,6 +4310,129 @@ _at91.session_state['search_text_input'] = '하이닉스'
 _at91.run()
 check("검색어를 입력한 상태에서 렌더 예외 없음", len(_at91.exception) == 0,
       str(_at91.exception[:1])[:200])
+
+
+section("92. 아침 전면 점검 — 화면이 두 말을 하지 않는가 · 양 테마 대비")
+
+import ast as _ast92
+import re as _re92
+_w92 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_g92 = open(_os.path.join(PROJ, 'gaeum_ai.py'), encoding='utf-8').read()
+_u92 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+
+# ① 같은 값을 두 타일에 세우지 않는다 — 한 측정이 두 번 확인된 것처럼 보인다
+check("적중률 타일에서 blind 를 두 번 세우지 않는다",
+      _w92.count("'label': '추천만 골랐을 때'") == 0)
+check("표본 부족 경고는 실전 적중률 타일에 붙어 있다",
+      "안 본 기간 {_bzb2.get('n', 0):,}건 중 · 표본 부족" in _w92)
+
+# ② 국면 안내는 표의 행 이름과 맞아야 하고, 근거(60일 추세)를 밝혀야 한다
+check("국면 안내가 표의 행 이름과 일치 (차분한/거친 + 국면)",
+      "<b>차분한 {_now_ko}</b>" in _w92 and "<b>거친 {_now_ko}</b>" in _w92)
+check("'~로 시작하는' 이라는 틀린 안내가 남아 있지 않다",
+      "로 시작하는 두 줄" not in _w92)
+check("국면 판정 근거를 함께 적는다 — 하루 등락과 구분",
+      "_now_basis" in _w92 and "하루 등락이 아니라 60일 추세로 봅니다" in _w92)
+
+# ③ 가늠 AI 는 화면 위쪽과 같은 판정을 봐야 한다 (두 개의 진실 금지)
+check("가늠 AI 가 최종 판정(verdict)을 받는다",
+      "_gai.build(four_scores, sim_res, verdict" in _w92)
+check("위험요인은 글자수로 자르지 않고 첫 사유만 고른다",
+      "split(' / ')[0]" in _g92 and "[:160]" not in _g92)
+
+# ④ 다크 의미색이 모든 표면에서 WCAG AA 를 넘는가 (실측 계산)
+def _hx92(s):
+    s = s.lstrip('#')
+    return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _lum92(c):
+    f = []
+    for v in c:
+        v /= 255.0
+        f.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+
+
+def _cr92(a, b):
+    la, lb = _lum92(a), _lum92(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+import ui_kit as _uk92
+# #1C2635 는 양 테마에서 다크로 고정되는 카드 — 다크 표면 중 가장 밝다
+_SURF92 = [_uk92.DARK['bg'], _uk92.DARK['card'], _uk92.DARK['raised'],
+           _uk92.DARK_NAV, '#1C2635', '#161D2A']
+_low92 = []
+for _k92 in ('brand', 'up', 'down', 'pos', 'warn', 'neg'):
+    _r92 = min(_cr92(_hx92(_uk92.DARK[_k92]), _hx92(_s92)) for _s92 in _SURF92)
+    if _r92 < 4.5:
+        _low92.append(f"{_k92}={_uk92.DARK[_k92]}({_r92:.2f})")
+check("다크 의미색 6개가 모든 다크 표면에서 4.5:1 이상",
+      not _low92, ' '.join(_low92))
+
+_lowL92 = []
+for _k92 in ('brand', 'up', 'down', 'pos', 'warn', 'neg'):
+    _r92 = min(_cr92(_hx92(_uk92.LIGHT[_k92]), _hx92(_s92))
+               for _s92 in (_uk92.LIGHT['bg'], _uk92.LIGHT['card'],
+                            _uk92.LIGHT['raised'], _uk92.LIGHT_NAV))
+    if _r92 < 4.5:
+        _lowL92.append(f"{_k92}={_uk92.LIGHT[_k92]}({_r92:.2f})")
+check("라이트 의미색 6개가 모든 라이트 표면에서 4.5:1 이상",
+      not _lowL92, ' '.join(_lowL92))
+
+# ⑤ 다크 고정 카드 안쪽 되돌림에 code 가 빠지면 코드 칩만 안 보인다
+check("다크 고정 카드 되돌림 규칙에 code 포함",
+      '.stApp div[style*="rgb(22, 29, 42)"] code' in _w92)
+check("되돌림이 일반 code 규칙보다 뒤에 온다 (순서로 이긴다)",
+      _w92.find('.stApp div[style*="rgb(22, 29, 42)"] code')
+      > _w92.find('.stApp code, .stApp kbd') > -1)
+
+# ⑥ 사라질 API·폰트에 없는 글자
+check("use_container_width 를 쓰지 않는다 (2025-12-31 제거)",
+      'use_container_width' not in _w92 and 'use_container_width' not in _u92)
+_EMO92 = _re92.compile('[\U0001F300-\U0001FAFF☀-➿⬀-⯿]')
+_bademo = [ln for ln in _w92.split('\n')
+           if _EMO92.search(ln) and not ln.lstrip().startswith('#')
+           and any(k in ln for k in ('set_title', 'annotate', 'set_xlabel',
+                                     'set_ylabel', 'suptitle'))]
+check("차트 라벨에 이모지를 쓰지 않는다 (한글 폰트에 글리프 없음)",
+      not _bademo, str(_bademo[:1])[:120])
+
+# ⑦ ui_kit 호출부가 theme 을 빠뜨리면 라이트에서 다크색이 그려진다
+_ukast92 = _ast92.parse(_u92)
+_themed92 = {}
+for _n92 in _ukast92.body:
+    if isinstance(_n92, _ast92.FunctionDef):
+        _names92 = [a.arg for a in _n92.args.args]
+        if 'theme' in _names92:
+            _themed92[_n92.name] = _names92.index('theme')
+_miss92 = []
+for _node92 in _ast92.walk(_ast92.parse(_w92)):
+    if not isinstance(_node92, _ast92.Call):
+        continue
+    _f92 = _node92.func
+    if not (isinstance(_f92, _ast92.Attribute) and isinstance(_f92.value, _ast92.Name)
+            and _f92.value.id in ('_uk', 'ui_kit')):
+        continue
+    if _f92.attr not in _themed92:
+        continue
+    if ('theme' not in {k.arg for k in _node92.keywords if k.arg}
+            and len(_node92.args) <= _themed92[_f92.attr]):
+        _miss92.append(f'{_f92.attr}:{_node92.lineno}')
+check("모든 ui_kit 호출이 theme 을 넘긴다", not _miss92, ' '.join(_miss92))
+
+# ⑧ 제거 기한이 지난 API — 스트림릿을 올리는 순간 화면이 사라진다
+check("st.components.v1.html 을 쓰지 않는다 (2026-06-01 제거 기한 경과)",
+      'st.components.v1.html(' not in _w92)
+
+# ⑨ 하위 프로세스 출력은 UTF-8 로 읽는다 — 한글 로그에서 죽지 않게
+_subp92 = [ln for ln in _w92.split('\n')
+           if '.run(' in ln and 'capture_output' in ln]
+check("하위 프로세스 호출에 encoding 이 지정돼 있다",
+      all('encoding=' in _w92[max(0, _w92.find(ln) - 400):
+                              _w92.find(ln) + 400] for ln in _subp92),
+      str(_subp92[:1])[:120])
 
 
 print()
