@@ -213,13 +213,23 @@ def make_detect_issues(conn, calib):
         else:
             it.resolve_by_key(conn, 'model|vb_gap')
 
-        if (sig.get('rate_pct') or 100) < 2.0:
+        if (sig.get('rate_pct') or 100) < 5.0:
             it.create_issue(conn, category='usability', severity='medium',
                             title='매수 신호 발생률 과소',
                             summary=f"신호율 {sig.get('rate_pct')}% — 실용성 점검.",
                             related_model=ver, issue_key='usability|signal_rate')
         else:
             it.resolve_by_key(conn, 'usability|signal_rate')
+
+        # ── 조치 관리: 계획 부여 → 경과일 규칙 적용 (3일 방치 금지) ──────
+        from improvement import issue_ops as _io
+        _io.ensure_schema(conn)
+        for _k in ('validation|high_conf_n', 'model|vb_gap',
+                   'usability|signal_rate', 'data|index_missing'):
+            _io.apply_playbook(conn, _k, version=ver)
+        _esc = _io.escalate(conn)
+        if _esc:
+            print("경과일 규칙 적용:", _esc)
     return detect_issues
 
 

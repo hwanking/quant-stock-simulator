@@ -3136,7 +3136,8 @@ check("종목 이슈 — 차단 조건이 최상위(높음)", _si66[0]['severity
 check("경고 없으면 이슈 없음", po66.build_stock_issues({}, {}, {}) == [])
 
 # ④ 화면 — v4 패널·전체 보기·고객센터
-check("홈 주요 이슈 섹션", '주요 이슈 — 오늘 꼭 봐야 할 핵심 변화' in _w66)
+check("홈 주요 이슈 섹션 — 건수·최상위 제목이 접힌 채로 보인다",
+      '주요 이슈 ' in _w66 and '건 — ' in _w66)
 check("종목 이슈 섹션", '이 종목의 주요 이슈' in _w66)
 check("업데이트 패널 — 요약+필터+전체 보기", '최근 업데이트 · 업데이트 히스토리' in _w66
       and '전체 업데이트 보기' in _w66 and 'upd_cat_filter' in _w66)
@@ -3488,8 +3489,10 @@ check("코드 조각 — 칩 해체 (배경 투명)",
 check("실행 메타 — 접힌 실행 정보로", '실행 정보 — 분석기준일' in _w76)
 check("결론 배너 — 양 테마 다크 카드 고정 (흰 글자 보호)",
       '라이트 surface(흰색)로 바꾸면 글자가 사라진다' in _w76)
-check("사이드바 헤더 — 이모지 제거", '### 종목 검색' in _w76
-      and '### 시장 트렌드 탐색기' in _w76)
+check("사이드바 구역 — 킷 라벨로 통일 · 가로선 없음",
+      '_uk.sidebar_section("종목"' in _w76
+      and '_uk.sidebar_section("종목 찾기"' in _w76
+      and 'st.sidebar.markdown("---")' not in _w76)
 
 
 section("77. 타입 스케일 — 열 단계만 · 굵기 700 상한 · 접근성 하한 12px")
@@ -3608,6 +3611,79 @@ _mv79 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
 check("실측 근거 기록 (차단 42.3% · 차이 0.9%p)",
       '42.3%' in _mv79 and '+0.9%p' in _mv79)
 check("기각된 가설도 기록 (ESS 게이트)", '1차 가설 기각' in _mv79)
+
+
+import datetime as _dt
+_d80 = open(_os.path.join(PROJ, "scripts",
+            "run_daily_improvement.py"), encoding='utf-8').read()
+section("80. 이슈 조치 관리 — 3일 규칙 · 필드 완비 · 화면 노출")
+from improvement import issue_ops as _io80
+from improvement import issue_tracker as _it80
+from improvement import database as _db80
+
+# 운영 DB를 건드리지 않는다 — 시험용 임시 파일에만 쓴다
+_p80 = _os.path.join(PROJ, '_probe', '_issue_ops_test.db')
+_os.makedirs(_os.path.dirname(_p80), exist_ok=True)
+if _os.path.exists(_p80):
+    _os.remove(_p80)
+_db80.initialize_database(_p80)
+_c80 = _db80.get_connection(_p80)
+_io80.ensure_schema(_c80)
+
+_cols80 = {r[1] for r in _c80.execute(
+    "PRAGMA table_info(improvement_issues)").fetchall()}
+check("조치 열 완비 — 원인·영향·즉시수정·상태·담당·예정·해결버전·검증",
+      {'cause', 'user_impact', 'fixable_now', 'work_status', 'module',
+       'action_plan', 'safeguard', 'target', 'eta', 'resolved_version',
+       'verification', 'next_review'} <= _cols80)
+check("ensure_schema 는 두 번 불러도 안전", (_io80.ensure_schema(_c80) is None))
+
+_it80.create_issue(_c80, category='usability', severity='medium',
+                   title='매수 신호 발생률 과소', summary='시험',
+                   issue_key='usability|signal_rate')
+_io80.apply_playbook(_c80, 'usability|signal_rate', version='v-test')
+_r80 = _io80.issue_view(_c80)[0]
+check("계획 부여 — 원인·영향·조치·안전조치·목표가 모두 채워진다",
+      all(_r80[k] for k in ('cause', 'user_impact', 'action_plan',
+                            'safeguard', 'target', 'eta')))
+check("즉시 수정 가능 여부가 참/거짓으로 명시", _r80['fixable_now'] in (0, 1))
+check("수정 예정일은 오늘 이후", str(_r80['eta']) >= _dt.date.today().isoformat())
+
+# 계획이 없는 미지의 이슈는 지어내지 않고 '확인 중'으로 둔다
+_it80.create_issue(_c80, category='data', severity='low', title='처음 보는 문제',
+                   summary='시험', issue_key='unknown|xyz')
+_io80.apply_playbook(_c80, 'unknown|xyz')
+_unk80 = [r for r in _io80.issue_view(_c80) if r['issue_key'] == 'unknown|xyz'][0]
+check("모르는 문제엔 계획을 날조하지 않는다", _unk80['work_status'] == _io80.ST_CHECKING
+      and '조사 중' in str(_unk80['cause']))
+
+# 3일 규칙 — 등록일을 4일 전으로 되돌리면 성격이 자동 재분류된다
+_c80.execute("UPDATE improvement_issues SET created_at=? WHERE issue_key=?",
+             ((_dt.date.today() - _dt.timedelta(days=4)).isoformat(), 'unknown|xyz'))
+_esc80 = _io80.escalate(_c80)
+_unk80b = [r for r in _io80.issue_view(_c80) if r['issue_key'] == 'unknown|xyz'][0]
+check("3일 넘게 방치 금지 — 자동 재분류", _unk80b['work_status'] in
+      (_io80.ST_BLOCKED, _io80.ST_LONGTERM) and len(_esc80) >= 1)
+check("재분류 시 다음 검토일이 새로 잡힌다", bool(_unk80b['next_review']))
+check("재분류 사유가 사람 말로 남는다", '경과' in str(_unk80b['verification']))
+check("재분류된 이슈는 더 이상 방치(stale)로 세지 않는다", not _unk80b['stale'])
+
+_io80.resolve_with_verification(_c80, 'usability|signal_rate',
+                                version='v-test', verification='표본 100건 재측정 통과')
+_done80 = [r for r in _io80.issue_view(_c80)
+           if r['issue_key'] == 'usability|signal_rate'][0]
+check("해결은 검증 결과와 해결 버전을 함께 남겨야 성립",
+      _done80['status'] == 'resolved' and _done80['work_status'] == _io80.ST_DONE
+      and _done80['resolved_version'] == 'v-test' and _done80['verification'])
+
+_w80 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 이슈마다 원인·영향·조치·예정일을 함께 보여준다",
+      '왜 생겼나' in _w80 and '영향' in _w80 and '지금 하는 일' in _w80
+      and '임시 안전조치' in _w80)
+check("일일 루틴이 계획 부여·경과일 규칙을 실제로 호출",
+      'apply_playbook' in _d80 and 'escalate' in _d80)
+_c80.close()
+_os.remove(_p80)
 
 
 print()

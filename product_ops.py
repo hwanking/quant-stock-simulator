@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import re as _re
 from datetime import datetime
 
 # ── 업데이트 카테고리 — 커밋 제목 낱말 규칙 (순서 = 우선순위) ─────────────
@@ -37,8 +38,83 @@ def classify_update_category(subject):
     return '기타'
 
 
+# ── 업데이트 상세 필드 추출 ──────────────────────────────────────────────
+# 원칙: 커밋 본문에 **실제로 적혀 있는 것만** 뽑는다. 없으면 지어내지 않고
+# '기록 없음'으로 둔다. 커밋 본문이 유일한 원천이며 여기서 새 사실을 만들지
+# 않는다 (업데이트 내역을 손으로 예쁘게 쓰면 그 순간 신뢰를 잃는다).
+_RE_TESTS = _re.compile(r'(\d[\d,]*)\s*건\s*(?:전체\s*)?(통과|실패)')
+_RE_NEWSEC = _re.compile(r'§\s*(\d+)\s*(?:신설|추가)\s*\((\d+)\s*건\)')
+_RE_MODULE = _re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z0-9_]+)*\.py)\b')
+_RE_ISSUE = _re.compile(r'§\s*\d+|issue_key\s*[=:]\s*[\'"]?([\w|]+)')
+# '문제/증상/원인' 처럼 앞머리에 라벨이 붙은 줄만 '변경 전 문제'로 인정한다
+_RE_PROBLEM = _re.compile(r'^\s*[-·*]?\s*(문제|증상|원인|배경)\s*[:：]\s*(.+)$', _re.M)
+_RE_USER = _re.compile(
+    r'^\s*[-·*]?\s*(사용자(?:에게)?(?:\s*달라지는\s*점)?|화면(?:에서)?)\s*[:：]\s*(.+)$',
+    _re.M)
+
+_NONE = '기록 없음'
+
+
+def extract_update_detail(item):
+    """
+    커밋 하나에서 상세 필드를 뽑는다.
+
+    반환 키: problem(변경 전 문제) · why(변경 이유) · related(관련 이슈) ·
+             tests(테스트 결과) · user_effect(사용자에게 달라지는 점) ·
+             modules(담당 모듈)
+    """
+    body = str((item or {}).get('body') or '').strip()
+    subject = str((item or {}).get('subject') or '')
+    paras = [p.strip() for p in body.split('\n\n') if p.strip()]
+
+    m = _RE_PROBLEM.search(body)
+    if m:
+        problem = m.group(2).strip()
+    else:
+        # 라벨이 없으면 '과거에 이랬다'를 서술한 줄만 인정한다. 커밋에 적힌
+        # 문장을 그대로 옮길 뿐, 없는 문제를 만들어 내지는 않는다.
+        _past = ('였다', '었다', '았다', '못했다', '않았다', '없었다', '깨지',
+                 '죽던', '터지', '버그', '오류', '누락', '역전', '모순', '뒤집')
+        _cands = [ln.strip(' -·*') for ln in body.splitlines()
+                  if any(w in ln for w in _past) and len(ln.strip()) > 10]
+        problem = _cands[0] if _cands else _NONE
+
+    # 변경 이유 = 본문 첫 문단 (커밋 규약상 '왜'를 먼저 쓴다). 없으면 제목.
+    why = paras[0].replace('\n', ' ') if paras else (subject or _NONE)
+
+    mu = _RE_USER.search(body)
+    if mu:
+        user_effect = mu.group(2).strip()
+    else:
+        # 라벨이 없으면 '사용자/화면/보입니다'가 들어간 문장만 인정한다
+        cands = [ln.strip(' -·*') for ln in body.splitlines()
+                 if ('사용자' in ln or '화면' in ln) and len(ln.strip()) > 8]
+        user_effect = cands[0] if cands else _NONE
+
+    mt = _RE_NEWSEC.search(body) or None
+    m2 = _RE_TESTS.search(body)
+    if m2 and m2.group(2) == '통과':
+        tests = f"회귀 {m2.group(1)}건 전체 통과"
+        if mt:
+            tests += f" (§{mt.group(1)} 신설 {mt.group(2)}건 포함)"
+    elif m2:
+        tests = f"회귀 {m2.group(1)}건 실패 — 후속 수정 있음"
+    else:
+        tests = _NONE
+
+    mods = []
+    for mm in _RE_MODULE.finditer(body):
+        if mm.group(1) not in mods:
+            mods.append(mm.group(1))
+    related = sorted({s for s in _re.findall(r'§\s*\d+', body)})
+
+    return {'problem': problem, 'why': why, 'user_effect': user_effect,
+            'tests': tests, 'modules': mods[:4],
+            'related': related[:6] or [], 'has_detail': bool(body)}
+
+
 def enrich_update_history(history):
-    """update_history.json 구조에 카테고리·버전 표기를 입힌다 (원문 불변)."""
+    """update_history.json 구조에 카테고리·버전·상세 필드를 입힌다 (원문 불변)."""
     out = []
     for day in (history or {}).get('days', []):
         d = str(day.get('date', ''))
@@ -46,6 +122,7 @@ def enrich_update_history(history):
         items = [{
             **it,
             'category': classify_update_category(it.get('subject')),
+            'detail': extract_update_detail(it),
         } for it in day.get('items', [])]
         out.append({'date': d, 'version': ver, 'items': items})
     return out

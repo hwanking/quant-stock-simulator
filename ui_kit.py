@@ -52,6 +52,41 @@ def section(title: str, subtitle: str = '', theme: str = 'dark',
         unsafe_allow_html=True)
 
 
+def sidebar_section(title: str, sub: str = '', theme: str = 'dark',
+                    top: int = 26) -> None:
+    """
+    사이드바 구역 라벨 — 본문 섹션보다 한 단계 조용하다.
+
+    구분선(---)을 쓰지 않는다. 사이드바에 가로선을 그으면 좁은 폭에서 선만
+    눈에 남고 내용이 밀린다. 대신 위 여백과 작은 대문자 라벨로 나눈다.
+    """
+    t = tokens(theme)
+    s = (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx3']}; "
+         f"line-height:1.5; word-break:keep-all;'>{_esc(sub)}</p>"
+         if sub else '')
+    st.sidebar.markdown(
+        f"<div style='margin:{top}px 0 8px 0;'>"
+        f"<p style='margin:0; font-size:12px; font-weight:600; "
+        f"letter-spacing:0.06em; color:{t['tx2']};'>{_esc(title)}</p>{s}</div>",
+        unsafe_allow_html=True)
+
+
+def sidebar_fact(label: str, value: str, theme: str = 'dark',
+                 tone: str = '') -> None:
+    """사이드바 한 줄 사실 — 색 상자(success/info) 대신 쓴다."""
+    t = tokens(theme)
+    col = t.get(tone, t['tx1'])
+    st.sidebar.markdown(
+        f"<div style='display:flex; gap:10px; align-items:baseline; "
+        f"padding:4px 0;'>"
+        f"<span style='font-size:12px; color:{t['tx3']}; flex:0 0 auto;'>"
+        f"{_esc(label)}</span>"
+        f"<span style='font-size:13px; color:{col}; font-weight:600; "
+        f"margin-left:auto; text-align:right; word-break:break-all;'>"
+        f"{_esc(value)}</span></div>",
+        unsafe_allow_html=True)
+
+
 def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
     """
     지표 타일 줄 — st.metric 대체. 한 그룹 카드 안에 세로 헤어라인으로 나눈다.
@@ -70,20 +105,20 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
                f"line-height:1.45; word-break:keep-all;'>"
                f"{_esc(it.get('sub'))}</p>" if it.get('sub') else '')
         cells.append(
-            f"<div style='flex:1 1 0; min-width:0; padding:4px 14px; {border}'>"
+            f"<div style='flex:1 1 0; min-width:0; padding:4px 16px; {border}'>"
             f"<p style='margin:0; font-size:13px; color:{t['tx2']}; "
             f"font-weight:500; white-space:nowrap; overflow:hidden; "
             f"text-overflow:ellipsis;'>{_esc(it['label'])}</p>"
             # 값은 절대 줄바꿈하지 않는다 — 폭이 좁으면 글자를 줄인다(clamp).
             # 경계값 20·28 은 타입 스케일 안이다.
-            f"<p style='margin:6px 0 0 0; font-size:clamp(20px, 2.4vw, 28px); "
+            f"<p style='margin:8px 0 0 0; font-size:clamp(20px, 2.4vw, 28px); "
             f"font-weight:600; color:{tone}; letter-spacing:-0.02em; "
             f"line-height:1.15; white-space:nowrap; overflow:hidden; "
             f"text-overflow:ellipsis; font-variant-numeric:tabular-nums;'>"
             f"{_esc(it['value'])}</p>{sub}</div>")
     st.markdown(
         f"<div style='background:{t['card']}; border-radius:18px; "
-        f"padding:20px 6px; display:flex; align-items:stretch;'>"
+        f"padding:20px 8px; display:flex; align-items:stretch;'>"
         + ''.join(cells) + "</div>", unsafe_allow_html=True)
 
 
@@ -95,7 +130,7 @@ def rows(items: Sequence[tuple], theme: str = 'dark',
     items: [(label, value)] 또는 [(label, value, tone)]
     """
     t = tokens(theme)
-    head = (f"<p style='margin:0 0 10px 2px; font-size:13px; color:{t['tx2']}; "
+    head = (f"<p style='margin:0 0 8px 2px; font-size:13px; color:{t['tx2']}; "
             f"font-weight:500;'>{_esc(title)}</p>" if title else '')
     body = []
     for i, it in enumerate(items):
@@ -111,7 +146,7 @@ def rows(items: Sequence[tuple], theme: str = 'dark',
             f"{_esc(value)}</span></div>")
     st.markdown(
         head + f"<div style='background:{t['card']}; border-radius:18px; "
-        f"padding:6px 20px;'>" + ''.join(body) + "</div>",
+        f"padding:8px 20px;'>" + ''.join(body) + "</div>",
         unsafe_allow_html=True)
 
 
@@ -130,7 +165,7 @@ def note(text: str, theme: str = 'dark') -> None:
     """보조 설명 — 캡션보다 조용하게, 카드 밖에 둔다."""
     t = tokens(theme)
     st.markdown(
-        f"<p style='margin:10px 2px 0 2px; font-size:13px; color:{t['tx3']}; "
+        f"<p style='margin:8px 2px 0 2px; font-size:13px; color:{t['tx3']}; "
         f"line-height:1.6;'>{_esc(text)}</p>", unsafe_allow_html=True)
 
 
@@ -204,7 +239,7 @@ def global_css(theme: str = 'dark') -> str:
         border: 1px solid {t['line']} !important;
         background: {t['raised']} !important;
         font-weight: 600 !important;
-        padding: 8px 18px !important;
+        padding: 8px 20px !important;
         transition: background .2s ease, border-color .2s ease !important;
     }}
     .stApp .stButton > button:hover {{

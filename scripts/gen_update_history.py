@@ -17,20 +17,28 @@ OUT = os.path.join(BASE, 'data', 'update_history.json')
 
 
 def main():
+    # 본문(%b)까지 가져온다 — 변경 이유·테스트 결과가 본문에 적혀 있다.
+    # 레코드 구분은 \x1e, 필드 구분은 \x1f (커밋 본문에 줄바꿈이 있으므로)
     r = subprocess.run(
-        ['git', 'log', '--pretty=format:%ad\x1f%h\x1f%s',
+        ['git', 'log', '--pretty=format:%ad\x1f%h\x1f%s\x1f%b\x1e',
          '--date=format:%Y-%m-%d', '-n', '400'],
         cwd=BASE, capture_output=True, text=True, encoding='utf-8')
     if r.returncode != 0:
         print('git log 실패:', r.stderr[:200])
         return 1
     days = {}
-    for line in r.stdout.splitlines():
-        parts = line.split('\x1f')
-        if len(parts) != 3:
+    for rec in r.stdout.split('\x1e'):
+        parts = rec.strip('\n').split('\x1f')
+        if len(parts) < 3:
             continue
-        d, h, s = parts
-        days.setdefault(d, []).append({'hash': h, 'subject': s})
+        d, h, s = parts[0].strip(), parts[1], parts[2]
+        body = parts[3] if len(parts) > 3 else ''
+        # 서명 줄(Co-Authored-By 등)은 사용자에게 보여줄 내용이 아니다
+        body = '\n'.join(ln for ln in body.splitlines()
+                         if not ln.startswith(('Co-Authored-By:', 'Signed-off-by:',
+                                               '🤖 Generated')))
+        days.setdefault(d, []).append({'hash': h, 'subject': s,
+                                       'body': body.strip()})
     out = {'generated_from': 'git log (커밋 이력 원문)',
            'days': [{'date': d, 'items': items}
                     for d, items in sorted(days.items(), reverse=True)]}
