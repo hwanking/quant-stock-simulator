@@ -2458,7 +2458,52 @@ def _load_update_history():
         return None
 
 
-# 홈 1순위: 개장 전 한 줄 결론 (v2 — 지수보다 먼저, 리포트 없으면 만들지 않는다)
+# ── 홈 1순위: 모델 상태 (사용자 요청 — 화면 최상단 고정, 전부 실측·n 병기) ──
+# 이 판정을 얼마나 믿을 수 있는지가 첫 화면의 첫 정보다.
+_home_cal = _load_calibration_meta()
+if _home_cal.get('total_cases'):
+    _sp = _home_cal.get('splits') or {}
+    _bz = (_sp.get('buy_zone') or {})
+    _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
+    _sig = _home_cal.get('signal_frequency') or {}
+    # 라벨은 짧게, 정확한 정의는 툴팁으로 (좁은 폭에서 잘리지 않게)
+    _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns(5)
+    with _hc1:
+        st.metric("모델",
+                  str(_home_cal.get('rulebook_version', '—')).replace('v2026.', "v'26."),
+                  f"케이스 {_home_cal['total_cases']:,}", delta_color="off",
+                  help="운영 중인 규칙집 버전과 누적 리플레이 케이스 수")
+    with _hc2:
+        st.metric("검증 적중률",
+                  f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None else "미산출",
+                  f"n={_v.get('n', 0):,}", delta_color="off",
+                  help="표본외(검증) 구간 실측 적중률 — 목표가를 손절가보다 "
+                       "먼저 터치한 비율")
+    with _hc3:
+        st.metric("블라인드",
+                  f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None else "미산출",
+                  f"n={_b.get('n', 0):,}", delta_color="off",
+                  help="모델 선택에 전혀 쓰지 않은 구간의 적중률 — 실전에 "
+                       "가장 가까운 수치이며 현재 최우선 개선 대상입니다.")
+    with _hc4:
+        st.metric("고신뢰 60+",
+                  f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None else "미산출",
+                  f"n={_bzb.get('n', 0)} 부족" if (_bzb.get('n') or 0) < 30
+                  else f"n={_bzb.get('n', 0)}", delta_color="off",
+                  help="60점 이상 매수권 신호만 추린 블라인드 적중률. "
+                       "표본 30건 미만이면 공식 성과로 인정하지 않습니다.")
+    with _hc5:
+        st.metric("신호율",
+                  f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None else "미산출",
+                  f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0):,}",
+                  delta_color="off",
+                  help="전체 분석 중 매수권(60점+)이 나온 비율 — 낮을수록 "
+                       "선별이 엄격하지만 기회도 드뭅니다.")
+    st.caption("가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
+               "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
+    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+
+# 개장 전 한 줄 결론 (리포트가 있을 때만 — 없으면 만들지 않는다)
 try:
     import premarket as _pm_home
     _pm_today = st.session_state.get('premarket_report') or _pm_home.load_today_report()
@@ -2563,39 +2608,6 @@ if m_indices['kospi']['price'] == 'N/A' or m_indices['kosdaq']['price'] == 'N/A'
     st.warning("⚠️ **KOSPI·KOSDAQ 데이터 미수신 알림**: 최신 지수 수치가 연동되지 않아 **`[시장 국면: 판정 보류]`** 상태가 적용되었으며, 매매 적합도 상한(59점) 게이트 통제가 활성화되었습니다.")
 
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
-
-# ── 🏠 홈 지휘센터 — 모델 상태 + 개장 전 한 줄 결론 (전부 실측, n 병기) ─────
-_home_cal = _load_calibration_meta()
-if _home_cal.get('total_cases'):
-    _sp = _home_cal.get('splits') or {}
-    _bz = (_sp.get('buy_zone') or {})
-    _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
-    _sig = _home_cal.get('signal_frequency') or {}
-    # 모델 상태 — 사용자 요청으로 토글 없이 항상 펼쳐 보인다
-    _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns(5)
-    with _hc1:
-        st.metric("모델 버전",
-                  str(_home_cal.get('rulebook_version', '—')).replace('v2026.', "v'26."),
-                  f"누적 케이스 {_home_cal['total_cases']:,}건", delta_color="off")
-    with _hc2:
-        st.metric("검증(표본외) 적중률",
-                  f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None else "미산출",
-                  f"n={_v.get('n', 0)}", delta_color="off")
-    with _hc3:
-        st.metric("블라인드 적중률",
-                  f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None else "미산출",
-                  f"n={_b.get('n', 0)}", delta_color="off")
-    with _hc4:
-        st.metric("고신뢰(60점+) 블라인드",
-                  f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None else "미산출",
-                  f"n={_bzb.get('n', 0)} — 표본 부족" if (_bzb.get('n') or 0) < 30
-                  else f"n={_bzb.get('n', 0)}", delta_color="off")
-    with _hc5:
-        st.metric("매수권 신호율",
-                  f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None else "미산출",
-                  f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0)}건", delta_color="off")
-    st.caption("가상 백테스트(과거 기준일 리플레이) 실측입니다 — 미래 수익을 보장하지 "
-               "않으며, 자세한 분해·실패 원인은 아래 [모델 성과](#nav-perf) 섹션에 있습니다.")
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
 with st.spinner(f"[{resolved_name}] 동적 무결성 점수 및 시계열 연산 중..."):
