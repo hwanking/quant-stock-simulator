@@ -460,17 +460,17 @@ def _render_toolbar(here_html: str = '') -> None:
 
 _render_toolbar()               # 우선 비워서 그린다 (자리 이동 방지)
 
-st.markdown("""
+st.markdown(f"""
 <style>
-    /* 전체 다크 모드 고대비 시각성 극대화 최적화 */
+    /* 사이드바 — 색은 토큰에서만 온다 (테마 전환 시 함께 바뀐다) */
     
     /* 사이드바 고대비(High-Contrast) 가독성 100% 최적화 */
-    [data-testid="stSidebar"] {
-        background-color: #161D2A !important;
-        border-right: 1px solid #222C3C !important;
-    }
+    [data-testid="stSidebar"] {{
+        background-color: {_TOK['bg2']} !important;
+        border-right: 1px solid {_TOK['border']} !important;
+    }}
     
-    /* (삭제) [data-testid="stSidebar"] * { color:#fff }
+    /* (삭제) [data-testid="stSidebar"] * {{ color:#fff }}
        전 요소를 흰색·굵게 만들어 라벨과 값이 구분되지 않았다.
        사이드바도 본문과 같은 3단 텍스트 위계를 쓴다. */
     [data-testid="stSidebar"] h1,
@@ -478,112 +478,112 @@ st.markdown("""
     [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] h4,
     [data-testid="stSidebar"] h5,
-    [data-testid="stSidebar"] h6 {
-        color: #F3F6FA !important;
+    [data-testid="stSidebar"] h6 {{
+        color: {_TOK['tx1']} !important;
         font-weight: 600 !important;
         letter-spacing: -0.014em;
         margin-top: 24px !important;
         margin-bottom: 8px !important;
-    }
+    }}
 
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] li,
     [data-testid="stSidebar"] small,
-    [data-testid="stSidebar"] div[data-testid="stCaptionContainer"] {
-        color: #9DAABC !important;
+    [data-testid="stSidebar"] div[data-testid="stCaptionContainer"] {{
+        color: {_TOK['tx2']} !important;
         font-size: 13px !important;
         font-weight: 400 !important;
-    }
+    }}
 
     /* 사이드바 입력창 & 드롭다운 가독성 강화 */
-    [data-testid="stSidebar"] input {
-        background-color: #1C2635 !important;
-        color: #ffffff !important;
+    [data-testid="stSidebar"] input {{
+        background-color: {_TOK['hover']} !important;
+        color: {_TOK['tx1']} !important;
         border-radius: 8px !important;
         font-weight: bold !important;
         font-size: 16px !important;
-    }
+    }}
     
-    [data-testid="stSidebar"] [data-baseweb="select"] {
-        background-color: #1C2635 !important;
+    [data-testid="stSidebar"] [data-baseweb="select"] {{
+        background-color: {_TOK['hover']} !important;
         border-radius: 8px !important;
-    }
+    }}
 
-    [data-testid="stSidebar"] [data-baseweb="select"] * {
+    [data-testid="stSidebar"] [data-baseweb="select"] * {{
         color: #ffffff !important;
-        background-color: #1C2635 !important;
+        background-color: {_TOK['hover']} !important;
         font-weight: bold !important;
-    }
+    }}
 
     /* (v6) 사이드바 code 는 칩이 아니라 조용한 보조 텍스트 — 토큰 블록에서 통일 */
 
     /* 메인 지표 카드 고대비 스타일 */
-    [data-testid="stMetricValue"] {
+    [data-testid="stMetricValue"] {{
         font-size: 34px !important;
         font-weight: 700 !important;
         color: #ffffff !important;
-    }
+    }}
     
-    [data-testid="stMetricLabel"] {
-        color: #9DAABC !important;
+    [data-testid="stMetricLabel"] {{
+        color: {_TOK['tx2']} !important;
         font-size: 15px !important;
         font-weight: 700 !important;
         margin-bottom: 4px !important;
-    }
+    }}
     
-    [data-testid="stMetricDelta"] {
+    [data-testid="stMetricDelta"] {{
         font-size: 15px !important;
         font-weight: 700 !important;
-    }
+    }}
 
     /* 교차 검증 상태표 표 전용 스타일 */
-    .cross-val-matrix {
+    .cross-val-matrix {{
         width: 100%;
         border-collapse: collapse;
         margin: 12px 0 20px 0;
-        background: #161D2A;
+        background: {_TOK['bg2']};
         border-radius: 12px;
         overflow: hidden;
-        }
-    .cross-val-matrix th {
-        background: #1C2635;
-        color: #4C8DFF;
+        }}
+    .cross-val-matrix th {{
+        background: {_TOK['hover']};
+        color: {_TOK['brand']};
         padding: 12px 16px;
         font-size: 15px;
         font-weight: bold;
         text-align: left;
-    }
-    .cross-val-matrix td {
+    }}
+    .cross-val-matrix td {{
         padding: 12px 16px;
-        border-top: 1px solid #222C3C;
-        color: #F3F6FA;
+        border-top: 1px solid {_TOK['border']};
+        color: {_TOK['tx1']};
         font-size: 15px;
-    }
+    }}
 
     /* 탭 스타일 고대비 */
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; background-color: #161D2A; padding: 4px; border-radius: 12px; }
-    .stTabs [data-baseweb="tab"] { height: 42px; border-radius: 8px; color: #9DAABC !important; font-weight: 700; font-size: 15px; }
-    .stTabs [aria-selected="true"] { background-color: #222C3C !important; color: #ffffff !important; font-weight: 700; }
+    .stTabs [data-baseweb="tab-list"] {{ gap: 6px; background-color: {_TOK['bg2']}; padding: 4px; border-radius: 12px; }}
+    .stTabs [data-baseweb="tab"] {{ height: 42px; border-radius: 8px; color: {_TOK['tx2']} !important; font-weight: 700; font-size: 15px; }}
+    .stTabs [aria-selected="true"] {{ background-color: {_TOK['border']} !important; color: #ffffff !important; font-weight: 700; }}
 
     /* 버튼 기본 테마 강제 */
-    .stButton > button {
-        background-color: #1C2635 !important;
+    .stButton > button {{
+        background-color: {_TOK['hover']} !important;
         color: #ffffff !important;
         font-weight: bold !important;
-    }
-    .stButton > button:hover {
-        border-color: #4C8DFF !important;
-        color: #4C8DFF !important;
-    }
-    .stButton > button p {
+    }}
+    .stButton > button:hover {{
+        border-color: {_TOK['brand']} !important;
+        color: {_TOK['brand']} !important;
+    }}
+    .stButton > button p {{
         color: inherit !important;
         font-weight: bold !important;
-    }
+    }}
 
-    h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700 !important; }
-    p, span, li, label { color: #F3F6FA; font-size: 16px; }
+    h1, h2, h3, h4, h5, h6 {{ color: #ffffff !important; font-weight: 700 !important; }}
+    p, span, li, label {{ color: {_TOK['tx1']}; font-size: 16px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -600,64 +600,620 @@ if _theme == 'light':
           ':not([data-testid="stAlert"] *):not(button *):not(code):not(kbd)')
     st.markdown(f"""
     <style>
-        .stApp {{ background-color: #F3F6FA !important; }}
+        .stApp {{ background-color: {_TOK['bg1']} !important; }}
         .stApp > header {{ background-color: transparent !important; }}
 
         /* 흰 바탕의 일반 텍스트 → 어둡게 (다크 카드 자손·버튼·알림 제외) */
         .stApp p{_G}, .stApp span{_G}, .stApp li{_G}, .stApp label{_G},
         .stApp em{_G}, .stApp strong{_G}, .stApp b{_G},
         .stApp td{_G}, .stApp th{_G} {{
-            color: #1C2635 !important;
+            color: {_TOK['tx1']} !important;
         }}
         .stApp h1{_G}, .stApp h2{_G}, .stApp h3{_G},
         .stApp h4{_G}, .stApp h5{_G}, .stApp h6{_G} {{
-            color: #0B0F17 !important;
+            color: {_TOK['tx1']} !important;
         }}
-        .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: #7C8AA0 !important; }}
+        .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: {_TOK['tx2']} !important; }}
 
         /* 메트릭 숫자 */
-        [data-testid="stMetricValue"] {{ color: #0B0F17 !important; }}
-        [data-testid="stMetricLabel"] {{ color: #7C8AA0 !important; }}
+        [data-testid="stMetricValue"] {{ color: {_TOK['tx1']} !important; }}
+        [data-testid="stMetricLabel"] {{ color: {_TOK['tx2']} !important; }}
 
         /* 알림 박스: 배경이 반투명 틴트라 라이트 모드에선 밝아진다 → 글자는 어둡게 */
         .stApp [data-testid="stAlert"] p, .stApp [data-testid="stAlert"] span,
         .stApp [data-testid="stAlert"] li, .stApp [data-testid="stAlert"] b,
         .stApp [data-testid="stAlert"] strong {{
-            color: #161D2A !important;
+            color: {_TOK['tx1']} !important;
         }}
         /* 코드 조각: 라이트에서도 칩이 아니라 조용한 보조 텍스트 (v6) */
         .stApp code, .stApp kbd,
         [data-testid="stSidebar"] code, [data-testid="stSidebar"] kbd {{
-            background-color: transparent !important; color: #7C8AA0 !important;
+            background-color: transparent !important; color: {_TOK['tx2']} !important;
             padding: 0 !important;
         }}
-        /* 버튼: 다크 스타일 유지 — 글자는 밝게 고정 */
-        .stApp .stButton > button p, .stApp .stButton > button span,
-        .stApp [data-testid="stDownloadButton"] button p {{
-            color: #F3F6FA !important;
+        /* 버튼도 테마를 따른다. 라이트에서만 버튼을 다크로 남기면
+           숫자 입력의 +/- 나 드롭다운 화살표까지 밝은 글자가 돼 흰 배경
+           위에서 사라진다 — 특례를 두지 않는 쪽이 결국 덜 깨진다. */
+        .stApp [data-testid^="stBaseButton"],
+        .stApp [data-testid^="stBaseButton"] *,
+        [data-testid="stSidebar"] [data-testid^="stBaseButton"],
+        [data-testid="stSidebar"] [data-testid^="stBaseButton"] * {{
+            color: {_TOK['tx1']} !important;
+        }}
+        /* 배경도 같이 잡아야 한다 — 다크 규칙이 더 구체적이라 이겼고,
+           그 결과 다크 버튼 위에 라이트 글자가 얹혀 안 보였다.
+           같은 모양의 셀렉터로 맞받아 배경을 테마 쪽으로 되돌린다. */
+        /* help= 가 붙은 버튼은 툴팁 span 으로 한 겹 더 감싸여 있어
+           div[data-testid="stButton"] > button 에 걸리지 않는다 */
+        section[data-testid="stSidebar"] div[data-testid="stButton"] > button,
+        section[data-testid="stSidebar"] span[data-testid="stTooltipHoverTarget"] > button,
+        .stApp span[data-testid="stTooltipHoverTarget"] > button,
+        .stApp div[data-testid="stButton"] > button,
+        .stApp div[data-testid="stDownloadButton"] > button {{
+            background: {_TOK['bg2']} !important;
+            border: 1px solid {_TOK['border']} !important;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stButton"] > button *,
+        section[data-testid="stSidebar"] span[data-testid="stTooltipHoverTarget"] > button *,
+        .stApp span[data-testid="stTooltipHoverTarget"] > button *,
+        .stApp div[data-testid="stButton"] > button *,
+        .stApp div[data-testid="stDownloadButton"] > button * {{
+            color: {_TOK['tx1']} !important;
         }}
         /* 탭 라벨 */
-        .stApp [data-testid="stTabs"] button p {{ color: #222C3C !important; }}
+        .stApp [data-testid="stTabs"] button p {{ color: {_TOK['tx2']} !important; }}
         .stApp [data-testid="stTabs"] button[aria-selected="true"] p {{
-            color: #0A84FF !important; font-weight: 700 !important; }}
+            color: {_TOK['brand']} !important; font-weight: 700 !important; }}
 
-        [data-testid="stSidebar"] {{ background-color: #ffffff !important;
-                                    border-right: 1px solid #F3F6FA !important; }}
+        [data-testid="stSidebar"] {{ background-color: {_TOK['bg2']} !important;
+                                    border-right: 1px solid {_TOK['border']} !important; }}
         [data-testid="stSidebar"] p{_G}, [data-testid="stSidebar"] span{_G},
         [data-testid="stSidebar"] li{_G}, [data-testid="stSidebar"] label{_G},
         [data-testid="stSidebar"] b{_G}, [data-testid="stSidebar"] strong{_G},
         [data-testid="stSidebar"] h1{_G}, [data-testid="stSidebar"] h2{_G},
         [data-testid="stSidebar"] h3{_G}, [data-testid="stSidebar"] h4{_G} {{
-            color: #161D2A !important;
+            color: {_TOK['tx1']} !important;
         }}
-        hr {{ border-color: #F3F6FA !important; }}
-        .stApp [data-testid="stWidgetLabel"] p{_G} {{ color: #1C2635 !important; }}
+        hr {{ border-color: {_TOK['border']} !important; }}
+
+        /* 인라인 color 가 박힌 글자는 위 가드를 통과해 라이트에서도
+           다크 색으로 남는다. 글자 토큰 3단만 라이트 등가로 되돌린다
+           (의미색 상승·하락·경고는 건드리지 않는다). */
+        .stApp [style*="color:#F3F6FA"],
+        .stApp [style*="color: #F3F6FA"],
+        .stApp [style*="color:#f3f6fa"],
+        .stApp [style*="color: #f3f6fa"],
+        .stApp [style*="color:rgb(243, 246, 250)"],
+        .stApp [style*="color: rgb(243, 246, 250)"] {{
+            color: {_TOK['tx1']} !important; }}
+        .stApp [style*="color:#9DAABC"],
+        .stApp [style*="color: #9DAABC"],
+        .stApp [style*="color:#9daabc"],
+        .stApp [style*="color: #9daabc"],
+        .stApp [style*="color:rgb(157, 170, 188)"],
+        .stApp [style*="color: rgb(157, 170, 188)"] {{
+            color: {_TOK['tx2']} !important; }}
+        .stApp [style*="color:#7C8AA0"],
+        .stApp [style*="color: #7C8AA0"],
+        .stApp [style*="color:#7c8aa0"],
+        .stApp [style*="color: #7c8aa0"],
+        .stApp [style*="color:rgb(124, 138, 160)"],
+        .stApp [style*="color: rgb(124, 138, 160)"] {{
+            color: {_TOK['tx3']} !important; }}
+
+        /* 의미색(상승·하락·좋음·경고)도 라이트 등가로 — 다크 팔레트
+           값은 흰 카드 위에서 대비가 3.4 안팎으로 떨어진다 (실측). */
+        .stApp [style*="color:#4C8DFF"],
+        .stApp [style*="color: #4C8DFF"],
+        .stApp [style*="color:#4c8dff"],
+        .stApp [style*="color: #4c8dff"],
+        .stApp [style*="color:rgb(76, 141, 255)"],
+        .stApp [style*="color: rgb(76, 141, 255)"] {{
+            color: {_TOK['brand']} !important; }}
+        .stApp [style*="color:#35C98B"],
+        .stApp [style*="color: #35C98B"],
+        .stApp [style*="color:#35c98b"],
+        .stApp [style*="color: #35c98b"],
+        .stApp [style*="color:rgb(53, 201, 139)"],
+        .stApp [style*="color: rgb(53, 201, 139)"] {{
+            color: {_TOK['pos']} !important; }}
+        .stApp [style*="color:#F2B84B"],
+        .stApp [style*="color: #F2B84B"],
+        .stApp [style*="color:#f2b84b"],
+        .stApp [style*="color: #f2b84b"],
+        .stApp [style*="color:rgb(242, 184, 75)"],
+        .stApp [style*="color: rgb(242, 184, 75)"] {{
+            color: {_TOK['warn']} !important; }}
+        .stApp [style*="color:#F26161"],
+        .stApp [style*="color: #F26161"],
+        .stApp [style*="color:#f26161"],
+        .stApp [style*="color: #f26161"],
+        .stApp [style*="color:rgb(242, 97, 97)"],
+        .stApp [style*="color: rgb(242, 97, 97)"] {{
+            color: {_TOK['neg']} !important; }}
+        .stApp [style*="color:#FF453A"],
+        .stApp [style*="color: #FF453A"],
+        .stApp [style*="color:#ff453a"],
+        .stApp [style*="color: #ff453a"],
+        .stApp [style*="color:rgb(255, 69, 58)"],
+        .stApp [style*="color: rgb(255, 69, 58)"] {{
+            color: {_TOK['up']} !important; }}
+        .stApp [style*="color:#0A84FF"],
+        .stApp [style*="color: #0A84FF"],
+        .stApp [style*="color:#0a84ff"],
+        .stApp [style*="color: #0a84ff"],
+        .stApp [style*="color:rgb(10, 132, 255)"],
+        .stApp [style*="color: rgb(10, 132, 255)"] {{
+            color: {_TOK['down']} !important; }}
+
+        /* 링크 — 기본 하늘색은 흰 배경에서 미달 */
+        .stApp a:not(.qnav a) {{ color: {_TOK['brand']} !important; }}
+
+        /* 반투명 틴트 카드도 라이트에선 어두운 솔리드로 바뀐다 —
+           그 안쪽 글자 역시 밝은 쪽으로 되돌린다 (인라인은 rgba 로 남아
+           위 hex/rgb 매칭에 걸리지 않는다). */
+        .stApp div[style*="rgb(22, 29, 42)"] p,
+        .stApp div[style*="rgb(22, 29, 42)"] span,
+        .stApp div[style*="rgb(28, 38, 53)"] p,
+        .stApp div[style*="rgb(28, 38, 53)"] span,
+        .stApp div[style*="rgba(48, 209, 88"] *,
+        .stApp div[style*="rgba(255, 69, 58"] *,
+        .stApp div[style*="rgba(76, 141, 255"] *,
+        .stApp div[style*="rgba(242, 184, 75"] *,
+        .stApp div[style*="rgba(10, 132, 255"] * {{
+            color: {_uk.DARK['tx1']} !important; }}
+
+        /* 단, 양 테마에서 다크로 고정되는 카드 안쪽은 다시 밝게.
+           위 규칙 뒤에 와야 같은 특이도에서 이긴다. */
+        .stApp div[style*="background:#161D2A"] p,
+        .stApp div[style*="background:#161D2A"] span,
+        .stApp div[style*="background:#161D2A"] li,
+        .stApp div[style*="background:#161D2A"] b,
+        .stApp div[style*="background:#161D2A"] strong,
+        .stApp div[style*="background:#161D2A"] div,
+        .stApp div[style*="background: #161D2A"] p,
+        .stApp div[style*="background: #161D2A"] span,
+        .stApp div[style*="background: #161D2A"] li,
+        .stApp div[style*="background: #161D2A"] b,
+        .stApp div[style*="background: #161D2A"] strong,
+        .stApp div[style*="background: #161D2A"] div,
+        .stApp div[style*="background-color:#161D2A"] p,
+        .stApp div[style*="background-color:#161D2A"] span,
+        .stApp div[style*="background-color:#161D2A"] li,
+        .stApp div[style*="background-color:#161D2A"] b,
+        .stApp div[style*="background-color:#161D2A"] strong,
+        .stApp div[style*="background-color:#161D2A"] div,
+        .stApp div[style*="background-color: #161D2A"] p,
+        .stApp div[style*="background-color: #161D2A"] span,
+        .stApp div[style*="background-color: #161D2A"] li,
+        .stApp div[style*="background-color: #161D2A"] b,
+        .stApp div[style*="background-color: #161D2A"] strong,
+        .stApp div[style*="background-color: #161D2A"] div,
+        .stApp div[style*="background:#161d2a"] p,
+        .stApp div[style*="background:#161d2a"] span,
+        .stApp div[style*="background:#161d2a"] li,
+        .stApp div[style*="background:#161d2a"] b,
+        .stApp div[style*="background:#161d2a"] strong,
+        .stApp div[style*="background:#161d2a"] div,
+        .stApp div[style*="background: #161d2a"] p,
+        .stApp div[style*="background: #161d2a"] span,
+        .stApp div[style*="background: #161d2a"] li,
+        .stApp div[style*="background: #161d2a"] b,
+        .stApp div[style*="background: #161d2a"] strong,
+        .stApp div[style*="background: #161d2a"] div,
+        .stApp div[style*="background-color:#161d2a"] p,
+        .stApp div[style*="background-color:#161d2a"] span,
+        .stApp div[style*="background-color:#161d2a"] li,
+        .stApp div[style*="background-color:#161d2a"] b,
+        .stApp div[style*="background-color:#161d2a"] strong,
+        .stApp div[style*="background-color:#161d2a"] div,
+        .stApp div[style*="background-color: #161d2a"] p,
+        .stApp div[style*="background-color: #161d2a"] span,
+        .stApp div[style*="background-color: #161d2a"] li,
+        .stApp div[style*="background-color: #161d2a"] b,
+        .stApp div[style*="background-color: #161d2a"] strong,
+        .stApp div[style*="background-color: #161d2a"] div,
+        .stApp div[style*="background:rgb(22, 29, 42)"] p,
+        .stApp div[style*="background:rgb(22, 29, 42)"] span,
+        .stApp div[style*="background:rgb(22, 29, 42)"] li,
+        .stApp div[style*="background:rgb(22, 29, 42)"] b,
+        .stApp div[style*="background:rgb(22, 29, 42)"] strong,
+        .stApp div[style*="background:rgb(22, 29, 42)"] div,
+        .stApp div[style*="background: rgb(22, 29, 42)"] p,
+        .stApp div[style*="background: rgb(22, 29, 42)"] span,
+        .stApp div[style*="background: rgb(22, 29, 42)"] li,
+        .stApp div[style*="background: rgb(22, 29, 42)"] b,
+        .stApp div[style*="background: rgb(22, 29, 42)"] strong,
+        .stApp div[style*="background: rgb(22, 29, 42)"] div,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] p,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] span,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] li,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] b,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] strong,
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] div,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] p,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] span,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] li,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] b,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] strong,
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] div,
+        .stApp div[style*="background:#1C2635"] p,
+        .stApp div[style*="background:#1C2635"] span,
+        .stApp div[style*="background:#1C2635"] li,
+        .stApp div[style*="background:#1C2635"] b,
+        .stApp div[style*="background:#1C2635"] strong,
+        .stApp div[style*="background:#1C2635"] div,
+        .stApp div[style*="background: #1C2635"] p,
+        .stApp div[style*="background: #1C2635"] span,
+        .stApp div[style*="background: #1C2635"] li,
+        .stApp div[style*="background: #1C2635"] b,
+        .stApp div[style*="background: #1C2635"] strong,
+        .stApp div[style*="background: #1C2635"] div,
+        .stApp div[style*="background-color:#1C2635"] p,
+        .stApp div[style*="background-color:#1C2635"] span,
+        .stApp div[style*="background-color:#1C2635"] li,
+        .stApp div[style*="background-color:#1C2635"] b,
+        .stApp div[style*="background-color:#1C2635"] strong,
+        .stApp div[style*="background-color:#1C2635"] div,
+        .stApp div[style*="background-color: #1C2635"] p,
+        .stApp div[style*="background-color: #1C2635"] span,
+        .stApp div[style*="background-color: #1C2635"] li,
+        .stApp div[style*="background-color: #1C2635"] b,
+        .stApp div[style*="background-color: #1C2635"] strong,
+        .stApp div[style*="background-color: #1C2635"] div,
+        .stApp div[style*="background:#1c2635"] p,
+        .stApp div[style*="background:#1c2635"] span,
+        .stApp div[style*="background:#1c2635"] li,
+        .stApp div[style*="background:#1c2635"] b,
+        .stApp div[style*="background:#1c2635"] strong,
+        .stApp div[style*="background:#1c2635"] div,
+        .stApp div[style*="background: #1c2635"] p,
+        .stApp div[style*="background: #1c2635"] span,
+        .stApp div[style*="background: #1c2635"] li,
+        .stApp div[style*="background: #1c2635"] b,
+        .stApp div[style*="background: #1c2635"] strong,
+        .stApp div[style*="background: #1c2635"] div,
+        .stApp div[style*="background-color:#1c2635"] p,
+        .stApp div[style*="background-color:#1c2635"] span,
+        .stApp div[style*="background-color:#1c2635"] li,
+        .stApp div[style*="background-color:#1c2635"] b,
+        .stApp div[style*="background-color:#1c2635"] strong,
+        .stApp div[style*="background-color:#1c2635"] div,
+        .stApp div[style*="background-color: #1c2635"] p,
+        .stApp div[style*="background-color: #1c2635"] span,
+        .stApp div[style*="background-color: #1c2635"] li,
+        .stApp div[style*="background-color: #1c2635"] b,
+        .stApp div[style*="background-color: #1c2635"] strong,
+        .stApp div[style*="background-color: #1c2635"] div,
+        .stApp div[style*="background:rgb(28, 38, 53)"] p,
+        .stApp div[style*="background:rgb(28, 38, 53)"] span,
+        .stApp div[style*="background:rgb(28, 38, 53)"] li,
+        .stApp div[style*="background:rgb(28, 38, 53)"] b,
+        .stApp div[style*="background:rgb(28, 38, 53)"] strong,
+        .stApp div[style*="background:rgb(28, 38, 53)"] div,
+        .stApp div[style*="background: rgb(28, 38, 53)"] p,
+        .stApp div[style*="background: rgb(28, 38, 53)"] span,
+        .stApp div[style*="background: rgb(28, 38, 53)"] li,
+        .stApp div[style*="background: rgb(28, 38, 53)"] b,
+        .stApp div[style*="background: rgb(28, 38, 53)"] strong,
+        .stApp div[style*="background: rgb(28, 38, 53)"] div,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] p,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] span,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] li,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] b,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] strong,
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] div,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] p,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] span,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] li,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] b,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] strong,
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] div,
+        .stApp div[style*="background:#0B0F17"] p,
+        .stApp div[style*="background:#0B0F17"] span,
+        .stApp div[style*="background:#0B0F17"] li,
+        .stApp div[style*="background:#0B0F17"] b,
+        .stApp div[style*="background:#0B0F17"] strong,
+        .stApp div[style*="background:#0B0F17"] div,
+        .stApp div[style*="background: #0B0F17"] p,
+        .stApp div[style*="background: #0B0F17"] span,
+        .stApp div[style*="background: #0B0F17"] li,
+        .stApp div[style*="background: #0B0F17"] b,
+        .stApp div[style*="background: #0B0F17"] strong,
+        .stApp div[style*="background: #0B0F17"] div,
+        .stApp div[style*="background-color:#0B0F17"] p,
+        .stApp div[style*="background-color:#0B0F17"] span,
+        .stApp div[style*="background-color:#0B0F17"] li,
+        .stApp div[style*="background-color:#0B0F17"] b,
+        .stApp div[style*="background-color:#0B0F17"] strong,
+        .stApp div[style*="background-color:#0B0F17"] div,
+        .stApp div[style*="background-color: #0B0F17"] p,
+        .stApp div[style*="background-color: #0B0F17"] span,
+        .stApp div[style*="background-color: #0B0F17"] li,
+        .stApp div[style*="background-color: #0B0F17"] b,
+        .stApp div[style*="background-color: #0B0F17"] strong,
+        .stApp div[style*="background-color: #0B0F17"] div,
+        .stApp div[style*="background:#0b0f17"] p,
+        .stApp div[style*="background:#0b0f17"] span,
+        .stApp div[style*="background:#0b0f17"] li,
+        .stApp div[style*="background:#0b0f17"] b,
+        .stApp div[style*="background:#0b0f17"] strong,
+        .stApp div[style*="background:#0b0f17"] div,
+        .stApp div[style*="background: #0b0f17"] p,
+        .stApp div[style*="background: #0b0f17"] span,
+        .stApp div[style*="background: #0b0f17"] li,
+        .stApp div[style*="background: #0b0f17"] b,
+        .stApp div[style*="background: #0b0f17"] strong,
+        .stApp div[style*="background: #0b0f17"] div,
+        .stApp div[style*="background-color:#0b0f17"] p,
+        .stApp div[style*="background-color:#0b0f17"] span,
+        .stApp div[style*="background-color:#0b0f17"] li,
+        .stApp div[style*="background-color:#0b0f17"] b,
+        .stApp div[style*="background-color:#0b0f17"] strong,
+        .stApp div[style*="background-color:#0b0f17"] div,
+        .stApp div[style*="background-color: #0b0f17"] p,
+        .stApp div[style*="background-color: #0b0f17"] span,
+        .stApp div[style*="background-color: #0b0f17"] li,
+        .stApp div[style*="background-color: #0b0f17"] b,
+        .stApp div[style*="background-color: #0b0f17"] strong,
+        .stApp div[style*="background-color: #0b0f17"] div,
+        .stApp div[style*="background:rgb(11, 15, 23)"] p,
+        .stApp div[style*="background:rgb(11, 15, 23)"] span,
+        .stApp div[style*="background:rgb(11, 15, 23)"] li,
+        .stApp div[style*="background:rgb(11, 15, 23)"] b,
+        .stApp div[style*="background:rgb(11, 15, 23)"] strong,
+        .stApp div[style*="background:rgb(11, 15, 23)"] div,
+        .stApp div[style*="background: rgb(11, 15, 23)"] p,
+        .stApp div[style*="background: rgb(11, 15, 23)"] span,
+        .stApp div[style*="background: rgb(11, 15, 23)"] li,
+        .stApp div[style*="background: rgb(11, 15, 23)"] b,
+        .stApp div[style*="background: rgb(11, 15, 23)"] strong,
+        .stApp div[style*="background: rgb(11, 15, 23)"] div,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] p,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] span,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] li,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] b,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] strong,
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] div,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] p,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] span,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] li,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] b,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] strong,
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] div,
+        .stApp div[style*="background:#222C3C"] p,
+        .stApp div[style*="background:#222C3C"] span,
+        .stApp div[style*="background:#222C3C"] li,
+        .stApp div[style*="background:#222C3C"] b,
+        .stApp div[style*="background:#222C3C"] strong,
+        .stApp div[style*="background:#222C3C"] div,
+        .stApp div[style*="background: #222C3C"] p,
+        .stApp div[style*="background: #222C3C"] span,
+        .stApp div[style*="background: #222C3C"] li,
+        .stApp div[style*="background: #222C3C"] b,
+        .stApp div[style*="background: #222C3C"] strong,
+        .stApp div[style*="background: #222C3C"] div,
+        .stApp div[style*="background-color:#222C3C"] p,
+        .stApp div[style*="background-color:#222C3C"] span,
+        .stApp div[style*="background-color:#222C3C"] li,
+        .stApp div[style*="background-color:#222C3C"] b,
+        .stApp div[style*="background-color:#222C3C"] strong,
+        .stApp div[style*="background-color:#222C3C"] div,
+        .stApp div[style*="background-color: #222C3C"] p,
+        .stApp div[style*="background-color: #222C3C"] span,
+        .stApp div[style*="background-color: #222C3C"] li,
+        .stApp div[style*="background-color: #222C3C"] b,
+        .stApp div[style*="background-color: #222C3C"] strong,
+        .stApp div[style*="background-color: #222C3C"] div,
+        .stApp div[style*="background:#222c3c"] p,
+        .stApp div[style*="background:#222c3c"] span,
+        .stApp div[style*="background:#222c3c"] li,
+        .stApp div[style*="background:#222c3c"] b,
+        .stApp div[style*="background:#222c3c"] strong,
+        .stApp div[style*="background:#222c3c"] div,
+        .stApp div[style*="background: #222c3c"] p,
+        .stApp div[style*="background: #222c3c"] span,
+        .stApp div[style*="background: #222c3c"] li,
+        .stApp div[style*="background: #222c3c"] b,
+        .stApp div[style*="background: #222c3c"] strong,
+        .stApp div[style*="background: #222c3c"] div,
+        .stApp div[style*="background-color:#222c3c"] p,
+        .stApp div[style*="background-color:#222c3c"] span,
+        .stApp div[style*="background-color:#222c3c"] li,
+        .stApp div[style*="background-color:#222c3c"] b,
+        .stApp div[style*="background-color:#222c3c"] strong,
+        .stApp div[style*="background-color:#222c3c"] div,
+        .stApp div[style*="background-color: #222c3c"] p,
+        .stApp div[style*="background-color: #222c3c"] span,
+        .stApp div[style*="background-color: #222c3c"] li,
+        .stApp div[style*="background-color: #222c3c"] b,
+        .stApp div[style*="background-color: #222c3c"] strong,
+        .stApp div[style*="background-color: #222c3c"] div,
+        .stApp div[style*="background:rgb(34, 44, 60)"] p,
+        .stApp div[style*="background:rgb(34, 44, 60)"] span,
+        .stApp div[style*="background:rgb(34, 44, 60)"] li,
+        .stApp div[style*="background:rgb(34, 44, 60)"] b,
+        .stApp div[style*="background:rgb(34, 44, 60)"] strong,
+        .stApp div[style*="background:rgb(34, 44, 60)"] div,
+        .stApp div[style*="background: rgb(34, 44, 60)"] p,
+        .stApp div[style*="background: rgb(34, 44, 60)"] span,
+        .stApp div[style*="background: rgb(34, 44, 60)"] li,
+        .stApp div[style*="background: rgb(34, 44, 60)"] b,
+        .stApp div[style*="background: rgb(34, 44, 60)"] strong,
+        .stApp div[style*="background: rgb(34, 44, 60)"] div,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] p,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] span,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] li,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] b,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] strong,
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] div,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] p,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] span,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] li,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] b,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] strong,
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] div {{
+            color: {_uk.DARK['tx1']} !important; }}
+
+
+        /* 양 테마에서 다크로 고정되는 카드(결론 배너·점수 카드) 안쪽은
+           라이트 재색칠에서 빼는 것만으로 부족하다 — 색을 지정하지 않은
+           글자가 라이트 본문색(어두움)을 상속해 다크 카드 위에서
+           사라진다. 다크 표면의 자손을 명시적으로 밝은 글자로 되돌린다.
+           (Streamlit 이 인라인 hex 를 rgb() 로 정규화하므로 두 표기 모두) */
+        .stApp div[style*="background:#161D2A"] p:not([style*="color"]),
+        .stApp div[style*="background:#161D2A"] span:not([style*="color"]),
+        .stApp div[style*="background:#161D2A"] li:not([style*="color"]),
+        .stApp div[style*="background: #161D2A"] p:not([style*="color"]),
+        .stApp div[style*="background: #161D2A"] span:not([style*="color"]),
+        .stApp div[style*="background: #161D2A"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#161D2A"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#161D2A"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#161D2A"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #161D2A"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #161D2A"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #161D2A"] li:not([style*="color"]),
+        .stApp div[style*="background:#161d2a"] p:not([style*="color"]),
+        .stApp div[style*="background:#161d2a"] span:not([style*="color"]),
+        .stApp div[style*="background:#161d2a"] li:not([style*="color"]),
+        .stApp div[style*="background: #161d2a"] p:not([style*="color"]),
+        .stApp div[style*="background: #161d2a"] span:not([style*="color"]),
+        .stApp div[style*="background: #161d2a"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#161d2a"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#161d2a"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#161d2a"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #161d2a"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #161d2a"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #161d2a"] li:not([style*="color"]),
+        .stApp div[style*="background:rgb(22, 29, 42)"] p:not([style*="color"]),
+        .stApp div[style*="background:rgb(22, 29, 42)"] span:not([style*="color"]),
+        .stApp div[style*="background:rgb(22, 29, 42)"] li:not([style*="color"]),
+        .stApp div[style*="background: rgb(22, 29, 42)"] p:not([style*="color"]),
+        .stApp div[style*="background: rgb(22, 29, 42)"] span:not([style*="color"]),
+        .stApp div[style*="background: rgb(22, 29, 42)"] li:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] p:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] span:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(22, 29, 42)"] li:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] p:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] span:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(22, 29, 42)"] li:not([style*="color"]),
+        .stApp div[style*="background:#1C2635"] p:not([style*="color"]),
+        .stApp div[style*="background:#1C2635"] span:not([style*="color"]),
+        .stApp div[style*="background:#1C2635"] li:not([style*="color"]),
+        .stApp div[style*="background: #1C2635"] p:not([style*="color"]),
+        .stApp div[style*="background: #1C2635"] span:not([style*="color"]),
+        .stApp div[style*="background: #1C2635"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#1C2635"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#1C2635"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#1C2635"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #1C2635"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #1C2635"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #1C2635"] li:not([style*="color"]),
+        .stApp div[style*="background:#1c2635"] p:not([style*="color"]),
+        .stApp div[style*="background:#1c2635"] span:not([style*="color"]),
+        .stApp div[style*="background:#1c2635"] li:not([style*="color"]),
+        .stApp div[style*="background: #1c2635"] p:not([style*="color"]),
+        .stApp div[style*="background: #1c2635"] span:not([style*="color"]),
+        .stApp div[style*="background: #1c2635"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#1c2635"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#1c2635"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#1c2635"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #1c2635"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #1c2635"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #1c2635"] li:not([style*="color"]),
+        .stApp div[style*="background:rgb(28, 38, 53)"] p:not([style*="color"]),
+        .stApp div[style*="background:rgb(28, 38, 53)"] span:not([style*="color"]),
+        .stApp div[style*="background:rgb(28, 38, 53)"] li:not([style*="color"]),
+        .stApp div[style*="background: rgb(28, 38, 53)"] p:not([style*="color"]),
+        .stApp div[style*="background: rgb(28, 38, 53)"] span:not([style*="color"]),
+        .stApp div[style*="background: rgb(28, 38, 53)"] li:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] p:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] span:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(28, 38, 53)"] li:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] p:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] span:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(28, 38, 53)"] li:not([style*="color"]),
+        .stApp div[style*="background:#0B0F17"] p:not([style*="color"]),
+        .stApp div[style*="background:#0B0F17"] span:not([style*="color"]),
+        .stApp div[style*="background:#0B0F17"] li:not([style*="color"]),
+        .stApp div[style*="background: #0B0F17"] p:not([style*="color"]),
+        .stApp div[style*="background: #0B0F17"] span:not([style*="color"]),
+        .stApp div[style*="background: #0B0F17"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#0B0F17"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#0B0F17"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#0B0F17"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #0B0F17"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #0B0F17"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #0B0F17"] li:not([style*="color"]),
+        .stApp div[style*="background:#0b0f17"] p:not([style*="color"]),
+        .stApp div[style*="background:#0b0f17"] span:not([style*="color"]),
+        .stApp div[style*="background:#0b0f17"] li:not([style*="color"]),
+        .stApp div[style*="background: #0b0f17"] p:not([style*="color"]),
+        .stApp div[style*="background: #0b0f17"] span:not([style*="color"]),
+        .stApp div[style*="background: #0b0f17"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#0b0f17"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#0b0f17"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#0b0f17"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #0b0f17"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #0b0f17"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #0b0f17"] li:not([style*="color"]),
+        .stApp div[style*="background:rgb(11, 15, 23)"] p:not([style*="color"]),
+        .stApp div[style*="background:rgb(11, 15, 23)"] span:not([style*="color"]),
+        .stApp div[style*="background:rgb(11, 15, 23)"] li:not([style*="color"]),
+        .stApp div[style*="background: rgb(11, 15, 23)"] p:not([style*="color"]),
+        .stApp div[style*="background: rgb(11, 15, 23)"] span:not([style*="color"]),
+        .stApp div[style*="background: rgb(11, 15, 23)"] li:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] p:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] span:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(11, 15, 23)"] li:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] p:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] span:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(11, 15, 23)"] li:not([style*="color"]),
+        .stApp div[style*="background:#222C3C"] p:not([style*="color"]),
+        .stApp div[style*="background:#222C3C"] span:not([style*="color"]),
+        .stApp div[style*="background:#222C3C"] li:not([style*="color"]),
+        .stApp div[style*="background: #222C3C"] p:not([style*="color"]),
+        .stApp div[style*="background: #222C3C"] span:not([style*="color"]),
+        .stApp div[style*="background: #222C3C"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#222C3C"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#222C3C"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#222C3C"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #222C3C"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #222C3C"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #222C3C"] li:not([style*="color"]),
+        .stApp div[style*="background:#222c3c"] p:not([style*="color"]),
+        .stApp div[style*="background:#222c3c"] span:not([style*="color"]),
+        .stApp div[style*="background:#222c3c"] li:not([style*="color"]),
+        .stApp div[style*="background: #222c3c"] p:not([style*="color"]),
+        .stApp div[style*="background: #222c3c"] span:not([style*="color"]),
+        .stApp div[style*="background: #222c3c"] li:not([style*="color"]),
+        .stApp div[style*="background-color:#222c3c"] p:not([style*="color"]),
+        .stApp div[style*="background-color:#222c3c"] span:not([style*="color"]),
+        .stApp div[style*="background-color:#222c3c"] li:not([style*="color"]),
+        .stApp div[style*="background-color: #222c3c"] p:not([style*="color"]),
+        .stApp div[style*="background-color: #222c3c"] span:not([style*="color"]),
+        .stApp div[style*="background-color: #222c3c"] li:not([style*="color"]),
+        .stApp div[style*="background:rgb(34, 44, 60)"] p:not([style*="color"]),
+        .stApp div[style*="background:rgb(34, 44, 60)"] span:not([style*="color"]),
+        .stApp div[style*="background:rgb(34, 44, 60)"] li:not([style*="color"]),
+        .stApp div[style*="background: rgb(34, 44, 60)"] p:not([style*="color"]),
+        .stApp div[style*="background: rgb(34, 44, 60)"] span:not([style*="color"]),
+        .stApp div[style*="background: rgb(34, 44, 60)"] li:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] p:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] span:not([style*="color"]),
+        .stApp div[style*="background-color:rgb(34, 44, 60)"] li:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] p:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] span:not([style*="color"]),
+        .stApp div[style*="background-color: rgb(34, 44, 60)"] li:not([style*="color"]) {{
+            color: {_uk.DARK['tx1']} !important; }}
+
+        .stApp [data-testid="stWidgetLabel"] p{_G} {{ color: {_TOK['tx1']} !important; }}
 
         /* 탭: 다크용 #222C3C 배경(선택 탭·패널 모두)을 라이트로 교체 */
         .stApp .stTabs [data-baseweb="tab-list"] {{
-            background-color: #F3F6FA !important; border-color: #F3F6FA !important; }}
+            background-color: {_TOK['bg1']} !important; border-color: {_TOK['border']} !important; }}
         .stApp .stTabs [aria-selected="true"] {{
-            background-color: #ffffff !important; }}
+            background-color: {_TOK['bg2']} !important; }}
 
         /* 반투명 틴트 카드: 라이트 바탕에선 배경이 밝아져 다크용 인라인 색이
            안 보인다 → 어두운 솔리드로 고정 (내부 텍스트는 가드로 원색 유지) */
@@ -1250,7 +1806,7 @@ run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{target_ticker.split
 st.markdown(
     f"<h1 style='font-size:34px; font-weight:700; letter-spacing:-0.028em; "
     f"margin:0 0 4px 0;'>{APP_TITLE}</h1>"
-    f"<p style='margin:0 0 4px 0; font-size:17px; color:#9DAABC; "
+    f"<p style='margin:0 0 4px 0; font-size:17px; color:{_TOK['tx2']}; "
     f"letter-spacing:-0.01em;'>{APP_TAGLINE}</p>",
     unsafe_allow_html=True)
 st.caption("과거로 되돌려 실제로 맞았는지 세어 본 뒤에 판단합니다 · "
@@ -1694,7 +2250,7 @@ if _pmr:
             st.markdown(f"""
             <div style='background:{_TOK['surface']}; border-top:3px solid {_cc}; border-radius:12px;
                         padding:16px 16px; min-height:236px;'>
-              <p style='margin:0;'><span style='background:{_cc}22; color:{_cc};
+              <p style='margin:0;'><span style='background:{_TOK['hover']}; color:{_cc};
                  font-size:12px; font-weight:700; padding:2px 8px;
                  border-radius:6px;'>{_p.get('reco_class')}</span></p>
               <p style='margin:8px 0 1px 0; font-size:16px; font-weight:700;
@@ -2558,6 +3114,7 @@ if _home_cal.get('total_cases'):
             _rows_rg.append((_ko, f"{_vtxt} · {_btxt}",
                              'warn' if _thin else ''))
         if _rows_rg:
+            _uk.spacer(20)
             _uk.rows(_rows_rg, theme=_theme,
                      title='시장 국면별 추천 성적 — 같은 모델도 장세에 따라 다릅니다')
             _uk.note("주황색은 표본 30건 미만이라 성적으로 인정하지 않는 구간입니다. "
@@ -2592,8 +3149,9 @@ _gi_calib = _load_calibration_meta()
 _gi_mkt = {'index_missing': (m_indices['kospi']['price'] == 'N/A'
                              or m_indices['kosdaq']['price'] == 'N/A')}
 _issues_global = _pops.build_global_issues(_gi_calib, _gi_mkt)
-_SEV_BADGE = {'높음': ('#F26161', '높음'), '중간': ('#F2B84B', '중간'),
-              '낮음': ('#9DAABC', '낮음')}
+# 배지 색도 토큰에서만 온다 — 라이트에서 자기 틴트 위 대비가 무너졌었다
+_SEV_BADGE = {'높음': (_TOK['neg'], '높음'), '중간': (_TOK['warn'], '중간'),
+              '낮음': (_TOK['tx2'], '낮음')}
 if _issues_global:
     # 토글형 (v5) — 접힌 상태에서도 건수·최상위 이슈가 제목에 보인다
     with st.expander(f"주요 이슈 {len(_issues_global)}건 — "
@@ -2658,7 +3216,7 @@ if _issues_global:
                 f"<div style='background:{_TOK['surface']}; border-left:3px solid "
                 f"{_bc if _is['severity'] == '높음' else 'transparent'}; "
                 f"border-radius:12px; padding:12px 16px; margin-bottom:8px;'>"
-                f"<span style='background:{_bc}22; color:{_bc}; font-size:12px; "
+                f"<span style='background:{_TOK['hover']}; color:{_bc}; font-size:12px; "
                 f"font-weight:700; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
                 f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
                 f"font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
@@ -3237,7 +3795,7 @@ if _issues_stock:
             f"<div style='background:{_TOK['surface']}; border-left:3px solid "
             f"{_bc if _is['severity'] == '높음' else 'transparent'}; "
             f"border-radius:12px; padding:12px 16px; margin-bottom:8px;'>"
-            f"<span style='background:{_bc}22; color:{_bc}; font-size:12px; "
+            f"<span style='background:{_TOK['hover']}; color:{_bc}; font-size:12px; "
             f"font-weight:700; padding:2px 8px; border-radius:6px;'>{_bt}</span> "
             f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
             f"font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px;'>"
@@ -3327,6 +3885,34 @@ except Exception as _cp_err:
     st.caption(f"종합 차트를 그리지 못했습니다: {_cp_err}")
 
 _uk.spacer(28)
+
+# ── 약세 국면 과매도 반등 — 조건부 참고 (라운드 8 채택) ────────────────────
+# 점수·게이트·산식은 건드리지 않는다. 이 조건에서 과거 적중률이 높았다는
+# 사실만 알려 주는 참고 표시다. 채택 근거는 종목 홀드아웃(본 적 없는 종목
+# 164건에서 70.7%)이며, 블라인드 하락장에서는 맞아도 비용 차감 후 손실이
+# 났다는 사실을 같은 자리에 함께 적는다 — 유리한 절반만 보여 주지 않는다.
+_bear_now = '하락' in str(four_scores.get('market_regime_label') or '')
+_rsi_now = four_scores.get('rsi_value')
+_bbp_now = four_scores.get('bb_position_pct')
+if _bear_now and ((_rsi_now is not None and _rsi_now < 35)
+                  or (_bbp_now is not None and _bbp_now < 20)):
+    _cond = ('RSI 과매도' if (_rsi_now is not None and _rsi_now < 35)
+             else '볼린저 하단')
+    _uk.card(
+        f"<p style='margin:0 0 8px 0; font-size:15px; font-weight:600; "
+        f"color:{_uk.DARK['tx1']};'>하락 국면 + {_cond} — 과거엔 반등이 잦던 "
+        f"자리입니다</p>"
+        f"<p style='margin:0; font-size:13px; line-height:1.7; "
+        f"color:{_uk.DARK['tx2']};'>같은 조건의 과거 사례에서 "
+        f"<b>본 적 없는 종목 164건 기준 70.7%</b>가 20거래일 안에 목표에 "
+        f"닿았습니다 (하락 국면 평균 58.5%보다 12.2%p 높음).<br>"
+        f"다만 <b>실전(안 본 기간) 하락장 13건에서는 맞아도 비용 차감 후 "
+        f"평균 −4.03%</b>였습니다 — 맞는 비율은 높지만 이길 때 조금 벌고 질 때 "
+        f"크게 잃었다는 뜻입니다. 그래서 이 표시는 매수 신호가 아니라 "
+        f"<b>참고</b>이며, 위의 결론과 점수는 이 규칙 때문에 바뀌지 "
+        f"않습니다.</p>",
+        theme=_theme, accent=_uk.DARK['warn'])
+    _uk.spacer(24)
 
 # 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
 action_bg_color = "#161D2A"

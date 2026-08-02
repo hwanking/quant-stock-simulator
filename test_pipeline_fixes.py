@@ -3785,6 +3785,54 @@ check("국면 의존 이슈가 계획에 추가됐다",
       'model|regime_dependence' in _io82.PLAYBOOK)
 
 
+section("83. 라운드 8 — 확장 축적 후 재판정 · 조건부 참고 채택 범위")
+_mv83 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("8차 확장 규모 기록 (268종목 · 7,947건)",
+      '268' in _mv83 and '7,947' in _mv83)
+check("규칙·기준을 바꾸지 않고 같은 스크립트를 다시 돌렸다고 명시",
+      '규칙·기준을 하나도 바꾸지 않은 채' in _mv83)
+check("홀드아웃 재현 수치 기록 (70.7% · n=164)",
+      '70.7%' in _mv83 and 'n=164' in _mv83)
+check("블라인드 lift 가 뒤집힌 사실 기록",
+      '음수였던 lift 가 전부 양수로' in _mv83)
+check("유리한 절반만 보여주지 않는다 — 비용후 음수 병기",
+      '반쪽만 보여 주지 않는다' in _mv83 and '−4.03%' in _mv83)
+check("채택 범위가 '매수 신호 아님'으로 못박혀 있다",
+      '매수 신호로 쓰지 않는다' in _mv83
+      and '점수·게이트·산식·KPI 정의는 전부 그대로' in _mv83)
+check("약세장 게이트는 확장 후에도 기각",
+      '확장 후에도 재판정했고 다시 기각' in _mv83)
+check("70% 미달을 확장 후에도 그대로 유지 표기",
+      '무조건적 검증 70%는 여전히 미달' in _mv83)
+check("'70% 모델' 로 부르지 않겠다고 명시",
+      '"70% 모델"이라고 부르지 않는다' in _mv83)
+
+_w83 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 조건부 참고 카드가 하락 국면 + 과매도/하단에서만 뜬다",
+      "_bear_now = '하락' in str(four_scores.get('market_regime_label')" in _w83
+      and "_rsi_now < 35" in _w83 and "_bbp_now < 20" in _w83)
+check("화면 — 참고 카드가 유리한 수치와 불리한 수치를 같이 적는다",
+      '본 적 없는 종목 164건 기준 70.7%' in _w83
+      and '평균 −4.03%' in _w83)
+check("화면 — 매수 신호가 아니라고 카드 안에서 밝힌다",
+      '매수 신호가 아니라' in _w83 and '점수는 이 규칙 때문에 바뀌지' in _w83)
+check("엔진 산식은 이번 라운드에서 건드리지 않았다 — 화면 전용",
+      '_uk.card(' in _w83)
+
+# 라이트 모드 회귀 — 하드코딩 다크 색이 다시 스며들지 않게 잠근다
+check("라이트 CSS 가 토큰 참조를 쓴다 (하드코딩 hex 아님)",
+      ".stApp {{ background-color: {_TOK['bg1']} !important; }}" in _w83)
+check("인라인 다크 글자 토큰을 라이트 등가로 되돌리는 규칙 존재",
+      '글자 토큰 3단만 라이트 등가로 되돌린다' in _w83)
+check("고정 다크 카드 안쪽은 다시 밝게 (그라디언트 배너 포함)",
+      'div[style*="rgb(22, 29, 42)"] p' in _w83)
+check("버튼에 다크 특례를 두지 않는다", '특례를 두지 않는 쪽이 결국 덜 깨진다' in _w83)
+check("사이드바 입력 글자가 흰색 고정이 아니다 (테마를 따른다)",
+      '[data-testid="stSidebar"] input {{' in _w83
+      and "color: {_TOK['tx1']} !important;" in _w83)
+
+
 print()
 print("=" * 72)
 if FAILURES:

@@ -27,8 +27,10 @@ DARK = dict(bg='#0B0F17', card='#161D2A', raised='#1C2635',
             pos='#35C98B', warn='#F2B84B', neg='#F26161')
 LIGHT = dict(bg='#EFF1F6', card='#FFFFFF', raised='#F2F5F9',
              line='#E6EAF0', tx1='#111827', tx2='#4A4D53', tx3='#666873',
-             brand='#2563EB', up='#D93025', down='#1A73E8',
-             pos='#16875D', warn='#B7791F', neg='#D14343')
+             brand='#2563EB', up='#D02E24', down='#186AD5',
+             pos='#147C56', warn='#966319', neg='#C23E3E')
+# 라이트의 의미색은 색상(hue)은 그대로 두고 명도만 낮췄다 — 흰 카드와
+# 회색 배경 **양쪽에서** 4.5:1 을 넘겨야 하기 때문이다 (실측 4.53~4.59).
 # 글자 3단은 눈대중이 아니라 실측으로 정했다 (WCAG 대비, 회색 배경·흰 카드 양쪽):
 #   다크  tx1 15.6 · tx2 7.2 · tx3 4.8   |  라이트 tx1 15.7 · tx2 7.5 · tx3 4.9
 # tx3 는 보조 설명 전용이며 4.5 미만으로 내려가면 안 된다 (작은 12px 글자가 많다).
@@ -263,9 +265,12 @@ def global_css(theme: str = 'dark') -> str:
         background: {t['brand']} !important; }}
     /* 손잡이 위 숫자는 브랜드색 배경에 얹히므로 흰 글자로 고정한다.
        기본값(보조 회색)이면 대비 1.4 로 읽히지 않는다 (실측). */
-    [data-testid="stSliderThumbValue"],
-    [data-testid="stSliderThumbValue"] * {{
-        color: #FFFFFF !important; font-weight: 600 !important; }}
+    /* .stApp p 규칙(0,1,1)이 !important 로 이기므로 특이도를 더 올린다 */
+    .stApp [data-testid="stSliderThumbValue"] p,
+    .stApp [data-testid="stSliderThumbValue"],
+    [data-testid="stSidebar"] [data-testid="stSliderThumbValue"] p,
+    [data-testid="stSidebar"] [data-testid="stSliderThumbValue"] {{
+        color: #0B0F17 !important; font-weight: 600 !important; }}
 
     /* 수직 리듬 — 8pt 그리드 */
     .stApp hr {{ margin: 40px 0 !important; border-color: {t['line']} !important;
