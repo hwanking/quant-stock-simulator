@@ -4,9 +4,22 @@
   "scoring": "v2026.08.03.0",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1",
-  "model": "v2026.08.04.6"
+  "model": "v2026.08.05.0"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.05.0",
+   "previous": "v2026.08.04.6",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "라운드 11 — 후보 24개 대규모 대결 · 워크포워드 4폴드 · 교체 판정 3관문",
+   "note": "",
+   "created_at": "2026-08-02T10:26:25+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

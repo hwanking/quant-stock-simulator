@@ -3932,29 +3932,10 @@ check("이전 버전 케이스를 덮어쓰지 않는다고 명시",
       '이전 버전 케이스는 덮어쓰지 않는다' in _d84)
 
 
-section("85. 라운드 10 — 후보 엔진 대결 · 과최적화 증거 · 설계 문서")
-_bk85 = _os.path.join(PROJ, '.portfolio', 'engine_bakeoff.json')
-check("엔진 대결 산출물 존재", _os.path.exists(_bk85))
-if _os.path.exists(_bk85):
-    with open(_bk85, encoding='utf-8') as _f:
-        _b85 = _j84.load(_f)
-    check("후보 엔진 7종(기준선 포함)이 모두 평가됐다",
-          len(_b85['engines']) >= 7)
-    check("채택된 엔진이 없다 (사전등록 기준 미달)", _b85['adopted'] == [])
-    check("기준선이 블라인드에서 가장 높다 — 덜 무너진다",
-          all(_b85['engines']['base']['blind']['hit'] >= _e['blind']['hit']
-              for _k, _e in _b85['engines'].items()
-              if _e.get('blind', {}).get('hit') is not None))
-    check("과최적화 증거 — 평균회귀가 검증 1위, 블라인드 꼴찌",
-          _b85['engines']['meanrev']['valid']['hit']
-          > _b85['engines']['base']['valid']['hit']
-          and _b85['engines']['meanrev']['blind']['hit']
-          < _b85['engines']['base']['blind']['hit'] - 20)
-    check("로지스틱이 배운 최대 가중치는 국면이다",
-          abs(_b85['logistic_weights']['상승장'])
-          > abs(_b85['logistic_weights']['점수']))
-    check("판정 기준이 산출물에 함께 저장됐다", 'criteria' in _b85)
-
+section("85. 라운드 10 — 과최적화 증거 · 설계 문서")
+# 산출물(engine_bakeoff.json)은 라운드 11 이 덮어쓴다. 라운드 10 의 실측은
+# MODEL_VERSIONS.md 에 표로 남아 있으므로 여기서는 그 기록을 검증한다 —
+# 산출물 형식이 바뀌어도 '무엇을 확인했는지'는 사라지지 않아야 한다.
 _mv85 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("라운드 9 어깨 구간 기록 (3~5%)", '**어깨 = 3~5%.**' in _mv85)
@@ -3996,6 +3977,62 @@ check("과최적화 이슈가 계획에 등록됐다", 'model|overfit_gap' in _i
 check("손절 폭 이슈가 계획에 등록됐다", 'model|stop_width' in _io85.PLAYBOOK)
 check("과최적화 이슈에 실측 근거가 들어 있다",
       '67.0%' in _io85.PLAYBOOK['model|overfit_gap']['cause'])
+
+
+section("86. 라운드 11 — 대규모 엔진 대결 · 워크포워드 · 로고 비율")
+_bk86 = _os.path.join(PROJ, '.portfolio', 'engine_bakeoff.json')
+check("엔진 대결 산출물 존재", _os.path.exists(_bk86))
+if _os.path.exists(_bk86):
+    with open(_bk86, encoding='utf-8') as _f:
+        _b86 = _j84.load(_f)
+    check("후보가 20개 이상으로 늘었다 (문턱 훑기 포함)",
+          _b86.get('n_candidates', 0) >= 20)
+    check("워크포워드 폴드 기준이 산출물에 박혀 있다",
+          _b86['criteria']['walk_forward_folds'] >= 4
+          and _b86['criteria']['min_folds_win'] >= 3)
+    check("모든 후보에 워크포워드 성적이 기록된다",
+          all('wf_wins' in _e for _e in _b86['engines'].values()))
+    check("표본·신호율 하한이 판정에 포함된다",
+          _b86['criteria']['min_n'] >= 100
+          and _b86['criteria']['min_signal_rate'] >= 3.0)
+    check("원장 기간이 기록된다 (예전 장세 포함 여부 추적)",
+          len(_b86.get('period') or []) == 2 and 'years' in _b86)
+    # 채택 여부와 무관하게 기준선은 항상 함께 저장돼야 비교가 가능하다
+    check("기준선 성적이 함께 저장된다",
+          _b86['baseline']['blind']['hit'] is not None)
+
+_r11 = open(_os.path.join(PROJ, "scripts", "engine_bakeoff_r11.py"),
+            encoding='utf-8').read()
+check("사전등록 3관문이 코드에 선명시", '사전등록' in _r11
+      and '1차 (워크포워드)' in _r11 and '3차 (블라인드)' in _r11)
+check("기각이 목적이 아님을 명시 — 통과하면 실제로 교체",
+      '기각이 목적이 아니다' in _r11)
+check("워크포워드는 시간순 분할 (앞을 보고 뒤를 맞힌다)",
+      'def walk_forward' in _r11 and "key=lambda r: str(r.get('date')" in _r11)
+
+_lab86 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"),
+              encoding='utf-8').read()
+check("과거 데이터 수집 범위가 2015년으로 확장됐다",
+      "start_date='2015-01-01'" in _lab86)
+check("종목당 기준일이 80개로 늘었다 (25봉 간격 유지)",
+      'n_dates=80' in _lab86 and 'spacing=25' in _lab86)
+
+_w86 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("사이드바 일괄 글자 규칙이 로고를 누르지 않는다",
+      '[data-testid="stSidebar"] span:not([style*="font-size"])' in _w86)
+check("h1 고정 규칙도 인라인 크기를 존중한다",
+      '.stApp h1:not([style*="font-size"])' in _w86)
+check("로고가 제목 역할 — 홈 버튼은 조용한 보조",
+      '로고가 제목 역할을 하므로 이 버튼은 조용한 보조로 둔다' in _w86)
+check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
+      "f\"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; \"" in _w86)
+check("상단 상태바 — 운영 버전 칩이 오른쪽 끝",
+      '_uk.status_bar(' in _w86)
+
+_u86 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+check("상태바 컴포넌트 존재", 'def status_bar(' in _u86)
+check("상태바는 가장 조용한 줄이어야 한다고 명시",
+      '가장 조용한 줄이어야 한다' in _u86)
 
 
 print()

@@ -4132,21 +4132,49 @@ if _bake and _bake.get('engines'):
         if key == 'meanrev':
             return ((_rsi is not None and _rsi < 40)
                     or (_bbp is not None and _bbp < 25)) and _sc >= 45
-        if key == 'volbreak':
-            return (_v is not None and _v < 0.020) and (
-                _rp is not None and _rp >= 70) and _sc >= 50
+        if key == 'volbreak' or key == 'lowvol':
+            return (_v is not None and _v < 0.020) and _sc >= 55
+        if key.startswith('score'):
+            try:
+                return _sc >= int(key[5:])
+            except ValueError:
+                return None
+        if key.startswith('tsmom'):
+            try:
+                return _m10 and _sc >= int(key[5:])
+            except ValueError:
+                return None
+        if key.startswith('meanrev'):
+            return ((_rsi is not None and _rsi < 40)
+                    or (_bbp is not None and _bbp < 25))
+        if key in ('valuezone', 'safezone'):
+            _z = str(four_scores.get('entry_zone_label')
+                     or (snap.get('verdict') or {}).get('entry_zone') or '')
+            _kw = '이하' if key == 'valuezone' else '안전마진'
+            return (_sc >= 55 and _kw in _z) if _z else None
         return None
 
-    _ENG_KO = {'base': '현행 종합점수', 'tsmom': '추세 지속',
-               'meanrev': '눌림 되돌림', 'volbreak': '변동성 돌파'}
     _rows_e = []
-    for _k, _ko in _ENG_KO.items():
-        _e = (_bake['engines'].get(_k) or {})
-        _bl = (_e.get('blind') or {})
+    _base_e = _bake.get('baseline') or {}
+    if _base_e.get('blind'):
+        _say0 = _eng_says('base')
+        _rows_e.append(('현행 종합점수',
+                        ('산다' if _say0 else '관망')
+                        + f" · 실전 적중 {_base_e['blind']['hit']:.0f}%",
+                        'pos' if _say0 else ''))
+    # 실전 비용후가 좋은 순으로 상위 3개만 — 스물네 줄을 늘어놓으면 안 읽힌다
+    _cands = sorted(
+        ((k, v) for k, v in (_bake.get('engines') or {}).items()
+         if (v.get('blind') or {}).get('hit') is not None
+         and (v['blind'].get('n') or 0) >= 30),
+        key=lambda kv: -(kv[1]['blind'].get('net') or -99))[:3]
+    for _k, _e in _cands:
+        _bl = _e['blind']
         _say = _eng_says(_k)
-        _lab = ('산다' if _say is True else '관망' if _say is False else '판단 보류')
-        _hit = (f"{_bl['hit']:.0f}%" if _bl.get('hit') is not None else '—')
-        _rows_e.append((f"{_ko}", f"{_lab} · 실전 적중 {_hit}",
+        _lab = ('산다' if _say is True else '관망' if _say is False
+                else '판단 보류')
+        _rows_e.append((str(_e.get('desc') or _k),
+                        f"{_lab} · 실전 적중 {_bl['hit']:.0f}% (n={_bl['n']})",
                         'pos' if _say is True else ''))
     _uk.rows(_rows_e, theme=_theme,
              title='다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)')
