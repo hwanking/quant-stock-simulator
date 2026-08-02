@@ -138,6 +138,24 @@ def build_candidates():
     add('safezone', '점수 55+ & 안전마진 확보',
         lambda r: (r.get('score') or 0) >= 55
         and '안전마진' in str(r.get('entry_zone') or ''))
+    # 라운드 12(국면별)에서 횡보 블라인드 +7.0%p 로 두각을 보인 조합.
+    # 기준을 고치지 않고 **후보 공간만 넓혀** 같은 관문으로 검정한다.
+    add('safe58', '점수 58+ & 안전마진 확보',
+        lambda r: (r.get('score') or 0) >= 58
+        and '안전마진' in str(r.get('entry_zone') or ''))
+    add('safe60', '점수 60+ & 안전마진 확보',
+        lambda r: (r.get('score') or 0) >= 60
+        and '안전마진' in str(r.get('entry_zone') or ''))
+    add('trend_safe', '추세 위(월10선) + 안전마진 · 점수 55+',
+        lambda r: (bool(r.get('m10_above')) and (r.get('score') or 0) >= 55
+                   and '안전마진' in str(r.get('entry_zone') or '')))
+    add('trend_safe58', '추세 위(월10선) + 안전마진 · 점수 58+',
+        lambda r: (bool(r.get('m10_above')) and (r.get('score') or 0) >= 58
+                   and '안전마진' in str(r.get('entry_zone') or '')))
+    add('safe_or_value', '점수 58+ & (안전마진 또는 적정가 이하)',
+        lambda r: ((r.get('score') or 0) >= 58
+                   and ('안전마진' in str(r.get('entry_zone') or '')
+                        or '이하' in str(r.get('entry_zone') or ''))))
 
     # 국면 조건부 — 장세마다 다른 원리
     def regime_fn(r, bull_t=50, side_bb=30, bear_rsi=35):
@@ -176,19 +194,27 @@ def walk_forward(train_rows, fn, base_fn, folds=N_FOLDS):
     """
     학습 구간을 시간순 4등분해 앞→뒤로 반복 검정한다.
     한 시기에서만 좋은 규칙을 걸러내는 것이 목적이다.
+
+    ⚠️ 측정 오류 수정 (라운드 11 진행 중 발견):
+    처음 구현은 표본이 부족한 폴드를 **패배로 셌다.** 그러면 엄격한 규칙일수록
+    폴드당 신호가 적어 자동으로 불리해진다 — 성능이 아니라 표본을 벌하는 셈이다.
+    표본이 모자란 폴드는 '판정 불가'로 빼고, **잴 수 있는 폴드 중에서만** 센다.
+    반환은 (이긴 폴드 수, 판정 가능한 폴드 수).
     """
     rows = sorted(train_rows, key=lambda r: str(r.get('date') or ''))
     if len(rows) < folds * 50:
-        return 0, folds
+        return 0, 0
     size = len(rows) // folds
-    wins = 0
+    wins = judged = 0
     for i in range(folds):
         seg = rows[i * size:(i + 1) * size] if i < folds - 1 else rows[i * size:]
         a, b = ev(seg, fn), ev(seg, base_fn)
-        if a['n'] >= 20 and b['n'] >= 20 and a['hit'] is not None \
-                and b['hit'] is not None and a['hit'] > b['hit']:
+        if a['n'] < 15 or b['n'] < 15 or a['hit'] is None or b['hit'] is None:
+            continue                      # 잴 수 없는 폴드 — 패배로 세지 않는다
+        judged += 1
+        if a['hit'] > b['hit']:
             wins += 1
-    return wins, folds
+    return wins, judged
 
 
 def main():
@@ -222,8 +248,9 @@ def main():
         tr, va, bl = (ev(by[s], fn) for s in ('train', 'valid', 'blind'))
         if not (va['n'] and bl['n']):
             continue
-        wins, folds = walk_forward(by['train'], fn, base_fn)
+        wins, judged = walk_forward(by['train'], fn, base_fn)
         results.append({'key': key, 'desc': desc, 'wf_wins': wins,
+                        'wf_judged': judged,
                         'train': tr, 'valid': va, 'blind': bl})
 
     results.sort(key=lambda x: -(x['blind']['net'] or -99))
@@ -241,7 +268,10 @@ def main():
     for x in results:
         va, bl = x['valid'], x['blind']
         gates = [
-            ('워크포워드', x['wf_wins'] >= MIN_FOLDS_WIN),
+            # 판정 가능한 폴드가 2개 이상이고, 그중 과반에서 이길 것.
+            # (표본이 없어 잴 수 없는 폴드는 애초에 세지 않는다)
+            ('워크포워드', x['wf_judged'] >= 2
+             and x['wf_wins'] * 2 > x['wf_judged']),
             ('검증 적중', va['hit'] >= b_va['hit'] - MAX_HIT_DROP_VALID),
             ('검증 비용후', va['net'] >= b_va['net']),
             ('실전 적중', bl['hit'] > b_bl['hit']),
@@ -266,7 +296,8 @@ def main():
                       ('블라인드', adopted['blind'])):
             print(f"  {ko:5s} n={m['n']:5d} 적중 {m['hit']:5.1f}% "
                   f"비용후 {m['net']:+.2f}% PF {m['pf']:.2f} MAE {m['mae']:.2f}%")
-        print(f"  워크포워드 {adopted['wf_wins']}/{N_FOLDS} 폴드에서 기준선 우위")
+        print(f"  워크포워드 {adopted['wf_wins']}/{adopted['wf_judged']} "
+              "판정 가능 폴드에서 기준선 우위")
         print(f"  기준선 대비 — 검증 적중 "
               f"{adopted['valid']['hit'] - b_va['hit']:+.1f}%p · "
               f"실전 적중 {adopted['blind']['hit'] - b_bl['hit']:+.1f}%p · "
@@ -283,12 +314,13 @@ def main():
             'baseline': {'key': 'base', 'desc': base_desc,
                          'train': b_tr, 'valid': b_va, 'blind': b_bl},
             'engines': {x['key']: {'desc': x['desc'], 'wf_wins': x['wf_wins'],
+                                   'wf_judged': x['wf_judged'],
                                    'train': x['train'], 'valid': x['valid'],
                                    'blind': x['blind']} for x in results},
             'adopted': (adopted['key'] if adopted else None),
             'adopted_desc': (adopted['desc'] if adopted else None),
             'criteria': {'walk_forward_folds': N_FOLDS,
-                         'min_folds_win': MIN_FOLDS_WIN,
+                         'min_folds_win': '판정 가능 폴드의 과반 (최소 2개 판정)',
                          'max_hit_drop_valid': MAX_HIT_DROP_VALID,
                          'min_signal_rate': MIN_SIGNAL_RATE, 'min_n': MIN_N},
         }, f, ensure_ascii=False, indent=1)

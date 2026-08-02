@@ -451,6 +451,14 @@ def global_css(theme: str = 'dark') -> str:
         .qnav .here {{ display: none !important; }}
         .qnav a {{ font-size: 12px !important; padding: 6px 9px !important; }}
     }}
-    .stMainBlockContainer {{ max-width: 1120px !important;
-                            padding-top: 2rem !important; }}
+    /* 화면 폭을 다 쓴다. 1120px 로 묶어 두면 넓은 모니터에서 양옆이 비고
+       표·차트가 좁아진다. 다만 무한정 늘리면 한 줄이 너무 길어 읽기 나빠지므로
+       본문 글줄만 별도로 제한한다. */
+    .stMainBlockContainer {{ max-width: 1600px !important;
+                            padding-top: 1.5rem !important;
+                            padding-left: 2.5rem !important;
+                            padding-right: 2.5rem !important; }}
+    @media (min-width: 1900px) {{
+        .stMainBlockContainer {{ max-width: 1800px !important; }}
+    }}
     """

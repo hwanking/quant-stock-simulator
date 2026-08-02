@@ -92,18 +92,18 @@ def bump(current: str, kind: str, today: date | None = None) -> str:
         return fmt(today, 0)
     cur_d, cur_p = p
     how = CHANGE_KINDS[kind]
-    if how == BUMP_PATCH:
-        if cur_d == today:
-            return fmt(cur_d, cur_p + 1)
-        # 날짜가 지났으면 오늘 날짜의 첫 패치로 시작한다
-        return fmt(today, 1) if today > cur_d else fmt(cur_d, cur_p + 1)
-    # DATE·MAJOR — 결론이 바뀔 수 있는 변경.
-    # 같은 날 두 번 알고리즘을 바꿔도 버전이 같으면 안 된다. 날짜 자리는
-    # 달력이 아니라 **세대(generation)** 로 쓴다 — 사용자 예시가 그렇다
-    # (v2026.08.02 에서 로직을 바꾸면 v2026.08.03.0).
-    from datetime import timedelta
-    nxt_d = today if today > cur_d else (cur_d + timedelta(days=1))
-    return fmt(nxt_d, 0)
+    # 날짜 자리는 **실제 달력 날짜**다. 앞으로 당기지 않는다 —
+    # 오늘이 8월 2일인데 버전이 8월 4일이면 그건 버전이 아니라 거짓말이다.
+    if today > cur_d:
+        # 날이 바뀌었다 — 오늘 날짜의 첫 릴리스
+        return fmt(today, 0 if how != BUMP_PATCH else 1)
+    if today < cur_d:
+        # 시계가 뒤로 간 경우(수동 조정 등) — 기존 날짜를 지키고 패치만 올린다
+        return fmt(cur_d, cur_p + 1)
+    # 같은 날의 두 번째 이후 릴리스는 무조건 패치가 오른다.
+    # 알고리즘 변경인지 화면 수정인지는 버전 문자열이 아니라 **이력**에
+    # 남긴다(kind·bump). 문자열 하나에 두 가지를 담으려다 날짜가 틀어졌다.
+    return fmt(cur_d, cur_p + 1)
 
 
 def _load() -> dict:

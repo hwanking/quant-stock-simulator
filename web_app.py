@@ -3122,6 +3122,9 @@ if _home_cal.get('total_cases'):
     _sp = _home_cal.get('splits') or {}
     _bz = (_sp.get('buy_zone') or {})
     _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
+    # 대표 지표는 '실제로 추천한 것' 기준 — 전체 사례에는 우리가 애초에
+    # 추천하지 않는 사례가 다 들어 있어 구독자가 받는 성적과 다르다.
+    _bzv, _bzb2 = _bz.get('valid') or {}, _bz.get('blind') or {}
     _sig = _home_cal.get('signal_frequency') or {}
     # UI 킷 타일 — 한 카드 안에서 헤어라인으로 나눈다 (테두리 없음)
     _uk.section("이 판단, 얼마나 믿을 수 있나",
@@ -3130,14 +3133,14 @@ if _home_cal.get('total_cases'):
         {'label': '되돌려 본 판단',
          'value': f"{_home_cal['total_cases']:,}",
          'sub': f"모델 {_VER_NOW['model']}"},
-        {'label': '연습 적중률',
-         'value': (f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None
-                   else "미산출"),
-         'sub': f"과거 {_v.get('n', 0):,}번 중"},
-        {'label': '실전 적중률',
-         'value': (f"{_b['hit_rate']:.1f}%" if _b.get('hit_rate') is not None
-                   else "미산출"),
-         'sub': f"안 본 기간 {_b.get('n', 0):,}번 중"},
+        {'label': '추천했을 때 연습 적중률',
+         'value': (f"{_bzv['hit_rate']:.1f}%"
+                   if _bzv.get('hit_rate') is not None else "미산출"),
+         'sub': f"매수 신호 {_bzv.get('n', 0):,}건 중"},
+        {'label': '추천했을 때 실전 적중률',
+         'value': (f"{_bzb2['hit_rate']:.1f}%"
+                   if _bzb2.get('hit_rate') is not None else "미산출"),
+         'sub': f"안 본 기간 {_bzb2.get('n', 0):,}건 중"},
         {'label': '추천만 골랐을 때',
          'value': (f"{_bzb['hit_rate']:.1f}%" if _bzb.get('hit_rate') is not None
                    else "미산출"),
@@ -3149,8 +3152,13 @@ if _home_cal.get('total_cases'):
                    else "미산출"),
          'sub': f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0):,}건"},
     ], theme=_theme)
-    _uk.note("미래 수익을 보장하지 않습니다. 분해·실패 원인은 아래 모델 성과 "
-             "섹션에 있습니다.", theme=_theme)
+    _uk.note(
+        f"위 두 적중률은 **실제로 매수 신호를 낸 경우만** 센 것입니다 — "
+        f"구독자가 받는 신호의 성적입니다. 참고로 추천하지 않은 것까지 포함한 "
+        f"전체 사례 적중률은 연습 {_v.get('hit_rate', 0):.1f}% "
+        f"({_v.get('n', 0):,}건) · 실전 {_b.get('hit_rate', 0):.1f}% "
+        f"({_b.get('n', 0):,}건)입니다. 미래 수익을 보장하지 않습니다.",
+        theme=_theme)
 
     # ── 국면별 성적 (라운드 7 실측) ────────────────────────────────────
     # 평균 한 줄은 사용자가 오늘 자기 상황에 적용할 수 없다. 적중률을
@@ -3171,10 +3179,27 @@ if _home_cal.get('total_cases'):
             _bb2 = (_rb['buy_zone'].get('blind') or {}).get(_rg) or {}
             if not (_bv or _bb2):
                 continue
-            _vtxt = (f"연습 {_bv['hit']:.0f}% (n={_bv['n']})"
-                     if _bv.get('hit') is not None else '연습 표본 없음')
-            _btxt = (f"실전 {_bb2['hit']:.0f}% (n={_bb2['n']})"
-                     if _bb2.get('hit') is not None else '실전 표본 없음')
+            def _ci(_m):
+                """표본이 적으면 숫자 대신 범위를 보여 준다 — n=16 의 12% 는
+                성적이 아니라 잡음이다. 범위를 숨기면 사용자가 그걸 성적으로
+                읽는다."""
+                _n = _m.get('n') or 0
+                if not _n or _m.get('hit') is None:
+                    return None
+                if _n >= 30:
+                    return f"{_m['hit']:.0f}%"
+                _p = float(_m['hit']) / 100.0
+                _z = 1.96
+                _d = 1 + _z * _z / _n
+                _c = _p + _z * _z / (2 * _n)
+                _mg = _z * ((_p * (1 - _p) / _n
+                             + _z * _z / (4 * _n * _n)) ** 0.5)
+                return (f"{100 * (_c - _mg) / _d:.0f}~"
+                        f"{100 * (_c + _mg) / _d:.0f}%")
+
+            _vv, _bb3 = _ci(_bv), _ci(_bb2)
+            _vtxt = (f"연습 {_vv} (n={_bv['n']})" if _vv else '연습 표본 없음')
+            _btxt = (f"실전 {_bb3} (n={_bb2['n']})" if _bb3 else '실전 표본 없음')
             # 표본이 30건 미만이면 수치를 강조하지 않는다 (우연일 수 있다)
             _thin = ((_bv.get('n') or 0) < 30 or (_bb2.get('n') or 0) < 30)
             _rows_rg.append((_ko, f"{_vtxt} · {_btxt}",
@@ -3183,10 +3208,13 @@ if _home_cal.get('total_cases'):
             _uk.spacer(20)
             _uk.rows(_rows_rg, theme=_theme,
                      title='시장 국면별 추천 성적 — 같은 모델도 장세에 따라 다릅니다')
-            _uk.note("주황색은 표본 30건 미만이라 성적으로 인정하지 않는 구간입니다. "
-                     "특히 하락 추세는 연습과 실전이 크게 엇갈려(연습에서는 잘 맞고 "
-                     "실전에서는 크게 틀렸습니다) 이 국면의 판단은 신뢰하지 마세요.",
-                     theme=_theme)
+            _uk.note(
+                "주황색은 표본 30건 미만이라 성적으로 인정하지 않는 구간이며, "
+                "하나의 숫자 대신 **95% 신뢰구간**을 보여 드립니다. 예를 들어 "
+                "16건에서 2번 맞았다면 참값은 3%일 수도 36%일 수도 있습니다 — "
+                "그건 성적이 아니라 잡음입니다. 특히 하락 추세는 연습과 실전이 "
+                "크게 엇갈리므로 이 국면의 판단은 신뢰하지 마세요.",
+                theme=_theme)
 
 # 개장 전 한 줄 결론 (리포트가 있을 때만 — 없으면 만들지 않는다)
 try:

@@ -2959,12 +2959,15 @@ _w63 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 # ① 홈 지휘센터 — 실측 카드에 표본 수(n) 병기, 보장 문구 금지
 # UI 킷 타일로 렌더 — 5개 지표가 모두 있고, 표본 수를 보조에 적는다
 check("홈 카드 5종 — 사용자 언어 라벨", all(s in _w63 for s in (
-    "'되돌려 본 판단'", "'연습 적중률'", "'실전 적중률'",
-    "'추천만 골랐을 때'", "'매수 기회'")))
+    "'되돌려 본 판단'", "'추천했을 때 연습 적중률'",
+    "'추천했을 때 실전 적중률'", "'추천만 골랐을 때'", "'매수 기회'")))
 check("홈 카드 — 킷 컴포넌트로 렌더 (인라인 HTML 금지)",
       '_uk.stat_tiles(' in _w63 and '_uk.section(' in _w63)
-check("홈 카드 — 표본 수 병기 (세는 단위로)",
-      '과거 {_v.get' in _w63 and '안 본 기간 {_b.get' in _w63)
+check("홈 카드 — 대표 지표가 '추천했을 때' 기준 (전체 사례가 아님)",
+      '추천했을 때 실전 적중률' in _w63
+      and '매수 신호 {_bzv.get' in _w63)
+check("홈 카드 — 전체 사례 적중률도 숨기지 않고 보조로 남긴다",
+      '추천하지 않은 것까지 포함한' in _w63)
 check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
 check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
       '_pm_today and _pm_today.get' in _w63)
@@ -3844,12 +3847,18 @@ check("형식 파싱 — v2026.08.02.1", _V84.parse('v2026.08.02.1') ==
 check("패치 자리 — 같은 날 UI 수정은 끝자리만 오른다",
       _V84.bump('v2026.08.02.1', 'ui', today=_dt84(2026, 8, 2))
       == 'v2026.08.02.2')
-check("날짜 자리 — 알고리즘 변경은 세대가 오르고 패치는 0으로",
+check("날짜는 실제 달력 날짜 — 앞으로 당기지 않는다",
       _V84.bump('v2026.08.02.3', 'algorithm', today=_dt84(2026, 8, 2))
+      == 'v2026.08.02.4')
+check("날이 바뀌면 그날 날짜의 0번으로 시작 (알고리즘 변경)",
+      _V84.bump('v2026.08.02.9', 'algorithm', today=_dt84(2026, 8, 3))
       == 'v2026.08.03.0')
-check("같은 날 두 번 알고리즘을 바꿔도 버전이 겹치지 않는다",
-      _V84.bump('v2026.08.03.0', 'algorithm', today=_dt84(2026, 8, 2))
-      == 'v2026.08.04.0')
+check("같은 날 여러 번 릴리스해도 버전이 겹치지 않는다",
+      _V84.bump('v2026.08.02.4', 'algorithm', today=_dt84(2026, 8, 2))
+      == 'v2026.08.02.5')
+check("변경 종류는 버전 문자열이 아니라 이력에 남는다",
+      '알고리즘 변경인지 화면 수정인지는 버전 문자열이 아니라' in open(
+          _os.path.join(PROJ, 'versioning.py'), encoding='utf-8').read())
 check("전면 교체는 major 로 분류", _V84.CHANGE_KINDS['engine_swap'] == 'major')
 try:
     _V84.bump('v2026.08.02.1', '아무거나')
@@ -3989,7 +3998,9 @@ if _os.path.exists(_bk86):
           _b86.get('n_candidates', 0) >= 20)
     check("워크포워드 폴드 기준이 산출물에 박혀 있다",
           _b86['criteria']['walk_forward_folds'] >= 4
-          and _b86['criteria']['min_folds_win'] >= 3)
+          and '과반' in str(_b86['criteria']['min_folds_win']))
+    check("판정 가능한 폴드 수가 함께 기록된다 (표본 부족을 패배로 세지 않는다)",
+          all('wf_judged' in _e for _e in _b86['engines'].values()))
     check("모든 후보에 워크포워드 성적이 기록된다",
           all('wf_wins' in _e for _e in _b86['engines'].values()))
     check("표본·신호율 하한이 판정에 포함된다",
