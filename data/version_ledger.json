@@ -1,12 +1,38 @@
 {
  "axes": {
-  "model": "v2026.08.03.1",
+  "model": "v2026.08.03.3",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.03.3",
+   "previous": "v2026.08.03.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "전날 미국장 경고 — 보합인 날 실전 46.5% 실측 (라운드 16)",
+   "note": "",
+   "created_at": "2026-08-02T15:46:45+00:00",
+   "effective_from": "2026-08-03"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.03.2",
+   "previous": "v2026.08.03.1",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "정직 점검 — 기대값이 마이너스인 원인은 손익비 0.72 (라운드 15)",
+   "note": "",
+   "created_at": "2026-08-02T15:46:45+00:00",
+   "effective_from": "2026-08-03"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

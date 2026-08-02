@@ -4205,6 +4205,71 @@ check("공시 테스트가 장 시작 전에도 통과한다 (시각 의존 제�
       '시각에 따라 깨지는 테스트는 신호가 아니라 소음이다' in _tt89)
 
 
+section("90. 라운드 15·16 — 기대값 정직 점검 · 손익비 · 전날 미국장")
+_he90 = open(_os.path.join(PROJ, "scripts", "honest_edge_check.py"),
+             encoding='utf-8').read()
+check("적중률이 아니라 기대값을 본다고 명시",
+      '적중률이 아니라 **기대값**을 본다' in _he90)
+check("승률이 높아도 손익비가 나쁘면 잃는다는 설명",
+      '승률이 50%를 넘어도 손익비가 나쁘면 돈을 잃는다' in _he90)
+
+_rr90 = _os.path.join(PROJ, '.portfolio', 'rr_policy.json')
+check("손익비 연구 산출물 존재", _os.path.exists(_rr90))
+if _os.path.exists(_rr90):
+    with open(_rr90, encoding='utf-8') as _f:
+        _r90 = _j84.load(_f)
+    check("현행 손익비가 0.7 로 기록됨", _r90['current_k'] == 0.7)
+    check("전체 일괄 상향은 채택하지 않았다", _r90.get('adopted_k') is None)
+    _g13 = (_r90['grid'].get('1.3') or {}).get('blind') or {}
+    _g07 = (_r90['grid'].get('0.7') or {}).get('blind') or {}
+    check("k=1.3 에서 블라인드 기대값이 양수로 뒤집힌다",
+          _g07.get('ev', 0) < 0 < _g13.get('ev', 0))
+    check("도달률이 떨어지는 대가도 함께 기록",
+          _g13.get('reach', 99) < _g07.get('reach', 0))
+    check("국면별 개선 후보가 기록됨 (거친 상승)",
+          'BULL|rough' in (_r90.get('per_cell') or {}))
+
+_us90 = _os.path.join(PROJ, '.portfolio', 'us_overnight.json')
+check("전날 미국장 연구 산출물 존재", _os.path.exists(_us90))
+if _os.path.exists(_us90):
+    with open(_us90, encoding='utf-8') as _f:
+        _u90 = _j84.load(_f)
+    check("미국 지수 매칭률 95% 이상", _u90.get('coverage', 0) >= 95)
+    _flat = (_u90['bands'].get('보합 (±0.5%)') or {}).get('blind') or {}
+    _up = (_u90['bands'].get('상승 (+0.5~+2%)') or {}).get('blind') or {}
+    check("보합 구간이 상승 구간보다 나쁘다 (직관과 반대 방향)",
+          _flat.get('hit', 99) < _up.get('hit', 0))
+    check("게이트는 채택하지 않았다 (신호 절반 감소)",
+          _u90.get('gate') is None)
+
+_w90 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("화면 — 전날 미국장 경고 (보합이면 조심)",
+      '어젯밤 미국장이 보합이었습니다' in _w90
+      and '오늘은 특히 조심하세요' in _w90)
+check("화면 — 게이트가 아니라 경고임을 코드에 명시",
+      '게이트로 막지는 않는다' in _w90)
+check("누수 방지 — 직전 미국 거래일만 쓴다",
+      'D−1 종가' in open(_os.path.join(PROJ, "scripts",
+                                       "us_overnight_r16.py"),
+                        encoding='utf-8').read())
+
+_mv90 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
+             encoding='utf-8').read()
+check("돈을 못 번다는 사실을 문서에 그대로 적었다",
+      '우리 엔진은 지금 돈을 못 번다' in _mv90
+      or '지금 이 신호대로 매매하면 평균적으로 잃는다' in _mv90)
+check("원인이 설계임을 명시 (목표=손절×0.7)",
+      '구조적으로 기대값이 음수가 되는 설계' in _mv90)
+check("사용자 직관의 방향이 반대였음을 기록",
+      '사용자 직관은 맞았는데 방향이 반대였다' in _mv90)
+
+from improvement import issue_ops as _io90
+check("기대값 마이너스가 이슈로 등록됨", 'model|negative_edge' in _io90.PLAYBOOK)
+check("전날 미국장이 이슈로 등록됨", 'model|us_overnight' in _io90.PLAYBOOK)
+check("이슈에 실측 수치가 들어 있다",
+      '0.72:1' in _io90.PLAYBOOK['model|negative_edge']['cause'])
+
+
 print()
 print("=" * 72)
 if FAILURES:

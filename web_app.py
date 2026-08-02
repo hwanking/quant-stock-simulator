@@ -3306,6 +3306,64 @@ if _home_cal.get('total_cases'):
             _rb = json.load(_rf)
     except Exception:
         _rb = None
+    # ── 전날 미국장 경고 (라운드 16) ────────────────────────────────
+    # 사용자 직관("미장 영향 많이 받는다")은 맞았는데 방향이 반대였다.
+    # 급락한 다음날이 아니라 **보합인 다음날**이 나쁘다 — 미국이 방향을
+    # 정하지 못하면 한국은 방향 없이 흔들린다.
+    # 게이트로 막지는 않는다(신호가 절반으로 줄어 사전등록 미달). 대신 알린다.
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               '.portfolio', 'us_overnight.json'),
+                  encoding='utf-8') as _uf:
+            _uo = json.load(_uf)
+    except Exception:
+        _uo = None
+    _sp_pct = None
+    try:
+        _sp_raw = str((m_indices.get('sp500') or {}).get('pct') or '')
+        _sp_pct = float(_sp_raw.replace('%', '').replace('+', '').strip())
+        if _sp_raw.strip().startswith('-'):
+            _sp_pct = -abs(_sp_pct)
+    except Exception:
+        _sp_pct = None
+    if _uo and _sp_pct is not None:
+        _bko = ('급락 (−2%↓)' if _sp_pct < -2 else
+                '하락 (−2~−0.5%)' if _sp_pct < -0.5 else
+                '보합 (±0.5%)' if _sp_pct < 0.5 else
+                '상승 (+0.5~+2%)' if _sp_pct < 2 else '급등 (+2%↑)')
+        _bs = ((_uo.get('bands') or {}).get(_bko) or {})
+        _bbl = _bs.get('blind') or _bs.get('valid') or {}
+        _uk.spacer(20)
+        if _bko == '보합 (±0.5%)':
+            _uk.card(
+                f"<p style='margin:0 0 8px 0; font-size:15px; font-weight:600; "
+                f"color:{_TOK['tx1']};'>어젯밤 미국장이 보합이었습니다 "
+                f"({_sp_pct:+.2f}%) — 오늘은 특히 조심하세요</p>"
+                f"<p style='margin:0; font-size:13px; line-height:1.7; "
+                f"color:{_TOK['tx2']};'>과거 실측에서 <b>전날 미국장이 보합인 "
+                f"날의 추천 성적이 가장 나빴습니다</b> — 실전 적중 "
+                f"{_bbl.get('hit', 0):.0f}% · 비용 차감 후 "
+                f"{_bbl.get('ev', 0):+.2f}% (n={_bbl.get('n', 0)}). "
+                f"미국이 방향을 정하지 못하면 한국은 방향 없이 흔들립니다. "
+                f"오늘 나오는 매수 결론은 평소보다 낮게 보시는 편이 안전합니다.</p>",
+                theme=_theme, accent='warn')
+        else:
+            _uk.card(
+                f"<p style='margin:0 0 6px 0; font-size:13px; "
+                f"color:{_TOK['tx3']};'>어젯밤 미국장</p>"
+                f"<p style='margin:0; font-size:15px; line-height:1.7; "
+                f"color:{_TOK['tx1']};'>S&amp;P 500 <b>{_sp_pct:+.2f}%</b> · "
+                f"{_bko}</p>"
+                + (f"<p style='margin:6px 0 0 0; font-size:13px; "
+                   f"color:{_TOK['tx2']};'>같은 구간의 과거 추천 성적: "
+                   f"적중 {_bbl.get('hit', 0):.0f}% · 비용 차감 후 "
+                   f"{_bbl.get('ev', 0):+.2f}% (n={_bbl.get('n', 0)})</p>"
+                   if _bbl.get('n') else
+                   f"<p style='margin:6px 0 0 0; font-size:13px; "
+                   f"color:{_TOK['tx3']};'>이 구간은 과거 표본이 적어 성적을 "
+                   f"말하지 않습니다.</p>"),
+                theme=_theme)
+
     if _rb and _rb.get('cells6') and _rb.get('mode') == '6':
         # 국면을 변동성으로 쪼갠 6칸 (라운드 14). 같은 판단을 더 정확한
         # 이름으로 묶으니 연습-실전 격차가 31.8%p → 6.5%p 로 줄었다.
