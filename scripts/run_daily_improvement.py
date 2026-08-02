@@ -35,6 +35,7 @@ from improvement import issue_tracker as it
 from improvement import model_registry as mr
 from improvement.performance import resolve_long_case
 from improvement.schemas import RECO_CLASS_TO_DECISION, Decision
+import versioning as V
 
 PM_HISTORY = os.path.join(BASE, '.portfolio', 'premarket_history.jsonl')
 CALIB = os.path.join(BASE, '.portfolio', 'calibration.json')
@@ -54,6 +55,7 @@ def _operating_version(calib):
 
 def make_create_new_cases(conn, calib):
     def create_new_cases() -> int:
+        _vs = V.snapshot()
         if not os.path.exists(PM_HISTORY):
             return 0
         added = 0
@@ -73,8 +75,8 @@ def make_create_new_cases(conn, calib):
                         ticker=str(p['symbol']),
                         asset_type=str(p.get('asset_type') or 'STOCK'),
                         signal_date=date.fromisoformat(str(p['date'])),
-                        model_version=ver,
-                        rulebook_version=ver,
+                        model_version=_vs['model'],
+                        rulebook_version=_vs['rulebook'],
                         decision=decision,
                         total_score=float(p.get('score') or 0),
                         confidence_score=float(
@@ -90,7 +92,10 @@ def make_create_new_cases(conn, calib):
                         holding_days=int(p.get('horizon_days') or 20),
                         market_regime=str(p.get('entry_zone') or '미기록'),
                         strategy_type=str(p.get('reco_class') or ''),
-                        source_payload=p)
+                        # 케이스마다 버전 도장을 찍는다 — 나중에 "이 판단이
+                        # 어느 버전에서 나왔나"를 되짚을 수 있어야 한다.
+                        # 이전 버전 케이스는 덮어쓰지 않는다.
+                        source_payload=V.stamp(p))
                     if ct.save_prediction_case(conn, case):
                         added += 1
                 except ValueError:

@@ -57,6 +57,114 @@ def section(title: str, subtitle: str = '', theme: str = 'dark',
         unsafe_allow_html=True)
 
 
+def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
+    """
+    가늠 워드마크 — 글자 하나로 로고를 만든다.
+
+    '가늠'은 가늠쇠에서 온 말이다. 가늠쇠는 총열 끝의 작은 표적 조준점이고,
+    그 모양이 이 로고의 유일한 도형이다 — 원 안의 십자, 그리고 마침표.
+    마침표는 '재보고 나서 결론을 낸다'는 뜻이다. 장식은 이게 전부다.
+    """
+    t = tokens(theme)
+    r = size * 0.42
+    mark = (
+        f"<svg width='{size}' height='{size}' viewBox='0 0 24 24' "
+        f"fill='none' style='flex:0 0 auto;'>"
+        f"<circle cx='12' cy='12' r='9' stroke='{t['brand']}' "
+        f"stroke-width='1.6'/>"
+        f"<path d='M12 3v4M12 17v4M3 12h4M17 12h4' stroke='{t['tx2']}' "
+        f"stroke-width='1.6' stroke-linecap='round'/>"
+        f"<circle cx='12' cy='12' r='2.4' fill='{t['brand']}'/></svg>")
+    subhtml = (f"<span style='font-size:12px; color:{t['tx3']}; "
+               f"font-weight:500; letter-spacing:0;'>{_esc(sub)}</span>"
+               if sub else '')
+    return (
+        f"<div style='display:flex; align-items:center; gap:9px;'>{mark}"
+        f"<span style='font-size:{size * 0.78:.0f}px; font-weight:700; "
+        f"color:{t['tx1']}; letter-spacing:-0.03em; line-height:1;'>가늠"
+        f"<span style='color:{t['brand']};'>.</span></span>{subhtml}</div>")
+
+
+def update_bar(version: str, headline: str, theme: str = 'dark',
+               kind: str = '') -> None:
+    """
+    최상단 업데이트 바 — 탭보다 위. 사용자가 가장 중요하다고 한 정보다.
+
+    한 건만 보여 준다. 여러 건을 늘어놓으면 아무것도 안 읽힌다.
+    """
+    t = tokens(theme)
+    tag = (f"<span style='background:{t['raised']}; color:{t['tx2']}; "
+           f"font-size:12px; font-weight:600; padding:2px 8px; "
+           f"border-radius:6px; flex:0 0 auto;'>{_esc(kind)}</span>"
+           if kind else '')
+    st.markdown(
+        f"<div style='display:flex; align-items:center; gap:12px; "
+        f"background:{t['card']}; border-radius:12px; padding:10px 16px; "
+        f"margin-bottom:10px; flex-wrap:wrap;'>"
+        f"<span style='width:7px; height:7px; border-radius:50%; "
+        f"background:{t['pos']}; flex:0 0 auto;'></span>"
+        f"<span style='font-size:12px; color:{t['tx3']}; font-weight:600; "
+        f"letter-spacing:0.02em; flex:0 0 auto;'>최신 업데이트</span>"
+        f"<span style='font-size:12px; color:{t['brand']}; font-weight:700; "
+        f"font-variant-numeric:tabular-nums; flex:0 0 auto;'>"
+        f"{_esc(version)}</span>{tag}"
+        f"<span style='font-size:13px; color:{t['tx1']}; min-width:0; "
+        f"overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'>"
+        f"{_esc(headline)}</span></div>",
+        unsafe_allow_html=True)
+
+
+#: 분석 파이프라인의 실제 단계 — 화면에 이 순서대로 보여 준다.
+#  이름을 지어내지 않는다. 각 단계는 실제로 코드가 하는 일이다.
+STEPS = [
+    ('collect', '데이터 수집'),
+    ('crosscheck', '가격 교차검증'),
+    ('indicators', '기술지표 계산'),
+    ('news', '뉴스 분석'),
+    ('similar', '과거 유사사례 탐색'),
+    ('verdict', '최종 판단 생성'),
+]
+
+
+def progress(done: int, total: int = 0, label: str = '',
+             theme: str = 'dark') -> str:
+    """
+    절제된 진행 표시 — 얇은 막대와 단계 이름만. 회전하는 장식은 쓰지 않는다.
+
+    반환한 HTML 을 st.empty().markdown 에 넣어 단계마다 갈아 끼운다.
+    """
+    t = tokens(theme)
+    total = total or len(STEPS)
+    pct = max(0.0, min(100.0, 100.0 * done / max(1, total)))
+    dots = []
+    for i, (_k, ko) in enumerate(STEPS[:total]):
+        if i < done:
+            col, mark = t['pos'], '✓'
+        elif i == done:
+            col, mark = t['brand'], '·'
+        else:
+            col, mark = t['tx3'], '·'
+        dots.append(
+            f"<span style='font-size:12px; color:{col}; white-space:nowrap;'>"
+            f"{mark} {_esc(ko)}</span>")
+    return (
+        f"<div style='background:{t['card']}; border-radius:14px; "
+        f"padding:16px 20px;'>"
+        f"<div style='display:flex; align-items:baseline; gap:10px; "
+        f"margin-bottom:12px;'>"
+        f"<span style='font-size:15px; font-weight:600; color:{t['tx1']};'>"
+        f"{_esc(label or (STEPS[done][1] if done < len(STEPS) else '완료'))}"
+        f"</span>"
+        f"<span style='font-size:12px; color:{t['tx3']}; margin-left:auto; "
+        f"font-variant-numeric:tabular-nums;'>{done}/{total}</span></div>"
+        f"<div style='height:3px; background:{t['raised']}; border-radius:2px; "
+        f"overflow:hidden; margin-bottom:12px;'>"
+        f"<div style='height:100%; width:{pct:.0f}%; background:{t['brand']}; "
+        f"border-radius:2px; transition:width .35s ease;'></div></div>"
+        f"<div style='display:flex; gap:14px; flex-wrap:wrap;'>"
+        + ''.join(dots) + "</div></div>")
+
+
 def sidebar_section(title: str, sub: str = '', theme: str = 'dark',
                     top: int = 26) -> None:
     """
@@ -275,6 +383,36 @@ def global_css(theme: str = 'dark') -> str:
     /* 수직 리듬 — 8pt 그리드 */
     .stApp hr {{ margin: 40px 0 !important; border-color: {t['line']} !important;
                 opacity: 1 !important; }}
+    /* ── 모바일 (≤768px) ─────────────────────────────────────────────
+       데스크톱을 축소하지 않는다. 한 열로 세우고, 터치 대상을 44px 이상으로
+       키우고, 넘치는 것은 각자의 상자 안에서만 넘치게 한다. */
+    @media (max-width: 768px) {{
+        .stMainBlockContainer {{ padding: 12px 16px !important; }}
+        /* 타일 줄 — 줄이면 숫자가 안 보인다. 가로로 밀어 보게 한다 */
+        .stApp div[style*="align-items:stretch"] {{
+            overflow-x: auto !important; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; }}
+        .stApp div[style*="align-items:stretch"] > div {{
+            min-width: 136px !important; }}
+        /* 컬럼은 한 열로 */
+        .stApp [data-testid="stHorizontalBlock"] {{
+            flex-direction: column !important; gap: 12px !important; }}
+        .stApp [data-testid="stColumn"] {{ width: 100% !important;
+            flex: 1 1 100% !important; min-width: 0 !important; }}
+        /* 표는 자기 상자 안에서만 넘친다 — 본문이 밀리면 안 된다 */
+        .stApp [data-testid="stDataFrame"] {{ max-width: 100% !important; }}
+        .stApp table {{ display: block; overflow-x: auto; max-width: 100%; }}
+        /* 탭은 가로 스크롤 */
+        .stApp .stTabs [data-baseweb="tab-list"] {{
+            overflow-x: auto !important; flex-wrap: nowrap !important;
+            scrollbar-width: none; }}
+        /* 터치 대상 44px — 애플 HIG 최소치 */
+        .stApp button, .stApp [role="tab"] {{ min-height: 44px !important; }}
+        /* 상단 툴바는 좁게, 종목 표시는 접는다 */
+        .qnav {{ padding: 8px 10px !important; gap: 4px !important; }}
+        .qnav .here {{ display: none !important; }}
+        .qnav a {{ font-size: 12px !important; padding: 6px 9px !important; }}
+    }}
     .stMainBlockContainer {{ max-width: 1120px !important;
                             padding-top: 2rem !important; }}
     """

@@ -3064,7 +3064,8 @@ with open(_os.path.join(PROJ, "data", "update_history.json"),
 check("히스토리 — git 원천 명시·비어있지 않음",
       'git' in str(_uh65.get('generated_from', ''))
       and len(_uh65.get('days', [])) >= 1)
-check("웹앱 히스토리 섹션", '업데이트 히스토리' in _w65)
+check("웹앱 히스토리 섹션 — 킷 섹션으로 통일",
+      '_uk.section("업데이트"' in _w65)
 
 # ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
 check("케이스 축적 목표 표시 (단계 목표·중단 금지)",
@@ -3139,7 +3140,8 @@ check("경고 없으면 이슈 없음", po66.build_stock_issues({}, {}, {}) == [
 check("홈 주요 이슈 섹션 — 건수·최상위 제목이 접힌 채로 보인다",
       '주요 이슈 ' in _w66 and '건 — ' in _w66)
 check("종목 이슈 섹션", '이 종목의 주요 이슈' in _w66)
-check("업데이트 패널 — 요약+필터+전체 보기", '최근 업데이트 · 업데이트 히스토리' in _w66
+check("업데이트 패널 — 최신 1건 상세 + 나머지 한 줄 + 전체 보기",
+      '최신 1건은 펼쳐서, 나머지는 한 줄로' in _w66
       and '전체 업데이트 보기' in _w66 and 'upd_cat_filter' in _w66)
 check("고객센터 — 실제 대처법·신고 채널", '고객센터 — 안 될 때 여기부터' in _w66
       and 'github.com/hwanking/quant-stock-simulator/issues' in _w66)
@@ -3831,6 +3833,103 @@ check("버튼에 다크 특례를 두지 않는다", '특례를 두지 않는 �
 check("사이드바 입력 글자가 흰색 고정이 아니다 (테마를 따른다)",
       '[data-testid="stSidebar"] input {{' in _w83
       and "color: {_TOK['tx1']} !important;" in _w83)
+
+
+section("84. 버전 체계 · 가늠 AI · 무릎-어깨 · 모바일 · 진행 표시")
+import versioning as _V84
+from datetime import date as _dt84
+
+check("형식 파싱 — v2026.08.02.1", _V84.parse('v2026.08.02.1') ==
+      (_dt84(2026, 8, 2), 1))
+check("패치 자리 — 같은 날 UI 수정은 끝자리만 오른다",
+      _V84.bump('v2026.08.02.1', 'ui', today=_dt84(2026, 8, 2))
+      == 'v2026.08.02.2')
+check("날짜 자리 — 알고리즘 변경은 세대가 오르고 패치는 0으로",
+      _V84.bump('v2026.08.02.3', 'algorithm', today=_dt84(2026, 8, 2))
+      == 'v2026.08.03.0')
+check("같은 날 두 번 알고리즘을 바꿔도 버전이 겹치지 않는다",
+      _V84.bump('v2026.08.03.0', 'algorithm', today=_dt84(2026, 8, 2))
+      == 'v2026.08.04.0')
+check("전면 교체는 major 로 분류", _V84.CHANGE_KINDS['engine_swap'] == 'major')
+try:
+    _V84.bump('v2026.08.02.1', '아무거나')
+    _ok84 = False
+except ValueError:
+    _ok84 = True
+check("등록되지 않은 변경 종류는 거부한다 (즉흥 판단 금지)", _ok84)
+check("이유 없이 버전을 올릴 수 없다", 'reason' in _V84.release.__doc__
+      and '변경 이유' in _V84.release.__doc__)
+_st84 = _V84.stamp()
+check("버전 도장에 5축이 모두 있다", set(_V84.AXES) <= set(_st84['versions']))
+for _k84 in ('generated_at', 'effective_from', 'previous_version',
+             'change_reason'):
+    check(f"버전 도장 필드 — {_k84}", _k84 in _st84)
+check("버전 원장 파일이 존재하고 이력이 쌓인다",
+      _os.path.exists(_V84.LEDGER) and len(_V84.history()) >= 5)
+
+import gaeum_ai as _ga84
+_g84 = _ga84.build({}, {}, {})
+for _k84 in ('up_prob', 'down_prob', 'undecided', 'price_low', 'hold_days',
+             'sample_n', 'oos_hit', 'ci_low', 'risk', 'limits', 'confidence'):
+    check(f"가늠 AI 필드 — {_k84}", _k84 in _g84)
+check("표본이 없으면 확률을 지어내지 않는다",
+      _g84['up_prob'] is None and _g84['sample_n'] is None)
+check("표본이 없을 때 한 문장이 '보류'라고 말한다",
+      '확률로 말할 수 없어' in _ga84.sentence(_g84))
+_g84b = _ga84.build({}, {'match_count': 126, 'tp_first_prob': 64.3}, {})
+check("표본이 있으면 '몇 건 중 몇 건' 으로 말한다",
+      '126건 중 81건' in _ga84.sentence(_g84b))
+check("신뢰도를 낱말로 준다", _g84b['confidence'] in
+      ('낮음', '보통', '높음', '판단 불가'))
+
+_tp84 = _os.path.join(PROJ, '.portfolio', 'target_policy.json')
+check("무릎-어깨 목표 정책 산출물 존재", _os.path.exists(_tp84))
+if _os.path.exists(_tp84):
+    import json as _j84
+    with open(_tp84, encoding='utf-8') as _f:
+        _pol84 = _j84.load(_f)
+    _zs84 = {s['zone'] for s in _pol84['splits']['valid']['steps']}
+    check("무릎·어깨·머리 세 구간이 모두 나온다",
+          {'무릎', '어깨', '머리'} <= _zs84)
+    check("어깨 구간이 3~5% 로 실측됐다",
+          _pol84['recommended']['range_pct'] == [3.0, 5.0])
+
+_sp84 = _os.path.join(PROJ, '.portfolio', 'stop_policy.json')
+check("손절 정책은 채택하지 않았음이 기록돼 있다",
+      _os.path.exists(_sp84) and
+      _j84.load(open(_sp84, encoding='utf-8'))['adopted'] is False)
+
+_u84 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+check("로고 — 가늠쇠 조준점 워드마크", 'def logo(' in _u84
+      and '가늠쇠' in _u84)
+check("업데이트 바 — 최상단 컴포넌트", 'def update_bar(' in _u84)
+check("진행 표시 — 단계 이름이 실제 파이프라인과 같다",
+      'def progress(' in _u84 and '과거 유사사례 탐색' in _u84)
+check("모바일 — 한 열·44px 터치·가로 스크롤",
+      '@media (max-width: 768px)' in _u84 and 'min-height: 44px' in _u84
+      and 'flex-direction: column' in _u84)
+
+_w84 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("업데이트 바가 툴바(탭)보다 위에 그려진다",
+      _w84.index('_uk.update_bar(') < _w84.index('_render_toolbar()'))
+check("애플 폰트 스택 — 시스템 폰트 우선, Pretendard 폴백",
+      '-apple-system' in _w84 and '"SF Pro Display"' in _w84
+      and '"Pretendard"' in _w84)
+check("애플 폰트 파일을 배포하지 않는다고 명시",
+      '애플 폰트 파일을 배포하지 않는다' in _w84)
+check("크기별 트래킹 — 큰 글자일수록 자간을 좁힌다",
+      'letter-spacing: -0.024em' in _w84)
+check("진행 표시가 끝나면 사라진다", '_prog.empty()' in _w84)
+check("가늠 AI 패널이 화면에 있다", '_uk.section("가늠 AI"' in _w84)
+check("얼마에 팔 것인가 — 목표별 도달 확률 표", '얼마에 팔 것인가' in _w84)
+check("업데이트 최신 1건 상세 + 나머지 한 줄",
+      '최신 1건은 펼쳐서, 나머지는 한 줄로' in _w84)
+
+_d84 = open(_os.path.join(PROJ, "scripts", "run_daily_improvement.py"),
+            encoding='utf-8').read()
+check("케이스에 버전 도장을 찍는다", 'V.stamp(p)' in _d84)
+check("이전 버전 케이스를 덮어쓰지 않는다고 명시",
+      '이전 버전 케이스는 덮어쓰지 않는다' in _d84)
 
 
 print()

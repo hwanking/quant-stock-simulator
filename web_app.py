@@ -267,13 +267,32 @@ st.markdown(f"""
     .stApp {{
         background-color: {_APP_BG};
         color: {_APP_TX};
-        font-family: "Pretendard", "Pretendard Variable", "Inter",
-                     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                     "Malgun Gothic", Helvetica, Arial, sans-serif;
-        font-feature-settings: "tnum" 1;
+        /* 애플 시스템 폰트를 먼저 찾고, 없으면 Pretendard·Inter 로 자연스럽게
+           내려간다. 애플 폰트 파일을 배포하지 않는다 — 설치된 환경에서만 쓴다. */
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                     "SF Pro Text", "Apple SD Gothic Neo", "Pretendard",
+                     "Pretendard Variable", "Inter", "Noto Sans KR",
+                     "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+        font-feature-settings: "tnum" 1, "case" 1, "ss01" 1;
         font-variant-numeric: tabular-nums;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.011em;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
     }}
+    /* 큰 글자일수록 자간을 좁힌다 — 애플이 크기별로 트래킹을 다르게 주는 이유.
+       같은 자간을 모든 크기에 쓰면 큰 제목이 성기게 벌어져 보인다. */
+    .stApp h1, .stApp [style*="font-size:40px"], .stApp [style*="font-size: 40px"] {{
+        letter-spacing: -0.024em !important; }}
+    .stApp h2, .stApp [style*="font-size:34px"], .stApp [style*="font-size:28px"] {{
+        letter-spacing: -0.021em !important; }}
+    .stApp h3, .stApp [style*="font-size:22px"], .stApp [style*="font-size:20px"] {{
+        letter-spacing: -0.017em !important; }}
+    /* 본문은 여유 있는 행간 — 한글은 라틴보다 조금 더 필요하다 */
+    .stApp p, .stApp li {{ line-height: 1.62; }}
+    /* 숫자는 어디서나 자릿수 고정 — 표에서 자리가 흔들리면 비교가 안 된다 */
+    .stApp [style*="font-variant-numeric"], .stApp td, .stApp th {{
+        font-variant-numeric: tabular-nums; }}
     /* 표면·경계선 접합 — 카드마다 다른 색 금지 */
     {_CSS_SURFACE_MAP}
     {_CSS_BORDER_MAP}
@@ -457,6 +476,21 @@ def _render_toolbar(here_html: str = '') -> None:
         f'<span class="here">{here_html}</span></div>',
         unsafe_allow_html=True)
 
+
+# ── 최상단 업데이트 바 (탭보다 위) ──────────────────────────────────────
+# 사용자 요구: "업데이트가 가장 중요하다 — 엔진 맨 위, 탭 위에 넣어라".
+# 한 건만 보여 준다. 전체는 아래 히스토리에서 본다.
+import versioning as _ver
+_VER_NOW = _ver.snapshot()
+# 이 시점엔 아직 헬퍼가 정의되기 전이라 파일을 직접 읽는다 (의존 없음)
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           'data', 'update_history.json'), encoding='utf-8') as _f:
+        _uh_top = json.load(_f)
+    _i0 = ((_uh_top.get('days') or [{}])[0].get('items') or [{}])[0]
+    _uk.update_bar(_VER_NOW['model'], str(_i0.get('subject') or '—'), _theme)
+except Exception:
+    _uk.update_bar(_VER_NOW['model'], '업데이트 이력을 불러오지 못했습니다', _theme)
 
 _render_toolbar()               # 우선 비워서 그린다 (자리 이동 방지)
 
@@ -1406,7 +1440,8 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-if st.sidebar.button(APP_NAME, use_container_width=True, key="btn_home",
+st.sidebar.markdown(_uk.logo(_theme, size=30), unsafe_allow_html=True)
+if st.sidebar.button("첫 화면으로", use_container_width=True, key="btn_home",
                      help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
                           "보유종목은 지워지지 않습니다."):
     # 보유종목(positions)과 저장본은 건드리지 않는다 — 사용자의 자료다.
@@ -3063,7 +3098,7 @@ if _home_cal.get('total_cases'):
     _uk.stat_tiles([
         {'label': '되돌려 본 판단',
          'value': f"{_home_cal['total_cases']:,}",
-         'sub': f"모델 {str(_home_cal.get('rulebook_version', '—')).lstrip('v')}"},
+         'sub': f"모델 {_VER_NOW['model']}"},
         {'label': '연습 적중률',
          'value': (f"{_v['hit_rate']:.1f}%" if _v.get('hit_rate') is not None
                    else "미산출"),
@@ -3238,22 +3273,67 @@ if _uh_home and _uh_home.get('days'):
     _flat_upd = [{**it, 'date': d['date'], 'version': d['version']}
                  for d in _days_enr for it in d['items']]
     _n_upd = len(_flat_upd)
-    _latest_ver = str((_gi_calib or {}).get('rulebook_version', '')) or \
-        (_days_enr[0]['version'] if _days_enr else '')
-    st.markdown("#### 최근 업데이트 · 업데이트 히스토리")
-    st.caption(f"누적 개선 **{_n_upd}건** · 운영 모델 **{_latest_ver}** · "
-               "원천: 커밋 이력 원문 (손으로 쓰지 않아 누락·과장이 없습니다)")
-    for _u in _flat_upd[:5]:
-        st.markdown(
-            f"<div style='display:flex; gap:10px; align-items:baseline; "
-            f"padding:4px 2px; border-bottom:1px solid {_TOK['border']};'>"
-            f"<span style='font-size:12px; color:{_TOK['tx2']}; width:84px; "
-            f"flex-shrink:0;'>{_u['date']}</span>"
-            f"<span style='background:{_TOK['hover']}; color:{_TOK['brand']}; "
-            f"font-size:12px; font-weight:700; padding:1px 8px; border-radius:6px; "
-            f"flex-shrink:0;'>{_u['category']}</span>"
-            f"<span style='font-size:13px; color:{_TOK['tx1']};'>"
-            f"{_u['subject']}</span></div>", unsafe_allow_html=True)
+    _latest_ver = _VER_NOW['model']       # 버전 원장이 유일 출처
+    _uk.section("업데이트", f"누적 {_n_upd}건 · 운영 모델 {_latest_ver}",
+                theme=_theme, top=28)
+    st.caption("원천은 커밋 이력 원문입니다 — 손으로 쓰지 않아 누락·과장이 "
+               "없습니다. 최신 1건은 펼쳐서, 나머지는 한 줄로 보여 드립니다.")
+
+    # ── 최신 1건 — 상세 (사용자 요구: 날짜·버전·카테고리·제목·요약·변경 이유·
+    #    사용자에게 달라지는 점·관련 이슈·테스트 결과) ──────────────────
+    if _flat_upd:
+        _u0 = _flat_upd[0]
+        _d0 = _u0.get('detail') or {}
+        _uk.card(
+            f"<div style='display:flex; gap:10px; align-items:center; "
+            f"flex-wrap:wrap; margin-bottom:10px;'>"
+            f"<span style='font-size:12px; color:{_TOK['tx3']};'>"
+            f"{_u0['date']}</span>"
+            f"<span style='font-size:12px; font-weight:700; "
+            f"color:{_TOK['brand']}; font-variant-numeric:tabular-nums;'>"
+            f"{_VER_NOW['model']}</span>"
+            f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
+            f"font-size:12px; font-weight:600; padding:2px 8px; "
+            f"border-radius:6px;'>{_u0['category']}</span></div>"
+            f"<p style='margin:0 0 10px 0; font-size:17px; font-weight:600; "
+            f"color:{_TOK['tx1']}; line-height:1.45;'>"
+            f"{_uk._esc(_u0['subject'])}</p>"
+            + ''.join(
+                f"<p style='margin:0 0 8px 0; font-size:13px; line-height:1.65; "
+                f"color:{_TOK['tx2']};'><span style='color:{_TOK['tx3']};'>"
+                f"{_lab} </span>{_uk._esc(_val)}</p>"
+                for _lab, _val in (
+                    ('변경 이유', _d0.get('why')),
+                    ('사용자에게 달라지는 점', _d0.get('user_effect')),
+                    ('변경 전 문제', _d0.get('problem')),
+                    ('테스트 결과', _d0.get('tests')))
+                if _val and _val != '기록 없음')
+            + (f"<p style='margin:8px 0 0 0; font-size:12px; "
+               f"color:{_TOK['tx3']};'>관련 회귀 "
+               f"{' '.join(_d0.get('related') or [])}</p>"
+               if _d0.get('related') else ''),
+            theme=_theme, accent='brand')
+        _uk.spacer(12)
+
+    # ── 나머지 — 한 줄. 누르면 그 자리에서 펼쳐진다 ─────────────────────
+    for _u in _flat_upd[1:12]:
+        _dd = _u.get('detail') or {}
+        with st.expander(f"{_u['date']} · {_u['category']} · {_u['subject']}",
+                         expanded=False):
+            for _lab, _val in (('변경 이유', _dd.get('why')),
+                               ('사용자에게 달라지는 점', _dd.get('user_effect')),
+                               ('변경 전 문제', _dd.get('problem')),
+                               ('테스트 결과', _dd.get('tests'))):
+                _dim = (_val in (None, '', '기록 없음'))
+                st.markdown(
+                    f"<p style='margin:0 0 6px 0; font-size:13px; "
+                    f"line-height:1.65; color:"
+                    f"{_TOK['tx3'] if _dim else _TOK['tx2']};'>"
+                    f"<span style='color:{_TOK['tx3']};'>{_lab} </span>"
+                    f"{_uk._esc(_val or '기록 없음')}</p>",
+                    unsafe_allow_html=True)
+
+
     with st.expander(f"전체 업데이트 보기 ({_n_upd}건 · 카테고리 필터)",
                      expanded=False):
         _cats = ['전체'] + sorted({u['category'] for u in _flat_upd})
@@ -3322,9 +3402,19 @@ if m_indices['kospi']['price'] == 'N/A' or m_indices['kosdaq']['price'] == 'N/A'
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
-with st.spinner(f"[{resolved_name}] 동적 무결성 점수 및 시계열 연산 중..."):
+# 기본 스피너는 '무언가 돌고 있다'만 말한다. 어느 단계인지 보여야 기다릴 수 있다.
+_prog = st.empty()
+_prog.markdown(_uk.progress(0, label=f"{resolved_name} · 데이터 수집",
+                            theme=_theme), unsafe_allow_html=True)
+try:
     snap, snap_origin = get_shared_snapshot(target_ticker, t_ref_str, rho_cutoff)
+    _prog.markdown(_uk.progress(4, label=f"{resolved_name} · 과거 유사사례 탐색",
+                                theme=_theme), unsafe_allow_html=True)
     report_text, snapshot, latest_fund, sr117_audit, guard_res = build_report_context(snap)
+    _prog.markdown(_uk.progress(6, label="완료", theme=_theme),
+                   unsafe_allow_html=True)
+finally:
+    _prog.empty()          # 끝나면 조용히 사라진다
 
 tech_df   = snap['tech_df']
 fund_df   = snap['fund_df']
@@ -3913,6 +4003,103 @@ if _bear_now and ((_rsi_now is not None and _rsi_now < 35)
         f"않습니다.</p>",
         theme=_theme, accent=_uk.DARK['warn'])
     _uk.spacer(24)
+
+# ── 가늠 AI — 무엇을 가늠했는지 사용자 말로 ────────────────────────────
+# 이름만 AI 처럼 보이지 않게, 실제로 잰 것을 전부 펼친다. 계산은 여기서 새로
+# 하지 않는다 — 엔진이 낸 값을 모아 번역할 뿐이다(두 개의 진실 금지).
+import gaeum_ai as _gai
+_g = _gai.build(four_scores, sim_res, snap.get('verdict') or {},
+                price=realtime_price)
+_uk.section("가늠 AI", "이 종목을 어떻게 가늠했는지 그대로 보여 드립니다",
+            theme=_theme, top=28)
+_uk.card(
+    f"<p style='margin:0; font-size:17px; line-height:1.7; "
+    f"color:{_TOK['tx1']};'>{_uk._esc(_gai.sentence(_g))}</p>",
+    theme=_theme, accent='brand')
+_uk.spacer(12)
+
+
+def _pc(v, suf='%'):
+    return f"{v:.1f}{suf}" if v is not None else _gai.NA
+
+
+_uk.stat_tiles([
+    {'label': '목표 방향이 먼저 나올 확률', 'value': _pc(_g['tp_first']),
+     'sub': '손절선보다 목표에 먼저 닿는 비율', 'tone': 'pos'},
+    {'label': '손절선에 먼저 닿을 확률', 'value': _pc(_g['sl_first']),
+     'sub': '목표보다 손절에 먼저 닿는 비율', 'tone': 'neg'},
+    {'label': '기간 안에 어느 쪽도 못 닿을 확률', 'value': _pc(_g['undecided']),
+     'sub': '보유기간이 끝날 때까지 결판 안 남'},
+], theme=_theme)
+_uk.spacer(12)
+
+_rows_g = [
+    ('예상 보유기간',
+     (f"{_g['hold_days']}거래일" if _g.get('hold_days') else _gai.NA)),
+    ('비슷했던 과거 사례',
+     (f"{_g['sample_n']:,}건" if _g.get('sample_n') else '찾지 못함')),
+    ('이 점수대의 실제 성적 (안 본 사례)',
+     (f"{_g['oos_hit']:.0f}% · {_g['oos_n']:,}건 기준"
+      if _g.get('oos_hit') is not None else _gai.NA)),
+    ('95% 신뢰구간',
+     (f"{_g['ci_low']:.0f}% ~ {_g['ci_high']:.0f}%"
+      if _g.get('ci_low') is not None else _gai.NA)),
+    ('신뢰도', str(_g.get('confidence') or _gai.NA),
+     ('pos' if _g.get('confidence') == '높음'
+      else 'warn' if _g.get('confidence') in ('낮음', '판단 불가') else '')),
+]
+if _g.get('price_low') and _g.get('price_high'):
+    _rows_g.insert(0, ('기대 가격 범위 (10~90분위)',
+                       f"{_g['price_low']:,.0f} ~ {_g['price_high']:,.0f}원"))
+_uk.rows(_rows_g, theme=_theme, title='가늠한 값')
+
+if _g.get('risk'):
+    _uk.spacer(12)
+    _uk.card(
+        f"<p style='margin:0 0 6px 0; font-size:13px; color:{_TOK['tx3']};'>"
+        f"가장 큰 위험요인</p>"
+        f"<p style='margin:0; font-size:15px; line-height:1.65; "
+        f"color:{_TOK['tx1']};'>{_uk._esc(_g['risk'])}</p>",
+        theme=_theme, accent='warn')
+
+_uk.spacer(12)
+_lim_html = ''.join(
+    f"<li style='margin:0 0 6px 0;'>{_uk._esc(x)}</li>" for x in _g['limits'])
+_uk.card(
+    f"<p style='margin:0 0 8px 0; font-size:13px; color:{_TOK['tx3']};'>"
+    f"지금 판단의 한계</p>"
+    f"<ul style='margin:0; padding-left:18px; font-size:15px; line-height:1.7; "
+    f"color:{_TOK['tx2']};'>{_lim_html}</ul>", theme=_theme)
+
+# ── 얼마나 먹을 것인가 — 무릎·어깨·머리 (라운드 9 실측) ────────────────
+# 사용자 요구: "확률로 몇 프로 정도 먹을건지 정해야 한다. 머리도 발도 아니고
+# 무릎에서." 목표를 높이면 폭은 커지지만 닿을 확률이 떨어진다 — 그 교환을
+# 숫자로 그어 준다.
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           '.portfolio', 'target_policy.json'),
+              encoding='utf-8') as _tf:
+        _tp_pol = json.load(_tf)
+except Exception:
+    _tp_pol = None
+if _tp_pol and (_tp_pol.get('splits') or {}).get('valid'):
+    _uk.spacer(20)
+    _steps = _tp_pol['splits']['valid']['steps']
+    _rec = _tp_pol.get('recommended') or {}
+    _rows_t = []
+    for _s in _steps:
+        _tone = ('pos' if _s['zone'] == '어깨'
+                 else 'warn' if _s['zone'] == '머리' else '')
+        _rows_t.append((f"+{_s['target_pct']:.0f}% 목표",
+                        f"{_s['reach_rate']:.0f}% 도달 · {_s['zone']}", _tone))
+    _uk.rows(_rows_t, theme=_theme,
+             title='얼마에 팔 것인가 — 목표별 도달 확률 (매수권 사례 실측)')
+    _uk.note(
+        f"무릎(자주 닿지만 얇다) · 어깨(폭과 확률의 균형) · 머리(대부분 못 닿는다). "
+        f"실측상 어깨는 "
+        f"{_rec.get('range_pct', [3, 5])[0]:.0f}~{_rec.get('range_pct', [3, 5])[1]:.0f}% "
+        f"구간입니다. 이 종목의 1차 목표도 그 안에 들어오도록 잡습니다 — "
+        f"더 높은 목표는 기대값이 오히려 줄어듭니다.", theme=_theme)
 
 # 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
 action_bg_color = "#161D2A"
