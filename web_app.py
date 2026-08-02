@@ -309,11 +309,8 @@ st.markdown(f"""
     .stApp div[style*="border-radius:14px"]:hover {{
         transform: translateY(-1px);
     }}
-    /* 절제된 위계 (v2) — 본문 15px+ / 보조 13px+ / 섹션 18~22 / 최대 폭 1440 */
-    .stMainBlockContainer {{
-        max-width: 1440px !important;
-        padding-top: 1.6rem !important;
-    }}
+    /* 본문 폭은 ui_kit.global_css 한 곳에서만 정한다 — 두 곳에서 정하면
+       나중에 주입된 쪽이 이겨서 어느 값이 실제로 적용됐는지 알 수 없다. */
     /* v7 타입 스케일 — 12·13·15·16·17·20·22·28·34·40 열 단계만 쓴다.
        광학 보정: 큰 글자는 자간을 좁히고, 작은 글자는 살짝 벌린다 (애플 방식) */
     .stApp h1:not([style*="font-size"]) {{ font-size: 28px !important;
