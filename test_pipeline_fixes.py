@@ -3426,6 +3426,45 @@ check("실전 케이스 동결 저장 (개장 전 추천 → DB)", _n_cases >= 1
 check("파이프라인 실행 로그 기록", _n_runs >= 2)
 
 
+section("75. 확률 최우선 — 배너 실측 확률 격상 · 연구 후보 등록부 · 상태 UI")
+
+_w75 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+check("배너 — 실측 성공률을 점수 옆 1등으로",
+      '과거 같은 점수대 실측 성공률' in _w75 and '_prob_html' in _w75)
+check("배너 — 표본<30이면 %를 숨기고 '표본 부족' 표시",
+      '표시 보류' in _w75 and '>= 30' in _w75)
+check("확률 원천은 리플레이 실측뿐 (요행 수치 금지 주석)",
+      '요행 수치를 대표값으로 쓰지 않는다' in _w75)
+
+from improvement import research as ires
+_db75 = _os.path.join(_tmp74.gettempdir(), "improvement_test75.db")
+if _os.path.exists(_db75):
+    _os.remove(_db75)
+idb.initialize_database(_db75)
+_c75 = idb.get_connection(_db75)
+_cid75 = ires.register_research_candidate(
+    _c75, source="SSRN 0000", core_idea="시험 아이디어",
+    target_failure="노이즈 손절", implementable=True)
+check("연구 후보 등록 — 채택은 NULL(미정)로 시작",
+      _c75.execute("SELECT adopted FROM research_candidates "
+                   "WHERE candidate_id=?", (_cid75,)).fetchone()[0] is None)
+ires.record_decision(_c75, _cid75, adopted=False,
+                     validation_result="검증 미통과", decision_reason="비용후 열위")
+check("연구 후보 — 기각 사유 기록", _c75.execute(
+    "SELECT adopted, decision_reason FROM research_candidates "
+    "WHERE candidate_id=?", (_cid75,)).fetchone()['decision_reason']
+    == "비용후 열위")
+check("케이스 MFE 열 존재 (스키마 확장)", any(
+    r[1] == 'max_runup' for r in _c75.execute(
+        "PRAGMA table_info(prediction_cases)").fetchall()))
+_c75.commit()
+_c75.close()
+
+check("파이프라인 상태 UI — 대기 건수·마지막 실행·수동 실행",
+      '결과 확정 대기' in _w75 and 'btn_run_improvement' in _w75)
+check("클라우드 영속성 정직 경고", '재배포 시 초기화' in _w75)
+
+
 print()
 print("=" * 72)
 if FAILURES:

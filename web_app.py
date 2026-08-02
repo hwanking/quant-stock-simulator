@@ -2784,6 +2784,27 @@ _banner_sub_html = (
     f"<p style='margin:6px 0 0 0; font-size:1.05rem; font-weight:800; "
     f"color:#F3F6FA;'>{_banner_sub}</p>" if _banner_sub
     and _banner_sub not in str(verdict['headline']) else "")
+
+# 매수·매도 성공 확률이 최우선이다 — 점수 바로 아래에 실측 확률을 1등으로 표시.
+# 원천은 리플레이 실측(점수대 캘리브레이션)뿐이며, 표본이 부족하면 %를 숨기고
+# '표본 부족'을 그대로 보여준다 (요행 수치를 대표값으로 쓰지 않는다).
+_cb_banner = four_scores.get('calibration_band') or {}
+if (_cb_banner.get('hit_rate') is not None
+        and (_cb_banner.get('n') or 0) >= 30):
+    _prob_html = (
+        f"<p style='margin:8px 0 0 0; font-size:0.78rem; color:#86868b;'>"
+        f"과거 같은 점수대 실측 성공률</p>"
+        f"<p style='margin:0; font-size:1.6rem; font-weight:900; "
+        f"color:#F3F6FA; line-height:1.1;'>{_cb_banner['hit_rate']:.0f}%"
+        f"<span style='font-size:0.8rem; color:#86868b;'> "
+        f"(n={_cb_banner['n']:,} · W하한 "
+        f"{fmt_num(_cb_banner.get('wilson_low'), '.0f', '%', na='—')})</span></p>")
+elif _cb_banner:
+    _prob_html = (
+        f"<p style='margin:8px 0 0 0; font-size:0.78rem; color:#F2B84B;'>"
+        f"실측 확률 표본 부족 (n={_cb_banner.get('n', 0)}) — 표시 보류</p>")
+else:
+    _prob_html = ""
 st.markdown(f"""
 <div style='background:linear-gradient(135deg,#141416 0%,#1c1c1e 100%);
             border:3px solid {_vc}; border-radius:20px; padding:22px 26px; margin-bottom:16px;
@@ -2798,7 +2819,7 @@ st.markdown(f"""
     <div style='text-align:right;'>
       <p style='margin:0; font-size:0.8rem; color:#86868b;'>종합 점수</p>
       <p style='margin:0; font-size:3rem; font-weight:900; color:{_vc}; line-height:1;'>
-        {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:1.1rem; color:#86868b;'> / 100</span></p>
+        {fmt_num(_vscore, ',.0f', na='—')}<span style='font-size:1.1rem; color:#86868b;'> / 100</span></p>{_prob_html}
       <p style='margin:2px 0 0 0; font-size:0.9rem; font-weight:800; color:{_vc};'>{_vshort}</p>
     </div>
   </div>
@@ -3415,6 +3436,54 @@ if _ledger_df is not None:
                f"🔄 **운영 상태**: 마지막 케이스 기준일 {_lg_last} · "
                f"1단계 3,000·2단계 5,000 달성 — 다음 목표 **10,000건**. 축적은 중단하지 않습니다. "
                "동일 종목·인접 기준일 중복은 25봉 간격 규칙으로 통제합니다.")
+
+    # ── 지속 개선 파이프라인 상태 (실전 추천 추적 계층 — improvement DB) ────
+    try:
+        from improvement import case_tracker as _imp_ct
+        from improvement.daily_pipeline import last_run as _imp_last
+        from improvement.database import get_connection as _imp_conn
+        from improvement.database import initialize_database as _imp_init
+        _imp_init()
+        _ic = _imp_conn()
+        try:
+            _lr = _imp_last(_ic)
+            _n_open_imp = len(_imp_ct.open_cases(_ic))
+            _n_all_imp = _ic.execute(
+                "SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+        finally:
+            _ic.close()
+        _lr_txt = (f"{str(_lr['started_at'])[:16]} ({_lr['status']} · "
+                   f"추가 {_lr['added_cases']} · 확정 {_lr['resolved_cases']})"
+                   if _lr else "아직 실행 이력 없음")
+        _pc1, _pc2 = st.columns([3, 1])
+        with _pc1:
+            st.caption(f"⚙️ **실전 추천 추적 파이프라인**: 동결 케이스 "
+                       f"{_n_all_imp}건 · 결과 확정 대기 {_n_open_imp}건 · "
+                       f"마지막 실행 {_lr_txt}. 같은 봉에서 목표·손절이 함께 "
+                       "닿으면 성공으로 세지 않습니다 (선도달 확인 불가).")
+        with _pc2:
+            if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
+                         use_container_width=True):
+                import subprocess as _sp_imp
+                with st.spinner("일일 파이프라인 실행 중 (동결→판정→지표→이슈)..."):
+                    _rr = _sp_imp.run(
+                        [sys.executable,
+                         os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      'scripts', 'run_daily_improvement.py')],
+                        capture_output=True, text=True, timeout=600)
+                st.toast(("파이프라인 완료: " + (_rr.stdout or '').strip()[-120:])
+                         if _rr.returncode == 0 else "실행 실패 — 로그 확인")
+                st.rerun()
+        try:
+            if is_remote_exposed():
+                st.warning("⚠️ 클라우드 배포에서는 로컬 파일 저장(.portfolio — "
+                           "케이스 DB·추천 이력)이 **재배포 시 초기화**될 수 "
+                           "있습니다. 장기 축적은 로컬 실행 또는 외부 영속 DB "
+                           "연동(운영 문서 §17 검토 항목)으로 운영하세요.")
+        except Exception:
+            pass
+    except Exception as _imp_err:
+        st.caption(f"⚙️ 실전 추천 추적 파이프라인 미초기화: {_imp_err}")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
         _cf1, _cf2, _cf3, _cf4 = st.columns(4)
         with _cf1:

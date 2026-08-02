@@ -2,6 +2,15 @@
  "generated_from": "git log (커밋 이력 원문)",
  "days": [
   {
+   "date": "2026-08-02",
+   "items": [
+    {
+     "hash": "e1ecd19",
+     "subject": "지속 개선 엔진 + 케이스 6,508건 + OCR 백엔드 감지 수정"
+    }
+   ]
+  },
+  {
    "date": "2026-08-01",
    "items": [
     {

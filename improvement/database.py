@@ -132,7 +132,32 @@ def initialize_database(db_path: str = DEFAULT_DB_PATH) -> None:
             error_count INTEGER NOT NULL DEFAULT 0,
             detail TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS research_candidates (
+            candidate_id TEXT PRIMARY KEY,
+            registered_at TEXT NOT NULL,
+            source TEXT NOT NULL,
+            year TEXT,
+            core_idea TEXT NOT NULL,
+            target_failure TEXT,
+            required_data TEXT,
+            implementable INTEGER,
+            leakage_risk TEXT,
+            compute_cost TEXT,
+            stock_applicable INTEGER,
+            etf_applicable INTEGER,
+            validation_result TEXT,
+            adopted INTEGER,
+            decision_reason TEXT
+        );
         """)
         conn.commit()
+        # 기존 DB 확장 — MFE(최대 이익폭) 열이 없으면 추가한다 (append-only 유지)
+        try:
+            conn.execute(
+                "ALTER TABLE prediction_cases ADD COLUMN max_runup REAL")
+            conn.commit()
+        except Exception:
+            pass
     finally:
         conn.close()
