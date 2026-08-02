@@ -464,16 +464,14 @@ _NAV_SLOT = st.empty()          # 종목이 확정된 뒤 채운다 (자리는 �
 
 
 def _render_toolbar(here_html: str = '') -> None:
+    # 내비는 좌측 사이드바 한 곳에만 둔다 (참조 화면과 같다). 여기는 지금
+    # 보고 있는 종목만 표시한다 — 같은 링크를 두 곳에 두면 어느 쪽이
+    # 현재 위치인지 알 수 없다.
+    if not here_html:
+        _NAV_SLOT.empty()
+        return
     _NAV_SLOT.markdown(
-        f'<div class="qnav"><span class="brand">{APP_TITLE}</span>'
-        f'<span class="rule"></span>'
-        f'<a href="#nav-top">홈</a>'
-        f'<a href="#nav-premarket">오늘의 추천</a>'
-        f'<a href="#nav-verdict">종목 분석</a>'
-        f'<a href="#nav-holdings">내 보유종목</a>'
-        f'<a href="#nav-context">시장·뉴스</a>'
-        f'<a href="#nav-perf">모델 성적</a>'
-        f'<span class="here">{here_html}</span></div>',
+        f'<div class="qnav"><span class="here">{here_html}</span></div>',
         unsafe_allow_html=True)
 
 
@@ -482,15 +480,6 @@ def _render_toolbar(here_html: str = '') -> None:
 # 한 건만 보여 준다. 전체는 아래 히스토리에서 본다.
 import versioning as _ver
 _VER_NOW = _ver.snapshot()
-# 이 시점엔 아직 헬퍼가 정의되기 전이라 파일을 직접 읽는다 (의존 없음)
-try:
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           'data', 'update_history.json'), encoding='utf-8') as _f:
-        _uh_top = json.load(_f)
-    _i0 = ((_uh_top.get('days') or [{}])[0].get('items') or [{}])[0]
-    _uk.update_bar(_VER_NOW['model'], str(_i0.get('subject') or '—'), _theme)
-except Exception:
-    _uk.update_bar(_VER_NOW['model'], '업데이트 이력을 불러오지 못했습니다', _theme)
 
 # 상태 줄 — 지금 무엇이 돌아가는지 한 줄, 오른쪽 끝에 운영 버전 칩
 try:
@@ -515,7 +504,7 @@ st.markdown(f"""
     
     /* 사이드바 고대비(High-Contrast) 가독성 100% 최적화 */
     [data-testid="stSidebar"] {{
-        background-color: {_TOK['bg2']} !important;
+        background-color: {_uk.DARK_NAV if _theme == 'dark' else _uk.LIGHT_NAV} !important;
         border-right: 1px solid {_TOK['border']} !important;
     }}
     
@@ -1460,10 +1449,51 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── 좌측 내비 (참조 화면 구조) — 로고 · 1차 탭 · 서브 항목 ────────────────
+# 내비는 앵커 링크다. 눌리면 그 구역으로 이동한다. 화면이 한 장이라
+# 라우팅 대신 앵커를 쓰지만, 보이는 구조와 동작은 참조와 같다.
+_NAV_MAIN = [
+    {'key': 'top', 'label': '홈', 'icon': 'home', 'href': '#nav-top'},
+    {'key': 'verdict', 'label': '종목 분석', 'icon': 'compass',
+     'href': '#nav-verdict'},
+    {'key': 'perf', 'label': '모델 성적', 'icon': 'chart', 'href': '#nav-perf'},
+    {'key': 'updates', 'label': '업데이트', 'icon': 'bell',
+     'href': '#nav-updates'},
+    {'key': 'support', 'label': '고객센터', 'icon': 'life',
+     'href': '#nav-support'},
+]
+_NAV_SUB = [
+    {'title': '1. 오늘의 판단', 'items': [
+        {'key': 'verdict', 'label': '한 줄 결론', 'icon': 'doc',
+         'href': '#nav-verdict'},
+        {'key': 'gaeum', 'label': '가늠 AI', 'icon': 'compass',
+         'href': '#nav-gaeum'},
+        {'key': 'premarket', 'label': '오늘의 추천', 'icon': 'chart',
+         'href': '#nav-premarket'},
+    ]},
+    {'title': '2. 근거 확인', 'items': [
+        {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
+         'href': '#nav-context'},
+        {'key': 'basis', 'label': '판정 근거', 'icon': 'doc',
+         'href': '#nav-basis'},
+    ]},
+    {'title': '3. 내 자산', 'items': [
+        {'key': 'holdings', 'label': '내 보유종목', 'icon': 'wallet',
+         'href': '#nav-holdings'},
+    ]},
+    {'title': '4. 검증과 이력', 'items': [
+        {'key': 'perf', 'label': '모델 성적', 'icon': 'chart',
+         'href': '#nav-perf'},
+        {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
+         'href': '#nav-updates'},
+    ]},
+]
 st.sidebar.markdown(
-    f"<div style='padding:6px 0 2px 0;'>{_uk.logo(_theme, size=34)}"
-    f"<p style='margin:8px 0 0 0; font-size:12px; color:{_TOK['tx3']}; "
-    f"line-height:1.5;'>{APP_TAGLINE}</p></div>", unsafe_allow_html=True)
+    f"<div style='padding:4px 0 14px 0;'>{_uk.logo(_theme, size=30)}</div>"
+    + _uk.nav_list(_NAV_MAIN, active='top', theme=_theme)
+    + _uk.nav_groups(_NAV_SUB, theme=_theme),
+    unsafe_allow_html=True)
+st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 if st.sidebar.button("처음으로", use_container_width=False, key="btn_home",
                      help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
                           "보유종목은 지워지지 않습니다."):
@@ -3330,66 +3360,27 @@ if _uh_home and _uh_home.get('days'):
                  for d in _days_enr for it in d['items']]
     _n_upd = len(_flat_upd)
     _latest_ver = _VER_NOW['model']       # 버전 원장이 유일 출처
-    _uk.section("업데이트", f"누적 {_n_upd}건 · 운영 모델 {_latest_ver}",
-                theme=_theme, top=28)
-    st.caption("원천은 커밋 이력 원문입니다 — 손으로 쓰지 않아 누락·과장이 "
-               "없습니다. 최신 1건은 펼쳐서, 나머지는 한 줄로 보여 드립니다.")
+    st.markdown("<div id='nav-updates'></div>", unsafe_allow_html=True)
+    # 사용자 요청: 눌러야 나오게, 아주 간략하게. 평소엔 한 줄만 보인다.
+    with st.expander(f"업데이트 {_n_upd}건 · {_latest_ver}", expanded=False):
+        st.caption("커밋 이력 원문에서 자동 생성 — 손으로 쓰지 않습니다.")
 
-    # ── 최신 1건 — 상세 (사용자 요구: 날짜·버전·카테고리·제목·요약·변경 이유·
-    #    사용자에게 달라지는 점·관련 이슈·테스트 결과) ──────────────────
-    if _flat_upd:
-        _u0 = _flat_upd[0]
-        _d0 = _u0.get('detail') or {}
-        _uk.card(
-            f"<div style='display:flex; gap:10px; align-items:center; "
-            f"flex-wrap:wrap; margin-bottom:10px;'>"
-            f"<span style='font-size:12px; color:{_TOK['tx3']};'>"
-            f"{_u0['date']}</span>"
-            f"<span style='font-size:12px; font-weight:700; "
-            f"color:{_TOK['brand']}; font-variant-numeric:tabular-nums;'>"
-            f"{_VER_NOW['model']}</span>"
-            f"<span style='background:{_TOK['hover']}; color:{_TOK['tx2']}; "
-            f"font-size:12px; font-weight:600; padding:2px 8px; "
-            f"border-radius:6px;'>{_u0['category']}</span></div>"
-            f"<p style='margin:0 0 10px 0; font-size:17px; font-weight:600; "
-            f"color:{_TOK['tx1']}; line-height:1.45;'>"
-            f"{_uk._esc(_u0['subject'])}</p>"
-            + ''.join(
-                f"<p style='margin:0 0 8px 0; font-size:13px; line-height:1.65; "
-                f"color:{_TOK['tx2']};'><span style='color:{_TOK['tx3']};'>"
-                f"{_lab} </span>{_uk._esc(_val)}</p>"
-                for _lab, _val in (
-                    ('변경 이유', _d0.get('why')),
-                    ('사용자에게 달라지는 점', _d0.get('user_effect')),
-                    ('변경 전 문제', _d0.get('problem')),
-                    ('테스트 결과', _d0.get('tests')))
-                if _val and _val != '기록 없음')
-            + (f"<p style='margin:8px 0 0 0; font-size:12px; "
-               f"color:{_TOK['tx3']};'>관련 회귀 "
-               f"{' '.join(_d0.get('related') or [])}</p>"
-               if _d0.get('related') else ''),
-            theme=_theme, accent='brand')
-        _uk.spacer(12)
+        # 아주 간략하게 — 한 줄씩. 자세한 건 아래 '전체 업데이트 보기'.
+        for _u in _flat_upd[:8]:
+            st.markdown(
+                f"<div style='display:flex; gap:10px; align-items:baseline; "
+                f"padding:6px 0;'>"
+                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
+                f"width:78px; flex:0 0 auto; "
+                f"font-variant-numeric:tabular-nums;'>{_u['date']}</span>"
+                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
+                f"width:56px; flex:0 0 auto;'>{_u['category']}</span>"
+                f"<span style='font-size:13px; color:{_TOK['tx1']}; "
+                f"min-width:0; overflow:hidden; text-overflow:ellipsis; "
+                f"white-space:nowrap;'>{_uk._esc(_u['subject'])}</span></div>",
+                unsafe_allow_html=True)
 
-    # ── 나머지 — 한 줄. 누르면 그 자리에서 펼쳐진다 ─────────────────────
-    for _u in _flat_upd[1:12]:
-        _dd = _u.get('detail') or {}
-        with st.expander(f"{_u['date']} · {_u['category']} · {_u['subject']}",
-                         expanded=False):
-            for _lab, _val in (('변경 이유', _dd.get('why')),
-                               ('사용자에게 달라지는 점', _dd.get('user_effect')),
-                               ('변경 전 문제', _dd.get('problem')),
-                               ('테스트 결과', _dd.get('tests'))):
-                _dim = (_val in (None, '', '기록 없음'))
-                st.markdown(
-                    f"<p style='margin:0 0 6px 0; font-size:13px; "
-                    f"line-height:1.65; color:"
-                    f"{_TOK['tx3'] if _dim else _TOK['tx2']};'>"
-                    f"<span style='color:{_TOK['tx3']};'>{_lab} </span>"
-                    f"{_uk._esc(_val or '기록 없음')}</p>",
-                    unsafe_allow_html=True)
-
-
+    
     with st.expander(f"전체 업데이트 보기 ({_n_upd}건 · 카테고리 필터)",
                      expanded=False):
         _cats = ['전체'] + sorted({u['category'] for u in _flat_upd})
@@ -4066,6 +4057,7 @@ if _bear_now and ((_rsi_now is not None and _rsi_now < 35)
 import gaeum_ai as _gai
 _g = _gai.build(four_scores, sim_res, snap.get('verdict') or {},
                 price=realtime_price)
+st.markdown("<div id='nav-gaeum'></div>", unsafe_allow_html=True)
 _uk.section("가늠 AI", "이 종목을 어떻게 가늠했는지 그대로 보여 드립니다",
             theme=_theme, top=28)
 _uk.card(
@@ -4241,6 +4233,7 @@ if _tp_pol and (_tp_pol.get('splits') or {}).get('valid'):
         f"구간입니다. 이 종목의 1차 목표도 그 안에 들어오도록 잡습니다 — "
         f"더 높은 목표는 기대값이 오히려 줄어듭니다.", theme=_theme)
 
+st.markdown("<div id='nav-basis'></div>", unsafe_allow_html=True)
 # 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
 action_bg_color = "#161D2A"
 

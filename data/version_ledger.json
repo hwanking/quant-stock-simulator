@@ -1,12 +1,25 @@
 {
  "axes": {
-  "model": "v2026.08.02.15",
+  "model": "v2026.08.02.16",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.02.16",
+   "previous": "v2026.08.02.15",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "좌측 내비 재구성 (참조 화면 구조) — 1차 탭 + 서브 그룹, 색감 교체, 업데이트는 눌러야 열림",
+   "note": "",
+   "created_at": "2026-08-02T12:14:16+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

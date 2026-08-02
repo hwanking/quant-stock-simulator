@@ -21,10 +21,15 @@ from typing import Iterable, Optional, Sequence
 import streamlit as st
 
 # ── 표면 3단계 (테두리 없음 — 이 대비만으로 층이 보인다) ──────────────────
-DARK = dict(bg='#0B0F17', card='#161D2A', raised='#1C2635',
-            line='#222C3C', tx1='#F3F6FA', tx2='#9DAABC', tx3='#7C8AA0',
-            brand='#4C8DFF', up='#FF453A', down='#0A84FF',
-            pos='#35C98B', warn='#F2B84B', neg='#F26161')
+# 참조 화면(사용자 제공)의 색감 — 남색기를 뺀 중성 다크.
+# 사이드바가 본문보다 살짝 밝고, 카드가 그 사이에 놓인다.
+DARK = dict(bg='#0A0B0F', card='#16181F', raised='#1E2129',
+            line='#282C35', tx1='#E9EBEF', tx2='#9BA1AC', tx3='#858C99',
+            brand='#3B82F6', up='#F0483C', down='#3B82F6',
+            pos='#2FBF71', warn='#E0A33E', neg='#E05252')
+#: 사이드바는 본문보다 한 단계 밝은 면 — 참조 화면과 같은 층 구조
+DARK_NAV = '#101216'
+LIGHT_NAV = '#F7F8FA'
 LIGHT = dict(bg='#EFF1F6', card='#FFFFFF', raised='#F2F5F9',
              line='#E6EAF0', tx1='#111827', tx2='#4A4D53', tx3='#666873',
              brand='#2563EB', up='#D02E24', down='#186AD5',
@@ -83,6 +88,120 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
         f"<span style='font-size:{size * 0.78:.0f}px; font-weight:700; "
         f"color:{t['tx1']}; letter-spacing:-0.03em; line-height:1;'>가늠"
         f"<span style='color:{t['brand']};'>.</span></span>{subhtml}</div>")
+
+
+#: 내비 아이콘 — 선 아이콘만 쓴다 (참조 화면과 같다). 이모지는 쓰지 않는다.
+_ICONS = {
+    'home': 'M3 11l9-8 9 8M5 10v10h14V10',
+    'compass': 'M12 21a9 9 0 100-18 9 9 0 000 18zM15.5 8.5l-2 5-5 2 2-5 5-2z',
+    'doc': 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z'
+           'M14 3v5h5',
+    'chart': 'M4 19h16M7 16V9M12 16V5M17 16v-4',
+    'bell': 'M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 01-3.4 0',
+    'life': 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 16a4 4 0 100-8 4 4 0 000 8'
+            'M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
+    'news': 'M4 6h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2zM8 10h8M8 14h5',
+    'wallet': 'M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 7l2-3h12l2 3'
+              'M16 13h2',
+}
+
+
+def _icon(name: str, color: str, size: int = 17) -> str:
+    d = _ICONS.get(name, _ICONS['doc'])
+    return (f"<svg width='{size}' height='{size}' viewBox='0 0 24 24' "
+            f"fill='none' stroke='{color}' stroke-width='1.7' "
+            f"stroke-linecap='round' stroke-linejoin='round' "
+            f"style='flex:0 0 auto;'><path d='{d}'/></svg>")
+
+
+def nav_list(items: Sequence[dict], active: str = '',
+             theme: str = 'dark') -> str:
+    """
+    좌측 1차 탭 — 아이콘 + 라벨. 현재 위치는 면으로 표시한다(선이 아니라).
+
+    items: [{'key','label','icon','href'}]
+    """
+    t = tokens(theme)
+    out = []
+    for it in items:
+        on = (it['key'] == active)
+        col = t['brand'] if on else t['tx2']
+        bg = (f"background:{t['raised']};" if on else '')
+        out.append(
+            f"<a href='{_esc(it.get('href') or '#')}' class='qnav-item' "
+            f"style='display:flex; align-items:center; gap:11px; "
+            f"padding:9px 12px; border-radius:9px; {bg} "
+            f"text-decoration:none; margin-bottom:2px;'>"
+            f"{_icon(it.get('icon', 'doc'), col)}"
+            f"<span style='font-size:13px; font-weight:{600 if on else 500}; "
+            f"color:{col}; white-space:nowrap;'>{_esc(it['label'])}</span></a>")
+    return ''.join(out)
+
+
+def nav_groups(groups: Sequence[dict], active: str = '',
+               theme: str = 'dark') -> str:
+    """
+    2차 서브 내비 — 번호 붙은 그룹 아래 항목들. 참조 화면과 같은 구조.
+
+    groups: [{'title','items':[{'key','label','href','icon'(선택)}]}]
+    """
+    t = tokens(theme)
+    out = []
+    for g in groups:
+        out.append(
+            f"<p style='margin:18px 0 7px 10px; font-size:12px; "
+            f"font-weight:600; color:{t['tx3']}; letter-spacing:0.01em;'>"
+            f"{_esc(g['title'])}</p>")
+        for it in g['items']:
+            on = (it['key'] == active)
+            col = t['brand'] if on else t['tx2']
+            bg = (f"background:{t['raised']};" if on else '')
+            ic = (_icon(it['icon'], col, 15) if it.get('icon') else
+                  f"<span style='width:15px;'></span>")
+            out.append(
+                f"<a href='{_esc(it.get('href') or '#')}' class='qnav-sub' "
+                f"style='display:flex; align-items:center; gap:10px; "
+                f"padding:8px 10px; border-radius:8px; {bg} "
+                f"text-decoration:none; margin-bottom:1px;'>{ic}"
+                f"<span style='font-size:13px; "
+                f"font-weight:{600 if on else 400}; color:{col}; "
+                f"white-space:nowrap;'>{_esc(it['label'])}</span></a>")
+    return ''.join(out)
+
+
+def plan_card(plan: str, usage_pct: int, engine: str, version: str,
+              theme: str = 'dark') -> str:
+    """사이드바 하단 상태 카드 — 참조 화면의 플랜 카드 자리."""
+    t = tokens(theme)
+    return (
+        f"<div style='background:{t['card']}; border-radius:12px; "
+        f"padding:14px 14px 12px 14px; margin-top:20px; "
+        f"border-top:2px solid {t['brand']};'>"
+        f"<div style='display:flex; align-items:center; gap:9px; "
+        f"margin-bottom:10px;'>"
+        f"<span style='width:26px; height:26px; border-radius:50%; "
+        f"background:{t['brand']}; color:#fff; font-size:12px; "
+        f"font-weight:700; display:flex; align-items:center; "
+        f"justify-content:center; flex:0 0 auto;'>가</span>"
+        f"<div style='min-width:0;'>"
+        f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>지금 보는 모델</p>"
+        f"<p style='margin:0; font-size:13px; font-weight:600; "
+        f"color:{t['tx1']};'>{_esc(plan)}</p></div></div>"
+        f"<div style='display:flex; justify-content:space-between; "
+        f"font-size:12px; color:{t['tx3']}; margin-bottom:5px;'>"
+        f"<span>실전 신뢰도</span><span>{usage_pct}%</span></div>"
+        f"<div style='height:4px; background:{t['raised']}; border-radius:2px; "
+        f"overflow:hidden; margin-bottom:12px;'>"
+        f"<div style='height:100%; width:{max(0, min(100, usage_pct))}%; "
+        f"background:{t['brand']};'></div></div>"
+        f"<p style='margin:0 0 3px 0; font-size:12px; color:{t['tx3']};'>"
+        f"분석 엔진</p>"
+        f"<p style='margin:0; font-size:13px; color:{t['tx1']}; "
+        f"display:flex; align-items:center; gap:7px;'>"
+        f"<span style='width:6px; height:6px; border-radius:50%; "
+        f"background:{t['pos']};'></span>{_esc(engine)}</p>"
+        f"<p style='margin:2px 0 0 13px; font-size:12px; color:{t['tx3']}; "
+        f"font-variant-numeric:tabular-nums;'>{_esc(version)}</p></div>")
 
 
 def status_bar(items: Sequence[tuple], version: str = '',

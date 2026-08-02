@@ -2990,8 +2990,8 @@ check("요인은 composition 실측에서만",
       "verdict.get('composition'" in _w63)
 
 # ④ 내비게이션 — 모델 성과 링크와 앵커
-check("내비 모델 성과 링크", 'href="#nav-perf"' in _w63
-      and 'id="nav-perf"' in _w63)
+check("내비 모델 성과 링크 — 좌측 내비에 정의, 앵커는 본문에",
+      "'href': '#nav-perf'" in _w63 and 'id="nav-perf"' in _w63)
 
 
 section("64. 케이스 스터디 화면 — 원장 필터 · 배포용 산출물 동봉")
@@ -3029,8 +3029,9 @@ check("빈 결과 안내 (날조 금지)", '해당하는 사례가 없습니다'
 check("사례 목록 — MFE/MAE·실패 원인 노출", '최대이익 MFE' in _w64
       and '최대손실 MAE' in _w64)
 # v2 정보구조: 전역 메뉴는 6개 — 케이스 스터디는 모델 검증 내부(앵커만 유지)
-check("케이스 앵커 유지 · 전역 메뉴 6개", 'id="nav-cases"' in _w64
-      and _w64.count('<a href="#nav-') == 6)
+check("케이스 앵커 유지 · 좌측 내비 1차 5개 + 서브 8개",
+      'id="nav-cases"' in _w64
+      and _w64.count("'href': '#nav-") >= 12)
 
 
 section("65. 운영 체계 v3 — 공시 연동 · 업데이트 히스토리 · 케이스 축적 규율")
@@ -3067,8 +3068,9 @@ with open(_os.path.join(PROJ, "data", "update_history.json"),
 check("히스토리 — git 원천 명시·비어있지 않음",
       'git' in str(_uh65.get('generated_from', ''))
       and len(_uh65.get('days', [])) >= 1)
-check("웹앱 히스토리 섹션 — 킷 섹션으로 통일",
-      '_uk.section("업데이트"' in _w65)
+check("웹앱 히스토리 — 접힌 패널 + 앵커",
+      "id='nav-updates'" in _w65
+      and 'st.expander(f\"업데이트 {_n_upd}건' in _w65)
 
 # ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
 check("케이스 축적 목표 표시 (단계 목표·중단 금지)",
@@ -3143,8 +3145,8 @@ check("경고 없으면 이슈 없음", po66.build_stock_issues({}, {}, {}) == [
 check("홈 주요 이슈 섹션 — 건수·최상위 제목이 접힌 채로 보인다",
       '주요 이슈 ' in _w66 and '건 — ' in _w66)
 check("종목 이슈 섹션", '이 종목의 주요 이슈' in _w66)
-check("업데이트 패널 — 최신 1건 상세 + 나머지 한 줄 + 전체 보기",
-      '최신 1건은 펼쳐서, 나머지는 한 줄로' in _w66
+check("업데이트 패널 — 눌러야 열리고 한 줄씩 (사용자 요청: 아주 간략하게)",
+      '아주 간략하게 — 한 줄씩' in _w66
       and '전체 업데이트 보기' in _w66 and 'upd_cat_filter' in _w66)
 check("고객센터 — 실제 대처법·신고 채널", '고객센터 — 안 될 때 여기부터' in _w66
       and 'github.com/hwanking/quant-stock-simulator/issues' in _w66)
@@ -3580,8 +3582,15 @@ check("사이드바 3단 위계 복원 (제목 tx1 / 본문 tx2)",
 check("킷 전역 규칙 주입", '_uk.global_css(_theme)' in _w78)
 check("킷 컴포넌트 사용 (섹션·타일)",
       _w78.count('_uk.section(') >= 2 and _w78.count('_uk.stat_tiles(') >= 2)
-check("한국 관례 색 — 상승 빨강·하락 파랑",
-      uk78.DARK['up'] == '#FF453A' and uk78.DARK['down'] == '#0A84FF')
+def _rgb78(h):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+check("한국 관례 색 — 상승은 붉은 계열, 하락은 푸른 계열 (값이 아니라 관례)",
+      all((lambda u, d: u[0] > u[2] and d[2] > d[0])(
+          _rgb78(p['up']), _rgb78(p['down']))
+          for p in (uk78.DARK, uk78.LIGHT)))
 
 # ⑤ 팔레트 밖 색 제거
 check("팔레트 밖 보라(#bf5af2) 0건", '#bf5af2' not in _w78)
@@ -3919,8 +3928,9 @@ check("모바일 — 한 열·44px 터치·가로 스크롤",
       and 'flex-direction: column' in _u84)
 
 _w84 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("업데이트 바가 툴바(탭)보다 위에 그려진다",
-      _w84.index('_uk.update_bar(') < _w84.index('_render_toolbar()'))
+check("업데이트는 눌러야 열린다 (상단 상시 노출 제거 — 사용자 요청)",
+      '_uk.update_bar(' not in _w84
+      and "with st.expander(f\"업데이트 {_n_upd}건" in _w84)
 check("애플 폰트 스택 — 시스템 폰트 우선, Pretendard 폴백",
       '-apple-system' in _w84 and '"SF Pro Display"' in _w84
       and '"Pretendard"' in _w84)
@@ -3931,8 +3941,7 @@ check("크기별 트래킹 — 큰 글자일수록 자간을 좁힌다",
 check("진행 표시가 끝나면 사라진다", '_prog.empty()' in _w84)
 check("가늠 AI 패널이 화면에 있다", '_uk.section("가늠 AI"' in _w84)
 check("얼마에 팔 것인가 — 목표별 도달 확률 표", '얼마에 팔 것인가' in _w84)
-check("업데이트 최신 1건 상세 + 나머지 한 줄",
-      '최신 1건은 펼쳐서, 나머지는 한 줄로' in _w84)
+check("업데이트는 접힌 채로 시작한다", 'expanded=False' in _w84)
 
 _d84 = open(_os.path.join(PROJ, "scripts", "run_daily_improvement.py"),
             encoding='utf-8').read()
