@@ -3482,6 +3482,42 @@ check("사이드바 헤더 — 이모지 제거", '### 종목 검색' in _w76
       and '### 시장 트렌드 탐색기' in _w76)
 
 
+section("77. 타입 스케일 — 열 단계만 · 굵기 700 상한 · 접근성 하한 12px")
+
+#: 애플 HIG 계열 10단 스케일. 이 밖의 크기는 화면에 존재하면 안 된다.
+TYPE_SCALE = {12, 13, 15, 16, 17, 20, 22, 28, 34, 40}
+import re as _re77
+
+_off = {}
+for _fn in ("web_app.py", "chart_pro.py"):
+    _src77 = open(_os.path.join(PROJ, _fn), encoding='utf-8').read()
+    for _val, _unit in _re77.findall(r'font-size:\s*([0-9.]+)(px|rem|em)', _src77):
+        if _unit == 'em':
+            if float(_val) != 1.0:            # 1em(상속)만 허용
+                _off.setdefault(_fn, []).append(f"{_val}em")
+            continue
+        _px = float(_val) * (16 if _unit == 'rem' else 1)
+        if _px not in TYPE_SCALE:
+            _off.setdefault(_fn, []).append(f"{_val}{_unit}")
+check("소스 전역 — 스케일 밖 글자 크기 0건", not _off, str(_off)[:160])
+
+_w77 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_weights77 = [int(w) for w in _re77.findall(r'font-weight:\s*([0-9]{3})', _w77)]
+check("굵기 상한 700 (히어로 결론 한 줄만 800)",
+      max(_weights77) == 800 and _weights77.count(800) == 1,
+      f"max={max(_weights77)} n800={_weights77.count(800)}")
+check("굵기 단계 4개 이하 (400·600·700·800)",
+      set(_weights77) <= {400, 500, 600, 700, 800}, str(sorted(set(_weights77))))
+check("접근성 하한 — 12px 미만 없음",
+      min(TYPE_SCALE) == 12
+      and not _re77.findall(r'font-size:\s*(?:0\.[0-6][0-9]?rem|[0-9]|10|11)px', _w77))
+check("광학 자간 — 대형 텍스트 트래킹 보정",
+      'letter-spacing: -0.028em' in _w77 and 'letter-spacing: -0.021em' in _w77)
+check("행간 — 본문 1.6 계열", 'line-height: 1.62' in _w77)
+check("스케일 정규화 도구 보존 (재발 시 재실행)",
+      _os.path.exists(_os.path.join(PROJ, "scripts", "normalize_type_scale.py")))
+
+
 print()
 print("=" * 72)
 if FAILURES:

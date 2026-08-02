@@ -225,15 +225,15 @@ __LIB__
     background: var(--bg); }
   #toolbar { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center;
     padding: 10px 14px; border-bottom: 1px solid var(--bd);
-    color: var(--lg); font-size: 12.5px; }
-  #toolbar b.ttl { color: var(--tx); font-size: 13.5px; margin-right: 6px; }
+    color: var(--lg); font-size: 13px; }
+  #toolbar b.ttl { color: var(--tx); font-size: 13px; margin-right: 6px; }
   .rngbtn { border:1px solid var(--bd); background:transparent; color:var(--lg);
     border-radius:7px; padding:2px 9px; cursor:pointer; font-size:12px; }
   .rngbtn.on { background:#2997ff; color:#fff; border-color:#2997ff; }
   /* 지표 선택창 */
   #indWrap { position: relative; }
   #indBtn { border:1px solid var(--bd); background:transparent; color:var(--tx);
-    border-radius:7px; padding:3px 11px; cursor:pointer; font-size:12.5px; }
+    border-radius:7px; padding:3px 11px; cursor:pointer; font-size:13px; }
   #indPanel { display:none; position:absolute; right:0; top:30px; z-index:50;
     background: var(--bg); border:1px solid var(--bd); border-radius:10px;
     padding: 12px 16px; min-width: 380px;
@@ -244,16 +244,16 @@ __LIB__
   #indPanel h5:first-child { margin-top: 0; }
   .indGrid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 4px 12px; }
   .indGrid label { display:flex; align-items:center; gap:5px; cursor:pointer;
-    color: var(--lg); font-size: 12.5px; white-space:nowrap;
+    color: var(--lg); font-size: 13px; white-space:nowrap;
     user-select:none; padding: 2px 0; }
   .indGrid input { accent-color:#2997ff; }
   .sw { display:inline-block; width:9px; height:9px; border-radius:2px; }
   #legend { padding: 4px 14px 0 14px; font-size: 12px; color: var(--lg);
     min-height: 17px; }
   .pane { position: relative; }
-  .plabel { position:absolute; left:10px; top:6px; z-index:3; font-size:11px;
+  .plabel { position:absolute; left:10px; top:6px; z-index:3; font-size:12px;
     color: var(--lg); pointer-events:none; }
-  #attrib { text-align:right; padding: 3px 12px 6px 0; font-size: 10px; }
+  #attrib { text-align:right; padding: 3px 12px 6px 0; font-size: 12px; }
   #attrib a { color: var(--lg); opacity: .6; text-decoration: none; }
 </style></head>
 <body>
