@@ -316,7 +316,8 @@ st.markdown(f"""
     }}
     /* v7 타입 스케일 — 12·13·15·16·17·20·22·28·34·40 열 단계만 쓴다.
        광학 보정: 큰 글자는 자간을 좁히고, 작은 글자는 살짝 벌린다 (애플 방식) */
-    .stApp h1 {{ font-size: 28px !important; font-weight: 700 !important;
+    .stApp h1:not([style*="font-size"]) {{ font-size: 28px !important;
+                    font-weight: 700 !important;
                 letter-spacing: -0.021em !important; line-height: 1.22 !important; }}
     .stApp h2 {{ font-size: 22px !important; font-weight: 700 !important;
                 letter-spacing: -0.017em !important; line-height: 1.26 !important; }}
@@ -494,6 +495,21 @@ try:
 except Exception:
     _uk.update_bar(_VER_NOW['model'], '업데이트 이력을 불러오지 못했습니다', _theme)
 
+# 상태 줄 — 지금 무엇이 돌아가는지 한 줄, 오른쪽 끝에 운영 버전 칩
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           '.portfolio', 'calibration.json'), encoding='utf-8') as _f:
+        _cal_top = json.load(_f)
+    _uk.status_bar([
+        ('데이터 점검 완료', 'pos'),
+        (f"되돌려 본 판단 {_cal_top.get('total_cases', 0):,}건", ''),
+        (f"룰북 {_VER_NOW['rulebook']}", ''),
+        (f"산식 {_VER_NOW['scoring']}", ''),
+    ], version=_VER_NOW['model'], theme=_theme)
+except Exception:
+    _uk.status_bar([('데이터 점검 중', 'warn')],
+                   version=_VER_NOW['model'], theme=_theme)
+
 _render_toolbar()               # 우선 비워서 그린다 (자리 이동 방지)
 
 st.markdown(f"""
@@ -522,9 +538,11 @@ st.markdown(f"""
         margin-bottom: 8px !important;
     }}
 
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] label,
+    /* 크기·굵기를 직접 지정한 요소(로고 워드마크 등)는 제외한다.
+       일괄 규칙이 로고까지 13px 로 눌러 마크(34px) 옆에서 찌그러졌었다. */
+    [data-testid="stSidebar"] p:not([style*="font-size"]),
+    [data-testid="stSidebar"] span:not([style*="font-size"]),
+    [data-testid="stSidebar"] label:not([style*="font-size"]),
     [data-testid="stSidebar"] li,
     [data-testid="stSidebar"] small,
     [data-testid="stSidebar"] div[data-testid="stCaptionContainer"] {{
@@ -1390,8 +1408,8 @@ st.sidebar.markdown("""
   /* ① 일반 사이드바 버튼 — 보유종목 등. 어두운 배경에 묻히지 않게 대비를 올린다 */
   section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
       color: #F3F6FA !important;
-      font-weight: 700 !important;
-      font-size: 15px !important;
+      font-weight: 500 !important;
+      font-size: 13px !important;
       background: #1C2635 !important;
       }
   section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
@@ -1410,19 +1428,22 @@ st.sidebar.markdown("""
   section[data-testid="stSidebar"] div[data-testid="stSidebarUserContent"]
       > div > div > div[data-testid="element-container"]:first-of-type
       div[data-testid="stButton"] > button {
-      background: #0B0F17 !important;
-      border-radius: 12px !important;
-      box-shadow: 0 2px 0 #0B0F17 !important;
-      color: #F3F6FA !important;
-      font-size: 28px !important;
-      line-height: 1.3 !important;
-      font-weight: 700 !important;
-      letter-spacing: -0.5px !important;
-      padding: 12px 16px !important;
+      /* 로고가 제목 역할을 하므로 이 버튼은 조용한 보조로 둔다.
+         28px 짜리 꽉 찬 버튼이 34px 로고 옆에 붙으면 비율이 무너진다. */
+      background: transparent !important;
+      border-radius: 8px !important;
+      box-shadow: none !important;
+      color: #7C8AA0 !important;
+      font-size: 13px !important;
+      line-height: 1.4 !important;
+      font-weight: 500 !important;
+      letter-spacing: -0.01em !important;
+      padding: 4px 0 !important;
       text-align: left !important;
       justify-content: flex-start !important;
-      white-space: normal !important;
-      width: 100% !important;
+      white-space: nowrap !important;
+      width: auto !important;
+      min-height: 0 !important;
       transition: transform .05s ease, border-color .15s ease !important;
   }
   section[data-testid="stSidebar"] div[data-testid="stButton"].st-key-btn_home > button:hover,
@@ -1442,8 +1463,11 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.sidebar.markdown(_uk.logo(_theme, size=30), unsafe_allow_html=True)
-if st.sidebar.button("첫 화면으로", use_container_width=True, key="btn_home",
+st.sidebar.markdown(
+    f"<div style='padding:6px 0 2px 0;'>{_uk.logo(_theme, size=34)}"
+    f"<p style='margin:8px 0 0 0; font-size:12px; color:{_TOK['tx3']}; "
+    f"line-height:1.5;'>{APP_TAGLINE}</p></div>", unsafe_allow_html=True)
+if st.sidebar.button("처음으로", use_container_width=False, key="btn_home",
                      help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
                           "보유종목은 지워지지 않습니다."):
     # 보유종목(positions)과 저장본은 건드리지 않는다 — 사용자의 자료다.
@@ -1841,14 +1865,19 @@ import datetime
 run_id = f"RUN-{datetime.datetime.now().strftime('%Y%m%d')}-{target_ticker.split('.')[0][-5:]}"
 # 본문 대제목 — 사이드바 홈 버튼과 같은 이름을 쓴다 (APP_TITLE 하나로 관리)
 st.markdown(
-    f"<h1 style='font-size:34px; font-weight:700; letter-spacing:-0.028em; "
-    f"margin:0 0 4px 0;'>{APP_TITLE}</h1>"
-    f"<p style='margin:0 0 4px 0; font-size:17px; color:{_TOK['tx2']}; "
-    f"letter-spacing:-0.01em;'>{APP_TAGLINE}</p>",
+    f"<div style='margin:4px 0 28px 0;'>"
+    f"<p style='margin:0 0 10px 0; font-size:13px; font-weight:600; "
+    f"letter-spacing:0.04em; color:{_TOK['tx3']};'>오늘의 판단</p>"
+    f"<h1 style='font-size:40px; font-weight:700; letter-spacing:-0.026em; "
+    f"line-height:1.15; margin:0 0 10px 0; color:{_TOK['tx1']};'>"
+    f"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; "
+    f"font-size:20px; font-weight:500; letter-spacing:-0.01em; "
+    f"margin-left:10px;'>{_uk._esc(target_ticker)}</span></h1>"
+    f"<p style='margin:0; font-size:17px; color:{_TOK['tx2']}; "
+    f"line-height:1.6; letter-spacing:-0.01em;'>"
+    f"과거로 되돌려 실제로 맞았는지 세어 본 뒤에 판단합니다. "
+    f"미래 정보는 잘라내고 검증했습니다.</p></div>",
     unsafe_allow_html=True)
-st.caption("과거로 되돌려 실제로 맞았는지 세어 본 뒤에 판단합니다 · "
-           "미래 정보를 잘라낸 검증 · 네이버·다음 실시간 데이터 "
-           f"(실행 `{run_id}`)")
 
 # --- 종목 검색기 렌더링 ---
 if st.session_state.get('show_screener', False):

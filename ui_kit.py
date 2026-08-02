@@ -85,6 +85,40 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
         f"<span style='color:{t['brand']};'>.</span></span>{subhtml}</div>")
 
 
+def status_bar(items: Sequence[tuple], version: str = '',
+               theme: str = 'dark') -> None:
+    """
+    상단 상태 줄 — 왼쪽에 지금 상태, 오른쪽 끝에 운영 버전 칩.
+
+    items: [(text, tone)] · tone 은 pos/warn/neg/'' 중 하나.
+    화면에서 가장 조용한 줄이어야 한다 — 상태는 배경 정보다.
+    """
+    t = tokens(theme)
+    cells = []
+    for i, it in enumerate(items):
+        txt = it[0]
+        tone = t.get(it[1], t['tx2']) if len(it) > 1 and it[1] else t['tx2']
+        dot = (f"<span style='width:6px; height:6px; border-radius:50%; "
+               f"background:{tone}; display:inline-block; "
+               f"margin-right:7px;'></span>" if i == 0 else '')
+        sep = ('' if i == 0 else
+               f"<span style='color:{t['tx3']}; margin:0 10px;'>·</span>")
+        cells.append(f"{sep}{dot}<span style='color:"
+                     f"{tone if i == 0 else t['tx3']};'>{_esc(txt)}</span>")
+    chip = (f"<span style='margin-left:auto; display:flex; align-items:center; "
+            f"gap:8px; flex:0 0 auto;'>"
+            f"<span style='font-size:12px; color:{t['tx3']}; "
+            f"letter-spacing:0.05em;'>운영 버전</span>"
+            f"<span style='background:{t['raised']}; color:{t['tx1']}; "
+            f"font-size:12px; font-weight:700; padding:3px 9px; "
+            f"border-radius:7px; font-variant-numeric:tabular-nums;'>"
+            f"{_esc(version)}</span></span>" if version else '')
+    st.markdown(
+        f"<div style='display:flex; align-items:center; font-size:12px; "
+        f"padding:6px 2px 12px 2px; flex-wrap:wrap; gap:4px 0;'>"
+        + ''.join(cells) + chip + "</div>", unsafe_allow_html=True)
+
+
 def update_bar(version: str, headline: str, theme: str = 'dark',
                kind: str = '') -> None:
     """

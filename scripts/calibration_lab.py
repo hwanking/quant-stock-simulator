@@ -421,9 +421,9 @@ def main(limit=200):
     for tk in dict.fromkeys(TICKERS + HOLDOUT_TICKERS):     # 중복 자동 제거
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
-                symbol=tk, start_date='2020-01-01', end_date=None)
+                symbol=tk, start_date='2015-01-01', end_date=None)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=30):
+            for d in make_asof_dates(pdf, n_dates=80):
                 if (tk, d) not in done:
                     todo.append((tk, d))
         except Exception as exc:
@@ -493,7 +493,7 @@ def main(limit=200):
         if pdf is None:
             try:
                 pdf, _ = eng.generate_synthetic_bitemporal_data(
-                    symbol=r['ticker'], start_date='2020-01-01', end_date=None)
+                    symbol=r['ticker'], start_date='2015-01-01', end_date=None)
                 price_cache[r['ticker']] = pdf
             except Exception:
                 continue

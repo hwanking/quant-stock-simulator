@@ -4,9 +4,22 @@
   "scoring": "v2026.08.03.0",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1",
-  "model": "v2026.08.04.5"
+  "model": "v2026.08.04.6"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.6",
+   "previous": "v2026.08.04.5",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "로고·제목 비율 교정 — 일괄 CSS가 로고 워드마크를 13px로 누르던 것 해제, 상단 상태바 신설",
+   "note": "",
+   "created_at": "2026-08-02T10:07:06+00:00",
+   "effective_from": "2026-08-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
