@@ -2965,6 +2965,33 @@ class QuantIndicatorsEngine:
                 entry_target_1st = float(_e_t1)
                 entry_rr = round(float((_e_t1 - _e) / _e_risk), 2)
 
+        # ── 도달 가능성 — "그 가격까지 정말 오나"를 지어내지 않고 잰다 ────
+        # 거리(%)를 보유기간 변동성 σ√t 로 나눠 **몇 시그마**인지 본다.
+        # 이걸 안 적으면 현재가의 절반인 권장 매수가가 실행 가격처럼 보인다.
+        #   달바글로벌 실측: 권장 매수가까지 -48.1% = 1.82σ (σ 5.92%/일).
+        #   산술적으로 불가능은 아니지만 20일 안에 닿을 일은 드물다.
+        _H = 20
+        _sig_h = (vol_20 * 100.0 * (_H ** 0.5)) if vol_20 else None
+
+        def _reach(target_price):
+            """그 가격까지 몇 시그마인가 · 사람 말로 뭐라고 부를 것인가."""
+            if not (_sig_h and target_price and curr_price):
+                return None, None
+            _z = abs(target_price / curr_price - 1.0) * 100.0 / _sig_h
+            if _z <= 0.5:
+                return round(_z, 2), '가까움'
+            if _z <= 1.0:
+                return round(_z, 2), '닿을 만함'
+            if _z <= 2.0:
+                return round(_z, 2), '멀다'
+            return round(_z, 2), '사실상 도달 어려움'
+
+        rec_sigma, rec_reach = _reach(recommended_buy_price)
+        t1_sigma, t1_reach = _reach(target_tech_1st)
+        # 현재가에서 권장 매수가까지 얼마나 내려야 하나 (사람이 바로 읽는 수치)
+        rec_drop_pct = (float(recommended_buy_price) / curr_price - 1.0) * 100.0 \
+            if (recommended_buy_price and curr_price) else None
+
         # 손익비는 구조적 목표(2차) 기준 — 1차는 분할익절이라 손익비 지표가 아니다
         reward_abs = target_tech_2nd - curr_price
         reward_risk_ratio = round(float(reward_abs / risk_abs), 2) if risk_abs > 0 else None
@@ -3516,6 +3543,13 @@ class QuantIndicatorsEngine:
             'entry_stop_price': entry_stop_price,
             'entry_target_1st': entry_target_1st,
             'entry_rr': entry_rr,
+            # 도달 가능성 — 몇 시그마인가 · 20일 1σ 폭이 몇 %인가
+            'rec_buy_sigma': rec_sigma,
+            'rec_buy_reach': rec_reach,
+            'rec_buy_drop_pct': rec_drop_pct,
+            'target1_sigma': t1_sigma,
+            'target1_reach': t1_reach,
+            'horizon_sigma_pct': (round(_sig_h, 1) if _sig_h else None),
             'entry_levels_note': ('권장 매수가에 샀을 때 기준 — 위 손절·목표는 '
                                   '현재가 기준이라 서로 다른 값입니다'),
             'target_tech_1st': target_tech_1st,
@@ -4347,8 +4381,22 @@ class QuantIndicatorsEngine:
             if not (rt_price * 0.75 <= low_p <= rt_price * 1.25):  low_p = rt_price * 0.995
             if not (rt_price * 0.75 <= open_p <= rt_price * 1.25): open_p = rt_price
 
+            # 실시간 봉이 붙을 날짜는 t_ref 가 아니라 **원천이 아는 마지막
+            # 거래일**이다. 원천이 이미 t_ref 보다 나중 봉(오늘 장중)을 갖고
+            # 있는데 t_ref 로 찍어 뒤에 붙이면, 같은 날짜가 서로 다른 가격으로
+            # 두 번 들어가고 시계열 순서가 깨진다.
+            #   실제 사례(2026-08-04): t_ref=08-03 인데 원천 마지막이 08-04 라
+            #   …07-31, 08-03(239,500), 08-04(233,750), 08-03(233,750) 이 됐다.
+            #   Lightweight Charts 는 역순 시계열에서 조용히 렌더를 포기해
+            #   종합 차트가 통째로 빈 화면이 됐고, 이동평균·RSI·MACD 도 그
+            #   어긋난 순서 위에서 계산되고 있었다.
+            rt_date = str(t_ref_str)
+            if not prices_df.empty:
+                _last_src = str(prices_df['trade_date'].iloc[-1])[:10]
+                if _last_src > rt_date:
+                    rt_date = _last_src
             rt_row = pd.DataFrame([{
-                'trade_date': t_ref_str,
+                'trade_date': rt_date,
                 'open': open_p, 'high': high_p, 'low': low_p,
                 'close': rt_price, 'adj_close': rt_price, 'volume': vol_p,
                 # 수급이 미연동이면 NaN — 0이나 임의값으로 채우지 않는다
@@ -4356,9 +4404,16 @@ class QuantIndicatorsEngine:
                 'institution_net': float(sm['net_i']) if sm.get('net_i') is not None else np.nan,
                 'retail_net': float(sm['net_r']) if sm.get('net_r') is not None else np.nan,
             }])
-            if not prices_df.empty and prices_df['trade_date'].iloc[-1] == t_ref_str:
-                prices_df = prices_df.iloc[:-1]
+            # 마지막 한 행만 보고 지우면 위 같은 상황을 놓친다 — 같은 날짜는
+            # 어디에 있든 전부 지운 뒤 붙이고, 마지막에 날짜순으로 정렬한다.
+            if not prices_df.empty:
+                prices_df = prices_df[
+                    prices_df['trade_date'].astype(str).str[:10] != rt_date
+                ]
             prices_df = pd.concat([prices_df, rt_row], ignore_index=True)
+            prices_df = (prices_df
+                         .sort_values('trade_date', kind='stable')
+                         .reset_index(drop=True))
 
         tech_df = self.compute_technical_indicators(prices_df)
         sim_res = self.run_self_similarity_backtest(tech_df, t_ref_str, 20, rho_cutoff)

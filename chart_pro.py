@@ -66,6 +66,21 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
     df = (tech_df.tail(int(n_bars)) if n_bars else tech_df).copy() \
         .reset_index(drop=True)
 
+    # Lightweight Charts 는 시계열이 **오름차순·중복 없음**이어야 그린다.
+    # 하나라도 어긋나면 예외도 경고도 없이 캔들·거래량·RSI·MACD 를 전부
+    # 그리지 않는다 — 격자와 가격선만 남은 빈 화면이 된다 (2026-08-04 실측).
+    # 상류를 고쳤더라도 여기서 한 번 더 막는다. 화면이 통째로 죽는 것보다
+    # 한 줄을 버리는 쪽이 낫다.
+    if 'trade_date' in df.columns and len(df):
+        _d = df['trade_date'].astype(str).str[:10]
+        _bad = int((_d < _d.shift(1)).sum()) + int(_d.duplicated().sum())
+        if _bad:
+            df = (df.assign(_t=_d)
+                    .drop_duplicates('_t', keep='last')
+                    .sort_values('_t', kind='stable')
+                    .drop(columns='_t')
+                    .reset_index(drop=True))
+
     times = [str(t)[:10] for t in df['trade_date']]
     closes = [_f(x) for x in df['adj_close']]
     opens = ([_f(x) for x in df['open']] if 'open' in df.columns else closes)

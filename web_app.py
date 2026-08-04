@@ -453,6 +453,12 @@ st.markdown(f"""
   letter-spacing: -0.01em; color: {_TOK['tx1']}; }}
 .qnav .rule {{ width: 1px; height: 15px; background: {_TOK['border']};
   margin: 0 8px; flex: 0 0 auto; }}
+/* 엔진 버전 칩 묶음 — 위 `.qnav a` 의 패딩·글자색을 물려받으면 안 된다.
+   버전은 읽는 값이지 누르는 메뉴가 아니므로 조용해야 한다. */
+.qnav a.qvers {{ padding: 2px 4px !important; font-size: 12px !important;
+  font-weight: 400 !important; white-space: normal !important;
+  border-radius: 7px; }}
+.qnav a.qvers:hover {{ background: {_TOK['hover']}; }}
 .qnav .here {{ margin-left: auto; font-size: 12px; color: {_TOK['tx3']};
   padding-left: 12px; white-space: nowrap; }}
 .qnav .here b {{ color: {_TOK['tx1']}; font-weight: 600; }}
@@ -471,8 +477,24 @@ def _render_toolbar(here_html: str = '') -> None:
     if not here_html:
         _NAV_SLOT.empty()
         return
+    # 엔진 버전 다섯 축을 '보는 중' 왼쪽에 함께 둔다. 상태 줄의 운영 버전
+    # 칩은 대표값(model) 하나뿐이라, 어느 축이 언제 바뀌었는지 알 수 없었다.
+    # 누르면 업데이트 이력으로 간다.
+    _AX_KO = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
+              'schema': '스키마', 'news': '뉴스'}
+    _chips = ''.join(
+        f"<span style='display:inline-flex; align-items:baseline; gap:5px; "
+        f"margin-right:9px; white-space:nowrap;'>"
+        f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
+        f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
+        f"font-variant-numeric:tabular-nums;'>{_VER_NOW.get(_ax, '—')}</span>"
+        f"</span>"
+        for _ax, _ko in _AX_KO.items())
     _NAV_SLOT.markdown(
-        f'<div class="qnav"><span class="here">{here_html}</span></div>',
+        f'<div class="qnav">'
+        f"<a href='#nav-updates' class='qvers' "
+        f"title='누르면 업데이트 이력으로 갑니다'>{_chips}</a>"
+        f'<span class="here">{here_html}</span></div>',
         unsafe_allow_html=True)
 
 
@@ -1861,8 +1883,12 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
 
     _uk.sidebar_section("종목 찾기", theme=_theme)
-    st.sidebar.caption("코스피·코스닥 전체에서 거래대금·수급·추세가 변화하는 **관심종목**을 먼저 발굴하고, "
-                       "그중 **퀀트 최종 행동조건**을 통과한 종목만 추천합니다. "
+    # '코스피·코스닥 전체' 라고 쓰고 있었지만 실제 출발점은 네이버 순위
+    # 페이지 2종(거래대금 상위·상승률 상위)이다. 전 종목 목록이 아니다.
+    st.sidebar.caption("코스피·코스닥의 **거래대금·상승률 순위 상위**에서 관심종목을 "
+                       "먼저 추리고, 그중 **퀀트 최종 행동조건**을 통과한 종목만 "
+                       "추천합니다. 전 종목을 정밀분석하지는 않습니다 — "
+                       "거래가 한산한 종목은 순위에 오르지 않아 후보에서 빠집니다. "
                        "관심도와 매수 판단은 별개입니다.")
 
     if 'show_screener' not in st.session_state:
@@ -2113,17 +2139,36 @@ if st.session_state.get('show_screener', False):
                 for reason in r.get('top3_block_reasons', []):
                     block_counter[reason.split('(')[0].strip()] += 1
 
+            # 탐색 깊이를 있는 그대로 — 몇 개를 실제로 계산했나
+            _att_res = st.session_state.get('attention_result') or {}
+            _deep_done = int(_att_res.get('deep_count') or 0)
+            try:
+                _deep_cap = int(market_attention.DEEP_POOL_MAX)
+            except Exception:
+                _deep_cap = _deep_done
+
             st.markdown(f"""
             <div style='background:#161D2A; padding:16px; border-radius:10px; margin-bottom:16px; '>
-                <h4 style='color:#F3F6FA; margin-top:0;'>시장 스캔 완료</h4>
-                <ul style='color:#9DAABC; font-size:15px; line-height:1.6; margin-bottom:0;'>
+                <h4 style='color:#F3F6FA; margin-top:0;'>시장 스캔 완료 — 어디까지 봤나</h4>
+                <ul style='color:#9DAABC; font-size:15px; line-height:1.6; margin-bottom:8px;'>
                     <li>분석 기준일: {t_ref_str} · rho {rho_cutoff}</li>
-                    <li>1단계 관심종목 후보 풀: <b>{st.session_state.get('scan_universe_total', 0):,}개</b>
+                    <li>0단계 <b>출발점</b>: 네이버 순위 페이지 <b>2종</b>(거래대금 상위·상승률 상위)
+                        × 코스피·코스닥 — <b>전체 종목 목록이 아닙니다</b></li>
+                    <li>1단계 후보 풀: <b>{st.session_state.get('scan_universe_total', 0):,}개</b>
                         (ETF·우선주·스팩·리츠 제외 후)</li>
-                    <li>2단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
-                        → 분석 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개</li>
+                    <li>2단계 관심지표 계산: 최대 <b>{_deep_cap:,}개</b>
+                        → 실제 <b>{_deep_done:,}개</b></li>
+                    <li>3단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
+                        → 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개</li>
                     <li>최종 행동 필수조건 통과: <b style='color:{"#35C98B" if recommended else "#F2B84B"};'>{len(recommended)}개</b></li>
                 </ul>
+                <p style='margin:0; font-size:13px; color:#F2B84B; line-height:1.65;'>
+                    <b>이 결과는 코스피·코스닥 전 종목을 정밀분석한 것이 아닙니다.</b>
+                    거래대금·상승률 순위 상위에서 출발해 {st.session_state.get('scan_universe_total', 0):,}개를 추리고,
+                    그중 {scan_depth}개만 정밀분석했습니다.
+                    정밀분석하지 않은 종목에 더 좋은 후보가 있을 수 있습니다 —
+                    <b>'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다.</b>
+                    거래가 한산한 종목은 순위 페이지에 오르지 않아 애초에 후보가 되지 못합니다.</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -3978,6 +4023,77 @@ if _e_stop and _e_t1:
         + (f" · 손익비 <b>{_e_rr}:1</b>" if _e_rr else '')
         + "</p>")
 
+# ── 도달 가능성 · 논리 검사 ──────────────────────────────────────────────
+# "권장 매수가가 현실적으로 닿는 가격인가"를 σ 로 재서 말로 옮긴다.
+# 안 적으면 현재가의 절반인 값이 실행 가격처럼 보인다.
+_rc_sig = four_scores.get('rec_buy_sigma')
+_rc_reach = four_scores.get('rec_buy_reach')
+_rc_drop = four_scores.get('rec_buy_drop_pct')
+_t1_sig = four_scores.get('target1_sigma')
+_t1_reach = four_scores.get('target1_reach')
+_sig_pct = four_scores.get('horizon_sigma_pct')
+_fair_v = four_scores.get('displayed_fair_value')
+_gap_fair = ((realtime_price / _fair_v - 1) * 100
+             if (_fair_v and realtime_price) else None)
+
+#: 도달이 어려우면 '실행 가격'이 아니라 '관찰 대상'이다 — 강조를 낮춘다
+_rec_is_far = bool(_rc_sig is not None and _rc_sig > 2.0)
+
+_reach_html = ''
+if _rc_sig is not None:
+    _rc_col = '#F2B84B' if _rec_is_far else '#9DAABC'
+    _reach_html = (
+        f"<p style='margin:6px 0 0 0; font-size:12px; color:{_rc_col}; "
+        f"line-height:1.6;'>현재가에서 <b>{_rc_drop:+.1f}%</b> "
+        f"— 20일 변동폭({_sig_pct}%) 대비 <b>{_rc_sig}σ</b> · {_rc_reach}"
+        + ("<br><b>지금은 매수 후보가 아니라 관찰 대상입니다.</b> "
+           "계산된 매수가까지 차이가 너무 커 단기간에 내려올 가능성이 낮습니다."
+           if _rec_is_far else '')
+        + "</p>")
+
+# 논리 검사 — 사용자가 요청한 조건을 자동으로 걸고, 어긋나면 화면에 적는다
+_logic_warn = []
+if _e_t1 and rec_buy_val and _e_t1 <= rec_buy_val:
+    _logic_warn.append('신규 목표가가 매수가보다 낮거나 같습니다')
+if _e_stop and rec_buy_val and _e_stop >= rec_buy_val:
+    _logic_warn.append('신규 손절가가 매수가보다 높거나 같습니다')
+if _e_rr is not None and _e_rr < 1.0:
+    _logic_warn.append(
+        f'신규 진입 손익비가 {_e_rr}:1 로 1:1 에 못 미칩니다 '
+        f'(목표를 손절거리의 0.7배로 잡는 현행 구조 탓 — 라운드 21 기록)')
+if (_gap_fair is not None and _gap_fair > 20
+        and four_scores.get('target_tech_1st')
+        and _fair_v and four_scores['target_tech_1st'] > _fair_v):
+    _logic_warn.append(
+        f'장기 적정가({_fair_v:,.0f}원)보다 현재가가 {_gap_fair:+.0f}% 높은데 '
+        f'보유자 목표가는 그보다 더 위입니다 — 목표가는 밸류에이션이 아니라 '
+        f'20일 변동성·저항으로만 계산되기 때문입니다')
+if _t1_sig is not None and _t1_sig > 2.0:
+    _logic_warn.append(f'보유자 1차 목표가 20일 변동폭 대비 {_t1_sig}σ '
+                       f'로 멀어 도달 가능성이 낮습니다')
+
+# 보유자 목표의 도달 가능성도 같은 잣대로 적는다
+_hold_reach_html = ''
+if _t1_sig is not None and realtime_price and four_scores.get('target_tech_1st'):
+    _up = (four_scores['target_tech_1st'] / realtime_price - 1) * 100
+    _hold_reach_html = (
+        f"<p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; "
+        f"line-height:1.6;'>1차 목표까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
+        f"({_sig_pct}%) 대비 <b>{_t1_sig}σ</b> · {_t1_reach}</p>")
+
+# 논리 검사에 걸린 것은 숨기지 않고 그 자리에 적는다 (경고 없는 모순이 제일 나쁘다)
+_logic_warn_html = ''
+if _logic_warn:
+    _items = ''.join(f"<li style='margin:3px 0;'>{_uk._esc(x)}</li>"
+                     for x in _logic_warn)
+    _logic_warn_html = (
+        f"<div style='margin-top:12px; background:#1C2635; border-radius:12px; "
+        f"padding:10px 14px;'>"
+        f"<p style='margin:0 0 4px 0; font-size:12px; color:#F2B84B; "
+        f"font-weight:700;'>가격 체계 자동 점검 — 걸린 항목 {len(_logic_warn)}건</p>"
+        f"<ul style='margin:0; padding-left:18px; font-size:12px; "
+        f"color:#9DAABC; line-height:1.65;'>{_items}</ul></div>")
+
 # ⏱️ DeMARK 매수 포인트 — 신호 상태와 유효 하한선(TDST 지지)을 함께 보여준다.
 _dme = four_scores.get('demark_entry') or {}
 _dm_state = _dme.get('state')
@@ -4053,31 +4169,35 @@ st.markdown(f"""
       <p style='margin:2px 0 0 0; font-size:15px; font-weight:700; color:{_vc};'>{_vshort}</p>
     </div>
   </div>
-  <div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px;
+  <div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px;
               margin-top:16px; padding-top:16px; border-top:1px solid #1C2635;'>
-    <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
-      <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>살 가격 <span style='font-weight:400;'>· 아직 안 샀다면 이 값 이하에서</span></p>
-      <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#35C98B;'>{rec_buy_display}</p>{_rec_sub_html}{_entry_lv_html}
+    <div style='background:#161D2A; border-radius:14px; padding:14px 16px;'>
+      <p style='margin:0 0 10px 0; font-size:13px; color:#35C98B; font-weight:700;'>
+        아직 안 샀다면 <span style='color:#9DAABC; font-weight:400;'>· 신규 매수 기준</span></p>
+      <p style='margin:0; font-size:12px; color:#9DAABC;'>살 가격 · 이 값 이하에서</p>
+      <p style='margin:2px 0 0 0; font-size:{'17' if _rec_is_far else '22'}px; font-weight:700;
+                color:{'#9DAABC' if _rec_is_far else '#35C98B'};'>{rec_buy_display}</p>{_rec_sub_html}{_reach_html}{_entry_lv_html}
+      <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC;'>매수 타이밍 신호 · 하락세가 힘 빠지는 지점</p>
+      <p style='margin:2px 0 0 0; font-size:15px; font-weight:700; color:{_dm_color}; line-height:1.3;'>{_dm_head}</p>
+      <p style='margin:2px 0 0 0; font-size:12px; color:#9DAABC;'>{_dm_line}</p>
     </div>
-    <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
-      <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>팔 가격 1차 <span style='font-weight:400;'>· 여기까지 오르면 일부 정리</span></p>
-      <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#4C8DFF;'>{_ex_tgt}</p>
+    <div style='background:#161D2A; border-radius:14px; padding:14px 16px;'>
+      <p style='margin:0 0 10px 0; font-size:13px; color:#4C8DFF; font-weight:700;'>
+        이미 갖고 있다면 <span style='color:#9DAABC; font-weight:400;'>· 현재가 기준 대응</span></p>
+      <div style='display:flex; gap:18px; flex-wrap:wrap;'>
+        <div><p style='margin:0; font-size:12px; color:#9DAABC;'>팔 가격 1차 · 일부 정리</p>
+          <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#4C8DFF;'>{_ex_tgt}</p></div>
+        <div><p style='margin:0; font-size:12px; color:#9DAABC;'>버틸 수 없는 가격 · 손실을 끊는 선</p>
+          <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
+      </div>{_hold_reach_html}
     </div>
-    <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
-      <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>버틸 수 없는 가격 <span style='font-weight:400;'>· 이미 갖고 계신 분 기준 — 여기 아래면 손실을 끊습니다</span></p>
-      <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#ff453a;'>{_ex_stop}</p>
-    </div>
-    <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
-      <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>매수 타이밍 신호 <span style='font-weight:400;'>· 하락세가 힘 빠지는 지점</span></p>
-      <p style='margin:2px 0 0 0; font-size:16px; font-weight:700; color:{_dm_color}; line-height:1.3;'>{_dm_head}</p>
-      <p style='margin:4px 0 0 0; font-size:12px; color:#9DAABC;'>{_dm_line}</p>
-    </div>
-  </div>
-  <p style='margin:8px 0 0 0; font-size:12px; color:#F2B84B;'>
-    ⚠️ 실행 가격 기준: 가운데 두 칸(팔 가격·버틸 수 없는 가격)은 <b>지금 가격에 산다면</b> 기준입니다.
-    아직 안 사셨다면 왼쪽 '살 가격' 칸 아래의 손절·목표를 보세요 — 그게 그 가격에 샀을 때의 값입니다.
-    두 값이 다른 것이 정상이며, 현재가가 적정가보다 높을수록 더 벌어집니다.
-    DeMARK 매수 포인트는 <b>시점</b> 신호이며, 위 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
+  </div>{_logic_warn_html}
+  <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
+    <b style='color:#F2B84B;'>시간축이 다릅니다.</b>
+    펀더멘털 적정가는 <b>분기 실적 기반 장기 가치</b>이고, 위 목표·손절은 <b>20일 변동성과 저항선</b>으로 계산합니다.
+    그래서 고평가 구간에서도 단기 목표가가 현재가보다 위에 나올 수 있습니다 — 목표가는 밸류에이션을 보지 않습니다.
+    신규 매수 판단과 보유자 대응은 서로 다른 결론일 수 있고, 그것이 정상입니다.
+    DeMARK 는 <b>시점</b> 신호이며 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
 

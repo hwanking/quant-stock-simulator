@@ -1664,7 +1664,8 @@ check("DART '제출 원본 재공시' 단정 제거", "제출 원본을 재공�
 _w41 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("재무기준일을 보고서 기준일로 위장하지 않음", "보고서 기준일 아님" in _w41)
 check("실행 가격에 기준(신규/보유자) 라벨 — 쉬운 말이어도 기준은 남는다",
-      "이미 갖고 계신 분 기준" in _w41 and "아직 안 샀다면" in _w41)
+      "이미 갖고 있다면" in _w41 and "현재가 기준 대응" in _w41
+      and "아직 안 샀다면" in _w41 and "신규 매수 기준" in _w41)
 check("저장 문구가 원격에서 거짓이 되지 않음", "이 브라우저 세션에만 유지" in _w41)
 
 
@@ -4567,7 +4568,8 @@ check("화면 '살 가격' 칸에 그 가격 기준 손절·목표를 붙인다"
       '_entry_lv_html' in _w94 and '이 가격에 사면 → 손절' in _w94)
 check("떠넘기던 경고문을 실제 안내로 바꿨다",
       '진입가 기준으로 손절가를 다시 설정해야 합니다' not in _w94
-      and "왼쪽 '살 가격' 칸 아래의 손절·목표를 보세요" in _w94)
+      and '시간축이 다릅니다' in _w94
+      and '목표가는 밸류에이션을 보지 않습니다' in _w94)
 
 # 실제로 산출해 정합한지 — 파이프라인을 돌려 확인한다 (§5 의 스냅샷 재사용)
 _fs94 = fs
@@ -4592,6 +4594,134 @@ _mv94 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
              encoding='utf-8').read()
 check("라운드 22 실측(65%)이 기록돼 있다",
       '라운드 22' in _mv94 and '65%' in _mv94)
+
+
+section("95. 시계열 순서 — 한 줄이 어긋나면 차트가 통째로 죽는다")
+
+# 실시간 봉을 t_ref 로 찍어 뒤에 붙이는데, 원천이 이미 t_ref 보다 나중 봉
+# (오늘 장중)을 갖고 있으면 …08-03, 08-04, 08-03 이 된다.
+# Lightweight Charts 는 역순 시계열에서 **예외도 경고도 없이** 렌더를
+# 포기한다 — 격자와 가격선만 남은 빈 화면이 됐다 (2026-08-04 실측).
+# 지표(MA·RSI·MACD)도 그 어긋난 순서 위에서 계산되고 있었다.
+_td95 = snap['tech_df']
+_t95 = [str(x)[:10] for x in _td95['trade_date']]
+_rev95 = [(i, _t95[i - 1], _t95[i]) for i in range(1, len(_t95))
+          if _t95[i] < _t95[i - 1]]
+check("tech_df 날짜가 오름차순이다", not _rev95, str(_rev95[:3]))
+check("tech_df 에 같은 날짜가 두 번 있지 않다",
+      len(set(_t95)) == len(_t95),
+      f'{len(_t95) - len(set(_t95))}건 중복')
+
+# 실시간 행이 붙는 날짜 — 원천의 마지막 거래일이어야 한다
+_q95 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+check("실시간 봉을 t_ref 가 아니라 원천 마지막 거래일에 붙인다",
+      "if _last_src > rt_date:" in _q95 and "'trade_date': rt_date," in _q95)
+check("같은 날짜 행은 위치와 무관하게 전부 지운다 (마지막 하나만 보지 않는다)",
+      ".str[:10] != rt_date" in _q95)
+check("붙인 뒤 날짜순으로 정렬한다",
+      "sort_values('trade_date', kind='stable')" in _q95)
+
+# 차트도 방어적이어야 한다 — 상류 한 줄 때문에 화면이 죽으면 안 된다
+_cp95 = open(_os.path.join(PROJ, 'chart_pro.py'), encoding='utf-8').read()
+check("차트가 시계열을 정렬·중복제거하고 그린다",
+      "drop_duplicates('_t', keep='last')" in _cp95
+      and "sort_values('_t', kind='stable')" in _cp95)
+
+# 실제로 어긋난 데이터를 넣어도 차트가 살아 있는가 (방어선 작동 확인)
+import chart_pro as _cp95m
+_bad95 = _td95.copy()
+if len(_bad95) >= 3:
+    _bad95 = pd.concat([_bad95, _bad95.iloc[[-2]]], ignore_index=True)
+    _html95 = _cp95m.build_chart_html(_bad95, fs, name='시험', unit_str='원',
+                                      theme='dark', user_avg=None)
+    import re as _re95b
+    _m95 = _re95b.search(r'"candles":\s*(\[.*?\}\])', _html95, _re95b.S)
+    if _m95:
+        _times95 = _re95b.findall(r'"time":\s*"(\d{4}-\d{2}-\d{2})"',
+                                  _m95.group(1))
+        _rev95b = sum(1 for i in range(1, len(_times95))
+                      if _times95[i] < _times95[i - 1])
+        check("역순 행을 넣어도 차트 데이터는 오름차순으로 나간다",
+              _rev95b == 0, f'역순 {_rev95b}건')
+    else:
+        check("차트 candles 배열을 찾을 수 있다", False, 'candles 미발견')
+
+# 상단 바 — 엔진 버전 다섯 축 노출 + 업데이트 이력 링크
+_w95 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_u95 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+check("상단 바에 엔진 버전 다섯 축을 모두 보여 준다",
+      "_AX_KO = {'model': '모델'" in _w95 and "'news': '뉴스'" in _w95)
+check("엔진 버전 칩이 업데이트 이력으로 간다",
+      "class='qvers'" in _w95 and "href='#nav-updates'" in _w95)
+check("운영 버전 칩도 업데이트 이력으로 간다",
+      "version_href: str = '#nav-updates'" in _u95
+      and "<a href='{_esc(version_href)}'" in _u95)
+check("버전 칩은 메뉴 링크 스타일을 물려받지 않는다",
+      '.qnav a.qvers' in _w95)
+
+
+section("96. 라운드 23 — 가격 체계 분리 · 도달 가능성 · 스캔 범위 정직 표기")
+
+_w96 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_q96 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+
+# ① 도달 가능성 — "그 가격까지 정말 오나"를 σ 로 잰다
+check("엔진이 권장 매수가의 도달 가능성을 σ 로 산출한다",
+      "'rec_buy_sigma': rec_sigma" in _q96
+      and "'rec_buy_reach': rec_reach" in _q96
+      and "'horizon_sigma_pct'" in _q96)
+check("목표가 도달 가능성도 같은 잣대로 산출한다",
+      "'target1_sigma': t1_sigma" in _q96)
+_fs96 = fs
+for _k96 in ('rec_buy_sigma', 'rec_buy_reach', 'target1_sigma',
+             'horizon_sigma_pct'):
+    check(f"four_scores 에 {_k96} 가 있다", _k96 in _fs96)
+if _fs96.get('rec_buy_sigma') is not None:
+    check("σ 는 0 이상 실수", _fs96['rec_buy_sigma'] >= 0,
+          str(_fs96['rec_buy_sigma']))
+    check("도달 표현이 정해진 네 가지 중 하나",
+          _fs96.get('rec_buy_reach') in ('가까움', '닿을 만함', '멀다',
+                                         '사실상 도달 어려움'),
+          str(_fs96.get('rec_buy_reach')))
+
+# ② 화면 — 신규 매수자 / 보유자 완전 분리
+check("화면이 '아직 안 샀다면' 블록을 따로 그린다",
+      '아직 안 샀다면' in _w96 and '신규 매수 기준' in _w96)
+check("화면이 '이미 갖고 있다면' 블록을 따로 그린다",
+      '이미 갖고 있다면' in _w96 and '현재가 기준 대응' in _w96)
+check("두 기준을 한 줄에 섞지 않는다 (예전 4칸 격자 제거)",
+      "살 가격 <span style='font-weight:400;'>· 아직 안 샀다면" not in _w96)
+check("시간축이 다르다는 설명을 본문에 적는다",
+      '시간축이 다릅니다' in _w96 and '분기 실적 기반 장기 가치' in _w96)
+
+# ③ 도달 어려우면 실행 가격처럼 강조하지 않는다
+check("도달이 2σ 를 넘으면 관찰 대상으로 표시한다",
+      '_rec_is_far' in _w96 and '관찰 대상입니다' in _w96)
+check("도달 어려운 권장가는 글자 크기를 낮춘다 (강조하지 않는다)",
+      "'17' if _rec_is_far else '22'" in _w96)
+
+# ④ 논리 검사가 자동으로 돌고 어긋나면 화면에 적힌다
+check("가격 체계 자동 점검이 존재한다",
+      '_logic_warn' in _w96 and '가격 체계 자동 점검' in _w96)
+for _cond96, _lab96 in (
+        ('_e_t1 <= rec_buy_val', '신규 목표 ≤ 매수가'),
+        ('_e_stop >= rec_buy_val', '신규 손절 ≥ 매수가'),
+        ('_e_rr < 1.0', '손익비 1:1 미달'),
+):
+    check(f"검사 조건: {_lab96}", _cond96 in _w96)
+
+# ⑤ 스캔 범위 — 과장 없이
+check("사이드바가 '전체'라고 과장하지 않는다",
+      '코스피·코스닥 전체에서 거래대금' not in _w96
+      and '거래대금·상승률 순위 상위' in _w96)
+check("스캔 결과에 출발점(순위 페이지 2종)을 밝힌다",
+      '네이버 순위 페이지' in _w96 and '전체 종목 목록이 아닙니다' in _w96)
+check("전 종목 정밀분석이 아니라고 명시한다",
+      '전 종목을 정밀분석한 것이 아닙니다' in _w96)
+check("'추천 없음'의 뜻을 오해하지 않게 적는다",
+      "'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다" in _w96)
+check("퍼널 단계 수치를 보여 준다 (관심지표 계산 실제 개수)",
+      '_deep_done' in _w96 and '_deep_cap' in _w96)
 
 
 print()

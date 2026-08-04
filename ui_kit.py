@@ -300,7 +300,7 @@ def plan_card(plan: str, usage_pct: int, engine: str, version: str,
 
 
 def status_bar(items: Sequence[tuple], version: str = '',
-               theme: str = 'dark') -> None:
+               theme: str = 'dark', version_href: str = '#nav-updates') -> None:
     """
     상단 상태 줄 — 왼쪽에 지금 상태, 오른쪽 끝에 운영 버전 칩.
 
@@ -319,14 +319,17 @@ def status_bar(items: Sequence[tuple], version: str = '',
                f"<span style='color:{t['tx3']}; margin:0 10px;'>·</span>")
         cells.append(f"{sep}{dot}<span style='color:"
                      f"{tone if i == 0 else t['tx3']};'>{_esc(txt)}</span>")
-    chip = (f"<span style='margin-left:auto; display:flex; align-items:center; "
-            f"gap:8px; flex:0 0 auto;'>"
+    # 버전 칩은 **누르면 업데이트 이력으로** 간다. 버전만 보여 주고 무엇이
+    # 바뀌었는지 못 찾게 하면 그 숫자는 장식이다.
+    chip = (f"<a href='{_esc(version_href)}' style='margin-left:auto; "
+            f"display:flex; align-items:center; gap:8px; flex:0 0 auto; "
+            f"text-decoration:none;' title='누르면 업데이트 이력으로 갑니다'>"
             f"<span style='font-size:12px; color:{t['tx3']}; "
             f"letter-spacing:0.05em;'>운영 버전</span>"
             f"<span style='background:{t['raised']}; color:{t['tx1']}; "
             f"font-size:12px; font-weight:700; padding:3px 9px; "
             f"border-radius:7px; font-variant-numeric:tabular-nums;'>"
-            f"{_esc(version)}</span></span>" if version else '')
+            f"{_esc(version)}</span></a>" if version else '')
     st.markdown(
         f"<div style='display:flex; align-items:center; font-size:12px; "
         f"padding:6px 2px 12px 2px; flex-wrap:wrap; gap:4px 0;'>"
