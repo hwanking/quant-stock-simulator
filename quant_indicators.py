@@ -4871,3 +4871,4 @@ class QuantIndicatorsEngine:
 
         return results
 
+

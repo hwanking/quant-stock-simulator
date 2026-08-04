@@ -2518,6 +2518,12 @@ if _pmr:
     # (제목은 사도 된다는데 본문이 '판단 보류'인 카드를 만들지 않는다. 가격·점수는 불변)
     def _pm_display_class(p):
         cls, easy = str(p.get('reco_class') or ''), str(p.get('easy_line') or '')
+        # 다음 조건 엔진이 '추천 자격 없음'으로 본 종목은 추천 자리에 두지
+        # 않는다. 26,350원짜리에 21,218원(-19.5%)을 오늘의 추천으로 내밀면
+        # 계산은 맞아도 실행할 수 없는 값이다.
+        _n = p.get('next_action') or {}
+        if _n.get('exclude_reason') and not _n.get('reco_eligible'):
+            return '오늘은 기다려야 하는 종목'
         if '보류' in easy and cls in ('오늘 사도 되는 종목', '조건부로 사도 되는 종목'):
             return '오늘은 기다려야 하는 종목'
         if '사지 마세요' in easy and cls != '오늘은 사면 안 되는 종목':
@@ -2547,6 +2553,7 @@ if _pmr:
           · 권장가가 멀면(2σ 초과) 목표·손절을 흐리게 — 닿지 않을 값을
             진하게 두면 실행 가격처럼 보인다.
         """
+        _n = p.get('next_action') or {}
         cls = str(p.get('reco_class') or '')
         price, rec = p.get('price'), p.get('rec_buy')
         e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
@@ -2565,11 +2572,29 @@ if _pmr:
         else:
             state = 'warn'
 
-        label = ('사실상 관망' if (far and rec) else
-                 cls.replace('오늘은 ', '오늘 ') or '판단 보류')
+        # 상태 라벨도 '무엇을 기다리는가'로 — '관망'만 쓰면 행동을 못 정한다
+        _NA_LABEL = {'buy_now': '지금 분할매수', 'pullback': '눌림목 대기',
+                     'breakout': '돌파 확인 대기', 'observe': '장기 관찰',
+                     'blocked': '매수 차단', 'no_data': '데이터 부족'}
+        label = (_NA_LABEL.get(_n.get('kind'))
+                 or ('사실상 관망' if (far and rec) else
+                     cls.replace('오늘은 ', '오늘 ') or '판단 보류'))
+        if _n.get('kind') == 'buy_now':
+            state = 'pos'
+        elif _n.get('kind') in ('blocked',):
+            state = 'neg'
+        elif _n.get('kind') in ('observe', 'no_data'):
+            state = 'hold'
+        elif _n.get('kind'):
+            state = 'warn'
 
-        # 쉬운 설명 — 현재 위치를 한 문장으로
-        if rec and gap is not None and gap > 0:
+        # 쉬운 설명 — "사지 마세요"로 끝내지 않는다. 다음 조건 엔진이
+        # 낸 한 줄을 먼저 쓰고, 조건들은 아래 목록으로 붙인다.
+        if _n.get('headline'):
+            say = f"<b>{_n['headline']}</b>"
+            if rec and gap is not None and gap > 0:
+                say += f" 현재가는 권장 매수가보다 {gap:.1f}% 높습니다."
+        elif rec and gap is not None and gap > 0:
             say = (f"현재가가 권장 매수가보다 <b>{gap:.1f}%</b> 높습니다. "
                    + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
                       "<b>지금은 기다리는 편</b>이 낫습니다."
@@ -2621,6 +2646,8 @@ if _pmr:
             'hit': conf_txt,
             'horizon': (f"예상 보유 {p['horizon_days']}거래일"
                         if p.get('horizon_days') else None),
+            # 다음 조건 — 무엇을 기다리는지 카드에 적는다
+            'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
         }
 
     if not _picks_show:
@@ -4243,6 +4270,36 @@ if _t1_sig is not None and _t1_sig > 2.0:
     _logic_warn.append(f'보유자 1차 목표가 20일 변동폭 대비 {_t1_sig}σ '
                        f'로 멀어 도달 가능성이 낮습니다')
 
+# ── 다음 조건 — "사지 마세요"로 끝내지 않는다 ────────────────────────────
+# 관망이라면 **언제·어떤 조건에서** 살 수 있는지 반드시 적는다.
+import next_action as _na
+_NA = _na.build(four_scores, tech_df, realtime_price, verdict)
+_na_html = ''
+if _NA.get('headline'):
+    _na_col = {'buy_now': '#35C98B', 'pullback': '#F2B84B',
+               'breakout': '#4C8DFF', 'blocked': '#ff453a'}.get(
+                   _NA['kind'], '#9DAABC')
+    _na_items = ''.join(
+        f"<li style='margin:4px 0;'>{_uk._esc(c['text'])}</li>"
+        for c in _NA.get('conditions', []))
+    _na_html = (
+        f"<div style='margin-top:14px; background:#1C2635; border-radius:12px; "
+        f"padding:12px 16px;'>"
+        f"<p style='margin:0 0 2px 0; font-size:12px; color:#9DAABC; "
+        f"font-weight:700;'>다음 조건 — 언제 사면 되나</p>"
+        f"<p style='margin:0 0 6px 0; font-size:17px; font-weight:700; "
+        f"color:{_na_col}; line-height:1.4;'>{_uk._esc(_NA['headline'])}</p>"
+        + (f"<ul style='margin:0; padding-left:18px; font-size:13px; "
+           f"color:#9DAABC; line-height:1.65;'>{_na_items}</ul>"
+           if _na_items else '')
+        + (f"<p style='margin:6px 0 0 0; font-size:12px; color:#9DAABC;'>"
+           f"괴리 {_NA['gap_pct']:+.1f}% · [{_NA['gap_band']}] · "
+           f"일 변동폭 {_NA['atr_pct']}%"
+           + (f" · 예상 대기 {_NA['wait_days']}거래일"
+              if _NA.get('wait_days') else '')
+           + "</p>" if _NA.get('gap_band') else '')
+        + "</div>")
+
 # 보유자 목표의 도달 가능성도 같은 잣대로 적는다
 _hold_reach_html = ''
 if _t1_sig is not None and realtime_price and four_scores.get('target_tech_1st'):
@@ -4362,7 +4419,7 @@ st.markdown(f"""
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
       </div>{_hold_reach_html}
     </div>
-  </div>{_logic_warn_html}
+  </div>{_na_html}{_logic_warn_html}
   <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
     <b style='color:#F2B84B;'>시간축이 다릅니다.</b>
     펀더멘털 적정가는 <b>분기 실적 기반 장기 가치</b>이고, 위 목표·손절은 <b>20일 변동성과 저항선</b>으로 계산합니다.

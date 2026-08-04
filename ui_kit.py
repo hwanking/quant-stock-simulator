@@ -827,6 +827,20 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
     say = (f"<p style='margin:0; font-size:13px; line-height:1.65; "
            f"color:{t['tx1']};'>{p['say']}</p>" if p.get('say') else '')
 
+    # 다음 조건 — "사지 마세요"로 끝내지 않는다. 관망이면 무엇을 기다리는지
+    # 여기에 적는다. 조건이 없으면 이 상자를 아예 그리지 않는다.
+    nextbox = ''
+    if p.get('next_conditions'):
+        _items = ''.join(f"<li style='margin:3px 0;'>{_esc(x)}</li>"
+                         for x in p['next_conditions'][:3])
+        nextbox = (
+            f"<div style='background:{t['raised']}; border-radius:10px; "
+            f"padding:9px 11px;'>"
+            f"<p style='margin:0 0 4px 0; font-size:12px; color:{t['tx3']}; "
+            f"font-weight:700;'>다음 조건</p>"
+            f"<ul style='margin:0; padding-left:16px; font-size:12px; "
+            f"color:{t['tx2']}; line-height:1.6;'>{_items}</ul></div>")
+
     box = ''
     if p.get('hold_note'):
         box = (f"<div style='background:{t['raised']}; border-radius:10px; "
@@ -855,7 +869,7 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
         f"{_esc(p.get('name', ''))}</p>"
         f"<p style='margin:0; font-size:12px; color:{t['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_esc(meta)}</p></div>",
-        prices, say, box, why) if x]
+        prices, say, nextbox, box, why) if x]
 
     return (
         f"<div style='background:{t['card']}; border-radius:14px; "

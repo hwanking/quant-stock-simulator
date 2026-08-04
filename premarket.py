@@ -62,6 +62,26 @@ def _classify_reco(row, easy_line):
     return '오늘은 사면 안 되는 종목'
 
 
+def _na_of(row):
+    """
+    스캔 행 하나에 '다음 조건'을 붙인다 — 카드가 "사지 마세요"로 끝나지 않게.
+
+    실패하면 None 을 돌려 준다. 여기서 예외가 나면 리포트 전체가 죽으므로
+    감싸되, 조용히 빈 값으로 채우지는 않는다(없으면 없다고 말한다).
+    """
+    try:
+        import next_action as _na
+        snap = row.get('snapshot') or {}
+        fs = snap.get('four_scores') or {}
+        td = snap.get('tech_df')
+        price = row.get('base_price') or snap.get('rt_price')
+        if td is None or not price:
+            return None
+        return _na.build(fs, td, price, snap.get('verdict'))
+    except Exception:
+        return None
+
+
 def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     """
     스캔 결과(전일 확정 데이터 기반) → 개장 전 리포트. 이미 있으면 기존 것을 반환.
@@ -120,6 +140,8 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
             'rec_buy_sigma': fs.get('rec_buy_sigma'),
             'rec_buy_reach': fs.get('rec_buy_reach'),
             'rec_buy_drop_pct': fs.get('rec_buy_drop_pct'),
+            # 다음 조건 — "사지 마세요"로 끝내지 않는다 (라운드 24)
+            'next_action': _na_of(r),
             'confidence': fs.get('analysis_confidence'),
             'horizon_days': 20,
             'entry_candidate': bool(r.get('entry_candidate')),

@@ -4867,6 +4867,87 @@ check("2단계가 순위 페이지 출발임을 계속 밝힌다",
       and '순위 페이지에서 출발하므로' in _w98)
 
 
+section("99. 라운드 24 — \"사지 마세요\"로 끝내지 않는다 · 괴리 큰 종목 추천 제외")
+
+import next_action as _na99
+_w99 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_p99 = open(_os.path.join(PROJ, "premarket.py"), encoding='utf-8').read()
+_u99 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+
+# ① 실제 종목에 걸어 본다 (§5 스냅샷 재사용 — 추가 조회 없음)
+_r99 = _na99.build(fs, snap['tech_df'], snap.get('rt_price'),
+                   snap.get('verdict'))
+check("다음 조건 엔진이 결과를 낸다", isinstance(_r99, dict) and _r99.get('kind'))
+check("판정이 정해진 여섯 가지 안", _r99['kind'] in (
+    'buy_now', 'pullback', 'breakout', 'observe', 'blocked', 'no_data'),
+    str(_r99['kind']))
+check("관망이어도 한 줄 결론이 비어 있지 않다", bool(_r99.get('headline')))
+check("일 ATR 을 산출한다", _r99.get('atr_pct') is not None,
+      str(_r99.get('atr_pct')))
+check("ATR 로 조정한 밴드 경계가 3개",
+      isinstance(_r99.get('band_edges'), tuple) and len(_r99['band_edges']) == 3,
+      str(_r99.get('band_edges')))
+check("밴드 경계가 오름차순",
+      _r99['band_edges'][0] < _r99['band_edges'][1] < _r99['band_edges'][2])
+if _r99['kind'] not in ('blocked', 'buy_now', 'no_data'):
+    check("기다리는 판단에는 조건이 하나 이상 붙는다",
+          len(_r99.get('conditions') or []) >= 1,
+          str(len(_r99.get('conditions') or [])))
+    check("추천 자격이 없으면 이유를 남긴다",
+          _r99.get('reco_eligible') or _r99.get('exclude_reason'),
+          str(_r99.get('exclude_reason')))
+
+# ② 지지·저항은 실제 계산값에서만 — 지어내지 않는다
+_lv99 = _na99.levels(snap['tech_df'], snap.get('rt_price'))
+_p0 = float(snap.get('rt_price') or 0)
+check("지지 후보는 전부 현재가 아래",
+      all(v < _p0 for v, _ in _lv99['supports']), str(_lv99['supports'][:2]))
+check("저항 후보는 전부 현재가 위",
+      all(v > _p0 for v, _ in _lv99['resists']), str(_lv99['resists'][:2]))
+
+# ③ 밴드 분류 — 괴리가 크면 추천에서 뺀다
+class _FakeDF:
+    """최소 tech_df 흉내 — 밴드 분류만 검사한다."""
+    columns = ['tr', 'high', 'low', 'sma_20', 'bb_mid', 'volume_ratio']
+
+    def __init__(self, n=30):
+        self._n = n
+
+    def __len__(self):
+        return self._n
+
+
+_atr99 = _r99.get('atr_pct')
+if _atr99:
+    _sc99 = min(_na99.SCALE_MAX, max(_na99.SCALE_MIN,
+                                     _atr99 / _na99.BASE_ATR_PCT))
+    check("변동성이 크면 밴드가 넓어진다 (ATR 보정)",
+          abs(_r99['band_edges'][0] - round(_na99.BANDS[0] * _sc99, 1)) < 0.05)
+check("배율이 0.7~2.5 로 묶인다",
+      _na99.SCALE_MIN == 0.7 and _na99.SCALE_MAX == 2.5)
+check("예상 대기기간 상한이 60거래일", _na99.MAX_WAIT_DAYS == 60)
+
+# ④ 화면 연결
+check("결론 배너에 '다음 조건' 블록이 있다",
+      '다음 조건 — 언제 사면 되나' in _w99 and '_NA = _na.build(' in _w99)
+check("추천 카드가 다음 조건을 받는다", "'next_conditions'" in _w99)
+check("카드 컴포넌트가 다음 조건 상자를 그린다",
+      "p.get('next_conditions')" in _u99 and '다음 조건' in _u99)
+check("premarket 이 다음 조건을 실어 나른다",
+      "'next_action': _na_of(r)" in _p99 and 'def _na_of(' in _p99)
+
+# ⑤ 괴리 큰 종목을 추천 자리에서 뺀다
+check("추천 자격 없으면 '기다려야 하는 종목'으로 내린다",
+      "_n.get('exclude_reason') and not _n.get('reco_eligible')" in _w99)
+check("상태 라벨이 '무엇을 기다리는가'로 바뀐다",
+      '_NA_LABEL' in _w99 and '눌림목 대기' in _w99
+      and '돌파 확인 대기' in _w99 and '장기 관찰' in _w99)
+
+# ⑥ 알림 조건을 저장한다 (다시 검색하지 않아도 되게)
+check("알림으로 저장할 조건을 만든다", "'alert'" in open(
+    _os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read())
+
+
 print()
 print("=" * 72)
 if FAILURES:
