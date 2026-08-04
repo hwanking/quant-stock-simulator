@@ -5112,6 +5112,26 @@ check("등록 시 엔진 버전을 함께 남긴다",
 check("확인 불가를 충족으로 세지 않는다고 화면에 밝힌다",
       '확인 불가' in _w101 and '충족으로 세지 않습니다' in _w101)
 
+# ⑤ 커밋 메시지의 버전이 실제 이력에 있는가
+#    2026-08-05: 버전 올리기가 실패했는데(축 이름을 종류로 넘김) 커밋
+#    메시지에는 v2026.08.05.3 이 적혀 나갔다. 없는 버전을 적으면 그 커밋은
+#    무엇으로 만든 것인지 추적할 수 없다.
+import subprocess as _sp101
+import versioning as _ver101
+try:
+    _msg101 = _sp101.run(['git', 'log', '-1', '--pretty=%s'], cwd=PROJ,
+                         capture_output=True, text=True, encoding='utf-8',
+                         errors='replace').stdout
+except Exception:
+    _msg101 = ''
+_vs101 = _re.findall(r'v\d{4}\.\d{2}\.\d{2}\.\d+', _msg101 or '')
+if _vs101:
+    _known101 = {e['version'] for e in _ver101.history(limit=400)}
+    _known101 |= set(_ver101.snapshot().values())
+    _miss101 = [v for v in _vs101 if v not in _known101]
+    check("최근 커밋 메시지의 버전이 실제 이력에 있다",
+          not _miss101, f'이력에 없음: {_miss101}')
+
 
 print()
 print("=" * 72)

@@ -83,9 +83,15 @@ def bump(current: str, kind: str, today: date | None = None) -> str:
     수정'처럼 보여 오해를 부른다.
     """
     if kind not in CHANGE_KINDS:
+        # 축 이름(model·scoring·rulebook·schema·news)을 종류 자리에 넘기는
+        # 실수가 실제로 있었다. 그냥 '모르는 값'이라고만 하면 무엇이 잘못된
+        # 건지 안 보인다 — 헷갈린 게 축인지 짚어 준다.
+        hint = (f" '{kind}' 는 **축** 이름입니다 — release(axis='{kind}', "
+                f"kind=...) 처럼 첫 인자로 넘기세요."
+                if kind in AXES else '')
         raise ValueError(
             f"등록되지 않은 변경 종류: {kind} — {sorted(CHANGE_KINDS)} 중 하나여야 "
-            "합니다. 어느 자리를 올릴지 사람이 즉흥으로 정하지 않는다.")
+            f"합니다. 어느 자리를 올릴지 사람이 즉흥으로 정하지 않는다.{hint}")
     today = today or date.today()
     p = parse(current)
     if p is None:
