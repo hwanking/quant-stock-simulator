@@ -196,7 +196,12 @@ def build(four_scores, tech_df, price, verdict=None):
         out['exclude_reason'] = '강제 매수 차단 조건'
         return out
 
-    rec = _f(fs.get('recommended_buy_price'))
+    # 오늘의 진입가는 **실행 가능한 눌림가**(기준가 − 일변동성)를 쓴다.
+    # 적정가 기반 값(value_floor_price)은 장기 가치 참고선이라 현재가와
+    # 30~50% 벌어지는 일이 흔했다 — 그걸 오늘의 매수가로 쓰면 안 된다.
+    # (라운드 25: 눌림가는 실전 체결률 79.3% · 평균 3.4거래일)
+    rec = _f(fs.get('entry_pullback_price')) or _f(
+        fs.get('recommended_buy_price'))
     if rec is None:
         # 진입가가 없어도 **과열이면 그 사실이 먼저**다. 급등 직후에
         # '진입 기준이 없습니다'만 적으면 사용자는 뭘 하지 말아야 할지 모른다.
@@ -239,6 +244,29 @@ def build(four_scores, tech_df, price, verdict=None):
         out['gap_band'] = '장기 관찰'
     else:
         out['gap_band'] = '괴리 과다'
+
+    # ── 밸류 가드 ───────────────────────────────────────────────────
+    # 눌림 진입가는 변동성만 본다 — 밸류에이션을 전혀 모른다. 그래서 적정가를
+    # 크게 초과한 종목도 "−5.8%면 살 만하다"로 보일 수 있다(달바글로벌 실측:
+    # 현재가가 적정가보다 +69.5% 위인데 buy_now 로 나왔다).
+    # 진입 위치 판정이 '크게 초과'면 오늘 살 종목이 아니다.
+    zone = str(fs.get('chase_buy_status') or fs.get('entry_zone') or '')
+    over_value = ('크게 초과' in zone)
+    vfloor = _f(fs.get('value_floor_price'))
+    if over_value:
+        out['kind'] = 'observe'
+        out['exclude_reason'] = '적정가 크게 초과 — 추격매수 위험'
+        out['headline'] = '고평가 구간입니다 — 오늘의 매수 후보가 아닙니다.'
+        cond('value', vfloor,
+             (f"장기 가치 기준 참고선은 {vfloor:,.0f}원입니다 — "
+              f"오늘의 매수가가 아니라 위험 참고선입니다"
+              if vfloor else "현재가가 적정가를 크게 넘었습니다"))
+        support_cond()
+        breakout_cond()
+        if hot:
+            cooldown_cond()
+        volume_cond()
+        return out
 
     # ── 바로 살 수 있는 경우 ────────────────────────────────────────
     if out['gap_band'] == '즉시·근접' and not hot:

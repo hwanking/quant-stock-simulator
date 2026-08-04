@@ -123,7 +123,13 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
             'easy_line': easy_nb.get('line'),
             'score': r.get('final_score'),
             'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)
-            'rec_buy': fs.get('recommended_buy_price'),
+            # 카드가 쓰는 '권장 매수가'는 **실행 가능한 눌림가**다 (라운드 25).
+            # 적정가 기반 값은 장기 참고선으로 따로 싣는다 — 오늘의 매수가가
+            # 아니다 (현재가와 30~50% 벌어지는 일이 흔했다).
+            'rec_buy': (fs.get('entry_pullback_price')
+                        or fs.get('recommended_buy_price')),
+            'rec_buy_basis': fs.get('entry_pullback_basis'),
+            'value_floor': fs.get('value_floor_price'),
             'entry_zone': fs.get('entry_zone'),
             'chase_max': fs.get('buy_entry_max'),
             # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다

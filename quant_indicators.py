@@ -2965,6 +2965,26 @@ class QuantIndicatorsEngine:
                 entry_target_1st = float(_e_t1)
                 entry_rr = round(float((_e_t1 - _e) / _e_risk), 2)
 
+        # ── 실행 가능한 눌림 진입가 (라운드 25 · 채택) ──────────────────
+        # 현행 권장 매수가는 **적정가 × 0.85** 였다. 적정가는 분기 실적 기반
+        # 장기 가치라 현재가와 30~50% 벌어지는 일이 흔했다.
+        #   우진 14,600 → 9,388(−35.7%) · 달바글로벌 242,500 → 126,452(−47.8%)
+        # "14,600원인데 언제 9,388원까지 떨어져"라는 지적이 정확했다.
+        # 장기 가치평가 값을 **오늘의 실행 가격**으로 쓴 것이 잘못이다.
+        #
+        # 라운드 25 에서 진입 방식 15개를 같은 경로 데이터로 겨뤘다.
+        # 채택 근거는 **수익이 아니라 실행 가능성**이다:
+        #   변동성 1배(기준가 − 일변동성) — 실전 체결률 79.3% · 평균 3.4일
+        #   (현행 적정가 기반은 체결률을 잴 수조차 없다 — 원장에 적정가가 없다)
+        # 수익 개선은 주장하지 않는다. 사전등록 ④(실전 기간 전·후반 양쪽
+        # 개선)에서 걸려 기각했다 — 상승장에서는 기다리면 놓치기 때문이다.
+        entry_pullback_price = None
+        if curr_price and vol_20 and vol_20 > 0:
+            entry_pullback_price = float(curr_price * (1.0 - vol_20))
+        # 적정가 기반 값은 '오늘의 매수가'가 아니라 **장기 가치 참고선**이다
+        value_floor_price = (float(recommended_buy_price)
+                             if recommended_buy_price is not None else None)
+
         # ── 도달 가능성 — "그 가격까지 정말 오나"를 지어내지 않고 잰다 ────
         # 거리(%)를 보유기간 변동성 σ√t 로 나눠 **몇 시그마**인지 본다.
         # 이걸 안 적으면 현재가의 절반인 권장 매수가가 실행 가격처럼 보인다.
@@ -3543,6 +3563,13 @@ class QuantIndicatorsEngine:
             'entry_stop_price': entry_stop_price,
             'entry_target_1st': entry_target_1st,
             'entry_rr': entry_rr,
+            # 실행 가능한 눌림 진입가 (라운드 25) — 카드·다음조건이 쓰는 값
+            'entry_pullback_price': entry_pullback_price,
+            'entry_pullback_basis': ('기준가 − 일변동성 1배 · 실전 체결률 79.3% '
+                                     '· 평균 3.4거래일 (라운드 25)'),
+            # 적정가 기반 값은 오늘의 매수가가 아니라 **장기 가치 참고선**이다
+            'value_floor_price': value_floor_price,
+            'value_floor_basis': '적정가 × (1 − 안전마진) · 장기 가치 기준',
             # 도달 가능성 — 몇 시그마인가 · 20일 1σ 폭이 몇 %인가
             'rec_buy_sigma': rec_sigma,
             'rec_buy_reach': rec_reach,

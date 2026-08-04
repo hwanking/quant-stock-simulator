@@ -129,6 +129,51 @@ def simulate(c, tp, sp, entry_disc=0.0, max_bars=None):
     return 'OPEN', rel(cl[n - 1])
 
 
+def simulate_entry(c, tp, sp, entry_kind='now', entry_pct=0.0, max_bars=None):
+    """
+    진입 방식까지 포함한 재현. simulate 와 달리 **체결 봉**을 함께 돌려준다.
+
+    entry_kind:
+      now       기준일 종가에 바로 산다 (entry_pct 무시)
+      limit     기준가보다 entry_pct% **아래**로 내려오면 산다 (눌림 대기)
+      breakout  기준가보다 entry_pct% **위**로 올라가면 산다 (돌파 확인)
+
+    반환 dict: kind(TARGET/STOP/OPEN/NOENTRY/NODATA) · ret · entry_bar
+      entry_bar 는 1부터 센다 (1 = 다음 거래일). 미체결이면 None.
+    """
+    hi, lo, cl = c['high'], c['low'], c['close']
+    if not hi:
+        return {'kind': 'NODATA', 'ret': 0.0, 'entry_bar': None}
+    n = len(hi) if max_bars is None else min(len(hi), max_bars)
+
+    start, base, ebar = 0, 0.0, 0
+    if entry_kind == 'limit' and entry_pct > 0:
+        for i in range(n):
+            if lo[i] <= -entry_pct:
+                start, base, ebar = i, -entry_pct, i + 1
+                break
+        else:
+            return {'kind': 'NOENTRY', 'ret': 0.0, 'entry_bar': None}
+    elif entry_kind == 'breakout' and entry_pct > 0:
+        for i in range(n):
+            if hi[i] >= entry_pct:
+                start, base, ebar = i, entry_pct, i + 1
+                break
+        else:
+            return {'kind': 'NOENTRY', 'ret': 0.0, 'entry_bar': None}
+
+    def rel(x):
+        return ((100.0 + x) / (100.0 + base) - 1.0) * 100.0
+
+    for i in range(start, n):
+        h, l = rel(hi[i]), rel(lo[i])
+        if l <= -sp + EPS:
+            return {'kind': 'STOP', 'ret': -sp, 'entry_bar': ebar or 0}
+        if h >= tp:
+            return {'kind': 'TARGET', 'ret': tp, 'entry_bar': ebar or 0}
+    return {'kind': 'OPEN', 'ret': rel(cl[n - 1]), 'entry_bar': ebar or 0}
+
+
 def ev(cases, tp_mult=1.0, sp_mult=1.0, entry_disc=0.0, max_bars=None):
     """
     한 설정의 성적. 진입 못 한 건(NOENTRY)은 거래가 없으므로 수익 0 으로

@@ -4948,6 +4948,80 @@ check("알림으로 저장할 조건을 만든다", "'alert'" in open(
     _os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read())
 
 
+section("100. 라운드 25 — 실행 가능한 진입가 · 밸류 가드")
+
+import json as _json100
+_q100 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_n100 = open(_os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read()
+_p100 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
+
+# ① 엔진이 실행 가능한 눌림 진입가를 낸다 (적정가 기반과 분리)
+check("엔진이 눌림 진입가를 산출한다",
+      "'entry_pullback_price': entry_pullback_price" in _q100)
+check("눌림가는 기준가 − 일변동성 1배",
+      'entry_pullback_price = float(curr_price * (1.0 - vol_20))' in _q100)
+check("적정가 기반 값은 '장기 가치 참고선'으로 이름이 바뀌었다",
+      "'value_floor_price': value_floor_price" in _q100
+      and '장기 가치 기준' in _q100)
+for _k100 in ('entry_pullback_price', 'entry_pullback_basis',
+              'value_floor_price'):
+    check(f"four_scores 에 {_k100} 가 있다", _k100 in fs)
+if fs.get('entry_pullback_price') and snap.get('rt_price'):
+    _gap100 = (fs['entry_pullback_price'] / float(snap['rt_price']) - 1) * 100
+    check("눌림 진입가가 현재가보다 아래", _gap100 < 0, f'{_gap100:+.1f}%')
+    check("눌림 진입가가 현재가에서 25% 안쪽 (실행 가능)",
+          abs(_gap100) <= 25.0, f'{_gap100:+.1f}%')
+
+# ② 다음 조건이 눌림가를 쓴다 (적정가 기반을 오늘의 매수가로 쓰지 않는다)
+check("next_action 이 눌림 진입가를 먼저 쓴다",
+      "_f(fs.get('entry_pullback_price')) or _f(" in _n100)
+
+# ③ 밸류 가드 — 눌림가는 밸류에이션을 모른다
+check("적정가 크게 초과면 오늘의 매수 후보에서 뺀다",
+      "over_value = ('크게 초과' in zone)" in _n100
+      and '고평가 구간입니다' in _n100)
+check("장기 참고선을 '오늘의 매수가가 아니다'라고 밝힌다",
+      '오늘의 매수가가 아니라 위험 참고선입니다' in _n100)
+
+# ④ 화면·리포트가 같은 값을 쓴다
+check("premarket 이 눌림가를 rec_buy 로 싣는다",
+      "fs.get('entry_pullback_price')" in _p100
+      and "'value_floor': fs.get('value_floor_price')" in _p100)
+
+# ⑤ 실제로 걸어 본다 — 고평가 종목이 buy_now 로 새지 않는가
+import next_action as _na100
+_r100 = _na100.build(fs, snap['tech_df'], snap.get('rt_price'),
+                     snap.get('verdict'))
+_zone100 = str(fs.get('chase_buy_status') or fs.get('entry_zone') or '')
+if '크게 초과' in _zone100:
+    check("고평가 종목은 buy_now 가 되지 않는다",
+          _r100['kind'] != 'buy_now', str(_r100['kind']))
+    check("고평가 제외 사유를 남긴다",
+          '적정가' in str(_r100.get('exclude_reason') or ''),
+          str(_r100.get('exclude_reason')))
+
+# ⑥ 연구 산출물 — 채택/기각이 기록돼 있다
+for _f100, _lab100 in (('entry_engine_r25.json', '라운드 25'),
+                       ('entry_engine_r25b.json', '라운드 25b')):
+    _pp100 = _os.path.join(PROJ, '.portfolio', _f100)
+    if not _os.path.exists(_pp100):
+        continue
+    with open(_pp100, encoding='utf-8') as _fh100:
+        _j100 = _json100.load(_fh100)
+    check(f"{_lab100} 결과가 기록돼 있다", 'adopted' in _j100)
+    check(f"{_lab100} 는 수익 개선을 채택하지 않았다",
+          _j100.get('adopted') in (None, '', []),
+          str(_j100.get('adopted')))
+
+# ⑦ 기록 — 왜 바꿨는지가 문서에 있다
+_mv100 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+              encoding='utf-8').read()
+check("라운드 25 기록에 채택 근거가 '실행 가능성'이라고 적혀 있다",
+      '라운드 25' in _mv100 and '실행 가능성' in _mv100)
+check("수익 개선을 주장하지 않는다고 적혀 있다",
+      '수익 개선' in _mv100 and '기각' in _mv100)
+
+
 print()
 print("=" * 72)
 if FAILURES:
