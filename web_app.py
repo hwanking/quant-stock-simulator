@@ -1496,9 +1496,23 @@ _NAV_SUB = [
     ]},
 ]
 st.sidebar.markdown(
-    f"<div style='padding:4px 0 14px 0;'>{_uk.logo(_theme, size=30)}</div>"
+    f"<div style='padding:4px 0 14px 0;'>{_uk.logo(_theme, size=30)}</div>",
+    unsafe_allow_html=True)
+
+# 종목 검색은 이 앱의 첫 동작이다 — 메뉴보다 위에 있어야 한다.
+# 그런데 검색 코드는 종목 확정·시세 조회까지 한 덩어리라 위로 못 옮긴다
+# (if/elif/else 체인 + 아래 화면 전체가 그 결과에 기댄다).
+# 그래서 **자리만 먼저 잡아 두고** 코드는 제자리에서 이 자리에 그린다 —
+# 스트림릿 컨테이너는 호출 시점이 아니라 잡아 둔 위치에 렌더된다.
+_SB_PICK = st.sidebar.container()
+
+st.sidebar.markdown(
+    # 검색 블록과 메뉴는 성격이 다르다 — 붙여 놓으면 드롭다운의 연장으로
+    # 보인다. 선을 긋지 않고 여백으로만 나눈다 (§78).
+    "<div style='margin-top:18px;'>"
     + _uk.nav_list(_NAV_MAIN, active='top', theme=_theme)
-    + _uk.nav_groups(_NAV_SUB, theme=_theme),
+    + _uk.nav_groups(_NAV_SUB, theme=_theme)
+    + "</div>",
     unsafe_allow_html=True)
 st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 if st.sidebar.button("처음으로", width='content', key="btn_home",
@@ -1571,7 +1585,8 @@ _uk.acc_css(_SB_STEPS, _sb_open, _sb_busy, _theme)
 # 아무것도 시작할 수 없다. 접힘 상태와 무관하게 항상 그린다.
 # (if/elif/else 체인이라 검색만 떼어낼 수 없다 — 종목 확정까지 함께 뺀다)
 
-_uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme, top=18)
+_uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme,
+                    top=6, at=_SB_PICK)
 
 if 'search_text_input' not in st.session_state:
     st.session_state['search_text_input'] = ''
@@ -1580,7 +1595,7 @@ if 'pending_search' in st.session_state and st.session_state['pending_search']:
     st.session_state['search_text_input'] = st.session_state['pending_search']
     st.session_state['pending_search'] = ""
 
-search_text_input = st.sidebar.text_input(
+search_text_input = _SB_PICK.text_input(
     '종목명 일부 또는 티커 입력',
     key='search_text_input',
     placeholder='예: 하이닉스, 타이어, 건설, 페이, 포스코, 073240...',
@@ -1591,7 +1606,7 @@ matched_stocks = []
 if search_text_input.strip():
     # 네이버 조회가 섞여 있어 1~2초 걸린다. 아무 표시도 없으면 멈춘 것처럼
     # 보이므로 검색 중임을 사이드바에 그대로 알린다.
-    _sp = st.sidebar.empty()
+    _sp = _SB_PICK.empty()
     _sp.markdown(
         f"<div style='display:flex; align-items:center; gap:8px; "
         f"padding:8px 2px; font-size:12px; color:{_TOK['tx3']};'>"
@@ -1621,19 +1636,19 @@ if search_text_input.strip():
     _sp.empty()          # 결과가 나오면 조용히 사라진다
 
 if matched_stocks:
-    st.sidebar.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
-    selected_from_matches = st.sidebar.selectbox("검색 종목 선택", matched_stocks)
+    _SB_PICK.markdown(f"'{search_text_input}' 일치 {len(matched_stocks)}개 — 골라 주세요")
+    selected_from_matches = _SB_PICK.selectbox("검색 종목 선택", matched_stocks)
     final_query = selected_from_matches
 elif search_text_input.strip():
     final_query = search_text_input.strip()
 else:
-    st.sidebar.caption("시가총액 상위에서 고르기")
+    _SB_PICK.caption("시가총액 상위에서 고르기")
     # 종목 목록을 코드에 박아두지 않는다 — 시총 상위에서 매번 가져온다
     if 'quick_top' not in st.session_state:
         st.session_state['quick_top'] = engine_init.fetch_market_cap_top(10)
     QUICK_PLACEHOLDER = "--- 시총 상위 종목 선택 ---"     # 안내문구 (검색어로 넘기지 않는다)
     quick_select_options = [QUICK_PLACEHOLDER] + st.session_state['quick_top']
-    selected_quick_item = st.sidebar.selectbox("시총 상위 퀵 선택", quick_select_options)
+    selected_quick_item = _SB_PICK.selectbox("시총 상위 퀵 선택", quick_select_options)
 
     if st.session_state.get('selected_ticker'):
         final_query = st.session_state['selected_ticker']

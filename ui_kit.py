@@ -424,18 +424,21 @@ def progress(done: int, total: int = 0, label: str = '',
 
 
 def sidebar_section(title: str, sub: str = '', theme: str = 'dark',
-                    top: int = 26) -> None:
+                    top: int = 26, at=None) -> None:
     """
     사이드바 구역 라벨 — 본문 섹션보다 한 단계 조용하다.
 
     구분선(---)을 쓰지 않는다. 사이드바에 가로선을 그으면 좁은 폭에서 선만
     눈에 남고 내용이 밀린다. 대신 위 여백과 작은 대문자 라벨로 나눈다.
+
+    at: 그릴 자리(st.sidebar.container()). 스트림릿은 **호출 순서대로** 그리므로
+        코드를 옮기지 않고 위치만 바꾸려면 미리 잡아 둔 자리를 넘긴다.
     """
     t = tokens(theme)
     s = (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx3']}; "
          f"line-height:1.5; word-break:keep-all;'>{_esc(sub)}</p>"
          if sub else '')
-    st.sidebar.markdown(
+    (at or st.sidebar).markdown(
         f"<div style='margin:{top}px 0 8px 0;'>"
         f"<p style='margin:0; font-size:12px; font-weight:600; "
         f"letter-spacing:0.06em; color:{t['tx2']};'>{_esc(title)}</p>{s}</div>",
