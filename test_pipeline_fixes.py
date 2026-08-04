@@ -4724,6 +4724,98 @@ check("퍼널 단계 수치를 보여 준다 (관심지표 계산 실제 개수)
       '_deep_done' in _w96 and '_deep_cap' in _w96)
 
 
+section("97. 추천 카드 재설계 — 가격 순서·기준 분리·아이콘 한 세트")
+
+import ui_kit as _uk97
+_w97 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_u97 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+_p97 = open(_os.path.join(PROJ, "premarket.py"), encoding='utf-8').read()
+
+
+def _row97(h, label):
+    """가격 표의 그 줄이 실제로 있는가 — 안내 문구의 낱말과 섞이면 안 된다."""
+    return f">{label}</div>" in h
+
+
+_C97 = {
+    'pos': dict(state='pos', state_label='오늘 사도 되는 종목', name='가',
+                code='000001', asset_ko='주식', score=62, price=842000,
+                rec_buy=821400, rec_basis='-2.4% · 0.3σ · 가까움',
+                target=869900, target_basis='권장가 기준', stop=767300,
+                stop_basis='권장가 기준', say='설명', news='뉴스', hit='적중'),
+    'warn': dict(state='warn', state_label='사실상 관망', name='나',
+                 code='000002', asset_ko='주식', score=49, price=243500,
+                 rec_buy=126452, rec_basis='-48.1% · 1.82σ · 멀다',
+                 target=136920, target_basis='권장가 기준', stop=111480,
+                 stop_basis='권장가 기준', dim_levels=True, say='설명',
+                 news='뉴스', hit='적중'),
+    'hold': dict(state='hold', state_label='판단 보류', name='다',
+                 code='000003', asset_ko='주식', score=59, price=26150,
+                 rec_buy=None, rec_na='미산출', say='설명', news='뉴스',
+                 hit='적중'),
+    'neg': dict(state='neg', state_label='오늘 사면 안 되는 종목', name='라',
+                code='000004', asset_ko='주식', score=41, price=34850,
+                rec_buy=None, rec_na='차단됨', say='설명', hit='적중'),
+}
+
+for _th97 in ('dark', 'light'):
+    for _k97, _c97 in _C97.items():
+        _h97 = _uk97.reco_card(_c97, theme=_th97)
+        check(f"[{_th97}/{_k97}] 카드에 현재가가 있다", _row97(_h97, '현재가'))
+        check(f"[{_th97}/{_k97}] 카드에 권장 매수가가 있다",
+              _row97(_h97, '권장 매수가'))
+        # 진입 기준이 없으면 목표·손절을 아예 감춘다 (참고값을 실행 가격 자리에 두지 않는다)
+        _want97 = bool(_c97.get('rec_buy'))
+        check(f"[{_th97}/{_k97}] 목표가 표시={_want97} 규칙",
+              _row97(_h97, '1차 목표가') == _want97)
+        check(f"[{_th97}/{_k97}] 손절가 표시={_want97} 규칙",
+              _row97(_h97, '손절가') == _want97)
+        # 순서는 늘 현재가 → 권장 → 목표 → 손절
+        check(f"[{_th97}/{_k97}] 현재가가 권장보다 위에 온다",
+              _h97.index('>현재가</div>') < _h97.index('>권장 매수가</div>'))
+        if _want97:
+            check(f"[{_th97}/{_k97}] 권장 → 목표 → 손절 순서",
+                  _h97.index('>권장 매수가</div>') < _h97.index('>1차 목표가</div>')
+                  < _h97.index('>손절가</div>'))
+        check(f"[{_th97}/{_k97}] 이모지를 쓰지 않는다",
+              not _re.search('[\U0001F300-\U0001FAFF]', _h97))
+        check(f"[{_th97}/{_k97}] 테두리를 쓰지 않는다 (§78)",
+              'border:' not in _h97 and 'border-top:' not in _h97)
+
+# 카드에 현재가 기준(보유자) 목표·손절을 섞지 않는다
+check("카드의 목표·손절은 권장가 기준만 쓴다",
+      "'target': e_t1 if rec else None" in _w97
+      and "'stop': e_stop if rec else None" in _w97)
+check("보유자 기준은 경고 상자 한 줄로만 안내한다",
+      "보유 중이시면 기준이 다릅니다" in _w97 and 'hold_note' in _w97)
+# 소스에서는 파이썬 문자열 이어붙이기로 나뉘어 있다 — 조각으로 확인한다
+check("진입 기준이 없으면 목표·손절을 감춘다고 안내한다",
+      '진입 기준이 없어 목표가·손절가를 표시하지' in _w97
+      and '지금은 신규 매수 판단을 보류합니다' in _w97)
+
+# premarket 이 진입가 기준 레벨과 도달 가능성을 실어 나른다
+for _k97 in ('entry_target_1st', 'entry_stop_price', 'entry_rr',
+             'rec_buy_sigma', 'rec_buy_reach'):
+    check(f"premarket 이 {_k97} 를 담는다", f"'{_k97}':" in _p97)
+
+# 아이콘 — Lucide 한 세트, 규격 통일
+for _ic97 in ('CircleDollarSign', 'ArrowDownToLine', 'Target', 'ShieldAlert',
+              'ShieldCheck', 'Clock3', 'Newspaper', 'ChartNoAxesCombined',
+              'TriangleAlert', 'CalendarClock'):
+    check(f"아이콘 {_ic97} 가 있다", _ic97 in _uk97._ICONS)
+check("모든 아이콘이 같은 규격으로 그려진다 (24 그리드·선 2·둥근 끝)",
+      "viewBox='0 0 24 24'" in _u97 and "stroke-width='2'" in _u97
+      and "stroke-linecap='round'" in _u97)
+check("아이콘 크기는 16~18px 안 (카드 17 · 근거 16)",
+      "_icon(icon, t['tx3'] if muted else (color or t['tx2']), 17)" in _u97
+      and "_icon(icon, color or t['tx3'], 16)" in _u97)
+
+# 이전 인라인 카드가 남아 있지 않은가 (킷으로만 그린다)
+check("추천 카드를 킷 컴포넌트로만 그린다",
+      '_uk.reco_card(' in _w97
+      and "min-height:236px" not in _w97)
+
+
 print()
 print("=" * 72)
 if FAILURES:

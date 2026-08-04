@@ -1,12 +1,51 @@
 {
  "axes": {
-  "model": "v2026.08.04.8",
+  "model": "v2026.08.04.11",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.11",
+   "previous": "v2026.08.04.10",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "추천 카드 배치를 한 줄 3개로 — 5개를 우겨 넣으면 폭 280px 로 줄어 '242,500원'의 원이 잘리고 종목명이 어색하게 접혔다",
+   "note": "",
+   "created_at": "2026-08-04T05:06:21+00:00",
+   "effective_from": "2026-08-04"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.10",
+   "previous": "v2026.08.04.9",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "카드 아이콘을 Lucide 한 세트로 통일 — CircleDollarSign·ArrowDownToLine·Target·ShieldAlert·ShieldCheck·Clock3·Newspaper·ChartNoAxesCombined·TriangleAlert·CalendarClock. 24 그리드·선 2·둥근 끝, 카드 17px·근거 16px",
+   "note": "",
+   "created_at": "2026-08-04T05:06:21+00:00",
+   "effective_from": "2026-08-04"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.9",
+   "previous": "v2026.08.04.8",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "추천 카드 전면 재설계 — 가격을 현재가→권장→목표→손절 고정 순서로 세우고 각 값 아래에 '어느 기준인지'를 붙임. 카드의 목표·손절은 권장가 기준만 쓰고 보유자(현재가) 기준은 경고 상자 한 줄로 분리. 권장가 미산출이면 목표·손절을 아예 감춤(참고값을 실행 가격 자리에 두지 않음). 권장가가 2σ 넘게 멀면 흐리게",
+   "note": "",
+   "created_at": "2026-08-04T05:06:21+00:00",
+   "effective_from": "2026-08-04"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

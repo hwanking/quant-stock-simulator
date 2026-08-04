@@ -110,6 +110,34 @@ _ICONS = {
             'M13.73 21a2 2 0 01-3.46 0',
     'help': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
             'M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01',
+    # ── 추천 카드용 (Lucide 이름 그대로) ──────────────────────────────
+    #  한 세트로만 쓴다. 의미가 모호하면 아이콘을 붙이지 않는다.
+    'CircleDollarSign': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
+                        'M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6',
+    'ArrowDownToLine': 'M12 17V3M6 11l6 6 6-6M19 21H5',
+    'Target': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
+              'M12 18a6 6 0 100-12 6 6 0 000 12z'
+              'M12 14a2 2 0 100-4 2 2 0 000 4z',
+    'ShieldAlert': 'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01'
+                   'C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72'
+                   'a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'
+                   'M12 8v4M12 16h.01',
+    'ShieldCheck': 'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01'
+                   'C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72'
+                   'a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'
+                   'M9 12l2 2 4-4',
+    'Clock3': 'M12 22a10 10 0 100-20 10 10 0 000 20zM12 6v6h4',
+    'Newspaper': 'M15 18h-5M18 14h-8'
+                 'M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16'
+                 'a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2',
+    'ChartNoAxesCombined': 'M12 16v5M16 14v7M20 10v11'
+                           'M22 3l-8.65 8.65a.5.5 0 0 1-.7 0L9.35 8.35'
+                           'a.5.5 0 0 0-.7 0L2 15M4 18v3M8 14v7',
+    'TriangleAlert': 'M21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14'
+                     'A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4M12 17h.01',
+    'CalendarClock': 'M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5'
+                     'M16 2v4M8 2v4M3 10h5'
+                     'M22 16a6 6 0 10-12 0 6 6 0 0012 0zM16 14v2l1 1',
 }
 
 
@@ -692,3 +720,146 @@ def global_css(theme: str = 'dark') -> str:
         .stMainBlockContainer {{ max-width: 1800px !important; }}
     }}
     """
+
+
+# ── 추천 카드 ────────────────────────────────────────────────────────────
+# 시안: scratchpad/gaeum-card-spec.html
+#
+# 설계 원칙 (하나라도 어기면 사용자가 값을 잘못 읽는다):
+#   1. 가격 네 줄은 **늘 같은 순서·같은 자리** — 현재가 → 권장 → 목표 → 손절.
+#      카드마다 순서가 바뀌면 눈이 매번 다시 읽어야 한다.
+#   2. 값 아래에 **어느 기준인지** 붙인다. 기준이 다른 값이 한 표에 서도
+#      섞여 읽히지 않게 하는 유일한 방법이다.
+#   3. 권장가가 멀면(2σ 초과) 목표·손절을 흐리게 — 닿지 않을 값을 진하게 두면
+#      실행 가격처럼 보인다.
+#   4. 진입 기준이 없으면 목표·손절을 **아예 감춘다**. 참고값을 실행 가격
+#      자리에 두지 않는다.
+#   5. 보유자 기준은 카드에 섞지 않고 경고 상자로 한 줄만.
+#   6. 테두리 없음 — 상태는 상단 3px 스트라이프로만 (§78).
+
+def _won(v, na='—'):
+    try:
+        return f"{float(v):,.0f}원"
+    except (TypeError, ValueError):
+        return na
+
+
+def _price_row(icon, label, value, basis='', color=None, muted=False,
+               big=False, theme='dark'):
+    t = tokens(theme)
+    col = t['tx3'] if muted else (color or t['tx1'])
+    ic = _icon(icon, t['tx3'] if muted else (color or t['tx2']), 17)
+    sub = (f"<span style='display:block; font-size:12px; font-weight:400; "
+           f"color:{t['tx3']}; margin-top:1px;'>{_esc(basis)}</span>"
+           if basis else '')
+    return (
+        f"<div style='display:contents;'>"
+        f"<div style='padding:7px 0;'>{ic}</div>"
+        f"<div style='padding:7px 0; font-size:12px; color:{t['tx2']}; "
+        f"white-space:nowrap;'>{_esc(label)}</div>"
+        f"<div style='padding:7px 0; text-align:right; white-space:nowrap; "
+        f"font-size:{17 if big else 15}px; "
+        f"font-weight:{400 if muted else 700}; color:{col}; "
+        f"font-variant-numeric:tabular-nums;'>{value}{sub}</div>"
+        f"</div>")
+
+
+def _why_row(icon, text, color=None, theme='dark'):
+    t = tokens(theme)
+    return (f"<div style='display:flex; align-items:center; gap:7px;'>"
+            f"{_icon(icon, color or t['tx3'], 16)}"
+            f"<span>{_esc(text)}</span></div>")
+
+
+def reco_card(p: dict, theme: str = 'dark') -> str:
+    """
+    오늘의 추천·관망 카드 한 장.
+
+    p 에서 읽는 것: state(pos|warn|hold|neg) · state_label · name · code ·
+    asset_ko · score · conf · price · rec_buy · rec_basis · target ·
+    target_basis · stop · stop_basis · dim_levels(bool) · say · hold_note ·
+    news · hit · horizon · risk
+    없는 값은 그리지 않는다 — 지어내지 않는다.
+    """
+    t = tokens(theme)
+    STATE = {'pos': (t['pos'], 'ShieldCheck'),
+             'warn': (t['warn'], 'Clock3'),
+             'hold': (t['tx2'], 'Clock3'),
+             'neg': (t['neg'], 'TriangleAlert')}
+    col, sic = STATE.get(p.get('state', 'hold'), STATE['hold'])
+    stripe = col if p.get('state') != 'hold' else t['tx3']
+
+    head = (
+        f"<span style='display:inline-flex; align-items:center; gap:6px; "
+        f"background:{t['raised']}; color:{col}; font-size:12px; "
+        f"font-weight:700; padding:3px 9px; border-radius:7px; "
+        f"white-space:nowrap;'>{_icon(sic, col, 14)}"
+        f"{_esc(p.get('state_label', ''))}</span>")
+
+    meta = ' · '.join(str(x) for x in (
+        p.get('code'), p.get('asset_ko'),
+        (f"{p['score']}점" if p.get('score') is not None else None),
+        p.get('conf')) if x)
+
+    # 가격 — 늘 같은 순서. 없는 줄은 그리지 않는다.
+    dim = bool(p.get('dim_levels'))
+    rows = [_price_row('CircleDollarSign', '현재가', _won(p.get('price')),
+                       big=True, theme=theme)]
+    rows.append(_price_row(
+        'ArrowDownToLine', '권장 매수가',
+        _won(p['rec_buy']) if p.get('rec_buy') else _esc(p.get('rec_na', '미산출')),
+        p.get('rec_basis', ''),
+        color=(col if p.get('rec_buy') else None),
+        muted=not p.get('rec_buy'), theme=theme))
+    if p.get('target'):
+        rows.append(_price_row('Target', '1차 목표가', _won(p['target']),
+                               p.get('target_basis', ''),
+                               color=t['brand'], muted=dim, theme=theme))
+    if p.get('stop'):
+        rows.append(_price_row('ShieldAlert', '손절가', _won(p['stop']),
+                               p.get('stop_basis', ''),
+                               color=t['up'], muted=dim, theme=theme))
+    prices = (f"<div style='background:{t['raised']}; border-radius:11px; "
+              f"padding:4px 12px; display:grid; "
+              f"grid-template-columns:17px 1fr auto; gap:0 10px; "
+              f"align-items:center;'>{''.join(rows)}</div>")
+
+    say = (f"<p style='margin:0; font-size:13px; line-height:1.65; "
+           f"color:{t['tx1']};'>{p['say']}</p>" if p.get('say') else '')
+
+    box = ''
+    if p.get('hold_note'):
+        box = (f"<div style='background:{t['raised']}; border-radius:10px; "
+               f"padding:9px 11px; display:flex; gap:8px; "
+               f"align-items:flex-start; font-size:12px; color:{t['tx2']}; "
+               f"line-height:1.6;'>{_icon('TriangleAlert', t['warn'], 16)}"
+               f"<span>{p['hold_note']}</span></div>")
+
+    whys = []
+    if p.get('risk'):
+        whys.append(_why_row('TriangleAlert', p['risk'], t['neg'], theme))
+    if p.get('news'):
+        whys.append(_why_row('Newspaper', p['news'], theme=theme))
+    if p.get('hit'):
+        whys.append(_why_row('ChartNoAxesCombined', p['hit'], theme=theme))
+    if p.get('horizon'):
+        whys.append(_why_row('CalendarClock', p['horizon'], theme=theme))
+    why = (f"<div style='display:flex; flex-direction:column; gap:5px; "
+           f"font-size:12px; color:{t['tx2']};'>{''.join(whys)}</div>"
+           if whys else '')
+
+    parts = [x for x in (
+        head,
+        f"<div><p style='margin:0; font-size:17px; font-weight:700; "
+        f"color:{t['tx1']}; letter-spacing:-0.01em; text-wrap:balance;'>"
+        f"{_esc(p.get('name', ''))}</p>"
+        f"<p style='margin:0; font-size:12px; color:{t['tx2']}; "
+        f"font-variant-numeric:tabular-nums;'>{_esc(meta)}</p></div>",
+        prices, say, box, why) if x]
+
+    return (
+        f"<div style='background:{t['card']}; border-radius:14px; "
+        f"overflow:hidden;'>"
+        f"<div style='height:3px; background:{stripe};'></div>"
+        f"<div style='padding:16px 18px 18px; display:flex; "
+        f"flex-direction:column; gap:12px;'>{''.join(parts)}</div></div>")

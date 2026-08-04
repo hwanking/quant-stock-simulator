@@ -2485,10 +2485,110 @@ if _pmr:
                    if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
     _picks_ban = [p for p in _picks_all
                   if p['reco_class'] == '오늘은 사면 안 되는 종목']
+    _ASSET_KO = {'STOCK': '주식', 'ETF': 'ETF', 'ETF_LEV': '레버리지 ETF',
+                 'ETF_INV': '인버스 ETF'}
+
+    def _build_reco_card(p, news_txt, conf_txt):
+        """
+        스캔 결과 한 건 → 카드가 읽을 값 묶음.
+
+        여기서 지키는 것 (하나라도 어기면 사용자가 값을 잘못 읽는다):
+          · 가격 순서는 늘 현재가 → 권장 → 목표 → 손절
+          · 목표·손절은 **권장가 기준**만 카드에 올린다. 현재가 기준(보유자용)은
+            같은 카드에 섞지 않고 경고 상자로 한 줄만 안내한다.
+          · 권장가가 없으면 목표·손절을 **아예 감춘다** — 참고값을 실행 가격
+            자리에 두지 않는다.
+          · 권장가가 멀면(2σ 초과) 목표·손절을 흐리게 — 닿지 않을 값을
+            진하게 두면 실행 가격처럼 보인다.
+        """
+        cls = str(p.get('reco_class') or '')
+        price, rec = p.get('price'), p.get('rec_buy')
+        e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
+        sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
+        gap = ((float(price) / float(rec) - 1) * 100
+               if (price and rec) else None)
+        far = bool(sig is not None and sig > 2.0) or bool(
+            gap is not None and gap >= 30)
+
+        if not rec:
+            state = 'neg' if '사면 안' in cls else 'hold'
+        elif '사도 되는' in cls:
+            state = 'pos'
+        elif '사면 안' in cls:
+            state = 'neg'
+        else:
+            state = 'warn'
+
+        label = ('사실상 관망' if (far and rec) else
+                 cls.replace('오늘은 ', '오늘 ') or '판단 보류')
+
+        # 쉬운 설명 — 현재 위치를 한 문장으로
+        if rec and gap is not None and gap > 0:
+            say = (f"현재가가 권장 매수가보다 <b>{gap:.1f}%</b> 높습니다. "
+                   + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
+                      "<b>지금은 기다리는 편</b>이 낫습니다."
+                      if far else "조금만 기다리면 매수 구간에 닿습니다."))
+        elif rec:
+            say = "현재가가 이미 매수 구간 안에 있습니다."
+        else:
+            say = str(p.get('easy_line') or '')
+
+        rec_basis = ''
+        if rec and gap is not None:
+            rec_basis = f"{-gap:+.1f}%"
+            if sig is not None:
+                rec_basis += f" · {sig}σ · {reach}"
+
+        # 보유자 기준은 섞지 않는다 — 있으면 한 줄 안내로만
+        hold_note = ''
+        if p.get('target') and p.get('stop') and rec:
+            hold_note = (
+                f"보유 중이시면 기준이 다릅니다 — 현재가 기준 1차 목표 "
+                f"{float(p['target']):,.0f}원 · 손절 {float(p['stop']):,.0f}원. "
+                f"<b>분석 보기</b>에서 확인하세요.")
+        elif not rec:
+            hold_note = ("<b>진입 기준이 없어 목표가·손절가를 표시하지 "
+                         "않습니다.</b> 참고값은 분석 보기에서 확인하세요. "
+                         "지금은 신규 매수 판단을 보류합니다.")
+
+        _cb = p.get('confidence_band') or {}
+        return {
+            'state': state, 'state_label': label,
+            'name': p.get('name'), 'code': p.get('code'),
+            'asset_ko': _ASSET_KO.get(str(p.get('asset_type')),
+                                      p.get('asset_type')),
+            'score': p.get('score'),
+            'conf': (f"신뢰도 {p['confidence']:.0f}"
+                     if isinstance(p.get('confidence'), (int, float)) else None),
+            'price': price,
+            'rec_buy': rec, 'rec_basis': rec_basis,
+            'rec_na': ('차단됨' if '사면 안' in cls else '미산출'),
+            'target': e_t1 if rec else None,
+            'target_basis': ('권장가 기준'
+                             + (f" · 손익비 {p['entry_rr']}:1"
+                                if p.get('entry_rr') else '')) if rec else '',
+            'stop': e_stop if rec else None,
+            'stop_basis': '권장가 기준' if rec else '',
+            'dim_levels': far,
+            'say': say, 'hold_note': hold_note,
+            'news': ' · '.join(news_txt) if news_txt else '특이 뉴스 없음',
+            'hit': conf_txt,
+            'horizon': (f"예상 보유 {p['horizon_days']}거래일"
+                        if p.get('horizon_days') else None),
+        }
+
     if not _picks_show:
         st.info("오늘은 사도 되는·기다릴 후보가 없습니다 — 전 종목이 제외됐습니다. "
                 "없는 날은 관망이 결론입니다 (아래 제외 목록에서 이유를 확인하세요).")
-    _pm_cols = st.columns(min(5, max(1, len(_picks_show) or 1)))
+    # 한 줄에 5개를 우겨 넣으면 카드 폭이 ~280px 로 줄어 '242,500원'의 원이
+    # 잘리고 종목명이 어색하게 접힌다. 한 줄 3개로 두면 ~450px 이 나온다.
+    # 스트림릿 컬럼은 자동 줄바꿈이 없으므로 직접 묶어서 여러 줄로 만든다.
+    _PER_ROW = 3
+    _pm_cols = []
+    for _s in range(0, len(_picks_show) or 1, _PER_ROW):
+        _n = min(_PER_ROW, max(1, len(_picks_show) - _s))
+        _row = st.columns(_PER_ROW)          # 마지막 줄도 폭을 맞춘다
+        _pm_cols.extend(_row[:_n])
     for _pi, _p in enumerate(_picks_show):
         _cc = _CLS_COLOR.get(_p.get('reco_class'), '#9DAABC')
         _cb_p = _p.get('confidence_band') or {}
@@ -2514,22 +2614,8 @@ if _pmr:
                              f"color:{'#F2B84B' if _gap_pct >= 7 else _TOK['tx2']};'>"
                              f"기준가가 권장보다 {_gap_pct:+.1f}% 위{_gap_warn}</p>")
         with _pm_cols[_pi]:
-            st.markdown(f"""
-            <div style='background:{_TOK['surface']}; border-top:3px solid {_cc}; border-radius:12px;
-                        padding:16px 16px; min-height:236px;'>
-              <p style='margin:0;'><span style='background:{_TOK['hover']}; color:{_cc};
-                 font-size:12px; font-weight:700; padding:2px 8px;
-                 border-radius:6px;'>{_p.get('reco_class')}</span></p>
-              <p style='margin:8px 0 1px 0; font-size:16px; font-weight:700;
-                 color:{_TOK['tx1']};'>{_p.get('name')}</p>
-              <p style='margin:0; font-size:12px; color:{_TOK['tx2']};'>{_p.get('code')} · {_p.get('asset_type')} · {_p.get('score')}점</p>
-              <p style='margin:8px 0 8px 0; font-size:13px; font-weight:700;
-                 color:{_cc}; line-height:1.45;'>{_p.get('easy_line')}</p>{_gap_html}
-              <p style='margin:0; font-size:13px; color:{_TOK['tx2']}; line-height:1.7;'>
-                권장 <b style='color:{_TOK['tx1']};'>{'{:,.0f}원'.format(_p['rec_buy']) if _p.get('rec_buy') else '미산출'}</b><br>
-                목표 {'{:,.0f}원'.format(_p['target']) if _p.get('target') else '—'} · 손절 {'{:,.0f}원'.format(_p['stop']) if _p.get('stop') else '—'}<br>
-                {' · '.join(_news_txt) if _news_txt else '특이 뉴스 없음'}<br>{_conf_txt}</p>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(_uk.reco_card(_build_reco_card(_p, _news_txt, _conf_txt),
+                                      theme=_theme), unsafe_allow_html=True)
             # 카드 클릭 → 아래 종목 분석 화면이 이 종목으로 전환된다
             if st.button("분석 보기", key=f"pm_go_{_p.get('symbol')}_{_pi}",
                          width='stretch'):

@@ -106,9 +106,21 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
             'rec_buy': fs.get('recommended_buy_price'),
             'entry_zone': fs.get('entry_zone'),
             'chase_max': fs.get('buy_entry_max'),
+            # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다
             'target': fs.get('target_tech_1st'),
             'target2': fs.get('target_tech_2nd'),
             'stop': fs.get('stop_loss_price'),
+            # 권장 매수가 기준 (신규 매수자용) — 카드의 목표·손절은 이쪽이다.
+            # 둘을 같은 카드에 섞으면 "126,452원에 사서 213,955원에 손절"
+            # 같은 말이 된다 (라운드 22 실측: 17종목 중 11종목이 그랬다).
+            'entry_target_1st': fs.get('entry_target_1st'),
+            'entry_stop_price': fs.get('entry_stop_price'),
+            'entry_rr': fs.get('entry_rr'),
+            # 도달 가능성 — 권장가가 정말 닿는 가격인가 (라운드 23)
+            'rec_buy_sigma': fs.get('rec_buy_sigma'),
+            'rec_buy_reach': fs.get('rec_buy_reach'),
+            'rec_buy_drop_pct': fs.get('rec_buy_drop_pct'),
+            'confidence': fs.get('analysis_confidence'),
             'horizon_days': 20,
             'entry_candidate': bool(r.get('entry_candidate')),
             'm10_above': bool(r.get('m10_above')),
