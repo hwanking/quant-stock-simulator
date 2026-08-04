@@ -2341,21 +2341,27 @@ if st.session_state.get('show_screener', False):
                         _ratio_txt = (f" · 거래대금 {_c['turnover_ratio']:.1f}배"
                                       f"({_c.get('turnover_basis', '')})")
 
+                    # 추천 카드와 같은 킷으로 그린다 — 예전에는 이 목록만
+                    # 옛 인라인 HTML(이모지 뱃지·왼쪽 색 테두리)이라 한 화면에
+                    # 두 가지 디자인이 보였다.
+                    _BK = {'🏆 실전 추천 후보': ('실전 추천 후보', 'pos'),
+                           '🔥 관심 급증·추격주의': ('관심 급증 · 추격 주의', 'warn'),
+                           '🌱 조용한 선행 후보': ('조용한 선행 후보', 'info'),
+                           '👀 관찰 후보': ('관찰 후보', 'mute'),
+                           '🚫 추천 제외': ('추천 제외', 'neg')}
+                    _bk_ko, _bk_kind = _BK.get(_bucket, (str(_bucket), 'mute'))
                     _cc1, _cc2 = st.columns([3, 1])
                     with _cc1:
-                        st.markdown(
-                            f"<div style='background:#161D2A;border-left:4px solid {_bcol};"
-                            f"border-radius:8px;padding:8px 16px;margin-bottom:8px;'>"
-                            f"<b style='color:#F3F6FA;font-size:16px;'>{_r['name']}</b> "
-                            f"<span style='color:#9DAABC;font-size:13px;'>{_r['code']}</span><br>"
-                            f"<span style='color:{_bcol};font-weight:700;font-size:13px;'>{_bucket}</span><br>"
-                            f"<span style='color:#9DAABC;font-size:13px;'>"
-                            f"시장 관심점수 <b>{_a['adjusted_attention_score']:.0f}</b>"
-                            f"<span style='color:#9DAABC;'> ({_raw_txt})</span>"
-                            f" · 퀀트 행동점수 <b>{fmt_num(_act, ',.0f')}</b></span><br>"
-                            f"<span style='color:#9DAABC;font-size:13px;'>"
-                            f"{_r.get('selection_reason', '')}{_ratio_txt}</span>"
-                            f"{_pen_html}</div>", unsafe_allow_html=True)
+                        st.markdown(_uk.attention_row({
+                            'name': _r['name'], 'code': _r['code'],
+                            'bucket': _bk_ko, 'bucket_kind': _bk_kind,
+                            'attention': f"{_a['adjusted_attention_score']:.0f}",
+                            'raw': _raw_txt,
+                            'action': fmt_num(_act, ',.0f'),
+                            'reason': (f"{_r.get('selection_reason', '')}"
+                                       f"{_ratio_txt}").strip(' ·'),
+                            'warns': list(_a.get('penalty_reasons') or []),
+                        }, theme=_theme), unsafe_allow_html=True)
                     with _cc2:
                         if st.button("분석 →", key=f"att_{_r['code']}",
                                      width='stretch'):
@@ -2516,15 +2522,20 @@ if _pmr:
     # 리포트는 사후 선택 방지를 위해 동결한다. 그런데 엔진을 바꾸면 동결된
     # 값이 낡는다 — 실제로 권장 매수가 산식을 바꿨는데 카드가 옛 값을
     # 그대로 보여 줬다. 낡았으면 화면이 먼저 말해야 한다.
-    if _pm_ver and _pm_ver != _VER_NOW['model']:
-        st.warning(f"이 리포트는 엔진 **{_pm_ver}** 로 만들어졌고 현재 엔진은 "
-                   f"**{_VER_NOW['model']}** 입니다. 아래 가격은 예전 산식 "
-                   f"기준이라 지금 계산과 다를 수 있습니다 — 사이드바에서 "
-                   f"스캔을 다시 실행하면 새 엔진으로 만듭니다.")
-    elif not _pm_ver:
-        st.warning("이 리포트에는 만든 엔진 버전이 기록돼 있지 않습니다 "
-                   "(예전 형식). 지금 엔진과 다를 수 있으니 스캔을 다시 "
-                   "실행하는 편이 안전합니다.")
+    # 낡은 리포트는 '경고를 달고 계속 보여 주기'로 끝내지 않는다. 종전에는
+    # "다시 스캔하세요"라고만 말했는데, 정작 리포트 키가 날짜뿐이라 다시
+    # 스캔해도 같은 파일이 재사용됐다 — 실행 불가능한 안내였다.
+    # 이제 리포트는 날짜×엔진으로 저장되므로, 엔진이 바뀌면 다시 스캔이
+    # 실제로 새 리포트를 만든다.
+    _pm_stale = bool(_pmr.get('stale_engine')) or not _pm_ver
+    if _pm_stale:
+        _pm_old = str(_pmr.get('stale_engine') or _pm_ver or '미상')
+        st.warning(
+            f"아래 리포트는 엔진 **{_pm_old}** 로 만든 것이고 현재 엔진은 "
+            f"**{_VER_NOW['model']}** 입니다. 가격·점수가 지금 산식과 다릅니다."
+            f"  \n**사이드바에서 스캔을 다시 실행하면 새 엔진으로 다시 만듭니다** "
+            f"(리포트를 날짜별이 아니라 날짜×엔진으로 저장하도록 고쳤습니다 — "
+            f"이제 다시 스캔이 실제로 갱신됩니다).")
     _CLS_COLOR = {'오늘 사도 되는 종목': '#35C98B', '조건부로 사도 되는 종목': '#4C8DFF',
                   '오늘은 기다려야 하는 종목': '#F2B84B', '오늘은 사면 안 되는 종목': '#ff453a'}
 
@@ -2571,6 +2582,16 @@ if _pmr:
         cls = str(p.get('reco_class') or '')
         price, rec = p.get('price'), p.get('rec_buy')
         e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
+        # 정합 가드 (라운드 30) — 동결 리포트는 옛 엔진 값을 그대로 들고
+        # 있어서, 손절이 매수가 위이거나 목표가 매수가 아래인 카드가 나온다
+        # (실측: GS 92,011 매수에 손절 100,775 · NAVER 214,733 매수에 목표
+        # 172,895). 성립하지 않는 문장은 **표시하지 않는다** — 경고만 달고
+        # 그대로 보여 주면 사용자는 그 숫자를 읽는다.
+        if rec:
+            if e_stop is not None and float(e_stop) >= float(rec):
+                e_stop = None
+            if e_t1 is not None and float(e_t1) <= float(rec):
+                e_t1 = None
         sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
         gap = ((float(price) / float(rec) - 1) * 100
                if (price and rec) else None)
@@ -2664,7 +2685,19 @@ if _pmr:
             'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
         }
 
-    if not _picks_show:
+    # ── 낡은 리포트는 가격을 화면에 두지 않는다 (라운드 30) ──────────────
+    # 경고만 달고 카드를 그대로 보여 주면 사용자는 그 숫자를 읽는다. 실제로
+    # 옛 엔진 카드에는 성립하지 않는 값이 있었다(손절이 매수가 위 등).
+    # 파일은 그대로 남기고(사후 선택 방지 감사 흔적), **화면에서만 접는다.**
+    if _pm_stale and _picks_show:
+        st.caption("이 리포트가 추천했던 종목: "
+                   + ", ".join(f"{_p.get('name')}({_p.get('code')})"
+                               for _p in _picks_show)
+                   + " — 가격·점수는 옛 엔진 값이라 표시하지 않습니다. "
+                     "다시 스캔하면 현재 엔진으로 다시 만듭니다.")
+        _picks_show = []
+
+    if not _picks_show and not _pm_stale:
         st.info("오늘은 사도 되는·기다릴 후보가 없습니다 — 전 종목이 제외됐습니다. "
                 "없는 날은 관망이 결론입니다 (아래 제외 목록에서 이유를 확인하세요).")
     # 한 줄에 5개를 우겨 넣으면 카드 폭이 ~280px 로 줄어 '242,500원'의 원이
@@ -4699,6 +4732,29 @@ if _issues_stock:
             } for i in _issues_stock]), width='stretch',
                 hide_index=True)
 
+# ── 국면 게이트 (라운드 27) ────────────────────────────────────────────
+# 6칸 성적을 '모델 성적' 화면에만 두지 않고, 판단이 실제로 깎인 자리에서
+# 그 사실과 근거를 같이 보여 준다. 안 깎였으면 아무 말도 하지 않는다.
+_rg = four_scores.get('regime_gate') or {}
+if _rg.get('cell') and (_rg.get('capped') or _rg.get('block_new')):
+    _rg_lines = []
+    if _rg.get('score_after') != _rg.get('score_before'):
+        _rg_lines.append(f"- 종합점수 {_rg['score_before']}점 → "
+                         f"**{_rg['score_after']}점** (국면 상한)")
+    if _rg.get('conf_after') != _rg.get('conf_before'):
+        _rg_lines.append(f"- 분석 신뢰도 {_rg['conf_before']} → "
+                         f"**{_rg['conf_after']}** (국면 상한)")
+    if (_rg.get('size_mult') or 1.0) < 1.0:
+        _rg_lines.append(f"- 제안 비중 **{_rg['size_mult']:.1f}배**로 축소")
+    if (_rg.get('stop_mult') or 1.0) < 1.0:
+        _rg_lines.append(f"- 손절 폭 **{_rg['stop_mult']:.1f}배**로 축소 "
+                         "(목표는 그대로 — 손실만 줄입니다)")
+    _rg_body = _rg['why'] + ("\n\n" + "\n".join(_rg_lines) if _rg_lines else "")
+    if _rg.get('block_new'):
+        st.error(f"**이 국면에서는 신규 매수를 하지 않습니다** — {_rg_body}")
+    else:
+        st.warning(f"**국면별 제한을 적용했습니다 ({_rg['level']})** — {_rg_body}")
+
 if verdict['vetoes']:
     st.error("**매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
              "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
@@ -6196,8 +6252,58 @@ with tab_pred:
 # [Section 8 & 8-1] 밸류에이션 및 적정가 (시장조정 펀더멘털 적정가 단일 체제)
 with tab_val:
     show_tab_verdict('valuation')
+
+    # ── 세 가격 축 (라운드 28) ──────────────────────────────────────────
+    # '적정가' 한 숫자가 지평이 다른 세 질문에 동시에 답하려다 26,350원짜리
+    # 종목에 21,218원이 권장 매수가로 붙었다. 축을 갈라서 먼저 보여 준다.
+    _AX = four_scores.get('price_axes') or {}
+    if _AX:
+        st.markdown("#### 가격은 하나가 아닙니다 — 질문이 셋이라서")
+        _ax_c1, _ax_c2, _ax_c3 = st.columns(3)
+        _b, _m, _e = (_AX.get('value_band') or {}, _AX.get('market_fair') or {},
+                      _AX.get('entry') or {})
+        with _ax_c1:
+            st.caption("① 이 기업의 값어치는? · 수년")
+            if _b.get('available'):
+                st.markdown(f"### {_b['low']:,.0f} ~ {_b['high']:,.0f}원")
+                st.caption(f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
+                           f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})")
+                st.caption(_b['basis'])
+            else:
+                st.markdown("### 미산출")
+                st.caption(_b.get('why', ''))
+        with _ax_c2:
+            st.caption("② 지금 시장이 매길 값은? · 수개월")
+            if _m.get('available'):
+                st.markdown(f"### {_m['price']:,.0f}원")
+                st.caption(_m['basis'])
+            else:
+                st.markdown("### 미산출")
+                st.caption(_m.get('why', ''))
+        with _ax_c3:
+            st.caption("③ 그래서 얼마에 사나? · 수일")
+            if _e.get('available'):
+                st.markdown(f"### {_e['price']:,.0f}원")
+                if _e.get('gap_pct') is not None:
+                    st.caption(f"현재가 대비 {_e['gap_pct']:+.1f}%"
+                               + (f" · 손절 {_e['stop']:,.0f}원 · 1차 목표 "
+                                  f"{_e['target1']:,.0f}원 (손익비 {_e['rr']})"
+                                  if _e.get('stop') and _e.get('target1') else ""))
+                st.caption(_e['basis'])
+            else:
+                st.markdown("### 미산출")
+                st.caption(_e.get('why', ''))
+        for _n in (_AX.get('notes') or []):
+            st.caption(f"· {_n}")
+        if not _AX.get('consistent'):
+            st.warning("세 축이 서로 어긋납니다 — 위 문구를 먼저 읽어 주세요.")
+        _pol = _AX.get('policy') or {}
+        if _pol.get('score_cap') is not None:
+            st.caption(f"판정 반영: {_pol.get('why', '')}")
+        st.divider()
+
     st.subheader(f"[{resolved_name}] - 시장조정 펀더멘털 적정가")
-    
+
     target_price = four_scores.get('target_fundamental', realtime_price)
     disp_price = four_scores.get('displayed_fair_value')
     prelim_range = four_scores.get('preliminary_range_str', '미산출')

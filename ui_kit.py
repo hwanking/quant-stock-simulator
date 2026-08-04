@@ -877,3 +877,58 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
         f"<div style='height:3px; background:{stripe};'></div>"
         f"<div style='padding:16px 18px 18px; display:flex; "
         f"flex-direction:column; gap:12px;'>{''.join(parts)}</div></div>")
+
+
+def attention_row(a: dict, theme: str = 'dark') -> str:
+    """
+    관심종목 후보 한 줄 — 추천 카드와 같은 표면·타이포·아이콘을 쓴다.
+
+    이 목록은 '지금 시장이 주목하는가'이고 추천 카드는 '지금 살 만한가'다.
+    둘은 다른 질문이라 카드 크기도 다르지만, **보이는 언어는 같아야** 한다.
+    예전에는 이 목록만 옛 인라인 HTML(이모지 뱃지·왼쪽 색 테두리)이라
+    같은 화면에서 두 가지 디자인이 보였다.
+
+    a: {name, code, bucket, bucket_kind, attention, raw, action, reason,
+        warns[]}
+    """
+    t = tokens(theme)
+    KIND = {'pos': (t['pos'], 'ShieldCheck'), 'warn': (t['warn'], 'Clock3'),
+            'info': (t['brand'], 'ChartNoAxesCombined'),
+            'mute': (t['tx2'], 'Clock3'), 'neg': (t['neg'], 'TriangleAlert')}
+    col, ic = KIND.get(a.get('bucket_kind', 'mute'), KIND['mute'])
+
+    warn = ''
+    if a.get('warns'):
+        warn = (f"<p style='margin:4px 0 0 0; font-size:12px; "
+                f"color:{t['warn']}; display:flex; align-items:center; "
+                f"gap:6px;'>{_icon('TriangleAlert', t['warn'], 14)}"
+                f"<span>{_esc(' · '.join(a['warns']))}</span></p>")
+
+    return (
+        f"<div style='background:{t['card']}; border-radius:12px; "
+        f"overflow:hidden; margin-bottom:8px;'>"
+        f"<div style='height:3px; background:{col};'></div>"
+        f"<div style='padding:10px 14px 12px;'>"
+        f"<div style='display:flex; align-items:baseline; gap:8px; "
+        f"flex-wrap:wrap;'>"
+        f"<span style='font-size:16px; font-weight:700; color:{t['tx1']};'>"
+        f"{_esc(a.get('name', ''))}</span>"
+        f"<span style='font-size:12px; color:{t['tx2']}; "
+        f"font-variant-numeric:tabular-nums;'>{_esc(a.get('code', ''))}</span>"
+        f"</div>"
+        f"<p style='margin:3px 0 0 0; font-size:13px; font-weight:700; "
+        f"color:{col}; display:flex; align-items:center; gap:6px;'>"
+        f"{_icon(ic, col, 15)}<span>{_esc(a.get('bucket', ''))}</span></p>"
+        f"<p style='margin:5px 0 0 0; font-size:13px; color:{t['tx2']}; "
+        f"font-variant-numeric:tabular-nums;'>"
+        f"시장 관심점수 <b style='color:{t['tx1']};'>{_esc(a.get('attention'))}"
+        f"</b>"
+        + (f" <span style='color:{t['tx3']};'>({_esc(a['raw'])})</span>"
+           if a.get('raw') else '')
+        + (f" · 퀀트 행동점수 <b style='color:{t['tx1']};'>"
+           f"{_esc(a.get('action'))}</b>" if a.get('action') else '')
+        + "</p>"
+        + (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx3']}; "
+           f"line-height:1.6;'>{_esc(a['reason'])}</p>"
+           if a.get('reason') else '')
+        + warn + "</div></div>")

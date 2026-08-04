@@ -2486,10 +2486,19 @@ _q53src = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').rea
 check("모멘텀 열위는 상한만 (승자 추격 가점 없음)",
       "momentum_cap = 64" in _q53src and "momentum_bonus" not in _q53src)
 
-# ② 변동성 관리 비중 — 10~100% 사이, 근거 문구 포함
+# ② 변동성 관리 비중 — 근거 문구 포함. 범위는 국면·레버리지 배수만큼 함께
+#    내려간다 (라운드 27). 바닥 10%를 배수 앞에 걸면 0.3배 제한이 무력화되므로
+#    바닥도 같은 배수를 받는다. 그래서 기대 범위는 고정 10~100 이 아니다.
 _sp53 = _fs53.get('suggested_position_pct')
+_sp53_lev = 0.5 if _fs53.get('asset_type') in ('ETF_LEV', 'ETF_INV') else 1.0
+_sp53_rg = min(1.0, float((_fs53.get('regime_gate') or {}).get('size_mult') or 1.0))
+_sp53_scale = _sp53_lev * _sp53_rg
 check("비중 제안 존재", _sp53 is not None)
-check("비중 제안 10~100% 범위", _sp53 is None or 10 <= _sp53 <= 100, str(_sp53))
+check("비중 제안이 배수 적용 범위 안",
+      _sp53 is None or (10.0 * _sp53_scale) - 0.5 <= _sp53 <= 100.0 * _sp53_scale,
+      f"{_sp53} (배수 {_sp53_scale:.2f} → 기대 "
+      f"{10.0 * _sp53_scale:.1f}~{100.0 * _sp53_scale:.0f})")
+check("국면 배수가 비중을 줄인다 (늘리지 않는다)", _sp53_rg <= 1.0)
 check("근거에 변동성·목표 명시", "목표 20%" in str(_fs53.get('suggested_position_basis')))
 
 # ③ 자기 성적 보정 — 적중률이 낮으면 상한, 기록 없으면 개입 없음
@@ -2894,9 +2903,11 @@ _rows61 = [{
         'gate_reason': '테스트', 'm10_disparity': 5.0}},
 }]
 _dk61 = "2099-01-01"          # 실제 날짜와 충돌하지 않는 시험용 날짜
-_p61 = pm61._pm_path(_dk61)
-if _os.path.exists(_p61):
-    _os.remove(_p61)
+# 라운드 30: 리포트 키가 날짜×엔진이 됐다. 옛 경로(날짜만)도 함께 치운다.
+_p61 = pm61._pm_path(_dk61, pm61._engine_version())
+for _old61 in (_p61, pm61._pm_path(_dk61)):
+    if _os.path.exists(_old61):
+        _os.remove(_old61)
 _rep61, _new61 = pm61.build_report(q, _rows61, date_key=_dk61, market_label="시험")
 check("리포트 생성·고정 저장", _new61 and _os.path.exists(_p61))
 check("생성 시각·기준일 박제", _rep61.get('generated_at') and _rep61.get('data_asof'))
@@ -2914,7 +2925,11 @@ check("추천 근거 저장 (가격 3종·사유·뉴스)",
 _hist61 = [l for l in open(pm61.PM_HISTORY, encoding='utf-8')
            if '"2099-01-01"' in l] if _os.path.exists(pm61.PM_HISTORY) else []
 check("이력(jsonl) 추가 저장", len(_hist61) >= 1)
-_os.remove(_p61)              # 시험용 파일 정리 (이력은 append-only 로 남긴다)
+check("리포트 파일명에 엔진 버전이 박힌다",
+      pm61._engine_version() in _os.path.basename(_p61))
+for _old61 in (_p61, pm61._pm_path(_dk61)):   # 시험용 파일 정리
+    if _os.path.exists(_old61):               # (이력은 append-only 로 남긴다)
+        _os.remove(_old61)
 
 # ③ 화면 — 리포트 섹션·테마 토글
 _w61 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
@@ -4577,11 +4592,18 @@ _fs94 = fs
 _rec94 = _fs94.get('recommended_buy_price')
 _es94 = _fs94.get('entry_stop_price')
 _et94 = _fs94.get('entry_target_1st')
-if _rec94 and _es94:
-    check("진입가 기준 손절이 매수가보다 아래다", _es94 < _rec94,
-          f'권장 {_rec94:,.0f} · 손절 {_es94:,.0f}')
-    check("진입가 기준 1차 목표가 매수가보다 위다", _et94 > _rec94,
-          f'권장 {_rec94:,.0f} · 1차 {_et94:,.0f}')
+# 라운드 30: 손절·목표는 **화면에 뜨는 진입가**에 매단다. 종전 검사는
+# recommended_buy_price(장기 가치 참고선)와 비교했는데, 표시 진입가는
+# 눌림가로 바뀐 지 오래였다. 그 어긋남이 GS·NAVER 모순을 통과시켰다.
+_anc94 = _fs94.get('entry_pullback_price') or _rec94
+if _anc94 and _es94:
+    check("진입가 기준 손절이 진입가보다 아래다", _es94 < _anc94,
+          f'진입 {_anc94:,.0f} · 손절 {_es94:,.0f}')
+    check("진입가 기준 1차 목표가 진입가보다 위다", _et94 > _anc94,
+          f'진입 {_anc94:,.0f} · 1차 {_et94:,.0f}')
+    check("손절·목표가 표시 진입가와 같은 기준을 쓴다",
+          _fs94.get('entry_pullback_price') is None
+          or _anc94 == _fs94.get('entry_pullback_price'))
     check("진입가 기준 손익비가 정의된다",
           _fs94.get('entry_rr') is not None and _fs94['entry_rr'] > 0,
           str(_fs94.get('entry_rr')))
@@ -4958,8 +4980,10 @@ _p100 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
 # ① 엔진이 실행 가능한 눌림 진입가를 낸다 (적정가 기반과 분리)
 check("엔진이 눌림 진입가를 산출한다",
       "'entry_pullback_price': entry_pullback_price" in _q100)
+# 라운드 30 에서 이 식은 _entry_anchor 로 옮겼다 — 손절·목표가 같은 값을
+# 쓰게 하기 위해서다. 식 자체는 그대로다.
 check("눌림가는 기준가 − 일변동성 1배",
-      'entry_pullback_price = float(curr_price * (1.0 - vol_20))' in _q100)
+      '_entry_anchor = float(curr_price * (1.0 - vol_20))' in _q100)
 check("적정가 기반 값은 '장기 가치 참고선'으로 이름이 바뀌었다",
       "'value_floor_price': value_floor_price" in _q100
       and '장기 가치 기준' in _q100)
@@ -5026,11 +5050,23 @@ _w100 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 check("개장 전 리포트에 만든 엔진 버전을 찍는다",
       "'engine_version': _engine_version()" in _p100
       and 'def _engine_version(' in _p100)
+# 라운드 30: 경고 분기를 하나로 합쳤다. 종전에는 "다시 스캔하세요"라고
+# 하면서도 리포트 키가 날짜뿐이라 다시 스캔이 아무것도 갱신하지 못했다.
 check("엔진이 바뀌면 리포트가 낡았다고 경고한다",
-      "_pm_ver != _VER_NOW['model']" in _w100
-      and '예전 산식' in _w100)
-check("버전 기록이 없는 예전 리포트도 경고한다",
-      '만든 엔진 버전이 기록돼 있지 않습니다' in _w100)
+      '_pm_stale' in _w100 and '현재 엔진은' in _w100)
+check("버전 기록이 없는 예전 리포트도 같은 경고를 받는다",
+      "bool(_pmr.get('stale_engine')) or not _pm_ver" in _w100)
+check("경고가 실제로 실행 가능한 조치를 가리킨다",
+      '다시 스캔이 실제로 갱신됩니다' in _w100)
+# 라운드 30: 경고만 달고 옛 가격을 보여 주면 사용자는 그 숫자를 읽는다.
+check("낡은 리포트는 가격을 화면에 두지 않는다",
+      'if _pm_stale and _picks_show:' in _w100
+      and '_picks_show = []' in _w100)
+check("낡아도 어떤 종목이었는지는 밝힌다",
+      '이 리포트가 추천했던 종목' in _w100)
+check("카드에도 정합 가드가 걸린다",
+      'if e_stop is not None and float(e_stop) >= float(rec):' in _w100
+      and 'if e_t1 is not None and float(e_t1) <= float(rec):' in _w100)
 
 
 section("101. 라운드 26 — 못 겨룬 진입 엔진 마저 · 관망 조건 감시")
@@ -5134,6 +5170,307 @@ if _vs101:
     _miss101 = [v for v in _vs101 if v not in _known101]
     check("최근 커밋 메시지의 버전이 실제 이력에 있다",
           not _miss101, f'이력에 없음: {_miss101}')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §102 — 국면 게이트를 판단에 실제로 걸었는가 (라운드 27)
+#    사용자 지적: *"국면별 성과를 표시만 하지 말고 엔진에 실제 반영해."*
+#    표시만 하던 6칸 성적이 점수·신뢰도·손절·비중·차단으로 내려왔는지 잠근다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§102 국면 게이트 — 성적이 판단에 내려왔는가 (라운드 27)")
+print("=" * 72)
+import regime_policy as _rp102
+
+_q102 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_w102 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_q102_rp = open(_os.path.join(PROJ, 'regime_policy.py'), encoding='utf-8').read()
+
+check("정책을 엔진이 호출한다", "_rp.policy(_RP_MAP.get(regime_code), vol_20)" in _q102)
+check("국면코드 4종을 빠짐없이 매핑", all(
+    f"'{k}': '{v}'" in _q102 for k, v in
+    (('BULL_STRONG', 'BULL'), ('BULL_MILD', 'BULL'),
+     ('BEAR_PANIC', 'BEAR'), ('SIDEWAYS', 'SIDEWAYS'))))
+check("정책이 손절 계산보다 먼저 온다",
+      0 < _q102.find("import regime_policy as _rp")
+      < _q102.find("base_risk = curr_price * max(_stop_floor"))
+check("손절 배수를 실제로 건다",
+      "_stop_mult *= min(1.0, _stop_regime_mult)" in _q102
+      and "_stop_floor *= min(1.0, _stop_regime_mult)" in _q102)
+check("손절은 좁히기만 한다 (넓히지 않는다)",
+      "min(1.0, _stop_regime_mult)" in _q102
+      and "max(1.0, _stop_regime_mult)" not in _q102)
+check("점수·신뢰도 상한을 씌운다", "_rp.apply_caps(" in _q102)
+check("상한은 점수 확정 뒤에 온다",
+      0 < _q102.find("final_action_score = min(final_action_score, 74)")
+      < _q102.find("_rp.apply_caps("))
+check("차단 국면은 판정 문구를 바꾼다",
+      'final_action_title = "신규 매수 차단 (국면)"' in _q102)
+check("새 판정 문구가 TITLE_MAP 에 등록됐다",
+      "'신규 매수 차단 (국면)':" in _q102)
+check("차단 문구는 더 강한 경고를 덮지 않는다",
+      "not in ('비중축소 검토', '거래 회피'," in _q102)
+check("게이트 목록에 국면 항목이 있다", '"국면별 실전 성과 확보"' in _q102)
+check("비중 배수를 곱한다", "_pos_regime = min(1.0," in _q102)
+check("비중 바닥도 같은 배수를 받는다", "max(10.0 * _pos_scale," in _q102)
+check("게이트 결과를 화면에 내보낸다", "'regime_gate': regime_gate," in _q102)
+check("화면이 국면 제한을 표시한다",
+      "regime_gate" in _w102 and "국면별 제한을 적용했습니다" in _w102)
+check("화면이 차단을 별도 문구로 표시한다",
+      "이 국면에서는 신규 매수를 하지 않습니다" in _w102)
+check("안 깎였으면 아무 말도 하지 않는다",
+      "_rg.get('capped') or _rg.get('block_new')" in _w102)
+
+# 정책 자체 — 구간 규칙이 사전등록값 그대로인가
+check("정상 경계 50%", _rp102.BANDS[0][0] == 50.0
+      and _rp102.BANDS[0][1]['score_cap'] is None)
+check("강한 제한은 차단", _rp102.BANDS[-1][1]['block_new'] is True
+      and _rp102.BANDS[-1][1]['score_cap'] == 45)
+check("표본 없으면 낮춘다", _rp102.NO_SAMPLE['score_cap'] == 55
+      and _rp102.NO_SAMPLE['conf_cap'] == 60)
+_pol102 = _rp102.policy('BEAR', 0.05)
+check("상한은 올리지 않는다", _rp102.apply_caps(30, 40, _pol102) == (30, 40))
+check("국면 미판정이면 제한 없음",
+      _rp102.policy(None, 0.05)['score_cap'] is None)
+
+# ── 라운드 27b — 첫 판을 스스로 기각한 것을 잠근다 ────────────────────
+#    블라인드만 보고 구간을 정했다가 2단계 검증에서 무너졌다:
+#    학습+검증으로 다시 뽑으면 6칸이 전부 '정상'이고, 그 정책을 블라인드에
+#    적용하면 적중 +0.0%p. '거친 하락 실전 12%'는 n=16 짜리였다.
+check("통합 표본을 기본 추정으로 쓴다", "def _pool(cell)" in _q102_rp
+      and "SPLITS = ('train', 'valid', 'blind')" in _q102_rp)
+check("실전은 표본을 갖췄을 때만 본다",
+      "if bn >= MIN_N and bhit is not None" in _q102_rp)
+check("두 하한 중 낮은 쪽을 택한다", "min(cands, key=lambda x: x[0])" in _q102_rp)
+check("자기기각을 모듈에 기록했다",
+      '라운드 27b' in _q102_rp and '스스로 기각' in _q102_rp)
+check("n=16 로 차단하지 않는다", _pol102['block_new'] is False,
+      f"거친 하락 level={_pol102['level']}")
+check("거친 하락의 실전 표본 부족을 밝힌다",
+      '실전 표본은 16건뿐' in _pol102['why'], _pol102['why'][:80])
+check("거친 하락 판단 근거는 통합 표본", _pol102['basis'] == '통합 표본')
+check("통합 표본이 실전보다 훨씬 크다",
+      _pol102['pooled_n'] > _pol102['blind_n'] * 5,
+      f"통합 {_pol102['pooled_n']} vs 실전 {_pol102['blind_n']}")
+# 실전 표본이 충분한 칸에서는 실전이 이긴다 (차분한 상승 n=38 · 거친 옆걸음 n=108)
+_pol102b = _rp102.policy('SIDEWAYS', 0.05)
+check("실전 표본 충분하면 실전을 따른다", _pol102b['basis'] == '실전 표본',
+      f"{_pol102b['basis']} (실전 n={_pol102b['blind_n']})")
+check("실전이 나쁜 칸에는 상한이 걸린다", _pol102b['score_cap'] == 62,
+      str(_pol102b['level']))
+check("표본 없는 칸도 통합으로 판정한다",
+      _rp102.policy('BEAR', 0.02)['blind_n'] == 0
+      and _rp102.policy('BEAR', 0.02)['pooled_n'] > 0)
+
+# ══════════════════════════════════════════════════════════════════════
+# §103 — 적정가를 세 축으로 쪼갰는가 (라운드 28 · 28b)
+#    사용자 요구: *"적정가를 장기 가치 범위 / 시장 기반 공정가격 /
+#    실전 진입가격으로 분리해 주세요"*, *"신뢰하기 어려운 종목에는 억지로
+#    숫자를 만들지 마세요"*, *"신뢰도 등급별로 점수 영향력을 차등하세요"*
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§103 적정가 3분할 — 지평이 다른 세 질문 (라운드 28)")
+print("=" * 72)
+import price_axes as _pa103
+
+_ve103 = dict(fair_value_range_core=(24000, 30000),
+              fair_value_range_wide=(21000, 34000),
+              reference_fair_value=27000, displayed_fair_value=27000,
+              fair_value_confidence=84.0, independent_models=3,
+              market_adjustment_pct=-2.0, fair_value_status='CALIBRATED',
+              type_probabilities={'A_STABLE': 0.7})
+_fs103 = dict(entry_pullback_price=25150, entry_stop_price=24200,
+              entry_target_1st=26800, entry_rr=1.74, asset_type='STOCK')
+_r103 = _pa103.build(_ve103, _fs103, curr_price=26350, bars=900)
+
+check("① 장기 가치는 범위다 (숫자 하나가 아니다)",
+      _r103['value_band']['available']
+      and _r103['value_band']['low'] < _r103['value_band']['high'])
+check("① 넓은 범위도 함께 준다",
+      _r103['value_band']['wide_low'] <= _r103['value_band']['low']
+      and _r103['value_band']['wide_high'] >= _r103['value_band']['high'])
+check("② 시장 공정가격이 별도로 나온다", _r103['market_fair']['available'])
+check("③ 실전 진입가격이 별도로 나온다", _r103['entry']['available'])
+check("세 축이 서로 다른 값이다",
+      len({round(_r103['value_band']['center']),
+           round(_r103['market_fair']['price']),
+           round(_r103['entry']['price'])}) == 3)
+check("세 축의 지평을 명시한다",
+      (_r103['value_band']['horizon'], _r103['market_fair']['horizon'],
+       _r103['entry']['horizon']) == ('수년', '수개월', '수일'))
+check("③ 은 변동성 기반이지 밸류에이션이 아니다",
+      '변동성' in _r103['entry']['basis'])
+
+# 억지로 숫자를 만들지 않는다 — 그리고 그게 오류가 아니라 정상 상태다
+for _k103, _tag103 in (({'F_DEFICIT': 0.62}, '적자기업'),
+                       ({'E_BIOTECH': 0.55}, '바이오')):
+    _rr = _pa103.build(dict(_ve103, type_probabilities=_k103), _fs103,
+                       26350, bars=900)
+    check(f"{_tag103}는 가치 미산출", not _rr['value_band']['available'])
+    check(f"{_tag103} 미산출 사유를 적는다", bool(_rr['value_band'].get('why')))
+    check(f"{_tag103}도 진입가는 살아 있다", _rr['entry']['available'])
+    check(f"{_tag103} 미산출에 숫자 키가 없다", 'low' not in _rr['value_band'])
+for _at103 in ('ETF', 'ETF_LEV', 'ETF_INV'):
+    _rr = _pa103.build(_ve103, dict(_fs103, asset_type=_at103), 26350, bars=900)
+    check(f"{_at103}는 가치 미산출", not _rr['value_band']['available'])
+    check(f"{_at103}도 진입가는 살아 있다", _rr['entry']['available'])
+check("신규상장(249일)은 미산출",
+      not _pa103.build(_ve103, _fs103, 26350, bars=249)['value_band']['available'])
+check("250일부터 산출",
+      _pa103.build(_ve103, _fs103, 26350, bars=250)['value_band']['available'])
+
+# 신뢰도 등급 — 사용자 사양 그대로인가
+check("80점 정상", _pa103.tier_of(80)[1] == '정상' and _pa103.tier_of(80)[2] == 1.0)
+check("79점 제한적(절반)",
+      _pa103.tier_of(79)[1] == '제한적' and _pa103.tier_of(79)[2] == 0.5)
+check("59점 참고만(미반영)",
+      _pa103.tier_of(59)[1] == '참고만' and _pa103.tier_of(59)[2] == 0.0)
+check("39점 제외", _pa103.tier_of(39)[1] == '제외')
+check("신뢰 39↓ 는 범위조차 안 준다",
+      not _pa103.build(dict(_ve103, fair_value_confidence=32.0), _fs103,
+                       26350, bars=900)['value_band']['available'])
+
+# 축 모순 감지
+_r103b = _pa103.build(_ve103, dict(_fs103, entry_pullback_price=40000),
+                      curr_price=42000, bars=900)
+check("진입가가 가치 상단 밖이면 모순으로 잡는다", not _r103b['consistent'])
+check("모순 문구를 사람 말로 적는다",
+      any('값어치보다 비싸게' in _n for _n in _r103b['notes']))
+
+# 국면이 시장 공정가격을 낮춘다 (올리지 않는다)
+_r103c = _pa103.build(_ve103, dict(_fs103, regime_gate=dict(
+    size_mult=0.3, cell_ko='거친 하락')), 26350, bars=900)
+check("나쁜 국면은 시장 공정가격을 낮춘다",
+      _r103c['market_fair']['price'] < _r103['market_fair']['price'])
+check("국면 보정 근거를 밝힌다", '거친 하락' in _r103c['market_fair']['basis'])
+
+# 라운드 28b — 적정가 필수 게이트 해제 + 점수 상한
+check("적정가는 더 이상 TOP3 필수 게이트가 아니다",
+      '_bool_gate("적정가 신뢰도 확보", fair_value_usable' not in _q102)
+check("게이트 항목에 '차단 아님'을 밝힌다",
+      '미충족이어도 차단 아님' in _q102)
+check("대신 점수 상한을 건다", "_pa_policy['score_cap']" in _q102)
+_napol103 = _pa103.score_policy(dict(available=False, why='시험'))
+check("미산출 상한은 62점", _napol103['score_cap'] == _pa103.NA_SCORE_CAP == 62)
+check("미산출은 차단이 아니다", _napol103['block'] is False)
+check("미산출 사유에 실측 EV 를 인용한다", 'EV' in _napol103['why'])
+check("정상 등급은 상한 없음",
+      _pa103.score_policy(_r103['value_band'])['score_cap'] is None)
+check("참고만 등급은 상한 있음",
+      _pa103.score_policy(_pa103.build(
+          dict(_ve103, fair_value_confidence=50.0), _fs103, 26350,
+          bars=900)['value_band'])['score_cap'] == 62)
+check("적정가 상한 결과를 화면에 내보낸다", "'fv_gate': fv_gate," in _q102)
+check("엔진이 세 축을 내보낸다", "'price_axes'" in _q102)
+check("화면이 세 축을 보여준다",
+      '가격은 하나가 아닙니다' in _w102 and "_AX.get('value_band')" in _w102)
+check("화면이 세 축의 질문을 적는다",
+      '이 기업의 값어치는?' in _w102 and '지금 시장이 매길 값은?' in _w102
+      and '그래서 얼마에 사나?' in _w102)
+
+# 실측 결과가 코드에 박제됐는가 (나중에 근거 없이 바뀌지 않게)
+check("미산출 실측치를 코드에 남긴다",
+      _pa103.NA_MEASURED['blind_n'] == 152
+      and _pa103.NA_MEASURED['blind_low'] == 46.0)
+check("산출 쪽 실측치도 남긴다",
+      _pa103.NA_MEASURED['calc_ev'] == 1.03
+      and _pa103.NA_MEASURED['na_ev'] == -0.84)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §104 — 실행점수 상한표 재산정 · 실행 레벨 앵커 통일 (라운드 29 · 30)
+#    화면 실측: 관심종목 후보 5개 중 4개가 행동점수 45 에 몰림
+#             GS 진입 92,014 인데 손절 100,783 · NAVER 목표가 진입가 아래
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§104 실행점수 상한표 · 레벨 앵커 (라운드 29 · 30)")
+print("=" * 72)
+_q104 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+
+# ── 라운드 29 — 적정가가 없다고 실행점수를 45로 깎지 않는다 ──────────
+check("'판정 불가' 상한 45가 사라졌다", '"판정 불가": 45,' not in _q104)
+check("'판정 불가' 상한이 100", '"판정 불가": 100,' in _q104)
+check("기본값도 45가 아니다", '.get(entry_zone, 45)' not in _q104
+      and '.get(entry_zone, 100)' in _q104)
+check("표본 0건 구간은 현행 유지 (풀어주지 않는다)",
+      '"적정가 크게 초과 (추격매수 위험)": 30,' in _q104)
+check("재산정 근거를 코드에 남긴다",
+      'rho=+0.20' in _q104 and '54.5%' in _q104)
+check("새 숫자를 만들지 않고 채택된 규칙을 재사용했다고 밝힌다",
+      'regime_policy 의 이미 채택된' in _q104)
+check("완화/강화 비대칭을 밝힌다", '푸는 데는 표본 90건' in _q104)
+_r29 = _os.path.join(PROJ, '.portfolio', 'exec_cap_table_r29.json')
+check("라운드 29 산출물이 있다", _os.path.exists(_r29))
+if _os.path.exists(_r29):
+    import json as _j104
+    with open(_r29, encoding='utf-8') as _f:
+        _d29 = _j104.load(_f)
+    check("rho 가 기준 미달로 기록됐다", _d29['rho'] < _d29['rho_cut'],
+          f"rho={_d29['rho']}")
+    check("'판정 불가' 하한이 가장 높다",
+          _d29['stat']['판정 불가']['low'] == max(
+              s['low'] for s in _d29['stat'].values()),
+          str(_d29['stat']['판정 불가']['low']))
+    check("코드 상한표가 산출물과 일치한다",
+          all(f'"{_z}": {_c},' in _q104
+              for _z, _c in _d29['proposed'].items()))
+
+# ── 라운드 30 — 손절·목표를 표시 진입가에 맞춰 매단다 ────────────────
+check("앵커 변수를 하나로 쓴다", '_entry_anchor' in _q104)
+check("앵커는 눌림가 우선", "_entry_anchor = float(curr_price * (1.0 - vol_20))"
+      in _q104)
+check("옛 권장매수가에 직접 매지 않는다",
+      '_e = float(recommended_buy_price)' not in _q104)
+check("표시 진입가도 같은 앵커를 쓴다",
+      'entry_pullback_price = (float(_entry_anchor)' in _q104)
+check("두 번 난 모순임을 코드에 남긴다",
+      '라운드 22b · 30' in _q104 or ('라운드 30' in _q104
+                                    and '재발' in _q104))
+check("실측 모순 3건을 코드에 인용한다",
+      'GS' in _q104 and 'NAVER' in _q104 and '100,783' in _q104)
+
+# 정합 가드 — 어긋나면 고치지 않고 비운다
+check("정합 가드가 있다", 'level_incoherence' in _q104)
+check("가드가 진입가·현재가 두 축을 본다",
+      "'진입가')" in _q104 and "'현재가')" in _q104)
+check("어긋난 값은 비운다 (지어내지 않는다)",
+      'entry_stop_price = entry_target_1st = entry_rr = None' in _q104
+      and 'stop_loss_price = None' in _q104)
+check("비운 이유를 함께 내보낸다", "'level_incoherence': level_incoherence,"
+      in _q104)
+
+# 실제 산출물로 검증 — 이 종목의 레벨이 실제로 정합인가
+_e104 = _fs53.get('entry_pullback_price')
+_s104 = _fs53.get('entry_stop_price')
+_t104 = _fs53.get('entry_target_1st')
+check("진입가가 산출된다", _e104 is not None)
+check("진입가 기준 손절이 진입가 아래",
+      _s104 is None or _e104 is None or _s104 < _e104,
+      f"진입 {_e104} · 손절 {_s104}")
+check("진입가 기준 목표가 진입가 위",
+      _t104 is None or _e104 is None or _t104 > _e104,
+      f"진입 {_e104} · 목표 {_t104}")
+check("모순 목록이 비어 있다", not (_fs53.get('level_incoherence') or []),
+      str(_fs53.get('level_incoherence')))
+
+# ── 개장 전 리포트 키 — 다시 스캔이 실제로 갱신되는가 ────────────────
+import premarket as _pm104
+_v104 = _pm104._engine_version()
+check("리포트 경로가 날짜×엔진으로 갈린다",
+      _pm104._pm_path('2026-01-01') != _pm104._pm_path('2026-01-01', _v104))
+check("경로에 엔진 버전이 들어간다",
+      _v104 in _os.path.basename(_pm104._pm_path('2026-01-01', _v104)))
+_pmsrc104 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
+check("낡은 리포트를 재사용하지 않는다",
+      "if existing and not existing.get('stale_engine')" in _pmsrc104)
+check("낡음을 표시로 알린다", "old['stale_engine']" in _pmsrc104)
+check("옛 파일을 지우지 않는다 (감사 흔적)",
+      '옛 파일은 지우지 않는다' in _pmsrc104)
+_w104 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면 안내가 실행 가능해졌다",
+      '이제 다시 스캔이 실제로 갱신됩니다' in _w104)
+check("실행 불가능했던 옛 안내를 지웠다",
+      '실행하는 편이 안전합니다' not in _w104)
 
 
 print()

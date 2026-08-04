@@ -1689,6 +1689,8 @@ class QuantIndicatorsEngine:
             '제한적 진입':         ('ACCUMULATE', "제한적으로만 진입"),
             '조건 확인·관망':      ('HOLD', "지금은 사지 마세요 — 조건이 갖춰지면 후보"),
             '신규 매수 보류':      ('HOLD', "지금은 사지 마세요"),
+            # 라운드 27 — 국면별 실전 성적이 무너진 칸에서의 차단
+            '신규 매수 차단 (국면)': ('HOLD', "이 국면에서는 신규 매수를 하지 않습니다"),
             '비중축소 검토':       ('REDUCE', "비중 축소 검토"),
             '거래 회피':           ('SELL', "사지 마세요 (보유 중이면 축소 검토)"),
             # 하드 정합성 위반 전용 — 신호 간 이견은 여기로 오지 않고 관망으로 화해된다
@@ -2887,9 +2889,28 @@ class QuantIndicatorsEngine:
         # 무추세 선도달확률 이론값이 33% — 적중률의 상한을 기하가 막고 있었다.
         # 재설계: 손절은 변동성 2σ 바닥(노이즈 손절 방지), 1차 목표는 '1차 분할익절'
         # (손절거리×0.7, 무추세 이론 P≈59%), 구조적 저항 목표는 2차 목표로 이동.
+        # ── 국면별 게이트 (라운드 27 · 채택) ────────────────────────────
+        # 6칸 성적을 화면에만 보여 주고 판단에는 안 걸고 있었다. 실측상
+        # 거친 하락은 **실전 12%(하한 4%)** 인데 그대로 매수 신호를 내보내면
+        # 안 된다. 연습이 아니라 **실전 Wilson 하한**으로 상한을 건다.
+        # 손절 배수를 여기서 먼저 읽는 이유: 아래 손절 계산에 실제로 걸기 위함.
+        _RP_MAP = {'BULL_STRONG': 'BULL', 'BULL_MILD': 'BULL',
+                   'BEAR_PANIC': 'BEAR', 'SIDEWAYS': 'SIDEWAYS'}
+        _rp_pol = None
+        try:
+            import regime_policy as _rp
+            _rp_pol = _rp.policy(_RP_MAP.get(regime_code), vol_20)
+        except Exception:
+            _rp_pol = None
+
         _XL = RULEBOOK.get('RULES_EXECUTION_LEVELS', {})
         _stop_mult = float(_XL.get('stop_vol_mult', 2.0))
+        # 성적이 나쁜 국면에서는 손절을 좁힌다(0.7~1.0배). 목표는 그대로 두므로
+        # 손실만 줄고 R:R 은 오히려 넓어진다 — 늘리는 방향으로는 절대 안 간다.
+        _stop_regime_mult = float((_rp_pol or {}).get('stop_mult') or 1.0)
+        _stop_mult *= min(1.0, _stop_regime_mult)
         _stop_floor = float(_XL.get('stop_floor_pct', 3.0)) / 100.0
+        _stop_floor *= min(1.0, _stop_regime_mult)
         _t1_of_stop = float(_XL.get('target1_of_stop', 0.7))
         _t1_vol_floor = float(_XL.get('target1_vol_floor_mult', 0.8))
 
@@ -2944,10 +2965,23 @@ class QuantIndicatorsEngine:
         #
         # 그래서 같은 공식을 진입가에 다시 걸어 준다. 2차 목표(구조적 저항)는
         # 시장에 실재하는 가격대라 진입가와 무관하므로 그대로 둔다.
+        #
+        # ⚠️ 라운드 30 — 이 블록은 **화면에 실제로 뜨는 진입가**에 매야 한다.
+        # 라운드 25 에서 표시 진입가를 눌림가(현재가−1σ)로 바꿨는데, 손절·목표
+        # 계산은 옛 recommended_buy_price 에 그대로 남아 있었다. 이관을 절반만
+        # 한 것이다. 결과는 라운드 22b 에서 고쳤던 바로 그 모순의 재발이었다:
+        #   GS     진입 92,014 인데 손절 100,783  (손절이 진입가 위)
+        #   NAVER  진입 214,728 인데 1차 목표 172,900 (목표가 진입가 아래)
+        #   삼성전자 진입 219,319 인데 1차 목표 165,369
+        # 앵커를 표시 진입가와 하나로 묶어 재발을 막는다.
         entry_stop_price = entry_target_1st = entry_rr = None
-        if (recommended_buy_price and recommended_buy_price > 0
-                and vol_20 is not None):
-            _e = float(recommended_buy_price)
+        _entry_anchor = None
+        if curr_price and vol_20 and vol_20 > 0:
+            _entry_anchor = float(curr_price * (1.0 - vol_20))
+        elif recommended_buy_price and recommended_buy_price > 0:
+            _entry_anchor = float(recommended_buy_price)
+        if _entry_anchor and _entry_anchor > 0 and vol_20 is not None:
+            _e = _entry_anchor
             _e_risk = _e * max(_stop_floor, vol_20 * _stop_mult)
             _e_stop = _e - _e_risk
             # 진입가 기준으로도 TDST 지지가 0.5R~1.5R 안이면 그 지지선을 쓴다
@@ -2978,9 +3012,43 @@ class QuantIndicatorsEngine:
         #   (현행 적정가 기반은 체결률을 잴 수조차 없다 — 원장에 적정가가 없다)
         # 수익 개선은 주장하지 않는다. 사전등록 ④(실전 기간 전·후반 양쪽
         # 개선)에서 걸려 기각했다 — 상승장에서는 기다리면 놓치기 때문이다.
-        entry_pullback_price = None
-        if curr_price and vol_20 and vol_20 > 0:
-            entry_pullback_price = float(curr_price * (1.0 - vol_20))
+        # 위 손절·목표 블록이 매어 둔 것과 **같은 값**을 쓴다 (라운드 30).
+        # 두 곳에서 따로 계산하면 또 어긋난다.
+        entry_pullback_price = (float(_entry_anchor)
+                                if (_entry_anchor and curr_price and vol_20
+                                    and vol_20 > 0) else None)
+
+        # ── 정합 가드 (라운드 30) ───────────────────────────────────────
+        # 같은 모순이 두 번 났다(라운드 22b · 30). 세 번째는 없게 한다.
+        # 어긋난 값은 **고쳐서 내보내지 않고 비운다** — 지어낸 숫자보다
+        # '미산출'이 정직하다. 비운 이유는 함께 싣는다.
+        level_incoherence = []
+        _guard = ((entry_pullback_price, entry_stop_price, entry_target_1st,
+                   '진입가'),
+                  (curr_price, stop_loss_price, target_tech_1st, '현재가'))
+        for _anchor, _stop, _tgt, _tag in _guard:
+            if not _anchor:
+                continue
+            if _stop is not None and _stop >= _anchor:
+                level_incoherence.append(
+                    f"{_tag}({_anchor:,.0f}원) 기준 손절({_stop:,.0f}원)이 "
+                    f"위에 있어 표시하지 않았습니다")
+            if _tgt is not None and _tgt <= _anchor:
+                level_incoherence.append(
+                    f"{_tag}({_anchor:,.0f}원) 기준 1차 목표({_tgt:,.0f}원)가 "
+                    f"아래에 있어 표시하지 않았습니다")
+        if level_incoherence:
+            if entry_pullback_price and (
+                    (entry_stop_price is not None
+                     and entry_stop_price >= entry_pullback_price)
+                    or (entry_target_1st is not None
+                        and entry_target_1st <= entry_pullback_price)):
+                entry_stop_price = entry_target_1st = entry_rr = None
+            if curr_price:
+                if stop_loss_price is not None and stop_loss_price >= curr_price:
+                    stop_loss_price = None
+                if target_tech_1st is not None and target_tech_1st <= curr_price:
+                    target_tech_1st = None
         # 적정가 기반 값은 '오늘의 매수가'가 아니라 **장기 가치 참고선**이다
         value_floor_price = (float(recommended_buy_price)
                              if recommended_buy_price is not None else None)
@@ -3141,11 +3209,27 @@ class QuantIndicatorsEngine:
             + event_execution_score * WE.get('weight_event', 0.10)
         )
 
+        # ── 실행점수 상한표 (라운드 29 재산정) ──────────────────────────
+        # 종전 표는 손으로 쓴 것이었고 실측과 어긋났다. 특히 '판정 불가'가
+        # 45 였는데, 매수권 케이스의 **54.5%** 가 이 구간이다. 즉 종목 절반이
+        # 적정가가 없다는 이유만으로 실행점수 45로 깎였고, 화면에서 후보
+        # 대부분이 '행동점수 45'에 몰리는 원인이었다.
+        #
+        # 실측(원장 5,389건 매수권): 구간별 Wilson 하한이 49.6~56.9% 로
+        # **7.3%p 밖에 차이 나지 않는다.** 상한 순서와 하한 순서의 순위상관은
+        # rho=+0.20 (사전등록 기준 0.7 미달) — 표가 성적을 반영하지 못했다.
+        # 특히 '판정 불가'는 하한 56.9% 로 **가장 높다**.
+        #
+        # 다시 매길 때 새 숫자를 만들지 않는다. regime_policy 의 이미 채택된
+        # 구간 규칙(≥50% 정상 · 40~50% 62 · 30~40% 55 · <30% 45)을 재사용한다.
+        # 비대칭: **푸는 데는 표본 90건, 조이는 데는 30건**을 요구한다.
+        # 표본이 없는 구간은 현행 유지 — 모르는 것을 풀어 주지 않는다.
         execution_score = min(execution_score, {
-            "판정 불가": 45, "안전마진 확보": 100, "적정가 이하 (안전마진 미확보)": 70,
-            "적정가 소폭 초과": 55, "적정가 초과 (추격매수 경고)": 40,
-            "적정가 크게 초과 (추격매수 위험)": 30,
-        }.get(entry_zone, 45))
+            "판정 불가": 100, "안전마진 확보": 100,
+            "적정가 이하 (안전마진 미확보)": 100,
+            "적정가 소폭 초과": 62, "적정가 초과 (추격매수 경고)": 100,
+            "적정가 크게 초과 (추격매수 위험)": 30,   # 표본 0건 — 현행 유지
+        }.get(entry_zone, 100))
 
         # ========================================================
         # 6. 최종 행동 원점수
@@ -3470,6 +3554,22 @@ class QuantIndicatorsEngine:
             return {'name': name, 'actual': detail, 'threshold': '', 'passed': bool(ok),
                     'text': f"{name}{(' — ' + detail) if detail else ''}"}
 
+        # ── 적정가 정책 (라운드 28b) ────────────────────────────────────
+        # 종전에는 '적정가 신뢰도 확보'가 TOP3 **필수** 게이트였다. 원장
+        # 19,883건 중 62.9%가 적정가 미산출이고, 산출 여부는 블라인드
+        # 적중률을 유의하게 가르지 못했다(lift +4.7%p · 기준 5%p 미달 ·
+        # 구간 겹침). 근거 없이 3분의 2를 막고 있었으므로 **필수 게이트를
+        # 해제**하고, 대신 블라인드 EV 차이(+1.03% vs −0.84%)를 근거로
+        # **점수 상한**을 건다.
+        _pa_band, _pa_policy = None, None
+        try:
+            import price_axes as _pa
+            _pa_band = _pa.value_band(val_eval, asset_type=asset_type,
+                                      bars=len(tech_df))
+            _pa_policy = _pa.score_policy(_pa_band)
+        except Exception:
+            _pa_band, _pa_policy = None, None
+
         gate_checks = [
             _num_gate("최종 행동점수", final_action_score, G.get('min_action_score', 68)),
             _num_gate("종목 기본 매력도", stock_quality_score, G.get('min_stock_quality', 60)),
@@ -3485,11 +3585,26 @@ class QuantIndicatorsEngine:
                        buy_entry_max is not None and curr_price <= buy_entry_max,
                        f"현재 {curr_price:,.0f}원 / 권장 "
                        + (f"{buy_entry_max:,.0f}원 이하" if buy_entry_max is not None else "미산출")),
-            _bool_gate("적정가 신뢰도 확보", fair_value_usable, f"{fair_value_confidence:.0f}점"),
+            # 라운드 28b: 필수 → 참고. 미산출은 실측상 정상 상태이며(62.9%),
+            # 추천을 막을 근거가 없다. 대신 아래에서 점수 상한으로 다룬다.
+            _bool_gate("적정가 신뢰도 확보 (참고 · 미충족이어도 차단 아님)",
+                       True,
+                       (f"{fair_value_confidence:.0f}점 · "
+                        + ((_pa_policy or {}).get('tier_ko') or '미산출')
+                        + ('' if fair_value_usable
+                           else f" → 점수 상한 {(_pa_policy or {}).get('score_cap')}점"))),
             _bool_gate("데이터 모순 없음", not contradiction_detected),
             _bool_gate("표본외(Blind/OOS) 검증 통과",
                        (not blind_test_not_completed) and (strategy_quality_score or 0) >= 40,
                        f"품질 {strategy_quality_score:.0f}점" if strategy_quality_score is not None else "미수행"),
+            _bool_gate(
+                "국면별 실전 성과 확보",
+                not (_rp_pol or {}).get('block_new'),
+                (f"{_rp_pol['cell_ko']} · 실전 {_rp_pol['blind_hit']:.0f}%"
+                 f"(하한 {_rp_pol['blind_low']:.0f}%, n={_rp_pol['blind_n']})"
+                 if (_rp_pol and _rp_pol.get('blind_low') is not None)
+                 else ((_rp_pol or {}).get('cell_ko') or '국면 미판정')),
+            ),
         ]
         top3_block_reasons = [g['text'] for g in gate_checks if not g['passed']]
         eligible_for_top3 = (len(top3_block_reasons) == 0)
@@ -3501,6 +3616,45 @@ class QuantIndicatorsEngine:
             else:
                 final_action_title = "제한적 진입"
                 final_action_score = min(final_action_score, 74)
+
+        # ── 적정가 상한 (라운드 28b) ───────────────────────────────────
+        # 필수 게이트를 푼 대가로 여기서 상한을 건다. 차단은 하지 않는다.
+        fv_gate = None
+        if _pa_policy and _pa_policy.get('score_cap') is not None:
+            _fv_s0 = final_action_score
+            final_action_score = int(min(final_action_score,
+                                         _pa_policy['score_cap']))
+            fv_gate = dict(_pa_policy)
+            fv_gate['score_before'] = int(_fv_s0)
+            fv_gate['score_after'] = final_action_score
+            fv_gate['capped'] = final_action_score < _fv_s0
+
+        # ── 국면 게이트를 실제로 건다 (라운드 27) ──────────────────────
+        # 여기까지 온 점수·신뢰도에 **국면 상한**을 씌운다. 올리지 않는다 —
+        # 상한만 내린다. 실전 표본이 없거나 성적이 무너진 칸에서 높은 점수가
+        # 그대로 나가는 것이 지금까지의 구멍이었다.
+        regime_gate = None
+        if _rp_pol and _rp_pol.get('cell'):
+            _s0, _c0 = final_action_score, analysis_confidence_score
+            final_action_score, analysis_confidence_score = _rp.apply_caps(
+                final_action_score, analysis_confidence_score, _rp_pol)
+            final_action_score = int(final_action_score)
+            analysis_confidence_score = int(analysis_confidence_score)
+            regime_gate = dict(_rp_pol)
+            regime_gate['score_before'] = int(_s0)
+            regime_gate['score_after'] = final_action_score
+            regime_gate['conf_before'] = int(_c0)
+            regime_gate['conf_after'] = analysis_confidence_score
+            regime_gate['capped'] = (final_action_score < _s0
+                                     or analysis_confidence_score < _c0)
+            # 차단은 매수의도만이 아니라 '관망' 문구도 덮는다. 바로 위 게이트
+            # 강등이 이미 '조건 확인·관망'으로 바꿔 놓기 때문에, 매수의도만
+            # 검사하면 차단 사실이 화면에서 사라진다. 더 강한 경고
+            # (축소·회피·정합성)는 덮지 않는다.
+            if (_rp_pol.get('block_new')
+                    and final_action_title not in ('비중축소 검토', '거래 회피',
+                                                   '⚠️ 재검토 필요')):
+                final_action_title = "신규 매수 차단 (국면)"
 
         if contradiction_detected:
             action_explain = "데이터 모순이 감지되어 추천을 중단했습니다: " + " / ".join(contradiction_reasons)
@@ -3539,7 +3693,19 @@ class QuantIndicatorsEngine:
                 entry_review_price, entry_review_basis = max(
                     _er_below, key=lambda x: x[0])
 
-        return {
+        # 변동성 관리 비중 (Moreira–Muir) × 레버리지 감쇄 × 국면 배수.
+        # 순서가 중요하다: 바닥을 먼저 걸면 국면 배수가 무력화된다.
+        _pos_lev = 0.5 if asset_type in ('ETF_LEV', 'ETF_INV') else 1.0
+        _pos_regime = min(1.0, float((_rp_pol or {}).get('size_mult') or 1.0))
+        _pos_pct = None
+        if vol_20 and vol_20 > 0:
+            _pos_raw = 20.0 / (float(vol_20) * (252 ** 0.5) * 100.0) * 100.0
+            _pos_scale = _pos_lev * _pos_regime
+            _pos_pct = round(float(min(100.0 * _pos_scale,
+                                       max(10.0 * _pos_scale,
+                                           _pos_raw * _pos_scale))), 0)
+
+        _fs_out = {
             # ETF·ETN 은 적정가를 산출하지 않는다 (None). float(None) 로 죽지 않게 한다.
             'target_fundamental': (float(target_fundamental)
                                    if target_fundamental is not None else None),
@@ -3560,6 +3726,7 @@ class QuantIndicatorsEngine:
             'fair_value_confidence': float(fair_value_confidence),
             # 권장 매수가에 샀을 때의 레벨 — 위 target_tech_*/stop_loss_price 는
             # **현재가** 기준이라, 아직 안 산 사람에게는 이쪽이 맞는 값이다.
+            'level_incoherence': level_incoherence,
             'entry_stop_price': entry_stop_price,
             'entry_target_1st': entry_target_1st,
             'entry_rr': entry_rr,
@@ -3616,6 +3783,8 @@ class QuantIndicatorsEngine:
             'cap_reasons': cap_reasons,
             'top3_block_reasons': top3_block_reasons,
             'gate_checks': gate_checks,
+            'regime_gate': regime_gate,
+            'fv_gate': fv_gate,
 
             'final_quant_score': final_action_score, # UI 호환성을 위해 final_action_score를 매핑
             'final_action_score': final_action_score,
@@ -3661,14 +3830,17 @@ class QuantIndicatorsEngine:
             # 변동성 관리 비중 제안 (Moreira–Muir 2017: 실현 변동성이 높을 때
             # 노출을 줄이면 위험조정수익이 개선된다). 목표 연변동성 20% ÷ 실현.
             # 레버리지·인버스는 복리손실 때문에 여기서 다시 절반으로 줄인다.
-            'suggested_position_pct': (
-                round(min(100.0, max(10.0, 20.0 / (float(vol_20) * (252 ** 0.5) * 100.0)
-                                     * 100.0))
-                      * (0.5 if asset_type in ('ETF_LEV', 'ETF_INV') else 1.0), 0)
-                if vol_20 and vol_20 > 0 else None),
+            # 라운드 27: 여기에 **국면 비중 배수**를 곱한다. 성적이 무너진
+            # 국면에서 변동성만 보고 큰 비중을 제안하던 것이 구멍이었다.
+            # 바닥(10%)도 배수만큼 같이 내린다 — 0.3배를 걸어 놓고 바닥에서
+            # 10%로 되돌리면 제한이 무의미해진다.
+            'suggested_position_pct': _pos_pct,
             'suggested_position_basis': (
                 f"연환산 변동성 {float(vol_20) * (252 ** 0.5) * 100.0:.0f}% · 목표 20% "
                 f"(Moreira–Muir 변동성 관리)"
+                + (f" · {_rp_pol['cell_ko']} 국면 {_rp_pol['size_mult']:.1f}배"
+                   if (_rp_pol and _rp_pol.get('cell')
+                       and (_rp_pol.get('size_mult') or 1.0) < 1.0) else "")
                 if vol_20 and vol_20 > 0 else "변동성 미산출"),
 
             # 상대 모멘텀(12-1)·실전 성적 — 화면 표시 + 상한 근거
@@ -3740,6 +3912,20 @@ class QuantIndicatorsEngine:
                                   else round(float(upside_shrunk_pct), 1)),
             'soft_conflict_notes': soft_conflict_notes
         }
+
+        # ── 중앙 가격 엔진 (라운드 28) ────────────────────────────────
+        # '적정가' 한 숫자가 서로 다른 세 질문에 동시에 답하려다 26,350원짜리
+        # 종목에 21,218원이 권장 매수가로 붙었다. 지평이 다른 세 축으로
+        # 쪼개고, 화면·추천·AI 요약이 전부 이 결과 하나만 보게 한다.
+        try:
+            import price_axes as _pa
+            _fs_out['price_axes'] = _pa.build(
+                val_eval, _fs_out, curr_price=curr_price,
+                asset_type=asset_type, bars=len(tech_df))
+        except Exception as _e:
+            _fs_out['price_axes'] = None
+            _fs_out['price_axes_error'] = str(_e)
+        return _fs_out
 
     def check_20sma_settlement(self, tech_df):
         sub = tech_df.tail(5)

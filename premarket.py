@@ -23,20 +23,56 @@ PM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".portfolio")
 PM_HISTORY = os.path.join(PM_DIR, "premarket_history.jsonl")
 
 
-def _pm_path(date_key):
+def _pm_path(date_key, engine_version=None):
+    """
+    리포트 경로 — **날짜 × 엔진 버전**으로 가른다.
+
+    종전에는 날짜만 키였다. 그래서 엔진을 고쳐도 그날 처음 만든 리포트가
+    영원히 재사용됐고, 화면은 "예전 형식이니 다시 스캔하세요"라고만
+    말하면서 계속 같은 옛 값을 보여 줬다. 다시 스캔해도 파일이 있으니
+    갱신되지 않았다 — 안내가 실행 불가능한 지시였던 셈이다.
+
+    엔진이 바뀌면 그 엔진의 오늘 리포트는 아직 없으므로 새로 만든다.
+    옛 파일은 지우지 않는다 (사후 선택 방지 기록은 그대로 남긴다).
+    """
+    if engine_version:
+        safe = str(engine_version).replace(os.sep, '_').replace('/', '_')
+        return os.path.join(PM_DIR, f"premarket_{date_key}__{safe}.json")
     return os.path.join(PM_DIR, f"premarket_{date_key}.json")
 
 
-def load_today_report(date_key=None):
-    """오늘 리포트가 이미 고정돼 있으면 그대로 돌려준다 (장중 재계산 금지)."""
+def load_today_report(date_key=None, engine_version=None):
+    """
+    오늘 리포트가 **현재 엔진으로** 고정돼 있으면 그대로 돌려준다.
+
+    같은 날이라도 엔진이 다르면 그 리포트는 오늘의 결론이 아니다.
+    낡은 파일이 있으면 내용 대신 `superseded_by` 표시만 붙여 돌려주어,
+    화면이 "다시 스캔하세요"가 아니라 왜 비어 있는지 말할 수 있게 한다.
+    """
     date_key = date_key or datetime.now().strftime('%Y-%m-%d')
-    p = _pm_path(date_key)
+    ver = engine_version or _engine_version()
+
+    p = _pm_path(date_key, ver)
     if os.path.exists(p):
         try:
             with open(p, encoding='utf-8') as f:
                 return json.load(f)
         except Exception:
             return None
+
+    # 현재 엔진 리포트가 없다 — 옛 형식(날짜만)이 남아 있는지 본다
+    legacy = _pm_path(date_key)
+    if os.path.exists(legacy):
+        try:
+            with open(legacy, encoding='utf-8') as f:
+                old = json.load(f)
+        except Exception:
+            return None
+        if str(old.get('engine_version') or '') == str(ver):
+            return old
+        old['stale_engine'] = str(old.get('engine_version') or '미상')
+        old['current_engine'] = str(ver)
+        return old
     return None
 
 
@@ -99,7 +135,9 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     """
     date_key = date_key or datetime.now().strftime('%Y-%m-%d')
     existing = load_today_report(date_key)
-    if existing:
+    # 엔진이 바뀌어 낡은 리포트라면 그대로 돌려주지 않는다. 다시 만든다.
+    # 이걸 안 해서 "다시 스캔하세요" 안내가 아무 효과가 없었다.
+    if existing and not existing.get('stale_engine'):
         return existing, False               # (리포트, 새로 생성했는가)
 
     picks = []
@@ -188,7 +226,10 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     }
     try:
         os.makedirs(PM_DIR, exist_ok=True)
-        with open(_pm_path(date_key), 'w', encoding='utf-8') as f:
+        # 날짜×엔진으로 저장한다. 같은 날 엔진을 고치면 새 파일이 생기고,
+        # 옛 파일은 기록으로 남는다 (사후 선택 방지 감사 흔적).
+        with open(_pm_path(date_key, report['engine_version']), 'w',
+                  encoding='utf-8') as f:
             json.dump(report, f, ensure_ascii=False, indent=1)
         # 이력에도 추가 (같은 날짜+종목은 중복 저장하지 않음)
         seen = set()
