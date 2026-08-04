@@ -2508,9 +2508,23 @@ _pmr = st.session_state.get('premarket_report') or _pm_view.load_today_report()
 st.markdown('<div id="nav-premarket"></div>', unsafe_allow_html=True)
 if _pmr:
     st.markdown("## 오늘의 추천 — 개장 전 확정 리포트")
+    _pm_ver = str(_pmr.get('engine_version') or '')
     st.caption(f"기준 데이터 **{_pmr.get('data_asof')}** · 생성 **{_pmr.get('generated_at')}** · "
-               f"{_pmr.get('market_label') or ''}  \n"
+               f"{_pmr.get('market_label') or ''}"
+               + (f" · 엔진 **{_pm_ver}**" if _pm_ver else '') + "  \n"
                f"🔒 {_pmr.get('note')}")
+    # 리포트는 사후 선택 방지를 위해 동결한다. 그런데 엔진을 바꾸면 동결된
+    # 값이 낡는다 — 실제로 권장 매수가 산식을 바꿨는데 카드가 옛 값을
+    # 그대로 보여 줬다. 낡았으면 화면이 먼저 말해야 한다.
+    if _pm_ver and _pm_ver != _VER_NOW['model']:
+        st.warning(f"이 리포트는 엔진 **{_pm_ver}** 로 만들어졌고 현재 엔진은 "
+                   f"**{_VER_NOW['model']}** 입니다. 아래 가격은 예전 산식 "
+                   f"기준이라 지금 계산과 다를 수 있습니다 — 사이드바에서 "
+                   f"스캔을 다시 실행하면 새 엔진으로 만듭니다.")
+    elif not _pm_ver:
+        st.warning("이 리포트에는 만든 엔진 버전이 기록돼 있지 않습니다 "
+                   "(예전 형식). 지금 엔진과 다를 수 있으니 스캔을 다시 "
+                   "실행하는 편이 안전합니다.")
     _CLS_COLOR = {'오늘 사도 되는 종목': '#35C98B', '조건부로 사도 되는 종목': '#4C8DFF',
                   '오늘은 기다려야 하는 종목': '#F2B84B', '오늘은 사면 안 되는 종목': '#ff453a'}
 

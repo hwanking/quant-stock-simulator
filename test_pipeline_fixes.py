@@ -5021,6 +5021,17 @@ check("라운드 25 기록에 채택 근거가 '실행 가능성'이라고 적�
 check("수익 개선을 주장하지 않는다고 적혀 있다",
       '수익 개선' in _mv100 and '기각' in _mv100)
 
+# ⑧ 동결 리포트가 낡았는지 화면이 먼저 말한다
+_w100 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("개장 전 리포트에 만든 엔진 버전을 찍는다",
+      "'engine_version': _engine_version()" in _p100
+      and 'def _engine_version(' in _p100)
+check("엔진이 바뀌면 리포트가 낡았다고 경고한다",
+      "_pm_ver != _VER_NOW['model']" in _w100
+      and '예전 산식' in _w100)
+check("버전 기록이 없는 예전 리포트도 경고한다",
+      '만든 엔진 버전이 기록돼 있지 않습니다' in _w100)
+
 
 print()
 print("=" * 72)

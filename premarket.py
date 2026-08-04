@@ -62,6 +62,15 @@ def _classify_reco(row, easy_line):
     return '오늘은 사면 안 되는 종목'
 
 
+def _engine_version():
+    """리포트를 만든 엔진 버전 — 없으면 '미상'(지어내지 않는다)."""
+    try:
+        import versioning as _v
+        return _v.current('model')
+    except Exception:
+        return '미상'
+
+
 def _na_of(row):
     """
     스캔 행 하나에 '다음 조건'을 붙인다 — 카드가 "사지 마세요"로 끝나지 않게.
@@ -169,6 +178,10 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
                          if scan_rows else date_key),
         'market_label': market_label,
         'frozen': True,
+        # 어느 엔진이 만든 리포트인지 찍는다. 이게 없으면 엔진을 바꾼 뒤에도
+        # 낡은 값을 들고 있는 걸 알 수 없다 — 실제로 라운드 25 에서 권장
+        # 매수가 산식을 바꿨는데 카드가 옛 9,388원을 그대로 보여 줬다.
+        'engine_version': _engine_version(),
         'note': ("이 리포트는 생성 시각의 확정 데이터 기준이며, 오늘 장중에는 "
                  "다시 계산하지 않습니다 (사후 선택 방지)."),
         'picks': picks,
