@@ -1427,10 +1427,12 @@ section("38. Bollinger·DeMARK 신호가 종목마다 분화되는가")
 #   ② DeMARK 가 '오늘 봉에서 희귀 사건이 있었나'만 세어 전 종목이
 #      Bullish 8 / Bearish 0 고정, 라벨은 늘 '방향성 탐색 중' 이었다.
 _bb_states, _bull, _bear, _labels = [], [], [], []
+_bb_pcts = []
 for _sym in ("005930.KS", "003490.KS", "018880.KS", "037710.KS"):
     _sn = q.run_full_pipeline(_sym, T_REF, b_engine=engine, rho_cutoff=0.80)
     _f = _sn['four_scores']
     _bb_states.append(_f.get('bb_state'))
+    _bb_pcts.append(_f.get('bb_position_pct'))
     _bull.append(_f.get('demark_bullish_score'))
     _bear.append(_f.get('demark_bearish_score'))
     _labels.append(_f.get('demark_direction_text'))
@@ -1438,7 +1440,13 @@ for _sym in ("005930.KS", "003490.KS", "018880.KS", "037710.KS"):
           f"{_f.get('bb_position_pct')} · {_f.get('bb_state')}")
 
 check("볼린저 상태가 four_scores 에 노출됨", all(s for s in _bb_states), str(_bb_states))
-check("볼린저 상태가 종목마다 다를 수 있음", len(set(_bb_states)) >= 2, str(_bb_states))
+# 이 검사의 목적은 "밴드 위치가 상수로 굳어 있지 않은가" 다.
+# 그런데 상태 라벨(하단권/중앙권/상단권)은 4종목이 우연히 같은 날
+# 다 중앙권일 수 있다 — 그건 시장 상태이지 고장이 아니다.
+# 라벨 대신 **위치 수치**가 갈리는지로 본다 (시각에 흔들리지 않는다).
+check("볼린저 위치가 종목마다 갈린다 (상수로 굳지 않음)",
+      len(set(round(float(x), 1) for x in _bb_pcts if x is not None)) >= 2,
+      f"라벨 {_bb_states} · 위치 {[round(float(x),1) for x in _bb_pcts if x is not None]}")
 check("Bearish 가 0 고정이 아님", len(set(_bear)) >= 2, str(_bear))
 check("Bullish 가 8 고정이 아님", len(set(_bull)) >= 2, str(_bull))
 check("DeMARK 라벨이 '방향성 탐색 중' 하나로 고정되지 않음",
@@ -2972,16 +2980,17 @@ _w63 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 
 # ① 홈 지휘센터 — 실측 카드에 표본 수(n) 병기, 보장 문구 금지
 # UI 킷 타일로 렌더 — 5개 지표가 모두 있고, 표본 수를 보조에 적는다
-check("홈 카드 5종 — 사용자 언어 라벨", all(s in _w63 for s in (
-    "'되돌려 본 판단'", "'추천했을 때 연습 적중률'",
-    "'추천했을 때 실전 적중률'", "'추천만 골랐을 때'", "'매수 기회'")))
+check("홈 카드 4종 — 사용자 언어 라벨 + 점수 문턱 명시", all(
+    s in _w63 for s in (
+        "'되돌려 본 판단'", "'60점+ 신호 연습 적중률'",
+        "'60점+ 신호 실전 적중률'", "'매수 기회'")))
 check("홈 카드 — 킷 컴포넌트로 렌더 (인라인 HTML 금지)",
       '_uk.stat_tiles(' in _w63 and '_uk.section(' in _w63)
-check("홈 카드 — 대표 지표가 '추천했을 때' 기준 (전체 사례가 아님)",
-      '추천했을 때 실전 적중률' in _w63
+check("홈 카드 — 대표 지표가 매수권 기준 (전체 사례가 아님)",
+      '60점+ 신호 실전 적중률' in _w63
       and '매수 신호 {_bzv.get' in _w63)
 check("홈 카드 — 전체 사례 적중률도 숨기지 않고 보조로 남긴다",
-      '추천하지 않은 것까지 포함한' in _w63)
+      '점수와 무관하게 전체 사례를 다 센 적중률' in _w63)
 check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
 check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
       '_pm_today and _pm_today.get' in _w63)
@@ -3809,7 +3818,8 @@ if _os.path.exists(_rb82):
 
 _w82 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("화면 — 국면별 성적을 나눠 보여준다",
-      '시장 국면별 추천 성적' in _w82 and 'regime_breakdown.json' in _w82)
+      '시장 국면별 성적 (58점+ 신호)' in _w82
+      and 'regime_breakdown.json' in _w82)
 check("화면 — 표본 30건 미만은 성적으로 인정하지 않는다고 밝힌다",
       '표본 30건 미만이라 성적으로 인정하지 않는' in _w82)
 check("화면 — 하락 추세 신뢰 경고", '이 국면의 판단은 신뢰하지 마세요' in _w82)
@@ -4433,6 +4443,106 @@ check("하위 프로세스 호출에 encoding 이 지정돼 있다",
       all('encoding=' in _w92[max(0, _w92.find(ln) - 400):
                               _w92.find(ln) + 400] for ln in _subp92),
       str(_subp92[:1])[:120])
+
+
+section("93. 라운드 17~21 — 실행 레벨 재조사 · 도구 검증 규율")
+
+import json as _json93
+
+# ① 라운드 17 이 왜 무효였는지가 기록에 남아 있는가 (같은 실수 반복 방지)
+_mv93 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+             encoding='utf-8').read()
+check("라운드 17 무효 사유가 기록돼 있다 (mfe/mae 창 불일치)",
+      '라운드 17 은 무효였다' in _mv93 and '청산 봉까지만' in _mv93)
+check("라운드 18~21 기각이 기록돼 있다",
+      '라운드 18' in _mv93 and '라운드 21' in _mv93 and '기각' in _mv93)
+check("점수 분리력 결론이 기록돼 있다",
+      '58점 문턱은' in _mv93 and '구분되지 않는다' in _mv93)
+
+# ② 재시뮬레이터가 현행 판정을 재현하는가 — 도구를 먼저 검증한다
+_pth93 = _os.path.join(PROJ, '.portfolio', 'virtual_paths.jsonl')
+if _os.path.exists(_pth93):
+    sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+    import exec_sim as _X93
+    _orig93 = {}
+    for _r93 in _X93._jsonl(_X93.LED):
+        _orig93[(_r93['ticker'], _r93['date'])] = _r93.get('outcome')
+    _cs93, _ = _X93.load_cases(min_score=0, need_path=True)
+    _ag93 = _tt93 = 0
+    for _c93 in _cs93:
+        _k93, _ = _X93.simulate(_c93, _c93['TP'], _c93['SP'])
+        if _k93 == 'NODATA':
+            continue
+        _tt93 += 1
+        if _k93 == _orig93.get((_c93['ticker'], _c93['date'])):
+            _ag93 += 1
+    _rate93 = _ag93 / max(1, _tt93) * 100
+    check("재시뮬레이터가 현행 판정을 99% 이상 재현",
+          _rate93 >= 99.0, f'{_rate93:.2f}% ({_ag93:,}/{_tt93:,})')
+    check("경로가 원장 전건에 붙어 있다",
+          len(_cs93) > 0 and _tt93 >= 19000, f'{_tt93:,}건')
+else:
+    check("경로 파일 존재 (.portfolio/virtual_paths.jsonl)", False,
+          '없음 — scripts/enrich_paths_r17d.py 를 먼저 돌리세요')
+
+# ③ 실행 레벨 연구가 mfe/mae 를 직접 쓰지 않는가 (창이 다르다)
+#    라운드 17 이 그렇게 무효가 됐다. 새 연구는 exec_sim 만 쓴다.
+_newstudy93 = ['exec_levels_r18.py', 'when_not_to_buy_r19.py',
+               'gate_lift_r19b.py', 'does_score_work_r20.py',
+               'loss_control_r21.py']
+_bad93 = []
+for _f93 in _newstudy93:
+    _p93 = _os.path.join(PROJ, 'scripts', _f93)
+    if not _os.path.exists(_p93):
+        _bad93.append(f'{_f93}(없음)')
+        continue
+    _s93 = open(_p93, encoding='utf-8').read()
+    if 'mfe_pct' in _s93 or 'mae_pct' in _s93:
+        _bad93.append(f'{_f93}(mfe/mae 직접 사용)')
+    if 'import exec_sim' not in _s93 and 'from exec_sim' not in _s93 \
+            and 'when_not_to_buy_r19' not in _s93:
+        _bad93.append(f'{_f93}(exec_sim 미사용)')
+check("라운드 18~21 연구가 exec_sim 만 쓴다 (mfe/mae 직접 사용 없음)",
+      not _bad93, ' '.join(_bad93))
+
+# ④ 사전등록이 문서화돼 있는가 — 측정 후에 기준을 만들지 않았다는 증거
+for _f93 in _newstudy93:
+    _p93 = _os.path.join(PROJ, 'scripts', _f93)
+    if not _os.path.exists(_p93):
+        continue
+    _d93 = (open(_p93, encoding='utf-8').read().split('"""')[1]
+            if '"""' in open(_p93, encoding='utf-8').read() else '')
+    check(f"{_f93} 에 사전등록이 적혀 있다",
+          ('사전등록' in _d93 or '채택 기준' in _d93 or '판정 기준' in _d93
+           or '해석 규칙' in _d93), _d93[:60].replace('\n', ' '))
+
+# ⑤ 채택한 것이 없다는 사실이 산출물에도 남아 있는가
+for _f93, _key93 in (('exec_levels_r18.json', 'adopted'),
+                     ('gate_lift_r19b.json', 'adopted'),
+                     ('loss_control_r21.json', 'adopted')):
+    _p93 = _os.path.join(PROJ, '.portfolio', _f93)
+    if not _os.path.exists(_p93):
+        continue
+    with open(_p93, encoding='utf-8') as _fh93:
+        _j93 = _json93.load(_fh93)
+    check(f"{_f93} 채택 없음이 기록됨", _j93.get(_key93) in (None, [], ''),
+          str(_j93.get(_key93))[:60])
+
+# ⑥ 화면에서 '추천'이 두 집단을 가리키지 않는가 (58+ vs 60+)
+_w93 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("타일 라벨에 점수 문턱이 박혀 있다 (60점+)",
+      "'60점+ 신호 실전 적중률'" in _w93)
+check("국면 표 제목에 점수 문턱이 박혀 있다 (58점+)",
+      '시장 국면별 성적 (58점+ 신호)' in _w93)
+check("두 표의 숫자가 다른 이유를 본문에서 밝힌다",
+      '아래 국면별 표는 **58점 이상**' in _w93)
+
+# ⑦ 새 이슈가 원인·계획과 함께 등록돼 있는가
+_io93 = open(_os.path.join(PROJ, 'improvement', 'issue_ops.py'),
+             encoding='utf-8').read()
+for _k93 in ('model|score_not_separating', 'data|ledger_path_window',
+             'usability|loss_control_tradeoff'):
+    check(f"플레이북에 {_k93} 가 있다", f"'{_k93}'" in _io93)
 
 
 print()
