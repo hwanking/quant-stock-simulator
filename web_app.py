@@ -2557,9 +2557,24 @@ if _pmr:
 
     _picks_all = [{**p, 'reco_class': _pm_display_class(p)}
                   for p in (_pmr.get('picks') or [])]
+    # ── 실행 가능성 게이트 (라운드 34) ──────────────────────────────────
+    # 사용자 지적: *"우진처럼 현재가 14,600원인데 권장 매수가 9,388원인
+    # 종목은 오늘의 추천에서 제외해 주세요."* 중앙 판정의 10조건이 판단하고,
+    # 통과 못 한 종목은 **사유와 함께 분류**해서 따로 둔다.
+    import verdict_core as _vc_view
+    _picks_ok = [p for p in _picks_all
+                 if (p.get('core') or {}).get('recommended')]
+    _picks_gated = [p for p in _picks_all
+                    if (p.get('core') or {})
+                    and not (p.get('core') or {}).get('recommended')]
+    _picks_legacy = [p for p in _picks_all if not p.get('core')]
+
     # 추천 카드에는 '사면 안 되는 종목'을 올리지 않는다 — 그건 추천이 아니라 제외다
-    _picks_show = [p for p in _picks_all
-                   if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
+    if _picks_ok or _picks_gated:
+        _picks_show = _picks_ok[:5]
+    else:                                    # 옛 리포트 — 중앙 판정이 없다
+        _picks_show = [p for p in _picks_legacy
+                       if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
     _picks_ban = [p for p in _picks_all
                   if p['reco_class'] == '오늘은 사면 안 되는 종목']
     _ASSET_KO = {'STOCK': '주식', 'ETF': 'ETF', 'ETF_LEV': '레버리지 ETF',
@@ -2580,8 +2595,19 @@ if _pmr:
         """
         _n = p.get('next_action') or {}
         cls = str(p.get('reco_class') or '')
-        price, rec = p.get('price'), p.get('rec_buy')
-        e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
+        # ── 중앙 판정 우선 (라운드 34) ────────────────────────────────
+        # 카드가 자기만의 가격 조합을 만들면 상세 화면과 어긋난다(라운드 31
+        # 진단 ⑤). 중앙 판정이 있으면 그것만 읽고, 없을 때만(옛 리포트)
+        # 예전 키로 폴백한다.
+        _core = p.get('core') or {}
+        price = p.get('price')
+        if _core:
+            rec = _core.get('pullback_zone') or (
+                (_core.get('buy_zone') or [None])[0])
+            e_t1, e_stop = _core.get('new_target'), _core.get('new_stop')
+        else:
+            rec = p.get('rec_buy')
+            e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
         # 정합 가드 (라운드 30) — 동결 리포트는 옛 엔진 값을 그대로 들고
         # 있어서, 손절이 매수가 위이거나 목표가 매수가 아래인 카드가 나온다
         # (실측: GS 92,011 매수에 손절 100,775 · NAVER 214,733 매수에 목표
@@ -2698,8 +2724,36 @@ if _pmr:
         _picks_show = []
 
     if not _picks_show and not _pm_stale:
-        st.info("오늘은 사도 되는·기다릴 후보가 없습니다 — 전 종목이 제외됐습니다. "
-                "없는 날은 관망이 결론입니다 (아래 제외 목록에서 이유를 확인하세요).")
+        # 억지로 종목 수를 채우지 않는다 (사용자 사양 §2)
+        st.error(f"**{_vc_view.NO_PICK_LINE}**")
+
+    # ── 통과 못 한 종목 — 사유를 8분류로 명시 (사용자 사양 §2) ────────────
+    if _picks_gated and not _pm_stale:
+        _by_bucket = {}
+        for _g in _picks_gated:
+            _c = _g.get('core') or {}
+            _by_bucket.setdefault(_c.get('bucket') or '추천 제외', []).append(
+                (_g, _c))
+        st.markdown("###### 오늘 추천에 올리지 못한 종목과 이유")
+        for _bk in _vc_view.BUCKETS:
+            _items = _by_bucket.get(_bk)
+            if not _items:
+                continue
+            with st.expander(f"{_bk} ({len(_items)}종목)", expanded=False):
+                for _g, _c in _items:
+                    _gp = _c.get('gap_pct')
+                    st.markdown(
+                        f"**{_g.get('name')}** ({_g.get('code')}) — "
+                        + (f"현재가 {_c['current_price']:,.0f}원"
+                           if _c.get('current_price') else '현재가 미산출')
+                        + (f" · 진입가 {_c['pullback_zone']:,.0f}원"
+                           f"({_gp:+.1f}%)" if _c.get('pullback_zone')
+                           and _gp is not None else '')
+                        + f"  \n{_c.get('exclude_reason') or ''}")
+                    _fail = [c for c in (_c.get('checks') or []) if not c['ok']]
+                    if _fail:
+                        st.caption("미충족: " + " · ".join(
+                            f"{c['name']}({c['detail']})" for c in _fail[:4]))
     # 한 줄에 5개를 우겨 넣으면 카드 폭이 ~280px 로 줄어 '242,500원'의 원이
     # 잘리고 종목명이 어색하게 접힌다. 한 줄 3개로 두면 ~450px 이 나온다.
     # 스트림릿 컬럼은 자동 줄바꿈이 없으므로 직접 묶어서 여러 줄로 만든다.
@@ -4321,6 +4375,16 @@ if _t1_sig is not None and _t1_sig > 2.0:
 # 관망이라면 **언제·어떤 조건에서** 살 수 있는지 반드시 적는다.
 import next_action as _na
 _NA = _na.build(four_scores, tech_df, realtime_price, verdict)
+
+# ── 중앙 판정 (라운드 34) ────────────────────────────────────────────────
+# 추천 카드·종목 상세·가늠 AI·차트·보유자 화면이 **이 결과 하나만** 읽는다.
+# 라운드 31 진단: 같은 개념에 이름이 5개(권장 매수가)·2개(손절)·2개(목표)
+# 였고, 카드는 premarket 의 rec_buy/target/stop 을, 상세는 four_scores
+# 원본을 읽었다. 경로가 둘이라 한쪽만 고치는 일이 생겼다(라운드 30 모순).
+import verdict_core as _vc
+CORE = _vc.build(four_scores, verdict=verdict,
+                 price_axes=four_scores.get('price_axes'),
+                 next_action=_NA, realtime_price=realtime_price)
 
 # ── 관망 조건 감시 — 저장만 하고 다시 안 보면 매번 직접 검색해야 한다 ────
 import watch_alerts as _wa

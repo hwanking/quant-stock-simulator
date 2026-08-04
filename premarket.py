@@ -98,6 +98,30 @@ def _classify_reco(row, easy_line):
     return '오늘은 사면 안 되는 종목'
 
 
+def _core_of(q_engine, row, fs, verdict):
+    """
+    중앙 판정 — 상세 화면과 **같은 함수**를 쓴다 (라운드 34).
+
+    카드가 자기만의 rec_buy/target/stop 조합을 만들던 것이 화면 간 어긋남의
+    원인이었다(라운드 31 진단 ⑤). 이제 두 화면이 같은 dict 를 읽는다.
+    """
+    try:
+        import next_action as _na
+        import verdict_core as _vc
+    except Exception:
+        return None
+    try:
+        na = _na.build(fs, None, row.get('base_price'), verdict or {})
+    except Exception:
+        na = None
+    try:
+        return _vc.build(fs, verdict=verdict,
+                         price_axes=fs.get('price_axes'), next_action=na,
+                         realtime_price=row.get('base_price'))
+    except Exception:
+        return None
+
+
 def _engine_version():
     """리포트를 만든 엔진 버전 — 없으면 '미상'(지어내지 않는다)."""
     try:
@@ -207,6 +231,11 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
                                 if cb else None),
             'reasons': [str(x)[:90] for x in
                         (str(fs.get('gate_reason', '')).split(' / ')[:3])],
+            # ── 중앙 판정 (라운드 34) ────────────────────────────────
+            # 카드가 자기만의 가격 조합을 만들지 않도록, 상세 화면과 **같은
+            # 함수**가 낸 결과를 통째로 싣는다. 화면 간 값이 어긋나면
+            # 회귀가 잡는다.
+            'core': _core_of(q_engine, r, fs, verdict),
         })
 
     report = {

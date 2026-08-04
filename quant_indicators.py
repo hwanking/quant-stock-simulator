@@ -3726,6 +3726,10 @@ class QuantIndicatorsEngine:
             'fair_value_confidence': float(fair_value_confidence),
             # 권장 매수가에 샀을 때의 레벨 — 위 target_tech_*/stop_loss_price 는
             # **현재가** 기준이라, 아직 안 산 사람에게는 이쪽이 맞는 값이다.
+            # 중앙 판정이 현재가를 화면에서 따로 받지 않아도 되게 함께 싣는다
+            # (라운드 36: 이게 없어서 verdict_core 가 현재가를 못 받는 경로가
+            #  있었고, 괴리·깊이·정합 판정이 통째로 건너뛰어졌다).
+            'current_price': float(curr_price),
             'level_incoherence': level_incoherence,
             'entry_stop_price': entry_stop_price,
             'entry_target_1st': entry_target_1st,

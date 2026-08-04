@@ -1,0 +1,347 @@
+# -*- coding: utf-8 -*-
+"""
+중앙 판정 엔진 — 모든 화면이 **이 결과 하나만** 읽는다.
+
+사용자 지적: *"추천 화면, 종목 상세, 가늠 AI, 차트, 보유자 화면이 서로 다른
+결론이나 가격을 표시하지 않도록 중앙 판정 엔진을 하나로 통합해 주세요.
+화면마다 값이 다르면 자동 테스트가 실패하도록 해 주세요."*
+
+■ 왜 어긋났나 (라운드 31 진단)
+  같은 개념에 이름이 여럿이었다:
+    권장 매수가 5개 — recommended_buy_price · entry_pullback_price ·
+                   buy_entry_max · entry_review_price · value_floor_price
+    손절 2개 — stop_loss_price · entry_stop_price
+    1차 목표 2개 — target_tech_1st · entry_target_1st
+  그리고 추천 카드는 premarket 이 만든 rec_buy/target/stop 을,
+  상세 화면은 four_scores 원본을 읽었다. **경로가 둘이었다.**
+  경로가 둘이면 한쪽만 고치는 일이 생기고, 실제로 그렇게 어긋났다
+  (라운드 30: GS 손절이 매수가 위, NAVER 목표가 매수가 아래).
+
+■ 규칙
+  ① 화면은 four_scores 를 직접 읽지 않는다. `build()` 결과만 읽는다.
+  ② 신규 매수자 값과 보유자 값을 **다른 키**로 분리한다. 섞이면 버그다.
+  ③ 미산출은 None 으로 둔다 — 임의 숫자로 채우지 않는다.
+  ④ 정합(손절<진입<목표)이 깨지면 그 값을 **비우고** 사유를 남긴다.
+"""
+from __future__ import annotations
+
+#: 추천 자격 — 10개 조건 전부 통과해야 '오늘 살 수 있는 종목'이다 (사용자 사양 §2)
+#:
+#: 진입 깊이 상한은 **손으로 고르지 않았다** — 그리고 자를 두 번 바꿨다.
+#:
+#: 라운드 33 (기각): 진입가를 고정 %(−0.5%~−30%)로 훑어 체결률 60% 지점을
+#:   읽었다 → 5.5%. 그런데 게이트로 걸어 보니 **변동성 큰 종목만 잘렸다**:
+#:   SK하이닉스 −10.1% · 삼성전자 −8.6% · 우리기술 −8.4% 전부 탈락.
+#:   같은 −8% 라도 일변동성 1% 종목에겐 8σ, 5% 종목에겐 1.6σ 다.
+#:   **고정 %는 잘못된 자였다.** 게다가 현행 진입 엔진은 진입가를 늘 1σ
+#:   아래에 두므로 도달 확률이 전 종목 82% 로 상수가 되어 무의미했다.
+#:
+#: 라운드 35 (채택): 같은 측정을 **σ 단위**로 다시 했다. 세 구간이
+#:   1.9~2.1σ 로 거의 일치한다 — 고정 %(4.5~9.0%)보다 훨씬 안정적이다.
+#:     train 2.1σ · valid 1.9σ · blind 2.1σ · 통합 2.1σ (n=5,389)
+MAX_ENTRY_SIGMA = 2.1   #: 라운드 35 실측 · 통합 표본 체결률 60% 지점
+SIGMA_BASIS = ('20봉 안 체결률 60% 지점을 σ 단위로 실측 · 통합 n=5,389 '
+               '(train 2.1σ · valid 1.9σ · blind 2.1σ)')
+MIN_RR = 0.5            #: 손익비 하한 (1차 목표 0.7R 기하의 하한)
+COST_PCT = 0.36         #: 왕복 거래비용 (수수료+세금+슬리피지)
+MIN_CONF = 45           #: 분석 신뢰도 하한
+MIN_QUALITY = 40        #: 전략 품질(표본외) 하한
+MIN_TURNOVER = 3e8      #: 20일 평균 거래대금 하한 (3억 · 저유동성 배제)
+
+#: 도달 확률 — 위 σ 문턱을 사람이 읽을 수 있는 확률로 바꾼 값.
+#: 무추세 랜덤워크의 최저점 분포(반사원리): P(20봉 최저 ≤ −g) = 2·Φ(−g/σ√20)
+#: **게이트는 σ 문턱 하나만 쓴다.** 확률은 화면 표시용이다 — 같은 것을 두 번
+#: 거르면 이유 없이 두 배로 엄격해진다.
+HORIZON = 20
+#: 실측 대조 (라운드 35): 모형이 낸 확률과 원장 실측 체결률
+#:   1.0σ 모형 82% vs 실측 78.3%  ·  2.0σ 모형 47% vs 실측 60.3%
+#: 모형은 깊은 쪽에서 실제보다 비관적이다(추세·변동성 군집을 무시하므로).
+#: 그래서 **판정은 실측 σ 문턱으로 하고, 모형 확률은 참고로만 보여 준다.**
+FILL_MODEL_NOTE = '무추세 모형 추정 (실측 체결률과 다를 수 있음)'
+
+#: 추천에서 빠진 이유 — 사용자 사양 §2 의 8분류
+BUCKETS = ('오늘 매수 가능', '눌림목 대기', '돌파 확인 대기', '장기 관찰',
+           '과열로 제외', '권장가 괴리 과다', '신뢰도 부족', '데이터 부족',
+           '추천 제외')
+
+NO_PICK_LINE = ("오늘은 검증 조건과 실행 가능성을 모두 충족한 신규 매수 "
+                "종목이 없습니다. 현금 유지가 우선입니다.")
+
+
+def _f(v):
+    try:
+        if v is None:
+            return None
+        x = float(v)
+        return None if x != x else x
+    except (TypeError, ValueError):
+        return None
+
+
+def _pct(a, b):
+    a, b = _f(a), _f(b)
+    return None if not (a and b) else (a / b - 1.0) * 100.0
+
+
+def _norm_cdf(z):
+    """표준정규 누적분포 — 외부 의존 없이."""
+    return 0.5 * (1.0 + _erf(z / (2.0 ** 0.5)))
+
+
+def _erf(x):
+    """Abramowitz–Stegun 7.1.26 (오차 < 1.5e-7)."""
+    s = 1.0 if x >= 0 else -1.0
+    x = abs(x)
+    t = 1.0 / (1.0 + 0.3275911 * x)
+    y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+                - 0.284496736) * t + 0.254829592) * t * (2.718281828459045
+                                                         ** (-x * x))
+    return s * y
+
+
+def fill_probability(entry, price, vol_20, horizon=HORIZON):
+    """
+    보유기간 안에 진입가에 닿을 확률 (%).
+
+    무추세 랜덤워크의 최저점 분포를 쓴다(반사원리):
+        P(min ≤ −g) = 2·Φ(−g / (σ√H))
+    괴리와 다른 것을 잰다 — 같은 5% 라도 종목 변동성에 따라 확률이 다르다.
+    돌파형(진입가가 현재가 위)이면 최고점 분포로 대칭 적용한다.
+    """
+    e, p, v = _f(entry), _f(price), _f(vol_20)
+    if not (e and p and v and v > 0):
+        return None
+    g = abs(e / p - 1.0)
+    if g == 0:
+        return 100.0
+    sig = v * (horizon ** 0.5)
+    if sig <= 0:
+        return None
+    return round(min(100.0, 2.0 * _norm_cdf(-g / sig) * 100.0), 1)
+
+
+def build(four_scores, verdict=None, price_axes=None, next_action=None,
+          realtime_price=None):
+    """
+    모든 화면이 공유할 단일 판정.
+
+    반환 키 (사용자 사양 §6 전부):
+      action · recommended · buy_zone · pullback_zone · breakout_price ·
+      new_target · new_stop · hold_trim · hold_stop · horizon_days ·
+      reach_prob · expected_return · rr · confidence · exclude_reason ·
+      bucket · price_basis · incoherence
+    """
+    fs = four_scores or {}
+    vd = verdict or {}
+    ax = price_axes or fs.get('price_axes') or {}
+    na = next_action or {}
+
+    px = _f(realtime_price) or _f(fs.get('current_price'))
+    ent = (ax.get('entry') or {})
+    entry = _f(ent.get('price')) if ent.get('available') else None
+    if entry is None:                      # 축이 없으면 엔진 원값으로 폴백
+        entry = (_f(fs.get('entry_pullback_price'))
+                 or _f(fs.get('recommended_buy_price'))
+                 or _f(fs.get('entry_review_price')))
+
+    stop = _f(fs.get('entry_stop_price'))
+    tgt = _f(fs.get('entry_target_1st'))
+    rr = _f(fs.get('entry_rr'))
+
+    # ── ④ 정합 — 깨지면 비우고 사유를 남긴다 ──────────────────────────
+    inc = list(fs.get('level_incoherence') or [])
+    if entry:
+        if stop is not None and stop >= entry:
+            inc.append(f'손절({stop:,.0f})이 진입가({entry:,.0f}) 이상 — 표시 제외')
+            stop = rr = None
+        if tgt is not None and tgt <= entry:
+            inc.append(f'1차 목표({tgt:,.0f})가 진입가({entry:,.0f}) 이하 — 표시 제외')
+            tgt = rr = None
+
+    # ── ② 보유자 값은 별도 키 (신규 매수자와 절대 섞지 않는다) ────────
+    hold_trim = _f(fs.get('target_tech_1st'))
+    hold_stop = _f(fs.get('stop_loss_price'))
+    if px:
+        if hold_stop is not None and hold_stop >= px:
+            hold_stop = None
+        if hold_trim is not None and hold_trim <= px:
+            hold_trim = None
+
+    gap = _pct(entry, px)                        # 진입가가 현재가보다 얼마나 아래인가
+    vol20 = _f(fs.get('vol_20')) or _f(fs.get('vol20'))
+    fill_p = fill_probability(entry, px, vol20)
+    turnover = _f(fs.get('avg_turnover_20d'))
+    # 진입 깊이를 종목 자신의 변동성으로 정규화한다 (라운드 35).
+    # 고정 %는 변동성 큰 종목을 부당하게 잘랐다.
+    depth_sigma = (round(abs(gap) / (vol20 * 100.0), 2)
+                   if (gap is not None and vol20 and vol20 > 0) else None)
+    sigma = _f(fs.get('rec_buy_sigma'))
+    reach = fs.get('rec_buy_reach')
+    conf = _f(fs.get('analysis_confidence'))
+    quality = _f(fs.get('strategy_quality_score'))
+    score = _f(fs.get('final_action_score'))
+    vetoes = list(vd.get('vetoes') or [])
+    rg = fs.get('regime_gate') or {}
+
+    # 기대수익 — 지어내지 않는다. 목표·손절과 과거 적중률이 다 있을 때만.
+    cb = fs.get('calibration_band') or {}
+    hit = _f(cb.get('hit_rate'))
+    exp_ret = None
+    if entry and tgt and stop and hit is not None and (cb.get('n') or 0) >= 30:
+        p = hit / 100.0
+        up = (tgt / entry - 1.0) * 100.0
+        dn = (stop / entry - 1.0) * 100.0
+        exp_ret = round(p * up + (1 - p) * dn - COST_PCT, 2)
+
+    # ── ① 추천 10조건 (사용자 사양 §2) ────────────────────────────────
+    checks = [
+        ('권장 매수가 산출', entry is not None,
+         f'{entry:,.0f}원' if entry else '미산출'),
+        ('진입 깊이 현실적', depth_sigma is not None
+         and depth_sigma <= MAX_ENTRY_SIGMA,
+         (f'{depth_sigma:.2f}σ ({gap:+.1f}% · 상한 {MAX_ENTRY_SIGMA}σ · '
+          f'{SIGMA_BASIS})' if depth_sigma is not None else '산출 불가')),
+        ('보유기간 안 도달 가능', depth_sigma is not None
+         and depth_sigma <= MAX_ENTRY_SIGMA,
+         (f'{HORIZON}봉 실측 체결률 기준 통과 · 모형 확률 {fill_p:.0f}% '
+          f'({FILL_MODEL_NOTE})'
+          if fill_p is not None else '산출 불가')),
+        ('목표·손절 산출', tgt is not None and stop is not None,
+         '있음' if (tgt and stop) else '미산출'),
+        ('손익비 기준 이상', rr is not None and rr >= MIN_RR,
+         f'{rr}' if rr is not None else '미산출'),
+        ('비용 차감 기대값 양수', exp_ret is not None and exp_ret > 0,
+         f'{exp_ret:+.2f}%' if exp_ret is not None else '산출 불가'),
+        ('신뢰도·전략품질 기준', (conf is not None and conf >= MIN_CONF)
+         and (quality is not None and quality >= MIN_QUALITY),
+         f'신뢰 {conf:.0f} · 품질 {quality:.0f}'
+         if (conf is not None and quality is not None) else '미산출'),
+        ('과열·저유동성 아님',
+         (not _overheated(fs))
+         and (turnover is None or turnover >= MIN_TURNOVER),
+         _heat_txt(fs)
+         + (f' · 거래대금 {turnover / 1e8:.1f}억' if turnover else '')),
+        ('표본외 검증 통과', not fs.get('blind_test_not_completed'),
+         str(fs.get('blind_test_status') or '미수행')),
+        ('강제 차단 없음', not vetoes and not rg.get('block_new'),
+         f'{len(vetoes)}건' if vetoes else '없음'),
+    ]
+    failed = [c[0] for c in checks if not c[1]]
+    recommended = not failed
+
+    bucket, reason = _bucket(failed, na, gap, entry, sigma, fill_p,
+                         depth_sigma)
+
+    return dict(
+        # 결론
+        action=str(vd.get('action') or ''),
+        headline=str(vd.get('headline') or ''),
+        recommended=recommended,
+        bucket=bucket,
+        exclude_reason=reason,
+        checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
+        failed=failed,
+        # 신규 매수자 가격 (한 기준: 진입가)
+        buy_zone=(None if entry is None
+                  else (round(entry * 0.99), round(entry * 1.01))),
+        pullback_zone=_f(fs.get('entry_pullback_price')),
+        breakout_price=_f(na.get('breakout_price')) or _f(fs.get('high_20d')),
+        new_target=tgt, new_stop=stop, rr=rr,
+        # 보유자 가격 (절대 섞지 않는다)
+        hold_trim=hold_trim, hold_stop=hold_stop,
+        # 판단 부가
+        horizon_days=int(_f(fs.get('horizon_days')) or 20),
+        reach_prob=fill_p, reach_label=reach, reach_sigma=sigma,
+        turnover=turnover, vol_20=vol20, depth_sigma=depth_sigma,
+        expected_return=exp_ret, confidence=conf, score=score,
+        current_price=px, gap_pct=(round(gap, 2) if gap is not None else None),
+        price_basis='진입가 기준 (신규 매수자) · 보유자 값은 hold_* 키',
+        incoherence=inc,
+        regime=rg.get('cell_ko'), regime_level=rg.get('level'),
+    )
+
+
+#: 과열 지표의 실제 키 이름. 라운드 35 에서 **이름을 잘못 읽고 있었다** —
+#: bb_position/williams_r/rsi_14 로 찾았는데 엔진은 *_pct/*_value 로 내보낸다.
+#: 그래서 지표가 전부 None 이 되고, 대신 적정가 구간('크게 초과')만으로
+#: 과열을 판정했다. 그 결과 삼성전자·SK하이닉스처럼 유동성 최상위 종목이
+#: '과열'로 탈락했다. 라운드 28b 에서 적정가 구간이 성과를 유의하게 가르지
+#: 못한다고 이미 측정했으므로, 적정가를 과열 판정에 쓰지 않는다.
+_HEAT_KEYS = (('bb_position_pct', '볼린저', 95.0, 'ge'),
+              ('williams_r_value', 'W%R', -10.0, 'ge'),
+              ('rsi_value', 'RSI', 75.0, 'ge'))
+
+
+def _heat_hits(fs):
+    """과열 지표 중 몇 개가 임계를 넘었나 · 읽은 값들."""
+    hits, parts, seen = 0, [], 0
+    for key, lbl, thr, _op in _HEAT_KEYS:
+        v = _f(fs.get(key))
+        if v is None:
+            continue
+        seen += 1
+        parts.append(f'{lbl} {v:.0f}')
+        if v >= thr:
+            hits += 1
+    return hits, seen, parts
+
+
+def _overheated(fs):
+    """
+    기술적 과열만 본다 — 적정가 구간은 쓰지 않는다 (라운드 28b·35).
+
+    지표를 하나도 못 읽으면 **과열이 아니라고 본다.** 못 읽은 것을
+    과열로 취급하면 데이터 결측이 매수 차단으로 둔갑한다.
+    """
+    hits, seen, _ = _heat_hits(fs)
+    return seen >= 2 and hits >= 2
+
+
+def _heat_txt(fs):
+    _, seen, parts = _heat_hits(fs)
+    if not parts:
+        return '과열 지표 미수신 (과열로 보지 않음)'
+    return ' · '.join(parts)
+
+
+def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None):
+    """왜 추천에서 빠졌는가 — 8분류 중 하나로 명시한다."""
+    if not failed:
+        return '오늘 매수 가능', ''
+    if '권장 매수가 산출' in failed or '목표·손절 산출' in failed:
+        return '데이터 부족', '실행 가격을 산출하지 못했습니다.'
+    if '강제 차단 없음' in failed:
+        return '추천 제외', '매수를 막는 조건이 있습니다.'
+    if '과열·저유동성 아님' in failed:
+        return '과열로 제외', '급등 직후라 추격 위험이 큽니다.'
+    if '진입 깊이 현실적' in failed or '보유기간 안 도달 가능' in failed:
+        g = f'{gap:+.1f}%' if gap is not None else '산출 불가'
+        d = f'{depth:.2f}σ' if depth is not None else '산출 불가'
+        return '권장가 괴리 과다', (
+            f'진입가가 현재가 대비 {g}({d}) 라 {HORIZON}봉 안에 닿을 확률이 '
+            f'60% 미만입니다 (상한 {MAX_ENTRY_SIGMA}σ · 실측). '
+            f'장기 참고선으로만 봅니다.')
+    if '신뢰도·전략품질 기준' in failed or '표본외 검증 통과' in failed:
+        return '신뢰도 부족', '분석 신뢰도 또는 표본외 검증이 기준에 못 미칩니다.'
+    kind = str(na.get('kind') or '')
+    if kind == 'breakout':
+        return '돌파 확인 대기', '돌파 후 재지지를 확인해야 합니다.'
+    if kind == 'pullback':
+        return '눌림목 대기', '눌림을 기다립니다.'
+    if kind == 'observe':
+        return '장기 관찰', '지금은 실행 자리가 아닙니다.'
+    return '눌림목 대기', ' / '.join(failed[:3])
+
+
+def screen_values(v):
+    """
+    화면 간 일치를 확인할 때 비교하는 값들.
+
+    회귀 테스트가 이 묶음을 모든 화면에서 뽑아 같은지 본다.
+    다르면 실패한다 — 사용자 요구 그대로다.
+    """
+    return {k: v.get(k) for k in (
+        'action', 'recommended', 'buy_zone', 'pullback_zone',
+        'breakout_price', 'new_target', 'new_stop', 'hold_trim', 'hold_stop',
+        'horizon_days', 'reach_prob', 'expected_return', 'rr', 'confidence',
+        'exclude_reason', 'bucket')}

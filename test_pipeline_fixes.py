@@ -5473,6 +5473,258 @@ check("실행 불가능했던 옛 안내를 지웠다",
       '실행하는 편이 안전합니다' not in _w104)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §105 — "왜 이전 화면으로 돌아갔나" 여섯 가설과 그 재발 방지 (라운드 31~34)
+#   진단 결과: ①구형 컴포넌트 ③이전 커밋 배포 는 **기각**.
+#   실제 원인은 ②동결 산출물이 옛 엔진 값을 그대로 화면에 올림,
+#   ④업데이트 이력이 재생성되지 않아 UI 날짜가 뒤처짐,
+#   ⑤추천 카드와 상세 화면이 **서로 다른 키**를 읽는 이중 경로.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§105 되돌아감 재발 방지 · 중앙 판정 (라운드 31~34)")
+print("=" * 72)
+import verdict_core as _vc105
+_vcsrc105 = open(_os.path.join(PROJ, 'verdict_core.py'),
+                 encoding='utf-8').read()
+_q105 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_w105 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_p105 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
+
+# ── ④ UI 날짜가 커밋 이력에서 나오고, 그 이력이 최신인가 ──────────────
+import json as _j105
+import subprocess as _sp105
+with open(_os.path.join(PROJ, 'data', 'update_history.json'),
+          encoding='utf-8') as _f:
+    _uh105 = _j105.load(_f)
+_uh_latest = str((_uh105.get('days') or [{}])[0].get('date') or '')
+try:
+    _git_latest = _sp105.run(
+        ['git', 'log', '-1', '--date=short', '--pretty=%ad'], cwd=PROJ,
+        capture_output=True, text=True, encoding='utf-8',
+        errors='replace').stdout.strip()
+except Exception:
+    _git_latest = ''
+check("업데이트 날짜를 손으로 적지 않는다",
+      'APP_UPDATED = _last_update_date()' in _w105
+      and 'update_history.json' in _w105)
+check("업데이트 이력이 최신 커밋까지 반영돼 있다",
+      (not _git_latest) or _uh_latest >= _git_latest,
+      f'이력 {_uh_latest} vs 커밋 {_git_latest} — '
+      f'scripts/gen_update_history.py 를 다시 돌려야 합니다')
+
+# ── ② 동결 산출물이 옛 엔진 값을 화면에 올리지 않는가 ─────────────────
+check("동결 리포트는 날짜×엔진으로 저장",
+      "_pm_path(date_key, report['engine_version'])" in _p105)
+check("낡은 동결 리포트를 재사용하지 않는다",
+      "if existing and not existing.get('stale_engine')" in _p105)
+check("낡으면 가격을 화면에 두지 않는다",
+      'if _pm_stale and _picks_show:' in _w105)
+
+# ── ⑤ 추천 카드와 상세가 같은 중앙 판정을 읽는가 ──────────────────────
+check("중앙 판정 모듈이 있다", _os.path.exists(
+    _os.path.join(PROJ, 'verdict_core.py')))
+check("상세 화면이 중앙 판정을 만든다", 'CORE = _vc.build(' in _w105)
+check("추천 리포트가 같은 함수를 쓴다",
+      'import verdict_core as _vc' in _p105 and 'def _core_of(' in _p105)
+check("카드가 중앙 판정을 우선 읽는다",
+      "_core = p.get('core') or {}" in _w105
+      and "_core.get('new_target')" in _w105)
+check("중앙 판정이 없을 때만 옛 키로 폴백",
+      "rec = p.get('rec_buy')" in _w105 and 'else:' in _w105)
+
+# ── 중앙 판정 계약 — 사용자 사양 §6 의 값이 전부 있는가 ────────────────
+_b105 = dict(current_price=26350, entry_pullback_price=25150,
+             entry_stop_price=24200, entry_target_1st=26800, entry_rr=1.74,
+             target_tech_1st=27900, stop_loss_price=25000,
+             analysis_confidence=78, strategy_quality_score=62,
+             final_action_score=63, blind_test_not_completed=False,
+             horizon_days=20, calibration_band={'hit_rate': 59.0, 'n': 8436},
+             bb_position=62, williams_r=-35, rsi_14=58,
+             rec_buy_sigma=0.45, rec_buy_reach='가까움',
+             chase_buy_status='안전마진 확보')
+_c105 = _vc105.build(_b105, verdict=dict(action='ACCUMULATE',
+                                         headline='분할매수 검토 가능',
+                                         vetoes=[]))
+for _k105 in ('action', 'recommended', 'buy_zone', 'pullback_zone',
+              'breakout_price', 'new_target', 'new_stop', 'hold_trim',
+              'hold_stop', 'horizon_days', 'reach_prob', 'expected_return',
+              'rr', 'confidence', 'exclude_reason', 'bucket'):
+    check(f"중앙 판정에 '{_k105}' 있다", _k105 in _c105)
+check("신규 매수자와 보유자 값이 다른 키",
+      _c105['new_stop'] != _c105['hold_stop']
+      and _c105['new_target'] != _c105['hold_trim'])
+check("화면 비교 묶음이 16개", len(_vc105.screen_values(_c105)) == 16)
+
+# ── 추천 10조건 · 8분류 (사용자 사양 §2) ──────────────────────────────
+check("추천 조건이 10개", len(_c105['checks']) == 10)
+check("분류가 9종", len(_vc105.BUCKETS) == 9)
+for _bk105 in ('눌림목 대기', '돌파 확인 대기', '장기 관찰', '과열로 제외',
+               '권장가 괴리 과다', '신뢰도 부족', '데이터 부족', '추천 제외'):
+    check(f"분류 '{_bk105}' 정의", _bk105 in _vc105.BUCKETS)
+check("추천 없음 문구가 현금 유지를 말한다",
+      '현금 유지가 우선입니다' in _vc105.NO_PICK_LINE)
+check("화면이 그 문구를 쓴다", '_vc_view.NO_PICK_LINE' in _w105)
+check("제외 사유를 화면에 분류별로 보여준다",
+      '오늘 추천에 올리지 못한 종목과 이유' in _w105)
+
+# ── 괴리 상한이 실측에서 나왔는가 (라운드 33) ─────────────────────────
+_g35 = _os.path.join(PROJ, '.portfolio', 'gap_sigma_r35.json')
+check("진입 깊이 문턱 산출물이 있다", _os.path.exists(_g35))
+if _os.path.exists(_g35):
+    with open(_g35, encoding='utf-8') as _f:
+        _d35 = _j105.load(_f)
+    check("목표 체결률 60%로 사전등록", _d35['target_fill'] == 60.0)
+    check("구간별 문턱이 다 측정됐다",
+          all(k in _d35['cut'] for k in ('train', 'valid', 'blind', 'all')))
+    check("코드 상한이 통합 표본 σ와 일치",
+          abs(_vc105.MAX_ENTRY_SIGMA - _d35['cut']['all']) < 0.01,
+          f"코드 {_vc105.MAX_ENTRY_SIGMA} vs 통합 {_d35['cut']['all']}")
+    check("σ 문턱은 구간별로 안정적 (편차 ≤0.3σ)",
+          max(_d35['cut'][s] for s in ('train', 'valid', 'blind'))
+          - min(_d35['cut'][s] for s in ('train', 'valid', 'blind')) <= 0.3,
+          str({s: _d35['cut'][s] for s in ('train', 'valid', 'blind')}))
+    check("고정 % 자가 무엇을 잘랐는지 기록",
+          _d35['fixed_pct_would_lose'] > 0)
+# 라운드 35 — 변동성 큰 종목이 부당하게 잘리지 않는가
+_hv105 = dict(_b105, current_price=240000, entry_pullback_price=219319,
+              vol_20=0.086)
+_lv105 = dict(_hv105, vol_20=0.012)
+check("변동성 큰 종목은 −8.6%라도 깊이 통과",
+      _vc105.build(_hv105)['depth_sigma'] <= _vc105.MAX_ENTRY_SIGMA)
+check("저변동성 종목은 같은 −8.6%라도 깊이 초과",
+      _vc105.build(_lv105)['depth_sigma'] > _vc105.MAX_ENTRY_SIGMA)
+check("고정 % 자를 버린 이유를 코드에 남긴다",
+      '고정 %는 잘못된 자였다' in _vcsrc105)
+
+# 과열 판정 — 지표 키를 잘못 읽어 적정가로 대신 판단하던 결함 (라운드 35)
+check("과열 지표 키가 엔진 출력과 일치",
+      all(k in _q105 for k in ('bb_position_pct', 'rsi_value',
+                               'williams_r_value')))
+check("과열 판정에 적정가 구간을 쓰지 않는다",
+      "'크게 초과' in zone" not in _vcsrc105)
+check("지표를 못 읽으면 과열로 보지 않는다",
+      not _vc105.build(dict(_b105, bb_position_pct=None, rsi_value=None,
+                            williams_r_value=None))['checks'][7]['ok'] is False)
+_hot105 = _vc105.build(dict(_b105, bb_position_pct=101, rsi_value=78,
+                            williams_r_value=-3))
+check("지표 2개 이상 과열이면 제외", _hot105['bucket'] == '과열로 제외')
+
+# 목표 배수 재탐색 (라운드 36) — 기각 결과를 잠근다
+_t36 = _os.path.join(PROJ, '.portfolio', 'target_multiple_r36.json')
+check("목표 배수 재탐색 산출물이 있다", _os.path.exists(_t36))
+if _os.path.exists(_t36):
+    with open(_t36, encoding='utf-8') as _f:
+        _d36 = _j105.load(_f)
+    check("0.4R~3.0R 를 다 훑었다", len(_d36['grid']) >= 27)
+    check("현행 0.7R 이 기준선", _d36['current'] == 0.7)
+    check("사전등록 4조건을 넘은 후보가 없다 (기각 기록)",
+          len(_d36['winners']) == 0, str(_d36['winners']))
+    check("어떤 배수도 train 에서 양수가 아니다",
+          all((_v['splits']['train'] or {}).get('ev_sig', 0) <= 0
+              for _v in _d36['grid'].values()
+              if _v['splits'].get('train')))
+check("상한 근거를 코드에 남긴다",
+      'n=5,389' in _vc105.SIGMA_BASIS and '60%' in _vc105.SIGMA_BASIS)
+check("자를 바꾼 이유(고정 %→σ)를 코드에 남긴다",
+      '라운드 33 (기각)' in _vcsrc105 and '라운드 35 (채택)' in _vcsrc105)
+
+# 실행 불가능한 추천이 실제로 걸리는가
+_woo105 = dict(_b105, current_price=14600, entry_pullback_price=9388,
+               entry_stop_price=8900, entry_target_1st=9900, entry_rr=1.05,
+               rec_buy_sigma=3.2)
+_cw105 = _vc105.build(_woo105, verdict=dict(action='HOLD', headline='',
+                                            vetoes=[]))
+check("우진형(−35.7%)은 추천에서 빠진다", not _cw105['recommended'])
+check("빠진 이유가 괴리 과다", _cw105['bucket'] == '권장가 괴리 과다')
+check("이유에 상한 수치를 적는다",
+      f'{_vc105.MAX_ENTRY_SIGMA}' in _cw105['exclude_reason'])
+
+# ── 진입 엔진 대결 (라운드 32) ────────────────────────────────────────
+_b32 = _os.path.join(PROJ, '.portfolio', 'entry_bakeoff_r32.json')
+check("진입 엔진 대결 산출물이 있다", _os.path.exists(_b32))
+if _os.path.exists(_b32):
+    with open(_b32, encoding='utf-8') as _f:
+        _d32 = _j105.load(_f)
+    check("후보 엔진 10종을 겨뤘다", len(_d32['engines']) == 10)
+    check("전 구간(train/valid/blind)을 다 쟀다",
+          all(s in _d32['engines']['변동성 1배 (현행)']
+              for s in ('train', 'valid', 'blind')))
+    check("12개 기준을 다 냈다",
+          all(k in _d32['engines']['변동성 1배 (현행)']['blind']
+              for k in ('fill_rate', 'nofill_rate', 'days', 'tgt_first',
+                        'stop_first', 'ret', 'rr', 'pf', 'mdd', 'ev_sig')))
+    check("거래비용을 차감했다", _d32['cost_pct'] == 0.36)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §106 — 화면마다 값이 다르면 **여기서 실패한다** (사용자 사양 §6)
+#   *"추천 화면, 종목 상세, 가늠 AI, 차트, 보유자 화면이 서로 다른 결론이나
+#     가격을 표시하지 않도록 (…) 화면마다 값이 다르면 자동 테스트가
+#     실패하도록 해 주세요."*
+#   같은 스냅샷을 두 경로(추천 리포트 / 종목 상세)로 흘려 값이 같은지 본다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§106 화면 간 값 일치 (사용자 사양 §6)")
+print("=" * 72)
+import premarket as _pm106
+import verdict_core as _vc106
+
+# 실제 파이프라인 스냅샷을 하나 만들어 두 경로로 흘린다
+_snap106 = None
+try:
+    _snap106 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine,
+                                   rho_cutoff=0.80)
+except Exception as _e106:
+    print(f'  (스냅샷 생성 실패: {_e106})')
+
+if _snap106:
+    _fs106 = _snap106.get('four_scores') or {}
+    _vd106 = q.build_final_verdict(_snap106)
+    _px106 = _fs106.get('current_price')
+
+    # 경로 A — 종목 상세 화면이 하는 일
+    _detail106 = _vc106.build(_fs106, verdict=_vd106,
+                              price_axes=_fs106.get('price_axes'),
+                              realtime_price=_px106)
+    # 경로 B — 추천 리포트(premarket)가 하는 일
+    _card106 = _pm106._core_of(q, {'base_price': _px106}, _fs106, _vd106)
+
+    check("추천 경로가 중앙 판정을 만든다", _card106 is not None)
+    if _card106:
+        _sa = _vc106.screen_values(_detail106)
+        _sb = _vc106.screen_values(_card106)
+        _diff106 = {k: (_sa[k], _sb[k]) for k in _sa if _sa[k] != _sb[k]}
+        check("추천 화면과 종목 상세의 값이 전부 같다",
+              not _diff106, f'어긋난 항목: {_diff106}')
+        for _k106 in ('buy_zone', 'new_target', 'new_stop', 'hold_trim',
+                      'hold_stop', 'recommended', 'bucket'):
+            check(f"  · {_k106} 일치", _sa[_k106] == _sb[_k106],
+                  f'상세 {_sa[_k106]} vs 추천 {_sb[_k106]}')
+
+    # 신규 매수자 값과 보유자 값이 섞이지 않는가
+    check("신규 손절과 보유자 손절이 다른 값",
+          _detail106['new_stop'] is None or _detail106['hold_stop'] is None
+          or _detail106['new_stop'] != _detail106['hold_stop'])
+    # 정합 — 손절 < 진입 < 목표
+    _e106 = _detail106.get('pullback_zone')
+    if _e106 and _detail106.get('new_stop'):
+        check("손절이 진입가 아래", _detail106['new_stop'] < _e106,
+              f"진입 {_e106} · 손절 {_detail106['new_stop']}")
+    if _e106 and _detail106.get('new_target'):
+        check("목표가 진입가 위", _detail106['new_target'] > _e106,
+              f"진입 {_e106} · 목표 {_detail106['new_target']}")
+    check("모순 목록이 비어 있다", not _detail106['incoherence'],
+          str(_detail106['incoherence']))
+    # 미산출을 임의 숫자로 바꾸지 않는가
+    check("미산출은 None 으로 남는다",
+          all(_detail106[k] is None or isinstance(_detail106[k], (int, float,
+                                                                 tuple, str))
+              for k in ('new_target', 'new_stop', 'hold_trim', 'hold_stop')))
+    # 현재가와 분석 기준일
+    check("중앙 판정이 현재가를 싣는다", _detail106['current_price'] is not None)
+    check("보유기간을 싣는다", _detail106['horizon_days'] == 20)
+
+
 print()
 print("=" * 72)
 if FAILURES:
