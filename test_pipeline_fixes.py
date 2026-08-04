@@ -4545,6 +4545,55 @@ for _k93 in ('model|score_not_separating', 'data|ledger_path_window',
     check(f"플레이북에 {_k93} 가 있다", f"'{_k93}'" in _io93)
 
 
+section("94. 라운드 22 — 실행 가격이 서로 말이 되는가 (진입가 기준 레벨)")
+
+# 손절·목표는 현재가 기준, 권장 매수가는 적정가 기준이라 서로 모순됐다.
+# 실측(30종목): 권장 매수가가 나온 17종목 중 11종목(65%)의 손절가가
+# 매수가보다 위. "6,602원에 사서 19,339원에 손절"은 문장이 성립 안 한다.
+_w94 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+_q94 = open(_os.path.join(PROJ, "quant_indicators.py"), encoding='utf-8').read()
+
+check("엔진이 진입가 기준 레벨을 산출한다",
+      "'entry_stop_price': entry_stop_price" in _q94
+      and "'entry_target_1st': entry_target_1st" in _q94
+      and "'entry_rr': entry_rr" in _q94)
+check("진입가 기준 손절도 같은 공식(변동성·바닥)을 쓴다",
+      "_e_risk = _e * max(_stop_floor, vol_20 * _stop_mult)" in _q94)
+check("진입가 기준에서도 TDST 지지선 규칙이 적용된다",
+      "(_e - 1.5 * _e_risk) <= tdst_support <= (_e - 0.5 * _e_risk)" in _q94)
+check("2차 목표(구조적 저항)는 진입가로 옮기지 않는다 — 실재 가격대다",
+      'target_struct' in _q94 and "'entry_target_2nd'" not in _q94)
+check("화면 '살 가격' 칸에 그 가격 기준 손절·목표를 붙인다",
+      '_entry_lv_html' in _w94 and '이 가격에 사면 → 손절' in _w94)
+check("떠넘기던 경고문을 실제 안내로 바꿨다",
+      '진입가 기준으로 손절가를 다시 설정해야 합니다' not in _w94
+      and "왼쪽 '살 가격' 칸 아래의 손절·목표를 보세요" in _w94)
+
+# 실제로 산출해 정합한지 — 파이프라인을 돌려 확인한다 (§5 의 스냅샷 재사용)
+_fs94 = fs
+_rec94 = _fs94.get('recommended_buy_price')
+_es94 = _fs94.get('entry_stop_price')
+_et94 = _fs94.get('entry_target_1st')
+if _rec94 and _es94:
+    check("진입가 기준 손절이 매수가보다 아래다", _es94 < _rec94,
+          f'권장 {_rec94:,.0f} · 손절 {_es94:,.0f}')
+    check("진입가 기준 1차 목표가 매수가보다 위다", _et94 > _rec94,
+          f'권장 {_rec94:,.0f} · 1차 {_et94:,.0f}')
+    check("진입가 기준 손익비가 정의된다",
+          _fs94.get('entry_rr') is not None and _fs94['entry_rr'] > 0,
+          str(_fs94.get('entry_rr')))
+else:
+    check("권장 매수가 미산출 시 진입가 레벨도 미산출 (지어내지 않는다)",
+          _es94 is None and _et94 is None,
+          f'rec={_rec94} stop={_es94} t1={_et94}')
+
+# 라운드 22 기록이 남아 있는가
+_mv94 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+             encoding='utf-8').read()
+check("라운드 22 실측(65%)이 기록돼 있다",
+      '라운드 22' in _mv94 and '65%' in _mv94)
+
+
 print()
 print("=" * 72)
 if FAILURES:

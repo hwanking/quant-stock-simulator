@@ -3961,6 +3961,23 @@ _rec_sub_html = (f"<p style='margin:4px 0 0 0; font-size:12px; "
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 
+# 권장 매수가에 샀을 때의 레벨. 위 두 값은 **현재가** 기준이라, 아직 안 산
+# 사람에게는 맞지 않는다. 실측(라운드 22b · 30종목)에서 권장 매수가가 나온
+# 17종목 중 11종목(65%)의 손절가가 매수가보다 위였다 — 최대 +193%.
+# 그래서 진입가 기준 레벨을 따로 계산해 살 가격 칸 밑에 붙인다.
+_e_stop = four_scores.get('entry_stop_price')
+_e_t1 = four_scores.get('entry_target_1st')
+_e_rr = four_scores.get('entry_rr')
+_entry_lv_html = ''
+if _e_stop and _e_t1:
+    _entry_lv_html = (
+        f"<p style='margin:6px 0 0 0; font-size:12px; color:#9DAABC; "
+        f"line-height:1.6;'>이 가격에 사면 → 손절 "
+        f"<b style='color:#ff453a;'>{_e_stop:,.0f}원</b> · 1차 목표 "
+        f"<b style='color:#4C8DFF;'>{_e_t1:,.0f}원</b>"
+        + (f" · 손익비 <b>{_e_rr}:1</b>" if _e_rr else '')
+        + "</p>")
+
 # ⏱️ DeMARK 매수 포인트 — 신호 상태와 유효 하한선(TDST 지지)을 함께 보여준다.
 _dme = four_scores.get('demark_entry') or {}
 _dm_state = _dme.get('state')
@@ -4040,7 +4057,7 @@ st.markdown(f"""
               margin-top:16px; padding-top:16px; border-top:1px solid #1C2635;'>
     <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
       <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>살 가격 <span style='font-weight:400;'>· 아직 안 샀다면 이 값 이하에서</span></p>
-      <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#35C98B;'>{rec_buy_display}</p>{_rec_sub_html}
+      <p style='margin:2px 0 0 0; font-size:20px; font-weight:700; color:#35C98B;'>{rec_buy_display}</p>{_rec_sub_html}{_entry_lv_html}
     </div>
     <div style='background:#161D2A; border-radius:12px; padding:8px 16px;'>
       <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>팔 가격 1차 <span style='font-weight:400;'>· 여기까지 오르면 일부 정리</span></p>
@@ -4057,8 +4074,9 @@ st.markdown(f"""
     </div>
   </div>
   <p style='margin:8px 0 0 0; font-size:12px; color:#F2B84B;'>
-    ⚠️ 실행 가격 기준: 목표·손절은 현재가 기준 기술 레벨이고 권장 매수가는 신규 진입 기준입니다.
-    신규 진입 시에는 진입가 기준으로 손절가를 다시 설정해야 합니다.
+    ⚠️ 실행 가격 기준: 가운데 두 칸(팔 가격·버틸 수 없는 가격)은 <b>지금 가격에 산다면</b> 기준입니다.
+    아직 안 사셨다면 왼쪽 '살 가격' 칸 아래의 손절·목표를 보세요 — 그게 그 가격에 샀을 때의 값입니다.
+    두 값이 다른 것이 정상이며, 현재가가 적정가보다 높을수록 더 벌어집니다.
     DeMARK 매수 포인트는 <b>시점</b> 신호이며, 위 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)

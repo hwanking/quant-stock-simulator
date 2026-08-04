@@ -1,12 +1,25 @@
 {
  "axes": {
-  "model": "v2026.08.04.3",
+  "model": "v2026.08.04.4",
   "scoring": "v2026.08.02.1",
   "rulebook": "v2026.08.02.1",
   "schema": "v2026.08.02.1",
   "news": "v2026.08.02.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.04.4",
+   "previous": "v2026.08.04.3",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "권장 매수가 기준 실행 레벨(entry_stop_price·entry_target_1st·entry_rr) 신설 — 손절·목표는 현재가 기준, 권장 매수가는 적정가 기준이라 서로 모순됐다. 30종목 실측에서 권장 매수가가 산출된 17종목 중 11종목(65%)의 손절가가 매수가보다 위였고 최대 +193%. 같은 공식을 진입가에 다시 걸어 17/17건 정합화",
+   "note": "",
+   "created_at": "2026-08-04T02:50:42+00:00",
+   "effective_from": "2026-08-04"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

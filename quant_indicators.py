@@ -2933,6 +2933,38 @@ class QuantIndicatorsEngine:
         target_tech_2nd = float(max(target_struct, target_tech_1st))
         atr_risk_level = float(curr_price - base_risk * 2.0)
 
+        # ── 권장 매수가에 실제로 샀을 때의 실행 레벨 ──────────────────────
+        # 위 손절·목표는 전부 '지금 이 가격에 산다면'을 전제로 한 값이다.
+        # 그런데 엔진은 동시에 '지금 사지 말고 X원까지 내려오면 사라'고 말한다.
+        # 그러면 화면의 손절가는 **사지 말라고 한 가격**을 기준으로 그린 선이다.
+        #
+        # 실측(라운드 22b · 30종목): 권장 매수가가 산출된 17종목 중 **11종목
+        # (65%)** 에서 손절가가 권장 매수가보다 위였다. 최대 +193%.
+        # "6,602원에 사서 19,339원에 손절하라"는 문장은 성립하지 않는다.
+        #
+        # 그래서 같은 공식을 진입가에 다시 걸어 준다. 2차 목표(구조적 저항)는
+        # 시장에 실재하는 가격대라 진입가와 무관하므로 그대로 둔다.
+        entry_stop_price = entry_target_1st = entry_rr = None
+        if (recommended_buy_price and recommended_buy_price > 0
+                and vol_20 is not None):
+            _e = float(recommended_buy_price)
+            _e_risk = _e * max(_stop_floor, vol_20 * _stop_mult)
+            _e_stop = _e - _e_risk
+            # 진입가 기준으로도 TDST 지지가 0.5R~1.5R 안이면 그 지지선을 쓴다
+            if (tdst_available and tdst_support is not None
+                    and (_e - 1.5 * _e_risk) <= tdst_support <= (_e - 0.5 * _e_risk)):
+                _e_stop = float(tdst_support)
+            _e_risk = _e - _e_stop
+            if _e_risk > 0:
+                _e_t1 = _e + _t1_of_stop * _e_risk
+                # 구조적 저항이 그보다 가까우면 그 저항까지만 (현행과 같은 규칙)
+                if target_struct > _e:
+                    _e_t1 = min(_e_t1, target_struct)
+                _e_t1 = max(_e_t1, _e + _t1_vol_floor * vol_20 * _e)
+                entry_stop_price = float(_e_stop)
+                entry_target_1st = float(_e_t1)
+                entry_rr = round(float((_e_t1 - _e) / _e_risk), 2)
+
         # 손익비는 구조적 목표(2차) 기준 — 1차는 분할익절이라 손익비 지표가 아니다
         reward_abs = target_tech_2nd - curr_price
         reward_risk_ratio = round(float(reward_abs / risk_abs), 2) if risk_abs > 0 else None
@@ -3479,6 +3511,13 @@ class QuantIndicatorsEngine:
             'upside_eval': upside_eval,
             'market_adjustment_pct': float(market_adjustment_pct),
             'fair_value_confidence': float(fair_value_confidence),
+            # 권장 매수가에 샀을 때의 레벨 — 위 target_tech_*/stop_loss_price 는
+            # **현재가** 기준이라, 아직 안 산 사람에게는 이쪽이 맞는 값이다.
+            'entry_stop_price': entry_stop_price,
+            'entry_target_1st': entry_target_1st,
+            'entry_rr': entry_rr,
+            'entry_levels_note': ('권장 매수가에 샀을 때 기준 — 위 손절·목표는 '
+                                  '현재가 기준이라 서로 다른 값입니다'),
             'target_tech_1st': target_tech_1st,
             'target_tech_1st_note': '1차 분할익절 목표 (도달확률 우선 — 손절거리 0.7배·변동성 기반)',
             'target_tech_2nd': target_tech_2nd,
