@@ -477,21 +477,36 @@ def _render_toolbar(here_html: str = '') -> None:
     if not here_html:
         _NAV_SLOT.empty()
         return
-    # 엔진 버전 다섯 축을 '보는 중' 왼쪽에 함께 둔다. 상태 줄의 운영 버전
-    # 칩은 대표값(model) 하나뿐이라, 어느 축이 언제 바뀌었는지 알 수 없었다.
-    # 누르면 업데이트 이력으로 간다.
+    # 상단 바는 **한 줄**이다. 예전에는 두 줄이었고 룰북·산식이 양쪽에 두 번,
+    # '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
+    # 왼쪽: 상태 점 + 되돌려 본 판단 수 + 엔진 5축 버전 (누르면 업데이트 이력)
+    # 오른쪽: 지금 보고 있는 종목
     _AX_KO = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
               'schema': '스키마', 'news': '뉴스'}
     _chips = ''.join(
-        f"<span style='display:inline-flex; align-items:baseline; gap:5px; "
-        f"margin-right:9px; white-space:nowrap;'>"
+        f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
+        f"margin-right:8px; white-space:nowrap;'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_VER_NOW.get(_ax, '—')}</span>"
         f"</span>"
         for _ax, _ko in _AX_KO.items())
+
+    _st_txt, _st_tone, _st_more = _STATUS_TOP
+    _status = (
+        f"<span style='display:inline-flex; align-items:center; gap:7px; "
+        f"margin-right:10px; white-space:nowrap;'>"
+        f"<span style='width:6px; height:6px; border-radius:50%; "
+        f"background:{_TOK.get(_st_tone, _TOK['tx2'])}; "
+        f"display:inline-block;'></span>"
+        f"<span style='font-size:12px; color:{_TOK.get(_st_tone, _TOK['tx2'])};'>"
+        f"{_uk._esc(_st_txt)}</span></span>"
+        + (f"<span style='font-size:12px; color:{_TOK['tx3']}; "
+           f"margin-right:10px; white-space:nowrap;'>{_uk._esc(_st_more)}"
+           f"</span>" if _st_more else ''))
+
     _NAV_SLOT.markdown(
-        f'<div class="qnav">'
+        f'<div class="qnav">{_status}'
         f"<a href='#nav-updates' class='qvers' "
         f"title='누르면 업데이트 이력으로 갑니다'>{_chips}</a>"
         f'<span class="here">{here_html}</span></div>',
@@ -504,20 +519,17 @@ def _render_toolbar(here_html: str = '') -> None:
 import versioning as _ver
 _VER_NOW = _ver.snapshot()
 
-# 상태 줄 — 지금 무엇이 돌아가는지 한 줄, 오른쪽 끝에 운영 버전 칩
+# 상태 줄은 따로 그리지 않는다 — 위 내비 바 하나로 합쳤다.
+# 예전에는 줄이 둘이었고 룰북·산식이 양쪽에 **두 번** 나왔으며,
+# '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
 try:
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            '.portfolio', 'calibration.json'), encoding='utf-8') as _f:
         _cal_top = json.load(_f)
-    _uk.status_bar([
-        ('데이터 점검 완료', 'pos'),
-        (f"되돌려 본 판단 {_cal_top.get('total_cases', 0):,}건", ''),
-        (f"룰북 {_VER_NOW['rulebook']}", ''),
-        (f"산식 {_VER_NOW['scoring']}", ''),
-    ], version=_VER_NOW['model'], theme=_theme)
+    _STATUS_TOP = ('데이터 점검 완료', 'pos',
+                   f"되돌려 본 판단 {_cal_top.get('total_cases', 0):,}건")
 except Exception:
-    _uk.status_bar([('데이터 점검 중', 'warn')],
-                   version=_VER_NOW['model'], theme=_theme)
+    _STATUS_TOP = ('데이터 점검 중', 'warn', '')
 
 _render_toolbar()               # 우선 비워서 그린다 (자리 이동 방지)
 
@@ -2011,6 +2023,30 @@ def run_market_scan():
     _progress("종목 코드·시장 구분 확인 중")
     universe = engine_init.get_screener_universe(full_market=True)
     by_code = {u['symbol'].split('.')[0]: u for u in universe}
+
+    # ── 전 종목 경량 스캔 ────────────────────────────────────────────
+    # 순위 페이지 2종에서만 출발하면 거래가 한산한 종목은 애초에 후보가
+    # 되지 못한다. 유니버스에는 이미 시총·거래대금이 실려 있으므로
+    # **추가 요청 없이** 전 종목을 한 번 훑을 수 있다. 여기서 거르는 건
+    # 데이터가 없거나 유동성이 없어 어차피 못 사는 종목뿐이다.
+    _MIN_TRADE_VALUE = 5e8          # 당일 거래대금 5억원
+    _lite = {'total': len(universe), 'no_price': 0, 'no_liquidity': 0,
+             'thin': 0, 'passed': 0}
+    _lite_pass = set()
+    for u in universe:
+        if not u.get('base_price'):
+            _lite['no_price'] += 1
+            continue
+        if not u.get('liquidity_confirmed'):
+            _lite['no_liquidity'] += 1
+            continue
+        if (u.get('today_trade_value') or 0) < _MIN_TRADE_VALUE:
+            _lite['thin'] += 1
+            continue
+        _lite_pass.add(u['symbol'].split('.')[0])
+    _lite['passed'] = len(_lite_pass)
+    st.session_state['scan_lite'] = _lite
+
     target, unmapped = [], []
     for r in att['rows']:
         u = by_code.get(r['code'])
@@ -2146,29 +2182,39 @@ if st.session_state.get('show_screener', False):
                 _deep_cap = int(market_attention.DEEP_POOL_MAX)
             except Exception:
                 _deep_cap = _deep_done
+            _lt = st.session_state.get('scan_lite') or {}
+            # 탐색률 — 유동성 있는 전체 중 몇 %를 정밀분석했나. 과장하지 않는다.
+            _deep_rate = (scan_depth / _lt['passed'] * 100
+                          if _lt.get('passed') else 0.0)
 
             st.markdown(f"""
             <div style='background:#161D2A; padding:16px; border-radius:10px; margin-bottom:16px; '>
                 <h4 style='color:#F3F6FA; margin-top:0;'>시장 스캔 완료 — 어디까지 봤나</h4>
                 <ul style='color:#9DAABC; font-size:15px; line-height:1.6; margin-bottom:8px;'>
                     <li>분석 기준일: {t_ref_str} · rho {rho_cutoff}</li>
-                    <li>0단계 <b>출발점</b>: 네이버 순위 페이지 <b>2종</b>(거래대금 상위·상승률 상위)
-                        × 코스피·코스닥 — <b>전체 종목 목록이 아닙니다</b></li>
-                    <li>1단계 후보 풀: <b>{st.session_state.get('scan_universe_total', 0):,}개</b>
-                        (ETF·우선주·스팩·리츠 제외 후)</li>
-                    <li>2단계 관심지표 계산: 최대 <b>{_deep_cap:,}개</b>
+                    <li>1단계 <b>전 종목 경량 스캔</b>: 코스피·코스닥 <b>{_lt.get('total', 0):,}개</b>
+                        → 유동성·데이터 조건 통과 <b>{_lt.get('passed', 0):,}개</b>
+                        <span style='font-size:13px;'>(시세 없음 {_lt.get('no_price', 0):,} ·
+                        거래 미확인 {_lt.get('no_liquidity', 0):,} ·
+                        거래대금 5억 미만 {_lt.get('thin', 0):,} 제외)</span></li>
+                    <li>2단계 후보 풀: <b>{st.session_state.get('scan_universe_total', 0):,}개</b>
+                        — 거래대금·상승률 순위 상위에서 수집 (ETF·우선주·스팩·리츠 제외)</li>
+                    <li>3단계 관심지표 계산: 최대 <b>{_deep_cap:,}개</b>
                         → 실제 <b>{_deep_done:,}개</b></li>
-                    <li>3단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
+                    <li>4단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
                         → 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개</li>
                     <li>최종 행동 필수조건 통과: <b style='color:{"#35C98B" if recommended else "#F2B84B"};'>{len(recommended)}개</b></li>
+                    <li><b>전체 시장 정밀분석 비율: {_deep_rate:.1f}%</b>
+                        ({scan_depth}/{max(1, _lt.get('passed', 0)):,})</li>
                 </ul>
                 <p style='margin:0; font-size:13px; color:#F2B84B; line-height:1.65;'>
-                    <b>이 결과는 코스피·코스닥 전 종목을 정밀분석한 것이 아닙니다.</b>
-                    거래대금·상승률 순위 상위에서 출발해 {st.session_state.get('scan_universe_total', 0):,}개를 추리고,
-                    그중 {scan_depth}개만 정밀분석했습니다.
-                    정밀분석하지 않은 종목에 더 좋은 후보가 있을 수 있습니다 —
-                    <b>'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다.</b>
-                    거래가 한산한 종목은 순위 페이지에 오르지 않아 애초에 후보가 되지 못합니다.</p>
+                    오늘의 추천은 코스피·코스닥 전 종목을 <b>경량 스캔</b>한 뒤,
+                    거래대금·상승률 순위에서 모은 후보 중 <b>관심점수 상위 {scan_depth}개만
+                    정밀분석</b>한 결과입니다.
+                    <b>정밀분석하지 않은 종목에 더 좋은 후보가 있을 수 있습니다 —
+                    '추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다.</b>
+                    2단계 후보 수집이 순위 페이지에서 출발하므로, 거래가 한산한 종목은
+                    경량 스캔을 통과해도 후보에 오르지 못합니다.</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -2616,12 +2662,51 @@ if _pmr:
         with _pm_cols[_pi]:
             st.markdown(_uk.reco_card(_build_reco_card(_p, _news_txt, _conf_txt),
                                       theme=_theme), unsafe_allow_html=True)
-            # 카드 클릭 → 아래 종목 분석 화면이 이 종목으로 전환된다
-            if st.button("분석 보기", key=f"pm_go_{_p.get('symbol')}_{_pi}",
-                         width='stretch'):
-                st.session_state['pending_search'] = \
-                    f"{_p.get('name')} ({_p.get('code')})"
-                st.rerun()
+            # 카드 하단 세 동작. 여기서 바로 처리해야 카드를 떠나지 않는다.
+            _b1, _b2, _b3 = st.columns([1.4, 1, 1])
+            _sym, _cd, _nm = (_p.get('symbol'), _p.get('code'), _p.get('name'))
+            with _b1:
+                if st.button("분석 보기", key=f"pm_go_{_sym}_{_pi}",
+                             width='stretch', type='primary'):
+                    st.session_state['pending_search'] = f"{_nm} ({_cd})"
+                    st.rerun()
+            with _b2:
+                _wl_now = st.session_state.get('watchlist') or []
+                _in_wl = any(str(w.get('code')) == str(_cd) for w in _wl_now)
+                if st.button('관심 추가됨' if _in_wl else '관심 추가',
+                             key=f"pm_wl_{_sym}_{_pi}", width='stretch',
+                             help=('이미 관심종목입니다' if _in_wl else
+                                   '관심종목에 넣습니다 — 후보 발굴 방식에서 '
+                                   "'사용자 관심종목'으로 다시 스캔할 수 있습니다"),
+                             disabled=_in_wl):
+                    _items = _wl_now + [{'code': _cd, 'name': _nm}]
+                    st.session_state['watchlist'] = _items
+                    if ALLOW_LOCAL_STORE:
+                        # 저장 실패를 삼키면 사용자는 저장된 줄 안다
+                        try:
+                            portfolio.save_watchlist(_items)
+                        except Exception as _ex:
+                            st.warning(f"관심종목 파일 저장 실패 — 이 세션에만 "
+                                       f"남습니다 ({type(_ex).__name__})")
+                    st.rerun()
+            with _b3:
+                if st.button("보유 등록", key=f"pm_pos_{_sym}_{_pi}",
+                             width='stretch',
+                             help='이 종목을 보유종목으로 등록합니다 — '
+                                  '수량·평단가는 보유종목 화면에서 채웁니다'):
+                    # 수량·평단가를 모르는 채로 지어내지 않는다. 0 으로 넣고
+                    # 보유종목 화면을 열어 사용자가 채우게 한다.
+                    _mkt = ('KOSDAQ' if str(_sym).endswith('.KQ') else 'KOSPI')
+                    st.session_state['positions'] = (
+                        (st.session_state.get('positions') or [])
+                        + [portfolio.PortfolioPosition(
+                            ticker=_sym, stock_name=_nm, market=_mkt,
+                            quantity=0.0, average_buy_price=0.0,
+                            source_type='scan_card')])
+                    st.session_state['show_portfolio'] = True
+                    st.toast(f"{_nm} 등록 — 보유종목 화면에서 수량·평단가를 "
+                             f"채워 주세요")
+                    st.rerun()
     if _picks_ban:
         with st.expander(f"오늘 제외된 종목 {len(_picks_ban)}건 — 사면 안 되는 이유",
                          expanded=False):

@@ -4080,8 +4080,9 @@ check("로고가 제목 역할 — 홈 버튼은 조용한 보조",
       '로고가 제목 역할을 하므로 이 버튼은 조용한 보조로 둔다' in _w86)
 check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
       "f\"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; \"" in _w86)
-check("상단 상태바 — 운영 버전 칩이 오른쪽 끝",
-      '_uk.status_bar(' in _w86)
+check("상단 바 한 줄에 상태와 엔진 버전이 함께 있다",
+      '_STATUS_TOP' in _w86 and "_AX_KO = {'model': '모델'" in _w86
+      and 'class="here"' in _w86)
 
 _u86 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
 check("상태바 컴포넌트 존재", 'def status_bar(' in _u86)
@@ -4714,10 +4715,11 @@ for _cond96, _lab96 in (
 check("사이드바가 '전체'라고 과장하지 않는다",
       '코스피·코스닥 전체에서 거래대금' not in _w96
       and '거래대금·상승률 순위 상위' in _w96)
-check("스캔 결과에 출발점(순위 페이지 2종)을 밝힌다",
-      '네이버 순위 페이지' in _w96 and '전체 종목 목록이 아닙니다' in _w96)
+check("스캔 결과에 후보 수집 출발점을 밝힌다",
+      '거래대금·상승률 순위 상위에서 수집' in _w96
+      and '순위 페이지에서 출발하므로' in _w96)
 check("전 종목 정밀분석이 아니라고 명시한다",
-      '전 종목을 정밀분석한 것이 아닙니다' in _w96)
+      '관심점수 상위' in _w96 and '정밀분석</b>한 결과입니다' in _w96)
 check("'추천 없음'의 뜻을 오해하지 않게 적는다",
       "'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다" in _w96)
 check("퍼널 단계 수치를 보여 준다 (관심지표 계산 실제 개수)",
@@ -4814,6 +4816,55 @@ check("아이콘 크기는 16~18px 안 (카드 17 · 근거 16)",
 check("추천 카드를 킷 컴포넌트로만 그린다",
       '_uk.reco_card(' in _w97
       and "min-height:236px" not in _w97)
+
+
+section("98. 상단 바 하나로 · 카드 버튼 3개 · 전 종목 경량 스캔")
+
+_w98 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+
+# ① 상단 바 — 두 줄이었고 룰북·산식이 두 번, 운영 버전은 모델과 같은 값이었다
+check("상태 줄을 따로 그리지 않는다 (한 줄로 합침)",
+      '_uk.status_bar(' not in _w98)
+check("상태·판단수·엔진 5축·보는 중이 한 바에 들어간다",
+      '_STATUS_TOP' in _w98 and "_AX_KO = {'model': '모델'" in _w98
+      and 'class="here"' in _w98)
+check("룰북·산식이 바 안에서 두 번 나오지 않는다",
+      _w98.count("f\"룰북 {_VER_NOW['rulebook']}\"") == 0
+      and _w98.count("f\"산식 {_VER_NOW['scoring']}\"") == 0)
+
+# ② 카드 하단 세 동작
+for _k98, _lab98 in (('pm_go_', '분석 보기'), ('pm_wl_', '관심 추가'),
+                     ('pm_pos_', '보유 등록')):
+    check(f"카드 버튼 {_lab98} 가 있다", _k98 in _w98 and _lab98 in _w98)
+check("이미 관심종목이면 다시 넣지 않는다",
+      '_in_wl' in _w98 and 'disabled=_in_wl' in _w98)
+check("관심종목 저장 실패를 삼키지 않는다",
+      '관심종목 파일 저장 실패' in _w98)
+check("보유 등록 시 수량·평단가를 지어내지 않는다",
+      'quantity=0.0' in _w98 and 'average_buy_price=0.0' in _w98
+      and '수량·평단가를' in _w98)
+check("버튼 라벨에 기호를 쓰지 않는다",
+      not _re.search(r"st\.button\('[^']*[✓✔×✕]", _w98))
+
+# ③ 전 종목 경량 스캔 — 순위 페이지에서만 출발하지 않는다
+check("전 종목 경량 스캔이 존재한다",
+      '_lite = {' in _w98 and '_MIN_TRADE_VALUE' in _w98)
+check("경량 스캔이 제외 사유를 나눠 센다",
+      all(k in _w98 for k in ("'no_price'", "'no_liquidity'", "'thin'",
+                              "'passed'")))
+check("경량 스캔 결과를 세션에 남긴다", "st.session_state['scan_lite']" in _w98)
+check("퍼널이 4단계로 표시된다",
+      all(s in _w98 for s in ('1단계 <b>전 종목 경량 스캔</b>', '2단계 후보 풀',
+                              '3단계 관심지표 계산', '4단계 정밀분석')))
+check("전체 시장 정밀분석 비율을 표시한다",
+      '_deep_rate' in _w98 and '전체 시장 정밀분석 비율' in _w98)
+check("탐색률을 유동성 통과분 기준으로 센다 (분모를 부풀리지 않는다)",
+      "scan_depth / _lt['passed'] * 100" in _w98)
+check("여전히 '추천 없음'의 뜻을 밝힌다",
+      "'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다" in _w98)
+check("2단계가 순위 페이지 출발임을 계속 밝힌다",
+      '거래대금·상승률 순위 상위에서 수집' in _w98
+      and '순위 페이지에서 출발하므로' in _w98)
 
 
 print()
