@@ -5033,6 +5033,86 @@ check("버전 기록이 없는 예전 리포트도 경고한다",
       '만든 엔진 버전이 기록돼 있지 않습니다' in _w100)
 
 
+section("101. 라운드 26 — 못 겨룬 진입 엔진 마저 · 관망 조건 감시")
+
+import json as _json101
+import watch_alerts as _wa101
+_w101 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+# ① 지표 레벨 보강 — 기준일 이후 봉이 섞이면 연구가 통째로 무효다
+_lvp101 = _os.path.join(PROJ, '.portfolio', 'virtual_levels.jsonl')
+check("지표 레벨 파일이 있다", _os.path.exists(_lvp101))
+if _os.path.exists(_lvp101):
+    _n101 = 0
+    _keys101 = set()
+    with open(_lvp101, encoding='utf-8') as _fh101:
+        for _ln101 in _fh101:
+            _ln101 = _ln101.strip()
+            if not _ln101:
+                continue
+            _n101 += 1
+            if _n101 <= 3:
+                _keys101 |= set(_json101.loads(_ln101).keys())
+    check("원장 전건에 레벨이 붙었다", _n101 >= 19000, f'{_n101:,}건')
+    for _k101 in ('sma_20', 'bb_lower', 'bb_mid', 'high20', 'low10',
+                  'atr14', 'vol20'):
+        check(f"레벨에 {_k101} 가 있다", _k101 in _keys101)
+_e101 = open(_os.path.join(PROJ, 'scripts', 'enrich_levels_r26.py'),
+             encoding='utf-8').read()
+check("지표를 기준일까지의 봉으로만 계산한다 (누수 차단)",
+      "sub = tdf[tdf['_d'] <= d]" in _e101
+      and "str(sub['_d'].iloc[-1]) != d" in _e101)
+check("엔진과 같은 산식을 쓴다 (compute_technical_indicators 재사용)",
+      'q.compute_technical_indicators(pdf)' in _e101)
+
+# ② 라운드 26 결과 — 채택 없음이 기록돼 있다
+_r26p = _os.path.join(PROJ, '.portfolio', 'entry_engine_r26.json')
+if _os.path.exists(_r26p):
+    with open(_r26p, encoding='utf-8') as _fh101:
+        _r26 = _json101.load(_fh101)
+    check("라운드 26 은 새 엔진을 채택하지 않았다",
+          _r26.get('adopted') in (None, '', []), str(_r26.get('adopted')))
+    check("지지선·이동평균·볼린저를 실제로 겨뤘다",
+          any('20일선' in r['name'] for r in _r26.get('stage1', []))
+          and any('볼린저' in r['name'] for r in _r26.get('stage1', [])))
+
+# ③ 관망 조건 감시 — 가격은 OR, 막는 조건은 AND
+_it101 = dict(symbol='T', name='시험', kind='pullback',
+              levels=[{'kind': 'support', 'level': 100.0},
+                      {'kind': 'breakout', 'level': 130.0}],
+              need_cooldown=True, need_volume_calm=True, vol_calm_ratio=1.2)
+_c101 = _wa101.check_one(_it101, price=100, low=99.8, high=101, close=100.2,
+                         bb_pos=60, wr=-45, vol_ratio=1.0)
+check("지지만 맞아도 해소된다 (가격 조건은 OR)", _c101['resolved'] is True)
+_c101b = _wa101.check_one(_it101, price=131, low=128, high=132, close=131,
+                          bb_pos=60, wr=-45, vol_ratio=1.0)
+check("돌파만 맞아도 해소된다", _c101b['resolved'] is True)
+_c101c = _wa101.check_one(_it101, price=100, low=99.8, high=101, close=100.2,
+                          bb_pos=99, wr=-2, vol_ratio=1.0)
+check("과열이 남아 있으면 해소되지 않는다 (막는 조건은 AND)",
+      _c101c['resolved'] is False)
+_c101d = _wa101.check_one(_it101, price=100, low=99.8, high=101, close=100.2,
+                          bb_pos=None, wr=None, vol_ratio=None)
+check("지표를 못 받으면 충족으로 세지 않는다", _c101d['resolved'] is False)
+check("확인 불가를 그대로 적는다",
+      any('확인 불가' in x for x in _c101d['unmet']))
+check("해소되면 사람이 읽는 문장을 만든다",
+      isinstance(_wa101.sentence(_it101, _c101), str)
+      and '해소' in _wa101.sentence(_it101, _c101))
+check("해소 안 되면 문장을 만들지 않는다",
+      _wa101.sentence(_it101, _c101c) is None)
+
+# ④ 화면 연결
+check("결론 카드에 알림 감시 블록이 붙는다",
+      '_watch_html' in _w101 and '알림 감시' in _w101)
+check("알림 등록·해제 버튼이 있다",
+      'btn_wa_on' in _w101 and 'btn_wa_off' in _w101)
+check("등록 시 엔진 버전을 함께 남긴다",
+      "engine_version=_VER_NOW['model']" in _w101)
+check("확인 불가를 충족으로 세지 않는다고 화면에 밝힌다",
+      '확인 불가' in _w101 and '충족으로 세지 않습니다' in _w101)
+
+
 print()
 print("=" * 72)
 if FAILURES:

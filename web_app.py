@@ -4288,6 +4288,53 @@ if _t1_sig is not None and _t1_sig > 2.0:
 # 관망이라면 **언제·어떤 조건에서** 살 수 있는지 반드시 적는다.
 import next_action as _na
 _NA = _na.build(four_scores, tech_df, realtime_price, verdict)
+
+# ── 관망 조건 감시 — 저장만 하고 다시 안 보면 매번 직접 검색해야 한다 ────
+import watch_alerts as _wa
+_watch_now = None
+try:
+    _wa_items = (_wa.load().get('items') or [])
+    _watch_now = next((it for it in _wa_items
+                       if it.get('symbol') == target_ticker), None)
+except Exception:
+    _wa_items = []
+
+_watch_html = ''
+if _watch_now:
+    # 등록해 둔 조건을 **오늘 값으로 다시 잰다**
+    try:
+        _lastbar = tech_df.iloc[-1]
+        _res = _wa.check_one(
+            _watch_now, price=realtime_price,
+            low=float(_lastbar.get('low')), high=float(_lastbar.get('high')),
+            close=realtime_price,
+            bb_pos=four_scores.get('bb_position_pct'),
+            wr=four_scores.get('williams_r_value'),
+            vol_ratio=(float(_lastbar.get('volume_ratio'))
+                       if _lastbar.get('volume_ratio') is not None else None))
+    except Exception:
+        _res = None
+    if _res:
+        _wcol = '#35C98B' if _res['resolved'] else '#9DAABC'
+        _lines = ''.join(
+            f"<li style='margin:3px 0; color:#35C98B;'>{_uk._esc(x)}</li>"
+            for x in _res['met'])
+        _lines += ''.join(
+            f"<li style='margin:3px 0;'>{_uk._esc(x)}</li>"
+            for x in (_res['unmet'] + _res.get('pending', [])))
+        _hdr = (_wa.sentence(_watch_now, _res) if _res['resolved']
+                else '등록한 관망 조건 — 아직 기다리는 중입니다')
+        _watch_html = (
+            f"<div style='margin-top:12px; background:#1C2635; "
+            f"border-radius:12px; padding:12px 16px;'>"
+            f"<p style='margin:0 0 4px 0; font-size:12px; color:#9DAABC; "
+            f"font-weight:700;'>알림 감시 "
+            f"({_watch_now.get('registered_at', '')[:10]} 등록)</p>"
+            f"<p style='margin:0 0 6px 0; font-size:15px; font-weight:700; "
+            f"color:{_wcol}; line-height:1.5;'>{_uk._esc(_hdr)}</p>"
+            f"<ul style='margin:0; padding-left:18px; font-size:12px; "
+            f"color:#9DAABC; line-height:1.65;'>{_lines}</ul></div>")
+
 _na_html = ''
 if _NA.get('headline'):
     _na_col = {'buy_now': '#35C98B', 'pullback': '#F2B84B',
@@ -4433,7 +4480,7 @@ st.markdown(f"""
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
       </div>{_hold_reach_html}
     </div>
-  </div>{_na_html}{_logic_warn_html}
+  </div>{_na_html}{_watch_html}{_logic_warn_html}
   <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
     <b style='color:#F2B84B;'>시간축이 다릅니다.</b>
     펀더멘털 적정가는 <b>분기 실적 기반 장기 가치</b>이고, 위 목표·손절은 <b>20일 변동성과 저항선</b>으로 계산합니다.
@@ -4442,6 +4489,30 @@ st.markdown(f"""
     DeMARK 는 <b>시점</b> 신호이며 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ── 알림 감시 등록·해제 ─────────────────────────────────────────────────
+# 관망 조건을 저장해 두면 다음에 이 종목을 열 때 오늘 값으로 다시 재서
+# 풀렸는지 알려 준다. 매번 직접 검색하지 않아도 되게 하는 것이 목적이다.
+if _NA.get('alert'):
+    _wc1, _wc2 = st.columns([1, 3])
+    with _wc1:
+        if _watch_now:
+            if st.button("알림 해제", width='stretch', key='btn_wa_off'):
+                _wa.remove(target_ticker)
+                st.rerun()
+        else:
+            if st.button("이 조건 알림 등록", width='stretch',
+                         type='primary', key='btn_wa_on'):
+                _wa.register(target_ticker, resolved_name, realtime_price,
+                             _NA, engine_version=_VER_NOW['model'])
+                st.rerun()
+    with _wc2:
+        st.caption("등록하면 다음에 이 종목을 열 때 위 조건을 오늘 값으로 "
+                   "다시 재서 풀렸는지 알려 드립니다. 시세·지표를 못 받으면 "
+                   "'확인 불가'로 남기고 충족으로 세지 않습니다."
+                   if not _watch_now else
+                   "이 종목은 알림 감시 중입니다. 조건은 이 화면을 열 때마다 "
+                   "다시 잽니다.")
 
 # ═══ 아주 쉬운 결론 — 신규 매수자와 보유자를 절대 섞지 않는다 ═══════════════
 # 사용자 상태 선택기 (v2): 분석 화면 안에서 미보유/보유를 고른다.
