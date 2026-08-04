@@ -5124,7 +5124,10 @@ try:
                          errors='replace').stdout
 except Exception:
     _msg101 = ''
-_vs101 = _re.findall(r'v\d{4}\.\d{2}\.\d{2}\.\d+', _msg101 or '')
+# 제목 **끝 괄호**의 버전만 본다 — 그게 "이 커밋은 버전 X 다"라는 주장이다.
+# 본문에 다른 버전을 인용할 수 있다(예: 정정 커밋이 잘못된 버전을 지목).
+_vs101 = _re.findall(r'\(\s*(v\d{4}\.\d{2}\.\d{2}\.\d+)\s*\)\s*$',
+                     (_msg101 or '').strip())
 if _vs101:
     _known101 = {e['version'] for e in _ver101.history(limit=400)}
     _known101 |= set(_ver101.snapshot().values())
