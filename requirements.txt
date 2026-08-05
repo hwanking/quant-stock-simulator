@@ -13,9 +13,17 @@
 #     저장되므로, 오독은 미리보기에서 걸러진다.)
 
 # 섹터 사이클(라운드 44) — 글로벌 섹터 ETF·환율·원자재·업종 분류 수신.
-#   pandas·requests·lxml 위에 얹히는 얇은 래퍼라 컨테이너 메모리에 부담이 없다.
-#   없어도 앱은 뜬다 — sector_cycle 이 '미연동'으로 내려간다(§3).
-finance-datareader>=0.9.90
+#
+# ⚠️ **클라우드에서는 뺀다.** 라운드 44 배포에서 이 줄을 넣자마자 앱이
+#    "Oh no. Error running app." 로 죽었다. 로컬(3.14)에서는 멀쩡하고,
+#    FinanceDataReader 를 가려 놓고 임포트해도 전 모듈이 통과했다
+#    (_probe/diag_cloud_boot.py). 즉 코드가 아니라 **설치 단계**가 문제다.
+#
+#    앱이 죽는 것보다 업황이 '미연동'으로 나가는 게 낫다 — sector_cycle 은
+#    수신 실패를 available=False 로 내리고 화면이 그 사실을 적는다(§3).
+#    클라우드 파이썬 버전에서 설치가 되는지 확인한 뒤 다시 넣는다.
+#
+# finance-datareader>=0.9.90     # 로컬에서만 (pip install finance-datareader)
 
 streamlit>=1.40
 pandas>=2.0
