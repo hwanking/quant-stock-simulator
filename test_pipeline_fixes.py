@@ -3542,10 +3542,14 @@ check("코드 조각 — 칩 해체 (배경 투명)",
 check("실행 메타 — 접힌 실행 정보로", '실행 정보 — 분석기준일' in _w76)
 check("결론 배너 — 양 테마 다크 카드 고정 (흰 글자 보호)",
       '라이트 surface(흰색)로 바꾸면 글자가 사라진다' in _w76)
+# 라운드 38: '종목 찾기'는 아코디언 줄(항상 펼침)이 제목을 그리므로
+# sidebar_section 을 또 부르면 제목이 두 번 나온다 — 실제로 그랬다.
 check("사이드바 구역 — 킷 라벨로 통일 · 가로선 없음",
       '_uk.sidebar_section("종목"' in _w76
-      and '_uk.sidebar_section("종목 찾기"' in _w76
       and 'st.sidebar.markdown("---")' not in _w76)
+check("항상 펼침 구역은 제목을 두 번 그리지 않는다",
+      '_uk.sidebar_section("종목 찾기"' not in _w76
+      and "'title': '종목 찾기', 'always': True" in _w76)
 
 
 section("77. 타입 스케일 — 열 단계만 · 굵기 700 상한 · 접근성 하한 12px")
@@ -5841,6 +5845,68 @@ check("σ 표기도 같은 실행 가격 기준",
       and "_rc_drop = (CORE or {}).get('gap_pct')" in _w107)
 check("같은 카드 안에서 두 가격이 싸우지 않게 한 이유를 남긴다",
       '제목 147,560원 vs 본문 228,287원' in _w107)
+
+# ══════════════════════════════════════════════════════════════════════
+# §108 — 같은 말이 두 숫자를 가리키지 않는다 · 종목 찾기 상시 노출 (라운드 38)
+#   실측: LX인터내셔널이 "유효표본 0건"으로 매수 차단됐는데 같은 화면에
+#   "유효표본 132건"이 떠 있었다. 앞은 유사패턴 매칭(match_count),
+#   뒤는 전략 백테스트 표본(eff_sample_size) — 다른 개념이 같은 이름이었다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§108 표본 이름 분리 · 종목 찾기 상시 노출 (라운드 38)")
+print("=" * 72)
+_q108 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_w108 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+check("거부 문구가 '유사패턴 표본'이라고 말한다",
+      '유사패턴 표본 {sim.get(\'match_count\', 0)}건' in _q108)
+check("거부 문구에 '유효표본'을 쓰지 않는다",
+      "유효표본 {sim.get('match_count', 0)}건" not in _q108)
+check("왜 이름을 갈랐는지 코드에 남긴다",
+      '같은 말이 두 숫자를' in _q108 and 'LX인터내셔널' in _q108)
+check("화면도 match_count 를 '유사패턴 표본'으로 부른다",
+      "유사패턴 표본 {sim_res.get('match_count', 0)}건" in _w108)
+check("화면이 match_count 에 '유효표본'을 쓰지 않는다",
+      "유효표본 {sim_res.get('match_count', 0)}건" not in _w108
+      and "유효표본 {h['match_count']}건" not in _w108)
+check("전략 표본은 다른 이름으로 부른다",
+      "전략 표본 {four_scores.get('eff_sample_size', 0):.0f}건" in _w108)
+check("적정가 범위가 넓으면 경고한다",
+      '범위 폭이 **{_bw:.1f}배**입니다' in _w108
+      and "'저평가'를 단정하지 마세요" in _w108)
+
+# ── 종목 찾기 UI (사용자 요청) ────────────────────────────────────────
+check("종목 찾기는 기본이 펼침",
+      "st.session_state['show_screener'] = True" in _w108
+      and "st.session_state['show_screener'] = False" not in _w108)
+check("버튼 문구가 '최신화'", 'st.sidebar.button("최신화"' in _w108)
+check("'닫기' 문구를 없앴다", '오늘의 관심종목 스캔 / 닫기' not in _w108)
+check("최신화 중에는 버튼이 잠긴다", 'disabled=_scan_busy' in _w108)
+check("진행 단계를 보여준다",
+      '가격 확인 → 거래량 점검 → 뉴스 갱신 → 후보 재정렬' in _w108)
+check("마지막 갱신 시각을 표시한다",
+      "scan_done_at" in _w108 and '최신화 완료 · **{_last}**' in _w108)
+check("현재 분석 대상 수를 표시한다",
+      '관심종목 {_n_att}개 · 정밀분석 {_n_deep}개' in _w108)
+check("개장 전 리포트는 장중에 안 바뀐다고 밝힌다",
+      '개장 전 추천은 전일 확정 데이터 기준으로 유지됩니다' in _w108)
+check("스캔 조건은 '상세 설정'으로 접는다",
+      '"상세 설정 · 스캔 조건"' in _w108)
+check("실패해도 최신화 플래그가 풀린다",
+      'finally:' in _w108 and "st.session_state['pending_scan'] = False" in _w108)
+# 사이드바 아코디언에서 '종목 찾기'만 예외로 항상 펼침
+_uk108 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+check("아코디언에 항상 펼침 옵션이 있다",
+      "always = bool(step.get('always'))" in _uk108
+      and "on = always or (step['key'] == active)" in _uk108)
+check("항상 펼침은 접기 화살표를 안 그린다",
+      "arrow = '' if always else" in _uk108)
+check("항상 펼침은 버튼이 아니라 제목으로 그린다",
+      "acc-always" in _uk108 and 'st.sidebar.markdown(' in _uk108)
+check("'종목 찾기'가 항상 펼침으로 지정됐다",
+      "'title': '종목 찾기', 'always': True" in _w108)
+check("다른 단계는 여전히 접힌다",
+      _w108.count("'always': True") == 1)
 
 
 print()

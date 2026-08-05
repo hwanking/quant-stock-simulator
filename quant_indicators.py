@@ -1642,7 +1642,16 @@ class QuantIndicatorsEngine:
         vetoes = []
         net = (sim.get('mean_perf') or 0.0) - self.TOTAL_COST_PCT
         if not self.probabilities_allowed(sim.get('sample_tier') or sim.get('status', '')):
-            vetoes.append(f"유효표본 {sim.get('match_count', 0)}건 — 확률 판단 기준 미달")
+            # ⚠️ 라운드 38 — 여기 쓰던 '유효표본'은 화면의 '유효표본'과
+            # **다른 수**였다. 이건 20일 유사패턴 매칭 건수(match_count)이고,
+            # 화면의 유효표본은 전략 백테스트 표본(eff_sample_size)이다.
+            # 실측: LX인터내셔널이 "유효표본 0건"으로 매수 차단됐는데 같은
+            # 화면에 "유효표본 132건"이 떠 있었다. 같은 말이 두 숫자를
+            # 가리키면 사용자는 화면을 못 믿는다. 이름을 갈라 준다.
+            vetoes.append(
+                f"유사패턴 표본 {sim.get('match_count', 0)}건 — "
+                f"확률 판단 기준 미달 (과거에 지금과 닮은 자리를 "
+                f"충분히 찾지 못했습니다)")
         # [라운드 3] 이 거부권은 매수 결론의 42%를 막는 최대 차단자인데,
         # 원장 4,011건 실측에서 net>0 과 net<=0 의 성과 차이가 적중률 +0.9%p ·
         # 비용후 +0.03%p 로 사실상 없었다(블라인드에서는 오히려 역전).

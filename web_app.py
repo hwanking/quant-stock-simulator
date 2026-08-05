@@ -1601,7 +1601,9 @@ _SB_STEPS = [
      'done': bool(st.session_state.get('positions')),
      'icon': 'account_balance_wallet',
      'hint': '보유 중이면 판단이 달라집니다'},
-    {'key': 'find', 'no': '3', 'title': '종목 찾기',
+    # 항상 펼쳐 둔다 (라운드 38 · 사용자 요청) — 이 영역에서 하는 일은
+    # 접는 게 아니라 **다시 불러오는 것**이다.
+    {'key': 'find', 'no': '3', 'title': '종목 찾기', 'always': True,
      'done': bool(st.session_state.get('scan_results')),
      'icon': 'query_stats',
      'hint': '조건에 맞는 후보를 발굴합니다'},
@@ -1894,7 +1896,8 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
 if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
 
-    _uk.sidebar_section("종목 찾기", theme=_theme)
+    # 제목은 아코디언 줄(항상 펼침)이 이미 그린다 — 여기서 또 그리면
+    # '종목 찾기'가 두 번 나온다 (라운드 38 실행 확인에서 잡음).
     # '코스피·코스닥 전체' 라고 쓰고 있었지만 실제 출발점은 네이버 순위
     # 페이지 2종(거래대금 상위·상승률 상위)이다. 전 종목 목록이 아니다.
     st.sidebar.caption("코스피·코스닥의 **거래대금·상승률 순위 상위**에서 관심종목을 "
@@ -1903,38 +1906,74 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
                        "거래가 한산한 종목은 순위에 오르지 않아 후보에서 빠집니다. "
                        "관심도와 매수 판단은 별개입니다.")
 
+    # ── 종목 찾기는 **항상 열려 있다** (라운드 38) ──────────────────────
+    # 종전에는 기본이 접힘이었고, 버튼이 '스캔 / 닫기' 라 한 번 더 누르면
+    # 결과가 사라졌다. 사용자가 이 영역에서 하는 일은 접는 게 아니라
+    # **다시 불러오는 것**이므로, 기본을 펼침으로 두고 버튼을 '최신화'로 바꾼다.
     if 'show_screener' not in st.session_state:
-        st.session_state['show_screener'] = False
+        st.session_state['show_screener'] = True
+        st.session_state['pending_scan'] = True     # 첫 진입에 한 번 자동 스캔
 
-    _strat_labels = [lbl for _k, lbl in market_attention.STRATEGIES]
-    _strat_by_label = {lbl: k for k, lbl in market_attention.STRATEGIES}
-    _sel_strat_label = st.sidebar.selectbox(
-        "후보 발굴 방식", _strat_labels, index=0,
-        help="시총 상위는 대형주가 반복되므로 기본값은 '종합 이슈'입니다.")
-    attention_strategy = _strat_by_label[_sel_strat_label]
-    if attention_strategy in market_attention.STRATEGY_UNAVAILABLE:
-        st.sidebar.warning(market_attention.STRATEGY_UNAVAILABLE[attention_strategy])
+    # ① 검색창·② 빠른 선택은 위쪽 '분석할 종목' 절에 이미 있다.
+    # ③ 전체 시장 스캔 조건 — 모바일에서 화면을 덜 먹도록 접어 둔다.
+    with st.sidebar.expander("상세 설정 · 스캔 조건", expanded=False):
+        _strat_labels = [lbl for _k, lbl in market_attention.STRATEGIES]
+        _strat_by_label = {lbl: k for k, lbl in market_attention.STRATEGIES}
+        _sel_strat_label = st.selectbox(
+            "후보 발굴 방식", _strat_labels, index=0,
+            help="시총 상위는 대형주가 반복되므로 기본값은 '종합 이슈'입니다.")
+        attention_strategy = _strat_by_label[_sel_strat_label]
+        if attention_strategy in market_attention.STRATEGY_UNAVAILABLE:
+            st.warning(market_attention.STRATEGY_UNAVAILABLE[attention_strategy])
 
-    scan_depth = st.sidebar.selectbox(
-        f"정밀분석 후보 수 ({_sel_strat_label} 순)", [5, 10, 15, 20, 30], index=0,
-        help="관심점수 상위 N개에만 종목별 정밀 파이프라인을 돌립니다. "
-             "종목당 일봉·시세 조회가 필요해 N이 클수록 오래 걸립니다. "
-             "기본 5개는 빠르게 훑어보기용이며, 넓게 보려면 15~30개로 올리세요.")
+        scan_depth = st.selectbox(
+            f"정밀분석 후보 수 ({_sel_strat_label} 순)", [5, 10, 15, 20, 30],
+            index=0,
+            help="관심점수 상위 N개에만 종목별 정밀 파이프라인을 돌립니다. "
+                 "종목당 일봉·시세 조회가 필요해 N이 클수록 오래 걸립니다. "
+                 "기본 5개는 빠르게 훑어보기용이며, 넓게 보려면 15~30개로 올리세요.")
 
-    with st.sidebar.expander("관심 데이터 연동 현황"):
-        st.caption("수집하지 못한 항목은 값을 만들어내지 않고 가중치를 0으로 둔 뒤, "
-                   "나머지 항목에 재정규화합니다.")
+        st.caption("**관심 데이터 연동 현황** — 수집하지 못한 항목은 값을 "
+                   "만들어내지 않고 가중치를 0으로 둔 뒤 나머지에 재정규화합니다.")
         for _d in market_attention.data_status():
-            _mark = {'full': '🟢 연동', 'partial': '🟡 부분', 'none': '🔴 미연동'}[_d['availability']]
+            _mark = {'full': '🟢 연동', 'partial': '🟡 부분',
+                     'none': '🔴 미연동'}[_d['availability']]
             st.markdown(
                 f"**{_d['label']}** {_mark}  \n"
-                f"명세 {_d['spec_weight_pct']:.0f}% → 적용 **{_d['effective_weight_pct']:.1f}%**  \n"
+                f"명세 {_d['spec_weight_pct']:.0f}% → 적용 "
+                f"**{_d['effective_weight_pct']:.1f}%**  \n"
                 f"<span style='color:#9DAABC;font-size:12px;'>{_d['detail']}</span>",
                 unsafe_allow_html=True)
 
-    if st.sidebar.button("오늘의 관심종목 스캔 / 닫기", width='stretch'):
-        st.session_state['show_screener'] = not st.session_state['show_screener']
-        st.session_state['pending_scan'] = st.session_state['show_screener']
+    # ④ 최신화 버튼 — 실행 중에는 비활성화해 중복 클릭을 막는다
+    _scan_busy = bool(st.session_state.get('pending_scan'))
+    if st.sidebar.button("최신화", width='stretch', type='primary',
+                         disabled=_scan_busy,
+                         help="현재가·거래량·거래대금·시장 국면·뉴스·관심점수·"
+                              "행동점수·추천 후보를 다시 불러옵니다. "
+                              "개장 전 확정 리포트는 전일 확정 데이터 기준이라 "
+                              "장중에 바뀌지 않습니다."):
+        st.session_state['show_screener'] = True
+        st.session_state['pending_scan'] = True
+        st.rerun()
+
+    # ⑤ 마지막 갱신 시각 · ⑥ 현재 분석 대상 수 · ⑦ 진행 상태
+    if _scan_busy:
+        st.sidebar.info("**시장 데이터 최신화 중**  \n"
+                        "가격 확인 → 거래량 점검 → 뉴스 갱신 → 후보 재정렬")
+    else:
+        _last = st.session_state.get('scan_done_at')
+        _n_att = len((st.session_state.get('attention_result') or {})
+                     .get('rows') or [])
+        _n_deep = len(st.session_state.get('scan_results') or [])
+        if _last:
+            st.sidebar.caption(
+                f"최신화 완료 · **{_last}**  \n"
+                f"관심종목 {_n_att}개 · 정밀분석 {_n_deep}개  \n"
+                f"개장 전 추천은 전일 확정 데이터 기준으로 유지됩니다.")
+        else:
+            st.sidebar.caption("아직 최신화하지 않았습니다 — "
+                               "'최신화'를 누르면 시장 데이터를 불러옵니다.")
 
 
 if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
@@ -2095,7 +2134,15 @@ def run_market_scan():
 
 
 if st.session_state.pop('pending_scan', False):
-    run_market_scan()
+    # 스캔이 도중에 실패해도 플래그는 반드시 풀린다 — 안 그러면 '최신화'
+    # 버튼이 영원히 비활성 상태로 남는다 (라운드 38).
+    try:
+        run_market_scan()
+    finally:
+        import datetime as _dt_scan
+        st.session_state['scan_done_at'] = (
+            _dt_scan.datetime.now().strftime('%H:%M:%S'))
+        st.session_state['pending_scan'] = False
 
 # 3. 메인 타이틀
 import uuid
@@ -6005,7 +6052,7 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
         st.markdown(f"""
         <div style='background:#161D2A; border-radius:12px; padding:16px;'>
             <p style='margin:0; font-weight:bold; color:#F2B84B;'>🎯 현재 매매 적합도 주요 진단 요인 ({four_scores['trading_timing_score']}점)</p>
-            <p style='margin:4px 0; color:{wr_col}; font-size:13px;'>[관찰 승률] 20일 유사패턴 과거 관찰 승률: {fmt_pct(_wr, signed=False)} (유효표본 {four_scores.get('eff_sample_size', 0):.0f}건 · {four_scores.get('sample_tier', '-')})</p>
+            <p style='margin:4px 0; color:{wr_col}; font-size:13px;'>[관찰 승률] 20일 유사패턴 과거 관찰 승률: {fmt_pct(_wr, signed=False)} (전략 표본 {four_scores.get('eff_sample_size', 0):.0f}건 · {four_scores.get('sample_tier', '-')})</p>
             <p style='margin:4px 0; color:{pe_col}; font-size:13px;'>[경로 우위] 20일 평균 수익률: {fmt_pct(_pe)}</p>
             <p style='margin:4px 0; color:{nr_col}; font-size:13px;'>[미도달 비중] 목표가·손절가 모두 미도달: {fmt_pct(_nr, signed=False)}</p>
             <p style='margin:4px 0; color:#4C8DFF; font-size:13px;'>[게이트 판정] <code>{four_scores['gate_reason']}</code></p>
@@ -6146,7 +6193,7 @@ with tab_pred:
             <b>④ 독립성 확보</b>: 매칭 간 최소 H영업일 간격 강제 (중복 이벤트 제거)<br>
             <b>⑤ 경로 확률</b>: 손절(-{TP_SL[1]:.0f}%) vs 목표(+{TP_SL[0]:.0f}%) 선도달 여부를 매칭별로 실제 경로 추적<br>
             <b>⑥ 베이지안 보정</b>: Beta-Binomial 사후평균 (사후확률: <b style='color:#35C98B;'>{fmt_pct(sim_res.get('bayes_prob'), signed=False)}</b>) + 95% Wilson 구간<br>
-            <b>⑦ 표본 통제</b>: 유효표본 {sim_res.get('match_count', 0)}건 · 등급 <b>{sim_res.get('sample_tier_label', '-')}</b> — 10건 미만이면 확률 미표시
+            <b>⑦ 표본 통제</b>: 유사패턴 표본 {sim_res.get('match_count', 0)}건 · 등급 <b>{sim_res.get('sample_tier_label', '-')}</b> — 10건 미만이면 확률 미표시
         </p>
         <p style='font-size: 12px; color:#9DAABC; margin: 8px 0 0 0;'>
             ※ 거래량·수급·RSI를 유사도에 반영하는 다중거리 모델과 다중 모델 앙상블은 구현되어 있지 않습니다.
@@ -6156,7 +6203,7 @@ with tab_pred:
     """, unsafe_allow_html=True)
 
     if not sim_res.get('probabilities_shown', False):
-        st.warning(f"**[명세 §11 표본 통제]** 유효표본 {sim_res.get('match_count', 0)}건 — "
+        st.warning(f"**[명세 §11 표본 통제]** 유사패턴 표본 {sim_res.get('match_count', 0)}건 — "
                    f"{sim_res.get('sample_tier_label', '')}. 이 구간에서는 확률을 산출·표시하지 않고 "
                    f"과거 관찰값만 제공합니다.")
 
@@ -6206,7 +6253,7 @@ with tab_pred:
                 continue
             hz_rows.append({
                 "기간": f"{H}일",
-                "유효표본": h.get('match_count', 0),
+                "유사패턴 표본": h.get('match_count', 0),
                 "등급": h.get('tier_label', '-'),
                 "관찰승률": fmt_pct(h.get('obs_win_rate'), signed=False),
                 "평균": fmt_pct(h.get('mean_perf')),
@@ -6395,7 +6442,7 @@ with tab_pred:
 
         title_kind = "예측" if show_forecast else "과거 유사사례 관찰"
         ax_p.set_title(
-            f"[{resolved_name}] {sel_h}영업일 {title_kind} — 유효표본 {h['match_count']}건 · {h['tier_label']}",
+            f"[{resolved_name}] {sel_h}영업일 {title_kind} — 유사패턴 표본 {h['match_count']}건 · {h['tier_label']}",
             color='#F3F6FA', fontsize=13)
         ax_p.set_xlabel("미래 영업일 (Day)", color='#9DAABC')
         ax_p.set_ylabel(f"주가 ({unit_str})", color='#9DAABC')
@@ -6405,11 +6452,11 @@ with tab_pred:
         st.pyplot(fig_pred)
 
         if not show_forecast:
-            st.warning(f"유효표본 {h['match_count']}건 — {h['tier_label']}. "
+            st.warning(f"유사패턴 표본 {h['match_count']}건 — {h['tier_label']}. "
                        f"위 그래프는 **미래 예측이 아니라 과거 유사사례의 관찰 분포**입니다.")
 
         g1, g2, g3, g4, g5, g6 = st.columns(6)
-        g1.metric("유효표본", f"{h['match_count']}건", h['tier_label'])
+        g1.metric("유사패턴 표본", f"{h['match_count']}건", h['tier_label'])
         g2.metric("ESS", fmt_num(h.get('ess'), '.1f', '건'), "분포 쏠림 보정")
         g3.metric("평균 / 중앙값", f"{fmt_pct(h['mean_perf'])} / {fmt_pct(h['median_perf'])}")
         g4.metric("25~75분위", f"{fmt_pct(h.get('p10_perf'))} ~ {fmt_pct(h.get('p90_perf'))}", "10~90분위")
@@ -6437,6 +6484,15 @@ with tab_val:
                 st.markdown(f"### {_b['low']:,.0f} ~ {_b['high']:,.0f}원")
                 st.caption(f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
                            f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})")
+                # 라운드 38 — 범위의 **폭**을 말해 준다. LX인터내셔널이
+                # 31,860~78,511원(2.5배)이었는데 화면은 그냥 범위만 보여 줬다.
+                # 폭이 2배를 넘으면 "적정가가 좋다"고 읽으면 안 된다.
+                _bw = ((_b['wide_high'] / _b['wide_low'])
+                       if _b.get('wide_low') else None)
+                if _bw and _bw >= 2.0:
+                    st.warning(f"범위 폭이 **{_bw:.1f}배**입니다 — 모델들이 서로 "
+                               f"크게 다른 값을 냈다는 뜻이라, 이 숫자로 "
+                               f"'저평가'를 단정하지 마세요.")
                 st.caption(_b['basis'])
             else:
                 st.markdown("### 미산출")

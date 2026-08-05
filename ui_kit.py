@@ -251,6 +251,10 @@ def acc_css(steps, active='', busy='', theme='dark'):
         '  color: ' + t['tx2'] + ' !important; }',
         sb + ' div[class*="st-key-_acc_"] button:hover {',
         '  background: ' + t['raised'] + ' !important; }',
+        # 항상 펼친 단계의 제목 — 버튼이 아니므로 같은 리듬만 맞춘다
+        sb + ' .acc-always { font-size: 13px; font-weight: 600;',
+        '  color: ' + t['brand'] + '; padding: 9px 11px;',
+        '  margin: 0; letter-spacing: 0; }',
     ]
     for s in steps:
         # 일반 규칙(div[class*=...] button p)과 특이도를 맞춘다 —
@@ -274,7 +278,11 @@ def acc_row(step, active='', busy='', state_key='sb_step'):
     이미 열린 것을 다시 누르면 닫는다 (전부 닫힌 상태도 허용).
     반환: 이 줄이 지금 열려 있는가
     """
-    on = (step['key'] == active)
+    # always=True 인 단계는 아코디언 규칙에서 빼고 **항상 펼쳐 둔다**
+    # (라운드 38 · 사용자 요청): "종목 찾기는 접는 것보다 다시 불러오는 일이
+    # 훨씬 잦으니 늘 열려 있어야 한다."
+    always = bool(step.get('always'))
+    on = always or (step['key'] == active)
     # 아이콘은 Streamlit 내장 Material Symbols 하나로 통일한다 —
     # 직접 그린 SVG 는 버튼 라벨에 못 넣고, 세트를 섞으면 아마추어처럼 보인다.
     ico = step.get('icon') or ''
@@ -282,8 +290,15 @@ def acc_row(step, active='', busy='', state_key='sb_step'):
     # 완료는 ✓, 미설정은 표시 안 함(빈 원은 실패처럼 보인다), 처리 중은 ●
     mark = '  ✓' if step.get('done') is True else ''
     run = '  ●' if step['key'] == busy else ''
-    arrow = '  ▾' if on else '  ▸'
+    arrow = '' if always else ('  ▾' if on else '  ▸')
     label = head + str(step['title']) + run + mark + arrow
+    if always:
+        # 접을 수 없으므로 버튼이 아니라 제목으로 그린다 — 누를 수 있게
+        # 보이는데 아무 일도 안 일어나면 그게 더 나쁘다.
+        st.sidebar.markdown(
+            f"<div class='acc-always'>{_esc(str(step['title']))}</div>",
+            unsafe_allow_html=True)
+        return True
     if st.sidebar.button(label, key='_acc_' + step['key'],
                          width='stretch',
                          help=step.get('hint') or None):
