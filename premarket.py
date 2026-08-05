@@ -98,6 +98,22 @@ def _classify_reco(row, easy_line):
     return '오늘은 사면 안 되는 종목'
 
 
+def _why_of(core, fs, news_flags, sector_cycle):
+    """
+    왜 이 종목인가 — 근거를 사람이 읽는 문장으로 (라운드 47).
+
+    실패해도 카드는 그려져야 한다. 근거를 못 만들면 빈 묶음을 돌려주고,
+    카드는 그 칸을 통째로 생략한다 (없는 근거를 지어내지 않는다).
+    """
+    if not core:
+        return None
+    try:
+        import why_pick as _wp
+        return _wp.build(core, fs, news_flags, sector_cycle)
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
 def _core_of(q_engine, row, fs, verdict):
     """
     중앙 판정 — 상세 화면과 **같은 함수**를 쓴다 (라운드 34).
@@ -180,6 +196,7 @@ def pick_from_scan_row(q_engine, r):
 
     nf = ((snap.get('market_context') or {}).get('news_flags') or {})
     cb = fs.get('calibration_band') or {}
+    _core = _core_of(q_engine, r, fs, verdict)
     return {
         'code': str(r.get('symbol', '')).split('.')[0],
         'symbol': r.get('symbol'),
@@ -231,7 +248,12 @@ def pick_from_scan_row(q_engine, r):
         # 카드가 자기만의 가격 조합을 만들지 않도록, 상세 화면과 **같은
         # 함수**가 낸 결과를 통째로 싣는다. 화면 간 값이 어긋나면
         # 회귀가 잡는다.
-        'core': _core_of(q_engine, r, fs, verdict),
+        'core': _core,
+        # ── 왜 이 종목인가 (라운드 47) ───────────────────────────
+        # 사용자 지적: *"단순히 점수가 높다는 이유만 보여줄 것이 아니라,
+        # 왜 이 종목을 계속 관심 있게 봐야 하는지 명확하게 설명해 주세요."*
+        # 근거가 없으면 빈 묶음이 온다 — 그때는 카드가 이 칸을 안 그린다.
+        'why': _why_of(_core, fs, nf, fs.get('sector_cycle')),
     }
 
 
