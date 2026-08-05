@@ -249,7 +249,7 @@ def _parse_news_datetime(s):
     return t
 
 
-def fetch_stock_news(code, limit=15):
+def fetch_stock_news(code, limit=15, name_hint=''):
     """
     종목 뉴스 목록. 반환: {'available', 'items': [...], 'source', 'reason'}
 
@@ -295,10 +295,54 @@ def fetch_stock_news(code, limit=15):
                 'scope': classify_news_scope(title),
                 'lagging': is_lagging_report(title),
             })
-        return {'available': bool(items), 'items': items,
-                'source': '네이버 금융 종목뉴스 (제목·언론사·시각 원문)',
-                'reason': '' if items else '표시할 기사가 없습니다.'}
+        if items:
+            return {'available': True, 'items': items,
+                    'source': '네이버 금융 종목뉴스 (제목·언론사·시각 원문)',
+                    'reason': ''}
+        # ── 공개 RSS 보완 (라운드 42) ────────────────────────────────
+        # 네이버 종목뉴스가 비면 뉴스 게이트가 아예 못 돈다. 그런데
+        # '기사가 없다'와 '이 출처가 못 준다'는 다르다. 공개 RSS(연합뉴스·
+        # 한경·매경)에서 같은 종목을 찾아 보완한다. 출처를 밝혀 섞이지 않게 한다.
+        return _rss_fallback(c, name_hint)
     return _cached(f"news:{c}", _TTL_NEWS, _build)
+
+
+def _rss_fallback(code, name_hint=''):
+    """공개 RSS 에서 종목명으로 기사를 찾는다 (라운드 42)."""
+    nm = str(name_hint or '').strip()
+    if not nm:
+        try:
+            from bitemporal_engine import STOCK_METRICS_DB
+            for k, v in (STOCK_METRICS_DB or {}).items():
+                if str(k).split('.')[0] == code:
+                    nm = str(v.get('name') or '')
+                    break
+        except Exception:
+            nm = ''
+    if not nm:
+        return {'available': False, 'items': [],
+                'reason': '종목명을 알 수 없어 RSS 보완을 하지 못했습니다.'}
+    try:
+        import news_feed as _nf
+        s = _nf.for_stock(nm)
+    except Exception as e:
+        return {'available': False, 'items': [],
+                'reason': f'RSS 보완 실패 ({type(e).__name__})'}
+    items = []
+    for h in s.get('headlines') or []:
+        title = h.get('title') or ''
+        items.append({
+            'title': title, 'press': h.get('source', ''),
+            'datetime': h.get('when', ''), 'url': h.get('link', ''),
+            'related': [], 'related_count': 0,
+            'risk_hits': [k for k in NEWS_RISK_KEYWORDS if k in title],
+            'watch_hits': [k for k in NEWS_WATCH_KEYWORDS if k in title],
+            'scope': classify_news_scope(title),
+            'lagging': is_lagging_report(title),
+        })
+    return {'available': bool(items), 'items': items,
+            'source': '공개 RSS 보완 (연합뉴스·한국경제·매일경제 · 제목·시각만)',
+            'reason': '' if items else '네이버·RSS 양쪽에 기사가 없습니다.'}
 
 
 def fetch_stock_disclosures(code, limit=10):
@@ -353,15 +397,24 @@ def summarize_news_flags(news):
     fresh_watch = sum(1 for it in items
                       if it.get('watch_hits') and not it.get('lagging')
                       and it.get('scope') == '종목')
+    # 라운드 42 — 룰북의 뉴스 게이트가 쓸 수 있게 두 가지를 더 싣는다.
+    #  · risk_words   : 어떤 낱말이 걸렸는지 (화면에 사유로 적어야 한다)
+    #  · feed_available: 뉴스를 **받기는 했는가**.
+    #    받지 못한 것과 악재가 없는 것은 다르다. 미수신을 '악재 없음'으로
+    #    읽으면 데이터 장애가 매수 허가로 둔갑한다.
+    risk_words = sorted({w for _, hits in risk for w in (hits or [])})
     return {
         'risk_titles': risk,
         'risk_count': len(risk),
+        'risk_words': risk_words,
         'watch_count': watch,
         'fresh_watch_count': fresh_watch,
         'lagging_count': sum(1 for it in items if it.get('lagging')),
         'by_scope': {s: sum(1 for it in items if it.get('scope') == s)
                      for s in ('종목', '업종', '시장', '거시')},
         'total': len(items),
+        'total_count': len(items),
+        'feed_available': bool((news or {}).get('available', bool(items))),
     }
 
 

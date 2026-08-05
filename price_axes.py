@@ -188,6 +188,58 @@ def value_band(val_eval, asset_type=None, bars=None):
     )
 
 
+def cycle_band(val_eval, band):
+    """
+    ①.5 업황조정 가치 — 기본 가치에 섹터 사이클을 얹은 범위.
+
+    사용자 사양 §3: *"기본 펀더멘털 가치 / 업황조정 가치 / 시장반영 최종
+    가치 범위 — 셋을 분리해 주세요."*
+
+    ■ 지금은 기본 가치와 **같다.** 그리고 그게 정직한 상태다.
+      라운드 44에서 미국 섹터 ETF 모멘텀으로 국내 종목 결과를 예측할 수
+      있는지 원장 16,805건에 시점 복원으로 실측했다. 사전등록 게이트
+      G1~G4 중 세 개를 못 넘었다 — 특히 **방향이 valid 에서 뒤집힌다**
+      (train +5.2%p · valid −5.0%p · blind +7.6%p). 표본 문제가 아니라
+      신호가 일관되지 않다는 뜻이다.
+
+      그래서 조정 폭은 0 이다. 범위는 그대로 두고, `adjusted=False` 와
+      이유를 같이 실어 화면이 "업황 미반영"이라고 말할 수 있게 한다.
+      **칸을 만들어 놓고 0 을 넣는 것과, 0 인 이유를 적는 것은 다르다.**
+    """
+    if not band.get('available'):
+        return _blank('기본 가치가 없어 업황조정 가치도 낼 수 없습니다.')
+    ve = val_eval or {}
+    adj = _f(ve.get('market_adjustment_pct')) or 0.0
+    sc = ve.get('sector_cycle') or {}
+    why = ve.get('market_adjustment_why')
+
+    lo = float(band['low']) * (1.0 + adj / 100.0)
+    hi = float(band['high']) * (1.0 + adj / 100.0)
+    # 미연동이면 '게이트 미통과'보다 **어느 업종이 왜 안 붙는지**가 먼저다.
+    # 둘 다 0% 지만 사용자가 할 수 있는 일이 다르다 — 게이트는 기다릴 일이고,
+    # 미연동은 그 업종에 프록시가 아예 없다는 뜻이다.
+    unlinked_why = sc.get('why') if not sc.get('linked') else None
+    return dict(
+        available=True, low=lo, high=hi, adj_pct=round(adj, 2),
+        adjusted=bool(adj), horizon='수개월~1년',
+        linked=bool(sc.get('linked')),
+        sector_ko=sc.get('ko'), industry=sc.get('industry'),
+        mom60=sc.get('mom60'), rs60=sc.get('rs60'),
+        # 언제 받은 값인지 같이 보낸다 — 신선도를 화면이 말할 수 있어야 한다
+        last_date=sc.get('last_date'), fresh=sc.get('fresh'),
+        collected_at=sc.get('collected_at'),
+        sources=sc.get('sources') or [],
+        proxy_note=sc.get('proxy_note'),
+        real_indicators=sc.get('real_indicators') or [],
+        real_linked=sc.get('real_linked') or [],
+        why=(unlinked_why or why
+             or ('업황 조정이 적용되지 않았습니다.' if not adj else None)),
+        gate_why=why,
+        basis=(f"기본 가치 범위 × (1 {adj:+.1f}%)" if adj
+               else '기본 가치 범위와 같습니다 — 업황 조정 미적용'),
+    )
+
+
 def market_fair(val_eval, band, regime_gate=None):
     """
     ② 시장 기반 공정가격 — 장기 가치에 지금 시장 상태를 얹은 값.
@@ -209,7 +261,11 @@ def market_fair(val_eval, band, regime_gate=None):
     if size is not None and size < 1.0:
         regime_adj = -(1.0 - size) * 10.0
     price = center * (1.0 + (adj + regime_adj) / 100.0)
-    parts = [f"장기 가치 중심 {center:,.0f}원", f"시장 조정 {adj:+.1f}%"]
+    # 조정이 0 이면 '조정 +0.0%' 라고 말하지 않는다 — 조정한 적이 없는데
+    # 조정했다고 읽힌다. 0 인 **이유**는 업황조정 축(cycle_band)이 적는다.
+    parts = [f"장기 가치 중심 {center:,.0f}원"]
+    if adj:
+        parts.append(f"업황 조정 {adj:+.1f}%")
     if regime_adj:
         parts.append(f"{rg.get('cell_ko') or '국면'} 보정 {regime_adj:+.1f}%")
     return dict(available=True, price=float(price), horizon='수개월',
@@ -257,6 +313,7 @@ def build(val_eval, four_scores, curr_price=None, asset_type=None, bars=None):
     at = asset_type or fs.get('asset_type')
     rg = fs.get('regime_gate')
     band = value_band(val_eval, asset_type=at, bars=bars)
+    cyc = cycle_band(val_eval, band)
     mkt = market_fair(val_eval, band, regime_gate=rg)
     ent = entry(fs, curr_price=curr_price)
 
@@ -283,8 +340,11 @@ def build(val_eval, four_scores, curr_price=None, asset_type=None, bars=None):
     if not band.get('available'):
         notes.append(f"장기 가치는 {band['why']} 실전 진입가는 그대로 유효합니다.")
 
+    if cyc.get('available') and not cyc.get('linked'):
+        notes.append(f"업황: {cyc.get('why') or '업종이 프록시에 미연동입니다.'}")
+
     code, ko, weight = tier_of(band.get('confidence'))
-    return dict(value_band=band, market_fair=mkt, entry=ent,
+    return dict(value_band=band, cycle_band=cyc, market_fair=mkt, entry=ent,
                 tier=code, tier_ko=ko, weight=weight,
                 policy=score_policy(band),
                 consistent=consistent, notes=notes,

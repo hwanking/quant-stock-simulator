@@ -41,10 +41,11 @@ COMPONENT_SPEC = [
      'availability': 'full',
      'detail': '최근 확정 거래대금 ÷ 20일 평균 거래대금'},
     {'key': 'event_catalyst', 'label': '뉴스·공시 촉매', 'weight': 0.20,
-     'availability': 'partial',
-     'detail': 'DART 최근 공시(RSS)를 유형별로 반영 — 수주·실적·M&A 등. '
-               '다만 RSS 는 최근 50건만 주고 회사명으로 매칭하며, '
-               '뉴스 기사는 여전히 미연동이라 기사 수를 세지 않는다'},
+     'availability': 'full',
+     'detail': 'DART 공시(RSS 50건) + **뉴스 기사**(연합뉴스·한국경제·'
+               '매일경제 공개 RSS, 라운드 41 실측 220건). 제목·시각·링크만 '
+               '보고 본문은 저장하지 않는다. 두 글자 종목명은 경계를 요구해 '
+               '다른 상장사(GS vs GS건설)와 섞이지 않게 한다'},
     {'key': 'price_volatility', 'label': '가격·변동성 변화', 'weight': 0.15,
      'availability': 'full',
      'detail': '갭, ATR 확대(ATR5÷ATR20), 당일 변동폭'},
@@ -82,10 +83,9 @@ STRATEGIES = [
 STRATEGY_LABELS = dict(STRATEGIES)
 
 #: 현재 데이터로는 후보를 만들 수 없는 방식 (선택 시 사유를 알리고 대체 방식을 권한다)
-STRATEGY_UNAVAILABLE = {
-    'news': '공시·뉴스 API가 연동되지 않아 촉매 기반 후보를 만들 수 없습니다. '
-            '기사 건수를 임의로 세지 않습니다.',
-}
+#: 라운드 41 — 뉴스 RSS 를 실제로 받게 되어 'news' 방식이 열렸다.
+#: 받지 못하는 날에는 find_attention_candidates 가 사유를 붙여 알린다.
+STRATEGY_UNAVAILABLE = {}
 
 #: 유동성 하한 — 이보다 작으면 슬리피지로 전략이 성립하지 않는다
 MIN_AVG_TURNOVER_KRW = 2_000_000_000
@@ -563,6 +563,39 @@ def score_investor_flow(flow, avg_volume):
     return float(score), detail
 
 
+def score_news(name, items):
+    """
+    뉴스 기사 → 0~100 관심 점수 · 상세 (라운드 41).
+
+    무엇을 세는가:
+      · **신선한 기사**(24시간 안)만 주 신호로 쓴다. 후행 보도는 절반만 센다
+      · 촉매 낱말(수주·계약·임상·흑자전환 …)이 붙으면 가산
+      · 위험 낱말(상장폐지·거래정지·횡령 …)이 붙으면 감산 — 관심은 끌지만
+        살 이유는 아니다
+
+    기사가 없으면 0.0 을 돌려준다 — '미산출'과 '없음'은 다르다.
+    출처를 못 받은 경우는 detail 의 unavailable 로 구분한다.
+    """
+    if not items:
+        return 0.0, {'unavailable': '뉴스 RSS 미수신'}
+    try:
+        import news_feed as _nf
+        s = _nf.for_stock(name, items)
+    except Exception as e:
+        return 0.0, {'unavailable': f'뉴스 분석 실패 ({type(e).__name__})'}
+    if not s['total']:
+        return 0.0, {'total': 0}
+    # 신선 기사 1건 = 30점, 3건이면 90점에서 포화
+    base = min(90.0, s['fresh'] * 30.0 + s['lagging'] * 12.0)
+    base += min(10.0, s['catalyst'] * 5.0)
+    base -= min(40.0, s['risk'] * 20.0)
+    return float(max(0.0, min(100.0, base))), {
+        'total': s['total'], 'fresh': s['fresh'], 'lagging': s['lagging'],
+        'risk_words': s['risk_words'], 'catalyst_words': s['catalyst_words'],
+        'headlines': s['headlines'],
+    }
+
+
 def score_disclosures(items):
     """공시 목록 → 0~100. 유형 가중치 중 가장 높은 것을 기준으로 삼고 건수로 소폭 가산."""
     if not items:
@@ -820,17 +853,17 @@ def strategy_filter(strategy, row):
 def classify_bucket(attention, action_score, entry_ok=None):
     """§13 결과 분류. action_score 가 없으면 관심도만으로 임시 분류한다."""
     if action_score is None:
-        return ('🔥 관심 급증·추격주의' if attention.get('overheated')
-                else '👀 관찰 후보')
+        return ('관심 급증·추격주의' if attention.get('overheated')
+                else '관찰 후보')
     hot = attention['adjusted_attention_score'] >= 55
     good = action_score >= 68
     if hot and good:
-        return '🏆 실전 추천 후보'
+        return '실전 추천 후보'
     if hot and not good:
-        return '🔥 관심 급증·추격주의'
+        return '관심 급증·추격주의'
     if (not hot) and good:
-        return '🌱 조용한 선행 후보'
-    return '🚫 추천 제외'
+        return '조용한 선행 후보'
+    return '추천 제외'
 
 
 def find_attention_candidates(strategy='composite', top_n=15,
@@ -856,7 +889,7 @@ def find_attention_candidates(strategy='composite', top_n=15,
         if not codes:
             return {'rows': [], 'pool_size': 0, 'deep_count': 0, 'sources': [],
                     'failures': [], 'unavailable':
-                        "관심종목이 비어 있습니다. 스캔 결과에서 '⭐ 이 목록을 관심종목으로 "
+                        "관심종목이 비어 있습니다. 스캔 결과에서 '이 목록을 관심종목으로 "
                         "저장'을 누르거나 보유종목을 등록하세요."}
         pool = {c: {'code': c, 'name': c, 'price': None, 'change_pct': None,
                     'volume': None, 'turnover_mil': None, 'market_cap_eok': None,
@@ -924,6 +957,15 @@ def find_attention_candidates(strategy='composite', top_n=15,
     if progress:
         progress("DART 최근 공시 수집")
     disclosures = fetch_disclosures()
+    # 뉴스 기사 (라운드 41) — 한 번만 받아 후보 전체에 재사용한다
+    news_items = []
+    try:
+        import news_feed as _nf
+        if progress:
+            progress('뉴스 기사 수집')
+        news_items, _news_report = _nf.fetch()
+    except Exception:
+        news_items = []
 
     rows, failures = [], []
     for i, base in enumerate(deep):
@@ -955,10 +997,17 @@ def find_attention_candidates(strategy='composite', top_n=15,
         elif base['name'] in flow_names:
             comp['scores']['investor_flow'] = 100.0   # 순매수 상위 목록 진입은 유지
 
-        # ── 공시 촉매 ─────────────────────────────────────────────────
+        # ── 공시 + 뉴스 촉매 (라운드 41) ──────────────────────────────
+        # 종전에는 DART 공시만 봤다. 이제 공개 뉴스 RSS 도 함께 본다.
+        # 둘 중 **높은 쪽**을 쓴다 — 공시가 없어도 기사가 붙었으면 그건
+        # 시장이 주목한다는 뜻이고, 반대도 마찬가지다. 평균을 내면
+        # 한쪽이 0 일 때 신호가 반토막 난다.
         ds, dtypes = score_disclosures(disclosures.get(base['name']))
-        comp['scores']['event_catalyst'] = ds
+        ns, ndetail = score_news(base['name'], news_items)
+        _cands = [x for x in (ds, ns) if x is not None]
+        comp['scores']['event_catalyst'] = max(_cands) if _cands else 0.0
         comp['disclosure_types'] = dtypes
+        comp['news_detail'] = ndetail
 
         att = score_candidate(comp, change_pct=base.get('change_pct'))
         row = {**base, 'components': comp, 'attention': att,

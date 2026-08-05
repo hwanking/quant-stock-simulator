@@ -152,6 +152,20 @@ def _icon(name, color, size=16):
             f"style='flex:0 0 auto;'><path d='{d}'/></svg>")
 
 
+def dot(color, size=10):
+    """
+    판정 표시용 점 — 이모지(🟢🔴🟡⚪🟠) 대체 (라운드 40).
+
+    금융 터미널 레퍼런스 17종(Binance·Coinbase·Kraken·Stripe·Linear 등)에
+    이모지를 UI 상태 표시로 쓰는 예가 없다. 이모지는 폰트·OS 마다 모양과
+    크기가 달라 정렬이 깨지고, 색을 우리가 통제할 수 없다.
+    같은 자리에 **토큰 색을 그대로 쓰는 점**을 그린다.
+    """
+    return (f"<span style='display:inline-block; width:{size}px; "
+            f"height:{size}px; border-radius:50%; background:{color}; "
+            f"flex:0 0 auto; vertical-align:middle;'></span>")
+
+
 def nav_links(items, theme='dark'):
     """
     아코디언 안의 이동 링크 — 아이콘 없이 글자만.

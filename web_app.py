@@ -164,7 +164,7 @@ def check_password():
 
 st.set_page_config(
     page_title=APP_TITLE,
-    page_icon="⚙️",
+    page_icon="G",
     layout="wide",
     # 좁은 화면에서는 자동으로 접힌다 — 모바일에서 사이드바가 본문을 덮으면
     # 결론을 볼 수가 없다
@@ -197,6 +197,27 @@ _TOK = {'dark': _pal(_uk.DARK), 'light': _pal(_uk.LIGHT)}[_theme]
 _APP_BG = _TOK['bg1']
 _APP_TX = _TOK['tx1']
 _SB_BG = _TOK['bg2']
+
+
+def _md_safe(text):
+    """
+    엔진이 만든 문장을 마크다운 위젯에 넘기기 전에 이스케이프한다.
+
+    ■ 실제 사고 (라운드 44)
+      `price_axes` 의 근거 문구 "이익·장부가 모델 5종의 25~75분위 범위
+      (넓게 보면 88,863~173,641원)" 가 화면에 **"25 75분위 범위 (넓게
+      보면 88,863 173,641원)"** 로 나왔다. 물결표 두 개를 Streamlit
+      마크다운이 취소선(`<del>`)으로 묶어 사이 글자를 지운 것이다.
+
+      숫자를 담은 문장은 **데이터**지 마크업이 아니다. 데이터를 마크업
+      파서에 그냥 넘긴 것이 원인이므로, 개별 문구가 아니라 **넘기는 자리**
+      에서 막는다. (`unsafe_allow_html=True` 블록은 인라인 HTML 안이라
+      파서가 건드리지 않아 같은 문구도 멀쩡했다 — 그래서 더 안 보였다)
+    """
+    s = '' if text is None else str(text)
+    for ch in ('~', '*', '_', '`'):
+        s = s.replace(ch, '\\' + ch)
+    return s
 
 # 흩어진 인라인 다크 표면·경계선을 토큰으로 접합한다 — 카드마다 다른 색 금지 (v2)
 _OLD_SURFACES = ['#161D2A', '#161D2A', '#161D2A', '#161D2A', '#161D2A',
@@ -481,11 +502,23 @@ def _render_toolbar(here_html: str = '') -> None:
     # '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
     # 왼쪽: 상태 점 + 되돌려 본 판단 수 + 엔진 5축 버전 (누르면 업데이트 이력)
     # 오른쪽: 지금 보고 있는 종목
-    _AX_KO = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
-              'schema': '스키마', 'news': '뉴스'}
+    # 라운드 44 — 적정가·섹터를 model 축에서 떼어 냈다. 축을 여기 손으로
+    # 나열하면 versioning.AXES 가 늘어도 화면이 안 따라온다(실제로 안 따라왔다).
+    # 이름만 여기서 주고, **목록은 versioning 이 정한다.**
+    _AX_KO_NAMES = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
+                    'schema': '스키마', 'news': '뉴스',
+                    'valuation': '적정가', 'sector': '업황'}
+    _AX_KO = {_a: _AX_KO_NAMES.get(_a, _ver.AXIS_KO.get(_a, _a))
+              for _a in _ver.AXES}
+    # 라운드 39 — 버전이 낮다고 낡은 게 아니다. 버전은 **그 축이 마지막으로
+    # 바뀐 시점**을 가리킨다. 룰북·뉴스가 v2026.08.02 인 것은 그 축의 파일이
+    # 그 뒤로 안 바뀌었다는 뜻인데, 화면이 설명을 안 해서 낡아 보였다.
+    # (사용자 질문: "룰북, 뉴스는 최신버전이 아니야?")
     _chips = ''.join(
         f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
-        f"margin-right:8px; white-space:nowrap;'>"
+        f"margin-right:8px; white-space:nowrap;' "
+        f"title='{_ko} 축은 {_VER_NOW.get(_ax, '—')} 이후 바뀌지 않았습니다. "
+        f"버전은 앱 출시일이 아니라 그 축이 마지막으로 바뀐 시점입니다.'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_VER_NOW.get(_ax, '—')}</span>"
@@ -1334,12 +1367,12 @@ if os.path.isdir(_PASTE_COMPONENT_DIR):
 def paste_image_box(key="paste_box"):
     """붙여넣은 이미지 정보를 담은 dict 또는 None. 컴포넌트를 못 쓰면 None."""
     if _paste_component is None:
-        st.caption("ℹ️ 이 환경에서는 붙여넣기 상자를 띄우지 못했습니다 — 아래 파일 올리기를 이용하세요.")
+        st.caption("이 환경에서는 붙여넣기 상자를 띄우지 못했습니다 — 아래 파일 올리기를 이용하세요.")
         return None
     try:
         return _paste_component(key=key, default=None)
     except Exception as exc:
-        st.caption(f"ℹ️ 붙여넣기 상자를 띄우지 못했습니다 ({type(exc).__name__}) — 아래 파일 올리기를 이용하세요.")
+        st.caption(f"붙여넣기 상자를 띄우지 못했습니다 ({type(exc).__name__}) — 아래 파일 올리기를 이용하세요.")
         return None
 
 
@@ -1858,7 +1891,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
                  if p.ticker == target_ticker), None)
     if _reg is not None:
         st.sidebar.success(
-            f"✅ **{resolved_name}** — 보유종목에서 자동으로 채웠습니다 "
+            f"**{resolved_name}** — 보유종목에서 자동으로 채웠습니다 "
             f"({_reg.quantity:,.0f}주 · 평단 {_reg.average_buy_price:,.0f}원). "
             f"위 목록에서 다른 종목을 누르면 그 종목으로 바뀝니다.")
     else:
@@ -1936,8 +1969,8 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
         st.caption("**관심 데이터 연동 현황** — 수집하지 못한 항목은 값을 "
                    "만들어내지 않고 가중치를 0으로 둔 뒤 나머지에 재정규화합니다.")
         for _d in market_attention.data_status():
-            _mark = {'full': '🟢 연동', 'partial': '🟡 부분',
-                     'none': '🔴 미연동'}[_d['availability']]
+            _mark = {'full': '연동', 'partial': '부분',
+                     'none': '미연동'}[_d['availability']]
             st.markdown(
                 f"**{_d['label']}** {_mark}  \n"
                 f"명세 {_d['spec_weight_pct']:.0f}% → 적용 "
@@ -1984,8 +2017,8 @@ if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
     _mkt = bitemporal_engine.get_market_status()
     _resolved_date = bitemporal_engine.resolve_analysis_date(market_status=_mkt)
     st.sidebar.caption(
-        f"🕒 시장 상태: **{_mkt['state']}** 확정 분석 기준일 **{_resolved_date}**"
-        + ("" if _mkt['holiday_data_available'] else "  ⚠️ 해당 연도 공휴일 미등록 (주말만 판정)")
+        f"시장 상태: **{_mkt['state']}** 확정 분석 기준일 **{_resolved_date}**"
+        + ("" if _mkt['holiday_data_available'] else " 해당 연도 공휴일 미등록 (주말만 판정)")
     )
     t_ref_date = _keep('t_ref', st.sidebar.date_input(
         "백테스트 기준일 (t_ref)", value=_kept('t_ref', _resolved_date)))
@@ -2016,7 +2049,7 @@ t_ref_str = t_ref_date.strftime("%Y-%m-%d")
 
 # --- 💼 보유종목 상세 화면 열기 ---
 show_portfolio = st.sidebar.toggle(
-    "💼 보유종목 상세 화면 (가져오기·판정)", value=st.session_state.get('show_portfolio', False),
+    "보유종목 상세 화면 (가져오기·판정)", value=st.session_state.get('show_portfolio', False),
     help="CSV·Excel 가져오기, 다중기간 전망 비교, 보유자 행동판정을 본문에서 봅니다.")
 st.session_state['show_portfolio'] = show_portfolio
 st.sidebar.caption("증권사 CSV·Excel 가져오기 또는 직접 입력. "
@@ -2037,12 +2070,159 @@ if st.session_state.get('scan_key') not in (None, _scan_key):
 st.session_state['scan_key'] = _scan_key
 
 
+import premarket as _pm_mod
+
+# 카드가 쓰는 자산유형 한글 이름 — 카드 조립 함수와 같은 자리에 둔다
+# (라운드 39: 함수만 올리고 이 표를 두고 와서 NameError 가 났다)
+_ASSET_KO = {'STOCK': '주식', 'ETF': 'ETF', 'ETF_LEV': '레버리지 ETF',
+             'ETF_INV': '인버스 ETF'}
+
+# ── 추천 카드 조립 (라운드 39: 모듈 수준으로 끌어올림) ──────────────
+# 개장 전 추천과 오늘의 관심종목 후보가 **같은 카드**를 써야 하는데,
+# 이 함수가 개장 전 블록 안에 갇혀 있어 목록마다 자기만의 카드를 만들었다.
+# 한 화면에 두 종류의 카드가 보이면 어느 쪽을 믿을지 알 수 없다.
+def _build_reco_card(p, news_txt, conf_txt):
+    """
+    스캔 결과 한 건 → 카드가 읽을 값 묶음.
+
+    여기서 지키는 것 (하나라도 어기면 사용자가 값을 잘못 읽는다):
+      · 가격 순서는 늘 현재가 → 권장 → 목표 → 손절
+      · 목표·손절은 **권장가 기준**만 카드에 올린다. 현재가 기준(보유자용)은
+        같은 카드에 섞지 않고 경고 상자로 한 줄만 안내한다.
+      · 권장가가 없으면 목표·손절을 **아예 감춘다** — 참고값을 실행 가격
+        자리에 두지 않는다.
+      · 권장가가 멀면(2σ 초과) 목표·손절을 흐리게 — 닿지 않을 값을
+        진하게 두면 실행 가격처럼 보인다.
+    """
+    _n = p.get('next_action') or {}
+    cls = str(p.get('reco_class') or '')
+    # ── 중앙 판정 우선 (라운드 34) ────────────────────────────────
+    # 카드가 자기만의 가격 조합을 만들면 상세 화면과 어긋난다(라운드 31
+    # 진단 ⑤). 중앙 판정이 있으면 그것만 읽고, 없을 때만(옛 리포트)
+    # 예전 키로 폴백한다.
+    _core = p.get('core') or {}
+    price = p.get('price')
+    if _core:
+        rec = _core.get('pullback_zone') or (
+            (_core.get('buy_zone') or [None])[0])
+        e_t1, e_stop = _core.get('new_target'), _core.get('new_stop')
+    else:
+        rec = p.get('rec_buy')
+        e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
+    # 정합 가드 (라운드 30) — 동결 리포트는 옛 엔진 값을 그대로 들고
+    # 있어서, 손절이 매수가 위이거나 목표가 매수가 아래인 카드가 나온다
+    # (실측: GS 92,011 매수에 손절 100,775 · NAVER 214,733 매수에 목표
+    # 172,895). 성립하지 않는 문장은 **표시하지 않는다** — 경고만 달고
+    # 그대로 보여 주면 사용자는 그 숫자를 읽는다.
+    if rec:
+        if e_stop is not None and float(e_stop) >= float(rec):
+            e_stop = None
+        if e_t1 is not None and float(e_t1) <= float(rec):
+            e_t1 = None
+    sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
+    gap = ((float(price) / float(rec) - 1) * 100
+           if (price and rec) else None)
+    far = bool(sig is not None and sig > 2.0) or bool(
+        gap is not None and gap >= 30)
+
+    if not rec:
+        state = 'neg' if '사면 안' in cls else 'hold'
+    elif '사도 되는' in cls:
+        state = 'pos'
+    elif '사면 안' in cls:
+        state = 'neg'
+    else:
+        state = 'warn'
+
+    # 상태 라벨도 '무엇을 기다리는가'로 — '관망'만 쓰면 행동을 못 정한다
+    _NA_LABEL = {'buy_now': '지금 분할매수', 'pullback': '눌림목 대기',
+                 'breakout': '돌파 확인 대기', 'observe': '장기 관찰',
+                 'blocked': '매수 차단', 'no_data': '데이터 부족'}
+    label = (_NA_LABEL.get(_n.get('kind'))
+             or ('사실상 관망' if (far and rec) else
+                 cls.replace('오늘은 ', '오늘 ') or '판단 보류'))
+    if _n.get('kind') == 'buy_now':
+        state = 'pos'
+    elif _n.get('kind') in ('blocked',):
+        state = 'neg'
+    elif _n.get('kind') in ('observe', 'no_data'):
+        state = 'hold'
+    elif _n.get('kind'):
+        state = 'warn'
+
+    # 쉬운 설명 — "사지 마세요"로 끝내지 않는다. 다음 조건 엔진이
+    # 낸 한 줄을 먼저 쓰고, 조건들은 아래 목록으로 붙인다.
+    if _n.get('headline'):
+        say = f"<b>{_n['headline']}</b>"
+        if rec and gap is not None and gap > 0:
+            say += f" 현재가는 권장 매수가보다 {gap:.1f}% 높습니다."
+    elif rec and gap is not None and gap > 0:
+        say = (f"현재가가 권장 매수가보다 <b>{gap:.1f}%</b> 높습니다. "
+               + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
+                  "<b>지금은 기다리는 편</b>이 낫습니다."
+                  if far else "조금만 기다리면 매수 구간에 닿습니다."))
+    elif rec:
+        say = "현재가가 이미 매수 구간 안에 있습니다."
+    else:
+        say = str(p.get('easy_line') or '')
+
+    rec_basis = ''
+    if rec and gap is not None:
+        rec_basis = f"{-gap:+.1f}%"
+        if sig is not None:
+            rec_basis += f" · {sig}σ · {reach}"
+
+    # 보유자 기준은 섞지 않는다 — 있으면 한 줄 안내로만
+    hold_note = ''
+    if p.get('target') and p.get('stop') and rec:
+        hold_note = (
+            f"보유 중이시면 기준이 다릅니다 — 현재가 기준 1차 목표 "
+            f"{float(p['target']):,.0f}원 · 손절 {float(p['stop']):,.0f}원. "
+            f"<b>분석 보기</b>에서 확인하세요.")
+    elif not rec:
+        hold_note = ("<b>진입 기준이 없어 목표가·손절가를 표시하지 "
+                     "않습니다.</b> 참고값은 분석 보기에서 확인하세요. "
+                     "지금은 신규 매수 판단을 보류합니다.")
+
+    _cb = p.get('confidence_band') or {}
+    return {
+        'state': state, 'state_label': label,
+        'name': p.get('name'), 'code': p.get('code'),
+        'asset_ko': _ASSET_KO.get(str(p.get('asset_type')),
+                                  p.get('asset_type')),
+        'score': p.get('score'),
+        'conf': (f"신뢰도 {p['confidence']:.0f}"
+                 if isinstance(p.get('confidence'), (int, float)) else None),
+        'price': price,
+        'rec_buy': rec, 'rec_basis': rec_basis,
+        'rec_na': ('차단됨' if '사면 안' in cls else '미산출'),
+        'target': e_t1 if rec else None,
+        'target_basis': ('권장가 기준'
+                         + (f" · 손익비 {p['entry_rr']}:1"
+                            if p.get('entry_rr') else '')) if rec else '',
+        'stop': e_stop if rec else None,
+        'stop_basis': '권장가 기준' if rec else '',
+        'dim_levels': far,
+        'say': say, 'hold_note': hold_note,
+        'news': ' · '.join(news_txt) if news_txt else '특이 뉴스 없음',
+        'hit': conf_txt,
+        'horizon': (f"예상 보유 {p['horizon_days']}거래일"
+                    if p.get('horizon_days') else None),
+        # 다음 조건 — 무엇을 기다리는지 카드에 적는다
+        'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
+    }
+
+# ── 낡은 리포트는 가격을 화면에 두지 않는다 (라운드 30) ──────────────
+# 경고만 달고 카드를 그대로 보여 주면 사용자는 그 숫자를 읽는다. 실제로
+# 옛 엔진 카드에는 성립하지 않는 값이 있었다(손절이 매수가 위 등).
+
+
 def run_market_scan():
     """관심종목 발굴 → 정밀 퀀트 분석. 두 단계를 명확히 분리한다."""
     _bar = st.sidebar.empty()
 
     def _progress(msg):
-        _bar.caption(f"⏳ {msg}")
+        _bar.caption(f"{msg}")
 
     # 1단계 — 오늘의 관심종목 발굴 (순위 페이지 → 후보에만 일봉)
     # '사용자 관심종목' 방식은 저장된 관심종목 + 보유종목을 대상으로 한다
@@ -2133,9 +2313,13 @@ def run_market_scan():
             row['attention_components'] = src['attention_components']
 
 
-if st.session_state.pop('pending_scan', False):
-    # 스캔이 도중에 실패해도 플래그는 반드시 풀린다 — 안 그러면 '최신화'
-    # 버튼이 영원히 비활성 상태로 남는다 (라운드 38).
+if st.session_state.get('pending_scan'):
+    # ⚠️ 라운드 38 — pop() 을 쓰면 안 된다.
+    # 사이드바는 이 지점보다 **먼저** 그려진다. pop 으로 플래그를 지우면
+    # 스캔이 도는 동안 사이드바가 '아직 최신화하지 않았습니다'라고 말하고
+    # 버튼도 눌리는 상태가 된다(실측). 플래그는 스캔이 끝날 때까지 켜 두고,
+    # 끝난 뒤 rerun 해서 사이드바가 완료 시각을 반영하게 한다.
+    # 실패해도 finally 로 반드시 풀어 버튼이 영구 비활성되지 않게 한다.
     try:
         run_market_scan()
     finally:
@@ -2143,6 +2327,7 @@ if st.session_state.pop('pending_scan', False):
         st.session_state['scan_done_at'] = (
             _dt_scan.datetime.now().strftime('%H:%M:%S'))
         st.session_state['pending_scan'] = False
+    st.rerun()          # 사이드바에 '최신화 완료 · HH:MM:SS' 를 띄운다
 
 # 3. 메인 타이틀
 import uuid
@@ -2325,7 +2510,7 @@ if st.session_state.get('show_screener', False):
                       "블라인드 55.3%(n=226), 비용 차감 후 소폭 음수 — 탐색용.")
                 if _ext_below:
                     _ext_msg += (
-                        f"  \n⭐ 이 중 **적정가 이하 진입 {len(_ext_below)}종목** ("
+                        f" \n이 중 **적정가 이하 진입 {len(_ext_below)}종목** ("
                         + " · ".join(r.get('name') for r in _ext_below[:4])
                         + ") — 이 조건은 블라인드 58.9%(n=95)·비용후 +0.55%로 "
                           "유일한 비용후 양수 계층입니다 (라운드 2.5 실측).")
@@ -2395,23 +2580,24 @@ if st.session_state.get('show_screener', False):
                                    + ", ".join(w['name'] for w in _wl_now[:8])
                                    + (" 외" if len(_wl_now) > 8 else ""))
 
+                _att_rows = []
                 for _r in _scored_rows:
                     _a = _r['attention']
                     _c = _r['components']
                     _act = _action_by_code.get(_r['code'])
                     _bucket = market_attention.classify_bucket(_a, _act)
-                    _bcol = {'🏆 실전 추천 후보': '#35C98B',
-                             '🔥 관심 급증·추격주의': '#F2B84B',
-                             '🌱 조용한 선행 후보': '#4C8DFF',
-                             '👀 관찰 후보': '#7C8AA0',
-                             '🚫 추천 제외': '#ff453a'}.get(_bucket, '#7C8AA0')
+                    _bcol = {'실전 추천 후보': '#35C98B',
+                             '관심 급증·추격주의': '#F2B84B',
+                             '조용한 선행 후보': '#4C8DFF',
+                             '관찰 후보': '#7C8AA0',
+                             '추천 제외': '#ff453a'}.get(_bucket, '#7C8AA0')
                     # HTML 안에서 조건식을 조립하면 읽을 수 없어진다 — 먼저 문자열로 만든다
                     _raw_txt = f"원점수 {_a['market_attention_score']:.0f}"
                     if _a['penalty']:
                         _raw_txt += f" · 감점 −{_a['penalty']:.0f}"
                     _pen_html = ""
                     if _a['penalty_reasons']:
-                        _pen_html = ("<br><span style='color:#F2B84B;font-size:12px;'>⚠️ "
+                        _pen_html = ("<br><span style='color:#F2B84B;font-size:12px;'>"
                                      + " · ".join(_a['penalty_reasons']) + "</span>")
                     _ratio_txt = ""
                     if _c.get('turnover_ratio'):
@@ -2421,28 +2607,75 @@ if st.session_state.get('show_screener', False):
                     # 추천 카드와 같은 킷으로 그린다 — 예전에는 이 목록만
                     # 옛 인라인 HTML(이모지 뱃지·왼쪽 색 테두리)이라 한 화면에
                     # 두 가지 디자인이 보였다.
-                    _BK = {'🏆 실전 추천 후보': ('실전 추천 후보', 'pos'),
-                           '🔥 관심 급증·추격주의': ('관심 급증 · 추격 주의', 'warn'),
-                           '🌱 조용한 선행 후보': ('조용한 선행 후보', 'info'),
-                           '👀 관찰 후보': ('관찰 후보', 'mute'),
-                           '🚫 추천 제외': ('추천 제외', 'neg')}
+                    _BK = {'실전 추천 후보': ('실전 추천 후보', 'pos'),
+                           '관심 급증·추격주의': ('관심 급증 · 추격 주의', 'warn'),
+                           '조용한 선행 후보': ('조용한 선행 후보', 'info'),
+                           '관찰 후보': ('관찰 후보', 'mute'),
+                           '추천 제외': ('추천 제외', 'neg')}
                     _bk_ko, _bk_kind = _BK.get(_bucket, (str(_bucket), 'mute'))
-                    _cc1, _cc2 = st.columns([3, 1])
-                    with _cc1:
-                        st.markdown(_uk.attention_row({
-                            'name': _r['name'], 'code': _r['code'],
-                            'bucket': _bk_ko, 'bucket_kind': _bk_kind,
-                            'attention': f"{_a['adjusted_attention_score']:.0f}",
-                            'raw': _raw_txt,
-                            'action': fmt_num(_act, ',.0f'),
-                            'reason': (f"{_r.get('selection_reason', '')}"
-                                       f"{_ratio_txt}").strip(' ·'),
-                            'warns': list(_a.get('penalty_reasons') or []),
-                        }, theme=_theme), unsafe_allow_html=True)
-                    with _cc2:
-                        if st.button("분석 →", key=f"att_{_r['code']}",
-                                     width='stretch'):
-                            st.session_state['pending_search'] = f"{_r['name']} ({_r['code']})"
+                    _att_rows.append((_r, _a, _bk_ko, _bk_kind, _raw_txt,
+                                      _ratio_txt, _act))
+
+                # ── 추천 카드와 **같은 카드**로 그린다 (라운드 39) ──────
+                # 사용자 요청: "오늘의 관심후보도 이 스타일로."
+                # 스캔 스냅샷에 가격·조건이 이미 다 있으므로, 개장 전 추천과
+                # 똑같이 _build_reco_card → _uk.reco_card 로 그린다.
+                # 한 화면에 두 가지 카드가 보이면 어느 쪽을 믿을지 모른다.
+                _by_sym = {str(r.get('symbol', '')).split('.')[0]: r
+                           for r in (scan_results or [])}
+                _ATT_PER_ROW = 3
+                _att_cols = []
+                for _s in range(0, len(_att_rows) or 1, _ATT_PER_ROW):
+                    _n = min(_ATT_PER_ROW, max(1, len(_att_rows) - _s))
+                    _att_cols.extend(st.columns(_ATT_PER_ROW)[:_n])
+                for _i, (_r, _a, _bk_ko, _bk_kind, _raw_txt, _ratio_txt,
+                         _act) in enumerate(_att_rows):
+                    _sr = _by_sym.get(_r['code'])
+                    _pick = None
+                    if _sr:
+                        try:
+                            _pick = _pm_mod.pick_from_scan_row(q_engine, _sr)
+                        except Exception:
+                            _pick = None
+                    if _pick:
+                        _pick['reco_class'] = _bk_ko
+                    with _att_cols[_i]:
+                        if _pick:
+                            _att_news = []
+                            if _pick.get('news_fresh'):
+                                _att_news.append(f"신선 재료 {_pick['news_fresh']}건")
+                            if _pick.get('news_lagging'):
+                                _att_news.append(
+                                    f"후행 보도 {_pick['news_lagging']}건 제외")
+                            _cb_a = _pick.get('confidence_band') or {}
+                            _conf_a = (
+                                f"과거 동점수대 적중 {_cb_a['hit_rate']:.0f}% "
+                                f"(n={_cb_a['n']})"
+                                if _cb_a.get('hit_rate') is not None
+                                and (_cb_a.get('n') or 0) >= 30
+                                else f"관심점수 {_a['adjusted_attention_score']:.0f} "
+                                     f"· {_raw_txt}")
+                            st.markdown(
+                                _uk.reco_card(
+                                    _build_reco_card(_pick, _att_news, _conf_a),
+                                    theme=_theme),
+                                unsafe_allow_html=True)
+                        else:
+                            # 정밀분석 스냅샷이 없으면 가격을 지어내지 않는다
+                            st.markdown(_uk.attention_row({
+                                'name': _r['name'], 'code': _r['code'],
+                                'bucket': _bk_ko, 'bucket_kind': _bk_kind,
+                                'attention': f"{_a['adjusted_attention_score']:.0f}",
+                                'raw': _raw_txt,
+                                'action': fmt_num(_act, ',.0f'),
+                                'reason': (f"{_r.get('selection_reason', '')}"
+                                           f"{_ratio_txt}").strip(' ·'),
+                                'warns': list(_a.get('penalty_reasons') or []),
+                            }, theme=_theme), unsafe_allow_html=True)
+                        if st.button("분석 보기", key=f"att_{_r['code']}",
+                                     width='stretch', type='primary'):
+                            st.session_state['pending_search'] = (
+                                f"{_r['name']} ({_r['code']})")
                             st.rerun()
 
                 if not _scored_rows:
@@ -2524,7 +2757,9 @@ if st.session_state.get('show_screener', False):
                     cols[0].markdown(f"<div style='text-align:center; padding-top:8px;'><span style='background:#4C8DFF; color:#fff; padding:3px 8px; border-radius:12px; font-weight:bold;'>{i+1}</span></div>", unsafe_allow_html=True)
                     
                     with cols[1]:
-                        _entry_badge = "🎯" if r.get('entry_candidate') else ""
+                        # 라운드 40 — 이모지(🎯)를 걷어내면서 양쪽이 빈
+                        # 문자열이 되어 배지가 아무 뜻도 없어졌다. 글자로 되살린다.
+                        _entry_badge = "진입후보 " if r.get('entry_candidate') else ""
                         if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
                                      width='stretch',
                                      help=("진입 후보 — 적정가 이하 & 순기대수익 양수. "
@@ -2536,7 +2771,7 @@ if st.session_state.get('show_screener', False):
                             st.session_state['pending_search'] = f"{r['name']} ({r['symbol'].split('.')[0]})"
                             st.rerun()
                             
-                    st_type = r.get('strategy_type', '💎 가치·반전형')
+                    st_type = r.get('strategy_type', '가치·반전형')
                     curr_p_str = f"{r['base_price']:,.0f}원"
 
                     tgt = r.get('target_fundamental')
@@ -2556,9 +2791,9 @@ if st.session_state.get('show_screener', False):
                     # 차트 관점 배지: DeMARK 매수 신호가 살아 있으면 함께 표기
                     _dstate = r.get('demark_entry_state')
                     if _dstate in ('COMPLETE', 'SETUP_DONE'):
-                        m10_str += " · ⏱️매수신호"
+                        m10_str += " · 매수신호"
                     elif _dstate == 'FORMING':
-                        m10_str += " · ⏱️셋업중"
+                        m10_str += " · 셋업중"
 
                     # 컬럼 헤더가 '손익비'이므로 실제 손익비를 넣는다 (구버전은 승률을 표시했음)
                     rr_val = r.get('reward_risk_ratio')
@@ -2580,8 +2815,8 @@ if st.session_state.get('show_screener', False):
             st.markdown(f"""
             <div style='display:flex; justify-content:space-around; background:#161D2A; padding:12px; border-radius:8px; margin-top:16px; '>
                 <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>⏳ 눌림 대기</span><br><b style='color:#F3F6FA;'>{wait_pullback}개</b></div>
-                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>👀 관찰 후보</span><br><b style='color:#F3F6FA;'>{watch_list}개</b></div>
-                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>🚫 추천 제외</span><br><b style='color:#F3F6FA;'>{excluded}개</b></div>
+                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>관찰 후보</span><br><b style='color:#F3F6FA;'>{watch_list}개</b></div>
+                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>추천 제외</span><br><b style='color:#F3F6FA;'>{excluded}개</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -2597,7 +2832,7 @@ if st.session_state.get('show_screener', False):
             _pm_report, _pm_new = _pm.build_report(q_engine, scan_results,
                                                    market_label=_pm_mkt)
             if _pm_new:
-                st.toast("📋 오늘의 개장 전 리포트를 고정 저장했습니다")
+                st.toast("오늘의 개장 전 리포트를 고정 저장했습니다")
             st.session_state['premarket_report'] = _pm_report
 
     _uk.spacer(28)
@@ -2615,7 +2850,7 @@ if _pmr:
     st.caption(f"기준 데이터 **{_pmr.get('data_asof')}** · 생성 **{_pmr.get('generated_at')}** · "
                f"{_pmr.get('market_label') or ''}"
                + (f" · 엔진 **{_pm_ver}**" if _pm_ver else '') + "  \n"
-               f"🔒 {_pmr.get('note')}")
+               f"{_pmr.get('note')}")
     # 리포트는 사후 선택 방지를 위해 동결한다. 그런데 엔진을 바꾸면 동결된
     # 값이 낡는다 — 실제로 권장 매수가 산식을 바꿨는데 카드가 옛 값을
     # 그대로 보여 줬다. 낡았으면 화면이 먼저 말해야 한다.
@@ -2674,143 +2909,6 @@ if _pmr:
                        if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
     _picks_ban = [p for p in _picks_all
                   if p['reco_class'] == '오늘은 사면 안 되는 종목']
-    _ASSET_KO = {'STOCK': '주식', 'ETF': 'ETF', 'ETF_LEV': '레버리지 ETF',
-                 'ETF_INV': '인버스 ETF'}
-
-    def _build_reco_card(p, news_txt, conf_txt):
-        """
-        스캔 결과 한 건 → 카드가 읽을 값 묶음.
-
-        여기서 지키는 것 (하나라도 어기면 사용자가 값을 잘못 읽는다):
-          · 가격 순서는 늘 현재가 → 권장 → 목표 → 손절
-          · 목표·손절은 **권장가 기준**만 카드에 올린다. 현재가 기준(보유자용)은
-            같은 카드에 섞지 않고 경고 상자로 한 줄만 안내한다.
-          · 권장가가 없으면 목표·손절을 **아예 감춘다** — 참고값을 실행 가격
-            자리에 두지 않는다.
-          · 권장가가 멀면(2σ 초과) 목표·손절을 흐리게 — 닿지 않을 값을
-            진하게 두면 실행 가격처럼 보인다.
-        """
-        _n = p.get('next_action') or {}
-        cls = str(p.get('reco_class') or '')
-        # ── 중앙 판정 우선 (라운드 34) ────────────────────────────────
-        # 카드가 자기만의 가격 조합을 만들면 상세 화면과 어긋난다(라운드 31
-        # 진단 ⑤). 중앙 판정이 있으면 그것만 읽고, 없을 때만(옛 리포트)
-        # 예전 키로 폴백한다.
-        _core = p.get('core') or {}
-        price = p.get('price')
-        if _core:
-            rec = _core.get('pullback_zone') or (
-                (_core.get('buy_zone') or [None])[0])
-            e_t1, e_stop = _core.get('new_target'), _core.get('new_stop')
-        else:
-            rec = p.get('rec_buy')
-            e_t1, e_stop = p.get('entry_target_1st'), p.get('entry_stop_price')
-        # 정합 가드 (라운드 30) — 동결 리포트는 옛 엔진 값을 그대로 들고
-        # 있어서, 손절이 매수가 위이거나 목표가 매수가 아래인 카드가 나온다
-        # (실측: GS 92,011 매수에 손절 100,775 · NAVER 214,733 매수에 목표
-        # 172,895). 성립하지 않는 문장은 **표시하지 않는다** — 경고만 달고
-        # 그대로 보여 주면 사용자는 그 숫자를 읽는다.
-        if rec:
-            if e_stop is not None and float(e_stop) >= float(rec):
-                e_stop = None
-            if e_t1 is not None and float(e_t1) <= float(rec):
-                e_t1 = None
-        sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
-        gap = ((float(price) / float(rec) - 1) * 100
-               if (price and rec) else None)
-        far = bool(sig is not None and sig > 2.0) or bool(
-            gap is not None and gap >= 30)
-
-        if not rec:
-            state = 'neg' if '사면 안' in cls else 'hold'
-        elif '사도 되는' in cls:
-            state = 'pos'
-        elif '사면 안' in cls:
-            state = 'neg'
-        else:
-            state = 'warn'
-
-        # 상태 라벨도 '무엇을 기다리는가'로 — '관망'만 쓰면 행동을 못 정한다
-        _NA_LABEL = {'buy_now': '지금 분할매수', 'pullback': '눌림목 대기',
-                     'breakout': '돌파 확인 대기', 'observe': '장기 관찰',
-                     'blocked': '매수 차단', 'no_data': '데이터 부족'}
-        label = (_NA_LABEL.get(_n.get('kind'))
-                 or ('사실상 관망' if (far and rec) else
-                     cls.replace('오늘은 ', '오늘 ') or '판단 보류'))
-        if _n.get('kind') == 'buy_now':
-            state = 'pos'
-        elif _n.get('kind') in ('blocked',):
-            state = 'neg'
-        elif _n.get('kind') in ('observe', 'no_data'):
-            state = 'hold'
-        elif _n.get('kind'):
-            state = 'warn'
-
-        # 쉬운 설명 — "사지 마세요"로 끝내지 않는다. 다음 조건 엔진이
-        # 낸 한 줄을 먼저 쓰고, 조건들은 아래 목록으로 붙인다.
-        if _n.get('headline'):
-            say = f"<b>{_n['headline']}</b>"
-            if rec and gap is not None and gap > 0:
-                say += f" 현재가는 권장 매수가보다 {gap:.1f}% 높습니다."
-        elif rec and gap is not None and gap > 0:
-            say = (f"현재가가 권장 매수가보다 <b>{gap:.1f}%</b> 높습니다. "
-                   + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
-                      "<b>지금은 기다리는 편</b>이 낫습니다."
-                      if far else "조금만 기다리면 매수 구간에 닿습니다."))
-        elif rec:
-            say = "현재가가 이미 매수 구간 안에 있습니다."
-        else:
-            say = str(p.get('easy_line') or '')
-
-        rec_basis = ''
-        if rec and gap is not None:
-            rec_basis = f"{-gap:+.1f}%"
-            if sig is not None:
-                rec_basis += f" · {sig}σ · {reach}"
-
-        # 보유자 기준은 섞지 않는다 — 있으면 한 줄 안내로만
-        hold_note = ''
-        if p.get('target') and p.get('stop') and rec:
-            hold_note = (
-                f"보유 중이시면 기준이 다릅니다 — 현재가 기준 1차 목표 "
-                f"{float(p['target']):,.0f}원 · 손절 {float(p['stop']):,.0f}원. "
-                f"<b>분석 보기</b>에서 확인하세요.")
-        elif not rec:
-            hold_note = ("<b>진입 기준이 없어 목표가·손절가를 표시하지 "
-                         "않습니다.</b> 참고값은 분석 보기에서 확인하세요. "
-                         "지금은 신규 매수 판단을 보류합니다.")
-
-        _cb = p.get('confidence_band') or {}
-        return {
-            'state': state, 'state_label': label,
-            'name': p.get('name'), 'code': p.get('code'),
-            'asset_ko': _ASSET_KO.get(str(p.get('asset_type')),
-                                      p.get('asset_type')),
-            'score': p.get('score'),
-            'conf': (f"신뢰도 {p['confidence']:.0f}"
-                     if isinstance(p.get('confidence'), (int, float)) else None),
-            'price': price,
-            'rec_buy': rec, 'rec_basis': rec_basis,
-            'rec_na': ('차단됨' if '사면 안' in cls else '미산출'),
-            'target': e_t1 if rec else None,
-            'target_basis': ('권장가 기준'
-                             + (f" · 손익비 {p['entry_rr']}:1"
-                                if p.get('entry_rr') else '')) if rec else '',
-            'stop': e_stop if rec else None,
-            'stop_basis': '권장가 기준' if rec else '',
-            'dim_levels': far,
-            'say': say, 'hold_note': hold_note,
-            'news': ' · '.join(news_txt) if news_txt else '특이 뉴스 없음',
-            'hit': conf_txt,
-            'horizon': (f"예상 보유 {p['horizon_days']}거래일"
-                        if p.get('horizon_days') else None),
-            # 다음 조건 — 무엇을 기다리는지 카드에 적는다
-            'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
-        }
-
-    # ── 낡은 리포트는 가격을 화면에 두지 않는다 (라운드 30) ──────────────
-    # 경고만 달고 카드를 그대로 보여 주면 사용자는 그 숫자를 읽는다. 실제로
-    # 옛 엔진 카드에는 성립하지 않는 값이 있었다(손절이 매수가 위 등).
     # 파일은 그대로 남기고(사후 선택 방지 감사 흔적), **화면에서만 접는다.**
     if _pm_stale and _picks_show:
         st.caption("이 리포트가 추천했던 종목: "
@@ -2879,7 +2977,7 @@ if _pmr:
         if _p.get('news_fresh'):
             _news_txt.append(f"신선 재료 {_p['news_fresh']}건")
         if _p.get('news_risk'):
-            _news_txt.append(f"⚠️위험 낱말 {_p['news_risk']}건")
+            _news_txt.append(f"위험 낱말 {_p['news_risk']}건")
         if _p.get('news_lagging'):
             _news_txt.append(f"후행 보도 {_p['news_lagging']}건 제외")
         # 갭 표기 (라운드 2.5) — 조건부 매수가와 현재 기준가의 거리. 갭이 크면
@@ -2957,7 +3055,7 @@ if _pmr:
                         f"손절 {_hist['stop']} · 미결 {_hist['open']} "
                         f"(분모 = 목표+손절, 미결은 별도)")
             for _h in _hist['rows'][::-1]:
-                _oe = {'TARGET': '🟢', 'STOP': '🔴', 'OPEN': '⏳'}.get(_h['outcome'], '·')
+                _oe = {'TARGET': '', 'STOP': '', 'OPEN': ''}.get(_h['outcome'], '·')
                 st.caption(f"{_oe} {_h['date']} {_h['name']} ({_h['reco_class']}) → "
                            f"{_h['outcome']} {_h['return_pct']:+.1f}%")
         else:
@@ -2981,10 +3079,10 @@ if st.session_state.get('show_portfolio'):
     # 화면을 열자마자 등록 수단이 보이게 한다.
     if st.session_state.get('positions'):
         p_tab_view, p_tab_import, p_tab_manage = st.tabs(
-            ["📊 포트폴리오 분석", "📥 가져오기 / 입력", "⚙️ 저장·삭제"])
+            ["포트폴리오 분석", "가져오기 / 입력", " 저장·삭제"])
     else:
         p_tab_import, p_tab_view, p_tab_manage = st.tabs(
-            ["📥 가져오기 / 입력", "📊 포트폴리오 분석", "⚙️ 저장·삭제"])
+            ["가져오기 / 입력", "포트폴리오 분석", " 저장·삭제"])
 
     # ── 가져오기 / 직접 입력 ────────────────────────────────────────────
     with p_tab_import:
@@ -3057,7 +3155,7 @@ if st.session_state.get('show_portfolio'):
         _xc1, _xc2 = st.columns(2)
         with _xc1:
             _tpl_bytes, _tpl_name, _tpl_mime = portfolio.build_template_bytes()
-            st.download_button("📥 입력 양식 내려받기", data=_tpl_bytes,
+            st.download_button("입력 양식 내려받기", data=_tpl_bytes,
                                file_name=_tpl_name, mime=_tpl_mime,
                                width='stretch', key="btn_dl_template")
             st.caption("종목코드·종목명·보유수량·평균매수가 네 칸만 채우면 됩니다.")
@@ -3065,7 +3163,7 @@ if st.session_state.get('show_portfolio'):
             _cur_pos = st.session_state.get('positions') or []
             _exp_df = portfolio.positions_to_dataframe(_cur_pos)
             st.download_button(
-                f"📤 지금 보유종목 내보내기 ({len(_cur_pos)}종목)",
+                f"지금 보유종목 내보내기 ({len(_cur_pos)}종목)",
                 data=_exp_df.to_csv(index=False).encode("utf-8-sig"),
                 file_name="내_보유종목.csv", mime="text/csv",
                 width='stretch', disabled=not _cur_pos,
@@ -3285,7 +3383,7 @@ if st.session_state.get('show_portfolio'):
         _needs_manual = any(r.get('보유수량') is None or r.get('평균매수가') is None
                             for r in _prev_rows)
         if _src_text.strip():
-            with st.expander("열을 직접 지정하기" + ("  ⬅️ 자동 인식 실패" if _needs_manual else ""),
+            with st.expander("열을 직접 지정하기" + (" 자동 인식 실패" if _needs_manual else ""),
                              expanded=_needs_manual):
                 _ncol, _cells = portfolio.preview_columns(_src_text)
                 if _ncol < 2:
@@ -3396,7 +3494,7 @@ if st.session_state.get('show_portfolio'):
                 f"<span style='color:#ff453a;'>오류 가능 {_c_err}</span>",
                 unsafe_allow_html=True)
             for _ck in _vtot['checks']:
-                _cc = {'ok': '🟢', 'warn': '🟡', 'error': '🔴'}[_ck['level']]
+                _cc = {'ok': '', 'warn': '', 'error': ''}[_ck['level']]
                 st.caption(f"{_cc} {_ck['name']} — {_ck['detail']}")
             if _vtot.get('worst_rows'):
                 st.caption("오차 기여가 큰 행: " + ", ".join(
@@ -3464,7 +3562,7 @@ if st.session_state.get('show_portfolio'):
                            + ", ".join(f"{r.get('종목명')}({w})" for r, w in _blocked[:4]))
 
             pc1, pc2 = st.columns(2)
-            if pc1.button(f"✅ 검증 통과 {len(_savable)}행 반영",
+            if pc1.button(f"검증 통과 {len(_savable)}행 반영",
                           disabled=not _savable):
                 # 사용자가 직접 넣은 종목코드는 시장(KOSPI/KOSDAQ)을 모른다.
                 # KOSPI 로 넘겨짚으면 코스닥 종목의 시세 조회가 통째로 실패한다.
@@ -3496,7 +3594,7 @@ if st.session_state.get('show_portfolio'):
                 for w in warns:
                     st.warning(w)
                 st.rerun()
-            if pc2.button("✖ 미리보기 취소"):
+            if pc2.button(" 미리보기 취소"):
                 st.session_state.pop('paste_preview', None)
                 st.rerun()
 
@@ -3536,16 +3634,16 @@ if st.session_state.get('show_portfolio'):
             st.markdown("보유 정보는 **이 PC의 `.portfolio/positions.json`** 에만 저장됩니다. "
                         "서버 전송·외부 API 전달을 하지 않으며, 계좌번호는 마스킹되어 저장됩니다.")
             mg1, mg2, mg3 = st.columns(3)
-            if mg1.button("💾 로컬 저장"):
+            if mg1.button("로컬 저장"):
                 path = portfolio.save_positions(st.session_state['positions'])
                 st.session_state['positions_saved_at'] = datetime.datetime.now().isoformat(timespec="seconds")
                 st.success(f"저장 완료: {path}")
-            if mg2.button("📂 저장본 불러오기"):
+            if mg2.button("저장본 불러오기"):
                 loaded, saved_at = portfolio.load_positions()
                 st.session_state['positions'] = loaded
                 st.session_state['positions_saved_at'] = saved_at
                 st.success(f"{len(loaded)}종목 불러옴 (저장 시각 {saved_at})")
-            if mg3.button("🗑️ 전체 삭제", type="secondary"):
+            if mg3.button("전체 삭제", type="secondary"):
                 portfolio.delete_positions()
                 st.session_state['positions'] = []
                 st.session_state['positions_saved_at'] = None
@@ -3563,7 +3661,7 @@ if st.session_state.get('show_portfolio'):
                 st.session_state['positions_saved_at'] = None
                 st.success("삭제 완료")
         if st.session_state['positions']:
-            st.download_button("⬇️ CSV 내보내기",
+            st.download_button("CSV 내보내기",
                                portfolio.export_positions_csv(st.session_state['positions']),
                                file_name="portfolio.csv", mime="text/csv")
             st.caption("LLM·외부 전송 시 사용하는 익명화 뷰 (수량·평단가 제외): "
@@ -3659,7 +3757,7 @@ if st.session_state.get('show_portfolio'):
 
                         st.markdown("**추가매수(물타기) 허용 조건** — 전부 통과해야 허용")
                         for label, ok in pv['averaging_down_checks']:
-                            st.markdown(f"- {'✅' if ok else '❌'} {label}")
+                            st.markdown(f"- {'' if ok else ''} {label}")
                         if not pv['averaging_down_allowed']:
                             st.warning("추가매수 조건을 충족하지 못했습니다. 손실 중이라는 이유만으로 "
                                        "기계적 물타기를 권하지 않습니다.")
@@ -4351,13 +4449,13 @@ st.markdown(f"""
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{fmt_num(debt_val, '.1f', '%', na='미수신')}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
-            <p style='margin: 0; font-size: 12px; color: #4C8DFF; font-weight: bold;'>💎 시장조정 펀더멘털 적정가</p>
+            <p style='margin: 0; font-size: 12px; color: #4C8DFF; font-weight: bold;'>시장조정 펀더멘털 적정가</p>
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #4C8DFF; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>{_fv_note_html}
         </div>
     </div>
     <!-- 🛡️ 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
     <p style='margin: 12px 0 0 0; color: #35C98B; font-size: 13px; text-align: center; border-top: 1px solid #1C2635; padding-top: 8px;'>
-        🛡️ <b>데이터 출처 분리</b>: <b>연동된 시세 출처</b> — 네이버증권(기준) · 다음금융(교차검증). <b>미연동</b> — KRX·KIND·FnGuide·Investing.
+        <b>데이터 출처 분리</b>: <b>연동된 시세 출처</b> — 네이버증권(기준) · 다음금융(교차검증). <b>미연동</b> — KRX·KIND·FnGuide·Investing.
         <b>DART·KIND·기업IR</b>은 공시·재무 출처이며 현재가 대조에 사용하지 않습니다.
     </p>
 </div>
@@ -4391,15 +4489,20 @@ CORE = _vcore.build(four_scores, verdict=verdict,
                     price_axes=four_scores.get('price_axes'),
                     next_action=_NA, realtime_price=realtime_price)
 
+# 라운드 40 — 이모지(🟢🔴🟡🟠⚪)를 걷어내고 토큰 색 점으로 바꾼다.
+# 금융 터미널 레퍼런스 17종(Binance·Coinbase·Kraken·Stripe·Linear …)에
+# 이모지를 상태 표시로 쓰는 예가 없다. 이모지는 OS·폰트마다 모양과 크기가
+# 달라 정렬이 깨지고 색을 통제할 수 없다.
 _ACTION_STYLE = {
-    'BUY':        ("#35C98B", "🟢", "매수"),
-    'ACCUMULATE': ("#35C98B", "🟢", "분할매수"),
-    'HOLD':       ("#F2B84B", "🟡", "관망"),
-    'REDUCE':     ("#F26161", "🟠", "비중 축소"),
-    'SELL':       ("#ff453a", "🔴", "매도"),
-    'NO_TRADE':   ("#ff453a", "🔴", "매수 안 함"),
+    'BUY':        ("#35C98B", "매수"),
+    'ACCUMULATE': ("#35C98B", "분할매수"),
+    'HOLD':       ("#F2B84B", "관망"),
+    'REDUCE':     ("#F26161", "비중 축소"),
+    'SELL':       ("#ff453a", "매도"),
+    'NO_TRADE':   ("#ff453a", "매수 안 함"),
 }
-_vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#9DAABC", "⚪", "판단 보류"))
+_vc, _vshort = _ACTION_STYLE.get(verdict['action'], ("#9DAABC", "판단 보류"))
+_vi = _uk.dot(_vc, 14)
 _vscore = verdict['score']
 
 # 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만)
@@ -4825,28 +4928,28 @@ st.caption("신규 매수 기준과 보유자 기준은 서로 다릅니다 — 
 _extra_bits = []
 _pos_sug = four_scores.get('suggested_position_pct')
 if _pos_sug:
-    _extra_bits.append(f"📐 변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
+    _extra_bits.append(f"변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
                        f"({four_scores.get('suggested_position_basis', '')})")
 _rm = four_scores.get('rel_mom_detail')
 if _rm and _rm.get('relative') is not None:
-    _extra_bits.append(f"🏁 상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
+    _extra_bits.append(f"상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
                        f"(종목 {_rm['stock']:+.1f}% vs {_rm['market']} {_rm['index']:+.1f}%)")
 _tr = four_scores.get('track_record')
 if _tr and _tr.get('hit_rate') is not None:
-    _extra_bits.append(f"🎯 실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
+    _extra_bits.append(f"실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
                        f"({_tr.get('decided', 0)}건 판정 완료 — 점수 확신에 반영)")
 _cb = four_scores.get('calibration_band')
 if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
     _extra_bits.append(
-        f"🧪 가상 백테스트: 이 점수대({_cb['lo']}~{_cb['hi']}점)의 과거 리플레이 적중률 "
+        f"가상 백테스트: 이 점수대({_cb['lo']}~{_cb['hi']}점)의 과거 리플레이 적중률 "
         f"**{_cb['hit_rate']:.0f}%** (n={_cb['n']}, Wilson 하한 {_cb['wilson_low']:.0f}%)")
 elif _cb and _cb.get('n', 0) < 5:
-    _extra_bits.append(f"🧪 이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
+    _extra_bits.append(f"이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
                        f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
-    _extra_bits.append(f"📚 모델 {_calib_all.get('rulebook_version', '')} · "
+    _extra_bits.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
                        f"누적 케이스 {_calib_all['total_cases']:,}건")
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
@@ -4971,6 +5074,21 @@ if _rg.get('cell') and (_rg.get('capped') or _rg.get('block_new')):
     else:
         st.warning(f"**국면별 제한을 적용했습니다 ({_rg['level']})** — {_rg_body}")
 
+# ── 뉴스 게이트 (라운드 42) ──────────────────────────────────────────────
+# 뉴스가 판단에 **실제로** 개입했으면 그 사실과 근거를 여기서 밝힌다.
+# 개입하지 않았으면 아무 말도 하지 않는다.
+_ng = four_scores.get('news_gate') or {}
+if _ng.get('risk'):
+    st.error(
+        f"**악재로 신규 매수를 차단했습니다** — {_ng['why']}  \n"
+        f"종합점수 {_ng['score_before']} → **{_ng['score_after']}** · "
+        f"신뢰도 {_ng['conf_before']} → **{_ng['conf_after']}**  \n"
+        f"수집 기사 {_ng.get('total', 0)}건 중 위험 낱말 {_ng['risk']}건 "
+        f"(룰북 `RULES_NEWS` · 뉴스 엔진 "
+        f"{_VER_NOW.get('news', '—')} · 룰북 {_VER_NOW.get('rulebook', '—')})")
+elif _ng and not _ng.get('total'):
+    st.caption(f"뉴스 게이트: {_ng.get('why', '')}")
+
 if verdict['vetoes']:
     st.error("**매수 결론을 막는 조건 " + str(len(verdict['vetoes'])) + "건** — "
              "다른 점수가 높아도 이 조건들이 먼저입니다.\n\n"
@@ -4987,7 +5105,7 @@ _up_raw = four_scores.get('upside_pct')
 _up_shr = four_scores.get('upside_shrunk_pct')
 if (_up_raw is not None and _up_shr is not None
         and abs(float(_up_raw) - float(_up_shr)) >= 3.0):
-    st.caption(f"ℹ️ 적정가 괴리율 {float(_up_raw):+.1f}% 는 신뢰도 "
+    st.caption(f"적정가 괴리율 {float(_up_raw):+.1f}% 는 신뢰도 "
                f"{four_scores.get('fair_value_confidence', 0):.0f}점을 반영해 "
                f"**{float(_up_shr):+.1f}%** 로 수축시켜 판단에 씁니다 "
                f"(신뢰도가 낮을수록 시장가격 쪽으로 끌어당김 — Black–Litterman 방식).")
@@ -5387,8 +5505,8 @@ _ctx_c1, _ctx_c2 = st.columns([1, 1])
 with _ctx_c1:
     _dom = _mkt_ctx.get('domestic') or {}
     if _dom.get('available'):
-        _reg_icon = {"BULL_STRONG": "🟢", "BULL_MILD": "🟡",
-                     "SIDEWAYS": "⚪", "BEAR_PANIC": "🔴"}.get(_dom.get('regime_code'), "⚪")
+        _reg_icon = {"BULL_STRONG": "", "BULL_MILD": "",
+                     "SIDEWAYS": "", "BEAR_PANIC": ""}.get(_dom.get('regime_code'), "")
         st.markdown(f"**{_reg_icon} 상장시장 국면 — {_dom.get('market')}**")
         st.markdown(f"{_dom.get('regime_label')}")
         st.caption(_dom.get('basis', '') + " · " + _dom.get('source', ''))
@@ -5468,7 +5586,7 @@ with _ctx_c2:
                        "— 아래는 업종·시장 참고 기사입니다.")
 
         def _render_news_item(_it, direct):
-            _flag = " 🔴" + "·".join(_it['risk_hits']) if _it.get('risk_hits') else ""
+            _flag = " " + "·".join(_it['risk_hits']) if _it.get('risk_hits') else ""
             _tag = "" if direct else " `참고`"
             _link = (f"[{_it['title']}]({_it['url']})" if _it.get('url')
                      else _it['title'])
@@ -5498,7 +5616,7 @@ with _ctx_c2:
         st.caption("미수신 — " + str(_news.get('reason', '')))
 
 for _note in (_mkt_ctx.get('notes') or []):
-    st.caption("ℹ️ " + str(_note))
+    st.caption("" + str(_note))
 
 # ── 기업 공시 — 원문 나열만 (해석·요약 생성 금지, 점수 미반영) ──────────────
 try:
@@ -5651,7 +5769,7 @@ if _ledger_df is not None:
     _lg_last = str(_ledger_df['date'].max())[:10] if 'date' in _ledger_df.columns else '—'
     st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
                "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.  \n"
-               f"🔄 **운영 상태**: 마지막 케이스 기준일 {_lg_last} · "
+               f"**운영 상태**: 마지막 케이스 기준일 {_lg_last} · "
                f"1단계 3,000·2단계 5,000 달성 — 다음 목표 **10,000건**. 축적은 중단하지 않습니다. "
                "동일 종목·인접 기준일 중복은 25봉 간격 규칙으로 통제합니다.")
 
@@ -5779,8 +5897,8 @@ if _ledger_df is not None:
                 '기준일': str(r['date'])[:10], '종목': r['ticker'],
                 '국면': r['regime'], '점수': int(r['score']),
                 '당시 판정': r['action_title'],
-                '결과': {'TARGET': '✅ 목표', 'STOP': '❌ 손절'}.get(
-                    r['outcome'], '⏳ 미도달'),
+                '결과': {'TARGET': '목표', 'STOP': '손절'}.get(
+                    r['outcome'], '미도달'),
                 '수익률': f"{r['return_pct']:+.1f}%",
                 '최대이익 MFE': f"{r['mfe_pct']:+.1f}%",
                 '최대손실 MAE': f"{r['mae_pct']:+.1f}%",
@@ -5824,7 +5942,7 @@ if _lw_data.get('models'):
                    "보내지 않는 조회 전용). 여기 나온 모델을 파이프라인에 자동 연결하지 "
                    "않습니다 — 채택은 다른 방법과 똑같이 표본외·블라인드 검증을 통과해야 "
                    "하며, **포트폴리오 정보는 어떤 외부 모델에도 전송하지 않습니다.**"
-                   + (" ⚠️ 이번 주 재조회 실패 — 마지막 성공 캐시를 표시 중입니다."
+                   + (" 이번 주 재조회 실패 — 마지막 성공 캐시를 표시 중입니다."
                       if _lw_data.get('stale') else ""))
         st.dataframe(pd.DataFrame([{
             '모델': m['id'], '다운로드': f"{m['downloads']:,}",
@@ -5857,7 +5975,7 @@ _uk.spacer(28)
 
 # 🚨 [사용자 요청] 뉴스·공시·촉매의 시간축 3단계 분리 분석을 한줄핵심결론 위로 배치
 news_tf = engine_init.get_timeframe_news_analysis(target_ticker)
-st.caption("ℹ️ 증권사 리서치·IR 원문은 미연동입니다. 아래는 실제 수집한 가격·거래량·게시 투자지표의 관찰과 정량 해석이며, 사건·원인을 추정해 서술하지 않습니다. (실제 뉴스 기사는 위 '시장·글로벌·뉴스 컨텍스트'에 원문 링크로 표시됩니다.)")
+st.caption("증권사 리서치·IR 원문은 미연동입니다. 아래는 실제 수집한 가격·거래량·게시 투자지표의 관찰과 정량 해석이며, 사건·원인을 추정해 서술하지 않습니다. (실제 뉴스 기사는 위 '시장·글로벌·뉴스 컨텍스트'에 원문 링크로 표시됩니다.)")
 st.markdown(f"[{resolved_name}] 가격·지표 관찰의 시간축 3단계 정리")
 
 n1, n2, n3 = st.columns(3)
@@ -5910,36 +6028,36 @@ if user_entry_price > 0 and user_quantity > 0:
     if user_entry_price >= realtime_price * 1.15:
         user_pos_tag = "머리 가격 (최상투 고점)"
         user_pos_color = "#ff453a"
-        user_pos_advice = f"🚨 현재 평단가({user_entry_price:,.0f}원)가 고점 부근입니다. 무분별한 물타기는 위험하며 반등 시 1차 비중 30% 축소를 권장합니다."
+        user_pos_advice = f"현재 평단가({user_entry_price:,.0f}원)가 고점 부근입니다. 무분별한 물타기는 위험하며 반등 시 1차 비중 30% 축소를 권장합니다."
     elif user_entry_price >= realtime_price * 1.05:
         user_pos_tag = "어깨 가격 (고점 부근)"
         user_pos_color = "#F2B84B"
-        user_pos_advice = f"⚠️ 평단가 대비 손실 구간({pnl_pct:.1f}%)입니다. 20일선 지지 안착 확인 전까지 추가 매수를 유의하세요."
+        user_pos_advice = f"평단가 대비 손실 구간({pnl_pct:.1f}%)입니다. 20일선 지지 안착 확인 전까지 추가 매수를 유의하세요."
     elif user_entry_price >= realtime_price * 0.95:
         user_pos_tag = "허리 가격 (평균 구간)"
         user_pos_color = "#35C98B"
-        user_pos_advice = f"🟢 평단가 부근 형성 중입니다. 20일선 수급 안착 시 현재 보유량을 유지하며 관망합니다."
+        user_pos_advice = f"평단가 부근 형성 중입니다. 20일선 수급 안착 시 현재 보유량을 유지하며 관망합니다."
     elif user_entry_price >= realtime_price * 0.85:
         user_pos_tag = "무릎 가격 (저점 진입)"
         user_pos_color = "#4C8DFF"
-        user_pos_advice = f"💎 수익 구간({pnl_pct:+.1f}%)입니다. 1차 목표가({tp_1st:,.0f}원) 도달 시 분할 익절을 고려하세요."
+        user_pos_advice = f"수익 구간({pnl_pct:+.1f}%)입니다. 1차 목표가({tp_1st:,.0f}원) 도달 시 분할 익절을 고려하세요."
     else:
         user_pos_tag = "발목 가격 (최저점 매수)"
         user_pos_color = "#4C8DFF"
-        user_pos_advice = f"🚀 최저가 부근 우수 진입 포지션입니다({pnl_pct:+.1f}%). 잔여 이익을 극대화하세요."
+        user_pos_advice = f"최저가 부근 우수 진입 포지션입니다({pnl_pct:+.1f}%). 잔여 이익을 극대화하세요."
 
     sma_20_curr = tech_df['sma_20'].iloc[-1]
     
     final_score = four_scores.get('final_quant_score', 50)
 
     if final_score >= 68:
-        add_buy_status = f"🟢 <b>매수 (비중 확대)</b><br><span style='font-size:13px; color:#9DAABC;'>단기 목표가 {tp_1st:,.0f}원 도달 시 익절</span>"
+        add_buy_status = f"<b>매수 (비중 확대)</b><br><span style='font-size:13px; color:#9DAABC;'>단기 목표가 {tp_1st:,.0f}원 도달 시 익절</span>"
         add_buy_color = "#35C98B"
     elif final_score >= 50:
-        add_buy_status = f"🟡 <b>관망 (보유 비중 유지)</b><br><span style='font-size:13px; color:#9DAABC;'>물타기 금지 / {tp_1st:,.0f}원 반등 시 매도</span>"
+        add_buy_status = f"<b>관망 (보유 비중 유지)</b><br><span style='font-size:13px; color:#9DAABC;'>물타기 금지 / {tp_1st:,.0f}원 반등 시 매도</span>"
         add_buy_color = "#F2B84B"
     else:
-        add_buy_status = f"🔴 <b>매도 (비중 축소)</b><br><span style='font-size:13px; color:#9DAABC;'>위험 구간 / {sl_1st:,.0f}원 이탈 시 전량 손절</span>"
+        add_buy_status = f"<b>매도 (비중 축소)</b><br><span style='font-size:13px; color:#9DAABC;'>위험 구간 / {sl_1st:,.0f}원 이탈 시 전량 손절</span>"
         add_buy_color = "#ff453a"
 
 
@@ -5947,11 +6065,11 @@ if user_entry_price > 0 and user_quantity > 0:
     if user_entry_price > tp_1st and realtime_price < tp_1st:
         add_q = max(1, int(user_quantity * (user_entry_price - tp_1st) / (tp_1st - realtime_price)))
         add_cost = add_q * realtime_price
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #F2B84B;'><p style='margin:0; font-size:15px; color:#F3F6FA;'>💡 <b>맞춤형 물타기(평단가 인하) 시뮬레이션</b></p><p style='margin:4px 0 0 0; font-size:13px; color:#9DAABC;'>현재가 기준 <b>약 {add_q:,}주 ({add_cost:,.0f}원)</b> 추가 매수 시, 평단가를 AI 1차 목표가(<b>{tp_1st:,.0f}원</b>)로 낮춰 본전 탈출이 가능합니다.</p></div>"
+        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #F2B84B;'><p style='margin:0; font-size:15px; color:#F3F6FA;'><b>맞춤형 물타기(평단가 인하) 시뮬레이션</b></p><p style='margin:4px 0 0 0; font-size:13px; color:#9DAABC;'>현재가 기준 <b>약 {add_q:,}주 ({add_cost:,.0f}원)</b> 추가 매수 시, 평단가를 AI 1차 목표가(<b>{tp_1st:,.0f}원</b>)로 낮춰 본전 탈출이 가능합니다.</p></div>"
     elif user_entry_price > realtime_price and user_entry_price <= tp_1st:
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #35C98B;'><p style='margin:0; font-size:13px; color:#9DAABC;'>💡 현재 평단가가 AI 1차 목표가({tp_1st:,.0f}원)보다 낮아, 본전 탈출을 위한 무리한 추가 물타기 없이 목표가 도달 시 수익 전환이 가능합니다.</p></div>"
+        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #35C98B;'><p style='margin:0; font-size:13px; color:#9DAABC;'>현재 평단가가 AI 1차 목표가({tp_1st:,.0f}원)보다 낮아, 본전 탈출을 위한 무리한 추가 물타기 없이 목표가 도달 시 수익 전환이 가능합니다.</p></div>"
     elif user_entry_price > 0:
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #4C8DFF;'><p style='margin:0; font-size:13px; color:#9DAABC;'>💡 현재 수익 구간입니다. 신규 매수(불타기) 시 평단가가 높아지므로, 잔여 물량은 보유 유지 및 단기 익절 대응을 권장합니다.</p></div>"
+        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #4C8DFF;'><p style='margin:0; font-size:13px; color:#9DAABC;'>현재 수익 구간입니다. 신규 매수(불타기) 시 평단가가 높아지므로, 잔여 물량은 보유 유지 및 단기 익절 대응을 권장합니다.</p></div>"
     st.markdown(f"""
     <div style='background: #161D2A; border-radius: 16px; padding: 20px 24px; margin: 12px 0 20px 0;'>
         <div style='display:flex; justify-size:space-between; align-items:center; flex-wrap:wrap; gap:10px;'>
@@ -6370,13 +6488,13 @@ with tab_pred:
             default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h), avail_h[0])
 
         def _h_label(H):
-            mark = " ⭐" if H in core else ""
+            mark = " " if H in core else ""
             if H not in avail_h:
                 return f"{H}일{mark} (표본없음)"
             return f"{H}일{mark}"
 
         sel_h = st.radio(
-            "예측 기간 선택 (기본 40일 · ⭐는 전략 유형에 맞는 핵심 기간)",
+            "예측 기간 선택 (기본 40일 · 는 전략 유형에 맞는 핵심 기간)",
             ALL_H, index=ALL_H.index(default_h), horizontal=True,
             format_func=_h_label, key="horizon_pick")
 
@@ -6482,8 +6600,9 @@ with tab_val:
             st.caption("① 이 기업의 값어치는? · 수년")
             if _b.get('available'):
                 st.markdown(f"### {_b['low']:,.0f} ~ {_b['high']:,.0f}원")
-                st.caption(f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
-                           f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})")
+                st.caption(_md_safe(
+                    f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
+                    f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})"))
                 # 라운드 38 — 범위의 **폭**을 말해 준다. LX인터내셔널이
                 # 31,860~78,511원(2.5배)이었는데 화면은 그냥 범위만 보여 줬다.
                 # 폭이 2배를 넘으면 "적정가가 좋다"고 읽으면 안 된다.
@@ -6493,18 +6612,18 @@ with tab_val:
                     st.warning(f"범위 폭이 **{_bw:.1f}배**입니다 — 모델들이 서로 "
                                f"크게 다른 값을 냈다는 뜻이라, 이 숫자로 "
                                f"'저평가'를 단정하지 마세요.")
-                st.caption(_b['basis'])
+                st.caption(_md_safe(_b['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_b.get('why', ''))
+                st.caption(_md_safe(_b.get('why', '')))
         with _ax_c2:
             st.caption("② 지금 시장이 매길 값은? · 수개월")
             if _m.get('available'):
                 st.markdown(f"### {_m['price']:,.0f}원")
-                st.caption(_m['basis'])
+                st.caption(_md_safe(_m['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_m.get('why', ''))
+                st.caption(_md_safe(_m.get('why', '')))
         with _ax_c3:
             st.caption("③ 그래서 얼마에 사나? · 수일")
             if _e.get('available'):
@@ -6514,12 +6633,52 @@ with tab_val:
                                + (f" · 손절 {_e['stop']:,.0f}원 · 1차 목표 "
                                   f"{_e['target1']:,.0f}원 (손익비 {_e['rr']})"
                                   if _e.get('stop') and _e.get('target1') else ""))
-                st.caption(_e['basis'])
+                st.caption(_md_safe(_e['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_e.get('why', ''))
+                st.caption(_md_safe(_e.get('why', '')))
+        # 업황조정 가치 — 사양 §3의 가운데 칸.
+        # 조정이 0 이어도 **왜 0 인지**를 적는다. 칸만 만들고 값을 비우면
+        # 사용자는 '반영됐겠거니' 하고 읽는다.
+        _cy = _AX.get('cycle_band') or {}
+        if _cy.get('available'):
+            st.markdown("###### 업황조정 가치 — 섹터 사이클을 얹으면")
+            _cy1, _cy2 = st.columns([1, 2])
+            with _cy1:
+                if _cy.get('adjusted'):
+                    st.markdown(f"**{_cy['low']:,.0f} ~ {_cy['high']:,.0f}원** "
+                                f"({_cy['adj_pct']:+.1f}%)")
+                else:
+                    st.markdown("**업황 미반영** (조정 0.0%)")
+            with _cy2:
+                if _cy.get('linked'):
+                    _mm = []
+                    if _cy.get('rs60') is not None:
+                        _mm.append(f"S&P500 대비 {_cy['rs60']:+.1f}%p")
+                    if _cy.get('mom60') is not None:
+                        _mm.append(f"프록시 60일 {_cy['mom60']:+.1f}%")
+                    if _cy.get('last_date'):
+                        _mm.append(f"최종 수신 {_cy['last_date']}"
+                                   + ("" if _cy.get('fresh', True)
+                                      else " (신선하지 않음)"))
+                    st.caption(_md_safe(f"{_cy.get('sector_ko') or '업종'} · "
+                                        + " · ".join(_mm)))
+                    if _cy.get('proxy_note'):
+                        st.caption(_md_safe(f"대용 지표: {_cy['proxy_note']}"))
+                    _rl = set(_cy.get('real_linked') or [])
+                    _ri = _cy.get('real_indicators') or []
+                    if _ri:
+                        _un = [x for x in _ri if x not in _rl]
+                        st.caption(_md_safe(
+                            "이 업종의 진짜 선행지표 — 연동: "
+                            + (", ".join(sorted(_rl)) if _rl else "없음")
+                            + " · 미연동: " + ", ".join(_un)))
+                else:
+                    st.caption(_md_safe(_cy.get('why') or '업종 미연동'))
+            if _cy.get('why') and not _cy.get('adjusted'):
+                st.caption(_md_safe(_cy['why']))
         for _n in (_AX.get('notes') or []):
-            st.caption(f"· {_n}")
+            st.caption(_md_safe(f"· {_n}"))
         if not _AX.get('consistent'):
             st.warning("세 축이 서로 어긋납니다 — 위 문구를 먼저 읽어 주세요.")
         _pol = _AX.get('policy') or {}
@@ -6535,7 +6694,9 @@ with tab_val:
     base_fair_val = four_scores.get('base_fair_value', target_price)
     upside_pct = four_scores.get('upside_pct')
     upside_eval = four_scores.get('upside_eval', '가치판단 보류')
-    mkt_adj_pct = four_scores.get('market_adjustment_pct', -2.0)
+    # 폴백도 0 — 근거 없는 −2% 를 화면 기본값 자리에 숨기지 않는다 (라운드 44)
+    mkt_adj_pct = four_scores.get('market_adjustment_pct', 0.0)
+    mkt_adj_why = four_scores.get('market_adjustment_why')
     conf_score = four_scores.get('fair_value_confidence', 0.0)
     rec_buy = four_scores.get('recommended_buy_price')
     mos_pct = four_scores.get('margin_of_safety_pct', 15.0)
@@ -6584,7 +6745,7 @@ with tab_val:
             <div style="text-align: right; background: #1C2635; padding: 16px 20px; border-radius: 12px; ">
                 <p style="margin: 0; font-size: 13px; color: #9DAABC;">기초 펀더멘털 가치</p>
                 <p style="margin: 4px 0 8px 0; font-size: 17px; font-weight: bold; color: #F3F6FA;">{base_fair_val:,.0f}{unit_str}</p>
-                <p style="margin: 0; font-size: 13px; color: #9DAABC;">시장조정 영향: <b style="color:#F2B84B;">{mkt_adj_pct:+.1f}%</b></p>
+                <p style="margin: 0; font-size: 13px; color: #9DAABC;">업황조정 영향: <b style="color:#F2B84B;">{mkt_adj_pct:+.1f}%</b></p>
                 <p style="margin: 4px 0 0 0; font-size: 13px; color: #9DAABC;">적정가 신뢰도: <b style="color:#4C8DFF;">{conf_score:.0f} / 100점</b></p>
             </div>
         </div>
@@ -6607,7 +6768,14 @@ with tab_val:
         </div>
     </div>
     ''', unsafe_allow_html=True)
-        
+
+    # 업황조정이 0 이면 **왜 0 인지** 바로 밑에 적는다.
+    # 라운드 44 전까지 이 자리는 근거 없는 −2% 상수였고, 화면은 그걸
+    # '시장조정'이라고만 불렀다. 수치가 없는 것보다 나쁜 건, 근거 없는
+    # 수치를 근거 있는 척 보여 주는 것이다.
+    if mkt_adj_why:
+        st.caption(_md_safe(f"업황조정 {mkt_adj_pct:+.1f}% — {mkt_adj_why}"))
+
     with st.expander("[적정가 산출 근거 & 기업유형별 평가모델 내역 펼쳐보기]", expanded=True):
         # 기업유형 소속 확률 (상위 4개)
         tprobs = val_eval.get('type_probabilities') or {}
@@ -6725,7 +6893,23 @@ with tab_scen:
     
     _uk.spacer(28)
     # [Section 1-6 Spec] 목표가격 5종 세트 산출 근거 표
+    #
+    # ⚠️ 라운드 42 — 이 표는 중앙 판정을 안 쓰고 four_scores 원본을 읽어서,
+    # 같은 화면 안에서 배너와 다른 값을 보여 줬다 (실측: 대우건설).
+    #     배너   권장 매수가 14,963원 · 1차 목표 16,562원
+    #     이 표  권장 매수가 "적정가 신뢰도 미달 (미산출)" · 1차 목표 17,931원
+    # 하나는 숫자, 하나는 '미산출'. 사용자가 어느 쪽을 믿어야 할지 알 수 없다.
+    # 두 값은 **다른 것**이다 — 배너는 실행 진입가(변동성 기반),
+    # 이 표는 적정가 기반 장기 참고선. 이름이 같아서 충돌했다.
+    # 이름을 갈라 적고, 실행 가격 행을 별도로 넣어 어느 것이 오늘 쓰는
+    # 값인지 분명히 한다.
     st.markdown("목표가격 및 손절·위험선 산출 근거 명시적 표")
+    # 물결표를 쓰지 않는다 — 이 문장은 굵게 표시를 의도적으로 쓰므로
+    # _md_safe 로 통째로 이스케이프할 수 없고, 물결표 두 개가 짝을 이루면
+    # 마크다운이 취소선으로 묶어 사이 글자를 지운다 (라운드 44 실측 결함).
+    st.caption("**신규 매수자용 실행 가격**은 아래 1·2행이 아니라 "
+               "**'실행 진입가' 행**입니다. 1·2행은 분기 실적 기반 **장기 "
+               "가치 참고선**이라 오늘 살 자리와 다를 수 있습니다.")
     st.markdown(f"""
     <table class='cross-val-matrix'>
         <thead>
@@ -6742,14 +6926,23 @@ with tab_scen:
                 <td>{four_scores['target_fundamental_note']}</td>
             </tr>
             <tr>
-                <td><b>2. 권장 매수가 (안전마진 적용)</b></td>
-                <td><b style='color:#35C98B;'>{f"{four_scores['recommended_buy_price']:,.0f}원 이하" if four_scores.get('recommended_buy_price') is not None else "적정가 신뢰도 미달 (미산출)"}</b></td>
-                <td>안전마진 {four_scores.get('margin_of_safety_pct', 15):.0f}% 적용 실제 진입 가격</td>
+                <td><b>2. 장기 가치 참고선 (적정가 − 안전마진)</b></td>
+                <td><b style='color:#9DAABC;'>{f"{four_scores['recommended_buy_price']:,.0f}원" if four_scores.get('recommended_buy_price') is not None else "적정가 신뢰도 미달 (미산출)"}</b></td>
+                <td>안전마진 {four_scores.get('margin_of_safety_pct', 15):.0f}% 적용 —
+                    <b>오늘의 매수가가 아니다</b> (분기 실적 기반 장기 기준)</td>
+            </tr>
+            <tr style='background:rgba(53,201,139,0.06);'>
+                <td><b>★ 실행 진입가 (오늘 쓰는 값)</b></td>
+                <td><b style='color:#35C98B;'>{fmt_num((CORE or {}).get('pullback_zone'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td>현재가 − 20일 변동성 1σ · 배너·추천 카드와 <b>같은 값</b>
+                    (중앙 판정 verdict_core)</td>
             </tr>
             <tr>
-                <td><b>3. 기술적 1차 목표가</b></td>
+                <td><b>3. 기술적 1차 목표가 <span style='color:#9DAABC;'>(보유자 · 현재가 기준)</span></b></td>
                 <td><b style='color:#4C8DFF;'>{fmt_num(four_scores.get('target_tech_1st'), ',.0f', '원', na='산출 불가')}</b></td>
-                <td>{four_scores.get('target_tech_1st_note', '')}</td>
+                <td>{four_scores.get('target_tech_1st_note', '')}
+                    — <b>이미 보유한 사람</b>의 기준. 신규 매수자는
+                    실행 진입가 기준 {fmt_num((CORE or {}).get('new_target'), ',.0f', '원', na='미산출')}</td>
             </tr>
             <tr>
                 <td><b>4. 기술적 2차 목표가</b></td>
@@ -6757,9 +6950,11 @@ with tab_scen:
                 <td>{four_scores.get('target_tech_2nd_note', '')}</td>
             </tr>
             <tr>
-                <td><b>5. 손절가 (Stop-Loss)</b></td>
+                <td><b>5. 손절가 <span style='color:#9DAABC;'>(보유자 · 현재가 기준)</span></b></td>
                 <td><b style='color:#ff453a;'>{fmt_num(four_scores.get('stop_loss_price'), ',.0f', '원', na='산출 불가')}</b></td>
-                <td>{four_scores.get('stop_loss_note', '')}</td>
+                <td>{four_scores.get('stop_loss_note', '')}
+                    — 신규 매수자는 실행 진입가 기준
+                    {fmt_num((CORE or {}).get('new_stop'), ',.0f', '원', na='미산출')}</td>
             </tr>
             <tr>
                 <td><b>6. ATR / DeMARK 구조적 위험선</b></td>
