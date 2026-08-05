@@ -59,13 +59,24 @@ HORIZON = 20
 #: 그래서 **판정은 실측 σ 문턱으로 하고, 모형 확률은 참고로만 보여 준다.**
 FILL_MODEL_NOTE = '무추세 모형 추정 (실측 체결률과 다를 수 있음)'
 
-#: 추천에서 빠진 이유 — 사용자 사양 §2 의 8분류
-BUCKETS = ('오늘 매수 가능', '눌림목 대기', '돌파 확인 대기', '장기 관찰',
-           '과열로 제외', '권장가 괴리 과다', '신뢰도 부족', '데이터 부족',
+#: 추천에서 빠진 이유 — **전부 행동 조건이 붙은 이름**이다 (라운드 47).
+#:
+#: 종전에 '장기 관찰'이 있었다. 사용자 지적: *"장기 관찰은 언제 다시 봐야
+#: 하는지 알 수 없다. 차라리 눌림목 대기나 사라고 해 줘야지."* 맞다.
+#: 이름이 '관찰'이면 사용자가 할 일이 없고, 할 일이 없으면 화면에 있을
+#: 이유도 없다. 그래서 **무엇을 기다리는지가 이름에 들어간다.**
+BUCKETS = ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기',
+           '과열 해소 대기', '거래량 회복 대기', '시장 국면 회복 대기',
+           '신뢰도·표본 확보 대기', '권장가 괴리 과다', '데이터 부족',
            '추천 제외')
 
-NO_PICK_LINE = ("오늘은 검증 조건과 실행 가능성을 모두 충족한 신규 매수 "
-                "종목이 없습니다. 현금 유지가 우선입니다.")
+#: 내일(다음 거래일) 실제로 손댈 수 있는 칸 — 오늘의 추천에 올릴 것들.
+#: 나머지는 **메인에서 숨기고** 관심목록으로 내린다.
+ACTIONABLE_BUCKETS = ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기')
+
+NO_PICK_LINE = ("오늘은 전일 확정 데이터 기준으로 다음 거래일에 실제 매수를 "
+                "검토할 수 있는 종목이 없습니다. 무리하게 진입하지 않고 "
+                "현금을 유지하는 것이 우선입니다.")
 
 
 def _f(v):
@@ -230,7 +241,25 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     recommended = not failed
 
     bucket, reason = _bucket(failed, na, gap, entry, sigma, fill_p,
-                         depth_sigma)
+                             depth_sigma, turnover=turnover,
+                             heat=_heat_txt(fs),
+                             regime_block=bool(rg.get('block_new')),
+                             vetoes=vetoes)
+
+    # 내일 실제로 손댈 수 있는가 — 오늘의 추천에 올릴지 가르는 단 하나의 기준.
+    #
+    # 사용자 지적: *"권장 매수가가 현재가보다 지나치게 낮은 종목은 추천하지
+    # 말고, 현실적인 눌림목이나 돌파 조건을 제시할 수 있을 때만 대기 후보로."*
+    # 맞다. 조건을 제시할 수 없으면 화면에 있을 이유가 없다.
+    #
+    # 자를 새로 만들지 않는다 — MAX_ENTRY_SIGMA(2.1σ)가 이미 '20봉 안 체결률
+    # 60% 지점'의 실측값이다(라운드 35 · n=5,389). 그 안이면 다음 거래일부터
+    # 실제로 걸어 둘 수 있는 자리고, 밖이면 장기 참고선이지 매수가가 아니다.
+    actionable = (bucket in ACTIONABLE_BUCKETS
+                  and entry is not None and tgt is not None and stop is not None
+                  and depth_sigma is not None
+                  and depth_sigma <= MAX_ENTRY_SIGMA
+                  and not inc)
 
     return dict(
         # 결론
@@ -238,6 +267,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         headline=str(vd.get('headline') or ''),
         recommended=recommended,
         bucket=bucket,
+        actionable=actionable,
         exclude_reason=reason,
         checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
         failed=failed,
@@ -304,33 +334,66 @@ def _heat_txt(fs):
     return ' · '.join(parts)
 
 
-def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None):
-    """왜 추천에서 빠졌는가 — 8분류 중 하나로 명시한다."""
+def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
+            turnover=None, heat=None, regime_block=False, vetoes=None):
+    """
+    왜 추천에서 빠졌는가 — **무엇을 기다리면 되는지**를 이름에 넣는다.
+
+    순서가 곧 우선순위다. 위쪽이 더 근본적인 막힘이라 먼저 잡는다.
+    """
     if not failed:
         return '오늘 매수 가능', ''
     if '권장 매수가 산출' in failed or '목표·손절 산출' in failed:
         return '데이터 부족', '실행 가격을 산출하지 못했습니다.'
     if '강제 차단 없음' in failed:
+        if regime_block:
+            return '시장 국면 회복 대기', (
+                '지금 시장 국면에서 이 전략의 성적이 무너져 신규 매수를 '
+                '막고 있습니다. 국면이 돌아서면 다시 봅니다.')
+        # 거부권은 이미 사람이 읽을 수 있는 문장이다 — 그걸 그대로 낸다.
+        # 종전에는 "매수를 막는 조건이 있습니다"로 뭉뜽그려서, 무엇이 막는지
+        # 알 수 없었다. 막힌 이유를 모르면 언제 풀리는지도 알 수 없다.
+        vs = [str(v).strip() for v in (vetoes or []) if str(v).strip()]
+        if vs:
+            more = f' 외 {len(vs) - 2}건' if len(vs) > 2 else ''
+            return '추천 제외', ' · '.join(vs[:2]) + more
         return '추천 제외', '매수를 막는 조건이 있습니다.'
     if '과열·저유동성 아님' in failed:
-        return '과열로 제외', '급등 직후라 추격 위험이 큽니다.'
+        # 과열과 저유동성은 기다리는 것이 다르다 — 섞어 부르지 않는다
+        if turnover is not None and turnover < MIN_TURNOVER:
+            return '거래량 회복 대기', (
+                f'20일 평균 거래대금이 {turnover / 1e8:.1f}억으로 기준'
+                f'({MIN_TURNOVER / 1e8:.0f}억)에 못 미칩니다. 거래가 붙어야 '
+                f'계산한 가격에 실제로 체결됩니다.')
+        return '과열 해소 대기', (
+            f'급등 직후라 추격 위험이 큽니다. {heat or "과열 지표"}가 '
+            f'풀린 뒤 다시 봅니다.')
     if '진입 깊이 현실적' in failed or '보유기간 안 도달 가능' in failed:
         g = f'{gap:+.1f}%' if gap is not None else '산출 불가'
         d = f'{depth:.2f}σ' if depth is not None else '산출 불가'
         return '권장가 괴리 과다', (
             f'진입가가 현재가 대비 {g}({d}) 라 {HORIZON}봉 안에 닿을 확률이 '
             f'60% 미만입니다 (상한 {MAX_ENTRY_SIGMA}σ · 실측). '
-            f'장기 참고선으로만 봅니다.')
+            f'현실적인 매수 조건을 제시할 수 없어 추천에서 뺍니다.')
     if '신뢰도·전략품질 기준' in failed or '표본외 검증 통과' in failed:
-        return '신뢰도 부족', '분석 신뢰도 또는 표본외 검증이 기준에 못 미칩니다.'
+        return '신뢰도·표본 확보 대기', (
+            '분석 신뢰도 또는 표본외 검증이 기준에 못 미칩니다. '
+            '사례가 더 쌓여야 판단할 수 있습니다.')
     kind = str(na.get('kind') or '')
     if kind == 'breakout':
-        return '돌파 확인 대기', '돌파 후 재지지를 확인해야 합니다.'
+        return '돌파 후 매수 대기', '돌파 후 재지지를 확인해야 합니다.'
     if kind == 'pullback':
-        return '눌림목 대기', '눌림을 기다립니다.'
+        return '눌림목 매수 대기', '눌림을 기다립니다.'
     if kind == 'observe':
-        return '장기 관찰', '지금은 실행 자리가 아닙니다.'
-    return '눌림목 대기', ' / '.join(failed[:3])
+        # 종전 '장기 관찰' — 조건이 없으면 화면에 둘 이유가 없다.
+        # 손익비·기대값처럼 **가격이 움직여야 풀리는** 조건이면 눌림목 대기,
+        # 그것도 아니면 추천에서 뺀다.
+        if any(x in failed for x in ('손익비 기준 이상', '비용 차감 기대값 양수')):
+            return '눌림목 매수 대기', (
+                '지금 가격에서는 손익비·기대값이 기준에 못 미칩니다. '
+                '더 낮은 자리에서만 셈이 맞습니다.')
+        return '추천 제외', ' / '.join(failed[:3])
+    return '눌림목 매수 대기', ' / '.join(failed[:3])
 
 
 def screen_values(v):
@@ -344,4 +407,4 @@ def screen_values(v):
         'action', 'recommended', 'buy_zone', 'pullback_zone',
         'breakout_price', 'new_target', 'new_stop', 'hold_trim', 'hold_stop',
         'horizon_days', 'reach_prob', 'expected_return', 'rr', 'confidence',
-        'exclude_reason', 'bucket')}
+        'exclude_reason', 'bucket', 'actionable')}

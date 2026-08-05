@@ -807,7 +807,7 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
     p 에서 읽는 것: state(pos|warn|hold|neg) · state_label · name · code ·
     asset_ko · score · conf · price · rec_buy · rec_basis · target ·
     target_basis · stop · stop_basis · dim_levels(bool) · say · hold_note ·
-    news · hit · horizon · risk
+    news · hit · horizon · risk · **why**(why_pick.build 결과)
     없는 값은 그리지 않는다 — 지어내지 않는다.
     """
     t = tokens(theme)
@@ -878,10 +878,56 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
                f"line-height:1.6;'>{_icon('TriangleAlert', t['warn'], 16)}"
                f"<span>{p['hold_note']}</span></div>")
 
+    # ── 왜 이 종목인가 ────────────────────────────────────────────────
+    # 사용자 지적: *"단순히 점수가 높다는 이유만 보여줄 것이 아니라, 왜 이
+    # 종목을 계속 관심 있게 봐야 하는지 명확하게 설명해 주세요."*
+    # '49점 · 신뢰도 88' 은 근거가 아니라 라벨이다. 그 점수가 어떤 매수
+    # 논리를 뜻하는지 숫자와 함께 적는다. 근거가 없으면 이 칸을 안 그린다.
+    whybox = ''
+    wp = p.get('why') or {}
+    if wp.get('quant') or (wp.get('news') or {}).get('text') or wp.get('sector'):
+        rows = []
+        for title, body in (wp.get('quant') or []):
+            rows.append(
+                f"<li style='margin:0 0 5px 0;'>"
+                f"<b style='color:{t['tx1']};'>{_esc(title)}</b> — "
+                f"{_esc(body)}</li>")
+        nw = wp.get('news') or {}
+        if nw.get('text'):
+            rows.append(
+                f"<li style='margin:0 0 5px 0;'>"
+                f"<b style='color:{t['tx1']};'>뉴스·이슈</b> — "
+                f"{_esc(nw['text'])}</li>")
+        if wp.get('sector'):
+            st_, sb_ = wp['sector']
+            rows.append(
+                f"<li style='margin:0 0 5px 0;'>"
+                f"<b style='color:{t['tx1']};'>{_esc(st_)}</b> — "
+                f"{_esc(sb_)}</li>")
+        rk = wp.get('risk')
+        risk_html = ''
+        if rk:
+            rt, rb = rk
+            risk_html = (
+                f"<p style='margin:8px 0 0 0; font-size:12px; "
+                f"color:{t['warn']}; display:flex; gap:6px; "
+                f"align-items:flex-start; line-height:1.65;'>"
+                f"{_icon('TriangleAlert', t['warn'], 14)}"
+                f"<span><b>{_esc(rt)}</b> — {_esc(rb)}</span></p>")
+        whybox = (
+            f"<div style='background:{t['raised']}; border-radius:10px; "
+            f"padding:11px 13px;'>"
+            f"<p style='margin:0 0 7px 0; font-size:12px; font-weight:700; "
+            f"color:{t['tx2']};'>왜 이 종목인가</p>"
+            f"<ul style='margin:0; padding-left:16px; font-size:12px; "
+            f"color:{t['tx2']}; line-height:1.65;'>{''.join(rows)}</ul>"
+            f"{risk_html}</div>")
+
     whys = []
     if p.get('risk'):
         whys.append(_why_row('TriangleAlert', p['risk'], t['neg'], theme))
-    if p.get('news'):
+    if p.get('news') and not whybox:
+        # 왜-칸이 뉴스를 이미 서술했으면 개수 줄을 또 쓰지 않는다
         whys.append(_why_row('Newspaper', p['news'], theme=theme))
     if p.get('hit'):
         whys.append(_why_row('ChartNoAxesCombined', p['hit'], theme=theme))
@@ -898,7 +944,7 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
         f"{_esc(p.get('name', ''))}</p>"
         f"<p style='margin:0; font-size:12px; color:{t['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_esc(meta)}</p></div>",
-        prices, say, nextbox, box, why) if x]
+        prices, say, nextbox, whybox, box, why) if x]
 
     return (
         f"<div style='background:{t['card']}; border-radius:14px; "

@@ -1,14 +1,53 @@
 {
  "axes": {
-  "model": "v2026.08.05.7",
+  "model": "v2026.08.06.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.05.1",
-  "schema": "v2026.08.05.6",
+  "schema": "v2026.08.06.0",
   "news": "v2026.08.05.1",
   "sector": "v2026.08.05.0",
   "valuation": "v2026.08.05.0"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.06.0",
+   "previous": "v2026.08.05.6",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "screen_values 에 actionable 추가 (16 → 17개)",
+   "note": "화면 간 일치 검사가 노출 여부까지 대조한다.",
+   "created_at": "2026-08-05T16:05:44+00:00",
+   "effective_from": "2026-08-06"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.06.1",
+   "previous": "v2026.08.06.0",
+   "kind": "gate",
+   "kind_ko": "게이트 변경",
+   "bump": "date",
+   "reason": "actionable 판정 신설 — 다음 거래일 실행 가능만 노출",
+   "note": "MAX_ENTRY_SIGMA(2.1σ · 20봉 체결률 60% 실측 n=5,389)를 노출 기준으로 재사용한다. 새 문턱을 만들지 않았다. 2.1σ 밖은 현실적인 매수 조건을 낼 수 없어 화면에서 뺀다.",
+   "created_at": "2026-08-05T16:05:44+00:00",
+   "effective_from": "2026-08-06"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.06.0",
+   "previous": "v2026.08.05.7",
+   "kind": "gate",
+   "kind_ko": "게이트 변경",
+   "bump": "date",
+   "reason": "추천 분류를 행동 조건 기준으로 재편 — 장기 관찰 제거",
+   "note": "'장기 관찰'은 언제 다시 봐야 하는지 알 수 없어 제거했다. 과열/저유동성을 '과열 해소 대기'와 '거래량 회복 대기'로 갈랐고, '시장 국면 회복 대기'를 신설했다. 거부권 사유를 뭉뜽그리지 않고 그대로 낸다. 같은 입력에 다른 분류가 나온다.",
+   "created_at": "2026-08-05T16:05:44+00:00",
+   "effective_from": "2026-08-06"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

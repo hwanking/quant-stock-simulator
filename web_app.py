@@ -2210,6 +2210,8 @@ def _build_reco_card(p, news_txt, conf_txt):
                     if p.get('horizon_days') else None),
         # 다음 조건 — 무엇을 기다리는지 카드에 적는다
         'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
+        # 왜 이 종목인가 (라운드 47) — 근거가 없으면 카드가 이 칸을 생략한다
+        'why': p.get('why'),
     }
 
 # ── 낡은 리포트는 가격을 화면에 두지 않는다 (라운드 30) ──────────────
@@ -2624,59 +2626,135 @@ if st.session_state.get('show_screener', False):
                 _by_sym = {str(r.get('symbol', '')).split('.')[0]: r
                            for r in (scan_results or [])}
                 _ATT_PER_ROW = 3
-                _att_cols = []
-                for _s in range(0, len(_att_rows) or 1, _ATT_PER_ROW):
-                    _n = min(_ATT_PER_ROW, max(1, len(_att_rows) - _s))
-                    _att_cols.extend(st.columns(_ATT_PER_ROW)[:_n])
-                for _i, (_r, _a, _bk_ko, _bk_kind, _raw_txt, _ratio_txt,
-                         _act) in enumerate(_att_rows):
-                    _sr = _by_sym.get(_r['code'])
-                    _pick = None
-                    if _sr:
+                # ── 실행 가능 / 대기 로 가른다 (라운드 47) ──────────────────
+                # 사용자 지적: *"내일 사야되는 종목만 띄워줘. 오늘 매수 후보가
+                # 아니면 보여주지마."* 맞다. 조건을 제시할 수 없는 종목이
+                # 목록 맨 위에 있으면 사용자는 그걸 추천으로 읽는다.
+                #
+                # 가르는 자는 verdict_core.actionable 하나다 —
+                # MAX_ENTRY_SIGMA(2.1σ · 20봉 체결률 60% 실측) 안이고,
+                # 실행 3값이 다 있고, 정합이 깨지지 않은 것.
+                _built = []
+                for _row in _att_rows:
+                    _r0 = _row[0]
+                    _sr0 = _by_sym.get(_r0['code'])
+                    _pk = None
+                    if _sr0:
                         try:
-                            _pick = _pm_mod.pick_from_scan_row(q_engine, _sr)
+                            _pk = _pm_mod.pick_from_scan_row(q_engine, _sr0)
                         except Exception:
-                            _pick = None
-                    if _pick:
-                        _pick['reco_class'] = _bk_ko
-                    with _att_cols[_i]:
-                        if _pick:
-                            _att_news = []
-                            if _pick.get('news_fresh'):
-                                _att_news.append(f"신선 재료 {_pick['news_fresh']}건")
-                            if _pick.get('news_lagging'):
-                                _att_news.append(
-                                    f"후행 보도 {_pick['news_lagging']}건 제외")
-                            _cb_a = _pick.get('confidence_band') or {}
-                            _conf_a = (
-                                f"과거 동점수대 적중 {_cb_a['hit_rate']:.0f}% "
-                                f"(n={_cb_a['n']})"
-                                if _cb_a.get('hit_rate') is not None
-                                and (_cb_a.get('n') or 0) >= 30
-                                else f"관심점수 {_a['adjusted_attention_score']:.0f} "
-                                     f"· {_raw_txt}")
+                            _pk = None
+                    if _pk:
+                        _pk['reco_class'] = _row[2]
+                    _built.append((_row, _pk))
+                # ⚠️ 모듈 수준 `import verdict_core as _vcore` 는 이 함수보다
+                #    **아래**(4560행)에 있다. 이 함수가 먼저 불리면 NameError 다.
+                #    2970행과 같은 지역 임포트로 순서 의존을 없앤다.
+                import verdict_core as _vcore
+                # 조건을 제시할 수 있는 칸만 대기 목록에 남긴다.
+                # '권장가 괴리 과다'는 현실적인 눌림목·돌파 조건을 낼 수 없다는
+                # 뜻이므로 대기 목록에도 두지 않는다 — 사용자 지적 그대로다.
+                _WAIT_OK = ('과열 해소 대기', '거래량 회복 대기',
+                            '시장 국면 회복 대기', '신뢰도·표본 확보 대기')
+                _live, _wait, _dropped = [], [], []
+                for _x in _built:
+                    _cr = (_x[1] or {}).get('core') or {}
+                    _bk = str(_cr.get('bucket') or '')
+                    if _cr.get('actionable'):
+                        _live.append(_x)
+                    elif _bk in _WAIT_OK or _bk in _vcore.ACTIONABLE_BUCKETS:
+                        _wait.append(_x)
+                    else:
+                        _dropped.append((_x, _bk or '판정 불가',
+                                         str(_cr.get('exclude_reason') or '')))
+
+                def _render_att(items, key_prefix):
+                    _cols = []
+                    for _s in range(0, len(items) or 1, _ATT_PER_ROW):
+                        _n2 = min(_ATT_PER_ROW, max(1, len(items) - _s))
+                        _cols.extend(st.columns(_ATT_PER_ROW)[:_n2])
+                    for _i, (_row, _pick) in enumerate(items):
+                        (_r, _a, _bk_ko, _bk_kind, _raw_txt, _ratio_txt,
+                         _act) = _row
+                        with _cols[_i]:
+                            if _pick:
+                                _att_news = []
+                                if _pick.get('news_fresh'):
+                                    _att_news.append(
+                                        f"신선 재료 {_pick['news_fresh']}건")
+                                if _pick.get('news_lagging'):
+                                    _att_news.append(
+                                        f"후행 보도 {_pick['news_lagging']}건 제외")
+                                _cb_a = _pick.get('confidence_band') or {}
+                                _conf_a = (
+                                    f"과거 동점수대 적중 {_cb_a['hit_rate']:.0f}% "
+                                    f"(n={_cb_a['n']})"
+                                    if _cb_a.get('hit_rate') is not None
+                                    and (_cb_a.get('n') or 0) >= 30
+                                    else f"관심점수 "
+                                         f"{_a['adjusted_attention_score']:.0f} "
+                                         f"· {_raw_txt}")
+                                st.markdown(
+                                    _uk.reco_card(
+                                        _build_reco_card(_pick, _att_news,
+                                                         _conf_a),
+                                        theme=_theme),
+                                    unsafe_allow_html=True)
+                            else:
+                                # 정밀분석 스냅샷이 없으면 가격을 지어내지 않는다
+                                st.markdown(_uk.attention_row({
+                                    'name': _r['name'], 'code': _r['code'],
+                                    'bucket': _bk_ko, 'bucket_kind': _bk_kind,
+                                    'attention':
+                                        f"{_a['adjusted_attention_score']:.0f}",
+                                    'raw': _raw_txt,
+                                    'action': fmt_num(_act, ',.0f'),
+                                    'reason': (f"{_r.get('selection_reason', '')}"
+                                               f"{_ratio_txt}").strip(' ·'),
+                                    'warns': list(_a.get('penalty_reasons') or []),
+                                }, theme=_theme), unsafe_allow_html=True)
+                            if st.button("분석 보기",
+                                         key=f"att_{key_prefix}_{_r['code']}",
+                                         width='stretch', type='primary'):
+                                st.session_state['pending_search'] = (
+                                    f"{_r['name']} ({_r['code']})")
+                                st.rerun()
+
+                if _live:
+                    st.markdown("###### 다음 거래일에 실제로 손댈 수 있는 후보")
+                    st.caption(
+                        f"매수가가 현재가에서 {_vcore.MAX_ENTRY_SIGMA}σ 안이고, "
+                        f"목표·손절이 같은 진입가 기준으로 산출되며, 가격 정합이 "
+                        f"깨지지 않은 종목만 여기 올립니다. "
+                        f"({_vcore.SIGMA_BASIS})")
+                    _render_att(_live, 'live')
+                else:
+                    st.info(_vcore.NO_PICK_LINE)
+
+                if _wait:
+                    # 조건을 제시할 수 있는 것만 대기 목록에 남긴다.
+                    # '언제 다시 봐야 하는지' 없는 종목은 화면에 둘 이유가 없다.
+                    with st.expander(
+                            f"조건 충족을 기다리는 후보 {len(_wait)}종목 — "
+                            f"무엇을 기다리는지 보기"):
+                        st.caption(
+                            "지금 사는 자리가 아닙니다. 각 카드의 '다음 조건'이 "
+                            "충족되면 그때 검토하세요. 현재가와 매수가가 너무 "
+                            "벌어져 현실적인 조건을 제시할 수 없는 종목은 "
+                            "여기에도 두지 않습니다.")
+                        _render_att(_wait, 'wait')
+
+                if _dropped:
+                    # 뺀 것도 **왜 뺐는지**는 남긴다. 조용히 사라지면
+                    # 사용자는 엔진이 못 본 줄 안다.
+                    with st.expander(
+                            f"추천·대기에서 뺀 {len(_dropped)}종목 — 사유 보기"):
+                        for (_x, _bk, _rz) in _dropped:
+                            _rr0 = _x[0][0]
                             st.markdown(
-                                _uk.reco_card(
-                                    _build_reco_card(_pick, _att_news, _conf_a),
-                                    theme=_theme),
-                                unsafe_allow_html=True)
-                        else:
-                            # 정밀분석 스냅샷이 없으면 가격을 지어내지 않는다
-                            st.markdown(_uk.attention_row({
-                                'name': _r['name'], 'code': _r['code'],
-                                'bucket': _bk_ko, 'bucket_kind': _bk_kind,
-                                'attention': f"{_a['adjusted_attention_score']:.0f}",
-                                'raw': _raw_txt,
-                                'action': fmt_num(_act, ',.0f'),
-                                'reason': (f"{_r.get('selection_reason', '')}"
-                                           f"{_ratio_txt}").strip(' ·'),
-                                'warns': list(_a.get('penalty_reasons') or []),
-                            }, theme=_theme), unsafe_allow_html=True)
-                        if st.button("분석 보기", key=f"att_{_r['code']}",
-                                     width='stretch', type='primary'):
-                            st.session_state['pending_search'] = (
-                                f"{_r['name']} ({_r['code']})")
-                            st.rerun()
+                                f"**{_rr0['name']}** `{_rr0['code']}` · "
+                                f"{_bk}"
+                                + (f"  \n{_rz}" if _rz else ""))
 
                 if not _scored_rows:
                     st.info("행동점수까지 산출된 후보가 없습니다. 아래 제외 사유를 확인하세요.")

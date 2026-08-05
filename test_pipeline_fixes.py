@@ -5582,16 +5582,30 @@ for _k105 in ('action', 'recommended', 'buy_zone', 'pullback_zone',
 check("신규 매수자와 보유자 값이 다른 키",
       _c105['new_stop'] != _c105['hold_stop']
       and _c105['new_target'] != _c105['hold_trim'])
-check("화면 비교 묶음이 16개", len(_vc105.screen_values(_c105)) == 16)
+# 라운드 47 — 비교 묶음에 actionable 이 늘어 17개다 (16 → 17)
+check("화면 비교 묶음이 17개", len(_vc105.screen_values(_c105)) == 17)
+check("비교 묶음에 실행 가능 여부가 들어 있다",
+      'actionable' in _vc105.screen_values(_c105))
 
-# ── 추천 10조건 · 8분류 (사용자 사양 §2) ──────────────────────────────
-check("추천 조건이 10개", len(_c105['checks']) == 10)
-check("분류가 9종", len(_vc105.BUCKETS) == 9)
-for _bk105 in ('눌림목 대기', '돌파 확인 대기', '장기 관찰', '과열로 제외',
-               '권장가 괴리 과다', '신뢰도 부족', '데이터 부족', '추천 제외'):
+# ── 추천 10조건 · 분류 (사용자 사양 §2 · 라운드 47에서 이름 개편) ──────
+#   종전에 '장기 관찰'이 있었다. 사용자 지적: *"장기 관찰은 언제 다시 봐야
+#   하는지 알 수 없다."* 맞다 — 이름이 '관찰'이면 할 일이 없고, 할 일이
+#   없으면 화면에 있을 이유도 없다. **전부 행동 조건이 붙은 이름으로** 바꿨다.
+check("분류가 10종", len(_vc105.BUCKETS) == 10)
+check("'장기 관찰' 은 사라졌다 (할 일이 없는 이름)",
+      '장기 관찰' not in _vc105.BUCKETS)
+for _bk105 in ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기',
+               '과열 해소 대기', '거래량 회복 대기', '시장 국면 회복 대기',
+               '신뢰도·표본 확보 대기', '권장가 괴리 과다', '데이터 부족',
+               '추천 제외'):
     check(f"분류 '{_bk105}' 정의", _bk105 in _vc105.BUCKETS)
+check("실행 가능 칸은 3종", len(_vc105.ACTIONABLE_BUCKETS) == 3)
+check("'권장가 괴리 과다' 는 실행 가능이 아니다",
+      '권장가 괴리 과다' not in _vc105.ACTIONABLE_BUCKETS)
 check("추천 없음 문구가 현금 유지를 말한다",
-      '현금 유지가 우선입니다' in _vc105.NO_PICK_LINE)
+      '현금을 유지하는 것이 우선입니다' in _vc105.NO_PICK_LINE)
+check("추천 없음 문구가 '다음 거래일' 기준임을 밝힌다",
+      '다음 거래일' in _vc105.NO_PICK_LINE)
 check("화면이 그 문구를 쓴다", '_vc_view.NO_PICK_LINE' in _w105)
 check("제외 사유를 화면에 분류별로 보여준다",
       '오늘 추천에 올리지 못한 종목과 이유' in _w105)
@@ -5636,7 +5650,12 @@ check("지표를 못 읽으면 과열로 보지 않는다",
                             williams_r_value=None))['checks'][7]['ok'] is False)
 _hot105 = _vc105.build(dict(_b105, bb_position_pct=101, rsi_value=78,
                             williams_r_value=-3))
-check("지표 2개 이상 과열이면 제외", _hot105['bucket'] == '과열로 제외')
+# 라운드 47 — '과열로 제외' → '과열 해소 대기'. 무엇을 기다리면 되는지 적는다.
+check("지표 2개 이상 과열이면 제외", _hot105['bucket'] == '과열 해소 대기')
+check("과열은 실행 가능이 아니다", _hot105['actionable'] is False)
+check("과열 사유에 무엇이 풀려야 하는지 적는다",
+      '풀린' in str(_hot105['exclude_reason']),
+      str(_hot105['exclude_reason'])[:80])
 
 # 목표 배수 재탐색 (라운드 36) — 기각 결과를 잠근다
 _t36 = _os.path.join(PROJ, '.portfolio', 'target_multiple_r36.json')
@@ -5962,10 +5981,17 @@ check("pick 에 중앙 판정이 실린다",
       "'core'" in _ins109.getsource(_pm109.pick_from_scan_row))
 check("카드 조립 함수가 모듈 수준으로 올라왔다",
       '\ndef _build_reco_card(p, news_txt, conf_txt):' in _w109)
+# 라운드 47 — 목록을 실행 가능/대기로 가르면서 렌더를 _render_att 로 뺐다.
+# 들여쓰기까지 문자열로 박아 두면 구조를 바꿀 때마다 검사가 막는다 —
+# **같은 함수를 쓰는가**만 본다 (그게 이 검사의 의도였다).
 check("관심종목 후보도 같은 카드를 쓴다",
-      '_pm_mod.pick_from_scan_row(q_engine, _sr)' in _w109
-      and '_uk.reco_card(\n                                    _build_reco_card(_pick'
-      in _w109)
+      '_pm_mod.pick_from_scan_row(q_engine, _sr0)' in _w109
+      and '_build_reco_card(_pick' in _w109
+      and '_uk.reco_card(' in _w109)
+check("실행 가능한 것만 위로 올린다 (라운드 47)",
+      "_cr.get('actionable')" in _w109 and '_render_att(_live' in _w109)
+check("대기 후보는 접어서 아래로", '_render_att(_wait' in _w109)
+check("뺀 종목도 사유를 남긴다", '_dropped' in _w109)
 check("스냅샷이 없으면 가격을 지어내지 않는다",
       '정밀분석 스냅샷이 없으면 가격을 지어내지 않는다' in _w109)
 check("한 화면 두 카드 문제를 코드에 남긴다",
@@ -6569,6 +6595,121 @@ check("엔진 변경 없이 버전을 올리지 않았다고 적었다",
       '엔진 변경 없음. 버전 올리지 않는다' in
       open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
            encoding='utf-8').read())
+
+# ══════════════════════════════════════════════════════════════════════
+# §116 — 내일 살 수 있는 것만 보여준다 · 왜 사는지 말한다 (라운드 47)
+#   사용자 지적: *"추천주가 거의 다 권장매수가 위다 보니 왜 이 주식을 사야
+#   하는지 말해주면 좋겠다. 내일 사야되는 종목만 띄워줘. 장기관찰은 차라리
+#   눌림목 대기 혹은 사라고 해줘야지."*
+#
+#   ⚠️ 함께 들어온 요구 중 **하나는 넣지 않았다**: "섹터 점수가 최상위면
+#   권장매수가를 현재가 부근으로 끌어올려라." 라운드 44에서 원장 16,805건
+#   으로 실측하고 기각한 가설이다(블라인드 호황 구간 적중 50.0% ·
+#   비용후 EV −2.467%). 넣으면 추격매수에 근거를 붙여 주는 셈이다.
+#   이 검사가 그 선을 지킨다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§116 실행 가능한 것만 노출 · 왜 이 종목인가 (라운드 47)")
+print("=" * 72)
+import why_pick as _wp116                                    # noqa: E402
+
+_FS116 = dict(entry_pullback_price=98.5, current_price=100.0,
+              entry_target_1st=110.0, entry_stop_price=92.0, entry_rr=1.2,
+              analysis_confidence=70, strategy_quality_score=60,
+              vol_20=0.03, avg_turnover_20d=1e9,
+              target_tech_1st=112.0, stop_loss_price=90.0,
+              calibration_band=dict(lo=50, hi=59, hit_rate=58.0, n=1200,
+                                    wilson_low=55.0),
+              range_position_pct=55.0, bb_position_pct=50.0,
+              williams_r_value=-50.0, rsi_value=52.0,
+              blind_test_status='통과')
+_VD116 = {'action': 'BUY', 'headline': '', 'vetoes': []}
+
+# ① 진입 깊이가 노출을 가른다 — 새 문턱을 만들지 않고 2.1σ 를 재사용
+for _lbl, _entry, _want in (('가까움', 98.5, True),
+                            ('상한 부근', 94.0, True),
+                            ('너무 멀다', 88.0, False)):
+    _c = _vc105.build(dict(_FS116, entry_pullback_price=_entry,
+                           entry_stop_price=_entry * 0.93,
+                           entry_target_1st=_entry * 1.10),
+                      _VD116, None, {'kind': 'pullback'}, 100.0)
+    check(f"진입 깊이 '{_lbl}' → 실행 가능 {_want}",
+          bool(_c['actionable']) is _want,
+          f"{_c['depth_sigma']}σ · {_c['bucket']}")
+check("노출 자를 새로 만들지 않았다 (2.1σ 재사용)",
+      _vc105.MAX_ENTRY_SIGMA == 2.1 and 'n=5,389' in _vc105.SIGMA_BASIS)
+
+# ② 거부권 사유를 뭉뜽그리지 않는다 — 무엇이 막는지 적는다
+_c116v = _vc105.build(
+    _FS116, {'action': 'HOLD', 'headline': '',
+             'vetoes': ["진입 위치 '적정가 크게 초과' — 적정가를 크게 초과",
+                        '거래비용 차감 후 기대수익 −0.42% (0 이하)']},
+    None, {'kind': 'pullback'}, 100.0)
+check("거부권이면 추천 제외", _c116v['bucket'] == '추천 제외')
+check("거부권 사유를 그대로 낸다",
+      '적정가' in str(_c116v['exclude_reason']),
+      str(_c116v['exclude_reason'])[:70])
+check("'매수를 막는 조건이 있습니다' 로 뭉뜽그리지 않는다",
+      str(_c116v['exclude_reason']) != '매수를 막는 조건이 있습니다.')
+
+# ③ 왜 이 종목인가 — 근거는 숫자와 함께, 위험은 반드시 하나
+_c116 = _vc105.build(_FS116, _VD116, None, {'kind': 'pullback'}, 100.0)
+_w116 = _wp116.build(_c116, _FS116,
+                     news_flags=dict(feed_available=True, fresh=2, lagging=7,
+                                     risk_words=[],
+                                     headlines=[dict(title='신규 공급계약',
+                                                     source='연합뉴스 경제')]),
+                     sector_cycle=dict(linked=True, ko='해운',
+                                       mom60=10.1, rs60=4.6))
+check("정량 근거가 나온다", len(_w116['quant']) >= 2)
+check("근거에 표본 수가 들어간다",
+      any('건' in b for _, b in _w116['quant']))
+check("위험요인을 반드시 하나 낸다",
+      bool(_w116['risk']) and len(_w116['risk']) == 2)
+check("뉴스를 개수가 아니라 내용으로 말한다",
+      '신규 공급계약' in _w116['news']['text'])
+check("중복·후행 제외 수를 밝힌다", '7건' in _w116['news']['text'])
+check("뉴스 반영 정도를 숨기지 않는다",
+      '가점 0' in _w116['news']['text'])
+
+# ④ 선반영 — 좋은 뉴스라도 이미 올랐으면 가점을 넣지 않는다
+_hot116 = dict(_FS116, range_position_pct=92.0)
+_n116 = _wp116.news_reason(
+    dict(feed_available=True, fresh=1, lagging=3, risk_words=[],
+         headlines=[dict(title='대규모 수주', source='한국경제')]),
+    _c116, _hot116)
+check("선반영이면 그렇게 적는다",
+      '이미 가격에 반영' in _n116['text'], _n116['text'][:70])
+check("선반영 판정이 플래그로도 나온다", _n116['priced_in'] is True)
+
+# ⑤ 뉴스 미수신 ≠ 악재
+_na116 = _wp116.news_reason(dict(feed_available=False), _c116, _FS116)
+check("뉴스 미수신을 악재로 만들지 않는다",
+      '악재가 아니며' in _na116['text'])
+
+# ⑥ 업황은 참고로만 — 라운드 44 기각을 문장에 남긴다
+_s116 = _wp116.sector_reason(dict(linked=True, ko='해운', mom60=10.1, rs60=4.6))
+check("업황을 참고로만 쓴다고 밝힌다",
+      _s116 is not None and '판정에는 넣지 않았습니다' in _s116[1])
+check("업황 미연동이면 아예 안 쓴다",
+      _wp116.sector_reason(dict(linked=False)) is None)
+
+# ⑦ 섹터로 매수가를 끌어올리지 않는다 (요구받았으나 기각된 것)
+_wsrc116 = open(_os.path.join(PROJ, 'why_pick.py'), encoding='utf-8').read()
+# 유니코드 마이너스(−, U+2212)와 ASCII 하이픈(-)을 둘 다 받는다.
+# 문서 문장은 유니코드 마이너스를 쓴다 — 검사가 그걸 몰라 한 번 걸렸다.
+check("섹터 모멘텀으로 매수가를 올리지 않는다고 코드에 적었다",
+      '기각했다' in _wsrc116
+      and ('2.467' in _wsrc116)
+      and ('−2.467' in _wsrc116 or '-2.467' in _wsrc116))
+_vsrc116 = open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read()
+check("업황이 진입가 산출에 끼어들지 않는다",
+      'sector' not in _vsrc116.lower().split('def build(')[1].split('return dict')[0])
+
+# ⑧ 카드가 '왜' 칸을 그리는가
+_usrc116 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+check("카드에 '왜 이 종목인가' 칸이 있다", '왜 이 종목인가' in _usrc116)
+check("근거가 없으면 그 칸을 안 그린다", "wp.get('quant')" in _usrc116)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
