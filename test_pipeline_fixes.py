@@ -4111,9 +4111,15 @@ check("로고가 제목 역할 — 홈 버튼은 조용한 보조",
       '로고가 제목 역할을 하므로 이 버튼은 조용한 보조로 둔다' in _w86)
 check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
       "f\"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; \"" in _w86)
+# 라운드 44 — 예전에는 "_AX_KO = {'model': '모델'" 이라는 **리터럴**을 요구했다.
+# 그런데 축 목록을 화면에 손으로 나열해 둔 것이 바로 이번에 고친 결함이다
+# (versioning.AXES 가 5 → 7 로 늘었는데 화면은 5개만 그렸다).
+# 그래서 리터럴이 아니라 **의도**를 검사한다 — 상태·버전이 한 줄에 있고,
+# 축 목록을 versioning 이 정하는가.
 check("상단 바 한 줄에 상태와 엔진 버전이 함께 있다",
-      '_STATUS_TOP' in _w86 and "_AX_KO = {'model': '모델'" in _w86
-      and 'class="here"' in _w86)
+      '_STATUS_TOP' in _w86 and '_AX_KO' in _w86 and 'class="here"' in _w86)
+check("버전 칩 축 목록을 화면이 손으로 나열하지 않는다",
+      'for _a in _ver.AXES' in _w86 and "'valuation': '적정가'" in _w86)
 
 _u86 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
 check("상태바 컴포넌트 존재", 'def status_bar(' in _u86)
@@ -4685,11 +4691,14 @@ if len(_bad95) >= 3:
     else:
         check("차트 candles 배열을 찾을 수 있다", False, 'candles 미발견')
 
-# 상단 바 — 엔진 버전 다섯 축 노출 + 업데이트 이력 링크
+# 상단 바 — 엔진 버전 축 전부 노출 + 업데이트 이력 링크
+#   라운드 44에서 '다섯 축'이 아니라 **versioning.AXES 전부**로 바꿨다.
+#   축을 화면에 손으로 나열해 둔 탓에 축이 7개로 늘었는데 5개만 그렸다.
 _w95 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 _u95 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
-check("상단 바에 엔진 버전 다섯 축을 모두 보여 준다",
-      "_AX_KO = {'model': '모델'" in _w95 and "'news': '뉴스'" in _w95)
+check("상단 바에 엔진 버전 축을 빠짐없이 보여 준다",
+      'for _a in _ver.AXES' in _w95 and "'news': '뉴스'" in _w95
+      and "'sector': '업황'" in _w95)
 check("엔진 버전 칩이 업데이트 이력으로 간다",
       "class='qvers'" in _w95 and "href='#nav-updates'" in _w95)
 check("운영 버전 칩도 업데이트 이력으로 간다",
@@ -4863,8 +4872,9 @@ _w98 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 # ① 상단 바 — 두 줄이었고 룰북·산식이 두 번, 운영 버전은 모델과 같은 값이었다
 check("상태 줄을 따로 그리지 않는다 (한 줄로 합침)",
       '_uk.status_bar(' not in _w98)
-check("상태·판단수·엔진 5축·보는 중이 한 바에 들어간다",
-      '_STATUS_TOP' in _w98 and "_AX_KO = {'model': '모델'" in _w98
+# 라운드 44 — '5축' 이 아니라 versioning.AXES 전부다 (7축).
+check("상태·판단수·엔진 축·보는 중이 한 바에 들어간다",
+      '_STATUS_TOP' in _w98 and 'for _a in _ver.AXES' in _w98
       and 'class="here"' in _w98)
 check("룰북·산식이 바 안에서 두 번 나오지 않는다",
       _w98.count("f\"룰북 {_VER_NOW['rulebook']}\"") == 0
@@ -6268,6 +6278,212 @@ check("65% 미달을 숨기지 않는다",
       open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
            encoding='utf-8').read())
 
+# ══════════════════════════════════════════════════════════════════════
+# §114 — 섹터 사이클 오버레이 기각을 기록으로 잠근다 (라운드 44)
+#   사양은 "미국 해운이 호황이면 국내 해운주 적정가에 +15~20% 프리미엄"을
+#   요구했다. 원장 16,805건에 시점 복원으로 실측하니 사전등록 게이트를
+#   넘지 못했다 — 특히 **valid 에서 방향이 뒤집힌다**(G3).
+#   이 기록이 지워지면 검증 없이 프리미엄을 붙일 위험이 있다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§114 섹터 사이클 오버레이 기각 기록 (라운드 44)")
+print("=" * 72)
+import sector_cycle as _sc114                                # noqa: E402
+
+_pre114 = _os.path.join(PROJ, 'docs', 'PREREG_R44_SECTOR_OVERLAY.md')
+check("사전등록 문서가 있다", _os.path.exists(_pre114))
+if _os.path.exists(_pre114):
+    _pt114 = open(_pre114, encoding='utf-8').read()
+    check("측정 전에 썼다고 밝힌다", '측정 전' in _pt114)
+    check("게이트 G1~G4 를 미리 고정했다",
+          all(x in _pt114 for x in ('G1', 'G2', 'G3', 'G4', '≥ 5.0%p')))
+    check("연동 안 되는 것을 미리 적었다", '지금 검증 불가' in _pt114)
+    check("BDRY 가 운임지수 자체가 아님을 밝혔다", 'BDRY' in _pt114)
+    check("적정가 오차는 못 잰다고 적었다",
+          '측정 불가' in _pt114 and '적정가 필드가 없다' in _pt114)
+
+# 실측 산출물 — 두 지표 모두 기각이어야 한다
+for _mt114 in ('rs60', 'mom60'):
+    _p114 = _os.path.join(PROJ, '.portfolio',
+                          f'sector_overlay_r44_{_mt114}.json')
+    check(f"{_mt114} 산출물이 있다", _os.path.exists(_p114))
+    if not _os.path.exists(_p114):
+        continue
+    with open(_p114, encoding='utf-8') as _f:
+        _d114 = _j105.load(_f)
+    _g114 = _d114.get('gate') or {}
+    check(f"{_mt114} 판정이 기각이다", _g114.get('verdict') == '기각',
+          str(_g114.get('verdict')))
+    check(f"{_mt114} 게이트 4개를 다 기록했다",
+          all(k in _g114 for k in ('g1', 'g2', 'g3', 'g4')))
+    check(f"{_mt114} 는 세 구간 방향이 일치하지 않았다",
+          _g114.get('g3') is False, f"g3={_g114.get('g3')}")
+    check(f"{_mt114} 블라인드 구간이 기록돼 있다",
+          bool((_d114.get('blind') or {})))
+
+# 룰북 — 조정 폭이 전부 0 인가 (검증 안 된 값으로 적정가를 움직이지 않는다)
+_SR114 = qi.RULEBOOK.get('RULES_SECTOR', {})
+check("룰북에 [RULES_SECTOR] 가 있다", bool(_SR114))
+check("업황 조정을 적정가에 반영하지 않는다",
+      int(_SR114.get('apply_to_fair_value', 1) or 0) == 0,
+      str(_SR114.get('apply_to_fair_value')))
+for _k114 in ('cap_pct_normal', 'cap_pct_limited', 'cap_pct_reference'):
+    check(f"{_k114} 이 0 이다", float(_SR114.get(_k114, 99) or 0) == 0.0,
+          str(_SR114.get(_k114)))
+check("사양의 ±15/±8/±3 을 그대로 쓰지 않았다",
+      float(_SR114.get('cap_pct_normal', 0) or 0) != 15.0)
+check("미연동 업종은 조정하지 않는다",
+      int(_SR114.get('skip_when_unlinked', 0) or 0) == 1)
+
+# 근거 없는 상수 −2.0 이 되살아나지 않는가
+_qsrc114 = open(_os.path.join(PROJ, 'quant_indicators.py'),
+                encoding='utf-8').read()
+check("market_adjustment_pct 상수 −2.0 이 사라졌다",
+      "'market_adjustment_pct': -2.0" not in _qsrc114)
+check("−2.0 이 기본값 자리에도 없다",
+      "market_adjustment_pct', -2.0" not in _qsrc114)
+_wsrc114 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면 폴백에도 −2.0 이 없다",
+      "market_adjustment_pct', -2.0" not in _wsrc114)
+check("업황조정이 0 인 이유를 화면이 적는다",
+      'market_adjustment_why' in _wsrc114)
+
+# sector_cycle — 없는 값을 지어내지 않는가
+check("업종 미연동은 available=False 로 낸다",
+      _sc114.for_stock('000000', industry='존재하지않는업종').get(
+          'available') is False)
+check("미연동에 이유가 붙는다",
+      '미연동' in str(_sc114.for_stock(
+          '000000', industry='존재하지않는업종').get('why') or ''))
+check("업종이 없으면 연결하지 않는다",
+      _sc114.group_of(None) is None and _sc114.group_of('nan') is None)
+check("해상 운송업은 해운으로 간다", _sc114.group_of('해상 운송업') == 'SHIP')
+check("반도체 제조업은 반도체로 간다", _sc114.group_of('반도체 제조업') == 'SEMI')
+check("BDRY 가 대용임을 그룹 정의가 밝힌다",
+      '운임지수' in _sc114.GROUPS['SHIP']['proxy_note']
+      and '아니라' in _sc114.GROUPS['SHIP']['proxy_note'])
+check("해운의 진짜 선행지표가 미연동으로 남아 있다",
+      len(_sc114.GROUPS['SHIP']['real']) >= 5
+      and _sc114.GROUPS['SHIP']['real_linked'] == [])
+check("시세 수집 시작일이 원장보다 앞선다",
+      _sc114.SERIES_START <= '2015-01-01', _sc114.SERIES_START)
+
+# price_axes — 3단계가 분리되고, 조정 0 이면 adjusted=False 로 말하는가
+_pa114 = _pa103.build(
+    {'fair_value_range_core': [100.0, 140.0],
+     'fair_value_range_wide': [90.0, 160.0],
+     'reference_fair_value': 120.0, 'displayed_fair_value': 120.0,
+     'fair_value_confidence': 85.0, 'independent_models': 3,
+     'market_adjustment_pct': 0.0,
+     'market_adjustment_why': '업황 조정 미적용 — 사전등록 게이트 미통과',
+     'sector_cycle': {'available': False, 'linked': False,
+                      'why': "'기타' 업종은 아직 프록시가 연결되지 않았습니다 (미연동)."}},
+    {'current_price': 120.0, 'entry_pullback_price': 110.0})
+_cb114 = _pa114.get('cycle_band') or {}
+check("업황조정 축이 생겼다", bool(_cb114.get('available')))
+check("조정 0 이면 adjusted=False", _cb114.get('adjusted') is False)
+check("조정 0 이면 기본 범위와 같다",
+      abs(_cb114.get('low', 0) - 100.0) < 1e-9
+      and abs(_cb114.get('high', 0) - 140.0) < 1e-9)
+# 미연동이면 '게이트 미통과'보다 **어느 업종이 왜 안 붙는지**가 먼저다.
+# 둘 다 0% 지만 사용자가 할 수 있는 일이 다르다 (라운드 44).
+check("미연동이면 업종 사유를 먼저 말한다",
+      '미연동' in str(_cb114.get('why') or ''), str(_cb114.get('why')))
+check("게이트 사유는 따로 실어 보낸다",
+      '게이트' in str(_cb114.get('gate_why') or ''), str(_cb114.get('gate_why')))
+check("미연동 사실이 notes 로 올라온다",
+      any('업황' in str(_n) for _n in (_pa114.get('notes') or [])))
+# 연동됐는데 게이트 때문에 0 인 경우 — 이때는 게이트 사유가 앞에 온다
+_cb114b = _pa103.cycle_band(
+    {'market_adjustment_pct': 0.0,
+     'market_adjustment_why': '업황 조정 미적용 — 사전등록 게이트 미통과',
+     'sector_cycle': {'available': True, 'linked': True, 'ko': '해운',
+                      'mom60': 10.1, 'rs60': 4.6}},
+    {'available': True, 'low': 100.0, 'high': 140.0})
+check("연동됐으면 게이트 사유를 말한다",
+      '게이트' in str(_cb114b.get('why') or ''), str(_cb114b.get('why')))
+check("연동돼도 조정은 0 이다", _cb114b.get('adj_pct') == 0.0)
+
+# 버전 축 — 적정가·섹터가 독립 축으로 분리됐는가
+check("버전 축이 7개다", len(_ver101.AXES) == 7, str(_ver101.AXES))
+for _a114 in ('valuation', 'sector'):
+    check(f"'{_a114}' 축이 있다", _a114 in _ver101.AXES)
+    check(f"'{_a114}' 버전이 등록돼 있다",
+          _ver101.current(_a114) != 'v2026.08.02.0', _ver101.current(_a114))
+
+# 이모지 금지 — 새 모듈도 예외가 아니다
+_scsrc114 = open(_os.path.join(PROJ, 'sector_cycle.py'), encoding='utf-8').read()
+check("sector_cycle 에 이모지가 없다",
+      not _re.search(r'[\U0001F300-\U0001FAFF☀-➿]', _scsrc114))
+
+# 물결표가 취소선으로 먹히지 않는가 (라운드 44 실측 결함)
+#   "25~75분위 범위 (넓게 보면 88,863~173,641원)" 이 화면에
+#   "25 75분위 범위 (넓게 보면 88,863 173,641원)" 로 나왔다.
+#   Streamlit 마크다운이 물결표 두 개를 <del> 로 묶어 사이 글자를 지웠다.
+check("마크다운 이스케이프 헬퍼가 있다", '_md_safe' in _wsrc114)
+# 함수 본문만 정확히 잘라 낸다. 고정 길이로 자르면 뒤 코드까지 끌려와
+# SyntaxError 가 난다 (실제로 났다 — _OLD_BORDERS 리스트 중간에서 잘렸다).
+_i114 = _wsrc114.index('def _md_safe')
+_j114 = _wsrc114.index('\n    return s\n', _i114) + len('\n    return s\n')
+_ns114 = {}
+exec(compile(_wsrc114[_i114:_j114], '<md_safe>', 'exec'), _ns114)
+_mdsafe114 = _ns114['_md_safe']
+check("물결표를 이스케이프한다",
+      _mdsafe114('25~75분위 (88,863~173,641원)')
+      == '25\\~75분위 (88,863\\~173,641원)',
+      _mdsafe114('25~75분위 (88,863~173,641원)'))
+check("별표·밑줄·역따옴표도 막는다",
+      _mdsafe114('a*b_c`d') == 'a\\*b\\_c\\`d')
+check("None 을 빈 문자열로", _mdsafe114(None) == '')
+
+# 마크다운 위젯에 물결표가 짝수로 들어가는 자리가 남아 있는가 (AST 전수)
+#   한 군데만 고치면 나머지가 남는다 — 실제로 두 번째 자리가 있었다:
+#   "아래 1~2행이 아니라 … 1~2행은" → <del> 로 사이 글자가 지워졌다.
+import ast as _ast114
+_MD_CALLS114 = {'caption', 'markdown', 'write', 'info', 'warning',
+                'success', 'error', 'text'}
+_tilde114 = []
+for _f114 in ('web_app.py', 'ui_kit.py', 'chart_pro.py', 'gaeum_ai.py',
+              'next_action.py', 'product_ops.py'):
+    _p = _os.path.join(PROJ, _f114)
+    if not _os.path.exists(_p):
+        continue
+    _s114 = open(_p, encoding='utf-8').read()
+    for _nd in _ast114.walk(_ast114.parse(_s114)):
+        if not isinstance(_nd, _ast114.Call):
+            continue
+        _fn = _nd.func
+        if not (isinstance(_fn, _ast114.Attribute)
+                and _fn.attr in _MD_CALLS114
+                and isinstance(_fn.value, _ast114.Name)
+                and _fn.value.id in ('st', '_st')):
+            continue
+        if any(_k.arg == 'unsafe_allow_html' for _k in _nd.keywords):
+            continue           # 인라인 HTML 안이라 마크다운 파서가 안 건드린다
+        _seg = _ast114.get_source_segment(_s114, _nd) or ''
+        if '_md_safe' in _seg:
+            continue           # 이스케이프를 거친다
+        _lit = ''.join(_c.value for _c in _ast114.walk(_nd)
+                       if isinstance(_c, _ast114.Constant)
+                       and isinstance(_c.value, str))
+        if _lit.count('~') >= 2:
+            _tilde114.append(f'{_f114}:{_nd.lineno}')
+check("마크다운 위젯에 취소선으로 먹힐 물결표가 없다",
+      not _tilde114, ' · '.join(_tilde114[:5]))
+# 근거 문구가 실제로 이 헬퍼를 거치는가 (엔진 문자열 → 마크다운 위젯)
+for _pat114 in ("st.caption(_md_safe(_b['basis']))",
+                "st.caption(_md_safe(_m['basis']))",
+                "st.caption(_md_safe(_e['basis']))"):
+    check(f"근거 문구가 이스케이프를 거친다 — {_pat114[18:30]}",
+          _pat114 in _wsrc114)
+# 조정이 0 이면 '조정 +0.0%' 라고 말하지 않는가
+_mf114 = _pa103.market_fair(
+    {'displayed_fair_value': 120.0, 'market_adjustment_pct': 0.0},
+    {'available': True, 'center': 120.0, 'confidence': 85.0,
+     'tier': 'normal', 'tier_ko': '정상', 'weight': 1.0})
+check("조정 0 이면 근거에 '조정' 이라 쓰지 않는다",
+      '조정' not in str(_mf114.get('basis') or ''), _mf114.get('basis'))
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
@@ -6277,7 +6493,10 @@ import subprocess as _sp109
 _AXF109 = {'model': ['quant_indicators.py', 'verdict_core.py',
                      'price_axes.py', 'regime_policy.py'],
            'rulebook': ['analysis_rulebook_ko.txt'],
-           'news': ['market_context.py']}
+           'news': ['market_context.py'],
+           # 라운드 44 신설 — 적정가와 섹터를 model 축에서 떼어 냈다
+           'valuation': ['price_axes.py'],
+           'sector': ['sector_cycle.py']}
 for _ax109, _files109 in _AXF109.items():
     _v109 = _ver101.current(_ax109)
     _vd109 = _v109[1:11].replace('.', '-') if _v109.startswith('v') else ''

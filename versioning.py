@@ -27,10 +27,16 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 LEDGER = os.path.join(BASE, 'data', 'version_ledger.json')
 
 #: 각 축은 독립적으로 오른다. 화면·케이스마다 어느 축이 쓰였는지 함께 남긴다.
-AXES = ('model', 'scoring', 'rulebook', 'schema', 'news')
+#:
+#: 라운드 44에서 `valuation`·`sector` 를 더했다. 그전에는 적정가 산식이
+#: 바뀌어도 `model` 하나가 움직여서, 점수 게이트가 바뀐 건지 밸류에이션이
+#: 바뀐 건지 이력만 봐서는 갈라낼 수 없었다.
+AXES = ('model', 'scoring', 'rulebook', 'schema', 'news',
+        'valuation', 'sector')
 AXIS_KO = {
     'model': '모델', 'scoring': '점수 산식', 'rulebook': '룰북',
     'schema': '데이터 스키마', 'news': '뉴스 분석',
+    'valuation': '적정가 엔진', 'sector': '섹터 사이클',
 }
 
 BUMP_PATCH = 'patch'

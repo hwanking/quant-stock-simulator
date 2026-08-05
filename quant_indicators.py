@@ -2537,6 +2537,55 @@ class QuantIndicatorsEngine:
             elif upside_pct >= -30.0: upside_eval = "고평가 가능성"
             else: upside_eval = "큰 고평가 가능성"
 
+        # ── 업황(섹터 사이클) 조정 ─────────────────────────────────
+        # 종전에는 여기가 **상수 −2.0** 이었다. 2,872개 전 종목이 3년 내내
+        # 같은 값을 받았고, 어느 표본에서 나온 값인지 코드에도 문서에도
+        # 근거가 없었다. '시장조정'이라는 이름만 있고 조정하는 대상이 없었다.
+        #
+        # 라운드 44에서 실측 대체를 시도했으나 **사전등록 게이트를 넘지
+        # 못했다**(rulebook [RULES_SECTOR] 주석에 전문). 그래서 검증된 값도
+        # 없고 근거 없는 −2% 도 쓰지 않는다 — 0 으로 두고 이유를 남긴다.
+        # 업황 자체는 재서 `sector_cycle` 키로 화면까지 보낸다(표시 전용).
+        _sec_cycle, _sec_adj, _sec_why = None, 0.0, None
+        _SR = RULEBOOK.get('RULES_SECTOR', {})
+        try:
+            import sector_cycle as _sc
+            # symbol 은 기본값이 None 인 인자다 — 없으면 업황도 없다고 적는다
+            if not symbol:
+                raise ValueError('종목 코드가 없어 업종을 연결할 수 없습니다')
+            _sec_cycle = _sc.for_stock(
+                str(symbol).split('.')[0], industry=None,
+                as_of=getattr(self, '_sector_as_of', None))
+            if not int(_SR.get('apply_to_fair_value', 0) or 0):
+                _sec_why = ('업황 조정 미적용 — 사전등록 게이트 미통과 '
+                            '(라운드 44). 화면 표시용입니다.')
+            elif not _sec_cycle.get('available'):
+                _sec_why = _sec_cycle.get('why')
+            elif not _sec_cycle.get('fresh', True):
+                _sec_why = (f"업황 데이터가 신선하지 않습니다 "
+                            f"(최종 수신 {_sec_cycle.get('last_date')}).")
+            else:
+                # 배선은 실제로 연결해 둔다 — 플래그만 켜고 계수가 안 붙으면
+                # 다음 라운드에서 "켰는데 왜 그대로냐"가 된다. 상한은 룰북이
+                # 쥐고 있고 지금은 전부 0 이라, 켜도 결과는 0 이다.
+                # 폭이 필요해지면 **룰북 숫자만** 바꾸면 된다.
+                import price_axes as _pa_sec
+                _cap = {'normal': 'cap_pct_normal', 'limited': 'cap_pct_limited',
+                        'reference': 'cap_pct_reference'}.get(
+                            _pa_sec.tier_of(fair_value_confidence)[0])
+                _cap_pct = float(_SR.get(_cap, 0) or 0) if _cap else 0.0
+                _rs = _sec_cycle.get('rs60')
+                if _cap_pct and _rs is not None:
+                    # 상대강도를 상한 안으로 자른다 (선형 증폭 금지 — 라운드 29)
+                    _sec_adj = max(-_cap_pct, min(_cap_pct, float(_rs)))
+                else:
+                    _sec_why = (f'업황 조정 상한이 0 입니다 — 실측된 폭이 '
+                                f'없습니다 (룰북 [RULES_SECTOR]).')
+        except Exception as _e:                              # noqa: BLE001
+            _sec_cycle = dict(available=False, linked=False,
+                              why=f'업황 데이터를 받지 못했습니다 ({type(_e).__name__}).')
+            _sec_why = _sec_cycle['why']
+
         return {
             'target_fundamental': target_fundamental,
             'displayed_fair_value': displayed_fair_value,
@@ -2544,7 +2593,9 @@ class QuantIndicatorsEngine:
             'base_fair_value': float(base_fair_value),
             'recommended_buy_price': recommended_buy_price,
             'margin_of_safety_pct': margin_of_safety * 100,
-            'market_adjustment_pct': -2.0,
+            'market_adjustment_pct': float(_sec_adj),
+            'market_adjustment_why': _sec_why,
+            'sector_cycle': _sec_cycle,
             'upside_pct': upside_pct_out,
             'raw_upside_pct': float(raw_upside_pct),
             'upside_eval': upside_eval,
@@ -2592,7 +2643,8 @@ class QuantIndicatorsEngine:
         upside_eval = val_eval.get('upside_eval', '적정가 부근')
         fair_value_confidence = val_eval.get('fair_value_confidence', 0.0)
         fair_value_status = val_eval.get('fair_value_status', 'UNCALCULATED')
-        market_adjustment_pct = val_eval.get('market_adjustment_pct', -2.0)
+        # 폴백도 0 이다 — 근거 없는 −2% 를 기본값 자리에 숨겨 두지 않는다 (라운드 44)
+        market_adjustment_pct = val_eval.get('market_adjustment_pct', 0.0)
 
         # [P0-6 연동] 신뢰도 미달 구간에서는 중심 적정가·권장 매수가가 None으로 내려온다.
         displayed_fair_value = val_eval.get('displayed_fair_value')
@@ -3779,6 +3831,9 @@ class QuantIndicatorsEngine:
             'upside_pct': upside_pct,
             'upside_eval': upside_eval,
             'market_adjustment_pct': float(market_adjustment_pct),
+            'market_adjustment_why': val_eval.get('market_adjustment_why'),
+            # 업황은 재서 화면까지 보낸다 — 적정가에는 넣지 않는다 (라운드 44 기각)
+            'sector_cycle': val_eval.get('sector_cycle'),
             'fair_value_confidence': float(fair_value_confidence),
             # 권장 매수가에 샀을 때의 레벨 — 위 target_tech_*/stop_loss_price 는
             # **현재가** 기준이라, 아직 안 산 사람에게는 이쪽이 맞는 값이다.
@@ -4586,6 +4641,12 @@ class QuantIndicatorsEngine:
             is_replay = (_dt.datetime.now() - _tref_dt).days > 5
         except ValueError:
             is_replay = False
+
+        # 업황(섹터 사이클)도 시점을 지켜야 한다. 리플레이에 오늘의 미국 섹터
+        # 모멘텀을 붙이면 그 자체가 미래 누수다 — 기준일을 self 에 남겨서
+        # evaluate_valuation_metric 이 그 전날까지만 보도록 한다.
+        # (라이브에서는 None → 최신까지 본다)
+        self._sector_as_of = str(t_ref_str)[:10] if is_replay else None
 
         # 시장 국면 컨텍스트는 같은 시장 안에서는 종목마다 같으므로 캐시한다.
         # ⚠️ 시장별로 따로 캐시해야 한다. 하나만 들고 있으면 코스피 종목을 먼저 본 뒤

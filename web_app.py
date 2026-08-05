@@ -198,6 +198,27 @@ _APP_BG = _TOK['bg1']
 _APP_TX = _TOK['tx1']
 _SB_BG = _TOK['bg2']
 
+
+def _md_safe(text):
+    """
+    엔진이 만든 문장을 마크다운 위젯에 넘기기 전에 이스케이프한다.
+
+    ■ 실제 사고 (라운드 44)
+      `price_axes` 의 근거 문구 "이익·장부가 모델 5종의 25~75분위 범위
+      (넓게 보면 88,863~173,641원)" 가 화면에 **"25 75분위 범위 (넓게
+      보면 88,863 173,641원)"** 로 나왔다. 물결표 두 개를 Streamlit
+      마크다운이 취소선(`<del>`)으로 묶어 사이 글자를 지운 것이다.
+
+      숫자를 담은 문장은 **데이터**지 마크업이 아니다. 데이터를 마크업
+      파서에 그냥 넘긴 것이 원인이므로, 개별 문구가 아니라 **넘기는 자리**
+      에서 막는다. (`unsafe_allow_html=True` 블록은 인라인 HTML 안이라
+      파서가 건드리지 않아 같은 문구도 멀쩡했다 — 그래서 더 안 보였다)
+    """
+    s = '' if text is None else str(text)
+    for ch in ('~', '*', '_', '`'):
+        s = s.replace(ch, '\\' + ch)
+    return s
+
 # 흩어진 인라인 다크 표면·경계선을 토큰으로 접합한다 — 카드마다 다른 색 금지 (v2)
 _OLD_SURFACES = ['#161D2A', '#161D2A', '#161D2A', '#161D2A', '#161D2A',
                  '#1C2635', '#1C2635', '#161D2A', '#0B0F17']
@@ -481,8 +502,14 @@ def _render_toolbar(here_html: str = '') -> None:
     # '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
     # 왼쪽: 상태 점 + 되돌려 본 판단 수 + 엔진 5축 버전 (누르면 업데이트 이력)
     # 오른쪽: 지금 보고 있는 종목
-    _AX_KO = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
-              'schema': '스키마', 'news': '뉴스'}
+    # 라운드 44 — 적정가·섹터를 model 축에서 떼어 냈다. 축을 여기 손으로
+    # 나열하면 versioning.AXES 가 늘어도 화면이 안 따라온다(실제로 안 따라왔다).
+    # 이름만 여기서 주고, **목록은 versioning 이 정한다.**
+    _AX_KO_NAMES = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
+                    'schema': '스키마', 'news': '뉴스',
+                    'valuation': '적정가', 'sector': '업황'}
+    _AX_KO = {_a: _AX_KO_NAMES.get(_a, _ver.AXIS_KO.get(_a, _a))
+              for _a in _ver.AXES}
     # 라운드 39 — 버전이 낮다고 낡은 게 아니다. 버전은 **그 축이 마지막으로
     # 바뀐 시점**을 가리킨다. 룰북·뉴스가 v2026.08.02 인 것은 그 축의 파일이
     # 그 뒤로 안 바뀌었다는 뜻인데, 화면이 설명을 안 해서 낡아 보였다.
@@ -6573,8 +6600,9 @@ with tab_val:
             st.caption("① 이 기업의 값어치는? · 수년")
             if _b.get('available'):
                 st.markdown(f"### {_b['low']:,.0f} ~ {_b['high']:,.0f}원")
-                st.caption(f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
-                           f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})")
+                st.caption(_md_safe(
+                    f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
+                    f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})"))
                 # 라운드 38 — 범위의 **폭**을 말해 준다. LX인터내셔널이
                 # 31,860~78,511원(2.5배)이었는데 화면은 그냥 범위만 보여 줬다.
                 # 폭이 2배를 넘으면 "적정가가 좋다"고 읽으면 안 된다.
@@ -6584,18 +6612,18 @@ with tab_val:
                     st.warning(f"범위 폭이 **{_bw:.1f}배**입니다 — 모델들이 서로 "
                                f"크게 다른 값을 냈다는 뜻이라, 이 숫자로 "
                                f"'저평가'를 단정하지 마세요.")
-                st.caption(_b['basis'])
+                st.caption(_md_safe(_b['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_b.get('why', ''))
+                st.caption(_md_safe(_b.get('why', '')))
         with _ax_c2:
             st.caption("② 지금 시장이 매길 값은? · 수개월")
             if _m.get('available'):
                 st.markdown(f"### {_m['price']:,.0f}원")
-                st.caption(_m['basis'])
+                st.caption(_md_safe(_m['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_m.get('why', ''))
+                st.caption(_md_safe(_m.get('why', '')))
         with _ax_c3:
             st.caption("③ 그래서 얼마에 사나? · 수일")
             if _e.get('available'):
@@ -6605,12 +6633,52 @@ with tab_val:
                                + (f" · 손절 {_e['stop']:,.0f}원 · 1차 목표 "
                                   f"{_e['target1']:,.0f}원 (손익비 {_e['rr']})"
                                   if _e.get('stop') and _e.get('target1') else ""))
-                st.caption(_e['basis'])
+                st.caption(_md_safe(_e['basis']))
             else:
                 st.markdown("### 미산출")
-                st.caption(_e.get('why', ''))
+                st.caption(_md_safe(_e.get('why', '')))
+        # 업황조정 가치 — 사양 §3의 가운데 칸.
+        # 조정이 0 이어도 **왜 0 인지**를 적는다. 칸만 만들고 값을 비우면
+        # 사용자는 '반영됐겠거니' 하고 읽는다.
+        _cy = _AX.get('cycle_band') or {}
+        if _cy.get('available'):
+            st.markdown("###### 업황조정 가치 — 섹터 사이클을 얹으면")
+            _cy1, _cy2 = st.columns([1, 2])
+            with _cy1:
+                if _cy.get('adjusted'):
+                    st.markdown(f"**{_cy['low']:,.0f} ~ {_cy['high']:,.0f}원** "
+                                f"({_cy['adj_pct']:+.1f}%)")
+                else:
+                    st.markdown("**업황 미반영** (조정 0.0%)")
+            with _cy2:
+                if _cy.get('linked'):
+                    _mm = []
+                    if _cy.get('rs60') is not None:
+                        _mm.append(f"S&P500 대비 {_cy['rs60']:+.1f}%p")
+                    if _cy.get('mom60') is not None:
+                        _mm.append(f"프록시 60일 {_cy['mom60']:+.1f}%")
+                    if _cy.get('last_date'):
+                        _mm.append(f"최종 수신 {_cy['last_date']}"
+                                   + ("" if _cy.get('fresh', True)
+                                      else " (신선하지 않음)"))
+                    st.caption(_md_safe(f"{_cy.get('sector_ko') or '업종'} · "
+                                        + " · ".join(_mm)))
+                    if _cy.get('proxy_note'):
+                        st.caption(_md_safe(f"대용 지표: {_cy['proxy_note']}"))
+                    _rl = set(_cy.get('real_linked') or [])
+                    _ri = _cy.get('real_indicators') or []
+                    if _ri:
+                        _un = [x for x in _ri if x not in _rl]
+                        st.caption(_md_safe(
+                            "이 업종의 진짜 선행지표 — 연동: "
+                            + (", ".join(sorted(_rl)) if _rl else "없음")
+                            + " · 미연동: " + ", ".join(_un)))
+                else:
+                    st.caption(_md_safe(_cy.get('why') or '업종 미연동'))
+            if _cy.get('why') and not _cy.get('adjusted'):
+                st.caption(_md_safe(_cy['why']))
         for _n in (_AX.get('notes') or []):
-            st.caption(f"· {_n}")
+            st.caption(_md_safe(f"· {_n}"))
         if not _AX.get('consistent'):
             st.warning("세 축이 서로 어긋납니다 — 위 문구를 먼저 읽어 주세요.")
         _pol = _AX.get('policy') or {}
@@ -6626,7 +6694,9 @@ with tab_val:
     base_fair_val = four_scores.get('base_fair_value', target_price)
     upside_pct = four_scores.get('upside_pct')
     upside_eval = four_scores.get('upside_eval', '가치판단 보류')
-    mkt_adj_pct = four_scores.get('market_adjustment_pct', -2.0)
+    # 폴백도 0 — 근거 없는 −2% 를 화면 기본값 자리에 숨기지 않는다 (라운드 44)
+    mkt_adj_pct = four_scores.get('market_adjustment_pct', 0.0)
+    mkt_adj_why = four_scores.get('market_adjustment_why')
     conf_score = four_scores.get('fair_value_confidence', 0.0)
     rec_buy = four_scores.get('recommended_buy_price')
     mos_pct = four_scores.get('margin_of_safety_pct', 15.0)
@@ -6675,7 +6745,7 @@ with tab_val:
             <div style="text-align: right; background: #1C2635; padding: 16px 20px; border-radius: 12px; ">
                 <p style="margin: 0; font-size: 13px; color: #9DAABC;">기초 펀더멘털 가치</p>
                 <p style="margin: 4px 0 8px 0; font-size: 17px; font-weight: bold; color: #F3F6FA;">{base_fair_val:,.0f}{unit_str}</p>
-                <p style="margin: 0; font-size: 13px; color: #9DAABC;">시장조정 영향: <b style="color:#F2B84B;">{mkt_adj_pct:+.1f}%</b></p>
+                <p style="margin: 0; font-size: 13px; color: #9DAABC;">업황조정 영향: <b style="color:#F2B84B;">{mkt_adj_pct:+.1f}%</b></p>
                 <p style="margin: 4px 0 0 0; font-size: 13px; color: #9DAABC;">적정가 신뢰도: <b style="color:#4C8DFF;">{conf_score:.0f} / 100점</b></p>
             </div>
         </div>
@@ -6698,7 +6768,14 @@ with tab_val:
         </div>
     </div>
     ''', unsafe_allow_html=True)
-        
+
+    # 업황조정이 0 이면 **왜 0 인지** 바로 밑에 적는다.
+    # 라운드 44 전까지 이 자리는 근거 없는 −2% 상수였고, 화면은 그걸
+    # '시장조정'이라고만 불렀다. 수치가 없는 것보다 나쁜 건, 근거 없는
+    # 수치를 근거 있는 척 보여 주는 것이다.
+    if mkt_adj_why:
+        st.caption(_md_safe(f"업황조정 {mkt_adj_pct:+.1f}% — {mkt_adj_why}"))
+
     with st.expander("[적정가 산출 근거 & 기업유형별 평가모델 내역 펼쳐보기]", expanded=True):
         # 기업유형 소속 확률 (상위 4개)
         tprobs = val_eval.get('type_probabilities') or {}
@@ -6827,8 +6904,11 @@ with tab_scen:
     # 이름을 갈라 적고, 실행 가격 행을 별도로 넣어 어느 것이 오늘 쓰는
     # 값인지 분명히 한다.
     st.markdown("목표가격 및 손절·위험선 산출 근거 명시적 표")
-    st.caption("**신규 매수자용 실행 가격**은 아래 1~2행이 아니라 "
-               "**'실행 진입가' 행**입니다. 1~2행은 분기 실적 기반 **장기 "
+    # 물결표를 쓰지 않는다 — 이 문장은 굵게 표시를 의도적으로 쓰므로
+    # _md_safe 로 통째로 이스케이프할 수 없고, 물결표 두 개가 짝을 이루면
+    # 마크다운이 취소선으로 묶어 사이 글자를 지운다 (라운드 44 실측 결함).
+    st.caption("**신규 매수자용 실행 가격**은 아래 1·2행이 아니라 "
+               "**'실행 진입가' 행**입니다. 1·2행은 분기 실적 기반 **장기 "
                "가치 참고선**이라 오늘 살 자리와 다를 수 있습니다.")
     st.markdown(f"""
     <table class='cross-val-matrix'>

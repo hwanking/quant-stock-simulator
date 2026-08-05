@@ -1,12 +1,79 @@
 {
  "axes": {
-  "model": "v2026.08.05.6",
+  "model": "v2026.08.05.7",
   "scoring": "v2026.08.05.1",
-  "rulebook": "v2026.08.05.0",
-  "schema": "v2026.08.05.5",
-  "news": "v2026.08.05.1"
+  "rulebook": "v2026.08.05.1",
+  "schema": "v2026.08.05.6",
+  "news": "v2026.08.05.1",
+  "sector": "v2026.08.05.0",
+  "valuation": "v2026.08.05.0"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.05.6",
+   "previous": "v2026.08.05.5",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "버전 축에 valuation·sector 추가 (5축 → 7축)",
+   "note": "적정가 산식이 바뀌어도 model 하나가 움직여서 이력만으로는 점수 게이트 변경과 갈라낼 수 없었다.",
+   "created_at": "2026-08-05T06:52:09+00:00",
+   "effective_from": "2026-08-05"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.05.7",
+   "previous": "v2026.08.05.6",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "적정가 파이프라인에 업황 축 연결 — 표시 전용 경로",
+   "note": "val_eval 에 sector_cycle·market_adjustment_why 추가. price_axes 에 cycle_band 신설.",
+   "created_at": "2026-08-05T06:52:09+00:00",
+   "effective_from": "2026-08-05"
+  },
+  {
+   "axis": "rulebook",
+   "axis_ko": "룰북",
+   "version": "v2026.08.05.1",
+   "previous": "v2026.08.05.0",
+   "kind": "gate",
+   "kind_ko": "게이트 변경",
+   "bump": "date",
+   "reason": "[RULES_SECTOR] 신설 — 업황 조정 계수와 미적용 사유를 룰북에 고정",
+   "note": "조정 폭 전부 0. 사양이 예시로 든 ±15/±8/±3 을 쓰지 않는다 — 실측되지 않은 숫자다. 재는 쪽(sector_cycle)과 쓰는 쪽(룰북) 분리.",
+   "created_at": "2026-08-05T06:52:09+00:00",
+   "effective_from": "2026-08-05"
+  },
+  {
+   "axis": "valuation",
+   "axis_ko": "적정가 엔진",
+   "version": "v2026.08.05.0",
+   "previous": "v2026.08.02.0",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "시장조정 상수 −2.0% 제거 — 근거 없는 값이라 0으로 두고 사유 표기",
+   "note": "종전 market_adjustment_pct 는 전 종목·전 기간 상수 −2.0 이었다. 어느 표본에서 나온 값인지 근거가 없어 제거했다. 실측 대체를 시도했으나 기각되어 0 이다. 3단계 적정가(기본/업황조정/시장반영) 분리.",
+   "created_at": "2026-08-05T06:52:09+00:00",
+   "effective_from": "2026-08-05"
+  },
+  {
+   "axis": "sector",
+   "axis_ko": "섹터 사이클",
+   "version": "v2026.08.05.0",
+   "previous": "v2026.08.02.0",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "섹터 사이클 엔진 신설 — 글로벌 프록시 22종·매크로 7종 연동",
+   "note": "사전등록 게이트 G1~G4 중 3개 미달로 **적정가 미반영**. 표시 전용. rs60 lift +7.6%p 는 통과했으나 valid 에서 방향이 뒤집혀(G3) 신호 일관성이 없다. docs/PREREG_R44_SECTOR_OVERLAY.md",
+   "created_at": "2026-08-05T06:52:09+00:00",
+   "effective_from": "2026-08-05"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
