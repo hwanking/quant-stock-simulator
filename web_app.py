@@ -2010,8 +2010,54 @@ def run_market_scan():
     watch = [w['code'] for w in (st.session_state.get('watchlist') or [])]
     watch += [p.ticker.split('.')[0] for p in (st.session_state.get('positions') or [])
               if p.ticker.split('.')[0] not in watch]
+    # ── 전 종목 경량 스캔 ────────────────────────────────────────────
+    # 순위 페이지 2종에서만 출발하면 거래가 한산한 종목은 애초에 후보가
+    # 되지 못한다. 유니버스에는 이미 시총·거래대금이 실려 있으므로
+    # **추가 요청 없이** 전 종목을 한 번 훑을 수 있다. 여기서 거르는 건
+    # 데이터가 없거나 유동성이 없어 어차피 못 사는 종목뿐이다.
+    #
+    # ⚠️ 라운드 37 — 이 블록은 관심종목 탐색 **앞**에 와야 한다.
+    # 종전에는 뒤에 있었고, 순위 페이지가 비면 그 전에 return 해 버려서
+    # 경량 스캔이 **실행조차 안 된 채** 화면에 '0개'로 찍혔다. 사용자는
+    # "전 종목을 훑었는데 하나도 없구나"로 읽는다 — 사실이 아니었다.
+    _progress("종목 코드·시장 구분 확인 중")
+    universe = engine_init.get_screener_universe(full_market=True)
+    by_code = {u['symbol'].split('.')[0]: u for u in universe}
+
+    _MIN_TRADE_VALUE = 5e8          # 당일 거래대금 5억원
+    # ⚠️ 라운드 37 — **못 잰 것으로 거르지 않는다.**
+    # 유니버스가 거래대금을 안 실어 오는 시간대(장 시작 전 등)에는
+    # today_trade_value 가 전 종목 None 이고 liquidity_confirmed 도 전부
+    # False 다. 종전 코드는 이걸 '유동성 없음'으로 세어 2,997종목을 전부
+    # 탈락시켰고, 화면은 "유동성·데이터 조건 통과 0개"라고 말했다.
+    # 실제로는 유동성이 없는 게 아니라 **거래대금을 수집하지 못한 것**이다.
+    # 그래서 수신율을 먼저 보고, 거의 안 왔으면 그 필터를 끈다.
+    _tv_seen = sum(1 for u in universe if (u.get('today_trade_value') or 0) > 0)
+    _tv_usable = _tv_seen >= max(20, len(universe) * 0.05)
+    _lite = {'total': len(universe), 'no_price': 0, 'no_liquidity': 0,
+             'thin': 0, 'passed': 0, 'tv_seen': _tv_seen,
+             'tv_usable': _tv_usable}
+    _lite_pass, _lite_rows = set(), []
+    for u in universe:
+        if not u.get('base_price'):
+            _lite['no_price'] += 1
+            continue
+        if _tv_usable:
+            if not u.get('liquidity_confirmed'):
+                _lite['no_liquidity'] += 1
+                continue
+            if (u.get('today_trade_value') or 0) < _MIN_TRADE_VALUE:
+                _lite['thin'] += 1
+                continue
+        _lite_pass.add(u['symbol'].split('.')[0])
+        _lite_rows.append(u)
+    _lite['passed'] = len(_lite_pass)
+    st.session_state['scan_lite'] = _lite
+
+    # 순위 페이지가 죽으면 경량 스캔 통과 종목을 거래대금 순으로 대신 쓴다
     att = market_attention.find_attention_candidates(
-        attention_strategy, top_n=scan_depth, progress=_progress, watchlist=watch)
+        attention_strategy, top_n=scan_depth, progress=_progress,
+        watchlist=watch, fallback_pool=_lite_rows)
     st.session_state['attention_result'] = att
     if att.get('unavailable') or not att['rows']:
         _bar.empty()
@@ -2020,32 +2066,6 @@ def run_market_scan():
         return
 
     # 2단계 — 후보에 시장 구분을 붙여 기존 정밀 파이프라인에 넘긴다
-    _progress("종목 코드·시장 구분 확인 중")
-    universe = engine_init.get_screener_universe(full_market=True)
-    by_code = {u['symbol'].split('.')[0]: u for u in universe}
-
-    # ── 전 종목 경량 스캔 ────────────────────────────────────────────
-    # 순위 페이지 2종에서만 출발하면 거래가 한산한 종목은 애초에 후보가
-    # 되지 못한다. 유니버스에는 이미 시총·거래대금이 실려 있으므로
-    # **추가 요청 없이** 전 종목을 한 번 훑을 수 있다. 여기서 거르는 건
-    # 데이터가 없거나 유동성이 없어 어차피 못 사는 종목뿐이다.
-    _MIN_TRADE_VALUE = 5e8          # 당일 거래대금 5억원
-    _lite = {'total': len(universe), 'no_price': 0, 'no_liquidity': 0,
-             'thin': 0, 'passed': 0}
-    _lite_pass = set()
-    for u in universe:
-        if not u.get('base_price'):
-            _lite['no_price'] += 1
-            continue
-        if not u.get('liquidity_confirmed'):
-            _lite['no_liquidity'] += 1
-            continue
-        if (u.get('today_trade_value') or 0) < _MIN_TRADE_VALUE:
-            _lite['thin'] += 1
-            continue
-        _lite_pass.add(u['symbol'].split('.')[0])
-    _lite['passed'] = len(_lite_pass)
-    st.session_state['scan_lite'] = _lite
 
     target, unmapped = [], []
     for r in att['rows']:
@@ -2184,8 +2204,13 @@ if st.session_state.get('show_screener', False):
                 _deep_cap = _deep_done
             _lt = st.session_state.get('scan_lite') or {}
             # 탐색률 — 유동성 있는 전체 중 몇 %를 정밀분석했나. 과장하지 않는다.
-            _deep_rate = (scan_depth / _lt['passed'] * 100
-                          if _lt.get('passed') else 0.0)
+            # 분모가 0 이면 비율을 만들지 않는다 — 종전에는 max(1, …) 때문에
+            # '0.0% (5/1)' 이라는 말이 안 되는 표시가 나갔다 (라운드 37).
+            _deep_pass = int(_lt.get('passed') or 0)
+            _deep_rate_txt = (f"{scan_depth / _deep_pass * 100:.1f}% "
+                              f"({scan_depth}/{_deep_pass:,})"
+                              if _deep_pass > 0
+                              else "미산출 — 경량 스캔이 0개를 반환했습니다")
 
             st.markdown(f"""
             <div style='background:#161D2A; padding:16px; border-radius:10px; margin-bottom:16px; '>
@@ -2194,9 +2219,15 @@ if st.session_state.get('show_screener', False):
                     <li>분석 기준일: {t_ref_str} · rho {rho_cutoff}</li>
                     <li>1단계 <b>전 종목 경량 스캔</b>: 코스피·코스닥 <b>{_lt.get('total', 0):,}개</b>
                         → 유동성·데이터 조건 통과 <b>{_lt.get('passed', 0):,}개</b>
-                        <span style='font-size:13px;'>(시세 없음 {_lt.get('no_price', 0):,} ·
-                        거래 미확인 {_lt.get('no_liquidity', 0):,} ·
-                        거래대금 5억 미만 {_lt.get('thin', 0):,} 제외)</span></li>
+                        <span style='font-size:13px;'>{
+                            f"(시세 없음 {_lt.get('no_price', 0):,} · "
+                            f"거래 미확인 {_lt.get('no_liquidity', 0):,} · "
+                            f"거래대금 5억 미만 {_lt.get('thin', 0):,} 제외)"
+                            if _lt.get('tv_usable')
+                            else f"(거래대금 미수신 — 유동성 필터를 적용하지 "
+                                 f"않았습니다. 수신 {_lt.get('tv_seen', 0):,}종목. "
+                                 f"못 잰 것으로 거르지 않습니다)"
+                        }</span></li>
                     <li>2단계 후보 풀: <b>{st.session_state.get('scan_universe_total', 0):,}개</b>
                         — 거래대금·상승률 순위 상위에서 수집 (ETF·우선주·스팩·리츠 제외)</li>
                     <li>3단계 관심지표 계산: 최대 <b>{_deep_cap:,}개</b>
@@ -2204,8 +2235,7 @@ if st.session_state.get('show_screener', False):
                     <li>4단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
                         → 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개</li>
                     <li>최종 행동 필수조건 통과: <b style='color:{"#35C98B" if recommended else "#F2B84B"};'>{len(recommended)}개</b></li>
-                    <li><b>전체 시장 정밀분석 비율: {_deep_rate:.1f}%</b>
-                        ({scan_depth}/{max(1, _lt.get('passed', 0)):,})</li>
+                    <li><b>전체 시장 정밀분석 비율: {_deep_rate_txt}</b></li>
                 </ul>
                 <p style='margin:0; font-size:13px; color:#F2B84B; line-height:1.65;'>
                     오늘의 추천은 코스피·코스닥 전 종목을 <b>경량 스캔</b>한 뒤,
@@ -2400,8 +2430,28 @@ if st.session_state.get('show_screener', False):
                         st.markdown(f"- **{f['name']}** (`{f['symbol']}`) — {f['reason']}")
 
             if len(top_recs) == 0:
-                st.warning("**현재 추천주 없음** — 필수조건을 모두 통과한 종목이 없습니다. "
-                           "무리한 신규 매수보다 현금 유지가 우선입니다.")
+                # ── 데이터 미수신과 판정 결과를 구분한다 (라운드 37) ──────
+                # 후보를 하나도 못 받은 것은 **엔진의 판정이 아니라 수집 실패**다.
+                # 둘을 같은 문장으로 말하면 "오늘은 살 게 없다"로 읽힌다.
+                _scanned = int((st.session_state.get('scan_lite') or {})
+                               .get('passed') or 0)
+                _pool = int(st.session_state.get('scan_universe_total') or 0)
+                if _scanned == 0 or _pool == 0:
+                    st.error(
+                        "**판정 불가 — 후보 데이터를 받지 못했습니다.** "
+                        + ("전 종목 경량 스캔이 0개를 반환했습니다. "
+                           if _scanned == 0 else "")
+                        + ("순위 페이지에서 후보 풀을 만들지 못했습니다. "
+                           if _pool == 0 else "")
+                        + "이것은 '오늘 살 종목이 없다'는 **판정이 아니라 "
+                          "수집 실패**입니다. 장 시작 전이거나 데이터 출처가 "
+                          "일시적으로 응답하지 않을 때 발생합니다 — "
+                          "잠시 후 다시 스캔해 주세요.")
+                else:
+                    st.warning(
+                        "**현재 추천주 없음** — 정밀분석한 "
+                        f"{len(scan_results)}개 중 필수조건을 모두 통과한 종목이 "
+                        "없습니다. 무리한 신규 매수보다 현금 유지가 우선입니다.")
                 if block_counter:
                     top_blocks = block_counter.most_common(5)
                     st.markdown(
@@ -2724,8 +2774,17 @@ if _pmr:
         _picks_show = []
 
     if not _picks_show and not _pm_stale:
-        # 억지로 종목 수를 채우지 않는다 (사용자 사양 §2)
-        st.error(f"**{_vc_view.NO_PICK_LINE}**")
+        # 억지로 종목 수를 채우지 않는다 (사용자 사양 §2).
+        # 다만 **후보를 아예 못 받은 것**과 **받았는데 다 떨어진 것**은
+        # 다른 사실이다 (라운드 37). 앞의 경우를 뒤로 말하면 거짓이 된다.
+        if not _picks_all:
+            st.error(
+                "**판정 불가 — 이 리포트는 후보 종목을 받지 못한 상태로 "
+                "만들어졌습니다.** 검증 조건을 통과하지 못한 것이 아니라 "
+                "**수집 단계에서 후보가 0개**였습니다. 사이드바에서 스캔을 "
+                "다시 실행해 주세요.")
+        else:
+            st.error(f"**{_vc_view.NO_PICK_LINE}**")
 
     # ── 통과 못 한 종목 — 사유를 8분류로 명시 (사용자 사양 §2) ────────────
     if _picks_gated and not _pm_stale:
@@ -4266,6 +4325,25 @@ st.markdown(f"""
 # ═══════════════════════════════════════════════════════════════════════════
 verdict = q_engine.build_final_verdict(snap)
 
+# ── 중앙 판정 (라운드 34·37) ─────────────────────────────────────────────
+# 추천 카드·종목 상세·가늠 AI·차트·보유자 화면이 **이 결과 하나만** 읽는다.
+# 라운드 31 진단: 같은 개념에 이름이 5개(권장 매수가)·2개(손절)·2개(목표)
+# 였고, 카드는 premarket 의 rec_buy/target/stop 을, 상세는 four_scores
+# 원본을 읽었다. 경로가 둘이라 한쪽만 고치는 일이 생겼다(라운드 30 모순).
+#
+# ⚠️ 별칭을 `_vc` 로 쓰면 안 된다 — 그 이름은 아래에서 **결론 배너의
+# 색상**으로 쓰인다. 실제로 그렇게 썼다가 배너 스타일 자리에 모듈 객체
+# (`<module 'verdict_core' from '...'>`)가 찍혀 HTML 이 깨졌고, 화면에
+# `from=""` 속성과 `; line-height:1.15;'>` 조각이 텍스트로 새어 나왔다.
+#
+# 결론 배너가 실행 가격을 여기서 받아 쓰므로 **배너보다 먼저** 만든다.
+import next_action as _na
+import verdict_core as _vcore
+_NA = _na.build(four_scores, tech_df, realtime_price, verdict)
+CORE = _vcore.build(four_scores, verdict=verdict,
+                    price_axes=four_scores.get('price_axes'),
+                    next_action=_NA, realtime_price=realtime_price)
+
 _ACTION_STYLE = {
     'BUY':        ("#35C98B", "🟢", "매수"),
     'ACCUMULATE': ("#35C98B", "🟢", "분할매수"),
@@ -4277,15 +4355,35 @@ _ACTION_STYLE = {
 _vc, _vi, _vshort = _ACTION_STYLE.get(verdict['action'], ("#9DAABC", "⚪", "판단 보류"))
 _vscore = verdict['score']
 
-# 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만; 상세 카드에서는 중복 표기하지 않음)
-# 적정가 기반 권장 매수가가 없으면 기술 지지 기반 '진입 검토가'를 대신 보여준다
-# (엔진이 이미 계산한 지지선 재사용 — 계층이 다름을 라벨로 명시, 없으면 없다고 말한다).
-rec_buy_val = four_scores.get('recommended_buy_price')
+# 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만)
+#
+# ⚠️ 라운드 37 — 여기가 마지막으로 남아 있던 **두 번째 가격 경로**였다.
+# 배너가 `recommended_buy_price`(적정가 × 안전마진)를 실행 가격으로 써서,
+# 삼성전자 현재가 240,000원에 "147,567원 이하로 내려올 때만 사세요"(−38.5%)
+# 라고 말했다. 그건 라운드 25 에서 폐기한 산식이고, 사용자가 처음부터
+# 지적한 바로 그 문제다("14,600원인데 9,388원까지 언제 떨어져").
+# 게다가 그 가격 기준으로 그린 손절(180,832원)이 매수가보다 **위**였다.
+#
+# 이제 배너도 중앙 판정(CORE)이 낸 실행 진입가만 쓴다. 적정가 기반 값은
+# 장기 참고선으로 아래에 따로 적는다.
+_core_entry = (CORE or {}).get('pullback_zone')
+_value_floor = four_scores.get('recommended_buy_price')
+rec_buy_val = _core_entry if _core_entry else _value_floor
 _er_price = four_scores.get('entry_review_price')
 _er_basis = four_scores.get('entry_review_basis') or ''
 rec_buy_sub = ''
 if rec_buy_val is not None:
     rec_buy_display = f"{rec_buy_val:,.0f}원 이하"
+    if _core_entry:
+        # 적정가 기반 값은 **오늘의 매수가가 아니라 장기 참고선**이다.
+        # 둘이 크게 벌어질 때만 함께 적어 오해를 막는다.
+        if _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
+            rec_buy_sub = (
+                f"장기 가치 참고선은 {_value_floor:,.0f}원이지만, 20일 안에 "
+                f"닿을 자리가 아니라 오늘의 매수가로 쓰지 않습니다")
+    elif _value_floor:
+        rec_buy_sub = ("적정가 기반 장기 참고선 — 변동성 기반 진입가를 "
+                       "산출하지 못해 대신 표시합니다")
 elif _er_price:
     rec_buy_display = f"{_er_price:,.0f}원 부근"
     _er_why = ("모델 범위 밖" if four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN'
@@ -4309,9 +4407,11 @@ _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 
 # 사람에게는 맞지 않는다. 실측(라운드 22b · 30종목)에서 권장 매수가가 나온
 # 17종목 중 11종목(65%)의 손절가가 매수가보다 위였다 — 최대 +193%.
 # 그래서 진입가 기준 레벨을 따로 계산해 살 가격 칸 밑에 붙인다.
-_e_stop = four_scores.get('entry_stop_price')
-_e_t1 = four_scores.get('entry_target_1st')
-_e_rr = four_scores.get('entry_rr')
+# 라운드 37: 중앙 판정이 정합 가드를 이미 통과시킨 값만 쓴다. 어긋난 값은
+# CORE 가 None 으로 비워 두므로, 여기서 다시 그리지 않는다.
+_e_stop = (CORE or {}).get('new_stop')
+_e_t1 = (CORE or {}).get('new_target')
+_e_rr = (CORE or {}).get('rr')
 _entry_lv_html = ''
 if _e_stop and _e_t1:
     _entry_lv_html = (
@@ -4325,9 +4425,19 @@ if _e_stop and _e_t1:
 # ── 도달 가능성 · 논리 검사 ──────────────────────────────────────────────
 # "권장 매수가가 현실적으로 닿는 가격인가"를 σ 로 재서 말로 옮긴다.
 # 안 적으면 현재가의 절반인 값이 실행 가격처럼 보인다.
-_rc_sig = four_scores.get('rec_buy_sigma')
-_rc_reach = four_scores.get('rec_buy_reach')
-_rc_drop = four_scores.get('rec_buy_drop_pct')
+# 라운드 37 — 이 σ 표기는 **화면에 실제로 뜬 매수가**를 기준으로 해야 한다.
+# 엔진의 rec_buy_sigma 는 적정가 기반 값(147,560원) 기준이라, 배너가
+# 228,287원을 보여 주면서 "−41.0% · 1.05σ · 멀다"라고 말하는 어긋남이 났다.
+_rc_sig = (CORE or {}).get('depth_sigma')
+_rc_drop = (CORE or {}).get('gap_pct')
+if _rc_sig is None:                       # 중앙 판정이 못 낸 경우만 폴백
+    _rc_sig = four_scores.get('rec_buy_sigma')
+    _rc_drop = four_scores.get('rec_buy_drop_pct')
+    _rc_reach = four_scores.get('rec_buy_reach')
+else:
+    _rc_reach = ('가까움' if _rc_sig <= 0.5 else
+                 '닿을 만함' if _rc_sig <= 1.0 else
+                 '멀다' if _rc_sig <= 2.1 else '사실상 도달 어려움')
 _t1_sig = four_scores.get('target1_sigma')
 _t1_reach = four_scores.get('target1_reach')
 _sig_pct = four_scores.get('horizon_sigma_pct')
@@ -4371,20 +4481,8 @@ if _t1_sig is not None and _t1_sig > 2.0:
     _logic_warn.append(f'보유자 1차 목표가 20일 변동폭 대비 {_t1_sig}σ '
                        f'로 멀어 도달 가능성이 낮습니다')
 
-# ── 다음 조건 — "사지 마세요"로 끝내지 않는다 ────────────────────────────
-# 관망이라면 **언제·어떤 조건에서** 살 수 있는지 반드시 적는다.
-import next_action as _na
-_NA = _na.build(four_scores, tech_df, realtime_price, verdict)
-
-# ── 중앙 판정 (라운드 34) ────────────────────────────────────────────────
-# 추천 카드·종목 상세·가늠 AI·차트·보유자 화면이 **이 결과 하나만** 읽는다.
-# 라운드 31 진단: 같은 개념에 이름이 5개(권장 매수가)·2개(손절)·2개(목표)
-# 였고, 카드는 premarket 의 rec_buy/target/stop 을, 상세는 four_scores
-# 원본을 읽었다. 경로가 둘이라 한쪽만 고치는 일이 생겼다(라운드 30 모순).
-import verdict_core as _vc
-CORE = _vc.build(four_scores, verdict=verdict,
-                 price_axes=four_scores.get('price_axes'),
-                 next_action=_NA, realtime_price=realtime_price)
+# _NA · CORE 는 결론 배너보다 앞(4326행 부근)에서 이미 만들었다.
+# 배너가 실행 가격을 CORE 에서 받아 쓰기 때문이다.
 
 # ── 관망 조건 감시 — 저장만 하고 다시 안 보면 매번 직접 검색해야 한다 ────
 import watch_alerts as _wa
@@ -4508,7 +4606,14 @@ try:
         four_scores, verdict, realtime_price,
         user_avg=None, user_qty=None)['new_buyer']
     _banner_sub = str(_easy_nb_banner.get('line') or '')
-    if '이하로 내려올 때만' in _banner_sub:
+    # 라운드 37 — 이 문장은 엔진의 옛 권장 매수가(적정가 × 안전마진)로
+    # 만들어진다. 배너 본문은 이미 중앙 판정의 실행 진입가를 보여 주므로,
+    # 제목만 옛 값을 말하면 같은 카드 안에서 두 가격이 싸운다
+    # (실측: 제목 147,560원 vs 본문 228,287원). 실행 가격으로 다시 쓴다.
+    if '이하로 내려올 때만' in _banner_sub and _core_entry:
+        _banner_sub = (f"{_core_entry:,.0f}원 이하로 내려올 때만 사세요. "
+                       f"(현재가 {realtime_price:,.0f}원은 조건 위)")
+    elif '이하로 내려올 때만' in _banner_sub:
         _banner_sub += f" (현재가 {realtime_price:,.0f}원은 조건 위)"
 except Exception:
     _banner_sub = ''

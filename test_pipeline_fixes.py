@@ -4881,7 +4881,10 @@ check("퍼널이 4단계로 표시된다",
 check("전체 시장 정밀분석 비율을 표시한다",
       '_deep_rate' in _w98 and '전체 시장 정밀분석 비율' in _w98)
 check("탐색률을 유동성 통과분 기준으로 센다 (분모를 부풀리지 않는다)",
-      "scan_depth / _lt['passed'] * 100" in _w98)
+      'scan_depth / _deep_pass * 100' in _w98)
+# 라운드 37: 분모가 0이면 비율 자체를 만들지 않는다 ('0.0% (5/1)' 방지)
+check("분모가 0이면 비율을 만들지 않는다 (라운드 37)",
+      '경량 스캔이 0개를 반환했습니다' in _w98)
 check("여전히 '추천 없음'의 뜻을 밝힌다",
       "'추천 없음'은 시장에 후보가 없다는 뜻이 아닙니다" in _w98)
 check("2단계가 순위 페이지 출발임을 계속 밝힌다",
@@ -5523,7 +5526,7 @@ check("낡으면 가격을 화면에 두지 않는다",
 # ── ⑤ 추천 카드와 상세가 같은 중앙 판정을 읽는가 ──────────────────────
 check("중앙 판정 모듈이 있다", _os.path.exists(
     _os.path.join(PROJ, 'verdict_core.py')))
-check("상세 화면이 중앙 판정을 만든다", 'CORE = _vc.build(' in _w105)
+check("상세 화면이 중앙 판정을 만든다", 'CORE = _vcore.build(' in _w105)
 check("추천 리포트가 같은 함수를 쓴다",
       'import verdict_core as _vc' in _p105 and 'def _core_of(' in _p105)
 check("카드가 중앙 판정을 우선 읽는다",
@@ -5723,6 +5726,121 @@ if _snap106:
     # 현재가와 분석 기준일
     check("중앙 판정이 현재가를 싣는다", _detail106['current_price'] is not None)
     check("보유기간을 싣는다", _detail106['horizon_days'] == 20)
+
+# ── 라운드 37 — 데이터 미수신을 '추천 없음'으로 말하지 않는다 ──────────
+#   실행 확인에서 잡았다: 경량 스캔 0개 · 후보 풀 0개 인데 화면은
+#   "현재 추천주 없음 — 필수조건을 통과한 종목이 없습니다" 라고 했다.
+#   그건 판정이 아니라 수집 실패다. 그리고 '0.0% (5/1)' 이라는 말이
+#   안 되는 비율이 나갔다 (분모에 max(1, …) 를 쓴 탓).
+_w107 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("수집 실패와 판정 결과를 구분한다",
+      '판정 불가 — 후보 데이터를 받지 못했습니다' in _w107)
+check("수집 실패를 판정으로 오해하지 않게 명시",
+      "'오늘 살 종목이 없다'는 **판정이 아니라 " in _w107
+      or "판정이 아니라" in _w107)
+check("추천 없음은 실제 분석 건수를 밝힌다",
+      '정밀분석한 ' in _w107 and 'len(scan_results)' in _w107)
+check("동결 리포트도 같은 구분을 한다",
+      '수집 단계에서 후보가 0개' in _w107)
+check("분모가 0이면 비율을 만들지 않는다",
+      'max(1, _lt.get(' not in _w107
+      and '경량 스캔이 0개를 반환했습니다' in _w107)
+check("0으로 나눈 가짜 비율이 없다", '_deep_rate:.1f' not in _w107)
+
+# ── 라운드 37 — import 별칭이 화면 변수를 덮어쓰지 않는가 ──────────────
+#   실행 확인에서 잡았다: `import verdict_core as _vc` 가 결론 배너의 색상
+#   변수 `_vc` 를 덮어써서, 스타일 자리에 모듈 객체가 찍혔다. 화면에
+#   `from=""` 속성과 `; line-height:1.15;'>` 조각이 텍스트로 새어 나왔다.
+import ast as _ast107
+_tree107 = _ast107.parse(_w107)
+_alias107, _assign107 = {}, {}
+for _n107 in _ast107.walk(_tree107):
+    if isinstance(_n107, _ast107.Import):
+        for _a in _n107.names:
+            if _a.asname:
+                _alias107[_a.asname] = _a.name
+    elif isinstance(_n107, (_ast107.Assign,)):
+        # st.session_state['x'] = ... 는 st 를 다시 묶는 게 아니다.
+        # 직접 이름 대입(과 튜플 풀기)만 재바인딩으로 센다.
+        _flat = []
+        for _t in _n107.targets:
+            if isinstance(_t, _ast107.Name):
+                _flat.append(_t)
+            elif isinstance(_t, (_ast107.Tuple, _ast107.List)):
+                _flat += [_e for _e in _t.elts
+                          if isinstance(_e, _ast107.Name)]
+        for _sub in _flat:
+            _assign107.setdefault(_sub.id, _sub.lineno)
+_clash107 = {a: (m, _assign107[a]) for a, m in _alias107.items()
+             if a in _assign107}
+check("import 별칭이 화면 변수와 겹치지 않는다",
+      not _clash107,
+      '겹침: ' + ', '.join(f'{a}(모듈 {m}, 대입 {l}행)'
+                          for a, (m, l) in _clash107.items()))
+# 모듈 객체가 f-string 으로 HTML 에 들어가면 이 조각이 나온다
+_code107 = "\n".join(l for l in _w107.splitlines()
+                     if not l.lstrip().startswith('#'))
+check("모듈 객체가 f-string 으로 들어가는 자리가 없다",
+      '<module' not in _code107)
+check("겹침 사고를 코드에 기록했다",
+      "모듈 객체" in _w107 and "결론 배너의" in _w107
+      and "별칭을 `_vc` 로 쓰면 안 된다" in _w107)
+
+# ── 라운드 37 — 못 잰 것으로 거르지 않는다 ────────────────────────────
+#   실행 확인에서 잡았다: 유니버스가 today_trade_value 를 안 실어 오는
+#   시간대(장 전)에 liquidity_confirmed 가 전 종목 False 라, 경량 스캔이
+#   2,997종목을 전부 탈락시키고 화면은 "유동성 조건 통과 0개"라고 말했다.
+#   유동성이 없는 게 아니라 **거래대금을 수집하지 못한 것**이다.
+check("거래대금 수신율을 먼저 본다", '_tv_usable' in _w107
+      and '_tv_seen' in _w107)
+check("미수신이면 유동성 필터를 끈다",
+      'if _tv_usable:' in _w107 and 'no_liquidity' in _w107)
+check("못 잰 것으로 거르지 않는다고 코드에 남긴다",
+      '못 잰 것으로 거르지 않는다' in _w107)
+check("화면이 미수신 사실을 밝힌다",
+      '거래대금 미수신 — 유동성 필터를 적용하지' in _w107)
+
+# 순위 페이지가 죽어도 추천이 멈추지 않는가
+_ma107 = open(_os.path.join(PROJ, 'market_attention.py'), encoding='utf-8').read()
+import inspect as _ins107
+import market_attention as _MA107
+check("탐색 함수가 대체 후보를 받는다",
+      'fallback_pool' in _ins107.signature(
+          _MA107.find_attention_candidates).parameters)
+check("호출부가 경량 스캔 결과를 넘긴다", 'fallback_pool=_lite_rows' in _w107)
+check("경량 스캔이 탐색보다 먼저 온다",
+      0 < _w107.find("_lite['passed'] = len(_lite_pass)")
+      < _w107.find('market_attention.find_attention_candidates'))
+check("거래대금 미수신이면 시총으로 정렬",
+      "'시가총액 대체'" in _ma107 and '_tv_ok' in _ma107)
+check("대체 사용 사실을 출처에 남긴다", '순위 페이지 미수신' in _ma107)
+
+# ── 라운드 37 — 결론 배너도 중앙 판정을 쓴다 (마지막 두 번째 경로) ─────
+#   실행 확인에서 잡았다: 배너가 recommended_buy_price(적정가×안전마진)를
+#   실행 가격으로 써서 삼성전자 240,000원에 "147,567원 이하로 내려올 때만
+#   사세요"(−38.5%)라고 말했다. 라운드 25 에서 폐기한 산식이고, 그 값으로
+#   그린 손절(180,832원)은 매수가보다 위였다.
+check("배너 매수가가 중앙 판정에서 온다",
+      "_core_entry = (CORE or {}).get('pullback_zone')" in _w107
+      and 'rec_buy_val = _core_entry if _core_entry else _value_floor' in _w107)
+check("배너 손절·목표도 중앙 판정에서 온다",
+      "_e_stop = (CORE or {}).get('new_stop')" in _w107
+      and "_e_t1 = (CORE or {}).get('new_target')" in _w107)
+check("CORE 가 배너보다 먼저 만들어진다",
+      0 < _w107.find('CORE = _vcore.build(')
+      < _w107.find('_core_entry = (CORE or {})'))
+check("적정가 값은 장기 참고선으로만 적는다",
+      '장기 가치 참고선은' in _w107
+      and '오늘의 매수가로 쓰지 않습니다' in _w107)
+check("배너가 four_scores 원본 손절을 직접 읽지 않는다",
+      "_e_stop = four_scores.get('entry_stop_price')" not in _w107)
+check("배너 제목도 같은 실행 가격을 말한다",
+      "if '이하로 내려올 때만' in _banner_sub and _core_entry:" in _w107)
+check("σ 표기도 같은 실행 가격 기준",
+      "_rc_sig = (CORE or {}).get('depth_sigma')" in _w107
+      and "_rc_drop = (CORE or {}).get('gap_pct')" in _w107)
+check("같은 카드 안에서 두 가격이 싸우지 않게 한 이유를 남긴다",
+      '제목 147,560원 vs 본문 228,287원' in _w107)
 
 
 print()

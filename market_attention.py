@@ -835,9 +835,15 @@ def classify_bucket(attention, action_score, entry_ok=None):
 
 def find_attention_candidates(strategy='composite', top_n=15,
                               deep_max=DEEP_POOL_MAX, progress=None,
-                              watchlist=None):
+                              watchlist=None, fallback_pool=None):
     """
     관심종목 후보를 찾는다.
+
+    fallback_pool: 순위 페이지가 빈 값을 줄 때 쓸 유니버스 목록
+        (symbol · name · base_price · today_trade_value 를 가진 dict 들).
+        장 시작 전이나 출처 장애로 순위 페이지가 죽어도 추천이 멈추지
+        않게 한다 (라운드 37).
+
     반환: {'rows': [...], 'pool_size': int, 'deep_count': int,
            'sources': [...], 'failures': [...], 'unavailable': str|None}
     """
@@ -859,6 +865,38 @@ def find_attention_candidates(strategy='composite', top_n=15,
                                       'count': len(codes), 'ok': True}]
     else:
         pool, flow_names, report = fetch_candidate_pool(progress=progress)
+
+    if not pool and fallback_pool:
+        # ── 순위 페이지가 죽어도 추천을 멈추지 않는다 (라운드 37) ────────
+        # 순위 페이지는 장 시작 전이나 출처 장애 때 빈 값을 준다. 그때마다
+        # 추천이 통째로 멈추고 화면은 "후보 없음"이라고 말했다 — 실제로는
+        # **수집 실패**인데 판정처럼 읽혔다.
+        # 유니버스에는 이미 시세·거래대금이 실려 있으므로, 추가 요청 없이
+        # 거래대금 순으로 후보를 만들 수 있다. 순위 페이지가 하는 일과
+        # 같은 일을 우리가 가진 데이터로 하는 것이다.
+        # 거래대금이 미수신인 시간대에는 시가총액으로 순서를 정한다.
+        # 없는 값으로 정렬하면 전부 0 이 되어 사실상 무작위가 된다.
+        _tv_ok = any((u.get('today_trade_value') or 0) > 0
+                     for u in fallback_pool)
+        _key = ((lambda x: (x.get('today_trade_value') or 0)) if _tv_ok
+                else (lambda x: (x.get('market_cap_eok') or 0)))
+        pool = {}
+        for u in sorted(fallback_pool, key=_key,
+                        reverse=True)[:max(deep_max, top_n) * 2]:
+            c = str(u.get('symbol', '')).split('.')[0]
+            if not c:
+                continue
+            pool[c] = {'code': c, 'name': u.get('name') or c,
+                       'price': u.get('base_price'), 'change_pct': None,
+                       'volume': None,
+                       'turnover_mil': (u.get('today_trade_value') or 0) / 1e6,
+                       'market_cap_eok': u.get('market_cap_eok'),
+                       'sources': {'거래대금 대체'}}
+        if pool:
+            report = list(report) + [
+                {'source': ('거래대금 대체' if _tv_ok else '시가총액 대체')
+                           + ' (순위 페이지 미수신)',
+                 'count': len(pool), 'ok': True}]
 
     if not pool:
         return {'rows': [], 'pool_size': 0, 'deep_count': 0, 'sources': report,
