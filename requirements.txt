@@ -13,19 +13,30 @@
 #     저장되므로, 오독은 미리보기에서 걸러진다.)
 
 # 섹터 사이클(라운드 44) — 글로벌 섹터 ETF·환율·원자재·업종 분류 수신.
+#   pandas·requests·lxml 위에 얹히는 얇은 래퍼라 컨테이너 메모리에 부담이 없다.
+#   없어도 앱은 뜬다 — sector_cycle 이 '미연동'으로 내려간다(§3).
 #
-# ⚠️ **클라우드에서는 뺀다.** 라운드 44 배포에서 이 줄을 넣자마자 앱이
-#    "Oh no. Error running app." 로 죽었다. 로컬(3.14)에서는 멀쩡하고,
-#    FinanceDataReader 를 가려 놓고 임포트해도 전 모듈이 통과했다
-#    (_probe/diag_cloud_boot.py). 즉 코드가 아니라 **설치 단계**가 문제다.
-#
-#    앱이 죽는 것보다 업황이 '미연동'으로 나가는 게 낫다 — sector_cycle 은
-#    수신 실패를 available=False 로 내리고 화면이 그 사실을 적는다(§3).
-#    클라우드 파이썬 버전에서 설치가 되는지 확인한 뒤 다시 넣는다.
-#
-# finance-datareader>=0.9.90     # 로컬에서만 (pip install finance-datareader)
+#   ※ 배포가 죽었을 때 처음엔 이 줄을 범인으로 의심해 뺐다. 아니었다.
+#     진짜 원인은 아래 starlette 였고, 빈 venv 재현으로 이 줄이 무죄임을
+#     확인한 뒤 되돌렸다. **의심만으로 빼 두면 기능이 조용히 사라진다.**
+finance-datareader>=0.9.90
 
 streamlit>=1.40
+# ⚠️ starlette 를 열어 두면 배포가 죽는다 (2026-08-05 실측).
+#
+#    streamlit 1.61.0 + starlette 1.4.0 조합에서 기동 즉시:
+#      TypeError: GZipResponder.__init__() missing 1 required
+#                 keyword-only argument: 'thread_minimum_size'
+#    streamlit 의 SelectiveGZipMiddleware 가 starlette 의 GZipResponder 를
+#    상속하는데, starlette 1.4 가 그 생성자에 필수 인자를 추가했다.
+#
+#    requirements 가 streamlit 만 열어 뒀고 starlette 는 아예 없어서,
+#    **재빌드 때마다 최신 starlette 가 딸려 들어온다.** 코드를 한 줄도
+#    안 고쳐도 어느 날 갑자기 앱이 죽는 구조였다.
+#
+#    클라우드와 같은 의존성만 담은 빈 venv 로 재현하고(_probe/cloudenv),
+#    이 한 줄을 넣으니 streamlit 1.61.0 그대로 정상 기동을 확인했다.
+starlette<1.4
 pandas>=2.0
 numpy>=1.26
 matplotlib>=3.8

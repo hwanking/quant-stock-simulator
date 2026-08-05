@@ -6411,6 +6411,23 @@ for _a114 in ('valuation', 'sector'):
     check(f"'{_a114}' 버전이 등록돼 있다",
           _ver101.current(_a114) != 'v2026.08.02.0', _ver101.current(_a114))
 
+# 배포를 죽인 의존성 — 열어 두면 재빌드 때마다 최신이 딸려 들어온다
+#   2026-08-05 실측: streamlit 1.61.0 + starlette 1.4.0 에서 기동 즉시
+#   TypeError: GZipResponder.__init__() missing 'thread_minimum_size'.
+#   requirements 에 starlette 가 아예 없어서, **코드를 한 줄도 안 고쳐도**
+#   어느 날 갑자기 앱이 죽는 구조였다. 상한을 지운 채로 통과시키지 않는다.
+_req114 = open(_os.path.join(PROJ, 'requirements.txt'), encoding='utf-8').read()
+_reqlines114 = [_l.strip() for _l in _req114.split('\n')
+                if _l.strip() and not _l.strip().startswith('#')]
+check("starlette 상한이 requirements 에 있다",
+      any(_l.startswith('starlette') and '<' in _l for _l in _reqlines114),
+      ' · '.join(_reqlines114))
+check("streamlit 이 requirements 에 있다",
+      any(_l.startswith('streamlit') for _l in _reqlines114))
+check("섹터 수신 패키지가 requirements 에 있다",
+      any(_l.lower().startswith('finance-datareader') for _l in _reqlines114),
+      '의심만으로 빼 두면 업황이 조용히 미연동으로 나간다')
+
 # 이모지 금지 — 새 모듈도 예외가 아니다
 _scsrc114 = open(_os.path.join(PROJ, 'sector_cycle.py'), encoding='utf-8').read()
 check("sector_cycle 에 이모지가 없다",

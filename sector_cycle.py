@@ -222,14 +222,20 @@ def group_of(industry):
 # ───────────────────────────────────────────────────────────────────
 
 def _cache_path(name):
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    # 디렉터리 생성 실패로 예외를 밖으로 내보내지 않는다. 캐시는 **선택**이고,
+    # 쓰기 불가 파일시스템(읽기 전용 컨테이너 등)에서 캐시 때문에 조회 자체가
+    # 죽으면 안 된다. 못 만들면 그냥 캐시 미스로 흘러간다.
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+    except OSError:
+        pass
     safe = re.sub(r'[^A-Za-z0-9_.=-]', '_', str(name))
     return os.path.join(CACHE_DIR, f'{safe}.json')
 
 
 def _cache_read(name, ttl):
-    p = _cache_path(name)
     try:
+        p = _cache_path(name)
         if os.path.exists(p) and (time.time() - os.path.getmtime(p)) < ttl:
             with open(p, encoding='utf-8') as f:
                 return json.load(f)
