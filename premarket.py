@@ -151,6 +151,90 @@ def _na_of(row):
         return None
 
 
+def pick_from_scan_row(q_engine, r):
+    """
+    스캔 행 하나 → 추천 카드가 읽는 pick dict.
+
+    라운드 39 — build_report 안에만 있던 조립을 함수로 뺐다.
+    "오늘의 관심종목 후보"도 개장 전 추천과 **같은 카드**로 그려야 하는데,
+    조립이 한 함수 안에 갇혀 있어 목록마다 자기만의 카드를 만들고 있었다.
+    한 화면에 두 종류의 카드가 보이면 어느 쪽을 믿을지 알 수 없다.
+    """
+    snap = r.get('snapshot') or {}
+    fs = (snap.get('four_scores') or r.get('scores_obj') or {})
+    snap = r.get('snapshot') or {}
+    fs = (snap.get('four_scores') or r.get('scores_obj') or {})
+    verdict = None
+    try:
+        verdict = q_engine.build_final_verdict(snap) if snap else None
+    except Exception:
+        verdict = None
+    try:
+        easy = q_engine.build_easy_advice(
+            fs, verdict or {'score': r.get('final_score'),
+                            'action': 'HOLD', 'vetoes': []},
+            r.get('base_price'))
+        easy_nb = easy['new_buyer']
+    except Exception:
+        easy_nb = {'emoji': '', 'line': '판단 보류', 'detail': ''}
+
+    nf = ((snap.get('market_context') or {}).get('news_flags') or {})
+    cb = fs.get('calibration_band') or {}
+    return {
+        'code': str(r.get('symbol', '')).split('.')[0],
+        'symbol': r.get('symbol'),
+        'name': r.get('name'),
+        'asset_type': fs.get('asset_type', 'STOCK'),
+        'reco_class': _classify_reco(r, easy_nb.get('line')),
+        'easy_emoji': easy_nb.get('emoji'),
+        'easy_line': easy_nb.get('line'),
+        'score': r.get('final_score'),
+        'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)
+        # 카드가 쓰는 '권장 매수가'는 **실행 가능한 눌림가**다 (라운드 25).
+        # 적정가 기반 값은 장기 참고선으로 따로 싣는다 — 오늘의 매수가가
+        # 아니다 (현재가와 30~50% 벌어지는 일이 흔했다).
+        'rec_buy': (fs.get('entry_pullback_price')
+                    or fs.get('recommended_buy_price')),
+        'rec_buy_basis': fs.get('entry_pullback_basis'),
+        'value_floor': fs.get('value_floor_price'),
+        'entry_zone': fs.get('entry_zone'),
+        'chase_max': fs.get('buy_entry_max'),
+        # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다
+        'target': fs.get('target_tech_1st'),
+        'target2': fs.get('target_tech_2nd'),
+        'stop': fs.get('stop_loss_price'),
+        # 권장 매수가 기준 (신규 매수자용) — 카드의 목표·손절은 이쪽이다.
+        # 둘을 같은 카드에 섞으면 "126,452원에 사서 213,955원에 손절"
+        # 같은 말이 된다 (라운드 22 실측: 17종목 중 11종목이 그랬다).
+        'entry_target_1st': fs.get('entry_target_1st'),
+        'entry_stop_price': fs.get('entry_stop_price'),
+        'entry_rr': fs.get('entry_rr'),
+        # 도달 가능성 — 권장가가 정말 닿는 가격인가 (라운드 23)
+        'rec_buy_sigma': fs.get('rec_buy_sigma'),
+        'rec_buy_reach': fs.get('rec_buy_reach'),
+        'rec_buy_drop_pct': fs.get('rec_buy_drop_pct'),
+        # 다음 조건 — "사지 마세요"로 끝내지 않는다 (라운드 24)
+        'next_action': _na_of(r),
+        'confidence': fs.get('analysis_confidence'),
+        'horizon_days': 20,
+        'entry_candidate': bool(r.get('entry_candidate')),
+        'm10_above': bool(r.get('m10_above')),
+        'news_risk': int(nf.get('risk_count', 0) or 0),
+        'news_fresh': int(nf.get('fresh_watch_count', 0) or 0),
+        'news_lagging': int(nf.get('lagging_count', 0) or 0),
+        'confidence_band': ({'lo': cb.get('lo'), 'hi': cb.get('hi'),
+                             'hit_rate': cb.get('hit_rate'), 'n': cb.get('n')}
+                            if cb else None),
+        'reasons': [str(x)[:90] for x in
+                    (str(fs.get('gate_reason', '')).split(' / ')[:3])],
+        # ── 중앙 판정 (라운드 34) ────────────────────────────────
+        # 카드가 자기만의 가격 조합을 만들지 않도록, 상세 화면과 **같은
+        # 함수**가 낸 결과를 통째로 싣는다. 화면 간 값이 어긋나면
+        # 회귀가 잡는다.
+        'core': _core_of(q_engine, r, fs, verdict),
+    }
+
+
 def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     """
     스캔 결과(전일 확정 데이터 기반) → 개장 전 리포트. 이미 있으면 기존 것을 반환.
@@ -166,77 +250,9 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
 
     picks = []
     for r in (scan_rows or [])[:5]:
-        snap = r.get('snapshot') or {}
-        fs = (snap.get('four_scores') or r.get('scores_obj') or {})
-        verdict = None
-        try:
-            verdict = q_engine.build_final_verdict(snap) if snap else None
-        except Exception:
-            verdict = None
-        try:
-            easy = q_engine.build_easy_advice(
-                fs, verdict or {'score': r.get('final_score'),
-                                'action': 'HOLD', 'vetoes': []},
-                r.get('base_price'))
-            easy_nb = easy['new_buyer']
-        except Exception:
-            easy_nb = {'emoji': '⚪', 'line': '판단 보류', 'detail': ''}
-
-        nf = ((snap.get('market_context') or {}).get('news_flags') or {})
-        cb = fs.get('calibration_band') or {}
-        picks.append({
-            'code': str(r.get('symbol', '')).split('.')[0],
-            'symbol': r.get('symbol'),
-            'name': r.get('name'),
-            'asset_type': fs.get('asset_type', 'STOCK'),
-            'reco_class': _classify_reco(r, easy_nb.get('line')),
-            'easy_emoji': easy_nb.get('emoji'),
-            'easy_line': easy_nb.get('line'),
-            'score': r.get('final_score'),
-            'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)
-            # 카드가 쓰는 '권장 매수가'는 **실행 가능한 눌림가**다 (라운드 25).
-            # 적정가 기반 값은 장기 참고선으로 따로 싣는다 — 오늘의 매수가가
-            # 아니다 (현재가와 30~50% 벌어지는 일이 흔했다).
-            'rec_buy': (fs.get('entry_pullback_price')
-                        or fs.get('recommended_buy_price')),
-            'rec_buy_basis': fs.get('entry_pullback_basis'),
-            'value_floor': fs.get('value_floor_price'),
-            'entry_zone': fs.get('entry_zone'),
-            'chase_max': fs.get('buy_entry_max'),
-            # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다
-            'target': fs.get('target_tech_1st'),
-            'target2': fs.get('target_tech_2nd'),
-            'stop': fs.get('stop_loss_price'),
-            # 권장 매수가 기준 (신규 매수자용) — 카드의 목표·손절은 이쪽이다.
-            # 둘을 같은 카드에 섞으면 "126,452원에 사서 213,955원에 손절"
-            # 같은 말이 된다 (라운드 22 실측: 17종목 중 11종목이 그랬다).
-            'entry_target_1st': fs.get('entry_target_1st'),
-            'entry_stop_price': fs.get('entry_stop_price'),
-            'entry_rr': fs.get('entry_rr'),
-            # 도달 가능성 — 권장가가 정말 닿는 가격인가 (라운드 23)
-            'rec_buy_sigma': fs.get('rec_buy_sigma'),
-            'rec_buy_reach': fs.get('rec_buy_reach'),
-            'rec_buy_drop_pct': fs.get('rec_buy_drop_pct'),
-            # 다음 조건 — "사지 마세요"로 끝내지 않는다 (라운드 24)
-            'next_action': _na_of(r),
-            'confidence': fs.get('analysis_confidence'),
-            'horizon_days': 20,
-            'entry_candidate': bool(r.get('entry_candidate')),
-            'm10_above': bool(r.get('m10_above')),
-            'news_risk': int(nf.get('risk_count', 0) or 0),
-            'news_fresh': int(nf.get('fresh_watch_count', 0) or 0),
-            'news_lagging': int(nf.get('lagging_count', 0) or 0),
-            'confidence_band': ({'lo': cb.get('lo'), 'hi': cb.get('hi'),
-                                 'hit_rate': cb.get('hit_rate'), 'n': cb.get('n')}
-                                if cb else None),
-            'reasons': [str(x)[:90] for x in
-                        (str(fs.get('gate_reason', '')).split(' / ')[:3])],
-            # ── 중앙 판정 (라운드 34) ────────────────────────────────
-            # 카드가 자기만의 가격 조합을 만들지 않도록, 상세 화면과 **같은
-            # 함수**가 낸 결과를 통째로 싣는다. 화면 간 값이 어긋나면
-            # 회귀가 잡는다.
-            'core': _core_of(q_engine, r, fs, verdict),
-        })
+        p = pick_from_scan_row(q_engine, r)
+        if p:
+            picks.append(p)
 
     report = {
         'date': date_key,

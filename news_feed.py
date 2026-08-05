@@ -1,0 +1,194 @@
+# -*- coding: utf-8 -*-
+"""
+뉴스 기사 수집 — 공개 RSS만 (라운드 41).
+
+■ 왜 만들었나
+  '뉴스·공시 촉매'는 관심점수의 **20%** 인데 지금까지 DART RSS 50건만
+  보고 있었다. 그래서 상태가 '부분 연동'이었고, 후보 발굴 방식 'news' 는
+  아예 못 쓰는 항목으로 막혀 있었다.
+
+■ 실측으로 고른 출처 (라운드 41 · _probe/news_sources_r41.py)
+    연합뉴스 경제   120건 · 266ms   수신 OK
+    한경 증권       50건 · 133ms   수신 OK
+    매경 증권       50건 ·  92ms   수신 OK
+  받아 보고 되는 것만 넣었다. 안 되는 곳(머니투데이·이데일리·서울경제)은
+  넣지 않는다 — 출처 목록을 길게 적어 놓고 실제로는 안 받는 것이 거짓이다.
+
+■ 규칙
+  · 공개 RSS만. 로그인·쿠키·비공식 사설 API 를 쓰지 않는다
+  · 기사 **본문을 저장하지 않는다.** 제목·시각·링크만 본다 (저작권)
+  · 종목명 매칭은 보수적으로 — 짧은 이름의 오탐을 막는다
+  · 받지 못하면 0으로 두고 **어느 출처가 실패했는지** 함께 돌려준다.
+    건수를 지어내지 않는다
+"""
+from __future__ import annotations
+
+import re
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+
+UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+TIMEOUT = 10
+
+#: 라운드 41 실측에서 수신에 성공한 공개 RSS 만
+FEEDS = [
+    ('연합뉴스 경제', 'https://www.yna.co.kr/rss/economy.xml'),
+    ('한국경제 증권', 'https://www.hankyung.com/feed/finance'),
+    ('매일경제 증권', 'https://www.mk.co.kr/rss/50200011/'),
+]
+
+#: '신선한 재료' 로 볼 시간 창 (시간). 그보다 오래된 기사는 후행 보도로 본다.
+FRESH_HOURS = 24
+
+#: 위험 낱말 — 있으면 매수 판단에서 감점 요인으로 본다
+RISK_WORDS = ('상장폐지', '거래정지', '감사의견', '한정', '부적정', '의견거절',
+              '횡령', '배임', '분식', '소송', '압수수색', '리콜', '결함',
+              '유상증자', '전환사채', '무상감자', '관리종목', '불성실공시',
+              '어닝쇼크', '적자전환', '영업정지', '해킹', '파업')
+#: 촉매 낱말 — 있으면 관심을 끌 만한 재료로 본다
+CATALYST_WORDS = ('수주', '계약', '공급', '納品', '납품', '신제품', '출시',
+                  '임상', '승인', '허가', '특허', '흑자전환', '어닝서프라이즈',
+                  '실적개선', '증설', 'M&A', '인수', '합병', '수출', '진출',
+                  '협약', 'MOU', '투자유치', '자사주')
+
+_CACHE = {'ts': 0.0, 'items': [], 'report': []}
+_CACHE_SEC = 600
+
+
+def _get(url):
+    req = urllib.request.Request(url, headers=UA)
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return r.read()
+
+
+def _parse_dt(s):
+    """RSS 의 pubDate 를 KST 로. 못 읽으면 None — 지어내지 않는다."""
+    if not s:
+        return None
+    s = str(s).strip()
+    for fmt in ('%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S %Z',
+                '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S'):
+        try:
+            d = datetime.strptime(s, fmt)
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone(timedelta(hours=9)))
+            return d.astimezone(timezone(timedelta(hours=9)))
+        except ValueError:
+            continue
+    return None
+
+
+def fetch(max_age_sec=_CACHE_SEC):
+    """
+    공개 RSS 에서 기사 제목·시각·링크를 모은다.
+
+    반환: (items, report)
+        items[i]  = {'title','link','source','dt'(KST|None)}
+        report[i] = {'source','count','ok','error'}
+    """
+    now = time.time()
+    if _CACHE['items'] and (now - _CACHE['ts']) < max_age_sec:
+        return _CACHE['items'], _CACHE['report']
+
+    items, report = [], []
+    for name, url in FEEDS:
+        try:
+            root = ET.fromstring(_get(url))
+        except Exception as e:
+            report.append({'source': name, 'count': 0, 'ok': False,
+                           'error': f'{type(e).__name__}'})
+            continue
+        got = 0
+        for it in root.findall('.//item'):
+            t = it.find('title')
+            title = (t.text or '').strip() if t is not None else ''
+            if not title:
+                continue
+            lk = it.find('link')
+            pd = it.find('pubDate')
+            items.append({
+                'title': title,
+                'link': (lk.text or '').strip() if lk is not None else '',
+                'source': name,
+                'dt': _parse_dt(pd.text if pd is not None else None),
+            })
+            got += 1
+        report.append({'source': name, 'count': got, 'ok': got > 0,
+                       'error': ''})
+
+    _CACHE.update(ts=now, items=items, report=report)
+    return items, report
+
+
+def _mentions(title, name):
+    """
+    제목이 이 종목을 말하고 있는가 — 보수적으로.
+
+    두 글자 이름('DL','GS')은 아무 문장에나 걸리므로 경계를 요구한다.
+    괄호·조사 앞뒤는 경계로 인정한다.
+    """
+    if not name or len(name) < 2:
+        return False
+    if len(name) <= 3:
+        # 짧은 이름은 앞뒤가 한글/영숫자가 아니어야 한다
+        return re.search(r'(^|[^0-9A-Za-z가-힣])'
+                         + re.escape(name)
+                         + r'([^0-9A-Za-z가-힣]|$)', title) is not None
+    return name in title
+
+
+def for_stock(name, items=None, fresh_hours=FRESH_HOURS):
+    """
+    한 종목의 뉴스 요약. 없는 값을 만들지 않는다.
+
+    반환: {'total','fresh','lagging','risk','catalyst',
+           'risk_words','catalyst_words','headlines'}
+    """
+    if items is None:
+        items, _ = fetch()
+    hits = [it for it in items if _mentions(it['title'], str(name or ''))]
+    now = datetime.now(timezone(timedelta(hours=9)))
+    fresh = lagging = 0
+    risk_w, cat_w = set(), set()
+    for it in hits:
+        d = it.get('dt')
+        if d is None:
+            lagging += 1          # 시각을 모르면 신선하다고 하지 않는다
+        elif (now - d) <= timedelta(hours=fresh_hours):
+            fresh += 1
+        else:
+            lagging += 1
+        for w in RISK_WORDS:
+            if w in it['title']:
+                risk_w.add(w)
+        for w in CATALYST_WORDS:
+            if w in it['title']:
+                cat_w.add(w)
+    return {
+        'total': len(hits), 'fresh': fresh, 'lagging': lagging,
+        'risk': len(risk_w), 'catalyst': len(cat_w),
+        'risk_words': sorted(risk_w), 'catalyst_words': sorted(cat_w),
+        'headlines': [{'title': h['title'], 'source': h['source'],
+                       'link': h['link'],
+                       'when': h['dt'].strftime('%m-%d %H:%M') if h['dt']
+                       else '시각 미상'} for h in hits[:6]],
+    }
+
+
+def status():
+    """화면에 그대로 띄울 연동 현황."""
+    _, report = fetch()
+    got = sum(r['count'] for r in report)
+    ok = sum(1 for r in report if r['ok'])
+    return {
+        'sources': report,
+        'total_items': got,
+        'ok_sources': ok,
+        'availability': ('full' if ok == len(FEEDS)
+                         else 'partial' if ok else 'none'),
+        'detail': (f'공개 RSS {ok}/{len(FEEDS)}곳에서 기사 {got}건 수신 '
+                   f'(제목·시각·링크만 · 본문 미저장)'
+                   if ok else '뉴스 RSS 를 한 곳도 받지 못했습니다'),
+    }

@@ -1073,7 +1073,7 @@ class QuantIndicatorsEngine:
         disparity_60 = round(((curr_price - sma_60) / (sma_60 + 1e-8)) * 100.0, 1)
         drop_from_high = round(((curr_price - high_52w) / (high_52w + 1e-8)) * 100.0, 1)
         
-        summary_text = f"💎 현재 가격 위치: {range_name} ({val_eval.get('pos_simple', '허리')}대)\n- 52주 범위 위치: {range_pos_pct}%\n- 적정가 범위 내 위치: {val_eval.get('pos_val', '적정')}\n- 60일선 대비 이격률: {disparity_60:+.1f}%\n- 52주 고점 대비 하락률: {drop_from_high:.1f}%"
+        summary_text = f"현재 가격 위치: {range_name} ({val_eval.get('pos_simple', '허리')}대)\n- 52주 범위 위치: {range_pos_pct}%\n- 적정가 범위 내 위치: {val_eval.get('pos_val', '적정')}\n- 60일선 대비 이격률: {disparity_60:+.1f}%\n- 52주 고점 대비 하락률: {drop_from_high:.1f}%"
         
         return {
             'range_pos_pct': range_pos_pct, 'range_name': range_name, 'high_52w': high_52w, 'low_52w': low_52w,
@@ -1503,13 +1503,13 @@ class QuantIndicatorsEngine:
         mc = sim.get('match_count') or 0
         allowed = bool(sim.get('probabilities_shown'))
         if not allowed or wr is None:
-            add('pattern', '🔮 자기유사 예측',
+            add('pattern', '자기유사 예측',
                 None, [f"유효표본 {mc}건 — 확률 산출 기준(10건) 미달, 관찰값만 참고"],
                 available=False)
         else:
             net = (mp or 0.0) - self.TOTAL_COST_PCT
             s = float(np.clip(50 + (wr - 50) * 1.6 + net * 6.0, 0, 100))
-            add('pattern', '🔮 자기유사 예측', s, [
+            add('pattern', '자기유사 예측', s, [
                 f"과거 유사구간 {mc}건 · 관찰 승률 {fmt_or(obs, digits=1)}% · "
                 f"베이지안 사후 {wr:.1f}%",
                 f"평균 수익률 {mp:+.2f}% → 거래비용 {self.TOTAL_COST_PCT:.2f}% 차감 후 {net:+.2f}%",
@@ -1519,15 +1519,15 @@ class QuantIndicatorsEngine:
         up = val.get('upside_pct')
         conf = val.get('fair_value_confidence')
         if val.get('is_fund'):
-            add('valuation', '💎 밸류에이션', None,
+            add('valuation', '밸류에이션', None,
                 ["ETF·ETN 은 펀더멘털 적정가가 성립하지 않습니다"], available=False)
         elif up is None or conf is None or conf < 45:
-            add('valuation', '💎 밸류에이션', None,
+            add('valuation', '밸류에이션', None,
                 [f"적정가 신뢰도 {fmt_or(conf)} — 산출 보류"], available=False)
         else:
             s = float(np.clip(50 + up * 0.8, 0, 100))
             s = s * (0.6 + 0.4 * min(conf, 95) / 95.0)     # 신뢰도로 감쇠
-            add('valuation', '💎 밸류에이션', s, [
+            add('valuation', '밸류에이션', s, [
                 f"적정가 대비 상승여력 {up:+.1f}% (신뢰도 {conf:.0f}점)",
                 f"진입 위치: {fs.get('entry_zone', '판정 불가')}",
             ])
@@ -1536,14 +1536,14 @@ class QuantIndicatorsEngine:
         tp = sim.get('tp_first_prob')
         sl = sim.get('sl_first_prob')
         if tp is None or sl is None:
-            add('scenario', '🎯 대응 시나리오', None,
+            add('scenario', '대응 시나리오', None,
                 ["표본 부족으로 목표·손절 선도달 확률 미산출"], available=False)
         else:
             nt = sim.get('no_touch_prob')
             if nt is None:
                 nt = round(max(0.0, 100.0 - tp - sl), 1)
             s = float(np.clip(50 + (tp - sl) * 1.2, 0, 100))
-            add('scenario', '🎯 대응 시나리오', s, [
+            add('scenario', '대응 시나리오', s, [
                 f"목표 선도달 {tp:.1f}% · 손절 선도달 {sl:.1f}% · 미도달 {nt:.1f}% (합 100%)",
                 f"손익비 {fmt_or(fs.get('reward_risk_ratio'))}",
             ])
@@ -1552,10 +1552,10 @@ class QuantIndicatorsEngine:
         bull = fs.get('demark_bullish_score')
         bear = fs.get('demark_bearish_score')
         if bull is None or bear is None:
-            add('demark', '⏱️ DeMARK', None, ["지표 산출 불가"], available=False)
+            add('demark', ' DeMARK', None, ["지표 산출 불가"], available=False)
         else:
             s = float(np.clip(50 + (bull - bear) * 0.9, 0, 100))
-            add('demark', '⏱️ DeMARK', s, [
+            add('demark', ' DeMARK', s, [
                 f"Bullish {bull} vs Bearish {bear} → {fs.get('demark_direction_text', '')}",
                 f"TDST 지지 {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}",
             ])
@@ -1573,15 +1573,15 @@ class QuantIndicatorsEngine:
         if fs.get('market_regime_label'):
             reasons5.append(f"시장 국면: {fs['market_regime_label']}")
         if parts:
-            add('technical', '🌊 수급·기술', float(np.mean(parts)), reasons5)
+            add('technical', '수급·기술', float(np.mean(parts)), reasons5)
         else:
-            add('technical', '🌊 수급·기술', None, ["기술적 지표 산출 불가"], available=False)
+            add('technical', '수급·기술', None, ["기술적 지표 산출 불가"], available=False)
 
         # ── ⑥ 무결성·전략품질 ────────────────────────────────────────────
         sq = fs.get('strategy_quality_score')
         ac = fs.get('analysis_confidence')
         if sq is None and ac is None:
-            add('integrity', '🏛️ 무결성·전략품질', None, ["미산출"], available=False)
+            add('integrity', ' 무결성·전략품질', None, ["미산출"], available=False)
         else:
             s = float(np.mean([x for x in (sq, ac) if x is not None]))
             r6 = []
@@ -1590,7 +1590,7 @@ class QuantIndicatorsEngine:
                           + (f" · Sharpe {oos.get('sharpe')}" if oos.get('sharpe') is not None else ""))
             if ac is not None:
                 r6.append(f"분석 신뢰도 {ac:.0f}점")
-            add('integrity', '🏛️ 무결성·전략품질', s, r6)
+            add('integrity', ' 무결성·전략품질', s, r6)
 
         return tabs
 
@@ -1698,12 +1698,14 @@ class QuantIndicatorsEngine:
             '제한적 진입':         ('ACCUMULATE', "제한적으로만 진입"),
             '조건 확인·관망':      ('HOLD', "지금은 사지 마세요 — 조건이 갖춰지면 후보"),
             '신규 매수 보류':      ('HOLD', "지금은 사지 마세요"),
+            # 라운드 42 — 악재 뉴스로 인한 차단
+            '신규 매수 차단 (악재)': ('HOLD', "악재가 있어 지금은 사지 않습니다"),
             # 라운드 27 — 국면별 실전 성적이 무너진 칸에서의 차단
             '신규 매수 차단 (국면)': ('HOLD', "이 국면에서는 신규 매수를 하지 않습니다"),
             '비중축소 검토':       ('REDUCE', "비중 축소 검토"),
             '거래 회피':           ('SELL', "사지 마세요 (보유 중이면 축소 검토)"),
             # 하드 정합성 위반 전용 — 신호 간 이견은 여기로 오지 않고 관망으로 화해된다
-            '⚠️ 재검토 필요':      ('NO_TRADE', "판정 보류 — 데이터 정합성 문제가 감지됐습니다"),
+            '재검토 필요': ('NO_TRADE', "판정 보류 — 데이터 정합성 문제가 감지됐습니다"),
         }
         if base is None:
             action, headline = 'NO_TRADE', "판단할 데이터가 부족합니다"
@@ -1884,12 +1886,12 @@ class QuantIndicatorsEngine:
 
         # ── 신규 매수자 ────────────────────────────────────────────────
         if score is None:
-            nb = {'emoji': '⚪', 'line': '데이터가 부족해 판단할 수 없습니다.',
+            nb = {'emoji': '', 'line': '데이터가 부족해 판단할 수 없습니다.',
                   'detail': "분석에 필요한 데이터가 모자랍니다. 무리해서 사지 마세요."}
         elif action in ('BUY', 'ACCUMULATE') and not vetoes:
             _half = ((curr_price + t1) / 2 if curr_price and t1 and t1 > curr_price
                      else None)
-            nb = {'emoji': '🟢', 'line': '지금 사도 됩니다 (나눠서).',
+            nb = {'emoji': '', 'line': '지금 사도 됩니다 (나눠서).',
                   'detail': (f"한 번에 다 사지 말고 나눠 사세요. 1차는 지금, "
                              f"손절선(잃음을 멈추는 선) {w(stop)}을 지키세요. "
                              f"1차 목표(먼저 일부 이익실현) {w(t1)}, 2차 목표 {w(t2)}. "
@@ -1898,18 +1900,18 @@ class QuantIndicatorsEngine:
                                 f"손실 확률을 약 1/3 줄였습니다. " if _half else "")
                              + odds)}
         elif rec is not None and curr_price and curr_price > rec:
-            nb = {'emoji': '🟡', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
+            nb = {'emoji': '', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
                   'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
                              f"쫓아가서 사지 마세요(추격매수 금지"
                              + (f" — {w(chase_max)} 위에서는 특히 금지" if chase_max else "")
                              + f"). {w(rec)} 아래로 오면 나눠서 검토하세요. {odds}")}
         elif rec is None:
-            nb = {'emoji': '⚪', 'line': '분석 신뢰도가 낮아 판단을 보류하세요.',
+            nb = {'emoji': '', 'line': '분석 신뢰도가 낮아 판단을 보류하세요.',
                   'detail': "적정 매수 가격을 믿을 만하게 계산하지 못했습니다. "
                             "이 종목은 근거가 더 생길 때까지 관망이 안전합니다."}
         else:
             _why = vetoes[0] if vetoes else "매수 조건 미충족"
-            nb = {'emoji': '🟡', 'line': '지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.',
+            nb = {'emoji': '', 'line': '지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.',
                   'detail': (f"막는 조건: {_why}. 가격은 매수 구간({w(rec)} 이하)이어도 "
                              f"이 조건이 풀려야 삽니다. {odds}")}
         nb['prices'] = {'권장 매수가(1차 분할)': rec,
@@ -1928,13 +1930,13 @@ class QuantIndicatorsEngine:
             add_ok = (score is not None and score >= 58 and not downtrend
                       and not vetoes and rec is not None and curr_price <= rec)
             if stop is not None and curr_price < stop:
-                holder = {'emoji': '🔴',
+                holder = {'emoji': '',
                           'line': '손절 기준을 이탈했습니다 — 정리(손절)를 검토하세요.',
                           'detail': (f"현재가가 손절선 {w(stop)} 아래입니다. "
                                      f"현재 {ret:+.1f}%. 손실이 더 커지기 전에 정리하는 것이 "
                                      f"원칙입니다. 반등을 기다리는 선택은 '기대'이지 근거가 아닙니다.")}
             elif ret > 0 and overheat:
-                holder = {'emoji': '🟠',
+                holder = {'emoji': '',
                           'line': '수익 중 — 일부 매도(절반 이익실현)를 권합니다.',
                           'detail': (f"현재 {ret:+.1f}% 수익. 단기 과열 신호(장기 추세선 대비 "
                                      f"+{m10:.0f}%)가 강합니다. 절반은 지금 팔고, 나머지는 "
@@ -1944,21 +1946,21 @@ class QuantIndicatorsEngine:
                             else f"이미 수익 중이니 손절선을 본전({w(float(user_avg))}) "
                                  f"위로 올려 두는 것도 좋습니다 — 이익을 손실로 되돌리지 "
                                  f"않는 검증된 운용입니다. ")
-                holder = {'emoji': '🔵',
+                holder = {'emoji': '',
                           'line': '계속 보유하세요 — 목표가까지, 손절가는 지키면서.',
                           'detail': (f"현재 {ret:+.1f}% 수익. {w(t1)} 도달 시 일부 매도, "
                                      f"{w(t2)}가 최종 목표입니다. {_be_note}종가가 {w(stop)} 아래로 "
                                      f"내려가면 원칙대로 정리하세요. 추가 매수는 "
                                      + ("가능 구간입니다 (나눠서)." if add_ok else "지금은 하지 마세요."))}
             elif add_ok:
-                holder = {'emoji': '🔵',
+                holder = {'emoji': '',
                           'line': f'보유 유지 — 추가 매수는 {w(rec)} 이하에서만 나눠서.',
                           'detail': (f"현재 {ret:+.1f}%. 추세가 살아 있고 매수 구간 안이라 "
                                      f"분할 추가매수를 검토할 수 있습니다. 단, 손절선 {w(stop)}은 "
                                      f"반드시 지키세요. {odds}")}
             else:
                 _deep = ret <= -15.0
-                holder = {'emoji': '🟠',
+                holder = {'emoji': '',
                           'line': ('물타기(평단 낮추기 목적의 추가 매수)는 하지 마세요.'
                                    if not _deep else
                                    '추가 매수 금지 — 반등 시 비중 축소를 검토하세요.'),
@@ -2613,13 +2615,13 @@ class QuantIndicatorsEngine:
 
         # 4대 전략 버킷(Strategy Bucket) 정량 동적 분류
         if m10_status == "위" and m10_slope > 0 and m10_disparity <= 25.0:
-            strategy_type = "🏔️ 장기 추세형"
+            strategy_type = "장기 추세형"
         elif upside_for_scoring >= 20.0 or upside_eval in ["큰 저평가 가능성", "저평가 가능성"]:
-            strategy_type = "💎 가치·반전형"
+            strategy_type = "가치·반전형"
         elif curr_price > tech_df['sma_60'].iloc[-1] and curr_price <= tech_df['sma_20'].iloc[-1] * 1.025:
-            strategy_type = "🎯 눌림목 재진입형"
+            strategy_type = "눌림목 재진입형"
         else:
-            strategy_type = "⚡ 실적 모멘텀형"
+            strategy_type = "실적 모멘텀형"
 
         # 1-1. 펀더멘털 점수 (ROE 미확보 시 가점·감점 없이 중립)
         roe_raw = latest_fund.get('roe')
@@ -3541,7 +3543,7 @@ class QuantIndicatorsEngine:
 
         if contradiction_detected:
             final_action_score = min(final_action_score, 49)
-            final_action_title = '⚠️ 재검토 필요'
+            final_action_title = '재검토 필요'
 
         # ========================================================
         # [명세 §15] TOP3 필수조건 — 통과/미통과 사유를 전부 남긴다
@@ -3626,6 +3628,51 @@ class QuantIndicatorsEngine:
                 final_action_title = "제한적 진입"
                 final_action_score = min(final_action_score, 74)
 
+        # ── 뉴스 게이트 (라운드 42) ────────────────────────────────────
+        # 뉴스 엔진은 재료를 **재기만** 하고, 그것을 언제 쓸지는 룰북이 정한다.
+        # 이번 라운드는 **감점·차단만** 건다 — 가점은 걸지 않는다.
+        # 원장에 뉴스 필드가 없어 사후 검증을 못 하는데, 좋은 뉴스로 점수를
+        # 올리는 것은 검증 없이 위험을 늘리는 쪽이고 나쁜 뉴스로 막는 것은
+        # 검증 없이도 손실을 줄이는 쪽이라 비대칭으로 간다 (규칙 §2).
+        news_gate = None
+        _NR = RULEBOOK.get('RULES_NEWS', {})
+        try:
+            # ⚠️ market_context 는 지역 변수가 아니라 self 속성이다.
+            # 지역 이름으로 읽으면 NameError 가 나고 except 가 삼켜서
+            # 게이트가 **조용히 안 걸린다** (실측: 기사 15건인데 0으로 도착).
+            _nf_flags = ((getattr(self, 'market_context', None) or {})
+                         .get('news_flags') or {})
+            _n_risk = int(_nf_flags.get('risk_count') or 0)
+            _n_fresh = int(_nf_flags.get('fresh_watch_count') or 0)
+            _n_total = int(_nf_flags.get('total_count') or 0)
+            _feed_ok = bool(_nf_flags.get('feed_available', _n_total > 0))
+            _need = int(_NR.get('risk_block_min_count', 1))
+            if _feed_ok and _n_risk >= _need:
+                _ns0, _nc0 = final_action_score, analysis_confidence_score
+                final_action_score = int(min(final_action_score,
+                                             _NR.get('risk_score_cap', 55)))
+                analysis_confidence_score = int(min(
+                    analysis_confidence_score,
+                    _NR.get('risk_confidence_cap', 60)))
+                if final_action_title in self.BUY_INTENT_TITLES:
+                    final_action_title = '신규 매수 차단 (악재)'
+                news_gate = dict(
+                    risk=_n_risk, fresh=_n_fresh, total=_n_total,
+                    words=list(_nf_flags.get('risk_words') or []),
+                    score_before=int(_ns0), score_after=final_action_score,
+                    conf_before=int(_nc0),
+                    conf_after=analysis_confidence_score,
+                    why=(f"위험 낱말이 붙은 재료 {_n_risk}건이 있습니다 "
+                         f"({', '.join((_nf_flags.get('risk_words') or [])[:3])})"
+                         f" — 점수 상한 {_NR.get('risk_score_cap', 55):.0f}점 · "
+                         f"신규 매수 차단."))
+            elif not _feed_ok:
+                news_gate = dict(risk=0, fresh=0, total=0, words=[],
+                                 why='뉴스를 받지 못해 뉴스 게이트를 걸지 '
+                                     '않았습니다 (미수신 ≠ 악재).')
+        except Exception:
+            news_gate = None
+
         # ── 적정가 상한 (라운드 28b) ───────────────────────────────────
         # 필수 게이트를 푼 대가로 여기서 상한을 건다. 차단은 하지 않는다.
         fv_gate = None
@@ -3662,7 +3709,7 @@ class QuantIndicatorsEngine:
             # (축소·회피·정합성)는 덮지 않는다.
             if (_rp_pol.get('block_new')
                     and final_action_title not in ('비중축소 검토', '거래 회피',
-                                                   '⚠️ 재검토 필요')):
+                                                   '재검토 필요')):
                 final_action_title = "신규 매수 차단 (국면)"
 
         if contradiction_detected:
@@ -3798,6 +3845,7 @@ class QuantIndicatorsEngine:
             'gate_checks': gate_checks,
             'regime_gate': regime_gate,
             'fv_gate': fv_gate,
+            'news_gate': news_gate,
 
             'final_quant_score': final_action_score, # UI 호환성을 위해 final_action_score를 매핑
             'final_action_score': final_action_score,
@@ -4131,10 +4179,10 @@ class QuantIndicatorsEngine:
             fomo_status = "데이터 기반 객관적 관망 유지 권장 (업사이드 여력 존재)"
         elif curr_per >= sector_10yr_per:
             upside_room_pct = 0.0
-            fomo_status = f"현재 PER({curr_per:.1f}배)가 섹터 평균({sector_10yr_per:.1f}배) 이상 ➔ 고평가 진입 주의"
+            fomo_status = f"현재 PER({curr_per:.1f}배)가 섹터 평균({sector_10yr_per:.1f}배) 이상 고평가 진입 주의"
         else:
             upside_room_pct = 15.0
-            fomo_status = "적자/특이 수치 ➔ 펀더멘털 적정가 대조 권장"
+            fomo_status = "적자/특이 수치 펀더멘털 적정가 대조 권장"
         
         return {
             "sector_10yr_per": round(sector_10yr_per, 1),
@@ -4973,7 +5021,7 @@ class QuantIndicatorsEngine:
         snap['status'] = "REVIEW_REQUIRED" if failed else "OK"
         snap['eligible_for_top3'] = (not failed) and bool(fs.get('eligible_for_top3'))
         if failed:
-            fs['final_action_title'] = '⚠️ 재검토 필요'
+            fs['final_action_title'] = '재검토 필요'
             fs['final_action_score'] = min(fs.get('final_action_score', 0), 49)
             fs['eligible_for_top3'] = False
             fs['contradiction_detected'] = True
@@ -5025,18 +5073,18 @@ class QuantIndicatorsEngine:
             # 분류 — 무결성 게이트에서 강등된 종목은 추천 대상에서 제외
             title = scores.get('final_action_title', '거래 회피')
             if snap.get('status') == 'REVIEW_REQUIRED':
-                cat = "⚠️ 재검토 필요"
+                cat = "재검토 필요"
             elif not snap.get('eligible_for_top3', False):
                 if "매수" in title or "진입" in title:
                     # eligible 안 되면 좌천
-                    cat = "⏳ 눌림 대기" if "조건 확인" in title else "👀 관찰 후보"
+                    cat = "눌림 대기" if "조건 확인" in title else "관찰 후보"
                 else:
-                    cat = "🚫 추천 제외"
+                    cat = "추천 제외"
             else:
-                cat = "🏆 최종 추천주"
+                cat = "최종 추천주"
                 
             if "거래 회피" in title or "신규 매수 보류" in title or "비중축소" in title:
-                cat = "🚫 추천 제외"
+                cat = "추천 제외"
 
             # 적정가·표본이 없으면 None을 0으로 바꾸지 않는다 (미산출은 미산출로 전달)
             results.append({
@@ -5061,7 +5109,7 @@ class QuantIndicatorsEngine:
                 "analysis_confidence": scores.get('analysis_confidence', 0),
                 "tp_1st": scores['target_tech_1st'],
                 "sl_1st": scores['stop_loss_price'],
-                "strategy_type": scores.get('strategy_type', '⚡ 실적 모멘텀형'),
+                "strategy_type": scores.get('strategy_type', '실적 모멘텀형'),
                 "m10_status": scores.get('m10_status', '위'),
                 "m10_disparity": scores.get('m10_disparity', 0.0),
                 "m10_trend_eval": scores.get('m10_trend_eval', '양호'),

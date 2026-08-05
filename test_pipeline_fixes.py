@@ -767,13 +767,13 @@ check("정상 종목은 감점 없음", mkt.compute_penalties(_calm, change_pct=
 # §8 관심점수를 매수점수로 쓰지 않는다
 check("관심 높음 + 행동 낮음 = 추격주의",
       mkt.classify_bucket({'adjusted_attention_score': 90.0, 'overheated': True}, 40)
-      == '🔥 관심 급증·추격주의')
+      == '관심 급증·추격주의')
 check("관심 낮음 + 행동 높음 = 선행 후보",
       mkt.classify_bucket({'adjusted_attention_score': 20.0, 'overheated': False}, 75)
-      == '🌱 조용한 선행 후보')
+      == '조용한 선행 후보')
 check("둘 다 높아야 실전 추천",
       mkt.classify_bucket({'adjusted_attention_score': 80.0, 'overheated': False}, 75)
-      == '🏆 실전 추천 후보')
+      == '실전 추천 후보')
 
 # §12 관심점수의 순위 영향은 5% 이내로 제한
 check("관심점수 가산점 상한 5점",
@@ -782,10 +782,13 @@ check("관심점수 가산점 상한 5점",
 check("관심점수가 행동점수를 뒤집지 못함",
       68 + mkt.attention_tiebreak_bonus(0.0) < 75 + mkt.attention_tiebreak_bonus(0.0))
 
-# 연동되지 않은 후보 방식은 임의로 만들어내지 않고 사유를 돌려준다 (§14)
+# 라운드 41 — 뉴스 RSS 를 실제로 받게 되어 'news' 방식이 열렸다.
+# 이제는 '후보를 만들거나, 못 만들면 사유를 밝히거나' 둘 중 하나여야 한다.
+# 조용히 빈 목록을 돌려주는 것만 금지한다.
 _na = mkt.find_attention_candidates('news', top_n=5)
-check("뉴스·공시 방식은 미연동 사유 반환",
-      not _na['rows'] and bool(_na['unavailable']), str(_na['unavailable'])[:60])
+check("뉴스·공시 방식이 후보 또는 사유를 낸다",
+      bool(_na['rows']) or bool(_na['unavailable']),
+      f"rows={len(_na['rows'])} · {str(_na.get('unavailable'))[:50]}")
 
 # 장중 미확정 봉을 20일 평균과 비교하면 배수가 왜곡된다
 _bars = (np.arange(60).astype(str), np.full(60, 100.0), np.full(60, 105.0),
@@ -1352,10 +1355,14 @@ _ds = {d['label']: d for d in mkt.data_status()}
 for _lab in ('업종 상대강도', '외국인·기관 수급'):
     check(f"{_lab} 연동됨", _ds[_lab]['availability'] == 'full',
           _ds[_lab]['availability'])
-check("뉴스·공시 촉매 연동됨(부분)", _ds['뉴스·공시 촉매']['availability'] == 'partial',
+# 라운드 41 — DART 공시에 공개 뉴스 RSS 3곳을 더해 완전 연동이 됐다.
+check("뉴스·공시 촉매 연동됨", _ds['뉴스·공시 촉매']['availability'] == 'full',
       _ds['뉴스·공시 촉매']['availability'])
-check("공시 항목이 한계를 명시", "최근" in _ds['뉴스·공시 촉매']['detail']
-      and "뉴스 기사" in _ds['뉴스·공시 촉매']['detail'])
+check("촉매 항목이 실제 출처를 명시",
+      "DART" in _ds['뉴스·공시 촉매']['detail']
+      and "연합뉴스" in _ds['뉴스·공시 촉매']['detail'])
+check("본문 미저장을 밝힌다",
+      "본문은 저장하지 않는다" in _ds['뉴스·공시 촉매']['detail'])
 _spec_cov = sum(d['spec_weight_pct'] for d in mkt.data_status()
                 if d['availability'] != 'none')
 check("명세 가중치 100% 커버", abs(_spec_cov - 100.0) < 0.1, f"{_spec_cov:.0f}%")
@@ -2060,7 +2067,7 @@ check("신뢰도 수축 괴리(정밀도 가중) 도입", "upside_shrunk_pct" in
 _snap47 = q.run_full_pipeline("035760.KQ", T_REF, b_engine=engine, rho_cutoff=0.80)
 _fs47 = _snap47['four_scores']
 check("CJ ENM 이 판정 보류가 아니라 실제 결론을 냄",
-      _fs47.get('final_action_title') != '⚠️ 재검토 필요'
+      _fs47.get('final_action_title') != '재검토 필요'
       and not _fs47.get('contradiction_detected'),
       str(_fs47.get('final_action_title')))
 _up47, _sh47 = _fs47.get('upside_pct'), _fs47.get('upside_shrunk_pct')
@@ -2113,7 +2120,7 @@ check("죽은 키 'integrity_status' 제거", "integrity_status" not in _q47.rep
 # ⑦ 하드 위반이 실제로 보류를 만드는지 (합성 주입)
 _s47h = dict(_snap47)
 _f47h = dict(_snap47['four_scores'])
-_f47h['final_action_title'] = '⚠️ 재검토 필요'
+_f47h['final_action_title'] = '재검토 필요'
 _f47h['contradiction_detected'] = True
 _s47h['four_scores'] = _f47h
 _v47h = q.build_final_verdict(_s47h)
@@ -2690,8 +2697,8 @@ check("스캔 행에 entry_candidate 노출", '"entry_candidate"' in _q56src)
 check("스캔 행에 DeMARK 상태 노출", '"demark_entry_state"' in _q56src)
 check("정렬 1순위 = 진입 후보", 'x.get("entry_candidate")' in _q56src)
 _w56 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("카드에 진입 후보 배지(🎯)", "_entry_badge" in _w56)
-check("카드 월봉10선 열에 DeMARK 배지 병기", "⏱️매수신호" in _w56)
+check("카드에 진입 후보 배지", "_entry_badge" in _w56)
+check("카드 월봉10선 열에 DeMARK 배지 병기", " · 매수신호" in _w56)
 
 
 section("57. 80% 검증 체계 — 시간 분할·실패 분류·세분화 보정·추세 게이트")
@@ -2722,8 +2729,13 @@ check("인버스는 m10 게이트 비적용", "asset_type != 'ETF_INV'" in _q57s
 check("vol_20 을 케이스 원장에 노출", "'vol_20':" in _q57src)
 
 # 규칙집 버전 승격 + 버전 기록 문서
-check("규칙집 버전 v2026.08.02",
-      str(qi.RULEBOOK.get('RULES_GENERAL', {}).get('version')) == "v2026.08.02")
+# 라운드 42 — RULES_NEWS 신설로 룰북이 v2026.08.05 로 올랐다.
+# 특정 값을 박아 두면 룰북을 고칠 때마다 이 검사가 막는다.
+# 형식과 **전진 여부**만 본다.
+_rbv57 = str(qi.RULEBOOK.get('RULES_GENERAL', {}).get('version') or '')
+check("규칙집 버전 형식", _re.match(r'^v\d{4}\.\d{2}\.\d{2}$', _rbv57),
+      _rbv57)
+check("규칙집 버전이 v2026.08.02 이상", _rbv57 >= "v2026.08.02", _rbv57)
 _mv57 = _os.path.join(PROJ, "docs", "MODEL_VERSIONS.md")
 check("모델 버전 기록 문서 존재", _os.path.exists(_mv57))
 if _os.path.exists(_mv57):
@@ -5894,6 +5906,13 @@ check("스캔 조건은 '상세 설정'으로 접는다",
       '"상세 설정 · 스캔 조건"' in _w108)
 check("실패해도 최신화 플래그가 풀린다",
       'finally:' in _w108 and "st.session_state['pending_scan'] = False" in _w108)
+# 라운드 38 — 사이드바는 스캔보다 먼저 그려진다. pop() 으로 플래그를 지우면
+# 스캔 중인데 '아직 최신화하지 않았습니다'가 뜨고 버튼도 눌린다(실측).
+check("스캔 중에는 플래그를 유지한다",
+      "st.session_state.pop('pending_scan'" not in _w108
+      and "if st.session_state.get('pending_scan'):" in _w108)
+check("스캔이 끝나면 사이드바를 갱신한다",
+      "st.rerun()          # 사이드바에" in _w108)
 # 사이드바 아코디언에서 '종목 찾기'만 예외로 항상 펼침
 _uk108 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
 check("아코디언에 항상 펼침 옵션이 있다",
@@ -5907,6 +5926,373 @@ check("'종목 찾기'가 항상 펼침으로 지정됐다",
       "'title': '종목 찾기', 'always': True" in _w108)
 check("다른 단계는 여전히 접힌다",
       _w108.count("'always': True") == 1)
+
+# ══════════════════════════════════════════════════════════════════════
+# §109 — 한 화면에 카드가 한 종류다 (라운드 39)
+#   사용자 요청: "오늘의 관심후보도 이 스타일로." 개장 전 추천은 reco_card
+#   인데 관심종목 후보만 다른 모양이었다. 조립 함수가 개장 전 블록 안에
+#   갇혀 있어서 목록마다 자기 카드를 만든 게 원인이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§109 카드 한 종류 · 버전 칩 근거 (라운드 39)")
+print("=" * 72)
+import premarket as _pm109
+import inspect as _ins109
+_w109 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+check("pick 조립이 재사용 가능한 함수로 나왔다",
+      hasattr(_pm109, 'pick_from_scan_row'))
+check("그 함수가 (엔진, 스캔행) 을 받는다",
+      list(_ins109.signature(_pm109.pick_from_scan_row).parameters) ==
+      ['q_engine', 'r'])
+check("build_report 가 그 함수를 쓴다",
+      'p = pick_from_scan_row(q_engine, r)' in
+      open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read())
+check("pick 에 중앙 판정이 실린다",
+      "'core'" in _ins109.getsource(_pm109.pick_from_scan_row))
+check("카드 조립 함수가 모듈 수준으로 올라왔다",
+      '\ndef _build_reco_card(p, news_txt, conf_txt):' in _w109)
+check("관심종목 후보도 같은 카드를 쓴다",
+      '_pm_mod.pick_from_scan_row(q_engine, _sr)' in _w109
+      and '_uk.reco_card(\n                                    _build_reco_card(_pick'
+      in _w109)
+check("스냅샷이 없으면 가격을 지어내지 않는다",
+      '정밀분석 스냅샷이 없으면 가격을 지어내지 않는다' in _w109)
+check("한 화면 두 카드 문제를 코드에 남긴다",
+      '어느 쪽을 믿을지' in _w109)
+check("관심종목 후보도 3열 카드로 배치",
+      '_ATT_PER_ROW = 3' in _w109)
+
+# 끌어올린 함수가 참조하는 이름이 모듈 수준에 다 있는가 (라운드 39)
+#   실측: _build_reco_card 만 올리고 _ASSET_KO 표를 두고 와 NameError 가 났다.
+import ast as _ast109
+import builtins as _bi109
+_tree109 = _ast109.parse(_w109)
+_modnames109 = set(dir(_bi109))
+for _n109 in _ast109.walk(_tree109):
+    if isinstance(_n109, (_ast109.Import, _ast109.ImportFrom)):
+        for _a109 in _n109.names:
+            _modnames109.add((_a109.asname or _a109.name).split('.')[0])
+    elif isinstance(_n109, (_ast109.FunctionDef, _ast109.AsyncFunctionDef,
+                            _ast109.ClassDef)):
+        _modnames109.add(_n109.name)
+    elif isinstance(_n109, _ast109.Name) and isinstance(_n109.ctx,
+                                                        _ast109.Store):
+        _modnames109.add(_n109.id)
+    elif isinstance(_n109, _ast109.arg):
+        _modnames109.add(_n109.arg)
+for _fn109 in [_n for _n in _ast109.walk(_tree109)
+               if isinstance(_n, _ast109.FunctionDef)
+               and _n.name == '_build_reco_card']:
+    _loc109 = {_a.arg for _a in _fn109.args.args}
+    for _n in _ast109.walk(_fn109):
+        if isinstance(_n, _ast109.Name) and isinstance(_n.ctx, _ast109.Store):
+            _loc109.add(_n.id)
+        elif isinstance(_n, _ast109.arg):
+            _loc109.add(_n.arg)
+    _miss109 = sorted({_n.id for _n in _ast109.walk(_fn109)
+                       if isinstance(_n, _ast109.Name)
+                       and isinstance(_n.ctx, _ast109.Load)}
+                      - _loc109 - _modnames109)
+    check("끌어올린 카드 함수가 두고 온 이름이 없다", not _miss109,
+          f'정의 없음: {_miss109}')
+check("자산유형 표도 함께 올라왔다",
+      "\n_ASSET_KO = {'STOCK': '주식'" in _w109)
+
+# ══════════════════════════════════════════════════════════════════════
+# §110 — 금융 터미널 디자인: 화면에 이모지를 쓰지 않는다 (라운드 40)
+#   getdesign.md 의 DESIGN.md 74종을 받아 금융·데이터 밀집 계열 17종
+#   (Binance·Coinbase·Kraken·Revolut·Wise·Stripe·Mastercard·Linear·Vercel·
+#    ClickHouse·Sentry·PostHog·Raycast·Warp·Superhuman·Notion·Claude)을
+#   분석했다. 이모지를 UI 상태 표시로 쓰는 예가 하나도 없다.
+#   이모지는 OS·폰트마다 모양과 크기가 달라 정렬이 깨지고 색을 통제할 수 없다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§110 이모지 배제 · 디자인 레퍼런스 (라운드 40)")
+print("=" * 72)
+import re as _re110
+_UIF110 = ['web_app.py', 'ui_kit.py', 'premarket.py', 'quant_indicators.py',
+           'market_attention.py', 'next_action.py', 'gaeum_ai.py',
+           'chart_pro.py', 'verdict_core.py', 'price_axes.py']
+_EMO110 = _re110.compile(
+    '[\U0001F300-\U0001FAFF\U00002600-\U000027BF'
+    '\U0001F1E6-\U0001F1FF\U00002B00-\U00002BFF]')
+_KEEP110 = set('→←↑↓↔·—–…‘’“”×÷≥≤±✓')
+
+
+def _display_emoji(path):
+    """주석·docstring 밖(= 화면에 나가는 문자열)의 이모지만 센다."""
+    hits, in_doc = [], False
+    for i, line in enumerate(open(path, encoding='utf-8')):
+        q = line.count('"""') + line.count("'''")
+        was = in_doc
+        if q % 2 == 1:
+            in_doc = not in_doc
+        if was or in_doc or line.lstrip().startswith('#'):
+            continue
+        if 'page_icon=' in line:
+            continue
+        for m in _EMO110.finditer(line):
+            if m.group(0) not in _KEEP110:
+                hits.append((i + 1, m.group(0), line.strip()[:70]))
+    return hits
+
+
+_emo_all110 = []
+for _f110 in _UIF110:
+    _p110 = _os.path.join(PROJ, _f110)
+    if _os.path.exists(_p110):
+        _emo_all110 += [(_f110,) + h for h in _display_emoji(_p110)]
+check("화면 문자열에 이모지가 없다", not _emo_all110,
+      f'{len(_emo_all110)}개: '
+      + ', '.join(f'{f}:{ln}({c})' for f, ln, c, _ in _emo_all110[:6]))
+
+# 판정 색 점은 이모지가 아니라 토큰 색 원으로 그린다
+import ui_kit as _uk110
+check("판정 표시가 토큰 색 점이다", hasattr(_uk110, 'dot'))
+check("결론 배너가 색 점을 쓴다", '_vi = _uk.dot(_vc, 14)' in _w109)
+check("판정 스타일 표에서 이모지를 뺐다",
+      '"🟢"' not in _w109 and '"🔴"' not in _w109 and '"🟡"' not in _w109)
+
+# 레퍼런스가 실제로 있는가
+_refdir110 = _os.path.join(PROJ, 'references', 'design-md')
+_refs110 = ([f for f in _os.listdir(_refdir110) if f.endswith('.md')]
+            if _os.path.isdir(_refdir110) else [])
+check("디자인 레퍼런스를 받아 뒀다", len(_refs110) >= 60,
+      f'{len(_refs110)}개')
+for _need110 in ('binance.md', 'coinbase.md', 'stripe.md', 'linear.app.md'):
+    check(f"금융 계열 레퍼런스 {_need110}", _need110 in _refs110)
+check("레퍼런스 받기 스크립트가 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'fetch_design_md.py')))
+
+# 프로젝트 규칙 파일 — 로직 훼손 방지
+_cl110 = _os.path.join(PROJ, 'CLAUDE.md')
+check("CLAUDE.md 가 있다", _os.path.exists(_cl110))
+if _os.path.exists(_cl110):
+    _cltxt110 = open(_cl110, encoding='utf-8').read()
+    for _k110 in ('절대 건드리지 않는 것', '숫자를 손으로 고르지 않는다',
+                  '없는 값을 지어내지 않는다', '화면 값은 한 곳에서 나온다',
+                  '이모지 금지'):
+        check(f"CLAUDE.md 에 '{_k110}'", _k110 in _cltxt110)
+
+# ══════════════════════════════════════════════════════════════════════
+# §111 — 뉴스 축을 실제로 연동했는가 (라운드 41)
+#   '뉴스·공시 촉매'가 관심점수의 20% 인데 DART 공시 50건만 보고 있었다.
+#   공개 RSS 를 직접 두드려 되는 곳만 넣었다 (연합뉴스 120 · 한경 50 · 매경 50).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§111 뉴스 축 연동 (라운드 41)")
+print("=" * 72)
+import market_attention as _ma111
+import news_feed as _nf111
+
+check("뉴스 모듈이 있다", _os.path.exists(_os.path.join(PROJ, 'news_feed.py')))
+check("공개 RSS 만 쓴다",
+      all(u.startswith('https://') for _, u in _nf111.FEEDS))
+check("실측으로 고른 출처 3곳", len(_nf111.FEEDS) == 3)
+check("본문을 저장하지 않는다고 밝힌다",
+      '본문을 저장하지 않는다' in open(
+          _os.path.join(PROJ, 'news_feed.py'), encoding='utf-8').read())
+
+# 짧은 이름이 다른 상장사와 섞이지 않는가 (GS vs GS건설 · DL vs DL이앤씨)
+for _t111, _n111, _want111 in (('GS건설, 신규 수주', 'GS', False),
+                               ('GS, 자사주 매입', 'GS', True),
+                               ('DL이앤씨 계약', 'DL', False),
+                               ('DL, 유상증자', 'DL', True),
+                               ('LGS전자 신제품', 'GS', False),
+                               ('삼성전자 실적', '삼성전자', True)):
+    check(f"이름 매칭 '{_t111[:14]}' ← {_n111}",
+          _nf111._mentions(_t111, _n111) is _want111)
+
+# 점수 산출 — 기사가 없으면 0, 있으면 신선도·촉매·위험을 반영
+_s111, _d111 = _ma111.score_news('삼성전자', [])
+check("기사가 없으면 0점", _s111 == 0.0 and 'unavailable' in _d111)
+_fake111 = [{'title': '삼성전자, 대규모 수주 계약 체결', 'link': '', 'source': 't',
+             'dt': None}]
+_s111b, _d111b = _ma111.score_news('삼성전자', _fake111)
+check("촉매 낱말을 잡는다", '수주' in (_d111b.get('catalyst_words') or []))
+_risk111 = [{'title': '아무개, 횡령 혐의 압수수색', 'link': '', 'source': 't',
+             'dt': None}]
+check("위험 낱말을 잡는다",
+      '횡령' in (_ma111.score_news('아무개', _risk111)[1].get('risk_words')
+                or []))
+check("점수는 0~100 범위", 0.0 <= _s111b <= 100.0)
+
+# 연동 상태가 '부분'에서 '연동'으로 올라갔는가
+_ev111 = next(c for c in _ma111.COMPONENT_SPEC
+              if c['key'] == 'event_catalyst')
+check("뉴스·공시 촉매가 완전 연동", _ev111['availability'] == 'full')
+check("설명에 실제 출처를 적는다",
+      '연합뉴스' in _ev111['detail'] and '매일경제' in _ev111['detail'])
+check("'news' 후보 발굴이 열렸다",
+      'news' not in _ma111.STRATEGY_UNAVAILABLE)
+check("스캔이 뉴스를 한 번만 받아 재사용한다",
+      'news_items, _news_report = _nf.fetch()' in
+      open(_os.path.join(PROJ, 'market_attention.py'),
+           encoding='utf-8').read())
+check("공시·뉴스 중 높은 쪽을 쓴다",
+      'max(_cands) if _cands else 0.0' in
+      open(_os.path.join(PROJ, 'market_attention.py'),
+           encoding='utf-8').read())
+
+# ══════════════════════════════════════════════════════════════════════
+# §112 — 뉴스가 **실제 판단**에 개입하는가 (라운드 42)
+#   사용자 지적: "화면만 바뀌고 엔진 결과가 그대로라면 업데이트로 인정하지
+#   마세요." 맞다. 뉴스가 관심점수(추천 순위 영향 ≤5%)에만 들어가고 종합점수·
+#   매수 판단에는 안 들어가고 있었다. 룰북 RULES_NEWS 로 게이트를 걸었다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§112 뉴스 → 실제 매매 판단 연결 (라운드 42)")
+print("=" * 72)
+import market_context as _mc112
+_q112 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_w112 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+# 룰북에 규칙이 실렸는가 (엔진이 읽는 단일 출처)
+_nr112 = qi.RULEBOOK.get('RULES_NEWS') or {}
+for _k112 in ('fresh_window_hours', 'risk_block_min_count', 'risk_score_cap',
+              'risk_confidence_cap', 'catalyst_score_bonus'):
+    check(f"룰북 RULES_NEWS 에 {_k112}", _k112 in _nr112)
+check("좋은 뉴스로 점수를 올리지 않는다 (검증 전 비대칭)",
+      float(_nr112.get('catalyst_score_bonus', -1)) == 0.0)
+check("룰북 버전을 올렸다",
+      qi.RULEBOOK.get('RULES_GENERAL', {}).get('version') != 'v2026.08.02',
+      str(qi.RULEBOOK.get('RULES_GENERAL', {}).get('version')))
+check("가점을 안 거는 이유를 룰북에 적었다",
+      '검증될 때까지 비대칭' in open(
+          _os.path.join(PROJ, 'analysis_rulebook_ko.txt'),
+          encoding='utf-8').read())
+
+# 엔진이 그 규칙으로 상한을 씌우는가
+check("엔진에 뉴스 게이트가 있다", 'news_gate = None' in _q112)
+check("점수·신뢰도 상한을 씌운다",
+      "_NR.get('risk_score_cap', 55)" in _q112
+      and "_NR.get('risk_confidence_cap', 60)" in _q112)
+check("악재면 판정 문구가 바뀐다",
+      "final_action_title = '신규 매수 차단 (악재)'" in _q112)
+check("그 문구가 TITLE_MAP 에 등록됐다",
+      "'신규 매수 차단 (악재)':" in _q112)
+check("게이트 결과를 화면에 내보낸다", "'news_gate': news_gate," in _q112)
+check("미수신은 악재가 아니다", 'feed_available' in _q112
+      and '미수신 ≠ 악재' in _q112)
+# self 속성을 지역 이름으로 읽어 게이트가 조용히 안 걸리던 결함
+check("컨텍스트를 self 속성으로 읽는다",
+      "(getattr(self, 'market_context', None) or {})" in _q112)
+check("그 실수를 코드에 기록했다", '조용히 안 걸린다' in _q112)
+
+# 뉴스 요약이 게이트가 쓸 필드를 내는가
+_fk112 = {'items': [
+    {'title': 'A사 횡령 혐의 압수수색', 'risk_hits': ['횡령'], 'watch_hits': [],
+     'scope': '종목', 'lagging': False}], 'available': True}
+_f112 = _mc112.summarize_news_flags(_fk112)
+check("risk_words 를 낸다", _f112.get('risk_words') == ['횡령'])
+check("feed_available 를 낸다", _f112.get('feed_available') is True)
+_e112 = _mc112.summarize_news_flags({'items': [], 'available': False})
+check("미수신이면 feed_available=False", _e112.get('feed_available') is False)
+
+# 네이버가 비면 공개 RSS 로 보완하는가
+check("RSS 보완 경로가 있다", 'def _rss_fallback(' in
+      open(_os.path.join(PROJ, 'market_context.py'), encoding='utf-8').read())
+check("보완 출처를 밝힌다", '공개 RSS 보완' in
+      open(_os.path.join(PROJ, 'market_context.py'), encoding='utf-8').read())
+
+# 화면이 개입 사실과 근거를 밝히는가
+check("화면이 뉴스 게이트를 표시한다",
+      '악재로 신규 매수를 차단했습니다' in _w112)
+check("화면이 엔진 버전을 함께 적는다",
+      "_VER_NOW.get('news'" in _w112 and "_VER_NOW.get('rulebook'" in _w112)
+check("개입 안 했으면 말하지 않는다", "if _ng.get('risk'):" in _w112)
+
+# 근거 표가 중앙 판정과 같은 값을 쓰는가 (라운드 42 · 배너와 어긋났던 자리)
+check("근거 표에 실행 진입가 행이 있다", '★ 실행 진입가 (오늘 쓰는 값)' in _w112)
+check("근거 표가 중앙 판정을 읽는다",
+      "(CORE or {}).get('pullback_zone')" in _w112
+      and "(CORE or {}).get('new_target')" in _w112)
+check("적정가 행은 '오늘의 매수가가 아니다'라고 밝힌다",
+      '오늘의 매수가가 아니다' in _w112)
+check("보유자 기준임을 라벨에 적는다",
+      '(보유자 · 현재가 기준)' in _w112)
+
+# ══════════════════════════════════════════════════════════════════════
+# §113 — 메타 레이블링 기각을 기록으로 잠근다 (라운드 43)
+#   valid 65.2% 였던 규칙이 blind 54.5% 로 무너졌다(기준선 56.1%보다 낮다).
+#   사전등록을 안 했다면 valid 수치를 '목표 달성'으로 보고했을 것이다.
+#   이 기록이 지워지면 같은 규칙을 다시 채택할 위험이 있다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§113 메타 레이블링 기각 기록 (라운드 43)")
+print("=" * 72)
+_pre113 = _os.path.join(PROJ, 'docs', 'PREREG_R43_META_LABELING.md')
+check("사전등록 문서가 있다", _os.path.exists(_pre113))
+if _os.path.exists(_pre113):
+    _pt113 = open(_pre113, encoding='utf-8').read()
+    check("측정 전에 썼다고 밝힌다", '측정 전' in _pt113)
+    check("판정 기준 8개를 미리 고정했다",
+          all(x in _pt113 for x in ('≥ 65.0%', '≥ 100건', '≥ 58.0%')))
+    check("못 재는 것을 하지 않는다고 적었다",
+          '지금은 검증할 수 없다' in _pt113)
+    check("실패 가능성을 미리 적었다", '채택 가능성은 낮다고 본다' in _pt113)
+
+_ml113 = _os.path.join(PROJ, '.portfolio', 'meta_label_r43.json')
+check("메타 레이블링 산출물이 있다", _os.path.exists(_ml113))
+if _os.path.exists(_ml113):
+    with open(_ml113, encoding='utf-8') as _f:
+        _d113 = _j105.load(_f)
+    check("판정이 기각이다", _d113.get('verdict') == '기각',
+          str(_d113.get('verdict')))
+    _b113 = _d113.get('blind') or {}
+    _v113 = _d113.get('valid') or {}
+    _base113 = _d113.get('base_blind') or {}
+    check("valid 에서는 65% 를 넘었다", (_v113.get('hit') or 0) >= 65.0,
+          f"valid {_v113.get('hit')}%")
+    check("blind 에서 무너졌다", (_b113.get('hit') or 100) < 65.0,
+          f"blind {_b113.get('hit')}%")
+    check("기준선보다도 낮았다",
+          (_b113.get('hit') or 100) < (_base113.get('hit') or 0),
+          f"{_b113.get('hit')}% vs 기준선 {_base113.get('hit')}%")
+    check("blind EV 가 음수였다", (_b113.get('ev') or 0) < 0,
+          f"{_b113.get('ev')}")
+    check("판정 기준 8개를 다 기록했다", len(_d113.get('checks') or []) == 8)
+
+_fd113 = _os.path.join(PROJ, '.portfolio', 'failure_decomp_r43.json')
+check("실패 분해 산출물이 있다", _os.path.exists(_fd113))
+check("문서에 기각을 적었다",
+      '메타 레이블링, 사전등록대로 기각' in
+      open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+           encoding='utf-8').read())
+check("65% 미달을 숨기지 않는다",
+      '65 % 는 이번 라운드에서 달성하지 못했다' in
+      open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+           encoding='utf-8').read()
+      or '65% 는 이번 라운드에서 달성하지 못했다' in
+      open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+           encoding='utf-8').read())
+
+# 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
+check("버전 칩에 근거 설명이 붙는다",
+      '이후 바뀌지 않았습니다' in _w109
+      and '그 축이 마지막으로 바뀐 시점' in _w109)
+# 축별 버전이 실제로 그 축의 파일 변경과 맞는가 (뒤처지면 실패)
+import subprocess as _sp109
+_AXF109 = {'model': ['quant_indicators.py', 'verdict_core.py',
+                     'price_axes.py', 'regime_policy.py'],
+           'rulebook': ['analysis_rulebook_ko.txt'],
+           'news': ['market_context.py']}
+for _ax109, _files109 in _AXF109.items():
+    _v109 = _ver101.current(_ax109)
+    _vd109 = _v109[1:11].replace('.', '-') if _v109.startswith('v') else ''
+    _last109 = ''
+    for _f109 in _files109:
+        if not _os.path.exists(_os.path.join(PROJ, _f109)):
+            continue
+        _d109 = _sp109.run(['git', 'log', '-1', '--date=short', '--pretty=%ad',
+                            _f109], cwd=PROJ, capture_output=True, text=True,
+                           encoding='utf-8', errors='replace').stdout.strip()
+        if _d109 > _last109:
+            _last109 = _d109
+    check(f"'{_ax109}' 버전이 담당 파일 변경보다 뒤처지지 않는다",
+          (not _last109) or _vd109 >= _last109,
+          f'버전 {_v109}({_vd109}) vs 파일 최종 변경 {_last109}')
 
 
 print()
