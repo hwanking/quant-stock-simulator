@@ -6501,6 +6501,75 @@ _mf114 = _pa103.market_fair(
 check("조정 0 이면 근거에 '조정' 이라 쓰지 않는다",
       '조정' not in str(_mf114.get('basis') or ''), _mf114.get('basis'))
 
+# ══════════════════════════════════════════════════════════════════════
+# §115 — 시장 수준 축은 날짜 수가 표본이다 (라운드 45)
+#   VIX 축이 블라인드 6개 조건을 **전부 통과**했다 (lift +33.9%p).
+#   그런데 블라인드 매수권 280건은 고유 기준일 **5개**에서 나왔고,
+#   VIX 는 하루 안에서 모든 종목에 같은 값이라 VIX 로 자르는 것은
+#   날짜로 자르는 것이었다. lift 의 거의 전부가 2026-04-16 하루에서 나왔다.
+#   이 기록이 지워지면 같은 교란을 '발견'으로 채택할 위험이 있다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§115 시장 수준 축은 날짜 수가 표본이다 (라운드 45)")
+print("=" * 72)
+_pre115 = _os.path.join(PROJ, 'docs', 'PREREG_R45_STUDY.md')
+check("사전등록 문서가 있다", _os.path.exists(_pre115))
+if _os.path.exists(_pre115):
+    _pt115 = open(_pre115, encoding='utf-8').read()
+    check("측정 전에 썼다고 밝힌다", '측정 전' in _pt115)
+    check("구간수 × 최소표본을 미리 계산했다 (라운드 44 교훈)",
+          '구간 수 × 칸당 최소표본' in _pt115)
+    check("다중비교 보정을 미리 정했다",
+          'Bonferroni' in _pt115 and '2.87' in _pt115)
+    check("사후 기록을 따로 표시했다", '사후 기록' in _pt115)
+    check("통과했지만 기각한 사실을 적었다",
+          '전부 통과' in _pt115 and 'B1 VIX 기각' in _pt115)
+    check("기준을 내린 게 아님을 밝힌다",
+          '기준을 사후에 내린 것이 아니라' in _pt115)
+
+# 실측 산출물 — 군집 구조가 기록돼 있는가
+_cl115 = _os.path.join(PROJ, '.portfolio', 'study_r45_cluster.json')
+check("군집 산출물이 있다", _os.path.exists(_cl115))
+if _os.path.exists(_cl115):
+    with open(_cl115, encoding='utf-8') as _f:
+        _d115 = _j105.load(_f)
+    _b115 = (_d115.get('splits') or {}).get('blind') or {}
+    check("블라인드 매수권 날짜 수가 기록돼 있다",
+          _b115.get('buy_dates') is not None, str(_b115))
+    check("블라인드 날짜가 30개 미만이다 — 시장 수준 축 판정 불가",
+          int(_b115.get('buy_dates') or 0) < 30,
+          f"날짜 {_b115.get('buy_dates')}개 · 케이스 {_b115.get('buy')}건")
+    check("케이스 수가 날짜 수보다 훨씬 크다 (군집이 실재한다)",
+          int(_b115.get('buy') or 0) > int(_b115.get('buy_dates') or 1) * 10)
+    # 종목 수준 축은 하루 안에서 값이 갈린다 — 이쪽은 케이스가 표본이다
+    _lv115 = _d115.get('axis_level') or {}
+    for _k115 in ('rsi', 'bb_pos', 'range_pos'):
+        if _k115 in _lv115:
+            check(f"'{_k115}' 는 종목 수준 축이다",
+                  float(_lv115[_k115].get('within_day_sd') or 0) > 0,
+                  str(_lv115[_k115].get('within_day_sd')))
+
+_st115 = _os.path.join(PROJ, '.portfolio', 'study_r45.json')
+check("스터디 산출물이 있다", _os.path.exists(_st115))
+if _os.path.exists(_st115):
+    with open(_st115, encoding='utf-8') as _f:
+        _s115 = _j105.load(_f)
+    check("1차 관문을 통과한 축이 1개뿐이었다",
+          int(_s115.get('n_passed') or 0) <= 1, str(_s115.get('n_passed')))
+    # 종목 수준 축 6개가 전부 탈락한 사실
+    _fail115 = [k for k, v in (_s115.get('stage1') or {}).items()
+                if k.startswith('A') and v.get('verdict') != '1차 통과']
+    check("방향 오판 해부 축 6개가 전부 1차 탈락했다",
+          len(_fail115) == 6, f"탈락 {len(_fail115)}개")
+
+check("문서에 라운드 45 기각을 적었다",
+      '라운드 45' in open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+                        encoding='utf-8').read())
+check("엔진 변경 없이 버전을 올리지 않았다고 적었다",
+      '엔진 변경 없음. 버전 올리지 않는다' in
+      open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+           encoding='utf-8').read())
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
