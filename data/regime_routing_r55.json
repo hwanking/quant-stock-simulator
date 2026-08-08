@@ -1,0 +1,23 @@
+{
+ "made": "2026-08-09",
+ "status": "FORWARD_TRIAL",
+ "note": "사전등록 게이트(PREREG_R55_REGIME_MOE.md §4) 전부 통과한 유일 후보. 즉시 적용하지 않는다 — §4-5 에 따라 2026-08-23 이후 전방 축적분(2026-08-09~)으로 같은 게이트를 1회 재평가해 통과 시에만 versioning.release(axis='model') 와 함께 적용한다. 미달이면 기각하고 현행 유지 — 재튜닝해 같은 전방 구간을 다시 보지 않는다. 병행에 기록기 수정은 불필요 — 국면은 코스피 일봉에서, 프록시는 원장 결정시점 필드에서 재구성된다 (scripts/regime_moe_lab.py).",
+ "vol_median_train": 0.0092,
+ "routing": {
+  "ABOVE_BOTH|고변동": "돌파",
+  "ABOVE_BOTH|저변동": "평균회귀",
+  "BEAR|고변동": "평균회귀",
+  "BEAR|저변동": "돌파",
+  "PULLBACK|고변동": "과열회피",
+  "PULLBACK|저변동": "돌파",
+  "REBOUND|고변동": "과열회피",
+  "REBOUND|저변동": "과열회피"
+ },
+ "valid_result": {
+  "base": {"cover": 100.0, "hit": 66.1, "ev": 0.660, "pf": 1.33, "monthly": 219, "n": 1536},
+  "routing": {"cover": 39.1, "hit": 67.0, "wilson": 63.1, "ev": 1.053, "pf": 1.51, "monthly": 86, "n": 600},
+  "meta_abstain": {"cover": 20.1, "hit": 70.5, "ev": 2.127, "pf": 1.87, "monthly": 44, "n": 308, "verdict": "기각 — 커버리지 30% 미달"},
+  "combined": {"cover": 10.5, "hit": 71.4, "ev": 2.510, "pf": 2.07, "monthly": 23, "n": 161, "verdict": "기각 — 커버리지 30% 미달"}
+ },
+ "blind_touched": false
+}

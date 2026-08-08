@@ -7358,6 +7358,35 @@ check("복원 가치주 코호트가 박제됐다 (전방 검증용)",
       _cj122.get('n_caution', 0) >= 100 and len(_cj122.get('caution')) ==
       _cj122.get('n_caution'))
 
+# ══════════════════════════════════════════════════════════════════════
+# §123 — 라운드 55: 국면 라우팅 전방 병행 박제
+#   첫 게이트 통과 후보. 즉시 적용이 아니라 2주 전방 재평가 후 적용 —
+#   그 절차가 문서·정책 파일에 고정돼 있는지 잠근다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§123 국면 라우팅 전방 병행 (라운드 55)")
+print("=" * 72)
+_rr123 = _json.load(open(_os.path.join(PROJ, 'data',
+                                       'regime_routing_r55.json'),
+                         encoding='utf-8'))
+check("정책이 박제돼 있다 (8칸 라우팅)",
+      len(_rr123.get('routing') or {}) == 8)
+check("상태가 전방 병행이다 — 즉시 적용 아님",
+      _rr123.get('status') == 'FORWARD_TRIAL')
+check("blind 를 만지지 않았다", _rr123.get('blind_touched') is False)
+check("재평가 날짜·기각 원칙이 정책에 적혀 있다",
+      '2026-08-23' in str(_rr123.get('note'))
+      and '현행 유지' in str(_rr123.get('note')))
+_pr123 = open(_os.path.join(PROJ, 'docs', 'PREREG_R55_REGIME_MOE.md'),
+              encoding='utf-8').read()
+check("사전등록에 전방 재평가 §4b 가 있다",
+      '전방 재평가 등록' in _pr123 and '재튜닝해 다시 전방을 보지 않는다'
+      in _pr123)
+check("측정 스크립트가 저장소에 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'regime_moe_lab.py')))
+check("커버리지 하한 기각이 기록돼 있다 (좋아 보여도 자른다)",
+      '커버리지 30% 미달' in str(_rr123.get('valid_result')))
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
