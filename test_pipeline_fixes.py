@@ -6871,6 +6871,86 @@ check("별칭이 경량 스캔 변수와 겹치지 않는다",
 check("띠 하나 때문에 앱이 죽지 않는다",
       '띠 하나 때문에 앱이 죽지 않는다' in _w118)
 
+# ══════════════════════════════════════════════════════════════════════
+# §119 — 순위에 정보가 없다 (라운드 49·50)
+#   사용자 요구: *"우리가 추천한 종목이 추천하지 않은 종목보다 실제로 더
+#   많이 올랐는가? 차이가 없다면 추천 엔진이 의미가 없는 것입니다."*
+#   맞다. 그리고 재 보니 **차이가 없었다.** 이 기록이 지워지면 타점·엑시트
+#   개선을 순위 문제보다 먼저 하게 된다 — 잘못된 목록을 예쁘게 정렬하는 일.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§119 순위에 정보가 없다 (라운드 49·50)")
+print("=" * 72)
+for _p119, _ko119 in ((('docs', 'PREREG_R49_RANK_VALUE.md'), '라운드 49'),
+                      (('docs', 'PREREG_R50_RANK_AXES.md'), '라운드 50')):
+    _f119 = _os.path.join(PROJ, *_p119)
+    check(f"{_ko119} 사전등록이 있다", _os.path.exists(_f119))
+    if _os.path.exists(_f119):
+        _t119 = open(_f119, encoding='utf-8').read()
+        check(f"{_ko119} — 측정 전에 썼다고 밝힌다", '측정 전' in _t119)
+        check(f"{_ko119} — 봉인 구간을 읽지 않는다고 적었다",
+              'evaluated_holdout_1' in _t119 and '읽지 않는다' in _t119)
+
+_r49 = _os.path.join(PROJ, '.portfolio', 'rank_value_r49.json')
+check("라운드 49 산출물이 있다", _os.path.exists(_r49))
+if _os.path.exists(_r49):
+    with open(_r49, encoding='utf-8') as _f:
+        _d49 = _j105.load(_f)
+    check("판정이 미달이다", _d49.get('verdict') == '미달', str(_d49.get('verdict')))
+    check("순위가 단조가 아니었다", _d49.get('monotonic') is False)
+    check("TOP5 가 미추천보다 나았다는 증거가 없다",
+          float(_d49.get('lift') or 0) < 5.0, str(_d49.get('lift')))
+    check("봉인 구간을 제외하고 쟀다",
+          _d49.get('split') == 'development_only')
+
+_r49b = _os.path.join(PROJ, '.portfolio', 'rank_value_r49b.json')
+check("날짜 교란 확인 산출물이 있다", _os.path.exists(_r49b))
+if _os.path.exists(_r49b):
+    with open(_r49b, encoding='utf-8') as _f:
+        _d49b = _j105.load(_f)
+    check("같은 날 안에서 짝지어 다시 쟀다",
+          int(_d49b.get('paired_days') or 0) >= 100,
+          f"{_d49b.get('paired_days')}일")
+    check("교란을 걷어내도 상위5 우위가 없다",
+          float(_d49b.get('mean_hit_diff') or 0) < 3.0,
+          f"{_d49b.get('mean_hit_diff')}%p")
+
+_r50 = _os.path.join(PROJ, '.portfolio', 'rank_axes_r50.json')
+check("라운드 50 산출물이 있다", _os.path.exists(_r50))
+if _os.path.exists(_r50):
+    with open(_r50, encoding='utf-8') as _f:
+        _d50 = _j105.load(_f)
+    check("통과 축이 없다", len(_d50.get('passed') or []) == 0,
+          str(_d50.get('passed')))
+    check("9개 축을 다 쟀다", len(_d50.get('axes') or {}) >= 8)
+    check("기준선(종합점수)도 같이 쟀다",
+          (_d50.get('baseline') or {}).get('mean_hit') is not None)
+
+# 결론이 프로젝트 규칙에 박혔는가 — 새 기능 요청에 순서가 밀리지 않도록
+_cl119 = open(_os.path.join(PROJ, 'CLAUDE.md'), encoding='utf-8').read()
+check("CLAUDE.md 에 '순위에 정보가 없다'를 박았다",
+      '순위에 정보가 없다' in _cl119)
+check("타점·엑시트보다 산식이 먼저임을 적었다",
+      '점수 산식 자체를 다시 봐야 한다' in _cl119)
+check("새 기능 요청에도 순서를 바꾸지 않는다고 적었다",
+      '이 순서를 바꾸지' in _cl119)
+
+# 원장 확장 — 없는 키를 적지 않았는가
+_lab119 = open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'),
+               encoding='utf-8').read()
+check("원장에 하위점수를 기록한다",
+      all(_k in _lab119 for _k in ('q_stock_quality', 'q_trading_timing',
+                                   'q_risk_safety', 'q_opportunity',
+                                   'q_execution')))
+check("원장에 업종을 기록한다", "'sector':" in _lab119)
+check("원장에 뉴스 필드를 기록한다 (라운드 42 한계 해소)",
+      'news_risk_count' in _lab119 and 'news_available' in _lab119)
+check("존재하지 않는 키는 적지 않는다",
+      "'q_signal_consensus'" not in _lab119)
+check("왜 뺐는지 코드에 남겼다",
+      'signal_consensus_score 는' in _lab119 and '뺐다' in _lab119
+      and 'null 로 쌓인다' in _lab119)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

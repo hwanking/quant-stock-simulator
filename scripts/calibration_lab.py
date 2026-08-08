@@ -826,6 +826,39 @@ def main(limit=200):
                 'demark_bear': (fs.get('demark_res') or {}).get('bearish_score'),
                 'win_rate': (snap.get('sim_res') or {}).get('obs_win_ratio'),
                 'eff_sample': fs.get('eff_sample_size'),
+                # ── 3차 확장 (라운드 50) — **하위점수를 남긴다** ──────────
+                # 라운드 49·50 에서 벽에 부딪혔다: 같은 날 안에서 종합점수로
+                # 줄을 세우면 상위5가 6위이하보다 오히려 나빴고(−2.29%p),
+                # 원장에 있는 재료 8종 어느 것으로도 우열이 안 갈렸다.
+                #
+                # 그런데 **왜 안 갈리는지 분해할 수가 없었다.** 원장에
+                # 종합점수 하나뿐이라, 네 축(기본매력·매매적합·리스크·
+                # 최종행동) 중 어디가 순위를 망치는지 볼 방법이 없었다.
+                # 없는 것으로는 아무것도 못 한다 — 그래서 기록부터 남긴다.
+                'q_stock_quality': fs.get('stock_quality_score'),
+                'q_trading_timing': fs.get('trading_timing_score'),
+                'q_risk_safety': fs.get('risk_safety_score'),
+                'q_opportunity': fs.get('opportunity_score'),
+                'q_execution': fs.get('execution_score'),
+                'q_confidence': fs.get('analysis_confidence'),
+                'q_strategy_quality': fs.get('strategy_quality_score'),
+                # ⚠️ signal_consensus_score 는 **뺐다.** 엔진 내부 변수라
+                #    four_scores 로 안 나온다 — 적으면 전부 null 로 쌓인다.
+                #    (_probe/verify_ledger_keys_r50.py 로 확인했다.
+                #     없는 키를 적는 것은 '기록했다'는 착각만 남긴다)
+                # 업종 — 지금은 KRX-DESC 로 외부 조인해야 한다. 조인 키가
+                # 오늘의 상장 목록이라 과거 재분류를 반영하지 못한다.
+                'sector': ((snap.get('val_eval') or {}).get('sector')
+                           or fs.get('sector')),
+                # 뉴스 — 라운드 42 에서 "원장에 뉴스 필드가 없어 검증 불가"
+                # 라 가점을 0 으로 뒀다. 그 한계를 여기서 푼다.
+                'news_risk_count': ((snap.get('market_context') or {})
+                                    .get('news_flags') or {}).get('risk_count'),
+                'news_fresh_count': ((snap.get('market_context') or {})
+                                     .get('news_flags') or {})
+                                    .get('fresh_watch_count'),
+                'news_available': bool(((snap.get('market_context') or {})
+                                        .get('news') or {}).get('available')),
             }
             with open(VIRT_FILE, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
