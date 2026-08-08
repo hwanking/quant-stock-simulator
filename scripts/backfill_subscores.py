@@ -21,7 +21,19 @@
   이뤄지기 때문이고, 봉인된 블라인드는 애초에 읽지 않는다.
 
     C:/Python314/python.exe scripts/backfill_subscores.py [--limit N] [--all]
+
+■ 병렬 (라운드 53)
+  단일 프로세스가 한 코어의 30%밖에 못 쓰고 있어 15,726건에 6.7시간이
+  걸렸다. 대상을 조각으로 나눠 동시에 돌린다.
+
+    --shard i/n   sorted(todo) 를 n등분한 i번째만 처리 (0부터)
+    --out NAME    .portfolio/NAME 에 기록 (조각마다 다른 파일)
+
+  **조각마다 파일을 갈라야 한다.** 여러 프로세스가 한 파일에 append 하면
+  줄이 섞여 깨질 수 있다. 완료 판정은 `subscore_patch*.jsonl` 전부를
+  읽어서 하므로, 조각을 어떻게 나누든 이미 끝난 건은 다시 돌지 않는다.
 """
+import glob
 import io
 import json
 import os
@@ -54,9 +66,13 @@ FIELDS = (('q_stock_quality', 'stock_quality_score'),
 
 
 def load_done():
+    """완료 집합 — 조각 파일을 전부 읽는다.
+
+    한 조각만 읽으면 다른 조각이 끝낸 건을 다시 돌게 된다.
+    """
     done = set()
-    if os.path.exists(PATCH):
-        with open(PATCH, encoding='utf-8') as f:
+    for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
+        with open(path, encoding='utf-8') as f:
             for ln in f:
                 try:
                     r = json.loads(ln)
@@ -71,6 +87,17 @@ def main():
     if '--limit' in sys.argv:
         limit = int(sys.argv[sys.argv.index('--limit') + 1])
     want_all = '--all' in sys.argv
+
+    out_path = PATCH
+    if '--out' in sys.argv:
+        out_path = os.path.join(P, sys.argv[sys.argv.index('--out') + 1])
+    shard = shards = None
+    if '--shard' in sys.argv:
+        raw = sys.argv[sys.argv.index('--shard') + 1]
+        shard, shards = (int(x) for x in raw.split('/'))
+        if not 0 <= shard < shards:
+            print(f'조각 번호가 범위를 벗어남: {raw}')
+            return 2
 
     rows = []
     with open(LEDGER, encoding='utf-8') as f:
@@ -99,6 +126,11 @@ def main():
     print(f'채울 대상 {len(todo):,}건 '
           f'({"전체" if want_all else "개발 구간 매수권만"}) · '
           f'이미 완료 {len(done):,}건')
+    if shards:
+        # 나누기는 **완료분을 뺀 뒤**에 한다. 그래야 조각이 고르게 남는다.
+        todo = todo[shard::shards]
+        print(f'조각 {shard}/{shards} → {len(todo):,}건 · 기록 '
+              f'{os.path.basename(out_path)}')
     if not todo:
         print('채울 것이 없다.')
         return 0
@@ -106,7 +138,7 @@ def main():
     q = qi.QuantIndicatorsEngine()
     eng = be.BitemporalEngine()
     t0, ran, fail = time.time(), 0, 0
-    with open(PATCH, 'a', encoding='utf-8') as out:
+    with open(out_path, 'a', encoding='utf-8') as out:
         for tk, d in todo:
             if ran >= limit:
                 print(f'  한도 {limit}건 도달 — 이어서 실행 가능')
@@ -131,7 +163,7 @@ def main():
                 if fail <= 5:
                     print(f'  [실패] {tk} @ {d} — {type(exc).__name__}')
     print(f'\n완료 {ran:,}건 · 실패 {fail}건')
-    print(f'저장: {PATCH}')
+    print(f'저장: {out_path}')
     print('  원장 병합은 merge 단계에서 한다 — 채점 결과는 건드리지 않는다.')
     return 0
 

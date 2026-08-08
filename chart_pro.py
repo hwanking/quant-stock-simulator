@@ -56,11 +56,16 @@ def _series(times, vals):
 
 
 def build_chart_html(tech_df, four_scores, name='', unit_str='원',
-                     theme='dark', user_avg=None, n_bars=None, height=780):
+                     theme='dark', user_avg=None, n_bars=None, height=780,
+                     core=None):
     """전체 차트 HTML(문자열)을 만든다. st.components.v1.html 로 넣는다.
 
     n_bars=None 이면 보유한 전체 이력을 싣는다 — '전체' 버튼이 진짜 전체를
     보여야 하기 때문이다 (기본 화면은 JS 쪽에서 1년으로 시작).
+
+    core 는 `verdict_core.build()` 결과다. **넘기면 실행 가격선을 여기서만
+    받는다** — 없으면 four_scores 로 물러서지만, 그건 배너와 다른 숫자다
+    (아래 실행 가격선 주석 참고).
     """
     th = _THEMES.get(theme, _THEMES['dark'])
     df = (tech_df.tail(int(n_bars)) if n_bars else tech_df).copy() \
@@ -189,17 +194,47 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
         except (TypeError, ValueError):
             continue
 
-    # ── 실행 가격선 — 배너와 같은 숫자만 쓴다 ─────────────
+    # ── 실행 가격선 ───────────────────────────────────────
+    #
+    # ⚠️ 라운드 53 — 여기에 "배너와 같은 숫자만 쓴다"고 적혀 있었지만
+    # **거짓이었다.** 이 차트는 `recommended_buy_price`(적정가 × 안전마진)를
+    # '추천 매수가'로 그렸다. 그 산식은 라운드 25 에서 폐기했고 라운드 37 에
+    # 배너에서 걷어낸 것이다 — 삼성전자 현재가 240,000원에 "147,567원 이하로
+    # 사세요"(−38.5%) 를 만들어 낸 바로 그 값이다. 배너는 이미 CORE 의 실행
+    # 진입가를 쓰고 있었으니, 같은 화면에서 '추천 매수가'가 두 개의 다른
+    # 숫자였다 (CLAUDE.md §4).
+    #
+    # 목표·손절도 마찬가지다. `target_tech_1st`/`stop_loss_price` 는 **보유자
+    # 기준(현재가 기준)**이고 배너는 **신규 매수자 기준**을 쓴다. 이름표 없이
+    # 섞으면 신규 매수자가 남의 손절가를 보게 된다.
     fs = four_scores or {}
+    co = core or {}
+    if co:
+        _rows = [(co.get('pullback_zone'), '실행 진입가 · 신규', '#ffd60a', 0),
+                 (co.get('new_target'), '1차 목표 · 신규', '#30d158', 0),
+                 (co.get('new_stop'), '손절 · 신규', '#ff453a', 0),
+                 (fs.get('target_tech_2nd'), '2차 목표', '#2997ff', 2),
+                 (fs.get('displayed_fair_value'), '펀더멘털 적정가 (장기)',
+                  '#2997ff', 1)]
+        if (co.get('bucket') or '').startswith('돌파'):
+            _rows.append((co.get('breakout_price'), '돌파 매수가 · 신규',
+                          '#30d158', 2))
+        if user_avg:                      # 보유자 값은 실제 보유자에게만
+            _rows += [(co.get('hold_trim'), '1차 목표 · 보유자', '#30d158', 2),
+                      (co.get('hold_stop'), '손절 · 보유자', '#ff453a', 2)]
+    else:
+        # 중앙 판정을 못 받은 자리(단독 호출·테스트). 폐기된 추천가는 쓰지
+        # 않는다 — 없는 선이 틀린 선보다 낫다.
+        _rows = [(fs.get('target_tech_1st'), '1차 목표 · 보유자', '#30d158', 2),
+                 (fs.get('target_tech_2nd'), '2차 목표', '#2997ff', 2),
+                 (fs.get('stop_loss_price'), '손절 · 보유자', '#ff453a', 2),
+                 (fs.get('displayed_fair_value'), '펀더멘털 적정가 (장기)',
+                  '#2997ff', 1)]
     plines = []
     for val, label, color, style in (
-            (fs.get('recommended_buy_price'), '추천 매수가', '#ffd60a', 2),
-            (fs.get('target_tech_1st'), '1차 목표가', '#30d158', 2),
-            (fs.get('target_tech_2nd'), '2차 목표가', '#2997ff', 2),
-            (fs.get('stop_loss_price'), '손절가', '#ff453a', 0),
-            (dm.get('tdst_support'), 'TDST 지지', '#30d15888', 1),
-            (dm.get('tdst_resistance'), 'TDST 저항', '#ff9f0a88', 1),
-            (user_avg, '내 평단가', '#bf5af2', 0)):
+            _rows + [(dm.get('tdst_support'), 'TDST 지지', '#30d15888', 1),
+                     (dm.get('tdst_resistance'), 'TDST 저항', '#ff9f0a88', 1),
+                     (user_avg, '내 평단가', '#bf5af2', 0)]):
         v = _f(val)
         if v and v > 0:
             plines.append({'price': v, 'title': label, 'color': color,

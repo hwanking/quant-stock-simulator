@@ -1075,12 +1075,19 @@ class BitemporalEngine:
             if len(closes) < 60:
                 return {"available": False, "reason": f"지수 봉 수 부족 ({len(closes)}개)"}
             arr = np.array(closes, dtype=float)
+            # 60일선의 **기울기** — 위치만으로 판정하지 않기 위해 5봉 전
+            # 60일선을 같이 낸다. 라운드 52 실측: 같은 '20·60 모두 아래'
+            # 라도 60선이 상승 중이면 개발 구간 적중 67.1%, 하락 중이면
+            # 53.8% 로 13.3%p 갈렸다. 위치만 보면 이 둘이 한 칸이 된다.
+            # 봉이 모자라면 None — 지어내지 않는다.
+            sma60_prev = (float(arr[-65:-5].mean()) if len(arr) >= 65 else None)
             return {
                 "available": True,
                 "index": index_name,
                 "price": float(arr[-1]),
                 "sma20": float(arr[-20:].mean()),
                 "sma60": float(arr[-60:].mean()),
+                "sma60_prev": sma60_prev,
                 "bars": len(arr),
             }
         except Exception as exc:

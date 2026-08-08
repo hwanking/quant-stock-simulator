@@ -1021,6 +1021,145 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
         f"<div class='gn-tick'>{row}{row}</div></div>")
 
 
+def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
+    """
+    매매 지시서 — 화면 맨 위. "그래서 얼마에 사서 언제 파는가".
+
+    p: trade_plan.build() 결과
+    없는 값은 그리지 않는다. 특히 **한계 문구를 빼지 않는다** — 지시서는
+    확신처럼 읽히므로, 검증되지 않은 부분을 밝히지 않으면 과장이 된다.
+    """
+    t = tokens(theme)
+    b = p.get('buyer') or {}
+    h = p.get('holder') or {}
+    m = p.get('market') or {}
+
+    def _won(v):
+        f = None
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return None if f != f else f'{f:,.0f}원'
+
+    def _row(label, value, sub='', col=None):
+        if not value:
+            return ''
+        return (f"<div style='min-width:132px;'>"
+                f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
+                f"{_esc(label)}</p>"
+                f"<p style='margin:2px 0 0 0; font-size:16px; font-weight:700; "
+                f"color:{col or t['tx1']}; font-variant-numeric:tabular-nums;'>"
+                f"{_esc(value)}</p>"
+                + (f"<p style='margin:1px 0 0 0; font-size:11px; "
+                   f"color:{t['tx3']};'>{_esc(sub)}</p>" if sub else '')
+                + "</div>")
+
+    # ① 시장 진단
+    mkt = ''
+    if m:
+        note = m.get('slope_note') or ''
+        mkt = (f"<div style='background:{t['raised']}; border-radius:9px; "
+               f"padding:9px 12px;'>"
+               f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
+               f"시장 진단</p>"
+               f"<p style='margin:2px 0 0 0; font-size:13px; "
+               f"color:{t['tx1']};'><b>{_esc(m.get('ko'))}</b>"
+               + (f" · 60일선 {_esc(m.get('slope_ko'))}"
+                  if m.get('slope_ko') else '') + "</p>"
+               f"<p style='margin:3px 0 0 0; font-size:12px; "
+               f"color:{t['tx2']}; line-height:1.6;'>{_esc(m.get('say'))}"
+               + (f" {_esc(note)}" if note else '') + "</p>"
+               f"<p style='margin:3px 0 0 0; font-size:11px; "
+               f"color:{t['tx3']};'>개발 구간 실측 n={m.get('n'):,}"
+               f" · 기준일 {m.get('days')}일 · 적중 {m.get('hit')}%"
+               f" · 비용후 EV {m.get('ev'):+.3f}% — "
+               f"시장 상태는 하루 안에서 모든 종목에 같은 값이라 유효 표본이 "
+               f"날짜입니다. 블라인드로 확정하지 못했습니다.</p></div>")
+
+    # ② 신규 매수 지시
+    buy = ''
+    if b.get('available'):
+        col = t['pos'] if b.get('actionable') else t['warn']
+        prices = ''.join((
+            _row('매수구간',
+                 (f"{b['entry_zone'][0]:,.0f}~{b['entry_zone'][1]:,.0f}원"
+                  if b.get('entry_zone') else _won(b.get('entry'))),
+                 '이 값 이하에서만'),
+            _row('돌파 매수', _won(b.get('breakout')), '거래량 동반 시'),
+            _row('1차 목표', _won(b.get('target')),
+                 (f"{b['target_pct']:+.1f}%" if b.get('target_pct') else ''),
+                 t['up']),
+            _row('2차 목표', _won(b.get('target2')),
+                 (f"{b['target2_pct']:+.1f}%" if b.get('target2_pct') else ''),
+                 t['up']),
+            _row('손절', _won(b.get('stop')),
+                 (f"{b['stop_pct']:+.1f}%" if b.get('stop_pct') else ''),
+                 t['down']),
+            _row('손익비', (f"{b['rr']}:1" if b.get('rr') else None)),
+            _row('예상 보유', f"{b.get('horizon')}거래일"),
+        ))
+        ev = b.get('expected')
+        buy = (f"<div>"
+               f"<p style='margin:0 0 4px 0; font-size:15px; font-weight:700; "
+               f"color:{col};'>{_esc(b.get('headline'))}</p>"
+               + (f"<p style='margin:0 0 9px 0; font-size:13px; "
+                  f"color:{t['tx2']}; line-height:1.65;'>"
+                  f"{_esc(b.get('line'))}</p>" if b.get('line') else '')
+               + f"<div style='display:flex; gap:18px; flex-wrap:wrap;'>"
+                 f"{prices}</div>"
+               + (f"<p style='margin:8px 0 0 0; font-size:12px; "
+                  f"color:{t['warn'] if (ev or 0) <= 0 else t['pos']};'>"
+                  f"비용 차감 기대값 {ev:+.2f}%</p>" if ev is not None else '')
+               + f"<p style='margin:6px 0 0 0; font-size:11px; "
+                 f"color:{t['tx3']}; line-height:1.6;'>"
+                 f"{_esc(b.get('target_caveat'))}</p></div>")
+    elif b.get('why'):
+        buy = (f"<p style='margin:0; font-size:13px; color:{t['tx2']};'>"
+               f"{_esc(b['why'])}</p>")
+
+    # ③ 보유자 지시
+    hold = ''
+    if h.get('available'):
+        rc = t['up'] if (h.get('ret_pct') or 0) >= 0 else t['down']
+        hold = (f"<div style='background:{t['raised']}; border-radius:9px; "
+                f"padding:10px 13px;'>"
+                f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
+                f"이미 갖고 계신 분께 · 평단 {h['avg']:,.0f}원 · "
+                f"<span style='color:{rc}; font-weight:700;'>"
+                f"{h['ret_pct']:+.1f}%</span></p>"
+                f"<p style='margin:4px 0 0 0; font-size:14px; font-weight:700; "
+                f"color:{t['tx1']};'>{_esc(h.get('headline'))}</p>"
+                f"<p style='margin:3px 0 0 0; font-size:12px; "
+                f"color:{t['tx2']}; line-height:1.65;'>{_esc(h.get('body'))}"
+                f" {_esc(h.get('add_note'))}</p></div>")
+
+    # ④ 매수 후 규칙
+    steps = ''.join(
+        f"<li style='margin:0 0 3px 0;'><b style='color:{t['tx1']};'>"
+        f"{_esc(k)}</b> — {_esc(v)}</li>"
+        for k, v in (p.get('post_entry') or []))
+    post = (f"<div><p style='margin:0 0 5px 0; font-size:12px; "
+            f"font-weight:700; color:{t['tx2']};'>산 뒤에는</p>"
+            f"<ul style='margin:0; padding-left:16px; font-size:12px; "
+            f"color:{t['tx2']}; line-height:1.65;'>{steps}</ul>"
+            f"<p style='margin:6px 0 0 0; font-size:11px; color:{t['tx3']}; "
+            f"line-height:1.6;'>{_esc(p.get('post_entry_caveat'))}</p></div>"
+            if steps else '')
+
+    parts = [x for x in (mkt, buy, hold, post) if x]
+    return (
+        f"<div style='background:{t['card']}; border-radius:14px; "
+        f"overflow:hidden; margin-bottom:14px;'>"
+        f"<div style='height:3px; background:{t['brand']};'></div>"
+        f"<div style='padding:15px 18px 17px; display:flex; "
+        f"flex-direction:column; gap:13px;'>"
+        f"<p style='margin:0; font-size:13px; font-weight:700; "
+        f"color:{t['tx2']}; letter-spacing:0.01em;'>"
+        f"내일 매매 지시서{(' · ' + _esc(name)) if name else ''}</p>"
+        f"{''.join(parts)}</div></div>")
+
+
 def attention_row(a: dict, theme: str = 'dark') -> str:
     """
     관심종목 후보 한 줄 — 추천 카드와 같은 표면·타이포·아이콘을 쓴다.

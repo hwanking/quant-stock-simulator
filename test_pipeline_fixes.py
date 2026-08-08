@@ -2991,17 +2991,42 @@ _fs62 = {'recommended_buy_price': 120.0, 'target_tech_1st': 190.0,
          'target_tech_2nd': 200.0, 'stop_loss_price': 110.0,
          'demark_res': {'buy_setup_series': [0] * 149 + [9],
                         'tdst_support': 115.0}}
+#: 중앙 판정 결과. 라운드 53 이전에는 이 인자가 없어서 차트가 four_scores 를
+#: 직접 읽었다 — 그 결과 배너와 다른 숫자를 그렸다 (아래 검사 참고).
+_core62 = {'pullback_zone': 125.0, 'new_target': 140.0, 'new_stop': 118.0,
+           'hold_trim': 190.0, 'hold_stop': 110.0, 'breakout_price': 150.0,
+           'bucket': '눌림목 매수 대기'}
 _html62 = cp62.build_chart_html(_tdf62, _fs62, name='시험', theme='dark',
-                                user_avg=130.0)
+                                user_avg=130.0, core=_core62)
 check("HTML 문자열 생성", isinstance(_html62, str) and len(_html62) > 100_000)
 check("지표 선택창 존재 (사용자가 원하는 지표를 고른다)",
       'indPanel' in _html62 and '지표 선택' in _html62)
 check("추가 지표 — 스토캐스틱·OBV·EMA20",
       all(k in _html62 for k in ('stochK', 'obv', 'ema20')))
 check("선택 상태 저장 (localStorage)", 'qchart_ind_v1' in _html62)
-check("실행 가격선 = 배너와 같은 숫자 (추천매수·목표·손절·평단)",
-      all(s in _html62 for s in ('추천 매수가', '1차 목표가', '손절가',
-                                 '내 평단가')))
+# ⚠️ 라운드 53 — 이 검사는 원래 `'추천 매수가'` 가 HTML 에 있는지만 봤다.
+# 그런데 그 선의 출처가 `recommended_buy_price`(적정가 × 안전마진)였다.
+# 라운드 25 에서 폐기하고 라운드 37 에 배너에서 걷어낸 산식이다 — 삼성전자
+# 240,000원에 "147,567원 이하로 사세요"를 만든 값. 즉 **검사가 결함을
+# 잠그고 있었다.** 이름이 아니라 출처와 값을 본다.
+check("실행 가격선을 중앙 판정에서 받는다 (신규 매수자 기준)",
+      all(s in _html62 for s in ('실행 진입가 · 신규', '1차 목표 · 신규',
+                                 '손절 · 신규', '내 평단가')))
+check("폐기된 추천매수가 산식을 더는 그리지 않는다",
+      '"price": 120.0' not in _html62 and '추천 매수가' not in _html62)
+check("신규 진입가가 실제로 실렸다", '"price": 125.0' in _html62)
+check("보유자 기준은 이름표로 갈린다",
+      '1차 목표 · 보유자' in _html62 and '손절 · 보유자' in _html62)
+check("돌파 자리가 아니면 돌파선을 그리지 않는다 (소음 방지)",
+      '돌파 매수가' not in _html62)
+_html62b = cp62.build_chart_html(_tdf62, _fs62, name='시험', theme='dark',
+                                 core=dict(_core62,
+                                           bucket='돌파 후 매수 대기'))
+check("돌파 대기면 돌파 매수가를 그린다", '돌파 매수가 · 신규' in _html62b)
+check("보유자 값은 평단이 있을 때만", '손절 · 보유자' not in _html62b)
+_html62c = cp62.build_chart_html(_tdf62, _fs62, name='시험', theme='dark')
+check("중앙 판정이 없으면 틀린 선 대신 아무것도 안 그린다",
+      '추천 매수가' not in _html62c and '실행 진입가' not in _html62c)
 check("DeMARK 마커 시리즈 내장", '"text": "9"' in _html62)
 check("라이선스 표기 (Apache 2.0 attribution)",
       'TradingView Lightweight Charts' in _html62)
@@ -6950,6 +6975,137 @@ check("존재하지 않는 키는 적지 않는다",
 check("왜 뺐는지 코드에 남겼다",
       'signal_consensus_score 는' in _lab119 and '뺐다' in _lab119
       and 'null 로 쌓인다' in _lab119)
+
+# ══════════════════════════════════════════════════════════════════════
+# §120 — 매매 지시서 · 평단 종목별 분리 (라운드 51~53)
+#   ① 평단이 종목을 따라가지 않아 금호건설 10,246원이 LG생활건강
+#      (약 330,000원) 차트에 그려졌다. 평단은 보유 판단의 유일한 입력이라
+#      섞이면 수익률·물타기 판정이 통째로 남의 것이 된다.
+#   ② 점수만 보여주지 말고 "얼마에 사서 언제 파는가"를 낸다.
+#      단, 검증되지 않은 부분(목표 배수·추적손절)을 밝히지 않으면 과장이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§120 매매 지시서 · 평단 종목별 분리 (라운드 51~53)")
+print("=" * 72)
+import trade_plan as _tp120                                  # noqa: E402
+
+_w120 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+# ① 평단 위젯이 종목별로 갈렸는가
+check("사이드바 평단 키가 종목별이다", 'key=f"sb_avg_{_pk}"' in _w120)
+check("본문 평단 키가 종목별이다", 'key=f"pos_avg_{_pkm}"' in _w120)
+check("보유 여부 라디오도 종목별이다", 'key=f"pos_mode_{_pkm}"' in _w120)
+check("고정 키가 남아 있지 않다",
+      "key=\"pos_avg_main\"" not in _w120
+      and "key='pos_avg_main'" not in _w120)
+check("자릿수 안전장치가 있다",
+      '자릿수가 맞지 않아 차트에 표시하지 않았습니다' in _w120)
+check("왜 생긴 결함인지 코드에 남겼다",
+      'LG생활건강' in _w120 and '금호건설' in _w120)
+
+# ② 지시서가 실제 문장을 내는가
+_FS120 = dict(entry_pullback_price=24800.0, current_price=25800.0,
+              entry_target_1st=27300.0, entry_stop_price=24000.0,
+              entry_rr=1.3, target_tech_2nd=28500.0,
+              analysis_confidence=72, strategy_quality_score=61,
+              vol_20=0.025, avg_turnover_20d=1e9,
+              target_tech_1st=27500.0, stop_loss_price=24200.0,
+              calibration_band=dict(lo=58, hi=64, hit_rate=59.0, n=1200,
+                                    wilson_low=56.0),
+              range_position_pct=52.0, bb_position_pct=44.0,
+              williams_r_value=-55.0, rsi_value=48.0,
+              blind_test_status='통과')
+_c120 = _vc105.build(_FS120, {'action': 'BUY', 'headline': '', 'vetoes': []},
+                     None, {'kind': 'pullback'}, 25800.0)
+_b120 = _tp120.for_buyer(_c120, _FS120)
+check("매수 지시가 나온다", _b120.get('available') is True)
+check("매수·목표·손절이 다 있다",
+      all(_b120.get(_k) for _k in ('entry', 'target', 'stop')))
+check("퍼센트와 원을 같이 낸다",
+      _b120.get('target_pct') is not None and _b120.get('stop_pct') is not None)
+check("목표 배수의 한계를 반드시 적는다",
+      '라운드 36' in str(_b120.get('target_caveat'))
+      and '양수가 아니었습니다' in str(_b120.get('target_caveat')))
+
+# 보유자 — 수익률 구간마다 지시가 달라지는가
+_heads = [_tp120.for_holder(_c120, a)['headline']
+          for a in (23000, 25500, 27000, 30000)]
+check("보유자 지시가 수익률에 따라 갈린다", len(set(_heads)) == 4,
+      ' / '.join(_h[:10] for _h in _heads))
+check("손실 구간에서 물타기를 막는다",
+      any('물타기' in _h for _h in _heads))
+check("평단이 없으면 아무것도 만들지 않는다",
+      _tp120.for_holder(_c120, None).get('available') is False)
+
+# ③ 시장 4상태 — 라운드 52 실측을 그대로 싣는가
+_ms = _tp120.market_state(2600, 2650, 2500, 2480)
+check("조정 구간을 알아본다", _ms and 'PULLBACK' == _ms.get('code'))
+check("조정 구간이 유일한 양수 EV 임을 적는다",
+      '유일하게 비용후 기대값이 양수' in str(_ms.get('say')))
+_ms2 = _tp120.market_state(2400, 2450, 2500, 2530)
+check("60일선 기울기를 반영한다", _ms2 and _ms2.get('slope') == 'down')
+check("기울기 차이를 문장으로 낸다", '53.8%' in str(_ms2.get('slope_note')))
+_bi120 = open(_os.path.join(PROJ, 'bitemporal_engine.py'),
+              encoding='utf-8').read()
+check("엔진이 60일선 기울기를 낸다", '"sma60_prev"' in _bi120)
+check("봉이 모자라면 지어내지 않는다", 'if len(arr) >= 65 else None' in _bi120)
+
+# ④ 추적손절 — 못 잰 것을 잰 척하지 않는가
+check("사후 규칙의 수치가 미측정임을 밝힌다",
+      '측정하지 못했습니다' in _tp120.POST_ENTRY_CAVEAT)
+check("왜 못 재는지 이유를 적는다",
+      '청산 시점까지만' in _tp120.POST_ENTRY_CAVEAT)
+_tps120 = open(_os.path.join(PROJ, 'trade_plan.py'), encoding='utf-8').read()
+check("지시서가 점수를 만들지 않는다고 적었다",
+      '점수를 만들거나 가격을 새로 계산하지 않는다' in _tps120)
+
+# ⑤ 카드 렌더
+_h120 = _ukmod118.trade_plan_card(
+    _tp120.build(_c120, _FS120, avg=25500, qty=100,
+                 market=_tp120.market_state(2400, 2450, 2500, 2480)),
+    name='테스트')
+check("카드가 그려진다", len(_h120) > 1000)
+check("카드에 이모지가 없다",
+      not _re.search(r'[\U0001F300-\U0001FAFF☀-➿]', _h120))
+check("카드가 한계를 숨기지 않는다", '라운드 36' in _h120)
+check("화면이 지시서를 그린다",
+      '_uk.trade_plan_card(' in _w120 and 'import trade_plan as _tp' in _w120)
+check("지시서 하나 때문에 화면이 죽지 않는다",
+      '지시서 하나 때문에 분석 화면이 죽지 않는다' in _w120)
+
+# ⑥ 경로 분포 차트 — 어디서 사는지가 빠져 있었다
+#    목표선·손절선은 있는데 **실행 진입가**가 없었다. 그리고 그 목표·손절은
+#    보유자 값(target_tech_1st·stop_loss_price)인데 이름표가 없어서, 배너의
+#    신규 매수자 값과 이름은 같고 숫자는 다른 선이 한 화면에 있었다.
+check("경로 차트에 실행 진입가가 있다",
+      "CORE.get('pullback_zone'), '#35C98B'" in _w120)
+check("경로 차트가 중앙 판정에서 목표·손절을 받는다",
+      "CORE.get('new_target')" in _w120 and "CORE.get('new_stop')" in _w120)
+check("경로 차트가 보유자 값을 이름 없이 그리지 않는다",
+      "(four_scores.get('target_tech_1st'), '#4C8DFF', '1차 목표가')"
+      not in _w120
+      and "(four_scores.get('stop_loss_price'), '#ff453a', '손절가')"
+      not in _w120)
+check("누구 기준인지 이름에 적는다",
+      '1차 목표 · 신규' in _w120 and '1차 목표 · 보유자' in _w120)
+check("보유자 선은 실제 보유자에게만 그린다",
+      "        if _my:\n            _AX += [" in _w120)
+check("평단 자릿수 판정을 선 고르기 **전에** 한다",
+      _w120.index('자릿수가 맞지 않아 차트에 표시하지 않았습니다')
+      < _w120.index("CORE.get('pullback_zone'), '#35C98B'"))
+
+# ⑦ 종합 차트(chart_pro) — 폐기된 산식을 그리고 있었다
+_cp120 = open(_os.path.join(PROJ, 'chart_pro.py'), encoding='utf-8').read()
+check("종합 차트가 중앙 판정을 받는다", 'core=None' in _cp120)
+check("웹앱이 중앙 판정을 실제로 넘긴다", 'core=CORE)' in _w120)
+check("폐기된 recommended_buy_price 를 더는 그리지 않는다",
+      "fs.get('recommended_buy_price')" not in _cp120)
+check("왜 폐기했는지 코드에 남겼다",
+      '147,567원' in _cp120 and '라운드 25' in _cp120)
+check("차트 설명이 두 기준을 구분해 알린다",
+      '실선은 **신규 매수자**' in _w120 and '**보유자**' in _w120)
+check("설명이 '배너와 같은 숫자'라고 거짓 주장하지 않는다",
+      '실행 가격선(추천 매수가·1·2차 목표가·손절가·TDST)은 위 배너와 같은 '
+      '숫자입니다' not in _w120)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

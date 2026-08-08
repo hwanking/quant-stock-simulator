@@ -1937,13 +1937,22 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
     else:
         st.sidebar.caption(f"지금 보고 있는 **{resolved_name}** 한 종목만 임시로 확인합니다. "
                            f"여러 종목을 계속 관리하려면 위 '내 보유종목'에 등록하세요.")
+    # ⚠️ 키를 **종목별로** 가른다 (라운드 51 실측 결함)
+    #    키가 없으면 스트림릿이 라벨로 키를 만든다. 그러면 종목을 바꿔도
+    #    같은 위젯이라 값이 따라온다 — 실제로 금호건설 평단 10,246원이
+    #    LG생활건강(약 330,000원) 차트에 '내 평균 매수가'로 그려졌다.
+    #    평단은 보유 판단의 유일한 입력이라, 종목이 섞이면 수익률·물타기
+    #    판정이 통째로 남의 것이 된다 (CLAUDE.md §9).
+    _pk = str(target_ticker or '').replace('.', '_')
     user_entry_price = st.sidebar.number_input(
         "평균 매수가 (원)", min_value=0,
         value=int(_reg.average_buy_price) if _reg else 0, step=1000,
-        help="보유 중인 주당 평균 매수가 (0원 = 미보유)")
+        key=f"sb_avg_{_pk}",
+        help="보유 중인 주당 평균 매수가 (0원 = 미보유) · 종목마다 따로 기억합니다")
     user_quantity = st.sidebar.number_input(
         "보유 수량 (주)", min_value=0,
         value=int(_reg.quantity) if _reg else 0, step=10,
+        key=f"sb_qty_{_pk}",
         help="보유 중인 총 주식 수량 (0주 = 미보유)")
     if user_entry_price > 0 and user_quantity > 0 and _reg is None:
         if st.sidebar.button("보유종목에 등록", width='stretch'):
@@ -4988,26 +4997,61 @@ if _NA.get('alert'):
 # 사용자 상태 선택기 (v2): 분석 화면 안에서 미보유/보유를 고른다.
 # '보유 중' 선택 시 여기 입력값이 이후 모든 보유자 판정(쉬운 결론·포지션 진단)에
 # 쓰인다 — 사이드바 입력은 기본값 공급원이다.
+# ⚠️ 키를 종목별로 가른다 — 사이드바와 같은 이유다 (라운드 51).
+#    'pos_avg_main' 처럼 고정 키를 쓰면 종목을 바꿔도 값이 남는다.
+_pkm = str(target_ticker or '').replace('.', '_')
 _pos_default = 1 if user_entry_price > 0 else 0
 _pos_mode = st.radio("이 종목을 갖고 계신가요?", ["아직 없음", "보유 중"],
-                     index=_pos_default, horizontal=True, key="pos_mode_main")
+                     index=_pos_default, horizontal=True,
+                     key=f"pos_mode_{_pkm}")
 if _pos_mode == "보유 중":
     _pc1, _pc2 = st.columns(2)
     with _pc1:
         _main_avg = st.number_input(
             "평균 매수가 (원)", min_value=0,
             value=int(user_entry_price) if user_entry_price > 0 else 0,
-            step=1000, key="pos_avg_main",
-            help="보유 판단에만 사용합니다 — 예측·적정가·점수에는 절대 반영되지 않습니다.")
+            step=1000, key=f"pos_avg_{_pkm}",
+            help="보유 판단에만 사용합니다 — 예측·적정가·점수에는 절대 반영되지 "
+                 "않습니다. 종목마다 따로 기억합니다.")
     with _pc2:
         _main_qty = st.number_input(
             "보유 수량 (주)", min_value=0,
             value=int(user_quantity) if user_quantity > 0 else 0,
-            step=10, key="pos_qty_main")
+            step=10, key=f"pos_qty_{_pkm}")
     if _main_avg > 0:
         user_entry_price, user_quantity = _main_avg, _main_qty
 else:
     user_entry_price, user_quantity = 0, 0
+
+# ── 매매 지시서 (라운드 53) ────────────────────────────────────────────
+# 사용자 지적: *"판단 점수만 보여주는 시스템에서 끝나면 부족합니다. 결국
+# 그래서 지금 사야 하나, 몇 % 먹고 팔아야 하나, 손절은 어디인가, 보유자는
+# 어떻게 해야 하나를 알고 싶습니다."*
+#
+# 값은 전부 중앙 판정(CORE)에서만 가져온다 — 지시서가 자기만의 가격을
+# 만들면 화면마다 값이 달라진다 (CLAUDE.md §4).
+# 평단이 확정된 **뒤에** 그린다. 보유자 지시가 평단을 쓰기 때문이다.
+try:
+    import trade_plan as _tp
+
+    _mkt_state = None
+    try:
+        _kd = (q_engine.market_regime_ctx or {})
+        _mkt_state = _tp.market_state(
+            _kd.get('price'), _kd.get('sma20'), _kd.get('sma60'),
+            _kd.get('sma60_prev'))
+    except Exception:                                        # noqa: BLE001
+        _mkt_state = None
+
+    _plan = _tp.build(CORE, four_scores,
+                      avg=(user_entry_price if user_entry_price > 0 else None),
+                      qty=(user_quantity if user_quantity > 0 else None),
+                      market=_mkt_state)
+    st.markdown(_uk.trade_plan_card(_plan, name=resolved_name, theme=_theme),
+                unsafe_allow_html=True)
+except Exception:                                            # noqa: BLE001
+    # 지시서 하나 때문에 분석 화면이 죽지 않는다. 못 그리면 안 그린다.
+    pass
 
 _easy = q_engine.build_easy_advice(
     four_scores, verdict, realtime_price,
@@ -5267,18 +5311,25 @@ st.markdown('<div id="nav-chart"></div>', unsafe_allow_html=True)
 st.markdown(f"### [{resolved_name}] 종합 차트")
 try:
     import chart_pro as _cp
+    # core=CORE 를 빼면 차트가 four_scores 로 물러서고, 그 순간 배너와 다른
+    # 숫자를 그린다 (라운드 53에서 실제로 그러고 있었다). 반드시 넘긴다.
     _chart_html = _cp.build_chart_html(
         tech_df, four_scores, name=resolved_name, unit_str=unit_str,
         theme=st.session_state.get('ui_theme', 'dark'),
         user_avg=(user_entry_price if user_entry_price and user_entry_price > 0
-                  else None))
+                  else None),
+        core=CORE)
     # st.components.v1.html 은 2026-06-01 제거 예정이었고 그 날짜가 이미
     # 지났다 — 스트림릿을 올리는 순간 차트가 통째로 사라진다. 같은 iframe
     # 임베드인 st.iframe 으로 바꾼다 (HTML 문자열도 그대로 받는다).
     # 이 HTML 은 우리가 만든 것이고 외부 입력을 넣지 않는다.
     st.iframe(_chart_html, height=880)
     st.caption("휠 확대·드래그 이동 · 상단 체크박스로 지표 켜고 끄기. "
-               "실행 가격선(추천 매수가·1·2차 목표가·손절가·TDST)은 위 배너와 같은 숫자입니다. "
+               "가격선은 중앙 판정에서 그대로 받습니다 — 실선은 **신규 매수자** "
+               "기준(실행 진입가·1차 목표·손절)이고, 점선은 참고선"
+               "(2차 목표·펀더멘털 적정가·TDST)입니다. 평단을 입력하셨다면 "
+               "**보유자** 기준 목표·손절이 파선으로 함께 그려집니다 — "
+               "두 기준은 서로 다른 숫자이므로 이름표를 보고 구분해 주세요. "
                "차트 데이터는 이 화면 안에만 있고 외부로 전송되지 않습니다.")
 except Exception as _cp_err:
     st.caption(f"종합 차트를 그리지 못했습니다: {_cp_err}")
@@ -6652,17 +6703,8 @@ with tab_pred:
         ax_p.plot(days, h['path_bear'], color='#ff453a', linewidth=2.0, linestyle='--',
                   label=f"비관 군집 평균 (n={cs.get('bear', 0)})")
         ax_p.axhline(curr_price, color='#F3F6FA', linestyle='-', linewidth=1.2, label="현재가")
-        # 기준선들 — 모두 참고용이며 경로 분포 계산에는 사용하지 않는다
-        for _v, _c, _lb in (
-                (four_scores.get('displayed_fair_value'), '#4C8DFF', '펀더멘털 적정가'),
-                (four_scores.get('buy_entry_max'), '#35C98B', '권장 매수가 상단'),
-                (four_scores.get('target_tech_1st'), '#4C8DFF', '1차 목표가'),
-                (four_scores.get('target_tech_2nd'), '#4C8DFF', '2차 목표가'),
-                (four_scores.get('stop_loss_price'), '#ff453a', '손절가')):
-            if _v is not None:
-                ax_p.axhline(_v, color=_c, linestyle=':', linewidth=1.1, alpha=0.85, label=_lb)
 
-        # 보유 중이면 평균 매수가를 개인 참고선으로만 겹쳐 그린다
+        # 보유 여부를 먼저 알아야 한다 — 보유자 기준선을 그릴지가 여기서 갈린다
         _my = None
         for _p in (st.session_state.get('positions') or []):
             if _p.ticker == target_ticker:
@@ -6670,6 +6712,54 @@ with tab_pred:
                 break
         if _my is None and user_entry_price > 0:
             _my = float(user_entry_price)
+        # 값이 새더라도 화면이 스스로 잡는다 (라운드 51).
+        # 평단이 현재가의 1/5 미만이거나 5배를 넘으면 **다른 종목 값**이다 —
+        # 실제로 금호건설 평단 10,246원이 LG생활건강(330,000원) 차트에
+        # 그려졌다. 위젯 키는 고쳤지만, 한 겹 더 막는다.
+        #
+        # ⚠️ 이 판정은 기준선을 **고르기 전에** 해야 한다. 뒤에 두었더니
+        # "평단을 표시하지 않았습니다"라고 적어 놓고 그 평단으로 켠 보유자
+        # 선은 그대로 그려졌다 (라운드 53).
+        if _my and curr_price and not (curr_price * 0.2 <= _my <= curr_price * 5):
+            st.caption(
+                f"입력된 평균 매수가 {_my:,.0f}원이 현재가 {curr_price:,.0f}원과 "
+                f"자릿수가 맞지 않아 차트에 표시하지 않았습니다 — 다른 종목의 "
+                f"값일 수 있습니다. 사이드바에서 확인해 주세요.")
+            _my = None
+
+        # 기준선들 — 모두 참고용이며 경로 분포 계산에는 사용하지 않는다.
+        #
+        # ⚠️ 라운드 53 — 여기가 마지막까지 남아 있던 **또 하나의 가격 경로**였다.
+        # 이 차트만 four_scores 를 직접 읽어서, 배너는 CORE 의 신규 매수자 값을
+        # 쓰는데 차트는 보유자 값(target_tech_1st·stop_loss_price)을 '1차 목표가'
+        # '손절가'라는 **누구 기준인지 없는 이름**으로 같이 그렸다. 같은 화면에
+        # 이름이 같고 숫자가 다른 선이 두 개 있었다는 뜻이다 (CLAUDE.md §4).
+        #
+        # 그리고 정작 **실제로 걸어야 할 실행 진입가**가 빠져 있었다. 목표와
+        # 손절만 있고 어디서 사는지가 없으면 그림이 완성되지 않는다.
+        _AX = [(four_scores.get('displayed_fair_value'), '#4C8DFF', ':', 1.1,
+                '펀더멘털 적정가 (장기)'),
+               (CORE.get('pullback_zone'), '#35C98B', '-', 1.8,
+                '실행 진입가 · 신규'),
+               (CORE.get('new_target'), '#4C8DFF', '-', 1.5, '1차 목표 · 신규'),
+               (CORE.get('new_stop'), '#ff453a', '-', 1.5, '손절 · 신규'),
+               (four_scores.get('target_tech_2nd'), '#4C8DFF', ':', 1.1,
+                '2차 목표')]
+        # 돌파 매수가는 돌파를 기다리는 자리에서만 뜻이 있다 — 늘 그리면 소음이다
+        if (CORE.get('bucket') or '').startswith('돌파'):
+            _AX.append((CORE.get('breakout_price'), '#35C98B', ':', 1.3,
+                        '돌파 매수가 · 신규'))
+        # 보유자 기준선은 실제로 갖고 있을 때만. 신규 매수자에게는 남의 숫자다
+        if _my:
+            _AX += [(CORE.get('hold_trim'), '#4C8DFF', '-.', 1.2,
+                     '1차 목표 · 보유자'),
+                    (CORE.get('hold_stop'), '#ff453a', '-.', 1.2,
+                     '손절 · 보유자')]
+        for _v, _c, _ls, _lw, _lb in _AX:
+            if _v is None:
+                continue
+            ax_p.axhline(_v, color=_c, linestyle=_ls, linewidth=_lw,
+                         alpha=0.85, label=f"{_lb} ({_v:,.0f})")
         if _my:
             ax_p.axhline(_my, color='#F2B84B', linestyle='--', linewidth=1.8,
                          label=f"내 평균 매수가 ({_my:,.0f})")
