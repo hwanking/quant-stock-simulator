@@ -1,14 +1,40 @@
 {
  "axes": {
-  "model": "v2026.08.06.1",
+  "model": "v2026.08.08.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.08.1",
-  "schema": "v2026.08.08.2",
+  "schema": "v2026.08.08.3",
   "news": "v2026.08.05.1",
   "sector": "v2026.08.05.0",
   "valuation": "v2026.08.05.0"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.08.1",
+   "previous": "v2026.08.06.1",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "중앙 판정이 폐기 산식으로 매수구간을 만들지 않는다",
+   "note": "verdict_core 가 가격 축 부재 시 recommended_buy_price(적정가 × 안전마진)로 폴백하고 있었다. 그러면 buy_zone·정합·actionable 이 전부 그 값 기준이 되는데 pullback_zone 은 entry_pullback_price 만 쓰므로 매수구간은 그려지고 진입가는 비는 조합이 나온다. 폴백을 떼어 진입가가 없으면 매수구간을 만들지 않고 \"데이터 부족\"으로 분류한다. 실행할 수 없는 자리를 매수구간이라 부르지 않는다. 점수 산식·게이트 문턱은 바뀌지 않았다 (scoring 축 그대로).",
+   "created_at": "2026-08-08T14:12:17+00:00",
+   "effective_from": "2026-08-08"
+  },
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.08.3",
+   "previous": "v2026.08.08.2",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "폐기 산식(적정가×안전마진) 폴백을 6곳에서 제거",
+   "note": "verdict_core·next_action·premarket·web_app 고정패널·report_generator·추격금지선 문장. 다섯 곳은 \"그걸 오늘의 매수가로 쓰면 안 된다\"는 주석 바로 다음 줄에서 그 값으로 폴백하고 있었다 — 라운드 25 에서 결정만 하고 호출부를 절반만 옮긴 흔적. 이제 진입가가 없으면 매수구간을 만들지 않고 데이터 부족이라 말한다. 추격금지선은 값을 고치지 않고(안전마진 게이트 입력) 진입가보다 아래일 때 문장에서 비운다.",
+   "created_at": "2026-08-08T13:47:44+00:00",
+   "effective_from": "2026-08-08"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

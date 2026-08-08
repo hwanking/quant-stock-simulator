@@ -200,8 +200,11 @@ def build(four_scores, tech_df, price, verdict=None):
     # 적정가 기반 값(value_floor_price)은 장기 가치 참고선이라 현재가와
     # 30~50% 벌어지는 일이 흔했다 — 그걸 오늘의 매수가로 쓰면 안 된다.
     # (라운드 25: 눌림가는 실전 체결률 79.3% · 평균 3.4거래일)
-    rec = _f(fs.get('entry_pullback_price')) or _f(
-        fs.get('recommended_buy_price'))
+    # 라운드 53c — 바로 위 주석이 "그걸 오늘의 매수가로 쓰면 안 된다"인데
+    # 정작 다음 줄이 그 값으로 폴백하고 있었다. 라운드 25 에서 결정만 하고
+    # 호출부를 절반만 옮긴 흔적이다. 폴백을 뗀다 — 진입가가 없으면 아래에서
+    # '진입 기준이 아직 없습니다'로 정직하게 말한다.
+    rec = _f(fs.get('entry_pullback_price'))
     if rec is None:
         # 진입가가 없어도 **과열이면 그 사실이 먼저**다. 급등 직후에
         # '진입 기준이 없습니다'만 적으면 사용자는 뭘 하지 말아야 할지 모른다.

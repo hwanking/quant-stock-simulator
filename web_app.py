@@ -5134,14 +5134,17 @@ st.markdown(f"""
   font-weight: 700; font-variant-numeric: tabular-nums; }}
 @media (max-width: 1760px) {{ .qside {{ display: none; }} }}
 </style>
+<!-- 라운드 53c — 이 고정 패널이 '진입 검토가'로 recommended_buy_price 를,
+     '1차 목표가'·'손절가'로 보유자 값을 이름표 없이 싣고 있었다. 화면 오른쪽에
+     항상 붙어 있는 요약이라 배너와 다른 숫자가 나란히 보였다. 전부 CORE 로. -->
 <div class="qside">
   <p class="act">{verdict['headline']}</p>
   <table>
     <tr><td>종합점수</td><td>{verdict['score']}점</td></tr>
     <tr><td>현재가</td><td>{realtime_price:,.0f}{unit_str}</td></tr>
-    <tr><td>진입 검토가</td><td>{fmt_num(four_scores.get('recommended_buy_price'), ',.0f', unit_str, na='산출 불가')}</td></tr>
-    <tr><td>1차 목표가</td><td>{fmt_num(four_scores.get('target_tech_1st'), ',.0f', unit_str, na='산출 불가')}</td></tr>
-    <tr><td>손절가</td><td>{fmt_num(four_scores.get('stop_loss_price'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>실행 진입가</td><td>{fmt_num((CORE or {}).get('pullback_zone'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>1차 목표 · 신규</td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td>손절 · 신규</td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td>분석 신뢰도</td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
     <tr><td>이 점수대 실측</td><td>{_sum_band}</td></tr>
   </table>

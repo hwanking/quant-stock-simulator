@@ -210,8 +210,11 @@ def pick_from_scan_row(q_engine, r):
         # 카드가 쓰는 '권장 매수가'는 **실행 가능한 눌림가**다 (라운드 25).
         # 적정가 기반 값은 장기 참고선으로 따로 싣는다 — 오늘의 매수가가
         # 아니다 (현재가와 30~50% 벌어지는 일이 흔했다).
-        'rec_buy': (fs.get('entry_pullback_price')
-                    or fs.get('recommended_buy_price')),
+        # 라운드 53c — 폴백을 뗐다. 위 주석이 이미 "오늘의 매수가가 아니다"
+        # 라고 적어 둔 값이었다. 게다가 폴백이 걸리면 아래 rec_buy_basis
+        # (entry_pullback_basis)와 짝이 맞지 않아, 근거 없는 가격이 카드에
+        # 실린다. 없으면 None 으로 두고 카드가 '미산출'이라 말한다.
+        'rec_buy': fs.get('entry_pullback_price'),
         'rec_buy_basis': fs.get('entry_pullback_basis'),
         'value_floor': fs.get('value_floor_price'),
         'entry_zone': fs.get('entry_zone'),

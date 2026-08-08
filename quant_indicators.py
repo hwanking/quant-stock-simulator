@@ -1878,7 +1878,16 @@ class QuantIndicatorsEngine:
         # 신규 매수자 기준 — 중앙 판정과 같은 출처. 없으면 '판단 보류'로
         # 말한다. 폐기된 산식으로 물러서지 않는다 (없는 값 > 틀린 값).
         rec = fs.get('entry_pullback_price')
+        # '추격매수 금지선'은 진입가보다 **위**일 때만 뜻이 있다.
+        # buy_entry_max 는 `recommended_buy_price`(적정가 − 안전마진)이라
+        # 진입가보다 아래인 경우가 흔했고, 그러면 문장이 자기모순이 된다 —
+        # 실제 화면: "211,023원 이하로 내려올 때만 사세요 …
+        #             147,608원 위에서는 특히 금지" (권장가가 금지선 위)
+        # 값을 고치지 않는다 (그 값은 안전마진 게이트의 입력이다). 정합이
+        # 깨지면 문장에서 비운다 (CLAUDE.md §4).
         chase_max = fs.get('buy_entry_max')
+        if chase_max is not None and rec is not None and chase_max <= rec:
+            chase_max = None
         t1 = fs.get('entry_target_1st')
         stop = fs.get('entry_stop_price')
         t2 = fs.get('target_tech_2nd')

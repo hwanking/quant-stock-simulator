@@ -151,8 +151,13 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     ent = (ax.get('entry') or {})
     entry = _f(ent.get('price')) if ent.get('available') else None
     if entry is None:                      # 축이 없으면 엔진 원값으로 폴백
+        # ⚠️ 라운드 53c — 여기 `recommended_buy_price`(적정가 × 안전마진)가
+        # 중간에 끼어 있었다. 라운드 25 에서 폐기하고 37 에 배너에서 걷어낸
+        # 산식이다. 이 폴백이 걸리면 buy_zone·정합·actionable 이 전부 그 값을
+        # 기준으로 계산되는데, pullback_zone 은 entry_pullback_price 만 쓰므로
+        # **매수구간은 폐기 산식으로 그려지고 진입가는 비는** 조합이 나온다.
+        # 실행할 수 없는 자리를 매수구간이라 부르지 않는다.
         entry = (_f(fs.get('entry_pullback_price'))
-                 or _f(fs.get('recommended_buy_price'))
                  or _f(fs.get('entry_review_price')))
 
     stop = _f(fs.get('entry_stop_price'))

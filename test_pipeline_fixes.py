@@ -5085,8 +5085,18 @@ if fs.get('entry_pullback_price') and snap.get('rt_price'):
           abs(_gap100) <= 25.0, f'{_gap100:+.1f}%')
 
 # ② 다음 조건이 눌림가를 쓴다 (적정가 기반을 오늘의 매수가로 쓰지 않는다)
-check("next_action 이 눌림 진입가를 먼저 쓴다",
-      "_f(fs.get('entry_pullback_price')) or _f(" in _n100)
+#
+# ⚠️ 라운드 53c — 이 검사는 원래 `"_f(fs.get('entry_pullback_price')) or _f("`
+# 라는 **문자열**을 요구했다. 즉 "눌림가를 먼저 쓰고 적정가 기반으로 폴백한다"
+# 는 구현을 검사가 못박고 있었다. 그런데 그 폴백 대상이
+# `recommended_buy_price`(라운드 25 폐기 산식)였다 — 검사가 결함을 잠그고
+# 있었던 셈이다. 이제 폴백 자체를 뗐으므로, 문자열이 아니라 **의도**를 본다.
+check("next_action 이 눌림 진입가만 쓴다",
+      "rec = _f(fs.get('entry_pullback_price'))" in _n100)
+check("적정가 기반 값으로 폴백하지 않는다",
+      "fs.get('recommended_buy_price')" not in _n100)
+check("진입가가 없으면 지어내지 않고 그렇게 말한다",
+      "'유효 진입가 미산출'" in _n100)
 
 # ③ 밸류 가드 — 눌림가는 밸류에이션을 모른다
 check("적정가 크게 초과면 오늘의 매수 후보에서 뺀다",
@@ -7157,6 +7167,73 @@ _qis120 = open(_os.path.join(PROJ, 'quant_indicators.py'),
                encoding='utf-8').read()
 check("왜 바꿨는지 엔진에 남겼다",
       '147,608원 이하로 내려올 때만' in _qis120 and '라운드 25 폐기' in _qis120)
+
+# ⑨ 같은 결함이 여섯 벌 있었다 — 폐기 산식을 '오늘의 매수가'로 쓰는 자리
+#    다섯 곳 모두 주석이 코드와 반대였다. 라운드 25 에서 폐기 결정만 하고
+#    호출부를 절반만 옮긴 흔적이다:
+#      # 그걸 오늘의 매수가로 쓰면 안 된다  ← 주석
+#      rec = entry_pullback_price or recommended_buy_price   ← 바로 다음 줄
+_DEAD120 = 147608.0
+_FS120D = dict(current_price=231000.0, entry_pullback_price=None,
+               recommended_buy_price=_DEAD120, buy_entry_max=_DEAD120,
+               entry_target_1st=None, entry_stop_price=None,
+               target_tech_1st=236572.0, target_tech_2nd=298000.0,
+               stop_loss_price=174524.0, m10_disparity=8.0,
+               vol_20=0.02, avg_turnover_20d=1e10, calibration_band=None)
+_VD120D = {'action': 'HOLD', 'score': 49, 'vetoes': []}
+
+# ⓐ 중앙 판정 — 진입가가 없으면 폐기 산식으로 매수구간을 만들지 않는다
+_c120d = _vc105.build(_FS120D, _VD120D, None, None, 231000.0)
+check("진입가 미산출이면 매수구간을 만들지 않는다",
+      _c120d['buy_zone'] is None and _c120d['pullback_zone'] is None)
+check("그 상태를 '데이터 부족'으로 말한다",
+      _c120d['bucket'] == '데이터 부족' and _c120d['actionable'] is False)
+_vcs120 = open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read()
+check("중앙 판정 폴백에서 폐기 산식이 빠졌다",
+      "or _f(fs.get('recommended_buy_price'))" not in _vcs120)
+
+# ⓑ next_action — 주석과 코드가 반대였다
+import next_action as _na120                                  # noqa: E402
+_n120 = _na120.build(_FS120D, None, 231000.0, _VD120D)
+check("next_action 이 폐기 산식을 진입가로 쓰지 않는다",
+      '147,608' not in str(_n120))
+_nas120 = open(_os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read()
+check("next_action 폴백 제거", "fs.get('recommended_buy_price')" not in _nas120)
+
+# ⓒ 개장 전 리포트
+_pm120 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
+check("개장 전 카드 폴백 제거",
+      "or fs.get('recommended_buy_price')" not in _pm120)
+
+# ⓓ 고정 사이드 패널 — 배너 옆에 항상 붙어 있던 다른 숫자
+check("고정 패널이 중앙 판정을 읽는다",
+      "<tr><td>실행 진입가</td><td>{fmt_num((CORE or {}).get('pullback_zone')"
+      in _w120)
+check("고정 패널이 보유자 값을 이름 없이 싣지 않는다",
+      "<tr><td>1차 목표가</td><td>{fmt_num(four_scores.get('target_tech_1st')"
+      not in _w120)
+
+# ⓔ 정밀 레포트
+_rg120 = open(_os.path.join(PROJ, 'report_generator.py'), encoding='utf-8').read()
+check("레포트의 '권장 매수가'가 실행 진입가로 바뀌었다",
+      "rec_buy = fs.get('entry_pullback_price')" in _rg120)
+check("레포트가 장기 참고선을 따로 적는다",
+      '장기 가치 참고선' in _rg120 and '오늘의 매수가가 아님' in _rg120)
+
+# ⓕ 추격금지선 — 진입가보다 아래면 문장이 자기모순이다
+_FS120C = dict(_FS120D, entry_pullback_price=211023.0,
+               entry_target_1st=236572.0, entry_stop_price=196000.0)
+_ec = qi.QuantIndicatorsEngine.build_easy_advice(_FS120C, _VD120D, 231000.0)
+_ect = _ec['new_buyer']['line'] + _ec['new_buyer']['detail']
+check("금지선이 진입가 아래면 문구를 비운다",
+      '위에서는 특히 금지' not in _ect and '147,608' not in _ect)
+_ec2 = qi.QuantIndicatorsEngine.build_easy_advice(
+    dict(_FS120C, buy_entry_max=250000.0), _VD120D, 231000.0)
+check("금지선이 진입가 위면 남긴다",
+      '250,000원 위에서는' in _ec2['new_buyer']['detail'])
+check("값을 고치지 않고 문장에서만 비운다 (게이트 입력 보존)",
+      'buy_entry_max = float(recommended_buy_price) if fair_value_usable'
+      in _qis120)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

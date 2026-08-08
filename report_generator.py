@@ -72,7 +72,12 @@ class QuantReportGenerator:
 
         fs = four_scores or {}
         fair_disp = fs.get('displayed_fair_value', val_eval.get('displayed_fair_value'))
-        rec_buy = fs.get('recommended_buy_price', val_eval.get('recommended_buy_price'))
+        # 라운드 53c — '권장 매수가' 자리에 recommended_buy_price(적정가 −
+        # 안전마진)를 싣고 있었다. 라운드 25 폐기 산식이라 현재가와 30~50%
+        # 벌어진다. 실행 진입가를 쓰고, 장기 참고선은 아래에 따로 적는다.
+        rec_buy = fs.get('entry_pullback_price')
+        value_floor = fs.get('recommended_buy_price',
+                             val_eval.get('recommended_buy_price'))
         tp1 = fs.get('target_tech_1st')
         tp2 = fs.get('target_tech_2nd')
         sl = fs.get('stop_loss_price')
@@ -99,7 +104,8 @@ class QuantReportGenerator:
 - **부채비율**: `{_num(debt_ratio, ".1f", "%")}` | **Piotroski F-Score**: `{_num(fundamental_dict.get('piotroski_f_score'), ".0f", "/9")}`
 - **시장조정 적정가**: **`{_num(fair_disp, ",.0f", unit_str, na="산출 보류 (신뢰도 미달)")}`**
 - **적정가 신뢰도**: `{val_eval.get('fair_value_confidence', 0):.0f}점` — {val_eval.get('fair_value_status_note', '')}
-- **권장 매수가**: **`{_num(rec_buy, ",.0f", unit_str + " 이하", na="미산출")}`**
+- **실행 진입가 (신규 매수자 · 오늘 쓰는 값)**: **`{_num(rec_buy, ",.0f", unit_str + " 이하", na="미산출")}`**
+- **장기 가치 참고선 (적정가 − 안전마진)**: `{_num(value_floor, ",.0f", unit_str, na="미산출")}` — 오늘의 매수가가 아님
 - **예비 모델 범위**: `{val_eval.get('preliminary_range_str', '미산출')}`
 
 ---
