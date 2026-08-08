@@ -1,0 +1,137 @@
+# -*- coding: utf-8 -*-
+"""
+봉 단위 경로 축적 (라운드 56 — Exit·추적손절 연구의 선행 조건).
+
+■ 왜 필요한가
+  원장의 mfe/mae 는 **청산 봉까지만** 기록돼 있어 (라운드 36 교훈)
+  "+3% 찍고 -2%가 됐는가", "추적손절 2ATR 이 더 나았는가" 같은 질문을
+  과거에 되돌려 물을 수 없다. 신호 이후 21봉의 고·저·종가 경로를
+  원장과 별도 파일에 박제한다.
+
+■ 원칙
+  · 경로는 시장 원자료다 — 판정·채점을 여기서 하지 않는다
+  · 원장(virtual_graded.jsonl)은 읽기만 하고 쓰지 않는다
+  · 블라인드 행의 경로도 저장은 한다. **분석 시점의 분리**는 각 연구의
+    사전등록이 지킨다 — 저장과 사용은 다른 문제다
+  · 종목당 시세 1회 수신 → 행별 슬라이스. 실패 종목은 건너뛰고 기록한다
+
+    C:/Python314/python.exe scripts/path_recorder.py [--shard i/n]
+"""
+import glob
+import io
+import json
+import os
+import sys
+import time
+import warnings
+
+warnings.filterwarnings('ignore')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJ)
+P = os.path.join(PROJ, '.portfolio')
+
+import bitemporal_engine as be                                # noqa: E402
+
+BARS = 21                      # 신호 다음 날부터 21봉 (판정 지평 20 + 여유 1)
+
+
+def load_done():
+    done = set()
+    for path in sorted(glob.glob(os.path.join(P, 'bar_paths*.jsonl'))):
+        with open(path, encoding='utf-8') as f:
+            for ln in f:
+                try:
+                    r = json.loads(ln)
+                    done.add((r['ticker'], r['date']))
+                except Exception:                              # noqa: BLE001
+                    continue
+    return done
+
+
+def main():
+    shard, shards = 0, 1
+    if '--shard' in sys.argv:
+        raw = sys.argv[sys.argv.index('--shard') + 1]
+        shard, shards = (int(x) for x in raw.split('/'))
+
+    # 원장에서 (종목 → [(date, price)]) 를 모은다 — 결과 필드는 읽지 않는다
+    by_tk = {}
+    with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:                                  # noqa: BLE001
+                continue
+            tk = str(r.get('ticker'))
+            d = str(r.get('date'))[:10]
+            px = r.get('price')
+            if tk and d and px:
+                by_tk.setdefault(tk, {})[d] = float(px)
+
+    tks = sorted(by_tk)[shard::shards]
+    done = load_done()
+    out_path = os.path.join(P, f'bar_paths_s{shard}.jsonl')
+    total_rows = sum(len(v) for t, v in by_tk.items() if t in set(tks))
+    print(f'조각 {shard}/{shards} — 종목 {len(tks)} · 행 {total_rows:,} · '
+          f'이미 완료 {len(done):,}')
+
+    eng = be.BitemporalEngine()
+    t0, wrote, skip_tk = time.time(), 0, 0
+    with open(out_path, 'a', encoding='utf-8') as out:
+        for i, tk in enumerate(tks):
+            todo = [(d, px) for d, px in sorted(by_tk[tk].items())
+                    if (tk, d) not in done]
+            if not todo:
+                continue
+            try:
+                # 반환은 (일봉 df, 재무 df) 튜플이다 — 첫 실행에서 df 로
+                # 착각해 98종목 전부 조용히 건너뛰었다. 실패는 삼키되
+                # **집계로는 남긴다**.
+                df, _fund = eng.load_bitemporal_data(tk,
+                                                     start_date='2014-01-01')
+            except Exception:                                  # noqa: BLE001
+                skip_tk += 1
+                continue
+            if df is None or len(df) < 30:
+                skip_tk += 1
+                continue
+            dates = list(df['trade_date'].astype(str).str[:10])
+            idx = {d: j for j, d in enumerate(dates)}
+            H = df['high_raw'].astype(float).tolist()
+            L = df['low_raw'].astype(float).tolist()
+            C = df['adj_close'].astype(float).tolist()
+            for d, px in todo:
+                j = idx.get(d)
+                if j is None:
+                    # 신호일이 봉에 없으면 다음 거래일을 찾는다 (주말 신호)
+                    later = [k for k, dd in enumerate(dates) if dd > d]
+                    if not later:
+                        continue
+                    j = later[0] - 1
+                seg = range(j + 1, min(j + 1 + BARS, len(dates)))
+                bars = [[dates[k],
+                         round(H[k] / px * 100 - 100, 3),
+                         round(L[k] / px * 100 - 100, 3),
+                         round(C[k] / px * 100 - 100, 3)] for k in seg]
+                if not bars:
+                    continue          # 신호 직후 봉이 아직 없다 (최근 신호)
+                out.write(json.dumps(
+                    {'ticker': tk, 'date': d, 'price': px,
+                     'bars': bars, 'n_bars': len(bars)},
+                    ensure_ascii=False) + '\n')
+                wrote += 1
+            out.flush()
+            if (i + 1) % 10 == 0:
+                el = time.time() - t0
+                print(f'  종목 {i + 1}/{len(tks)} · 기록 {wrote:,}행 · '
+                      f'{el:,.0f}s · 수신실패 {skip_tk}')
+    print(f'\n완료 — 기록 {wrote:,}행 · 수신 실패 종목 {skip_tk}')
+    print(f'저장: {out_path} (고·저·종가는 기준가 대비 %)')
+
+
+if __name__ == '__main__':
+    main()

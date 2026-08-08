@@ -962,7 +962,8 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
     뭐다, 실시간으로 사이트나 뉴스 같은 거 맨 위에 계속 움직이게."*
 
     items: [{'kind': 'live'|'issue'|'news'|'market'|'idle',
-             'text': str, 'href': str|None, 'meta': str|None}]
+             'text': str, 'href': str|None, 'meta': str|None,
+             'pick': str|None}]
 
     ■ 지키는 것
       · **없는 것을 흘리지 않는다.** 뉴스를 못 받으면 그 사실을 흘린다.
@@ -971,8 +972,11 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
       · `prefers-reduced-motion` 이면 **멈춘다.** 계속 움직이는 띠는
         어지럼·주의력 문제를 만든다. 접근성은 선택이 아니다
       · 마우스를 올리면 멈춘다 — 읽으려는데 지나가면 소용이 없다
-      · 링크는 새 창. 앱 상태를 잃지 않게
+      · 기사 링크는 새 창. **pick 이 있으면 제목 클릭은 같은 창** —
+        ?pick=종목 으로 앱을 다시 열어 그 종목 분석으로 넘어간다
+        (라운드 56: "뉴스 클릭하면 관련 종목으로 아래 내용도 바뀌게")
     """
+    from urllib.parse import quote as _q56
     t = tokens(theme)
     KIND = {'live': t['brand'], 'issue': t['warn'], 'news': t['tx2'],
             'market': t['pos'], 'idle': t['tx3'], 'neg': t['neg']}
@@ -988,12 +992,27 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
                 f"background:{col}; display:inline-block; flex:0 0 auto;'>"
                 f"</span><span style='color:{t['tx2']};'>"
                 f"{_esc(x['text'])}</span>{meta}")
-        inner = (f"<a href='{_esc(x['href'])}' target='_blank' "
-                 f"rel='noopener noreferrer' style='display:inline-flex; "
-                 f"align-items:center; gap:7px; text-decoration:none;'>"
-                 f"{body}</a>" if x.get('href') else
-                 f"<span style='display:inline-flex; align-items:center; "
-                 f"gap:7px;'>{body}</span>")
+        if x.get('pick'):
+            # 제목 → 같은 창에서 그 종목 분석(?pick= 을 앱이 받아 검색
+            # 경로로 넘긴다). 원문은 별도 '기사' 링크로 남긴다 — 두 목적
+            # (분석 전환/원문 읽기)을 한 클릭에 섞지 않는다.
+            art = (f"<a href='{_esc(x['href'])}' target='_blank' "
+                   f"rel='noopener noreferrer' style='color:{t['tx3']}; "
+                   f"margin-left:6px; font-size:11px; "
+                   f"text-decoration:underline;'>기사</a>"
+                   if x.get('href') else '')
+            inner = (f"<a href='?pick={_q56(str(x['pick']))}' "
+                     f"target='_self' title='{_esc(x['pick'])} 분석으로 이동' "
+                     f"style='display:inline-flex; align-items:center; "
+                     f"gap:7px; text-decoration:none;'>{body}</a>{art}")
+        elif x.get('href'):
+            inner = (f"<a href='{_esc(x['href'])}' target='_blank' "
+                     f"rel='noopener noreferrer' style='display:inline-flex; "
+                     f"align-items:center; gap:7px; text-decoration:none;'>"
+                     f"{body}</a>")
+        else:
+            inner = (f"<span style='display:inline-flex; align-items:center; "
+                     f"gap:7px;'>{body}</span>")
         return (f"<span style='display:inline-flex; align-items:center; "
                 f"gap:7px; margin-right:34px; white-space:nowrap;'>"
                 f"{inner}</span>")

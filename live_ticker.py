@@ -83,7 +83,36 @@ def _market(macro):
     return out
 
 
-def _news(items, report):
+def _match_stock(title, name_map):
+    """
+    제목이 말하는 종목을 찾는다 — 있으면 "이름 (코드)" 라벨을 돌려준다.
+
+    사용자 요청 (라운드 56): *"뉴스 기사 클릭하면 그거 관련된 대표적인
+    주식으로 밑에 내용도 바뀌도록."* 매칭은 news_feed._mentions 의 보수
+    규칙을 그대로 쓴다 — 짧은 이름('GS','DL')은 경계를 요구한다.
+    여러 종목이 걸리면 **가장 긴 이름**을 고른다 ('삼성'보다 '삼성전자').
+    못 찾으면 None — 억지로 잇지 않는다.
+    """
+    if not name_map:
+        return None
+    try:
+        import news_feed as nf
+    except Exception:                                        # noqa: BLE001
+        return None
+    best = None
+    for name, ticker in name_map.items():
+        if '(' in str(name):
+            continue
+        if nf._mentions(title, str(name)):
+            if best is None or len(str(name)) > len(best[0]):
+                best = (str(name), str(ticker))
+    if best is None:
+        return None
+    code = best[1].split('.')[0]
+    return f'{best[0]} ({code})'
+
+
+def _news(items, report, name_map=None):
     """
     최신 헤드라인 — 위험 낱말이 붙은 것이 먼저 지나간다.
 
@@ -119,6 +148,12 @@ def _news(items, report):
         row = dict(kind=('issue' if hit else 'news'),
                    text=_cut(title), href=it.get('link') or None,
                    meta=str(it.get('source') or '') or None)
+        try:
+            pick = _match_stock(title, name_map)
+            if pick:
+                row['pick'] = pick        # 제목 클릭 → 이 종목 분석으로
+        except Exception:                                    # noqa: BLE001
+            pass                          # 매칭 실패가 띠를 죽이지 않는다
         (risky if hit else fresh).append((age_h, row))
 
     risky.sort(key=lambda x: (x[0] is None, x[0] or 0))
@@ -128,11 +163,12 @@ def _news(items, report):
     return out
 
 
-def build(session=None, macro=None, extra=None):
+def build(session=None, macro=None, extra=None, name_map=None):
     """
     띠에 실을 줄 목록. ui_kit.ticker_bar 에 그대로 넘긴다.
 
     실패해도 화면은 떠야 한다 — 못 모으면 짧은 목록을 돌려준다.
+    name_map: {종목명: 티커} — 주면 헤드라인에 종목 전환 링크가 붙는다.
     """
     rows = []
     try:
@@ -149,7 +185,7 @@ def build(session=None, macro=None, extra=None):
     try:
         import news_feed as nf
         items, report = nf.fetch()
-        rows.extend(_news(items, report))
+        rows.extend(_news(items, report, name_map=name_map))
     except Exception as e:                                   # noqa: BLE001
         rows.append(dict(kind='idle',
                          text=f'뉴스 수신 실패 ({type(e).__name__}) — '

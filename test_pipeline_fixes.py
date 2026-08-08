@@ -7387,6 +7387,64 @@ check("측정 스크립트가 저장소에 있다",
 check("커버리지 하한 기각이 기록돼 있다 (좋아 보여도 자른다)",
       '커버리지 30% 미달' in str(_rr123.get('valid_result')))
 
+# ══════════════════════════════════════════════════════════════════════
+# §124 — 라운드 56: 가격 역할 분리 · 뉴스→종목 전환 · 경로 축적
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§124 가격 역할 분리 · 뉴스→종목 전환 · 경로 축적 (라운드 56)")
+print("=" * 72)
+_w124 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+# ① 적정가(가치) vs 매수기준(타이밍) — 괴리·이유 자동 설명
+#    ⚠️ 소스 검사라 f-string 이 줄을 바꾸는 지점을 가로지르는 문자열은
+#    못 찾는다 — 한 리터럴 안에 통째로 있는 조각만 쓴다.
+check("배너가 두 가격의 역할을 가른다",
+      '아직 싸지 않지만' in _w124 and '서로 다른 질문입니다' in _w124)
+check("괴리를 숫자로 낸다 (지어내지 않고 계산)",
+      '_gap_fv = (_core_entry / _fair - 1.0) * 100.0' in _w124)
+check("타이밍·가치가 겹치는 자리도 구분해 말한다",
+      '방향을 가리키는 자리입니다' in _w124
+      and '사실상 같은 자리' in _w124 and '겹칩니다' in _w124)
+check("안전마진선은 오늘의 매수가가 아님을 유지",
+      '오늘의 매수가로 쓰지 않습니다' in _w124)
+check("진입가 근거를 명시한다 (단순 % 할인 아님을 설명)",
+      '기준가 − 20일 변동성 1일치 · 20봉 내 체결률 실측' in _w124)
+
+# ② 뉴스 클릭 → 관련 종목 분석 전환
+import live_ticker as _lt124                                  # noqa: E402
+_NM124 = {'삼성전자': '005930.KS', 'GS': '078930.KS'}
+check("헤드라인에서 종목을 찾는다",
+      _lt124._match_stock('삼성전자 3나노 수주', _NM124) == '삼성전자 (005930)')
+check("짧은 이름은 경계를 요구한다 (BGS 오탐 방지)",
+      _lt124._match_stock('BGS 전자 신제품', _NM124) is None)
+check("못 찾으면 None — 억지로 잇지 않는다",
+      _lt124._match_stock('코스피 급락 마감', _NM124) is None)
+_tb124 = _ukmod118.ticker_bar(
+    [dict(kind='news', text='삼성전자 수주', href='https://e.x/1',
+          pick='삼성전자 (005930)')], theme='dark')
+check("제목 클릭은 같은 창(?pick=)", "?pick=" in _tb124
+      and "target='_self'" in _tb124)
+check("원문 '기사' 링크는 새 창으로 분리", ">기사</a>" in _tb124
+      and "target='_blank'" in _tb124)
+check("앱이 ?pick= 을 pending_search 경로로 받는다",
+      "st.query_params.get('pick')" in _w124
+      and "st.session_state['pending_search'] = str(_qp_pick)" in _w124)
+check("받은 즉시 파라미터를 지운다 (새로고침 반복 방지)",
+      "del st.query_params['pick']" in _w124)
+check("띠 빌더가 이름 지도를 받는다",
+      "name_map=globals().get('STOCK_NAME_MAP')" in _w124)
+
+# ③ 경로 축적 — Exit·추적손절 연구의 선행 조건
+_prc124 = open(_os.path.join(PROJ, 'scripts', 'path_recorder.py'),
+               encoding='utf-8').read()
+check("경로 기록기가 저장소에 있다", '봉 단위 경로 축적' in _prc124)
+check("원장을 읽기만 한다", '원장(virtual_graded.jsonl)은 읽기만' in _prc124)
+check("판정을 하지 않는다 — 원자료만", '판정·채점을 여기서 하지 않는다'
+      in _prc124)
+check("경로는 기준가 대비 %로 저장", "round(H[k] / px * 100 - 100, 3)"
+      in _prc124)
+check("왜 필요한지(mfe/mae 한계) 적었다", '청산 봉까지만' in _prc124)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

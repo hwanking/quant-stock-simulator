@@ -517,8 +517,10 @@ def _render_ticker(extra=None):
             _macro = _sc_t.macro()
         except Exception:                                    # noqa: BLE001
             _macro = None
+        # name_map 을 주면 헤드라인 클릭 → 그 종목 분석으로 전환된다
         _rows = _ltick.build(session=st.session_state, macro=_macro,
-                             extra=extra)
+                             extra=extra,
+                             name_map=globals().get('STOCK_NAME_MAP'))
         _html = _uk.ticker_bar(_rows, theme=_theme)
         if _html:
             _TICKER_SLOT.markdown(_html, unsafe_allow_html=True)
@@ -1695,6 +1697,17 @@ _uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _the
 
 if 'search_text_input' not in st.session_state:
     st.session_state['search_text_input'] = ''
+
+# 뉴스 띠에서 넘어온 종목 (라운드 56) — ?pick=이름 (코드) 를 관심종목
+# 클릭과 같은 pending_search 경로에 태운다. 경로가 둘이면 한쪽만 고치는
+# 일이 생긴다 (§4). 받은 즉시 파라미터를 지워 새로고침 반복을 막는다.
+try:
+    _qp_pick = st.query_params.get('pick')
+    if _qp_pick and str(_qp_pick).strip():
+        st.session_state['pending_search'] = str(_qp_pick).strip()
+        del st.query_params['pick']
+except Exception:                                              # noqa: BLE001
+    pass                              # 파라미터 하나 때문에 화면이 죽지 않는다
 
 if 'pending_search' in st.session_state and st.session_state['pending_search']:
     st.session_state['search_text_input'] = st.session_state['pending_search']
@@ -4652,9 +4665,43 @@ rec_buy_sub = ''
 if rec_buy_val is not None:
     rec_buy_display = f"{rec_buy_val:,.0f}원 이하"
     if _core_entry:
-        # 적정가 기반 값은 **오늘의 매수가가 아니라 장기 참고선**이다.
-        # 둘이 크게 벌어질 때만 함께 적어 오해를 막는다.
-        if _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
+        # ── 두 가격의 역할 분리 (라운드 56) ──────────────────────────
+        # 사용자 지적: "적정가 173,656원과 매수 기준 211,023원이 둘 다
+        # '사도 되는 가격'처럼 보인다." 역할이 다르다 —
+        #   적정가   = 가치상 얼마면 싼가 (재무·업종 기반 중장기 기준)
+        #   매수기준 = 지금 장세에서 어디부터 진입할 만한가 (추세·변동성·
+        #             체결률 실측 — 라운드 25·35: 20봉 체결률 60% 지점 2.1σ)
+        # 둘이 다른 것은 오류가 아니므로, 괴리와 이유를 **엔진 값으로**
+        # 자동 생성해 같이 적는다. 새 숫자는 만들지 않는다.
+        _fair = four_scores.get('displayed_fair_value')
+        if _fair and _fair > 0:
+            _gap_fv = (_core_entry / _fair - 1.0) * 100.0
+            if _gap_fv >= 3.0:
+                rec_buy_sub = (
+                    f"가치 기준(적정가 {_fair:,.0f}원)보다 "
+                    f"<b>{_gap_fv:+.1f}%</b> 높은 자리 — 가치 관점에서는 "
+                    f"아직 싸지 않지만, 현재 추세·변동성 기준으로는 이 값 "
+                    f"아래부터 위험 대비 보상이 개선됩니다 (진입가 근거: "
+                    f"기준가 − 20일 변동성 1일치 · 20봉 내 체결률 실측). "
+                    f"적정가 부근까지의 하락을 기다리는 것은 가치 매수이고, "
+                    f"위 값은 타이밍 매수 기준입니다 — 서로 다른 질문입니다")
+            elif _gap_fv <= -3.0:
+                rec_buy_sub = (
+                    f"진입 기준이 가치 기준(적정가 {_fair:,.0f}원)보다 "
+                    f"<b>{_gap_fv:+.1f}%</b> 아래 — 타이밍과 가치가 같은 "
+                    f"방향을 가리키는 자리입니다. 다만 적정가 신뢰도와 "
+                    f"거래 조건을 함께 확인하세요")
+            else:
+                rec_buy_sub = (
+                    f"가치 기준(적정가 {_fair:,.0f}원)과 사실상 같은 자리 "
+                    f"({_gap_fv:+.1f}%) — 타이밍 기준과 가치 기준이 "
+                    f"겹칩니다")
+            if _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
+                rec_buy_sub += (
+                    f"<br>장기 안전마진선(적정가 − 안전마진)은 "
+                    f"{_value_floor:,.0f}원 — 20일 안에 닿을 자리가 아니라 "
+                    f"오늘의 매수가로 쓰지 않습니다")
+        elif _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
             rec_buy_sub = (
                 f"장기 가치 참고선은 {_value_floor:,.0f}원이지만, 20일 안에 "
                 f"닿을 자리가 아니라 오늘의 매수가로 쓰지 않습니다")
