@@ -2796,7 +2796,15 @@ section("59. 아주 쉬운 결론 — 신규/보유 기준 분리 · 90% 정직 
 # 사용자 요구: 안 샀으면 사도 되는지, 샀으면(평단 기준) 팔지/더 살지/물타기 금지를
 # 한 줄로. 신규 매수자와 보유자의 기준을 절대 섞지 않는다.
 
-_fs59 = {'recommended_buy_price': 10000, 'buy_entry_max': 11000,
+# ⚠️ 라운드 53 — 픽스처가 `recommended_buy_price` 만 갖고 있었다. 그 키가
+# 이 문단의 신규 매수가였기 때문이다. 실제 화면에서 삼성전자 현재가
+# 231,000원에 매매 지시서는 "매수구간 208,913~213,133원"이라 하고 바로 아래
+# 이 문단이 "147,608원 이하로 내려올 때만 사세요"라고 했다 — 같은 화면에서
+# 매수가가 6만원 차이로 둘. 라운드 25 폐기·37 배너 제거 산식이 여기 남아
+# 있었다. 이제 신규 매수자 값은 중앙 판정과 같은 entry_* 키를 쓴다.
+_fs59 = {'entry_pullback_price': 10000, 'buy_entry_max': 11000,
+         'entry_target_1st': 10800, 'entry_stop_price': 9400,
+         'recommended_buy_price': 6200,      # 폐기 산식 — 새어 나오면 실패
          'target_tech_1st': 10800, 'target_tech_2nd': 11500,
          'stop_loss_price': 9400, 'm10_disparity': 5.0,
          'calibration_band': {'lo': 55, 'hi': 59, 'n': 921, 'hit_rate': 61.0}}
@@ -2808,6 +2816,17 @@ check("비보유·추격 구간 → '이하로 내려올 때만'",
 check("신규 기준 가격 세트 (분할·추격금지·목표·손절·기간)",
       all(k in _e59['new_buyer']['prices'] for k in
           ('권장 매수가(1차 분할)', '추격매수 금지선', '1차 목표가', '예상 보유기간')))
+check("신규 매수가가 중앙 판정 진입가와 같다",
+      _e59['new_buyer']['prices']['권장 매수가(1차 분할)'] == 10000)
+check("폐기된 적정가×안전마진이 문장에 새지 않는다",
+      '6,200' not in (_e59['new_buyer']['line']
+                      + _e59['new_buyer']['detail']))
+# 진입가를 못 낸 종목 — 폐기 산식으로 물러서지 않는다 (없는 값 > 틀린 값)
+_e59z = q.build_easy_advice(dict(_fs59, entry_pullback_price=None),
+                            _v59, 10500)
+check("진입가 미산출이면 폐기 산식으로 물러서지 않는다",
+      '판단을 보류' in _e59z['new_buyer']['line']
+      and '6,200' not in str(_e59z['new_buyer']))
 
 _e59b = q.build_easy_advice(_fs59, {'score': 70, 'action': 'BUY', 'vetoes': []}, 9800)
 check("매수 가능 → '지금 사도 됩니다 (나눠서)'",
@@ -2815,7 +2834,7 @@ check("매수 가능 → '지금 사도 됩니다 (나눠서)'",
 check("틀릴 가능성을 실측으로 명시",
       '틀릴 가능성' in _e59b['new_buyer']['detail'])
 
-_e59c = q.build_easy_advice({'recommended_buy_price': None, 'm10_disparity': 0},
+_e59c = q.build_easy_advice({'entry_pullback_price': None, 'm10_disparity': 0},
                             {'score': 50, 'action': 'HOLD', 'vetoes': []}, 10000)
 check("신뢰도 미달 → 판단 보류 (억지 판단 금지)",
       '판단을 보류' in _e59c['new_buyer']['line'])
@@ -2878,7 +2897,9 @@ check("KPI 정의 불변 원칙 명시", "채점 정의는 바꾸지 않는다" 
 check("고신뢰 구간 부작용도 기록 (은폐 금지)", "본전 청산이 끊는 비용" in _mv60)
 
 # 쉬운 결론에 본전 스탑 조언이 실리는가
-_fs60 = {'recommended_buy_price': 10000, 'buy_entry_max': 11000,
+# 라운드 53 — 신규 매수자 값을 entry_* 로 옮겼다 (§59 주석 참고)
+_fs60 = {'entry_pullback_price': 10000, 'buy_entry_max': 11000,
+         'entry_target_1st': 10800, 'entry_stop_price': 9400,
          'target_tech_1st': 10800, 'target_tech_2nd': 11500,
          'stop_loss_price': 9400, 'm10_disparity': 5.0, 'calibration_band': None}
 _e60 = q.build_easy_advice(_fs60, {'score': 70, 'action': 'BUY', 'vetoes': []}, 9800)
@@ -7106,6 +7127,36 @@ check("차트 설명이 두 기준을 구분해 알린다",
 check("설명이 '배너와 같은 숫자'라고 거짓 주장하지 않는다",
       '실행 가격선(추천 매수가·1·2차 목표가·손절가·TDST)은 위 배너와 같은 '
       '숫자입니다' not in _w120)
+
+# ⑧ '아주 쉬운 결론' — 화면에서 실제로 잡은 모순
+#    지시서: "매수구간 208,913~213,133원"
+#    그 아래: "147,608원 이하로 내려올 때만 사세요"
+#    같은 종목·같은 화면에서 매수가가 6만원 차이로 둘이었다. 서버를 띄우지
+#    않았으면 못 봤다 — 회귀는 전건 통과 상태였다.
+_FS120E = dict(current_price=231000.0, entry_pullback_price=211023.0,
+               entry_target_1st=236572.0, entry_stop_price=196000.0,
+               recommended_buy_price=147608.0,       # 폐기 산식
+               buy_entry_max=213133.0, target_tech_1st=236572.0,
+               target_tech_2nd=298000.0, stop_loss_price=174524.0,
+               m10_disparity=8.0, calibration_band=None)
+_VD120E = {'action': 'HOLD', 'score': 49, 'vetoes': ['진입 위치 초과']}
+_ez = qi.QuantIndicatorsEngine.build_easy_advice(_FS120E, _VD120E, 231000.0)
+_nbt = _ez['new_buyer']['line'] + _ez['new_buyer']['detail']
+check("쉬운 결론이 폐기된 적정가×안전마진을 말하지 않는다",
+      '147,608' not in _nbt)
+check("쉬운 결론의 매수가 = 중앙 판정 진입가", '211,023' in _nbt)
+check("쉬운 결론의 신규 손절 = 진입 기준 손절",
+      _ez['new_buyer']['prices']['손절가(신규 진입 기준으로 재설정)'] == 196000.0)
+_hz = qi.QuantIndicatorsEngine.build_easy_advice(
+    _FS120E, _VD120E, 231000.0, user_avg=250000.0)['holder']
+check("보유자 문단은 보유자 손절을 쓴다",
+      _hz['prices']['손절가(보유 기준)'] == 174524.0
+      and '174,524' in _hz['detail'])
+check("보유자 문단에 신규 손절이 새지 않는다", '196,000' not in _hz['detail'])
+_qis120 = open(_os.path.join(PROJ, 'quant_indicators.py'),
+               encoding='utf-8').read()
+check("왜 바꿨는지 엔진에 남겼다",
+      '147,608원 이하로 내려올 때만' in _qis120 and '라운드 25 폐기' in _qis120)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

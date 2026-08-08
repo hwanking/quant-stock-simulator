@@ -3,12 +3,25 @@
   "model": "v2026.08.06.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.08.1",
-  "schema": "v2026.08.08.1",
+  "schema": "v2026.08.08.2",
   "news": "v2026.08.05.1",
   "sector": "v2026.08.05.0",
   "valuation": "v2026.08.05.0"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.08.2",
+   "previous": "v2026.08.08.1",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "'아주 쉬운 결론'의 신규 매수가를 중앙 판정 진입가로 교체",
+   "note": "삼성전자 화면에서 매매 지시서는 \"매수구간 208,913~213,133원\", 바로 아래 문단은 \"147,608원 이하로 내려올 때만 사세요\"였다 — 폐기된 recommended_buy_price(라운드 25 폐기·37 배너 제거)가 한 벌 더 살아 있었다. 게다가 신규/보유자 문단이 t1·stop 변수를 같이 쓰고 있었다 (둘 다 보유자 값). 신규는 entry_pullback_price/entry_target_1st/entry_stop_price, 보유자는 target_tech_1st/stop_loss_price 로 분리. 진입가 미산출이면 폐기 산식으로 물러서지 않고 판단 보류.",
+   "created_at": "2026-08-08T13:20:25+00:00",
+   "effective_from": "2026-08-08"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",
