@@ -954,6 +954,73 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
         f"flex-direction:column; gap:12px;'>{''.join(parts)}</div></div>")
 
 
+def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
+    """
+    화면 맨 위 흐르는 띠 — 지금 무엇이 돌고 있고, 무슨 이슈가 있는가.
+
+    사용자 요청: *"업데이트 상황 알려주는 창... 뭐 진행중이다, 핫이슈가
+    뭐다, 실시간으로 사이트나 뉴스 같은 거 맨 위에 계속 움직이게."*
+
+    items: [{'kind': 'live'|'issue'|'news'|'market'|'idle',
+             'text': str, 'href': str|None, 'meta': str|None}]
+
+    ■ 지키는 것
+      · **없는 것을 흘리지 않는다.** 뉴스를 못 받으면 그 사실을 흘린다.
+        빈 띠를 채우려고 문구를 지어내지 않는다 (CLAUDE.md §3)
+      · 이모지 대신 색 점 하나. 종류를 색으로만 가른다
+      · `prefers-reduced-motion` 이면 **멈춘다.** 계속 움직이는 띠는
+        어지럼·주의력 문제를 만든다. 접근성은 선택이 아니다
+      · 마우스를 올리면 멈춘다 — 읽으려는데 지나가면 소용이 없다
+      · 링크는 새 창. 앱 상태를 잃지 않게
+    """
+    t = tokens(theme)
+    KIND = {'live': t['brand'], 'issue': t['warn'], 'news': t['tx2'],
+            'market': t['pos'], 'idle': t['tx3'], 'neg': t['neg']}
+    items = [x for x in (items or []) if str(x.get('text') or '').strip()]
+    if not items:
+        return ''
+
+    def one(x):
+        col = KIND.get(str(x.get('kind') or 'news'), t['tx2'])
+        meta = (f"<span style='color:{t['tx3']}; margin-left:6px;'>"
+                f"{_esc(x['meta'])}</span>" if x.get('meta') else '')
+        body = (f"<span style='width:6px; height:6px; border-radius:50%; "
+                f"background:{col}; display:inline-block; flex:0 0 auto;'>"
+                f"</span><span style='color:{t['tx2']};'>"
+                f"{_esc(x['text'])}</span>{meta}")
+        inner = (f"<a href='{_esc(x['href'])}' target='_blank' "
+                 f"rel='noopener noreferrer' style='display:inline-flex; "
+                 f"align-items:center; gap:7px; text-decoration:none;'>"
+                 f"{body}</a>" if x.get('href') else
+                 f"<span style='display:inline-flex; align-items:center; "
+                 f"gap:7px;'>{body}</span>")
+        return (f"<span style='display:inline-flex; align-items:center; "
+                f"gap:7px; margin-right:34px; white-space:nowrap;'>"
+                f"{inner}</span>")
+
+    row = ''.join(one(x) for x in items)
+    # 같은 줄을 두 번 이어 붙여 끊김 없이 순환시킨다 (-50% 지점에서 원위치)
+    dur = max(24, len(items) * 7)
+    return (
+        f"<style>"
+        f"@keyframes gnTick {{from{{transform:translateX(0)}}"
+        f"to{{transform:translateX(-50%)}}}}"
+        f".gn-tick-wrap{{overflow:hidden; background:{t['card']}; "
+        f"border-radius:9px; height:{height}px; display:flex; "
+        f"align-items:center; margin:0 0 10px 0;}}"
+        f".gn-tick{{display:inline-flex; align-items:center; "
+        f"animation:gnTick {dur}s linear infinite; font-size:12px; "
+        f"font-variant-numeric:tabular-nums; will-change:transform;}}"
+        f".gn-tick-wrap:hover .gn-tick{{animation-play-state:paused;}}"
+        f"@media (prefers-reduced-motion: reduce){{"
+        f".gn-tick{{animation:none; overflow-x:auto;}}"
+        f".gn-tick-wrap{{overflow-x:auto;}}}}"
+        f"</style>"
+        f"<div class='gn-tick-wrap' role='status' aria-live='off' "
+        f"aria-label='진행 상황과 시장 소식'>"
+        f"<div class='gn-tick'>{row}{row}</div></div>")
+
+
 def attention_row(a: dict, theme: str = 'dark') -> str:
     """
     관심종목 후보 한 줄 — 추천 카드와 같은 표면·타이포·아이콘을 쓴다.

@@ -490,6 +490,42 @@ st.markdown(f"""
 
 _NAV_SLOT = st.empty()          # 종목이 확정된 뒤 채운다 (자리는 지금 잡는다)
 
+# ── 실시간 띠 (라운드 48) ──────────────────────────────────────────────
+# 사용자 요청: *"업데이트 상황 알려주는 창... 뭐 진행중이다, 핫이슈가 뭐다,
+# 실시간으로 사이트나 뉴스 같은 거 맨 위에 계속 움직이게."*
+#
+# 자리는 지금 잡고 내용은 나중에 채운다 — 스캔 상태·매크로·뉴스가 다
+# 모이는 시점이 이 아래이기 때문이다. 자리를 안 잡으면 띠가 화면 중간에
+# 나타난다.
+_TICKER_SLOT = st.empty()
+
+
+def _render_ticker(extra=None):
+    """
+    맨 위 띠를 채운다. 실패해도 화면은 떠야 한다.
+
+    띠는 **알림이지 판단이 아니다** — 여기서 점수를 만들거나 값을 고치지
+    않는다. 이미 계산된 것을 줄로 바꿀 뿐이다 (CLAUDE.md §4).
+    """
+    try:
+        # ⚠️ 별칭을 `_lt` 로 두지 않는다 — 2475행에서 **경량 스캔 결과**가
+        #    이미 그 이름을 쓴다. 라운드 39에서 `_vc`(verdict_core vs 배너
+        #    색)로 똑같은 사고를 냈고, 모듈 객체가 style 속성에 찍혀 나갔다.
+        import live_ticker as _ltick
+        try:
+            import sector_cycle as _sc_t
+            _macro = _sc_t.macro()
+        except Exception:                                    # noqa: BLE001
+            _macro = None
+        _rows = _ltick.build(session=st.session_state, macro=_macro,
+                             extra=extra)
+        _html = _uk.ticker_bar(_rows, theme=_theme)
+        if _html:
+            _TICKER_SLOT.markdown(_html, unsafe_allow_html=True)
+    except Exception:                                        # noqa: BLE001
+        # 띠 하나 때문에 앱이 죽지 않는다. 못 그리면 안 그린다.
+        pass
+
 
 def _render_toolbar(here_html: str = '') -> None:
     # 내비는 좌측 사이드바 한 곳에만 둔다 (참조 화면과 같다). 여기는 지금
@@ -1757,6 +1793,10 @@ realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price
 # 상단 툴바 오른쪽 끝에 지금 보는 종목 — 스크롤 중에도 잊지 않게 (sticky)
 _render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
                 f"{_uk._esc(target_ticker)}")
+
+# 맨 위 실시간 띠 — 지금 보는 종목까지 확정된 뒤에 채운다
+_render_ticker([dict(kind='live', text=f'분석 중 {resolved_name} '
+                                       f'{target_ticker}')])
 
 # 1단계 — 지금 무엇을 보고 있는지. 검색은 위에 있고 여기엔 결과만 담는다.
 if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
