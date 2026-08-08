@@ -7267,6 +7267,97 @@ check("하방 사례(레인보우)는 여전히 산출 불가",
       "raw_upside_pct:+.0f}% 괴리" in _qi121
       and 'OUT_OF_DOMAIN' in _qi121)
 
+# ══════════════════════════════════════════════════════════════════════
+# §122 — 뉴스 중복 병합·사건 유형 · 업종 원장 실측 · 유효 표본 (라운드 54b)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§122 뉴스 병합·사건 유형 · 업종 실측 · 유효 표본 (라운드 54b)")
+print("=" * 72)
+import json as _json                                          # noqa: E402
+import news_feed as _nf122                                    # noqa: E402
+
+# ① 중복 병합 — 장식([단독]·(종합)·기호)만 다른 제목은 같은 기사다
+check("장식 다른 같은 제목을 병합 키로 묶는다",
+      _nf122._norm_title('[단독] 삼성전자, 3나노 수주')
+      == _nf122._norm_title('삼성전자 3나노 수주(종합)'))
+check("다른 기사는 묶이지 않는다",
+      _nf122._norm_title('삼성전자 3나노 수주')
+      != _nf122._norm_title('삼성전자 4나노 수주'))
+check("유사도 임계값 없이 정규화 완전 일치만 쓴다 (§2 — 숫자 안 고름)",
+      '정규화 후 완전 일치' in open(_os.path.join(PROJ, 'news_feed.py'),
+                              encoding='utf-8').read())
+
+# ② 사건 유형 — 낱말 일치만, 해석 금지
+check("수주 기사 → 수주·공급",
+      _nf122.event_types_of('한화오션 2조원 LNG선 수주') == ['수주·공급'])
+check("증자 기사 → 증자·CB",
+      '증자·CB' in _nf122.event_types_of('E8, 40억원 규모 유상증자 실시'))
+check("시황 해설은 사건이 아니다",
+      _nf122.event_types_of('오늘 코스피 급락 마감') == [])
+
+# ③ for_stock 계약 — 합성 기사로 오프라인 검증 (수신 실패와 무관하게 판정)
+from datetime import datetime as _dt122, timedelta as _td122, \
+    timezone as _tz122                                        # noqa: E402
+_now122 = _dt122.now(_tz122(_td122(hours=9)))
+_items122 = [
+    {'title': '테스트전자 1조 수주', 'link': '', 'source': 'A',
+     'dt': _now122, 'dup_sources': ['A', 'B']},
+    {'title': '테스트전자 유상증자 검토', 'link': '', 'source': 'C',
+     'dt': _now122 - _td122(hours=40), 'dup_sources': ['C']},
+]
+_s122 = _nf122.for_stock('테스트전자', items=_items122)
+check("사건 유형 집계가 나온다",
+      _s122['event_types'].get('수주·공급') == 1
+      and _s122['event_types'].get('증자·CB') == 1)
+check("신선/후행이 갈린다", _s122['fresh'] == 1 and _s122['lagging'] == 1)
+check("헤드라인에 다중 출처 병합 사실을 밝힌다",
+      _s122['headlines'][0]['sources_n'] == 2)
+check("위험 낱말(유상증자)은 종전대로 잡힌다", '유상증자' in _s122['risk_words'])
+
+# ④ 업종 원장 실측 — 표시 전용
+import sector_cycle as _sc122                                 # noqa: E402
+_sp122 = _sc122.ledger_perf('화학')
+check("업종 실측 표가 로드된다", _sp122 is not None and _sp122['n'] >= 100)
+check("Wilson 하한을 같이 낸다", 'wilson_low' in (_sp122 or {}))
+check("없는 업종은 None — 지어내지 않는다",
+      _sc122.ledger_perf('존재하지않는업종') is None)
+_spj122 = _json.load(open(_os.path.join(PROJ, 'data', 'sector_perf.json'),
+                          encoding='utf-8'))
+check("실측 표가 블라인드 미포함을 명시한다",
+      '블라인드 미포함' in _spj122.get('basis', ''))
+check("표시 전용임을 명시한다 (라운드 44 결정 유지)",
+      '점수·게이트에 사용하지 않는다' in _spj122.get('note', ''))
+_w122 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("업황 카드가 업종 실측을 병기한다",
+      '매수권 신호의 과거 실측' in _w122 and 'ledger_perf' in _w122)
+check("표본 작으면 판단 근거로 이르다고 말한다",
+      '판단 근거로 쓰기 이릅니다' in _w122)
+
+# ⑤ 유효 독립 표본 — raw n 과 함께 표기
+_en122 = _json.load(open(_os.path.join(PROJ, 'data', 'effective_n.json'),
+                         encoding='utf-8'))
+_enA = (_en122.get('sets') or {}).get('전체 원장') or {}
+check("유효 표본이 산출돼 있다 (에피소드·군집·날짜)",
+      all(k in _enA for k in ('raw', 'episodes', 'clusters', 'dates')))
+check("에피소드 수가 raw 보다 작다 (독립성 보정이 실제로 걸림)",
+      0 < _enA.get('episodes', 0) < _enA.get('raw', 0))
+check("화면이 유효 독립 표본을 병기한다",
+      '유효 독립 표본' in _w122 and '한 사건으로 묶음' in _w122)
+
+# ⑥ 사전등록·코호트 — 다음 라운드 재료가 박제돼 있다
+_pr122 = open(_os.path.join(PROJ, 'docs', 'PREREG_R55_REGIME_MOE.md'),
+              encoding='utf-8').read()
+check("R55 사전등록 — 가중치를 손으로 정하지 않는다",
+      '가중치를 손으로 정하지 않는다' in _pr122)
+check("R55 — blind 미사용·전방 확인 원칙", '전방 축적분' in _pr122)
+check("R55 — 기각 시 현행 유지", '기각하고 현행 유지' in _pr122)
+_cj122 = _json.load(open(_os.path.join(PROJ, 'data',
+                                       'fv_revived_cohort.json'),
+                         encoding='utf-8'))
+check("복원 가치주 코호트가 박제됐다 (전방 검증용)",
+      _cj122.get('n_caution', 0) >= 100 and len(_cj122.get('caution')) ==
+      _cj122.get('n_caution'))
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

@@ -452,6 +452,34 @@ def sector_snapshot(as_of=None):
     return {g: proxy_momentum(g, as_of=as_of) for g in GROUPS}
 
 
+#: 업종별 원장 실측 (라운드 54b) — scripts/gen_sector_perf.py 가 만든
+#: 표시 전용 표. 프록시 모멘텀이 '지금 업황'이라면 이것은 '이 업종에서
+#: 우리 신호가 과거에 실제로 맞았는가'다. 점수·게이트에 쓰지 않는다.
+_PERF = {'loaded': False, 'doc': None}
+
+
+def ledger_perf(sector):
+    """이 업종 매수권 신호의 원장 실측. 없으면 None — 지어내지 않는다."""
+    if not sector:
+        return None
+    if not _PERF['loaded']:
+        _PERF['loaded'] = True
+        try:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'data', 'sector_perf.json')
+            with open(p, encoding='utf-8') as f:
+                _PERF['doc'] = json.load(f)
+        except Exception:                                      # noqa: BLE001
+            _PERF['doc'] = None
+    doc = _PERF['doc']
+    if not doc:
+        return None
+    row = (doc.get('sectors') or {}).get(str(sector))
+    if not row:
+        return None
+    return dict(row, basis=doc.get('basis', ''), sector=str(sector))
+
+
 def for_stock(code, industry=None, as_of=None):
     """
     종목 하나의 업황 신호.

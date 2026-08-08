@@ -64,8 +64,44 @@ CATALYST_WORDS = ('수주', '계약', '공급', '納品', '납품', '신제품',
                   '실적개선', '증설', 'M&A', '인수', '합병', '수출', '진출',
                   '협약', 'MOU', '투자유치', '자사주')
 
+#: 사건 유형 — 감성 점수가 아니라 **무슨 일인지**를 구조화한다 (라운드 54b).
+#: 공시 분류(§37)와 같은 철학: 낱말 일치만, 해석 금지. 유형별로 지속성이
+#: 다르다는 것(수주·임상은 수개월, 급등 해설은 하루)을 화면이 구분해
+#: 말할 수 있게 하는 재료다. 점수·게이트에는 넣지 않는다 — 표시 전용.
+EVENT_TYPES = (
+    ('수주·공급', ('수주', '공급계약', '납품', '納品', '공급')),
+    ('실적', ('실적', '영업이익', '어닝', '흑자전환', '적자전환', '매출')),
+    ('임상·인허가', ('임상', '승인', '허가', 'FDA', '식약처')),
+    ('M&A·지분', ('인수', '합병', 'M&A', '지분', '매각', '경영권')),
+    ('증자·CB', ('유상증자', '무상증자', '전환사채', 'CB', 'BW', '감자')),
+    ('자사주·배당', ('자사주', '배당', '소각')),
+    ('신사업·계약', ('신제품', '출시', '특허', '협약', 'MOU', '투자유치',
+                 '증설', '진출')),
+    ('사법·규제', ('압수수색', '횡령', '배임', '분식회계', '제재', '과징금')),
+)
+
 _CACHE = {'ts': 0.0, 'items': [], 'report': []}
 _CACHE_SEC = 600
+
+
+def _norm_title(t):
+    """중복 판정용 정규화 — [단독]·(종합) 같은 장식과 기호·공백을 걷는다.
+
+    임계값 있는 유사도가 아니라 **정규화 후 완전 일치**만 쓴다. 숫자를
+    고르지 않기 위해서다(§2). 이 규칙으로 못 잡는 중복은 남는 것이 맞다.
+    """
+    t = re.sub(r'\[[^\]]{1,12}\]|\([^)]{1,12}\)|【[^】]{1,12}】', '', str(t))
+    t = re.sub(r'[^0-9A-Za-z가-힣%]+', '', t)
+    return t.lower()
+
+
+def event_types_of(title):
+    """제목의 사건 유형 태그. 낱말 일치만 — 해석하지 않는다."""
+    out = []
+    for label, words in EVENT_TYPES:
+        if any(w in title for w in words):
+            out.append(label)
+    return out
 
 
 def _get(url):
@@ -129,6 +165,26 @@ def fetch(max_age_sec=_CACHE_SEC):
         report.append({'source': name, 'count': got, 'ok': got > 0,
                        'error': ''})
 
+    # ── 중복 병합 (라운드 54b) — 같은 기사가 3사에 실려 3건으로 세지던 것
+    # 신선도는 **가장 이른 시각**을 쓴다. 재탕 기사가 원 기사보다 늦게
+    # 왔다고 '신선한 재료'가 되면 novelty 가 거짓이 된다.
+    merged = {}
+    for it in items:
+        k = _norm_title(it['title'])
+        if not k:
+            continue
+        prev = merged.get(k)
+        if prev is None:
+            it = dict(it, dup_sources=[it['source']])
+            merged[k] = it
+        else:
+            if it['source'] not in prev['dup_sources']:
+                prev['dup_sources'].append(it['source'])
+            d_new, d_old = it.get('dt'), prev.get('dt')
+            if d_new is not None and (d_old is None or d_new < d_old):
+                prev['dt'] = d_new          # 첫 보도 시각으로
+    items = list(merged.values())
+
     _CACHE.update(ts=now, items=items, report=report)
     return items, report
 
@@ -163,6 +219,7 @@ def for_stock(name, items=None, fresh_hours=FRESH_HOURS):
     now = datetime.now(timezone(timedelta(hours=9)))
     fresh = lagging = 0
     risk_w, cat_w = set(), set()
+    ev_types = {}
     for it in hits:
         d = it.get('dt')
         if d is None:
@@ -177,12 +234,19 @@ def for_stock(name, items=None, fresh_hours=FRESH_HOURS):
         for w in CATALYST_WORDS:
             if w in it['title']:
                 cat_w.add(w)
+        for lb in event_types_of(it['title']):
+            ev_types[lb] = ev_types.get(lb, 0) + 1
     return {
         'total': len(hits), 'fresh': fresh, 'lagging': lagging,
         'risk': len(risk_w), 'catalyst': len(cat_w),
         'risk_words': sorted(risk_w), 'catalyst_words': sorted(cat_w),
+        # 사건 유형 (라운드 54b) — 표시 전용. 점수에 넣지 않는다
+        'event_types': dict(sorted(ev_types.items(), key=lambda x: -x[1])),
         'headlines': [{'title': h['title'], 'source': h['source'],
                        'link': h['link'],
+                       # 3사 중복이면 병합 사실을 밝힌다 — 건수 부풀림 방지
+                       'sources_n': len(h.get('dup_sources') or [h['source']]),
+                       'events': event_types_of(h['title']),
                        'when': h['dt'].strftime('%m-%d %H:%M') if h['dt']
                        else '시각 미상'} for h in hits[:6]],
     }

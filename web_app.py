@@ -5113,6 +5113,20 @@ _calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
     _extra_bits.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
                        f"누적 케이스 {_calib_all['total_cases']:,}건")
+    # 유효 독립 표본 (라운드 54b) — 같은 날 같은 업종 신호는 같은 시장
+    # 사건 하나다. raw 건수로 신뢰구간을 좁히면 과신이 된다.
+    try:
+        import json as _json54
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'data', 'effective_n.json'),
+                  encoding='utf-8') as _f54:
+            _en54 = (_json54.load(_f54).get('sets') or {}).get('전체 원장') or {}
+        if _en54.get('episodes'):
+            _extra_bits.append(
+                f"유효 독립 표본 약 {_en54['episodes']:,}건"
+                f" (같은 종목 35일 내 재신호를 한 사건으로 묶음)")
+    except Exception:                                          # noqa: BLE001
+        pass                          # 표기 하나 때문에 화면이 죽지 않는다
 if _extra_bits:
     st.caption("  ·  ".join(_extra_bits))
 
@@ -6888,6 +6902,23 @@ with tab_val:
                     st.caption(_md_safe(_cy.get('why') or '업종 미연동'))
             if _cy.get('why') and not _cy.get('adjusted'):
                 st.caption(_md_safe(_cy['why']))
+        # 업종 원장 실측 (라운드 54b) — 프록시 모멘텀이 '지금 업황'이라면
+        # 이것은 '이 업종에서 우리 매수권 신호가 과거에 실제로 맞았는가'다.
+        # 표시 전용 — 점수·게이트 미사용. 표본이 작으면 그 사실을 먼저 쓴다.
+        try:
+            import sector_cycle as _scp
+            _sp = _scp.ledger_perf(val_eval.get('sector'))
+            if _sp:
+                _sp_head = (f"표본 {_sp['n']}건뿐이라 판단 근거로 쓰기 이릅니다"
+                            if _sp.get('small') else
+                            f"적중 {_sp['hit']:.1f}% (Wilson 하한 "
+                            f"{_sp['wilson_low']:.1f}) · 비용후 평균 "
+                            f"{_sp['ev']:+.3f}%p")
+                st.caption(_md_safe(
+                    f"이 업종({_sp['sector']}) 매수권 신호의 과거 실측 — "
+                    f"{_sp_head} · n {_sp['n']:,} · 개발 구간 · 표시 전용"))
+        except Exception:                                       # noqa: BLE001
+            pass                       # 실측 표 하나 때문에 축 화면이 죽지 않는다
         for _n in (_AX.get('notes') or []):
             st.caption(_md_safe(f"· {_n}"))
         if not _AX.get('consistent'):
