@@ -104,6 +104,7 @@ def main():
             H = df['high_raw'].astype(float).tolist()
             L = df['low_raw'].astype(float).tolist()
             C = df['adj_close'].astype(float).tolist()
+            V = df['volume'].astype(float).tolist()
             for d, px in todo:
                 j = idx.get(d)
                 if j is None:
@@ -113,10 +114,16 @@ def main():
                         continue
                     j = later[0] - 1
                 seg = range(j + 1, min(j + 1 + BARS, len(dates)))
+                # 볼륨은 신호일 거래량 대비 배율 (라운드 57 명세 — 거래량
+                # 이탈형 Exit 후보 연구에 필요). 신호일 거래량이 0이면
+                # 배율을 지어내지 않고 None.
+                v0 = V[j] if j < len(V) and V[j] > 0 else None
                 bars = [[dates[k],
                          round(H[k] / px * 100 - 100, 3),
                          round(L[k] / px * 100 - 100, 3),
-                         round(C[k] / px * 100 - 100, 3)] for k in seg]
+                         round(C[k] / px * 100 - 100, 3),
+                         (round(V[k] / v0, 2) if v0 else None)]
+                        for k in seg]
                 if not bars:
                     continue          # 신호 직후 봉이 아직 없다 (최근 신호)
                 out.write(json.dumps(

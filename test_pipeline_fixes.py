@@ -7444,6 +7444,19 @@ check("판정을 하지 않는다 — 원자료만", '판정·채점을 여기�
 check("경로는 기준가 대비 %로 저장", "round(H[k] / px * 100 - 100, 3)"
       in _prc124)
 check("왜 필요한지(mfe/mae 한계) 적었다", '청산 봉까지만' in _prc124)
+# 라운드 57 사전 조사에서 추가 — 거래량 이탈형 Exit 후보 연구용
+check("봉별 거래량을 신호일 대비 배율로 저장",
+      'round(V[k] / v0, 2)' in _prc124)
+check("신호일 거래량 0이면 배율을 지어내지 않는다 (None)",
+      'if j < len(V) and V[j] > 0 else None' in _prc124)
+check("케이스 스터디 스크립트가 저장소에 있다 (규칙 채택 없음)",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'exit_shape_study.py'))
+      and _os.path.exists(_os.path.join(PROJ, 'scripts',
+                                        'entry_depth_study.py')))
+check("스터디가 최적화가 아님을 스스로 밝힌다",
+      '최적화가 아니다' in open(_os.path.join(PROJ, 'scripts',
+                                       'exit_shape_study.py'),
+                          encoding='utf-8').read())
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
