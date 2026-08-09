@@ -135,12 +135,29 @@ def blended_prob(score, sector=None, regime_code=None, fs=None):
                 label=label)
 
 
-def layers_for(score, sector=None, regime_code=None, fs=None):
+def self_history(ticker):
+    """이 종목 자체의 과거 신호 이력 (표시 전용 · R59 혼합 미포함).
+
+    반환: {'n','hit','wilson','recent':[[날짜,점수,결과,수익%],...]} | None
+    """
+    doc = _doc()
+    if not doc or not ticker:
+        return None
+    tk = str(ticker)
+    s = (doc.get('SELF') or {}).get(tk)
+    if not s:
+        return None
+    return dict(s, recent=(doc.get('SELF_RECENT') or {}).get(tk) or [])
+
+
+def layers_for(score, sector=None, regime_code=None, fs=None, ticker=None):
     """
     지금 종목의 문맥에 맞는 계층 실측 행 목록 (넓은 층 → 좁은 층 순).
 
     반환 행: {'label','n','hit','wilson','ev','narrow'} — 없으면 빼고,
     업종 층이 점수대 문제로 미축적이면 그 사실을 note 로 알린다.
+    ticker 를 주면 SELF(이 종목 자체) 층이 가장 좁은 층으로 붙는다 —
+    표시 전용이며 R59 혼합 확률에는 들어가지 않는다.
     """
     doc = _doc()
     if not doc or score is None:
@@ -183,5 +200,11 @@ def layers_for(score, sector=None, regime_code=None, fs=None):
         elif b not in ('58-64', '65-100'):
             note = ('업종별 실측은 매수권(58점 이상)만 축적돼 있어 이 '
                     '점수대에서는 아직 없습니다')
+    if ticker:
+        s = (doc.get('SELF') or {}).get(str(ticker))
+        if s:
+            rows.append(dict(label='이 종목 자체 과거 신호 (전 점수대)',
+                             narrow=3, n=s['n'], hit=s['hit'],
+                             wilson=s['wilson'], ev=None))
     rows.sort(key=lambda x: x['narrow'])
     return rows, note

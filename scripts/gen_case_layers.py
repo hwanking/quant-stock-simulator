@@ -154,16 +154,39 @@ def main():
         if sec and st:
             agg_add(L2, (b, sec, st), r)
 
+    # SELF 축 (라운드 61) — 이 종목 자체의 과거 신호 이력. 표시 전용이며
+    # **혼합 확률(R59 채택분)에는 넣지 않는다** — 게이트는 SELF 없는
+    # 구성으로 통과했고, 통과 후 층을 추가하면 무단 변경이다.
+    SELF, SELF_RECENT = {}, {}
+    for r in rows:
+        tk = str(r['ticker'])
+        a = SELF.setdefault(tk, [0, 0])
+        a[0] += 1
+        a[1] += 1 if r.get('success') else 0
+        SELF_RECENT.setdefault(tk, []).append(
+            [str(r['date'])[:10], int(float(r.get('score') or 0)),
+             '성공' if r.get('success') else
+             ('손절' if r.get('outcome') == 'STOP' else '미도달'),
+             round(float(r.get('return_pct') or 0), 1)])
+    for tk in SELF_RECENT:
+        SELF_RECENT[tk] = sorted(SELF_RECENT[tk])[-10:]
+
     doc = dict(
         made='2026-08-09',
         basis='개발 구간(train+valid) · 판정완료 · 블라인드 제외 · '
               '비용 0.36%p 차감 · 국면=코스피 4상태(R52 규칙 재사용)',
         note='표시 전용 — 각 층은 그 계층의 실측이지 이 종목의 확률이 '
              '아니다. 확률 혼합(shrinkage)은 R59 사전등록 게이트 통과 '
-             '전에는 하지 않는다. 업종 층은 매수권(58+)만 축적돼 있다.',
+             '전에는 하지 않는다. 업종 층은 매수권(58+)만 축적돼 있다. '
+             'SELF 축은 표시 전용 — R59 혼합에 넣지 않는다(게이트가 SELF '
+             '없는 구성으로 통과).',
         vol_terciles=[round(float(t1), 5), round(float(t2), 5)],
         L5=agg_out(L5), L4=agg_out(L4, 30), L4b=agg_out(L4b, 30),
-        L3=agg_out(L3, 30), L2=agg_out(L2, 30))
+        L3=agg_out(L3, 30), L2=agg_out(L2, 30),
+        SELF={k: dict(n=v[0], hit=round(v[1] / v[0] * 100, 1),
+                      wilson=round(wilson_low(v[1], v[0]), 1))
+              for k, v in SELF.items() if v[0] >= 1},
+        SELF_RECENT=SELF_RECENT)
     dst = os.path.join(PROJ, 'data', 'case_layers.json')
     with open(dst, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, indent=1)

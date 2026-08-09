@@ -5522,7 +5522,7 @@ try:
     # _rg58 은 위 계층 보정 타일에서 이미 계산됨 — 같은 값을 재사용 (§4)
     _lay58, _note58 = _cl58.layers_for(
         verdict.get('score'), sector=val_eval.get('sector'),
-        regime_code=_rg58, fs=four_scores)
+        regime_code=_rg58, fs=four_scores, ticker=target_ticker)
     # L5(점수대 전체)는 화면 위 '이 점수대의 실제 성적'(calibration 출처)과
     # 같은 개념이라 다른 집계로 또 보여주면 §4 위반이다 — 좁은 층만 병기
     _lay58 = [r for r in _lay58 if r.get('narrow', 0) > 0]
@@ -5542,6 +5542,21 @@ try:
             "채우는 방식은 쓰지 않습니다."))
         if _note58:
             st.caption(_md_safe(f"· {_note58}"))
+    # 이 종목 자체 과거 신호의 실체 (라운드 61) — "그 사례들이 뭔데?"에
+    # 표로 답한다. 표시 전용 · R59 혼합 미포함 (게이트가 SELF 없는 구성으로
+    # 통과 — 통과 후 층 추가는 무단 변경).
+    _sh61 = _cl58.self_history(target_ticker)
+    if _sh61 and _sh61.get('recent'):
+        with st.expander(f"이 종목 과거 신호 실체 — 최근 "
+                         f"{len(_sh61['recent'])}건 (전체 {_sh61['n']}건 · "
+                         f"적중 {_sh61['hit']}%)"):
+            import pandas as _pd61
+            st.dataframe(_pd61.DataFrame(
+                _sh61['recent'],
+                columns=['신호일', '점수', '결과', '판정수익%']),
+                hide_index=True, width='stretch')
+            st.caption("개발 구간 원장 실측 그대로 — 미래 신호의 보장이 "
+                       "아니며, 표본이 작을수록 우연에 가깝습니다.")
 except Exception:                                              # noqa: BLE001
     pass                          # 계층 표 하나 때문에 화면이 죽지 않는다
 _uk.spacer(12)
@@ -5584,6 +5599,129 @@ _uk.card(
     f"<ul style='margin:0; padding-left:18px; font-size:15px; line-height:1.7; "
     f"color:{_TOK['tx2']};'>{_lim_html}</ul>", theme=_theme)
 
+# ── 판단 품질 · 엔진별 의견 · 연구 레이더 (라운드 61) ─────────────────
+# 버전 숫자만 보여주지 않고 "이번 판단을 누가 어떻게 만들었고, 무엇이
+# 약하고, 무엇이 연구 중인가"를 편다. 전부 기존 값의 결정적 조합 —
+# 여기서 판정을 만들지 않는다. 후보 엔진 상태는 실제 라운드 결과만 쓴다.
+try:
+    import news_feed as _nf60
+    _news60 = _nf60.for_stock(resolved_name)
+except Exception:                                              # noqa: BLE001
+    _news60 = None
+try:
+    _eng_rows = []
+    _e61 = (CORE or {}).get('pullback_zone')
+    _gap61 = ((float(realtime_price) / float(_e61) - 1) * 100
+              if _e61 and realtime_price else None)
+    _eng_rows.append((
+        '타이밍·기술', (CORE or {}).get('bucket') or '미분류',
+        (f"현재가가 진입 기준보다 {_gap61:+.1f}%"
+         if _gap61 is not None else '진입 기준 미산출'),
+        ('강한 부정' if _gap61 is not None and _gap61 > 3 else
+         '중립' if _gap61 is not None else '판단 불가')))
+    _fair61 = four_scores.get('displayed_fair_value')
+    if _fair61 and realtime_price:
+        _fg61 = (float(realtime_price) / float(_fair61) - 1) * 100
+        _eng_rows.append(('펀더멘털', f'현재가가 적정가 대비 {_fg61:+.0f}%',
+                          f"적정가 {_fair61:,.0f}원 "
+                          f"({four_scores.get('fair_value_status')})",
+                          '부정 참고' if _fg61 > 10 else '중립 참고'))
+    else:
+        _eng_rows.append(('펀더멘털', '미산출',
+                          str(four_scores.get('fair_value_status_note')
+                              or '적정가 미산출')[:40], '판단 불가'))
+    try:
+        import sector_cycle as _scq61
+        _sp61 = _scq61.ledger_perf(val_eval.get('sector'))
+        if _sp61 and not _sp61.get('small'):
+            _tone61 = ('긍정 참고' if _sp61['ev'] > 0 else '부정 참고')
+            _eng_rows.append(('업황(표시 전용)',
+                              f"{_sp61['sector']}",
+                              f"원장 실측 적중 {_sp61['hit']}% · "
+                              f"EV {_sp61['ev']:+.2f} (n {_sp61['n']:,})",
+                              _tone61))
+    except Exception:                                          # noqa: BLE001
+        pass
+    _nt61 = (_news60 or {}).get('total')
+    _eng_rows.append((
+        '뉴스', ('위험 낱말 감지' if (_news60 or {}).get('risk_words')
+               else '중립' if _nt61 else '미수신'),
+        (f"관련 기사 {_nt61}건" if _nt61 else
+         '수신 기사 없음 — 판단에 미반영'),
+        '감점 요인' if (_news60 or {}).get('risk_words') else '영향 작음'))
+    _ST_KO61 = {'ABOVE_BOTH': '상승(20·60선 위)', 'REBOUND': '반등 초기',
+                'PULLBACK': '조정', 'BEAR': '약세'}
+    _eng_rows.append((
+        '시장 국면', _ST_KO61.get(_rg58, '미산출'),
+        '국면 라우팅(R55)은 8/23 전방 검증 전 — 이번 판단에 미사용',
+        '참고'))
+    if _blend59:
+        _eng_rows.append((
+            '계층 케이스', f"약 {_blend59['p'] * 100:.0f}%",
+            f"{_blend59['layers']}층 혼합 · 최협층 n "
+            f"{_blend59['n_narrow']:,}", '확률 근거'))
+    _uk.section("이번 판단을 만든 근거들",
+                "엔진별 의견 — 판정은 위 배너 하나뿐이고, 여기는 그 구성이다",
+                theme=_theme, top=28)
+    _uk.rows([(f"{a} · {b}", f"{c} — {d}") for a, b, c, d in _eng_rows],
+             theme=_theme)
+    # 종합 한 줄 — 규칙 기반 (버킷·괴리로만 구성)
+    _bk61 = str((CORE or {}).get('bucket') or '')
+    if (_gap61 is not None and _gap61 > 3
+            and ('대기' in _bk61 or '제외' in _bk61)):
+        st.caption(_md_safe(
+            '종합: 기업·업황이 나빠서가 아니라 **현재 진입가격이 검증된 '
+            '기준보다 높아서** 신규 매수가 보류된 상태입니다.'))
+    # 이번 판단의 약점 — 가늠 AI 한계에서 상위 2개 재사용 (§4 한 소스)
+    _weak61 = list((_g.get('limits') or [])[:2])
+    if _blend59 and _blend59.get('n_narrow', 0) < 200:
+        _weak61.append(f"가장 좁은 계층 표본이 {_blend59['n_narrow']}건 — "
+                       f"계층 보정의 개인화 정도가 낮습니다")
+    if _weak61:
+        _uk.card(
+            "<p style='margin:0 0 6px 0; font-size:13px; "
+            f"color:{_TOK['tx3']};'>이번 판단에서 가장 약한 근거</p>"
+            + ''.join(f"<p style='margin:0 0 4px 0; font-size:15px; "
+                      f"line-height:1.6; color:{_TOK['tx2']};'>· "
+                      f"{_uk._esc(w)}</p>" for w in _weak61[:3]),
+            theme=_theme, accent='warn')
+    with st.expander("다른 엔진과 비교 · 다음 개선 연구 (연구·특허 레이더)"):
+        st.markdown(_md_safe(
+            "각 후보의 상태는 실제 라운드 결과입니다. 후보 엔진의 숫자는 "
+            "운영 판단에 섞이지 않으며, 채택은 사전등록 → valid → 전방 "
+            "검증을 통과해야만 합니다. 논문·특허는 아이디어 출처일 뿐 "
+            "성능 근거가 아닙니다."))
+        import pandas as _pd61b
+        st.dataframe(_pd61b.DataFrame([
+            ['현재 가늠 엔진', '운영', '설명력·검증 체계·타이밍',
+             '종목 순위력 약함 (R49·R54 실측)'],
+            ['계층 혼합 확률 (R59)', '운영 채택', '보정도 12.1 vs 35.4%p',
+             '개인화 한계 (최협층 n 의존)'],
+            ['국면 라우팅 (R55)', '전방검증 대기 (8/23)',
+             'valid EV +0.66→+1.05 · 적중 유지', '전방 미확정'],
+            ['즉시 진입 (R57)', '전방검증 대기 (8/23)',
+             'valid 정책EV 2배 · 역선택 회피', '전방 미확정'],
+            ['Exit 도전자 12종 (R58b)', '기각 — 현행 방어',
+             '타임스탑 EV 우위', '승률 하한 미달·우호구간 의존'],
+            ['메타 라벨 logit/XGB/LGBM (R54)', '기각',
+             'EV +0.48%p', '적중 리프트·커버리지 미달'],
+            ['업종 게이트 (R46)', '기각 · 홀드아웃 봉인',
+             '방향 일치 (+5.6%p)', 'A2 미달 · "업종 문제가 아니다"'],
+            ['뉴스 사건-가격반응', '연구 예정', '사건 유형 10종 태깅 완료',
+             '반응 실측 미연결'],
+            ['TSFM (Chronos·TimesFM)', '연구 예정 (torch 확보)',
+             '가격 경로 비교 후보', '금융 우위 미확정 (문헌)'],
+            ['Cross-sectional Ranking', '연구 예정',
+             '섹터 상대강도·초과수익 후보', 'R49 "순위 정보 없음"이 출발점'],
+        ], columns=['엔진·후보', '상태', '근거·강점', '한계']),
+            hide_index=True, width='stretch')
+        st.caption(_md_safe(
+            "다음 개선 연구: Entry(다층 매수구간 · 8/23 후) · Exit(새 신호 "
+            "집합 위 재측정) · 뉴스 가격반응 · TSFM 챌린저 · 순위 엔진. "
+            "전부 계획이며 현재 판단값을 바꾸지 않습니다."))
+except Exception:                                              # noqa: BLE001
+    pass                          # 설명 칸 때문에 분석 화면이 죽지 않는다
+
 # ── 가늠 AI에게 물어보기 (라운드 60) — 종목 전용 결정적 답변 조합기 ─────
 # 외부 LLM 미사용: §9(포트폴리오 외부 전송 금지)와 양립하지 않고, 요구
 # 명세("중앙 값만·재계산 금지·없으면 없다고") 자체가 결정적 조합기다.
@@ -5594,11 +5732,7 @@ try:
     _uk.section("가늠 AI에게 물어보기",
                 f"{resolved_name} 대화 — 종목을 바꾸면 대화도 그 종목 "
                 f"것으로 분리됩니다", theme=_theme, top=28)
-    try:
-        import news_feed as _nf60
-        _news60 = _nf60.for_stock(resolved_name)
-    except Exception:                                          # noqa: BLE001
-        _news60 = None
+    # _news60 은 위 '판단 근거' 대시보드에서 이미 수신 — 재수신하지 않는다
     _ctx60 = _gch.build_context(
         name=resolved_name, ticker=target_ticker, price=realtime_price,
         core=CORE, fs=four_scores, verdict=verdict, blend=_blend59,
