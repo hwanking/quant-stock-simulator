@@ -7552,6 +7552,35 @@ check("기준선 축적이 누출을 금지한다 (이전 봉만)",
                                      'entry_anchor_recorder.py'),
                       encoding='utf-8').read())
 
+# ══════════════════════════════════════════════════════════════════════
+# §127 — 라운드 58b: Exit Engine 기각 — 현행이 도전자 12종을 방어
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§127 Exit Engine 기각 (라운드 58b)")
+print("=" * 72)
+_pr127 = open(_os.path.join(PROJ, 'docs', 'PREREG_R58_EXIT_ENGINE.md'),
+              encoding='utf-8').read()
+check("사전등록 — 승률 하한 게이트가 있다 (EV 로 적중률을 사지 않는다)",
+      '승률(양수 마감) ≥ 기준선 − 3%p' in _pr127)
+check("사전등록 — 트레일링 배수 스캔 금지 (R36 교훈)",
+      '배수 훑기' in _pr127 and '우연을 줍는다' in _pr127)
+check("사전등록 — 불리한 근사 원칙 (갭 하향 종가 체결)",
+      '불리한 쪽으로 근사' in _pr127)
+_el127 = open(_os.path.join(PROJ, 'scripts', 'exit_engine_lab.py'),
+              encoding='utf-8').read()
+check("측정 스크립트가 저장소에 있다 — 손절 우선·종가 체결 구현",
+      'cl[i] if cl[i] < stop else stop' in _el127
+      and '손절 우선' in _el127)
+_mv127 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+              encoding='utf-8').read()
+check("기각 기록 — 현행이 도전자를 방어했다고 적었다",
+      '어깨에서 파는 규칙이 전부 졌다' in _mv127
+      and '기각 — 현행 유지' in _mv127)
+check("승률 게이트 미달 사유를 숫자로 남겼다",
+      '60.3% vs 66.2%' in _mv127)
+check("train·valid 괴리(우호 구간 의존)를 기록했다",
+      '+0.04' in _mv127 and '+4.31' in _mv127)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
