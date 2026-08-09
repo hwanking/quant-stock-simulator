@@ -1,0 +1,92 @@
+name: 일일 케이스 축적 (전방 데이터)
+
+# ■ 왜 있는가
+#   전방 재평가(R55·R57·R66)는 2026-08-09 이후 새로 쌓이는 데이터로만
+#   판정한다. 그 데이터가 "PC 를 켜 뒀는가"에 달려 있으면 안 된다.
+#   장 마감 후 클라우드에서 스스로 쌓는다.
+#
+# ■ 무엇을 하지 않는가 (8/23 동결 준수)
+#   · 점수·게이트·문턱을 바꾸지 않는다. 케이스를 **기록만** 한다
+#   · 모델 선택·채택 판정을 하지 않는다 — 사람이 사전등록 후 돌린다
+#   · 원장은 append-only. 기존 행을 고치지 않는다
+
+on:
+  schedule:
+    # 한국 장 마감(15:30 KST) 뒤 — UTC 08:00 = KST 17:00, 평일만
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:          # 손으로도 돌릴 수 있게
+
+concurrency:
+  group: daily-accumulate     # 겹쳐 돌면 원장이 섞인다
+  cancel-in-progress: false
+
+jobs:
+  accumulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 지난 원장 내려받기 (없으면 새로 시작)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p .portfolio
+          TAG=$(gh release list --limit 30 \
+                --json tagName,createdAt \
+                --jq '[.[] | select(.tagName | startswith("data-"))]
+                      | sort_by(.createdAt) | last | .tagName' || echo "")
+          if [ -n "$TAG" ]; then
+            echo "복원: $TAG"
+            gh release download "$TAG" -D . --clobber
+            for z in research_data_*.zip; do
+              [ -e "$z" ] && unzip -o -q "$z" && rm -f "$z"
+            done
+          else
+            echo "이전 스냅샷 없음 — 빈 원장으로 시작"
+          fi
+          ls -la .portfolio/ | head -5
+
+      - name: 케이스 축적 (기록만)
+        run: |
+          python scripts/calibration_lab.py --limit 400 || true
+
+      - name: 경로·기준선 보강 (신규 신호분)
+        run: |
+          python scripts/path_recorder.py || true
+          python scripts/entry_anchor_recorder.py || true
+
+      - name: 개인 자료가 섞이지 않았는지 확인 (§9)
+        run: |
+          if ls .portfolio/positions* .portfolio/holdings* 2>/dev/null; then
+            echo "개인 자료 발견 — 백업을 중단한다"; exit 1
+          fi
+          echo "개인 자료 없음 확인"
+
+      - name: 새 스냅샷 올리기
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/backup_research_data.py
+          STAMP=$(date -u +%Y%m%d)
+          Z=$(ls _archive/research_data_*.zip | tail -1)
+          gh release create "data-$STAMP" "$Z" \
+            --title "연구 데이터 $STAMP (자동)" \
+            --notes "장 마감 후 자동 축적. 개인 자료는 화이트리스트로 제외." \
+            || gh release upload "data-$STAMP" "$Z" --clobber
+
+      - name: 축적 요약
+        if: always()
+        run: |
+          echo "원장 행수: $(wc -l < .portfolio/virtual_graded.jsonl || echo 0)"
+          echo "경로 행수: $(cat .portfolio/bar_paths_s*.jsonl 2>/dev/null | wc -l || echo 0)"
