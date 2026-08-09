@@ -7725,6 +7725,83 @@ check("SELF 실체 표가 있다 (그 사례들이 뭔데)",
 check("후보 숫자를 운영 판단에 섞지 않음을 명시",
       '운영 판단에 섞이지 않으며' in _w130)
 
+# ══════════════════════════════════════════════════════════════════════
+# §131 — 라운드 62: 유사사례 실체 — 확률은 못 내도 본 것은 보여 준다
+#   사용자 지적: "5건이라 산출 불가"로 끝나고 그 5건이 무엇인지 안 보였다.
+#   표본 미달 경로에서도 실체를 낸다 (표시 전용 · 판정 미사용).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§131 유사사례 실체 (라운드 62)")
+print("=" * 72)
+_qs131 = open(_os.path.join(PROJ, 'quant_indicators.py'),
+              encoding='utf-8').read()
+check("미산출 지평도 실체를 싣는다 (매개변수)",
+      'def _insufficient_horizon(H, n, reason, matches=None)' in _qs131)
+check("두 경로가 같은 함수로 실체를 만든다 (§4)",
+      _qs131.count('_match_rows_of(dedup_matches, _rho_of, H)') == 2)
+check("확률은 못 내도 본 것은 보여 준다고 적었다",
+      '확률은 못 내도' in _qs131 and '판정에 쓰지 않는다' in _qs131)
+_h131 = (snap.get('sim_res') or {}).get('horizons_data') or {}
+_m131 = (_h131.get(20) or {}).get('matches')
+check("실제 파이프라인에서 실체가 나온다", isinstance(_m131, list))
+if _m131:
+    check("행에 날짜·유사도·가격·결과·수익·낙폭이 있다",
+          set(_m131[0]) >= {'date', 'rho', 'price', 'outcome',
+                            'ret_pct', 'mdd_pct'})
+    check("날짜가 실제 값이다 (지어내지 않음)",
+          all(r['date'] for r in _m131))
+    check("결과는 세 갈래 중 하나",
+          all(r['outcome'] in ('목표 선도달', '손절 선도달', '미도달')
+              for r in _m131))
+    check("표시 상한 12건", len(_m131) <= 12)
+_w131 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면이 유사사례 실체 표를 그린다",
+      '이 종목의 유사사례 실체' in _w131)
+# ⚠️ 소스 검사는 f-string 이 줄을 바꾸는 지점을 가로지르는 문자열을
+# 찾지 못한다 — 한 리터럴 안에 통째로 있는 조각만 쓴다 (라운드 63).
+check("표본 적어도 숨기지 않는다는 문구",
+      '숨기지 않습니다' in _w131 and '확률로 환산하지 않지만' in _w131)
+
+# ══════════════════════════════════════════════════════════════════════
+# §132 — 라운드 63: 살 수 없는 가격을 사라고 하지 않는다
+#   사용자 지적("적정가 17만인데 왜 21만에 사라고?")을 실측으로 판정.
+#   매수권(58+) 15,332건 중 '적정가 크게 초과' 구간은 **0건** — 엔진이
+#   이미 통째로 차단하고 있었다. 그런데 화면은 그 구간의 가격을 "이하로
+#   내려올 때만 사세요"라고 말했다. 문구가 게이트를 따라가게 고쳤다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§132 살 수 없는 가격을 사라고 하지 않는다 (라운드 63)")
+print("=" * 72)
+_va132 = _json.load(open(_os.path.join(PROJ, 'data',
+                                       'valuation_premium_audit.json'),
+                         encoding='utf-8'))
+_z132 = _va132.get('zones') or {}
+check("프리미엄 감사 산출물이 있다 (구간별 n·적중·EV)",
+      len(_z132) >= 4 and all('ev' in v for v in _z132.values()))
+check("'크게 초과' 구간은 매수권에 없다 (엔진이 차단 중)",
+      not any('크게 초과' in k and v.get('n', 0) > 0
+              for k, v in _z132.items()))
+check("감사가 게이트 채택이 아님을 밝힌다",
+      '게이트 채택 없음' in _va132.get('note', ''))
+check("entry_zone 은 원장 기록을 그대로 썼다 (새 정의 없음)",
+      '새 정의 없음' in _va132.get('note', ''))
+_w132 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("진입가에서도 차단이 유지되는지 판정한다",
+      '_still_blocked = bool(' in _w132
+      and "/ float(_floor_fv)) > 1.15" in _w132)
+check("제목이 매수 지시로 읽히지 않는다",
+      '(가격 조건만 · 매수 신호 아님)' in _w132)
+check("도달해도 신호가 아님을 본문이 말한다",
+      '이 가격에 도달해도 지금 ' in _w132 and '매수 신호가 아닙니다'
+      in _w132)
+check("무엇이 바뀌어야 후보가 되는지 알려준다",
+      '안전마진선' in _w132 and '내려와야 합니다' in _w132)
+check("실측 근거를 화면에 병기한다", '15,332건 중 0건' in _w132)
+check("차단되지 않는 경우의 종전 설명은 유지",
+      '서로 다른 질문입니다' in _w132)
+_sc132 = _os.path.join(PROJ, 'scripts', 'valuation_premium_audit.py')
+check("감사 스크립트가 저장소에 있다", _os.path.exists(_sc132))
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

@@ -441,14 +441,60 @@ class QuantIndicatorsEngine:
         total_p = sum(strat_probs.values())
         for k in strat_probs: strat_probs[k] = round((strat_probs[k] / total_p) * 100, 1)
 
-        def _insufficient_horizon(H, n, reason):
-            """표본 미달 지평 — 확률·기대값을 일절 산출하지 않는다 (None)."""
+        def _insufficient_horizon(H, n, reason, matches=None):
+            """표본 미달 지평 — 확률·기대값을 일절 산출하지 않는다 (None).
+
+            ⚠️ 라운드 62 — 확률은 못 내도 **무엇을 봤는지는 보여 준다.**
+            사용자 지적: "5건이라 산출 불가"라고만 하고 그 5건이 무엇인지
+            안 보여 줬다. matches 는 표시 전용이며 판정에 쓰지 않는다.
+            """
             return {
                 'h': H, 'match_count': int(n), 'win_rate': None, 'mean_perf': None,
                 'mdd': None, 'tp_first_prob': None, 'sl_first_prob': None,
                 'status': 'INSUFFICIENT', 'tier_label': reason,
+                'matches': list(matches or []),
                 'trajectory': np.full(H, curr_p)
             }
+
+        _dates_arr = (df['trade_date'].astype(str).str[:10].values
+                      if 'trade_date' in df.columns else None)
+
+        def _match_rows_of(idxs, rho_of, H):
+            """유사 구간의 실체 — 이미 계산에 쓰인 값만 옮긴다 (새 값 없음)."""
+            out = []
+            for idx in idxs:
+                fut = (prices[idx + H: idx + H * 2]
+                       if idx + H * 2 <= len(prices) else prices[-H:])
+                if len(fut) < 2:
+                    continue
+                ret_h = (fut[-1] - fut[0]) / (fut[0] + 1e-8)
+                tp_lvl, sl_lvl = (self.TP_THRESHOLD_PCT / 100.0,
+                                  -self.SL_THRESHOLD_PCT / 100.0)
+                tp_hit = sl_hit = False
+                for p in fut:
+                    chg = (p - fut[0]) / (fut[0] + 1e-8)
+                    if chg >= tp_lvl and not sl_hit:
+                        tp_hit = True
+                        break
+                    if chg <= sl_lvl and not tp_hit:
+                        sl_hit = True
+                        break
+                peak, mdd = fut[0], 0.0
+                for p in fut:
+                    peak = max(peak, p)
+                    mdd = min(mdd, (p - peak) / (peak + 1e-8))
+                end = min(idx + H - 1, len(prices) - 1)
+                out.append({
+                    'date': (str(_dates_arr[end]) if _dates_arr is not None
+                             and end < len(_dates_arr) else None),
+                    'rho': round(float(rho_of.get(idx, float('nan'))), 3),
+                    'price': round(float(prices[end]), 2),
+                    'ret_pct': round(ret_h * 100, 2),
+                    'mdd_pct': round(mdd * 100, 2),
+                    'outcome': ('목표 선도달' if tp_hit else
+                                '손절 선도달' if sl_hit else '미도달'),
+                })
+            return sorted(out, key=lambda r: (r['date'] or ''))[-12:]
 
         # 각 Horizon 독립 계산
         for H in FORECAST_HORIZONS:
@@ -481,18 +527,23 @@ class QuantIndicatorsEngine:
 
             # 독립성 확보를 위해 최소 H영업일 간격 이벤트 필터링 (minimum_event_gap = H)
             dedup_matches = []
+            _rho_of = {}
             last_idx = -9999
             for idx, r_val in raw_matches:
                 if idx - last_idx >= H:
                     dedup_matches.append(idx)
+                    _rho_of[idx] = float(r_val)
                     last_idx = idx
 
             match_cnt = len(dedup_matches)
             tier_code, tier_label = self.classify_sample_tier(match_cnt)
 
             # [명세 §11] 유효표본 5건 미만은 미산출. 표본 보충·복제·위조를 하지 않는다.
+            # 다만 **본 것은 보여 준다** — 확률만 안 낸다 (라운드 62).
             if tier_code == 'INSUFFICIENT':
-                horizons_data[H] = _insufficient_horizon(H, match_cnt, tier_label)
+                horizons_data[H] = _insufficient_horizon(
+                    H, match_cnt, tier_label,
+                    _match_rows_of(dedup_matches, _rho_of, H))
                 continue
 
             fut_returns, trajectories, mdd_list = [], [], []
@@ -545,6 +596,10 @@ class QuantIndicatorsEngine:
 
             horizons_data[H] = {
                 'h': H,
+                # 유사사례 실체 (라운드 62) — 표시 전용. 확률·판정에 쓰지
+                # 않는다. 미산출 지평과 같은 함수로 만들어 두 경로가 같은
+                # 모양을 낸다 (§4).
+                'matches': _match_rows_of(dedup_matches, _rho_of, H),
                 'match_count': match_cnt,
                 'win_count': win_cnt,
                 'loss_count': match_cnt - win_cnt,
