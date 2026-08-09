@@ -7511,6 +7511,47 @@ check("R59 사전등록 — 기각 접근(문턱 인하·표본 차용) 명문�
 check("R59 — Brier·보정도 게이트, 미달 시 현행 유지",
       'Brier' in _pr125 and '기각·현행 유지' in _pr125)
 
+# ══════════════════════════════════════════════════════════════════════
+# §126 — 라운드 57: Entry Engine 측정·박제 (전방 병행 대기)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§126 Entry Engine (라운드 57)")
+print("=" * 72)
+_ee126 = _json.load(open(_os.path.join(PROJ, 'data',
+                                       'entry_engine_r57.json'),
+                         encoding='utf-8'))
+check("정책이 박제돼 있다 — 전방 병행 상태",
+      _ee126.get('status') == 'FORWARD_TRIAL')
+check("blind 를 만지지 않았다", _ee126.get('blind_touched') is False)
+check("재평가 날짜·기각 원칙이 적혀 있다",
+      '2026-08-23' in str(_ee126.get('note'))
+      and '현행 유지' in str(_ee126.get('note')))
+check("실행 정확화가 명시돼 있다 (시가 체결)",
+      '다음 봉 시가' in str(_ee126.get('note')))
+check("해석 경계(caveat)를 함께 박제했다",
+      len(_ee126.get('caveats') or []) >= 3
+      and any('우호' in c for c in _ee126['caveats']))
+check("기준선(현행 눌림가)을 명시한다",
+      '라운드 25' in str(_ee126.get('baseline')))
+_pr126 = open(_os.path.join(PROJ, 'docs', 'PREREG_R57_ENTRY_ENGINE.md'),
+              encoding='utf-8').read()
+check("사전등록 — 역선택 배경과 정책 EV 정의가 있다",
+      '역선택' in _pr126 and '신호 전체' in _pr126)
+check("사전등록 — 기각 시 현행 유지·blind 미사용",
+      '기각·현행 유지' in _pr126 and 'blind 미사용' in _pr126)
+check("측정·축적 스크립트가 저장소에 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'entry_engine_lab.py'))
+      and _os.path.exists(_os.path.join(PROJ, 'scripts',
+                                        'entry_anchor_recorder.py')))
+_par126 = open(_os.path.join(PROJ, 'scripts', 'path_recorder.py'),
+               encoding='utf-8').read()
+check("경로가 시가를 저장한다 (실행 정확화 재료)",
+      'O[k] / px * 100 - 100' in _par126)
+check("기준선 축적이 누출을 금지한다 (이전 봉만)",
+      '누출 금지' in open(_os.path.join(PROJ, 'scripts',
+                                     'entry_anchor_recorder.py'),
+                      encoding='utf-8').read())
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

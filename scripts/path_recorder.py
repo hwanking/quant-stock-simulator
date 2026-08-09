@@ -101,6 +101,7 @@ def main():
                 continue
             dates = list(df['trade_date'].astype(str).str[:10])
             idx = {d: j for j, d in enumerate(dates)}
+            O = df['open_raw'].astype(float).tolist()
             H = df['high_raw'].astype(float).tolist()
             L = df['low_raw'].astype(float).tolist()
             C = df['adj_close'].astype(float).tolist()
@@ -117,12 +118,17 @@ def main():
                 # 볼륨은 신호일 거래량 대비 배율 (라운드 57 명세 — 거래량
                 # 이탈형 Exit 후보 연구에 필요). 신호일 거래량이 0이면
                 # 배율을 지어내지 않고 None.
+                # 시가(라운드 57b)는 '다음 날 시가 체결'을 실측하기 위해
+                # 필요하다 — 종가 체결 가정은 갭 상승 장에서 즉시 매수
+                # EV 를 부풀린다.
                 v0 = V[j] if j < len(V) and V[j] > 0 else None
                 bars = [[dates[k],
                          round(H[k] / px * 100 - 100, 3),
                          round(L[k] / px * 100 - 100, 3),
                          round(C[k] / px * 100 - 100, 3),
-                         (round(V[k] / v0, 2) if v0 else None)]
+                         (round(V[k] / v0, 2) if v0 else None),
+                         (round(O[k] / px * 100 - 100, 3)
+                          if O[k] > 0 else None)]
                         for k in seg]
                 if not bars:
                     continue          # 신호 직후 봉이 아직 없다 (최근 신호)
