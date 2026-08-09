@@ -5155,6 +5155,32 @@ if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
 elif _cb and _cb.get('n', 0) < 5:
     _extra_bits.append(f"이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
                        f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
+# 계층 보정 확률(R59)·국면 — 배너·고정 패널·가늠 AI 타일·대화가 전부
+# 이 두 값을 읽는다. 한 번만 계산해 네 곳이 같은 숫자를 말하게 한다 (§4).
+_rg58 = None
+try:
+    _ir58 = engine_init.get_index_regime('KOSPI')
+    if _ir58.get('available'):
+        import trade_plan as _tp58
+        _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
+                                   _ir58['sma60'], _ir58.get('sma60_prev'))
+        _rg58 = (_ms58 or {}).get('code')
+except Exception:                                              # noqa: BLE001
+    pass
+_blend59 = None
+try:
+    import case_layers as _cl59
+    _blend59 = _cl59.blended_prob(
+        verdict.get('score'), sector=val_eval.get('sector'),
+        regime_code=_rg58, fs=four_scores)
+except Exception:                                              # noqa: BLE001
+    pass
+if _blend59:
+    _extra_bits.append(
+        f"계층 보정 확률 약 {_blend59['p'] * 100:.0f}% "
+        f"[{_blend59['wilson_low'] * 100:.0f}~"
+        f"{_blend59['wilson_high'] * 100:.0f}%] · R59")
+
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
@@ -5207,8 +5233,11 @@ st.markdown(f"""
     <tr><td>1차 목표 · 신규</td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td>손절 · 신규</td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td>분석 신뢰도</td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
-    <tr><td>이 점수대 실측</td><td>{_sum_band}</td></tr>
+    <tr><td>계층 보정 확률</td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}</td></tr>
+    <tr><td>이 점수대 원실측</td><td>{_sum_band}</td></tr>
   </table>
+  <p style='margin:8px 0 0 0;'><a href='#nav-ask' style='font-size:12px;
+  color:#4C8DFF; text-decoration:none;'>가늠 AI에게 물어보기 →</a></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -5455,24 +5484,8 @@ def _pc(v, suf='%'):
 # 유사사례가 있는 행 부분집합에서도 우위였다. 손절/미결 확률은 혼합
 # 모델이 예측하지 않으므로 종전대로 유사사례 표본 기준(미산출이면
 # 미산출) — 아는 것과 모르는 것을 섞지 않는다.
-_rg58 = None
-try:
-    _ir58 = engine_init.get_index_regime('KOSPI')
-    if _ir58.get('available'):
-        import trade_plan as _tp58
-        _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
-                                   _ir58['sma60'], _ir58.get('sma60_prev'))
-        _rg58 = (_ms58 or {}).get('code')
-except Exception:                                              # noqa: BLE001
-    pass
-_blend59 = None
-try:
-    import case_layers as _cl59
-    _blend59 = _cl59.blended_prob(
-        verdict.get('score'), sector=val_eval.get('sector'),
-        regime_code=_rg58, fs=four_scores)
-except Exception:                                              # noqa: BLE001
-    pass
+# (_rg58 · _blend59 는 배너 앞에서 계산됨 — 고정 패널·배너·타일·대화가
+#  같은 값을 읽는다 §4)
 _tp_tile = (
     {'label': '목표 방향이 먼저 나올 확률 (계층 보정)',
      'value': f"약 {_blend59['p'] * 100:.0f}%",
@@ -5570,6 +5583,55 @@ _uk.card(
     f"지금 판단의 한계</p>"
     f"<ul style='margin:0; padding-left:18px; font-size:15px; line-height:1.7; "
     f"color:{_TOK['tx2']};'>{_lim_html}</ul>", theme=_theme)
+
+# ── 가늠 AI에게 물어보기 (라운드 60) — 종목 전용 결정적 답변 조합기 ─────
+# 외부 LLM 미사용: §9(포트폴리오 외부 전송 금지)와 양립하지 않고, 요구
+# 명세("중앙 값만·재계산 금지·없으면 없다고") 자체가 결정적 조합기다.
+# 모든 가격은 CORE/four_scores 를 그대로 읽는다 — 여기서 만들지 않는다.
+try:
+    import gaeum_chat as _gch
+    st.markdown("<div id='nav-ask'></div>", unsafe_allow_html=True)
+    _uk.section("가늠 AI에게 물어보기",
+                f"{resolved_name} 대화 — 종목을 바꾸면 대화도 그 종목 "
+                f"것으로 분리됩니다", theme=_theme, top=28)
+    try:
+        import news_feed as _nf60
+        _news60 = _nf60.for_stock(resolved_name)
+    except Exception:                                          # noqa: BLE001
+        _news60 = None
+    _ctx60 = _gch.build_context(
+        name=resolved_name, ticker=target_ticker, price=realtime_price,
+        core=CORE, fs=four_scores, verdict=verdict, blend=_blend59,
+        regime_code=_rg58, sector=val_eval.get('sector'), news=_news60,
+        versions=_ver.snapshot(), cb=_cb,
+        user_avg=(user_entry_price if user_entry_price
+                  and user_entry_price > 0 else None))
+    _ck60 = f"gchat_{str(target_ticker).replace('.', '_')}"
+    if _ck60 not in st.session_state:
+        st.session_state[_ck60] = []
+    # 추천 질문 칩 — 한 줄 배치
+    _qcols = st.columns(3)
+    _pending_q = None
+    for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
+        if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
+            _pending_q = _qq
+    _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
+                             key=f'{_ck60}_in')
+    _ask60 = _typed_q or _pending_q
+    if _ask60:
+        st.session_state[_ck60].append(('user', _ask60))
+        st.session_state[_ck60].append(('assistant',
+                                        _gch.answer(_ask60, _ctx60)))
+        st.session_state[_ck60] = st.session_state[_ck60][-12:]
+    for _role60, _msg60 in st.session_state[_ck60]:
+        with st.chat_message(_role60):
+            st.markdown(_md_safe(_msg60))
+    if not st.session_state[_ck60]:
+        st.caption("답은 이 화면의 중앙 판정 값만 씁니다 — 다른 화면과 다른 "
+                   "가격을 만들지 않고, 없는 값은 없다고 말합니다. 평단 등 "
+                   "개인 정보는 이 PC 를 떠나지 않습니다.")
+except Exception:                                              # noqa: BLE001
+    pass                          # 대화 한 칸 때문에 분석 화면이 죽지 않는다
 
 # ── 모델 검증 반영 (사용자 요구: 검증이 판단에 어떻게 쓰이는지 보여라) ────
 # 검증 결과를 화면에만 띄우고 판단에 안 쓰면 그건 장식이다. 실제로 이번
