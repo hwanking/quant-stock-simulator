@@ -7802,6 +7802,53 @@ check("차단되지 않는 경우의 종전 설명은 유지",
 _sc132 = _os.path.join(PROJ, 'scripts', 'valuation_premium_audit.py')
 check("감사 스크립트가 저장소에 있다", _os.path.exists(_sc132))
 
+# ══════════════════════════════════════════════════════════════════════
+# §133 — 라운드 64·65: 돌파 하이패스 기각 · 떠 있는 가늠 AI 버튼
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§133 돌파 하이패스 기각 · 떠 있는 AI 버튼 (라운드 64·65)")
+print("=" * 72)
+_bs133 = _json.load(open(_os.path.join(PROJ, '.portfolio',
+                                       'breakout_study_r64.json'),
+                         encoding='utf-8'))
+check("돌파 연구가 blind 를 만지지 않았다",
+      _bs133.get('blind_touched') is False)
+check("게이트 판정이 기각이다 (자동 채택 없음)",
+      _bs133.get('gate_pass') is False)
+check("기각 사유가 거짓돌파 지표다",
+      _bs133['gates'].get('거짓돌파 < 50%') is False
+      and _bs133['gates'].get('EV > 비돌파') is True)
+check("돌파 코호트 성적이 기록돼 있다",
+      (_bs133.get('breakout') or {}).get('ev') is not None
+      and (_bs133.get('non_breakout') or {}).get('ev') is not None)
+_pr133 = open(_os.path.join(PROJ, 'docs', 'PREREG_R64_BREAKOUT_BYPASS.md'),
+              encoding='utf-8').read()
+check("사전등록 — 측정 없는 우회를 금지한다고 적었다",
+      '측정 없이 넣지 않는다' in _pr133 and '라운드 27b' in _pr133)
+check("사전등록 — 손절 -3% 같은 손 숫자 금지",
+      '손으로 고른 숫자를 쓰지 않는다' in _pr133)
+check("지표 결함을 기록하되 오늘 고쳐 재측정하지 않는다",
+      '다시 정의해 재측정하지 않는다' in _pr133
+      and '대조군이' in _pr133)
+# ⚠️ 문서 검사는 마크다운 굵기(**)가 낱말 사이에 끼면 못 찾는다 —
+# 강조 없는 조각으로 본다 (라운드 65).
+check("정정 정의는 새 사전등록(R66)·전방 데이터로 예약",
+      'R66' in _pr133 and '로 잰다' in _pr133
+      and '같은 개발 구간을 다시 보지' in _pr133)
+check("돌파를 전부 막고 있지 않다는 반증도 기록",
+      '성립하지 않는다' in _pr133 and '2,755건' in _pr133)
+_sc133 = _os.path.join(PROJ, 'scripts', 'breakout_study.py')
+check("돌파 측정 스크립트가 저장소에 있다", _os.path.exists(_sc133))
+check("돌파 지표가 신호일 이전 봉만 쓴다 (누출 금지)",
+      '신호일 제외 (누출 금지)' in open(_sc133, encoding='utf-8').read())
+_w133 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("떠 있는 가늠 AI 버튼이 있다",
+      'gn-ask-fab' in _w133 and "href=\"#nav-ask\"" in _w133)
+check("좁은 화면에서 글자를 접는다 (아이콘만)",
+      '@media (max-width: 640px)' in _w133 and '.gn-ask-t' in _w133)
+check("버튼에 이모지를 쓰지 않는다 (Lucide SVG)",
+      "_uk._icon('help'" in _w133)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

@@ -5267,6 +5267,32 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ── 떠 있는 '가늠 AI' 버튼 (라운드 65) ────────────────────────────────
+# 사용자 요청: "오른쪽에 계속 아이콘처럼 있고 누르면 물어볼 수 있게."
+# Streamlit 은 입력 위젯을 고정 레이어에 넣을 수 없다 (위젯은 문서 흐름
+# 안에서만 산다). 그래서 **버튼만 고정**하고 누르면 대화 칸으로 데려간다.
+# 좁은 화면에서도 남으므로 고정 요약 패널(1760px 이상)과 달리 항상 뜬다.
+st.markdown(f"""
+<style>
+.gn-ask-fab {{ position:fixed; right:18px; bottom:22px; z-index:9990;
+  display:flex; align-items:center; gap:8px; padding:11px 15px;
+  border-radius:999px; background:{_TOK['brand']}; color:#fff;
+  font-size:13px; font-weight:700; text-decoration:none;
+  box-shadow:0 6px 20px rgba(0,0,0,.35); }}
+.gn-ask-fab:hover {{ filter:brightness(1.08); }}
+.gn-ask-fab .gn-ask-t {{ display:inline; }}
+@media (max-width: 640px) {{ .gn-ask-fab .gn-ask-t {{ display:none; }}
+  .gn-ask-fab {{ padding:13px; right:14px; bottom:16px; }} }}
+@media (prefers-reduced-motion: reduce) {{ .gn-ask-fab {{ transition:none; }} }}
+</style>
+<a class="gn-ask-fab" href="#nav-ask"
+   title="{_uk._esc(resolved_name)}에 대해 물어보기"
+   aria-label="가늠 AI에게 물어보기">
+  {_uk._icon('help', '#fff', 17)}
+  <span class="gn-ask-t">가늠 AI</span>
+</a>
+""", unsafe_allow_html=True)
+
 # ── 원칙 3: 결론·가격 다음에 '이유' — 점수를 움직인 요인 상·하위 3개 ────────
 # verdict['composition'] 실측만 사용한다 (label/score/weight_pct/contribution).
 _comp_scored = [c for c in verdict.get('composition', [])
