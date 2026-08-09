@@ -7581,6 +7581,46 @@ check("승률 게이트 미달 사유를 숫자로 남겼다",
 check("train·valid 괴리(우호 구간 의존)를 기록했다",
       '+0.04' in _mv127 and '+4.31' in _mv127)
 
+# ══════════════════════════════════════════════════════════════════════
+# §128 — 라운드 59: 계층 혼합 확률 채택 (게이트 3/3 통과)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§128 계층 혼합 확률 (라운드 59)")
+print("=" * 72)
+_hp128 = _json.load(open(_os.path.join(PROJ, 'data',
+                                       'hier_prob_tables.json'),
+                         encoding='utf-8'))
+check("운영 표가 있다 (m·3분위·셀)",
+      _hp128.get('m') == 100 and len(_hp128.get('cells') or {}) >= 100
+      and len(_hp128.get('vol_terciles') or []) == 2)
+check("blind 미접촉·선택 기준 공개가 적혀 있다",
+      '블라인드 미접촉' in _hp128.get('basis', '')
+      and '명시되지 않았' in _hp128.get('note', ''))
+_bl128 = _cl125.blended_prob(49, sector=None, regime_code='BEAR',
+                             fs={'market': 'KOSPI', 'vol_20': 0.012,
+                                 'range_position_pct': 40,
+                                 'm10_disparity': 5.0})
+check("혼합 확률이 나온다 (49점·약세)",
+      _bl128 is not None and 0.3 < _bl128['p'] < 0.8)
+check("근거 층수·최협층 n·Wilson 구간이 붙는다",
+      all(k in _bl128 for k in ('layers', 'n_narrow', 'wilson_low',
+                                'wilson_high')))
+check("모르는 점수는 None — 지어내지 않는다",
+      _cl125.blended_prob(None) is None)
+_w128 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면 타일이 계층 보정 확률을 쓴다",
+      '계층 보정' in _w128 and "blended_prob(" in _w128)
+check("손절/미결 확률은 교체하지 않았다 (모르는 것을 섞지 않음)",
+      "_pc(_g['sl_first'])" in _w128 and "_pc(_g['undecided'])" in _w128)
+check("혼합값의 성격(이 종목만의 확률 아님)을 화면이 말한다",
+      '이 종목만의 확률이 아니라' in _w128)
+check("측정 랩이 저장소에 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'hier_prob_lab.py')))
+_mv128 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
+              encoding='utf-8').read()
+check("현행 유사사례 확률이 최악이었음을 기록 (35.4%p)",
+      '35.4%p' in _mv128 and '전면 교체가 정당' in _mv128)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

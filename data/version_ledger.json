@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.08.09.1",
+  "model": "v2026.08.09.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.09.2",
   "schema": "v2026.08.08.3",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.09.2",
+   "previous": "v2026.08.09.1",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "목표 선도달 확률을 계층 혼합(Beta-Binomial, m=100)으로 교체",
+   "note": "사전등록(PREREG_R59_HIER_PROB.md) 게이트 3/3 통과 — valid 1회: Brier 0.2305 vs 현행 유사사례 0.2566 · logloss 0.6537 vs 0.7328 · 보정이탈 12.1 vs 35.4%p. 유사사례 확률이 있는 행 부분집합(2,997건)에서도 우위(0.2312 vs 0.2671). m=100 은 train 내부 Brier 선택 — 기준 미명시였음을 공개. 손절/미결 확률은 혼합이 예측하지 않으므로 종전 유사사례 기준 유지(미산출이면 미산출). 화면에 근거 층수·최협층 n·Wilson 구간 병기. blind 미접촉.",
+   "created_at": "2026-08-09T10:21:35+00:00",
+   "effective_from": "2026-08-09"
+  },
   {
    "axis": "rulebook",
    "axis_ko": "룰북",
