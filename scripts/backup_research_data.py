@@ -36,7 +36,8 @@ INCLUDE = ('virtual_graded.jsonl', 'bar_paths_s*.jsonl',
            'cohort_registry_r46.json', '*_r*.json',
            # 전방 기록 — 8/23 재평가의 핵심 자료다. 개장 전 동결 추천과
            # 예측 로그가 없으면 "그때 무엇을 추천했는가"를 되돌릴 수 없다.
-           'premarket_*.json', 'predictions.jsonl')
+           'premarket_*.json', 'predictions.jsonl',
+           'news_events.jsonl')          # 뉴스 사건 사후 경로 (라운드 70)
 
 #: 절대 넣지 않을 것 — 개인 자료 (INCLUDE 에 걸려도 여기서 잘린다)
 DENY = ('positions*', 'holdings*', '*secret*', '*credential*',

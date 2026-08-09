@@ -66,6 +66,11 @@ jobs:
           python scripts/path_recorder.py || true
           python scripts/entry_anchor_recorder.py || true
 
+      - name: 뉴스 사건 기록·사후 경로 채움 (관측 전용)
+        run: |
+          python scripts/news_event_recorder.py --record || true
+          python scripts/news_event_recorder.py --resolve || true
+
       - name: 개인 자료가 섞이지 않았는지 확인 (§9)
         run: |
           if ls .portfolio/positions* .portfolio/holdings* 2>/dev/null; then
