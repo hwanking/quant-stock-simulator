@@ -59,6 +59,82 @@ _ST_KO = {'ABOVE_BOTH': '상승(20·60선 위)', 'REBOUND': '반등 초기',
           'PULLBACK': '조정', 'BEAR': '약세'}
 
 
+_HIER = {'loaded': False, 'doc': None}
+
+
+def _hier_doc():
+    if not _HIER['loaded']:
+        _HIER['loaded'] = True
+        try:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'data', 'hier_prob_tables.json')
+            with open(p, encoding='utf-8') as f:
+                _HIER['doc'] = json.load(f)
+        except Exception:                                      # noqa: BLE001
+            _HIER['doc'] = None
+    return _HIER['doc']
+
+
+def blended_prob(score, sector=None, regime_code=None, fs=None):
+    """
+    계층 혼합 목표 선도달 확률 (라운드 59 채택 — PREREG_R59 게이트 통과).
+
+    L5 → L4 → L4b → L3 → L2 순으로 Beta-Binomial 축소 갱신 (m=100).
+    valid 1회 실측: Brier 0.2305 vs 현행 유사사례 0.2566 · 보정이탈
+    12.1 vs 35.4%p. 유사사례 확률이 있는 행 부분집합에서도 우위.
+
+    반환: {'p': 0~1, 'layers': 사용 층 수, 'n_narrow': 가장 좁은 층 n,
+           'wilson_low','wilson_high': 그 n 기준 구간, 'label': 근거 요약}
+    없으면 None — L5 조차 없는 점수는 지어내지 않는다.
+    """
+    doc = _hier_doc()
+    if not doc or score is None:
+        return None
+    b = _band_of(float(score))
+    if not b:
+        return None
+    m = float(doc.get('m') or 100)
+    cells = doc.get('cells') or {}
+    fs = fs or {}
+    keys = [('L5', b)]
+    if regime_code:
+        keys.append(('L4', f'{b}|{regime_code}'))
+        for pxy in _proxies_of(fs):
+            keys.append(('L4b', f'{b}|{regime_code}|{pxy}'))
+    vol = fs.get('vol_20')
+    ter = doc.get('vol_terciles') or []
+    if fs.get('market') and isinstance(vol, (int, float)) and len(ter) == 2:
+        vb = '저' if vol <= ter[0] else ('중' if vol <= ter[1] else '고')
+        keys.append(('L3', f"{b}|{fs.get('market')}|{vb}"))
+    if sector and regime_code:
+        keys.append(('L2', f'{b}|{sector}|{regime_code}'))
+
+    p = None
+    used, n_narrow, label = 0, None, ''
+    for layer, key in keys:
+        a = cells.get(f'{layer}|{key}')
+        if not a or a[0] == 0:
+            continue
+        n, k = a[0], a[1]
+        if p is None:
+            p = k / n
+        else:
+            p = (k + m * p) / (n + m)
+        used += 1
+        n_narrow, label = n, f'{layer}:{key}'
+    if p is None:
+        return None
+    import math as _m
+    z = 1.96
+    n_ = max(1, n_narrow)
+    d = 1 + z * z / n_
+    c = p + z * z / (2 * n_)
+    w = z * _m.sqrt(max(0.0, p * (1 - p) / n_ + z * z / (4 * n_ * n_)))
+    return dict(p=float(p), layers=used, n_narrow=n_narrow,
+                wilson_low=float((c - w) / d), wilson_high=float((c + w) / d),
+                label=label)
+
+
 def layers_for(score, sector=None, regime_code=None, fs=None):
     """
     지금 종목의 문맥에 맞는 계층 실측 행 목록 (넓은 층 → 좁은 층 순).

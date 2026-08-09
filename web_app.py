@@ -5450,14 +5450,53 @@ def _pc(v, suf='%'):
     return f"{v:.1f}{suf}" if v is not None else _gai.NA
 
 
-_uk.stat_tiles([
+# 목표 선도달 확률은 계층 혼합(R59 채택)으로 낸다 — valid 실측에서
+# 현행 유사사례 확률(보정이탈 35.4%p)을 Brier·보정도 모두로 이겼고,
+# 유사사례가 있는 행 부분집합에서도 우위였다. 손절/미결 확률은 혼합
+# 모델이 예측하지 않으므로 종전대로 유사사례 표본 기준(미산출이면
+# 미산출) — 아는 것과 모르는 것을 섞지 않는다.
+_rg58 = None
+try:
+    _ir58 = engine_init.get_index_regime('KOSPI')
+    if _ir58.get('available'):
+        import trade_plan as _tp58
+        _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
+                                   _ir58['sma60'], _ir58.get('sma60_prev'))
+        _rg58 = (_ms58 or {}).get('code')
+except Exception:                                              # noqa: BLE001
+    pass
+_blend59 = None
+try:
+    import case_layers as _cl59
+    _blend59 = _cl59.blended_prob(
+        verdict.get('score'), sector=val_eval.get('sector'),
+        regime_code=_rg58, fs=four_scores)
+except Exception:                                              # noqa: BLE001
+    pass
+_tp_tile = (
+    {'label': '목표 방향이 먼저 나올 확률 (계층 보정)',
+     'value': f"약 {_blend59['p'] * 100:.0f}%",
+     'sub': (f"근거 {_blend59['layers']}층 · 최협층 n "
+             f"{_blend59['n_narrow']:,} · 구간 "
+             f"{_blend59['wilson_low'] * 100:.0f}~"
+             f"{_blend59['wilson_high'] * 100:.0f}%"), 'tone': 'pos'}
+    if _blend59 else
     {'label': '목표 방향이 먼저 나올 확률', 'value': _pc(_g['tp_first']),
-     'sub': '손절선보다 목표에 먼저 닿는 비율', 'tone': 'pos'},
+     'sub': '손절선보다 목표에 먼저 닿는 비율', 'tone': 'pos'})
+_uk.stat_tiles([
+    _tp_tile,
     {'label': '손절선에 먼저 닿을 확률', 'value': _pc(_g['sl_first']),
      'sub': '목표보다 손절에 먼저 닿는 비율', 'tone': 'neg'},
     {'label': '기간 안에 어느 쪽도 못 닿을 확률', 'value': _pc(_g['undecided']),
      'sub': '보유기간이 끝날 때까지 결판 안 남'},
 ], theme=_theme)
+if _blend59:
+    st.caption(_md_safe(
+        "계층 보정 확률은 이 종목만의 확률이 아니라 같은 점수대·국면·자리"
+        "·업종 계층의 실측을 표본 크기에 따라 섞은 값입니다 (R59 게이트 "
+        "통과 — Brier·보정도에서 종전 유사사례 확률보다 정확). 초근접 "
+        f"유사사례는 {_g.get('sample_n') or 0}건으로 여전히 부족하며, 그 "
+        "사실은 아래 한계에 그대로 둡니다."))
 _uk.spacer(12)
 
 # ── 계층 실측 (라운드 58) — '산출 불가'로 대화를 끝내지 않는다 ─────────
@@ -5467,17 +5506,7 @@ _uk.spacer(12)
 # 금지 (docs/PREREG_R59_HIER_PROB.md).
 try:
     import case_layers as _cl58
-    _rg58 = None
-    try:
-        _ir58 = engine_init.get_index_regime('KOSPI')
-        if _ir58.get('available'):
-            import trade_plan as _tp58
-            _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
-                                       _ir58['sma60'],
-                                       _ir58.get('sma60_prev'))
-            _rg58 = (_ms58 or {}).get('code')
-    except Exception:                                          # noqa: BLE001
-        pass
+    # _rg58 은 위 계층 보정 타일에서 이미 계산됨 — 같은 값을 재사용 (§4)
     _lay58, _note58 = _cl58.layers_for(
         verdict.get('score'), sector=val_eval.get('sector'),
         regime_code=_rg58, fs=four_scores)
