@@ -7683,6 +7683,48 @@ check("고정 패널이 계층 보정 확률을 병기하고 대화로 잇는다
 check("개인 정보가 PC 를 떠나지 않음을 화면이 말한다",
       '이 PC 를 떠나지 않습니다' in _w129)
 
+# ══════════════════════════════════════════════════════════════════════
+# §130 — 라운드 61: SELF 축·판단 품질 대시보드·특허/논문 태그
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§130 SELF 축 · 판단 품질 · 특허/논문 (라운드 61)")
+print("=" * 72)
+_sh130 = _cl125.self_history('005930.KS')
+check("SELF 이력이 나온다 (날짜·점수·결과·수익)",
+      _sh130 is not None and _sh130['n'] >= 30
+      and len(_sh130['recent'][0]) == 4)
+check("모르는 종목 SELF 는 None — 지어내지 않는다",
+      _cl125.self_history('999999.XX') is None)
+_lay130, _ = _cl125.layers_for(49, regime_code='BEAR',
+                               fs={'market': 'KOSPI', 'vol_20': 0.012},
+                               ticker='005930.KS')
+check("SELF 층이 가장 좁은 층으로 붙는다",
+      any('자체' in r['label'] and r['narrow'] == 3 for r in _lay130))
+check("R59 혼합에는 SELF 가 없다 (게이트 통과 구성 보존)",
+      'ticker' not in _cl125.blended_prob.__code__.co_varnames[:6])
+_cj130 = _json.load(open(_os.path.join(PROJ, 'data', 'case_layers.json'),
+                         encoding='utf-8'))
+check("표가 SELF 미혼합 원칙을 명시한다",
+      'R59 혼합에 넣지 않는다' in _cj130.get('note', ''))
+check("특허 태그 — 취득 계열만, 소송은 제외",
+      _nf122.event_types_of('OO바이오 특허 취득') == ['특허']
+      and _nf122.event_types_of('특허 소송 패소') == [])
+check("논문·학회 태그", _nf122.event_types_of('SCI 논문 등재')
+      == ['논문·학회'])
+_w130 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("판단 근거 대시보드가 있다 (엔진별 의견)",
+      '이번 판단을 만든 근거들' in _w130 and '엔진별 의견' in _w130)
+check("약점 카드가 가늠 AI 한계를 재사용한다 (§4 한 소스)",
+      "_weak61 = list((_g.get('limits') or [])[:2])" in _w130)
+check("R55 미사용을 대시보드가 명시한다",
+      '8/23 전방 검증 전 — 이번 판단에 미사용' in _w130)
+check("엔진 비교 표의 상태가 실제 라운드 결과다",
+      '기각 — 현행 방어' in _w130 and '전방검증 대기 (8/23)' in _w130)
+check("SELF 실체 표가 있다 (그 사례들이 뭔데)",
+      '이 종목 과거 신호 실체' in _w130)
+check("후보 숫자를 운영 판단에 섞지 않음을 명시",
+      '운영 판단에 섞이지 않으며' in _w130)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
