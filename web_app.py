@@ -4676,7 +4676,33 @@ if rec_buy_val is not None:
         _fair = four_scores.get('displayed_fair_value')
         if _fair and _fair > 0:
             _gap_fv = (_core_entry / _fair - 1.0) * 100.0
-            if _gap_fv >= 3.0:
+            # ⚠️ 라운드 63 — 진입가까지 내려와도 **같은 이유로 여전히 막히는**
+            # 경우가 있다. 삼성전자: 진입가 211,023원의 안전마진선 대비 비율이
+            # 1.43 이라 'ï적정가 크게 초과' 판정이 그대로 유지된다. 그런데
+            # 화면은 "이 값 이하로 내려올 때만 사세요"라고 말했다 — 살 수
+            # 없는 가격을 사라고 한 셈이다. 실측(라운드 63)에서 매수권 신호
+            # 15,332건 중 '크게 초과' 구간은 **0건**이었다: 엔진이 이미 그
+            # 구간 전체를 차단하고 있다. 그러니 문구가 게이트를 따라가야 한다.
+            _floor_fv = four_scores.get('buy_entry_max')
+            _still_blocked = bool(
+                _floor_fv and _floor_fv > 0
+                and (_core_entry / float(_floor_fv)) > 1.15)
+            if _still_blocked:
+                # 제목 자체를 바꾼다 — "…이하"는 매수 지시로 읽힌다
+                rec_buy_display = (f"{rec_buy_val:,.0f}원 "
+                                   f"(가격 조건만 · 매수 신호 아님)")
+                rec_buy_sub = (
+                    f"이 값은 <b>가격 조건만</b> 본 것입니다 — 여기까지 "
+                    f"내려와도 적정가({_fair:,.0f}원) 대비 "
+                    f"<b>{_gap_fv:+.1f}%</b>라 '적정가 크게 초과' 차단이 "
+                    f"그대로 유지됩니다. 즉 <b>이 가격에 도달해도 지금 "
+                    f"규칙으로는 매수 신호가 아닙니다.</b> 실제 매수 후보가 "
+                    f"되려면 적정가가 올라오거나(실적·업황 반영) 가격이 "
+                    f"안전마진선({float(_floor_fv):,.0f}원) 부근까지 더 "
+                    f"내려와야 합니다. 개발 구간 실측에서 '크게 초과' 자리의 "
+                    f"매수권 신호는 15,332건 중 0건이었습니다 — 엔진이 이 "
+                    f"구간을 통째로 막고 있습니다 (라운드 63)")
+            elif _gap_fv >= 3.0:
                 rec_buy_sub = (
                     f"가치 기준(적정가 {_fair:,.0f}원)보다 "
                     f"<b>{_gap_fv:+.1f}%</b> 높은 자리 — 가치 관점에서는 "
@@ -5580,6 +5606,30 @@ if _g.get('price_low') and _g.get('price_high'):
     _rows_g.insert(0, ('기대 가격 범위 (10~90분위)',
                        f"{_g['price_low']:,.0f} ~ {_g['price_high']:,.0f}원"))
 _uk.rows(_rows_g, theme=_theme, title='가늠한 값')
+
+# 유사사례 실체 (라운드 62) — "그 5건이 뭔데?" 에 표로 답한다.
+# 확률을 못 내는 표본이어도 **무엇을 봤는지는 보여 준다** — 표시 전용이며
+# 이 표에서 새 판정을 만들지 않는다.
+try:
+    _mh62 = ((sim_res or {}).get('horizons_data') or {}).get(20) or {}
+    _mt62 = _mh62.get('matches') or []
+    if _mt62:
+        with st.expander(f"이 종목의 유사사례 실체 — {len(_mt62)}건 "
+                         f"(20일 패턴 · 유사도 {sim_res.get('rho_cutoff_applied', 0.8):.2f} 이상)"):
+            import pandas as _pd62
+            st.dataframe(_pd62.DataFrame([
+                [m['date'], m['rho'], f"{m['price']:,.0f}", m['outcome'],
+                 m['ret_pct'], m['mdd_pct']] for m in _mt62],
+                columns=['패턴 종료일', '유사도(ρ)', '당시 가격', '20일 결과',
+                         '수익%', '최대낙폭%']),
+                hide_index=True, width='stretch')
+            st.caption(_md_safe(
+                "이 종목의 과거 가격 경로에서 지금과 닮은 구간을 찾아, 그 "
+                "직후 20영업일에 실제로 무슨 일이 있었는지 그대로 옮긴 "
+                "것입니다. 표본이 적으면 확률로 환산하지 않지만, 무엇을 "
+                "봤는지는 숨기지 않습니다."))
+except Exception:                                              # noqa: BLE001
+    pass                          # 사례 표 하나 때문에 화면이 죽지 않는다
 
 if _g.get('risk'):
     _uk.spacer(12)
