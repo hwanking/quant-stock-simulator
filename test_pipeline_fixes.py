@@ -7621,6 +7621,68 @@ _mv128 = open(_os.path.join(PROJ, 'docs', 'MODEL_VERSIONS.md'),
 check("현행 유사사례 확률이 최악이었음을 기록 (35.4%p)",
       '35.4%p' in _mv128 and '전면 교체가 정당' in _mv128)
 
+# ══════════════════════════════════════════════════════════════════════
+# §129 — 라운드 60: 가늠 AI에게 물어보기 (결정적 조합기)
+#   외부 LLM 미사용 — §9(포트폴리오 외부 전송 금지)와 요구 명세("중앙
+#   값만·재계산 금지·없으면 없다고") 자체가 결정적 조합기를 가리킨다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§129 가늠 AI에게 물어보기 (라운드 60)")
+print("=" * 72)
+import gaeum_chat as _gc129                                   # noqa: E402
+
+_CTX129 = _gc129.build_context(
+    name='시험전자', ticker='000001.KS', price=231000.0,
+    core=dict(bucket='추천 제외', actionable=False,
+              pullback_zone=211023.0, buy_zone=(208913, 213133),
+              new_target=236572.0, new_stop=174524.0, rr=0.7,
+              horizon_days=20, hold_trim=258968.0, hold_stop=191046.0),
+    fs=dict(displayed_fair_value=173656.0,
+            recommended_buy_price=147608.0, fair_value_status='CAUTION'),
+    verdict=dict(headline='지금은 사지 마세요', score=49, action='HOLD',
+                 vetoes=['표본 미달']),
+    blend=dict(p=0.53, layers=4, n_narrow=5733,
+               wilson_low=0.52, wilson_high=0.54),
+    regime_code='BEAR', sector='반도체와반도체장비',
+    news=dict(total=0), versions=dict(model='v-test'),
+    cb=dict(lo=40, hi=49, hit_rate=55.0, n=20824))
+_full129 = ''.join(_gc129.answer(q, _CTX129) for q in
+                   ('지금 사도 돼?', '얼마에 사야 해?', '얼마에 팔아?',
+                    '나는 205,000원에 가지고 있어. 어떻게 해?',
+                    '확률은 믿을 수 있어?'))
+check("답이 중앙 진입가만 쓴다", '211,023' in _full129)
+check("답의 목표·손절 = 중앙 판정 값",
+      '236,572' in _full129 and '174,524' in _full129)
+check("보유자 값은 보유자 답에만, 분리 문구 포함",
+      '258,968' in _full129 and '섞지 않습니다' in _full129)
+check("폐기 산식(적정가×안전마진)을 답에 쓰지 않는다",
+      '147,608' not in _full129)
+check("R55·R57 을 운영값처럼 말하지 않는다",
+      '전방 검증 전' in _full129 and '운영 판단에 쓰지 않습니다' in _full129)
+check("자유 입력 평단 파싱 + 자릿수 가드",
+      _gc129._avg_from_question('205,000원에 샀어', 231000.0) == 205000.0
+      and _gc129._avg_from_question('10,000원에 샀어', 231000.0) is None)
+check("없는 값은 없다고 말한다 (지어내지 않음)",
+      _gc129.NA in _gc129.answer(
+          '얼마에 사야 해?',
+          _gc129.build_context(name='X', ticker='X', price=1000,
+                               core={}, fs={}, verdict={})))
+check("모르는 질문엔 준비된 틀이 없다고 말한다",
+      '준비된 답변 틀이 없습니다' in _gc129.answer('점심 뭐 먹지', _CTX129))
+check("뉴스 0건이면 미수신≠이슈없음 구분",
+      '다른 말' in _gc129.answer('뉴스 영향은?', _CTX129))
+check("외부 전송 금지 필드가 명시돼 있다 (§9)",
+      'user_avg' in _gc129.PRIVATE_KEYS
+      and 'holder_ret_pct' in _gc129.PRIVATE_KEYS)
+_w129 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면에 대화 칸이 있고 종목별로 분리된다",
+      '가늠 AI에게 물어보기' in _w129
+      and 'gchat_{str(target_ticker)' in _w129)
+check("고정 패널이 계층 보정 확률을 병기하고 대화로 잇는다",
+      '계층 보정 확률' in _w129 and "#nav-ask" in _w129)
+check("개인 정보가 PC 를 떠나지 않음을 화면이 말한다",
+      '이 PC 를 떠나지 않습니다' in _w129)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
