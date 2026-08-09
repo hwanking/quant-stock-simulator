@@ -5460,6 +5460,50 @@ _uk.stat_tiles([
 ], theme=_theme)
 _uk.spacer(12)
 
+# ── 계층 실측 (라운드 58) — '산출 불가'로 대화를 끝내지 않는다 ─────────
+# 초근접 표본이 5건이면 그 사실은 그대로 두고(문턱을 낮춰 채우면 §2 위반),
+# 더 넓은 계층의 실측을 이름표와 함께 병기한다. 어떤 층도 '이 종목의
+# 확률'이 아니다 — 그 계층의 실측이다. 층 혼합 확률은 R59 게이트 통과 전
+# 금지 (docs/PREREG_R59_HIER_PROB.md).
+try:
+    import case_layers as _cl58
+    _rg58 = None
+    try:
+        _ir58 = engine_init.get_index_regime('KOSPI')
+        if _ir58.get('available'):
+            import trade_plan as _tp58
+            _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
+                                       _ir58['sma60'],
+                                       _ir58.get('sma60_prev'))
+            _rg58 = (_ms58 or {}).get('code')
+    except Exception:                                          # noqa: BLE001
+        pass
+    _lay58, _note58 = _cl58.layers_for(
+        verdict.get('score'), sector=val_eval.get('sector'),
+        regime_code=_rg58, fs=four_scores)
+    # L5(점수대 전체)는 화면 위 '이 점수대의 실제 성적'(calibration 출처)과
+    # 같은 개념이라 다른 집계로 또 보여주면 §4 위반이다 — 좁은 층만 병기
+    _lay58 = [r for r in _lay58 if r.get('narrow', 0) > 0]
+    if _lay58:
+        _lrows58 = [(
+            r['label'],
+            f"적중 {r['hit']}% (하한 {r['wilson']}) · EV {r['ev']:+.2f} · "
+            f"n {r['n']:,}",
+            ('pos' if r['ev'] > 0 else 'neg')) for r in _lay58]
+        _uk.rows(_lrows58, theme=_theme,
+                 title='더 넓은 계층의 실측 — 같은 조건이었던 과거')
+        st.caption(_md_safe(
+            "위 값은 이 종목의 확률이 아니라 각 계층의 실측입니다. "
+            "초근접 사례가 부족해도 판단 재료가 없는 것이 아니라, 좁은 "
+            "버킷만 비어 있는 것입니다 — 좁은 층일수록 지금과 닮았고, "
+            "넓은 층일수록 표본이 많습니다. 유사도 문턱을 낮춰 표본을 "
+            "채우는 방식은 쓰지 않습니다."))
+        if _note58:
+            st.caption(_md_safe(f"· {_note58}"))
+except Exception:                                              # noqa: BLE001
+    pass                          # 계층 표 하나 때문에 화면이 죽지 않는다
+_uk.spacer(12)
+
 _rows_g = [
     ('예상 보유기간',
      (f"{_g['hold_days']}거래일" if _g.get('hold_days') else _gai.NA)),

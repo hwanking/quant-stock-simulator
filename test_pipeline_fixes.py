@@ -7458,6 +7458,59 @@ check("스터디가 최적화가 아님을 스스로 밝힌다",
                                        'exit_shape_study.py'),
                           encoding='utf-8').read())
 
+# ══════════════════════════════════════════════════════════════════════
+# §125 — 라운드 58: 계층 실측 — '산출 불가'로 대화를 끝내지 않는다
+#   초근접 5건이면 그 사실은 그대로 두고, 더 넓은 계층의 실측을 이름표와
+#   함께 병기한다. 문턱 완화·표본 차용으로 채우는 길은 사전등록으로 막았다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§125 계층 실측 (라운드 58)")
+print("=" * 72)
+import case_layers as _cl125                                  # noqa: E402
+
+_cj125 = _json.load(open(_os.path.join(PROJ, 'data', 'case_layers.json'),
+                         encoding='utf-8'))
+check("계층 표가 생성돼 있다 (L5~L2)",
+      all(k in _cj125 for k in ('L5', 'L4', 'L4b', 'L3', 'L2')))
+check("표가 자기 성격을 밝힌다 — 종목 확률이 아니라 계층 실측",
+      '이 종목의 확률이' in _cj125.get('note', '')
+      and '블라인드 제외' in _cj125.get('basis', ''))
+check("혼합 확률은 R59 게이트 통과 전 금지를 명시",
+      'R59' in _cj125.get('note', ''))
+_lay125, _ = _cl125.layers_for(49, sector=None, regime_code='BEAR',
+                               fs={'market': 'KOSPI', 'vol_20': 0.02,
+                                   'range_position_pct': 40,
+                                   'm10_disparity': 5.0})
+check("49점 종목에 40-49 점수대 층이 나온다",
+      any('40-49' in r['label'] for r in _lay125))
+check("각 층에 n·적중·Wilson·EV 가 있다",
+      all(all(k in r for k in ('n', 'hit', 'wilson', 'ev'))
+          for r in _lay125))
+check("좁은 층이 뒤에 온다 (넓은 → 좁은 정렬)",
+      [r['narrow'] for r in _lay125]
+      == sorted(r['narrow'] for r in _lay125))
+_lay125b, _note125 = _cl125.layers_for(45, sector='화학',
+                                       regime_code='BEAR', fs={})
+check("업종 미축적 점수대는 이유를 말한다 (지어내지 않음)",
+      _note125 is not None and '매수권' in _note125)
+check("모르는 점수는 빈 목록 — 조용히 실패하지 않는다",
+      _cl125.layers_for(None) == ([], None))
+_w125 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("가늠 AI 화면이 계층 실측을 병기한다",
+      '더 넓은 계층의 실측' in _w125)
+check("화면이 '종목 확률 아님'을 명시한다",
+      '이 종목의 확률이 아니라 각 계층의 실측' in _w125)
+check("문턱 완화 방식을 쓰지 않음을 화면에 밝힌다",
+      '유사도 문턱을 낮춰' in _w125)
+check("L5는 화면에서 뺀다 — 기존 점수대 실측과 이중 표기 금지 (§4)",
+      "r.get('narrow', 0) > 0" in _w125)
+_pr125 = open(_os.path.join(PROJ, 'docs', 'PREREG_R59_HIER_PROB.md'),
+              encoding='utf-8').read()
+check("R59 사전등록 — 기각 접근(문턱 인하·표본 차용) 명문화",
+      '강제 확보' in _pr125 and '기준 인하' in _pr125)
+check("R59 — Brier·보정도 게이트, 미달 시 현행 유지",
+      'Brier' in _pr125 and '기각·현행 유지' in _pr125)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
