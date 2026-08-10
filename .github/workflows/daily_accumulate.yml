@@ -20,6 +20,15 @@ concurrency:
   group: daily-accumulate     # 겹쳐 돌면 원장이 섞인다
   cancel-in-progress: false
 
+# ⚠️ 라운드 71 — 이게 없어서 첫 실행이 실패했다.
+#   기본 GITHUB_TOKEN 은 `contents: read` 다. 75분간 축적은 멀쩡히 돌았고
+#   마지막 업로드에서 `HTTP 403: Resource not accessible by integration`
+#   으로 죽었다. 즉 **쌓기는 쌓았는데 저장이 안 됐다** — PC 가 꺼져도
+#   데이터가 남게 하려던 목적이 정확히 그 한 줄 때문에 비어 있었다.
+#   릴리스 생성·업로드에는 쓰기가 필요하다. 그 이상은 주지 않는다.
+permissions:
+  contents: write
+
 jobs:
   accumulate:
     runs-on: ubuntu-latest
