@@ -7332,7 +7332,12 @@ with tab_val:
     mkt_adj_pct = four_scores.get('market_adjustment_pct', 0.0)
     mkt_adj_why = four_scores.get('market_adjustment_why')
     conf_score = four_scores.get('fair_value_confidence', 0.0)
-    rec_buy = four_scores.get('recommended_buy_price')
+    # 장기 가치 참고선 — 적정가 × 안전마진. **오늘의 실행가가 아니다.**
+    # 라운드 25 에 실행가 자리에서 폐기했고 37 에 배너에서 걷어냈는데,
+    # 이 화면만 '권장 매수가 / 안전 매수 구간'이라는 옛 이름으로 남아
+    # 있었다(라운드 71 계보 감사에서 발견). 이름을 코드까지 옮긴다 —
+    # 주석에만 적어 두면 다음 사람이 또 실행가로 읽는다.
+    _value_ref = four_scores.get('recommended_buy_price')
     mos_pct = four_scores.get('margin_of_safety_pct', 15.0)
     fv_status = four_scores.get('fair_value_status', 'UNCALCULATED')
     fv_note = four_scores.get('fair_value_status_note', '')
@@ -7345,7 +7350,7 @@ with tab_val:
     elif fv_status == "REFERENCE_ONLY":
         st.warning(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 아래 예비 모델 범위만 참고하십시오.")
     else:
-        st.error(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 중심 적정가와 권장 매수가를 산출하지 않았습니다.")
+        st.error(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 중심 적정가와 장기 가치 참고선을 산출하지 않았습니다.")
 
     disp_price_str = f"{disp_price:,.0f}{unit_str}" if disp_price is not None else "산출 보류"
     if upside_pct is None:
@@ -7354,14 +7359,17 @@ with tab_val:
         upside_color = "#35C98B" if upside_pct > 0 else "#ff453a"
         upside_display_str = f"현재가 대비 <b style='color:{upside_color};'>{upside_pct:+.1f}%</b> ({upside_eval})"
 
-    if rec_buy is None:
-        rec_buy_str = "미산출 (신뢰도 미달)"
-        entry_eval_str = "판정 불가"
-        entry_eval_color = "#9DAABC"
+    if _value_ref is None:
+        value_ref_str = "미산출 (신뢰도 미달)"
+        value_eval_str = "판정 불가"
+        value_eval_color = "#9DAABC"
     else:
-        rec_buy_str = f"{rec_buy:,.0f}{unit_str} 이하"
-        entry_eval_str = "안전 매수 구간" if realtime_price <= rec_buy else "안전마진 상단 초과 (눌림 대기)"
-        entry_eval_color = "#35C98B" if realtime_price <= rec_buy else "#F2B84B"
+        value_ref_str = f"{_value_ref:,.0f}{unit_str} 이하"
+        # '안전 매수 구간'이라고 쓰지 않는다 — 이 선 아래로 내려와도
+        # 실행 게이트는 따로 판단한다. 가치 판정과 매수 신호는 다른 말이다.
+        value_eval_str = ("가치 기준 저평가 구간" if realtime_price <= _value_ref
+                          else "가치 기준 참고선 위")
+        value_eval_color = "#35C98B" if realtime_price <= _value_ref else "#F2B84B"
 
     st.markdown(f'''
     <div style="background: #161D2A; border-radius: 18px; padding: 24px; margin-bottom: 20px;">
@@ -7386,22 +7394,33 @@ with tab_val:
         <hr style="border-color: #222C3C; margin: 16px 0;">
         <div style="display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap;">
             <div style="margin: 4px 8px;">
-                <span style="font-size: 13px; color: #9DAABC;">권장 매수가 (안전마진 {mos_pct:.0f}% 적용)</span><br>
-                <b style="font-size: 17px; color: #35C98B;">{rec_buy_str}</b>
+                <span style="font-size: 13px; color: #9DAABC;">장기 가치 참고선 (안전마진 {mos_pct:.0f}%)</span><br>
+                <b style="font-size: 17px; color: #35C98B;">{value_ref_str}</b>
             </div>
             <div style="margin: 4px 8px;">
                 <span style="font-size: 13px; color: #9DAABC;">핵심 평가 모델</span><br>
                 <b style="font-size: 16px; color: #F3F6FA;">기업특성 기반 선택적 다중 모델</b>
             </div>
             <div style="margin: 4px 8px;">
-                <span style="font-size: 13px; color: #9DAABC;">현재 진입 평가</span><br>
-                <b style="font-size: 16px; color: {entry_eval_color};">
-                    {entry_eval_str}
+                <span style="font-size: 13px; color: #9DAABC;">장기 가치 대비</span><br>
+                <b style="font-size: 16px; color: {value_eval_color};">
+                    {value_eval_str}
                 </b>
             </div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
+
+    # 두 가격의 역할을 이 화면에도 적는다 (라운드 56 에 배너에 적은 것과
+    # 같은 말이다). 위 참고선은 '가치상 얼마면 싼가'이고, 오늘 실제로 걸어
+    # 둘 가격은 중앙 판정이 낸 실행 진입가 하나뿐이다. 새 숫자를 만들지
+    # 않고 CORE 값을 그대로 옮긴다 (§4 — 화면 값은 한 곳에서 나온다).
+    _exec_entry = (CORE or {}).get('pullback_zone')
+    st.caption(_md_safe(
+        '위 참고선은 장기 가치 기준입니다 — 여기까지 내려와도 매수 신호가 '
+        '켜지는 것은 아닙니다. 오늘의 실행 진입가는 '
+        + (f'{_exec_entry:,.0f}{unit_str}' if _exec_entry else '산출 불가')
+        + ' (종합 결론 배너와 같은 값).'))
 
     # 업황조정이 0 이면 **왜 0 인지** 바로 밑에 적는다.
     # 라운드 44 전까지 이 자리는 근거 없는 −2% 상수였고, 화면은 그걸

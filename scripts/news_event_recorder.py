@@ -39,7 +39,7 @@ H = 20
 
 def record():
     import news_feed as nf
-    from bitemporal_engine import STOCK_METRICS_DB
+    from bitemporal_engine import STOCK_METRICS_DB, STOCK_NAME_MAP
 
     items, report = nf.fetch(max_age_sec=0)
     got = sum(r['count'] for r in report)
@@ -59,11 +59,22 @@ def record():
                     continue
     # 국내 종목만 — 사후 경로를 국내 일봉으로 채우므로 해외 티커를
     # 기록하면 영원히 resolve 되지 않고 로그만 더럽힌다.
+    #
+    # 라운드 71 — 여기가 STOCK_METRICS_DB(국내 19종)만 훑고 있었다.
+    # 이름 지도에는 25종이 더 있는데 조용히 빠졌다. 전방 축적이 목적인
+    # 기록기가 유니버스의 일부만 보면 축적 속도가 그만큼 준다.
     names = {}
     for sym, meta in (STOCK_METRICS_DB or {}).items():
         nm = (meta or {}).get('name')
         if nm and str(sym).endswith(('.KS', '.KQ')):
             names[str(nm)] = str(sym)
+    for nm, sym in (STOCK_NAME_MAP or {}).items():
+        # 이름 지도는 한 종목에 키가 여럿이다 ('금호타이어' · '073240' ·
+        # '금호타이어 (073240)'). 숫자·괄호 키는 기사 매칭에 쓸모없다.
+        nm = str(nm)
+        if (str(sym).endswith(('.KS', '.KQ')) and nm not in names
+                and not nm.isdigit() and '(' not in nm):
+            names[nm] = str(sym)
 
     wrote = 0
     with open(LOG, 'a', encoding='utf-8') as out:
@@ -83,6 +94,10 @@ def record():
                 'sources_ok': sum(1 for r in report if r['ok']),
                 'resolved': False,
             }, ensure_ascii=False) + '\n')
+            # 한 종목에 이름이 여럿이다 ('포스코홀딩스' · 'POSCO홀딩스' →
+            # 005490.KS). seen 을 파일에서만 채우면 같은 날 같은 티커가
+            # 두 줄 쓰이고, 사건별 집계가 그만큼 이중 계산된다.
+            seen.add((sym, today))
             wrote += 1
     print(f'기록 {wrote}종목 (기사 있는 종목만) · 수신 {got}건 · '
           f'출처 {sum(1 for r in report if r["ok"])}/{len(report)}곳')

@@ -830,8 +830,21 @@ check("지수 미연결 시 KOSPI200 미산출", _bd_off['kospi200_perf'] is Non
 check("지수 연결 시 KOSPI200 실산출", _bd_on['kospi200_perf'] is not None,
       f"{_bd_on['kospi200_perf']}% · {_bd_on['kospi200_note'][:40]}")
 check("KOSPI200 수익률이 리터럴 12.6이 아님", _bd_on['kospi200_perf'] != 12.6)
-check("판정 문구에 KOSPI200 포함", "KOSPI200" in _bd_on['judge_text'],
-      _bd_on['judge_text'][:70])
+# 판정 문구는 **대조가 성립할 때만** KOSPI200 을 담는다.
+#   라운드 71 — 이 검사가 무조건 "KOSPI200" 을 요구하고 있었다. 그런데
+#   대조는 종목 쪽 성과(ai_perf)가 있어야 성립하고, 유사패턴 표본이 0건이면
+#   ai_perf 는 None 이다(오늘 삼성전자가 그랬다). 그때 엔진은 "표본 부족으로
+#   벤치마크 대조를 산출하지 못했습니다" 라고 적는다 — §3 그대로의 정직한
+#   동작이다. 검사가 그 경로를 결함으로 몰고 있었으므로 현실에 맞춘다.
+#   **느슨해지지는 않는다**: 대조가 성립하는데 KOSPI200 이 빠지면 여전히 실패다.
+_jt107 = _bd_on['judge_text']
+if _bd_on.get('ai_perf') is not None and _bd_on.get('kospi200_perf') is not None:
+    check("대조 성립 시 판정 문구에 KOSPI200 포함", "KOSPI200" in _jt107,
+          _jt107[:70])
+else:
+    check("대조 불가 시 판정 문구가 미산출을 밝힌다",
+          '산출하지 못했' in _jt107 or 'KOSPI200' in _jt107,
+          f"ai_perf={_bd_on.get('ai_perf')} · {_jt107[:60]}")
 
 # 28-3 팩터 귀속 — 시장 1팩터는 실제 회귀가 가능하다
 _fa = q.calculate_factor_attribution(sim, tech_df=snap['tech_df'], b_engine=engine)
@@ -7877,6 +7890,75 @@ for _ax109, _files109 in _AXF109.items():
     check(f"'{_ax109}' 버전이 담당 파일 변경보다 뒤처지지 않는다",
           (not _last109) or _vd109 >= _last109,
           f'버전 {_v109}({_vd109}) vs 파일 최종 변경 {_last109}')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §107 — 결정 계보 감사 (라운드 71)
+#   "이 숫자가 어디서 왔나"를 검사가 대신 묻는다.
+#
+#   왜 필요했나: 오늘 두 결함을 잡았는데 둘 다 계보 문제였다.
+#     · 폐기 산식(recommended_buy_price)이 여섯 곳에 살아 있었다
+#     · 적정가 화면이 그 값을 '권장 매수가 / 안전 매수 구간'이라 불러
+#       오늘 살 가격처럼 읽혔다 (실행 게이트는 따로 막고 있었다)
+#   둘 다 결정은 주석에 적혔고 호출부는 절반만 옮겨졌다. 그래서
+#   **주석을 근거로 통과시키지 않는** 감사를 만들고 여기서 돌린다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§107 결정 계보 감사 (라운드 71)")
+print("=" * 72)
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import lineage_audit as _la107                                  # noqa: E402
+
+# 값으로 검사한다 — 문자열이 있는지가 아니라 감사를 **실제로 돌려**
+# 결함 목록이 비었는지 본다 (§62 교훈: 존재 검사는 결함을 잠글 수 있다)
+import io as _io107
+import contextlib as _ctx107
+_buf107 = _io107.StringIO()
+with _ctx107.redirect_stdout(_buf107):
+    _iss107 = _la107.static_audit()
+check("계보 감사 정적 검사 전부 통과", not _iss107,
+      ' / '.join(_iss107[:4]))
+
+# 주석을 근거로 통과시키지 않는가 — 감사 자신을 검사한다.
+# 주석에만 라벨이 있는 가짜 소스를 만들어 넣으면 걸러져야 한다.
+_fake107 = ("# 장기 가치 참고선 — 오늘의 매수가가 아니다\n"
+            "x = four_scores.get('recommended_buy_price')\n")
+_prose107 = _la107.prose_lines(_fake107)
+check("감사가 주석 줄을 산문으로 걷어낸다", 1 in _prose107 and 2 not in _prose107,
+      f'산문 판정: {sorted(_prose107)}')
+
+# 적정가 화면이 폐기 산식을 '살 가격'으로 부르지 않는가.
+# 결함 문구의 **부재**를 본다 — 부재 검사는 f-string 줄바꿈으로
+# 우회되지 않는다 (§62 에서 존재 검사가 당했던 방식).
+#
+# 단, 소스 전체를 훑으면 **주석까지 잡는다.** 처음 이 검사를 그렇게
+# 짰다가 "옛 이름이 무엇이었나"를 설명하는 주석 두 줄에 걸려 실패했다.
+# 감사가 이미 산문 제거기를 갖고 있으므로 그것을 쓴다 — 검사와 감사가
+# 같은 기준으로 코드를 본다.
+_w107 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_code107 = '\n'.join(ln for _i, ln in _la107.code_lines('web_app.py'))
+check("적정가 화면이 '안전 매수 구간'이라 부르지 않는다",
+      '안전 매수 구간' not in _code107)
+check("적정가 화면이 '권장 매수가'를 값 라벨로 쓰지 않는다",
+      '권장 매수가 (안전마진' not in _code107)
+check("적정가 화면이 장기 참고선이라 밝힌다",
+      '장기 가치 참고선 (안전마진' in _w107)
+check("적정가 화면이 실행 진입가를 함께 적는다",
+      "_exec_entry = (CORE or {}).get('pullback_zone')" in _w107)
+
+# 실행 추적 산출물 — 못 잰 것을 통과로 적지 않았는가
+_lp107 = _os.path.join(PROJ, 'data', 'lineage_audit.json')
+if _os.path.exists(_lp107):
+    import json as _js107
+    _ld107 = _js107.load(open(_lp107, encoding='utf-8'))
+    check("실행 추적이 실제로 잰 종목이 있다", (_ld107.get('n_ok') or 0) > 0,
+          f"추적 {_ld107.get('n_traced')} · 성공 {_ld107.get('n_ok')}")
+    check("실행 추적에 정합 위반이 없다", not _ld107.get('faults'),
+          str((_ld107.get('faults') or [])[:2]))
+    check("실행 추적이 계보표를 함께 남긴다",
+          bool(_ld107.get('lineage')) and 'new_stop' in (_ld107.get('lineage') or {}))
+else:
+    check("실행 추적 산출물이 있다", False, 'data/lineage_audit.json 없음')
 
 
 print()

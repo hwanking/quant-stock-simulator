@@ -95,3 +95,11 @@ jobs:
         run: |
           echo "원장 행수: $(wc -l < .portfolio/virtual_graded.jsonl || echo 0)"
           echo "경로 행수: $(cat .portfolio/bar_paths_s*.jsonl 2>/dev/null | wc -l || echo 0)"
+
+      # 결정 계보 감사 (라운드 71) — 정적이라 네트워크도 데이터도 안 쓴다.
+      # **맨 뒤에 둔다**: 축적을 먼저 끝내고, 계보가 어긋나면 그때 붉게
+      # 만든다. 축적이 코드 결함에 인질로 잡히지 않게 하려는 순서다.
+      # `|| true` 를 붙이지 않는다 — 아무도 안 읽는 경고는 검사가 아니다.
+      - name: 결정 계보 감사 (표시 값의 출처 추적)
+        run: |
+          python scripts/lineage_audit.py
