@@ -40,6 +40,7 @@ import os
 import sys
 import time
 import warnings
+import zlib
 
 warnings.filterwarnings('ignore')
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -127,10 +128,19 @@ def main():
           f'({"전체" if want_all else "개발 구간 매수권만"}) · '
           f'이미 완료 {len(done):,}건')
     if shards:
-        # 나누기는 **완료분을 뺀 뒤**에 한다. 그래야 조각이 고르게 남는다.
-        todo = todo[shard::shards]
+        # ⚠️ 라운드 73 — 여기가 `todo[shard::shards]` 였다.
+        #   stride 분할은 **모든 워커가 똑같은 todo 목록을 볼 때만** 성립한다.
+        #   6개를 3개씩 나눠 띄웠더니 두 번째 묶음이 (그 사이 채워진 만큼
+        #   줄어든) 다른 목록을 보고 갈랐고, 조각이 겹쳐 같은 건을 두 번
+        #   돌았다 — 실측 중복 3,665건. 유니버스 캐시에서 고친 것과 같은
+        #   함정이다: 분할의 입력이 워커마다 다르면 분할이 아니다.
+        #
+        #   키 자체의 안정 해시로 가른다. 언제 띄우든, todo 가 무엇이든
+        #   같은 (종목,날짜)는 항상 같은 조각에 간다.
+        todo = [x for x in todo
+                if zlib.crc32(f'{x[0]}|{x[1]}'.encode()) % shards == shard]
         print(f'조각 {shard}/{shards} → {len(todo):,}건 · 기록 '
-              f'{os.path.basename(out_path)}')
+              f'{os.path.basename(out_path)} (안정 해시 분할)')
     if not todo:
         print('채울 것이 없다.')
         return 0
