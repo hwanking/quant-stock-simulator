@@ -50,7 +50,7 @@ def _utf8_stdout():
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 #: 줄어들면 안 되는 축적 파일 (append-only 이거나 재생성되더라도 커져야 한다)
-WATCH = ('virtual_predictions.jsonl', 'virtual_graded.jsonl',
+WATCH = ('virtual_predictions*.jsonl', 'virtual_graded.jsonl',
          'bar_paths_s*.jsonl', 'entry_anchors_s*.jsonl',
          'subscore_patch*.jsonl', 'breakout_flags_s*.jsonl',
          'news_events.jsonl', 'predictions.jsonl')

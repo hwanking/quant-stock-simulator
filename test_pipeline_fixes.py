@@ -4179,8 +4179,27 @@ _lab86 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"),
               encoding='utf-8').read()
 check("과거 데이터 수집 범위가 2015년으로 확장됐다",
       "start_date='2015-01-01'" in _lab86)
-check("종목당 기준일이 80개로 늘었다 (25봉 간격 유지)",
-      'n_dates=80' in _lab86 and 'spacing=25' in _lab86)
+# 라운드 72 — 종목당 기준일이 80 → 108 로 올랐다. 이 검사는 80 을 못 박고
+# 있었다. 108 은 손으로 고른 값이 아니라 **데이터 천장**이다: 제공처가
+# 종목당 약 3,000봉만 주고, 앞 260봉(워밍업)·뒤 21봉(채점)을 빼면 usable
+# 2,716봉이라 간격 25 로는 2,716 // 25 = 108 개가 전부다.
+#
+# 검사의 핵심은 개수가 아니라 **간격**이다 — spacing 25 가 보유기간
+# 20영업일보다 커야 같은 종목의 인접 케이스가 안 겹친다. 그 조건을 값으로
+# 확인하고, 개수는 상수를 실제로 읽어서 본다 (문자열 못 박기 금지).
+import importlib as _il72                                      # noqa: E402
+_sys72 = _os.path.join(PROJ, 'scripts')
+if _sys72 not in sys.path:
+    sys.path.insert(0, _sys72)
+_cl72 = _il72.import_module('calibration_lab')
+check("종목당 기준일이 데이터 천장(108)까지 올라갔다",
+      _cl72.N_DATES == 108, f'N_DATES={_cl72.N_DATES}')
+check("기준일 간격이 보유기간보다 넓다 (겹치면 독립성이 깨진다)",
+      'spacing=25' in _lab86 and 'horizon=20' in _lab86)
+check("유니버스 확장 손잡이가 있다 (--universe)",
+      'DEFAULT_UNIVERSE_TOP' in _lab86 and 'def load_universe' in _lab86)
+check("샤드 워커는 채점하지 않는다 (동시 채점은 서로를 덮는다)",
+      '샤드 워커는 **채점하지 않는다.**' in _lab86)
 
 _w86 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("사이드바 일괄 글자 규칙이 로고를 누르지 않는다",
@@ -8001,14 +8020,22 @@ if _os.path.exists(_sp107):
 import backup_research_data as _bk107                           # noqa: E402
 import snapshot_guard as _sg107                                 # noqa: E402
 check("백업이 원장의 **원본**을 담는다 (재생성의 입력)",
-      'virtual_predictions.jsonl' in _bk107.INCLUDE,
+      'virtual_predictions*.jsonl' in _bk107.INCLUDE,
       str(_bk107.INCLUDE))
+# 별표가 없으면 샤드가 통째로 빠진다 — 값으로 확인한다 (라운드 72)
+import fnmatch as _fn107                                        # noqa: E402
+check("백업 규칙이 샤드 파일까지 잡는다",
+      any(_fn107.fnmatch('virtual_predictions_s1.jsonl', p)
+          for p in _bk107.INCLUDE))
+check("가드도 샤드 파일까지 센다",
+      any(_fn107.fnmatch('virtual_predictions_s1.jsonl', p)
+          for p in _sg107.WATCH))
 check("백업이 산출물 원장도 담는다",
       'virtual_graded.jsonl' in _bk107.INCLUDE)
 check("개인 자료 차단 목록이 살아 있다 (§9)",
       all(p in _bk107.DENY for p in ('positions*', 'holdings*')))
 check("가드가 원본·산출물을 둘 다 감시한다",
-      'virtual_predictions.jsonl' in _sg107.WATCH
+      'virtual_predictions*.jsonl' in _sg107.WATCH
       and 'virtual_graded.jsonl' in _sg107.WATCH)
 
 # 가드가 **실제로 막는가** — 한 번도 안 울리는 경보는 증명이 아니다.
@@ -8020,7 +8047,13 @@ if _os.path.exists(_sg107.BASE):
     try:
         import json as _js107c
         _c107 = _js107c.load(open(_sg107.BASE, encoding='utf-8'))
-        _c107['virtual_graded.jsonl']['lines'] *= 2   # 반토막으로 보이게
+        # ⚠️ 라운드 72 — 여기서 **저장된 기준선**을 2배 했더니 검사가 실패했다.
+        #   어제 기록한 기준선은 6만 건이고 오늘 원장은 18만 건이라, 2배(12만)
+        #   해도 여전히 현재보다 작아 '축소'로 보이지 않았다. 낡은 기준선이
+        #   검사를 조용히 통과시킨 것이다.
+        #   기준선이 아니라 **지금 값**에서 만든다 — 언제 돌려도 반드시 축소다.
+        _now107 = _sg107.counts()['virtual_graded.jsonl']['lines']
+        _c107['virtual_graded.jsonl']['lines'] = _now107 * 2 + 1000
         with open(_sg107.BASE, 'w', encoding='utf-8') as _gf107:
             _js107c.dump(_c107, _gf107, ensure_ascii=False)
         _buf107b = _io107.StringIO()
