@@ -61,6 +61,10 @@ N_DATES = 108
 #: 목록(600종목)만 쓴다 — 기존 동작 그대로다.
 DEFAULT_UNIVERSE_TOP = 1500
 
+#: 국면 판정용 지수 봉 수 (라운드 73 — 1,200 → 3,000).
+#: 제공처 천장이 3,000봉(2014-05-20~)이라 그 이상은 더 줘도 안 온다.
+INDEX_BARS = 3000
+
 #: 종목 풀 — 시총·업종·시장이 섞이도록 고정 (감사 §41 FIXED_SET 계열)
 TICKERS = [
     "005930.KS",  # 삼성전자 (대형 기술)
@@ -842,7 +846,13 @@ def main(limit=200, universe_top=None, shard=None):
     # 시장 국면(그 날짜 기준) — 지수 시계열을 기준일 이하로 잘라 계산한다 (누수 없음)
     idx_series = {}
     for mkt in ("KOSPI", "KOSDAQ"):
-        idx_series[mkt] = eng.fetch_index_daily(mkt, 1200)
+        # ⚠️ 라운드 73 — 여기가 1200 봉이었다. 1,200 거래일은 약 4.8년이라
+        #   2021-09 이전 판정에는 국면이 아예 안 붙었다. 원장 확장 뒤
+        #   미기록이 47.6% 였고, 실측해 보니 2021-12-08 이전이 **100%**,
+        #   그 이후가 0% — 순수한 날짜 절단이었다.
+        #   지수도 종목과 같은 3,000봉 천장(2014-05-20~)이므로 거기까지
+        #   받는다. 새 숫자를 고른 게 아니라 받을 수 있는 전부다.
+        idx_series[mkt] = eng.fetch_index_daily(mkt, INDEX_BARS)
 
     def regime_at(mkt, d):
         s = idx_series.get(mkt)
