@@ -18,6 +18,7 @@
 
 실행:  python scripts/calibration_lab.py [--limit N]
 """
+import datetime
 import json
 import os
 import sys
@@ -35,8 +36,30 @@ import bitemporal_engine as be
 import prediction_log as plog
 import quant_indicators as qi
 
-VIRT_FILE = os.path.join(PROJ, ".portfolio", "virtual_predictions.jsonl")
+#: 원본 예측 원장. `--shard i/n` 을 주면 워커별 샤드 파일로 갈린다.
+VIRT_BASE = os.path.join(PROJ, ".portfolio", "virtual_predictions.jsonl")
+VIRT_FILE = VIRT_BASE            # main() 에서 샤드면 교체된다
 CALIB_FILE = os.path.join(PROJ, ".portfolio", "calibration.json")
+
+#: 종목당 뽑을 날짜 수 (라운드 72 — 80 → 108).
+#:
+#: **왜 108인가 — 손으로 고른 숫자가 아니다.** 시세 제공처가 종목당 약
+#: 3,000봉만 준다(2014-05 부터). 앞 260봉(지표 워밍업)과 뒤 21봉(채점용)을
+#: 빼면 usable 2,716봉이고, 간격 25거래일로 뽑으면 2,716 // 25 = 108 개가
+#: **데이터가 허용하는 전부**다. 80 은 그 천장의 74% 만 쓰고 있었다.
+#: 그래서 2013~2017 이 172건뿐이었다 — 80 × 25 = 2,000봉이 2018년까지만
+#: 닿기 때문이다.
+#:
+#: 간격(spacing=25)은 **건드리지 않는다.** 보유기간이 20영업일이므로 그보다
+#: 좁히면 같은 종목의 인접 케이스가 겹쳐 독립성이 깨진다. 표본을 늘리려고
+#: 중복을 만드는 것은 raw 만 부풀리고 정보량은 그대로다.
+N_DATES = 108
+
+#: 유니버스 확장 상한 — 시총 상위 몇 종목까지 볼 것인가.
+#: 전 종목은 3,014개(코스피 1,421 · 코스닥 1,593)지만 전부 돌리면 축적이
+#: 너무 길어진다. `--universe N` 으로 지정하며, 지정하지 않으면 아래 고정
+#: 목록(600종목)만 쓴다 — 기존 동작 그대로다.
+DEFAULT_UNIVERSE_TOP = 1500
 
 #: 종목 풀 — 시총·업종·시장이 섞이도록 고정 (감사 §41 FIXED_SET 계열)
 TICKERS = [
@@ -724,10 +747,67 @@ def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25):
     return sorted(picked)
 
 
+def load_universe(eng, top, existing):
+    """시총 상위 `top` 종목 목록 — **한 번만 받아 캐시에 박제한다.**
+
+    ■ 왜 캐시가 필수인가 (라운드 72)
+      샤드를 6개 띄웠더니 여섯이 각자 3,014종목 유니버스를 중복으로
+      받아 왔다. 느린 것도 문제지만 **분할이 깨진다** — 시총 순위는
+      장중에 바뀌므로 샤드마다 pool 순서가 달라지면 `k % n` 이 같은
+      종목을 두 번 돌리거나 아예 빠뜨린다. 분할이 성립하려면 모든
+      워커가 **같은 목록**을 봐야 한다.
+
+      그래서 목록을 파일에 박제하고 샤드는 그것만 읽는다. 다시 받고
+      싶으면 캐시 파일을 지운다.
+    """
+    cache = os.path.join(PROJ, '.portfolio', f'universe_top{top}.json')
+    if os.path.exists(cache):
+        with open(cache, encoding='utf-8') as f:
+            meta = json.load(f)
+        syms = meta.get('symbols') or []
+        add = [s for s in syms if s not in existing]
+        print(f"유니버스 캐시 사용 ({meta.get('made')}, 전 종목 "
+              f"{meta.get('total')}) → 신규 {len(add):,}종목")
+        return add
+    try:
+        uni = eng.get_screener_universe(full_market=True, max_pages=40)
+    except Exception as exc:                                   # noqa: BLE001
+        # 못 넓혔으면 **밝힌다.** 조용히 기존 목록으로 도는 것은
+        # "넓혔다"는 착각을 준다 (§3).
+        print(f"유니버스 수집 실패 — 넓히지 못했다: "
+              f"{type(exc).__name__}: {exc}")
+        return []
+    syms = [u['symbol'] for u in uni[:top]]
+    with open(cache, 'w', encoding='utf-8') as f:
+        json.dump(dict(made=datetime.date.today().isoformat(), top=top,
+                       total=len(uni), symbols=syms,
+                       note='샤드가 같은 분할을 보도록 박제한 목록. '
+                            '다시 받으려면 이 파일을 지운다.'),
+                  f, ensure_ascii=False)
+    add = [s for s in syms if s not in existing]
+    print(f"유니버스 수집: 전 종목 {len(uni):,} 중 시총 상위 {top:,} → "
+          f"신규 {len(add):,}종목 · 캐시 저장 {os.path.basename(cache)}")
+    return add
+
+
+def virt_files():
+    """원본 예측 파일 전부 — 본체 + 샤드.
+
+    라운드 72 에서 샤딩을 붙였다. 완료 여부·채점은 **항상 전 샤드를 합쳐**
+    본다. 한 샤드만 보면 다른 샤드가 이미 한 일을 다시 하거나, 채점이
+    일부만 되고도 '완료'로 보인다.
+    """
+    import glob as _g
+    out = [VIRT_BASE] if os.path.exists(VIRT_BASE) else []
+    out += sorted(_g.glob(os.path.join(os.path.dirname(VIRT_BASE),
+                                       'virtual_predictions_s*.jsonl')))
+    return out
+
+
 def load_done():
     done = set()
-    if os.path.exists(VIRT_FILE):
-        with open(VIRT_FILE, encoding="utf-8") as f:
+    for path in virt_files():
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 try:
                     r = json.loads(line)
@@ -747,7 +827,13 @@ def wilson_low(hit, n, z=1.96):
     return max(0.0, (centre - margin) / denom) * 100.0
 
 
-def main(limit=200):
+def main(limit=200, universe_top=None, shard=None):
+    global VIRT_FILE
+    if shard:
+        i, n = shard
+        VIRT_FILE = os.path.join(
+            PROJ, '.portfolio', f'virtual_predictions_s{i}.jsonl')
+        print(f'샤드 {i}/{n} — 기록: {os.path.basename(VIRT_FILE)}')
     q = qi.QuantIndicatorsEngine()
     eng = be.BitemporalEngine()
     done = load_done()
@@ -777,16 +863,36 @@ def main(limit=200):
 
     todo = []
     price_cache = {}
-    for tk in dict.fromkeys(TICKERS + HOLDOUT_TICKERS + EXPANSION_TICKERS):     # 중복 자동 제거
+    pool = list(dict.fromkeys(TICKERS + HOLDOUT_TICKERS + EXPANSION_TICKERS))
+    if universe_top:
+        # 시총 상위 N 종목까지 넓힌다 (라운드 72). 고정 목록은 그대로 두고
+        # **앞에 붙이지 않고 뒤에 이어 붙인다** — 기존 종목이 먼저 채워져야
+        # 중간에 끊겨도 과거 원장과 비교가 유지된다.
+        add = load_universe(eng, universe_top, set(pool))
+        pool += add
+    if shard:
+        # 종목 단위로 가른다 — (종목,날짜) 단위로 가르면 같은 종목의 시세를
+        # 워커마다 중복으로 받아 온다. 종목으로 가르면 시세 캐시가 산다.
+        i, n = shard
+        pool = [t for k, t in enumerate(pool) if k % n == (i - 1)]
+        print(f'  샤드 {i}/{n} 담당 종목 {len(pool):,}개')
+    skipped = 0
+    for tk in pool:
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
                 symbol=tk, start_date='2015-01-01', end_date=None)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=80):
+            for d in make_asof_dates(pdf, n_dates=N_DATES):
                 if (tk, d) not in done:
                     todo.append((tk, d))
         except Exception as exc:
-            print(f"  [건너뜀] {tk} — {type(exc).__name__}: {exc}")
+            skipped += 1
+            if skipped <= 10:
+                print(f"  [건너뜀] {tk} — {type(exc).__name__}: {exc}")
+    if skipped:
+        # 실패를 삼키더라도 집계로는 남긴다 (경로 기록기에서 98종목이
+        # 전부 실패했는데 조용했던 사고가 있었다).
+        print(f"  시세 미수신으로 건너뛴 종목 {skipped}개 / {len(pool)}개")
 
     total_planned = len(done) + len(todo)
     print(f"가상 판정 계획: 완료 {len(done)}건 · 남음 {len(todo)}건 (계획 {total_planned}건)")
@@ -870,14 +976,26 @@ def main(limit=200):
             print(f"  [실패] {tk} @ {d} — {type(exc).__name__}: {str(exc)[:80]}")
 
     # ── 채점 & 집계 ──────────────────────────────────────────────────────
+    #
+    # 샤드 워커는 **채점하지 않는다.** 채점은 virtual_graded.jsonl 을 통째로
+    # 다시 쓰므로(open(...,'w')), 워커 여러 개가 동시에 하면 서로를 덮는다.
+    # 라운드 71c 에서 클라우드가 원장을 400건으로 깎은 것과 같은 사고다.
+    # 축적이 다 끝난 뒤 `--shard` 없이 한 번 돌려 전 샤드를 합쳐 채점한다.
+    if shard:
+        print(f"\n샤드 {shard[0]}/{shard[1]} 축적 완료 — 채점은 건너뛴다. "
+              f"전 샤드가 끝나면 `--shard` 없이 한 번 돌려 채점한다.")
+        return
+
     rows = []
-    with open(VIRT_FILE, encoding='utf-8') as f:
-        for line in f:
-            try:
-                rows.append(json.loads(line))
-            except Exception:
-                continue
-    print(f"\n채점 대상 가상 판정: {len(rows)}건")
+    for path in virt_files():
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    print(f"\n채점 대상 가상 판정: {len(rows)}건 "
+          f"(파일 {len(virt_files())}개 합산)")
 
     graded = []
     for r in rows:
@@ -1147,4 +1265,19 @@ if __name__ == "__main__":
     lim = 200
     if "--limit" in sys.argv:
         lim = int(sys.argv[sys.argv.index("--limit") + 1])
-    main(lim)
+    # --universe [N] : 시총 상위 N 종목까지 유니버스를 넓힌다 (기본 1500).
+    #                  주지 않으면 고정 목록 600종목 — 기존 동작 그대로.
+    uni = None
+    if "--universe" in sys.argv:
+        i = sys.argv.index("--universe")
+        uni = DEFAULT_UNIVERSE_TOP
+        if len(sys.argv) > i + 1 and sys.argv[i + 1].isdigit():
+            uni = int(sys.argv[i + 1])
+    # --shard i/n : 종목을 n 갈래로 나눠 i 번째만 돈다 (1부터). 워커는
+    #               자기 샤드 파일에만 append 하고 채점은 하지 않는다.
+    shd = None
+    if "--shard" in sys.argv:
+        spec = sys.argv[sys.argv.index("--shard") + 1]
+        a, b = spec.split('/')
+        shd = (int(a), int(b))
+    main(lim, universe_top=uni, shard=shd)
