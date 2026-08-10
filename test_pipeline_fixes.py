@@ -7960,6 +7960,76 @@ if _os.path.exists(_lp107):
 else:
     check("실행 추적 산출물이 있다", False, 'data/lineage_audit.json 없음')
 
+# 원장 정합 훑기 — 라운드 30 사고(GS 손절이 매수가 위, NAVER 목표가 매수가
+# 아래)는 **과거에 실제로 나간 값**의 문제였다. 실행 추적은 오늘 25종목만
+# 보므로, 기록된 6만 건 전부를 따로 훑는다.
+_sp107 = _os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json')
+if _os.path.exists(_sp107):
+    import json as _js107b
+    _sd107 = _js107b.load(open(_sp107, encoding='utf-8'))
+    check("원장 정합 훑기가 실제로 잰 건이 있다",
+          (_sd107.get('n_checked') or 0) > 1000, str(_sd107.get('n_checked')))
+    check("원장 전건에서 손절 < 기준가",
+          (_sd107.get('n_stop_violation') or 0) == 0,
+          str(_sd107.get('n_stop_violation')))
+    check("원장 전건에서 목표 > 기준가",
+          (_sd107.get('n_target_violation') or 0) == 0,
+          str(_sd107.get('n_target_violation')))
+    check("원장에 퇴화 레벨(목표=기준가)이 없다",
+          (_sd107.get('n_degenerate') or 0) == 0,
+          str(_sd107.get('n_degenerate')))
+    # 손익분기 적중률은 **기록된 폭에서 도출**된다 — 손으로 고른 문턱이
+    # 아니다. 값이 사라지거나 비현실적이면 산출이 깨진 것이다.
+    _be107 = _sd107.get('breakeven_hit_post_cost')
+    check("비용 후 손익분기 적중률이 산출된다",
+          isinstance(_be107, (int, float)) and 40.0 < _be107 < 90.0,
+          str(_be107))
+
+# ── 스냅샷이 축적을 하다가 데이터를 깎지 못하게 (라운드 71c) ──────────
+#   실제 사고: 클라우드가 원장을 60,462건 → 400건으로 다시 만들고 좋은
+#   스냅샷을 덮었다. 원인은 `virtual_graded.jsonl`(산출물)만 백업하고
+#   `virtual_predictions.jsonl`(원본)을 빼먹은 것. calibration_lab 은
+#   매번 원본을 재채점해 산출물을 open(...,'w') 로 덮는다.
+import backup_research_data as _bk107                           # noqa: E402
+import snapshot_guard as _sg107                                 # noqa: E402
+check("백업이 원장의 **원본**을 담는다 (재생성의 입력)",
+      'virtual_predictions.jsonl' in _bk107.INCLUDE,
+      str(_bk107.INCLUDE))
+check("백업이 산출물 원장도 담는다",
+      'virtual_graded.jsonl' in _bk107.INCLUDE)
+check("개인 자료 차단 목록이 살아 있다 (§9)",
+      all(p in _bk107.DENY for p in ('positions*', 'holdings*')))
+check("가드가 원본·산출물을 둘 다 감시한다",
+      'virtual_predictions.jsonl' in _sg107.WATCH
+      and 'virtual_graded.jsonl' in _sg107.WATCH)
+
+# 가드가 **실제로 막는가** — 한 번도 안 울리는 경보는 증명이 아니다.
+# 기준선 파일만 조작한다(원장은 읽기만 한다).
+import shutil as _sh107                                         # noqa: E402
+if _os.path.exists(_sg107.BASE):
+    _bak107 = _sg107.BASE + '.regress_bak'
+    _sh107.copyfile(_sg107.BASE, _bak107)
+    try:
+        import json as _js107c
+        _c107 = _js107c.load(open(_sg107.BASE, encoding='utf-8'))
+        _c107['virtual_graded.jsonl']['lines'] *= 2   # 반토막으로 보이게
+        with open(_sg107.BASE, 'w', encoding='utf-8') as _gf107:
+            _js107c.dump(_c107, _gf107, ensure_ascii=False)
+        _buf107b = _io107.StringIO()
+        with _ctx107.redirect_stdout(_buf107b):
+            _rc107 = _sg107.verify()
+            _rc107b = _sg107.verify(allow_shrink=True)
+        check("가드가 스냅샷 축소를 잡는다", _rc107 == 1, f'verify()={_rc107}')
+        check("--allow-shrink 로만 통과한다", _rc107b == 0, f'={_rc107b}')
+    finally:
+        _sh107.move(_bak107, _sg107.BASE)
+    _buf107c = _io107.StringIO()
+    with _ctx107.redirect_stdout(_buf107c):
+        _rc107c = _sg107.verify()
+    check("검사 후 기준선이 원상복구된다", _rc107c == 0, f'={_rc107c}')
+else:
+    check("스냅샷 기준선이 있다", False, '_snapshot_baseline.json 없음')
+
 
 print()
 print("=" * 72)
