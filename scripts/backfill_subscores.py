@@ -96,11 +96,48 @@ def load_done():
     return done
 
 
+def load_sector_done():
+    """**섹터를 가진** (종목,날짜) 집합 — 두 곳을 다 본다.
+
+    원장 행에 직접 있는 것과 패치 파일에 있는 것을 합친다. 라운드 72
+    확장분은 축적할 때 원장에 직접 쓰므로 패치만 보면 절반을 놓친다
+    (라운드 73 에서 그 착오로 '섹터 96.8% 미기록' 이라 잘못 보고했다).
+    """
+    out = set()
+    for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
+        with open(path, encoding='utf-8', errors='replace') as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    q = json.loads(ln)
+                except Exception:                              # noqa: BLE001
+                    continue
+                if q.get('sector'):
+                    out.add((str(q.get('ticker')), str(q.get('date'))[:10]))
+    with open(LEDGER, encoding='utf-8') as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:                                  # noqa: BLE001
+                continue
+            if r.get('sector'):
+                out.add((str(r.get('ticker')), str(r.get('date'))[:10]))
+    return out
+
+
 def main():
     limit = 10 ** 9
     if '--limit' in sys.argv:
         limit = int(sys.argv[sys.argv.index('--limit') + 1])
     want_all = '--all' in sys.argv
+    #: 섹터만 다시 채운다 — 엔진의 코스닥 접미사 결함(라운드 74)을 고친 뒤,
+    #: 이미 쌓인 케이스에 그 수정을 반영하기 위한 모드.
+    sector_only = '--sector-only' in sys.argv
 
     out_path = PATCH
     if '--out' in sys.argv:
@@ -124,22 +161,40 @@ def main():
                     pass
     print(f'원장 {len(rows):,}건')
 
-    todo = []
-    for r in rows:
-        if not want_all:
-            if r.get('split') == SEALED:
-                continue
-            if float(r.get('score') or 0) < THR:
-                continue
-        if r.get('q_stock_quality') is not None:
-            continue                      # 이미 채워짐
-        todo.append((str(r.get('ticker')), str(r.get('date'))[:10]))
-    todo = sorted(set(todo))
-    done = load_done()
-    todo = [x for x in todo if x not in done]
-    print(f'채울 대상 {len(todo):,}건 '
-          f'({"전체" if want_all else "개발 구간 매수권만"}) · '
-          f'이미 완료 {len(done):,}건')
+    if sector_only:
+        # ── 섹터만 다시 채우는 모드 (라운드 74) ─────────────────────────
+        #   코스닥 종목의 섹터가 통째로 비어 있었다. 원인은 엔진의 접미사
+        #   결함이었고 고쳤지만, **이미 쌓인 케이스의 섹터는 그때 계산된
+        #   값이라 코드를 고쳐도 안 바뀐다.** 다시 돌려야 한다.
+        #
+        #   여기서 '완료'의 뜻이 다르다: 패치 행이 있느냐가 아니라
+        #   **섹터가 있느냐**다. 패치 행은 있는데 sector=None 인 건들이
+        #   바로 다시 돌아야 하는 대상이므로, load_done() 을 쓰면
+        #   영영 건너뛴다.
+        has_sec = load_sector_done()
+        todo = sorted({(str(r.get('ticker')), str(r.get('date'))[:10])
+                       for r in rows
+                       if (str(r.get('ticker')),
+                           str(r.get('date'))[:10]) not in has_sec})
+        print(f'섹터 없는 건 {len(todo):,}건 · 이미 섹터 있음 '
+              f'{len(has_sec):,}건')
+    else:
+        todo = []
+        for r in rows:
+            if not want_all:
+                if r.get('split') == SEALED:
+                    continue
+                if float(r.get('score') or 0) < THR:
+                    continue
+            if r.get('q_stock_quality') is not None:
+                continue                      # 이미 채워짐
+            todo.append((str(r.get('ticker')), str(r.get('date'))[:10]))
+        todo = sorted(set(todo))
+        done = load_done()
+        todo = [x for x in todo if x not in done]
+        print(f'채울 대상 {len(todo):,}건 '
+              f'({"전체" if want_all else "개발 구간 매수권만"}) · '
+              f'이미 완료 {len(done):,}건')
     if shards:
         # ⚠️ 라운드 73 — 여기가 `todo[shard::shards]` 였다.
         #   stride 분할은 **모든 워커가 똑같은 todo 목록을 볼 때만** 성립한다.
