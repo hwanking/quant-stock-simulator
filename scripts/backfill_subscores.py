@@ -141,7 +141,19 @@ def main():
 
     out_path = PATCH
     if '--out' in sys.argv:
-        out_path = os.path.join(P, sys.argv[sys.argv.index('--out') + 1])
+        name = sys.argv[sys.argv.index('--out') + 1]
+        # ⚠️ 라운드 74 — 산출 파일을 'subscore_sector_a.jsonl' 로 지었다가
+        #   96,218건이 통째로 묻혔다. **읽는 쪽 glob 이 전부**
+        #   `subscore_patch*.jsonl` 인데 이름이 안 맞아 아무도 안 봤다
+        #   (sample_audit · weakness_map · load_done · load_sector_done ·
+        #    백업 화이트리스트 · 스냅샷 가드 — 여섯 곳).
+        #   이름 규칙을 사람 기억에 맡기지 않는다. 안 맞으면 여기서 막는다.
+        if not name.startswith('subscore_patch'):
+            print(f"산출 파일 이름은 'subscore_patch' 로 시작해야 한다 "
+                  f"(받은 값: {name}). 읽는 쪽 glob 이 그 패턴이라, 다른 "
+                  f"이름으로 쓰면 채운 데이터를 아무도 못 본다.")
+            return 2
+        out_path = os.path.join(P, name)
     shard = shards = None
     if '--shard' in sys.argv:
         raw = sys.argv[sys.argv.index('--shard') + 1]

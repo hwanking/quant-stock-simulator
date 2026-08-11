@@ -131,7 +131,9 @@ def second_pass():
         workers.append(subprocess.Popen(
             [PY, 'scripts/backfill_subscores.py', '--sector-only',
              '--shard', f'{i}/3', '--limit', '200000',
-             '--out', f'subscore_sector2_{tag}.jsonl'], cwd=PROJ))
+             # 이름은 반드시 subscore_patch* — 읽는 쪽 glob 이 그 패턴이다
+             # (라운드 74 에서 96,218건을 묻은 실수)
+             '--out', f'subscore_patch_r74s2_{tag}.jsonl'], cwd=PROJ))
     print(f'2차 패스 워커 {len(workers)}개 시작', flush=True)
     for w in workers:
         w.wait()
