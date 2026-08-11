@@ -43,9 +43,22 @@ import warnings
 import zlib
 
 warnings.filterwarnings('ignore')
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
+
+
+def _utf8_stdout():
+    """스크립트로 돌 때만 stdout 을 UTF-8 로 맞춘다.
+
+    모듈 수준에서 새 TextIOWrapper 로 갈아끼우면 임포트하는 쪽의 stdout
+    까지 바뀌고, 옛 래퍼가 수거될 때 버퍼를 닫아 그 뒤 출력이 죽는다.
+    이 저장소에서 같은 함정을 네 번 밟았다 (lineage_audit · snapshot_guard
+    · backup_research_data · 여기). reconfigure 는 같은 객체를 고친다.
+    """
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:                                          # noqa: BLE001
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import bitemporal_engine as be                               # noqa: E402
 import quant_indicators as qi                                # noqa: E402
@@ -179,4 +192,5 @@ def main():
 
 
 if __name__ == '__main__':
+    _utf8_stdout()
     sys.exit(main())

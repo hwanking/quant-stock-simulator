@@ -73,11 +73,18 @@ def load_ledger():
     return rows
 
 
-def load_sectors():
-    """(ticker, date) → 섹터. 하위점수 패치에만 있다."""
+def load_sectors(rows):
+    """(ticker, date) → 섹터. **두 곳**에서 모은다.
+
+    ⚠️ 라운드 73 — 여기가 하위점수 패치만 봤다. 그래서 ⑤가 3,476 에서
+    안 움직였고 '섹터 96.8% 미기록' 이라고 잘못 보고했다.
+    라운드 72 확장분(121,497건)은 축적할 때 섹터를 **원장 행에 직접**
+    쓴다 — 패치 파일이 애초에 필요 없다. 패치는 그 전 60,462건용이다.
+    측정 도구가 한쪽만 보면 없는 구멍을 만들어 낸다.
+    """
     out = {}
     for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding='utf-8', errors='replace') as f:
             for ln in f:
                 try:
                     q = json.loads(ln)
@@ -86,6 +93,10 @@ def load_sectors():
                 s = q.get('sector')
                 if s:
                     out[(str(q.get('ticker')), str(q.get('date'))[:10])] = s
+    for r in rows:                       # 원장에 직접 있는 것이 우선
+        s = r.get('sector')
+        if s:
+            out[(str(r.get('ticker')), str(r.get('date'))[:10])] = s
     return out
 
 
@@ -127,7 +138,7 @@ def main():
     if not rows:
         print('원장이 없다 — 셀 것이 없다. 통과가 아니라 미측정이다.')
         return 1
-    sect = load_sectors()
+    sect = load_sectors(rows)
 
     tickers = {str(r.get('ticker')) for r in rows}
     dates = {str(r.get('date'))[:10] for r in rows}
