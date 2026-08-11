@@ -62,6 +62,20 @@ def run(label, args):
 
 
 def main():
+    if '--second-pass' in sys.argv:
+        # 2차 패스부터 시작 — 기다리지 않고 바로 돌린 뒤 채점·감사까지
+        if second_pass() != 0:
+            return 1
+        if run('채점 (전 샤드 합산)',
+               ['scripts/calibration_lab.py', '--limit', '0']) != 0:
+            print('채점 실패 — 감사를 돌리지 않는다.', flush=True)
+            return 1
+        run('표본 감사', ['scripts/sample_audit.py'])
+        run('계보 감사 · 원장 정합', ['scripts/lineage_audit.py', '--ledger'])
+        run('스냅샷 기준선 갱신', ['scripts/snapshot_guard.py', '--record'])
+        print('\n■ 2차 패스까지 전부 끝났다.', flush=True)
+        return 0
+
     print('■ 섹터 재백필이 끝나기를 기다린다', flush=True)
     t0 = time.time()
     last, still = lines(), 0
@@ -91,6 +105,37 @@ def main():
     run('계보 감사 · 원장 정합', ['scripts/lineage_audit.py', '--ledger'])
     run('스냅샷 기준선 갱신', ['scripts/snapshot_guard.py', '--record'])
     print('\n■ 전부 끝났다.', flush=True)
+    return 0
+
+
+def second_pass():
+    """섹터 2차 패스 — 1차에서 못 채운 건을 새 코드로 다시 돌린다.
+
+    ■ 왜 두 번 도나
+      1차는 OUT_OF_DOMAIN 수정 **전** 코드로 시작했다. 적정가가 산출
+      불가인 종목은 그 반환 dict 에 sector 가 없어 None 으로 기록됐다.
+      수정 뒤 표본 12종목으로 재니 11개가 회수됐다(나머지 1개는 ETF —
+      원래 업종이 없다). 35,504건 중 약 32,545건이 대상이다.
+
+      --sector-only 는 '섹터 없는 행'을 대상으로 잡으므로, 그냥 한 번 더
+      돌리면 자연히 그 건들만 간다. 특별한 지시가 필요 없다.
+
+    ■ 왜 자동으로 반복하지 않나
+      회수율이 0 에 수렴하면 멈춰야 하는데, ETF 처럼 **영원히 못 채우는
+      건**이 남는다. 그걸 모르고 반복하면 무한히 돈다. 그래서 사람이
+      값어치를 재고 한 번 더 돌리는 형태로 둔다 (표본으로 회수율을 먼저
+      재는 것이 이 저장소의 방식이다).
+    """
+    workers = []
+    for i, tag in enumerate('abc'):
+        workers.append(subprocess.Popen(
+            [PY, 'scripts/backfill_subscores.py', '--sector-only',
+             '--shard', f'{i}/3', '--limit', '200000',
+             '--out', f'subscore_sector2_{tag}.jsonl'], cwd=PROJ))
+    print(f'2차 패스 워커 {len(workers)}개 시작', flush=True)
+    for w in workers:
+        w.wait()
+    print('2차 패스 완료', flush=True)
     return 0
 
 
