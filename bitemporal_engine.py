@@ -703,7 +703,17 @@ class BitemporalEngine:
         # 재무지표를 통째로 지어내 DB에 넣었다. 현재가 파싱까지 실패하면 50,000원을
         # 기본값으로 써서, 서로 다른 종목이 동일한 적정가를 갖는 결과가 나왔다.
         if symbol not in STOCK_METRICS_DB or not STOCK_METRICS_DB[symbol].get('sector'):
-            self.fetch_and_update_naver_realtime(code)
+            # ⚠️ 라운드 73 — 여기가 `code`(접미사 없음)를 넘기고 있었다.
+            #   접미사가 없으면 fetch_and_update_naver_realtime 이 :500-502 의
+            #   else 가지로 떨어져 **기본 .KS** 로 저장한다. 그래서 코스닥
+            #   종목의 정보가 '035760.KS' 에 실리고 '035760.KQ' 는 비었다.
+            #   읽는 쪽(아래 meta)은 symbol(.KQ)을 먼저 보므로, 유니버스
+            #   시드가 만들어 둔 **섹터 없는 낡은 .KQ 항목**이 이긴다.
+            #   결과: 원장 181,959건에서 코스닥 섹터가 **0종목**이었다
+            #   (KOSPI 287종목만 섹터 보유 · 실측).
+            #   :491-495 주석이 시세에 대해 경고한 바로 그 결함이 이 호출부에
+            #   남아 있었다. 접미사를 살려 넘긴다.
+            self.fetch_and_update_naver_realtime(symbol)
 
         meta = STOCK_METRICS_DB.get(symbol) or STOCK_METRICS_DB.get(code) or {}
         krx_base_price = meta.get("base_price")
