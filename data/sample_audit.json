@@ -10,7 +10,7 @@
  "independent_episodes": 57730,
  "sector_cluster_effective_n": 21987,
  "sector_missing": 96221,
- "regime_effective_n": 2903,
+ "regime_effective_n": 3482,
  "forward_evaluated_n": 0,
  "forward_log_n": 16,
  "high_conf_forward_n": 0,
@@ -40,10 +40,10 @@
   "2026": 13232
  },
  "regime_counts": {
-  "BEAR": 26402,
-  "SIDEWAYS": 36233,
-  "BULL": 32787,
-  "None": 86537
+  "BEAR": 51123,
+  "SIDEWAYS": 65993,
+  "BULL": 64787,
+  "None": 56
  },
  "note": "세기만 한다 — 점수·게이트를 바꾸지 않는다. raw 개수보다 ④~⑥(독립성 보정)과 ⑦⑧(전방)을 우선해 읽는다."
 }
