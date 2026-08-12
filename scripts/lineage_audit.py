@@ -94,6 +94,9 @@ CANDIDATES = ('regime_routing_r55', 'entry_engine_r57', 'breakout_flags_r64',
 OPS_FILES = ('quant_indicators.py', 'verdict_core.py', 'regime_policy.py',
              'next_action.py', 'price_axes.py')
 
+#: 왕복 비용 — 수수료 0.03 + 세금 0.20 + 슬리피지 0.18 (원장 연구와 동일)
+COST_PCT = 0.36
+
 
 def read(name):
     p = os.path.join(PROJ, name)
@@ -338,8 +341,155 @@ def trace(n_tickers):
     return bad
 
 
+# ══════════════════════════════════════════════════════════════════
+# ③ 원장 정합 훑기 — 과거에 실제로 나간 값들이 정합했는가
+# ══════════════════════════════════════════════════════════════════
+def ledger_sweep():
+    """원장 전건에서 손절 < 기준가 < 목표 가 성립했는지 본다.
+
+    실행 추적은 오늘 25종목만 본다 — 유니버스가 그만큼뿐이다. 그런데
+    라운드 30 사고(GS 손절이 매수가 위, NAVER 목표가 매수가 아래)는
+    **과거에 실제로 나간 값**의 문제였다. 원장에는 60,462건의 기준가·
+    목표·손절이 남아 있으므로, 같은 사고가 있었는지 전건으로 확인한다.
+
+    감사 전용 — 점수·게이트를 바꾸지 않는다.
+    """
+    import json as _j
+    path = os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
+    if not os.path.exists(path):
+        # 훑어 달라고 불러 놓고 원장이 없으면 그것은 통과가 아니다.
+        # 조용히 넘어가면 "정합 위반 0건"으로 읽힌다.
+        print('\n■ 원장 정합 훑기 — 원장 파일이 없다. 통과가 아니라 미측정이다.')
+        return ['원장이 없어 정합을 재지 못했다 (.portfolio/'
+                'virtual_graded.jsonl)']
+    n = 0
+    bad_stop, bad_tgt, degen = [], [], []
+    rr_vals, ups, dns = [], [], []
+    hit = {}                       # split -> [적중, 전체] (매수권 58점+)
+    with open(path, encoding='utf-8') as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = _j.loads(ln)
+            except Exception:                                  # noqa: BLE001
+                continue
+            px, tg, st = r.get('price'), r.get('target'), r.get('stop')
+            if not all(isinstance(v, (int, float)) for v in (px, tg, st)):
+                continue
+            n += 1
+            if st >= px:
+                bad_stop.append((r.get('ticker'), r.get('date'), px, st))
+            if tg <= px:
+                bad_tgt.append((r.get('ticker'), r.get('date'), px, tg))
+            if tg == px or st == px:
+                degen.append((r.get('ticker'), r.get('date')))
+            if st < px < tg and px > 0:
+                rr_vals.append((tg - px) / (px - st))
+                ups.append((tg / px - 1) * 100)
+                dns.append((1 - st / px) * 100)
+            # 매수권(58점+) 실적중 — 손익분기선과 견주려고 함께 센다
+            if (r.get('outcome') != 'OPEN'
+                    and float(r.get('score') or 0) >= 58.0):
+                sp = str(r.get('split') or '?')
+                cell = hit.setdefault(sp, [0, 0])
+                cell[1] += 1
+                if r.get('success'):
+                    cell[0] += 1
+
+    print(f'\n■ 원장 정합 훑기 — 기록된 판단 {n:,}건 전부')
+    print(f'  손절이 기준가 이상: {len(bad_stop):,}건')
+    print(f'  목표가 기준가 이하: {len(bad_tgt):,}건')
+    print(f'  목표·손절이 기준가와 같음(퇴화): {len(degen):,}건')
+    for lbl, lst in (('손절≥기준가', bad_stop), ('목표≤기준가', bad_tgt)):
+        for t, d, px, v in lst[:3]:
+            print(f'    [문제] {lbl} {t} {d} — 기준 {px:,.0f} vs {v:,.0f}')
+    be_pre = be_post = rr_med = up_med = dn_med = None
+    if rr_vals:
+        rr_vals.sort()
+        q = lambda p: rr_vals[int(len(rr_vals) * p)]            # noqa: E731
+        rr_med = q(0.5)
+        print(f'  손익비 분포 — 최소 {rr_vals[0]:.2f} · 25% {q(0.25):.2f} · '
+              f'중앙 {rr_med:.2f} · 75% {q(0.75):.2f} · 최대 {rr_vals[-1]:.2f}')
+        # ── 적중률을 어떻게 읽어야 하는가 ────────────────────────────
+        # 손익비가 사실상 상수(0.70)다. 그러면 "적중률 60%" 가 좋은
+        # 숫자인지 아닌지는 **손익분기 적중률과 견줘야만** 알 수 있다.
+        #   손익분기 p* = (손절폭 + 비용) / (목표폭 + 손절폭)
+        # 새 문턱을 만드는 게 아니라 이미 기록된 폭에서 도출되는 값이다.
+        ups.sort()
+        dns.sort()
+        up_med, dn_med = ups[len(ups) // 2], dns[len(dns) // 2]
+        be_pre = dn_med / (up_med + dn_med) * 100
+        be_post = (dn_med + COST_PCT) / (up_med + dn_med) * 100
+        print(f'  기록된 폭 중앙값 — 목표 +{up_med:.2f}% · 손절 −{dn_med:.2f}%')
+        print(f'  손익분기 적중률 — 비용 전 {be_pre:.1f}% · '
+              f'비용 후({COST_PCT}%) {be_post:.1f}%')
+        print('    → 이 원장의 적중률은 이 선과 견줘 읽어야 한다. '
+              '선 아래면 적중률이 높아 보여도 지는 구조다.')
+        print('  매수권(58점+) 실적중 vs 비용 후 손익분기:')
+        for sp in ('train', 'valid', 'blind'):
+            k, tot = hit.get(sp, [0, 0])
+            if not tot:
+                continue
+            h = k / tot * 100
+            gap = h - be_post
+            print(f'    {sp:6s} n {tot:>6,} · 적중 {h:5.2f}% · '
+                  f'{gap:+6.2f}%p {"위" if gap > 0 else "아래"}')
+        hits = {sp: (round(v[0] / v[1] * 100, 2) if v[1] else None)
+                for sp, v in hit.items()}
+        above = [sp for sp, h in hits.items() if h is not None and h > be_post]
+        print(f'    → 손익분기선 위인 구간: '
+              f'{", ".join(above) if above else "없음"}')
+    if not (bad_stop or bad_tgt or degen):
+        print('  위반 없음 — 기록된 모든 판단이 손절<기준가<목표 를 지켰다')
+
+    dst = os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json')
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(dst, 'w', encoding='utf-8') as f:
+        _j.dump(dict(made='2026-08-10', n_checked=n,
+                     n_stop_violation=len(bad_stop),
+                     n_target_violation=len(bad_tgt),
+                     n_degenerate=len(degen),
+                     rr_min=(round(rr_vals[0], 3) if rr_vals else None),
+                     rr_median=(round(rr_med, 3) if rr_med else None),
+                     rr_max=(round(rr_vals[-1], 3) if rr_vals else None),
+                     target_pct_median=(round(up_med, 3) if up_med else None),
+                     stop_pct_median=(round(dn_med, 3) if dn_med else None),
+                     cost_pct=COST_PCT,
+                     breakeven_hit_pre_cost=(round(be_pre, 2) if be_pre
+                                             else None),
+                     breakeven_hit_post_cost=(round(be_post, 2) if be_post
+                                              else None),
+                     buy_zone_hit=dict(
+                         (sp, dict(n=v[1],
+                                   hit=(round(v[0] / v[1] * 100, 2)
+                                        if v[1] else None)))
+                         for sp, v in sorted(hit.items())),
+                     samples=dict(stop=bad_stop[:20], target=bad_tgt[:20]),
+                     note='감사 전용 — 원장에 기록된 기준가·목표·손절의 '
+                          '정합만 본다. 점수·게이트를 바꾸지 않는다. '
+                          '손익분기 적중률은 새 문턱이 아니라 기록된 '
+                          '폭에서 도출되는 값이다 — 적중률을 읽는 기준선.'),
+                f, ensure_ascii=False, indent=1)
+    print(f'  저장: {dst}')
+
+    out = []
+    if bad_stop:
+        out.append(f'원장 손절≥기준가 {len(bad_stop):,}건')
+    if bad_tgt:
+        out.append(f'원장 목표≤기준가 {len(bad_tgt):,}건')
+    if degen:
+        out.append(f'원장 퇴화 레벨 {len(degen):,}건')
+    if n == 0:
+        out.append('원장에서 레벨을 한 건도 읽지 못했다 — 통과가 아니라 미측정')
+    return out
+
+
 def main():
     issues = static_audit()
+    if '--ledger' in sys.argv or '--all' in sys.argv:
+        issues += ledger_sweep()
     if '--trace' in sys.argv:
         i = sys.argv.index('--trace')
         n = int(sys.argv[i + 1]) if len(sys.argv) > i + 1 else 12

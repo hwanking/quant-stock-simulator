@@ -2531,6 +2531,16 @@ class QuantIndicatorsEngine:
                 'model_results': model_results,
                 'fair_value_status': "OUT_OF_DOMAIN",
                 'roe': float(roe), 'per': float(per), 'pbr': float(pbr),
+                # ⚠️ 라운드 74 — 여기에 'sector' 가 없어서, 적정가가 산출
+                #   불가인 종목은 **업종까지 함께 사라졌다.** 업종은 회사의
+                #   사실이지 밸류에이션 산출물이 아니다. 모델이 안 돌았다고
+                #   업종을 모르는 것은 아니다.
+                #   실측: 천일고속(PBR 29.56 · ROE −72.99)은 DB 에 업종이
+                #   '도로와철도운송' 으로 멀쩡히 있는데 val_eval.sector 는
+                #   None 이었다. 정상 경로(39개 키)에는 있고 이 조기 반환
+                #   경로(19개 키)에만 없었다.
+                #   점수·적정가에는 영향이 없다 — 없던 사실을 되돌려 줄 뿐이다.
+                'sector': sector,
             }
 
         # 극단적 모델 편차/이상치 윈저화(Winsorization) 수축 방정식

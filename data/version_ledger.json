@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.08.10.0",
+  "model": "v2026.08.12.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.10.1",
   "schema": "v2026.08.08.3",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.12.1",
+   "previous": "v2026.08.10.0",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "업종(섹터)이 코스닥 전체와 적정가 산출 불가 종목에서 누락되던 결함 수정",
+   "note": "① bitemporal_engine: fetch 호출이 접미사를 잃어 코스닥 정보가 .KS 키에 저장되고 .KQ 를 읽는 쪽과 만나지 못했다 (코스닥 섹터 0종목). ② quant_indicators: fair_value_status=OUT_OF_DOMAIN 조기 반환 dict 에 sector 가 없어, 적정가를 못 내면 업종까지 사라졌다. 업종은 회사의 사실이지 밸류에이션 산출물이 아니다. 점수·게이트·문턱은 바꾸지 않았다 (8/23 동결 준수). 실측: 섹터 커버리지 47.1% → 89.8%.",
+   "created_at": "2026-08-12T10:58:48+00:00",
+   "effective_from": "2026-08-12"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

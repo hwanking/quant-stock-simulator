@@ -1848,13 +1848,19 @@ def validate_row(row, market_price=None):
     #    독립 증거가 아니므로 '교차검증'이 아니라 '개연성'으로만 다룬다.
     if live and avg and avg > 0:
         live_ret = (live / avg - 1.0) * 100.0
-        plausible = -90.0 <= live_ret <= 400.0
+        # ⚠️ 하한은 **열린 구간**이다 (라운드 71c).
+        #   가장 흔한 자릿수 오독은 0 을 하나 더 붙이는 것 — 정확히 10배다.
+        #   그러면 수익률이 정확히 −90.0% 가 되는데, 하한을 닫아 두면
+        #   (`-90.0 <=`) 그 값이 '개연성 있음'으로 통과한다. **제일 흔한
+        #   오독이 경계선 위에 정확히 앉아서 빠져나가고 있었다.**
+        #   숫자(−90/400)는 그대로 두고 경계 포함 여부만 고친다 (§2).
+        plausible = -90.0 < live_ret <= 400.0
         add("실시간 시세 대비 평단가 개연성", plausible,
             f"현재가 {live:,.0f}원 기준 수익률 {live_ret:+.1f}%"
             + ("" if plausible else " — 평단가 자릿수 오독 가능"))
         if not plausible:
             cands = [c for c in digit_candidates(avg)
-                     if -90.0 <= (live / c - 1.0) * 100.0 <= 400.0]
+                     if -90.0 < (live / c - 1.0) * 100.0 <= 400.0]
             if cands:
                 sugg.setdefault('평균매수가', cands)
 

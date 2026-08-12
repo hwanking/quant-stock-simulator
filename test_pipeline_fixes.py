@@ -1308,12 +1308,20 @@ check("올바른 수량을 여전히 제안",
       str(_lvr[0]['_validation']['suggestions']))
 
 # 화면에 검증 열이 아예 없어도 실시간 시세로 자릿수 오독은 잡는다 (개연성 검사)
+#
+# ⚠️ 라운드 71c — 여기 평단가가 **37,500 으로 박혀 있었다.** 한온시스템
+#   시세가 3,750 근처일 때만 10배 오독이 되는 값이다. 시세가 3,765 로
+#   움직이자 −89.96% 가 되어 −90% 하한을 간발의 차로 통과했고, 검사가
+#   실패했다. 더 나쁜 건 이 우연한 어긋남이 **진짜 구멍을 가리고 있었다**는
+#   것이다 — 정확한 10배 오독은 −90.0% 라 닫힌 하한을 그대로 통과한다.
+#   구현의 하한을 열린 구간으로 고쳤고, 검사는 시세에서 오독을 만든다.
 _solo_px = _q("018880.KS")
+_misread = round(_solo_px * 10, 2)          # 0 을 하나 더 붙인 전형적 오독
 _solo = pf.validate_row(
     {'종목명': '한온시스템', '_ticker': '018880.KS', '종목코드': '018880',
-     '보유수량': 1157, '평균매수가': 37500.0}, market_price=_solo_px)
+     '보유수량': 1157, '평균매수가': _misread}, market_price=_solo_px)
 check("검증 열 없이도 자릿수 오독 탐지", _solo['severity'] != 'ok',
-      f"현재가 {_solo_px:,.0f} 대비")
+      f"현재가 {_solo_px:,.0f} · 오독 평단 {_misread:,.0f} (정확히 10배)")
 check("개연성 실패 사유 명시",
       any('개연성' in c['name'] for c in _solo['checks'] if not c['ok']))
 
@@ -4171,8 +4179,27 @@ _lab86 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"),
               encoding='utf-8').read()
 check("과거 데이터 수집 범위가 2015년으로 확장됐다",
       "start_date='2015-01-01'" in _lab86)
-check("종목당 기준일이 80개로 늘었다 (25봉 간격 유지)",
-      'n_dates=80' in _lab86 and 'spacing=25' in _lab86)
+# 라운드 72 — 종목당 기준일이 80 → 108 로 올랐다. 이 검사는 80 을 못 박고
+# 있었다. 108 은 손으로 고른 값이 아니라 **데이터 천장**이다: 제공처가
+# 종목당 약 3,000봉만 주고, 앞 260봉(워밍업)·뒤 21봉(채점)을 빼면 usable
+# 2,716봉이라 간격 25 로는 2,716 // 25 = 108 개가 전부다.
+#
+# 검사의 핵심은 개수가 아니라 **간격**이다 — spacing 25 가 보유기간
+# 20영업일보다 커야 같은 종목의 인접 케이스가 안 겹친다. 그 조건을 값으로
+# 확인하고, 개수는 상수를 실제로 읽어서 본다 (문자열 못 박기 금지).
+import importlib as _il72                                      # noqa: E402
+_sys72 = _os.path.join(PROJ, 'scripts')
+if _sys72 not in sys.path:
+    sys.path.insert(0, _sys72)
+_cl72 = _il72.import_module('calibration_lab')
+check("종목당 기준일이 데이터 천장(108)까지 올라갔다",
+      _cl72.N_DATES == 108, f'N_DATES={_cl72.N_DATES}')
+check("기준일 간격이 보유기간보다 넓다 (겹치면 독립성이 깨진다)",
+      'spacing=25' in _lab86 and 'horizon=20' in _lab86)
+check("유니버스 확장 손잡이가 있다 (--universe)",
+      'DEFAULT_UNIVERSE_TOP' in _lab86 and 'def load_universe' in _lab86)
+check("샤드 워커는 채점하지 않는다 (동시 채점은 서로를 덮는다)",
+      '샤드 워커는 **채점하지 않는다.**' in _lab86)
 
 _w86 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("사이드바 일괄 글자 규칙이 로고를 누르지 않는다",
@@ -7862,6 +7889,45 @@ check("좁은 화면에서 글자를 접는다 (아이콘만)",
 check("버튼에 이모지를 쓰지 않는다 (Lucide SVG)",
       "_uk._icon('help'" in _w133)
 
+# §133b — 가늠 AI 버튼이 **실제로 무언가 하는가** (라운드 75)
+#   종전에는 href="#nav-ask" 앵커뿐이었다. Streamlit 본문은 창이 아니라
+#   .stMain 안쪽에서 스크롤되므로 브라우저 앵커 이동이 먹지 않는다 —
+#   눌러도 화면이 그대로였다. 앵커만 있는 상태로 되돌아가면 여기서 잡는다.
+check("가늠 AI 버튼에 id 가 있다 (스크립트가 잡을 수 있게)",
+      'id="gn-ask-fab"' in _w133)
+check("버튼 클릭을 스크립트가 처리한다 (앵커만으로는 안 움직인다)",
+      "getElementById('gn-ask-fab')" in _w133
+      and "addEventListener('click'" in _w133)
+check("누르면 입력에 커서를 넣는다",
+      '[data-testid="stChatInput"] textarea' in _w133
+      and 'ta.focus()' in _w133)
+
+# §133c — 알약과 입력바는 **하나**다 (라운드 76)
+#   사용자 지적: "이거 두개 통합해달라니깐." 종전에는 파란 알약과 하단
+#   입력바가 동시에 떠서 알약이 입력바를 덮고 있었다. 하나만 보이게 하고
+#   누르면 서로 자리를 바꾼다.
+check("평소에는 입력바를 감춘다 (알약만 보인다)",
+      'body.gn-ask-ready [data-testid="stBottom"]' in _w133
+      and 'translateY(115%)' in _w133)
+check("열리면 입력바가 오고 알약이 사라진다",
+      'body.gn-ask-ready.gn-ask-open [data-testid="stBottom"]' in _w133
+      and 'body.gn-ask-open .gn-ask-fab' in _w133)
+# ⚠️ 숨김을 body.gn-ask-ready 아래에만 걸어야 한다. 스크립트가 못 붙으면
+#    클래스가 안 생겨 입력바가 종전처럼 보인다 — 자바스크립트가 죽었다고
+#    대화 자체를 못 하게 만들지 않는다.
+check("스크립트가 죽어도 입력바가 사라지지 않는다 (ready 스코프)",
+      "classList.add('gn-ask-ready')" in _w133)
+check("닫는 길이 있다 (Esc · 바깥 클릭)",
+      "e.key === 'Escape'" in _w133 and "'mousedown'" in _w133)
+check("동작이 부드럽다 · 모션 축소 설정을 존중한다",
+      'cubic-bezier' in _w133 and 'prefers-reduced-motion' in _w133)
+# 요약 패널의 '물어보기 →' 링크도 같은 동작을 해야 한다. 입력바를 숨긴
+# 뒤로 그 링크만 옛 앵커로 남으면, 대화 구역에 가 놓고도 물어볼 칸이
+# 없는 어긋난 상태가 된다.
+check("요약 패널 링크도 대화를 연다",
+      "class='gn-ask-open-link'" in _w133
+      and "querySelectorAll('.gn-ask-open-link')" in _w133)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
@@ -7959,6 +8025,90 @@ if _os.path.exists(_lp107):
           bool(_ld107.get('lineage')) and 'new_stop' in (_ld107.get('lineage') or {}))
 else:
     check("실행 추적 산출물이 있다", False, 'data/lineage_audit.json 없음')
+
+# 원장 정합 훑기 — 라운드 30 사고(GS 손절이 매수가 위, NAVER 목표가 매수가
+# 아래)는 **과거에 실제로 나간 값**의 문제였다. 실행 추적은 오늘 25종목만
+# 보므로, 기록된 6만 건 전부를 따로 훑는다.
+_sp107 = _os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json')
+if _os.path.exists(_sp107):
+    import json as _js107b
+    _sd107 = _js107b.load(open(_sp107, encoding='utf-8'))
+    check("원장 정합 훑기가 실제로 잰 건이 있다",
+          (_sd107.get('n_checked') or 0) > 1000, str(_sd107.get('n_checked')))
+    check("원장 전건에서 손절 < 기준가",
+          (_sd107.get('n_stop_violation') or 0) == 0,
+          str(_sd107.get('n_stop_violation')))
+    check("원장 전건에서 목표 > 기준가",
+          (_sd107.get('n_target_violation') or 0) == 0,
+          str(_sd107.get('n_target_violation')))
+    check("원장에 퇴화 레벨(목표=기준가)이 없다",
+          (_sd107.get('n_degenerate') or 0) == 0,
+          str(_sd107.get('n_degenerate')))
+    # 손익분기 적중률은 **기록된 폭에서 도출**된다 — 손으로 고른 문턱이
+    # 아니다. 값이 사라지거나 비현실적이면 산출이 깨진 것이다.
+    _be107 = _sd107.get('breakeven_hit_post_cost')
+    check("비용 후 손익분기 적중률이 산출된다",
+          isinstance(_be107, (int, float)) and 40.0 < _be107 < 90.0,
+          str(_be107))
+
+# ── 스냅샷이 축적을 하다가 데이터를 깎지 못하게 (라운드 71c) ──────────
+#   실제 사고: 클라우드가 원장을 60,462건 → 400건으로 다시 만들고 좋은
+#   스냅샷을 덮었다. 원인은 `virtual_graded.jsonl`(산출물)만 백업하고
+#   `virtual_predictions.jsonl`(원본)을 빼먹은 것. calibration_lab 은
+#   매번 원본을 재채점해 산출물을 open(...,'w') 로 덮는다.
+import backup_research_data as _bk107                           # noqa: E402
+import snapshot_guard as _sg107                                 # noqa: E402
+check("백업이 원장의 **원본**을 담는다 (재생성의 입력)",
+      'virtual_predictions*.jsonl' in _bk107.INCLUDE,
+      str(_bk107.INCLUDE))
+# 별표가 없으면 샤드가 통째로 빠진다 — 값으로 확인한다 (라운드 72)
+import fnmatch as _fn107                                        # noqa: E402
+check("백업 규칙이 샤드 파일까지 잡는다",
+      any(_fn107.fnmatch('virtual_predictions_s1.jsonl', p)
+          for p in _bk107.INCLUDE))
+check("가드도 샤드 파일까지 센다",
+      any(_fn107.fnmatch('virtual_predictions_s1.jsonl', p)
+          for p in _sg107.WATCH))
+check("백업이 산출물 원장도 담는다",
+      'virtual_graded.jsonl' in _bk107.INCLUDE)
+check("개인 자료 차단 목록이 살아 있다 (§9)",
+      all(p in _bk107.DENY for p in ('positions*', 'holdings*')))
+check("가드가 원본·산출물을 둘 다 감시한다",
+      'virtual_predictions*.jsonl' in _sg107.WATCH
+      and 'virtual_graded.jsonl' in _sg107.WATCH)
+
+# 가드가 **실제로 막는가** — 한 번도 안 울리는 경보는 증명이 아니다.
+# 기준선 파일만 조작한다(원장은 읽기만 한다).
+import shutil as _sh107                                         # noqa: E402
+if _os.path.exists(_sg107.BASE):
+    _bak107 = _sg107.BASE + '.regress_bak'
+    _sh107.copyfile(_sg107.BASE, _bak107)
+    try:
+        import json as _js107c
+        _c107 = _js107c.load(open(_sg107.BASE, encoding='utf-8'))
+        # ⚠️ 라운드 72 — 여기서 **저장된 기준선**을 2배 했더니 검사가 실패했다.
+        #   어제 기록한 기준선은 6만 건이고 오늘 원장은 18만 건이라, 2배(12만)
+        #   해도 여전히 현재보다 작아 '축소'로 보이지 않았다. 낡은 기준선이
+        #   검사를 조용히 통과시킨 것이다.
+        #   기준선이 아니라 **지금 값**에서 만든다 — 언제 돌려도 반드시 축소다.
+        _now107 = _sg107.counts()['virtual_graded.jsonl']['lines']
+        _c107['virtual_graded.jsonl']['lines'] = _now107 * 2 + 1000
+        with open(_sg107.BASE, 'w', encoding='utf-8') as _gf107:
+            _js107c.dump(_c107, _gf107, ensure_ascii=False)
+        _buf107b = _io107.StringIO()
+        with _ctx107.redirect_stdout(_buf107b):
+            _rc107 = _sg107.verify()
+            _rc107b = _sg107.verify(allow_shrink=True)
+        check("가드가 스냅샷 축소를 잡는다", _rc107 == 1, f'verify()={_rc107}')
+        check("--allow-shrink 로만 통과한다", _rc107b == 0, f'={_rc107b}')
+    finally:
+        _sh107.move(_bak107, _sg107.BASE)
+    _buf107c = _io107.StringIO()
+    with _ctx107.redirect_stdout(_buf107c):
+        _rc107c = _sg107.verify()
+    check("검사 후 기준선이 원상복구된다", _rc107c == 0, f'={_rc107c}')
+else:
+    check("스냅샷 기준선이 있다", False, '_snapshot_baseline.json 없음')
 
 
 print()

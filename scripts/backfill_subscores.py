@@ -40,11 +40,25 @@ import os
 import sys
 import time
 import warnings
+import zlib
 
 warnings.filterwarnings('ignore')
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
+
+
+def _utf8_stdout():
+    """스크립트로 돌 때만 stdout 을 UTF-8 로 맞춘다.
+
+    모듈 수준에서 새 TextIOWrapper 로 갈아끼우면 임포트하는 쪽의 stdout
+    까지 바뀌고, 옛 래퍼가 수거될 때 버퍼를 닫아 그 뒤 출력이 죽는다.
+    이 저장소에서 같은 함정을 네 번 밟았다 (lineage_audit · snapshot_guard
+    · backup_research_data · 여기). reconfigure 는 같은 객체를 고친다.
+    """
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:                                          # noqa: BLE001
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import bitemporal_engine as be                               # noqa: E402
 import quant_indicators as qi                                # noqa: E402
@@ -82,15 +96,64 @@ def load_done():
     return done
 
 
+def load_sector_done():
+    """**섹터를 가진** (종목,날짜) 집합 — 두 곳을 다 본다.
+
+    원장 행에 직접 있는 것과 패치 파일에 있는 것을 합친다. 라운드 72
+    확장분은 축적할 때 원장에 직접 쓰므로 패치만 보면 절반을 놓친다
+    (라운드 73 에서 그 착오로 '섹터 96.8% 미기록' 이라 잘못 보고했다).
+    """
+    out = set()
+    for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
+        with open(path, encoding='utf-8', errors='replace') as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    q = json.loads(ln)
+                except Exception:                              # noqa: BLE001
+                    continue
+                if q.get('sector'):
+                    out.add((str(q.get('ticker')), str(q.get('date'))[:10]))
+    with open(LEDGER, encoding='utf-8') as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:                                  # noqa: BLE001
+                continue
+            if r.get('sector'):
+                out.add((str(r.get('ticker')), str(r.get('date'))[:10]))
+    return out
+
+
 def main():
     limit = 10 ** 9
     if '--limit' in sys.argv:
         limit = int(sys.argv[sys.argv.index('--limit') + 1])
     want_all = '--all' in sys.argv
+    #: 섹터만 다시 채운다 — 엔진의 코스닥 접미사 결함(라운드 74)을 고친 뒤,
+    #: 이미 쌓인 케이스에 그 수정을 반영하기 위한 모드.
+    sector_only = '--sector-only' in sys.argv
 
     out_path = PATCH
     if '--out' in sys.argv:
-        out_path = os.path.join(P, sys.argv[sys.argv.index('--out') + 1])
+        name = sys.argv[sys.argv.index('--out') + 1]
+        # ⚠️ 라운드 74 — 산출 파일을 'subscore_sector_a.jsonl' 로 지었다가
+        #   96,218건이 통째로 묻혔다. **읽는 쪽 glob 이 전부**
+        #   `subscore_patch*.jsonl` 인데 이름이 안 맞아 아무도 안 봤다
+        #   (sample_audit · weakness_map · load_done · load_sector_done ·
+        #    백업 화이트리스트 · 스냅샷 가드 — 여섯 곳).
+        #   이름 규칙을 사람 기억에 맡기지 않는다. 안 맞으면 여기서 막는다.
+        if not name.startswith('subscore_patch'):
+            print(f"산출 파일 이름은 'subscore_patch' 로 시작해야 한다 "
+                  f"(받은 값: {name}). 읽는 쪽 glob 이 그 패턴이라, 다른 "
+                  f"이름으로 쓰면 채운 데이터를 아무도 못 본다.")
+            return 2
+        out_path = os.path.join(P, name)
     shard = shards = None
     if '--shard' in sys.argv:
         raw = sys.argv[sys.argv.index('--shard') + 1]
@@ -110,27 +173,54 @@ def main():
                     pass
     print(f'원장 {len(rows):,}건')
 
-    todo = []
-    for r in rows:
-        if not want_all:
-            if r.get('split') == SEALED:
-                continue
-            if float(r.get('score') or 0) < THR:
-                continue
-        if r.get('q_stock_quality') is not None:
-            continue                      # 이미 채워짐
-        todo.append((str(r.get('ticker')), str(r.get('date'))[:10]))
-    todo = sorted(set(todo))
-    done = load_done()
-    todo = [x for x in todo if x not in done]
-    print(f'채울 대상 {len(todo):,}건 '
-          f'({"전체" if want_all else "개발 구간 매수권만"}) · '
-          f'이미 완료 {len(done):,}건')
+    if sector_only:
+        # ── 섹터만 다시 채우는 모드 (라운드 74) ─────────────────────────
+        #   코스닥 종목의 섹터가 통째로 비어 있었다. 원인은 엔진의 접미사
+        #   결함이었고 고쳤지만, **이미 쌓인 케이스의 섹터는 그때 계산된
+        #   값이라 코드를 고쳐도 안 바뀐다.** 다시 돌려야 한다.
+        #
+        #   여기서 '완료'의 뜻이 다르다: 패치 행이 있느냐가 아니라
+        #   **섹터가 있느냐**다. 패치 행은 있는데 sector=None 인 건들이
+        #   바로 다시 돌아야 하는 대상이므로, load_done() 을 쓰면
+        #   영영 건너뛴다.
+        has_sec = load_sector_done()
+        todo = sorted({(str(r.get('ticker')), str(r.get('date'))[:10])
+                       for r in rows
+                       if (str(r.get('ticker')),
+                           str(r.get('date'))[:10]) not in has_sec})
+        print(f'섹터 없는 건 {len(todo):,}건 · 이미 섹터 있음 '
+              f'{len(has_sec):,}건')
+    else:
+        todo = []
+        for r in rows:
+            if not want_all:
+                if r.get('split') == SEALED:
+                    continue
+                if float(r.get('score') or 0) < THR:
+                    continue
+            if r.get('q_stock_quality') is not None:
+                continue                      # 이미 채워짐
+            todo.append((str(r.get('ticker')), str(r.get('date'))[:10]))
+        todo = sorted(set(todo))
+        done = load_done()
+        todo = [x for x in todo if x not in done]
+        print(f'채울 대상 {len(todo):,}건 '
+              f'({"전체" if want_all else "개발 구간 매수권만"}) · '
+              f'이미 완료 {len(done):,}건')
     if shards:
-        # 나누기는 **완료분을 뺀 뒤**에 한다. 그래야 조각이 고르게 남는다.
-        todo = todo[shard::shards]
+        # ⚠️ 라운드 73 — 여기가 `todo[shard::shards]` 였다.
+        #   stride 분할은 **모든 워커가 똑같은 todo 목록을 볼 때만** 성립한다.
+        #   6개를 3개씩 나눠 띄웠더니 두 번째 묶음이 (그 사이 채워진 만큼
+        #   줄어든) 다른 목록을 보고 갈랐고, 조각이 겹쳐 같은 건을 두 번
+        #   돌았다 — 실측 중복 3,665건. 유니버스 캐시에서 고친 것과 같은
+        #   함정이다: 분할의 입력이 워커마다 다르면 분할이 아니다.
+        #
+        #   키 자체의 안정 해시로 가른다. 언제 띄우든, todo 가 무엇이든
+        #   같은 (종목,날짜)는 항상 같은 조각에 간다.
+        todo = [x for x in todo
+                if zlib.crc32(f'{x[0]}|{x[1]}'.encode()) % shards == shard]
         print(f'조각 {shard}/{shards} → {len(todo):,}건 · 기록 '
-              f'{os.path.basename(out_path)}')
+              f'{os.path.basename(out_path)} (안정 해시 분할)')
     if not todo:
         print('채울 것이 없다.')
         return 0
@@ -169,4 +259,5 @@ def main():
 
 
 if __name__ == '__main__':
+    _utf8_stdout()
     sys.exit(main())
