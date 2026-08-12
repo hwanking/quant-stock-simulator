@@ -61,6 +61,15 @@ N_DATES = 108
 #: 목록(600종목)만 쓴다 — 기존 동작 그대로다.
 DEFAULT_UNIVERSE_TOP = 1500
 
+#: 전방 재평가 구간의 시작 — R55·R57·R66 동결일(2026-08-09) 다음부터.
+#: `--forward-only` 가 쓰는 값이며, 사전등록 문서에서 그대로 온 날짜다
+#: (docs/PREREG_R55_REGIME_MOE.md §4b). 여기서 손으로 바꾸지 않는다.
+#:
+#: 전방만은 간격 25봉 규칙을 쓰지 않고 **모든 거래일**을 쓴다 — 이유는
+#: make_asof_dates 주석 참고 (45거래일 구간에서 날짜 2개로는 국면
+#: 라우팅을 평가할 수 없다).
+FORWARD_FROM = '2026-08-09'
+
 #: 국면 판정용 지수 봉 수 (라운드 73 — 1,200 → 3,000).
 #: 제공처 천장이 3,000봉(2014-05-20~)이라 그 이상은 더 줘도 안 온다.
 INDEX_BARS = 3000
@@ -743,10 +752,27 @@ def split_of(date_str):
     return 'train'
 
 #: 과거 기준일 — 20영업일(판정 지평)보다 넓은 25봉 간격으로 떼어 표본 중복을 줄인다
-def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25):
+def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25,
+                    forward_from=None):
+    """기준일 후보. `forward_from` 이 있으면 **전방 구간만 촘촘히** 뽑는다.
+
+    ■ 왜 전방만은 촘촘해야 하는가 (라운드 78)
+      평소 25봉 간격은 표본 중복을 줄이려는 것이다. 그런데 전방 구간은
+      길이가 45거래일뿐이라 25봉 간격으로 뽑으면 **날짜가 2개**가 된다.
+      R55 는 국면 라우팅이고 국면은 시장 수준 변수라 **날짜가 표본**이다
+      — 날짜 2개로는 라우팅을 평가할 수 없다. 그래서 전방은 전부 쓴다.
+
+      촘촘한 표본은 서로 상관된다. 그건 숨기지 않고 **에피소드 기준**
+      (같은 종목 35일 묶음, R64 §3 정의)으로 병기해 해결한다.
+
+      `usable` 상한이 이미 horizon 을 빼 두므로, 아직 20봉이 지나지
+      않은 날짜는 여기서 자동으로 빠진다 — 채점 못 할 날을 만들지 않는다.
+    """
     dates = list(prices_df['trade_date'].astype(str))
     # 마지막 판정도 채점 가능해야 하므로 horizon 봉 이전에서 끊는다
     usable = dates[260:len(dates) - horizon - 1]
+    if forward_from:
+        return sorted(d for d in usable if d >= forward_from)
     picked = usable[::-spacing][:n_dates]     # 최근에서 과거로 spacing 간격
     return sorted(picked)
 
@@ -831,7 +857,7 @@ def wilson_low(hit, n, z=1.96):
     return max(0.0, (centre - margin) / denom) * 100.0
 
 
-def main(limit=200, universe_top=None, shard=None):
+def main(limit=200, universe_top=None, shard=None, forward_from=None):
     global VIRT_FILE
     if shard:
         i, n = shard
@@ -886,13 +912,42 @@ def main(limit=200, universe_top=None, shard=None):
         i, n = shard
         pool = [t for k, t in enumerate(pool) if k % n == (i - 1)]
         print(f'  샤드 {i}/{n} 담당 종목 {len(pool):,}개')
+    if forward_from:
+        # **먼저 달력만 본다.** 아래 pool 루프는 종목마다 시세를 받으므로
+        # 2,100종목이면 매우 오래 걸린다. 첫 수확일(2026-09-07) 전에는
+        # 그걸 다 받아 놓고 "0개"를 찍게 되므로, 종목 하나의 거래일로
+        # 먼저 판단하고 빠져나온다. 거래일 달력은 종목마다 같다.
+        probe = None
+        for tk in pool[:8]:
+            try:
+                pdf, _f = eng.generate_synthetic_bitemporal_data(
+                    symbol=tk, start_date='2015-01-01', end_date=None)
+            except Exception:                                  # noqa: BLE001
+                continue
+            price_cache[tk] = pdf
+            probe = make_asof_dates(pdf, n_dates=N_DATES,
+                                    forward_from=forward_from)
+            break
+        if probe is None:
+            print('  전방 모드 — 시세를 한 종목도 못 받았다. '
+                  '0건이 아니라 **미측정**이다.')
+            return
+        if not probe:
+            print(f'  전방 모드 — 기준일 {forward_from} 이후 채점 가능한 '
+                  f'날짜 0개')
+            print('  아직 20영업일이 지난 전방 날짜가 없다 — 축적할 것이 '
+                  '없는 것이지 다 한 것이 아니다.')
+            return
+        print(f'  전방 모드 — 채점 가능한 날짜 {len(probe)}개 '
+              f'({probe[0]} ~ {probe[-1]}) · 종목 {len(pool):,}개')
     skipped = 0
     for tk in pool:
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
                 symbol=tk, start_date='2015-01-01', end_date=None)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=N_DATES):
+            for d in make_asof_dates(pdf, n_dates=N_DATES,
+                                     forward_from=forward_from):
                 if (tk, d) not in done:
                     todo.append((tk, d))
         except Exception as exc:
@@ -903,6 +958,11 @@ def main(limit=200, universe_top=None, shard=None):
         # 실패를 삼키더라도 집계로는 남긴다 (경로 기록기에서 98종목이
         # 전부 실패했는데 조용했던 사고가 있었다).
         print(f"  시세 미수신으로 건너뛴 종목 {skipped}개 / {len(pool)}개")
+    if forward_from and not todo:
+        # **0건은 '다 했다'가 아니다.** 위 달력 검사를 통과했는데도 여기가
+        # 0이면 "이미 다 쌓았다"는 뜻이므로, 두 경우를 갈라 적는다 (§3).
+        print(f"  전방 모드 — 새로 쌓을 것 없음 (기록 완료 {len(done):,}건). "
+              f"날짜는 있으나 전부 이미 쌓았다.")
 
     total_planned = len(done) + len(todo)
     print(f"가상 판정 계획: 완료 {len(done)}건 · 남음 {len(todo)}건 (계획 {total_planned}건)")
@@ -1290,4 +1350,13 @@ if __name__ == "__main__":
         spec = sys.argv[sys.argv.index("--shard") + 1]
         a, b = spec.split('/')
         shd = (int(a), int(b))
-    main(lim, universe_top=uni, shard=shd)
+    # --forward-only : 전방 재평가 구간(2026-08-09~)의 기준일만 **전부** 돈다.
+    #                  기본 25봉 간격으로는 45거래일 구간에서 날짜가 2개뿐이라
+    #                  국면 라우팅을 평가할 수 없다 (라운드 78).
+    #                  --forward-from YYYY-MM-DD 로 시작일을 바꿀 수 있다.
+    fwd = None
+    if "--forward-only" in sys.argv:
+        fwd = FORWARD_FROM
+    if "--forward-from" in sys.argv:
+        fwd = sys.argv[sys.argv.index("--forward-from") + 1]
+    main(lim, universe_top=uni, shard=shd, forward_from=fwd)

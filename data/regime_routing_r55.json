@@ -19,5 +19,16 @@
   "meta_abstain": {"cover": 20.1, "hit": 70.5, "ev": 2.127, "pf": 1.87, "monthly": 44, "n": 308, "verdict": "기각 — 커버리지 30% 미달"},
   "combined": {"cover": 10.5, "hit": 71.4, "ev": 2.510, "pf": 2.07, "monthly": 23, "n": 161, "verdict": "기각 — 커버리지 30% 미달"}
  },
- "blind_touched": false
+ "blind_touched": false,
+ "forward_eval": {
+  "added": "2026-08-13",
+  "supersedes_date_in_note": "2026-08-23",
+  "date": "2026-11-16",
+  "rule": "2026-08-10(동결 뒤 첫 거래일) 부터 65번째 거래일 = 45(기록) + 20(채점)",
+  "why": "① 원장 전 케이스가 horizon_days 20 인데 8/09→8/23 은 10영업일이라 채점 가능 케이스 0건. ② 국면은 시장 수준 변수라 날짜가 표본인데, 45거래일부터 국면 칸 최소 2개가 보장된다(2,935일 롤링 실측 · 35일은 최소 1칸). 라우팅할 칸이 하나면 라우팅 평가가 성립하지 않는다.",
+  "gates_unchanged": true,
+  "policy_unchanged": true,
+  "note": "위 routing·vol_median_train·valid_result 는 한 글자도 바뀌지 않았다 — 바뀐 것은 날짜뿐이고 그 날짜는 유도된 것이다. 재평가일에 §3 칸 n>=200 과 §4-3 커버/월평균을 먼저 확인하고, 미달이면 완화가 아니라 '미측정'으로 적는다. 근거: docs/FORWARD_EVAL_DATE_R78.md",
+  "doc": "docs/FORWARD_EVAL_DATE_R78.md"
+ }
 }

@@ -7756,10 +7756,16 @@ check("판단 근거 대시보드가 있다 (엔진별 의견)",
       '이번 판단을 만든 근거들' in _w130 and '엔진별 의견' in _w130)
 check("약점 카드가 가늠 AI 한계를 재사용한다 (§4 한 소스)",
       "_weak61 = list((_g.get('limits') or [])[:2])" in _w130)
+# ⚠️ 라운드 78 — 이 두 검사는 옛 날짜('8/23')를 **문자열로** 요구하고
+#   있었다. 재평가일이 2026-11-16 으로 정정되면서 화면이 옳게 바뀌었는데
+#   검사가 옛 구현을 붙잡고 실패했다. 검사를 현실에 맞추되, 같은 일이
+#   또 생기지 않게 **날짜를 단일 출처에서 받아** 대조한다.
 check("R55 미사용을 대시보드가 명시한다",
-      '8/23 전방 검증 전 — 이번 판단에 미사용' in _w130)
+      '전방 검증 전 — ' in _w130 and '이번 판단에 미사용' in _w130
+      and '_fe.eval_date_ko()' in _w130)
 check("엔진 비교 표의 상태가 실제 라운드 결과다",
-      '기각 — 현행 방어' in _w130 and '전방검증 대기 (8/23)' in _w130)
+      '기각 — 현행 방어' in _w130
+      and "f'전방검증 대기 ({_fe.eval_date_ko()})'" in _w130)
 check("SELF 실체 표가 있다 (그 사례들이 뭔데)",
       '이 종목 과거 신호 실체' in _w130)
 check("후보 숫자를 운영 판단에 섞지 않음을 명시",
@@ -7955,6 +7961,132 @@ check("일일 워크플로가 전방 기록기를 돌린다",
 # 8/23 에는 20영업일이 안 지나 채점 자체가 성립하지 않는다 — 근거를 남긴다
 _fd134 = _os.path.join(PROJ, 'docs', 'FORWARD_DATA_R77.md')
 check("전방 재평가 날짜 문제를 문서로 남겼다", _os.path.exists(_fd134))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §135 — 전방 재평가 **날짜**가 한 곳에서만 나오는가 (라운드 78)
+#   종전 날짜(2026-08-23)가 코드·문서·워크플로 여덟 군데에 박혀 있었다.
+#   하나만 고쳤다면 화면의 가늠 AI 는 계속 "8/23 전방 검증 전"이라고
+#   말했을 것이다 — 폐기한 산식이 여섯 곳에 살아 있던 사고의 반복이다.
+#   그래서 **이름이 아니라 값으로** 검사한다: 실제로 로드해서 날짜를 받고,
+#   코드에 옛 날짜 문자열이 남아 있지 않은지 본다.
+import forward_eval as _fe135
+
+_D135 = _fe135.eval_date()
+check("전방 재평가일이 박제 파일에서 읽힌다", _D135 == '2026-11-16',
+      f'eval_date()={_D135}')
+check("지평은 사전등록 값 그대로", _fe135.HORIZON_DAYS == 20)
+check("전방 구간 시작은 동결일 다음", _fe135.FORWARD_FROM == '2026-08-09')
+# 값이 없으면 지어내지 않는다
+check("날짜 없으면 없다고 말한다",
+      '미기록' in _fe135.pending_note().replace(_D135 or '', '')
+      or (_D135 or '') in _fe135.pending_note())
+
+# 정책 원문은 한 글자도 안 바뀌었다 — 날짜만 붙였다
+# (§107 의 별칭을 쓰지 않는다 — §135 가 §107 보다 **먼저** 돈다.
+#  처음에 그렇게 썼다가 NameError 로 회귀가 여기서 끊겼다.)
+import json as _js135                                          # noqa: E402
+_rr135 = _js135.load(open(_os.path.join(PROJ, 'data',
+                                        'regime_routing_r55.json'),
+                          encoding='utf-8'))
+check("라우팅 정책 8칸이 그대로다", _rr135['routing'] == {
+    "ABOVE_BOTH|고변동": "돌파", "ABOVE_BOTH|저변동": "평균회귀",
+    "BEAR|고변동": "평균회귀", "BEAR|저변동": "돌파",
+    "PULLBACK|고변동": "과열회피", "PULLBACK|저변동": "돌파",
+    "REBOUND|고변동": "과열회피", "REBOUND|저변동": "과열회피"})
+check("변동성 분할 문턱이 그대로다", _rr135['vol_median_train'] == 0.0092)
+check("valid 결과가 그대로다",
+      _rr135['valid_result']['routing']['n'] == 600
+      and _rr135['valid_result']['base']['n'] == 1536
+      and _rr135['valid_result']['routing']['ev'] == 1.053)
+check("블라인드 미접촉 표시가 그대로다", _rr135['blind_touched'] is False)
+check("정책이 아니라 날짜만 붙였다고 명시한다",
+      _rr135['forward_eval']['policy_unchanged'] is True
+      and _rr135['forward_eval']['gates_unchanged'] is True)
+
+# 코드에 옛 날짜가 살아 있으면 실패 — 문서는 '정정됐다'고 적으므로 제외한다
+for _f135 in ('gaeum_chat.py', 'web_app.py', 'verdict_core.py',
+              'quant_indicators.py', 'premarket.py'):
+    _p135 = _os.path.join(PROJ, _f135)
+    if not _os.path.exists(_p135):
+        continue
+    _s135 = open(_p135, encoding='utf-8').read()
+    check(f"{_f135} 에 옛 재평가일이 박혀 있지 않다",
+          '8/23' not in _s135 and '2026-08-23' not in _s135)
+
+# 전방 구간만 촘촘히 도는 모드가 실제로 있는가 (없으면 그 날도 날짜 2개)
+import scripts.calibration_lab as _cl135                       # noqa: E402
+check("calibration_lab 에 전방 전용 시작일이 있다",
+      _cl135.FORWARD_FROM == '2026-08-09')
+
+
+class _PDF135:
+    """make_asof_dates 는 DataFrame 의 trade_date 만 본다."""
+    def __init__(self, ds):
+        self._ds = ds
+
+    def __getitem__(self, k):
+        assert k == 'trade_date'
+        return self
+
+    def astype(self, _t):
+        return self._ds
+
+
+# 260봉 워밍업 + 21봉 채점여유를 넘도록 넉넉히 만든다
+_ds135 = [f'2025-{m:02d}-{d:02d}' for m in range(1, 13)
+          for d in range(1, 26)] + \
+         [f'2026-{m:02d}-{d:02d}' for m in range(1, 9) for d in range(1, 26)]
+_ds135 = sorted(_ds135)
+_all135 = _cl135.make_asof_dates(_PDF135(_ds135), n_dates=108)
+_fwd135 = _cl135.make_asof_dates(_PDF135(_ds135), n_dates=108,
+                                 forward_from='2026-06-01')
+check("전방 모드는 시작일 이후만 준다",
+      all(d >= '2026-06-01' for d in _fwd135), f'{_fwd135[:3]}')
+# 25봉 간격 규칙을 쓰면 같은 구간에서 날짜가 몇 개 안 나온다 — 그걸 안 쓴다
+_same135 = [d for d in _all135 if d >= '2026-06-01']
+check("전방 모드가 간격 규칙보다 촘촘하다",
+      len(_fwd135) > len(_same135),
+      f'전방 {len(_fwd135)} vs 간격 {len(_same135)}')
+# 아직 20봉이 안 지난 날짜는 스스로 빠진다 (채점 못 할 날을 만들지 않는다)
+check("채점 못 할 최근 날짜는 빠진다",
+      _fwd135 and _fwd135[-1] <= _ds135[-21], f'끝 {_fwd135[-1:]}')
+# 0건은 '다 했다'가 아니다
+_cls135 = open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'),
+               encoding='utf-8').read()
+check("전방 0건을 '다 했다'로 쓰지 않는다",
+      '다 한 것이 아니다' in _cls135)
+check("시세를 못 받은 것과 날짜가 없는 것을 가른다",
+      '0건이 아니라 **미측정**이다' in _cls135)
+# 첫 수확일 전에는 2,100종목 시세를 받아 놓고 0을 찍으면 안 된다
+check("전방 모드는 달력을 먼저 보고 빠져나온다",
+      '먼저 달력만 본다' in _cls135
+      and _cls135.index('probe = None') < _cls135.index('for tk in pool:'))
+check("일일 워크플로가 전방 전용 축적을 돌린다", '--forward-only' in _wf134)
+
+# 전방 표본을 동결 시점 목록으로 고정한다 — 안 하면 매일 그 날 시총으로
+# 종목을 새로 골라 동결 이후 상승분이 표본에 들어온다
+import scripts.backup_research_data as _bk135                  # noqa: E402
+check("유니버스 목록이 백업에 담긴다",
+      any('universe_top' in i for i in _bk135.INCLUDE),
+      f'{_bk135.INCLUDE}')
+check("유니버스 목록이 별표로 담긴다 (샤드/상한 변화 대비)",
+      _bk135.picked('universe_top1500.json')
+      and _bk135.picked('universe_top3014.json'))
+
+# 유도 근거 문서 — 날짜를 감으로 고르지 않았다는 기록
+_fe135d = open(_os.path.join(PROJ, 'docs', 'FORWARD_EVAL_DATE_R78.md'),
+               encoding='utf-8').read()
+for _need135 in ('2026-11-16', '65번째 거래일', '45', '국면 칸',
+                 '미측정', '147일'):
+    check(f"유도 문서에 '{_need135}' 근거가 있다", _need135 in _fe135d)
+# 사전등록 세 문서가 모두 새 날짜를 가리키는가
+for _pr135 in ('PREREG_R55_REGIME_MOE.md', 'PREREG_R57_ENTRY_ENGINE.md',
+               'PREREG_R64_BREAKOUT_BYPASS.md'):
+    _s135b = open(_os.path.join(PROJ, 'docs', _pr135), encoding='utf-8').read()
+    check(f"{_pr135} 이 새 날짜를 가리킨다", '2026-11-16' in _s135b)
+    check(f"{_pr135} 이 게이트 불변을 명시한다",
+          '그대로' in _s135b or '바꾸지 않는다' in _s135b)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

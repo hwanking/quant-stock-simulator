@@ -45,6 +45,7 @@ import portfolio
 importlib.reload(portfolio)
 
 import market_attention
+import forward_eval as _fe      # 전방 재평가일 — 단일 출처 (라운드 78)
 importlib.reload(market_attention)
 
 from bitemporal_engine import STOCK_NAME_MAP, BitemporalEngine
@@ -5842,7 +5843,8 @@ try:
                 'PULLBACK': '조정', 'BEAR': '약세'}
     _eng_rows.append((
         '시장 국면', _ST_KO61.get(_rg58, '미산출'),
-        '국면 라우팅(R55)은 8/23 전방 검증 전 — 이번 판단에 미사용',
+        f'국면 라우팅(R55)은 {_fe.eval_date_ko()} 전방 검증 전 — '
+        f'이번 판단에 미사용',
         '참고'))
     if _blend59:
         _eng_rows.append((
@@ -5886,9 +5888,9 @@ try:
              '종목 순위력 약함 (R49·R54 실측)'],
             ['계층 혼합 확률 (R59)', '운영 채택', '보정도 12.1 vs 35.4%p',
              '개인화 한계 (최협층 n 의존)'],
-            ['국면 라우팅 (R55)', '전방검증 대기 (8/23)',
+            ['국면 라우팅 (R55)', f'전방검증 대기 ({_fe.eval_date_ko()})',
              'valid EV +0.66→+1.05 · 적중 유지', '전방 미확정'],
-            ['즉시 진입 (R57)', '전방검증 대기 (8/23)',
+            ['즉시 진입 (R57)', f'전방검증 대기 ({_fe.eval_date_ko()})',
              'valid 정책EV 2배 · 역선택 회피', '전방 미확정'],
             ['Exit 도전자 12종 (R58b)', '기각 — 현행 방어',
              '타임스탑 EV 우위', '승률 하한 미달·우호구간 의존'],
@@ -5905,9 +5907,9 @@ try:
         ], columns=['엔진·후보', '상태', '근거·강점', '한계']),
             hide_index=True, width='stretch')
         st.caption(_md_safe(
-            "다음 개선 연구: Entry(다층 매수구간 · 8/23 후) · Exit(새 신호 "
-            "집합 위 재측정) · 뉴스 가격반응 · TSFM 챌린저 · 순위 엔진. "
-            "전부 계획이며 현재 판단값을 바꾸지 않습니다."))
+            f"다음 개선 연구: Entry(다층 매수구간 · {_fe.eval_date_ko()} 후) "
+            f"· Exit(새 신호 집합 위 재측정) · 뉴스 가격반응 · TSFM 챌린저 "
+            f"· 순위 엔진. 전부 계획이며 현재 판단값을 바꾸지 않습니다."))
 except Exception:                                              # noqa: BLE001
     pass                          # 설명 칸 때문에 분석 화면이 죽지 않는다
 
