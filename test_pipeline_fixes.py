@@ -7898,16 +7898,35 @@ check("가늠 AI 버튼에 id 가 있다 (스크립트가 잡을 수 있게)",
 check("버튼 클릭을 스크립트가 처리한다 (앵커만으로는 안 움직인다)",
       "getElementById('gn-ask-fab')" in _w133
       and "addEventListener('click'" in _w133)
-check("대화칸으로 데려가고 입력에 커서를 넣는다",
-      'scrollIntoView' in _w133
-      and '[data-testid="stChatInput"] textarea' in _w133)
-# 좌표를 미리 계산해 scrollTo 하면 애니메이션 도중 페이지 높이가 바뀌어
-# 목표가 밀린다 (실측 8,473px 에서 멈추고 2,350px 남았다). 보정 패스가
-# 있어야 결국 닿는다.
-check("스크롤이 밀렸을 때 보정한다",
-      'clearInterval' in _w133 and 'tries' in _w133)
-check("대상이 없으면 아무 일도 하지 않는다 (지어내지 않는다)",
-      'if (!target) return;' in _w133)
+check("누르면 입력에 커서를 넣는다",
+      '[data-testid="stChatInput"] textarea' in _w133
+      and 'ta.focus()' in _w133)
+
+# §133c — 알약과 입력바는 **하나**다 (라운드 76)
+#   사용자 지적: "이거 두개 통합해달라니깐." 종전에는 파란 알약과 하단
+#   입력바가 동시에 떠서 알약이 입력바를 덮고 있었다. 하나만 보이게 하고
+#   누르면 서로 자리를 바꾼다.
+check("평소에는 입력바를 감춘다 (알약만 보인다)",
+      'body.gn-ask-ready [data-testid="stBottom"]' in _w133
+      and 'translateY(115%)' in _w133)
+check("열리면 입력바가 오고 알약이 사라진다",
+      'body.gn-ask-ready.gn-ask-open [data-testid="stBottom"]' in _w133
+      and 'body.gn-ask-open .gn-ask-fab' in _w133)
+# ⚠️ 숨김을 body.gn-ask-ready 아래에만 걸어야 한다. 스크립트가 못 붙으면
+#    클래스가 안 생겨 입력바가 종전처럼 보인다 — 자바스크립트가 죽었다고
+#    대화 자체를 못 하게 만들지 않는다.
+check("스크립트가 죽어도 입력바가 사라지지 않는다 (ready 스코프)",
+      "classList.add('gn-ask-ready')" in _w133)
+check("닫는 길이 있다 (Esc · 바깥 클릭)",
+      "e.key === 'Escape'" in _w133 and "'mousedown'" in _w133)
+check("동작이 부드럽다 · 모션 축소 설정을 존중한다",
+      'cubic-bezier' in _w133 and 'prefers-reduced-motion' in _w133)
+# 요약 패널의 '물어보기 →' 링크도 같은 동작을 해야 한다. 입력바를 숨긴
+# 뒤로 그 링크만 옛 앵커로 남으면, 대화 구역에 가 놓고도 물어볼 칸이
+# 없는 어긋난 상태가 된다.
+check("요약 패널 링크도 대화를 연다",
+      "class='gn-ask-open-link'" in _w133
+      and "querySelectorAll('.gn-ask-open-link')" in _w133)
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

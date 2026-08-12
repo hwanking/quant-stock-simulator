@@ -5262,7 +5262,8 @@ st.markdown(f"""
     <tr><td>계층 보정 확률</td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}</td></tr>
     <tr><td>이 점수대 원실측</td><td>{_sum_band}</td></tr>
   </table>
-  <p style='margin:8px 0 0 0;'><a href='#nav-ask' style='font-size:12px;
+  <p style='margin:8px 0 0 0;'><a href='#nav-ask' class='gn-ask-open-link'
+  style='font-size:12px;
   color:#4C8DFF; text-decoration:none;'>가늠 AI에게 물어보기 →</a></p>
 </div>
 """, unsafe_allow_html=True)
@@ -5283,7 +5284,28 @@ st.markdown(f"""
 .gn-ask-fab .gn-ask-t {{ display:inline; }}
 @media (max-width: 640px) {{ .gn-ask-fab .gn-ask-t {{ display:none; }}
   .gn-ask-fab {{ padding:13px; right:14px; bottom:16px; }} }}
-@media (prefers-reduced-motion: reduce) {{ .gn-ask-fab {{ transition:none; }} }}
+
+/* ── 알약과 입력바를 하나로 (라운드 76) ────────────────────────────────
+   사용자 지적: "이거 두개 통합해달라니깐. 이걸 클릭하면 '이 종목에 대해
+   무엇이든 물어보세요'가 뜨게 해주고 자연스럽게."
+   종전에는 파란 알약과 하단 입력바가 **동시에** 떠서 알약이 입력바를
+   덮고 있었다. 하나만 보이게 하고, 누르면 서로 자리를 바꾼다.
+
+   ⚠️ 숨김은 `body.gn-ask-ready` 아래에서만 건다. 스크립트가 못 붙으면
+      클래스가 안 생기므로 입력바가 **종전처럼 그대로 보인다** — 자바
+      스크립트가 죽었다고 대화 자체를 못 하게 만들지 않는다. */
+body.gn-ask-ready [data-testid="stBottom"] {{
+  transition: transform .28s cubic-bezier(.2,.7,.3,1), opacity .2s;
+  transform: translateY(115%); opacity: 0; pointer-events: none; }}
+body.gn-ask-ready.gn-ask-open [data-testid="stBottom"] {{
+  transform: none; opacity: 1; pointer-events: auto; }}
+.gn-ask-fab {{ transition: transform .2s cubic-bezier(.2,.7,.3,1),
+                            opacity .16s; }}
+body.gn-ask-open .gn-ask-fab {{
+  transform: scale(.72); opacity: 0; pointer-events: none; }}
+@media (prefers-reduced-motion: reduce) {{
+  .gn-ask-fab, body.gn-ask-ready [data-testid="stBottom"] {{
+    transition: none; }} }}
 </style>
 <a class="gn-ask-fab" id="gn-ask-fab" href="#nav-ask"
    title="{_uk._esc(resolved_name)}에 대해 물어보기"
@@ -5331,45 +5353,49 @@ try:
     return D.scrollingElement || D.documentElement;
   }
 
-  function go(target, smooth) {
-    // ⚠️ 좌표를 미리 계산해 scrollTo 하면 **애니메이션 도중 페이지 높이가
-    //   바뀌어** 목표가 밀린다. 실측: 0 → 8,473px 까지만 가고 대화칸이
-    //   여전히 2,350px 아래 남았다. 스트림릿이 늦게 그리는 요소가 많아서다.
-    //   scrollIntoView 는 브라우저가 스크롤 조상을 알아서 잡고, 아래에서
-    //   한 번 더 보정하므로 밀려도 결국 닿는다.
-    target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto',
-                            block: 'start' });
+  // 입력바가 실제로 있을 때만 숨김 CSS 를 켠다. 없으면 켜 봐야 숨길
+  // 것도 없고, 혹시 선택자가 바뀌면 애먼 것을 지운다.
+  if (D.querySelector('[data-testid="stBottom"]')) {
+    D.body.classList.add('gn-ask-ready');
+  }
+
+  function open_() {
+    D.body.classList.add('gn-ask-open');
+    // 애니메이션(0.28s)이 끝난 뒤 커서를 넣는다 — 올라오는 도중에 넣으면
+    // 브라우저가 스크롤을 함께 흔든다.
+    setTimeout(function () {
+      const ta = D.querySelector('[data-testid="stChatInput"] textarea');
+      if (ta) ta.focus();
+    }, 300);
+  }
+  function close_() {
+    D.body.classList.remove('gn-ask-open');
   }
 
   fab.addEventListener('click', function (e) {
     e.preventDefault();
-    const anchor = D.getElementById('nav-ask');
-    const input = D.querySelector('[data-testid="stChatInput"] textarea');
-    const target = anchor || input;
-    if (!target) return;                 // 없으면 아무 일도 하지 않는다
-    go(target, true);
-    // 보정 — 애니메이션이 끝난 뒤에도 화면 밖이면 즉시 한 번 더 끌어온다
-    let tries = 0;
-    const fix = setInterval(function () {
-      tries += 1;
-      const r = target.getBoundingClientRect();
-      const h = window.parent.innerHeight || 800;
-      if ((r.top >= 0 && r.top < h * 0.6) || tries > 6) {
-        clearInterval(fix);
-        return;
-      }
-      go(target, false);
-    }, 350);
-    if (input) {
-      setTimeout(function () {
-        input.focus();
-        const box = input.closest('[data-testid="stChatInput"]');
-        if (box) {                        // 잠깐 밝혀서 눈으로 보이게
-          box.style.transition = 'box-shadow .25s';
-          box.style.boxShadow = '0 0 0 2px #4C8DFF';
-          setTimeout(function () { box.style.boxShadow = ''; }, 1400);
-        }
-      }, 500);
+    open_();
+  });
+
+  // 고정 요약 패널의 '가늠 AI에게 물어보기 →' 도 같은 동작을 해야 한다.
+  // 입력바가 숨겨진 뒤로 그 링크만 옛 앵커로 남으면, 눌러서 대화 구역에
+  // 가 놓고도 물어볼 칸이 없는 어긋난 상태가 된다.
+  D.querySelectorAll('.gn-ask-open-link').forEach(function (a) {
+    if (a.dataset.gnBound === '1') return;
+    a.dataset.gnBound = '1';
+    a.addEventListener('click', function () { open_(); });
+  });
+
+  // 닫는 길을 둔다 — 열기만 되고 못 닫으면 알약이 영영 안 돌아온다.
+  D.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') close_();
+  });
+  D.addEventListener('mousedown', function (e) {
+    if (!D.body.classList.contains('gn-ask-open')) return;
+    const bar = D.querySelector('[data-testid="stBottom"]');
+    if (bar && !bar.contains(e.target) && e.target !== fab
+        && !fab.contains(e.target)) {
+      close_();
     }
   });
 })();
