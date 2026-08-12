@@ -777,7 +777,7 @@ def make_asof_dates(prices_df, n_dates, horizon=20, spacing=25,
     return sorted(picked)
 
 
-def load_universe(eng, top, existing):
+def load_universe(eng, top, existing, pinned=False):
     """시총 상위 `top` 종목 목록 — **한 번만 받아 캐시에 박제한다.**
 
     ■ 왜 캐시가 필수인가 (라운드 72)
@@ -789,7 +789,30 @@ def load_universe(eng, top, existing):
 
       그래서 목록을 파일에 박제하고 샤드는 그것만 읽는다. 다시 받고
       싶으면 캐시 파일을 지운다.
+
+    ■ 전방 구간은 저장소에 박은 목록만 쓴다 (`pinned=True`, 라운드 78)
+      위 캐시는 `.portfolio/` 라 gitignored 다. 클라우드에는 스냅샷으로만
+      건너가므로, 없는 상태로 돌면 **그 날 시총으로 목록을 새로 만든다.**
+      전방 구간에서 그건 속도 문제가 아니라 방법론 문제다 — 동결
+      (2026-08-09) 이후 순위로 표본을 고르면 그 사이 오른 종목이 들어오고
+      빠진 종목이 나간다. 그래서 전방은 `data/universe_pin_forward.json`
+      (2026-08-10 자, 커밋됨) 만 읽고, **없으면 받아 오지 않고 멈춘다.**
+      임의 목록으로 전방을 채우느니 아무것도 안 쌓는 편이 정직하다 (§3).
     """
+    if pinned:
+        pin = os.path.join(PROJ, 'data', 'universe_pin_forward.json')
+        if not os.path.exists(pin):
+            print('전방 유니버스 핀이 없다 — 그 날 시총으로 새로 고르지 '
+                  '않는다. 축적을 건너뛴다 (data/universe_pin_forward.json)')
+            return []
+        with open(pin, encoding='utf-8') as f:
+            meta = json.load(f)
+        syms = meta.get('symbols') or []
+        add = [s for s in syms if s not in existing]
+        print(f"전방 유니버스 핀 사용 ({meta.get('made')} 자 "
+              f"{len(syms):,}종목 / 전 종목 {meta.get('total')}) → "
+              f"신규 {len(add):,}종목")
+        return add
     cache = os.path.join(PROJ, '.portfolio', f'universe_top{top}.json')
     if os.path.exists(cache):
         with open(cache, encoding='utf-8') as f:
@@ -904,7 +927,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         # 시총 상위 N 종목까지 넓힌다 (라운드 72). 고정 목록은 그대로 두고
         # **앞에 붙이지 않고 뒤에 이어 붙인다** — 기존 종목이 먼저 채워져야
         # 중간에 끊겨도 과거 원장과 비교가 유지된다.
-        add = load_universe(eng, universe_top, set(pool))
+        # 전방 구간은 동결 시점 목록으로 고정한다 (라운드 78)
+        add = load_universe(eng, universe_top, set(pool),
+                            pinned=bool(forward_from))
         pool += add
     if shard:
         # 종목 단위로 가른다 — (종목,날짜) 단위로 가르면 같은 종목의 시세를
@@ -958,6 +983,22 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         # 실패를 삼키더라도 집계로는 남긴다 (경로 기록기에서 98종목이
         # 전부 실패했는데 조용했던 사고가 있었다).
         print(f"  시세 미수신으로 건너뛴 종목 {skipped}개 / {len(pool)}개")
+    if forward_from and todo:
+        # ⚠️ todo 는 **종목 단위로** 쌓인다 (위 루프가 종목마다 날짜 전부를
+        #   붙인다). 하루 한도가 400건이면 그 순서로는 **종목 9개가 45일치**
+        #   돌고 끝난다. 그런데 R66 의 하한은 돌파 **에피소드 300** 이고
+        #   에피소드는 종목 수가 결정한다 — 종목 9개로는 원리적으로 못 채운다.
+        #   반대로 날짜 순으로만 쌓으면 종목은 넓어지지만 국면 칸이 안 는다
+        #   (R55 가 못 선다).
+        #
+        #   그래서 **대각선**으로 깐다: 앞에서부터 얼마를 자르든 날짜와 종목
+        #   양쪽이 고르게 섞이도록. 한도에 걸려 끊겨도 두 하한이 같이 자란다.
+        di = {d: i for i, d in enumerate(sorted({d for _t, d in todo}))}
+        ti = {t: i for i, t in enumerate(dict.fromkeys(t for t, _d in todo))}
+        nd = max(1, len(di))
+        todo.sort(key=lambda p: ((di[p[1]] + ti[p[0]]) % nd, di[p[1]], p[0]))
+        print(f'  전방 순서를 대각선으로 깐다 — 끊겨도 날짜 {len(di)}개 · '
+              f'종목 {len(ti):,}개가 고르게 채워진다')
     if forward_from and not todo:
         # **0건은 '다 했다'가 아니다.** 위 달력 검사를 통과했는데도 여기가
         # 0이면 "이미 다 쌓았다"는 뜻이므로, 두 경우를 갈라 적는다 (§3).
