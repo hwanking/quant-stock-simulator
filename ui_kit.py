@@ -170,11 +170,26 @@ def disclose(label: str, inner_html: str, color: str = '#9DAABC',
 
     본문은 **호출하는 쪽이 만든 HTML 그대로** 넣는다 (숫자 서식·강조가
     이미 들어 있다). 라벨만 escape 한다.
+
+    ■ 왜 바깥에 div 를 한 겹 두는가 — 서버를 띄워 보고 두 번 고쳤다
+      ① Streamlit 의 `st.expander` 도 DOM 에서 `<details>` 다. `details >
+         summary { … }` 처럼 요소로만 스코프를 잡으면 화면의 **모든 확장
+         패널**(69개였다)의 마커와 hover 가 같이 바뀐다.
+      ② 그래서 `<details class='gn-disc'>` 로 바꿨더니 **class 가 지워져**
+         나왔다. Streamlit 의 정화기가 `details` 에는 `style` 만 남긴다
+         (같은 markdown 안의 `<a class='gn-ask-fab'>` 는 멀쩡했다).
+      → class 가 살아남는 `div` 를 한 겹 씌우고 거기서 스코프를 잡는다.
+        회귀가 **렌더된 DOM 이 아니라 소스**만 보면 둘 다 못 잡는다 —
+        화면 결함은 서버를 띄워야 나온다.
     """
     car = _icon('ChevronDown', color, 14)
     return (
+        f"<div class='gn-disc'>"
         f"<details style='margin:6px 0 0 0;'"
         + (' open' if open_ else '') + ">"
+        # display:flex 자체가 크롬·사파리의 기본 삼각형을 없앤다.
+        # list-style:none 은 파이어폭스용이다. 둘 다 인라인이라
+        # 정화기가 class 를 지워도 살아남는다 — CSS 는 회전만 맡는다.
         f"<summary style='list-style:none; cursor:pointer; display:flex; "
         f"align-items:center; gap:4px; font-size:12px; color:{color}; "
         f"padding:2px 0; user-select:none;'>"
@@ -182,7 +197,7 @@ def disclose(label: str, inner_html: str, color: str = '#9DAABC',
         f"<div style='margin:6px 0 2px 0; padding:10px 12px; "
         f"background:rgba(255,255,255,.03); border-radius:10px; "
         f"font-size:12px; line-height:1.75;'>{inner_html}</div>"
-        f"</details>")
+        f"</details></div>")
 
 
 def dot(color, size=10):

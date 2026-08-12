@@ -8131,6 +8131,94 @@ for _pr135 in ('PREREG_R55_REGIME_MOE.md', 'PREREG_R57_ENTRY_ENGINE.md',
     check(f"{_pr135} 이 게이트 불변을 명시한다",
           '그대로' in _s135b or '바꾸지 않는다' in _s135b)
 
+
+# ══════════════════════════════════════════════════════════════════════
+# §136 — 쉬운 문장 + 눌러서 펼치는 근거 (라운드 79)
+#   사용자 요청: "이런 내용 좋다 조금만 더 쉽게 써주고 클릭하면 더 자세히
+#   보이게 해줘." 위험은 둘이다 —
+#     ① 쉽게 쓴다며 **근거를 지워** 버린다 (§9 위반)
+#     ② 펼침이 스크립트에 기대 죽으면 근거가 영영 안 보인다 (라운드 76)
+#   그래서 '접혔는가'가 아니라 **접힌 안에 근거가 들어 있는가**를 검사한다.
+# ══════════════════════════════════════════════════════════════════════
+import ui_kit as _uk136                                        # noqa: E402
+
+_d136 = _uk136.disclose('왜 그런가 · 자세히', '<b>본문</b> 근거')
+check("펼침 헬퍼가 <details> 를 쓴다 (스크립트 없이 열린다)",
+      '<details' in _d136 and '<summary' in _d136)
+check("펼침이 기본은 닫혀 있다", ' open>' not in _d136)
+check("라벨은 escape 하고 본문은 원문 유지 (숫자 서식이 살아야 한다)",
+      '&lt;b&gt;' in _uk136.disclose('<b>x</b>', 'y')
+      and '<b>본문</b> 근거' in _d136)
+check("펼침에 Lucide 셰브런을 쓴다 (이모지 금지 · §5)",
+      '<svg' in _d136 and 'ChevronDown' in str(_uk136._ICONS))
+import re as _re136                                            # noqa: E402
+check("펼침에 이모지가 없다",
+      not _re136.findall(r'[\U0001F300-\U0001FAFF☀-➿]', _d136))
+
+_w136 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("카드가 펼침을 실제로 그린다",
+      '_buy_more_html' in _w136 and '_dm_more_html' in _w136
+      and '_uk.disclose(' in _w136)
+check("기본 삼각형 마커를 지운다 (브라우저마다 모양이 다르다)",
+      '::-webkit-details-marker' in _w136 and '::marker' in _w136)
+check("펼침 회전이 모션 축소를 존중한다",
+      '.gn-disc > details[open] > summary svg' in _w136
+      and 'prefers-reduced-motion' in _w136)
+# ⚠️ 서버를 띄워 보고 두 번 고친 자리다.
+#   ① Streamlit 의 st.expander 도 DOM 에서 <details> — 요소로만 스코프를
+#      잡으면 화면의 확장 패널 69개가 같이 바뀐다.
+#   ② class 를 <details> 에 달았더니 **정화기가 지웠다.** 그래서 바깥
+#      div 에 단다. 소스만 보는 검사는 ②를 못 잡으므로, 여기서는 최소한
+#      '어디에 붙였는지'를 값으로 확인한다.
+check("펼침 바깥에 전용 클래스 div 가 있다",
+      "<div class='gn-disc'>" in _d136)
+check("details 자체에는 class 를 달지 않는다 (정화기가 지운다)",
+      "<details class=" not in _d136)
+# 기본 삼각형은 CSS 없이도 사라져야 한다 — 인라인 style 만 살아남으므로
+check("summary 가 인라인으로 마커를 없앤다 (display:flex · list-style)",
+      'display:flex' in _d136 and 'list-style:none' in _d136)
+# 셀렉터 전문을 그대로 찾는다 — 'find(":hover")' 처럼 조각으로 찾으면
+# 파일 앞쪽의 다른 규칙(.gn-ask-fab:hover)에 걸려 엉뚱한 곳을 본다.
+for _sel136 in ('.gn-disc > details > summary::-webkit-details-marker',
+                '.gn-disc > details > summary::marker',
+                '.gn-disc > details > summary:hover',
+                '.gn-disc > details > summary svg',
+                '.gn-disc > details[open] > summary svg'):
+    check(f"'{_sel136}' 가 우리 것만 칠한다",
+          _sel136 in _w136, 'Streamlit expander 까지 바뀐다')
+# 반대 방향 — 클래스 없는 광범위 셀렉터가 남아 있으면 실패
+for _bad136 in ('\ndetails > summary', '\ndetails[open] > summary',
+                '\ndetails.gn-disc'):
+    check(f"'{_bad136.strip()}' 같은 전역/무효 셀렉터가 없다",
+          _bad136 not in _w136, '화면의 모든 확장 패널이 같이 바뀐다')
+
+# ── 근거를 지우지 않았는가 — 여기가 이 절의 핵심이다 ────────────────
+for _need136, _why136 in (
+        ('15,332건', '차단 근거 실측치'),
+        ('라운드 63', '그 판정이 어디서 왔는지'),
+        ('안전마진선', '언제 살 수 있게 되는지'),
+        ('손익비', '위험 대비 보상'),
+        ('σ', '거리를 배수로 잰다는 사실')):
+    check(f"근거가 남아 있다 — {_why136}", _need136 in _w136)
+
+# ── 표면은 쉬워졌는가 — 긴 옛 문장이 그대로 남아 있으면 실패 ────────
+for _gone136 in ("'적정가 크게 초과' 차단이 ",
+                 '즉 <b>이 가격에 도달해도 지금 ',
+                 '20일 변동폭({_sig_pct}%) 대비 <b>{_rc_sig}σ</b> · {_rc_reach}'):
+    check(f"옛 긴 문장이 표면에서 빠졌다 — {_gone136[:22]}…",
+          _gone136 not in _w136)
+check("막힌 값이면 칸 제목이 '살 가격'이 아니다 (매수 지시로 읽힌다)",
+      '여기까지 오면 다시 볼 값' in _w136 and '_rec_blocked' in _w136)
+check("쉬운 한 문장이 표면에 있다",
+      '여기까지 내려와도 아직은 못 삽니다' in _w136)
+
+# ── 손익비를 원으로 풀 때 **CORE 진입가일 때만** 뺀다 (§4) ──────────
+#   폴백(_value_floor)이면 손익비와 기준이 달라 숫자가 서로 안 맞는다.
+_i136 = _w136.find('_entry_lv_more = (')
+check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
+      _i136 > 0 and 'if _core_entry and _e_rr:' in _w136[max(0, _i136 - 700):_i136],
+      '조건 밖에서 계산하면 폴백일 때 손익비와 어긋난다')
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109

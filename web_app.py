@@ -5102,14 +5102,23 @@ st.markdown(f"""
 /* 눌러서 펼치는 상세 (라운드 79) — ui_kit.disclose 가 그리는 요소.
    카드 HTML 과 같은 덩어리에 넣어 둔다: 다른 곳의 <style> 순서에
    기대지 않게 하려는 것이다. 기본 삼각형 마커는 브라우저마다 모양이
-   달라 지우고 Lucide 셰브런만 쓴다 (§5 — 아이콘 한 세트). */
-details > summary::-webkit-details-marker {{ display:none; }}
-details > summary::marker {{ content:''; }}
-details > summary:hover {{ filter:brightness(1.35); }}
-details > summary svg {{ transition:transform .18s ease; }}
-details[open] > summary svg {{ transform:rotate(180deg); }}
+   달라 지우고 Lucide 셰브런만 쓴다 (§5 — 아이콘 한 세트).
+
+   ⚠️ 반드시 `.gn-disc` 안에서만 칠한다. 서버를 띄워 보니 Streamlit 의
+   st.expander 도 DOM 에서 <details> 였다 — 요소로만 스코프를 잡았더니
+   화면의 확장 패널 69개(자산·통화 확인 · 상세 설정 · 제외 사유 …)의
+   마커와 hover 가 같이 바뀌고 있었다. 회귀는 통과하는 종류의 결함이다.
+
+   ⚠️ 그리고 class 는 <details> 에 못 단다 — Streamlit 정화기가 지운다.
+   ui_kit.disclose 가 바깥에 <div class='gn-disc'> 를 한 겹 씌우므로
+   여기서도 그 div 를 타고 내려간다. */
+.gn-disc > details > summary::-webkit-details-marker {{ display:none; }}
+.gn-disc > details > summary::marker {{ content:''; }}
+.gn-disc > details > summary:hover {{ filter:brightness(1.35); }}
+.gn-disc > details > summary svg {{ transition:transform .18s ease; }}
+.gn-disc > details[open] > summary svg {{ transform:rotate(180deg); }}
 @media (prefers-reduced-motion: reduce) {{
-  details > summary svg {{ transition:none; }} }}
+  .gn-disc > details > summary svg {{ transition:none; }} }}
 </style>
 <div style='background:linear-gradient(135deg,#161D2A 0%,#161D2A 100%);
             border:3px solid {_vc}; border-radius:20px; padding:24px 24px; margin-bottom:16px;
