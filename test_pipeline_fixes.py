@@ -8074,6 +8074,49 @@ check("유니버스 목록이 별표로 담긴다 (샤드/상한 변화 대비)"
       _bk135.picked('universe_top1500.json')
       and _bk135.picked('universe_top3014.json'))
 
+# ⚠️ 백업만으로는 부족하다 — 그 캐시는 .portfolio/ 라 gitignored 이고
+#   클라우드에는 스냅샷으로만 건너간다. 없는 상태로 돌면 **그 날 시총으로
+#   목록을 새로 만든다.** 그래서 전방용 핀은 **저장소에** 둔다.
+_pin135 = _os.path.join(PROJ, 'data', 'universe_pin_forward.json')
+check("전방 유니버스 핀이 저장소에 있다", _os.path.exists(_pin135))
+if _os.path.exists(_pin135):
+    _pm135 = _js135.load(open(_pin135, encoding='utf-8'))
+    check("핀이 동결 시점 목록이다 (2026-08-09 이후 순위로 고르지 않는다)",
+          str(_pm135.get('made')) <= '2026-08-10', f"made={_pm135.get('made')}")
+    check("핀에 종목이 실제로 들어 있다",
+          len(_pm135.get('symbols') or []) >= 1000,
+          f"{len(_pm135.get('symbols') or [])}종목")
+    # 핀이 곧 유니버스 — 전방 모드에서 네트워크로 다시 받지 않는다
+    _got135 = _cl135.load_universe(None, 1500, set(), pinned=True)
+    check("전방 모드는 핀만 읽는다 (eng=None 이어도 동작)",
+          len(_got135) >= 1000, f'{len(_got135)}종목')
+check("핀이 없으면 받아 오지 않고 멈춘다 (임의 목록 금지)",
+      '그 날 시총으로 새로 고르지 ' in _cls135
+      and 'pinned=bool(forward_from)' in _cls135)
+
+# ⚠️ 순서가 하한을 가른다 — todo 는 종목 단위로 쌓이므로 하루 400건이면
+#   종목 9개가 45일치 돌고 끝난다. R66 의 하한은 돌파 에피소드 300 이고
+#   에피소드는 **종목 수**가 결정한다. 반대로 날짜 단위로만 깔면 종목은
+#   넓어지지만 국면 칸이 안 늘어 R55 가 못 선다. 대각선이 둘을 같이 채운다.
+check("전방 todo 를 대각선으로 깐다", '대각선으로 깐다' in _cls135)
+_NT135, _ND135, _CAP135 = 300, 45, 400
+_pairs135 = [(t, d) for t in range(_NT135) for d in range(_ND135)]
+
+
+def _cov135(order):
+    pre = order[:_CAP135 * 10]
+    return len({p[0] for p in pre}), len({p[1] for p in pre})
+
+
+_tm135 = _cov135(sorted(_pairs135, key=lambda p: (p[0], p[1])))
+_dg135 = _cov135(sorted(_pairs135,
+                        key=lambda p: ((p[1] + p[0]) % _ND135, p[1], p[0])))
+check("대각선이 종목·날짜를 같이 채운다 (종목단위보다 넓다)",
+      _dg135[0] > _tm135[0] and _dg135[1] >= _tm135[1],
+      f'대각선 {_dg135} vs 종목단위 {_tm135}')
+check("대각선 10일치가 두 축을 모두 덮는다",
+      _dg135 == (_NT135, _ND135), f'{_dg135}')
+
 # 유도 근거 문서 — 날짜를 감으로 고르지 않았다는 기록
 _fe135d = open(_os.path.join(PROJ, 'docs', 'FORWARD_EVAL_DATE_R78.md'),
                encoding='utf-8').read()
