@@ -5285,13 +5285,100 @@ st.markdown(f"""
   .gn-ask-fab {{ padding:13px; right:14px; bottom:16px; }} }}
 @media (prefers-reduced-motion: reduce) {{ .gn-ask-fab {{ transition:none; }} }}
 </style>
-<a class="gn-ask-fab" href="#nav-ask"
+<a class="gn-ask-fab" id="gn-ask-fab" href="#nav-ask"
    title="{_uk._esc(resolved_name)}에 대해 물어보기"
    aria-label="가늠 AI에게 물어보기">
   {_uk._icon('help', '#fff', 17)}
   <span class="gn-ask-t">가늠 AI</span>
 </a>
 """, unsafe_allow_html=True)
+
+# ── 버튼을 눌렀을 때 **실제로 무언가 일어나게** 한다 (라운드 75) ──────────
+#
+# 종전에는 `href="#nav-ask"` 앵커뿐이었다. 그런데 Streamlit 본문은 창이
+# 아니라 `.stMain` **안쪽에서 스크롤**된다. 브라우저의 앵커 이동은 바깥
+# 창을 움직이므로 눌러도 화면이 그대로였다. 사용자가 이미 대화칸 근처에
+# 있으면 더더욱 아무 일도 안 일어난 것처럼 보였다.
+#
+# st.markdown 은 <script> 를 지우므로 여기서 직접 JS 를 넣을 수 없다.
+# 높이 0 짜리 components.html 을 하나 두고, 그 안에서 부모 문서의 버튼에
+# 클릭 처리기를 붙인다. 버튼 자체는 부모에 그대로 둬야 화면 위에 뜬다
+# (iframe 안의 fixed 는 부모를 덮지 못한다).
+#
+# 하는 일: ① 실제 스크롤 컨테이너를 찾아 대화칸까지 부드럽게 이동
+#          ② 입력칸에 커서를 넣는다 — 누르자마자 바로 타이핑되게
+#          ③ 잠깐 테두리를 밝혀 "여기다" 를 눈으로 보이게
+try:
+    import streamlit.components.v1 as _fabjs
+    _fabjs.html(
+        """
+<script>
+(function () {
+  const D = window.parent && window.parent.document;
+  if (!D) return;
+  const fab = D.getElementById('gn-ask-fab');
+  if (!fab || fab.dataset.gnBound === '1') return;
+  fab.dataset.gnBound = '1';
+
+  function scroller(el) {          // 진짜로 스크롤되는 조상을 찾는다
+    let n = el.parentElement;
+    while (n && n !== D.body) {
+      const st = getComputedStyle(n);
+      if ((st.overflowY === 'auto' || st.overflowY === 'scroll')
+          && n.scrollHeight > n.clientHeight + 40) return n;
+      n = n.parentElement;
+    }
+    return D.scrollingElement || D.documentElement;
+  }
+
+  function go(target, smooth) {
+    // ⚠️ 좌표를 미리 계산해 scrollTo 하면 **애니메이션 도중 페이지 높이가
+    //   바뀌어** 목표가 밀린다. 실측: 0 → 8,473px 까지만 가고 대화칸이
+    //   여전히 2,350px 아래 남았다. 스트림릿이 늦게 그리는 요소가 많아서다.
+    //   scrollIntoView 는 브라우저가 스크롤 조상을 알아서 잡고, 아래에서
+    //   한 번 더 보정하므로 밀려도 결국 닿는다.
+    target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto',
+                            block: 'start' });
+  }
+
+  fab.addEventListener('click', function (e) {
+    e.preventDefault();
+    const anchor = D.getElementById('nav-ask');
+    const input = D.querySelector('[data-testid="stChatInput"] textarea');
+    const target = anchor || input;
+    if (!target) return;                 // 없으면 아무 일도 하지 않는다
+    go(target, true);
+    // 보정 — 애니메이션이 끝난 뒤에도 화면 밖이면 즉시 한 번 더 끌어온다
+    let tries = 0;
+    const fix = setInterval(function () {
+      tries += 1;
+      const r = target.getBoundingClientRect();
+      const h = window.parent.innerHeight || 800;
+      if ((r.top >= 0 && r.top < h * 0.6) || tries > 6) {
+        clearInterval(fix);
+        return;
+      }
+      go(target, false);
+    }, 350);
+    if (input) {
+      setTimeout(function () {
+        input.focus();
+        const box = input.closest('[data-testid="stChatInput"]');
+        if (box) {                        // 잠깐 밝혀서 눈으로 보이게
+          box.style.transition = 'box-shadow .25s';
+          box.style.boxShadow = '0 0 0 2px #4C8DFF';
+          setTimeout(function () { box.style.boxShadow = ''; }, 1400);
+        }
+      }, 500);
+    }
+  });
+})();
+</script>
+        """, height=0)
+except Exception:                                          # noqa: BLE001
+    # 스크립트를 못 붙여도 앵커(href)는 그대로 남아 있다 — 기능이 줄 뿐
+    # 버튼이 사라지지는 않는다.
+    pass
 
 # ── 원칙 3: 결론·가격 다음에 '이유' — 점수를 움직인 요인 상·하위 3개 ────────
 # verdict['composition'] 실측만 사용한다 (label/score/weight_pct/contribution).

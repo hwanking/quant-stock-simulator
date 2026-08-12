@@ -7889,6 +7889,26 @@ check("좁은 화면에서 글자를 접는다 (아이콘만)",
 check("버튼에 이모지를 쓰지 않는다 (Lucide SVG)",
       "_uk._icon('help'" in _w133)
 
+# §133b — 가늠 AI 버튼이 **실제로 무언가 하는가** (라운드 75)
+#   종전에는 href="#nav-ask" 앵커뿐이었다. Streamlit 본문은 창이 아니라
+#   .stMain 안쪽에서 스크롤되므로 브라우저 앵커 이동이 먹지 않는다 —
+#   눌러도 화면이 그대로였다. 앵커만 있는 상태로 되돌아가면 여기서 잡는다.
+check("가늠 AI 버튼에 id 가 있다 (스크립트가 잡을 수 있게)",
+      'id="gn-ask-fab"' in _w133)
+check("버튼 클릭을 스크립트가 처리한다 (앵커만으로는 안 움직인다)",
+      "getElementById('gn-ask-fab')" in _w133
+      and "addEventListener('click'" in _w133)
+check("대화칸으로 데려가고 입력에 커서를 넣는다",
+      'scrollIntoView' in _w133
+      and '[data-testid="stChatInput"] textarea' in _w133)
+# 좌표를 미리 계산해 scrollTo 하면 애니메이션 도중 페이지 높이가 바뀌어
+# 목표가 밀린다 (실측 8,473px 에서 멈추고 2,350px 남았다). 보정 패스가
+# 있어야 결국 닿는다.
+check("스크롤이 밀렸을 때 보정한다",
+      'clearInterval' in _w133 and 'tries' in _w133)
+check("대상이 없으면 아무 일도 하지 않는다 (지어내지 않는다)",
+      'if (!target) return;' in _w133)
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
