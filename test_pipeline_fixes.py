@@ -3392,10 +3392,16 @@ check("후보 = 기존 계산된 지지선만 (TDST·20일선·볼린저)",
 
 # ② 화면 — 계층 라벨·미산출 사유
 _w70 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+# ⚠️ 라운드 79 — 문구를 쉽게 고치면서 이 두 검사가 옛 문장을 요구했다.
+#   **속성은 그대로**다(근거를 밝히고 · 검증 없음을 밝히고 · 없으면 없다고
+#   말한다). 검사를 현실에 맞추되 속성은 하나도 빼지 않는다.
 check("배너 — 검토가 계층 라벨 (적정가 검증 없음 명시)",
-      '기술 지지 기준:' in _w70 and '적정가 검증 없음' in _w70)
+      '차트 지지선만 보고 잡은 값입니다' in _w70
+      and '가치 검증은 없습니다' in _w70
+      and '적정가로 한 번 더 검증하지 ' in _w70)
 check("배너 — 지지선조차 없으면 없다고 말한다",
-      '유효 지지선도 없음' in _w70)
+      '현재가 아래 지지선이 없습니다' in _w70
+      and '현재가 아래 지지선도 없습니다' in _w70)
 check("적정가 미산출 카드 — 사유 캡션", 'fair_value_status_note' in _w70)
 check("오늘의 추천 카드 → 분석 화면 전환 버튼",
       '분석 보기' in _w70 and 'pm_go_' in _w70)
@@ -4842,8 +4848,10 @@ check("시간축이 다르다는 설명을 본문에 적는다",
       '시간축이 다릅니다' in _w96 and '분기 실적 기반 장기 가치' in _w96)
 
 # ③ 도달 어려우면 실행 가격처럼 강조하지 않는다
+# 라운드 79 — '관찰 대상입니다' → '지켜볼 종목입니다'. 뜻은 같고 말이 쉽다.
 check("도달이 2σ 를 넘으면 관찰 대상으로 표시한다",
-      '_rec_is_far' in _w96 and '관찰 대상입니다' in _w96)
+      '_rec_is_far' in _w96
+      and '매수 후보가 아니라 지켜볼 종목입니다' in _w96)
 check("도달 어려운 권장가는 글자 크기를 낮춘다 (강조하지 않는다)",
       "'17' if _rec_is_far else '22'" in _w96)
 
@@ -5983,9 +5991,10 @@ check("배너 손절·목표도 중앙 판정에서 온다",
 check("CORE 가 배너보다 먼저 만들어진다",
       0 < _w107.find('CORE = _vcore.build(')
       < _w107.find('_core_entry = (CORE or {})'))
+# 라운드 79 — '…매수가로 쓰지' → '…매수가로는 쓰지'. 조사만 바뀌었다.
 check("적정가 값은 장기 참고선으로만 적는다",
       '장기 가치 참고선은' in _w107
-      and '오늘의 매수가로 쓰지 않습니다' in _w107)
+      and '오늘의 매수가로는 쓰지 ' in _w107)
 check("배너가 four_scores 원본 손절을 직접 읽지 않는다",
       "_e_stop = four_scores.get('entry_stop_price')" not in _w107)
 check("배너 제목도 같은 실행 가격을 말한다",
@@ -7438,17 +7447,24 @@ _w124 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 # ① 적정가(가치) vs 매수기준(타이밍) — 괴리·이유 자동 설명
 #    ⚠️ 소스 검사라 f-string 이 줄을 바꾸는 지점을 가로지르는 문자열은
 #    못 찾는다 — 한 리터럴 안에 통째로 있는 조각만 쓴다.
+# ⚠️ 라운드 79 — 아래 네 검사가 옛 긴 문장을 요구했다. 그 설명들은
+#   **지워진 게 아니라 펼침 안으로 들어갔다.** 그러니 검사도 그 자리를
+#   본다 — 문장이 사라졌는지가 아니라 **속성이 남았는지**가 기준이다.
 check("배너가 두 가격의 역할을 가른다",
-      '아직 싸지 않지만' in _w124 and '서로 다른 질문입니다' in _w124)
+      '가치로 보면 아직 싸지 않습니다' in _w124
+      and '두 가격은 다른 질문에 답합니다' in _w124
+      and '얼마면 싼가' in _w124 and '어디부터 들어갈 만한가' in _w124)
 check("괴리를 숫자로 낸다 (지어내지 않고 계산)",
       '_gap_fv = (_core_entry / _fair - 1.0) * 100.0' in _w124)
 check("타이밍·가치가 겹치는 자리도 구분해 말한다",
-      '방향을 가리키는 자리입니다' in _w124
-      and '사실상 같은 자리' in _w124 and '겹칩니다' in _w124)
+      '같은 방향</b>을 ' in _w124
+      and '거의 같은 자리입니다' in _w124 and '겹치는 자리입니다' in _w124)
 check("안전마진선은 오늘의 매수가가 아님을 유지",
-      '오늘의 매수가로 쓰지 않습니다' in _w124)
+      '오늘의 매수가로는 쓰지 ' in _w124
+      and '장기 안전마진선' in _w124)
 check("진입가 근거를 명시한다 (단순 % 할인 아님을 설명)",
-      '기준가 − 20일 변동성 1일치 · 20봉 내 체결률 실측' in _w124)
+      '기준가에서 20일 변동성 하루치를 뺀' in _w124
+      and '20봉 안에 실제로 체결된 비율을 실측해' in _w124)
 
 # ② 뉴스 클릭 → 관련 종목 분석 전환
 import live_ticker as _lt124                                  # noqa: E402
@@ -7837,14 +7853,21 @@ check("진입가에서도 차단이 유지되는지 판정한다",
       and "/ float(_floor_fv)) > 1.15" in _w132)
 check("제목이 매수 지시로 읽히지 않는다",
       '(가격 조건만 · 매수 신호 아님)' in _w132)
+# ⚠️ 라운드 79 — 이 네 가지가 이 절의 핵심 속성이다. 문구는 쉬워졌고
+#   근거는 펼침으로 들어갔지만, **네 가지가 다 남아 있어야** 한다.
+#   하나라도 빠지면 "쉽게 쓴다며 근거를 지운" 상태다 (§9).
 check("도달해도 신호가 아님을 본문이 말한다",
-      '이 가격에 도달해도 지금 ' in _w132 and '매수 신호가 아닙니다'
-      in _w132)
+      '여기까지 내려와도 아직은 못 삽니다' in _w132
+      and '본 숫자라, 도달해도 ' in _w132
+      and '매수 신호로 바뀌지 않습니다' in _w132)
 check("무엇이 바뀌어야 후보가 되는지 알려준다",
-      '안전마진선' in _w132 and '내려와야 합니다' in _w132)
-check("실측 근거를 화면에 병기한다", '15,332건 중 0건' in _w132)
+      '언제 살 수 있게 되나' in _w132
+      and '부근까지 더 ' in _w132 and '적정가가 올라온다' in _w132)
+check("실측 근거를 화면에 병기한다",
+      '과거 15,332건 중 ' in _w132 and '0건</b>이었습니다' in _w132)
 check("차단되지 않는 경우의 종전 설명은 유지",
-      '서로 다른 질문입니다' in _w132)
+      '두 가격은 다른 질문에 답합니다' in _w132
+      and '가치 매수' in _w132 and '타이밍 매수' in _w132)
 _sc132 = _os.path.join(PROJ, 'scripts', 'valuation_premium_audit.py')
 check("감사 스크립트가 저장소에 있다", _os.path.exists(_sc132))
 
@@ -8130,6 +8153,94 @@ for _pr135 in ('PREREG_R55_REGIME_MOE.md', 'PREREG_R57_ENTRY_ENGINE.md',
     check(f"{_pr135} 이 새 날짜를 가리킨다", '2026-11-16' in _s135b)
     check(f"{_pr135} 이 게이트 불변을 명시한다",
           '그대로' in _s135b or '바꾸지 않는다' in _s135b)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §136 — 쉬운 문장 + 눌러서 펼치는 근거 (라운드 79)
+#   사용자 요청: "이런 내용 좋다 조금만 더 쉽게 써주고 클릭하면 더 자세히
+#   보이게 해줘." 위험은 둘이다 —
+#     ① 쉽게 쓴다며 **근거를 지워** 버린다 (§9 위반)
+#     ② 펼침이 스크립트에 기대 죽으면 근거가 영영 안 보인다 (라운드 76)
+#   그래서 '접혔는가'가 아니라 **접힌 안에 근거가 들어 있는가**를 검사한다.
+# ══════════════════════════════════════════════════════════════════════
+import ui_kit as _uk136                                        # noqa: E402
+
+_d136 = _uk136.disclose('왜 그런가 · 자세히', '<b>본문</b> 근거')
+check("펼침 헬퍼가 <details> 를 쓴다 (스크립트 없이 열린다)",
+      '<details' in _d136 and '<summary' in _d136)
+check("펼침이 기본은 닫혀 있다", ' open>' not in _d136)
+check("라벨은 escape 하고 본문은 원문 유지 (숫자 서식이 살아야 한다)",
+      '&lt;b&gt;' in _uk136.disclose('<b>x</b>', 'y')
+      and '<b>본문</b> 근거' in _d136)
+check("펼침에 Lucide 셰브런을 쓴다 (이모지 금지 · §5)",
+      '<svg' in _d136 and 'ChevronDown' in str(_uk136._ICONS))
+import re as _re136                                            # noqa: E402
+check("펼침에 이모지가 없다",
+      not _re136.findall(r'[\U0001F300-\U0001FAFF☀-➿]', _d136))
+
+_w136 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("카드가 펼침을 실제로 그린다",
+      '_buy_more_html' in _w136 and '_dm_more_html' in _w136
+      and '_uk.disclose(' in _w136)
+check("기본 삼각형 마커를 지운다 (브라우저마다 모양이 다르다)",
+      '::-webkit-details-marker' in _w136 and '::marker' in _w136)
+check("펼침 회전이 모션 축소를 존중한다",
+      '.gn-disc > details[open] > summary svg' in _w136
+      and 'prefers-reduced-motion' in _w136)
+# ⚠️ 서버를 띄워 보고 두 번 고친 자리다.
+#   ① Streamlit 의 st.expander 도 DOM 에서 <details> — 요소로만 스코프를
+#      잡으면 화면의 확장 패널 69개가 같이 바뀐다.
+#   ② class 를 <details> 에 달았더니 **정화기가 지웠다.** 그래서 바깥
+#      div 에 단다. 소스만 보는 검사는 ②를 못 잡으므로, 여기서는 최소한
+#      '어디에 붙였는지'를 값으로 확인한다.
+check("펼침 바깥에 전용 클래스 div 가 있다",
+      "<div class='gn-disc'>" in _d136)
+check("details 자체에는 class 를 달지 않는다 (정화기가 지운다)",
+      "<details class=" not in _d136)
+# 기본 삼각형은 CSS 없이도 사라져야 한다 — 인라인 style 만 살아남으므로
+check("summary 가 인라인으로 마커를 없앤다 (display:flex · list-style)",
+      'display:flex' in _d136 and 'list-style:none' in _d136)
+# 셀렉터 전문을 그대로 찾는다 — 'find(":hover")' 처럼 조각으로 찾으면
+# 파일 앞쪽의 다른 규칙(.gn-ask-fab:hover)에 걸려 엉뚱한 곳을 본다.
+for _sel136 in ('.gn-disc > details > summary::-webkit-details-marker',
+                '.gn-disc > details > summary::marker',
+                '.gn-disc > details > summary:hover',
+                '.gn-disc > details > summary svg',
+                '.gn-disc > details[open] > summary svg'):
+    check(f"'{_sel136}' 가 우리 것만 칠한다",
+          _sel136 in _w136, 'Streamlit expander 까지 바뀐다')
+# 반대 방향 — 클래스 없는 광범위 셀렉터가 남아 있으면 실패
+for _bad136 in ('\ndetails > summary', '\ndetails[open] > summary',
+                '\ndetails.gn-disc'):
+    check(f"'{_bad136.strip()}' 같은 전역/무효 셀렉터가 없다",
+          _bad136 not in _w136, '화면의 모든 확장 패널이 같이 바뀐다')
+
+# ── 근거를 지우지 않았는가 — 여기가 이 절의 핵심이다 ────────────────
+for _need136, _why136 in (
+        ('15,332건', '차단 근거 실측치'),
+        ('라운드 63', '그 판정이 어디서 왔는지'),
+        ('안전마진선', '언제 살 수 있게 되는지'),
+        ('손익비', '위험 대비 보상'),
+        ('σ', '거리를 배수로 잰다는 사실')):
+    check(f"근거가 남아 있다 — {_why136}", _need136 in _w136)
+
+# ── 표면은 쉬워졌는가 — 긴 옛 문장이 그대로 남아 있으면 실패 ────────
+for _gone136 in ("'적정가 크게 초과' 차단이 ",
+                 '즉 <b>이 가격에 도달해도 지금 ',
+                 '20일 변동폭({_sig_pct}%) 대비 <b>{_rc_sig}σ</b> · {_rc_reach}'):
+    check(f"옛 긴 문장이 표면에서 빠졌다 — {_gone136[:22]}…",
+          _gone136 not in _w136)
+check("막힌 값이면 칸 제목이 '살 가격'이 아니다 (매수 지시로 읽힌다)",
+      '여기까지 오면 다시 볼 값' in _w136 and '_rec_blocked' in _w136)
+check("쉬운 한 문장이 표면에 있다",
+      '여기까지 내려와도 아직은 못 삽니다' in _w136)
+
+# ── 손익비를 원으로 풀 때 **CORE 진입가일 때만** 뺀다 (§4) ──────────
+#   폴백(_value_floor)이면 손익비와 기준이 달라 숫자가 서로 안 맞는다.
+_i136 = _w136.find('_entry_lv_more = (')
+check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
+      _i136 > 0 and 'if _core_entry and _e_rr:' in _w136[max(0, _i136 - 700):_i136],
+      '조건 밖에서 계산하면 폴백일 때 손익비와 어긋난다')
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

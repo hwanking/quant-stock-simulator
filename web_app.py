@@ -4663,6 +4663,14 @@ rec_buy_val = _core_entry if _core_entry else _value_floor
 _er_price = four_scores.get('entry_review_price')
 _er_basis = four_scores.get('entry_review_basis') or ''
 rec_buy_sub = ''
+#: 눌러서 펼치는 상세 (라운드 79). 표면에는 **한 문장**만 남기고 근거·수치·
+#: 라운드 번호는 여기로 내린다. 사용자 요청: "조금만 더 쉽게 써주고
+#: 클릭하면 더 자세히 보이게." 지우는 게 아니라 **접는다** — 근거를 없애면
+#: §9(성과를 좋게 보이게 쓰지 않는다)가 깨진다.
+rec_buy_more = ''
+#: 게이트가 막고 있는 값인가 — 막혔으면 칸 제목도 '살 가격'이 아니어야 한다.
+#: "이 값 이하에서"는 매수 지시로 읽힌다 (라운드 63 이 헤드라인을 고친 이유).
+_rec_blocked = False
 if rec_buy_val is not None:
     rec_buy_display = f"{rec_buy_val:,.0f}원 이하"
     if _core_entry:
@@ -4690,67 +4698,103 @@ if rec_buy_val is not None:
                 and (_core_entry / float(_floor_fv)) > 1.15)
             if _still_blocked:
                 # 제목 자체를 바꾼다 — "…이하"는 매수 지시로 읽힌다
+                _rec_blocked = True
                 rec_buy_display = (f"{rec_buy_val:,.0f}원 "
                                    f"(가격 조건만 · 매수 신호 아님)")
                 rec_buy_sub = (
-                    f"이 값은 <b>가격 조건만</b> 본 것입니다 — 여기까지 "
-                    f"내려와도 적정가({_fair:,.0f}원) 대비 "
-                    f"<b>{_gap_fv:+.1f}%</b>라 '적정가 크게 초과' 차단이 "
-                    f"그대로 유지됩니다. 즉 <b>이 가격에 도달해도 지금 "
-                    f"규칙으로는 매수 신호가 아닙니다.</b> 실제 매수 후보가 "
-                    f"되려면 적정가가 올라오거나(실적·업황 반영) 가격이 "
-                    f"안전마진선({float(_floor_fv):,.0f}원) 부근까지 더 "
-                    f"내려와야 합니다. 개발 구간 실측에서 '크게 초과' 자리의 "
-                    f"매수권 신호는 15,332건 중 0건이었습니다 — 엔진이 이 "
-                    f"구간을 통째로 막고 있습니다 (라운드 63)")
+                    f"<b>여기까지 내려와도 아직은 못 삽니다.</b> "
+                    f"적정가 {_fair:,.0f}원보다 {_gap_fv:+.1f}% 비싸서 "
+                    f"규칙이 막고 있습니다.")
+                rec_buy_more = (
+                    f"<b>언제 살 수 있게 되나</b> — 둘 중 하나가 일어나야 "
+                    f"합니다.<br>"
+                    f"① 값이 <b>{float(_floor_fv):,.0f}원</b> 부근까지 더 "
+                    f"내려온다<br>"
+                    f"② 실적·업황이 좋아져 <b>적정가가 올라온다</b>"
+                    f"<br><br>"
+                    f"<b>왜 막나</b> — 이 자리('적정가 크게 초과')에서 나온 "
+                    f"매수 신호는 과거 15,332건 중 <b>0건</b>이었습니다. "
+                    f"엔진이 구간을 통째로 막고 있습니다 (라운드 63). "
+                    f"위 값은 <b>가격 조건만</b> 본 숫자라, 도달해도 "
+                    f"매수 신호로 바뀌지 않습니다.")
             elif _gap_fv >= 3.0:
                 rec_buy_sub = (
-                    f"가치 기준(적정가 {_fair:,.0f}원)보다 "
-                    f"<b>{_gap_fv:+.1f}%</b> 높은 자리 — 가치 관점에서는 "
-                    f"아직 싸지 않지만, 현재 추세·변동성 기준으로는 이 값 "
-                    f"아래부터 위험 대비 보상이 개선됩니다 (진입가 근거: "
-                    f"기준가 − 20일 변동성 1일치 · 20봉 내 체결률 실측). "
-                    f"적정가 부근까지의 하락을 기다리는 것은 가치 매수이고, "
-                    f"위 값은 타이밍 매수 기준입니다 — 서로 다른 질문입니다")
+                    f"가치로 보면 아직 싸지 않습니다 — 적정가 "
+                    f"{_fair:,.0f}원보다 {_gap_fv:+.1f}% 위입니다. "
+                    f"타이밍으로는 이 값 아래부터 해 볼 만합니다.")
+                rec_buy_more = (
+                    f"<b>두 가격은 다른 질문에 답합니다.</b><br>"
+                    f"· 적정가 {_fair:,.0f}원 = <b>얼마면 싼가</b> "
+                    f"(재무·업종 기반 장기 가치)<br>"
+                    f"· 위 값 = <b>지금 장세에서 어디부터 들어갈 만한가</b> "
+                    f"(추세·변동성 기준)<br><br>"
+                    f"위 값의 근거는 기준가에서 20일 변동성 하루치를 뺀 "
+                    f"자리이고, 20봉 안에 실제로 체결된 비율을 실측해 "
+                    f"정했습니다. 적정가까지 내려오길 기다리는 것은 "
+                    f"<b>가치 매수</b>, 위 값에서 들어가는 것은 "
+                    f"<b>타이밍 매수</b>입니다 — 둘 다 맞을 수 있습니다.")
             elif _gap_fv <= -3.0:
                 rec_buy_sub = (
-                    f"진입 기준이 가치 기준(적정가 {_fair:,.0f}원)보다 "
-                    f"<b>{_gap_fv:+.1f}%</b> 아래 — 타이밍과 가치가 같은 "
-                    f"방향을 가리키는 자리입니다. 다만 적정가 신뢰도와 "
-                    f"거래 조건을 함께 확인하세요")
+                    f"가치로 봐도 싼 자리입니다 — 적정가 {_fair:,.0f}원보다 "
+                    f"{_gap_fv:+.1f}% 아래입니다.")
+                rec_buy_more = (
+                    f"타이밍 기준과 가치 기준이 <b>같은 방향</b>을 "
+                    f"가리킵니다. 드문 자리지만 그것만으로 안전하지는 "
+                    f"않습니다 — 적정가를 얼마나 믿을 수 있는지(신뢰도)와 "
+                    f"거래량이 충분한지를 함께 보세요.")
             else:
                 rec_buy_sub = (
-                    f"가치 기준(적정가 {_fair:,.0f}원)과 사실상 같은 자리 "
-                    f"({_gap_fv:+.1f}%) — 타이밍 기준과 가치 기준이 "
-                    f"겹칩니다")
+                    f"적정가({_fair:,.0f}원)와 거의 같은 자리입니다 "
+                    f"({_gap_fv:+.1f}%).")
+                rec_buy_more = (
+                    f"<b>얼마면 싼가</b>(가치)와 <b>어디부터 들어갈 만한가</b>"
+                    f"(타이밍)가 겹치는 자리입니다. 두 기준이 서로 다른 값을 "
+                    f"말할 때가 많은데, 지금은 같은 곳을 가리킵니다.")
             if _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
-                rec_buy_sub += (
-                    f"<br>장기 안전마진선(적정가 − 안전마진)은 "
-                    f"{_value_floor:,.0f}원 — 20일 안에 닿을 자리가 아니라 "
-                    f"오늘의 매수가로 쓰지 않습니다")
+                rec_buy_more += (
+                    f"<br><br><b>장기 안전마진선 {_value_floor:,.0f}원</b>은 "
+                    f"따로 있습니다 — 가치가 확실히 싸지는 자리지만 20일 "
+                    f"안에 닿을 값이 아니라, 오늘의 매수가로는 쓰지 "
+                    f"않습니다.")
         elif _value_floor and abs(_value_floor / _core_entry - 1.0) >= 0.10:
-            rec_buy_sub = (
-                f"장기 가치 참고선은 {_value_floor:,.0f}원이지만, 20일 안에 "
-                f"닿을 자리가 아니라 오늘의 매수가로 쓰지 않습니다")
+            rec_buy_sub = "장기 가치 참고선은 따로 있습니다"
+            rec_buy_more = (
+                f"장기 가치 참고선은 <b>{_value_floor:,.0f}원</b>입니다. "
+                f"다만 20일 안에 닿을 자리가 아니라 오늘의 매수가로는 쓰지 "
+                f"않습니다 — 위 값이 오늘 기준입니다.")
     elif _value_floor:
-        rec_buy_sub = ("적정가 기반 장기 참고선 — 변동성 기반 진입가를 "
-                       "산출하지 못해 대신 표시합니다")
+        rec_buy_sub = "적정가 기반 장기 참고선입니다"
+        rec_buy_more = ("변동성으로 계산하는 오늘의 진입가를 만들지 못해, "
+                        "대신 장기 가치 기준선을 보여 드립니다. 성격이 "
+                        "다른 값이므로 '오늘 여기서 사라'는 뜻이 "
+                        "아닙니다.")
 elif _er_price:
     rec_buy_display = f"{_er_price:,.0f}원 부근"
     _er_why = ("모델 범위 밖" if four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN'
                else "적정가 신뢰도 미달")
-    rec_buy_sub = f"기술 지지 기준: {_er_basis} — 적정가 검증 없음 ({_er_why})"
+    rec_buy_sub = "차트 지지선만 보고 잡은 값입니다 — 가치 검증은 없습니다"
+    rec_buy_more = (f"근거: {_er_basis}<br>적정가로 한 번 더 검증하지 "
+                    f"못했습니다 ({_er_why}). 가격이 싼지 비싼지는 이 "
+                    f"값으로 알 수 없습니다.")
 elif four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN':
     # 성장 기대가 가격을 지배하는 종목 — 신뢰도 문제가 아니라 모델이 성립하지 않는다
     rec_buy_display = "산출 불가 (모델 범위 밖)"
-    rec_buy_sub = "현재가 아래 유효 지지선도 없음 — 진입 기준 자체가 없습니다"
+    rec_buy_sub = "기준을 만들 수 없습니다 — 현재가 아래 지지선도 없습니다"
+    rec_buy_more = ("실적보다 성장 기대가 가격을 지배하는 종목이라 "
+                    "적정가 모델이 성립하지 않습니다. 값이 틀린 것이 "
+                    "아니라 <b>낼 수 없다</b>는 뜻입니다 — 없는 값을 "
+                    "지어내지 않습니다.")
 else:
     rec_buy_display = "신뢰도 미달"
-    rec_buy_sub = "현재가 아래 유효 지지선도 없음 — 근거가 생길 때까지 관망"
+    rec_buy_sub = "근거가 생길 때까지 관망 — 현재가 아래 지지선이 없습니다"
+    rec_buy_more = ("기댈 지지선도, 믿을 만한 적정가도 없습니다. "
+                    "이럴 때 숫자를 만들어 주면 근거 없는 값이 실행 "
+                    "가격처럼 보입니다.")
 # 주의: f-string 템플릿 안에 조건부로 '빈 줄'을 남기면 markdown 이 이어지는
 # HTML 을 코드 블록으로 렌더한다 — 반드시 앞 요소와 같은 줄에 붙인다.
 _rec_sub_html = (f"<p style='margin:4px 0 0 0; font-size:12px; "
-                 f"color:#9DAABC;'>{rec_buy_sub}</p>" if rec_buy_sub else "")
+                 f"color:#9DAABC; line-height:1.6;'>{rec_buy_sub}</p>"
+                 if rec_buy_sub else "")
 _ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
 _ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
 
@@ -4764,6 +4808,7 @@ _e_stop = (CORE or {}).get('new_stop')
 _e_t1 = (CORE or {}).get('new_target')
 _e_rr = (CORE or {}).get('rr')
 _entry_lv_html = ''
+_entry_lv_more = ''
 if _e_stop and _e_t1:
     _entry_lv_html = (
         f"<p style='margin:6px 0 0 0; font-size:12px; color:#9DAABC; "
@@ -4772,6 +4817,20 @@ if _e_stop and _e_t1:
         f"<b style='color:#4C8DFF;'>{_e_t1:,.0f}원</b>"
         + (f" · 손익비 <b>{_e_rr}:1</b>" if _e_rr else '')
         + "</p>")
+    # 손익비를 '원'으로 풀어 준다. 비율만 보면 0.7:1 이 좋은지 나쁜지
+    # 감이 안 온다. 두 값 모두 CORE 가 낸 것이라 화면과 어긋날 수 없다 (§4).
+    # 표시 진입가가 CORE 진입가일 때만 뺄셈한다 — 폴백(_value_floor)이면
+    # 손익비와 기준이 달라져 숫자가 서로 안 맞는다.
+    if _core_entry and _e_rr:
+        _risk = _core_entry - _e_stop
+        _rewd = _e_t1 - _core_entry
+        if _risk > 0 and _rewd > 0:
+            _entry_lv_more = (
+                f"<b>손익비 {_e_rr}:1 이 무슨 뜻이냐면</b> — 이 가격에 "
+                f"사면 손절까지 <b>{_risk:,.0f}원</b>을 감수하고 1차 "
+                f"목표까지 <b>{_rewd:,.0f}원</b>을 노리는 자리입니다. "
+                f"1보다 작으면 <b>잃을 폭이 벌 폭보다 큽니다</b> — 그만큼 "
+                f"적중률이 높아야 본전입니다.")
 
 # ── 도달 가능성 · 논리 검사 ──────────────────────────────────────────────
 # "권장 매수가가 현실적으로 닿는 가격인가"를 σ 로 재서 말로 옮긴다.
@@ -4800,16 +4859,30 @@ _gap_fair = ((realtime_price / _fair_v - 1) * 100
 _rec_is_far = bool(_rc_sig is not None and _rc_sig > 2.0)
 
 _reach_html = ''
+_reach_more = ''
 if _rc_sig is not None:
     _rc_col = '#F2B84B' if _rec_is_far else '#9DAABC'
+    # 표면은 사람 말로만 — σ 같은 기호는 아래 '자세히'로 내린다 (라운드 79).
+    _reach_word = {'가까움': '금방 닿을 거리입니다',
+                   '닿을 만함': '20일 안에 닿을 만한 거리입니다',
+                   '멀다': '20일 안에 닿기는 쉽지 않습니다',
+                   '사실상 도달 어려움': '20일 안에 닿기 어렵습니다',
+                   }.get(str(_rc_reach), str(_rc_reach))
     _reach_html = (
         f"<p style='margin:6px 0 0 0; font-size:12px; color:{_rc_col}; "
-        f"line-height:1.6;'>현재가에서 <b>{_rc_drop:+.1f}%</b> "
-        f"— 20일 변동폭({_sig_pct}%) 대비 <b>{_rc_sig}σ</b> · {_rc_reach}"
-        + ("<br><b>지금은 매수 후보가 아니라 관찰 대상입니다.</b> "
-           "계산된 매수가까지 차이가 너무 커 단기간에 내려올 가능성이 낮습니다."
+        f"line-height:1.6;'>지금보다 <b>{abs(_rc_drop):.1f}% "
+        f"{'아래' if _rc_drop < 0 else '위'}</b> — {_reach_word}"
+        + ("<br><b>지금은 매수 후보가 아니라 지켜볼 종목입니다.</b> "
+           "계산된 매수가가 너무 멀어 곧 내려올 가능성이 낮습니다."
            if _rec_is_far else '')
         + "</p>")
+    _reach_more = (
+        f"<b>'닿을 만하다'를 어떻게 재나</b> — 이 종목은 20일 동안 보통 "
+        f"<b>{_sig_pct}%</b>쯤 움직입니다. 위 매수가까지는 그 평소 움직임의 "
+        f"<b>{_rc_sig}배</b>({_rc_sig}σ) 거리입니다.<br>"
+        f"1배 안쪽이면 흔한 움직임, 2배를 넘으면 20일 안에 보기 드문 "
+        f"움직임입니다. 그래서 '{_rc_reach}'로 적었습니다 — 종목마다 평소 "
+        f"움직임이 다르므로 <b>%가 아니라 배수로</b> 잽니다.")
 
 # 논리 검사 — 사용자가 요청한 조건을 자동으로 걸고, 어긋나면 화면에 적는다
 _logic_warn = []
@@ -4939,14 +5012,29 @@ if _dme:
     # 유효 하한선은 신호가 있을 때만 보여준다. 신호가 없는데 선만 띄우면
     # 진입 근거가 있는 것처럼 읽힌다.
     if _dme.get('trigger_line') and _dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING'):
-        _dm_line = (f"유효 하한 {_dme['trigger_line']:,.0f}원 "
-                    f"({'지지 유지 중' if _dme.get('valid') else '이탈 — 신호 무효'})")
+        _dm_line = (f"{_dme['trigger_line']:,.0f}원이 무너지지 않는 동안만 "
+                    f"유효합니다"
+                    if _dme.get('valid') else
+                    f"{_dme['trigger_line']:,.0f}원이 무너져 이 신호는 "
+                    f"무효입니다")
     elif _dm_state in ('COMPLETE', 'SETUP_DONE', 'FORMING'):
-        _dm_line = "유효 하한(TDST 지지) 산출 불가"
+        _dm_line = "받쳐 주는 선을 산출하지 못했습니다"
     else:
         _dm_line = str(_dme.get('detail', ''))[:60]
+    _dm_more = (
+        "<b>이게 무슨 신호인가</b> — 하락이 계속되면 파는 힘이 점점 "
+        "빠집니다. 그 지친 정도를 9봉까지 세는 것이 DeMARK 셋업입니다. "
+        "9까지 차면 <b>하락이 멈출 자리</b>로 봅니다.<br>"
+        "'몇/9'는 지금 몇 번째인지이고, 아래 가격은 <b>이 신호가 살아 "
+        "있으려면 지켜야 하는 선</b>입니다. 그 선이 무너지면 세던 것을 "
+        "버립니다.<br><br>"
+        "이건 <b>가격이 아니라 시점</b> 신호입니다 — 위의 매수가(가격 "
+        "기준)와 같이 볼 때만 뜻이 있습니다.")
 else:
     _dm_head, _dm_line = "산출 불가 (데이터 부족)", "DeMARK 신호를 만들지 못했습니다"
+    _dm_more = ("봉 수가 모자라거나 시세를 다 받지 못해 셋업을 셀 수 "
+                "없었습니다. 신호가 없다는 뜻이 아니라 <b>재지 못했다</b>는 "
+                "뜻입니다.")
 
 st.markdown('<div id="nav-verdict"></div>', unsafe_allow_html=True)
 # 헤드라인만으로는 '조건부'가 안 보인다 — 신규 매수자용 쉬운 결론 한 줄을
@@ -4993,7 +5081,45 @@ elif _cb_banner:
         f"실측 확률 표본 부족 (n={_cb_banner.get('n', 0)}) — 표시 보류</p>")
 else:
     _prob_html = ""
+# ── 눌러서 펼치는 상세 (라운드 79) ──────────────────────────────────────
+# 사용자 요청: "이런 내용 좋다 조금만 더 쉽게 써주고 클릭하면 더 자세히
+# 보이게 해줘." 그래서 근거를 **지우지 않고 접는다** — 표면에는 한 문장,
+# 눌러야 수치·σ·라운드 번호가 나온다. 근거를 없애면 §9 가 깨진다.
+#
+# 조각마다 따로 접으면 카드가 아코디언 밭이 된다. 매수 칸은 **하나로**
+# 묶고, 타이밍 신호만 따로 둔다 (질문이 다르다 — '얼마에'와 '언제').
+_buy_more_parts = [x for x in (rec_buy_more, _reach_more, _entry_lv_more) if x]
+_buy_more_html = (
+    _uk.disclose('왜 그런가 · 자세히',
+                 "<hr style='border:none; border-top:1px solid #263041; "
+                 "margin:10px 0;'>".join(_buy_more_parts))
+    if _buy_more_parts else '')
+_dm_more_html = (_uk.disclose('이 신호가 뭔가 · 자세히', _dm_more)
+                 if _dm_more else '')
+
 st.markdown(f"""
+<style>
+/* 눌러서 펼치는 상세 (라운드 79) — ui_kit.disclose 가 그리는 요소.
+   카드 HTML 과 같은 덩어리에 넣어 둔다: 다른 곳의 <style> 순서에
+   기대지 않게 하려는 것이다. 기본 삼각형 마커는 브라우저마다 모양이
+   달라 지우고 Lucide 셰브런만 쓴다 (§5 — 아이콘 한 세트).
+
+   ⚠️ 반드시 `.gn-disc` 안에서만 칠한다. 서버를 띄워 보니 Streamlit 의
+   st.expander 도 DOM 에서 <details> 였다 — 요소로만 스코프를 잡았더니
+   화면의 확장 패널 69개(자산·통화 확인 · 상세 설정 · 제외 사유 …)의
+   마커와 hover 가 같이 바뀌고 있었다. 회귀는 통과하는 종류의 결함이다.
+
+   ⚠️ 그리고 class 는 <details> 에 못 단다 — Streamlit 정화기가 지운다.
+   ui_kit.disclose 가 바깥에 <div class='gn-disc'> 를 한 겹 씌우므로
+   여기서도 그 div 를 타고 내려간다. */
+.gn-disc > details > summary::-webkit-details-marker {{ display:none; }}
+.gn-disc > details > summary::marker {{ content:''; }}
+.gn-disc > details > summary:hover {{ filter:brightness(1.35); }}
+.gn-disc > details > summary svg {{ transition:transform .18s ease; }}
+.gn-disc > details[open] > summary svg {{ transform:rotate(180deg); }}
+@media (prefers-reduced-motion: reduce) {{
+  .gn-disc > details > summary svg {{ transition:none; }} }}
+</style>
 <div style='background:linear-gradient(135deg,#161D2A 0%,#161D2A 100%);
             border:3px solid {_vc}; border-radius:20px; padding:24px 24px; margin-bottom:16px;
             box-shadow:0 10px 34px {_vc}22;'>
@@ -5016,12 +5142,12 @@ st.markdown(f"""
     <div style='background:#161D2A; border-radius:14px; padding:14px 16px;'>
       <p style='margin:0 0 10px 0; font-size:13px; color:#35C98B; font-weight:700;'>
         아직 안 샀다면 <span style='color:#9DAABC; font-weight:400;'>· 신규 매수 기준</span></p>
-      <p style='margin:0; font-size:12px; color:#9DAABC;'>살 가격 · 이 값 이하에서</p>
+      <p style='margin:0; font-size:12px; color:#9DAABC;'>{'여기까지 오면 다시 볼 값' if _rec_blocked else '살 가격 · 이 값 이하에서'}</p>
       <p style='margin:2px 0 0 0; font-size:{'17' if _rec_is_far else '22'}px; font-weight:700;
-                color:{'#9DAABC' if _rec_is_far else '#35C98B'};'>{rec_buy_display}</p>{_rec_sub_html}{_reach_html}{_entry_lv_html}
-      <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC;'>매수 타이밍 신호 · 하락세가 힘 빠지는 지점</p>
+                color:{'#9DAABC' if _rec_is_far else '#35C98B'};'>{rec_buy_display}</p>{_rec_sub_html}{_reach_html}{_entry_lv_html}{_buy_more_html}
+      <p style='margin:14px 0 0 0; font-size:12px; color:#9DAABC;'>언제 사나 · 하락이 지치는 자리</p>
       <p style='margin:2px 0 0 0; font-size:15px; font-weight:700; color:{_dm_color}; line-height:1.3;'>{_dm_head}</p>
-      <p style='margin:2px 0 0 0; font-size:12px; color:#9DAABC;'>{_dm_line}</p>
+      <p style='margin:2px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>{_dm_line}</p>{_dm_more_html}
     </div>
     <div style='background:#161D2A; border-radius:14px; padding:14px 16px;'>
       <p style='margin:0 0 10px 0; font-size:13px; color:#4C8DFF; font-weight:700;'>
