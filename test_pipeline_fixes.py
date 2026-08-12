@@ -1446,8 +1446,20 @@ else:
     check(f"공시 — 장 시작 전({_now_d.strftime('%H:%M')})이라 0건이 정상",
           isinstance(_disc, dict))
 _types = {i['type'] for v in _disc.values() for i in v}
-if _disc:
+_n_disc = sum(len(v) for v in _disc.values())
+# ⚠️ 라운드 80 — 이 줄만 시각 가드가 빠져 있었다. 07:47 에 공시가 2건뿐이라
+#   유형이 {'기타','실적'} 2종이었고 "유형 3종 이상"이 깨졌다. 바로 위
+#   건수 검사는 이미 _market_ran 으로 가르고 있었는데 여기만 안 갈랐다.
+#   장 전에는 3종이 안 나오는 게 정상이다 — 시각에 따라 깨지는 테스트는
+#   신호가 아니라 소음이다(이 절 머리말).
+#   다만 **표본 부족을 통과로 쓰지 않는다**: 몇 건이었는지 같이 찍는다.
+if _disc and _market_ran:
     check("공시 유형 분류", len(_types) >= 3, str(sorted(_types)[:6]))
+elif _disc:
+    check(f"공시 유형 분류 — 장 전({_now_d.strftime('%H:%M')}) "
+          f"{_n_disc}건이라 유형 다양성은 미측정",
+          _types <= ({lbl for lbl, _k in mkt.DISCLOSURE_TYPES} | {'기타'}),
+          str(sorted(_types)))
 else:
     check("공시 유형 분류 — 수집분이 없어 판정 보류", True)
 check("공시 유형이 정의된 값", _types <= (
@@ -8241,6 +8253,69 @@ _i136 = _w136.find('_entry_lv_more = (')
 check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
       _i136 > 0 and 'if _core_entry and _e_rr:' in _w136[max(0, _i136 - 700):_i136],
       '조건 밖에서 계산하면 폴백일 때 손익비와 어긋난다')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §137 — 유효표본을 상관으로 센다 (라운드 80 · 관측 전용)
+#   종전 잣대(날짜×업종)는 15,726 → 13,458 로 0.86배밖에 못 깎았다.
+#   라벨을 믿는 방식이라 섹터 없는 종목(ETF·리츠 300)은 아예 못 묶는다.
+#   상관 문턱을 고르는 대신 **설계효과**를 쓴다 — 새 숫자가 없다.
+#   ⚠️ 이 절이 지켜야 할 것은 '값이 얼마인가'가 아니라
+#      **① 문턱을 만들지 않았는가 ② 게이트를 안 건드렸는가** 다.
+# ══════════════════════════════════════════════════════════════════════
+import scripts.effective_n_icc as _en137                       # noqa: E402
+
+check("유효표본 스크립트가 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts',
+                                    'effective_n_icc.py')))
+check("매수권 문턱은 채택된 값을 재사용한다 (새 숫자 금지)",
+      _en137.BUY_ZONE == 58)
+# 상관 문턱을 고르지 않았는지 — 소스에 'ρ>' 류 컷오프가 없어야 한다
+_es137 = open(_os.path.join(PROJ, 'scripts', 'effective_n_icc.py'),
+              encoding='utf-8').read()
+check("상관 문턱(컷오프)을 만들지 않았다",
+      'CORR_CUT' not in _es137 and 'corr_threshold' not in _es137
+      and '설계효과' in _es137)
+
+# 값으로 검사한다 — 합성 데이터로 ICC 의 두 극단을 확인
+_hi137 = ([{'date': '2026-01-01', 'close_return_pct': 5.0} for _ in range(20)]
+          + [{'date': '2026-01-02', 'close_return_pct': -5.0}
+             for _ in range(20)])
+_r137 = _en137.icc_and_neff(_hi137, min_per_date=2)
+check("날짜 안이 완전히 같으면 ICC≈1 · 유효표본≈날짜 수",
+      _r137['icc'] is not None and _r137['icc'] > 0.95
+      and _r137['n_eff'] <= 3.0,
+      f"icc={_r137['icc']} n_eff={_r137['n_eff']}")
+
+_lo137 = [{'date': f'2026-01-{d:02d}', 'close_return_pct': v}
+          for d in range(1, 11) for v in (-9, -3, 0, 3, 9)]
+_r137b = _en137.icc_and_neff(_lo137, min_per_date=2)
+check("날짜 효과가 없으면 ICC≈0 · 유효표본≈raw",
+      _r137b['icc'] is not None and _r137b['icc'] < 0.05
+      and _r137b['n_eff'] >= 45,
+      f"icc={_r137b['icc']} n_eff={_r137b['n_eff']}")
+
+# 못 재면 지어내지 않는다 (§3)
+_r137c = _en137.icc_and_neff([{'date': '2026-01-01',
+                               'close_return_pct': 1.0}], min_per_date=2)
+check("표본이 모자라면 값을 만들지 않고 사유를 적는다",
+      _r137c['icc'] is None and _r137c.get('why'))
+
+# 결과 파일 · 문서
+_ef137 = _os.path.join(PROJ, 'data', 'effective_n_icc.json')
+if _os.path.exists(_ef137):
+    _ej137 = _js135.load(open(_ef137, encoding='utf-8'))
+    check("결과가 관측 전용임을 파일에 적는다",
+          '관측 전용' in str(_ej137.get('note', '')))
+    check("날짜당 최소 건수 여러 개를 실어 견고성을 보인다",
+          all(f'min{m}' in str(_ej137.get('sets')) for m in (2, 5, 10)))
+_ed137 = open(_os.path.join(PROJ, 'docs', 'EFFECTIVE_N_ICC_R80.md'),
+              encoding='utf-8').read()
+check("문서가 하한을 지금 바꾸지 않는다고 못박는다",
+      '측정 후 기준 변경' in _ed137 and '2026-11-16' in _ed137)
+check("문서가 한계를 적는다 (같은 날 부분집합 비교에는 못 쓴다)",
+      '시장 요인이 상쇄되므로' in _ed137)
+
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
