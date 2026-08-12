@@ -110,6 +110,8 @@ _ICONS = {
             'M13.73 21a2 2 0 01-3.46 0',
     'help': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
             'M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01',
+    #: 펼침 표시 — disclose() 가 쓴다. 열리면 CSS 로 180° 돌린다.
+    'ChevronDown': 'm6 9 6 6 6-6',
     # ── 추천 카드용 (Lucide 이름 그대로) ──────────────────────────────
     #  한 세트로만 쓴다. 의미가 모호하면 아이콘을 붙이지 않는다.
     'CircleDollarSign': 'M12 22a10 10 0 100-20 10 10 0 000 20z'
@@ -150,6 +152,37 @@ def _icon(name, color, size=16):
             f"fill='none' stroke='{color}' stroke-width='2' "
             f"stroke-linecap='round' stroke-linejoin='round' "
             f"style='flex:0 0 auto;'><path d='{d}'/></svg>")
+
+
+def disclose(label: str, inner_html: str, color: str = '#9DAABC',
+             open_: bool = False) -> str:
+    """눌러서 펼치는 상세 — **HTML 문자열을 돌려준다** (라운드 79).
+
+    ■ 왜 st.expander 가 아닌가
+      이 카드는 `st.markdown(unsafe_allow_html=True)` 로 그린 하나의 HTML
+      덩어리다. 중간에 위젯을 끼울 수 없다. 그리고 카드 안 상세를 위젯으로
+      빼면 카드가 두 조각으로 갈라져 §5(카드는 한 종류)가 깨진다.
+
+    ■ 왜 <details> 인가
+      스크립트 없이 브라우저가 여는 표준 요소다. Streamlit 이 <script> 를
+      지워도 동작하고, 키보드·스크린리더가 그냥 읽는다. 라운드 76 의
+      알약처럼 스크립트가 죽으면 못 여는 구조를 만들지 않는다.
+
+    본문은 **호출하는 쪽이 만든 HTML 그대로** 넣는다 (숫자 서식·강조가
+    이미 들어 있다). 라벨만 escape 한다.
+    """
+    car = _icon('ChevronDown', color, 14)
+    return (
+        f"<details style='margin:6px 0 0 0;'"
+        + (' open' if open_ else '') + ">"
+        f"<summary style='list-style:none; cursor:pointer; display:flex; "
+        f"align-items:center; gap:4px; font-size:12px; color:{color}; "
+        f"padding:2px 0; user-select:none;'>"
+        f"<span>{_esc(label)}</span>{car}</summary>"
+        f"<div style='margin:6px 0 2px 0; padding:10px 12px; "
+        f"background:rgba(255,255,255,.03); border-radius:10px; "
+        f"font-size:12px; line-height:1.75;'>{inner_html}</div>"
+        f"</details>")
 
 
 def dot(color, size=10):
