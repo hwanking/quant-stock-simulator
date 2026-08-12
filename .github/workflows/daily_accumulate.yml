@@ -81,6 +81,20 @@ jobs:
           python scripts/path_recorder.py || true
           python scripts/entry_anchor_recorder.py || true
 
+      # ⚠️ 라운드 77 — 전방 재평가(R55·R57·R66)가 쓸 데이터를 **아무도
+      #   자동으로 쌓고 있지 않았다.** predictions.jsonl 을 쓰는 것은
+      #   web_app.py 와 premarket.py 뿐인데 둘 다 여기서 안 돈다.
+      #   실측: 전방 27건이 전부 8/10·8/11·8/12 — 사람이 앱을 띄운 날만
+      #   기록됐다. 라운드 68 에서 없애려던 'PC 를 켜 뒀는가' 의존이
+      #   전방 쪽에 그대로 남아 있었다.
+      #
+      #   calibration_lab 은 전방을 만들 수 없다 — usable 이
+      #   dates[260:len-21] 이라 오늘 날짜 케이스는 원리적으로 못 만든다
+      #   (20봉이 지나야 채점되므로). 전방은 여기서 먼저 쌓인다.
+      - name: 전방 판정 기록 (오늘 판정을 박제)
+        run: |
+          python scripts/forward_recorder.py --top 60 || true
+
       - name: 뉴스 사건 기록·사후 경로 채움 (관측 전용)
         run: |
           python scripts/news_event_recorder.py --record || true

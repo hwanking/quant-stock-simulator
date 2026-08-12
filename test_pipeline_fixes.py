@@ -7928,6 +7928,34 @@ check("요약 패널 링크도 대화를 연다",
       "class='gn-ask-open-link'" in _w133
       and "querySelectorAll('.gn-ask-open-link')" in _w133)
 
+# §134 — 전방 데이터를 **자동으로** 쌓는가 (라운드 77)
+#   8/23 전방 재평가가 쓸 데이터를 아무도 자동으로 쌓고 있지 않았다.
+#   predictions.jsonl 을 쓰는 것은 web_app.py 와 premarket.py 뿐인데
+#   둘 다 클라우드 워크플로에서 안 돈다. 실측: 전방 27건이 전부 사람이
+#   앱을 띄운 날(8/10·11·12)이었다.
+_fwd134 = _os.path.join(PROJ, 'scripts', 'forward_recorder.py')
+check("전방 판정 기록기가 있다", _os.path.exists(_fwd134))
+if _os.path.exists(_fwd134):
+    _fr134 = open(_fwd134, encoding='utf-8').read()
+    # 앱과 같은 필드로 쌓아야 나중에 화면과 대조가 된다
+    check("앱과 같은 필드로 기록한다",
+          "'horizon_days': 20" in _fr134
+          and "'target': fs.get('target_tech_1st')" in _fr134
+          and "'stop': fs.get('stop_loss_price')" in _fr134)
+    check("같은 종목·날짜를 두 번 쓰지 않는다", 'done.add' in _fr134)
+    # 유니버스를 못 받으면 임의 종목으로 채우지 않는다 (§3)
+    check("유니버스 미수신이면 기록하지 않는다",
+          '오늘은 기록하지 않는다' in _fr134)
+    check("한 건도 못 쌓으면 실패로 남긴다",
+          '통과가 아니라 미측정이다' in _fr134)
+_wf134 = open(_os.path.join(PROJ, '.github', 'workflows',
+                            'daily_accumulate.yml'), encoding='utf-8').read()
+check("일일 워크플로가 전방 기록기를 돌린다",
+      'scripts/forward_recorder.py' in _wf134)
+# 8/23 에는 20영업일이 안 지나 채점 자체가 성립하지 않는다 — 근거를 남긴다
+_fd134 = _os.path.join(PROJ, 'docs', 'FORWARD_DATA_R77.md')
+check("전방 재평가 날짜 문제를 문서로 남겼다", _os.path.exists(_fd134))
+
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",
       '이후 바뀌지 않았습니다' in _w109
