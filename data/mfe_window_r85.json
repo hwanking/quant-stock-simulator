@@ -1,0 +1,29 @@
+{
+ "made": "2026-08-13",
+ "paths": 181959,
+ "ledger": 181959,
+ "by_outcome": {
+  "TARGET": {
+   "n": 102783,
+   "led_mfe_med": 4.92,
+   "path_max_med": 11.088,
+   "diff_med": 4.851000000000001,
+   "path_bigger_pct": 90.0
+  },
+  "STOP": {
+   "n": 71510,
+   "led_mfe_med": 1.02,
+   "path_max_med": 2.497,
+   "diff_med": 0.004999999999999893,
+   "path_bigger_pct": 70.5
+  },
+  "OPEN": {
+   "n": 7666,
+   "led_mfe_med": 1.63,
+   "path_max_med": 1.702,
+   "diff_med": 0.0010000000000000009,
+   "path_bigger_pct": 53.6
+  }
+ },
+ "note": "관측 전용 — 목표 배수를 고르지 않는다. 원장 mfe 는 청산 봉까지라 연구용으로 쓰지 않는다. 경로(bar_paths)는 청산과 무관하게 21봉이 남아 있어 목표 확장 연구가 가능하다."
+}
