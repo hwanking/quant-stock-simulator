@@ -1,0 +1,79 @@
+{
+ "made": "2026-08-13",
+ "note": "후보 엔진·연구 레이더 — 화면이 읽는 단일 출처 (라운드 82). 종전에는 web_app.py 안 DataFrame 리터럴이었고, 그래서 라운드 78 에서 재평가일을 고칠 때 이 표의 '8/23' 두 개가 따로 남아 있었다. 상태 문구는 여기서만 고친다. 전방검증 대기 항목의 날짜는 코드가 forward_eval 에서 붙이므로 여기 적지 않는다.",
+ "columns": ["엔진·후보", "상태", "근거·강점", "한계"],
+ "rows": [
+  {
+   "name": "현재 가늠 엔진",
+   "status": "운영",
+   "strength": "설명력·검증 체계·타이밍",
+   "limit": "종목 순위력 약함 (R49·R54 실측)",
+   "origin": "자체"
+  },
+  {
+   "name": "계층 혼합 확률 (R59)",
+   "status": "운영 채택",
+   "strength": "보정도 12.1 vs 35.4%p",
+   "limit": "개인화 한계 (최협층 n 의존)",
+   "origin": "자체"
+  },
+  {
+   "name": "국면 라우팅 (R55)",
+   "status": "전방검증 대기",
+   "status_needs_eval_date": true,
+   "strength": "valid EV +0.66→+1.05 · 적중 유지",
+   "limit": "전방 미확정",
+   "origin": "자체 (사전등록 PREREG_R55_REGIME_MOE.md)"
+  },
+  {
+   "name": "즉시 진입 (R57)",
+   "status": "전방검증 대기",
+   "status_needs_eval_date": true,
+   "strength": "valid 정책EV 2배 · 역선택 회피",
+   "limit": "전방 미확정",
+   "origin": "자체 (사전등록 PREREG_R57_ENTRY_ENGINE.md)"
+  },
+  {
+   "name": "Exit 도전자 12종 (R58b)",
+   "status": "기각 — 현행 방어",
+   "strength": "타임스탑 EV 우위",
+   "limit": "승률 하한 미달·우호구간 의존",
+   "origin": "자체"
+  },
+  {
+   "name": "메타 라벨 logit/XGB/LGBM (R54)",
+   "status": "기각",
+   "strength": "EV +0.48%p",
+   "limit": "적중 리프트·커버리지 미달",
+   "origin": "외부 아이디어 — 메타 라벨링 (López de Prado, Advances in Financial ML)"
+  },
+  {
+   "name": "업종 게이트 (R46)",
+   "status": "기각 · 홀드아웃 봉인",
+   "strength": "방향 일치 (+5.6%p)",
+   "limit": "A2 미달 · \"업종 문제가 아니다\"",
+   "origin": "자체"
+  },
+  {
+   "name": "뉴스 사건-가격반응",
+   "status": "연구 예정",
+   "strength": "사건 유형 10종 태깅 완료",
+   "limit": "반응 실측 미연결",
+   "origin": "자체"
+  },
+  {
+   "name": "TSFM (Chronos·TimesFM)",
+   "status": "연구 예정 (torch 확보)",
+   "strength": "가격 경로 비교 후보",
+   "limit": "금융 우위 미확정 (문헌)",
+   "origin": "외부 아이디어 — 시계열 파운데이션 모델 (Amazon Chronos · Google TimesFM)"
+  },
+  {
+   "name": "Cross-sectional Ranking",
+   "status": "연구 예정",
+   "strength": "섹터 상대강도·초과수익 후보",
+   "limit": "R49 \"순위 정보 없음\"이 출발점",
+   "origin": "외부 아이디어 — 횡단면 모멘텀·상대강도 계열"
+  }
+ ]
+}

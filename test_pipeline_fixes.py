@@ -7821,9 +7821,32 @@ check("약점 카드가 가늠 AI 한계를 재사용한다 (§4 한 소스)",
 check("R55 미사용을 대시보드가 명시한다",
       '전방 검증 전 — ' in _w130 and '이번 판단에 미사용' in _w130
       and '_fe.eval_date_ko()' in _w130)
+# ⚠️ 라운드 82 — 이 표가 web_app 의 DataFrame 리터럴이었고, 그래서
+#   라운드 78 에서 날짜를 고칠 때 여기 '8/23' 두 개가 따로 남아 있었다.
+#   이제 data/research_radar.json 한 곳에서 읽는다 — 검사도 그 데이터를 본다.
+#   (§135 의 json 별칭을 쓰지 않는다 — 이 절이 먼저 돈다. 라운드 78 에서
+#    같은 실수로 회귀가 NameError 로 끊겼다.)
+import json as _js130                                          # noqa: E402
+_rad130 = _js130.load(open(_os.path.join(PROJ, 'data',
+                                         'research_radar.json'),
+                           encoding='utf-8'))
 check("엔진 비교 표의 상태가 실제 라운드 결과다",
-      '기각 — 현행 방어' in _w130
-      and "f'전방검증 대기 ({_fe.eval_date_ko()})'" in _w130)
+      any('기각 — 현행 방어' == r.get('status') for r in _rad130['rows'])
+      and any(r.get('status_needs_eval_date') for r in _rad130['rows']))
+check("표를 코드에 다시 박지 않는다 (한 곳에서 읽는다)",
+      "['현재 가늠 엔진', '운영'" not in _w130
+      and 'research_radar.json' in _w130)
+check("전방검증 날짜를 표에 적어 두지 않는다 (forward_eval 이 붙인다)",
+      not any('2026-' in str(r.get('status') or '')
+              for r in _rad130['rows']),
+      '표에 날짜를 적으면 또 따로 낡는다')
+check("못 읽으면 표를 지어내지 않는다",
+      '목록 없이 표를 만들지 않습니다' in _w130)
+# 화면이 '레이더'라 부르는 것의 출처를 적었는가 (논문·특허는 아이디어 출처)
+check("외부 아이디어 출처를 밝힌다",
+      sum(1 for r in _rad130['rows']
+          if str(r.get('origin', '')).startswith('외부')) >= 3,
+      str([r.get('origin') for r in _rad130['rows']][:3]))
 check("SELF 실체 표가 있다 (그 사례들이 뭔데)",
       '이 종목 과거 신호 실체' in _w130)
 check("후보 숫자를 운영 판단에 섞지 않음을 명시",
@@ -8069,13 +8092,17 @@ check("정책이 아니라 날짜만 붙였다고 명시한다",
       _rr135['forward_eval']['policy_unchanged'] is True
       and _rr135['forward_eval']['gates_unchanged'] is True)
 
-# 코드에 옛 날짜가 살아 있으면 실패 — 문서는 '정정됐다'고 적으므로 제외한다
+# 코드에 옛 날짜가 살아 있으면 실패 — 문서는 '정정됐다'고 적으므로 제외한다.
+# ⚠️ 라운드 82 — **주석은 근거로 치지 않는다.** 라운드 78 이 왜 고쳤는지
+#   설명하는 주석에 '8/23' 이 들어가는데, 그것까지 실패로 세면 결정을
+#   기록하지 못하게 된다. 라운드 71 이 만든 code_lines(산문 제거)를 쓴다.
+import scripts.lineage_audit as _la135                         # noqa: E402
 for _f135 in ('gaeum_chat.py', 'web_app.py', 'verdict_core.py',
               'quant_indicators.py', 'premarket.py'):
     _p135 = _os.path.join(PROJ, _f135)
     if not _os.path.exists(_p135):
         continue
-    _s135 = open(_p135, encoding='utf-8').read()
+    _s135 = '\n'.join(ln for _i135, ln in _la135.code_lines(_f135))
     check(f"{_f135} 에 옛 재평가일이 박혀 있지 않다",
           '8/23' not in _s135 and '2026-08-23' not in _s135)
 
