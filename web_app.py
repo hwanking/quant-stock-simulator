@@ -6039,30 +6039,40 @@ try:
             "운영 판단에 섞이지 않으며, 채택은 사전등록 → valid → 전방 "
             "검증을 통과해야만 합니다. 논문·특허는 아이디어 출처일 뿐 "
             "성능 근거가 아닙니다."))
+        # ⚠️ 라운드 82 — 이 표는 여기 DataFrame 리터럴로 박혀 있었다.
+        #   그래서 라운드 78 에서 재평가일을 고칠 때 이 표 안의 '8/23' 두
+        #   개가 따로 남아 있었다 — 같은 사실이 두 곳에 적혀 있으면 한쪽만
+        #   고치게 된다(§4). 이제 data/research_radar.json 한 곳에서 읽는다.
+        #   전방검증 대기 항목의 날짜는 forward_eval 이 붙인다 — 표에
+        #   날짜를 적어 두지 않는다.
         import pandas as _pd61b
-        st.dataframe(_pd61b.DataFrame([
-            ['현재 가늠 엔진', '운영', '설명력·검증 체계·타이밍',
-             '종목 순위력 약함 (R49·R54 실측)'],
-            ['계층 혼합 확률 (R59)', '운영 채택', '보정도 12.1 vs 35.4%p',
-             '개인화 한계 (최협층 n 의존)'],
-            ['국면 라우팅 (R55)', f'전방검증 대기 ({_fe.eval_date_ko()})',
-             'valid EV +0.66→+1.05 · 적중 유지', '전방 미확정'],
-            ['즉시 진입 (R57)', f'전방검증 대기 ({_fe.eval_date_ko()})',
-             'valid 정책EV 2배 · 역선택 회피', '전방 미확정'],
-            ['Exit 도전자 12종 (R58b)', '기각 — 현행 방어',
-             '타임스탑 EV 우위', '승률 하한 미달·우호구간 의존'],
-            ['메타 라벨 logit/XGB/LGBM (R54)', '기각',
-             'EV +0.48%p', '적중 리프트·커버리지 미달'],
-            ['업종 게이트 (R46)', '기각 · 홀드아웃 봉인',
-             '방향 일치 (+5.6%p)', 'A2 미달 · "업종 문제가 아니다"'],
-            ['뉴스 사건-가격반응', '연구 예정', '사건 유형 10종 태깅 완료',
-             '반응 실측 미연결'],
-            ['TSFM (Chronos·TimesFM)', '연구 예정 (torch 확보)',
-             '가격 경로 비교 후보', '금융 우위 미확정 (문헌)'],
-            ['Cross-sectional Ranking', '연구 예정',
-             '섹터 상대강도·초과수익 후보', 'R49 "순위 정보 없음"이 출발점'],
-        ], columns=['엔진·후보', '상태', '근거·강점', '한계']),
-            hide_index=True, width='stretch')
+        _rad61 = None
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   'data', 'research_radar.json'),
+                      encoding='utf-8') as _rf61:
+                _rad61 = json.load(_rf61)
+        except Exception:                                      # noqa: BLE001
+            _rad61 = None
+        if _rad61 and _rad61.get('rows'):
+            _rows61 = []
+            for _r61 in _rad61['rows']:
+                _st61 = str(_r61.get('status') or '')
+                if _r61.get('status_needs_eval_date'):
+                    _st61 = f"{_st61} ({_fe.eval_date_ko()})"
+                _rows61.append([_r61.get('name'), _st61,
+                                _r61.get('strength'), _r61.get('limit')])
+            st.dataframe(
+                _pd61b.DataFrame(_rows61,
+                                 columns=(_rad61.get('columns')
+                                          or ['엔진·후보', '상태',
+                                              '근거·강점', '한계'])),
+                hide_index=True, width='stretch')
+        else:
+            # 없는 표를 지어내지 않는다 (§3) — 못 읽었으면 그렇게 적는다.
+            st.caption(_md_safe(
+                '후보 목록을 읽지 못했습니다 (`data/research_radar.json`). '
+                '목록 없이 표를 만들지 않습니다.'))
         st.caption(_md_safe(
             f"다음 개선 연구: Entry(다층 매수구간 · {_fe.eval_date_ko()} 후) "
             f"· Exit(새 신호 집합 위 재측정) · 뉴스 가격반응 · TSFM 챌린저 "
