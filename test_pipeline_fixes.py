@@ -8313,6 +8313,73 @@ check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
 
 
 # ══════════════════════════════════════════════════════════════════════
+# §139 — 점수 횡단면 IC (라운드 84 · 측정 전용)
+#   이 절이 지켜야 할 것은 '값이 얼마인가'가 아니라
+#   ① 사전등록 기준이 코드에 박혀 있고 사후에 안 내려갔는가
+#   ② 표본 미달을 '통과'로 쓰지 않는가
+#   ③ 점수·게이트·가중치를 안 건드렸는가
+# ══════════════════════════════════════════════════════════════════════
+import scripts.score_ic_lab as _ic139                          # noqa: E402
+
+check("IC 판정 기준이 코드에 박혀 있다 (사후 조정 금지)",
+      _ic139.T_FLOOR == 2.0 and _ic139.MIN_DATES == 30,
+      f't={_ic139.T_FLOOR} d={_ic139.MIN_DATES}')
+check("날짜당 최소 종목을 여러 개 실어 견고성을 보인다",
+      tuple(_ic139.PER_DATE) == (5, 10, 20))
+# 사전등록 문서가 **측정 전에** 있었는지 — 기준의 출처
+_pr139 = open(_os.path.join(PROJ, 'docs', 'PREREG_R84_SCORE_IC.md'),
+              encoding='utf-8').read()
+check("사전등록이 기준을 먼저 적었다",
+      '|t| ≥ 2.0' in _pr139 and '날짜 수 ≥ 30' in _pr139
+      and '측정 전' in _pr139)
+check("사전등록이 측정 전용임을 못박는다",
+      '점수·게이트·문턱·가중치를 **바꾸지 않는다.**' in _pr139
+      and '측정 전용' in _pr139)
+check("방향 미정 지표는 결과를 보고 방향을 고르지 않는다",
+      '방향을 미리 고르지 않는다' in _pr139)
+
+# 스피어만이 실제로 맞는가 — 값으로 (합성 데이터 두 극단)
+check("완전 일치면 IC=+1",
+      abs(_ic139.spearman([1, 2, 3, 4], [10, 20, 30, 40]) - 1.0) < 1e-9)
+check("완전 역순이면 IC=-1",
+      abs(_ic139.spearman([1, 2, 3, 4], [40, 30, 20, 10]) + 1.0) < 1e-9)
+check("한쪽이 상수면 정의되지 않는다 (0 으로 만들지 않는다)",
+      _ic139.spearman([1, 1, 1, 1], [1, 2, 3, 4]) is None)
+check("동률을 평균 순위로 다룬다",
+      _ic139.spearman([1, 1, 2, 2], [1, 2, 3, 4]) is not None)
+
+# 결과 파일 — 표본 미달을 통과로 쓰지 않는다
+_icf139 = _os.path.join(PROJ, 'data', 'score_ic_r84.json')
+if _os.path.exists(_icf139):
+    _icj139 = _js135.load(open(_icf139, encoding='utf-8'))
+    check("결과가 측정 전용임을 파일에 적는다",
+          '측정 전용' in str(_icj139.get('note', '')))
+    check("사전등록 문서를 가리킨다",
+          'PREREG_R84' in str(_icj139.get('prereg', '')))
+    _vs139 = [v['verdict']
+              for o in _icj139['verdicts'].values() for v in o.values()]
+    check("판정이 세 값 중 하나다 (임의 표현 금지)",
+          set(_vs139) <= {'정보 있음', '정보 없음', '미측정'},
+          str(sorted(set(_vs139))))
+    # 오늘 실제 판정은 전부 미측정이었다 — 그것을 통과로 바꾸지 않았는지
+    check("표본 미달을 '정보 있음'으로 바꾸지 않았다",
+          not any(v == '정보 있음' for v in _vs139)
+          or all((_icj139['result'][o][f]['by_split'][s]['min10']['dates']
+                  or 0) >= 30
+                 for o in _icj139['verdicts']
+                 for f in _icj139['verdicts'][o]
+                 if _icj139['verdicts'][o][f]['verdict'] == '정보 있음'
+                 for s in ('train', 'valid', 'blind')))
+_icd139 = open(_os.path.join(PROJ, 'docs', 'SCORE_IC_R84.md'),
+               encoding='utf-8').read()
+check("결과 문서가 미측정을 통과로 쓰지 않는다",
+      '통과도 기각도 아니다' in _icd139 and '기준을 내리지 않는다' in _icd139)
+check("train 관측을 증거로 부르지 않는다",
+      '증거가 아니라 가설 생성' in _icd139
+      and '판정이 아니다' in _icd139)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # §138 — 복원이 **최신** 스냅샷을 집는가 (라운드 81)
 #   실제 사고: 매 실행이 어제 스냅샷(data-20260811)을 복원하고 오늘
 #   태그(data-20260812)로 올렸다. 이틀 연속 원장이 182,359 에서 멈췄는데
