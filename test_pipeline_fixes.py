@@ -8313,6 +8313,50 @@ check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
 
 
 # ══════════════════════════════════════════════════════════════════════
+# §142 — 환경 점검이 축적 **앞에서** 죽는가 (라운드 87)
+#   라운드 81·86 둘 다 전 단계 success 였고 증분 +0 이 찍혔는데 안 읽혔다.
+#   그래서 환경 가정을 축적 전에 검사하고, 틀리면 거기서 멈춘다.
+#   ⚠️ 이 절이 지켜야 할 것: ① 순서(축적보다 앞) ② `|| true` 없음
+#      ③ 아직 해롭지 않은 조건으로 막지 않는가 (소음 금지)
+# ══════════════════════════════════════════════════════════════════════
+import scripts.env_check as _ec142                             # noqa: E402
+
+check("환경 점검 스크립트가 있다", hasattr(_ec142, 'checks'))
+_wf142 = open(_os.path.join(PROJ, '.github', 'workflows',
+                            'daily_accumulate.yml'), encoding='utf-8').read()
+check("워크플로가 환경 점검을 돈다", 'scripts/env_check.py' in _wf142)
+# 순서 — 축적보다 앞에 있어야 100분을 안 태운다
+_i_env142 = _wf142.find('scripts/env_check.py')
+_i_acc142 = _wf142.find('scripts/calibration_lab.py')
+check("환경 점검이 축적보다 앞에 있다",
+      0 < _i_env142 < _i_acc142, f'{_i_env142} vs {_i_acc142}')
+# `|| true` 가 붙으면 아무도 안 읽는 경고가 된다
+_seg142 = _wf142[_i_env142:_i_env142 + 120]
+check("환경 점검에 || true 를 붙이지 않는다", '|| true' not in _seg142,
+      _seg142[:60])
+
+# 값으로 — 실제로 돌려서 결과 모양을 본다
+_rows142 = _ec142.checks()
+check("점검 항목이 4개 이상이다", len(_rows142) >= 4, str(len(_rows142)))
+check("각 항목이 (이름·통과·설명) 세 값을 낸다",
+      all(len(r) == 3 and isinstance(r[1], bool) and r[2]
+          for r in _rows142))
+_names142 = [r[0] for r in _rows142]
+for _need142 in ('시계', '기준일', '휴장일', 'UTF-8'):
+    check(f"'{_need142}' 항목을 본다",
+          any(_need142 in n for n in _names142), str(_names142))
+# 아직 해롭지 않은 조건으로 막지 않는다 — 내년 미등록은 통과여야 한다
+_nxt142 = [r for r in _rows142 if '참고' in r[0]]
+check("다가오는 해 미등록은 막지 않고 알리기만 한다",
+      _nxt142 and _nxt142[0][1] is True,
+      '아직 해롭지 않은 조건으로 파이프라인을 막으면 소음이다')
+# 지금 이 PC 에서는 통과해야 한다 (KST · UTF-8)
+check("현재 환경은 점검을 통과한다",
+      all(r[1] for r in _rows142),
+      str([(r[0], r[2]) for r in _rows142 if not r[1]]))
+
+
+# ══════════════════════════════════════════════════════════════════════
 # §141 — 클라우드 시계가 KST 인가 (라운드 86)
 #   실제 사고: 러너 시계가 UTC 라 08:00 을 '장 시작 전'으로 읽고
 #   **직전 거래일**을 기준일로 줬다. 전방 기록기가 매일 어제 날짜를 찍고
