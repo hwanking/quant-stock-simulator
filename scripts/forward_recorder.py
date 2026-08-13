@@ -65,6 +65,24 @@ def main():
     t_ref = be.resolve_analysis_date().strftime('%Y-%m-%d')
     print(f'전방 판정 기록 — 기준일 {t_ref} · 상위 {top}종목')
 
+    # ⚠️ 라운드 86 — 기준일이 **뒤처졌는지** 여기서 밝힌다.
+    #   resolve_analysis_date 는 now() 가 KST 라고 가정한다. 클라우드
+    #   러너는 UTC 라 08:00 을 '장 시작 전'으로 읽고 직전 거래일을 줬다.
+    #   그러면 매일 어제 날짜를 찍고 중복 방지에 걸려 **아무것도 안 쌓인다.**
+    #   실제로 predictions.jsonl 이 171 에서 멈춰 있었다 — 축소가 아니라
+    #   정체라 가드도 못 잡았다. 이제 눈에 보이게 적는다.
+    import datetime as _dt
+    _now = _dt.datetime.now()
+    _cal = be.KrxCalendar()
+    _latest = (_now.date() if _cal.is_trading_day(_now.date())
+               else _cal.previous_trading_day(_now.date()))
+    print(f'  시계 {_now:%Y-%m-%d %H:%M} · 달력상 최근 거래일 {_latest}')
+    if t_ref < _latest.strftime('%Y-%m-%d'):
+        print(f'  ⚠ 기준일이 최근 거래일({_latest})보다 뒤처졌다. '
+              f'시계가 KST 가 아닐 수 있다 (러너는 UTC). '
+              f'이대로면 어제 것을 다시 찍고 중복 방지에 걸려 '
+              f'아무것도 안 쌓인다 — TZ 를 확인한다.')
+
     # 이미 오늘 기록한 종목은 건너뛴다 (하루 여러 번 돌아도 안전)
     done = set()
     for r in plog.load_predictions():
