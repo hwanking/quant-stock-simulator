@@ -8384,6 +8384,25 @@ check("문서가 하한을 지금 바꾸지 않는다고 못박는다",
 check("문서가 한계를 적는다 (같은 날 부분집합 비교에는 못 쓴다)",
       '시장 요인이 상쇄되므로' in _ed137)
 
+# ── 업종별 — 화면이 raw n 옆에 상관을 병기하는가 (라운드 81b) ────────
+check("업종별 유효표본을 잰다", hasattr(_en137, 'by_sector'))
+if _os.path.exists(_ef137):
+    _sec137 = (_js135.load(open(_ef137, encoding='utf-8')).get('sectors')
+               or {})
+    check("업종별 결과가 저장된다", len(_sec137) >= 20, f'{len(_sec137)}개')
+    # 업종 안 상관은 전체보다 높아야 자연스럽다 (같은 업종이 더 같이 움직인다)
+    _iccs137 = [v['icc'] for v in _sec137.values() if v.get('icc')]
+    check("업종별 ICC 가 전부 0~1 안에 있다",
+          all(0.0 <= v <= 1.0 for v in _iccs137), str(_iccs137[:5]))
+    check("못 잰 업종은 넣지 않는다 (지어내지 않는다)",
+          all(v.get('n_eff') is not None for v in _sec137.values()))
+check("화면이 n 을 raw 라고 밝힌다",
+      'raw{_icctxt61}' in _w136 and '같은 날 상관 ICC' in _w136)
+check("변환한 유효표본을 화면에 지어내지 않는다",
+      '한쪽 비율을 다른 쪽 n 에 곱하면' in _w136)
+check("표 아래에 한 번만 설명을 붙인다",
+      'n 은 raw 건수' in _w136 and '독립 관측 수는' in _w136)
+
 
 # 버전 칩 — 낮은 버전이 '낡음'이 아님을 화면이 설명하는가
 check("버전 칩에 근거 설명이 붙는다",

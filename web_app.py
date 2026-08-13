@@ -5946,15 +5946,37 @@ try:
         _eng_rows.append(('펀더멘털', '미산출',
                           str(four_scores.get('fair_value_status_note')
                               or '적정가 미산출')[:40], '판단 불가'))
+    # ⚠️ 라운드 81b — 이 줄의 n 은 **raw 건수**다. 같은 날 같은 업종
+    #   종목은 함께 움직이므로 독립 관측이 아니다. 숫자만 보면 실제보다
+    #   단단해 보인다. 그래서 그 업종의 **실측 ICC 를 옆에 적는다.**
+    #
+    #   변환한 유효표본을 여기 쓰지 않는다 — sector_perf.json 의 모집단과
+    #   ICC 를 잰 모집단이 달라, 한쪽 비율을 다른 쪽 n 에 곱하면 근거 없는
+    #   숫자가 된다 (§3). 잰 것만 적는다.
+    _icc61 = None
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'data', 'effective_n_icc.json'),
+                  encoding='utf-8') as _f61:
+            _icc61 = (json.load(_f61).get('sectors') or {})
+    except Exception:                                          # noqa: BLE001
+        _icc61 = None
     try:
         import sector_cycle as _scq61
         _sp61 = _scq61.ledger_perf(val_eval.get('sector'))
         if _sp61 and not _sp61.get('small'):
             _tone61 = ('긍정 참고' if _sp61['ev'] > 0 else '부정 참고')
+            # 표본이 하한(R55 §3 의 n≥200 재사용)에 못 미치면 안 띄운다.
+            # '광고' 는 raw 6건인데 ICC 0.98 이 나온다 — 그런 숫자를 화면에
+            # 올리는 것이 라운드 27b 가 낸 사고다.
+            _ic61 = (_icc61 or {}).get(str(_sp61['sector']))
+            _icctxt61 = (f" · 같은 날 상관 ICC {_ic61['icc']:.2f}"
+                         if (_ic61 and _ic61.get('report')) else '')
             _eng_rows.append(('업황(표시 전용)',
                               f"{_sp61['sector']}",
                               f"원장 실측 적중 {_sp61['hit']}% · "
-                              f"EV {_sp61['ev']:+.2f} (n {_sp61['n']:,})",
+                              f"EV {_sp61['ev']:+.2f} "
+                              f"(n {_sp61['n']:,} raw{_icctxt61})",
                               _tone61))
     except Exception:                                          # noqa: BLE001
         pass
@@ -5989,6 +6011,15 @@ try:
         st.caption(_md_safe(
             '종합: 기업·업황이 나빠서가 아니라 **현재 진입가격이 검증된 '
             '기준보다 높아서** 신규 매수가 보류된 상태입니다.'))
+    # 라운드 81b — 위 표의 업황 n 이 raw 라는 것을 한 번만 설명한다.
+    # 표 안에 매번 문장을 넣으면 칸이 터지고, 안 적으면 235 가 독립 관측
+    # 235 개로 읽힌다.
+    if _icc61 and any(r[0] == '업황(표시 전용)' for r in _eng_rows):
+        st.caption(_md_safe(
+            '업황 줄의 **n 은 raw 건수**입니다. 같은 날 같은 업종 종목은 '
+            '함께 움직이므로(업종별 실측 ICC 0.15~0.37) 독립 관측 수는 '
+            '그보다 훨씬 적습니다 — 적중률·EV 를 그 표본이 주는 것보다 '
+            '단단하게 읽지 마세요. 계산은 `docs/EFFECTIVE_N_ICC_R80.md`.'))
     # 이번 판단의 약점 — 가늠 AI 한계에서 상위 2개 재사용 (§4 한 소스)
     _weak61 = list((_g.get('limits') or [])[:2])
     if _blend59 and _blend59.get('n_narrow', 0) < 200:
