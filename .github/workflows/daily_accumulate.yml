@@ -52,12 +52,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p .portfolio
-          TAG=$(gh release list --limit 30 \
-                --json tagName,createdAt \
-                --jq '[.[] | select(.tagName | startswith("data-"))]
-                      | sort_by(.createdAt) | last | .tagName' || echo "")
+          # ⚠️ 라운드 81 — 여기서 **매일 어제 것을 복원**하고 있었다.
+          #   종전: sort_by(.createdAt) | last
+          #   그런데 릴리스의 createdAt 은 **처음 만든 시각**이고, 자산을
+          #   `--clobber` 로 덮어써도 안 바뀐다. data-20260811 과
+          #   data-20260812 의 createdAt 이 초 단위까지 같았고
+          #   (2026-08-10T05:42:42Z), jq 의 sort_by 는 동률에서 입력 순서를
+          #   지키므로 `last` 가 **20260811** 을 집었다.
+          #   결과: 매 실행이 8/11 스냅샷에서 시작해 400건 더하고 8/12 로
+          #   올렸다 — 이틀 연속 원장이 182,359 에서 멈춰 있었다.
+          #   **축적이 하루도 안 쌓이고 있었다.**
+          #
+          #   고침: 자산이 **실제로 쓰인 시각**(assets[].updated_at)으로
+          #   고른다. 자산이 없는 릴리스(업로드 전 실패)는 제외한다.
+          #   태그 이름 정렬로도 되지만, 어떤 이유로 옛 태그에 새 자산을
+          #   올리는 일이 생기면 또 틀린다. '언제 쓰였나'가 정답이다.
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.tag_name|startswith("data-"))
+                  | select([.assets[]|select(.name|startswith("research_data_"))]|length > 0)
+                  | "\([.assets[]|select(.name|startswith("research_data_"))|.updated_at]|max)\t\(.tag_name)"' \
+            > /tmp/snaps.tsv || true
+          echo "── 후보 스냅샷 (자산 갱신 시각 순) ──"
+          sort /tmp/snaps.tsv || true
+          TAG=$(sort /tmp/snaps.tsv | tail -1 | cut -f2)
           if [ -n "$TAG" ]; then
-            echo "복원: $TAG"
+            echo "복원: $TAG (가장 최근에 쓰인 자산)"
             gh release download "$TAG" -D . --clobber
             for z in research_data_*.zip; do
               [ -e "$z" ] && unzip -o -q "$z" && rm -f "$z"
@@ -140,10 +159,13 @@ jobs:
             --notes "장 마감 후 자동 축적. 개인 자료는 화이트리스트로 제외." \
             || gh release upload "data-$STAMP" "$Z" --clobber
 
-      - name: 축적 요약
+      # ⚠️ 라운드 81 — 이 요약은 "원장 182,359건"만 찍었다. 두 실행 연속
+      #   **같은 숫자**였는데도 초록불이었다. 축소는 가드가 잡지만
+      #   **정체는 아무도 안 봤다.** 복원 기준선과의 차이를 찍는다.
+      - name: 축적 요약 (복원 기준선 대비 증분)
         if: always()
         run: |
-          echo "원장 행수: $(wc -l < .portfolio/virtual_graded.jsonl || echo 0)"
+          python scripts/snapshot_guard.py --delta || true
           echo "경로 행수: $(cat .portfolio/bar_paths_s*.jsonl 2>/dev/null | wc -l || echo 0)"
 
       # 결정 계보 감사 (라운드 71) — 정적이라 네트워크도 데이터도 안 쓴다.
