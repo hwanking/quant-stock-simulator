@@ -116,8 +116,43 @@ def verify(allow_shrink=False):
     return 1
 
 
+def delta():
+    """복원 기준선 대비 **증분**을 찍는다 (라운드 81).
+
+    ■ 왜 필요한가 — 정체가 축소보다 오래 안 보였다
+      `verify` 는 **줄었는가**만 본다. 그런데 실제로 난 사고는 축소가
+      아니라 **정체**였다: 복원이 매일 어제 스냅샷을 집는 바람에 이틀
+      연속 원장이 182,359 에서 멈췄는데, 요약은 그 숫자만 찍어서
+      초록불로 보였다. 0 은 '다 했다'가 아니다 (§3).
+
+    실패로 만들지는 않는다 — 계획이 다 찬 날은 0 이 정상이다. 대신
+    **눈에 띄게** 적는다.
+    """
+    if not os.path.exists(BASE):
+        print('기준선이 없다 — 증분을 확인하지 못했다. 미측정이다.')
+        return 0
+    with open(BASE, encoding='utf-8') as f:
+        before = json.load(f)
+    after = counts()
+    print('■ 복원 기준선 대비 증분')
+    grew = 0
+    for k in sorted(set(before) | set(after)):
+        b = (before.get(k) or {}).get('lines', 0)
+        a = (after.get(k) or {}).get('lines', 0)
+        if a > b:
+            grew += 1
+        print(f'  {k:30s} {b:>9,} → {a:>9,} ({a - b:+,})')
+    if grew == 0:
+        print('\n⚠ 늘어난 것이 하나도 없다. 계획이 다 찼다면 정상이지만,'
+              ' 남은 케이스가 있는데 0 이면 축적이 멈춘 것이다 —'
+              ' 복원이 최신 스냅샷을 집었는지 위 로그를 확인한다.')
+    return 0
+
+
 if __name__ == '__main__':
     _utf8_stdout()
     if '--verify' in sys.argv:
         sys.exit(verify(allow_shrink='--allow-shrink' in sys.argv))
+    if '--delta' in sys.argv:
+        sys.exit(delta())
     sys.exit(record())

@@ -5878,10 +5878,40 @@ if _snap106:
             check(f"  · {_k106} 일치", _sa[_k106] == _sb[_k106],
                   f'상세 {_sa[_k106]} vs 추천 {_sb[_k106]}')
 
-    # 신규 매수자 값과 보유자 값이 섞이지 않는가
-    check("신규 손절과 보유자 손절이 다른 값",
-          _detail106['new_stop'] is None or _detail106['hold_stop'] is None
-          or _detail106['new_stop'] != _detail106['hold_stop'])
+    # ⚠️ 라운드 81 — 여기는 "두 값이 다르다"를 요구했다. 그런데 오늘
+    #   삼성전자에서 둘 다 216,000 이 나와 실패했다. 확인해 보니 섞인 게
+    #   아니라 **두 손절이 같은 지지선에 걸린 것**이었다
+    #   (new_stop ← entry_stop_price · hold_stop ← stop_loss_price 로
+    #    출처는 갈려 있다). §4 의 규칙은 '다른 키로 분리한다'이지
+    #   '값이 절대 같으면 안 된다'가 아니다.
+    #
+    #   그래서 시장 상황에 흔들리는 값 비교를 버리고, **합성 입력으로
+    #   출처가 갈리는지**를 결정적으로 본다. 이게 진짜 불변식이다.
+    _mixfs106 = {
+        'current_price': 100000.0, 'entry_pullback_price': 96000.0,
+        'entry_stop_price': 90000.0, 'entry_target_1st': 110000.0,
+        'entry_rr': 2.2, 'stop_loss_price': 93000.0,
+        'target_tech_1st': 108000.0, 'horizon_days': 20}
+    _mix106 = _vc106.build(_mixfs106,
+                           verdict={'action': 'WATCH', 'headline': '관망',
+                                    'score': 55},
+                           realtime_price=100000.0)
+    check("신규 손절은 진입 기준에서만 온다 (entry_stop_price)",
+          _mix106['new_stop'] == 90000.0, str(_mix106['new_stop']))
+    check("보유자 손절은 보유 기준에서만 온다 (stop_loss_price)",
+          _mix106['hold_stop'] == 93000.0, str(_mix106['hold_stop']))
+    check("신규 목표와 보유자 정리가도 갈린다",
+          _mix106['new_target'] == 110000.0
+          and _mix106['hold_trim'] == 108000.0,
+          f"{_mix106['new_target']} / {_mix106['hold_trim']}")
+    # 원천이 같으면 출력이 같은 것은 정상이다 — 그걸 섞임으로 세지 않는다
+    _same106 = _vc106.build(dict(_mixfs106, stop_loss_price=90000.0),
+                            verdict={'action': 'WATCH', 'headline': '관망',
+                                     'score': 55},
+                            realtime_price=100000.0)
+    check("원천이 같으면 두 손절이 같아도 섞임이 아니다",
+          _same106['new_stop'] == _same106['hold_stop'] == 90000.0,
+          f"{_same106['new_stop']} / {_same106['hold_stop']}")
     # 정합 — 손절 < 진입 < 목표
     _e106 = _detail106.get('pullback_zone')
     if _e106 and _detail106.get('new_stop'):
@@ -8253,6 +8283,44 @@ _i136 = _w136.find('_entry_lv_more = (')
 check("손익비 풀이가 CORE 진입가 조건 안에서만 계산된다",
       _i136 > 0 and 'if _core_entry and _e_rr:' in _w136[max(0, _i136 - 700):_i136],
       '조건 밖에서 계산하면 폴백일 때 손익비와 어긋난다')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §138 — 복원이 **최신** 스냅샷을 집는가 (라운드 81)
+#   실제 사고: 매 실행이 어제 스냅샷(data-20260811)을 복원하고 오늘
+#   태그(data-20260812)로 올렸다. 이틀 연속 원장이 182,359 에서 멈췄는데
+#   축소가 아니라 **정체**라 가드가 안 잡았고 요약은 초록불이었다.
+#   원인: 릴리스의 createdAt 은 '처음 만든 시각'이라 --clobber 로 자산을
+#   덮어써도 안 바뀐다. 두 릴리스의 createdAt 이 초까지 같아
+#   sort_by(.createdAt)|last 가 엉뚱한 것을 집었다.
+# ══════════════════════════════════════════════════════════════════════
+_wf138 = open(_os.path.join(PROJ, '.github', 'workflows',
+                            'daily_accumulate.yml'), encoding='utf-8').read()
+#: 주석은 근거로 치지 않는다 — 옛 코드를 설명하는 주석에 검사가 걸리면
+#: 안 된다 (라운드 71 의 prose_lines 와 같은 원칙). 실행되는 줄만 본다.
+_wfcode138 = '\n'.join(
+    ln for ln in _wf138.splitlines() if not ln.lstrip().startswith('#'))
+check("복원이 createdAt 으로 고르지 않는다 (자산 갱신과 무관한 값)",
+      'sort_by(.createdAt)' not in _wfcode138,
+      '--clobber 는 createdAt 을 바꾸지 않는다')
+check("복원이 자산이 실제로 쓰인 시각으로 고른다",
+      'updated_at' in _wf138 and 'research_data_' in _wf138)
+check("자산 없는 릴리스는 후보에서 뺀다 (업로드 전 실패분)",
+      'length > 0' in _wf138)
+check("후보 목록을 로그에 남긴다 (무엇 중에 골랐는지 보이게)",
+      '후보 스냅샷' in _wf138)
+# 정체를 눈에 보이게 — 축소만 잡던 가드에 증분 표시를 더했다
+import scripts.snapshot_guard as _sg138                        # noqa: E402
+check("가드에 증분 보고가 있다", hasattr(_sg138, 'delta'))
+check("워크플로가 증분을 찍는다", '--delta' in _wf138)
+_sgs138 = open(_os.path.join(PROJ, 'scripts', 'snapshot_guard.py'),
+               encoding='utf-8').read()
+check("증분 0 을 '다 했다'로 쓰지 않는다",
+      '늘어난 것이 하나도 없다' in _sgs138
+      and '축적이 멈춘 것이다' in _sgs138)
+# 기준선이 없으면 지어내지 않는다 (§3)
+check("기준선이 없으면 증분도 미측정이라고 적는다",
+      '증분을 확인하지 못했다' in _sgs138)
 
 
 # ══════════════════════════════════════════════════════════════════════
