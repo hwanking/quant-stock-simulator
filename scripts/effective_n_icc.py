@@ -35,6 +35,11 @@ LEDGER = os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
 OUT = os.path.join(PROJ, 'data', 'effective_n_icc.json')
 
 BUY_ZONE = 58          # 채택된 매수권 문턱 (새 숫자 아님)
+#: 화면에 ICC 를 띄울 최소 raw 표본 — **새 숫자가 아니다.**
+#: R55 §3 이 측정 전에 고정한 칸 하한 200 을 그대로 재사용한다
+#: ("Wilson 폭 ±7%p 수준"). 그 아래 업종은 재기는 하되 화면이 안 쓴다.
+REPORT_N_FLOOR = 200
+
 MIN_PER_DATE = 5       # 날짜내 분산을 재려면 한 날에 최소 2건은 있어야 한다.
 #: 5 는 문턱이 아니라 **정의상 하한**이다 — 1건뿐인 날은 날짜내 분산이
 #: 존재하지 않아 ICC 계산에 기여할 수 없다. 넉넉히 5로 둔 값이며,
@@ -111,6 +116,42 @@ def icc_and_neff(rows, field='close_return_pct', min_per_date=MIN_PER_DATE):
                 n_eff=round(N / deff, 1), why=None)
 
 
+def by_sector(rows, min_per_date=2):
+    """업종별 유효표본 — 화면이 raw n 옆에 병기할 값 (라운드 81b).
+
+    ■ 왜 필요한가
+      판정 근거 화면이 "업황 … 적중 59.6% · EV −0.07 (n 235)" 라고 적는다.
+      235 는 raw 다. 같은 날 케이스는 서로 독립이 아니므로 이 숫자만 보면
+      **실제보다 단단해 보인다.** 옆에 유효표본을 같이 적는다.
+
+      값을 바꾸지 않는다 — 병기만 한다. 게이트가 아니라 표시 라벨이다.
+
+    못 재는 업종은 **넣지 않는다** (지어내지 않는다 · §3).
+
+    ■ 화면에 띄울 만한가 — `report` 플래그
+      '광고' 업종은 raw 6건인데 ICC 0.982 가 나온다. 표본 6개짜리 상관을
+      화면에 0.98 이라고 띄우면 **작은 표본으로 큰 결론**이다(라운드 27b).
+      그렇다고 여기서 새 문턱을 고르지 않는다 — 이미 채택된 하한을
+      재사용한다: **R55 §3 의 n ≥ 200** ("Wilson 폭 ±7%p 수준"으로
+      측정 전에 고정된 값). 그 아래는 재기는 하되 `report=False` 로 두고
+      화면이 안 쓴다.
+    """
+    per = defaultdict(list)
+    for r in rows:
+        s = r.get('sector')
+        if s:
+            per[str(s)].append(r)
+    out = {}
+    for s, sub in per.items():
+        d = icc_and_neff(sub, min_per_date=min_per_date)
+        if d.get('n_eff') is None:
+            continue
+        out[s] = dict(N=d['N'], dates=d['dates'], icc=d['icc'],
+                      design_effect=d['design_effect'], n_eff=d['n_eff'],
+                      report=bool(d['N'] >= REPORT_N_FLOOR))
+    return out
+
+
 def main():
     rows = load()
     print(f'원장 {len(rows):,}건')
@@ -147,10 +188,17 @@ def main():
                   f'{v.get("episodes"):,} · 섹터군집 {v.get("clusters"):,} · '
                   f'날짜 {v.get("dates"):,}')
 
+    # 업종별 — 화면이 raw n 옆에 병기한다 (라운드 81b)
+    sec = by_sector(buy)
+    print(f'\n업종별 유효표본 (매수권 기준) — 잰 업종 {len(sec)}개')
+    for s, d in sorted(sec.items(), key=lambda x: -x[1]['N'])[:12]:
+        print(f"   {s:<16} raw {d['N']:>6,} · 날짜 {d['dates']:>4,} · "
+              f"ICC {d['icc']:.3f} → 유효 {d['n_eff']:>7,.0f}")
+
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
             made='2026-08-13', method='ANOVA ICC + design effect',
-            buy_zone=BUY_ZONE, sets=result, previous=prev,
+            buy_zone=BUY_ZONE, sets=result, sectors=sec, previous=prev,
             note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 상관 문턱을 '
                  '고르는 대신 설계효과(1+(n̄−1)ICC)를 그대로 쓴다. 날짜당 '
                  '최소 건수는 2·5·10 을 모두 실어 결과가 그 선택에 '
