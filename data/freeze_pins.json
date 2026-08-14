@@ -2,11 +2,11 @@
  "note": "2026-11-16 전방 재평가 대상의 박제 해시. 그날까지 바뀌면 평가가 성립하지 않는다 — 재평가는 \"그때 정한 것을 그대로\" 재는 일이다.",
  "pinned_at_utc": null,
  "files": {
-  "data/regime_routing_r55.json": "9d158707c8d4c79c80034e80b6c7086073216fed7269d2dc9f1e75d3e1051afe",
+  "data/regime_routing_r55.json": "1fd5406baf01307ad7fef1ca9da9083e03f282a4bdbd6a5f8bfdaf33b8b92f58",
   "data/entry_engine_r57.json": "b2f3a50be595c226521c9db1bbc223fea9f18e8891ac848736777228dc349bb6",
-  "docs/PREREG_R55_REGIME_MOE.md": "81b3adef4c8acd75d6175d8b97826bc1f31a04d192f8aeedbce38a02c424f8a4",
-  "docs/PREREG_R57_ENTRY_ENGINE.md": "cff54c6979d42718774bf074ba5380f1c1fd16f5ded9a6631bb86769d4c224a7",
-  "docs/PREREG_R64_BREAKOUT_BYPASS.md": "3729718635479a28b40fa78936c83668ade4c1923e9756fa64383cdac6e7a03b",
-  "forward_eval.py": "a652b0bd5b60ecb5a0ef7298d5e97d0a19173b69364a87055c94c1b064511dc4"
+  "docs/PREREG_R55_REGIME_MOE.md": "a4423b170a9e9d4068978e1dbe2d812d772653865b2c21e05bc138320a7e568b",
+  "docs/PREREG_R57_ENTRY_ENGINE.md": "a8278df43fe1d10aee9830559572aecc50d35c2b8eb531be526ad79c2ae969c4",
+  "docs/PREREG_R64_BREAKOUT_BYPASS.md": "229236a68322123a250b03fdc977c12958c111268066af9ed72c409e1f80321e",
+  "forward_eval.py": "45eb1c69fd7404fba32a64cae42f9f8768fca0831e12473d1367a9007809ae65"
  }
 }
