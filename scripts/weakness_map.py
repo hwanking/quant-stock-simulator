@@ -34,6 +34,12 @@ H, COST = 20, 0.36
 MIN_N = 60
 
 import trade_plan as tp                                       # noqa: E402
+import forward_eval as _fe                                     # noqa: E402
+
+#: 재평가일은 여기서 만들지 않는다 (라운드 78 단일 출처). 라운드 93 에서
+#: 이 파일이 '8/23' 을 화면과 data/weakness_map.json 에 계속 찍고 있는 것을
+#: 찾았다 — 회귀가 검사 대상 파일을 **손으로 다섯 개** 적어 둔 탓이다.
+_FE = _fe.eval_date() or '재평가일 미기록'
 
 IDX = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 ST_KO = {'ABOVE_BOTH': '상승', 'REBOUND': '반등초기', 'PULLBACK': '조정',
@@ -179,7 +185,7 @@ def main():
                 weak.append((ax, k, c['ev'], c['n']))
         print()
 
-    print('■ 가장 약한 칸 (8/23 이후 연구 우선순위 후보)')
+    print(f'■ 가장 약한 칸 ({_FE} 이후 연구 우선순위 후보)')
     for ax, k, ev, n in sorted(weak, key=lambda x: x[2])[:8]:
         print(f'  {ax:10s} {k:16s} EV {ev:+.3f} (n {n:,})')
 
@@ -188,7 +194,7 @@ def main():
         json.dump(dict(made='2026-08-10', base=base, axes=out,
                        min_n=MIN_N,
                        note='관측 전용 — 점수·게이트를 바꾸지 않는다. '
-                            '8/23 이후 연구 순서를 정하는 근거로만 쓴다.',
+                            f'{_FE} 이후 연구 순서를 정하는 근거로만 쓴다.',
                        weakest=[dict(axis=a, cell=k, ev=e, n=n)
                                 for a, k, e, n in
                                 sorted(weak, key=lambda x: x[2])[:10]]),

@@ -28,9 +28,17 @@ import numpy as np
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJ)
 P = os.path.join(PROJ, '.portfolio')
 H, COST = 20, 0.36
 FN_UP = 10.0                       # 놓침 판정 상승폭 (%)
+
+import forward_eval as _fe                                     # noqa: E402
+
+#: 재평가일 단일 출처 (라운드 78). 라운드 93 에서 이 파일이 결과 json 에
+#: 옛 날짜를 계속 적고 있는 것을 찾았다 — 회귀가 검사할 파일을 손으로
+#: 적어 둔 탓에 보름 넘게 안 보였다.
+_FE = _fe.eval_date() or '재평가일 미기록'
 
 
 def load_map(pattern):
@@ -150,7 +158,7 @@ def main():
         made='2026-08-10',
         basis='개발 구간 · 판정완료 · blind 제외 · 경로 21봉 결합',
         note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 여기서 나온 '
-             '패턴은 8/23 이후 새 사전등록의 후보 목록으로만 쓴다.',
+             f'패턴은 {_FE} 이후 새 사전등록의 후보 목록으로만 쓴다.',
         fn_rule=f'score<58 & 20봉 최고 >= +{FN_UP:.0f}%',
         fp_rule='score>=58 & outcome=STOP',
         fn_n=len(fn), below_n=len(below),

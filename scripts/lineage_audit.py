@@ -15,7 +15,7 @@
        ⒜ 폐기 키가 표시 경로에 되살아났는가
        ⒝ 신규 매수자 값과 보유자 값이 한 자리에서 섞였는가
        ⒞ 화면이 중앙 판정을 우회해 진입가를 만드는가
-       ⒟ 사전등록 후보가 운영 코드에 새어 들어갔는가 (8/23 동결)
+       ⒟ 사전등록 후보가 운영 코드에 새어 들어갔는가 (전방 재평가 전 동결)
      **주석·독스트링은 오탐하지 않는다** — ast 로 문자열 표현식 구간과
      `#`·`<!-- -->` 구간을 먼저 걷어낸 뒤 검사한다. 지난 결함들이
      하나같이 "주석엔 적혀 있는데 코드는 안 옮겨진" 형태였으므로,
@@ -30,7 +30,7 @@
        · 신규 값과 보유자 값이 같은 숫자로 겹치는가
      결과는 data/lineage_audit.json 에 남긴다.
 
-■ 8/23 동결 준수
+■ 전방 재평가 전 동결 준수 (날짜는 forward_eval 에서만 읽는다)
   감사만 한다. 점수·게이트·문턱을 바꾸지 않는다.
 
     C:/Python314/python.exe scripts/lineage_audit.py
@@ -46,6 +46,20 @@ import warnings
 warnings.filterwarnings('ignore')
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
+
+import forward_eval as _fe        # 재평가일 단일 출처 (라운드 78)  # noqa: E402
+
+#: ⚠️ 라운드 93 — 여기에 '8/23' 이 다섯 군데 박혀 있었다. 라운드 78 이
+#:   재평가일을 11/16 으로 **정정한 뒤에도** 이 파일만 옛 날짜를 화면과
+#:   data/lineage_audit.json 에 계속 찍고 있었다.
+#:
+#:   회귀 §135 가 못 잡은 이유가 더 나쁘다 — 검사할 파일을 **손으로 다섯
+#:   개 적어 뒀고**, 정작 그 검사가 쓰는 이 모듈이 목록에 없었다.
+#:   검사가 자기 자신은 안 본 것이다. 이제 §135 는 프로젝트의 .py 를
+#:   전부 훑는다.
+#:
+#:   날짜를 여기서 만들지 않는다. 못 읽으면 지어내지 않고 그렇게 적는다.
+FREEZE = _fe.eval_date() or '재평가일 미기록'
 
 
 def _utf8_stdout():
@@ -88,7 +102,7 @@ NEW_KEYS = ('entry_target_1st', 'entry_stop_price', 'entry_pullback_price',
             'new_target', 'new_stop')
 HOLD_KEYS = ('target_tech_1st', 'stop_loss_price', 'hold_trim', 'hold_stop')
 
-#: 사전등록 후보 — 8/23 전방 검증 전 운영 코드에 들어가면 안 된다
+#: 사전등록 후보 — 전방 검증(FREEZE) 전 운영 코드에 들어가면 안 된다
 CANDIDATES = ('regime_routing_r55', 'entry_engine_r57', 'breakout_flags_r64',
               'ROUTING_TABLE', 'BREAKOUT_BYPASS')
 OPS_FILES = ('quant_indicators.py', 'verdict_core.py', 'regime_policy.py',
@@ -201,7 +215,7 @@ def static_audit():
     if not hit_c:
         print('  없음 — 진입가는 CORE 를 거친다')
 
-    print('\n■ ⒟ 사전등록 후보가 운영 코드에 새어 들어갔는가 (8/23 동결)')
+    print(f'\n■ ⒟ 사전등록 후보가 운영 코드에 새어 들어갔는가 ({FREEZE} 동결)')
     hit_d = 0
     for f in OPS_FILES:
         for i, ln in code_lines(f):
@@ -335,7 +349,7 @@ def trace(n_tickers):
                        note='감사 전용 — 점수·게이트를 바꾸지 않는다. '
                             '표시되는 값이 전부 CORE 한 곳에서 나오는지, '
                             '정합과 손익비가 같은 진입 기준으로 계산되는지 '
-                            '확인한다 (8/23 동결 준수).'),
+                            f'확인한다 ({FREEZE} 동결 준수).'),
                   f, ensure_ascii=False, indent=1)
     print(f'  저장: {dst}')
     return bad

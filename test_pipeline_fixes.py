@@ -8135,15 +8135,57 @@ check("정책이 아니라 날짜만 붙였다고 명시한다",
 # ⚠️ 라운드 82 — **주석은 근거로 치지 않는다.** 라운드 78 이 왜 고쳤는지
 #   설명하는 주석에 '8/23' 이 들어가는데, 그것까지 실패로 세면 결정을
 #   기록하지 못하게 된다. 라운드 71 이 만든 code_lines(산문 제거)를 쓴다.
+#
+# ⚠️ 라운드 93 — 여기 **파일을 손으로 다섯 개 적어 뒀다.** 그리고 정작
+#   이 검사가 쓰는 scripts/lineage_audit.py 가 그 목록에 없었다.
+#   그 파일은 '8/23' 을 다섯 군데 갖고 있었고, 그중 하나는 화면에 찍히고
+#   하나는 data/lineage_audit.json 에 저장되고 있었다 — 라운드 78 이
+#   정정한 지 보름이 지나도록. **검사가 자기 자신은 안 봤다.**
+#   낱말을 손으로 채우다 절반을 놓친 라운드 92 와 같은 모양이다.
+#   목록을 늘리는 대신 **프로젝트의 .py 를 전부 훑는다.**
 import scripts.lineage_audit as _la135                         # noqa: E402
-for _f135 in ('gaeum_chat.py', 'web_app.py', 'verdict_core.py',
-              'quant_indicators.py', 'premarket.py'):
-    _p135 = _os.path.join(PROJ, _f135)
-    if not _os.path.exists(_p135):
+_scan135 = []
+for _root135, _dirs135, _files135 in _os.walk(PROJ):
+    _dirs135[:] = [d for d in _dirs135
+                   if d not in ('.git', '_probe', '_archive', 'docs',
+                                '__pycache__', '.portfolio', 'node_modules')]
+    for _n135 in _files135:
+        if _n135.endswith('.py'):
+            _scan135.append(_os.path.relpath(
+                _os.path.join(_root135, _n135), PROJ))
+#: 이 파일만 뺀다 — 두 가지 이유가 다 정당하다.
+#:   ⓐ 찾을 문자열을 **검사 코드가 반드시 갖고 있다** (자기참조)
+#:   ⓑ §123·§126 은 박제된 사전등록 원문의 note 가 옛 날짜 그대로인지
+#:      검사한다. 라운드 78 은 "정책 원문은 한 글자도 안 바꾸고 날짜만
+#:      붙인다"로 정했으므로, 그 note 는 8/23 인 것이 **맞다.**
+#: 뺀 파일이 하나뿐인지도 같이 확인한다 — 예외가 늘면 스캔이 도로
+#: 손 목록이 된다.
+_SELF135 = 'test_pipeline_fixes.py'
+_bad135 = []
+_read135 = 0
+for _f135 in sorted(_scan135):
+    if _f135 == _SELF135:
         continue
-    _s135 = '\n'.join(ln for _i135, ln in _la135.code_lines(_f135))
-    check(f"{_f135} 에 옛 재평가일이 박혀 있지 않다",
-          '8/23' not in _s135 and '2026-08-23' not in _s135)
+    try:
+        _s135 = '\n'.join(ln for _i135, ln in _la135.code_lines(_f135))
+    except Exception:                                          # noqa: BLE001
+        continue
+    _read135 += 1
+    if '8/23' in _s135 or '2026-08-23' in _s135:
+        _bad135.append(_f135)
+# ⚠️ **실제로 읽은 개수**를 판정 조건에 넣는다. 0개를 훑고 "위반 0건"으로
+#   초록불이 켜지는 사고를 이 저장소에서 이미 겪었다 — 미측정과 통과는
+#   같은 색이면 안 된다.
+check(f"어느 .py 에도 옛 재평가일이 박혀 있지 않다 ({_read135}개 실제로 읽음)",
+      not _bad135 and _read135 >= 50,
+      f'옛 날짜가 남은 파일: {_bad135}' if _bad135
+      else f'읽은 파일 {_read135}개 — 너무 적으면 스캔이 안 돈 것이다')
+check("스캔 예외는 회귀 파일 하나뿐이다 (예외가 늘면 손 목록이 된다)",
+      len(_scan135) - _read135 <= 1,
+      f'대상 {len(_scan135)} · 읽음 {_read135}')
+# 감사 스크립트가 날짜를 **자기가 만들지 않는지**도 값으로 본다
+check("계보 감사가 재평가일을 forward_eval 에서 받는다",
+      _la135.FREEZE == _D135, f'FREEZE={_la135.FREEZE} vs {_D135}')
 
 # 전방 구간만 촘촘히 도는 모드가 실제로 있는가 (없으면 그 날도 날짜 2개)
 import scripts.calibration_lab as _cl135                       # noqa: E402
