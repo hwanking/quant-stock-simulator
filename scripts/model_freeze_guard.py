@@ -74,15 +74,36 @@ def _utf8():
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
+#: 줄바꿈을 정규화할 확장자 — 텍스트만. 이진 파일을 정규화하면 서로
+#: 다른 파일이 같은 해시가 될 수 있으므로 손대지 않는다.
+_TEXT_EXT = ('.py', '.json', '.md', '.yml', '.yaml', '.txt', '.cfg')
+
+
 def sha(rel):
-    """파일 해시. 없으면 None — **없는 것을 같다고 하지 않는다.**"""
+    """파일 해시. 없으면 None — **없는 것을 같다고 하지 않는다.**
+
+    ⚠️ 라운드 96 — 첫 클라우드 실행에서 6개 중 5개가 '오염'으로 찍혔다.
+      내용은 같은데 **줄바꿈이 달랐다.** 이 PC 는 Windows 라 체크아웃이
+      CRLF 이고 러너는 Linux 라 LF 다(git 이 "LF will be replaced by
+      CRLF" 로 이미 경고하고 있었다). 플랫폼이 다르면 해시가 다르니
+      자물쇠가 매일 거짓 경보를 낸다 — 그러면 곧 무시된다.
+
+      그래서 **텍스트는 줄바꿈을 통일한 뒤** 해시한다. 내용이 바뀌면
+      여전히 잡히고, 체크아웃 방식이 달라도 안 흔들린다.
+      정규화한 바이트를 파일에 쓰지는 않는다 — 비교용일 뿐이다.
+    """
     p = os.path.join(PROJ, rel)
     if not os.path.exists(p):
         return None
+    text = rel.lower().endswith(_TEXT_EXT)
     h = hashlib.sha256()
     with open(p, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 20), b''):
-            h.update(chunk)
+        if not text:
+            for chunk in iter(lambda: f.read(1 << 20), b''):
+                h.update(chunk)
+        else:
+            data = f.read().replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+            h.update(data)
     return h.hexdigest()
 
 
