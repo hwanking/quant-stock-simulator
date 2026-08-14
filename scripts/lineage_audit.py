@@ -246,6 +246,18 @@ LINEAGE = {
 }
 
 
+def _num(v):
+    """숫자면 float, 아니면 None — 비교 전에 꼴을 맞춘다 (라운드 95).
+
+    원본 칸이 문자열로 들어오는 경우가 있어, 그대로 비교하면 배선이
+    맞는데도 '다르다'가 된다. 검사가 틀리면 통과도 실패도 못 믿는다.
+    """
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def trace(n_tickers):
     import bitemporal_engine as be
     import quant_indicators as qi
@@ -306,10 +318,46 @@ def trace(n_tickers):
             if abs(calc - rr) > 0.15:
                 r['fault'] = (f'손익비 표시 {rr} vs 재계산 {calc} — '
                               f'다른 진입 기준이 섞였다')
-        # 신규 값과 보유자 값이 같은 숫자로 겹치는가
-        if (core.get('new_stop') is not None
-                and core.get('new_stop') == core.get('hold_stop')):
-            r['fault'] = '신규 손절 = 보유자 손절 (키 분리가 무너졌다)'
+        # ── 신규/보유자 손절 — **값이 같은지가 아니라 출처가 맞는지** 본다
+        #
+        # ⚠️ 라운드 95 — 종전에는 `new_stop == hold_stop` 이면 무조건
+        #   '키 분리가 무너졌다'로 신고했다. 그런데 삼성전자에서 두 산식이
+        #   같은 지지선(216,000)에 떨어져 **우연**으로 걸렸다. 10종목을 재니
+        #   9종목은 원본 칸이 서로 달랐다 — 배선은 멀쩡했다.
+        #
+        #   우연과 고장이 같은 색으로 찍히면 감사가 늑대소년이 된다.
+        #   그렇다고 검사를 없애면 라운드 30(GS 손절이 매수가 위) 계열을
+        #   놓친다. 그래서 **판정 기준을 바꾼다** — 각 출력이 **자기 입력**
+        #   에서 왔는지 확인한다. 값이 겹치는 것은 사실로만 적는다.
+        #
+        #     new_stop  ← fs['entry_stop_price']   (진입가 기준)
+        #     hold_stop ← fs['stop_loss_price']    (현재가 기준)
+        #
+        #   verdict_core 는 정합이 깨지면 값을 **비운다**(None). 그래서
+        #   None 인 경우는 배선 문제가 아니므로 건너뛴다.
+        src_new = _num(fs.get('entry_stop_price'))
+        src_hold = _num(fs.get('stop_loss_price'))
+        nstp = _num(stp)
+        hstp = _num(core.get('hold_stop'))
+        r['src_new_stop'] = src_new
+        r['src_hold_stop'] = src_hold
+        r['hold_stop'] = hstp
+        if nstp is not None and src_new is not None and nstp != src_new:
+            r['fault'] = (f'신규 손절 {nstp:,.0f} 이 원본 '
+                          f'entry_stop_price {src_new:,.0f} 과 다르다 '
+                          f'(배선이 어긋났다)')
+        elif hstp is not None and src_hold is not None and hstp != src_hold:
+            r['fault'] = (f'보유자 손절 {hstp:,.0f} 이 원본 '
+                          f'stop_loss_price {src_hold:,.0f} 과 다르다 '
+                          f'(배선이 어긋났다)')
+        elif (nstp is not None and nstp == hstp):
+            # 배선은 맞는데 숫자가 겹쳤다 — 결함이 아니라 **사실**이다.
+            # 다만 원본 칸까지 같으면 상류에서 한 값을 두 번 쓴 것일 수
+            # 있으므로 구분해서 적는다.
+            r['note'] = ('신규·보유자 손절이 같은 값이다 — '
+                         + ('원본 칸도 같다 (상류 확인 필요)'
+                            if (src_new is not None and src_new == src_hold)
+                            else '원본 칸은 다르다 (우연)'))
         if r.get('fault'):
             bad.append(r)
         rows.append(r)
@@ -318,11 +366,28 @@ def trace(n_tickers):
     ax_src = sum(1 for r in ok if r.get('entry_src') == 'price_axes.entry')
     print(f'\n■ 실행 추적 — 종목 {len(rows)} · 스냅샷 성공 {len(ok)}')
     print(f'  진입가 출처: 축 {ax_src} · 폴백 {len(ok) - ax_src}')
+    # 손절 배선을 **몇 건이나 실제로 대조했는지** 함께 적는다.
+    # 0건을 대조하고 "위반 없음"으로 초록불이 켜지는 것을 막는다 (§3).
+    wired = sum(1 for r in ok
+                if r.get('src_new_stop') is not None
+                or r.get('src_hold_stop') is not None)
+    print(f'  손절 배선 대조: {wired}건 (출력이 자기 원본 칸에서 왔는가)')
     print(f'  정합 위반: {len(bad)}건')
     for r in bad[:10]:
         print(f'    [문제] {r["ticker"]} — {r["fault"]}')
     if not bad and ok:
-        print('    없음 — 손절<진입<목표 · 손익비 재계산 전부 일치')
+        print('    없음 — 손절<진입<목표 · 손익비 재계산 · 손절 배선 전부 일치')
+    notes = [r for r in ok if r.get('note')]
+    if notes:
+        # 결함이 아니지만 조용히 묻으면 다음 사람이 다시 놀란다.
+        # 원본 두 칸을 **같이** 적는다 — 결과만 보면 우연인지 알 수 없다.
+        print(f'  참고 {len(notes)}건 (결함 아님):')
+        for r in notes[:10]:
+            a, b = r.get('src_new_stop'), r.get('src_hold_stop')
+            pair = ''
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                pair = f'  [원본 {a:,.0f} / {b:,.0f}]'
+            print(f'    · {r["ticker"]} — {r["note"]}{pair}')
 
     # 못 잰 것을 통과로 적지 않는다 (§3). 첫 실행에서 함수 이름이 틀려
     # 10건 전부 실패했는데 감사는 "전부 통과"라고 찍었다 — 감사가 스스로

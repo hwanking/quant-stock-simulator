@@ -1,0 +1,12 @@
+{
+ "note": "2026-11-16 전방 재평가 대상의 박제 해시. 그날까지 바뀌면 평가가 성립하지 않는다 — 재평가는 \"그때 정한 것을 그대로\" 재는 일이다.",
+ "pinned_at_utc": null,
+ "files": {
+  "data/regime_routing_r55.json": "9d158707c8d4c79c80034e80b6c7086073216fed7269d2dc9f1e75d3e1051afe",
+  "data/entry_engine_r57.json": "b2f3a50be595c226521c9db1bbc223fea9f18e8891ac848736777228dc349bb6",
+  "docs/PREREG_R55_REGIME_MOE.md": "81b3adef4c8acd75d6175d8b97826bc1f31a04d192f8aeedbce38a02c424f8a4",
+  "docs/PREREG_R57_ENTRY_ENGINE.md": "cff54c6979d42718774bf074ba5380f1c1fd16f5ded9a6631bb86769d4c224a7",
+  "docs/PREREG_R64_BREAKOUT_BYPASS.md": "3729718635479a28b40fa78936c83668ade4c1923e9756fa64383cdac6e7a03b",
+  "forward_eval.py": "a652b0bd5b60ecb5a0ef7298d5e97d0a19173b69364a87055c94c1b064511dc4"
+ }
+}
