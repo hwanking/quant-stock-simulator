@@ -8674,6 +8674,89 @@ check("2026-07-17 은 전방 구간 밖이다 (동결 무영향)",
 
 
 # ══════════════════════════════════════════════════════════════════════
+# §146 — 일일 개선 파이프라인 자동화와 그 **경계** (라운드 96)
+#   run_daily_improvement.py 는 앱 버튼으로만 돌았고 마지막 실행이 8/8
+#   이었다 — 일주일치 개장 전 픽 85건이 동결되지 않은 채 쌓여 있었다.
+#   라운드 68 이 없애려던 'PC 를 켜 뒀는가' 의존이 여기 남아 있었다.
+#
+#   워크플로에 붙이면 사람이 안 봐도 돈다. 그게 목적이면서 동시에 위험이다.
+#   경계를 **값으로** 잠근다:
+#       자동 축적·판정 → 허용 / 자동 모델 변경 → 금지
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§146 일일 개선 자동화와 동결 자물쇠 (라운드 96)")
+print("=" * 72)
+_wf146 = open(_os.path.join(PROJ, '.github', 'workflows',
+                            'daily_accumulate.yml'), encoding='utf-8').read()
+
+# ① 파이프라인이 워크플로에 실제로 있는가
+check("워크플로가 일일 개선 파이프라인을 돈다",
+      'scripts/run_daily_improvement.py' in _wf146)
+# ② 업로드 **앞**이어야 등록부 상태가 다음 실행으로 이어진다.
+#    뒤에 두면 매 실행이 빈 등록부로 시작한다 (improvement.db 는 라운드 93
+#    에서 백업 화이트리스트에 들어갔다).
+_i_imp146 = _wf146.find('scripts/run_daily_improvement.py')
+_i_up146 = _wf146.find('scripts/backup_research_data.py')
+check("개선 파이프라인이 업로드보다 앞에 있다",
+      0 < _i_imp146 < _i_up146, f'{_i_imp146} vs {_i_up146}')
+
+# ③ 동결 자물쇠 — 기록이 축적 앞, 대조가 업로드 앞
+_i_rec146 = _wf146.find('model_freeze_guard.py --record')
+_i_ver146 = _wf146.find('model_freeze_guard.py --verify')
+_i_chk146 = _wf146.find('model_freeze_guard.py --check')
+_i_acc146 = _wf146.find('scripts/calibration_lab.py')
+check("동결 해시를 축적 앞에서 찍는다",
+      0 < _i_rec146 < _i_acc146, f'{_i_rec146} vs {_i_acc146}')
+check("동결 대조가 개선 파이프라인 뒤·업로드 앞에 있다",
+      _i_imp146 < _i_ver146 < _i_up146,
+      f'{_i_imp146} / {_i_ver146} / {_i_up146}')
+check("전방 박제 대조도 업로드 앞에 있다",
+      0 < _i_chk146 < _i_up146, f'{_i_chk146} vs {_i_up146}')
+# ④ 자물쇠에 `|| true` 를 붙이면 아무도 안 읽는 경고가 된다 (§142 와 같은 규칙)
+for _lbl146, _i146 in (('--verify', _i_ver146), ('--check', _i_chk146),
+                       ('--record', _i_rec146)):
+    _seg146 = _wf146[_i146:_i146 + 100]
+    check(f"동결 자물쇠 {_lbl146} 에 || true 를 안 붙인다",
+          '|| true' not in _seg146, _seg146[:60])
+
+# ⑤ 자물쇠가 **무엇을 잠그는가** — 이름이 아니라 목록으로 확인한다
+import scripts.model_freeze_guard as _fg146                    # noqa: E402
+for _need146 in ('data/version_ledger.json', 'quant_indicators.py',
+                 'verdict_core.py', 'price_axes.py', 'regime_policy.py',
+                 'forward_eval.py'):
+    check(f"자동 변경 금지 목록에 {_need146} 이 있다",
+          _need146 in _fg146.NO_AUTO_CHANGE, str(_fg146.NO_AUTO_CHANGE))
+check("11/16 평가 대상이 박제 목록에 있다",
+      'data/regime_routing_r55.json' in _fg146.FORWARD_TARGETS
+      and 'data/entry_engine_r57.json' in _fg146.FORWARD_TARGETS,
+      str(_fg146.FORWARD_TARGETS))
+
+# ⑥ **값으로** — 지금 상태에서 박제 대조가 통과하는가.
+#    통과 못 하면 이미 오염된 것이므로 회귀가 알려야 한다.
+check("전방 평가 대상 박제 파일이 있다",
+      _os.path.exists(_os.path.join(PROJ, 'data', 'freeze_pins.json')))
+_pins146 = _js130.load(open(_os.path.join(PROJ, 'data', 'freeze_pins.json'),
+                            encoding='utf-8'))
+_files146 = (_pins146 or {}).get('files') or {}
+check("박제 대상이 6개 이상이다", len(_files146) >= 6, str(len(_files146)))
+_drift146 = [r for r, h in _files146.items() if _fg146.sha(r) != h]
+check(f"박제 해시가 지금 파일과 일치한다 ({len(_files146)}개 실제로 대조)",
+      not _drift146, f'달라진 것: {_drift146}')
+
+# ⑦ 개선 파이프라인이 **버전을 올리지 않는가** — 읽기 전용만 쓴다.
+#    release() 를 부르면 자동으로 모델이 바뀐다.
+_di146 = open(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'),
+              encoding='utf-8').read()
+_dcode146 = '\n'.join(ln for _i, ln in
+                      _la135.code_lines('scripts/run_daily_improvement.py'))
+check("개선 파이프라인이 versioning.release 를 부르지 않는다",
+      'V.release' not in _dcode146 and 'versioning.release' not in _dcode146,
+      '자동 실행이 버전을 올리면 안 된다')
+check("개선 파이프라인은 버전을 읽기만 한다 (snapshot/stamp)",
+      'V.snapshot()' in _di146 or 'V.stamp(' in _di146)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # §142 — 환경 점검이 축적 **앞에서** 죽는가 (라운드 87)
 #   라운드 81·86 둘 다 전 단계 success 였고 증분 +0 이 찍혔는데 안 읽혔다.
 #   그래서 환경 가정을 축적 전에 검사하고, 틀리면 거기서 멈춘다.
