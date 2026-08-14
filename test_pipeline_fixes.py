@@ -5665,10 +5665,40 @@ except Exception:
 check("업데이트 날짜를 손으로 적지 않는다",
       'APP_UPDATED = _last_update_date()' in _w105
       and 'update_history.json' in _w105)
-check("업데이트 이력이 최신 커밋까지 반영돼 있다",
+check("업데이트 이력이 최신 커밋 **날짜**까지 반영돼 있다",
       (not _git_latest) or _uh_latest >= _git_latest,
       f'이력 {_uh_latest} vs 커밋 {_git_latest} — '
       f'scripts/gen_update_history.py 를 다시 돌려야 합니다')
+
+# ⚠️ 라운드 92 — 위 검사는 **날짜만** 본다. 그래서 같은 날 커밋이 아무리
+#   쌓여도 통과한다. 실제로 그랬다: 이력이 라운드 87 에서 멈춰 있는데
+#   라운드 88·89·90·91 이 전부 같은 날(8/13~8/14)이라 초록불이었고,
+#   앱의 '업데이트 이력' 탭은 네 라운드가 빠진 채로 배포되고 있었다.
+#   **커밋 해시**로 본다.
+#
+#   허용치 2 는 감으로 고른 값이 아니라 작업 순서에서 나온다 — 이력을
+#   다시 만들어 커밋하는 순간, 그 커밋 자신은 파일에 들어갈 수 없고
+#   (자기 해시를 미리 알 수 없다) 그것을 올리는 머지 커밋도 마찬가지다.
+#   그 둘 말고 빠진 것이 있으면 한 라운드가 통째로 안 적힌 것이다.
+_uh_hashes105 = {it.get('hash') for d in (_uh105.get('days') or [])
+                 for it in (d.get('items') or [])}
+try:
+    _recent105 = _sp105.run(
+        ['git', 'log', '-n', '20', '--pretty=%h'], cwd=PROJ,
+        capture_output=True, text=True, encoding='utf-8',
+        errors='replace').stdout.split()
+except Exception:                                              # noqa: BLE001
+    _recent105 = []
+_lag105 = 0
+for _h105 in _recent105:
+    if _h105 in _uh_hashes105:
+        break
+    _lag105 += 1
+check("업데이트 이력에 안 적힌 커밋이 2개를 넘지 않는다 (해시 대조)",
+      (not _recent105) or _lag105 <= 2,
+      f'최근 커밋 {_lag105}개가 이력에 없다 — '
+      f'scripts/gen_update_history.py 를 다시 돌려야 합니다 '
+      f'(빠진 것: {" ".join(_recent105[:_lag105])})')
 
 # ── ② 동결 산출물이 옛 엔진 값을 화면에 올리지 않는가 ─────────────────
 check("동결 리포트는 날짜×엔진으로 저장",
@@ -8502,6 +8532,43 @@ check("'진입가?' 는 매수가 질문이고 '진입가능?' 은 매수 질문
 check("목록을 넓혀도 종목과 무관한 말은 여전히 안 잡힌다",
       _intent144('오늘 점심 뭐 먹지') is None,
       str(_intent144('오늘 점심 뭐 먹지')))
+
+# ⑤ 의도가 맞는 것과 **답이 쓸모 있는 것**은 다르다.
+#    위 검사는 전부 의도 이름만 본다. 사용자가 보는 것은 문장이고,
+#    라우팅이 맞아도 그 자리 답변 함수가 엉뚱한 값을 내면 소용이 없다.
+#    특히 §4 — 신규 매수자 값(new_*)과 보유자 값(hold_*)이 섞이면 버그다.
+#    그래서 화면과 같은 길로 간다: build_context → answer → **나온 문장**.
+#    숫자는 자리마다 다르게 둬서 문장만 보고 어느 값인지 구별한다.
+_ctx145 = _gc144.build_context(
+    name='삼성전자', ticker='005930.KS', price=274_500,
+    core=dict(bucket='관망', actionable=False,
+              pullback_zone=252_124, buy_zone=(249_603, 254_646),
+              new_target=277_411, new_stop=216_000, rr=0.7,
+              horizon_days=20, hold_trim=315_450, hold_stop=216_000),
+    fs=dict(displayed_fair_value=173_609, recommended_buy_price=252_124,
+            fair_value_status='CALIBRATED'),
+    verdict=dict(headline='지금은 사지 마세요', score=49, action='관망',
+                 vetoes=['유사패턴 표본 0건', '적정가 크게 초과']),
+    news=dict(total=2, fresh=1, lagging=1),
+    versions=dict(model='v2026.08.12.1'))
+for _q145, _must145, _never145 in (
+        # 세 번째 칸이 핵심 — 섞이면 안 되는 값이다
+        ('진입가능?', '274,500', '315,450'),   # 매수 판단이지 보유자 값 아님
+        ('매수가능?', '274,500', '315,450'),
+        ('물렸어', '평균 매수가', '277,411'),   # 평단 없으면 요청해야 한다
+        ('존버할까?', '평균 매수가', None),
+        ('손절가는?', '216,000', None),        # 신규 손절
+        ('언제 파는 게 좋아?', '277,411', None),
+        ('사도 될까요?', '274,500', None),
+        ('왜 매수 신호가 안 떠?', '막는 조건', None),
+        ('목표 매수가는?', '252,124', None),
+        ('진입가?', '252,124', None),          # 이건 값 질문이다
+        ('적중률 몇 프로야?', '확률', '252,124')):
+    _a145 = _gc144.answer(_q145, _ctx145)
+    check(f"'{_q145}' 의 **답**이 제 값을 담는다 (섞임 없이)",
+          (_must145 in _a145)
+          and (_never145 is None or _never145 not in _a145),
+          _a145.splitlines()[0][:80])
 
 
 # ══════════════════════════════════════════════════════════════════════
