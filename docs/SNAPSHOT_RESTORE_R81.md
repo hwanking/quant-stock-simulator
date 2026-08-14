@@ -89,3 +89,11 @@ gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
 가드는 **자기가 보도록 만들어진 실패만** 잡는다. 라운드 71c 는 축소를
 겪고 축소 가드를 만들었고, 그래서 정체를 못 봤다. 다음에 축적 파이프라인을
 고칠 때는 "무엇이 조용히 실패할 수 있나"를 먼저 묻는다.
+
+## 7. 그 뒤 (라운드 93)
+
+여기서 만든 고르는 법(자산 `updated_at`)은 이제 **두 곳**에서 쓴다 —
+워크플로의 복원 단계와 `scripts/pull_research_data.py`. 되받는 길이
+워크플로 안에만 있어서 사람이 못 쓰던 것을 그때 꺼냈고, 그 첫 실행이
+**subscore 131,879줄이 사본 없이 로컬에만 있던 것**을 찾아냈다.
+근거: [BACKUP_COMPLETENESS_R93.md](BACKUP_COMPLETENESS_R93.md)
