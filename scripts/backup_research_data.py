@@ -70,7 +70,27 @@ INCLUDE = ('virtual_graded.jsonl',
            # 나간다. 전방 표본은 **동결 시점 목록으로 고정**해야 한다.
            # 지금 박제된 것은 2026-08-10 자 3,014종목이다.
            'universe_top*.json',
-           'news_events.jsonl')          # 뉴스 사건 사후 경로 (라운드 70)
+           'news_events.jsonl',          # 뉴스 사건 사후 경로 (라운드 70)
+           # ⚠️ 라운드 93 — 되받는 스크립트를 만들다 **화이트리스트 밖에
+           #   13개(약 18MB)가 있는 것**을 알았다. 전부 다시 돌려야 만들거나
+           #   아예 못 만드는 것들인데, 원리적으로 영영 안 올라가고 있었다.
+           #   (같은 라운드에서 subscore 131,879줄이 사본 없이 이 PC 에만
+           #   있던 것도 찾았다 — 그건 목록엔 있었는데 안 올라간 경우다.)
+           #
+           #   넓히되 **화이트리스트 방식은 유지한다.** `*.json` 처럼 통째로
+           #   여는 순간 이 파일 머리말의 약속("나중에 보유종목 파일이
+           #   생겨도 목록에 없으면 애초에 안 들어간다")이 깨진다.
+           'virtual_paths.jsonl', 'virtual_levels.jsonl',
+           'premarket_history.jsonl',
+           '*_policy.json',              # target · stop · rr
+           'regime_*.json',              # regime_engine · regime_breakdown
+           'sideways_study.json', 'engine_bakeoff.json',
+           'us_overnight.json', 'version_compare.json', 'llm_watch.json',
+           # 개선 이슈 등록부 — 다시 못 만든다. sqlite 라 내용 검사가 못
+           # 읽으므로 스키마를 직접 훑어 확인했다: 6개 테이블 전부 모델·
+           # 이슈·파이프라인 자료이고 평단·수량·자격증명 열쇠가 없다.
+           # (holding_days 는 **보유기간**이지 보유종목이 아니다.)
+           'improvement.db')
 
 #: 절대 넣지 않을 것 — 개인 자료 (INCLUDE 에 걸려도 여기서 잘린다)
 DENY = ('positions*', 'holdings*', '*secret*', '*credential*',
