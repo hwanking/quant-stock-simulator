@@ -2269,7 +2269,9 @@ def _build_reco_card(p, news_txt, conf_txt):
         'say': say, 'hold_note': hold_note,
         'news': ' · '.join(news_txt) if news_txt else '특이 뉴스 없음',
         'hit': conf_txt,
-        'horizon': (f"예상 보유 {p['horizon_days']}거래일"
+        # 라운드 98 — '실행 기준'을 붙여 유사패턴 관찰기간과 구별한다.
+        # 같은 화면에 20일과 40일이 이름 없이 같이 있어 모순처럼 보였다.
+        'horizon': (f"실행 기준 보유 {p['horizon_days']}거래일"
                     if p.get('horizon_days') else None),
         # 다음 조건 — 무엇을 기다리는지 카드에 적는다
         'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
@@ -5795,6 +5797,17 @@ _uk.stat_tiles([
     {'label': '기간 안에 어느 쪽도 못 닿을 확률', 'value': _pc(_g['undecided']),
      'sub': '보유기간이 끝날 때까지 결판 안 남'},
 ], theme=_theme)
+# ⚠️ 라운드 98 — 화면 아래쪽 '목표별 도달 확률' 표(+2%·+3%···)와 이 타일이
+#   둘 다 '확률'이라 같은 것처럼 읽혔다. 정의가 다르다:
+#     · 이 타일  = **이 종목의 1차 목표**가 손절보다 먼저 나올 확률
+#     · 아래 표  = **고정 폭(+2%·+3%···)**에 닿은 비율 (매수권 사례 실측)
+#   목표 폭이 커질수록 도달률은 내려가므로 두 숫자는 원래 다르다.
+#   값을 바꾸지 않는다 — 무엇을 재는지 적는다.
+st.caption(_md_safe(
+    "위 확률은 **이 종목의 1차 목표**가 손절보다 먼저 나올 확률입니다. "
+    "화면 아래 '얼마에 팔 것인가' 표의 확률은 **고정 폭(+2%·+3%···)에 "
+    "닿은 비율**이라 서로 다른 질문의 답입니다 — 목표 폭이 커질수록 "
+    "도달률은 내려갑니다."))
 if _blend59:
     st.caption(_md_safe(
         "계층 보정 확률은 이 종목만의 확률이 아니라 같은 점수대·국면·자리"
@@ -5854,7 +5867,12 @@ except Exception:                                              # noqa: BLE001
 _uk.spacer(12)
 
 _rows_g = [
-    ('예상 보유기간',
+    # ⚠️ 라운드 98 — 이 값은 sim.optimal_holding_period_days 다. 즉
+    #   **유사패턴이 고른 관찰 지평**이고, 매매지시서의 '예상 보유 20거래일'
+    #   (core.horizon_days)과는 다른 값이다. 둘 다 '예상 보유기간'으로
+    #   적혀 있어서 화면이 20일과 40일을 동시에 말하는 것처럼 보였다.
+    #   값은 안 바꾼다 — 무엇을 재는지 이름으로 가른다.
+    ('유사패턴 관찰기간',
      (f"{_g['hold_days']}거래일" if _g.get('hold_days') else _gai.NA)),
     ('비슷했던 과거 사례',
      (f"{_g['sample_n']:,}건" if _g.get('sample_n') else '찾지 못함')),
@@ -6432,6 +6450,19 @@ with _ctx_c2:
         if _nfl.get('risk_count'):
             st.error(f"제목에 확인이 필요한 낱말이 있는 기사 **{_nfl['risk_count']}건** — "
                      "종합 점수에 상한이 걸렸습니다. 기사 원문을 직접 확인하세요.")
+        # ⚠️ 라운드 98 — 낱말은 걸렸는데 **사고 맥락이 없어** 확정하지 못한 것.
+        #   점수 상한을 걸지 않는다(농심 '인기 폭발' 이 그래서 매수를 막았다).
+        #   그렇다고 감추면 사용자가 그 기사가 있었다는 사실조차 모른다 —
+        #   막지 않되 **보여는 준다.**
+        if _nfl.get('review_count'):
+            _rw = ' · '.join(_nfl.get('review_words') or [])
+            st.info(
+                f"확인이 필요할 수 있는 낱말이 있는 기사 "
+                f"**{_nfl['review_count']}건**"
+                + (f" ({_rw})" if _rw else '')
+                + " — 사고·분쟁 맥락이 함께 나오지 않아 **점수에는 반영하지 "
+                  "않았습니다.** 같은 낱말이라도 '공장 폭발'과 '인기 폭발'은 "
+                  "다르기 때문입니다. 제목을 직접 보고 판단해 주세요.")
         # 관련성 뱃지 — 제목에 종목명이 실제로 들어간 기사만 '직접'.
         # 나머지는 업종·시장 참고 기사다 (낱말 일치만 — 해석하지 않는다).
         _nm_keys = [resolved_name]
@@ -6447,6 +6478,9 @@ with _ctx_c2:
 
         def _render_news_item(_it, direct):
             _flag = " " + "·".join(_it['risk_hits']) if _it.get('risk_hits') else ""
+            # 확정은 아니지만 걸린 낱말 — 점수엔 안 쓰고 표시만 (라운드 98)
+            if not _flag and _it.get('risk_review'):
+                _flag = " `확인 필요: " + "·".join(_it['risk_review']) + "`"
             _tag = "" if direct else " `참고`"
             _link = (f"[{_it['title']}]({_it['url']})" if _it.get('url')
                      else _it['title'])
@@ -7250,9 +7284,12 @@ with tab_pred:
              'value': fmt_num(sim_res.get('horizon_consistency_score'),
                               suffix='점'),
              'sub': '산출 가능한 지평 기준'},
-            {'label': '최적 보유기간',
+            # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을
+            # 몇 봉까지 보고 골랐나**이다. 실행 보유기간(20거래일)과 다른
+            # 값이라 이름을 갈랐다.
+            {'label': '유사패턴 최적 관찰기간',
              'value': sim_res.get('optimal_holding_period_str', '산출 불가'),
-             'sub': '평균수익 × 승률 × 일치도 / √기간'},
+             'sub': '평균수익 × 승률 × 일치도 / √기간 · 매매 지시 아님'},
             {'label': '적용 상관 임계값',
              'value': f"rho ≥ {sim_res.get('rho_cutoff_applied', rho_cutoff)}",
              'sub': '왼쪽에서 설정한 값 그대로'},
@@ -7263,7 +7300,8 @@ with tab_pred:
             _elig = sim_res.get('horizon_eligibility') or {}
             _near = sim_res.get('horizon_nearest_miss')
             _nosam = sim_res.get('horizons_without_sample') or []
-            with st.expander("최적 보유기간이 왜 미선정인가 — 지평별 판정 근거", expanded=True):
+            with st.expander("유사패턴 최적 관찰기간이 왜 미선정인가 — "
+                             "지평별 판정 근거", expanded=True):
                 st.caption(
                     "게이트를 통과한 지평이 없다는 뜻이며, 오류가 아닙니다. "
                     "억지로 하나를 고르면 손실이 기대되는 기간을 '최적'이라 부르게 됩니다.")

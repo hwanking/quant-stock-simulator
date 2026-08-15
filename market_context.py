@@ -203,6 +203,89 @@ NEWS_WATCH_KEYWORDS = (
     "목표주가 상향", "상향 조정", "무상증자",
 )
 
+# ─────────────────────────────────────────────────────────────────────
+# 위험 낱말 오탐 걸러내기 (라운드 98)
+#
+# ■ 무슨 일이 있었나
+#   농심 기사 '"불닭만 잘나가는 게 아니네"…해외서 인기 폭발한 K-라면' 이
+#   '폭발' 때문에 위험으로 잡혔다. 상한 넷 중 **가장 낮은 값이 뉴스**여서
+#   최종 점수를 55 로 정했다(그것이 없었으면 59). 결론(HOLD)은 안 바뀌지만
+#   **틀린 이유를 사용자에게 보여 주고 있었다.**
+#
+# ■ 감으로 목록을 손보지 않았다 — 실제 기사 219건을 먼저 셌다
+#   위험 낱말이 걸린 기사 11건 중 **4건이 오탐**이었고, 모양이 셋이었다:
+#     ⓐ 더 긴 낱말의 일부   '디폴트옵션'(퇴직연금 상품) · '폭발세'
+#     ⓑ 상태를 뒤집는 말    '회생절차 **종결** 신청'
+#     ⓒ 앞말이 성격을 정함  '인기 폭발' · '수요 폭발'
+#   셋은 서로 다른 규칙이라 하나로 뭉치면 또 놓친다.
+#
+# ■ 해석하지 않는다
+#   이 모듈의 규칙은 그대로다 — 낱말 일치만 하고 기사 뜻을 추측하지 않는다.
+#   아래는 '같은 글자가 다른 낱말일 때'를 가리는 장치이지, 감성 판단이
+#   아니다. 라운드 91·92 가 문장부호·띄어쓰기에서 한 것과 같은 성질이다.
+
+#: ⓐ 위험 낱말을 **품고 있는 다른 낱말**. 여기에 걸리면 그 자리는 세지 않는다.
+#:    실제 기사에서 관측된 것만 적는다 — 지어내지 않는다.
+NEWS_RISK_COLLISIONS = (
+    "디폴트옵션",          # 퇴직연금 상품명 (채무불이행 아님)
+    "폭발세", "폭발적",     # '빚투 폭발세' 처럼 세勢·的 이 붙어 다른 뜻
+    "감자탕", "감자칩", "감자전",   # 식품 (무상감자 아님)
+    "소송법", "소송절차",   # 제도 일반
+)
+
+#: ⓑ 위험 낱말 **뒤**에 가까이 오면 그 위험이 끝났다는 뜻인 말
+NEWS_RISK_RESOLVED = ("종결", "졸업", "해제", "철회", "취하", "기각",
+                      "승소", "면제", "해소", "완료", "무혐의", "각하")
+
+#: ⓒ 낱말만으로는 못 정하는 것 — **사고 맥락이 같이 있어야** 위험으로 센다.
+#:    맥락이 없으면 '확인 필요'로 표시만 하고 점수 상한을 걸지 않는다.
+#:    (제목 한 낱말로 매수를 막는 것이 이번 사고의 원인이었다)
+NEWS_RISK_SOFT = {
+    "폭발": ("공장", "가스", "사고", "화재", "사망", "부상", "대피",
+             "붕괴", "폭발물", "누출"),
+    "화재": ("공장", "창고", "사업장", "사망", "부상", "대피", "진화"),
+    "소송": ("피소", "패소", "손해배상", "제기", "피고", "특허침해",
+             "집단소송"),
+    "파업": ("돌입", "장기화", "전면", "총파업", "무기한"),
+    "감자": ("무상감자", "자본감소", "주식병합", "감자 결정", "결손"),
+}
+
+#: 뒤집는 말을 찾을 거리 — 제목에서 위험어 뒤 이만큼 안에 있으면 본다.
+#: (문장 전체를 보면 관계없는 낱말까지 걸린다)
+_RESOLVED_WINDOW = 12
+
+
+def risk_hits_of(title):
+    """제목 → (확정 위험 낱말, 확인 필요 낱말).
+
+    **낱말 일치만 한다.** 기사 뜻을 추측하지 않는다.
+    확정과 '확인 필요'를 나누는 이유: 제목 한 낱말로 매수를 막는 것이
+    라운드 98 사고의 원인이었다. 애매하면 막지 말고 보여 준다.
+    """
+    t = str(title or '')
+    hard, review = [], []
+    for w in NEWS_RISK_KEYWORDS:
+        i = t.find(w)
+        if i < 0:
+            continue
+        # ⓐ 더 긴 낱말의 일부인가
+        if any(c in t and t.find(c) <= i < t.find(c) + len(c)
+               for c in NEWS_RISK_COLLISIONS if w in c):
+            continue
+        # ⓑ 뒤에 상태를 뒤집는 말이 가까이 오는가
+        tail = t[i + len(w):i + len(w) + _RESOLVED_WINDOW]
+        if any(r in tail for r in NEWS_RISK_RESOLVED):
+            continue
+        # ⓒ 맥락이 있어야 하는 낱말인가
+        if w in NEWS_RISK_SOFT:
+            if any(c in t for c in NEWS_RISK_SOFT[w]):
+                hard.append(w)
+            else:
+                review.append(w)
+            continue
+        hard.append(w)
+    return hard, review
+
 
 def _clean_title(s):
     """제목 정리 — HTML 엔티티(&quot; 등)를 원래 글자로 되돌리고 공백을 정리한다."""
@@ -288,7 +371,10 @@ def fetch_stock_news(code, limit=15, name_hint=''):
                 'url': head.get('mobileNewsUrl') or '',
                 'related': rest,
                 'related_count': len(rest),
-                'risk_hits': [k for k in NEWS_RISK_KEYWORDS if k in title],
+                # 라운드 98 — 두 곳에서 같은 한 줄을 반복하고 있었다.
+                # 함수 하나로 빼서 양쪽이 **같은 것**을 부르게 한다.
+                'risk_hits': risk_hits_of(title)[0],
+                'risk_review': risk_hits_of(title)[1],
                 'watch_hits': [k for k in NEWS_WATCH_KEYWORDS if k in title],
                 # 범위·후행 분류 — 낱말 일치만. 연관 묶음(related)이 이미 반복
                 # 기사 중복을 걷어낸 상태다.
@@ -335,7 +421,8 @@ def _rss_fallback(code, name_hint=''):
             'title': title, 'press': h.get('source', ''),
             'datetime': h.get('when', ''), 'url': h.get('link', ''),
             'related': [], 'related_count': 0,
-            'risk_hits': [k for k in NEWS_RISK_KEYWORDS if k in title],
+            'risk_hits': risk_hits_of(title)[0],
+            'risk_review': risk_hits_of(title)[1],
             'watch_hits': [k for k in NEWS_WATCH_KEYWORDS if k in title],
             'scope': classify_news_scope(title),
             'lagging': is_lagging_report(title),
@@ -403,10 +490,18 @@ def summarize_news_flags(news):
     #    받지 못한 것과 악재가 없는 것은 다르다. 미수신을 '악재 없음'으로
     #    읽으면 데이터 장애가 매수 허가로 둔갑한다.
     risk_words = sorted({w for _, hits in risk for w in (hits or [])})
+    # 라운드 98 — '확인 필요'(맥락이 없어 확정 못 한 것)를 따로 싣는다.
+    # 점수 상한은 안 걸지만 **안 보이면 없는 것과 같다.** 사용자가
+    # 직접 판단할 수 있게 화면이 읽어 갈 자리를 만든다.
+    review = [(it['title'], it.get('risk_review') or [])
+              for it in items if it.get('risk_review')]
     return {
         'risk_titles': risk,
         'risk_count': len(risk),
         'risk_words': risk_words,
+        'review_titles': review,
+        'review_count': len(review),
+        'review_words': sorted({w for _, hs in review for w in (hs or [])}),
         'watch_count': watch,
         'fresh_watch_count': fresh_watch,
         'lagging_count': sum(1 for it in items if it.get('lagging')),

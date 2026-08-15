@@ -766,8 +766,24 @@ class BitemporalEngine:
             daum_delay = f"{daum_ms}ms (timeout/error)"
 
         now_dt = datetime.datetime.now()
-        today_date_str = now_dt.strftime("%Y-%m-%d")
         t_now = now_dt.strftime("%H:%M:%S KST")
+        # ⚠️ 라운드 98 — 여기에 **오늘 날짜**를 그대로 넣고 '기준 거래일'
+        #   이라고 불렀다. 2026-08-15(토·광복절)에 화면을 열면 거래가
+        #   없었던 날이 '기준 거래일'로 찍혔다. 가격은 8/14 종가인데
+        #   날짜만 8/15 였다 — 같은 화면의 '분석 기준일 2026-08-14' 와
+        #   어긋나 사용자가 어느 날 값인지 알 수 없었다.
+        #
+        #   거래일인지는 **달력에 물어본다.** 오늘이 거래일이 아니면
+        #   직전 거래일이 그 가격이 속한 날이다.
+        #   (표시용 날짜만 고친다 — 가격·판정은 건드리지 않는다)
+        _today = now_dt.date()
+        try:
+            _cal_now = KrxCalendar()
+            _base_day = (_today if _cal_now.is_trading_day(_today)
+                         else _cal_now.previous_trading_day(_today))
+        except Exception:                                      # noqa: BLE001
+            _base_day = _today          # 달력을 못 읽으면 지어내지 않는다
+        today_date_str = _base_day.strftime("%Y-%m-%d")
 
         # [명세 §4] 실제로 연동된 출처만 가격을 갖는다.
         # DART·KIND·기업IR은 공시·재무 출처이며 현재가 대조에 사용하지 않는다.
