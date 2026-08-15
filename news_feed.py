@@ -101,11 +101,35 @@ def _norm_title(t):
     return t.lower()
 
 
+def _tight(s):
+    """공백을 지운 꼴 — **대조에만** 쓴다 (라운드 92 의 gaeum_chat._tight).
+
+    ⚠️ 라운드 104 — 라운드 61 이 '특허'·'논문·학회' 를 넣으면서 낱말을
+      전부 **띄어쓴 구절**로 적었다('특허 취득'·'학회 발표'). 그런데
+      실제 기사 제목은 붙여 쓴다 — "특허취득"·"학회발표".
+      단순 부분일치라 하나도 안 잡혔다.
+
+      실측(구성한 표기 5종): 4/5 를 못 잡았다. 띄어쓰기를 통일하니 5/5.
+      실제 기사 217건에는 특허·논문 뉴스가 0건이라 **실사용 빈도는
+      못 쟀다** — 그 사실을 숨기지 않는다.
+
+      라운드 91~92 가 가늠 AI 에서 정확히 같은 것을 고쳤다. 그 교훈이
+      이 파일에는 안 와 있었다.
+    """
+    return re.sub(r'\s+', '', str(s))
+
+
 def event_types_of(title):
-    """제목의 사건 유형 태그. 낱말 일치만 — 해석하지 않는다."""
+    """제목의 사건 유형 태그. 낱말 일치만 — 해석하지 않는다.
+
+    원문 일치 **또는** 띄어쓰기를 지운 일치. 뒤엣것만 더한 것이라
+    종전에 잡히던 것은 전부 그대로 잡힌다(순수 확대).
+    """
+    t = str(title)
+    tt = _tight(t)
     out = []
     for label, words in EVENT_TYPES:
-        if any(w in title for w in words):
+        if any(w in t or _tight(w) in tt for w in words):
             out.append(label)
     return out
 
