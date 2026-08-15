@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import warnings
+import zlib
 
 import numpy as np
 
@@ -71,7 +72,11 @@ def main():
             if tk and d and px:
                 by_tk.setdefault(tk, {})[d] = float(px)
 
-    tks = sorted(by_tk)[shard::shards]
+    # 라운드 106 — 위치 분할을 안정 해시로 (라운드 73 이 backfill_subscores
+    # 에서 고친 것과 같은 함정). 종목이 하나만 늘어도 정렬 위치가 밀려
+    # 모든 종목이 다른 조각으로 간다.
+    tks = [t for t in sorted(by_tk)
+           if zlib.crc32(t.encode()) % shards == shard]
     done = load_done()
     out_path = os.path.join(P, f'entry_anchors_s{shard}.jsonl')
     print(f'조각 {shard}/{shards} — 종목 {len(tks)} · 이미 완료 {len(done):,}')
