@@ -18,7 +18,10 @@ import re
 import sys
 from collections import Counter
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:          # noqa: BLE001
+    pass
 
 SCALE = [12, 13, 15, 16, 17, 20, 22, 28, 34, 40]
 EXPLICIT = {2.5: 40, 3.0: 34}          # rem 기준 명시 지정 (위계 보호)

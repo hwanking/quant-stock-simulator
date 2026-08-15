@@ -9833,6 +9833,163 @@ for _rel151 in ('data/miss_study.json', 'data/weakness_map.json'):
               _note151[:60])
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §152 — 뉴스 사건 기억: 쌓는 길과 **읽는 길** (라운드 103)
+#
+#   라운드 70 이 record/resolve 를 만들고 워크플로에도 걸었다. 그런데
+#   `news_events.jsonl` 을 읽는 코드는 **백업과 스냅샷 가드뿐**이었다 —
+#   분석도 화면도 안 읽는다. 기억이 아니라 창고였다.
+#
+#   더 급한 문제가 하나 있었다: resolve 는 20영업일이 지나야 채운다.
+#   첫 기록이 2026-08-10 이므로 실제로 채워지는 것은 9월이다. 그때까지
+#   매일 "0건 채움" 만 찍히는데 **정상 대기인지 고장인지 구분할 수 없다.**
+#   라운드 96 은 일주일 만에 알아챘지만 여기서는 석 달이 걸린다.
+#
+#   그래서 resolve 가 경로를 받게 하고, **진짜 그 함수를** 충분히 오래된
+#   임시 기록에 물려 돌려 본다. 실제 원장에는 가짜 행을 넣지 않는다(§3).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§152 뉴스 사건 기억 — 쌓는 길과 읽는 길 (라운드 103)")
+print("=" * 72)
+import tempfile as _tf152                                       # noqa: E402
+
+import news_event_recorder as _ner152                           # noqa: E402
+import news_memory as _nm152                                    # noqa: E402
+
+check("표본 하한이 새 숫자가 아니다 (resolve 가 쓰던 30 재사용)",
+      _nm152.MIN_N == 30, f'{_nm152.MIN_N}')
+_real152 = _nm152.LOG
+_size152 = _os.path.getsize(_real152) if _os.path.exists(_real152) else 0
+
+# ① resolve 가 **지금** 동작하는가 — 오래된 임시 기록으로 확인
+with _tf152.TemporaryDirectory() as _td152:
+    _p152 = _os.path.join(_td152, 'news_events.jsonl')
+    with open(_p152, 'w', encoding='utf-8') as _f152:
+        _f152.write(_json148.dumps({
+            'ticker': '005930.KS', 'name': '삼성전자', 'date': '2026-06-02',
+            'total': 1, 'fresh': 1, 'lagging': 0,
+            'events': {'수주·공급': 1}, 'risk_words': [],
+            'catalyst_words': ['수주'], 'sources_ok': 3,
+            'resolved': False}, ensure_ascii=False) + '\n')
+    try:
+        _done152 = _ner152.resolve(path=_p152)
+    except Exception as _e152:                                  # noqa: BLE001
+        _done152 = 0
+        check("resolve 가 예외 없이 돈다", False,
+              f'{type(_e152).__name__}: {_e152}')
+    check("resolve 가 오래된 기록을 실제로 채운다", _done152 >= 1,
+          f'{_done152}건')
+    if _done152:
+        with open(_p152, encoding='utf-8') as _f152b:
+            _row152 = _json148.loads(_f152b.readline())
+        check("사후 경로 필드가 전부 찬다",
+              all(_row152.get(k) is not None for k in
+                  ('base_price', 'ret_1d', 'ret_20d', 'mfe', 'mae')))
+        check("MFE ≥ MAE (경로가 뒤집히지 않았다)",
+              _row152['mfe'] >= _row152['mae'],
+              f"{_row152['mfe']} · {_row152['mae']}")
+        check("20일 수익률이 MFE~MAE 안에 있다",
+              _row152['mae'] - 0.01 <= _row152['ret_20d']
+              <= _row152['mfe'] + 0.01, f"{_row152['ret_20d']}")
+
+# ② 읽는 길이 **하한을 지키는가** — 아는 분포를 넣고 대조한다
+with _tf152.TemporaryDirectory() as _td152b:
+    _p152b = _os.path.join(_td152b, 'news_events.jsonl')
+
+    def _row152b(r):
+        d = {'ticker': 'X.KS', 'date': '2026-06-02',
+             'events': {'수주·공급': 1}, 'resolved': True,
+             'mfe': abs(r) + 1.0, 'mae': -abs(r) - 1.0}
+        for _h in _nm152.HORIZONS:
+            d[f'ret_{_h}d'] = r
+        return d
+
+    with open(_p152b, 'w', encoding='utf-8') as _f152c:
+        for _i152 in range(_nm152.MIN_N - 1):
+            _f152c.write(_json148.dumps(_row152b(1.0),
+                                        ensure_ascii=False) + '\n')
+    _d152 = _nm152.lookup('수주·공급', path=_p152b)
+    check("하한 미만이면 값을 만들지 않는다",
+          _d152['available'] is False and 'horizons' not in _d152,
+          f"n={_d152['n']}")
+    check("못 내미는 사유를 담는다", bool(_d152.get('why')))
+
+    with open(_p152b, 'w', encoding='utf-8') as _f152c:
+        for _i152 in range(20):
+            _f152c.write(_json148.dumps(_row152b(-3.0),
+                                        ensure_ascii=False) + '\n')
+        for _i152 in range(20):
+            _f152c.write(_json148.dumps(_row152b(7.0),
+                                        ensure_ascii=False) + '\n')
+    _d152 = _nm152.lookup('수주·공급', path=_p152b)
+    _h152 = (_d152.get('horizons') or {}).get('20d') or {}
+    check("하한을 넘으면 분포를 낸다", _d152['available'] is True
+          and _d152['n'] == 40, f"n={_d152['n']}")
+    check("중앙값·사분위·상승비율이 맞다",
+          _h152.get('median') == 7.0 and _h152.get('q25') == -3.0
+          and _h152.get('up_rate') == 50.0, str(_h152))
+    # 미해소 기록이 통계를 오염시키지 않는다
+    with open(_p152b, 'a', encoding='utf-8') as _f152c:
+        for _i152 in range(50):
+            _r152 = _row152b(99.0)
+            _r152['resolved'] = False
+            _f152c.write(_json148.dumps(_r152, ensure_ascii=False) + '\n')
+    check("미해소 기록은 통계에 안 들어간다",
+          _nm152.lookup('수주·공급', path=_p152b)['n'] == 40)
+    _st152 = _nm152.state(path=_p152b)
+    check("대기와 해소를 따로 센다",
+          _st152['pending'] == 50 and _st152['resolved'] == 40,
+          f"대기 {_st152['pending']} · 해소 {_st152['resolved']}")
+
+# ③ 검사가 실제 원장을 건드리지 않았다
+check("검사가 실제 뉴스 원장을 건드리지 않는다",
+      (_os.path.getsize(_real152) if _os.path.exists(_real152) else 0)
+      == _size152, '크기가 바뀌었다')
+
+# ④ 지금 상태를 **기다림인지 고장인지** 말할 수 있는가
+_now152 = _nm152.state()
+check("기억 상태에 사유가 붙는다 (0건이 고장인지 대기인지)",
+      _now152['usable'] or bool(_now152['why']), str(_now152)[:90])
+check("워크플로가 뉴스 사건을 기록·해소한다",
+      'news_event_recorder.py --record' in _yml149
+      and 'news_event_recorder.py --resolve' in _yml149)
+
+# ── ⑤ 모듈 수준 stdout 교체 — 임포트하는 쪽의 출력을 죽인다 ────────────
+#   backfill_subscores 가 이미 적어 둔 것:
+#     "모듈 수준에서 새 TextIOWrapper 로 갈아끼우면 임포트하는 쪽의 stdout
+#      까지 바뀌고, 옛 래퍼가 수거될 때 버퍼를 닫아 그 뒤 출력이 죽는다.
+#      이 저장소에서 같은 함정을 **네 번** 밟았다 … reconfigure 는 같은
+#      객체를 고친다."
+#
+#   오늘 다섯 번째를 밟았다. §152 가 news_event_recorder 를 임포트하자
+#   그 뒤 검사 출력이 통째로 사라졌다 — 검사 수가 2,665 → 2,591 로
+#   '줄어든' 것처럼 보였다. 검사가 안 돈 게 아니라 **출력이 죽었다.**
+#
+#   실측으로 이 형태가 **51개 파일**에 살아 있었다. 고쳐진 4개가 예외였다.
+#   이름을 손으로 적지 않는다 — 전부 훑어서 하나라도 남으면 실패시킨다.
+_DANGER153 = 'sys.stdout = io.TextIOWrapper'
+_scan153, _hit153 = 0, []
+for _root153, _dirs153, _fs153 in _os.walk(PROJ):
+    if any(p in _root153 for p in ('.git', '_probe', '_archive', 'venv',
+                                   '__pycache__')):
+        continue
+    for _fn153 in _fs153:
+        if not _fn153.endswith('.py'):
+            continue
+        _rel153 = _os.path.relpath(_os.path.join(_root153, _fn153),
+                                   PROJ).replace('\\', '/')
+        _scan153 += 1
+        for _ln153 in _read148(_os.path.join(PROJ, _rel153)).splitlines():
+            # 줄 맨 앞에 있는 것만 — 함수 안(들여쓰기)의 것은 안전하다
+            if _ln153.startswith(_DANGER153):
+                _hit153.append(_rel153)
+                break
+check("훑은 파이썬 파일이 있다 (0개면 미측정)", _scan153 >= 100,
+      f'{_scan153}개')
+check("모듈 수준에서 stdout 을 갈아끼우는 파일이 없다",
+      not _hit153, f'{len(_hit153)}개 — {_hit153[:5]}')
+
+
 print()
 print("=" * 72)
 if FAILURES:

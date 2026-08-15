@@ -22,7 +22,10 @@ import warnings
 import numpy as np
 
 warnings.filterwarnings('ignore')
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:          # noqa: BLE001
+    pass
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 P = os.path.join(PROJ, '.portfolio')
