@@ -9759,6 +9759,80 @@ else:
     check("dual-check 산출물이 있다", False, 'data/dual_check_grading.json 없음')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §151 — FN/FP 연구가 자동으로 돌고, 멈추면 드러난다 (라운드 102)
+#
+#   miss_study(라운드 67)·weakness_map(라운드 69)은 이미 있었다. 그런데
+#   일일 워크플로와 run_daily_improvement 를 통틀어 **등장 0회** 였다 —
+#   사람이 돌릴 때만 돌았다. 라운드 77(전방 기록기)·96(개선 파이프라인)과
+#   같은 모양이다: 도구는 있는데 아무도 안 부른다.
+#
+#   더 나쁜 것은 **멈춘 것을 알아챌 방법이 없었다**는 점이다. 두 산출물이
+#   만든 날짜를 `made='2026-08-10'` 으로 박아 두고 있어서, 다시 만들어도
+#   날짜가 안 바뀌었다. 실측: 17:20 에 다시 쓴 파일이 "8/10에 만들었다"고
+#   적고 있었다.
+#
+#   그래서 셋을 함께 건다 — 자동 실행 · 진짜 출처 · 낡음의 값 판정.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§151 FN/FP 연구 자동화와 낡음 판정 (라운드 102)")
+print("=" * 72)
+import study_freshness as _sf151                                # noqa: E402
+
+# ① 워크플로가 실제로 부르는가
+check("일일 워크플로가 FN/FP 연구를 부른다",
+      'scripts/miss_study.py' in _yml149)
+check("일일 워크플로가 취약구간 지도를 부른다",
+      'scripts/weakness_map.py' in _yml149)
+check("신선도 검사는 || true 없이 건다",
+      'python scripts/study_freshness.py' in _yml149
+      and 'python scripts/study_freshness.py || true' not in _yml149)
+
+# ② 만든 날짜를 박아 두지 않는가 — 산문 말고 산 코드로 본다
+for _f151 in ('scripts/miss_study.py', 'scripts/weakness_map.py'):
+    _src151 = '\n'.join(ln for _i151, ln in _la135.code_lines(_f151))
+    check(f"{_f151} 이 만든 날짜를 박아 두지 않는다",
+          "made='2026-" not in _src151 and 'made="2026-' not in _src151,
+          '옛 하드코딩이 남아 있다')
+    check(f"{_f151} 이 원장 줄 수를 함께 적는다",
+          'ledger_rows' in _src151)
+
+# ③ 낡음 판정이 **값으로** 동작하는가 — 만든 문서로 먹여 본다
+check("허용 밀림을 일일 증분에서 유도한다 (감으로 고르지 않는다)",
+      _sf151.MAX_LAG == 800, f'{_sf151.MAX_LAG}')
+check("판정 대상이 비어 있지 않다", len(_sf151.STUDIES) >= 2,
+      f'{len(_sf151.STUDIES)}개')
+_now151 = _sf151.ledger_rows()
+check("원장 줄 수를 실제로 센다 (0이면 미측정)", _now151 > 1000,
+      f'{_now151:,}줄')
+
+# 실측 산출물 — 지금 낡지 않았는가
+for _rel151, _lbl151 in _sf151.STUDIES:
+    _p151 = _os.path.join(PROJ, _rel151)
+    if not _os.path.exists(_p151):
+        check(f"{_lbl151} 산출물이 있다", False, f'{_rel151} 없음')
+        continue
+    with open(_p151, encoding='utf-8') as _f151b:
+        _d151 = _json148.load(_f151b)
+    check(f"{_lbl151} 가 출처를 적는다 (옛 규약이 아니다)",
+          _d151.get('ledger_rows') is not None,
+          f"made={_d151.get('made')}")
+    if _d151.get('ledger_rows') is not None:
+        _lag151 = _now151 - int(_d151['ledger_rows'])
+        check(f"{_lbl151} 가 원장보다 크게 밀리지 않았다",
+              _lag151 <= _sf151.MAX_LAG, f'{_lag151:,}줄 밀림')
+
+# ④ 연구가 **관측 전용**임을 스스로 밝히는가 (11/16 동결)
+for _rel151 in ('data/miss_study.json', 'data/weakness_map.json'):
+    _p151 = _os.path.join(PROJ, _rel151)
+    if _os.path.exists(_p151):
+        with open(_p151, encoding='utf-8') as _f151c:
+            _note151 = str((_json148.load(_f151c) or {}).get('note') or '')
+        check(f"{_rel151} 가 관측 전용임을 적는다",
+              '관측 전용' in _note151 and '2026-11-16' in _note151,
+              _note151[:60])
+
+
 print()
 print("=" * 72)
 if FAILURES:

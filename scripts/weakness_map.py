@@ -22,7 +22,7 @@ import math
 import os
 import sys
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 
@@ -120,6 +120,7 @@ def main():
                     continue
 
     rows = []
+    _ledger_rows = 0        # 원장이 몇 줄일 때 잰 것인지 — 낡음 판정의 근거
     with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
         for ln in f:
             ln = ln.strip()
@@ -129,6 +130,7 @@ def main():
                 r = json.loads(ln)
             except Exception:                                  # noqa: BLE001
                 continue
+            _ledger_rows += 1
             if (r.get('split') == 'blind' or r.get('outcome') == 'OPEN'
                     or float(r.get('score') or 0) < 58.0):
                 continue
@@ -191,7 +193,16 @@ def main():
 
     dst = os.path.join(PROJ, 'data', 'weakness_map.json')
     with open(dst, 'w', encoding='utf-8') as f:
-        json.dump(dict(made='2026-08-10', base=base, axes=out,
+        # ⚠️ 라운드 102 — 여기도 `made='2026-08-10'` 이 박혀 있었다
+        #   (miss_study 와 같은 자리). 다시 만들어도 날짜가 안 바뀌니
+        #   낡았는지 알 수 없었다. 언제 돌렸는지와 **무엇으로 쟀는지**를
+        #   같이 적는다 — ledger_rows 로 낡음을 값으로 판정한다.
+        json.dump(dict(made=date.today().isoformat(),
+                       made_at=datetime.now(timezone.utc)
+                       .isoformat(timespec='seconds'),
+                       ledger_rows=_ledger_rows,
+                       joined_n=len(rows),
+                       base=base, axes=out,
                        min_n=MIN_N,
                        note='관측 전용 — 점수·게이트를 바꾸지 않는다. '
                             f'{_FE} 이후 연구 순서를 정하는 근거로만 쓴다.',
