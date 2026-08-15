@@ -26,10 +26,14 @@ from report_generator import QuantReportGenerator
 
 PROJ = _os.path.dirname(_os.path.abspath(__file__))
 FAILURES = []
+#: 지금까지 **실제로 돌린** 검사 수 (라운드 109 — §158 이 규칙 문서의
+#: 회귀 하한을 이 값으로 대조한다. 세지 않으면 '항상 참'인 검사가 된다)
+_CHECKS_RUN = [0]
 
 
 def check(name, condition, detail=""):
     ok = bool(condition)
+    _CHECKS_RUN[0] += 1
     print(f"  [{'OK  ' if ok else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""))
     if not ok:
         FAILURES.append(name)
@@ -10303,6 +10307,65 @@ if _os.path.exists(_meta157):
 # 갱신 절차가 있다 — 손으로 복사하면 또 멈춘다
 check("동봉본 갱신 스크립트가 있다",
       _os.path.exists(_os.path.join(PROJ, 'scripts', 'refresh_bundle.py')))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §158 — 규칙 문서의 숫자가 9배 어긋난 채 있었다 (라운드 109)
+#
+#   CLAUDE.md 는 **매 작업 전에 읽는** 문서다. 여기 숫자가 낡으면 그
+#   뒤의 모든 판단이 낡은 전제 위에 선다.
+#
+#       원장 건수      문서 19,883 · 실제 184,759   (9.3배)
+#       회귀 하한      문서  1,700 · 실제   2,719
+#
+#   §2 는 "원장으로 실측한다" 고 하는데, 그 규모를 2만 건으로 알고
+#   시작하면 표본 판단이 통째로 달라진다.
+#
+#   숫자만 갈면 내일 또 낡는다. **잰 날짜를 같이 적게** 하고, 검사는
+#   '자릿수가 어긋나는가' 만 본다 — 매일 자라는 값에 일일 정확도를
+#   요구하면 검사가 매일 깨지고, 곧 무시된다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§158 규칙 문서의 숫자 — 날짜를 달고, 자릿수가 안 어긋나게 (라운드 109)")
+print("=" * 72)
+_md158 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+check("규칙 문서를 읽었다 (0바이트면 미측정)", len(_md158) > 2000,
+      f'{len(_md158)}바이트')
+
+_m158 = _re.search(r'\*\*(\d{4}-\d\d-\d\d) 기준 ([\d,]+)건\*\*', _md158)
+check("원장 건수에 잰 날짜가 붙어 있다", bool(_m158),
+      '날짜 없는 숫자는 반드시 낡는다')
+if _m158:
+    _claim158 = int(_m158.group(2).replace(',', ''))
+    _now158 = _sf151.ledger_rows()
+    # 자릿수만 본다 — 매일 자라므로 일일 일치를 요구하지 않는다
+    check("문서의 원장 건수가 실제와 자릿수가 맞는다",
+          _now158 == 0 or 0.5 <= _claim158 / _now158 <= 2.0,
+          f'문서 {_claim158:,} · 실제 {_now158:,}')
+
+_m158b = _re.search(r'([\d,]+)건 이상 \((\d{4}-\d\d-\d\d) 기준\)', _md158)
+check("회귀 하한에도 잰 날짜가 붙어 있다", bool(_m158b),
+      '회귀 건수 표기에 날짜가 없다')
+if _m158b:
+    # 하한은 '이상' 이므로 **실제 검사 수가 그보다 많아야** 한다.
+    # 이 절이 도는 시점에 이미 2,700여 건이 실행됐다 — 그 수를 센다.
+    # (항상 참인 검사를 쓰지 않는다. 처음에 빈 문자열을 뒤져 +10^9 을
+    #  더하는 식으로 써 놓고 지웠다 — 못 깨지는 검사는 없는 것만 못하다.)
+    _floor158 = int(_m158b.group(1).replace(',', ''))
+    _ran158 = len(FAILURES) + _CHECKS_RUN[0]
+    check("문서의 회귀 하한을 실제 검사 수가 넘는다",
+          _ran158 >= _floor158, f'문서 {_floor158:,} · 실행 {_ran158:,}')
+
+# 보호 계산 파일 줄 수도 문서가 말한다 — 크게 어긋나면 안 된다
+_m158c = _re.search(r'`quant_indicators\.py`[^|]*약\s*([\d,]+)\s*줄', _md158)
+if _m158c:
+    _cl158 = int(_m158c.group(1).replace(',', ''))
+    with open(_os.path.join(PROJ, 'quant_indicators.py'),
+              encoding='utf-8', errors='replace') as _f158:
+        _real158 = sum(1 for _ in _f158)
+    check("문서의 quant_indicators 줄 수가 실제와 가깝다",
+          abs(_cl158 - _real158) <= 500,
+          f'문서 {_cl158:,} · 실제 {_real158:,}')
 
 
 print()
