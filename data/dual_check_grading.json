@@ -1,10 +1,10 @@
 {
- "n_compared": 176646,
- "agree": 176536,
+ "n_compared": 177042,
+ "agree": 176932,
  "mismatch": 110,
- "mismatch_rate": 0.0006227143552642007,
- "skipped": 7713,
- "same_bar_rate": 0.9991049984139212,
+ "mismatch_rate": 0.0006213214943346777,
+ "skipped": 7717,
+ "same_bar_rate": 0.9991070015599213,
  "kinds": {
   "STOP→TARGET": 94,
   "STOP→OPEN": 15,

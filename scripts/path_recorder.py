@@ -24,6 +24,7 @@ import os
 import sys
 import time
 import warnings
+import zlib
 
 warnings.filterwarnings('ignore')
 try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
@@ -75,7 +76,12 @@ def main():
             if tk and d and px:
                 by_tk.setdefault(tk, {})[d] = float(px)
 
-    tks = sorted(by_tk)[shard::shards]
+    # 라운드 106 — 위치 분할을 안정 해시로 바꿨다. 원장에 종목이 하나만
+    # 늘어도 정렬 위치가 밀려 모든 종목이 다른 조각으로 간다(라운드 73 이
+    # backfill_subscores 에서 고친 것과 같은 함정). 여기는 done 을 전체
+    # glob 으로 읽어 와서 구멍이 안 났을 뿐, 분할 자체는 같은 결함이었다.
+    tks = [t for t in sorted(by_tk)
+           if zlib.crc32(t.encode()) % shards == shard]
     done = load_done()
     out_path = os.path.join(P, f'bar_paths_s{shard}.jsonl')
     total_rows = sum(len(v) for t, v in by_tk.items() if t in set(tks))

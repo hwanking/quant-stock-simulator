@@ -10084,6 +10084,79 @@ check("리포트 없으면 배너를 만들지 않는다",
       '_pm_today and _pm_today.get' in _w154)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §155 — 조각 분할을 위치로 하면 목록이 자라는 순간 어긋난다 (라운드 106)
+#
+#   backfill_subscores 가 라운드 73 에서 이걸 고치며 적어 뒀다:
+#     "stride 분할은 **모든 워커가 똑같은 todo 목록을 볼 때만** 성립한다 …
+#      키 자체의 안정 해시로 가른다."
+#   그런데 고쳐진 것은 **그 파일 하나**였고, 같은 형태가 세 곳에 남아
+#   있었다 — breakout_study · path_recorder · entry_anchor_recorder.
+#   라운드 103 의 stdout 과 같은 모양이다(넷만 고치고 51개를 남겨 둠).
+#
+#   실측: 돌파 플래그 '설명 안 됨' 2,642건이 **20종목에만** 몰려 있고,
+#   그 20종목 전부가 다른 날짜에는 플래그를 받았다. 2015~2026 에 고르게
+#   흩어져 있고 최근 축적분은 0% — 시점 문제가 아니라 분할 문제였다.
+#
+#   breakout_study 는 done 까지 **자기 조각 파일에서만** 읽고 있었다.
+#   path_recorder 는 처음부터 전체 glob 이라 구멍이 안 났다 — 그 차이가
+#   왜 하나만 뚫렸는지를 설명한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§155 조각 분할 — 위치 대신 안정 해시 (라운드 106)")
+print("=" * 72)
+
+# 이름을 손으로 적지 않는다 — 전부 훑어 하나라도 남으면 실패
+# ⚠️ 패턴을 **조립한다.** 리터럴로 적으면 이 검사가 자기 소스를 잡는다 —
+#   §148 에서 세 번 겪었고 여기가 네 번째였다. 산 코드에 남은 유일한
+#   일치가 이 줄 자신이었다.
+_PAT155 = '[' + 'shard' + '::' + 'shards' + ']'
+_scan155, _hit155 = 0, []
+for _root155, _dirs155, _fs155 in _os.walk(PROJ):
+    if any(p in _root155 for p in ('.git', '_probe', '_archive', 'venv',
+                                   '__pycache__')):
+        continue
+    for _fn155 in _fs155:
+        if not _fn155.endswith('.py'):
+            continue
+        _rel155 = _os.path.relpath(_os.path.join(_root155, _fn155),
+                                   PROJ).replace('\\', '/')
+        _scan155 += 1
+        _src155 = '\n'.join(ln for _i155, ln
+                            in _la135.code_lines(_rel155))
+        if _PAT155 in _src155:
+            _hit155.append(_rel155)
+check("훑은 파이썬 파일이 있다 (0개면 미측정)", _scan155 >= 100,
+      f'{_scan155}개')
+check("위치로 조각을 가르는 곳이 없다", not _hit155,
+      f'{len(_hit155)}개 — {_hit155[:4]}')
+
+# 안정 해시를 실제로 쓰는가 — 조각을 나눠도 합이 보존되는지 값으로 본다
+import zlib as _zlib155                                         # noqa: E402
+_tks155 = [f'{i:06d}.KS' for i in range(500)]
+for _n155 in (3, 6):
+    _parts155 = [[t for t in _tks155
+                  if _zlib155.crc32(t.encode()) % _n155 == s]
+                 for s in range(_n155)]
+    _flat155 = [t for p in _parts155 for t in p]
+    check(f"{_n155}조각이 겹치지도 빠지지도 않는다",
+          sorted(_flat155) == sorted(_tks155)
+          and len(_flat155) == len(set(_flat155)),
+          f'{len(_flat155)} vs {len(_tks155)}')
+# 목록이 자라도 같은 종목은 같은 조각 — 위치 분할이 못 지키는 성질
+_grown155 = ['000000.KQ'] + _tks155
+check("목록이 자라도 종목의 조각이 안 바뀐다",
+      all(_zlib155.crc32(t.encode()) % 6
+          == _zlib155.crc32(t.encode()) % 6 for t in _grown155)
+      and (_zlib155.crc32(_tks155[0].encode()) % 6
+           == _zlib155.crc32(_tks155[0].encode()) % 6))
+
+# done 을 자기 조각만 읽으면 조각이 바뀐 종목의 과거가 안 보인다
+_bs155 = _read148(_os.path.join(PROJ, 'scripts', 'breakout_study.py'))
+check("돌파 스터디가 done 을 전체 조각에서 읽는다",
+      "glob.glob(os.path.join(P, 'breakout_flags_s*.jsonl'))" in _bs155)
+
+
 print()
 print("=" * 72)
 if FAILURES:

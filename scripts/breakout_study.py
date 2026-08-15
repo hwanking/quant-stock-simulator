@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import warnings
+import zlib
 from datetime import date, timedelta
 
 import numpy as np
@@ -60,11 +61,26 @@ def build_flags(shard, shards):
                 continue
             by_tk.setdefault(str(r['ticker']), set()).add(str(r['date'])[:10])
 
-    tks = sorted(by_tk)[shard::shards]
+    # ⚠️ 라운드 106 — 여기가 `sorted(by_tk)[shard::shards]` 였다.
+    #   **위치로 가르는 분할**은 목록이 고정일 때만 성립한다. 원장에 종목이
+    #   하나 늘면 정렬 위치가 통째로 밀려 **모든 종목이 다른 조각으로 간다.**
+    #   backfill_subscores 가 라운드 73 에서 정확히 이 문제를 고치며 적어
+    #   뒀는데(안정 해시), 이 파일에는 안 왔다.
+    #
+    #   실측 결과: 돌파 플래그 '설명 안 됨' 2,642건이 **20종목에만** 몰려
+    #   있고, 그 20종목 전부가 다른 날짜에는 플래그를 받았다. 2015~2026 에
+    #   고르게 흩어져 있고 최근 축적분은 0% — 시점 문제가 아니라 분할 문제다.
+    #
+    #   키 자체의 안정 해시로 가른다. 종목이 몇 개든 같은 종목은 늘 같은 조각.
+    tks = [t for t in sorted(by_tk)
+           if zlib.crc32(t.encode()) % shards == shard]
     out_path = os.path.join(P, f'breakout_flags_s{shard}.jsonl')
+    # ⚠️ 그리고 `done` 을 **자기 조각 파일에서만** 읽고 있었다.
+    #   조각이 바뀐 종목의 옛 기록은 다른 파일에 있어 안 보인다 —
+    #   path_recorder 는 처음부터 전체 glob 을 읽는다(그래서 100%다).
     done = set()
-    if os.path.exists(out_path):
-        with open(out_path, encoding='utf-8') as f:
+    for _p in sorted(glob.glob(os.path.join(P, 'breakout_flags_s*.jsonl'))):
+        with open(_p, encoding='utf-8', errors='replace') as f:
             for ln in f:
                 try:
                     q = json.loads(ln)
