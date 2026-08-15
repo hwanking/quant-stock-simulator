@@ -8882,7 +8882,11 @@ for _lbl146, _i146 in (('--verify', _i_ver146), ('--check', _i_chk146),
 import scripts.model_freeze_guard as _fg146                    # noqa: E402
 for _need146 in ('data/version_ledger.json', 'quant_indicators.py',
                  'verdict_core.py', 'price_axes.py', 'regime_policy.py',
-                 'forward_eval.py'):
+                 'forward_eval.py',
+                 # 라운드 97 — 전방 기록부의 규약. 자동 실행이 CONTRACT·
+                 # FIELDS 를 바꾸면 같은 파일 안에서 앞뒤 행의 뜻이 갈리고
+                 # 11/16 에 알아챌 방법이 없다.
+                 'forward_registry.py'):
     check(f"자동 변경 금지 목록에 {_need146} 이 있다",
           _need146 in _fg146.NO_AUTO_CHANGE, str(_fg146.NO_AUTO_CHANGE))
 check("11/16 평가 대상이 박제 목록에 있다",
@@ -9538,6 +9542,12 @@ check("화면에 띄울 자격을 갖춘 업종이 40개 이상이다",
 _eni148 = _read148(_os.path.join(PROJ, 'scripts', 'effective_n_icc.py'))
 check("유효표본 산출이 패치 파일도 읽는다",
       _stem148 + '_patch' in _eni148)
+# 커버리지 보고가 '못 채운 것'과 '원래 못 채우는 것'을 가르는가 —
+# 그 파일이 스스로 내건 목적이다. 안 가르면 ETF 18,469건이 영원히 할 일로
+# 보이고, 그래서 백필을 또 돌리게 된다.
+_cvr148 = _read148(_os.path.join(PROJ, 'scripts', 'coverage_report.py'))
+check("커버리지 보고가 '확인했고 없음'을 따로 센다",
+      'sector_checked' in _cvr148 and '할 일이 아니다' in _cvr148)
 # 화면 문구가 잰 값을 손으로 적어 두면 반드시 낡는다 — 유도하는지 본다
 _wicc148 = '\n'.join(ln for _i148, ln in _la135.code_lines('web_app.py'))
 check("ICC 범위를 문장에 박아 두지 않는다",
