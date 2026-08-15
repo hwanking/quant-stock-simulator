@@ -3756,9 +3756,16 @@ class QuantIndicatorsEngine:
             _num_gate("손익비", _rr, G.get('min_reward_risk', 1.3), "{:.2f}"),
             _num_gate("유효표본", eff_sample_size, G.get('min_effective_samples', 10), "{:.0f}건"),
             _num_gate("신호 합의도", signal_consensus_score, G.get('min_signal_consensus', 55)),
-            _bool_gate("현재가가 권장 매수가 이하",
+            # ⚠️ 라운드 98 — 라벨만 고쳤다(값·판정 불변). 이 칸의 기준은
+            #   buy_entry_max = recommended_buy_price = **적정가 − 안전마진**
+            #   이고, 배너의 '권장 매수가'(실행 진입가)와는 **다른 값**이다.
+            #   둘 다 '권장 매수가'로 불려서 화면이 한 종목에 두 가격을
+            #   말하는 것처럼 보였다(농심: 423,626 vs 446,331).
+            #   라운드 31 이 정리한 '같은 개념에 이름 다섯 개'가 여기 남아
+            #   있었다. 무엇을 재는지 이름에 적는다.
+            _bool_gate("현재가가 가치 기준선(적정가−안전마진) 이하",
                        buy_entry_max is not None and curr_price <= buy_entry_max,
-                       f"현재 {curr_price:,.0f}원 / 권장 "
+                       f"현재 {curr_price:,.0f}원 / 가치 기준선 "
                        + (f"{buy_entry_max:,.0f}원 이하" if buy_entry_max is not None else "미산출")),
             # 라운드 28b: 필수 → 참고. 미산출은 실측상 정상 상태이며(62.9%),
             # 추천을 막을 근거가 없다. 대신 아래에서 점수 상한으로 다룬다.
