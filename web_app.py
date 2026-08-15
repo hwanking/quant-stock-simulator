@@ -4326,10 +4326,19 @@ if _uh_home and _uh_home.get('days'):
     _flat_upd = [{**it, 'date': d['date'], 'version': d['version']}
                  for d in _days_enr for it in d['items']]
     _n_upd = len(_flat_upd)
-    _latest_ver = _VER_NOW['model']       # 버전 원장이 유일 출처
+    # ⚠️ 라운드 98b — 여기 `_VER_NOW['model']` 을 붙여 두고 있었다.
+    #   건수는 **모든 커밋**을 센 값인데 버전은 **모델 축 하나**여서
+    #   "업데이트 213건 · v2026.08.12.1" 처럼 어긋났다. 그 213건 안에는
+    #   8/15 룰북 변경이 들어 있는데 표시는 8/12 였다.
+    #   §7 이 말한 '5축이 따로 움직인다'를 한 축으로 대표시킨 것이다.
+    #   5축 버전은 이미 상단 칩에 따로 있으므로, 여기는 **건수와 같은
+    #   출처**인 최근 갱신일을 쓴다 — 그래야 어긋날 수가 없다.
+    _latest_day = str((_days_enr[0] or {}).get('date') or '') if _days_enr else ''
+    _upd_head = (f"업데이트 {_n_upd}건 · 최근 {_latest_day}"
+                 if _latest_day else f"업데이트 {_n_upd}건")
     st.markdown("<div id='nav-updates'></div>", unsafe_allow_html=True)
     # 사용자 요청: 눌러야 나오게, 아주 간략하게. 평소엔 한 줄만 보인다.
-    with st.expander(f"업데이트 {_n_upd}건 · {_latest_ver}", expanded=False):
+    with st.expander(_upd_head, expanded=False):
         st.caption("커밋 이력 원문에서 자동 생성 — 손으로 쓰지 않습니다.")
 
         # 아주 간략하게 — 한 줄씩. 자세한 건 아래 '전체 업데이트 보기'.
