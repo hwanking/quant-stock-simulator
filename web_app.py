@@ -3928,6 +3928,27 @@ def _artifact_path(fname):
     return None
 
 
+def _artifact_source(fname):
+    """이 값이 **로컬 최신인가 저장소 동봉본인가** (라운드 108).
+
+    ⚠️ `.portfolio` 는 gitignore 라 배포 환경에 없다. 그래서 배포에서는
+      늘 `data/` 동봉본을 읽는다. 그런데 동봉본이 2026-08-02 에 멈춰
+      있었고(6,508건 · 실제 184,759건), 화면은 그것을 **최신인 양**
+      보여 주고 있었다. 더 나쁜 것은 그 숫자가 모델에 유리한 쪽이었다는
+      점이다 — 고신뢰 비용후 수익 -0.10(동봉) vs -0.43(실제),
+      PF 1.17 vs 1.04. §9 는 성과를 좋게 보이게 쓰지 말라고 한다.
+
+      동봉본은 갱신했고(scripts/refresh_bundle.py), 여기서는 **어느
+      쪽을 읽었는지 밝힌다.** 조용한 폴백은 §3 위반이다.
+    """
+    _base = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(_base, ".portfolio", fname)):
+        return 'live'
+    if os.path.exists(os.path.join(_base, "data", fname)):
+        return 'bundle'
+    return None
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_calibration_meta():
     try:
@@ -6615,9 +6636,16 @@ st.markdown('<div id="nav-perf"></div>', unsafe_allow_html=True)
 _perf_cal = _load_calibration_meta()
 if _perf_cal.get('total_cases'):
     st.markdown("### 모델 자체 점검")
+    # 라운드 108 — 이 숫자가 **로컬 최신인지 저장소 동봉본인지** 밝힌다.
+    # 배포 환경에는 .portfolio 가 없어 늘 동봉본을 읽는데, 그 사실을
+    # 안 적으면 옛 표본으로 낸 숫자를 최신으로 읽게 된다(§3·§9).
+    _cal_src = _artifact_source("calibration.json")
     st.caption(f"과거 기준일 리플레이 **{_perf_cal['total_cases']:,}건** · "
                f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
-               "시간 분할: 학습 <2025-07 / 검증 ~2026-01 / 블라인드 ≥2026-02 "
+               + ("로컬 최신 기록" if _cal_src == 'live'
+                  else "저장소 동봉본 (배포 환경 — 로컬 기록 없음)")
+               + " · 시간 분할: 학습 <2025-07 / 검증 ~2026-01 / "
+               "블라인드 ≥2026-02 "
                "(블라인드는 보고 전용 — 모델 선택에 쓰지 않습니다)")
     with st.expander("성과 분해 · 점수대 캘리브레이션 · 실패 원인 (펼쳐보기)",
                      expanded=False):

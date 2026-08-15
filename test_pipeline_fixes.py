@@ -10238,6 +10238,73 @@ for _fn156 in _REGEN156:
           (_mt156 - _md156).days <= 1, f'수정 {_mt156} · made {_md156}')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §157 — 배포가 보는 숫자가 3.5% 표본이었다 (라운드 108)
+#
+#   `.portfolio/` 는 gitignore 라 **배포 환경(Streamlit Cloud)에 없다.**
+#   `_artifact_path` 는 .portfolio → data 순으로 찾으므로 배포에서는
+#   저장소에 커밋된 `data/` 동봉본을 읽는다.
+#
+#   그 동봉본이 **2026-08-02 에 멈춰 있었다.** 원장이 6,508 → 184,759 로
+#   자라는 동안 한 번도 안 갱신됐다. §64 는 동봉본의 **존재와 구조**만
+#   검사하고 **최신인지는 안 봤다** — 그래서 보름을 못 봤다.
+#
+#   더 나쁜 것은 그 숫자가 **모델에 유리한 쪽**이었다는 점이다:
+#       고신뢰(65+)   실제 n 588 · 비용후 -0.43 · PF 1.04 · Wilson 56.0
+#                     동봉 n  45 · 비용후 -0.10 · PF 1.17 · Wilson 47.6
+#   §9 — 성과를 좋게 보이게 쓰지 않는다. 우연이라도 그러면 고친다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§157 배포 동봉본 — 최신인가, 표본이라고 밝히는가 (라운드 108)")
+print("=" * 72)
+_w157 = '\n'.join(ln for _i157, ln in _la135.code_lines('web_app.py'))
+
+check("어느 쪽을 읽었는지 판별하는 함수가 있다",
+      'def _artifact_source' in _w157)
+check("모델 성과 화면이 출처를 밝힌다",
+      '저장소 동봉본' in _w157 and '로컬 최신 기록' in _w157)
+
+_bun157 = _os.path.join(PROJ, 'data', 'calibration.json')
+_liv157 = _os.path.join(PROJ, '.portfolio', 'calibration.json')
+with open(_bun157, encoding='utf-8') as _f157:
+    _bd157 = _json148.load(_f157)
+check("동봉 집계표가 표본 수를 적는다",
+      isinstance(_bd157.get('total_cases'), int),
+      str(_bd157.get('total_cases')))
+# 둘 다 있을 때만 대조한다 — 배포/CI 에는 .portfolio 가 없다
+if _os.path.exists(_liv157):
+    with open(_liv157, encoding='utf-8') as _f157b:
+        _lv157 = _json148.load(_f157b)
+    _gap157 = (_lv157.get('total_cases') or 0) - (_bd157.get('total_cases')
+                                                  or 0)
+    # 허용치는 하루 축적량(실측 ~400)의 두 배 — study_freshness 와 같은 값
+    check("동봉본이 실제보다 크게 뒤처지지 않는다", _gap157 <= 800,
+          f"실제 {_lv157.get('total_cases'):,} · "
+          f"동봉 {_bd157.get('total_cases'):,} · 차 {_gap157:,}")
+else:
+    check("배포 환경 — 실제 기록이 없어 대조는 건너뛴다", True,
+          '.portfolio 없음')
+
+# 원장 표본은 **몇 건 중 몇 건인지** 남겨야 한다 (§3 — 전체인 척 금지)
+_meta157 = _os.path.join(PROJ, 'data', 'bundle_meta.json')
+check("원장 표본이 전체 대비 몇 건인지 기록한다",
+      _os.path.exists(_meta157), 'data/bundle_meta.json 없음')
+if _os.path.exists(_meta157):
+    with open(_meta157, encoding='utf-8') as _f157c:
+        _bm157 = _json148.load(_f157c)
+    check("표본 수와 전체 수가 둘 다 적혀 있다",
+          isinstance(_bm157.get('sample_rows'), int)
+          and isinstance(_bm157.get('ledger_rows_at_bundle'), int),
+          str(_bm157)[:80])
+    check("표본이 전체보다 크지 않다",
+          _bm157.get('sample_rows', 0)
+          <= _bm157.get('ledger_rows_at_bundle', 0))
+
+# 갱신 절차가 있다 — 손으로 복사하면 또 멈춘다
+check("동봉본 갱신 스크립트가 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'refresh_bundle.py')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
