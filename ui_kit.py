@@ -482,6 +482,38 @@ STEPS = [
 ]
 
 
+def dur_ko(sec: float | int | None) -> str:
+    """초를 사람이 읽는 시간으로 — `187` → `3분 7초` (라운드 99).
+
+    ■ 왜
+      진행 표시가 `187초 경과 · 약 240초 남음` 처럼 **초만** 쓰고 있었다.
+      2~5분짜리 정밀 분석에서 세 자리 초는 크기가 안 잡힌다. 사람은
+      '3분쯤' 으로 읽지 '187초' 로 읽지 않는다.
+
+    ■ 규칙
+      · 60초 미만        → `47초`
+      · 60초 이상        → `3분 7초` (초가 0이면 `3분`)
+      · 1시간 이상       → `1시간 4분`
+      · None / 음수      → `—` (없는 값을 0초로 꾸미지 않는다, §3)
+    """
+    if sec is None:
+        return '—'
+    try:
+        s = int(round(float(sec)))
+    except (TypeError, ValueError):
+        return '—'
+    if s < 0:
+        return '—'
+    if s < 60:
+        return f'{s}초'
+    if s < 3600:
+        m, r = divmod(s, 60)
+        return f'{m}분 {r}초' if r else f'{m}분'
+    h, r = divmod(s, 3600)
+    m = r // 60
+    return f'{h}시간 {m}분' if m else f'{h}시간'
+
+
 def progress(done: int, total: int = 0, label: str = '',
              theme: str = 'dark', elapsed: float | None = None) -> str:
     """
@@ -509,10 +541,10 @@ def progress(done: int, total: int = 0, label: str = '',
         _left = ''
         if done > 0 and done < total:
             _eta = elapsed / done * (total - done)
-            _left = f" · 약 {_eta:.0f}초 남음"
+            _left = f" · 약 {dur_ko(_eta)} 남음"
         el = (f"<span style='font-size:12px; color:{t['tx3']}; "
               f"font-variant-numeric:tabular-nums;'>"
-              f"{elapsed:.0f}초 경과{_left}</span>")
+              f"{dur_ko(elapsed)} 경과{_left}</span>")
     return (
         f"<div style='background:{t['card']}; border-radius:14px; "
         f"padding:16px 20px;'>"

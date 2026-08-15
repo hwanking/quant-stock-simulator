@@ -65,7 +65,15 @@ import quant_indicators as qi                                # noqa: E402
 
 P = os.path.join(PROJ, '.portfolio')
 LEDGER = os.path.join(P, 'virtual_graded.jsonl')
-PATCH = os.path.join(P, 'subscore_patch.jsonl')
+
+#: 산출 파일 이름 규칙 — **읽는 쪽 전부가 이 패턴이다** (라운드 74).
+#: 여기가 유일한 출처다. 아래 세 곳(쓰기 검사·load_done·load_sector_done)과
+#: 바깥 소비자(after_sector_backfill 등)가 전부 이 상수를 본다.
+#: 라운드 99 — after_sector_backfill 이 옛 이름('subscore_sector_*')을
+#: 손으로 적어 두고 있었고, 그래서 **완료 판정이 늘 0건을 세고 있었다.**
+PATCH_PREFIX = 'subscore_patch'
+PATCH_GLOB = os.path.join(P, PATCH_PREFIX + '*.jsonl')
+PATCH = os.path.join(P, PATCH_PREFIX + '.jsonl')
 THR = 58.0
 SEALED = 'blind'
 
@@ -85,7 +93,7 @@ def load_done():
     한 조각만 읽으면 다른 조각이 끝낸 건을 다시 돌게 된다.
     """
     done = set()
-    for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
+    for path in sorted(glob.glob(PATCH_GLOB)):
         with open(path, encoding='utf-8') as f:
             for ln in f:
                 try:
@@ -96,15 +104,30 @@ def load_done():
     return done
 
 
-def load_sector_done():
-    """**섹터를 가진** (종목,날짜) 집합 — 두 곳을 다 본다.
+def load_sector_done(count_none=True):
+    """**섹터가 정해진** (종목,날짜) 집합 — 두 곳을 다 본다.
 
     원장 행에 직접 있는 것과 패치 파일에 있는 것을 합친다. 라운드 72
     확장분은 축적할 때 원장에 직접 쓰므로 패치만 보면 절반을 놓친다
     (라운드 73 에서 그 착오로 '섹터 96.8% 미기록' 이라 잘못 보고했다).
+
+    ■ 라운드 99 — '없다'와 '아직 안 봤다'를 갈랐다
+      ETF·리츠는 업종이 **원래 없다.** 그런데 대상 선정이 '섹터가 빈
+      행'이었던 탓에, 돌려도 sector=None 이 나오고 다음 번에 또 잡혔다.
+      실측: 남은 18,469건 중 17,102건(92.6%)이 ETF 였고, 326종목 전부가
+      **한 번도** 섹터를 받은 적이 없었다. 라운드 74 가 이미 적어 둔
+      함정이다 — "ETF 처럼 영원히 못 채우는 건이 남는다. 그걸 모르고
+      반복하면 무한히 돈다."
+
+      그래서 돌린 결과를 `sector_checked` 로 남긴다. 엔진이 '없다'고
+      답한 것도 **답한 것**이다(§3 — 없는 값을 지어내지 않되, 못 잰
+      것과 없는 것은 구분한다).
+
+      count_none=False 를 주면 '확인했지만 없음'을 다시 대상으로 잡는다
+      (--recheck-none). 나중에 업종 산출을 고쳤을 때 쓴다.
     """
     out = set()
-    for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
+    for path in sorted(glob.glob(PATCH_GLOB)):
         with open(path, encoding='utf-8', errors='replace') as f:
             for ln in f:
                 ln = ln.strip()
@@ -114,7 +137,7 @@ def load_sector_done():
                     q = json.loads(ln)
                 except Exception:                              # noqa: BLE001
                     continue
-                if q.get('sector'):
+                if q.get('sector') or (count_none and q.get('sector_checked')):
                     out.add((str(q.get('ticker')), str(q.get('date'))[:10]))
     with open(LEDGER, encoding='utf-8') as f:
         for ln in f:
@@ -148,8 +171,8 @@ def main():
         #   (sample_audit · weakness_map · load_done · load_sector_done ·
         #    백업 화이트리스트 · 스냅샷 가드 — 여섯 곳).
         #   이름 규칙을 사람 기억에 맡기지 않는다. 안 맞으면 여기서 막는다.
-        if not name.startswith('subscore_patch'):
-            print(f"산출 파일 이름은 'subscore_patch' 로 시작해야 한다 "
+        if not name.startswith(PATCH_PREFIX):
+            print(f"산출 파일 이름은 '{PATCH_PREFIX}' 로 시작해야 한다 "
                   f"(받은 값: {name}). 읽는 쪽 glob 이 그 패턴이라, 다른 "
                   f"이름으로 쓰면 채운 데이터를 아무도 못 본다.")
             return 2
@@ -183,13 +206,19 @@ def main():
         #   **섹터가 있느냐**다. 패치 행은 있는데 sector=None 인 건들이
         #   바로 다시 돌아야 하는 대상이므로, load_done() 을 쓰면
         #   영영 건너뛴다.
-        has_sec = load_sector_done()
+        recheck = '--recheck-none' in sys.argv
+        has_sec = load_sector_done(count_none=not recheck)
         todo = sorted({(str(r.get('ticker')), str(r.get('date'))[:10])
                        for r in rows
                        if (str(r.get('ticker')),
                            str(r.get('date'))[:10]) not in has_sec})
-        print(f'섹터 없는 건 {len(todo):,}건 · 이미 섹터 있음 '
-              f'{len(has_sec):,}건')
+        # 무엇을 왜 건너뛰는지 **밝힌다.** 조용히 줄이면 '다 했다'로 읽힌다.
+        n_none = len(load_sector_done(count_none=True)
+                     - load_sector_done(count_none=False))
+        print(f'섹터 미확인 {len(todo):,}건 · 확정 '
+              f'{len(has_sec) - n_none:,}건 · '
+              f"확인했으나 업종 없음 {n_none:,}건"
+              + (' (--recheck-none 으로 다시 대상)' if recheck else ''))
     else:
         todo = []
         for r in rows:
@@ -241,6 +270,11 @@ def main():
                 for lk, ek in FIELDS:
                     patch[lk] = fs.get(ek)
                 patch['sector'] = (snap.get('val_eval') or {}).get('sector')
+                # 라운드 99 — 돌렸다는 사실 자체를 남긴다. 엔진이 '업종
+                # 없음'이라고 답한 것도 답한 것이다. 이게 없으면 ETF·리츠를
+                # 매번 다시 잡아 영원히 수렴하지 않는다.
+                if sector_only:
+                    patch['sector_checked'] = True
                 out.write(json.dumps(patch, ensure_ascii=False) + '\n')
                 out.flush()
                 ran += 1

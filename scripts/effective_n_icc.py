@@ -24,6 +24,7 @@
 
     C:/Python314/python.exe scripts/effective_n_icc.py
 """
+import glob
 import io
 import json
 import os
@@ -54,6 +55,21 @@ def _utf8():
 
 
 def load(path=LEDGER):
+    """원장 + **하위점수 패치**를 합쳐 읽는다.
+
+    ⚠️ 라운드 99 — 여기가 원장만 읽고 있었다.
+      섹터는 원장 행에 직접 있는 것이 **29.9%** 뿐이고 나머지 60.2%p 는
+      패치 파일(`subscore_patch*.jsonl`)에만 있다. 옛 케이스는 백필로
+      뒤에 채웠고 병합 단계가 없기 때문이다.
+
+      그래서 by_sector 가 원장만 보면 **업종별 표본이 1/3로 잘린다.**
+      게다가 화면이 쓰는 report 플래그가 `N >= 200`(R55 §3 하한)이라,
+      실제로는 200을 넘는 업종이 못 넘는 것처럼 찍혔다 — 값이 틀린 게
+      아니라 **표본이 없는 척**한 것이다.
+
+      저장소의 다른 9개 스크립트는 전부 패치를 함께 읽는다. 반쪽만 보던
+      것은 이 파일 하나였다.
+    """
     rows = []
     with open(path, encoding='utf-8') as f:
         for line in f:
@@ -64,6 +80,33 @@ def load(path=LEDGER):
                 rows.append(json.loads(line))
             except Exception:                                  # noqa: BLE001
                 pass
+
+    patch = {}
+    for p in sorted(glob.glob(os.path.join(PROJ, '.portfolio',
+                                           'subscore_patch*.jsonl'))):
+        with open(p, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    q = json.loads(line)
+                except Exception:                              # noqa: BLE001
+                    continue
+                if q.get('sector'):
+                    patch[(str(q.get('ticker')),
+                           str(q.get('date'))[:10])] = q['sector']
+    n_filled = 0
+    for r in rows:
+        if not r.get('sector'):
+            s = patch.get((str(r.get('ticker')), str(r.get('date'))[:10]))
+            if s:
+                r['sector'] = s
+                n_filled += 1
+    # 조용히 채우지 않는다 — 몇 건을 어디서 가져왔는지 밝힌다
+    if n_filled:
+        print(f'  (패치에서 섹터 {n_filled:,}건 보충 — 원장 단독은 '
+              f'{sum(1 for r in rows if r.get("sector")) - n_filled:,}건)')
     return rows
 
 

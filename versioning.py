@@ -183,6 +183,50 @@ def history(limit: int = 50, axis: str = '') -> list:
     return h[:limit]
 
 
+def releases_by_day() -> dict:
+    """{'YYYY-MM-DD': [릴리스 …]} — **그날 실제로 발효된 것만.**
+
+    ⚠️ 라운드 99 — 업데이트 이력 화면이 버전을 **날짜에서 지어내고** 있었다.
+
+        ver = 'v' + d[2:].replace('-', '.')   # 2026-08-15 → v26.08.15
+
+      `v26.08.15` 는 원장 어디에도 없는 값이다. 상단 칩은 진짜
+      `v2026.08.15.1` 을 보여 주므로 둘은 **영원히 안 맞는다.**
+      §3 '없는 값을 지어내지 않는다' 를 화면이 어기고 있었던 셈이다.
+
+      날짜에서 버전을 만들 수 있다는 생각 자체가 틀렸다. 버전은 앱을
+      만진 날이 아니라 **그 축이 바뀐 시점**이고(§7), 하루에 두 축이
+      움직일 수도, 한 축도 안 움직일 수도 있다. 원장에서 읽는다.
+
+      릴리스가 없는 날은 빈 목록이다 — 없는 것을 만들지 않는다.
+    """
+    out: dict = {}
+    for e in (_load().get('history') or []):
+        day = str(e.get('effective_from') or '')[:10]
+        if len(day) == 10:
+            out.setdefault(day, []).append(e)
+    return out
+
+
+def label_for_day(day: str) -> str:
+    """그날 나간 릴리스를 사람이 읽는 한 줄로. 없으면 빈 문자열.
+
+    하루에 같은 축이 두 번 나갈 수 있다(라운드 99 에 룰북이 그랬다).
+    그때 두 판을 나란히 적으면 "룰북 v…15.2 · 룰북 v…15.1" 처럼 읽혀
+    어느 것이 지금 것인지 알 수 없다. **축마다 그날의 최종본만** 적는다.
+    history 는 최신이 앞이므로 먼저 만난 것이 최종본이다.
+    """
+    rel = releases_by_day().get(str(day)[:10]) or []
+    seen, out = set(), []
+    for e in rel:
+        ax = str(e.get('axis') or '')
+        if ax in seen:
+            continue
+        seen.add(ax)
+        out.append(f"{e.get('axis_ko') or ax} {e.get('version')}")
+    return ' · '.join(out)
+
+
 def stamp(payload: dict | None = None) -> dict:
     """
     분석 결과·케이스에 붙일 버전 도장.
