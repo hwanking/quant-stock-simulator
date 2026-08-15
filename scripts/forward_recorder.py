@@ -57,8 +57,10 @@ def main():
         top = int(sys.argv[sys.argv.index('--top') + 1])
 
     import bitemporal_engine as be
+    import forward_registry as _fr
     import prediction_log as plog
     import quant_indicators as qi
+    import verdict_core as _vc
 
     eng = be.BitemporalEngine()
     q = qi.QuantIndicatorsEngine()
@@ -84,12 +86,21 @@ def main():
               f'아무것도 안 쌓인다 — TZ 를 확인한다.')
 
     # 이미 오늘 기록한 종목은 건너뛴다 (하루 여러 번 돌아도 안전)
-    done = set()
+    # ⚠️ 라운드 97 — 여기가 predictions.jsonl 만 보고 있었다. 전방 기록부를
+    #   새로 붙인 날에는 **모든 종목이 이미 옛 원장에 있으므로** 건너뛰게
+    #   되고, 새 기록부는 영영 0건으로 남는다. 실측으로 그렇게 나왔다
+    #   (오늘 62종목 전부 건너뜀 → 기록부 0건).
+    #   원장이 둘이면 '이미 했다'도 **둘 다** 봐야 한다.
+    _pred_done, _reg_done = set(), set()
     for r in plog.load_predictions():
         if str(r.get('date'))[:10] == t_ref:
-            done.add(str(r.get('ticker')))
-    if done:
-        print(f'  오늘 이미 기록됨 {len(done)}종목 — 건너뛴다')
+            _pred_done.add(str(r.get('ticker')))
+    for r in _fr.load():
+        if str(r.get('date'))[:10] == t_ref:
+            _reg_done.add(str(r.get('ticker')))
+    done = _pred_done & _reg_done          # 둘 다 있는 것만 건너뛴다
+    print(f'  오늘 이미 기록됨 — 판정원장 {len(_pred_done)}종목 · '
+          f'전방기록부 {len(_reg_done)}종목 → 건너뛸 것 {len(done)}종목')
 
     try:
         uni = eng.get_screener_universe(full_market=True, max_pages=40)
@@ -99,10 +110,14 @@ def main():
         print(f'유니버스 수신 실패 — 오늘은 기록하지 않는다: '
               f'{type(exc).__name__}: {exc}')
         return 1
+    # 종목명은 유니버스에 있다 — 스냅샷에는 없다.
+    # (라운드 97: 옛 기록은 이름 자리에 티커를 넣고 있었다)
+    names = {str(u['symbol']): str(u.get('name') or '') for u in uni}
     pool = [u['symbol'] for u in uni[:top] if u['symbol'] not in done]
     print(f'  대상 {len(pool)}종목 (전 종목 {len(uni):,} 중 상위 {top})')
 
     t0, wrote, failed = time.time(), 0, 0
+    reg_wrote, reg_bad = 0, 0
     for i, sym in enumerate(pool, 1):
         try:
             snap = q.run_full_pipeline(sym, t_ref, b_engine=eng,
@@ -110,9 +125,13 @@ def main():
             fs = snap['four_scores']
             vd = q.build_final_verdict(snap)
             # 앱과 같은 필드·같은 출처 (web_app.py 판정 기록 블록)
+            # ⚠️ 여기 target/stop 은 **보유자 값**이다(target_tech_1st ·
+            #   stop_loss_price). 옛 규약이라 그대로 두지만, 전방 재평가는
+            #   아래 forward_registry 를 읽는다 — 거기서는 신규 매수자
+            #   값과 보유자 값이 다른 키로 갈려 있다 (§4).
             ok = plog.record_prediction({
                 'ticker': sym,
-                'name': (fs.get('name') or snap.get('name') or sym),
+                'name': (names.get(sym) or sym),
                 'date': snap.get('t_ref') or t_ref,
                 'price': fs.get('current_price'),
                 'action': vd.get('action'),
@@ -124,6 +143,20 @@ def main():
             })
             if ok:
                 wrote += 1
+
+            # ── 전방 기록부 (라운드 97) ──────────────────────────────
+            #   화면이 읽는 그 함수로 값을 만든다 — 경로가 둘이면 갈린다(§4).
+            vc_row = _vc.build(fs, verdict=vd,
+                               price_axes=fs.get('price_axes'),
+                               next_action=snap.get('next_action'))
+            reg_ok, reg_why = _fr.record(
+                _fr.build_row(sym, snap, vc_row, name=names.get(sym)))
+            if reg_ok:
+                reg_wrote += 1
+            elif reg_why and '이미 있다' not in reg_why[0]:
+                reg_bad += 1
+                if reg_bad <= 5:
+                    print(f'  [기록부 거부] {sym} — {reg_why[:2]}')
         except Exception as exc:                               # noqa: BLE001
             failed += 1
             if failed <= 5:
@@ -135,8 +168,28 @@ def main():
 
     # 실패를 삼키더라도 집계로는 남긴다
     print(f'\n기록 {wrote}건 · 실패 {failed}건 / 대상 {len(pool)}종목')
-    if pool and wrote == 0:
-        print('한 건도 기록하지 못했다 — 통과가 아니라 미측정이다.')
+    cov = _fr.coverage()
+    print(f'전방 기록부 {reg_wrote}건 추가 · 규약 거부 {reg_bad}건 '
+          f'→ 누적 {cov["n"]:,}건 (규약 통과 {cov["valid"]:,}건 · '
+          f'신규 레벨 있음 {cov["with_new_levels"]:,}건)')
+    # ⚠️ 라운드 97 — 여기가 `wrote == 0` 하나로 실패를 판정했다. 원장이
+    #   둘이 되면서 **한쪽은 이미 다 있고 다른 쪽만 새로 쌓는 날**이
+    #   정상인데 그걸 실패로 읽었다(실측: 기록부 6건을 넣고도 종료코드 1).
+    #   각 원장에 **쓸 것이 있었는데 못 썼는가**로 따로 본다.
+    _pred_todo = [s for s in pool if s not in _pred_done]
+    _reg_todo = [s for s in pool if s not in _reg_done]
+    bad = []
+    if _pred_todo and wrote == 0:
+        bad.append(f'판정 원장: 쓸 것 {len(_pred_todo)}종목인데 0건')
+    if _reg_todo and reg_wrote == 0:
+        bad.append(f'전방 기록부: 쓸 것 {len(_reg_todo)}종목인데 0건')
+    if bad:
+        print('한 건도 기록하지 못했다 — 통과가 아니라 미측정이다: '
+              + ' · '.join(bad))
+        return 1
+    if reg_bad:
+        print(f'전방 기록부가 규약으로 {reg_bad}건을 거부했다 — '
+              f'11/16 에 읽을 수 없는 행이다.')
         return 1
     return 0
 

@@ -176,6 +176,16 @@ jobs:
         run: |
           python scripts/forward_recorder.py --top 60 || true
 
+      # ⚠️ 라운드 97 — 위 단계는 `|| true` 다(유니버스 수신 실패로 파이프라인
+      #   전체를 죽이지 않으려는 것). 그러면 **규약을 어긴 행이 쌓여도
+      #   조용하다.** 11/16 재평가는 이 원장을 읽으므로, 읽을 수 없는 행이
+      #   섞이는 것은 그날 재평가가 무의미해진다는 뜻이다.
+      #   그래서 판정은 따로, `|| true` 없이 건다.
+      #   0건은 실패로 보지 않되 **본 건수를 찍는다** — 0건과 통과를 같은
+      #   색으로 찍지 않는다.
+      - name: 전방 기록부 규약 검사
+        run: python forward_registry.py
+
       - name: 뉴스 사건 기록·사후 경로 채움 (관측 전용)
         run: |
           python scripts/news_event_recorder.py --record || true

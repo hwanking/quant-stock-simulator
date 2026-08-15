@@ -9563,6 +9563,107 @@ check("남은 시간도 같은 형식이다", '약 3분 7초 남음' in _pg148,
       _pg148.split('경과')[1][:48] if '경과' in _pg148 else '경과 표시 없음')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §149 — 전방 기록부 분리 (라운드 97)
+#
+#   2026-11-16 재평가는 전방 기록으로 한다. 그런데 predictions.jsonl 은
+#   **필드가 11개뿐**이었고, 필요한 14가지가 하나도 없었다(실측 14/14).
+#
+#   더 나쁜 것은 있던 두 필드다. `target`/`stop` 에 들어간 값은
+#   target_tech_1st · stop_loss_price — verdict_core 기준으로 **보유자
+#   값**이다. 중립 이름으로 적어 두었으니 11/16 에 읽는 사람은 그것을
+#   신규 매수자 목표로 읽는다. §4 가 금지한 그 혼동이다.
+#
+#     005930.KS · 현재가 274,500
+#        옛 기록  target 315,450 / stop 216,000   ← hold_trim / hold_stop
+#        신규매수 entry 252,124 · target 277,411 / stop 216,000
+#     → 목표가 315,450 vs 277,411. 채점 결과가 달라진다.
+#
+#   기존 293건은 **고치지 않는다** — 옛 규약으로 찍힌 기록이다(§3).
+#   규약 이름(fr-1)으로 갈라 두고, 새로 쌓는 것만 새 규약을 지킨다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§149 전방 기록부 분리 — 신규 매수자 값과 보유자 값 (라운드 97)")
+print("=" * 72)
+import forward_registry as _fr149                               # noqa: E402
+
+check("규약 이름이 붙어 있다", bool(_fr149.CONTRACT), _fr149.CONTRACT)
+check("규약이 필드를 목록으로 선언한다 (손으로 센 숫자가 아니다)",
+      len(_fr149.FIELDS) >= 25, f'{len(_fr149.FIELDS)}개')
+# §4 — 두 벌이 **다른 키**로 있어야 한다
+for _k149 in ('new_entry', 'new_target', 'new_stop',
+              'hold_trim', 'hold_stop'):
+    check(f"규약에 {_k149} 가 있다", _k149 in _fr149.FIELDS)
+check("전방 재평가에 필요한 것이 규약에 들어 있다",
+      all(k in _fr149.FIELDS for k in
+          ('versions', 'model_sha', 'freeze_hash', 'signal_timestamp',
+           'market_regime', 'sector')))
+# 0건과 미수신을 가른다 (§3)
+check("뉴스 0건과 미수신을 가르는 필드가 있다",
+      'news_feed_ok' in _fr149.FIELDS)
+
+# 규약 검사가 **실제로 잡는가** — 어긴 행을 만들어 먹여 본다
+_good149 = {k: 1 for k in _fr149.FIELDS}
+_good149.update(contract=_fr149.CONTRACT, ticker='X', date='2026-08-14',
+                price=100.0, new_entry=100.0, new_target=110.0,
+                new_stop=90.0, hold_trim=120.0, hold_stop=80.0,
+                new_buy_zone=[99, 101], missing=[])
+check("올바른 행은 통과한다", not _fr149.validate(_good149),
+      str(_fr149.validate(_good149))[:80])
+_bad149 = dict(_good149, new_stop=115.0)      # 손절이 목표 위
+check("신규 레벨 순서가 깨지면 잡는다", bool(_fr149.validate(_bad149)))
+_bad149b = dict(_good149, hold_stop=130.0)    # 보유 손절이 현재가 위
+check("보유자 손절이 현재가 위면 잡는다", bool(_fr149.validate(_bad149b)))
+_bad149c = dict(_good149, contract='fr-0')
+check("다른 규약이면 잡는다", bool(_fr149.validate(_bad149c)))
+_bad149d = {k: v for k, v in _good149.items() if k != 'score'}
+check("빠진 필드를 잡는다", bool(_fr149.validate(_bad149d)))
+
+# 실제 쌓인 원장 — **본 건수를 조건에 넣는다**
+_cov149 = _fr149.coverage()
+check("전방 기록부가 규약 위반 없이 쌓인다",
+      _cov149['n'] == _cov149['valid'],
+      f"{_cov149['n']}건 중 통과 {_cov149['valid']}건")
+if _cov149['n']:
+    check("쌓인 행에 신규 매수자 레벨이 들어 있다",
+          _cov149['with_new_levels'] > 0,
+          f"{_cov149['with_new_levels']}/{_cov149['n']}")
+    check("옛 규약이 섞여 있지 않다",
+          _cov149['contracts'] == [_fr149.CONTRACT],
+          str(_cov149['contracts']))
+
+# 옛 기록 293건은 **건드리지 않았다** (§3 — 없는 값을 지어내지 않는다)
+import prediction_log as _plog149                               # noqa: E402
+_old149 = _plog149.load_predictions()
+check("옛 판정 원장이 그대로 있다", len(_old149) >= 290, f'{len(_old149)}건')
+check("옛 기록에 새 규약 필드를 채워 넣지 않았다",
+      not any('contract' in r or 'freeze_hash' in r for r in _old149))
+
+# 원장이 둘이면 '이미 했다'도 둘 다 봐야 한다 (실측으로 기록부가 0건이었다)
+_fwd149 = _read148(_os.path.join(PROJ, 'scripts', 'forward_recorder.py'))
+check("건너뛸 종목을 두 원장의 교집합으로 정한다",
+      '_pred_done & _reg_done' in _fwd149)
+check("기록기가 기록부에도 쓴다", '_fr.record(' in _fwd149)
+check("기록기가 화면과 같은 함수로 값을 만든다 (§4)",
+      '_vc.build(' in _fwd149)
+check("이름을 티커로 때우지 않는다 (유니버스에서 가져온다)",
+      'names.get(sym)' in _fwd149)
+
+# 새 원장이 백업·감시 목록에 들어 있는가 — 없으면 클라우드가 매일 잃는다
+import snapshot_guard as _sg149                                 # noqa: E402
+check("스냅샷 가드가 전방 기록부를 감시한다",
+      'forward_registry.jsonl' in _sg149.WATCH, str(_sg149.WATCH))
+_bk149 = _read148(_os.path.join(PROJ, 'scripts',
+                                'backup_research_data.py'))
+check("백업 화이트리스트에 전방 기록부가 있다",
+      'forward_registry.jsonl' in _bk149)
+_yml149 = _read148(_os.path.join(PROJ, '.github', 'workflows',
+                                 'daily_accumulate.yml'))
+check("워크플로가 규약 검사를 || true 없이 건다",
+      'python forward_registry.py' in _yml149
+      and 'python forward_registry.py || true' not in _yml149)
+
+
 print()
 print("=" * 72)
 if FAILURES:
