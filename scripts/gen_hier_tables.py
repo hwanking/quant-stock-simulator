@@ -33,6 +33,14 @@ IDX_CACHE = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 BANDS = ((0, 40), (40, 50), (50, 58), (58, 65), (65, 101))
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def band_of(s):
     for lo, hi in BANDS:
         if lo <= s < hi:
@@ -121,7 +129,7 @@ def main():
         if sec and st:
             add('L2', f'{b}|{sec}|{st}', r)
 
-    doc = dict(made='2026-08-09', m=100,
+    doc = dict(made=_today(), m=100,
                basis='개발 구간(train+valid) 재적합 · 블라인드 미접촉 · '
                      '게이트는 train 적합·valid 1회로 통과 (R59)',
                note='m=100 은 train 내부 Brier 로 선택 — 선택 기준이 '

@@ -38,6 +38,14 @@ FEATURES = [
 OUTCOMES = ('close_return_pct', 'success')
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def _utf8():
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -194,6 +202,8 @@ def main():
 
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
+            # ⚠️ 라운드 107 — 여기 날짜는 **사전등록 연구를 판정한 날**이다.
+            #   다시 돌려도 안 바뀌는 게 맞다 (같은 줄의 prereg= 가 표식).
             made='2026-08-13', prereg='docs/PREREG_R84_SCORE_IC.md',
             t_floor=T_FLOOR, min_dates=MIN_DATES, per_date=list(PER_DATE),
             features=[f for f, _ in FEATURES], outcomes=list(OUTCOMES),

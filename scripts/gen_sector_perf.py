@@ -28,6 +28,14 @@ P = os.path.join(PROJ, '.portfolio')
 COST = 0.36
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def wilson_low(k, n, z=1.96):
     if n == 0:
         return 0.0
@@ -79,7 +87,7 @@ for sec, a in agg.items():
         small=a['n'] < 30)
 
 doc = dict(
-    made='2026-08-09', basis='개발 구간(train+valid) 매수권 58+ · 판정완료 · '
+    made=_today(), basis='개발 구간(train+valid) 매수권 58+ · 판정완료 · '
     '블라인드 미포함 · 비용 0.36%p 차감',
     note='표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)',
     sectors=out)

@@ -44,6 +44,14 @@ INNER_VAL_FROM = '2024-09-01'  # 메타 변형 선택용 train 내부 경계
 IDX_CACHE = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def wilson_low(k, n, z=1.96):
     if n == 0:
         return 0.0
@@ -67,7 +75,7 @@ def kospi_series():
     dates = [str(x) for x in r[0]]
     closes = [float(x) for x in r[1]]
     with open(IDX_CACHE, 'w', encoding='utf-8') as f:
-        json.dump({'dates': dates, 'closes': closes, 'made': '2026-08-09'}, f)
+        json.dump({'dates': dates, 'closes': closes, 'made': _today()}, f)
     return dates, closes
 
 
@@ -283,6 +291,10 @@ def main():
     out = dict(base=base, routing=m_route, meta=m_meta, both=m_both,
                routing_table=routing, meta_regime_included=bool(pick),
                vol_median=vmed, verdicts=verdicts,
+               # ⚠️ 라운드 107 — 여기 날짜는 **판정한 날**이다. 다시 돌려도
+               #   안 바뀌는 게 맞다 (R55 사전등록 게이트 판정 결과).
+               #   재생성되는 관측 산출물과 성격이 다르다 — 그쪽만 오늘
+               #   날짜로 고쳤다. 위 78행의 지수 캐시는 관측이라 바꿨다.
                made='2026-08-09', blind_touched=False)
     with open(os.path.join(P, 'regime_moe_r55.json'), 'w',
               encoding='utf-8') as f:

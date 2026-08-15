@@ -49,6 +49,14 @@ FORWARD_FROM = '2026-08-09'
 BUY_SCORE = 58.0
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def _utf8_stdout():
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -206,7 +214,7 @@ def main():
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, 'w', encoding='utf-8') as f:
         json.dump(dict(
-            made='2026-08-10', span=[span[0], span[-1]],
+            made=_today(), span=[span[0], span[-1]],
             raw_cases=len(rows), unique_tickers=len(tickers),
             unique_dates=len(dates), independent_episodes=ep,
             sector_cluster_effective_n=len(sec_pairs),

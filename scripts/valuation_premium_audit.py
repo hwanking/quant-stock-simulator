@@ -35,6 +35,14 @@ ZONE_ORDER = ['안전마진 확보', '적정가 이하 (안전마진 미확보)'
               '적정가 크게 초과 (추격매수 위험)', '판정 불가']
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def wilson_low(k, n, z=1.96):
     if n == 0:
         return 0.0
@@ -123,7 +131,7 @@ def main():
 
     dst = os.path.join(PROJ, 'data', 'valuation_premium_audit.json')
     with open(dst, 'w', encoding='utf-8') as f:
-        json.dump(dict(made='2026-08-09', basis='개발 구간 매수권(58+) · '
+        json.dump(dict(made=_today(), basis='개발 구간 매수권(58+) · '
                        '판정완료 · 블라인드 제외 · 비용 0.36%p 차감',
                        note='기술 통계 — 게이트 채택 없음. entry_zone 은 '
                             '원장 기록값을 그대로 썼다(새 정의 없음).',

@@ -1,48 +1,48 @@
 {
- "made": "2026-08-10",
+ "made": "2026-08-16",
  "span": [
   "2011-01-14",
-  "2026-07-09"
+  "2026-07-15"
  ],
- "raw_cases": 181959,
+ "raw_cases": 184759,
  "unique_tickers": 1547,
- "unique_dates": 2658,
- "independent_episodes": 57730,
- "sector_cluster_effective_n": 31574,
+ "unique_dates": 2695,
+ "independent_episodes": 57496,
+ "sector_cluster_effective_n": 33827,
  "sector_missing": 18469,
- "regime_effective_n": 3482,
+ "regime_effective_n": 3573,
  "forward_evaluated_n": 0,
- "forward_log_n": 20,
+ "forward_log_n": 202,
  "high_conf_forward_n": 0,
  "forward_from": "2026-08-09",
  "episode_days": 35,
  "per_ticker": {
   "min": 1,
   "median": 108,
-  "max": 268
+  "max": 592
  },
  "by_year": {
   "2011": 10,
   "2012": 10,
   "2013": 18,
   "2014": 38,
-  "2015": 3522,
-  "2016": 8612,
-  "2017": 9235,
-  "2018": 13758,
-  "2019": 17022,
-  "2020": 16791,
-  "2021": 17849,
-  "2022": 19041,
-  "2023": 20296,
-  "2024": 21345,
-  "2025": 21180,
-  "2026": 13232
+  "2015": 3634,
+  "2016": 8888,
+  "2017": 9495,
+  "2018": 14018,
+  "2019": 17256,
+  "2020": 17051,
+  "2021": 18109,
+  "2022": 19301,
+  "2023": 20549,
+  "2024": 21595,
+  "2025": 21405,
+  "2026": 13382
  },
  "regime_counts": {
-  "BEAR": 51123,
-  "SIDEWAYS": 65993,
-  "BULL": 64787,
+  "BEAR": 51944,
+  "SIDEWAYS": 66920,
+  "BULL": 65839,
   "None": 56
  },
  "note": "세기만 한다 — 점수·게이트를 바꾸지 않는다. raw 개수보다 ④~⑥(독립성 보정)과 ⑦⑧(전방)을 우선해 읽는다."

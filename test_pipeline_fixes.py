@@ -10157,6 +10157,87 @@ check("돌파 스터디가 done 을 전체 조각에서 읽는다",
       "glob.glob(os.path.join(P, 'breakout_flags_s*.jsonl'))" in _bs155)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §156 — 만든 날짜가 박혀 있으면 낡음을 알 수 없다 (라운드 107)
+#
+#   라운드 102 가 miss_study·weakness_map 에서 이걸 고쳤다. 그 둘만
+#   고쳤는데, 산출물을 전수로 훑으니 같은 증상이 더 있었다:
+#       lineage_audit.json  수정 08-15 · made 08-10  (5일 어긋남)
+#       sample_audit.json   수정 08-12 · made 08-10
+#       effective_n_icc.json 수정 08-15 · made 08-13
+#   코드에 박힌 날짜가 **16곳**이었다.
+#
+#   ⚠️ 그런데 전부 고치면 안 된다. 두 종류가 섞여 있다:
+#       ① **사전등록 판정 결과** — 날짜는 '판정한 날'이고 다시 돌려도
+#          안 바뀌는 게 맞다 (R55·R57·R58·R64·R84·계층확률).
+#          바꾸면 동결 서사가 깨진다.
+#       ② **재생성되는 관측 산출물** — 다시 만들었는데 날짜가 그대로면
+#          낡음을 알 수 없다. 오늘 날짜여야 한다.
+#
+#   코드가 이미 갈라 준다: ①은 같은 줄에 gate_pass / prereg / verdicts
+#   중 하나를 달고 있다. 그 표식을 판별자로 쓴다 — 파일 이름을 손으로
+#   적지 않는다.
+#
+#   내가 이 고침에서 두 번 헛짚었다:
+#     ⓐ 산문까지 고쳐 study_freshness 의 설명이 뜻이 반대가 됐다
+#        ("made=_today() 으로 박아 두고 있어서") → 되돌리고 code_lines 로
+#     ⓑ 판별자를 gate_pass 하나로 잡아 regime_moe(verdicts)·
+#        score_ic(prereg) 두 판정 결과를 오늘 날짜로 바꿔 버렸다 → 되돌림
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§156 만든 날짜 — 판정일과 생성일을 가른다 (라운드 107)")
+print("=" * 72)
+
+#: 이 표식이 같은 줄에 있으면 '판정한 날' 이므로 고정이 맞다
+_FIXED_OK156 = ('gate_pass', 'prereg', 'verdicts')
+_RE156 = _re.compile(r"made\s*=\s*'20\d\d-\d\d-\d\d'"
+                     r"|'made'\s*:\s*'20\d\d-\d\d-\d\d'")
+_scan156, _hard156, _declared156 = 0, [], []
+for _root156, _dirs156, _fs156 in _os.walk(PROJ):
+    if any(p in _root156 for p in ('.git', '_probe', '_archive', 'venv',
+                                   '__pycache__')):
+        continue
+    for _fn156 in _fs156:
+        if not _fn156.endswith('.py'):
+            continue
+        _rel156 = _os.path.relpath(_os.path.join(_root156, _fn156),
+                                   PROJ).replace('\\', '/')
+        _scan156 += 1
+        # 표식은 같은 **dict 리터럴** 안에 있으면 된다 — 한 줄만 보면
+        # `verdicts=verdicts,` 다음 줄의 made 를 놓친다 (실제로 놓쳤다).
+        _lines156 = list(_la135.code_lines(_rel156))
+        for _k156, (_i156, _ln156) in enumerate(_lines156):
+            if not _RE156.search(_ln156):
+                continue
+            _near156 = '\n'.join(
+                l for _j, l in _lines156[max(0, _k156 - 4):_k156 + 3])
+            if any(k in _near156 for k in _FIXED_OK156):
+                _declared156.append(f'{_rel156}:{_i156}')
+            else:
+                _hard156.append(f'{_rel156}:{_i156}')
+check("훑은 파이썬 파일이 있다 (0개면 미측정)", _scan156 >= 100,
+      f'{_scan156}개')
+check("박힌 날짜는 전부 '판정일'이라고 선언돼 있다",
+      not _hard156, f'선언 없이 박힌 곳 {len(_hard156)}개 — {_hard156[:4]}')
+check("판정일로 선언된 곳이 실제로 있다 (0개면 판별자가 안 맞는 것)",
+      len(_declared156) >= 3, f'{len(_declared156)}곳')
+
+# 재생성되는 산출물은 파일 수정일과 made 가 어긋나지 않아야 한다
+_REGEN156 = ('miss_study.json', 'weakness_map.json')
+import datetime as _dt156                                       # noqa: E402
+for _fn156 in _REGEN156:
+    _p156 = _os.path.join(PROJ, 'data', _fn156)
+    if not _os.path.exists(_p156):
+        check(f'{_fn156} 이 있다', False)
+        continue
+    with open(_p156, encoding='utf-8') as _f156:
+        _d156 = _json148.load(_f156)
+    _mt156 = _dt156.datetime.fromtimestamp(_os.path.getmtime(_p156)).date()
+    _md156 = _dt156.date.fromisoformat(str(_d156.get('made'))[:10])
+    check(f"{_fn156} 의 made 가 파일 수정일과 맞는다",
+          (_mt156 - _md156).days <= 1, f'수정 {_mt156} · made {_md156}')
+
+
 print()
 print("=" * 72)
 if FAILURES:

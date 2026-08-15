@@ -62,6 +62,14 @@ import forward_eval as _fe        # 재평가일 단일 출처 (라운드 78)  #
 FREEZE = _fe.eval_date() or '재평가일 미기록'
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def _utf8_stdout():
     """스크립트로 돌 때만 stdout 을 UTF-8 로 맞춘다.
 
@@ -408,7 +416,7 @@ def trace(n_tickers):
     dst = os.path.join(PROJ, 'data', 'lineage_audit.json')
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, 'w', encoding='utf-8') as f:
-        json.dump(dict(made='2026-08-10', lineage=LINEAGE,
+        json.dump(dict(made=_today(), lineage=LINEAGE,
                        n_traced=len(rows), n_ok=len(ok),
                        n_axis_src=ax_src, faults=bad, rows=rows,
                        note='감사 전용 — 점수·게이트를 바꾸지 않는다. '
@@ -526,7 +534,7 @@ def ledger_sweep():
     dst = os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json')
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, 'w', encoding='utf-8') as f:
-        _j.dump(dict(made='2026-08-10', n_checked=n,
+        _j.dump(dict(made=_today(), n_checked=n,
                      n_stop_violation=len(bad_stop),
                      n_target_violation=len(bad_tgt),
                      n_degenerate=len(degen),

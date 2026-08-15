@@ -1,74 +1,74 @@
 {
- "made": "2026-08-13",
+ "made": "2026-08-16",
  "method": "ANOVA ICC + design effect",
  "buy_zone": 58,
  "sets": {
   "전체 원장": {
    "min2": {
-    "N": 184133,
+    "N": 184533,
     "dates": 2469,
-    "n_bar": 74.6,
+    "n_bar": 74.7,
     "icc": 0.1412,
-    "design_effect": 11.39,
-    "n_eff": 16165.6,
+    "design_effect": 11.41,
+    "n_eff": 16169.2,
     "why": null
    },
    "min5": {
-    "N": 182349,
+    "N": 182749,
     "dates": 1899,
-    "n_bar": 96.0,
+    "n_bar": 96.2,
     "icc": 0.1329,
-    "design_effect": 13.63,
-    "n_eff": 13382.4,
+    "design_effect": 13.65,
+    "n_eff": 13384.2,
     "why": null
    },
    "min10": {
-    "N": 176077,
-    "dates": 978,
-    "n_bar": 180.0,
-    "icc": 0.1288,
-    "design_effect": 24.06,
-    "n_eff": 7318.9,
+    "N": 176582,
+    "dates": 995,
+    "n_bar": 177.5,
+    "icc": 0.1286,
+    "design_effect": 23.69,
+    "n_eff": 7452.9,
     "why": null
    }
   },
   "매수권(58+)": {
    "min2": {
-    "N": 81570,
-    "dates": 2026,
+    "N": 81861,
+    "dates": 2031,
     "n_bar": 40.3,
-    "icc": 0.136,
+    "icc": 0.1359,
     "design_effect": 6.34,
-    "n_eff": 12870.1,
+    "n_eff": 12912.3,
     "why": null
    },
    "min5": {
-    "N": 78546,
-    "dates": 975,
-    "n_bar": 80.6,
-    "icc": 0.11,
-    "design_effect": 9.76,
-    "n_eff": 8051.4,
+    "N": 79009,
+    "dates": 1030,
+    "n_bar": 76.7,
+    "icc": 0.1095,
+    "design_effect": 9.29,
+    "n_eff": 8506.9,
     "why": null
    },
    "min10": {
-    "N": 75195,
-    "dates": 442,
-    "n_bar": 170.1,
+    "N": 75256,
+    "dates": 448,
+    "n_bar": 168.0,
     "icc": 0.1071,
-    "design_effect": 19.12,
-    "n_eff": 3933.0,
+    "design_effect": 18.88,
+    "n_eff": 3985.1,
     "why": null
    }
   }
  },
  "sectors": {
   "반도체와반도체장비": {
-   "N": 9065,
-   "dates": 469,
-   "icc": 0.2777,
-   "design_effect": 6.09,
-   "n_eff": 1488.5,
+   "N": 9169,
+   "dates": 521,
+   "icc": 0.2759,
+   "design_effect": 5.58,
+   "n_eff": 1643.1,
    "report": true
   },
   "화학": {
