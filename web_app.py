@@ -1577,7 +1577,12 @@ _NAV_MAIN = [
 ]
 _NAV_SUB = [
     {'title': '1. 오늘의 판단', 'items': [
-        {'key': 'verdict', 'label': '한 줄 결론', 'icon': 'doc',
+        # 라운드 105 — '한 줄 결론' 이라는 이름이 **두 곳**에 있다.
+        #   개장 전(시장 전체) 과 개별 종목. 내비가 뒤엣것만 가리키고
+        #   있어서 앞엣것을 찾을 길이 없었다. 둘 다 넣고 이름으로 가른다.
+        {'key': 'premarket_line', 'label': '개장 전 결론', 'icon': 'doc',
+         'href': '#nav-premarket-line'},
+        {'key': 'verdict', 'label': '이 종목 한 줄 결론', 'icon': 'doc',
          'href': '#nav-verdict'},
         {'key': 'gaeum', 'label': '가늠 AI', 'icon': 'compass',
          'href': '#nav-gaeum'},
@@ -4221,7 +4226,17 @@ if _pm_today and _pm_today.get('picks'):
     for _pk in _pm_today['picks']:
         _cls_cnt[_pk.get('reco_class', '?')] = _cls_cnt.get(_pk.get('reco_class', '?'), 0) + 1
     _buyable = _cls_cnt.get('오늘 사도 되는 종목', 0) + _cls_cnt.get('조건부로 사도 되는 종목', 0)
-    _oneline = ("오늘은 매수 후보가 있습니다 — 아래 '오늘의 추천'에서 조건을 확인하세요."
+    # ⚠️ 라운드 105 — 사용자가 이 문구를 인용하면서 "어디 있어? 안 보이는데"
+    #   라고 물었다. 실측하니 **화면에는 있었다**(Y=848). 못 찾은 이유가
+    #   둘이었다.
+    #     ① 앵커가 없어 내비게이션이 여기로 못 온다. 내비의 '한 줄 결론'은
+    #        Y=2093 의 **개별 종목** 판정으로 가서 이 배너를 지나친다.
+    #     ② "**아래** '오늘의 추천'" 이라 적었는데 오늘의 추천은 Y=-570 —
+    #        1,418px **위**다. 방향이 반대였다.
+    #   방향어를 쓰지 않고 **앵커 링크**로 건다 — 위아래가 바뀌어도 안 틀린다.
+    st.markdown('<div id="nav-premarket-line"></div>', unsafe_allow_html=True)
+    _oneline = ("오늘은 매수 후보가 있습니다 — [오늘의 추천](#nav-premarket)"
+                "에서 조건을 확인하세요."
                 if _buyable else
                 "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
     st.info(f"**개장 전 한 줄 결론** · {_oneline}  \n"
