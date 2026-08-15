@@ -3218,9 +3218,14 @@ with open(_os.path.join(PROJ, "data", "update_history.json"),
 check("히스토리 — git 원천 명시·비어있지 않음",
       'git' in str(_uh65.get('generated_from', ''))
       and len(_uh65.get('days', [])) >= 1)
+# ⚠️ 라운드 98b — 이 검사가 `st.expander(f"업데이트 {_n_upd}건` 이라는
+#   **조립 방식**을 그대로 요구하고 있었다. 제목을 변수로 빼자 깨졌는데,
+#   화면은 멀쩡했다. 검사가 지키려던 것은 '접힌 패널 + 앵커'이지 문자열을
+#   어떻게 만드느냐가 아니다 — 성질로 바꾼다.
 check("웹앱 히스토리 — 접힌 패널 + 앵커",
       "id='nav-updates'" in _w65
-      and 'st.expander(f\"업데이트 {_n_upd}건' in _w65)
+      and 'st.expander(_upd_head' in _w65
+      and '업데이트 {_n_upd}건' in _w65)
 
 # ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
 check("케이스 축적 목표 표시 (단계 목표·중단 금지)",
@@ -4091,9 +4096,12 @@ check("모바일 — 한 열·44px 터치·가로 스크롤",
       and 'flex-direction: column' in _u84)
 
 _w84 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+# 라운드 98b — 위와 같은 이유로 조립 방식이 아니라 성질을 본다.
+#   지키려는 것: ① 상단 상시 노출 없음 ② 눌러야 열리는 패널
 check("업데이트는 눌러야 열린다 (상단 상시 노출 제거 — 사용자 요청)",
       '_uk.update_bar(' not in _w84
-      and "with st.expander(f\"업데이트 {_n_upd}건" in _w84)
+      and 'with st.expander(_upd_head' in _w84
+      and '업데이트 {_n_upd}건' in _w84)
 check("애플 폰트 스택 — 시스템 폰트 우선, Pretendard 폴백",
       '-apple-system' in _w84 and '"SF Pro Display"' in _w84
       and '"Pretendard"' in _w84)
