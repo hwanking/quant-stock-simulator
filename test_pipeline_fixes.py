@@ -3267,10 +3267,29 @@ check("카테고리 분류 — 미매칭은 기타", po66.classify_update_catego
     "안녕하세요") == '기타')
 _enr66 = po66.enrich_update_history({'days': [
     {'date': '2026-08-01', 'items': [{'hash': 'abc', 'subject': '뉴스 범위 분류'}]}]})
-check("히스토리 보강 — 버전 표기·카테고리·원문 불변",
-      _enr66[0]['version'] == 'v26.08.01'
-      and _enr66[0]['items'][0]['category'] == '뉴스 분석'
+# ⚠️ 라운드 99 — 여기가 `version == 'v26.08.01'` 을 요구하고 있었다.
+#   그 값은 **날짜에서 조립한 가짜 버전**이었다. 원장에 없는 값이라
+#   상단 칩(v2026.08.15.1)과 영원히 안 맞았고, 검사가 그 조작을 지키고
+#   있었다. 이제 버전은 원장에서 그날 발효된 릴리스만 읽는다.
+#   2026-08-01 에는 릴리스가 없으므로 **빈 문자열이 맞다** —
+#   커밋이 있었다고 축이 움직인 것은 아니다(§3·§7).
+check("히스토리 보강 — 카테고리·원문 불변",
+      _enr66[0]['items'][0]['category'] == '뉴스 분석'
       and _enr66[0]['items'][0]['subject'] == '뉴스 범위 분류')
+check("릴리스 없는 날은 버전을 지어내지 않는다",
+      _enr66[0]['version'] == '', f"={_enr66[0]['version']!r}")
+# 릴리스가 있는 날은 **원장에 있는 진짜 값**을 쓴다 — 값으로 확인한다
+import versioning as _ver66                                    # noqa: E402
+_relday66 = _ver66.releases_by_day()
+_someday66 = next(iter(sorted(_relday66, reverse=True)), '')
+if _someday66:
+    _enr66b = po66.enrich_update_history({'days': [
+        {'date': _someday66, 'items': [{'hash': 'x', 'subject': 'y'}]}]})
+    check(f"릴리스 있는 날({_someday66})은 원장 버전을 그대로 쓴다",
+          _relday66[_someday66][0]['version'] in _enr66b[0]['version'],
+          f"={_enr66b[0]['version']!r}")
+else:
+    check("버전 원장에 발효일이 있다 (0이면 미측정)", False, '릴리스 0건')
 
 # ② 전역 이슈 — 실측·실경고에서만 파생 (날조 금지)
 _cal66 = {'splits': {'valid': {'hit_rate': 66.8}, 'blind': {'hit_rate': 51.4},
@@ -9374,6 +9393,174 @@ if _os.path.exists(_sg107.BASE):
     check("검사 후 기준선이 원상복구된다", _rc107c == 0, f'={_rc107c}')
 else:
     check("스냅샷 기준선이 있다", False, '_snapshot_baseline.json 없음')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §148 — 라운드 99. 세 곳이 각자 다른 것을 보고 있었다
+#
+#   ① 화면이 버전을 **날짜에서 지어냈다**
+#        product_ops: ver = 'v' + d[2:].replace('-', '.')   → v26.08.15
+#      원장에 없는 값이라 상단 칩(v2026.08.15.1)과 영영 안 맞는다.
+#      §3(없는 값 금지)·§7(버전은 축이 바뀐 시점)을 화면이 어기고 있었다.
+#
+#   ② 완료 판정이 **없는 파일을 세고 있었다**
+#        after_sector_backfill.lines() → glob('subscore_sector_*.jsonl')
+#      그 이름은 라운드 74 에서 금지됐고, 같은 파일 second_pass() 에는
+#      "이름은 반드시 subscore_patch*" 주석까지 달려 있다. 한 파일 안에서
+#      절반만 옮긴 것이다. 결과: 늘 0 을 세고 8분 만에 '끝났다'며 채점으로
+#      넘어갔다 — 섹터 재백필이 완주하지 못한 이유.
+#
+#   ③ 진행 표시가 **초만** 썼다 — `187초 경과 · 약 240초 남음`
+#
+#   세 검사 모두 **본 개수를 통과 조건에 넣는다.** 0건을 보고 초록불이
+#   켜지는 사고를 이 저장소에서 여러 번 냈다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§148 지어낸 버전 · 0건을 세는 완료 판정 · 초만 쓰는 진행 표시 (라운드 99)")
+print("=" * 72)
+
+import json as _json148                                        # noqa: E402
+import product_ops as _po148                                   # noqa: E402
+import versioning as _v148                                     # noqa: E402
+import ui_kit as _uk148                                        # noqa: E402
+
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import backfill_subscores as _bfs148                           # noqa: E402
+_PFX148 = _bfs148.PATCH_PREFIX
+
+
+def _read148(path):
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            return f.read()
+    except Exception:                                          # noqa: BLE001
+        return ''
+
+
+# ── ① 화면에 나가는 버전은 전부 원장에 있어야 한다 ────────────────────
+_led148 = _v148._load()
+_known148 = {str(e.get('version')) for e in (_led148.get('history') or [])}
+_known148 |= {str(v) for v in (_led148.get('axes') or {}).values()}
+check("버전 원장에 버전이 있다 (검사 자체가 빈 집합이면 무의미)",
+      len(_known148) >= 5, f'{len(_known148)}개')
+
+with open(_os.path.join(PROJ, 'data', 'update_history.json'),
+          encoding='utf-8') as _f148:
+    _uh148 = _json148.load(_f148)
+_days148 = _po148.enrich_update_history(_uh148)
+_shown148 = []
+for _d148 in _days148:
+    for _tok148 in str(_d148.get('version') or '').split(' · '):
+        _tok148 = _tok148.strip()
+        if _tok148:
+            _shown148.append((_d148['date'], _tok148.split()[-1]))
+_bad148 = [x for x in _shown148 if x[1] not in _known148]
+check("업데이트 이력이 보여 주는 버전이 전부 원장에 있다",
+      not _bad148, f'없는 값 {_bad148[:4]}')
+# ⚠️ 0건이면 '위반 없음'이 아니라 '못 쟀다'다 — 본 개수를 조건에 넣는다
+check("그 검사가 실제로 버전을 봤다 (0건이면 미측정)",
+      len(_shown148) >= 3, f'{len(_shown148)}개')
+# ⚠️ 세 번째 자기 참조 — 이 검사가 **그 실수를 적어 둔 주석**을 잡았다.
+#   product_ops 의 독스트링에 옛 코드를 인용해 두었기 때문이다.
+#   산문을 걷어내고 **산 코드만** 본다 (라운드 71 code_lines).
+check("옛 날짜 조립식(v26.08.15)이 코드에서 사라졌다",
+      "'v' + d[2:].replace" not in
+      '\n'.join(ln for _i148, ln in _la135.code_lines('product_ops.py')))
+# 릴리스가 없는 날은 빈 값이어야 한다 — 커밋이 있었다고 축이 움직인 게 아니다
+_relday148 = set(_v148.releases_by_day())
+_wrong148 = [d['date'] for d in _days148
+             if bool(d.get('version')) != (d['date'] in _relday148)]
+check("릴리스 있는 날만 버전이 붙는다", not _wrong148, f'{_wrong148[:4]}')
+check("그 검사가 실제로 날짜를 봤다", len(_days148) >= 5, f'{len(_days148)}일')
+
+# ── ② 패치 파일 이름은 쓰는 쪽이 강제하는 하나뿐 ──────────────────────
+#   손으로 적은 glob 이 또 어긋나지 않도록 **모든 .py 를 훑는다.**
+#   ⚠️ 두 번 헛짚었다. ⓐ 처음엔 산문까지 세어 **그 실수를 적어 둔 주석**이
+#      걸렸고(라운드 71 의 code_lines 로 걷어냈다), ⓑ 다음엔 검사 자신의
+#      문자열이 걸렸다. 그래서 찾을 낱말도 **강제 상수에서 조립한다** —
+#      이 절의 소스에는 그 낱말이 한 번도 리터럴로 등장하지 않는다.
+_stem148 = _PFX148.split('_')[0]
+_pat148 = _re.compile(r"['\"](" + _stem148 + r"_[A-Za-z0-9_*]*)")
+_globs148, _files148 = [], 0
+for _root148, _dirs148, _fs148 in _os.walk(PROJ):
+    if any(p in _root148 for p in ('.git', '_probe', '_archive', 'venv')):
+        continue
+    for _fn148 in _fs148:
+        if not _fn148.endswith('.py'):
+            continue
+        _rel148 = _os.path.relpath(_os.path.join(_root148, _fn148),
+                                   PROJ).replace('\\', '/')
+        _files148 += 1
+        _src148 = '\n'.join(ln for _i148, ln in _la135.code_lines(_rel148))
+        for _m148 in _pat148.finditer(_src148):
+            _globs148.append((_rel148, _m148.group(1)))
+check("훑은 파이썬 파일이 있다 (0개면 미측정)", _files148 >= 30,
+      f'{_files148}개')
+check(f"'{_stem148}_' 이름을 쓰는 곳을 실제로 찾았다", len(_globs148) >= 3,
+      f'{len(_globs148)}곳')
+# 접두사는 여기 적지 않는다 — **쓰는 쪽이 강제하는 상수**를 가져다 쓴다
+_off148 = [g for g in _globs148 if not g[1].startswith(_PFX148)]
+check(f"모든 파일 이름이 강제 접두사('{_PFX148}')로 시작한다",
+      not _off148, f'어긋남 {_off148[:4]}')
+
+# 완료 판정이 0건을 통과로 쓰지 않는다 — **값으로** 확인한다
+_asb148 = _read148(_os.path.join(PROJ, 'scripts',
+                                 'after_sector_backfill.py'))
+check("완료 판정이 이름을 다시 적지 않고 쓰는 쪽에서 가져온다",
+      'from backfill_subscores import PATCH_GLOB' in _asb148)
+check("산출 0건이면 채점으로 넘어가지 않는다",
+      'if last == 0:' in _asb148 and 'return 2' in _asb148)
+# 문자열이 아니라 **실제 값**으로 — 두 쪽이 같은 파일을 보는가.
+# (환경에 패치 파일이 없어도 성립하는 검사다. 로컬 실측으로는
+#  lines() 가 0 → 202,467 건이 됐다.)
+import after_sector_backfill as _asb148m                        # noqa: E402
+check("완료 판정과 쓰는 쪽이 같은 glob 을 본다",
+      _asb148m._PATCH_GLOB == _bfs148.PATCH_GLOB,
+      f'{_asb148m._PATCH_GLOB} vs {_bfs148.PATCH_GLOB}')
+
+# ── ②-b 섹터를 읽는 쪽은 **원장과 패치를 함께** 봐야 한다 ───────────────
+#   섹터는 원장 행에 직접 있는 것이 29.9% 뿐이고 나머지는 패치에만 있다.
+#   유효표본 산출이 원장만 읽어 업종별 표본이 1/3로 잘렸고, 화면이 쓰는
+#   report 플래그(N≥200)가 걸려 **표본이 없는 척**했다.
+#   실측: 업종 41→65 · 화면에 띄우는 업종 24→48 · 묶인 케이스 3.96배.
+#   생물공학·통신장비·디스플레이장비·소프트웨어는 N=0 으로 찍히고 있었다.
+with open(_os.path.join(PROJ, 'data', 'effective_n_icc.json'),
+          encoding='utf-8') as _f148b:
+    _icc148 = (_json148.load(_f148b).get('sectors') or {})
+check("유효표본 산출물에 업종이 있다 (0개면 미측정)", len(_icc148) >= 40,
+      f'{len(_icc148)}개')
+check("업종에 묶인 케이스가 원장 단독 수준이 아니다",
+      sum((v.get('N') or 0) for v in _icc148.values()) >= 50_000,
+      f"{sum((v.get('N') or 0) for v in _icc148.values()):,}건")
+check("화면에 띄울 자격을 갖춘 업종이 40개 이상이다",
+      sum(1 for v in _icc148.values() if v.get('report')) >= 40,
+      f"{sum(1 for v in _icc148.values() if v.get('report'))}개")
+_eni148 = _read148(_os.path.join(PROJ, 'scripts', 'effective_n_icc.py'))
+check("유효표본 산출이 패치 파일도 읽는다",
+      _stem148 + '_patch' in _eni148)
+# 화면 문구가 잰 값을 손으로 적어 두면 반드시 낡는다 — 유도하는지 본다
+_wicc148 = '\n'.join(ln for _i148, ln in _la135.code_lines('web_app.py'))
+check("ICC 범위를 문장에 박아 두지 않는다",
+      '0.15~0.37' not in _wicc148, '옛 범위가 그대로 남아 있다')
+check("ICC 범위를 산출물에서 유도한다",
+      "_iccv61[0]:.2f}~{_iccv61[-1]:.2f}" in _wicc148)
+
+# ── ③ 진행 표시는 분·초로 읽힌다 ──────────────────────────────────────
+for _sec148, _want148 in ((0, '0초'), (47, '47초'), (59, '59초'),
+                          (60, '1분'), (180, '3분'), (187, '3분 7초'),
+                          (3600, '1시간'), (3900, '1시간 5분')):
+    check(f"{_sec148}초 → {_want148}", _uk148.dur_ko(_sec148) == _want148,
+          f'={_uk148.dur_ko(_sec148)}')
+check("없는 값은 0초로 꾸미지 않는다 (§3)",
+      _uk148.dur_ko(None) == '—' and _uk148.dur_ko(-5) == '—',
+      f'None={_uk148.dur_ko(None)} · -5={_uk148.dur_ko(-5)}')
+_pg148 = _uk148.progress(3, 6, label='시험', theme='dark', elapsed=187.0)
+check("진행 표시가 세 자리 초를 그대로 뿌리지 않는다",
+      '187초' not in _pg148, '187초가 그대로 보인다')
+check("진행 표시가 분 단위로 읽힌다", '3분 7초 경과' in _pg148)
+# 3/6 · 187초 → 남은 예상도 187초여야 하고, 같은 형식으로 읽혀야 한다
+check("남은 시간도 같은 형식이다", '약 3분 7초 남음' in _pg148,
+      _pg148.split('경과')[1][:48] if '경과' in _pg148 else '경과 표시 없음')
 
 
 print()

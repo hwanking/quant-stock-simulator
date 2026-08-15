@@ -32,6 +32,12 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = os.path.join(PROJ, '.portfolio')
 PY = sys.executable
 
+#: 패치 파일 이름 규칙 — **쓰는 쪽에서 가져온다** (라운드 99).
+#: 손으로 다시 적으면 또 어긋난다. 여기서 이름을 만들지 않는 것이 요점이다.
+sys.path.insert(0, os.path.join(PROJ, 'scripts'))
+sys.path.insert(0, PROJ)
+from backfill_subscores import PATCH_GLOB as _PATCH_GLOB       # noqa: E402
+
 #: 몇 번 연속으로 증가가 없으면 끝난 것으로 보나 (60초 간격)
 STILL = 8
 #: 최대 대기 (안전장치 — 무한 대기 금지)
@@ -46,8 +52,22 @@ def _utf8_stdout():
 
 
 def lines():
+    """패치 파일의 총 줄 수 — **쓰는 쪽이 강제하는 패턴**으로 센다.
+
+    ⚠️ 라운드 99 — 여기가 `subscore_sector_*.jsonl` 이었다. 그 이름은
+      라운드 74 에서 금지됐고(쓰는 쪽이 거부한다), 바로 아래 second_pass()
+      에는 "이름은 반드시 subscore_patch*" 라는 주석까지 달아 놓았다.
+      **한 파일 안에서 절반만 옮긴 것이다.**
+
+      결과: glob 이 아무것도 못 찾아 lines() 가 늘 0 을 돌려줬다. 아래
+      대기 루프는 '증가 없음'을 완료 신호로 보므로, 백필이 몇 시간 남았든
+      8분 만에 '끝났다'며 채점으로 넘어갔다. 섹터 재백필이 **한 번도
+      완주하지 못한 이유**가 이것이다.
+
+      이름을 여기 다시 적지 않는다. 강제하는 쪽의 상수를 가져다 쓴다.
+    """
     n = 0
-    for path in glob.glob(os.path.join(P, 'subscore_sector_*.jsonl')):
+    for path in glob.glob(_PATCH_GLOB):
         with open(path, encoding='utf-8', errors='replace') as f:
             n += sum(1 for ln in f if ln.strip())
     return n
@@ -79,6 +99,16 @@ def main():
     print('■ 섹터 재백필이 끝나기를 기다린다', flush=True)
     t0 = time.time()
     last, still = lines(), 0
+    # ⚠️ 라운드 99 — **0건은 완료가 아니라 '못 쟀다'다.**
+    #   '증가 없음'을 완료 신호로 쓰는 루프는 아무것도 못 세고 있을 때도
+    #   똑같이 통과한다. 실제로 그 사고가 났다(위 lines() 주석).
+    #   그래서 시작 시점의 건수를 조건에 넣는다 — 몇 건을 보고 있는지
+    #   모르면 판정하지 않는다.
+    started_with = last
+    print(f'  시작 시점 패치 {started_with:,}건', flush=True)
+    if started_with == 0:
+        print('  경고: 패치 파일이 0건이다. 백필이 아직 아무것도 안 썼거나 '
+              '읽는 패턴이 틀렸다. 완료로 보지 않는다.', flush=True)
     while time.time() - t0 < MAX_WAIT_SEC:
         time.sleep(60)
         cur = lines()
@@ -94,7 +124,15 @@ def main():
     else:
         print(f'최대 대기({MAX_WAIT_SEC // 3600}시간)를 넘겼다 — '
               f'그래도 진행한다. 남은 건은 다음에 이어서 돌린다.', flush=True)
-    print(f'\n재백필 산출 {last:,}건 — 채점으로 넘어간다.', flush=True)
+    if last == 0:
+        print('\n재백필 산출이 0건이다 — **완료가 아니라 미측정이다.** '
+              '채점을 돌리지 않는다.\n'
+              '  이 상태로 채점하면 아무것도 안 바뀐 원장을 새 결과처럼 '
+              '보고하게 된다 (라운드 99).', flush=True)
+        return 2
+    print(f'\n재백필 산출 {last:,}건 '
+          f'(시작 {started_with:,} → +{last - started_with:,}) — '
+          f'채점으로 넘어간다.', flush=True)
 
     if run('채점 (전 샤드 합산)',
            ['scripts/calibration_lab.py', '--limit', '0']) != 0:

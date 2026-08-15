@@ -114,11 +114,25 @@ def extract_update_detail(item):
 
 
 def enrich_update_history(history):
-    """update_history.json 구조에 카테고리·버전·상세 필드를 입힌다 (원문 불변)."""
+    """update_history.json 구조에 카테고리·버전·상세 필드를 입힌다 (원문 불변).
+
+    ⚠️ 라운드 99 — 버전을 **날짜에서 만들고** 있었다.
+
+        ver = 'v' + d[2:].replace('-', '.')   # 2026-08-15 → v26.08.15
+
+      `v26.08.15` 는 버전 원장에 없는 값이다. 상단 칩은 진짜
+      `v2026.08.15.1` 을 쓰므로 두 표시가 영원히 어긋난다. 사용자가
+      "날짜가 안 맞아 · 다 통일해줘" 라고 한 자리가 여기다.
+
+      원장에서 **그날 실제로 발효된 릴리스**를 읽는다. 없는 날은 빈
+      문자열이다 — 커밋이 있었다고 버전이 움직인 것은 아니다(§3·§7).
+    """
+    import versioning as _v
     out = []
     for day in (history or {}).get('days', []):
         d = str(day.get('date', ''))
-        ver = 'v' + d[2:].replace('-', '.') if len(d) == 10 else ''
+        # 문자열을 여기서 조립하지 않는다 — 만드는 곳이 둘이면 또 어긋난다
+        ver = _v.label_for_day(d)
         items = [{
             **it,
             'category': classify_update_category(it.get('subject')),

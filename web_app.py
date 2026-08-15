@@ -4389,13 +4389,18 @@ if _uh_home and _uh_home.get('days'):
                     _meta_u.append("관련 회귀 " + " ".join(_dt_u['related']))
                 if _dt_u.get('modules'):
                     _meta_u.append("담당 모듈 " + " · ".join(_dt_u['modules']))
-                _meta_u.append(f"버전 {_u['version']} · 커밋 {_u.get('hash', '')}")
+                # 라운드 99 — 버전은 그날 실제로 발효된 것만 온다.
+                # 커밋이 있었다고 축이 움직인 것은 아니므로 빈 날은 그렇게 적는다.
+                _meta_u.append(
+                    f"버전 {_u['version']} · 커밋 {_u.get('hash', '')}"
+                    if _u.get('version')
+                    else f"버전 변경 없음 · 커밋 {_u.get('hash', '')}")
                 st.caption(" | ".join(_meta_u))
         if len(_sel_upd) > 40:
             st.caption(f"이 카테고리의 나머지 {len(_sel_upd) - 40}건은 아래 표에서 "
                        "보실 수 있습니다.")
             st.dataframe(pd.DataFrame([{
-                '날짜': u['date'], '버전': u['version'],
+                '날짜': u['date'], '버전': u['version'] or '변경 없음',
                 '카테고리': u['category'], '내용': u['subject'],
             } for u in _sel_upd[40:]]), width='stretch',
                 hide_index=True)
@@ -6042,9 +6047,18 @@ try:
     # 표 안에 매번 문장을 넣으면 칸이 터지고, 안 적으면 235 가 독립 관측
     # 235 개로 읽힌다.
     if _icc61 and any(r[0] == '업황(표시 전용)' for r in _eng_rows):
+        # ⚠️ 라운드 99 — 여기 범위가 '0.15~0.37' 로 **손으로 적혀** 있었다.
+        #   그건 업종 41개일 때 잰 값이고, 유효표본 산출이 패치까지 읽게
+        #   되면서 65개(화면에 쓰는 것은 48개)가 됐다. 실제 범위는
+        #   0.06~0.43 으로 달라졌다. 잰 값을 문장에 박아 두면 반드시
+        #   낡는다 — **같은 파일에서 유도한다.**
+        _iccv61 = sorted(v['icc'] for v in (_icc61 or {}).values()
+                         if v.get('report') and v.get('icc') is not None)
+        _iccr61 = (f'업종별 실측 ICC {_iccv61[0]:.2f}~{_iccv61[-1]:.2f}'
+                   if _iccv61 else '업종별 실측 ICC 미산출')
         st.caption(_md_safe(
             '업황 줄의 **n 은 raw 건수**입니다. 같은 날 같은 업종 종목은 '
-            '함께 움직이므로(업종별 실측 ICC 0.15~0.37) 독립 관측 수는 '
+            f'함께 움직이므로({_iccr61}) 독립 관측 수는 '
             '그보다 훨씬 적습니다 — 적중률·EV 를 그 표본이 주는 것보다 '
             '단단하게 읽지 마세요. 계산은 `docs/EFFECTIVE_N_ICC_R80.md`.'))
     # 이번 판단의 약점 — 가늠 AI 한계에서 상위 2개 재사용 (§4 한 소스)
