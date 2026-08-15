@@ -53,7 +53,10 @@ def _utf8_stdout():
 WATCH = ('virtual_predictions*.jsonl', 'virtual_graded.jsonl',
          'bar_paths_s*.jsonl', 'entry_anchors_s*.jsonl',
          'subscore_patch*.jsonl', 'breakout_flags_s*.jsonl',
-         'news_events.jsonl', 'predictions.jsonl')
+         'news_events.jsonl', 'predictions.jsonl',
+         # 라운드 97 — 전방 기록부(fr-1). 11/16 재평가가 읽는 원장이므로
+         # 줄어들면 그 자리에서 잡아야 한다.
+         'forward_registry.jsonl')
 
 
 def counts():
