@@ -47,6 +47,14 @@ IDX_CACHE = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 BANDS = ((0, 40), (40, 50), (50, 58), (58, 65), (65, 101))
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def band_of(score):
     for lo, hi in BANDS:
         if lo <= score < hi:
@@ -175,7 +183,7 @@ def main():
         SELF_RECENT[tk] = sorted(SELF_RECENT[tk])[-10:]
 
     doc = dict(
-        made='2026-08-09',
+        made=_today(),
         basis='개발 구간(train+valid) · 판정완료 · 블라인드 제외 · '
               '비용 0.36%p 차감 · 국면=코스피 4상태(R52 규칙 재사용)',
         note='표시 전용 — 각 층은 그 계층의 실측이지 이 종목의 확률이 '

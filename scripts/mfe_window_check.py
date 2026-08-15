@@ -33,6 +33,14 @@ PF = os.path.join(PROJ, '.portfolio')
 OUT = os.path.join(PROJ, 'data', 'mfe_window_r85.json')
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def _utf8():
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -124,7 +132,7 @@ def main():
 
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
-            made='2026-08-13', paths=len(paths), ledger=len(rows),
+            made=_today(), paths=len(paths), ledger=len(rows),
             by_outcome=summary,
             note='관측 전용 — 목표 배수를 고르지 않는다. 원장 mfe 는 청산 '
                  '봉까지라 연구용으로 쓰지 않는다. 경로(bar_paths)는 청산과 '

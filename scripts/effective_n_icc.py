@@ -47,6 +47,14 @@ MIN_PER_DATE = 5       # 날짜내 분산을 재려면 한 날에 최소 2건은
 #: 아래에서 2·5·10 을 모두 찍어 결과가 이 선택에 흔들리는지 보인다.
 
 
+def _today():
+    """오늘 날짜 — 라운드 107. 박아 두면 다시 만들어도
+    안 바뀌어 낡음을 알 수 없다 (라운드 102 miss_study).
+    """
+    import datetime as _dt
+    return _dt.date.today().isoformat()
+
+
 def _utf8():
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -240,7 +248,7 @@ def main():
 
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
-            made='2026-08-13', method='ANOVA ICC + design effect',
+            made=_today(), method='ANOVA ICC + design effect',
             buy_zone=BUY_ZONE, sets=result, sectors=sec, previous=prev,
             note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 상관 문턱을 '
                  '고르는 대신 설계효과(1+(n̄−1)ICC)를 그대로 쓴다. 날짜당 '

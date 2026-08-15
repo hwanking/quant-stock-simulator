@@ -1,5 +1,5 @@
 {
- "made": "2026-08-10",
+ "made": "2026-08-16",
  "lineage": {
   "pullback_zone": "four_scores.entry_pullback_price",
   "new_target": "four_scores.entry_target_1st",
@@ -10,9 +10,9 @@
   "breakout_price": "next_action.breakout_price | four_scores.high_20d",
   "current_price": "realtime_price | four_scores.current_price"
  },
- "n_traced": 10,
- "n_ok": 10,
- "n_axis_src": 10,
+ "n_traced": 12,
+ "n_ok": 12,
+ "n_axis_src": 12,
  "faults": [],
  "rows": [
   {
@@ -165,6 +165,37 @@
    "src_new_stop": 985033.0538265827,
    "src_hold_stop": 1039159.2524757014,
    "hold_stop": 1039159.2524757014
+  },
+  {
+   "ticker": "034020.KS",
+   "ok": true,
+   "entry_src": "price_axes.entry",
+   "entry": 78517.29522636528,
+   "target": 83950.56532862915,
+   "stop": 70755.48079455977,
+   "rr": 0.7,
+   "actionable": true,
+   "incoherence": [],
+   "rr_calc": 0.7,
+   "src_new_stop": 70755.48079455977,
+   "src_hold_stop": 74434.59045273057,
+   "hold_stop": 74434.59045273057
+  },
+  {
+   "ticker": "035420.KS",
+   "ok": true,
+   "entry_src": "price_axes.entry",
+   "entry": 215989.2687170369,
+   "target": 230121.75681896275,
+   "stop": 195800.0,
+   "rr": 0.7,
+   "actionable": false,
+   "incoherence": [],
+   "rr_calc": 0.7,
+   "src_new_stop": 195800.0,
+   "src_hold_stop": 195800.0,
+   "hold_stop": 195800.0,
+   "note": "신규·보유자 손절이 같은 값이다 — 원본 칸도 같다 (상류 확인 필요)"
   }
  ],
  "note": "감사 전용 — 점수·게이트를 바꾸지 않는다. 표시되는 값이 전부 CORE 한 곳에서 나오는지, 정합과 손익비가 같은 진입 기준으로 계산되는지 확인한다 (2026-11-16 동결 준수)."
