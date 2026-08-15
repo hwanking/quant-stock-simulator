@@ -91,8 +91,20 @@ def main():
     sec = keys('subscore_patch*.jsonl', need='sector')
     sec |= {k for k, r in led.items() if r.get('sector')}
     miss = set(led) - sec
+    # ⚠️ 라운드 99 — 빈 곳을 한 덩어리로 내면 이 파일이 스스로 내건 목적을
+    #   어긴다: "못 채운 것과 원래 못 채우는 것은 다르다."
+    #   백필이 돌면서 '엔진에게 물어봤고 없다고 답했다'를 sector_checked 로
+    #   남기기 시작했다. 그 둘을 갈라 적는다 — 안 그러면 ETF 18,469건이
+    #   영원히 '할 일'로 보인다.
+    checked = keys('subscore_patch*.jsonl', need='sector_checked')
+    none_confirmed = miss & checked
+    unseen = miss - checked
     print(f'\n■ 섹터  {len(sec):,}/{n:,} ({len(sec) / n * 100:.1f}%) · '
           f'빈 곳 {len(miss):,}')
+    print(f'    확인했고 업종이 없다  {len(none_confirmed):>7,}  '
+          f'← 할 일이 아니다')
+    print(f'    아직 안 봤다        {len(unseen):>7,}'
+          + ('  ← 채울 수 있다' if unseen else ''))
     tks = sorted({t for t, _ in miss})
     print(f'    빈 곳 종목 {len(tks):,}개')
     if tks:

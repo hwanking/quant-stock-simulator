@@ -54,6 +54,11 @@ NO_AUTO_CHANGE = (
     'verdict_core.py',                 # 중앙 판정
     'quant_indicators.py',             # 점수 산식·문턱
     'forward_eval.py',                 # 재평가일 단일 출처
+    # ⚠️ 라운드 97 — 전방 기록부의 **규약**이다. CONTRACT 나 FIELDS 가
+    #   자동 실행 중에 바뀌면 같은 파일 안에서 앞뒤 행의 뜻이 달라지고,
+    #   11/16 에 그걸 알아챌 방법이 없다. 규약은 사람이 사유와 함께
+    #   바꾸고 이름(fr-2 …)을 올린다.
+    'forward_registry.py',
 )
 
 #: ⓑ 11/16 에 평가할 대상 — 그날까지 한 글자도 안 바뀌어야 한다
