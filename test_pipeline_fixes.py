@@ -9687,6 +9687,78 @@ check("워크플로가 규약 검사를 || true 없이 건다",
       and 'python forward_registry.py || true' not in _yml149)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §150 — 채점을 독립 경로로 다시 매긴다 (라운드 101 · dual-check)
+#
+#   이 저장소의 모든 숫자가 원장의 outcome 하나 위에 서 있는데, 라운드
+#   100까지 그 값을 **다른 경로로 다시 매겨 본 적이 없었다.**
+#   bar_paths 는 path_recorder 가 따로 받아 적은 경로다 — 코드도 실행
+#   시점도 다르다. 176,646건을 다시 매겨 불일치 0.062%.
+#
+#   ⚠️ 첫 측정에서 내가 틀렸다. 허용오차 없이 재니 244건(0.138%)이
+#      나왔는데 **절반이 내 대조의 부작용**이었다 — path_recorder 가
+#      `round(pct,3)` 으로 저장하는데 나는 `저가 ≤ 손절` 을 엄격히 따졌다.
+#      허용오차를 저장 정밀도에서 유도하니 110건으로 줄었다.
+#      남은 110건은 18개 종목에 몰려 있고(하나가 66건) 원장이 본 저가가
+#      중앙값 -8.8%p 더 낮다 — 과거 시세 재작성이지 채점 결함이 아니다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§150 채점 dual-check — 독립 경로로 다시 매긴다 (라운드 101)")
+print("=" * 72)
+import dual_check_grading as _dc150                             # noqa: E402
+
+check("허용오차를 저장 정밀도에서 유도한다 (감으로 고르지 않는다)",
+      _dc150.EPS == 0.0005, f'EPS={_dc150.EPS}')
+check("합격 기준을 코드에 박아 둔다 (측정 후 내리지 않는다)",
+      _dc150.MISMATCH_MAX == 0.010 and _dc150.MIN_N == 1000,
+      f'{_dc150.MISMATCH_MAX} · {_dc150.MIN_N}')
+
+# 판정 함수가 **실제로** 규칙대로 매기는가 — 만든 봉으로 먹여 본다
+def _bar150(hi, lo):
+    return ['d', hi, lo, 0.0, None, 0.0]
+
+
+_row150 = {'price': 100.0, 'target': 110.0, 'stop': 90.0, 'horizon_days': 3}
+for _bars150, _want150, _lbl150 in (
+        ([_bar150(11.0, -1.0)], ('TARGET', 1), '목표 먼저'),
+        ([_bar150(1.0, -11.0)], ('STOP', 1), '손절 먼저'),
+        ([_bar150(11.0, -11.0)], ('STOP', 1), '같은 봉 동시 → 성공 아님'),
+        ([_bar150(1.0, -1.0)] * 3, ('OPEN', 0), '지평 내 미도달'),
+        ([_bar150(1.0, -1.0)] * 5, ('OPEN', 0), '지평 밖은 안 본다'),
+        ([_bar150(1.0, -1.0), _bar150(11.0, -1.0)], ('TARGET', 2), '둘째 봉'),
+):
+    _got150, _ = _dc150.regrade(_row150, {'bars': _bars150})
+    check(f"재판정 규칙 — {_lbl150}", _got150 == _want150,
+          f'{_got150} (기대 {_want150})')
+# 경계 — 반올림 때문에 놓치지 않는가 (실제로 이것 때문에 244건이 나왔다)
+_got150b, _ = _dc150.regrade(
+    {'price': 21400.0, 'target': 21890.0, 'stop': 20700.0,
+     'horizon_days': 20},
+    {'bars': [_bar150(1.0, -3.271)]})       # 손절 정확히 -3.27103%
+check("반올림 경계에서 손절을 놓치지 않는다", _got150b == ('STOP', 1),
+      f'{_got150b}')
+
+# 실측 산출물 — **본 건수를 조건에 넣는다**
+_p150 = _os.path.join(PROJ, 'data', 'dual_check_grading.json')
+if _os.path.exists(_p150):
+    with open(_p150, encoding='utf-8') as _f150:
+        _d150 = _json148.load(_f150)
+    check("대조한 건수가 하한을 넘는다 (0건이면 미측정)",
+          (_d150.get('n_compared') or 0) >= _dc150.MIN_N,
+          f"{_d150.get('n_compared')}건")
+    check("불일치율이 사전등록 기준 안에 있다",
+          (_d150.get('mismatch_rate') or 1) <= _dc150.MISMATCH_MAX,
+          f"{_d150.get('mismatch_rate')}")
+    check("도달 봉까지 대체로 같다",
+          (_d150.get('same_bar_rate') or 0) >= 0.99,
+          f"{_d150.get('same_bar_rate')}")
+    check("불일치가 소수 종목에 몰려 있다 (전면 결함이 아니다)",
+          (_d150.get('n_mismatch_tickers') or 999) <= 60,
+          f"{_d150.get('n_mismatch_tickers')}종목")
+else:
+    check("dual-check 산출물이 있다", False, 'data/dual_check_grading.json 없음')
+
+
 print()
 print("=" * 72)
 if FAILURES:

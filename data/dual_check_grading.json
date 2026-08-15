@@ -1,0 +1,27 @@
+{
+ "n_compared": 176646,
+ "agree": 176536,
+ "mismatch": 110,
+ "mismatch_rate": 0.0006227143552642007,
+ "skipped": 7713,
+ "same_bar_rate": 0.9991049984139212,
+ "kinds": {
+  "STOP→TARGET": 94,
+  "STOP→OPEN": 15,
+  "TARGET→STOP": 1
+ },
+ "top_mismatch_tickers": {
+  "052710.KQ": 66,
+  "480020.KS": 8,
+  "480040.KS": 7,
+  "441640.KS": 5,
+  "480030.KS": 5,
+  "329650.KS": 3,
+  "481060.KS": 3,
+  "237370.KS": 2
+ },
+ "n_mismatch_tickers": 18,
+ "threshold": 0.01,
+ "min_n": 1000,
+ "eps": 0.0005
+}
