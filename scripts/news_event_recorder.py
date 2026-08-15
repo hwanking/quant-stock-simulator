@@ -29,7 +29,10 @@ import warnings
 from datetime import date
 
 warnings.filterwarnings('ignore')
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:          # noqa: BLE001
+    pass
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 P = os.path.join(PROJ, '.portfolio')
@@ -104,14 +107,30 @@ def record():
     return wrote
 
 
-def resolve():
-    """20영업일 지난 기록에 사후 경로를 채운다 — 없으면 조용히 남긴다."""
-    if not os.path.exists(LOG):
+def resolve(path=None):
+    """20영업일 지난 기록에 사후 경로를 채운다 — 없으면 조용히 남긴다.
+
+    ■ path 를 받는 이유 (라운드 103)
+      이 함수는 **20영업일이 지나야** 무언가를 채운다. 첫 기록이
+      2026-08-10 이므로 실제로 채워지는 것은 9월이다. 그때까지는
+      "0건 채움" 만 찍히는데, 그게 **정상 대기인지 함수가 고장 난
+      것인지 구분할 수 없다.**
+
+      라운드 96 에서 개선 파이프라인이 조용히 멈춘 것을 일주일 만에
+      알아챘다. 여기서는 석 달이 걸린다 — 그동안 쌓은 기록이 전부
+      쓸모없어질 수 있다.
+
+      그래서 경로를 받게 한다. 검사가 **진짜 이 함수를** 충분히 오래된
+      임시 기록에 물려 돌려 볼 수 있다. 실제 원장에 가짜 행을 넣지
+      않는다 (§3 — 지어내지 않는다).
+    """
+    path = path or LOG
+    if not os.path.exists(path):
         print('기록이 아직 없다.')
         return 0
     import bitemporal_engine as be
     rows = []
-    with open(LOG, encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         for ln in f:
             try:
                 rows.append(json.loads(ln))
@@ -156,10 +175,17 @@ def resolve():
         r['mae'] = round(min(Lo[i] for i in seg) / px * 100 - 100, 2)
         r['resolved'] = True
         done += 1
-    with open(LOG, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + '\n')
     print(f'사후 경로 채움 {done}건 / 대기 {len(todo)}건 (총 {len(rows)}건)')
+    # ⚠️ 0건이 '정상 대기'인지 '고장'인지 밝힌다 (라운드 103).
+    #   20영업일이 안 지난 기록만 있으면 0건이 맞다. 그 경우 **언제부터
+    #   채워지는지**를 같이 적어야 사람이 기다릴 수 있다.
+    if done == 0 and todo:
+        _oldest = min(str(r.get('date'))[:10] for r in todo)
+        print(f'  0건은 고장이 아니라 대기일 수 있다 — 가장 오래된 대기 '
+              f'기록이 {_oldest} 이고, {H}영업일이 지나야 채워진다.')
 
     res = [r for r in rows if r.get('resolved')]
     if len(res) >= 30:

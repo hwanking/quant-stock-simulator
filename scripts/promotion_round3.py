@@ -25,7 +25,10 @@ import json
 import os
 import sys
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:          # noqa: BLE001
+    pass
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PF = os.path.join(BASE, '.portfolio')
 
