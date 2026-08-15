@@ -40,6 +40,11 @@ sys.path.insert(0, PROJ)
 
 P = os.path.join(PROJ, '.portfolio')
 ARCH = os.path.join(PROJ, '_archive')
+#: 받은 zip 을 두는 곳. **backup_research_data 가 만드는 곳과 달라야 한다.**
+#: 라운드 97b — 같은 폴더·같은 이름이라 받은 zip 이 방금 만든 백업을
+#: 덮어썼고, 그걸 모르고 릴리스에 올려 클라우드 zip 을 클라우드에 도로
+#: 올렸다. 크기가 바이트까지 같아서 알아챘다.
+INBOX = os.path.join(ARCH, '_incoming')
 
 #: 판정 논리를 베끼지 않는다 — 축소 가드가 쓰는 그 패턴과 그 세는 법을
 #: 그대로 부른다 (라운드 92 에서 배운 것: 검사가 논리를 복사하면 코드만
@@ -207,10 +212,20 @@ def main():
           ' 라운드 81 에서 여기서 이틀을 잃었다.')
 
     os.makedirs(ARCH, exist_ok=True)
-    zip_path = os.path.join(ARCH, pick['name'])
+    # ⚠️ 라운드 97b — 여기가 `_archive/research_data_YYYYMMDD.zip` 로 받았다.
+    #   그건 **backup_research_data 가 만드는 파일과 같은 이름·같은 폴더**다.
+    #   실제로 사고가 났다: 로컬에서 5시간짜리 섹터 정착을 돌리고 백업 zip 을
+    #   만든 뒤 pull 을 미리보기로 한 번 돌렸더니, 받은 zip 이 방금 만든
+    #   백업을 덮어썼다. 그걸 모르고 릴리스에 올려 **클라우드 zip 을 클라우드에
+    #   도로 올렸다**(크기가 바이트까지 같아서 알아챘다).
+    #   받는 것과 만드는 것은 이름이 달라야 한다.
+    #   `--clobber` 는 **이름을 바꾸기 전에** 이미 덮어쓴다. 그래서 받는
+    #   폴더 자체를 갈라야 한다 (INBOX — 모듈 상수로 둬서 검사가 본다).
+    os.makedirs(INBOX, exist_ok=True)
+    zip_path = os.path.join(INBOX, pick['name'])
     print(f'\n내려받는 중 → {zip_path}')
     code, _, err = _gh(['release', 'download', pick['tag'],
-                        '-p', pick['name'], '-D', ARCH, '--clobber'])
+                        '-p', pick['name'], '-D', INBOX, '--clobber'])
     if code != 0 or not os.path.exists(zip_path):
         print('내려받기 실패 — 멈춘다.')
         print((err or '').strip()[:300])

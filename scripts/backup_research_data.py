@@ -27,6 +27,9 @@ from datetime import date
 
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = os.path.join(PROJ, '.portfolio')
+#: 만든 zip 을 두는 곳. **pull_research_data.INBOX 와 달라야 한다** —
+#: 같으면 받은 zip 이 방금 만든 백업을 덮어쓴다 (라운드 97b 실사고).
+OUT_DIR = os.path.join(PROJ, '_archive')
 
 
 def _utf8_stdout():
@@ -112,7 +115,7 @@ def main():
     if not os.path.isdir(P):
         print('.portfolio 가 없습니다.')
         return 1
-    out_dir = os.path.join(PROJ, '_archive')
+    out_dir = OUT_DIR
     os.makedirs(out_dir, exist_ok=True)
     stamp = date.today().strftime('%Y%m%d')
     dst = os.path.join(out_dir, f'research_data_{stamp}.zip')

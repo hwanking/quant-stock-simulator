@@ -9548,6 +9548,19 @@ check("유효표본 산출이 패치 파일도 읽는다",
 _cvr148 = _read148(_os.path.join(PROJ, 'scripts', 'coverage_report.py'))
 check("커버리지 보고가 '확인했고 없음'을 따로 센다",
       'sector_checked' in _cvr148 and '할 일이 아니다' in _cvr148)
+
+# ── ②-c 받는 zip 과 만드는 zip 이 같은 자리에 놓이면 안 된다 ────────────
+#   실사고(라운드 97b): 로컬에서 5시간짜리 섹터 정착을 돌리고 백업 zip 을
+#   만든 뒤 pull 을 미리보기로 한 번 돌렸더니, 받은 zip 이 방금 만든 백업을
+#   **같은 이름·같은 폴더**라 덮어썼다. 그걸 모르고 릴리스에 올려
+#   **클라우드 zip 을 클라우드에 도로 올렸다** — 크기가 바이트까지 같아서
+#   알아챘다. 이름이 아니라 **경로 값**으로 대조한다.
+import backup_research_data as _bkm148                          # noqa: E402
+import pull_research_data as _plm148                            # noqa: E402
+check("받는 폴더와 만드는 폴더가 다르다",
+      _os.path.normcase(_os.path.abspath(_plm148.INBOX))
+      != _os.path.normcase(_os.path.abspath(_bkm148.OUT_DIR)),
+      f'{_plm148.INBOX} vs {_bkm148.OUT_DIR}')
 # 화면 문구가 잰 값을 손으로 적어 두면 반드시 낡는다 — 유도하는지 본다
 _wicc148 = '\n'.join(ln for _i148, ln in _la135.code_lines('web_app.py'))
 check("ICC 범위를 문장에 박아 두지 않는다",
