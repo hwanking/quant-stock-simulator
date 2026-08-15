@@ -191,6 +191,26 @@ jobs:
           python scripts/news_event_recorder.py --record || true
           python scripts/news_event_recorder.py --resolve || true
 
+      # ⚠️ 라운드 102 — 이 두 연구가 **여기 한 번도 없었다.**
+      #   실측: daily_accumulate.yml 과 run_daily_improvement.py 를 통틀어
+      #   miss_study·weakness_map 등장 0회. 사람이 돌릴 때만 돌았다.
+      #   라운드 77(전방 기록기)·96(개선 파이프라인)과 **같은 모양**이다 —
+      #   도구는 있는데 아무도 안 부른다.
+      #
+      #   둘 다 **관측 전용**이다: 점수·게이트·문턱을 읽기만 한다.
+      #   FN/FP 와 취약 칸은 11/16 이후 새 사전등록의 후보 목록으로만 쓴다.
+      #   (자동 축적·판정은 허용 / 자동 모델 변경은 금지 — 라운드 96 경계)
+      - name: FN/FP 연구·취약구간 지도 (관측 전용)
+        run: |
+          python scripts/miss_study.py || true
+          python scripts/weakness_map.py || true
+
+      # 위 단계는 `|| true` 다. 그러면 **조용히 멈춰도 모른다** — 실제로
+      # 그 상태로 지내 왔다. 산출물이 원장보다 얼마나 밀렸는지로 판정한다.
+      # 낡음은 값이지 느낌이 아니다.
+      - name: 관측 연구 신선도 검사
+        run: python scripts/study_freshness.py
+
       # ⚠️ 라운드 96 — 이 단계가 **여기 없어서** 일주일을 놓쳤다.
       #   run_daily_improvement.py 는 앱 버튼(web_app.py)으로만 돌았고,
       #   마지막 실행이 8/8 이었다. 그 사이 개장 전 픽 85건이 동결되지

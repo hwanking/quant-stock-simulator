@@ -23,6 +23,7 @@ import json
 import os
 import sys
 from collections import Counter
+from datetime import date, datetime, timezone
 
 import numpy as np
 
@@ -68,6 +69,7 @@ def main():
                     continue
 
     rows = []
+    _ledger_rows = 0        # 원장이 몇 줄일 때 잰 것인지 — 낡음 판정의 근거
     with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
         for ln in f:
             ln = ln.strip()
@@ -77,6 +79,7 @@ def main():
                 r = json.loads(ln)
             except Exception:                                  # noqa: BLE001
                 continue
+            _ledger_rows += 1
             if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
                 continue
             k = (str(r['ticker']), str(r['date'])[:10])
@@ -155,7 +158,17 @@ def main():
               f"{r.get('action_title') or ''}")
 
     out = dict(
-        made='2026-08-10',
+        # ⚠️ 라운드 102 — 여기가 `made='2026-08-10'` 으로 **박혀 있었다.**
+        #   방금 다시 만든 산출물이 "8/10 에 만들었다" 고 적으니, 이게
+        #   오늘 원장으로 잰 것인지 닷새 전 것인지 알 방법이 없었다.
+        #   자동으로 도는 연구에서 그건 치명적이다 — 조용히 멈춰도
+        #   눈치채지 못한다 (라운드 96 에서 개선 파이프라인이 그랬다).
+        #   **언제 돌렸는지**와 **무엇으로 쟀는지**를 같이 적는다.
+        made=date.today().isoformat(),
+        made_at=datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        #: 이 값으로 낡음을 **판정**한다 — 원장이 자란 만큼 벌어진다
+        ledger_rows=_ledger_rows,
+        joined_n=len(rows),
         basis='개발 구간 · 판정완료 · blind 제외 · 경로 21봉 결합',
         note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 여기서 나온 '
              f'패턴은 {_FE} 이후 새 사전등록의 후보 목록으로만 쓴다.',
