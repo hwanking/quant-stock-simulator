@@ -249,8 +249,20 @@ def _sel(prop, colors, extra=''):
 # 라이트에서 이 카드들을 흰색으로 바꾸면, 내부 글자색이 밝은 색으로 하드코딩돼
 # 있어 통째로 사라진다(과거 라이트 모드 실패의 원인). 흰 배경 위 다크 카드는
 # 대시보드 관례이기도 하다 — 대신 9종이던 카드색을 하나로 통일한다.
-_CARD_BG = '#161D2A'
-_CARD_BG_ELEV = '#1C2635'
+#
+# ⚠️ 그 '하나'가 실은 **둘**이었다 (라운드 115). 서버를 띄워 세어 보니
+#    화면의 카드 표면이 두 계열로 갈려 있었다:
+#        #161D2A  45개  ← 여기 손으로 적은 값 (인라인 HTML 을 CSS 가 통일)
+#        #16181F  30개  ← ui_kit 컴포넌트가 쓰는 팔레트 토큰 DARK['card']
+#    두 색은 눈으로 거의 같지만 §5 는 카드 한 종류를 요구한다. 그리고 §5 는
+#    "색은 ui_kit 팔레트가 유일 출처" 라고도 한다 — 그러면 답은 정해져 있다.
+#    **팔레트 쪽으로 모은다.** DARK 는 고정 dict 이므로(테마별 _TOK 이 아니다)
+#    위의 '양 테마 단일 다크' 원칙도 그대로 지켜진다.
+#
+#    아래 _OLD_SURFACES 의 옛 hex 들은 **선택자**라 그대로 둔다 — 인라인
+#    마크업에 남아 있는 값을 잡아 여기 상수로 덮어쓰는 것이 이 장치다.
+_CARD_BG = _uk.DARK['card']
+_CARD_BG_ELEV = _uk.DARK['raised']
 
 _CSS_SURFACE_MAP = f"""
     {_sel('background-color', _OLD_SURFACES)},
@@ -265,8 +277,10 @@ _CSS_SURFACE_MAP = f"""
     .stApp div[style*="linear-gradient(135deg,#161D2A"],
     .stApp div[style*="linear-gradient(135deg, rgb(20, 20, 22)"] {{
         /* 결론 배너는 양 테마 모두 다크 카드 — 내부 글자가 밝은 색 하드코딩이라
-           라이트 surface(흰색)로 바꾸면 글자가 사라진다 */
-        background: #161D2A !important;
+           라이트 surface(흰색)로 바꾸면 글자가 사라진다.
+           선택자의 #161D2A 는 **마크업에 적힌 옛 값**이라 그대로 두고,
+           칠하는 값만 카드 상수로 맞춘다 (라운드 115) */
+        background: {_CARD_BG} !important;
     }}
 """
 _CSS_BORDER_MAP = ',\n'.join(
