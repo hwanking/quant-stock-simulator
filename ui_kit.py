@@ -1078,7 +1078,7 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
             # (분석 전환/원문 읽기)을 한 클릭에 섞지 않는다.
             art = (f"<a href='{_esc(x['href'])}' target='_blank' "
                    f"rel='noopener noreferrer' style='color:{t['tx3']}; "
-                   f"margin-left:6px; font-size:11px; "
+                   f"margin-left:6px; font-size:12px;"
                    f"text-decoration:underline;'>기사</a>"
                    if x.get('href') else '')
             inner = (f"<a href='?pick={_q56(str(x['pick']))}' "
@@ -1150,7 +1150,7 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                 f"<p style='margin:2px 0 0 0; font-size:16px; font-weight:700; "
                 f"color:{col or t['tx1']}; font-variant-numeric:tabular-nums;'>"
                 f"{_esc(value)}</p>"
-                + (f"<p style='margin:1px 0 0 0; font-size:11px; "
+                + (f"<p style='margin:1px 0 0 0; font-size:12px;"
                    f"color:{t['tx3']};'>{_esc(sub)}</p>" if sub else '')
                 + "</div>")
 
@@ -1169,7 +1169,7 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                f"<p style='margin:3px 0 0 0; font-size:12px; "
                f"color:{t['tx2']}; line-height:1.6;'>{_esc(m.get('say'))}"
                + (f" {_esc(note)}" if note else '') + "</p>"
-               f"<p style='margin:3px 0 0 0; font-size:11px; "
+               f"<p style='margin:3px 0 0 0; font-size:12px;"
                f"color:{t['tx3']};'>개발 구간 실측 n={m.get('n'):,}"
                f" · 기준일 {m.get('days')}일 · 적중 {m.get('hit')}%"
                f" · 비용후 EV {m.get('ev'):+.3f}% — "
@@ -1210,7 +1210,7 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                + (f"<p style='margin:8px 0 0 0; font-size:12px; "
                   f"color:{t['warn'] if (ev or 0) <= 0 else t['pos']};'>"
                   f"비용 차감 기대값 {ev:+.2f}%</p>" if ev is not None else '')
-               + f"<p style='margin:6px 0 0 0; font-size:11px; "
+               + f"<p style='margin:6px 0 0 0; font-size:12px;"
                  f"color:{t['tx3']}; line-height:1.6;'>"
                  f"{_esc(b.get('target_caveat'))}</p></div>")
     elif b.get('why'):
@@ -1227,7 +1227,9 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                 f"이미 갖고 계신 분께 · 평단 {h['avg']:,.0f}원 · "
                 f"<span style='color:{rc}; font-weight:700;'>"
                 f"{h['ret_pct']:+.1f}%</span></p>"
-                f"<p style='margin:4px 0 0 0; font-size:14px; font-weight:700; "
+                # 15px — 스케일에 14 는 없다 (12·13·15·16·17…).
+                # 주변 본문이 12px 이므로 헤드라인은 위로 올린다 (라운드 118)
+                f"<p style='margin:4px 0 0 0; font-size:15px; font-weight:700; "
                 f"color:{t['tx1']};'>{_esc(h.get('headline'))}</p>"
                 f"<p style='margin:3px 0 0 0; font-size:12px; "
                 f"color:{t['tx2']}; line-height:1.65;'>{_esc(h.get('body'))}"
@@ -1242,7 +1244,7 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
             f"font-weight:700; color:{t['tx2']};'>산 뒤에는</p>"
             f"<ul style='margin:0; padding-left:16px; font-size:12px; "
             f"color:{t['tx2']}; line-height:1.65;'>{steps}</ul>"
-            f"<p style='margin:6px 0 0 0; font-size:11px; color:{t['tx3']}; "
+            f"<p style='margin:6px 0 0 0; font-size:12px;color:{t['tx3']}; "
             f"line-height:1.6;'>{_esc(p.get('post_entry_caveat'))}</p></div>"
             if steps else '')
 

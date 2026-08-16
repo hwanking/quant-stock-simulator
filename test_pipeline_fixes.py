@@ -3696,8 +3696,56 @@ section("77. 타입 스케일 — 열 단계만 · 굵기 700 상한 · 접근�
 TYPE_SCALE = {12, 13, 15, 16, 17, 20, 22, 28, 34, 40}
 import re as _re77
 
+# ⚠️ 여기 파일을 손으로 **두 개** 적어 뒀었다 (라운드 118 까지).
+#    그래서 `ui_kit.py` 가 타이포 검사 밖이었다 — 하필 디자인 킷 본체이고,
+#    거기 인라인 `font-size:11px` 이 다섯 자리(화면 6곳) 살아 있었다.
+#    §5 는 최소 12px 을 요구하고 이 절이 그걸 잠근다고 적혀 있었는데,
+#    **잠그는 대상에 그 파일이 없었다.**
+#    라운드 114c 에서 이모지 검사가 똑같이 당했다 — 손으로 적은 목록은
+#    반드시 낡는다. web_app 에서 닿는 저장소 모듈로 유도한다.
+import ast as _ast77                                             # noqa: E402
+import subprocess as _sp77                                       # noqa: E402
+
+
+def _reach_ui(entry='web_app.py'):
+    """web_app 에서 전이적으로 닿는 저장소 모듈 (scripts/ 제외)."""
+    _tr = _sp77.run(['git', 'ls-files', '*.py'], cwd=PROJ,
+                    capture_output=True, text=True).stdout
+    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
+    _seen, _todo = set(), [entry]
+    while _todo:
+        _cur = _todo.pop()
+        if _cur in _seen:
+            continue
+        _seen.add(_cur)
+        try:
+            _t = _ast77.parse(open(_os.path.join(PROJ, _cur),
+                                   encoding='utf-8').read())
+        except Exception:                                        # noqa: BLE001
+            continue
+        _nm = set()
+        for _n in _ast77.walk(_t):
+            if isinstance(_n, _ast77.Import):
+                _nm |= {a.name.split('.')[0] for a in _n.names}
+            elif (isinstance(_n, _ast77.ImportFrom) and _n.module
+                  and not _n.level):
+                _nm.add(_n.module.split('.')[0])
+        for _x in _nm:
+            for _c in (f'{_x}.py', f'{_x}/__init__.py'):
+                if _c in _files and _c not in _seen:
+                    _todo.append(_c)
+    return sorted(p for p in _seen if not p.startswith('scripts/'))
+
+
+_UIF77 = _reach_ui()
+check("타이포 검사 대상을 손으로 적지 않고 유도한다 (25개 이상)",
+      len(_UIF77) >= 25, f'{len(_UIF77)}개')
+check("유도 목록이 디자인 킷 본체를 포함한다 (여기가 빠져 있었다)",
+      'ui_kit.py' in _UIF77 and 'web_app.py' in _UIF77
+      and 'chart_pro.py' in _UIF77)
+
 _off = {}
-for _fn in ("web_app.py", "chart_pro.py"):
+for _fn in _UIF77:
     _src77 = open(_os.path.join(PROJ, _fn), encoding='utf-8').read()
     for _val, _unit in _re77.findall(r'font-size:\s*([0-9.]+)(px|rem|em)', _src77):
         if _unit == 'em':
