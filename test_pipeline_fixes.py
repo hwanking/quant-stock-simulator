@@ -10502,6 +10502,165 @@ else:
           '라운드 111' in _read148(_os.path.join(PROJ, 'CLAUDE.md')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §161 — 다중비교 문턱을 반올림으로 내리지 않았는가 (전수)
+#
+#   라운드 112 에서 **내가 저지른 것**이다. `0.05/16` 의 참 임계는
+#   2.9552 인데 사전등록에 **2.95** 로 적었다. 0.0052 만큼 문턱을 내린
+#   것이다. 라운드 111 의 2.73 도 참값 2.7344 보다 낮다.
+#
+#   두 번 다 최고 z 가 그 틈에 없어서 판정은 안 바뀌었다. **다음에는
+#   바뀔 수 있다.** 소수 두 자리로 적을 거면 반올림이 아니라 **올림**이다.
+#
+#   이 검사는 이름을 안 본다 — `data/` 의 모든 연구 산출물 중 `z_crit`
+#   과 `n_tests` 를 같이 적은 것을 **전부** 뒤져, 통과로 표시된 항목이
+#   **참 임계값 아래에서 통과하지 않았는지** 값으로 확인한다.
+#   본 산출물 수를 판정 조건에 넣는다 — 0건을 재고 초록불을 켜면 안 된다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§161 Bonferroni 문턱 — 반올림으로 내리지 않았는가 (전수)")
+print("=" * 72)
+import glob as _glob161                                           # noqa: E402
+from statistics import NormalDist as _ND161                       # noqa: E402
+
+_seen161, _slack161, _cheated161 = [], [], []
+for _p161 in sorted(_glob161.glob(_os.path.join(PROJ, 'data', '*.json'))):
+    try:
+        with open(_p161, encoding='utf-8') as _f161:
+            _d161 = _json148.load(_f161)
+    except Exception:                                             # noqa: BLE001
+        continue
+    if not isinstance(_d161, dict):
+        continue
+    _zc, _nt = _d161.get('z_crit'), _d161.get('n_tests')
+    if not isinstance(_zc, (int, float)) or not isinstance(_nt, int):
+        continue
+    _rel161 = _os.path.relpath(_p161, PROJ).replace('\\', '/')
+    _true161 = _ND161().inv_cdf(1 - (0.05 / _nt) / 2)
+    _seen161.append(_rel161)
+    if _zc < _true161:
+        _slack161.append((_rel161, _zc, round(_true161, 4)))
+    # 값으로 확인한다 — 통과 표시된 항목이 참 임계 아래에 있으면 안 된다
+    _pr161 = _d161.get('paired') or {}
+    for _k161, _v161 in (_d161.get('verdict') or {}).items():
+        if not isinstance(_v161, dict):
+            continue
+        for _cond161, _ok161 in _v161.items():
+            if 'z' not in _cond161 or not _ok161:
+                continue
+            _z161 = (_pr161.get(_k161) or {}).get('sign_z')
+            if _z161 is not None and _z161 < _true161:
+                _cheated161.append((_rel161, _k161, _z161,
+                                    round(_true161, 4)))
+
+check("Bonferroni 를 쓴 산출물을 실제로 봤다 (2건 이상)",
+      len(_seen161) >= 2, f'{len(_seen161)}건: {_seen161}')
+check("참 임계값 아래에서 통과한 항목이 없다",
+      not _cheated161, str(_cheated161[:3]))
+# 이미 적어 버린 반올림은 지우지 않고 드러낸다. 보장하는 것은 위 검사다 —
+# **참 임계 아래에서 통과한 항목이 없다**는 것. 문턱의 표기가 아니라 판정이
+# 기준이다. (R111 2.73<2.7344 · R112 2.95<2.9552 — 둘 다 최고 z 가 멀다)
+print(f"   반올림으로 낮아진 기록 {len(_slack161)}건: {_slack161}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §162 — 라운드 112: 상대화가 순위 정보를 만들어 내는가
+#
+#   16개 전부 미달이다. 그런데 이 절이 잠그는 것은 **결론이 아니라
+#   대조를 뺐는지**다.
+#
+#   업종내 방식은 조건 못 갖춘 종목을 빼면서 **날짜 집합까지 바꿨다**
+#   (810일 → 286일). 그 상태로 z 가 −1.39 에서 +1.31 로 돌아섰다.
+#   대조를 안 뒀으면 "상대화가 효과 있다"고 읽었을 것이다.
+#   같은 날·같은 종목을 **원값으로** 매겨 보니 상대화 없이도 z 가
+#   −0.42 ~ +2.10 으로 흩어졌다 — **표본을 줄이는 것만으로 ±2 가 움직인다.**
+#
+#   그래서 규칙으로 잠근다: **표본을 걸러 낸 연구는 그 거름 자체가
+#   무엇을 하는지 같이 재야 한다.** 판정은 산출물의 verdict 를 믿지 않고
+#   저장된 숫자로 **다시 계산해서** 대조한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§162 라운드 112 상대화 — 대조를 뺐는지 검사한다")
+print("=" * 72)
+_p162 = _os.path.join(PROJ, 'data', 'relativization_r112.json')
+if not _os.path.exists(_p162):
+    check("R112 산출물이 있다", False, 'data/relativization_r112.json 없음')
+else:
+    with open(_p162, encoding='utf-8') as _f162:
+        _d162 = _json148.load(_f162)
+    import relativization_r112 as _rl162                          # noqa: E402
+
+    check("사전등록 문서를 근거로 적는다",
+          _d162.get('prereg') == 'docs/PREREG_R112_RELATIVIZATION.md')
+    check("사전등록이 측정보다 먼저 저장돼 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'PREREG_R112_RELATIVIZATION.md')))
+    check("다중비교를 보정한 문턱을 쓴다 (0.05/16)",
+          _rl162.N_TESTS == 16 and _rl162.Z_CRIT == 2.95)
+    check("판정은 반올림 값이 아니라 참 임계로 한다",
+          _rl162.Z_APPLIED >= _rl162.Z_CRIT_EXACT > _rl162.Z_CRIT)
+    check("표본 하한이 라운드 49 값(300건·100일) 그대로다",
+          _rl162.MIN_CASES == 300 and _rl162.MIN_DATES == 100)
+    check("비용·매수권 상수가 채택값 그대로다",
+          _rl162.COST == 0.36 and _rl162.BUY == 58.0)
+
+    _pr162 = _d162.get('paired') or {}
+    check("16개 시험을 전부 쟀다", len(_pr162) == 16, str(len(_pr162)))
+
+    # ── 핵심: 표본을 걸러 낸 연구는 그 거름 자체를 같이 재야 한다
+    _ct162 = _d162.get('raw_control') or {}
+    check("표본을 거른 시험마다 원값 대조가 있다",
+          set(_ct162) == set(_pr162),
+          f'대조 {len(_ct162)} · 시험 {len(_pr162)}')
+    check("대조가 실제 값을 담는다 (형태만 있는 게 아니다)",
+          all(isinstance(v.get('sign_z'), (int, float))
+              for v in _ct162.values()))
+    _cz162 = [v['sign_z'] for k, v in _ct162.items()
+              if k.startswith('업종내')]
+    check("원값만으로도 z 가 ±1.5 넘게 흔들린 사실이 남아 있다",
+          _cz162 and (max(_cz162) - min(_cz162)) > 1.5,
+          f'{min(_cz162):+.2f} ~ {max(_cz162):+.2f}' if _cz162 else '없음')
+
+    # ── B4 가 못 본 축(날짜)을 산출물에 적었는가
+    _dv162 = _d162.get('days_vs_r111') or {}
+    check("종목 수만이 아니라 날짜가 얼마나 줄었는지 적는다",
+          len(_dv162) == 8 and all('sector_pct' in v for v in _dv162.values()),
+          str(len(_dv162)))
+
+    # ── 시험하지 않은 것을 시험한 척하지 않았는가
+    check("같은 날 순위·평균빼기를 시험 대상에서 뺀 사실을 적는다",
+          '순서를 바꾸지 않' in str(_d162.get('not_tested')))
+
+    # ── verdict 를 믿지 않고 저장된 숫자로 다시 계산해 대조한다
+    _bad162 = []
+    for _k162, _v162 in _pr162.items():
+        _re162, _ = _rl162.judge(_v162, _v162.get('kept', 0),
+                                 _v162.get('dropped', 0))
+        if _re162 != (_d162.get('verdict') or {}).get(_k162):
+            _bad162.append(_k162)
+    check("저장된 판정이 저장된 숫자에서 다시 나온다",
+          not _bad162, str(_bad162[:3]))
+    check("통과 목록이 판정과 일치한다",
+          set(_d162.get('passed') or []) ==
+          {k for k, v in (_d162.get('verdict') or {}).items()
+           if all(v.values())})
+
+    # ── 봉인·관측 전용
+    _src162 = _read148(_os.path.join(PROJ, 'scripts',
+                                     'relativization_r112.py'))
+    check("블라인드를 읽지 않는다 (봉인 준수)",
+          "('train', 'valid')" in _src162 and 'blind' not in _src162)
+    check("자기이력이 과거만 쓴다 (오늘 값을 창에 넣은 뒤 계산하지 않는다)",
+          _src162.index("hist.append") > _src162.index("w = hist[-window:]"))
+    check("관측 전용임을 적는다",
+          '점수·게이트·문턱을 바꾸지 않는다' in str(_d162.get('note')))
+    check("결과 문서가 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'RESULT_R112_RELATIVIZATION.md')))
+    check("규칙 문서가 R112 를 반영한다",
+          '라운드 112' in _read148(_os.path.join(PROJ, 'CLAUDE.md')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
