@@ -1,0 +1,121 @@
+{
+ "made": "2026-08-16",
+ "paired": {
+  "days": 810,
+  "win": 355,
+  "lose": 393,
+  "tie": 62,
+  "sign_z": -1.39,
+  "median_hit_diff": 0.0,
+  "median_ev_diff": -0.314
+ },
+ "made_at": "2026-08-15T23:27:34+00:00",
+ "prereg": "docs/PREREG_R49_RANK_VALUE.md",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드 미사용",
+ "ledger_rows": 184759,
+ "cost": 0.36,
+ "buy_zone": 58.0,
+ "primary": {
+  "TOP1": {
+   "n": 2609,
+   "dates": 2609,
+   "hit": 58.3,
+   "wilson": 56.4,
+   "ev": -0.289,
+   "excess": -0.096
+  },
+  "TOP3": {
+   "n": 7274,
+   "dates": 2609,
+   "hit": 58.76,
+   "wilson": 57.6,
+   "ev": -0.256,
+   "excess": -0.063
+  },
+  "TOP5": {
+   "n": 11171,
+   "dates": 2609,
+   "hit": 58.18,
+   "wilson": 57.3,
+   "ev": -0.292,
+   "excess": -0.099
+  },
+  "후보 미추천": {
+   "n": 65509,
+   "dates": 810,
+   "hit": 60.5,
+   "wilson": 60.1,
+   "ev": -0.075,
+   "excess": 0.118
+  },
+  "전체 비교군": {
+   "n": 166132,
+   "dates": 2609,
+   "hit": 59.35,
+   "wilson": 59.1,
+   "ev": -0.193,
+   "excess": null
+  }
+ },
+ "primary_days": 2609,
+ "primary_boundary_ties": 926,
+ "verdict": {
+  "R1 TOP5 적중 − 미추천 ≥ 5.0%p": false,
+  "R2 TOP5 EV > 미추천 EV": false,
+  "R3 단조성 TOP1 ≥ TOP3 ≥ TOP5": false,
+  "R4 TOP5 초과수익 > 0": false,
+  "R5 표본 케이스≥300 · 날짜≥100": true
+ },
+ "passed": false,
+ "sensitivity_min10": {
+  "TOP1": {
+   "n": 928,
+   "dates": 928,
+   "hit": 59.16,
+   "wilson": 56.0,
+   "ev": -0.344,
+   "excess": -0.154
+  },
+  "TOP3": {
+   "n": 2784,
+   "dates": 928,
+   "hit": 59.41,
+   "wilson": 57.6,
+   "ev": -0.219,
+   "excess": -0.029
+  },
+  "TOP5": {
+   "n": 4640,
+   "dates": 928,
+   "hit": 58.51,
+   "wilson": 57.1,
+   "ev": -0.275,
+   "excess": -0.085
+  },
+  "후보 미추천": {
+   "n": 65426,
+   "dates": 747,
+   "hit": 60.48,
+   "wilson": 60.1,
+   "ev": -0.077,
+   "excess": 0.113
+  },
+  "전체 비교군": {
+   "n": 157913,
+   "dates": 928,
+   "hit": 59.41,
+   "wilson": 59.2,
+   "ev": -0.19,
+   "excess": null
+  }
+ },
+ "sensitivity_days": 2609,
+ "sensitivity_verdict": {
+  "R1 TOP5 적중 − 미추천 ≥ 5.0%p": false,
+  "R2 TOP5 EV > 미추천 EV": false,
+  "R3 단조성 TOP1 ≥ TOP3 ≥ TOP5": false,
+  "R4 TOP5 초과수익 > 0": false,
+  "R5 표본 케이스≥300 · 날짜≥100": true
+ },
+ "note": "관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 미달이면 기준을 내리지 않고 다음 라운드 과제로 적는다."
+}
