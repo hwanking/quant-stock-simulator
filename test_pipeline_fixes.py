@@ -6268,9 +6268,61 @@ print("\n" + "=" * 72)
 print("§110 이모지 배제 · 디자인 레퍼런스 (라운드 40)")
 print("=" * 72)
 import re as _re110
-_UIF110 = ['web_app.py', 'ui_kit.py', 'premarket.py', 'quant_indicators.py',
-           'market_attention.py', 'next_action.py', 'gaeum_ai.py',
-           'chart_pro.py', 'verdict_core.py', 'price_axes.py']
+import ast as _ast110                                             # noqa: E402
+
+
+def _reach110(entry='web_app.py'):
+    """web_app 에서 **전이적으로 닿는** 저장소 모듈을 유도한다.
+
+    ⚠️ 여기 파일 이름을 손으로 열 개 적어 뒀었다 (라운드 114b 까지).
+       그 목록 밖에 `report_generator.py`(레포트 제목 6개) ·
+       `leakage_guard.py`(면책 고지) · `llm_watch.py` 가 있었고, 거기
+       이모지 14개가 **영원히 검사받지 않은 채** 살아 있었다.
+       손으로 적은 목록은 반드시 낡는다 — 그래서 유도한다.
+       `st.` 호출 유무는 기준이 못 된다: verdict_core·price_axes 는 st 를
+       안 부르지만 그 문자열이 화면에 간다.
+    """
+    _tr = _subprocess110.run(['git', 'ls-files', '*.py'], cwd=PROJ,
+                             capture_output=True, text=True).stdout
+    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
+    _seen, _todo = set(), [entry]
+    while _todo:
+        _cur = _todo.pop()
+        if _cur in _seen:
+            continue
+        _seen.add(_cur)
+        try:
+            _t = _ast110.parse(open(_os.path.join(PROJ, _cur),
+                                    encoding='utf-8').read())
+        except Exception:                                         # noqa: BLE001
+            continue
+        _names = set()
+        for _n in _ast110.walk(_t):
+            if isinstance(_n, _ast110.Import):
+                _names |= {a.name.split('.')[0] for a in _n.names}
+            elif (isinstance(_n, _ast110.ImportFrom) and _n.module
+                  and not _n.level):
+                _names.add(_n.module.split('.')[0])
+        for _nm in _names:
+            for _cand in (f'{_nm}.py', f'{_nm}/__init__.py'):
+                if _cand in _files and _cand not in _seen:
+                    _todo.append(_cand)
+    return sorted(p for p in _seen if not p.startswith('scripts/'))
+
+
+import subprocess as _subprocess110                               # noqa: E402
+
+_UIF110 = _reach110()
+# 유도한 목록이 **줄어들면** 그것도 사고다 (import 를 지웠거나 유도가 깨졌거나).
+# 종전에 손으로 적었던 열 개는 지금도 전부 들어 있어야 한다.
+_HAND110 = ['web_app.py', 'ui_kit.py', 'premarket.py', 'quant_indicators.py',
+            'market_attention.py', 'next_action.py', 'gaeum_ai.py',
+            'chart_pro.py', 'verdict_core.py', 'price_axes.py']
+check("표시 파일 목록을 손으로 적지 않고 유도한다 (25개 이상)",
+      len(_UIF110) >= 25, f'{len(_UIF110)}개')
+check("유도한 목록이 종전 손 목록을 전부 포함한다",
+      not [f for f in _HAND110 if f not in _UIF110],
+      str([f for f in _HAND110 if f not in _UIF110]))
 # ⚠️ 이 범위에 **구멍이 있었다** (라운드 114). `⏳`(U+23F3) 가 스캔 요약
 #    칸에 살아 있었는데 이 패턴은 U+2300-23FF 블록을 통째로 안 봤다 —
 #    시계·모래시계·미디어 기호가 전부 그 안에 있다(⌛⏰⏱⏸⏹⏺).
@@ -6333,8 +6385,6 @@ def _display_emoji(path, src=None):
                              node.value.strip()[:70]))
     return hits
 
-
-import ast as _ast110                                             # noqa: E402
 
 # **검사가 아무것도 안 재고 초록불을 켜지 못하게** 한다 —
 # 심어 둔 이모지를 실제로 찾아내는지 먼저 확인한다.

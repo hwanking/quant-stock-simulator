@@ -121,4 +121,5 @@ if __name__ == '__main__':
     w = get_llm_watch()
     print('fetched_at:', w.get('fetched_at'), '| models:', len(w.get('models', [])))
     for m in w.get('models', [])[:12]:
-        print(f"  {m['id']}  dl {m['downloads']:,}  ♥{m['likes']}  {m['license']}")
+        print(f"  {m['id']}  dl {m['downloads']:,}  좋아요 {m['likes']}  "
+              f"{m['license']}")
