@@ -3946,6 +3946,29 @@ check("주요 버튼 글자를 배경 토큰으로 뒤집었다",
       and "color: {_TOK['bg1']} !important;" in _w81b)
 check("가늠 AI 알약 글자도 같이 뒤집었다",
       ".gn-ask-fab * {{ color:{_TOK['bg1']} !important; }}" in _w81b)
+
+# ── 라운드 117 — 라이트 토큰이 **다크 카드** 위에 얹히면 글자가 묻힌다
+#    카드는 양 테마 모두 다크로 고정인데(web_app 250행), 인라인 color 를
+#    라이트 등가로 되돌리는 규칙 아홉 덩어리가 **전부 그 가드를 빠뜨리고**
+#    있었다. 값으로 확인한다 — 라이트 토큰의 다크 카드 위 대비.
+_lowdark81 = []
+for _k81b in ('tx1', 'tx2', 'tx3', 'brand', 'up', 'down', 'pos', 'warn',
+              'neg'):
+    _r81b = _ratio81(_uk81.LIGHT[_k81b], _uk81.DARK['card'])
+    if _r81b < 4.5:
+        _lowdark81.append(f'{_k81b}={_r81b:.2f}')
+check("라이트 토큰은 다크 카드에서 읽히지 않는다 (그래서 가드가 필요하다)",
+      len(_lowdark81) == 9,
+      f'미달 {len(_lowdark81)}/9 — {" ".join(_lowdark81[:4])}')
+check("색 되돌림 규칙을 손으로 적지 않고 생성한다",
+      'def _recolor(pairs):' in _w81b and '{_recolor([' in _w81b)
+check("되돌림 규칙에 다크 카드 가드가 있다",
+      "_CARD_GUARD = (':not(div[style*=\"background\"] *)'" in _w81b
+      and '{_CARD_GUARD}' in _w81b)
+# 손으로 적힌 옛 덩어리가 되살아나지 않았는가 (가드 없는 형태)
+_bare81 = _re.findall(r'\.stApp \[style\*="color:[^"]+"\],\n', _w81b)
+check("가드 없는 옛 되돌림 셀렉터가 남아 있지 않다",
+      not _bare81, f'{len(_bare81)}개')
 # 라운드 115 — 여기가 `'#161D2A' in _cfg81` 을 요구하고 있었다. 그 값은
 # **카드 표면**인데 ui_kit 팔레트의 카드 토큰은 #16181F 라, 화면에 카드가
 # 두 계열로 갈려 있었다(45 vs 30). 이름(리터럴)이 아니라 **값이 팔레트와
@@ -4060,8 +4083,14 @@ check("엔진 산식은 이번 라운드에서 건드리지 않았다 — 화면
 # 라이트 모드 회귀 — 하드코딩 다크 색이 다시 스며들지 않게 잠근다
 check("라이트 CSS 가 토큰 참조를 쓴다 (하드코딩 hex 아님)",
       ".stApp {{ background-color: {_TOK['bg1']} !important; }}" in _w83)
+# 라운드 117 — 이 검사가 **옛 주석 문구**를 요구하고 있었다
+# ('글자 토큰 3단만 라이트 등가로 되돌린다'). 지키려는 것은 문구가 아니라
+# **규칙이 있다는 사실**이므로 생성기와 색 짝으로 확인한다. 손으로 적힌
+# 아홉 덩어리를 생성으로 바꾸면서 그 문구가 사라졌다 (§6).
 check("인라인 다크 글자 토큰을 라이트 등가로 되돌리는 규칙 존재",
-      '글자 토큰 3단만 라이트 등가로 되돌린다' in _w83)
+      '{_recolor([' in _w83
+      and "('#9DAABC', _TOK['tx2'])" in _w83
+      and "('#F3F6FA', _TOK['tx1'])" in _w83)
 check("고정 다크 카드 안쪽은 다시 밝게 (그라디언트 배너 포함)",
       'div[style*="rgb(22, 29, 42)"] p' in _w83)
 check("버튼에 다크 특례를 두지 않는다", '특례를 두지 않는 쪽이 결국 덜 깨진다' in _w83)
