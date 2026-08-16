@@ -148,7 +148,7 @@ class LeakageGuard:
                 violations.append(pattern)
                 cleaned_text = re.sub(pattern, replacement, cleaned_text)
                 
-        disclaimer_header = "⚠️ 법적 고지 및 면책 조항 (Disclaimer)"
+        disclaimer_header = "법적 고지 및 면책 조항 (Disclaimer)"
         if disclaimer_header not in cleaned_text:
             cleaned_text += f"\n\n{disclaimer_header}\n본 분석 레포트는 오염이 정제된 이중 시간 무결 시계열 데이터와 계량 퀀트 알고리즘에 기초하여 생성된 투자 참고용 정보이며, 특정 종목 매수/매도 권유가 아닙니다. 투자 판단과 손익에 대한 최종 책임은 투자자 본인에게 있습니다."
             

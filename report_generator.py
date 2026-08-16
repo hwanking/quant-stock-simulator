@@ -87,11 +87,11 @@ class QuantReportGenerator:
         block_str = " / ".join(blocks[:5]) if blocks else "없음 (전 조건 통과)"
 
         report_md = f"""
-### 📋 [{stock_name} ({symbol})] AI 퀀트 정밀 종합 분석 레포트
+### [{stock_name} ({symbol})] AI 퀀트 정밀 종합 분석 레포트
 
 ---
 
-#### 1. 🎯 종합 결단 시그널 및 밸류에이션 위치
+#### 1. 종합 결단 시그널 및 밸류에이션 위치
 - **자산 구분**: `{unit_currency}` | **현재가**: **{curr_p_formatted}**
 - **최종 행동 판정**: **`[{action}]`** (최종 행동점수 {_num(fs.get('final_action_score'), na='미산출')}점)
 - **밸류에이션 판정**: **`[{val_eval.get('upside_eval', '판단 보류')}]`** (현재가 대비 {_pct(val_eval.get('upside_pct'))})
@@ -99,7 +99,7 @@ class QuantReportGenerator:
 
 ---
 
-#### 2. 🏛️ 펀더멘털 및 적정가
+#### 2. 펀더멘털 및 적정가
 - **PER**: `{_num(per, ".2f", "배")}` | **PBR**: `{_num(pbr, ".2f", "배")}` | **BPS**: `{_num(bps, ",.0f", unit_str)}` | **ROE**: `{_num(roe, ".2f", "%")}`
 - **부채비율**: `{_num(debt_ratio, ".1f", "%")}` | **Piotroski F-Score**: `{_num(fundamental_dict.get('piotroski_f_score'), ".0f", "/9")}`
 - **시장조정 적정가**: **`{_num(fair_disp, ",.0f", unit_str, na="산출 보류 (신뢰도 미달)")}`**
@@ -110,7 +110,7 @@ class QuantReportGenerator:
 
 ---
 
-#### 3. 🔮 자기유사 과거 백테스트 관찰 통계 (표본 통제)
+#### 3. 자기유사 과거 백테스트 관찰 통계 (표본 통제)
 - **유효 패턴 표본 수**: `{match_cnt}건` (`{tier_label}`)
 - **예측 상승확률**: **`{pred_prob_str}`**
 - **과거 관찰 성과**: 평균 `{_pct(sim_res.get('mean_perf'))}` | 중앙값 `{_pct(sim_res.get('median_perf'))}` | 평균 MDD `{_pct(sim_res.get('mdd'))}`
@@ -120,7 +120,7 @@ class QuantReportGenerator:
 
 ---
 
-#### 4. 🌊 기술적 지표 실측치
+#### 4. 기술적 지표 실측치
 - **RSI 14**: `{_num(rsi_val, ".1f")}`
 - **거래량 비율 (20일 평균 대비)**: `{_num(vol_ratio, ".2f", "배")}`
 - **20일선 / 60일선 대비**: `{_num(tech_row.get('sma_20'), ",.0f", unit_str)}` / `{_num(tech_row.get('sma_60'), ",.0f", unit_str)}`
@@ -128,7 +128,7 @@ class QuantReportGenerator:
 
 ---
 
-#### 5. 🎯 목표가·손절가 및 손익비
+#### 5. 목표가·손절가 및 손익비
 - **1차 목표가**: `{_num(tp1, ",.0f", unit_str)}` | **2차 목표가**: `{_num(tp2, ",.0f", unit_str)}`
 - **손절가**: `{_num(sl, ",.0f", unit_str)}`
 - **손익비 (Reward/Risk)**: **`{_num(rr, ".2f")}`**
@@ -136,7 +136,7 @@ class QuantReportGenerator:
 
 ---
 
-#### 6. 🛡️ 무결성 감사 및 게이트 판정
+#### 6. 무결성 감사 및 게이트 판정
 - **분석 기준일 (t_ref)**: `{t_ref_val}`
 - **차단된 미래 데이터 수**: `{blocked_cnt}건` (available_date 통제)
 - **Shapley-DCLR 미래 누수율**: `{shapley}`
