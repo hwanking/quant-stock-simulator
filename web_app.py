@@ -245,6 +245,35 @@ def _sel(prop, colors, extra=''):
     return ',\n'.join(out)
 
 
+#: 라이트에서 **다크 카드 안**은 건드리지 않는다는 가드 (라운드 117).
+#  카드는 양 테마 모두 다크로 고정인데(250행), 라이트 토큰은 어두운 값이라
+#  카드 위에 얹으면 글자가 묻힌다 — 계산으로 확인했다:
+#      tx1 1.00 · tx2 2.09 · tx3 3.20 · 의미색 3.42~3.46  (전부 AA 미달)
+#  다크 값으로 두면 5.24~14.85 다. 그래서 인라인 배경을 가진 요소의
+#  자손은 원래 색을 지킨다.
+_CARD_GUARD = (':not(div[style*="background"] *)'
+               ':not(table[style*="background"] *)')
+
+
+def _recolor(pairs):
+    """인라인 hex 로 박힌 글자색을 라이트 등가로 되돌리는 규칙을 만든다.
+
+    손으로 적으면 아홉 덩어리 70여 줄이 되고, 실제로 그렇게 적혀 있다가
+    **아홉 곳 전부 가드를 빠뜨렸다** (라운드 117에서 발견). 생성으로 바꾸면
+    가드를 한 곳에서만 관리한다.
+
+    pairs: [(옛 hex, 라이트에서 쓸 토큰 값), ...]
+    """
+    out = []
+    for old, new in pairs:
+        sels = []
+        for v in (old.upper(), old.lower(), _hex_to_rgb_str(old)):
+            for sp in ('', ' '):
+                sels.append(f'.stApp [style*="color:{sp}{v}"]{_CARD_GUARD}')
+        out.append(',\n'.join(sels) + f' {{\n    color: {new} !important; }}')
+    return '\n'.join(out)
+
+
 # 카드 표면은 양 테마 모두 '단일 다크'로 고정한다.
 # 라이트에서 이 카드들을 흰색으로 바꾸면, 내부 글자색이 밝은 색으로 하드코딩돼
 # 있어 통째로 사라진다(과거 라이트 모드 실패의 원인). 흰 배경 위 다크 카드는
@@ -858,74 +887,20 @@ if _theme == 'light':
         hr {{ border-color: {_TOK['border']} !important; }}
 
         /* 인라인 color 가 박힌 글자는 위 가드를 통과해 라이트에서도
-           다크 색으로 남는다. 글자 토큰 3단만 라이트 등가로 되돌린다
-           (의미색 상승·하락·경고는 건드리지 않는다). */
-        .stApp [style*="color:#F3F6FA"],
-        .stApp [style*="color: #F3F6FA"],
-        .stApp [style*="color:#f3f6fa"],
-        .stApp [style*="color: #f3f6fa"],
-        .stApp [style*="color:rgb(243, 246, 250)"],
-        .stApp [style*="color: rgb(243, 246, 250)"] {{
-            color: {_TOK['tx1']} !important; }}
-        .stApp [style*="color:#9DAABC"],
-        .stApp [style*="color: #9DAABC"],
-        .stApp [style*="color:#9daabc"],
-        .stApp [style*="color: #9daabc"],
-        .stApp [style*="color:rgb(157, 170, 188)"],
-        .stApp [style*="color: rgb(157, 170, 188)"] {{
-            color: {_TOK['tx2']} !important; }}
-        .stApp [style*="color:#7C8AA0"],
-        .stApp [style*="color: #7C8AA0"],
-        .stApp [style*="color:#7c8aa0"],
-        .stApp [style*="color: #7c8aa0"],
-        .stApp [style*="color:rgb(124, 138, 160)"],
-        .stApp [style*="color: rgb(124, 138, 160)"] {{
-            color: {_TOK['tx3']} !important; }}
+           다크 색으로 남는다. 라이트 등가로 되돌리되 **다크 카드 안은
+           빼야 한다** — 카드는 양 테마 모두 다크인데(250행) 라이트 토큰은
+           어두운 값이라 카드 위에 얹으면 글자가 묻힌다.
 
-        /* 의미색(상승·하락·좋음·경고)도 라이트 등가로 — 다크 팔레트
-           값은 흰 카드 위에서 대비가 3.4 안팎으로 떨어진다 (실측). */
-        .stApp [style*="color:#4C8DFF"],
-        .stApp [style*="color: #4C8DFF"],
-        .stApp [style*="color:#4c8dff"],
-        .stApp [style*="color: #4c8dff"],
-        .stApp [style*="color:rgb(76, 141, 255)"],
-        .stApp [style*="color: rgb(76, 141, 255)"] {{
-            color: {_TOK['brand']} !important; }}
-        .stApp [style*="color:#35C98B"],
-        .stApp [style*="color: #35C98B"],
-        .stApp [style*="color:#35c98b"],
-        .stApp [style*="color: #35c98b"],
-        .stApp [style*="color:rgb(53, 201, 139)"],
-        .stApp [style*="color: rgb(53, 201, 139)"] {{
-            color: {_TOK['pos']} !important; }}
-        .stApp [style*="color:#F2B84B"],
-        .stApp [style*="color: #F2B84B"],
-        .stApp [style*="color:#f2b84b"],
-        .stApp [style*="color: #f2b84b"],
-        .stApp [style*="color:rgb(242, 184, 75)"],
-        .stApp [style*="color: rgb(242, 184, 75)"] {{
-            color: {_TOK['warn']} !important; }}
-        .stApp [style*="color:#F26161"],
-        .stApp [style*="color: #F26161"],
-        .stApp [style*="color:#f26161"],
-        .stApp [style*="color: #f26161"],
-        .stApp [style*="color:rgb(242, 97, 97)"],
-        .stApp [style*="color: rgb(242, 97, 97)"] {{
-            color: {_TOK['neg']} !important; }}
-        .stApp [style*="color:#FF453A"],
-        .stApp [style*="color: #FF453A"],
-        .stApp [style*="color:#ff453a"],
-        .stApp [style*="color: #ff453a"],
-        .stApp [style*="color:rgb(255, 69, 58)"],
-        .stApp [style*="color: rgb(255, 69, 58)"] {{
-            color: {_TOK['up']} !important; }}
-        .stApp [style*="color:#0A84FF"],
-        .stApp [style*="color: #0A84FF"],
-        .stApp [style*="color:#0a84ff"],
-        .stApp [style*="color: #0a84ff"],
-        .stApp [style*="color:rgb(10, 132, 255)"],
-        .stApp [style*="color: rgb(10, 132, 255)"] {{
-            color: {_TOK['down']} !important; }}
+           라운드 117 전까지 이 아홉 덩어리가 손으로 적혀 있었고 **아홉 곳
+           전부 그 가드를 빠뜨렸다.** 계산으로 확인한 라이트 토큰의 다크
+           카드 위 대비: tx1 1.00 · tx2 2.09 · tx3 3.20 · 의미색 3.42~3.46
+           — 전부 AA 미달이고 tx1 은 사실상 보이지 않는다.
+           생성으로 바꿔 가드를 한 곳(_CARD_GUARD)에서만 관리한다. */
+{_recolor([('#F3F6FA', _TOK['tx1']), ('#9DAABC', _TOK['tx2']),
+           ('#7C8AA0', _TOK['tx3']), ('#4C8DFF', _TOK['brand']),
+           ('#35C98B', _TOK['pos']), ('#F2B84B', _TOK['warn']),
+           ('#F26161', _TOK['neg']), ('#FF453A', _TOK['up']),
+           ('#0A84FF', _TOK['down'])])}
 
         /* 링크 — 기본 하늘색은 흰 배경에서 미달 */
         .stApp a:not(.qnav a) {{ color: {_TOK['brand']} !important; }}
