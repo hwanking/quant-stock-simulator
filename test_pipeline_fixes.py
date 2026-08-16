@@ -6271,10 +6271,29 @@ import re as _re110
 _UIF110 = ['web_app.py', 'ui_kit.py', 'premarket.py', 'quant_indicators.py',
            'market_attention.py', 'next_action.py', 'gaeum_ai.py',
            'chart_pro.py', 'verdict_core.py', 'price_axes.py']
+# ⚠️ 이 범위에 **구멍이 있었다** (라운드 114). `⏳`(U+23F3) 가 스캔 요약
+#    칸에 살아 있었는데 이 패턴은 U+2300-23FF 블록을 통째로 안 봤다 —
+#    시계·모래시계·미디어 기호가 전부 그 안에 있다(⌛⏰⏱⏸⏹⏺).
+#    가드가 **자기가 만들어질 때 있던 이모지만** 잡고 있었던 것이다.
+#    이름을 늘리는 대신 계열을 통째로 덮는다.
 _EMO110 = _re110.compile(
     '[\U0001F300-\U0001FAFF\U00002600-\U000027BF'
-    '\U0001F1E6-\U0001F1FF\U00002B00-\U00002BFF]')
+    '\U0001F1E6-\U0001F1FF\U00002B00-\U00002BFF'
+    '\U00002300-\U000023FF\U000020E3\U0000FE0F'
+    '\U00002900-\U0000297F]')
 _KEEP110 = set('→←↑↓↔·—–…‘’“”×÷≥≤±✓')
+# 범위를 넓히기만 하고 끝내면 다음에 또 구멍이 난다 — **패턴이 실제로
+# 그 글자를 잡는지** 값으로 확인한다 (memory: 가드는 만들어진 실패만 잡는다)
+check("이모지 패턴이 시계·모래시계 계열을 잡는다 (U+2300-23FF)",
+      all(_EMO110.search(_c110) for _c110 in ('⏳', '⌛', '⏰', '⏱')),
+      '못 잡는 글자: '
+      + str([_c110 for _c110 in ('⏳', '⌛', '⏰', '⏱')
+             if not _EMO110.search(_c110)]))
+check("이모지 패턴이 종전 계열도 계속 잡는다",
+      all(_EMO110.search(_c110) for _c110 in ('⚠', '📋', '✅', '🔴')))
+check("정상 기호는 여전히 통과시킨다 (화살표·중점·말줄임)",
+      all((not _EMO110.search(_c110)) or _c110 in _KEEP110
+          for _c110 in ('→', '·', '—', '…', '≥', '±')))
 
 
 def _display_emoji(path):
@@ -10790,6 +10809,61 @@ else:
     _src163 = _read148(_os.path.join(PROJ, 'scripts', 'power_r113.py'))
     check("블라인드를 읽지 않는다 (봉인 준수)",
           "('train', 'valid')" in _src163 and 'blind' not in _src163)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §164 — 후보 분류를 두 경로로 세지 않는가 (라운드 114)
+#
+#   서버를 띄우고 나서야 보였다. 회귀는 전건 통과였고 렌더 예외도 없었다.
+#
+#     "조건 충족을 기다리는 후보 1종목" · "추천·대기에서 뺀 4종목"
+#     그 바로 아래 — "눌림 대기 0개 · 관찰 후보 0개 · 추천 제외 5개"
+#
+#   합계는 5 로 같은데 **내역이 달랐다.** 목록은 verdict_core 의
+#   bucket/actionable 로 갈리고, 요약 칸은 스캐너의 옛 `cat` 문자열을
+#   따로 세고 있었다. §4 가 금지한 바로 그것이다 — 경로가 둘이면
+#   한쪽만 고치는 일이 생긴다.
+#
+#   이 절은 **경로가 하나인지**를 소스에서 확인한다. 숫자를 다시 세지
+#   않는다 — 세는 코드를 베끼면 아무것도 증명하지 못한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§164 후보 분류 — 화면 값이 한 곳에서 나오는가")
+print("=" * 72)
+_wa164 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_code164 = [ln for _i, ln in _la135.code_lines('web_app.py')]
+
+# ① 옛 경로가 되살아나지 않았는가 — `cat` 문자열로 분류를 세는 코드
+_revive164 = [ln.strip() for ln in _code164
+              if 'scan_results' in ln and '_cat(' in ln
+              and any(w in ln for w in ('눌림 대기', '관찰 후보', '추천 제외'))]
+check("요약 칸을 옛 `cat` 문자열로 다시 세지 않는다",
+      not _revive164, str(_revive164[:2]))
+
+# ② 요약 칸이 목록을 가른 그 분류를 쓰는가
+check("요약 칸이 verdict_core 분류(_live/_wait/_dropped)에서 나온다",
+      "_bucket_counts = {'실행 가능': len(_live)," in _wa164
+      and "'조건 대기': len(_wait)," in _wa164
+      and "'추천·대기에서 뺌': len(_dropped)}" in _wa164)
+
+# ③ 분류가 없으면 0 을 찍지 않는가 (§3 — 0 은 '없다'로 읽힌다)
+check("분류를 못 만들었으면 숫자를 지어내지 않는다",
+      '_bucket_counts is None' in _wa164
+      and '산출하지 않았습니다' in _wa164)
+
+# ④ 아이콘은 킷에서 가져오는가 (§5)
+#    이모지 자체는 §110 이 계열 통째로 본다 — 여기서 또 세지 않는다.
+#    (이 결함을 §110 이 놓친 이유가 바로 '범위를 좁게 잡아서' 였다.
+#     같은 실수를 여기서 반복하지 않는다)
+check("요약 칸이 ui_kit 의 Lucide 아이콘을 쓴다",
+      "_uk._icon(_bc_icon[_k]" in _wa164)
+
+# ⑤ 색을 그 자리에서 새로 만들지 않는가 (§5 — 팔레트가 유일 출처)
+_hex164 = [ln.strip() for ln in _code164
+           if ('_bc_cells' in ln or '_bucket_counts' in ln)
+           and _re.search(r"#[0-9A-Fa-f]{6}", ln)]
+check("요약 칸이 팔레트 밖 색을 만들지 않는다",
+      not _hex164, str(_hex164[:2]))
 
 
 print()

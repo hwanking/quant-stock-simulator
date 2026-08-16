@@ -2486,9 +2486,15 @@ if st.session_state.get('show_screener', False):
             def _cat(row):
                 return str(row.get('cat') or '')
             recommended = [r for r in scan_results if "추천주" in _cat(r)]
-            wait_pullback = sum(1 for r in scan_results if "눌림 대기" in _cat(r))
-            watch_list = sum(1 for r in scan_results if "관찰 후보" in _cat(r))
-            excluded = sum(1 for r in scan_results if "추천 제외" in _cat(r))
+            # ⚠️ 아래 요약 칸은 예전에 scan_results 의 `cat` 문자열을 따로
+            #    세었다. 그런데 목록 자체는 verdict_core 의 bucket/actionable
+            #    로 갈린다 — **경로가 둘이라 화면이 스스로 모순됐다.**
+            #    실제로 "조건 충족을 기다리는 후보 1종목 · 뺀 4종목" 아래에
+            #    "눌림 대기 0 · 관찰 후보 0 · 추천 제외 5" 가 찍혔다.
+            #    합계만 같고 내역이 달랐다 (§4 — 화면 값은 한 곳에서 나온다).
+            #    이제 목록을 만든 그 분류를 그대로 받아 쓴다. 분류가 안 만들
+            #    어졌으면 숫자를 지어내지 않고 그 사실을 적는다 (§3).
+            _bucket_counts = None
 
             top_recs = recommended[:3]
 
@@ -2737,6 +2743,11 @@ if st.session_state.get('show_screener', False):
                     else:
                         _dropped.append((_x, _bk or '판정 불가',
                                          str(_cr.get('exclude_reason') or '')))
+                # 아래 요약 칸이 **이 분류를 그대로** 쓴다 (§4). 목록과 숫자가
+                # 같은 곳에서 나오므로 둘이 어긋날 수 없다.
+                _bucket_counts = {'실행 가능': len(_live),
+                                  '조건 대기': len(_wait),
+                                  '추천·대기에서 뺌': len(_dropped)}
 
                 def _render_att(items, key_prefix):
                     _cols = []
@@ -2960,13 +2971,30 @@ if st.session_state.get('show_screener', False):
                     
                 st.info("**TIP:** 위 표에서 종목명 버튼을 클릭하면, 해당 종목이 자동으로 선택되고 하단의 상세 분석 화면이 즉시 갱신됩니다.")
                 
-            st.markdown(f"""
-            <div style='display:flex; justify-content:space-around; background:#161D2A; padding:12px; border-radius:8px; margin-top:16px; '>
-                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>⏳ 눌림 대기</span><br><b style='color:#F3F6FA;'>{wait_pullback}개</b></div>
-                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>관찰 후보</span><br><b style='color:#F3F6FA;'>{watch_list}개</b></div>
-                <div style='text-align:center;'><span style='color:#9DAABC; font-size:15px;'>추천 제외</span><br><b style='color:#F3F6FA;'>{excluded}개</b></div>
-            </div>
-            """, unsafe_allow_html=True)
+            # ── 정밀분석 종목 분류 요약 ────────────────────────────────────
+            # 위 목록을 가른 **그 분류**를 그대로 센다. 이모지 대신
+            # ui_kit 의 Lucide 아이콘을 쓴다 (§5).
+            if _bucket_counts is None:
+                # 분류를 못 만들었으면 0 을 찍지 않는다 — 0 은 '없다'로 읽힌다
+                st.caption("정밀분석 종목 분류 요약은 후보 목록을 만들지 "
+                           "못해 산출하지 않았습니다 (숫자를 지어내지 "
+                           "않습니다).")
+            else:
+                _bc_icon = {'실행 가능': 'ShieldCheck',
+                            '조건 대기': 'Clock3',
+                            '추천·대기에서 뺌': 'ShieldAlert'}
+                _bc_cells = "".join(
+                    f"<div style='text-align:center;'>"
+                    f"<span style='color:{_TOK['tx2']}; font-size:13px; "
+                    f"display:inline-flex; align-items:center; gap:6px;'>"
+                    f"{_uk._icon(_bc_icon[_k], _TOK['tx2'], 14)}{_k}</span>"
+                    f"<br><b style='color:{_TOK['tx1']};'>{_v}개</b></div>"
+                    for _k, _v in _bucket_counts.items())
+                st.markdown(
+                    f"<div style='display:flex; justify-content:space-around; "
+                    f"background:{_TOK['bg2']}; padding:12px; "
+                    f"border-radius:8px; margin-top:16px;'>{_bc_cells}</div>",
+                    unsafe_allow_html=True)
 
             # ── 📋 개장 전 확정 리포트 — 스캔 결과를 당일 파일로 고정 ──────────
             import premarket as _pm
