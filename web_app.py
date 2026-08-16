@@ -2983,16 +2983,25 @@ if st.session_state.get('show_screener', False):
                 _bc_icon = {'실행 가능': 'ShieldCheck',
                             '조건 대기': 'Clock3',
                             '추천·대기에서 뺌': 'ShieldAlert'}
+                # ⚠️ 여기 색을 `_TOK`(테마별 토큰)으로 썼다가 되돌렸다.
+                #    이 파일 250행이 이유를 적어 뒀다 — **카드 표면은 양
+                #    테마 모두 단일 다크로 고정**한다. 라이트에서 카드만
+                #    희어지면 옆의 카드들과 두 종류가 되고(§5), 내부 글자색이
+                #    밝게 하드코딩된 카드는 통째로 사라진다.
+                #    그래서 표면은 _CARD_BG, 글자는 다크 팔레트를 쓴다.
+                #    (색을 새로 만들지 않는 것과, 테마를 따라가는 것은
+                #     다른 이야기다 — 여기서 지켜야 하는 것은 앞의 것이다)
+                _bc_tx2, _bc_tx1 = _uk.DARK['tx2'], _uk.DARK['tx1']
                 _bc_cells = "".join(
                     f"<div style='text-align:center;'>"
-                    f"<span style='color:{_TOK['tx2']}; font-size:13px; "
+                    f"<span style='color:{_bc_tx2}; font-size:13px; "
                     f"display:inline-flex; align-items:center; gap:6px;'>"
-                    f"{_uk._icon(_bc_icon[_k], _TOK['tx2'], 14)}{_k}</span>"
-                    f"<br><b style='color:{_TOK['tx1']};'>{_v}개</b></div>"
+                    f"{_uk._icon(_bc_icon[_k], _bc_tx2, 14)}{_k}</span>"
+                    f"<br><b style='color:{_bc_tx1};'>{_v}개</b></div>"
                     for _k, _v in _bucket_counts.items())
                 st.markdown(
                     f"<div style='display:flex; justify-content:space-around; "
-                    f"background:{_TOK['bg2']}; padding:12px; "
+                    f"background:{_CARD_BG}; padding:12px; "
                     f"border-radius:8px; margin-top:16px;'>{_bc_cells}</div>",
                     unsafe_allow_html=True)
 
