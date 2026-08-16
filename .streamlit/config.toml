@@ -22,8 +22,12 @@ maxUploadSize = 20
 #    한다 — 그래서 팔레트 값(ui_kit.DARK['card'])으로 맞춘다.
 #    이 파일은 toml 이라 파이썬 상수를 못 읽는다. 대신 회귀가 두 값이
 #    같은지 **값으로** 대조한다 (§81).
+#    primaryColor 도 같은 이유로 팔레트 브랜드에 맞춘다 (라운드 116).
+#    여기가 #4C8DFF 였는데 팔레트 brand 는 #488AF7 이라 주요 버튼만 다른
+#    파랑이었다. ui_kit 주석이 적어 뒀듯 brand 는 "다크의 모든 표면에서
+#    4.5 를 넘기려고 명도를 조정한 값" 이다 — 그 보정을 버리면 안 된다.
 base = "dark"
-primaryColor = "#4C8DFF"
+primaryColor = "#488AF7"
 backgroundColor = "#0B0F17"
 secondaryBackgroundColor = "#16181F"
 textColor = "#F3F6FA"
