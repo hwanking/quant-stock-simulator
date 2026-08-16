@@ -3922,8 +3922,30 @@ check("팔레트는 킷이 유일 출처 — web_app 이 직접 정의하지 않
       '_pal(_uk.DARK)' in _w81 and '_pal(_uk.LIGHT)' in _w81)
 _cfg81 = open(_os.path.join(PROJ, ".streamlit", "config.toml"),
               encoding='utf-8').read()
-check("Streamlit 자체 크롬도 같은 토큰 — 배경·강조색 일치",
-      '#0B0F17' in _cfg81 and '#4C8DFF' in _cfg81)
+check("Streamlit 자체 크롬도 같은 토큰 — 배경 일치",
+      '#0B0F17' in _cfg81)
+# 라운드 116 — primaryColor 가 #4C8DFF 라 주요 버튼만 팔레트 밖 파랑이었다.
+# ui_kit 의 brand 는 "다크의 모든 표면에서 4.5 를 넘기려고 명도를 조정한
+# 값" 이므로 그쪽에 맞춘다. 여기도 리터럴이 아니라 **값**으로 본다.
+_pri81 = _re.search(r'primaryColor\s*=\s*"(#[0-9A-Fa-f]{6})"', _cfg81)
+check("Streamlit 강조색이 ui_kit 브랜드 토큰과 같은 값이다",
+      bool(_pri81) and _pri81.group(1).upper() == _uk81.DARK['brand'].upper(),
+      f'config={_pri81.group(1) if _pri81 else "없음"} · '
+      f'팔레트={_uk81.DARK["brand"]}')
+# 브랜드 채움 위 글자는 밝은 색으로 AA 를 못 넘는다 — 어두운 글자여야 한다.
+# 숫자로 확인한다 (흰색 3.36 · 배경토큰 5.86)
+_wht81 = _ratio81(_uk81.DARK['tx1'], _uk81.DARK['brand'])
+_drk81 = _ratio81(_uk81.DARK['bg'], _uk81.DARK['brand'])
+check("브랜드 채움 위에서는 어두운 글자만 AA 를 넘는다 (그래서 뒤집었다)",
+      _wht81 < 4.5 <= _drk81,
+      f'밝은 글자 {_wht81:.2f} · 어두운 글자 {_drk81:.2f}')
+_w81b = _read148(_os.path.join(PROJ, 'web_app.py')) \
+    if '_read148' in dir() else _w81
+check("주요 버튼 글자를 배경 토큰으로 뒤집었다",
+      "button[data-testid=\"stBaseButton-primary\"]" in _w81b
+      and "color: {_TOK['bg1']} !important;" in _w81b)
+check("가늠 AI 알약 글자도 같이 뒤집었다",
+      ".gn-ask-fab * {{ color:{_TOK['bg1']} !important; }}" in _w81b)
 # 라운드 115 — 여기가 `'#161D2A' in _cfg81` 을 요구하고 있었다. 그 값은
 # **카드 표면**인데 ui_kit 팔레트의 카드 토큰은 #16181F 라, 화면에 카드가
 # 두 계열로 갈려 있었다(45 vs 30). 이름(리터럴)이 아니라 **값이 팔레트와

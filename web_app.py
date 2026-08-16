@@ -646,12 +646,18 @@ st.markdown(f"""
     }}
 
     /* 크기·굵기를 직접 지정한 요소(로고 워드마크 등)는 제외한다.
-       일괄 규칙이 로고까지 13px 로 눌러 마크(34px) 옆에서 찌그러졌었다. */
-    [data-testid="stSidebar"] p:not([style*="font-size"]),
-    [data-testid="stSidebar"] span:not([style*="font-size"]),
-    [data-testid="stSidebar"] label:not([style*="font-size"]),
-    [data-testid="stSidebar"] li,
-    [data-testid="stSidebar"] small,
+       일괄 규칙이 로고까지 13px 로 눌러 마크(34px) 옆에서 찌그러졌었다.
+
+       주의 — **버튼 안도 제외한다** (라운드 116). 이 규칙이 `!important` 로
+          사이드바의 모든 p·span 을 tx2 로 칠하는데, Streamlit 은 버튼
+          라벨을 <p> 로 그린다. 그래서 파란 '최신화' 버튼 위 글자가 흰색이
+          아니라 tx2 로 덮여 **대비 1.23** 이 나왔다 — 회색 글자가 파란
+          배경에 거의 안 보인다. 버튼은 자기 배경과 자기 글자색을 갖는다. */
+    [data-testid="stSidebar"] p:not([style*="font-size"]):not(button *),
+    [data-testid="stSidebar"] span:not([style*="font-size"]):not(button *),
+    [data-testid="stSidebar"] label:not([style*="font-size"]):not(button *),
+    [data-testid="stSidebar"] li:not(button *),
+    [data-testid="stSidebar"] small:not(button *),
     [data-testid="stSidebar"] div[data-testid="stCaptionContainer"] {{
         color: {_TOK['tx2']} !important;
         font-size: 13px !important;
@@ -741,6 +747,20 @@ st.markdown(f"""
     .stButton > button p {{
         color: inherit !important;
         font-weight: bold !important;
+    }}
+
+    /* 주요(primary) 버튼 — 브랜드 파랑 채움 위 글자는 **어둡게** (라운드 116)
+       실측: 흰 글자가 3.20:1 로 AA 미달이었고, 사이드바 일괄 규칙에 덮여
+       실제로는 tx2 가 얹혀 **1.23:1** 이었다(회색 글자가 파란 배경에 거의
+       안 보였다). 더 어두운 파랑을 새로 만들지 않고(§5) 글자를 뒤집는다.
+       → 6.15:1 */
+    .stApp button[data-testid="stBaseButton-primary"],
+    .stApp button[kind="primary"] {{
+        color: {_TOK['bg1']} !important;
+    }}
+    .stApp button[data-testid="stBaseButton-primary"] *,
+    .stApp button[kind="primary"] * {{
+        color: {_TOK['bg1']} !important;
     }}
 
     h1, h2, h3, h4, h5, h6 {{ color: #ffffff !important; font-weight: 700 !important; }}
@@ -5505,11 +5525,17 @@ st.markdown(f"""
 # 좁은 화면에서도 남으므로 고정 요약 패널(1760px 이상)과 달리 항상 뜬다.
 st.markdown(f"""
 <style>
+/* 주의 — 글자를 **어둡게** 쓴다 (라운드 116). 브랜드 파랑은 밝은 축이라
+   그 위의 흰 글자가 3.36:1 밖에 안 나온다(AA 4.5 미달 — 실측 2.81).
+   더 어두운 파랑을 새로 만드는 것은 §5 가 금지하므로("화면 어디서도 새
+   색을 만들지 않는다") 글자를 배경 토큰으로 뒤집는다 → 5.86:1. */
 .gn-ask-fab {{ position:fixed; right:18px; bottom:22px; z-index:9990;
   display:flex; align-items:center; gap:8px; padding:11px 15px;
-  border-radius:999px; background:{_TOK['brand']}; color:#fff;
+  border-radius:999px; background:{_TOK['brand']}; color:{_TOK['bg1']};
   font-size:13px; font-weight:700; text-decoration:none;
   box-shadow:0 6px 20px rgba(0,0,0,.35); }}
+.gn-ask-fab * {{ color:{_TOK['bg1']} !important; }}
+.gn-ask-fab svg {{ stroke:{_TOK['bg1']} !important; }}
 .gn-ask-fab:hover {{ filter:brightness(1.08); }}
 .gn-ask-fab .gn-ask-t {{ display:inline; }}
 @media (max-width: 640px) {{ .gn-ask-fab .gn-ask-t {{ display:none; }}
