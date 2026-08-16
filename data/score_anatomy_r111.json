@@ -1,0 +1,230 @@
+{
+ "made": "2026-08-16",
+ "made_at": "2026-08-16T00:23:28+00:00",
+ "prereg": "docs/PREREG_R111_SCORE_ANATOMY.md",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드 미사용",
+ "cost": 0.36,
+ "buy_zone": 58.0,
+ "z_crit": 2.73,
+ "n_tests": 8,
+ "min_cases": 300,
+ "min_dates": 100,
+ "n_rows": 166132,
+ "subscore_coverage": {
+  "q_stock_quality": 166132,
+  "q_trading_timing": 166132,
+  "q_risk_safety": 166132,
+  "q_opportunity": 166132,
+  "q_execution": 166132,
+  "q_confidence": 166132,
+  "q_strategy_quality": 140181
+ },
+ "paired": {
+  "score": {
+   "days": 810,
+   "win": 355,
+   "lose": 393,
+   "tie": 62,
+   "sign_z": -1.39,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": -0.314,
+   "n_top": 4050,
+   "n_rest": 65509,
+   "boundary_tie_days": 700,
+   "tie_rate": 26.8
+  },
+  "q_stock_quality": {
+   "days": 1127,
+   "win": 511,
+   "lose": 515,
+   "tie": 101,
+   "sign_z": -0.12,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": 0.098,
+   "n_top": 5635,
+   "n_rest": 66807,
+   "boundary_tie_days": 482,
+   "tie_rate": 18.5
+  },
+  "q_trading_timing": {
+   "days": 1129,
+   "win": 522,
+   "lose": 499,
+   "tie": 108,
+   "sign_z": 0.72,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": 0.12,
+   "n_top": 5645,
+   "n_rest": 66560,
+   "boundary_tie_days": 369,
+   "tie_rate": 14.1
+  },
+  "q_risk_safety": {
+   "days": 1215,
+   "win": 538,
+   "lose": 568,
+   "tie": 109,
+   "sign_z": -0.9,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": -0.128,
+   "n_top": 6075,
+   "n_rest": 67005,
+   "boundary_tie_days": 526,
+   "tie_rate": 20.2
+  },
+  "q_opportunity": {
+   "days": 1248,
+   "win": 561,
+   "lose": 583,
+   "tie": 104,
+   "sign_z": -0.65,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": -0.033,
+   "n_top": 6240,
+   "n_rest": 67276,
+   "boundary_tie_days": 338,
+   "tie_rate": 13.0
+  },
+  "q_execution": {
+   "days": 1179,
+   "win": 533,
+   "lose": 541,
+   "tie": 105,
+   "sign_z": -0.24,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": -0.06,
+   "n_top": 5895,
+   "n_rest": 67219,
+   "boundary_tie_days": 791,
+   "tie_rate": 30.3
+  },
+  "q_confidence": {
+   "days": 1329,
+   "win": 588,
+   "lose": 622,
+   "tie": 119,
+   "sign_z": -0.98,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": -0.048,
+   "n_top": 6645,
+   "n_rest": 68130,
+   "boundary_tie_days": 488,
+   "tie_rate": 18.7
+  },
+  "q_strategy_quality": {
+   "days": 1083,
+   "win": 466,
+   "lose": 507,
+   "tie": 110,
+   "sign_z": -1.31,
+   "median_hit_diff": 0.0,
+   "median_ev_diff": 0.03,
+   "n_top": 5415,
+   "n_rest": 57428,
+   "boundary_tie_days": 42,
+   "tie_rate": 1.9
+  }
+ },
+ "verdict": {
+  "score": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_stock_quality": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_trading_timing": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_risk_safety": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_opportunity": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_execution": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_confidence": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  },
+  "q_strategy_quality": {
+   "A1 z ≥ +2.73 (Bonferroni)": false,
+   "A2 적중률 차이 중앙값 > 0": false,
+   "A3 표본 (케이스≥300 · 날짜≥100)": true
+  }
+ },
+ "passed": [],
+ "granularity": {
+  "score": {
+   "n": 166132,
+   "distinct": 43,
+   "min": 35.0,
+   "max": 83.0,
+   "distinct_in_buyzone": 20
+  },
+  "q_stock_quality": {
+   "n": 166132,
+   "distinct": 53,
+   "min": 32.0,
+   "max": 87.0,
+   "distinct_in_buyzone": 30
+  },
+  "q_trading_timing": {
+   "n": 166132,
+   "distinct": 56,
+   "min": 32.0,
+   "max": 87.0,
+   "distinct_in_buyzone": 30
+  },
+  "q_risk_safety": {
+   "n": 166132,
+   "distinct": 43,
+   "min": 45.0,
+   "max": 88.0,
+   "distinct_in_buyzone": 31
+  },
+  "q_opportunity": {
+   "n": 166132,
+   "distinct": 91,
+   "min": 14.0,
+   "max": 109.0,
+   "distinct_in_buyzone": 50
+  },
+  "q_execution": {
+   "n": 166132,
+   "distinct": 29,
+   "min": 23.0,
+   "max": 86.0,
+   "distinct_in_buyzone": 9
+  },
+  "q_confidence": {
+   "n": 166132,
+   "distinct": 66,
+   "min": 35.0,
+   "max": 100.0,
+   "distinct_in_buyzone": 43
+  },
+  "q_strategy_quality": {
+   "n": 140181,
+   "distinct": 950,
+   "min": 2.1,
+   "max": 97.5,
+   "distinct_in_buyzone": 391
+  }
+ },
+ "note": "관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 통과한 기준이 있어도 2026-11-16 이후 사전등록의 후보 목록으로만 쓴다."
+}

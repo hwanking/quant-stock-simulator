@@ -9499,9 +9499,18 @@ for _root148, _dirs148, _fs148 in _os.walk(PROJ):
         _rel148 = _os.path.relpath(_os.path.join(_root148, _fn148),
                                    PROJ).replace('\\', '/')
         _files148 += 1
-        _src148 = '\n'.join(ln for _i148, ln in _la135.code_lines(_rel148))
-        for _m148 in _pat148.finditer(_src148):
-            _globs148.append((_rel148, _m148.group(1)))
+        # ⚠️ 라운드 111 — 줄 단위로 본다. 이 가드가 지키려는 것은 **파일
+        #   이름** 규칙인데, 전엔 `subscore_` 로 시작하는 모든 문자열을
+        #   잡았다. 그래서 R111 산출물의 dict 키 `subscore_coverage` 가
+        #   걸렸다 — 파일이 아닌 것을 파일 이름으로 잰 것이다.
+        #   파일로 쓰이는 자리(.jsonl · glob · --out · 접두사 상수 정의)
+        #   에서만 본다.
+        for _i148, _ln148 in _la135.code_lines(_rel148):
+            if not any(t in _ln148 for t in
+                       ('.jsonl', 'glob', '--out', 'PATCH_PREFIX')):
+                continue
+            for _m148 in _pat148.finditer(_ln148):
+                _globs148.append((_rel148, _m148.group(1)))
 check("훑은 파이썬 파일이 있다 (0개면 미측정)", _files148 >= 30,
       f'{_files148}개')
 check(f"'{_stem148}_' 이름을 쓰는 곳을 실제로 찾았다", len(_globs148) >= 3,
@@ -10432,6 +10441,65 @@ else:
     check("결과 문서가 있다",
           _os.path.exists(_os.path.join(PROJ, 'docs',
                                         'RESULT_R49_RERUN_R110.md')))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §160 — 라운드 111: 순위 정보가 어디서 사라지는가
+#
+#   라운드 110 이 "종합점수 순위에 정보가 없다"를 확인했다. 111 은
+#   **재료(하위점수 7종)에도 없는지**를 같은 잣대로 쟀다 — 8개 전부 미달.
+#   가장 나은 trading_timing 이 z=+0.72 (보정 문턱 2.73).
+#
+#   가장 중요한 것: **거칠어서가 아니다.** strategy_quality 는 서로 다른
+#   값이 950개인 사실상 연속값인데 z=−1.31 로 대조군보다 못하다.
+#   → 가중치 조정은 해답이 아니다. 재료에 없는 정보를 합산이 못 만든다.
+#
+#   이 절도 **결론을 잠그지 않는다.** 규율을 잠근다 —
+#   사전등록이 측정보다 먼저 커밋됐는가 · 다중비교를 보정했는가 ·
+#   상수를 측정 후에 안 내렸는가 · 하위점수를 반쪽만 읽지 않았는가.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§160 라운드 111 점수 해부 — 규율을 검사한다")
+print("=" * 72)
+_p160 = _os.path.join(PROJ, 'data', 'score_anatomy_r111.json')
+if not _os.path.exists(_p160):
+    check("R111 산출물이 있다", False, 'data/score_anatomy_r111.json 없음')
+else:
+    with open(_p160, encoding='utf-8') as _f160:
+        _d160 = _json148.load(_f160)
+    import score_anatomy_r111 as _sa160                         # noqa: E402
+
+    check("사전등록 문서를 근거로 적는다",
+          _d160.get('prereg') == 'docs/PREREG_R111_SCORE_ANATOMY.md')
+    check("사전등록이 측정보다 먼저 저장돼 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'PREREG_R111_SCORE_ANATOMY.md')))
+    # 다중비교를 보정했는가 — 8개를 1.96 으로 보면 안 된다
+    check("다중비교를 보정한 문턱을 쓴다 (0.05/8 → 2.73)",
+          _sa160.Z_CRIT == 2.73 and _sa160.N_TESTS == 8,
+          f'z={_sa160.Z_CRIT} · n={_sa160.N_TESTS}')
+    check("표본 하한이 라운드 49 값(300건·100일) 그대로다",
+          _sa160.MIN_CASES == 300 and _sa160.MIN_DATES == 100)
+    check("비용·매수권 상수가 채택값 그대로다",
+          _sa160.COST == 0.36 and _sa160.BUY == 58.0)
+    # 하위점수를 반쪽만 읽지 않았는가 (라운드 99 교훈)
+    _cov160 = _d160.get('subscore_coverage') or {}
+    check("하위점수를 패치까지 합쳐 읽는다",
+          min(_cov160.values() or [0]) > 100_000,
+          f'최소 보유 {min(_cov160.values() or [0]):,}건')
+    check("8개 기준을 전부 쟀다",
+          len(_d160.get('paired') or {}) == 8,
+          str(len(_d160.get('paired') or {})))
+    check("각 기준마다 이긴 날·진 날·날짜를 적는다",
+          all(all(k in v for k in ('win', 'lose', 'days'))
+              for v in (_d160.get('paired') or {}).values()))
+    check("관측 전용임을 적는다",
+          '점수·게이트·문턱을 바꾸지 않는다' in str(_d160.get('note')))
+    check("결과 문서가 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'RESULT_R111_SCORE_ANATOMY.md')))
+    check("규칙 문서가 R111 을 반영한다",
+          '라운드 111' in _read148(_os.path.join(PROJ, 'CLAUDE.md')))
 
 
 print()
