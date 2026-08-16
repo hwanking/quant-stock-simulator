@@ -1,0 +1,567 @@
+{
+ "made": "2026-08-16",
+ "made_at": "2026-08-16T06:45:11+00:00",
+ "prereg": "docs/PREREG_R112_RELATIVIZATION.md",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드 미사용",
+ "not_tested": "같은 날 순위·평균빼기 — 그날 정렬 순서를 바꾸지 않으므로 라운드 111 과 동일한 시험이 된다",
+ "z_crit": 2.95,
+ "n_tests": 16,
+ "z_crit_exact": 2.9552,
+ "z_applied": 2.9552,
+ "z_note": "사전등록에 적은 2.95 는 0.05/16 의 참 임계 2.9552 를 반올림한 값이라 0.0052 만큼 낮다. 기록은 고치지 않고 판정만 더 엄한 쪽으로 했다. 최고 z 가 둘 사이에 없어 결과는 어느 쪽이든 같다.",
+ "min_cases": 300,
+ "min_dates": 100,
+ "max_drop": 0.5,
+ "min_sector": 3,
+ "window": 20,
+ "min_history": 10,
+ "n_rows": 166132,
+ "paired": {
+  "업종내:score": {
+   "days": 286,
+   "win": 152,
+   "lose": 130,
+   "tie": 4,
+   "n_top": 1430,
+   "sign_z": 1.31,
+   "median_hit_diff": 2.0,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_stock_quality": {
+   "days": 295,
+   "win": 164,
+   "lose": 127,
+   "tie": 4,
+   "n_top": 1475,
+   "sign_z": 2.17,
+   "median_hit_diff": 3.08,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_trading_timing": {
+   "days": 298,
+   "win": 146,
+   "lose": 147,
+   "tie": 5,
+   "n_top": 1490,
+   "sign_z": -0.06,
+   "median_hit_diff": 0.0,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_risk_safety": {
+   "days": 307,
+   "win": 165,
+   "lose": 133,
+   "tie": 9,
+   "n_top": 1535,
+   "sign_z": 1.85,
+   "median_hit_diff": 2.86,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_opportunity": {
+   "days": 304,
+   "win": 152,
+   "lose": 143,
+   "tie": 9,
+   "n_top": 1520,
+   "sign_z": 0.52,
+   "median_hit_diff": 0.4,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_execution": {
+   "days": 302,
+   "win": 152,
+   "lose": 142,
+   "tie": 8,
+   "n_top": 1510,
+   "sign_z": 0.58,
+   "median_hit_diff": 0.32,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_confidence": {
+   "days": 307,
+   "win": 153,
+   "lose": 144,
+   "tie": 10,
+   "n_top": 1535,
+   "sign_z": 0.52,
+   "median_hit_diff": 0.0,
+   "kept": 108303,
+   "dropped": 57829,
+   "drop_pct": 34.8
+  },
+  "업종내:q_strategy_quality": {
+   "days": 282,
+   "win": 139,
+   "lose": 136,
+   "tie": 7,
+   "n_top": 1410,
+   "sign_z": 0.18,
+   "median_hit_diff": 0.0,
+   "kept": 92734,
+   "dropped": 73398,
+   "drop_pct": 44.2
+  },
+  "자기이력:score": {
+   "days": 893,
+   "win": 377,
+   "lose": 433,
+   "tie": 83,
+   "n_top": 4465,
+   "sign_z": -1.97,
+   "median_hit_diff": 0.0,
+   "kept": 148722,
+   "dropped": 17410,
+   "drop_pct": 10.5
+  },
+  "자기이력:q_stock_quality": {
+   "days": 1132,
+   "win": 467,
+   "lose": 550,
+   "tie": 115,
+   "n_top": 5660,
+   "sign_z": -2.6,
+   "median_hit_diff": 0.0,
+   "kept": 151405,
+   "dropped": 14727,
+   "drop_pct": 8.9
+  },
+  "자기이력:q_trading_timing": {
+   "days": 1052,
+   "win": 469,
+   "lose": 483,
+   "tie": 100,
+   "n_top": 5260,
+   "sign_z": -0.45,
+   "median_hit_diff": 0.0,
+   "kept": 151811,
+   "dropped": 14321,
+   "drop_pct": 8.6
+  },
+  "자기이력:q_risk_safety": {
+   "days": 1146,
+   "win": 504,
+   "lose": 532,
+   "tie": 110,
+   "n_top": 5730,
+   "sign_z": -0.87,
+   "median_hit_diff": 0.0,
+   "kept": 151811,
+   "dropped": 14321,
+   "drop_pct": 8.6
+  },
+  "자기이력:q_opportunity": {
+   "days": 1136,
+   "win": 493,
+   "lose": 541,
+   "tie": 102,
+   "n_top": 5680,
+   "sign_z": -1.49,
+   "median_hit_diff": 0.0,
+   "kept": 151811,
+   "dropped": 14321,
+   "drop_pct": 8.6
+  },
+  "자기이력:q_execution": {
+   "days": 1001,
+   "win": 437,
+   "lose": 473,
+   "tie": 91,
+   "n_top": 5005,
+   "sign_z": -1.19,
+   "median_hit_diff": 0.0,
+   "kept": 132601,
+   "dropped": 33531,
+   "drop_pct": 20.2
+  },
+  "자기이력:q_confidence": {
+   "days": 1199,
+   "win": 530,
+   "lose": 550,
+   "tie": 119,
+   "n_top": 5995,
+   "sign_z": -0.61,
+   "median_hit_diff": 0.0,
+   "kept": 151601,
+   "dropped": 14531,
+   "drop_pct": 8.7
+  },
+  "자기이력:q_strategy_quality": {
+   "days": 925,
+   "win": 368,
+   "lose": 444,
+   "tie": 113,
+   "n_top": 4625,
+   "sign_z": -2.67,
+   "median_hit_diff": 0.0,
+   "kept": 127149,
+   "dropped": 38983,
+   "drop_pct": 23.5
+  }
+ },
+ "verdict": {
+  "업종내:score": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": true,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_stock_quality": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": true,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_trading_timing": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_risk_safety": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": true,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_opportunity": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": true,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_execution": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": true,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_confidence": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "업종내:q_strategy_quality": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:score": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_stock_quality": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_trading_timing": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_risk_safety": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_opportunity": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_execution": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_confidence": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  },
+  "자기이력:q_strategy_quality": {
+   "B1 z ≥ 문턱": false,
+   "B2 중앙값 > 0": false,
+   "B3 표본 300건·100일": true,
+   "B4 뺀 표본 < 50%": true
+  }
+ },
+ "passed": [],
+ "raw_control": {
+  "업종내:score": {
+   "days": 279,
+   "win": 134,
+   "lose": 141,
+   "tie": 4,
+   "n_top": 1395,
+   "sign_z": -0.42,
+   "median_hit_diff": -0.06
+  },
+  "업종내:q_stock_quality": {
+   "days": 285,
+   "win": 139,
+   "lose": 141,
+   "tie": 5,
+   "n_top": 1425,
+   "sign_z": -0.12,
+   "median_hit_diff": 0.0
+  },
+  "업종내:q_trading_timing": {
+   "days": 290,
+   "win": 158,
+   "lose": 125,
+   "tie": 7,
+   "n_top": 1450,
+   "sign_z": 1.96,
+   "median_hit_diff": 4.44
+  },
+  "업종내:q_risk_safety": {
+   "days": 295,
+   "win": 144,
+   "lose": 144,
+   "tie": 7,
+   "n_top": 1475,
+   "sign_z": 0.0,
+   "median_hit_diff": 0.0
+  },
+  "업종내:q_opportunity": {
+   "days": 300,
+   "win": 159,
+   "lose": 130,
+   "tie": 11,
+   "n_top": 1500,
+   "sign_z": 1.71,
+   "median_hit_diff": 2.86
+  },
+  "업종내:q_execution": {
+   "days": 298,
+   "win": 161,
+   "lose": 126,
+   "tie": 11,
+   "n_top": 1490,
+   "sign_z": 2.07,
+   "median_hit_diff": 4.0
+  },
+  "업종내:q_confidence": {
+   "days": 310,
+   "win": 158,
+   "lose": 143,
+   "tie": 9,
+   "n_top": 1550,
+   "sign_z": 0.86,
+   "median_hit_diff": 0.77
+  },
+  "업종내:q_strategy_quality": {
+   "days": 285,
+   "win": 157,
+   "lose": 122,
+   "tie": 6,
+   "n_top": 1425,
+   "sign_z": 2.1,
+   "median_hit_diff": 3.9
+  },
+  "자기이력:score": {
+   "days": 694,
+   "win": 311,
+   "lose": 333,
+   "tie": 50,
+   "n_top": 3470,
+   "sign_z": -0.87,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_stock_quality": {
+   "days": 988,
+   "win": 435,
+   "lose": 465,
+   "tie": 88,
+   "n_top": 4940,
+   "sign_z": -1.0,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_trading_timing": {
+   "days": 976,
+   "win": 453,
+   "lose": 430,
+   "tie": 93,
+   "n_top": 4880,
+   "sign_z": 0.77,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_risk_safety": {
+   "days": 1056,
+   "win": 470,
+   "lose": 493,
+   "tie": 93,
+   "n_top": 5280,
+   "sign_z": -0.74,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_opportunity": {
+   "days": 1089,
+   "win": 483,
+   "lose": 515,
+   "tie": 91,
+   "n_top": 5445,
+   "sign_z": -1.01,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_execution": {
+   "days": 898,
+   "win": 394,
+   "lose": 425,
+   "tie": 79,
+   "n_top": 4490,
+   "sign_z": -1.08,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_confidence": {
+   "days": 1154,
+   "win": 510,
+   "lose": 537,
+   "tie": 107,
+   "n_top": 5770,
+   "sign_z": -0.83,
+   "median_hit_diff": 0.0
+  },
+  "자기이력:q_strategy_quality": {
+   "days": 942,
+   "win": 390,
+   "lose": 449,
+   "tie": 103,
+   "n_top": 4710,
+   "sign_z": -2.04,
+   "median_hit_diff": 0.0
+  }
+ },
+ "raw_control_note": "같은 날·같은 종목을 원값으로 순위 매긴 대조. 상대화가 한 일과 표본이 바뀐 탓을 가른다. 판정 기준이 아니라 서술이다.",
+ "contribution": {
+  "업종내": {
+   "n": 8,
+   "helped": 3,
+   "hurt": 5,
+   "mean": -0.14,
+   "median": -0.76
+  },
+  "자기이력": {
+   "n": 8,
+   "helped": 1,
+   "hurt": 7,
+   "mean": -0.63,
+   "median": -0.55
+  }
+ },
+ "raw_z_range_sector": [
+  -0.42,
+  2.1
+ ],
+ "days_vs_r111": {
+  "score": {
+   "r111": 810,
+   "sector": 286,
+   "self": 893,
+   "sector_pct": 35.3,
+   "self_pct": 110.2
+  },
+  "q_stock_quality": {
+   "r111": 1127,
+   "sector": 295,
+   "self": 1132,
+   "sector_pct": 26.2,
+   "self_pct": 100.4
+  },
+  "q_trading_timing": {
+   "r111": 1129,
+   "sector": 298,
+   "self": 1052,
+   "sector_pct": 26.4,
+   "self_pct": 93.2
+  },
+  "q_risk_safety": {
+   "r111": 1215,
+   "sector": 307,
+   "self": 1146,
+   "sector_pct": 25.3,
+   "self_pct": 94.3
+  },
+  "q_opportunity": {
+   "r111": 1248,
+   "sector": 304,
+   "self": 1136,
+   "sector_pct": 24.4,
+   "self_pct": 91.0
+  },
+  "q_execution": {
+   "r111": 1179,
+   "sector": 302,
+   "self": 1001,
+   "sector_pct": 25.6,
+   "self_pct": 84.9
+  },
+  "q_confidence": {
+   "r111": 1329,
+   "sector": 307,
+   "self": 1199,
+   "sector_pct": 23.1,
+   "self_pct": 90.2
+  },
+  "q_strategy_quality": {
+   "r111": 1083,
+   "sector": 282,
+   "self": 925,
+   "sector_pct": 26.0,
+   "self_pct": 85.4
+  }
+ },
+ "window_sensitivity": {
+  "10": {
+   "days": 886,
+   "win": 390,
+   "lose": 421,
+   "tie": 75,
+   "n_top": 4430,
+   "sign_z": -1.09,
+   "median_hit_diff": 0.0
+  },
+  "20": {
+   "days": 893,
+   "win": 377,
+   "lose": 433,
+   "tie": 83,
+   "n_top": 4465,
+   "sign_z": -1.97,
+   "median_hit_diff": 0.0
+  },
+  "40": {
+   "days": 887,
+   "win": 381,
+   "lose": 425,
+   "tie": 81,
+   "n_top": 4435,
+   "sign_z": -1.55,
+   "median_hit_diff": 0.0
+  }
+ },
+ "note": "관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 통과한 방식이 있어도 2026-11-16 이후 사전등록의 후보 목록으로만 쓴다."
+}
