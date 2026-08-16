@@ -10661,6 +10661,137 @@ else:
           '라운드 112' in _read148(_os.path.join(PROJ, 'CLAUDE.md')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §163 — 라운드 113: "없다"라고 쓸 자격이 있는가 (검정력)
+#
+#   라운드 110·111·112 가 25개 시험에서 다 미달했고 그 위에 "순위에
+#   정보가 없다"를 적었다. **"못 봤다"와 "보니 없다"는 다른 말이다.**
+#   검정력을 재 보니 80% 를 넘으려면 5~8%p 가 필요했다 — Δ=3 은 어느
+#   문턱에서도 0% 다.
+#
+#   이 절이 잠그는 것:
+#     ① 검정력 연구가 **자기 검사를 통과했는가** — 재현(Δ=0 이 실제 z 를
+#        되짚는가) · 거짓양성률(결과를 섞은 귀무에서 2.5% 근처인가).
+#        사전등록에서 이 둘을 하나로 착각했다. 이름이 아니라 값으로 본다
+#     ② 결론이 **한쪽으로 기울지 않았는가** — 규칙 문서가 두 문장을
+#        함께 적고 있는가 ("정보가 없다" 와 "5%p 미만은 못 본다")
+#     ③ 결과 문서가 **산출물과 같은 숫자를 말하는가** — §162 는 산출물의
+#        정합만 본다. 사람이 읽는 것은 문서다. 문서만 고치고 산출물은
+#        그대로 두면 근거가 있는 것처럼 보인다. 본 숫자 개수를 판정
+#        조건에 넣는다 (0건을 대조하고 초록불을 켜면 안 된다)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§163 라운드 113 검정력 — '없다'라고 쓸 자격이 있는가")
+print("=" * 72)
+_p163 = _os.path.join(PROJ, 'data', 'power_r113.json')
+if not _os.path.exists(_p163):
+    check("R113 산출물이 있다", False, 'data/power_r113.json 없음')
+else:
+    with open(_p163, encoding='utf-8') as _f163:
+        _d163 = _json148.load(_f163)
+    import power_r113 as _pw163                                 # noqa: E402
+
+    check("사전등록 문서를 근거로 적는다",
+          _d163.get('prereg') == 'docs/PREREG_R113_POWER.md')
+    check("사전등록이 측정보다 먼저 저장돼 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'PREREG_R113_POWER.md')))
+    check("합성 데이터를 만들지 않는다고 적는다",
+          '합성 데이터를 만들지 않는다' in str(_d163.get('method')))
+    check("씨앗을 고정한다 (돌릴 때마다 답이 달라지면 측정이 아니다)",
+          isinstance(_d163.get('seed'), int) and _pw163.SEED == 113)
+    check("반복 수가 200 이상", _d163.get('repeats', 0) >= 200)
+    check("판정 격자에서 Δ=0 을 뺐다 (기계 검사 전용)",
+          0 not in (_d163.get('grid') or [0]))
+
+    # ── ① 재현 — Δ=0 은 난수가 없으니 실제 z 를 되짚어야 한다
+    _rp163 = _d163.get('reproduction') or {}
+    _pw163_paired = {}
+    for _f163b in ('score_anatomy_r111.json',):
+        _q163 = _os.path.join(PROJ, 'data', _f163b)
+        if _os.path.exists(_q163):
+            with open(_q163, encoding='utf-8') as _g163:
+                _pw163_paired = (_json148.load(_g163).get('paired') or {})
+    _mis163 = [k for k, v in _rp163.items()
+               if (_pw163_paired.get(k) or {}).get('sign_z') is not None
+               and abs(v - _pw163_paired[k]['sign_z']) > 0.01]
+    check("Δ=0 이 라운드 111 의 z 를 그대로 되짚는다 (재현)",
+          bool(_rp163) and not _mis163,
+          f'대조 {len(_rp163)}개 · 어긋남 {_mis163}')
+
+    # ── ② 거짓양성률은 **따로** 쟀는가 (사전등록이 이 둘을 착각했다)
+    _nl163 = _d163.get('null') or {}
+    check("거짓양성률을 귀무 분포로 따로 쟀다",
+          len(_nl163) == len(_rp163) and all('rate' in v
+                                             for v in _nl163.values()),
+          f'{len(_nl163)}개')
+    check("귀무에서 z≥1.96 이 6% 를 넘지 않는다 (기계가 정상)",
+          all(v['rate']['보정없음'] <= 0.06 for v in _nl163.values()),
+          str({k: v['rate']['보정없음'] for k, v in _nl163.items()}))
+    check("산출물이 sanity 통과를 값으로 기록한다",
+          _d163.get('sanity_ok') is True)
+    check("관측값이 귀무 분포의 어디인지 적는다 (정규근사에 안 기댄다)",
+          all(isinstance(v.get('observed_pctile'), (int, float))
+              and isinstance(v.get('empirical_p_two_sided'), (int, float))
+              for v in _nl163.values()))
+    # 라운드 110 의 -1.39 가 귀무에서 흔한 값이라는 사실 — 값으로 확인
+    check("관측 z 가 귀무 분포 안에 흔하게 있다 (해롭다고 못 쓴다)",
+          all(v['empirical_p_two_sided'] > 0.05
+              for v in _nl163.values()),
+          str({k: v['empirical_p_two_sided'] for k, v in _nl163.items()}))
+
+    # ── 최소 검출 효과가 실제로 나왔는가
+    _md163 = _d163.get('min_detectable') or {}
+    check("문턱·기준별 최소 검출 효과를 전부 적는다",
+          len(_md163) == len(_rp163) * len(_d163.get('thresholds') or {}),
+          str(len(_md163)))
+    check("Δ=3 은 보정 문턱에서 검출되지 않는다 (그래서 말을 낮췄다)",
+          all((_d163['power'][k]['3']['power']['R112']) < 0.80
+              for k in _d163.get('power', {})),
+          str({k: _d163['power'][k]['3']['power']['R112']
+               for k in _d163.get('power', {})}))
+
+    # ── ③ 결론이 한쪽으로 기울지 않았는가 (두 문장을 함께)
+    _cl163 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+    check("규칙 문서가 '정보가 없다'를 계속 적는다",
+          '순위에 정보가 없다' in _cl163)
+    check("규칙 문서가 '못 본다'도 함께 적는다 (한쪽으로 안 기운다)",
+          '못 본다' in _cl163 and '라운드 113' in _cl163)
+    check("결과 문서가 있다",
+          _os.path.exists(_os.path.join(PROJ, 'docs',
+                                        'RESULT_R113_POWER.md')))
+
+    # ── ④ 결과 문서가 산출물과 같은 숫자를 말하는가 (전수 대조)
+    #    §162 는 산출물만 본다. 사람이 읽는 것은 문서다.
+    _seen163, _bad163 = 0, []
+    for _rel163, _docn163, _nums163 in (
+        ('data/power_r113.json', 'docs/RESULT_R113_POWER.md',
+         [f'{v["observed_pctile"]}' for v in _nl163.values()]
+         + [f'{v["empirical_p_two_sided"]:.3f}' for v in _nl163.values()]
+         + [f'{v["median_z"]}'.replace('-', '−') for v in _nl163.values()]),
+        ('data/relativization_r112.json', 'docs/RESULT_R112_RELATIVIZATION.md',
+         []),
+    ):
+        _dp163 = _os.path.join(PROJ, *_docn163.split('/'))
+        if not _nums163 or not _os.path.exists(_dp163):
+            continue
+        _txt163 = _read148(_dp163).replace('**', '')
+        for _n163 in _nums163:
+            _seen163 += 1
+            if _n163 not in _txt163:
+                _bad163.append((_docn163, _n163))
+    check("결과 문서 숫자를 산출물과 대조했다 (6건 이상)",
+          _seen163 >= 6, f'{_seen163}건')
+    check("결과 문서가 산출물과 어긋나지 않는다",
+          not _bad163, str(_bad163[:3]))
+
+    check("관측 전용임을 적는다",
+          '점수·게이트·문턱을 바꾸지 않는다' in str(_d163.get('note')))
+    _src163 = _read148(_os.path.join(PROJ, 'scripts', 'power_r113.py'))
+    check("블라인드를 읽지 않는다 (봉인 준수)",
+          "('train', 'valid')" in _src163 and 'blind' not in _src163)
+
+
 print()
 print("=" * 72)
 if FAILURES:
