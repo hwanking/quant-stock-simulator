@@ -3,12 +3,25 @@
   "model": "v2026.08.15.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.16.3",
+  "schema": "v2026.08.16.4",
   "news": "v2026.08.15.2",
   "sector": "v2026.08.09.0",
   "valuation": "v2026.08.08.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.16.4",
+   "previous": "v2026.08.16.3",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "라운드 115 — 카드 표면 네 계열을 팔레트 토큰 둘로 통일",
+   "note": "서버를 띄워 세어 보니 카드 표면이 네 계열이었다: #161D2A 45개 (web_app._CARD_BG) · #16181F 30개 (ui_kit.DARK[card]) · #1C2635 7개 · #1E2129 4개. 출처는 셋이었고 하나는 .streamlit/config.toml 의 secondaryBackgroundColor 였다. §5 가 \"카드 한 종류\" 와 \"색은 ui_kit 팔레트가 유일 출처\" 를 동시에 요구하므로 팔레트 쪽으로 모았다 — _CARD_BG→DARK[card], _CARD_BG_ELEV→DARK[raised], config 도 #16181F. DARK 는 고정 dict 이라 \"양 테마 단일 다크\" 원칙도 지켜진다. 실측 결과 표면이 75+11 두 계열로 모였고, 카드 위 텍스트 642개 전수에서 대비 미달이 1건(#FF453A on #1C2635 = 4.47) → 0건이 됐다 — 새 표면이 더 어두워서다. 옛 hex 는 선택자로만 남는다. 산식·게이트·문턱 무변경.",
+   "created_at": "2026-08-16T12:59:48+00:00",
+   "effective_from": "2026-08-16"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

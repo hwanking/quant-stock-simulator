@@ -3923,7 +3923,17 @@ check("팔레트는 킷이 유일 출처 — web_app 이 직접 정의하지 않
 _cfg81 = open(_os.path.join(PROJ, ".streamlit", "config.toml"),
               encoding='utf-8').read()
 check("Streamlit 자체 크롬도 같은 토큰 — 배경·강조색 일치",
-      '#0B0F17' in _cfg81 and '#4C8DFF' in _cfg81 and '#161D2A' in _cfg81)
+      '#0B0F17' in _cfg81 and '#4C8DFF' in _cfg81)
+# 라운드 115 — 여기가 `'#161D2A' in _cfg81` 을 요구하고 있었다. 그 값은
+# **카드 표면**인데 ui_kit 팔레트의 카드 토큰은 #16181F 라, 화면에 카드가
+# 두 계열로 갈려 있었다(45 vs 30). 이름(리터럴)이 아니라 **값이 팔레트와
+# 같은지**로 검사한다 — 그래야 팔레트를 고쳤을 때 여기도 같이 따라온다.
+_sec81 = _re.search(r'secondaryBackgroundColor\s*=\s*"(#[0-9A-Fa-f]{6})"',
+                    _cfg81)
+check("Streamlit 카드 표면이 ui_kit 카드 토큰과 같은 값이다",
+      bool(_sec81) and _sec81.group(1).upper() == _uk81.DARK['card'].upper(),
+      f'config={_sec81.group(1) if _sec81 else "없음"} · '
+      f'팔레트={_uk81.DARK["card"]}')
 check("업데이트 날짜는 손으로 쓰지 않는다 (커밋 이력 파생)",
       'def _last_update_date' in _w81 and 'update_history.json' in _w81)
 check("타일 라벨을 …으로 자르지 않는다 (정보 손실 금지)",
@@ -4557,7 +4567,10 @@ def _cr92(a, b):
 
 
 import ui_kit as _uk92
-# #1C2635 는 양 테마에서 다크로 고정되는 카드 — 다크 표면 중 가장 밝다
+# 라운드 115 에서 카드 표면을 팔레트 토큰으로 모았다(#161D2A→card,
+# #1C2635→raised). 옛 두 값은 **일부러 남겨 둔다** — 인라인 마크업에 아직
+# 남아 있고, 무엇보다 #1C2635 가 다크 표면 중 가장 밝아 **문턱을 더 엄하게**
+# 잡아 주기 때문이다. 표면 목록에서 빼면 검사가 헐거워진다.
 _SURF92 = [_uk92.DARK['bg'], _uk92.DARK['card'], _uk92.DARK['raised'],
            _uk92.DARK_NAV, '#1C2635', '#161D2A']
 _low92 = []
@@ -10968,8 +10981,14 @@ check("요약 칸 표면이 공통 카드 상수다 (테마별로 안 바뀐다)
       "background:{_CARD_BG}; padding:12px; " in _wa164)
 check("요약 칸 글자가 다크 팔레트다 (표면이 항상 다크이므로)",
       "_bc_tx2, _bc_tx1 = _uk.DARK['tx2'], _uk.DARK['tx1']" in _wa164)
-# 표면이 고정이므로 대비도 양 테마에서 같다 — 값으로 확인한다
-_cbg164 = _re.search(r"_CARD_BG = '(#[0-9A-Fa-f]{6})'", _wa164).group(1)
+# 표면이 고정이므로 대비도 양 테마에서 같다 — 값으로 확인한다.
+# 라운드 115 — `_CARD_BG` 가 손으로 적은 hex 였다가 팔레트 토큰이 됐다.
+# 여기서 hex 를 정규식으로 뽑고 있었으므로 **소스 표기가 아니라 실제 값**을
+# 쓰도록 고친다 (검사가 옛 구현을 요구하던 자리 · §6).
+check("카드 상수가 팔레트에서 온다 (손으로 적은 hex 가 아니다)",
+      "_CARD_BG = _uk.DARK['card']" in _wa164
+      and "_CARD_BG_ELEV = _uk.DARK['raised']" in _wa164)
+_cbg164 = _uk110.DARK['card']
 
 
 def _lum164(h):

@@ -14,8 +14,16 @@ toolbarMode = "minimal"
 maxUploadSize = 20
 
 [theme]
+# ⚠️ secondaryBackgroundColor 는 **카드 표면**이다 (익스팬더·데이터프레임
+#    머리·메트릭 등 Streamlit 자체 위젯이 이 색으로 칠해진다).
+#    라운드 115 까지 여기가 #161D2A 였는데 ui_kit 팔레트의 카드 토큰은
+#    #16181F 라, 화면에 카드가 두 계열로 갈려 있었다(45개 vs 30개).
+#    §5 는 카드 한 종류를 요구하고 "색은 ui_kit 팔레트가 유일 출처" 라고도
+#    한다 — 그래서 팔레트 값(ui_kit.DARK['card'])으로 맞춘다.
+#    이 파일은 toml 이라 파이썬 상수를 못 읽는다. 대신 회귀가 두 값이
+#    같은지 **값으로** 대조한다 (§81).
 base = "dark"
 primaryColor = "#4C8DFF"
 backgroundColor = "#0B0F17"
-secondaryBackgroundColor = "#161D2A"
+secondaryBackgroundColor = "#16181F"
 textColor = "#F3F6FA"
