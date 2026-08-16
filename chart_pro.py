@@ -316,7 +316,7 @@ __LIB__
     <button class="rngbtn" data-m="0">전체</button>
     <span style="flex:1"></span>
     <div id="indWrap">
-      <button id="indBtn">📐 지표 선택 ▾</button>
+      <button id="indBtn">지표 선택 ▾</button>
       <div id="indPanel">
         <h5>가격 오버레이</h5>
         <div class="indGrid" id="gOverlay"></div>

@@ -4634,7 +4634,7 @@ st.markdown(f"""
         </div>
     </div>
     <hr style='border: 0; border-top: 1px solid #1C2635; margin: 16px 0 16px 0;'>
-    <!-- 📊 9대 핵심 펀더멘털 & 밸류에이션 전광판 -->
+    <!-- 9대 핵심 펀더멘털 & 밸류에이션 전광판 -->
     <div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px;'>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
             <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>PER (주가수익비율)</p>
@@ -4674,7 +4674,7 @@ st.markdown(f"""
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #4C8DFF; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>{_fv_note_html}
         </div>
     </div>
-    <!-- 🛡️ 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
+    <!-- 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
     <p style='margin: 12px 0 0 0; color: #35C98B; font-size: 13px; text-align: center; border-top: 1px solid #1C2635; padding-top: 8px;'>
         <b>데이터 출처 분리</b>: <b>연동된 시세 출처</b> — 네이버증권(기준) · 다음금융(교차검증). <b>미연동</b> — KRX·KIND·FnGuide·Investing.
         <b>DART·KIND·기업IR</b>은 공시·재무 출처이며 현재가 대조에 사용하지 않습니다.
@@ -5184,12 +5184,12 @@ st.markdown(f"""
    기대지 않게 하려는 것이다. 기본 삼각형 마커는 브라우저마다 모양이
    달라 지우고 Lucide 셰브런만 쓴다 (§5 — 아이콘 한 세트).
 
-   ⚠️ 반드시 `.gn-disc` 안에서만 칠한다. 서버를 띄워 보니 Streamlit 의
+   주의 — 반드시 `.gn-disc` 안에서만 칠한다. 서버를 띄워 보니 Streamlit 의
    st.expander 도 DOM 에서 <details> 였다 — 요소로만 스코프를 잡았더니
    화면의 확장 패널 69개(자산·통화 확인 · 상세 설정 · 제외 사유 …)의
    마커와 hover 가 같이 바뀌고 있었다. 회귀는 통과하는 종류의 결함이다.
 
-   ⚠️ 그리고 class 는 <details> 에 못 단다 — Streamlit 정화기가 지운다.
+   주의 — 그리고 class 는 <details> 에 못 단다. Streamlit 정화기가 지운다.
    ui_kit.disclose 가 바깥에 <div class='gn-disc'> 를 한 겹 씌우므로
    여기서도 그 div 를 타고 내려간다. */
 .gn-disc > details > summary::-webkit-details-marker {{ display:none; }}
@@ -5498,7 +5498,7 @@ st.markdown(f"""
    종전에는 파란 알약과 하단 입력바가 **동시에** 떠서 알약이 입력바를
    덮고 있었다. 하나만 보이게 하고, 누르면 서로 자리를 바꾼다.
 
-   ⚠️ 숨김은 `body.gn-ask-ready` 아래에서만 건다. 스크립트가 못 붙으면
+   주의 — 숨김은 `body.gn-ask-ready` 아래에서만 건다. 스크립트가 못 붙으면
       클래스가 안 생기므로 입력바가 **종전처럼 그대로 보인다** — 자바
       스크립트가 죽었다고 대화 자체를 못 하게 만들지 않는다. */
 body.gn-ask-ready [data-testid="stBottom"] {{
@@ -6416,7 +6416,7 @@ st.markdown(f'''
 
 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px;">
 <div style="background:#1C2635; padding:16px; border-radius:8px;">
-    <h4 style="color:#F3F6FA; margin:0 0 8px 0;">⏱️ DeMARK 신호</h4>
+    <h4 style="color:#F3F6FA; margin:0 0 8px 0;">DeMARK 신호</h4>
     <p style="color:#35C98B; margin:2px 0; font-size:15px;">- Bullish: {four_scores.get('demark_bullish_score', 0)}점</p>
     <p style="color:{_TOK['up']}; margin:2px 0; font-size:15px;">- Bearish: {four_scores.get('demark_bearish_score', 0)}점</p>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 방향: {four_scores.get('demark_direction_text', '중립')}</p>
@@ -6973,7 +6973,7 @@ with n1:
     <div style='background: #161D2A; padding: 20px; border-radius: 14px; '>
         <h4 style='color: #ff453a !important; margin-top:0;'>1. 오늘의 변동 요인 ({dd.get('date', '2026-07-30')})</h4>
         <p style='font-weight: bold; color: #F3F6FA;'>{dd['title']}</p>
-        <p style='font-size: 15px; color: #9DAABC;'>💡 <b>관찰 내용</b>: {dd['impact']}</p>
+        <p style='font-size: 15px; color: #9DAABC;'><b>관찰 내용</b>: {dd['impact']}</p>
         <span style='font-size: 13px; color: #9DAABC;'>출처: {dd['source']} | 성향: {dd['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -6984,7 +6984,7 @@ with n2:
     <div style='background: #161D2A; padding: 20px; border-radius: 14px; '>
         <h4 style='color: #F2B84B !important; margin-top:0;'>2. 중기 촉매 ({mc.get('timeframe', '1~3개월')})</h4>
         <p style='font-weight: bold; color: #F3F6FA;'>{mc['title']}</p>
-        <p style='font-size: 15px; color: #9DAABC;'>💡 <b>정량 해석</b>: {mc['impact']}</p>
+        <p style='font-size: 15px; color: #9DAABC;'><b>정량 해석</b>: {mc['impact']}</p>
         <span style='font-size: 13px; color: #9DAABC;'>출처: {mc['source']} | 성향: {mc['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -6995,7 +6995,7 @@ with n3:
     <div style='background: #161D2A; padding: 20px; border-radius: 14px; '>
         <h4 style='color: #35C98B !important; margin-top:0;'>3. 장기 구조적 서사 ({ln.get('timeframe', '6~12개월')})</h4>
         <p style='font-weight: bold; color: #F3F6FA;'>{ln['title']}</p>
-        <p style='font-size: 15px; color: #9DAABC;'>💡 <b>정량 해석</b>: {ln['impact']}</p>
+        <p style='font-size: 15px; color: #9DAABC;'><b>정량 해석</b>: {ln['impact']}</p>
         <span style='font-size: 13px; color: #9DAABC;'>출처: {ln['source']} | 성향: {ln['sentiment']}</span>
     </div>
     """, unsafe_allow_html=True)
@@ -7082,7 +7082,7 @@ if user_entry_price > 0 and user_quantity > 0:
                 <p style='margin:2px 0 0 0; font-size:15px; color:{add_buy_color};'>{add_buy_status}</p>
             </div>
         </div>
-        <p style='margin:0; font-size:15px; color:#F3F6FA;'>💡 <b>맞춤 대응 가이드</b>: {user_pos_advice}</p>
+        <p style='margin:0; font-size:15px; color:#F3F6FA;'><b>맞춤 대응 가이드</b>: {user_pos_advice}</p>
         {water_msg}
     </div>
     """, unsafe_allow_html=True)
@@ -7139,7 +7139,7 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
     with s_col1:
         st.markdown(f"""
         <div style='background:#161D2A; border-radius:12px; padding:16px;'>
-            <p style='margin:0; font-weight:bold; color:#35C98B;'>🏆 종목 기본 매력도 세부 기여 내역 ({four_scores['stock_quality_score']}점)</p>
+            <p style='margin:0; font-weight:bold; color:#35C98B;'>종목 기본 매력도 세부 기여 내역 ({four_scores['stock_quality_score']}점)</p>
             <p style='margin:4px 0; color:#9DAABC; font-size:13px;'>펀더멘털 30%: {four_scores['f_score']}점 → 기여 {four_scores['f_score']*0.30:.1f}점</p>
             <p style='margin:4px 0; color:#9DAABC; font-size:13px;'>밸류에이션 25%: {four_scores['v_score']}점 → 기여 {four_scores['v_score']*0.25:.1f}점</p>
             <p style='margin:4px 0; color:#9DAABC; font-size:13px;'>재무안전 20%: {four_scores['r_score']}점 → 기여 {four_scores['r_score']*0.20:.1f}점</p>
@@ -7157,7 +7157,7 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
         nr_col = "#9DAABC" if _nr is None else ("#ff453a" if _nr >= 60 else "#35C98B")
         st.markdown(f"""
         <div style='background:#161D2A; border-radius:12px; padding:16px;'>
-            <p style='margin:0; font-weight:bold; color:#F2B84B;'>🎯 현재 매매 적합도 주요 진단 요인 ({four_scores['trading_timing_score']}점)</p>
+            <p style='margin:0; font-weight:bold; color:#F2B84B;'>현재 매매 적합도 주요 진단 요인 ({four_scores['trading_timing_score']}점)</p>
             <p style='margin:4px 0; color:{wr_col}; font-size:13px;'>[관찰 승률] 20일 유사패턴 과거 관찰 승률: {fmt_pct(_wr, signed=False)} (전략 표본 {four_scores.get('eff_sample_size', 0):.0f}건 · {four_scores.get('sample_tier', '-')})</p>
             <p style='margin:4px 0; color:{pe_col}; font-size:13px;'>[경로 우위] 20일 평균 수익률: {fmt_pct(_pe)}</p>
             <p style='margin:4px 0; color:{nr_col}; font-size:13px;'>[미도달 비중] 목표가·손절가 모두 미도달: {fmt_pct(_nr, signed=False)}</p>
@@ -7342,7 +7342,7 @@ with tab_pred:
 
         st.markdown(f"""
         <div style='background: rgba(48, 209, 88, 0.10); border-radius: 12px; padding: 16px 20px; margin: 12px 0;'>
-            <span style='font-size: 17px; font-weight: bold; color: #F3F6FA;'>🎯 최종 예측 상승확률 (베이지안 사후보정): </span>
+            <span style='font-size: 17px; font-weight: bold; color: #F3F6FA;'>최종 예측 상승확률 (베이지안 사후보정): </span>
             <span style='font-size: 20px; font-weight: 700; color: {prob_color}; margin-left: 8px;'>{sim_res['predicted_prob_str']}</span>
             <span style='font-size: 15px; color: #9DAABC; margin-left: 12px;'>(95% 신뢰구간: <code style="color:#4C8DFF;">{sim_res['ci_str']}</code> | 분류: <b>{sim_res['confidence_grade']}</b>)</span>
         </div>
@@ -7885,7 +7885,7 @@ with tab_val:
     <tr><td><b>기업 분류 유형</b></td><td>{val_eval.get('enterprise_class', '판단 불가')}</td></tr>
     <tr><td><b>분류 근거</b></td><td>{val_eval.get('classification_basis', '-')} (분류 신뢰도 {val_eval.get('classification_confidence', 0):.0f}점)</td></tr>
     <tr><td><b>제외된 모델</b></td><td>{'<br>'.join(f"{d['name']} — {d['reason']}" for d in (val_eval.get('excluded_models') or [])) or '없음'}</td></tr>
-    <tr><td><b>권장 매수가 조건</b></td><td>{' · '.join(('✅' if ok else '❌') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
+    <tr><td><b>권장 매수가 조건</b></td><td>{' · '.join(('충족' if ok else '미충족') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
     <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'}</td></tr>
     <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
@@ -7931,7 +7931,7 @@ with tab_scen:
         </thead>
         <tbody>
             <tr>
-                <td><b style='color:#35C98B;'>🟢 상승 시나리오</b></td>
+                <td><b style='color:#35C98B;'>상승 시나리오</b></td>
                 <td>20일선 복귀(`{curr_price*(1 + atr_val*0.5):,.0f}{unit_str}`) + 거래량 1.2배 + 외인 전환</td>
                 <td><b>{bull_range_low:,.0f}{unit_str} ~ {bull_range_high:,.0f}{unit_str}</b></td>
                 <td>{bull_target*0.95:,.0f}{unit_str} / {bull_target:,.0f}{unit_str}</td>
@@ -7939,7 +7939,7 @@ with tab_scen:
                 <td>1차 분할 매수 검토</td>
             </tr>
             <tr>
-                <td><b style='color:#F2B84B;'>🟡 횡보 시나리오</b></td>
+                <td><b style='color:#F2B84B;'>횡보 시나리오</b></td>
                 <td>60일선 지지(`{curr_price*(1 - atr_val*0.2):,.0f}{unit_str}`) + 거래량 감소 및 RSI 리셋</td>
                 <td><b>{side_range_low:,.0f}{unit_str} ~ {side_range_high:,.0f}{unit_str}</b></td>
                 <td>{side_target:,.0f}{unit_str} / N/A</td>
@@ -7947,7 +7947,7 @@ with tab_scen:
                 <td>관망 및 지지 확인 후 접근</td>
             </tr>
             <tr>
-                <td><b style='color:#ff453a;'>🔴 하락 시나리오</b></td>
+                <td><b style='color:#ff453a;'>하락 시나리오</b></td>
                 <td>60일선 종가 이탈(`{curr_price*(1 - atr_val*0.5):,.0f}{unit_str}` 하회) + 기관 동반 매도</td>
                 <td><b>{bear_range_low:,.0f}{unit_str} ~ {bear_range_high:,.0f}{unit_str}</b></td>
                 <td>N/A (하방 지지선 탐색)</td>
@@ -7999,7 +7999,7 @@ with tab_scen:
                     <b>오늘의 매수가가 아니다</b> (분기 실적 기반 장기 기준)</td>
             </tr>
             <tr style='background:rgba(53,201,139,0.06);'>
-                <td><b>★ 실행 진입가 (오늘 쓰는 값)</b></td>
+                <td><b>실행 진입가 (오늘 쓰는 값)</b></td>
                 <td><b style='color:#35C98B;'>{fmt_num((CORE or {}).get('pullback_zone'), ',.0f', '원', na='산출 불가')}</b></td>
                 <td>현재가 − 20일 변동성 1σ · 배너·추천 카드와 <b>같은 값</b>
                     (중앙 판정 verdict_core)</td>
@@ -8039,7 +8039,7 @@ with tab_demark:
     
     st.markdown(f"""
     <div style="background-color:#161D2A; padding:20px; border-radius:12px; margin-bottom:20px;">
-        <h3 style="color:#F3F6FA; margin-top:0;">⏱️ DeMARK 9-13 결합신호 종합 대시보드</h3>
+        <h3 style="color:#F3F6FA; margin-top:0;">DeMARK 9-13 결합신호 종합 대시보드</h3>
         <div style="display:flex; justify-content:space-between; flex-wrap:wrap; color:#F3F6FA; font-size:16px; line-height:1.6;">
             <div style="flex:1; min-width:250px;">
                 <b style="color:#4C8DFF;">[DeMARK 카운트]</b><br>
@@ -8347,7 +8347,7 @@ with tab_audit:
             <p>- <b>20일 관찰 승률</b>: <b>{fmt_pct(cost_metrics['win_rate_20d'], signed=False)}</b> | <b>Profit Factor</b>: <b>{fmt_num(cost_metrics['profit_factor'], spec='.2f')}</b></p>
             <p>- <b>Brier Score</b>: <b>{fmt_num(cost_metrics['brier_score'], spec='.3f')}</b> | <b>MAE</b>: <b>{fmt_pct(cost_metrics['mae_pct'], signed=False)}</b></p>
             <p style='color:#9DAABC; font-size:13px;'>표본 등급: {cost_metrics['sample_note']}</p>
-            <p style='color:#F2B84B; font-size:13px;'>⚠️ {cost_metrics['calibration_status']}</p>
+            <p style='color:#F2B84B; font-size:13px;'>{cost_metrics['calibration_status']}</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -8392,7 +8392,7 @@ with tab_audit:
             <p>- <b>KOSPI200 지수</b>: <b>{fmt_pct(bench_data['kospi200_perf'], digits=2)}</b>
                <span style='color:#9DAABC;font-size:13px;'>({bench_data['kospi200_note']})</span></p>
             <hr style='border-color:#1C2635; margin:8px 0;'>
-            <p style='font-size:13px; color:#F2B84B; margin:0;'>💡 <b>판정</b>: {bench_data['judge_text']}</p>
+            <p style='font-size:13px; color:#F2B84B; margin:0;'><b>판정</b>: {bench_data['judge_text']}</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -8410,7 +8410,7 @@ with tab_audit:
                    · 연환산 <b style='color:{_alpha_col};'>{fmt_pct(factor_data['alpha_annual_pct'], digits=2)}</b></p>
                 <p>- <b>실현 총수익률</b>: <b>{fmt_pct(factor_data['realized_total_pct'], digits=1)}</b></p>
                 <hr style='border-color:#1C2635; margin:8px 0;'>
-                <p style='font-size:13px; color:#F2B84B; margin:0;'>⚠️ 미연동 팩터: {', '.join(factor_data['missing_factors'])} — {factor_data['missing_reason']}</p>
+                <p style='font-size:13px; color:#F2B84B; margin:0;'>미연동 팩터: {', '.join(factor_data['missing_factors'])} — {factor_data['missing_reason']}</p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -8451,7 +8451,7 @@ with tab_audit:
             <p style='margin:2px 0;'>- 과거 최대낙폭 <b style='color:#ff453a;'>{risk_budget['historical_mdd_pct']:.1f}%</b></p>
             <p style='margin:8px 0 2px;'>- <b>권장 현금 비중</b>: <b style='color:{_ccol}; font-size:17px;'>{_cash:.0f}%</b></p>
             <p style='font-size:13px; color:#9DAABC; margin:2px 0;'>사유: {' · '.join(risk_budget['cash_reasons'])}</p>
-            <p style='font-size:12px; color:#9DAABC; margin-top:8px;'>ℹ️ {risk_budget['note']}</p>
+            <p style='font-size:12px; color:#9DAABC; margin-top:8px;'>{risk_budget['note']}</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -8509,7 +8509,7 @@ with tab_audit:
                · 왕복 거래비용 {_cost:.2f}% → <b style='color:{"#35C98B" if _net_edge > 0 else "#ff453a"};'>순 {_net_edge:+.2f}%p</b></p>
             <hr style='border-color:#1C2635; margin:8px 0;'>
             <p style='margin:2px 0; color:{_vcol};'><b>판정</b>: {_verdict}</p>
-            <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>⚠️ {_div['note']}</p>
+            <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>{_div['note']}</p>
         </div>
         """, unsafe_allow_html=True)
 

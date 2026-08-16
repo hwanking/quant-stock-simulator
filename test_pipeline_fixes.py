@@ -6296,23 +6296,62 @@ check("정상 기호는 여전히 통과시킨다 (화살표·중점·말줄임)
           for _c110 in ('→', '·', '—', '…', '≥', '±')))
 
 
-def _display_emoji(path):
-    """주석·docstring 밖(= 화면에 나가는 문자열)의 이모지만 센다."""
-    hits, in_doc = [], False
-    for i, line in enumerate(open(path, encoding='utf-8')):
-        q = line.count('"""') + line.count("'''")
-        was = in_doc
-        if q % 2 == 1:
-            in_doc = not in_doc
-        if was or in_doc or line.lstrip().startswith('#'):
+def _display_emoji(path, src=None):
+    """화면에 나가는 문자열의 이모지만 센다 — **AST 로** 가른다.
+
+    ⚠️ 종전에는 줄 단위로 `\"\"\"` 개수를 세어 독스트링을 건너뛰었다.
+       그런데 이 저장소의 화면 문자열은 대부분
+
+           st.markdown(f\"\"\" ... \"\"\", unsafe_allow_html=True)
+
+       형태다. 줄 세기로는 **이것도 독스트링으로 보인다.** 그래서 이 검사는
+       화면 문자열이 가장 많이 사는 자리를 통째로 건너뛰고 "위반 0건"을
+       찍고 있었다 — 실제로는 35개가 살아 있었다(라운드 114).
+       AST 는 독스트링을 정확히 알므로 그런 착시가 없다.
+    """
+    src = src if src is not None else open(path, encoding='utf-8').read()
+    tree = _ast110.parse(src)
+    docs = set()
+    for node in _ast110.walk(tree):
+        body = getattr(node, 'body', None)
+        if not isinstance(node, (_ast110.Module, _ast110.FunctionDef,
+                                 _ast110.AsyncFunctionDef, _ast110.ClassDef)):
             continue
-        if 'page_icon=' in line:
+        if (body and isinstance(body[0], _ast110.Expr)
+                and isinstance(body[0].value, _ast110.Constant)
+                and isinstance(body[0].value.value, str)):
+            docs.add(id(body[0].value))
+    hits = []
+    for node in _ast110.walk(tree):
+        if not isinstance(node, _ast110.Constant):
             continue
-        for m in _EMO110.finditer(line):
+        if not isinstance(node.value, str) or id(node) in docs:
+            continue
+        for m in _EMO110.finditer(node.value):
             if m.group(0) not in _KEEP110:
-                hits.append((i + 1, m.group(0), line.strip()[:70]))
+                hits.append((getattr(node, 'lineno', 0), m.group(0),
+                             node.value.strip()[:70]))
     return hits
 
+
+import ast as _ast110                                             # noqa: E402
+
+# **검사가 아무것도 안 재고 초록불을 켜지 못하게** 한다 —
+# 심어 둔 이모지를 실제로 찾아내는지 먼저 확인한다.
+# (0건은 '없다'와 '못 봤다' 둘 다일 수 있다 · memory: 점검이 0건을 재고
+#  초록불을 켠다)
+_PLANT110 = (
+    'def f():\n'
+    '    """문서 문자열 안의 \U0001F4A1 는 세면 안 된다."""\n'
+    '    st.markdown(f"""\n'
+    '        <p>\U0001F4A1 <b>여러 줄 템플릿 안</b>은 세야 한다</p>\n'
+    '    """, unsafe_allow_html=True)\n')
+_plant110 = _display_emoji('<planted>', _PLANT110)
+check("이모지 검사가 여러 줄 템플릿 안을 실제로 본다 (심어서 확인)",
+      len(_plant110) == 1 and _plant110[0][1] == '\U0001F4A1',
+      f'찾은 것 {_plant110}')
+check("이모지 검사가 독스트링은 세지 않는다 (같은 심기로 확인)",
+      len(_plant110) == 1)
 
 _emo_all110 = []
 for _f110 in _UIF110:
@@ -6480,7 +6519,11 @@ check("화면이 엔진 버전을 함께 적는다",
 check("개입 안 했으면 말하지 않는다", "if _ng.get('risk'):" in _w112)
 
 # 근거 표가 중앙 판정과 같은 값을 쓰는가 (라운드 42 · 배너와 어긋났던 자리)
-check("근거 표에 실행 진입가 행이 있다", '★ 실행 진입가 (오늘 쓰는 값)' in _w112)
+# 라운드 114 — 앞의 `★`(U+2605)를 뺐다. §5 이모지 금지에 걸리는데
+# §110 이 여러 줄 템플릿을 통째로 건너뛰느라 못 보고 있었다. 검사가 옛
+# 표기를 요구하고 있었으므로 검사를 현실에 맞춘다 — 지키려는 것은 별표가
+# 아니라 **그 행이 있다는 사실**이다.
+check("근거 표에 실행 진입가 행이 있다", '실행 진입가 (오늘 쓰는 값)' in _w112)
 check("근거 표가 중앙 판정을 읽는다",
       "(CORE or {}).get('pullback_zone')" in _w112
       and "(CORE or {}).get('new_target')" in _w112)
