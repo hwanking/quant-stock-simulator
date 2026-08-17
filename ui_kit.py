@@ -108,13 +108,21 @@ def section(title: str, subtitle: str = '', theme: str = 'dark',
         unsafe_allow_html=True)
 
 
-def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
+def logo(theme: str = 'dark', size: int = 28, sub: str = '',
+         href: str = '', title: str = '') -> str:
     """
     가늠 워드마크 — 글자 하나로 로고를 만든다.
 
     '가늠'은 가늠쇠에서 온 말이다. 가늠쇠는 총열 끝의 작은 표적 조준점이고,
     그 모양이 이 로고의 유일한 도형이다 — 원 안의 십자, 그리고 마침표.
     마침표는 '재보고 나서 결론을 낸다'는 뜻이다. 장식은 이게 전부다.
+
+    ■ `href` (라운드 122)
+      web_app 1529행에 "제목 자체를 홈 버튼으로 쓴다"고 **주석으로만**
+      적혀 있었고, 코드는 맨 `<div>` 였다. 사이드바는 그 아래에서
+      "제목을 누르면 첫 화면으로 돌아갑니다"라고 안내하고 있었다 —
+      화면이 지키지 못할 약속을 하고 있었던 것이다.
+      결정을 주석이 아니라 **코드**로 옮긴다.
     """
     t = tokens(theme)
     r = size * 0.42
@@ -129,11 +137,18 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '') -> str:
     subhtml = (f"<span style='font-size:12px; color:{t['tx3']}; "
                f"font-weight:500; letter-spacing:0;'>{_esc(sub)}</span>"
                if sub else '')
-    return (
-        f"<div style='display:flex; align-items:center; gap:9px;'>{mark}"
+    inner = (
+        f"{mark}"
         f"<span style='font-size:{size * 0.78:.0f}px; font-weight:700; "
         f"color:{t['tx1']}; letter-spacing:-0.03em; line-height:1;'>가늠"
-        f"<span style='color:{t['brand']};'>.</span></span>{subhtml}</div>")
+        f"<span style='color:{t['brand']};'>.</span></span>{subhtml}")
+    box = "display:flex; align-items:center; gap:9px;"
+    if not href:
+        return f"<div style='{box}'>{inner}</div>"
+    return (f"<a href='{_esc_attr(href)}' "
+            f"title='{_esc_attr(title or '첫 화면으로')}' "
+            f"style='{box} text-decoration:none; cursor:pointer;'>"
+            f"{inner}</a>")
 
 
 #: 아이콘 — Lucide 규격 하나로 통일한다 (24 그리드 · 선 2 · 둥근 끝).

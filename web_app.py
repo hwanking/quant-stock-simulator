@@ -1634,8 +1634,55 @@ _NAV_SUB = [
          'href': '#nav-updates'},
     ]},
 ]
+#: 첫 화면으로 되돌릴 때 비우는 상태 — **한 곳에만 적는다.**
+#  로고 링크와 '처음으로' 버튼이 같은 목록을 써야 한다. 목록이 둘이면
+#  한쪽만 고치는 일이 생긴다 (§4). 보유종목(positions)과 저장본은
+#  건드리지 않는다 — 사용자의 자료다.
+_HOME_RESET_KEYS = (
+    'search_text_input', 'pending_search', 'selected_ticker',
+    'show_portfolio', 'show_screener', 'pending_scan',
+    'scan_results', 'scan_key', 'scan_universe_total',
+    'attention_result', 'attention_unmapped',
+    'paste_preview', 'last_ocr_text', 'clip_image',
+    'name_candidates', 'horizon_pick', 'freeform_paste')
+
+
+def _go_home():
+    for _k in _HOME_RESET_KEYS:
+        st.session_state.pop(_k, None)
+    st.rerun()
+
+
+# 로고 클릭 — Streamlit 위젯은 HTML 앵커에서 못 누르므로 쿼리 파라미터로
+# 돌아온다. 파라미터는 처리 후 지운다 (새로고침해도 다시 안 돌게).
+if st.query_params.get('home'):
+    try:
+        del st.query_params['home']
+    except Exception:                                          # noqa: BLE001
+        st.query_params.clear()
+    _go_home()
+
+# 접기 버튼은 스크롤해도 자리에 있어야 한다 (라운드 122).
+#   `stSidebarCollapseButton` 은 `stSidebarHeader` 안에 있고, 그 바깥의
+#   `stSidebarContent` 가 스크롤 컨테이너다. 헤더가 static 이라 사이드바를
+#   내리면 버튼이 위로 밀려 사라졌다 — 메뉴가 길어질수록 더 그렇다.
+#   헤더를 스크롤 컨테이너 기준 sticky 로 붙인다. 배경을 함께 주지 않으면
+#   아래 내용이 버튼 뒤로 비쳐 보인다.
 st.sidebar.markdown(
-    f"<div style='padding:4px 0 14px 0;'>{_uk.logo(_theme, size=30)}</div>",
+    f"""<style>
+  section[data-testid="stSidebar"] div[data-testid="stSidebarHeader"] {{
+      position: sticky; top: 0; z-index: 70;
+      background: {_TOK['bg2']};
+  }}
+  /* 로고 줄도 같이 붙여 두면 '지금 어느 앱인지'가 항상 보인다 */
+  section[data-testid="stSidebar"] a.gn-home {{ text-decoration: none; }}
+</style>""",
+    unsafe_allow_html=True)
+
+st.sidebar.markdown(
+    f"<div style='padding:4px 0 14px 0;'>"
+    f"{_uk.logo(_theme, size=30, href='?home=1', title='첫 화면으로 (검색어·스캔 결과 초기화)')}"
+    f"</div>",
     unsafe_allow_html=True)
 
 # 종목 검색은 이 앱의 첫 동작이다 — 메뉴보다 위에 있어야 한다.
@@ -1657,17 +1704,10 @@ st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 if st.sidebar.button("처음으로", width='content', key="btn_home",
                      help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
                           "보유종목은 지워지지 않습니다."):
-    # 보유종목(positions)과 저장본은 건드리지 않는다 — 사용자의 자료다.
-    for _k in ('search_text_input', 'pending_search', 'selected_ticker',
-               'show_portfolio', 'show_screener', 'pending_scan',
-               'scan_results', 'scan_key', 'scan_universe_total',
-               'attention_result', 'attention_unmapped',
-               'paste_preview', 'last_ocr_text', 'clip_image',
-               'name_candidates', 'horizon_pick', 'freeform_paste'):
-        st.session_state.pop(_k, None)
-    st.rerun()
+    _go_home()
 
-st.sidebar.caption(f"업데이트 {APP_UPDATED} · 제목을 누르면 첫 화면으로 돌아갑니다")
+st.sidebar.caption(f"업데이트 {APP_UPDATED} · 제목이나 '처음으로'를 누르면 "
+                   f"첫 화면으로 돌아갑니다")
 
 # 라이트/다크 테마 토글
 _theme_is_light = st.sidebar.toggle("라이트 모드", value=(_theme == 'light'),
@@ -2322,12 +2362,55 @@ def _build_reco_card(p, news_txt, conf_txt):
 # 옛 엔진 카드에는 성립하지 않는 값이 있었다(손절이 매수가 위 등).
 
 
+#: 스캔 단계 — 화면이 '몇 단계 중 몇 번째'를 말할 수 있게 한 곳에 적는다.
+#  퍼센트를 지어내지 않는다. 종목 단위 진척은 엔진이 알려 주지 않으므로
+#  (`run_screener_scan` 은 콜백이 없다 · §1 계산 파일은 안 건드린다)
+#  **단계 단위**로만 말한다 — 2/4 는 50% 가 맞고, 그 이상은 추측이다.
+_SCAN_STEPS = ('종목·시장 구분 확인', '관심종목 발굴', '관심지표 계산',
+               '정밀 분석')
+
+
 def run_market_scan():
     """관심종목 발굴 → 정밀 퀀트 분석. 두 단계를 명확히 분리한다."""
     _bar = st.sidebar.empty()
+    _st = {'step': 0, 't0': time.time()}
 
-    def _progress(msg):
-        _bar.caption(f"{msg}")
+    def _progress(msg, step=None):
+        """진행 표시 — 단계·퍼센트·경과 시간을 함께 적는다 (라운드 122).
+
+        종전에는 문장 한 줄만 있었다. 오래 걸리는데 얼마나 남았는지
+        화면이 말하지 않으면 사용자는 멈춘 것으로 읽는다.
+        경과는 **갱신 시점**의 값이다 — 막힌 호출 중에는 흐르지 않는다.
+        그래서 '지난번엔 몇 초 걸렸다'를 같이 적어 기다릴 길이를 준다.
+        """
+        if step is not None:
+            _st['step'] = step
+        _cur = max(1, min(_st['step'], len(_SCAN_STEPS)))
+        _pct = int(round(100 * _cur / len(_SCAN_STEPS)))
+        _el = time.time() - _st['t0']
+        _prev = st.session_state.get('scan_last_secs')
+        _prev_txt = (f" · 지난번 {_prev:.0f}초" if _prev else '')
+        _bar.markdown(
+            f"<div style='padding:2px 0 6px 0;'>"
+            f"<div style='display:flex; justify-content:space-between; "
+            f"font-size:12px; color:{_TOK['tx2']}; margin-bottom:5px;'>"
+            f"<span>{_cur}/{len(_SCAN_STEPS)}단계 · "
+            f"{_uk._esc(_SCAN_STEPS[_cur - 1])}</span>"
+            f"<span style='font-variant-numeric:tabular-nums;'>{_pct}%</span>"
+            f"</div>"
+            # `_TOK` 는 킷의 `raised` 를 `hover` 라는 이름으로 담는다
+            # (_pal 이 이름을 바꿔 싣는다). 킷 키를 그대로 쓰면 KeyError 다 —
+            # 실제로 그렇게 써서 스캔이 통째로 죽었다 (라운드 122).
+            f"<div style='height:4px; border-radius:3px; "
+            f"background:{_TOK['hover']}; overflow:hidden;'>"
+            f"<div style='width:{_pct}%; height:100%; "
+            f"background:{_TOK['brand']};'></div></div>"
+            # §77 — 화면 글자는 12px 미만으로 내려가지 않는다. 여기서
+            # 11px 을 썼다가 회귀가 잡았다 (라운드 122).
+            f"<div style='font-size:12px; color:{_TOK['tx3']}; "
+            f"margin-top:5px; line-height:1.5;'>{_uk._esc(msg)}<br>"
+            f"경과 {_el:.0f}초{_prev_txt}</div></div>",
+            unsafe_allow_html=True)
 
     # 1단계 — 오늘의 관심종목 발굴 (순위 페이지 → 후보에만 일봉)
     # '사용자 관심종목' 방식은 저장된 관심종목 + 보유종목을 대상으로 한다
@@ -2344,7 +2427,7 @@ def run_market_scan():
     # 종전에는 뒤에 있었고, 순위 페이지가 비면 그 전에 return 해 버려서
     # 경량 스캔이 **실행조차 안 된 채** 화면에 '0개'로 찍혔다. 사용자는
     # "전 종목을 훑었는데 하나도 없구나"로 읽는다 — 사실이 아니었다.
-    _progress("종목 코드·시장 구분 확인 중")
+    _progress("종목 코드·시장 구분 확인 중", step=1)
     universe = engine_init.get_screener_universe(full_market=True)
     by_code = {u['symbol'].split('.')[0]: u for u in universe}
 
@@ -2379,6 +2462,7 @@ def run_market_scan():
     st.session_state['scan_lite'] = _lite
 
     # 순위 페이지가 죽으면 경량 스캔 통과 종목을 거래대금 순으로 대신 쓴다
+    _progress("거래대금·상승률 순위에서 관심종목 추리는 중", step=2)
     att = market_attention.find_attention_candidates(
         attention_strategy, top_n=scan_depth, progress=_progress,
         watchlist=watch, fallback_pool=_lite_rows)
@@ -2403,10 +2487,15 @@ def run_market_scan():
     st.session_state['attention_unmapped'] = unmapped
     st.session_state['scan_universe_total'] = att['pool_size']
 
-    _bar.empty()
-    with st.spinner(f"관심종목 {len(target)}개 정밀 분석 중... (2단계)"):
+    # 막대는 지우지 않는다 — 가장 오래 걸리는 단계에서 화면이 비면
+    # 사용자는 멈춘 것으로 읽는다 (라운드 122).
+    _progress(f"관심종목 {len(target)}개를 하나씩 정밀 분석하는 중", step=4)
+    with st.spinner(f"관심종목 {len(target)}개 정밀 분석 중... (4/4단계)"):
         st.session_state['scan_results'] = q_engine.run_screener_scan(
             target, t_ref_str, b_engine=engine_init, rho_cutoff=rho_cutoff)
+    # 다음번에 '얼마나 기다리면 되는지' 말할 수 있게 실제 소요를 남긴다.
+    st.session_state['scan_last_secs'] = time.time() - _st['t0']
+    _bar.empty()
 
     # 관심점수를 결과 행에 붙인다 (순위에는 동점 보조기준으로만 쓴다 — §12)
     _att_by_symbol = {t['symbol']: t for t in target}
