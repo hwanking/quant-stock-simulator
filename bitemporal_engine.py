@@ -250,6 +250,39 @@ def resolve_analysis_date(now_kst=None, krx_calendar=None, market_status=None):
         return today          # 장 종료 후 → 오늘 종가 확정
     return cal.previous_trading_day(today)   # 장중·장 시작 전 → 직전 거래일
 
+def price_basis_day(now_kst=None, krx_calendar=None, market_status=None):
+    """지금 받아 온 **현재가가 속한 거래일** — 표시 전용 단일 출처.
+
+    ■ 왜 `resolve_analysis_date` 와 따로 있는가
+      둘은 다른 질문이다.
+        · `resolve_analysis_date` — **어느 확정 종가로 분석하는가.**
+          장중에는 오늘 종가가 아직 없으므로 **직전 거래일**이다.
+        · 이 함수 — **화면에 띄운 그 가격이 어느 날 값인가.**
+          장중에는 오늘의 체결가이므로 **오늘**이다.
+      장중에는 둘이 다른 것이 맞다. 같아야 하는 때는 장 시작 전·휴장이다.
+
+    ■ 실제 사고 (라운드 98 → 122)
+      라운드 98 은 '오늘이 **거래일**인가'만 물었다. 그래서 거래일이지만
+      **장이 열리기 전**인 시각에 화면을 열면 오늘 날짜가 '기준 거래일'로
+      찍혔고, 정작 가격은 직전 거래일 종가였다.
+      2026-08-18 새벽에 실제로 그랬다 — 표는 8/18, 같은 화면의 분석
+      기준일은 8/14 였다(8/17 은 광복절 대체공휴일). 274,500원은 8/14
+      종가였다. 거래일 여부만이 아니라 **장이 열렸는가**까지 봐야 한다.
+
+    표시용 날짜만 정한다 — 가격·판정은 건드리지 않는다.
+    """
+    now_kst = now_kst or datetime.datetime.now()
+    cal = krx_calendar or KrxCalendar()
+    status = market_status or get_market_status(now_kst)
+    today = now_kst.date()
+    try:
+        if status.get('state') in ('장중', '장 종료'):
+            return today                     # 오늘 장이 값을 만들었다
+        return cal.previous_trading_day(today)   # 장 시작 전 · 휴장
+    except Exception:                            # noqa: BLE001
+        return today            # 달력을 못 읽으면 지어내지 않는다
+
+
 class BitemporalEngine:
     """
     [Section 1, 2, 3, 4, 9] 단위 파서 강제, 6대 출처 교차검증 우선순위, Bitemporal PTA 및 TimeSPEC 엔진.
@@ -781,14 +814,12 @@ class BitemporalEngine:
         #   거래일인지는 **달력에 물어본다.** 오늘이 거래일이 아니면
         #   직전 거래일이 그 가격이 속한 날이다.
         #   (표시용 날짜만 고친다 — 가격·판정은 건드리지 않는다)
-        _today = now_dt.date()
-        try:
-            _cal_now = KrxCalendar()
-            _base_day = (_today if _cal_now.is_trading_day(_today)
-                         else _cal_now.previous_trading_day(_today))
-        except Exception:                                      # noqa: BLE001
-            _base_day = _today          # 달력을 못 읽으면 지어내지 않는다
-        today_date_str = _base_day.strftime("%Y-%m-%d")
+        #
+        # ⚠️ 라운드 122 — 그 물음이 **좁았다.** '거래일인가'만 봤더니
+        #   거래일 **장 시작 전**에는 오늘이 찍혔고 가격은 직전 거래일
+        #   종가였다. 판정을 `price_basis_day()` 한 곳으로 옮겼다 —
+        #   화면과 회귀가 같은 함수를 부른다 (§4).
+        today_date_str = price_basis_day(now_dt).strftime("%Y-%m-%d")
 
         # [명세 §4] 실제로 연동된 출처만 가격을 갖는다.
         # DART·KIND·기업IR은 공시·재무 출처이며 현재가 대조에 사용하지 않는다.

@@ -9181,10 +9181,28 @@ _bad147 = [d for d in _dates147
            if not _cal147.is_trading_day(_dt147.date.fromisoformat(d))]
 check("표의 '기준 거래일'이 실제 거래일이다 (휴장일이 아니다)",
       not _bad147, f'거래일이 아닌 값: {_bad147}')
+# 라운드 122 — 이 검사가 '분석 기준일과 **같다**'를 요구하고 있었다.
+#   그런데 둘은 다른 질문이다. 장중에는 화면 가격이 오늘의 체결가이고
+#   분석 기준일은 직전 거래일이라 **다른 것이 맞다.** 같아야 하는 때는
+#   장 시작 전·휴장이다.
+#   실제로 2026-08-18 새벽(장 시작 전)에 표가 8/18 을 찍고 분석 기준일이
+#   8/14 여서 이 검사가 실패했고, 그건 검사가 아니라 **화면이 틀린** 것이었다
+#   — 가격 274,500원은 8/14 종가였다.
+#   판정을 `price_basis_day()` 로 옮기고, 검사는 그 함수를 부른다.
 _ref147 = be.resolve_analysis_date().strftime('%Y-%m-%d')
-check("표의 기준 거래일이 분석 기준일과 같다",
-      all(d == _ref147 for d in _dates147),
-      f'표 {_dates147} vs 분석기준일 {_ref147}')
+_basis147 = be.price_basis_day().strftime('%Y-%m-%d')
+_state147 = be.get_market_status().get('state')
+check("표의 기준 거래일이 '그 가격이 속한 날'과 같다",
+      all(d == _basis147 for d in _dates147),
+      f'표 {_dates147} vs 기준일 {_basis147} ({_state147})')
+# 장이 열리기 전에는 분석 기준일과도 같아야 한다 — 이때 어긋나면
+# 화면이 두 날짜를 동시에 말하게 된다 (라운드 98 · 122 의 사고).
+if _state147 in ('장 시작 전', '휴장일'):
+    check("장 시작 전·휴장에는 분석 기준일과도 같다",
+          _basis147 == _ref147, f'{_basis147} vs {_ref147} ({_state147})')
+else:
+    check(f"장중·장 종료에는 둘이 달라도 된다 ({_state147})",
+          True, f'표 {_basis147} · 분석 {_ref147}')
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -11747,6 +11765,54 @@ check("날짜 스크립트가 국면 분류를 다시 정의하지 않는다",
       'import regime_split_r14 as R' in _rd168
       and 'R.volband(r)' in _rd168
       and 'VOL_SPLIT =' not in _rd168)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §169 — 화면이 없는 팔레트 키를 쓰지 않는가 (라운드 122)
+#
+#   진행 표시를 만들면서 `_TOK['raised']` 라고 썼다. 킷(ui_kit.DARK)에는
+#   `raised` 가 있지만, web_app 의 `_pal()` 은 그것을 **`hover` 라는 다른
+#   이름으로** 담는다. 결과는 KeyError 였고 **스캔이 통째로 죽었다.**
+#
+#   회귀는 초록불이었다 — 그 줄은 스캔이 돌 때만 실행되기 때문이다.
+#   서버를 띄워 화면에 뜬 트레이스백을 보고서야 알았다.
+#   런타임에만 터지는 이름 오류는 정적으로 잡을 수 있다. 잡는다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§169 팔레트 키 — 화면이 없는 이름을 쓰지 않는가")
+print("=" * 72)
+_tree169 = _ast165.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
+
+# ⓐ `_pal()` 이 실제로 만드는 키 — 정의에서 유도한다 (손으로 안 적는다)
+_defined169 = set()
+for _n169 in _ast165.walk(_tree169):
+    if (isinstance(_n169, _ast165.FunctionDef) and _n169.name == '_pal'):
+        for _r169 in _ast165.walk(_n169):
+            if isinstance(_r169, _ast165.Call) and isinstance(
+                    _r169.func, _ast165.Name) and _r169.func.id == 'dict':
+                _defined169 |= {_kw.arg for _kw in _r169.keywords if _kw.arg}
+check("팔레트 키 정의를 찾아냈다 (0개를 재고 통과하지 않는다)",
+      len(_defined169) >= 10, f'{len(_defined169)}개: {sorted(_defined169)}')
+
+# ⓑ `_TOK['x']` 로 실제로 쓰인 키
+_used169 = set()
+for _n169 in _ast165.walk(_tree169):
+    if (isinstance(_n169, _ast165.Subscript)
+            and isinstance(_n169.value, _ast165.Name)
+            and _n169.value.id == '_TOK'
+            and isinstance(_n169.slice, _ast165.Constant)
+            and isinstance(_n169.slice.value, str)):
+        _used169.add(_n169.slice.value)
+check("_TOK 사용처를 실제로 찾아냈다", len(_used169) >= 5,
+      f'{len(_used169)}개')
+_bad169 = sorted(_used169 - _defined169)
+check("화면이 팔레트에 없는 키를 쓰지 않는다", not _bad169,
+      f'없는 키: {_bad169}')
+
+# ⓒ 심어서 확인 — 있을 때 잡는가 (0건이 '못 봤다'가 아님을 보인다)
+check("검사가 없는 키를 실제로 잡는다 (심어서 확인)",
+      bool({'raised'} - _defined169),
+      "킷의 'raised' 는 _pal 에서 'hover' 로 이름이 바뀐다")
 
 
 print()
