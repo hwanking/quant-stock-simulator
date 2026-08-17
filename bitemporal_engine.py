@@ -275,7 +275,12 @@ class BitemporalEngine:
             matches = re.findall(r'<a href="/item/main\.naver\?code=\d+" class="tltle">(.*?)</a>', html)
             if matches:
                 return matches[0].strip()
-        return "삼성전자"
+        # 수신 실패 시 **종목명을 지어내지 않는다** (§3 · 라운드 119).
+        #   여기가 `return "삼성전자"` 였다. 화면 사이드바가 이 값을
+        #   "오늘 시총 1위는 {값}" 으로 그대로 쓰므로, 네이버가 안 뜨는 날
+        #   삼성전자가 **사실처럼** 나갔다 — 못 받은 것과 1위인 것은 다르다.
+        #   None 을 돌려주고 화면이 '미수신'을 밝히게 한다.
+        return None
 
     def search_naver_stocks_realtime(self, query):
         """
