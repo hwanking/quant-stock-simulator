@@ -11669,6 +11669,86 @@ check("중앙 판정이 없는 리포트는 있다·없다를 말하지 않는�
       and '이 리포트에는 중앙 판정이 없습니다' in _wa167)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §168 — 국면 표가 '언제 잰 값'인지와 '날짜 표본'을 밝히는가 (라운드 121)
+#
+#   사용자가 화면의 국면 표를 붙여 놓고 "확률을 더 높여 달라"고 물었다.
+#   표를 재 보니 두 가지가 나왔고, 둘 다 표만 봐서는 안 보인다.
+#
+#     ① 게이트가 읽는 `regime_breakdown.json` 은 2026-08-03 에 쓰였고
+#        **파일 안에 측정 시각이 없다.** 그 사이 원장이 자라서, 화면의
+#        "연습 54% (n=225)" 칸이 지금 원장으로는 n=3,577 이다.
+#        §2 그대로다 — 날짜 없는 숫자는 반드시 낡는다.
+#     ② 국면은 **시장 수준** 값이라 케이스 수가 독립 관측 수가 아니다.
+#        거친 하락 실전 877건은 실은 **9일**이다 (97배).
+#        VIX 축에서 이미 당했다 — "280건"이 실은 날짜 5개였다.
+#
+#   숫자는 **고치지 않았다.** 그 파일은 regime_policy 가 점수·비중·손절
+#   상한을 정하는 데 쓰고, R55·R57·R66 전방 표본이 2026-08-09 부터
+#   쌓이는 중이다. 대신 화면이 이 사실을 말하게 했다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§168 국면 표 — 측정 시각과 날짜 표본을 밝히는가")
+print("=" * 72)
+import json as _json168                                        # noqa: E402
+
+_dpath168 = _os.path.join(PROJ, '.portfolio', 'regime_cell_days.json')
+check("날짜 표본 산출물이 있다", _os.path.exists(_dpath168), _dpath168)
+_d168 = {}
+if _os.path.exists(_dpath168):
+    with open(_dpath168, encoding='utf-8') as _fh168:
+        _d168 = _json168.load(_fh168)
+
+# ① 측정 날짜를 반드시 함께 적는다 (§2)
+check("날짜 표본 산출물이 측정 시각을 적는다", bool(_d168.get('measured_at')),
+      str(_d168.get('measured_at')))
+check("무엇으로 쟀는지(원장 크기)를 적는다",
+      (_d168.get('ledger_buyzone_n') or 0) >= 1000,
+      str(_d168.get('ledger_buyzone_n')))
+check("표시 전용임을 스스로 밝힌다",
+      '점수·게이트·문턱에 쓰지 않는다' in str(_d168.get('note')))
+
+# ② 게이트로 새어 들어가지 않는다 — 두 번째 경로를 만들지 않았다 (§4)
+_rp168 = ' '.join(ln for _i, ln in _la135.code_lines('regime_policy.py'))
+check("게이트(regime_policy)가 날짜 산출물을 읽지 않는다",
+      'regime_cell_days' not in _rp168)
+
+# ③ 이 공개가 지킬 것이 실제로 있는가 — 케이스가 날짜를 크게 넘는가
+_ratios168 = []
+for _k168, _c168 in (_d168.get('cells') or {}).items():
+    _b168 = _c168.get('blind') or {}
+    if _b168.get('days'):
+        _ratios168.append(_b168['n'] / _b168['days'])
+check("실전 칸의 케이스÷날짜를 실제로 쟀다 (0칸을 재고 통과하지 않는다)",
+      len(_ratios168) >= 4, f'{len(_ratios168)}칸')
+check("케이스 수가 날짜 수를 크게 넘는다 (공개할 이유가 있다)",
+      _ratios168 and max(_ratios168) >= 10,
+      f'최대 {max(_ratios168):.0f}배' if _ratios168 else '미측정')
+
+# ④ 화면이 셋 다 말하는가 — 측정 시각 · 날짜 표본 · 다시 안 재는 이유
+_wa168 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 측정 시각 유무를 밝힌다",
+      '측정 시각이 기록돼 있지 않습니다' in _wa168)
+check("화면이 케이스÷날짜를 밝힌다",
+      '케이스÷날짜' in _wa168 and 'regime_cell_days.json' in _wa168)
+check("화면이 다시 안 재는 이유(전방 표본)를 밝힌다",
+      '전방 표본이' in _wa168 and '_fe.eval_date_ko()' in _wa168)
+
+# ⑤ 다음 실행부터는 산출물이 측정 시각을 스스로 적는다
+_rs168 = _read148(_os.path.join(PROJ, 'scripts', 'regime_split_r14.py'))
+check("생성 스크립트가 measured_at 을 적도록 고쳐졌다",
+      "'generated_at': _dt.date.today().isoformat()" in _rs168
+      and "'ledger_buyzone_n': len(rows)" in _rs168)
+
+# ⑥ 분류 산식을 베끼지 않았다 — 원본 모듈을 부른다 (§6)
+_rd168 = _read148(_os.path.join(PROJ, 'scripts',
+                                'regime_cell_days_r121.py'))
+check("날짜 스크립트가 국면 분류를 다시 정의하지 않는다",
+      'import regime_split_r14 as R' in _rd168
+      and 'R.volband(r)' in _rd168
+      and 'VOL_SPLIT =' not in _rd168)
+
+
 print()
 print("=" * 72)
 if FAILURES:
