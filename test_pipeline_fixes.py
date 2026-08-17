@@ -531,6 +531,34 @@ check("산문 렌더 자리가 _esc_md 를 쓴다 (note·매수후 주의문)",
       "line-height:1.6;'>{_esc_md(text)}</p>" in _uksrc120
       and "_esc_md(p.get('post_entry_caveat'))" in _uksrc120)
 
+# 킷만 고쳤더니 화면에 별표가 **8곳 → 4곳**만 줄었다. 남은 넷은 다른
+# 경로였다 — `_md_safe()`(라운드 44 의 물결표 방어)가 산문의 별표까지
+# 통째로 이스케이프하고 있었다. 호출부마다 빼면 같은 실수를 다시 부르므로
+# **여기서** 짝이 맞는 굵기만 되살린다. 물결표·밑줄·백틱은 계속 막는다.
+_mdsafe120 = _re.search(
+    r"def _md_safe\(text\):.*?return _RE_MD_BOLD_ESC\.sub\("
+    r"r'\*\*\\1\*\*', s\)", _w120, _re.S)
+check("_md_safe 가 굵기만 되살린다 (물결표 방어는 유지)",
+      bool(_mdsafe120)
+      and "for ch in ('~', '*', '_', '`'):" in _mdsafe120.group(0))
+_ns120 = {'_re_wa': _re}
+if _mdsafe120:
+    exec(_mdsafe120.group(0), _ns120)                          # noqa: S102
+    _pat120 = _re.search(r"_RE_MD_BOLD_ESC = _re_wa\.compile\((.*?)\)\n",
+                         _w120, _re.S)
+    exec('_RE_MD_BOLD_ESC = _re_wa.compile(' + _pat120.group(1) + ')',
+         _ns120)                                              # noqa: S102
+    _f120 = _ns120['_md_safe']
+    check("_md_safe — 굵기 표기가 살아난다",
+          '**굵게**' in _f120('앞 **굵게** 뒤')
+          and '\\*' not in _f120('앞 **굵게** 뒤'))
+    check("_md_safe — 물결표는 여전히 막는다 (라운드 44 재발 방지)",
+          _f120('25~75분위').count('\\~') == 1)
+    check("_md_safe — 별표에 공백이 붙으면 살리지 않는다",
+          '\\*\\*' in _f120('** 공백 시작**'))
+    check("_md_safe — 짝이 안 맞으면 살리지 않는다",
+          '\\*\\*' in _f120('**한쪽만'))
+
 
 # ---------------------------------------------------------------- 스캔 격리
 section("17. 한 종목 오류가 전체 스캔을 막지 않는가")
@@ -7039,17 +7067,33 @@ check("sector_cycle 에 이모지가 없다",
 check("마크다운 이스케이프 헬퍼가 있다", '_md_safe' in _wsrc114)
 # 함수 본문만 정확히 잘라 낸다. 고정 길이로 자르면 뒤 코드까지 끌려와
 # SyntaxError 가 난다 (실제로 났다 — _OLD_BORDERS 리스트 중간에서 잘렸다).
-_i114 = _wsrc114.index('def _md_safe')
-_j114 = _wsrc114.index('\n    return s\n', _i114) + len('\n    return s\n')
-_ns114 = {}
-exec(compile(_wsrc114[_i114:_j114], '<md_safe>', 'exec'), _ns114)
+#
+# ⚠️ 라운드 120 — 여기가 `'\n    return s\n'` 을 끝 표시로 삼고 있었다.
+#    함수의 마지막 줄이 바뀌자(굵기 복원을 넣으면서) 그 문자열이 사라져
+#    **ValueError 로 회귀가 통째로 죽었다.** 검사가 코드의 *형태*를 붙들면
+#    구현을 고칠 때마다 깨진다 — AST 로 함수 경계를 얻는다.
+_ast114b = __import__('ast')
+_mod114 = _ast114b.parse(_wsrc114)
+_fn114 = next(n for n in _mod114.body
+              if isinstance(n, _ast114b.FunctionDef) and n.name == '_md_safe')
+_ns114 = {'_re_wa': _re}
+exec(compile(_ast114b.Module(body=[_fn114], type_ignores=[]),
+             '<md_safe>', 'exec'), _ns114)                     # noqa: S102
+# 함수가 참조하는 모듈 수준 패턴도 같이 넣어 준다
+_pat114 = _re.search(r"_RE_MD_BOLD_ESC = _re_wa\.compile\((.*?)\)\n",
+                     _wsrc114, _re.S)
+exec('_RE_MD_BOLD_ESC = _re_wa.compile(' + _pat114.group(1) + ')',
+     _ns114)                                                   # noqa: S102
 _mdsafe114 = _ns114['_md_safe']
 check("물결표를 이스케이프한다",
       _mdsafe114('25~75분위 (88,863~173,641원)')
       == '25\\~75분위 (88,863\\~173,641원)',
       _mdsafe114('25~75분위 (88,863~173,641원)'))
-check("별표·밑줄·역따옴표도 막는다",
+# 라운드 120 — 짝이 맞는 굵기 표기만 되살아난다. 홀 별표·밑줄·백틱은 그대로
+check("홀 별표·밑줄·역따옴표는 막는다",
       _mdsafe114('a*b_c`d') == 'a\\*b\\_c\\`d')
+check("짝이 맞는 굵기 표기는 살린다 (산문)",
+      _mdsafe114('앞 **굵게** 뒤') == '앞 **굵게** 뒤')
 check("None 을 빈 문자열로", _mdsafe114(None) == '')
 
 # 마크다운 위젯에 물결표가 짝수로 들어가는 자리가 남아 있는가 (AST 전수)
