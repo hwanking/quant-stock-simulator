@@ -203,7 +203,9 @@ def pick_from_scan_row(q_engine, r):
         'name': r.get('name'),
         'asset_type': fs.get('asset_type', 'STOCK'),
         'reco_class': _classify_reco(r, easy_nb.get('line')),
-        'easy_emoji': easy_nb.get('emoji'),
+        # 라운드 120g — `easy_emoji` 를 뺐다. 엔진의 `emoji` 는 **모든 대입이
+        # 빈 문자열**이고(이모지 금지 · §5), 아무도 읽지 않는 필드였다.
+        # 화면은 그걸 `{emoji} {line}` 으로 그려 빈 자리와 앞 공백만 남겼다.
         'easy_line': easy_nb.get('line'),
         'score': r.get('final_score'),
         'price': r.get('base_price'),          # 추천 시점 가격 (전일 종가 기준)

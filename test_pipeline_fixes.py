@@ -11519,6 +11519,156 @@ check("굵기를 담은 키가 블록 HTML 로 맨몸으로 가지 않는다",
       not _naked165, str(_naked165[:3]))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §166 — 화면이 **항상 비는 값**을 자리로 그리지 않는가 (라운드 120g)
+#
+#   라운드 114 에서 국면 제목의 빈 아이콘 자리를 뺐다. 같은 것이 또
+#   나왔다 — `easy['new_buyer']['emoji']` 는 엔진의 대입 11곳이 전부
+#   빈 문자열인데(§5 이모지 금지의 잔재) 화면은 이렇게 그리고 있었다:
+#
+#       <p …>{_nb['emoji']} {_nb['line']}</p>
+#
+#   이모지가 없으니 남는 것은 **앞 공백 하나**뿐이다. 값이 없다는 사실을
+#   화면이 자리로 남겨 두면, 언젠가 그 자리에 무언가를 채우고 싶어진다.
+#
+#   이름(`emoji`)이 아니라 **값**으로 찾는다 — 이름이 바뀌어도, 새 필드가
+#   같은 상태가 되어도 걸린다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§166 빈 자리 — 항상 비는 값을 화면이 그리지 않는가")
+print("=" * 72)
+
+
+def _always_empty166():
+    """dict 리터럴에서 그 키에 붙은 값이 **하나도 빠짐없이** '' 인 키."""
+    _seen, _dirty = {}, set()
+    for _p in _la16.reachable_modules():
+        if _p in _SRC165:
+            continue
+        try:
+            _t = _ast165.parse(_read148(_os.path.join(PROJ, _p)))
+        except Exception:                                        # noqa: BLE001
+            continue
+        for _n in _ast165.walk(_t):
+            if not isinstance(_n, _ast165.Dict):
+                continue
+            for _k, _v in zip(_n.keys, _n.values):
+                if not (isinstance(_k, _ast165.Constant)
+                        and isinstance(_k.value, str)):
+                    continue
+                if (isinstance(_v, _ast165.Constant)
+                        and isinstance(_v.value, str) and _v.value == ''):
+                    _seen.setdefault(_k.value, []).append(_p)
+                else:
+                    _dirty.add(_k.value)
+    return {k: v for k, v in _seen.items() if k not in _dirty}
+
+
+_AE166 = _always_empty166()
+# 0개면 유도가 깨진 것이다 — '위반 없음'으로 읽지 않는다.
+check("항상 비는 필드를 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+      len(_AE166) >= 1, f'{len(_AE166)}개: {sorted(_AE166)}')
+check("그 필드가 여러 곳에서 같은 상태다 (한 줄 우연이 아니다)",
+      max((len(v) for v in _AE166.values()), default=0) >= 5,
+      str({k: len(v) for k, v in _AE166.items()}))
+
+_slot166 = []
+if _AE166:
+    _pat166 = _re.compile(
+        r"""\[['"](%s)['"]\]|\.get\(['"](%s)['"]"""
+        % ('|'.join(map(_re.escape, _AE166)),
+           '|'.join(map(_re.escape, _AE166))))
+    for _p166 in _SRC165:
+        _t166 = _ast165.parse(_read148(_os.path.join(PROJ, _p166)))
+        for _n166 in _ast165.walk(_t166):
+            if not isinstance(_n166, _ast165.JoinedStr):
+                continue
+            for _v166 in _n166.values:
+                if isinstance(_v166, _ast165.FormattedValue):
+                    _e166 = _ast165.unparse(_v166.value)
+                    if _pat166.search(_e166):
+                        _slot166.append(
+                            f'{_p166}:{getattr(_v166, "lineno", 0)} '
+                            f'{_e166[:40]}')
+check("화면이 항상 비는 필드를 자리로 그리지 않는다",
+      not _slot166, str(_slot166[:3]))
+
+# 죽은 필드를 실어 나르지도 않는다 — premarket 이 `easy_emoji` 로
+# 그 빈 값을 카드까지 옮기고 있었고, 아무도 읽지 않았다.
+#
+# ※ 원문을 그대로 훑으면 **왜 뺐는지 적어 둔 주석**이 걸린다. 실제로
+#   처음 돌렸을 때 그렇게 실패했다 — 이 저장소에서 자기 언급에 걸린
+#   것이 이번이 다섯 번째다. 산문을 걷어낸 코드 줄만 본다 (§71).
+_pm166 = ' '.join(ln for _i, ln in _la135.code_lines('premarket.py'))
+check("premarket 이 죽은 easy_emoji 를 싣지 않는다",
+      'easy_emoji' not in _pm166)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §167 — 개장 전 배너가 리포트 본문과 다른 말을 하지 않는가 (라운드 120h)
+#
+#   교촌에프앤비를 화면에서 보다가 잡았다. 같은 페이지에 이 둘이 함께
+#   떠 있었다:
+#
+#       "개장 전 한 줄 결론 · **오늘은 매수 후보가 있습니다**"
+#       "오늘은 … **실제 매수를 검토할 수 있는 종목이 없습니다**"
+#       "실행 가능 0 · 조건 대기 1 · 추천·대기에서 뺌 4"
+#
+#   배너는 `reco_class` **문자열**('조건부로 사도 되는 종목' 1건)을 세고,
+#   리포트 본문은 중앙 판정(`core.recommended`)으로 갈랐다. 경로가 둘이면
+#   한쪽만 고치는 일이 생긴다 — §4 가 금지한 그것이고, 라운드 114 의
+#   요약 칸과 **같은 모양**이다. 회귀는 그때도 초록불이었다.
+#
+#   검사 순서: ① 위험이 실제로 데이터에 있는지 먼저 확인하고
+#              ② 그 다음에 배너가 중앙 판정을 쓰는지 본다.
+#   ①이 없으면 ②는 '아무것도 안 지키는 검사'가 될 수 있다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§167 개장 전 배너 — 본문과 같은 잣대인가")
+print("=" * 72)
+import glob as _glob167                                         # noqa: E402
+import json as _json167                                         # noqa: E402
+
+_SOFT167 = ('오늘 사도 되는 종목', '조건부로 사도 되는 종목')
+_disagree167, _rep167 = 0, 0
+for _f167 in sorted(_glob167.glob(_os.path.join(PROJ, '.portfolio',
+                                                'premarket_*.json'))):
+    try:
+        with open(_f167, encoding='utf-8') as _fh167:
+            _d167 = _json167.load(_fh167)
+    except Exception:                                            # noqa: BLE001
+        continue
+    _pk167 = _d167.get('picks') or []
+    if not _pk167:
+        continue
+    _rep167 += 1
+    for _p167 in _pk167:
+        _core167 = _p167.get('core') or {}
+        if (_p167.get('reco_class') in _SOFT167
+                and not _core167.get('recommended')):
+            _disagree167 += 1
+
+check("개장 전 리포트를 실제로 읽었다 (0건을 재고 통과하지 않는다)",
+      _rep167 >= 1, f'{_rep167}개 리포트')
+# 두 잣대가 실제로 갈리는 픽이 있다 — 그래서 아래 검사가 지킬 것이 있다.
+check("두 잣대가 갈리는 픽이 원장에 실재한다 (검사가 지킬 것이 있다)",
+      _disagree167 >= 1,
+      f'reco_class 는 매수권인데 중앙 판정은 아닌 픽 {_disagree167}건')
+
+_wa167 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("배너의 매수 후보 수가 중앙 판정에서 나온다",
+      "_buyable = sum(1 for _pk in _pm_picks" in _wa167
+      and "(_pk.get('core') or {}).get('recommended'))" in _wa167)
+check("배너가 reco_class 문자열을 세지 않는다",
+      "_cls_cnt[_pk.get('reco_class'" not in _wa167)
+check("배너의 칸 이름이 verdict_core 의 bucket 이다",
+      "_bk_pm = (_pk.get('core') or {}).get('bucket')" in _wa167)
+# 중앙 판정이 아예 없는 옛 리포트에 '있다/없다'를 말하지 않는다 (§3)
+check("중앙 판정이 없는 리포트는 있다·없다를 말하지 않는다",
+      "if not _pm_has_core:" in _wa167
+      and '이 리포트에는 중앙 판정이 없습니다' in _wa167)
+
+
 print()
 print("=" * 72)
 if FAILURES:
