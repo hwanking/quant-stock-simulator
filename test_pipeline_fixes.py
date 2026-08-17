@@ -11418,6 +11418,106 @@ _wa165 = _read148(_os.path.join(PROJ, 'web_app.py'))
 check("배당락일 note 가 이스케이프를 지난다",
       "_uk._esc_md(_div['note'])" in _wa165)
 
+# ⑨ 굵기를 **실제로 담은** 키가 블록 HTML 로 맨몸으로 가지 않는가
+#
+#    처음엔 이름으로 골랐다 — note · why · detail · target · title …
+#    그랬더니 `bull_target` 같은 **숫자**까지 걸려 56건이 나왔다. 오탐이
+#    많은 검사는 결국 아무도 안 본다. 그래서 값에서 출발한다:
+#    저장소 모듈의 문자열 중 굵기 표기를 담은 것의 **키만** 모으고,
+#    그 키가 블록 HTML 로 가는 자리만 본다.
+#
+#    왜 '블록' 인가 — 마크다운은 인라인 HTML 안의 `**` 는 해석한다
+#    (`f"**굵게** <span>{x}</span>"` 는 정상). 첫 글자가 `<` 인 블록은
+#    통째로 raw 로 지나가므로 별표가 글자로 남는다. 라운드 120c(배당
+#    note) · 120e(이슈 카드) 둘 다 블록이었다.
+_BOLD165 = _re.compile(r'\*\*(?=\S)(.+?)(?<=\S)\*\*', _re.S)
+
+
+def _docids165(tree):
+    _out = set()
+    for _n in _ast165.walk(tree):
+        if not isinstance(_n, (_ast165.Module, _ast165.FunctionDef,
+                               _ast165.AsyncFunctionDef, _ast165.ClassDef)):
+            continue
+        _b = getattr(_n, 'body', None) or []
+        if (_b and isinstance(_b[0], _ast165.Expr)
+                and isinstance(_b[0].value, _ast165.Constant)
+                and isinstance(_b[0].value.value, str)):
+            _out.add(id(_b[0].value))
+    return _out
+
+
+def _bold_keys165():
+    """굵기를 담은 값이 붙어 있는 dict 키·키워드 인자 이름 (렌더 쪽 제외)."""
+    _keys = {}
+    for _p in _la16.reachable_modules():
+        if _p in _SRC165:
+            continue
+        try:
+            _t = _ast165.parse(_read148(_os.path.join(PROJ, _p)))
+        except Exception:                                        # noqa: BLE001
+            continue
+        _docs = _docids165(_t)
+
+        def _carries(node, _docs=_docs):
+            return any(isinstance(c, _ast165.Constant)
+                       and isinstance(c.value, str)
+                       and id(c) not in _docs and _BOLD165.search(c.value)
+                       for c in _ast165.walk(node))
+
+        for _n in _ast165.walk(_t):
+            if isinstance(_n, _ast165.Dict):
+                for _k, _v in zip(_n.keys, _n.values):
+                    if (isinstance(_k, _ast165.Constant)
+                            and isinstance(_k.value, str) and _carries(_v)):
+                        _keys.setdefault(_k.value, set()).add(_p)
+            elif isinstance(_n, _ast165.Call):
+                for _kw in _n.keywords:
+                    if _kw.arg and _carries(_kw.value):
+                        _keys.setdefault(_kw.arg, set()).add(_p)
+    return _keys
+
+
+def _is_block165(node):
+    """f-string 이 `<` 로 시작하는가 — 마크다운이 통째로 지나가는 자리."""
+    for _v in node.values:
+        if isinstance(_v, _ast165.Constant) and isinstance(_v.value, str):
+            _s = _v.value.lstrip()
+            if not _s:
+                continue
+            return _s.startswith('<')
+        return False
+    return False
+
+
+_BK165 = _bold_keys165()
+# 0개면 '없다'가 아니라 '못 봤다'다 — 실제로 있는 것을 확인하고 넘어간다.
+check("굵기를 담은 키를 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+      len(_BK165) >= 6, f'{len(_BK165)}개: {sorted(_BK165)[:4]}')
+check("그 키가 엔진 여러 모듈에서 나온다",
+      len({m for s in _BK165.values() for m in s}) >= 3,
+      str(sorted({m for s in _BK165.values() for m in s})))
+
+_KPAT165 = _re.compile(
+    r"""\[['"](%s)['"]\]|\.get\(['"](%s)['"]"""
+    % ('|'.join(map(_re.escape, _BK165)), '|'.join(map(_re.escape, _BK165))))
+_naked165 = []
+for _p165 in _SRC165:
+    _t165 = _ast165.parse(_read148(_os.path.join(PROJ, _p165)))
+    for _n165 in _ast165.walk(_t165):
+        if not isinstance(_n165, _ast165.JoinedStr) or not _is_block165(_n165):
+            continue
+        for _v165 in _n165.values:
+            if not isinstance(_v165, _ast165.FormattedValue):
+                continue
+            _e165 = _ast165.unparse(_v165.value)
+            if _KPAT165.search(_e165) and not any(s in _e165
+                                                  for s in _ESCN165):
+                _naked165.append(
+                    f'{_p165}:{getattr(_v165, "lineno", 0)} {_e165[:40]}')
+check("굵기를 담은 키가 블록 HTML 로 맨몸으로 가지 않는다",
+      not _naked165, str(_naked165[:3]))
+
 
 print()
 print("=" * 72)
