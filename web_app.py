@@ -4313,10 +4313,25 @@ try:
 except Exception:
     _pm_today = None
 if _pm_today and _pm_today.get('picks'):
+    # 라운드 120h — 여기서 `reco_class` **문자열**을 세고 있었다. 리포트
+    #   본문은 중앙 판정(`core.recommended`)으로 가르는데 배너만 다른
+    #   잣대를 써서, 같은 화면에 이 둘이 **함께** 떠 있었다:
+    #
+    #       "개장 전 한 줄 결론 · 오늘은 매수 후보가 있습니다"
+    #       "오늘은 … 실제 매수를 검토할 수 있는 종목이 없습니다"
+    #
+    #   교촌에프앤비를 보다가 잡았다. `reco_class` 의 '조건부로 사도 되는
+    #   종목' 1건이 중앙 판정에서는 추천이 아니었다(실행 가능 0). §4 가
+    #   금지한 두 번째 경로다 — 라운드 114 의 요약 칸과 같은 모양이다.
+    _pm_picks = _pm_today['picks']
+    _pm_has_core = any(_pk.get('core') for _pk in _pm_picks)
+    _buyable = sum(1 for _pk in _pm_picks
+                   if (_pk.get('core') or {}).get('recommended'))
+    # 칸 이름도 리포트 본문과 같은 어휘(verdict_core 의 bucket)로 적는다.
     _cls_cnt = {}
-    for _pk in _pm_today['picks']:
-        _cls_cnt[_pk.get('reco_class', '?')] = _cls_cnt.get(_pk.get('reco_class', '?'), 0) + 1
-    _buyable = _cls_cnt.get('오늘 사도 되는 종목', 0) + _cls_cnt.get('조건부로 사도 되는 종목', 0)
+    for _pk in _pm_picks:
+        _bk_pm = (_pk.get('core') or {}).get('bucket') or '판정 없음'
+        _cls_cnt[_bk_pm] = _cls_cnt.get(_bk_pm, 0) + 1
     # ⚠️ 라운드 105 — 사용자가 이 문구를 인용하면서 "어디 있어? 안 보이는데"
     #   라고 물었다. 실측하니 **화면에는 있었다**(Y=848). 못 찾은 이유가
     #   둘이었다.
@@ -4326,10 +4341,15 @@ if _pm_today and _pm_today.get('picks'):
     #        1,418px **위**다. 방향이 반대였다.
     #   방향어를 쓰지 않고 **앵커 링크**로 건다 — 위아래가 바뀌어도 안 틀린다.
     st.markdown('<div id="nav-premarket-line"></div>', unsafe_allow_html=True)
-    _oneline = ("오늘은 매수 후보가 있습니다 — [오늘의 추천](#nav-premarket)"
-                "에서 조건을 확인하세요."
-                if _buyable else
-                "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
+    # 중앙 판정이 아예 없는 옛 리포트는 '있다/없다'를 말하지 않는다 (§3).
+    if not _pm_has_core:
+        _oneline = ("이 리포트에는 중앙 판정이 없습니다 (옛 엔진) — "
+                    "[오늘의 추천](#nav-premarket)에서 다시 스캔하세요.")
+    else:
+        _oneline = (f"오늘은 매수 후보가 {_buyable}종목 있습니다 — "
+                    "[오늘의 추천](#nav-premarket)에서 조건을 확인하세요."
+                    if _buyable else
+                    "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
     st.info(f"**개장 전 한 줄 결론** · {_oneline}  \n"
             + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
             + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
@@ -5391,7 +5411,7 @@ with _ec1:
     st.markdown(f"""
     <div style='background:#161D2A; border-radius:14px; padding:16px 16px; height:100%;'>
       <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>처음 사는 분께</p>
-      <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_nb['emoji']} {_nb['line']}</p>
+      <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_uk._esc_md(_nb['line'])}</p>
       <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_uk._esc_md(_nb['detail'])}</p>
     </div>""", unsafe_allow_html=True)
 with _ec2:
@@ -5400,7 +5420,7 @@ with _ec2:
         st.markdown(f"""
         <div style='background:#161D2A; border-radius:14px; padding:16px 16px; height:100%;'>
           <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>이미 갖고 계신 분께 (평단 {user_entry_price:,.0f}원 · 현재 {_hd['ret_pct']:+.1f}%)</p>
-          <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_hd['emoji']} {_hd['line']}</p>
+          <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_uk._esc_md(_hd['line'])}</p>
           <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_uk._esc_md(_hd['detail'])}</p>
         </div>""", unsafe_allow_html=True)
     else:
