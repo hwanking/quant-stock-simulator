@@ -617,7 +617,8 @@ def _render_toolbar(here_html: str = '') -> None:
     _chips = ''.join(
         f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
         f"margin-right:8px; white-space:nowrap;' "
-        f"title='{_ko} 축은 {_VER_NOW.get(_ax, '—')} 이후 바뀌지 않았습니다. "
+        f"title='{_uk._esc_attr(_ko)} 축은 "
+        f"{_uk._esc_attr(_VER_NOW.get(_ax, '—'))} 이후 바뀌지 않았습니다. "
         f"버전은 앱 출시일이 아니라 그 축이 마지막으로 바뀐 시점입니다.'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
@@ -4387,15 +4388,20 @@ if _issues_global:
                     f"color:{_TOK['tx2']};'>{_tr.get('age_days', 0)}일 경과 · "
                     f"{_fix} · 다음 점검 {_tr.get('next_review') or _tr.get('eta') or '—'}</span>"
                     f"<p style='margin:8px 0 4px 0; font-size:15px; "
-                    f"font-weight:600; color:{_TOK['tx1']};'>{_tr['title']}</p>"
+                    f"font-weight:600; color:{_TOK['tx1']};'>"
+                    f"{_uk._esc_md(_tr['title'])}</p>"
                     f"<p style='margin:0; font-size:13px; color:{_TOK['tx2']}; "
-                    f"line-height:1.6;'><b>왜 생겼나</b> {_tr.get('cause','')}<br>"
-                    f"<b>영향</b> {_tr.get('user_impact','')}<br>"
-                    f"<b>지금 하는 일</b> {_tr.get('action_plan','')}<br>"
-                    f"<b>임시 안전조치</b> {_tr.get('safeguard','')}<br>"
-                    f"<b>목표</b> {_tr.get('target','')}"
+                    f"line-height:1.6;'><b>왜 생겼나</b> "
+                    f"{_uk._esc_md(_tr.get('cause',''))}<br>"
+                    f"<b>영향</b> {_uk._esc_md(_tr.get('user_impact',''))}<br>"
+                    f"<b>지금 하는 일</b> "
+                    f"{_uk._esc_md(_tr.get('action_plan',''))}<br>"
+                    f"<b>임시 안전조치</b> "
+                    f"{_uk._esc_md(_tr.get('safeguard',''))}<br>"
+                    f"<b>목표</b> {_uk._esc_md(_tr.get('target',''))}"
                     + (f"<br><b>담당</b> <span style='color:{_TOK['tx3']};'>"
-                       f"{_tr.get('module','')}</span>" if _tr.get('module') else '')
+                       f"{_uk._esc(_tr.get('module',''))}</span>"
+                       if _tr.get('module') else '')
                     + "</p></div>", unsafe_allow_html=True)
             st.caption("이슈는 3일 넘게 조치 없이 같은 경고만 반복되지 않도록 "
                        "경과일에 따라 자동으로 재분류됩니다. 표본 축적처럼 물리적으로 "
@@ -8559,7 +8565,7 @@ with tab_audit:
                · 왕복 거래비용 {_cost:.2f}% → <b style='color:{"#35C98B" if _net_edge > 0 else "#ff453a"};'>순 {_net_edge:+.2f}%p</b></p>
             <hr style='border-color:#1C2635; margin:8px 0;'>
             <p style='margin:2px 0; color:{_vcol};'><b>판정</b>: {_verdict}</p>
-            <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>{_div['note']}</p>
+            <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>{_uk._esc_md(_div['note'])}</p>
         </div>
         """, unsafe_allow_html=True)
 

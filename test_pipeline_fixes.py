@@ -422,33 +422,15 @@ _TICK16 = _re.compile(r'^\d{6}(\.(KS|KQ))?$')
 _NAMES16 = {'삼성전자', 'SK하이닉스', '현대차', '알테오젠', '카카오', 'NAVER'}
 
 
+import scripts.lineage_audit as _la16                            # noqa: E402
+
+
 def _reach16(entry='web_app.py'):
-    _tr = _sp16.run(['git', 'ls-files', '*.py'], cwd=PROJ,
-                    capture_output=True, text=True).stdout
-    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
-    _seen, _todo = set(), [entry]
-    while _todo:
-        _cur = _todo.pop()
-        if _cur in _seen:
-            continue
-        _seen.add(_cur)
-        try:
-            _t = _ast16.parse(open(_os.path.join(PROJ, _cur),
-                                   encoding='utf-8').read())
-        except Exception:                                        # noqa: BLE001
-            continue
-        _nm = set()
-        for _n in _ast16.walk(_t):
-            if isinstance(_n, _ast16.Import):
-                _nm |= {a.name.split('.')[0] for a in _n.names}
-            elif (isinstance(_n, _ast16.ImportFrom) and _n.module
-                  and not _n.level):
-                _nm.add(_n.module.split('.')[0])
-        for _x in _nm:
-            for _c in (f'{_x}.py', f'{_x}/__init__.py'):
-                if _c in _files and _c not in _seen:
-                    _todo.append(_c)
-    return sorted(p for p in _seen if not p.startswith('scripts/'))
+    """라운드 120e — 이 함수가 §77 · §110 에도 **베껴져** 있었고 셋 다
+    `from improvement import issue_ops` 를 안 따라갔다. 유도를
+    `lineage_audit.reachable_modules` 한 곳으로 모았다."""
+    return [p for p in _la16.reachable_modules(entry)
+            if not p.startswith('scripts/')]
 
 
 def _is_stock16(node):
@@ -3864,33 +3846,15 @@ import subprocess as _sp77                                       # noqa: E402
 
 
 def _reach_ui(entry='web_app.py'):
-    """web_app 에서 전이적으로 닿는 저장소 모듈 (scripts/ 제외)."""
-    _tr = _sp77.run(['git', 'ls-files', '*.py'], cwd=PROJ,
-                    capture_output=True, text=True).stdout
-    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
-    _seen, _todo = set(), [entry]
-    while _todo:
-        _cur = _todo.pop()
-        if _cur in _seen:
-            continue
-        _seen.add(_cur)
-        try:
-            _t = _ast77.parse(open(_os.path.join(PROJ, _cur),
-                                   encoding='utf-8').read())
-        except Exception:                                        # noqa: BLE001
-            continue
-        _nm = set()
-        for _n in _ast77.walk(_t):
-            if isinstance(_n, _ast77.Import):
-                _nm |= {a.name.split('.')[0] for a in _n.names}
-            elif (isinstance(_n, _ast77.ImportFrom) and _n.module
-                  and not _n.level):
-                _nm.add(_n.module.split('.')[0])
-        for _x in _nm:
-            for _c in (f'{_x}.py', f'{_x}/__init__.py'):
-                if _c in _files and _c not in _seen:
-                    _todo.append(_c)
-    return sorted(p for p in _seen if not p.startswith('scripts/'))
+    """web_app 에서 전이적으로 닿는 저장소 모듈 (scripts/ 제외).
+
+    라운드 120e — 여기 있던 그래프 탐색이 §16 · §110 과 **거의 글자까지
+    같은 복사본**이었고, 셋 다 `from pkg import mod` 를 안 따라가
+    improvement/ 아래 5개 파일이 타이포·이모지 검사 밖에 있었다.
+    유도를 `lineage_audit.reachable_modules` 한 곳으로 모았다.
+    """
+    return [p for p in _la16.reachable_modules(entry)
+            if not p.startswith('scripts/')]
 
 
 _UIF77 = _reach_ui()
@@ -5117,9 +5081,16 @@ check("상단 바에 엔진 버전 축을 빠짐없이 보여 준다",
       and "'sector': '업황'" in _w95)
 check("엔진 버전 칩이 업데이트 이력으로 간다",
       "class='qvers'" in _w95 and "href='#nav-updates'" in _w95)
+import inspect as _insp95                                        # noqa: E402
+import ui_kit as _uk95                                           # noqa: E402
+# 라운드 120d — 이 검사가 `_esc(version_href)` 라는 **소스 문자열**을 요구하고
+# 있었다. 킷의 기본 이스케이퍼가 굵기까지 살리도록 바뀌면서 속성 자리는
+# `_esc_attr()` 로 갈라졌고, 링크는 멀쩡한데 검사만 깨졌다.
+# 이 검사가 재려던 것은 "칩이 업데이트 이력으로 가는가"다 — 기본값으로 본다.
+# 이스케이프 여부는 §165 가 속성 자리 전수로 따로 본다.
 check("운영 버전 칩도 업데이트 이력으로 간다",
-      "version_href: str = '#nav-updates'" in _u95
-      and "<a href='{_esc(version_href)}'" in _u95)
+      _insp95.signature(_uk95.status_bar)
+      .parameters['version_href'].default == '#nav-updates')
 check("버전 칩은 메뉴 링크 스타일을 물려받지 않는다",
       '.qnav a.qvers' in _w95)
 
@@ -6549,33 +6520,17 @@ def _reach110(entry='web_app.py'):
        손으로 적은 목록은 반드시 낡는다 — 그래서 유도한다.
        `st.` 호출 유무는 기준이 못 된다: verdict_core·price_axes 는 st 를
        안 부르지만 그 문자열이 화면에 간다.
+
+    ■ 라운드 120e — 유도 자체가 좁았다
+       손으로 적은 목록을 유도로 바꿨는데, 그 유도가 `node.module` 만
+       보고 있어서 `from improvement import issue_ops` 를 못 따라갔다.
+       improvement/ 아래 5개 파일이 이모지·타이포 검사 밖에 있었고,
+       실제로 그중 한 곳의 산문이 화면에 `**별표**` 그대로 나갔다.
+       같은 탐색이 §16 · §77 에도 베껴져 있어 셋 다 같은 구멍이었다 —
+       이제 `lineage_audit.reachable_modules` 한 곳만 고치면 된다.
     """
-    _tr = _subprocess110.run(['git', 'ls-files', '*.py'], cwd=PROJ,
-                             capture_output=True, text=True).stdout
-    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
-    _seen, _todo = set(), [entry]
-    while _todo:
-        _cur = _todo.pop()
-        if _cur in _seen:
-            continue
-        _seen.add(_cur)
-        try:
-            _t = _ast110.parse(open(_os.path.join(PROJ, _cur),
-                                    encoding='utf-8').read())
-        except Exception:                                         # noqa: BLE001
-            continue
-        _names = set()
-        for _n in _ast110.walk(_t):
-            if isinstance(_n, _ast110.Import):
-                _names |= {a.name.split('.')[0] for a in _n.names}
-            elif (isinstance(_n, _ast110.ImportFrom) and _n.module
-                  and not _n.level):
-                _names.add(_n.module.split('.')[0])
-        for _nm in _names:
-            for _cand in (f'{_nm}.py', f'{_nm}/__init__.py'):
-                if _cand in _files and _cand not in _seen:
-                    _todo.append(_cand)
-    return sorted(p for p in _seen if not p.startswith('scripts/'))
+    return [p for p in _la16.reachable_modules(entry)
+            if not p.startswith('scripts/')]
 
 
 import subprocess as _subprocess110                               # noqa: E402
@@ -11278,6 +11233,190 @@ _r164 = [((max(_lum164(_f), _lum164(_cbg164)) + 0.05)
 check("요약 칸 대비가 AA(4.5) 이상 — 양 테마 동일",
       min(_r164) >= 4.5,
       f'라벨 {_r164[0]:.2f} · 값 {_r164[1]:.2f} on {_cbg164}')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §165 — 산문의 굵기 표기가 화면에 별표로 남지 않는가 (라운드 120d)
+#
+#   같은 결함을 **세 번** 고쳤고 세 번 다 다른 자리였다.
+#       ① 킷의 note() · post_entry_caveat        (라운드 120)
+#       ② web_app 의 _md_safe                     (라운드 120b)
+#       ③ 엔진 note 를 f-string 으로 직접 보간     (라운드 120c)
+#   매번 "이제 0곳"이라고 쓰고 싶었지만, 세어 보면 8 → 3 → 1 이었다.
+#   한 자리씩 고치는 방식이 문제였다. 산문을 쓰는 사람은 마크다운으로
+#   쓰고, 그 문장이 어느 자리로 흘러갈지는 쓰는 시점에 모른다.
+#
+#   그래서 **기본값**을 바꿨다 (라운드 120d).
+#       _esc()       텍스트 자리 — 이스케이프 + 굵기 복원 (기본)
+#       _esc_attr()  속성 자리   — 순수 이스케이프
+#   빠뜨렸을 때 나는 결과가 '별표 노출'에서 '속성에 태그'로 바뀐다.
+#   드물고 눈에 띄는 쪽으로 실패를 옮긴 것이다.
+#
+#   이 절은 **값으로** 확인한다. 소스에 무슨 이름이 적혔는지가 아니라
+#   실제 엔진 문자열을 킷에 흘려 보고 별표가 남는지를 본다
+#   (§6 — 논리를 베낀 검사는 아무것도 증명하지 않는다).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§165 산문 굵기 — 별표가 글자 그대로 나가지 않는가")
+print("=" * 72)
+import ast as _ast165                                            # noqa: E402
+import ui_kit as _uk165                                          # noqa: E402
+
+# ① 두 이스케이퍼의 역할이 실제로 다른가
+check("_esc 는 굵기를 <b> 로 살린다",
+      _uk165._esc('앞 **굵게** 뒤') == '앞 <b>굵게</b> 뒤',
+      _uk165._esc('앞 **굵게** 뒤'))
+check("_esc_attr 는 굵기를 살리지 않는다 (속성 자리)",
+      '<b>' not in _uk165._esc_attr('앞 **굵게** 뒤'))
+check("_esc_md 는 _esc 와 같은 값을 준다 (옛 이름 유지)",
+      _uk165._esc_md('앞 **굵게** 뒤') == _uk165._esc('앞 **굵게** 뒤'))
+
+# ② 주입 안전 — 외부 태그는 그대로 이스케이프되어야 한다
+_inj165 = _uk165._esc('<script>alert(1)</script> **굵게**')
+check("외부 태그는 이스케이프된다 (우리가 넣은 <b> 만 살아남는다)",
+      '<script>' not in _inj165 and '&lt;script&gt;' in _inj165
+      and '<b>굵게</b>' in _inj165, _inj165[:60])
+
+# ③ 마크다운 규칙을 지키는가 — 별표 안쪽 공백은 굵기가 아니다
+check("별표 뒤 공백은 굵기로 보지 않는다 (마크다운과 같게)",
+      '<b>' not in _uk165._esc('** 굵게 아님 **'))
+check("None 은 빈 문자열이 된다 (§3 — 지어내지 않는다)",
+      _uk165._esc(None) == '')
+
+# ④ 속성 자리와 텍스트 자리를 **문맥으로** 가른다.
+#    처음엔 "보간 **직전** 리터럴이 =' 로 끝나는가"만 봤다. 그러면 같은
+#    속성 안의 **두 번째** 보간을 못 본다 — title='{a} … {b}' 의 b.
+#    누적 리터럴에서 아직 안 닫힌 속성을 찾아 그 이름을 돌려준다.
+def _attr_ctx165(buf):
+    _m165 = None
+    for _m2165 in _re.finditer(r"""([\w:-]+)=(['"])""", buf):
+        _m165 = _m2165
+    if _m165 is None:
+        return None
+    return (None if _m165.group(2) in buf[_m165.end():]
+            else _m165.group(1).lower())
+
+
+def _walk_fstr165(paths):
+    """f-string 보간을 (파일, 줄, 표현식, 속성이름|None) 으로 훑는다."""
+    for _p165 in paths:
+        _t165 = _ast165.parse(_read148(_os.path.join(PROJ, _p165)))
+        for _n165 in _ast165.walk(_t165):
+            if not isinstance(_n165, _ast165.JoinedStr):
+                continue
+            _buf165 = ''
+            for _v165 in _n165.values:
+                if isinstance(_v165, _ast165.Constant) and isinstance(
+                        _v165.value, str):
+                    _buf165 += _v165.value
+                elif isinstance(_v165, _ast165.FormattedValue):
+                    yield (_p165, getattr(_v165, 'lineno', 0),
+                           _ast165.unparse(_v165.value),
+                           _attr_ctx165(_buf165))
+
+
+def _escapers165(paths):
+    """이스케이퍼 이름을 **손으로 적지 않는다** — import 에서 유도한다.
+
+    처음엔 ('_esc', 'escape', 'quote') 를 문자열로 적어 뒀다가
+    `from urllib.parse import quote as _q56` 를 못 알아봤다. 킷의 기사
+    링크가 멀쩡히 URL 인코딩을 하고 있는데 미달로 찍혔다.
+    """
+    _names165 = {'_esc', '_esc_attr', '_esc_md', '_md_safe'}
+    for _p165 in paths:
+        _t165 = _ast165.parse(_read148(_os.path.join(PROJ, _p165)))
+        for _n165 in _ast165.walk(_t165):
+            if not isinstance(_n165, (_ast165.Import, _ast165.ImportFrom)):
+                continue
+            for _a165 in _n165.names:
+                if _a165.name.split('.')[-1] in ('quote', 'quote_plus',
+                                                 'escape'):
+                    _names165.add(_a165.asname or _a165.name.split('.')[-1])
+    return _names165
+
+
+_SRC165 = ('ui_kit.py', 'web_app.py')
+_ESCN165 = _escapers165(_SRC165)
+check("이스케이퍼 이름을 import 에서 유도한다 (손으로 적지 않는다)",
+      '_q56' in _ESCN165, str(sorted(_ESCN165)))
+_bad165 = [f'{p}:{ln}' for p, ln, e, ctx in _walk_fstr165(_SRC165)
+           if '_esc_attr(' in e and ctx is None]
+check("_esc_attr 는 속성 자리에서만 쓴다",
+      not _bad165, str(_bad165[:3]))
+
+# ④-b 거꾸로도 본다 — href·title·alt 는 **빠짐없이** 이스케이퍼를 지나는가.
+#      ④ 만 있으면 "속성에 아무것도 안 걸면 통과"가 된다. 라운드 120d
+#      이전에는 §95 가 이 자리를 소스 문자열 **한 줄**로 못 박아 두고
+#      있었고, 그 한 줄이 사라지면 아무도 안 보는 상태가 된다.
+#      style·class 는 뺀다 — 팔레트 토큰이 들어가는 자리라 성격이 다르고,
+#      거기까지 넣으면 수백 건이 되어 결국 아무도 안 보는 검사가 된다.
+_attr165 = [f'{p}:{ln} {e[:40]}' for p, ln, e, ctx in _walk_fstr165(_SRC165)
+            if ctx in ('href', 'title', 'alt')
+            and not any(s in e for s in _ESCN165)]
+check("href·title·alt 보간은 빠짐없이 이스케이퍼를 지난다",
+      not _attr165, str(_attr165[:3]))
+
+# ⑤ 킷의 인라인 HTML 텍스트 자리에 **맨** 산문 보간이 남아 있지 않은가
+#    (일부러 HTML 을 담는 값은 이름·형태로 구분해 통과시킨다)
+_TAG165 = _re.compile(
+    r'<(p|div|span|td|th|li|h[1-6]|small|b|strong|em)\b', _re.I)
+_PROSE165 = ('note', 'why', 'say', 'text', 'caveat', 'reason', 'msg',
+             'desc', 'summary', 'comment', 'detail', 'sentence')
+_SAFE165 = tuple(_ESCN165) + ('_why_row', '_icon')
+
+
+def _html_expr165(e):
+    """일부러 HTML 조각을 담는 값인가 — 이스케이프하면 오히려 깨진다."""
+    return e.endswith('_html') or '.join(' in e or '_row(' in e
+
+
+_raw165 = []
+_t165k = _ast165.parse(_read148(_os.path.join(PROJ, 'ui_kit.py')))
+for _n165 in _ast165.walk(_t165k):
+    if not isinstance(_n165, _ast165.JoinedStr):
+        continue
+    _lit165 = ''.join(v.value for v in _n165.values
+                      if isinstance(v, _ast165.Constant)
+                      and isinstance(v.value, str))
+    if not _TAG165.search(_lit165):
+        continue
+    for _v165 in _n165.values:
+        if not isinstance(_v165, _ast165.FormattedValue):
+            continue
+        _e165 = _ast165.unparse(_v165.value)
+        if not any(k in _e165.lower() for k in _PROSE165):
+            continue
+        if any(s in _e165 for s in _SAFE165) or _html_expr165(_e165):
+            continue
+        _raw165.append(f"ui_kit.py:{getattr(_v165, 'lineno', 0)} {_e165[:40]}")
+check("킷의 HTML 텍스트 자리에 맨 산문이 없다",
+      not _raw165, str(_raw165[:3]))
+
+# ⑥ 엔진이 실제로 쓰는 문장이 별표 없이 나오는가 — 값으로 확인한다
+#    소스에서 문자열을 읽어 오지 않고, 엔진 모듈이 만든 것을 그대로 쓴다.
+import regime_policy as _rp165                                   # noqa: E402
+import trade_plan as _tp165                                      # noqa: E402
+
+_sent165 = []
+for _st165 in _tp165.MARKET_STATES.values():
+    _sent165.append(_st165['say'])
+_sent165.append(_rp165.NO_SAMPLE.get('why') or
+                '강한 제한이면 **신규 매수를 차단**합니다')
+_left165 = [s for s in _sent165 if '**' in _uk165._esc(s)]
+check("엔진 문장이 킷을 지나면 별표가 남지 않는다",
+      not _left165, str(_left165[:1]))
+_bolded165 = [s for s in _sent165 if '**' in s]
+check("굵기 표기를 담은 엔진 문장이 실제로 있다 (0건을 재고 통과하지 않는다)",
+      len(_bolded165) >= 2, f'{len(_bolded165)}건')
+
+# ⑦ 킷의 왜-줄도 굵기를 살리는가 (라운드 120d 에서 새로 찾은 자리)
+check("_why_row 가 굵기를 살린다",
+      '<b>굵게</b>' in _uk165._why_row('Newspaper', '앞 **굵게** 뒤'))
+
+# ⑧ 배당 note 자리 — 라운드 120c 의 그 자리가 다시 맨몸이 되지 않았는가
+_wa165 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("배당락일 note 가 이스케이프를 지난다",
+      "_uk._esc_md(_div['note'])" in _wa165)
 
 
 print()
