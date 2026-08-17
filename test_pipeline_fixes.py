@@ -406,6 +406,102 @@ for fname in ('quant_indicators.py', 'web_app.py'):
     check(f"{fname}: 종목명 분기 없음", not NAME_PAT.search(code),
           str(NAME_PAT.search(code).group(0) if NAME_PAT.search(code) else ''))
 
+# ── 라운드 119 — 위 두 파일은 리터럴 자체를 금지한다. 그런데 이 절이
+#    지키려는 것은 "**그 종목만 다르게 처리하지 않는다**" 이고, 훑는 파일이
+#    손으로 적은 두 개뿐이었다 (web_app 에서 닿는 모듈은 30개).
+#    넓히면 6개 파일이 더 걸리는데 **전부 조회표·기본 인자**다:
+#        STOCK_METRICS_DB = {"005930.KS": {...}}       시드 표
+#        NAME_TO_TICKER   = {"삼성전자": "005930.KS"}  이름→코드 표
+#        def load(..., symbol="005930.KS")             기본 인자
+#    그걸 위반으로 찍으면 검사가 거짓말을 한다. 그래서 **분기 형태만**
+#    AST 로 골라 전 모듈에서 센다 — 비교·소속 검사에 종목 리터럴이 쓰인 자리.
+import ast as _ast16                                             # noqa: E402
+import subprocess as _sp16                                       # noqa: E402
+
+_TICK16 = _re.compile(r'^\d{6}(\.(KS|KQ))?$')
+_NAMES16 = {'삼성전자', 'SK하이닉스', '현대차', '알테오젠', '카카오', 'NAVER'}
+
+
+def _reach16(entry='web_app.py'):
+    _tr = _sp16.run(['git', 'ls-files', '*.py'], cwd=PROJ,
+                    capture_output=True, text=True).stdout
+    _files = {p.strip() for p in _tr.split('\n') if p.strip()}
+    _seen, _todo = set(), [entry]
+    while _todo:
+        _cur = _todo.pop()
+        if _cur in _seen:
+            continue
+        _seen.add(_cur)
+        try:
+            _t = _ast16.parse(open(_os.path.join(PROJ, _cur),
+                                   encoding='utf-8').read())
+        except Exception:                                        # noqa: BLE001
+            continue
+        _nm = set()
+        for _n in _ast16.walk(_t):
+            if isinstance(_n, _ast16.Import):
+                _nm |= {a.name.split('.')[0] for a in _n.names}
+            elif (isinstance(_n, _ast16.ImportFrom) and _n.module
+                  and not _n.level):
+                _nm.add(_n.module.split('.')[0])
+        for _x in _nm:
+            for _c in (f'{_x}.py', f'{_x}/__init__.py'):
+                if _c in _files and _c not in _seen:
+                    _todo.append(_c)
+    return sorted(p for p in _seen if not p.startswith('scripts/'))
+
+
+def _is_stock16(node):
+    if isinstance(node, _ast16.Constant) and isinstance(node.value, str):
+        v = node.value.strip()
+        return bool(_TICK16.match(v)) or v in _NAMES16
+    return False
+
+
+_UIF16 = _reach16()
+_branch16 = []
+for _f16 in _UIF16:
+    try:
+        _tree16 = _ast16.parse(open(_os.path.join(PROJ, _f16),
+                                    encoding='utf-8').read())
+    except Exception:                                            # noqa: BLE001
+        continue
+    for _n16 in _ast16.walk(_tree16):
+        if not isinstance(_n16, _ast16.Compare):
+            continue
+        if not any(type(_o).__name__ in ('Eq', 'NotEq', 'In', 'NotIn')
+                   for _o in _n16.ops):
+            continue
+        for _c16 in [_n16.left] + list(_n16.comparators):
+            _tg = ([_c16] if not isinstance(_c16, (_ast16.Tuple, _ast16.List,
+                                                   _ast16.Set))
+                   else list(_c16.elts))
+            if any(_is_stock16(_x16) for _x16 in _tg):
+                _branch16.append(f'{_f16}:{getattr(_n16, "lineno", 0)}')
+                break
+check("종목별 분기 검사 대상을 손으로 적지 않고 유도한다 (25개 이상)",
+      len(_UIF16) >= 25, f'{len(_UIF16)}개')
+check("어느 모듈에도 종목별 분기가 없다 (조회표·기본 인자는 분기가 아니다)",
+      not _branch16, str(_branch16[:4]))
+
+# ── 못 받은 값을 지어내지 않는가 (§3) — 시총 1위는 화면에 그대로 나간다
+_be16 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py')) \
+    if '_read148' in dir() else open(
+        _os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8').read()
+_w16 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+# 산문을 걷어내고 본다 — 이 검사가 **왜 그렇게 고쳤는지 적어 둔 주석**을
+# 잡아 실패했다 (자기 참조). 이 저장소가 이미 세 번 겪은 함정이라 §148 이
+# 쓰는 code_lines() 로 주석·독스트링을 뺀 뒤 센다.
+import sys as _sys16                                            # noqa: E402
+_sys16.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import lineage_audit as _la16                                   # noqa: E402
+_be16_code = '\n'.join(ln for _i, ln
+                       in _la16.code_lines('bitemporal_engine.py'))
+check("시총 1위 수신 실패 시 종목명을 지어내지 않는다",
+      'return "삼성전자"' not in _be16_code)
+check("화면이 시총 1위 미수신을 밝힌다",
+      '시총 1위 미수신' in _w16 and 'if default_stock_no1' in _w16)
+
 
 # ---------------------------------------------------------------- 스캔 격리
 section("17. 한 종목 오류가 전체 스캔을 막지 않는가")
@@ -3682,8 +3778,11 @@ check("결론 배너 — 양 테마 다크 카드 고정 (흰 글자 보호)",
       '라이트 surface(흰색)로 바꾸면 글자가 사라진다' in _w76)
 # 라운드 38: '종목 찾기'는 아코디언 줄(항상 펼침)이 제목을 그리므로
 # sidebar_section 을 또 부르면 제목이 두 번 나온다 — 실제로 그랬다.
+# 라운드 119 — 호출을 여러 줄로 나누자 `_uk.sidebar_section("종목"` 이
+# 이어지지 않아 이 검사가 깨졌다. 지키려는 것은 **킷 라벨을 쓴다는 사실**
+# 이지 한 줄로 적혔다는 형태가 아니다 — 줄바꿈을 허용해 본다 (§6).
 check("사이드바 구역 — 킷 라벨로 통일 · 가로선 없음",
-      '_uk.sidebar_section("종목"' in _w76
+      bool(_re.search(r'_uk\.sidebar_section\(\s*"종목"', _w76))
       and 'st.sidebar.markdown("---")' not in _w76)
 check("항상 펼침 구역은 제목을 두 번 그리지 않는다",
       '_uk.sidebar_section("종목 찾기"' not in _w76

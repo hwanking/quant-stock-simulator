@@ -1707,8 +1707,13 @@ _uk.acc_css(_SB_STEPS, _sb_open, _sb_busy, _theme)
 # 아무것도 시작할 수 없다. 접힘 상태와 무관하게 항상 그린다.
 # (if/elif/else 체인이라 검색만 떼어낼 수 없다 — 종목 확정까지 함께 뺀다)
 
-_uk.sidebar_section("종목", f"오늘 시총 1위는 {default_stock_no1}", _theme,
-                    top=6, at=_SB_PICK)
+# 못 받았으면 '미수신'과 이유를 쓴다 — 지어낸 이름을 사실처럼 두지 않는다
+# (§3 · 라운드 119. 엔진이 실패 시 "삼성전자" 를 돌려주고 있었다)
+_uk.sidebar_section(
+    "종목",
+    (f"오늘 시총 1위는 {default_stock_no1}" if default_stock_no1
+     else "시총 1위 미수신 — 네이버 시세 응답 없음"),
+    _theme, top=6, at=_SB_PICK)
 
 if 'search_text_input' not in st.session_state:
     st.session_state['search_text_input'] = ''
