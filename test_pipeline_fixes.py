@@ -11886,6 +11886,49 @@ _linked170 = {h for _l, h in _nav170}
 _orphan170 = sorted(_anch170 - _linked170 - _EXEMPT170)
 check("본문에 메뉴가 못 가는 절이 없다", not _orphan170, str(_orphan170))
 
+# ⓔ **묶음 안에서는 본문 순서가 뒤집히지 않는다** (라운드 125)
+#
+#    이것이 "비슷한 것끼리 묶였다"의 정의다. 한 묶음의 항목들이 본문에서
+#    위아래로 튀면, 묶어 놓았다는 말과 실제 화면이 다르다.
+#    종전 묶음은 뜻으로만 그럴듯했고 여섯 군데에서 튀었다.
+#    묶음 **사이**의 순서는 여기서 요구하지 않는다 — '업데이트 내역'이
+#    본문 5번째에 있는 것은 렌더 위치 문제이고, 그 블록은 조건문 안에서
+#    위에서 만든 데이터에 기대므로 옮기려면 구조를 건드려야 한다.
+#    고치지 않은 것은 고치지 않았다고 적는다.
+_pos170 = {}
+for _i170, _m170 in enumerate(
+        _re.finditer(r'id=[\'"](nav-[a-z0-9-]+)[\'"]', _wa170)):
+    _pos170.setdefault(_m170.group(1), _i170)
+
+_grp170 = []
+for _n170 in _ast165.walk(_tree170):
+    if not (isinstance(_n170, _ast165.Assign)
+            and any(getattr(t, 'id', '') == '_NAV_SUB'
+                    for t in _n170.targets)):
+        continue
+    for _g170 in _n170.value.elts:
+        _title170, _items170 = None, []
+        for _k170, _v170 in zip(_g170.keys, _g170.values):
+            _kn170 = getattr(_k170, 'value', None)
+            if _kn170 == 'title':
+                _title170 = _v170.value
+            elif _kn170 == 'items':
+                for _it170 in _v170.elts:
+                    for _ik170, _iv170 in zip(_it170.keys, _it170.values):
+                        if (getattr(_ik170, 'value', None) == 'href'
+                                and isinstance(_iv170, _ast165.Constant)):
+                            _items170.append(_iv170.value.lstrip('#'))
+        _grp170.append((_title170, _items170))
+
+check("메뉴 묶음을 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+      len(_grp170) >= 4, f'{len(_grp170)}묶음')
+_zig170 = []
+for _t170, _hs170 in _grp170:
+    _seq170 = [_pos170[h] for h in _hs170 if h in _pos170]
+    if _seq170 != sorted(_seq170):
+        _zig170.append(f'{_t170}: {_seq170}')
+check("묶음 안에서 본문 순서가 뒤집히지 않는다", not _zig170, str(_zig170))
+
 
 print()
 print("=" * 72)
