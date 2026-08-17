@@ -50,27 +50,43 @@ def tokens(theme: str = 'dark') -> dict:
     return DARK if theme == 'dark' else LIGHT
 
 
-def _esc(s) -> str:
+def _esc_attr(s) -> str:
+    """속성값 전용 — 순수 이스케이프. `href` · `title` 처럼 태그가 들어가면
+    안 되는 자리에만 쓴다. 텍스트 자리에는 `_esc()` 를 쓴다."""
     return _html.escape(str(s if s is not None else ''))
 
 
-def _esc_md(s) -> str:
-    """HTML 로 이스케이프하되 **굵게** 표기만 <b> 로 살린다 (라운드 120).
+def _esc(s) -> str:
+    """텍스트 자리의 기본값 — 이스케이프하되 **굵게** 표기만 <b> 로 살린다.
 
-    ■ 실제 사고
+    ■ 실제 사고 (라운드 120 · 120b · 120c)
       화면 8곳에 별표가 **글자 그대로** 나오고 있었다:
           "위 두 적중률은 **점수 60점 이상**만 센 것입니다"
       엔진·화면의 산문은 마크다운으로 쓰여 있는데, 킷이 그 문장을 인라인
-      HTML 안에 넣으면서 `_esc()` 만 걸었다. HTML 안에서는 마크다운을
+      HTML 안에 넣으면서 순수 이스케이프만 걸었다. HTML 안에서는 마크다운을
       아무도 해석하지 않으므로 `**` 가 남는다.
 
       한 문장씩 `<b>` 로 고치는 것은 같은 실수를 다시 부른다 — 산문을
       쓰는 사람은 마크다운으로 쓴다. **받는 쪽에서** 해석한다.
 
+    ■ 세 번 고치고 세 번 다 다른 자리였다 (라운드 120d)
+      ① 킷의 note() · post_entry_caveat  ② web_app 의 _md_safe
+      ③ 엔진 note 를 f-string 으로 직접 보간한 자리
+      한 자리씩 `_esc_md()` 로 바꾸는 방식이 세 번 다 새 자리를 남겼다.
+      그래서 **기본값 쪽**을 바꾼다 — 텍스트 자리는 아무것도 안 해도
+      안전하고, 태그가 들어가면 안 되는 자리만 `_esc_attr()` 로 명시한다.
+      빠뜨렸을 때 나는 결과가 '별표 노출'이 아니라 '속성에 태그'가 되므로
+      드물고 눈에 띈다.
+
     ※ 이스케이프를 먼저 하므로 `<b>` 는 우리가 넣은 것만 살아남는다.
       (사용자·외부 문자열의 태그는 그대로 escape 된다 — 주입 안전)
     """
-    return _RE_MD_BOLD.sub(r'<b>\1</b>', _esc(s))
+    return _RE_MD_BOLD.sub(r'<b>\1</b>', _esc_attr(s))
+
+
+def _esc_md(s) -> str:
+    """`_esc()` 의 옛 이름. web_app 이 명시적으로 부르는 자리가 있어 남긴다."""
+    return _esc(s)
 
 
 #: `**굵게**` — 여는 별표 **뒤**와 닫는 별표 **앞**에 공백이 오면 마크다운은
@@ -251,7 +267,7 @@ def nav_links(items, theme='dark'):
     out = []
     for label, href in items:
         out.append(
-            f"<a href='{_esc(href)}' style='display:block; padding:7px 12px "
+            f"<a href='{_esc_attr(href)}' style='display:block; padding:7px 12px "
             f"7px 34px; font-size:13px; color:{t['tx2']}; "
             f"text-decoration:none; border-radius:7px; "
             f"white-space:nowrap;'>{_esc(label)}</a>")
@@ -272,7 +288,7 @@ def nav_list(items: Sequence[dict], active: str = '',
         col = t['brand'] if on else t['tx2']
         bg = (f"background:{t['raised']};" if on else '')
         out.append(
-            f"<a href='{_esc(it.get('href') or '#')}' class='qnav-item' "
+            f"<a href='{_esc_attr(it.get('href') or '#')}' class='qnav-item' "
             f"style='display:flex; align-items:center; gap:11px; "
             f"padding:9px 12px; border-radius:9px; {bg} "
             f"text-decoration:none; margin-bottom:2px;'>"
@@ -303,7 +319,7 @@ def nav_groups(groups: Sequence[dict], active: str = '',
             ic = (_icon(it['icon'], col, 15) if it.get('icon') else
                   f"<span style='width:15px;'></span>")
             out.append(
-                f"<a href='{_esc(it.get('href') or '#')}' class='qnav-sub' "
+                f"<a href='{_esc_attr(it.get('href') or '#')}' class='qnav-sub' "
                 f"style='display:flex; align-items:center; gap:10px; "
                 f"padding:8px 10px; border-radius:8px; {bg} "
                 f"text-decoration:none; margin-bottom:1px;'>{ic}"
@@ -452,7 +468,7 @@ def status_bar(items: Sequence[tuple], version: str = '',
                      f"{tone if i == 0 else t['tx3']};'>{_esc(txt)}</span>")
     # 버전 칩은 **누르면 업데이트 이력으로** 간다. 버전만 보여 주고 무엇이
     # 바뀌었는지 못 찾게 하면 그 숫자는 장식이다.
-    chip = (f"<a href='{_esc(version_href)}' style='margin-left:auto; "
+    chip = (f"<a href='{_esc_attr(version_href)}' style='margin-left:auto; "
             f"display:flex; align-items:center; gap:8px; flex:0 0 auto; "
             f"text-decoration:none;' title='누르면 업데이트 이력으로 갑니다'>"
             f"<span style='font-size:12px; color:{t['tx3']}; "
@@ -963,7 +979,7 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
               f"align-items:center;'>{''.join(rows)}</div>")
 
     say = (f"<p style='margin:0; font-size:13px; line-height:1.65; "
-           f"color:{t['tx1']};'>{p['say']}</p>" if p.get('say') else '')
+           f"color:{t['tx1']};'>{_esc(p['say'])}</p>" if p.get('say') else '')
 
     # 다음 조건 — "사지 마세요"로 끝내지 않는다. 관망이면 무엇을 기다리는지
     # 여기에 적는다. 조건이 없으면 이 상자를 아예 그리지 않는다.
@@ -985,7 +1001,7 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
                f"padding:9px 11px; display:flex; gap:8px; "
                f"align-items:flex-start; font-size:12px; color:{t['tx2']}; "
                f"line-height:1.6;'>{_icon('TriangleAlert', t['warn'], 16)}"
-               f"<span>{p['hold_note']}</span></div>")
+               f"<span>{_esc(p['hold_note'])}</span></div>")
 
     # ── 왜 이 종목인가 ────────────────────────────────────────────────
     # 사용자 지적: *"단순히 점수가 높다는 이유만 보여줄 것이 아니라, 왜 이
@@ -1105,17 +1121,17 @@ def ticker_bar(items, theme: str = 'dark', height: int = 34) -> str:
             # 제목 → 같은 창에서 그 종목 분석(?pick= 을 앱이 받아 검색
             # 경로로 넘긴다). 원문은 별도 '기사' 링크로 남긴다 — 두 목적
             # (분석 전환/원문 읽기)을 한 클릭에 섞지 않는다.
-            art = (f"<a href='{_esc(x['href'])}' target='_blank' "
+            art = (f"<a href='{_esc_attr(x['href'])}' target='_blank' "
                    f"rel='noopener noreferrer' style='color:{t['tx3']}; "
                    f"margin-left:6px; font-size:12px;"
                    f"text-decoration:underline;'>기사</a>"
                    if x.get('href') else '')
             inner = (f"<a href='?pick={_q56(str(x['pick']))}' "
-                     f"target='_self' title='{_esc(x['pick'])} 분석으로 이동' "
+                     f"target='_self' title='{_esc_attr(x['pick'])} 분석으로 이동' "
                      f"style='display:inline-flex; align-items:center; "
                      f"gap:7px; text-decoration:none;'>{body}</a>{art}")
         elif x.get('href'):
-            inner = (f"<a href='{_esc(x['href'])}' target='_blank' "
+            inner = (f"<a href='{_esc_attr(x['href'])}' target='_blank' "
                      f"rel='noopener noreferrer' style='display:inline-flex; "
                      f"align-items:center; gap:7px; text-decoration:none;'>"
                      f"{body}</a>")

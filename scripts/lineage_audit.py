@@ -170,6 +170,71 @@ def code_lines(name):
             if i not in skip and ln.strip()]
 
 
+def reachable_modules(entry='web_app.py'):
+    """`entry` 에서 import 로 닿는 저장소 안 .py 를 전부 돌려준다.
+
+    ■ 왜 여기에 두는가 (라운드 120e)
+      §16 · §77 · §110 이 각자 같은 그래프 탐색을 **베껴서** 갖고 있었고,
+      셋 다 같은 구멍이 있었다:
+
+          from improvement import issue_ops
+
+      `node.module` 만 보고 `improvement/__init__.py` 로만 내려가서
+      `improvement/issue_ops.py` 는 **한 번도 검사 대상이 아니었다.**
+      실제로 그 파일의 산문이 화면에 `**별표**` 그대로 나가고 있었고,
+      이모지·타이포 검사도 그 파일을 못 보고 있었다.
+
+      손으로 적은 목록이 낡는다고 유도로 바꿨는데, 이번엔 **유도가**
+      좁았다. 그래서 유도를 한 곳에만 둔다 — 고칠 자리도 한 곳이다.
+
+    ■ 따라가는 형태
+        import a            · import a.b        · import a as x
+        from a import b     (b 가 모듈이면 a/b.py 로도 내려간다)
+        from a.b import c
+      상대 import(`from . import x`)는 이 저장소에 없어 다루지 않는다.
+    """
+    import subprocess
+    tracked = subprocess.run(['git', 'ls-files', '*.py'], cwd=PROJ,
+                             capture_output=True, text=True).stdout
+    files = {p.strip().replace('\\', '/') for p in tracked.split('\n')
+             if p.strip()}
+
+    def candidates(dotted):
+        p = dotted.replace('.', '/')
+        return (f'{p}.py', f'{p}/__init__.py')
+
+    seen, todo = set(), [entry.replace('\\', '/')]
+    while todo:
+        cur = todo.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        src = read(cur)
+        if src is None:
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        targets = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    targets.add(a.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.level:            # 상대 import — 이 저장소엔 없다
+                    continue
+                targets.add(node.module)
+                # `from pkg import mod` 의 mod 도 모듈일 수 있다
+                for a in node.names:
+                    targets.add(f'{node.module}.{a.name}')
+        for t in targets:
+            for c in candidates(t):
+                if c in files and c not in seen:
+                    todo.append(c)
+    return sorted(seen)
+
+
 # ══════════════════════════════════════════════════════════════════
 # ① 정적 감사
 # ══════════════════════════════════════════════════════════════════
