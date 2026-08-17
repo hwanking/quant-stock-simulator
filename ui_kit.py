@@ -16,6 +16,7 @@ UI 킷 — 애플 HIG(설정·건강·주식 앱) 패턴의 단일 렌더 계층
 from __future__ import annotations
 
 import html as _html
+import re as _re
 from typing import Iterable, Optional, Sequence
 
 import streamlit as st
@@ -51,6 +52,31 @@ def tokens(theme: str = 'dark') -> dict:
 
 def _esc(s) -> str:
     return _html.escape(str(s if s is not None else ''))
+
+
+def _esc_md(s) -> str:
+    """HTML 로 이스케이프하되 **굵게** 표기만 <b> 로 살린다 (라운드 120).
+
+    ■ 실제 사고
+      화면 8곳에 별표가 **글자 그대로** 나오고 있었다:
+          "위 두 적중률은 **점수 60점 이상**만 센 것입니다"
+      엔진·화면의 산문은 마크다운으로 쓰여 있는데, 킷이 그 문장을 인라인
+      HTML 안에 넣으면서 `_esc()` 만 걸었다. HTML 안에서는 마크다운을
+      아무도 해석하지 않으므로 `**` 가 남는다.
+
+      한 문장씩 `<b>` 로 고치는 것은 같은 실수를 다시 부른다 — 산문을
+      쓰는 사람은 마크다운으로 쓴다. **받는 쪽에서** 해석한다.
+
+    ※ 이스케이프를 먼저 하므로 `<b>` 는 우리가 넣은 것만 살아남는다.
+      (사용자·외부 문자열의 태그는 그대로 escape 된다 — 주입 안전)
+    """
+    return _RE_MD_BOLD.sub(r'<b>\1</b>', _esc(s))
+
+
+#: `**굵게**` — 여는 별표 **뒤**와 닫는 별표 **앞**에 공백이 오면 마크다운은
+#  굵기로 보지 않는다. 그 규칙을 그대로 따라 그런 경우는 건드리지 않는다
+#  (실제로 화면에 `** 상장시장 국면 …**` 이 그렇게 남아 있었다).
+_RE_MD_BOLD = _re.compile(r'\*\*(?=\S)(.+?)(?<=\S)\*\*', _re.S)
 
 
 def section(title: str, subtitle: str = '', theme: str = 'dark',
@@ -682,11 +708,14 @@ def card(body_html: str, theme: str = 'dark', accent: str = '',
 
 
 def note(text: str, theme: str = 'dark') -> None:
-    """보조 설명 — 캡션보다 조용하게, 카드 밖에 둔다."""
+    """보조 설명 — 캡션보다 조용하게, 카드 밖에 둔다.
+
+    산문이므로 `**굵게**` 를 해석한다 (_esc_md · 라운드 120).
+    """
     t = tokens(theme)
     st.markdown(
         f"<p style='margin:8px 2px 0 2px; font-size:13px; color:{t['tx3']}; "
-        f"line-height:1.6;'>{_esc(text)}</p>", unsafe_allow_html=True)
+        f"line-height:1.6;'>{_esc_md(text)}</p>", unsafe_allow_html=True)
 
 
 def spacer(px: int = 24) -> None:
@@ -1245,7 +1274,10 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
             f"<ul style='margin:0; padding-left:16px; font-size:12px; "
             f"color:{t['tx2']}; line-height:1.65;'>{steps}</ul>"
             f"<p style='margin:6px 0 0 0; font-size:12px;color:{t['tx3']}; "
-            f"line-height:1.6;'>{_esc(p.get('post_entry_caveat'))}</p></div>"
+            # 산문이라 `**굵게**` 를 해석한다 (라운드 120 — 여기 별표가
+            # 글자로 나오고 있었다: "**각 지점의 최적 수치는 …**")
+            f"line-height:1.6;'>{_esc_md(p.get('post_entry_caveat'))}"
+            f"</p></div>"
             if steps else '')
 
     parts = [x for x in (mkt, buy, hold, post) if x]

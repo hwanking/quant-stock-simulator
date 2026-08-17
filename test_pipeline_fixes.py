@@ -502,6 +502,35 @@ check("시총 1위 수신 실패 시 종목명을 지어내지 않는다",
 check("화면이 시총 1위 미수신을 밝힌다",
       '시총 1위 미수신' in _w16 and 'if default_stock_no1' in _w16)
 
+# ── 라운드 120 — 화면에 마크다운 별표가 **글자 그대로** 나오고 있었다
+#    (8곳). 원인이 둘이다:
+#      ① 킷이 산문을 인라인 HTML 에 넣으며 _esc() 만 걸었다. HTML 안에서는
+#         마크다운을 아무도 해석하지 않으므로 `**` 가 남는다.
+#      ② 2026-08-05 '디자인 정리' 가 국면 제목의 이모지를 빈 문자열로
+#         바꾸면서 `** 상장시장 …**` 이 됐다 — 여는 별표 뒤 공백이면
+#         마크다운은 굵기로 보지 않는다. 12일 동안 그대로였다.
+#    한 문장씩 <b> 로 고치면 같은 실수를 다시 부른다 — 산문 쓰는 사람은
+#    마크다운으로 쓴다. **받는 쪽(_esc_md)** 에서 해석한다.
+import ui_kit as _uk120                                          # noqa: E402
+_md120 = _uk120._esc_md('앞 **굵게** 뒤')
+check("킷이 산문의 **굵게** 를 <b> 로 해석한다",
+      '<b>굵게</b>' in _md120 and '**' not in _md120, _md120)
+check("마크다운과 같은 규칙 — 여는 별표 뒤 공백이면 굵기가 아니다",
+      '<b>' not in _uk120._esc_md('** 공백 시작**'))
+_inj120 = _uk120._esc_md('<script>x</script> **굵게**')
+check("굵기를 살려도 외부 태그는 여전히 escape 된다",
+      '&lt;script&gt;' in _inj120 and '<script>' not in _inj120
+      and '<b>굵게</b>' in _inj120)
+_w120 = _read148(_os.path.join(PROJ, 'web_app.py')) \
+    if '_read148' in dir() else _w16
+check("국면 제목에 빈 아이콘 자리를 남기지 않는다",
+      '**{_reg_icon} 상장시장' not in _w120
+      and '**상장시장 국면 —' in _w120)
+_uksrc120 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+check("산문 렌더 자리가 _esc_md 를 쓴다 (note·매수후 주의문)",
+      "line-height:1.6;'>{_esc_md(text)}</p>" in _uksrc120
+      and "_esc_md(p.get('post_entry_caveat'))" in _uksrc120)
+
 
 # ---------------------------------------------------------------- 스캔 격리
 section("17. 한 종목 오류가 전체 스캔을 막지 않는가")
