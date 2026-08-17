@@ -4422,7 +4422,8 @@ if _issues_global:
                 f"{_is['type']}</span> "
                 f"<b style='font-size:15px; color:{_TOK['tx1']};'> {_is['title']}</b>"
                 f"<p style='margin:4px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
-                f"{_is['detail']}</p></div>", unsafe_allow_html=True)
+                f"{_uk._esc_md(_is['detail'])}</p></div>",
+                unsafe_allow_html=True)
         if len(_issues_global) > 3:
             st.markdown("**전체 이슈**")
             st.dataframe(pd.DataFrame([{
@@ -4644,7 +4645,7 @@ if (four_scores.get('displayed_fair_value') is None
         and four_scores.get('fair_value_status_note')):
     _fv_note_html = (f"<p style='margin: 2px 0 0 0; font-size: 12px; "
                      f"color: #9DAABC;'>"
-                     f"{str(four_scores.get('fair_value_status_note'))[:48]}</p>")
+                     f"{_uk._esc_md(str(four_scores.get('fair_value_status_note'))[:48])}</p>")
 
 # 배당은 fetch_dividend_info 하나만 쓴다.
 # 구버전은 헤더와 하단 패널이 서로 다른 경로로 계산해 같은 종목의 DPS 가 두 값이었다
@@ -5391,7 +5392,7 @@ with _ec1:
     <div style='background:#161D2A; border-radius:14px; padding:16px 16px; height:100%;'>
       <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>처음 사는 분께</p>
       <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_nb['emoji']} {_nb['line']}</p>
-      <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_nb['detail']}</p>
+      <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_uk._esc_md(_nb['detail'])}</p>
     </div>""", unsafe_allow_html=True)
 with _ec2:
     _hd = _easy['holder']
@@ -5400,7 +5401,7 @@ with _ec2:
         <div style='background:#161D2A; border-radius:14px; padding:16px 16px; height:100%;'>
           <p style='margin:0; font-size:12px; color:#9DAABC; font-weight:700;'>이미 갖고 계신 분께 (평단 {user_entry_price:,.0f}원 · 현재 {_hd['ret_pct']:+.1f}%)</p>
           <p style='margin:8px 0; font-size:17px; font-weight:700; color:#F3F6FA;'>{_hd['emoji']} {_hd['line']}</p>
-          <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_hd['detail']}</p>
+          <p style='margin:0; font-size:15px; color:#9DAABC; line-height:1.55;'>{_uk._esc_md(_hd['detail'])}</p>
         </div>""", unsafe_allow_html=True)
     else:
         st.markdown("""
@@ -5721,7 +5722,8 @@ if _issues_stock:
             f"{_is['type']}</span> "
             f"<b style='font-size:13px; color:{_TOK['tx1']};'> {_is['title']}</b>"
             f"<p style='margin:4px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
-            f"{_is['detail']}</p></div>", unsafe_allow_html=True)
+            f"{_uk._esc_md(_is['detail'])}</p></div>",
+            unsafe_allow_html=True)
     if len(_issues_stock) > 3:
         with st.expander(f"전체 이슈 보기 ({len(_issues_stock)}건)",
                          expanded=False):
@@ -7945,7 +7947,7 @@ with tab_val:
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
     <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'}</td></tr>
     <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
-    <tr><td><b>적정가 신뢰도</b></td><td>{val_eval.get('fair_value_confidence', 0):.0f}점 — {val_eval.get('fair_value_status_note', '')}</td></tr>
+    <tr><td><b>적정가 신뢰도</b></td><td>{val_eval.get('fair_value_confidence', 0):.0f}점 — {_uk._esc_md(val_eval.get('fair_value_status_note', ''))}</td></tr>
     <tr><td><b>할인율 가정</b></td><td>WACC 8.5% / 영구성장률 2.0% (중복 할인 없음)</td></tr>
     <tr><td><b>최종 계산 기준일</b></td><td>{t_ref_date.strftime('%Y-%m-%d')} (Point-in-Time)</td></tr>
 </tbody>
@@ -8507,7 +8509,7 @@ with tab_audit:
             <p style='margin:2px 0;'>- 과거 최대낙폭 <b style='color:#ff453a;'>{risk_budget['historical_mdd_pct']:.1f}%</b></p>
             <p style='margin:8px 0 2px;'>- <b>권장 현금 비중</b>: <b style='color:{_ccol}; font-size:17px;'>{_cash:.0f}%</b></p>
             <p style='font-size:13px; color:#9DAABC; margin:2px 0;'>사유: {' · '.join(risk_budget['cash_reasons'])}</p>
-            <p style='font-size:12px; color:#9DAABC; margin-top:8px;'>{risk_budget['note']}</p>
+            <p style='font-size:12px; color:#9DAABC; margin-top:8px;'>{_uk._esc_md(risk_budget['note'])}</p>
         </div>
         """, unsafe_allow_html=True)
     else:
