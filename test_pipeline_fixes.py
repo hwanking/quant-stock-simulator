@@ -7709,12 +7709,22 @@ check("개장 전 카드 폴백 제거",
       "or fs.get('recommended_buy_price')" not in _pm120)
 
 # ⓓ 고정 사이드 패널 — 배너 옆에 항상 붙어 있던 다른 숫자
-check("고정 패널이 중앙 판정을 읽는다",
-      "<tr><td>실행 진입가</td><td>{fmt_num((CORE or {}).get('pullback_zone')"
-      in _w120)
+#
+# 라운드 122 — 이 검사가 `<tr><td>실행 진입가</td><td>{fmt_num(...` 이라는
+#   **마크업 문자열 전체**를 요구하고 있었다. 패널의 각 줄에 본문으로 가는
+#   링크를 달자(<a href=...>) 곧바로 깨졌다 — 값은 그대로인데 검사만
+#   깨진 것이다. 코드 모양에 못 박힌 검사를 고친 것이 이걸로 여섯 번째다.
+#   재려던 것은 "패널이 **중앙 판정**을 읽는가"이므로 그것만 본다.
+_qs120 = _w120[_w120.find('<div class="qside">'):]
+_qs120 = _qs120[:_qs120.find('</div>')] if '</div>' in _qs120 else _qs120
+check("고정 패널 블록을 찾았다 (0글자를 재고 통과하지 않는다)",
+      len(_qs120) > 200, f'{len(_qs120)}자')
+for _k120 in ('pullback_zone', 'new_target', 'new_stop'):
+    check(f"고정 패널의 {_k120} 이 중앙 판정에서 온다",
+          f"(CORE or {{}}).get('{_k120}')" in _qs120)
 check("고정 패널이 보유자 값을 이름 없이 싣지 않는다",
-      "<tr><td>1차 목표가</td><td>{fmt_num(four_scores.get('target_tech_1st')"
-      not in _w120)
+      "four_scores.get('target_tech_1st')" not in _qs120
+      and "recommended_buy_price" not in _qs120)
 
 # ⓔ 정밀 레포트
 _rg120 = open(_os.path.join(PROJ, 'report_generator.py'), encoding='utf-8').read()
@@ -11813,6 +11823,68 @@ check("화면이 팔레트에 없는 키를 쓰지 않는다", not _bad169,
 check("검사가 없는 키를 실제로 잡는다 (심어서 확인)",
       bool({'raised'} - _defined169),
       "킷의 'raised' 는 _pal 에서 'hover' 로 이름이 바뀐다")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §170 — 메뉴가 약속한 자리가 본문에 실제로 있는가 (라운드 122)
+#
+#   사용자: *"비슷한 것끼리 묶어 주는 게 좋지 않나?"*
+#   재 보니 묶임 이전에 **메뉴와 본문이 어긋나** 있었다.
+#     · '고객센터'가 `#nav-support` 를 가리키는데 본문에 그 앵커가 없다.
+#       눌러도 아무 데도 안 간다.
+#     · 본문에만 있고 메뉴에 없는 절이 셋 — 차트·사례·점수 요인.
+#       화면에 있는데 찾을 길이 없다.
+#     · 메뉴 순서를 본문 위치로 바꿔 보면 **6군데에서 위로 튄다.**
+#
+#   본문 재배치는 렌더 순서를 건드리는 큰 수술이라 이 라운드에서는
+#   하지 않는다. 대신 **메뉴가 사실을 말하게** 하고, 어긋남을 검사로
+#   못 박는다. 죽은 링크는 0 이어야 하고, 고아 절도 0 이어야 한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§170 내비게이션 — 메뉴와 본문이 어긋나지 않는가")
+print("=" * 72)
+_wa170 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_tree170 = _ast165.parse(_wa170)
+
+# ⓐ 메뉴가 선언한 앵커 — 리터럴에서 유도한다 (손으로 안 적는다)
+_nav170 = []
+for _n170 in _ast165.walk(_tree170):
+    if not isinstance(_n170, _ast165.Assign):
+        continue
+    _nm170 = [t.id for t in _n170.targets
+              if isinstance(t, _ast165.Name)]
+    if not any(x in ('_NAV_MAIN', '_NAV_SUB') for x in _nm170):
+        continue
+    for _c170 in _ast165.walk(_n170.value):
+        if not isinstance(_c170, _ast165.Dict):
+            continue
+        _d170 = {}
+        for _k170, _v170 in zip(_c170.keys, _c170.values):
+            if (isinstance(_k170, _ast165.Constant)
+                    and isinstance(_v170, _ast165.Constant)):
+                _d170[_k170.value] = _v170.value
+        _h170 = str(_d170.get('href') or '')
+        if _h170.startswith('#'):
+            _nav170.append((_d170.get('label'), _h170[1:]))
+check("메뉴 항목을 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+      len(_nav170) >= 10, f'{len(_nav170)}개')
+
+# ⓑ 본문에 박힌 앵커
+_anch170 = set(_re.findall(r'id=[\'"](nav-[a-z0-9-]+)[\'"]', _wa170))
+check("본문 앵커를 실제로 찾아냈다", len(_anch170) >= 10,
+      f'{len(_anch170)}개')
+
+# ⓒ 죽은 링크 — 메뉴가 가리키는데 본문에 없는 것
+_dead170 = sorted({h for _l, h in _nav170 if h not in _anch170})
+check("메뉴에 죽은 링크가 없다", not _dead170, str(_dead170))
+
+# ⓓ 고아 절 — 본문에 있는데 메뉴에서 못 가는 것
+#    `nav-ask`(가늠 AI 입력창)·`nav-premarket-line` 은 다른 항목이
+#    같은 자리로 데려가므로 예외로 둔다. 예외는 **이유와 함께** 적는다.
+_EXEMPT170 = {'nav-ask'}          # 가늠 AI 항목이 같은 블록으로 데려간다
+_linked170 = {h for _l, h in _nav170}
+_orphan170 = sorted(_anch170 - _linked170 - _EXEMPT170)
+check("본문에 메뉴가 못 가는 절이 없다", not _orphan170, str(_orphan170))
 
 
 print()

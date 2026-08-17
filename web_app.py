@@ -1618,10 +1618,15 @@ _NAV_SUB = [
          'href': '#nav-premarket'},
     ]},
     {'title': '2. 근거 확인', 'items': [
-        {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
-         'href': '#nav-context'},
+        # 라운드 122 — 본문 등장 순서(차트 → 판정 근거 → 시장·뉴스)에
+        #   맞춰 나열한다. 메뉴가 위아래로 튀면 '묶여 있다'는 말과
+        #   실제 화면이 어긋난다.
+        {'key': 'chart', 'label': '차트', 'icon': 'chart',
+         'href': '#nav-chart'},
         {'key': 'basis', 'label': '판정 근거', 'icon': 'doc',
          'href': '#nav-basis'},
+        {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
+         'href': '#nav-context'},
     ]},
     {'title': '3. 내 자산', 'items': [
         {'key': 'holdings', 'label': '내 보유종목', 'icon': 'wallet',
@@ -1630,8 +1635,17 @@ _NAV_SUB = [
     {'title': '4. 검증과 이력', 'items': [
         {'key': 'perf', 'label': '모델 성적', 'icon': 'chart',
          'href': '#nav-perf'},
+        # 본문에는 있는데 메뉴에 없어 **찾을 길이 없던** 두 절을 넣는다.
+        {'key': 'cases', 'label': '사례 모음', 'icon': 'doc',
+         'href': '#nav-cases'},
+        {'key': 'scores', 'label': '점수 요인', 'icon': 'chart',
+         'href': '#nav-scores'},
         {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
          'href': '#nav-updates'},
+    ]},
+    {'title': '5. 도움', 'items': [
+        {'key': 'support', 'label': '고객센터', 'icon': 'life',
+         'href': '#nav-support'},
     ]},
 ]
 #: 첫 화면으로 되돌릴 때 비우는 상태 — **한 곳에만 적는다.**
@@ -5664,6 +5678,15 @@ st.markdown(f"""
 .qside td {{ padding: 3px 0; font-size: 13px; color: {_TOK['tx2']}; }}
 .qside td:last-child {{ text-align: right; color: {_TOK['tx1']};
   font-weight: 700; font-variant-numeric: tabular-nums; }}
+/* 라운드 122 — 패널의 각 줄에서 본문 해당 절로 갈 수 있게 한다.
+   종전에는 숫자만 있고 길이 없어, 왼쪽 메뉴와 오른쪽 패널이 서로를
+   모르는 상태였다. 색을 새로 만들지 않고 링크는 글자색을 물려받는다. */
+.qside td a {{ color: inherit; text-decoration: none;
+  border-bottom: 1px dotted {_TOK['tx3']}; }}
+.qside td a:hover {{ color: {_TOK['brand']}; }}
+/* 화면이 길어지면 패널이 아래로 넘친다 — 스스로 스크롤하게 두고
+   오른쪽 아래 '가늠 AI' 버튼과 겹치지 않게 아래를 비운다. */
+.qside {{ max-height: calc(100vh - 200px); overflow-y: auto; }}
 @media (max-width: 1760px) {{ .qside {{ display: none; }} }}
 </style>
 <!-- 라운드 53c — 이 고정 패널이 '진입 검토가'로 recommended_buy_price 를,
@@ -5672,14 +5695,14 @@ st.markdown(f"""
 <div class="qside">
   <p class="act">{verdict['headline']}</p>
   <table>
-    <tr><td>종합점수</td><td>{verdict['score']}점</td></tr>
-    <tr><td>현재가</td><td>{realtime_price:,.0f}{unit_str}</td></tr>
-    <tr><td>실행 진입가</td><td>{fmt_num((CORE or {}).get('pullback_zone'), ',.0f', unit_str, na='산출 불가')}</td></tr>
-    <tr><td>1차 목표 · 신규</td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
-    <tr><td>손절 · 신규</td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
-    <tr><td>분석 신뢰도</td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
-    <tr><td>계층 보정 확률</td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}</td></tr>
-    <tr><td>이 점수대 원실측</td><td>{_sum_band}</td></tr>
+    <tr><td><a href="#nav-verdict">종합점수</a></td><td>{verdict['score']}점</td></tr>
+    <tr><td><a href="#nav-top">현재가</a></td><td>{realtime_price:,.0f}{unit_str}</td></tr>
+    <tr><td><a href="#nav-basis">실행 진입가</a></td><td>{fmt_num((CORE or {}).get('pullback_zone'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td><a href="#nav-basis">1차 목표 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td><a href="#nav-basis">손절 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
+    <tr><td><a href="#nav-basis">분석 신뢰도</a></td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
+    <tr><td><a href="#nav-perf">계층 보정 확률</a></td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}</td></tr>
+    <tr><td><a href="#nav-perf">이 점수대 원실측</a></td><td>{_sum_band}</td></tr>
   </table>
   <p style='margin:8px 0 0 0;'><a href='#nav-ask' class='gn-ask-open-link'
   style='font-size:12px;
@@ -7120,6 +7143,10 @@ if _ledger_df is not None:
                        "블라인드 구간은 모델 선택에 쓰지 않은 순수 검증분입니다.")
 
 # ── 고객센터 — 안 될 때 여기부터 (실제 대처법만, 빈 약속 금지) ───────────────
+# 라운드 122 — 상단 메뉴의 '고객센터'가 `#nav-support` 를 가리키는데
+#   본문에 그 앵커가 **없었다.** 눌러도 아무 데도 안 갔다. 메뉴가 약속을
+#   하고 본문이 안 지키던 자리다 (§4 와 같은 모양).
+st.markdown('<div id="nav-support"></div>', unsafe_allow_html=True)
 st.markdown("### 고객센터 — 안 될 때 여기부터")
 with st.expander("자주 겪는 문제와 대처법 · 문제 신고 (펼쳐보기)", expanded=False):
     st.markdown("""
