@@ -184,7 +184,17 @@ def main():
     print('=' * 74)
 
     # 산출물은 화면이 바로 쓸 수 있게 두 벌 다 담는다
+    #
+    # 라운드 121 — `generated_at` · `ledger_buyzone_n` 을 추가했다.
+    #   종전 산출물에는 **측정 시각이 없었다.** 8/3 에 잰 표가 화면에
+    #   그대로 떠 있는 동안 원장은 4천 건대에서 82,259 건으로 자랐고,
+    #   화면은 "연습 54% (n=225)" 를 계속 보여 주고 있었다 (같은 칸을
+    #   지금 원장으로 세면 n=3,577 이다).
+    #   §2 가 적어 둔 그대로다 — **날짜 없는 숫자는 반드시 낡는다.**
+    import datetime as _dt
     out = {'generated_from': 'virtual_graded.jsonl',
+           'generated_at': _dt.date.today().isoformat(),
+           'ledger_buyzone_n': len(rows),
            'vol_split': VOL_SPLIT, 'min_cell_n': MIN_CELL_N,
            'mode': '6' if adopt else '3',
            'gap3': round(g3, 1), 'gap6': round(g6, 1),

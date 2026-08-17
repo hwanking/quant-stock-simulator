@@ -3,12 +3,25 @@
   "model": "v2026.08.15.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.17.5",
+  "schema": "v2026.08.17.6",
   "news": "v2026.08.15.2",
   "sector": "v2026.08.09.0",
   "valuation": "v2026.08.08.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.17.6",
+   "previous": "v2026.08.17.5",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "국면 산출물에 측정 시각·원장 크기를 기록하고, 날짜 단위 표본 수를 표시 전용 산출물로 분리했다",
+   "note": "regime_breakdown.json 에 generated_at·ledger_buyzone_n 을 적도록 생성 스크립트를 고쳤고(다음 실행부터), 날짜 수는 게이트를 먹이지 않는 별도 파일 regime_cell_days.json 에 담았다. 점수·게이트·문턱은 바꾸지 않았다 — R55·R57·R66 전방 표본이 2026-08-09 부터 쌓이는 중이다.",
+   "created_at": "2026-08-17T12:37:17+00:00",
+   "effective_from": "2026-08-17"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

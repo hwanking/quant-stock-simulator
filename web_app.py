@@ -4261,6 +4261,61 @@ if _home_cal.get('total_cases'):
                 f"시장을 비교하고 있었던 것입니다. 주황색은 표본 30건 미만이라 "
                 f"하나의 숫자 대신 95% 신뢰구간을 보여 드립니다.",
                 theme=_theme)
+
+            # ── 이 표가 언제 잰 값이고, 무엇을 못 말하는가 (라운드 121) ──
+            #
+            # 두 가지를 밝힌다. 둘 다 이 표만 봐서는 알 수 없다.
+            #   ① **언제 잰 값인가** — 산출물에 측정 시각이 안 적혀 있었다.
+            #      §2 가 적어 둔 그대로다: "날짜 없는 숫자는 반드시 낡는다."
+            #   ② **케이스 수가 독립 관측 수가 아니다** — 국면은 시장 수준
+            #      값이라 같은 날 추천 90건이 케이스 90·날짜 1이다.
+            #      VIX 축에서 이미 당했다 ("280건"이 실은 날짜 5개).
+            #
+            # 표의 숫자는 **고치지 않는다.** 이 파일은 regime_policy 가
+            # 점수·비중·손절 상한을 정하는 데 쓰고, R55·R57·R66 전방 표본이
+            # 2026-08-09 부터 쌓이는 중이다. 지금 다시 재면 그 표본이 무효다.
+            _rgd = None
+            try:
+                with open(os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        '.portfolio', 'regime_cell_days.json'),
+                        encoding='utf-8') as _rdf:
+                    _rgd = json.load(_rdf)
+            except Exception:                                # noqa: BLE001
+                _rgd = None
+            _rb_when = _rb.get('generated_at')
+            _prov = (f"이 표는 **{_rb_when}** 에 잰 값입니다. "
+                     if _rb_when else
+                     "이 표에는 **측정 시각이 기록돼 있지 않습니다** — "
+                     "언제 잰 값인지 산출물이 말하지 않습니다. ")
+            _days_line = ''
+            if _rgd and (_rgd.get('cells') or {}):
+                _cl = _rgd['cells']
+                _pairs = [(f"{_rb['vol_ko'].get(_vb, _vb)} "
+                           f"{_rb['regime_ko'].get(_rg, _rg)}",
+                           (_cl.get(f'{_rg}|{_vb}') or {}).get('blind') or {})
+                          for _rg, _vb in _RG_ORDER]
+                _pairs = [(_k, _m) for _k, _m in _pairs if _m.get('days')]
+                if _pairs:
+                    _wk, _wm = max(_pairs,
+                                   key=lambda x: x[1]['n'] / x[1]['days'])
+                    _days_line = (
+                        f"그리고 국면은 **시장 수준** 값이라 케이스 수가 "
+                        f"독립 관측 수가 아닙니다 — {_rgd.get('measured_at')} "
+                        f"원장 {_rgd.get('ledger_buyzone_n', 0):,}건으로 재니 "
+                        f"실전 칸의 **케이스÷날짜**가 "
+                        f"{min(m['n'] / m['days'] for _, m in _pairs):.0f}~"
+                        f"{max(m['n'] / m['days'] for _, m in _pairs):.0f}배"
+                        f"입니다 (가장 큰 칸: {_wk} {_wm['n']:,}건 = "
+                        f"**{_wm['days']}일**). 표의 n 을 독립 표본 수로 "
+                        f"읽으면 근거를 실제보다 크게 봅니다. ")
+            _uk.note(
+                _prov + _days_line
+                + f"이 표는 국면 라우팅(R55) 전방 재평가일 "
+                  f"**{_fe.eval_date_ko()}** 까지 다시 재지 않습니다 — "
+                  f"지금 다시 재면 2026-08-09 부터 쌓은 전방 표본이 "
+                  f"무효가 됩니다. 속도가 아니라 방법의 문제입니다.",
+                theme=_theme)
     elif _rb and _rb.get('buy_zone'):
         _rows_rg = []
         for _rg, _ko in (('BULL', '상승 추세'), ('SIDEWAYS', '옆걸음(횡보)'),
