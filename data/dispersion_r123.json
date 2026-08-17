@@ -1,0 +1,64 @@
+{
+ "measured_at": "2026-08-18",
+ "z_crit": 2.5,
+ "min_effect_pp": 5.0,
+ "min_days": 300,
+ "min_cases": 3000,
+ "dev": {
+  "disp": {
+   "z": 2.403,
+   "median_gap_pp": 5.83,
+   "days_low": 427,
+   "days_high": 427,
+   "cases_low": 22487,
+   "cases_high": 78867,
+   "A1_z": false,
+   "A2_direction": true,
+   "A3_effect": true,
+   "A4_sample": true,
+   "verdict": "미달"
+  },
+  "disp_iqr": {
+   "z": 1.137,
+   "median_gap_pp": 2.86,
+   "days_low": 427,
+   "days_high": 427,
+   "cases_low": 44487,
+   "cases_high": 59147,
+   "A1_z": false,
+   "A2_direction": true,
+   "A3_effect": false,
+   "A4_sample": true,
+   "verdict": "미달"
+  },
+  "breadth": {
+   "z": -0.118,
+   "median_gap_pp": 0.0,
+   "days_low": 427,
+   "days_high": 427,
+   "cases_low": 72474,
+   "cases_high": 39184,
+   "A1_z": false,
+   "A2_direction": false,
+   "A3_effect": false,
+   "A4_sample": true,
+   "verdict": "미달"
+  },
+  "corr": {
+   "z": -0.71,
+   "median_gap_pp": 0.0,
+   "days_low": 427,
+   "days_high": 427,
+   "cases_low": 56842,
+   "cases_high": 27803,
+   "A1_z": false,
+   "A2_direction": false,
+   "A3_effect": false,
+   "A4_sample": true,
+   "verdict": "미달"
+  }
+ },
+ "blind": {},
+ "adopted": [],
+ "note": "표시·연구 전용. 점수·게이트·문턱을 바꾸지 않는다."
+}
