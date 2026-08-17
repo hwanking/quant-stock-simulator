@@ -6499,9 +6499,12 @@ _ctx_c1, _ctx_c2 = st.columns([1, 1])
 with _ctx_c1:
     _dom = _mkt_ctx.get('domestic') or {}
     if _dom.get('available'):
-        _reg_icon = {"BULL_STRONG": "", "BULL_MILD": "",
-                     "SIDEWAYS": "", "BEAR_PANIC": ""}.get(_dom.get('regime_code'), "")
-        st.markdown(f"**{_reg_icon} 상장시장 국면 — {_dom.get('market')}**")
+        # 라운드 120 — 여기 `_reg_icon` 이 이모지 4종이었는데 2026-08-05
+        #   '디자인 정리' 에서 전부 빈 문자열이 됐다. 그러자 문장이
+        #   `** 상장시장 국면 …**` 이 되고, 마크다운은 **여는 별표 뒤에
+        #   공백이 오면 굵기로 보지 않으므로** 별표가 12일 동안 글자
+        #   그대로 화면에 나와 있었다. 빈 자리를 남기지 않는다.
+        st.markdown(f"**상장시장 국면 — {_dom.get('market')}**")
         st.markdown(f"{_dom.get('regime_label')}")
         st.caption(_dom.get('basis', '') + " · " + _dom.get('source', ''))
     else:
