@@ -1,0 +1,40 @@
+#!/bin/sh
+# 업데이트 이력을 커밋에 자동으로 실어 보낸다 (라운드 132).
+#
+# 왜 필요했나: 이력은 `scripts/gen_update_history.py` 가 git log 에서
+# 만드는데, 그걸 **손으로** 돌려야 했다. GitHub 에서 머지하고 pull 하면
+# 그 커밋들이 파일에 없고, 다음 라운드까지 쌓여서 회귀가 매번 걸렸다.
+# 최근 다섯 라운드 연속으로 같은 검사가 실패했다.
+#
+# 이 훅은 커밋 **직전**에 이력을 다시 만들어 스테이지에 넣는다.
+# 그래서 이력에 빠지는 것은 (a) 지금 만드는 이 커밋 자신과
+# (b) 나중에 그것을 올리는 머지 커밋 — 정확히 둘이다.
+# 회귀 §105 의 허용치 2 가 바로 그 둘이다.
+#
+# 검사를 대신하지 않는다: §105 는 그대로 남아 있고, 훅이 꺼지면 그
+# 검사가 다시 걸린다. 자동화가 조용히 멈추는 것을 막기 위해서다.
+#
+# 설치: C:/Python314/python.exe scripts/setup_hooks.py
+
+set -e
+
+# 파이썬을 못 찾아도 커밋을 막지 않는다 — 그때는 §105 가 잡는다.
+# (훅이 커밋을 막으면 사람들은 --no-verify 를 쓰게 되고, 그러면
+#  자동화도 검사도 둘 다 없는 상태가 된다)
+PY=""
+for c in "C:/Python314/python.exe" python3 python; do
+    if command -v "$c" >/dev/null 2>&1; then PY="$c"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "pre-commit: 파이썬을 못 찾아 업데이트 이력을 건너뜁니다" >&2
+    exit 0
+fi
+
+ROOT=$(git rev-parse --show-toplevel)
+if ! "$PY" "$ROOT/scripts/gen_update_history.py" >/dev/null 2>&1; then
+    echo "pre-commit: 업데이트 이력 생성 실패 — 그대로 진행합니다" >&2
+    exit 0
+fi
+
+git add "$ROOT/data/update_history.json" 2>/dev/null || true
+exit 0

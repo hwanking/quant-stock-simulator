@@ -12380,6 +12380,75 @@ else:
           str((_d175.get('join') or {}).get('used_pct')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §176 — 업데이트 이력 자동화가 실제로 걸려 있는가 (라운드 132)
+#
+#   §105 가 다섯 라운드 연속으로 걸렸다. 원인은 사람이 아니라 구조다 —
+#   GitHub 에서 머지하고 pull 하면 그 커밋들이 이력 파일에 없고, 손으로
+#   gen_update_history.py 를 돌릴 때까지 쌓인다.
+#
+#   .githooks/pre-commit 이 커밋 직전에 이력을 다시 만들어 스테이지에
+#   넣는다. 그래서 이력에 빠지는 것은 **정확히 둘**이다 — 지금 만드는
+#   커밋 자신과, 나중에 그것을 올리는 머지 커밋. §105 의 허용치 2 가
+#   그 둘이고, 이제 그 숫자에 근거가 붙는다.
+#
+#   ⚠ 자동화가 **검사를 대신하지 않는다.** §105 는 그대로 남는다.
+#     훅이 꺼지면 §105 가 다시 걸린다 — 자동화가 조용히 멈추는 것을
+#     막기 위해서다. 그리고 이 절은 훅이 **연결돼 있는지**까지 본다.
+#     파일만 있고 core.hooksPath 가 안 걸려 있으면 장식이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§176 업데이트 이력 자동화 (라운드 132)")
+print("=" * 72)
+_hook176 = _os.path.join(PROJ, '.githooks', 'pre-commit')
+check("커밋 훅이 저장소에 실려 있다 (.git/hooks 는 클론에 안 따라온다)",
+      _os.path.exists(_hook176))
+check("훅 설치 스크립트가 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'setup_hooks.py')))
+if _os.path.exists(_hook176):
+    _hs176 = _read148(_hook176)
+    check("훅이 이력 생성기를 부른다",
+          'gen_update_history.py' in _hs176)
+    check("훅이 생성한 파일을 스테이지에 넣는다 (안 넣으면 커밋에 안 실린다)",
+          'git add' in _hs176 and 'update_history.json' in _hs176)
+    # 훅이 커밋을 **막으면 안 된다** — 막으면 --no-verify 를 쓰게 되고
+    # 그러면 자동화도 검사도 둘 다 없는 상태가 된다.
+    check("훅이 실패해도 커밋을 막지 않는다",
+          _hs176.count('exit 0') >= 2 and 'exit 1' not in _hs176,
+          '훅이 커밋을 막으면 --no-verify 로 우회하게 된다')
+
+    # 실제로 **연결돼 있는가** — 파일만 있으면 장식이다
+    try:
+        _hp176 = _sp105.run(['git', 'config', '--get', 'core.hooksPath'],
+                            cwd=PROJ, capture_output=True, text=True,
+                            encoding='utf-8',
+                            errors='replace').stdout.strip()
+    except Exception:                                          # noqa: BLE001
+        _hp176 = ''
+    check("훅이 실제로 연결돼 있다 (core.hooksPath)",
+          _hp176.replace('\\', '/').rstrip('/') == '.githooks',
+          f'core.hooksPath="{_hp176}" — '
+          f'C:/Python314/python.exe scripts/setup_hooks.py 를 돌리세요')
+
+    # 그리고 훅이 **정말 작동했는지**를 결과로 본다: 최근 커밋들 중
+    # 이력 파일을 함께 건드린 것이 있어야 한다. 훅이 붙기 전 커밋도
+    # 섞여 있으므로 '하나라도'로 본다 — 0 이면 한 번도 안 돈 것이다.
+    try:
+        _touch176 = _sp105.run(
+            ['git', 'log', '-n', '12', '--pretty=%h', '--',
+             'data/update_history.json'], cwd=PROJ, capture_output=True,
+            text=True, encoding='utf-8', errors='replace').stdout.split()
+    except Exception:                                          # noqa: BLE001
+        _touch176 = []
+    check("최근 커밋 중 이력이 함께 실린 것이 있다 (훅이 돈 흔적)",
+          len(_touch176) >= 1, f'{len(_touch176)}건')
+
+# §105 가 살아 있어야 자동화가 멈춘 것을 알 수 있다 — 지우지 않았는가
+check("§105 의 이력 검사가 그대로 살아 있다 (자동화가 검사를 대신하지 않는다)",
+      '업데이트 이력에 안 적힌 커밋이 2개를 넘지 않는다' in _read148(
+          _os.path.join(PROJ, 'test_pipeline_fixes.py')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
