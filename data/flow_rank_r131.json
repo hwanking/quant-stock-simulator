@@ -1,0 +1,192 @@
+{
+ "made": "2026-08-20",
+ "made_at": "2026-08-19T16:40:32+00:00",
+ "prereg": "docs/PREREG_R131_FLOW.md",
+ "prereg_commit": "be52ba7",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드/전방 미사용",
+ "leak_rule": "수급은 D-1 까지만 사용 (당일은 장 마감 후 공표)",
+ "seed": 131,
+ "z_pass": 2.58,
+ "min_days": 200,
+ "vars": [
+  "frgn_days5",
+  "inst_days5",
+  "both_days5",
+  "frgn_streak",
+  "frgn_flip"
+ ],
+ "join": {
+  "rows": 166132,
+  "used": 30715,
+  "miss_ticker": 104773,
+  "miss_window": 30644,
+  "used_pct": 18.5
+ },
+ "results": {
+  "frgn_days5": {
+   "days": 219,
+   "win": 106,
+   "lose": 98,
+   "decided": 204,
+   "z": 0.56,
+   "pass_p1": false,
+   "pass_p4": true,
+   "split": {
+    "train": {
+     "days": 190,
+     "z": 0.376
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.577
+    }
+   },
+   "pass_p3": true
+  },
+  "inst_days5": {
+   "days": 219,
+   "win": 100,
+   "lose": 107,
+   "decided": 207,
+   "z": -0.487,
+   "pass_p1": false,
+   "pass_p4": true,
+   "split": {
+    "train": {
+     "days": 190,
+     "z": -0.673
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": false
+  },
+  "both_days5": {
+   "days": 219,
+   "win": 100,
+   "lose": 105,
+   "decided": 205,
+   "z": -0.349,
+   "pass_p1": false,
+   "pass_p4": true,
+   "split": {
+    "train": {
+     "days": 190,
+     "z": -0.526
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": false
+  },
+  "frgn_streak": {
+   "days": 218,
+   "win": 96,
+   "lose": 106,
+   "decided": 202,
+   "z": -0.704,
+   "pass_p1": false,
+   "pass_p4": true,
+   "split": {
+    "train": {
+     "days": 189,
+     "z": -0.91
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": false
+  },
+  "frgn_flip": {
+   "days": 221,
+   "win": 97,
+   "lose": 106,
+   "decided": 203,
+   "z": -0.632,
+   "pass_p1": false,
+   "pass_p4": true,
+   "split": {
+    "train": {
+     "days": 192,
+     "z": -0.983
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.756
+    }
+   },
+   "pass_p3": false
+  },
+  "score": {
+   "days": 183,
+   "win": 90,
+   "lose": 84,
+   "decided": 174,
+   "z": 0.455,
+   "pass_p1": false,
+   "pass_p4": false
+  }
+ },
+ "verdict": {
+  "frgn_days5": {
+   "P1": false,
+   "P2": true,
+   "P3": true,
+   "P4": true,
+   "passed": false
+  },
+  "inst_days5": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": true,
+   "passed": false
+  },
+  "both_days5": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": true,
+   "passed": false
+  },
+  "frgn_streak": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": true,
+   "passed": false
+  },
+  "frgn_flip": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": true,
+   "passed": false
+  }
+ },
+ "passed": 0,
+ "min_detectable_pp": {
+  "frgn_days5": 8,
+  "inst_days5": 12,
+  "both_days5": 8,
+  "frgn_streak": 12,
+  "frgn_flip": 12
+ },
+ "selfcheck": {
+  "fpr": 0.035,
+  "fpr_ok": true,
+  "z_real": 0.5601,
+  "z_shuffled": 0.4264,
+  "var_used_ok": true,
+  "z_leak": 1.0476,
+  "leak_ok": true,
+  "ok": true
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 통과해도 2026-11-16 전에는 운영에 넣지 않는다."
+}

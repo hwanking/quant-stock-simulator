@@ -12280,6 +12280,106 @@ if _os.path.exists(_rec174) and _os.path.exists(_doc174p):
           and _fr174.OUT.replace('\\', '/').find('/.portfolio/') > 0)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §175 — 라운드 131: 수급 연속성 측정이 제대로 선 판정인가
+#
+#   R112 가 "남은 길은 없는 정보를 넣는 것"이라 했고, R130 이 그 하나를
+#   열었다(수급). R131 이 그것을 사전등록대로 쟀고 **5개 전부 미달**이다.
+#
+#   여기서 지키는 것은 결론이 아니라 **결론이 서 있는 다리**다:
+#     ⓐ 사전등록이 측정 **전에** 커밋됐는가 (해시가 산출물에 박혀 있는가)
+#     ⓑ 자기검사 넷을 통과했는가 — 특히 대조군이 0 이 아닌가
+#     ⓒ 대조군을 함께 냈는가 — 안 두면 +0.56 을 "방향은 맞다"고 읽는다
+#     ⓓ 누출 차단이 실제로 걸려 있는가 (D 포함과 z 가 달라야 한다)
+#     ⓔ 미달을 "효과 없음"으로 쓰지 않았는가 (최소 가시 효과 병기)
+#     ⓕ 문턱·변수 수가 사전등록 그대로인가 (측정 후에 안 고쳤는가)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§175 라운드 131 수급 — 기각이 제대로 선 판정인가")
+print("=" * 72)
+_p175 = _os.path.join(PROJ, 'data', 'flow_rank_r131.json')
+_doc175p = _os.path.join(PROJ, 'docs', 'RESULT_R131_FLOW.md')
+_pre175p = _os.path.join(PROJ, 'docs', 'PREREG_R131_FLOW.md')
+if not _os.path.exists(_p175):
+    check("R131 산출물이 있다", False, 'data/flow_rank_r131.json 없음')
+else:
+    with open(_p175, encoding='utf-8') as _f175:
+        _d175 = _json.load(_f175)
+    _doc175 = _read148(_doc175p)
+    _pre175 = _read148(_pre175p)
+
+    # ⓐ 사전등록이 측정 전에 있었다 — 커밋 해시로 못 박는다
+    check("사전등록 문서가 있다", _os.path.exists(_pre175p))
+    check("산출물이 사전등록을 가리킨다",
+          _d175.get('prereg') == 'docs/PREREG_R131_FLOW.md')
+    check("사전등록 커밋 해시를 산출물에 박았다",
+          bool(_d175.get('prereg_commit'))
+          and _d175['prereg_commit'] in _doc175,
+          str(_d175.get('prereg_commit')))
+
+    # ⓕ 문턱·변수가 사전등록 그대로인가 (측정 후에 고치지 않았다)
+    check("문턱이 사전등록 값(2.58) 그대로다", _d175.get('z_pass') == 2.58,
+          str(_d175.get('z_pass')))
+    check("시험 변수가 정확히 5개다 (늘리지 않았다)",
+          len(_d175.get('vars') or []) == 5,
+          str(_d175.get('vars')))
+    for _v175 in (_d175.get('vars') or []):
+        check(f"변수 '{_v175}' 가 사전등록에 적혀 있다", _v175 in _pre175)
+    check("보정 문턱을 올림으로 적었다 (반올림 아님)",
+          '올림' in _pre175 and '2.5758' in _pre175)
+
+    # ⓑ 자기검사 넷
+    _sc175 = _d175.get('selfcheck') or {}
+    check("자기검사 전체가 통과했다", _sc175.get('ok') is True)
+    check("ⓐ 거짓양성률이 정상 범위다", _sc175.get('fpr_ok') is True,
+          str(_sc175.get('fpr')))
+    check("ⓑ 변수가 정렬에 실제로 들어갔다 (섞으면 z 가 바뀐다)",
+          _sc175.get('var_used_ok') is True,
+          f"{_sc175.get('z_real')} vs {_sc175.get('z_shuffled')}")
+    check("ⓓ 누출 차단이 걸려 있다 (당일 포함과 z 가 다르다)",
+          _sc175.get('leak_ok') is True,
+          f"{_sc175.get('z_real')} vs {_sc175.get('z_leak')}")
+    # 누출을 넣으면 커져야 한다 — 방향까지 본다 (이름만 믿지 않는다)
+    check("당일을 넣으면 z 가 **커진다** (누출이 우위를 만든다)",
+          (_sc175.get('z_leak') or 0) > (_sc175.get('z_real') or 0),
+          f"{_sc175.get('z_real')} → {_sc175.get('z_leak')}")
+
+    # ⓒ 대조군 — 0 이 아니고, 결과에 함께 실렸는가
+    _ctrl175 = (_d175.get('results') or {}).get('score') or {}
+    check("대조군을 함께 쟀다 (같은 축소 표본의 종합점수)",
+          _ctrl175.get('days', 0) > 0, f"{_ctrl175.get('days')}일")
+    # 산출물의 값을 **그대로** 옮겼는가. 다시 반올림해서 대조하면
+    # 같은 숫자가 두 곳에서 달라진다 (0.455 → 콘솔 0.45 · 재반올림 0.46).
+    check("대조군 z 를 산출물 자릿수 그대로 문서에 적었다",
+          _ctrl175.get('z') is not None
+          and str(_ctrl175['z']) in _doc175,
+          str(_ctrl175.get('z')))
+    # 대조군이 없으면 해석이 불가능하다는 것을 문서가 말하는가
+    check("대조군 없이 읽으면 오독한다고 적었다",
+          '대조군을 안 뒀으면' in _doc175)
+
+    # ⓔ 미달을 "효과 없음"으로 쓰지 않았는가
+    check("모든 변수의 최소 가시 효과를 냈다",
+          len(_d175.get('min_detectable_pp') or {})
+          == len(_d175.get('vars') or []),
+          str(_d175.get('min_detectable_pp')))
+    check("문서가 '효과 없다'가 아니라 '이 표본에서 N%p 짜리는 없다'로 쓴다",
+          '짜리는 없다' in _doc175)
+
+    # 판정 자체 — 통과 개수와 문서가 어긋나지 않는가 (값으로 대조)
+    check("판정이 산출물과 문서에서 같다",
+          (_d175.get('passed') == 0) == ('전부 미달' in _doc175),
+          f"passed={_d175.get('passed')}")
+    check("기각해도 운영을 안 바꿨다고 적었다",
+          '하나도 안 바꿨다' in _doc175
+          and '바꾸지 않는다' in str(_d175.get('note')))
+    # 조인 커버리지를 밝혔는가 (몇 %를 못 썼는지)
+    check("쓸 수 없었던 케이스 비율을 밝혔다",
+          (_d175.get('join') or {}).get('used_pct') is not None
+          and f"{_d175['join']['used_pct']}%" in _doc175,
+          str((_d175.get('join') or {}).get('used_pct')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
