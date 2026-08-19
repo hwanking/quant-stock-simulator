@@ -7918,8 +7918,21 @@ check("배너가 두 가격의 역할을 가른다",
       '가치로 보면 아직 싸지 않습니다' in _w124
       and '두 가격은 다른 질문에 답합니다' in _w124
       and '얼마면 싼가' in _w124 and '어디부터 들어갈 만한가' in _w124)
+# ⚠️ 라운드 133 — 이 검사는 `_gap_fv = (_core_entry / _fair - 1.0) * 100.0`
+#   이라는 **코드 모양**을 붙잡고 있었다. 그 계산이 킷으로 옮겨가면서
+#   실패했는데, 검사의 목적("지어내지 않고 **계산**한다")은 그대로다.
+#   왜 옮겼나: 같은 나눗셈이 상세 배너에만 있고 **추천 카드에는 없어서**,
+#   카드는 싸 보이고 상세는 비싸 보이는 어긋남이 났다 (§4).
+#   그래서 검사도 자리를 옮긴다 — 어디서 계산하느냐가 아니라
+#   **진입가와 적정가로 계산하느냐**가 기준이다 (라운드 79 와 같은 판단).
+# ⚠️ `_read148` 은 9,800줄대에서 정의된다 — 이 절은 그보다 **먼저** 돈다.
+#   (파일 앞쪽에 같은 함정이 이미 적혀 있다: "§135 의 json 별칭을 쓰지
+#   않는다 — 이 절이 먼저 돈다.") 여기서는 그냥 연다.
+with open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8') as _f124:
+    _uk124 = _f124.read()
 check("괴리를 숫자로 낸다 (지어내지 않고 계산)",
-      '_gap_fv = (_core_entry / _fair - 1.0) * 100.0' in _w124)
+      'pct = (e / f - 1.0) * 100.0' in _uk124
+      and '_uk.value_premium(_core_entry, _fair)' in _w124)
 check("타이밍·가치가 겹치는 자리도 구분해 말한다",
       '같은 방향</b>을 ' in _w124
       and '거의 같은 자리입니다' in _w124 and '겹치는 자리입니다' in _w124)
@@ -12447,6 +12460,126 @@ if _os.path.exists(_hook176):
 check("§105 의 이력 검사가 그대로 살아 있다 (자동화가 검사를 대신하지 않는다)",
       '업데이트 이력에 안 적힌 커밋이 2개를 넘지 않는다' in _read148(
           _os.path.join(PROJ, 'test_pipeline_fixes.py')))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §177 — 가치 프리미엄이 카드에서 보이는가 (라운드 133)
+#
+#   사용자 지적: *"대우건설·현대건설을 추천해 줬는데 적정가보다 매수가가
+#   높아서 선뜻 못 사겠다."* 서버를 띄워 보니 원인이 분명했다 —
+#   **추천 카드에 가치 정보가 한 줄도 없었다.**
+#       현재가 17,200 · 권장 매수가 16,002(-7.5%) · 목표 · 손절
+#   이것만 보면 싸 보인다. 그런데 상세로 들어가면 적정가가 그 아래다.
+#
+#   라운드 56 이 같은 계산을 **상세 배너 안에 인라인으로** 넣어 뒀지만,
+#   카드만 보는 사용자에게는 그 문장이 없는 것과 같았다
+#   (페이지 전체에서 '가치로 보면' 이 딱 1번 나왔다).
+#
+#   고친 방식이 중요하다. 카드에 계산을 하나 더 만들지 않았다 —
+#   **킷에 한 곳을 만들고 배너·카드가 같은 함수를 부른다** (§4).
+#
+#   그리고 값이 실제로 오는지 확인했다: 추천 행(premarket.picks)에
+#   `displayed_fair_value` 가 **아예 없었다.** 넣지 않았으면 카드가
+#   조용히 아무것도 안 그리고, 나는 "넣었다"고 말했을 것이다.
+#
+#   ⚠️ 표시 전용이다. 라운드 28b 가 적정가 구간이 성과를 유의하게
+#     가르지 못한다고 이미 측정했다 — 등급처럼 보이는 다단 구간을
+#     새로 만들지 않는 이유다. 갈래는 라운드 56 의 ±3% 를 재사용한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§177 가치 프리미엄 — 카드에서 보이는가 (라운드 133)")
+print("=" * 72)
+import ui_kit as _uk177                                        # noqa: E402
+
+check("가치 프리미엄 계산이 킷에 있다", hasattr(_uk177, 'value_premium'))
+check("문턱이 라운드 56 의 값(±3%)을 재사용한다",
+      getattr(_uk177, 'VALUE_NEAR_PCT', None) == 3.0,
+      str(getattr(_uk177, 'VALUE_NEAR_PCT', None)))
+
+# ⓐ 값으로 확인한다 — 세 갈래가 실제로 갈리는가
+_c177 = [((16002, 14500), 'trend'), ((16002, 16100), 'near'),
+         ((16002, 18000), 'value'), ((None, 14500), None),
+         ((16002, None), None), ((16002, 0), None)]
+for (_e177, _f177), _want177 in _c177:
+    _got177 = _uk177.value_premium(_e177, _f177)
+    check(f"value_premium({_e177}, {_f177}) → {_want177}",
+          (_got177 or {}).get('kind') == _want177 if _want177
+          else _got177 is None,
+          str((_got177 or {}).get('kind')))
+
+# ⓑ 완성된 카드 HTML 에 실제로 들어가는가 (헬퍼가 맞는 것과 다르다)
+_vp177 = _uk177.value_premium(16002, 14500)
+_html177 = _uk177.reco_card({'state': 'warn', 'state_label': '눌림목 대기',
+                             'name': '시험', 'price': 17200,
+                             'rec_buy': 16002, 'value_premium': _vp177},
+                            theme='dark')
+check("카드 HTML 에 '추세형 매수'가 들어간다", '추세형 매수' in _html177)
+check("카드 HTML 에 프리미엄 숫자가 들어간다", '+10.4%' in _html177,
+      f'{len(_html177)}자')
+# ⓒ 값이 없으면 상자를 아예 안 그린다 (지어내지 않는다 · §3)
+_html177b = _uk177.reco_card({'state': 'warn', 'state_label': '눌림목 대기',
+                              'name': '시험', 'price': 17200,
+                              'rec_buy': 16002}, theme='dark')
+check("값이 없으면 그 상자를 안 그린다",
+      '추세형 매수' not in _html177b and '가치형 매수' not in _html177b)
+
+# ⓓ 값이 **실제로 카드까지 온다** — 추천 행이 적정가를 싣는가
+_pm177 = _read148(_os.path.join(PROJ, 'premarket.py'))
+check("추천 행이 적정가를 싣는다 (없으면 카드가 조용히 빈다)",
+      "'displayed_fair_value': fs.get('displayed_fair_value')" in _pm177)
+check("적정가를 value_floor 로 대신하지 않는다 (다른 값이다 · 라운드 53c)",
+      "'displayed_fair_value': fs.get('value_floor_price')" not in _pm177)
+_wa177 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("카드 조립부가 킷 함수를 부른다",
+      '_uk.value_premium(rec' in _wa177)
+
+# ⓔ 계산이 **한 곳에만** 있는가 (§4 — 경로가 둘이면 한쪽만 고친다)
+_dup177 = len(_re.findall(r'/\s*_?fair\w*\s*-\s*1\.0\s*\)\s*\*\s*100',
+                          _wa177))
+check("web_app 에 프리미엄 나눗셈이 남아 있지 않다 (킷으로 옮겼다)",
+      _dup177 == 0, f'{_dup177}곳 남음')
+check("배너도 같은 함수를 쓴다", '_vp = _uk.value_premium(_core_entry, _fair)'
+      in _wa177)
+
+# ⓕ 아이콘이 **조용히 사라지지 않는가** — `_icon()` 은 모르는 이름에
+#    빈 문자열을 돌려준다. 이 라운드에서 실제로 없는 이름('Scale')을
+#    쓸 뻔했고, 그러면 아이콘 자리가 소리 없이 비었을 것이다.
+_uks177 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+
+
+def _icon_names(src):
+    """소스에서 **리터럴로 적힌** 아이콘 이름만 모은다.
+
+    ⚠️ 이 조사는 완전하지 않다 — `_icon(sic, col, 14)` 처럼 변수로 넘기는
+    자리는 못 본다. 완전한 척하지 않고, 리터럴 자리만 본다고 적는다.
+    """
+    return set(_re.findall(r"_icon\(\s*'([A-Za-z0-9]+)'", src))
+
+
+_used177 = _icon_names(_uks177)
+_miss177 = sorted(n for n in _used177 if n not in _uk177._ICONS)
+check("킷이 부르는 아이콘 이름이 전부 _ICONS 에 있다 (없으면 조용히 빈다)",
+      not _miss177, f'없는 이름: {_miss177}')
+# ⚠️ 처음엔 `len(_used177) >= 5` 로 썼다. 5 는 감으로 고른 숫자였고 실제
+#   리터럴 자리는 3개라 곧바로 실패했다 — **검사 문턱을 감으로 정하지
+#   않는다**(§2)는 규칙을 검사에서 어긴 것이다.
+#   재려던 것은 "이 조사가 실제로 잡아내는가"이므로, 숫자를 세는 대신
+#   **없는 이름을 심어서 잡히는지** 본다 (§110 의 자기검사 방식).
+_plant177 = _icon_names("x = _icon('NoSuchIconR133', c, 16)")
+check("심은 가짜 아이콘 이름을 조사가 잡는다 (0건이 '없다'인지 가른다)",
+      'NoSuchIconR133' in _plant177
+      and 'NoSuchIconR133' not in _uk177._ICONS,
+      str(sorted(_plant177)))
+check("실제 소스에서도 이름을 하나 이상 찾았다",
+      len(_used177) >= 1, f'{len(_used177)}개 · {sorted(_used177)}')
+
+# ⓖ 표시 전용임을 코드가 말하는가 — 판정·게이트에 안 쓴다
+check("표시 전용이라고 적었다 (라운드 28b)",
+      '표시 전용' in _uks177 and '28b' in _uks177)
+for _f177b in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+               'regime_policy.py'):
+    check(f"{_f177b} 가 value_premium 을 쓰지 않는다",
+          'value_premium' not in _read148(_os.path.join(PROJ, _f177b)))
 
 
 print()

@@ -219,6 +219,15 @@ def pick_from_scan_row(q_engine, r):
         'rec_buy': fs.get('entry_pullback_price'),
         'rec_buy_basis': fs.get('entry_pullback_basis'),
         'value_floor': fs.get('value_floor_price'),
+        # 적정가 — 라운드 133 에서 **빠져 있는 것을 발견했다.** 카드는
+        # `권장 매수가 -7.5%` 만 보여 줘서 싸 보이는데, 상세로 들어가면
+        # 적정가가 그보다 아래인 경우가 있다(대우건설·현대건설). 두 화면이
+        # 다른 인상을 준다. 카드가 가치 프리미엄을 그리려면 이 값이 행에
+        # 실려야 한다. **이름을 바꾸지 않는다** — 같은 사실을 다른 이름으로
+        # 부르면 계보가 끊긴다.
+        # ⚠️ `value_floor`(장기 안전마진선)로 대신하지 않는다. 그건 적정가에
+        #   안전마진을 곱한 다른 값이고, 라운드 53c 가 폐기 산식이라 적었다.
+        'displayed_fair_value': fs.get('displayed_fair_value'),
         'entry_zone': fs.get('entry_zone'),
         'chase_max': fs.get('buy_entry_max'),
         # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다
