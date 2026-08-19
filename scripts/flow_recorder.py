@@ -123,6 +123,12 @@ def fetch_page(code, page):
     return out
 
 
+#: 사전 고정한 표본 조건 (docs/CANDIDATES_R130_FLOW_ENGINES.md §5).
+#: **데이터를 보기 전에** 적었다. 나중에 정하면 통과하는 쪽으로 정하게 된다.
+NEED_CASES = 20_000
+NEED_DAYS = 400
+
+
 def report(cases, per_ticker, have):
     """커버리지 — 원장 케이스 중 수급이 붙은 비율. 케이스와 날짜를 함께 센다.
 
@@ -132,16 +138,39 @@ def report(cases, per_ticker, have):
     hit = sum(1 for k in cases if k in have)
     days_all = {d for _, d in cases}
     days_hit = {d for t, d in cases if (t, d) in have}
-    print(f'■ 커버리지 (원장 대비)')
+    print('■ 커버리지 (원장 대비)')
     print(f'   케이스 {hit:,} / {len(cases):,} '
-          f'({hit / max(1, len(cases)) * 100:.1f}%)')
+          f'({hit / max(1, len(cases)) * 100:.1f}%)  '
+          f'[조건 {NEED_CASES:,} — {"충족" if hit >= NEED_CASES else "미달"}]')
     print(f'   날짜   {len(days_hit):,} / {len(days_all):,} '
-          f'({len(days_hit) / max(1, len(days_all)) * 100:.1f}%)')
+          f'({len(days_hit) / max(1, len(days_all)) * 100:.1f}%)  '
+          f'[조건 {NEED_DAYS:,} — '
+          f'{"충족" if len(days_hit) >= NEED_DAYS else "미달"}]')
     print(f'   기록 총량 {len(have):,}행 · 종목 '
           f'{len({t for t, _ in have}):,}개')
     if have:
         ds = sorted({d for _, d in have})
         print(f'   기록 구간 {ds[0]} ~ {ds[-1]}')
+
+    # ── 구멍 검사 — 페이지를 건너뛰면 여기서 보여야 한다 ──────────
+    # 원장의 날짜 합집합을 거래일 달력의 대용으로 쓴다. 한 종목의
+    # 기록 구간 **안에서** 달력에 있는데 기록에 없는 날을 센다.
+    # 이걸 안 찍으면 --from-page 로 건너뛴 구멍을 영영 모른다.
+    cal = sorted(days_all)
+    by_t = collections.defaultdict(set)
+    for t, d in have:
+        by_t[t].add(d)
+    holes, worst = 0, (None, 0)
+    for t, ds_t in by_t.items():
+        lo, hi = min(ds_t), max(ds_t)
+        miss = sum(1 for d in cal if lo <= d <= hi and d not in ds_t)
+        holes += miss
+        if miss > worst[1]:
+            worst = (t, miss)
+    print(f'   기록 구간 안의 빈 날 {holes:,}일 '
+          f'(최다 {worst[0]} {worst[1]:,}일)')
+    print('   ※ 상장 전·거래정지·원장 달력의 한계로도 생긴다. '
+          '갑자기 20의 배수로 늘면 페이지를 건너뛴 것이다.')
     return hit, len(days_hit)
 
 
@@ -150,7 +179,13 @@ def main():
     ap.add_argument('--tickers', type=int, default=20,
                     help='원장 케이스가 많은 순으로 몇 종목까지')
     ap.add_argument('--pages', type=int, default=6,
-                    help='종목당 몇 페이지 (1페이지 = 20거래일)')
+                    help='종목당 몇 페이지까지 (1페이지 = 20거래일)')
+    # 이어 받을 때 이미 받은 페이지를 다시 요청하면 그만큼 통째로 낭비다.
+    # 1차 수집(1~25페이지) 뒤 깊이를 늘릴 때는 --from-page 26 처럼 준다.
+    # **한 페이지 겹쳐서** 시작하는 것이 안전하다 — 중복은 어차피
+    # 걸러지고, 경계에서 빠지는 것이 훨씬 나쁘다.
+    ap.add_argument('--from-page', type=int, default=1,
+                    help='몇 페이지부터 (이어 받기 — 일일 수집은 1)')
     ap.add_argument('--delay', type=float, default=0.25,
                     help='요청 사이 간격(초)')
     ap.add_argument('--report', action='store_true',
@@ -177,8 +212,12 @@ def main():
             picked.append(t)
         else:
             skipped += 1
+    first = max(1, a.from_page)
     print(f'대상 {len(picked)}종목 (6자리 아님으로 건너뜀 {skipped}개) '
-          f'· 종목당 최대 {a.pages}페이지')
+          f'· 페이지 {first}~{a.pages}')
+    if first > 1:
+        print(f'   ※ {first - 1}페이지까지는 이미 받은 것으로 보고 건너뛴다. '
+              f'경계가 어긋나면 아래 "구간"에 구멍이 보인다.')
 
     added = 0
     fail_t, empty_t = [], []
@@ -186,7 +225,7 @@ def main():
         for i, t in enumerate(picked, 1):
             code = code_of(t)
             got_t = 0
-            for page in range(1, a.pages + 1):
+            for page in range(first, a.pages + 1):
                 rows = fetch_page(code, page)
                 if rows is None:
                     fail_t.append((t, page))
