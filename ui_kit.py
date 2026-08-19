@@ -940,6 +940,74 @@ def _why_row(icon, text, color=None, theme='dark'):
             f"<span>{_esc(text)}</span></div>")
 
 
+# ── 가치 프리미엄 — 진입가가 적정가보다 얼마나 비싼가 (라운드 133) ────
+#
+# 사용자 지적: *"대우건설·현대건설을 추천해 줬는데 적정가보다 매수가가
+# 높아서 선뜻 못 사겠다."* 화면을 보니 원인이 분명했다 —
+# **추천 카드에 가치 정보가 한 줄도 없다.** 카드에는
+# `권장 매수가 16,002원 (-7.5%)` 만 있어서 싸 보이는데, 상세로 들어가면
+# 적정가가 그보다 아래다. 두 화면이 서로 다른 인상을 준다.
+#
+# 라운드 56 이 상세 배너에 이미 같은 계산을 넣어 뒀는데(인라인),
+# 카드에는 없었고 계산도 web_app 안에 박혀 있었다. **한 곳으로 옮긴다**
+# (§4 — 경로가 둘이면 한쪽만 고치는 일이 생긴다).
+#
+# ⚠️ 표시 전용이다. 판정·게이트·문턱에 **쓰지 않는다** —
+#   라운드 28b 가 적정가 구간이 성과를 유의하게 가르지 못한다고 이미
+#   측정했다(`verdict_core` 과열 판정 주석). 등급처럼 보이는 다단 구간을
+#   새로 만들지 않는 이유도 그것이다.
+#
+# 갈래는 **라운드 56 이 이미 채택한 ±3%** 를 그대로 쓴다. 새 문턱을
+# 감으로 만들지 않는다 (§2 — 가능하면 채택된 구간 규칙을 재사용한다).
+VALUE_NEAR_PCT = 3.0
+
+
+def value_premium(entry, fair):
+    """(진입가 ÷ 적정가 − 1). 둘 중 하나라도 없으면 None — 지어내지 않는다.
+
+    반환: dict(pct, kind, kind_ko, line)
+      · kind 'trend'  — 적정가보다 비싼 자리 (추세를 사는 것)
+      · kind 'value'  — 적정가보다 싼 자리
+      · kind 'near'   — 거의 같은 자리
+    """
+    try:
+        e, f = float(entry), float(fair)
+    except (TypeError, ValueError):
+        return None
+    if not (e > 0 and f > 0):
+        return None
+    pct = (e / f - 1.0) * 100.0
+    if pct >= VALUE_NEAR_PCT:
+        kind, ko = 'trend', '추세형'
+        line = (f"가치가 싸서 고른 자리가 아닙니다 — 매수가가 적정가보다 "
+                f"{pct:+.1f}% 위입니다.")
+    elif pct <= -VALUE_NEAR_PCT:
+        kind, ko = 'value', '가치형'
+        line = (f"가치로 봐도 싼 자리입니다 — 매수가가 적정가보다 "
+                f"{pct:+.1f}% 아래입니다.")
+    else:
+        kind, ko = 'near', '중립'
+        line = f"적정가와 거의 같은 자리입니다 ({pct:+.1f}%)."
+    return dict(pct=round(pct, 1), kind=kind, kind_ko=ko, line=line)
+
+
+def value_row(vp, theme='dark'):
+    """가치 프리미엄 한 줄. `value_premium()` 결과를 그대로 받는다."""
+    if not vp:
+        return ''
+    t = tokens(theme)
+    col = {'trend': t['warn'], 'value': t['pos'], 'near': t['tx2']}.get(
+        vp['kind'], t['tx2'])
+    return (
+        f"<div style='display:flex; align-items:flex-start; gap:7px; "
+        f"margin-top:9px; padding:8px 10px; background:{t['raised']}; "
+        f"border-radius:8px;'>"
+        f"{_icon('CircleDollarSign', col, 15)}"
+        f"<div style='font-size:12px; line-height:1.5; color:{t['tx2']};'>"
+        f"<b style='color:{col};'>{_esc(vp['kind_ko'])} 매수</b> · "
+        f"{_esc(vp['line'])}</div></div>")
+
+
 def reco_card(p: dict, theme: str = 'dark') -> str:
     """
     오늘의 추천·관망 카드 한 장.
@@ -980,6 +1048,11 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
         p.get('rec_basis', ''),
         color=(col if p.get('rec_buy') else None),
         muted=not p.get('rec_buy'), theme=theme))
+    # 가치 프리미엄 — 가격 줄 **바로 아래**에 둔다 (라운드 133).
+    # 접힌 영역에 두면 안 읽힌다. 실제로 라운드 56 이 같은 내용을 상세
+    # 배너의 '더 보기' 안에 넣어 뒀는데, 카드만 보는 사용자에게는 그
+    # 문장이 존재하지 않는 것과 같았다.
+    _vp_html = value_row(p.get('value_premium'), theme=theme)
     if p.get('target'):
         rows.append(_price_row('Target', '1차 목표가', _won(p['target']),
                                p.get('target_basis', ''),
@@ -991,7 +1064,8 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
     prices = (f"<div style='background:{t['raised']}; border-radius:11px; "
               f"padding:4px 12px; display:grid; "
               f"grid-template-columns:17px 1fr auto; gap:0 10px; "
-              f"align-items:center;'>{''.join(rows)}</div>")
+              f"align-items:center;'>{''.join(rows)}</div>"
+              + _vp_html)
 
     say = (f"<p style='margin:0; font-size:13px; line-height:1.65; "
            f"color:{t['tx1']};'>{_esc(p['say'])}</p>" if p.get('say') else '')
