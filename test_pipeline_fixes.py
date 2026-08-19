@@ -12187,6 +12187,99 @@ else:
                                             'sample_ceiling_r129.py')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §174 — 수급 수집이 '수집'에서 멈추는가 (라운드 130)
+#
+#   사용자가 영상 요약을 주며 제안했다: 외국인 연속 순매수에 **+5점**,
+#   프로그램 순매수 **10% 돌파** 시 강력 매수 트리거, 적정가 **−15%**
+#   에서 매수 보류 해제 — 그리고 "즉각 도입".
+#
+#   숫자 넷이 전부 감으로 고른 값이고(§2), 지금은 R55·R57·R66 전방
+#   동결 기간이다. 그래서 **수집만** 시작했다.
+#
+#   "운영에 안 넣었다"는 약속은 약속으로 두지 않는다 — 검사가 지킨다:
+#     ⓐ 기록기가 원장을 건드리지 않는가 (읽기만 · 쓰기는 다른 파일)
+#     ⓑ 점수·판정 경로가 수급을 **import 하지 않는가**
+#     ⓒ 감으로 고른 숫자를 규칙으로 채택하지 않았는가
+#     ⓓ 11/16 전방 창에 조건을 얹지 않겠다고 적었는가
+#     ⓔ 라운드 124 의 틀린 줄("불가")이 정정됐는가
+#     ⓕ 표본 조건에 **케이스와 날짜가 함께** 있는가 (R113 교훈)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§174 수급 수집 — 수집에서 멈추는가 (라운드 130)")
+print("=" * 72)
+_rec174 = _os.path.join(PROJ, 'scripts', 'flow_recorder.py')
+_doc174p = _os.path.join(PROJ, 'docs', 'CANDIDATES_R130_FLOW_ENGINES.md')
+check("수급 기록기가 있다", _os.path.exists(_rec174))
+check("후보 등록 문서가 있다", _os.path.exists(_doc174p))
+if _os.path.exists(_rec174) and _os.path.exists(_doc174p):
+    _src174 = _read148(_rec174)
+    _doc174 = _read148(_doc174p)
+
+    # ⓐ 원장을 건드리지 않는다 — 쓰기 대상이 원장이 아니어야 한다
+    import importlib.util as _ilu174                            # noqa: E402
+    _spec174 = _ilu174.spec_from_file_location('_flowrec174', _rec174)
+    _fr174 = _ilu174.module_from_spec(_spec174)
+    _spec174.loader.exec_module(_fr174)
+    check("기록기가 원장과 **다른 파일**에 쓴다",
+          _os.path.abspath(_fr174.OUT) != _os.path.abspath(_fr174.LEDGER),
+          f'{_os.path.basename(_fr174.OUT)} vs '
+          f'{_os.path.basename(_fr174.LEDGER)}')
+    check("원장을 여는 곳이 읽기 전용이다 (쓰기 모드로 안 연다)",
+          "open(LEDGER" not in _src174.replace(
+              "open(LEDGER, encoding='utf-8', errors='replace')", ''),
+          '원장을 쓰기로 여는 자리가 있다')
+    # 코드 6자리 변환이 실제로 동작하는가 (이름만 믿지 않는다)
+    check("종목코드 변환이 값으로 맞는다",
+          _fr174.code_of('005930.KS') == '005930'
+          and _fr174.code_of('SPY') is None,
+          f"{_fr174.code_of('005930.KS')} / {_fr174.code_of('SPY')}")
+
+    # ⓑ 점수·판정 경로가 수급을 끌어다 쓰지 않는가
+    for _f174 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+                  'regime_policy.py', 'web_app.py'):
+        _t174 = _read148(_os.path.join(PROJ, _f174))
+        check(f"{_f174} 가 수급 기록을 읽지 않는다",
+              'flow_recorder' not in _t174 and 'flow_daily' not in _t174)
+
+    # ⓒ 감으로 고른 숫자를 채택하지 않았다 — 문서가 그것을 기각으로 적는다
+    for _n174 in ('+5점', '3일 이상', '10% 돌파', '−15% 이하'):
+        check(f"제안 숫자 '{_n174}' 를 기각으로 적었다", _n174 in _doc174)
+    check("문턱을 비워 둔 채 등록한다고 적었다",
+          '문턱은 비워 둔 채 등록한다' in _doc174)
+    # 점수 상수에 5점짜리 수급 가산이 실제로 안 들어갔는가 (말이 아니라 값)
+    _qi174 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+    check("점수 산식에 수급 가산점이 없다",
+          not _re.search(r'(외국인|기관|수급)[^\n]{0,40}\+\s*5\b', _qi174))
+
+    # ⓓ 11/16 전방 창을 건드리지 않는다
+    check("11/16 전방 창에 조건을 얹지 않는다고 적었다",
+          '11/16 은' in _doc174 and '건드리지 않는다' in _doc174)
+    check("새 팩터는 자기 사전등록·자기 전방 창을 갖는다고 적었다",
+          '자기 사전등록과 자기 전방 창' in _doc174)
+
+    # ⓔ 라운드 124 의 틀린 줄이 정정됐는가 (§4 — 같은 사실이 두 곳에)
+    _d124 = _read148(_os.path.join(PROJ, 'docs',
+                                   'CANDIDATES_R124_EVENT_ENGINES.md'))
+    check("R124 의 '수집 시작 + 6~12개월' 판정이 정정됐다",
+          'CANDIDATES_R130_FLOW_ENGINES.md' in _d124
+          and '라운드 130' in _d124,
+          '틀린 줄을 고치지 않으면 계획을 영원히 막는다')
+
+    # ⓕ 표본 조건에 케이스와 날짜가 함께 있는가 (R113 교훈)
+    check("표본 조건에 케이스 수가 있다", '20,000건 이상' in _doc174)
+    check("표본 조건에 **날짜**도 있다 (케이스만 걸면 날짜가 날아간다)",
+          '400일 이상' in _doc174)
+    check("검정력 한계를 미리 적었다 (R129 의 5%p)",
+          '5%p 미만을 못 본다' in _doc174)
+
+    # 수집 파일은 원장과 같이 gitignore 안에 있어야 한다 (§9)
+    _gi174 = _read148(_os.path.join(PROJ, '.gitignore'))
+    check("수집 파일이 커밋되지 않는다 (.portfolio/ 가 무시된다)",
+          '.portfolio/' in _gi174
+          and _fr174.OUT.replace('\\', '/').find('/.portfolio/') > 0)
+
+
 print()
 print("=" * 72)
 if FAILURES:
