@@ -12078,6 +12078,115 @@ check("두 경우 모두 같은 칸에 남는다 (분류는 안 바꿨다)",
       f'{_r172a[0]} / {_r172b[0]}')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §173 — "과거 표본을 늘리면 되지 않나" 에 답이 있는가 (라운드 129)
+#
+#   사용자가 물었다: *"미래는 미래고 예전 표본 수를 늘려서 정확도
+#   개선은 어때?"* 이건 자원을 어디에 쓸지 고르는 질문이라 감으로
+#   답하면 안 된다 (§2).
+#
+#   R129 가 셋을 쟀다:
+#     ① 종목 축은 포화 — 마지막 373종목이 벌어들인 날짜가 14일
+#     ② 810일의 절반은 데이터가 아니라 잣대 구조 (813일이 대조군 빔)
+#     ③ 과거를 다 채워도(3,681일) 볼 수 있는 최소 효과는 4~5%p
+#
+#   이 검사가 지키는 것은 **결론이 아니라 근거의 연결**이다:
+#     ⓐ 자기검사가 통과했는가 — 첫 시도는 괴리 19.9%p 로 걸렸다.
+#        걸린 채로 숫자를 쓰면 안 된다
+#     ⓑ 포화 주장이 실제 곡선에서 나오는가 (말이 아니라 값으로)
+#     ⓒ 문서의 숫자가 산출물과 **같은가** — 문장을 찾지 않고 값을
+#        JSON 에서 꺼내 문서에 있는지 본다. 재측정하고 문서를 안 고치면
+#        여기서 걸린다 (§2 — 날짜 없는 숫자는 반드시 낡는다)
+#     ⓓ 두 문장을 함께 쓰는가 — "늘리면 한 칸" 과 "그래도 안 뒤집힌다"
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§173 라운드 129 표본 상한 — '과거를 더 쌓으면?' 에 답이 있는가")
+print("=" * 72)
+_p173 = _os.path.join(PROJ, 'data', 'sample_ceiling_r129.json')
+_doc173p = _os.path.join(PROJ, 'docs', 'RESULT_R129_SAMPLE_CEILING.md')
+if not _os.path.exists(_p173):
+    check("R129 산출물이 있다", False, 'data/sample_ceiling_r129.json 없음')
+else:
+    with open(_p173, encoding='utf-8') as _f173:
+        _d173 = _json.load(_f173)
+    _doc173 = _read148(_doc173p)
+
+    # ⓐ 자기검사 — 걸린 채로 숫자를 쓰지 않는다
+    _sc173 = _d173.get('selfcheck') or {}
+    check("자기검사 전체가 통과했다", _sc173.get('ok') is True, str(_sc173.get('ok')))
+    check("ⓐ 거짓양성률이 정상 범위다",
+          (_sc173.get('fpr') or {}).get('ok') is True,
+          f"{(_sc173.get('fpr') or {}).get('rate')}")
+    check("ⓑ 식이 낸 필요 N 에서 검정력 80% 를 되짚었다",
+          (_sc173.get('recover') or {}).get('ok') is True,
+          f"최대 괴리 {(_sc173.get('recover') or {}).get('worst_gap')}")
+    check("ⓒ 단조성이 성립한다",
+          (_sc173.get('monotone') or {}).get('ok') is True,
+          str((_sc173.get('monotone') or {}).get('power_ramp')))
+    # 되짚기 쌍이 0개면 ⓑ가 아무것도 안 잰 것이다 (0건과 미측정을 가른다)
+    check("되짚기가 실제로 무언가를 쟀다",
+          len((_sc173.get('recover') or {}).get('pairs') or []) >= 4,
+          f"{len((_sc173.get('recover') or {}).get('pairs') or [])}쌍")
+
+    # ⓑ 포화 — 말이 아니라 곡선에서 나오는가
+    _cv173 = _d173.get('ticker_curve') or []
+    check("종목 곡선이 4점 이상이다", len(_cv173) >= 4, f"{len(_cv173)}점")
+    if len(_cv173) >= 4:
+        _first = _cv173[0]['paired_days']
+        _last = _cv173[-1]['paired_days'] - _cv173[-2]['paired_days']
+        check("종목 축이 실제로 포화다 (마지막 구간 증분이 첫 구간의 1/10 미만)",
+              _last * 10 < _first, f"첫 {_first}일 vs 마지막 증분 {_last}일")
+        check("케이스는 늘었는데 날짜는 안 늘었다 (둘을 헷갈리지 않는다)",
+              _cv173[-1]['cases'] > _cv173[-2]['cases'], '')
+
+    # ② 810일의 정체 — 탈락한 날은 전부 매수권이 얇아서다
+    _st173 = _d173.get('structure') or {}
+    check("탈락 날짜가 6종목 이상인 날에서 나온다",
+          _st173.get('six_plus', 0) == _st173.get('paired', 0)
+          + _st173.get('lost', 0),
+          f"{_st173.get('six_plus')} = {_st173.get('paired')} + "
+          f"{_st173.get('lost')}")
+    check("탈락한 날은 전부 매수권 5종목 이하다 (데이터가 아니라 구조)",
+          all(int(k) <= 5
+              for k in (_st173.get('lost_by_buyzone') or {'9': 0})),
+          str(sorted((_st173.get('lost_by_buyzone') or {}).keys())))
+
+    # ⓒ 문서의 숫자가 산출물과 같은가 — 값을 꺼내 문서에서 찾는다
+    _need173 = _d173.get('need_days') or {}
+    _ceil173 = _d173.get('ceiling') or {}
+    _want173 = [
+        (_ceil173.get('have'), '지금 짝비교 날짜'),
+        (_ceil173.get('max_dates'), '물리 상한'),
+        ((_need173.get('5') or {}).get('R112보정'), '5%p 필요 날짜'),
+        ((_need173.get('3') or {}).get('R112보정'), '3%p 필요 날짜'),
+    ]
+    for _v173, _lab173 in _want173:
+        check(f"문서가 산출물의 {_lab173}({_v173:,}일)를 그대로 적었다",
+              _v173 is not None and f'{_v173:,}' in _doc173,
+              f'{_v173}')
+    check("측정일을 문서에 적었다 (날짜 없는 숫자는 낡는다)",
+          bool(_d173.get('made')) and _d173['made'] in _doc173,
+          str(_d173.get('made')))
+
+    # ⓓ 두 문장을 함께 쓰는가
+    check("늘려서 얻는 것을 적었다 (상한에서 보이는 최소 효과)",
+          (_d173.get('visible_at_ceiling') or {}).get('R112보정') is not None,
+          str(_d173.get('visible_at_ceiling')))
+    check("늘려도 안 뒤집힌다는 것도 함께 적었다",
+          '뒤집지 않는다' in _doc173 and '0.0%p' in _doc173)
+    check("자기검사가 걸렸던 사실을 숨기지 않았다",
+          '19.9%p' in _doc173 and '19.9' in str(_d173.get('method_note')))
+
+    # 관측 전용임을 못 박았는가 — 동결 기간이다
+    check("점수·게이트·문턱을 안 바꿨다고 적었다",
+          '바꾸지 않는다' in str(_d173.get('note'))
+          and '하나도 안 바꿨다' in _doc173)
+    check("재현 명령이 문서에 있다",
+          'scripts/sample_ceiling_r129.py' in _doc173
+          and _os.path.exists(_os.path.join(PROJ, 'scripts',
+                                            'sample_ceiling_r129.py')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
