@@ -11929,6 +11929,51 @@ for _t170, _hs170 in _grp170:
         _zig170.append(f'{_t170}: {_seq170}')
 check("묶음 안에서 본문 순서가 뒤집히지 않는다", not _zig170, str(_zig170))
 
+# ⓕ **목록 전체가 본문 순서와 같은가** (라운드 127)
+#
+#    라운드 125 는 '묶음 안'까지만 요구했다. 묶음 **사이**는 본문
+#    재배치가 필요해서 미뤘고, 라운드 127 에서 '업데이트 내역'을
+#    본문 다섯 번째 → 검증·이력 자리(13번째)로 내려 그 빚을 갚았다.
+#    → **상단바는 뒤집힘 0** 이 됐다.
+#
+#    사이드바에는 **1군데**가 남는다 — 보유종목(2)이 오늘의 추천(1)과
+#    개장 전 결론(3) 사이에 낀다. 고칠 수 있었지만 **안 고쳤다**:
+#    배너를 보유종목 앞으로 올려 봤더니 라운드 68 이 적어 둔
+#    "모델 상태 — **사용자 요청** · 화면 최상단 고정"보다 위로 갔다.
+#    지난 사용자 결정을 순서 맞추기 편의로 뒤집지 않는다.
+#    그래서 상한을 1 로 두고, 왜 1 인지를 여기 적는다. 늘면 실패한다.
+#
+#    ⚠ 두 목록을 한 줄로 이어 세지 않는다. `_NAV_MAIN`(상단바)과
+#      `_NAV_SUB`(사이드바)는 다른 목록이고, 이어 세면 경계에서 항상
+#      한 번 튀어 보인다 — 없는 결함을 만들어 내는 세는 법이다.
+_MAX_INV170 = {'_NAV_MAIN': 0, '_NAV_SUB': 1}
+_navlist170 = {'_NAV_MAIN': [], '_NAV_SUB': []}
+for _n170 in _ast165.walk(_tree170):
+    if not isinstance(_n170, _ast165.Assign):
+        continue
+    _key170 = next((getattr(t, 'id', '') for t in _n170.targets
+                    if getattr(t, 'id', '') in _navlist170), None)
+    if not _key170:
+        continue
+    for _c170 in _ast165.walk(_n170.value):
+        if not isinstance(_c170, _ast165.Dict):
+            continue
+        for _k170, _v170 in zip(_c170.keys, _c170.values):
+            if (getattr(_k170, 'value', None) == 'href'
+                    and isinstance(_v170, _ast165.Constant)
+                    and str(_v170.value).startswith('#')):
+                _navlist170[_key170].append(str(_v170.value)[1:])
+
+for _key170, _hs170 in _navlist170.items():
+    _seq170 = [_pos170[h] for h in _hs170 if h in _pos170]
+    check(f"{_key170} 항목을 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+          len(_seq170) >= 5, f'{len(_seq170)}개')
+    _inv170 = sum(1 for _i170 in range(1, len(_seq170))
+                  if _seq170[_i170] < _seq170[_i170 - 1])
+    _cap170 = _MAX_INV170[_key170]
+    check(f"{_key170} 순서 뒤집힘이 {_cap170}군데 이하다",
+          _inv170 <= _cap170, f'{_inv170}군데 · {_seq170}')
+
 
 # ══════════════════════════════════════════════════════════════════════
 # §171 — 떠 있는 '가늠 AI' 버튼이 **양 테마 모두** AA 를 넘는가 (라운드 126)

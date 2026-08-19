@@ -1614,7 +1614,7 @@ _NAV_MAIN = [
 #   그래서 **화면에서 실제로 이웃한 것**을 한 묶음으로 부른다.
 #   괄호 안 숫자가 본문 등장 순서다 — 묶음 안에서 단조로워야 한다.
 _NAV_SUB = [
-    # 시장 전체 이야기 — 종목을 고르기 전에 보는 것들 (2 · 4 · 5)
+    # 시장 전체 이야기 — 종목을 고르기 전에 보는 것들 (1 · 3)
     {'title': '1. 오늘의 시장', 'items': [
         {'key': 'premarket', 'label': '오늘의 추천', 'icon': 'chart',
          'href': '#nav-premarket'},
@@ -1623,8 +1623,6 @@ _NAV_SUB = [
         #   있어서 앞엣것을 찾을 길이 없었다. 둘 다 넣고 이름으로 가른다.
         {'key': 'premarket_line', 'label': '개장 전 결론', 'icon': 'doc',
          'href': '#nav-premarket-line'},
-        {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
-         'href': '#nav-updates'},
     ]},
     # 내 자산 (3)
     {'title': '2. 내 자산', 'items': [
@@ -1644,7 +1642,7 @@ _NAV_SUB = [
         {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
          'href': '#nav-context'},
     ]},
-    # 검증과 이력 (12 · 13 · 15)
+    # 검증과 이력 (10 · 11 · 12 · 13)
     {'title': '4. 검증과 이력', 'items': [
         {'key': 'perf', 'label': '모델 성적', 'icon': 'chart',
          'href': '#nav-perf'},
@@ -1653,6 +1651,10 @@ _NAV_SUB = [
          'href': '#nav-cases'},
         {'key': 'scores', 'label': '점수 요인', 'icon': 'chart',
          'href': '#nav-scores'},
+        # 라운드 127 — 본문 블록을 여기로 내렸으므로 메뉴도 따라온다.
+        #   종전에는 '오늘의 시장'에 있었다(본문 다섯 번째였을 때).
+        {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
+         'href': '#nav-updates'},
     ]},
     # 도움 — 본문 맨 끝 (16)
     {'title': '5. 도움', 'items': [
@@ -4476,6 +4478,11 @@ if _home_cal.get('total_cases'):
                 "크게 엇갈리므로 이 국면의 판단은 신뢰하지 마세요.",
                 theme=_theme)
 
+# ── 개장 전 한 줄 결론 — 자리를 **여기로 되돌렸다** (라운드 127).
+#   묶음을 맞추려고 보유종목 앞으로 올렸더니, 라운드 68 이 적어 둔
+#   "모델 상태 — 사용자 요청 · 화면 최상단 고정"보다 위로 갔다.
+#   지난 사용자 결정을 내 편의로 뒤집지 않는다. 그래서 메뉴에는
+#   보유종목이 사이에 끼는 뒤집힘 1건이 남는다 — §170 에 이유를 적었다.
 # 개장 전 한 줄 결론 (리포트가 있을 때만 — 없으면 만들지 않는다)
 try:
     import premarket as _pm_home
@@ -4620,92 +4627,6 @@ if _issues_global:
                 '중요도': i['severity'], '유형': i['type'], '제목': i['title'],
                 '내용': i['detail'], '범위': i['scope'], '생성': i['created'],
             } for i in _issues_global]), width='stretch', hide_index=True)
-
-# ── 최근 업데이트 (v4) — 제품형 릴리스 노트: 요약 5건 + 전체 보기·필터 ────────
-_uh_home = _load_update_history()
-if _uh_home and _uh_home.get('days'):
-    _days_enr = _pops.enrich_update_history(_uh_home)
-    _flat_upd = [{**it, 'date': d['date'], 'version': d['version']}
-                 for d in _days_enr for it in d['items']]
-    _n_upd = len(_flat_upd)
-    # ⚠️ 라운드 98b — 여기 `_VER_NOW['model']` 을 붙여 두고 있었다.
-    #   건수는 **모든 커밋**을 센 값인데 버전은 **모델 축 하나**여서
-    #   "업데이트 213건 · v2026.08.12.1" 처럼 어긋났다. 그 213건 안에는
-    #   8/15 룰북 변경이 들어 있는데 표시는 8/12 였다.
-    #   §7 이 말한 '5축이 따로 움직인다'를 한 축으로 대표시킨 것이다.
-    #   5축 버전은 이미 상단 칩에 따로 있으므로, 여기는 **건수와 같은
-    #   출처**인 최근 갱신일을 쓴다 — 그래야 어긋날 수가 없다.
-    _latest_day = str((_days_enr[0] or {}).get('date') or '') if _days_enr else ''
-    _upd_head = (f"업데이트 {_n_upd}건 · 최근 {_latest_day}"
-                 if _latest_day else f"업데이트 {_n_upd}건")
-    st.markdown("<div id='nav-updates'></div>", unsafe_allow_html=True)
-    # 사용자 요청: 눌러야 나오게, 아주 간략하게. 평소엔 한 줄만 보인다.
-    with st.expander(_upd_head, expanded=False):
-        st.caption("커밋 이력 원문에서 자동 생성 — 손으로 쓰지 않습니다.")
-
-        # 아주 간략하게 — 한 줄씩. 자세한 건 아래 '전체 업데이트 보기'.
-        for _u in _flat_upd[:8]:
-            st.markdown(
-                f"<div style='display:flex; gap:10px; align-items:baseline; "
-                f"padding:6px 0;'>"
-                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
-                f"width:78px; flex:0 0 auto; "
-                f"font-variant-numeric:tabular-nums;'>{_u['date']}</span>"
-                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
-                f"width:56px; flex:0 0 auto;'>{_u['category']}</span>"
-                f"<span style='font-size:13px; color:{_TOK['tx1']}; "
-                f"min-width:0; overflow:hidden; text-overflow:ellipsis; "
-                f"white-space:nowrap;'>{_uk._esc(_u['subject'])}</span></div>",
-                unsafe_allow_html=True)
-
-    
-    with st.expander(f"전체 업데이트 보기 ({_n_upd}건 · 카테고리 필터)",
-                     expanded=False):
-        _cats = ['전체'] + sorted({u['category'] for u in _flat_upd})
-        _f_cat = st.selectbox("카테고리", _cats, key="upd_cat_filter")
-        _sel_upd = [u for u in _flat_upd
-                    if _f_cat == '전체' or u['category'] == _f_cat]
-        st.caption("각 줄을 펼치면 왜 바꿨는지·무엇이 달라지는지·어떻게 확인했는지가 "
-                   "나옵니다. 커밋 기록에 없는 항목은 '기록 없음'으로 둡니다 "
-                   "(보기 좋게 지어내지 않습니다).")
-        for _u in _sel_upd[:40]:
-            _dt_u = _u.get('detail') or {}
-            with st.expander(f"{_u['date']} · {_u['category']} · {_u['subject']}",
-                             expanded=False):
-                for _lab, _val in (("변경 전 문제", _dt_u.get('problem')),
-                                   ("변경 이유", _dt_u.get('why')),
-                                   ("사용자에게 달라지는 점",
-                                    _dt_u.get('user_effect')),
-                                   ("테스트 결과", _dt_u.get('tests'))):
-                    _dim = (_val in (None, '', '기록 없음'))
-                    st.markdown(
-                        f"<div style='padding:4px 0;'><span style='font-size:12px;"
-                        f" color:{_TOK['tx3']};'>{_lab}</span><br>"
-                        f"<span style='font-size:13px; color:"
-                        f"{_TOK['tx3'] if _dim else _TOK['tx1']};"
-                        f" line-height:1.65;'>"
-                        f"{_uk._esc(_val or '기록 없음')}</span></div>",
-                        unsafe_allow_html=True)
-                _meta_u = []
-                if _dt_u.get('related'):
-                    _meta_u.append("관련 회귀 " + " ".join(_dt_u['related']))
-                if _dt_u.get('modules'):
-                    _meta_u.append("담당 모듈 " + " · ".join(_dt_u['modules']))
-                # 라운드 99 — 버전은 그날 실제로 발효된 것만 온다.
-                # 커밋이 있었다고 축이 움직인 것은 아니므로 빈 날은 그렇게 적는다.
-                _meta_u.append(
-                    f"버전 {_u['version']} · 커밋 {_u.get('hash', '')}"
-                    if _u.get('version')
-                    else f"버전 변경 없음 · 커밋 {_u.get('hash', '')}")
-                st.caption(" | ".join(_meta_u))
-        if len(_sel_upd) > 40:
-            st.caption(f"이 카테고리의 나머지 {len(_sel_upd) - 40}건은 아래 표에서 "
-                       "보실 수 있습니다.")
-            st.dataframe(pd.DataFrame([{
-                '날짜': u['date'], '버전': u['version'] or '변경 없음',
-                '카테고리': u['category'], '내용': u['subject'],
-            } for u in _sel_upd[40:]]), width='stretch',
-                hide_index=True)
 
 # 시장 지수 — 배경정보 (v2: 홈의 주인공이 아니다). 킷 타일로 통일.
 _uk.section("시장", "국내·해외 지수와 환율 (전일 대비)", theme=_theme)
@@ -8810,6 +8731,99 @@ st.markdown(f"""
     </tbody>
 </table>
 """, unsafe_allow_html=True)
+
+# ── 최근 업데이트 — 라운드 127 에서 **여기로 내렸다**.
+#   종전에는 개장 전 결론 바로 다음(본문 다섯 번째)이었다. 메뉴는
+#   이걸 "4. 검증과 이력"으로 묶어 놓는데 화면에서는 훨씬 위에 있어,
+#   메뉴 순서를 본문 위치로 바꾸면 거기서 뒤집혔다 (라운드 125 측정).
+#   블록이 자기 안에서 데이터를 다 만들고 밖에서 쓰는 곳이 없어
+#   통째로 옮길 수 있었다.
+# ── 최근 업데이트 (v4) — 제품형 릴리스 노트: 요약 5건 + 전체 보기·필터 ────────
+_uh_home = _load_update_history()
+if _uh_home and _uh_home.get('days'):
+    _days_enr = _pops.enrich_update_history(_uh_home)
+    _flat_upd = [{**it, 'date': d['date'], 'version': d['version']}
+                 for d in _days_enr for it in d['items']]
+    _n_upd = len(_flat_upd)
+    # ⚠️ 라운드 98b — 여기 `_VER_NOW['model']` 을 붙여 두고 있었다.
+    #   건수는 **모든 커밋**을 센 값인데 버전은 **모델 축 하나**여서
+    #   "업데이트 213건 · v2026.08.12.1" 처럼 어긋났다. 그 213건 안에는
+    #   8/15 룰북 변경이 들어 있는데 표시는 8/12 였다.
+    #   §7 이 말한 '5축이 따로 움직인다'를 한 축으로 대표시킨 것이다.
+    #   5축 버전은 이미 상단 칩에 따로 있으므로, 여기는 **건수와 같은
+    #   출처**인 최근 갱신일을 쓴다 — 그래야 어긋날 수가 없다.
+    _latest_day = str((_days_enr[0] or {}).get('date') or '') if _days_enr else ''
+    _upd_head = (f"업데이트 {_n_upd}건 · 최근 {_latest_day}"
+                 if _latest_day else f"업데이트 {_n_upd}건")
+    st.markdown("<div id='nav-updates'></div>", unsafe_allow_html=True)
+    # 사용자 요청: 눌러야 나오게, 아주 간략하게. 평소엔 한 줄만 보인다.
+    with st.expander(_upd_head, expanded=False):
+        st.caption("커밋 이력 원문에서 자동 생성 — 손으로 쓰지 않습니다.")
+
+        # 아주 간략하게 — 한 줄씩. 자세한 건 아래 '전체 업데이트 보기'.
+        for _u in _flat_upd[:8]:
+            st.markdown(
+                f"<div style='display:flex; gap:10px; align-items:baseline; "
+                f"padding:6px 0;'>"
+                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
+                f"width:78px; flex:0 0 auto; "
+                f"font-variant-numeric:tabular-nums;'>{_u['date']}</span>"
+                f"<span style='font-size:12px; color:{_TOK['tx3']}; "
+                f"width:56px; flex:0 0 auto;'>{_u['category']}</span>"
+                f"<span style='font-size:13px; color:{_TOK['tx1']}; "
+                f"min-width:0; overflow:hidden; text-overflow:ellipsis; "
+                f"white-space:nowrap;'>{_uk._esc(_u['subject'])}</span></div>",
+                unsafe_allow_html=True)
+
+    
+    with st.expander(f"전체 업데이트 보기 ({_n_upd}건 · 카테고리 필터)",
+                     expanded=False):
+        _cats = ['전체'] + sorted({u['category'] for u in _flat_upd})
+        _f_cat = st.selectbox("카테고리", _cats, key="upd_cat_filter")
+        _sel_upd = [u for u in _flat_upd
+                    if _f_cat == '전체' or u['category'] == _f_cat]
+        st.caption("각 줄을 펼치면 왜 바꿨는지·무엇이 달라지는지·어떻게 확인했는지가 "
+                   "나옵니다. 커밋 기록에 없는 항목은 '기록 없음'으로 둡니다 "
+                   "(보기 좋게 지어내지 않습니다).")
+        for _u in _sel_upd[:40]:
+            _dt_u = _u.get('detail') or {}
+            with st.expander(f"{_u['date']} · {_u['category']} · {_u['subject']}",
+                             expanded=False):
+                for _lab, _val in (("변경 전 문제", _dt_u.get('problem')),
+                                   ("변경 이유", _dt_u.get('why')),
+                                   ("사용자에게 달라지는 점",
+                                    _dt_u.get('user_effect')),
+                                   ("테스트 결과", _dt_u.get('tests'))):
+                    _dim = (_val in (None, '', '기록 없음'))
+                    st.markdown(
+                        f"<div style='padding:4px 0;'><span style='font-size:12px;"
+                        f" color:{_TOK['tx3']};'>{_lab}</span><br>"
+                        f"<span style='font-size:13px; color:"
+                        f"{_TOK['tx3'] if _dim else _TOK['tx1']};"
+                        f" line-height:1.65;'>"
+                        f"{_uk._esc(_val or '기록 없음')}</span></div>",
+                        unsafe_allow_html=True)
+                _meta_u = []
+                if _dt_u.get('related'):
+                    _meta_u.append("관련 회귀 " + " ".join(_dt_u['related']))
+                if _dt_u.get('modules'):
+                    _meta_u.append("담당 모듈 " + " · ".join(_dt_u['modules']))
+                # 라운드 99 — 버전은 그날 실제로 발효된 것만 온다.
+                # 커밋이 있었다고 축이 움직인 것은 아니므로 빈 날은 그렇게 적는다.
+                _meta_u.append(
+                    f"버전 {_u['version']} · 커밋 {_u.get('hash', '')}"
+                    if _u.get('version')
+                    else f"버전 변경 없음 · 커밋 {_u.get('hash', '')}")
+                st.caption(" | ".join(_meta_u))
+        if len(_sel_upd) > 40:
+            st.caption(f"이 카테고리의 나머지 {len(_sel_upd) - 40}건은 아래 표에서 "
+                       "보실 수 있습니다.")
+            st.dataframe(pd.DataFrame([{
+                '날짜': u['date'], '버전': u['version'] or '변경 없음',
+                '카테고리': u['category'], '내용': u['subject'],
+            } for u in _sel_upd[40:]]), width='stretch',
+                hide_index=True)
+
 
 # ── 고객센터 — 안 될 때 여기부터 (실제 대처법만, 빈 약속 금지) ───────────────
 # 라운드 122 — 상단 메뉴의 '고객센터'가 `#nav-support` 를 가리키는데
