@@ -5740,6 +5740,13 @@ st.markdown(f"""
   box-shadow:0 6px 20px rgba(0,0,0,.35); }}
 .gn-ask-fab * {{ color:{_TOK['bg1']} !important; }}
 .gn-ask-fab svg {{ stroke:{_TOK['bg1']} !important; }}
+/* 라운드 126 — 라이트 모드에서 이 버튼 글자가 브랜드 파랑 위에 tx1 로
+   찍혀 **3.43:1** 이었다 (AA 4.5 미달). 클래스 규칙에 !important 가
+   있었는데도 다른 규칙이 이겼다 — 다크에서는 tx1 이 밝아 우연히
+   괜찮았고, **라이트에서만 드러나는 결함**이었다.
+   특이도 싸움을 끝내려고 ID 로 올린다. 색은 팔레트에서 온다. */
+#gn-ask-fab, #gn-ask-fab * {{ color:{_TOK['bg1']} !important; }}
+#gn-ask-fab svg {{ stroke:{_TOK['bg1']} !important; }}
 .gn-ask-fab:hover {{ filter:brightness(1.08); }}
 .gn-ask-fab .gn-ask-t {{ display:inline; }}
 @media (max-width: 640px) {{ .gn-ask-fab .gn-ask-t {{ display:none; }}
