@@ -2206,14 +2206,46 @@ def delete_positions(path=PORTFOLIO_FILE):
 WATCHLIST_FILE = os.path.join(PORTFOLIO_DIR, "watchlist.json")
 
 
+#: 관심종목이 함께 들고 다니는 사용자 메모 (라운드 136).
+#: ⚠️ 이 값들은 **표시·개인 메모 전용**이다. 점수·적정가·판정에 들어가지
+#:   않는다 (§9 — 평균 매수가는 보유 판단에만 쓴다. 앵커링 방지).
+WATCH_NOTE_NUM = ('target_buy', 'paid')      # 목표 매수가 · 매입가
+WATCH_NOTE_TXT = ('memo',)
+
+
+def _watch_num(v):
+    """숫자로 읽히면 숫자, 아니면 None. 0 이나 음수는 가격이 아니다."""
+    try:
+        f = float(str(v).replace(',', '').strip())
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
 def save_watchlist(items, path=WATCHLIST_FILE):
-    """items: [{'code': '028670', 'name': '팬오션'}, ...]"""
+    """items: [{'code': '028670', 'name': '팬오션',
+                'target_buy': 4200, 'paid': 4500, 'memo': '...'}, ...]
+
+    ⚠️ 라운드 136 — 종전에는 code·name 만 남기고 **나머지를 버렸다.**
+    화면에서 목표가를 적어도 새로고침하면 사라졌다. 메모 칸을 함께 싣되,
+    **없는 값은 키 자체를 안 만든다** — 0 으로 채우면 '적지 않음'과
+    '0원'이 구분되지 않는다 (§3).
+    """
     clean = []
     for it in (items or []):
         code = normalize_code((it or {}).get('code'))
         if not code:
             continue
-        clean.append({'code': code, 'name': str((it or {}).get('name') or code)})
+        row = {'code': code, 'name': str((it or {}).get('name') or code)}
+        for k in WATCH_NOTE_NUM:
+            v = _watch_num((it or {}).get(k))
+            if v is not None:
+                row[k] = v
+        for k in WATCH_NOTE_TXT:
+            v = str((it or {}).get(k) or '').strip()
+            if v:
+                row[k] = v[:120]
+        clean.append(row)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     payload = {"saved_at": datetime.now().isoformat(timespec="seconds"),
                "items": clean}
