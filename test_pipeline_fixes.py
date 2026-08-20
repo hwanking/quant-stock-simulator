@@ -5275,8 +5275,16 @@ for _k98, _lab98 in (('pm_go_', '분석 보기'), ('pm_wl_', '관심 추가'),
     check(f"카드 버튼 {_lab98} 가 있다", _k98 in _w98 and _lab98 in _w98)
 check("이미 관심종목이면 다시 넣지 않는다",
       '_in_wl' in _w98 and 'disabled=_in_wl' in _w98)
+# ⚠️ 라운드 135 — 이 검사는 카드 버튼 안에 있던 문구
+#   ('관심종목 파일 저장 실패')를 붙잡고 있었다. 담기 경로 셋을 `_wl_*`
+#   한 벌로 모으면서 그 자리가 사라졌는데, **재려던 성질은 그대로다** —
+#   저장이 실패하면 사용자에게 알린다(삼키지 않는다).
+#   그러니 자리가 아니라 성질을 본다: 저장을 감싼 곳에 경고가 있는가.
 check("관심종목 저장 실패를 삼키지 않는다",
-      '관심종목 파일 저장 실패' in _w98)
+      _re.search(r'def _wl_write\([^)]*\):(?:.|\n){0,600}?'
+                 r'portfolio\.save_watchlist\((?:.|\n){0,300}?'
+                 r'st\.sidebar\.warning', _w98) is not None,
+      '_wl_write 가 저장 실패를 조용히 넘긴다')
 check("보유 등록 시 수량·평단가를 지어내지 않는다",
       'quantity=0.0' in _w98 and 'average_buy_price=0.0' in _w98
       and '수량·평단가를' in _w98)
@@ -12580,6 +12588,164 @@ for _f177b in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
                'regime_policy.py'):
     check(f"{_f177b} 가 value_premium 을 쓰지 않는다",
           'value_premium' not in _read148(_os.path.join(PROJ, _f177b)))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §178 — 라운드 134: 수급 재측정 · 두 번째 기회를 공짜로 쓰지 않았는가
+#
+#   R131 이 기각한 것을 표본 6배로 **다시** 쟀다. 같은 가설을 두 번 재는
+#   것이므로, 지키는 것은 결론이 아니라 **규율**이다:
+#     ⓐ 사전등록이 측정 전에 커밋됐는가
+#     ⓑ **문턱을 올렸는가** (가족 10개 → 2.58 → 2.81). 내렸으면 이건
+#        '될 때까지 돌리기'다
+#     ⓒ 변수를 늘리지 않았는가 (R131 과 같은 5개)
+#     ⓓ 측정 코드를 **다시 쓰지 않았는가** — R131 함수를 import 하는가
+#     ⓔ R131 을 **대체하지 않고 나란히** 실었는가
+#     ⓕ 사전등록한 P4 가 틀렸던 사실을 숨기지 않았는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§178 라운드 134 수급 재측정 — 두 번째 기회를 공짜로 안 썼는가")
+print("=" * 72)
+_p178 = _os.path.join(PROJ, 'data', 'flow_rank_r134.json')
+_doc178p = _os.path.join(PROJ, 'docs', 'RESULT_R134_FLOW_REPLICATION.md')
+_pre178p = _os.path.join(PROJ, 'docs', 'PREREG_R134_FLOW_REPLICATION.md')
+if not _os.path.exists(_p178):
+    check("R134 산출물이 있다", False, 'data/flow_rank_r134.json 없음')
+else:
+    with open(_p178, encoding='utf-8') as _f178:
+        _d178 = _json.load(_f178)
+    _doc178 = _read148(_doc178p)
+    _pre178 = _read148(_pre178p)
+    _d131 = _json.load(open(_os.path.join(PROJ, 'data',
+                                          'flow_rank_r131.json'),
+                            encoding='utf-8'))
+
+    # ⓐ 사전등록이 먼저
+    check("사전등록 문서가 있다", _os.path.exists(_pre178p))
+    check("사전등록 커밋 해시가 산출물·문서에 박혀 있다",
+          bool(_d178.get('prereg_commit'))
+          and _d178['prereg_commit'] in _doc178,
+          str(_d178.get('prereg_commit')))
+
+    # ⓑ 문턱을 **올렸는가** — 이 검사가 이 절의 핵심이다
+    check("문턱이 R131 보다 **높다** (내렸으면 될 때까지 돌리기다)",
+          _d178.get('z_pass', 0) > _d131.get('z_pass', 0),
+          f"R131 {_d131.get('z_pass')} → R134 {_d178.get('z_pass')}")
+    check("문턱이 가족 10개 보정값(2.81)이다",
+          _d178.get('z_pass') == 2.81 and _d178.get('family_size') == 10,
+          f"{_d178.get('z_pass')} · 가족 {_d178.get('family_size')}")
+    check("올림으로 적었다 (반올림 2.807 → 2.81)",
+          '2.8070' in _pre178 and '올림' in _pre178)
+
+    # ⓒ 변수를 안 늘렸다
+    check("시험 변수가 R131 과 **정확히 같다**",
+          list(_d178.get('vars') or []) == list(_d131.get('vars') or []),
+          str(_d178.get('vars')))
+
+    # ⓓ 측정 코드를 다시 쓰지 않았다
+    _s178 = _read148(_os.path.join(PROJ, 'scripts', 'flow_rank_r134.py'))
+    check("R131 의 측정 함수를 import 해서 쓴다 (다시 구현하지 않았다)",
+          'import flow_rank_r131 as R' in _s178
+          and 'R.day_frames(' in _s178 and 'R.sign_z(' in _s178)
+    check("잣대를 새로 짜지 않았다 (day_frames 를 재정의하지 않는다)",
+          'def day_frames' not in _s178 and 'def sign_z' not in _s178)
+
+    # ⓔ R131 을 대체하지 않고 나란히
+    check("산출물이 무엇을 재현한 것인지 가리킨다",
+          _d178.get('replicates') == 'docs/RESULT_R131_FLOW.md')
+    check("문서가 R131 을 대체하지 않는다고 적었다",
+          '대체하지 않는다' in _doc178)
+    # ⚠️ 부호를 정규화해서 대조한다. 문서는 조판용 빼기(U+2212)를 쓰고
+    #   `str(-0.487)` 는 ASCII 하이픈을 준다 — 같은 숫자인데 안 맞는다.
+    #   라운드 131 에서 콘솔값 0.45 와 저장값 0.455 로 어긋난 것과 같은
+    #   부류다: **같은 사실을 두 표기로 적으면 두 곳이 달라진다.**
+    _norm178 = _doc178.replace('−', '-')
+    _side178 = [(v, str((_d131.get('results') or {}).get(v, {}).get('z')))
+                for v in (_d178.get('vars') or [])[:2]]
+    check("두 라운드 z 를 나란히 실었다",
+          all(z in _norm178 for _v, z in _side178),
+          f'문서에서 못 찾은 값: '
+          f'{[z for _v, z in _side178 if z not in _norm178]}')
+
+    # ⓕ 사전등록한 P4 가 틀렸던 것을 숨기지 않았다
+    _days178 = [(_d178['results'][v] or {}).get('days', 0)
+                for v in (_d178.get('vars') or [])]
+    check("짝비교 날짜가 사전등록 하한(600)에 **못 미쳤다** — 사실 확인",
+          all(d < _d178.get('min_days', 0) for d in _days178),
+          f'{_days178} vs {_d178.get("min_days")}')
+    check("P4 가 틀렸던 경위를 문서에 적었다",
+          '내가 사전등록한 P4 가 틀렸다' in _doc178
+          and '0.28' in _doc178)
+    check("그래도 판정을 바꾸지 않았다고 적었다",
+          '판정을 바꾸지 않는다' in _doc178)
+
+    # 자기검사 · 결론의 크기
+    _sc178 = _d178.get('selfcheck') or {}
+    check("자기검사 전체가 통과했다", _sc178.get('ok') is True)
+    check("대조군이 0 이 아니다", (_sc178.get('control_days') or 0) > 0,
+          f"{_sc178.get('control_days')}일")
+    check("섞은 z 가 실제 z 보다 높았던 사실을 실었다 (잡음의 크기)",
+          '+2.178' in _doc178 or '2.178' in _doc178,
+          f"{_sc178.get('z_shuffled')}")
+    check("최소 가시 효과를 전 변수에 냈다",
+          len(_d178.get('min_detectable_pp') or {})
+          == len(_d178.get('vars') or []))
+    check("'효과 없다'가 아니라 '이 표본에서 N%p 짜리는 없다'로 쓴다",
+          '짜리는 없다' in _doc178)
+    check("판정이 산출물과 문서에서 같다",
+          (_d178.get('passed') == 0) == ('전부 미달' in _doc178),
+          f"passed={_d178.get('passed')}")
+    check("다음 재측정은 문턱이 또 오른다고 적었다",
+          '2.94' in _doc178)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §179 — 관심종목을 담고·보고·지울 수 있는가 (라운드 135)
+#
+#   종전에는 **'이 목록을 통째로 저장'** 하나뿐이었다. 한 종목을 담을
+#   수도, 하나만 뺄 수도 없었고, 그 버튼은 기존 목록을 **덮어썼다.**
+#
+#   그리고 담는 경로가 **셋**이었는데 하나는 `normalize_code` 를 안
+#   거쳤다 — 같은 종목이 '005930' 과 '005930.KS' 로 두 줄이 될 수 있었다.
+#   한 벌(`_wl_*`)로 모았다 (§4).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§179 관심종목 담기·보기·지우기 (라운드 135)")
+print("=" * 72)
+_w179 = _read148(_os.path.join(PROJ, 'web_app.py'))
+for _fn179 in ('_wl_items', '_wl_has', '_wl_write', '_wl_add', '_wl_remove'):
+    check(f"{_fn179}() 가 있다", f'def {_fn179}(' in _w179)
+check("담기 버튼이 있다 (지금 보는 종목)", '지금 이 종목 담기' in _w179)
+check("하나씩 빼는 버튼이 있다", 'wl_del_' in _w179 and '"빼기"' in _w179)
+check("전체 비우기가 있다", 'wl_clear' in _w179 and '전체 비우기' in _w179)
+check("목록에서 그 종목으로 갈 수 있다", 'wl_go_' in _w179)
+
+# 저장이 한 곳인가 — 화면이 portfolio.save_watchlist 를 직접 부르지 않는다
+# ⚠️ 처음엔 `_w179.count('portfolio.save_watchlist(')` 로 셌는데 **주석에
+#   적힌 설명까지 세어** 2로 나왔다. 검사가 코드를 재는 척하면서 산문을
+#   재고 있었다 — 이 저장소가 여러 번 당한 그 모양이다.
+#   주석·문자열이 아닌 **실제 호출 줄만** 센다.
+_calls179 = [ln for ln in _w179.splitlines()
+             if 'portfolio.save_watchlist(' in ln
+             and not ln.lstrip().startswith('#')]
+check("저장 경로가 하나다 (_wl_write 안에서만 부른다)",
+      len(_calls179) == 1, f'{len(_calls179)}곳: '
+      f'{[ln.strip()[:48] for ln in _calls179]}')
+check("담기가 코드 정규화를 거친다 (005930 과 005930.KS 가 같은 종목)",
+      'portfolio.normalize_code' in _w179
+      and 'def _wl_has' in _w179 and 'normalize_code(code)' in _w179)
+# 덮어쓰기를 없앴는가 — 공들여 담은 목록이 스캔 한 번에 사라지면 안 된다
+check("스캔 결과 저장이 **덮어쓰기가 아니라 더하기**다",
+      '이 목록을 관심종목에 더하기' in _w179
+      and '이 목록을 관심종목으로 저장' not in _w179)
+check("세션과 파일을 같이 바꾼다고 적었다",
+      '한쪽만 바뀌면 새로고침에 되살아난다' in _w179)
+# 원격 노출 시 파일에 안 쓴다 (§9)
+check("원격 접속에서는 파일에 쓰지 않는다고 화면이 밝힌다",
+      '이 브라우저 세션에만' in _w179 and 'ALLOW_LOCAL_STORE' in _w179)
+# 코드가 아닌 것을 담지 않는다 (§3)
+check("6자리 코드가 아니면 담을 수 없다고 말한다",
+      '6자리 종목코드가 아니라' in _w179)
 
 
 print()
