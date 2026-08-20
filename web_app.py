@@ -4234,19 +4234,37 @@ if not _wl_body:
     st.caption("아직 담은 종목이 없습니다. 사이드바 '관심종목' 칸이나 "
                "추천 카드의 '관심 추가'로 담을 수 있습니다.")
 else:
-    st.caption(f"{len(_wl_body)}종목 · 목표 매수가와 매입가는 **직접 적는 "
-               f"메모**입니다 — 점수·적정가·판정에 쓰지 않습니다. "
-               f"보유 중이라면 [내 보유종목](#nav-holdings)에 등록해야 "
-               f"포트폴리오 판단에 들어갑니다.")
-    _wl_hdr = st.columns([2.2, 1.2, 1.2, 1.2, 2.0, 0.9])
+    # ⚠️ 라운드 141 — 엔진 값과 사용자 입력을 **눈에 보이게 가른다.**
+    #   목표 매수가·1차·2차·적정가는 엔진이 낸 값이고, 매입가·수량·메모는
+    #   사용자가 적는 값이다. 섞어 놓으면 어느 쪽이 근거인지 못 읽는다.
+    st.caption(
+        f"{len(_wl_body)}종목 · **목표 매수가·1차·2차·적정가는 엔진 값**"
+        f"이고, 그 종목을 마지막으로 **본 날** 찍힌 것입니다 — 오늘 값이 "
+        f"아닐 수 있어 날짜를 함께 적습니다. **매입가·수량·메모는 직접 "
+        f"적는 값**이고 점수·적정가·판정에 쓰지 않습니다. 보유 중이라면 "
+        f"[내 보유종목](#nav-holdings)에 등록해야 포트폴리오 판단에 "
+        f"들어갑니다.")
+    # ⚠️ 1차는 **권장가 기준**, 2차는 **현재가 기준**이다. 기준이 다르므로
+    #   열 이름에 적는다 — 섞으면 §4 가 금지한 그 버그가 된다.
+    _WL_COLS = [1.9, 1.0, 1.1, 1.1, 1.1, 1.1, 1.0, 0.8, 1.4, 0.7]
+    _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
-                                '매입가', '메모', '')):
+                                '1차 목표(권장가)', '2차 목표(현재가)',
+                                '적정가', '매입가', '수량', '메모', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
-                    f"padding-bottom:6px;'>{_uk._esc(_h)}</div>",
-                    unsafe_allow_html=True)
+                    f"padding-bottom:6px; line-height:1.35;'>"
+                    f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
+
+    def _wl_cell(v, na='—'):
+        """엔진 값 한 칸. 없으면 지어내지 않고 '—' 로 둔다 (§3)."""
+        try:
+            return f"{float(v):,.0f}원"
+        except (TypeError, ValueError):
+            return na
+
     _wl_dirty = False
     for _wi, _w in enumerate(list(_wl_body)):
-        _wc = st.columns([2.2, 1.2, 1.2, 1.2, 2.0, 0.9])
+        _wc = st.columns(_WL_COLS)
         _wcode = str(_w.get('code'))
         with _wc[0]:
             if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
@@ -4260,53 +4278,77 @@ else:
                 f"<div style='padding-top:8px; font-size:13px;'>"
                 f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
                 unsafe_allow_html=True)
-        with _wc[2]:
-            _tb = st.number_input(
-                "목표 매수가", min_value=0.0, step=100.0,
-                value=float(_w.get('target_buy') or 0.0),
-                key=f"wl_tb_{_wcode}", label_visibility='collapsed')
-        with _wc[3]:
+        # ── 엔진 값 네 칸 — 읽기 전용 ────────────────────────────
+        for _ci, _key in enumerate(('snap_buy', 'snap_t1', 'snap_t2',
+                                    'snap_fair'), start=2):
+            with _wc[_ci]:
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK['tx2']};'>{_wl_cell(_w.get(_key))}</div>",
+                    unsafe_allow_html=True)
+        # ── 사용자 입력 세 칸 ────────────────────────────────────
+        with _wc[6]:
             _pd = st.number_input(
                 "매입가", min_value=0.0, step=100.0,
                 value=float(_w.get('paid') or 0.0),
                 key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-        with _wc[4]:
+        with _wc[7]:
+            _qt = st.number_input(
+                "수량", min_value=0, step=1,
+                value=int(_w.get('qty') or 0),
+                key=f"wl_qt_{_wcode}", label_visibility='collapsed')
+        with _wc[8]:
             _mm = st.text_input(
                 "메모", value=str(_w.get('memo') or ''),
                 key=f"wl_mm_{_wcode}", label_visibility='collapsed',
                 placeholder='메모')
-        with _wc[5]:
+        with _wc[9]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
                 st.rerun()
         # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
-        _new = dict(_w)
-        _new['target_buy'] = _tb or None
-        _new['paid'] = _pd or None
-        _new['memo'] = _mm
-        if ((_w.get('target_buy') or None) != (_tb or None)
-                or (_w.get('paid') or None) != (_pd or None)
+        if ((_w.get('paid') or None) != (_pd or None)
+                or int(_w.get('qty') or 0) != int(_qt or 0)
                 or str(_w.get('memo') or '') != str(_mm or '')):
+            _new = dict(_w)
+            _new['paid'] = _pd or None
+            _new['qty'] = _qt or None
+            _new['memo'] = _mm
             _wl_body[_wi] = _new
             _wl_dirty = True
     if _wl_dirty:
         _wl_write(_wl_body)
-    # 목표가·매입가를 적었으면 현재가와의 거리를 **읽어만** 준다
+
+    # ── 언제 잰 값인가 · 아직 안 본 종목은 그렇게 말한다 (§3) ────────
+    _stale = [w for w in _wl_items() if not w.get('snap_at')]
+    _snapd = sorted({str(w.get('snap_at')) for w in _wl_items()
+                     if w.get('snap_at')})
+    if _snapd:
+        st.caption(f"엔진 값 기준일 {_snapd[0]}"
+                   + (f" ~ {_snapd[-1]}" if _snapd[-1] != _snapd[0] else '')
+                   + " — 종목 이름을 눌러 분석을 열면 그날 값으로 채워집니다.")
+    if _stale:
+        st.caption("아직 분석을 열지 않아 엔진 값이 없는 종목: "
+                   + ", ".join(str(w.get('name')) for w in _stale[:8])
+                   + (f" 외 {len(_stale) - 8}종목" if len(_stale) > 8 else '')
+                   + " — 이름을 누르면 채워집니다. 없는 값을 지어내지 "
+                     "않습니다.")
+
+    # ── 매입가·수량을 적었으면 평가손익을 **읽어만** 준다 ────────────
+    # §9 — 평단가는 보유 판단에만. 점수·적정가·예측에 안 들어간다.
     _wl_notes = []
     for _w in _wl_items():
-        _px_w = (st.session_state.get('quote_cache') or {}).get(
-            f"{_w.get('code')}.KS", (None, 0))[0] or (
-            st.session_state.get('quote_cache') or {}).get(
-            f"{_w.get('code')}.KQ", (None, 0))[0]
-        if not _px_w:
+        _qc = st.session_state.get('quote_cache') or {}
+        _px_w = (_qc.get(f"{_w.get('code')}.KS", (None, 0))[0]
+                 or _qc.get(f"{_w.get('code')}.KQ", (None, 0))[0])
+        if not _px_w or not _w.get('paid'):
             continue
-        if _w.get('target_buy'):
-            _d = (_px_w / float(_w['target_buy']) - 1) * 100
-            _wl_notes.append(f"{_w.get('name')} — 목표 매수가보다 "
-                             f"{_d:+.1f}%")
-        if _w.get('paid'):
-            _d = (_px_w / float(_w['paid']) - 1) * 100
-            _wl_notes.append(f"{_w.get('name')} — 매입가 대비 {_d:+.1f}%")
+        _d = (_px_w / float(_w['paid']) - 1) * 100
+        _line = f"{_w.get('name')} 매입가 대비 {_d:+.1f}%"
+        if _w.get('qty'):
+            _pl = (_px_w - float(_w['paid'])) * float(_w['qty'])
+            _line += f" · 평가손익 {_pl:+,.0f}원"
+        _wl_notes.append(_line)
     if _wl_notes:
         st.caption("· " + "  ·  ".join(_wl_notes[:6]))
     _wc1, _wc2 = st.columns([1, 3])
@@ -5086,6 +5128,49 @@ _NA = _na.build(four_scores, tech_df, realtime_price, verdict)
 CORE = _vcore.build(four_scores, verdict=verdict,
                     price_axes=four_scores.get('price_axes'),
                     next_action=_NA, realtime_price=realtime_price)
+
+# ── 관심종목 값 채우기 (라운드 141) ──────────────────────────────────
+# 사용자 요청: 관심종목에 목표 매수가·1차·2차 목표·적정가를 **가져온다.**
+#
+# 관심종목 10종목마다 전체 파이프라인을 돌리면 화면이 몇 분씩 멈춘다
+# (한 종목 정밀분석이 6단계다). 그래서 **이 종목을 볼 때** 이미 계산된
+# 값을 찍어 둔다. 관심종목 화면은 그 값과 **언제 잰 것인지**를 함께
+# 보여 준다 — 오늘 값인 척하지 않는다 (§3).
+#
+# 값은 전부 CORE 에서 온다 (§4 — 화면 값은 한 곳에서).
+# ⚠️ `snap_t1` 은 **권장가 기준**, `snap_t2` 는 **현재가 기준**이다.
+#   기준이 다르므로 관심종목 화면이 열 이름에 그것을 적는다.
+try:
+    if _wl_has(target_ticker):
+        _snap141 = {
+            'snap_buy': (CORE.get('pullback_zone')
+                         or (CORE.get('buy_zone') or [None])[0]),
+            'snap_t1': CORE.get('new_target'),          # 권장가 기준
+            'snap_t2': four_scores.get('target_tech_2nd'),   # 현재가 기준
+            'snap_fair': four_scores.get('displayed_fair_value'),
+            'snap_px': realtime_price,
+            'snap_at': datetime.date.today().isoformat(),
+            'snap_engine': str(_VER_NOW.get('model') or ''),
+        }
+        _cw141 = portfolio.normalize_code(target_ticker)
+        _items141, _dirty141 = [], False
+        for _w141 in _wl_items():
+            if portfolio.normalize_code(_w141.get('code')) == _cw141:
+                _new141 = dict(_w141)
+                for _k141, _v141 in _snap141.items():
+                    # 못 낸 값은 **덮어쓰지 않는다** — 어제 잰 값이라도
+                    # 오늘 미산출로 지워 버리면 화면이 더 비어 보인다.
+                    if _v141 not in (None, ''):
+                        if _new141.get(_k141) != _v141:
+                            _dirty141 = True
+                        _new141[_k141] = _v141
+                _items141.append(_new141)
+            else:
+                _items141.append(_w141)
+        if _dirty141:
+            _wl_write(_items141)
+except Exception:                                              # noqa: BLE001
+    pass          # 관심종목 갱신 때문에 분석 화면이 죽지 않는다
 
 # 라운드 40 — 이모지(🟢🔴🟡🟠⚪)를 걷어내고 토큰 색 점으로 바꾼다.
 # 금융 터미널 레퍼런스 17종(Binance·Coinbase·Kraken·Stripe·Linear …)에

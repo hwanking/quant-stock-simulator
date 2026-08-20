@@ -13131,6 +13131,102 @@ if _os.path.exists(_dt183p) and _os.path.exists(_doc183p):
           '한 글자도 안 건드렸다' in _flat183)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §184 — 관심종목의 엔진 값과 사용자 입력이 갈려 있는가 (라운드 141)
+#
+#   사용자 요청: 목표 매수가·1차·2차·적정가를 **가져오고**, 매입가·수량은
+#   **입력**하게. 넷은 엔진 값이고 둘은 사용자 값이다 — 섞으면 어느 쪽이
+#   근거인지 못 읽는다.
+#
+#   ⚠️ 1차 목표는 **권장가 기준**, 2차는 **현재가 기준**이다.
+#     §4 가 "신규 매수자 값과 보유자 값을 섞으면 버그"라고 못 박은
+#     자리다. 그래서 **열 이름에 기준을 적는다.**
+#
+#   ⚠️ 관심종목마다 파이프라인을 돌리면 화면이 몇 분 멈춘다. 그래서
+#     **그 종목을 볼 때** 값을 찍어 두고, 화면은 **언제 잰 것인지**를
+#     함께 보여 준다 — 오늘 값인 척하지 않는다 (§3).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§184 관심종목 — 엔진 값과 입력 값이 갈려 있는가 (라운드 141)")
+print("=" * 72)
+_w184 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_pf184 = _read148(_os.path.join(PROJ, 'portfolio.py'))
+
+# ⓐ 기준이 다른 두 목표를 **열 이름에 적었는가** (§4)
+check("1차·2차 목표의 **기준을 열 이름에 적었다**",
+      "'1차 목표(권장가)'" in _w184 and "'2차 목표(현재가)'" in _w184,
+      '기준을 안 적으면 신규/보유 값이 섞인다')
+check("1차는 CORE 의 신규 매수자 값에서 온다",
+      "'snap_t1': CORE.get('new_target')" in _w184)
+check("2차는 보유자 기준값임을 코드가 밝힌다",
+      "'snap_t2': four_scores.get('target_tech_2nd')" in _w184
+      and '현재가 기준' in _w184)
+
+# ⓑ 엔진 값은 **읽기 전용**인가 (사용자가 못 적는다)
+check("엔진 값 칸에 입력 위젯을 두지 않았다",
+      'wl_tb_' not in _w184,
+      '목표 매수가는 이제 엔진 값이다 — 입력칸이 남아 있으면 안 된다')
+check("사용자 입력은 매입가·수량·메모뿐이다",
+      'wl_pd_' in _w184 and 'wl_qt_' in _w184 and 'wl_mm_' in _w184)
+
+# ⓒ 언제 잰 값인지 말하는가 · 안 본 종목은 그렇게 말하는가 (§3)
+check("엔진 값 기준일을 화면에 적는다", '엔진 값 기준일' in _w184)
+check("아직 안 본 종목은 그렇게 말한다",
+      '아직 분석을 열지 않아 엔진 값이 없는 종목' in _w184)
+check("없는 값을 지어내지 않는다고 적었다",
+      '없는 값을 지어내지 ' in _w184)
+
+# ⓓ 스냅샷이 CORE 한 곳에서 오는가 (§4)
+check("스냅샷이 CORE 에서 온다 (화면이 따로 계산하지 않는다)",
+      "CORE.get('pullback_zone')" in _w184
+      and "CORE.get('new_target')" in _w184)
+check("이미 담긴 종목만 갱신한다", '_wl_has(target_ticker)' in _w184)
+check("못 낸 값으로 옛 값을 덮어쓰지 않는다",
+      '덮어쓰지 않는다' in _w184)
+check("관심종목 갱신 때문에 분석 화면이 죽지 않는다",
+      '관심종목 갱신 때문에 분석 화면이 죽지 않는다' in _w184)
+
+# ⓔ 새 칸이 저장 왕복에서 사는가 — **값으로** 확인 (라운드 136 의 교훈)
+import portfolio as _pf184m                                    # noqa: E402
+import tempfile as _tf184                                      # noqa: E402
+_tmp184 = _os.path.join(_tf184.gettempdir(), 'wl_r184_check.json')
+try:
+    _pf184m.save_watchlist([
+        {'code': '005930.KS', 'name': '삼성전자', 'paid': 231500,
+         'qty': 12, 'memo': 'x', 'snap_buy': 250000, 'snap_t1': 280000,
+         'snap_t2': 295000, 'snap_fair': 173649, 'snap_px': 268250,
+         'snap_at': '2026-08-20', 'snap_engine': 'v2026.08.19.1'},
+        {'code': '047040', 'name': '대우건설'},
+        {'code': '000660', 'name': 'X', 'paid': 0, 'qty': 0},
+    ], path=_tmp184)
+    _b184, _ = _pf184m.load_watchlist(path=_tmp184)
+    check("엔진 스냅샷이 저장 왕복에서 살아남는다",
+          _b184[0].get('snap_t1') == 280000.0
+          and _b184[0].get('snap_fair') == 173649.0
+          and _b184[0].get('snap_at') == '2026-08-20',
+          str({k: _b184[0].get(k) for k in ('snap_t1', 'snap_fair',
+                                            'snap_at')}))
+    check("수량이 저장 왕복에서 살아남는다", _b184[0].get('qty') == 12.0,
+          str(_b184[0].get('qty')))
+    check("안 적은 종목은 키 자체가 없다 (§3)",
+          sorted(_b184[1]) == ['code', 'name'], str(sorted(_b184[1])))
+    check("0 은 '안 적음'으로 본다 (0원 매입가·0주를 저장하지 않는다)",
+          'paid' not in _b184[2] and 'qty' not in _b184[2],
+          str(sorted(_b184[2])))
+finally:
+    if _os.path.exists(_tmp184):
+        _os.remove(_tmp184)
+
+# ⓕ 매입가·수량이 판정으로 새지 않는가 (§9 — 앵커링 방지)
+for _f184 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+              'regime_policy.py', 'premarket.py'):
+    _t184 = _read148(_os.path.join(PROJ, _f184))
+    check(f"{_f184} 가 관심종목 입력을 읽지 않는다",
+          'load_watchlist' not in _t184 and 'snap_fair' not in _t184)
+check("평가손익이 보유 판단 전용임을 적었다",
+      '평단가는 보유 판단에만' in _w184)
+
+
 print()
 print("=" * 72)
 if FAILURES:
