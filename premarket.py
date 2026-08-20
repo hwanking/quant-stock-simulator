@@ -228,6 +228,11 @@ def pick_from_scan_row(q_engine, r):
         # ⚠️ `value_floor`(장기 안전마진선)로 대신하지 않는다. 그건 적정가에
         #   안전마진을 곱한 다른 값이고, 라운드 53c 가 폐기 산식이라 적었다.
         'displayed_fair_value': fs.get('displayed_fair_value'),
+        # 적정가 신뢰도 — 라운드 143 에서 **또 빠져 있는 것을 발견했다.**
+        # 적정가만 실으면 "4,615원이 1,659원의 3배"라는 사실만 보이고
+        # 그 4,615원을 **믿을 수 있는지**는 안 보인다. 값과 신뢰도는
+        # 같이 다녀야 한다.
+        'fair_value_confidence': fs.get('fair_value_confidence'),
         'entry_zone': fs.get('entry_zone'),
         'chase_max': fs.get('buy_entry_max'),
         # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다
