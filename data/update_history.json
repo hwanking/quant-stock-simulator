@@ -5,6 +5,16 @@
    "date": "2026-08-20",
    "items": [
     {
+     "hash": "4ed25b0",
+     "subject": "Merge pull request #80 from hwanking/round-138-probe-cleanup",
+     "body": "프로브 정리 — 그러다 검사 하나를 조용히 없앨 뻔했다 (라운드 138)"
+    },
+    {
+     "hash": "ed0cf52",
+     "subject": "프로브 정리 — 그러다 검사 하나를 조용히 없앨 뻔했다 (라운드 138)",
+     "body": "_probe/ 가 659개 · 30MB 로 불어 있었다. 590개를 지워 69개로 줄였다.\n\n■ 보존 목록을 손으로 적지 않았다\n\n지우기 전에 `_probe/<이름>` 으로 가리켜지는 것을 **소스에서 유도**했다\n(라운드 114·120e 의 교훈 — 손으로 적은 목록은 반드시 낡는다). 70개가\n나왔고, 유도가 0개면 정규식이 틀린 것이므로 **멈추게** 해 뒀다.\n\n실제 의존이던 것:\n  · kospi_daily_cache.json — 스크립트 6개가 **읽는다**\n  · feasibility_r46.py · light_app.py — 회귀가 참조\n  · tickers_r46.json — calibration_lab 이 읽는다\n\n보존 사유가 두 종류였다. 약 45개는 .claude/settings.local.json(실행 허용\n목록)에만 이름이 있어 **진짜 의존이 아니다.** 그래도 지울 때는 보수적인\n쪽이 맞아서 남겼다.\n\n■ 정리하다 검사를 조용히 없앨 뻔했다\n\n    _fes117 = _os.path.join(PROJ, '_probe', 'feasibility_r46.py')\n    if _os.path.exists(_fes117):        # ← 없으면 실패가 아니라 사라진다\n        check(\"타당성 프로브가 블라인드 성적을 잠갔다\", ...)\n\n프로브는 **gitignored** 다. 파일 하나 지우면 이 검사가 사라지는데 로그에\n아무 흔적도 안 남는다. 이 저장소가 반복해서 당한 \"0건과 미측정이 같은\n색으로 찍힌다\" 그 자리다.\n\n없으면 **실패**로 찍게 고쳤다. 같은 부류가 더 있는지 훑었는데 이것\n하나뿐이었다(나머지 한 건은 디렉터리 건너뛰기 필터).\n\n  → 잠금이 필요 없어졌다면 그 절을 지우지, **파일을 지워서 검사를\n    무력화하지 않는다.**\n\n회귀 3,064건 전건 통과 — 590개를 지운 뒤에도 아무것도 안 깨졌다.\n계산 파일 무변경."
+    },
+    {
      "hash": "9a79db2",
      "subject": "Merge pull request #79 from hwanking/round-137-flow-ticker-curve",
      "body": "긁기 전에 폭을 쟀다 — 길이 아예 없었다 (라운드 137)"
