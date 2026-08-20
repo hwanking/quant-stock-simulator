@@ -2012,8 +2012,15 @@ def _wl_remove(code):
     _wl_write(keep, '한 종목 뺐습니다')
 
 
+# ⚠️ 라운드 142 — 사용자 요청: "검색하는 종목에 관심추가 버튼도 넣어줘."
+#   버튼은 라운드 135 부터 여기 있었지만 **접힌 칸 안**이라, 검색 직후에는
+#   보이지 않았다. 라운드 136 에서 "관심목록 어디서 봐?" 라고 물은 것과
+#   같은 모양이다 — 있는데 안 보이면 없는 것이다.
+#   → 지금 보는 종목이 **아직 안 담겼으면 펼쳐 둔다.** 담고 나면 접힌다.
+_wl_cur_open = bool(portfolio.normalize_code(target_ticker)) and not _wl_has(
+    target_ticker)
 with st.sidebar.expander(
-        f"관심종목 {len(_wl_items())}개", expanded=False):
+        f"관심종목 {len(_wl_items())}개", expanded=_wl_cur_open):
     _flash = st.session_state.pop('wl_flash', '')
     if _flash:
         st.success(_flash)
@@ -2901,20 +2908,35 @@ if st.session_state.get('show_screener', False):
                     #   사이드바에서 하나씩 담고 빼게 된 이상, 덮어쓰기는
                     #   사고다(공들여 담은 목록이 스캔 한 번에 사라진다).
                     #   **합친다.** 이미 있는 것은 그대로 두고 없는 것만 더한다.
-                    if st.button("이 목록을 관심종목에 더하기",
-                                 width='stretch', key="btn_save_watchlist"):
+                    # ⚠️ 라운드 142 — 사용자 지적: "더하기 하면 왜 5개가 다
+                    #   들어가나? 다음 거래일에 실제로 손댈 수 있는 후보만
+                    #   들어가야 하는 것 아닌가."
+                    #   맞다. 바로 위에서 `_scored_rows`(행동점수가 나온 것)와
+                    #   `_excluded_rows`(못 낸 것)로 **갈라 놓고도** 담을 때는
+                    #   `_att['rows']` 전체를 썼다. 제외된 종목까지 들어갔다.
+                    #   → **점수가 나온 것만** 담는다. 그리고 몇 개를 왜
+                    #     안 담았는지 화면에 적는다 (§3 — 조용히 거르지 않는다).
+                    if st.button(f"점수 나온 {len(_scored_rows)}종목을 "
+                                 f"관심종목에 더하기",
+                                 width='stretch', key="btn_save_watchlist",
+                                 disabled=not _scored_rows):
                         _before = len(_wl_items())
-                        for _r in _att['rows']:
+                        for _r in _scored_rows:
                             _wl_add(_r['code'], _r['name'])
                         _added = len(_wl_items()) - _before
-                        st.success(
-                            f"{_added}종목 추가 (이미 있던 "
-                            f"{len(_att['rows']) - _added}종목은 그대로) — "
-                            f"지금 관심종목 {len(_wl_items())}개. 후보 발굴 "
-                            f"방식에서 '사용자 관심종목'으로 다시 스캔할 수 "
-                            f"있습니다."
-                            + ('' if ALLOW_LOCAL_STORE
-                               else ' (이 브라우저 세션에만 유지)'))
+                        _msg = (f"{_added}종목 추가 (이미 있던 "
+                                f"{len(_scored_rows) - _added}종목은 그대로) — "
+                                f"지금 관심종목 {len(_wl_items())}개.")
+                        if _excluded_rows:
+                            _msg += (f" 행동점수를 못 낸 "
+                                     f"{len(_excluded_rows)}종목은 "
+                                     f"**담지 않았습니다** — "
+                                     + ", ".join(str(r.get('name'))
+                                                 for r in _excluded_rows[:4])
+                                     + ".")
+                        if not ALLOW_LOCAL_STORE:
+                            _msg += ' (이 브라우저 세션에만 유지)'
+                        st.success(_msg)
                 with _wl_c2:
                     _wl_now = st.session_state.get('watchlist') or []
                     if _wl_now:
@@ -4229,6 +4251,24 @@ if st.session_state.get('show_portfolio'):
 st.markdown('<div id="nav-watchlist"></div>', unsafe_allow_html=True)
 _uk.spacer(28)
 st.header("관심종목")
+
+# 지금 보는 종목을 여기서도 담을 수 있게 한다 (라운드 142).
+# 사이드바에만 두면 검색 직후에 안 보인다 — 라운드 136 의 "어디서 봐?"
+# 와 같은 모양이다.
+_wl_cur = portfolio.normalize_code(target_ticker)
+_wl_h1, _wl_h2 = st.columns([1.3, 2.7])
+with _wl_h1:
+    if not _wl_cur:
+        st.caption(f"{resolved_name} 은(는) 6자리 종목코드가 아니라 "
+                   f"담을 수 없습니다.")
+    elif _wl_has(_wl_cur):
+        st.caption(f"지금 보는 **{resolved_name}** 은(는) 이미 담겨 "
+                   f"있습니다.")
+    elif st.button(f"지금 보는 종목 담기 · {resolved_name}",
+                   width='stretch', key='wlb_add_cur'):
+        _wl_add(_wl_cur, resolved_name)
+        st.rerun()
+
 _wl_body = _wl_items()
 if not _wl_body:
     st.caption("아직 담은 종목이 없습니다. 사이드바 '관심종목' 칸이나 "
@@ -4762,6 +4802,60 @@ if _pm_today and _pm_today.get('picks'):
     #   금지한 두 번째 경로다 — 라운드 114 의 요약 칸과 같은 모양이다.
     _pm_picks = _pm_today['picks']
     _pm_has_core = any(_pk.get('core') for _pk in _pm_picks)
+
+    # ── 관심종목 값 주기 갱신 (라운드 142) ──────────────────────────
+    # 사용자 요청: "목표매수가·1차·2차·적정가를 **주기적으로 저장**해서
+    # 표기해 주는 게 좋을 듯하다."
+    #
+    # 라운드 141 은 **그 종목을 볼 때**만 찍었다. 그래서 안 열어 본
+    # 종목은 영원히 비어 있었다. 개장 전 리포트에 그 종목이 있으면
+    # 여기서도 채운다 — 리포트는 매 거래일 다시 만들어지므로 이것이
+    # **주기적 갱신**이 된다. 새 계산을 돌리지 않으므로 공짜다.
+    #
+    # 값은 리포트가 들고 있는 CORE 에서 온다 (§4 — 한 곳에서).
+    try:
+        _wl_codes142 = {portfolio.normalize_code(w.get('code'))
+                        for w in _wl_items()}
+        if _wl_codes142:
+            _asof142 = str(_pm_today.get('data_asof')
+                           or _pm_today.get('date') or '')[:10]
+            _eng142 = str(_pm_today.get('engine_version') or '')
+            _by142 = {}
+            for _pk142 in _pm_picks:
+                _c142 = portfolio.normalize_code(_pk142.get('code'))
+                if _c142 in _wl_codes142:
+                    _by142[_c142] = _pk142
+            if _by142:
+                _upd142, _dirty142 = [], False
+                for _w142 in _wl_items():
+                    _c142 = portfolio.normalize_code(_w142.get('code'))
+                    _pk142 = _by142.get(_c142)
+                    if not _pk142:
+                        _upd142.append(_w142)
+                        continue
+                    _co142 = _pk142.get('core') or {}
+                    _snap = {
+                        'snap_buy': (_co142.get('pullback_zone')
+                                     or _pk142.get('rec_buy')),
+                        'snap_t1': _co142.get('new_target'),   # 권장가 기준
+                        'snap_t2': _pk142.get('target2'),      # 현재가 기준
+                        'snap_fair': _pk142.get('displayed_fair_value'),
+                        'snap_px': _pk142.get('price'),
+                        'snap_at': _asof142, 'snap_engine': _eng142,
+                    }
+                    _n142 = dict(_w142)
+                    for _k, _v in _snap.items():
+                        # 못 낸 값으로 옛 값을 덮어쓰지 않는다 (라운드 141)
+                        if _v in (None, ''):
+                            continue
+                        if _n142.get(_k) != _v:
+                            _dirty142 = True
+                        _n142[_k] = _v
+                    _upd142.append(_n142)
+                if _dirty142:
+                    _wl_write(_upd142)
+    except Exception:                                          # noqa: BLE001
+        pass          # 관심종목 갱신 때문에 개장 전 화면이 죽지 않는다
     _buyable = sum(1 for _pk in _pm_picks
                    if (_pk.get('core') or {}).get('recommended'))
     # 칸 이름도 리포트 본문과 같은 어휘(verdict_core 의 bucket)로 적는다.
