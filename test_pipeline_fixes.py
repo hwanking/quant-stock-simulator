@@ -13014,6 +13014,123 @@ if _os.path.exists(_rec182) and _os.path.exists(_doc182p):
           or "'.portfolio'" in _s182)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §183 — 공시 분류 세분화가 **운영을 안 건드리는가** (라운드 140)
+#
+#   `_classify_disclosure` 는 관심점수로 흘러가고, 관심점수 상위 5개만
+#   정밀분석된다. 즉 분류를 바꾸면 **어떤 종목이 스캔되는지가 바뀐다.**
+#   R55·R57·R66 전방 표본이 2026-08-09 부터 쌓이는 중이라, 후보 풀이
+#   도중에 바뀌면 **그 표본이 오염된다.**
+#
+#   그래서 연구 분류기는 **운영 분류를 먼저 부르고 '기타'였던 것만**
+#   세분한다 — 8종에는 두 번째 판단이 존재하지 않는다 (§4).
+#
+#   이 절이 지키는 것:
+#     ⓐ 운영 분류기가 **안 바뀌었는가**
+#     ⓑ 연구 분류가 운영 8종을 **덮어쓰지 않는가** (값으로 확인)
+#     ⓒ 죽은 규칙이 없는가 — 넣어 놓고 0건이면 없는 것과 같다
+#     ⓓ 운영 경로가 연구 모듈을 **import 하지 않는가**
+#     ⓔ 못 고치는 것(영업(잠정)실적)을 **기록했는가**
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§183 공시 분류 세분화 — 운영을 안 건드리는가 (라운드 140)")
+print("=" * 72)
+_dt183p = _os.path.join(PROJ, 'disclosure_types.py')
+_doc183p = _os.path.join(PROJ, 'docs', 'RESULT_R140_DISCLOSURE_TYPES.md')
+check("연구 분류 모듈이 있다", _os.path.exists(_dt183p))
+check("결과 문서가 있다", _os.path.exists(_doc183p))
+if _os.path.exists(_dt183p) and _os.path.exists(_doc183p):
+    import disclosure_types as _dt183                          # noqa: E402
+    import market_attention as _ma183                          # noqa: E402
+    _s183 = _read148(_dt183p)
+    _flat183 = _re.sub(r'\s+', ' ', _read148(_doc183p))
+
+    # ⓐ·ⓑ 운영 8종을 덮어쓰지 않는가 — **값으로** 확인한다
+    #    운영이 8종 중 하나라고 한 제목은 연구도 같은 답을 내야 한다.
+    _probe183 = [
+        '단일판매ㆍ공급계약체결', '현금ㆍ현물배당결정',
+        '자기주식취득결정', '유상증자결정', '기업설명회(IR)개최',
+        '신규시설투자등', '회사합병결정', '임상시험계획승인신청',
+        '매출액또는손익구조30%이상변경',
+    ]
+    _same183 = _bad183 = 0
+    for _t183 in _probe183:
+        _o = _ma183._classify_disclosure(_t183)
+        _n = _dt183.classify(_t183)
+        if _o != '기타':
+            if _o == _n:
+                _same183 += 1
+            else:
+                _bad183 += 1
+    check("운영이 분류한 것을 연구가 덮어쓰지 않는다 (값으로 확인)",
+          _bad183 == 0 and _same183 >= 5,
+          f'같음 {_same183} · 다름 {_bad183}')
+    check("연구 분류가 운영 분류를 **먼저 부른다** (구조)",
+          '_ma._classify_disclosure(title)' in _s183
+          and "if base != '기타':" in _s183)
+    check("운영 8종을 여기서 다시 정의하지 않는다 (원본을 읽는다)",
+          '_ma.DISCLOSURE_TYPES' in _s183)
+
+    # ⓒ 죽은 규칙이 없는가 — 규칙마다 실제로 잡히는 예를 하나씩 시험
+    _live183 = {
+        '하도급·거래조건': '지급수단별ㆍ지급기간별지급금액',
+        '증권발행서류': '일괄신고서',
+        '주주총회': '주주총회소집결의',
+        '정기보고서': '감사보고서',
+        '기업집단·지배구조': '대규모기업집단현황공시',
+        '지분변동': '최대주주등소유주식변동신고서',
+        '특수관계·보증': '타인에대한채무보증결정',
+        '경영진변경': '대표이사변경',
+        '스톡옵션': '주식매수선택권부여에관한신고',
+        '소송': '소송등의판결ㆍ결정',
+        '손실·위험': '파생상품거래손실발생',
+        '시장조치': '기타시장안내',
+        '자산유동화': '자산유동화관련중요사항발생등보고서',
+    }
+    _dead183 = [k for k, t in _live183.items() if _dt183.classify(t) != k]
+    check("규칙마다 실제로 잡히는 예가 있다 (죽은 규칙 0개)",
+          not _dead183, f'안 잡히는 유형: {_dead183}')
+    check("시험한 유형이 모듈의 유형과 같은 수다 (목록이 안 낡았다)",
+          len(_live183) == len(_dt183.EXTENDED_TYPES),
+          f'시험 {len(_live183)} vs 모듈 {len(_dt183.EXTENDED_TYPES)}')
+    # 모르는 것은 여전히 '기타'다 — 억지로 채우지 않는다 (§3)
+    check("모르는 제목은 여전히 '기타'다",
+          _dt183.classify('알수없는이상한공시제목XYZ') == '기타')
+
+    # ⓓ 운영 경로가 연구 모듈을 안 읽는다
+    #
+    # ⚠️ 처음엔 `'disclosure_types' not in 소스` 로 썼다가 **오탐**했다.
+    #   market_attention 에 같은 이름의 **dict 키**(`c['disclosure_types']`)
+    #   가 있어서 import 가 아닌데 걸렸다. 두 라운드 전에 "검사가 코드를
+    #   재는 척하며 **주석**을 세고 있었다"와 같은 부류다 — 이번엔
+    #   **데이터 키**였다.
+    #   → 재려는 것은 "이 모듈을 **가져다 쓰는가**" 이므로 import 문만 본다.
+    _imp183 = _re.compile(r'^\s*(?:import\s+disclosure_types'
+                          r'|from\s+disclosure_types\s+import)', _re.M)
+    for _f183 in ('market_attention.py', 'quant_indicators.py',
+                  'verdict_core.py', 'premarket.py', 'web_app.py'):
+        check(f"{_f183} 가 연구 분류기를 import 하지 않는다",
+              not _imp183.search(_read148(_os.path.join(PROJ, _f183))))
+    # 검사가 실제로 잡는지 심어서 확인한다 (0건이 '없다'인지 '못 봤다'인지)
+    check("이 검사가 진짜 import 를 잡는다 (심어서 확인)",
+          bool(_imp183.search('import disclosure_types as dt'))
+          and bool(_imp183.search('from disclosure_types import classify'))
+          and not _imp183.search("c['disclosure_types']"))
+
+    # ⓔ 못 고치는 것을 기록했는가
+    check("영업(잠정)실적 누락을 기록했다",
+          '영업(잠정)실적' in _flat183 and '2,943' in _flat183)
+    check("왜 지금 못 고치는지 적었다 (전방 표본 오염 · §4)",
+          '전방 표본 오염' in _flat183 and '§4 위반' in _flat183)
+    check("11/16 이후로 넘긴다고 적었다", '2026-11-16 이후' in _flat183)
+    # 작은 표본이 속인 경위 — 숨기지 않는다
+    check("작은 표본이 틀렸던 경위를 적었다",
+          '57.8%' in _flat183 and '74.8%' in _flat183
+          and '잘못된 안심' in _flat183)
+    check("운영 분류기를 안 건드렸다고 적었다",
+          '한 글자도 안 건드렸다' in _flat183)
+
+
 print()
 print("=" * 72)
 if FAILURES:
