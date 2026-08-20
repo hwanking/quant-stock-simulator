@@ -1956,6 +1956,103 @@ if 'watchlist' not in st.session_state:
     else:
         st.session_state['watchlist'] = []
 
+
+# ── 관심종목 담기·보기·지우기 (라운드 135) ───────────────────────────
+# 종전에는 **'이 목록을 통째로 저장'** 하나뿐이었다. 한 종목을 담을 수도,
+# 하나만 뺄 수도 없었고, 그 버튼은 기존 목록을 **덮어썼다.**
+# 담는 곳(스캔 결과)과 보는 곳이 달라서 지금 담긴 게 뭔지도 안 보였다.
+#
+# 저장은 `portfolio.save_watchlist()` **한 곳**으로만 한다 (§4).
+# 원격 노출 상태면 파일에 쓰지 않고 세션에만 둔다 — 앱 인스턴스가 하나라
+# `.portfolio/` 가 방문자 전원의 공용 파일이 된다 (§9).
+
+def _wl_items():
+    return list(st.session_state.get('watchlist') or [])
+
+
+def _wl_has(code):
+    c = portfolio.normalize_code(code)
+    return any(portfolio.normalize_code(w.get('code')) == c
+               for w in _wl_items())
+
+
+def _wl_write(items, msg=''):
+    """세션과 파일을 **같이** 바꾼다. 한쪽만 바뀌면 새로고침에 되살아난다."""
+    st.session_state['watchlist'] = items
+    if ALLOW_LOCAL_STORE:
+        try:
+            portfolio.save_watchlist(items)
+        except Exception as _ex:                               # noqa: BLE001
+            st.sidebar.warning(f"로컬 저장 실패: {_ex}")
+            return
+    if msg:
+        st.session_state['wl_flash'] = msg
+
+
+def _wl_add(code, name):
+    """이미 있으면 아무것도 안 한다 — 같은 종목이 두 줄로 늘지 않는다."""
+    c = portfolio.normalize_code(code)
+    if not c or _wl_has(c):
+        return False
+    _wl_write(_wl_items() + [{'code': c, 'name': str(name or c)}],
+              f"{name or c} 담았습니다")
+    return True
+
+
+def _wl_remove(code):
+    c = portfolio.normalize_code(code)
+    keep = [w for w in _wl_items()
+            if portfolio.normalize_code(w.get('code')) != c]
+    _wl_write(keep, '한 종목 뺐습니다')
+
+
+with st.sidebar.expander(
+        f"관심종목 {len(_wl_items())}개", expanded=False):
+    _flash = st.session_state.pop('wl_flash', '')
+    if _flash:
+        st.success(_flash)
+
+    _cur_code = portfolio.normalize_code(target_ticker)
+    if not _cur_code:
+        # 지어내지 않는다 — 코드를 못 읽었으면 그렇게 적는다 (§3)
+        st.caption(f"{resolved_name} 은(는) 6자리 종목코드가 아니라 "
+                   f"담을 수 없습니다.")
+    elif _wl_has(_cur_code):
+        st.caption(f"{resolved_name} 은(는) 이미 담겨 있습니다.")
+    else:
+        if st.button(f"지금 이 종목 담기 · {resolved_name}",
+                     width='stretch', key='wl_add_cur'):
+            _wl_add(_cur_code, resolved_name)
+            st.rerun()
+
+    _wl_now = _wl_items()
+    if not _wl_now:
+        st.caption("아직 담은 종목이 없습니다. 위 버튼이나 스캔 결과에서 "
+                   "담을 수 있습니다.")
+    else:
+        st.caption("이름을 누르면 그 종목을 봅니다 · '빼기'로 하나씩 "
+                   "지웁니다.")
+        for _w in _wl_now:
+            _c1, _c2 = st.columns([3, 1])
+            with _c1:
+                if st.button(f"{_w.get('name')} · {_w.get('code')}",
+                             width='stretch',
+                             key=f"wl_go_{_w.get('code')}"):
+                    st.session_state['ticker_input'] = str(_w.get('code'))
+                    st.rerun()
+            with _c2:
+                if st.button("빼기", width='stretch',
+                             key=f"wl_del_{_w.get('code')}"):
+                    _wl_remove(_w.get('code'))
+                    st.rerun()
+        if st.button("전체 비우기", width='stretch', key='wl_clear'):
+            _wl_write([], '관심종목을 모두 비웠습니다')
+            st.rerun()
+        if not ALLOW_LOCAL_STORE:
+            st.caption("원격 접속이라 이 목록은 **이 브라우저 세션에만** "
+                       "남습니다 — 파일로 저장하지 않습니다.")
+
+
 QUOTE_TTL_SEC = 60
 
 
@@ -2794,20 +2891,24 @@ if st.session_state.get('show_screener', False):
                 # ── 관심종목 저장 ─────────────────────────────────────────
                 _wl_c1, _wl_c2 = st.columns([1, 2.2])
                 with _wl_c1:
-                    if st.button("이 목록을 관심종목으로 저장",
+                    # ⚠️ 라운드 135 — 이 버튼은 기존 관심종목을 **덮어썼다.**
+                    #   사이드바에서 하나씩 담고 빼게 된 이상, 덮어쓰기는
+                    #   사고다(공들여 담은 목록이 스캔 한 번에 사라진다).
+                    #   **합친다.** 이미 있는 것은 그대로 두고 없는 것만 더한다.
+                    if st.button("이 목록을 관심종목에 더하기",
                                  width='stretch', key="btn_save_watchlist"):
-                        _items = [{'code': r['code'], 'name': r['name']}
-                                  for r in _att['rows']]
-                        st.session_state['watchlist'] = _items
-                        if ALLOW_LOCAL_STORE:
-                            try:
-                                portfolio.save_watchlist(_items)
-                                st.success(f"{len(_items)}종목 저장 — 후보 발굴 방식에서 "
-                                           f"'사용자 관심종목'으로 다시 스캔할 수 있습니다.")
-                            except Exception as _ex:
-                                st.warning(f"로컬 저장 실패: {_ex}")
-                        else:
-                            st.success(f"{len(_items)}종목 저장 (이 브라우저 세션에만 유지)")
+                        _before = len(_wl_items())
+                        for _r in _att['rows']:
+                            _wl_add(_r['code'], _r['name'])
+                        _added = len(_wl_items()) - _before
+                        st.success(
+                            f"{_added}종목 추가 (이미 있던 "
+                            f"{len(_att['rows']) - _added}종목은 그대로) — "
+                            f"지금 관심종목 {len(_wl_items())}개. 후보 발굴 "
+                            f"방식에서 '사용자 관심종목'으로 다시 스캔할 수 "
+                            f"있습니다."
+                            + ('' if ALLOW_LOCAL_STORE
+                               else ' (이 브라우저 세션에만 유지)'))
                 with _wl_c2:
                     _wl_now = st.session_state.get('watchlist') or []
                     if _wl_now:
@@ -3345,23 +3446,19 @@ if _pmr:
                     st.session_state['pending_search'] = f"{_nm} ({_cd})"
                     st.rerun()
             with _b2:
-                _wl_now = st.session_state.get('watchlist') or []
-                _in_wl = any(str(w.get('code')) == str(_cd) for w in _wl_now)
+                # ⚠️ 라운드 135 — 여기가 관심종목을 담는 **세 번째 경로**였고,
+                #   혼자만 `normalize_code` 를 안 거쳤다. 같은 종목이
+                #   '005930' 과 '005930.KS' 로 두 줄이 될 수 있었고,
+                #   중복 판정도 문자열 비교라 못 걸렀다.
+                #   담기·빼기·저장을 `_wl_*` 한 벌로 모은다 (§4).
+                _in_wl = _wl_has(_cd)
                 if st.button('관심 추가됨' if _in_wl else '관심 추가',
                              key=f"pm_wl_{_sym}_{_pi}", width='stretch',
                              help=('이미 관심종목입니다' if _in_wl else
                                    '관심종목에 넣습니다 — 후보 발굴 방식에서 '
                                    "'사용자 관심종목'으로 다시 스캔할 수 있습니다"),
                              disabled=_in_wl):
-                    _items = _wl_now + [{'code': _cd, 'name': _nm}]
-                    st.session_state['watchlist'] = _items
-                    if ALLOW_LOCAL_STORE:
-                        # 저장 실패를 삼키면 사용자는 저장된 줄 안다
-                        try:
-                            portfolio.save_watchlist(_items)
-                        except Exception as _ex:
-                            st.warning(f"관심종목 파일 저장 실패 — 이 세션에만 "
-                                       f"남습니다 ({type(_ex).__name__})")
+                    _wl_add(_cd, _nm)
                     st.rerun()
             with _b3:
                 if st.button("보유 등록", key=f"pm_pos_{_sym}_{_pi}",

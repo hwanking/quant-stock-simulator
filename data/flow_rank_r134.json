@@ -1,0 +1,203 @@
+{
+ "made": "2026-08-20",
+ "made_at": "2026-08-20T03:19:56+00:00",
+ "prereg": "docs/PREREG_R134_FLOW_REPLICATION.md",
+ "prereg_commit": "87ce30b",
+ "replicates": "docs/RESULT_R131_FLOW.md",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드/전방 미사용",
+ "leak_rule": "수급은 D-1 까지만 사용 (당일은 장 마감 후 공표)",
+ "z_pass": 2.81,
+ "min_days": 600,
+ "family_size": 10,
+ "family_note": "R131 의 5개 + R134 의 같은 5개 = 10. 같은 가설을 두 번 재므로 문턱을 2.58 에서 2.81 로 **올렸다**.",
+ "vars": [
+  "frgn_days5",
+  "inst_days5",
+  "both_days5",
+  "frgn_streak",
+  "frgn_flip"
+ ],
+ "join": {
+  "rows": 166132,
+  "used": 53571,
+  "miss_ticker": 104773,
+  "miss_window": 7788,
+  "used_pct": 32.2
+ },
+ "results": {
+  "frgn_days5": {
+   "days": 393,
+   "win": 189,
+   "lose": 180,
+   "decided": 369,
+   "z": 0.469,
+   "pass_p1": false,
+   "pass_p4": false,
+   "split": {
+    "train": {
+     "days": 364,
+     "z": 0.324
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.577
+    }
+   },
+   "pass_p3": true
+  },
+  "inst_days5": {
+   "days": 398,
+   "win": 193,
+   "lose": 184,
+   "decided": 377,
+   "z": 0.464,
+   "pass_p1": false,
+   "pass_p4": false,
+   "split": {
+    "train": {
+     "days": 369,
+     "z": 0.375
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": true
+  },
+  "both_days5": {
+   "days": 396,
+   "win": 193,
+   "lose": 179,
+   "decided": 372,
+   "z": 0.726,
+   "pass_p1": false,
+   "pass_p4": false,
+   "split": {
+    "train": {
+     "days": 367,
+     "z": 0.647
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": true
+  },
+  "frgn_streak": {
+   "days": 401,
+   "win": 170,
+   "lose": 202,
+   "decided": 372,
+   "z": -1.659,
+   "pass_p1": false,
+   "pass_p4": false,
+   "split": {
+    "train": {
+     "days": 372,
+     "z": -1.833
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.378
+    }
+   },
+   "pass_p3": false
+  },
+  "frgn_flip": {
+   "days": 402,
+   "win": 175,
+   "lose": 197,
+   "decided": 372,
+   "z": -1.141,
+   "pass_p1": false,
+   "pass_p4": false,
+   "split": {
+    "train": {
+     "days": 373,
+     "z": -1.402
+    },
+    "valid": {
+     "days": 29,
+     "z": 0.756
+    }
+   },
+   "pass_p3": false
+  },
+  "score": {
+   "days": 322,
+   "win": 152,
+   "lose": 156,
+   "decided": 308,
+   "z": -0.228,
+   "pass_p1": false,
+   "pass_p4": false
+  }
+ },
+ "verdict": {
+  "frgn_days5": {
+   "P1": false,
+   "P2": true,
+   "P3": true,
+   "P4": false,
+   "passed": false
+  },
+  "inst_days5": {
+   "P1": false,
+   "P2": true,
+   "P3": true,
+   "P4": false,
+   "passed": false
+  },
+  "both_days5": {
+   "P1": false,
+   "P2": true,
+   "P3": true,
+   "P4": false,
+   "passed": false
+  },
+  "frgn_streak": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": false,
+   "passed": false
+  },
+  "frgn_flip": {
+   "P1": false,
+   "P2": false,
+   "P3": false,
+   "P4": false,
+   "passed": false
+  }
+ },
+ "passed": 0,
+ "min_detectable_pp": {
+  "frgn_days5": 8,
+  "inst_days5": 8,
+  "both_days5": 5,
+  "frgn_streak": 12,
+  "frgn_flip": 8
+ },
+ "prev_min_detectable_pp": {
+  "frgn_days5": 8,
+  "inst_days5": 12,
+  "both_days5": 8,
+  "frgn_streak": 12,
+  "frgn_flip": 12
+ },
+ "selfcheck": {
+  "fpr": 0.0525,
+  "fpr_ok": true,
+  "z_real": 0.4685,
+  "z_shuffled": 2.1776,
+  "var_used_ok": true,
+  "z_leak": 0.208,
+  "leak_ok": true,
+  "control_days": 322,
+  "control_ok": true,
+  "ok": true
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 라운드 131 을 대체하지 않는다."
+}
