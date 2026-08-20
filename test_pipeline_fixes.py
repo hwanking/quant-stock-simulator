@@ -12748,6 +12748,91 @@ check("6자리 코드가 아니면 담을 수 없다고 말한다",
       '6자리 종목코드가 아니라' in _w179)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §180 — 관심종목이 **찾을 수 있는 자리**에 있는가 (라운드 136)
+#
+#   사용자 물음: *"관심목록 리스트 어디서 봐?"*
+#   라운드 135 에서 사이드바 **접힌 칸**에만 뒀다. 담기는 되는데 어디에
+#   쌓이는지 안 보였다. 라운드 105 와 같은 모양이다 — 화면에는 있는데
+#   갈 길이 없었다. 그때 배운 것: **방향어 대신 앵커**.
+#
+#   그리고 메모 칸(목표 매수가·매입가)을 붙였는데, 종전 `save_watchlist`
+#   는 code·name 만 남기고 **나머지를 버렸다** — 적어도 새로고침하면
+#   사라지는 상태였다.
+#
+#   ⚠️ 이 값들은 표시·메모 전용이다. 점수·적정가·판정에 안 들어간다
+#     (§9 — 평균 매수가는 보유 판단에만. 앵커링 방지).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§180 관심종목 — 찾을 수 있는 자리에 있는가 (라운드 136)")
+print("=" * 72)
+_w180 = _read148(_os.path.join(PROJ, 'web_app.py'))
+
+# ⓐ 본문에 절이 있고, 메뉴가 그리로 간다 (앵커가 없으면 못 찾는다)
+check("본문에 관심종목 앵커가 있다",
+      'id="nav-watchlist"' in _w180)
+check("메뉴에 관심종목 항목이 있다",
+      "'href': '#nav-watchlist'" in _w180
+      and "'label': '관심종목'" in _w180)
+check("'내 자산' 묶음에 넣었다 (보유종목 옆)",
+      _re.search(r"'2\. 내 자산'[\s\S]{0,600}#nav-watchlist", _w180)
+      is not None)
+# 본문 순서가 메뉴 순서와 같은가 — 보유종목이 먼저다 (§170 ⓔ 와 같은 기준)
+_i180h = _w180.find('id="nav-holdings"')
+_i180w = _w180.find('id="nav-watchlist"')
+check("본문에서 보유종목이 관심종목보다 먼저다 (묶음 안에서 단조)",
+      0 < _i180h < _i180w, f'holdings@{_i180h} · watchlist@{_i180w}')
+
+# ⓑ 지울 수 있는가 — 본문에서도
+check("본문에서 하나씩 뺄 수 있다", 'wlb_del_' in _w180)
+check("본문에서 전체 비우기가 있다", 'wlb_clear' in _w180)
+check("목록에서 그 종목으로 갈 수 있다", 'wlb_go_' in _w180)
+
+# ⓒ 메모 칸 — 저장 왕복에서 살아남는가 (값으로 확인한다)
+import portfolio as _pf180                                     # noqa: E402
+import tempfile as _tf180                                      # noqa: E402
+_tmp180 = _os.path.join(_tf180.gettempdir(), 'wl_r180_check.json')
+try:
+    _pf180.save_watchlist([
+        {'code': '005930.KS', 'name': '삼성전자', 'target_buy': 220000,
+         'paid': 231500, 'memo': '분할 1차'},
+        {'code': '047040', 'name': '대우건설'},
+        {'code': '087010', 'name': '펩트론', 'target_buy': 0,
+         'paid': None, 'memo': '   '},
+    ], path=_tmp180)
+    _back180, _ = _pf180.load_watchlist(path=_tmp180)
+    check("메모 칸이 저장 왕복에서 살아남는다 (종전에는 버려졌다)",
+          len(_back180) == 3
+          and _back180[0].get('target_buy') == 220000.0
+          and _back180[0].get('paid') == 231500.0
+          and _back180[0].get('memo') == '분할 1차',
+          str(_back180[0]))
+    check("안 적은 값은 **키 자체를 안 만든다** (0 으로 안 채운다 · §3)",
+          'target_buy' not in _back180[1] and 'paid' not in _back180[1],
+          str(sorted(_back180[1])))
+    check("0·None·공백은 '안 적음'으로 본다",
+          'target_buy' not in _back180[2] and 'memo' not in _back180[2],
+          str(sorted(_back180[2])))
+    check("코드는 여전히 정규화된다",
+          _back180[0].get('code') == '005930', str(_back180[0].get('code')))
+finally:
+    if _os.path.exists(_tmp180):
+        _os.remove(_tmp180)
+
+# ⓓ 메모가 판정으로 새지 않는가 (§9 — 앵커링 방지)
+for _f180 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+              'regime_policy.py', 'premarket.py'):
+    _t180 = _read148(_os.path.join(PROJ, _f180))
+    check(f"{_f180} 가 관심종목 메모를 읽지 않는다",
+          'target_buy' not in _t180 and 'load_watchlist' not in _t180)
+check("화면이 '점수·적정가·판정에 쓰지 않는다'고 밝힌다",
+      '점수·적정가·판정에 쓰지 않습니다' in _w180)
+check("보유 중이면 보유종목에 등록하라고 안내한다",
+      '[내 보유종목](#nav-holdings)' in _w180)
+# 현재가를 못 받으면 0 원으로 채우지 않는다 (§3)
+check("현재가 미수신을 '미수신'이라 쓴다", "'미수신'" in _w180)
+
+
 print()
 print("=" * 72)
 if FAILURES:

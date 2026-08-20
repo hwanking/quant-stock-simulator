@@ -1624,10 +1624,16 @@ _NAV_SUB = [
         {'key': 'premarket_line', 'label': '개장 전 결론', 'icon': 'doc',
          'href': '#nav-premarket-line'},
     ]},
-    # 내 자산 (3)
+    # 내 자산 (3 · 4)
+    # ⚠️ 라운드 136 — '관심종목'을 여기 넣는다. 라운드 135 에서 사이드바
+    #   접힌 칸에만 뒀더니 사용자가 "관심목록 리스트 어디서 봐?" 라고
+    #   물었다. 라운드 105 와 같은 모양이다 — 화면에는 있는데 갈 길이 없다.
+    #   본문 순서(보유종목 → 관심종목)와 같은 차례로 둔다 (§170 ⓔ).
     {'title': '2. 내 자산', 'items': [
         {'key': 'holdings', 'label': '내 보유종목', 'icon': 'wallet',
          'href': '#nav-holdings'},
+        {'key': 'watchlist', 'label': '관심종목', 'icon': 'target',
+         'href': '#nav-watchlist'},
     ]},
     # 이 종목 이야기 — 판정부터 근거까지 한 줄기 (6 · 7 · 8 · 10 · 11)
     {'title': '3. 이 종목', 'items': [
@@ -4206,6 +4212,114 @@ if st.session_state.get('show_portfolio'):
                             st.dataframe(pd.DataFrame(m['accounts']),
                                          width='stretch', hide_index=True)
     _uk.spacer(28)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 관심종목 화면 (라운드 136)
+#
+# 사용자 물음: *"관심목록 리스트 어디서 봐?"*
+#   라운드 135 에서 사이드바 **접힌 칸**에만 뒀다. 담기는 되는데 어디에
+#   쌓이는지 안 보였다. 라운드 105 에서 같은 일이 있었다 — 화면에는
+#   있었는데 앵커가 없어 못 찾았다. 그러니 **본문 절 + 메뉴 항목**으로 낸다.
+#
+# ⚠️ 목표 매수가·매입가는 **개인 메모 전용**이다. 점수·적정가·판정에
+#   들어가지 않는다 (§9 — 평균 매수가는 보유 판단에만. 앵커링 방지).
+#   보유 중이면 '내 보유종목'에 등록해야 포트폴리오 판단에 들어간다.
+# ═══════════════════════════════════════════════════════════════════════════
+st.markdown('<div id="nav-watchlist"></div>', unsafe_allow_html=True)
+_uk.spacer(28)
+st.header("관심종목")
+_wl_body = _wl_items()
+if not _wl_body:
+    st.caption("아직 담은 종목이 없습니다. 사이드바 '관심종목' 칸이나 "
+               "추천 카드의 '관심 추가'로 담을 수 있습니다.")
+else:
+    st.caption(f"{len(_wl_body)}종목 · 목표 매수가와 매입가는 **직접 적는 "
+               f"메모**입니다 — 점수·적정가·판정에 쓰지 않습니다. "
+               f"보유 중이라면 [내 보유종목](#nav-holdings)에 등록해야 "
+               f"포트폴리오 판단에 들어갑니다.")
+    _wl_hdr = st.columns([2.2, 1.2, 1.2, 1.2, 2.0, 0.9])
+    for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
+                                '매입가', '메모', '')):
+        _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
+                    f"padding-bottom:6px;'>{_uk._esc(_h)}</div>",
+                    unsafe_allow_html=True)
+    _wl_dirty = False
+    for _wi, _w in enumerate(list(_wl_body)):
+        _wc = st.columns([2.2, 1.2, 1.2, 1.2, 2.0, 0.9])
+        _wcode = str(_w.get('code'))
+        with _wc[0]:
+            if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
+                         key=f"wlb_go_{_wcode}"):
+                st.session_state['ticker_input'] = _wcode
+                st.rerun()
+        with _wc[1]:
+            # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
+            _px_w = light_quote(f"{_wcode}.KS") or light_quote(f"{_wcode}.KQ")
+            st.markdown(
+                f"<div style='padding-top:8px; font-size:13px;'>"
+                f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
+                unsafe_allow_html=True)
+        with _wc[2]:
+            _tb = st.number_input(
+                "목표 매수가", min_value=0.0, step=100.0,
+                value=float(_w.get('target_buy') or 0.0),
+                key=f"wl_tb_{_wcode}", label_visibility='collapsed')
+        with _wc[3]:
+            _pd = st.number_input(
+                "매입가", min_value=0.0, step=100.0,
+                value=float(_w.get('paid') or 0.0),
+                key=f"wl_pd_{_wcode}", label_visibility='collapsed')
+        with _wc[4]:
+            _mm = st.text_input(
+                "메모", value=str(_w.get('memo') or ''),
+                key=f"wl_mm_{_wcode}", label_visibility='collapsed',
+                placeholder='메모')
+        with _wc[5]:
+            if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
+                _wl_remove(_wcode)
+                st.rerun()
+        # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
+        _new = dict(_w)
+        _new['target_buy'] = _tb or None
+        _new['paid'] = _pd or None
+        _new['memo'] = _mm
+        if ((_w.get('target_buy') or None) != (_tb or None)
+                or (_w.get('paid') or None) != (_pd or None)
+                or str(_w.get('memo') or '') != str(_mm or '')):
+            _wl_body[_wi] = _new
+            _wl_dirty = True
+    if _wl_dirty:
+        _wl_write(_wl_body)
+    # 목표가·매입가를 적었으면 현재가와의 거리를 **읽어만** 준다
+    _wl_notes = []
+    for _w in _wl_items():
+        _px_w = (st.session_state.get('quote_cache') or {}).get(
+            f"{_w.get('code')}.KS", (None, 0))[0] or (
+            st.session_state.get('quote_cache') or {}).get(
+            f"{_w.get('code')}.KQ", (None, 0))[0]
+        if not _px_w:
+            continue
+        if _w.get('target_buy'):
+            _d = (_px_w / float(_w['target_buy']) - 1) * 100
+            _wl_notes.append(f"{_w.get('name')} — 목표 매수가보다 "
+                             f"{_d:+.1f}%")
+        if _w.get('paid'):
+            _d = (_px_w / float(_w['paid']) - 1) * 100
+            _wl_notes.append(f"{_w.get('name')} — 매입가 대비 {_d:+.1f}%")
+    if _wl_notes:
+        st.caption("· " + "  ·  ".join(_wl_notes[:6]))
+    _wc1, _wc2 = st.columns([1, 3])
+    with _wc1:
+        if st.button("전체 비우기", width='stretch', key='wlb_clear'):
+            _wl_write([], '관심종목을 모두 비웠습니다')
+            st.rerun()
+    with _wc2:
+        if not ALLOW_LOCAL_STORE:
+            st.caption("원격 접속이라 이 목록은 **이 브라우저 세션에만** "
+                       "남습니다 — 파일로 저장하지 않습니다.")
+_uk.spacer(28)
+
 
 # ── 캘리브레이션 산출물 로더 — 홈 카드·판정 캡션·모델 성과 섹션이 공유 ──────
 # rerun 마다 엔진이 새로 만들어져 속성이 비므로, 파일을 직접 읽어 캐시한다.
