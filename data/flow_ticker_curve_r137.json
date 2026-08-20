@@ -1,0 +1,61 @@
+{
+ "made": "2026-08-20",
+ "made_at": "2026-08-20T06:40:38+00:00",
+ "question": "수급 종목을 더 모으면 짝비교 날짜가 얼마나 느나 — 40시간을 긁기 전에 폭부터 잰다",
+ "basis": "개발 구간(train+valid) · 판정완료 · 블라인드 미사용",
+ "method": "늘린 결과는 지어낼 수 없으므로 **줄여서** 곡선을 그린다. 위로 늘렸을 때의 값은 외삽이며 가정이다.",
+ "key": "frgn_days5",
+ "curve": [
+  {
+   "frac": 0.2,
+   "tickers": 50,
+   "cases": 12893,
+   "covered_days": 839,
+   "paired_days": 373,
+   "gain": null
+  },
+  {
+   "frac": 0.4,
+   "tickers": 100,
+   "cases": 23841,
+   "covered_days": 1180,
+   "paired_days": 374,
+   "gain": 1
+  },
+  {
+   "frac": 0.6,
+   "tickers": 150,
+   "cases": 34652,
+   "covered_days": 1260,
+   "paired_days": 391,
+   "gain": 17
+  },
+  {
+   "frac": 0.8,
+   "tickers": 200,
+   "cases": 45136,
+   "covered_days": 1341,
+   "paired_days": 392,
+   "gain": 1
+  },
+  {
+   "frac": 1.0,
+   "tickers": 250,
+   "cases": 53571,
+   "covered_days": 1357,
+   "paired_days": 393,
+   "gain": 1
+  }
+ ],
+ "per_ticker_days": [
+  0.02,
+  0.34,
+  0.02,
+  0.02
+ ],
+ "first_rate": 0.02,
+ "last_rate": 0.02,
+ "have_tickers": 250,
+ "have_paired_days": 393,
+ "note": "관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 가설 검정이 아니라 자원 배분을 고르기 위한 측정이다."
+}
