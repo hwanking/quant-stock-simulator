@@ -7324,7 +7324,17 @@ if _os.path.exists(_pre117):
           '미도달' in _pt117 and '실패로 센다' in _pt117)
 
 # 프로브 잠금 — 블라인드 성적을 다시 출력하지 못하게
+#
+# ⚠️ 라운드 138 — 이 절이 `if exists:` 로 감싸여 있었다. 프로브는
+#   gitignored `_probe/` 에 있으므로 **파일이 사라지면 검사가 실패가
+#   아니라 통째로 사라진다.** 실제로 _probe 를 정리하다가 이 검사를
+#   조용히 없앨 뻔했다.
+#   0 건과 미측정을 가른다 — 없으면 **실패**로 찍는다. 잠금이 필요 없어
+#   졌다면 이 절을 지우지, 파일을 지워서 검사를 무력화하지 않는다.
 _fes117 = _os.path.join(PROJ, '_probe', 'feasibility_r46.py')
+check("타당성 프로브가 남아 있다 (없으면 아래 잠금을 못 잰다)",
+      _os.path.exists(_fes117),
+      '_probe/feasibility_r46.py 가 없다 — 잠금 검사가 사라진다')
 if _os.path.exists(_fes117):
     _fs117 = open(_fes117, encoding='utf-8').read()
     check("타당성 프로브가 블라인드 성적을 잠갔다",
