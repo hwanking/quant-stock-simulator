@@ -12925,6 +12925,95 @@ else:
           and 'def day_frames' not in _s181)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §182 — 공시 수집이 '수집'에서 멈추는가 (라운드 139)
+#
+#   라운드 124 가 후보 1·2 를 "DART 미연동 · 수집 시작 + 12개월"로
+#   적어 뒀는데 **틀렸다.** `selectDate=YYYYMMDD` 를 붙이면 과거 하루가
+#   열린다 — 2012년까지 확인. **이런 줄이 두 번째다**(R130 이 첫 번째).
+#
+#   그런데 **열렸다고 잴 수 있는 것은 아니다.** 제목만으로 태깅하므로
+#   분류기가 58% 를 '기타'로 보낸다. R124 §3.1 이 "그 낮음을 측정해서
+#   적는다"고 요구한 그 숫자다 — 그것을 낮추기 전에는 이벤트 통계를
+#   내지 않는다.
+#
+#   이 절이 지키는 것:
+#     ⓐ 기록기가 원장·수급 기록을 건드리지 않는가 (쓰기 대상 분리)
+#     ⓑ 점수·판정 경로가 공시 기록을 **import 하지 않는가**
+#     ⓒ 정정공시의 옛 접수번호를 **결함이 아니라 사실로** 적었는가
+#     ⓓ 분류 재현율('기타' 비율)을 **숨기지 않았는가**
+#     ⓔ R124 의 틀린 줄이 정정됐는가 (§4 — 안 고치면 또 막힌다)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§182 공시 수집 — 수집에서 멈추는가 (라운드 139)")
+print("=" * 72)
+_rec182 = _os.path.join(PROJ, 'scripts', 'disclosure_recorder.py')
+_doc182p = _os.path.join(PROJ, 'docs', 'RESULT_R139_DART_OPENED.md')
+check("공시 기록기가 있다", _os.path.exists(_rec182))
+check("결과 문서가 있다", _os.path.exists(_doc182p))
+if _os.path.exists(_rec182) and _os.path.exists(_doc182p):
+    _s182 = _read148(_rec182)
+    _doc182 = _read148(_doc182p)
+    # ⚠️ 산문은 **줄이 바뀐다.** 문서를 대조할 때는 공백을 눌러서 본다 —
+    #   처음에 '태깅 오류의 통계' 가 '태깅 오류의\n통계다' 로 줄바꿈돼
+    #   있어 못 찾았다. 이 파일 앞쪽에 같은 경고가 이미 적혀 있다.
+    _flat182 = _re.sub(r'\s+', ' ', _doc182)
+
+    # ⓐ 쓰기 대상이 원장·수급과 다른 파일인가
+    check("공시는 **다른 파일**에 쓴다 (원장·수급을 안 건드린다)",
+          'disclosures_daily.jsonl' in _s182
+          and 'virtual_graded' not in _s182
+          and 'flow_daily' not in _s182)
+    check("공개 페이지만 쓴다 (API 키·로그인 없음)",
+          'dsac001' in _s182 and 'api_key' not in _s182.lower()
+          and 'crtfc' not in _s182.lower())
+
+    # ⓑ 점수·판정이 공시 기록을 읽지 않는다
+    for _f182 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+                  'regime_policy.py', 'premarket.py', 'web_app.py'):
+        check(f"{_f182} 가 공시 기록을 읽지 않는다",
+              'disclosures_daily' not in _read148(
+                  _os.path.join(PROJ, _f182))
+              and 'disclosure_recorder' not in _read148(
+                  _os.path.join(PROJ, _f182)))
+
+    # ⓒ 정정공시를 결함이 아니라 사실로 적었는가
+    check("행마다 자기 접수번호를 남긴다 (rcp_day)",
+          "'rcp_day'" in _s182)
+    check("정정공시가 옛 날짜를 싣는다는 것을 적었다",
+          '정정공시' in _s182 and '결함이 아니' in _s182)
+    check("처음에 잘못 쟀던 경위를 문서에 남겼다",
+          '내가 잘못된 것을 쟀다' in _flat182)
+
+    # ⓓ 분류 재현율을 숨기지 않았는가 — R124 가 요구한 숫자
+    check("'기타' 비율을 문서에 적었다 (R124 §3.1 이 요구한 숫자)",
+          '57.8%' in _flat182 or '58%' in _flat182)
+    check("분류기를 먼저 고친다고 적었다 (태깅 오류의 통계 방지)",
+          '분류기를 먼저 고친다' in _flat182
+          and '태깅 오류의 통계' in _flat182)
+    check("기록기도 재현율을 함께 찍는다",
+          '재현율이 낮다' in _s182)
+
+    # ⓔ R124 정정
+    _d124b = _read148(_os.path.join(PROJ, 'docs',
+                                    'CANDIDATES_R124_EVENT_ENGINES.md'))
+    check("R124 의 '수집 시작 + 12개월' 판정이 정정됐다",
+          'RESULT_R139_DART_OPENED.md' in _d124b and '라운드 139' in _d124b,
+          '틀린 줄을 안 고치면 다음에 같은 벽을 다시 만난다')
+    check("두 번째임을 잇는다 (R130 의 수급)",
+          '두 번째' in _flat182 and '130' in _flat182)
+
+    # 측정하지 않았다 — 사전등록 없이 재지 않는다
+    check("사전등록 없이 재지 않는다고 적었다",
+          '사전등록 없이는 재지 않는다' in _flat182)
+    check("원장 mfe/mae 를 이벤트 창에 안 쓴다고 적었다",
+          'mfe/mae' in _flat182 and '청산 봉까지만' in _flat182)
+    # 수집 파일이 커밋되지 않는다 (§9)
+    check("공시 기록이 커밋되지 않는다 (.portfolio/)",
+          '/.portfolio/' in _s182.replace('\\', '/')
+          or "'.portfolio'" in _s182)
+
+
 print()
 print("=" * 72)
 if FAILURES:
