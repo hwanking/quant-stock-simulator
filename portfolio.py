@@ -2217,7 +2217,11 @@ WATCH_NOTE_NUM = ('paid', 'qty', 'target_buy')   # 매입가 · 수량 · (구)�
 #: ⚠️ `snap_t1` 은 **권장가 기준**, `snap_t2` 는 **현재가 기준**이다.
 #:   기준이 다르므로 화면이 열 이름에 그것을 적는다 (§4 — 신규 매수자
 #:   값과 보유자 값을 섞으면 버그다).
-WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair', 'snap_px')
+#: `snap_fair_conf` — 적정가를 얼마나 믿을 수 있나 (0~100).
+#:   적정가만 보여 주면 4,615원이 1,659원의 3배라는 사실만 보이고
+#:   **그 4,615원을 믿을 수 있는지**는 안 보인다 (라운드 143).
+WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
+                  'snap_fair_conf', 'snap_px')
 WATCH_SNAP_TXT = ('snap_at', 'snap_engine')
 WATCH_NOTE_TXT = ('memo',)
 

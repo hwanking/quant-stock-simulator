@@ -4269,6 +4269,41 @@ with _wl_h1:
         _wl_add(_wl_cur, resolved_name)
         st.rerun()
 
+with _wl_h2:
+    # ── 한 번에 여러 개 담기 (라운드 143) ────────────────────────────
+    # 사용자 요청: *"검색해서 여러 개 등록할 수 있게. 검색하는데 너무
+    # 오래 걸리니까 한 번에 등록하는 것."*
+    #
+    # 종목을 하나 고를 때마다 전체 파이프라인이 돌아 몇 분씩 걸린다.
+    # 여기서는 **분석을 돌리지 않고 이름만 골라 담는다** — 값은 나중에
+    # 개장 전 리포트나 상세 화면이 채운다 (라운드 141·142 의 그 경로).
+    # ⚠️ `_pm_today` 는 이 절보다 **뒤에서** 정의된다 — 참조하면
+    #   NameError 다. 이 저장소가 라운드 139 에서 같은 순서 오류를
+    #   겪었다(`_read148` 을 정의 전에 씀). 여기서는 세션에 이미 있는
+    #   스캔 결과만 쓴다.
+    _pool143 = {}
+    for _r143 in (st.session_state.get('scan_results') or []):
+        _c143 = portfolio.normalize_code(
+            _r143.get('code') or _r143.get('symbol'))
+        if _c143 and not _wl_has(_c143):
+            _pool143[_c143] = str(_r143.get('name') or _c143)
+    if _pool143:
+        _sel143 = st.multiselect(
+            "여러 개 한 번에 담기 (스캔에 나온 종목)",
+            options=sorted(_pool143, key=lambda c: _pool143[c]),
+            format_func=lambda c: f"{_pool143[c]} · {c}",
+            key='wl_bulk_pick',
+            help='분석을 돌리지 않고 이름만 담습니다 — 값은 나중에 '
+                 '개장 전 리포트나 분석 화면이 채웁니다.')
+        if _sel143 and st.button(f"{len(_sel143)}종목 한 번에 담기",
+                                 key='wl_bulk_add'):
+            for _c143 in _sel143:
+                _wl_add(_c143, _pool143[_c143])
+            st.rerun()
+    else:
+        st.caption("한 번에 담을 후보가 없습니다 — 스캔을 돌리거나 "
+                   "종목을 검색해 하나씩 담을 수 있습니다.")
+
 _wl_body = _wl_items()
 if not _wl_body:
     st.caption("아직 담은 종목이 없습니다. 사이드바 '관심종목' 칸이나 "
@@ -4286,11 +4321,24 @@ else:
         f"들어갑니다.")
     # ⚠️ 1차는 **권장가 기준**, 2차는 **현재가 기준**이다. 기준이 다르므로
     #   열 이름에 적는다 — 섞으면 §4 가 금지한 그 버그가 된다.
-    _WL_COLS = [1.9, 1.0, 1.1, 1.1, 1.1, 1.1, 1.0, 0.8, 1.4, 0.7]
+    # ── 쉬운 표현 (라운드 143) ────────────────────────────────────
+    # 사용자 물음: *"판단 점수 진짜 맞는 거야?"*
+    # 숨기지 않는다. 화면이 이미 연습 71.5% · 실전 51.3% 를 적고 있고,
+    # 51.3% 는 동전 던지기다. 그 사실을 표 옆에 한 문장으로 둔다.
+    st.info(
+        "**이 표가 말할 수 있는 것과 없는 것** — 아래 값들은 "
+        "*'이 자리에서 사면 손절과 목표 중 어디에 먼저 닿았나'* 를 과거로 "
+        "되돌려 센 결과입니다. **어느 종목이 더 낫다는 뜻이 아닙니다** — "
+        "같은 날 점수 상위와 하위를 짝지어 비교했더니 차이가 없었습니다"
+        "(라운드 49·110·111·112). 그래서 이 표는 **순위표가 아니라 "
+        "가격 기준표**입니다.")
+
+    _WL_COLS = [1.7, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9, 0.7, 1.2, 0.6]
     _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
                                 '1차 목표(권장가)', '2차 목표(현재가)',
-                                '적정가', '매입가', '수량', '메모', '')):
+                                '적정가', '적정가 신뢰도', '매입가',
+                                '수량', '메모', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -4326,23 +4374,45 @@ else:
                     f"<div style='padding-top:8px; font-size:13px; "
                     f"color:{_TOK['tx2']};'>{_wl_cell(_w.get(_key))}</div>",
                     unsafe_allow_html=True)
-        # ── 사용자 입력 세 칸 ────────────────────────────────────
+        # ── 적정가 신뢰도 (라운드 143) ───────────────────────────
+        # 값과 신뢰도는 같이 다녀야 한다. 적정가 4,615원만 보여 주면
+        # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
+        # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
         with _wc[6]:
+            _fc = _w.get('snap_fair_conf')
+            try:
+                _fcv = float(_fc)
+            except (TypeError, ValueError):
+                _fcv = None
+            if _fcv is None:
+                _fct, _fcc = '—', _TOK['tx3']
+            elif _fcv >= 70:
+                _fct, _fcc = f'{_fcv:.0f} 높음', _TOK['pos']
+            elif _fcv >= 55:
+                _fct, _fcc = f'{_fcv:.0f} 보통', _TOK['tx2']
+            else:
+                _fct, _fcc = f'{_fcv:.0f} 낮음', _TOK['warn']
+            st.markdown(
+                f"<div style='padding-top:8px; font-size:13px; "
+                f"color:{_fcc};'>{_uk._esc(_fct)}</div>",
+                unsafe_allow_html=True)
+        # ── 사용자 입력 세 칸 ────────────────────────────────────
+        with _wc[7]:
             _pd = st.number_input(
                 "매입가", min_value=0.0, step=100.0,
                 value=float(_w.get('paid') or 0.0),
                 key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-        with _wc[7]:
+        with _wc[8]:
             _qt = st.number_input(
                 "수량", min_value=0, step=1,
                 value=int(_w.get('qty') or 0),
                 key=f"wl_qt_{_wcode}", label_visibility='collapsed')
-        with _wc[8]:
+        with _wc[9]:
             _mm = st.text_input(
                 "메모", value=str(_w.get('memo') or ''),
                 key=f"wl_mm_{_wcode}", label_visibility='collapsed',
                 placeholder='메모')
-        with _wc[9]:
+        with _wc[10]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
                 st.rerun()
@@ -4840,6 +4910,8 @@ if _pm_today and _pm_today.get('picks'):
                         'snap_t1': _co142.get('new_target'),   # 권장가 기준
                         'snap_t2': _pk142.get('target2'),      # 현재가 기준
                         'snap_fair': _pk142.get('displayed_fair_value'),
+                        'snap_fair_conf': _pk142.get(
+                            'fair_value_confidence'),
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
                     }
@@ -5242,6 +5314,7 @@ try:
             'snap_t1': CORE.get('new_target'),          # 권장가 기준
             'snap_t2': four_scores.get('target_tech_2nd'),   # 현재가 기준
             'snap_fair': four_scores.get('displayed_fair_value'),
+            'snap_fair_conf': four_scores.get('fair_value_confidence'),
             'snap_px': realtime_price,
             'snap_at': datetime.date.today().isoformat(),
             'snap_engine': str(_VER_NOW.get('model') or ''),
