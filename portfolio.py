@@ -2209,7 +2209,16 @@ WATCHLIST_FILE = os.path.join(PORTFOLIO_DIR, "watchlist.json")
 #: 관심종목이 함께 들고 다니는 사용자 메모 (라운드 136).
 #: ⚠️ 이 값들은 **표시·개인 메모 전용**이다. 점수·적정가·판정에 들어가지
 #:   않는다 (§9 — 평균 매수가는 보유 판단에만 쓴다. 앵커링 방지).
-WATCH_NOTE_NUM = ('target_buy', 'paid')      # 목표 매수가 · 매입가
+#: 사용자가 **직접 적는** 값
+WATCH_NOTE_NUM = ('paid', 'qty', 'target_buy')   # 매입가 · 수량 · (구)목표가
+#: 엔진이 낸 값을 그 종목을 **볼 때 찍어 둔 것** (라운드 141).
+#: 관심종목마다 전체 파이프라인을 돌리면 화면이 몇 분씩 멈춘다 —
+#: 그래서 상세 화면이 그 종목을 계산할 때 그 값을 여기 남긴다.
+#: ⚠️ `snap_t1` 은 **권장가 기준**, `snap_t2` 는 **현재가 기준**이다.
+#:   기준이 다르므로 화면이 열 이름에 그것을 적는다 (§4 — 신규 매수자
+#:   값과 보유자 값을 섞으면 버그다).
+WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair', 'snap_px')
+WATCH_SNAP_TXT = ('snap_at', 'snap_engine')
 WATCH_NOTE_TXT = ('memo',)
 
 
@@ -2237,11 +2246,11 @@ def save_watchlist(items, path=WATCHLIST_FILE):
         if not code:
             continue
         row = {'code': code, 'name': str((it or {}).get('name') or code)}
-        for k in WATCH_NOTE_NUM:
+        for k in WATCH_NOTE_NUM + WATCH_SNAP_NUM:
             v = _watch_num((it or {}).get(k))
             if v is not None:
                 row[k] = v
-        for k in WATCH_NOTE_TXT:
+        for k in WATCH_NOTE_TXT + WATCH_SNAP_TXT:
             v = str((it or {}).get(k) or '').strip()
             if v:
                 row[k] = v[:120]
