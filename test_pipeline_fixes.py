@@ -13458,6 +13458,80 @@ else:
               PROJ, 'scripts', 'disclosure_name_match.py')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §188 — R147 주주환원 공시 × 원장 조인 (사전등록 준수)
+#
+#   "지금 없는 정보를 넣는 것"(R112)의 첫 시험. 여기서 지키는 것은
+#   결과 값이 아니라 **규율**이다:
+#     ⓐ 판정 기준이 사전등록과 스크립트 산출물에서 같은 값인가
+#        (문서 따로 코드 따로면 §106 류의 이중 경로다)
+#     ⓑ 기각인데 blind 를 열지 않았는가 (개발 통과 시에만 — §4)
+#     ⓒ 두 문장 규율 — "정보 없음"과 "못 보는 크기"를 함께 썼는가
+#     ⓓ 부 시험의 유의해 보이는 칸(1일 z=1.8)을 쫓지 않았는가
+#     ⓔ 산출물 수치를 문서가 자릿수 그대로 인용하는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§188 R147 이벤트-원장 조인 (사전등록 준수)")
+print("=" * 72)
+_p188 = _os.path.join(PROJ, 'data', 'event_ledger_join_r147.json')
+_doc188 = _os.path.join(PROJ, 'docs', 'RESULT_R147_EVENT_LEDGER_JOIN.md')
+_pre188 = _os.path.join(PROJ, 'docs', 'PREREG_R147_EVENT_LEDGER_JOIN.md')
+if not _os.path.exists(_p188):
+    check("R147 산출물이 있다", False, 'data/event_ledger_join_r147.json 없음')
+else:
+    with open(_p188, encoding='utf-8') as _f188:
+        _d188 = _json.load(_f188)
+    # 조판의 유니코드 마이너스(−)만 하이픈으로 눌러 값 대조를 지킨다
+    _flat188 = _re.sub(r'\s+', ' ', _read148(_doc188)).replace('−', '-')
+    _flatpre = _re.sub(r'\s+', ' ', _read148(_pre188)).replace('−', '-')
+    _c188 = _d188.get('criteria') or {}
+    _m188 = _d188.get('main') or {}
+
+    # ⓐ 판정 기준 — 사전등록·산출물이 같은 값
+    check("문턱 1.96 이 사전등록과 산출물에 같다",
+          _c188.get('z_crit') == 1.96 and '1.96' in _flatpre)
+    check("표본 조건(1,000·300)이 사전등록과 산출물에 같다",
+          _c188.get('min_cases') == 1000 and _c188.get('min_days') == 300
+          and '1,000' in _flatpre and '300' in _flatpre)
+    check("주 시험 신선도 5일이 사전등록과 산출물에 같다",
+          _c188.get('main_fresh') == 5 and 'D-5' in _flatpre)
+    check("매수권 문턱은 채택값 58 재사용",
+          _c188.get('buy') == 58.0)
+    # ⓑ 기각 시 blind 미개봉
+    check("판정이 산출물에 있다", bool(_d188.get('verdict')),
+          str(_d188.get('verdict')))
+    if not (_d188.get('sample_ok') and _d188.get('z_ok')
+            and (_m188.get('sign_z') or 0) > 0):
+        check("기각인데 blind 를 열지 않았다 (§4)",
+              _d188.get('blind') is None)
+    # ⓔ 수치 정합 — 자릿수 그대로
+    check("문서가 z 를 그대로 적었다",
+          _m188.get('sign_z') is not None
+          and f"z = {_m188['sign_z']}" in _flat188, str(_m188.get('sign_z')))
+    check("문서가 ΔH 를 그대로 적었다",
+          _m188.get('dh_mean_pp') is not None
+          and f"{_m188['dh_mean_pp']}%p" in _flat188,
+          str(_m188.get('dh_mean_pp')))
+    check("문서가 케이스·날짜를 그대로 적었다",
+          _m188.get('event_cases') and _m188.get('valid_days')
+          and f"{_m188['event_cases']:,}" in _flat188
+          and f"{_m188['valid_days']}" in _flat188,
+          f"{_m188.get('event_cases')}·{_m188.get('valid_days')}")
+    check("측정일이 문서에 있다",
+          bool(_d188.get('made')) and _d188['made'] in _flat188,
+          str(_d188.get('made')))
+    # ⓒ 두 문장 규율
+    check("두 문장을 함께 썼다 (정보 없음 + 못 보는 크기)",
+          '정보가 없다' in _flat188 and '못 보는 크기' in _flat188)
+    # ⓓ 유의해 보이는 부 시험을 쫓지 않았다
+    check("부 시험을 쫓지 않았다 (새 사전등록 요구를 명시)",
+          '쫓지 않는다' in _flat188 and '새 사전등록' in _flat188)
+    check("사전등록이 측정 전 커밋임을 문서가 해시로 적었다",
+          'f74d769' in _flat188)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d188.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
