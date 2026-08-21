@@ -1,0 +1,79 @@
+{
+ "made": "2026-08-21",
+ "made_at": "2026-08-21T14:00:35+00:00",
+ "prereg": "docs/PREREG_R147_EVENT_LEDGER_JOIN.md",
+ "event_type": "자사주·배당",
+ "criteria": {
+  "z_crit": 1.96,
+  "min_cases": 1000,
+  "min_days": 300,
+  "main_fresh": 5,
+  "buy": 58.0
+ },
+ "joined_event_rows": 58057,
+ "joined_event_stocks": 2374,
+ "ledger_cases_buy": 82259,
+ "calendar_days": 2695,
+ "main": {
+  "fresh_days": 5,
+  "event_cases": 2717,
+  "valid_days": 475,
+  "dh_median": 0.0,
+  "dh_mean_pp": -1.69,
+  "dev_mean_pp": -0.005,
+  "sign_win": 217,
+  "sign_n": 418,
+  "sign_z": 0.78
+ },
+ "sample_ok": true,
+ "z_ok": false,
+ "verdict": "미달 — 기각, 현행 유지",
+ "subs": [
+  {
+   "fresh_days": 1,
+   "event_cases": 545,
+   "valid_days": 222,
+   "dh_median": 0.0307,
+   "dh_mean_pp": 1.82,
+   "dev_mean_pp": 0.192,
+   "sign_win": 117,
+   "sign_n": 208,
+   "sign_z": 1.8
+  },
+  {
+   "fresh_days": 3,
+   "event_cases": 1665,
+   "valid_days": 380,
+   "dh_median": 0.0,
+   "dh_mean_pp": -1.31,
+   "dev_mean_pp": -0.029,
+   "sign_win": 177,
+   "sign_n": 339,
+   "sign_z": 0.81
+  },
+  {
+   "fresh_days": 10,
+   "event_cases": 5096,
+   "valid_days": 671,
+   "dh_median": 0.0,
+   "dh_mean_pp": -1.28,
+   "dev_mean_pp": 0.033,
+   "sign_win": 307,
+   "sign_n": 580,
+   "sign_z": 1.41
+  },
+  {
+   "fresh_days": 20,
+   "event_cases": 9361,
+   "valid_days": 921,
+   "dh_median": 0.0,
+   "dh_mean_pp": -0.74,
+   "dev_mean_pp": -0.012,
+   "sign_win": 391,
+   "sign_n": 759,
+   "sign_z": 0.83
+  }
+ ],
+ "blind": null,
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 원장 mfe/mae 미사용. D0 공시 제외(누출 차단)."
+}
