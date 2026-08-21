@@ -13297,6 +13297,90 @@ for _k185 in ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
           _w185.count(f"'{_k185}'") >= 2, f"{_w185.count(chr(39) + _k185 + chr(39))}회")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §186 — 공시 분류의 시대 안정성 감사 (라운드 144)
+#
+#   물음: 옛 구간에서 분류 규칙이 덜 먹히는가. 이벤트 연구를 열기 전에
+#   알아야 할 전제다 — 옛 구간에서 '기타'가 훨씬 높다면 그 구간의
+#   이벤트 통계는 태깅 오류에 더 오염된다 (R124 §3.1 이 구간마다
+#   다를 수 있다).
+#
+#   전체 평균으로 두 번 틀릴 뻔했다: ① 3일 표본 57.8% 를 안정값으로
+#   읽음(실제 74.8%), ② 회차 세 점만 보고 경향을 읽음(네 점째가 뒤집음).
+#   그래서 **연도별로 갈라** 쟀고, 그 산출물과 문서가 어긋나지 않는지를
+#   여기서 지킨다.
+#
+#   지키는 것:
+#     ⓐ 산출물이 있고 문서가 그 **자릿수 그대로** 인용하는가
+#        (라운드 131 의 0.45 vs 0.455 — 같은 숫자를 두 번 반올림하면
+#         두 곳이 달라진다)
+#     ⓑ 온전한 해(200일 이상)만 비교했는가 — 첫해·끝해를 섞지 않는다
+#     ⓒ 평균으로 틀릴 뻔한 경위를 숨기지 않았는가
+#     ⓓ 실적 누락이 표본에 비례해 자란 것을 적었는가 (판정은 그대로)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§186 공시 분류 시대 안정성 (라운드 144)")
+print("=" * 72)
+_p186 = _os.path.join(PROJ, 'data', 'disclosure_year_audit.json')
+_doc186p = _os.path.join(PROJ, 'docs', 'RESULT_R140_DISCLOSURE_TYPES.md')
+if not _os.path.exists(_p186):
+    check("연도별 감사 산출물이 있다", False,
+          'data/disclosure_year_audit.json 없음')
+else:
+    with open(_p186, encoding='utf-8') as _f186:
+        _d186 = _json.load(_f186)
+    # 산문은 줄이 바뀐다 — 공백을 눌러서 본다 (§182 의 교훈)
+    _flat186 = _re.sub(r'\s+', ' ', _read148(_doc186p))
+    _h186 = _d186.get('headline') or {}
+
+    check("측정일이 문서에 있다 (날짜 없는 숫자는 낡는다)",
+          bool(_d186.get('made')) and _d186['made'] in _flat186,
+          str(_d186.get('made')))
+    check("연도가 9개 이상이다 (한두 해로 시대를 말하지 않는다)",
+          len(_d186.get('years') or []) >= 9,
+          f"{len(_d186.get('years') or [])}개")
+
+    # ⓑ 온전한 해만 비교 — 부분 해가 비교에 끼지 않았는가
+    check("온전한 해 기준(200일)이 산출물에 있다",
+          _d186.get('full_year_days') == 200)
+    check("부분 해가 비교에서 빠졌다 (2017·2026 은 full 이 아니다)",
+          all(not y['full'] for y in (_d186.get('years') or [])
+              if y.get('days', 0) < 200),
+          '날짜가 모자란 해가 full 로 표시됐다')
+
+    # ⓐ 문서가 산출물 자릿수 그대로 인용하는가 — 값을 꺼내 찾는다
+    for _k186, _lab186 in (('spread_pp', '폭'), ('min_pct', '최저'),
+                           ('max_pct', '최고'), ('old_avg_pct', '옛 평균'),
+                           ('new_avg_pct', '최근 평균'),
+                           ('era_gap_pp', '시대 차')):
+        _v186 = _h186.get(_k186)
+        check(f"문서가 {_lab186}({_v186})를 그대로 적었다",
+              _v186 is not None and f'{_v186:.1f}%' in _flat186,
+              str(_v186))
+    check("실적 누락 건수를 그대로 적었다",
+          _d186.get('missing_earnings_in_etc')
+          and f"{_d186['missing_earnings_in_etc']:,}건" in _flat186,
+          str(_d186.get('missing_earnings_in_etc')))
+
+    # ⓒ 평균으로 틀릴 뻔한 경위 — 숨기지 않는다
+    check("평균으로 틀릴 뻔한 경위를 적었다",
+          '평균으로 또 틀릴 뻔했다' in _flat186
+          and '네 점째' in _flat186)
+    # ⓓ 판정 — 편향은 있지만 작다 · 판정은 그대로
+    check("판정을 적었다 (시대 편향은 있지만 작다)",
+          '시대 편향은 있지만 작다' in _flat186
+          and '9년 내내 비슷하게 먹힌다' in _flat186)
+    check("실적 누락의 판정이 그대로다 (11/16 이후)",
+          '판정은 그대로다' in _flat186)
+    # 측정 전용 — 운영을 안 건드렸다
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d186.get('note')))
+    check("재현 명령이 문서에 있다",
+          'scripts/disclosure_year_audit.py' in _flat186
+          and _os.path.exists(_os.path.join(
+              PROJ, 'scripts', 'disclosure_year_audit.py')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
