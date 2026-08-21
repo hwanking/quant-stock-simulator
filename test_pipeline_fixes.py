@@ -13393,6 +13393,71 @@ else:
               PROJ, 'scripts', 'disclosure_year_audit.py')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §187 — 공시 회사명 → 종목코드 매칭 품질 (라운드 146)
+#
+#   이벤트 연구(R124 §3.2)의 조인 기반. 공시에는 종목코드가 없고
+#   회사명뿐이라(R139), 붙는 비율과 틀리는 자리를 측정 전에 잣대를
+#   적고 쟀다. 여기서 지키는 것:
+#     ⓐ 산출물·문서 정합 — 주 잣대(원장 주식 매칭률)와 충돌 개수를
+#        산출물 자릿수 그대로 문서가 인용하는가
+#     ⓑ 분모 갈림 — ETF(공시 주체 아님)를 주식과 갈랐는가. 처음
+#        79.3% 로 보이던 것이 분모를 가르니 100.0% 였다
+#     ⓒ 하지 않은 것 — 유사도 매칭·충돌 임의 해소·운영 탑재를
+#        하지 않았다고 문서가 밝히는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§187 공시 회사명 매칭 품질 (라운드 146)")
+print("=" * 72)
+_p187 = _os.path.join(PROJ, 'data', 'disclosure_name_match.json')
+_d187doc = _os.path.join(PROJ, 'docs', 'RESULT_R146_NAME_MATCH.md')
+if not _os.path.exists(_p187):
+    check("매칭 산출물이 있다", False, 'data/disclosure_name_match.json 없음')
+else:
+    with open(_p187, encoding='utf-8') as _f187:
+        _d187 = _json.load(_f187)
+    _flat187 = _re.sub(r'\s+', ' ', _read148(_d187doc))
+    _h187 = _d187.get('headline') or {}
+    check("측정일이 문서에 있다", bool(_d187.get('made'))
+          and _d187['made'] in _flat187, str(_d187.get('made')))
+    # ⓑ 분모 갈림 — ETF 와 주식이 산출물에 따로 있다
+    check("유니버스 분모를 주식/ETF 로 갈랐다",
+          _h187.get('univ_stocks') and _h187.get('univ_etf')
+          and _h187['univ_stocks'] + _h187['univ_etf']
+          == _h187.get('univ_total'),
+          f"{_h187.get('univ_stocks')}+{_h187.get('univ_etf')}"
+          f"≠{_h187.get('univ_total')}")
+    for _k187, _lab187 in (('univ_named_pct', '주식 매칭률'),
+                           ('univ_any_pct', '상폐 포함 매칭률'),
+                           ('case_norm_pct', '건수 매칭률')):
+        _v187 = _h187.get(_k187)
+        check(f"문서가 {_lab187}({_v187})를 그대로 적었다",
+              _v187 is not None and f'{_v187:.1f}%' in _flat187,
+              str(_v187))
+    check("충돌 개수를 그대로 적었다",
+          _h187.get('collisions') is not None
+          and f"{_h187['collisions']}개" in _flat187,
+          str(_h187.get('collisions')))
+    check("충돌 목록이 산출물에 있다 (해소하지 않고 적는다)",
+          isinstance(_d187.get('collision_names_sample'), dict)
+          and len(_d187['collision_names_sample']) > 0)
+    # ⓒ 하지 않은 것
+    check("유사도 매칭을 쓰지 않았다고 밝힌다",
+          '유사도' in _flat187 and '안 쓴다' in _flat187)
+    check("운영 탑재를 하지 않았다고 밝힌다",
+          '운영 코드에 매칭' in _flat187)
+    check("이름 마스터 스냅샷이 박제돼 있다",
+          _os.path.exists(_os.path.join(PROJ, '.portfolio',
+                                        'name_master.json'))
+          and bool(_d187.get('master_snapshot')))
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d187.get('note')))
+    check("재현 명령이 문서에 있다",
+          'scripts/disclosure_name_match.py' in _flat187
+          and _os.path.exists(_os.path.join(
+              PROJ, 'scripts', 'disclosure_name_match.py')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
