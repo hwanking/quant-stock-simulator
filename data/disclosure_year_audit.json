@@ -1,18 +1,74 @@
 {
  "made": "2026-08-21",
- "made_at": "2026-08-21T03:48:51+00:00",
+ "made_at": "2026-08-21T05:42:11+00:00",
  "question": "옛날 구간에서 분류 규칙이 덜 먹히는가 (연도별)",
  "source": ".portfolio/disclosures_daily.jsonl",
- "rows_total": 1449495,
+ "rows_total": 2249225,
  "full_year_days": 200,
  "years": [
   {
-   "year": "2017",
-   "n": 70493,
-   "days": 162,
-   "op_etc_pct": 71.8,
-   "res_etc_pct": 12.0,
+   "year": "2010",
+   "n": 2385,
+   "days": 7,
+   "op_etc_pct": 70.3,
+   "res_etc_pct": 23.5,
    "full": false
+  },
+  {
+   "year": "2011",
+   "n": 115502,
+   "days": 249,
+   "op_etc_pct": 76.2,
+   "res_etc_pct": 14.5,
+   "full": true
+  },
+  {
+   "year": "2012",
+   "n": 111820,
+   "days": 249,
+   "op_etc_pct": 77.1,
+   "res_etc_pct": 14.0,
+   "full": true
+  },
+  {
+   "year": "2013",
+   "n": 117509,
+   "days": 248,
+   "op_etc_pct": 77.5,
+   "res_etc_pct": 13.8,
+   "full": true
+  },
+  {
+   "year": "2014",
+   "n": 124089,
+   "days": 246,
+   "op_etc_pct": 79.0,
+   "res_etc_pct": 12.2,
+   "full": true
+  },
+  {
+   "year": "2015",
+   "n": 131071,
+   "days": 249,
+   "op_etc_pct": 79.0,
+   "res_etc_pct": 11.7,
+   "full": true
+  },
+  {
+   "year": "2016",
+   "n": 131934,
+   "days": 247,
+   "op_etc_pct": 77.6,
+   "res_etc_pct": 11.2,
+   "full": true
+  },
+  {
+   "year": "2017",
+   "n": 135913,
+   "days": 244,
+   "op_etc_pct": 77.9,
+   "res_etc_pct": 10.6,
+   "full": true
   },
   {
    "year": "2018",
@@ -87,17 +143,17 @@
    "full": false
   }
  ],
- "full_years": 8,
+ "full_years": 15,
  "headline": {
   "min_year": "2025",
   "min_pct": 9.0,
-  "max_year": "2020",
-  "max_pct": 12.4,
-  "spread_pp": 3.4,
-  "old_avg_pct": 11.4,
+  "max_year": "2011",
+  "max_pct": 14.5,
+  "spread_pp": 5.5,
+  "old_avg_pct": 12.3,
   "new_avg_pct": 9.8,
-  "era_gap_pp": 1.6
+  "era_gap_pp": 2.5
  },
- "missing_earnings_in_etc": 20447,
+ "missing_earnings_in_etc": 32846,
  "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 운영 분류기(market_attention)는 건드리지 않는다."
 }
