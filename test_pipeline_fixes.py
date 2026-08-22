@@ -14239,6 +14239,114 @@ else:
           '바꾸지 않는다' in str(_d195.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §196 — R156 k≥3 표본 상한 (실현 가능성 계산의 규율)
+#
+#   가설 검정이 아니다. 그래서 지키는 것이 다르다:
+#     ⓐ 상수를 새로 만들지 않았는가 — 문턱·표본 조건·물리 상한이
+#        전부 채택값(2.25 · 1,000/300 · 3,665)이어야 한다
+#     ⓑ **부트스트랩 대조를 실제로 했고 괴리를 숨기지 않았는가** —
+#        괴리가 허용을 넘으면 부트스트랩을 채택했어야 한다
+#     ⓒ 닫힌 식의 버그와 사전등록의 덜 정해짐을 자백했는가
+#     ⓓ **효과를 주장하지 않았는가** — k≥3 이 나쁘다고 적으면 안 된다
+#     ⓔ 벽이 규칙임을 알고도 **규칙을 넓히지 않았는가**
+#     ⓕ 종목 축과 날짜 축을 갈랐는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§196 R156 k≥3 표본 상한 (라운드 156)")
+print("=" * 72)
+_p196 = _os.path.join(PROJ, 'data', 'k3_ceiling_r156.json')
+_doc196 = _os.path.join(PROJ, 'docs', 'RESULT_R156_K3_CEILING.md')
+_pre196 = _os.path.join(PROJ, 'docs', 'PREREG_R156_K3_CEILING.md')
+_p153c = _os.path.join(PROJ, 'data', 'event_confluence_r153.json')
+if not _os.path.exists(_p196):
+    check("R156 산출물이 있다", False, 'data/k3_ceiling_r156.json 없음')
+else:
+    with open(_p196, encoding='utf-8') as _f196:
+        _d196 = _json.load(_f196)
+    _flat196 = _re.sub(r'\s+', ' ', _read148(_doc196)).replace('−', '-')
+    _pre196f = _re.sub(r'\s+', ' ', _read148(_pre196)).replace('−', '-')
+    _k196 = _d196.get('constants') or {}
+
+    # ⓐ 상수는 전부 채택값 재사용
+    check("문턱·표본 조건이 채택값 그대로다 (2.25 · 1,000 · 300)",
+          _k196.get('z_crit') == 2.25 and _k196.get('min_events') == 1000
+          and _k196.get('min_days') == 300)
+    check("물리 상한이 R129 유도값 3,665 다",
+          _k196.get('ceiling_days') == 3665 and '3,665' in _pre196f)
+    check("씨앗·반복이 사전등록과 같다 (20260822 · 2,000)",
+          _k196.get('seed') == 20260822 and _k196.get('boot') == 2000
+          and '20260822' in _pre196f)
+    check("산출물이 상수 재사용을 밝힌다",
+          '채택값 재사용' in str(_d196.get('note')))
+
+    # 자기검사 — R153 재현
+    _sc196 = _d196.get('self_check') or {}
+    if _os.path.exists(_p153c):
+        check("k≥3 이 R153 발표값과 일치했다",
+              _sc196.get('events') == _sc196.get('r153_events')
+              and _sc196.get('days') == _sc196.get('r153_days')
+              and _sc196.get('mean_pp') is not None
+              and abs(_sc196['mean_pp'] - _sc196['r153_mean']) <= 0.001 + 1e-9
+              and abs(_sc196['z'] - _sc196['r153_z']) <= 0.01 + 1e-9,
+              f"{_sc196.get('events')}/{_sc196.get('days')}")
+
+    # ⓑ 부트스트랩 대조 — 실제로 했고 괴리 처리를 지켰는가
+    check("부트스트랩 결과가 산출물에 있다",
+          _d196.get('S2_bootstrap_days') is not None)
+    _dv196 = _d196.get('S2_divergence')
+    check("괴리 값이 산출물에 있다", _dv196 is not None, str(_dv196))
+    if _dv196 is not None and _dv196 > (_k196.get('diverge_tol') or 0.20):
+        check("괴리가 허용을 넘었으므로 부트스트랩을 채택했다",
+              _d196.get('C2_used_days') == _d196.get('S2_bootstrap_days'),
+              f"used={_d196.get('C2_used_days')} "
+              f"boot={_d196.get('S2_bootstrap_days')}")
+        check("문서가 괴리와 그 이유(검정력 50% vs 80%)를 적었다",
+              '109.4%' in _flat196 and '검정력 50%' in _flat196
+              and '80%' in _flat196)
+    # ⓒ 버그와 덜 정해짐 자백
+    check("닫힌 식의 단측/양측 버그를 자백했다",
+          '단측이었기 때문' in _flat196 and '양측' in _flat196)
+    check("사전등록이 덜 정해졌음을 자백했다",
+          '덜 정해져 있었다' in _flat196)
+    check("S2 가 없었다면 잘못 나갔을 것임을 적었다",
+          '영원히 불가능' in _flat196)
+    # ⓓ 효과를 주장하지 않았다
+    check("k≥3 의 효과를 주장하지 않는다고 밝힌다",
+          '효과를 주장하지 않는다' in _flat196
+          and '판정하지 않은 채로 둔다' in _flat196)
+    check("산출물 note 가 가설 검정이 아님을 적는다",
+          '가설 검정이 아니다' in str(_d196.get('note')))
+    # ⓔ 벽이 규칙임을 알고도 넓히지 않았다
+    check("벽이 표본 조건임을 산출물이 담는다",
+          '표본 조건' in str(_d196.get('binding_constraint')))
+    check("규칙을 넓히지 않겠다고 밝힌다",
+          '규칙을 넓히지 않는다' in _flat196
+          and '새 사전등록' in _flat196)
+    # ⓕ 종목 축과 날짜 축 구분
+    check("종목 축과 날짜 축을 갈라 적었다",
+          '같은 축이 아니다' in _flat196 and '표본 단위는' in _flat196)
+    check("종목 확장 반영값이 산출물에 있다",
+          _d196.get('C3_with_stock_expansion')
+          and _d196.get('C4_with_stock_expansion'))
+    # 수치 자릿수 그대로
+    for _k, _lab in (('C2_used_days', '검정력 필요 날짜'),
+                     ('C3_days_for_events', '이벤트 필요 날짜'),
+                     ('C3_with_stock_expansion', '확장 반영'),
+                     ('C5_ceiling_days', '물리 상한')):
+        _v = _d196.get(_k)
+        check(f"문서가 {_lab}({_v})를 그대로 적었다",
+              _v is not None and f"{_v:,}일" in _flat196, str(_v))
+    check("판정이 산출물에 있고 문서와 같다",
+          bool(_d196.get('verdict'))
+          and ('불가능' in _d196['verdict']) == ('판정: 불가능하다' in _flat196))
+    check("사전등록 커밋 해시를 적었다", 'd1b1dba' in _flat196)
+    check("측정일이 문서에 있다",
+          bool(_d196.get('made')) and _d196['made'] in _flat196)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d196.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
