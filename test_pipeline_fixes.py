@@ -13617,6 +13617,103 @@ else:
           '바꾸지 않는다' in str(_d189.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §190 — R149 기준선 대비 재측정 (사전등록 준수 + 재구현 자기검사)
+#
+#   R148 이 "0 대비"가 잣대가 아님을 드러낸 뒤, 같은 날 무공시 종목
+#   대비로 다시 쟀다. 여기서 지키는 것:
+#     ⓐ 판정 기준이 사전등록·산출물에서 같은 값
+#     ⓑ **재구현 자기검사가 실제로 통과했는가** — R148 발표 값 8개를
+#        허용 오차 안에서 재현했는가. 이 검사가 첫 실행에서 4유형을
+#        잡았고, 허용 오차를 늘리지 않고 매핑을 고쳤다
+#     ⓒ 양의 통과 0 — 매수 우위가 없다는 사실이 유지되는가
+#     ⓓ 자사주·배당의 평균/중앙값 분기를 **양쪽 다** 적었는가
+#        (한쪽만 적으면 R148 처럼 오해한다)
+#     ⓔ 구성 confound(크기·유동성 미매칭)를 숨기지 않았는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§190 R149 기준선 대비 재측정 (라운드 149)")
+print("=" * 72)
+_p190 = _os.path.join(PROJ, 'data', 'event_vs_baseline_r149.json')
+_doc190 = _os.path.join(PROJ, 'docs', 'RESULT_R149_EVENT_VS_BASELINE.md')
+_pre190 = _os.path.join(PROJ, 'docs', 'PREREG_R149_EVENT_VS_BASELINE.md')
+if not _os.path.exists(_p190):
+    check("R149 산출물이 있다", False, 'data/event_vs_baseline_r149.json 없음')
+else:
+    with open(_p190, encoding='utf-8') as _f190:
+        _d190 = _json.load(_f190)
+    _flat190 = _re.sub(r'\s+', ' ', _read148(_doc190)).replace('−', '-')
+    _pre190f = _re.sub(r'\s+', ' ', _read148(_pre190)).replace('−', '-')
+    _c190 = _d190.get('criteria') or {}
+    _t190 = _d190.get('types') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.70 이 사전등록과 산출물에 같다",
+          _c190.get('z_crit') == 2.70 and '2.70' in _pre190f)
+    check("표본 조건(1,000·300)이 같다",
+          _c190.get('min_events') == 1000 and _c190.get('min_days') == 300
+          and '1,000' in _pre190f and '300' in _pre190f)
+    check("창 D+5 와 시험 7 이 사전등록과 같다",
+          _c190.get('main_exit') == 5 and _c190.get('n_tests') == 7)
+    check("구간 경계가 R148·원장과 같다",
+          _c190.get('dev_end') == '2026-01-30'
+          and _c190.get('blind') == ['2026-02-03', '2026-07-15'])
+    check("7유형이 모두 산출물에 있다", len(_t190) == 7, f"{len(_t190)}개")
+
+    # ⓑ 재구현 자기검사 — 실제로 통과했는가 (0건이 '없다'인지 확인)
+    _rc190 = _d190.get('repro_check') or []
+    check("재구현 자기검사가 8건 기록돼 있다", len(_rc190) == 8,
+          f"{len(_rc190)}건")
+    _tol190 = _c190.get('repro_tol') or 0.001
+    _rbad = [r['name'] for r in _rc190
+             if r.get('mine') is None or r.get('r148') is None
+             or abs(r['mine'] - r['r148']) > _tol190 + 1e-9]
+    check("재구현이 R148 발표 값을 전부 재현했다", not _rbad, str(_rbad))
+    check("허용 오차가 사전등록 값(0.001)에서 늘어나지 않았다",
+          _tol190 == 0.001, str(_tol190))
+    check("자기검사가 잡아낸 매핑 결함을 문서가 적었다",
+          '거래일 아닌 접수일' in _flat190
+          and '허용 오차를 늘리지 않고' in _flat190)
+
+    # ⓒ 양의 통과 0 — 매수 우위 없음이 유지된다
+    _pos190 = [t for t, r in _t190.items()
+               if r.get('z_ok') and (r.get('dev') or {}).get('sign_z', 0) > 0]
+    check("양의 방향으로 문턱을 넘은 유형이 없다", not _pos190, str(_pos190))
+    check("문서가 매수 우위 없음을 적었다",
+          '양의 방향으로 문턱을 넘은 유형은 여전히 0개' in _flat190)
+
+    # ⓓ 수치 — 자릿수 그대로 · 평균/중앙 양쪽
+    for _tn, _tr in _t190.items():
+        _dv = _tr.get('dev') or {}
+        check(f"문서가 {_tn} z 를 그대로 적었다",
+              _dv.get('sign_z') is not None
+              and f"{_dv['sign_z']:.2f}" in _flat190, str(_dv.get('sign_z')))
+    _ab190 = ((_t190.get('자사주·배당') or {}).get('dev') or {})
+    check("자사주·배당의 평균과 중앙값을 둘 다 적었다",
+          _ab190.get('delta_mean_pp') is not None
+          and _ab190.get('delta_median_pp') is not None
+          and f"{_ab190['delta_mean_pp']:+.3f}" in _flat190
+          and f"{_ab190['delta_median_pp']:.3f}" in _flat190,
+          f"{_ab190.get('delta_mean_pp')}/{_ab190.get('delta_median_pp')}")
+    check("평균/중앙 분기의 뜻을 적었다 (한쪽만 적으면 오해)",
+          '평균은 같고, 보통 날은 못하다' in _flat190)
+    check("중앙값을 판정에 쓰지 않았음을 밝힌다",
+          '판정에는 쓰지 않았다' in _flat190)
+
+    # ⓔ 한계 — 숨기지 않는다
+    check("구성 confound(크기·유동성 미매칭)를 적었다",
+          '크기·유동성 매칭을 하지 않았다' in _flat190)
+    check("인과가 아님을 적었다",
+          '인과가 아니다' in _flat190)
+    check("blind 검정력 한계를 두 문장으로 적었다",
+          '이 크기를 볼 수 없다' in _flat190 and '필요 승률' in _flat190)
+    check("사전등록 커밋 해시를 적었다", '358d5e0' in _flat190)
+    check("측정일이 문서에 있다",
+          bool(_d190.get('made')) and _d190['made'] in _flat190)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d190.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
