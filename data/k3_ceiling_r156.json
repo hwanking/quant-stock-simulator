@@ -1,0 +1,67 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T13:31:03+00:00",
+ "prereg": "docs/PREREG_R156_K3_CEILING.md",
+ "constants": {
+  "z_crit": 2.25,
+  "min_events": 1000,
+  "min_days": 300,
+  "ceiling_days": 3665,
+  "seed": 20260822,
+  "boot": 2000,
+  "boot_power": 0.8,
+  "diverge_tol": 0.2,
+  "main_exit": 5
+ },
+ "self_check": {
+  "events": 219,
+  "days": 190,
+  "mean_pp": -0.979,
+  "z": -2.47,
+  "r153_events": 219,
+  "r153_days": 190,
+  "r153_mean": -0.979,
+  "r153_z": -2.47,
+  "passed": true
+ },
+ "C1": {
+  "events": 219,
+  "days": 190,
+  "win_pct": 41.1,
+  "sign_z": -2.47
+ },
+ "C2_closed_form_days": 159,
+ "S2_bootstrap_days": 333,
+ "S2_divergence": 1.0943,
+ "C2_used_days": 333,
+ "C3_days_for_events": 13083,
+ "accrual_per_day": 0.0764,
+ "C3_with_stock_expansion": 5429,
+ "C4_required_days": 13083,
+ "C4_with_stock_expansion": 5429,
+ "C5_ceiling_days": 3665,
+ "C6_stock_headroom": 2.41,
+ "listed": 2873,
+ "universe": 1190,
+ "binding_constraint": "표본 조건(이벤트 1,000)",
+ "dev_trading_days": 2865,
+ "verdict": "불가능하다 — 종목을 최대로 늘리고 모든 거래일을 다 모아도 판정 못 한다",
+ "E1_by_events_per_day": {
+  "1건": {
+   "days": 842,
+   "win_pct": 43.0,
+   "sign_z": -4.07
+  },
+  "2건": {
+   "days": 453,
+   "win_pct": 41.1,
+   "sign_z": -3.81
+  },
+  "3건+": {
+   "days": 448,
+   "win_pct": 40.0,
+   "sign_z": -4.25
+  }
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 실현 가능성 계산이지 가설 검정이 아니다 — k≥3 의 효과를 주장하지 않는다. 상수는 전부 채택값 재사용(문턱 2.25 · 표본 1,000/300 · 상한 3,665일)."
+}

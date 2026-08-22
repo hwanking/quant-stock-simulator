@@ -257,13 +257,13 @@ def main():
           f'승률 {p_hat * 100:.1f}% · z {z3}')
 
     # ── C2 닫힌 식 ─────────────────────────────────────────────────────
-    if p_hat <= 0.5:
-        c2 = None
-        print('■ C2 — 승률이 0.5 이하 방향 — 날짜를 늘려도 z 2.25 에 '
-              '안 닿는다')
-    else:
-        c2 = int(math.ceil((Z_CRIT / (2 * (p_hat - 0.5))) ** 2))
-        print(f'■ C2 — z {Z_CRIT} 에 닿는 날짜(닫힌 식): {c2:,}일')
+    #   **양측** 검정이므로 |p − 0.5| 를 쓴다. 처음에 (p − 0.5) 로 써서
+    #   승률 41.1%(음의 방향)를 "닿을 수 없다"로 잘못 처리했고, S2
+    #   부트스트랩이 그것을 잡았다 — 사전등록이 S2 를 넣은 이유다.
+    gap = abs(p_hat - 0.5)
+    c2 = int(math.ceil((Z_CRIT / (2 * gap)) ** 2)) if gap > 0 else None
+    print(f'■ C2 — |z| {Z_CRIT} 에 닿는 날짜(닫힌 식): {c2:,}일 '
+          f'(승률 {p_hat * 100:.1f}%, 0.5 에서 {gap * 100:.1f}%p)')
 
     # ── S2 부트스트랩 대조 ─────────────────────────────────────────────
     rnd = random.Random(SEED)
@@ -305,23 +305,34 @@ def main():
           f'{MIN_EVENTS:,}건에 닿는 날짜 {c3:,}일')
 
     # ── C4 · C5 · C6 ───────────────────────────────────────────────────
-    c4 = max(x for x in (c2_use, c3, MIN_DAYS) if x)
     c6 = round(live / len(stocks), 2)
+    #: 종목을 상장 전체로 늘리면 적립률이 그만큼 오른다고 본 값.
+    #  가정이다 — 작은 종목의 공시 빈도가 다르면 어긋난다(결과에 적는다).
+    c3x = int(math.ceil(c3 / c6)) if c3 else None
+    c4 = max(x for x in (c2_use, c3, MIN_DAYS) if x)
+    c4x = max(x for x in (c2_use, c3x, MIN_DAYS) if x)
     print(f'■ C4 — 필요 날짜 = max(C2 {c2_use:,}, C3 {c3:,}, 300) '
           f'= {c4:,}일')
     print(f'■ C5 — 물리 상한 {CEILING_DAYS:,}일 (246×14.9, R129)')
-    print(f'■ C6 — 종목 축 여력: 상장 {live:,} ÷ 유니버스 {len(stocks):,} '
-          f'= {c6}배')
+    print(f'■ C6 — 종목 축 여력: 상장 주식 {live:,} ÷ 유니버스 '
+          f'{len(stocks):,} = {c6}배')
+    print(f'   종목을 최대로 늘리면 C3 {c3:,} → {c3x:,}일 · '
+          f'필요 날짜 {c4x:,}일')
 
     if c4 <= CEILING_DAYS:
-        verdict = '언젠가 가능하다 — 필요 날짜가 물리 상한 안'
-    elif c3 and c3 > CEILING_DAYS and c2_use <= CEILING_DAYS:
-        verdict = ('부분적으로 가능 — 이벤트는 종목 확장으로 채울 수 '
-                   '있으나 날짜가 관건')
+        verdict = '언젠가 가능하다 — 종목 확장 없이도 물리 상한 안'
+    elif c4x <= CEILING_DAYS:
+        verdict = '종목을 최대로 늘려야 가능하다'
     else:
-        verdict = '불가능하다 — 모든 거래일을 다 모아도 판정 못 한다'
+        verdict = ('불가능하다 — 종목을 최대로 늘리고 모든 거래일을 '
+                   '다 모아도 판정 못 한다')
+    #: 무엇이 벽인지 갈라 적는다 — 검정력인가, 우리가 정한 표본 조건인가
+    binding = ('표본 조건(이벤트 1,000)' if (c3x or 0) > c2_use
+               else '통계적 검정력')
     print()
     print(f'■ 판정(실현 가능성): {verdict}')
+    print(f'   벽이 되는 것: {binding}  '
+          f'(검정력 {c2_use:,}일 vs 이벤트 조건 {c3x:,}일, 확장 반영)')
 
     # ── E1 종목 축 실측 (판정 아님) ────────────────────────────────────
     g2 = matched_delta(lambda s: len(s) >= 2)
@@ -359,8 +370,11 @@ def main():
         'S2_divergence': (round(diverge, 4) if diverge is not None else None),
         'C2_used_days': c2_use,
         'C3_days_for_events': c3, 'accrual_per_day': round(rate, 4),
-        'C4_required_days': c4, 'C5_ceiling_days': CEILING_DAYS,
+        'C3_with_stock_expansion': c3x,
+        'C4_required_days': c4, 'C4_with_stock_expansion': c4x,
+        'C5_ceiling_days': CEILING_DAYS,
         'C6_stock_headroom': c6, 'listed': live, 'universe': len(stocks),
+        'binding_constraint': binding,
         'dev_trading_days': len(cal_days),
         'verdict': verdict, 'E1_by_events_per_day': e1,
         'note': ('측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. '
