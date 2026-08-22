@@ -13532,6 +13532,91 @@ else:
           '바꾸지 않는다' in str(_d188.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §189 — R148 순수 이벤트 창 (사전등록 준수 + 기준선 교훈)
+#
+#   7유형 전부 "유의(−)"가 나왔는데, 사후 진단으로 기준선을 재니
+#   유니버스 보통 날도 같은 창에서 −0.232% 였다. "0 대비 유의"는
+#   기준선이 0 이 아닐 때 아무것도 말하지 않는다. 여기서 지키는 것:
+#     ⓐ 판정 기준이 사전등록·산출물에서 같은 값 (이중 경로 차단)
+#     ⓑ 양의 통과 0/7 — 문서가 "양의 알파 없음"으로 적었는가
+#     ⓒ 기준선 진단이 산출물에 있고, 문서가 그것을 **판정에 쓰지
+#        않는다**고 밝히면서도 숨기지 않았는가
+#     ⓓ 유형별 수치(평균·z)·기준선 수치를 자릿수 그대로 인용했는가
+#     ⓔ 설계 교훈(다음은 기준선 대비)을 적었는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§189 R148 순수 이벤트 창 (사전등록 준수 + 기준선)")
+print("=" * 72)
+_p189 = _os.path.join(PROJ, 'data', 'event_window_r148.json')
+_doc189 = _os.path.join(PROJ, 'docs', 'RESULT_R148_EVENT_WINDOW.md')
+_pre189 = _os.path.join(PROJ, 'docs', 'PREREG_R148_EVENT_WINDOW.md')
+if not _os.path.exists(_p189):
+    check("R148 산출물이 있다", False, 'data/event_window_r148.json 없음')
+else:
+    with open(_p189, encoding='utf-8') as _f189:
+        _d189 = _json.load(_f189)
+    _flat189 = _re.sub(r'\s+', ' ', _read148(_doc189)).replace('−', '-')
+    _pre189f = _re.sub(r'\s+', ' ', _read148(_pre189)).replace('−', '-')
+    _c189 = _d189.get('criteria') or {}
+    _t189 = _d189.get('types') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.70 이 사전등록과 산출물에 같다",
+          _c189.get('z_crit') == 2.70 and '2.70' in _pre189f)
+    check("표본 조건(1,000·300)이 같다",
+          _c189.get('min_events') == 1000 and _c189.get('min_days') == 300
+          and '1,000' in _pre189f and '300' in _pre189f)
+    check("주 창 D+5 · 비용 0.41 · 시험 7 이 같다",
+          _c189.get('main_exit') == 5 and _c189.get('cost_pct') == 0.41
+          and _c189.get('n_tests') == 7 and '0.41%' in _pre189f)
+    check("개발 구간 끝이 원장 valid 끝(2026-01-30)과 같다",
+          _c189.get('dev_end') == '2026-01-30' and '2026-01-30' in _pre189f)
+    check("7유형이 모두 산출물에 있다", len(_t189) == 7, f"{len(_t189)}개")
+    # ⓑ 양의 통과 0/7
+    _pos189 = [t for t, r in _t189.items()
+               if r.get('z_ok') and (r.get('dev') or {}).get('sign_z', 0) > 0]
+    check("양의 방향으로 문턱을 넘은 유형이 없다 (0/7)",
+          len(_pos189) == 0, str(_pos189))
+    check("문서가 '양의 알파는 0/7' 로 적었다",
+          '양의 알파는 0/7' in _flat189)
+    # ⓓ 수치 — 자릿수 그대로
+    for _tn, _tr in _t189.items():
+        _dv = _tr.get('dev') or {}
+        check(f"문서가 {_tn} 평균·z 를 그대로 적었다",
+              _dv.get('mean_pct') is not None and _dv.get('sign_z') is not None
+              and f"{_dv['mean_pct']:.3f}%" in _flat189
+              and f"{_dv['sign_z']:.2f}" in _flat189,
+              f"{_dv.get('mean_pct')}·{_dv.get('sign_z')}")
+    # ⓒ 기준선 — 산출물에 있고, 판정에 안 쓰며, 숨기지 않는다
+    _bl = ((_d189.get('diagnostics') or {}).get('baseline') or {})
+    check("기준선 진단이 산출물에 있다 (창·날짜·평균)",
+          _bl.get('events') and _bl.get('days') and _bl.get('mean_pct') is not None)
+    check("문서가 기준선 평균을 그대로 적었다",
+          _bl.get('mean_pct') is not None and f"{_bl['mean_pct']:.3f}%" in _flat189,
+          str(_bl.get('mean_pct')))
+    check("기준선을 판정에 쓰지 않는다고 밝힌다",
+          '판정에 쓰지 않는다' in str((_d189.get('diagnostics') or {}).get('note'))
+          and '사후 진단' in _flat189)
+    _ab = (_t189.get('자사주·배당') or {}).get('vs_baseline_pp')
+    check("자사주·배당의 기준선 대비 차이를 그대로 적었다",
+          _ab is not None and f"{_ab:+.3f}" in _flat189, str(_ab))
+    # ⓔ 교훈 + 규율
+    check("설계 교훈을 적었다 (0 대비는 잣대가 아니다 → 기준선 대비)",
+          '기준선 대비' in _flat189 and '아무것도 말하지 않는다' in _flat189)
+    check("사후 편차를 쫓지 않는다 (새 사전등록 요구)",
+          '쫓지 않는다' in _flat189 and '새 사전등록' in _flat189)
+    check("두 문장(기각 + 못 보는 크기)을 함께 썼다",
+          '필요 승률' in _flat189 and '관측 승률' in _flat189)
+    check("사전등록 커밋 해시를 적었다", '7c2147b' in _flat189)
+    check("기간 제한(2014-05-30)과 생존 편향을 밝힌다",
+          '2014-05-30' in _flat189 and '생존 편향' in _flat189)
+    check("측정일이 문서에 있다",
+          bool(_d189.get('made')) and _d189['made'] in _flat189)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d189.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
