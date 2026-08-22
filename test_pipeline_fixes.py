@@ -14112,6 +14112,133 @@ else:
           '바꾸지 않는다' in str(_d194.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §195 — R155 동등성 검정 ("차이 없음"을 "같음"으로 쓰지 않았는가)
+#
+#   R154 가 사후 관찰로만 남긴 "증자 한 건 ≈ 다른 것 두 건"을 시험으로
+#   바꿨다. 이 절이 지키는 것 — 이 라운드의 핵심은 ⓑ·ⓒ 다:
+#     ⓐ 기준이 사전등록·산출물에서 같고 R153·R154 의 문턱을 재사용했다
+#     ⓑ **마진을 결과 본 뒤에 고르지 않았는가** — R154 발표값이어야 한다
+#     ⓒ **"차이 못 봄"을 "같다"로 쓰지 않았는가** — TOST 를 따로 했고,
+#        미달이면 "못 가린다"로 적어야 한다
+#     ⓓ 자기검사(네 집단 12개 값)가 통과했는가
+#     ⓔ 미달인데 blind 를 열지 않았는가
+#     ⓕ 얼마나 못 가리는지를 숫자로 적었는가 (사후 진단 · 물리 상한)
+#     ⓖ 마진을 넓혀 통과시키지 않겠다고 밝혔는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§195 R155 동등성 검정 (라운드 155)")
+print("=" * 72)
+_p195 = _os.path.join(PROJ, 'data', 'dilution_equivalence_r155.json')
+_doc195 = _os.path.join(PROJ, 'docs', 'RESULT_R155_DILUTION_EQUIVALENCE.md')
+_pre195 = _os.path.join(PROJ, 'docs', 'PREREG_R155_DILUTION_EQUIVALENCE.md')
+_p154ref = _os.path.join(PROJ, 'data', 'confluence_dilution_r154.json')
+if not _os.path.exists(_p195):
+    check("R155 산출물이 있다", False,
+          'data/dilution_equivalence_r155.json 없음')
+else:
+    with open(_p195, encoding='utf-8') as _f195:
+        _d195 = _json.load(_f195)
+    _flat195 = _re.sub(r'\s+', ' ', _read148(_doc195)).replace('−', '-')
+    _pre195f = _re.sub(r'\s+', ' ', _read148(_pre195)).replace('−', '-')
+    _c195 = _d195.get('criteria') or {}
+    _pd195 = _d195.get('paired') or {}
+    _ts195 = _d195.get('tost') or {}
+
+    # ⓐ 기준 정합 — 문턱은 R153·R154 것을 재사용
+    check("문턱 2.25 가 사전등록과 산출물에 같다",
+          _c195.get('z_crit') == 2.25 and '2.25' in _pre195f)
+    check("표본 조건(1,000·300)이 같다",
+          _c195.get('min_events') == 1000 and _c195.get('min_days') == 300)
+    if _os.path.exists(_p154ref):
+        with open(_p154ref, encoding='utf-8') as _f154r:
+            _r154 = _json.load(_f154r)
+        _c154 = _r154.get('criteria') or {}
+        check("문턱·창·층이 R154 와 같다 (새 숫자를 만들지 않았다)",
+              _c195.get('z_crit') == _c154.get('z_crit')
+              and _c195.get('main_exit') == _c154.get('main_exit')
+              and _c195.get('lookback') == _c154.get('lookback')
+              and _c195.get('nq') == _c154.get('nq'))
+        # ⓑ 마진이 R154 발표값에서 왔는가 — 값으로 대조한다
+        _m154 = ((_r154.get('groups') or {}).get('k=1·증자X') or {})
+        check("마진이 R154 발표값(k=1·증자X 중앙값)의 절댓값과 같다",
+              _m154.get('median_pp') is not None
+              and abs(_c195.get('margin', 0) - abs(_m154['median_pp']))
+              <= 1e-9,
+              f"{_c195.get('margin')} vs |{_m154.get('median_pp')}|")
+    check("마진의 출처가 산출물에 적혀 있다",
+          'R154' in str(_c195.get('margin_source')))
+    check("문서가 마진을 손으로 고르지 않았음을 밝힌다",
+          '마진은 손으로 고르지 않았다' in _flat195
+          and '공시 한 건어치' in _flat195)
+
+    # ⓓ 자기검사 — 네 집단 12개 값
+    _rc195 = _d195.get('repro_check') or []
+    check("자기검사가 네 집단을 기록했다", len(_rc195) == 4, f"{len(_rc195)}개")
+    _rbad195 = [r['name'] for r in _rc195
+                if r.get('mean') is None or r.get('r154_mean') is None
+                or abs(r['mean'] - r['r154_mean']) > (_c195.get('tol_v') or 0.001) + 1e-9
+                or abs(r['median'] - r['r154_median']) > (_c195.get('tol_v') or 0.001) + 1e-9
+                or abs(r['z'] - r['r154_z']) > (_c195.get('tol_z') or 0.01) + 1e-9]
+    check("네 집단 값이 R154 와 전부 일치했다", not _rbad195, str(_rbad195))
+
+    # ⓒ "차이 없음"을 "같음"으로 쓰지 않았다 — 이 라운드의 핵심
+    check("TOST 를 실제로 돌렸다 (두 단측 z 가 산출물에 있다)",
+          _ts195.get('z_lower') is not None
+          and _ts195.get('z_upper') is not None)
+    _d1 = bool(_pd195.get('d1_pass'))
+    _e1 = bool(_ts195.get('equivalent'))
+    if (not _d1) and (not _e1):
+        check("차이도 동등성도 못 봤으면 '못 가린다'로 적었다",
+              '못 가린다' in str(_d195.get('verdict'))
+              and '못 가린다' in _flat195)
+        check("'차이 없음'을 '같다'로 쓰지 않았음을 문서가 밝힌다",
+              '"같다"가 아니라' in _flat195
+              and '같다고 세울 수는 없다' in _flat195)
+        # ⓔ 미달이면 blind 미개봉
+        check("미달인데 blind 를 열지 않았다", _d195.get('blind') is None)
+    check("판정이 산출물에 있다", bool(_d195.get('verdict')),
+          str(_d195.get('verdict')))
+    # 수치 자릿수 그대로
+    _s195 = _pd195.get('summary') or {}
+    for _k, _lab in (('median_pp', '중앙'), ('mean_pp', '평균'),
+                     ('sign_z', 'D1 z')):
+        _v = _s195.get(_k)
+        check(f"문서가 짝 차이 {_lab}({_v})를 그대로 적었다",
+              _v is not None and (f"{_v:.3f}" in _flat195
+                                  or f"{_v:.2f}" in _flat195), str(_v))
+    for _k, _lab in (('z_lower', 'TOST 아래'), ('z_upper', 'TOST 위')):
+        _v = _ts195.get(_k)
+        check(f"문서가 {_lab}({_v})를 그대로 적었다",
+              _v is not None and f"{_v:.2f}" in _flat195, str(_v))
+
+    # ⓕ 얼마나 못 가리는지 — 사후 진단과 물리 상한
+    _dg195 = _d195.get('diagnostics') or {}
+    check("사후 진단이 필요 날짜와 물리 상한을 담고 있다",
+          _dg195.get('need_days_lower') and _dg195.get('need_days_upper')
+          and _dg195.get('physical_ceiling_days'))
+    check("문서가 필요 날짜와 상한을 그대로 적었다",
+          f"{_dg195.get('need_days_lower', 0):,}일" in _flat195
+          and f"{_dg195.get('need_days_upper', 0):,}일" in _flat195
+          and f"{_dg195.get('physical_ceiling_days', 0):,}일" in _flat195)
+    check("사후 진단을 판정에 쓰지 않는다고 밝힌다",
+          '판정에 쓰지 않는다' in _flat195
+          and '판정에 쓰지 않는다' in str(_dg195.get('note')))
+    # ⓖ 마진을 넓혀 통과시키지 않는다
+    check("마진을 넓히지 않겠다고 밝힌다",
+          '마진을 넓히면 통과하겠지만 하지 않는다' in _flat195
+          and '새 사전등록' in _flat195)
+    check("R154 의 사후 문장을 앞으로 주장으로 쓰지 않겠다고 적었다",
+          '주장으로 쓰지 않는다' in _flat195)
+    check("매수 우위 0 이 일곱 라운드 통틀어 유지됨을 적었다",
+          'R155 통틀어' in _flat195 and '0개' in _flat195)
+    check("사전등록 커밋 해시를 적었다", '706d0e6' in _flat195)
+    check("측정일이 문서에 있다",
+          bool(_d195.get('made')) and _d195['made'] in _flat195)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d195.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
