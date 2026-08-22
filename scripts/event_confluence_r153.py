@@ -234,14 +234,19 @@ def main():
                 s = strata.get(i)
                 if s is None:
                     continue
-                tset = {t for t in types_at.get((c, d), ()) if t in type_set}
+                # 대조군은 **언제나 7유형 어느 공시도 없는 종목**이다
+                # (R149·R150 과 동일). type_set 은 이벤트 쪽만 좁힌다 —
+                # 처음에 대조까지 좁혔더니 다른 유형 공시가 난 종목이
+                # 대조에 섞여 자기검사가 걸렸다(Δ 0.067 vs R150 0.048).
+                all_t = types_at.get((c, d), ())
+                tset = {t for t in all_t if t in type_set}
                 a = acc[s]
                 if tset and pick(tset):
                     w = sum(mult_at[(c, d)][t] for t in tset) if len(
                         type_set) == 1 else 1
                     a[0] += ret * w
                     a[1] += w
-                elif not tset:
+                elif not all_t:
                     a[2] += ret
                     a[3] += 1
             num = den = 0.0
