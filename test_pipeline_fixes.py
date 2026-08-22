@@ -14013,6 +14013,105 @@ else:
           '바꾸지 않는다' in str(_d193.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §194 — R154 겹침 vs 희석 (앞 라운드가 적어 둔 confound 를 실제로 갈랐나)
+#
+#   R153 은 스스로 "겹침이 희석 쏠림의 다른 얼굴일 수 있다"를 적었고
+#   R154 가 그것을 갈랐다. 이 절이 지키는 것:
+#     ⓐ 기준이 사전등록·산출물에서 같고 R153 과도 같다
+#     ⓑ 자기검사가 R153 의 T2 를 재현했고 허용 오차가 안 늘었는가
+#     ⓒ **사후 관찰("증자 한 건 ≈ 다른 것 두 건")을 판정으로 쓰지
+#        않았는가** — 네 집단 표는 참고이지 시험이 아니다
+#     ⓓ 미달(T2)을 "무의미하다"로 부풀리지 않았는가
+#     ⓔ 매수 우위 0 이 여섯 라운드 통틀어 유지되는가
+#     ⓕ blind 를 기각으로 오독하지 않았는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§194 R154 겹침 vs 희석 (라운드 154)")
+print("=" * 72)
+_p194 = _os.path.join(PROJ, 'data', 'confluence_dilution_r154.json')
+_doc194 = _os.path.join(PROJ, 'docs', 'RESULT_R154_CONFLUENCE_VS_DILUTION.md')
+_pre194 = _os.path.join(PROJ, 'docs', 'PREREG_R154_CONFLUENCE_VS_DILUTION.md')
+_p153ref = _os.path.join(PROJ, 'data', 'event_confluence_r153.json')
+if not _os.path.exists(_p194):
+    check("R154 산출물이 있다", False, 'data/confluence_dilution_r154.json 없음')
+else:
+    with open(_p194, encoding='utf-8') as _f194:
+        _d194 = _json.load(_f194)
+    _flat194 = _re.sub(r'\s+', ' ', _read148(_doc194)).replace('−', '-')
+    _pre194f = _re.sub(r'\s+', ' ', _read148(_pre194)).replace('−', '-')
+    _c194 = _d194.get('criteria') or {}
+    _t194 = _d194.get('tests') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.25 가 사전등록과 산출물에 같다",
+          _c194.get('z_crit') == 2.25 and '2.25' in _pre194f)
+    check("표본 조건(1,000·300)이 같다",
+          _c194.get('min_events') == 1000 and _c194.get('min_days') == 300)
+    check("시험이 둘이다 (T1·T2)",
+          _c194.get('n_tests') == 2 and len(_t194) == 2, f"{len(_t194)}개")
+    check("가르는 축이 증자·CB·BW 로 적혀 있다",
+          _c194.get('dilution') == '증자·CB·BW')
+    if _os.path.exists(_p153ref):
+        with open(_p153ref, encoding='utf-8') as _f153r:
+            _c153r = (_json.load(_f153r).get('criteria') or {})
+        check("창·층·구간이 R153 과 같다 (그래야 이어 읽힌다)",
+              _c194.get('main_exit') == _c153r.get('main_exit')
+              and _c194.get('lookback') == _c153r.get('lookback')
+              and _c194.get('nq') == _c153r.get('nq')
+              and _c194.get('dev_end') == _c153r.get('dev_end')
+              and _c194.get('blind') == _c153r.get('blind'))
+    # ⓑ 자기검사
+    _sc194 = _d194.get('self_check') or {}
+    check("자기검사 값이 산출물에 남아 있다",
+          _sc194.get('delta') is not None and _sc194.get('z') is not None)
+    check("자기검사가 R153 의 T2 를 허용 오차 안에서 재현했다",
+          _sc194.get('delta') is not None
+          and abs(_sc194['delta'] - (_c194.get('r153_delta') or -0.393))
+          <= (_c194.get('tol_d') or 0.001) + 1e-9
+          and abs(_sc194['z'] - (_c194.get('r153_z') or -4.91))
+          <= (_c194.get('tol_z') or 0.01) + 1e-9,
+          f"{_sc194.get('delta')}/{_sc194.get('z')}")
+    check("허용 오차가 사전등록 값에서 늘어나지 않았다",
+          _c194.get('tol_d') == 0.001 and _c194.get('tol_z') == 0.01)
+    # ⓒ 사후 관찰을 판정으로 쓰지 않았다
+    check("네 집단 표가 참고임을 밝힌다 (판정 아님)",
+          '판정에 쓰지 않는다' in _flat194 and '판정이 아니라 관찰' in _flat194)
+    check("사후 비교임을 스스로 밝히고 새 사전등록을 요구한다",
+          '사전등록에 없던 사후 비교' in _flat194
+          and '새 사전등록이 필요' in _flat194)
+    check("네 집단이 산출물에 있다 (문서만의 숫자가 아니다)",
+          len(_d194.get('groups') or {}) == 4,
+          f"{len(_d194.get('groups') or {})}개")
+    # ⓓ 미달을 부풀리지 않았다
+    check("T2 미달을 '못 가른다'로 적었다 (무의미로 부풀리지 않음)",
+          '못 가른다' in _flat194 and '이지 "증자' in _flat194)
+    # 수치 자릿수 그대로
+    for _tn, _tr in _t194.items():
+        _s = _tr.get('summary') or {}
+        check(f"문서가 {_tn} 의 z 를 그대로 적었다",
+              _s.get('sign_z') is not None
+              and f"{_s['sign_z']:.2f}" in _flat194, str(_s.get('sign_z')))
+    # ⓔ 매수 우위 0 — 여섯 라운드
+    _pos194 = [n for n, r in _t194.items()
+               if r.get('z_ok') and (r.get('summary') or {}).get('sign_z', 0) > 0]
+    check("양의 방향으로 문턱을 넘은 시험이 없다", not _pos194, str(_pos194))
+    check("여섯 라운드 통틀어 매수 우위 0 을 적었다",
+          'R153·R154 통틀어 여전히 0개' in _flat194)
+    # ⓕ blind 오독 방지 · confound 유지
+    check("blind 를 기각으로 읽지 않는다고 밝힌다",
+          '이 크기를 볼 수 없다' in _flat194 and '64.2%' in _flat194)
+    check("남은 confound 를 적었다 (인과 아님)",
+          '인과가 아니다' in _flat194)
+    check("R153 의 confound 가 해소됐음을 적었다",
+          '해소됐다' in _flat194 and '희석' in _flat194)
+    check("사전등록 커밋 해시를 적었다", '10d442d' in _flat194)
+    check("측정일이 문서에 있다",
+          bool(_d194.get('made')) and _d194['made'] in _flat194)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d194.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:

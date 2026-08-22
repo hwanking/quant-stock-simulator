@@ -1,0 +1,129 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T11:36:03+00:00",
+ "prereg": "docs/PREREG_R154_CONFLUENCE_VS_DILUTION.md",
+ "criteria": {
+  "z_crit": 2.25,
+  "min_events": 1000,
+  "min_days": 300,
+  "main_exit": 5,
+  "lookback": 20,
+  "nq": 5,
+  "dev_end": "2026-01-30",
+  "blind": [
+   "2026-02-03",
+   "2026-07-15"
+  ],
+  "n_tests": 2,
+  "dilution": "증자·CB·BW",
+  "r153_delta": -0.393,
+  "r153_z": -4.91,
+  "tol_d": 0.001,
+  "tol_z": 0.01
+ },
+ "self_check": {
+  "delta": -0.393,
+  "z": -4.91,
+  "r153_delta": -0.393,
+  "r153_z": -4.91,
+  "passed": true
+ },
+ "tests": {
+  "T1_증자없는 겹침": {
+   "summary": {
+    "events": 1890,
+    "days": 1137,
+    "mean_pp": -0.457,
+    "median_pp": -0.698,
+    "win_pct": 44.0,
+    "need_pct": 53.3,
+    "sign_z": -4.06,
+    "sign_win": 500,
+    "sign_n": 1137
+   },
+   "question": "증자 없는 겹침에서도 증폭이 남는가",
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "증폭이 남는다(−)",
+   "blind": {
+    "events": 146,
+    "days": 63,
+    "mean_pp": -1.685,
+    "median_pp": -1.3,
+    "win_pct": 36.5,
+    "need_pct": 64.2,
+    "sign_z": -2.14,
+    "sign_win": 23,
+    "sign_n": 63
+   }
+  },
+  "T2_증자있는 겹침": {
+   "summary": {
+    "events": 1478,
+    "days": 998,
+    "mean_pp": -0.12,
+    "median_pp": -0.089,
+    "win_pct": 49.4,
+    "need_pct": 53.6,
+    "sign_z": -0.38,
+    "sign_win": 493,
+    "sign_n": 998
+   },
+   "question": "증자가 있을 때 겹침이 더 얹히는가",
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 못 가른다",
+   "blind": null
+  }
+ },
+ "passed": [
+  "T1_증자없는 겹침"
+ ],
+ "groups": {
+  "k>=2·증자X": {
+   "events": 1890,
+   "days": 1137,
+   "mean_pp": -0.58,
+   "median_pp": -0.738,
+   "win_pct": 41.8,
+   "need_pct": 53.3,
+   "sign_z": -5.55,
+   "sign_win": 475,
+   "sign_n": 1137
+  },
+  "k=1·증자X": {
+   "events": 66767,
+   "days": 2846,
+   "mean_pp": -0.064,
+   "median_pp": -0.17,
+   "win_pct": 45.8,
+   "need_pct": 52.1,
+   "sign_z": -4.46,
+   "sign_win": 1304,
+   "sign_n": 2846
+  },
+  "k>=2·증자O": {
+   "events": 1640,
+   "days": 1116,
+   "mean_pp": -0.405,
+   "median_pp": -0.912,
+   "win_pct": 42.1,
+   "need_pct": 53.4,
+   "sign_z": -5.27,
+   "sign_win": 470,
+   "sign_n": 1116
+  },
+  "k=1·증자O": {
+   "events": 6863,
+   "days": 2516,
+   "mean_pp": -0.329,
+   "median_pp": -0.823,
+   "win_pct": 42.6,
+   "need_pct": 52.2,
+   "sign_z": -7.42,
+   "sign_win": 1072,
+   "sign_n": 2516
+  }
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 창·매칭은 R150·R153 과 동일. 현재 시총 미사용(누출). 원장 미조인 · mfe/mae 미사용. 조합별 시험 없음."
+}
