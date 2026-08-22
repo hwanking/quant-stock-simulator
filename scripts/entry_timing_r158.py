@@ -225,7 +225,7 @@ def main():
           f'{sum(len(v) for v in per_day.values()):,}관측 · 종목 '
           f'{len(stocks):,}')
 
-    def matched(pick, retfn, lo=None, hi=DEV_END, weighted=False):
+    def matched(pick, retfn, lo=None, hi=DEV_END, solo_type=None):
         """pick 이 참인 이벤트의 층화 매칭 델타 — 날짜별.
 
         **분위는 '이 창의 수익이 있는 관측' 안에서 매긴다.** 처음에는
@@ -264,8 +264,11 @@ def main():
                 tset = types_at.get((c, d0), ())
                 a = acc[s]
                 if tset and pick(tset):
-                    w = (sum(mult_at[(c, d0)][t] for t in tset)
-                         if weighted else 1)
+                    # 배수는 **고른 유형에만** 합산한다. 그날 있던 모든
+                    # 유형에 합산하면 복수 유형 날의 가중치가 부풀어
+                    # R153/R150 과 어긋난다 — 자기검사가 그것을 잡았다
+                    # (Δ 0.017 vs 0.048). 주 시험은 배수를 안 쓴다(w=1).
+                    w = mult_at[(c, d0)][solo_type] if solo_type else 1
                     a[0] += v * w
                     a[1] += w
                 elif not tset:
@@ -284,7 +287,7 @@ def main():
     print()
     print('■ 자기검사 — 자사주·배당 · L=1 이 R150 을 재현하는가 (§5)')
     gchk = matched(lambda st: R150_TYPE in st,
-                   lambda c, d: leg(c, d, 1, HOLD), weighted=True)
+                   lambda c, d: leg(c, d, 1, HOLD), solo_type=R150_TYPE)
     chk = summarize([v for v, _ in gchk.values()],
                     sum(n for _, n in gchk.values()))
     ok_d = (chk['mean_pp'] is not None
