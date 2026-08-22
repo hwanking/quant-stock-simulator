@@ -14347,6 +14347,122 @@ else:
           '바꾸지 않는다' in str(_d196.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §197 — R158 진입 시점 (앞 라운드의 '해석'을 검증하고, 불편한 답을
+#         그대로 적었는가)
+#
+#   R151 이 "해석이지 측정이 아니다"라고 못 박은 문장을 측정으로
+#   바꿨고, 결과는 그 해석을 **절반만** 지지했다. 지키는 것:
+#     ⓐ 기준이 사전등록·산출물에서 같고 채택값을 재사용했는가
+#     ⓑ 자기검사가 통과했고 **연달아 잡은 결함 둘**을 적었는가
+#     ⓒ **불편한 결과(L=10 통과·비단조)를 지우지 않았는가** —
+#        사전등록 갈래표를 결과 본 뒤 고치지 않았는가
+#     ⓓ 밤사이 갭을 **거래 신호가 아니라고** 못 박았는가
+#     ⓔ 민감도(6유형 전 L 유의)를 숨기지 않았는가
+#     ⓕ R151 의 해석이 절반만 맞다고 적었는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§197 R158 진입 시점 (라운드 158)")
+print("=" * 72)
+_p197 = _os.path.join(PROJ, 'data', 'entry_timing_r158.json')
+_doc197 = _os.path.join(PROJ, 'docs', 'RESULT_R158_ENTRY_TIMING.md')
+_pre197 = _os.path.join(PROJ, 'docs', 'PREREG_R158_ENTRY_TIMING.md')
+if not _os.path.exists(_p197):
+    check("R158 산출물이 있다", False, 'data/entry_timing_r158.json 없음')
+else:
+    with open(_p197, encoding='utf-8') as _f197:
+        _d197 = _json.load(_f197)
+    _flat197 = _re.sub(r'\s+', ' ', _read148(_doc197)).replace('−', '-')
+    _pre197f = _re.sub(r'\s+', ' ', _read148(_pre197)).replace('−', '-')
+    _c197 = _d197.get('criteria') or {}
+    _t197 = _d197.get('tests') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.58 이 사전등록과 산출물에 같다",
+          _c197.get('z_crit') == 2.58 and '2.58' in _pre197f)
+    check("표본 조건이 채택값(1,000·300)이다",
+          _c197.get('min_events') == 1000 and _c197.get('min_days') == 300)
+    check("진입 지연과 보유가 사전등록과 같다",
+          _c197.get('lags') == [1, 2, 3, 5, 10] and _c197.get('hold') == 5
+          and _c197.get('n_tests') == 5)
+    check("다섯 L 이 모두 산출물에 있다", len(_t197) == 5, f"{len(_t197)}개")
+    check("D0 종가 진입을 시험하지 않았음을 적는다",
+          'D0 종가 진입' in str(_d197.get('note'))
+          and '누출' in str(_d197.get('note')))
+
+    # ⓑ 자기검사 — 통과 + 결함 둘 기록
+    _sc197 = _d197.get('self_check') or {}
+    check("자기검사 값이 산출물에 남아 있다",
+          _sc197.get('delta') is not None and _sc197.get('z') is not None)
+    check("자기검사가 R150 값을 허용 오차 안에서 재현했다",
+          _sc197.get('delta') is not None
+          and abs(_sc197['delta'] - (_c197.get('r150_delta') or 0.048))
+          <= (_c197.get('tol_v') or 0.001) + 1e-9
+          and abs(_sc197['z'] - (_c197.get('r150_z') or -3.42))
+          <= (_c197.get('tol_z') or 0.01) + 1e-9,
+          f"{_sc197.get('delta')}/{_sc197.get('z')}")
+    check("연달아 잡은 결함 둘을 적었다 (층화 집합 · 배수 범위)",
+          '층화 대상 집합' in _flat197 and '배수 적용 범위' in _flat197
+          and '허용 오차를 늘리지 않고' in _flat197)
+
+    # ⓒ 불편한 결과를 지우지 않았다
+    _pass197 = _d197.get('passed') or []
+    _l1 = (_t197.get('1') or {})
+    _l10 = (_t197.get('10') or {})
+    if _l10.get('z_ok'):
+        check("L=10 통과를 문서가 그대로 적었다",
+              'L=10 이 문턱을 다시 넘었다' in _flat197
+              and '비단조' in _flat197)
+        check("사전등록 갈래표를 그대로 적용했다 (해석 미확인)",
+              '그 줄을 그대로 적용한다' in _flat197
+              and '확인되지 않았다' in _flat197)
+        check("갈래표가 비단조를 예상 못 한 것을 자백했다",
+              '비단조 패턴을 예상하지 않은 것' in _flat197
+              and '표를 고치지 않는다' in _flat197)
+    # 수치 자릿수 그대로
+    for _k197, _r197 in _t197.items():
+        _s197 = _r197.get('summary') or {}
+        check(f"문서가 L={_k197} 의 z 를 그대로 적었다",
+              _s197.get('sign_z') is not None
+              and f"{_s197['sign_z']:.2f}" in _flat197,
+              str(_s197.get('sign_z')))
+    # blind — 통과분만 열렸고 대조가 적혔는가
+    check("blind 가 통과분에만 열렸다",
+          all((_r.get('blind') is not None) == bool(_r.get('z_ok')
+                                                    and _r.get('sample_ok'))
+              for _r in _t197.values()))
+    if _l1.get('blind') and _l10.get('blind'):
+        check("blind 대조(L=1 남고 L=10 사라짐)를 적었다",
+              'L=1 은 남고 L=10 은 사라진다' in _flat197)
+    # ⓓ 밤사이 갭 경계
+    _desc197 = _d197.get('descriptive') or {}
+    _gap = ((_desc197.get('daily_pieces') or {}).get('0') or {})
+    check("밤사이 갭이 산출물에 있다", bool(_gap.get('summary')))
+    check("밤사이 갭이 거래 신호가 아님을 문서와 산출물이 밝힌다",
+          '거래 신호가 아니다' in _flat197
+          and '거래 신호가 아니다' in str(_desc197.get('note')))
+    check("문서가 갭 값을 그대로 적었다",
+          (_gap.get('summary') or {}).get('median_pp') is not None
+          and f"{_gap['summary']['median_pp']:.3f}%p" in _flat197)
+    # ⓔ 민감도를 숨기지 않았다
+    check("6유형 민감도가 모든 L 에서 유의함을 적었다",
+          '모든 L 에서 유의하다' in _flat197
+          and '"L=1 에만 있다"고 말할 수 없다' in _flat197)
+    # ⓕ R151 해석의 절반
+    check("R151 의 해석이 절반만 맞다고 적었다",
+          '절반만' in _flat197 and '맞은 부분' in _flat197
+          and '틀린/부족한 부분' in _flat197)
+    check("원장 귀무를 진입 시점으로만 설명할 수 없다고 적었다",
+          '진입 시점 때문"으로만 설명할 수 없다' in _flat197)
+    check("매수 우위 0 이 열한 라운드 통틀어 유지됨을 적었다",
+          'R148~R158 통틀어 여전히 0개' in _flat197)
+    check("사전등록 커밋 해시를 적었다", 'c0f1695' in _flat197)
+    check("측정일이 문서에 있다",
+          bool(_d197.get('made')) and _d197['made'] in _flat197)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d197.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
