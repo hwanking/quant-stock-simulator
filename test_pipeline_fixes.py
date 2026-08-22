@@ -13714,6 +13714,108 @@ else:
           '바꾸지 않는다' in str(_d190.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §191 — R150 매칭 대조군 (사전등록 준수 + 자기검사가 잡은 내 모순)
+#
+#   R149 의 음(−)이 크기·유동성 구성 효과인지 갈랐다. 지키는 것:
+#     ⓐ 판정 기준이 사전등록·산출물에서 같은 값이고, R149 와도 같다
+#        (문턱·표본·구간을 바꿔 놓고 "남았다"고 하면 비교가 아니다)
+#     ⓑ 자기검사가 실제로 통과했고 허용 오차가 늘지 않았는가
+#     ⓒ 그 자기검사가 잡은 것이 **내 사전등록의 모순**이었음을
+#        숨기지 않았는가 (§114 의 교훈이 이번엔 내 문서에서 났다)
+#     ⓓ 매칭 변수가 시점 안전한가 — 현재 시총 미사용을 밝혔는가
+#     ⓔ 양의 통과 0 이 R148·R149·R150 통틀어 유지되는가
+#     ⓕ blind 를 "기각"으로 오독하지 않았는가 (검정력 두 문장)
+#     ⓖ 남은 confound 를 적었는가 (인과 아님)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§191 R150 매칭 대조군 (라운드 150)")
+print("=" * 72)
+_p191 = _os.path.join(PROJ, 'data', 'matched_control_r150.json')
+_doc191 = _os.path.join(PROJ, 'docs', 'RESULT_R150_MATCHED_CONTROL.md')
+_pre191 = _os.path.join(PROJ, 'docs', 'PREREG_R150_MATCHED_CONTROL.md')
+_p149ref = _os.path.join(PROJ, 'data', 'event_vs_baseline_r149.json')
+if not _os.path.exists(_p191):
+    check("R150 산출물이 있다", False, 'data/matched_control_r150.json 없음')
+else:
+    with open(_p191, encoding='utf-8') as _f191:
+        _d191 = _json.load(_f191)
+    _flat191 = _re.sub(r'\s+', ' ', _read148(_doc191)).replace('−', '-')
+    _pre191f = _re.sub(r'\s+', ' ', _read148(_pre191)).replace('−', '-')
+    _c191 = _d191.get('criteria') or {}
+    _t191 = _d191.get('types') or {}
+
+    # ⓐ 기준 정합 — 그리고 R149 와 같은 문턱·표본·구간이어야 비교가 된다
+    check("문턱 2.70 이 사전등록과 산출물에 같다",
+          _c191.get('z_crit') == 2.70 and '2.70' in _pre191f)
+    check("표본 조건(1,000·300)이 같다",
+          _c191.get('min_events') == 1000 and _c191.get('min_days') == 300)
+    check("창 D+5 · 시험 7 · 5분위 · 20거래일이 사전등록과 같다",
+          _c191.get('main_exit') == 5 and _c191.get('n_tests') == 7
+          and _c191.get('nq') == 5 and _c191.get('lookback') == 20)
+    if _os.path.exists(_p149ref):
+        with open(_p149ref, encoding='utf-8') as _f149r:
+            _c149r = (_json.load(_f149r).get('criteria') or {})
+        check("문턱·표본·구간이 R149 와 같다 (그래야 감쇠 비교가 된다)",
+              _c191.get('z_crit') == _c149r.get('z_crit')
+              and _c191.get('min_events') == _c149r.get('min_events')
+              and _c191.get('min_days') == _c149r.get('min_days')
+              and _c191.get('dev_end') == _c149r.get('dev_end')
+              and _c191.get('blind') == _c149r.get('blind'))
+    check("7유형이 모두 산출물에 있다", len(_t191) == 7, f"{len(_t191)}개")
+
+    # ⓑ 자기검사 — 실제로 통과했는가
+    _rc191 = _d191.get('repro_check') or []
+    check("재구현 자기검사가 7건 기록돼 있다", len(_rc191) == 7,
+          f"{len(_rc191)}건")
+    _tol191 = _c191.get('repro_tol') or 0.001
+    _rbad191 = [r['name'] for r in _rc191
+                if r.get('mine') is None or r.get('r149') is None
+                or abs(r['mine'] - r['r149']) > _tol191 + 1e-9]
+    check("재구현이 R149 값을 전부 재현했다", not _rbad191, str(_rbad191))
+    check("허용 오차가 사전등록 값(0.001)에서 늘어나지 않았다",
+          _tol191 == 0.001, str(_tol191))
+    # ⓒ 잡힌 것이 내 사전등록의 모순이었음을 밝힌다
+    check("자기검사가 잡은 것이 사전등록의 모순임을 적었다",
+          '내 사전등록의 모순' in _flat191
+          and '동시에 성립할 수 없다' in _flat191)
+    check("판정 기준을 바꾸지 않았음을 밝힌다",
+          '한 글자도 바꾸지 않았다' in _flat191)
+    # ⓓ 시점 안전
+    check("현재 시총을 쓰지 않았음을 밝힌다",
+          '현재 시총은' in _flat191 and '미래 정보' in _flat191)
+    check("매칭 변수가 D0 까지만 쓴다고 밝힌다",
+          '직전 20거래일' in _flat191)
+    check("산출물 note 가 시총 미사용을 적는다",
+          '현재 시총 미사용' in str(_d191.get('note')))
+    # ⓔ 양의 통과 0 — 세 라운드 통틀어
+    _pos191 = [t for t, r in _t191.items()
+               if r.get('z_ok') and (r.get('dev') or {}).get('sign_z', 0) > 0]
+    check("양의 방향으로 문턱을 넘은 유형이 없다", not _pos191, str(_pos191))
+    check("문서가 세 라운드 통틀어 양의 통과 0 을 적었다",
+          'R148·R149·R150 통틀어 0개' in _flat191)
+    # 수치 — 매칭 z 와 R149 z 를 둘 다 적었는가 (감쇠를 보여야 한다)
+    for _tn, _tr in _t191.items():
+        _dv = _tr.get('dev') or {}
+        _pz = _tr.get('unmatched_r149_z')
+        check(f"문서가 {_tn} 의 매칭 z 와 R149 z 를 둘 다 적었다",
+              _dv.get('sign_z') is not None and _pz is not None
+              and f"{_dv['sign_z']:.2f}" in _flat191
+              and f"{_pz:.2f}" in _flat191,
+              f"{_dv.get('sign_z')}/{_pz}")
+    # ⓕ blind 오독 방지
+    check("blind 를 기각으로 읽지 않는다고 밝힌다",
+          '이 크기를 볼 수 없다' in _flat191 and '62.9%' in _flat191)
+    # ⓖ 남은 confound
+    check("남은 confound 를 적었다 (인과 아님)",
+          '인과가 아니다' in _flat191 and '분위 안의 산포' in _flat191)
+    check("사전등록 커밋 해시를 적었다", 'd849bb9' in _flat191)
+    check("측정일이 문서에 있다",
+          bool(_d191.get('made')) and _d191['made'] in _flat191)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d191.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
