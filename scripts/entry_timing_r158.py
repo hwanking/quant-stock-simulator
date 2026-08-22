@@ -226,28 +226,40 @@ def main():
           f'{len(stocks):,}')
 
     def matched(pick, retfn, lo=None, hi=DEV_END, weighted=False):
-        """pick 이 참인 이벤트의 층화 매칭 델타 — 날짜별."""
+        """pick 이 참인 이벤트의 층화 매칭 델타 — 날짜별.
+
+        **분위는 '이 창의 수익이 있는 관측' 안에서 매긴다.** 처음에는
+        층화 재료가 있는 모든 관측에서 매겼는데, 그러면 R150 과 분위
+        경계가 어긋나 자기검사가 걸렸다(Δ 0.016 vs 0.048). 사전등록
+        §2 는 매칭 변수를 D0 에서 만든다고만 했지 **어느 집합에서
+        분위를 매기는지**를 안 적었다 — 판정 기준은 그대로 두고
+        R150 과 같은 집합을 쓰도록 고쳤다.
+        """
         out = {}
-        for d0, obs in per_day.items():
+        for d0, cohort in per_day.items():
             if (lo is not None and d0 < lo) or (hi is not None and d0 > hi):
+                continue
+            obs = []
+            for (c, to, vol, mk) in cohort:
+                v = retfn(c, d0)
+                if v is not None:
+                    obs.append((c, v, to, vol, mk))
+            if not obs:
                 continue
             strata = {}
             for mk in ('KOSPI', 'KOSDAQ'):
-                sub = [i for i, o in enumerate(obs) if o[3] == mk]
+                sub = [i for i, o in enumerate(obs) if o[4] == mk]
                 if not sub:
                     continue
                 n = len(sub)
-                tq = quintile(sorted(sub, key=lambda i: obs[i][1]), n)
-                vq = quintile(sorted(sub, key=lambda i: obs[i][2]), n)
+                tq = quintile(sorted(sub, key=lambda i: obs[i][2]), n)
+                vq = quintile(sorted(sub, key=lambda i: obs[i][3]), n)
                 for i in sub:
                     strata[i] = (mk, tq[i], vq[i])
             acc = collections.defaultdict(lambda: [0.0, 0, 0.0, 0])
-            for i, (c, _to, _vol, _mk) in enumerate(obs):
+            for i, (c, v, _to, _vol, _mk) in enumerate(obs):
                 s = strata.get(i)
                 if s is None:
-                    continue
-                v = retfn(c, d0)
-                if v is None:
                     continue
                 tset = types_at.get((c, d0), ())
                 a = acc[s]
