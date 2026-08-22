@@ -1,0 +1,410 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T08:54:28+00:00",
+ "prereg": "docs/PREREG_R150_MATCHED_CONTROL.md",
+ "criteria": {
+  "z_crit": 2.7,
+  "min_events": 1000,
+  "min_days": 300,
+  "main_exit": 5,
+  "lookback": 20,
+  "nq": 5,
+  "dev_end": "2026-01-30",
+  "blind": [
+   "2026-02-03",
+   "2026-07-15"
+  ],
+  "n_tests": 7,
+  "repro_tol": 0.001
+ },
+ "windows": 2886293,
+ "no_stat": 27538,
+ "repro_check": [
+  {
+   "name": "자사주·배당",
+   "mine": 0.009,
+   "r149": 0.009
+  },
+  {
+   "name": "수주·공급계약",
+   "mine": -0.34,
+   "r149": -0.34
+  },
+  {
+   "name": "증자·CB·BW",
+   "mine": -0.333,
+   "r149": -0.333
+  },
+  {
+   "name": "투자·설비",
+   "mine": -0.262,
+   "r149": -0.262
+  },
+  {
+   "name": "M&A·분할",
+   "mine": -0.321,
+   "r149": -0.321
+  },
+  {
+   "name": "IR·안내",
+   "mine": 0.148,
+   "r149": 0.148
+  },
+  {
+   "name": "인허가·임상",
+   "mine": -1.234,
+   "r149": -1.234
+  }
+ ],
+ "types": {
+  "자사주·배당": {
+   "dev": {
+    "events": 20473,
+    "days": 2737,
+    "delta_mean_pp": 0.048,
+    "delta_median_pp": -0.196,
+    "win_pct": 46.7,
+    "need_pct": 52.6,
+    "sign_z": -3.42,
+    "sign_win": 1279,
+    "sign_n": 2737
+   },
+   "unmatched_r149_z": -4.25,
+   "unmatched_all": {
+    "events": 20609,
+    "days": 2755,
+    "delta_mean_pp": 0.009,
+    "delta_median_pp": -0.202,
+    "win_pct": 46.0,
+    "need_pct": 52.6,
+    "sign_z": -4.25,
+    "sign_win": 1266,
+    "sign_n": 2755
+   },
+   "unmatched_restricted": {
+    "events": 20494,
+    "days": 2737,
+    "delta_mean_pp": 0.007,
+    "delta_median_pp": -0.197,
+    "win_pct": 46.2,
+    "need_pct": 52.6,
+    "sign_z": -3.96,
+    "sign_win": 1265,
+    "sign_n": 2737
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 1572,
+    "days": 109,
+    "delta_mean_pp": -0.431,
+    "delta_median_pp": -0.696,
+    "win_pct": 40.4,
+    "need_pct": 62.9,
+    "sign_z": -2.01,
+    "sign_win": 44,
+    "sign_n": 109
+   }
+  },
+  "수주·공급계약": {
+   "dev": {
+    "events": 17913,
+    "days": 2823,
+    "delta_mean_pp": -0.305,
+    "delta_median_pp": -0.523,
+    "win_pct": 41.6,
+    "need_pct": 52.5,
+    "sign_z": -8.9,
+    "sign_win": 1175,
+    "sign_n": 2823
+   },
+   "unmatched_r149_z": -9.21,
+   "unmatched_all": {
+    "events": 18085,
+    "days": 2843,
+    "delta_mean_pp": -0.34,
+    "delta_median_pp": -0.579,
+    "win_pct": 41.4,
+    "need_pct": 52.5,
+    "sign_z": -9.21,
+    "sign_win": 1176,
+    "sign_n": 2843
+   },
+   "unmatched_restricted": {
+    "events": 17926,
+    "days": 2823,
+    "delta_mean_pp": -0.327,
+    "delta_median_pp": -0.559,
+    "win_pct": 41.4,
+    "need_pct": 52.5,
+    "sign_z": -9.09,
+    "sign_win": 1170,
+    "sign_n": 2823
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 1030,
+    "days": 109,
+    "delta_mean_pp": -0.485,
+    "delta_median_pp": -0.717,
+    "win_pct": 44.0,
+    "need_pct": 62.9,
+    "sign_z": -1.25,
+    "sign_win": 48,
+    "sign_n": 109
+   }
+  },
+  "증자·CB·BW": {
+   "dev": {
+    "events": 8506,
+    "days": 2634,
+    "delta_mean_pp": -0.302,
+    "delta_median_pp": -0.736,
+    "win_pct": 42.3,
+    "need_pct": 52.6,
+    "sign_z": -7.95,
+    "sign_win": 1113,
+    "sign_n": 2634
+   },
+   "unmatched_r149_z": -8.49,
+   "unmatched_all": {
+    "events": 8622,
+    "days": 2651,
+    "delta_mean_pp": -0.333,
+    "delta_median_pp": -0.798,
+    "win_pct": 41.8,
+    "need_pct": 52.6,
+    "sign_z": -8.49,
+    "sign_win": 1107,
+    "sign_n": 2651
+   },
+   "unmatched_restricted": {
+    "events": 8525,
+    "days": 2634,
+    "delta_mean_pp": -0.332,
+    "delta_median_pp": -0.813,
+    "win_pct": 41.6,
+    "need_pct": 52.6,
+    "sign_z": -8.57,
+    "sign_win": 1097,
+    "sign_n": 2634
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 505,
+    "days": 108,
+    "delta_mean_pp": -0.647,
+    "delta_median_pp": -1.464,
+    "win_pct": 40.7,
+    "need_pct": 63.0,
+    "sign_z": -1.92,
+    "sign_win": 44,
+    "sign_n": 108
+   }
+  },
+  "투자·설비": {
+   "dev": {
+    "events": 7660,
+    "days": 2500,
+    "delta_mean_pp": -0.175,
+    "delta_median_pp": -0.644,
+    "win_pct": 43.7,
+    "need_pct": 52.7,
+    "sign_z": -6.32,
+    "sign_win": 1092,
+    "sign_n": 2500
+   },
+   "unmatched_r149_z": -8.2,
+   "unmatched_all": {
+    "events": 7738,
+    "days": 2522,
+    "delta_mean_pp": -0.262,
+    "delta_median_pp": -0.772,
+    "win_pct": 41.8,
+    "need_pct": 52.7,
+    "sign_z": -8.2,
+    "sign_win": 1055,
+    "sign_n": 2522
+   },
+   "unmatched_restricted": {
+    "events": 7662,
+    "days": 2500,
+    "delta_mean_pp": -0.257,
+    "delta_median_pp": -0.777,
+    "win_pct": 41.9,
+    "need_pct": 52.7,
+    "sign_z": -8.08,
+    "sign_win": 1048,
+    "sign_n": 2500
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 457,
+    "days": 105,
+    "delta_mean_pp": 0.153,
+    "delta_median_pp": -0.778,
+    "win_pct": 46.7,
+    "need_pct": 63.2,
+    "sign_z": -0.68,
+    "sign_win": 49,
+    "sign_n": 105
+   }
+  },
+  "M&A·분할": {
+   "dev": {
+    "events": 4656,
+    "days": 2081,
+    "delta_mean_pp": -0.309,
+    "delta_median_pp": -0.716,
+    "win_pct": 42.2,
+    "need_pct": 53.0,
+    "sign_z": -7.12,
+    "sign_win": 878,
+    "sign_n": 2081
+   },
+   "unmatched_r149_z": -7.69,
+   "unmatched_all": {
+    "events": 4698,
+    "days": 2096,
+    "delta_mean_pp": -0.321,
+    "delta_median_pp": -0.848,
+    "win_pct": 41.6,
+    "need_pct": 52.9,
+    "sign_z": -7.69,
+    "sign_win": 872,
+    "sign_n": 2096
+   },
+   "unmatched_restricted": {
+    "events": 4664,
+    "days": 2082,
+    "delta_mean_pp": -0.343,
+    "delta_median_pp": -0.858,
+    "win_pct": 41.5,
+    "need_pct": 53.0,
+    "sign_z": -7.8,
+    "sign_win": 863,
+    "sign_n": 2082
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 259,
+    "days": 94,
+    "delta_mean_pp": -1.185,
+    "delta_median_pp": -1.308,
+    "win_pct": 37.2,
+    "need_pct": 63.9,
+    "sign_z": -2.48,
+    "sign_win": 35,
+    "sign_n": 94
+   }
+  },
+  "IR·안내": {
+   "dev": {
+    "events": 20489,
+    "days": 2782,
+    "delta_mean_pp": 0.234,
+    "delta_median_pp": 0.069,
+    "win_pct": 51.4,
+    "need_pct": 52.6,
+    "sign_z": 1.44,
+    "sign_win": 1429,
+    "sign_n": 2782
+   },
+   "unmatched_r149_z": 0.38,
+   "unmatched_all": {
+    "events": 20673,
+    "days": 2800,
+    "delta_mean_pp": 0.148,
+    "delta_median_pp": 0.026,
+    "win_pct": 50.4,
+    "need_pct": 52.6,
+    "sign_z": 0.38,
+    "sign_win": 1410,
+    "sign_n": 2800
+   },
+   "unmatched_restricted": {
+    "events": 20519,
+    "days": 2783,
+    "delta_mean_pp": 0.154,
+    "delta_median_pp": 0.033,
+    "win_pct": 50.6,
+    "need_pct": 52.6,
+    "sign_z": 0.59,
+    "sign_win": 1407,
+    "sign_n": 2783
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 매칭하니 사라진다",
+   "blind": null
+  },
+  "인허가·임상": {
+   "dev": {
+    "events": 1268,
+    "days": 894,
+    "delta_mean_pp": -1.74,
+    "delta_median_pp": -2.38,
+    "win_pct": 32.7,
+    "need_pct": 54.5,
+    "sign_z": -10.37,
+    "sign_win": 292,
+    "sign_n": 894
+   },
+   "unmatched_r149_z": -9.79,
+   "unmatched_all": {
+    "events": 1308,
+    "days": 921,
+    "delta_mean_pp": -1.234,
+    "delta_median_pp": -2.082,
+    "win_pct": 33.9,
+    "need_pct": 54.4,
+    "sign_z": -9.79,
+    "sign_win": 312,
+    "sign_n": 921
+   },
+   "unmatched_restricted": {
+    "events": 1268,
+    "days": 894,
+    "delta_mean_pp": -1.604,
+    "delta_median_pp": -2.131,
+    "win_pct": 34.0,
+    "need_pct": 54.5,
+    "sign_z": -9.57,
+    "sign_win": 304,
+    "sign_n": 894
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 매칭 뒤에도 남는다",
+   "blind": {
+    "events": 107,
+    "days": 61,
+    "delta_mean_pp": -2.234,
+    "delta_median_pp": -2.24,
+    "win_pct": 36.1,
+    "need_pct": 67.3,
+    "sign_z": -2.18,
+    "sign_win": 22,
+    "sign_n": 61
+   }
+  }
+ },
+ "passed": [
+  "자사주·배당",
+  "수주·공급계약",
+  "증자·CB·BW",
+  "투자·설비",
+  "M&A·분할",
+  "인허가·임상"
+ ],
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 현재 시총 미사용(누출). 매칭 변수는 D0 까지의 일봉만 쓴다. 최근접 이웃 매칭 없음 — 층화만."
+}
