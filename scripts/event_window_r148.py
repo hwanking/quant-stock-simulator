@@ -156,10 +156,18 @@ def main():
         vals = [sum(bd[x]) / len(bd[x]) for x in days]
         n_ev = sum(len(bd[x]) for x in days)
         z, win, n = sign_test(vals)
+        # 사후 진단(판정에 안 씀) — 비용 전 값. 비용 0.41% 는 상수라
+        # 짧은 창에서 부호를 지배한다. 얼마가 비용이고 얼마가 이벤트인지
+        # 가르기 위해 같이 적는다.
+        gz, gwin, gn = sign_test([v + COST_PCT for v in vals])
         return dict(events=n_ev, days=len(days),
                     mean_pct=round(sum(vals) / len(vals), 3) if vals else None,
                     win_pct=round(win / n * 100, 1) if n else None,
-                    need_pct=need_p(n), sign_z=z, sign_win=win, sign_n=n)
+                    need_pct=need_p(n), sign_z=z, sign_win=win, sign_n=n,
+                    gross_mean_pct=(round(sum(vals) / len(vals) + COST_PCT, 3)
+                                    if vals else None),
+                    gross_win_pct=round(gwin / gn * 100, 1) if gn else None,
+                    gross_z=gz)
 
     results = {}
     print()
@@ -227,6 +235,38 @@ def main():
         print(f"   {t:<10} " + ' · '.join(
             f"D+{k}: {s[str(k)]['sign_z']}" for k in SUB_EXITS))
 
+    # ── 사후 진단 (판정에 쓰지 않는다) — 비이벤트 기준선 ───────────────
+    # 이 설계는 지수 대비라 "같은 종목의 보통 날"이 얼마인지 기준선이
+    # 없다. 유니버스 전 종목·전 거래일을 D0 로 놓고 같은 창을 재면,
+    # 이벤트 값이 그 기준선과 다른지(이벤트 효과) 같은지(창 구조·비용)
+    # 가를 수 있다. 사전등록 뒤에 붙인 진단이므로 판정에는 쓰지 않는다.
+    base_day = collections.defaultdict(list)
+    for c in stocks:
+        ds, _bm = bars[c]
+        for d in ds:
+            if d < bar_first or d > DEV_END:
+                continue
+            ret, dd = window(c, d, MAIN_EXIT)
+            if ret is not None:
+                base_day[dd].append(ret)
+    baseline = agg(base_day, hi=DEV_END)
+    print()
+    print('■ 사후 진단 (판정에 쓰지 않는다) — 비이벤트 기준선: 유니버스 전 '
+          '종목·전 거래일, 같은 창')
+    print(f"   창 {baseline['events']:,} · 날짜 {baseline['days']:,} · "
+          f"평균 {baseline['mean_pct']}% (비용 전 {baseline['gross_mean_pct']}%)"
+          f" · z {baseline['sign_z']} (비용 전 z {baseline['gross_z']})")
+    print(f'   {"유형":<10}{"이벤트 평균":>10}{"기준선":>9}{"차이":>8}'
+          f'{"비용전 평균":>11}{"비용전 z":>9}')
+    for t in TYPES:
+        dv = results[t]['dev']
+        if dv['mean_pct'] is None:
+            continue
+        diff = round(dv['mean_pct'] - baseline['mean_pct'], 3)
+        results[t]['vs_baseline_pp'] = diff
+        print(f"   {t:<10}{dv['mean_pct']:>10.3f}{baseline['mean_pct']:>9.3f}"
+              f"{diff:>8.3f}{dv['gross_mean_pct']:>11.3f}{dv['gross_z']:>9.2f}")
+
     doc = {
         'made': date.today().isoformat(),
         'made_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
@@ -239,6 +279,10 @@ def main():
                      last=last_day),
         'types': results,
         'passed': passed,
+        'diagnostics': dict(
+            note='사후 진단 — 판정에 쓰지 않는다. 비용 전 값과 비이벤트 '
+                 '기준선(유니버스 전 종목·전 거래일, 같은 창).',
+            baseline=baseline),
         'note': ('측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 원장 미조인. '
                  '진입 D+1 시가(누출 차단). 생존 편향·2014-05-30 기간 제한은 '
                  '사전등록 §1 에 적었다.'),
