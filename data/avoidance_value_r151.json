@@ -1,0 +1,224 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T09:33:56+00:00",
+ "prereg": "docs/PREREG_R151_AVOIDANCE_VALUE.md",
+ "criteria": {
+  "z_crit": 2.25,
+  "min_events": 1000,
+  "min_days": 300,
+  "fresh": 5,
+  "buy": 58.0,
+  "n_tests": 2,
+  "r147_dh": -1.69,
+  "r147_z": 0.78,
+  "tol_dh": 0.01,
+  "tol_z": 0.01
+ },
+ "ledger_cases_buy": 82259,
+ "self_check": {
+  "dh": -1.692,
+  "z": 0.78,
+  "r147_dh": -1.69,
+  "r147_z": 0.78,
+  "passed": true
+ },
+ "tests": {
+  "A_전체7유형": {
+   "dev": {
+    "event_cases": 9207,
+    "valid_days": 971,
+    "skipped": 5655,
+    "dh_mean_pp": 0.509,
+    "dh_median_pp": 0.0,
+    "dev_mean_pp": 0.027,
+    "win_pct": 53.7,
+    "need_pct": 54.0,
+    "sign_z": 2.06,
+    "sign_win": 424,
+    "sign_n": 790
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 기각, 옮겨지지 않는다",
+   "blind": null,
+   "types": [
+    "자사주·배당",
+    "수주·공급계약",
+    "증자·CB·BW",
+    "투자·설비",
+    "M&A·분할",
+    "IR·안내",
+    "인허가·임상"
+   ]
+  },
+  "B_내용6유형": {
+   "dev": {
+    "event_cases": 6827,
+    "valid_days": 863,
+    "skipped": 5655,
+    "dh_mean_pp": -0.362,
+    "dh_median_pp": 0.0,
+    "dev_mean_pp": 0.059,
+    "win_pct": 52.9,
+    "need_pct": 54.2,
+    "sign_z": 1.57,
+    "sign_win": 377,
+    "sign_n": 712
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 기각, 옮겨지지 않는다",
+   "blind": null,
+   "types": [
+    "자사주·배당",
+    "수주·공급계약",
+    "증자·CB·BW",
+    "투자·설비",
+    "M&A·분할",
+    "인허가·임상"
+   ]
+  }
+ },
+ "passed": [],
+ "sensitivity": {
+  "A_전체7유형": {
+   "ledger_calendar": {
+    "event_cases": 9482,
+    "valid_days": 1028,
+    "skipped": 0,
+    "dh_mean_pp": 0.706,
+    "dh_median_pp": 0.0,
+    "dev_mean_pp": 0.065,
+    "win_pct": 53.8,
+    "need_pct": 53.9,
+    "sign_z": 2.18,
+    "sign_win": 451,
+    "sign_n": 839
+   },
+   "sub_windows": {
+    "1": {
+     "event_cases": 2074,
+     "valid_days": 471,
+     "skipped": 5655,
+     "dh_mean_pp": -0.262,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": -0.02,
+     "win_pct": 51.2,
+     "need_pct": 55.5,
+     "sign_z": 0.49,
+     "sign_win": 215,
+     "sign_n": 420
+    },
+    "3": {
+     "event_cases": 5923,
+     "valid_days": 774,
+     "skipped": 5655,
+     "dh_mean_pp": -0.111,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": 0.013,
+     "win_pct": 51.8,
+     "need_pct": 54.4,
+     "sign_z": 0.91,
+     "sign_win": 334,
+     "sign_n": 645
+    },
+    "10": {
+     "event_cases": 16072,
+     "valid_days": 1282,
+     "skipped": 5655,
+     "dh_mean_pp": 0.022,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": 0.056,
+     "win_pct": 52.1,
+     "need_pct": 53.5,
+     "sign_z": 1.34,
+     "sign_win": 534,
+     "sign_n": 1025
+    },
+    "20": {
+     "event_cases": 26109,
+     "valid_days": 1511,
+     "skipped": 5655,
+     "dh_mean_pp": 0.793,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": 0.089,
+     "win_pct": 51.1,
+     "need_pct": 53.3,
+     "sign_z": 0.78,
+     "sign_win": 611,
+     "sign_n": 1195
+    }
+   }
+  },
+  "B_내용6유형": {
+   "ledger_calendar": {
+    "event_cases": 7063,
+    "valid_days": 920,
+    "skipped": 0,
+    "dh_mean_pp": -0.183,
+    "dh_median_pp": 0.0,
+    "dev_mean_pp": 0.085,
+    "win_pct": 54.1,
+    "need_pct": 54.1,
+    "sign_z": 2.28,
+    "sign_win": 412,
+    "sign_n": 761
+   },
+   "sub_windows": {
+    "1": {
+     "event_cases": 1490,
+     "valid_days": 406,
+     "skipped": 5655,
+     "dh_mean_pp": -1.008,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": -0.039,
+     "win_pct": 50.7,
+     "need_pct": 55.9,
+     "sign_z": 0.26,
+     "sign_win": 182,
+     "sign_n": 359
+    },
+    "3": {
+     "event_cases": 4339,
+     "valid_days": 690,
+     "skipped": 5655,
+     "dh_mean_pp": -0.917,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": -0.033,
+     "win_pct": 51.8,
+     "need_pct": 54.6,
+     "sign_z": 0.87,
+     "sign_win": 304,
+     "sign_n": 587
+    },
+    "10": {
+     "event_cases": 12173,
+     "valid_days": 1175,
+     "skipped": 5655,
+     "dh_mean_pp": 0.349,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": 0.118,
+     "win_pct": 52.0,
+     "need_pct": 53.6,
+     "sign_z": 1.23,
+     "sign_win": 494,
+     "sign_n": 950
+    },
+    "20": {
+     "event_cases": 20404,
+     "valid_days": 1439,
+     "skipped": 5655,
+     "dh_mean_pp": 1.034,
+     "dh_median_pp": 0.0,
+     "dev_mean_pp": 0.126,
+     "win_pct": 51.4,
+     "need_pct": 53.3,
+     "sign_z": 0.95,
+     "sign_win": 586,
+     "sign_n": 1140
+    }
+   }
+  }
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. R147 이 자사주·배당 한 유형으로 같은 잣대를 이미 돌려 기각했다(z 0.78) — 이것은 두 번째 시도이고 그 사실을 결과 문서에 적는다. 원장 mfe/mae 미사용. D0 제외."
+}
