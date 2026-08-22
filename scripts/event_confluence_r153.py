@@ -131,9 +131,11 @@ def main():
         n2c[norm(r['name'])].add(r['code'])
     name2code = {k: next(iter(v)) for k, v in n2c.items() if len(v) == 1}
 
-    # ── (코드, 거래일) -> 유형 집합 ────────────────────────────────────
-    types_at = collections.defaultdict(set)
-    mult_at = collections.defaultdict(collections.Counter)  # R150 재현용 배수
+    # ── 공시 → (코드, 접수일) **집합** ────────────────────────────────
+    #   집합이 먼저다 — 같은 종목·같은 접수일·같은 유형의 복수 공시는
+    #   1건이다(R148~R150 과 동일). 행마다 세면 배수가 부풀어 자기검사가
+    #   걸린다(실제로 걸렸다: Δ 0.062 vs R150 0.048).
+    ev_set = {t: set() for t in TYPES}
     with open(DISC, encoding='utf-8', errors='replace') as f:
         for ln in f:
             ln = ln.strip()
@@ -150,8 +152,14 @@ def main():
             if not code or code not in bars:
                 continue
             d = str(r.get('day') or '')[:10]
-            if len(d) != 10 or d < BAR_FIRST:
-                continue
+            if len(d) == 10 and d >= BAR_FIRST:
+                ev_set[t].add((code, d))
+
+    # ── 접수일 → 거래일 (R148~R150 과 동일 · 배수 유지) ────────────────
+    types_at = collections.defaultdict(set)
+    mult_at = collections.defaultdict(collections.Counter)
+    for t in TYPES:
+        for code, d in ev_set[t]:
             ds = bars[code][0]
             i = bisect.bisect_left(ds, d)
             if i >= len(ds) or d < ds[0]:
