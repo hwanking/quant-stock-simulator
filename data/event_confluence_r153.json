@@ -1,0 +1,249 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T10:57:18+00:00",
+ "prereg": "docs/PREREG_R153_EVENT_CONFLUENCE.md",
+ "criteria": {
+  "z_crit": 2.25,
+  "min_events": 1000,
+  "min_days": 300,
+  "main_exit": 5,
+  "lookback": 20,
+  "nq": 5,
+  "dev_end": "2026-01-30",
+  "blind": [
+   "2026-02-03",
+   "2026-07-15"
+  ],
+  "n_tests": 2,
+  "r150_delta": 0.048,
+  "r150_z": -3.42,
+  "tol_d": 0.001,
+  "tol_z": 0.01,
+  "pair_combos": 21,
+  "pair_z": 3.04,
+  "pair_max_n": 975
+ },
+ "k_distribution": {
+  "1": 80937,
+  "2": 3650,
+  "3": 223,
+  "4": 18,
+  "5": 1
+ },
+ "self_check": {
+  "delta": 0.048,
+  "z": -3.42,
+  "r150_delta": 0.048,
+  "r150_z": -3.42,
+  "passed": true
+ },
+ "tests": {
+  "T1_겹침 vs 보통날": {
+   "summary": {
+    "events": 3530,
+    "days": 1743,
+    "mean_pp": -0.54,
+    "median_pp": -0.882,
+    "win_pct": 41.7,
+    "need_pct": 52.7,
+    "sign_z": -6.92,
+    "sign_win": 727,
+    "sign_n": 1743
+   },
+   "question": "겹친 날이 보통 날과 다른가",
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "증폭한다(−)",
+   "blind": {
+    "events": 226,
+    "days": 80,
+    "mean_pp": -0.791,
+    "median_pp": -0.753,
+    "win_pct": 41.2,
+    "need_pct": 62.6,
+    "sign_z": -1.57,
+    "sign_win": 33,
+    "sign_n": 80
+   }
+  },
+  "T2_겹침 vs 하나": {
+   "summary": {
+    "events": 3530,
+    "days": 1743,
+    "mean_pp": -0.393,
+    "median_pp": -0.661,
+    "win_pct": 44.1,
+    "need_pct": 52.7,
+    "sign_z": -4.91,
+    "sign_win": 769,
+    "sign_n": 1743
+   },
+   "question": "겹침이 하나보다 큰가",
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "증폭한다(−)",
+   "blind": {
+    "events": 226,
+    "days": 80,
+    "mean_pp": -0.411,
+    "median_pp": -0.88,
+    "win_pct": 40.0,
+    "need_pct": 62.6,
+    "sign_z": -1.79,
+    "sign_win": 32,
+    "sign_n": 80
+   }
+  }
+ },
+ "passed": [
+  "T1_겹침 vs 보통날",
+  "T2_겹침 vs 하나"
+ ],
+ "sensitivity": {
+  "material6": {
+   "t1": {
+    "events": 2539,
+    "days": 1450,
+    "mean_pp": -0.592,
+    "median_pp": -1.011,
+    "win_pct": 41.2,
+    "need_pct": 53.0,
+    "sign_z": -6.72,
+    "sign_win": 597,
+    "sign_n": 1450
+   },
+   "t2": {
+    "events": 2539,
+    "days": 1450,
+    "mean_pp": -0.3,
+    "median_pp": -0.724,
+    "win_pct": 44.6,
+    "need_pct": 53.0,
+    "sign_z": -4.15,
+    "sign_win": 646,
+    "sign_n": 1450
+   }
+  },
+  "k3": {
+   "events": 219,
+   "days": 190,
+   "mean_pp": -0.979,
+   "median_pp": -1.142,
+   "win_pct": 41.1,
+   "need_pct": 58.2,
+   "sign_z": -2.47,
+   "sign_win": 78,
+   "sign_n": 190
+  },
+  "sub_windows": {
+   "1": {
+    "t1": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.275,
+     "median_pp": -0.33,
+     "win_pct": 42.6,
+     "need_pct": 52.7,
+     "sign_z": -6.16,
+     "sign_win": 743,
+     "sign_n": 1743
+    },
+    "t2": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.179,
+     "median_pp": -0.265,
+     "win_pct": 44.7,
+     "need_pct": 52.7,
+     "sign_z": -4.43,
+     "sign_win": 779,
+     "sign_n": 1743
+    }
+   },
+   "3": {
+    "t1": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.534,
+     "median_pp": -0.678,
+     "win_pct": 40.3,
+     "need_pct": 52.7,
+     "sign_z": -8.07,
+     "sign_win": 703,
+     "sign_n": 1743
+    },
+    "t2": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.423,
+     "median_pp": -0.564,
+     "win_pct": 43.3,
+     "need_pct": 52.7,
+     "sign_z": -5.58,
+     "sign_win": 755,
+     "sign_n": 1743
+    }
+   },
+   "10": {
+    "t1": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.747,
+     "median_pp": -1.308,
+     "win_pct": 41.0,
+     "need_pct": 52.7,
+     "sign_z": -7.5,
+     "sign_win": 715,
+     "sign_n": 1743
+    },
+    "t2": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.526,
+     "median_pp": -1.168,
+     "win_pct": 43.0,
+     "need_pct": 52.7,
+     "sign_z": -5.82,
+     "sign_win": 750,
+     "sign_n": 1743
+    }
+   },
+   "20": {
+    "t1": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.789,
+     "median_pp": -2.072,
+     "win_pct": 40.3,
+     "need_pct": 52.7,
+     "sign_z": -8.07,
+     "sign_win": 703,
+     "sign_n": 1743
+    },
+    "t2": {
+     "events": 3530,
+     "days": 1743,
+     "mean_pp": -0.495,
+     "median_pp": -1.692,
+     "win_pct": 41.9,
+     "need_pct": 52.7,
+     "sign_z": -6.78,
+     "sign_win": 730,
+     "sign_n": 1743
+    }
+   }
+  },
+  "ledger_descriptive": {
+   "events": 487,
+   "days": 225,
+   "mean_pp": -4.687,
+   "median_pp": 0.0,
+   "win_pct": 52.6,
+   "need_pct": 57.7,
+   "sign_z": 0.75,
+   "sign_win": 112,
+   "sign_n": 213
+  }
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 조합별 시험은 하지 않는다 — 21조합 보정 z 3.04 인데 최대 조합이 975건으로 표본 조건 1,000 을 못 넘는다(사전등록 §3). 원장 venue 는 개별이 귀무라 기술 통계로만 낸다(R124 §4). 현재 시총 미사용 · 원장 mfe/mae 미사용."
+}

@@ -13905,6 +13905,114 @@ else:
           and '바꾸지 않는다' in str(_d192.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §193 — R153 겹침 (R124 §4 의 조건과 비용을 지켰는가)
+#
+#   R124 §4 는 겹침 연구에 세 가지를 걸었다: 개별을 먼저 잴 것,
+#   개별이 귀무인 venue 에서 겹침만 유의하면 다중검정 산물로 볼 것,
+#   조합 수만큼 보정을 올리고 **그 비용을 미리 적을 것**.
+#   이 절은 그 셋을 지켰는지 본다:
+#     ⓐ 판정 기준이 사전등록·산출물에서 같고 R150 과도 같다
+#     ⓑ 조합별 시험을 하지 않았고 **그 비용(21조합·z 3.04·최대 975)** 을
+#        숫자로 적었는가
+#     ⓒ 원장 venue 를 **기술 통계로만** 냈는가 (개별이 귀무이므로)
+#     ⓓ 자기검사가 통과했고 **연달아 잡은 결함 둘**을 적었는가
+#     ⓔ 표본 미달(k>=3)을 판정으로 쓰지 않았는가
+#     ⓕ 매수 우위 0 이 다섯 라운드 통틀어 유지되는가
+#     ⓖ 겹침 고유의 confound(희석 쏠림)를 적었는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§193 R153 겹침 (라운드 153)")
+print("=" * 72)
+_p193 = _os.path.join(PROJ, 'data', 'event_confluence_r153.json')
+_doc193 = _os.path.join(PROJ, 'docs', 'RESULT_R153_EVENT_CONFLUENCE.md')
+_pre193 = _os.path.join(PROJ, 'docs', 'PREREG_R153_EVENT_CONFLUENCE.md')
+_p150ref = _os.path.join(PROJ, 'data', 'matched_control_r150.json')
+if not _os.path.exists(_p193):
+    check("R153 산출물이 있다", False, 'data/event_confluence_r153.json 없음')
+else:
+    with open(_p193, encoding='utf-8') as _f193:
+        _d193 = _json.load(_f193)
+    _flat193 = _re.sub(r'\s+', ' ', _read148(_doc193)).replace('−', '-')
+    _pre193f = _re.sub(r'\s+', ' ', _read148(_pre193)).replace('−', '-')
+    _c193 = _d193.get('criteria') or {}
+    _t193 = _d193.get('tests') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.25 가 사전등록과 산출물에 같다",
+          _c193.get('z_crit') == 2.25 and '2.25' in _pre193f)
+    check("표본 조건(1,000·300)이 같다",
+          _c193.get('min_events') == 1000 and _c193.get('min_days') == 300)
+    check("시험이 둘이다 (T1·T2)",
+          _c193.get('n_tests') == 2 and len(_t193) == 2, f"{len(_t193)}개")
+    if _os.path.exists(_p150ref):
+        with open(_p150ref, encoding='utf-8') as _f150r:
+            _c150r = (_json.load(_f150r).get('criteria') or {})
+        check("창·층·구간이 R150 과 같다 (그래야 이어 읽힌다)",
+              _c193.get('main_exit') == _c150r.get('main_exit')
+              and _c193.get('lookback') == _c150r.get('lookback')
+              and _c193.get('nq') == _c150r.get('nq')
+              and _c193.get('dev_end') == _c150r.get('dev_end')
+              and _c193.get('blind') == _c150r.get('blind'))
+    # ⓑ 조합별 비용을 숫자로 적었는가
+    check("조합별 비용이 산출물에 숫자로 있다 (21·3.04·975)",
+          _c193.get('pair_combos') == 21 and _c193.get('pair_z') == 3.04
+          and _c193.get('pair_max_n') == 975)
+    check("문서가 조합별 시험을 하지 않은 이유를 적었다",
+          '조합별 시험은 애초에 불가능' in _flat193
+          and '3.04' in _flat193 and '975건' in _flat193)
+    check("산출물 note 가 조합별 미시행을 적는다",
+          '조합별 시험은 하지 않는다' in str(_d193.get('note')))
+    # ⓒ 원장 venue — 기술 통계로만
+    _led193 = ((_d193.get('sensitivity') or {}).get('ledger_descriptive') or {})
+    check("원장 venue 가 민감도에만 있다 (주 시험이 아니다)",
+          bool(_led193) and all('원장' not in k for k in _t193))
+    check("원장을 판정하지 않는다고 문서가 밝힌다",
+          '판정하지 않는다' in _flat193 and 'R124 §4' in _flat193)
+    # ⓓ 자기검사 — 통과 + 연달아 잡은 결함 둘
+    _sc193 = _d193.get('self_check') or {}
+    check("자기검사 값이 산출물에 남아 있다",
+          _sc193.get('delta') is not None and _sc193.get('z') is not None)
+    check("자기검사가 R150 값을 허용 오차 안에서 재현했다",
+          _sc193.get('delta') is not None
+          and abs(_sc193['delta'] - (_c193.get('r150_delta') or 0.048))
+          <= (_c193.get('tol_d') or 0.001) + 1e-9
+          and abs(_sc193['z'] - (_c193.get('r150_z') or -3.42))
+          <= (_c193.get('tol_z') or 0.01) + 1e-9,
+          f"{_sc193.get('delta')}/{_sc193.get('z')}")
+    check("연달아 잡은 결함 둘을 문서가 적었다 (대조군 정의 · 배수 계산)",
+          '대조군 정의' in _flat193 and '배수 계산' in _flat193
+          and '허용 오차를 늘리지 않고' in _flat193)
+    # ⓔ 표본 미달을 판정으로 쓰지 않았다
+    _k3 = ((_d193.get('sensitivity') or {}).get('k3') or {})
+    if _k3 and (_k3.get('events', 0) < _c193.get('min_events', 1000)
+                or _k3.get('days', 0) < _c193.get('min_days', 300)):
+        check("k>=3 을 표본 미달로 적고 판정하지 않았다",
+              '표본 조건 미달' in _flat193 and '못 한다' in _flat193)
+    # 수치 자릿수 그대로
+    for _tn, _tr in _t193.items():
+        _s = _tr.get('summary') or {}
+        check(f"문서가 {_tn} 의 z 를 그대로 적었다",
+              _s.get('sign_z') is not None
+              and f"{_s['sign_z']:.2f}" in _flat193, str(_s.get('sign_z')))
+    # ⓕ 매수 우위 0 — 다섯 라운드
+    _pos193 = [n for n, r in _t193.items()
+               if r.get('z_ok') and (r.get('summary') or {}).get('sign_z', 0) > 0]
+    check("양의 방향으로 문턱을 넘은 시험이 없다", not _pos193, str(_pos193))
+    check("다섯 라운드 통틀어 매수 우위 0 을 적었다",
+          'R151·R153 통틀어' in _flat193 and '여전히 0개' in _flat193)
+    # ⓖ 겹침 고유 confound
+    check("겹침 고유의 confound(희석 쏠림)를 적었다",
+          '희석' in _flat193 and '증자·CB·BW + 투자·설비' in _flat193)
+    check("blind 를 기각으로 읽지 않는다고 밝힌다",
+          '이 크기를 볼 수 없다' in _flat193 and '62.6%' in _flat193)
+    check("사전등록 커밋 해시를 적었다", '7e6ddf8' in _flat193)
+    check("측정일이 문서에 있다",
+          bool(_d193.get('made')) and _d193['made'] in _flat193)
+    check("산출물이 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d193.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
