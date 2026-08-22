@@ -127,12 +127,34 @@ def main():
             d = str(r.get('day') or '')[:10]
             if len(d) == 10 and d >= BAR_FIRST:
                 ev[t].add((code, d))
-    #: (code, D0) -> 그날 그 종목에 있던 유형 집합
-    any_ev = collections.defaultdict(set)
-    for t in TYPES:
-        for k in ev[t]:
-            any_ev[k].add(t)
     print('■ 이벤트: ' + ' · '.join(f'{t} {len(ev[t]):,}' for t in TYPES))
+
+    # ── 접수일 → 거래일 매핑 (R148 과 동일하게) ─────────────────────────
+    #   접수일이 그 종목의 거래일이 아니면 **다음 거래일**이 D0 다
+    #   (사전등록 §2 · R148 도 같다). 처음에 이 매핑을 빼먹고 '거래일과
+    #   정확히 일치하는 공시'만 봤더니 유형당 5~221건이 통째로 빠져
+    #   §4 자기검사가 4유형에서 걸렸다 — 허용 오차를 늘리지 않고
+    #   매핑을 고쳤다.
+    #
+    #   중복도 R148 을 그대로 따른다: 서로 다른 접수일 둘이 같은 거래일로
+    #   밀리면 R148 은 그 종목의 수익을 그날 **두 번** 센다. 재현이
+    #   목적이므로 배수(mult)를 그대로 반영한다. 영향은 유형당 0~21건
+    #   (2만 건 중 0.11% 미만)이고 결과 문서에 적는다.
+    ev_map = {t: collections.Counter() for t in TYPES}
+    any_ev = collections.defaultdict(set)     # (code, 거래일) -> 유형 집합
+    n_shift = collections.Counter()
+    for t in TYPES:
+        for c, d in ev[t]:
+            ds = bars[c][0]
+            i = bisect.bisect_left(ds, d)
+            if i >= len(ds) or d < ds[0]:
+                continue
+            if ds[i] != d:
+                n_shift[t] += 1
+            ev_map[t][(c, ds[i])] += 1
+            any_ev[(c, ds[i])].add(t)
+    print('   (거래일 아닌 접수일 → 다음 거래일로 이동: '
+          + ' · '.join(f'{t} {n_shift[t]}' for t in TYPES) + ')')
 
     def window(code, d0, exit_k):
         """R148 과 동일 — D+1 시가 → D+exit 종가, 시장 초과(비용 전)."""
@@ -193,12 +215,13 @@ def main():
                 bm_[2] += ret
                 bm_[3] += 1
             for t in types_here:
+                mult = ev_map[t][(c, dd)]       # R148 재현 — 배수 그대로
                 e = per_type[t][dd]
-                e[0] += ret
-                e[1] += 1
+                e[0] += ret * mult
+                e[1] += mult
                 em = per_type_mkt[t][dd][mk]
-                em[0] += ret
-                em[1] += 1
+                em[0] += ret * mult
+                em[1] += mult
             for t in TYPES:                 # 민감도용 — T 만 없는 대조군
                 if t not in types_here:
                     o = per_type_other[t][dd]
@@ -215,9 +238,10 @@ def main():
                     s[2] += r2
                     s[3] += 1
                 for t in types_here:
+                    mult = ev_map[t][(c, dd)]
                     st = sub_type[k][t][d2]
-                    st[0] += r2
-                    st[1] += 1
+                    st[0] += r2 * mult
+                    st[1] += mult
     print(f'■ 창 {n_win:,}개 · 날짜 {len(per_day):,}일')
 
     # ── 재구현 자기검사 (사전등록 §4) ───────────────────────────────────
@@ -261,15 +285,21 @@ def main():
                       and pt[d][1] > 0 and pd[d][3] > 0)
         vals = [pt[d][0] / pt[d][1] - pd[d][2] / pd[d][3] for d in days]
         z, win, n = sign_test(vals)
+        # 중앙값은 결과를 본 뒤에 **보고용으로만** 더했다 — 자사주·배당에서
+        # 평균(+)과 부호검정(−)이 갈렸고, 둘 중 하나만 적으면 오해를 준다.
+        # 판정에는 쓰지 않는다(사전등록 §2 의 부호검정 그대로).
+        sv = sorted(vals)
+        med = (round(sv[len(sv) // 2], 3) if sv else None)
         return dict(events=sum(pt[d][1] for d in days), days=len(days),
                     delta_mean_pp=round(sum(vals) / len(vals), 3) if vals else None,
+                    delta_median_pp=med,
                     win_pct=round(win / n * 100, 1) if n else None,
                     need_pct=need_p(n), sign_z=z, sign_win=win, sign_n=n)
 
     results = {}
     print()
-    print(f'{"유형":<10}{"이벤트":>8}{"날짜":>7}{"Δ평균%p":>9}{"승률":>7}'
-          f'{"필요":>7}{"z":>7}  판정')
+    print(f'{"유형":<10}{"이벤트":>8}{"날짜":>7}{"Δ평균%p":>9}{"Δ중앙%p":>9}'
+          f'{"승률":>7}{"필요":>7}{"z":>7}  판정')
     for t in TYPES:
         dev = run(per_type[t], per_day, hi=DEV_END)
         sample_ok = dev['events'] >= MIN_EVENTS and dev['days'] >= MIN_DAYS
@@ -286,7 +316,9 @@ def main():
         results[t] = dict(dev=dev, sample_ok=sample_ok, z_ok=z_ok,
                           verdict=verdict, blind=blind)
         print(f'{t:<10}{dev["events"]:>8,}{dev["days"]:>7,}'
-              f'{(dev["delta_mean_pp"] or 0):>9.3f}{(dev["win_pct"] or 0):>6.1f}%'
+              f'{(dev["delta_mean_pp"] or 0):>9.3f}'
+              f'{(dev["delta_median_pp"] or 0):>9.3f}'
+              f'{(dev["win_pct"] or 0):>6.1f}%'
               f'{(dev["need_pct"] or 0):>6.1f}%'
               f'{(dev["sign_z"] if dev["sign_z"] is not None else 0):>7.2f}  {verdict}')
 

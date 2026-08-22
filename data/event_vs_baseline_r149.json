@@ -1,0 +1,836 @@
+{
+ "made": "2026-08-22",
+ "made_at": "2026-08-22T08:06:49+00:00",
+ "prereg": "docs/PREREG_R149_EVENT_VS_BASELINE.md",
+ "criteria": {
+  "z_crit": 2.7,
+  "min_events": 1000,
+  "min_days": 300,
+  "main_exit": 5,
+  "dev_end": "2026-01-30",
+  "blind": [
+   "2026-02-03",
+   "2026-07-15"
+  ],
+  "n_tests": 7,
+  "bar_first": "2014-05-30",
+  "repro_tol": 0.001
+ },
+ "windows": 2886293,
+ "window_days": 2995,
+ "repro_check": [
+  {
+   "name": "기준선",
+   "mine": -0.232,
+   "r148": -0.232
+  },
+  {
+   "name": "자사주·배당",
+   "mine": -0.22,
+   "r148": -0.22
+  },
+  {
+   "name": "수주·공급계약",
+   "mine": -0.568,
+   "r148": -0.568
+  },
+  {
+   "name": "증자·CB·BW",
+   "mine": -0.565,
+   "r148": -0.565
+  },
+  {
+   "name": "투자·설비",
+   "mine": -0.485,
+   "r148": -0.485
+  },
+  {
+   "name": "M&A·분할",
+   "mine": -0.534,
+   "r148": -0.534
+  },
+  {
+   "name": "IR·안내",
+   "mine": -0.076,
+   "r148": -0.076
+  },
+  {
+   "name": "인허가·임상",
+   "mine": -1.529,
+   "r148": -1.529
+  }
+ ],
+ "types": {
+  "자사주·배당": {
+   "dev": {
+    "events": 20609,
+    "days": 2755,
+    "delta_mean_pp": 0.009,
+    "delta_median_pp": -0.202,
+    "win_pct": 46.0,
+    "need_pct": 52.6,
+    "sign_z": -4.25,
+    "sign_win": 1266,
+    "sign_n": 2755
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 1577,
+    "days": 109,
+    "delta_mean_pp": -0.333,
+    "delta_median_pp": -0.705,
+    "win_pct": 33.9,
+    "need_pct": 62.9,
+    "sign_z": -3.35,
+    "sign_win": 37,
+    "sign_n": 109
+   }
+  },
+  "수주·공급계약": {
+   "dev": {
+    "events": 18085,
+    "days": 2843,
+    "delta_mean_pp": -0.34,
+    "delta_median_pp": -0.579,
+    "win_pct": 41.4,
+    "need_pct": 52.5,
+    "sign_z": -9.21,
+    "sign_win": 1176,
+    "sign_n": 2843
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 1035,
+    "days": 109,
+    "delta_mean_pp": -0.505,
+    "delta_median_pp": -0.914,
+    "win_pct": 43.1,
+    "need_pct": 62.9,
+    "sign_z": -1.44,
+    "sign_win": 47,
+    "sign_n": 109
+   }
+  },
+  "증자·CB·BW": {
+   "dev": {
+    "events": 8622,
+    "days": 2651,
+    "delta_mean_pp": -0.333,
+    "delta_median_pp": -0.798,
+    "win_pct": 41.8,
+    "need_pct": 52.6,
+    "sign_z": -8.49,
+    "sign_win": 1107,
+    "sign_n": 2651
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 512,
+    "days": 108,
+    "delta_mean_pp": -0.551,
+    "delta_median_pp": -0.979,
+    "win_pct": 40.7,
+    "need_pct": 63.0,
+    "sign_z": -1.92,
+    "sign_win": 44,
+    "sign_n": 108
+   }
+  },
+  "투자·설비": {
+   "dev": {
+    "events": 7738,
+    "days": 2522,
+    "delta_mean_pp": -0.262,
+    "delta_median_pp": -0.772,
+    "win_pct": 41.8,
+    "need_pct": 52.7,
+    "sign_z": -8.2,
+    "sign_win": 1055,
+    "sign_n": 2522
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 462,
+    "days": 105,
+    "delta_mean_pp": -0.292,
+    "delta_median_pp": -0.964,
+    "win_pct": 41.0,
+    "need_pct": 63.2,
+    "sign_z": -1.85,
+    "sign_win": 43,
+    "sign_n": 105
+   }
+  },
+  "M&A·분할": {
+   "dev": {
+    "events": 4698,
+    "days": 2096,
+    "delta_mean_pp": -0.321,
+    "delta_median_pp": -0.848,
+    "win_pct": 41.6,
+    "need_pct": 52.9,
+    "sign_z": -7.69,
+    "sign_win": 872,
+    "sign_n": 2096
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 262,
+    "days": 94,
+    "delta_mean_pp": -1.051,
+    "delta_median_pp": -1.045,
+    "win_pct": 42.6,
+    "need_pct": 63.9,
+    "sign_z": -1.44,
+    "sign_win": 40,
+    "sign_n": 94
+   }
+  },
+  "IR·안내": {
+   "dev": {
+    "events": 20673,
+    "days": 2800,
+    "delta_mean_pp": 0.148,
+    "delta_median_pp": 0.026,
+    "win_pct": 50.4,
+    "need_pct": 52.6,
+    "sign_z": 0.38,
+    "sign_win": 1410,
+    "sign_n": 2800
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 기각",
+   "blind": null
+  },
+  "인허가·임상": {
+   "dev": {
+    "events": 1308,
+    "days": 921,
+    "delta_mean_pp": -1.234,
+    "delta_median_pp": -2.082,
+    "win_pct": 33.9,
+    "need_pct": 54.4,
+    "sign_z": -9.79,
+    "sign_win": 312,
+    "sign_n": 921
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "통과(−) — 보통 날보다 못하다",
+   "blind": {
+    "events": 107,
+    "days": 61,
+    "delta_mean_pp": -2.322,
+    "delta_median_pp": -2.258,
+    "win_pct": 34.4,
+    "need_pct": 67.3,
+    "sign_z": -2.43,
+    "sign_win": 21,
+    "sign_n": 61
+   }
+  }
+ },
+ "passed": [
+  "자사주·배당",
+  "수주·공급계약",
+  "증자·CB·BW",
+  "투자·설비",
+  "M&A·분할",
+  "인허가·임상"
+ ],
+ "sensitivity": {
+  "자사주·배당": {
+   "control_t_only": {
+    "events": 20609,
+    "days": 2755,
+    "delta_mean_pp": 0.012,
+    "delta_median_pp": -0.197,
+    "win_pct": 46.0,
+    "need_pct": 52.6,
+    "sign_z": -4.25,
+    "sign_win": 1266,
+    "sign_n": 2755
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 11246,
+     "days": 2379,
+     "delta_mean_pp": -0.04,
+     "delta_median_pp": -0.209,
+     "win_pct": 46.7,
+     "need_pct": 52.8,
+     "sign_z": -3.22,
+     "sign_win": 1111,
+     "sign_n": 2379
+    },
+    "KOSDAQ": {
+     "events": 9363,
+     "days": 2390,
+     "delta_mean_pp": 0.097,
+     "delta_median_pp": -0.406,
+     "win_pct": 45.2,
+     "need_pct": 52.8,
+     "sign_z": -4.66,
+     "sign_win": 1081,
+     "sign_n": 2390
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 20609,
+     "days": 2755,
+     "delta_mean_pp": -0.052,
+     "delta_median_pp": -0.086,
+     "win_pct": 46.2,
+     "need_pct": 52.6,
+     "sign_z": -3.98,
+     "sign_win": 1273,
+     "sign_n": 2755
+    },
+    "3": {
+     "events": 20609,
+     "days": 2755,
+     "delta_mean_pp": -0.007,
+     "delta_median_pp": -0.186,
+     "win_pct": 45.7,
+     "need_pct": 52.6,
+     "sign_z": -4.52,
+     "sign_win": 1259,
+     "sign_n": 2755
+    },
+    "10": {
+     "events": 20609,
+     "days": 2755,
+     "delta_mean_pp": -0.005,
+     "delta_median_pp": -0.452,
+     "win_pct": 44.4,
+     "need_pct": 52.6,
+     "sign_z": -5.89,
+     "sign_win": 1223,
+     "sign_n": 2755
+    },
+    "20": {
+     "events": 20609,
+     "days": 2755,
+     "delta_mean_pp": -0.043,
+     "delta_median_pp": -0.719,
+     "win_pct": 43.5,
+     "need_pct": 52.6,
+     "sign_z": -6.8,
+     "sign_win": 1199,
+     "sign_n": 2755
+    }
+   }
+  },
+  "수주·공급계약": {
+   "control_t_only": {
+    "events": 18085,
+    "days": 2843,
+    "delta_mean_pp": -0.339,
+    "delta_median_pp": -0.569,
+    "win_pct": 41.2,
+    "need_pct": 52.5,
+    "sign_z": -9.4,
+    "sign_win": 1171,
+    "sign_n": 2843
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 10236,
+     "days": 2610,
+     "delta_mean_pp": -0.187,
+     "delta_median_pp": -0.426,
+     "win_pct": 43.5,
+     "need_pct": 52.6,
+     "sign_z": -6.66,
+     "sign_win": 1135,
+     "sign_n": 2610
+    },
+    "KOSDAQ": {
+     "events": 7849,
+     "days": 2577,
+     "delta_mean_pp": -0.483,
+     "delta_median_pp": -0.896,
+     "win_pct": 40.2,
+     "need_pct": 52.7,
+     "sign_z": -9.99,
+     "sign_win": 1035,
+     "sign_n": 2577
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 18085,
+     "days": 2843,
+     "delta_mean_pp": -0.253,
+     "delta_median_pp": -0.309,
+     "win_pct": 38.7,
+     "need_pct": 52.5,
+     "sign_z": -12.06,
+     "sign_win": 1100,
+     "sign_n": 2843
+    },
+    "3": {
+     "events": 18085,
+     "days": 2843,
+     "delta_mean_pp": -0.338,
+     "delta_median_pp": -0.51,
+     "win_pct": 39.9,
+     "need_pct": 52.5,
+     "sign_z": -10.82,
+     "sign_win": 1133,
+     "sign_n": 2843
+    },
+    "10": {
+     "events": 18085,
+     "days": 2843,
+     "delta_mean_pp": -0.298,
+     "delta_median_pp": -0.639,
+     "win_pct": 43.0,
+     "need_pct": 52.5,
+     "sign_z": -7.48,
+     "sign_win": 1222,
+     "sign_n": 2843
+    },
+    "20": {
+     "events": 18085,
+     "days": 2843,
+     "delta_mean_pp": -0.139,
+     "delta_median_pp": -0.732,
+     "win_pct": 43.3,
+     "need_pct": 52.5,
+     "sign_z": -7.18,
+     "sign_win": 1230,
+     "sign_n": 2843
+    }
+   }
+  },
+  "증자·CB·BW": {
+   "control_t_only": {
+    "events": 8622,
+    "days": 2651,
+    "delta_mean_pp": -0.33,
+    "delta_median_pp": -0.8,
+    "win_pct": 41.7,
+    "need_pct": 52.6,
+    "sign_z": -8.57,
+    "sign_win": 1105,
+    "sign_n": 2651
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 3287,
+     "days": 1861,
+     "delta_mean_pp": -0.352,
+     "delta_median_pp": -0.79,
+     "win_pct": 42.1,
+     "need_pct": 53.1,
+     "sign_z": -6.79,
+     "sign_win": 784,
+     "sign_n": 1861
+    },
+    "KOSDAQ": {
+     "events": 5335,
+     "days": 2304,
+     "delta_mean_pp": -0.426,
+     "delta_median_pp": -1.006,
+     "win_pct": 42.4,
+     "need_pct": 52.8,
+     "sign_z": -7.33,
+     "sign_win": 976,
+     "sign_n": 2304
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 8622,
+     "days": 2651,
+     "delta_mean_pp": -0.325,
+     "delta_median_pp": -0.437,
+     "win_pct": 41.2,
+     "need_pct": 52.6,
+     "sign_z": -9.11,
+     "sign_win": 1091,
+     "sign_n": 2651
+    },
+    "3": {
+     "events": 8622,
+     "days": 2651,
+     "delta_mean_pp": -0.342,
+     "delta_median_pp": -0.743,
+     "win_pct": 41.6,
+     "need_pct": 52.6,
+     "sign_z": -8.68,
+     "sign_win": 1102,
+     "sign_n": 2651
+    },
+    "10": {
+     "events": 8622,
+     "days": 2651,
+     "delta_mean_pp": -0.629,
+     "delta_median_pp": -1.306,
+     "win_pct": 41.0,
+     "need_pct": 52.6,
+     "sign_z": -9.26,
+     "sign_win": 1087,
+     "sign_n": 2651
+    },
+    "20": {
+     "events": 8622,
+     "days": 2651,
+     "delta_mean_pp": -0.667,
+     "delta_median_pp": -2.044,
+     "win_pct": 41.0,
+     "need_pct": 52.6,
+     "sign_z": -9.26,
+     "sign_win": 1087,
+     "sign_n": 2651
+    }
+   }
+  },
+  "투자·설비": {
+   "control_t_only": {
+    "events": 7738,
+    "days": 2522,
+    "delta_mean_pp": -0.259,
+    "delta_median_pp": -0.745,
+    "win_pct": 41.9,
+    "need_pct": 52.7,
+    "sign_z": -8.12,
+    "sign_win": 1057,
+    "sign_n": 2522
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 4677,
+     "days": 2049,
+     "delta_mean_pp": -0.254,
+     "delta_median_pp": -0.525,
+     "win_pct": 44.0,
+     "need_pct": 53.0,
+     "sign_z": -5.46,
+     "sign_win": 901,
+     "sign_n": 2049
+    },
+    "KOSDAQ": {
+     "events": 3061,
+     "days": 1725,
+     "delta_mean_pp": -0.36,
+     "delta_median_pp": -1.081,
+     "win_pct": 40.8,
+     "need_pct": 53.3,
+     "sign_z": -7.63,
+     "sign_win": 704,
+     "sign_n": 1725
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 7738,
+     "days": 2522,
+     "delta_mean_pp": -0.245,
+     "delta_median_pp": -0.307,
+     "win_pct": 41.8,
+     "need_pct": 52.7,
+     "sign_z": -8.2,
+     "sign_win": 1055,
+     "sign_n": 2522
+    },
+    "3": {
+     "events": 7738,
+     "days": 2522,
+     "delta_mean_pp": -0.267,
+     "delta_median_pp": -0.546,
+     "win_pct": 42.3,
+     "need_pct": 52.7,
+     "sign_z": -7.77,
+     "sign_win": 1066,
+     "sign_n": 2522
+    },
+    "10": {
+     "events": 7738,
+     "days": 2522,
+     "delta_mean_pp": -0.434,
+     "delta_median_pp": -1.103,
+     "win_pct": 41.4,
+     "need_pct": 52.7,
+     "sign_z": -8.6,
+     "sign_win": 1045,
+     "sign_n": 2522
+    },
+    "20": {
+     "events": 7738,
+     "days": 2522,
+     "delta_mean_pp": -0.558,
+     "delta_median_pp": -1.479,
+     "win_pct": 40.9,
+     "need_pct": 52.7,
+     "sign_z": -9.12,
+     "sign_win": 1032,
+     "sign_n": 2522
+    }
+   }
+  },
+  "M&A·분할": {
+   "control_t_only": {
+    "events": 4698,
+    "days": 2096,
+    "delta_mean_pp": -0.317,
+    "delta_median_pp": -0.846,
+    "win_pct": 41.6,
+    "need_pct": 52.9,
+    "sign_z": -7.73,
+    "sign_win": 871,
+    "sign_n": 2096
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 2665,
+     "days": 1528,
+     "delta_mean_pp": -0.281,
+     "delta_median_pp": -0.832,
+     "win_pct": 41.8,
+     "need_pct": 53.5,
+     "sign_z": -6.45,
+     "sign_win": 638,
+     "sign_n": 1528
+    },
+    "KOSDAQ": {
+     "events": 2033,
+     "days": 1352,
+     "delta_mean_pp": -0.291,
+     "delta_median_pp": -0.809,
+     "win_pct": 42.9,
+     "need_pct": 53.7,
+     "sign_z": -5.22,
+     "sign_win": 580,
+     "sign_n": 1352
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 4698,
+     "days": 2096,
+     "delta_mean_pp": -0.162,
+     "delta_median_pp": -0.275,
+     "win_pct": 43.2,
+     "need_pct": 52.9,
+     "sign_z": -6.25,
+     "sign_win": 905,
+     "sign_n": 2096
+    },
+    "3": {
+     "events": 4698,
+     "days": 2096,
+     "delta_mean_pp": -0.346,
+     "delta_median_pp": -0.609,
+     "win_pct": 41.3,
+     "need_pct": 52.9,
+     "sign_z": -7.99,
+     "sign_win": 865,
+     "sign_n": 2096
+    },
+    "10": {
+     "events": 4698,
+     "days": 2096,
+     "delta_mean_pp": -0.316,
+     "delta_median_pp": -1.059,
+     "win_pct": 41.1,
+     "need_pct": 52.9,
+     "sign_z": -8.17,
+     "sign_win": 861,
+     "sign_n": 2096
+    },
+    "20": {
+     "events": 4698,
+     "days": 2096,
+     "delta_mean_pp": -0.087,
+     "delta_median_pp": -1.479,
+     "win_pct": 41.7,
+     "need_pct": 52.9,
+     "sign_z": -7.6,
+     "sign_win": 874,
+     "sign_n": 2096
+    }
+   }
+  },
+  "IR·안내": {
+   "control_t_only": {
+    "events": 20673,
+    "days": 2800,
+    "delta_mean_pp": 0.153,
+    "delta_median_pp": 0.017,
+    "win_pct": 50.3,
+    "need_pct": 52.6,
+    "sign_z": 0.34,
+    "sign_win": 1409,
+    "sign_n": 2800
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 14238,
+     "days": 2714,
+     "delta_mean_pp": 0.09,
+     "delta_median_pp": -0.031,
+     "win_pct": 49.4,
+     "need_pct": 52.6,
+     "sign_z": -0.61,
+     "sign_win": 1341,
+     "sign_n": 2714
+    },
+    "KOSDAQ": {
+     "events": 6435,
+     "days": 2208,
+     "delta_mean_pp": 0.531,
+     "delta_median_pp": -0.095,
+     "win_pct": 49.2,
+     "need_pct": 52.9,
+     "sign_z": -0.77,
+     "sign_win": 1086,
+     "sign_n": 2208
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 20673,
+     "days": 2800,
+     "delta_mean_pp": 0.076,
+     "delta_median_pp": 0.011,
+     "win_pct": 50.4,
+     "need_pct": 52.6,
+     "sign_z": 0.42,
+     "sign_win": 1411,
+     "sign_n": 2800
+    },
+    "3": {
+     "events": 20673,
+     "days": 2800,
+     "delta_mean_pp": 0.15,
+     "delta_median_pp": 0.029,
+     "win_pct": 50.7,
+     "need_pct": 52.6,
+     "sign_z": 0.72,
+     "sign_win": 1419,
+     "sign_n": 2800
+    },
+    "10": {
+     "events": 20673,
+     "days": 2800,
+     "delta_mean_pp": 0.094,
+     "delta_median_pp": -0.235,
+     "win_pct": 46.9,
+     "need_pct": 52.6,
+     "sign_z": -3.25,
+     "sign_win": 1314,
+     "sign_n": 2800
+    },
+    "20": {
+     "events": 20673,
+     "days": 2800,
+     "delta_mean_pp": -0.136,
+     "delta_median_pp": -0.591,
+     "win_pct": 44.9,
+     "need_pct": 52.6,
+     "sign_z": -5.4,
+     "sign_win": 1257,
+     "sign_n": 2800
+    }
+   }
+  },
+  "인허가·임상": {
+   "control_t_only": {
+    "events": 1308,
+    "days": 921,
+    "delta_mean_pp": -1.232,
+    "delta_median_pp": -2.112,
+    "win_pct": 34.0,
+    "need_pct": 54.4,
+    "sign_z": -9.72,
+    "sign_win": 313,
+    "sign_n": 921
+   },
+   "by_market": {
+    "KOSPI": {
+     "events": 283,
+     "days": 223,
+     "delta_mean_pp": -0.94,
+     "delta_median_pp": -1.249,
+     "win_pct": 35.4,
+     "need_pct": 59.0,
+     "sign_z": -4.35,
+     "sign_win": 79,
+     "sign_n": 223
+    },
+    "KOSDAQ": {
+     "events": 1025,
+     "days": 792,
+     "delta_mean_pp": -1.557,
+     "delta_median_pp": -2.481,
+     "win_pct": 33.6,
+     "need_pct": 54.8,
+     "sign_z": -9.24,
+     "sign_win": 266,
+     "sign_n": 792
+    }
+   },
+   "sub_windows": {
+    "1": {
+     "events": 1308,
+     "days": 921,
+     "delta_mean_pp": -0.824,
+     "delta_median_pp": -0.753,
+     "win_pct": 34.9,
+     "need_pct": 54.4,
+     "sign_z": -9.19,
+     "sign_win": 321,
+     "sign_n": 921
+    },
+    "3": {
+     "events": 1308,
+     "days": 921,
+     "delta_mean_pp": -1.374,
+     "delta_median_pp": -1.512,
+     "win_pct": 33.8,
+     "need_pct": 54.4,
+     "sign_z": -9.85,
+     "sign_win": 311,
+     "sign_n": 921
+    },
+    "10": {
+     "events": 1308,
+     "days": 921,
+     "delta_mean_pp": -1.345,
+     "delta_median_pp": -2.549,
+     "win_pct": 36.0,
+     "need_pct": 54.4,
+     "sign_z": -8.47,
+     "sign_win": 332,
+     "sign_n": 921
+    },
+    "20": {
+     "events": 1308,
+     "days": 921,
+     "delta_mean_pp": -0.949,
+     "delta_median_pp": -3.584,
+     "win_pct": 36.5,
+     "need_pct": 54.4,
+     "sign_z": -8.2,
+     "sign_win": 336,
+     "sign_n": 921
+    }
+   }
+  }
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. 비용은 차분에서 상쇄되므로 빼지 않는다. 크기·유동성 매칭 없음 (사전등록 §6). 원장 미조인."
+}
