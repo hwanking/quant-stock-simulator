@@ -95,7 +95,7 @@ def main():
     idx = {'KOSPI': bars.get('KS11'), 'KOSDAQ': bars.get('KQ11')}
     stocks = [c for c in bars if mkt_of[c] != 'INDEX']
     firsts = sorted(bars[c][0][0] for c in stocks)
-    bar_first = firsts[0]
+    bar_first = '2014-05-30'   # 사전등록 §1 기준일 (네이버 3,000봉 상한)
     last_day = max(bars[c][0][-1] for c in stocks)
     print(f"■ 일봉 {len(stocks):,}종목 (실패 {n_fail}) · 최초 {bar_first} · "
           f"최종 {last_day} · 지수 KS11 {len(idx['KOSPI'][0]):,}봉 · "
@@ -136,7 +136,7 @@ def main():
         """D0(또는 다음 거래일) 기준 D+1 시가 → D+exit 종가 초과수익(%)."""
         ds, bm = bars[code]
         i0 = bisect.bisect_left(ds, d0)
-        if i0 >= len(ds) or i0 + exit_k >= len(ds):
+        if i0 >= len(ds) or d0 < ds[0] or i0 + exit_k >= len(ds):
             return None, None
         d_in, d_out = ds[i0 + 1], ds[i0 + exit_k]
         ix = idx[mkt_of[code]]
