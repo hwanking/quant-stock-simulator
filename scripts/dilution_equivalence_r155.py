@@ -358,6 +358,38 @@ def main():
           f'(판정은 중앙값으로 한다 — R154 에서 평균과 중앙이 방향까지 '
           f'어긋났다)')
 
+    # ── 사후 진단 (판정에 쓰지 않는다) — 얼마나 더 있어야 하나 ─────────
+    #   "못 가린다"로 끝내면 '얼마나 못 가리는지'를 안 적는 것이다.
+    #   관측 비율에서 z 2.25 에 닿는 데 필요한 날짜를 역산한다.
+    #   물리 상한은 246거래일/년 × 14.9년 (R129 유도값).
+    def need_days(cnt, n):
+        if not n:
+            return None
+        p = cnt / n
+        if p <= 0.5:
+            return None                     # 방향이 반대면 늘려도 안 닿는다
+        return int(math.ceil((Z_CRIT / (2 * (p - 0.5))) ** 2))
+
+    nd_lo = need_days(e['lower_cnt'], e['lower_n'])
+    nd_hi = need_days(e['upper_cnt'], e['upper_n'])
+    ceiling = int(246 * 14.9)
+    diag = dict(observed_days=len(days), need_days_lower=nd_lo,
+                need_days_upper=nd_hi, physical_ceiling_days=ceiling,
+                note='사후 진단 — 판정에 쓰지 않는다. 관측 비율이 그대로일 '
+                     '때 z 2.25 에 닿는 날짜 수. 물리 상한은 246일/년 × '
+                     '14.9년(R129).')
+    print()
+    print('■ 사후 진단 (판정에 쓰지 않는다) — 동등성을 보이려면 얼마나 더?')
+    print(f'   지금 짝 날짜 {len(days):,}일')
+    print(f'   아래 단측: 관측 {e["lower_cnt"]}/{e["lower_n"]} '
+          f'({e["lower_cnt"] / e["lower_n"] * 100:.1f}%) → 필요 '
+          f'{nd_lo:,}일' if nd_lo else '   아래 단측: 방향이 반대 — 늘려도 안 닿는다')
+    print(f'   위  단측: 관측 {e["upper_cnt"]}/{e["upper_n"]} '
+          f'({e["upper_cnt"] / e["upper_n"] * 100:.1f}%) → 필요 '
+          f'{nd_hi:,}일' if nd_hi else '   위 단측: 방향이 반대 — 늘려도 안 닿는다')
+    print(f'   물리 상한 {ceiling:,}일 (246일/년 × 14.9년) — '
+          f'{"상한 안" if (nd_lo and nd_hi and max(nd_lo, nd_hi) <= ceiling) else "상한 밖"}')
+
     doc = {
         'made': date.today().isoformat(),
         'made_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
@@ -373,6 +405,7 @@ def main():
         'paired': dict(summary=s, sample_ok=sample_ok, d1_pass=d1_ok),
         'tost': e, 'verdict': verdict, 'blind': blind,
         'sensitivity': dict(k2_exact=dict(summary=s2, tost=e2)),
+        'diagnostics': diag,
         'note': ('측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. '
                  '"차이가 유의하지 않다"는 "같다"가 아니므로 동등성을 '
                  'TOST 로 따로 쟀다. 마진은 R154 가 이미 발표한 값이라 '
