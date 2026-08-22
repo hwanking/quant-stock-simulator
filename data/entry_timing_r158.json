@@ -1,0 +1,370 @@
+{
+ "made": "2026-08-23",
+ "made_at": "2026-08-22T19:36:09+00:00",
+ "prereg": "docs/PREREG_R158_ENTRY_TIMING.md",
+ "criteria": {
+  "z_crit": 2.58,
+  "lags": [
+   1,
+   2,
+   3,
+   5,
+   10
+  ],
+  "hold": 5,
+  "min_events": 1000,
+  "min_days": 300,
+  "lookback": 20,
+  "nq": 5,
+  "dev_end": "2026-01-30",
+  "blind": [
+   "2026-02-03",
+   "2026-07-15"
+  ],
+  "n_tests": 5,
+  "r150_delta": 0.048,
+  "r150_z": -3.42,
+  "tol_v": 0.001,
+  "tol_z": 0.01
+ },
+ "self_check": {
+  "delta": 0.048,
+  "z": -3.42,
+  "r150_delta": 0.048,
+  "r150_z": -3.42,
+  "passed": true
+ },
+ "tests": {
+  "1": {
+   "lag": 1,
+   "summary": {
+    "events": 77160,
+    "days": 2846,
+    "mean_pp": -0.11,
+    "median_pp": -0.195,
+    "win_pct": 44.5,
+    "need_pct": 52.4,
+    "sign_z": -5.85,
+    "sign_win": 1267,
+    "sign_n": 2846
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "불이익 있음(−)",
+   "blind": {
+    "events": 5024,
+    "days": 109,
+    "mean_pp": -0.434,
+    "median_pp": -0.505,
+    "win_pct": 33.9,
+    "need_pct": 62.4,
+    "sign_z": -3.35,
+    "sign_win": 37,
+    "sign_n": 109
+   }
+  },
+  "2": {
+   "lag": 2,
+   "summary": {
+    "events": 77160,
+    "days": 2846,
+    "mean_pp": -0.005,
+    "median_pp": -0.076,
+    "win_pct": 47.8,
+    "need_pct": 52.4,
+    "sign_z": -2.32,
+    "sign_win": 1361,
+    "sign_n": 2846
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 불이익 안 보임",
+   "blind": null
+  },
+  "3": {
+   "lag": 3,
+   "summary": {
+    "events": 77139,
+    "days": 2846,
+    "mean_pp": 0.013,
+    "median_pp": -0.067,
+    "win_pct": 48.1,
+    "need_pct": 52.4,
+    "sign_z": -2.02,
+    "sign_win": 1369,
+    "sign_n": 2846
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 불이익 안 보임",
+   "blind": null
+  },
+  "5": {
+   "lag": 5,
+   "summary": {
+    "events": 77144,
+    "days": 2846,
+    "mean_pp": 0.001,
+    "median_pp": -0.039,
+    "win_pct": 48.8,
+    "need_pct": 52.4,
+    "sign_z": -1.31,
+    "sign_win": 1388,
+    "sign_n": 2846
+   },
+   "sample_ok": true,
+   "z_ok": false,
+   "verdict": "미달 — 불이익 안 보임",
+   "blind": null
+  },
+  "10": {
+   "lag": 10,
+   "summary": {
+    "events": 77148,
+    "days": 2846,
+    "mean_pp": -0.009,
+    "median_pp": -0.099,
+    "win_pct": 47.5,
+    "need_pct": 52.4,
+    "sign_z": -2.66,
+    "sign_win": 1352,
+    "sign_n": 2846
+   },
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "불이익 있음(−)",
+   "blind": {
+    "events": 5024,
+    "days": 109,
+    "mean_pp": 0.08,
+    "median_pp": -0.098,
+    "win_pct": 47.7,
+    "need_pct": 62.4,
+    "sign_z": -0.48,
+    "sign_win": 52,
+    "sign_n": 109
+   }
+  }
+ },
+ "passed": [
+  "1",
+  "10"
+ ],
+ "descriptive": {
+  "material6": {
+   "1": {
+    "events": 57759,
+    "days": 2846,
+    "mean_pp": -0.25,
+    "median_pp": -0.335,
+    "win_pct": 42.4,
+    "need_pct": 52.4,
+    "sign_z": -8.14,
+    "sign_win": 1206,
+    "sign_n": 2846
+   },
+   "2": {
+    "events": 57758,
+    "days": 2846,
+    "mean_pp": -0.055,
+    "median_pp": -0.155,
+    "win_pct": 45.5,
+    "need_pct": 52.4,
+    "sign_z": -4.76,
+    "sign_win": 1296,
+    "sign_n": 2846
+   },
+   "3": {
+    "events": 57736,
+    "days": 2846,
+    "mean_pp": -0.013,
+    "median_pp": -0.111,
+    "win_pct": 47.0,
+    "need_pct": 52.4,
+    "sign_z": -3.19,
+    "sign_win": 1338,
+    "sign_n": 2846
+   },
+   "5": {
+    "events": 57741,
+    "days": 2846,
+    "mean_pp": -0.002,
+    "median_pp": -0.11,
+    "win_pct": 46.9,
+    "need_pct": 52.4,
+    "sign_z": -3.3,
+    "sign_win": 1335,
+    "sign_n": 2846
+   },
+   "10": {
+    "events": 57743,
+    "days": 2846,
+    "mean_pp": -0.008,
+    "median_pp": -0.133,
+    "win_pct": 46.1,
+    "need_pct": 52.4,
+    "sign_z": -4.12,
+    "sign_win": 1313,
+    "sign_n": 2846
+   }
+  },
+  "daily_pieces": {
+   "0": {
+    "label": "밤사이 갭",
+    "summary": {
+     "events": 77441,
+     "days": 2846,
+     "mean_pp": -0.056,
+     "median_pp": 0.239,
+     "win_pct": 70.1,
+     "need_pct": 52.4,
+     "sign_z": 21.41,
+     "sign_win": 1994,
+     "sign_n": 2846
+    }
+   },
+   "1": {
+    "label": "D+1 장중",
+    "summary": {
+     "events": 77160,
+     "days": 2846,
+     "mean_pp": -0.107,
+     "median_pp": -0.11,
+     "win_pct": 41.7,
+     "need_pct": 52.4,
+     "sign_z": -8.85,
+     "sign_win": 1187,
+     "sign_n": 2846
+    }
+   },
+   "2": {
+    "label": "D+2 장중",
+    "summary": {
+     "events": 77160,
+     "days": 2846,
+     "mean_pp": -0.031,
+     "median_pp": -0.041,
+     "win_pct": 46.7,
+     "need_pct": 52.4,
+     "sign_z": -3.56,
+     "sign_win": 1328,
+     "sign_n": 2846
+    }
+   },
+   "3": {
+    "label": "D+3 장중",
+    "summary": {
+     "events": 77139,
+     "days": 2846,
+     "mean_pp": -0.007,
+     "median_pp": -0.017,
+     "win_pct": 48.7,
+     "need_pct": 52.4,
+     "sign_z": -1.42,
+     "sign_win": 1385,
+     "sign_n": 2846
+    }
+   },
+   "4": {
+    "label": "D+4 장중",
+    "summary": {
+     "events": 77139,
+     "days": 2846,
+     "mean_pp": 0.01,
+     "median_pp": -0.016,
+     "win_pct": 48.8,
+     "need_pct": 52.4,
+     "sign_z": -1.31,
+     "sign_win": 1388,
+     "sign_n": 2846
+    }
+   },
+   "5": {
+    "label": "D+5 장중",
+    "summary": {
+     "events": 77144,
+     "days": 2846,
+     "mean_pp": 0.011,
+     "median_pp": -0.03,
+     "win_pct": 48.3,
+     "need_pct": 52.4,
+     "sign_z": -1.84,
+     "sign_win": 1374,
+     "sign_n": 2846
+    }
+   },
+   "6": {
+    "label": "D+6 장중",
+    "summary": {
+     "events": 77147,
+     "days": 2846,
+     "mean_pp": 0.014,
+     "median_pp": -0.001,
+     "win_pct": 50.0,
+     "need_pct": 52.4,
+     "sign_z": -0.04,
+     "sign_win": 1422,
+     "sign_n": 2846
+    }
+   },
+   "7": {
+    "label": "D+7 장중",
+    "summary": {
+     "events": 77148,
+     "days": 2846,
+     "mean_pp": -0.007,
+     "median_pp": -0.039,
+     "win_pct": 47.6,
+     "need_pct": 52.4,
+     "sign_z": -2.59,
+     "sign_win": 1354,
+     "sign_n": 2846
+    }
+   },
+   "8": {
+    "label": "D+8 장중",
+    "summary": {
+     "events": 77154,
+     "days": 2846,
+     "mean_pp": 0.016,
+     "median_pp": -0.004,
+     "win_pct": 49.8,
+     "need_pct": 52.4,
+     "sign_z": -0.22,
+     "sign_win": 1417,
+     "sign_n": 2846
+    }
+   },
+   "9": {
+    "label": "D+9 장중",
+    "summary": {
+     "events": 77148,
+     "days": 2846,
+     "mean_pp": -0.005,
+     "median_pp": -0.014,
+     "win_pct": 48.8,
+     "need_pct": 52.4,
+     "sign_z": -1.24,
+     "sign_win": 1390,
+     "sign_n": 2846
+    }
+   },
+   "10": {
+    "label": "D+10 장중",
+    "summary": {
+     "events": 77148,
+     "days": 2846,
+     "mean_pp": -0.012,
+     "median_pp": -0.026,
+     "win_pct": 48.1,
+     "need_pct": 52.4,
+     "sign_z": -1.99,
+     "sign_win": 1370,
+     "sign_n": 2846
+    }
+   }
+  },
+  "note": "판정에 쓰지 않는다. 밤사이 갭은 공시 자체를 담고 있어 거래 신호가 아니다."
+ },
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다. D0 종가 진입은 누출이라 시험하지 않는다. 층화는 언제나 D0 기준. 새 문턱·표본 조건 없음(채택값 재사용). 원장 미조인 · mfe/mae 미사용 · 현재 시총 미사용."
+}
