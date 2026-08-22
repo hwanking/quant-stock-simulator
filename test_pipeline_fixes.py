@@ -13816,6 +13816,95 @@ else:
           '바꾸지 않는다' in str(_d191.get('note')))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §192 — R151 회피 규칙의 값 (사전등록 준수 + 자유도 유혹 차단)
+#
+#   R148~R150 의 순수 창 발견이 원장으로 옮겨지는지 물었고 두 시험 다
+#   기각됐다. 이 절이 지키는 것 중 가장 중요한 것은 ⓒ다:
+#     ⓐ 판정 기준이 사전등록·산출물에서 같은 값
+#     ⓑ 자기검사가 실제로 통과했는가 (R147 값 재현 — 값을 남겼는가)
+#     ⓒ **민감도 한 칸이 문턱을 넘었는데 쫓지 않았는가** —
+#        판정은 사전등록이 고른 달력(일봉)의 결과여야 한다
+#     ⓓ 세 번째 물음이었다는 사실(R147 포함)을 적었는가
+#     ⓔ 방향이 반대라는 사실을 숨기지 않았는가
+#     ⓕ 해석과 측정을 갈랐는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§192 R151 회피 규칙의 값 (라운드 151)")
+print("=" * 72)
+_p192 = _os.path.join(PROJ, 'data', 'avoidance_value_r151.json')
+_doc192 = _os.path.join(PROJ, 'docs', 'RESULT_R151_AVOIDANCE_VALUE.md')
+_pre192 = _os.path.join(PROJ, 'docs', 'PREREG_R151_AVOIDANCE_VALUE.md')
+if not _os.path.exists(_p192):
+    check("R151 산출물이 있다", False, 'data/avoidance_value_r151.json 없음')
+else:
+    with open(_p192, encoding='utf-8') as _f192:
+        _d192 = _json.load(_f192)
+    _flat192 = _re.sub(r'\s+', ' ', _read148(_doc192)).replace('−', '-')
+    _pre192f = _re.sub(r'\s+', ' ', _read148(_pre192)).replace('−', '-')
+    _c192 = _d192.get('criteria') or {}
+    _t192 = _d192.get('tests') or {}
+
+    # ⓐ 기준 정합
+    check("문턱 2.25 가 사전등록과 산출물에 같다",
+          _c192.get('z_crit') == 2.25 and '2.25' in _pre192f)
+    check("표본 조건(1,000·300)이 같다",
+          _c192.get('min_events') == 1000 and _c192.get('min_days') == 300)
+    check("창 D-5 · 시험 2 · 매수권 58 이 사전등록과 같다",
+          _c192.get('fresh') == 5 and _c192.get('n_tests') == 2
+          and _c192.get('buy') == 58.0)
+    check("시험이 두 개다 (A 전체 · B 내용)", len(_t192) == 2,
+          f"{len(_t192)}개")
+    # ⓑ 자기검사 — 값을 남겼는가 (0건이 '없다'인지 '안 봤다'인지)
+    _sc192 = _d192.get('self_check') or {}
+    check("자기검사 값이 산출물에 남아 있다",
+          _sc192.get('dh') is not None and _sc192.get('z') is not None)
+    check("자기검사가 R147 값을 허용 오차 안에서 재현했다",
+          _sc192.get('dh') is not None
+          and abs(_sc192['dh'] - (_c192.get('r147_dh') or -1.69))
+          <= (_c192.get('tol_dh') or 0.01) + 1e-9
+          and abs(_sc192['z'] - (_c192.get('r147_z') or 0.78))
+          <= (_c192.get('tol_z') or 0.01) + 1e-9,
+          f"{_sc192.get('dh')}/{_sc192.get('z')}")
+    # ⓒ 자유도 유혹 — 민감도가 문턱을 넘어도 판정이 바뀌지 않았다
+    _sens192 = _d192.get('sensitivity') or {}
+    _cross = [n for n, s in _sens192.items()
+              if abs(((s.get('ledger_calendar') or {}).get('sign_z') or 0))
+              >= _c192.get('z_crit', 2.25)]
+    check("통과한 시험이 없다 (민감도가 넘어도 판정 불변)",
+          not _d192.get('passed'), str(_d192.get('passed')))
+    if _cross:
+        check("문턱을 넘은 민감도 칸을 문서가 밝히고 쫓지 않았다",
+              '쫓지 않는다' in _flat192 and '판정에 쓰지 않는다' in _flat192
+              and '자유도' in _flat192, str(_cross))
+    check("기각인데 blind 를 열지 않았다",
+          all(r.get('blind') is None for r in _t192.values()))
+    # ⓓ 세 번째 물음 · ⓔ 방향 반대
+    check("세 번 물었고 세 번 다 없었음을 적었다",
+          '세 번 물었고 세 번 다 없었다' in _flat192 and 'R147' in _flat192)
+    check("방향이 반대라는 사실을 적었다",
+          '방향이 반대' in _flat192)
+    check("중앙값이 0 이라는 사실을 적었다",
+          '중앙값이 정확히 0.000%p' in _flat192)
+    # 수치 자릿수 그대로
+    for _tn, _tr in _t192.items():
+        _dv = _tr.get('dev') or {}
+        check(f"문서가 {_tn} 의 z 를 그대로 적었다",
+              _dv.get('sign_z') is not None
+              and f"{_dv['sign_z']:+.2f}" in _flat192, str(_dv.get('sign_z')))
+    # ⓕ 해석과 측정 구분
+    check("해석과 측정을 갈랐다",
+          '해석이지 측정이 아니다' in _flat192)
+    check("매수 우위 0 이 네 라운드 통틀어 유지됨을 적었다",
+          'R148·R149·R150·R151 통틀어 여전히 0개' in _flat192)
+    check("사전등록 커밋 해시를 적었다", 'c3699a5' in _flat192)
+    check("측정일이 문서에 있다",
+          bool(_d192.get('made')) and _d192['made'] in _flat192)
+    check("산출물 note 가 R147 재시도임을 적는다",
+          'R147' in str(_d192.get('note'))
+          and '바꾸지 않는다' in str(_d192.get('note')))
+
+
 print()
 print("=" * 72)
 if FAILURES:
