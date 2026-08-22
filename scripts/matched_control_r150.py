@@ -8,8 +8,11 @@
   Δ(T,D) = 층별 (이벤트평균 − 대조평균) 을 이벤트 수로 가중평균
   창은 R148/R149 와 동일 · 문턱 z 2.70 · 이벤트 ≥1,000 그리고 날짜 ≥300
 
-**재구현 자기검사(사전등록 §5)**: 층을 하나로 합치면 R149 의 유형별
-Δ 평균 7개를 0.001%p 이내로 재현해야 한다. 못 하면 측정을 중단한다.
+**재구현 자기검사(사전등록 §5)**: 층을 하나로 합치고 **모든 창**을
+쓰면 R149 의 유형별 Δ 평균 7개를 0.001%p 이내로 재현해야 한다. 못
+하면 측정을 중단한다. (사전등록은 이 조건을 '층 계산 가능한 창'으로
+적었는데 §2 의 20거래일 제외와 모순이었다 — 판정 기준은 그대로 두고
+검사가 같은 표본끼리 견주도록 고쳤다. 결과 문서 §1 에 적는다.)
 
 측정 전용 — 점수·게이트·문턱을 바꾸지 않는다.
 
@@ -172,27 +175,38 @@ def main():
             if ret is None:
                 continue
             n_win += 1
-            if i + 1 < LOOKBACK:
+            to = vol = None
+            if i + 1 >= LOOKBACK:
+                win_bars = raw[i + 1 - LOOKBACK:i + 1]
+                tot = sum(x[4] * x[5] for x in win_bars) / LOOKBACK
+                rets = []
+                for j in range(1, len(win_bars)):
+                    p0 = win_bars[j - 1][4]
+                    if p0:
+                        rets.append(win_bars[j][4] / p0 - 1)
+                if len(rets) >= 2 and tot > 0:
+                    to, vol = tot, statistics.pstdev(rets)
+            if to is None:
                 n_nostat += 1
-                continue
-            win_bars = raw[i + 1 - LOOKBACK:i + 1]
-            to = sum(x[4] * x[5] for x in win_bars) / LOOKBACK
-            rets = []
-            for j in range(1, len(win_bars)):
-                p0 = win_bars[j - 1][4]
-                if p0:
-                    rets.append(win_bars[j][4] / p0 - 1)
-            if len(rets) < 2 or to <= 0:
-                n_nostat += 1
-                continue
-            vol = statistics.pstdev(rets)
+            # 층을 못 만드는 창도 **버리지 않고 담는다** — 자기검사가
+            # R149 와 같은 표본으로 견주려면 필요하다(아래 §5 설명).
             per_day[dd].append((c, ret, to, vol, mk))
     print(f'■ 창 {n_win:,}개 · 층 계산 가능 '
           f'{n_win - n_nostat:,} ({(n_win - n_nostat) / n_win * 100:.1f}%)'
           f' · 20거래일 부족 {n_nostat:,}')
 
-    # ── Δ 계산 — matched=True 면 층화, False 면 층 하나(=R149 재현) ────
-    def deltas(t, matched, lo=None, hi=None):
+    # ── Δ 계산 — 세 모드 ───────────────────────────────────────────────
+    #   'all'        : 층 하나 · 모든 창          → R149 재현용(자기검사)
+    #   'restricted' : 층 하나 · 층 계산 가능한 창 → 표본 축소 효과만 본다
+    #   'matched'    : 층화 · 층 계산 가능한 창    → 주 시험
+    #
+    #   처음에는 'all' 모드 없이 'restricted' 로 R149 를 재현하려 했고,
+    #   자기검사가 6유형에서 걸렸다. 원인은 데이터가 아니라 **사전등록의
+    #   모순**이었다 — §2 는 20거래일 미만 창을 제외한다고 했고 §5 는
+    #   층을 합치면 R149 를 그대로 재현한다고 했는데, 제외가 있는 한
+    #   둘은 동시에 성립할 수 없다(27,538창 · 1.0% 차이).
+    #   판정 기준은 그대로 두고 **검사가 같은 표본끼리 견주도록** 고쳤다.
+    def deltas(t, mode, lo=None, hi=None):
         vals, days, n_ev = [], 0, 0
         for d in sorted(per_day):
             if (lo is not None and d < lo) or (hi is not None and d > hi):
@@ -200,10 +214,11 @@ def main():
             obs = per_day[d]
             if not obs:
                 continue
-            if matched:
+            if mode == 'matched':
                 strata = {}
                 for mk in ('KOSPI', 'KOSDAQ'):
-                    sub = [k for k, o in enumerate(obs) if o[4] == mk]
+                    sub = [k for k, o in enumerate(obs)
+                           if o[4] == mk and o[2] is not None]
                     if not sub:
                         continue
                     n = len(sub)
@@ -211,7 +226,9 @@ def main():
                     vq = quintile(sorted(sub, key=lambda k: obs[k][3]), n)
                     for k in sub:
                         strata[k] = (mk, tq[k], vq[k])
-            else:
+            elif mode == 'restricted':
+                strata = {k: 0 for k, o in enumerate(obs) if o[2] is not None}
+            else:                                  # 'all'
                 strata = {k: 0 for k in range(len(obs))}
             acc = collections.defaultdict(
                 lambda: [0.0, 0, 0.0, 0])   # 이벤트합·수·대조합·수
@@ -250,12 +267,13 @@ def main():
     with open(R149, encoding='utf-8') as f:
         prev = json.load(f)
     print()
-    print('■ 재구현 자기검사 — 층을 하나로 합치면 R149 를 재현하는가 (§5)')
+    print('■ 재구현 자기검사 — 층 하나 · 모든 창이면 R149 를 재현하는가 (§5)')
     checks, bad = [], []
-    unmatched = {}
+    unmatched, restricted = {}, {}
     for t in TYPES:
-        mine = deltas(t, matched=False, hi=DEV_END)
+        mine = deltas(t, 'all', hi=DEV_END)
         unmatched[t] = mine
+        restricted[t] = deltas(t, 'restricted', hi=DEV_END)
         theirs = ((prev['types'].get(t) or {}).get('dev') or {}).get(
             'delta_mean_pp')
         ok = (mine['delta_mean_pp'] is not None and theirs is not None
@@ -277,7 +295,7 @@ def main():
     print(f'{"유형":<10}{"이벤트":>8}{"날짜":>7}{"Δ평균%p":>9}{"Δ중앙%p":>9}'
           f'{"승률":>7}{"z":>7}{"R149 z":>9}  판정')
     for t in TYPES:
-        dev = deltas(t, matched=True, hi=DEV_END)
+        dev = deltas(t, 'matched', hi=DEV_END)
         prev_z = ((prev['types'].get(t) or {}).get('dev') or {}).get('sign_z')
         sample_ok = dev['events'] >= MIN_EVENTS and dev['days'] >= MIN_DAYS
         z_ok = dev['sign_z'] is not None and abs(dev['sign_z']) >= Z_CRIT
@@ -288,10 +306,12 @@ def main():
                        else '통과(−) — 매칭 뒤에도 남는다')
         else:
             verdict = '미달 — 매칭하니 사라진다'
-        blind = deltas(t, matched=True, lo=BLIND[0], hi=BLIND[1]) \
+        blind = deltas(t, 'matched', lo=BLIND[0], hi=BLIND[1]) \
             if (sample_ok and z_ok) else None
         results[t] = dict(dev=dev, unmatched_r149_z=prev_z,
-                          unmatched_here=unmatched[t], sample_ok=sample_ok,
+                          unmatched_all=unmatched[t],
+                          unmatched_restricted=restricted[t],
+                          sample_ok=sample_ok,
                           z_ok=z_ok, verdict=verdict, blind=blind)
         print(f'{t:<10}{dev["events"]:>8,}{dev["days"]:>7,}'
               f'{(dev["delta_mean_pp"] or 0):>9.3f}'
