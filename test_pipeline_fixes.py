@@ -14664,6 +14664,20 @@ check("None 을 받으면 빈 문자열 (화면이 안 깨진다)",
 _txt199, _gap199 = _uk199.breakeven_line(_be199, 60.0)
 check("실측 60% 와 함께 주면 모자란 폭을 적는다",
       '모자랍니다' in _txt199 and '1.2%p' in _txt199, _txt199)
+# 라운드 161b — 배지는 '{:.0f}%' 라 59.7% 가 '60%' 로 보인다. 차이만
+# 적으면 읽는 사람이 60 − 60.3 = 0.3 으로 계산해 어긋난다(라운드 131 의
+# 두 번 반올림). **세 수가 서로 검산되게** 실측값을 그대로 적는다.
+_txt199c, _gap199c = _uk199.breakeven_line(_be199, 59.7)
+check("실측값을 반올림 없이 함께 적는다 (세 수가 검산된다)",
+      '실측 59.7%' in _txt199c, _txt199c)
+if _be199:
+    _m199 = _re.search(r'적중률 ([\d.]+)% — 실측 ([\d.]+)% 로 ([\d.]+)%p',
+                       _txt199c)
+    check("적힌 세 수가 서로 맞는다 (본전 − 실측 = 차이)",
+          _m199 is not None
+          and abs((float(_m199.group(1)) - float(_m199.group(2)))
+                  - float(_m199.group(3))) < 0.06,
+          _txt199c)
 _txt199b, _gap199b = _uk199.breakeven_line(_be199, 65.0)
 check("실측이 넘으면 넘는다고 적는다",
       '넘습니다' in _txt199b, _txt199b)
