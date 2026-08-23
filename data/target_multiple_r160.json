@@ -1,0 +1,183 @@
+{
+ "made": "2026-08-23",
+ "made_at": "2026-08-22T23:44:11+00:00",
+ "prereg": "docs/PREREG_R160_TARGET_MULTIPLE.md",
+ "criteria": {
+  "z_crit": 2.5,
+  "mults": [
+   1.0,
+   1.5,
+   2.0,
+   3.0
+  ],
+  "buy": 58.0,
+  "cost_pct": 0.41,
+  "min_cases": 1000,
+  "min_days": 300,
+  "repro_min": 95.0,
+  "n_tests": 4,
+  "dev": [
+   "train",
+   "valid"
+  ]
+ },
+ "coverage": {
+  "buy_zone": 82259,
+  "no_path": 0,
+  "no_risk": 0,
+  "analyzed": 82259
+ },
+ "self_check": {
+  "matched": 82117,
+  "total": 82259,
+  "rate_pct": 99.83,
+  "threshold": 95.0,
+  "passed": true,
+  "mismatch": {
+   "STOP→TARGET": 115,
+   "STOP→OPEN": 21,
+   "TARGET→STOP": 3,
+   "OPEN→TARGET": 3
+  }
+ },
+ "baseline": {
+  "cases": 76801,
+  "hit_pct": 57.9,
+  "ev_mean": -0.432,
+  "ev_median": -0.252,
+  "ev_p10": -4.754
+ },
+ "tests": {
+  "1.0": {
+   "gain_where": {
+    "bad_days_median": 0.0,
+    "bad_days_mean": -0.016,
+    "good_days_median": 0.974,
+    "good_days_mean": 0.239
+   },
+   "mult": 1.0,
+   "cases": 76801,
+   "days": 2388,
+   "hit_pct": 48.9,
+   "ev_mean": -0.321,
+   "ev_median": -0.41,
+   "ev_p10": -5.558,
+   "ev_p90": 4.991,
+   "d_mean": 0.112,
+   "d_median": 0.381,
+   "win_pct": 70.5,
+   "need_pct": 52.8,
+   "sign_z": 18.55,
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "낫다(+)",
+   "blind": {
+    "cases": 5458,
+    "days": 41,
+    "hit_pct": 42.4,
+    "d_mean": 0.983,
+    "sign_z": 3.0
+   }
+  },
+  "1.5": {
+   "gain_where": {
+    "bad_days_median": 0.0,
+    "bad_days_mean": -0.056,
+    "good_days_median": 1.129,
+    "good_days_mean": 0.529
+   },
+   "mult": 1.5,
+   "cases": 76801,
+   "days": 2388,
+   "hit_pct": 37.7,
+   "ev_mean": -0.196,
+   "ev_median": -0.628,
+   "ev_p10": -6.072,
+   "ev_p90": 6.285,
+   "d_mean": 0.236,
+   "d_median": 0.09,
+   "win_pct": 60.4,
+   "need_pct": 52.8,
+   "sign_z": 9.42,
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "낫다(+)",
+   "blind": {
+    "cases": 5458,
+    "days": 41,
+    "hit_pct": 32.1,
+    "d_mean": 1.386,
+    "sign_z": 1.67
+   }
+  },
+  "2.0": {
+   "gain_where": {
+    "bad_days_median": 0.0,
+    "bad_days_mean": -0.045,
+    "good_days_median": 1.074,
+    "good_days_mean": 0.773
+   },
+   "mult": 2.0,
+   "cases": 76801,
+   "days": 2388,
+   "hit_pct": 29.6,
+   "ev_mean": -0.068,
+   "ev_median": -0.811,
+   "ev_p10": -6.239,
+   "ev_p90": 7.341,
+   "d_mean": 0.364,
+   "d_median": 0.0,
+   "win_pct": 56.7,
+   "need_pct": 52.8,
+   "sign_z": 6.0,
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "낫다(+)",
+   "blind": {
+    "cases": 5458,
+    "days": 41,
+    "hit_pct": 25.0,
+    "d_mean": 0.598,
+    "sign_z": 0.67
+   }
+  },
+  "3.0": {
+   "gain_where": {
+    "bad_days_median": 0.0,
+    "bad_days_mean": -0.03,
+    "good_days_median": 0.941,
+    "good_days_mean": 1.129
+   },
+   "mult": 3.0,
+   "cases": 76801,
+   "days": 2388,
+   "hit_pct": 18.7,
+   "ev_mean": 0.117,
+   "ev_median": -1.088,
+   "ev_p10": -6.514,
+   "ev_p90": 8.527,
+   "d_mean": 0.55,
+   "d_median": 0.0,
+   "win_pct": 53.2,
+   "need_pct": 52.8,
+   "sign_z": 2.9,
+   "sample_ok": true,
+   "z_ok": true,
+   "verdict": "낫다(+)",
+   "blind": {
+    "cases": 5458,
+    "days": 41,
+    "hit_pct": 16.4,
+    "d_mean": 1.306,
+    "sign_z": 1.0
+   }
+  }
+ },
+ "passed": [
+  "1.0",
+  "1.5",
+  "2.0",
+  "3.0"
+ ],
+ "note": "측정 전용 — 점수·게이트·문턱·실행 레벨을 바꾸지 않는다. 원장 mfe/mae 미사용(청산 봉 함정) — bar_paths 를 다시 밟았다(R85). 채점 규칙은 prediction_log 와 동일. 잣대는 비용후 기대값이지 적중률이 아니다. 통과해도 이 라운드에서 목표 산식을 바꾸지 않는다 — 실행 레벨 변경은 2026-11-16 이후 별도 사전등록이다."
+}
