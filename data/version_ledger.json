@@ -3,12 +3,38 @@
   "model": "v2026.08.19.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.23.3",
+  "schema": "v2026.08.24.1",
   "news": "v2026.08.15.2",
   "sector": "v2026.08.09.0",
-  "valuation": "v2026.08.08.1"
+  "valuation": "v2026.08.24.1"
  },
  "history": [
+  {
+   "axis": "valuation",
+   "axis_ko": "적정가 엔진",
+   "version": "v2026.08.24.1",
+   "previous": "v2026.08.08.1",
+   "kind": "copy",
+   "kind_ko": "문구 수정",
+   "bump": "patch",
+   "reason": "ETF 적정가 미산출 문구가 \"NAV 미연동\"이라 적고 있었다 — 라운드 164 에서 연동했고 화면은 옆 칸에 NAV 를 띄운다",
+   "note": "같은 화면이 스스로 모순되던 자리 (§4) · 표시 전용 — 라운드 165",
+   "created_at": "2026-08-23T16:46:48+00:00",
+   "effective_from": "2026-08-24"
+  },
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.24.1",
+   "previous": "v2026.08.23.3",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "문자 코드 ETF 가 일봉·뉴스·공시·배당에서 죽던 결함 — 코드에서 숫자만 뽑는 표기 네 자리를 stock_code 로",
+   "note": "'0040Y0.KS' → '00400'(5자리)로 물어봐서 수신 실패였다. 네이버는 0040Y0 으로 325봉을 정상 제공한다(실측) — 라운드 165",
+   "created_at": "2026-08-23T16:46:48+00:00",
+   "effective_from": "2026-08-24"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",
