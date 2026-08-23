@@ -24,6 +24,8 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 
+import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 저장 위치 — 로컬 전용. 서버 전송 없음.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -887,8 +889,11 @@ def _read_code_token(token):
 
     # ③ 그 밖의 글자가 있으면 실제 문자 포함 KRX 코드로 본다 (예: ETF '0040Y0').
     #    다만 O 는 어느 자리에서든 0 의 오독일 가능성이 커서 바꿔 준다.
+    #    ⚠️ 라운드 164 — 이 판별식이 여기에만 있어서 **OCR 경로만** 문자
+    #       코드를 읽고 검색·관심종목은 못 읽었다. 식을 `stock_code` 로
+    #       올리고 여기서도 그것을 부른다 — 규칙은 한 곳에만 둔다.
     cand = up.replace('O', '0')
-    if re.fullmatch(r'[0-9][0-9A-Z]{5}', cand) and sum(c.isdigit() for c in cand) >= 4:
+    if stock_code.is_code(cand):
         return cand, cand != up
     return None, False
 
@@ -2069,27 +2074,19 @@ def normalize_code(raw):
     ⚠️ 표 왕복(Arrow/엑셀)에서 종목코드 열이 숫자형으로 바뀌면 '005930' 이 5930.0 이 된다.
        그대로 숫자만 뽑으면 '59300' → 059300 이라는 **없는 종목코드**가 만들어진다.
        소수점 표기를 먼저 걷어낸 뒤 자리수를 맞춘다.
+
+    ⚠️ 라운드 164 — 판별을 `stock_code` 로 옮겼다. 종전 구현은 **숫자만
+       뽑아 zfill** 했는데, 그것이 문자 섞인 KRX 코드에서 **다른 종목의
+       코드를 만들어 냈다**:
+
+           '0040Y0'        → '000400'   (롯데손해보험)
+           'ACE 미국빅테크7' → '000007'
+
+       못 읽는 것과 남의 코드를 만드는 것은 전혀 다른 실패다 (§3).
+       규칙은 이 파일의 `_read_code_token` ③ 이 이미 쓰던 것을 그대로
+       올렸다 — 새 문턱을 만들지 않았다 (§2).
     """
-    if raw is None:
-        return None
-    if isinstance(raw, float):
-        if np.isnan(raw):
-            return None
-        if float(raw).is_integer():
-            raw = int(raw)
-    s = str(raw).strip()
-    if not s or s.lower() in ('nan', 'none', '<na>'):
-        return None
-    # '5930.0' 처럼 정수를 실수로 표기한 문자열도 정수부만 쓴다
-    m = re.fullmatch(r'(\d+)\.0+', s)
-    if m:
-        s = m.group(1)
-    digits = re.sub(r'\D', '', s)
-    if not digits:
-        return None
-    if len(digits) > 6:
-        digits = digits[-6:]
-    return digits.zfill(6)
+    return stock_code.normalize(raw)
 
 
 def import_positions(df, mapping, resolve_market=None, source_type="csv_import"):
@@ -2223,7 +2220,17 @@ WATCH_NOTE_NUM = ('paid', 'qty', 'target_buy')   # 매입가 · 수량 · (구)�
 WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
                   'snap_fair_conf', 'snap_px')
 WATCH_SNAP_TXT = ('snap_at', 'snap_engine')
-WATCH_NOTE_TXT = ('memo',)
+#: `plan` — 이 종목을 **어떻게 할 생각인가** (라운드 164).
+#:   사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해 보유
+#:   이렇게만 해줘."* 자유 메모는 다시 읽을 때 해석이 필요한데, 정작
+#:   보고 싶은 것은 셋 중 하나였다.
+#: ⚠️ 이것은 **사용자의 계획**이지 엔진의 판정이 아니다. 점수·적정가·
+#:   판정에 들어가지 않는다 (§9). 화면이 두 값을 눈에 보이게 가른다.
+#: `memo` 는 지우지 않는다 — 이미 적어 둔 사람의 글이 사라지면 안 된다.
+WATCH_NOTE_TXT = ('memo', 'plan')
+
+#: `plan` 이 가질 수 있는 값. 이 밖의 문자열은 저장하지 않는다.
+WATCH_PLANS = ('매수', '매도', '보유')
 
 
 def _watch_num(v):
@@ -2256,6 +2263,10 @@ def save_watchlist(items, path=WATCHLIST_FILE):
                 row[k] = v
         for k in WATCH_NOTE_TXT + WATCH_SNAP_TXT:
             v = str((it or {}).get(k) or '').strip()
+            # 계획은 정해진 셋 중 하나만 남긴다 — 오타·옛 값이 그대로
+            # 굳지 않게 한다. 아니면 키를 아예 안 만든다 (§3).
+            if k == 'plan' and v not in WATCH_PLANS:
+                continue
             if v:
                 row[k] = v[:120]
         clean.append(row)
@@ -2276,6 +2287,83 @@ def load_watchlist(path=WATCHLIST_FILE):
 
 
 def delete_watchlist(path=WATCHLIST_FILE):
+    if os.path.exists(path):
+        os.remove(path)
+        return True
+    return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 최근 본 종목 (라운드 164)
+#
+# 사용자 요청: *"검색할 때 전에 검색한 리스트도 쭉 나오게 해서 고르게
+# 하는 거 어때?"*
+#
+# 이 앱에서 종목 하나를 고르면 전체 파이프라인이 돌아 몇 분씩 걸린다.
+# 그래서 **다시 보러 가는 일**이 잦은데, 그때마다 이름을 처음부터 다시
+# 쳐야 했다. 관심종목과는 다른 것이다 — 관심종목은 *담아 둔 것*이고
+# 이것은 *지나온 것*이다. 둘을 섞지 않는다.
+#
+# 보유종목과 같은 원칙: 로컬 파일에만, 서버 전송 없음.
+# ⚠️ 무엇을 봤는지도 개인 정보다. `.portfolio/` 아래 두어 커밋되지 않게
+#   한다 (§9). 원격 접속에서는 화면이 이 파일을 아예 쓰지 않는다.
+# ─────────────────────────────────────────────────────────────────────────────
+SEARCH_HISTORY_FILE = os.path.join(PORTFOLIO_DIR, "recent_stocks.json")
+
+#: 몇 개까지 남기나. 사이드바 한 칸에서 고를 수 있는 만큼.
+SEARCH_HISTORY_MAX = 20
+
+
+def load_search_history(path=SEARCH_HISTORY_FILE):
+    """[{'code','name','at'}, ...] — 최근 본 것이 앞. 없으면 빈 목록."""
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except Exception:                                          # noqa: BLE001
+        return []                       # 파일 하나 때문에 화면이 죽지 않는다
+    out = []
+    for it in (payload.get("items") or []):
+        code = normalize_code((it or {}).get('code'))
+        if not code:
+            continue
+        out.append({'code': code,
+                    'name': str((it or {}).get('name') or code)[:60],
+                    'at': str((it or {}).get('at') or '')[:19]})
+    return out[:SEARCH_HISTORY_MAX]
+
+
+def save_search_history(items, path=SEARCH_HISTORY_FILE):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {"saved_at": datetime.now().isoformat(timespec="seconds"),
+               "items": (items or [])[:SEARCH_HISTORY_MAX]}
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    return path
+
+
+def push_search_history(items, code, name):
+    """
+    본 종목을 맨 앞으로. 이미 있으면 **옮기고 지우지 않는다** (중복 없음).
+
+    반환: (새 목록, 바뀌었나). 안 바뀌었으면 호출부가 저장을 건너뛴다 —
+    rerun 마다 파일을 쓰지 않기 위해서다.
+    """
+    c = normalize_code(code)
+    if not c:
+        return list(items or []), False
+    nm = str(name or c)[:60]
+    cur = list(items or [])
+    if cur and cur[0].get('code') == c and cur[0].get('name') == nm:
+        return cur, False               # 맨 앞 그대로 — 쓸 것이 없다
+    rest = [it for it in cur if it.get('code') != c]
+    new = [{'code': c, 'name': nm,
+            'at': datetime.now().strftime('%Y-%m-%d %H:%M')}] + rest
+    return new[:SEARCH_HISTORY_MAX], True
+
+
+def delete_search_history(path=SEARCH_HISTORY_FILE):
     if os.path.exists(path):
         os.remove(path)
         return True

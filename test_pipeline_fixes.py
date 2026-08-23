@@ -13258,8 +13258,19 @@ check("2차는 보유자 기준값임을 코드가 밝힌다",
 check("엔진 값 칸에 입력 위젯을 두지 않았다",
       'wl_tb_' not in _w184,
       '목표 매수가는 이제 엔진 값이다 — 입력칸이 남아 있으면 안 된다')
-check("사용자 입력은 매입가·수량·메모뿐이다",
-      'wl_pd_' in _w184 and 'wl_qt_' in _w184 and 'wl_mm_' in _w184)
+# ⚠️ 라운드 164 — 세 번째 칸이 '메모'(`wl_mm_`)에서 **'내 계획'**
+#   (`wl_pl_`)으로 바뀌었다. 사용자 요청: *"관심종목에 메모 대신 매수
+#   매도 할지에 대해 보유 이렇게만 해줘."* 자유 메모는 다시 읽을 때
+#   해석이 필요한데 정작 보고 싶은 것은 셋 중 하나였다.
+#   검사가 옛 구현을 요구하고 있으므로 **현실에 맞춘다** (§6).
+#   지키려는 것은 그대로다 — 사용자가 적는 칸은 이 셋뿐이고, 엔진 값
+#   칸에는 입력 위젯이 없다.
+check("사용자 입력은 매입가·수량·내 계획뿐이다",
+      'wl_pd_' in _w184 and 'wl_qt_' in _w184 and 'wl_pl_' in _w184)
+check("옛 메모 입력칸은 남아 있지 않다 (값이 두 곳에서 오지 않는다 · §4)",
+      'wl_mm_' not in _w184)
+check("계획 보기는 portfolio 가 정한 셋뿐이다 (화면이 새로 만들지 않는다)",
+      'portfolio.WATCH_PLANS' in _w184 and 'WATCH_PLANS = ' in _pf184)
 
 # ⓒ 언제 잰 값인지 말하는가 · 안 본 종목은 그렇게 말하는가 (§3)
 check("엔진 값 기준일을 화면에 적는다", '엔진 값 기준일' in _w184)
@@ -14866,6 +14877,284 @@ if _os.path.exists(_prof200):
     check("프로파일이 완주한 실행에서 나왔다 (죽은 기록을 근거로 쓰지 않는다)",
           _pd200.get('returncode') == 0 and (_pd200.get('checks') or 0) > 3000,
           f"rc={_pd200.get('returncode')} checks={_pd200.get('checks')}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §201 — 단축코드는 한 곳에서만 읽는다 · ETF (라운드 164)
+#
+#   사용자가 두 종목을 못 찾았다.
+#     · SOL 팔란티어커버드콜OTM채권혼합  0040Y0
+#     · ACE 미국빅테크7+데일리타겟커버드콜(합성)  480020
+#
+#   재 보니 원인이 하나였다 — **이 저장소가 코드를 `\d{6}` 으로만
+#   읽는다.** KRX 는 문자 섞인 6자리 코드를 발급하고, 네이버 ETF 목록
+#   1,161종목 중 **296종목(25.5%)** 이 그 모양이다.
+#
+#   그리고 못 읽는 데서 끝나지 않았다:
+#       normalize_code('0040Y0')       → '000400'  (롯데손해보험)
+#       normalize_code('ACE 미국빅테크7') → '000007'
+#   **남의 코드를 만들어 냈다.** 관심종목·보유종목이 이 함수를 쓴다.
+#
+#   §6(라운드 120c~e)이 배운 대로 호출부를 하나씩 고치지 않고 판별을
+#   `stock_code` 한 곳으로 올렸다. 이 절이 그것을 잠근다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§201 단축코드는 한 곳에서만 · ETF (라운드 164)")
+print("=" * 72)
+import stock_code as _sc201                                    # noqa: E402
+# ⚠️ `etf_registry` 는 여기서 부르지 않는다 — 목록 조회가 네트워크를 타서
+#   검사 결과가 회선 상태에 좌우된다. ETF 쪽은 **동봉 색인 파일**만 본다.
+import portfolio as _pf201                                     # noqa: E402
+import ui_kit as _uk201                                        # noqa: E402
+
+# ── ⓐ 종전 동작을 그대로 지키는가 (고치면서 깨뜨리지 않았는가) ────────
+for _raw201, _exp201 in ((5930.0, '005930'), ('5930.0', '005930'),
+                         (5930, '005930'), ('005930', '005930'),
+                         ('A005930', '005930'), ('005930.KS', '005930'),
+                         (float('nan'), None), (None, None), ('', None),
+                         ('nan', None), ('1234567', '234567')):
+    check(f"§201 normalize_code({_raw201!r})",
+          _pf201.normalize_code(_raw201) == _exp201,
+          f'→ {_pf201.normalize_code(_raw201)!r} (기대 {_exp201!r})')
+
+# ── ⓑ 문자 섞인 KRX 코드를 읽는가 (사용자가 못 찾은 그것) ─────────────
+for _raw201, _exp201 in (('0040Y0', '0040Y0'), ('0040y0', '0040Y0'),
+                         ('0040Y0.KS', '0040Y0'), ('A0040Y0', '0040Y0'),
+                         ('480020', '480020')):
+    check(f"문자 포함 코드 {_raw201!r} → {_exp201!r}",
+          _pf201.normalize_code(_raw201) == _exp201,
+          f'→ {_pf201.normalize_code(_raw201)!r}')
+
+# ── ⓒ **남의 코드를 만들지 않는가** — 이 라운드의 핵심 (§3) ──────────
+for _bad201 in ('ACE 미국빅테크7', 'SOL 팔란티어', 'KODEX 200',
+                '삼성전자', '수량 38', '평단가 27,740'):
+    check(f"이름에서 코드를 지어내지 않는다 {_bad201!r}",
+          _pf201.normalize_code(_bad201) is None,
+          f'→ {_pf201.normalize_code(_bad201)!r} — 실재하는 다른 종목이 된다')
+
+# ── ⓓ 규칙이 한 곳에 있는가 · 되돌아가지 않는가 ──────────────────────
+#    조회·검색 함수 안에 `\d{6}` 을 손으로 다시 적으면 걸린다. AST 로
+#    함수 본문만 떼어 본다 — 파일 전체를 보면 유니버스 쪽(일부러 남긴
+#    것)까지 잡혀 검사가 잔소리가 된다.
+_be_src201 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_LOOKUP201 = ('search_naver_stocks_realtime', 'fetch_and_update_naver_realtime')
+_seen_fn201 = []
+try:
+    _tree201 = _ast16.parse(_be_src201)
+    for _n201 in _ast16.walk(_tree201):
+        if isinstance(_n201, _ast16.FunctionDef) and _n201.name in _LOOKUP201:
+            _seg201 = _ast16.get_source_segment(_be_src201, _n201) or ''
+            _seen_fn201.append(_n201.name)
+            # 주석은 뺀다 — 왜 고쳤는지 적은 줄까지 위반으로 보면 안 된다
+            _body201 = '\n'.join(
+                l for l in _seg201.splitlines() if not l.strip().startswith('#'))
+            check(f"{_n201.name} 이 코드 자릿수를 손으로 적지 않는다",
+                  r'\d{6}' not in _body201,
+                  '판별은 stock_code 한 곳에서만 한다')
+except Exception as _ex201:                                    # noqa: BLE001
+    check("bitemporal_engine 을 AST 로 읽었다", False, str(_ex201)[:60])
+check("검사가 실제로 두 함수를 봤다 (0건이 미측정이 아니다)",
+      sorted(_seen_fn201) == sorted(_LOOKUP201), str(_seen_fn201))
+
+# ── ⓔ **유니버스는 일부러 안 넓혔다** — 경계를 검사로 못 박는다 ──────
+#    시가총액 순위 스크래핑을 넓히면 ETF 가 추천 스캔 모집단에 들어가
+#    **연구 표본이 바뀐다.** R129 가 같은 자리에서 참았다("결과를 본 뒤에
+#    잣대를 넓히지 않는다"). 넓히려면 새 사전등록이 필요하다.
+check("유니버스 스크래핑은 숫자 6자리 그대로다 (연구 표본을 안 바꾼다)",
+      r'code=(\d{6})" class="tltle"' in _be_src201,
+      '넓히려면 사전등록이 필요하다 — 스캔 모집단이 바뀐다')
+_ma201 = _read148(_os.path.join(PROJ, 'market_attention.py'))
+check("관심종목 발굴(순위 페이지)도 숫자 6자리 그대로다",
+      _ma201.count(r'code=(\d{6})') >= 2, '같은 이유 — 모집단 고정')
+
+# ── ⓕ 자기검사: 있을 때는 잡는가 (§110 · 0건이 '못 봤다'가 아니게) ────
+_plant201 = "def search_naver_stocks_realtime(self, q):\n    re.findall(r'\\d{6}', q)\n"
+_ok201 = False
+try:
+    _t201 = _ast16.parse(_plant201)
+    for _n201 in _ast16.walk(_t201):
+        if isinstance(_n201, _ast16.FunctionDef):
+            _ok201 = r'\d{6}' in (_ast16.get_source_segment(_plant201, _n201) or '')
+except Exception:                                              # noqa: BLE001
+    _ok201 = False
+check("심어 두면 실제로 잡는다 (검사가 눈뜨고 있다)", _ok201)
+
+# ── ⓖ ETF 색인 — 있고, 두 종목이 들었고, **NAV 는 안 들었다** ────────
+_eidx201 = _os.path.join(PROJ, 'data', 'etf_index.json')
+check("data/etf_index.json 이 있다", _os.path.exists(_eidx201))
+if _os.path.exists(_eidx201):
+    with open(_eidx201, encoding='utf-8') as _f201:
+        _ed201 = _json.load(_f201)
+    _emap201 = _ed201.get('map') or {}
+    check("색인에 종목이 충분히 있다", len(_emap201) > 500, f'{len(_emap201):,}종목')
+    for _c201 in ('0040Y0', '480020'):
+        check(f"사용자가 못 찾던 {_c201} 이 색인에 있다", _c201 in _emap201,
+              str(_emap201.get(_c201)))
+    check("색인에 문자 포함 코드가 실제로 있다",
+          any(_sc201.has_letter(_c) for _c in _emap201),
+          f"{_ed201.get('with_letter')}종목")
+    # ⚠️ 동봉 색인에 NAV 를 넣으면 **낡은 값이 오늘 값처럼** 보인다 (§3).
+    #   문자열 검색이 아니라 **자료 구조**로 본다 — 주석에 든 'NAV' 글자를
+    #   값으로 오해하지 않게(§110 의 그 교훈).
+    check("동봉 색인에 값 필드가 없다 (낡은 NAV 를 오늘처럼 쓰지 않는다)",
+          not ({'rows', 'nav', 'price', 'nowVal'} & set(_ed201)),
+          f'키: {sorted(_ed201)}')
+    check("색인의 값은 **이름 문자열**뿐이다",
+          all(isinstance(_v201, str) for _v201 in
+              list(_emap201.values())[:50]) and _emap201,
+          str(list(_emap201.items())[:1]))
+    check("색인이 언제 만든 것인지 적혀 있다", bool(_ed201.get('made')),
+          str(_ed201.get('made')))
+
+# ── ⓗ NAV 는 지어내지 않는다 ─────────────────────────────────────────
+check("NAV 가 없으면 괴리를 만들지 않는다",
+      _uk201.nav_premium(1000, None) is None
+      and _uk201.nav_premium(1000, 0) is None
+      and _uk201.nav_premium(None, 1000) is None)
+_np201 = _uk201.nav_premium(10290, 10240)
+check("괴리율 = (현재가 − NAV) ÷ NAV",
+      _np201 and abs(_np201['pct'] - 0.49) < 0.01, str(_np201))
+check("NAV 갈래는 새 문턱을 만들지 않는다 (VALUE_NEAR_PCT 재사용)",
+      'VALUE_NEAR_PCT' in _read148(_os.path.join(PROJ, 'ui_kit.py')).split(
+          'def nav_premium')[1][:900])
+check("NAV 한 줄은 **받은 시각**을 함께 적는다",
+      '조회' in _uk201.nav_row(_np201, 10290, 10240, '2026-08-23 22:55'))
+check("시각이 없으면 시각을 지어내지 않는다",
+      '조회' not in _uk201.nav_row(_np201, 10290, 10240, None))
+
+# ── ⓘ 관심종목 '내 계획' — 정해진 값만, 옛 메모는 안 지운다 ──────────
+check("계획 보기는 셋뿐이다", _pf201.WATCH_PLANS == ('매수', '매도', '보유'),
+      str(_pf201.WATCH_PLANS))
+_wl201 = _os.path.join(PROJ, '_probe', '_r201_wl.json')
+_pf201.save_watchlist([{'code': '0040Y0', 'name': 'SOL', 'plan': '매수',
+                        'memo': '옛 메모'},
+                       {'code': '480020', 'name': 'ACE', 'plan': '아무거나'}],
+                      path=_wl201)
+_wr201, _ = _pf201.load_watchlist(path=_wl201)
+check("문자 코드가 관심종목에 그대로 저장된다",
+      [r['code'] for r in _wr201] == ['0040Y0', '480020'],
+      str([r['code'] for r in _wr201]))
+check("허용되지 않은 계획은 저장하지 않는다 (빈 값을 만들지도 않는다)",
+      _wr201[0].get('plan') == '매수' and 'plan' not in _wr201[1],
+      str([r.get('plan') for r in _wr201]))
+check("옛 메모는 지우지 않는다 (사용자가 쓴 글이다)",
+      _wr201[0].get('memo') == '옛 메모', str(_wr201[0].get('memo')))
+try:
+    _os.remove(_wl201)
+except OSError:
+    pass
+
+# ── ⓙ 최근 본 종목 ───────────────────────────────────────────────────
+_h201, _c201 = _pf201.push_search_history([], '005930', '삼성전자')
+check("최근 본 종목: 처음 넣으면 바뀐다", _c201 and _h201[0]['code'] == '005930')
+check("같은 것을 또 넣으면 파일을 쓰지 않는다",
+      not _pf201.push_search_history(_h201, '005930', '삼성전자')[1])
+_h201, _ = _pf201.push_search_history(_h201, '0040Y0', 'SOL')
+_h201, _ = _pf201.push_search_history(_h201, '005930', '삼성전자')
+check("다시 보면 맨 앞으로 오고 중복이 없다",
+      [r['code'] for r in _h201] == ['005930', '0040Y0'],
+      str([r['code'] for r in _h201]))
+check("코드가 아니면 최근 목록에 안 넣는다",
+      not _pf201.push_search_history(_h201, 'ACE 미국빅테크7', 'x')[1])
+_cap201 = []
+for _i201 in range(_pf201.SEARCH_HISTORY_MAX + 5):
+    _cap201, _ = _pf201.push_search_history(_cap201, f'{_i201:06d}', 'x')
+check(f"최근 목록은 {_pf201.SEARCH_HISTORY_MAX}개를 넘지 않는다",
+      len(_cap201) == _pf201.SEARCH_HISTORY_MAX, str(len(_cap201)))
+
+# ── ⓚ 화면이 두 요청을 실제로 반영했는가 ─────────────────────────────
+_wa201 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+check("사이드바에 '최근 본 종목' 고르는 칸이 있다",
+      "최근 본 종목" in _wa201 and "recent_pick" in _wa201)
+check("종목이 **확정된 뒤**에 최근 목록에 남긴다 (오타를 안 남긴다)",
+      'push_search_history' in _wa201 and 'resolved_name' in _wa201)
+check("원격 접속에서는 최근 목록을 파일에 안 쓴다 (§9)",
+      'is_remote_exposed()' in _wa201.split('push_search_history')[-1][:400])
+check("관심종목 칸이 '메모'가 아니라 '내 계획'이다",
+      "'내 계획'" in _wa201 and 'wl_pl_' in _wa201)
+check("관심종목에서 자유 메모 입력칸은 없앴다",
+      'wl_mm_' not in _wa201, '옛 입력칸이 남아 있으면 값이 두 곳에서 온다 (§4)')
+# ⚠️ `if '(' in name` 이 이름에 괄호가 든 종목을 통째로 걸렀다
+check("검색이 이름의 괄호를 별칭으로 오해하지 않는다",
+      "if '(' in name" not in _wa201 and '_RE_ALIAS_KEY' in _wa201)
+check("검색이 ETF 목록도 본다", 'etf_registry.search' in _wa201)
+check("ETF 화면이 기업 적정가를 만들지 않는다고 밝힌다",
+      'EPS·BPS·ROE 가 존재하지 않습니다' in _wa201)
+
+# ── ⓛ 새 모듈이 §16·§77·§110 검사 대상에 들어왔는가 ──────────────────
+#    라운드 114·120 의 교훈 — 검사 대상을 손으로 적으면 반드시 낡는다.
+_reach201 = set(_la16.reachable_modules('web_app.py'))
+for _m201 in ('stock_code.py', 'etf_registry.py'):
+    check(f"{_m201} 이 검사 대상에 유도됐다",
+          any(_p.endswith(_m201) for _p in _reach201),
+          f'{len(_reach201)}개 모듈을 봤다')
+
+# ── ⓜ **쓰기만 하고 아무도 안 읽는 세션 키가 없는가** ────────────────
+#
+#   라운드 164 에서 실제로 그런 것이 있었다. 관심종목의 이름 버튼 두
+#   곳이 `st.session_state['ticker_input']` 에 코드를 넣고 rerun 했는데
+#   **그 키를 읽는 곳이 저장소 어디에도 없었다.** 사이드바 캡션은
+#   *"이름을 누르면 그 종목을 봅니다"* 라고 적고 있었지만 눌러도 화면이
+#   그대로였다 — 회귀는 내내 초록불이었다.
+#
+#   이 검사는 그 모양을 일반화한다: 어떤 키가 **쓰이기만 하고** 파일
+#   어디에도 다른 이름으로 안 나오면 죽은 버튼이다.
+#   (`_HOME_RESET_KEYS` 처럼 목록에 이름이 또 나오면 세지 않는다 —
+#    거짓 경보를 내지 않는 쪽으로 보수적으로 만든다.)
+_wa_src201 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_writes201, _consts201, _dead201 = {}, {}, []
+try:
+    _t201w = _ast16.parse(_wa_src201)
+    for _n201 in _ast16.walk(_t201w):
+        if isinstance(_n201, _ast16.Assign):
+            for _tg201 in _n201.targets:
+                if (isinstance(_tg201, _ast16.Subscript)
+                        and isinstance(_tg201.value, _ast16.Attribute)
+                        and _tg201.value.attr == 'session_state'
+                        and isinstance(_tg201.slice, _ast16.Constant)
+                        and isinstance(_tg201.slice.value, str)):
+                    _writes201.setdefault(_tg201.slice.value, []).append(
+                        _n201.lineno)
+        if (isinstance(_n201, _ast16.Constant)
+                and isinstance(_n201.value, str)):
+            _consts201[_n201.value] = _consts201.get(_n201.value, 0) + 1
+    _dead201 = [(_k, _v) for _k, _v in _writes201.items()
+                if _consts201.get(_k, 0) <= len(_v)]
+except Exception as _ex201w:                                   # noqa: BLE001
+    _dead201 = [('파싱 실패', str(_ex201w)[:40])]
+check("쓰기만 하고 아무도 안 읽는 세션 키가 없다", not _dead201,
+      f'{_dead201[:3]} — 눌러도 아무 일도 안 나는 버튼이다')
+check("검사가 실제로 세션 키를 셌다 (0건이 미측정이 아니다)",
+      len(_writes201) > 20, f'{len(_writes201)}개 키를 봤다')
+# 심어 두면 잡는가 — 0건이 '없다'인지 '못 봤다'인지 구분되게 (§110)
+_plant201w = ("import streamlit as st\n"
+              "st.session_state['zzz_dead_key'] = 1\n")
+_pd201w = []
+try:
+    _wz201, _cz201 = {}, {}
+    for _n201 in _ast16.walk(_ast16.parse(_plant201w)):
+        if isinstance(_n201, _ast16.Assign):
+            for _tg201 in _n201.targets:
+                if (isinstance(_tg201, _ast16.Subscript)
+                        and isinstance(_tg201.value, _ast16.Attribute)
+                        and _tg201.value.attr == 'session_state'
+                        and isinstance(_tg201.slice, _ast16.Constant)):
+                    _wz201.setdefault(_tg201.slice.value, []).append(0)
+        if isinstance(_n201, _ast16.Constant) and isinstance(_n201.value, str):
+            _cz201[_n201.value] = _cz201.get(_n201.value, 0) + 1
+    _pd201w = [k for k, v in _wz201.items() if _cz201.get(k, 0) <= len(v)]
+except Exception:                                              # noqa: BLE001
+    _pd201w = []
+check("죽은 키를 심어 두면 실제로 잡는다", _pd201w == ['zzz_dead_key'],
+      str(_pd201w))
+# 그리고 종목으로 넘어가는 길이 하나인가 (§4)
+_wa201b = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+check("종목 보러 가는 길이 `_go_stock` 하나다",
+      'def _go_stock' in _wa201b
+      and _wa201b.count('_go_stock(') >= 3,
+      f"호출 {_wa201b.count('_go_stock(')}회")
+check("옛 `ticker_input` 경로가 남아 있지 않다",
+      'ticker_input' not in _wa201b)
 
 
 print()
