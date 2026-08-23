@@ -14604,6 +14604,108 @@ else:
           bool(_d160.get('made')) and _d160['made'] in _flat160)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §199 — 본전에 필요한 적중률을 적중률 옆에 놓았는가 (라운드 161)
+#
+#   사용자 지적(다날 064260): 화면이 "맞은 비율 60%" 를 크게 보여 주는데
+#   그 구조(손익비 0.70:1)의 본전이 **61.2%** 라 이미 마이너스였다.
+#   한쪽만 보여 주는 것은 §9("성과를 좋게 보이게 쓰지 않는다")에 걸린다.
+#   지키는 것:
+#     ⓐ 계산이 ui_kit 한 곳에 있고 값이 맞는가 (다날 사례로 고정)
+#     ⓑ 식이 자기정합한가 — 반환한 p 에서 기대값이 0 인가
+#     ⓒ **정합이 깨지면 그리지 않는가** (§4 — 고치지 말고 비운다)
+#     ⓓ 비용을 **채택값**에서 읽는가 (숫자를 손으로 박지 않았는가)
+#     ⓔ 화면 두 자리에 실제로 붙었는가
+#     ⓕ **표시 전용인가** — 판정·게이트가 이 함수를 쓰지 않는가
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§199 본전 적중률 표시 (라운드 161)")
+print("=" * 72)
+import ui_kit as _uk199                                        # noqa: E402
+
+# ⓐ 다날 사례로 값을 고정한다 — 손계산 61.2% 와 같아야 한다
+_be199 = _uk199.breakeven_hit_rate(4863, 4356, 5217, 0.41)
+check("본전 적중률 함수가 있다", _be199 is not None)
+check("다날 사례가 61.2% 로 나온다 (손계산과 일치)",
+      _be199 and abs(_be199['pct'] - 61.2) < 0.05, str(_be199))
+check("손익비도 함께 낸다 (0.70:1)",
+      _be199 and abs(_be199['rr'] - 0.70) < 0.005, str(_be199))
+
+# ⓑ 자기정합 — 반환한 up/dn 으로 식을 다시 풀면 같은 p 가 나와야 한다.
+#    ⚠️ 처음엔 "반환한 p 에서 기대값이 정확히 0" 을 요구했는데, 반환값이
+#    표시용으로 **반올림**돼 있어 애초에 0 이 될 수 없었다(잔차 -0.00148).
+#    검사가 재려던 것은 반올림이 아니라 **식**이다 — 그래서 식을 직접
+#    다시 풀어 대조하고, 기대값은 반올림 폭만큼만 허용한다.
+if _be199:
+    _exact199 = ((_be199['dn_pct'] + 0.41)
+                 / (_be199['up_pct'] + _be199['dn_pct']) * 100.0)
+    check("반환한 up/dn 으로 식을 다시 풀면 같은 값 (반올림 폭 안)",
+          abs(_be199['pct'] - _exact199) < 0.05,
+          f"{_be199['pct']} vs {_exact199:.4f}")
+    _p199 = _exact199 / 100.0
+    _ev199 = (_p199 * _be199['up_pct']
+              - (1 - _p199) * _be199['dn_pct'] - 0.41)
+    check("그 값에서 기대값이 0 이다 (식이 자기정합)",
+          abs(_ev199) < 1e-9, f"기대값 {_ev199:.12f}")
+
+# ⓒ 정합이 깨지면 그리지 않는다 — 값을 고치지 않는다 (§4)
+check("목표가 진입 아래면 None",
+      _uk199.breakeven_hit_rate(5000, 4800, 4900, 0.41) is None)
+check("손절이 진입 위면 None",
+      _uk199.breakeven_hit_rate(5000, 5200, 5300, 0.41) is None)
+check("값이 없으면 None (지어내지 않는다)",
+      _uk199.breakeven_hit_rate(None, 4356, 5217, 0.41) is None
+      and _uk199.breakeven_hit_rate(4863, None, 5217, 0.41) is None)
+check("None 을 받으면 빈 문자열 (화면이 안 깨진다)",
+      _uk199.breakeven_row(None) == ''
+      and _uk199.breakeven_line(None)[0] == '')
+
+# 실측을 같이 주면 모자란 폭까지 적는다 — 두 수를 나란히 놓는 것이 목적
+_txt199, _gap199 = _uk199.breakeven_line(_be199, 60.0)
+check("실측 60% 와 함께 주면 모자란 폭을 적는다",
+      '모자랍니다' in _txt199 and '1.2%p' in _txt199, _txt199)
+_txt199b, _gap199b = _uk199.breakeven_line(_be199, 65.0)
+check("실측이 넘으면 넘는다고 적는다",
+      '넘습니다' in _txt199b, _txt199b)
+
+# ⓓ 비용을 채택값에서 읽는다 — 호출부에 숫자를 박지 않았는가
+_wa199 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_calls199 = _re.findall(r'_uk\.breakeven_hit_rate\((.*?)\)', _wa199,
+                        _re.S)
+check("web_app 이 본전 계산을 부른다 (두 자리)", len(_calls199) == 2,
+      f"{len(_calls199)}곳")
+check("비용을 채택값(TOTAL_COST_PCT)으로 넘긴다 — 숫자 하드코딩 아님",
+      all('TOTAL_COST_PCT' in c for c in _calls199)
+      and not any(_re.search(r'0\.41', c) for c in _calls199))
+
+# ⓔ 화면 두 자리에 붙었다
+check("적중률 배지 아래에 본전 줄을 붙였다",
+      '_uk.breakeven_row(_be_banner' in _wa199)
+check("손익비 설명에도 숫자를 넣었다",
+      '이상 맞아야 본전입니다' in _wa199)
+check("배지 아래 줄이 실측 적중률과 함께 그려진다",
+      _re.search(r"breakeven_row\(_be_banner,\s*_cb_banner\['hit_rate'\]",
+                 _wa199) is not None)
+# 라운드 161 — 처음에 theme 을 안 넘겨 회귀가 잡았다(라이트 모드에서 색이
+# 틀어진다). 같은 실수가 다시 나지 않게 호출 자체를 잠근다.
+check("본전 줄 호출이 theme 을 넘긴다 (라이트 모드)",
+      _re.search(r"breakeven_row\([^)]*theme=", _wa199, _re.S) is not None)
+
+# ⓕ 표시 전용 — 판정·게이트가 이 함수를 쓰지 않는다
+for _f199 in ('verdict_core.py', 'quant_indicators.py', 'regime_policy.py',
+              'price_axes.py'):
+    _p199f = _os.path.join(PROJ, _f199)
+    if _os.path.exists(_p199f):
+        check(f"{_f199} 가 본전 계산을 쓰지 않는다 (표시 전용)",
+              'breakeven_hit_rate' not in _read148(_p199f))
+_uk_src199 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+check("ui_kit 주석이 표시 전용임을 밝힌다",
+      '표시 전용이다' in _uk_src199
+      and '실행 레벨에' in _uk_src199 and '쓰지 않는다' in _uk_src199)
+check("ui_kit 주석이 채택 시점을 11/16 이후로 못 박는다",
+      '2026-11-16 이후 별도 사전등록' in _uk_src199)
+
+
 print()
 print("=" * 72)
 if FAILURES:
