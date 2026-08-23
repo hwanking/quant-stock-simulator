@@ -1060,15 +1060,23 @@ def breakeven_line(be, observed=None):
 
     실측 적중률을 같이 주면 **모자란 폭까지** 적는다 — 두 수를 나란히
     놓아야 60% 가 좋은 수인지 알 수 있다.
+
+    ⚠️ 실측값을 **반올림 없이 그대로** 적는다. 배지는 `{:.0f}%` 라
+    59.7% 가 '60%' 로 보이는데, 차이만 0.6%p 로 적으면 읽는 사람이
+    `60 − 60.3 = 0.3` 으로 계산해 어긋난다 — 라운드 131 이 겪은
+    "같은 숫자를 두 번 반올림하면 두 곳이 달라진다" 그대로다.
+    세 수(실측·본전·차이)가 **서로 검산되게** 한 줄에 같이 놓는다.
     """
     if not be:
         return '', None
     if observed is None:
         return (f"본전에 필요한 적중률 {be['pct']:.1f}% "
                 f"(손익비 {be['rr']:.2f}:1)"), None
-    gap = float(observed) - be['pct']
+    obs = float(observed)
+    gap = obs - be['pct']
     tail = (f"{abs(gap):.1f}%p {'넘습니다' if gap >= 0 else '모자랍니다'}")
-    return (f"본전에 필요한 적중률 {be['pct']:.1f}% — {tail}"), gap
+    return (f"본전에 필요한 적중률 {be['pct']:.1f}% — "
+            f"실측 {obs:.1f}% 로 {tail}"), gap
 
 
 def breakeven_row(be, observed=None, theme='dark'):
