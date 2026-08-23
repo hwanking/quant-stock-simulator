@@ -1090,6 +1090,79 @@ def breakeven_row(be, observed=None, theme='dark'):
             f"color:{col};'>{_esc(txt)}</p>")
 
 
+# ── ETF 의 '적정가' — 순자산가치(NAV) · 라운드 164 ───────────────────────
+#
+# 사용자 요청: *"같은 주식도 검색해서 적정가 살때말때도 해줬으면 좋겠어"*
+# (ETF 두 개를 가리키며).
+#
+# **ETF 에 기업 적정가는 없다.** EPS·BPS·ROE 가 존재하지 않는 자산이라
+# 엔진은 `is_fund_like` 로 펀더멘털 밸류에이션을 건너뛴다 — 그게 옳다.
+# 라운드 44 주석이 경고한 대로, 여기서 폴백이 걸리면 KODEX 200 에
+# '적정가 90,069원' 같은 **근거 없는 값**이 붙는다.
+#
+# 그렇다고 "적정가 없음"으로 끝낼 일은 아니다. ETF 에는 원래부터 정답에
+# 해당하는 값이 있다 — **순자산가치(NAV)**. 담고 있는 자산을 그날 값으로
+# 평가한 것이라 **추정하는 값이 아니라 발표되는 값**이다.
+#
+# ⚠️ 갈래 기준을 새로 만들지 않았다. 이미 채택된 `VALUE_NEAR_PCT`(±3%)를
+#   그대로 쓴다 (§2). 국내 ETF 의 괴리는 보통 이보다 훨씬 작아서 대부분
+#   '중립'으로 나오는데, 그것이 **사실**이다 — 잘 따라간다는 뜻이다.
+#   좁은 기준을 감으로 만들어 없는 신호를 만들지 않는다.
+def nav_premium(price, nav):
+    """(현재가 ÷ NAV − 1). 둘 중 하나라도 없으면 None — 지어내지 않는다.
+
+    반환: dict(pct, kind, kind_ko, line)
+      · 'rich'  — NAV 보다 비싸게 거래 (담은 자산보다 비싸게 사는 것)
+      · 'cheap' — NAV 보다 싸게 거래
+      · 'near'  — 거의 같다 (정상적인 ETF 의 보통 모습)
+    """
+    try:
+        p, n = float(price), float(nav)
+    except (TypeError, ValueError):
+        return None
+    if not (p > 0 and n > 0):
+        return None
+    pct = (p / n - 1.0) * 100.0
+    if pct >= VALUE_NEAR_PCT:
+        kind, ko = 'rich', '고평가'
+        line = (f"담고 있는 자산 가치(NAV)보다 {pct:+.2f}% 비싸게 "
+                f"거래되고 있습니다 — 그만큼 얹어 사는 것입니다.")
+    elif pct <= -VALUE_NEAR_PCT:
+        kind, ko = 'cheap', '저평가'
+        line = (f"담고 있는 자산 가치(NAV)보다 {pct:+.2f}% 싸게 "
+                f"거래되고 있습니다.")
+    else:
+        kind, ko = 'near', '정상'
+        line = (f"NAV 와 거의 같습니다 ({pct:+.2f}%) — 지수를 잘 "
+                f"따라가고 있다는 뜻입니다.")
+    return dict(pct=round(pct, 2), kind=kind, kind_ko=ko, line=line)
+
+
+def nav_row(np_, price=None, nav=None, at=None, theme='dark'):
+    """ETF NAV 한 줄(HTML). `nav_premium()` 결과를 그대로 받는다.
+
+    ⚠️ **받은 시각을 반드시 함께 적는다.** NAV 는 그 시점의 값이고,
+       낡은 값을 오늘 값처럼 보여 주면 §3 위반이다.
+    """
+    if not np_:
+        return ''
+    t = tokens(theme)
+    col = {'rich': t['warn'], 'cheap': t['pos'], 'near': t['tx2']}.get(
+        np_['kind'], t['tx2'])
+    nums = ''
+    if price and nav:
+        nums = (f"현재가 {float(price):,.0f}원 · NAV {float(nav):,.0f}원 · ")
+    when = f" <span style='color:{t['tx3']};'>({_esc(at)} 조회)</span>" if at else ''
+    return (
+        f"<div style='display:flex; align-items:flex-start; gap:7px; "
+        f"margin-top:9px; padding:8px 10px; background:{t['raised']}; "
+        f"border-radius:8px;'>"
+        f"{_icon('CircleDollarSign', col, 15)}"
+        f"<div style='font-size:12px; line-height:1.5; color:{t['tx2']};'>"
+        f"<b style='color:{col};'>ETF · NAV 대비 {_esc(np_['kind_ko'])}</b> · "
+        f"{_esc(nums)}{_esc(np_['line'])}{when}</div></div>")
+
+
 def reco_card(p: dict, theme: str = 'dark') -> str:
     """
     오늘의 추천·관망 카드 한 장.

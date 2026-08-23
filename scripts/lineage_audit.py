@@ -194,10 +194,25 @@ def reachable_modules(entry='web_app.py'):
       상대 import(`from . import x`)는 이 저장소에 없어 다루지 않는다.
     """
     import subprocess
-    tracked = subprocess.run(['git', 'ls-files', '*.py'], cwd=PROJ,
-                             capture_output=True, text=True).stdout
-    files = {p.strip().replace('\\', '/') for p in tracked.split('\n')
-             if p.strip()}
+
+    def _ls(*args):
+        try:
+            out = subprocess.run(['git', 'ls-files', *args], cwd=PROJ,
+                                 capture_output=True, text=True).stdout
+        except Exception:                                      # noqa: BLE001
+            return set()
+        return {p.strip().replace('\\', '/') for p in out.split('\n')
+                if p.strip()}
+
+    # ⚠️ 라운드 164 — 여기가 **추적 중인 파일만** 봤다. 그래서 새로 만든
+    #   모듈(`stock_code.py` · `etf_registry.py`)이 web_app 에서 import 되는데도
+    #   §16 · §77 · §110 검사 밖에 있었다 — **커밋하기 전까지는 아무도 안
+    #   보는 창**이 생긴 것이고, 새 파일일수록 검사가 필요하다.
+    #   라운드 114·120 이 두 번 겪은 '대상이 좁다'의 세 번째 판본이다.
+    #   아직 add 하지 않았을 뿐 프로젝트의 일부인 파일(`--others
+    #   --exclude-standard`)도 함께 본다. gitignore 된 `_probe/`·`_archive/`
+    #   는 여전히 빠진다.
+    files = _ls('*.py') | _ls('--others', '--exclude-standard', '*.py')
 
     def candidates(dotted):
         p = dotted.replace('.', '/')

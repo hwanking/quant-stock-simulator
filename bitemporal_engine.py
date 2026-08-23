@@ -8,6 +8,14 @@ import json
 import re
 import time
 
+import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
+
+#: 네이버 종목 링크에서 코드를 뽑는 식. `\d{6}` 을 손으로 적지 않는다 —
+#: KRX 문자 포함 코드(ETF 1,161종목 중 296종목)를 통째로 놓친다.
+_RE_ITEM_CODE = re.compile(
+    r'/item/main\.naver\?code=(' + stock_code.CODE + r')')
+
+
 def _euckr_quote(text):
     """
     네이버 검색은 euc-kr 인코딩을 요구한다. 이모지 등 euc-kr 로 표현 못 하는
@@ -323,9 +331,11 @@ class BitemporalEngine:
             return []
             
         q_clean = query.strip()
-        six_digits = re.findall(r'\d{6}', q_clean)
-        if six_digits:
-            code_num = six_digits[0]
+        # ⚠️ 라운드 164 — 여기가 `\d{6}` 이었다. 사용자가 'SOL 팔란티어'
+        #    (0040Y0) 를 못 찾은 자리 중 하나다. 코드 판별은 `stock_code`
+        #    한 곳에서만 한다. `'이름 (코드)'` 라벨은 괄호 안을 먼저 본다.
+        code_num = stock_code.from_label(q_clean)
+        if code_num:
             _, r_name, _ = self.fetch_and_update_naver_realtime(code_num)
             if r_name and r_name != code_num:
                 label = f"{r_name} ({code_num})"
@@ -346,7 +356,7 @@ class BitemporalEngine:
         #    아래 '이름</a>' 정규식은 그 형태를 못 잡아서, '한온시스템'처럼
         #    멀쩡한 종목명이 전부 '검색 결과 없음'이 되고 있었다.
         if html and 'code=' in html and '</a>' not in html:
-            codes = re.findall(r'/item/main\.naver\?code=(\d{6})', html)
+            codes = _RE_ITEM_CODE.findall(html)
             if len(codes) == 1:
                 code_num = codes[0]
                 _, r_name, _ = self.fetch_and_update_naver_realtime(code_num)
@@ -359,7 +369,9 @@ class BitemporalEngine:
                     return [label]
 
         if html:
-            matches = re.findall(r'/item/main\.naver\?code=(\d+)">(.*?)</a>', html)
+            matches = re.findall(
+                r'/item/main\.naver\?code=(' + stock_code.CODE + r')">(.*?)</a>',
+                html)
             if matches:
                 res_list = []
                 seen_codes = set()
@@ -512,22 +524,32 @@ class BitemporalEngine:
         현재가, 전일비, 시가, 고가, 저가, 거래량, PER, PBR, EPS, BPS, 배당수익률을 STOCK_METRICS_DB에 100% 동적 업데이트
         """
         query = str(symbol_or_code).strip()
-        six_digits = re.findall(r'\d{6}', query)
-        code = six_digits[0] if six_digits else None
-        
+        # ⚠️ 라운드 164 — 여기가 `\d{6}` 이라 문자 섞인 KRX 코드('0040Y0')를
+        #    못 읽었다. 판별은 `stock_code` 한 곳에서만 한다.
+        #    `'이름 (코드)'` 라벨이면 괄호 안이 코드다 — 이름 조각을
+        #    코드로 읽지 않도록 그것을 먼저 본다.
+        code = stock_code.from_label(query)
+
         if not code:
             if query in STOCK_NAME_MAP:
                 code = STOCK_NAME_MAP[query].split('.')[0]
-                
+
         if not code:
             encoded = _euckr_quote(query)
             if encoded is None:
-                return None, query, STOCK_METRICS_DB.get("005930.KS", {})
+                # ⚠️ 라운드 164 — 여기가 **삼성전자 지표 뭉치**를 돌려주고
+                #    있었다(`STOCK_METRICS_DB["005930.KS"]`). 못 찾은 종목에
+                #    남의 현재가·EPS·BPS 가 붙는다는 뜻이다. 실측에서
+                #    '0040Y0' 조회가 price=207,000 을 받아 왔다.
+                #    R119 가 종목명에서 걷어낸 그 결함이 여기 남아 있었다.
+                return None, query, {}
             url_s = f"https://finance.naver.com/search/search.naver?query={encoded}"
             html_s = fetch_html_with_retry(url_s, timeout=5)
-            
+
             if html_s:
-                matches = re.findall(r'/item/main\.naver\?code=(\d+)"[^>]*>(.*?)</a>', html_s)
+                matches = re.findall(
+                    r'/item/main\.naver\?code=(' + stock_code.CODE + r')"[^>]*>(.*?)</a>',
+                    html_s)
                 for m_code, m_name in matches:
                     clean_n = re.sub(r'<.*?>', '', m_name).strip()
                     if query in clean_n or clean_n in query:
@@ -536,7 +558,7 @@ class BitemporalEngine:
                 if not code and matches:
                     code = matches[0][0]
                 if not code:
-                    all_codes = re.findall(r'code=(\d{6})', html_s)
+                    all_codes = re.findall(r'code=(' + stock_code.CODE + r')', html_s)
                     if all_codes:
                         code = all_codes[0]
 
@@ -546,12 +568,13 @@ class BitemporalEngine:
             if d_res and 'data' in d_res and d_res['data']:
                 item = d_res['data'][0]
                 sc = item.get('shortCode', '') or item.get('symbolCode', '')
-                code_digits = re.findall(r'\d{6}', sc)
+                # 다음의 shortCode 는 'A0040Y0' 처럼 접두가 붙는다
+                code_digits = stock_code.find_codes(sc)
                 if code_digits:
                     code = code_digits[0]
-                
+
         if not code:
-            return None, query, STOCK_METRICS_DB.get("005930.KS", {})
+            return None, query, {}          # 남의 지표를 돌려주지 않는다 (§3)
 
         # ⚠️ 시장 접미사를 무조건 .KS 로 만들면 안 된다 (최종 감사에서 실측된 결함).
         #    '086520.KQ' 로 조회하면 신선한 시세가 '086520.KS' 키에 저장되고,

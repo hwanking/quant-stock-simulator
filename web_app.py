@@ -46,6 +46,8 @@ import portfolio
 importlib.reload(portfolio)
 
 import market_attention
+import etf_registry              # ETF 이름·코드·NAV (라운드 164)
+import stock_code                # 단축코드를 읽는 한 곳 (라운드 164)
 import forward_eval as _fe      # 전방 재평가일 — 단일 출처 (라운드 78)
 importlib.reload(market_attention)
 
@@ -1811,6 +1813,10 @@ _uk.sidebar_section(
 if 'search_text_input' not in st.session_state:
     st.session_state['search_text_input'] = ''
 
+#: `STOCK_NAME_MAP` 은 같은 종목을 이름·'이름 (코드)'·코드 세 키로 담는다.
+#: 검색 목록에서 별칭 키만 걸러 내는 식 — **이름에 든 괄호와 구분한다.**
+_RE_ALIAS_KEY = _re_wa.compile(r'\s\(' + stock_code.CODE + r'\)$')
+
 # 뉴스 띠에서 넘어온 종목 (라운드 56) — ?pick=이름 (코드) 를 관심종목
 # 클릭과 같은 pending_search 경로에 태운다. 경로가 둘이면 한쪽만 고치는
 # 일이 생긴다 (§4). 받은 즉시 파라미터를 지워 새로고침 반복을 막는다.
@@ -1833,6 +1839,58 @@ search_text_input = _SB_PICK.text_input(
     help='단어 일부(예: 하이닉스, 타이어, 페이)를 입력하시면 연동 후보 리스트가 하단에 즉시 생성되어 선택할 수 있습니다.'
 )
 
+# ── 최근 본 종목 (라운드 164) ────────────────────────────────────────────
+# 사용자 요청: *"검색할 때 전에 검색한 리스트도 쭉 나오게 해서 고르게
+# 하는 거 어때?"*
+#
+# 이 앱은 종목 하나를 고르면 전체 파이프라인이 돌아 몇 분씩 걸린다.
+# 그래서 **다시 보러 가는 일**이 잦은데 그때마다 이름을 처음부터 쳐야
+# 했다. 관심종목(담아 둔 것)과는 다른 목록이다 — 이건 지나온 것이다.
+#
+# ⚠️ 무엇을 봤는지도 개인 정보다. 원격 접속에서는 파일에 쓰지 않고
+#   이 브라우저 세션에만 둔다 (보유종목과 같은 규칙 · §9).
+if 'recent_stocks' not in st.session_state:
+    try:
+        st.session_state['recent_stocks'] = (
+            [] if is_remote_exposed() else portfolio.load_search_history())
+    except Exception:                                          # noqa: BLE001
+        st.session_state['recent_stocks'] = []
+
+_recent_items = st.session_state.get('recent_stocks') or []
+if _recent_items:
+    _RECENT_PH = "--- 최근 본 종목에서 고르기 ---"
+    _recent_labels = [f"{r['name']} ({r['code']})" for r in _recent_items]
+    # ⚠️ 고르고 나면 이 칸을 **안내문구로 되돌린다.** 되돌리지 않으면
+    #   골라 둔 값이 그대로 남아, 나중에 **같은 종목을 다시 고를 때
+    #   '변화 없음'이 되어 아무 일도 안 난다** — 이번 라운드에 고친
+    #   '죽은 버튼'과 똑같은 모양이다.
+    #   Streamlit 은 위젯이 만들어진 뒤 그 키를 못 고치므로, 이 저장소가
+    #   이미 쓰는 방식(`paste_nonce`)대로 **키 자체를 바꿔** 되돌린다.
+    _recent_nonce = st.session_state.get('recent_nonce', 0)
+    # ⚠️ 개수를 적지 않는다. 이 칸은 종목이 **확정되기 전에** 그려지고
+    #   기록은 확정된 뒤에 남으므로, 방금 본 종목이 아직 안 들어 있다.
+    #   "2개"라고 적으면 목록에 3개가 보이는 판이 생긴다 — 화면이 스스로
+    #   모순되는 그 모양(§4)이다. 목록 자체가 이미 개수를 보여 준다.
+    _recent_pick = _SB_PICK.selectbox(
+        "최근 본 종목", [_RECENT_PH] + _recent_labels,
+        index=0, key=f'recent_pick_{_recent_nonce}',
+        help='이 브라우저에서 열어 본 종목입니다. 고르면 검색창에 들어가 '
+             '바로 다시 엽니다. 관심종목과는 다른 목록입니다 — '
+             '관심종목은 담아 둔 것이고 이것은 지나온 것입니다.')
+    if _recent_pick != _RECENT_PH:
+        st.session_state['recent_nonce'] = _recent_nonce + 1
+        st.session_state['pending_search'] = _recent_pick
+        st.rerun()
+    _rc1, _rc2 = _SB_PICK.columns([1, 1])
+    if _rc2.button("최근 목록 비우기", width='stretch', key='recent_clear'):
+        st.session_state['recent_stocks'] = []
+        try:
+            if not is_remote_exposed():
+                portfolio.delete_search_history()
+        except Exception:                                      # noqa: BLE001
+            pass
+        st.rerun()
+
 matched_stocks = []
 if search_text_input.strip():
     # 네이버 조회가 섞여 있어 1~2초 걸린다. 아무 표시도 없으면 멈춘 것처럼
@@ -1853,13 +1911,31 @@ if search_text_input.strip():
         unsafe_allow_html=True)
     kw = search_text_input.strip().lower()
     for name, ticker in STOCK_NAME_MAP.items():
-        if '(' in name: continue
+        # ⚠️ 라운드 164 — 여기가 `if '(' in name` 이었다. 뜻은 *"'이름
+        #   (코드)' 별칭 키는 건너뛴다"* 였는데, **이름 자체에 괄호가 든
+        #   종목까지 통째로 걸렀다.** 사용자가 못 찾은
+        #   'ACE 미국빅테크7+데일리타겟커버드콜(합성)' 이 그 모양이다.
+        #   별칭만 정확히 골라 낸다 — 끝이 ' (코드)' 인 키.
+        if _RE_ALIAS_KEY.search(name):
+            continue
         if kw in name.lower() or kw in ticker.lower():
             code_num = ticker.split('.')[0]
             label = f"{name} ({code_num})"
             if label not in matched_stocks:
                 matched_stocks.append(label)
-            
+
+    # ── ETF 는 따로 찾는다 (라운드 164) ─────────────────────────────
+    # 실측: 네이버 검색이 '미국빅테크7' 에 **0건**을 돌려줬는데 ETF 목록
+    # 에는 8종목이 있었다. 이름으로 찾는 길을 네이버 한 곳에만 맡기지
+    # 않는다. 목록을 못 받으면 그냥 건너뛴다 — 지어내지 않는다.
+    try:
+        for _ec, _en in etf_registry.search(search_text_input.strip()):
+            _elabel = f"{_en} ({_ec})"
+            if _elabel not in matched_stocks:
+                matched_stocks.append(_elabel)
+    except Exception:                                          # noqa: BLE001
+        pass                          # 검색 하나 때문에 화면이 죽지 않는다
+
     naver_matches = engine_init.search_naver_stocks_realtime(search_text_input.strip())
     for nm in naver_matches:
         if nm not in matched_stocks:
@@ -1907,6 +1983,23 @@ if not target_ticker:
              f"종목명 또는 6자리 종목코드를 입력해 주세요. "
              f"네이버증권 검색이 일시적으로 실패했을 수도 있습니다.")
     st.stop()
+
+# ── 최근 본 종목에 남긴다 (라운드 164) ──────────────────────────────────
+# 종목이 **확정된 뒤**에 남긴다. 검색어 그대로 남기면 오타·중간 입력이
+# 목록을 채운다. 맨 앞이 이미 이 종목이면 파일을 쓰지 않는다 — rerun
+# 마다 디스크를 건드리지 않기 위해서다.
+_hist_code = portfolio.normalize_code(target_ticker)
+if _hist_code:
+    _hist_new, _hist_changed = portfolio.push_search_history(
+        st.session_state.get('recent_stocks') or [], _hist_code, resolved_name)
+    if _hist_changed:
+        st.session_state['recent_stocks'] = _hist_new
+        try:
+            if not is_remote_exposed():
+                portfolio.save_search_history(_hist_new)
+        except Exception:                                      # noqa: BLE001
+            pass                      # 기록 하나 때문에 화면이 죽지 않는다
+
 # 🚨 [무결성 보장] 네이버 증권 실시간 웹 파서 강제 동적 수신
 engine_init.fetch_and_update_naver_realtime(target_ticker)
 
@@ -1971,6 +2064,27 @@ if 'watchlist' not in st.session_state:
 # 저장은 `portfolio.save_watchlist()` **한 곳**으로만 한다 (§4).
 # 원격 노출 상태면 파일에 쓰지 않고 세션에만 둔다 — 앱 인스턴스가 하나라
 # `.portfolio/` 가 방문자 전원의 공용 파일이 된다 (§9).
+
+def _go_stock(code, name=''):
+    """
+    그 종목을 보러 간다 — **이 함수 하나만** 쓴다 (라운드 164).
+
+    ⚠️ 여기가 실제로 고장나 있었다. 관심종목의 이름 버튼 두 곳이
+       `st.session_state['ticker_input']` 에 코드를 넣고 rerun 했는데
+       **그 키를 읽는 곳이 저장소 어디에도 없었다.** 사이드바 캡션은
+       *"이름을 누르면 그 종목을 봅니다"* 라고 적고 있었지만 눌러도
+       화면이 그대로였다.
+
+       검색어를 넘기는 길은 원래 하나다 — `pending_search`. 뉴스 띠
+       (`?pick=`)·최근 본 종목이 그 길을 쓴다. 경로가 둘이면 한쪽만
+       고치는 일이 생긴다 (§4). 이제 셋 다 이 함수를 부른다.
+    """
+    c = portfolio.normalize_code(code)
+    if not c:
+        return False
+    st.session_state['pending_search'] = f"{name} ({c})" if name else c
+    return True
+
 
 def _wl_items():
     return list(st.session_state.get('watchlist') or [])
@@ -2051,7 +2165,7 @@ with st.sidebar.expander(
                 if st.button(f"{_w.get('name')} · {_w.get('code')}",
                              width='stretch',
                              key=f"wl_go_{_w.get('code')}"):
-                    st.session_state['ticker_input'] = str(_w.get('code'))
+                    _go_stock(_w.get('code'), _w.get('name'))
                     st.rerun()
             with _c2:
                 if st.button("빼기", width='stretch',
@@ -4315,7 +4429,7 @@ else:
     st.caption(
         f"{len(_wl_body)}종목 · **목표 매수가·1차·2차·적정가는 엔진 값**"
         f"이고, 그 종목을 마지막으로 **본 날** 찍힌 것입니다 — 오늘 값이 "
-        f"아닐 수 있어 날짜를 함께 적습니다. **매입가·수량·메모는 직접 "
+        f"아닐 수 있어 날짜를 함께 적습니다. **매입가·수량·내 계획은 직접 "
         f"적는 값**이고 점수·적정가·판정에 쓰지 않습니다. 보유 중이라면 "
         f"[내 보유종목](#nav-holdings)에 등록해야 포트폴리오 판단에 "
         f"들어갑니다.")
@@ -4333,12 +4447,16 @@ else:
         "(라운드 49·110·111·112). 그래서 이 표는 **순위표가 아니라 "
         "가격 기준표**입니다.")
 
+    #: '내 계획' 칸의 보기 (라운드 164). 첫 항목은 **적지 않음**을 뜻하며
+    #: 저장하지 않는다 — 0 이나 빈 문자열을 값처럼 두지 않는다 (§3).
+    _WL_PLAN_OPTS = ('미정',) + portfolio.WATCH_PLANS
+
     _WL_COLS = [1.7, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9, 0.7, 1.2, 0.6]
     _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
                                 '1차 목표(권장가)', '2차 목표(현재가)',
                                 '적정가', '적정가 신뢰도', '매입가',
-                                '수량', '메모', '')):
+                                '수량', '내 계획', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -4357,7 +4475,7 @@ else:
         with _wc[0]:
             if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
                          key=f"wlb_go_{_wcode}"):
-                st.session_state['ticker_input'] = _wcode
+                _go_stock(_wcode, _w.get('name'))
                 st.rerun()
         with _wc[1]:
             # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
@@ -4408,10 +4526,24 @@ else:
                 value=int(_w.get('qty') or 0),
                 key=f"wl_qt_{_wcode}", label_visibility='collapsed')
         with _wc[9]:
-            _mm = st.text_input(
-                "메모", value=str(_w.get('memo') or ''),
-                key=f"wl_mm_{_wcode}", label_visibility='collapsed',
-                placeholder='메모')
+            # ── 메모 대신 '내 계획' (라운드 164) ─────────────────────
+            # 사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해
+            # 보유 이렇게만 해줘."*
+            #
+            # 자유 메모는 다시 읽을 때 해석이 필요한데, 정작 보고 싶은
+            # 것은 셋 중 하나였다. 옛 메모는 **지우지 않는다** — 아래
+            # 캡션이 남아 있는 메모를 그대로 보여 준다.
+            #
+            # ⚠️ 이것은 **사용자의 계획**이지 엔진의 판정이 아니다.
+            #   점수·적정가·판정에 들어가지 않는다 (§9).
+            _plan_now = str(_w.get('plan') or '')
+            _pl = st.selectbox(
+                "내 계획", _WL_PLAN_OPTS,
+                index=(_WL_PLAN_OPTS.index(_plan_now)
+                       if _plan_now in _WL_PLAN_OPTS else 0),
+                key=f"wl_pl_{_wcode}", label_visibility='collapsed')
+            # '미정'은 **적지 않음**이지 값이 아니다 — 빈 문자열로 둔다 (§3)
+            _pl_val = _pl if _pl in portfolio.WATCH_PLANS else ''
         with _wc[10]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
@@ -4419,15 +4551,37 @@ else:
         # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
         if ((_w.get('paid') or None) != (_pd or None)
                 or int(_w.get('qty') or 0) != int(_qt or 0)
-                or str(_w.get('memo') or '') != str(_mm or '')):
+                or str(_w.get('plan') or '') != _pl_val):
             _new = dict(_w)
             _new['paid'] = _pd or None
             _new['qty'] = _qt or None
-            _new['memo'] = _mm
+            _new['plan'] = _pl_val
             _wl_body[_wi] = _new
             _wl_dirty = True
     if _wl_dirty:
         _wl_write(_wl_body)
+
+    # ── 계획을 적은 것 · 옛 메모 (라운드 164) ────────────────────────
+    # 메모 칸을 '내 계획'으로 바꿨다. 이미 적어 둔 메모는 **지우지
+    # 않는다** — 사용자가 쓴 글이 말없이 사라지는 쪽이 더 나쁘다.
+    _plan_by = {}
+    for _w in _wl_items():
+        _p = str(_w.get('plan') or '')
+        if _p:
+            _plan_by.setdefault(_p, []).append(str(_w.get('name') or ''))
+    if _plan_by:
+        st.caption("내 계획 — " + " · ".join(
+            f"**{_p}** {len(_ns)}종목 ({', '.join(_ns[:4])}"
+            + (f" 외 {len(_ns) - 4}" if len(_ns) > 4 else '') + ")"
+            for _p, _ns in _plan_by.items())
+            + "  \n이 값은 **내가 적은 계획**이고 엔진의 판정이 아닙니다.")
+    _old_memo = [(str(_w.get('name') or ''), str(_w.get('memo') or ''))
+                 for _w in _wl_items() if str(_w.get('memo') or '').strip()]
+    if _old_memo:
+        st.caption("예전에 적어 둔 메모 (지우지 않고 그대로 둡니다) — "
+                   + " · ".join(f"{_n}: {_m}" for _n, _m in _old_memo[:6])
+                   + (f" 외 {len(_old_memo) - 6}건"
+                      if len(_old_memo) > 6 else ''))
 
     # ── 언제 잰 값인가 · 아직 안 본 종목은 그렇게 말한다 (§3) ────────
     _stale = [w for w in _wl_items() if not w.get('snap_at')]
@@ -5082,12 +5236,20 @@ st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 # 기본 스피너는 '무언가 돌고 있다'만 말한다. 어느 단계인지 보여야 기다릴 수 있다.
 _prog = st.empty()
 _t0 = time.time()
-_prog.markdown(_uk.progress(0, label=f"{resolved_name} · 데이터 수집",
+# ⚠️ 라운드 164 — 아래에서 `_last_analysis_sec` 를 **쓰기만 하고** 아무도
+#   안 읽고 있었다("다음 분석의 예상 시간을 알려주기 위해 기억해 둔다"고
+#   적어 놓고 그 다음이 없었다). 스캔 진행줄이 이미 쓰는 표현을 그대로
+#   재사용한다 — 새 문구를 만들지 않는다 (§2·§4).
+_prev_sec = st.session_state.get('_last_analysis_sec')
+_prev_txt = f" · 지난번 {_prev_sec:.0f}초" if _prev_sec else ''
+_prog.markdown(_uk.progress(0, label=f"{resolved_name} · 데이터 수집{_prev_txt}",
                             theme=_theme, elapsed=0.0),
                unsafe_allow_html=True)
 try:
     snap, snap_origin = get_shared_snapshot(target_ticker, t_ref_str, rho_cutoff)
-    _prog.markdown(_uk.progress(4, label=f"{resolved_name} · 과거 유사사례 탐색",
+    _prog.markdown(_uk.progress(4,
+                                label=f"{resolved_name} · 과거 유사사례 탐색"
+                                      f"{_prev_txt}",
                                 theme=_theme, elapsed=time.time() - _t0),
                    unsafe_allow_html=True)
     report_text, snapshot, latest_fund, sr117_audit, guard_res = build_report_context(snap)
@@ -5175,6 +5337,36 @@ roe_val = _metric(stock_info.get('roe'), _lf.get('roe'))          # ROE 는 음�
 eps_val = _metric(stock_info.get('eps'), _lf.get('eps'), positive_only=True)
 bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
 
+# ── ETF 는 '적정가' 자리가 다르다 (라운드 164) ──────────────────────────
+# 기업 적정가(EPS·BPS)는 펀드에 성립하지 않는다 — 엔진이 이미 건너뛴다.
+# 대신 **발표되는 값**인 NAV 를 받아다 그대로 적는다. 못 받으면 '미수신'
+# 이라 쓰고 지어내지 않는다 (§3).
+_etf_nav = None
+_etf_is = None
+try:
+    _etf_is = etf_registry.is_etf(target_ticker)
+    if _etf_is:
+        _etf_nav = etf_registry.nav_of(target_ticker)
+except Exception:                                              # noqa: BLE001
+    _etf_is, _etf_nav = None, None       # 조회 하나 때문에 화면이 죽지 않는다
+
+_etf_tile_html = ""
+if _etf_is:
+    _nv_txt = (f"{_etf_nav['nav']:,.0f}원"
+               if (_etf_nav and _etf_nav.get('nav')) else "미수신")
+    _nv_sub = ((f"괴리 {_etf_nav['premium_pct']:+.2f}% · {_etf_nav['at']}")
+               if (_etf_nav and _etf_nav.get('premium_pct') is not None)
+               else "네이버 ETF 목록 응답 없음")
+    _etf_tile_html = (
+        "<div style='background: #161D2A; padding: 8px 12px; "
+        "border-radius: 12px; text-align: center;'>"
+        "<p style='margin: 0; font-size: 12px; color: #4C8DFF; "
+        "font-weight: bold;'>ETF 순자산가치 (NAV)</p>"
+        f"<p style='margin: 4px 0 0 0; font-size: 17px; color: #4C8DFF; "
+        f"font-weight: bold;'>{_uk._esc(_nv_txt)}</p>"
+        f"<p style='margin: 2px 0 0 0; font-size: 12px; color: #9DAABC;'>"
+        f"{_uk._esc(_nv_sub)}</p></div>")
+
 # 적정가 미산출 사유 캡션 — 템플릿 안 조건식이 빈 줄을 만들면 markdown 이
 # 이어지는 HTML 을 코드 블록으로 바꾼다. 미리 만들어 같은 줄에 붙인다.
 _fv_note_html = ""
@@ -5257,7 +5449,7 @@ st.markdown(f"""
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
             <p style='margin: 0; font-size: 12px; color: #4C8DFF; font-weight: bold;'>시장조정 펀더멘털 적정가</p>
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #4C8DFF; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>{_fv_note_html}
-        </div>
+        </div>{_etf_tile_html}
     </div>
     <!-- 가격 출처 vs 공시 출처 분리 및 다중 출처 교차검증 -->
     <p style='margin: 12px 0 0 0; color: #35C98B; font-size: 13px; text-align: center; border-top: 1px solid #1C2635; padding-top: 8px;'>
@@ -5266,6 +5458,43 @@ st.markdown(f"""
     </p>
 </div>
 """, unsafe_allow_html=True)
+
+# ── ETF 라면 무엇이 다른지 한 문단으로 밝힌다 (라운드 164) ──────────────
+# 사용자 요청은 *"ETF 도 적정가 살때말때"* 였다. 절반만 해 줄 수 있다:
+#   · 못 하는 것 — **기업 적정가.** EPS·BPS·ROE 가 없는 자산이라 만들면
+#     그건 지어낸 값이다 (라운드 44 가 겪은 그 폴백).
+#   · 할 수 있는 것 — **NAV 대비 어디인가.** 그리고 진입·손절·목표는
+#     가격·변동성으로만 정해지므로 ETF 에도 그대로 성립한다.
+# 두 문장을 섞지 않는다 (§3 — '데이터 미수신 ≠ 추천 없음' 과 같은 모양).
+if _etf_is:
+    _nav_p = _uk.nav_premium((_etf_nav or {}).get('price'),
+                             (_etf_nav or {}).get('nav'))
+    # ⚠️ `_uk.card` 는 값을 돌려주지 않고 **직접 그린다.** st.markdown 으로
+    #   감싸면 화면에 'None' 이 찍힌다.
+    _uk.card(
+            "<div style='font-size:13px; line-height:1.65; "
+            f"color:{_TOK['tx2']};'>"
+            "<b style='color:" + _TOK['tx1'] + ";'>이 종목은 ETF 입니다</b> — "
+            "기업이 아니라 펀드라서 <b>EPS·BPS·ROE 가 존재하지 않습니다.</b> "
+            "그래서 위 '시장조정 펀더멘털 적정가'는 <b>만들지 않습니다</b> "
+            "— 없는 값을 지어내지 않기 위해서입니다. ETF 에서 그 자리에 "
+            "해당하는 값은 <b>순자산가치(NAV)</b>이고, 그것은 추정이 아니라 "
+            "<b>발표되는 값</b>입니다."
+            "</div>"
+            + _uk.nav_row(_nav_p, (_etf_nav or {}).get('price'),
+                          (_etf_nav or {}).get('nav'),
+                          (_etf_nav or {}).get('at'), theme=_theme)
+            + ("" if _etf_nav else
+               f"<p style='margin:9px 0 0 0; font-size:12px; "
+               f"color:{_TOK['warn']};'>NAV 미수신 — 네이버 ETF 목록 응답이 "
+               f"없습니다. 값을 지어내지 않고 비워 둡니다.</p>")
+            + f"<p style='margin:9px 0 0 0; font-size:12px; "
+              f"color:{_TOK['tx3']};'>아래 진입가·손절·목표는 <b>가격과 "
+              f"변동성만으로</b> 정해지므로 ETF 에도 그대로 성립합니다. "
+              f"다만 이 엔진의 매수 신호에는 비용 차감 뒤 재현되는 우위가 "
+              f"확인되지 않았고(라운드 148~160), 그 사실은 ETF 라고 달라지지 "
+              f"않습니다.</p>",
+            theme=_theme, accent=_TOK['brand'])
 
 # (감사 처분: 상단 matplotlib 3단 차트 expander는 아래 '종합 차트'와 완전 중복이라
 #  제거했다 — 같은 지표(MA 5·20·60·120, RSI, 거래량)를 종합 차트가 인터랙티브로 제공.)
