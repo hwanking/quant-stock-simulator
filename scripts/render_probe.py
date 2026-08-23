@@ -37,6 +37,14 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 os.chdir(PROJ)
 
+# ⚠️ 라운드 165 — 검사가 **사용자 자료를 바꾸고 있었다.** 라운드 164 가
+#   '최근 본 종목'을 파일에 남기게 했는데, 이 프로브가 돌 때마다 테스트
+#   종목(SK하이닉스·다날·CJ ENM …)이 사용자 목록에 쌓였다.
+#   화면은 이 값을 보면 **로컬 파일을 쓰지 않는다** (읽기는 그대로 —
+#   검사는 실제 자료 위에서 돌아야 화면이 진짜로 그리는지 알 수 있다).
+#   os.environ 에 여기서 넣어야 AppTest 가 exec 하는 web_app 이 본다.
+os.environ['GAEUM_NO_LOCAL_WRITE'] = '1'
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -48,8 +56,25 @@ def main():
     ap.add_argument('--timeout', type=int, default=1800)
     a = ap.parse_args()
 
+    # ⚠️ 라운드 165 — 렌더가 **사용자 자료를 바꾸는지** 여기서 잰다.
+    #   회귀 전체 구간으로 재면 사용자가 앱을 열어 둔 것만으로 실패한다 —
+    #   그건 검사가 아니라 잔소리다. 창을 **렌더 한 번**으로 좁힌다.
+    #   그리고 이름(스위치가 소스에 있나)이 아니라 **값**(파일이 실제로
+    #   바뀌었나)으로 잰다 (§6).
+    def _user_stamps():
+        s = {}
+        for f in ('recent_stocks.json', 'watchlist.json', 'positions.json'):
+            p = os.path.join(PROJ, '.portfolio', f)
+            try:
+                st = os.stat(p)
+                s[f] = (st.st_mtime, st.st_size)
+            except OSError:
+                s[f] = None
+        return s
+
     out = {'ok': False, 'exceptions': None, 'first': '', 'keys': {},
-           'error': ''}
+           'error': '', 'touched': None}
+    _before = _user_stamps()
     try:
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file(os.path.join(PROJ, 'web_app.py'),
@@ -72,6 +97,8 @@ def main():
         # 자식이 죽으면 부모가 그것을 **검사 실패가 아니라 실행 실패**로
         # 구분할 수 있어야 한다. 지어내지 않는다(§3).
         out['error'] = f'{type(e).__name__}: {e}'[:300]
+    _after = _user_stamps()
+    out['touched'] = sorted(k for k in _before if _before[k] != _after[k])
     sys.stdout.write('\n@@RESULT@@' + json.dumps(out, ensure_ascii=False))
     return 0
 

@@ -26,6 +26,19 @@ from report_generator import QuantReportGenerator
 
 PROJ = _os.path.dirname(_os.path.abspath(__file__))
 FAILURES = []
+
+#: 검사가 **사용자 자료를 건드렸는지** 나중에 확인하려고 지금 찍어 둔다
+#: (라운드 165 · §202). 회귀의 AppTest 렌더가 '최근 본 종목'에 테스트
+#: 종목을 쌓던 자리다. 끝나고 수정시각이 이 값보다 새로우면 실패다.
+#: ⚠️ 이름만 보고 믿지 않으려면 **값으로** 재야 한다 — 소스에 스위치가
+#:   적혀 있는지가 아니라, 파일이 실제로 안 바뀌었는지를 본다.
+_USER_FILES_T0 = {}
+for _uf in ('recent_stocks.json', 'watchlist.json', 'positions.json'):
+    _up = _os.path.join(PROJ, '.portfolio', _uf)
+    try:
+        _USER_FILES_T0[_uf] = _os.stat(_up).st_mtime
+    except OSError:
+        _USER_FILES_T0[_uf] = None          # 없으면 '없음'으로 기록한다
 #: 지금까지 **실제로 돌린** 검사 수 (라운드 109 — §158 이 규칙 문서의
 #: 회귀 하한을 이 값으로 대조한다. 세지 않으면 '항상 참'인 검사가 된다)
 _CHECKS_RUN = [0]
@@ -15155,6 +15168,171 @@ check("종목 보러 가는 길이 `_go_stock` 하나다",
       f"호출 {_wa201b.count('_go_stock(')}회")
 check("옛 `ticker_input` 경로가 남아 있지 않다",
       'ticker_input' not in _wa201b)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §202 — 종목코드를 손으로 뜯지 않는다 (라운드 165)
+#
+#   라운드 164 가 검색 경로의 `\d{6}` 을 `stock_code` 로 모았다. 그런데
+#   바로 다음 날 화면이 죽었다:
+#
+#       0040Y0.KS: 네이버 일봉 시계열 수신 실패
+#
+#   원인은 **같은 결함의 다른 표기**였다 —
+#
+#       clean_symbol = ''.join(filter(str.isdigit, symbol))   # 일봉
+#       code = ''.join(filter(str.isdigit, str(symbol_or_code)))[:6]  # 배당
+#       c = re.sub(r'\D', '', str(code or ''))[:6]            # 뉴스·공시
+#
+#   '0040Y0.KS' → '00400'(5자리). 네이버는 `0040Y0` 으로 **325봉을 정상
+#   제공**한다(실측) — 못 받은 게 아니라 우리가 코드를 망가뜨려 물어본
+#   것이다.
+#
+#   §201 이 이걸 못 잡은 이유가 중요하다: **정규식만 찾고 있었고, 검사
+#   대상도 함수 두 개로 손으로 적어 뒀다.** 그래서 여기서는
+#   ⓐ **표기가 아니라 idiom 자체**를 막고
+#   ⓑ **모든 모듈**을 훑는다 (손 목록이 아니라 유도).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§202 종목코드를 손으로 뜯지 않는다 (라운드 165)")
+print("=" * 72)
+
+#: 코드를 **망가뜨리는** 표기. 판별(`isdigit()` 로 물어보기)이 아니라
+#: 추출(숫자만 남기기)이다. 문자 포함 KRX 코드를 조용히 다른 값으로 만든다.
+_MANGLE202 = ("filter(str.isdigit", "re.sub(r'\\D'", 're.sub(r"\\D"')
+
+
+def _mangle_hits202(src_lines):
+    """(줄번호, 줄) 목록에서 mangling 표기를 찾는다. 주석은 이미 빠져 있다."""
+    return [(i, ln.strip()[:70]) for i, ln in src_lines
+            if any(m in ln for m in _MANGLE202)]
+
+
+_reach202 = [p for p in _la16.reachable_modules('web_app.py')]
+_hits202 = []
+for _f202 in _reach202:
+    try:
+        _hits202 += [(_f202, i, ln)
+                     for i, ln in _mangle_hits202(_la16.code_lines(_f202))]
+    except Exception:                                          # noqa: BLE001
+        continue
+check("어느 모듈도 종목코드에서 숫자만 뽑지 않는다",
+      not _hits202,
+      f'{_hits202[:3]} — stock_code.normalize() 를 쓴다')
+check(f"검사가 실제로 모듈을 훑었다 ({len(_reach202)}개)",
+      len(_reach202) >= 30, f'{len(_reach202)}개 — 손 목록이 아니라 유도')
+
+# 심어 두면 잡는가 — 0건이 '없다'인지 '못 봤다'인지 가른다 (§110)
+_plant202 = [(1, "    code = ''.join(filter(str.isdigit, symbol))"),
+             (2, '    c = re.sub(r"\\D", "", code)[:6]'),
+             (3, "    ok = code.isdigit()")]          # 판별은 잡지 않는다
+_got202 = _mangle_hits202(_plant202)
+check("심어 두면 실제로 잡는다 (그리고 판별은 오탐하지 않는다)",
+      [i for i, _ in _got202] == [1, 2], str(_got202))
+
+# ── 오늘 터진 네 자리가 실제로 stock_code 를 부르는가 ────────────────
+#    ⚠️ 이 목록은 **손으로 적은 것**이라 낡는다. 위 idiom 검사가 일반
+#    그물이고, 이건 오늘 자리를 못 박는 자물쇠다 — 둘을 같이 둔다.
+_SITES202 = {
+    'bitemporal_engine.py': ('generate_synthetic_bitemporal_data',
+                             'fetch_dividend_info'),
+    'market_context.py': ('fetch_stock_news', 'fetch_stock_disclosures'),
+}
+for _f202, _fns202 in _SITES202.items():
+    _src202 = _read148(_os.path.join(PROJ, _f202))
+    _seen202 = set()
+    try:
+        _t202 = _ast16.parse(_src202)
+        for _n202 in _ast16.walk(_t202):
+            if (isinstance(_n202, _ast16.FunctionDef)
+                    and _n202.name in _fns202):
+                _seen202.add(_n202.name)
+                _seg202 = _ast16.get_source_segment(_src202, _n202) or ''
+                _body202 = '\n'.join(
+                    l for l in _seg202.splitlines()
+                    if not l.strip().startswith('#'))
+                check(f"{_f202}:{_n202.name} 이 stock_code 로 코드를 읽는다",
+                      'stock_code.normalize' in _body202,
+                      '손으로 뜯으면 문자 코드가 남의 코드가 된다')
+    except Exception as _ex202:                                # noqa: BLE001
+        check(f"{_f202} 을 AST 로 읽었다", False, str(_ex202)[:60])
+    check(f"{_f202}: 검사가 대상 함수를 다 봤다",
+          _seen202 == set(_fns202), f'{sorted(_seen202)} / {sorted(_fns202)}')
+
+# ── 판별 실패와 수신 실패를 가르는가 (§3) ────────────────────────────
+_be202 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("코드를 못 읽은 것과 시세를 못 받은 것을 다른 문장으로 말한다",
+      '조회를 시도하지 ' in _be202 and '수신 실패와 다릅니다' in _be202,
+      '둘을 섞으면 "네이버가 안 준다"로 오독한다')
+
+# ── 화면이 스스로 모순되지 않는가 (§4) ───────────────────────────────
+#   ETF 적정가 미산출 문구가 "NAV 는 연동되어 있지 않다" 라고 적고 있었다.
+#   라운드 164 가 NAV 를 연동했고 화면은 **바로 옆 칸에 NAV 를 띄운다.**
+_qi202 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("ETF 적정가 문구가 'NAV 미연동' 이라고 말하지 않는다",
+      not ('NAV' in _qi202 and '괴리율은 연동되어 있지 않' in _qi202),
+      '옆 칸에 NAV 를 띄우면서 미연동이라 적으면 화면이 스스로 모순된다')
+
+# ── stock_code 가 접미사·대소문자를 실제로 처리하는가 ────────────────
+for _raw202, _exp202 in (('0040Y0.KS', '0040Y0'), ('0040y0', '0040Y0'),
+                         ('005930.KS', '005930'), ('480020', '480020')):
+    check(f"§202 normalize({_raw202!r}) == {_exp202!r}",
+          _sc201.normalize(_raw202) == _exp202,
+          f'→ {_sc201.normalize(_raw202)!r}')
+
+# ── 검사가 사용자 자료를 바꾸지 않는가 (§9) ──────────────────────────
+#
+#   라운드 165 에서 실제로 그랬다. 라운드 164 가 '최근 본 종목'을 파일에
+#   남기게 했는데, 회귀의 AppTest 렌더가 돌 때마다 **사용자 목록에
+#   테스트 종목(SK하이닉스·다날·CJ ENM …)이 쌓였다.** 자료가 지워진 건
+#   아니지만, 검사가 사용자의 것을 건드리면 안 된다.
+#
+#   ⚠️ **값으로 잰다.** 소스에 스위치가 적혀 있는지가 아니라 파일이 실제로
+#     안 바뀌었는지를 본다 (§6 — 검사는 이름이 아니라 값으로 한다).
+#   ⚠️ 그리고 **창을 렌더 한 번으로 좁힌다.** 회귀 전체 구간으로 재면
+#     사용자가 앱을 열어 둔 것만으로 실패한다 — 그건 검사가 아니라
+#     잔소리다. 프로브가 자기 렌더 앞뒤로 재서 `touched` 로 돌려준다.
+_ren202 = _render(ticker='069500')
+check("렌더 프로브가 실제로 돌았다 (못 돌면 통과시키지 않는다)",
+      _render_ok(_ren202), str(_ren202)[:120])
+# ⚠️ 이 판별이 **있을 때 잡는지**는 확인했다: 임시 사본에 한 글자를 심으면
+#   `["recent_stocks.json"]` 을 돌려준다 (`_probe/touched_plant.py`).
+#   그리고 실제로 한 번 잡았다 — 고치기 전 사용자 목록에 회귀의 테스트
+#   종목(SK하이닉스·다날·CJ ENM)이 그 시각으로 쌓여 있었다.
+check("렌더가 사용자 자료를 바꾸지 않는다 (§9)",
+      _ren202.get('touched') == [],
+      f"{_ren202.get('touched')} — 검사가 관심종목·최근 목록을 건드렸다")
+check("검사가 실제로 사용자 파일을 지켜봤다 (0건이 미측정이 아니다)",
+      _ren202.get('touched') is not None
+      and any(v is not None for v in _USER_FILES_T0.values()),
+      f'{ {k: (v is not None) for k, v in _USER_FILES_T0.items()} }')
+# 참고 — 회귀 전체 구간에서 바뀐 것 (사용자가 앱을 열어 뒀을 수도 있어
+# 판정에는 쓰지 않는다. 그래도 눈에는 보이게 적는다.)
+_moved202 = [k for k, v in _USER_FILES_T0.items()
+             if v != (_os.stat(_os.path.join(PROJ, '.portfolio', k)).st_mtime
+                      if _os.path.exists(_os.path.join(PROJ, '.portfolio', k))
+                      else None)]
+print(f"  [참고 ] 회귀 구간에 바뀐 사용자 파일: {_moved202 or '없음'} "
+      f"(앱을 열어 두면 사용자가 바꿀 수 있어 판정에 쓰지 않는다)")
+
+_rp202 = _read148(_os.path.join(PROJ, 'scripts', 'render_probe.py'))
+check("렌더 프로브가 '로컬 쓰기 금지'를 켠다",
+      "os.environ['GAEUM_NO_LOCAL_WRITE']" in _rp202,
+      '검사가 사용자의 관심종목·최근 목록을 바꾸면 안 된다 (§9)')
+_wa202 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+check("화면이 그 값을 실제로 본다",
+      'NO_LOCAL_WRITE' in _wa202
+      and _wa202.count('NO_LOCAL_WRITE') >= 3,
+      f"등장 {_wa202.count('NO_LOCAL_WRITE')}회 — 정의 + 저장 지점들")
+check("최근 목록 저장이 그 스위치를 거친다",
+      'not NO_LOCAL_WRITE' in _wa202.split('save_search_history')[0][-400:],
+      '스위치를 안 거치면 검사가 사용자 목록을 채운다')
+# 읽기까지 막으면 검사가 빈 화면을 보게 된다 — 그건 검사가 아니다
+check("읽기는 막지 않는다 (검사는 실제 자료 위에서 돈다)",
+      'load_search_history' in _wa202
+      and 'NO_LOCAL_WRITE' not in
+      _wa202.split('load_search_history')[0][-200:],
+      '읽기까지 끄면 화면이 진짜로 그리는지 알 수 없다')
 
 
 print()

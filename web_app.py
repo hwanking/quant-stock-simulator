@@ -76,6 +76,19 @@ def _last_update_date():
 
 APP_UPDATED = _last_update_date()
 
+#: 검사가 사용자 자료를 건드리지 않게 하는 스위치 (라운드 165).
+#:
+#: ⚠️ 실제로 그런 일이 있었다. 라운드 164 가 '최근 본 종목'을 파일에
+#:   남기게 했는데, 회귀의 AppTest 렌더가 돌 때마다 **사용자의 목록에
+#:   테스트 종목(SK하이닉스·다날·CJ ENM …)이 쌓였다.** 검사가 사용자
+#:   자료를 바꾸면 안 된다 (§9 — 보유·관심 자료는 사용자의 것이다).
+#:
+#: `scripts/render_probe.py` 가 이 값을 켜고, 화면은 그때 **어떤 로컬
+#: 파일도 쓰지 않는다.** 읽기는 그대로 둔다 — 검사는 실제 자료 위에서
+#: 돌아야 화면이 진짜로 그리는지 알 수 있다.
+NO_LOCAL_WRITE = bool(os.environ.get('GAEUM_NO_LOCAL_WRITE'))
+
+
 def is_remote_exposed():
     """
     지금 접속이 이 PC 밖에서 온 것인가? (클라우드·터널·LAN 모두 포함)
@@ -1995,7 +2008,9 @@ if _hist_code:
     if _hist_changed:
         st.session_state['recent_stocks'] = _hist_new
         try:
-            if not is_remote_exposed():
+            # 검사가 돌 때는 파일에 쓰지 않는다 — 사용자 목록에 테스트
+            # 종목이 쌓이던 자리다 (라운드 165 · §9)
+            if not is_remote_exposed() and not NO_LOCAL_WRITE:
                 portfolio.save_search_history(_hist_new)
         except Exception:                                      # noqa: BLE001
             pass                      # 기록 하나 때문에 화면이 죽지 않는다
@@ -2037,7 +2052,9 @@ if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
 # 원격 접속(클라우드·터널)에서는 로컬 파일 저장소를 쓰지 않는다.
 # 앱 인스턴스가 하나라 `.portfolio/positions.json` 이 방문자 전원의 공용 파일이 되어
 # 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
-ALLOW_LOCAL_STORE = not is_remote_exposed()
+#  ⚠️ 라운드 165 — 검사가 돌 때도 끈다. 회귀의 AppTest 렌더가 사용자
+#     자료를 바꾸면 안 된다 (§9). 읽기는 그대로다.
+ALLOW_LOCAL_STORE = not is_remote_exposed() and not NO_LOCAL_WRITE
 
 if 'positions' not in st.session_state:
     if ALLOW_LOCAL_STORE:

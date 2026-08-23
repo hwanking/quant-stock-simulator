@@ -2207,10 +2207,15 @@ class QuantIndicatorsEngine:
                 'upside_pct': None,
                 'fair_value_confidence': 0.0,
                 'fair_value_status': "UNCALCULATED",
+                # ⚠️ 라운드 165 — 이 문구가 "순자산가치(NAV)·괴리율은 연동되어
+                #   있지 않으므로" 라고 적고 있었다. **라운드 164 에서 연동했다.**
+                #   화면은 바로 옆 칸에 NAV 10,240원 · 괴리 +0.49% 를 띄우면서
+                #   이 줄은 "연동 안 됨"이라고 말하고 있었다 — 같은 화면이
+                #   스스로 모순되는 §4 의 그 모양이다. 문구만 고친다(표시 전용).
                 'fair_value_status_note': (
                     "ETF·ETN 은 개별 기업이 아니라 펀드라서 EPS·BPS·ROE 기반 적정가가 "
-                    "성립하지 않습니다. 순자산가치(NAV)·괴리율은 연동되어 있지 않으므로 "
-                    "적정가를 산출하지 않습니다. **추세·경로·표본 분석은 그대로 유효합니다.**"),
+                    "성립하지 않습니다. 이 자리에 해당하는 값은 순자산가치(NAV)이며 "
+                    "옆 칸에 따로 적습니다. **추세·경로·표본 분석은 그대로 유효합니다.**"),
                 'buy_price_checks': [],
                 'recommended_buy_price': None,
                 'input_metrics': {}, 'missing_inputs': ['EPS', 'BPS', 'ROE', 'PER', 'PBR'],

@@ -25,6 +25,7 @@ import time
 import numpy as np
 
 import bitemporal_engine as be
+import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 캐시 — 지수·뉴스는 종목마다 다시 받을 필요가 없다
@@ -340,8 +341,11 @@ def fetch_stock_news(code, limit=15, name_hint=''):
     네이버 종목뉴스 API 는 같은 사건을 다룬 기사를 하나로 묶어 준다.
     그 묶음을 그대로 살려 '연관 뉴스'로 보여준다.
     """
-    c = re.sub(r'\D', '', str(code or ''))[:6]
-    if len(c) != 6:
+    # ⚠️ 라운드 165 — 여기가 `re.sub(r'\D', '', …)` 였다. '0040Y0' 이
+    #    '00400' 이 되어 뉴스가 통째로 '종목코드를 알 수 없습니다' 였다.
+    #    실측: 네이버 뉴스 API 는 `0040Y0` 으로 **3건을 정상 제공**한다.
+    c = stock_code.normalize(code)
+    if not c:
         return {'available': False, 'items': [], 'reason': '종목코드를 알 수 없습니다.'}
 
     def _build():
@@ -440,8 +444,9 @@ def fetch_stock_disclosures(code, limit=10):
     만들어 내지 않는다 (날조 금지 원칙). 반환:
     {'available', 'items': [{'title','provider','date','url'}], 'source', 'reason'}
     """
-    c = re.sub(r'\D', '', str(code or ''))[:6]
-    if len(c) != 6:
+    # ⚠️ 라운드 165 — 위 뉴스와 같은 자리. 숫자만 뽑으면 문자 코드가 죽는다.
+    c = stock_code.normalize(code)
+    if not c:
         return {'available': False, 'items': [], 'reason': '종목코드를 알 수 없습니다.'}
 
     def _build():

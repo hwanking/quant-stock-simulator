@@ -1093,8 +1093,10 @@ class BitemporalEngine:
         반환 dict: dps, dividend_yield_pct, fiscal_month, estimated_record_date,
                    estimated_ex_date, days_to_ex, expected_drop_pct, is_estimated, note
         """
-        code = ''.join(filter(str.isdigit, str(symbol_or_code)))[:6]
-        if len(code) != 6:
+        # ⚠️ 라운드 165 — 여기도 숫자만 뽑고 있었다. '0040Y0' 이 '00400' 이
+        #    되어 배당 조회가 통째로 '종목코드를 해석하지 못했습니다' 였다.
+        code = stock_code.normalize(symbol_or_code)
+        if not code:
             return {"available": False, "reason": "종목코드를 해석하지 못했습니다."}
 
         try:
@@ -1293,13 +1295,26 @@ class BitemporalEngine:
         realtime_target_price, check_status, matrix = self.get_realtime_stock_price_triple_check(symbol)
         
         prices_df = None
-        
+
+        # ⚠️ 라운드 165 — 여기가 `''.join(filter(str.isdigit, symbol))` 이었다.
+        #    '0040Y0.KS' 를 **'00400'(5자리)** 으로 만들어 일봉을 통째로 못
+        #    받았고, 문자 코드 ETF 는 화면이 `DataUnavailableError` 로 죽었다.
+        #    실측(_probe/etf_bars_probe.py): 네이버는 `0040Y0` 으로 **325봉을
+        #    정상 제공**한다 — 못 받은 게 아니라 우리가 코드를 망가뜨려
+        #    물어본 것이다. 라운드 164 가 검색 경로를 고쳤는데 **같은 결함의
+        #    다른 표기**(정규식이 아니라 filter)가 여기 남아 있었다.
+        #
+        #    판별 실패와 수신 실패는 **다른 실패**다. 사유를 섞지 않는다 (§3).
+        clean_symbol = stock_code.normalize(symbol)
+        if not clean_symbol:
+            raise DataUnavailableError(
+                f"{symbol}: 종목코드를 읽지 못했습니다 — 조회를 시도하지 "
+                f"않았습니다 (수신 실패와 다릅니다).")
+
         # 2. 네이버 증권 (Naver Finance) 실시간 일봉 데이터 연동 시도
         try:
             import urllib.request
             import xml.etree.ElementTree as ET
-            # 종목코드가 '005930.KS' 처럼 들어올 경우 숫자만 추출
-            clean_symbol = ''.join(filter(str.isdigit, symbol))
             naver_url = f"https://fchart.stock.naver.com/sise.nhn?symbol={clean_symbol}&timeframe=day&count=3000&requestType=0"
             req = urllib.request.Request(naver_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5) as response:
