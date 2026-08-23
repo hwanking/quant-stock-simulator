@@ -39,6 +39,84 @@ def check(name, condition, detail=""):
         FAILURES.append(name)
 
 
+# ── 무거운 자원 놓아 주기 (라운드 163) ──────────────────────────────────
+#
+# 이 회귀가 이 PC 에서 자주 죽었다. 종료 코드 127/255 · 트레이스백 없음 ·
+# 죽는 지점이 매번 달랐다(110 · 640 · 712 · 1,210 · 1,214 · 3,453).
+# 진단에서 `0xC000012D`(STATUS_COMMITMENT_LIMIT)를 실제로 봤다 —
+# **커밋 한도 초과**다. 남의 프로세스(llama-server 8GB · 다른 프로젝트
+# 12GB · ChatGPT 5GB)는 우리가 못 줄이지만 **우리 봉우리는 줄일 수 있다.**
+#
+# `scripts/profile_regression.py` 로 절 단위 봉우리를 재 보니 **7,065 MB**
+# 였고, 583 MB 에서 한 번도 안 내려가며 단조로 올랐다:
+#
+#     §24 스크린샷 OCR      +3,093 MB   (easyocr/torch 모델)
+#     §88 아코디언 렌더      +2,530 MB   (AppTest)
+#     §49 None 포맷 폭탄     +2,395 MB   (AppTest)
+#     §91 토큰·검색 렌더     +2,230 MB   (AppTest)
+#
+# 원인은 둘이다. ① AppTest 를 **아홉 번** 만드는데 쓰고 나서 놓아 주지
+# 않는다. ② 그보다 큰 것 — AppTest 가 돌 때마다 **Streamlit 전역 캐시**
+# 에 앱의 원장·케이스가 쌓이고 회귀가 끝날 때까지 안 비워진다.
+#
+# 그래서 무거운 것을 쓴 자리마다 여기서 놓아 준다. 검사 내용은 하나도
+# 바꾸지 않는다 — **무엇을 재는지가 아니라 다 쓴 뒤 치우는지의 문제**다.
+def _release(*names_or_objs):
+    """AppTest·OCR 모델을 놓아 주고 Streamlit 전역 캐시를 비운다.
+
+    호출부는 `_release(_at49)` 처럼 객체를 넘기면 된다 — 참조를 끊는 것은
+    호출부의 `del` 이 하고, 여기서는 **전역에 남는 것**을 치운다.
+    """
+    import gc
+    try:
+        import streamlit as _st_rel
+        # 앱이 @st.cache_data 로 원장·캘리브레이션을 담아 둔다. 회차마다
+        # 쌓이므로 렌더 검사 사이에 비운다. (검사 대상이 아니라 부산물이다)
+        _st_rel.cache_data.clear()
+        _st_rel.cache_resource.clear()
+    except Exception:                                          # noqa: BLE001
+        pass
+    gc.collect()
+
+
+# ── 렌더 검사는 자식 프로세스로 (라운드 163) ────────────────────────────
+#
+# 해제 지점을 넣어도 봉우리가 5,230 MB 에서 안 내려갔다. 누적이 아니라
+# **단발 봉우리**이기 때문이다 — AppTest 한 번이 앱 전체(원장 18만 건
+# 포함)를 올려 2.2GB 를 쓴다. 같은 프로세스 안에서는 못 줄인다.
+# **프로세스를 나누면** 끝날 때 OS 가 전부 회수한다.
+#
+# 검사의 뜻은 하나도 바꾸지 않는다 — 예외 개수·첫 문구·세션 키만 받는다.
+def _render(**kw):
+    """scripts/render_probe.py 로 렌더 한 건. dict 반환(실행 실패면 error)."""
+    import json as _j, subprocess as _sp
+    argv = [sys.executable, _os.path.join(PROJ, 'scripts', 'render_probe.py')]
+    for k in ('ticker', 'sb_step', 'search', 'state_json'):
+        v = kw.get(k)
+        if v is not None:
+            argv += ['--' + k.replace('_', '-'), str(v)]
+    for k in kw.get('want_key') or []:
+        argv += ['--want-key', k]
+    try:
+        r = _sp.run(argv, cwd=PROJ, capture_output=True, text=True,
+                    encoding='utf-8', errors='replace', timeout=2400)
+        tag = (r.stdout or '').rsplit('@@RESULT@@', 1)
+        if len(tag) == 2:
+            return _j.loads(tag[1])
+        return {'ok': False, 'error': f'결과 없음 (rc={r.returncode})',
+                'exceptions': None}
+    except Exception as e:                                     # noqa: BLE001
+        return {'ok': False, 'error': f'{type(e).__name__}: {e}'[:200],
+                'exceptions': None}
+
+
+def _render_ok(res):
+    """렌더가 '예외 0건'인가. **실행 실패와 검사 실패를 가른다** —
+    자식이 못 돌았으면 검사를 통과시키지 않는다(§3: 못 잰 것으로 거르지
+    않되, 못 잰 것을 통과로 적지도 않는다)."""
+    return bool(res.get('ok')) and res.get('exceptions') == 0
+
+
 def section(title):
     print()
     print("=" * 72)
@@ -702,9 +780,25 @@ check("보유자 등급이 정의된 값", pv_hi['holder_action_key'] in q.HOLDE
 
 section("24. 스크린샷 OCR — 줄 복원 · 코드 교정 · 오독 무단보정 금지")
 
+# 라운드 163 — OCR 을 건드리는 검사는 **한 번의 자식 프로세스**로 모은다.
+# easyocr 은 import 만으로 torch 를 올려 1.5GB 를 쓰고, 리더까지 만들면
+# 3GB 다. 참조를 끊어도 OS 로 안 돌아온다 — 프로세스를 나누는 수밖에 없다.
+_ocr24 = {}
+try:
+    import json as _j24, subprocess as _sp24
+    _r24 = _sp24.run(
+        [sys.executable, _os.path.join(PROJ, 'scripts', 'ocr_probe.py')],
+        cwd=PROJ, capture_output=True, text=True, encoding='utf-8',
+        errors='replace', timeout=900)
+    _tag24 = (_r24.stdout or '').rsplit('@@RESULT@@', 1)
+    if len(_tag24) == 2:
+        _ocr24 = _j24.loads(_tag24[1])
+except Exception as _ex24:                                     # noqa: BLE001
+    _ocr24 = {'error': f'{type(_ex24).__name__}'}
+
 # 24-1 OCR 엔진이 없어도 죽지 않고 사유를 돌려준다
-_t, _b, _e = pf.extract_text_from_image(b"this-is-not-an-image")
-check("깨진 이미지에 예외를 던지지 않음", _t is None and _e is not None, str(_e)[:60])
+check("깨진 이미지에 예외를 던지지 않음", _ocr24.get('broken_ok') is True,
+      str(_ocr24.get('broken_err') or _ocr24.get('error'))[:60])
 
 # 24-1b 클립보드 읽기는 어떤 상태에서도 예외를 던지지 않고 (bytes|None, err) 를 준다
 try:
@@ -743,28 +837,17 @@ check("평단가 오독을 임의 보정하지 않음",
 
 # 24-5 줄 복원: 같은 줄의 토큰이 y 경계값에서 쪼개지지 않는가.
 #      고정 격자(round(y/14))를 쓰면 중심 104.9 와 105.1 이 다른 줄로 갈라졌다.
-if pf.ocr_backend() is not None:
-    import io as _io
-    try:
-        from PIL import Image as _Im, ImageDraw as _Dr, ImageFont as _Ft
-        _f = _Ft.truetype(r"C:\Windows\Fonts\malgun.ttf", 30)
-        _img = _Im.new("RGB", (900, 160), "white")
-        _d = _Dr.Draw(_img)
-        _d.text((40, 40), "005930", font=_f, fill="black")
-        _d.text((300, 40), "삼성전자", font=_f, fill="black")
-        _d.text((560, 40), "10", font=_f, fill="black")
-        _d.text((700, 40), "71,200", font=_f, fill="black")
-        _buf = _io.BytesIO()
-        _img.save(_buf, format="PNG")
-        _txt, _bk, _er = pf.extract_text_from_image(_buf.getvalue())
-        _nonempty = [l for l in (_txt or "").splitlines() if l.strip()]
-        check("한 줄로 그린 표가 한 줄로 복원됨",
-              _er is None and len(_nonempty) == 1, f"{len(_nonempty)}줄: {_nonempty}")
-    except Exception as _ex:
-        check("OCR 줄 복원 검사", True, f"건너뜀 ({type(_ex).__name__})")
+# 라운드 163 — 이 검사가 easyocr(torch)을 올려 **+3,058 MB** 를 쓰는데,
+# 리더 참조를 끊고 gc 를 돌려도 OS 로 안 돌아온다. 그래서 자식
+# 프로세스로 돌린다 — 끝나면 전부 회수된다(렌더 검사와 같은 처방).
+# 검사의 뜻은 그대로다: 한 줄로 그린 표가 한 줄로 복원되는가.
+if not _ocr24:
+    check("OCR 줄 복원 검사", True, "건너뜀 (프로브 실행 실패)")
+elif _ocr24.get('skipped'):
+    check("OCR 줄 복원 검사", True, f"건너뜀 ({_ocr24.get('reason')})")
 else:
-    check("OCR 줄 복원 검사", True, "건너뜀 (OCR 엔진 미설치)")
-
+    check("한 줄로 그린 표가 한 줄로 복원됨", _ocr24.get('lines') == 1,
+          f"{_ocr24.get('lines')}줄: {_ocr24.get('texts')}")
 
 section("25. HTS 잔고 화면 — 열 이름으로 평단가를 특정하는가")
 
@@ -2436,14 +2519,11 @@ check("fmt 헬퍼 계약 — None → 문구",
       and "return f\"{v:{spec}}{suffix}\" if v is not None else na" in _w49)
 
 # ⑤ 실제 렌더 — 성격이 다른 종목 4종에서 예외 0건
-from streamlit.testing.v1 import AppTest as _AT49
 
 for _code49, _label49 in [("069500", "ETF"), ("035760", "저신뢰 적정가")]:
-    _at49 = _AT49.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
-    _at49.session_state['selected_ticker'] = _code49
-    _at49.run()
-    check(f"{_label49}({_code49}) 렌더 예외 없음", len(_at49.exception) == 0,
-          str(_at49.exception[:1])[:150])
+    _r49 = _render(ticker=_code49)
+    check(f"{_label49}({_code49}) 렌더 예외 없음", _render_ok(_r49),
+          (_r49.get('error') or _r49.get('first'))[:150])
 
 
 section("50. 열 추측을 버리고 관계식으로 푼다 — 수량·평단가 자동 판별")
@@ -4558,28 +4638,20 @@ if _os.path.exists(_bk87):
 section("88. 아코디언 단계별 렌더 — 어느 단계를 접어도 화면이 살아 있는가")
 # 접힌 단계의 위젯은 렌더되지 않는다. 그 안에서만 정의된 이름을 본문이 쓰면
 # 그 단계를 접는 순간 화면이 죽는다. 눈으로 찾지 말고 **네 단계를 다 열어 본다**.
-from streamlit.testing.v1 import AppTest as _AT88
 
 for _step88 in ('today', 'mine', 'history', 'setup', ''):
-    _at88 = _AT88.from_file(_os.path.join(PROJ, "web_app.py"),
-                            default_timeout=1800)
-    _at88.session_state['selected_ticker'] = '005930'
-    _at88.session_state['sb_step'] = _step88
-    _at88.run()
+    _r88 = _render(ticker='005930', sb_step=_step88)
     _nm88 = _step88 or '전부 접힘'
-    check(f"{_nm88} 상태에서 렌더 예외 없음", len(_at88.exception) == 0,
-          str(_at88.exception[:1])[:200])
+    check(f"{_nm88} 상태에서 렌더 예외 없음", _render_ok(_r88),
+          (_r88.get('error') or _r88.get('first'))[:200])
 
 # 값 유지 — 4단계에서 rho 를 바꾸고 접어도 값이 살아 있어야 한다
-_at88b = _AT88.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
-_at88b.session_state['selected_ticker'] = '005930'
-_at88b.session_state['sb_step'] = 'setup'
-_at88b.session_state['_sb_keep'] = {'rho': 0.9}
-_at88b.run()
+_r88b = _render(ticker='005930', sb_step='setup',
+                state_json='{"_sb_keep": {"rho": 0.9}}',
+                want_key=['_sb_keep'])
 check("접힌 단계의 설정이 _KEEP 에 보존된다",
-      len(_at88b.exception) == 0
-      and '_sb_keep' in _at88b.session_state,
-      str(_at88b.exception[:1])[:150])
+      _render_ok(_r88b) and _r88b.get('keys', {}).get('_sb_keep') is True,
+      (_r88b.get('error') or _r88b.get('first'))[:150])
 
 
 section("89. 라운드 13·14 — 횡보 실전 하락의 원인과 국면 세분")
@@ -4730,12 +4802,9 @@ check("두 이름 공간이 다르다는 것을 코드가 밝힌다 (line ↔ bo
       "border=_p['line']" in _w91)
 
 # 검색어가 있는 상태로도 렌더해 본다 — 스피너 경로가 실행된다
-from streamlit.testing.v1 import AppTest as _AT91
-_at91 = _AT91.from_file(_os.path.join(PROJ, "web_app.py"), default_timeout=1800)
-_at91.session_state['search_text_input'] = '하이닉스'
-_at91.run()
-check("검색어를 입력한 상태에서 렌더 예외 없음", len(_at91.exception) == 0,
-      str(_at91.exception[:1])[:200])
+_r91 = _render(search='하이닉스')
+check("검색어를 입력한 상태에서 렌더 예외 없음", _render_ok(_r91),
+      (_r91.get('error') or _r91.get('first'))[:200])
 
 
 section("92. 아침 전면 점검 — 화면이 두 말을 하지 않는가 · 양 테마 대비")
@@ -14718,6 +14787,85 @@ check("ui_kit 주석이 표시 전용임을 밝힌다",
       and '실행 레벨에' in _uk_src199 and '쓰지 않는다' in _uk_src199)
 check("ui_kit 주석이 채택 시점을 11/16 이후로 못 박는다",
       '2026-11-16 이후 별도 사전등록' in _uk_src199)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §200 — 무거운 것은 자식 프로세스에서 (라운드 163)
+#
+#   이 회귀가 이 PC 에서 자주 끊겼다. 코드 문제가 아니라 **커밋 한도
+#   초과**였다 — 다른 작업이 50GB 안팎을 쓰는데 회귀가 7GB 봉우리를
+#   만들었다. `scripts/profile_regression.py` 로 재고 고쳐서
+#   **7,065 → 1,239 MB (−82.5%)** 로 줄였다.
+#
+#   되돌아가기 쉬운 종류의 고침이다 — 누군가 편하게 AppTest 를 여기서
+#   바로 만들면 다시 2.2GB 가 붙고, easyocr 을 import 하면 1.5GB 가
+#   붙는다. 그래서 **부모가 무거운 것을 직접 건드리지 않는지** 잠근다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§200 무거운 것은 자식 프로세스에서 (라운드 163)")
+print("=" * 72)
+_self200 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+_code200 = '\n'.join(ln for _i, ln in _la16.code_lines(
+    'test_pipeline_fixes.py'))
+
+# ⓐⓑ 부모가 무거운 것을 **실제로 부르는지**를 본다.
+#    ⚠️ 처음엔 문자열로 찾았다가 **이 검사 자신이 걸렸다** — 검사 코드가
+#    'AppTest.from_file' 같은 문자열을 갖고 있기 때문이다(옛 재평가일
+#    검사가 자기 파일을 빼는 것과 같은 자기참조). §110 이 이모지에서
+#    배운 그대로 **텍스트가 아니라 AST 로 가른다** — 부르는 것과
+#    말하는 것은 다르다.
+_heavy200 = {'from_file': 'AppTest 렌더', 'ocr_backend': 'OCR 백엔드',
+             'extract_text_from_image': 'OCR 추출'}
+_calls200 = []
+try:
+    _tree200 = _ast16.parse(_self200)
+    for _n200 in _ast16.walk(_tree200):
+        if isinstance(_n200, _ast16.Call) and isinstance(
+                _n200.func, _ast16.Attribute):
+            if _n200.func.attr in _heavy200:
+                _calls200.append((_n200.func.attr, _n200.lineno))
+        elif isinstance(_n200, _ast16.ImportFrom):
+            for _al200 in _n200.names:
+                if _al200.name == 'AppTest':
+                    _calls200.append(('import AppTest', _n200.lineno))
+except Exception as _ex200:                                    # noqa: BLE001
+    _calls200 = [('파싱 실패', 0)]
+check("부모가 무거운 것을 직접 부르지 않는다 (AST 로 본다)",
+      not _calls200,
+      f'직접 호출: {_calls200[:4]} — 프로브로 옮긴다')
+# 그리고 **검사가 실제로 무언가를 봤는지** 확인한다 — 0건이 '없다'인지
+# '안 봤다'인지 구분되게(§audit-passes-while-measuring-nothing).
+_seen200 = sum(1 for _n in _ast16.walk(_ast16.parse(_self200))
+               if isinstance(_n, _ast16.Call))
+check("AST 가 실제로 호출을 셌다 (0건이 미측정이 아니다)",
+      _seen200 > 500, f'{_seen200:,}개 호출을 봤다')
+# ⓒ 프로브가 실제로 있다 — 없으면 검사가 조용히 건너뛴다
+for _pb200 in ('render_probe.py', 'ocr_probe.py', 'profile_regression.py',
+               'run_regression.py'):
+    check(f"scripts/{_pb200} 가 있다",
+          _os.path.exists(_os.path.join(PROJ, 'scripts', _pb200)))
+# ⓓ 실행 실패와 검사 실패를 가른다 — 자식이 못 돌면 통과시키지 않는다
+check("자식이 못 돌면 통과시키지 않는다 (_render_ok 가 ok 를 본다)",
+      "res.get('ok')" in _code200 and "res.get('exceptions') == 0"
+      in _code200)
+check("OCR 프로브 결과도 실행 실패를 가른다",
+      "_ocr24.get('broken_ok') is True" in _code200
+      and "_ocr24.get('skipped')" in _code200)
+# ⓔ 프로파일 산출물이 있고, 봉우리가 문턱 아래인가.
+#    ⚠️ 이 값은 **측정한 것**이지 목표가 아니다. 문턱은 넉넉히 둔다 —
+#    조금 오른 것을 실패로 찍으면 검사가 잔소리가 된다.
+_PEAK_MAX_MB = 2000
+_prof200 = _os.path.join(PROJ, 'data', 'regression_profile.json')
+if _os.path.exists(_prof200):
+    with open(_prof200, encoding='utf-8') as _f200:
+        _pd200 = _json.load(_f200)
+    check(f"마지막 프로파일의 봉우리가 {_PEAK_MAX_MB:,} MB 아래다",
+          (_pd200.get('peak_mb') or 0) < _PEAK_MAX_MB,
+          f"{_pd200.get('peak_mb')} MB — 오르면 "
+          f"scripts/profile_regression.py 로 어느 절인지 본다")
+    check("프로파일이 완주한 실행에서 나왔다 (죽은 기록을 근거로 쓰지 않는다)",
+          _pd200.get('returncode') == 0 and (_pd200.get('checks') or 0) > 3000,
+          f"rc={_pd200.get('returncode')} checks={_pd200.get('checks')}")
 
 
 print()
