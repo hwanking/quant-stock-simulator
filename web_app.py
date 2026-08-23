@@ -5539,12 +5539,21 @@ if _e_stop and _e_t1:
         _risk = _core_entry - _e_stop
         _rewd = _e_t1 - _core_entry
         if _risk > 0 and _rewd > 0:
+            # 라운드 161 — "그만큼 적중률이 높아야 본전"까지만 적고 **그
+            # 수를 안 적고 있었다.** 얼마나 높아야 하는지가 핵심인데
+            # 읽는 사람이 계산할 수 없다. 숫자를 넣는다.
+            _be_more = _uk.breakeven_hit_rate(
+                _core_entry, _e_stop, _e_t1, q_engine.TOTAL_COST_PCT)
             _entry_lv_more = (
                 f"<b>손익비 {_e_rr}:1 이 무슨 뜻이냐면</b> — 이 가격에 "
                 f"사면 손절까지 <b>{_risk:,.0f}원</b>을 감수하고 1차 "
                 f"목표까지 <b>{_rewd:,.0f}원</b>을 노리는 자리입니다. "
                 f"1보다 작으면 <b>잃을 폭이 벌 폭보다 큽니다</b> — 그만큼 "
-                f"적중률이 높아야 본전입니다.")
+                f"적중률이 높아야 본전입니다."
+                + (f" 거래비용 {q_engine.TOTAL_COST_PCT}% 까지 넣으면 "
+                   f"<b>열 번 중 {_be_more['pct'] / 10:.1f}번</b>"
+                   f"(<b>{_be_more['pct']:.1f}%</b>) 이상 맞아야 본전입니다."
+                   if _be_more else ''))
 
 # ── 도달 가능성 · 논리 검사 ──────────────────────────────────────────────
 # "권장 매수가가 현실적으로 닿는 가격인가"를 σ 로 재서 말로 옮긴다.
@@ -5779,6 +5788,12 @@ _banner_sub_html = (
 # 원천은 리플레이 실측(점수대 캘리브레이션)뿐이며, 표본이 부족하면 %를 숨기고
 # '표본 부족'을 그대로 보여준다 (요행 수치를 대표값으로 쓰지 않는다).
 _cb_banner = four_scores.get('calibration_band') or {}
+# 라운드 161 — 적중률만 크게 보여 주면 그 수가 좋은지 나쁜지 알 수 없다.
+# 다날(064260)에서 60% 가 이미 마이너스였다(본전 61.2%). **본전 적중률을
+# 바로 밑에 같이 놓는다.** 계산은 ui_kit 한 곳에 있고(§4), 진입·손절·목표는
+# CORE 값을, 비용은 채택값(TOTAL_COST_PCT)을 그대로 쓴다 — 새 숫자 없음.
+_be_banner = _uk.breakeven_hit_rate(
+    _core_entry, _e_stop, _e_t1, q_engine.TOTAL_COST_PCT)
 if (_cb_banner.get('hit_rate') is not None
         and (_cb_banner.get('n') or 0) >= 30):
     _prob_html = (
@@ -5788,7 +5803,9 @@ if (_cb_banner.get('hit_rate') is not None
         f"color:#F3F6FA; line-height:1.1;'>{_cb_banner['hit_rate']:.0f}%"
         f"<span style='font-size:13px; color:#9DAABC;'> "
         f"(n={_cb_banner['n']:,} · W하한 "
-        f"{fmt_num(_cb_banner.get('wilson_low'), '.0f', '%', na='—')})</span></p>")
+        f"{fmt_num(_cb_banner.get('wilson_low'), '.0f', '%', na='—')})</span></p>"
+        + _uk.breakeven_row(_be_banner, _cb_banner['hit_rate'],
+                            theme=_theme))
 elif _cb_banner:
     _prob_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#F2B84B;'>"

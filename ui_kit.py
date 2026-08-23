@@ -1008,6 +1008,80 @@ def value_row(vp, theme='dark'):
         f"{_esc(vp['line'])}</div></div>")
 
 
+# ── 본전에 필요한 적중률 — 라운드 161 ────────────────────────────────────
+#
+# 사용자 지적(다날 064260): *"펀더멘털 적정가가 이런데 추천하면 얼마 못
+# 버는 거 아냐?"* 화면을 보니 그 말이 맞았다 —
+#
+#     비슷했던 과거에서 맞은 비율   60% (n=12,423 · W하한 59%)
+#     이 가격에 사면 → 손절 4,356원 · 1차 목표 5,217원 · 손익비 0.7:1
+#
+# **60% 가 좋은 수인지 나쁜 수인지 화면만 봐서는 알 수 없다.** 실제로는
+# 이 구조(0.70:1)에서 본전이 **61.2%** 라 60% 는 이미 마이너스다.
+# 라운드 159 가 전수로 잰 값도 같은 자리를 가리킨다 — 원장 전체의
+# 목표/손절 중앙이 0.70:1 이고 본전 63.7%, 실전 적중률 50.4%.
+#
+# 그래서 **적중률 옆에 본전 적중률을 같이 놓는다.** 한쪽만 보여 주는 것은
+# §9("성과를 좋게 보이게 쓰지 않는다")에 걸린다.
+#
+# ⚠️ 표시 전용이다. 판정·게이트·문턱·실행 레벨에 **쓰지 않는다.**
+#   목표 배수를 바꾸는 문제는 라운드 160 이 측정만 했고, 채택은
+#   2026-11-16 이후 별도 사전등록이다.
+#
+# 새 숫자를 만들지 않는다 — 진입·손절·목표는 `verdict_core` 가 낸 값을
+# 그대로 받고, 비용은 호출부가 채택값(`TOTAL_COST_PCT`)을 넘긴다.
+def breakeven_hit_rate(entry, stop, target, cost_pct):
+    """본전에 필요한 적중률(%). 목표·손절·비용만으로 정해지는 값.
+
+        p·(목표−진입) − (1−p)·(진입−손절) − 비용 = 0
+        →  p = (손절폭 + 비용) / (목표폭 + 손절폭)
+
+    셋 중 하나라도 없거나 방향이 어긋나면 **None** — 지어내지 않는다(§3).
+    반환: dict(pct, up_pct, dn_pct, rr)
+    """
+    try:
+        e, s, t = float(entry), float(stop), float(target)
+        c = float(cost_pct)
+    except (TypeError, ValueError):
+        return None
+    if not (e > 0 and s > 0 and t > 0):
+        return None
+    up = (t - e) / e * 100.0
+    dn = (e - s) / e * 100.0
+    if up <= 0 or dn <= 0:          # 정합이 깨진 값은 그리지 않는다 (§4)
+        return None
+    pct = (dn + c) / (up + dn) * 100.0
+    return dict(pct=round(pct, 1), up_pct=round(up, 2),
+                dn_pct=round(dn, 2), rr=round(up / dn, 2))
+
+
+def breakeven_line(be, observed=None):
+    """본전 적중률 한 줄(문구만). `breakeven_hit_rate()` 결과를 받는다.
+
+    실측 적중률을 같이 주면 **모자란 폭까지** 적는다 — 두 수를 나란히
+    놓아야 60% 가 좋은 수인지 알 수 있다.
+    """
+    if not be:
+        return '', None
+    if observed is None:
+        return (f"본전에 필요한 적중률 {be['pct']:.1f}% "
+                f"(손익비 {be['rr']:.2f}:1)"), None
+    gap = float(observed) - be['pct']
+    tail = (f"{abs(gap):.1f}%p {'넘습니다' if gap >= 0 else '모자랍니다'}")
+    return (f"본전에 필요한 적중률 {be['pct']:.1f}% — {tail}"), gap
+
+
+def breakeven_row(be, observed=None, theme='dark'):
+    """본전 적중률 한 줄(HTML). 모자라면 경고색, 넘으면 긍정색."""
+    txt, gap = breakeven_line(be, observed)
+    if not txt:
+        return ''
+    t = tokens(theme)
+    col = t['tx2'] if gap is None else (t['pos'] if gap >= 0 else t['warn'])
+    return (f"<p style='margin:4px 0 0 0; font-size:12px; "
+            f"color:{col};'>{_esc(txt)}</p>")
+
+
 def reco_card(p: dict, theme: str = 'dark') -> str:
     """
     오늘의 추천·관망 카드 한 장.
