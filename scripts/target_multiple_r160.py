@@ -192,13 +192,17 @@ def main():
     print(f'■ 현행(그대로) — 개발 구간 케이스 {base_n:,} · '
           f'목표 도달률 {base_hit}%')
     ev0 = [sum(v) / len(v) for v in base_dev.values()]
-    print(f'   날짜 {len(ev0):,} · 날짜평균 비용후 EV 중앙 '
-          f'{sorted(ev0)[len(ev0) // 2]:+.3f}%')
+    ev0s = sorted(ev0)
+    base_mean = sum(ev0) / len(ev0)
+    base_med = ev0s[len(ev0) // 2]
+    base_p10 = ev0s[int(0.10 * (len(ev0s) - 1))]
+    print(f'   날짜 {len(ev0):,} · 비용후 EV  평균 {base_mean:+.3f}% · '
+          f'중앙 {base_med:+.3f}% · 하위10% {base_p10:+.3f}%')
 
     results = {}
     print()
-    print(f'{"M":>5}{"케이스":>9}{"날짜":>7}{"도달률":>8}{"EV중앙":>9}'
-          f'{"ΔEV평균":>9}{"ΔEV중앙":>9}{"승률":>7}{"필요":>7}{"z":>7}  판정')
+    print(f'{"M":>5}{"도달률":>8}{"EV평균":>9}{"EV중앙":>9}{"하위10%":>9}'
+          f'{"ΔEV평균":>9}{"ΔEV중앙":>9}{"승률":>7}{"z":>7}  판정')
     for m in MULTS:
         bd, n, hit = run(m, DEV)
         days = sorted(set(bd) & set(base_dev))
@@ -206,6 +210,7 @@ def main():
              for x in days]
         z, win, nn = sign_test(d)
         ev = [sum(bd[x]) / len(bd[x]) for x in days]
+        evs = sorted(ev)
         sample_ok = n >= MIN_CASES and len(days) >= MIN_DAYS
         z_ok = z is not None and abs(z) >= Z_CRIT
         if not sample_ok:
@@ -214,20 +219,43 @@ def main():
             verdict = '낫다(+)' if z > 0 else '더 나쁘다(−)'
         else:
             verdict = '미달 — 차이 못 봄'
+        # 기전 진단(판정 아님) — 이득이 어느 날에서 나오나.
+        #   손절 먼저 규칙 때문에 '나쁜 날'(손절로 끝나는 날)은 목표를
+        #   밀어도 그대로다. 이득이 '이미 좋았던 날'에서만 나오는지 본다.
+        med_base = sorted(sum(base_dev[x]) / len(base_dev[x])
+                          for x in days)[len(days) // 2]
+        lo_d = [d[i] for i, x in enumerate(days)
+                if sum(base_dev[x]) / len(base_dev[x]) < med_base]
+        hi_d = [d[i] for i, x in enumerate(days)
+                if sum(base_dev[x]) / len(base_dev[x]) >= med_base]
+        where = dict(
+            bad_days_median=(round(sorted(lo_d)[len(lo_d) // 2], 3)
+                             if lo_d else None),
+            bad_days_mean=(round(sum(lo_d) / len(lo_d), 3) if lo_d else None),
+            good_days_median=(round(sorted(hi_d)[len(hi_d) // 2], 3)
+                              if hi_d else None),
+            good_days_mean=(round(sum(hi_d) / len(hi_d), 3) if hi_d else None))
         results[str(m)] = dict(
+            gain_where=where,
             mult=m, cases=n, days=len(days), hit_pct=hit,
-            ev_median=round(sorted(ev)[len(ev) // 2], 3) if ev else None,
+            ev_mean=round(sum(ev) / len(ev), 3) if ev else None,
+            ev_median=round(evs[len(evs) // 2], 3) if ev else None,
+            ev_p10=round(evs[int(0.10 * (len(evs) - 1))], 3) if ev else None,
+            ev_p90=round(evs[int(0.90 * (len(evs) - 1))], 3) if ev else None,
             d_mean=round(sum(d) / len(d), 3) if d else None,
             d_median=round(sorted(d)[len(d) // 2], 3) if d else None,
             win_pct=round(win / nn * 100, 1) if nn else None,
             need_pct=need_p(nn), sign_z=z, sample_ok=sample_ok,
             z_ok=z_ok, verdict=verdict, blind=None)
         r = results[str(m)]
-        print(f'{m:>5.1f}{n:>9,}{len(days):>7,}{(hit or 0):>7.1f}%'
-              f'{(r["ev_median"] or 0):>9.3f}{(r["d_mean"] or 0):>9.3f}'
-              f'{(r["d_median"] or 0):>9.3f}{(r["win_pct"] or 0):>6.1f}%'
-              f'{(r["need_pct"] or 0):>6.1f}%{(z if z is not None else 0):>7.2f}'
-              f'  {verdict}')
+        print(f'{m:>5.1f}{(hit or 0):>7.1f}%{(r["ev_mean"] or 0):>9.3f}'
+              f'{(r["ev_median"] or 0):>9.3f}{(r["ev_p10"] or 0):>9.3f}'
+              f'{(r["d_mean"] or 0):>9.3f}{(r["d_median"] or 0):>9.3f}'
+              f'{(r["win_pct"] or 0):>6.1f}%'
+              f'{(z if z is not None else 0):>7.2f}  {verdict}')
+        print(f'{"":>5}  이득이 나는 곳: 현행이 나쁜 날 ΔEV 중앙 '
+              f'{where["bad_days_median"]} · 좋은 날 '
+              f'{where["good_days_median"]}')
 
     passed = [k for k, r in results.items() if r['sample_ok'] and r['z_ok']]
     print()
@@ -265,7 +293,9 @@ def main():
                            threshold=REPRO_MIN, passed=True,
                            mismatch=dict(mism.most_common())),
         'baseline': dict(cases=base_n, hit_pct=base_hit,
-                         ev_median=round(sorted(ev0)[len(ev0) // 2], 3)),
+                         ev_mean=round(base_mean, 3),
+                         ev_median=round(base_med, 3),
+                         ev_p10=round(base_p10, 3)),
         'tests': results, 'passed': passed,
         'note': ('측정 전용 — 점수·게이트·문턱·실행 레벨을 바꾸지 않는다. '
                  '원장 mfe/mae 미사용(청산 봉 함정) — bar_paths 를 다시 '

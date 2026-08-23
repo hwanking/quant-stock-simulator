@@ -8569,9 +8569,14 @@ check("정책이 아니라 날짜만 붙였다고 명시한다",
 import scripts.lineage_audit as _la135                         # noqa: E402
 _scan135 = []
 for _root135, _dirs135, _files135 in _os.walk(PROJ):
+    # '.claude' 를 빼는 이유: 에이전트 도구가 .claude/worktrees/ 에 저장소
+    # **사본**을 만든다(gitignore 대상). 사본에는 이 검사 파일도 들어 있어
+    # 자기참조 문자열이 위반으로 잡히고, 무엇보다 **검사 결과가 무관한
+    # 워크트리의 존재 여부에 좌우된다.** 실제로 그렇게 한 번 깨졌다.
     _dirs135[:] = [d for d in _dirs135
-                   if d not in ('.git', '_probe', '_archive', 'docs',
-                                '__pycache__', '.portfolio', 'node_modules')]
+                   if d not in ('.git', '.claude', '_probe', '_archive',
+                                'docs', '__pycache__', '.portfolio',
+                                'node_modules')]
     for _n135 in _files135:
         if _n135.endswith('.py'):
             _scan135.append(_os.path.relpath(
@@ -8599,6 +8604,12 @@ for _f135 in sorted(_scan135):
 # ⚠️ **실제로 읽은 개수**를 판정 조건에 넣는다. 0개를 훑고 "위반 0건"으로
 #   초록불이 켜지는 사고를 이 저장소에서 이미 겪었다 — 미측정과 통과는
 #   같은 색이면 안 된다.
+#: 스캔이 도구 사본(.claude/worktrees)을 훑지 않는지 잠근다. 훑으면
+#: 검사 결과가 워크트리 유무에 좌우된다 — 그것이 실제로 한 번 깨뜨렸다.
+_wt135 = [f for f in _scan135
+          if f.split(_os.sep)[0] == '.claude' or f.startswith('.claude/')]
+check("스캔이 도구 사본(.claude)을 훑지 않는다", not _wt135,
+      f'사본이 섞였다: {_wt135[:3]}')
 check(f"어느 .py 에도 옛 재평가일이 박혀 있지 않다 ({_read135}개 실제로 읽음)",
       not _bad135 and _read135 >= 50,
       f'옛 날짜가 남은 파일: {_bad135}' if _bad135
@@ -9901,7 +9912,8 @@ _stem148 = _PFX148.split('_')[0]
 _pat148 = _re.compile(r"['\"](" + _stem148 + r"_[A-Za-z0-9_*]*)")
 _globs148, _files148 = [], 0
 for _root148, _dirs148, _fs148 in _os.walk(PROJ):
-    if any(p in _root148 for p in ('.git', '_probe', '_archive', 'venv')):
+    if any(p in _root148 for p in ('.git', '.claude', '_probe', '_archive',
+                                   'venv')):
         continue
     for _fn148 in _fs148:
         if not _fn148.endswith('.py'):
@@ -10393,7 +10405,8 @@ check("워크플로가 뉴스 사건을 기록·해소한다",
 _DANGER153 = 'sys.stdout = io.TextIOWrapper'
 _scan153, _hit153 = 0, []
 for _root153, _dirs153, _fs153 in _os.walk(PROJ):
-    if any(p in _root153 for p in ('.git', '_probe', '_archive', 'venv',
+    if any(p in _root153 for p in ('.git', '.claude', '_probe',
+                                   '_archive', 'venv',
                                    '__pycache__')):
         continue
     for _fn153 in _fs153:
@@ -10536,7 +10549,8 @@ print("=" * 72)
 _PAT155 = '[' + 'shard' + '::' + 'shards' + ']'
 _scan155, _hit155 = 0, []
 for _root155, _dirs155, _fs155 in _os.walk(PROJ):
-    if any(p in _root155 for p in ('.git', '_probe', '_archive', 'venv',
+    if any(p in _root155 for p in ('.git', '.claude', '_probe',
+                                   '_archive', 'venv',
                                    '__pycache__')):
         continue
     for _fn155 in _fs155:
@@ -10617,7 +10631,8 @@ _RE156 = _re.compile(r"made\s*=\s*'20\d\d-\d\d-\d\d'"
                      r"|'made'\s*:\s*'20\d\d-\d\d-\d\d'")
 _scan156, _hard156, _declared156 = 0, [], []
 for _root156, _dirs156, _fs156 in _os.walk(PROJ):
-    if any(p in _root156 for p in ('.git', '_probe', '_archive', 'venv',
+    if any(p in _root156 for p in ('.git', '.claude', '_probe',
+                                   '_archive', 'venv',
                                    '__pycache__')):
         continue
     for _fn156 in _fs156:
@@ -14461,6 +14476,132 @@ else:
           bool(_d197.get('made')) and _d197['made'] in _flat197)
     check("산출물이 측정 전용임을 적는다",
           '바꾸지 않는다' in str(_d197.get('note')))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §198 — R159 전수 조사 · R160 목표 배수
+#
+#   이 저장소에서 오랜만에 "낫다"가 나온 라운드다. 그래서 지키는 것이
+#   평소와 다르다 — **좋아 보이는 결과를 부풀리지 않았는가**:
+#     ⓐ R159: 실전 적중률과 본전 적중률을 함께 적었는가
+#     ⓑ R160: 원장 mfe/mae 를 안 쓰고 경로를 밟았는가(R85 함정)
+#     ⓒ 자기검사(원장 outcome 재현)가 실제로 통과했는가
+#     ⓓ **평균만 적지 않았는가** — 중앙·하위10% 를 같이 적었는가
+#        (이번엔 평균과 중앙의 방향이 정반대다)
+#     ⓔ blind 에서 재현되는 것이 하나뿐임을 적었는가
+#     ⓕ **여전히 손해임을 적었는가** · 운영을 안 바꿨는가(11/16)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§198 R159 전수 조사 · R160 목표 배수")
+print("=" * 72)
+_p159 = _os.path.join(PROJ, 'data', 'census_r159.json')
+_d159doc = _os.path.join(PROJ, 'docs', 'RESULT_R159_CENSUS.md')
+_p160 = _os.path.join(PROJ, 'data', 'target_multiple_r160.json')
+_d160doc = _os.path.join(PROJ, 'docs', 'RESULT_R160_TARGET_MULTIPLE.md')
+_pre160 = _os.path.join(PROJ, 'docs', 'PREREG_R160_TARGET_MULTIPLE.md')
+
+# ── R159 ───────────────────────────────────────────────────────────────
+if not _os.path.exists(_p159):
+    check("R159 산출물이 있다", False, 'data/census_r159.json 없음')
+else:
+    with open(_p159, encoding='utf-8') as _f159:
+        _d159 = _json.load(_f159)
+    _flat159 = _re.sub(r'\s+', ' ', _read148(_d159doc)).replace('−', '-')
+    _be = _d159.get('breakeven') or {}
+    check("실전(blind) 적중률과 본전 적중률을 둘 다 적었다",
+          _be.get('blind_hit_pct') is not None
+          and _be.get('need_hit_pct') is not None
+          and f"{_be['blind_hit_pct']}%" in _flat159
+          and f"{_be['need_hit_pct']}%" in _flat159,
+          f"{_be.get('blind_hit_pct')}/{_be.get('need_hit_pct')}")
+    check("목표/손절 비를 적었다 (구조 문제의 근거)",
+          _be.get('rr_median') is not None
+          and f"{_be['rr_median']:.2f} : 1" in _flat159)
+    check("blind 점수대가 평평함을 적었다 (선별력 없음)",
+          '평평하다' in _flat159 and '과최적화' in _flat159)
+    check("연도 차이가 개선이 아니라 국면임을 적었다",
+          '모델 개선이 아니라' in _flat159 and '국면' in _flat159)
+    check("R159 가 측정 전용임을 적는다",
+          '바꾸지 않는다' in str(_d159.get('note')))
+
+# ── R160 ───────────────────────────────────────────────────────────────
+if not _os.path.exists(_p160):
+    check("R160 산출물이 있다", False, 'data/target_multiple_r160.json 없음')
+else:
+    with open(_p160, encoding='utf-8') as _f160:
+        _d160 = _json.load(_f160)
+    _flat160 = _re.sub(r'\s+', ' ', _read148(_d160doc)).replace('−', '-')
+    _pre160f = _re.sub(r'\s+', ' ', _read148(_pre160)).replace('−', '-')
+    _c160 = _d160.get('criteria') or {}
+    _t160 = _d160.get('tests') or {}
+    _b160 = _d160.get('baseline') or {}
+
+    check("문턱 2.50 이 사전등록과 산출물에 같다",
+          _c160.get('z_crit') == 2.50 and '2.50' in _pre160f)
+    check("표본 조건·매수권·비용이 채택값이다",
+          _c160.get('min_cases') == 1000 and _c160.get('min_days') == 300
+          and _c160.get('buy') == 58.0 and _c160.get('cost_pct') == 0.41)
+    check("배수 넷이 사전등록과 같다",
+          _c160.get('mults') == [1.0, 1.5, 2.0, 3.0] and len(_t160) == 4)
+    # ⓑ mfe/mae 함정 회피
+    check("원장 mfe/mae 를 쓰지 않았음을 밝힌다",
+          'mfe/mae 미사용' in str(_d160.get('note'))
+          and 'bar_paths' in str(_d160.get('note')))
+    check("문서가 R85 가 함정을 닫은 경위를 적었다",
+          'R85' in _flat160 and '청산 봉까지만' in _flat160)
+    # ⓒ 자기검사
+    _sc160 = _d160.get('self_check') or {}
+    check("자기검사 재현율이 산출물에 있다",
+          _sc160.get('rate_pct') is not None)
+    check("자기검사가 문턱을 넘었다",
+          (_sc160.get('rate_pct') or 0) >= (_c160.get('repro_min') or 95.0),
+          f"{_sc160.get('rate_pct')} vs {_c160.get('repro_min')}")
+    check("문턱이 사전등록 값(95)에서 내려가지 않았다",
+          _c160.get('repro_min') == 95.0)
+    check("문서가 재현율을 그대로 적었다",
+          f"{_sc160.get('rate_pct')}%" in _flat160)
+    # ⓓ 평균만 적지 않았다 — 중앙·하위10% 를 같이
+    for _mk, _mr in _t160.items():
+        for _f, _lab in (('ev_mean', 'EV평균'), ('ev_median', 'EV중앙'),
+                         ('ev_p10', '하위10%')):
+            _v = _mr.get(_f)
+            check(f"문서가 M={_mk} 의 {_lab}({_v})를 적었다",
+                  _v is not None and f"{_v:.3f}" in _flat160, str(_v))
+    check("평균과 중앙이 반대로 간다는 사실을 적었다",
+          '중앙값은 반대로 간다' in _flat160
+          and '한쪽만 적으면 거짓말' in _flat160)
+    check("기준선의 평균·중앙·하위10% 가 산출물에 있다",
+          _b160.get('ev_mean') is not None
+          and _b160.get('ev_median') is not None
+          and _b160.get('ev_p10') is not None)
+    # 기전 진단 — 나쁜 날에는 이득이 없다
+    check("이득이 나는 곳 진단이 산출물에 있다",
+          all((_r.get('gain_where') or {}).get('bad_days_median') is not None
+              for _r in _t160.values()))
+    check("나쁜 날에는 아무 일도 없음을 적었다",
+          '나쁜 날에는 아무 일도 일어나지 않는다' in _flat160)
+    # ⓔ blind 재현
+    _bl1 = ((_t160.get('1.0') or {}).get('blind') or {})
+    check("blind 가 통과분에만 열렸다",
+          all((_r.get('blind') is not None) == bool(_r.get('z_ok')
+                                                    and _r.get('sample_ok'))
+              for _r in _t160.values()))
+    check("blind 에서 재현되는 것이 하나뿐임을 적었다",
+          '재현되는 것은 M=1.0 하나뿐' in _flat160)
+    check("blind 날짜가 적다는 한계를 적었다",
+          '41일뿐' in _flat160 and '69.5%' in _flat160)
+    # ⓕ 여전히 손해 · 운영 무변경
+    check("여전히 손해임을 적었다",
+          '그래도 손해다' in _flat160 and '흑자가 안 된다' in _flat160)
+    check("목표 배수가 진입 문제를 못 고침을 적었다",
+          '진입의 문제를 못 고친다' in _flat160)
+    check("운영을 바꾸지 않았음을 문서와 산출물이 밝힌다",
+          '목표 산식을 바꾸지 않는다' in _flat160
+          and '2026-11-16' in _flat160
+          and '실행 레벨' in str(_d160.get('note')))
+    check("사전등록 커밋 해시를 적었다", 'cb106f4' in _flat160)
+    check("측정일이 문서에 있다",
+          bool(_d160.get('made')) and _d160['made'] in _flat160)
 
 
 print()
