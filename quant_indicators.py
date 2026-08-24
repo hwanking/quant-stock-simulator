@@ -2203,8 +2203,11 @@ class QuantIndicatorsEngine:
         curr_price = float(tech_df['adj_close'].iloc[-1])
         latest_fund = fund_df.iloc[-1].to_dict() if (fund_df is not None and len(fund_df) > 0) else {}
         
-        from bitemporal_engine import STOCK_METRICS_DB
-        sm_meta = STOCK_METRICS_DB.get(symbol, {}) if symbol else {}
+        # 라운드 159 — `.get(symbol)` 만 하면 접미사가 어긋난 호출(낡은
+        # positions.json · 리플레이)이 빈 dict 를 받아 per/pbr 이 사라진다.
+        # 값이 아니라 **키**가 안 맞는 것이므로 코드로도 찾는다.
+        from bitemporal_engine import metrics_of as _metrics_of
+        sm_meta = _metrics_of(symbol) if symbol else {}
 
         # ── ETF·ETN 은 펀더멘털 밸류에이션이 성립하지 않는다 ────────────────
         # 펀드에는 EPS·BPS·ROE 가 없다. 억지로 돌리면 `BPS = 가격×0.8` 폴백이
@@ -4765,7 +4768,7 @@ class QuantIndicatorsEngine:
         if b_engine is None:
             from bitemporal_engine import BitemporalEngine
             b_engine = BitemporalEngine()
-        from bitemporal_engine import STOCK_METRICS_DB
+        from bitemporal_engine import metrics_of as be_metrics_of
 
         # ── 리플레이(과거 기준일) 판정 ──────────────────────────────────
         # t_ref 가 과거면 '그 날 알 수 있었던 것'만 써야 한다. 오늘의 실시간
@@ -4790,8 +4793,13 @@ class QuantIndicatorsEngine:
         # 시장 국면 컨텍스트는 같은 시장 안에서는 종목마다 같으므로 캐시한다.
         # ⚠️ 시장별로 따로 캐시해야 한다. 하나만 들고 있으면 코스피 종목을 먼저 본 뒤
         #    코스닥 종목을 볼 때 코스피 국면이 그대로 재사용된다.
-        _mkt = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
-        if is_replay:
+        # ⚠️ 라운드 159 — 여기가 `.KQ 아니면 KOSPI` 였다. 그 폴백은
+        #    코스닥 종목을 코스피 국면으로 판정하게 만든다(실제로 그랬다).
+        #    시장은 엔진이 **실측**한 값을 단일 진입점에서 받는다.
+        #    못 읽었으면 국면을 고르지 않는다 — 없는 값을 지어내지 않는다(§3).
+        import bitemporal_engine as _be_mkt
+        _mkt = _be_mkt.market_of(symbol)
+        if is_replay or _mkt is None:
             self.market_regime_ctx = None      # 오늘 지수 국면은 과거 판정에 못 쓴다
         else:
             if not hasattr(self, '_regime_by_market'):
@@ -4824,7 +4832,7 @@ class QuantIndicatorsEngine:
             symbol=symbol, start_date='2020-01-01', end_date=t_ref_str)
 
         # 자산 유형 판별 — 주식/일반 ETF/레버리지/인버스는 게이트를 다르게 탄다
-        _sm_name = (STOCK_METRICS_DB.get(symbol) or {}).get('name', '')
+        _sm_name = (be_metrics_of(symbol) or {}).get('name', '')
         self._asset_type_name = _sm_name
 
         if is_replay:
@@ -4844,7 +4852,7 @@ class QuantIndicatorsEngine:
             matrix_data = []
         else:
             rt_price, rt_status, matrix_data = b_engine.get_realtime_stock_price_triple_check(symbol)
-            sm = STOCK_METRICS_DB.get(symbol, {})
+            sm = be_metrics_of(symbol)
             open_p = float(sm.get('open_p', rt_price))
             high_p = float(sm.get('high_p', max(rt_price, open_p)))
             low_p = float(sm.get('low_p', min(rt_price, open_p)))
@@ -4906,7 +4914,10 @@ class QuantIndicatorsEngine:
             if is_replay:
                 raise RuntimeError("리플레이 — 오늘 기준 지수 시계열을 쓰지 않는다")
             _stk_mom = self.momentum_12_1(tech_df['adj_close'].values)
-            _mkt_name = "KOSDAQ" if symbol.endswith(".KQ") else "KOSPI"
+            # 상대 모멘텀도 상장 시장 지수와 견준다 — 시장을 모르면 겨루지 않는다.
+            _mkt_name = _mkt
+            if _mkt_name is None:
+                raise RuntimeError("상장 시장 미수신 — 지수 상대 모멘텀을 겨루지 않는다")
             if not hasattr(self, '_idx_daily_cache'):
                 self._idx_daily_cache = {}
             if _mkt_name not in self._idx_daily_cache:

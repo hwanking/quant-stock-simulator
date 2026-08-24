@@ -1196,9 +1196,19 @@ _nan_rows = [{"종목코드": "005930", "종목명": "삼성전자", "보유수�
 try:
     _np_pos, _np_warn = pf.rows_to_positions(_nan_rows)
     check("_ticker 가 NaN 이어도 예외 없음", True, f"{len(_np_pos)}종목")
+    # ⚠️ 라운드 159 — 이 칸은 `.KS`/`.KQ` 로 끝나기를 요구했다. 그게 참이었던
+    #    이유는 옛 코드가 **시장을 몰라도 .KS 를 붙였기** 때문이다(바로 그 결함).
+    #    지금 지켜야 할 것은 접미사가 아니라 **종목코드를 잃지 않는 것**이다.
+    #    시장을 읽을 수 없으면 접미사 없이 코드만 남기고 사유를 적는다(§3).
     check("NaN 대신 종목코드로 티커 재구성",
-          len(_np_pos) == 2 and all(p.ticker.endswith(('.KS', '.KQ')) for p in _np_pos),
+          len(_np_pos) == 2
+          and [p.code for p in _np_pos] == ['005930', '003490']
+          and all(p.ticker.split('.')[0] == p.code for p in _np_pos),
           str([p.ticker for p in _np_pos]))
+    check("시장을 못 읽으면 접미사를 지어내지 않고 사유를 남긴다",
+          all(p.market is None and '.' not in p.ticker for p in _np_pos)
+          and len(_np_warn) >= 2 and all('시장 미지정' in w for w in _np_warn),
+          str([(p.ticker, p.market) for p in _np_pos]) + ' / ' + str(_np_warn)[:80])
 except Exception as _ex:
     check("_ticker 가 NaN 이어도 예외 없음", False, f"{type(_ex).__name__}: {_ex}")
 
@@ -1224,8 +1234,14 @@ def _boom(_c):
 _rp, _ = pf.rows_to_positions(
     [{"종목코드": "005930", "종목명": "삼성전자", "보유수량": 10,
       "평균매수가": 71200, "_ticker": None}], resolve_market=_boom)
-check("resolve_market 예외를 흡수", len(_rp) == 1 and _rp[0].ticker == "005930.KS",
+# ⚠️ 라운드 159 — 종전 기대값은 "005930.KS" 였다. 조회가 **터졌는데도**
+#    KOSPI 로 찍던 것이라, 흡수는 맞고 기대값이 틀렸다. 지켜야 할 것은
+#    "예외가 반영 전체를 죽이지 않는다"이지 ".KS 가 붙는다"가 아니다.
+check("resolve_market 예외를 흡수", len(_rp) == 1 and _rp[0].code == "005930",
       str([p.ticker for p in _rp]))
+check("예외를 흡수하되 시장을 지어내지는 않는다",
+      _rp[0].market is None and _rp[0].ticker == "005930",
+      f"{_rp[0].ticker} / {_rp[0].market}")
 
 check("clean_cell_str 이 NaN·'nan'·빈문자를 None 으로",
       all(pf.clean_cell_str(v) is None
@@ -15990,6 +16006,165 @@ check("화면이 경과일·점검일을 스스로 조립하지 않는다",
 check("화면이 issue_ops 가 만든 문구를 쓴다",
       'state_label' in _w206 and 'review_label' in _w206
       and 'age_label' in _w206)
+# §207 — R159 시장 접미사를 추정하지 않는다
+#
+#   검색 경로가 코스닥 종목에 .KS 를 붙이고 있었다.
+#   시드(79항목)에 .KQ 로 등록된 종목코드가 3개뿐이라
+#   코스닥 1,770종목 중 1,767개(99.8%)가 KOSPI 로 박혔고(2026-08-23 실측),
+#   접미사는 이 저장소에서 시장의 유일한 표현이라 그 값이
+#   **국면 판정 지수**까지 번졌다.
+#
+#   지키는 것 (docs/FIX_R159_MARKET_SUFFIX.md §4):
+#     C2  접미사 없는 조회는 **실측 시장**을 따른다
+#     C3  못 읽으면 접미사를 지어내지 않고 사유를 남긴다 (§3)
+#     C4  에코프로·ETF 회귀 그대로
+#     그리고 **유도는 한 곳에만** — 새 호출부가 접미사로 직접
+#     시장을 메기지 않는지 소스로 본다 (§6 — 호출부를 하나씩 고치지 않는다)
+#
+#   ⚠️ 자기검사 — 0건이 '없다'인지 '못 봤다'인지 가른다(§110 · R114).
+#      일부러 틀린 배지를 심어 검사가 그걸 실제로 잡는지 확인한다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§207 R159 시장 접미사를 추정하지 않는다")
+print("=" * 72)
+
+import market_context as _mcx207
+
+# —— 자기검사 먼저: 배지 파서가 심은 것을 실제로 가르는가 ——
+_BADGE_KS207 = ('<div class="wrap_company"><h2>x</h2><div class="description">'
+                '<span class="code">031510</span>'
+                '<img src="/btn_kospi.gif" alt="코스피" class="kospi">')
+_BADGE_KQ207 = _BADGE_KS207.replace('kospi', 'kosdaq').replace('코스피', '코스닥')
+check("[자기검사] 심은 KOSPI 배지를 KOSPI 로 읽는다",
+      engine.parse_market_badge(_BADGE_KS207) == "KOSPI")
+check("[자기검사] 심은 KOSDAQ 배지를 KOSDAQ 로 읽는다",
+      engine.parse_market_badge(_BADGE_KQ207) == "KOSDAQ")
+check("[자기검사] 배지가 없으면 None (한쪽으로 찍지 않는다)",
+      engine.parse_market_badge('<div class="wrap_company">배지 없음</div>') is None)
+check("[자기검사] 틀린 시장을 주면 틀린 접미사가 나온다(검사가 눈멀지 않았다)",
+      engine._compose_ticker("031510", "031510", "KOSPI", "심은 값")[0] == "031510.KS")
+
+# —— C2 — 접미사 없는 조회가 실측 시장을 따르는가 ——
+#     코스닥은 시드에 없는 것으로 고른다 — 시드에 있으면 예전 폴백도 맞춰버린다.
+for _cd207, _nm207, _want207 in (("031510", "오스템", ".KQ"),
+                                 ("028300", "HLB", ".KQ"),
+                                 ("058470", "리노공업", ".KQ"),
+                                 ("005930", "삼성전자", ".KS"),
+                                 ("035420", "NAVER", ".KS"),
+                                 ("069500", "KODEX 200", ".KS")):
+    _t207, _n207, _i207 = engine.fetch_and_update_naver_realtime(_cd207)
+    check(f"접미사 없이 {_nm207}({_cd207}) → {_want207}",
+          _t207 == f"{_cd207}{_want207}", str(_t207))
+    check(f"  └ {_nm207} 의 시장을 **값**으로도 들고 있다",
+          _i207.get('market') == ("KOSDAQ" if _want207 == ".KQ" else "KOSPI"),
+          str(_i207.get('market')))
+
+check("이름에 '코스닥'이 있어도 ETF 는 KOSPI (이름으로 추정 금지)",
+      engine.fetch_and_update_naver_realtime("233740")[0] == "233740.KS",
+      str(engine.fetch_and_update_naver_realtime("233740")[0]))
+
+# —— C3 — 못 읽으면 지어내지 않는다 ——
+#
+# ⚠️ 라운드 173 — 이 검사가 **회귀 안에서만** 실패했다. 종전에는
+#   `999999` 를 썼는데, 그 코드를 §1·§20·§39 가 **먼저** 조회해
+#   `STOCK_NAME_MAP` 에 `999999.KS` 로 등록해 버린다. 그래서 §207 이
+#   볼 때는 이미 '미등록'이 아니었고, 코드는 옳게 **등록을 따랐다.**
+#   즉 검사가 재려던 것(미등록일 때의 동작)을 못 재고 있었다.
+#   → 아무도 안 건드리는 코드로 바꾸고, **미등록이라는 전제 자체를
+#     먼저 확인한다.** 전제가 깨지면 검사가 무엇도 재지 않는다 (§6).
+_UNSEEN207 = "999097"
+check("C3 의 전제 — 이 코드는 아직 미등록이다 (아니면 아무것도 못 잰다)",
+      not str(be.STOCK_NAME_MAP.get(_UNSEEN207) or ''),
+      f'이미 {be.STOCK_NAME_MAP.get(_UNSEEN207)} 로 등록돼 있다')
+_t207a, _note207a = engine._compose_ticker(
+    _UNSEEN207, _UNSEEN207, None, "시장 미수신 — 테스트")
+check("미등록·미수신 → 접미사 없음", _t207a == _UNSEEN207, _t207a)
+check("그 사유를 남긴다", "미수신" in _note207a and "추정 금지" in _note207a, _note207a)
+check("미수신일 때 입력 접미사는 보존한다 (에코프로 규칙)",
+      engine._compose_ticker(f"{_UNSEEN207}.KQ", _UNSEEN207, None,
+                             "미수신")[0] == f"{_UNSEEN207}.KQ")
+# 등록이 있으면 그것을 따른다 — 위와 짝이 되는 반대편 (§6 · 심어서 확인)
+check("등록이 있으면 등록을 따른다 (미등록 검사가 진짜인지 가른다)",
+      engine._compose_ticker("999999", "999999", None, "미수신")[0]
+      in ("999999.KS", "999999.KQ"),
+      '앞선 절이 등록해 둔 값을 따라야 한다')
+check("실측이 입력 접미사보다 앞선다",
+      engine._compose_ticker("031510.KS", "031510", "KOSDAQ", "배지")[0] == "031510.KQ")
+check("어긋난 입력은 사유에 적힌다",
+      "어긋나" in engine._compose_ticker("031510.KS", "031510", "KOSDAQ", "배지")[1])
+check("모르는 시장에 접미사를 붙이지 않는다 (suffix_for)",
+      be.suffix_for(None) == "" and be.suffix_for("코넥스") == ""
+      and be.suffix_for("KOSDAQ") == ".KQ" and be.suffix_for("KOSPI") == ".KS")
+
+# 하류 — 접미사 없는 티커가 조용히 KOSPI 로 변하지 않는가
+check("market_of_ticker 는 모르면 None (종전: KOSPI)",
+      _mcx207.market_of_ticker("999999") is None)
+_dom207 = _mcx207.fetch_domestic_context(engine, None)
+check("국면은 '미수신'으로 나온다 — 지수를 고르지 않는다",
+      _dom207.get('available') is False and '미수신' in str(_dom207.get('reason')),
+      str(_dom207.get('reason')))
+check("접미사 없는 6자리는 해외 주식이 아니다",
+      engine.get_asset_currency_and_unit("999999")["currency"] == "KRW",
+      str(engine.get_asset_currency_and_unit("999999")))
+check("진짜 해외 티커는 그대로 USD",
+      engine.get_asset_currency_and_unit("AAPL")["currency"] == "USD")
+
+# —— C4 — 기존 회귀 ——
+check("에코프로 .KQ 보존 (§41 과 같은 것을 다시 잰다)",
+      engine.fetch_and_update_naver_realtime("086520.KQ")[0] == "086520.KQ")
+check("ETF 069500.KS 보존",
+      engine.fetch_and_update_naver_realtime("069500.KS")[0] == "069500.KS")
+
+# —— 유도는 한 곳에만 ——
+#     같은 결함이 9개 자리에 흩어져 있었다. 새 호출부가 다시 접미사로
+#     시장을 메기지 않는지 **유도한 모듈 목록**으로 본다.
+#     목록을 손으로 적지 않는다 (R114·R120e — 손 목록은 반드시 낡는다).
+_sys207 = __import__('sys')
+if _os.path.join(PROJ, 'scripts') not in _sys207.path:
+    _sys207.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import lineage_audit as _lin207
+_mods207 = sorted(_lin207.reachable_modules('web_app.py'))
+print(f"  · 유도된 검사 대상 모듈 {len(_mods207)}개")     # 개수를 찍는다 (R120e)
+check("유도 결과가 비지 않는다", len(_mods207) >= 20, str(len(_mods207)))
+
+_DERIVE207 = _re.compile(
+    "['\"]KOS(?:PI|DAQ)['\"]\\s+if\\s+[^\\n]{0,80}?['\"]\\.K[SQ]['\"]"
+    "|['\"]\\.KQ['\"]\\s+if\\s+[^\\n]{0,60}?KOSDAQ"
+    "|['\"]\\.KS['\"]\\s+if\\s+[^\\n]{0,60}?KOSPI")
+#: 유도를 **소유**하는 자리 — 여기서만 접미사를 다룬다.
+_OWNERS207 = {'bitemporal_engine.py', 'portfolio.py'}
+_leak207 = []
+for _m207 in _mods207:
+    if _m207 in _OWNERS207:
+        continue
+    try:
+        with open(_os.path.join(PROJ, _m207), encoding='utf-8') as _fh207:
+            _lines207 = _fh207.read().split('\n')
+    except OSError:
+        continue
+    for _i207b, _ln207 in enumerate(_lines207, 1):
+        if _ln207.lstrip().startswith('#'):
+            continue
+        if _DERIVE207.search(_ln207):
+            _leak207.append(f"{_m207}:{_i207b}")
+check("[자기검사] 이 검사가 접미사 유도를 실제로 잡는다",
+      bool(_DERIVE207.search('m = "KOSPI" if ".KS" in symbol else "KOSDAQ"'))
+      and bool(_DERIVE207.search('mk = "KOSDAQ" if t.endswith(".KQ") else "KOSPI"'))
+      and bool(_DERIVE207.search("s = '.KQ' if market == 'KOSDAQ' else '.KS'"))
+      and not _DERIVE207.search('market = be.market_of(ticker)'))
+check("시장 유도가 소유 모듈 밖으로 새지 않는다",
+      not _leak207, "; ".join(_leak207[:6]))
+
+# —— 문서가 실측값을 그대로 적었는가 ——
+_doc207 = _read148(_os.path.join(PROJ, 'docs', 'FIX_R159_MARKET_SUFFIX.md'))
+_flat207 = _re.sub(r'\s+', ' ', _doc207)
+check("결함 문서가 있다", len(_flat207) > 500, str(len(_flat207)))
+check("규모를 잰 날짜와 같이 적었다 (§2 — 날짜 없는 숫자는 낡는다)",
+      '2026-08-23' in _flat207 and '1,767' in _flat207 and '99.8%' in _flat207)
+check("파급 표에 국면 판정 지수가 있다",
+      'market_of_ticker' in _flat207 and '국면' in _flat207)
+check("판정 기준을 고치기 전에 적었다",
+      '고치기 전에 적는다' in _flat207 and 'C1' in _flat207 and 'C5' in _flat207)
 
 
 print()

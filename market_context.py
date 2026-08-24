@@ -115,11 +115,26 @@ def fetch_global_context():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def market_of_ticker(ticker):
-    """'035760.KQ' → 'KOSDAQ'. 접미사가 없으면 KOSPI 로 본다."""
-    return "KOSDAQ" if str(ticker or "").upper().endswith(".KQ") else "KOSPI"
+    """'035760.KQ' → 'KOSDAQ'. **접미사가 없으면 None** 이다.
+
+    ⚠️ 라운드 159 — 종전에는 접미사가 없으면 KOSPI 로 봤다.
+       그러나 이 함수가 고르는 것은 **국면 판정에 쓸 지수**라,
+       모르는 종목을 KOSPI 로 찍으면 코스닥 종목이 코스피 지수로
+       국면 판정을 받고 domestic_bear 상한(55점)이 엉뚱한 지수에서
+       걸리거나 안 걸린다. 모르면 모른다고 해야 상위 단계가
+       '국면 미수신'으로 처리한다(§3 — 없는 값을 지어내지 않는다).
+    """
+    return be.market_of(ticker)          # 유도는 한 곳에만 둔다 (be.market_of)
 
 
 def fetch_domestic_context(engine, market="KOSPI"):
+    # 시장을 못 읽은 종목은 지수를 고를 수 없다 — 한쪽으로 찍지 않고
+    # '미수신' 과 사유를 돌려준다. 상한 규칙은 available=False 에서
+    # 경고만 남기고 점수를 건드리지 않는다(build_market_context ①).
+    if market not in ("KOSPI", "KOSDAQ"):
+        return {'available': False, 'market': None,
+                'reason': '상장 시장 미수신 — 지수 국면을 고를 수 없음'}
+
     def _build():
         r = engine.get_index_regime(market)
         if not r or not r.get('available'):
@@ -713,7 +728,8 @@ def build_market_context(engine, ticker, code=None, with_news=True):
             caps['domestic_bear'] = CONTEXT_CAPS['domestic_bear']
             reasons.append(f"{market} 지수가 20일선·60일선 아래 ({dom['basis']})")
     else:
-        warns.append(f"{market} 지수 국면 미수신 — {dom.get('reason', '')}")
+        warns.append(f"{market or '상장 시장 미확인'} 지수 국면 미수신 — "
+                     f"{dom.get('reason', '')}")
 
     # ② 글로벌 — 경고 항목을 세어 본다
     g_warn = []
