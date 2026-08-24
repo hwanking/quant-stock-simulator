@@ -57,24 +57,34 @@ def main():
     a = ap.parse_args()
 
     # ⚠️ 라운드 165 — 렌더가 **사용자 자료를 바꾸는지** 여기서 잰다.
-    #   회귀 전체 구간으로 재면 사용자가 앱을 열어 둔 것만으로 실패한다 —
-    #   그건 검사가 아니라 잔소리다. 창을 **렌더 한 번**으로 좁힌다.
-    #   그리고 이름(스위치가 소스에 있나)이 아니라 **값**(파일이 실제로
-    #   바뀌었나)으로 잰다 (§6).
-    def _user_stamps():
-        s = {}
-        for f in ('recent_stocks.json', 'watchlist.json', 'positions.json'):
-            p = os.path.join(PROJ, '.portfolio', f)
-            try:
-                st = os.stat(p)
-                s[f] = (st.st_mtime, st.st_size)
-            except OSError:
-                s[f] = None
-        return s
+    #
+    # ⚠️ 라운드 170 — 처음엔 **파일 수정시각**으로 쟀다. 그랬더니 회귀가
+    #   실패했는데 원인이 렌더가 아니라 **사용자가 열어 둔 streamlit
+    #   서버**였다 (서버를 끄고 다시 재니 0건). 검사가 잰 것(파일이
+    #   바뀌었다)은 맞았지만 **원인 지목이 틀렸다** — 남의 프로세스를
+    #   우리 탓으로 적었다.
+    #   그래서 **우리 코드가 저장 함수를 불렀는지**를 직접 센다.
+    #   파일 상태가 아니라 **우리 행동**을 재는 것이라 남의 프로세스에
+    #   흔들리지 않는다.
+    _calls = []
+    try:
+        import portfolio as _pf
+        for _fn in ('save_watchlist', 'save_search_history', 'save_positions'):
+            _orig = getattr(_pf, _fn, None)
+            if not callable(_orig):
+                continue
+
+            def _wrap(name, fn):
+                def _inner(*a, **k):
+                    _calls.append(name)
+                    return fn(*a, **k)
+                return _inner
+            setattr(_pf, _fn, _wrap(_fn, _orig))
+    except Exception:                                          # noqa: BLE001
+        _calls = None                   # 못 걸었으면 '못 쟀다'로 둔다 (§3)
 
     out = {'ok': False, 'exceptions': None, 'first': '', 'keys': {},
            'error': '', 'touched': None}
-    _before = _user_stamps()
     try:
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file(os.path.join(PROJ, 'web_app.py'),
@@ -97,8 +107,9 @@ def main():
         # 자식이 죽으면 부모가 그것을 **검사 실패가 아니라 실행 실패**로
         # 구분할 수 있어야 한다. 지어내지 않는다(§3).
         out['error'] = f'{type(e).__name__}: {e}'[:300]
-    _after = _user_stamps()
-    out['touched'] = sorted(k for k in _before if _before[k] != _after[k])
+    # 우리 코드가 부른 저장 함수 이름들. 계측을 못 걸었으면 None 이다 —
+    # '안 불렀다'와 '못 쟀다'를 가른다 (§3).
+    out['touched'] = (sorted(set(_calls)) if _calls is not None else None)
     sys.stdout.write('\n@@RESULT@@' + json.dumps(out, ensure_ascii=False))
     return 0
 
