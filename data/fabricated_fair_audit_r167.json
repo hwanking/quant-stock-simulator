@@ -1,0 +1,26 @@
+{
+ "made": "2026-08-24",
+ "fake_fair": 52713.75,
+ "sampled": 150,
+ "fabricated_now": 0,
+ "clean": 150,
+ "errors": 0,
+ "would_have_been_fabricated": 1,
+ "affected_pct": 0.7,
+ "affected_list": [
+  {
+   "code": "088980",
+   "name": "맥쿼리인프라",
+   "fair": 9526.84593440843,
+   "status": "CAUTION",
+   "conf": 57.188595507791,
+   "fd_bps": null,
+   "fd_pbr": 0.0,
+   "fd_roe": null,
+   "db_bps": null,
+   "db_eps": null,
+   "is_fund": false
+  }
+ ],
+ "note": "\"영향권\" 은 게시 BPS·EPS 가 둘 다 없는 종목이다 — 고치기 전에는 그 종목들이 전부 같은 가짜 적정가 52,714원(신뢰도 70.8 · CALIBRATED)을 받았다. 0 건이 미측정이 아니라는 것은 sampled 로 확인한다."
+}

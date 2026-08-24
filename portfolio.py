@@ -2219,7 +2219,13 @@ WATCH_NOTE_NUM = ('paid', 'qty', 'target_buy')   # 매입가 · 수량 · (구)�
 #:   **그 4,615원을 믿을 수 있는지**는 안 보인다 (라운드 143).
 WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
                   'snap_fair_conf', 'snap_px')
-WATCH_SNAP_TXT = ('snap_at', 'snap_engine')
+#: `snap_bucket` — 그 종목을 마지막으로 잰 날 **엔진이 내린 판단**
+#:   (라운드 166). 사용자 요청: *"내 계획이 아니라 실제로 너가 판단해서
+#:   해줘야지."* `verdict_core` 의 `bucket` 을 그대로 담는다 — 화면이
+#:   새 판정을 만들지 않는다 (§4 — 화면 값은 한 곳에서).
+#: ⚠️ 이것은 **엔진 값**이고 `plan` 은 **사용자 값**이다. 표가 둘을
+#:   눈에 보이게 가른다.
+WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket')
 #: `plan` — 이 종목을 **어떻게 할 생각인가** (라운드 164).
 #:   사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해 보유
 #:   이렇게만 해줘."* 자유 메모는 다시 읽을 때 해석이 필요한데, 정작

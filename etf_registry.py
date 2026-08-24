@@ -238,6 +238,39 @@ def nav_of(code):
     return None
 
 
+#: 룩스루 적정가 산출물 (라운드 167). 사전등록 기준을 통과한 ETF 만 들어 있다.
+LOOKTHROUGH = os.path.join(_BASE, 'data', 'etf_lookthrough_r167.json')
+
+
+def lookthrough_of(code):
+    """
+    한 ETF 의 **룩스루 적정가**. 없으면 None — 지어내지 않는다.
+
+    구성종목의 펀더멘털 적정가를 비중으로 가중해 *"담은 기업들이 모두
+    적정가에 거래된다면 NAV 가 몇 % 다를까"* 를 낸다. 배수·좌수가 식에
+    없다 (`docs/PREREG_R167_ETF_LOOKTHROUGH.md` §1).
+
+    ⚠️ **표시 전용이다.** 게이트·점수·추천에 넣지 않는다. 원장에 ETF 가
+       없어 이 값이 성과를 가르는지는 **재지 않았다** (라운드 44 가 업황을
+       표시 전용으로 낸 것과 같은 자리).
+    ⚠️ **잰 날의 값이다.** 구성종목 적정가는 매일 바뀐다 — 화면이 기준일을
+       함께 적는다.
+    """
+    c = stock_code.normalize(code)
+    if not c:
+        return None
+    doc = _read_json(LOOKTHROUGH)
+    if not doc:
+        return None
+    row = (doc.get('results') or {}).get(c)
+    if not row or row.get('lookthrough_fair') is None:
+        return None
+    # 사전등록 R2 를 통과한 것만 낸다 — 커버리지가 모자라면 값이 아니다
+    if (row.get('valued_pct') or 0) < (doc.get('cover_min') or 90.0):
+        return None
+    return dict(row, made=doc.get('made'), cover_min=doc.get('cover_min'))
+
+
 def write_index(path=None):
     """동봉 색인을 새로 만든다 (`scripts/etf_index_r164.py` 가 부른다)."""
     rows = _fetch_raw()

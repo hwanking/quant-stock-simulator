@@ -1,0 +1,247 @@
+{
+ "made": "2026-08-24",
+ "ledger_rows": 184759,
+ "cost_pct": 0.36,
+ "buy_score": 58.0,
+ "buy_cases": 82259,
+ "zones": {
+  "판정 불가": 66727,
+  "안전마진 확보": 86355,
+  "적정가 초과 (추격매수 경고)": 3285,
+  "적정가 크게 초과 (추격매수 위험)": 19536,
+  "적정가 소폭 초과": 1985,
+  "적정가 이하 (안전마진 미확보)": 6871
+ },
+ "all": {
+  "안전마진 확보": {
+   "n": 86355,
+   "decided": 84006,
+   "hit_pct": 59.47,
+   "wilson_lo": 59.14,
+   "ev_after_cost_pct": -0.196,
+   "breakeven_pct": 63.4,
+   "gap_pp": -3.93,
+   "median_rr": 0.7
+  },
+  "적정가 이하 (안전마진 미확보)": {
+   "n": 6871,
+   "decided": 6687,
+   "hit_pct": 58.19,
+   "wilson_lo": 57.0,
+   "ev_after_cost_pct": -0.318,
+   "breakeven_pct": 63.56,
+   "gap_pp": -5.37,
+   "median_rr": 0.7
+  },
+  "적정가 소폭 초과": {
+   "n": 1985,
+   "decided": 1936,
+   "hit_pct": 57.49,
+   "wilson_lo": 55.27,
+   "ev_after_cost_pct": -0.358,
+   "breakeven_pct": 63.57,
+   "gap_pp": -6.08,
+   "median_rr": 0.7
+  },
+  "적정가 초과 (추격매수 경고)": {
+   "n": 3285,
+   "decided": 3179,
+   "hit_pct": 57.85,
+   "wilson_lo": 56.12,
+   "ev_after_cost_pct": -0.391,
+   "breakeven_pct": 63.5,
+   "gap_pp": -5.65,
+   "median_rr": 0.7
+  },
+  "적정가 크게 초과 (추격매수 위험)": {
+   "n": 19536,
+   "decided": 18982,
+   "hit_pct": 56.37,
+   "wilson_lo": 55.67,
+   "ev_after_cost_pct": -0.521,
+   "breakeven_pct": 63.07,
+   "gap_pp": -6.69,
+   "median_rr": 0.7
+  },
+  "판정 불가": {
+   "n": 66727,
+   "decided": 62252,
+   "hit_pct": 59.04,
+   "wilson_lo": 58.66,
+   "ev_after_cost_pct": -0.277,
+   "breakeven_pct": 63.83,
+   "gap_pp": -4.78,
+   "median_rr": 0.7
+  }
+ },
+ "buy_only": {
+  "안전마진 확보": {
+   "n": 60711,
+   "decided": 59024,
+   "hit_pct": 59.6,
+   "wilson_lo": 59.2,
+   "ev_after_cost_pct": -0.176,
+   "breakeven_pct": 63.19,
+   "gap_pp": -3.59,
+   "median_rr": 0.7
+  },
+  "적정가 이하 (안전마진 미확보)": {
+   "n": 4054,
+   "decided": 3949,
+   "hit_pct": 59.33,
+   "wilson_lo": 57.79,
+   "ev_after_cost_pct": -0.185,
+   "breakeven_pct": 63.24,
+   "gap_pp": -3.9,
+   "median_rr": 0.7
+  },
+  "적정가 소폭 초과": {
+   "n": 822,
+   "decided": 800,
+   "hit_pct": 60.5,
+   "wilson_lo": 57.07,
+   "ev_after_cost_pct": -0.084,
+   "breakeven_pct": 62.9,
+   "gap_pp": -2.4,
+   "median_rr": 0.7
+  },
+  "적정가 초과 (추격매수 경고)": {
+   "n": 1026,
+   "decided": 994,
+   "hit_pct": 57.24,
+   "wilson_lo": 54.15,
+   "ev_after_cost_pct": -0.494,
+   "breakeven_pct": 62.98,
+   "gap_pp": -5.74,
+   "median_rr": 0.7
+  },
+  "적정가 크게 초과 (추격매수 위험)": null,
+  "판정 불가": {
+   "n": 15646,
+   "decided": 13983,
+   "hit_pct": 61.08,
+   "wilson_lo": 60.27,
+   "ev_after_cost_pct": -0.169,
+   "breakeven_pct": 62.83,
+   "gap_pp": -1.75,
+   "median_rr": 0.7
+  }
+ },
+ "blind_only": {
+  "안전마진 확보": {
+   "n": 4531,
+   "decided": 4399,
+   "hit_pct": 54.74,
+   "wilson_lo": 53.27,
+   "ev_after_cost_pct": -1.094,
+   "breakeven_pct": 61.56,
+   "gap_pp": -6.82,
+   "median_rr": 0.7
+  },
+  "적정가 이하 (안전마진 미확보)": {
+   "n": 518,
+   "decided": 500,
+   "hit_pct": 55.4,
+   "wilson_lo": 51.02,
+   "ev_after_cost_pct": -0.701,
+   "breakeven_pct": 61.74,
+   "gap_pp": -6.34,
+   "median_rr": 0.7
+  },
+  "적정가 소폭 초과": {
+   "n": 152,
+   "decided": 149,
+   "hit_pct": 54.36,
+   "wilson_lo": 46.36,
+   "ev_after_cost_pct": -0.862,
+   "breakeven_pct": 61.72,
+   "gap_pp": -7.36,
+   "median_rr": 0.7
+  },
+  "적정가 초과 (추격매수 경고)": {
+   "n": 261,
+   "decided": 253,
+   "hit_pct": 56.92,
+   "wilson_lo": 50.76,
+   "ev_after_cost_pct": -0.7,
+   "breakeven_pct": 61.52,
+   "gap_pp": -4.61,
+   "median_rr": 0.7
+  },
+  "적정가 크게 초과 (추격매수 위험)": {
+   "n": 1629,
+   "decided": 1567,
+   "hit_pct": 51.63,
+   "wilson_lo": 49.15,
+   "ev_after_cost_pct": -1.525,
+   "breakeven_pct": 61.14,
+   "gap_pp": -9.51,
+   "median_rr": 0.7
+  },
+  "판정 불가": {
+   "n": 4512,
+   "decided": 4042,
+   "hit_pct": 48.07,
+   "wilson_lo": 46.53,
+   "ev_after_cost_pct": -1.898,
+   "breakeven_pct": 61.66,
+   "gap_pp": -13.59,
+   "median_rr": 0.7
+  }
+ },
+ "buy_blind": {
+  "안전마진 확보": {
+   "n": 3179,
+   "decided": 3074,
+   "hit_pct": 53.64,
+   "wilson_lo": 51.88,
+   "ev_after_cost_pct": -1.316,
+   "breakeven_pct": 61.41,
+   "gap_pp": -7.76,
+   "median_rr": 0.7
+  },
+  "적정가 이하 (안전마진 미확보)": {
+   "n": 350,
+   "decided": 335,
+   "hit_pct": 59.4,
+   "wilson_lo": 54.07,
+   "ev_after_cost_pct": -0.122,
+   "breakeven_pct": 61.46,
+   "gap_pp": -2.05,
+   "median_rr": 0.7
+  },
+  "적정가 소폭 초과": {
+   "n": 73,
+   "decided": 71,
+   "hit_pct": 53.52,
+   "wilson_lo": 42.04,
+   "ev_after_cost_pct": -1.25,
+   "breakeven_pct": 61.08,
+   "gap_pp": -7.56,
+   "median_rr": 0.7
+  },
+  "적정가 초과 (추격매수 경고)": {
+   "n": 97,
+   "decided": 97,
+   "hit_pct": 54.64,
+   "wilson_lo": 44.74,
+   "ev_after_cost_pct": -1.012,
+   "breakeven_pct": 61.2,
+   "gap_pp": -6.56,
+   "median_rr": 0.7
+  },
+  "적정가 크게 초과 (추격매수 위험)": null,
+  "판정 불가": {
+   "n": 1759,
+   "decided": 1536,
+   "hit_pct": 52.86,
+   "wilson_lo": 50.36,
+   "ev_after_cost_pct": -1.597,
+   "breakeven_pct": 61.49,
+   "gap_pp": -8.63,
+   "median_rr": 0.7
+  }
+ },
+ "limitation": "원장은 과거 기준일 리플레이이고 재무 게시값은 이력이 없어 **오늘 값이 쓰인다**. 그래서 과거 케이스의 적정가에는 미래 정보가 섞여 있다 — 이 표는 관찰이지 인과가 아니며, 이것으로 게이트를 바꾸지 않는다.",
+ "note": "측정 전용 — 점수·게이트·문턱을 바꾸지 않는다."
+}

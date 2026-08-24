@@ -2184,7 +2184,22 @@ class QuantIndicatorsEngine:
         """
         if tech_df is None or tech_df.empty:
             return {}
-            
+
+        # ⚠️ 라운드 167 — 이 함수는 **지표가 계산된 tech_df** 를 전제로 한다
+        #   (`compute_technical_indicators` 가 만든 것). 원본 일봉 프레임을
+        #   그대로 넘기면 값이 조용히 **남의 종목 것**이 됐다:
+        #
+        #       삼성전자 → 롯데리츠 순으로 부르면 롯데리츠 적정가가
+        #       52,714원 · CALIBRATED (실제는 3,915원 · CAUTION)
+        #       뒤이은 SK리츠·ESR켄달스퀘어도 **똑같이 52,714원**
+        #
+        #   화면은 언제나 tech_df 를 넘기므로 영향이 없었지만, 연구
+        #   스크립트가 이 함수를 직접 부르면서 그 결함을 만났다.
+        #   못 재는 것을 '남의 값'으로 돌려주는 쪽이 훨씬 나쁘다 (§3).
+        #   전제가 안 맞으면 **비운다** — 지표 전용 열 하나로 가른다.
+        if 'vol_20' not in getattr(tech_df, 'columns', ()):
+            return {}
+
         curr_price = float(tech_df['adj_close'].iloc[-1])
         latest_fund = fund_df.iloc[-1].to_dict() if (fund_df is not None and len(fund_df) > 0) else {}
         

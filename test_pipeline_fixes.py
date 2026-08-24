@@ -15335,6 +15335,175 @@ check("읽기는 막지 않는다 (검사는 실제 자료 위에서 돈다)",
       '읽기까지 끄면 화면이 진짜로 그리는지 알 수 없다')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §203 — 지어낸 재무지표 · 화면이 게이트와 같은 값을 대는가 (라운드 166~168)
+#
+#   ⓐ 가장 큰 것부터: `generate_synthetic_bitemporal_data` 가 **처음 보는
+#     종목**에 `{"eps":5000.0,"bps":45000.0,"pbr":1.5,"roe":12.0}` 를
+#     넣고 있었다. 게시 재무가 없는 종목이 전부 같은 가짜 적정가
+#     **52,713.75원 · 신뢰 70.8 · CALIBRATED** 를 받아 화면에 나갔다.
+#     `:787` 주석이 "구버전은 … 통째로 지어내 DB에 넣었다" 고 적어 둔
+#     그 결함의 생존자다.
+#
+#     ⚠️ **한 프로세스에서 이어 돌리면 안 보인다** — 두 번째부터는 DB 가
+#       데워져 정상값이 나온다. 그래서 회귀도 앱도 못 봤다.
+#
+#   ⓑ 차단 문구가 **게이트가 안 쓰는 숫자**를 근거로 댔다 (다날:
+#     "적정가보다 −6.2% 비싸서" — −6.2%는 싸다는 뜻이고, 게이트는
+#     안전마진선과 견준다).
+#
+#   ⓒ 적정가 미산출을 신뢰도 **"0 낮음"** 으로 적고 있었다 (ETF 전부).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§203 지어낸 재무지표 · 화면이 게이트와 같은 값을 대는가 (라운드 166~168)")
+print("=" * 72)
+_be203 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_be203_code = '\n'.join(ln for _i, ln in _la16.code_lines('bitemporal_engine.py'))
+_wa203 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+_qi203 = '\n'.join(ln for _i, ln in _la16.code_lines('quant_indicators.py'))
+
+# ── ⓐ 지어낸 재무 리터럴이 되살아나지 않는가 ─────────────────────────
+#    주석은 뺀 뒤 본다 — 왜 걷어냈는지 적은 줄까지 위반으로 보면 안 된다.
+for _lit203 in ('"bps": 45000.0', "'bps': 45000.0",
+                '"eps": 5000.0', "'eps': 5000.0"):
+    check(f"엔진이 재무지표를 지어내지 않는다 ({_lit203})",
+          _lit203 not in _be203_code,
+          '처음 보는 종목이 통째로 이 값을 받았다 (§3)')
+# 순서는 **그 함수 안에서만** 본다 — 파일 전체로 재면 다른 함수의 같은
+# 문자열이 먼저 잡혀 엉뚱한 자리를 비교하게 된다(실제로 그랬다).
+_ord203 = None
+try:
+    for _n203 in _ast16.walk(_ast16.parse(_be203)):
+        if (isinstance(_n203, _ast16.FunctionDef)
+                and _n203.name == 'generate_synthetic_bitemporal_data'):
+            _seg203 = _ast16.get_source_segment(_be203, _n203) or ''
+            _body203 = '\n'.join(l for l in _seg203.splitlines()
+                                 if not l.strip().startswith('#'))
+            _i_meta = _body203.find('meta = STOCK_METRICS_DB.get(symbol)')
+            _i_fill = _body203.find('self.get_realtime_stock_price_triple_check'
+                                    '(symbol)')
+            _ord203 = (_i_meta, _i_fill)
+except Exception as _ex203b:                                   # noqa: BLE001
+    _ord203 = None
+check("메타를 **채운 뒤에** 읽는다 (읽고 나서 채우면 기본값이 들어간다)",
+      bool(_ord203) and _ord203[0] > _ord203[1] > -1,
+      f'meta@{_ord203 and _ord203[0]} · fill@{_ord203 and _ord203[1]} — '
+      f'순서가 뒤바뀌면 같은 결함이 그대로 돌아온다')
+
+# 심어서 확인 — 0건이 '없다'인지 '못 봤다'인지 가른다 (§110)
+_plant203 = 'meta = STOCK_METRICS_DB.get(symbol, {"eps": 5000.0})\n'
+check("심어 두면 실제로 잡는다", '"eps": 5000.0' in _plant203)
+
+# ── 값으로 잰다 — 차가운 자식 프로세스에서 재무 없는 종목 하나 ────────
+#    이름(리터럴이 없다)만 보지 않고 **실제로 그 값이 나오는지** 본다.
+#    ⚠️ 반드시 **새 프로세스**여야 한다. 이 회귀는 이미 여러 종목을
+#      돌렸으므로 여기서 직접 부르면 DB 가 데워져 결함이 가려진다.
+_COLD203 = _os.path.join(PROJ, '_probe', '_cold_r203.py')
+_FAKE203 = 52713.75
+try:
+    _os.makedirs(_os.path.dirname(_COLD203), exist_ok=True)
+    with open(_COLD203, 'w', encoding='utf-8') as _f203:
+        _f203.write(
+            "import os, sys, json\n"
+            "P, S = sys.argv[1], sys.argv[2]\n"
+            "sys.path.insert(0, P); os.chdir(P)\n"
+            "import bitemporal_engine as be, quant_indicators as qi\n"
+            "o = {}\n"
+            "try:\n"
+            "    e, q = be.BitemporalEngine(), qi.QuantIndicatorsEngine()\n"
+            "    px, fd = e.generate_synthetic_bitemporal_data(\n"
+            "        symbol=S, start_date='2022-01-01')\n"
+            "    t = q.compute_technical_indicators(px)\n"
+            "    v = q.evaluate_valuation_metric(t, fd, symbol=S)\n"
+            "    lf = fd.iloc[-1].to_dict() if (fd is not None and len(fd)) else {}\n"
+            "    o = {'fair': v.get('displayed_fair_value'),\n"
+            "         'bps': lf.get('bps'), 'pbr': lf.get('pbr'),\n"
+            "         'roe': lf.get('roe')}\n"
+            "except Exception as ex:\n"
+            "    o = {'error': f'{type(ex).__name__}: {ex}'[:90]}\n"
+            "sys.stdout.write('@@' + json.dumps(o))\n")
+    import subprocess as _sp203
+    _r203 = _sp203.run([sys.executable, _COLD203, PROJ, '330590.KS'],
+                       capture_output=True, text=True, encoding='utf-8',
+                       errors='replace', timeout=600)
+    _tag203 = (_r203.stdout or '').rsplit('@@', 1)
+    _d203 = _json.loads(_tag203[1]) if len(_tag203) == 2 else {'error': '결과 없음'}
+except Exception as _ex203:                                    # noqa: BLE001
+    _d203 = {'error': f'{type(_ex203).__name__}: {_ex203}'[:90]}
+check("차가운 프로세스 측정이 실제로 돌았다 (못 돌면 통과시키지 않는다)",
+      not _d203.get('error'), str(_d203)[:110])
+if not _d203.get('error'):
+    check("재무 없는 종목이 가짜 적정가를 받지 않는다 (롯데리츠 · 값으로)",
+          not (_d203.get('fair')
+               and abs(float(_d203['fair']) - _FAKE203) < 1.0),
+          f"적정 {_d203.get('fair')} — {_FAKE203:,.0f} 이면 지어낸 값이다")
+    check("재무 없는 종목의 fund_df 에 지어낸 값이 없다",
+          _d203.get('bps') != 45000.0 and _d203.get('pbr') != 1.5
+          and _d203.get('roe') != 12.0,
+          f"bps={_d203.get('bps')} pbr={_d203.get('pbr')} "
+          f"roe={_d203.get('roe')}")
+try:
+    _os.remove(_COLD203)
+except OSError:
+    pass
+
+# ── ⓑ 차단 문구가 게이트와 같은 값을 대는가 ──────────────────────────
+check("차단 문구가 **안전마진선**을 근거로 댄다 (게이트가 보는 값)",
+      '규칙이 보는 선은 <b>안전마진선' in _wa203,
+      '게이트는 buy_entry_max 와 견주는데 문구는 적정가를 댔다')
+check("옛 자기모순 문구가 남아 있지 않다",
+      '% 비싸서 ' not in _wa203,
+      '"-6.2% 비싸서" 는 자기모순이다 — 음수는 싸다는 뜻')
+
+# ── ⓒ 미산출을 0 점으로 적지 않는가 ──────────────────────────────────
+check("적정가가 없으면 신뢰도도 비운다 (0 을 '낮음'으로 읽지 않는다)",
+      "_w.get('snap_fair') in (None, '') or not _fcv" in _wa203,
+      'UNCALCULATED · confidence 0.0 은 못 쟀다는 뜻이다 (§3)')
+
+# ── ⓓ 룩스루는 표시 전용인가 (사전등록이 못 박은 것) ─────────────────
+_lt203 = _os.path.join(PROJ, 'data', 'etf_lookthrough_r167.json')
+check("data/etf_lookthrough_r167.json 이 있다", _os.path.exists(_lt203))
+if _os.path.exists(_lt203):
+    with open(_lt203, encoding='utf-8') as _f203:
+        _ld203 = _json.load(_f203)
+    check("사전등록 R1~R4 를 산출물이 그대로 들고 있다",
+          all(k in _ld203 for k in ('r1_pass', 'r2_pass', 'r3_pass',
+                                    'r4_selfcheck', 'cover_min')),
+          str(sorted(_ld203))[:100])
+    check("R4 자기검사가 통과한 산출물이다", _ld203.get('r4_selfcheck') is True)
+    check("R3 (통과 ETF ≥ 30) 을 넘겼다", _ld203.get('r3_pass') is True,
+          f"{_ld203.get('r2_pass')}개")
+    # 값이 정상권인가 — 13배 같은 것이 다시 나오면 무언가 깨진 것이다
+    _ratios203 = [v['ratio'] for v in (_ld203.get('results') or {}).values()
+                  if v.get('ratio') and (v.get('valued_pct') or 0) >= 90]
+    check("룩스루 비율에 터무니없는 값이 없다 (2배 초과 0개)",
+          _ratios203 and not [r for r in _ratios203 if r > 2 or r < 0.4],
+          f"{len(_ratios203)}개 · 최대 "
+          f"{max(_ratios203) if _ratios203 else None}")
+check("룩스루가 게이트·점수에 들어가지 않는다 (표시 전용)",
+      'lookthrough' not in _qi203 and 'lookthrough' not in
+      '\n'.join(ln for _i, ln in _la16.code_lines('verdict_core.py')),
+      '사전등록 §4① — 원장에 ETF 가 없어 쓸모를 못 쟀다')
+check("화면이 표시 전용임을 밝힌다",
+      '표시 전용입니다' in _wa203 and '재지 않았습니다' in _wa203)
+
+# ── ⓔ 전수 조사 산출물 (라운드 168) ──────────────────────────────────
+_vz203 = _os.path.join(PROJ, 'data', 'value_zone_census_r168.json')
+check("data/value_zone_census_r168.json 이 있다", _os.path.exists(_vz203))
+if _os.path.exists(_vz203):
+    with open(_vz203, encoding='utf-8') as _f203:
+        _vd203 = _json.load(_f203)
+    check("전수 조사가 원장 전건을 셌다",
+          (_vd203.get('ledger_rows') or 0) > 150000,
+          f"{_vd203.get('ledger_rows'):,}건")
+    check("매수권이 0 이 아니다 (정의가 맞다)",
+          (_vd203.get('buy_cases') or 0) > 1000,
+          f"{_vd203.get('buy_cases'):,}건 — 0 이면 정의를 의심하라")
+    check("한계를 산출물에 적어 두었다 (재무 이력이 없다)",
+          '미래 정보' in str(_vd203.get('limitation') or ''),
+          '이 표로 게이트를 바꾸지 않는다')
+
+
 print()
 print("=" * 72)
 if FAILURES:
