@@ -15895,6 +15895,103 @@ check("낼 수 있는 ETF 에는 사유가 안 붙는다",
       '값과 사유가 같이 나오면 화면이 자기모순이다 (§4)')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §206 — 이슈 카드가 원장과 다른 말을 하고 있었다 (라운드 172)
+#
+#   화면을 훑다가 잡았다. 회귀는 초록불이었다.
+#
+#     [원장] status=resolved
+#     [화면] 장기 개선 과제 · 20일 경과 · **즉시 수정 가능** ·
+#            다음 점검 2026-08-15        ← 그날은 **10일 지난 날**
+#
+#   해결된 이슈 **셋 전부**가 진행 중처럼 나오고 있었다.
+#
+#   원인은 **닫는 길이 넷인데 하나만 `work_status` 를 같이 고쳤다**는
+#   것이다(`resolve_with_verification`). 나머지 셋은 `status` 만 바꾼다:
+#     · improvement/issue_tracker.resolve_issue
+#     · improvement/issue_tracker.resolve_by_key
+#     · scripts/close_issue_mfe.py
+#
+#   → **쓰는 쪽 넷을 고치지 않았다.** 읽는 쪽(`issue_view`)이 `status` 를
+#     먼저 보게 했다 — 앞으로 어느 길로 닫혀도 화면이 안 어긋난다.
+#     화면 문구도 거기서 만든다: 화면이 조립하면 규칙이 또 두 곳에 생긴다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§206 이슈 카드 — 원장과 같은 말을 하는가 (라운드 172)")
+print("=" * 72)
+
+from improvement import issue_ops as _io206                      # noqa: E402
+from improvement.database import get_connection as _cx206        # noqa: E402
+import datetime as _dt206                                        # noqa: E402
+
+_c206 = _cx206()
+try:
+    _io206.ensure_schema(_c206)
+    _rows206 = _io206.issue_view(_c206, 20)
+finally:
+    _c206.close()
+
+check("이슈를 실제로 읽었다 (0건이면 미측정)", len(_rows206) >= 3,
+      f'{len(_rows206)}건')
+
+_TODAY206 = _dt206.date.today()
+_bad206 = []
+for _r206 in _rows206:
+    _st206 = str(_r206.get('status') or '')
+    _f206 = []
+    if _st206 == 'resolved':
+        # 해결분에 **진행 중 장식**이 붙으면 안 된다
+        if _r206.get('state_label') != _io206.ST_DONE:
+            _f206.append('배지가 진행형')
+        if _r206.get('fix_label'):
+            _f206.append("'수정 가능/불가'가 붙음")
+        if _r206.get('review_label'):
+            _f206.append('다음 점검이 붙음')
+        if '경과' in str(_r206.get('age_label')):
+            _f206.append('경과일이 계속 자람')
+    else:
+        _raw206 = str(_r206.get('next_review') or _r206.get('eta') or '')[:10]
+        try:
+            _late206 = (_TODAY206
+                        - _dt206.date.fromisoformat(_raw206)).days
+        except Exception:                                        # noqa: BLE001
+            _late206 = 0
+        if _late206 > 0 and '지남' not in str(_r206.get('review_label') or ''):
+            _f206.append(f'점검일이 {_late206}일 지났는데 안 적음')
+    if _f206:
+        _bad206.append((_r206.get('issue_key'), _f206))
+check("화면이 원장과 같은 말을 한다 (해결분에 진행 중 장식이 없다)",
+      not _bad206, f'{len(_bad206)}건 — {_bad206[:3]}')
+
+# 해결분을 실제로 봤는가 — 0건이면 위 검사가 아무것도 안 잰 것이다 (§6)
+check("해결분을 실제로 봤다 (0건이면 미측정)",
+      len([r for r in _rows206 if r.get('status') == 'resolved']) >= 1)
+
+# 심어서 잡히는지 — 0건이 '없다'인지 '못 봤다'인지 가른다 (§6)
+_p206 = _io206._display_fields(
+    {'status': 'open', 'work_status': _io206.ST_BLOCKED, 'fixable_now': 1,
+     'next_review': '2020-01-01'}, 99)
+check("심어 둔 지난 점검일을 '지남'으로 적는다",
+      '지남' in str(_p206.get('review_label')), str(_p206))
+_p206b = _io206._display_fields(
+    {'status': 'resolved', 'work_status': _io206.ST_LONGTERM,
+     'fixable_now': 1, 'next_review': '2020-01-01',
+     'created_at': '2026-08-01', 'resolved_at': '2026-08-19'}, 99)
+check("심어 둔 해결분에 진행 중 장식을 안 붙인다",
+      _p206b.get('state_label') == _io206.ST_DONE
+      and not _p206b.get('fix_label') and not _p206b.get('review_label')
+      and _p206b.get('age_label') == '18일 만에 해결', str(_p206b))
+
+# 화면이 **문구를 스스로 조립하지 않는다** (§4 — 값은 한 곳에서)
+_w206 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+check("화면이 경과일·점검일을 스스로 조립하지 않는다",
+      "일 경과 · " not in _w206 and "다음 점검 {" not in _w206,
+      '조립 규칙이 두 곳에 생기면 한쪽만 고치게 된다')
+check("화면이 issue_ops 가 만든 문구를 쓴다",
+      'state_label' in _w206 and 'review_label' in _w206
+      and 'age_label' in _w206)
+
+
 print()
 print("=" * 72)
 if FAILURES:

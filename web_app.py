@@ -5482,10 +5482,20 @@ if _issues_global:
                         '확인 중': 'warn', '즉시 수정 불가': 'tx2',
                         '장기 개선 과제': 'tx2'}
             for _tr in _tracked:
-                _ws = _tr.get('work_status') or '확인 중'
+                # ⚠️ 라운드 172 — 여기서 문구를 **조립하지 않는다.**
+                #   종전에는 화면이 `work_status` 를 배지로 쓰고 경과일·
+                #   '즉시 수정 가능'·'다음 점검' 을 스스로 붙였는데,
+                #   닫는 길 넷 중 셋이 `work_status` 를 안 고쳐서
+                #   **해결된 이슈 3건이 전부 진행 중처럼** 나왔다.
+                #   그중 하나는 *"즉시 수정 가능 · 다음 점검 2026-08-15"* —
+                #   10일 지난 날짜였다. 이제 `issue_ops` 가 `status` 를
+                #   먼저 보고 만든 문구를 그대로 찍는다 (§4).
+                _ws = _tr.get('state_label') or _tr.get('work_status') or '확인 중'
                 _tone = _uk.tokens(_theme).get(_ST_TONE.get(_ws, 'tx2'))
-                _fix = ('즉시 수정 가능' if _tr.get('fixable_now')
-                        else '지금은 즉시 해결 불가')
+                _meta = ' · '.join(
+                    str(_x) for _x in (_tr.get('age_label'),
+                                       _tr.get('fix_label'),
+                                       _tr.get('review_label')) if _x)
                 st.markdown(
                     f"<div style='background:{_TOK['surface']}; "
                     f"border-radius:14px; padding:16px 20px; margin-bottom:8px;'>"
@@ -5496,8 +5506,7 @@ if _issues_global:
                     f"<span style='width:6px; height:6px; border-radius:50%; "
                     f"background:{_tone};'></span>{_ws}</span>"
                     f"<span style='margin-left:8px; font-size:12px; "
-                    f"color:{_TOK['tx2']};'>{_tr.get('age_days', 0)}일 경과 · "
-                    f"{_fix} · 다음 점검 {_tr.get('next_review') or _tr.get('eta') or '—'}</span>"
+                    f"color:{_TOK['tx2']};'>{_uk._esc(_meta)}</span>"
                     f"<p style='margin:8px 0 4px 0; font-size:15px; "
                     f"font-weight:600; color:{_TOK['tx1']};'>"
                     f"{_uk._esc_md(_tr['title'])}</p>"
