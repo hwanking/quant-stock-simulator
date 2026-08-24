@@ -2290,11 +2290,38 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
     _reg = next((p for p in (st.session_state.get('positions') or [])
                  if p.ticker == target_ticker), None)
+
+    # ── 관심종목에 적어 둔 매입가·수량도 끌어온다 (라운드 166) ─────────
+    # 사용자 요청: *"이 종목을 갖고 계신가요를 관심종목이랑 연동시켜야지."*
+    # 관심종목 표에 매입가·수량을 적어 두고도 이 칸은 0 이라, 같은 사실을
+    # 두 번 적어야 했다.
+    # ⚠️ 순서를 못 박는다 — **보유종목이 먼저**다. 그쪽이 정식 등록이고
+    #   관심종목의 매입가는 개인 메모다. 어디서 온 값인지 화면이 밝힌다
+    #   (§3 · §4 — 값의 출처가 둘이면 어느 쪽인지 보여야 한다).
+    _wl_paid = _wl_qty = 0
+    if _reg is None:
+        _cwl166 = portfolio.normalize_code(target_ticker)
+        for _w166 in _wl_items():
+            if portfolio.normalize_code(_w166.get('code')) != _cwl166:
+                continue
+            try:
+                _wl_paid = int(float(_w166.get('paid') or 0))
+                _wl_qty = int(float(_w166.get('qty') or 0))
+            except (TypeError, ValueError):
+                _wl_paid = _wl_qty = 0
+            break
+
     if _reg is not None:
         st.sidebar.success(
             f"**{resolved_name}** — 보유종목에서 자동으로 채웠습니다 "
             f"({_reg.quantity:,.0f}주 · 평단 {_reg.average_buy_price:,.0f}원). "
             f"위 목록에서 다른 종목을 누르면 그 종목으로 바뀝니다.")
+    elif _wl_paid > 0:
+        st.sidebar.info(
+            f"**{resolved_name}** — **관심종목**에 적어 두신 값으로 "
+            f"채웠습니다 ({_wl_qty:,}주 · 평단 {_wl_paid:,}원). "
+            f"포트폴리오 판단에도 넣으려면 '내 보유종목'에 등록하세요 — "
+            f"관심종목의 값은 개인 메모입니다.")
     else:
         st.sidebar.caption(f"지금 보고 있는 **{resolved_name}** 한 종목만 임시로 확인합니다. "
                            f"여러 종목을 계속 관리하려면 위 '내 보유종목'에 등록하세요.")
@@ -2307,12 +2334,13 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
     _pk = str(target_ticker or '').replace('.', '_')
     user_entry_price = st.sidebar.number_input(
         "평균 매수가 (원)", min_value=0,
-        value=int(_reg.average_buy_price) if _reg else 0, step=1000,
+        value=int(_reg.average_buy_price) if _reg else _wl_paid, step=1000,
         key=f"sb_avg_{_pk}",
-        help="보유 중인 주당 평균 매수가 (0원 = 미보유) · 종목마다 따로 기억합니다")
+        help="보유 중인 주당 평균 매수가 (0원 = 미보유) · 종목마다 따로 "
+             "기억합니다 · 보유종목 → 관심종목 순으로 채웁니다")
     user_quantity = st.sidebar.number_input(
         "보유 수량 (주)", min_value=0,
-        value=int(_reg.quantity) if _reg else 0, step=10,
+        value=int(_reg.quantity) if _reg else _wl_qty, step=10,
         key=f"sb_qty_{_pk}",
         help="보유 중인 총 주식 수량 (0주 = 미보유)")
     if user_entry_price > 0 and user_quantity > 0 and _reg is None:
@@ -4468,12 +4496,29 @@ else:
     #: 저장하지 않는다 — 0 이나 빈 문자열을 값처럼 두지 않는다 (§3).
     _WL_PLAN_OPTS = ('미정',) + portfolio.WATCH_PLANS
 
-    _WL_COLS = [1.7, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9, 0.7, 1.2, 0.6]
+    #: 엔진 판단(`snap_bucket`) → 표에 넣을 짧은 말과 색 (라운드 166).
+    #: ⚠️ **새 판정을 만들지 않는다.** `verdict_core` 가 낸 bucket 을 짧게
+    #:   줄이기만 한다 — 화면이 자기 판단을 만들면 §4 위반이다.
+    _WL_BUCKET_TONE = {
+        '오늘 매수 가능': ('pos', '매수 가능'),
+        '눌림목 매수 대기': ('brand', '눌림목 대기'),
+        '돌파 후 매수 대기': ('brand', '돌파 대기'),
+        '과열 해소 대기': ('warn', '과열 대기'),
+        '거래량 회복 대기': ('warn', '거래량 대기'),
+        '시장 국면 회복 대기': ('warn', '국면 대기'),
+        '권장가 괴리 과다': ('warn', '괴리 과다'),
+        '신뢰도·표본 확보 대기': ('tx3', '표본 대기'),
+        '데이터 부족': ('tx3', '데이터 부족'),
+        '추천 제외': ('neg', '제외'),
+    }
+
+    _WL_COLS = [1.6, 0.85, 0.95, 0.95, 0.95, 0.95, 0.85, 1.0, 0.85, 0.65,
+                1.05, 0.55]
     _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
                                 '1차 목표(권장가)', '2차 목표(현재가)',
-                                '적정가', '적정가 신뢰도', '매입가',
-                                '수량', '내 계획', '')):
+                                '적정가', '적정가 신뢰도', '엔진 판단',
+                                '매입가', '수량', '내 계획', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -4519,7 +4564,12 @@ else:
                 _fcv = float(_fc)
             except (TypeError, ValueError):
                 _fcv = None
-            if _fcv is None:
+            # ⚠️ 라운드 166 — ETF 가 **'0 낮음'** 으로 나오고 있었다.
+            #   엔진은 적정가를 **산출하지 않았고**(status UNCALCULATED)
+            #   신뢰도 0.0 은 '못 쟀다'는 뜻인데, 화면이 그것을 **0점짜리
+            #   낮은 신뢰도**로 읽어 적었다 — 미산출을 값으로 만든 것이라
+            #   §3 위반이다. 적정가가 없으면 신뢰도도 없다.
+            if _w.get('snap_fair') in (None, '') or not _fcv:
                 _fct, _fcc = '—', _TOK['tx3']
             elif _fcv >= 70:
                 _fct, _fcc = f'{_fcv:.0f} 높음', _TOK['pos']
@@ -4531,18 +4581,31 @@ else:
                 f"<div style='padding-top:8px; font-size:13px; "
                 f"color:{_fcc};'>{_uk._esc(_fct)}</div>",
                 unsafe_allow_html=True)
-        # ── 사용자 입력 세 칸 ────────────────────────────────────
+        # ── 엔진 판단 (라운드 166) ───────────────────────────────
+        # 사용자 요청: *"내 계획이 아니라 실제로 너가 판단해서 해줘야지."*
+        # `verdict_core` 가 낸 bucket 을 그대로 짧게 적는다 — 화면이
+        # 새 판정을 만들지 않는다 (§4). 안 잰 종목은 '—' 다 (§3).
         with _wc[7]:
+            _bk = str(_w.get('snap_bucket') or '')
+            _tone, _short = _WL_BUCKET_TONE.get(_bk, ('tx3', _bk[:7]))
+            if not _bk:
+                _short, _tone = '아직 안 잼', 'tx3'
+            st.markdown(
+                f"<div style='padding-top:8px; font-size:13px; "
+                f"color:{_TOK[_tone]};' title='{_uk._esc_attr(_bk)}'>"
+                f"{_uk._esc(_short)}</div>", unsafe_allow_html=True)
+        # ── 사용자 입력 세 칸 ────────────────────────────────────
+        with _wc[8]:
             _pd = st.number_input(
                 "매입가", min_value=0.0, step=100.0,
                 value=float(_w.get('paid') or 0.0),
                 key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-        with _wc[8]:
+        with _wc[9]:
             _qt = st.number_input(
                 "수량", min_value=0, step=1,
                 value=int(_w.get('qty') or 0),
                 key=f"wl_qt_{_wcode}", label_visibility='collapsed')
-        with _wc[9]:
+        with _wc[10]:
             # ── 메모 대신 '내 계획' (라운드 164) ─────────────────────
             # 사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해
             # 보유 이렇게만 해줘."*
@@ -4561,7 +4624,7 @@ else:
                 key=f"wl_pl_{_wcode}", label_visibility='collapsed')
             # '미정'은 **적지 않음**이지 값이 아니다 — 빈 문자열로 둔다 (§3)
             _pl_val = _pl if _pl in portfolio.WATCH_PLANS else ''
-        with _wc[10]:
+        with _wc[11]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
                 st.rerun()
@@ -4608,12 +4671,93 @@ else:
         st.caption(f"엔진 값 기준일 {_snapd[0]}"
                    + (f" ~ {_snapd[-1]}" if _snapd[-1] != _snapd[0] else '')
                    + " — 종목 이름을 눌러 분석을 열면 그날 값으로 채워집니다.")
+    # ── 빈 칸을 지금 채운다 (라운드 166) ─────────────────────────────
+    # 사용자 지적: *"목표 매수가·1차목표·2차목표·적정가 없는 게 있어.
+    # 이거 넣어줘야지."*
+    #
+    # 종전에는 **그 종목을 열어야만** 채워졌다(라운드 141). 개장 전
+    # 리포트에 오르지 않는 종목은 영원히 비어 있었다 — 화신·남화토건·
+    # BGF리테일이 그랬다.
+    #
+    # ⚠️ 자동으로 돌리지 않는다. 한 종목 정밀분석이 1~3분이라 화면을
+    #   열 때마다 돌면 앱이 멈춘다(라운드 141 이 그래서 안 했다).
+    #   **버튼으로 사용자가 시작하고, 얼마나 걸리는지 미리 적는다.**
+    _fill_missing = [w for w in _wl_items()
+                     if not w.get('snap_at') or w.get('snap_buy') is None]
+    #: 한 번에 몇 개까지. 오래 걸린다는 사실을 숨기지 않고 나눠 돌린다.
+    _WL_FILL_MAX = 5
+    if _fill_missing:
+        _fm_names = ", ".join(str(w.get('name')) for w in _fill_missing[:8])
+        st.warning(
+            f"**엔진 값이 없는 종목 {len(_fill_missing)}개** — {_fm_names}"
+            + (f" 외 {len(_fill_missing) - 8}종목"
+               if len(_fill_missing) > 8 else '')
+            + f"  \n한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
+              f"**{_WL_FILL_MAX}종목씩** 채웁니다 — 없는 값을 지어내지 "
+              f"않고 실제로 계산합니다.")
+        _todo166 = _fill_missing[:_WL_FILL_MAX]
+        if st.button(f"{len(_todo166)}종목 지금 계산해서 채우기",
+                     key='wl_fill_now', type='primary'):
+            import verdict_core as _vc166
+            _bar166 = st.progress(0.0)
+            _msg166 = st.empty()
+            _done166, _fail166 = [], []
+            for _i166, _w166 in enumerate(_todo166):
+                _c166 = portfolio.normalize_code(_w166.get('code'))
+                _nm166 = str(_w166.get('name') or _c166)
+                _msg166.info(f"{_i166 + 1}/{len(_todo166)} · **{_nm166}** "
+                             f"계산 중…")
+                try:
+                    _sym166 = (f"{_c166}.KQ"
+                               if str(_w166.get('market') or '') == 'KOSDAQ'
+                               else f"{_c166}.KS")
+                    _snp166, _ = get_shared_snapshot(_sym166, t_ref_str,
+                                                     rho_cutoff)
+                    _fs166 = _snp166.get('four_scores') or {}
+                    _co166 = _vc166.build(_snp166)
+                    _vals166 = {
+                        'snap_buy': (_co166.get('pullback_zone')
+                                     or (_co166.get('buy_zone') or [None])[0]),
+                        'snap_t1': _co166.get('new_target'),
+                        'snap_t2': _fs166.get('target_tech_2nd'),
+                        'snap_fair': _fs166.get('displayed_fair_value'),
+                        'snap_fair_conf': _fs166.get('fair_value_confidence'),
+                        'snap_at': t_ref_str,
+                        'snap_engine': str(_VER_NOW.get('model') or ''),
+                        'snap_bucket': _co166.get('bucket'),
+                    }
+                    _done166.append((_c166, _vals166))
+                except Exception as _ex166:                    # noqa: BLE001
+                    # 실패를 통과로 적지 않는다 — 왜 못 냈는지 그대로 쓴다
+                    _fail166.append((_nm166,
+                                     f'{type(_ex166).__name__}: {_ex166}'[:90]))
+                _bar166.progress((_i166 + 1) / len(_todo166))
+            _by166 = dict(_done166)
+            _out166 = []
+            for _w166 in _wl_items():
+                _c166 = portfolio.normalize_code(_w166.get('code'))
+                _n166 = dict(_w166)
+                for _k166, _v166 in (_by166.get(_c166) or {}).items():
+                    if _v166 not in (None, ''):
+                        _n166[_k166] = _v166
+                _out166.append(_n166)
+            if _by166:
+                _wl_write(_out166)
+            _bar166.empty()
+            _msg166.empty()
+            if _fail166:
+                st.error("채우지 못한 종목 — 사유를 그대로 적습니다 (§3):  \n"
+                         + "  \n".join(f"· **{n}** — {r}" for n, r in _fail166))
+            if _by166:
+                st.success(f"{len(_by166)}종목을 채웠습니다 "
+                           f"(기준일 {t_ref_str}).")
+            st.rerun()
     if _stale:
         st.caption("아직 분석을 열지 않아 엔진 값이 없는 종목: "
                    + ", ".join(str(w.get('name')) for w in _stale[:8])
                    + (f" 외 {len(_stale) - 8}종목" if len(_stale) > 8 else '')
-                   + " — 이름을 누르면 채워집니다. 없는 값을 지어내지 "
-                     "않습니다.")
+                   + " — 위 버튼으로 채우거나, 이름을 누르면 채워집니다. "
+                     "없는 값을 지어내지 않습니다.")
 
     # ── 매입가·수량을 적었으면 평가손익을 **읽어만** 준다 ────────────
     # §9 — 평단가는 보유 판단에만. 점수·적정가·예측에 안 들어간다.
@@ -5085,6 +5229,7 @@ if _pm_today and _pm_today.get('picks'):
                             'fair_value_confidence'),
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
+                        'snap_bucket': _co142.get('bucket'),   # 라운드 166
                     }
                     _n142 = dict(_w142)
                     for _k, _v in _snap.items():
@@ -5360,12 +5505,15 @@ bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
 # 이라 쓰고 지어내지 않는다 (§3).
 _etf_nav = None
 _etf_is = None
+_etf_lt = None
 try:
     _etf_is = etf_registry.is_etf(target_ticker)
     if _etf_is:
         _etf_nav = etf_registry.nav_of(target_ticker)
+        # 룩스루 적정가 (라운드 167) — 사전등록 기준을 통과한 ETF 만 나온다
+        _etf_lt = etf_registry.lookthrough_of(target_ticker)
 except Exception:                                              # noqa: BLE001
-    _etf_is, _etf_nav = None, None       # 조회 하나 때문에 화면이 죽지 않는다
+    _etf_is, _etf_nav, _etf_lt = None, None, None
 
 _etf_tile_html = ""
 if _etf_is:
@@ -5505,6 +5653,39 @@ if _etf_is:
                f"<p style='margin:9px 0 0 0; font-size:12px; "
                f"color:{_TOK['warn']};'>NAV 미수신 — 네이버 ETF 목록 응답이 "
                f"없습니다. 값을 지어내지 않고 비워 둡니다.</p>")
+            # ── 룩스루 적정가 (라운드 167) ─────────────────────────
+            # 사용자 요청: *"ETF 도 그 내부의 주식이 어떻게 형성되어
+            # 있는지 해서 펀더멘털 적정가를 내주는 방법을 찾자."*
+            # 구성종목의 적정가를 비중으로 가중해 낸다. 배수·좌수가 식에
+            # 없다 — 못 아는 값을 안 쓴다.
+            # ⚠️ 표시 전용이고, **잰 날**을 반드시 함께 적는다.
+            # ⚠️ 비율(`ratio`)만 산출물에서 가져오고 **NAV 는 화면이 방금
+            #   받은 것**을 쓴다. 산출물의 NAV 는 잰 날의 값이라, 그대로
+            #   적으면 바로 위 NAV 타일과 **다른 숫자 두 개**가 한 화면에
+            #   나온다 (§4 가 금지한 그 모양 — 실제로 107,601 vs 110,197
+            #   로 나왔다). 비율은 배수라 오늘 NAV 에 곱하면 된다.
+            + ("" if not (_etf_lt and (_etf_nav or {}).get('nav')) else
+               f"<div style='margin-top:11px; padding:10px 12px; "
+               f"background:{_TOK['hover']}; border-radius:8px; "
+               f"font-size:12px; line-height:1.6; color:{_TOK['tx2']};'>"
+               f"<b style='color:{_TOK['tx1']};'>담은 기업들의 가치로 보면</b>"
+               f" — 구성종목 {_etf_lt['holdings']}개의 펀더멘털 적정가를 "
+               f"비중으로 가중하면 오늘 NAV 의 "
+               f"<b>{_etf_lt['ratio']:.3f}배</b>인 "
+               f"<b>{_etf_nav['nav'] * _etf_lt['ratio']:,.0f}원</b>입니다. "
+               f"평가 가능한 비중 {_etf_lt['valued_pct']:.1f}%"
+               + (f" · 값을 못 낸 몫 {_etf_lt['other_pct']:.1f}% 는 "
+                  f"<b>1.0 으로 두었습니다</b>(가치 판단을 하지 않는다는 뜻)"
+                  if _etf_lt['other_pct'] else '')
+               + f" · <span style='color:{_TOK['tx3']};'>배수는 "
+                 f"{_uk._esc(str(_etf_lt.get('made')))} 에 잰 것이고 "
+                 f"NAV 는 방금 받은 값입니다</span>"
+               f"<br><span style='color:{_TOK['tx3']};'>"
+               f"<b>표시 전용입니다.</b> 이 값이 실제 성과를 가르는지는 "
+               f"<b>재지 않았습니다</b> — 원장에 ETF 가 없어 검증할 표본이 "
+               f"없습니다. 점수·게이트·추천에 들어가지 않습니다. "
+               f"구성종목은 정기변경으로 바뀌고, 구성종목 적정가도 매일 "
+               f"바뀝니다.</span></div>")
             + f"<p style='margin:9px 0 0 0; font-size:12px; "
               f"color:{_TOK['tx3']};'>아래 진입가·손절·목표는 <b>가격과 "
               f"변동성만으로</b> 정해지므로 ETF 에도 그대로 성립합니다. "
@@ -5564,6 +5745,9 @@ try:
             'snap_px': realtime_price,
             'snap_at': datetime.date.today().isoformat(),
             'snap_engine': str(_VER_NOW.get('model') or ''),
+            # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
+            # 그대로 담는다 (§4). 사용자의 '내 계획'과는 다른 칸이다.
+            'snap_bucket': CORE.get('bucket'),
         }
         _cw141 = portfolio.normalize_code(target_ticker)
         _items141, _dirty141 = [], False
@@ -5661,11 +5845,26 @@ if rec_buy_val is not None:
                 _rec_blocked = True
                 rec_buy_display = (f"{rec_buy_val:,.0f}원 "
                                    f"(가격 조건만 · 매수 신호 아님)")
+                # ⚠️ 라운드 166 — 이 문장이 **게이트가 안 쓰는 숫자**를
+                #   근거로 대고 있었다. 게이트는 `buy_entry_max`(안전마진선)
+                #   와 비교하는데 문장은 `적정가`와의 괴리를 적었고, 그래서
+                #   다날에서 *"적정가 5,184원보다 −6.2% 비싸서"* 라는
+                #   **자기모순**이 나왔다 (−6.2% 는 싸다는 뜻이다).
+                #   실측: 적정가 5,184 · 안전마진선 4,147 · 진입 4,863 →
+                #   4,863÷4,147 = 1.173 이라 막힌다. 문장이 그 값을 댄다.
+                _over_floor = (float(_core_entry) / float(_floor_fv) - 1.0) * 100
                 rec_buy_sub = (
                     f"<b>여기까지 내려와도 아직은 못 삽니다.</b> "
-                    f"적정가 {_fair:,.0f}원보다 {_gap_fv:+.1f}% 비싸서 "
-                    f"규칙이 막고 있습니다.")
+                    f"규칙이 보는 선은 <b>안전마진선 "
+                    f"{float(_floor_fv):,.0f}원</b>인데 이 값이 그보다 "
+                    f"{_over_floor:+.1f}% 위입니다.")
                 rec_buy_more = (
+                    f"<b>세 값의 관계</b> — 적정가 <b>{_fair:,.0f}원</b> → "
+                    f"안전마진선 <b>{float(_floor_fv):,.0f}원</b>(적정가에서 "
+                    f"안전마진을 뺀 자리) → 지금 이 값 "
+                    f"<b>{rec_buy_val:,.0f}원</b>. 규칙은 "
+                    f"<b>가운데 값</b>과 견줍니다."
+                    f"<br><br>"
                     f"<b>언제 살 수 있게 되나</b> — 둘 중 하나가 일어나야 "
                     f"합니다.<br>"
                     f"① 값이 <b>{float(_floor_fv):,.0f}원</b> 부근까지 더 "
