@@ -1,0 +1,59 @@
+{
+ "made": "2026-08-24",
+ "prereg": "docs/PREREG_R170_DERIVED_WEIGHTS.md",
+ "r1_median": 0.001904,
+ "r2_p95": 0.020274,
+ "r1_pass": true,
+ "r2_pass": false,
+ "r3_pass": true,
+ "r4_pass": false,
+ "controls": 409,
+ "candidates": 8,
+ "opened": 6,
+ "opened_detail": {
+  "0184E0": {
+   "name": "1Q 200채권혼합50액티브",
+   "valued_pct": 93.21,
+   "ratio": 1.1493,
+   "nav": 10893.0,
+   "holdings": 180
+  },
+  "0192S0": {
+   "name": "SOL 코스피200채권혼합50",
+   "valued_pct": 92.18,
+   "ratio": 1.1514,
+   "nav": 9366.0,
+   "holdings": 190
+  },
+  "0203D0": {
+   "name": "PLUS 200위클리커버드콜채권혼합",
+   "valued_pct": 92.64,
+   "ratio": 1.1522,
+   "nav": 8946.0,
+   "holdings": 191
+  },
+  "183700": {
+   "name": "RISE 200채권혼합50",
+   "valued_pct": 92.55,
+   "ratio": 1.1479,
+   "nav": 95101.0,
+   "holdings": 205
+  },
+  "183710": {
+   "name": "RISE 주식혼합",
+   "valued_pct": 92.51,
+   "ratio": 1.1428,
+   "nav": 91454.0,
+   "holdings": 206
+  },
+  "284430": {
+   "name": "KODEX 200미국채혼합50",
+   "valued_pct": 92.83,
+   "ratio": 1.1519,
+   "nav": 20741.0,
+   "holdings": 203
+  }
+ },
+ "verdict": "기각",
+ "note": "측정 전용. 해외·채권 ETF 577종목은 이 방법으로도 안 된다 — 구성종목 가격·적정가가 우리에게 없다. 통과해도 원장에 ETF 가 없어 쓸모는 못 잰다(표시 전용)."
+}

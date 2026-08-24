@@ -15301,19 +15301,47 @@ for _raw202, _exp202 in (('0040Y0.KS', '0040Y0'), ('0040y0', '0040Y0'),
 _ren202 = _render(ticker='069500')
 check("렌더 프로브가 실제로 돌았다 (못 돌면 통과시키지 않는다)",
       _render_ok(_ren202), str(_ren202)[:120])
-# ⚠️ 이 판별이 **있을 때 잡는지**는 확인했다: 임시 사본에 한 글자를 심으면
-#   `["recent_stocks.json"]` 을 돌려준다 (`_probe/touched_plant.py`).
-#   그리고 실제로 한 번 잡았다 — 고치기 전 사용자 목록에 회귀의 테스트
-#   종목(SK하이닉스·다날·CJ ENM)이 그 시각으로 쌓여 있었다.
-check("렌더가 사용자 자료를 바꾸지 않는다 (§9)",
+# ⚠️ 라운드 170 — 이 검사가 **파일 수정시각**으로 재다가 한 번 틀리게
+#   실패했다. 파일은 정말 바뀌었는데 범인은 렌더가 아니라 **사용자가
+#   열어 둔 streamlit 서버**였다(서버를 끄고 다시 재니 0건).
+#   잰 것은 맞고 **원인 지목이 틀렸다** — 남의 프로세스를 우리 탓으로 적었다.
+#   이제 프로브가 **우리 코드가 저장 함수를 불렀는지**를 직접 센다.
+#   파일 상태가 아니라 우리 행동을 재므로 남의 프로세스에 안 흔들린다.
+check("렌더가 사용자 자료를 바꾸지 않는다 (§9 · 저장 호출로 잰다)",
       _ren202.get('touched') == [],
-      f"{_ren202.get('touched')} — 검사가 관심종목·최근 목록을 건드렸다")
+      f"{_ren202.get('touched')} — 렌더가 이 저장 함수를 불렀다")
+check("계측이 실제로 걸렸다 (None 이면 못 잰 것이지 통과가 아니다)",
+      _ren202.get('touched') is not None,
+      'portfolio 저장 함수에 계측을 못 걸었다')
+# 심어서 확인 — 같은 방식으로 감싼 뒤 **임시 경로**에 저장하면 잡히는가.
+# 사용자 자료는 건드리지 않는다 (`_probe/touched_plant2.py` 와 같은 방식).
+_plantw202 = []
+try:
+    import portfolio as _pfw202
+    import tempfile as _tf202
+    _origw202 = _pfw202.save_watchlist
+
+    def _wrapw202(*_a, **_k):
+        _plantw202.append('save_watchlist')
+        return _origw202(*_a, **_k)
+    _pfw202.save_watchlist = _wrapw202
+    _tmpw202 = _os.path.join(_tf202.gettempdir(), '_r202_plant.json')
+    _pfw202.save_watchlist([{'code': '005930', 'name': 'X'}], path=_tmpw202)
+    _pfw202.save_watchlist = _origw202
+    try:
+        _os.remove(_tmpw202)
+    except OSError:
+        pass
+except Exception as _exw202:                                   # noqa: BLE001
+    _plantw202 = [f'설치 실패: {_exw202}'[:50]]
+check("저장 계측이 있을 때는 실제로 잡는다 (심어서 확인)",
+      _plantw202 == ['save_watchlist'], str(_plantw202))
 check("검사가 실제로 사용자 파일을 지켜봤다 (0건이 미측정이 아니다)",
       _ren202.get('touched') is not None
       and any(v is not None for v in _USER_FILES_T0.values()),
       f'{ {k: (v is not None) for k, v in _USER_FILES_T0.items()} }')
-# 참고 — 회귀 전체 구간에서 바뀐 것 (사용자가 앱을 열어 뒀을 수도 있어
-# 판정에는 쓰지 않는다. 그래도 눈에는 보이게 적는다.)
+# 참고 — 회귀 전체 구간에서 바뀐 것. **판정에 쓰지 않는다**: 사용자가
+# 앱을 열어 두면 그것만으로 바뀐다(라운드 170 에서 실제로 그랬다).
 _moved202 = [k for k, v in _USER_FILES_T0.items()
              if v != (_os.stat(_os.path.join(PROJ, '.portfolio', k)).st_mtime
                       if _os.path.exists(_os.path.join(PROJ, '.portfolio', k))
@@ -15676,6 +15704,92 @@ for _k204 in ('snap_hold_trim', 'snap_hold_stop'):
           f"'{_k204}': CORE.get(" in _wa204
           or f"'{_k204}': _co" in _wa204,
           '엔진 값을 그대로 담아야 한다 (§4)')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §205 — ETF 룩스루의 천장 · 유도 비중 기각 (라운드 170)
+#
+#   사용자가 두 번째로 물었다 — *"ETF 의 펀더멘털 적정가 내주는 방법을
+#   찾자. 우리만의 방식으로 연구하고 기준이랑 다 검토해주고."*
+#
+#   전수로 재서 천장이 어디인지 밝혔고, 넓히려던 방법(비중 유도)은
+#   **사전등록 기준 미달로 기각**했다. 이 절이 지키는 것:
+#     ⓐ 기각한 것이 조용히 채택되지 않는다
+#     ⓑ 기준을 나중에 내리지 않는다 (사전등록 값이 산출물에 박제됨)
+#     ⓒ 천장이 어디인지 잰 산출물이 있다
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§205 ETF 룩스루 천장 · 유도 비중 기각 (라운드 170)")
+print("=" * 72)
+
+_tax205 = _os.path.join(PROJ, 'data', 'etf_taxonomy_r170.json')
+_gap205 = _os.path.join(PROJ, 'data', 'etf_gap_audit_r170.json')
+_der205 = _os.path.join(PROJ, 'data', 'etf_derived_weights_r170.json')
+for _p205, _n205 in ((_tax205, '전수 분류'), (_gap205, '천장 진단'),
+                     (_der205, '유도 비중')):
+    check(f"{_n205} 산출물이 있다 ({_os.path.basename(_p205)})",
+          _os.path.exists(_p205))
+
+if _os.path.exists(_tax205):
+    with open(_tax205, encoding='utf-8') as _f205:
+        _td205 = _json.load(_f205)
+    check("ETF 를 전수로 갈랐다 (1,000개 이상)",
+          (_td205.get('total') or 0) >= 1000, f"{_td205.get('total'):,}개")
+    check("세 덩어리 수가 합계와 맞는다 (자기검사)",
+          (_td205.get('passed', 0) + _td205.get('no_weight', 0)
+           + _td205.get('weight_but_failed', 0)) == _td205.get('total'),
+          f"{_td205.get('passed')} + {_td205.get('no_weight')} + "
+          f"{_td205.get('weight_but_failed')} vs {_td205.get('total')}")
+
+if _os.path.exists(_gap205):
+    with open(_gap205, encoding='utf-8') as _f205:
+        _gd205 = _json.load(_f205)
+    check("천장 진단이 구성종목을 실제로 셌다 (0건이 미측정이 아니다)",
+          (_gd205.get('constituents_checked') or 0) > 500,
+          f"{_gd205.get('constituents_checked'):,}종목")
+    # 막는 사유가 **우리 모델의 거부**임을 산출물이 들고 있어야 한다
+    _why205 = ' '.join(str(k) for k in (_gd205.get('reasons') or {}))
+    check("막는 사유가 산출물에 그대로 적혀 있다",
+          '멀티플 모델 적용 범위 밖' in _why205,
+          '천장은 ETF 자료가 아니라 단일종목 적정가 모델이다')
+
+if _os.path.exists(_der205):
+    with open(_der205, encoding='utf-8') as _f205:
+        _dd205 = _json.load(_f205)
+    # ⓐ 기각이 기각으로 남아 있는가
+    check("유도 비중은 **기각**으로 남아 있다",
+          _dd205.get('verdict') == '기각',
+          f"{_dd205.get('verdict')} — 채택하려면 새 사전등록이다")
+    # ⓑ 사전등록 문턱이 스크립트에 그대로 있는가 (나중에 내리지 않는다)
+    _ds205 = _read148(_os.path.join(PROJ, 'scripts',
+                                    'etf_derived_weights_r170.py'))
+    for _lit205 in ('R1_MEDIAN = 0.005', 'R2_P95 = 0.02',
+                    'R4_MIN_TARGETS = 10'):
+        check(f"사전등록 문턱이 그대로다 ({_lit205})", _lit205 in _ds205,
+              '결과를 본 뒤에 문턱을 내리지 않는다 (§2)')
+    # ⓒ 실제로 미달이었다는 사실이 산출물에 남아 있는가
+    check("R2 가 미달이었음이 산출물에 남아 있다",
+          _dd205.get('r2_pass') is False
+          and (_dd205.get('r2_p95') or 0) > 0.02,
+          f"95분위 {_dd205.get('r2_p95')} — 0.02027 은 '사실상 통과'가 "
+          f"아니다")
+    check("R4 도 미달이었다", _dd205.get('r4_pass') is False,
+          f"열린 ETF {_dd205.get('opened')}개")
+
+# ⓓ 기각한 방법이 화면·계산부에 새어 들어가지 않았는가
+_wa205 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+_er205 = '\n'.join(ln for _i, ln in _la16.code_lines('etf_registry.py'))
+for _f205, _s205 in (('web_app.py', _wa205), ('etf_registry.py', _er205)):
+    check(f"{_f205} 이 유도 비중을 쓰지 않는다 (기각한 방법)",
+          'derived_weight' not in _s205 and 'weights_der' not in _s205,
+          '기각한 것이 조용히 들어가면 사전등록이 무의미해진다')
+
+# ⓔ 룩스루는 여전히 표시 전용인가 (라운드 167 이 못 박은 것)
+check("룩스루가 계산부에 없다 (표시 전용 유지)",
+      'lookthrough' not in
+      '\n'.join(ln for _i, ln in _la16.code_lines('quant_indicators.py'))
+      and 'lookthrough' not in
+      '\n'.join(ln for _i, ln in _la16.code_lines('verdict_core.py')))
 
 
 print()
