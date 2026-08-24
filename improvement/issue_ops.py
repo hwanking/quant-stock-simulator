@@ -352,7 +352,25 @@ def escalate(conn: sqlite3.Connection) -> list:
 
 
 def issue_view(conn: sqlite3.Connection, limit: int = 20) -> list:
-    """화면용 — 조치 정보까지 포함한 이슈 목록 (경과일 계산 포함)."""
+    """화면용 — 조치 정보까지 포함한 이슈 목록 (경과일 계산 포함).
+
+    ⚠️ 라운드 172 — **화면이 원장과 다른 말을 하고 있었다.** 해결된 이슈
+       3건이 전부 진행 중처럼 나왔고, 그중 하나는 *"장기 개선 과제 ·
+       20일 경과 · **즉시 수정 가능** · 다음 점검 2026-08-15"* 였다 —
+       그 날짜는 **10일 지난 날**이다. 회귀는 초록불이었다.
+
+       원인은 **닫는 길이 넷인데 하나만 `work_status` 를 같이 고쳤다**는
+       것이다(`resolve_with_verification` 만). 나머지 셋
+       (`issue_tracker.resolve_issue` · `resolve_by_key` ·
+       `scripts/close_issue_mfe.py`)은 `status` 만 바꾼다.
+
+       → **쓰는 쪽을 넷 다 고치지 않는다.** 읽는 쪽이 `status` 를 먼저
+         보게 한다 — 그러면 앞으로 어느 길로 닫혀도 화면이 안 어긋난다.
+         (호출부 말고 기본값을 바꾼다 — 라운드 120e 와 같은 자리.)
+
+       여기서 **화면 문구까지 만들어 돌려준다.** 화면이 조립하면 조립
+       규칙이 또 두 곳에 생긴다 (§4).
+    """
     rows = conn.execute(
         """
         SELECT * FROM improvement_issues
@@ -374,8 +392,58 @@ def issue_view(conn: sqlite3.Connection, limit: int = 20) -> list:
         d['stale'] = (age >= 3 and (r['status'] == 'open')
                       and not (r['work_status'] or '').startswith(
                           (ST_BLOCKED, ST_LONGTERM, ST_DONE)))
+        d.update(_display_fields(d, age))
         out.append(d)
     return out
+
+
+def _display_fields(d: dict, age: int) -> dict:
+    """화면이 그대로 찍을 문구. **`status` 가 우선이다** (라운드 172).
+
+    돌려주는 것 넷:
+      `state_label`  배지 — 해결분은 무조건 '해결 완료'
+      `age_label`    '20일 경과' / '18일 만에 해결'
+      `fix_label`    '즉시 수정 가능' 류. 해결분은 `None` (붙이지 않는다)
+      `review_label` '다음 점검 …' / '점검 예정일 … · N일 지남'.
+                     해결분은 `None`
+    """
+    resolved = str(d.get('status') or '') == 'resolved'
+    ws = str(d.get('work_status') or '') or ST_CHECKING
+
+    if resolved:
+        # 해결까지 **얼마나 걸렸나** — 지금도 자라는 경과일이 아니다.
+        took = None
+        try:
+            took = (datetime.fromisoformat(str(d['resolved_at'])).date()
+                    - datetime.fromisoformat(str(d['created_at'])).date()).days
+        except Exception:                                      # noqa: BLE001
+            took = None
+        return {
+            'state_label': ST_DONE,
+            'age_label': (f'{took}일 만에 해결' if took is not None
+                          else '해결 완료'),
+            'fix_label': None,
+            'review_label': None,
+        }
+
+    # 아직 열려 있다 — 점검일이 지났으면 **지났다고 적는다** (§3)
+    raw = str(d.get('next_review') or d.get('eta') or '')[:10]
+    review = None
+    if raw:
+        try:
+            due = datetime.fromisoformat(raw).date()
+            late = (_today() - due).days
+            review = (f'점검 예정일 {raw} · {late}일 지남' if late > 0
+                      else f'다음 점검 {raw}')
+        except Exception:                                      # noqa: BLE001
+            review = f'다음 점검 {raw}'
+    return {
+        'state_label': ws,
+        'age_label': f'{age}일 경과',
+        'fix_label': ('즉시 수정 가능' if d.get('fixable_now')
+                      else '지금은 즉시 해결 불가'),
+        'review_label': review,
+    }
 
 
 def resolve_with_verification(conn: sqlite3.Connection, issue_key: str, *,
