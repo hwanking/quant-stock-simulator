@@ -13258,9 +13258,30 @@ _w184 = _read148(_os.path.join(PROJ, 'web_app.py'))
 _pf184 = _read148(_os.path.join(PROJ, 'portfolio.py'))
 
 # ⓐ 기준이 다른 두 목표를 **열 이름에 적었는가** (§4)
+#
+# ⚠️ 라운드 171 — 이 검사가 실제로 걸렸다. 손익 칸을 넣느라 두 목표를 한
+#   칸으로 묶으면서 기준을 **제목 속성(hover)** 으로 옮겼는데, 마우스를
+#   올려야 보이는 것은 적은 게 아니다. 열 이름으로 되돌렸다.
+#   그러면서 검사도 고쳤다 — 종전에는 파일 어딘가에 그 **문자열이 있으면**
+#   통과였다(주석에 적어 두기만 해도 통과한다). 이제 **관심종목 머리글
+#   묶음 안에** 두 기준이 다 들어 있는지 AST 로 본다.
+_hdr184 = []
+for _n184 in _ast165.walk(_ast165.parse(
+        '\n'.join(ln for _i184, ln in _la135.code_lines('web_app.py')))):
+    if (isinstance(_n184, _ast165.Call)
+            and getattr(_n184.func, 'id', '') == 'zip' and len(_n184.args) == 2
+            and getattr(_n184.args[0], 'id', '') == '_wl_hdr'):
+        for _e184 in getattr(_n184.args[1], 'elts', []):
+            _hdr184.append(_ast165.unparse(_e184))
+_hj184 = ' | '.join(_hdr184)
+check("관심종목 머리글을 코드에서 읽었다 (0개면 미측정)",
+      len(_hdr184) >= 8, f'{len(_hdr184)}개')
 check("1차·2차 목표의 **기준을 열 이름에 적었다**",
-      "'1차 목표(권장가)'" in _w184 and "'2차 목표(현재가)'" in _w184,
-      '기준을 안 적으면 신규/보유 값이 섞인다')
+      '1차 목표(권장가)' in _hj184 and '2차 목표(현재가)' in _hj184,
+      f'기준을 안 적으면 신규/보유 값이 섞인다 — 머리글: {_hj184[:120]}')
+# 심어서 잡히는지 — 기준을 뺀 머리글은 실제로 걸려야 한다 (§6)
+check("기준 없는 머리글을 심으면 잡는다",
+      not ('1차 목표(권장가)' in '종목 | 현재가 | 1·2차 목표 | 적정가'))
 check("1차는 CORE 의 신규 매수자 값에서 온다",
       "'snap_t1': CORE.get('new_target')" in _w184)
 check("2차는 보유자 기준값임을 코드가 밝힌다",
@@ -15091,6 +15112,50 @@ check("원격 접속에서는 최근 목록을 파일에 안 쓴다 (§9)",
       'is_remote_exposed()' in _wa201.split('push_search_history')[-1][:400])
 check("관심종목에 '엔진 판단' 칸이 있다 (메모·내 계획 자리를 대신한다)",
       "'엔진 판단'" in _wa201 and 'watch_action' in _wa201)
+# ── 라운드 171 — 사용자 요청 두 칸 ────────────────────────────────────
+#   *"현재 구매한 거랑 몇 프로 밑인지 위인지도 항목 넣어주고,
+#     총 매입수량도 넣어주고."*
+check("관심종목에 '매입가 대비 · 평가손익' 칸이 있다",
+      "'매입가 대비 · 평가손익'" in _wa201)
+check("총 매입금액·총 매입수량을 포트폴리오 견해에 낸다",
+      "'총 매입금액'" in _wa201 and '_pf_qty' in _wa201)
+# ⚠️ 라운드 171 — **칸을 더하기만 하면 표가 죽는다.** 손익 두 칸을 그냥
+#   붙였더니 13칸이 되어 폭 996px 을 나눠 쓰다가 매입가 입력이 `4760.(`
+#   로 잘리고 '빼기' 가 두 줄로 접혔다 (브라우저 실측 — 매입가 칸 56px).
+#   **회귀는 그때도 초록불이었다.** 그래서 칸 수에 상한을 건다.
+#   폭 996px · 칸 사이 16px 이므로 10칸이면 한 칸 평균 85px 이고,
+#   그 아래로 내려가면 number_input 이 값을 자른다.
+import ast as _ast201                                            # noqa: E402
+_tree201 = _ast201.parse(_wa201)
+_WLC201 = [n for n in _ast201.walk(_tree201)
+           if isinstance(n, _ast201.Assign)
+           and any(getattr(t, 'id', '') == '_WL_COLS' for t in n.targets)]
+check("관심종목 표의 칸 수를 코드에서 셀 수 있다", len(_WLC201) == 1,
+      f'_WL_COLS 대입 {len(_WLC201)}건')
+_wln201 = len(getattr(_WLC201[0].value, 'elts', [])) if _WLC201 else 0
+check("관심종목 표는 10칸을 넘지 않는다 (넘으면 입력값이 잘린다)",
+      0 < _wln201 <= 10, f'{_wln201}칸')
+# 머리글과 칸이 어긋나면 zip 이 **조용히 잘라 먹는다** — 예외가 안 난다.
+_hdr201 = [len(a.args[1].elts) for a in _ast201.walk(_tree201)
+           if isinstance(a, _ast201.Call)
+           and getattr(a.func, 'id', '') == 'zip' and len(a.args) == 2
+           and getattr(a.args[0], 'id', '') == '_wl_hdr'
+           and isinstance(a.args[1], (_ast201.Tuple, _ast201.List))]
+check("머리글 수가 칸 수와 같다 (zip 이 말없이 자르지 않게)",
+      _hdr201 == [_wln201], f'머리글 {_hdr201} vs 칸 {_wln201}')
+# 칸을 묶었으니 **묶인 값이 다 살아 있는지**를 본다 — 폭을 줄이려고
+# 값을 지우면 그건 결함이다 (§3).
+check("칸을 묶어도 값은 다 남는다 (1차·2차·적정가·신뢰도·손익)",
+      all(k in _wa201 for k in ("snap_t1", "snap_t2", "snap_fair",
+                                "snap_fair_conf", "_ret_w", "_pl_w")))
+# ⚠️ 손익률은 **방금 입력된 값**으로 세야 한다. 저장본으로 세면 방금
+#   고친 매입가가 한 판 늦게 반영돼 화면이 스스로 어긋난다 (§4).
+check("손익률을 방금 입력된 매입가·수량으로 센다 (저장본이 아니라)",
+      '_px_w / float(_pd) - 1.0' in _wa201
+      and "(_px_w - float(_pd)) * float(_qt)" in _wa201,
+      '저장본으로 세면 한 판 늦게 반영된다')
+check("한국 관행 색을 쓴다 (오르면 빨강 · 내리면 파랑 · §5)",
+      "_TOK['up'] if _ret_w >= 0 else _TOK['down']" in _wa201)
 check("관심종목에서 자유 메모 입력칸은 없앴다",
       'wl_mm_' not in _wa201, '옛 입력칸이 남아 있으면 값이 두 곳에서 온다 (§4)')
 # ⚠️ `if '(' in name` 이 이름에 괄호가 든 종목을 통째로 걸렀다
@@ -15790,6 +15855,44 @@ check("룩스루가 계산부에 없다 (표시 전용 유지)",
       '\n'.join(ln for _i, ln in _la16.code_lines('quant_indicators.py'))
       and 'lookthrough' not in
       '\n'.join(ln for _i, ln in _la16.code_lines('verdict_core.py')))
+
+# ⓕ 못 내는 ETF 가 **왜 못 내는지** 말하는가 (라운드 171)
+#
+#   ⚠️ 라운드 170 은 1,161종목을 전수로 갈라 사유를 문서에 적었는데
+#     **화면은 아무 말도 안 하고 있었다.** 값이 없을 때 조용하면
+#     "적정가가 없다"와 "우리가 못 낸다"가 같은 모양이 된다 — §3 이
+#     반드시 가르라고 한 두 문장이다.
+check("못 내는 ETF 의 사유를 내는 함수가 있다",
+      'def lookthrough_gap' in _er205)
+check("화면이 그 사유를 부른다", 'lookthrough_gap' in _wa205)
+check("사유를 화면에서 새로 짓지 않는다 (산출물을 읽는다)",
+      'etf_taxonomy_r170' in _er205 and 'etf_taxonomy_r170' not in _wa205)
+import etf_registry as _er171                                    # noqa: E402
+_idx171 = _er171.index() or {}
+check("ETF 색인을 읽었다 (0개면 미측정)", len(_idx171) >= 1000,
+      f'{len(_idx171):,}종목')
+# **전수로** 훑어 사유가 빈 ETF 가 없는지 본다 — 한 종목이라도 조용하면
+# 그 화면이 §3 을 어긴다.
+_blank171 = [c for c in _idx171
+             if not _er171.lookthrough_of(c) and not _er171.lookthrough_gap(c)]
+check("사유를 못 내는 ETF 가 하나도 없다 (전수)",
+      not _blank171, f'{len(_blank171)}건 — {_blank171[:5]}')
+# 사유가 **갈려** 있는가 — 하나로 뭉뚱그리면 "왜"를 말한 게 아니다
+_why171 = {}
+for _c171 in _idx171:
+    _g171 = _er171.lookthrough_gap(_c171)
+    if _g171:
+        _why171[str(_g171['why'])[:24]] = _why171.get(
+            str(_g171['why'])[:24], 0) + 1
+check("사유가 여러 갈래로 갈려 있다 (뭉뚱그리지 않는다)",
+      len(_why171) >= 6, f'{len(_why171)}갈래')
+# 낼 수 있는 ETF 에는 사유를 붙이지 않는다 (두 말이 한 화면에 나오면 모순)
+_ok171 = [c for c in _idx171 if _er171.lookthrough_of(c)]
+check("룩스루가 되는 ETF 를 실제로 봤다 (0개면 미측정)", len(_ok171) >= 100,
+      f'{len(_ok171)}종목')
+check("낼 수 있는 ETF 에는 사유가 안 붙는다",
+      not [c for c in _ok171 if _er171.lookthrough_gap(c)],
+      '값과 사유가 같이 나오면 화면이 자기모순이다 (§4)')
 
 
 print()

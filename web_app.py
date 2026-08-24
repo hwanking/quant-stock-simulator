@@ -4499,12 +4499,35 @@ else:
     #   판단은 `_uk.watch_action()` **한 곳**에서만 나온다 (§4) — 화면이
     #   자기 판정을 짓지 않고, 엔진이 발표한 가격선을 다시 말할 뿐이다.
 
-    _WL_COLS = [1.6, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 1.4, 0.9, 0.7, 0.55]
+    # ⚠️ 라운드 171 — 사용자 요청: *"현재 구매한 거랑 몇 프로 밑인지 위인지도
+    #   항목 넣어주고, 총 매입수량도 넣어주고."*
+    #   손익률·평가금액은 **산수**다 (현재가·매입가·수량만 쓴다). 점수·
+    #   적정가·판정에 들어가지 않는다 (§9 — 평단가는 보유 판단에만).
+    #
+    # ⚠️ 칸을 **더하기만 하면 표가 죽는다.** 손익 두 칸을 그냥 붙였더니
+    #   13칸이 되어 폭 996px 을 나눠 쓰다가 매입가 입력이 `4760.(` 로
+    #   잘렸고 '빼기' 버튼이 두 줄로 접혔다 (브라우저 실측 —
+    #   매입가 칸 56px · 수량 35px · 빼기 27px). 회귀는 초록불이었다.
+    #   그래서 **셋을 묶어 10칸으로 줄였다** — 같이 봐야 뜻이 서는 것끼리:
+    #     · 적정가 + 신뢰도 (라운드 143 이 "같이 다녀야 한다"고 적은 그것)
+    #     · 1차 목표 + 2차 목표
+    #     · 매입가 대비 % + 평가손익 + 매입금액
+    #   폭은 브라우저에서 재서 맞췄다 (실측 — 표 996px · 칸 사이 16px).
+    #   버튼은 좌우 여백이 **20px 씩 고정**이라 61px 칸에서도 '빼기' 가
+    #   두 줄로 접혔다 (61 − 40 = 21px < 글자 30px). 81px 로 넓혀 닫았다.
+    _WL_COLS = [1.35, 0.85, 0.9, 1.1, 1.0, 1.2, 1.2, 0.75, 1.15, 1.0]
+    #
+    # ⚠️ 두 목표의 **기준은 열 이름에 남긴다** (§4 · §184). 라운드 30 에서
+    #   신규 매수자 값과 보유자 값이 섞여 손절이 진입 위로 나갔다. 칸을
+    #   묶느라 기준을 제목 속성(hover)으로 옮겼다가 회귀에 걸렸고,
+    #   **그 지적이 옳다** — 마우스를 올려야 보이는 것은 적은 게 아니다.
+    #   묶은 열 이름에 둘 다 적는다. **글자 그대로** 적는다 — 상수로 빼면
+    #   검사가 열 이름을 읽을 때 이름만 보이고 값이 안 보인다.
     _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
-                                '1차 목표(권장가)', '2차 목표(현재가)',
-                                '적정가', '적정가 신뢰도', '엔진 판단',
-                                '매입가', '수량', '')):
+                                '1차 목표(권장가) · 2차 목표(현재가)',
+                                '적정가', '엔진 판단', '매입가', '수량',
+                                '매입가 대비 · 평가손익', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -4535,19 +4558,31 @@ else:
                 f"<div style='padding-top:8px; font-size:13px;'>"
                 f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
                 unsafe_allow_html=True)
-        # ── 엔진 값 네 칸 — 읽기 전용 ────────────────────────────
-        for _ci, _key in enumerate(('snap_buy', 'snap_t1', 'snap_t2',
-                                    'snap_fair'), start=2):
-            with _wc[_ci]:
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx2']};'>{_wl_cell(_w.get(_key))}</div>",
-                    unsafe_allow_html=True)
-        # ── 적정가 신뢰도 (라운드 143) ───────────────────────────
+        # ── 목표 매수가 — 읽기 전용 ─────────────────────────────
+        with _wc[2]:
+            st.markdown(
+                f"<div style='padding-top:8px; font-size:13px; "
+                f"color:{_TOK['tx2']};'>{_wl_cell(_w.get('snap_buy'))}</div>",
+                unsafe_allow_html=True)
+        # ── 1차·2차 목표 한 칸 (라운드 171) ─────────────────────
+        # 기준(권장가/현재가)은 **열 이름에** 있다. 여기서는 어느 쪽인지만
+        # 표시하고, 제목 속성으로 한 번 더 풀어 쓴다.
+        with _wc[3]:
+            st.markdown(
+                f"<div style='padding-top:8px; font-size:13px; "
+                f"color:{_TOK['tx2']}; line-height:1.5;' "
+                f"title='1차는 권장 진입가 기준 · "
+                f"2차는 현재가 기준으로 잰 값입니다'>"
+                f"<span style='color:{_TOK['tx3']};'>1차 </span>"
+                f"{_wl_cell(_w.get('snap_t1'))}<br>"
+                f"<span style='color:{_TOK['tx3']};'>2차 </span>"
+                f"{_wl_cell(_w.get('snap_t2'))}</div>",
+                unsafe_allow_html=True)
+        # ── 적정가 + 신뢰도 한 칸 (라운드 143 → 171) ─────────────
         # 값과 신뢰도는 같이 다녀야 한다. 적정가 4,615원만 보여 주면
         # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
         # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
-        with _wc[6]:
+        with _wc[4]:
             _fc = _w.get('snap_fair_conf')
             try:
                 _fcv = float(_fc)
@@ -4568,7 +4603,10 @@ else:
                 _fct, _fcc = f'{_fcv:.0f} 낮음', _TOK['warn']
             st.markdown(
                 f"<div style='padding-top:8px; font-size:13px; "
-                f"color:{_fcc};'>{_uk._esc(_fct)}</div>",
+                f"color:{_TOK['tx2']}; line-height:1.5;'>"
+                f"{_wl_cell(_w.get('snap_fair'))}<br>"
+                f"<span style='font-size:12px; color:{_fcc};'>"
+                f"{_uk._esc(_fct)}</span></div>",
                 unsafe_allow_html=True)
         # ── 엔진 판단 (라운드 166 → 169) ─────────────────────────
         # 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한
@@ -4577,7 +4615,7 @@ else:
         # 판단은 `_uk.watch_action()` **한 곳**에서 나온다 (§4). 그 함수는
         # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
         # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
-        with _wc[7]:
+        with _wc[5]:
             _act = _uk.watch_action(_w, _px_w)
             _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
             if not _act:
@@ -4596,17 +4634,49 @@ else:
                        if _act['held'] else '')
                     + "</div>", unsafe_allow_html=True)
         # ── 사용자 입력 두 칸 ────────────────────────────────────
-        with _wc[8]:
+        with _wc[6]:
+            # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
+            # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
             _pd = st.number_input(
-                "매입가", min_value=0.0, step=100.0,
+                "매입가", min_value=0.0, step=100.0, format='%.0f',
                 value=float(_w.get('paid') or 0.0),
                 key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-        with _wc[9]:
+        with _wc[7]:
             _qt = st.number_input(
                 "수량", min_value=0, step=1,
                 value=int(_w.get('qty') or 0),
                 key=f"wl_qt_{_wcode}", label_visibility='collapsed')
-        with _wc[10]:
+        # ── 매입가 대비 · 평가손익 (라운드 171) ─────────────────
+        # ⚠️ 방금 입력된 값(`_pd`·`_qt`)으로 센다 — 저장본이 아니라.
+        #   저장본으로 세면 방금 고친 값이 한 판 늦게 반영돼 화면이
+        #   스스로 어긋난다 (§4).
+        # ⚠️ 현재가를 못 받았으면 **비운다.** 0 으로 채우지 않는다 (§3).
+        _ret_w = ((_px_w / float(_pd) - 1.0) * 100.0
+                  if (_px_w and _pd and float(_pd) > 0) else None)
+        _pl_w = ((_px_w - float(_pd)) * float(_qt)
+                 if (_ret_w is not None and _qt) else None)
+        with _wc[8]:
+            if _ret_w is None:
+                # 매입가를 안 적었거나 현재가를 못 받았다 — 지어내지 않는다
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK['tx3']};'>—</div>", unsafe_allow_html=True)
+            else:
+                # 한국 관행 — 오르면 빨강, 내리면 파랑 (§5)
+                _rt_col = _TOK['up'] if _ret_w >= 0 else _TOK['down']
+                _pl_line = (
+                    f"<br><span style='font-size:12px;'>{_pl_w:+,.0f}원</span>"
+                    f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
+                    f"매입 {float(_pd) * float(_qt):,.0f}원</span>"
+                    if _pl_w is not None else
+                    f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
+                    f"수량 미입력</span>")
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"font-weight:600; line-height:1.5; color:{_rt_col};'>"
+                    f"{_ret_w:+.1f}%{_pl_line}</div>",
+                    unsafe_allow_html=True)
+        with _wc[9]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
                 st.rerun()
@@ -4775,6 +4845,7 @@ else:
     # ══════════════════════════════════════════════════════════════
     _pf_held, _pf_watch = [], []
     _pf_cost = _pf_val = 0.0
+    _pf_qty = 0                        # 총 매입수량 (라운드 171 · 사용자 요청)
     _pf_noprice, _pf_nojudge = [], []
     for _nm169, _act169, _row169, _px169 in _wl_acts:
         _paid169 = _row169.get('paid')
@@ -4788,6 +4859,7 @@ else:
             _v169 = float(_px169) * float(_qty169)
             _pf_cost += _c169
             _pf_val += _v169
+            _pf_qty += int(_qty169)
             _pf_held.append((_nm169, _act169, _c169, _v169))
         elif _paid169:
             _pf_held.append((_nm169, _act169, None, None))
@@ -4806,8 +4878,13 @@ else:
             _plp169 = _pl169 / _pf_cost * 100.0
             _top169 = max(_pf_held, key=lambda t: (t[3] or 0))
             _conc169 = (_top169[3] or 0) / _pf_val * 100 if _pf_val else 0
+            # 라운드 171 — 사용자 요청으로 **총 매입금액·총 매입수량**을
+            # 함께 낸다. 전부 산수다 (매입가 × 수량).
             _uk.stat_tiles([
-                dict(label='보유 종목', value=f"{sum(1 for h in _pf_held if h[2]):,}개"),
+                dict(label='보유 종목',
+                     value=f"{sum(1 for h in _pf_held if h[2]):,}개",
+                     sub=f"총 {_pf_qty:,}주"),
+                dict(label='총 매입금액', value=f"{_pf_cost:,.0f}원"),
                 dict(label='평가금액', value=f"{_pf_val:,.0f}원"),
                 dict(label='평가손익', value=f"{_pl169:+,.0f}원",
                      sub=f"{_plp169:+.1f}%",
@@ -5601,14 +5678,20 @@ bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
 _etf_nav = None
 _etf_is = None
 _etf_lt = None
+_etf_gap = None
 try:
     _etf_is = etf_registry.is_etf(target_ticker)
     if _etf_is:
         _etf_nav = etf_registry.nav_of(target_ticker)
         # 룩스루 적정가 (라운드 167) — 사전등록 기준을 통과한 ETF 만 나온다
         _etf_lt = etf_registry.lookthrough_of(target_ticker)
+        # ⚠️ 라운드 171 — 못 내는 ETF 는 **왜 못 내는지**를 적는다.
+        #   종전에는 화면이 그냥 조용했고, 그러면 "적정가가 없다"와
+        #   "우리가 못 낸다"가 구분되지 않는다 (§3 이 가르라고 한 두 문장).
+        #   라운드 170 이 1,161종목을 전수로 갈라 둔 것을 읽어 옮긴다.
+        _etf_gap = etf_registry.lookthrough_gap(target_ticker)
 except Exception:                                              # noqa: BLE001
-    _etf_is, _etf_nav, _etf_lt = None, None, None
+    _etf_is, _etf_nav, _etf_lt, _etf_gap = None, None, None, None
 
 _etf_tile_html = ""
 if _etf_is:
@@ -5781,6 +5864,28 @@ if _etf_is:
                f"없습니다. 점수·게이트·추천에 들어가지 않습니다. "
                f"구성종목은 정기변경으로 바뀌고, 구성종목 적정가도 매일 "
                f"바뀝니다.</span></div>")
+            # ── 못 내는 ETF — **왜 못 내는지** (라운드 171) ──────────
+            # ⚠️ 값이 없을 때 화면이 조용하면 "적정가가 없다"와 "우리가
+            #   못 낸다"가 같은 모양이 된다. 라운드 170 이 전수로 갈라
+            #   둔 사유를 그대로 옮긴다 — **여기서 새로 짓지 않는다.**
+            + ("" if _etf_lt or not _etf_gap else
+               f"<div style='margin-top:11px; padding:10px 12px; "
+               f"background:{_TOK['hover']}; border-radius:8px; "
+               f"font-size:12px; line-height:1.6; color:{_TOK['tx2']};'>"
+               f"<b style='color:{_TOK['tx1']};'>담은 기업들의 가치는 "
+               f"내지 못했습니다</b> — {_uk._esc(str(_etf_gap['why']))}."
+               + (f" 구성종목은 {_etf_gap['holdings']}개이고 "
+                  f"우세 자산은 {_uk._esc(str(_etf_gap['dominant']))}입니다."
+                  if _etf_gap.get('holdings') else '')
+               + f"<br><span style='color:{_TOK['tx3']};'>"
+                 f"국내 ETF {_etf_gap['total']:,}개 중 "
+                 f"<b>{_etf_gap['passed']:,}개</b>만 이 값을 낼 수 있습니다"
+                 f"({_etf_gap['passed'] / max(1, _etf_gap['total']) * 100:.1f}%). "
+                 f"막는 것은 ETF 자료가 아니라 <b>우리 단일종목 적정가 "
+                 f"모델</b>입니다 — 고배수·적자 구간에서는 값을 내지 않고 "
+                 f"거부합니다. 지어낸 적정가보다 없는 편이 낫기 때문입니다. "
+                 f"전수 조사는 {_uk._esc(str(_etf_gap.get('made')))} 에 "
+                 f"했습니다.</span></div>")
             + f"<p style='margin:9px 0 0 0; font-size:12px; "
               f"color:{_TOK['tx3']};'>아래 진입가·손절·목표는 <b>가격과 "
               f"변동성만으로</b> 정해지므로 ETF 에도 그대로 성립합니다. "

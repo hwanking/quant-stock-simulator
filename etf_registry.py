@@ -271,6 +271,88 @@ def lookthrough_of(code):
     return dict(row, made=doc.get('made'), cover_min=doc.get('cover_min'))
 
 
+#: ETF 전수 분류 (라운드 170). 1,161종목 각각이 **왜** 룩스루가 안 되는지.
+TAXONOMY = os.path.join(_BASE, 'data', 'etf_taxonomy_r170.json')
+
+#: 우세 자산유형 → 사람 말. 라운드 170 이 전수로 가른 사유 그대로다.
+#: **여기서 사유를 새로 짓지 않는다** — 분류는 산출물이 하고, 여기는 옮긴다.
+_GAP_WHY = {
+    '해외주식': '구성종목이 해외 주식이라 우리에게 그 종목의 가격도 '
+             '적정가도 없습니다',
+    '채권': '구성종목이 채권이라 주식 적정가 모델이 닿지 않습니다',
+    '스왑': '스왑 계약으로 되어 있어 들여다볼 구성종목이 없습니다',
+    '현금성': '현금성 자산이 대부분이라 들여다볼 기업이 없습니다',
+    '국내주식': '운용사가 구성종목 비중을 게시하지 않습니다',
+    '분류 안 됨': '구성종목의 자산유형을 우리가 가르지 못했습니다',
+}
+
+
+def lookthrough_gap(code):
+    """룩스루 적정가를 **왜 못 내는지**. 낼 수 있으면 None.
+
+    ⚠️ 라운드 171 — 라운드 170 이 1,161종목을 전수로 갈라 *"왜 148개
+       뿐인가"* 를 문서에 적었는데, **화면은 아무 말도 안 하고 있었다.**
+       사용자가 ETF 를 열면 적정가 칸이 그냥 비어 있었고, 그것은
+       "적정가가 없다"인지 "우리가 못 낸다"인지 구분되지 않는다 —
+       §3 이 갈라 놓으라고 한 바로 그 두 문장이다.
+
+    ⚠️ **새로 재지 않는다.** 이미 디스크에 있는 R170 산출물을 읽어 옮길
+       뿐이다. 산출물이 없으면 `None` 을 돌려주고 화면은 조용히 있는다 —
+       없는 사유를 지어내지 않는다.
+    """
+    c = stock_code.normalize(code)
+    if not c:
+        return None
+    if lookthrough_of(c):
+        return None                       # 낼 수 있는 ETF 다
+    tax = _read_json(TAXONOMY)
+    if not tax:
+        return None
+    row = None
+    for r in (tax.get('rows') or []):
+        if stock_code.normalize(r.get('code')) == c:
+            row = r
+            break
+    if not row:
+        return None
+
+    dom = str(row.get('dominant') or '')
+    state = str(row.get('state') or '')
+    cover_min = tax.get('cover_min') or 90.0
+
+    # 비중이 있는데 통과 못 한 경우 — **얼마나 모자랐는지**를 적는다.
+    valued = None
+    if state.startswith('비중 있음'):
+        lt = _read_json(LOOKTHROUGH) or {}
+        r167 = (lt.get('results') or {}).get(c) or {}
+        valued = r167.get('valued_pct')
+
+    # ⚠️ 사유를 뭉뚱그리지 않는다. '비중 있음 · 미통과' 안에 서로 다른 셋이
+    #   섞여 있고, 셋 다 실측으로 갈렸다 (`_probe/gap_107_r171.py`):
+    #     ⓐ 커버리지 미달 239개 — 구성종목 적정가가 모자란다
+    #     ⓑ 비중 합이 100%가 아님 76개 — 레버리지·인버스 (합 187~196%)
+    #     ⓒ 이름→코드 조인 미달 31개 — 금현물·리츠혼합 등
+    ws = row.get('weight_sum') or 0
+    if valued is not None:
+        why = (f'구성종목 중 적정가를 낼 수 있는 몫이 {valued:.1f}% 라 '
+               f'기준 {cover_min:.0f}% 에 못 미칩니다')
+    elif state.startswith('비중 있음') and not (95 <= ws <= 105):
+        why = (f'게시된 비중의 합이 {ws:.0f}% 입니다 (레버리지·인버스 등) '
+               f'— 그대로 가중하면 값이 틀립니다')
+    elif state.startswith('비중 있음'):
+        why = '구성종목 이름을 우리 종목코드에 붙이지 못한 몫이 있습니다'
+    else:
+        why = _GAP_WHY.get(dom, '구성종목 비중을 받지 못했습니다')
+
+    return {
+        'code': c, 'name': row.get('name'), 'holdings': row.get('holdings'),
+        'state': state, 'dominant': dom, 'why': why,
+        'valued_pct': valued, 'cover_min': cover_min,
+        'made': tax.get('made'),
+        'total': tax.get('total'), 'passed': tax.get('passed'),
+    }
+
+
 def write_index(path=None):
     """동봉 색인을 새로 만든다 (`scripts/etf_index_r164.py` 가 부른다)."""
     rows = _fetch_raw()
