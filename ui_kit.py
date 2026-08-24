@@ -1090,6 +1090,114 @@ def breakeven_row(be, observed=None, theme='dark'):
             f"color:{col};'>{_esc(txt)}</p>")
 
 
+# ── 관심종목 한 줄 판단 — 보유 여부까지 본다 (라운드 169) ────────────────
+#
+# 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한 상태에서는
+# 더 매수인지 매도인지, 없으면 매수인지."*
+#
+# ⚠️ **새 판정을 만들지 않는다.** 여기서 하는 일은 엔진이 이미 발표한
+#   가격선들과 현재가를 견주어 **한 줄로 다시 말하는 것**뿐이다:
+#
+#       snap_hold_stop  버틸 수 없는 가격 (보유자 기준 · CORE)
+#       snap_hold_trim  팔 가격 1차       (보유자 기준 · CORE)
+#       snap_buy        목표 매수가       (신규 매수자 기준 · CORE)
+#       snap_bucket     신규 매수 판정    (verdict_core.bucket 그대로)
+#
+#   새 문턱·새 계산이 없다. 문턱을 하나라도 만들면 §2 위반이고, 판정을
+#   여기서 다시 지으면 §4 위반이다(화면 값은 한 곳에서).
+#
+# ⚠️ 신규 매수자 값과 보유자 값을 **섞지 않는다** (§4 · 라운드 30 사고).
+#   보유 중이면 hold_* 만, 미보유면 bucket·snap_buy 만 본다.
+#
+#: 보유 중일 때 나올 수 있는 말 — 순서가 곧 우선순위다.
+WATCH_HOLD_ACTIONS = ('정리 검토', '일부 정리', '추가 매수 가능', '보유 유지')
+
+
+def watch_action(row, price=None):
+    """
+    관심종목 한 줄의 판단. 반환:
+
+        {'kind', 'label', 'tone', 'why', 'held'}   또는 None
+
+    · `held=True`  — 매입가를 적어 둔 종목 (보유자 관점)
+    · `held=False` — 안 적은 종목 (신규 매수자 관점 · bucket 그대로)
+    · 잰 값이 없으면 **None** — 지어내지 않는다 (§3)
+    """
+    def _n(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    px = _n(price) or _n((row or {}).get('snap_px'))
+    paid = _n((row or {}).get('paid'))
+    bucket = str((row or {}).get('snap_bucket') or '')
+    h_stop = _n((row or {}).get('snap_hold_stop'))
+    h_trim = _n((row or {}).get('snap_hold_trim'))
+    buy = _n((row or {}).get('snap_buy'))
+
+    if not bucket and not (h_stop or h_trim or buy):
+        return None                      # 아직 아무것도 안 쟀다
+
+    if paid and px:
+        # ── 보유자 관점 ────────────────────────────────────────────
+        # ⚠️ 보유자 가격선이 **하나도 없으면 판단하지 않는다.** 없는 채로
+        #   '보유 유지'라고 적으면 *못 잰 것*을 *판단*으로 만드는 것이라
+        #   §3 위반이다. 화면 실측에서 실제로 13종목이 전부 '보유 유지'로
+        #   나왔고, 그건 판단이 아니라 값이 없었던 것이다.
+        if not (h_stop or h_trim):
+            return dict(kind='보유 기준 미산출', label='보유 기준 미산출',
+                        tone='tx3', held=True,
+                        why='이 종목의 보유자 기준값(버틸 수 없는 가격·팔 '
+                            '가격 1차)을 아직 안 냈습니다 — 채우면 판단합니다')
+        if h_stop and px <= h_stop:
+            return dict(kind='정리 검토', label='정리 검토', tone='neg',
+                        held=True,
+                        why=f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다')
+        if h_trim and px >= h_trim:
+            return dict(kind='일부 정리', label='일부 정리', tone='pos',
+                        held=True,
+                        why=f'팔 가격 1차({h_trim:,.0f}원)에 닿았습니다')
+        if bucket == '오늘 매수 가능' and buy and px <= buy:
+            return dict(kind='추가 매수 가능', label='추가 매수 가능',
+                        tone='pos', held=True,
+                        why=f'목표 매수가({buy:,.0f}원) 이하이고 엔진이 '
+                            f'매수 가능으로 봅니다')
+        return dict(kind='보유 유지', label='보유 유지', tone='tx2', held=True,
+                    why=('버틸 수 없는 가격과 팔 가격 1차 사이입니다'
+                         if (h_stop and h_trim) else
+                         (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
+                          if h_stop else
+                          f'팔 가격 1차({h_trim:,.0f}원)에 아직 못 미칩니다')))
+
+    # ── 미보유 관점 — bucket 을 그대로 짧게 말한다 ──────────────────
+    if not bucket:
+        return None
+    if bucket == '오늘 매수 가능':
+        if buy and px and px <= buy:
+            return dict(kind='매수 가능', label='지금 매수 가능', tone='pos',
+                        held=False,
+                        why=f'목표 매수가({buy:,.0f}원) 이하입니다')
+        return dict(kind='매수 가능', label='매수 가능', tone='pos',
+                    held=False,
+                    why=(f'다만 목표 매수가 {buy:,.0f}원 이하로 내려와야 '
+                         f'합니다' if buy else '엔진이 매수 가능으로 봅니다'))
+    _short = {
+        '눌림목 매수 대기': ('눌림목 대기', 'brand'),
+        '돌파 후 매수 대기': ('돌파 대기', 'brand'),
+        '과열 해소 대기': ('과열 대기', 'warn'),
+        '거래량 회복 대기': ('거래량 대기', 'warn'),
+        '시장 국면 회복 대기': ('국면 대기', 'warn'),
+        '권장가 괴리 과다': ('괴리 과다', 'warn'),
+        '신뢰도·표본 확보 대기': ('표본 대기', 'tx3'),
+        '데이터 부족': ('데이터 부족', 'tx3'),
+        '추천 제외': ('사지 않음', 'neg'),
+    }
+    lbl, tone = _short.get(bucket, (bucket[:7], 'tx3'))
+    return dict(kind=bucket, label=lbl, tone=tone, held=False, why=bucket)
+
+
 # ── ETF 의 '적정가' — 순자산가치(NAV) · 라운드 164 ───────────────────────
 #
 # 사용자 요청: *"같은 주식도 검색해서 적정가 살때말때도 해줬으면 좋겠어"*

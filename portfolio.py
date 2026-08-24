@@ -2217,26 +2217,25 @@ WATCH_NOTE_NUM = ('paid', 'qty', 'target_buy')   # 매입가 · 수량 · (구)�
 #: `snap_fair_conf` — 적정가를 얼마나 믿을 수 있나 (0~100).
 #:   적정가만 보여 주면 4,615원이 1,659원의 3배라는 사실만 보이고
 #:   **그 4,615원을 믿을 수 있는지**는 안 보인다 (라운드 143).
+#: `snap_hold_trim` · `snap_hold_stop` — **보유자 기준** 값 (라운드 169).
+#: ⚠️ 신규 매수자 값(`snap_buy`·`snap_t1`)과 **다른 키**다. 섞이면 버그다
+#:   (§4 · 라운드 30 사고). 관심종목 판단이 보유 여부에 따라 이 둘만
+#:   쓰거나 저 둘만 쓴다.
 WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
-                  'snap_fair_conf', 'snap_px')
+                  'snap_fair_conf', 'snap_px',
+                  'snap_hold_trim', 'snap_hold_stop')
 #: `snap_bucket` — 그 종목을 마지막으로 잰 날 **엔진이 내린 판단**
 #:   (라운드 166). 사용자 요청: *"내 계획이 아니라 실제로 너가 판단해서
 #:   해줘야지."* `verdict_core` 의 `bucket` 을 그대로 담는다 — 화면이
 #:   새 판정을 만들지 않는다 (§4 — 화면 값은 한 곳에서).
-#: ⚠️ 이것은 **엔진 값**이고 `plan` 은 **사용자 값**이다. 표가 둘을
-#:   눈에 보이게 가른다.
 WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket')
-#: `plan` — 이 종목을 **어떻게 할 생각인가** (라운드 164).
-#:   사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해 보유
-#:   이렇게만 해줘."* 자유 메모는 다시 읽을 때 해석이 필요한데, 정작
-#:   보고 싶은 것은 셋 중 하나였다.
-#: ⚠️ 이것은 **사용자의 계획**이지 엔진의 판정이 아니다. 점수·적정가·
-#:   판정에 들어가지 않는다 (§9). 화면이 두 값을 눈에 보이게 가른다.
-#: `memo` 는 지우지 않는다 — 이미 적어 둔 사람의 글이 사라지면 안 된다.
-WATCH_NOTE_TXT = ('memo', 'plan')
-
-#: `plan` 이 가질 수 있는 값. 이 밖의 문자열은 저장하지 않는다.
-WATCH_PLANS = ('매수', '매도', '보유')
+#: ⚠️ 라운드 169 — `plan`('내 계획')을 **걷어냈다.**
+#:   라운드 164 에서 사용자 요청으로 넣었는데, 라운드 166 이 엔진 판단
+#:   칸을 붙이자 *"내 계획은 지워버리고 엔진 판단부터 제대로"* 로 요청이
+#:   바뀌었다. 사용자가 같은 것을 두 번 적을 이유가 없다.
+#:   저장 키 목록에서 뺐으므로 다음 저장 때 파일에서도 사라진다.
+#: `memo` 는 남긴다 — 라운드 164 이전에 적어 둔 사람의 글이다.
+WATCH_NOTE_TXT = ('memo',)
 
 
 def _watch_num(v):
@@ -2269,10 +2268,6 @@ def save_watchlist(items, path=WATCHLIST_FILE):
                 row[k] = v
         for k in WATCH_NOTE_TXT + WATCH_SNAP_TXT:
             v = str((it or {}).get(k) or '').strip()
-            # 계획은 정해진 셋 중 하나만 남긴다 — 오타·옛 값이 그대로
-            # 굳지 않게 한다. 아니면 키를 아예 안 만든다 (§3).
-            if k == 'plan' and v not in WATCH_PLANS:
-                continue
             if v:
                 row[k] = v[:120]
         clean.append(row)

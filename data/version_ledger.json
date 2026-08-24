@@ -3,12 +3,25 @@
   "model": "v2026.08.24.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.24.2",
+  "schema": "v2026.08.24.3",
   "news": "v2026.08.24.1",
   "sector": "v2026.08.09.0",
   "valuation": "v2026.08.24.6"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.24.3",
+   "previous": "v2026.08.24.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "관심종목 '내 계획'을 걷어내고 엔진 판단이 보유 여부를 보게 했다 · 관심종목 밑에 포트폴리오 견해",
+   "note": "판단은 ui_kit.watch_action 한 곳에서만 나오고 새 문턱을 만들지 않는다(엔진이 낸 hold_stop·hold_trim·목표 매수가와 현재가를 견줄 뿐) — 라운드 169",
+   "created_at": "2026-08-24T08:12:08+00:00",
+   "effective_from": "2026-08-24"
+  },
   {
    "axis": "news",
    "axis_ko": "뉴스 분석",
