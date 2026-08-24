@@ -4474,8 +4474,10 @@ else:
     st.caption(
         f"{len(_wl_body)}종목 · **목표 매수가·1차·2차·적정가는 엔진 값**"
         f"이고, 그 종목을 마지막으로 **본 날** 찍힌 것입니다 — 오늘 값이 "
-        f"아닐 수 있어 날짜를 함께 적습니다. **매입가·수량·내 계획은 직접 "
-        f"적는 값**이고 점수·적정가·판정에 쓰지 않습니다. 보유 중이라면 "
+        f"아닐 수 있어 날짜를 함께 적습니다. **매입가·수량은 직접 "
+        f"적는 값**이고 점수·적정가·판정에 쓰지 않습니다 — 다만 "
+        f"**매입가를 적으면 그 종목의 '엔진 판단'이 보유자 기준으로 "
+        f"바뀝니다**(더 살까·들고 갈까·정리할까). 보유 중이라면 "
         f"[내 보유종목](#nav-holdings)에 등록해야 포트폴리오 판단에 "
         f"들어갑니다.")
     # ⚠️ 1차는 **권장가 기준**, 2차는 **현재가 기준**이다. 기준이 다르므로
@@ -4492,33 +4494,17 @@ else:
         "(라운드 49·110·111·112). 그래서 이 표는 **순위표가 아니라 "
         "가격 기준표**입니다.")
 
-    #: '내 계획' 칸의 보기 (라운드 164). 첫 항목은 **적지 않음**을 뜻하며
-    #: 저장하지 않는다 — 0 이나 빈 문자열을 값처럼 두지 않는다 (§3).
-    _WL_PLAN_OPTS = ('미정',) + portfolio.WATCH_PLANS
+    # ⚠️ 라운드 169 — '내 계획' 칸을 걷어냈다. 사용자 요청:
+    #   *"내 계획은 지워버리고, 엔진 판단부터 제대로 되도록 해줘."*
+    #   판단은 `_uk.watch_action()` **한 곳**에서만 나온다 (§4) — 화면이
+    #   자기 판정을 짓지 않고, 엔진이 발표한 가격선을 다시 말할 뿐이다.
 
-    #: 엔진 판단(`snap_bucket`) → 표에 넣을 짧은 말과 색 (라운드 166).
-    #: ⚠️ **새 판정을 만들지 않는다.** `verdict_core` 가 낸 bucket 을 짧게
-    #:   줄이기만 한다 — 화면이 자기 판단을 만들면 §4 위반이다.
-    _WL_BUCKET_TONE = {
-        '오늘 매수 가능': ('pos', '매수 가능'),
-        '눌림목 매수 대기': ('brand', '눌림목 대기'),
-        '돌파 후 매수 대기': ('brand', '돌파 대기'),
-        '과열 해소 대기': ('warn', '과열 대기'),
-        '거래량 회복 대기': ('warn', '거래량 대기'),
-        '시장 국면 회복 대기': ('warn', '국면 대기'),
-        '권장가 괴리 과다': ('warn', '괴리 과다'),
-        '신뢰도·표본 확보 대기': ('tx3', '표본 대기'),
-        '데이터 부족': ('tx3', '데이터 부족'),
-        '추천 제외': ('neg', '제외'),
-    }
-
-    _WL_COLS = [1.6, 0.85, 0.95, 0.95, 0.95, 0.95, 0.85, 1.0, 0.85, 0.65,
-                1.05, 0.55]
+    _WL_COLS = [1.6, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 1.4, 0.9, 0.7, 0.55]
     _wl_hdr = st.columns(_WL_COLS)
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
                                 '1차 목표(권장가)', '2차 목표(현재가)',
                                 '적정가', '적정가 신뢰도', '엔진 판단',
-                                '매입가', '수량', '내 계획', '')):
+                                '매입가', '수량', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -4531,6 +4517,9 @@ else:
             return na
 
     _wl_dirty = False
+    #: 아래 '내 포트폴리오 견해'가 쓸 재료 (라운드 169) — 표를 그리면서
+    #: 모은다. 판단을 **두 번 계산하지 않는다** (§4).
+    _wl_acts = []
     for _wi, _w in enumerate(list(_wl_body)):
         _wc = st.columns(_WL_COLS)
         _wcode = str(_w.get('code'))
@@ -4581,20 +4570,32 @@ else:
                 f"<div style='padding-top:8px; font-size:13px; "
                 f"color:{_fcc};'>{_uk._esc(_fct)}</div>",
                 unsafe_allow_html=True)
-        # ── 엔진 판단 (라운드 166) ───────────────────────────────
-        # 사용자 요청: *"내 계획이 아니라 실제로 너가 판단해서 해줘야지."*
-        # `verdict_core` 가 낸 bucket 을 그대로 짧게 적는다 — 화면이
-        # 새 판정을 만들지 않는다 (§4). 안 잰 종목은 '—' 다 (§3).
+        # ── 엔진 판단 (라운드 166 → 169) ─────────────────────────
+        # 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한
+        # 상태에서는 더 매수인지 매도인지, 없으면 매수인지."*
+        #
+        # 판단은 `_uk.watch_action()` **한 곳**에서 나온다 (§4). 그 함수는
+        # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
+        # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
         with _wc[7]:
-            _bk = str(_w.get('snap_bucket') or '')
-            _tone, _short = _WL_BUCKET_TONE.get(_bk, ('tx3', _bk[:7]))
-            if not _bk:
-                _short, _tone = '아직 안 잼', 'tx3'
-            st.markdown(
-                f"<div style='padding-top:8px; font-size:13px; "
-                f"color:{_TOK[_tone]};' title='{_uk._esc_attr(_bk)}'>"
-                f"{_uk._esc(_short)}</div>", unsafe_allow_html=True)
-        # ── 사용자 입력 세 칸 ────────────────────────────────────
+            _act = _uk.watch_action(_w, _px_w)
+            _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
+            if not _act:
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK['tx3']};'>아직 안 잼</div>",
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK[_act['tone']]};' "
+                    f"title='{_uk._esc_attr(_act['why'])}'>"
+                    f"{_uk._esc(_act['label'])}"
+                    + (f"<br><span style='font-size:12px; "
+                       f"color:{_TOK['tx3']};'>보유 기준</span>"
+                       if _act['held'] else '')
+                    + "</div>", unsafe_allow_html=True)
+        # ── 사용자 입력 두 칸 ────────────────────────────────────
         with _wc[8]:
             _pd = st.number_input(
                 "매입가", min_value=0.0, step=100.0,
@@ -4606,55 +4607,20 @@ else:
                 value=int(_w.get('qty') or 0),
                 key=f"wl_qt_{_wcode}", label_visibility='collapsed')
         with _wc[10]:
-            # ── 메모 대신 '내 계획' (라운드 164) ─────────────────────
-            # 사용자 요청: *"관심종목에 메모 대신 매수 매도 할지에 대해
-            # 보유 이렇게만 해줘."*
-            #
-            # 자유 메모는 다시 읽을 때 해석이 필요한데, 정작 보고 싶은
-            # 것은 셋 중 하나였다. 옛 메모는 **지우지 않는다** — 아래
-            # 캡션이 남아 있는 메모를 그대로 보여 준다.
-            #
-            # ⚠️ 이것은 **사용자의 계획**이지 엔진의 판정이 아니다.
-            #   점수·적정가·판정에 들어가지 않는다 (§9).
-            _plan_now = str(_w.get('plan') or '')
-            _pl = st.selectbox(
-                "내 계획", _WL_PLAN_OPTS,
-                index=(_WL_PLAN_OPTS.index(_plan_now)
-                       if _plan_now in _WL_PLAN_OPTS else 0),
-                key=f"wl_pl_{_wcode}", label_visibility='collapsed')
-            # '미정'은 **적지 않음**이지 값이 아니다 — 빈 문자열로 둔다 (§3)
-            _pl_val = _pl if _pl in portfolio.WATCH_PLANS else ''
-        with _wc[11]:
             if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                 _wl_remove(_wcode)
                 st.rerun()
         # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
         if ((_w.get('paid') or None) != (_pd or None)
-                or int(_w.get('qty') or 0) != int(_qt or 0)
-                or str(_w.get('plan') or '') != _pl_val):
+                or int(_w.get('qty') or 0) != int(_qt or 0)):
             _new = dict(_w)
             _new['paid'] = _pd or None
             _new['qty'] = _qt or None
-            _new['plan'] = _pl_val
             _wl_body[_wi] = _new
             _wl_dirty = True
     if _wl_dirty:
         _wl_write(_wl_body)
 
-    # ── 계획을 적은 것 · 옛 메모 (라운드 164) ────────────────────────
-    # 메모 칸을 '내 계획'으로 바꿨다. 이미 적어 둔 메모는 **지우지
-    # 않는다** — 사용자가 쓴 글이 말없이 사라지는 쪽이 더 나쁘다.
-    _plan_by = {}
-    for _w in _wl_items():
-        _p = str(_w.get('plan') or '')
-        if _p:
-            _plan_by.setdefault(_p, []).append(str(_w.get('name') or ''))
-    if _plan_by:
-        st.caption("내 계획 — " + " · ".join(
-            f"**{_p}** {len(_ns)}종목 ({', '.join(_ns[:4])}"
-            + (f" 외 {len(_ns) - 4}" if len(_ns) > 4 else '') + ")"
-            for _p, _ns in _plan_by.items())
-            + "  \n이 값은 **내가 적은 계획**이고 엔진의 판정이 아닙니다.")
     _old_memo = [(str(_w.get('name') or ''), str(_w.get('memo') or ''))
                  for _w in _wl_items() if str(_w.get('memo') or '').strip()]
     if _old_memo:
@@ -4682,23 +4648,37 @@ else:
     # ⚠️ 자동으로 돌리지 않는다. 한 종목 정밀분석이 1~3분이라 화면을
     #   열 때마다 돌면 앱이 멈춘다(라운드 141 이 그래서 안 했다).
     #   **버튼으로 사용자가 시작하고, 얼마나 걸리는지 미리 적는다.**
-    _fill_missing = [w for w in _wl_items()
-                     if not w.get('snap_at') or w.get('snap_buy') is None]
+    # ⚠️ 라운드 169 — **보유자 기준값이 없는 종목**도 채울 대상이다.
+    #   매입가를 적어 둔 종목은 hold_stop·hold_trim 이 있어야 판단이
+    #   나온다. 없으면 화면이 '보유 기준 미산출'이라 적고, 이 버튼이
+    #   그것을 채운다.
+    def _wl_needs_fill(w):
+        if not w.get('snap_at') or w.get('snap_buy') is None:
+            return True
+        if w.get('paid') and not (w.get('snap_hold_stop')
+                                  or w.get('snap_hold_trim')):
+            return True
+        return False
+
+    _fill_missing = [w for w in _wl_items() if _wl_needs_fill(w)]
     #: 한 번에 몇 개까지. 오래 걸린다는 사실을 숨기지 않고 나눠 돌린다.
     _WL_FILL_MAX = 5
     if _fill_missing:
         _fm_names = ", ".join(str(w.get('name')) for w in _fill_missing[:8])
         st.warning(
-            f"**엔진 값이 없는 종목 {len(_fill_missing)}개** — {_fm_names}"
+            f"**엔진 값이 모자란 종목 {len(_fill_missing)}개** — {_fm_names}"
             + (f" 외 {len(_fill_missing) - 8}종목"
                if len(_fill_missing) > 8 else '')
-            + f"  \n한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
+            + f"  \n매입가를 적은 종목은 **보유자 기준값**(버틸 수 없는 "
+              f"가격 · 팔 가격 1차)까지 있어야 '엔진 판단'이 나옵니다. "
+              f"한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
               f"**{_WL_FILL_MAX}종목씩** 채웁니다 — 없는 값을 지어내지 "
               f"않고 실제로 계산합니다.")
         _todo166 = _fill_missing[:_WL_FILL_MAX]
         if st.button(f"{len(_todo166)}종목 지금 계산해서 채우기",
                      key='wl_fill_now', type='primary'):
             import verdict_core as _vc166
+            import next_action as _na
             _bar166 = st.progress(0.0)
             _msg166 = st.empty()
             _done166, _fail166 = [], []
@@ -4714,7 +4694,24 @@ else:
                     _snp166, _ = get_shared_snapshot(_sym166, t_ref_str,
                                                      rho_cutoff)
                     _fs166 = _snp166.get('four_scores') or {}
-                    _co166 = _vc166.build(_snp166)
+                    # ⚠️ 라운드 169 — 여기가 `build(_snp166)` 이었다.
+                    #   `build()` 의 첫 인자는 **four_scores** 인데 스냅샷을
+                    #   통째로 넘겨서, 안에서 읽는 키가 전부 None 이 됐다.
+                    #   그래서 채운 종목이 죄다 bucket='데이터 부족' 이고
+                    #   보유자 값이 비었다 — **못 낸 게 아니라 잘못 물어본
+                    #   것**이다. 라운드 167 에서 겪은 것과 같은 모양
+                    #   (경로를 베끼면서 한 단계를 빠뜨렸다).
+                    #   화면(:5798)이 부르는 방식 그대로 맞춘다 (§4).
+                    _vd166 = _snp166.get('verdict')
+                    if _vd166 is None:
+                        _vd166 = q_engine.build_final_verdict(_snp166)
+                    _na166 = _na.build(_fs166, _snp166.get('tech_df'),
+                                       _fs166.get('current_price'), _vd166)
+                    _co166 = _vc166.build(
+                        _fs166, verdict=_vd166,
+                        price_axes=_fs166.get('price_axes'),
+                        next_action=_na166,
+                        realtime_price=_fs166.get('current_price'))
                     _vals166 = {
                         'snap_buy': (_co166.get('pullback_zone')
                                      or (_co166.get('buy_zone') or [None])[0]),
@@ -4722,9 +4719,13 @@ else:
                         'snap_t2': _fs166.get('target_tech_2nd'),
                         'snap_fair': _fs166.get('displayed_fair_value'),
                         'snap_fair_conf': _fs166.get('fair_value_confidence'),
+                        'snap_px': _fs166.get('current_price'),
                         'snap_at': t_ref_str,
                         'snap_engine': str(_VER_NOW.get('model') or ''),
                         'snap_bucket': _co166.get('bucket'),
+                        # 보유자 기준 (라운드 169) — 다른 키다 (§4)
+                        'snap_hold_trim': _co166.get('hold_trim'),
+                        'snap_hold_stop': _co166.get('hold_stop'),
                     }
                     _done166.append((_c166, _vals166))
                 except Exception as _ex166:                    # noqa: BLE001
@@ -4759,23 +4760,114 @@ else:
                    + " — 위 버튼으로 채우거나, 이름을 누르면 채워집니다. "
                      "없는 값을 지어내지 않습니다.")
 
-    # ── 매입가·수량을 적었으면 평가손익을 **읽어만** 준다 ────────────
-    # §9 — 평단가는 보유 판단에만. 점수·적정가·예측에 안 들어간다.
-    _wl_notes = []
-    for _w in _wl_items():
-        _qc = st.session_state.get('quote_cache') or {}
-        _px_w = (_qc.get(f"{_w.get('code')}.KS", (None, 0))[0]
-                 or _qc.get(f"{_w.get('code')}.KQ", (None, 0))[0])
-        if not _px_w or not _w.get('paid'):
-            continue
-        _d = (_px_w / float(_w['paid']) - 1) * 100
-        _line = f"{_w.get('name')} 매입가 대비 {_d:+.1f}%"
-        if _w.get('qty'):
-            _pl = (_px_w - float(_w['paid'])) * float(_w['qty'])
-            _line += f" · 평가손익 {_pl:+,.0f}원"
-        _wl_notes.append(_line)
-    if _wl_notes:
-        st.caption("· " + "  ·  ".join(_wl_notes[:6]))
+    # ══════════════════════════════════════════════════════════════
+    # 내 포트폴리오 견해 (라운드 169)
+    #
+    # 사용자 요청: *"내 포트폴리오에 대한 견해도 관심종목 밑에 적절하게
+    # 넣어주면 좋겠어."*
+    #
+    # ⚠️ 새 판정을 만들지 않는다. 위 표가 이미 낸 `_uk.watch_action()`
+    #   결과를 **세기만** 한다 (§4 — 값은 한 곳에서). 금액은 사용자가
+    #   적은 매입가·수량으로 하는 산수일 뿐이다.
+    # ⚠️ §9 — 평단가는 보유 판단에만. 점수·적정가·예측에 안 들어간다.
+    # ⚠️ 못 잰 것은 못 쟀다고 적는다 (§3) — 현재가 미수신·엔진 값 없음을
+    #   숨기지 않는다.
+    # ══════════════════════════════════════════════════════════════
+    _pf_held, _pf_watch = [], []
+    _pf_cost = _pf_val = 0.0
+    _pf_noprice, _pf_nojudge = [], []
+    for _nm169, _act169, _row169, _px169 in _wl_acts:
+        _paid169 = _row169.get('paid')
+        _qty169 = _row169.get('qty')
+        if not _px169:
+            _pf_noprice.append(_nm169)
+        if not _act169:
+            _pf_nojudge.append(_nm169)
+        if _paid169 and _qty169 and _px169:
+            _c169 = float(_paid169) * float(_qty169)
+            _v169 = float(_px169) * float(_qty169)
+            _pf_cost += _c169
+            _pf_val += _v169
+            _pf_held.append((_nm169, _act169, _c169, _v169))
+        elif _paid169:
+            _pf_held.append((_nm169, _act169, None, None))
+        else:
+            _pf_watch.append((_nm169, _act169))
+
+    _uk.spacer(10)
+    st.subheader("내 포트폴리오 견해")
+
+    if not _pf_held and not _pf_watch:
+        st.caption("아직 볼 것이 없습니다.")
+    else:
+        # ── ① 보유 — 금액은 산수, 판단은 위 표에서 그대로 ─────────
+        if _pf_cost > 0:
+            _pl169 = _pf_val - _pf_cost
+            _plp169 = _pl169 / _pf_cost * 100.0
+            _top169 = max(_pf_held, key=lambda t: (t[3] or 0))
+            _conc169 = (_top169[3] or 0) / _pf_val * 100 if _pf_val else 0
+            _uk.stat_tiles([
+                dict(label='보유 종목', value=f"{sum(1 for h in _pf_held if h[2]):,}개"),
+                dict(label='평가금액', value=f"{_pf_val:,.0f}원"),
+                dict(label='평가손익', value=f"{_pl169:+,.0f}원",
+                     sub=f"{_plp169:+.1f}%",
+                     tone=('pos' if _pl169 >= 0 else 'warn')),
+                dict(label='가장 큰 종목 비중',
+                     value=f"{_conc169:.0f}%", sub=str(_top169[0])[:14]),
+            ], theme=_theme)
+
+        # ── ② 엔진이 지금 뭐라 하는가 — 세기만 한다 ────────────────
+        _cnt169 = {}
+        for _nm169, _act169, *_ in _pf_held:
+            if _act169:
+                _cnt169.setdefault(_act169['label'], []).append(_nm169)
+        _cnt_w169 = {}
+        for _nm169, _act169 in _pf_watch:
+            if _act169:
+                _cnt_w169.setdefault(_act169['label'], []).append(_nm169)
+
+        def _line169(title, d, empty):
+            if not d:
+                return f"**{title}** — {empty}"
+            return f"**{title}** — " + " · ".join(
+                f"{k} **{len(v)}종목**({', '.join(v[:3])}"
+                + (f" 외 {len(v) - 3}" if len(v) > 3 else '') + ")"
+                for k, v in sorted(d.items(), key=lambda t: -len(t[1])))
+
+        st.markdown(_line169(
+            f"보유 중 {len(_pf_held)}종목", _cnt169,
+            "매입가를 적은 종목이 없습니다 — 적으면 보유 기준으로 판단합니다."))
+        st.markdown(_line169(
+            f"안 산 것 {len(_pf_watch)}종목", _cnt_w169,
+            "판단할 값이 아직 없습니다."))
+
+        # ── ③ 못 잰 것을 밝힌다 (§3) ────────────────────────────────
+        if _pf_noprice:
+            st.caption("현재가 미수신이라 판단에서 뺀 종목: "
+                       + ", ".join(_pf_noprice[:6])
+                       + (f" 외 {len(_pf_noprice) - 6}" if len(_pf_noprice) > 6
+                          else ''))
+        if _pf_nojudge:
+            st.caption("엔진 값이 없어 판단하지 못한 종목: "
+                       + ", ".join(_pf_nojudge[:6])
+                       + (f" 외 {len(_pf_nojudge) - 6}" if len(_pf_nojudge) > 6
+                          else '')
+                       + " — 위 '지금 계산해서 채우기' 로 채울 수 있습니다.")
+
+        # ── ④ 이 견해가 무엇이고 무엇이 아닌가 (§9) ────────────────
+        _uk.note(
+            "**이 견해가 하는 일** — 위 표의 판단을 **세어서** 보여 줄 "
+            "뿐입니다. 판단 자체는 엔진이 발표한 가격선(버틸 수 없는 가격 · "
+            "팔 가격 1차 · 목표 매수가)과 현재가를 견준 것이고, 여기서 새 "
+            "기준을 만들지 않았습니다.  \n"
+            "**하지 않는 일** — 비중을 얼마로 하라거나 무엇을 사라고 하지 "
+            "않습니다. 이 엔진의 매수 신호에는 **비용 차감 뒤 실전에서 "
+            "재현되는 우위가 확인되지 않았습니다** (원장 184,759건 전수 — "
+            "블라인드 적중 50.4% vs 본전 63.7% · 라운드 159·168). "
+            "평균 매수가는 보유 판단에만 쓰고 점수·적정가·예측에는 "
+            "넣지 않습니다.", theme=_theme)
+
+    _uk.spacer(10)
     _wc1, _wc2 = st.columns([1, 3])
     with _wc1:
         if st.button("전체 비우기", width='stretch', key='wlb_clear'):
@@ -5230,6 +5322,9 @@ if _pm_today and _pm_today.get('picks'):
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
                         'snap_bucket': _co142.get('bucket'),   # 라운드 166
+                        # 보유자 기준 (라운드 169) — 다른 키다 (§4)
+                        'snap_hold_trim': _co142.get('hold_trim'),
+                        'snap_hold_stop': _co142.get('hold_stop'),
                     }
                     _n142 = dict(_w142)
                     for _k, _v in _snap.items():
@@ -5746,8 +5841,11 @@ try:
             'snap_at': datetime.date.today().isoformat(),
             'snap_engine': str(_VER_NOW.get('model') or ''),
             # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
-            # 그대로 담는다 (§4). 사용자의 '내 계획'과는 다른 칸이다.
+            # 그대로 담는다 (§4).
             'snap_bucket': CORE.get('bucket'),
+            # 보유자 기준 값 (라운드 169) — 신규 매수자 값과 **다른 키**다
+            'snap_hold_trim': CORE.get('hold_trim'),
+            'snap_hold_stop': CORE.get('hold_stop'),
         }
         _cw141 = portfolio.normalize_code(target_ticker)
         _items141, _dirty141 = [], False

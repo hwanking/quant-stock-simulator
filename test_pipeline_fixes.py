@@ -13271,19 +13271,22 @@ check("2차는 보유자 기준값임을 코드가 밝힌다",
 check("엔진 값 칸에 입력 위젯을 두지 않았다",
       'wl_tb_' not in _w184,
       '목표 매수가는 이제 엔진 값이다 — 입력칸이 남아 있으면 안 된다')
-# ⚠️ 라운드 164 — 세 번째 칸이 '메모'(`wl_mm_`)에서 **'내 계획'**
-#   (`wl_pl_`)으로 바뀌었다. 사용자 요청: *"관심종목에 메모 대신 매수
-#   매도 할지에 대해 보유 이렇게만 해줘."* 자유 메모는 다시 읽을 때
-#   해석이 필요한데 정작 보고 싶은 것은 셋 중 하나였다.
-#   검사가 옛 구현을 요구하고 있으므로 **현실에 맞춘다** (§6).
-#   지키려는 것은 그대로다 — 사용자가 적는 칸은 이 셋뿐이고, 엔진 값
-#   칸에는 입력 위젯이 없다.
-check("사용자 입력은 매입가·수량·내 계획뿐이다",
-      'wl_pd_' in _w184 and 'wl_qt_' in _w184 and 'wl_pl_' in _w184)
+# ⚠️ 이 칸은 세 번 바뀌었다 — 메모(`wl_mm_`) → 내 계획(`wl_pl_`) →
+#   **없앰**(라운드 169). 사용자 요청이 *"메모 대신 매수/매도/보유"*
+#   (164) 에서 *"내 계획은 지워버리고 엔진 판단부터 제대로"*(169)로
+#   바뀌었다. 검사가 옛 구현을 요구하므로 **현실에 맞춘다** (§6).
+#   지키려는 것은 처음부터 같다 — **사용자가 적는 칸은 매입가·수량
+#   둘뿐이고, 엔진 값 칸에는 입력 위젯이 없다.**
+check("사용자 입력은 매입가·수량 둘뿐이다",
+      'wl_pd_' in _w184 and 'wl_qt_' in _w184)
 check("옛 메모 입력칸은 남아 있지 않다 (값이 두 곳에서 오지 않는다 · §4)",
       'wl_mm_' not in _w184)
-check("계획 보기는 portfolio 가 정한 셋뿐이다 (화면이 새로 만들지 않는다)",
-      'portfolio.WATCH_PLANS' in _w184 and 'WATCH_PLANS = ' in _pf184)
+check("'내 계획' 입력칸도 남아 있지 않다 (라운드 169 에 걷어냈다)",
+      'wl_pl_' not in _w184,
+      '지운 칸이 남아 있으면 값이 두 곳에서 온다')
+check("portfolio 에 plan 저장 키가 남아 있지 않다",
+      'WATCH_PLANS' not in _pf184 and "'plan'" not in _pf184,
+      '저장 키가 남으면 파일에 죽은 값이 굳는다')
 
 # ⓒ 언제 잰 값인지 말하는가 · 안 본 종목은 그렇게 말하는가 (§3)
 check("엔진 값 기준일을 화면에 적는다", '엔진 값 기준일' in _w184)
@@ -15035,21 +15038,24 @@ check("NAV 한 줄은 **받은 시각**을 함께 적는다",
 check("시각이 없으면 시각을 지어내지 않는다",
       '조회' not in _uk201.nav_row(_np201, 10290, 10240, None))
 
-# ── ⓘ 관심종목 '내 계획' — 정해진 값만, 옛 메모는 안 지운다 ──────────
-check("계획 보기는 셋뿐이다", _pf201.WATCH_PLANS == ('매수', '매도', '보유'),
-      str(_pf201.WATCH_PLANS))
+# ── ⓘ 관심종목 저장 — 문자 코드 · 보유자 값 · 걷어낸 plan (169) ──────
 _wl201 = _os.path.join(PROJ, '_probe', '_r201_wl.json')
 _pf201.save_watchlist([{'code': '0040Y0', 'name': 'SOL', 'plan': '매수',
-                        'memo': '옛 메모'},
-                       {'code': '480020', 'name': 'ACE', 'plan': '아무거나'}],
+                        'memo': '옛 메모', 'snap_hold_stop': 7000.0,
+                        'snap_hold_trim': 9000.0},
+                       {'code': '480020', 'name': 'ACE'}],
                       path=_wl201)
 _wr201, _ = _pf201.load_watchlist(path=_wl201)
 check("문자 코드가 관심종목에 그대로 저장된다",
       [r['code'] for r in _wr201] == ['0040Y0', '480020'],
       str([r['code'] for r in _wr201]))
-check("허용되지 않은 계획은 저장하지 않는다 (빈 값을 만들지도 않는다)",
-      _wr201[0].get('plan') == '매수' and 'plan' not in _wr201[1],
+check("걷어낸 'plan' 은 저장되지 않는다 (라운드 169)",
+      all('plan' not in r for r in _wr201),
       str([r.get('plan') for r in _wr201]))
+check("보유자 기준 값이 저장된다 (신규 매수자 값과 다른 키 · §4)",
+      _wr201[0].get('snap_hold_stop') == 7000.0
+      and _wr201[0].get('snap_hold_trim') == 9000.0,
+      str({k: v for k, v in _wr201[0].items() if k.startswith('snap_hold')}))
 check("옛 메모는 지우지 않는다 (사용자가 쓴 글이다)",
       _wr201[0].get('memo') == '옛 메모', str(_wr201[0].get('memo')))
 try:
@@ -15083,8 +15089,8 @@ check("종목이 **확정된 뒤**에 최근 목록에 남긴다 (오타를 안 
       'push_search_history' in _wa201 and 'resolved_name' in _wa201)
 check("원격 접속에서는 최근 목록을 파일에 안 쓴다 (§9)",
       'is_remote_exposed()' in _wa201.split('push_search_history')[-1][:400])
-check("관심종목 칸이 '메모'가 아니라 '내 계획'이다",
-      "'내 계획'" in _wa201 and 'wl_pl_' in _wa201)
+check("관심종목에 '엔진 판단' 칸이 있다 (메모·내 계획 자리를 대신한다)",
+      "'엔진 판단'" in _wa201 and 'watch_action' in _wa201)
 check("관심종목에서 자유 메모 입력칸은 없앴다",
       'wl_mm_' not in _wa201, '옛 입력칸이 남아 있으면 값이 두 곳에서 온다 (§4)')
 # ⚠️ `if '(' in name` 이 이름에 괄호가 든 종목을 통째로 걸렀다
@@ -15502,6 +15508,174 @@ if _os.path.exists(_vz203):
     check("한계를 산출물에 적어 두었다 (재무 이력이 없다)",
           '미래 정보' in str(_vd203.get('limitation') or ''),
           '이 표로 게이트를 바꾸지 않는다')
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §204 — 관심종목 판단이 보유 여부를 본다 · 포트폴리오 견해 (라운드 169)
+#
+#   사용자 요청: *"내 계획은 지워버리고, 엔진 판단부터 제대로 되도록
+#   해줘. 지금 보유한 상태에서는 더 매수인지 매도인지, 없으면 매수인지.
+#   내 포트폴리오에 대한 견해도 관심종목 밑에."*
+#
+#   ⚠️ 여기서 지키려는 것은 하나다 — **판단은 새로 짓지 않는다.**
+#     `watch_action()` 은 엔진이 발표한 가격선(hold_stop·hold_trim·
+#     목표 매수가)과 현재가를 견주어 다시 말할 뿐이고, 새 문턱을
+#     만들면 §2 위반, 판정을 다시 지으면 §4 위반이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§204 관심종목 판단이 보유 여부를 본다 (라운드 169)")
+print("=" * 72)
+_uk204 = _uk201
+_wa204 = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
+
+# ── ⓐ 값으로 잰다 — 같은 종목이 매입가 유무로 달라지는가 ──────────────
+_row204 = {'snap_bucket': '오늘 매수 가능', 'snap_buy': 9000.0,
+           'snap_hold_trim': 12000.0, 'snap_hold_stop': 8000.0}
+_cases204 = [
+    # (설명, 매입가, 현재가, 기대 kind, 기대 held)
+    ('미보유 · 목표 매수가 이하', None, 8800.0, '매수 가능', False),
+    ('미보유 · 목표 매수가 위', None, 11000.0, '매수 가능', False),
+    ('보유 · 손절선 아래', 10000.0, 7500.0, '정리 검토', True),
+    ('보유 · 1차 목표 도달', 10000.0, 12500.0, '일부 정리', True),
+    ('보유 · 매수 구간', 10000.0, 8800.0, '추가 매수 가능', True),
+    ('보유 · 그 사이', 10000.0, 10500.0, '보유 유지', True),
+]
+for _d204, _paid204, _px204, _exp204, _held204 in _cases204:
+    _r204 = dict(_row204, paid=_paid204)
+    _a204 = _uk204.watch_action(_r204, _px204)
+    check(f"판단: {_d204} → {_exp204}",
+          _a204 and _a204['kind'] == _exp204 and _a204['held'] == _held204,
+          f"→ {_a204 and (_a204['kind'], _a204['held'])}")
+check("아무것도 안 잰 종목은 판단하지 않는다 (§3)",
+      _uk204.watch_action({}, 10000.0) is None)
+# ⚠️ 화면 실측에서 보유 13종목이 **전부 '보유 유지'** 로 나왔다 — 판단이
+#   아니라 보유자 가격선이 아직 없었던 것이다. 못 잰 것을 판단으로
+#   만들지 않는다 (§3).
+check("보유자 가격선이 없으면 '보유 유지'라고 하지 않는다 (§3)",
+      (_uk204.watch_action({'paid': 10000.0, 'snap_bucket': '추천 제외'},
+                           10500.0) or {}).get('kind') == '보유 기준 미산출',
+      str(_uk204.watch_action({'paid': 10000.0,
+                               'snap_bucket': '추천 제외'}, 10500.0)))
+check("가격선이 하나라도 있으면 판단한다",
+      (_uk204.watch_action({'paid': 10000.0, 'snap_hold_stop': 8000.0},
+                           10500.0) or {}).get('kind') == '보유 유지')
+check("현재가를 못 받으면 보유 기준으로 넘어가지 않는다",
+      (_uk204.watch_action(dict(_row204, paid=10000.0), None) or {})
+      .get('held') is False,
+      '가격 없이 손절·목표를 견줄 수 없다')
+
+# ── ⓑ 보유자 값과 신규 매수자 값을 섞지 않는가 (§4 · 라운드 30) ───────
+#    보유 판단은 hold_* 만, 미보유 판단은 bucket·snap_buy 만 봐야 한다.
+_only_hold204 = dict(snap_hold_trim=12000.0, snap_hold_stop=8000.0,
+                     paid=10000.0)
+check("보유 판단은 신규 매수자 값 없이도 난다",
+      (_uk204.watch_action(_only_hold204, 7500.0) or {}).get('kind')
+      == '정리 검토')
+_only_new204 = dict(snap_bucket='오늘 매수 가능', snap_buy=9000.0)
+check("미보유 판단은 보유자 값 없이도 난다",
+      (_uk204.watch_action(_only_new204, 8800.0) or {}).get('kind')
+      == '매수 가능')
+
+# ── ⓒ 새 문턱을 만들지 않았는가 ──────────────────────────────────────
+#    문턱이란 **비교에 쓰이는 숫자**다. `bucket[:7]` 같은 문자열 자르기는
+#    문턱이 아니므로 Compare 노드 안만 본다 — 처음에 전부 세었다가
+#    슬라이스 7 에 걸렸다(검사가 무엇을 재는지 정확히 적어야 한다).
+_uk_src204 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+_nums204 = []
+_seen204 = False
+try:
+    for _n204 in _ast16.walk(_ast16.parse(_uk_src204)):
+        if isinstance(_n204, _ast16.FunctionDef) and _n204.name == 'watch_action':
+            _seen204 = True
+            for _x204 in _ast16.walk(_n204):
+                if not isinstance(_x204, _ast16.Compare):
+                    continue
+                for _c204 in [_x204.left] + list(_x204.comparators):
+                    if (isinstance(_c204, _ast16.Constant)
+                            and isinstance(_c204.value, (int, float))
+                            and not isinstance(_c204.value, bool)
+                            and _c204.value != 0):
+                        _nums204.append(_c204.value)
+except Exception as _ex204:                                    # noqa: BLE001
+    _nums204 = ['파싱 실패']
+check("watch_action 이 새 문턱(비교에 쓰는 숫자)을 만들지 않는다 (§2)",
+      not _nums204, f'{_nums204[:5]} — 엔진이 낸 가격선만 견준다')
+check("검사가 실제로 그 함수를 봤다 (0건이 미측정이 아니다)", _seen204)
+
+# ── ⓓ '내 계획'이 화면·저장 어디에도 남아 있지 않은가 ────────────────
+check("화면에서 '내 계획' 칸을 걷어냈다",
+      'wl_pl_' not in _wa204 and 'WATCH_PLANS' not in _wa204)
+check("판단이 한 곳에서만 나온다 (_uk.watch_action)",
+      '_uk.watch_action(' in _wa204
+      and '_WL_BUCKET_TONE' not in _wa204,
+      '화면이 자기 판정표를 따로 들고 있으면 §4 위반')
+
+# ── ⓔ 포트폴리오 견해 ────────────────────────────────────────────────
+check("관심종목 밑에 '내 포트폴리오 견해'가 있다",
+      '내 포트폴리오 견해' in _wa204)
+check("견해가 표의 판단을 **다시 계산하지 않는다** (_wl_acts 재사용)",
+      '_wl_acts' in _wa204 and _wa204.count('_uk.watch_action(') == 1,
+      f"watch_action 호출 {_wa204.count('_uk.watch_action(')}회 — "
+      f"두 번 계산하면 두 값이 생긴다 (§4)")
+check("못 잰 것을 밝힌다 (현재가 미수신 · 엔진 값 없음)",
+      '현재가 미수신이라 판단에서 뺀 종목' in _wa204
+      and '엔진 값이 없어 판단하지 못한 종목' in _wa204)
+check("우위가 없다는 사실을 견해에 함께 적는다 (§9)",
+      '재현되는 우위가 확인되지 않았습니다' in _wa204
+      and '50.4%' in _wa204)
+check("비중·매매를 지시하지 않는다고 밝힌다",
+      '무엇을 사라고 하지' in _wa204)
+
+# ── ⓕ `verdict_core.build()` 를 **스냅샷으로 부르지 않는가** ──────────
+#
+#   라운드 169 에서 채우기 버튼이 `build(_snp166)` 로 부르고 있었다.
+#   첫 인자는 **four_scores** 인데 스냅샷을 통째로 넘겨서, 안에서 읽는
+#   키가 전부 None 이 됐다 — 채운 종목이 죄다 bucket='데이터 부족' 이고
+#   보유자 값이 비었다. **못 낸 게 아니라 잘못 물어본 것**이다.
+#   라운드 167 에서 `evaluate_valuation_metric` 에 원본 프레임을 넘겨
+#   겪은 것과 **같은 모양**이라 이번엔 검사로 못 박는다.
+_bad_build204 = []
+try:
+    _t204 = _ast16.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
+    for _n204 in _ast16.walk(_t204):
+        if not (isinstance(_n204, _ast16.Call)
+                and isinstance(_n204.func, _ast16.Attribute)
+                and _n204.func.attr == 'build'
+                and isinstance(_n204.func.value, _ast16.Name)
+                and 'vc' in _n204.func.value.id.lower()):
+            continue
+        if not _n204.args:
+            continue
+        _a0 = _n204.args[0]
+        _nm = (_a0.id if isinstance(_a0, _ast16.Name) else
+               _ast16.dump(_a0)[:40])
+        if 'snp' in _nm.lower() or 'snap' in _nm.lower():
+            _bad_build204.append((_nm, getattr(_n204, 'lineno', 0)))
+except Exception as _ex204b:                                   # noqa: BLE001
+    _bad_build204 = [('파싱 실패', 0)]
+check("verdict_core.build() 에 스냅샷을 넘기지 않는다 (첫 인자는 four_scores)",
+      not _bad_build204,
+      f'{_bad_build204[:3]} — 넘기면 안에서 읽는 키가 전부 None 이 된다')
+# 심어 두면 잡는가 (§110)
+_plant204 = 'x = _vcore.build(_snp166)\n'
+_got204 = []
+for _n204 in _ast16.walk(_ast16.parse(_plant204)):
+    if (isinstance(_n204, _ast16.Call)
+            and isinstance(_n204.func, _ast16.Attribute)
+            and _n204.func.attr == 'build' and _n204.args
+            and isinstance(_n204.args[0], _ast16.Name)
+            and 'snp' in _n204.args[0].id.lower()):
+        _got204.append(_n204.args[0].id)
+check("심어 두면 실제로 잡는다", _got204 == ['_snp166'], str(_got204))
+
+# ── ⓖ 보유자 값이 실제로 저장 경로에 실리는가 ────────────────────────
+for _k204 in ('snap_hold_trim', 'snap_hold_stop'):
+    check(f"{_k204} 가 관심종목 스냅샷 키에 있다",
+          _k204 in _pf201.WATCH_SNAP_NUM)
+    check(f"{_k204} 를 화면이 CORE 에서 담는다",
+          f"'{_k204}': CORE.get(" in _wa204
+          or f"'{_k204}': _co" in _wa204,
+          '엔진 값을 그대로 담아야 한다 (§4)')
 
 
 print()
