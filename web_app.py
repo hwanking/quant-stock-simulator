@@ -52,6 +52,10 @@ import forward_eval as _fe      # 전방 재평가일 — 단일 출처 (라운�
 importlib.reload(market_attention)
 
 from bitemporal_engine import STOCK_NAME_MAP, BitemporalEngine
+# 시장(KOSPI/KOSDAQ) 유도는 **엔진의 단일 진입점** 하나만 쓴다(라운드 159).
+# 화면에서 `'.KQ' in sym` 을 직접 쓰면 시장을 못 읽은 종목이
+# 조용히 한쪽으로 분류된다. 모르면 None 이 돌아오게 한다.
+from bitemporal_engine import market_of as _market_of
 from quant_indicators import QuantIndicatorsEngine
 from report_generator import QuantReportGenerator
 from leakage_guard import LeakageGuard
@@ -2348,7 +2352,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
             st.session_state['positions'] = (st.session_state.get('positions') or []) + [
                 portfolio.PortfolioPosition(
                     ticker=target_ticker, stock_name=resolved_name,
-                    market="KOSDAQ" if target_ticker.endswith(".KQ") else "KOSPI",
+                    market=_market_of(target_ticker),
                     quantity=float(user_quantity), average_buy_price=float(user_entry_price),
                     source_type="manual_entry")]
             st.rerun()
@@ -3654,7 +3658,7 @@ if _pmr:
                                   '수량·평단가는 보유종목 화면에서 채웁니다'):
                     # 수량·평단가를 모르는 채로 지어내지 않는다. 0 으로 넣고
                     # 보유종목 화면을 열어 사용자가 채우게 한다.
-                    _mkt = ('KOSDAQ' if str(_sym).endswith('.KQ') else 'KOSPI')
+                    _mkt = _market_of(_sym)
                     st.session_state['positions'] = (
                         (st.session_state.get('positions') or [])
                         + [portfolio.PortfolioPosition(
@@ -3739,7 +3743,7 @@ if st.session_state.get('show_portfolio'):
                 if st.button("가져오기 실행", type="primary"):
                     def _resolve_market(code):
                         t, _n, _i = engine_init.fetch_and_update_naver_realtime(code)
-                        return "KOSDAQ" if (t or "").endswith(".KQ") else "KOSPI"
+                        return (_i or {}).get('market') or _market_of(t)
                     try:
                         pos, warns = portfolio.import_positions(
                             df_raw, mapping, resolve_market=None,
@@ -4192,12 +4196,14 @@ if st.session_state.get('show_portfolio'):
                           disabled=not _savable):
                 # 사용자가 직접 넣은 종목코드는 시장(KOSPI/KOSDAQ)을 모른다.
                 # KOSPI 로 넘겨짚으면 코스닥 종목의 시세 조회가 통째로 실패한다.
+                # 라운드 159 — 해석 실패 시에도 KOSPI 로 찍지 않는다.
+                #   None 을 돌려주면 portfolio 가 '시장 미지정'으로 넣고 경고를 남긴다.
                 def _resolve_mkt(code):
                     try:
                         t, _n = engine_init.resolve_symbol(code)
-                        return "KOSDAQ" if str(t or "").endswith(".KQ") else "KOSPI"
+                        return _market_of(t)
                     except Exception:
-                        return "KOSPI"
+                        return None
                 pos, warns = portfolio.rows_to_positions(
                     [r for r, _ in _savable], resolve_market=_resolve_mkt)
                 st.session_state['positions'] = pos
@@ -7810,7 +7816,10 @@ with _ctx_c1:
         st.markdown(f"{_dom.get('regime_label')}")
         st.caption(_dom.get('basis', '') + " · " + _dom.get('source', ''))
     else:
-        st.markdown(f"**상장시장 국면 — {_mkt_ctx.get('market', '')}**")
+        # 라운드 159 — 시장을 못 읽은 종목은 market 이 None 이다.
+        #   그대로 보간하면 '상장시장 국면 — None' 이 화면에 나간다.
+        st.markdown(f"**상장시장 국면 — "
+                    f"{_mkt_ctx.get('market') or '상장 시장 미확인'}**")
         st.caption("미수신 — " + str(_dom.get('reason', '지수 데이터 없음')))
 
     # 국내 지수 상세 — 코스피·코스닥 이격도·최근 등락·52주 위치 (전부 일봉 실계산)

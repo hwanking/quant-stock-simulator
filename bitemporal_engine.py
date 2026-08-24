@@ -122,6 +122,96 @@ STOCK_METRICS_DB = {
 # [Section 9] 뉴스·공시·촉매의 시간축 3단계 이산 분류 DB
 TIMEFRAME_NEWS_DB = {}
 
+#: 종목코드 → 'KOSPI' | 'KOSDAQ' — **실측한 것만** 담는다 (라운드 159).
+#  못 읽은 종목은 키를 만들지 않는다. `.get(code)` 가 None 이면 '아직 안 읽었다'
+#  또는 '읽었지만 못 알아냈다'이지, 'KOSPI 다'가 아니다.
+MARKET_BY_CODE = {}
+
+
+def market_of(ticker_or_code, meta=None):
+    """'031510.KQ' · '031510' · meta → 'KOSPI' | 'KOSDAQ' | **None**.
+
+    시장을 알아내는 **단일 진입점**이다(라운드 159).
+
+    ⚠️ 이걸 만든 이유: 같은 결함을 **열두 자리에서** 고치고 있었다.
+       `"KOSPI" if ".KS" in symbol else "KOSDAQ"` 와 그 변종이
+       bitemporal_engine ·2 · market_context ·1 · quant_indicators ·2 ·
+       web_app ·4 · portfolio ·3 에 흩어져 있고, 전부 접미사가 맞다는
+       것을 전제로 한다 (`scripts/../_probe/p16_count.py` 로 센 값 —
+       손으로 세지 않는다).
+       CLAUDE.md §6 — "호출부를 하나씩 고치지 않는다. 같은 결함을 두 번째
+       고치고 있다면 공통 진입점을 찾고, 없으면 만든다."
+
+    순서 — **실측값이 접미사보다 앞선다**:
+      1. meta['market']            (그 조회에서 읽은 값)
+      2. MARKET_BY_CODE[code]      (이번 실행에서 실측한 값)
+      3. STOCK_METRICS_DB 의 market
+      4. 접미사                   (.KS/.KQ — 예전 경로·외부 입력용)
+      5. **None**                  — 모르면 모른다고 한다(§3)
+    """
+    m = str((meta or {}).get('market') or '').upper()
+    if m in ("KOSPI", "KOSDAQ"):
+        return m
+
+    t = str(ticker_or_code or "").upper()
+    digits = re.findall(r'\d{6}', t)
+    code = digits[0] if digits else None
+
+    if code and MARKET_BY_CODE.get(code) in ("KOSPI", "KOSDAQ"):
+        return MARKET_BY_CODE[code]
+
+    m2 = str((metrics_of(t) or {}).get('market') or '').upper()
+    if m2 in ("KOSPI", "KOSDAQ"):
+        return m2
+
+    if t.endswith(".KQ"):
+        return "KOSDAQ"
+    if t.endswith(".KS"):
+        return "KOSPI"
+    return None
+
+
+def metrics_of(symbol):
+    """STOCK_METRICS_DB 를 **접미사에 얽매이지 않고** 읽는다. 없으면 {}.
+
+    ⚠️ 라운드 159 — 이걸 만들어야 했던 이유.
+       종전에는 조회 접미사와 저장 접미사가 **항상 같았다** — 시장을 몰라도
+       `.KS` 를 붙였으니 `.KS` 로 물으면 `.KS` 에 있었다. 그 우연이 깨지자
+       (이제는 **실측한** 시장에 저장한다) `.get(symbol)` 만 하는 세 자리가
+       빈 dict 를 받기 시작했다:
+
+         · 낡은 positions.json 이 코스닥 종목을 `.KS` 로 들고 있는 경우
+         · 리플레이·백필이 예전 티커를 그대로 넘기는 경우
+
+       실제로 회귀 §52 가 잡았다 — 레인보우로보틱스(277810, **코스닥**)를
+       `277810.KS` 로 넘기니 per/pbr 이 안 잡혀 '범위 밖' 사유에서
+       *"PER 7,094배 — 성장 기대가 가격을 지배"* 라는 **근거 문구가
+       통째로 빠졌다.** 값은 DB 에 있었는데 키만 안 맞았다.
+
+       그래서 호출부를 하나씩 고치지 않고 **읽는 문을 하나로** 만든다(§6).
+       코드가 같으면 같은 종목이다 — 접미사는 캐시 키일 뿐이다.
+    """
+    s = str(symbol or "")
+    hit = STOCK_METRICS_DB.get(s)
+    if hit:
+        return hit
+    digits = re.findall(r'\d{6}', s)
+    if digits:
+        for key in (digits[0], f"{digits[0]}.KQ", f"{digits[0]}.KS"):
+            hit = STOCK_METRICS_DB.get(key)
+            if hit:
+                return hit
+    return {}
+
+
+def suffix_for(market):
+    """'KOSDAQ' → '.KQ' · 'KOSPI' → '.KS' · 그 외 → **''**.
+
+    모르는 시장에 .KS 를 붙이지 않는다 — 바로 그게 라운드 159 의 결함이다.
+    """
+    return {"KOSDAQ": ".KQ", "KOSPI": ".KS"}.get(str(market or "").upper(), "")
+
+
 STOCK_NAME_MAP = {
     "지역난방공사": "071320.KS", "071320": "071320.KS", "지역난방공사 (071320)": "071320.KS",
     "금호타이어": "073240.KS", "073240": "073240.KS", "금호타이어 (073240)": "073240.KS",
@@ -518,6 +608,101 @@ class BitemporalEngine:
 
         return None, None, cands
 
+    # ── 시장(KOSPI/KOSDAQ) 판별 ────────────────────────────────────────────
+    #    라운드 159 — 여기까지 '추정'이었다. 지금은 읽는다.
+
+    #: 네이버 종목 페이지의 시장 배지. `<div class="wrap_company">` 바로 뒤에
+    #  `<img src="…/btn_kosdaq.gif" alt="코스닥" class="kosdaq">` 가 온다.
+    _MARKET_BADGE = (
+        ("KOSDAQ", r'class="kosdaq"|alt="코스닥"|btn_kosdaq\.gif'),
+        ("KOSPI",  r'class="kospi"|alt="코스피"|btn_kospi\.gif'),
+    )
+    #: 배지를 찾을 창의 크기(문자). 실측상 배지는 wrap_company 뒤 400자 안에 있다.
+    _MARKET_WINDOW = 2000
+
+    @classmethod
+    def parse_market_badge(cls, html):
+        """네이버 종목 페이지 HTML → 'KOSPI' | 'KOSDAQ' | None.
+
+        ⚠️ **전역 검색을 쓰면 안 된다.** 이 페이지의 머리말에는 코스피·코스닥
+           지수가 둘 다 실려 있어, 코스피 종목의 HTML 에서도 'kosdaq' 이
+           4회 나온다(2026-08-23 실측). 회사 이름 블록 뒤 창으로 좁힌다.
+        """
+        if not html:
+            return None
+        i = html.find('<div class="wrap_company">')
+        frag = html[i:i + cls._MARKET_WINDOW] if i >= 0 else ''
+        if not frag:
+            return None
+        for market, pat in cls._MARKET_BADGE:
+            if re.search(pat, frag):
+                return market
+        return None            # 코넥스·상장폐지 등 — 지어내지 않는다
+
+    def _detect_market(self, code, html=None):
+        """종목의 상장 시장을 **읽는다**. (market, 근거) — 못 읽으면 (None, 사유).
+
+        시장을 이름·재무로 추정하면 안 되는 이유가 'KODEX 코스닥150레버리지'
+        (233740)에 있다 — 이름에 '코스닥'이 있지만 ETF 라 **KOSPI 상장**이다.
+        출처는 둘이고 둘 다 실측 대조를 마쳤다(docs/FIX_R159_MARKET_SUFFIX.md §3-1).
+        """
+        cached = MARKET_BY_CODE.get(code)
+        if cached:
+            return cached, "캐시(이번 실행에서 실측한 값)"
+
+        market = self.parse_market_badge(html)
+        if market:
+            MARKET_BY_CODE[code] = market
+            return market, "네이버 종목 페이지 시장 배지"
+
+        # 2차 — 다음금융 시세 API 가 market 을 그대로 준다
+        try:
+            d = fetch_json_with_retry(
+                f"https://finance.daum.net/api/quotes/A{code}?summary=false")
+        except Exception:
+            d = None
+        dm = str((d or {}).get('market') or '').upper()
+        if dm in ("KOSPI", "KOSDAQ"):
+            MARKET_BY_CODE[code] = dm
+            return dm, "다음금융 시세 API market 필드"
+
+        return None, "시장 미수신 — 네이버 배지·다음 API 모두 읽지 못함"
+
+    def _compose_ticker(self, query, code, market, market_src):
+        """(ticker, 사유) — 접미사를 **지어내지 않는다**.
+
+        결정 순서 (docs/FIX_R159_MARKET_SUFFIX.md §3-2):
+          1. 실측 성공            → 실측을 따른다
+          2. 실측 실패 + 입력 접미사 → 입력 보존 (에코프로 규칙)
+          3. 실측 실패 + 기존 등록  → 등록을 따른다
+          4. 그 외                → **접미사 없음** + 사유
+
+        ⚠️ 실측이 입력 접미사보다 **앞선다.** 둘이 어긋난다는 것은 입력이
+           틀렸다는 뜻이고, 틀린 키에 저장하면 읽는 쪽이 낡은 값을 보는
+           에코프로 사고(:562 주석)가 그대로 재발한다. 그렇다고 양쪽 키에
+           같이 넣지도 않는다 — `_get_fallback_universe` 가 DB 키를
+           순회하므로 `.KS` 키의 존재만으로 코스닥 종목이 KOSPI 로 세어진다.
+        """
+        q = str(query or "").upper()
+        in_suffix = ".KQ" if q.endswith(".KQ") else (".KS" if q.endswith(".KS") else None)
+
+        suffix = suffix_for(market)
+        if suffix:
+            if in_suffix and in_suffix != suffix:
+                return f"{code}{suffix}", (
+                    f"입력 접미사 {in_suffix} 가 실측({market})과 어긋나 실측을 따름 — {market_src}")
+            return f"{code}{suffix}", market_src
+
+        if in_suffix:
+            return f"{code}{in_suffix}", f"{market_src}. 입력 접미사 {in_suffix} 보존"
+
+        prev = str(STOCK_NAME_MAP.get(code) or "")
+        if prev.endswith(".KQ") or prev.endswith(".KS"):
+            return f"{code}{prev[-3:]}", f"{market_src}. 기존 등록 {prev[-3:]} 을 따름"
+
+        # §3 — 없는 값을 지어내지 않는다. 접미사 없이 코드만 돌려주고 사유를 남긴다.
+        return code, f"{market_src}. 접미사를 붙이지 않음(추정 금지)"
+
     def fetch_and_update_naver_realtime(self, symbol_or_code):
         """
         네이버 증권 다중 출처 무결성 파서 — 어떤 종목(예: 넥센타이어 002350, 지역난방공사 071320)이든 네이버 증권 페이지를 즉시 스크래핑/파싱하여 
@@ -576,25 +761,34 @@ class BitemporalEngine:
         if not code:
             return None, query, {}          # 남의 지표를 돌려주지 않는다 (§3)
 
-        # ⚠️ 시장 접미사를 무조건 .KS 로 만들면 안 된다 (최종 감사에서 실측된 결함).
-        #    '086520.KQ' 로 조회하면 신선한 시세가 '086520.KS' 키에 저장되고,
-        #    파이프라인은 '.KQ' 키에서 **낡은 시드 값**을 읽었다 — 에코프로 기준가가
-        #    358,500원(시드)으로 표시되고 다음 79,100원(실측)과 78% 어긋난 원인.
-        #    입력에 접미사가 있으면 보존하고, 없으면 기존 등록 시장을 따른다.
-        if query.upper().endswith(".KQ"):
-            ticker = f"{code}.KQ"
-        elif query.upper().endswith(".KS"):
-            ticker = f"{code}.KS"
-        else:
-            _prev = str(STOCK_NAME_MAP.get(code) or "")
-            ticker = f"{code}.KQ" if _prev.endswith(".KQ") else f"{code}.KS"
+        # ⚠️ 시장 접미사를 추정하면 안 된다 — 두 번 사고가 난 자리다.
+        #    (①) '086520.KQ' 로 조회하면 신선한 시세가 '086520.KS' 키에 저장되고,
+        #        파이프라인은 '.KQ' 키에서 **낡은 시드 값**을 읽었다 — 에코프로
+        #        기준가가 358,500원(시드)으로 나가 다음 79,100원(실측)과 78% 어긋난 원인.
+        #    (②) 라운드 159 — 그 수정이 남겨 둔 폴백이 **KOSPI 고정**이었다.
+        #        입력에 접미사가 없고 STOCK_NAME_MAP(79항목)에도 없으면 무조건 .KS 로
+        #        떨어졌다. 시드에 .KQ 로 등록된 종목코드가 **3개**뿐이라
+        #        코스닥 1,770종목 중 **1,767개(99.8%)**가 KOSPI 로 박혔다(2026-08-23 실측).
+        #        접미사는 이 저장소에서 시장의 유일한 표현이라, 그 값이
+        #        국면 판정 지수(market_context.market_of_ticker)까지 번졌다.
+        #    지금은 **읽는다**. 못 읽으면 접미사를 붙이지 않고 사유를 남긴다(§3).
         url_main = f"https://finance.naver.com/item/main.naver?code={code}"
-        
         try:
             html_m = fetch_html_with_retry(url_main, timeout=7)
-            if not html_m:
-                return ticker, query.split(' (')[0], STOCK_METRICS_DB.get(ticker, {})
-            
+        except Exception:
+            html_m = None
+
+        market, market_src = self._detect_market(code, html_m)
+        ticker, ticker_note = self._compose_ticker(query, code, market, market_src)
+
+        if not html_m:
+            _stale = dict(STOCK_METRICS_DB.get(ticker) or {})
+            if _stale:
+                _stale["market"] = market
+                _stale["market_source"] = ticker_note
+            return ticker, query.split(' (')[0], _stale
+
+        try:
             # 1. Name
             name_m = re.search(r'<div class="wrap_company">.*?<h2>.*?<a[^>]*>(.*?)</a>', html_m, re.DOTALL)
             if not name_m:
@@ -723,6 +917,10 @@ class BitemporalEngine:
             info = {
                 "sector": sector,
                 "is_fund": is_fund,          # ETF·ETN → 펀더멘털 밸류에이션 건너뜀
+                # 상장 시장은 **값**으로 들고 다닌다(라운드 159).
+                # 접미사는 캐시 키일 뿐이고, 시장의 근거는 이 실측값이다.
+                # 못 읽었으면 None — 한쪽으로 찍지 않는다(§3).
+                "market": market, "market_source": ticker_note,
                 "name": stock_name, "base_price": price, "raw_price": price, "prev_close": price - diff_p,
                 "diff_price": diff_p, "pct_change": pct_p, "open_p": open_p, "high_p": high_p,
                 "low_p": low_p, "volume": vol_p, "eps": eps, "bps": bps, "per": per, "pbr": pbr,
@@ -763,6 +961,12 @@ class BitemporalEngine:
         """
         if not symbol:
             return {"currency": "UNKNOWN", "unit_str": "", "type": "종목 미해석"}
+        # 라운드 159 — 접미사 없는 6자리 숫자를 해외 주식으로 보면 안 된다.
+        # 시장을 못 읽어 접미사를 붙이지 않은 KRX 종목이 여기로 떨어져
+        # 원화 종목에 달러 단위가 붙는다. 6자리 숫자는 KRX 코드다.
+        if re.fullmatch(r'\d{6}', str(symbol)):
+            return {"currency": "KRW", "unit_str": "원",
+                    "type": "국내 상장 주식 (KRX · 시장 미수신)"}
         if not symbol.endswith(".KS") and not symbol.endswith(".KQ") and "." not in symbol:
             return {"currency": "USD", "unit_str": "$", "type": "해외 주식"}
         elif "USD/KRW" in symbol or "KRW=" in symbol:
@@ -803,7 +1007,7 @@ class BitemporalEngine:
             #   남아 있었다. 접미사를 살려 넘긴다.
             self.fetch_and_update_naver_realtime(symbol)
 
-        meta = STOCK_METRICS_DB.get(symbol) or STOCK_METRICS_DB.get(code) or {}
+        meta = metrics_of(symbol)        # 접미사가 어긋나도 신선한 행을 읽는다
         krx_base_price = meta.get("base_price")
         if not krx_base_price:
             # 가격을 못 받았으면 임의값(50,000원)으로 대체하지 않는다
@@ -1595,7 +1799,7 @@ class BitemporalEngine:
             universe.append({
                 "symbol": symbol,
                 "name": name,
-                "market": "KOSPI" if ".KS" in symbol else "KOSDAQ",
+                "market": market_of(symbol, meta),   # 실측값 우선 — 모르면 None
                 "base_price": base_p,
                 "today_trade_value": base_p * today_volume,
                 "liquidity_confirmed": today_volume > 0,

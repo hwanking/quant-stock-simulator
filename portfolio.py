@@ -34,12 +34,30 @@ PORTFOLIO_FILE = os.path.join(PORTFOLIO_DIR, "positions.json")
 
 SOURCE_TYPES = ("csv_import", "excel_import", "manual_entry", "clipboard_paste", "local_restore")
 
+#: 시장 → 티커 접미사. **모르는 시장은 빈 문자열**이다 (라운드 159).
+#  이 모듈은 엔진을 import 하지 않는다(포트폴리오 저장소는 순수 데이터 계층).
+#  시장을 **알아내는** 일은 호출자가 resolve_market 로 주입하고,
+#  그 주입자는 bitemporal_engine.market_of 하나를 타고 들어온다.
+_SUFFIX = {"KOSPI": ".KS", "KOSDAQ": ".KQ"}
+
+
+def _market_of_ticker(ticker, measured=None):
+    """실측값이 있으면 그것, 없으면 접미사, 둘 다 없으면 None."""
+    if str(measured or '').upper() in _SUFFIX:
+        return str(measured).upper()
+    t = str(ticker or '').upper()
+    if t.endswith('.KQ'):
+        return 'KOSDAQ'
+    if t.endswith('.KS'):
+        return 'KOSPI'
+    return None
+
 
 @dataclass
 class PortfolioPosition:
     ticker: str                      # 005930.KS 형태
     stock_name: str
-    market: str                      # KOSPI / KOSDAQ
+    market: str | None               # KOSPI / KOSDAQ / None(시장 미수신 — 라운드 159)
     quantity: float
     average_buy_price: float
     account_name: str | None = None      # 계좌 별칭 (계좌번호는 저장하지 않는다)
@@ -2025,21 +2043,27 @@ def rows_to_positions(rows, source_type="clipboard_paste", resolve_market=None):
         #    반영 버튼이 옛 종목을 그대로 저장했다 ("반영해도 안 바뀐다"의 원인).
         hint = clean_cell_str(r.get("_ticker"))
         hint_code = normalize_code(hint) if hint else None
+        market = None                          # 실측값 — 못 읽으면 None 으로 남긴다
         if hint and hint_code == code:
             ticker = hint                      # 코드가 같으면 시장 접미사를 그대로 쓴다
         else:
-            market = None
             if resolve_market:
                 try:
                     market = resolve_market(code)
                 except Exception:
                     market = None
-            ticker = f"{code}{'.KQ' if market == 'KOSDAQ' else '.KS'}"
+            # 라운드 159 — 시장을 못 읽었으면 .KS 로 찍지 않는다.
+            # 접미사 없이 코드만 놓으면 상위가 '시장 미수신' 로 다룬다.
+            # 그리고 그 사실을 **조용히 넘기지 않는다** (§3).
+            ticker = f"{code}{_SUFFIX.get(market, '')}"
+            if not _SUFFIX.get(market):
+                warns.append(f"[{name}] 상장 시장을 확인하지 못해 시장 미지정으로 "
+                             f"넣었습니다 (종목코드 {code} 는 그대로 보존).")
             if hint and hint_code and hint_code != code:
                 warns.append(f"[{name}] 종목코드를 {hint_code} → {code} 로 바꿔 반영했습니다.")
         out.append(PortfolioPosition(
             ticker=ticker, stock_name=name,
-            market="KOSDAQ" if ticker.endswith(".KQ") else "KOSPI",
+            market=_market_of_ticker(ticker, market),
             quantity=float(qty), average_buy_price=float(avg),
             source_type=source_type))
     return out, warns
@@ -2122,8 +2146,14 @@ def import_positions(df, mapping, resolve_market=None, source_type="csv_import")
                 warnings.append(f"{line}행 [{name or code}]: 평균 매수가가 0 이하이거나 비어 있어 제외 ({avg})")
                 continue
 
-        market = resolve_market(code) if resolve_market else "KOSPI"
-        suffix = ".KQ" if market == "KOSDAQ" else ".KS"
+        # 라운드 159 — 종전에는 resolve_market 이 없으면 무조건 KOSPI 였다.
+        # 못 읽은 것과 KOSPI 인 것은 다른 사실이다(§3).
+        market = resolve_market(code) if resolve_market else None
+        if market not in ("KOSPI", "KOSDAQ"):
+            market = None
+            warnings.append(f"{line}행 [{name or code}]: 상장 시장을 확인하지 못해 "
+                            f"시장 미지정으로 넣었습니다.")
+        suffix = _SUFFIX.get(market, '')
 
         positions.append(PortfolioPosition(
             ticker=f"{code}{suffix}",
