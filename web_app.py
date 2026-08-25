@@ -220,6 +220,34 @@ _APP_TX = _TOK['tx1']
 _SB_BG = _TOK['bg2']
 
 
+# ── 부호가 있는 값의 색 (라운드 175) ──────────────────────────────────
+#
+# ⚠️ 라운드 174 는 '두 색 중 고르는' 줄을 고쳤다. 그런데 **반대도 결함**
+#   이다 — `+`/`-` 가 붙는 값에 **한 색을 박아** 두면 음수일 때도 그 색이
+#   나온다. 실측으로 둘이 걸렸다:
+#     · 상대적 밸류에이션 룸 — 음수(고평가)여도 초록
+#     · 패턴 조건부 전략 성과 — **우리 전략만** 초록이고 벤치마크 셋은
+#       무채색이었다. 성과가 음수여도 초록으로 나가는 자리라 §9
+#       ('성과를 좋게 보이게 쓰지 않는다')에 걸린다.
+#
+# 값이 없으면 **색을 주지 않는다** — 없는 값을 색으로 판단하지 않는다 (§3).
+def _signed_col(v, kind='price'):
+    """부호에 따른 색. `kind='price'` 는 한국 관행(오르면 빨강),
+    `kind='perf'` 는 좋다/나쁘다(초록/빨강)."""
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return _TOK['tx2']
+    if kind == 'perf':
+        return _TOK['pos'] if x >= 0 else _TOK['neg']
+    return _TOK['up'] if x >= 0 else _TOK['down']
+
+
+def _perf_col(v):
+    """성과 값의 색 — 벤치마크와 **같은 잣대**로 칠한다 (§9)."""
+    return _signed_col(v, kind='perf')
+
+
 def _md_safe(text):
     """
     엔진이 만든 문장을 마크다운 위젯에 넘기기 전에 이스케이프한다.
@@ -8535,7 +8563,7 @@ else:
         <div style='background: #161D2A; border-radius: 12px; padding: 20px;'>
             <h4 style='margin-top:0;'>1. 시장 국면 & 밸류에이션 위치</h4>
             <p style='margin: 4px 0; font-size:15px;'>- <b>섹터 10년 평균 PER</b>: <b>{fmt_num(per_upside['sector_10yr_per'], '.1f', '배')}</b> | <b>현재 PER</b>: <b>{fmt_num(per_upside['curr_per'], '.1f', '배')}</b></p>
-            <p style='margin: 4px 0; font-size:15px;'>- <b>상대적 밸류에이션 룸</b>: <b style='color:#35C98B;'>{fmt_pct(per_upside['upside_room_pct'])}</b></p>
+            <p style='margin: 4px 0; font-size:15px;'>- <b>상대적 밸류에이션 룸</b>: <b style='color:{_signed_col(per_upside['upside_room_pct'])};'>{fmt_pct(per_upside['upside_room_pct'])}</b></p>
             <p style='margin: 4px 0; font-size:13px; color:#F2B84B;'><b>FOMO 방지 지수</b>: {per_upside['fomo_status']}</p>
         </div>
         """, unsafe_allow_html=True)
@@ -9717,10 +9745,10 @@ with tab_audit:
         st.markdown(f"""
         <div style='background: #161D2A; border-radius: 14px; padding: 20px;'>
             <h4 style='color: #4C8DFF !important; margin-top:0;'>전략 유효성 벤치마크 직접 대조 (Section 20-3)</h4>
-            <p>- <b>패턴 조건부 전략 (20일)</b>: <b style='color:#35C98B;'>{fmt_pct(bench_data['ai_perf'], digits=2)}</b></p>
-            <p>- <b>동일 종목 무조건 보유</b>: <b>{fmt_pct(bench_data['buy_hold_perf'], digits=2)}</b></p>
-            <p>- <b>20일선 위에서만 보유</b>: <b>{fmt_pct(bench_data['trend20d_perf'], digits=2)}</b></p>
-            <p>- <b>KOSPI200 지수</b>: <b>{fmt_pct(bench_data['kospi200_perf'], digits=2)}</b>
+            <p>- <b>패턴 조건부 전략 (20일)</b>: <b style='color:{_perf_col(bench_data['ai_perf'])};'>{fmt_pct(bench_data['ai_perf'], digits=2)}</b></p>
+            <p>- <b>동일 종목 무조건 보유</b>: <b style='color:{_perf_col(bench_data['buy_hold_perf'])};'>{fmt_pct(bench_data['buy_hold_perf'], digits=2)}</b></p>
+            <p>- <b>20일선 위에서만 보유</b>: <b style='color:{_perf_col(bench_data['trend20d_perf'])};'>{fmt_pct(bench_data['trend20d_perf'], digits=2)}</b></p>
+            <p>- <b>KOSPI200 지수</b>: <b style='color:{_perf_col(bench_data['kospi200_perf'])};'>{fmt_pct(bench_data['kospi200_perf'], digits=2)}</b>
                <span style='color:#9DAABC;font-size:13px;'>({bench_data['kospi200_note']})</span></p>
             <hr style='border-color:#1C2635; margin:8px 0;'>
             <p style='font-size:13px; color:#F2B84B; margin:0;'><b>판정</b>: {bench_data['judge_text']}</p>

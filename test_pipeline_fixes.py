@@ -16293,6 +16293,69 @@ check("가격에서 나온 값에 pos/neg 타일을 쓰지 않는다",
       not _tile208, f'{_tile208[:2]}')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §209 — 부호가 있는데 색이 고정이었다 (라운드 175)
+#
+#   §208 은 '두 색 중 고르는' 줄을 고쳤다. **반대도 결함**이다 —
+#   `+`/`-` 가 붙는 값에 한 색을 박아 두면 음수일 때도 그 색이 나온다.
+#   실측으로 둘이 걸렸다:
+#     · 상대적 밸류에이션 룸 — 음수(고평가)여도 **초록**
+#     · 패턴 조건부 전략 성과 — **우리 전략만** 초록이고 벤치마크 셋
+#       (무조건 보유 · 20일선 · KOSPI200)은 무채색이었다. 성과가 음수여도
+#       초록으로 나가는 자리라 **§9(성과를 좋게 보이게 쓰지 않는다)** 다.
+#
+#   여기서는 **함수를 실제로 실행해** 본다 — 논리를 검사에 베끼면 아무것도
+#   증명하지 못한다. `web_app.py` 는 스트림릿 스크립트라 import 가 안 되므로
+#   AST 로 그 두 함수의 **원문만** 떼어 스텁 토큰 위에서 돌린다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§209 부호가 있으면 색도 부호를 따른다 (라운드 175)")
+print("=" * 72)
+
+_w209 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+_tree209 = _ast201.parse(_w209)
+_fn209 = {n.name: _ast201.get_source_segment(_w209, n)
+          for n in _ast201.walk(_tree209)
+          if isinstance(n, _ast201.FunctionDef)
+          and n.name in ('_signed_col', '_perf_col')}
+check("두 색 함수를 코드에서 떼어 냈다", set(_fn209) == {'_signed_col',
+                                                '_perf_col'},
+      str(sorted(_fn209)))
+
+_ns209 = {'_TOK': {'up': 'UP', 'down': 'DOWN', 'pos': 'POS', 'neg': 'NEG',
+                   'tx2': 'TX2'}}
+exec(_fn209['_signed_col'] + '\n' + _fn209['_perf_col'], _ns209)  # noqa: S102
+_sc209, _pc209 = _ns209['_signed_col'], _ns209['_perf_col']
+
+check("양수는 up (한국 관행 — 오르면 빨강)", _sc209(5.0) == 'UP')
+check("음수는 down", _sc209(-5.0) == 'DOWN')
+check("0 은 up 쪽 (경계)", _sc209(0) == 'UP')
+check("성과는 좋다/나쁘다 잣대", _pc209(5.0) == 'POS' and _pc209(-5.0) == 'NEG')
+# 없는 값을 색으로 판단하지 않는다 (§3)
+check("None 이면 방향색을 안 준다", _sc209(None) == 'TX2'
+      and _pc209(None) == 'TX2')
+check("숫자가 아니면 방향색을 안 준다", _sc209('미산출') == 'TX2')
+
+# ⓑ 벤치마크와 **같은 잣대**로 칠하는가 (§9)
+_bench209 = ('ai_perf', 'buy_hold_perf', 'trend20d_perf', 'kospi200_perf')
+_uncol209 = [k for k in _bench209
+             if f"_perf_col(bench_data['{k}'])" not in _w209]
+check("전략과 벤치마크를 같은 잣대로 칠한다 (§9)",
+      not _uncol209, f'색이 안 붙은 항목 {_uncol209}')
+
+# ⓒ 부호 있는 값에 고정색이 남지 않았나 — 그리고 **심어서** 확인
+_FIX209 = _re.compile(r"color:\s*#(35C98B|ff453a|F1574C|488AF7)\b", _re.I)
+_SGN209 = _re.compile(r'여력|룸|손익|수익률|perf')
+_left209 = [f'{_m}:{_i}' for _m in sorted(_la135.reachable_modules())
+            for _i, _ln in _la135.code_lines(_m)
+            if _FIX209.search(_ln) and _SGN209.search(_ln)]
+check("부호 있는 값에 고정색이 남지 않았다", not _left209,
+      f'{len(_left209)}곳 — {_left209[:3]}')
+check("심어 둔 고정색을 잡는다",
+      bool(_FIX209.search("<b style='color:#35C98B;'>{수익률}</b>"))
+      and bool(_SGN209.search("<b style='color:#35C98B;'>{수익률}</b>")))
+
+
 print()
 print("=" * 72)
 if FAILURES:
