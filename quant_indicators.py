@@ -4036,6 +4036,26 @@ class QuantIndicatorsEngine:
             'entry_premium_pct': round((entry_ratio - 1.0) * 100, 1) if entry_ratio is not None else None,
             'chase_buy_status': entry_zone,
             'entry_zone': entry_zone,
+            # ⚠️ 라운드 177 — **고평가 차단이 조용히 꺼지는 자리가 있었다.**
+            #   사용자 지적: *"현대건설 추천이 떴는데 펀더멘털 적정가가
+            #   현재가보다 낮다. 그러면 떨어질 가능성이 있는데 왜 추천했냐."*
+            #   실측(2026-08-25): 현재가 121,300 · 적정가 91,822 → **+32.1%**.
+            #   문턱은 +15% 초과면 '크게 초과'라 **차단됐어야 한다.**
+            #
+            #   그런데 `entry_zone` 은 `fair_value_usable` 이 참일 때만
+            #   계산된다. 그 조건은 **적정가와 권장 매수가가 둘 다** 있어야
+            #   하는데, 현대건설은 '모델 간 편차 허용범위' 미달로 권장
+            #   매수가가 `None` 이었다. 그래서 `entry_zone = "판정 불가"` 가
+            #   되고 `next_action` 의 밸류 가드가 **아예 안 걸렸다.**
+            #
+            #   못 잰 값(권장 매수가) 때문에 **아는 값(적정가 대비 위치)**
+            #   까지 판단을 포기했고, 그 기본값이 하필 '통과'였다.
+            #   → 적정가만 있어도 낼 수 있는 값을 따로 낸다. **차단 쪽으로만**
+            #     쓰고 점수에는 넣지 않는다 (문턱도 위와 같은 값을 재사용).
+            'fair_overshoot_pct': (
+                round((curr_price / float(displayed_fair_value) - 1.0) * 100, 1)
+                if (displayed_fair_value and float(displayed_fair_value) > 0
+                    and curr_price) else None),
             'gate_reason': "정상 (상한 미적용)" if not cap_reasons else " / ".join(cap_reasons),
             'cap_reasons': cap_reasons,
             'top3_block_reasons': top3_block_reasons,

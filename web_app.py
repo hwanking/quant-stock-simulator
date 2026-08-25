@@ -2641,14 +2641,19 @@ def _build_reco_card(p, news_txt, conf_txt):
 
     # 쉬운 설명 — "사지 마세요"로 끝내지 않는다. 다음 조건 엔진이
     # 낸 한 줄을 먼저 쓰고, 조건들은 아래 목록으로 붙인다.
+    # ⚠️ 라운드 177 — 산문에 **날 `<b>` 태그**를 쓰면 안 된다. 사용자 화면에
+    #   `<b>분석 보기</b>` 가 **글자 그대로** 나왔다.
+    #   `ui_kit._esc()` 는 이스케이프를 먼저 하고 `**굵게**` 표기만 되살린다
+    #   (라운드 120d — "산문은 마크다운으로 쓴다, 받는 쪽에서 해석한다").
+    #   그러니 굵게는 `**…**` 로 적는다.
     if _n.get('headline'):
-        say = f"<b>{_n['headline']}</b>"
+        say = f"**{_n['headline']}**"
         if rec and gap is not None and gap > 0:
             say += f" 현재가는 권장 매수가보다 {gap:.1f}% 높습니다."
     elif rec and gap is not None and gap > 0:
-        say = (f"현재가가 권장 매수가보다 <b>{gap:.1f}%</b> 높습니다. "
+        say = (f"현재가가 권장 매수가보다 **{gap:.1f}%** 높습니다. "
                + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
-                  "<b>지금은 기다리는 편</b>이 낫습니다."
+                  "**지금은 기다리는 편**이 낫습니다."
                   if far else "조금만 기다리면 매수 구간에 닿습니다."))
     elif rec:
         say = "현재가가 이미 매수 구간 안에 있습니다."
@@ -2667,10 +2672,10 @@ def _build_reco_card(p, news_txt, conf_txt):
         hold_note = (
             f"보유 중이시면 기준이 다릅니다 — 현재가 기준 1차 목표 "
             f"{float(p['target']):,.0f}원 · 손절 {float(p['stop']):,.0f}원. "
-            f"<b>분석 보기</b>에서 확인하세요.")
+            f"**분석 보기**에서 확인하세요.")
     elif not rec:
-        hold_note = ("<b>진입 기준이 없어 목표가·손절가를 표시하지 "
-                     "않습니다.</b> 참고값은 분석 보기에서 확인하세요. "
+        hold_note = ("**진입 기준이 없어 목표가·손절가를 표시하지 "
+                     "않습니다.** 참고값은 분석 보기에서 확인하세요. "
                      "지금은 신규 매수 판단을 보류합니다.")
 
     _cb = p.get('confidence_band') or {}
@@ -4596,151 +4601,179 @@ else:
     #: 아래 '내 포트폴리오 견해'가 쓸 재료 (라운드 169) — 표를 그리면서
     #: 모은다. 판단을 **두 번 계산하지 않는다** (§4).
     _wl_acts = []
-    for _wi, _w in enumerate(list(_wl_body)):
-        _wc = st.columns(_WL_COLS)
-        _wcode = str(_w.get('code'))
-        with _wc[0]:
-            if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
-                         key=f"wlb_go_{_wcode}"):
-                _go_stock(_wcode, _w.get('name'))
-                st.rerun()
-        with _wc[1]:
-            # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
-            _px_w = light_quote(f"{_wcode}.KS") or light_quote(f"{_wcode}.KQ")
-            st.markdown(
-                f"<div style='padding-top:8px; font-size:13px;'>"
-                f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
-                unsafe_allow_html=True)
-        # ── 목표 매수가 — 읽기 전용 ─────────────────────────────
-        with _wc[2]:
-            st.markdown(
-                f"<div style='padding-top:8px; font-size:13px; "
-                f"color:{_TOK['tx2']};'>{_wl_cell(_w.get('snap_buy'))}</div>",
-                unsafe_allow_html=True)
-        # ── 1차·2차 목표 한 칸 (라운드 171) ─────────────────────
-        # 기준(권장가/현재가)은 **열 이름에** 있다. 여기서는 어느 쪽인지만
-        # 표시하고, 제목 속성으로 한 번 더 풀어 쓴다.
-        with _wc[3]:
-            st.markdown(
-                f"<div style='padding-top:8px; font-size:13px; "
-                f"color:{_TOK['tx2']}; line-height:1.5;' "
-                f"title='1차는 권장 진입가 기준 · "
-                f"2차는 현재가 기준으로 잰 값입니다'>"
-                f"<span style='color:{_TOK['tx3']};'>1차 </span>"
-                f"{_wl_cell(_w.get('snap_t1'))}<br>"
-                f"<span style='color:{_TOK['tx3']};'>2차 </span>"
-                f"{_wl_cell(_w.get('snap_t2'))}</div>",
-                unsafe_allow_html=True)
-        # ── 적정가 + 신뢰도 한 칸 (라운드 143 → 171) ─────────────
-        # 값과 신뢰도는 같이 다녀야 한다. 적정가 4,615원만 보여 주면
-        # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
-        # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
-        with _wc[4]:
-            _fc = _w.get('snap_fair_conf')
-            try:
-                _fcv = float(_fc)
-            except (TypeError, ValueError):
-                _fcv = None
-            # ⚠️ 라운드 166 — ETF 가 **'0 낮음'** 으로 나오고 있었다.
-            #   엔진은 적정가를 **산출하지 않았고**(status UNCALCULATED)
-            #   신뢰도 0.0 은 '못 쟀다'는 뜻인데, 화면이 그것을 **0점짜리
-            #   낮은 신뢰도**로 읽어 적었다 — 미산출을 값으로 만든 것이라
-            #   §3 위반이다. 적정가가 없으면 신뢰도도 없다.
-            if _w.get('snap_fair') in (None, '') or not _fcv:
-                _fct, _fcc = '—', _TOK['tx3']
-            elif _fcv >= 70:
-                _fct, _fcc = f'{_fcv:.0f} 높음', _TOK['pos']
-            elif _fcv >= 55:
-                _fct, _fcc = f'{_fcv:.0f} 보통', _TOK['tx2']
-            else:
-                _fct, _fcc = f'{_fcv:.0f} 낮음', _TOK['warn']
-            st.markdown(
-                f"<div style='padding-top:8px; font-size:13px; "
-                f"color:{_TOK['tx2']}; line-height:1.5;'>"
-                f"{_wl_cell(_w.get('snap_fair'))}<br>"
-                f"<span style='font-size:12px; color:{_fcc};'>"
-                f"{_uk._esc(_fct)}</span></div>",
-                unsafe_allow_html=True)
-        # ── 엔진 판단 (라운드 166 → 169) ─────────────────────────
-        # 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한
-        # 상태에서는 더 매수인지 매도인지, 없으면 매수인지."*
-        #
-        # 판단은 `_uk.watch_action()` **한 곳**에서 나온다 (§4). 그 함수는
-        # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
-        # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
-        with _wc[5]:
-            _act = _uk.watch_action(_w, _px_w)
-            _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
-            if not _act:
+
+    # ── 보유 / 안 산 것으로 가른다 (라운드 177 · 사용자 요청) ────────
+    # *"관심종목에 보유주식이랑 있는주식이랑 나눠주는거 어때?"*
+    #
+    # 두 무리는 **읽는 법이 다르다.** 보유분은 '들고 갈까·더 살까·정리할까'
+    # 이고, 안 산 것은 '지금 살 자리인가'다. 라운드 169 가 판단 문구를
+    # 이미 그렇게 갈라 놓았는데(`watch_action` 의 `held`) 표는 섞여 있어
+    # 한 줄씩 매입가를 확인해야 어느 쪽인지 알 수 있었다.
+    #
+    # ⚠️ 순서만 바꾼다. **줄을 지우거나 합치지 않는다** — 저장 순서
+    #   (`_wl_body` 의 색인)는 그대로 쓰고 그리는 차례만 나눈다.
+    #   그래야 아래 저장 로직(`_wl_body[_wi] = _new`)이 그대로 맞는다.
+    _wl_owned = [(_i, _r) for _i, _r in enumerate(_wl_body) if _r.get('paid')]
+    _wl_free = [(_i, _r) for _i, _r in enumerate(_wl_body)
+                if not _r.get('paid')]
+    _wl_groups = [('보유 중', _wl_owned, '매입가를 적은 종목 — 보유자 기준으로 판단합니다'),
+                  ('안 산 것', _wl_free, '매입가가 없는 종목 — 신규 매수 기준으로 판단합니다')]
+
+    for _gname, _grows, _ghint in _wl_groups:
+        if not _grows:
+            continue
+        _uk.spacer(6)
+        st.markdown(
+            f"<div style='font-size:13px; font-weight:700; color:{_TOK['tx1']}; "
+            f"padding:4px 0 2px 0;'>{_uk._esc(_gname)} "
+            f"<span style='font-weight:400; color:{_TOK['tx3']};'>"
+            f"{len(_grows)}종목 · {_uk._esc(_ghint)}</span></div>",
+            unsafe_allow_html=True)
+        for _wi, _w in _grows:
+            _wc = st.columns(_WL_COLS)
+            _wcode = str(_w.get('code'))
+            with _wc[0]:
+                if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
+                             key=f"wlb_go_{_wcode}"):
+                    _go_stock(_wcode, _w.get('name'))
+                    st.rerun()
+            with _wc[1]:
+                # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
+                _px_w = light_quote(f"{_wcode}.KS") or light_quote(f"{_wcode}.KQ")
                 st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx3']};'>아직 안 잼</div>",
+                    f"<div style='padding-top:8px; font-size:13px;'>"
+                    f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
                     unsafe_allow_html=True)
-            else:
+            # ── 목표 매수가 — 읽기 전용 ─────────────────────────────
+            with _wc[2]:
                 st.markdown(
                     f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK[_act['tone']]};' "
-                    f"title='{_uk._esc_attr(_act['why'])}'>"
-                    f"{_uk._esc(_act['label'])}"
-                    + (f"<br><span style='font-size:12px; "
-                       f"color:{_TOK['tx3']};'>보유 기준</span>"
-                       if _act['held'] else '')
-                    + "</div>", unsafe_allow_html=True)
-        # ── 사용자 입력 두 칸 ────────────────────────────────────
-        with _wc[6]:
-            # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
-            # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
-            _pd = st.number_input(
-                "매입가", min_value=0.0, step=100.0, format='%.0f',
-                value=float(_w.get('paid') or 0.0),
-                key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-        with _wc[7]:
-            _qt = st.number_input(
-                "수량", min_value=0, step=1,
-                value=int(_w.get('qty') or 0),
-                key=f"wl_qt_{_wcode}", label_visibility='collapsed')
-        # ── 매입가 대비 · 평가손익 (라운드 171) ─────────────────
-        # ⚠️ 방금 입력된 값(`_pd`·`_qt`)으로 센다 — 저장본이 아니라.
-        #   저장본으로 세면 방금 고친 값이 한 판 늦게 반영돼 화면이
-        #   스스로 어긋난다 (§4).
-        # ⚠️ 현재가를 못 받았으면 **비운다.** 0 으로 채우지 않는다 (§3).
-        _ret_w = ((_px_w / float(_pd) - 1.0) * 100.0
-                  if (_px_w and _pd and float(_pd) > 0) else None)
-        _pl_w = ((_px_w - float(_pd)) * float(_qt)
-                 if (_ret_w is not None and _qt) else None)
-        with _wc[8]:
-            if _ret_w is None:
-                # 매입가를 안 적었거나 현재가를 못 받았다 — 지어내지 않는다
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx3']};'>—</div>", unsafe_allow_html=True)
-            else:
-                # 한국 관행 — 오르면 빨강, 내리면 파랑 (§5)
-                _rt_col = _TOK['up'] if _ret_w >= 0 else _TOK['down']
-                _pl_line = (
-                    f"<br><span style='font-size:12px;'>{_pl_w:+,.0f}원</span>"
-                    f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
-                    f"매입 {float(_pd) * float(_qt):,.0f}원</span>"
-                    if _pl_w is not None else
-                    f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
-                    f"수량 미입력</span>")
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"font-weight:600; line-height:1.5; color:{_rt_col};'>"
-                    f"{_ret_w:+.1f}%{_pl_line}</div>",
+                    f"color:{_TOK['tx2']};'>{_wl_cell(_w.get('snap_buy'))}</div>",
                     unsafe_allow_html=True)
-        with _wc[9]:
-            if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
-                _wl_remove(_wcode)
-                st.rerun()
-        # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
-        if ((_w.get('paid') or None) != (_pd or None)
-                or int(_w.get('qty') or 0) != int(_qt or 0)):
-            _new = dict(_w)
-            _new['paid'] = _pd or None
-            _new['qty'] = _qt or None
-            _wl_body[_wi] = _new
-            _wl_dirty = True
+            # ── 1차·2차 목표 한 칸 (라운드 171) ─────────────────────
+            # 기준(권장가/현재가)은 **열 이름에** 있다. 여기서는 어느 쪽인지만
+            # 표시하고, 제목 속성으로 한 번 더 풀어 쓴다.
+            with _wc[3]:
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK['tx2']}; line-height:1.5;' "
+                    f"title='1차는 권장 진입가 기준 · "
+                    f"2차는 현재가 기준으로 잰 값입니다'>"
+                    f"<span style='color:{_TOK['tx3']};'>1차 </span>"
+                    f"{_wl_cell(_w.get('snap_t1'))}<br>"
+                    f"<span style='color:{_TOK['tx3']};'>2차 </span>"
+                    f"{_wl_cell(_w.get('snap_t2'))}</div>",
+                    unsafe_allow_html=True)
+            # ── 적정가 + 신뢰도 한 칸 (라운드 143 → 171) ─────────────
+            # 값과 신뢰도는 같이 다녀야 한다. 적정가 4,615원만 보여 주면
+            # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
+            # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
+            with _wc[4]:
+                _fc = _w.get('snap_fair_conf')
+                try:
+                    _fcv = float(_fc)
+                except (TypeError, ValueError):
+                    _fcv = None
+                # ⚠️ 라운드 166 — ETF 가 **'0 낮음'** 으로 나오고 있었다.
+                #   엔진은 적정가를 **산출하지 않았고**(status UNCALCULATED)
+                #   신뢰도 0.0 은 '못 쟀다'는 뜻인데, 화면이 그것을 **0점짜리
+                #   낮은 신뢰도**로 읽어 적었다 — 미산출을 값으로 만든 것이라
+                #   §3 위반이다. 적정가가 없으면 신뢰도도 없다.
+                if _w.get('snap_fair') in (None, '') or not _fcv:
+                    _fct, _fcc = '—', _TOK['tx3']
+                elif _fcv >= 70:
+                    _fct, _fcc = f'{_fcv:.0f} 높음', _TOK['pos']
+                elif _fcv >= 55:
+                    _fct, _fcc = f'{_fcv:.0f} 보통', _TOK['tx2']
+                else:
+                    _fct, _fcc = f'{_fcv:.0f} 낮음', _TOK['warn']
+                st.markdown(
+                    f"<div style='padding-top:8px; font-size:13px; "
+                    f"color:{_TOK['tx2']}; line-height:1.5;'>"
+                    f"{_wl_cell(_w.get('snap_fair'))}<br>"
+                    f"<span style='font-size:12px; color:{_fcc};'>"
+                    f"{_uk._esc(_fct)}</span></div>",
+                    unsafe_allow_html=True)
+            # ── 엔진 판단 (라운드 166 → 169) ─────────────────────────
+            # 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한
+            # 상태에서는 더 매수인지 매도인지, 없으면 매수인지."*
+            #
+            # 판단은 `_uk.watch_action()` **한 곳**에서 나온다 (§4). 그 함수는
+            # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
+            # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
+            with _wc[5]:
+                _act = _uk.watch_action(_w, _px_w)
+                _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
+                if not _act:
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; "
+                        f"color:{_TOK['tx3']};'>아직 안 잼</div>",
+                        unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; "
+                        f"color:{_TOK[_act['tone']]};' "
+                        f"title='{_uk._esc_attr(_act['why'])}'>"
+                        f"{_uk._esc(_act['label'])}"
+                        + (f"<br><span style='font-size:12px; "
+                           f"color:{_TOK['tx3']};'>보유 기준</span>"
+                           if _act['held'] else '')
+                        + "</div>", unsafe_allow_html=True)
+            # ── 사용자 입력 두 칸 ────────────────────────────────────
+            with _wc[6]:
+                # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
+                # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
+                _pd = st.number_input(
+                    "매입가", min_value=0.0, step=100.0, format='%.0f',
+                    value=float(_w.get('paid') or 0.0),
+                    key=f"wl_pd_{_wcode}", label_visibility='collapsed')
+            with _wc[7]:
+                _qt = st.number_input(
+                    "수량", min_value=0, step=1,
+                    value=int(_w.get('qty') or 0),
+                    key=f"wl_qt_{_wcode}", label_visibility='collapsed')
+            # ── 매입가 대비 · 평가손익 (라운드 171) ─────────────────
+            # ⚠️ 방금 입력된 값(`_pd`·`_qt`)으로 센다 — 저장본이 아니라.
+            #   저장본으로 세면 방금 고친 값이 한 판 늦게 반영돼 화면이
+            #   스스로 어긋난다 (§4).
+            # ⚠️ 현재가를 못 받았으면 **비운다.** 0 으로 채우지 않는다 (§3).
+            _ret_w = ((_px_w / float(_pd) - 1.0) * 100.0
+                      if (_px_w and _pd and float(_pd) > 0) else None)
+            _pl_w = ((_px_w - float(_pd)) * float(_qt)
+                     if (_ret_w is not None and _qt) else None)
+            with _wc[8]:
+                if _ret_w is None:
+                    # 매입가를 안 적었거나 현재가를 못 받았다 — 지어내지 않는다
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; "
+                        f"color:{_TOK['tx3']};'>—</div>", unsafe_allow_html=True)
+                else:
+                    # 한국 관행 — 오르면 빨강, 내리면 파랑 (§5)
+                    _rt_col = _TOK['up'] if _ret_w >= 0 else _TOK['down']
+                    _pl_line = (
+                        f"<br><span style='font-size:12px;'>{_pl_w:+,.0f}원</span>"
+                        f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
+                        f"매입 {float(_pd) * float(_qt):,.0f}원</span>"
+                        if _pl_w is not None else
+                        f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
+                        f"수량 미입력</span>")
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; "
+                        f"font-weight:600; line-height:1.5; color:{_rt_col};'>"
+                        f"{_ret_w:+.1f}%{_pl_line}</div>",
+                        unsafe_allow_html=True)
+            with _wc[9]:
+                if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
+                    _wl_remove(_wcode)
+                    st.rerun()
+            # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
+            if ((_w.get('paid') or None) != (_pd or None)
+                    or int(_w.get('qty') or 0) != int(_qt or 0)):
+                _new = dict(_w)
+                _new['paid'] = _pd or None
+                _new['qty'] = _qt or None
+                _wl_body[_wi] = _new
+                _wl_dirty = True
     if _wl_dirty:
         _wl_write(_wl_body)
 
