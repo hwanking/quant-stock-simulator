@@ -152,7 +152,30 @@ def _is_fund_like(name):
 
 
 def _clean(html_cell):
-    return re.sub(r'<.*?>', '', html_cell or '').replace('\n', '').replace('\t', '').strip()
+    """표 한 칸의 HTML → 글자. **줄바꿈을 먼저 없앤다.**
+
+    ⚠️ 라운드 174 — 순서가 뒤바뀌어 있었다.
+
+        re.sub(r'<.*?>', '', cell).replace('\\n', '').replace('\\t', '')
+
+      `.` 는 개행을 안 먹으므로 **여러 줄에 걸친 태그가 살아남는다.**
+      DART 공시 목록이 정확히 그렇게 온다:
+
+        '\\r\\n\\t\\t<a href="/dsaf001/main.do?rcpNo=…"  onclick="…"\\r\\n
+         \\t\\ttitle="특수관계인으로부터자금차입 공시뷰어 새창" >특수관계인으로부터자금차입…'
+
+      그래서 공시 **제목이 `<a href=…>` 원문 그대로** 들어갔고, 그 글자에
+      낱말을 대는 분류가 통째로 무너져 50건 중 **44건(88%)이 '기타'** 로
+      떨어졌다. 화면에도 그 HTML 이 그대로 나갔다.
+      곁들여 `\\r` 은 아예 안 지우고 있었다 (DART 는 CRLF 로 온다).
+
+    → 공백을 먼저 한 칸으로 만들고, 그 다음에 태그를 지운다.
+      태그는 `<[^>]*>` 로 본다 — 닫히지 않은 태그에서 뒤를 통째로 먹지
+      않는다.
+    """
+    s = re.sub(r'[\r\n\t]+', ' ', html_cell or '')
+    s = re.sub(r'<[^>]*>', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
 
 
 def _num(text):

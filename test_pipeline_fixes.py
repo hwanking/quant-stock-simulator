@@ -1704,8 +1704,39 @@ _n_disc = sum(len(v) for v in _disc.values())
 #   장 전에는 3종이 안 나오는 게 정상이다 — 시각에 따라 깨지는 테스트는
 #   신호가 아니라 소음이다(이 절 머리말).
 #   다만 **표본 부족을 통과로 쓰지 않는다**: 몇 건이었는지 같이 찍는다.
-if _disc and _market_ran:
-    check("공시 유형 분류", len(_types) >= 3, str(sorted(_types)[:6]))
+#
+# ⚠️ 라운드 174 — 이 검사가 **결함을 하나 잡았지만 엉뚱한 이름으로** 울었다.
+#   10:11 에 "유형 2종"으로 실패했고, 파 보니 원인은 다양성이 아니라
+#   **제목 파싱**이었다. `_clean` 이 줄바꿈을 없애기 **전에** 태그를 지워
+#   (`.` 는 개행을 안 먹는다) DART 의 여러 줄짜리 `<a>` 가 통째로 살아남았고,
+#   제목이 `<a href="/dsaf001/…">` 원문이라 낱말 분류가 무너져 50건 중
+#   **44건(88%)이 '기타'** 였다. **화면에도 그 HTML 이 나갔다.**
+#
+#   고친 뒤 제목은 깨끗해졌는데 **유형은 여전히 2종**이다 — 그 시각 공시가
+#   실제로 행정 공시(대규모기업집단현황·특수관계인 자금거래·감사보고서)
+#   뿐이었기 때문이다. 그건 자료지 결함이 아니다.
+#
+#   → 그래서 다양성을 **표본이 충분할 때만** 묻고, 대신 **우리가 지킬 수
+#     있는 불변식**을 새로 건다: *제목에 HTML 이 남으면 안 된다.*
+#     그 검사가 있었으면 이번 결함을 **첫날에** 잡았다.
+#     기준을 내린 것이 아니라, 재던 것을 제대로 재는 것으로 바꾼 것이다.
+_html_disc = [str(i.get('title') or '') for v in _disc.values() for i in v
+              if '<' in str(i.get('title') or '')
+              or '&lt;' in str(i.get('title') or '')]
+check("공시 제목에 HTML 이 남지 않았다 (파싱이 실제로 됐는가)",
+      not _html_disc, f'{len(_html_disc)}건 — {_html_disc[:2]}')
+check("그 검사가 제목을 실제로 봤다 (0건이면 미측정)",
+      _n_disc > 0 or not _market_ran, f'{_n_disc}건')
+#: 유형 다양성은 표본이 이만큼 쌓여야 뜻이 있다 (그 아래는 소음이다)
+_DIV_MIN_DISC = 150
+if _disc and _market_ran and _n_disc >= _DIV_MIN_DISC:
+    check(f"공시 유형 분류 ({_n_disc}건)", len(_types) >= 3,
+          str(sorted(_types)[:6]))
+elif _disc and _market_ran:
+    check(f"공시 유형 분류 — {_n_disc}건({_DIV_MIN_DISC} 미만)이라 "
+          f"다양성은 미측정 · 분류표 안인지만 본다",
+          _types <= ({lbl for lbl, _k in mkt.DISCLOSURE_TYPES} | {'기타'}),
+          str(sorted(_types)))
 elif _disc:
     check(f"공시 유형 분류 — 장 전({_now_d.strftime('%H:%M')}) "
           f"{_n_disc}건이라 유형 다양성은 미측정",
@@ -16165,6 +16196,101 @@ check("파급 표에 국면 판정 지수가 있다",
       'market_of_ticker' in _flat207 and '국면' in _flat207)
 check("판정 기준을 고치기 전에 적었다",
       '고치기 전에 적는다' in _flat207 and 'C1' in _flat207 and 'C5' in _flat207)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §208 — 색 관행이 화면마다 반대였다 (라운드 174)
+#
+#   §5 는 **상승 빨강 / 하락 파랑**(한국 관행)을 못 박는다. 토큰은
+#   그대로였다 — `up=#F1574C`(빨강) · `down=#488AF7`(파랑).
+#   그런데 화면 아홉 자리가 손으로 **초록(#35C98B)=양수 · 빨강(#ff453a)=
+#   음수** 를 박아 두고 있었다. 서양 관행이고, §5 와 반대다.
+#
+#   가장 분명한 증거는 같은 색의 두 뜻이다:
+#     chart_pro.py:26   _UP = '#ff453a'      ← 차트에서 빨강은 **상승**
+#     web_app.py:3393   음수일 때 '#ff453a'   ← 표에서 빨강은 **하락**
+#   한 앱에서 같은 색이 반대 뜻이었다.
+#
+#   그리고 손으로 박은 색은 **테마를 안 따른다** — 라이트 모드에서도
+#   다크 색이 그대로 나온다.
+#
+#   여기서 지키는 것:
+#     ⓐ 가격에서 나온 수(평가손익·수익률·상승여력·등락률·평단 대비)에
+#        손 색을 쓰지 않는다 — `_TOK['up']`/`_TOK['down']` 만 쓴다
+#     ⓑ 토큰 자체가 관행을 지키는지 **값으로** 본다 (빨강이 정말 빨간가)
+#     ⓒ 심어서 확인한다 — 위반을 만들어 넣으면 잡히는가 (§6)
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§208 색 관행 — 오르면 빨강 · 내리면 파랑 (라운드 174)")
+print("=" * 72)
+
+_HEX208 = _re.compile(r'#35C98B|#ff453a', _re.I)
+#: 가격에서 나온 수를 가리키는 낱말
+_PRICE208 = ('수익률', '평가손익', '상승여력', '등락', '손익', 'pnl', 'ret',
+             'upside', 'chg', 'curr_price', 'm10_stat')
+
+
+def _viol208(text):
+    """한 줄에 두 손 색이 다 있고 가격 낱말이 있으면 관행 위반 후보."""
+    out = []
+    for _i, _ln in enumerate(text.splitlines(), 1):
+        if len(set(_HEX208.findall(_ln))) < 2:
+            continue
+        _low = _ln.lower()
+        if any(_k.lower() in _low for _k in _PRICE208):
+            out.append((_i, _ln.strip()[:100]))
+    return out
+
+
+_scan208 = 0
+_bad208 = []
+for _m208 in sorted(_la135.reachable_modules()):
+    _s208 = '\n'.join(ln for _i, ln in _la135.code_lines(_m208))
+    _scan208 += len(_s208.splitlines())
+    for _i208, _t208 in _viol208(_s208):
+        _bad208.append(f'{_m208}:{_i208}  {_t208}')
+check("훑은 줄이 있다 (0줄이면 미측정)", _scan208 > 10000, f'{_scan208:,}줄')
+check("가격에서 나온 수에 손 색을 안 쓴다 (§5 — 오르면 빨강)",
+      not _bad208, f'{len(_bad208)}곳 — {_bad208[:3]}')
+
+# ⓑ 토큰이 정말 '오르면 빨강'인가 — 이름이 아니라 **값**으로 본다
+import ui_kit as _uk208                                          # noqa: E402
+
+
+def _rgb208(h):
+    h = str(h).lstrip('#')
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+for _th208 in ('dark', 'light'):
+    _t208d = _uk208.tokens(_th208)
+    _ur, _ug, _ub = _rgb208(_t208d['up'])
+    _dr, _dg, _db = _rgb208(_t208d['down'])
+    check(f"[{_th208}] up 은 붉은 쪽이다 (R>B)", _ur > _ub,
+          f"{_t208d['up']}")
+    check(f"[{_th208}] down 은 푸른 쪽이다 (B>R)", _db > _dr,
+          f"{_t208d['down']}")
+
+# ⓒ 심어서 확인 — 위반을 만들면 실제로 잡히는가 (§6)
+check("심어 둔 위반을 잡는다",
+      len(_viol208('x = "#35C98B" if _pnl >= 0 else "#ff453a"')) == 1)
+check("판정용(초록=좋음)은 위반으로 안 본다",
+      len(_viol208('ok_col = "#35C98B" if passed else "#ff453a"')) == 0)
+
+# ⓓ 타일도 같은 언어를 쓰는가 — 라운드 171 이 넣은 평가손익 타일만
+#    `pos`(초록)였고 바로 위 표의 같은 값은 `up`(빨강)이었다.
+#    **한 화면에 두 색 언어가 있었다** (§4 · §5).
+_w208 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+check("포트폴리오 평가손익 타일이 관행 색을 쓴다",
+      "tone=('up' if _pl169 >= 0 else 'down')" in _w208,
+      "표는 up/down 인데 타일만 pos/warn 이면 한 화면에 두 언어다")
+# 가격에서 나온 값에 tone='pos'/'neg' 를 쓰는 타일이 또 생기지 않게
+_tile208 = [ln.strip()[:90] for _i, ln in _la135.code_lines('web_app.py')
+            if "tone=" in ln
+            and ("'pos'" in ln or '"pos"' in ln)
+            and any(k in ln for k in ('pnl', '손익', 'ret', '수익'))]
+check("가격에서 나온 값에 pos/neg 타일을 쓰지 않는다",
+      not _tile208, f'{_tile208[:2]}')
 
 
 print()
