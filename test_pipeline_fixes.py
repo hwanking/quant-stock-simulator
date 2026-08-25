@@ -16356,6 +16356,48 @@ check("심어 둔 고정색을 잡는다",
       and bool(_SGN209.search("<b style='color:#35C98B;'>{수익률}</b>")))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §210 — 라이트 모드에서 펼친 익스팬더 머리가 안 보였다 (라운드 176)
+#
+#   `.streamlit/config.toml` 이 `base = "dark"` 로 잠겨 있어 Streamlit 이
+#   **자기 위젯 크롬**을 다크로 칠한다. 그 다크는 `details[open] > summary`
+#   에만 붙는다 — 접힌 머리는 투명이다. 그래서 라이트 오버라이드가 그 안
+#   글자를 `tx1`(어둡게)로 바꾸면 **펼친 것만** 다크 배경 + 다크 글자가 된다.
+#
+#   브라우저 실측 (라이트 모드 · 글자 마디 1,802개 · 같은 DOM 에서 A/B):
+#       규칙 없이   대비 1.04 인 마디 **2개** (열린 익스팬더 4개 중)
+#       규칙 있으면 **0개**
+#
+#   ⚠️ 함정 — `summary` **전체**를 예외로 두면 접힌 65개가 흰 글자가 돼
+#      **더 나빠진다.** 반드시 `details[open]` 로 좁혀야 한다.
+#      이 절이 그 좁힘을 못 박는다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§210 라이트 모드 — 펼친 익스팬더 머리 (라운드 176)")
+print("=" * 72)
+
+_w210 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+check("펼친 익스팬더 머리의 배경을 라이트에서 지운다",
+      'details[open] > summary' in _w210 and 'background: transparent' in _w210)
+# 라이트 블록 **안**에 있어야 한다 — 다크에서 지우면 크롬이 사라진다
+_lightblk210 = _w210.split("if _theme == 'light':")[-1][:6000]
+check("그 규칙이 라이트 블록 안에 있다",
+      'details[open] > summary' in _lightblk210,
+      '다크에서 지우면 펼침 표시가 사라진다')
+# ⚠️ 함정 방지 — summary 전체를 예외로 두면 접힌 것이 흰 글자가 된다
+check("summary 전체를 글자색 예외로 두지 않았다",
+      ':not(summary)' not in _w210 and ':not(summary *)' not in _w210,
+      '접힌 머리 65개가 흰 글자가 된다 — details[open] 로 좁혀야 한다')
+# 설계 근거가 적혀 있는가 (왜 좁혔는지 · 실측값)
+check("실측값과 좁힌 이유를 코드에 적었다",
+      '1,802' in _w210 and '접힌' in _w210)
+# 테마가 잠겨 있다는 전제 자체를 값으로 확인한다 (전제가 바뀌면 이 규칙도 바뀐다)
+_cfg210 = _read148(_os.path.join(PROJ, '.streamlit', 'config.toml'))
+check("config.toml 이 여전히 base=dark 다 (이 규칙의 전제)",
+      'base = "dark"' in _cfg210,
+      '전제가 바뀌면 §210 의 규칙도 다시 재야 한다')
+
+
 print()
 print("=" * 72)
 if FAILURES:

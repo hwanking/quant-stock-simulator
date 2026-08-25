@@ -3,12 +3,25 @@
   "model": "v2026.08.25.0",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.25.5",
+  "schema": "v2026.08.25.6",
   "news": "v2026.08.25.2",
   "sector": "v2026.08.09.0",
   "valuation": "v2026.08.25.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.25.6",
+   "previous": "v2026.08.25.5",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "라이트 모드에서 펼친 익스팬더 머리의 글자가 안 보였다 (대비 1.04)",
+   "note": "config.toml 이 base=\"dark\" 로 잠겨 있어 Streamlit 이 자기 위젯 크롬을 다크로 칠하는데, 그 다크는 details[open] > summary 에만 붙는다(접힌 머리는 투명). 그래서 라이트 오버라이드가 그 안 글자를 tx1(어둡게)로 바꾸면 펼친 것만 다크 배경 + 다크 글자가 됐다. 브라우저 실측(글자 마디 1,802개, 같은 DOM A/B): 규칙 없이 2개 · 있으면 0개. summary 전체를 예외로 두면 접힌 65개가 흰 글자가 돼 더 나빠지므로 details[open] 으로 좁혔다.",
+   "created_at": "2026-08-25T13:06:15+00:00",
+   "effective_from": "2026-08-25"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",
