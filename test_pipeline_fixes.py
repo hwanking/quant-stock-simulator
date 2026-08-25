@@ -16398,6 +16398,100 @@ check("config.toml 이 여전히 base=dark 다 (이 규칙의 전제)",
       '전제가 바뀌면 §210 의 규칙도 다시 재야 한다')
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §211 — 고평가 차단이 조용히 꺼져 있었다 · 산문의 날 태그 (라운드 177)
+#
+#   사용자 지적: *"현대건설 추천이 떴는데 펀더멘털 적정가는 현재가보다
+#   낮은데, 그러면 떨어질 가능성이 있는데 왜 추천한 거냐."*
+#
+#   실측(2026-08-25): 현재가 121,300 · 적정가 91,822 → **+32.1%**.
+#   문턱은 +15% 초과면 '크게 초과'라 **차단됐어야 한다.**
+#
+#   원인 — `entry_zone` 은 `fair_value_usable` 이 참일 때만 계산되고,
+#   그 조건은 **적정가와 권장 매수가가 둘 다** 있어야 한다. 현대건설은
+#   '모델 간 편차 허용범위' 미달로 권장 매수가가 `None` 이었다. 그래서
+#   `entry_zone = '판정 불가'` 가 되고 밸류 가드가 통째로 안 걸렸다.
+#   화면은 같은 카드에서 **'상승여력 −24.3%'** 를 이미 적고 있었다 —
+#   아는 값을 두고 판단만 포기한 것이다.
+#
+#   영향 실측(표본 240종목): **8종목(3.3%)** 이 적정가 대비 +31~+51% 인데
+#   차단이 꺼진 상태였다 (현대건설 포함).
+#
+#   고침은 **차단 쪽으로만** 한다 — 점수는 건드리지 않고, 문턱도 구역
+#   판정이 쓰는 것과 같은 값을 재사용한다 (§2).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§211 고평가 차단 · 산문의 날 태그 (라운드 177)")
+print("=" * 72)
+
+_qi211 = '\n'.join(ln for _i, ln in _la135.code_lines('quant_indicators.py'))
+_na211 = '\n'.join(ln for _i, ln in _la135.code_lines('next_action.py'))
+
+check("적정가만 있어도 넘침을 낸다 (fair_overshoot_pct)",
+      "'fair_overshoot_pct'" in _qi211)
+check("그 값이 fair_value_usable 에 묶여 있지 않다",
+      'fair_value_usable' not in
+      _qi211.split("'fair_overshoot_pct'")[-1][:400],
+      '권장 매수가가 없다고 적정가까지 버리면 안 된다')
+check("밸류 가드가 그 값을 본다", 'fair_overshoot_pct' in _na211)
+check("문턱을 새로 고르지 않았다 (구역 판정과 같은 15%)",
+      '_OVER_BLOCK_PCT = 15.0' in _na211 and 'fair_ref * 1.15' in _qi211)
+
+# 가드가 실제로 어떻게 작동하는지 — **함수를 돌리지 않고** 규칙만 재현하면
+# 아무것도 증명하지 못한다. next_action 을 import 해 실제로 부른다.
+import next_action as _na211m                                    # noqa: E402
+import pandas as _pd211                                          # noqa: E402
+_tech211 = _pd211.DataFrame({
+    'close': [100.0] * 60, 'high': [101.0] * 60, 'low': [99.0] * 60,
+    'volume': [1000] * 60})
+
+
+def _kind211(over, zone='판정 불가'):
+    """넘침만 바꾸고 나머지는 **매수 후보 그대로** 둔 상태의 판정.
+
+    ⚠️ 진입가(`entry_pullback_price`)가 없으면 무엇을 넣든 `observe` 라
+       가드가 일하는지 안 하는지 구분이 안 된다. 처음에 그렇게 썼다가
+       '넘침 없음'과 '넘침 32%'가 **둘 다 observe** 로 나와 검사가
+       아무것도 못 재고 있었다 — 기준선을 매수 후보로 만든다.
+    """
+    _fs = {'entry_zone': zone, 'chase_buy_status': zone,
+           'fair_overshoot_pct': over, 'entry_pullback_price': 119000.0}
+    try:
+        return str((_na211m.build(_fs, _tech211, 121300.0) or {}).get('kind'))
+    except Exception as _e211:                                   # noqa: BLE001
+        return f'ERR {type(_e211).__name__}'
+
+
+check("기준선이 매수 후보다 (아니면 아래 검사가 아무것도 못 잰다)",
+      _kind211(None) == 'buy_now', _kind211(None))
+check("현대건설 형(판정 불가 + 32.1%)이 매수 후보에서 빠진다",
+      _kind211(32.1) == 'observe', _kind211(32.1))
+check("경계 바로 위(+15.1%)부터 막는다", _kind211(15.1) == 'observe')
+check("경계(+15.0%)는 그대로 둔다 — 문턱을 안 내렸다",
+      _kind211(15.0) == 'buy_now', _kind211(15.0))
+check("문턱 아래(+8%)도 그대로 둔다 (완화도 강화도 아님)",
+      _kind211(8.0) == 'buy_now', _kind211(8.0))
+# ⚠️ §3 — **못 잰 것으로 거르지 않는다.** 적정가가 없으면 이 가드는 안 건다.
+check("적정가를 못 낸 종목은 이 가드로 막지 않는다 (§3)",
+      _kind211(None) == 'buy_now' and _kind211(32.1) == 'observe',
+      f'넘침 없음={_kind211(None)} vs +32.1%={_kind211(32.1)}')
+check("적정가가 없으면 넘침 판정 자체를 안 만든다",
+      "if (displayed_fair_value and" in _qi211)
+
+# ── 산문에 날 HTML 태그를 쓰지 않는다 (라운드 120d 의 규칙) ──────────
+#   사용자 화면에 `<b>분석 보기</b>` 가 **글자 그대로** 나왔다.
+#   `_esc()` 는 이스케이프 뒤 `**굵게**` 만 되살린다 — 산문은 마크다운이다.
+_w211 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+_card211 = _w211.split('def _build_reco_card')[-1][:5200]
+_rawtag211 = _re.findall(r'</?(?:b|i|em|strong|u)>', _card211)
+check("추천 카드 산문에 날 <b> 태그가 없다", not _rawtag211,
+      f'{len(_rawtag211)}개 — 마크다운 **…** 으로 적는다')
+check("그 검사가 카드를 실제로 봤다 (0자면 미측정)",
+      len(_card211) > 2000, f'{len(_card211)}자')
+check("굵게는 마크다운으로 적는다", '**{_n[' in _card211
+      or "**분석 보기**" in _card211)
+
+
 print()
 print("=" * 72)
 if FAILURES:

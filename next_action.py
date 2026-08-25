@@ -255,11 +255,35 @@ def build(four_scores, tech_df, price, verdict=None):
     # 진입 위치 판정이 '크게 초과'면 오늘 살 종목이 아니다.
     zone = str(fs.get('chase_buy_status') or fs.get('entry_zone') or '')
     over_value = ('크게 초과' in zone)
+
+    # ⚠️ 라운드 177 — 위 판정이 **조용히 꺼지는 자리**가 있었다.
+    #   `entry_zone` 은 적정가와 **권장 매수가가 둘 다** 있어야 계산된다.
+    #   권장 매수가는 모델 간 편차가 크면 `None` 이 되는데, 그때
+    #   `entry_zone` 이 '판정 불가'가 되어 이 가드가 통째로 안 걸렸다.
+    #   실측: 현대건설 현재가 121,300 · 적정가 91,822 → **+32.1%** 인데
+    #   추천에 올라왔다. 문턱(+15%)을 한참 넘긴 값이다.
+    #
+    #   **못 잰 값(권장 매수가) 때문에 아는 값(적정가)까지 버리지 않는다.**
+    #   적정가만 있어도 넘침은 잴 수 있다. 문턱은 위 구역 판정이 쓰는 것과
+    #   **같은 값**이다 — 새로 고르지 않는다 (§2).
+    #   이 갈래는 **차단만** 한다. 통과를 만들지 않으므로 완화가 아니다.
+    _OVER_BLOCK_PCT = 15.0          # = entry_zone 의 fair_ref * 1.15 와 같다
+    _overshoot = _f(fs.get('fair_overshoot_pct'))
+    over_by_fair = (_overshoot is not None and _overshoot > _OVER_BLOCK_PCT)
+    over_value = over_value or over_by_fair
+
     vfloor = _f(fs.get('value_floor_price'))
     if over_value:
         out['kind'] = 'observe'
         out['exclude_reason'] = '적정가 크게 초과 — 추격매수 위험'
         out['headline'] = '고평가 구간입니다 — 오늘의 매수 후보가 아닙니다.'
+        if over_by_fair and '크게 초과' not in zone:
+            # 왜 막혔는지 **숫자로** 말한다 — '판정 불가'로 얼버무리지 않는다
+            out['exclude_reason'] = (
+                f'현재가가 적정가보다 {_overshoot:+.1f}% 위 — 추격매수 위험')
+            out['headline'] = (
+                f'현재가가 펀더멘털 적정가보다 {_overshoot:+.1f}% 높습니다 '
+                f'— 오늘의 매수 후보가 아닙니다.')
         cond('value', vfloor,
              (f"장기 가치 기준 참고선은 {vfloor:,.0f}원입니다 — "
               f"오늘의 매수가가 아니라 위험 참고선입니다"
