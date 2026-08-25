@@ -891,6 +891,25 @@ if _theme == 'light':
         }}
         .stApp [data-testid="stCaptionContainer"] p{_G} {{ color: {_TOK['tx2']} !important; }}
 
+        /* 라운드 176 — 펼친 익스팬더 머리가 라이트에서 안 보였다.
+           `.streamlit/config.toml` 이 `base = "dark"` 로 잠겨 있어
+           Streamlit 이 **자기 위젯 크롬**을 다크로 칠한다. 그런데 그 다크는
+           `details[open] > summary` 에만 붙는다 — 접힌 머리는 투명이다.
+           그래서 위의 라이트 규칙이 그 안 글자를 `tx1`(어둡게)로 바꾸면
+           **펼친 것만** 다크 배경 + 다크 글자가 된다.
+
+           브라우저 실측(라이트 모드 · 글자 마디 1,802개):
+             이 규칙 없이  대비 1.04 인 마디 2개 (열린 익스팬더 4개 중)
+             이 규칙 있으면 **0개**
+           같은 DOM 에서 규칙만 넣고 빼며 잰 값이다.
+
+           주의 — 접힌 머리(65개)는 이미 투명이라 어두운 글자가 맞다.
+           `summary` 전체를 예외로 두면 그 65개가 흰 글자가 돼 더 나빠진다.
+           `details[open]` 로 좁히는 이유가 그것이다. */
+        .stApp [data-testid="stExpander"] details[open] > summary {{
+            background: transparent !important;
+        }}
+
         /* 메트릭 숫자 */
         [data-testid="stMetricValue"] {{ color: {_TOK['tx1']} !important; }}
         [data-testid="stMetricLabel"] {{ color: {_TOK['tx2']} !important; }}
