@@ -2253,7 +2253,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
         _tot_ret = ((_tot_val / _tot_cost - 1) * 100) if (_tot_cost and _tot_val) else None
         _pnl = _tot_val - _tot_cost if _tot_val else None
-        _col = "#35C98B" if (_pnl or 0) >= 0 else "#ff453a"
+        _col = _TOK['up'] if (_pnl or 0) >= 0 else _TOK['down']
         st.sidebar.markdown(
             f"<div style='background:#161D2A;border-radius:10px;"
             f"padding:8px 12px;margin-bottom:8px;'>"
@@ -2280,7 +2280,7 @@ if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
                     st.session_state['pending_search'] = f"{_m['stock_name']} ({_m['ticker'].split('.')[0]})"
                     st.rerun()
             with _c2:
-                _rc = "#35C98B" if (_ret or 0) >= 0 else "#ff453a"
+                _rc = _TOK['up'] if (_ret or 0) >= 0 else _TOK['down']
                 st.markdown(
                     f"<div style='text-align:right;padding-top:8px;'>"
                     f"<span style='color:{_rc};font-weight:700;font-size:15px;'>{fmt_pct(_ret)}</span><br>"
@@ -3390,11 +3390,11 @@ if st.session_state.get('show_screener', False):
                         upside_str, upside_color = "미산출", "#9DAABC"
                     else:
                         upside_str = f"{upside_val:+.1f}%"
-                        upside_color = "#35C98B" if upside_val > 0 else "#ff453a"
+                        upside_color = _TOK['up'] if upside_val > 0 else _TOK['down']
 
                     m10_stat = r.get('m10_status', '위')
                     m10_disp = r.get('m10_disparity', 0.0)
-                    m10_col = "#35C98B" if m10_stat == "위" else "#ff453a"
+                    m10_col = _TOK['up'] if m10_stat == "위" else _TOK['down']
                     m10_str = f"{m10_stat} ({m10_disp:+.1f}%)"
                     # 차트 관점 배지: DeMARK 매수 신호가 살아 있으면 함께 표기
                     _dstate = r.get('demark_entry_state')
@@ -4104,7 +4104,7 @@ if st.session_state.get('show_portfolio'):
             if _s_cost > 0 and _s_val > 0:
                 _s_pnl = _s_val - _s_cost
                 _s_ret = (_s_val / _s_cost - 1.0) * 100.0
-                _sc = "#35C98B" if _s_pnl >= 0 else "#ff453a"
+                _sc = _TOK['up'] if _s_pnl >= 0 else _TOK['down']
                 st.markdown(
                     f"<div style='background:#161D2A;"
                     f"border-radius:10px;padding:8px 16px;margin:8px 0;'>"
@@ -4892,9 +4892,12 @@ else:
                      sub=f"총 {_pf_qty:,}주"),
                 dict(label='총 매입금액', value=f"{_pf_cost:,.0f}원"),
                 dict(label='평가금액', value=f"{_pf_val:,.0f}원"),
+                # ⚠️ 라운드 174 — 여기만 `pos`(초록)를 쓰고 있었다. 바로 위
+                #   표의 같은 값은 `up`(빨강)이라 **한 화면에 두 색 언어**가
+                #   있었다. 가격에서 나온 수는 한국 관행을 따른다 (§5).
                 dict(label='평가손익', value=f"{_pl169:+,.0f}원",
                      sub=f"{_plp169:+.1f}%",
-                     tone=('pos' if _pl169 >= 0 else 'warn')),
+                     tone=('up' if _pl169 >= 0 else 'down')),
                 dict(label='가장 큰 종목 비중',
                      value=f"{_conc169:.0f}%", sub=str(_top169[0])[:14]),
             ], theme=_theme)
@@ -5649,7 +5652,7 @@ high_p = float(stock_info.get('high_p', curr_price))
 low_p = float(stock_info.get('low_p', curr_price))
 volume_p = float(stock_info.get('volume', 0.0))
 
-chg_color = "#35C98B" if pct_change >= 0 else "#ff453a"
+chg_color = _TOK['up'] if pct_change >= 0 else _TOK['down']
 chg_sign = "▲ +" if pct_change >= 0 else "▼ "
 chg_text = f"{chg_sign}{pct_change:.2f}% ({diff_price:+,.0f}원)" if unit_currency=="KRW" else f"{chg_sign}{pct_change:.2f}% (${diff_price:+.2f})"
 
@@ -8403,7 +8406,7 @@ if user_entry_price > 0 and user_quantity > 0:
             </div>
             <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
                 <p style='margin:0; font-size:13px; color:#9DAABC;'>평가 손익 (수익률)</p>
-                <p style='margin:2px 0 0 0; font-size:20px; color:{"#35C98B" if pnl_val>=0 else "#ff453a"}; font-weight:bold;'>{pnl_val:+,.0f} 원 ({pnl_pct:+.2f}%)</p>
+                <p style='margin:2px 0 0 0; font-size:20px; color:{_TOK["up"] if pnl_val>=0 else _TOK["down"]}; font-weight:bold;'>{pnl_val:+,.0f} 원 ({pnl_pct:+.2f}%)</p>
             </div>
             <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
                 <p style='margin:0; font-size:13px; color:#9DAABC;'>매수 / 매도 전략</p>
@@ -8915,7 +8918,7 @@ with tab_pred:
             ax_p.axhline(_my, color='#F2B84B', linestyle='--', linewidth=1.8,
                          label=f"내 평균 매수가 ({_my:,.0f})")
             ax_p.fill_between(days, min(_my, curr_price), max(_my, curr_price),
-                              color=('#35C98B' if curr_price >= _my else '#ff453a'), alpha=0.07)
+                              color=(_TOK['up'] if curr_price >= _my else _TOK['down']), alpha=0.07)
 
         title_kind = "예측" if show_forecast else "과거 유사사례 관찰"
         ax_p.set_title(
@@ -9098,7 +9101,7 @@ with tab_val:
     if upside_pct is None:
         upside_display_str = f"<b style='color:#9DAABC;'>상승여력 미산출</b> ({upside_eval})"
     else:
-        upside_color = "#35C98B" if upside_pct > 0 else "#ff453a"
+        upside_color = _TOK['up'] if upside_pct > 0 else _TOK['down']
         upside_display_str = f"현재가 대비 <b style='color:{upside_color};'>{upside_pct:+.1f}%</b> ({upside_eval})"
 
     if _value_ref is None:
@@ -9664,7 +9667,7 @@ with tab_audit:
         #    부호도 하드코딩하면 안 된다 — 손실인데 '+' 가 붙는다.
         _raw_perf = cost_metrics.get('raw_perf')
         _net_perf = cost_metrics.get('net_perf')
-        _net_color = "#35C98B" if (_net_perf or 0) >= 0 else "#ff453a"
+        _net_color = _TOK['pos'] if (_net_perf or 0) >= 0 else _TOK['neg']
         st.markdown(f"""
         <div style='background: #161D2A; border-radius: 16px; padding: 20px;'>
             <h4 style='color: #4C8DFF !important; margin-top:0;'>백테스트 거래비용 차감 후 모델 성과 (Section 7 & 12)</h4>
@@ -9726,7 +9729,7 @@ with tab_audit:
 
     with ba2:
         if factor_data.get('available'):
-            _alpha_col = "#35C98B" if (factor_data['alpha_annual_pct'] or 0) >= 0 else "#ff453a"
+            _alpha_col = _TOK['pos'] if (factor_data['alpha_annual_pct'] or 0) >= 0 else _TOK['neg']
             st.markdown(f"""
             <div style='background: #161D2A; border-radius: 14px; padding: 20px;'>
                 <h4 style='color: #4C8DFF !important; margin-top:0;'>수익률 팩터 귀속 분해 (Section 20-7)</h4>
@@ -9834,7 +9837,7 @@ with tab_audit:
             <p style='margin:2px 0;'>- <b>추정 배당락일</b>: <b>{_div['estimated_ex_date']}</b>
                (D-{_dte}) · 추정 배당기준일 {_div['estimated_record_date']}</p>
             <p style='margin:2px 0;'>- <b>배당락 이론 하락폭</b>: 약 <b>{fmt_pct(_div['expected_drop_pct'], digits=2)}</b>
-               · 왕복 거래비용 {_cost:.2f}% → <b style='color:{"#35C98B" if _net_edge > 0 else "#ff453a"};'>순 {_net_edge:+.2f}%p</b></p>
+               · 왕복 거래비용 {_cost:.2f}% → <b style='color:{_TOK["pos"] if _net_edge > 0 else _TOK["neg"]};'>순 {_net_edge:+.2f}%p</b></p>
             <hr style='border-color:#1C2635; margin:8px 0;'>
             <p style='margin:2px 0; color:{_vcol};'><b>판정</b>: {_verdict}</p>
             <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>{_uk._esc_md(_div['note'])}</p>
