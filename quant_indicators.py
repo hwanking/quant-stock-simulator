@@ -2692,8 +2692,19 @@ class QuantIndicatorsEngine:
                 str(symbol).split('.')[0], industry=None,
                 as_of=getattr(self, '_sector_as_of', None))
             if not int(_SR.get('apply_to_fair_value', 0) or 0):
-                _sec_why = ('업황 조정 미적용 — 사전등록 게이트 미통과 '
-                            '(라운드 44). 화면 표시용입니다.')
+                # ⚠️ 라운드 181 — 사용자 물음: *"업황이 중요한데 업데이트
+                #   계획 없어?"* 종전 문구는 **왜 안 쓰는지**만 적고
+                #   **언제 다시 보는지**를 안 적었다. 계획이 있는데 화면이
+                #   말하지 않으면 사용자에게는 계획이 없는 것과 같다.
+                #   근거: docs/PLAN_R181_SECTOR.md
+                _sec_why = (
+                    '업황 조정 미적용 — 사전등록 게이트 미통과(라운드 44). '
+                    '절대 모멘텀은 블라인드에서 방향이 반대였고(호황 구간 '
+                    'EV −2.467%), 상대강도는 블라인드 표본이 244건뿐이라 '
+                    '판정할 수 없었습니다. 업종 매핑은 라운드 163에서 '
+                    '갖췄지만 블라인드 날짜가 59일이라 아직 볼 수 있는 것이 '
+                    '없습니다 — 2026-11-16 이후 같은 사전등록으로 다시 '
+                    '잽니다. 그때까지 이 값은 화면 표시용입니다.')
             elif not _sec_cycle.get('available'):
                 _sec_why = _sec_cycle.get('why')
             elif not _sec_cycle.get('fresh', True):
