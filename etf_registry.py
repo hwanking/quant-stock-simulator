@@ -314,7 +314,21 @@ def lookthrough_gap(code):
             row = r
             break
     if not row:
-        return None
+        # ⚠️ 라운드 178 — **분류표가 낡는다.** R170 이 1,161종목을 갈랐는데
+        #   색인은 살아 있어 1,164종목으로 자랐고, 그 뒤 상장된 3종목
+        #   (TIGER 삼성전자SK하이닉스미국채혼합50 등)이 **조용히 사유
+        #   없음**이 됐다. 라운드 171 이 "전수 · 빈 사유 0건" 을 확인했지만
+        #   그건 **그날의 색인**에서 참이었다 (§2 — 날짜 없는 숫자는 낡는다).
+        #   조용히 두지 않고 **왜 아직 모르는지**를 말한다 (§3).
+        return {
+            'code': c, 'name': None, 'holdings': None,
+            'state': '분류 안 됨', 'dominant': '',
+            'why': (f"{tax.get('made') or '이전'} 전수 분류 이후에 생긴 "
+                    f"종목이라 아직 분류하지 못했습니다"),
+            'valued_pct': None, 'cover_min': tax.get('cover_min') or 90.0,
+            'made': tax.get('made'),
+            'total': tax.get('total'), 'passed': tax.get('passed'),
+        }
 
     dom = str(row.get('dominant') or '')
     state = str(row.get('state') or '')
