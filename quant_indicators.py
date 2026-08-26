@@ -3021,30 +3021,60 @@ class QuantIndicatorsEngine:
         #         진입구간·추격매수 게이트 전체가 무력화되어 있었음.
         buy_entry_max = float(recommended_buy_price) if fair_value_usable else None
         fair_ref = float(displayed_fair_value) if fair_value_usable else None
+        # 라운드 178 — 권장 매수가가 없어도 **적정가는 있을 수 있다.**
+        #   그 경우에도 위치는 말할 수 있으므로 따로 들고 있는다.
+        fair_ref_any = (float(displayed_fair_value)
+                        if (displayed_fair_value
+                            and float(displayed_fair_value) > 0) else None)
 
         # 권장 매수가는 정의상 '적정가 − 안전마진'이므로 항상 현재가보다 낮을 수 있다.
         # 따라서 '안전마진 미확보'와 '적정가 초과(진짜 추격매수)'를 구분해서 판정한다.
-        if buy_entry_max is None:
+        #
+        # ⚠️ 라운드 178 — **적정가를 아는데도 '판정 불가'라고 적고 있었다.**
+        #   라운드 177 이 차단은 고쳤지만(`fair_overshoot_pct`) 이 **라벨**은
+        #   그대로였다. 그래서 현대건설 화면이 여섯 자리에서
+        #   `진입 위치 [판정 불가] → 상한 59점` 이라고 말한다 — 바로 옆에서
+        #   `적정가 대비 상승여력 −24.8%` 를 적어 놓고서.
+        #   **아는 값을 두고 모른다고 적는 것**이라 §3 위반이다.
+        #
+        #   그런데 라벨을 고치면 `price_location_score` 도 같이 움직인다.
+        #   점수를 **올리는** 쪽은 측정 없이 완화하는 것이라 §2 위반이다.
+        #   그래서 **라벨은 정직하게, 점수는 보수적인 쪽으로만** 반영한다:
+        #   권장 매수가가 없을 때의 점수는 종전 30 을 **상한**으로 두고
+        #   새 점수가 그보다 낮을 때만 내린다.
+        #     크게 초과 10 → 반영(내림) · 경고 22 → 반영(내림)
+        #     소폭 초과 40 · 적정가 이하 60 → 30 유지(안 올림)
+        #   완화가 한 칸도 없으므로 새 문턱을 만든 것이 아니다 (§2).
+        _NO_RBP_SCORE_CAP = 30          # 종전 '판정 불가' 점수 — 상한으로 쓴다
+
+        def _zone_of(_p, _fair):
+            """적정가 대비 위치 → (라벨, 점수). 문턱은 종전 그대로다."""
+            if _p <= _fair:
+                return "적정가 이하 (안전마진 미확보)", 60
+            if _p <= _fair * 1.05:
+                return "적정가 소폭 초과", 40
+            if _p <= _fair * 1.15:
+                return "적정가 초과 (추격매수 경고)", 22
+            return "적정가 크게 초과 (추격매수 위험)", 10
+
+        if buy_entry_max is None and fair_ref_any is None:
+            # 적정가조차 없다 — 이때만 진짜로 모른다 (§3)
             entry_ratio = None
             entry_zone = "판정 불가"
-            price_location_score = 30
+            price_location_score = _NO_RBP_SCORE_CAP
+        elif buy_entry_max is None:
+            # 권장 매수가만 없다 — 적정가로 **위치는 말할 수 있다**
+            entry_ratio = None
+            entry_zone, _z = _zone_of(curr_price, fair_ref_any)
+            price_location_score = min(_NO_RBP_SCORE_CAP, _z)
         else:
             entry_ratio = curr_price / buy_entry_max
             if curr_price <= buy_entry_max:
                 entry_zone = "안전마진 확보"
                 price_location_score = 90
-            elif curr_price <= fair_ref:
-                entry_zone = "적정가 이하 (안전마진 미확보)"
-                price_location_score = 60
-            elif curr_price <= fair_ref * 1.05:
-                entry_zone = "적정가 소폭 초과"
-                price_location_score = 40
-            elif curr_price <= fair_ref * 1.15:
-                entry_zone = "적정가 초과 (추격매수 경고)"
-                price_location_score = 22
             else:
-                entry_zone = "적정가 크게 초과 (추격매수 위험)"
-                price_location_score = 10
+                entry_zone, price_location_score = _zone_of(curr_price,
+                                                            fair_ref)
 
         event_timing_score = 50
         

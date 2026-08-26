@@ -7496,12 +7496,24 @@ try:
                               _tone61))
     except Exception:                                          # noqa: BLE001
         pass
+    # ⚠️ 라운드 178 — **'미수신'과 '기사 없음'을 섞고 있었다.**
+    #   화면에 `뉴스 · 미수신 · 수신 기사 없음 — 판단에 미반영` 이 나갔다.
+    #   앞은 "우리가 못 받았다"(우리 문제)이고 뒤는 "받았는데 기사가
+    #   없다"(정상)다 — §3 이 *"데이터 미수신 ≠ 추천 없음. 두 문장을
+    #   반드시 분리한다"* 고 못 박은 그 자리다.
+    #   `_news60` 이 `None` 이면 수집 실패, dict 인데 `total` 이 0 이면
+    #   수집은 됐고 기사가 없는 것이다. 갈라서 말한다.
     _nt61 = (_news60 or {}).get('total')
+    if _news60 is None:
+        _news_state61, _news_detail61 = '미수신', '뉴스 수집에 실패했습니다 — 판단에 미반영'
+    elif not _nt61:
+        _news_state61, _news_detail61 = '기사 없음', '수집은 됐고 관련 기사가 없습니다 — 판단에 미반영'
+    elif _news60.get('risk_words'):
+        _news_state61, _news_detail61 = '위험 낱말 감지', f"관련 기사 {_nt61}건"
+    else:
+        _news_state61, _news_detail61 = '중립', f"관련 기사 {_nt61}건"
     _eng_rows.append((
-        '뉴스', ('위험 낱말 감지' if (_news60 or {}).get('risk_words')
-               else '중립' if _nt61 else '미수신'),
-        (f"관련 기사 {_nt61}건" if _nt61 else
-         '수신 기사 없음 — 판단에 미반영'),
+        '뉴스', _news_state61, _news_detail61,
         '감점 요인' if (_news60 or {}).get('risk_words') else '영향 작음'))
     _ST_KO61 = {'ABOVE_BOTH': '상승(20·60선 위)', 'REBOUND': '반등 초기',
                 'PULLBACK': '조정', 'BEAR': '약세'}
