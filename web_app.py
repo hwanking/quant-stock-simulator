@@ -9198,8 +9198,20 @@ with tab_val:
 
     if _value_ref is None:
         value_ref_str = "미산출 (신뢰도 미달)"
-        value_eval_str = "판정 불가"
-        value_eval_color = "#9DAABC"
+        # ⚠️ 라운드 179 — 라운드 178 이 진입 위치에서 고친 것과 **같은 모양**
+        #   이 여기 남아 있었다. 장기 가치 참고선(적정가 − 안전마진)이 없다고
+        #   **적정가 대비 위치까지** 판정을 포기하고 '판정 불가'를 적었다.
+        #   화면 census 로 현대건설을 훑으니 이 자리 하나가 마지막으로
+        #   남아 있었다 — 바로 위 줄에서 `상승여력 -24.8%` 를 적어 놓고서.
+        #   참고선은 못 냈다고 말하되, **아는 값(적정가 대비)은 말한다** (§3).
+        if upside_pct is None:
+            value_eval_str = "판정 불가 (적정가·참고선 모두 미산출)"
+            value_eval_color = _TOK['tx3']
+        else:
+            value_eval_str = f"참고선 미산출 · 적정가 대비 {upside_pct:+.1f}%"
+            # 한국 관행 — 오르면 빨강, 내리면 파랑 (§5 · 라운드 174)
+            value_eval_color = (_TOK['up'] if upside_pct > 0
+                                else _TOK['down'])
     else:
         value_ref_str = f"{_value_ref:,.0f}{unit_str} 이하"
         # '안전 매수 구간'이라고 쓰지 않는다 — 이 선 아래로 내려와도
