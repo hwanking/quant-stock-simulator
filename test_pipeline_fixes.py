@@ -16602,6 +16602,29 @@ check("업데이트 목록이 '이미 반영이 끝난 변경'임을 밝힌다",
 check("제목이 '고치기 전의 문제'임을 밝힌다",
       '고치기 전의 문제' in _w212)
 
+# ── 라운드 181 — 업황이 왜 안 쓰이는지 **와 언제 다시 보는지** ───────
+#   사용자 물음: *"업황이 중요한데 업데이트 계획 없어?"*
+#   종전 문구는 '게이트 미통과'만 적고 재평가 시점을 안 적었다.
+#   계획이 있는데 화면이 말하지 않으면 사용자에게는 없는 것과 같다.
+_qi181 = '\n'.join(ln for _i, ln in _la135.code_lines('quant_indicators.py'))
+check("업황 미적용 문구가 **언제 다시 보는지**를 적는다",
+      '2026-11-16' in _qi181.split('업황 조정 미적용')[-1][:700],
+      '왜 안 쓰는지만 적고 언제 다시 보는지를 안 적으면 계획이 없는 것처럼 읽힌다')
+check("업황 미적용 문구가 기각 근거를 숫자로 적는다",
+      'EV −2.467%' in _qi181 or 'EV -2.467%' in _qi181)
+check("업황은 여전히 적정가에 미반영이다 (게이트 통과 전)",
+      int((_qi181.count('apply_to_fair_value') > 0)
+          and __import__('quant_indicators').RULEBOOK
+          .get('RULES_SECTOR', {}).get('apply_to_fair_value', 0) or 0) == 0,
+      '게이트를 통과하기 전에 켜면 §2 위반이다')
+# 계획 문서가 있고, 상한을 **숫자로** 적었는가
+_plan181 = _read148(_os.path.join(PROJ, 'docs', 'PLAN_R181_SECTOR.md'))
+check("업황 계획 문서가 있다", len(_plan181) > 1500, str(len(_plan181)))
+check("계획이 이득의 상한을 숫자로 적었다 (§2-7)",
+      '59일' in _plan181 and '546일' in _plan181 and '90.1%' in _plan181)
+check("계획이 '영영 안 함'과 '다시 잼'을 갈랐다",
+      '영영 안 함' in _plan181 and '2026-11-16' in _plan181)
+
 
 print()
 print("=" * 72)
