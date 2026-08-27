@@ -272,6 +272,36 @@ def build(four_scores, tech_df, price, verdict=None):
     over_by_fair = (_overshoot is not None and _overshoot > _OVER_BLOCK_PCT)
     over_value = over_value or over_by_fair
 
+    # ⚠️ 라운드 182 — 사용자 지적: *"서진시스템은 펀더멘털 적정가가 안
+    #   나오는데 왜 추천한 거야?"*
+    #   위 가드는 **적정가가 있을 때만** 돈다. 적정가가 없으면 `_overshoot`
+    #   이 None 이라 통째로 건너뛴다 — 그건 §3 대로다(못 잰 것으로 거르지
+    #   않는다). 그런데 그때 화면에 남는 것은 **눌림 진입가 하나**이고,
+    #   그 값은 이 파일 머리말이 적어 둔 대로 **변동성만 본다.**
+    #   즉 밸류 검증을 한 번도 못 받은 가격이 '권장 매수가'로 나간다.
+    #
+    #   실측(서진시스템 178320 · 2026-08-27):
+    #     displayed_fair_value  None (OUT_OF_DOMAIN · 모델이 −72% 괴리)
+    #     화면                   권장 매수가 38,681원 · 1차 목표 43,813원
+    #   두 사실이 같은 화면에 있지만 **멀리 떨어져 있어** 이어 읽히지 않는다.
+    #
+    #   → 거르지는 않는다. 대신 **그 카드에서** 밸류 검증을 못 했다고 말한다.
+    #     '데이터 미수신'과 '모델이 거부'는 다른 말이라 갈라 적는다.
+    _fv_status = str(fs.get('fair_value_status') or '')
+    _no_fair = (_f(fs.get('displayed_fair_value')) is None)
+    if _no_fair:
+        if _fv_status == 'OUT_OF_DOMAIN':
+            out['value_check'] = (
+                '적정가를 내지 못해 **밸류 검증을 못 했습니다** — 우리 '
+                '적정가 모델이 이 종목을 적용 범위 밖으로 봅니다(고배수·'
+                '적자 구간). 아래 가격은 **변동성만으로** 계산한 값이라 '
+                '싸고 비싼지는 판단하지 않았습니다.')
+        else:
+            out['value_check'] = (
+                '적정가를 내지 못해 **밸류 검증을 못 했습니다** — 아래 '
+                '가격은 **변동성만으로** 계산한 값이라 싸고 비싼지는 '
+                '판단하지 않았습니다.')
+
     vfloor = _f(fs.get('value_floor_price'))
     if over_value:
         out['kind'] = 'observe'
