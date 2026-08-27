@@ -16625,6 +16625,91 @@ check("계획이 이득의 상한을 숫자로 적었다 (§2-7)",
 check("계획이 '영영 안 함'과 '다시 잼'을 갈랐다",
       '영영 안 함' in _plan181 and '2026-11-16' in _plan181)
 
+# ── 라운드 182 — 적정가를 못 낸 종목은 **그 카드에서** 밝힌다 ────────
+#   사용자 지적: *"서진시스템은 펀더멘털 적정가가 안 나오는데 왜 추천한
+#   거야?"* 밸류 가드는 적정가가 있을 때만 돈다(§3 — 못 잰 것으로 거르지
+#   않는다). 그런데 그때 화면에 남는 것은 **변동성만 본 눌림 진입가**이고,
+#   그 값이 밸류 검증을 못 받았다는 말이 그 카드에 없었다.
+#   실측(178320 · OUT_OF_DOMAIN · 모델 −72% 괴리): 카드가 권장 매수가
+#   38,681원 · 1차 목표 43,813원을 다 내면서 적정가 미산출은 화면 아래
+#   다른 칸에 있어 이어 읽히지 않았다.
+_na182 = '\n'.join(ln for _i, ln in _la135.code_lines('next_action.py'))
+_w182 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+check("적정가가 없으면 밸류 검증 미실시를 알린다", "'value_check'" in _na182)
+check("'모델이 거부'와 '그냥 못 냄'을 갈라 적는다",
+      "OUT_OF_DOMAIN" in _na182 and '적용 범위 밖' in _na182,
+      '데이터 미수신과 모델 거부는 다른 말이다 (§3)')
+check("그 문구를 추천 카드가 실제로 쓴다", 'value_check' in _w182)
+# ⚠️ 라운드 182 — 이 검사를 처음엔 **글자 근접**으로 썼다가 헛짚었다:
+#   `_na182.split('_no_fair')[-1][:600]` 안에 무관한 `over_value` 블록의
+#   `observe` 가 들어와 실패했다. **코드는 옳았고 검사가 틀렸다.**
+#   근접이 아니라 **그 if 블록 안**을 AST 로 본다.
+_ifno182 = None
+for _n182a in _ast201.walk(_ast201.parse(_na182)):
+    if (isinstance(_n182a, _ast201.If)
+            and getattr(_n182a.test, 'id', '') == '_no_fair'):
+        _ifno182 = _n182a
+        break
+check("적정가 없음 분기를 코드에서 찾았다", _ifno182 is not None)
+_kind182 = []
+if _ifno182 is not None:
+    for _s182 in _ast201.walk(_ifno182):
+        if isinstance(_s182, _ast201.Assign):
+            for _t182 in _s182.targets:
+                if (isinstance(_t182, _ast201.Subscript)
+                        and getattr(_t182.value, 'id', '') == 'out'
+                        and getattr(getattr(_t182, 'slice', None),
+                                    'value', None) == 'kind'):
+                    _kind182.append(_ast201.unparse(_s182)[:60])
+check("거르지는 않는다 (§3 — 못 잰 것으로 거르지 않는다)",
+      not _kind182,
+      f'적정가가 없다고 후보에서 빼면 라운드 37 과 같은 실수다 — {_kind182}')
+
+# 실제로 돌려 본다 — 논리를 베끼지 않는다
+_fs182 = {'entry_zone': '판정 불가', 'chase_buy_status': '판정 불가',
+          'fair_overshoot_pct': None, 'entry_pullback_price': 38681.0,
+          'displayed_fair_value': None,
+          'fair_value_status': 'OUT_OF_DOMAIN'}
+_r182 = _na211m.build(_fs182, _tech211, 41350.0) or {}
+check("적정가 없음 + 모델 거부 → 밸류 검증 문구가 붙는다",
+      '적용 범위 밖' in str(_r182.get('value_check') or ''),
+      str(_r182.get('value_check'))[:80])
+check("그래도 후보에서 빼지 않는다", _r182.get('kind') != 'observe',
+      str(_r182.get('kind')))
+_fs182b = dict(_fs182, displayed_fair_value=91822.0,
+               fair_value_status='CALIBRATED', fair_overshoot_pct=-8.0)
+_r182b = _na211m.build(_fs182b, _tech211, 84000.0) or {}
+check("적정가가 있으면 그 문구를 안 붙인다 (0건이면 미측정)",
+      not _r182b.get('value_check'), str(_r182b.get('value_check'))[:60])
+
+# ── 버전 칩이 '언제 다시 보나'를 말하는가 (라운드 182) ──────────────
+#   사용자 물음: *"산식 v2026.08.05.1 / 룰북 v2026.08.16.1 — 이거는
+#   업데이트 계획이 어떻게 되나?"* 툴팁이 '언제 바뀌었나'만 말하고 있었다.
+#   ⚠️ 날짜를 화면에 **손으로 적지 않는다** — 이슈 원장의 next_review 를
+#     읽는다. 그래야 이슈가 옮겨질 때 화면이 따라 옮겨진다.
+check("버전 칩이 이슈 원장에서 다음 점검 시점을 읽는다",
+      '_AX_ISSUE' in _w182 and 'next_review' in _w182)
+check("축→이슈 연결을 손으로 적은 날짜로 대신하지 않았다",
+      "'2026-09-30'" not in _w182.split('_AX_ISSUE')[-1][:900],
+      '날짜를 화면에 박으면 이슈가 옮겨져도 화면이 안 따라온다')
+# 그 연결이 **실제로 살아 있는가** — 이슈 키가 원장에 있어야 한다
+_c182t = _cx206()
+try:
+    _io206.ensure_schema(_c182t)
+    _open182 = {str(r.get('issue_key')): r
+                for r in _io206.issue_view(_c182t, 40)
+                if str(r.get('status')) == 'open'}
+finally:
+    _c182t.close()
+for _k182t in ('model|score_not_separating', 'model|vb_gap'):
+    check(f"연결한 이슈가 원장에 열려 있다 ({_k182t})",
+          _k182t in _open182,
+          '이슈가 닫히면 화면 문구도 사라져야 한다 — 그때 이 검사가 알린다')
+check("그 이슈들이 다음 점검 시점을 들고 있다",
+      all(str(_open182[k].get('next_review') or _open182[k].get('eta') or '')[:4]
+          == '2026' for k in ('model|score_not_separating', 'model|vb_gap')
+          if k in _open182))
+
 
 print()
 print("=" * 72)

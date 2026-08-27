@@ -661,12 +661,48 @@ def _render_toolbar(here_html: str = '') -> None:
     # 바뀐 시점**을 가리킨다. 룰북·뉴스가 v2026.08.02 인 것은 그 축의 파일이
     # 그 뒤로 안 바뀌었다는 뜻인데, 화면이 설명을 안 해서 낡아 보였다.
     # (사용자 질문: "룰북, 뉴스는 최신버전이 아니야?")
+    # ⚠️ 라운드 182 — 툴팁이 **"언제 바뀌었나"** 는 말하는데 **"언제 다시
+    #   보나"** 를 안 말했다. 사용자 물음: *"산식 v2026.08.05.1 / 룰북
+    #   v2026.08.16.1 — 이거는 업데이트 계획이 어떻게 되나?"*
+    #   업황(라운드 181)과 같은 구멍이다 — 계획이 있어도 화면이 말하지
+    #   않으면 사용자에게는 없는 것과 같다.
+    #
+    #   ⚠️ **날짜를 여기 손으로 적지 않는다.** 열린 이슈의 `next_review` 를
+    #     읽어 붙인다 — 이슈가 옮겨지면 화면도 따라 옮겨진다.
+    #     이슈가 없는 축은 문구도 없다 (없는 계획을 지어내지 않는다 · §3).
+    _AX_ISSUE = {'scoring': 'model|score_not_separating',
+                 'model': 'model|vb_gap'}
+    _ax_plan = {}
+    try:
+        from improvement import issue_ops as _iop182
+        from improvement.database import get_connection as _icx182
+        _c182 = _icx182()
+        try:
+            _iop182.ensure_schema(_c182)
+            _byk182 = {str(r.get('issue_key')): r
+                       for r in _iop182.issue_view(_c182, 40)
+                       if str(r.get('status')) == 'open'}
+        finally:
+            _c182.close()
+        for _a182, _k182 in _AX_ISSUE.items():
+            _r182 = _byk182.get(_k182)
+            if not _r182:
+                continue
+            _d182 = str(_r182.get('next_review') or _r182.get('eta') or '')[:10]
+            if _d182:
+                _ax_plan[_a182] = (
+                    f" 다음에 다시 보는 시점은 {_d182} 입니다 — "
+                    f"열린 과제: {str(_r182.get('title') or '')[:40]}.")
+    except Exception:                                          # noqa: BLE001
+        _ax_plan = {}          # 못 읽으면 계획 문구를 안 붙인다 (§3)
+
     _chips = ''.join(
         f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
         f"margin-right:8px; white-space:nowrap;' "
         f"title='{_uk._esc_attr(_ko)} 축은 "
         f"{_uk._esc_attr(_VER_NOW.get(_ax, '—'))} 이후 바뀌지 않았습니다. "
-        f"버전은 앱 출시일이 아니라 그 축이 마지막으로 바뀐 시점입니다.'>"
+        f"버전은 앱 출시일이 아니라 그 축이 마지막으로 바뀐 시점입니다."
+        f"{_uk._esc_attr(_ax_plan.get(_ax, ''))}'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_VER_NOW.get(_ax, '—')}</span>"
@@ -2677,6 +2713,16 @@ def _build_reco_card(p, news_txt, conf_txt):
         hold_note = ("**진입 기준이 없어 목표가·손절가를 표시하지 "
                      "않습니다.** 참고값은 분석 보기에서 확인하세요. "
                      "지금은 신규 매수 판단을 보류합니다.")
+
+    # ⚠️ 라운드 182 — 적정가를 못 낸 종목은 **그 사실을 이 카드에서** 말한다.
+    #   사용자 지적: *"서진시스템은 펀더멘털 적정가가 안 나오는데 왜
+    #   추천한 거야?"* — 카드가 권장 매수가·목표·손절을 다 내면서 그 값이
+    #   **밸류 검증을 못 받았다**는 말을 안 하고 있었다. 적정가 미산출은
+    #   화면 아래쪽 다른 칸에 있어 이어 읽히지 않았다.
+    #   거르지는 않는다(§3) — 대신 **같은 카드에서** 밝힌다.
+    _vchk = str((_n or {}).get('value_check') or '')
+    if _vchk:
+        hold_note = (_vchk + (' ' + hold_note if hold_note else ''))
 
     _cb = p.get('confidence_band') or {}
     return {
