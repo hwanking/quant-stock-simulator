@@ -3123,8 +3123,24 @@ _fs59 = {'entry_pullback_price': 10000, 'buy_entry_max': 11000,
 _v59 = {'score': 62, 'action': 'HOLD', 'vetoes': []}
 
 _e59 = q.build_easy_advice(_fs59, _v59, 10500)
-check("비보유·추격 구간 → '이하로 내려올 때만'",
-      '이하로 내려올 때만' in _e59['new_buyer']['line'])
+# ⚠️ 라운드 184 — '사세요'는 **비용 후 기대값이 양수일 때만** 쓴다.
+#   이 fixture 는 EV 가 없어서 종전 검사('이하로 내려올 때만')가 걸렸다 —
+#   검사가 옛 문구를 요구한 것이므로 두 경우로 가른다:
+#   EV>0 → 종전 문구 · EV 없음/≤0 → '관찰 기준 가격' + 매수 비권고.
+_e59p = q.build_easy_advice(dict(_fs59, net_expected_return=2.0), _v59, 10500)
+check("비보유·추격 + EV>0 → '이하로 내려올 때만' (종전 문구 유지)",
+      '이하로 내려올 때만' in _e59p['new_buyer']['line'],
+      _e59p['new_buyer']['line'][:60])
+check("비보유·추격 + EV 미산출 → 매수 권고가 아니라 관찰 기준",
+      '관찰 기준 가격' in _e59['new_buyer']['line']
+      and '신규 매수를 권하지 않습니다' in _e59['new_buyer']['detail'],
+      _e59['new_buyer']['line'][:60])
+_e59n = q.build_easy_advice(dict(_fs59, net_expected_return=-0.09),
+                            _v59, 10500)
+check("비보유·추격 + EV<0 → '사세요'를 쓰지 않는다 (§9)",
+      '사세요' not in _e59n['new_buyer']['line']
+      and '관찰 기준 가격' in _e59n['new_buyer']['line'],
+      _e59n['new_buyer']['line'][:60])
 check("신규 기준 가격 세트 (분할·추격금지·목표·손절·기간)",
       all(k in _e59['new_buyer']['prices'] for k in
           ('권장 매수가(1차 분할)', '추격매수 금지선', '1차 목표가', '예상 보유기간')))
@@ -16751,6 +16767,99 @@ check("그 이슈들이 다음 점검 시점을 들고 있다",
       all(str(_open182[k].get('next_review') or _open182[k].get('eta') or '')[:4]
           == '2026' for k in ('model|score_not_separating', 'model|vb_gap')
           if k in _open182))
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §214 — 화면 정합성 일곱 건 (라운드 184 · 사용자 전수 분석)
+#
+#   사용자가 서진시스템 화면을 전수 분석해 일곱 건을 짚었고 **전부
+#   실재했다.** 공통 원인: 서로 다른 모듈이 같은 사실을 다른 이름·다른
+#   분모로 말한다.
+#     ① 89,520건을 '안 본 사례'라 불렀다 — 실제로는 학습·검증 포함
+#        전체 리플레이(판정 완료 177,042건)다. 블라인드 전체가 11,603건
+#        인데 한 점수대가 89,520건일 수 없다.
+#     ② 확률 세 타일의 합이 128% — 목표만 계층 보정값을 쓰고
+#        손절·미결은 유사사례 비율이었다.
+#     ③ 지수 라벨 KOSPI 하드코딩 — 코스닥 값 838 에 KOSPI 라고 적었다.
+#     ④ 가치 기준선 미산출인데 '…이하' 판정문이 찍혔다.
+#     ⑤ 음수 PER(-20.7배)를 '저PER 관찰'로 해석했다.
+#     ⑥ EV≤0 인데 '…이하로 내려올 때만 사세요'라고 지시했다.
+#     ⑦ 기본 매력도 48·적정가 미산출인데 '기업·업황이 나빠서가 아니라'.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§214 화면 정합성 — 사용자 전수 분석 일곱 건 (라운드 184)")
+print("=" * 72)
+
+_w214 = '\n'.join(ln for _i, ln in _la135.code_lines('web_app.py'))
+_q214 = '\n'.join(ln for _i, ln in _la135.code_lines('quant_indicators.py'))
+_b214 = '\n'.join(ln for _i, ln in _la135.code_lines('bitemporal_engine.py'))
+_g214 = '\n'.join(ln for _i, ln in _la135.code_lines('gaeum_ai.py'))
+
+# ① 리플레이 표본을 '안 본 사례·표본외'라 부르지 않는다
+check("칼리브레이션 표본을 '안 본 사례'라 부르지 않는다",
+      '안 본 사례' not in _w214 and '안 본 사례' not in _g214,
+      '그 표본은 학습·검증 포함 전체 리플레이다')
+check("그 자리가 '리플레이'라고 밝힌다",
+      '리플레이 성적' in _w214 and '리플레이 성적' in _g214)
+# 그리고 근거 자체를 값으로 — bands 의 n 합이 블라인드보다 훨씬 크다
+import json as _json214
+with open(_os.path.join(PROJ, '.portfolio', 'calibration.json'),
+          encoding='utf-8') as _f214:
+    _cal214 = _json214.load(_f214)
+_bandsum214 = sum(b.get('n', 0) for b in _cal214.get('bands', []))
+_blindn214 = ((_cal214.get('splits') or {}).get('blind') or {}).get('n')
+check("bands 합계가 블라인드보다 훨씬 크다 (= 전체 리플레이라는 증거)",
+      _blindn214 is not None and _bandsum214 > _blindn214 * 3,
+      f'bands 합 {_bandsum214:,} vs blind {_blindn214}')
+
+# ② 확률 세 타일이 한 표본의 분할이다 (합 100%)
+check("확률 타일 셋이 같은 표본(유사사례)의 분할이다",
+      "유사사례 실측" in _w214 and "셋의 합이 100%" in _w214)
+check("계층 보정값은 별도 추정치로 갈라 적는다",
+      "다른 추정치" in _w214 and "합산되지 않습니다" in _w214)
+
+# ③ 지수 라벨 — 함수를 실제로 돌려서 확인
+import quant_indicators as _qi214
+_qe214 = _qi214.QuantIndicatorsEngine()
+_lbl_kq214 = _qe214.classify_market_regime(838.0, 809.0, 857.0,
+                                           index_name='KOSDAQ')[1]
+_lbl_ks214 = _qe214.classify_market_regime(838.0, 809.0, 857.0)[1]
+check("코스닥 지수를 넘기면 라벨도 KOSDAQ", 'KOSDAQ 838' in _lbl_kq214,
+      _lbl_kq214[:60])
+check("이름이 없으면 종전 KOSPI 폴백 유지", 'KOSPI 838' in _lbl_ks214)
+check("호출부가 ctx 의 index 를 넘긴다",
+      "index_name=regime_ctx.get('index')" in _q214)
+
+# ④ 기준선 미산출이면 '이하' 판정문을 만들지 않는다
+check("기준선 미산출이면 '판정 불가' 라벨로 가른다",
+      '기준선 미산출이라 판정 불가' in _q214)
+check("미산출 상세가 비교문이 아니다",
+      '위·아래를 판정하지 않습니다' in _q214)
+
+# ⑤ 음수 PER — 저PER 해석 금지 (실제 분기 확인)
+check("음수 PER 를 저PER 로 부르지 않는다",
+      'PER 음수 (적자)' in _b214 and 'per <= 0' in _b214)
+check("점수 쪽은 원래 0<per 가드가 있다 (값 불변의 근거)",
+      _q214.count('0 < per') >= 3)
+
+# ⑥ EV≤0 이면 '사세요'가 아니라 '관찰 기준 가격'
+check("EV 가 양수일 때만 '사세요'를 쓴다",
+      "_ney is not None and _ney > 0" in _q214
+      and '관찰 기준 가격' in _q214)
+check("EV≤0 문구가 신규 매수를 권하지 않는다고 밝힌다",
+      '신규 매수를 권하지 않습니다' in _q214)
+
+# ⑦ '기업·업황이 나빠서가 아니라'는 사실일 때만
+check("펀더멘털이 약하면 그것도 함께 제한 사유로 적는다",
+      '함께 신규 매수를 제한합니다' in _w214)
+check("그 문장이 기본 매력도·적정가 상태를 실제로 본다",
+      "stock_quality_score" in _w214.split('나빠서가 아니라')[0][-2500:]
+      or "_q61" in _w214)
+
+# ⑧ 관심종목 — 입력 즉시 이동·반영 (라운드 184 요청)
+check("매입가 저장 직후 rerun 해 보유중 이동이 즉시다",
+      'st.rerun()' in _w214.split('_wl_write(_wl_body)')[-1][:700])
 
 
 print()
