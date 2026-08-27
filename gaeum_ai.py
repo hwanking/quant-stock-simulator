@@ -166,6 +166,9 @@ def sentence(g: dict) -> str:
             f'나타났습니다.')
     tail = f" 다만 신뢰도는 '{g.get('confidence')}'입니다 — {g.get('confidence_why')}"
     if oos is not None and g.get('oos_n'):
-        tail += (f" 이 점수대의 실제 성적은 {oos:.0f}% "
-                 f"(안 본 사례 {g['oos_n']:,}건 기준)입니다.")
+        # ⚠️ 라운드 184 — '안 본 사례'가 거짓이었다. 출처(calibration
+        #   bands)는 학습·검증 포함 **전체 리플레이**다 (블라인드 전체가
+        #   11,603건인데 한 점수대가 89,520건일 수 없다 — 사용자 지적).
+        tail += (f" 이 점수대의 리플레이 성적은 {oos:.0f}% "
+                 f"(학습·검증 포함 전체 {g['oos_n']:,}건 기준)입니다.")
     return base + tail

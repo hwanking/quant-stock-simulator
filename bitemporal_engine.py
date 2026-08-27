@@ -1173,7 +1173,14 @@ class BitemporalEngine:
             m_sent = "판단 보류"
         else:
             pbr_txt = f", PBR {pbr:.2f}배" if pbr is not None else ""
-            if per < 8:
+            # ⚠️ 라운드 184 — `per < 8` 이 **음수 PER(적자)** 까지 삼켰다.
+            #   PER −20.7배가 "시장 평균 대비 낮은 구간 · 저PER 관찰"로
+            #   나갔다(사용자 지적 · 서진시스템). 적자기업의 음수 PER 는
+            #   저평가가 아니라 **해석 불가**다. 점수 쪽은 이미 `0 < per`
+            #   가드가 있어(2287·2290·2297) 표시 문구만 틀렸던 것이다.
+            if per <= 0:
+                lvl, m_sent = "PER 음수 (적자) — PER 기반 저평가 해석 불가", "해석 불가 (적자)"
+            elif per < 8:
                 lvl, m_sent = "시장 평균 대비 낮은 구간", "저PER 관찰"
             elif per > 25:
                 lvl, m_sent = "시장 평균 대비 높은 구간", "고PER 관찰"

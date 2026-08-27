@@ -317,11 +317,20 @@ class QuantIndicatorsEngine:
         
         return df
 
-    def classify_market_regime(self, kospi_price=5593.56, kospi_sma20=5650.0, kospi_sma60=5700.0):
-        """ 
-        [Section 4 & 1-1 Spec] KOSPI/KOSDAQ 데이터 미수신 시 판정 보류 처리 
-        Note: kospi_price, kospi_sma20, and kospi_sma60 should be dynamically provided by the caller.
+    def classify_market_regime(self, kospi_price=5593.56, kospi_sma20=5650.0,
+                               kospi_sma60=5700.0, index_name=None):
         """
+        [Section 4 & 1-1 Spec] KOSPI/KOSDAQ 데이터 미수신 시 판정 보류 처리
+        Note: kospi_price, kospi_sma20, and kospi_sma60 should be dynamically provided by the caller.
+
+        ⚠️ 라운드 184 — 라벨의 지수 이름이 **KOSPI 로 하드코딩**돼 있었다.
+          코스닥 종목은 라운드 173 이후 코스닥 지수 값을 받는데, 라벨은
+          여전히 "(KOSPI 838 …)" 이라고 적었다 — 838 은 그날 코스닥이다.
+          값은 맞고 이름만 틀린 상태라 더 헷갈린다. 호출부가 ctx 의
+          `index` 를 넘기고, 없으면 종전대로 KOSPI 라고 쓴다(폴백 유지 —
+          이 함수를 KOSPI 값으로 부르는 옛 경로가 있을 수 있다).
+        """
+        _idx_ko = str(index_name or 'KOSPI')
         try:
             if kospi_price is None or kospi_price == "N/A" or float(kospi_price) <= 0:
                 return "DECISION_PENDING", "판정 보류 (KOSPI·KOSDAQ 최신 데이터 미수신)", {"F": 0.25, "V": 0.20, "T": 0.15, "S": 0.15, "R": 0.15, "M": 0.10}
@@ -335,7 +344,7 @@ class QuantIndicatorsEngine:
         # 근거 없이 '급락장·고변동성'만 표시하면, 당일 지수가 급등한 날에는
         # 상단 지수 카드(+17%)와 모순처럼 보인다. 이 판정은 당일 등락이 아니라
         # 지수의 20·60일 이동평균 대비 위치로 내리는 것이다.
-        basis = f"(KOSPI {kp:,.0f} vs 20일선 {ks20:,.0f}·60일선 {ks60:,.0f} 기준)"
+        basis = f"({_idx_ko} {kp:,.0f} vs 20일선 {ks20:,.0f}·60일선 {ks60:,.0f} 기준)"
         if kp >= ks20 and ks20 >= ks60:
             regime_code = "BULL_STRONG"
             regime_label = f"강한 상승장·과열장 {basis}"
@@ -1987,11 +1996,35 @@ class QuantIndicatorsEngine:
                                 f"손실 확률을 약 1/3 줄였습니다. " if _half else "")
                              + odds)}
         elif rec is not None and curr_price and curr_price > rec:
-            nb = {'emoji': '', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
-                  'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
-                             f"쫓아가서 사지 마세요(추격매수 금지"
-                             + (f" — {w(chase_max)} 위에서는 특히 금지" if chase_max else "")
-                             + f"). {w(rec)} 아래로 오면 나눠서 검토하세요. {odds}")}
+            # ⚠️ 라운드 184 — **비용 후 기대값이 양수가 아닌데** "…이하로
+            #   내려올 때만 사세요"라고 지시하고 있었다(사용자 지적 ·
+            #   서진시스템 EV −0.09%). 화면 스스로 "이 엔진의 매수 신호에는
+            #   비용 차감 후 재현되는 우위가 확인되지 않았다"고 적으면서(§9)
+            #   같은 화면이 매수를 지시하면 모순이다.
+            #   EV>0 일 때만 '사세요'를 쓰고, 아니면 그 값은 **관찰 기준
+            #   가격**이라고 부른다. 가격 계산은 안 바꾼다 — 문장만 정직하게.
+            _ney = fs.get('net_expected_return')
+            try:
+                _ney = float(_ney) if _ney is not None else None
+            except (TypeError, ValueError):
+                _ney = None
+            if _ney is not None and _ney > 0:
+                nb = {'emoji': '', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
+                      'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
+                                 f"쫓아가서 사지 마세요(추격매수 금지"
+                                 + (f" — {w(chase_max)} 위에서는 특히 금지" if chase_max else "")
+                                 + f"). {w(rec)} 아래로 오면 나눠서 검토하세요. {odds}")}
+            else:
+                _ney_txt = (f"{_ney:+.2f}%" if _ney is not None else "미산출")
+                nb = {'emoji': '',
+                      'line': f'{w(rec)}은 매수 권고가 아니라 관찰 기준 가격입니다.',
+                      'detail': (f"비용 차감 후 기대값이 {_ney_txt}로 양수가 아니라 "
+                                 f"신규 매수를 권하지 않습니다. {w(rec)}은 변동성으로 "
+                                 f"계산한 관찰 기준일 뿐 '싸다'는 뜻이 아닙니다. "
+                                 f"지금 가격({w(curr_price)})은 그 기준보다도 높습니다"
+                                 + (f" (추격매수 금지 — {w(chase_max)} 위에서는 특히)"
+                                    if chase_max else "")
+                                 + f". {odds}")}
         elif rec is None:
             nb = {'emoji': '', 'line': '분석 신뢰도가 낮아 판단을 보류하세요.',
                   'detail': "실제로 걸어 둘 수 있는 진입가를 계산하지 못했습니다. "
@@ -2995,7 +3028,9 @@ class QuantIndicatorsEngine:
         regime_code, regime_label = 'DECISION_PENDING', '판정 보류 (지수 데이터 미수신)'
         if regime_ctx and regime_ctx.get('available'):
             regime_code, regime_label, _rw = self.classify_market_regime(
-                regime_ctx.get('price'), regime_ctx.get('sma20'), regime_ctx.get('sma60'))
+                regime_ctx.get('price'), regime_ctx.get('sma20'),
+                regime_ctx.get('sma60'),
+                index_name=regime_ctx.get('index'))   # 라운드 184 — 이름도 실측대로
 
         market_regime_score = None
         regime_detail = {}
@@ -3827,10 +3862,20 @@ class QuantIndicatorsEngine:
             #   말하는 것처럼 보였다(농심: 423,626 vs 446,331).
             #   라운드 31 이 정리한 '같은 개념에 이름 다섯 개'가 여기 남아
             #   있었다. 무엇을 재는지 이름에 적는다.
-            _bool_gate("현재가가 가치 기준선(적정가−안전마진) 이하",
+            # ⚠️ 라운드 184 — 기준선이 **미산출인데** 라벨이 "…이하" 라는
+            #   판정문이었다. "현재 41,350원 / 가치 기준선 미산출" 처럼
+            #   비교 대상이 없는데 비교문이 찍혔다(사용자 지적). 판정 결과
+            #   (미충족)는 그대로 두고 — 이 게이트의 보수성은 안 바꾼다 —
+            #   **라벨만** 미산출일 때 '판정 불가'로 가른다 (§3).
+            _bool_gate(("현재가가 가치 기준선(적정가−안전마진) 이하"
+                        if buy_entry_max is not None else
+                        "가치 기준선 대비 위치 — 기준선 미산출이라 판정 불가"),
                        buy_entry_max is not None and curr_price <= buy_entry_max,
-                       f"현재 {curr_price:,.0f}원 / 가치 기준선 "
-                       + (f"{buy_entry_max:,.0f}원 이하" if buy_entry_max is not None else "미산출")),
+                       (f"현재 {curr_price:,.0f}원 / 가치 기준선 "
+                        f"{buy_entry_max:,.0f}원 이하"
+                        if buy_entry_max is not None else
+                        f"현재 {curr_price:,.0f}원 · 기준선을 계산하지 못해 "
+                        f"위·아래를 판정하지 않습니다")),
             # 라운드 28b: 필수 → 참고. 미산출은 실측상 정상 상태이며(62.9%),
             # 추천을 막을 근거가 없다. 대신 아래에서 점수 상한으로 다룬다.
             _bool_gate("적정가 신뢰도 확보 (참고 · 미충족이어도 차단 아님)",

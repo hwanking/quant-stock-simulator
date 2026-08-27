@@ -3315,7 +3315,7 @@ if st.session_state.get('show_screener', False):
                                         f"후행 보도 {_pick['news_lagging']}건 제외")
                                 _cb_a = _pick.get('confidence_band') or {}
                                 _conf_a = (
-                                    f"과거 동점수대 적중 {_cb_a['hit_rate']:.0f}% "
+                                    f"과거 동점수대 리플레이 적중 {_cb_a['hit_rate']:.0f}% "
                                     f"(n={_cb_a['n']})"
                                     if _cb_a.get('hit_rate') is not None
                                     and (_cb_a.get('n') or 0) >= 30
@@ -3702,7 +3702,7 @@ if _pmr:
     for _pi, _p in enumerate(_picks_show):
         _cc = _CLS_COLOR.get(_p.get('reco_class'), '#9DAABC')
         _cb_p = _p.get('confidence_band') or {}
-        _conf_txt = (f"과거 동점수대 적중 {_cb_p['hit_rate']:.0f}% (n={_cb_p['n']})"
+        _conf_txt = (f"과거 동점수대 리플레이 적중 {_cb_p['hit_rate']:.0f}% (n={_cb_p['n']})"
                      if _cb_p.get('hit_rate') is not None and (_cb_p.get('n') or 0) >= 30
                      else "적중률 표본 부족")
         _news_txt = []
@@ -4822,6 +4822,15 @@ else:
                 _wl_dirty = True
     if _wl_dirty:
         _wl_write(_wl_body)
+        # ⚠️ 라운드 184 — 사용자 요청: *"평단이랑 갯수 넣으면 자동적으로
+        #   내 포트폴리오 견해에 반영 및 보유중으로 이동해야지."*
+        #   보유/안 산 것 묶음과 포트폴리오 견해는 이 render 의 **첫머리**
+        #   에서 계산되므로, 방금 입력한 값은 다음 rerun 에야 반영됐다 —
+        #   한 번 더 눌러야 움직이는 화면이었다. 저장 직후 rerun 해서
+        #   즉시 이동·반영되게 한다.
+        #   무한 rerun 없음 — rerun 뒤에는 입력값과 저장값이 같아
+        #   `_wl_dirty` 가 다시 서지 않는다.
+        st.rerun()
 
     _old_memo = [(str(_w.get('name') or ''), str(_w.get('memo') or ''))
                  for _w in _wl_items() if str(_w.get('memo') or '').strip()]
@@ -7324,23 +7333,30 @@ def _pc(v, suf='%'):
 # 미산출) — 아는 것과 모르는 것을 섞지 않는다.
 # (_rg58 · _blend59 는 배너 앞에서 계산됨 — 고정 패널·배너·타일·대화가
 #  같은 값을 읽는다 §4)
-_tp_tile = (
-    {'label': '목표 방향이 먼저 나올 확률 (계층 보정)',
-     'value': f"약 {_blend59['p'] * 100:.0f}%",
-     'sub': (f"근거 {_blend59['layers']}층 · 최협층 n "
-             f"{_blend59['n_narrow']:,} · 구간 "
-             f"{_blend59['wilson_low'] * 100:.0f}~"
-             f"{_blend59['wilson_high'] * 100:.0f}%"), 'tone': 'pos'}
-    if _blend59 else
-    {'label': '목표 방향이 먼저 나올 확률', 'value': _pc(_g['tp_first']),
-     'sub': '손절선보다 목표에 먼저 닿는 비율', 'tone': 'pos'})
+# ⚠️ 라운드 184 — 세 타일의 합이 **128%** 가 됐다 (사용자 지적).
+#   목표 칸만 계층 보정값(약 58%)을 쓰고 손절(50%)·미결(20%)은 유사사례
+#   실측 비율을 그대로 썼기 때문이다 — 서로 다른 추정치를 한 분할처럼
+#   그려 놓은 것이다. 세 칸은 **같은 표본(유사사례)의 분할**로 통일해
+#   합이 100% 가 되게 하고, 계층 보정값(R59 채택 — 배너가 쓰는 값)은
+#   **별도 추정치**로 아래 캡션에 갈라 적는다. 값은 하나도 안 바꾼다 —
+#   무엇이 무엇과 합산되는지를 바로잡는 것이다 (§4).
 _uk.stat_tiles([
-    _tp_tile,
+    {'label': '목표 방향이 먼저 나올 확률 (유사사례 실측)',
+     'value': _pc(_g['tp_first']),
+     'sub': '아래 두 칸과 같은 표본 — 셋의 합이 100%입니다', 'tone': 'pos'},
     {'label': '손절선에 먼저 닿을 확률', 'value': _pc(_g['sl_first']),
      'sub': '목표보다 손절에 먼저 닿는 비율', 'tone': 'neg'},
     {'label': '기간 안에 어느 쪽도 못 닿을 확률', 'value': _pc(_g['undecided']),
      'sub': '보유기간이 끝날 때까지 결판 안 남'},
 ], theme=_theme)
+if _blend59:
+    st.caption(_md_safe(
+        f"계층 보정 목표 확률(R59 채택 · 배너가 쓰는 값)은 **약 "
+        f"{_blend59['p'] * 100:.0f}%** 입니다 — 위 세 칸과 **다른 추정치**"
+        f"라 그 분할과 합산되지 않습니다 (근거 {_blend59['layers']}층 · "
+        f"최협층 n {_blend59['n_narrow']:,} · 구간 "
+        f"{_blend59['wilson_low'] * 100:.0f}~"
+        f"{_blend59['wilson_high'] * 100:.0f}%)."))
 # ⚠️ 라운드 98 — 화면 아래쪽 '목표별 도달 확률' 표(+2%·+3%···)와 이 타일이
 #   둘 다 '확률'이라 같은 것처럼 읽혔다. 정의가 다르다:
 #     · 이 타일  = **이 종목의 1차 목표**가 손절보다 먼저 나올 확률
@@ -7420,7 +7436,11 @@ _rows_g = [
      (f"{_g['hold_days']}거래일" if _g.get('hold_days') else _gai.NA)),
     ('비슷했던 과거 사례',
      (f"{_g['sample_n']:,}건" if _g.get('sample_n') else '찾지 못함')),
-    ('이 점수대의 실제 성적 (안 본 사례)',
+    # ⚠️ 라운드 184 — 이 칸이 '안 본 사례'라고 적혀 있었는데 **거짓**이었다.
+    #   출처(calibration.json bands)는 판정 완료 177,042건 **전체**
+    #   (train 153,620 포함)다. 블라인드 전체가 11,603건인데 한 점수대가
+    #   89,520건일 수는 없다(사용자 지적). 표본외라 부르지 않는다.
+    ('이 점수대의 리플레이 성적 (학습·검증 포함 전체)',
      (f"{_g['oos_hit']:.0f}% · {_g['oos_n']:,}건 기준"
       if _g.get('oos_hit') is not None else _gai.NA)),
     ('95% 신뢰구간',
@@ -7582,9 +7602,25 @@ try:
     _bk61 = str((CORE or {}).get('bucket') or '')
     if (_gap61 is not None and _gap61 > 3
             and ('대기' in _bk61 or '제외' in _bk61)):
-        st.caption(_md_safe(
-            '종합: 기업·업황이 나빠서가 아니라 **현재 진입가격이 검증된 '
-            '기준보다 높아서** 신규 매수가 보류된 상태입니다.'))
+        # ⚠️ 라운드 184 — 이 문장이 **사실 확인 없이** "기업·업황이 나빠서가
+        #   아니라"고 단정하고 있었다. 서진시스템은 기본 매력도 48점 ·
+        #   ROE −12.9% · 적정가 미산출인데도 그렇게 나갔다(사용자 지적).
+        #   기본 매력도가 게이트(60점)를 넘고 적정가도 있을 때만 그 말을
+        #   쓰고, 아니면 **둘 다**라고 말한다.
+        _q61 = four_scores.get('stock_quality_score')
+        _fv_ok61 = bool(four_scores.get('fair_value_usable'))
+        if (_q61 is not None and float(_q61) >= 60 and _fv_ok61):
+            st.caption(_md_safe(
+                '종합: 기업·업황이 나빠서가 아니라 **현재 진입가격이 검증된 '
+                '기준보다 높아서** 신규 매수가 보류된 상태입니다.'))
+        else:
+            _q_txt61 = (f'기본 매력도 {float(_q61):.0f}점'
+                        if _q61 is not None else '기본 매력도 미산출')
+            st.caption(_md_safe(
+                f'종합: **현재 진입가격이 검증된 기준보다 높고**, 펀더멘털 '
+                f'불확실성({_q_txt61}'
+                + ('' if _fv_ok61 else ' · 적정가 미산출')
+                + ')도 함께 신규 매수를 제한합니다.'))
     # 라운드 81b — 위 표의 업황 n 이 raw 라는 것을 한 번만 설명한다.
     # 표 안에 매번 문장을 넣으면 칸이 터지고, 안 적으면 235 가 독립 관측
     # 235 개로 읽힌다.
@@ -7719,15 +7755,19 @@ _rows_v = [
     ('운영 모델 버전', _VER_NOW['model']),
     ('점수 산식 · 룰북', f"{_VER_NOW['scoring']} · {_VER_NOW['rulebook']}"),
 ]
+# ⚠️ 라운드 184 — '표본외 성적'이라고 적었는데 calibration bands 는
+#   학습·검증·블라인드 **전체 리플레이**(판정 완료 177,042건)다.
+#   블라인드만의 수치는 홈의 '실전 적중률'이 따로 있다. 이름을 바로잡는다.
 if _cb_v.get('n'):
     _rows_v.append((
-        f"이 점수대({_cb_v.get('lo')}~{_cb_v.get('hi')}점)의 표본외 성적",
+        f"이 점수대({_cb_v.get('lo')}~{_cb_v.get('hi')}점)의 리플레이 성적"
+        f" (학습·검증 포함)",
         f"{_cb_v.get('hit_rate', 0):.0f}% · {_cb_v['n']:,}건"
         + (f" · 하한 {_cb_v['wilson_low']:.0f}%"
            if _cb_v.get('wilson_low') is not None else ''),
         'pos' if (_cb_v.get('wilson_low') or 0) >= 55 else 'warn'))
 else:
-    _rows_v.append(('이 점수대의 표본외 성적', '표본 부족 — 판단에 반영하지 않음',
+    _rows_v.append(('이 점수대의 리플레이 성적', '표본 부족 — 판단에 반영하지 않음',
                     'warn'))
 _bzb_v = ((_gi_calib or {}).get('splits') or {}).get('buy_zone') or {}
 _blv = _bzb_v.get('blind') or {}
