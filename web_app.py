@@ -2597,6 +2597,57 @@ st.session_state['scan_key'] = _scan_key
 
 import premarket as _pm_mod
 
+
+# ── 산출물 읽기 (라운드 188에 위로 옮김) ──────────────────────────────
+# 종전에는 이 둘이 5,100행대에 있었다. 그런데 **스캔 블록(3,000행대)** 이
+# 신호율을 화면에 적으면서 파일을 못 읽어 `2.9%` 를 손으로 박아 두고
+# 있었고, 그 값이 원장이 자라는 동안 낡아 지금 값(7.2%)과 2.5배 벌어졌다.
+# 정의를 위로 올려 **두 자리가 같은 파일을 읽게** 한다 (§4). 함수 본문은
+# 한 글자도 안 바꿨다 — 순수 이동이다.
+def _artifact_path(fname):
+    _base = os.path.dirname(os.path.abspath(__file__))
+    for _d in (".portfolio", "data"):
+        _p = os.path.join(_base, _d, fname)
+        if os.path.exists(_p):
+            return _p
+    return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_calibration_meta():
+    try:
+        import json as _json_cal
+        _p = _artifact_path("calibration.json")
+        if not _p:
+            return {}
+        with open(_p, encoding='utf-8') as _f:
+            return _json_cal.load(_f)
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cal_made_date():
+    """캘리브레이션 숫자를 **언제 쟀나** — 없으면 None (지어내지 않는다).
+
+    ⚠️ 라운드 188 — `calibration.json` 에는 날짜 필드가 아예 없다. 그래서
+      화면이 인용하는 적중률·신호율·건수가 **전부 날짜 없이** 나가고 있었다.
+      §9 는 *"숫자를 인용할 때는 잰 날짜를 같이 적는다 — 날짜 없는 숫자는
+      반드시 낡는다"* 고 못 박았고, 실제로 신호율 2.9% 가 7.2% 가 되도록
+      아무도 몰랐다. 같은 묶음을 만든 `data/bundle_meta.json` 의 `made` 가
+      그 날짜다. 없으면 None 을 돌려주고 화면은 날짜를 안 적는다.
+    """
+    try:
+        import json as _json_md
+        _p = _artifact_path("bundle_meta.json")
+        if not _p:
+            return None
+        with open(_p, encoding='utf-8') as _f:
+            return (_json_md.load(_f) or {}).get('made') or None
+    except Exception:
+        return None
+
+
 # 카드가 쓰는 자산유형 한글 이름 — 카드 조립 함수와 같은 자리에 둔다
 # (라운드 39: 함수만 올리고 이 표를 두고 와서 NameError 가 났다)
 _ASSET_KO = {'STOCK': '주식', 'ETF': 'ETF', 'ETF_LEV': '레버리지 ETF',
@@ -3118,6 +3169,17 @@ if st.session_state.get('show_screener', False):
             # 고신뢰 매수권(60+)은 드물고, 확장 신호(58~59)는 4,229건 실측에서
             # 검증 61.2%(n=304) → 블라인드 58.2%(n=146)인 탐색층이다.
             # 비용후 기대값은 소폭 음수 — '후보 탐색'이지 수익 보장이 아니다.
+            # 라운드 188 — 신호율·블라인드 성적을 **파일에서 읽는다.**
+            #   손으로 박은 값이 원장이 자라는 동안 낡았다(2.9% vs 7.2%).
+            _cal188 = _load_calibration_meta()
+            _sf188 = (_cal188.get('signal_frequency') or {})
+            _bz188 = ((_cal188.get('splits') or {}).get('buy_zone') or {})
+            _bl188 = (_bz188.get('blind') or {})
+            _made188 = _cal_made_date()
+            _bz_rate_txt = (f"{_sf188['rate_pct']}%" if _sf188.get('rate_pct')
+                            is not None else "미산출")
+            if _made188:
+                _bz_rate_txt += f" (잰 날 {_made188})"
             _bz_rows = sorted(
                 [r for r in scan_results if (r.get('final_score') or 0) >= 60],
                 key=lambda r: r.get('final_score') or 0, reverse=True)
@@ -3130,8 +3192,14 @@ if st.session_state.get('show_screener', False):
                     f"**고신뢰 매수권(60점+) {len(_bz_rows)}종목** — "
                     + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
                                  for r in _bz_rows[:5])
-                    + "  \n실측 신호율 2.9%의 드문 구간입니다. 아래 표에서 "
-                      "종목을 눌러 조건을 확인하세요.")
+                    # ⚠️ 라운드 188 — 여기가 '실측 신호율 2.9%' 로 **박혀**
+                    #   있었다. 원장이 자란 지금 값은 7.2% 다(2.5배 차이).
+                    #   같은 앱의 홈 타일은 이 값을 파일에서 읽어 7.2% 를
+                    #   띄우고 있어 **한 앱이 두 숫자를 말했다.**
+                    #   날짜 없는 숫자는 반드시 낡는다 (§9) — 파일에서 읽고
+                    #   잰 날을 함께 적는다.
+                    + f"  \n실측 신호율 {_bz_rate_txt}의 드문 구간입니다. "
+                      f"아래 표에서 종목을 눌러 조건을 확인하세요.")
             if _ext_rows:
                 # 라운드 2.5: 이 중 '적정가 이하' 종목이 실측상 가장 좋다
                 # (검증 64.2% → 블라인드 61.9%·비용후 +1.15%)
@@ -3140,14 +3208,33 @@ if st.session_state.get('show_screener', False):
                     f"**확장 신호(58~59점) {len(_ext_rows)}종목** — "
                     + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
                                  for r in _ext_rows[:6])
-                    + "  \n사전등록 실측(6,508건): 검증 62.5%(n=456) → "
-                      "블라인드 55.3%(n=226), 비용 차감 후 소폭 음수 — 탐색용.")
+                    # ⚠️ 라운드 188 — 종전 문구는 원장 6,508건 시절(2026-08-02)
+                    #   값을 **잰 날 없이** 인용했다. 잰 날을 적는다 (§9).
+                    + f"  \n사전등록 실측(원장 6,508건 시점 · 2026-08-02): "
+                      f"검증 62.5%(n=456) → 블라인드 55.3%(n=226), "
+                      f"비용 차감 후 소폭 음수 — 탐색용.")
                 if _ext_below:
+                    # ⚠️ 라운드 188 — 여기가 **"유일한 비용후 양수 계층입니다"**
+                    #   였다. 원장 6,508건 시절의 n=95 짜리 주장인데, 지금
+                    #   원장(184,759건)에서 매수권 60+ 블라인드는
+                    #   n=1,068 · 적중 51.3% · **비용후 −1.81%** 다.
+                    #   화면이 우리가 재서 없다고 발표한 우위를 팔고 있었다 —
+                    #   §9 가 금지한 바로 그것이다. 옛 값은 **그때 값이라고**
+                    #   적고, 지금 값을 나란히 둔다.
+                    _bl_txt188 = (
+                        f"지금 원장에서 매수권(60+) 블라인드는 "
+                        f"적중 {_bl188['hit_rate']}%(n={_bl188['n']:,}) · "
+                        f"비용후 {_bl188['avg_return_after_cost']:+.2f}%"
+                        + (f" · 잰 날 {_made188}" if _made188 else "")
+                        + "로, 그 우위는 재현되지 않았습니다."
+                        if _bl188.get('hit_rate') is not None else
+                        "지금 원장의 블라인드 성적은 미산출입니다.")
                     _ext_msg += (
                         f" \n이 중 **적정가 이하 진입 {len(_ext_below)}종목** ("
                         + " · ".join(r.get('name') for r in _ext_below[:4])
-                        + ") — 이 조건은 블라인드 58.9%(n=95)·비용후 +0.55%로 "
-                          "유일한 비용후 양수 계층입니다 (라운드 2.5 실측).")
+                        + ") — 원장 6,508건 시점(2026-08-02)에는 이 조건이 "
+                          "블라인드 58.9%(n=95)·비용후 +0.55% 였습니다. "
+                        + _bl_txt188)
                 st.info(_ext_msg)
             if not _bz_rows and not _ext_rows:
                 st.caption("이번 스캔에는 매수권(60점+)·확장 신호(58~59점)가 모두 "
@@ -5148,15 +5235,6 @@ _uk.spacer(28)
 # ── 캘리브레이션 산출물 로더 — 홈 카드·판정 캡션·모델 성과 섹션이 공유 ──────
 # rerun 마다 엔진이 새로 만들어져 속성이 비므로, 파일을 직접 읽어 캐시한다.
 # 경로: .portfolio/ (로컬 최신) 우선, 없으면 data/ (저장소 동봉 — 클라우드 배포용).
-def _artifact_path(fname):
-    _base = os.path.dirname(os.path.abspath(__file__))
-    for _d in (".portfolio", "data"):
-        _p = os.path.join(_base, _d, fname)
-        if os.path.exists(_p):
-            return _p
-    return None
-
-
 def _artifact_source(fname):
     """이 값이 **로컬 최신인가 저장소 동봉본인가** (라운드 108).
 
@@ -5176,19 +5254,6 @@ def _artifact_source(fname):
     if os.path.exists(os.path.join(_base, "data", fname)):
         return 'bundle'
     return None
-
-
-@st.cache_data(ttl=600, show_spinner=False)
-def _load_calibration_meta():
-    try:
-        import json as _json_cal
-        _p = _artifact_path("calibration.json")
-        if not _p:
-            return {}
-        with open(_p, encoding='utf-8') as _f:
-            return _json_cal.load(_f)
-    except Exception:
-        return {}
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -8541,7 +8606,7 @@ with n1:
     dd = news_tf['daily_drivers']
     st.markdown(f"""
     <div style='background: #161D2A; padding: 20px; border-radius: 14px; '>
-        <h4 style='color: #ff453a !important; margin-top:0;'>1. 오늘의 변동 요인 ({dd.get('date', '2026-07-30')})</h4>
+        <h4 style='color: #ff453a !important; margin-top:0;'>1. 오늘의 변동 요인 ({dd.get('date') or '기준일 미상'})</h4>
         <p style='font-weight: bold; color: #F3F6FA;'>{dd['title']}</p>
         <p style='font-size: 15px; color: #9DAABC;'><b>관찰 내용</b>: {dd['impact']}</p>
         <span style='font-size: 13px; color: #9DAABC;'>출처: {dd['source']} | 성향: {dd['sentiment']}</span>
@@ -8602,7 +8667,10 @@ if user_entry_price > 0 and user_quantity > 0:
     else:
         user_pos_tag = "발목 가격 (최저점 매수)"
         user_pos_color = "#4C8DFF"
-        user_pos_advice = f"최저가 부근 우수 진입 포지션입니다({pnl_pct:+.1f}%). 잔여 이익을 극대화하세요."
+        # ⚠️ 라운드 188 — '우수 진입 포지션'·'극대화' 는 우리가 잰 것이
+        #   아니다. 아는 사실은 '평단이 현재가보다 많이 아래'라는 산술뿐이다.
+        user_pos_advice = (f"평단이 현재가보다 크게 아래입니다({pnl_pct:+.1f}%). "
+                           f"이 자리가 유리했는지는 측정하지 않았습니다.")
 
     sma_20_curr = tech_df['sma_20'].iloc[-1]
     
@@ -8864,7 +8932,11 @@ tab_pred, tab_val, tab_scen, tab_demark, tab_flow, tab_audit = st.tabs([
 # [Section 5 & 6 & 19] 자기유사 패턴 과거 백테스트 결과 (7대 적중률 극대화 파이프라인 가동)
 with tab_pred:
     show_tab_verdict('pattern')
-    st.subheader(f"[{resolved_name}] - 자기유사 예측 & 7대 적중률 극대화 엔진 파이프라인")
+    # ⚠️ 라운드 188 — '7대 적중률 극대화' 는 근거가 없다(라운드 36: 목표
+    #   배수 0.4R~3.0R 어느 것도 세 구간 모두에서 양수가 아니었다). 게다가
+    #   같은 화면 아래가 *"다중 모델 앙상블은 구현되어 있지 않습니다"* 라고
+    #   적어 한 화면이 두 말을 했다. 실제로 하는 일(7단계)만 적는다.
+    st.subheader(f"[{resolved_name}] — 자기유사 예측 파이프라인 (7단계)")
     
     # [19-10] 거래 회피(Abstain) 알림
     if sim_res.get('is_abstain'):
@@ -9948,12 +10020,12 @@ with tab_audit:
         st.markdown(f"""
         <div style='background: #161D2A; border-radius: 16px; padding: 20px;'>
             <h4 style='color: #35C98B !important; margin-top:0;'>SR 11-7 모델 리스크 관리 감사 카드 (Section 13)</h4>
-            <p>- <b>기준시점 ($t_{{ref}}$)</b>: <b>{snapshot.get('t_ref') if snapshot else '2026-07-30'}</b></p>
-            <p>- <b>미래 데이터 차단 건수</b>: <b>{snapshot.get('blocked_future_count') if snapshot else 0} 건 (PTA 통제 완료)</b></p>
+            <p>- <b>기준시점 ($t_{{ref}}$)</b>: <b>{snapshot.get('t_ref') if snapshot else '미상'}</b></p>
+            <p>- <b>미래 데이터 차단 건수</b>: <b>{f"{snapshot.get('blocked_future_count')} 건 (PTA 통제 완료)" if snapshot else '미산출 — 스냅샷 없음'}</b></p>
             <p>- <b>Shapley-DCLR 미래 누수율</b>: <b style='color:#F2B84B;'>{snapshot.get('shapley_dclr_status') if snapshot else '미산출'}</b></p>
             <p>- <b>중복 유사 패턴 제거</b>: <b>적용 (지평별 최소 H영업일 이격)</b></p>
             <p>- <b>SR 11-7 무결성 루브릭</b>: <b style='color:{"#35C98B" if sr117_audit.get("is_passed") else "#F2B84B"};'>{sr117_audit.get('total_score', 0)}/100점 ({'통과' if sr117_audit.get('is_passed') else '미달'})</b>
-               <span style='font-size:13px; color:#9DAABC;'>— 이중시점 {sr117_audit.get('bitemporal_score',0)} / 연산 {sr117_audit.get('math_score',0)} / 일관성 {sr117_audit.get('consistency_score',0)} / 통계 {sr117_audit.get('stat_score',0)} / 가드레일 {sr117_audit.get('guardrail_score',0)}</span></p>
+               <span style='font-size:13px; color:#9DAABC;'>— 이중시점 {sr117_audit.get('bitemporal_score',0)}({_uk._esc(sr117_audit.get('bitemporal_note','—'))}) / 연산 {sr117_audit.get('math_score',0)} / 일관성 {sr117_audit.get('consistency_score',0)}{'' if sr117_audit.get('consistency_measured') else ' (미측정 상수)'} / 통계 {sr117_audit.get('stat_score',0)} / 가드레일 {sr117_audit.get('guardrail_score',0)}</span></p>
             <p>- <b>금지 표현 자동 교정</b>: <b>{guard_res.get('violations_found', 0)}건</b></p>
             <p>- <b>규칙집 버전</b>: <code>{quant_indicators.QuantIndicatorsEngine.RULEBOOK_VERSION}</code> | <b>Run ID</b>: <code>{run_id}</code></p>
         </div>

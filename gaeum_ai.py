@@ -122,7 +122,12 @@ def build(four_scores: dict, sim_res: dict, verdict: dict,
     elif n < 30:
         limits.append(f'비슷한 사례가 {n}건뿐입니다. 확률로 보기엔 적습니다.')
     if (band and (band.get('n') or 0) < 100):
-        limits.append('이 점수대의 표본외 검증 사례가 100건에 못 미칩니다.')
+        # ⚠️ 라운드 188 — 여기가 '표본외 검증 사례' 였다. 이 표본의 출처는
+        #   calibration bands 로 **학습·검증 포함 전체 리플레이**다 — 라운드
+        #   184 가 다섯 자리에서 걷어낸 그 거짓의 생존자다. 같은 카드의
+        #   아래 칸(sentence)은 이미 '리플레이'라고 적어 한 카드가 두 말을 했다.
+        limits.append('이 점수대의 리플레이 사례(학습·검증 포함)가 '
+                      '100건에 못 미칩니다.')
     if not sim.get('probabilities_shown', True):
         limits.append(str(sim.get('blind_reason')
                           or '표본 부족으로 확률을 표시하지 않습니다.'))
