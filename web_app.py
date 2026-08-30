@@ -2556,6 +2556,10 @@ if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
 # ── 접힌 단계의 값 확정 ──────────────────────────────────────────────────
 # 아코디언이 접히면 그 안의 위젯이 렌더되지 않는다. 본문이 쓰는 이름은
 # 전부 여기서 채운다 — 하나라도 빠뜨리면 그 단계를 접는 순간 화면이 죽는다.
+#: 위젯이 `_keep()` 으로 저장하는 이름 ↔ 본문이 쓰는 전역 이름 (라운드 189).
+#: 둘이 달라서 폴백이 죽어 있었다. 새 항목을 넣을 때 여기도 같이 적는다.
+_KEEP_ALIAS = {'t_ref_date': 't_ref', 'rho_cutoff': 'rho'}
+
 _g = globals()
 if '_mkt' not in _g:
     _mkt = bitemporal_engine.get_market_status()
@@ -2567,8 +2571,15 @@ for _nm, _dv in (
         ('user_entry_price', 0.0), ('user_quantity', 0),
         ('attention_strategy', 'composite'), ('scan_depth', 5),
         ('t_ref_date', _resolved_date), ('rho_cutoff', 0.80)):
+    # ⚠️ 라운드 189 — 이 폴백이 **키 이름 불일치로 통째로 죽어 있었다.**
+    #   `_keep()` 은 't_ref' · 'rho' 로 저장하는데(2548 · 2552) 여기서는
+    #   't_ref_date' · 'rho_cutoff' 로 찾아 늘 못 찾았다. 그래서 4단계를
+    #   접는 순간 사용자가 고른 기준일·rho 가 조용히 기본값으로 되돌아갔다
+    #   — 1859-1861 주석이 약속한 "접었다 펼쳐도 유지된다"가 거짓이었다.
+    #   저장하는 이름과 찾는 이름을 잇는다. 나머지 여덟은 `_KEEP` 에 한
+    #   번도 쓰이지 않으므로 기본값으로 떨어지는 것이 정상이다.
     if _nm not in _g:
-        _g[_nm] = _KEEP.get(_nm, _dv)
+        _g[_nm] = _KEEP.get(_KEEP_ALIAS.get(_nm, _nm), _dv)
 t_ref_str = t_ref_date.strftime("%Y-%m-%d")
 
 
@@ -2852,6 +2863,17 @@ def run_market_scan():
     _bar = st.sidebar.empty()
     _st = {'step': 0, 't0': time.time()}
 
+    def _scan_done():
+        """진행 표시를 끈다 — 켠 곳이 하나면 끄는 곳도 하나여야 한다.
+
+        라운드 189: 켜는 코드가 없어 표시가 죽어 있었다. 살리면서 **끄는
+        길이 둘**(조기 반환·정상 종료)이라 한 곳으로 모은다. 안 그러면
+        조기 반환에서 '처리 중 ●' 이 영원히 남는다.
+        """
+        st.session_state['scan_busy'] = False
+        st.session_state['scan_stage'] = ''
+        st.session_state['_sb_busy'] = ''
+
     def _progress(msg, step=None):
         """진행 표시 — 단계·퍼센트·경과 시간을 함께 적는다 (라운드 122).
 
@@ -2863,6 +2885,15 @@ def run_market_scan():
         if step is not None:
             _st['step'] = step
         _cur = max(1, min(_st['step'], len(_SCAN_STEPS)))
+        # ⚠️ 라운드 189 — 진행 표시 세 자리가 **통째로 죽어 있었다.**
+        #   `_sb_busy`(web_app:1874) · `scan_busy`·`scan_stage`
+        #   (live_ticker:51-55) 를 읽는 코드는 있는데 **쓰는 곳이 저장소
+        #   어디에도 없어** 늘 빈 값이었다. 그래서 아코디언의 '처리 중 ●'
+        #   과 상단 띠의 '지금 돌고 있는 작업' 이 한 번도 안 떴다.
+        #   읽는 쪽이 기대하는 그대로 채운다 (§4 — 키는 한 벌만 쓴다).
+        st.session_state['scan_busy'] = True
+        st.session_state['scan_stage'] = _SCAN_STEPS[_cur - 1]
+        st.session_state['_sb_busy'] = _SB_STEPS[3]['key']
         _pct = int(round(100 * _cur / len(_SCAN_STEPS)))
         _el = time.time() - _st['t0']
         _prev = st.session_state.get('scan_last_secs')
@@ -2945,6 +2976,7 @@ def run_market_scan():
         watchlist=watch, fallback_pool=_lite_rows)
     st.session_state['attention_result'] = att
     if att.get('unavailable') or not att['rows']:
+        _scan_done()
         _bar.empty()
         st.session_state['scan_results'] = []
         st.session_state['scan_universe_total'] = att.get('pool_size', 0)
@@ -2972,6 +3004,7 @@ def run_market_scan():
             target, t_ref_str, b_engine=engine_init, rho_cutoff=rho_cutoff)
     # 다음번에 '얼마나 기다리면 되는지' 말할 수 있게 실제 소요를 남긴다.
     st.session_state['scan_last_secs'] = time.time() - _st['t0']
+    _scan_done()
     _bar.empty()
 
     # 관심점수를 결과 행에 붙인다 (순위에는 동점 보조기준으로만 쓴다 — §12)
@@ -3971,8 +4004,14 @@ if st.session_state.get('show_portfolio'):
                         t, _n, _i = engine_init.fetch_and_update_naver_realtime(code)
                         return (_i or {}).get('market') or _market_of(t)
                     try:
+                        # ⚠️ 라운드 189 — 바로 위에서 `_resolve_market` 을
+                        #   정의해 놓고 `resolve_market=None` 을 넘기고
+                        #   있었다(정의만 있고 아무도 안 부르는 함수였다).
+                        #   그래서 CSV·Excel 가져오기가 **모든 종목의 시장을
+                        #   미상으로** 만들고 행마다 경고를 뿌렸다. 붙여넣기
+                        #   경로(:4445)는 제대로 넘기고 있어 둘이 달랐다.
                         pos, warns = portfolio.import_positions(
-                            df_raw, mapping, resolve_market=None,
+                            df_raw, mapping, resolve_market=_resolve_market,
                             source_type="excel_import" if up.name.lower().endswith(('.xlsx', '.xls'))
                             else "csv_import")
                         st.session_state['positions'] = pos

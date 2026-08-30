@@ -1,14 +1,40 @@
 {
  "axes": {
-  "model": "v2026.08.31.3",
+  "model": "v2026.08.31.4",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
-  "schema": "v2026.08.28.1",
+  "schema": "v2026.08.31.1",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.31.4",
+   "previous": "v2026.08.31.3",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "R189 — 죽어 있던 화면 경로 셋 복구 (사이드바 설정 유지·CSV 시장·진행 표시)",
+   "note": "R188 감사 후속. ① _KEEP 폴백이 키 이름 불일치(t_ref vs t_ref_date)로 통째로 죽어 4단계를 접으면 기준일·rho 가 기본값으로 되돌아갔다. ② CSV·Excel 가져오기가 _resolve_market 을 정의해 놓고 None 을 넘겨 모든 종목의 시장을 미상으로 만들었다(붙여넣기 경로는 정상이었다). ③ scan_busy·scan_stage·_sb_busy 를 읽는 곳만 있고 쓰는 곳이 없어 진행 표시가 한 번도 안 떴다 — 켜고, 끄는 길을 _scan_done 하나로 모았다.",
+   "created_at": "2026-08-30T22:19:13+00:00",
+   "effective_from": "2026-08-31"
+  },
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.08.31.1",
+   "previous": "v2026.08.28.1",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "R189 — OCR 교정이 진짜 KRX 문자코드를 남의 종목 코드로 바꾸던 것을 막았다",
+   "note": "보유종목 입력 경로. _read_code_token 이 \"섞인 글자가 전부 숫자로 오해받는 글자면 오독\"으로 보고 숫자로 되돌렸는데 KRX 가 실제로 쓰는 글자(D·Z·G·A·S·T·B)가 그 표에 다 있었다. 실측: ETF 문자코드 296개 중 114개(38.5%)가 다른 코드로 — 0000Z0(RISE AI TOP10) → 000020(동화약품). 가르는 잣대는 실측이다: 실재 문자코드 296/296 이 0+숫자3+문자1(5번째)+숫자 이고 쓰이는 글자에 I·O·Q·U 가 없다(그 넷이 곧 오독 글자다). 판별식은 stock_code.looks_like_krx_alpha 한 곳에 둔다(R164 가 정한 자리). 고친 뒤 114개 → 0개, OCR 오독 교정은 그대로 유지. 곁들여 교정 표시를 버리던 세 번째 경로에 경고를 살렸다.",
+   "created_at": "2026-08-30T22:19:13+00:00",
+   "effective_from": "2026-08-31"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
