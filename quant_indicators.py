@@ -1524,18 +1524,31 @@ class QuantIndicatorsEngine:
 
     @staticmethod
     def _verdict_from_score(score, strong_buy=72, buy=60, hold=45, sell=32):
-        """0~100 점 → 다섯 단계 판정."""
+        """0~100 점 → 다섯 단계 **관점 우호도** (매매 지시가 아니다).
+
+        ⚠️ 라운드 187 — 종전에는 '매수 / 매수 우위 / 중립·관망 / 매도 우위 /
+          매도' 라는 **행동어**를 돌려줬다. 이 값은 탭 하나(자기유사·밸류·
+          DeMARK …)만 본 점수인데, 화면에서 `매수  78점` 으로 크게 찍혀
+          **운영 판정처럼 읽혔다** — 사용자 지적: *"매수 78점 탭 단독 판정은
+          자기유사 관점 점수일 뿐 운영 판정에 쓰지 않는다고 적어야 한다."*
+          맞다. 실제로 중앙 판정이 '추천 제외'인 종목에서도 이 칸은 '매수'
+          였다. 한 화면이 두 말을 한 것이다 (§4).
+
+          문턱(72/60/45/32)과 색은 **한 글자도 안 바꿨다** — 낱말만 그
+          관점이 우호적인지로 바꾼다. 매매 지시는 `verdict_core` 하나가
+          한다. 여기서 행동어를 되살리면 §4 위반이다.
+        """
         if score is None:
             return "산출 불가", "#86868b"
         if score >= strong_buy:
-            return "매수", "#30d158"
+            return "매우 우호적", "#30d158"
         if score >= buy:
-            return "매수 우위", "#7bd88f"
+            return "우호적", "#7bd88f"
         if score >= hold:
-            return "중립·관망", "#ff9f0a"
+            return "중립", "#ff9f0a"
         if score >= sell:
-            return "매도 우위", "#ff7a45"
-        return "매도", "#ff453a"
+            return "비우호적", "#ff7a45"
+        return "매우 비우호적", "#ff453a"
 
     def build_tab_verdicts(self, snap):
         """
