@@ -3141,11 +3141,20 @@ check("비보유·추격 + EV<0 → '사세요'를 쓰지 않는다 (§9)",
       '사세요' not in _e59n['new_buyer']['line']
       and '관찰 기준 가격' in _e59n['new_buyer']['line'],
       _e59n['new_buyer']['line'][:60])
+# ⚠️ 라운드 186 — 가격표 첫 줄 이름이 **분기 조건부**가 됐다. 종전에는
+#   본문이 "매수 권고가 아니라 관찰 기준 가격"이라 말한 분기에서도 표가
+#   같은 값을 '권장 매수가(1차 분할)'로 불러 한 카드가 두 말을 했다.
+#   매수를 실제로 권하는 분기(사도 됩니다 · EV>0 눌림)만 '권장'이다.
 check("신규 기준 가격 세트 (분할·추격금지·목표·손절·기간)",
       all(k in _e59['new_buyer']['prices'] for k in
-          ('권장 매수가(1차 분할)', '추격매수 금지선', '1차 목표가', '예상 보유기간')))
+          ('검토 기준가(1차 분할)', '추격매수 금지선', '1차 목표가', '예상 보유기간')))
 check("신규 매수가가 중앙 판정 진입가와 같다",
-      _e59['new_buyer']['prices']['권장 매수가(1차 분할)'] == 10000)
+      _e59['new_buyer']['prices']['검토 기준가(1차 분할)'] == 10000)
+check("관찰 분기의 가격표는 '권장'이라 부르지 않는다 (라운드 186)",
+      '권장 매수가(1차 분할)' not in _e59['new_buyer']['prices']
+      and '권장 매수가(1차 분할)' not in _e59n['new_buyer']['prices'])
+check("EV>0 눌림 분기는 '권장 매수가'다 (매수를 실제로 권한다)",
+      _e59p['new_buyer']['prices'].get('권장 매수가(1차 분할)') == 10000)
 check("폐기된 적정가×안전마진이 문장에 새지 않는다",
       '6,200' not in (_e59['new_buyer']['line']
                       + _e59['new_buyer']['detail']))
@@ -3159,6 +3168,8 @@ check("진입가 미산출이면 폐기 산식으로 물러서지 않는다",
 _e59b = q.build_easy_advice(_fs59, {'score': 70, 'action': 'BUY', 'vetoes': []}, 9800)
 check("매수 가능 → '지금 사도 됩니다 (나눠서)'",
       '지금 사도 됩니다' in _e59b['new_buyer']['line'])
+check("매수 분기의 가격표는 '권장 매수가'다 (라운드 186)",
+      '권장 매수가(1차 분할)' in _e59b['new_buyer']['prices'])
 check("틀릴 가능성을 실측으로 명시",
       '틀릴 가능성' in _e59b['new_buyer']['detail'])
 
@@ -5320,17 +5331,22 @@ def _row97(h, label):
     return f">{label}</div>" in h
 
 
+# ⚠️ 라운드 186 — 진입가 줄의 이름이 **데이터**가 됐다 (rec_label ←
+#   verdict_core.entry_label). 추천 통과(pos)만 '권장 매수가'고, 라벨을
+#   안 실은 카드는 기본값 '검토 기준가'로 떨어진다 — 기본값이 과장(권장)
+#   쪽이면 호출부가 빠뜨린 카드마다 R184 의 결함이 재발한다.
 _C97 = {
     'pos': dict(state='pos', state_label='오늘 사도 되는 종목', name='가',
                 code='000001', asset_ko='주식', score=62, price=842000,
                 rec_buy=821400, rec_basis='-2.4% · 0.3σ · 가까움',
-                target=869900, target_basis='권장가 기준', stop=767300,
-                stop_basis='권장가 기준', say='설명', news='뉴스', hit='적중'),
+                rec_label='권장 매수가',
+                target=869900, target_basis='진입가 기준', stop=767300,
+                stop_basis='진입가 기준', say='설명', news='뉴스', hit='적중'),
     'warn': dict(state='warn', state_label='사실상 관망', name='나',
                  code='000002', asset_ko='주식', score=49, price=243500,
                  rec_buy=126452, rec_basis='-48.1% · 1.82σ · 멀다',
-                 target=136920, target_basis='권장가 기준', stop=111480,
-                 stop_basis='권장가 기준', dim_levels=True, say='설명',
+                 target=136920, target_basis='진입가 기준', stop=111480,
+                 stop_basis='진입가 기준', dim_levels=True, say='설명',
                  news='뉴스', hit='적중'),
     'hold': dict(state='hold', state_label='판단 보류', name='다',
                  code='000003', asset_ko='주식', score=59, price=26150,
@@ -5340,25 +5356,32 @@ _C97 = {
                 code='000004', asset_ko='주식', score=41, price=34850,
                 rec_buy=None, rec_na='차단됨', say='설명', hit='적중'),
 }
+#: 기대 라벨 — pos 만 권장, 나머지는 라벨 미지정 → 기본값(검토 기준가)
+_LB97 = {'pos': '권장 매수가', 'warn': '검토 기준가',
+         'hold': '검토 기준가', 'neg': '검토 기준가'}
 
 for _th97 in ('dark', 'light'):
     for _k97, _c97 in _C97.items():
         _h97 = _uk97.reco_card(_c97, theme=_th97)
+        _lb97 = _LB97[_k97]
         check(f"[{_th97}/{_k97}] 카드에 현재가가 있다", _row97(_h97, '현재가'))
-        check(f"[{_th97}/{_k97}] 카드에 권장 매수가가 있다",
-              _row97(_h97, '권장 매수가'))
+        check(f"[{_th97}/{_k97}] 진입가 줄 이름이 '{_lb97}'다",
+              _row97(_h97, _lb97))
+        check(f"[{_th97}/{_k97}] 반대 이름은 없다 (한 카드 한 이름)",
+              not _row97(_h97, ('검토 기준가' if _lb97 == '권장 매수가'
+                                else '권장 매수가')))
         # 진입 기준이 없으면 목표·손절을 아예 감춘다 (참고값을 실행 가격 자리에 두지 않는다)
         _want97 = bool(_c97.get('rec_buy'))
         check(f"[{_th97}/{_k97}] 목표가 표시={_want97} 규칙",
               _row97(_h97, '1차 목표가') == _want97)
         check(f"[{_th97}/{_k97}] 손절가 표시={_want97} 규칙",
               _row97(_h97, '손절가') == _want97)
-        # 순서는 늘 현재가 → 권장 → 목표 → 손절
-        check(f"[{_th97}/{_k97}] 현재가가 권장보다 위에 온다",
-              _h97.index('>현재가</div>') < _h97.index('>권장 매수가</div>'))
+        # 순서는 늘 현재가 → 진입 기준 → 목표 → 손절
+        check(f"[{_th97}/{_k97}] 현재가가 진입 기준보다 위에 온다",
+              _h97.index('>현재가</div>') < _h97.index(f'>{_lb97}</div>'))
         if _want97:
-            check(f"[{_th97}/{_k97}] 권장 → 목표 → 손절 순서",
-                  _h97.index('>권장 매수가</div>') < _h97.index('>1차 목표가</div>')
+            check(f"[{_th97}/{_k97}] 진입 기준 → 목표 → 손절 순서",
+                  _h97.index(f'>{_lb97}</div>') < _h97.index('>1차 목표가</div>')
                   < _h97.index('>손절가</div>'))
         check(f"[{_th97}/{_k97}] 이모지를 쓰지 않는다",
               not _re.search('[\U0001F300-\U0001FAFF]', _h97))
@@ -13358,12 +13381,18 @@ for _n184 in _ast165.walk(_ast165.parse(
 _hj184 = ' | '.join(_hdr184)
 check("관심종목 머리글을 코드에서 읽었다 (0개면 미측정)",
       len(_hdr184) >= 8, f'{len(_hdr184)}개')
+# ⚠️ 라운드 186 — '(권장가)' → '(진입가)'. 관심종목에는 추천 아닌 종목이
+#   섞이므로 열 이름의 '권장'은 절반의 행에서 거짓이었다. 지키려는 성질
+#   (기준을 열 이름에 적는다)은 그대로다 — 이름만 어느 행에서도 참인
+#   중립 표기로 바꿨다 (verdict_core.price_basis 의 낱말 재사용).
 check("1차·2차 목표의 **기준을 열 이름에 적었다**",
-      '1차 목표(권장가)' in _hj184 and '2차 목표(현재가)' in _hj184,
+      '1차 목표(진입가)' in _hj184 and '2차 목표(현재가)' in _hj184,
       f'기준을 안 적으면 신규/보유 값이 섞인다 — 머리글: {_hj184[:120]}')
+check("'권장가'라는 열 이름은 사라졌다 (라운드 186)",
+      '권장가' not in _hj184, _hj184[:120])
 # 심어서 잡히는지 — 기준을 뺀 머리글은 실제로 걸려야 한다 (§6)
 check("기준 없는 머리글을 심으면 잡는다",
-      not ('1차 목표(권장가)' in '종목 | 현재가 | 1·2차 목표 | 적정가'))
+      not ('1차 목표(진입가)' in '종목 | 현재가 | 1·2차 목표 | 적정가'))
 check("1차는 CORE 의 신규 매수자 값에서 온다",
       "'snap_t1': CORE.get('new_target')" in _w184)
 check("2차는 보유자 기준값임을 코드가 밝힌다",
@@ -17026,6 +17055,78 @@ check("premarket._core_of 가 스냅샷 tech_df 를 넘긴다",
       'None 을 넘기면 next_action 이 no_data 로 조기 반환한다')
 check("tech_df=None 하드코딩이 사라졌다",
       '_na.build(fs, None,' not in _pmsrc215)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §216 — '권장 매수가'는 추천을 통과했을 때만 (라운드 186 · R184 분석 P1)
+#
+#   사용자 분석: *"'권장 매수가' 명칭은 EV>0 + 게이트 통과 시에만. 아니면
+#   검토 기준가/관찰 진입선."* 실제 화면(서진시스템)에서 카드가 "매수
+#   후보가 아닙니다"라고 말하면서 같은 칸에 '권장 매수가 38,681원'을
+#   내밀고 있었다 — 이름이 판정과 따로 놀았다.
+#
+#   고침: 이름을 **중앙 판정이 정한다** (verdict_core.entry_label ·
+#   recommended 일 때만 '권장 매수가'). 카드·배너는 그 값을 읽고,
+#   **기본값은 검토 기준가**다 — 호출부가 라벨을 빠뜨렸을 때 과장(추천
+#   아닌데 권장)이 축소보다 나쁘기 때문이다 (라운드 120e 의 기준).
+#   같은 값(buy_entry_max)을 '권장 매수가'로 부르던 안전마진 상자는
+#   게이트 라벨이 이미 쓰는 '가치 기준선(적정가−안전마진)'으로 통일했다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§216 진입가의 이름은 중앙 판정이 정한다 (라운드 186)")
+print("=" * 72)
+
+import trade_plan as _tp216                                      # noqa: E402
+import ui_kit as _uk216                                          # noqa: E402
+
+# ── ① 중앙 판정 — recommended 일 때만 '권장 매수가' ──────────────────
+_c216r = _vc105.build(_FS116, _VD116, None, {'kind': 'pullback'}, 100.0)
+check("추천 통과 → entry_label '권장 매수가'",
+      _c216r['recommended'] is True
+      and _c216r.get('entry_label') == '권장 매수가',
+      f"recommended={_c216r['recommended']} · {_c216r.get('entry_label')}")
+check("추천 미통과 → entry_label '검토 기준가'",
+      _c215a['recommended'] is False
+      and _c215a.get('entry_label') == '검토 기준가',
+      str(_c215a.get('entry_label')))
+
+# ── ② 카드 — 라벨을 데이터로 받고 기본값은 검토 기준가 ───────────────
+_uksrc216 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+check("카드 진입가 줄 이름이 데이터에서 온다 (기본값 = 검토 기준가)",
+      "p.get('rec_label') or '검토 기준가'" in _uksrc216)
+_w216 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("카드 조립이 중앙 판정 라벨을 싣는다",
+      "'rec_label': (_core.get('entry_label')" in _w216)
+_w216c = '\n'.join(ln for _i216, ln in _la135.code_lines('web_app.py'))
+check("'권장가 기준' 표기가 살아 있는 코드에서 사라졌다",
+      "권장가 기준" not in _w216c,
+      "진입가 기준(중앙 판정의 낱말)으로 통일했다")
+
+# ── ③ 배너 — 추천이 아니면 '매수구간 · 이 값 이하에서만'을 안 쓴다 ───
+_b216r = _tp216.for_buyer(_c216r)
+_b216x = _tp216.for_buyer(_c215a)
+check("trade_plan 이 recommended·entry_label 을 나른다",
+      _b216r.get('recommended') is True
+      and _b216x.get('recommended') is False
+      and _b216x.get('entry_label') == '검토 기준가')
+_h216r = _uk216.trade_plan_card({'buyer': _b216r}, name='가')
+_h216x = _uk216.trade_plan_card({'buyer': _b216x}, name='나')
+check("추천 통과 배너는 '매수구간 · 이 값 이하에서만'",
+      '매수구간' in _h216r and '이 값 이하에서만' in _h216r)
+check("추천 미통과 배너는 '검토 기준가 · 매수 지시 아님'",
+      '검토 기준가' in _h216x and '매수 지시 아님' in _h216x
+      and '이 값 이하에서만' not in _h216x,
+      _h216x[:100])
+check("미통과 배너에 '매수구간'이라는 이름이 없다",
+      '매수구간' not in _h216x)
+
+# ── ④ 안전마진 상자 — buy_entry_max 를 '권장 매수가'라 부르지 않는다 ──
+#   두 다른 값(실행 진입가 vs 적정가−안전마진)이 같은 이름을 쓰던 자리
+#   (quant_indicators:3860 주석이 지목). R184 게이트 라벨의 이름을 재사용.
+check("안전마진 상자가 '가치 기준선(적정가−안전마진)'이라 부른다",
+      _w216.count('가치 기준선(') >= 2
+      and '권장 매수가({_bem_str})' not in _w216,
+      'buy_entry_max 는 실행 진입가가 아니다 — 이름을 나눠야 한다')
 
 # ── ⑥ R184 ① 의 **다른 표기** 사냥 — 같은 결함의 다른 표기 (R165) ────
 #   §214 는 '안 본 사례' 넉 자를 web_app·gaeum_ai 두 파일에서만 봤다.

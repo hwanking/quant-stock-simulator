@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.08.30.0",
+  "model": "v2026.08.30.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
   "schema": "v2026.08.28.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.30.1",
+   "previous": "v2026.08.30.0",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "R186 — 진입가 이름을 중앙 판정이 정함: 추천 통과만 권장 매수가, 아니면 검토 기준가",
+   "note": "사용자 R184 분석 P1. verdict_core.entry_label 신설(recommended 기반), 카드·배너·easy_advice 가격표가 그 라벨을 읽고 기본값은 검토 기준가(과장 방지). 배너의 매수구간·이 값 이하에서만 은 추천 통과에만. buy_entry_max 를 권장 매수가라 부르던 안전마진 상자는 가치 기준선(적정가−안전마진)으로 통일. 관심종목 열 이름 (권장가)→(진입가). 가격·판정 값은 불변 — 이름만.",
+   "created_at": "2026-08-30T14:37:11+00:00",
+   "effective_from": "2026-08-30"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

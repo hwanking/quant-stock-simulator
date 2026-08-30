@@ -2612,7 +2612,7 @@ def _build_reco_card(p, news_txt, conf_txt):
 
     여기서 지키는 것 (하나라도 어기면 사용자가 값을 잘못 읽는다):
       · 가격 순서는 늘 현재가 → 권장 → 목표 → 손절
-      · 목표·손절은 **권장가 기준**만 카드에 올린다. 현재가 기준(보유자용)은
+      · 목표·손절은 **진입가 기준**만 카드에 올린다. 현재가 기준(보유자용)은
         같은 카드에 섞지 않고 경고 상자로 한 줄만 안내한다.
       · 권장가가 없으면 목표·손절을 **아예 감춘다** — 참고값을 실행 가격
         자리에 두지 않는다.
@@ -2692,12 +2692,15 @@ def _build_reco_card(p, news_txt, conf_txt):
     #   `ui_kit._esc()` 는 이스케이프를 먼저 하고 `**굵게**` 표기만 되살린다
     #   (라운드 120d — "산문은 마크다운으로 쓴다, 받는 쪽에서 해석한다").
     #   그러니 굵게는 `**…**` 로 적는다.
+    # 산문도 카드 줄과 같은 이름을 쓴다 (라운드 186 — 줄 이름이 '검토
+    # 기준가'인데 산문이 '권장 매수가'라 부르면 같은 카드가 두 말을 한다)
+    _lb = str((_core.get('entry_label') if _core else None) or '검토 기준가')
     if _n.get('headline'):
         say = f"**{_n['headline']}**"
         if rec and gap is not None and gap > 0:
-            say += f" 현재가는 권장 매수가보다 {gap:.1f}% 높습니다."
+            say += f" 현재가는 {_lb}보다 {gap:.1f}% 높습니다."
     elif rec and gap is not None and gap > 0:
-        say = (f"현재가가 권장 매수가보다 **{gap:.1f}%** 높습니다. "
+        say = (f"현재가가 {_lb}보다 **{gap:.1f}%** 높습니다. "
                + ("단기간에 매수 구간까지 내려올 가능성이 낮아 "
                   "**지금은 기다리는 편**이 낫습니다."
                   if far else "조금만 기다리면 매수 구간에 닿습니다."))
@@ -2745,13 +2748,20 @@ def _build_reco_card(p, news_txt, conf_txt):
                  if isinstance(p.get('confidence'), (int, float)) else None),
         'price': price,
         'rec_buy': rec, 'rec_basis': rec_basis,
+        # 라운드 186 — 이 줄의 이름은 중앙 판정이 정한다 (사용자 R184 분석
+        #   P1: 추천 통과가 아니면 '권장'이라 부르지 않는다). 중앙 판정이
+        #   없는 옛 리포트는 킷 기본값(검토 기준가)으로 떨어진다.
+        'rec_label': (_core.get('entry_label') if _core else None),
         'rec_na': ('차단됨' if '사면 안' in cls else '미산출'),
         'target': e_t1 if rec else None,
-        'target_basis': ('권장가 기준'
+        # '권장가 기준' → '진입가 기준' (라운드 186) — 기준가가 검토
+        # 기준가일 때도 참인 중립 표기다. verdict_core.price_basis 와 같은
+        # 낱말이라 새 이름이 아니다 (§2 재사용).
+        'target_basis': ('진입가 기준'
                          + (f" · 손익비 {p['entry_rr']}:1"
                             if p.get('entry_rr') else '')) if rec else '',
         'stop': e_stop if rec else None,
-        'stop_basis': '권장가 기준' if rec else '',
+        'stop_basis': '진입가 기준' if rec else '',
         'dim_levels': far,
         'say': say, 'hold_note': hold_note,
         'news': ' · '.join(news_txt) if news_txt else '특이 뉴스 없음',
@@ -4639,8 +4649,11 @@ else:
     #   묶은 열 이름에 둘 다 적는다. **글자 그대로** 적는다 — 상수로 빼면
     #   검사가 열 이름을 읽을 때 이름만 보이고 값이 안 보인다.
     _wl_hdr = st.columns(_WL_COLS)
+    # 라운드 186 — '(권장가)' → '(진입가)'. 관심종목에는 추천 아닌 종목이
+    # 섞이므로 열 이름의 '권장'은 절반의 행에서 거짓이다. '진입가'는 어느
+    # 행에서도 참인 기준 표기다 (verdict_core.price_basis 와 같은 낱말).
     for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
-                                '1차 목표(권장가) · 2차 목표(현재가)',
+                                '1차 목표(진입가) · 2차 목표(현재가)',
                                 '적정가', '엔진 판단', '매입가', '수량',
                                 '매입가 대비 · 평가손익', '')):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
@@ -5546,7 +5559,7 @@ if _pm_today and _pm_today.get('picks'):
                     _snap = {
                         'snap_buy': (_co142.get('pullback_zone')
                                      or _pk142.get('rec_buy')),
-                        'snap_t1': _co142.get('new_target'),   # 권장가 기준
+                        'snap_t1': _co142.get('new_target'),   # 진입가 기준
                         'snap_t2': _pk142.get('target2'),      # 현재가 기준
                         'snap_fair': _pk142.get('displayed_fair_value'),
                         'snap_fair_conf': _pk142.get(
@@ -6102,7 +6115,7 @@ try:
         _snap141 = {
             'snap_buy': (CORE.get('pullback_zone')
                          or (CORE.get('buy_zone') or [None])[0]),
-            'snap_t1': CORE.get('new_target'),          # 권장가 기준
+            'snap_t1': CORE.get('new_target'),          # 진입가 기준
             'snap_t2': four_scores.get('target_tech_2nd'),   # 현재가 기준
             'snap_fair': four_scores.get('displayed_fair_value'),
             'snap_fair_conf': four_scores.get('fair_value_confidence'),
@@ -6708,7 +6721,7 @@ st.markdown(f"""
     펀더멘털 적정가는 <b>분기 실적 기반 장기 가치</b>이고, 위 목표·손절은 <b>20일 변동성과 저항선</b>으로 계산합니다.
     그래서 고평가 구간에서도 단기 목표가가 현재가보다 위에 나올 수 있습니다 — 목표가는 밸류에이션을 보지 않습니다.
     신규 매수 판단과 보유자 대응은 서로 다른 결론일 수 있고, 그것이 정상입니다.
-    DeMARK 는 <b>시점</b> 신호이며 권장 매수가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
+    DeMARK 는 <b>시점</b> 신호이며 진입 기준가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -7930,7 +7943,7 @@ st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; ">
 <div style="margin-bottom:20px;">
     <h3 style="margin:0; color:#F3F6FA;">판정 근거 상세</h3>
-    <p style="margin:4px 0 0 0; color:#9DAABC; font-size:13px;">종합 결론·점수·실행 가격 기준(권장 매수가/1차 목표가/손절가)은 화면 맨 위 배너에 있습니다. 여기서는 그 근거만 봅니다.</p>
+    <p style="margin:4px 0 0 0; color:#9DAABC; font-size:13px;">종합 결론·점수·실행 가격 기준(진입 기준가/1차 목표가/손절가)은 화면 맨 위 배너에 있습니다. 여기서는 그 근거만 봅니다.</p>
 </div>
 
 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:16px;">
@@ -7969,14 +7982,19 @@ st.markdown(f'''
 
 _zone = four_scores.get('entry_zone', four_scores.get('chase_buy_status'))
 _bem_str = fmt_num(four_scores.get('buy_entry_max'), suffix='원')
+# 라운드 186 — 이 상자의 기준값은 `buy_entry_max`(적정가−안전마진)인데
+# '권장 매수가'라 부르고 있었다. 배너의 권장 매수가(실행 진입가)와 **다른
+# 값**이 같은 이름을 쓰는 자리다(quant_indicators:3860 주석이 지목한 그
+# 결함). 게이트 라벨(R184)이 이미 쓰는 이름 '가치 기준선(적정가−안전마진)'
+# 으로 통일한다 — 새 이름이 아니다 (§2 재사용).
 if _zone == "판정 불가":
-    st.warning("**[진입 판정 불가]**: 적정가 신뢰도가 기준에 미달하여 권장 매수가를 산출하지 못했습니다. "
+    st.warning("**[진입 판정 불가]**: 적정가 신뢰도가 기준에 미달하여 가치 기준선(적정가−안전마진)을 산출하지 못했습니다. "
                "현재가가 적정 진입구간 안인지 판단할 수 없으므로 신규 진입을 권하지 않습니다.")
 elif _zone == "안전마진 확보":
-    st.success(f"**[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 권장 매수가({_bem_str}) 이하입니다.")
+    st.success(f"**[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 가치 기준선({_bem_str} · 적정가−안전마진) 이하입니다.")
 elif _zone == "적정가 이하 (안전마진 미확보)":
     st.info(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래이지만 "
-            f"권장 매수가({_bem_str})보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+            f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
 elif _zone:
     st.error(f"**[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
              f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
@@ -9417,7 +9435,7 @@ with tab_val:
     <tr><td><b>기업 분류 유형</b></td><td>{val_eval.get('enterprise_class', '판단 불가')}</td></tr>
     <tr><td><b>분류 근거</b></td><td>{val_eval.get('classification_basis', '-')} (분류 신뢰도 {val_eval.get('classification_confidence', 0):.0f}점)</td></tr>
     <tr><td><b>제외된 모델</b></td><td>{'<br>'.join(f"{d['name']} — {d['reason']}" for d in (val_eval.get('excluded_models') or [])) or '없음'}</td></tr>
-    <tr><td><b>권장 매수가 조건</b></td><td>{' · '.join(('충족' if ok else '미충족') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
+    <tr><td><b>가치 기준선 조건</b></td><td>{' · '.join(('충족' if ok else '미충족') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
     <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'}</td></tr>
     <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
