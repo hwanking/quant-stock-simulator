@@ -25,7 +25,17 @@
 """
 from __future__ import annotations
 
-#: 추천 자격 — 10개 조건 전부 통과해야 '오늘 살 수 있는 종목'이다 (사용자 사양 §2)
+# 라운드 185 — 밸류 게이트(라운드 183)의 **단일 구현**을 읽는다.
+# R183 이 next_action 에만 걸었더니 이 파일이 그 존재를 모른 채 같은 종목을
+# '눌림목 매수 대기'로 승격시켰다 — 서진시스템(적정가 산출 불가)이 화면의
+# '다음 거래일에 실제로 손댈 수 있는 후보' 칸에 오른 원인. 판정자가 둘이면
+# 반드시 어긋난다 (§4). next_action 은 표준 라이브러리만 쓰는 잎 모듈이라
+# 순환이 없다 — 그쪽이 verdict_core 를 임포트하게 되면 이 줄이 순환이 된다.
+# 그때는 게이트를 셋째 모듈로 빼야 한다.
+import next_action as _value_gate
+
+#: 추천 자격 — 아래 checks 전부 통과해야 '오늘 살 수 있는 종목'이다
+#: (사용자 사양 §2 의 10조건 + 라운드 185 의 밸류 게이트 1건 = 11)
 #:
 #: 진입 깊이 상한은 **손으로 고르지 않았다** — 그리고 자를 두 번 바꿨다.
 #:
@@ -199,6 +209,25 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     vetoes = list(vd.get('vetoes') or [])
     rg = fs.get('regime_gate') or {}
 
+    # ── 밸류 게이트 (라운드 183 → 185) ────────────────────────────────
+    # next_action 과 **같은 함수**를 읽는다 — na 인자에 기대지 않는다.
+    # 관심 후보 경로는 na 를 tech_df 없이 만들어 늘 no_data 였고(가드가
+    # 조용히 꺼진 자리 — 못 받은 na 가 게이트를 끄면 라운드 177 의 재판이다),
+    # 상세 경로는 na 의 observe 를 이 파일이 도로 승격시켰다. 둘 다
+    # fs 에서 직접 판정하면 막힌다. 문턱은 R183 그대로 — 새 숫자 없음.
+    vb_code, vb_reason = _value_gate.value_block(fs)
+    _ov = _f(fs.get('fair_overshoot_pct'))
+    if vb_code:
+        vb_detail = str(vb_reason)
+    elif _f(fs.get('displayed_fair_value')) is None:
+        # §3 — 못 잰 것(UNCALCULATED 등)으로 거르지 않는다. 막는 것은
+        # 모델이 거부한 경우(OUT_OF_DOMAIN)뿐이며 그건 value_block 이 가른다.
+        vb_detail = '적정가 미산출 — 못 잰 것으로 거르지 않음'
+    elif _ov is not None:
+        vb_detail = f'적정가 대비 {_ov:+.1f}%'
+    else:
+        vb_detail = '적정가 이하'
+
     # 기대수익 — 지어내지 않는다. 목표·손절과 과거 적중률이 다 있을 때만.
     cb = fs.get('calibration_band') or {}
     hit = _f(cb.get('hit_rate'))
@@ -209,7 +238,9 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         dn = (stop / entry - 1.0) * 100.0
         exp_ret = round(p * up + (1 - p) * dn - COST_PCT, 2)
 
-    # ── ① 추천 10조건 (사용자 사양 §2) ────────────────────────────────
+    # ── ① 추천 조건 (사용자 사양 §2 의 10 + 라운드 185 밸류 게이트) ────
+    # ⚠️ 순서를 바꾸지 않는다 — 회귀가 checks[7](과열·저유동성)을 자리로
+    #   읽는다. 새 조건은 **끝에만** 더한다.
     checks = [
         ('권장 매수가 산출', entry is not None,
          f'{entry:,.0f}원' if entry else '미산출'),
@@ -241,6 +272,9 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
          str(fs.get('blind_test_status') or '미수행')),
         ('강제 차단 없음', not vetoes and not rg.get('block_new'),
          f'{len(vetoes)}건' if vetoes else '없음'),
+        # 라운드 185 — 밸류 게이트 (R183 블라인드 실측: 적정가 이하만 양수
+        # +0.238% · 초과는 음수 · OUT_OF_DOMAIN 은 최악 −1.237%)
+        ('펀더멘털 밸류 검증', vb_code is None, vb_detail),
     ]
     failed = [c[0] for c in checks if not c[1]]
     recommended = not failed
@@ -249,7 +283,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
                              depth_sigma, turnover=turnover,
                              heat=_heat_txt(fs),
                              regime_block=bool(rg.get('block_new')),
-                             vetoes=vetoes)
+                             vetoes=vetoes, vb_reason=vb_reason)
 
     # 내일 실제로 손댈 수 있는가 — 오늘의 추천에 올릴지 가르는 단 하나의 기준.
     #
@@ -340,7 +374,8 @@ def _heat_txt(fs):
 
 
 def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
-            turnover=None, heat=None, regime_block=False, vetoes=None):
+            turnover=None, heat=None, regime_block=False, vetoes=None,
+            vb_reason=None):
     """
     왜 추천에서 빠졌는가 — **무엇을 기다리면 되는지**를 이름에 넣는다.
 
@@ -350,6 +385,12 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
         return '오늘 매수 가능', ''
     if '권장 매수가 산출' in failed or '목표·손절 산출' in failed:
         return '데이터 부족', '실행 가격을 산출하지 못했습니다.'
+    # 라운드 185 — 밸류 게이트는 기다림이 아니라 제외다. OUT_OF_DOMAIN 은
+    # 가격이 움직여도 안 풀리고, 적정가 초과는 사유 문장이 스스로 조건
+    # (적정가 아래)을 말한다. 아래 kind='observe' 승격보다 **먼저** 잡아야
+    # R183 이 뺀 종목이 '눌림목 매수 대기'로 되살아나지 않는다.
+    if '펀더멘털 밸류 검증' in failed:
+        return '추천 제외', str(vb_reason or '펀더멘털 밸류 검증 미통과')
     if '강제 차단 없음' in failed:
         if regime_block:
             return '시장 국면 회복 대기', (
