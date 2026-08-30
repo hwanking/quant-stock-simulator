@@ -2660,10 +2660,17 @@ def _build_reco_card(p, news_txt, conf_txt):
         state = 'warn'
 
     # 상태 라벨도 '무엇을 기다리는가'로 — '관망'만 쓰면 행동을 못 정한다
+    # ⚠️ 라운드 185 — 중앙 판정이 있으면 **분류(bucket)를 그대로** 배지로
+    #   쓴다. 종전의 kind→라벨 사본이 '장기 관찰'(라운드 47 이 "언제 다시
+    #   봐야 하는지 알 수 없다"며 지운 이름)을 되살려, 같은 카드가 칸 제목
+    #   ('실제로 손댈 수 있는 후보')과 배지('장기 관찰')와 본문("매수
+    #   후보에서 뺐습니다")으로 **세 가지 다른 말**을 했다 — 서진시스템
+    #   실측. 사본은 중앙 판정이 없는 옛 리포트에서만 쓴다.
     _NA_LABEL = {'buy_now': '지금 분할매수', 'pullback': '눌림목 대기',
-                 'breakout': '돌파 확인 대기', 'observe': '장기 관찰',
+                 'breakout': '돌파 확인 대기', 'observe': '오늘 후보 아님',
                  'blocked': '매수 차단', 'no_data': '데이터 부족'}
-    label = (_NA_LABEL.get(_n.get('kind'))
+    label = (_core.get('bucket')
+             or _NA_LABEL.get(_n.get('kind'))
              or ('사실상 관망' if (far and rec) else
                  cls.replace('오늘은 ', '오늘 ') or '판단 보류'))
     if _n.get('kind') == 'buy_now':
@@ -2674,6 +2681,9 @@ def _build_reco_card(p, news_txt, conf_txt):
         state = 'hold'
     elif _n.get('kind'):
         state = 'warn'
+    if _core.get('bucket') in ('추천 제외', '데이터 부족'):
+        # 제외는 회색(관망)이 아니라 빨강 — 대기와 다른 말이다
+        state = 'neg' if _core.get('bucket') == '추천 제외' else 'hold'
 
     # 쉬운 설명 — "사지 마세요"로 끝내지 않는다. 다음 조건 엔진이
     # 낸 한 줄을 먼저 쓰고, 조건들은 아래 목록으로 붙인다.
@@ -3623,8 +3633,9 @@ if _pmr:
                   for p in (_pmr.get('picks') or [])]
     # ── 실행 가능성 게이트 (라운드 34) ──────────────────────────────────
     # 사용자 지적: *"우진처럼 현재가 14,600원인데 권장 매수가 9,388원인
-    # 종목은 오늘의 추천에서 제외해 주세요."* 중앙 판정의 10조건이 판단하고,
-    # 통과 못 한 종목은 **사유와 함께 분류**해서 따로 둔다.
+    # 종목은 오늘의 추천에서 제외해 주세요."* 중앙 판정의 추천 조건(§2 의
+    # 10 + R185 밸류 게이트)이 판단하고, 통과 못 한 종목은 **사유와 함께
+    # 분류**해서 따로 둔다.
     import verdict_core as _vc_view
     _picks_ok = [p for p in _picks_all
                  if (p.get('core') or {}).get('recommended')]

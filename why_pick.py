@@ -64,17 +64,22 @@ def quant_reasons(core, fs, limit=3):
     px = _f(core.get('current_price'))
 
     # ① 과거 같은 자리에서 얼마나 맞았나 — 표본을 반드시 같이 낸다
+    # ⚠️ 라운드 185 — 종전 제목이 '검증된 적중률'이었다. 이 표본
+    #   (calibration bands)은 학습·검증 포함 **전체 리플레이**라 '검증된'이
+    #   과장이다 — 라운드 184 가 다섯 자리에서 걷어낸 그 결함('안 본
+    #   사례')의 **다른 표기**가 여기 살아 있었다. 같은 카드 아래 칸은
+    #   이미 '리플레이 적중'이라 적고 있어 한 카드가 두 말을 했다.
     cb = fs.get('calibration_band') or {}
     n, hit = _f(cb.get('n')), _f(cb.get('hit_rate'))
     low = _f(cb.get('wilson_low'))
     if n and hit is not None and n >= 30:
         lo, hi = cb.get('lo'), cb.get('hi')
         band = f'{lo:.0f}~{hi:.0f}점' if lo is not None and hi is not None else '같은 점수대'
-        s = (f'과거 {band} 사례 {int(n):,}건 중 {hit:.0f}%가 손절보다 목표가에 '
-             f'먼저 닿았습니다')
+        s = (f'{band} 리플레이 {int(n):,}건(학습·검증 포함) 중 {hit:.0f}%가 '
+             f'손절보다 목표가에 먼저 닿았습니다')
         if low is not None:
             s += f' (95% 하한 {low:.0f}%)'
-        out.append(('검증된 적중률', s + '.'))
+        out.append(('과거 동점수대 리플레이 적중', s + '.'))
 
     # ② 손익비 — 한 번 맞고 한 번 틀렸을 때 남는가
     rr = _f(core.get('rr'))

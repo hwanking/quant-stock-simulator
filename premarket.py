@@ -127,7 +127,13 @@ def _core_of(q_engine, row, fs, verdict):
     except Exception:
         return None
     try:
-        na = _na.build(fs, None, row.get('base_price'), verdict or {})
+        # ⚠️ 라운드 185 — 여기가 tech_df 를 안 넘기고 있었다(None). 그러면
+        #   next_action 이 첫 줄에서 no_data 로 조기 반환해 **밸류 가드가
+        #   아예 안 돌았고**, kind 기반 분류(돌파 대기 등)도 전부 죽어
+        #   상세 화면과 카드가 다른 버킷을 냈다 (§4). 스냅샷에 tech_df 가
+        #   이미 있다 — _na_of() 가 쓰는 그 값이다.
+        _td = (row.get('snapshot') or {}).get('tech_df')
+        na = _na.build(fs, _td, row.get('base_price'), verdict or {})
     except Exception:
         na = None
     try:

@@ -5532,9 +5532,22 @@ check("premarket 이 다음 조건을 실어 나른다",
 # ⑤ 괴리 큰 종목을 추천 자리에서 뺀다
 check("추천 자격 없으면 '기다려야 하는 종목'으로 내린다",
       "_n.get('exclude_reason') and not _n.get('reco_eligible')" in _w99)
+# ⚠️ 라운드 185 — 이 검사가 '장기 관찰'을 **요구**하고 있었다. 라운드 47 이
+#   "언제 다시 봐야 하는지 알 수 없는 이름"이라며 BUCKETS 에서 지웠는데
+#   (§105 가 그걸 잠근다), 이 라벨 사본만 살아남아 카드 배지로 되살아났다 —
+#   서진시스템 카드가 칸 제목과 배지와 본문으로 세 가지 다른 말을 했다.
+#   배지는 중앙 판정 bucket 을 우선 쓰고, 사본의 observe 는 '오늘 후보
+#   아님'이다. 검사를 현실에 맞춘다 (§6 — 왜 바뀌었는지 여기 적는다).
 check("상태 라벨이 '무엇을 기다리는가'로 바뀐다",
       '_NA_LABEL' in _w99 and '눌림목 대기' in _w99
-      and '돌파 확인 대기' in _w99 and '장기 관찰' in _w99)
+      and '돌파 확인 대기' in _w99 and '오늘 후보 아님' in _w99)
+check("배지가 중앙 판정 분류를 우선 쓴다 (라운드 185)",
+      "label = (_core.get('bucket')" in _w99)
+# ⚠️ _w99 는 원문(주석 포함)이다 — '장기 관찰' 넉 자로 찾으면 이 결정을
+#   설명하는 주석에 걸린다. **매핑 값**이라는 코드 모양으로 좁혀 찾는다.
+check("'장기 관찰'은 배지 매핑에서 사라졌다 (라운드 47 의 결정)",
+      ": '장기 관찰'" not in _w99,
+      "라벨 사본이 지운 이름을 되살리면 안 된다")
 
 # ⑥ 알림 조건을 저장한다 (다시 검색하지 않아도 되게)
 check("알림으로 저장할 조건을 만든다", "'alert'" in open(
@@ -5582,9 +5595,15 @@ check("진입가가 없으면 지어내지 않고 그렇게 말한다",
       "'유효 진입가 미산출'" in _n100)
 
 # ③ 밸류 가드 — 눌림가는 밸류에이션을 모른다
+# ⚠️ 라운드 185 — 종전 검사는 `over_value = ('크게 초과' in zone)` 라는
+#   **글자**를 요구했다. 그 판정을 value_block() 한 곳으로 올리면서
+#   (중앙 판정과 공유하기 위해서다 — §215) 그 표기가 사라져 실패했다.
+#   지키려는 성질('크게 초과'면 후보에서 뺀다)은 한 글자도 안 바뀌었다 —
+#   글자가 아니라 **함수를 실제로 돌려** 잰다 (§6).
 check("적정가 크게 초과면 오늘의 매수 후보에서 뺀다",
-      "over_value = ('크게 초과' in zone)" in _n100
-      and '고평가 구간입니다' in _n100)
+      _na99.value_block({'displayed_fair_value': 100.0,
+                         'entry_zone': '적정가 크게 초과 (추격매수 위험)'})[0]
+      == 'over_fair' and '고평가 구간입니다' in _n100)
 check("장기 참고선을 '오늘의 매수가가 아니다'라고 밝힌다",
       '오늘의 매수가가 아니라 위험 참고선입니다' in _n100)
 
@@ -16860,6 +16879,173 @@ check("그 문장이 기본 매력도·적정가 상태를 실제로 본다",
 # ⑧ 관심종목 — 입력 즉시 이동·반영 (라운드 184 요청)
 check("매입가 저장 직후 rerun 해 보유중 이동이 즉시다",
       'st.rerun()' in _w214.split('_wl_write(_wl_body)')[-1][:700])
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §215 — R183 이 뺀 종목이 '실제로 손댈 수 있는 후보'로 되살아났다 (라운드 185)
+#
+#   사용자 스크린샷: 서진시스템(178320)이 배지 '장기 관찰' · 본문
+#   "펀더멘털 적정가를 내지 못해 오늘의 매수 후보에서 뺐습니다"를 단 채
+#   **'다음 거래일에 실제로 손댈 수 있는 후보'** 칸에 있었다. 한 카드가
+#   세 가지 다른 말을 했다 — §4 가 금지한 그 모양이다.
+#
+#   경로가 둘 다 뚫려 있었다:
+#     · 상세 — next_action 이 observe 로 빼도 verdict_core._bucket 이
+#       EV 실패를 '눌림목 매수 대기'(실행 가능 버킷)로 **승격**시켰다
+#     · 관심 카드 — premarket._core_of 가 tech_df=None 으로 next_action 을
+#       불러 na 가 늘 no_data 였다. R183 가드가 그 경로에서 **아예 안 돌았다**
+#   그리고 적정가 초과 종목이 10조건을 다 통과하면 '오늘 매수 가능'까지
+#   갔다 — 중앙 판정에 밸류 검증 조건 자체가 없었다.
+#
+#   고침: 판정을 next_action.value_block() **한 곳**에 두고, 중앙 판정이
+#   fs 에서 **직접** 부른다 — na 인자에 기대지 않는다. 못 받은 na 가
+#   게이트를 조용히 끄면 라운드 177(권장 매수가 없음 → 가드 꺼짐)의
+#   재판이다. 문턱은 R183 그대로 — 새 숫자는 없다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§215 밸류 게이트가 중앙 판정에 닿는다 (라운드 185)")
+print("=" * 72)
+
+_vcsrc215 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_pmsrc215 = _read148(_os.path.join(PROJ, 'premarket.py'))
+
+# ── ① 단일 구현 — 두 판정자가 같은 함수를 읽는다 ─────────────────────
+check("next_action 에 단일 구현 value_block 이 있다",
+      callable(getattr(_na211m, 'value_block', None)))
+check("문턱은 R183 모듈 상수 그대로다 (0.0 = 적정가 ×1.00)",
+      getattr(_na211m, '_OVER_BLOCK_PCT', None) == 0.0)
+check("중앙 판정이 그 함수를 부른다 (fs 에서 직접 — na 에 안 기댄다)",
+      'value_block(fs)' in _vcsrc215)
+check("중앙 판정에 구역 문자열 판정을 베끼지 않았다 (§6229 유지)",
+      "'크게 초과' in zone" not in _vcsrc215,
+      '판정을 베끼면 단일 구현이 아니다')
+
+# ── ② value_block 판정 — §3 경계 포함 ────────────────────────────────
+check("모델 거부(OUT_OF_DOMAIN)는 막는다",
+      _na211m.value_block({'displayed_fair_value': None,
+                           'fair_value_status': 'OUT_OF_DOMAIN'})[0]
+      == 'no_fair')
+check("못 잰 것(UNCALCULATED)은 안 막는다 (§3)",
+      _na211m.value_block({'displayed_fair_value': None,
+                           'fair_value_status': 'UNCALCULATED'})
+      == (None, None))
+check("적정가를 넘는 순간 막는다 (+0.1%)",
+      _na211m.value_block({'displayed_fair_value': 100.0,
+                           'fair_overshoot_pct': 0.1})[0] == 'over_fair')
+check("적정가 이하는 통과 (−0.1%)",
+      _na211m.value_block({'displayed_fair_value': 100.0,
+                           'fair_overshoot_pct': -0.1}) == (None, None))
+
+# ── ③ 서진시스템 꼴 — 중앙 판정이 실제로 막는가 ──────────────────────
+_FS215 = dict(entry_pullback_price=38681.0, current_price=41350.0,
+              entry_target_1st=43813.0, entry_stop_price=31350.0,
+              entry_rr=0.7, analysis_confidence=64,
+              strategy_quality_score=60, vol_20=0.033,
+              avg_turnover_20d=1e9,
+              calibration_band=dict(hit_rate=55.0, n=1200),
+              blind_test_status='통과', bb_position_pct=50.0,
+              williams_r_value=-50.0, rsi_value=52.0,
+              displayed_fair_value=None, fair_value_status='OUT_OF_DOMAIN',
+              entry_zone='판정 불가', chase_buy_status='판정 불가')
+_VD215 = {'action': 'HOLD', 'headline': '', 'vetoes': []}
+
+# ⓐ na 를 아예 못 받아도 막힌다 — **이 구멍이 사고의 절반이었다.**
+#    (관심 카드 경로가 tech_df=None 으로 na 를 no_data 로 만들었다.
+#     못 받은 값이 게이트를 끄는지 심어서 확인한다.)
+_c215a = _vc105.build(_FS215, _VD215, None, None, 41350.0)
+check("na=None 이어도 추천 제외다 (게이트가 na 에 안 기댄다)",
+      _c215a['bucket'] == '추천 제외' and _c215a['actionable'] is False,
+      f"{_c215a['bucket']} · actionable={_c215a['actionable']}")
+check("추천도 아니다", _c215a['recommended'] is False)
+check("사유가 R183 문장 그대로다",
+      '적정가 산출 불가' in str(_c215a['exclude_reason']))
+
+# ⓑ 두 경로(no_data na vs 실제 na)가 같은 답을 낸다 — §4
+_na215a = _na211m.build(_FS215, None, 41350.0, _VD215)          # 관심 카드 꼴
+_na215b = _na211m.build(_FS215, _tech211, 41350.0, _VD215)      # 상세 꼴
+_c215b = _vc105.build(_FS215, _VD215, None, _na215a, 41350.0)
+_c215c = _vc105.build(_FS215, _VD215, None, _na215b, 41350.0)
+check("두 경로의 버킷이 같다 (종전엔 눌림목 대기로 승격)",
+      _c215b['bucket'] == _c215c['bucket'] == '추천 제외',
+      f"{_c215b['bucket']} vs {_c215c['bucket']}")
+check("둘 다 실행 가능이 아니다",
+      _c215b['actionable'] is False and _c215c['actionable'] is False)
+check("next_action 사유와 중앙 판정 사유가 같은 문장이다 (단일 구현의 증거)",
+      str(_na215b.get('exclude_reason')) == str(_c215c['exclude_reason']),
+      f"{_na215b.get('exclude_reason')} vs {_c215c['exclude_reason']}")
+check("next_action 이 판정 표지를 싣는다", _na215b.get('value_block') == 'no_fair')
+
+# ⓒ 적정가 초과 + 나머지 전부 통과 — 종전엔 '오늘 매수 가능'이었다
+_FS215o = dict(entry_pullback_price=98.5, current_price=100.0,
+               entry_target_1st=110.0, entry_stop_price=92.0, entry_rr=1.2,
+               analysis_confidence=70, strategy_quality_score=60,
+               vol_20=0.03, avg_turnover_20d=1e9,
+               calibration_band=dict(hit_rate=58.0, n=1200),
+               blind_test_status='통과', bb_position_pct=50.0,
+               williams_r_value=-50.0, rsi_value=52.0,
+               displayed_fair_value=90.0, fair_value_status='CALIBRATED',
+               fair_overshoot_pct=11.1,
+               entry_zone='적정가 초과 (추격매수 경고)',
+               chase_buy_status='적정가 초과 (추격매수 경고)')
+_c215o = _vc105.build(_FS215o, {'action': 'BUY', 'vetoes': []}, None,
+                      {'kind': 'pullback'}, 100.0)
+check("적정가 초과면 10조건을 다 통과해도 추천이 아니다",
+      _c215o['recommended'] is False and _c215o['bucket'] == '추천 제외',
+      f"{_c215o['bucket']} · recommended={_c215o['recommended']}")
+check("그 사유가 숫자로 말한다",
+      '+11.1%' in str(_c215o['exclude_reason']),
+      str(_c215o['exclude_reason'])[:60])
+
+# ⓓ §3 — 못 잰 것(UNCALCULATED)은 종전 동작 그대로다 (과차단 금지)
+_c215u = _vc105.build(dict(_FS215, fair_value_status='UNCALCULATED'),
+                      _VD215, None, None, 41350.0)
+check("UNCALCULATED 는 밸류 게이트로 안 막는다 (§3)",
+      _c215u['bucket'] != '추천 제외', _c215u['bucket'])
+# ⓔ 적정가 이하 + EV 실패 — 종전 '눌림목 매수 대기' 승격 유지 (과차단 금지)
+_c215d = _vc105.build(dict(_FS215, displayed_fair_value=45000.0,
+                           fair_value_status='CALIBRATED',
+                           fair_overshoot_pct=-8.1),
+                      _VD215, None, {'kind': 'observe'}, 41350.0)
+check("적정가 이하는 종전 분류 그대로다 (이 게이트는 차단만 한다)",
+      _c215d['bucket'] == '눌림목 매수 대기', _c215d['bucket'])
+check("그 조건 칸이 통과로 찍힌다",
+      _c215d['checks'][10]['ok'] is True
+      and '적정가 대비' in _c215d['checks'][10]['detail'],
+      str(_c215d['checks'][10]))
+
+# ── ④ 조건 목록의 자리 — 끝에만 더했다 (checks[7] 자리 불변) ─────────
+check("조건이 11개다 (10 + 밸류 게이트)", len(_c215a['checks']) == 11)
+check("11번째가 밸류 게이트다",
+      _c215a['checks'][10]['name'] == '펀더멘털 밸류 검증')
+check("checks[7] 자리는 그대로 과열·저유동성이다 (§6231 보호)",
+      _c215a['checks'][7]['name'] == '과열·저유동성 아님')
+
+# ── ⑤ 관심 카드 경로 — tech_df 를 실제로 넘긴다 ──────────────────────
+check("premarket._core_of 가 스냅샷 tech_df 를 넘긴다",
+      "(row.get('snapshot') or {}).get('tech_df')" in _pmsrc215,
+      'None 을 넘기면 next_action 이 no_data 로 조기 반환한다')
+check("tech_df=None 하드코딩이 사라졌다",
+      '_na.build(fs, None,' not in _pmsrc215)
+
+# ── ⑥ R184 ① 의 **다른 표기** 사냥 — 같은 결함의 다른 표기 (R165) ────
+#   §214 는 '안 본 사례' 넉 자를 web_app·gaeum_ai 두 파일에서만 봤다.
+#   화면 실측에서 같은 카드가 위 칸은 '검증된 적중률 — 사례 89,520건',
+#   아래 칸은 '리플레이 적중'이라 **두 말**을 하고 있었다 — why_pick 이
+#   검사 밖이었다. 표기 두 가지를 **유도된 전체 모듈**에서 잡는다.
+_mods215 = sorted(_la135.reachable_modules())
+_overclaim215 = []
+for _m215 in _mods215:
+    _src215m = '\n'.join(ln for _i, ln in _la135.code_lines(_m215))
+    for _bad215 in ('안 본 사례', '검증된 적중률'):
+        if _bad215 in _src215m:
+            _overclaim215.append((_m215, _bad215))
+check("리플레이 표본을 '검증된/안 본'이라 부르는 모듈이 없다 (전 모듈)",
+      not _overclaim215, str(_overclaim215)[:120])
+check("그 사냥이 실제로 모듈을 봤다 (0개면 미측정)",
+      len(_mods215) >= 30, f'{len(_mods215)}개')
+check("why_pick 이 표본 정체(학습·검증 포함 리플레이)를 밝힌다",
+      '학습·검증 포함' in
+      '\n'.join(ln for _i, ln in _la135.code_lines('why_pick.py')))
 
 
 print()
