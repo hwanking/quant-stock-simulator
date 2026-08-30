@@ -898,9 +898,21 @@ def _read_code_token(token):
     if not others or len(up) - len(others) < 3:
         return None, False
 
+    # ⚠️ 라운드 189 — **진짜 KRX 코드를 먼저 가른다.**
+    #    아래 ② 가 *"섞인 글자가 전부 숫자로 오해받는 글자면 OCR 오독"* 으로
+    #    보고 숫자로 되돌리는데, KRX 가 실제로 쓰는 글자(D·Z·G·A·S·T·B …)가
+    #    그 표에 다 들어 있다. 실측: 네이버 ETF 문자코드 296개 중
+    #    **114개(38.5%)** 가 다른 종목 코드가 됐다 —
+    #        0000Z0 (RISE AI TOP10)  →  000020 (동화약품)
+    #        0004G0 (1Q 미국채TOP30) →  000460 (실재 상장 종목)
+    #    보유종목 입력 경로라 **남의 종목 값이 내 줄에 붙는다.**
+    #    판별식은 `stock_code` 한 곳에 둔다 (라운드 164 가 정한 자리).
+    if stock_code.looks_like_krx_alpha(up):
+        return up, False
+
     # ② 섞인 글자가 전부 '숫자로 오해받는 글자' 면 OCR 오독으로 보고 되돌린다.
-    #    (D→0, O→0, I→1 …). KRX 코드에 쓰이는 글자라도 이 경우가 훨씬 흔하고,
-    #    바로잡은 코드는 종목명 대조와 미리보기 확인을 다시 거친다.
+    #    (I→1, O→0 …). 위 ①.5 가 실재 코드 모양을 먼저 걸러 냈으므로 여기
+    #    남는 것은 자리·글자가 실재 코드와 안 맞는 것들이다.
     if all(c in _OCR_DIGIT_LOOKALIKE for c in others):
         fixed = repair_ocr_code(up)
         return (fixed, True) if fixed else (None, False)
@@ -1558,10 +1570,19 @@ def parse_freeform_holdings(text, resolve_name=None):
             # 첫 낱말만 잡으면 이름이 잘려 조회에 실패한다. 숫자·코드가 나오기 전까지의
             # 연속된 글자 토큰을 이어 붙이되, 종목번호(A002990)는 이름에 넣지 않는다.
             if not re.fullmatch(r'[\d.,+\-%원₩]+', tok):
-                _tok_code = read_code_cell(tok)[0]
+                # ⚠️ 라운드 189 — 여기가 `read_code_cell(tok)[0]` 로
+                #   **교정 표시(repaired)를 버리고** 있었다. 같은 파일의
+                #   :1333 · :1544 는 "종목코드 인식 교정 … (확인 필요)"
+                #   경고라도 남기는데, 이 경로만 **조용히** 바뀐 코드를
+                #   내 보유 줄에 붙였다. 표시를 살려 경고로 낸다 (§3).
+                _tok_code, _tok_rep = read_code_cell(tok)
                 if _tok_code:
                     if code is None:
                         code = _tok_code
+                        if _tok_rep:
+                            warnings.append(
+                                f"종목코드 인식 교정: '{tok}' → "
+                                f"'{_tok_code}' (확인 필요)")
                     continue
                 if name is None:
                     name = tok

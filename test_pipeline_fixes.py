@@ -15362,6 +15362,30 @@ try:
         if (isinstance(_n201, _ast16.Constant)
                 and isinstance(_n201.value, str)):
             _consts201[_n201.value] = _consts201.get(_n201.value, 0) + 1
+    # ⚠️ 라운드 189 — 이 검사가 **web_app.py 안만** 보고 있었다. 그래서
+    #   `scan_busy` · `scan_stage` 처럼 **web_app 이 쓰고 다른 모듈이 읽는**
+    #   키를 죽은 키로 잘못 잡았다(live_ticker:51-55 가 읽는다 — web_app:630
+    #   이 `session=st.session_state` 를 넘긴다).
+    #   라운드 120e·164·165 가 세 번 겪은 **'유도가 좁았다'** 와 같은
+    #   모양이다. 쓰기는 web_app 에서 세되 **읽기는 유도된 전 모듈**에서
+    #   센다 — 목록을 손으로 적지 않고 `_reach201` 을 그대로 쓴다.
+    #   (이 절이 위에서 이미 만들어 둔 그 집합이다.)
+    _read_mods201 = 0
+    for _p201r in sorted(_reach201):
+        if _p201r.endswith('web_app.py'):
+            continue
+        _src201r = _read148(_os.path.join(PROJ, _p201r))
+        if not _src201r:
+            continue
+        _read_mods201 += 1
+        try:
+            for _n201r in _ast16.walk(_ast16.parse(_src201r)):
+                if (isinstance(_n201r, _ast16.Constant)
+                        and isinstance(_n201r.value, str)):
+                    _consts201[_n201r.value] = _consts201.get(
+                        _n201r.value, 0) + 1
+        except Exception:                                      # noqa: BLE001
+            continue
     _dead201 = [(_k, _v) for _k, _v in _writes201.items()
                 if _consts201.get(_k, 0) <= len(_v)]
 except Exception as _ex201w:                                   # noqa: BLE001
@@ -15370,6 +15394,10 @@ check("쓰기만 하고 아무도 안 읽는 세션 키가 없다", not _dead201
       f'{_dead201[:3]} — 눌러도 아무 일도 안 나는 버튼이다')
 check("검사가 실제로 세션 키를 셌다 (0건이 미측정이 아니다)",
       len(_writes201) > 20, f'{len(_writes201)}개 키를 봤다')
+# 넓힌 유도가 **실제로 다른 모듈을 봤는가** — 숫자가 안 움직이면 그 창은
+# 아직 닫힌 것이다 (라운드 120e 가 "개수를 찍으라" 한 이유)
+check("읽기 집계가 web_app 밖 모듈도 봤다 (0개면 미측정)",
+      _read_mods201 >= 20, f'{_read_mods201}개 모듈')
 # 심어 두면 잡는가 — 0건이 '없다'인지 '못 봤다'인지 구분되게 (§110)
 _plant201w = ("import streamlit as st\n"
               "st.session_state['zzz_dead_key'] = 1\n")
@@ -17447,6 +17475,113 @@ check("why_pick 이 표본 정체(학습·검증 포함 리플레이)를 밝힌�
       '학습·검증 포함' in
       '\n'.join(ln for _i, ln in _la135.code_lines('why_pick.py')))
 
+
+# ══════════════════════════════════════════════════════════════════════
+# §219 — 진짜 KRX 문자코드를 남의 코드로 바꾸지 않는다 (라운드 189)
+#
+#   라운드 188 감사가 지목하고 이번에 고친 것. 보유종목 입력 경로의
+#   OCR 교정이 *"섞인 글자가 전부 숫자로 오해받는 글자면 오독"* 으로 보고
+#   숫자로 되돌리는데, **KRX 가 실제로 쓰는 글자(D·Z·G·A·S·T·B …)가 그
+#   표에 다 들어 있었다.** 실측: 네이버 ETF 문자코드 296개 중
+#   **114개(38.5%)** 가 다른 종목 코드가 됐다 —
+#       0000Z0 (RISE AI TOP10)  →  000020 (동화약품)
+#   라운드 165 가 걷어낸 결함(`filter(str.isdigit)`)의 **다른 표기**다.
+#
+#   가르는 잣대는 **실측**이다(감이 아니다): 실재 문자코드 296개가
+#   **전부** `0` + 숫자3 + 문자1(5번째 자리) + 숫자 이고, 쓰이는 글자에
+#   **I·O·Q·U 가 한 번도 없다** — 그 넷이 정확히 숫자와 헷갈리는 글자다.
+#   두 집합이 겹치지 않으므로 오독 교정을 잃지 않고 진짜 코드를 살린다.
+#
+#   곁들여 라운드 188 감사가 함께 지목한 죽은 경로 셋도 고쳤다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§219 진짜 KRX 문자코드를 지키면서 오독은 교정한다 (라운드 189)")
+print("=" * 72)
+
+import stock_code as _sc219                                      # noqa: E402
+import portfolio as _pf219                                       # noqa: E402
+
+_sc219src = '\n'.join(ln for _i219, ln in _la135.code_lines('stock_code.py'))
+_pf219src = '\n'.join(ln for _i219, ln in _la135.code_lines('portfolio.py'))
+_w219 = '\n'.join(ln for _i219, ln in _la135.code_lines('web_app.py'))
+
+# ── ① 판별식은 한 곳에만 (라운드 164 가 정한 자리) ────────────────────
+check("KRX 문자코드 판별식이 stock_code 에 있다",
+      hasattr(_sc219, 'looks_like_krx_alpha'))
+check("portfolio 가 그것을 부른다 (규칙을 베끼지 않는다)",
+      'stock_code.looks_like_krx_alpha(up)' in _pf219src)
+check("portfolio 에 모양 규칙을 베껴 두지 않았다",
+      '[A-Z]' not in _pf219src.split('_read_code_token')[-1][:900],
+      '규칙이 둘이면 한쪽만 고치는 일이 생긴다 (§4)')
+
+# ── ② 판별이 실제로 갈리는가 — 값으로 확인 ──────────────────────────
+for _c219 in ('0000Z0', '0040Y0', '0015B0', '0004G0'):
+    check(f"{_c219} 는 실재 코드 모양이다",
+          _sc219.looks_like_krx_alpha(_c219) is True)
+for _c219 in ('005930', '0O0660', '00593O', '0059I0', '0059Q0'):
+    check(f"{_c219} 는 실재 코드 모양이 아니다",
+          _sc219.looks_like_krx_alpha(_c219) is False)
+
+# ── ③ 전수 — 실재 문자코드가 한 개도 안 바뀐다 ──────────────────────
+import json as _json219                                          # noqa: E402
+_tax219 = _os.path.join(PROJ, 'data', 'etf_taxonomy_r170.json')
+if _os.path.exists(_tax219):
+    with open(_tax219, encoding='utf-8') as _f219:
+        _d219 = _json219.load(_f219)
+    _rows219 = _d219.get('rows') or _d219.get('items') or _d219
+    if isinstance(_rows219, dict):
+        _rows219 = list(_rows219.values())
+    _alpha219 = sorted({str(r.get('code', '')).strip().upper()
+                        for r in _rows219 if isinstance(r, dict)} - {''})
+    _alpha219 = [c for c in _alpha219 if len(c) == 6 and not c.isdigit()]
+    _bad219 = [c for c in _alpha219 if _pf219._read_code_token(c)[0] != c]
+    check("실재 KRX 문자코드가 한 개도 안 바뀐다",
+          not _bad219, f'{len(_bad219)}개 손상: {_bad219[:5]}')
+    check("그 사냥이 실제로 코드를 봤다 (0개면 미측정)",
+          len(_alpha219) >= 200, f'{len(_alpha219)}개')
+    # 실측 모양이 여전히 100% 인가 — 규칙의 근거가 살아 있는지 본다
+    _shape219 = [c for c in _alpha219 if _sc219.looks_like_krx_alpha(c)]
+    check("실측 모양이 문자코드 전부를 덮는다 (100%)",
+          len(_shape219) == len(_alpha219),
+          f'{len(_shape219)}/{len(_alpha219)} — 어긋나면 규칙을 다시 잰다')
+else:
+    skipped("§219 실재 문자코드 전수", "etf_taxonomy_r170.json 없음")
+
+# ── ④ 오독 교정을 잃지 않았다 (과차단이 아니다) ─────────────────────
+for _bad219t, _want219 in (('0O0660', '000660'), ('OO5930', '005930'),
+                           ('00S93O', '005930')):
+    check(f"OCR 오독 {_bad219t} → {_want219} 교정 유지",
+          _pf219._read_code_token(_bad219t) == (_want219, True),
+          str(_pf219._read_code_token(_bad219t)))
+check("종목명을 코드로 만들지 않는다",
+      _pf219._read_code_token('ABCDEF')[0] is None)
+
+# ── ⑤ 교정 표시를 조용히 버리지 않는다 (§3) ─────────────────────────
+check("read_code_cell 의 교정 표시를 버리지 않는다",
+      'read_code_cell(tok)[0]' not in _pf219src,
+      '표시를 버리면 바뀐 코드가 경고 없이 보유 줄에 붙는다')
+check("교정하면 경고를 남긴다 (세 경로 모두)",
+      _pf219src.count('종목코드 인식 교정') >= 3,
+      str(_pf219src.count('종목코드 인식 교정')))
+
+# ── ⑥ 라운드 188 감사가 지목한 죽은 경로 셋 ─────────────────────────
+check("사이드바 폴백이 저장한 이름으로 찾는다 (_KEEP 별칭)",
+      '_KEEP_ALIAS' in _w219
+      and '_KEEP.get(_KEEP_ALIAS.get(_nm, _nm), _dv)' in _w219,
+      '이름이 어긋나면 접을 때 기준일·rho 가 조용히 되돌아간다')
+check("CSV 가져오기가 시장을 실제로 해석한다",
+      'resolve_market=_resolve_market' in _w219
+      and 'resolve_market=None' not in _w219)
+check("스캔 진행 표시를 실제로 기록한다",
+      "st.session_state['scan_busy'] = True" in _w219
+      and "st.session_state['scan_stage'] = _SCAN_STEPS" in _w219
+      and "st.session_state['_sb_busy'] = _SB_STEPS" in _w219,
+      '읽는 곳만 있고 쓰는 곳이 없으면 표시가 죽는다')
+check("끄는 길이 하나다 (조기 반환에서도 꺼진다)",
+      _w219.count('def _scan_done(') == 1 and _w219.count('_scan_done()') == 3)
+# 심어서 잡히는지 — 옛 표기가 되살아나면 걸려야 한다 (§6)
+check("옛 표기를 심으면 잡는다",
+      'resolve_market=None' in 'portfolio.import_positions(df, m, resolve_market=None)')
 
 print()
 print("=" * 72)
