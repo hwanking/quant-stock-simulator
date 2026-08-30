@@ -3019,7 +3019,15 @@ if st.session_state.get('show_screener', False):
         st.error(f"**실시간 시세 교차검증 실패**: 출처 간 현재가 오차가 {cv_diff_str}로 1.0%를 초과하여 스캔을 중단합니다.")
     else:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("오늘의 AI 퀀트 최적 종목 TOP 3")
+        # ⚠️ 라운드 187 — 제목이 **'오늘의 AI 퀀트 최적 종목 TOP 3'** 이었다.
+        #   두 군데가 과장이다. ① '최적' — 전 종목이 아니라 관심점수 상위
+        #   몇 개만 정밀분석한 결과다(바로 아래 '어디까지 봤나' 칸이 그
+        #   사실을 이미 적고 있어 제목과 어긋났다). ② 'TOP 3' — 순위를
+        #   주장하는데, 라운드 110 이 원장 166,132건으로 재서 같은 날 점수
+        #   상위와 하위의 성적 차이가 **0.0%p**(부호검정 z −1.39, 유의하지
+        #   않음)였다. 우리가 없다고 발표한 것을 제목이 팔면 안 된다 (§9).
+        #   목록이 실제로 담는 것은 '필수조건을 통과한 종목'이다.
+        st.subheader("오늘 추천 필수조건을 통과한 종목")
         if 'scan_results' not in st.session_state:
             run_market_scan()
         scan_results = st.session_state['scan_results']
@@ -3466,13 +3474,25 @@ if st.session_state.get('show_screener', False):
                     )
             else:
                 st.success(f"필수조건을 모두 통과한 종목: **{len(recommended)}개** (최대 3개 표출)")
+                # ⚠️ 라운드 187 — 이 목록을 '최적'·'순위'로 부르지 않는다.
+                #   라운드 110 실측(원장 166,132건 · 기준일 2,609일): 같은 날
+                #   점수 상위5와 6위 이하의 적중률 차이 **중앙값 0.0%p**,
+                #   부호검정 z −1.39 로 유의하지 않다. 순위에 정보가 있다는
+                #   근거가 없는데 화면이 순위를 팔면 §9 위반이다.
+                st.caption(
+                    f"정밀분석한 {len(scan_results)}개 중에서 고른 것이며, "
+                    f"**나열 순서는 우열이 아닙니다** — 같은 날 점수 상위와 "
+                    f"하위의 성적 차이가 원장 실측에서 확인되지 않았습니다 "
+                    f"(라운드 110 · 차이 중앙값 0.0%p). 정밀분석하지 않은 "
+                    f"종목에 더 나은 후보가 있을 수 있습니다.")
 
                 # --- Interactive Screener Table ---
-                st.markdown("AI 퀀트 최적 종목 결과 (Clickable)")
-                
+                st.markdown("통과 종목 (이름을 누르면 분석으로 갑니다)")
+
                 # Header (전략유형 및 월봉 10선 장기추세 컬럼 탑재)
                 cols = st.columns([0.5, 1.8, 1.4, 1.1, 1.2, 1.2, 1.4, 1.2, 1.0, 1.2])
-                headers = ["순위", "종목명 (클릭)", "전략유형", "현재가", "적정가", "상승여력%", "월봉 10선", "최종점수", "손익비", "상태"]
+                # '순위' → '번호' (라운드 187) — 위 캡션과 같은 이유다.
+                headers = ["번호", "종목명 (클릭)", "전략유형", "현재가", "적정가", "상승여력%", "월봉 10선", "최종점수", "손익비", "상태"]
                 for col, header in zip(cols, headers):
                     col.markdown(f"<div style='text-align:center; color:#4C8DFF; font-size:13px; font-weight:bold; border-bottom:2px solid #222C3C; padding-bottom:8px;'>{header}</div>", unsafe_allow_html=True)
                 
@@ -6844,10 +6864,22 @@ st.caption("신규 매수 기준과 보유자 기준은 서로 다릅니다 — 
 
 # 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
 _extra_bits = []
+# ⚠️ 라운드 187 — '자본의 20% 이내' 라는 비중 제안이 **추천하지 않는
+#   종목에도** 붙어 있었다. 사용자 지적: 신규 매수를 권하지 않으면서
+#   얼마나 사라고 적으면 그 자체가 매수 지시로 읽힌다. 실제로 결론이
+#   '추천 제외'인 화면 바로 아래 줄이 이 문장이었다.
+#   → **추천 조건을 통과했을 때만** 낸다. 판정은 새로 만들지 않고
+#     중앙 판정의 `recommended` 를 그대로 읽는다 (§2-6 · R186 과 같은 자).
+#   → 다만 **조용히 감추지 않는다** (§3) — 왜 안 내는지 적는다.
 _pos_sug = four_scores.get('suggested_position_pct')
-if _pos_sug:
+if _pos_sug and CORE.get('recommended'):
     _extra_bits.append(f"변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
                        f"({four_scores.get('suggested_position_basis', '')})")
+elif _pos_sug:
+    _extra_bits.append(
+        "변동성 관리 비중 제안은 **표시하지 않습니다** — 이 종목은 오늘 "
+        "추천 필수조건을 통과하지 못했습니다. 얼마나 살지는 살 만한 자리일 "
+        "때만 말합니다.")
 _rm = four_scores.get('rel_mom_detail')
 if _rm and _rm.get('relative') is not None:
     _extra_bits.append(f"상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
@@ -8705,9 +8737,11 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
 
     blocks = four_scores.get('top3_block_reasons', [])
     if blocks:
-        st.markdown("**TOP 3 추천 미충족 조건**\n\n" + "\n".join(f"- {b}" for b in blocks))
+        # 라운드 187 — 'TOP 3' 를 뗐다. 이 목록은 순위가 아니라
+        # **추천 필수조건**이고, 순위에 정보가 있다는 근거가 없다(R110).
+        st.markdown("**추천 필수조건 미충족**\n\n" + "\n".join(f"- {b}" for b in blocks))
     else:
-        st.markdown("**TOP 3 추천 필수조건 전부 통과**")
+        st.markdown("**추천 필수조건 전부 통과**")
 
 # 🏢 [6대 영역 세부 프로필 (Section 18)]
 with st.expander("4대 분리 점수 세부 산출 근거 및 실시간 정량 기여도 펼쳐보기"):
@@ -8792,6 +8826,13 @@ _TAB_VERDICT = {t['key']: t for t in verdict['tabs']}
 
 
 def show_tab_verdict(key):
+    """탭 상단의 **관점 점수** 한 줄.
+
+    ⚠️ 라운드 187 — 여기가 `매수  78점 · 이 탭 단독 판정` 으로 찍혀
+      운영 판정처럼 읽혔다. 중앙 판정이 '추천 제외'인 종목에서도 그랬다.
+      낱말은 엔진에서 우호도로 바꿨고(`_verdict_from_score`), 이 캡션은
+      **어느 관점이며 운영 판정이 아니라는 것**을 적는다.
+    """
     t = _TAB_VERDICT.get(key)
     if not t:
         return
@@ -8801,7 +8842,9 @@ def show_tab_verdict(key):
         f"border-radius:10px;padding:12px 16px;margin-bottom:12px;'>"
         f"<span style='font-size:22px;font-weight:700;color:{t['color']};'>{t['verdict']}</span>"
         f"<span style='font-size:17px;font-weight:700;color:#F3F6FA;margin-left:12px;'>{score_txt}</span>"
-        f"<span style='color:#9DAABC;font-size:13px;margin-left:8px;'>이 탭 단독 판정</span>"
+        f"<span style='color:#9DAABC;font-size:13px;margin-left:8px;'>"
+        f"{_uk._esc(t.get('label') or '')} 관점만 본 점수 · 매매 판정 아님 "
+        f"(오늘 살지 말지는 맨 위 결론에서 봅니다)</span>"
         + "".join(f"<br><span style='color:#9DAABC;font-size:15px;'>· {r}</span>"
                   for r in t['reasons'])
         + "</div>", unsafe_allow_html=True)
