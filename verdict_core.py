@@ -307,6 +307,13 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         recommended=recommended,
         bucket=bucket,
         actionable=actionable,
+        # 라운드 186 — 진입가의 **이름**도 여기서 정한다 (사용자 R184 분석 P1).
+        #   추천 조건을 전부 통과했을 때만 '권장 매수가'다. 아니면 그 값은
+        #   변동성으로 계산한 검토 기준일 뿐인데 '권장'이라 부르면 카드가
+        #   "매수 후보가 아닙니다"라고 말하면서 같은 칸에서 권장가를 내미는
+        #   자기모순이 된다(서진시스템 스크린샷). 화면이 각자 정하면 §4
+        #   위반이라 한 곳에서 정한다.
+        entry_label=('권장 매수가' if recommended else '검토 기준가'),
         exclude_reason=reason,
         checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
         failed=failed,

@@ -1981,10 +1981,18 @@ class QuantIndicatorsEngine:
             odds = "이 점수대는 과거 사례가 적어 적중률을 제시하지 않습니다."
 
         # ── 신규 매수자 ────────────────────────────────────────────────
+        # 라운드 186 — 가격표의 첫 줄 이름. **매수를 실제로 권하는 분기**
+        #   (지금 사도 됩니다 · EV>0 눌림 대기)에서만 '권장 매수가'다.
+        #   종전에는 "매수 권고가 아니라 관찰 기준 가격입니다"라고 말한
+        #   분기에서도 가격표가 같은 값을 '권장 매수가(1차 분할)'로 불러
+        #   한 카드가 두 말을 했다. 기본값은 검토 쪽 — 빠뜨렸을 때 과장
+        #   (추천 아닌데 권장)이 축소보다 나쁘다.
+        _rec_key = '검토 기준가(1차 분할)'
         if score is None:
             nb = {'emoji': '', 'line': '데이터가 부족해 판단할 수 없습니다.',
                   'detail': "분석에 필요한 데이터가 모자랍니다. 무리해서 사지 마세요."}
         elif action in ('BUY', 'ACCUMULATE') and not vetoes:
+            _rec_key = '권장 매수가(1차 분할)'      # 매수를 실제로 권하는 분기
             _half = ((curr_price + t1) / 2 if curr_price and t1 and t1 > curr_price
                      else None)
             nb = {'emoji': '', 'line': '지금 사도 됩니다 (나눠서).',
@@ -2009,6 +2017,7 @@ class QuantIndicatorsEngine:
             except (TypeError, ValueError):
                 _ney = None
             if _ney is not None and _ney > 0:
+                _rec_key = '권장 매수가(1차 분할)'  # 조건부지만 매수를 권한다
                 nb = {'emoji': '', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
                       'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
                                  f"쫓아가서 사지 마세요(추격매수 금지"
@@ -2037,7 +2046,7 @@ class QuantIndicatorsEngine:
             nb = {'emoji': '', 'line': '지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.',
                   'detail': (f"막는 조건: {_why}. 가격은 매수 구간({w(rec)} 이하)이어도 "
                              f"이 조건이 풀려야 삽니다. {odds}")}
-        nb['prices'] = {'권장 매수가(1차 분할)': rec,
+        nb['prices'] = {_rec_key: rec,
                         '2차 분할가': (rec - 0.5 * (rec - stop)
                                    if rec is not None and stop is not None and rec > stop
                                    else None),

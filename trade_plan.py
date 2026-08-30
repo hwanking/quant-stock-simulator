@@ -142,6 +142,10 @@ def for_buyer(core, fs=None):
 
     return dict(
         available=True, actionable=actionable, bucket=bucket,
+        # 라운드 186 — 진입가의 이름은 중앙 판정이 정한다 (entry_label).
+        # recommended 가 아니면 화면이 '매수구간' 대신 '검토 기준가'로 적는다.
+        recommended=bool(core.get('recommended')),
+        entry_label=str(core.get('entry_label') or '검토 기준가'),
         headline=head, line=line,
         entry=entry, entry_zone=(zone[0], zone[1]) if len(zone) == 2 else None,
         breakout=brk, target=tgt, target_pct=tgt_pct,

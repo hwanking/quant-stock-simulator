@@ -1305,8 +1305,13 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
     dim = bool(p.get('dim_levels'))
     rows = [_price_row('CircleDollarSign', '현재가', _won(p.get('price')),
                        big=True, theme=theme)]
+    # 라운드 186 — 이 줄의 이름은 중앙 판정이 정한다 (rec_label ←
+    #   verdict_core.entry_label). 추천 조건을 통과했을 때만 '권장 매수가'고
+    #   아니면 '검토 기준가'다. **기본값은 검토 기준가** — 호출부가 라벨을
+    #   빠뜨렸을 때 나는 실패 중 '추천 아닌 종목에 권장이라 적기'(과장)가
+    #   '추천 종목에 검토라 적기'(축소)보다 나쁘다 (라운드 120e 의 기준).
     rows.append(_price_row(
-        'ArrowDownToLine', '권장 매수가',
+        'ArrowDownToLine', str(p.get('rec_label') or '검토 기준가'),
         _won(p['rec_buy']) if p.get('rec_buy') else _esc(p.get('rec_na', '미산출')),
         p.get('rec_basis', ''),
         color=(col if p.get('rec_buy') else None),
@@ -1577,11 +1582,16 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
     buy = ''
     if b.get('available'):
         col = t['pos'] if b.get('actionable') else t['warn']
+        # 라운드 186 — 추천 통과가 아니면 '매수구간·이 값 이하에서만'이라
+        #   적지 않는다. 머리말이 "오늘은 실행 자리가 아닙니다"인데 바로
+        #   아래 줄이 매수 지시어를 쓰면 한 카드가 두 말을 한다.
+        _reco_b = bool(b.get('recommended'))
         prices = ''.join((
-            _row('매수구간',
+            _row(('매수구간' if _reco_b else '검토 기준가'),
                  (f"{b['entry_zone'][0]:,.0f}~{b['entry_zone'][1]:,.0f}원"
                   if b.get('entry_zone') else _won(b.get('entry'))),
-                 '이 값 이하에서만'),
+                 ('이 값 이하에서만' if _reco_b
+                  else '매수 지시 아님 — 조건 충족 시 검토')),
             _row('돌파 매수', _won(b.get('breakout')), '거래량 동반 시'),
             _row('1차 목표', _won(b.get('target')),
                  (f"{b['target_pct']:+.1f}%" if b.get('target_pct') else ''),
