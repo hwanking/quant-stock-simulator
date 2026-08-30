@@ -100,12 +100,22 @@ class LeakageGuard:
         """
         SR 11-7 규제 준수 무결성 정량 검증 루브릭 (100점 만점)
         """
-        bitemporal_score = 25
-        if isinstance(snapshot, dict):
+        # ⚠️ 라운드 188 — 두 곳이 **못 잰 것을 통과로** 만들고 있었다.
+        #   ① 스냅샷이 없으면 25점을 그냥 줬다 — 이중시점 무결성을 확인할
+        #      재료가 없는데 만점이다.
+        #   ② `snapshot.get('t_ref', '2026-02-01')` — 기준일이 없으면
+        #      **지어낸 날짜**와 비교했다. 그 비교는 아무것도 검증하지 않는다.
+        #   가드가 멈출 때의 기본값이 '통과'면 그 가드는 없는 것과 같다.
+        bitemporal_score = 0
+        bitemporal_note = '미측정 — 시점 스냅샷 없음'
+        if isinstance(snapshot, dict) and snapshot.get('t_ref'):
             latest_fund = snapshot.get('latest_fundamental')
-            t_ref_str = snapshot.get('t_ref', '2026-02-01')
+            t_ref_str = snapshot.get('t_ref')
+            bitemporal_score = 25
+            bitemporal_note = '확인'
             if isinstance(latest_fund, dict) and latest_fund.get('available_date', '') > str(t_ref_str):
                 bitemporal_score = 0
+                bitemporal_note = '미래 재무 참조 발견'
         
         # 2. 정량 수식 연산 정확성 (25점)
         math_score = 25
@@ -113,7 +123,13 @@ class LeakageGuard:
             math_score -= 10
             
         # 3. 상태 판정 결정적 일관성 (20점)
+        # ⚠️ 라운드 188 — 이 20점은 **아무것도 재지 않는 상수**다. 재할당이
+        #   한 번도 없다. 그런데 화면은 이 합계를 'SR 11-7 무결성 루브릭
+        #   100/100점 통과' 라고 감사 결과처럼 띄운다. 점수는 종전과 같게
+        #   두되(계산을 바꾸면 그 자체가 근거 없는 조정이다) **재지 않았다는
+        #   사실을 값으로 내보내** 화면이 그렇게 적게 한다 (§3).
         consistency_score = 20
+        consistency_measured = False
         
         # 4. 통계 신뢰도 범위 통제 (15점)
         match_count = sim_res.get('match_count', 0)
@@ -130,8 +146,11 @@ class LeakageGuard:
         return {
             'total_score': total_score,
             'bitemporal_score': bitemporal_score,
+            'bitemporal_note': bitemporal_note,
             'math_score': math_score,
             'consistency_score': consistency_score,
+            # 라운드 188 — 화면이 '잰 것'과 '상수'를 구분해 적을 수 있게 한다
+            'consistency_measured': consistency_measured,
             'stat_score': stat_score,
             'guardrail_score': guardrail_score,
             'is_passed': total_score >= 90

@@ -52,6 +52,28 @@ def check(name, condition, detail=""):
         FAILURES.append(name)
 
 
+#: 돌지 못한 검사 묶음 — **초록불로 세지 않는다** (라운드 188).
+#:
+#: 이 저장소는 §110 이후 개별 검사에 *"0건이 없다인지 못 봤다인지 구분하라"*
+#: 를 요구해 왔는데, **정작 하네스가 그걸 안 지키고 있었다.** 산출물이나
+#: 네트워크가 없으면 `if os.path.exists(...)` / `if _snap:` 블록이 통째로
+#: 건너뛰어지고, 요약은 실패만 찍으므로 **몇 건이 안 돌았는지 알 방법이
+#: 없었다.** 감사 실측: `os.path.exists` 게이트 뒤 58블록·216건, 그중
+#: 76건이 gitignore 된 `.portfolio/` 뒤에 있다 — 새로 clone 한 환경이나
+#: CI 에서는 그만큼이 조용히 사라지고도 '전체 통과'가 찍힌다.
+SKIPPED = []
+
+
+def skipped(name, reason):
+    """검사를 못 돌렸다고 **기록**한다. 통과로 세지 않는다.
+
+    `check(name, True, '건너뜀')` 로 적으면 그 순간 초록불이 되고 요약에서
+    사라진다. 그러지 말고 여기 쌓아 두고 요약이 개수를 찍는다.
+    """
+    SKIPPED.append((str(name), str(reason)))
+    print(f"  [SKIP] {name} — {reason}")
+
+
 # ── 무거운 자원 놓아 주기 (라운드 163) ──────────────────────────────────
 #
 # 이 회귀가 이 PC 에서 자주 죽었다. 종료 코드 127/255 · 트레이스백 없음 ·
@@ -854,10 +876,14 @@ check("평단가 오독을 임의 보정하지 않음",
 # 리더 참조를 끊고 gc 를 돌려도 OS 로 안 돌아온다. 그래서 자식
 # 프로세스로 돌린다 — 끝나면 전부 회수된다(렌더 검사와 같은 처방).
 # 검사의 뜻은 그대로다: 한 줄로 그린 표가 한 줄로 복원되는가.
+# ⚠️ 라운드 188 — 여기가 **프로브 실행 실패를 초록불**로 세고 있었다.
+#   :126 의 `_render_ok()` 가 *"실행 실패와 검사 실패를 가른다 — 자식이
+#   못 돌았으면 검사를 통과시키지 않는다"* 고 적어 둔 원칙을 이 자리가
+#   어겼다. 실행 실패는 **실패**, 의도적 미설치는 **건너뜀**으로 가른다.
 if not _ocr24:
-    check("OCR 줄 복원 검사", True, "건너뜀 (프로브 실행 실패)")
+    check("OCR 프로브가 실행됐다", False, "프로브 실행 실패 — 검사 못 함")
 elif _ocr24.get('skipped'):
-    check("OCR 줄 복원 검사", True, f"건너뜀 ({_ocr24.get('reason')})")
+    skipped("한 줄로 그린 표가 한 줄로 복원됨", str(_ocr24.get('reason')))
 else:
     check("한 줄로 그린 표가 한 줄로 복원됨", _ocr24.get('lines') == 1,
           f"{_ocr24.get('lines')}줄: {_ocr24.get('texts')}")
@@ -2980,11 +3006,14 @@ if _os.path.exists(_cal55):
         check("매수권(60점+) 평균수익 양수 — 비용 차감 후에도",
               (_b60.get('avg_return') or -1) - 0.55 > 0, str(_b60.get('avg_return')))
     else:
-        check("점수 구간 표본 미충족 — 단조성 검증 유보 (표본 부족 정직 표기)", True)
+        # 라운드 188 — 표본 미충족은 '통과'가 아니라 '못 쟀다'다
+        skipped("점수 구간 적중률 단조 증가 (점수가 확률을 실제로 구분)",
+                f"표본 미충족 n={_b40.get('n')}/{_b50.get('n')}/{_b60.get('n')}")
     check("유형·시장·국면별 성과 분해 저장", 'breakdowns' in _c55)
 else:
-    check("캘리브레이션 파일 없음 — 랩 미실행 환경 (개입 없음 확인)",
-          True)
+    # 라운드 188 — 캘리브레이션 파일이 없으면 이 절은 **안 돈 것**이다.
+    #   `.portfolio/` 는 gitignore 라 새 환경·CI 에서는 늘 여기로 떨어진다.
+    skipped("§55 캘리브레이션 검사 묶음", "calibration.json 없음 (랩 미실행)")
 
 _lab55 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
 check("홀드아웃 종목이 랩에 분리 정의", "HOLDOUT_TICKERS" in _lab55)
@@ -6342,12 +6371,23 @@ import premarket as _pm106
 import verdict_core as _vc106
 
 # 실제 파이프라인 스냅샷을 하나 만들어 두 경로로 흘린다
+#
+# ⚠️ 라운드 188 — 여기가 **사용자가 직접 요구한 검사**("화면마다 값이
+#   다르면 자동 테스트가 실패하도록 해 주세요")인데, 스냅샷을 못 만들면
+#   `print()` 만 하고 **13건이 통째로 사라진 채 종료코드 0** 이었다.
+#   이 파일 :126 의 `_render_ok()` 가 적어 둔 원칙("자식이 못 돌았으면
+#   검사를 통과시키지 않는다")을 정작 이 절이 어기고 있었다.
+#   → 스냅샷 확보 자체를 검사로 만든다. 못 만들면 **실패**다.
 _snap106 = None
 try:
     _snap106 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine,
                                    rho_cutoff=0.80)
 except Exception as _e106:
     print(f'  (스냅샷 생성 실패: {_e106})')
+
+check("§106 스냅샷을 얻었다 (못 얻으면 아래 13건이 미측정이다)",
+      _snap106 is not None,
+      '화면 간 값 일치는 사용자 사양 §6 — 조용히 건너뛰지 않는다')
 
 if _snap106:
     _fs106 = _snap106.get('four_scores') or {}
@@ -10973,9 +11013,18 @@ if _m158b:
     # (항상 참인 검사를 쓰지 않는다. 처음에 빈 문자열을 뒤져 +10^9 을
     #  더하는 식으로 써 놓고 지웠다 — 못 깨지는 검사는 없는 것만 못하다.)
     _floor158 = int(_m158b.group(1).replace(',', ''))
-    _ran158 = len(FAILURES) + _CHECKS_RUN[0]
+    # ⚠️ 라운드 188 — 여기가 `len(FAILURES) + _CHECKS_RUN[0]` 이었다.
+    #   `check()` 는 성공·실패를 **모두** _CHECKS_RUN 에 올리므로 실패가
+    #   한 번 더 더해졌다 — **실패가 늘수록 하한을 넘기 쉬워지는** 셈이다.
+    #   실행 수는 _CHECKS_RUN 하나다.
+    _ran158 = _CHECKS_RUN[0]
     check("문서의 회귀 하한을 실제 검사 수가 넘는다",
           _ran158 >= _floor158, f'문서 {_floor158:,} · 실행 {_ran158:,}')
+    # 그리고 **건너뛴 검사가 하한을 갉아먹지 않았는지** 함께 본다.
+    check("건너뛴 검사가 전체의 5% 미만이다",
+          len(SKIPPED) < max(1, _ran158 * 0.05),
+          f'건너뜀 {len(SKIPPED)}건 / 실행 {_ran158:,}건 — '
+          f'산출물이 없으면 검사가 통째로 안 돈다')
 
 # 보호 계산 파일 줄 수도 문서가 말한다 — 크게 어긋나면 안 된다
 _m158c = _re.search(r'`quant_indicators\.py`[^|]*약\s*([\d,]+)\s*줄', _md158)
@@ -17203,6 +17252,181 @@ check("조건 없는 옛 표기를 심으면 잡는다",
       not ("if _pos_sug and CORE.get('recommended'):"
            in "_pos_sug = fs.get('x')\nif _pos_sug:\n    bits.append('20%')"))
 
+
+# ══════════════════════════════════════════════════════════════════════
+# §218 — 지어낸 값과 낡은 숫자 전수 (라운드 188)
+#
+#   사용자 요청으로 엔진 다섯 축을 전수 감사했고 세 갈래가 나왔다.
+#
+#   ⓐ **지어낸 재무가 모델 유효성 게이트를 통과시켰다** (§3 · 가장 큰 것)
+#      `bps = 현재가 × 0.8` 이 대체값으로 들어가는데 게이트가 그 값을 봤다:
+#          pbr_roe_valid = (bps > 0 and roe > 0)   ← 언제나 참
+#          sotp_valid = ev_s_valid = dcf_s_valid = (bps > 0)
+#      그래서 **재무가 하나도 없는 종목이 '유효 모델 4개'로 적정가를
+#      산출**했고, 그 값이 전부 bps 의 함수라 **모든 재무 미공시 종목이
+#      현재가의 같은 배수**를 받았다. 라운드 167 이 걷어낸 '같은 가짜
+#      적정가 52,714원'의 생존자다 — 그때 고침이 공유 리터럴을 **가격
+#      파생**으로 바꿔 놓아 종목마다 숫자가 달라졌고, 그래서 R167 의
+#      감사 스크립트(`abs(fair - 52713.75) < 1.0`)가 못 봤다.
+#      실측(고치기 전 · 감사): 3,915 / 52,714 / 187,000원 종목이 전부
+#      비율 0.83714 · 괴리 −16.29% · CAUTION · 신뢰도 62.6 로 같았다.
+#      실측(고친 뒤 · 실제 파이프라인): 롯데리츠·SK리츠·맥쿼리인프라·
+#      코람코 넷이 **적정가 미산출 · UNCALCULATED · 미수신 항목 명시**,
+#      삼성전자·농심은 종전대로 산출(비율 1.052 · 1.208 — 과차단 아님).
+#
+#   ⓑ **남의 종목 가격이 전 종목의 폴백이었다**
+#      `price = … if today_m else 6110.0` — 넥센타이어(002350)의 실제
+#      가격이다. truthy 라 "가격을 못 받았으면 임의값으로 대체하지 않는다"
+#      방어선(:1012)을 그냥 통과했다. 거래량도 `else 300000.0` 이라
+#      다음금융 교정(`if vol_p == 0`)이 **절대 실행되지 않았다.**
+#
+#   ⓒ **화면이 우리가 없다고 발표한 우위를 팔고 있었다** (§9)
+#      '검증된 매수구간' · '유일한 비용후 양수 계층' · '7대 적중률
+#      극대화' · '우수 진입 포지션 … 극대화' · 신호율 2.9%(지금 7.2%) ·
+#      지어낸 기준일 2026-07-30 · 표본외라 부른 전체 리플레이.
+#
+#   그리고 하네스 자신도 같은 규율을 어기고 있었다 — 산출물·네트워크가
+#   없으면 검사가 통째로 건너뛰어지는데 요약이 실패만 찍었다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§218 지어낸 값과 낡은 숫자 (라운드 188)")
+print("=" * 72)
+
+_qi218 = '\n'.join(ln for _i218, ln in _la135.code_lines('quant_indicators.py'))
+_be218 = '\n'.join(ln for _i218, ln in _la135.code_lines('bitemporal_engine.py'))
+_w218 = '\n'.join(ln for _i218, ln in _la135.code_lines('web_app.py'))
+_tp218 = '\n'.join(ln for _i218, ln in _la135.code_lines('trade_plan.py'))
+_ga218 = '\n'.join(ln for _i218, ln in _la135.code_lines('gaeum_ai.py'))
+_lg218 = '\n'.join(ln for _i218, ln in _la135.code_lines('leakage_guard.py'))
+
+# ── ⓐ 모델 유효성 게이트는 **수신값**으로 판정한다 ───────────────────
+check("유효성 판정에 수신 여부를 쓴다 (_have_*)",
+      '_have_bps' in _qi218 and '_have_norm_eps' in _qi218)
+for _gate218, _need218 in (('pbr_roe_valid', '_have_bps and _have_roe'),
+                           ('sotp_valid', '_have_bps'),
+                           ('ev_s_valid', '_have_bps'),
+                           ('dcf_s_valid', '_have_bps')):
+    check(f"{_gate218} 가 지어낸 bps 로 통과하지 않는다",
+          f"{_gate218} = ({_need218}" in _qi218,
+          '대체값(현재가×0.8)이 게이트를 켜면 유효성 검사가 없는 것과 같다')
+# **값으로** 확인한다 — 실제 함수를 돌린다 (논리를 베끼지 않는다)
+import pandas as _pd218                                          # noqa: E402
+_q218 = qi.QuantIndicatorsEngine()
+
+
+def _val218(price):
+    _n = 300
+    _td = _pd218.DataFrame({'close': [price] * _n, 'high': [price * 1.01] * _n,
+                            'low': [price * 0.99] * _n, 'open': [price] * _n,
+                            'volume': [100000] * _n})
+    try:
+        return _q218.evaluate_valuation_metric(
+            _td, _pd218.DataFrame([{'available_date': '2026-01-01'}]),
+            symbol=None) or {}
+    except Exception as _e:                                      # noqa: BLE001
+        return {'__err__': f'{type(_e).__name__}'}
+
+
+_fv218 = [_val218(p).get('displayed_fair_value')
+          for p in (3915.0, 52714.0, 187000.0)]
+check("재무가 하나도 없으면 적정가를 만들지 않는다",
+      all(v is None for v in _fv218), str(_fv218))
+_r218 = _val218(52714.0)
+check("그때 재무지표를 대체값으로 내보내지 않는다",
+      all(_r218.get(k) is None for k in ('per', 'pbr', 'roe', 'bps', 'eps')),
+      f"per={_r218.get('per')} bps={_r218.get('bps')}")
+# 조기 반환이 수신값을 내보내는가 (소스로도 잠근다)
+check("UNCALCULATED 반환이 in_* 를 내보낸다",
+      "'roe': in_roe, 'per': in_per, 'pbr': in_pbr" in _qi218)
+check("무엇이 미수신인지 함께 내보낸다 (§3)",
+      "'missing_inputs': missing_inputs" in _qi218)
+
+# ── ⓑ 남의 값으로 폴백하지 않는다 ───────────────────────────────────
+check("현재가 파싱 실패가 남의 종목 가격이 되지 않는다",
+      '6110.0' not in _be218,
+      '넥센타이어(002350) 가격이 전 종목 폴백이었다')
+check("거래량 폴백이 0 이라 교차검증 교정이 살아난다",
+      '300000.0' not in _be218 and "else 0.0" in _be218)
+# 심어서 잡히는지 — 옛 표기가 되살아나면 걸려야 한다 (§6)
+check("옛 폴백을 심으면 잡는다",
+      '6110.0' in "price = float(x) if m else 6110.0")
+
+# ── ⓒ 화면이 없는 우위를 팔지 않는다 ────────────────────────────────
+check("'검증된 매수구간'이라 적지 않는다", '검증된 매수구간' not in _tp218)
+check("그 자리가 우위 미확인을 밝힌다",
+      '재현되는 우위는 확인되지' in _tp218)
+check("'유일한 비용후 양수 계층' 주장이 사라졌다",
+      '유일한 비용후 양수' not in _w218)
+check("옛 값은 '그때 값'이라고 적는다",
+      '원장 6,508건 시점(2026-08-02)' in _w218)
+check("신호율을 파일에서 읽는다 (손으로 박지 않는다)",
+      "_sf188['rate_pct']" in _w218 and '실측 신호율 2.9%' not in _w218)
+check("잰 날짜를 붙인다 (§9)",
+      'def _cal_made_date' in _w218 and '잰 날' in _w218)
+check("'적중률 극대화' 를 제목에 쓰지 않는다", '적중률 극대화' not in _w218)
+check("'우수 진입 포지션'·'극대화하세요' 가 사라졌다",
+      '우수 진입 포지션' not in _w218 and '극대화하세요' not in _w218)
+check("지어낸 기준일(2026-07-30)이 사라졌다", '2026-07-30' not in _w218)
+check("스냅샷이 없으면 통제 완료라 적지 않는다",
+      '미산출 — 스냅샷 없음' in _w218)
+check("가늠 AI 가 리플레이 표본을 '표본외'라 부르지 않는다",
+      '표본외 검증 사례' not in _ga218 and '리플레이 사례(학습·검증 포함)' in _ga218)
+
+# ── ⓓ 감사 루브릭이 못 잰 것을 만점으로 주지 않는다 ──────────────────
+check("시점 스냅샷이 없으면 이중시점 점수를 주지 않는다",
+      'bitemporal_score = 0' in _lg218 and "bitemporal_note" in _lg218)
+check("지어낸 기준일과 비교하지 않는다", "'2026-02-01'" not in _lg218)
+check("상수 항목임을 화면이 말할 수 있게 표시한다",
+      'consistency_measured' in _lg218 and '미측정 상수' in _w218)
+import leakage_guard as _lg218m                                  # noqa: E402
+_rub218 = _lg218m.LeakageGuard().evaluate_compliance_rubric(
+    None, None, {}, {}) if hasattr(_lg218m, 'LeakageGuard') else None
+if _rub218 is not None:
+    check("스냅샷 없이 감사하면 만점이 아니다",
+          _rub218.get('total_score', 100) < 90
+          and _rub218.get('is_passed') is False,
+          str(_rub218.get('total_score')))
+
+# ── ⓔ 하네스 자신 — 건너뛴 검사를 초록불로 세지 않는다 ───────────────
+_self218 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+check("건너뜀 집계가 있다", 'SKIPPED = []' in _self218
+      and 'def skipped(' in _self218)
+check("요약이 실행·실패·건너뜀을 함께 찍는다",
+      '건너뜀 {len(SKIPPED)}건' in _self218 and '실행 {_CHECKS_RUN[0]:,}건' in _self218)
+# ⚠️ 이 두 검사는 처음에 **글자**로 썼다가 자기 자신에게 걸렸다 —
+#   금지 문자열을 찾는 검사문 그 자체가 파일 안에 있으니 언제나 매치된다.
+#   (라운드 178·186 이 "글자가 아니라 값으로 재라" 한 것의 자기참조 판)
+#   그래서 **구조로** 본다: AST 로 실제 호출·대입을 찾는다.
+_ast218 = _ast201.parse(_self218)
+_true_skips218 = []
+for _n218 in _ast201.walk(_ast218):
+    if (isinstance(_n218, _ast201.Call)
+            and getattr(_n218.func, 'id', '') == 'check'
+            and len(_n218.args) >= 2
+            and isinstance(_n218.args[1], _ast201.Constant)
+            and _n218.args[1].value is True):
+        _lbl218 = (_n218.args[0].value
+                   if isinstance(_n218.args[0], _ast201.Constant) else '?')
+        _det218 = (_n218.args[2].value
+                   if len(_n218.args) > 2
+                   and isinstance(_n218.args[2], _ast201.Constant) else '')
+        if '건너뜀' in str(_lbl218) + str(_det218) or '유보' in str(_lbl218):
+            _true_skips218.append(str(_lbl218)[:40])
+check("'건너뜀' 을 check(..., True) 로 세지 않는다 (AST)",
+      not _true_skips218, str(_true_skips218))
+check("그 사냥이 실제로 check 호출을 봤다 (0개면 미측정)",
+      sum(1 for _n in _ast201.walk(_ast218)
+          if isinstance(_n, _ast201.Call)
+          and getattr(_n.func, 'id', '') == 'check') > 3000)
+check("사용자 사양 §6 검사가 조용히 사라지지 않는다",
+      '§106 스냅샷을 얻었다' in _self218)
+_ran_rhs218 = [_ast201.unparse(_n.value) for _n in _ast201.walk(_ast218)
+               if isinstance(_n, _ast201.Assign)
+               and any(getattr(_t, 'id', '') == '_ran158' for _t in _n.targets)]
+check("회귀 하한이 실패를 두 번 세지 않는다 (AST)",
+      bool(_ran_rhs218) and all('FAILURES' not in _r for _r in _ran_rhs218),
+      str(_ran_rhs218))
+
 # ── ⑥ R184 ① 의 **다른 표기** 사냥 — 같은 결함의 다른 표기 (R165) ────
 #   §214 는 '안 본 사례' 넉 자를 web_app·gaeum_ai 두 파일에서만 봤다.
 #   화면 실측에서 같은 카드가 위 칸은 '검증된 적중률 — 사례 89,520건',
@@ -17226,6 +17450,18 @@ check("why_pick 이 표본 정체(학습·검증 포함 리플레이)를 밝힌�
 
 print()
 print("=" * 72)
+# 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
+#   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
+#   통째로 안 돌아도 '전체 통과'가 찍혔고, "0건이 없다인지 못 봤다인지"를
+#   요약 수준에서 구분할 수 없었다 (§110 의 규율을 하네스가 안 지킨 자리).
+print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 {len(FAILURES)}건 · "
+      f"건너뜀 {len(SKIPPED)}건")
+if SKIPPED:
+    print("건너뛴 검사 (통과가 아니다):")
+    for _sk_name, _sk_why in SKIPPED[:20]:
+        print(f"  - {_sk_name} — {_sk_why}")
+    if len(SKIPPED) > 20:
+        print(f"  … 외 {len(SKIPPED) - 20}건")
 if FAILURES:
     print(f"실패 {len(FAILURES)}건: " + ", ".join(FAILURES))
     sys.exit(1)

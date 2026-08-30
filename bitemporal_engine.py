@@ -804,7 +804,16 @@ class BitemporalEngine:
             
             # 2. Today Price
             today_m = re.search(r'<p class="no_today">.*?<span class="blind">([\d,]+)</span>', html_m, re.DOTALL)
-            price = float(today_m.group(1).replace(',', '')) if today_m else 6110.0
+            # ⚠️ 라운드 188 — 여기가 `else 6110.0` 이었다. **넥센타이어(002350)의
+            #   실제 가격**이다(test_fetch.py:34 가 그 출처를 적어 두었다).
+            #   즉 현재가 파싱에 실패한 **모든 종목**이 남의 종목 가격을
+            #   받아 갔다 — 라운드 164('실패하면 삼성전자 지표 뭉치')와 같은
+            #   유형이고, 더 나쁘게도 **6110.0 은 truthy 라** :1012 의
+            #   "가격을 못 받았으면 임의값으로 대체하지 않는다" 방어선을
+            #   그냥 통과했다. 그 값이 현재가·괴리율·진입가·손절가로 흘렀다.
+            #   → 0.0 은 이 함수가 이미 쓰는 **미수신 센티넬**이다(:866-869 가
+            #     `== 0` 으로 다음금융 교정을 건다). falsy 라 :1012 가 잡는다.
+            price = float(today_m.group(1).replace(',', '')) if today_m else 0.0
             
             # 3. Exday Diff & Rate (100% 무결성 blind 파서)
             exday_m = re.search(r'<p class="no_exday">(.*?)</p>', html_m, re.DOTALL)
@@ -833,7 +842,14 @@ class BitemporalEngine:
             open_p = float(open_m.group(1).replace(',', '')) if open_m else price
             high_p = float(high_m.group(1).replace(',', '')) if high_m else price
             low_p = float(low_m.group(1).replace(',', '')) if low_m else price
-            vol_p = float(vol_m.group(1).replace(',', '')) if vol_m else 300000.0
+            # ⚠️ 라운드 188 — 여기가 `else 300000.0` 이었다. 거래량을 지어내는
+            #   것도 문제지만 더 나쁜 것은 **그 값이 0 이 아니라서** 아래
+            #   :869 의 다음금융 교정(`if vol_p == 0 and …`)이 **절대 실행되지
+            #   않았다**는 점이다. 바로 위 시가·고가·저가는 같은 함정을
+            #   `(== 0 or == price)` 로 피했는데 거래량만 빠져 있었다.
+            #   지어낸 30만 주는 volume_ratio → 수급 점수(가중치 11%)와
+            #   유동성 판정, 뉴스 서사 문장으로 흘렀다.
+            vol_p = float(vol_m.group(1).replace(',', '')) if vol_m else 0.0
             
             # 4-1. 업종 (KRX 산업분류) — 기업유형 분류의 1차 근거.
             #      재무비율만으로 분류하면 '적자 + 고PBR'이라는 이유로 제조기업이

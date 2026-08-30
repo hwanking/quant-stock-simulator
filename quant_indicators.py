@@ -2326,6 +2326,33 @@ class QuantIndicatorsEngine:
         roe = in_roe if in_roe is not None else 10.0
         bps = in_bps if in_bps is not None else (curr_price * 0.8 if curr_price > 0 else 1000.0)
         eps = in_eps if in_eps is not None else (curr_price / 15.0 if curr_price > 0 else 1.0)
+
+        # ⚠️ 라운드 188 — 위 대체값은 주석대로 **분류 산식용**인데, 실제로는
+        #   아래 밸류에이션 모델 아홉 개의 입력으로 그대로 흘렀다. 더 나쁜
+        #   것은 **유효성 게이트가 그 대체값을 봤다**는 점이다:
+        #       pbr_roe_valid = (bps > 0 and roe > 0)   ← bps = 현재가×0.8
+        #       sotp_valid = ev_s_valid = dcf_s_valid = (bps > 0)
+        #   `현재가 × 0.8` 은 언제나 양수이므로 이 게이트들은 **항상 통과**
+        #   했다. 즉 재무가 하나도 없는 종목이 '유효 모델 4개'를 받고
+        #   적정가를 산출했다 — 그리고 그 값은 전부 bps 의 함수라
+        #   **모든 재무 미공시 종목이 현재가의 같은 배수**를 받았다.
+        #   (라운드 167 이 걷어낸 '같은 가짜 적정가 52,714원'의 생존자다.
+        #    그때 고침이 공유 리터럴을 **가격 파생**으로 바꿔 놓아 종목마다
+        #    숫자가 달라졌고, 그래서 R167 의 감사 스크립트가 못 봤다.)
+        #
+        #   → 게이트는 **수신한 값**으로만 판정한다. 대체값은 분류·표시에만
+        #     남기고 모델 유효성에는 쓰지 않는다. 없으면 그 모델은 무효고,
+        #     전부 무효면 아래에서 `UNCALCULATED`(적정가 미산출)로 나간다 —
+        #     그것이 §3 이 요구하는 정직한 결과다.
+        #   ⚠️ 이 갈래는 **무효화만** 한다. 없던 모델을 살리지 않으므로
+        #     완화가 아니다. 그리고 UNCALCULATED 는 라운드 183 이 §3 대로
+        #     추천에서 막지 않기로 한 상태다(막는 것은 OUT_OF_DOMAIN 뿐).
+        _have_bps = in_bps is not None
+        _have_eps = in_eps is not None
+        _have_roe = in_roe is not None
+        _have_per = in_per is not None
+        # norm_eps 는 eps 가 없으면 bps·roe 로 유도된다 — 그 재료도 수신값이어야 한다
+        _have_norm_eps = _have_eps or (_have_bps and _have_roe)
         
         # ---------------------------------------------------------
         # 1. 기업유형 확률분류 — 업종(1차) + 재무특성(2차)
@@ -2417,12 +2444,16 @@ class QuantIndicatorsEngine:
         model_results = {}
         
         # A. PER 모델
-        per_valid = (norm_eps > 0 and per > 0 and type_probs['E_BIOTECH'] < 0.5 and type_probs['F_DEFICIT'] < 0.5)
+        # 라운드 188 — `and _have_*` 가 더해진 자리들은 **수신 여부**다.
+        # 지어낸 대체값으로 모델을 살리지 않는다 (위 주석 참조).
+        per_valid = (_have_norm_eps and _have_per
+                     and norm_eps > 0 and per > 0 and type_probs['E_BIOTECH'] < 0.5 and type_probs['F_DEFICIT'] < 0.5)
         per_val = norm_eps * (8.15 if type_probs['B_CYCLICAL'] > 0.4 else (17.5 if type_probs['A_STABLE'] > 0.4 else 12.0))
         model_results['PER'] = {'val': per_val, 'weight': blended_weights.get('PER', 0.0), 'valid': per_valid, 'name': '정상화 PER'}
         
         # B. EV/EBITDA 모델 (금융업 부채 차감 무효 처리!)
-        ev_ebitda_valid = (ebitda_ps > 0 and type_probs['C_FINANCIAL'] < 0.4)
+        ev_ebitda_valid = (_have_norm_eps and _have_bps
+                           and ebitda_ps > 0 and type_probs['C_FINANCIAL'] < 0.4)
         if type_probs['B_CYCLICAL'] > 0.4:
             ev_val = (ebitda_ps * 5.0) + bps * 0.15 # 금융부채 전액 차감 제외 & 지분/순현금 반영
         else:
@@ -2430,23 +2461,24 @@ class QuantIndicatorsEngine:
         model_results['EV_EBITDA'] = {'val': ev_val, 'weight': blended_weights.get('EV_EBITDA', 0.0), 'valid': ev_ebitda_valid, 'name': 'EV/EBITDA'}
         
         # C. FCFF DCF 모델 (금융업 자동 제외)
-        fcff_valid = (norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4)
+        fcff_valid = (_have_norm_eps
+                      and norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4)
         fcff_ps = norm_eps * 0.85
         fcff_val = ((fcff_ps * 1.03) / (wacc - terminal_g)) * 0.65 + (bps * 0.15 if type_probs['B_CYCLICAL']>0.4 else 0.0)
         model_results['FCFF'] = {'val': fcff_val, 'weight': blended_weights.get('FCFF', 0.0), 'valid': fcff_valid, 'name': 'FCFF (DCF)'}
         
         # D. PBR-ROE / RIM 모델 (금융업 우세 모델)
-        pbr_roe_valid = (bps > 0 and roe > 0)
+        pbr_roe_valid = (_have_bps and _have_roe and bps > 0 and roe > 0)
         pbr_val = bps * (1.0 + (roe - 7.0) / 10.0) if roe > 7.0 else bps * max(0.4, pbr)
         model_results['PBR_ROE'] = {'val': pbr_val, 'weight': blended_weights.get('PBR_ROE', 0.0) + blended_weights.get('RIM', 0.0), 'valid': pbr_roe_valid, 'name': 'PBR-ROE / RIM'}
         
         # E. DDM (배당할인모형)
-        ddm_valid = (bps > 0 and roe > 0)
+        ddm_valid = (_have_bps and _have_roe and bps > 0 and roe > 0)
         ddm_val = bps * 0.85 * 1.03 / (wacc - 0.03) * 0.08
         model_results['DDM'] = {'val': ddm_val, 'weight': blended_weights.get('DDM', 0.0), 'valid': ddm_valid, 'name': '배당할인모형(DDM)'}
         
         # F. SOTP / NAV (복합기업 및 지주형)
-        sotp_valid = (bps > 0)
+        sotp_valid = (_have_bps and bps > 0)
         sotp_val = (bps * 0.88 + bps * 0.27 + bps * 0.20 + bps * 0.15) * 0.85 if type_probs['B_CYCLICAL']>0.4 else bps * 1.25 * 0.85
         model_results['SOTP'] = {'val': sotp_val, 'weight': blended_weights.get('SOTP', 0.0) + blended_weights.get('NAV', 0.0), 'valid': sotp_valid, 'name': 'SOTP / 조정 NAV'}
         
@@ -2464,12 +2496,12 @@ class QuantIndicatorsEngine:
             'exclusion_reason': None if rnpv_valid else "검증 가능한 파이프라인 데이터 없음 (임상단계·성공확률·출시시점 미연동)"}
         
         # H. EV/Sales & EV/Gross Profit (플랫폼 및 적자 고성장)
-        ev_s_valid = (bps > 0)
+        ev_s_valid = (_have_bps and _have_norm_eps and bps > 0)
         ev_s_val = bps * 1.8 + ebitda_ps * 10.0
         model_results['EV_GP'] = {'val': ev_s_val, 'weight': blended_weights.get('EV_GP', 0.0) + blended_weights.get('EV_SALES', 0.0), 'valid': ev_s_valid, 'name': 'EV/Sales & GP'}
         
         # I. DCF 시나리오 & 현금자산
-        dcf_s_valid = (bps > 0)
+        dcf_s_valid = (_have_bps and _have_norm_eps and bps > 0)
         dcf_s_val = (ebitda_ps * 0.8) / (wacc - 0.03) + bps * 0.8
         model_results['DCF_SCENARIO'] = {'val': dcf_s_val, 'weight': blended_weights.get('DCF_SCENARIO', 0.0) + blended_weights.get('CASH_ASSETS', 0.0) + blended_weights.get('NET_CASH', 0.0) + blended_weights.get('NORMALIZED_CF', 0.0) + blended_weights.get('RELATIVE', 0.0), 'valid': dcf_s_valid, 'name': '시나리오 DCF & 순현금'}
 
@@ -2522,8 +2554,14 @@ class QuantIndicatorsEngine:
                 'fair_value_status_note': "유효 가치평가 모델 0개 — 산출 불가",
                 'type_probabilities': type_probs,
                 'model_results': model_results, 'fair_value_status': "UNCALCULATED",
-                'roe': float(roe), 'per': float(per), 'pbr': float(pbr),
-                'bps': float(bps), 'eps': float(eps)
+                # ⚠️ 라운드 188 — 여기가 `float(roe)` … 처럼 **대체값**을
+                #   내보내고 있었다. 정상 경로(:2860 부근)는 `in_*`(미수신이면
+                #   None)를 내보낸다. 즉 **재무가 가장 없는 종목**이 화면의
+                #   'PER 15.0배 · ROE 10.0% · BPS 현재가×0.8' 을 수신값인 척
+                #   받았다. 못 잰 것은 None 이다 (§3).
+                'roe': in_roe, 'per': in_per, 'pbr': in_pbr,
+                'bps': in_bps, 'eps': in_eps,
+                'missing_inputs': missing_inputs,
             }
             
         total_valid_weight = sum([m['weight'] for m in valid_models])
@@ -2608,7 +2646,11 @@ class QuantIndicatorsEngine:
                 'type_probabilities': type_probs,
                 'model_results': model_results,
                 'fair_value_status': "OUT_OF_DOMAIN",
-                'roe': float(roe), 'per': float(per), 'pbr': float(pbr),
+                # ⚠️ 라운드 188 — 위 UNCALCULATED 반환과 같은 결함이 여기에도
+                #   있었다. 대체값이 아니라 **수신값**을 내보낸다 (§3).
+                'roe': in_roe, 'per': in_per, 'pbr': in_pbr,
+                'bps': in_bps, 'eps': in_eps,
+                'missing_inputs': missing_inputs,
                 # ⚠️ 라운드 74 — 여기에 'sector' 가 없어서, 적정가가 산출
                 #   불가인 종목은 **업종까지 함께 사라졌다.** 업종은 회사의
                 #   사실이지 밸류에이션 산출물이 아니다. 모델이 안 돌았다고
