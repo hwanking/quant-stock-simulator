@@ -44,9 +44,33 @@ for _uf in ('recent_stocks.json', 'watchlist.json', 'positions.json'):
 _CHECKS_RUN = [0]
 
 
-def check(name, condition, detail=""):
+def check(name, condition, detail="", scanned=None):
+    """검사 한 건.
+
+    `scanned` — **훑은 대상 수**. '위반 목록이 비었다'를 주장하는 스캐너
+    검사는 이것을 넘긴다 (라운드 194).
+
+    ⚠️ 왜 필요한가. `check("…없다", not _hits)` 는 스캐너가 **아무것도
+       못 봤을 때도 통과한다.** §110 이 이모지에서 당한 것이 정확히 그것
+       이고(대상 10개만 손으로 적어 14개를 영원히 못 봤다), §164·§192 가
+       같은 자리를 두 번 더 고쳤다. 그런데 *"0건이 없다인지 못 봤다인지
+       구분하라"* 는 규칙을 **개별 검사의 산문**에 맡겨 두었더니, 지키는
+       방식이 제각각이라 지켜졌는지조차 셀 수 없었다.
+
+       실측(2026-08-31 · `_probe/r194_structural.py`): '목록이 비었다'를
+       주장하는 스캐너 검사 **40개** 중 인접한 커버리지 주장이 있는 것이
+       29개, **없는 것이 11개**였다.
+
+       그래서 산문이 아니라 **인자**로 만든다. 0 이면 통과가 아니라
+       **실패**다 — 못 본 것을 '없다'로 적지 않는다 (§3).
+    """
     ok = bool(condition)
     _CHECKS_RUN[0] += 1
+    if scanned is not None and int(scanned) <= 0:
+        ok = False
+        detail = (f"{detail} · " if detail else "") + "훑은 대상 0개 — 미측정"
+    elif scanned is not None:
+        detail = (f"{detail} · " if detail else "") + f"훑은 대상 {int(scanned)}개"
     print(f"  [{'OK  ' if ok else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""))
     if not ok:
         FAILURES.append(name)
@@ -5085,7 +5109,7 @@ for _n92 in _ukast92.body:
         _names92 = [a.arg for a in _n92.args.args]
         if 'theme' in _names92:
             _themed92[_n92.name] = _names92.index('theme')
-_miss92 = []
+_miss92, _seen92 = [], 0
 for _node92 in _ast92.walk(_ast92.parse(_w92)):
     if not isinstance(_node92, _ast92.Call):
         continue
@@ -5095,10 +5119,12 @@ for _node92 in _ast92.walk(_ast92.parse(_w92)):
         continue
     if _f92.attr not in _themed92:
         continue
+    _seen92 += 1                      # 라운드 194 — 훑은 대상을 센다
     if ('theme' not in {k.arg for k in _node92.keywords if k.arg}
             and len(_node92.args) <= _themed92[_f92.attr]):
         _miss92.append(f'{_f92.attr}:{_node92.lineno}')
-check("모든 ui_kit 호출이 theme 을 넘긴다", not _miss92, ' '.join(_miss92))
+check("모든 ui_kit 호출이 theme 을 넘긴다", not _miss92, ' '.join(_miss92),
+      scanned=_seen92)
 
 # ⑧ 제거 기한이 지난 API — 스트림릿을 올리는 순간 화면이 사라진다
 check("st.components.v1.html 을 쓰지 않는다 (2026-06-01 제거 기한 경과)",
@@ -7355,7 +7381,7 @@ check("None 을 빈 문자열로", _mdsafe114(None) == '')
 import ast as _ast114
 _MD_CALLS114 = {'caption', 'markdown', 'write', 'info', 'warning',
                 'success', 'error', 'text'}
-_tilde114 = []
+_tilde114, _seen114 = [], 0
 for _f114 in ('web_app.py', 'ui_kit.py', 'chart_pro.py', 'gaeum_ai.py',
               'next_action.py', 'product_ops.py'):
     _p = _os.path.join(PROJ, _f114)
@@ -7376,13 +7402,14 @@ for _f114 in ('web_app.py', 'ui_kit.py', 'chart_pro.py', 'gaeum_ai.py',
         _seg = _ast114.get_source_segment(_s114, _nd) or ''
         if '_md_safe' in _seg:
             continue           # 이스케이프를 거친다
+        _seen114 += 1                 # 라운드 194 — 훑은 대상을 센다
         _lit = ''.join(_c.value for _c in _ast114.walk(_nd)
                        if isinstance(_c, _ast114.Constant)
                        and isinstance(_c.value, str))
         if _lit.count('~') >= 2:
             _tilde114.append(f'{_f114}:{_nd.lineno}')
 check("마크다운 위젯에 취소선으로 먹힐 물결표가 없다",
-      not _tilde114, ' · '.join(_tilde114[:5]))
+      not _tilde114, ' · '.join(_tilde114[:5]), scanned=_seen114)
 # 근거 문구가 실제로 이 헬퍼를 거치는가 (엔진 문자열 → 마크다운 위젯)
 for _pat114 in ("st.caption(_md_safe(_b['basis']))",
                 "st.caption(_md_safe(_m['basis']))",
@@ -11568,7 +11595,7 @@ _hex164 = [ln.strip() for ln in _code164
            if ('_bc_cells' in ln or '_bucket_counts' in ln)
            and _re.search(r"#[0-9A-Fa-f]{6}", ln)]
 check("요약 칸이 팔레트 밖 색을 만들지 않는다",
-      not _hex164, str(_hex164[:2]))
+      not _hex164, str(_hex164[:2]), scanned=len(_code164))
 
 # ⑥ 카드 표면을 테마별로 바꾸지 않는가
 #    처음엔 `_TOK`(테마 토큰)으로 그렸다. 그러면 **라이트에서 이 칸만
@@ -11712,10 +11739,11 @@ _SRC165 = ('ui_kit.py', 'web_app.py')
 _ESCN165 = _escapers165(_SRC165)
 check("이스케이퍼 이름을 import 에서 유도한다 (손으로 적지 않는다)",
       '_q56' in _ESCN165, str(sorted(_ESCN165)))
-_bad165 = [f'{p}:{ln}' for p, ln, e, ctx in _walk_fstr165(_SRC165)
+_all165 = list(_walk_fstr165(_SRC165))   # 라운드 194 — 훑은 대상을 센다
+_bad165 = [f'{p}:{ln}' for p, ln, e, ctx in _all165
            if '_esc_attr(' in e and ctx is None]
 check("_esc_attr 는 속성 자리에서만 쓴다",
-      not _bad165, str(_bad165[:3]))
+      not _bad165, str(_bad165[:3]), scanned=len(_all165))
 
 # ④-b 거꾸로도 본다 — href·title·alt 는 **빠짐없이** 이스케이퍼를 지나는가.
 #      ④ 만 있으면 "속성에 아무것도 안 걸면 통과"가 된다. 라운드 120d
@@ -11723,11 +11751,11 @@ check("_esc_attr 는 속성 자리에서만 쓴다",
 #      있었고, 그 한 줄이 사라지면 아무도 안 보는 상태가 된다.
 #      style·class 는 뺀다 — 팔레트 토큰이 들어가는 자리라 성격이 다르고,
 #      거기까지 넣으면 수백 건이 되어 결국 아무도 안 보는 검사가 된다.
-_attr165 = [f'{p}:{ln} {e[:40]}' for p, ln, e, ctx in _walk_fstr165(_SRC165)
+_attr165 = [f'{p}:{ln} {e[:40]}' for p, ln, e, ctx in _all165
             if ctx in ('href', 'title', 'alt')
             and not any(s in e for s in _ESCN165)]
 check("href·title·alt 보간은 빠짐없이 이스케이퍼를 지난다",
-      not _attr165, str(_attr165[:3]))
+      not _attr165, str(_attr165[:3]), scanned=len(_all165))
 
 # ⑤ 킷의 인라인 HTML 텍스트 자리에 **맨** 산문 보간이 남아 있지 않은가
 #    (일부러 HTML 을 담는 값은 이름·형태로 구분해 통과시킨다)
@@ -11743,7 +11771,7 @@ def _html_expr165(e):
     return e.endswith('_html') or '.join(' in e or '_row(' in e
 
 
-_raw165 = []
+_raw165, _seen_raw165 = [], 0   # 라운드 194 — 훑은 대상을 센다
 _t165k = _ast165.parse(_read148(_os.path.join(PROJ, 'ui_kit.py')))
 for _n165 in _ast165.walk(_t165k):
     if not isinstance(_n165, _ast165.JoinedStr):
@@ -11753,6 +11781,7 @@ for _n165 in _ast165.walk(_t165k):
                       and isinstance(v.value, str))
     if not _TAG165.search(_lit165):
         continue
+    _seen_raw165 += 1
     for _v165 in _n165.values:
         if not isinstance(_v165, _ast165.FormattedValue):
             continue
@@ -11763,7 +11792,7 @@ for _n165 in _ast165.walk(_t165k):
             continue
         _raw165.append(f"ui_kit.py:{getattr(_v165, 'lineno', 0)} {_e165[:40]}")
 check("킷의 HTML 텍스트 자리에 맨 산문이 없다",
-      not _raw165, str(_raw165[:3]))
+      not _raw165, str(_raw165[:3]), scanned=_seen_raw165)
 
 # ⑥ 엔진이 실제로 쓰는 문장이 별표 없이 나오는가 — 값으로 확인한다
 #    소스에서 문자열을 읽어 오지 않고, 엔진 모듈이 만든 것을 그대로 쓴다.
@@ -15136,9 +15165,12 @@ try:
                     _calls200.append(('import AppTest', _n200.lineno))
 except Exception as _ex200:                                    # noqa: BLE001
     _calls200 = [('파싱 실패', 0)]
+_ncall200 = sum(1 for _n in _ast16.walk(_ast16.parse(_self200))
+                if isinstance(_n, _ast16.Call))
 check("부모가 무거운 것을 직접 부르지 않는다 (AST 로 본다)",
       not _calls200,
-      f'직접 호출: {_calls200[:4]} — 프로브로 옮긴다')
+      f'직접 호출: {_calls200[:4]} — 프로브로 옮긴다',
+      scanned=_ncall200)
 # 그리고 **검사가 실제로 무언가를 봤는지** 확인한다 — 0건이 '없다'인지
 # '안 봤다'인지 구분되게(§audit-passes-while-measuring-nothing).
 _seen200 = sum(1 for _n in _ast16.walk(_ast16.parse(_self200))
@@ -16013,7 +16045,7 @@ check("비중·매매를 지시하지 않는다고 밝힌다",
 #   보유자 값이 비었다. **못 낸 게 아니라 잘못 물어본 것**이다.
 #   라운드 167 에서 `evaluate_valuation_metric` 에 원본 프레임을 넘겨
 #   겪은 것과 **같은 모양**이라 이번엔 검사로 못 박는다.
-_bad_build204 = []
+_bad_build204, _nbuild204 = [], 0   # 라운드 194 — 훑은 대상을 센다
 try:
     _t204 = _ast16.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
     for _n204 in _ast16.walk(_t204):
@@ -16023,6 +16055,7 @@ try:
                 and isinstance(_n204.func.value, _ast16.Name)
                 and 'vc' in _n204.func.value.id.lower()):
             continue
+        _nbuild204 += 1
         if not _n204.args:
             continue
         _a0 = _n204.args[0]
@@ -16034,7 +16067,8 @@ except Exception as _ex204b:                                   # noqa: BLE001
     _bad_build204 = [('파싱 실패', 0)]
 check("verdict_core.build() 에 스냅샷을 넘기지 않는다 (첫 인자는 four_scores)",
       not _bad_build204,
-      f'{_bad_build204[:3]} — 넘기면 안에서 읽는 키가 전부 None 이 된다')
+      f'{_bad_build204[:3]} — 넘기면 안에서 읽는 키가 전부 None 이 된다',
+      scanned=_nbuild204)
 # 심어 두면 잡는가 (§110)
 _plant204 = 'x = _vcore.build(_snp166)\n'
 _got204 = []
@@ -16580,7 +16614,8 @@ _bench209 = ('ai_perf', 'buy_hold_perf', 'trend20d_perf', 'kospi200_perf')
 _uncol209 = [k for k in _bench209
              if f"_perf_col(bench_data['{k}'])" not in _w209]
 check("전략과 벤치마크를 같은 잣대로 칠한다 (§9)",
-      not _uncol209, f'색이 안 붙은 항목 {_uncol209}')
+      not _uncol209, f'색이 안 붙은 항목 {_uncol209}',
+      scanned=len(_bench209))
 
 # ⓒ 부호 있는 값에 고정색이 남지 않았나 — 그리고 **심어서** 확인
 _FIX209 = _re.compile(r"color:\s*#(35C98B|ff453a|F1574C|488AF7)\b", _re.I)
@@ -16588,8 +16623,10 @@ _SGN209 = _re.compile(r'여력|룸|손익|수익률|perf')
 _left209 = [f'{_m}:{_i}' for _m in sorted(_la135.reachable_modules())
             for _i, _ln in _la135.code_lines(_m)
             if _FIX209.search(_ln) and _SGN209.search(_ln)]
+_nline209 = sum(len(_la135.code_lines(_m))
+                for _m in sorted(_la135.reachable_modules()))
 check("부호 있는 값에 고정색이 남지 않았다", not _left209,
-      f'{len(_left209)}곳 — {_left209[:3]}')
+      f'{len(_left209)}곳 — {_left209[:3]}', scanned=_nline209)
 check("심어 둔 고정색을 잡는다",
       bool(_FIX209.search("<b style='color:#35C98B;'>{수익률}</b>"))
       and bool(_SGN209.search("<b style='color:#35C98B;'>{수익률}</b>")))
@@ -18254,6 +18291,174 @@ check("네 개 이상이면 '외 N건' 으로 줄인다",
       _vc105._unmet(['a', 'b', 'c', 'd', 'e']))
 check("빈 목록이면 빈 문장이다 (없는 사유를 만들지 않는다)",
       _vc105._unmet([]) == '' and _vc105._unmet(None) == '')
+
+print()
+
+# ======================================================================
+# §225 — '위반 0건'을 주장하는 스캐너는 **몇 개를 봤는지** 말해야 한다
+#        (라운드 194)
+#
+#   §110 이 라운드 114 에 규칙을 적었다 — *"0건을 낸 검사는 '그럼 있을
+#   때는 잡느냐'를 심어서 확인한다. 0건이 '없다'인지 '못 봤다'인지
+#   구분되게."* 그런데 **그 규칙 자체를 검사하는 것이 없었다.** 지키는
+#   방식이 절마다 산문으로 제각각이라 몇 개가 지켜졌는지 셀 수도 없었다.
+#
+#   ■ 재려다 세 번 좁았다 — 그 과정을 그대로 적는다
+#     ① '심어/심은' 낱말만 찾음 → §165 의 *"0건을 재고 통과하지 않는다"*
+#        를 못 봐서 **29개**라고 부풀렸다
+#     ② 낱말을 늘림 → §170 의 *"0개를 재고"* 를 또 놓쳤다(내 목록은
+#        '0개면'). **낱말을 늘리는 것은 답이 아니다**
+#     ③ 구조로 바꿈(`len(X) >= N`) → §204 의 맨 이름 깃발(`_seen204`)과
+#        §218 의 `sum(...) > 3000` 을 못 봤다
+#   판별식이 좁으면 **남의 잘못을 부풀린다**(§9). 세 번 넓히고 나서야
+#   정직한 수가 나왔다: 스캐너형 40개 중 커버리지 없음 **10개**.
+#
+#   ■ 그래서 산문을 그만두고 **인자**로 만들었다
+#     `check(..., scanned=N)` — 0 이면 통과가 아니라 실패다.
+#     이 절은 그것을 **구조로** 강제한다. 한국어를 안 읽는다.
+# ======================================================================
+print("=" * 72)
+print("§225 '0건'을 주장하는 스캐너의 커버리지 (라운드 194)")
+print("=" * 72)
+
+import ast as _ast225                                             # noqa: E402
+
+_self225 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+_tree225 = _ast225.parse(_self225)
+_lines225 = _self225.splitlines()
+_SCANMARK225 = ('reachable_modules', 'code_lines', '.py', 'ast.walk',
+                '_ast', 'walk(', 'os.walk', 'iterdir', 'glob')
+
+
+def _fillers225(tree):
+    """이름 → 그 이름을 채우는 문장의 줄번호들 (append · += · 컴프리헨션)."""
+    out = {}
+    for n in _ast225.walk(tree):
+        tgt = None
+        if (isinstance(n, _ast225.Call)
+                and isinstance(n.func, _ast225.Attribute)
+                and n.func.attr == 'append'
+                and isinstance(n.func.value, _ast225.Name)):
+            tgt = n.func.value.id
+        elif (isinstance(n, _ast225.AugAssign)
+              and isinstance(n.target, _ast225.Name)
+              and isinstance(n.op, _ast225.Add)):
+            tgt = n.target.id
+        elif (isinstance(n, _ast225.Assign) and len(n.targets) == 1
+              and isinstance(n.targets[0], _ast225.Name)
+              and isinstance(n.value, (_ast225.ListComp, _ast225.SetComp))):
+            tgt = n.targets[0].id
+        if tgt:
+            out.setdefault(tgt, []).append(n.lineno)
+    return out
+
+
+def _empty_claim225(expr):
+    """이 조건이 '어떤 목록이 비었다'를 주장하는가 → 그 이름."""
+    if isinstance(expr, _ast225.UnaryOp) and isinstance(expr.op, _ast225.Not):
+        if isinstance(expr.operand, _ast225.Name):
+            return expr.operand.id
+    if isinstance(expr, _ast225.Compare) and len(expr.ops) == 1:
+        left, op, right = expr.left, expr.ops[0], expr.comparators[0]
+        if (isinstance(op, _ast225.Eq) and isinstance(right, _ast225.Constant)
+                and right.value == 0
+                and isinstance(left, _ast225.Call)
+                and isinstance(left.func, _ast225.Name)
+                and left.func.id == 'len' and left.args
+                and isinstance(left.args[0], _ast225.Name)):
+            return left.args[0].id
+        if (isinstance(op, _ast225.Eq) and isinstance(left, _ast225.Name)
+                and isinstance(right, (_ast225.List, _ast225.Tuple))
+                and not right.elts):
+            return left.id
+    return None
+
+
+def _coverage_claim225(expr):
+    """'훑은 것이 있다'는 주장인가 — 수 비교 · None 아님 · 맨 이름 깃발."""
+    if isinstance(expr, _ast225.Compare) and len(expr.ops) == 1:
+        op, right = expr.ops[0], expr.comparators[0]
+        if (isinstance(op, (_ast225.GtE, _ast225.Gt))
+                and isinstance(right, _ast225.Constant)
+                and isinstance(right.value, (int, float))
+                and not isinstance(right.value, bool)):
+            return True
+        if (isinstance(op, _ast225.IsNot)
+                and isinstance(right, _ast225.Constant)
+                and right.value is None):
+            return True
+    if isinstance(expr, _ast225.BoolOp):
+        return any(_coverage_claim225(v) for v in expr.values)
+    if isinstance(expr, _ast225.Name):
+        return True
+    return False
+
+
+def _uncovered225(src, tree):
+    """커버리지 주장이 없는 스캐너형 '0건' 검사를 돌려준다."""
+    lines = src.splitlines()
+    fills = _fillers225(tree)
+    cov = sorted(n.lineno for n in _ast225.walk(tree)
+                 if isinstance(n, _ast225.Call)
+                 and isinstance(n.func, _ast225.Name) and n.func.id == 'check'
+                 and len(n.args) >= 2 and _coverage_claim225(n.args[1]))
+    found, bad = 0, []
+    for n in _ast225.walk(tree):
+        if not (isinstance(n, _ast225.Call)
+                and isinstance(n.func, _ast225.Name) and n.func.id == 'check'
+                and len(n.args) >= 2):
+            continue
+        tgt = _empty_claim225(n.args[1])
+        if not tgt or tgt not in fills:
+            continue
+        if not any(any(m in '\n'.join(
+                lines[max(0, fl - 30):min(len(lines), fl + 5)])
+                for m in _SCANMARK225) for fl in fills[tgt]):
+            continue                       # 스캐너가 아니다 (그 자리 계산)
+        found += 1
+        if any(k.arg == 'scanned' for k in n.keywords):
+            continue                       # 인자로 밝혔다
+        if any(n.lineno - 40 <= c <= n.lineno + 6 for c in cov):
+            continue                       # 인접한 커버리지 주장이 있다
+        bad.append(f"{n.lineno}:{tgt}")
+    return found, bad
+
+
+_found225, _bad225 = _uncovered225(_self225, _tree225)
+# 0개면 '위반 없음'이 아니라 **미측정**이다 — 이 절 자신부터 지킨다
+check("스캐너형 '0건' 검사를 실제로 찾았다", _found225 >= 30,
+      f'{_found225}개', scanned=_found225)
+check("모든 스캐너가 훑은 대상 수를 밝힌다",
+      not _bad225, f'{len(_bad225)}개 — {_bad225[:5]}')
+
+# ── 심어서 — 없을 때는 잡는가 ────────────────────────────────────────
+_PLANT225_BAD = (
+    "_hits = []\n"
+    "for m in reachable_modules():\n"
+    "    for i, ln in code_lines(m):\n"
+    "        if 'x' in ln:\n"
+    "            _hits.append(ln)\n"
+    "check('없다', not _hits)\n")
+_PLANT225_OK = _PLANT225_BAD.replace(
+    "check('없다', not _hits)", "check('없다', not _hits, scanned=3)")
+_pf225, _pb225 = _uncovered225(_PLANT225_BAD, _ast225.parse(_PLANT225_BAD))
+_pf225b, _pb225b = _uncovered225(_PLANT225_OK, _ast225.parse(_PLANT225_OK))
+check("§225 가 커버리지 없는 스캐너를 잡는다 (심어서)",
+      _pf225 == 1 and len(_pb225) == 1, f'{_pf225}/{_pb225}')
+check("§225 가 scanned= 를 단 것은 통과시킨다 (심어서)",
+      _pf225b == 1 and not _pb225b, f'{_pf225b}/{_pb225b}')
+
+# ── check(scanned=0) 은 실패해야 한다 — 하네스를 값으로 확인 ─────────
+_before225 = (len(FAILURES), _CHECKS_RUN[0])
+#   ⚠️ 아래 한 줄은 **일부러 실패**한다 — 로그에 [FAIL] 로 찍히는 것이
+#     정상이고, 바로 다음 줄이 그것을 되돌리며 "실패로 셌는가"를 본다.
+check("§225 자기검사: scanned=0 은 실패다 (일부러 · 바로 되돌린다)",
+      True, scanned=0)
+_grew225 = (len(FAILURES) - _before225[0]) == 1
+if _grew225:
+    FAILURES.pop()                     # 일부러 낸 실패는 되돌린다
+check("scanned=0 이면 조건이 참이어도 실패로 센다", _grew225,
+      '못 본 것을 없다로 적지 않는다 (§3)')
 
 print()
 print("=" * 72)
