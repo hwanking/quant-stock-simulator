@@ -2836,7 +2836,7 @@ def _build_reco_card(p, news_txt, conf_txt):
         # 기준가일 때도 참인 중립 표기다. verdict_core.price_basis 와 같은
         # 낱말이라 새 이름이 아니다 (§2 재사용).
         'target_basis': ('진입가 기준'
-                         + (f" · 손익비 {p['entry_rr']}:1"
+                         + (f" · 손익비(진입가·1차) {p['entry_rr']}:1"
                             if p.get('entry_rr') else '')) if rec else '',
         'stop': e_stop if rec else None,
         'stop_basis': '진입가 기준' if rec else '',
@@ -3628,7 +3628,13 @@ if st.session_state.get('show_screener', False):
                 # Header (전략유형 및 월봉 10선 장기추세 컬럼 탑재)
                 cols = st.columns([0.5, 1.8, 1.4, 1.1, 1.2, 1.2, 1.4, 1.2, 1.0, 1.2])
                 # '순위' → '번호' (라운드 187) — 위 캡션과 같은 이유다.
-                headers = ["번호", "종목명 (클릭)", "전략유형", "현재가", "적정가", "상승여력%", "월봉 10선", "최종점수", "손익비", "상태"]
+                # ⚠️ 라운드 191 — '손익비' 라는 **같은 낱말이 두 값**을
+                #   가리키고 있었다. 이 표는 `reward_risk_ratio`(2차 목표 ·
+                #   현재가 기준 · 게이트 1.3)이고, 카드·배너는
+                #   `entry_rr`(1차 목표 · 진입가 기준 · 게이트 0.5)다.
+                #   같은 화면에 둘이 나란히 있었고 값도 게이트도 달랐다.
+                #   기준을 이름에 넣는다 — 값·게이트는 안 바꿨다 (§4).
+                headers = ["번호", "종목명 (클릭)", "전략유형", "현재가", "적정가", "상승여력%", "월봉 10선", "최종점수", "손익비(현재가·2차)", "상태"]
                 for col, header in zip(cols, headers):
                     col.markdown(f"<div style='text-align:center; color:#4C8DFF; font-size:13px; font-weight:bold; border-bottom:2px solid #222C3C; padding-bottom:8px;'>{header}</div>", unsafe_allow_html=True)
                 
@@ -6494,7 +6500,7 @@ if _e_stop and _e_t1:
         f"line-height:1.6;'>이 가격에 사면 → 손절 "
         f"<b style='color:#ff453a;'>{_e_stop:,.0f}원</b> · 1차 목표 "
         f"<b style='color:#4C8DFF;'>{_e_t1:,.0f}원</b>"
-        + (f" · 손익비 <b>{_e_rr}:1</b>" if _e_rr else '')
+        + (f" · 손익비(진입가·1차) <b>{_e_rr}:1</b>" if _e_rr else '')
         + "</p>")
     # 손익비를 '원'으로 풀어 준다. 비율만 보면 0.7:1 이 좋은지 나쁜지
     # 감이 안 온다. 두 값 모두 CORE 가 낸 것이라 화면과 어긋날 수 없다 (§4).

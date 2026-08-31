@@ -53,7 +53,29 @@ MAX_ENTRY_SIGMA = 2.1   #: 라운드 35 실측 · 통합 표본 체결률 60% �
 SIGMA_BASIS = ('20봉 안 체결률 60% 지점을 σ 단위로 실측 · 통합 n=5,389 '
                '(train 2.1σ · valid 1.9σ · blind 2.1σ)')
 MIN_RR = 0.5            #: 손익비 하한 (1차 목표 0.7R 기하의 하한)
-COST_PCT = 0.36         #: 왕복 거래비용 (수수료+세금+슬리피지)
+#: 왕복 거래비용 — **이 저장소에 값이 셋 있다** (라운드 191 실측).
+#:
+#:   0.30  scripts/engine_bakeoff_r10·r11 · layer_study_r4 · lift_study_r5 …
+#:         (라운드 4~11 시절) + quant_indicators:3066 `avg_pnl - 0.3`
+#:   0.36  **여기(운영 게이트)** + scripts/entry_engine_lab · exit_engine_lab ·
+#:         gen_case_layers · gen_sector_perf · breakout_study ·
+#:         PREREG R43·R46·R49·R54·R57·R58·R111
+#:   0.41  quant_indicators.TOTAL_COST_PCT (규칙집 항목 합) +
+#:         PREREG R148·R160 이 **"저장소 채택값"** 이라 적은 값 +
+#:         scripts/exec_sim · exec_levels_r17 · census_r159
+#:
+#: 그리고 **문서가 스스로 어긋난다** — PREREG_R46 은 *"왕복 0.36%
+#: (수수료 0.03 + 세금 0.20 + 슬리피지 0.18)"* 라고 적는데 그 항목 합은
+#: **0.41** 이다. `scripts/exec_sim.py` 는 0.41 을 *"현행 엔진과 같은 값"*
+#: 이라 적어 두었지만 현행 운영 게이트는 이 줄의 0.36 이다.
+#:
+#: ⚠️ **여기서 고치지 않는다.** 0.41 로 올리면 원장 복원 실측에서
+#:   *"비용 차감 기대값 양수"* 를 통과하던 **547건 중 267건(48.8%)이
+#:   뒤집힌다** (`_probe/r191_cost3.py` · 2026-08-31). 운영 게이트를
+#:   반 토막 내는 변경을 같은 밤에 감으로 하지 않는다 (§2) —
+#:   판정 기준을 먼저 적고 원장으로 잰다:
+#:   `docs/PREREG_R191_COST_UNIFY.md`
+COST_PCT = 0.36         #: 현행 운영값 — 위 계보와 사전등록 참조
 MIN_CONF = 45           #: 분석 신뢰도 하한
 MIN_QUALITY = 40        #: 전략 품질(표본외) 하한
 MIN_TURNOVER = 3e8      #: 20일 평균 거래대금 하한 (3억 · 저유동성 배제)
@@ -255,7 +277,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
           if fill_p is not None else '산출 불가')),
         ('목표·손절 산출', tgt is not None and stop is not None,
          '있음' if (tgt and stop) else '미산출'),
-        ('손익비 기준 이상', rr is not None and rr >= MIN_RR,
+        ('손익비(진입가·1차) 기준 이상', rr is not None and rr >= MIN_RR,
          f'{rr}' if rr is not None else '미산출'),
         ('비용 차감 기대값 양수', exp_ret is not None and exp_ret > 0,
          f'{exp_ret:+.2f}%' if exp_ret is not None else '산출 불가'),
@@ -459,7 +481,10 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
         # 종전 '장기 관찰' — 조건이 없으면 화면에 둘 이유가 없다.
         # 손익비·기대값처럼 **가격이 움직여야 풀리는** 조건이면 눌림목 대기,
         # 그것도 아니면 추천에서 뺀다.
-        if any(x in failed for x in ('손익비 기준 이상', '비용 차감 기대값 양수')):
+        # 라운드 191 — 체크 이름을 '손익비(진입가·1차) 기준 이상' 으로
+        #   갈랐으므로 여기 매칭도 같이 맞춘다. 이름만 바뀌었다.
+        if any(x in failed for x in ('손익비(진입가·1차) 기준 이상',
+                                     '비용 차감 기대값 양수')):
             return '눌림목 매수 대기', (
                 '지금 가격에서는 손익비·기대값이 기준에 못 미칩니다. '
                 '더 낮은 자리에서만 셈이 맞습니다.')

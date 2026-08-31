@@ -231,6 +231,7 @@ check("10건 미만은 확률 비노출", not q.probabilities_allowed('OBSERVATI
 # ---------------------------------------------------------------- 파이프라인
 section("5. 단일 스냅샷 파이프라인 (§17)")
 snap = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
+_snap17 = snap          # §222 가 **실행됐다는 증거**로 읽는다
 fs = snap['four_scores']
 sim = snap['sim_res']
 val = snap['val_eval']
@@ -17659,6 +17660,266 @@ check("verdict_core 는 여전히 3중 2 다",
 check("next_action 은 여전히 3중 1 이다",
       "_heat['hits'] >= 1" in _na220)
 check("과열 머리말이 근거를 숫자로 적는다", "과열 지표 " in _na220)
+
+# ======================================================================
+# §221 — 같은 개념에 값이 셋, 낱말이 하나 (라운드 191)
+#
+#   ⓐ 왕복 거래비용이 **0.30 / 0.36 / 0.41** 셋으로 쓰인다. 운영 게이트
+#      (verdict_core.COST_PCT)는 0.36 인데 scripts/exec_sim 은 0.41 을
+#      "현행 엔진과 같은 값" 이라 적어 두었다 — 거짓이다. 게다가
+#      PREREG_R46 은 "0.36 (수수료 0.03 + 세금 0.20 + 슬리피지 0.18)"
+#      이라 적는데 그 항목 합은 0.41 이다.
+#      ⚠️ **값은 안 바꿨다.** 0.41 로 올리면 원장 복원 실측에서 통과분
+#        547건 중 267건(48.8%)이 뒤집힌다. 그 크기의 변경은 사전등록으로
+#        한다 — docs/PREREG_R191_COST_UNIFY.md
+#   ⓑ "손익비" 라는 **같은 낱말이 두 값**을 가리켰다:
+#        reward_risk_ratio  2차 목표 · 현재가 기준 · 게이트 1.3 (홈 표)
+#        entry_rr           1차 목표 · 진입가 기준 · 게이트 0.5 (카드·배너)
+#      같은 화면에 나란히 있었다. 기준을 이름에 넣었다 — 값·게이트 불변.
+# ======================================================================
+print("\n" + "=" * 72)
+print("§221 비용 상수 계보 · 손익비 명칭 (라운드 191)")
+print("=" * 72)
+
+_vcraw221 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_qi221 = '\n'.join(ln for _i221, ln in _la135.code_lines('quant_indicators.py'))
+_w221 = '\n'.join(ln for _i221, ln in _la135.code_lines('web_app.py'))
+_uk221 = '\n'.join(ln for _i221, ln in _la135.code_lines('ui_kit.py'))
+_ex221 = _read148(_os.path.join(PROJ, 'scripts', 'exec_sim.py'))
+
+# ── ⓐ **값이 안 바뀌었는가** — 이것이 이 절의 핵심이다 ─────────────
+check("verdict_core.COST_PCT 가 0.36 그대로다",
+      _vc105.COST_PCT == 0.36, str(_vc105.COST_PCT))
+check("TOTAL_COST_PCT 가 0.41 그대로다",
+      qi.QuantIndicatorsEngine.TOTAL_COST_PCT == 0.41,
+      str(qi.QuantIndicatorsEngine.TOTAL_COST_PCT))
+check("순기대수익 비용이 0.3 그대로다",
+      qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT == 0.3,
+      str(qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT))
+check("MIN_RR 이 0.5 그대로다", _vc105.MIN_RR == 0.5, str(_vc105.MIN_RR))
+
+# ── 계보와 실측을 코드에 적었는가 ──────────────────────────────────
+check("세 값의 계보를 코드에 적었다",
+      all(_x in _vcraw221 for _x in ("0.30", "0.36", "0.41")))
+check("바꿀 때의 영향을 숫자로 적었다",
+      "48.8" in _vcraw221 and "267" in _vcraw221,
+      '크기를 모르는 채 상수를 맞추면 게이트를 감으로 바꾸는 것이다')
+check("사전등록 문서를 가리킨다", "PREREG_R191" in _vcraw221)
+check("벌거벗은 0.3 에 이름을 붙였다",
+      "_PATH_YIELD_COST_PCT" in _qi221
+      and "(float(avg_pnl) - 0.3)" not in _qi221)
+_cost221 = [ln for ln in _ex221.splitlines()
+            if ln.startswith("COST = ")]
+check("exec_sim 의 COST 줄을 찾았다 (0개면 미측정)", len(_cost221) == 1)
+check("exec_sim 이 거짓 주장을 하지 않는다",
+      bool(_cost221) and "현행 엔진과 같은 값" not in _cost221[0],
+      '운영 게이트는 0.36 인데 0.41 을 같은 값이라 적고 있었다')
+_prereg221 = _read148(_os.path.join(PROJ, "docs",
+                                    "PREREG_R191_COST_UNIFY.md"))
+check("사전등록에 판정 기준이 있다", len(_prereg221) > 1500
+      and "R1" in _prereg221 and "기각" in _prereg221,
+      str(len(_prereg221)))
+check("사전등록이 측정 비용 순으로 적혀 있다 (§2-7)",
+      "측정 비용" in _prereg221 or "무료" in _prereg221)
+
+# ── ⓑ 손익비 — 같은 낱말이 두 값을 가리키지 않는가 ────────────────
+check("홈 표가 기준을 이름에 적는다", '"손익비(현재가·2차)"' in _w221)
+check("카드·배너가 기준을 이름에 적는다", "손익비(진입가·1차)" in _w221)
+check("지시서도 기준을 적는다", "손익비(진입가·1차)" in _uk221)
+check("벌거벗은 '손익비' 라벨이 없다",
+      '"손익비"' not in _w221 and "_row('손익비'," not in _uk221,
+      '기준 없는 이름이 두 값을 가리켰다 (§4)')
+# 값으로 — 체크 이름이 bucket 매칭과 여전히 맞물리는가
+_FS221 = dict(entry_pullback_price=99.0, current_price=100.0,
+              entry_target_1st=110.0, entry_stop_price=92.0, entry_rr=0.2,
+              analysis_confidence=70, strategy_quality_score=60,
+              vol_20=0.03, avg_turnover_20d=1e9,
+              calibration_band=dict(hit_rate=58.0, n=1200),
+              blind_test_status='통과', bb_position_pct=50.0,
+              williams_r_value=-50.0, rsi_value=52.0,
+              displayed_fair_value=120.0, fair_value_status='CALIBRATED',
+              fair_overshoot_pct=-16.0)
+_c221 = _vc105.build(_FS221, {'action': 'HOLD', 'vetoes': []}, None,
+                     {'kind': 'observe'}, 100.0)
+check("체크 목록에 갈린 이름이 있다",
+      "손익비(진입가·1차) 기준 이상" in [_x["name"] for _x in _c221["checks"]])
+check("이름을 갈라도 분류 매칭이 살아 있다",
+      _c221["bucket"] == "눌림목 매수 대기", _c221["bucket"])
+
+print()
+
+# ======================================================================
+# §222 — 클래스 속성을 맨이름으로 읽으면 NameError 다 (라운드 191 후속)
+#
+#   이 라운드가 `_PATH_YIELD_COST_PCT = 0.3` 을 클래스 몸통에 두고
+#   메서드에서 **`self.` 없이** 읽었다. 파이썬은 클래스 몸통의 이름을
+#   메서드 스코프에 넣어 주지 않으므로 그 줄은 **실행되는 순간 죽는다**
+#   (`run_full_pipeline` → NameError). 회귀가 잡았다.
+#
+#   못 잡은 것은 **내 프로브** 16/16 이었다. 그 프로브는
+#     ① 상수가 존재하는가  ② 벌거벗은 리터럴이 사라졌는가
+#   만 봤다 — **그 줄을 실행하지 않았다.** §110 이 적어 둔 그 모양이다:
+#   *검사가 무엇을 재는지 이름만 보고 믿지 않는다.*
+#
+#   그래서 두 가지를 남긴다.
+#     ⓐ 같은 모양을 저장소 전체(유도 37개)에서 AST 로 찾는다
+#     ⓑ 심어서 잡히는지 확인한다 — 0건이 '없다'인지 '못 봤다'인지 갈리게
+# ======================================================================
+print("=" * 72)
+print("§222 클래스 속성 맨이름 참조 (라운드 191 후속)")
+print("=" * 72)
+
+import ast as _ast222                                             # noqa: E402
+import builtins as _bi222                                         # noqa: E402
+_BUILTINS222 = set(dir(_bi222))
+
+
+def _globals222(tree):
+    """모듈 최상위에서 묶이는 이름 (클래스 속성과 이름이 겹치면 무죄)."""
+    g = set()
+    for node in tree.body:
+        for sub in ([node] if not isinstance(
+                node, (_ast222.If, _ast222.Try, _ast222.For,
+                       _ast222.While, _ast222.With))
+                else list(_ast222.walk(node))):
+            if isinstance(sub, (_ast222.FunctionDef, _ast222.AsyncFunctionDef,
+                                _ast222.ClassDef)):
+                g.add(sub.name)
+            elif isinstance(sub, _ast222.Assign):
+                for t in sub.targets:
+                    for n in _ast222.walk(t):
+                        if isinstance(n, _ast222.Name):
+                            g.add(n.id)
+            elif isinstance(sub, _ast222.AnnAssign) and isinstance(
+                    sub.target, _ast222.Name):
+                g.add(sub.target.id)
+            elif isinstance(sub, (_ast222.Import, _ast222.ImportFrom)):
+                for a in sub.names:
+                    g.add((a.asname or a.name).split('.')[0])
+    return g
+
+
+def _clsattrs222(cls):
+    """클래스 몸통에서 **직접** 대입되는 이름 (메서드 안은 제외)."""
+    names = set()
+    for node in cls.body:
+        if isinstance(node, _ast222.Assign):
+            for t in node.targets:
+                if isinstance(t, _ast222.Name):
+                    names.add(t.id)
+        elif isinstance(node, _ast222.AnnAssign) and isinstance(
+                node.target, _ast222.Name):
+            names.add(node.target.id)
+    return names
+
+
+def _bound222(fn):
+    """함수 안에서 지역으로 묶이는 이름 — 이건 클래스 속성이 아니다."""
+    bound = set()
+    a = fn.args
+    for arg in list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs):
+        bound.add(arg.arg)
+    if a.vararg:
+        bound.add(a.vararg.arg)
+    if a.kwarg:
+        bound.add(a.kwarg.arg)
+    for n in _ast222.walk(fn):
+        if isinstance(n, _ast222.Name) and isinstance(
+                n.ctx, (_ast222.Store, _ast222.Del)):
+            bound.add(n.id)
+        elif isinstance(n, (_ast222.Global, _ast222.Nonlocal)):
+            bound.update(n.names)
+        elif isinstance(n, (_ast222.Import, _ast222.ImportFrom)):
+            for al in n.names:
+                bound.add((al.asname or al.name).split('.')[0])
+        elif isinstance(n, (_ast222.FunctionDef, _ast222.AsyncFunctionDef,
+                            _ast222.ClassDef)):
+            bound.add(n.name)
+        elif isinstance(n, _ast222.ExceptHandler) and n.name:
+            bound.add(n.name)
+    return bound
+
+
+def _scan222(src, label):
+    tree = _ast222.parse(src)
+    gl = _globals222(tree)
+    hits = []
+    for cls in [n for n in _ast222.walk(tree)
+                if isinstance(n, _ast222.ClassDef)]:
+        attrs = _clsattrs222(cls) - gl - _BUILTINS222
+        if not attrs:
+            continue
+        for fn in [n for n in _ast222.walk(cls)
+                   if isinstance(n, (_ast222.FunctionDef,
+                                     _ast222.AsyncFunctionDef))]:
+            bnd = _bound222(fn)
+            for n in _ast222.walk(fn):
+                if (isinstance(n, _ast222.Name)
+                        and isinstance(n.ctx, _ast222.Load)
+                        and n.id in attrs and n.id not in bnd):
+                    hits.append(f"{label}:{n.lineno} {cls.name}.{fn.name} "
+                                f"→ {n.id}")
+    return hits
+
+
+_mods222 = sorted(_la135.reachable_modules())
+_hits222, _scanned222 = [], 0
+for _m222 in _mods222:
+    _p222 = _m222 if _m222.endswith('.py') else _m222 + '.py'
+    _fp222 = _os.path.join(PROJ, _p222)
+    if not _os.path.exists(_fp222):
+        continue
+    try:
+        _hits222 += _scan222(_read148(_fp222), _p222)
+        _scanned222 += 1
+    except SyntaxError:
+        pass
+
+# ── 대상이 실제로 있었는가 (0개면 '위반 없음'이 아니라 '미측정'이다) ──
+check("§222 대상 모듈을 유도로 훑었다 (손 목록 아님)",
+      _scanned222 >= 30, f"{_scanned222}개")
+check("클래스 속성을 self 없이 읽는 자리가 없다",
+      not _hits222, "; ".join(_hits222[:5]))
+
+# ── 심어서 — 있을 때는 잡는가 ─────────────────────────────────────
+_PLANT222 = ("class E:\n"
+             "    _K = 0.3\n"
+             "    def bad(self, x):\n"
+             "        return x - _K\n"
+             "    def ok(self, x):\n"
+             "        return x - self._K\n"
+             "    def shadowed(self, _K):\n"
+             "        return _K\n")
+_ph222 = _scan222(_PLANT222, "<plant>")
+check("§222 가 심은 결함을 잡는다",
+      len(_ph222) == 1 and "E.bad" in _ph222[0],
+      f"{len(_ph222)}건 {_ph222}")
+check("§222 가 self. 접근을 오탐하지 않는다",
+      not any("E.ok" in h for h in _ph222))
+check("§222 가 같은 이름의 매개변수를 오탐하지 않는다",
+      not any("E.shadowed" in h for h in _ph222))
+
+# ── 그리고 **그 줄이 실제로 돈다** — 존재가 아니라 실행으로 ────────
+_epy222 = qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT
+_src222 = _la135.code_lines('quant_indicators.py')
+_use222 = [ln for _i, ln in _src222 if "_PATH_YIELD_COST_PCT" in ln
+           and "float(avg_pnl)" in ln]
+check("순기대수익이 상수를 self 로 읽는다",
+      len(_use222) == 1 and "self._PATH_YIELD_COST_PCT" in _use222[0],
+      str(_use222))
+# ⚠️ 이 검사도 **첫 판에 틀렸다** — 그것도 같은 이유로.
+#   처음엔 `path_expected_value_score` 가 스냅샷에 있는지 봤는데 그건
+#   **지역 변수 이름**이고, 밖으로 나가는 키는 `net_expected_return`
+#   (`quant_indicators.py:4334`)이다. 이름을 확인 안 하고 쓴 것 —
+#   NameError 를 만든 것과 **똑같은 습관**이다. 회귀가 또 잡았다.
+#   그 줄이 죽으면 run_full_pipeline 이 NameError 로 멈추므로,
+#   이 키가 실려 있다는 것이 **그 줄이 돌았다는 증거**다.
+#   (값은 None 일 수 있다 — 표본이 없으면 '미산출'이다. 여기서 재는
+#    것은 값이 아니라 **실행 여부**이므로 키의 존재만 본다.)
+check("§17 파이프라인이 그 줄을 실제로 지났다",
+      isinstance(_epy222, float) and isinstance(_snap17, dict)
+      and 'net_expected_return' in (_snap17.get('four_scores') or {}),
+      '상수의 존재만 보면 NameError 를 못 본다')
 
 print()
 print("=" * 72)

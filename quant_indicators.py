@@ -3062,8 +3062,15 @@ class QuantIndicatorsEngine:
         avg_pnl = sim_res.get('mean_perf') if sim_res else None
         eff_trades = int(sim_res.get('match_count', 0)) if sim_res else 0
 
-        # 거래비용 0.3%p 차감 후 순기대수익. 표본이 없으면 '0'이 아니라 '미산출'이다.
-        expected_path_yield = (float(avg_pnl) - 0.3) if stats_usable else None
+        # 거래비용 차감 후 순기대수익. 표본이 없으면 '0'이 아니라 '미산출'이다.
+        # ⚠️ 라운드 191 — 여기 0.3 은 저장소의 **세 번째 비용값**이다
+        #   (0.30 / 0.36 / 0.41). 같은 개념인데 자리마다 다르고, 이 값은
+        #   TOP3 게이트 `_num_gate("순기대수익", …, 2.0)` 의 입력이다.
+        #   바꾸면 게이트가 움직이므로 여기서 정하지 않는다 —
+        #   계보와 판정 기준은 verdict_core.COST_PCT 주석과
+        #   docs/PREREG_R191_COST_UNIFY.md 에 적었다.
+        expected_path_yield = ((float(avg_pnl) - self._PATH_YIELD_COST_PCT)
+                               if stats_usable else None)
 
         if expected_path_yield is None:            path_expected_value_score = 50
         elif expected_path_yield >= 4.0:           path_expected_value_score = 90
@@ -4486,6 +4493,10 @@ class QuantIndicatorsEngine:
             "fund_qual_score": fund_qual_score,
             "formula_str": f"Quant({quant_score}점)×70% + Fundamental({fund_qual_score}점)×30% = {hybrid_score}점"
         }
+
+    #: 라운드 191 — 순기대수익(경로) 계산이 쓰던 **또 다른** 비용값.
+    #: 이름을 붙여 두어야 "왜 0.3 인가"를 물을 수 있다. 값은 종전 그대로다.
+    _PATH_YIELD_COST_PCT = 0.3
 
     # 거래비용 가정 (왕복): 수수료 0.015%×2 + 증권거래세 0.20% + 슬리피지 0.18%
     COST_BREAKDOWN = {
