@@ -6699,9 +6699,14 @@ if _na_head:
     _na_col = {'buy_now': '#35C98B', 'pullback': '#F2B84B',
                'breakout': '#4C8DFF', 'blocked': '#ff453a'}.get(
                    _na_kind, '#9DAABC')
+    # 라운드 197 — 조건 목록도 중앙 판정에서 받는다. 막힌 화면에서
+    #   next_action 의 buy_now 조건 한 줄("거의 닿았습니다")만 남으면
+    #   그 칸이 **무엇을 기다리는지** 말하지 못한다.
     _na_items = ''.join(
         f"<li style='margin:4px 0;'>{_uk._esc(c['text'])}</li>"
-        for c in _NA.get('conditions', []))
+        for c in (CORE.get('next_conditions')
+                  if CORE.get('next_conditions') is not None
+                  else _NA.get('conditions', [])))
     _na_html = (
         f"<div style='margin-top:14px; background:#1C2635; border-radius:12px; "
         f"padding:12px 16px;'>"

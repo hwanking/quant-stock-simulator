@@ -3161,6 +3161,51 @@ if _os.path.exists(_cal55):
               '재현되는 우위' in _w54 or '우위가 확인되지' in _w54,
               '매수권 기대값이 음수인데 화면이 그것을 말하지 않으면 §9 위반')
     check("유형·시장·국면별 성과 분해 저장", 'breakdowns' in _c55)
+
+    # ── 라운드 197 — 원장이 **줄어들 수 있다**는 사실을 잠근다 ────────
+    #   `calibration_lab` 은 원장을 매 실행 통째로 다시 쓰고(`open('w')`),
+    #   채점 루프는 시세를 못 받은 종목을 `continue` 로 건너뛴다. 즉
+    #   **네트워크가 한 번 흔들리면 연구 표본이 영구히 작아진다.**
+    #   실측(2026-09-01): 스모크 테스트 한 번에 184,759 → 183,787
+    #   (−972 · 10종목 977건). 로그는 성공으로 끝났고 경고가 없었다.
+    #   백업(`_archive/research_data_20260815.zip`)에 977건이 그대로
+    #   있어 되살렸다 — 없었으면 영영 잃었다.
+    # ⚠️ `_read148` 도 §148 에서 정의된다 — 여기서 쓰면 실행에서
+    #   NameError 다(오늘 세 번째다). 그 자리에서 읽는다.
+    _lab197 = open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'),
+                   encoding='utf-8').read()
+    check("빠진 케이스를 센다 (조용히 사라지지 않는다)",
+          'drop_price' in _lab197 and '채점에서 빠진 케이스' in _lab197)
+    check("빠진 종목 이름을 찍는다",
+          '시세를 못 받은 종목' in _lab197)
+    check("시세를 더는 못 받는 종목의 종전 채점을 이어받는다",
+          "_prev_rows" in _lab197 and "'carried_over'" in _lab197,
+          '다시 못 재는 것과 없던 일로 하는 것은 다르다 (§3)')
+    check("이어받은 행은 통계에서 빼고 그 수를 적는다",
+          "'carried_over': len(_prev_rows)" in _lab197
+          and "'ledger_rows':" in _lab197)
+    check("줄어든 원장으로 덮어쓰지 않는다 (문턱이 아니라 사유로)",
+          'drop_price and len(graded) + len(_prev_rows) < _prev_n' in _lab197
+          and '.partial' in _lab197)
+    check("되살리는 도구가 있다 (백업에서)",
+          _os.path.exists(_os.path.join(PROJ, 'scripts',
+                                        'restore_graded_from_backup.py')))
+    # 값으로 — 산출물이 이어받은 수를 실제로 적고 있는가
+    check("캘리브레이션이 원장 행수와 이어받은 수를 함께 적는다",
+          ('ledger_rows' in _c55 and 'carried_over' in _c55)
+          or _c55.get('carried_over') == 0,
+          f"total_cases={_c55.get('total_cases')} · "
+          f"carried_over={_c55.get('carried_over')} · "
+          f"ledger_rows={_c55.get('ledger_rows')}")
+    if isinstance(_c55.get('ledger_rows'), int):
+        # ⚠️ `_sf151` 은 §151(10,600줄대)에서 임포트된다 — 여기서 쓰면
+        #   **정의보다 먼저 쓰는** 것이라 실행에서 NameError 다.
+        #   컴파일은 통과한다(라운드 191 이 같은 모양으로 죽었다).
+        import scripts.study_freshness as _sf197                 # noqa: E402
+        _nrow197 = _sf197.ledger_rows()
+        check("산출물이 말하는 원장 행수가 실제와 맞는다",
+              _nrow197 == 0 or abs(_c55['ledger_rows'] - _nrow197) <= 50,
+              f"산출물 {_c55['ledger_rows']:,} · 실제 {_nrow197:,}")
 else:
     # 라운드 188 — 캘리브레이션 파일이 없으면 이 절은 **안 돈 것**이다.
     #   `.portfolio/` 는 gitignore 라 새 환경·CI 에서는 늘 여기로 떨어진다.
@@ -18555,6 +18600,151 @@ if _grew225:
     FAILURES.pop()                     # 일부러 낸 실패는 되돌린다
 check("scanned=0 이면 조건이 참이어도 실패로 센다", _grew225,
       '못 본 것을 없다로 적지 않는다 (§3)')
+
+print()
+
+# ======================================================================
+# §226 — 정의보다 먼저 쓰는 이름 (라운드 197)
+#
+#   오늘 이 실수를 **세 번** 했다:
+#     · `_PATH_YIELD_COST_PCT` — 클래스 몸통에 두고 `self.` 없이 (§222)
+#     · `_sf151.ledger_rows()`  — §151(10,634줄) 것을 §55(3,198줄)에서
+#     · `_read148(...)`         — §148 것을 §55(3,173줄)에서
+#
+#   셋 다 **컴파일은 통과하고 실행에서 NameError** 다. 이 파일은
+#   4,000건을 20분 돌리므로, 그런 오타 하나가 20분을 통째로 버린다.
+#   실제로 오늘 그렇게 두 번 버렸다.
+#
+#   ⚠️ 판별식이 처음에 순진해서 **3,124건**이 나왔다 — `for k in xs: f(k)`
+#      의 `k` 까지 위반으로 봤다. **같은 문장 안에서 묶이는 이름은 무죄**다.
+#      그리고 이 파일에는 `X if 'X' in dir() else Y` 로 **스스로 막아 둔**
+#      자리가 셋 있다(누군가 같은 함정을 밟은 흔적이다) — 그것도 무죄다.
+#      세 번 좁히고 나서야 0건이 됐다.
+# ======================================================================
+print("=" * 72)
+print("§226 정의보다 먼저 쓰는 이름 (라운드 197)")
+print("=" * 72)
+
+import ast as _ast226                                             # noqa: E402
+import builtins as _bi226                                         # noqa: E402
+
+_BI226 = set(dir(_bi226)) | {'__name__', '__file__', '__doc__'}
+_DEFER226 = (_ast226.FunctionDef, _ast226.AsyncFunctionDef,
+             _ast226.ClassDef, _ast226.Lambda)
+
+
+def _binds226(node, local=False):
+    """`local=False` — 이 문장이 **남기는** 이름. `True` — 문장 **안에서**
+    묶이는 이름(for 변수·컴프리헨션·람다 인자 …)."""
+    out = set()
+    if not local and isinstance(node, (_ast226.FunctionDef,
+                                       _ast226.AsyncFunctionDef,
+                                       _ast226.ClassDef)):
+        return {node.name}
+    for n in _ast226.walk(node):
+        if isinstance(n, _ast226.Name) and isinstance(
+                n.ctx, ((_ast226.Store, _ast226.Del) if local
+                        else _ast226.Store)):
+            out.add(n.id)
+        elif isinstance(n, (_ast226.Import, _ast226.ImportFrom)):
+            for a in n.names:
+                out.add((a.asname or a.name).split('.')[0])
+        elif isinstance(n, (_ast226.FunctionDef, _ast226.AsyncFunctionDef,
+                            _ast226.ClassDef)):
+            out.add(n.name)
+        elif isinstance(n, _ast226.ExceptHandler) and n.name:
+            out.add(n.name)
+        elif local and isinstance(n, _ast226.Lambda):
+            for arg in (list(getattr(n.args, 'posonlyargs', []))
+                        + list(n.args.args) + list(n.args.kwonlyargs)):
+                out.add(arg.arg)
+        elif local and isinstance(n, _ast226.comprehension):
+            for t in _ast226.walk(n.target):
+                if isinstance(t, _ast226.Name):
+                    out.add(t.id)
+        elif local and isinstance(n, (_ast226.Global, _ast226.Nonlocal)):
+            out.update(n.names)
+    if local:
+        for n in _ast226.walk(node):
+            if isinstance(n, (_ast226.FunctionDef, _ast226.AsyncFunctionDef)):
+                a = n.args
+                for arg in (list(getattr(a, 'posonlyargs', []))
+                            + list(a.args) + list(a.kwonlyargs)):
+                    out.add(arg.arg)
+                if a.vararg:
+                    out.add(a.vararg.arg)
+                if a.kwarg:
+                    out.add(a.kwarg.arg)
+    return out
+
+
+def _loads226(node):
+    """이 문장이 **즉시** 읽는 이름 — 미뤄지는 몸통은 건너뛴다."""
+    out = []
+
+    def walk(n, top=False):
+        if isinstance(n, _DEFER226) and not top:
+            for d in getattr(n, 'decorator_list', []):
+                walk(d)
+            return
+        if isinstance(n, _ast226.Name) and isinstance(n.ctx, _ast226.Load):
+            out.append((n.id, n.lineno))
+        for c in _ast226.iter_child_nodes(n):
+            walk(c)
+
+    walk(node, top=True)
+    return out
+
+
+def _guarded226(node):
+    """`X if 'X' in dir() else Y` — 스스로 막아 둔 자리는 위반이 아니다."""
+    out = set()
+    for n in _ast226.walk(node):
+        if (isinstance(n, _ast226.Compare) and len(n.ops) == 1
+                and isinstance(n.ops[0], _ast226.In)
+                and isinstance(n.left, _ast226.Constant)
+                and isinstance(n.left.value, str)
+                and isinstance(n.comparators[0], _ast226.Call)
+                and getattr(n.comparators[0].func, 'id', '')
+                in ('dir', 'globals')):
+            out.add(n.left.value)
+    return out
+
+
+def _usebefore226(src):
+    tree = _ast226.parse(src)
+    bound, bad, stmts = set(_BI226), [], 0
+    for stmt in tree.body:
+        stmts += 1
+        local = _binds226(stmt, local=True) | _guarded226(stmt)
+        for name, lineno in _loads226(stmt):
+            if name not in bound and name not in local:
+                bad.append(f'{lineno}:{name}')
+        bound |= _binds226(stmt)
+    return stmts, bad
+
+
+_self226 = open(_os.path.join(PROJ, 'test_pipeline_fixes.py'),
+                encoding='utf-8').read()
+_stmt226, _bad226 = _usebefore226(_self226)
+check("최상위 문장을 순서대로 훑었다", _stmt226 >= 200, f'{_stmt226}문장',
+      scanned=_stmt226)
+check("정의보다 먼저 쓰는 이름이 없다", not _bad226,
+      f'{len(_bad226)}곳 — {_bad226[:5]} · 컴파일은 통과하고 실행에서 죽는다')
+
+# ── 심어서 — 있을 때는 잡고 없을 때는 조용한가 ─────────────────────
+_pb226 = _usebefore226("x = later()\ndef later():\n    return 1\n")[1]
+_po226 = _usebefore226("def later():\n    return 1\nx = later()\n")[1]
+check("§226 가 심은 '정의 전 사용'을 잡는다",
+      len(_pb226) == 1 and _pb226[0].endswith(':later'), str(_pb226))
+check("§226 가 정상 순서를 오탐하지 않는다", not _po226, str(_po226))
+# 판별식이 좁아 3,124건을 냈던 그 자리 — for 변수는 무죄다
+check("§226 가 for·컴프리헨션 변수를 오탐하지 않는다",
+      not _usebefore226("for k in [1, 2]:\n    print(k)\n"
+                        "ys = [z * 2 for z in [1, 2]]\n")[1])
+# 이 저장소가 스스로 막아 둔 관용구도 무죄다
+check("§226 가 dir() 방어 관용구를 오탐하지 않는다",
+      not _usebefore226("a = f() if 'f' in dir() else 1\n")[1])
 
 print()
 print("=" * 72)
