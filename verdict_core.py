@@ -322,6 +322,37 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
                   and depth_sigma <= MAX_ENTRY_SIGMA
                   and not inc)
 
+    # ── '다음 조건' 한 줄도 여기서 정한다 (라운드 193) ────────────────
+    #
+    # ⚠️ 화면의 '다음 조건 — 언제 사면 되나' 칸이 `next_action` 의 headline
+    #    을 **그대로** 그리고 있었다. 그런데 next_action 은 **가격 거리만**
+    #    본다 — 게이트(표본·거래대금·손익비·밸류)를 모른다. 그래서 같은
+    #    화면 한 장이 반대되는 말을 했다 (2026-08-31 삼성전자 실측):
+    #
+    #       다음 조건  "246,930원 이하에서 분할매수할 수 있습니다"
+    #       배너·지시서 "지금은 사지 마세요" / "쫓아가지 마세요"
+    #
+    #    실측(`_probe/r193_kind_vs_bucket.py` · 25종목 · t_ref 2026-08-28):
+    #    **20종목(80%)** 에서 next_action 이 buy_now 인데 중앙 판정은 '오늘
+    #    매수 가능'이 아니었다. 그중 **11종목은 actionable=False** —
+    #    엔진이 명시적으로 제외한 종목에 대고 칸이 매수를 권하고 있었다.
+    #    §4 가 금지한 그것이다(경로가 둘이면 한쪽만 고치는 일이 생긴다).
+    #
+    #    고침: 이 칸이 읽을 문장을 **중앙 판정이 정한다.** next_action 의
+    #    조건 목록·가격선은 그대로 쓰되, '살 수 있다'는 **결론**은 여기서
+    #    나온다. 문구는 라운드 136 이 이미 채택한 말투를 재사용한다(§2-6)
+    #    — *"여기까지 내려와도 아직은 못 삽니다."*
+    _na_kind = str(na.get('kind') or '')
+    _na_head = str(na.get('headline') or '')
+    if bucket == '오늘 매수 가능' or _na_kind != 'buy_now':
+        next_kind, next_headline = _na_kind, _na_head
+    else:
+        next_kind = 'blocked'
+        _tail = f' — {reason}' if reason else f' — {bucket}'
+        next_headline = ((f'{entry:,.0f}원까지 내려와도 오늘은 아직 '
+                          f'못 삽니다') if entry
+                         else '오늘은 아직 못 삽니다') + _tail
+
     return dict(
         # 결론
         action=str(vd.get('action') or ''),
@@ -337,6 +368,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         #   위반이라 한 곳에서 정한다.
         entry_label=('권장 매수가' if recommended else '검토 기준가'),
         exclude_reason=reason,
+        # 라운드 193 — '다음 조건' 칸의 결론 문장. 화면은 이것만 읽는다.
+        next_kind=next_kind, next_headline=next_headline,
         checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
         failed=failed,
         # 신규 매수자 가격 (한 기준: 진입가)
@@ -489,8 +522,24 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
                 '지금 가격에서는 손익비(진입가·1차)·기대값이 기준에 '
             '못 미칩니다. '
                 '더 낮은 자리에서만 셈이 맞습니다.')
-        return '추천 제외', ' / '.join(failed[:3])
-    return '눌림목 매수 대기', ' / '.join(failed[:3])
+        return '추천 제외', _unmet(failed)
+    return '눌림목 매수 대기', _unmet(failed)
+
+
+def _unmet(failed):
+    """미충족 체크 이름을 **사유 문장**으로 쓸 때 (라운드 193).
+
+    ⚠️ 종전에는 `' / '.join(failed[:3])` 을 그대로 사유 자리에 넣었다.
+       그런데 체크 이름은 **통과했을 때 참인 문장**이다. 그래서
+       "오늘은 아직 못 삽니다 — 비용 차감 기대값 양수" 처럼 **뜻이
+       뒤집혀** 읽혔다(기대값이 양수여서 못 산다는 말로).
+       화면의 제외 목록이 이미 쓰는 말투를 재사용한다(§2-6) — '미충족:'.
+    """
+    names = [str(f) for f in (failed or []) if str(f).strip()]
+    if not names:
+        return ''
+    more = f' 외 {len(names) - 3}건' if len(names) > 3 else ''
+    return '미충족: ' + ' / '.join(names[:3]) + more
 
 
 def screen_values(v):
