@@ -18638,126 +18638,131 @@ print("=" * 72)
 print("§226 정의보다 먼저 쓰는 이름 (라운드 197)")
 print("=" * 72)
 
-import ast as _ast226                                             # noqa: E402
-import builtins as _bi226                                         # noqa: E402
-
-_BI226 = set(dir(_bi226)) | {'__name__', '__file__', '__doc__'}
-_DEFER226 = (_ast226.FunctionDef, _ast226.AsyncFunctionDef,
-             _ast226.ClassDef, _ast226.Lambda)
-
-
-def _binds226(node, local=False):
-    """`local=False` — 이 문장이 **남기는** 이름. `True` — 문장 **안에서**
-    묶이는 이름(for 변수·컴프리헨션·람다 인자 …)."""
-    out = set()
-    if not local and isinstance(node, (_ast226.FunctionDef,
-                                       _ast226.AsyncFunctionDef,
-                                       _ast226.ClassDef)):
-        return {node.name}
-    for n in _ast226.walk(node):
-        if isinstance(n, _ast226.Name) and isinstance(
-                n.ctx, ((_ast226.Store, _ast226.Del) if local
-                        else _ast226.Store)):
-            out.add(n.id)
-        elif isinstance(n, (_ast226.Import, _ast226.ImportFrom)):
-            for a in n.names:
-                out.add((a.asname or a.name).split('.')[0])
-        elif isinstance(n, (_ast226.FunctionDef, _ast226.AsyncFunctionDef,
-                            _ast226.ClassDef)):
-            out.add(n.name)
-        elif isinstance(n, _ast226.ExceptHandler) and n.name:
-            out.add(n.name)
-        elif local and isinstance(n, _ast226.Lambda):
-            for arg in (list(getattr(n.args, 'posonlyargs', []))
-                        + list(n.args.args) + list(n.args.kwonlyargs)):
-                out.add(arg.arg)
-        elif local and isinstance(n, _ast226.comprehension):
-            for t in _ast226.walk(n.target):
-                if isinstance(t, _ast226.Name):
-                    out.add(t.id)
-        elif local and isinstance(n, (_ast226.Global, _ast226.Nonlocal)):
-            out.update(n.names)
-    if local:
-        for n in _ast226.walk(node):
-            if isinstance(n, (_ast226.FunctionDef, _ast226.AsyncFunctionDef)):
-                a = n.args
-                for arg in (list(getattr(a, 'posonlyargs', []))
-                            + list(a.args) + list(a.kwonlyargs)):
-                    out.add(arg.arg)
-                if a.vararg:
-                    out.add(a.vararg.arg)
-                if a.kwarg:
-                    out.add(a.kwarg.arg)
-    return out
-
-
-def _loads226(node):
-    """이 문장이 **즉시** 읽는 이름 — 미뤄지는 몸통은 건너뛴다."""
-    out = []
-
-    def walk(n, top=False):
-        if isinstance(n, _DEFER226) and not top:
-            for d in getattr(n, 'decorator_list', []):
-                walk(d)
-            return
-        if isinstance(n, _ast226.Name) and isinstance(n.ctx, _ast226.Load):
-            out.append((n.id, n.lineno))
-        for c in _ast226.iter_child_nodes(n):
-            walk(c)
-
-    walk(node, top=True)
-    return out
-
-
-def _guarded226(node):
-    """`X if 'X' in dir() else Y` — 스스로 막아 둔 자리는 위반이 아니다."""
-    out = set()
-    for n in _ast226.walk(node):
-        if (isinstance(n, _ast226.Compare) and len(n.ops) == 1
-                and isinstance(n.ops[0], _ast226.In)
-                and isinstance(n.left, _ast226.Constant)
-                and isinstance(n.left.value, str)
-                and isinstance(n.comparators[0], _ast226.Call)
-                and getattr(n.comparators[0].func, 'id', '')
-                in ('dir', 'globals')):
-            out.add(n.left.value)
-    return out
+# ⚠️ 라운드 199 — 이 판별식이 **두 벌**이었다: `_probe/r197_usebefore.py`
+#   와 여기. 그리고 한쪽만 고쳤다 — 프로브는 0건, 회귀는 **74건**(최상위
+#   `def` 자체를 만나면 몸통까지 훑는 버그). 이 세션이 내내 다룬 §4 를
+#   판별식에서 그대로 저질렀다.
+#   → 구현을 `scripts/usebefore_audit.py` **한 곳**에 두고 둘 다 부른다.
+import scripts.usebefore_audit as _ub226                          # noqa: E402
 
 
 def _usebefore226(src):
-    tree = _ast226.parse(src)
-    bound, bad, stmts = set(_BI226), [], 0
-    for stmt in tree.body:
-        stmts += 1
-        local = _binds226(stmt, local=True) | _guarded226(stmt)
-        for name, lineno in _loads226(stmt):
-            if name not in bound and name not in local:
-                bad.append(f'{lineno}:{name}')
-        bound |= _binds226(stmt)
-    return stmts, bad
+    return _ub226.scan(src)
 
 
-_self226 = open(_os.path.join(PROJ, 'test_pipeline_fixes.py'),
-                encoding='utf-8').read()
-_stmt226, _bad226 = _usebefore226(_self226)
-check("최상위 문장을 순서대로 훑었다", _stmt226 >= 200, f'{_stmt226}문장',
-      scanned=_stmt226)
+_mods226 = sorted(_la135.reachable_modules()) + ['test_pipeline_fixes.py']
+_stmt226, _bad226, _scan226 = 0, [], 0
+for _m226 in _mods226:
+    _p226 = _os.path.join(PROJ, _m226 if _m226.endswith('.py')
+                          else _m226 + '.py')
+    if not _os.path.exists(_p226):
+        continue
+    try:
+        _n226, _b226 = _usebefore226(open(_p226, encoding='utf-8').read())
+    except SyntaxError:
+        continue
+    _scan226 += 1
+    _stmt226 += _n226
+    _bad226 += [f'{_m226}:{x}' for x in _b226]
+check("최상위 문장을 순서대로 훑었다", _stmt226 >= 200,
+      f'{_scan226}개 모듈 · {_stmt226}문장', scanned=_scan226)
 check("정의보다 먼저 쓰는 이름이 없다", not _bad226,
       f'{len(_bad226)}곳 — {_bad226[:5]} · 컴파일은 통과하고 실행에서 죽는다')
 
-# ── 심어서 — 있을 때는 잡고 없을 때는 조용한가 ─────────────────────
-_pb226 = _usebefore226("x = later()\ndef later():\n    return 1\n")[1]
-_po226 = _usebefore226("def later():\n    return 1\nx = later()\n")[1]
-check("§226 가 심은 '정의 전 사용'을 잡는다",
-      len(_pb226) == 1 and _pb226[0].endswith(':later'), str(_pb226))
-check("§226 가 정상 순서를 오탐하지 않는다", not _po226, str(_po226))
-# 판별식이 좁아 3,124건을 냈던 그 자리 — for 변수는 무죄다
-check("§226 가 for·컴프리헨션 변수를 오탐하지 않는다",
-      not _usebefore226("for k in [1, 2]:\n    print(k)\n"
-                        "ys = [z * 2 for z in [1, 2]]\n")[1])
-# 이 저장소가 스스로 막아 둔 관용구도 무죄다
-check("§226 가 dir() 방어 관용구를 오탐하지 않는다",
-      not _usebefore226("a = f() if 'f' in dir() else 1\n")[1])
+# ── 심어서 — 판별식이 **양쪽으로** 맞는가 ──────────────────────────
+#   심기 목록도 모듈이 갖는다(`PLANTS`). 검사가 자기 심기를 따로 적어
+#   두면 그것도 두 벌이 된다 — 라운드 199 가 방금 그걸로 74건을 냈다.
+_pok226, _pdet226 = _ub226.self_check()
+check("§226 심기 목록이 있다 (0개면 미측정)", len(_ub226.PLANTS) >= 5,
+      f'{len(_ub226.PLANTS)}개', scanned=len(_ub226.PLANTS))
+check("§226 이 심은 것을 잡고, 정상은 오탐하지 않는다", _pok226, str(_pdet226))
+for _pk226 in sorted(_ub226.PLANTS):
+    _got226, _want226 = (_pdet226.get(_pk226) or '/').split('/')[:2]
+    check(f"§226 심기 '{_pk226}' 가 기대대로", _got226 == _want226,
+          f"{_pk226}={_pdet226.get(_pk226)}")
+
+print()
+
+# ======================================================================
+# §227 — 사용자가 짚은 셋 (라운드 199)
+#
+#   ⓐ "가지고 있는데 '이 종목을 갖고 계신가요'도 연동되게 해줘야지."
+#      보유 조회가 **사이드바 아코디언 안**에 있었다. §5 가 정한 대로 그
+#      칸은 기본이 접힘이라, 접혀 있으면 조회가 통째로 안 돌고
+#      `user_entry_price` 가 0 으로 떨어져 라디오가 '아직 없음' 을 골랐다.
+#      **화면 전체가 쓰는 값을 접히는 위젯이 만들고 있었다.**
+#   ⓑ "종합차트에 분봉, 일봉, 주봉도 되게 해줘야지."
+#      일봉만 있었다. 주봉·월봉은 일봉을 묶어 만든다(지어내지 않는다).
+#      분봉은 **자료가 없다** — 버튼을 비활성으로 두고 이유를 적는다.
+#   ⓒ "산출 불가는 어떻게 해야 해. 자꾸 현명하게 해줘."
+#      §11 이 유효표본 10건 미만에서 확률 환산을 막는다. 규칙은 옳지만
+#      화면이 **왜인지·대신 무엇을 아는지**를 말하지 않았다.
+# ======================================================================
+print("=" * 72)
+print("§227 보유 연동 · 봉 단위 · 산출 불가 (라운드 199)")
+print("=" * 72)
+
+_w227 = '\n'.join(ln for _i227, ln in _la135.code_lines('web_app.py'))
+_c227 = '\n'.join(ln for _i227, ln in _la135.code_lines('chart_pro.py'))
+
+# ── ⓐ 보유 조회가 아코디언 밖에 있는가 ─────────────────────────────
+import ast as _ast227                                             # noqa: E402
+_t227 = _ast227.parse(_w227)
+_held_ln = next((n.lineno for n in _ast227.walk(_t227)
+                 if isinstance(n, _ast227.FunctionDef)
+                 and n.name == '_held_of'), None)
+check("보유 조회 함수가 있다", _held_ln is not None)
+_acc_ln = next((i for i, ln in enumerate(_w227.splitlines(), 1)
+                if '_uk.acc_row(_SB_STEPS[1]' in ln), None)
+check("보유 아코디언 자리를 찾았다 (0이면 미측정)", bool(_acc_ln), str(_acc_ln))
+check("보유 조회가 아코디언보다 **먼저** 온다",
+      bool(_held_ln) and bool(_acc_ln) and _held_ln < _acc_ln,
+      f'조회 {_held_ln} · 아코디언 {_acc_ln} — 접히면 조회가 안 돈다')
+check("접혀 있어도 보유 사실이 기본값으로 살아 있다",
+      "('user_entry_price', float(_auto_avg))" in _w227,
+      '기본값이 0.0 이면 보유 종목인데도 라디오가 아직 없음을 고른다')
+check("어디서 끌어왔는지 화면이 밝힌다 (§3)",
+      "_auto_src" in _w227 and "적어 두신 값으로 채웠습니다" in _w227)
+# ⚠️ 이 검사는 처음에 **파일 전체**에서 두 낱말의 순서를 봤다가 틀렸다 —
+#   '관심종목' 은 앞쪽에도 수십 번 나온다. 재려는 것은 **그 함수 안의
+#   순서**이므로 함수 본문만 떼어 본다 (§201 이 쓰는 방식과 같다).
+_held_src227 = next(
+    (_ast227.get_source_segment(_w227, n) or '')
+    for n in _ast227.walk(_t227)
+    if isinstance(n, _ast227.FunctionDef) and n.name == '_held_of')
+check("보유 조회 본문을 떼어 냈다 (0자면 미측정)", len(_held_src227) > 100,
+      f'{len(_held_src227)}자')
+check("보유종목이 관심종목보다 먼저다 (출처 순서)",
+      _held_src227.find("'보유종목'") < _held_src227.find("'관심종목'"),
+      '정식 등록이 개인 메모보다 앞선다 (라운드 166 이 정한 순서)')
+
+# ── ⓑ 봉 단위 ──────────────────────────────────────────────────────
+for _tf227, _lb227 in (('D', '일봉'), ('W', '주봉'), ('M', '월봉')):
+    check(f"차트에 {_lb227} 버튼이 있다", f'data-tf="{_tf227}"' in _c227)
+check("주봉·월봉은 일봉을 묶어 만든다 (새 자료를 받지 않는다)",
+      'function aggregate(' in _c227 and 'bucketKey' in _c227)
+check("분봉은 자료가 없다고 화면이 말한다 (숨기지 않는다)",
+      '분봉 없음' in _c227 and 'disabled' in _c227,
+      '§3 — 없는 것은 없다고 적는다')
+check("기간 버튼이 봉 단위마다 다른 환산을 쓴다",
+      "{ D: 21, W: 4.3, M: 1 }" in _c227,
+      '같은 수를 다른 단위로 읽으면 주봉 1년이 5년치가 된다 (R190)')
+check("일봉 지표를 다른 봉에 겹쳐 읽지 않는다",
+      '지표는 일봉으로 계산한 값이라 함께 껐습니다' in _c227)
+
+# ── ⓒ '산출 불가' 가 이유와 대안을 말하는가 ────────────────────────
+check("산출 불가에 **왜인지**를 적는다",
+      '_na_why199' in _w227 and '확률로 환산하려면 10건이 필요합니다' in _w227)
+check("고장이 아니라 규칙임을 밝힌다",
+      '고장이 아니라 규칙입니다' in _w227)
+check("대신 아는 것(관찰값)을 적는다", '관찰값' in _w227)
+check("대신 볼 값(계층 보정)을 가리킨다",
+      '계층 보정 확률' in _w227 and '_blend59' in _w227)
+check("언제 채워지는지 적는다", '10건을 넘으면 자동으로 채워집니다' in _w227)
+# 값으로 — 확률 노출 규칙 자체는 안 바꿨다
+check("§11 규칙은 그대로다 (10건 미만은 확률 비노출)",
+      not qi.QuantIndicatorsEngine().probabilities_allowed('OBSERVATION_ONLY')
+      and not qi.QuantIndicatorsEngine().probabilities_allowed('INSUFFICIENT'))
 
 print()
 print("=" * 72)

@@ -2311,6 +2311,53 @@ def light_quote(ticker):
 
 _positions = st.session_state.get('positions') or []
 
+# ══════════════════════════════════════════════════════════════════════
+# 보유 여부는 **아코디언 밖에서** 정한다 (라운드 199)
+#
+#   사용자 지적: *"가지고 있는데 '이 종목을 갖고 계신가요'도 연동되게
+#   해줘야지."*  맞다. 라운드 166 이 관심종목의 매입가를 끌어오게 만들어
+#   두었는데, 그 조회가 **사이드바 아코디언 안**에 있었다:
+#
+#       if _uk.acc_row(_SB_STEPS[1], ...):      # '내 보유종목' — 기본 접힘
+#           _reg = ...positions 조회...
+#           user_entry_price = st.sidebar.number_input(..., value=_wl_paid)
+#
+#   §5 가 *"사이드바는 아코디언, '종목 찾기'만 항상 펼침"* 이라 그 칸은
+#   **기본이 접힘**이다. 접혀 있으면 저 블록이 통째로 안 돌고
+#   `user_entry_price` 가 폴백 **0.0** 으로 떨어진다(2577). 그러면
+#   본문의 라디오가 `1 if user_entry_price > 0 else 0` 이라 **'아직 없음'**
+#   을 고른다 — 사용자가 매입가를 적어 둔 종목인데도.
+#
+#   ⚠️ 화면 전체가 쓰는 값을 **접히는 위젯이 만들고 있었다.** 위젯은
+#     값을 *고치는* 자리이지 *만드는* 자리가 아니다 (§4 의 사촌).
+#     그래서 조회를 여기로 올린다 — 아코디언은 열렸을 때 그 값을 보여
+#     주고 덮어쓸 뿐이다.
+def _held_of(tk):
+    """이 종목의 보유 정보 — (평단, 수량, 출처). 없으면 (0, 0, None).
+
+    순서를 못 박는다: **보유종목이 먼저**다(정식 등록). 관심종목의
+    매입가는 개인 메모라 그 다음이다 (라운드 166 이 정한 순서 그대로).
+    """
+    for _p in (st.session_state.get('positions') or []):
+        if getattr(_p, 'ticker', None) == tk:
+            try:
+                return (int(_p.average_buy_price), int(_p.quantity), '보유종목')
+            except (TypeError, ValueError):
+                return (0, 0, None)
+    _c = portfolio.normalize_code(tk)
+    for _w in _wl_items():
+        if portfolio.normalize_code(_w.get('code')) != _c:
+            continue
+        try:
+            _pd, _qt = int(float(_w.get('paid') or 0)), int(float(_w.get('qty') or 0))
+        except (TypeError, ValueError):
+            _pd = _qt = 0
+        return (_pd, _qt, '관심종목' if _pd > 0 else None)
+    return (0, 0, None)
+
+
+_auto_avg, _auto_qty, _auto_src = _held_of(target_ticker)
+
 if _uk.acc_row(_SB_STEPS[1], _sb_open, _sb_busy):
 
     _uk.sidebar_section(f"내 보유종목 · {len(_positions)}", theme=_theme)
@@ -2574,7 +2621,10 @@ if '_resolved_date' not in _g:
 for _nm, _dv in (
         ('search_text_input', ''), ('matched_stocks', []),
         ('selected_from_matches', None), ('selected_quick_item', None),
-        ('user_entry_price', 0.0), ('user_quantity', 0),
+        # 라운드 199 — 접혀 있어도 **보유 사실은 살아 있어야** 한다.
+        #   종전 기본값이 0.0 이라, '내 보유종목' 아코디언을 안 펼치면
+        #   보유 종목인데도 본문 라디오가 '아직 없음' 을 골랐다.
+        ('user_entry_price', float(_auto_avg)), ('user_quantity', _auto_qty),
         ('attention_strategy', 'composite'), ('scan_depth', 5),
         ('t_ref_date', _resolved_date), ('rho_cutoff', 0.80)):
     # ⚠️ 라운드 189 — 이 폴백이 **키 이름 불일치로 통째로 죽어 있었다.**
@@ -5374,6 +5424,16 @@ def _load_update_history():
 # ── 홈 1순위: 모델 상태 (사용자 요청 — 화면 최상단 고정, 전부 실측·n 병기) ──
 # 이 판정을 얼마나 믿을 수 있는지가 첫 화면의 첫 정보다.
 _home_cal = _load_calibration_meta()
+# ⚠️ 라운드 199 — 지수 조회를 **여기로 올렸다.**
+#   아래 '어젯밤 미국장' 카드가 `m_indices` 를 쓰는데 그 이름은
+#   **342줄 뒤(5844)**에서 만들어지고 있었다. `except Exception` 이
+#   NameError 를 삼켜 `_sp_pct` 가 **항상 None** 이었고, 그래서
+#   라운드 16 의 실측 경고(*"전날 미국장이 보합인 날의 성적이 가장
+#   나빴다"*)가 **한 번도 화면에 안 나왔다.** 경고는 안 나와도
+#   티가 안 나므로 아무도 몰랐다 — §226 이 AST 로 잡았다.
+#   조회는 네트워크를 타므로 **한 번만** 부른다(아래 중복 제거).
+m_indices = engine_init.get_market_indices()
+
 if _home_cal.get('total_cases'):
     _sp = _home_cal.get('splits') or {}
     _bz = (_sp.get('buy_zone') or {})
@@ -5791,7 +5851,7 @@ if _pm_today and _pm_today.get('picks'):
             + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
             + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
 
-m_indices = engine_init.get_market_indices()
+# (m_indices 는 위 '모델 성적' 블록 앞에서 이미 한 번 부른다 — 라운드 199)
 
 # ── 주요 이슈 (v4) — 지금 꼭 봐야 할 것: 요약 3건 + 전체 보기. 실경고에서만 생성 ──
 import product_ops as _pops
@@ -6967,6 +7027,13 @@ _pos_default = 1 if user_entry_price > 0 else 0
 _pos_mode = st.radio("이 종목을 갖고 계신가요?", ["아직 없음", "보유 중"],
                      index=_pos_default, horizontal=True,
                      key=f"pos_mode_{_pkm}")
+# 라운드 199 — **어디서 끌어왔는지 밝힌다** (§3). 값이 저절로 채워지는데
+#   출처가 안 보이면 사용자는 자기가 적은 값인지 알 수 없다.
+if _auto_src and _auto_avg > 0:
+    st.caption(f"{_auto_src}에 적어 두신 값으로 채웠습니다 — "
+               f"평단 {_auto_avg:,}원"
+               + (f" · {_auto_qty:,}주" if _auto_qty else "")
+               + ". 아래에서 고치면 이 화면에만 적용됩니다.")
 if _pos_mode == "보유 중":
     _pc1, _pc2 = st.columns(2)
     with _pc1:
@@ -7583,15 +7650,48 @@ def _pc(v, suf='%'):
 #   합이 100% 가 되게 하고, 계층 보정값(R59 채택 — 배너가 쓰는 값)은
 #   **별도 추정치**로 아래 캡션에 갈라 적는다. 값은 하나도 안 바꾼다 —
 #   무엇이 무엇과 합산되는지를 바로잡는 것이다 (§4).
+# ⚠️ 라운드 199 — 세 칸이 전부 '산출 불가' 로 나가는데 **왜인지 안 적혀
+#   있었다.** 사용자 지적: *"산출 불가는 어떻게 해야 해. 자꾸 현명하게
+#   해줘."*  맞는 말이다. 규칙 자체는 옳다 — §11 이 유효표본 10건 미만에서
+#   확률 환산을 막는다(작은 표본을 확률처럼 내밀지 않는다). 그런데 화면이
+#   *"산출 불가"* 세 글자만 내밀면 사용자는 **고장인지 규칙인지** 알 수
+#   없고, 우리가 **대신 무엇을 아는지**도 못 본다.
+#   → 숫자를 지어내지 않는다(§3). 대신 셋을 적는다:
+#     ① 왜 못 내는가 (유사사례 N건 · 문턱 10건)
+#     ② 그래도 아는 것 (관찰값 — 몇 건 중 몇 건)
+#     ③ 대신 볼 값 (계층 보정 확률 — 아래 캡션이 이미 내는 값)
+_na_n199 = _g.get('sample_n')
+_na_why199 = (f"유사사례 {_na_n199}건 — 확률로 환산하려면 10건이 필요합니다"
+              if isinstance(_na_n199, int) else
+              "유사사례 표본을 만들지 못했습니다")
+_na_all199 = all(_g.get(k) is None
+                 for k in ('tp_first', 'sl_first', 'undecided'))
 _uk.stat_tiles([
     {'label': '목표 방향이 먼저 나올 확률 (유사사례 실측)',
      'value': _pc(_g['tp_first']),
-     'sub': '아래 두 칸과 같은 표본 — 셋의 합이 100%입니다', 'tone': 'pos'},
+     'sub': (_na_why199 if _g['tp_first'] is None
+             else '아래 두 칸과 같은 표본 — 셋의 합이 100%입니다'),
+     'tone': 'pos'},
     {'label': '손절선에 먼저 닿을 확률', 'value': _pc(_g['sl_first']),
-     'sub': '목표보다 손절에 먼저 닿는 비율', 'tone': 'neg'},
+     'sub': (_na_why199 if _g['sl_first'] is None
+             else '목표보다 손절에 먼저 닿는 비율'), 'tone': 'neg'},
     {'label': '기간 안에 어느 쪽도 못 닿을 확률', 'value': _pc(_g['undecided']),
-     'sub': '보유기간이 끝날 때까지 결판 안 남'},
+     'sub': (_na_why199 if _g['undecided'] is None
+             else '보유기간이 끝날 때까지 결판 안 남')},
 ], theme=_theme)
+if _na_all199:
+    _obs199 = str(sim_res.get('predicted_prob_str') or '') if sim_res else ''
+    st.caption(_md_safe(
+        "**세 칸이 비어 있는 것은 고장이 아니라 규칙입니다** — 유효표본이 "
+        "10건에 못 미치면 확률로 환산하지 않습니다. 작은 표본을 확률처럼 "
+        "내밀면 없는 근거를 만드는 것이기 때문입니다."
+        + (f"  \n지금 아는 것은 **관찰값**뿐입니다 — {_obs199}"
+           if '건 중' in _obs199 else '')
+        + ("  \n대신 **계층 보정 확률**(아래 줄)을 보세요 — 같은 점수대·"
+           "국면·자리·업종의 실측을 표본 크기에 따라 섞은 값입니다."
+           if _blend59 else
+           "  \n계층 보정 확률도 이 종목에서는 만들지 못했습니다.")
+        + "  \n거래일이 쌓여 유사사례가 10건을 넘으면 자동으로 채워집니다."))
 if _blend59:
     st.caption(_md_safe(
         f"계층 보정 목표 확률(R59 채택 · 배너가 쓰는 값)은 **약 "
