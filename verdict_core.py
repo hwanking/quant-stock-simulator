@@ -342,16 +342,35 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     #    조건 목록·가격선은 그대로 쓰되, '살 수 있다'는 **결론**은 여기서
     #    나온다. 문구는 라운드 136 이 이미 채택한 말투를 재사용한다(§2-6)
     #    — *"여기까지 내려와도 아직은 못 삽니다."*
+    #
+    # ⚠️ 라운드 197 — R193 이 **결론만** 가져오고 조건 목록은 두었다.
+    #    그런데 next_action 의 buy_now 가지는 조건에 **가격 사실 한 줄**만
+    #    넣고 바로 반환한다:
+    #        "현재가 260,000원은 권장 구간에 거의 닿았습니다"
+    #    판정이 막은 화면에서 그 한 줄만 남으면, 그 칸은 **무엇을
+    #    기다리는지 말하지 못한다** — next_action 이 스스로 적어 둔
+    #    존재 이유("무엇을 기다리는지 반드시 적는다")를 잃는다.
+    #    그래서 막았을 때는 조건도 **중앙 판정의 미충족 항목**으로 낸다.
+    #    통과했을 때는 next_action 의 조건을 **그대로** 쓴다.
     _na_kind = str(na.get('kind') or '')
     _na_head = str(na.get('headline') or '')
+    _na_conds = list(na.get('conditions') or [])
     if bucket == '오늘 매수 가능' or _na_kind != 'buy_now':
         next_kind, next_headline = _na_kind, _na_head
+        next_conditions = _na_conds
     else:
         next_kind = 'blocked'
         _tail = f' — {reason}' if reason else f' — {bucket}'
         next_headline = ((f'{entry:,.0f}원까지 내려와도 오늘은 아직 '
                           f'못 삽니다') if entry
                          else '오늘은 아직 못 삽니다') + _tail
+        next_conditions = [
+            dict(kind='gate', level=None,
+                 text=(f"{n} — {d}" if d else str(n)))
+            for n, o, d in checks if not o]
+        # 가격 사실은 **버리지 않는다** — 맨 뒤에 붙여 거리도 알려 준다
+        next_conditions += [dict(c) for c in _na_conds
+                            if c.get('kind') == 'price']
 
     return dict(
         # 결론
@@ -370,6 +389,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         exclude_reason=reason,
         # 라운드 193 — '다음 조건' 칸의 결론 문장. 화면은 이것만 읽는다.
         next_kind=next_kind, next_headline=next_headline,
+        next_conditions=next_conditions,
         checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
         failed=failed,
         # 신규 매수자 가격 (한 기준: 진입가)

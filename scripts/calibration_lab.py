@@ -1108,7 +1108,20 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     print(f"\n채점 대상 가상 판정: {len(rows)}건 "
           f"(파일 {len(virt_files())}개 합산)")
 
+    # ⚠️ 라운드 197 — 여기서 **원장이 조용히 줄어든다.**
+    #   시세를 못 받으면 그 종목의 **모든 케이스**가 `continue` 로 사라지고,
+    #   아래에서 원장을 `open(..., 'w')` 로 **통째로 덮어쓴다.** 즉
+    #   **네트워크가 한 번 흔들리면 연구 표본이 영구히 작아진다.**
+    #   실측(2026-09-01): 다음 API 가 HTTP 500 을 내 13종목이 빠졌고
+    #   원장이 184,759 → 183,787 로 **972건 줄었다.** 로그는 성공으로
+    #   끝났고 경고는 없었다.
+    #   → 빠진 것을 **세고**, 시세 미수신 때문에 줄어든 경우에는
+    #     **덮어쓰지 않는다** (아래 저장부). 그리고 원본
+    #     `virtual_predictions.jsonl` 은 그대로이므로 정상 실행 한 번이면
+    #     복구된다 — 잃는 것은 파생물뿐이다.
     graded = []
+    drop_price, drop_grade = 0, 0
+    drop_tickers = set()
     for r in rows:
         pdf = price_cache.get(r['ticker'])
         if pdf is None:
@@ -1117,10 +1130,20 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                     symbol=r['ticker'], start_date='2015-01-01', end_date=None)
                 price_cache[r['ticker']] = pdf
             except Exception:
+                drop_price += 1
+                drop_tickers.add(r['ticker'])
                 continue
         g = plog.grade_prediction(r, pdf)
         if g:
             graded.append({'row': r, 'grade': g})
+        else:
+            drop_grade += 1
+    if drop_price or drop_grade:
+        print(f"  ⚠️ 채점에서 빠진 케이스 {drop_price + drop_grade}건 — "
+              f"시세 미수신 {drop_price}건({len(drop_tickers)}종목) · "
+              f"채점 불가 {drop_grade}건")
+        if drop_tickers:
+            print(f"     시세를 못 받은 종목: {', '.join(sorted(drop_tickers))}")
 
     decided = [g for g in graded if g['grade']['outcome'] in ('TARGET', 'STOP')]
     print(f"판정 완료(목표 또는 손절 도달): {len(decided)}건 · "
@@ -1333,6 +1356,53 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
 
     # ── 케이스 스터디 원장 — 17개 항목을 채운 채점 결과를 그대로 남긴다 ──────
     graded_file = os.path.join(PROJ, ".portfolio", "virtual_graded.jsonl")
+    # ── 라운드 197 — **줄어든 원장으로 덮어쓰지 않는다** ─────────────
+    #   원장은 파생물이라 매 실행 통째로 다시 쓰인다. 그래서 시세를 한 번
+    #   못 받으면 그만큼 **영구히** 작아진다(2026-09-01 실측: −972건).
+    #   문턱을 감으로 고르지 않는다 — **사유로** 막는다:
+    #   *"시세를 못 받아 빠진 케이스가 있고, 결과가 종전보다 작으면
+    #     덮어쓰지 않는다."* 원본은 그대로이므로 정상 실행 한 번이면 는다.
+    #
+    # ■ 덮어쓰기를 막는 것만으로는 **이미 잃은 것이 안 돌아온다** (실측).
+    #   같은 10종목이 두 번 다 실패했다 — 일시적 장애가 아니라 그 종목의
+    #   시세를 **더는 받을 수 없는** 것이다(상장폐지·합병·코드 변경).
+    #   그러면 원장은 재구축할 때마다 그만큼씩 영영 작아진다.
+    #   → 그 종목의 **종전 채점 결과를 이어받는다.** 그때는 받을 수 있었고
+    #     제대로 채점된 행이다. 다시 못 재는 것과 없던 일로 하는 것은 다르다.
+    #   → 이어받은 행에는 `carried_over: True` 를 찍는다 — 이번 실행에서
+    #     다시 채점되지 않았다는 사실을 분석이 볼 수 있어야 한다 (§3).
+    _prev_rows, _prev_n = [], 0
+    if os.path.exists(graded_file):
+        with open(graded_file, 'r', encoding='utf-8') as _pf:
+            for _l in _pf:
+                if not _l.strip():
+                    continue
+                _prev_n += 1
+                if drop_tickers:
+                    try:
+                        _r = json.loads(_l)
+                    except Exception:
+                        continue
+                    if _r.get('ticker') in drop_tickers:
+                        _r['carried_over'] = True
+                        _prev_rows.append(_r)
+    if _prev_rows:
+        print(f"  ↩ 시세를 못 받은 {len(drop_tickers)}종목의 종전 채점 "
+              f"{len(_prev_rows)}건을 이어받습니다 (carried_over)")
+    if drop_price and len(graded) + len(_prev_rows) < _prev_n:
+        side = graded_file + '.partial'
+        with open(side, 'w', encoding='utf-8') as gf:
+            for g in graded:
+                gf.write(json.dumps(dict(g['row']), ensure_ascii=False) + "\n")
+        print(f"\n⛔ 원장을 덮어쓰지 않았습니다 — 시세 미수신으로 "
+              f"{drop_price}건({len(drop_tickers)}종목)이 빠져 결과가 "
+              f"{len(graded)}건으로 종전 {_prev_n}건보다 작습니다.")
+        print(f"   빠진 종목: {', '.join(sorted(drop_tickers)[:10])}"
+              f"{' 외' if len(drop_tickers) > 10 else ''}")
+        print(f"   부분 결과는 {side} 에 두었습니다. "
+              f"원본(virtual_predictions.jsonl)은 그대로이니 "
+              f"시세가 정상일 때 다시 돌리면 복구됩니다.")
+        sys.exit(2)
     with open(graded_file, 'w', encoding='utf-8') as gf:
         for g in graded:
             rec = dict(g['row'])
@@ -1348,7 +1418,12 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                 'failure_class': classify_failure(g),
             })
             gf.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    print(f"\n케이스 원장 저장: {graded_file} ({len(graded)}건)")
+        for rec in _prev_rows:          # 라운드 197 — 다시 못 잰 종목의 종전 채점
+            gf.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print(f"\n케이스 원장 저장: {graded_file} "
+          f"({len(graded) + len(_prev_rows)}건"
+          + (f" · 이어받음 {len(_prev_rows)}건" if _prev_rows else "")
+          + f" · 종전 {_prev_n}건)")
 
     calib = {
         'generated_from': f"{len(rows)}건 가상 판정 · 판정 완료 {len(decided)}건",
@@ -1361,11 +1436,19 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         'signal_frequency': freq_out,
         'high_confidence': hc,
         'total_cases': len(graded),
+        # 라운드 197 — 이어받은 행은 **이번 실행에서 다시 채점되지 않았다.**
+        #   통계는 새로 채점한 것만으로 낸다(재현 가능한 것만). 그래서
+        #   원장 행수와 total_cases 가 다를 수 있고, 그 차이를 여기 적는다.
+        'carried_over': len(_prev_rows),
+        'ledger_rows': len(graded) + len(_prev_rows),
         'rulebook_version': "v2026.08.02",
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "
-                 "쓰인다는 한계가 있다."),
+                 "쓰인다는 한계가 있다. "
+                 "carried_over 는 시세를 더는 받을 수 없어 이번 실행에서 "
+                 "다시 채점하지 못한 행이다 — 원장에는 남기고 통계에서는 "
+                 "뺀다(다시 못 재는 것과 없던 일로 하는 것은 다르다)."),
     }
     with open(CALIB_FILE, 'w', encoding='utf-8') as f:
         json.dump(calib, f, ensure_ascii=False, indent=1)
