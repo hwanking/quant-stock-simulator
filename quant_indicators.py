@@ -1622,7 +1622,7 @@ class QuantIndicatorsEngine:
             s = float(np.clip(50 + (tp - sl) * 1.2, 0, 100))
             add('scenario', '대응 시나리오', s, [
                 f"목표 선도달 {tp:.1f}% · 손절 선도달 {sl:.1f}% · 미도달 {nt:.1f}% (합 100%)",
-                f"손익비 {fmt_or(fs.get('reward_risk_ratio'))}",
+                f"손익비(현재가·2차) {fmt_or(fs.get('reward_risk_ratio'))}",
             ])
 
         # ── ④ DeMARK ───────────────────────────────────────────────────
@@ -3888,12 +3888,28 @@ class QuantIndicatorsEngine:
 
         def _num_gate(name, actual, threshold, fmt="{:.0f}"):
             """수치 게이트 — 통과/미통과에 따라 부등호를 올바르게 렌더한다.
-            (구버전은 미충족 항목에도 '49 ≥ 68' 처럼 요구조건을 그대로 찍어 참처럼 보였다)"""
+            (구버전은 미충족 항목에도 '49 ≥ 68' 처럼 요구조건을 그대로 찍어 참처럼 보였다)
+
+            ⚠️ 라운드 192 — **None 가지가 안 고쳐져 있었다.** 값이 없으면
+               `a` 가 "미산출" 이 되는데 그것을 부등호 왼쪽에 그대로 놓아
+               화면에 이렇게 나갔다:
+
+                   순기대수익 미산출 < +2.0%
+
+               `미산출` 은 값이 아니다. 부등호로 이으면 *"미산출이 2.0%
+               보다 작다"* 라는 **없는 비교**가 문장이 된다 (§3).
+               못 잰 것과 기준 미달은 다른 말이므로 문장을 가른다.
+               **판정은 안 바뀐다** — passed 는 여전히 False 다.
+            """
             ok = (actual is not None) and (actual >= threshold)
             a = fmt.format(actual) if actual is not None else "미산출"
             t = fmt.format(threshold)
+            if actual is None:
+                text = f"{name} 미산출 (기준 {t} 이상)"
+            else:
+                text = f"{name} {a} {'≥' if ok else '<'} {t}"
             return {'name': name, 'actual': a, 'threshold': t, 'passed': ok,
-                    'text': f"{name} {a} {'≥' if ok else '<'} {t}"}
+                    'text': text}
 
         def _bool_gate(name, ok, detail=""):
             return {'name': name, 'actual': detail, 'threshold': '', 'passed': bool(ok),
@@ -3923,7 +3939,12 @@ class QuantIndicatorsEngine:
             _num_gate("기회점수", opportunity_score, G.get('min_opportunity', 65)),
             _num_gate("실행가능성", execution_score, G.get('min_execution', 60)),
             _num_gate("순기대수익", _ey, G.get('min_expected_return_pct', 2.0), "{:+.1f}%"),
-            _num_gate("손익비", _rr, G.get('min_reward_risk', 1.3), "{:.2f}"),
+            # 라운드 192 — 벌거벗은 '손익비' 였다. 이 게이트가 재는 것은
+            #   reward_risk_ratio(2차 목표 · 현재가 기준 · 문턱 1.3)이고,
+            #   같은 화면 지시서의 '손익비 0.7:1' 은 entry_rr(1차 · 진입가
+            #   기준 · 문턱 0.5)다. 화면에 나란히 있었다 (§4).
+            _num_gate("손익비(현재가·2차)", _rr,
+                      G.get('min_reward_risk', 1.3), "{:.2f}"),
             _num_gate("유효표본", eff_sample_size, G.get('min_effective_samples', 10), "{:.0f}건"),
             _num_gate("신호 합의도", signal_consensus_score, G.get('min_signal_consensus', 55)),
             # ⚠️ 라운드 98 — 라벨만 고쳤다(값·판정 불변). 이 칸의 기준은
@@ -5308,7 +5329,8 @@ class QuantIndicatorsEngine:
         add_checks = [
             ("신규 진입 조건 통과", bool(fs.get('eligible_for_top3'))),
             ("거래비용 차감 후 기대수익 양수", ey is not None and ey > 0),
-            ("손익비 기준 통과", rr is not None and rr >= self.GATES.get('min_reward_risk', 1.3)),
+            ("손익비(현재가·2차) 기준 통과",
+             rr is not None and rr >= self.GATES.get('min_reward_risk', 1.3)),
             ("중기 추세 유지", not m10_broken),
             ("포트폴리오 비중 상한 미초과",
              portfolio_weight_pct is None or portfolio_weight_pct <= 25.0),

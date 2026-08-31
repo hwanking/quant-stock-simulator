@@ -84,7 +84,7 @@ def quant_reasons(core, fs, limit=3):
     # ② 손익비 — 한 번 맞고 한 번 틀렸을 때 남는가
     rr = _f(core.get('rr'))
     if rr is not None:
-        out.append(('손익비',
+        out.append(('손익비(진입가·1차)',
                     f'진입가 기준 목표까지와 손절까지의 비가 {rr}:1 입니다.'))
 
     # ③ 비용 차감 기대값 — 수수료·세금까지 빼고도 남는가
@@ -136,8 +136,9 @@ def risk_note(core, fs):
                 '이 종목은 실행 가격을 신뢰하지 마세요.')
     rr = _f(core.get('rr'))
     if rr is not None and rr < 1.0:
-        return ('손익비 1 미만',
-                f'손익비가 {rr}:1 이라 맞은 횟수가 틀린 횟수보다 많아야 '
+        return ('손익비(진입가·1차) 1 미만',
+                f'손익비(진입가·1차)가 {rr}:1 이라 맞은 횟수가 틀린 '
+                f'횟수보다 많아야 '
                 f'본전입니다. 현행 목표 구조(손절거리 0.7배) 탓입니다.')
     ev = _f(core.get('expected_return'))
     if ev is not None and ev <= 0:

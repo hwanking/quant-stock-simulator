@@ -139,9 +139,27 @@ def for_buyer(core, fs=None):
                 f'않았습니다.' if px else '')
     elif bucket == '눌림목 매수 대기':
         head = f'{entry:,.0f}원 부근까지 눌리면 1차 분할매수'
+        # ⚠️ 라운드 192 — 여기가 `_pct(px, entry)`, 즉 **역수**였다.
+        #   중앙 판정·next_action·price_axes 는 전부 `(진입/현재 − 1)` 인데
+        #   이 한 줄만 `(현재/진입 − 1)` 을 스스로 다시 계산했다. 그래서
+        #   같은 화면 한 장에 두 숫자가 나란히 있었다 (§4):
+        #       다음 조건  괴리 −5.0%
+        #       지시서     매수구간보다 +5.3% 위
+        #   이제 단일 출처(core['gap_pct'])에서 읽고, 화면이 쓰는 '위'
+        #   방향은 그 값에서 **대수로** 유도한다. 카드(web_app)와 같은
+        #   식이다 — 같은 결함을 두 번째 고치는 것이므로 식을 맞춘다.
+        #   그리고 **정합이 깨지면 비운다** (§4). gap_pct 가 가리키는 진입가와
+        #   이 문장이 이름 부른 진입가가 다르면 두 숫자가 서로 다른 가격을
+        #   말하게 된다 — 그때는 고치지 말고 문장을 비운다.
+        _g = _f(core.get('gap_pct'))
+        _above = None
+        if _g is not None and px and 100.0 + _g > 0:
+            _entry_of_gap = px * (1.0 + _g / 100.0)
+            if entry and abs(_entry_of_gap / entry - 1.0) <= 0.005:
+                _above = (100.0 / (100.0 + _g) - 1.0) * 100.0
         line = (f'현재가 {px:,.0f}원은 매수구간보다 '
-                f'{_pct(px, entry):+.1f}% 위입니다. 쫓아가지 마세요.'
-                if px else '')
+                f'{_above:+.1f}% 위입니다. 쫓아가지 마세요.'
+                if (px and _above is not None) else '')
     else:
         head = (f'{brk:,.0f}원을 거래량과 함께 돌파한 뒤 지지하면 매수'
                 if brk else '돌파 확인 후 매수')
