@@ -6688,10 +6688,17 @@ if _watch_now:
             f"color:#9DAABC; line-height:1.65;'>{_lines}</ul></div>")
 
 _na_html = ''
-if _NA.get('headline'):
+# 라운드 193 — 이 칸이 `_NA['headline']` 을 **그대로** 그리고 있었다.
+#   next_action 은 가격 거리만 보고 게이트를 모른다. 그래서 같은 화면이
+#   "분할매수할 수 있습니다"(이 칸)와 "쫓아가지 마세요"(지시서)를 함께
+#   말했다 — 25종목 중 20종목에서 어긋났고 그중 11종목은 actionable=False.
+#   결론 문장은 중앙 판정이 정한다(§4). 조건 목록·가격선은 그대로 쓴다.
+_na_head = str(CORE.get('next_headline') or _NA.get('headline') or '')
+_na_kind = str(CORE.get('next_kind') or _NA.get('kind') or '')
+if _na_head:
     _na_col = {'buy_now': '#35C98B', 'pullback': '#F2B84B',
                'breakout': '#4C8DFF', 'blocked': '#ff453a'}.get(
-                   _NA['kind'], '#9DAABC')
+                   _na_kind, '#9DAABC')
     _na_items = ''.join(
         f"<li style='margin:4px 0;'>{_uk._esc(c['text'])}</li>"
         for c in _NA.get('conditions', []))
@@ -6701,7 +6708,7 @@ if _NA.get('headline'):
         f"<p style='margin:0 0 2px 0; font-size:12px; color:#9DAABC; "
         f"font-weight:700;'>다음 조건 — 언제 사면 되나</p>"
         f"<p style='margin:0 0 6px 0; font-size:17px; font-weight:700; "
-        f"color:{_na_col}; line-height:1.4;'>{_uk._esc(_NA['headline'])}</p>"
+        f"color:{_na_col}; line-height:1.4;'>{_uk._esc(_na_head)}</p>"
         + (f"<ul style='margin:0; padding-left:18px; font-size:13px; "
            f"color:#9DAABC; line-height:1.65;'>{_na_items}</ul>"
            if _na_items else '')

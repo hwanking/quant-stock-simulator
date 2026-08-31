@@ -18156,6 +18156,106 @@ check("'손익비' 라벨이 전부 어느 잣대인지 밝힌다",
       not _rrbad223, f'{len(_rrbad223)}개 — ' + '; '.join(_rrbad223[:4]))
 
 print()
+
+# ======================================================================
+# §224 — 한 화면이 반대되는 말을 하지 않는가 (라운드 193)
+#
+#   서버를 띄워 보니 삼성전자 상세 한 장에 이렇게 있었다:
+#
+#       다음 조건   "246,930원 이하에서 분할매수할 수 있습니다"
+#       배너        "지금은 사지 마세요 — 조건이 갖춰지면 후보"
+#       지시서      "쫓아가지 마세요"
+#
+#   원인은 §4 가 금지한 그것이다 — **경로가 둘**이었다. '다음 조건' 칸이
+#   `next_action` 의 headline 을 **그대로** 그렸는데, next_action 은
+#   **가격 거리만** 본다(표본·거래대금·손익비·밸류 게이트를 모른다).
+#
+#   실측(`_probe/r193_kind_vs_bucket.py` · 25종목 · t_ref 2026-08-28):
+#     · next_action 이 buy_now 인데 중앙 판정은 '오늘 매수 가능' 아님 — **20종목(80%)**
+#     · 그중 **11종목은 actionable=False** (엔진이 명시적으로 제외한 종목)
+#
+#   고침: 결론 문장을 **중앙 판정이 정한다**(`next_headline`/`next_kind`).
+#   조건 목록·가격선은 그대로 next_action 을 쓴다.
+#
+#   곁들여, 사유 자리에 **체크 이름을 그대로** 넣고 있었다. 체크 이름은
+#   통과했을 때 참인 문장이라 "못 삽니다 — 비용 차감 기대값 양수" 처럼
+#   **뜻이 뒤집혀** 읽혔다. 화면이 이미 쓰는 '미충족:' 을 재사용한다.
+# ======================================================================
+print("=" * 72)
+print("§224 한 화면이 반대되는 말을 하지 않는가 (라운드 193)")
+print("=" * 72)
+
+# ── 값으로 — 게이트가 걸린 스냅샷에서 '살 수 있다'가 나오면 안 된다 ──
+def _mk224(**over):
+    """게이트를 통과하는 기본 스냅샷 — over 로 한 칸씩 무너뜨린다."""
+    base = dict(entry_pullback_price=99.0, current_price=100.0,
+                entry_target_1st=110.0, entry_stop_price=92.0, entry_rr=0.7,
+                analysis_confidence=70, strategy_quality_score=60,
+                vol_20=0.03, avg_turnover_20d=1e9,
+                calibration_band=dict(hit_rate=58.0, n=1200),
+                blind_test_status='통과', bb_position_pct=50.0,
+                williams_r_value=-50.0, rsi_value=52.0,
+                displayed_fair_value=120.0, fair_value_status='CALIBRATED',
+                fair_overshoot_pct=-16.0)
+    base.update(over)
+    return base
+
+
+_NA224 = {'kind': 'buy_now', 'headline': '99원 이하에서 분할매수할 수 있습니다.',
+          'conditions': [], 'gap_pct': -1.0, 'gap_band': '즉시·근접',
+          'atr_pct': 3.0}
+# ⓐ 거래대금이 기준 미달이면 — next_action 은 여전히 buy_now 다
+_c224a = _vc105.build(_mk224(avg_turnover_20d=1e7),
+                      {'action': 'HOLD', 'vetoes': []}, None, _NA224, 100.0)
+check("§224 대조군: next_action 은 여전히 buy_now 라고 말한다",
+      _NA224['kind'] == 'buy_now')
+check("게이트가 걸리면 '다음 조건'이 매수를 권하지 않는다",
+      '분할매수할 수 있습니다' not in str(_c224a.get('next_headline')),
+      str(_c224a.get('next_headline'))[:70])
+check("그 자리에 **무엇이 막는지**를 적는다",
+      len(str(_c224a.get('next_headline') or '')) > 12
+      and '못 삽니다' in str(_c224a.get('next_headline')),
+      str(_c224a.get('next_headline'))[:70])
+check("막힌 칸의 kind 는 blocked", _c224a.get('next_kind') == 'blocked',
+      str(_c224a.get('next_kind')))
+
+# ⓑ 게이트를 다 통과하면 next_action 의 말을 그대로 쓴다 (덮어쓰지 않는다)
+_c224b = _vc105.build(_mk224(), {'action': 'HOLD', 'vetoes': []}, None,
+                      _NA224, 100.0)
+check("§224 대조군: 통과 스냅샷은 '오늘 매수 가능'이다",
+      _c224b.get('bucket') == '오늘 매수 가능', str(_c224b.get('bucket')))
+check("통과하면 next_action 의 말을 그대로 쓴다",
+      _c224b.get('next_headline') == _NA224['headline'],
+      str(_c224b.get('next_headline')))
+
+# ⓒ buy_now 가 아닌 kind 는 손대지 않는다 (기다리라는 말은 이미 맞다)
+_NA224p = dict(_NA224, kind='pullback',
+               headline='급등 직후입니다 — 지금은 추격매수하지 마세요.')
+_c224c = _vc105.build(_mk224(avg_turnover_20d=1e7),
+                      {'action': 'HOLD', 'vetoes': []}, None, _NA224p, 100.0)
+check("pullback 문장은 그대로 둔다",
+      _c224c.get('next_headline') == _NA224p['headline'],
+      str(_c224c.get('next_headline')))
+
+# ── 화면이 그것을 읽는가 (경로가 다시 둘이 되지 않게) ─────────────────
+_w224 = '\n'.join(ln for _i224, ln in _la135.code_lines('web_app.py'))
+check("화면이 중앙 판정의 결론 문장을 읽는다",
+      "CORE.get('next_headline')" in _w224)
+check("화면이 next_action 의 headline 을 직접 그리지 않는다",
+      "_uk._esc(_NA['headline'])" not in _w224,
+      '§4 — 경로가 둘이면 한쪽만 고치는 일이 생긴다')
+
+# ── 사유 자리에 체크 이름을 그대로 넣지 않는가 ───────────────────────
+check("미충족 체크 이름은 '미충족:' 을 달고 나온다",
+      str(_vc105._unmet(['비용 차감 기대값 양수'])) == '미충족: 비용 차감 기대값 양수',
+      str(_vc105._unmet(['비용 차감 기대값 양수'])))
+check("네 개 이상이면 '외 N건' 으로 줄인다",
+      _vc105._unmet(['a', 'b', 'c', 'd', 'e']).endswith('외 2건'),
+      _vc105._unmet(['a', 'b', 'c', 'd', 'e']))
+check("빈 목록이면 빈 문장이다 (없는 사유를 만들지 않는다)",
+      _vc105._unmet([]) == '' and _vc105._unmet(None) == '')
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
