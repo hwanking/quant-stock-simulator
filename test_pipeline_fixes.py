@@ -17583,6 +17583,83 @@ check("끄는 길이 하나다 (조기 반환에서도 꺼진다)",
 check("옛 표기를 심으면 잡는다",
       'resolve_market=None' in 'portfolio.import_positions(df, m, resolve_market=None)')
 
+# ======================================================================
+# §220 — 단위가 다른 두 값을 곱해 읽히고 있었다 (라운드 190)
+#
+#   ⓐ 배너의 σ 설명이 **20봉 σ%** 와 **하루 σ 배수**를 곱해 읽혔다.
+#      "20일 보통 13.4% 움직이는데 매수가까지 2.23배" → 29.9% 라는 뜻이
+#      되지만 실제 거리는 6.7% 다. **√20 ≈ 4.47배 어긋난다.**
+#      판정이 쓰는 자(2.1σ · 라운드 35)가 하루 σ 이므로 문장을 하루 σ 로
+#      맞췄다 — 문턱은 안 건드렸다.
+#   ⓑ 카드의 σ 는 **화면에 뜬 가격과 다른 값**(폐기 산식 recommended_
+#      buy_price) 기준이었다. 배너는 라운드 37 에 고쳤는데 카드만 남았다.
+#   ⓒ 과열 문턱(95/−10/75)이 두 파일에 각각 있었고 **결합 규칙이 달라**
+#      (3중2 vs 3중1) 지표 하나만 켜지면 배지는 "오늘 매수 가능",
+#      본문은 "급등 직후" 가 되어 한 카드가 두 말을 했다 (5중 3).
+#      규칙은 안 바꾸고 **세는 일을 한 곳으로** 모은 뒤, 머리말이
+#      근거(몇 개가 켜졌나)를 적게 했다.
+# ======================================================================
+print("\n" + "=" * 72)
+print("§220 σ 단위·과열 판정을 한 곳에서 (라운드 190)")
+print("=" * 72)
+
+_w220 = '\n'.join(ln for _i220, ln in _la135.code_lines('web_app.py'))
+_na220 = '\n'.join(ln for _i220, ln in _la135.code_lines('next_action.py'))
+_vc220 = '\n'.join(ln for _i220, ln in _la135.code_lines('verdict_core.py'))
+
+# ── ⓐ σ 단위 — **값으로** 확인한다 ─────────────────────────────────
+_FS220 = dict(entry_pullback_price=93.3, current_price=100.0,
+              entry_target_1st=110.0, entry_stop_price=88.0, entry_rr=1.2,
+              analysis_confidence=70, strategy_quality_score=60,
+              vol_20=0.03, avg_turnover_20d=1e9,
+              calibration_band=dict(hit_rate=58.0, n=1200),
+              blind_test_status='통과', bb_position_pct=50.0,
+              williams_r_value=-50.0, rsi_value=52.0)
+_c220 = _vc105.build(_FS220, {'action': 'BUY', 'vetoes': []}, None,
+                     {'kind': 'pullback'}, 100.0)
+_day220 = (_c220.get('vol_20') or 0) * 100.0
+_prod220 = _day220 * (_c220.get('depth_sigma') or 0)
+check("하루 σ% × depth_sigma 가 실제 괴리와 같다 (단위 일치)",
+      abs(_prod220 - abs(_c220['gap_pct'])) < 0.05,
+      f"{_prod220:.2f} vs {abs(_c220['gap_pct']):.2f}")
+check("20봉 σ 와 섞으면 어긋난다 (섞지 말라는 근거)",
+      abs(_day220 * (20 ** 0.5) * _c220['depth_sigma']
+          - abs(_c220['gap_pct'])) > 1.0,
+      '√20 ≈ 4.47배 — 이걸 곱해 읽히면 안 된다')
+check("배너가 하루 σ 를 쓴다", "_day_sig_pct" in _w220
+      and "'vol_20'" in _w220)
+check("문장이 하루 단위임을 밝힌다", "하루 움직임의" in _w220)
+check("20봉 값은 참고로만 적는다", "20거래일 전체로는" in _w220)
+
+# ── ⓑ 카드 σ 가 화면에 뜬 가격과 같은 기준인가 ────────────────────
+check("카드가 중앙 판정 σ 를 쓴다",
+      "_core_sig = (_core or {}).get('depth_sigma')" in _w220,
+      '폐기 산식 기준 σ 를 쓰면 앞뒤 숫자의 기준이 다르다')
+
+# ── ⓒ 과열 — 세는 일은 한 곳, 규칙은 각자 그대로 ──────────────────
+import next_action as _na220m                                   # noqa: E402
+check("과열 세는 함수가 한 곳에 있다",
+      callable(getattr(_na220m, 'heat_state', None)))
+check("verdict_core 가 그것을 읽는다", "_value_gate.heat_state(fs)" in _vc220)
+check("verdict_core 에 문턱을 베끼지 않았다",
+      "95.0" not in _vc220.split("_heat_hits")[-1][:400],
+      '문턱이 두 벌이면 한쪽만 고치는 일이 생긴다 (§4)')
+_hs220 = _na220m.heat_state({'rsi_value': 76.0, 'bb_position_pct': 96.0,
+                             'williams_r_value': -50.0})
+check("과열 상태가 hits·seen 을 낸다",
+      _hs220['hits'] == 2 and _hs220['seen'] == 3, str(_hs220))
+check("못 읽은 지표는 세지 않는다 (§3)",
+      _na220m.heat_state({'rsi_value': None})['seen'] == 0)
+# **규칙은 종전 그대로** — 바꿨으면 게이트를 바꾼 것이다 (§2)
+check("verdict_core 는 여전히 3중 2 다",
+      _vc105._overheated({'rsi_value': 76.0, 'bb_position_pct': 80.0,
+                          'williams_r_value': -50.0}) is False
+      and _vc105._overheated({'rsi_value': 76.0, 'bb_position_pct': 96.0,
+                              'williams_r_value': -50.0}) is True)
+check("next_action 은 여전히 3중 1 이다",
+      "_heat['hits'] >= 1" in _na220)
+check("과열 머리말이 근거를 숫자로 적는다", "과열 지표 " in _na220)
+
 print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**

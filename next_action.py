@@ -64,6 +64,45 @@ def _f(x):
 _OVER_BLOCK_PCT = 0.0           # = entry_zone 의 fair_ref * 1.00 과 같다
 
 
+#: 과열 지표 — **문턱은 한 벌만 둔다** (라운드 190).
+#:
+#: 종전에는 이 셋(95 / −10 / 75)이 `next_action` 과 `verdict_core` 에 각각
+#: 적혀 있었다. 문턱은 우연히 같았지만 **결합 규칙이 달랐다** —
+#:   verdict_core._overheated : 3중 2 이상
+#:   next_action.hot          : 3중 1 이상
+#: 그래서 지표 하나만 켜지면 배지는 '오늘 매수 가능', 본문은 '급등
+#: 직후입니다 — 추격매수하지 마세요' 가 되어 **한 카드가 두 말을 했다**
+#: (실측 5개 조합 중 3개 · `_probe/r190_heat.py`).
+#:
+#: 규칙을 바꾸는 것은 게이트를 바꾸는 일이라 측정 없이 하지 않는다 (§2).
+#: 대신 **재는 것을 한 곳으로 모은다** — 두 판정자가 같은 입력을 읽고,
+#: 각자의 규칙은 그대로 두되 화면이 그 근거(몇 개가 켜졌나)를 말한다.
+_HEAT_KEYS = (('bb_position_pct', '볼린저', HOT_BB),
+              ('williams_r_value', 'W%R', HOT_WR),
+              ('rsi_value', 'RSI', HOT_RSI))
+
+
+def heat_state(four_scores):
+    """과열 지표를 **한 곳에서** 센다 (라운드 190).
+
+    반환: {'hits': 켜진 개수, 'seen': 읽은 개수, 'parts': ['RSI 76', …]}
+
+    ⚠️ 못 읽은 지표는 세지 않는다 — 결측을 과열로 취급하면 데이터 미수신이
+      매수 차단으로 둔갑한다 (§3 · verdict_core 가 이미 쓰던 규칙).
+    """
+    fs = four_scores or {}
+    hits, seen, parts = 0, 0, []
+    for key, lbl, thr in _HEAT_KEYS:
+        v = _f(fs.get(key))
+        if v is None:
+            continue
+        seen += 1
+        parts.append(f'{lbl} {v:.0f}')
+        if v >= thr:
+            hits += 1
+    return {'hits': hits, 'seen': seen, 'parts': parts}
+
+
 def value_block(four_scores):
     """
     밸류 게이트 판정 — **단일 구현** (라운드 185).
@@ -150,6 +189,25 @@ def levels(tech_df, price):
     return out
 
 
+def _hot_headline(heat):
+    """과열 머리말 — **근거를 숫자로** 적는다 (라운드 190).
+
+    종전에는 지표가 하나만 켜져도 *"급등 직후입니다 — 지금은 추격매수하지
+    마세요."* 라고 단정했다. 그런데 중앙 판정의 과열 규칙은 **3중 2** 라
+    같은 카드의 배지가 '오늘 매수 가능' 으로 남았고, 한 카드가 두 말을
+    했다(실측 5개 조합 중 3개).
+
+    규칙은 안 바꾼다 (§2 — 게이트 변경은 측정이 필요하다). 대신 **몇 개가
+    켜졌는지**를 문장에 적어, 배지와 본문이 서로 다른 잣대를 쓴다는 사실이
+    화면에서 보이게 한다. 강한 단정을 근거에 맞게 낮추는 쪽이다.
+    """
+    h, n = heat.get('hits', 0), heat.get('seen', 0)
+    if h >= 2:
+        return f'급등 직후입니다 — 지금은 추격매수하지 마세요 (과열 지표 {h}/{n}).'
+    return (f'과열 지표 {h}/{n} 이 켜졌습니다 — 추격매수는 피하세요 '
+            f'(종합 판정은 위 결론을 따릅니다).')
+
+
 def build(four_scores, tech_df, price, verdict=None):
     """
     관망 판단에 다음 조건을 붙이고, 괴리가 큰 종목을 추천에서 걸러 낸다.
@@ -197,9 +255,10 @@ def build(four_scores, tech_df, price, verdict=None):
         vr = _f(tech_df.iloc[-1].get('volume_ratio')) or 0.0
     except Exception:
         vr = 0.0
-    hot = bool((bb is not None and bb >= HOT_BB)
-               or (wr is not None and wr >= HOT_WR)
-               or (rsi is not None and rsi >= HOT_RSI))
+    # 규칙은 종전 그대로 **3중 1** 이다 — 세는 일만 한 곳으로 옮겼다.
+    _heat = heat_state(fs)
+    out['heat'] = _heat
+    hot = _heat['hits'] >= 1
 
     def cond(kind, level, text):
         out['conditions'].append({'kind': kind, 'level': level, 'text': text})
@@ -259,7 +318,7 @@ def build(four_scores, tech_df, price, verdict=None):
         # '진입 기준이 없습니다'만 적으면 사용자는 뭘 하지 말아야 할지 모른다.
         if hot:
             out['kind'] = 'pullback'
-            out['headline'] = '급등 직후입니다 — 지금은 추격매수하지 마세요.'
+            out['headline'] = _hot_headline(_heat)
             out['exclude_reason'] = '과열 — 추격 위험'
         else:
             out['kind'] = 'observe'
@@ -409,7 +468,7 @@ def build(four_scores, tech_df, price, verdict=None):
     #    무엇을 기다리는지 반드시 적는다. 이게 이 모듈의 존재 이유다.
     if hot:
         out['kind'] = 'pullback'
-        out['headline'] = '급등 직후입니다 — 지금은 추격매수하지 마세요.'
+        out['headline'] = _hot_headline(_heat)
         out['exclude_reason'] = '과열 — 추격 위험'
     elif out['gap_band'] == '눌림목 대기':
         out['kind'] = 'pullback'
