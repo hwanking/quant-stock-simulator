@@ -280,6 +280,9 @@ __LIB__
   .rngbtn { border:1px solid var(--bd); background:transparent; color:var(--lg);
     border-radius:7px; padding:2px 9px; cursor:pointer; font-size:12px; }
   .rngbtn.on { background:#2997ff; color:#fff; border-color:#2997ff; }
+  .tfbtn { border:1px solid var(--bd); background:transparent; color:var(--lg);
+    border-radius:7px; padding:2px 9px; cursor:pointer; font-size:12px; }
+  .tfbtn.on { background:#30d158; color:#0b1220; border-color:#30d158; }
   /* 지표 선택창 */
   #indWrap { position: relative; }
   #indBtn { border:1px solid var(--bd); background:transparent; color:var(--tx);
@@ -303,6 +306,9 @@ __LIB__
   .pane { position: relative; }
   .plabel { position:absolute; left:10px; top:6px; z-index:3; font-size:12px;
     color: var(--lg); pointer-events:none; }
+  .sep { width:1px; height:18px; background:var(--gr); margin:0 6px; }
+  .tfbtn.off { opacity:.45; cursor:not-allowed; }
+  #tfnote { padding: 2px 12px 0 12px; font-size: 12px; color: var(--lg); }
   #attrib { text-align:right; padding: 3px 12px 6px 0; font-size: 12px; }
   #attrib a { color: var(--lg); opacity: .6; text-decoration: none; }
 </style></head>
@@ -314,6 +320,12 @@ __LIB__
     <button class="rngbtn" data-m="6">6개월</button>
     <button class="rngbtn on" data-m="12">1년</button>
     <button class="rngbtn" data-m="0">전체</button>
+    <span class="sep"></span>
+    <button class="tfbtn on" data-tf="D">일봉</button>
+    <button class="tfbtn" data-tf="W">주봉</button>
+    <button class="tfbtn" data-tf="M">월봉</button>
+    <button class="tfbtn off" data-tf="m" disabled
+      title="분봉 자료를 받지 않습니다. 이 저장소는 일봉만 수집하며, 그래서 같은 날 목표·손절이 함께 닿은 케이스를 성공으로 세지 않습니다(선도달 순서를 알 수 없으므로).">분봉 없음</button>
     <span style="flex:1"></span>
     <div id="indWrap">
       <button id="indBtn">지표 선택 ▾</button>
@@ -327,6 +339,7 @@ __LIB__
       </div>
     </div>
   </div>
+  <div id="tfnote"></div>
   <div id="legend"></div>
   <div class="pane" id="pMain"><div id="cMain"></div></div>
   <div class="pane" id="pVol"><span class="plabel">거래량</span><div id="cVol"></div></div>
@@ -527,8 +540,15 @@ chMain.subscribeCrosshairMove(p => {
 
 // ── 기간 버튼 ───────────────────────────────────────────
 function setRange(months) {
-  const n = D.candles.length;
-  const bars = months === 0 ? n : Math.min(n, Math.round(months * 21));
+  // 라운드 199 — 봉 단위마다 **한 달에 들어가는 봉 수가 다르다.**
+  //   일 21 · 주 4.3 · 월 1. 이걸 안 나누면 주봉에서 '1년' 이 5년치를
+  //   보여 준다 (같은 수를 다른 단위로 읽는 것 — 라운드 190 의 그 모양).
+  const perMonth = { D: 21, W: 4.3, M: 1 }[typeof curTf === 'undefined'
+    ? 'D' : curTf] || 21;
+  const n = (sCandle.data && sCandle.data() ? sCandle.data().length
+             : D.candles.length) || D.candles.length;
+  const bars = months === 0 ? n : Math.min(n, Math.max(5,
+    Math.round(months * perMonth)));
   chMain.timeScale().setVisibleLogicalRange({ from: n - bars - 0.5, to: n + 2 });
 }
 document.querySelectorAll('.rngbtn').forEach(b => b.onclick = () => {
@@ -536,6 +556,84 @@ document.querySelectorAll('.rngbtn').forEach(b => b.onclick = () => {
   b.classList.add('on'); setRange(parseInt(b.dataset.m));
 });
 setRange(12);
+
+// ── 봉 단위 (일·주·월) ──────────────────────────────────────
+//   사용자 지적: "종합차트에 분봉, 일봉, 주봉도 되게 해줘야지."
+//   주봉·월봉은 **일봉을 묶어** 만든다 — 새 자료를 받아 오지 않는다.
+//   시가=첫 봉 시가 · 고가=최고 · 저가=최저 · 종가=마지막 봉 종가 ·
+//   거래량=합. 지어내는 값이 없다.
+//   분봉은 **자료가 없다.** 버튼을 비활성으로 두고 이유를 적는다 —
+//   숨기면 "왜 없지"를 알 수 없다.
+function bucketKey(tsSec, tf) {
+  const d = new Date(tsSec * 1000);
+  if (tf === 'M') return d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1);
+  // 주: 그 주의 월요일로 묶는다 (ISO)
+  const wd = (d.getUTCDay() + 6) % 7;          // 월=0
+  const mon = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - wd);
+  return Math.floor(mon / 86400000);
+}
+function aggregate(tf) {
+  if (tf === 'D') return { candles: D.candles, volume: D.volume };
+  const cs = [], vs = [];
+  let key = null, cur = null, vol = 0;
+  for (let i = 0; i < D.candles.length; i++) {
+    const c = D.candles[i];
+    const t = (typeof c.time === 'number') ? c.time
+      : Math.floor(Date.parse(c.time + 'T00:00:00Z') / 1000);
+    const k = bucketKey(t, tf);
+    if (k !== key) {
+      if (cur) { cs.push(cur); vs.push({ time: cur.time, value: vol,
+        color: (D.volume[i - 1] || {}).color }); }
+      key = k; cur = { time: c.time, open: c.open, high: c.high,
+                       low: c.low, close: c.close }; vol = 0;
+    } else {
+      cur.high = Math.max(cur.high, c.high);
+      cur.low = Math.min(cur.low, c.low);
+      cur.close = c.close;
+    }
+    const v = D.volume[i];
+    if (v && typeof v.value === 'number') vol += v.value;
+  }
+  if (cur) { cs.push(cur); vs.push({ time: cur.time, value: vol }); }
+  return { candles: cs, volume: vs };
+}
+let curTf = 'D';
+const TF_LABEL = { D: '일봉', W: '주봉', M: '월봉' };
+function setTf(tf) {
+  if (tf === curTf) return;
+  curTf = tf;
+  const agg = aggregate(tf);
+  sCandle.setData(agg.candles);
+  if (live.vol) {
+    const vseries = Array.isArray(live.vol) ? live.vol[0] : live.vol;
+    if (vseries && vseries.setData) vseries.setData(agg.volume);
+  }
+  // 지표는 **일봉으로 계산된 값**이다. 주봉·월봉 캔들 위에 그대로 얹으면
+  // 다른 잣대를 겹쳐 읽게 된다 — 그래서 끈다 (라운드 190 의 교훈).
+  const note = document.getElementById('tfnote');
+  if (tf === 'D') {
+    note.textContent = '';
+  } else {
+    document.querySelectorAll('#gOverlay input, #gPane input').forEach(inp => {
+      if (inp.checked && inp.dataset.id !== 'vol') {
+        inp.checked = false; inp.dispatchEvent(new Event('change'));
+      }
+    });
+    note.textContent = TF_LABEL[tf] + '은 일봉을 묶어 만든 값입니다'
+      + ' (시가=첫 봉·고가=최고·저가=최저·종가=마지막 봉·거래량=합).'
+      + ' 지표는 일봉으로 계산한 값이라 함께 껐습니다 —'
+      + ' 다른 잣대를 겹쳐 읽지 않기 위해서입니다.';
+  }
+  setRange(parseInt(
+    (document.querySelector('.rngbtn.on') || { dataset: { m: '12' } }).dataset.m));
+}
+document.querySelectorAll('.tfbtn').forEach(b => {
+  if (b.disabled) return;
+  b.onclick = () => {
+    document.querySelectorAll('.tfbtn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); setTf(b.dataset.tf);
+  };
+});
 
 window.__dbg = { charts, sCandle, mainH };
 window.addEventListener('resize', () => {
