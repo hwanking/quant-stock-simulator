@@ -743,8 +743,14 @@ try:
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            '.portfolio', 'calibration.json'), encoding='utf-8') as _f:
         _cal_top = json.load(_f)
+    # ⚠️ 라운드 198 — 여기가 `total_cases` 였다. 라운드 197 이 '이어받은
+    #   행'(시세를 더는 못 받아 다시 채점하지 못한 케이스)을 도입하면서
+    #   **두 수가 갈렸다**: total_cases 183,792 vs 원장 184,769.
+    #   연구 문서와 스크립트는 **원장 행수**를 센다(`ledger_rows()`).
+    #   화면이 다른 수를 내밀면 §4 위반이다 — 원장 쪽으로 맞춘다.
     _STATUS_TOP = ('데이터 점검 완료', 'pos',
-                   f"되돌려 본 판단 {_cal_top.get('total_cases', 0):,}건")
+                   f"되돌려 본 판단 "
+                   f"{_cal_top.get('ledger_rows') or _cal_top.get('total_cases', 0):,}건")
 except Exception:
     _STATUS_TOP = ('데이터 점검 중', 'warn', '')
 
@@ -5380,9 +5386,13 @@ if _home_cal.get('total_cases'):
     _uk.section("이 판단, 얼마나 믿을 수 있나",
                 "과거로 되돌려 실제로 맞았는지 세어 본 결과입니다", theme=_theme, top=8)
     _uk.stat_tiles([
+        # 라운드 198 — 원장 행수를 쓴다(위 상태 줄과 같은 수). 이어받은
+        #   행이 있으면 **그 사실도 적는다** — 다시 채점되지 않은 수다(§3).
         {'label': '되돌려 본 판단',
-         'value': f"{_home_cal['total_cases']:,}",
-         'sub': f"모델 {_VER_NOW['model']}"},
+         'value': (f"{_home_cal.get('ledger_rows') or _home_cal['total_cases']:,}"),
+         'sub': (f"모델 {_VER_NOW['model']}"
+                 + (f" · 이어받음 {_home_cal['carried_over']:,}"
+                    if _home_cal.get('carried_over') else ''))},
         {'label': '60점+ 신호 연습 적중률',
          'value': (f"{_bzv['hit_rate']:.1f}%"
                    if _bzv.get('hit_rate') is not None else "미산출"),
