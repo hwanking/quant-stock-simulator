@@ -337,7 +337,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     )
 
 
-#: 과열 지표의 실제 키 이름. 라운드 35 에서 **이름을 잘못 읽고 있었다** —
+#: 과열 지표의 실제 키 이름 (라운드 190 에 문턱은 next_action 으로 옮겼다 —
+#: 아래 표는 그 이력을 남기기 위한 것이고 판정에는 쓰이지 않는다). 라운드 35 에서 **이름을 잘못 읽고 있었다** —
 #: bb_position/williams_r/rsi_14 로 찾았는데 엔진은 *_pct/*_value 로 내보낸다.
 #: 그래서 지표가 전부 None 이 되고, 대신 적정가 구간('크게 초과')만으로
 #: 과열을 판정했다. 그 결과 삼성전자·SK하이닉스처럼 유동성 최상위 종목이
@@ -349,17 +350,16 @@ _HEAT_KEYS = (('bb_position_pct', '볼린저', 95.0, 'ge'),
 
 
 def _heat_hits(fs):
-    """과열 지표 중 몇 개가 임계를 넘었나 · 읽은 값들."""
-    hits, parts, seen = 0, [], 0
-    for key, lbl, thr, _op in _HEAT_KEYS:
-        v = _f(fs.get(key))
-        if v is None:
-            continue
-        seen += 1
-        parts.append(f'{lbl} {v:.0f}')
-        if v >= thr:
-            hits += 1
-    return hits, seen, parts
+    """과열 지표 중 몇 개가 임계를 넘었나 · 읽은 값들.
+
+    ⚠️ 라운드 190 — 세는 일을 `next_action.heat_state()` **한 곳**으로
+      옮겼다. 문턱(95 / −10 / 75)이 두 파일에 각각 적혀 있었고, 우연히
+      같았을 뿐 한쪽만 고치면 어긋나는 상태였다. **결합 규칙은 각자
+      그대로다** — 여기는 3중 2, next_action 은 3중 1. 규칙을 바꾸는 것은
+      게이트를 바꾸는 일이라 측정 없이 하지 않는다 (§2).
+    """
+    st = _value_gate.heat_state(fs)
+    return st['hits'], st['seen'], st['parts']
 
 
 def _overheated(fs):

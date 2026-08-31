@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.08.31.4",
+  "model": "v2026.08.31.5",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.16.1",
   "schema": "v2026.08.31.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.08.31.5",
+   "previous": "v2026.08.31.4",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "R190 — 단위가 다른 두 sigma 를 곱해 읽히던 문장과, 두 벌이던 과열 문턱을 정리",
+   "note": "R188 감사 후속. (a) 배너 설명이 20봉 sigma%(horizon_sigma_pct)와 하루 sigma 배수(depth_sigma)를 곱해 읽혀 sqrt(20)=4.47배 어긋났다 — \"20일 보통 13.4% 움직이는데 2.23배\"는 29.9%를 뜻하지만 실제 거리는 6.7%. 판정이 쓰는 자(2.1 sigma · R35)가 하루 단위라 문장을 하루로 맞췄다. 문턱 불변. (b) 카드의 sigma 가 폐기 산식(recommended_buy_price) 기준이라 화면에 뜬 가격과 달랐다 — 배너는 R37 에 고쳤는데 카드만 남아 있었다. 중앙 판정 depth_sigma 로 통일. (c) 과열 문턱 95/-10/75 가 next_action 과 verdict_core 에 각각 있었고 결합 규칙이 3중1 vs 3중2 라 지표 하나만 켜지면 배지는 오늘 매수 가능, 본문은 급등 직후가 되어 한 카드가 두 말을 했다(5중 3). 규칙은 그대로 두고 세는 일만 next_action.heat_state 한 곳으로 모은 뒤, 머리말이 과열 지표 n/m 을 적게 했다 — 모순 3/5 → 0/5.",
+   "created_at": "2026-08-31T07:40:18+00:00",
+   "effective_from": "2026-08-31"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

@@ -2706,7 +2706,23 @@ def _build_reco_card(p, news_txt, conf_txt):
             e_stop = None
         if e_t1 is not None and float(e_t1) <= float(rec):
             e_t1 = None
-    sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
+    # ⚠️ 라운드 190 — 카드의 σ가 **화면에 뜼 가격과 다른 값** 기준
+    #   이었다. `rec_buy_sigma` 는 엔진이 적정가×안전마진
+    #   (`recommended_buy_price` · 라운드 25 폐기 산식)으로 쟠 값인데,
+    #   카드가 그리는 가격은 `pullback_zone`(현재가−1σ)이다.
+    #   배너는 이미 고쳤는데(:6511 주석) 카드만 남아 한 줄이
+    #   `211,023원 · −8.5% · 1.05σ` 처럼 앞뒤 기준이 달랐다.
+    #   **중앙 판정의 값을 쓴다** (§4 — 화면 값은 한 곳에서).
+    #   단위도 같아진다: `depth_sigma` 는 **하루 σ 배수**고,
+    #   배너의 사다리(0.5/1.0/2.1)가 바로 그 단위다.
+    _core_sig = (_core or {}).get('depth_sigma')
+    if _core_sig is not None:
+        sig = _core_sig
+        reach = ('가까움' if sig <= 0.5 else
+                 '닿을 만함' if sig <= 1.0 else
+                 '멀다' if sig <= 2.1 else '사실상 도달 어려움')
+    else:                                  # 중앙 판정이 없는 옛 리포트
+        sig, reach = p.get('rec_buy_sigma'), p.get('rec_buy_reach')
     gap = ((float(price) / float(rec) - 1) * 100
            if (price and rec) else None)
     far = bool(sig is not None and sig > 2.0) or bool(
@@ -6512,6 +6528,9 @@ if _e_stop and _e_t1:
 # 228,287원을 보여 주면서 "−41.0% · 1.05σ · 멀다"라고 말하는 어긋남이 났다.
 _rc_sig = (CORE or {}).get('depth_sigma')
 _rc_drop = (CORE or {}).get('gap_pct')
+# 라운드 190 — 위 배수와 **같은 단위**의 σ (하루). 화면 문장이 이 둘을
+# 곱해 읽히므로 출처가 어긋나면 안 된다 (§4).
+_core_vol20 = (CORE or {}).get('vol_20')
 if _rc_sig is None:                       # 중앙 판정이 못 낸 경우만 폴백
     _rc_sig = four_scores.get('rec_buy_sigma')
     _rc_drop = four_scores.get('rec_buy_drop_pct')
@@ -6548,13 +6567,25 @@ if _rc_sig is not None:
            "계산된 매수가가 너무 멀어 곧 내려올 가능성이 낮습니다."
            if _rec_is_far else '')
         + "</p>")
+    # ⚠️ 라운드 190 — 이 문장이 **단위가 다른 두 값을 곱해** 읽히고 있었다.
+    #   `_sig_pct`(horizon_sigma_pct)는 **20봉 σ**(하루 σ×√20)인데
+    #   `_rc_sig`(depth_sigma)는 **하루 σ 배수**다. "20일 보통 13.4%
+    #   움직이는데 매수가까지 2.23배" 라고 적으면 29.9% 라는 뜻이 되지만
+    #   실제 거리는 6.7% 다 — **√20 ≈ 4.47배 어긋난다**(실측:
+    #   _probe/r190_sigma.py). 판정이 쓰는 자(2.1σ · 라운드 35)가 하루 σ
+    #   이므로 **문장도 하루 σ 로 맞춘다.** 문턱은 안 건드린다.
+    _day_sig_pct = ((_core_vol20 or 0) * 100.0) if _core_vol20 else None
     _reach_more = (
-        f"<b>'닿을 만하다'를 어떻게 재나</b> — 이 종목은 20일 동안 보통 "
-        f"<b>{_sig_pct}%</b>쯤 움직입니다. 위 매수가까지는 그 평소 움직임의 "
-        f"<b>{_rc_sig}배</b>({_rc_sig}σ) 거리입니다.<br>"
-        f"1배 안쪽이면 흔한 움직임, 2배를 넘으면 20일 안에 보기 드문 "
-        f"움직임입니다. 그래서 '{_rc_reach}'로 적었습니다 — 종목마다 평소 "
-        f"움직임이 다르므로 <b>%가 아니라 배수로</b> 잽니다.")
+        f"<b>'닿을 만하다'를 어떻게 재나</b> — 이 종목은 <b>하루</b>에 보통 "
+        + (f"<b>{_day_sig_pct:.1f}%</b>" if _day_sig_pct else "얼마나")
+        + f"쯤 움직입니다. 위 매수가까지는 그 <b>하루 움직임의 "
+        f"{_rc_sig}배</b>({_rc_sig}σ) 거리입니다.<br>"
+        f"1배 안쪽이면 흔한 하루 움직임, 2.1배를 넘으면 20일 안에 닿을 "
+        f"확률이 60% 아래로 떨어집니다(라운드 35 실측 · n=5,389). "
+        f"그래서 '{_rc_reach}'로 적었습니다 — 종목마다 평소 움직임이 "
+        f"다르므로 <b>%가 아니라 배수로</b> 잽니다."
+        + (f"<br>참고로 20거래일 전체로는 보통 <b>{_sig_pct}%</b>쯤 "
+           f"움직입니다(하루 σ×√20)." if _sig_pct else ''))
 
 # 논리 검사 — 사용자가 요청한 조건을 자동으로 걸고, 어긋나면 화면에 적는다
 _logic_warn = []
