@@ -18,7 +18,11 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LED = os.path.join(BASE, '.portfolio', 'virtual_graded.jsonl')
 PATHS = os.path.join(BASE, '.portfolio', 'virtual_paths.jsonl')
 
-COST = 0.41                 # 왕복 거래비용 % — 현행 엔진과 같은 값
+COST = 0.41                 # 왕복 거래비용 % — TOTAL_COST_PCT(규칙집 항목 합)
+#  ⚠️ 라운드 191 — 종전 주석이 '현행 엔진과 같은 값' 이라 적었는데 **거짓**
+#     이다. 운영 게이트(verdict_core.COST_PCT)는 0.36 이고 저장소에는
+#     0.30·0.36·0.41 셋이 쓰인다. 계보와 판정 기준은
+#     docs/PREREG_R191_COST_UNIFY.md 에 적었다.
 BUY = 58                    # 매수권 문턱 — 화면의 국면 표와 같은 기준
 VOL_CUT = 0.03
 #: 경로를 소수 3자리로 저장한 데서 오는 경계 오차 허용치

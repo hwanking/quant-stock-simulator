@@ -1602,7 +1602,10 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
             _row('손절', _won(b.get('stop')),
                  (f"{b['stop_pct']:+.1f}%" if b.get('stop_pct') else ''),
                  t['down']),
-            _row('손익비', (f"{b['rr']}:1" if b.get('rr') else None)),
+            # 라운드 191 — 이 rr 은 CORE.rr(= entry_rr · 진입가·1차 목표)다.
+            # 홈 표의 '손익비'(reward_risk_ratio · 현재가·2차)와 다른 값이라
+            # 기준을 이름에 넣는다.
+            _row('손익비(진입가·1차)', (f"{b['rr']}:1" if b.get('rr') else None)),
             _row('예상 보유', f"{b.get('horizon')}거래일"),
         ))
         ev = b.get('expected')
