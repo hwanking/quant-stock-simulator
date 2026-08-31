@@ -486,7 +486,8 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
         if any(x in failed for x in ('손익비(진입가·1차) 기준 이상',
                                      '비용 차감 기대값 양수')):
             return '눌림목 매수 대기', (
-                '지금 가격에서는 손익비·기대값이 기준에 못 미칩니다. '
+                '지금 가격에서는 손익비(진입가·1차)·기대값이 기준에 '
+            '못 미칩니다. '
                 '더 낮은 자리에서만 셈이 맞습니다.')
         return '추천 제외', ' / '.join(failed[:3])
     return '눌림목 매수 대기', ' / '.join(failed[:3])

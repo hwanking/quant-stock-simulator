@@ -152,6 +152,37 @@ def _render_ok(res):
     return bool(res.get('ok')) and res.get('exceptions') == 0
 
 
+# ──────────────────────────────────────────────────────────────────
+# 이모지 판별은 **한 곳**에서 (라운드 192)
+#
+#   라운드 114 가 `⏳` 를 놓친 뒤 §110 의 범위를 계열 통째로
+#   넓혔다. 그런데 같은 판별식이 저장소에 **여섯 벌** 더 있었고
+#   전부 그 전 범위에 멈춰 있었다 — 계열 단위로 §97 은 7/7,
+#   §92 는 5/7, 나머지 넷은 6/7 을 통째로 못 본다.
+#   손 목록이 낡듯 **베낀 패턴도 낡는다.** 그래서 기본값을 한 곳에
+#   두고 여섯 자리가 그것을 부른다 (라운드 120e 의 규율 —
+#   호출부를 하나씩 고치지 않는다).
+#
+#   실측(2026-08-31 · 유도 37개 모듈 · 주석 포함): 넓은 패턴만 잡는
+#   글자가 여섯이다 — U+23F1 · U+FE0F(여섯 벌 전부가 못 봄) ·
+#   U+26A0 · U+26AA · U+2717 · U+2794(§97 이 못 봄). 전부 산문
+#   안이라 **오늘 화면에 나가는 것은 없다** — 이번 고침은 예방이다.
+# ──────────────────────────────────────────────────────────────────
+_EMOJI_RE = _re.compile(
+    '[\U0001F300-\U0001FAFF\U00002600-\U000027BF'
+    '\U0001F1E6-\U0001F1FF\U00002B00-\U00002BFF'
+    '\U00002300-\U000023FF\U000020E3\U0000FE0F'
+    '\U00002900-\U0000297F]')
+#: 이모지 범위에 들지만 **금융 화면에서 쓰는** 기호 — 통과시킨다
+_EMOJI_KEEP = set('→←↑↓↔·—–…‘’“”×÷≥≤±✓')
+
+
+def emoji_hits(text):
+    """이모지만 돌려준다 — 화살표·중점·말줄임은 제외."""
+    return [c for c in _EMOJI_RE.findall(str(text or ''))
+            if c not in _EMOJI_KEEP]
+
+
 def section(title):
     print()
     print("=" * 72)
@@ -675,8 +706,22 @@ gc = fs.get('gate_checks') or []
 check("게이트가 구조화됨", all(isinstance(g, dict) and 'passed' in g for g in gc), f"{len(gc)}개")
 failed = [g for g in gc if not g['passed']]
 passed = [g for g in gc if g['passed']]
-check("미충족 항목은 '<' 로 표기", all('<' in g['text'] or g['threshold'] == '' for g in failed),
+# 라운드 192 — 이 규칙이 **없는 비교를 강제하고 있었다.** 값이 없으면
+#   `a` 가 "미산출" 인데 규칙이 '<' 를 요구하니 화면에
+#   `순기대수익 미산출 < +2.0%` 가 나갔다 (§3 — 못 잰 것으로 비교를
+#   만들지 않는다). 규칙을 현실에 맞춘다: 값이 있으면 '<', 없으면
+#   **미산출이라고 말하고 기준은 따로** 적는다.
+check("미충족 항목은 '<' 로 표기 (값이 있을 때)",
+      all('<' in g['text'] or g['threshold'] == '' or g['actual'] == '미산출'
+          for g in failed),
       "; ".join(g['text'] for g in failed[:2]))
+check("못 잰 값으로 부등호 문장을 만들지 않는다",
+      not [g for g in gc if '미산출 <' in g['text'] or '미산출 ≥' in g['text']],
+      "; ".join(g['text'] for g in gc if '미산출' in g['text'])[:160])
+check("미산출 항목도 기준은 밝힌다",
+      all(('기준' in g['text'] and g['threshold'] in g['text'])
+          for g in gc if g['actual'] == '미산출' and g['threshold']),
+      "; ".join(g['text'] for g in gc if g['actual'] == '미산출')[:160])
 check("충족 항목은 '≥' 로 표기", all('≥' in g['text'] or g['threshold'] == '' for g in passed),
       "; ".join(g['text'] for g in passed[:2]))
 check("block_reasons == 미충족 항목 문구",
@@ -3008,8 +3053,25 @@ if _os.path.exists(_cal55):
               (_b60.get('avg_return') or -1) - 0.55 > 0, str(_b60.get('avg_return')))
     else:
         # 라운드 188 — 표본 미충족은 '통과'가 아니라 '못 쟀다'다
+        # 라운드 192 — 그런데 **사유가 틀린 말**을 하고 있었다.
+        #   `표본 미충족 n=55695/None/None` 이라 적었지만 표본은
+        #   미충족이 아니다 — 검사가 찾는 (50,59)·(60,100) 칸이
+        #   산출물에 **없다.** 랩이 칸을 더 잘게 갈랐고(50-54·55-59 /
+        #   60-64·65-69·70-100) 검사는 옛 이름을 물었다. `.get()` 이
+        #   `{}` 를 주니 n 이 0 이 되어 표본에서 떨어진 것처럼 보였다.
+        #   라운드 165 의 '사유를 섞지 않는다' 와 같은 자리다.
+        #   계약을 되살릴지는 docs/PREREG_R192_BAND_MONOTONE.md 로.
+        _missing55 = [f'({_lo},{_hi})' for _lo, _hi in
+                      ((40, 49), (50, 59), (60, 100))
+                      if (_lo, _hi) not in _bands55]
+        _have55 = ', '.join(f'({b["lo"]},{b["hi"]}):n={b.get("n")}'
+                            for b in _c55.get('bands', []))
         skipped("점수 구간 적중률 단조 증가 (점수가 확률을 실제로 구분)",
-                f"표본 미충족 n={_b40.get('n')}/{_b50.get('n')}/{_b60.get('n')}")
+                (f"밴드 키 불일치 — 검사가 찾는 칸 {', '.join(_missing55)} 이"
+                 f" 산출물에 없다 · 산출물의 칸: {_have55}"
+                 if _missing55 else
+                 f"표본 미충족 n={_b40.get('n')}/{_b50.get('n')}"
+                 f"/{_b60.get('n')}"))
     check("유형·시장·국면별 성과 분해 저장", 'breakdowns' in _c55)
 else:
     # 라운드 188 — 캘리브레이션 파일이 없으면 이 절은 **안 돈 것**이다.
@@ -5006,9 +5068,10 @@ check("되돌림이 일반 code 규칙보다 뒤에 온다 (순서로 이긴다)
 # ⑥ 사라질 API·폰트에 없는 글자
 check("use_container_width 를 쓰지 않는다 (2025-12-31 제거)",
       'use_container_width' not in _w92 and 'use_container_width' not in _u92)
-_EMO92 = _re92.compile('[\U0001F300-\U0001FAFF☀-➿⬀-⯿]')
+# 라운드 192 — 판별식은 한 곳에서 (종전엔 여기 자기 패턴이 있었고
+#   U+2300-23FF · U+20E3 · VS16 · U+2900-297F 를 못 봤다)
 _bademo = [ln for ln in _w92.split('\n')
-           if _EMO92.search(ln) and not ln.lstrip().startswith('#')
+           if emoji_hits(ln) and not ln.lstrip().startswith('#')
            and any(k in ln for k in ('set_title', 'annotate', 'set_xlabel',
                                      'set_ylabel', 'suptitle'))]
 check("차트 라벨에 이모지를 쓰지 않는다 (한글 폰트에 글리프 없음)",
@@ -5413,8 +5476,9 @@ for _th97 in ('dark', 'light'):
             check(f"[{_th97}/{_k97}] 진입 기준 → 목표 → 손절 순서",
                   _h97.index(f'>{_lb97}</div>') < _h97.index('>1차 목표가</div>')
                   < _h97.index('>손절가</div>'))
+        # 라운드 192 — 종전 패턴은 U+2600-27BF(⚠✅❌)조차 못 봤다
         check(f"[{_th97}/{_k97}] 이모지를 쓰지 않는다",
-              not _re.search('[\U0001F300-\U0001FAFF]', _h97))
+              not emoji_hits(_h97), str(emoji_hits(_h97)[:3]))
         check(f"[{_th97}/{_k97}] 테두리를 쓰지 않는다 (§78)",
               'border:' not in _h97 and 'border-top:' not in _h97)
 
@@ -6787,12 +6851,10 @@ check("유도한 목록이 종전 손 목록을 전부 포함한다",
 #    시계·모래시계·미디어 기호가 전부 그 안에 있다(⌛⏰⏱⏸⏹⏺).
 #    가드가 **자기가 만들어질 때 있던 이모지만** 잡고 있었던 것이다.
 #    이름을 늘리는 대신 계열을 통째로 덮는다.
-_EMO110 = _re110.compile(
-    '[\U0001F300-\U0001FAFF\U00002600-\U000027BF'
-    '\U0001F1E6-\U0001F1FF\U00002B00-\U00002BFF'
-    '\U00002300-\U000023FF\U000020E3\U0000FE0F'
-    '\U00002900-\U0000297F]')
-_KEEP110 = set('→←↑↓↔·—–…‘’“”×÷≥≤±✓')
+#    라운드 192 — 이 패턴이 저장소에 여섯 벌 더 있었고 전부 위
+#    구멍이 난 그대로였다. 정의를 파일 맨 앞 한 곳으로 올렸다.
+_EMO110 = _EMOJI_RE
+_KEEP110 = _EMOJI_KEEP
 # 범위를 넓히기만 하고 끝내면 다음에 또 구멍이 난다 — **패턴이 실제로
 # 그 글자를 잡는지** 값으로 확인한다 (memory: 가드는 만들어진 실패만 잡는다)
 check("이모지 패턴이 시계·모래시계 계열을 잡는다 (U+2300-23FF)",
@@ -7248,8 +7310,8 @@ check("섹터 수신 패키지가 requirements 에 있다",
 
 # 이모지 금지 — 새 모듈도 예외가 아니다
 _scsrc114 = open(_os.path.join(PROJ, 'sector_cycle.py'), encoding='utf-8').read()
-check("sector_cycle 에 이모지가 없다",
-      not _re.search(r'[\U0001F300-\U0001FAFF☀-➿]', _scsrc114))
+check("sector_cycle 에 이모지가 없다",   # 라운드 192 — 판별식 단일화
+      not emoji_hits(_scsrc114), str(emoji_hits(_scsrc114)[:3]))
 
 # 물결표가 취소선으로 먹히지 않는가 (라운드 44 실측 결함)
 #   "25~75분위 범위 (넓게 보면 88,863~173,641원)" 이 화면에
@@ -7638,8 +7700,8 @@ import ui_kit as _ukmod118                                   # noqa: E402
 _h118 = _ukmod118.ticker_bar(_rows118)
 check("제목을 이스케이프한다 (XSS 방지)", '<script>' not in _h118)
 check("빈 목록이면 아예 그리지 않는다", _ukmod118.ticker_bar([]) == '')
-check("띠에 이모지가 없다",
-      not _re.search(r'[\U0001F300-\U0001FAFF☀-➿]', _h118))
+check("띠에 이모지가 없다",             # 라운드 192 — 판별식 단일화
+      not emoji_hits(_h118), str(emoji_hits(_h118)[:3]))
 
 # 뉴스 미수신을 '이슈 없음'으로 바꾸지 않는가
 _n118 = _lt118._news([], [{'ok': False, 'count': 0}])
@@ -7844,8 +7906,8 @@ _h120 = _ukmod118.trade_plan_card(
                  market=_tp120.market_state(2400, 2450, 2500, 2480)),
     name='테스트')
 check("카드가 그려진다", len(_h120) > 1000)
-check("카드에 이모지가 없다",
-      not _re.search(r'[\U0001F300-\U0001FAFF☀-➿]', _h120))
+check("카드에 이모지가 없다",           # 라운드 192 — 판별식 단일화
+      not emoji_hits(_h120), str(emoji_hits(_h120)[:3]))
 check("카드가 한계를 숨기지 않는다", '라운드 36' in _h120)
 check("화면이 지시서를 그린다",
       '_uk.trade_plan_card(' in _w120 and 'import trade_plan as _tp' in _w120)
@@ -8987,8 +9049,8 @@ check("라벨은 escape 하고 본문은 원문 유지 (숫자 서식이 살아�
 check("펼침에 Lucide 셰브런을 쓴다 (이모지 금지 · §5)",
       '<svg' in _d136 and 'ChevronDown' in str(_uk136._ICONS))
 import re as _re136                                            # noqa: E402
-check("펼침에 이모지가 없다",
-      not _re136.findall(r'[\U0001F300-\U0001FAFF☀-➿]', _d136))
+check("펼침에 이모지가 없다",           # 라운드 192 — 판별식 단일화
+      not emoji_hits(_d136), str(emoji_hits(_d136)[:3]))
 
 _w136 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 check("카드가 펼침을 실제로 그린다",
@@ -12471,6 +12533,48 @@ else:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 판정 경로는 **유도한다** (라운드 192)
+#
+#   "점수·판정이 X 를 읽지 않는다" 는 누수 검사가 일곱 절에 있고
+#   (§174 수급 · §177b 프리미엄 · §180 메모 · §182 공시 · §183 분류기 ·
+#    §184 평단가 · §199 본전), 대상 파일을 절마다 **손으로** 적어
+#   두었다 — 4~6개씩, 서로 다르게.
+#
+#   판정의 뿌리 다섯에서 import 로 닿는 모듈을 유도하면 **14개**다.
+#   실측(2026-08-31 · `_probe/r192_leak_scope.py`): 신규 대상 연인원
+#   **68개 · 실제 위반 0건**. 오늘 새는 것은 없다.
+#
+#   그런데 빠져 있던 것 중에 **next_action.py** 가 있다 — 라운드 185 가
+#   밸류 게이트를, 190 이 과열 판정을 **바로 그 모듈로 옮겨 넣었다.**
+#   판정 경로가 자란 뒤에도 일곱 목록 중 어느 것도 그 모듈을 몰랐다.
+#   **손 목록은 자란 쪽을 못 따라간다** (라운드 114 의 규율).
+#
+#   화면 모듈(web_app)·연구 수집 모듈(market_attention)은 유도에 안
+#   들어온다. 그건 절마다 뜻이 다르므로 그 절에서 **명시적으로** 더한다.
+# ══════════════════════════════════════════════════════════════════════
+_JUDGE_ROOTS192 = ('verdict_core.py', 'quant_indicators.py', 'price_axes.py',
+                   'regime_policy.py', 'premarket.py')
+_JUDGE_PATH192 = set()
+for _r192 in _JUDGE_ROOTS192:
+    if _os.path.exists(_os.path.join(PROJ, _r192)):
+        _JUDGE_PATH192 |= set(_la135.reachable_modules(_r192))
+_JUDGE_PATH192 = tuple(sorted(
+    (_m if _m.endswith('.py') else _m + '.py')
+    for _m in _JUDGE_PATH192 if not _m.startswith('scripts/')))
+# 유도 결과의 **개수를 찍는다** — 숫자가 움직이면 안 보던 것이 있었다는
+# 뜻이다 (라운드 120e). 그리고 손 목록이 몰랐던 모듈이 실제로 들어왔는지
+# 값으로 확인한다.
+check("판정 경로를 손으로 적지 않고 유도한다 (12개 이상)",
+      len(_JUDGE_PATH192) >= 12, f'{len(_JUDGE_PATH192)}개')
+check("유도가 종전 손 목록을 전부 포함한다",
+      all(_f in _JUDGE_PATH192 for _f in _JUDGE_ROOTS192),
+      str([_f for _f in _JUDGE_ROOTS192 if _f not in _JUDGE_PATH192]))
+check("게이트가 옮겨 간 모듈이 판정 경로에 들어온다 (R185·R190)",
+      'next_action.py' in _JUDGE_PATH192,
+      '손 목록 일곱 벌 중 어느 것도 next_action 을 몰랐다')
+
+
+# ══════════════════════════════════════════════════════════════════════
 # §174 — 수급 수집이 '수집'에서 멈추는가 (라운드 130)
 #
 #   사용자가 영상 요약을 주며 제안했다: 외국인 연속 순매수에 **+5점**,
@@ -12519,8 +12623,7 @@ if _os.path.exists(_rec174) and _os.path.exists(_doc174p):
           f"{_fr174.code_of('005930.KS')} / {_fr174.code_of('SPY')}")
 
     # ⓑ 점수·판정 경로가 수급을 끌어다 쓰지 않는가
-    for _f174 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
-                  'regime_policy.py', 'web_app.py'):
+    for _f174 in _JUDGE_PATH192 + ('web_app.py',):
         _t174 = _read148(_os.path.join(PROJ, _f174))
         check(f"{_f174} 가 수급 기록을 읽지 않는다",
               'flow_recorder' not in _t174 and 'flow_daily' not in _t174)
@@ -12846,8 +12949,7 @@ check("실제 소스에서도 이름을 하나 이상 찾았다",
 # ⓖ 표시 전용임을 코드가 말하는가 — 판정·게이트에 안 쓴다
 check("표시 전용이라고 적었다 (라운드 28b)",
       '표시 전용' in _uks177 and '28b' in _uks177)
-for _f177b in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
-               'regime_policy.py'):
+for _f177b in _JUDGE_PATH192:
     check(f"{_f177b} 가 value_premium 을 쓰지 않는다",
           'value_premium' not in _read148(_os.path.join(PROJ, _f177b)))
 
@@ -13090,8 +13192,7 @@ finally:
         _os.remove(_tmp180)
 
 # ⓓ 메모가 판정으로 새지 않는가 (§9 — 앵커링 방지)
-for _f180 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
-              'regime_policy.py', 'premarket.py'):
+for _f180 in _JUDGE_PATH192:
     _t180 = _read148(_os.path.join(PROJ, _f180))
     check(f"{_f180} 가 관심종목 메모를 읽지 않는다",
           'target_buy' not in _t180 and 'load_watchlist' not in _t180)
@@ -13229,8 +13330,7 @@ if _os.path.exists(_rec182) and _os.path.exists(_doc182p):
           and 'crtfc' not in _s182.lower())
 
     # ⓑ 점수·판정이 공시 기록을 읽지 않는다
-    for _f182 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
-                  'regime_policy.py', 'premarket.py', 'web_app.py'):
+    for _f182 in _JUDGE_PATH192 + ('web_app.py',):
         check(f"{_f182} 가 공시 기록을 읽지 않는다",
               'disclosures_daily' not in _read148(
                   _os.path.join(PROJ, _f182))
@@ -13367,8 +13467,7 @@ if _os.path.exists(_dt183p) and _os.path.exists(_doc183p):
     #   → 재려는 것은 "이 모듈을 **가져다 쓰는가**" 이므로 import 문만 본다.
     _imp183 = _re.compile(r'^\s*(?:import\s+disclosure_types'
                           r'|from\s+disclosure_types\s+import)', _re.M)
-    for _f183 in ('market_attention.py', 'quant_indicators.py',
-                  'verdict_core.py', 'premarket.py', 'web_app.py'):
+    for _f183 in _JUDGE_PATH192 + ('market_attention.py', 'web_app.py'):
         check(f"{_f183} 가 연구 분류기를 import 하지 않는다",
               not _imp183.search(_read148(_os.path.join(PROJ, _f183))))
     # 검사가 실제로 잡는지 심어서 확인한다 (0건이 '없다'인지 '못 봤다'인지)
@@ -13519,8 +13618,7 @@ finally:
         _os.remove(_tmp184)
 
 # ⓕ 매입가·수량이 판정으로 새지 않는가 (§9 — 앵커링 방지)
-for _f184 in ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
-              'regime_policy.py', 'premarket.py'):
+for _f184 in _JUDGE_PATH192:
     _t184 = _read148(_os.path.join(PROJ, _f184))
     check(f"{_f184} 가 관심종목 입력을 읽지 않는다",
           'load_watchlist' not in _t184 and 'snap_fair' not in _t184)
@@ -14984,8 +15082,7 @@ check("본전 줄 호출이 theme 을 넘긴다 (라이트 모드)",
       _re.search(r"breakeven_row\([^)]*theme=", _wa199, _re.S) is not None)
 
 # ⓕ 표시 전용 — 판정·게이트가 이 함수를 쓰지 않는다
-for _f199 in ('verdict_core.py', 'quant_indicators.py', 'regime_policy.py',
-              'price_axes.py'):
+for _f199 in _JUDGE_PATH192:
     _p199f = _os.path.join(PROJ, _f199)
     if _os.path.exists(_p199f):
         check(f"{_f199} 가 본전 계산을 쓰지 않는다 (표시 전용)",
@@ -17920,6 +18017,143 @@ check("§17 파이프라인이 그 줄을 실제로 지났다",
       isinstance(_epy222, float) and isinstance(_snap17, dict)
       and 'net_expected_return' in (_snap17.get('four_scores') or {}),
       '상수의 존재만 보면 NameError 를 못 본다')
+
+
+# ======================================================================
+# §223 — 베낀 판별식·손으로 적은 경로를 한 곳으로 (라운드 192)
+#
+#   라운드 114 는 **대상 목록**이 손으로 적혀 낡는다고 했다.
+#   이번에 나온 것은 그 사촌 둘이다:
+#     ⓐ **판별식**이 여섯 벌 베껴져 있고, R114 가 §110 한 벌만 넓혔다
+#     ⓑ **판정 경로**가 일곱 벌 손으로 적혀 있고 서로 다르다
+#   둘 다 고침은 같다 — 한 곳에 두고 나머지는 그것을 부른다.
+#   그리고 **또 베끼는 것을 검사가 막는다.**
+# ======================================================================
+print()
+print("=" * 72)
+print("§223 판별식·판정 경로 단일화 (라운드 192)")
+print("=" * 72)
+
+import ast as _ast223                                             # noqa: E402
+
+# ── ⓐ 이모지 문자군 리터럴이 이 파일에 **하나뿐인가** ──────────────
+#    자기참조를 피한다: 이 검사 자신은 이모지 문자를 담지 않고,
+#    파일을 AST 로 읽어 '[' 로 시작하는 문자열 상수 중 이모지 범위
+#    글자를 담은 것을 센다.
+_self223 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+_cls223 = []
+for _n223 in _ast223.walk(_ast223.parse(_self223)):
+    if (isinstance(_n223, _ast223.Constant) and isinstance(_n223.value, str)
+            and _n223.value.startswith('[')
+            and _EMOJI_RE.search(_n223.value)):
+        _cls223.append(_n223.lineno)
+check("이모지 문자군 리터럴이 이 파일에 하나뿐이다",
+      len(_cls223) == 1, f'{len(_cls223)}곳 {_cls223[:6]}')
+check("그 하나가 캐노니컬 정의다",
+      bool(_cls223) and '_EMOJI_RE' in _self223.splitlines()[_cls223[0] - 2],
+      str(_cls223))
+
+# 값으로 — 여섯 벌이 못 보던 글자를 이제 잡는가 (심어서 확인)
+check("판별식이 여섯 벌의 사각지대를 잡는다",
+      all(emoji_hits(_c223) for _c223 in
+          ('\U000023F1', '\U000026A0', '\U000026AA',
+           '\U00002717', '\U00002794', '\U0000FE0F')),
+      '못 잡는 글자: ' + str([hex(ord(_c223)) for _c223 in
+                             ('\U000023F1', '\U000026A0', '\U000026AA',
+                              '\U00002717', '\U00002794', '\U0000FE0F')
+                             if not emoji_hits(_c223)]))
+check("판별식이 금융 화면 기호는 통과시킨다",
+      not emoji_hits('→ · — … ≥ ± ✓'))
+check("emoji_hits 가 이모지가 없으면 빈 목록이다",
+      emoji_hits('현재가 132,500원 · 손익비 0.7:1') == [])
+
+# ── ⓑ 판정 경로가 유도이고, 손 목록보다 넓은가 ─────────────────────
+_HAND223 = {'quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+            'regime_policy.py', 'premarket.py'}
+check("유도한 판정 경로가 종전 손 목록보다 넓다",
+      len(set(_JUDGE_PATH192) - _HAND223) >= 5,
+      f'{len(set(_JUDGE_PATH192) - _HAND223)}개 더 본다')
+# 손 목록이 다시 손으로 돌아가지 않게 — 일곱 절이 유도를 부르는가
+_loops223 = _re.findall(r"for _f(?:174|177b|180|182|183|184|199) in ([^\n:]+):",
+                        _self223)
+check("누수 검사 일곱 자리를 전부 찾았다 (0개면 미측정)",
+      len(_loops223) == 7, f'{len(_loops223)}개')
+check("일곱 자리가 전부 유도 목록을 부른다",
+      all('_JUDGE_PATH192' in _l223 for _l223 in _loops223),
+      str([_l223 for _l223 in _loops223 if '_JUDGE_PATH192' not in _l223]))
+
+# ── ⓒ 건너뜀 사유가 밴드 키 불일치를 표본 미충족이라 하지 않는가 ───
+check("§55 건너뜀이 밴드 키 불일치를 갈라 적는다",
+      '밴드 키 불일치' in _self223 and '산출물의 칸' in _self223)
+check("계약 복원은 사전등록으로 넘겼다",
+      _os.path.exists(_os.path.join(PROJ, 'docs',
+                                    'PREREG_R192_BAND_MONOTONE.md')))
+_prereg223 = _read148(_os.path.join(PROJ, 'docs',
+                                    'PREREG_R192_BAND_MONOTONE.md'))
+check("사전등록이 측정 비용 순으로 적혀 있다 (§2-7)",
+      '측정 비용' in _prereg223 and '무료' in _prereg223)
+check("사전등록이 이미 아는 것을 결과 전에 적었다",
+      '라운드 110' in _prereg223 and '비단조' in _prereg223)
+
+# ── ⓓ 카드가 괴리를 다시 계산하지 않는가 ───────────────────────────
+_wa223 = '\n'.join(ln for _i223, ln in _la135.code_lines('web_app.py'))
+check("카드가 역수 괴리를 직접 계산하지 않는다",
+      "float(_p['price']) / float(_p['rec_buy'])" not in _wa223,
+      '§4 — 같은 개념을 네 번째로 재고 있었다')
+check("카드가 단일 출처의 gap_pct 를 읽는다",
+      "_core_gap" in _wa223 and "(_p.get('core') or {}).get('gap_pct')" in _wa223)
+# ⚠️ 카드만 고치고 **지시서를 놓쳤다.** 서버를 띄워 보니 같은 화면 한 장에
+#   `괴리 −5.0%`(다음 조건)와 `매수구간보다 +5.3% 위`(지시서)가 나란히
+#   있었다. 같은 결함의 두 번째 자리다 — 그래서 둘을 함께 잠근다.
+_tp223 = '\n'.join(ln for _i223, ln in _la135.code_lines('trade_plan.py'))
+check("지시서가 역수 괴리를 직접 계산하지 않는다",
+      "_pct(px, entry)" not in _tp223,
+      '카드와 같은 결함이 지시서에도 있었다 (§4)')
+check("지시서가 단일 출처의 gap_pct 를 읽는다",
+      "core.get('gap_pct')" in _tp223)
+check("지시서가 정합이 깨지면 문장을 비운다",
+      "_entry_of_gap" in _tp223 and "_above = None" in _tp223,
+      '두 숫자가 서로 다른 가격을 말하면 고치지 말고 비운다 (§4)')
+# 값으로 — 대수 변환이 옛 식과 같은 답을 내는가
+for _e223, _p223 in ((9000.0, 10000.0), (9500.0, 10000.0), (10000.0, 10000.0)):
+    _old223 = (_p223 / _e223 - 1.0) * 100.0
+    _g223 = (_e223 / _p223 - 1.0) * 100.0            # core['gap_pct']
+    _new223 = (100.0 / (100.0 + _g223) - 1.0) * 100.0
+    check(f"괴리 대수 변환이 옛 식과 같다 ({_e223:.0f}/{_p223:.0f})",
+          abs(_old223 - _new223) < 1e-9, f'{_old223:.6f} vs {_new223:.6f}')
+
+# ── ⓕ '손익비' 라벨이 **어느 잣대인지** 밝히는가 (유도 전수) ────────
+#    라운드 191 이 이걸 고쳤는데 그 검사의 대상이 **손으로 적은 두
+#    파일**(web_app · ui_kit)이었다. 유도 37개를 전수로 세니 여덟만
+#    고쳐졌고 **열다섯이 남아 있었다** — 그리고 그 열다섯이 두 값을
+#    섞어 가리켰다. 화면에서 실제로 나란히 보였다:
+#      판정 근거 `손익비 1.07 < 1.30`  (reward_risk_ratio · 현재가·2차)
+#      지시서    `손익비 0.7:1`        (entry_rr · 진입가·1차)
+#    이번 라운드의 주제 그대로다 — **손 목록은 자란 쪽을 못 따라간다.**
+_RRB223 = ('진입가', '현재가', '1차', '2차', 'Reward/Risk')
+_rrhits223, _rrbad223 = 0, []
+for _m223b in _mods222:
+    _p223b = _os.path.join(PROJ, _m223b if _m223b.endswith('.py')
+                           else _m223b + '.py')
+    if not _os.path.exists(_p223b):
+        continue
+    try:
+        _t223b = _ast223.parse(_read148(_p223b))
+    except SyntaxError:
+        continue
+    for _n223b in _ast223.walk(_t223b):
+        if (isinstance(_n223b, _ast223.Constant)
+                and isinstance(_n223b.value, str)
+                and '손익비' in _n223b.value):
+            _rrhits223 += 1
+            if not any(_b223 in _n223b.value for _b223 in _RRB223):
+                _rrbad223.append(f"{_m223b}:{_n223b.lineno} "
+                                 f"{_n223b.value.strip()[:40]}")
+# 0건이면 '위반 없음'이 아니라 **미측정**이다 — 먼저 몇 개를 봤는지 센다
+check("'손익비' 문자열을 유도 전수로 찾았다 (0개면 미측정)",
+      _rrhits223 >= 15, f'{_rrhits223}개')
+check("'손익비' 라벨이 전부 어느 잣대인지 밝힌다",
+      not _rrbad223, f'{len(_rrbad223)}개 — ' + '; '.join(_rrbad223[:4]))
 
 print()
 print("=" * 72)

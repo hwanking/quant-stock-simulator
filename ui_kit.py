@@ -1071,7 +1071,7 @@ def breakeven_line(be, observed=None):
         return '', None
     if observed is None:
         return (f"본전에 필요한 적중률 {be['pct']:.1f}% "
-                f"(손익비 {be['rr']:.2f}:1)"), None
+                f"(손익비(진입가·1차) {be['rr']:.2f}:1)"), None
     obs = float(observed)
     gap = obs - be['pct']
     tail = (f"{abs(gap):.1f}%p {'넘습니다' if gap >= 0 else '모자랍니다'}")

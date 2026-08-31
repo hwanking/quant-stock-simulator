@@ -155,7 +155,8 @@ def _ans_buy_now(ctx):
                     else ''))
     lines.append(f"1차 목표 {_w(ctx.get('new_target')) or NA} · "
                  f"손절 {_w(ctx.get('new_stop')) or NA}"
-                 + (f" · 손익비 {ctx['rr']}:1" if ctx.get('rr') else ''))
+                 + (f" · 손익비(진입가·1차) {ctx['rr']}:1"
+                    if ctx.get('rr') else ''))
     why = []
     if gap is not None and gap > 1:
         why.append(f'현재가와 검증된 진입 기준의 괴리 {gap:+.1f}%')

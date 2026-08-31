@@ -3897,10 +3897,32 @@ if _pmr:
             _news_txt.append(f"후행 보도 {_p['news_lagging']}건 제외")
         # 갭 표기 (라운드 2.5) — 조건부 매수가와 현재 기준가의 거리. 갭이 크면
         # 실측상 '추격 위험' 구간 성과가 최악(54.6%·비용후 -0.98%)임을 경고한다.
+        #
+        # ⚠️ 라운드 192 — 여기가 **괴리를 재는 넷째 자리**였고, 게다가
+        #   부호가 반대였다. 나머지 셋은 전부 `(권장/현재 − 1)` 이다:
+        #     verdict_core.gap_pct · next_action.gap_pct · price_axes.gap_pct
+        #   이 줄만 `(현재/권장 − 1)` 로 **역수**를 쟀다. 같은 행에
+        #   `core['gap_pct']` 가 이미 실려 있는데도 직접 다시 계산했다 —
+        #   §4 가 금지한 그것이다(경로가 둘이면 한쪽만 고치는 일이 생긴다).
+        #   이제 단일 출처에서 읽고, 화면이 쓰는 '현재가가 권장보다 얼마나
+        #   위인가'는 그 값에서 **대수로** 유도한다. 분모(현재가)는
+        #   같은 값이고(_core_of 가 realtime_price=base_price 로 부른다),
+        #   분자는 엔진이 **실제로 쓰는 진입가**다. 눌림가와 진입 축이
+        #   같은 종목은 숫자가 그대로고, 다른 종목은 카드가 이제 엔진과
+        #   같은 가격을 기준으로 말한다 — §4 가 요구하는 것이 그것이다.
+        #   문턱 7% 는 그대로 뒀다 — 채택된 구간 규칙
+        #   (next_action.BANDS 5/10/15 를 ATR 로 조정)으로 바꾸면 카드의
+        #   경고 문구가 실제로 바뀐다. 그건 사전등록 감이다 (§2).
         _gap_html = ""
-        if _p.get('rec_buy') and _p.get('price') and '이하로 내려올 때만' in str(_p.get('easy_line')):
-            _gap_pct = (float(_p['price']) / float(_p['rec_buy']) - 1) * 100
-            if _gap_pct > 0:
+        _core_gap = ((_p.get('core') or {}).get('gap_pct')
+                     if isinstance(_p.get('core'), dict) else None)
+        if (_core_gap is not None and _p.get('rec_buy') and _p.get('price')
+                and '이하로 내려올 때만' in str(_p.get('easy_line'))):
+            # gap = (권장/현재 − 1)×100 (음수 = 권장가가 아래).
+            # 화면이 말하는 '현재가가 권장보다 얼마나 위' = 그 역수.
+            _denom = 100.0 + float(_core_gap)
+            _gap_pct = ((100.0 / _denom - 1.0) * 100.0 if _denom > 0 else None)
+            if _gap_pct is not None and _gap_pct > 0:
                 _gap_warn = (" — 갭이 커서 단기 도달 가능성이 낮습니다. 사실상 관망"
                              if _gap_pct >= 7 else "")
                 _gap_html = (f"<p style='margin:0 0 8px 0; font-size:12px; "
@@ -6516,7 +6538,8 @@ if _e_stop and _e_t1:
             _be_more = _uk.breakeven_hit_rate(
                 _core_entry, _e_stop, _e_t1, q_engine.TOTAL_COST_PCT)
             _entry_lv_more = (
-                f"<b>손익비 {_e_rr}:1 이 무슨 뜻이냐면</b> — 이 가격에 "
+                f"<b>손익비(진입가·1차) {_e_rr}:1 이 무슨 뜻이냐면</b> — "
+                f"이 가격에 "
                 f"사면 손절까지 <b>{_risk:,.0f}원</b>을 감수하고 1차 "
                 f"목표까지 <b>{_rewd:,.0f}원</b>을 노리는 자리입니다. "
                 f"1보다 작으면 <b>잃을 폭이 벌 폭보다 큽니다</b> — 그만큼 "
@@ -6601,7 +6624,8 @@ if _e_stop and rec_buy_val and _e_stop >= rec_buy_val:
     _logic_warn.append('신규 손절가가 매수가보다 높거나 같습니다')
 if _e_rr is not None and _e_rr < 1.0:
     _logic_warn.append(
-        f'신규 진입 손익비가 {_e_rr}:1 로 1:1 에 못 미칩니다 '
+        f'신규 진입 손익비(진입가·1차)가 {_e_rr}:1 로 1:1 에 '
+        f'못 미칩니다 '
         f'(목표를 손절거리의 0.7배로 잡는 현행 구조 탓 — 라운드 21 기록)')
 if (_gap_fair is not None and _gap_fair > 20
         and four_scores.get('target_tech_1st')
@@ -9391,7 +9415,7 @@ with tab_val:
                 if _e.get('gap_pct') is not None:
                     st.caption(f"현재가 대비 {_e['gap_pct']:+.1f}%"
                                + (f" · 손절 {_e['stop']:,.0f}원 · 1차 목표 "
-                                  f"{_e['target1']:,.0f}원 (손익비 {_e['rr']})"
+                                  f"{_e['target1']:,.0f}원 (손익비(진입가·1차) {_e['rr']})"
                                   if _e.get('stop') and _e.get('target1') else ""))
                 st.caption(_md_safe(_e['basis']))
             else:
