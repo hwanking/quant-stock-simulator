@@ -3197,6 +3197,19 @@ if _os.path.exists(_cal55):
           f"total_cases={_c55.get('total_cases')} · "
           f"carried_over={_c55.get('carried_over')} · "
           f"ledger_rows={_c55.get('ledger_rows')}")
+    # ── 라운드 198 — **화면과 문서가 같은 수를 말하는가** ─────────────
+    #   R197 이 '이어받은 행'을 도입하면서 두 수가 갈렸다:
+    #     total_cases  183,792  (이번 실행에서 새로 채점한 것)
+    #     ledger_rows  184,769  (원장 전체 — 연구 문서·스크립트가 세는 것)
+    #   화면이 total_cases 를 내밀고 있었다. 같은 질문에 두 답이면 §4 다.
+    _w198 = '\n'.join(ln for _i198, ln in _la135.code_lines('web_app.py')) \
+        if '_la135' in dir() else _w54
+    check("화면이 원장 행수를 쓴다 (문서·스크립트와 같은 수)",
+          "_cal_top.get('ledger_rows')" in _w198
+          and "_home_cal.get('ledger_rows')" in _w198,
+          '화면이 total_cases 를 내밀면 문서와 977건 어긋난다')
+    check("이어받은 행이 있으면 화면이 그 사실을 적는다",
+          "이어받음" in _w198, '다시 채점되지 않은 수는 밝힌다 (§3)')
     if isinstance(_c55.get('ledger_rows'), int):
         # ⚠️ `_sf151` 은 §151(10,600줄대)에서 임포트된다 — 여기서 쓰면
         #   **정의보다 먼저 쓰는** 것이라 실행에서 NameError 다.
