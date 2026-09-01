@@ -156,6 +156,8 @@ def _render(**kw):
             argv += ['--' + k.replace('_', '-'), str(v)]
     for k in kw.get('want_key') or []:
         argv += ['--want-key', k]
+    for k in kw.get('want_val') or []:        # 라운드 200 — 존재가 아니라 값
+        argv += ['--want-val', k]
     try:
         r = _sp.run(argv, cwd=PROJ, capture_output=True, text=True,
                     encoding='utf-8', errors='replace', timeout=2400)
@@ -18763,6 +18765,127 @@ check("언제 채워지는지 적는다", '10건을 넘으면 자동으로 채�
 check("§11 규칙은 그대로다 (10건 미만은 확률 비노출)",
       not qi.QuantIndicatorsEngine().probabilities_allowed('OBSERVATION_ONLY')
       and not qi.QuantIndicatorsEngine().probabilities_allowed('INSUFFICIENT'))
+
+print()
+
+# ======================================================================
+# §228 — 쓰기 금지가 **읽기까지** 끄지 않는가 (라운드 200)
+#
+#   라운드 165 가 규칙을 적었다: *"프로브가 GAEUM_NO_LOCAL_WRITE 를 켜고
+#   화면이 그때 **쓰기만** 멈춘다 — **읽기는 그대로 둔다**(읽기까지 끄면
+#   검사가 빈 화면을 본다)."*
+#
+#   **그 주석이 거짓이었다.** 이름이 `ALLOW_LOCAL_STORE` 하나뿐이라
+#   읽기와 쓰기가 안 갈렸고, 보유종목·관심종목 **로딩**이 그 하나로
+#   막혀 있었다. 그래서 회귀의 AppTest 렌더는 **늘 빈 목록**을 봤다 —
+#   **보유자 경로가 한 번도 검사된 적이 없다.**
+#   (라운드 199 의 '보유 연동' 수정을 값으로 확인하려다 드러났다.)
+#
+#   → 이름을 가른다: `ALLOW_LOCAL_READ`(원격만 막음) ·
+#     `ALLOW_LOCAL_STORE`(원격 + 쓰기 금지). 원격 노출에서는 종전대로
+#     둘 다 막는다 (§9 — 공용 파일이 방문자끼리 새면 안 된다).
+# ======================================================================
+print("=" * 72)
+print("§228 쓰기 금지가 읽기까지 끄지 않는가 (라운드 200)")
+print("=" * 72)
+
+_w228 = '\n'.join(ln for _i228, ln in _la135.code_lines('web_app.py'))
+check("읽기와 쓰기가 다른 이름이다",
+      'ALLOW_LOCAL_READ = not is_remote_exposed()' in _w228
+      and 'ALLOW_LOCAL_STORE = ALLOW_LOCAL_READ and not NO_LOCAL_WRITE' in _w228,
+      '이름이 하나면 읽기와 쓰기를 못 가른다')
+# 로딩 세 자리가 READ 를 쓰는가 — **손으로 적지 않고** AST 로 찾는다
+import ast as _ast228                                            # noqa: E402
+_t228 = _ast228.parse(_w228)
+# ⚠️ 이 판별식이 **두 번 넓었다.** 이번 세션이 반복해서 겪은 그 모양인데
+#   방향이 반대다 — 좁아서 못 본 게 아니라 **넓어서 오탐**했다.
+#     ① `ast.walk` 로 모든 If → 바깥 `if 'positions' not in ...` 이 안쪽
+#        로딩을 품어 함께 잡히고, 버튼 핸들러까지 걸렸다
+#     ② test 가 `ALLOW_LOCAL_*` 인 If → **저장 패널**이 걸렸다. 거기
+#        `load_positions()` 는 *"저장본 불러오기"* **버튼 핸들러**이고,
+#        그 패널이 `ALLOW_LOCAL_STORE` 로 막히는 것은 **옳다**(쓰기가
+#        금지된 곳에 저장 버튼을 보일 이유가 없다)
+#   → 재려는 것은 **세션 초기 로딩**이다. 그 모양만 본다:
+#     `if '<키>' not in st.session_state:` 안에서 플래그로 가르는 자리.
+_loads228, _bad228 = 0, []
+for _n228 in _ast228.walk(_t228):
+    if not isinstance(_n228, _ast228.If):
+        continue
+    _t0 = _ast228.unparse(_n228.test)
+    if 'not in st.session_state' not in _t0:
+        continue
+    for _in228 in _n228.body:
+        if not isinstance(_in228, _ast228.If):
+            continue
+        _t1 = _ast228.unparse(_in228.test)
+        if 'ALLOW_LOCAL_' not in _t1:
+            continue
+        if not any(k in _ast228.unparse(_in228)
+                   for k in ('load_positions()', 'load_watchlist()')):
+            continue
+        _loads228 += 1
+        if 'ALLOW_LOCAL_READ' not in _t1:
+            _bad228.append(f'{_t0[:30]} → {_t1[:30]}')
+check("세션 초기 로딩 자리를 찾았다 (0이면 미측정)", _loads228 >= 2,
+      f'{_loads228}곳 (positions·watchlist)', scanned=_loads228)
+check("초기 로딩은 ALLOW_LOCAL_READ 로 판단한다", not _bad228, str(_bad228))
+
+
+# ── 심어서 — 되돌리면 잡히는가, 옳은 모양은 통과하는가 ──────────────
+def _rw228(src):
+    _t = _ast228.parse(src)
+    n, bad = 0, []
+    for _n in _ast228.walk(_t):
+        if not isinstance(_n, _ast228.If):
+            continue
+        if 'not in st.session_state' not in _ast228.unparse(_n.test):
+            continue
+        for _i in _n.body:
+            if not isinstance(_i, _ast228.If):
+                continue
+            _t1 = _ast228.unparse(_i.test)
+            if 'ALLOW_LOCAL_' not in _t1:
+                continue
+            if not any(k in _ast228.unparse(_i)
+                       for k in ('load_positions()', 'load_watchlist()')):
+                continue
+            n += 1
+            if 'ALLOW_LOCAL_READ' not in _t1:
+                bad.append(_t1)
+    return n, bad
+
+
+_P_BAD228 = ("if 'positions' not in st.session_state:\n"
+             "    if ALLOW_LOCAL_STORE:\n"
+             "        x = portfolio.load_positions()\n")
+_P_OK228 = _P_BAD228.replace('ALLOW_LOCAL_STORE', 'ALLOW_LOCAL_READ')
+# 저장 패널은 STORE 가 **옳다** — 오탐하면 안 된다
+_P_PANEL228 = ("if ALLOW_LOCAL_STORE:\n"
+               "    if mg2.button('저장본 불러오기'):\n"
+               "        loaded = portfolio.load_positions()\n")
+check("§228 이 되돌린 것을 잡는다 (심어서)",
+      _rw228(_P_BAD228) == (1, ['ALLOW_LOCAL_STORE']), str(_rw228(_P_BAD228)))
+check("§228 이 옳은 모양은 통과시킨다 (심어서)",
+      _rw228(_P_OK228) == (1, []), str(_rw228(_P_OK228)))
+check("§228 이 저장 패널을 오탐하지 않는다 (심어서)",
+      _rw228(_P_PANEL228) == (0, []), str(_rw228(_P_PANEL228)))
+# 저장은 여전히 STORE 로 막히는가 (§9 — 프로브가 사용자 자료를 안 바꾼다)
+check("저장은 여전히 쓰기 금지를 본다",
+      'if ALLOW_LOCAL_STORE:' in _w228 and 'save_watchlist' in _w228)
+
+# ── 값으로 — 쓰기 금지로 렌더해도 **보유가 읽히는가** ────────────────
+#   존재가 아니라 값을 본다(§222 의 교훈). 그리고 이 확인은 **파일을
+#   바꾸지 않아야** 한다 — §201 이 이미 그것을 재고 있다.
+_own228 = _render(ticker='004370.KS',
+                  want_val=['pos_mode_004370_KS'])
+if _own228.get('ok'):
+    _pm228 = (_own228.get('vals') or {}).get('pos_mode_004370_KS')
+    check("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
+          _pm228 == '보유 중',
+          f'pos_mode={_pm228!r} — 빈 목록을 보면 아직 없음이 된다')
+else:
+    skipped("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
+            f"렌더 실패 — {_own228.get('error')}")
 
 print()
 print("=" * 72)

@@ -2147,10 +2147,20 @@ if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
 # 한 사람이 저장하면 다른 사람 화면에 그대로 나타난다. 세션에만 두고 CSV 로 내보낸다.
 #  ⚠️ 라운드 165 — 검사가 돌 때도 끈다. 회귀의 AppTest 렌더가 사용자
 #     자료를 바꾸면 안 된다 (§9). 읽기는 그대로다.
-ALLOW_LOCAL_STORE = not is_remote_exposed() and not NO_LOCAL_WRITE
+#
+#  ⚠️ 라운드 200 — **그 주석이 거짓이었다.** 이름이 `ALLOW_LOCAL_STORE`
+#     하나뿐이라 읽기와 쓰기가 안 갈렸고, 아래에서 그 하나로 **읽기를
+#     막고 있었다.** 그래서 `GAEUM_NO_LOCAL_WRITE=1` 로 도는 회귀의
+#     AppTest 렌더는 **보유종목·관심종목이 늘 빈 화면**을 봤다 —
+#     보유자 경로가 한 번도 검사된 적이 없다는 뜻이다.
+#     (라운드 199 의 '보유 연동' 수정을 값으로 확인하려다 드러났다.)
+#     → 읽기와 쓰기를 **다른 이름**으로 가른다. 원격 노출은 종전대로
+#       둘 다 막는다(§9 — 공용 파일이 방문자끼리 새면 안 된다).
+ALLOW_LOCAL_READ = not is_remote_exposed()
+ALLOW_LOCAL_STORE = ALLOW_LOCAL_READ and not NO_LOCAL_WRITE
 
 if 'positions' not in st.session_state:
-    if ALLOW_LOCAL_STORE:
+    if ALLOW_LOCAL_READ:
         _loaded, _saved_at = portfolio.load_positions()
         st.session_state['positions'] = _loaded
         st.session_state['positions_saved_at'] = _saved_at
@@ -2159,7 +2169,7 @@ if 'positions' not in st.session_state:
         st.session_state['positions_saved_at'] = None
 
 if 'watchlist' not in st.session_state:
-    if ALLOW_LOCAL_STORE:
+    if ALLOW_LOCAL_READ:                 # 라운드 200 — 읽기는 막지 않는다
         _wl, _ = portfolio.load_watchlist()
         st.session_state['watchlist'] = _wl
     else:

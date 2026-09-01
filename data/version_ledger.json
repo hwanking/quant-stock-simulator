@@ -3,12 +3,25 @@
   "model": "v2026.09.01.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.08.31.4",
-  "schema": "v2026.09.01.1",
+  "schema": "v2026.09.01.2",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.09.01.2",
+   "previous": "v2026.09.01.1",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "R200 - 쓰기 금지가 읽기까지 끄고 있었다 (보유자 경로 미검사)",
+   "note": "라운드 165 가 \"쓰기만 멈추고 읽기는 그대로 둔다\"고 적었는데 이름이 ALLOW_LOCAL_STORE 하나뿐이라 읽기와 쓰기가 안 갈렸고, 보유종목·관심종목 로딩이 그 하나로 막혀 있었다. GAEUM_NO_LOCAL_WRITE=1 로 도는 회귀의 AppTest 렌더는 늘 빈 목록을 봤다 - 보유자 경로가 한 번도 검사된 적이 없다. ALLOW_LOCAL_READ(원격만 막음)와 ALLOW_LOCAL_STORE(원격+쓰기금지)로 이름을 가르고, 저장 패널은 여전히 STORE 로 막는다. 값으로 확인: 농심(관심종목 평단 429,333원)은 보유 중, 삼성전자(평단 없음)는 아직 없음, watchlist.json 은 안 바뀜. §228 이 세션 초기 로딩만 AST 로 보고 심기 셋으로 양방향 확인한다. render_probe 에 --want-val 추가(키 존재가 아니라 값). 판정·게이트는 안 바뀐다.",
+   "created_at": "2026-08-31T22:06:18+00:00",
+   "effective_from": "2026-09-01"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
