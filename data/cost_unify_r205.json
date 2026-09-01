@@ -1,0 +1,42 @@
+{
+ "measured_at_rows": 187435,
+ "usable": 187413,
+ "carried_over_rows": 1654,
+ "prereg": "docs/PREREG_R191_COST_UNIFY.md",
+ "R3": {
+  "blind_n_58plus": 5515,
+  "hit_rate": 50.262919310970084,
+  "mean_ret_raw": -0.9414106980961001,
+  "net_ev": {
+   "0.3": -1.2414,
+   "0.36": -1.3014,
+   "0.41": -1.3514
+  },
+  "same_sign": true
+ },
+ "R4": {
+  "0.3": {
+   "passers_all": 702,
+   "blind_n": 193,
+   "blind_hit": 45.07772020725388,
+   "blind_mean_ret_raw": -3.4199481865284973
+  },
+  "0.36": {
+   "passers_all": 270,
+   "blind_n": 70,
+   "blind_hit": 44.285714285714285,
+   "blind_mean_ret_raw": -4.074
+  },
+  "0.41": {
+   "passers_all": 127,
+   "blind_n": 31,
+   "blind_hit": 48.38709677419355,
+   "blind_mean_ret_raw": -5.831612903225807
+  }
+ },
+ "R4_verdict": {
+  "comparable": true,
+  "strict_not_worse": false,
+  "note": "블라인드 통과분이 한쪽이라도 0건이면 R4 는 판정 불가 — 못 잰 것을 통과로 적지 않는다 (§3)"
+ }
+}
