@@ -18342,6 +18342,44 @@ check("지시서가 단일 출처의 gap_pct 를 읽는다",
 check("지시서가 정합이 깨지면 문장을 비운다",
       "_entry_of_gap" in _tp223 and "_above = None" in _tp223,
       '두 숫자가 서로 다른 가격을 말하면 고치지 말고 비운다 (§4)')
+# ── 라운드 206 — 경고 문턱 7% 를 채택 밴드로 (사전등록 실행) ─────────
+#   PREREG_R206 R1(닫힌 식): e1 = 10×scale ∈ [7.0, 25.0] 이라 고정 7% 는
+#   **항상** 매수 적격 구간('눌림목 대기') 안이다 — 카드가 관망을 말하는
+#   자리에서 엔진은 늘 적격이었다. R2(25종목 실측): 발화 1건 = 실제 모순.
+#   R3: 밴드('장기 관찰'+)로 걸면 모순이 정의상 불가능. → 채택.
+# ⚠️ 변수명 주의 — `_w206` 은 16,465줄(§206 이슈 카드 절)이 먼저 쓴다.
+#   순차 실행이라 재대입은 무해하지만 같은 이름이 두 절에 살면 읽는
+#   사람이 헷갈린다. 여기는 §223 확장이므로 접미를 잇는다.
+_w223g = '\n'.join(ln for _i223g, ln in _la135.code_lines('web_app.py'))
+check("카드 경고가 손 문턱 7% 를 쓰지 않는다",
+      '_gap_pct >= 7' not in _w223g,
+      '§2 — 손으로 고른 수 대신 채택된 구간 규칙을 재사용한다')
+check("카드 경고가 채택 밴드로 판정한다",
+      "('장기 관찰', '괴리 과다')" in _w223g
+      and "(_p.get('core') or {}).get('gap_band')" in _w223g)
+# 사전등록 링크는 **주석**에 있다 — code_lines() 는 산문을 걷어내므로
+# 이 한 건만 원문으로 본다 (§110 의 교훈을 거꾸로 쓴 것).
+check("사전등록을 가리킨다",
+      'PREREG_R206' in _read148(_os.path.join(PROJ, 'web_app.py')))
+# 값으로 — 밴드가 core 를 **지나가는가** (§4 · 통로 확인)
+_c206 = _vc105.build(
+    dict(entry_pullback_price=99.0, current_price=100.0,
+         entry_target_1st=110.0, entry_stop_price=92.0, entry_rr=0.7,
+         analysis_confidence=70, strategy_quality_score=60,
+         vol_20=0.03, avg_turnover_20d=1e9,
+         calibration_band=dict(hit_rate=58.0, n=1200),
+         blind_test_status='통과', bb_position_pct=50.0,
+         williams_r_value=-50.0, rsi_value=52.0,
+         displayed_fair_value=120.0, fair_value_status='CALIBRATED',
+         fair_overshoot_pct=-16.0),
+    {'action': 'HOLD', 'vetoes': []}, None,
+    {'kind': 'observe', 'gap_band': '장기 관찰'}, 100.0)
+check("gap_band 가 중앙 판정을 지나간다 (값으로)",
+      _c206.get('gap_band') == '장기 관찰', str(_c206.get('gap_band')))
+_c206b = _vc105.build({}, {'action': 'HOLD', 'vetoes': []}, None, {}, None)
+check("밴드가 없으면 None — 지어내지 않는다 (§3)",
+      _c206b.get('gap_band') is None, str(_c206b.get('gap_band')))
+
 # 값으로 — 대수 변환이 옛 식과 같은 답을 내는가
 for _e223, _p223 in ((9000.0, 10000.0), (9500.0, 10000.0), (10000.0, 10000.0)):
     _old223 = (_p223 / _e223 - 1.0) * 100.0
