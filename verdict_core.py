@@ -415,6 +415,10 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         # 라운드 193 — '다음 조건' 칸의 결론 문장. 화면은 이것만 읽는다.
         next_kind=next_kind, next_headline=next_headline,
         next_conditions=next_conditions,
+        # 라운드 206 — 괴리 밴드도 여기로 지나간다 (§4 — 카드가 자기만의
+        #   문턱을 만들지 않게). next_action 의 채택 규칙(BANDS × ATR)이
+        #   유일 출처이고 여기는 통로다. 없으면 None — 지어내지 않는다(§3).
+        gap_band=na.get('gap_band'),
         checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
         failed=failed,
         # 신규 매수자 가격 (한 기준: 진입가)

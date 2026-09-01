@@ -3988,11 +3988,22 @@ if _pmr:
             # 화면이 말하는 '현재가가 권장보다 얼마나 위' = 그 역수.
             _denom = 100.0 + float(_core_gap)
             _gap_pct = ((100.0 / _denom - 1.0) * 100.0 if _denom > 0 else None)
+            # 라운드 206 — 경고 문턱 **7% 를 걷어냈다.** 그 7 은 손으로 고른
+            #   수였고(§2), 닫힌 식으로 재니 채택 밴드의 e1(10×scale)이
+            #   [7.0, 25.0] 이라 **7% 는 항상 '눌림목 대기'(매수 적격) 안**
+            #   이다 — 카드가 관망을 말하는 자리에서 엔진은 늘 적격이었다.
+            #   실측(25종목 · 2026-09-02): 발화 1건, 그 1건이 실제 모순.
+            #   이제 엔진의 채택 밴드(gap_band)가 유일 잣대다 — '장기 관찰'
+            #   이상일 때만 경고한다. 근거: docs/PREREG_R206_CARD_GAP_BAND.md
+            _core_band = ((_p.get('core') or {}).get('gap_band')
+                          if isinstance(_p.get('core'), dict) else None)
             if _gap_pct is not None and _gap_pct > 0:
-                _gap_warn = (" — 갭이 커서 단기 도달 가능성이 낮습니다. 사실상 관망"
-                             if _gap_pct >= 7 else "")
+                _band_far = _core_band in ('장기 관찰', '괴리 과다')
+                _gap_warn = ((f" — 매수구간과 괴리가 큽니다 [{_core_band}]. "
+                              f"단기 도달 가능성이 낮습니다.")
+                             if _band_far else "")
                 _gap_html = (f"<p style='margin:0 0 8px 0; font-size:12px; "
-                             f"color:{'#F2B84B' if _gap_pct >= 7 else _TOK['tx2']};'>"
+                             f"color:{'#F2B84B' if _band_far else _TOK['tx2']};'>"
                              f"기준가가 권장보다 {_gap_pct:+.1f}% 위{_gap_warn}</p>")
         with _pm_cols[_pi]:
             st.markdown(_uk.reco_card(_build_reco_card(_p, _news_txt, _conf_txt),
