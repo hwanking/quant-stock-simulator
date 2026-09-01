@@ -1,0 +1,44 @@
+{
+ "prereg": "docs/PREREG_R208_EV_GATE_ANTISELECT.md",
+ "cost": 0.36,
+ "measured_at_rows": 192827,
+ "R1": "formula identical to verdict_core.build (code-verified)",
+ "blind": {
+  "pass_n": 70,
+  "fail_n": 5526,
+  "pass_mean": -3.7875714285714284,
+  "fail_mean": -0.881996018820123
+ },
+ "R2": {
+  "obs_diff_pass_minus_fail": -2.9056,
+  "boot_ci95": [
+   -5.8757,
+   1.5721
+  ],
+  "n_boot": 2000,
+  "seed": 208,
+  "excludes_zero": false
+ },
+ "R3": {
+  "train": {
+   "pass_n": 180,
+   "fail_n": 72570,
+   "pass_mean": 0.196,
+   "fail_mean": 0.096,
+   "diff": 0.1
+  },
+  "valid": {
+   "pass_n": 8,
+   "fail_n": 7128,
+   "pass_mean": 8.3187,
+   "fail_mean": 0.8969,
+   "diff": 7.4219
+  }
+ },
+ "R3_same_sign": false,
+ "R4": {
+  "mde_halfwidth": 3.7239,
+  "obs_within_noise": true
+ },
+ "verdict": "(a) 현행 유지 — 역선별의 일관된 증거 없음."
+}

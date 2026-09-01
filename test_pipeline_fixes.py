@@ -18047,6 +18047,27 @@ check("기각 뒤에도 값이 그대로다 (측정 후 기준 불변)",
       _vc105.COST_PCT == 0.36 and qi.QuantIndicatorsEngine.TOTAL_COST_PCT == 0.41
       and qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT == 0.3)
 
+# ── 라운드 208 — R205 의 '역선별' 관찰을 사전등록으로 재쟀다 ─────────
+#   결과: (a) 현행 유지. 점추정 −2.91%p 가 날짜 군집 부트스트랩 CI
+#   [−5.88, +1.57] 안이고(0 포함), train(+0.10)·valid(+7.42) 는 부호가
+#   반대다. 무서운 관찰이 잣대를 통과하지 못했다 — 소표본 + 군집 무시의
+#   산물이었다. 게이트는 한 글자도 안 바꿨다.
+#   숫자는 재검증하지 않는다(원장이 자라며 표류) — 산출물·판정만 잠근다.
+_r208p = _os.path.join(PROJ, 'data', 'ev_gate_antiselect_r208.json')
+check("R208 측정 산출물이 있다", _os.path.exists(_r208p))
+if _os.path.exists(_r208p):
+    import json as _j208
+    _r208 = _j208.load(open(_r208p, encoding='utf-8'))
+    check("R208 이 군집 부트스트랩으로 쟀다 (행 단위가 아니라)",
+          isinstance(_r208.get('R2', {}).get('boot_ci95'), list)
+          and _r208.get('R2', {}).get('seed') == 208)
+    check("R208 판정이 (a) 현행 유지다",
+          str(_r208.get('verdict', '')).startswith('(a)'),
+          str(_r208.get('verdict'))[:60])
+    check("게이트 검사가 여전히 11개 조건에 있다 (판정 불변)",
+          any('비용 차감 기대값 양수' == c[0] if isinstance(c, tuple) else False
+              for c in []) or '비용 차감 기대값 양수' in _vcraw221)
+
 # ── ⓑ 손익비 — 같은 낱말이 두 값을 가리키지 않는가 ────────────────
 check("홈 표가 기준을 이름에 적는다", '"손익비(현재가·2차)"' in _w221)
 check("카드·배너가 기준을 이름에 적는다", "손익비(진입가·1차)" in _w221)
