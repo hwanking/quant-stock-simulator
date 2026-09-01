@@ -18015,6 +18015,38 @@ check("사전등록에 판정 기준이 있다", len(_prereg221) > 1500
 check("사전등록이 측정 비용 순으로 적혀 있다 (§2-7)",
       "측정 비용" in _prereg221 or "무료" in _prereg221)
 
+# ── 라운드 205 — 그 사전등록을 **실행했다**. 기각·0.36 유지 ─────────
+#   재지 않은 사전등록은 없느니만 못하다(R195 의 규율). R1~R4 를 순서대로
+#   쟀고 R4 미달로 기각했다: 기대값 게이트를 0.30→0.36→0.41 로 조일수록
+#   통과분의 블라인드 원수익이 −3.42→−4.07→−5.83% 로 나빠진다 —
+#   0.41 은 걸러 내는 게 아니라 표본만 줄인다. 산술 정합(항목 합 0.41)
+#   보다 성적이 우선이라는 사전등록 조항 그대로다.
+#   숫자는 재검증하지 않는다 — 밴드가 랩 실행마다 갱신돼 표류하므로,
+#   산출물의 존재·구조와 기각 기록만 잠근다.
+_r205p = _os.path.join(PROJ, 'data', 'cost_unify_r205.json')
+check("R205 측정 산출물이 있다", _os.path.exists(_r205p))
+if _os.path.exists(_r205p):
+    import json as _j205
+    _r205 = _j205.load(open(_r205p, encoding='utf-8'))
+    check("R205 가 세 비용을 전부 쟀다",
+          set(_r205.get('R4', {})) == {'0.3', '0.36', '0.41'},
+          str(sorted(_r205.get('R4', {}))), scanned=len(_r205.get('R4', {})))
+    check("R3 — 세 비용의 블라인드 EV 부호가 같다",
+          _r205.get('R3', {}).get('same_sign') is True)
+    check("R4 판정이 산출물에 기록돼 있다",
+          _r205.get('R4_verdict', {}).get('strict_not_worse') is False,
+          '기각 근거가 산출물에 없으면 주석이 근거 없는 주장이 된다')
+    check("측정 시점의 원장 행수를 적었다",
+          isinstance(_r205.get('measured_at_rows'), int)
+          and _r205['measured_at_rows'] > 100000,
+          str(_r205.get('measured_at_rows')))
+check("기각 사실이 COST_PCT 주석에 있다",
+      '라운드 205' in _vcraw221 and '기각 · 0.36 유지' in _vcraw221
+      and 'cost_unify_r205' in _vcraw221)
+check("기각 뒤에도 값이 그대로다 (측정 후 기준 불변)",
+      _vc105.COST_PCT == 0.36 and qi.QuantIndicatorsEngine.TOTAL_COST_PCT == 0.41
+      and qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT == 0.3)
+
 # ── ⓑ 손익비 — 같은 낱말이 두 값을 가리키지 않는가 ────────────────
 check("홈 표가 기준을 이름에 적는다", '"손익비(현재가·2차)"' in _w221)
 check("카드·배너가 기준을 이름에 적는다", "손익비(진입가·1차)" in _w221)
@@ -19000,6 +19032,66 @@ else:
           'requestAnimationFrame(() => setRange(_m))' in _js202)
     # 값으로 — 봉마다 한 달에 들어가는 봉 수가 다르다는 것을 코드가 안다
     check("기간 환산이 봉마다 다르다", "{ D: 21, W: 4.3, M: 1 }" in _js202)
+
+print()
+
+# ======================================================================
+# §230 — '못 받았다'와 '더는 없다'를 같은 문장으로 말하지 않는다 (라운드 204)
+#
+#   시세를 못 받던 10종목을 조사했다. 네이버 **검색**에는 8종목이 아직
+#   나오는데, **종목 페이지**는 10종목 전부 없었다 — 조회하면 메인
+#   페이지가 온다(상장폐지·합병의 전형). 즉 파서의 0.0 은 옳았다.
+#
+#   문제는 문장이었다. `현재가 수신 실패` 는 **일시 장애**처럼 읽혀서
+#   처음에 네트워크를 의심했다 — 라운드 165 가 적어 둔 그 함정이다
+#   (*"그 문장 때문에 처음에 네이버를 의심했다"*). 구조적 소멸(이 코드로는
+#   다시 못 받는다)과 일시 장애는 **다른 말**이다.
+#
+#   고침: 파서가 `page_status` 를 기록하고, 실패 메시지가 둘을 가른다.
+#   가격은 여전히 0.0(미수신 센티넬) — **판정은 안 바뀐다.**
+# ======================================================================
+print("=" * 72)
+print("§230 시세 실패 사유 분리 (라운드 204)")
+print("=" * 72)
+
+# 실행으로 확인한다 (§222) — 심은 항목이 실제 코드 경로를 지난다.
+#   네트워크는 안 쓴다: sector 가 있으면 fetch 를 건너뛰고 metrics 만 읽는다.
+_db230 = be.STOCK_METRICS_DB
+_saved230 = {k: _db230.get(k) for k in ('999999.KS', '999998.KS')}
+try:
+    _db230['999999.KS'] = {'sector': '시험', 'base_price': 0.0,
+                           'page_status': 'item_page_missing'}
+    _db230['999998.KS'] = {'sector': '시험', 'base_price': 0.0}
+    _msg230a = _msg230b = ''
+    try:
+        engine.get_realtime_stock_price_triple_check('999999.KS')
+    except be.DataUnavailableError as _e230:
+        _msg230a = str(_e230)
+    try:
+        engine.get_realtime_stock_price_triple_check('999998.KS')
+    except be.DataUnavailableError as _e230:
+        _msg230b = str(_e230)
+    check("종목 페이지 없음은 구조적 사유로 말한다",
+          '종목 페이지가 없습니다' in _msg230a
+          and '다시 받을 수 없습니다' in _msg230a, _msg230a[:80])
+    check("일반 미수신은 종전 문장 그대로다",
+          '현재가 수신 실패' in _msg230b
+          and '종목 페이지' not in _msg230b, _msg230b[:80])
+    check("둘 다 여전히 차단된다 (판정 불변 — 예외가 났다는 것이 증거)",
+          bool(_msg230a) and bool(_msg230b))
+finally:
+    for _k230, _v230 in _saved230.items():
+        if _v230 is None:
+            _db230.pop(_k230, None)
+        else:
+            _db230[_k230] = _v230
+# 파서가 page_status 를 실제로 기록하는가 — 소스 확인 (기록부는 네트워크라
+# 여기서 실행하지 않는다. 대신 record 와 read 가 같은 키를 쓰는지 본다)
+_be230 = open(_os.path.join(PROJ, 'bitemporal_engine.py'),
+              encoding='utf-8').read()
+check("파서가 page_status 를 기록하고 판정이 같은 키를 읽는다",
+      '"page_status": _page_status' in _be230
+      and "meta.get('page_status') == 'item_page_missing'" in _be230)
 
 print()
 print("=" * 72)

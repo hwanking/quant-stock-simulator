@@ -930,8 +930,22 @@ class BitemporalEngine:
             #   · 다음금융 dps 로 폴백해도 네이버 공시치와 어긋난다 (SK하이닉스 3,000 vs 1,200)
             # 화면에 필요한 배당 값은 fetch_dividend_info() 로 받아 쓴다.
 
+            # 라운드 204 — **종목 페이지가 없는 경우**를 기록한다.
+            #   상장폐지·합병된 코드로 조회하면 네이버는 종목 페이지 대신
+            #   **메인 페이지**를 돌려준다(제목에 종목명 없음 · no_today 없음).
+            #   실측(2026-09-02): 시세를 못 받던 10종목 전부가 이 경우였다
+            #   (쌍용C&E·신성통상·HD현대미포·부산가스·신세계푸드·
+            #    HD현대인프라코어·동원F&B·동양생명·셀트리온헬스케어·
+            #    위지윅스튜디오). 가격 0.0(미수신 센티넬)은 그대로 두고
+            #   **사유만** 남긴다 — 일시 장애와 구조적 소멸은 다른 말이다
+            #   (라운드 165 — 사유를 섞지 않는다).
+            _page_status = ('item_page_missing'
+                            if ('no_today' not in html_m
+                                and 'wrap_company' not in html_m)
+                            else 'ok')
             info = {
                 "sector": sector,
+                "page_status": _page_status,
                 "is_fund": is_fund,          # ETF·ETN → 펀더멘털 밸류에이션 건너뜀
                 # 상장 시장은 **값**으로 들고 다닌다(라운드 159).
                 # 접미사는 캐시 키일 뿐이고, 시장의 근거는 이 실측값이다.
@@ -1026,7 +1040,16 @@ class BitemporalEngine:
         meta = metrics_of(symbol)        # 접미사가 어긋나도 신선한 행을 읽는다
         krx_base_price = meta.get("base_price")
         if not krx_base_price:
-            # 가격을 못 받았으면 임의값(50,000원)으로 대체하지 않는다
+            # 가격을 못 받았으면 임의값(50,000원)으로 대체하지 않는다.
+            # 라운드 204 — 사유를 가른다(R165): '종목 페이지 없음'은 이
+            # 코드로는 **다시 받을 수 없는** 구조적 사유이고, '수신 실패'는
+            # 일시 장애일 수 있다. 같은 문장으로 말하면 로그를 읽는 사람이
+            # 네트워크를 의심하게 된다 — 실제로 그랬다.
+            if meta.get('page_status') == 'item_page_missing':
+                raise DataUnavailableError(
+                    f"{symbol}: 네이버에 종목 페이지가 없습니다(메인으로 "
+                    f"넘어감) — 상장폐지·합병이면 이 코드로는 다시 받을 수 "
+                    f"없습니다. 시세 미수신과는 다른 사유입니다.")
             raise DataUnavailableError(f"{symbol}: 현재가 수신 실패 — 분석에서 제외합니다.")
 
         val_ok, val_msg = self.validate_input_data(krx_base_price, symbol)
