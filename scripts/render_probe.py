@@ -53,6 +53,9 @@ def main():
     ap.add_argument('--search')
     ap.add_argument('--state-json', default='')
     ap.add_argument('--want-key', action='append', default=[])
+    # 라운드 200 — 존재만이 아니라 **값**이 필요할 때가 있다.
+    #   보유 연동은 '키가 있나' 가 아니라 '보유 중으로 왔나' 다.
+    ap.add_argument('--want-val', action='append', default=[])
     ap.add_argument('--timeout', type=int, default=1800)
     a = ap.parse_args()
 
@@ -102,6 +105,15 @@ def main():
         out['exceptions'] = len(at.exception)
         out['first'] = str(at.exception[:1])[:300] if at.exception else ''
         out['keys'] = {k: (k in at.session_state) for k in a.want_key}
+        _vals = {}
+        for k in a.want_val:
+            try:
+                _vals[k] = at.session_state[k]
+            except Exception:                          # noqa: BLE001
+                _vals[k] = None      # 못 읽은 것과 None 을 섞지 않게
+        out['vals'] = {k: (v if isinstance(v, (str, int, float, bool))
+                           or v is None else str(v)[:80])
+                       for k, v in _vals.items()}
         out['ok'] = True
     except Exception as e:                                     # noqa: BLE001
         # 자식이 죽으면 부모가 그것을 **검사 실패가 아니라 실행 실패**로
