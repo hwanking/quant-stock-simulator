@@ -474,14 +474,34 @@ function addCheck(grid, def, checked, onChange) {
   document.getElementById(grid).appendChild(lb);
 }
 
+// 라운드 201b — 봉을 바꿀 때 **데이터까지 비워야** 한다.
+//   [주의] 가시 범위는 논리 인덱스로 칸끼리 공유되는데, 각 칸의 시간축은
+//     그 칸에 담긴 series **전체**가 만든다. 지표를 숨기기만 하면
+//     (visible:false) 숨은 series 가 여전히 일봉 2,997점으로 시간축을
+//     만들어, 주봉으로 바꿔도 논리 586 이 2016년을 가리킨다.
+//     실제로 그렇게 나왔다 — 거래량 칸만 2026년이고 나머지는 2016년.
+//   → 만들 때 원본을 적어 두고, 일봉이 아니면 비운다. 되돌아오면 채운다.
+const SNAP = new Map();
+
+
+function remember(s) {
+  (Array.isArray(s) ? s : [s]).forEach(x => {
+    if (x && typeof x.data === 'function' && typeof x.setData === 'function') {
+      try { SNAP.set(x, x.data()); } catch (e) { /* 스텁은 건너뛴다 */ }
+    }
+  });
+  return s;
+}
+
+
 for (const d of overlayDefs) {
-  live[d.id] = d.mk();
+  live[d.id] = remember(d.mk());
   const on = isOn(d.id);
   setSeriesVisible(live[d.id], on);
   addCheck('gOverlay', d, on, v => setSeriesVisible(live[d.id], v));
 }
 for (const d of paneDefs) {
-  live[d.id] = d.mk();
+  live[d.id] = remember(d.mk());
   const on = isOn(d.id);
   document.getElementById(d.pane).style.display = on ? '' : 'none';
   addCheck('gPane', d, on, v => {
@@ -612,10 +632,15 @@ const TF_LABEL = { D: '일봉', W: '주봉', M: '월봉' };
 function setTf(tf) {
   const agg = aggregate(tf);
   sCandle.setData(agg.candles);
-  if (live.vol) {
-    const vseries = Array.isArray(live.vol) ? live.vol[0] : live.vol;
-    if (vseries && vseries.setData) vseries.setData(agg.volume);
-  }
+  const vseries = live.vol
+    ? (Array.isArray(live.vol) ? live.vol[0] : live.vol) : null;
+  // 지표 series 는 **일봉 시각**을 갖고 있다. 안 비우면 그 시각들이
+  // 시간축을 만들어 주봉·월봉 화면이 엉뚱한 해를 가리킨다 (위 주석).
+  SNAP.forEach((orig, s) => {
+    if (s === sCandle || s === vseries) return;
+    try { s.setData(tf === 'D' ? orig : []); } catch (e) { /* 무시 */ }
+  });
+  if (vseries && vseries.setData) vseries.setData(agg.volume);
   // 지표는 **일봉으로 계산된 값**이다. 주봉·월봉 캔들 위에 그대로 얹으면
   // 다른 잣대를 겹쳐 읽게 된다 — 그래서 끈다 (라운드 190 의 교훈).
   const note = document.getElementById('tfnote');
@@ -632,8 +657,17 @@ function setTf(tf) {
       + ' 지표는 일봉으로 계산한 값이라 함께 껐습니다 —'
       + ' 다른 잣대를 겹쳐 읽지 않기 위해서입니다.';
   }
-  setRange(parseInt(
-    (document.querySelector('.rngbtn.on') || { dataset: { m: '12' } }).dataset.m));
+  // [주의] 지표를 끄면 패널이 접히고 `relayout()` 이 resize 를 쏜다.
+  //   라이브러리는 그 리사이즈를 **다음 프레임에** 처리하면서 방금 넣은
+  //   가시 범위를 덮어쓴다 — 그래서 클릭 경로에서는 주봉 '1년' 이 255봉
+  //   (일봉 환산)으로 나왔고, 손으로 setRange 를 부르면 55봉이었다.
+  //   같은 값을 **지금과 다음 프레임에** 둘 다 넣는다.
+  const _m = parseInt(
+    (document.querySelector('.rngbtn.on') || { dataset: { m: '12' } }).dataset.m);
+  setRange(_m);
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => setRange(_m));
+  }
 }
 document.querySelectorAll('.tfbtn').forEach(b => {
   if (b.disabled) return;
