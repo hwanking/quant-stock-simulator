@@ -539,12 +539,23 @@ chMain.subscribeCrosshairMove(p => {
 });
 
 // ── 기간 버튼 ───────────────────────────────────────────
+// 라운드 201 — 지금 어느 봉인가는 **DOM 에서 읽는다.**
+//   [주의] 종전에는 `typeof curTf === 'undefined' ? 'D' : curTf` 를 썼다.
+//     `curTf` 는 아래에서 `let` 으로 선언되는데, `let` 은 **TDZ** 라
+//     `typeof` 로도 막을 수 없다 — `setRange(12)` 가 선언보다 먼저
+//     불리면서 ReferenceError 가 났고, **그 뒤 스크립트가 통째로 죽었다**
+//     (봉 버튼 바인딩·__dbg·리사이즈 핸들러까지). 차트는 이미 그려진
+//     뒤라 눈으로는 멀쩡해 보였다.
+//   → 선언 순서에 기대지 않는다. 켜져 있는 버튼이 곧 현재 봉이다.
+function activeTf() {
+  const b = document.querySelector('.tfbtn.on');
+  return (b && b.dataset && b.dataset.tf) || 'D';
+}
 function setRange(months) {
   // 라운드 199 — 봉 단위마다 **한 달에 들어가는 봉 수가 다르다.**
   //   일 21 · 주 4.3 · 월 1. 이걸 안 나누면 주봉에서 '1년' 이 5년치를
   //   보여 준다 (같은 수를 다른 단위로 읽는 것 — 라운드 190 의 그 모양).
-  const perMonth = { D: 21, W: 4.3, M: 1 }[typeof curTf === 'undefined'
-    ? 'D' : curTf] || 21;
+  const perMonth = { D: 21, W: 4.3, M: 1 }[activeTf()] || 21;
   const n = (sCandle.data && sCandle.data() ? sCandle.data().length
              : D.candles.length) || D.candles.length;
   const bars = months === 0 ? n : Math.min(n, Math.max(5,
@@ -597,11 +608,8 @@ function aggregate(tf) {
   if (cur) { cs.push(cur); vs.push({ time: cur.time, value: vol }); }
   return { candles: cs, volume: vs };
 }
-let curTf = 'D';
 const TF_LABEL = { D: '일봉', W: '주봉', M: '월봉' };
 function setTf(tf) {
-  if (tf === curTf) return;
-  curTf = tf;
   const agg = aggregate(tf);
   sCandle.setData(agg.candles);
   if (live.vol) {

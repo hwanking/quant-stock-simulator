@@ -18888,6 +18888,94 @@ else:
             f"렌더 실패 — {_own228.get('error')}")
 
 print()
+
+# ======================================================================
+# §229 — 차트 스크립트가 **끝까지 도는가** (라운드 201)
+#
+#   라운드 199 가 봉 단위(일·주·월) 버튼을 넣었고, §227 은 소스에
+#   `data-tf="W"` 가 있는지 **글자로** 확인해 통과했다. 그런데 브라우저
+#   에서는 **스크립트가 중간에 죽어 있었다**:
+#
+#       setRange(12);        // ← 여기서 호출
+#       ...
+#       let curTf = 'D';     // ← 선언은 뒤
+#
+#   `setRange` 안에서 `typeof curTf` 를 썼는데 `let` 은 **TDZ** 라
+#   `typeof` 로도 막히지 않는다. ReferenceError 가 나면서 그 뒤 코드가
+#   통째로 죽었다 — 봉 버튼 바인딩·`__dbg`·리사이즈 핸들러까지.
+#   **차트는 이미 그려진 뒤라 눈으로는 멀쩡해 보였다.**
+#
+#   §222 가 파이썬에서 얻은 결론과 같은 말이다 — **존재는 실행이 아니다.**
+#   글자로 재면 이 부류를 영원히 못 본다. 그래서 node 로 **진짜 돌린다.**
+#   DOM 은 무엇을 물어도 스텁을 주는 Proxy 라 절대 안 터진다 — 남는
+#   예외만 본다(TDZ · ReferenceError · 문법).
+# ======================================================================
+print("=" * 72)
+print("§229 차트 스크립트가 끝까지 도는가 (라운드 201)")
+print("=" * 72)
+
+import shutil as _sh229                                           # noqa: E402
+import subprocess as _sp229                                       # noqa: E402
+import tempfile as _tf229                                         # noqa: E402
+
+_node229 = _sh229.which('node')
+check("차트 스모크 도구가 있다",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'chart_js_smoke.js')))
+if not _node229:
+    skipped("차트 스크립트가 끝까지 돈다", "node 없음 — 실행할 수 없다")
+else:
+    # ⚠️ 여기 처음에 `tech_df, four_scores, CORE` 라고 적었다 — 그건
+    #   **web_app 의 이름**이지 이 파일의 이름이 아니다. §226 이 회귀를
+    #   돌리기 전에 잡아 줬다(정의 전 사용 3건). 두 라운드 전에 넣은
+    #   검사가 곧바로 값을 했다.
+    import chart_pro as _cp229                                    # noqa: E402
+    _fs229 = _snap17['four_scores']
+    _core229 = _vc105.build(_fs229, {'action': 'HOLD', 'vetoes': []},
+                            _fs229.get('price_axes'), None,
+                            float(_snap17['tech_df']['adj_close'].iloc[-1]))
+    _html229 = _cp229.build_chart_html(
+        _snap17['tech_df'], _fs229, name='시험', unit_str='원',
+        theme='dark', core=_core229)
+    check("차트 HTML 을 만들었다 (0바이트면 미측정)", len(_html229) > 100000,
+          f'{len(_html229):,}바이트', scanned=len(_html229))
+
+    def _smoke229(html):
+        _fd, _tmp = _tf229.mkstemp(suffix='.html', dir=_os.path.join(PROJ, '_probe')
+                                   if _os.path.isdir(_os.path.join(PROJ, '_probe'))
+                                   else None)
+        _os.close(_fd)
+        try:
+            open(_tmp, 'w', encoding='utf-8').write(html)
+            r = _sp229.run([_node229,
+                            _os.path.join(PROJ, 'scripts', 'chart_js_smoke.js'),
+                            _tmp], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=180)
+            return r.returncode, (r.stdout or '').strip()[:200]
+        finally:
+            try:
+                _os.remove(_tmp)
+            except OSError:
+                pass
+
+    _rc229, _out229 = _smoke229(_html229)
+    check("차트 스크립트가 끝까지 돈다 (node 로 실제 실행)",
+          _rc229 == 0, f'rc={_rc229} · {_out229}')
+
+    # ── 심어서 — 그 버그를 되심으면 잡는가 ─────────────────────────
+    #   0건이 '없다'인지 '못 봤다'인지 갈린다 (§110 의 규율)
+    _bad229 = _html229.replace(
+        "const perMonth = { D: 21, W: 4.3, M: 1 }[activeTf()] || 21;",
+        "const perMonth = { D: 21, W: 4.3, M: 1 }"
+        "[typeof curTf === 'undefined' ? 'D' : curTf] || 21;").replace(
+        "const TF_LABEL = { D:", "let curTf = 'D';\nconst TF_LABEL = { D:")
+    check("심을 자리를 찾았다 (못 찾으면 심기가 헛돈다)",
+          _bad229 != _html229)
+    if _bad229 != _html229:
+        _rcb229, _outb229 = _smoke229(_bad229)
+        check("§229 가 심은 TDZ 를 잡는다",
+              _rcb229 != 0 and 'curTf' in _outb229, f'rc={_rcb229} · {_outb229}')
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
