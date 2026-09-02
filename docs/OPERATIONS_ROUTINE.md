@@ -16,9 +16,23 @@
 - 1단계 3,000건 → 2단계 5,000건 → 3단계 10,000건 → 이후 매 거래일 자동 추가
 - 중복 통제: 25봉 간격 기준일(지평 20봉과 비중복), 동일 종목·유사 진입일 반복 금지,
   ETF와 기초지수 사실상 중복 유의, 미래 결과 기간 겹침 금지
+- **실행 전**: 원장 행수를 찍어 둔다. 랩은 매 실행 `open('w')` 로 원장을
+  통째로 다시 쓰고, 시세를 못 받은 종목의 케이스는 빠진다 — **네트워크가
+  흔들리면 표본이 영구히 작아진다**(라운드 197 실사고 · −972건).
+  라운드 197 이 가드를 넣었지만(빠진 수를 찍고 · 이어받고 · 줄면 안
+  덮어씀), **실행 전후 행수를 대 보는 것**이 마지막 방어선이다.
 - 실행: `python scripts/calibration_lab.py --limit N` (체크포인트 재개 — 기존 건 자동 스킵)
-- 완료 후: `.portfolio/calibration.json`·`virtual_graded.jsonl` → `data/` 복사,
-  `python scripts/gen_update_history.py`, 회귀 통과 확인, 커밋·푸시
+- **완료 후 — 원장이 자라면 파생물이 낡는다. 다섯을 함께 갱신한다**
+  (라운드 205~210 이 매번 밟은 절차):
+  1. `scripts/refresh_bundle.py --apply` — 배포 동봉본(`data/calibration.json`)
+  2. `scripts/miss_study.py` · `scripts/weakness_map.py` — 관측 연구 둘
+  3. `scripts/cost_unify_r205.py` · `scripts/ev_gate_antiselect_r208.py` —
+     원장으로 판정한 연구 둘 (결론이 바뀌는지 확인 · 지금까지 불변)
+  4. `scripts/gen_update_history.py` — 업데이트 이력
+  5. CLAUDE.md §2 의 원장 행수(`§158` 이 값으로 검사) · 회귀 통과 확인 ·
+     커밋·푸시
+  ⚠️ 파생물을 안 갱신하면 회귀의 신선도 검사(`§157`·`study_freshness`)가
+    정당하게 실패한다 — 그건 결함이 아니라 **알림이다.**
 
 ## 2. 매 거래일 루틴
 **장 종료 후**: 확정 OHLCV 수집 → 전일 개장 전 추천 실제 결과 갱신
