@@ -19385,6 +19385,75 @@ if _os.path.exists(_pr231):
     check("보정 문턱을 올림으로 적었다 (R113)", 'z ≥ 2.50' in _pt231)
     check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다**' in _pt231)
 
+# ════════════════════════════════════════════════════════════════════════
+# §232 — 적정가 극단 괴리는 모델 오류인가 (라운드 215 · 사전등록 실행)
+#
+#   사용자: *"제일 중요한 거는 적정가를 맞추는 거야."* R183 의 블라인드 표에서
+#   깊은 할인이 얕은 할인보다 나빴다 — 극단에서 적정가가 과대(H1)인가.
+#   원장 250,725행 · 세 구간 · 날짜 군집 부트로 쟀다: **둘 다 미달**(blind CI
+#   0 포함 · train 부호 반대) → (a) 현행 유지 · R2 백필은 열지 않았다.
+#   숫자는 잠그지 않는다 — 표류한다(R211~213). 사전등록·구조·**판정**·
+#   문서·랩 스키마만 잠근다.
+#   곁들여 스캔 요약이 정밀분석 후보 전부를 **셈으로 맞춘다**(완료+제외+미매핑
+#   +누락 = 상위 N) — "5개 중 1개 실패"가 조용히 사라지지 않게 (§3).
+# ════════════════════════════════════════════════════════════════════════
+print()
+print("=" * 72)
+print("§232 적정가 극단 괴리 — 사전등록 실행 · 판정 (a) · 랩이 적정가 숫자를 남긴다 (라운드 215)")
+print("=" * 72)
+_pr232 = _os.path.join(PROJ, 'docs', 'PREREG_R215_FAIR_VALUE_CALIBRATION.md')
+_rs232 = _os.path.join(PROJ, 'docs', 'RESULT_R215_FAIR_VALUE_CALIBRATION.md')
+_ar232 = _os.path.join(PROJ, 'data', 'fair_value_zone_r215.json')
+_prt232 = open(_pr232, encoding='utf-8').read() if _os.path.exists(_pr232) else ''
+_rst232 = open(_rs232, encoding='utf-8').read() if _os.path.exists(_rs232) else ''
+check("사전등록이 있고 측정 전에 썼다고 적었다", '**측정 전에 쓴다**' in _prt232)
+check("판정 규칙이 결과를 보기 전에 적혀 있다 (①② 둘 다 → H1 · 아니면 (a))",
+      '①②둘 다 → **H1 후보**' in _prt232)
+check("R215 측정 산출물이 있다", _os.path.exists(_ar232))
+if _os.path.exists(_ar232):
+    import json as _j232
+    _r232 = _j232.load(open(_ar232, encoding='utf-8'))
+    check("세 구간 × 여섯 구역 표가 있다",
+          set(_r232.get('zones', {})) == {'train', 'valid', 'blind'}
+          and all(len(_r232['zones'][s]) == 6 for s in ('train', 'valid', 'blind')),
+          str({s: len(_r232.get('zones', {}).get(s, {})) for s in ('train', 'valid', 'blind')}))
+    check("R1 이 세 구간 각각 날짜 군집 CI 로 쟀다 (시드 215)",
+          set(_r232.get('R1', {})) == {'train', 'valid', 'blind'}
+          and all(isinstance(_r232['R1'][s].get('ci95'), list)
+                  for s in ('train', 'valid', 'blind'))
+          and _r232.get('seed') == 215)
+    check("R1 은 행이 아니라 **날짜**를 표본으로 센다 (blind 날짜가 행보다 훨씬 적다)",
+          isinstance(_r232['R1']['blind'].get('dates'), int)
+          and _r232['R1']['blind']['dates'] < _r232['R1']['blind'].get('n_b', 0),
+          str(_r232['R1']['blind']))
+    check("판정이 (a) 현행 유지다 — 값이 아니라 판정을 잠근다",
+          str(_r232.get('verdict', '')).startswith('(a)'),
+          str(_r232.get('verdict'))[:60])
+    check("측정 시점의 원장 행수를 적었다",
+          isinstance(_r232.get('measured_at_rows'), int)
+          and _r232['measured_at_rows'] > 200000)
+check("결과 문서가 R1 미달과 'R2 는 열지 않는다'를 적었다",
+      '**둘 다 미달.**' in _rst232 and '열지 않는다' in _rst232)
+check("값은 하나도 안 바꿨다 (밸류 게이트 상수 불변 · 문서에도 적음)",
+      _vc105.COST_PCT == 0.36 and '**값은 하나도 안 바꿨다.**' in _rst232)
+# 랩이 앞으로 적정가 숫자를 남긴다 — 이게 없으면 정확도는 영영 못 잰다
+_lab232 = open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'),
+               encoding='utf-8').read()
+check("calibration_lab 행에 적정가 4필드가 있다 (fair·fair_conf·fair_status·ent_class)",
+      "'fair': fs.get('displayed_fair_value')" in _lab232
+      and "'fair_conf': fs.get('fair_value_confidence')" in _lab232
+      and "'fair_status': (snap.get('val_eval') or {}).get('fair_value_status')" in _lab232
+      and "'ent_class': (snap.get('val_eval') or {}).get('enterprise_class')" in _lab232)
+# 스캔 요약 — 정밀분석 후보 전부를 셈으로 맞춘다 (§3 · "5개 중 1개 실패")
+# ⚠️ '유니버스 미매핑' 낱말은 주석에도 있다 — 낱말로 재면 주석이 통과시킨다.
+#   **보간식**(코드에만 있는 모양)으로 잰다 (memory: my-discriminators-are-wrong-until-planted).
+check("4단계 요약이 미매핑·누락까지 센다 (완료+제외+미매핑+누락 = 상위 N)",
+      '_scan_unm =' in _w231 and '_scan_lost =' in _w231
+      and '유니버스 미매핑 {_scan_unm}개' in _w231
+      and '누락 {_scan_lost}개' in _w231 and '사유 미기록' in _w231)
+check("제외 사유 첫 건을 요약 줄에 바로 적는다 (접힌 칸을 열지 않아도 보인다)",
+      '_scan_why1 =' in _w231 and '{_scan_why1}' in _w231)
+
 print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
