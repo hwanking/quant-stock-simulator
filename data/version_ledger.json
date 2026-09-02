@@ -3,12 +3,25 @@
   "model": "v2026.09.02.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
-  "schema": "v2026.09.02.6",
+  "schema": "v2026.09.02.7",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.09.02.7",
+   "previous": "v2026.09.02.6",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "축적 8차분 — 원장 250,725 · 현행 계획 소진 (+18,956)",
+   "note": "calibration_lab --limit 20000 이 상한보다 적은 18,956 만 더함 → 계획 표본 사실상 소진(250,725 ≈ 계획 250,726). carried_over 977 · 축소 없음. R205 strict_not_worse 가 True→False 로 되돌아옴(진동 확인 · 최대 표본 n=253 에서 0.41 다시 나쁨) — R212 채택 안 한 게 옳았다. R208 블라인드 CI 0 제외→포함으로 되돌아옴 · (a) 유지. 값 안 잠근 회귀가 진동에 안 깨짐.",
+   "created_at": "2026-09-02T13:02:11+00:00",
+   "effective_from": "2026-09-02"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",
