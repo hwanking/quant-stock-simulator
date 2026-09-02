@@ -1,37 +1,37 @@
 {
- "measured_at_rows": 198769,
- "usable": 198747,
+ "measured_at_rows": 206769,
+ "usable": 206747,
  "carried_over_rows": 977,
  "prereg": "docs/PREREG_R191_COST_UNIFY.md",
  "R3": {
-  "blind_n_58plus": 5679,
-  "hit_rate": 50.57228385279098,
-  "mean_ret_raw": -0.9058760345131169,
+  "blind_n_58plus": 5787,
+  "hit_rate": 51.2182477967859,
+  "mean_ret_raw": -0.8155797477103843,
   "net_ev": {
-   "0.3": -1.2059,
-   "0.36": -1.2659,
-   "0.41": -1.3159
+   "0.3": -1.1156,
+   "0.36": -1.1756,
+   "0.41": -1.2256
   },
   "same_sign": true
  },
  "R4": {
   "0.3": {
-   "passers_all": 739,
-   "blind_n": 205,
-   "blind_hit": 41.951219512195124,
-   "blind_mean_ret_raw": -4.273073170731707
+   "passers_all": 1003,
+   "blind_n": 289,
+   "blind_hit": 44.63667820069204,
+   "blind_mean_ret_raw": -3.407923875432526
   },
   "0.36": {
-   "passers_all": 298,
-   "blind_n": 83,
-   "blind_hit": 45.78313253012048,
-   "blind_mean_ret_raw": -3.4246987951807224
+   "passers_all": 400,
+   "blind_n": 116,
+   "blind_hit": 49.13793103448276,
+   "blind_mean_ret_raw": -2.1701724137931033
   },
   "0.41": {
-   "passers_all": 123,
-   "blind_n": 27,
-   "blind_hit": 40.74074074074074,
-   "blind_mean_ret_raw": -8.16074074074074
+   "passers_all": 181,
+   "blind_n": 46,
+   "blind_hit": 43.47826086956522,
+   "blind_mean_ret_raw": -5.991956521739132
   }
  },
  "R4_verdict": {
