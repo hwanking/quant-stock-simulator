@@ -3,12 +3,25 @@
   "model": "v2026.09.02.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
-  "schema": "v2026.09.02.4",
+  "schema": "v2026.09.02.5",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.09.02.5",
+   "previous": "v2026.09.02.4",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "축적 6차분 — 원장 216,769 (+10,000)",
+   "note": "calibration_lab --limit 10000 · 206,769→216,769 · carried_over 977 · 축소 없음 · 파생물 5종 갱신(동봉본·미스·취약·R205·R208) · R205 기각 유지(0.41 blind −4.23% < 0.36 −2.24%) · R208 (a) 유지(blind 통과 70→111 · 군집 CI [−5.49,+2.11] 0 포함)",
+   "created_at": "2026-09-02T05:05:20+00:00",
+   "effective_from": "2026-09-02"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",
