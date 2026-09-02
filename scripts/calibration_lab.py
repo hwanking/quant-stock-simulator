@@ -1033,6 +1033,14 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                 'm10_above': bool(float(fs.get('m10_disparity', 0) or 0) >= 0),
                 'demark_state': ((fs.get('demark_entry') or {}).get('state')),
                 'entry_zone': fs.get('entry_zone'),
+                # 라운드 215 — 적정가 **숫자**를 남긴다. 종전엔 구역(6칸)만 실려
+                #   적정가 정확도(비율 분위·신뢰도 등급)를 원장으로 잴 수 없었고,
+                #   재려면 케이스마다 파이프라인을 다시 돌려야 했다(백필 = 축적
+                #   전체). 앞으로 쌓이는 행은 그 값을 갖는다. 없으면 None (§3).
+                'fair': fs.get('displayed_fair_value'),
+                'fair_conf': fs.get('fair_value_confidence'),
+                'fair_status': (snap.get('val_eval') or {}).get('fair_value_status'),
+                'ent_class': (snap.get('val_eval') or {}).get('enterprise_class'),
                 'net_expected': fs.get('net_expected_return'),
                 # 2차 확장 특징 — 어떤 상태가 적중을 예측하는지 볼 재료
                 'rsi': (fs.get('demark_res') or {}).get('rsi_value'),

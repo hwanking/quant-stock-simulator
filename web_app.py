@@ -3243,6 +3243,21 @@ if st.session_state.get('show_screener', False):
                               f"({scan_depth}/{_deep_pass:,})"
                               if _deep_pass > 0
                               else "미산출 — 경량 스캔이 0개를 반환했습니다")
+            # ── 라운드 215 — 4단계 후보 전부를 **셈으로 맞춘다** (§3) ──────
+            # 사용자: *"사용한 도구 5개(1개 실패) 뭐야? 실패 안 되게 스마트하게."*
+            # 종전 줄은 '완료 N · 제외 M' 만 적어, 상위 5 중 유니버스에서 코드를
+            # 못 찾아 정밀분석 **전에** 빠진 후보(`attention_unmapped`)가 셈에서
+            # 조용히 사라졌다 — 실측 "상위 5 → 완료 4 · 제외 0". 못 잰 것을
+            # 표시 없이 지나가면 §3 위반이다. 완료+제외+미매핑+누락 = 상위 N 이
+            # 되게 하고, 남는 차이는 '누락(사유 미기록)'이라 그대로 적는다.
+            # 제외 사유 첫 건은 접힌 칸을 열지 않아도 보이게 요약 줄에 붙인다.
+            # 재시도는 더하지 않았다 — 시세 수신은 fetch_html_with_retry 가 이미
+            # 재시도하고, 교차검증 불일치의 스캔 중단은 일부러 둔 안전장치다.
+            _scan_unm = len(st.session_state.get('attention_unmapped') or [])
+            _scan_lost = max(0, int(scan_depth) - len(scan_results)
+                             - len(scan_failures) - _scan_unm)
+            _scan_why1 = ((" — 예: " + _uk._esc(str(scan_failures[0].get('reason') or '')[:48]))
+                          if scan_failures else "")
 
             st.markdown(f"""
             <div style='background:#161D2A; padding:16px; border-radius:10px; margin-bottom:16px; '>
@@ -3265,7 +3280,9 @@ if st.session_state.get('show_screener', False):
                     <li>3단계 관심지표 계산: 최대 <b>{_deep_cap:,}개</b>
                         → 실제 <b>{_deep_done:,}개</b></li>
                     <li>4단계 정밀분석: <b>{_sel_strat_label}</b> 상위 <b>{scan_depth}개</b>
-                        → 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개</li>
+                        → 완료 {len(scan_results)}개 · 제외 {len(scan_failures)}개{_scan_why1}{
+                            f' · 유니버스 미매핑 {_scan_unm}개(정밀분석 전에 빠짐)' if _scan_unm else ''}{
+                            f' · <b>누락 {_scan_lost}개</b>(사유 미기록 — 셈이 안 맞습니다)' if _scan_lost else ''}</li>
                     <li>최종 행동 필수조건 통과: <b style='color:{"#35C98B" if recommended else "#F2B84B"};'>{len(recommended)}개</b></li>
                     <li><b>전체 시장 정밀분석 비율: {_deep_rate_txt}</b></li>
                 </ul>

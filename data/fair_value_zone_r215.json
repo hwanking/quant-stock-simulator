@@ -1,0 +1,153 @@
+{
+ "prereg": "docs/PREREG_R215_FAIR_VALUE_CALIBRATION.md",
+ "measured_at_rows": 250725,
+ "buy_zone_rows": 108856,
+ "seed": 215,
+ "n_boot": 2000,
+ "zones": {
+  "train": {
+   "안전마진 확보": {
+    "n": 71370,
+    "hit_pct": 57.8,
+    "wilson_low": 57.5,
+    "mean_ret": 0.1212
+   },
+   "적정가 이하 (안전마진 미확보)": {
+    "n": 5837,
+    "hit_pct": 57.7,
+    "wilson_low": 56.4,
+    "mean_ret": 0.047
+   },
+   "적정가 소폭 초과": {
+    "n": 1027,
+    "hit_pct": 57.3,
+    "wilson_low": 54.2,
+    "mean_ret": 0.0572
+   },
+   "적정가 초과 (추격매수 경고)": {
+    "n": 1354,
+    "hit_pct": 56.7,
+    "wilson_low": 54.1,
+    "mean_ret": -0.1026
+   },
+   "적정가 크게 초과 (추격매수 위험)": {
+    "n": 0
+   },
+   "판정 불가": {
+    "n": 14064,
+    "hit_pct": 54.7,
+    "wilson_low": 53.9,
+    "mean_ret": 0.0882
+   }
+  },
+  "valid": {
+   "안전마진 확보": {
+    "n": 5725,
+    "hit_pct": 62.3,
+    "wilson_low": 61.1,
+    "mean_ret": 0.5988
+   },
+   "적정가 이하 (안전마진 미확보)": {
+    "n": 550,
+    "hit_pct": 63.6,
+    "wilson_low": 59.5,
+    "mean_ret": 0.7113
+   },
+   "적정가 소폭 초과": {
+    "n": 124,
+    "hit_pct": 62.1,
+    "wilson_low": 53.3,
+    "mean_ret": 0.2734
+   },
+   "적정가 초과 (추격매수 경고)": {
+    "n": 169,
+    "hit_pct": 52.7,
+    "wilson_low": 45.2,
+    "mean_ret": -0.3438
+   },
+   "적정가 크게 초과 (추격매수 위험)": {
+    "n": 0
+   },
+   "판정 불가": {
+    "n": 2153,
+    "hit_pct": 63.7,
+    "wilson_low": 61.6,
+    "mean_ret": 1.1814
+   }
+  },
+  "blind": {
+   "안전마진 확보": {
+    "n": 3756,
+    "hit_pct": 56.7,
+    "wilson_low": 55.1,
+    "mean_ret": -0.2397
+   },
+   "적정가 이하 (안전마진 미확보)": {
+    "n": 481,
+    "hit_pct": 63.0,
+    "wilson_low": 58.6,
+    "mean_ret": 0.9269
+   },
+   "적정가 소폭 초과": {
+    "n": 109,
+    "hit_pct": 58.7,
+    "wilson_low": 49.3,
+    "mean_ret": 0.0172
+   },
+   "적정가 초과 (추격매수 경고)": {
+    "n": 140,
+    "hit_pct": 60.0,
+    "wilson_low": 51.7,
+    "mean_ret": 0.5098
+   },
+   "적정가 크게 초과 (추격매수 위험)": {
+    "n": 0
+   },
+   "판정 불가": {
+    "n": 1997,
+    "hit_pct": 49.1,
+    "wilson_low": 46.9,
+    "mean_ret": -0.6318
+   }
+  }
+ },
+ "R1": {
+  "train": {
+   "n_a": 5837,
+   "n_b": 71370,
+   "dates": 2330,
+   "obs_diff": -0.0742,
+   "ci95": [
+    -0.2597,
+    0.1143
+   ],
+   "excludes_zero": false,
+   "sign": -1
+  },
+  "valid": {
+   "n_a": 550,
+   "n_b": 5725,
+   "dates": 75,
+   "obs_diff": 0.1125,
+   "ci95": [
+    -0.4844,
+    0.6119
+   ],
+   "excludes_zero": false,
+   "sign": 1
+  },
+  "blind": {
+   "n_a": 481,
+   "n_b": 3756,
+   "dates": 46,
+   "obs_diff": 1.1666,
+   "ci95": [
+    -0.5352,
+    2.6109
+   ],
+   "excludes_zero": false,
+   "sign": 1
+  }
+ },
+ "verdict": "(a) 현행 유지 — H0. 깊은 할인이 더 나쁘다는 증거가 없다."
+}
