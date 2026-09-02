@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.02.2",
+  "model": "v2026.09.02.3",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.02.7",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.02.3",
+   "previous": "v2026.09.02.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "R214 - 신호 배너와 실행 후보를 한 판정으로 · 관심종목 이름순+우선순위·물타기 · 포트폴리오 업종·국면 서술 · 차트 구조 사전등록",
+   "note": "사용자 지적 넷. ① 확장 신호(SK이노베이션 59점) vs 실행 후보(DB손해보험) 불일치 — 배너는 원점수 띠, 후보는 verdict bucket 으로 갈랐던 §4 위반. 판정 메모 _pick_of 하나·분류 함수 _sig_class 하나, 배너 종목 옆에 bucket. ② 관심종목 보유/안 산 것 이름순 + 우선순위 한 줄(watch_action kind 재사용, 새 문턱 없음). ③ 물타기 — personalize_for_position 6조건을 스냅샷에 찍고 watch_action 이 다시 말함. ④ 포트폴리오 견해 업종 비중·업종 원장 성적·국면 서술(점수 안 만듦 — 원장이 종목 단위). ⑤ PREREG_R214 차트 구조: R1 레벨 조인 날짜 train70/valid6/blind4 로 미달, 기준 안 내림. §231.",
+   "created_at": "2026-09-02T14:35:53+00:00",
+   "effective_from": "2026-09-02"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

@@ -2279,7 +2279,15 @@ WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
 #:   (라운드 166). 사용자 요청: *"내 계획이 아니라 실제로 너가 판단해서
 #:   해줘야지."* `verdict_core` 의 `bucket` 을 그대로 담는다 — 화면이
 #:   새 판정을 만들지 않는다 (§4 — 화면 값은 한 곳에서).
-WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket')
+#: 라운드 214 — 물타기·업종 스탬프 여섯. **여기 없는 키는 저장에서 조용히
+#:   떨어진다.** 실측: 세션(화면)에는 '물타기 불가 · (업종)' 이 찍혔는데
+#:   파일에는 없었고, 재시작하면 사라졌다 — 화면은 맞고 파일이 거짓말했다.
+#:   `snap_avg_down_ok` 는 **글자**('가능'/'불가')다: 숫자 칸(`_watch_num`)은
+#:   0 을 버리므로 bool·0/1 로는 '불가'가 사라진다. 실패 목록도 ' · ' 로
+#:   이은 글자 하나다. 세션도 같은 모양으로 찍는다 (§4 — 두 모양 금지).
+WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket',
+                  'snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
+                  'snap_holder_key', 'snap_holder_title', 'snap_weight_basis')
 #: ⚠️ 라운드 169 — `plan`('내 계획')을 **걷어냈다.**
 #:   라운드 164 에서 사용자 요청으로 넣었는데, 라운드 166 이 엔진 판단
 #:   칸을 붙이자 *"내 계획은 지워버리고 엔진 판단부터 제대로"* 로 요청이

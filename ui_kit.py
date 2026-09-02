@@ -1140,6 +1140,41 @@ def watch_action(row, price=None):
     if not bucket and not (h_stop or h_trim or buy):
         return None                      # 아직 아무것도 안 쟀다
 
+    def _held(d):
+        """보유자 판단에 **물타기 판정**을 붙인다 (라운드 214 · 사용자 요청).
+
+        *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."*
+        새 문턱을 만들지 않는다 — 스냅샷에 찍힌 `personalize_for_position`
+        의 6조건 결과(`snap_avg_down_ok`·`snap_avg_down_fail`)를 **다시 말할
+        뿐**이다 (§2-6 · §4). 안 찍혔으면 None — 지어내지 않는다 (§3).
+        """
+        _ok_raw = (row or {}).get('snap_avg_down_ok')
+        # 파일은 글자('가능'/'불가')로 남기고(portfolio.WATCH_SNAP_TXT), 같은 세션의
+        # 옛 값은 bool 로 올 수 있다 — 둘 다 읽는다. 그 밖은 '안 잼'이다 (§3).
+        if _ok_raw in (True, '가능'):
+            _ok = True
+        elif _ok_raw in (False, '불가'):
+            _ok = False
+        else:
+            _ok = None
+        _fr = (row or {}).get('snap_avg_down_fail')
+        _fail = ([s for s in str(_fr).split(' · ') if s] if isinstance(_fr, str)
+                 else list(_fr or []))
+        if _ok is None:
+            d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'
+        elif _ok:
+            d['avg_down_ok'], d['avg_down_why'] = True, '6조건 전부 통과'
+        else:
+            d['avg_down_ok'] = False
+            # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
+            # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
+            _head, _more = _fail[:3], _fail[3:]
+            d['avg_down_why'] = ('미충족: ' + ' · '.join(_head)
+                                 + (f' 외 {len(_more)}' if _more else '')
+                                 ) if _fail else '조건 미충족'
+        d['holder_title'] = (row or {}).get('snap_holder_title')
+        return d
+
     if paid and px:
         # ── 보유자 관점 ────────────────────────────────────────────
         # ⚠️ 보유자 가격선이 **하나도 없으면 판단하지 않는다.** 없는 채로
@@ -1147,29 +1182,29 @@ def watch_action(row, price=None):
         #   §3 위반이다. 화면 실측에서 실제로 13종목이 전부 '보유 유지'로
         #   나왔고, 그건 판단이 아니라 값이 없었던 것이다.
         if not (h_stop or h_trim):
-            return dict(kind='보유 기준 미산출', label='보유 기준 미산출',
-                        tone='tx3', held=True,
-                        why='이 종목의 보유자 기준값(버틸 수 없는 가격·팔 '
-                            '가격 1차)을 아직 안 냈습니다 — 채우면 판단합니다')
+            return _held(dict(kind='보유 기준 미산출', label='보유 기준 미산출',
+                              tone='tx3', held=True,
+                              why='이 종목의 보유자 기준값(버틸 수 없는 가격·팔 '
+                                  '가격 1차)을 아직 안 냈습니다 — 채우면 판단합니다'))
         if h_stop and px <= h_stop:
-            return dict(kind='정리 검토', label='정리 검토', tone='neg',
-                        held=True,
-                        why=f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다')
+            return _held(dict(kind='정리 검토', label='정리 검토', tone='neg',
+                              held=True,
+                              why=f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다'))
         if h_trim and px >= h_trim:
-            return dict(kind='일부 정리', label='일부 정리', tone='pos',
-                        held=True,
-                        why=f'팔 가격 1차({h_trim:,.0f}원)에 닿았습니다')
+            return _held(dict(kind='일부 정리', label='일부 정리', tone='pos',
+                              held=True,
+                              why=f'팔 가격 1차({h_trim:,.0f}원)에 닿았습니다'))
         if bucket == '오늘 매수 가능' and buy and px <= buy:
-            return dict(kind='추가 매수 가능', label='추가 매수 가능',
-                        tone='pos', held=True,
-                        why=f'목표 매수가({buy:,.0f}원) 이하이고 엔진이 '
-                            f'매수 가능으로 봅니다')
-        return dict(kind='보유 유지', label='보유 유지', tone='tx2', held=True,
-                    why=('버틸 수 없는 가격과 팔 가격 1차 사이입니다'
-                         if (h_stop and h_trim) else
-                         (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
-                          if h_stop else
-                          f'팔 가격 1차({h_trim:,.0f}원)에 아직 못 미칩니다')))
+            return _held(dict(kind='추가 매수 가능', label='추가 매수 가능',
+                              tone='pos', held=True,
+                              why=f'목표 매수가({buy:,.0f}원) 이하이고 엔진이 '
+                                  f'매수 가능으로 봅니다'))
+        return _held(dict(kind='보유 유지', label='보유 유지', tone='tx2', held=True,
+                          why=('버틸 수 없는 가격과 팔 가격 1차 사이입니다'
+                               if (h_stop and h_trim) else
+                               (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
+                                if h_stop else
+                                f'팔 가격 1차({h_trim:,.0f}원)에 아직 못 미칩니다'))))
 
     # ── 미보유 관점 — bucket 을 그대로 짧게 말한다 ──────────────────
     if not bucket:

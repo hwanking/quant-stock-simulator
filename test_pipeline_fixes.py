@@ -6894,12 +6894,22 @@ check("카드 조립 함수가 모듈 수준으로 올라왔다",
 # 라운드 47 — 목록을 실행 가능/대기로 가르면서 렌더를 _render_att 로 뺐다.
 # 들여쓰기까지 문자열로 박아 두면 구조를 바꿀 때마다 검사가 막는다 —
 # **같은 함수를 쓰는가**만 본다 (그게 이 검사의 의도였다).
+# ⚠️ 라운드 214 — 직접 호출 `_pm_mod.pick_from_scan_row(q_engine, _sr0)` 은
+#   메모 `_pick_of` 안으로 들어갔다(배너와 목록이 **한 번** 계산한 판정을
+#   같이 읽는다 · §4). 검사의 의도("같은 함수를 쓰는가")는 그대로다 — 옛
+#   구현 문자열 대신 **그 함수가 메모 안에서 불리고, 목록이 메모를 읽는지**
+#   본다 (§6 — 검사가 옛 구현을 요구하면 현실에 맞추고 이유를 적는다).
 check("관심종목 후보도 같은 카드를 쓴다",
-      '_pm_mod.pick_from_scan_row(q_engine, _sr0)' in _w109
+      '_pm_mod.pick_from_scan_row(q_engine, sr)' in _w109     # 메모 안의 호출
+      and "_pk = _pick_of(_r0['code'], _sr0)" in _w109         # 목록이 메모를 읽는다
       and '_build_reco_card(_pick' in _w109
       and '_uk.reco_card(' in _w109)
+# ⚠️ 라운드 214 — `if _cr.get('actionable')` 인라인 분기가 `_sig_class` 한
+#   함수로 갔다(배너와 같은 함수). 'actionable 이면 위로'는 그 함수 안에 있다.
 check("실행 가능한 것만 위로 올린다 (라운드 47)",
-      "_cr.get('actionable')" in _w109 and '_render_att(_live' in _w109)
+      '_cls = _sig_class(_cr)' in _w109
+      and "if _c.get('actionable'):" in _w109        # _sig_class 안 — live 가 먼저
+      and '_render_att(_live' in _w109)
 check("대기 후보는 접어서 아래로", '_render_att(_wait' in _w109)
 check("뺀 종목도 사유를 남긴다", '_dropped' in _w109)
 check("스냅샷이 없으면 가격을 지어내지 않는다",
@@ -19165,6 +19175,215 @@ _be230 = open(_os.path.join(PROJ, 'bitemporal_engine.py'),
 check("파서가 page_status 를 기록하고 판정이 같은 키를 읽는다",
       '"page_status": _page_status' in _be230
       and "meta.get('page_status') == 'item_page_missing'" in _be230)
+
+# ════════════════════════════════════════════════════════════════════════
+# §231 — 관심후보·추천후보를 한 판정으로 · 관심종목 정렬·물타기 · 포트폴리오 서술
+#        (라운드 214 · 사용자 지적 넷)
+#
+#   ① *"확장 신호 1종목 — SK이노베이션(59점)인데 실제로 손댈 수 있는 후보는
+#      DB손해보험만."* — 배너는 **원점수 띠**로, 실행 후보는 **verdict_core
+#      bucket** 으로 갈랐다. 같은 종목을 두 경로로 세는 §4 위반(R114 의 그것).
+#      고침: 판정은 코드마다 한 번(`_pick_of` 메모), 가르는 함수는 하나
+#      (`_sig_class`), 배너 종목 옆에 bucket 을 적고 요약 한 줄로 잇는다.
+#   ② 관심종목 — 이름순 + 우선순위 한 줄. **새 문턱 없음** (`watch_action` 의
+#      kind 를 순서로만 옮김). 판단은 한 번(`_wl_pre`)만 계산.
+#   ③ 물타기 — `personalize_for_position` 의 **채택된 6조건**을 스냅샷에 찍고
+#      `watch_action` 이 다시 말한다. 안 찍혔으면 None (§3).
+#   ④ 포트폴리오 견해 — 업종 비중(산수)·업종 원장 성적(표시 전용)·국면(종목
+#      상세와 같은 함수). **점수를 만들지 않는다** — 원장이 종목 단위라
+#      포트폴리오 단위 문턱은 잴 수 없다 (§2).
+#   ⑤ 차트 구조 — 사전등록 R214. R1(레벨 조인 날짜)이 **미달**이라 R3 부터는
+#      안 쟀다. 기준을 안 내렸다.
+# ════════════════════════════════════════════════════════════════════════
+print()
+print("=" * 72)
+print("§231 관심후보·추천후보 한 판정 · 관심종목 정렬·물타기 · 포트폴리오 서술 (라운드 214)")
+print("=" * 72)
+_w231 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_uk231 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+
+# ── ① 배너와 실행 후보가 **같은 메모·같은 분류 함수**를 읽는다 (§4) ────────
+check("판정 메모 `_pick_of` 가 정의돼 있다", 'def _pick_of(code, sr):' in _w231)
+check("배너가 `_sig_tag` 로 종목 옆에 판정을 붙인다 (60+ · 58~59 둘 다)",
+      _w231.count('.join(_sig_tag(r) for r in _bz_rows[:5])') == 1
+      and _w231.count('.join(_sig_tag(r) for r in _ext_rows[:6])') == 1)
+# `_built` 구간에는 직접 호출이 남아 있으면 안 된다 — 두 번째 계산 경로가 된다
+_i231a = _w231.find('_built = []')
+_i231b = _w231.find('_live, _wait, _dropped = [], [], []')
+check("_built 구간을 찾았다 (못 찾으면 아래 검사가 헛돈다)",
+      0 < _i231a < _i231b, f'{_i231a}..{_i231b}')
+_seg231 = _w231[_i231a:_i231b] if 0 < _i231a < _i231b else ''
+check("_built 는 `_pick_of` 를 읽고 `pick_from_scan_row` 를 직접 부르지 않는다",
+      '_pk = _pick_of(' in _seg231 and 'pick_from_scan_row(' not in _seg231,
+      scanned=len(_seg231))
+check("가르는 함수 `_sig_class` 가 하나이고 배너·목록 둘 다 부른다",
+      _w231.count('def _sig_class(core):') == 1
+      and '_sig_cnt[_sig_class(_co)] += 1' in _w231
+      and '_cls = _sig_class(_cr)' in _w231)
+check("대기 튜플이 한 곳(`_WAIT_OK_214`)뿐이다 — 베낀 사본 없음",
+      _w231.count("_WAIT_OK_214 = (") == 1
+      and _w231.count("_WAIT_OK = (") == 0)
+check("배너가 신호→판정 요약 한 줄을 낸다 (실행 가능·조건 대기·뺌)",
+      '신호 {len(_bz_rows) + len(_ext_rows)}종목의 판정' in _w231
+      and "같은 판정**입니다" in _w231)
+check("판정을 못 낸 신호는 그렇게 적는다 (§3)", "_tag = '판정 미산출'" in _w231)
+
+# ── ② 관심종목 — 이름순 · 우선순위 한 줄 · 판단 한 번 (§2-6 · §4) ───────
+check("보유/안 산 것 두 무리가 **이름순**으로 정렬된다",
+      _w231.count(".sort(key=lambda it: str(it[1].get('name') or ''))") == 2)
+check("우선순위 순서표가 `watch_action` 의 kind 를 그대로 쓴다 (새 문턱 없음)",
+      "_WL_SELL_RANK = ('정리 검토', '일부 정리', '보유 유지'" in _w231
+      and "_WL_BUY_RANK = ('매수 가능', '눌림목 매수 대기'" in _w231)
+check("우선순위 한 줄이 무리 머리에 나온다",
+      'st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))' in _w231)
+check("판단·현재가를 한 번만 계산해(`_wl_pre`) 표가 그대로 쓴다",
+      '_wl_pre[_pi] = (_ppx, _uk.watch_action(_pr, _ppx))' in _w231
+      and '_px_w = _wl_pre[_wi][0]' in _w231
+      and '_act = _wl_pre[_wi][1]' in _w231)
+# ⚠️ 첫 판은 파일 전체에서 `_uk.watch_action(` 을 1개로 세었다 — 다른 화면
+#   (사이드바·요약 칸)도 부르므로 4개다. **표 구간만** 잘라 센다. 내 판별식이
+#   또 넓었다 (memory: my-discriminators-are-wrong-until-planted).
+_i231c = _w231.find('_wl_pre = {}')
+_i231d = _w231.find('if _wl_dirty:', _i231c)
+_seg231w = _w231[_i231c:_i231d] if 0 < _i231c < _i231d else ''
+
+
+def _code_calls231(seg, needle):
+    """주석 줄은 빼고 센다 — 주석이 함수 이름을 말하는 자리가 세 곳이다."""
+    return sum(1 for ln in seg.splitlines()
+               if needle in ln and not ln.lstrip().startswith('#'))
+
+
+check("관심종목 표 구간 안에서 watch_action 은 사전 계산 한 번뿐이다 (두 번 안 센다)",
+      _code_calls231(_seg231w, '_uk.watch_action(') == 1,
+      str(_code_calls231(_seg231w, '_uk.watch_action(')), scanned=len(_seg231w))
+
+# ── ③ 물타기 — 채택된 6조건 재사용 · 안 찍혔으면 None ─────────────────────
+check("스냅샷 찍는 함수가 personalize_for_position 을 부른다 (같은 함수 · §4)",
+      'def _wl_avg_down_snap(row, snapshot):' in _w231
+      and 'q_engine.personalize_for_position(snapshot, paid, qty,' in _w231)
+check("스냅샷이 있는 두 자리(채우기 버튼 · 종목 상세) 모두 물타기·업종을 찍는다",
+      _w231.count('_wl_avg_down_snap(') == 3          # def 1 + 호출 2
+      and "'snap_sector': (_snp166.get('val_eval') or {}).get('sector')" in _w231
+      and "'snap_sector': val_eval.get('sector')" in _w231,
+      str(_w231.count('_wl_avg_down_snap(')))
+check("비중 정의가 정식 보유 화면과 같다 (매입원가 기준)",
+      'wpct = (paid * qty / tot * 100.0) if tot > 0 else None' in _w231)
+check("watch_action 이 물타기를 **다시 말할 뿐**이다 (`_held` 래퍼)",
+      'def _held(d):' in _uk231 and "d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'" in _uk231)
+# 값으로 — 심어서 양방향 확인 (라운드 194 의 규율)
+try:
+    import ui_kit as _uk231m
+    _b231 = dict(paid=10000, snap_hold_stop=9000, snap_hold_trim=12000,
+                 snap_bucket='보유 유지')
+    _a231 = _uk231m.watch_action(dict(_b231, snap_avg_down_ok=False,
+                                      snap_avg_down_fail=['중기 추세 유지']), 10500)
+    check("물타기 불가를 사유와 함께 낸다",
+          _a231.get('avg_down_ok') is False and '미충족' in str(_a231.get('avg_down_why')),
+          str(_a231.get('avg_down_why')))
+    _a231 = _uk231m.watch_action(dict(_b231, snap_avg_down_ok=True), 10500)
+    check("물타기 가능", _a231.get('avg_down_ok') is True)
+    _a231 = _uk231m.watch_action(dict(_b231), 10500)
+    check("안 찍혔으면 None — 지어내지 않는다 (§3)", _a231.get('avg_down_ok') is None)
+    _a231 = _uk231m.watch_action(dict(snap_bucket='눌림목 매수 대기', snap_buy=9000), 10500)
+    check("미보유 판단에는 물타기 키가 없다 (오탐 없음)",
+          _a231.get('held') is False and 'avg_down_ok' not in _a231)
+    check("정리 검토(손절 아래)도 kind 를 지키고 물타기를 붙인다",
+          _uk231m.watch_action(dict(_b231, snap_avg_down_ok=False), 8500).get('kind') == '정리 검토')
+    # 파일 인코딩(글자)도 읽는다 — 저장은 글자로만 남기므로 (라운드 214 실측)
+    _a231 = _uk231m.watch_action(dict(_b231, snap_avg_down_ok='불가',
+                                      snap_avg_down_fail='중기 추세 유지 · 손익비'), 10500)
+    check("파일 인코딩('불가' + ' · ' 문자열)을 읽는다",
+          _a231.get('avg_down_ok') is False
+          and '중기 추세 유지' in str(_a231.get('avg_down_why')),
+          str(_a231.get('avg_down_why')))
+    check("파일 인코딩('가능')을 읽는다",
+          _uk231m.watch_action(dict(_b231, snap_avg_down_ok='가능'), 10500)
+          .get('avg_down_ok') is True)
+except Exception as _e231:                                     # noqa: BLE001
+    check("watch_action 물타기 심기 실행", False, f'{type(_e231).__name__}: {_e231}')
+check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만)",
+      "_ad_ok = _act.get('avg_down_ok') if _act['held'] else None" in _w231
+      and "물타기 {'가능' if _ad_ok else '불가'}" in _w231)
+
+# ── ③' 파일 스키마 — **세션엔 있고 파일엔 없던** 결함 (라운드 214 실측) ────
+#   화면이 '물타기 불가 · (업종)' 을 찍는데 파일에는 키가 없었다.
+#   `portfolio.save_watchlist` 가 화이트리스트로만 남기기 때문 — 재시작하면
+#   사라진다. 키를 스키마에 넣고, **저장→읽기 왕복**으로 잠근다.
+import portfolio as _pf231
+_SIX231 = ('snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
+           'snap_holder_key', 'snap_holder_title', 'snap_weight_basis')
+check("관심종목 파일 스키마가 물타기·업종 키 여섯을 남긴다 (없으면 재시작에 사라진다)",
+      all(k in _pf231.WATCH_SNAP_TXT for k in _SIX231), str(_pf231.WATCH_SNAP_TXT))
+check("스냅샷을 파일 스키마와 같은 모양(글자)으로 찍는다 (§4 — 두 모양 금지)",
+      "'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가')" in _w231
+      and "'snap_avg_down_fail': ' · '.join(_fails)" in _w231)
+try:
+    import tempfile as _tf231
+    _tmp231 = _os.path.join(_tf231.gettempdir(), 'gaeum_wl_roundtrip_231.json')
+    # 심기 종목은 **가짜 코드**다 — 실제 종목을 쓰면 보유로 읽힐 수 있다 (§9)
+    _pf231.save_watchlist([dict(code='999999', name='왕복검사종목', paid=1, qty=1,
+                                snap_at='2026-09-03', snap_sector='검사업종',
+                                snap_avg_down_ok='불가',
+                                snap_avg_down_fail='중기 추세 유지 · 손익비',
+                                snap_holder_key='TRIM_ON_BOUNCE',
+                                snap_holder_title='반등 시 비중축소',
+                                snap_weight_basis='관심종목 보유분 매입원가 기준')],
+                           path=_tmp231)
+    _rt231, _ = _pf231.load_watchlist(path=_tmp231)
+    _row231 = (_rt231 or [{}])[0]
+    check("저장→읽기 왕복에서 여섯 키가 살아남는다 (값 그대로)",
+          all(_row231.get(k) for k in _SIX231)
+          and _row231.get('snap_avg_down_ok') == '불가'
+          and _row231.get('snap_sector') == '검사업종',
+          str({k: _row231.get(k) for k in _SIX231}))
+    # 왕복한 값을 watch_action 이 그대로 읽는다 — 파일→화면 끝까지
+    _a231r = _uk231m.watch_action(dict(_row231, paid=10000, snap_hold_stop=9000,
+                                       snap_hold_trim=12000), 10500)
+    check("왕복한 파일 값으로 화면이 '물타기 불가 · 사유'를 낸다",
+          _a231r.get('avg_down_ok') is False and '손익비' in str(_a231r.get('avg_down_why')))
+    try:
+        _os.remove(_tmp231)
+    except OSError:
+        pass
+except Exception as _e231r:                                    # noqa: BLE001
+    check("관심종목 파일 왕복 심기 실행", False, f'{type(_e231r).__name__}: {_e231r}')
+
+# ── ④ 포트폴리오 견해 — 서술만 · 국면은 한 함수 ─────────────────────────
+check("업종 비중·집중도를 서술한다 (매입원가 산수)",
+      '**업종별 (매입원가 비중)**' in _w231 and '업종 집중도 HHI' in _w231)
+check("업종 성적은 sector_cycle.ledger_perf (표시 전용) 를 읽는다",
+      '_lp = _sc214.ledger_perf(_sc)' in _w231)
+check("점수를 만들지 않는다고 적어 뒀다 (§2 — 원장이 종목 단위라 못 잰다)",
+      '여기서 **점수를 만들지 않는다.**' in _w231 and '원장은 **종목 단위**' in _w231)
+# ⚠️ `def _market_state_214():` 도 그 문자열을 품는다 — 정의 1 + 호출 2 = 3.
+check("국면은 한 함수 `_market_state_214` 를 견해·종목 상세가 함께 읽는다 (§4)",
+      '_ms58 = _market_state_214()' in _w231
+      and '_ms214 = _market_state_214()' in _w231
+      and _code_calls231(_w231, '_market_state_214()') == 3      # def 1 + 호출 2
+      and _code_calls231(_w231, 'engine_init.get_index_regime(') == 1,
+      f"call {_code_calls231(_w231, '_market_state_214()')} · "
+      f"fetch {_code_calls231(_w231, 'engine_init.get_index_regime(')}")
+check("국면 캐시는 한 그리기에만 산다 (모듈 변수 — 재실행마다 비워짐)",
+      '_RG214_CACHE = {}' in _w231 and "if 'v' in _RG214_CACHE:" in _w231)
+check("지수를 못 받으면 국면을 지어내지 않는다 (§3)",
+      '지수를 못 받아 판정하지 않았습니다' in _w231)
+
+# ── ⑤ 차트 구조 사전등록 — R1 미달을 적었고 기준을 안 내렸다 ────────────
+_pr231 = _os.path.join(PROJ, 'docs', 'PREREG_R214_CHART_STRUCTURE.md')
+check("차트 구조 사전등록이 있다", _os.path.exists(_pr231))
+if _os.path.exists(_pr231):
+    _pt231 = open(_pr231, encoding='utf-8').read()
+    check("R1(레벨 조인 날짜)이 미달로 **실측 기록**돼 있다 (train 70·valid 6·blind 4)",
+          '**미달**' in _pt231 and 'train **70일**' in _pt231
+          and 'valid **6일**' in _pt231 and 'blind **4일**' in _pt231)
+    check("R84 의 날짜 하한 30일을 재사용했고 내리지 않았다",
+          '30일 이상' in _pt231 and '30 → 6 으로 내려 재지 않는다' in _pt231)
+    check("기측정(R84·R111·R158)을 표로 모았다 — '안 봤다'가 아니라 '봤고 없었다'",
+          'R84' in _pt231 and 'R111' in _pt231 and 'R158' in _pt231
+          and '봤고 없었다' in _pt231)
+    check("보정 문턱을 올림으로 적었다 (R113)", 'z ≥ 2.50' in _pt231)
+    check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다**' in _pt231)
 
 print()
 print("=" * 72)
