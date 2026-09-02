@@ -1,44 +1,44 @@
 {
  "prereg": "docs/PREREG_R208_EV_GATE_ANTISELECT.md",
  "cost": 0.36,
- "measured_at_rows": 216769,
+ "measured_at_rows": 231769,
  "R1": "formula identical to verdict_core.build (code-verified)",
  "blind": {
-  "pass_n": 111,
-  "fail_n": 5812,
-  "pass_mean": -2.794954954954955,
-  "fail_mean": -0.6935237439779767
+  "pass_n": 206,
+  "fail_n": 5925,
+  "pass_mean": -3.7709223300970875,
+  "fail_mean": -0.4437586497890296
  },
  "R2": {
-  "obs_diff_pass_minus_fail": -2.1014,
+  "obs_diff_pass_minus_fail": -3.3272,
   "boot_ci95": [
-   -5.4943,
-   2.1082
+   -5.5495,
+   -0.1486
   ],
   "n_boot": 2000,
   "seed": 208,
-  "excludes_zero": false
+  "excludes_zero": true
  },
  "R3": {
   "train": {
-   "pass_n": 285,
-   "fail_n": 80526,
-   "pass_mean": 0.521,
-   "fail_mean": 0.0996,
-   "diff": 0.4214
+   "pass_n": 525,
+   "fail_n": 85245,
+   "pass_mean": 1.2174,
+   "fail_mean": 0.0961,
+   "diff": 1.1213
   },
   "valid": {
-   "pass_n": 20,
-   "fail_n": 7732,
-   "pass_mean": 3.5945,
-   "fail_mean": 0.7868,
-   "diff": 2.8077
+   "pass_n": 35,
+   "fail_n": 8103,
+   "pass_mean": 1.454,
+   "fail_mean": 0.7631,
+   "diff": 0.6909
   }
  },
  "R3_same_sign": false,
  "R4": {
-  "mde_halfwidth": 3.8013,
-  "obs_within_noise": true
+  "mde_halfwidth": 2.7005,
+  "obs_within_noise": false
  },
  "verdict": "(a) 현행 유지 — 역선별의 일관된 증거 없음."
 }

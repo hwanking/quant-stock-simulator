@@ -3,12 +3,25 @@
   "model": "v2026.09.02.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
-  "schema": "v2026.09.02.5",
+  "schema": "v2026.09.02.6",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.09.02.6",
+   "previous": "v2026.09.02.5",
+   "kind": "data_fix",
+   "kind_ko": "데이터 오류 수정",
+   "bump": "patch",
+   "reason": "축적 7차분 — 원장 231,769 (+15,000)",
+   "note": "calibration_lab --limit 15000 · 216,769→231,769 · carried_over 977 · 축소 없음 · 파생물 5종 갱신. R205 strict_not_worse 가 False→True 로 표류(0.41 블라인드 n 31→126 · 평균 −5.83→−0.80) — 그래도 기각·0.36 유지(R3 큰 표본 반대 · 채택 입증 책임 · 블라인드 비정상). R208 블라인드 CI 가 0 제외로 세졌으나 train·valid 부호 반대라 (a) 유지. 회귀 R205 락을 표류값 대신 불변식으로 고침.",
+   "created_at": "2026-09-02T08:53:50+00:00",
+   "effective_from": "2026-09-02"
+  },
   {
    "axis": "schema",
    "axis_ko": "데이터 스키마",

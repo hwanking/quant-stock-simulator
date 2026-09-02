@@ -1,42 +1,42 @@
 {
- "measured_at_rows": 216769,
- "usable": 216747,
+ "measured_at_rows": 231769,
+ "usable": 231747,
  "carried_over_rows": 977,
  "prereg": "docs/PREREG_R191_COST_UNIFY.md",
  "R3": {
-  "blind_n_58plus": 5923,
-  "hit_rate": 51.899375316562555,
-  "mean_ret_raw": -0.7329056221509391,
+  "blind_n_58plus": 6131,
+  "hit_rate": 53.07453922687979,
+  "mean_ret_raw": -0.5555504811613129,
   "net_ev": {
-   "0.3": -1.0329,
-   "0.36": -1.0929,
-   "0.41": -1.1429
+   "0.3": -0.8556,
+   "0.36": -0.9156,
+   "0.41": -0.9656
   },
   "same_sign": true
  },
  "R4": {
   "0.3": {
-   "passers_all": 1216,
-   "blind_n": 362,
-   "blind_hit": 45.58011049723757,
-   "blind_mean_ret_raw": -2.9778453038674044
+   "passers_all": 2083,
+   "blind_n": 575,
+   "blind_hit": 49.04347826086956,
+   "blind_mean_ret_raw": -1.7386608695652184
   },
   "0.36": {
-   "passers_all": 481,
-   "blind_n": 133,
-   "blind_hit": 48.1203007518797,
-   "blind_mean_ret_raw": -2.2371428571428558
+   "passers_all": 904,
+   "blind_n": 256,
+   "blind_hit": 45.703125,
+   "blind_mean_ret_raw": -2.985351562499999
   },
   "0.41": {
-   "passers_all": 222,
-   "blind_n": 58,
-   "blind_hit": 46.55172413793103,
-   "blind_mean_ret_raw": -4.23396551724138
+   "passers_all": 452,
+   "blind_n": 126,
+   "blind_hit": 52.38095238095238,
+   "blind_mean_ret_raw": -0.801190476190476
   }
  },
  "R4_verdict": {
   "comparable": true,
-  "strict_not_worse": false,
+  "strict_not_worse": true,
   "note": "블라인드 통과분이 한쪽이라도 0건이면 R4 는 판정 불가 — 못 잰 것을 통과로 적지 않는다 (§3)"
  }
 }
