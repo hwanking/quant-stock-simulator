@@ -19305,6 +19305,10 @@ except Exception as _e231:                                     # noqa: BLE001
 check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만)",
       "_ad_ok = _act.get('avg_down_ok') if _act['held'] else None" in _w231
       and "물타기 {'가능' if _ad_ok else '불가'}" in _w231)
+# 채우기 버튼의 기준이 새 스탬프를 안다 — 모르면 옛 보유 행은 열기 전엔 영영 빈다
+check("채우기 버튼이 물타기 스탬프 없는 보유 행(매입가·수량 있음)도 대상으로 삼는다",
+      "'snap_avg_down_ok' not in w" in _w231
+      and "w.get('paid') and w.get('qty')" in _w231)
 
 # ── ③' 파일 스키마 — **세션엔 있고 파일엔 없던** 결함 (라운드 214 실측) ────
 #   화면이 '물타기 불가 · (업종)' 을 찍는데 파일에는 키가 없었다.

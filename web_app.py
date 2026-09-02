@@ -5385,6 +5385,14 @@ else:
         if w.get('paid') and not (w.get('snap_hold_stop')
                                   or w.get('snap_hold_trim')):
             return True
+        # 라운드 214 보완 — 물타기 스탬프가 없는 **보유** 행도 채울 대상이다.
+        #   이 기준이 그 키를 몰라, R214 이전에 저장된 보유 16행은 종목을 하나씩
+        #   열기 전엔 영영 '물타기' 칸이 비어 있었다. 매입가·수량 **둘 다** 있을
+        #   때만 — 수량이 없으면 헬퍼가 {} 를 돌려주어 키가 안 생기고, 그러면
+        #   이 기준이 그 행을 매번 다시 채우자고 해 파이프라인만 헛돈다.
+        if (w.get('paid') and w.get('qty')
+                and 'snap_avg_down_ok' not in w):
+            return True
         return False
 
     _fill_missing = [w for w in _wl_items() if _wl_needs_fill(w)]
