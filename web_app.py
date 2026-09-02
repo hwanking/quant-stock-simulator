@@ -3291,6 +3291,58 @@ if st.session_state.get('show_screener', False):
             _bz188 = ((_cal188.get('splits') or {}).get('buy_zone') or {})
             _bl188 = (_bz188.get('blind') or {})
             _made188 = _cal_made_date()
+            # ── 라운드 214 — 신호 계층과 '실제로 손댈 수 있는 후보'를 **한 판정**으로 ──
+            # 사용자 지적: *"확장 신호 1종목 — SK이노베이션(59점)인데 다음 거래일에
+            # 실제로 손댈 수 있는 후보는 DB손해보험만 나와. 정리해줘야 하는 거 아냐?
+            # 관심후보랑 추천후보랑 정리해줘야 하는 거 아닌가?"*
+            # 맞다. 이 배너는 **원점수 띠**(58~59 · 60+)로 걸렀고, 아래 실행 후보는
+            # `verdict_core` 의 bucket 으로 갈랐다 — 같은 종목을 두 경로로 세는
+            # §4 위반(라운드 114 의 그것)이다. 원점수 띠는 *신호*고 bucket 은
+            # *판정*이라 둘 다 사실이지만, **왜 신호가 판정에서 빠졌는지**를 배너가
+            # 말하지 않아 모순으로 읽혔다.
+            # → 판정은 코드마다 **한 번만** 계산한다(`_pick_of` 메모). 배너의
+            #   종목 옆에 그 bucket 을 붙이고, 아래 실행/대기/뺌 목록도 **같은
+            #   메모·같은 분류 함수**(`_sig_class`)를 읽는다.
+            _pick_memo = {}
+
+            def _pick_of(code, sr):
+                """scan 행 → premarket pick(verdict_core 포함). 한 코드에 한 번."""
+                if code not in _pick_memo:
+                    try:
+                        _pick_memo[code] = _pm_mod.pick_from_scan_row(q_engine, sr)
+                    except Exception:                          # noqa: BLE001
+                        _pick_memo[code] = None
+                return _pick_memo[code]
+
+            import verdict_core as _vcore214
+            #: 조건을 제시할 수 있는 대기 — 아래 대기 목록과 **같은 튜플**이다
+            _WAIT_OK_214 = ('과열 해소 대기', '거래량 회복 대기',
+                            '시장 국면 회복 대기', '신뢰도·표본 확보 대기')
+
+            def _sig_class(core):
+                """verdict_core 결과 → 'live' | 'wait' | 'drop'. 배너·목록이 같이 쓴다."""
+                _c = core or {}
+                if _c.get('actionable'):
+                    return 'live'
+                _bk = str(_c.get('bucket') or '')
+                if _bk in _WAIT_OK_214 or _bk in _vcore214.ACTIONABLE_BUCKETS:
+                    return 'wait'
+                return 'drop'
+
+            _SIG_KO_214 = {'live': '실행 후보', 'wait': None, 'drop': None}
+
+            def _sig_tag(r):
+                """배너 한 종목: 이름(점수 · 판정). 못 냈으면 그렇게 적는다 (§3)."""
+                _cd = str(r.get('symbol', '')).split('.')[0]
+                _co = ((_pick_of(_cd, r) or {}).get('core') or {})
+                _cls = _sig_class(_co) if _co else None
+                if _cls == 'live':
+                    _tag = '실행 후보'
+                elif _co.get('bucket'):
+                    _tag = str(_co.get('bucket'))
+                else:
+                    _tag = '판정 미산출'
+                return f"{r.get('name')}({r.get('final_score')}점 · {_tag})"
             _bz_rate_txt = (f"{_sf188['rate_pct']}%" if _sf188.get('rate_pct')
                             is not None else "미산출")
             if _made188:
@@ -3305,8 +3357,7 @@ if st.session_state.get('show_screener', False):
             if _bz_rows:
                 st.success(
                     f"**고신뢰 매수권(60점+) {len(_bz_rows)}종목** — "
-                    + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
-                                 for r in _bz_rows[:5])
+                    + " · ".join(_sig_tag(r) for r in _bz_rows[:5])
                     # ⚠️ 라운드 188 — 여기가 '실측 신호율 2.9%' 로 **박혀**
                     #   있었다. 원장이 자란 지금 값은 7.2% 다(2.5배 차이).
                     #   같은 앱의 홈 타일은 이 값을 파일에서 읽어 7.2% 를
@@ -3321,8 +3372,7 @@ if st.session_state.get('show_screener', False):
                 _ext_below = [r for r in _ext_rows if r.get('entry_candidate')]
                 _ext_msg = (
                     f"**확장 신호(58~59점) {len(_ext_rows)}종목** — "
-                    + " · ".join(f"{r.get('name')}({r.get('final_score')}점)"
-                                 for r in _ext_rows[:6])
+                    + " · ".join(_sig_tag(r) for r in _ext_rows[:6])
                     # ⚠️ 라운드 188 — 종전 문구는 원장 6,508건 시절(2026-08-02)
                     #   값을 **잰 날 없이** 인용했다. 잰 날을 적는다 (§9).
                     + f"  \n사전등록 실측(원장 6,508건 시점 · 2026-08-02): "
@@ -3354,6 +3404,21 @@ if st.session_state.get('show_screener', False):
             if not _bz_rows and not _ext_rows:
                 st.caption("이번 스캔에는 매수권(60점+)·확장 신호(58~59점)가 모두 "
                            "없습니다 — 없는 날은 관망이 결론입니다.")
+            else:
+                # 신호와 판정을 **한 줄로 잇는다** (라운드 214). 아래 '다음 거래일에
+                # 실제로 손댈 수 있는 후보'가 쓰는 것과 같은 메모·같은 함수다.
+                _sig_cnt = {'live': 0, 'wait': 0, 'drop': 0}
+                for _r in _bz_rows + _ext_rows:
+                    _co = ((_pick_of(str(_r.get('symbol', '')).split('.')[0], _r)
+                            or {}).get('core') or {})
+                    _sig_cnt[_sig_class(_co)] += 1
+                st.caption(
+                    f"신호 {len(_bz_rows) + len(_ext_rows)}종목의 판정 — 실행 가능 "
+                    f"**{_sig_cnt['live']}** · 조건 대기 **{_sig_cnt['wait']}** · "
+                    f"추천·대기에서 뺌 **{_sig_cnt['drop']}**. 아래 '다음 거래일에 "
+                    f"실제로 손댈 수 있는 후보'와 **같은 판정**입니다 — 신호(원점수 "
+                    f"띠)와 판정(11개 조건)은 다른 잣대라 신호가 있어도 판정에서 "
+                    f"빠질 수 있고, 그 이유를 종목 옆에 적었습니다.")
 
             _att = st.session_state.get('attention_result') or {}
             if _att.get('used_confirmed_bars_only'):
@@ -3493,10 +3558,9 @@ if st.session_state.get('show_screener', False):
                     _sr0 = _by_sym.get(_r0['code'])
                     _pk = None
                     if _sr0:
-                        try:
-                            _pk = _pm_mod.pick_from_scan_row(q_engine, _sr0)
-                        except Exception:
-                            _pk = None
+                        # 배너와 **같은 메모**를 읽는다 (§4 · 라운드 214) — 한 코드에
+                        # 판정 한 번. 실패는 메모가 None 으로 기억한다.
+                        _pk = _pick_of(_r0['code'], _sr0)
                     if _pk:
                         _pk['reco_class'] = _row[2]
                     _built.append((_row, _pk))
@@ -3507,15 +3571,16 @@ if st.session_state.get('show_screener', False):
                 # 조건을 제시할 수 있는 칸만 대기 목록에 남긴다.
                 # '권장가 괴리 과다'는 현실적인 눌림목·돌파 조건을 낼 수 없다는
                 # 뜻이므로 대기 목록에도 두지 않는다 — 사용자 지적 그대로다.
-                _WAIT_OK = ('과열 해소 대기', '거래량 회복 대기',
-                            '시장 국면 회복 대기', '신뢰도·표본 확보 대기')
+                # ⚠️ 라운드 214 — 가르는 함수는 배너와 **같은** `_sig_class` 다.
+                #   대기 튜플도 그 함수 안의 `_WAIT_OK_214` 하나뿐이다 (§4).
                 _live, _wait, _dropped = [], [], []
                 for _x in _built:
                     _cr = (_x[1] or {}).get('core') or {}
                     _bk = str(_cr.get('bucket') or '')
-                    if _cr.get('actionable'):
+                    _cls = _sig_class(_cr)
+                    if _cls == 'live':
                         _live.append(_x)
-                    elif _bk in _WAIT_OK or _bk in _vcore.ACTIONABLE_BUCKETS:
+                    elif _cls == 'wait':
                         _wait.append(_x)
                     else:
                         _dropped.append((_x, _bk or '판정 불가',
@@ -4799,6 +4864,83 @@ if st.session_state.get('show_portfolio'):
 #   들어가지 않는다 (§9 — 평균 매수가는 보유 판단에만. 앵커링 방지).
 #   보유 중이면 '내 보유종목'에 등록해야 포트폴리오 판단에 들어간다.
 # ═══════════════════════════════════════════════════════════════════════════
+def _wl_avg_down_snap(row, snapshot):
+    """관심종목 한 줄의 **물타기 판정**을 스냅샷에 찍는다 (라운드 214 · 사용자 요청).
+
+    *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."*
+    새 문턱을 만들지 않는다 — `personalize_for_position` 이 **이미 채택한
+    6조건**(신규 진입 통과 · 비용후 기대수익 양수 · 손익비(현재가·2차) ·
+    중기 추세 · 비중 상한 · 표본 게이트)을 그대로 부른다 (§2-6). 정식 보유 화면과
+    **같은 함수·같은 비중 정의**(매입원가 기준 · :4709)다 (§4).
+    매입가·수량이 없으면 빈 dict — 지어내지 않는다 (§3).
+    """
+    try:
+        paid = float(row.get('paid') or 0)
+        qty = float(row.get('qty') or 0)
+    except (TypeError, ValueError):
+        return {}
+    if paid <= 0 or qty <= 0 or not snapshot:
+        return {}        # 안 산 종목 — 판정 대상이 아니다 (실패가 아니라 정상)
+    tot = 0.0
+    for w in _wl_items():
+        try:
+            tot += float(w.get('paid') or 0) * float(w.get('qty') or 0)
+        except (TypeError, ValueError):
+            pass
+    wpct = (paid * qty / tot * 100.0) if tot > 0 else None
+    try:
+        pv = q_engine.personalize_for_position(snapshot, paid, qty,
+                                               portfolio_weight_pct=wpct)
+    except Exception:                                          # noqa: BLE001
+        # 못 낸 것은 빈 dict 로 두되(§3 — 지어내지 않는다) **왜 못 냈는지는
+        # 서버 로그에 남긴다.** 조용히 {} 만 돌려주면 물타기 칸이 영영 비어도
+        # 아무도 모른다.
+        import sys as _sys214
+        import traceback as _tb214
+        print('[관심종목 물타기 판정 실패 — 칸을 비운다]\n'
+              + _tb214.format_exc(), file=_sys214.stderr)
+        return {}
+    _fails = [lbl for lbl, ok in (pv.get('averaging_down_checks') or []) if not ok]
+    return {
+        # ⚠️ 파일은 **글자 스키마**(portfolio.WATCH_SNAP_TXT)로만 남긴다 — bool·list
+        #   는 저장에서 떨어진다(실측: 세션엔 있고 파일엔 없었다). 세션과 파일이
+        #   같은 모양이 되도록 처음부터 글자로 찍는다 (§4). '불가'를 0 으로 두면
+        #   숫자 칸이 0 을 버려 사라지므로 글자다.
+        'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가'),
+        'snap_avg_down_fail': ' · '.join(_fails),
+        'snap_holder_key': pv.get('holder_action_key'),
+        'snap_holder_title': pv.get('holder_action_title'),
+        'snap_weight_basis': ('관심종목 보유분 매입원가 기준'
+                              if wpct is not None else '비중 미확인'),
+    }
+
+
+#: 한 번의 그리기 안에서만 산다 — 스크립트가 다시 돌면 비워진다 (낡지 않는다)
+_RG214_CACHE = {}
+
+
+def _market_state_214():
+    """KOSPI 국면을 **한 그리기에 한 번만** 계산한다 (라운드 214).
+
+    관심종목의 '내 포트폴리오 견해'(앞)와 종목 상세의 국면 칸(뒤 :7176)이
+    **같은 함수·같은 값**을 읽는다 (§4). `get_index_regime` 은 지수를 받아
+    오므로 두 번 부르면 두 번 받는다. 못 재면 None (§3).
+    """
+    if 'v' in _RG214_CACHE:
+        return _RG214_CACHE['v']
+    _ms = None
+    try:
+        _ir = engine_init.get_index_regime('KOSPI')
+        if _ir.get('available'):
+            import trade_plan as _tp214
+            _ms = _tp214.market_state(_ir['price'], _ir['sma20'],
+                                      _ir['sma60'], _ir.get('sma60_prev'))
+    except Exception:                                          # noqa: BLE001
+        _ms = None
+    _RG214_CACHE['v'] = _ms
+    return _ms
+
+
 st.markdown('<div id="nav-watchlist"></div>', unsafe_allow_html=True)
 _uk.spacer(28)
 st.header("관심종목")
@@ -4953,10 +5095,61 @@ else:
     _wl_owned = [(_i, _r) for _i, _r in enumerate(_wl_body) if _r.get('paid')]
     _wl_free = [(_i, _r) for _i, _r in enumerate(_wl_body)
                 if not _r.get('paid')]
-    _wl_groups = [('보유 중', _wl_owned, '매입가를 적은 종목 — 보유자 기준으로 판단합니다'),
-                  ('안 산 것', _wl_free, '매입가가 없는 종목 — 신규 매수 기준으로 판단합니다')]
 
-    for _gname, _grows, _ghint in _wl_groups:
+    # ── 라운드 214 — 이름순 정렬 + 우선순위 줄 (사용자 요청) ────────────
+    # *"보유 중은 이름순으로 정리하고 매도할 거 우선순위, 안 산 것은 마찬가지로
+    #   이름순으로 정리하고 매수할 거 우선순위로."*
+    # 표는 **이름순**이다(찾기 쉽게). 우선순위는 무리 머리에 **한 줄**로 낸다 —
+    # 새 문턱을 만들지 않는다 (§2-6). `watch_action` 이 **이미 발표한 kind** 를
+    # 급한 순서로 늘어놓을 뿐이다: 보유분은 '정리 검토'(버틸 수 없는 가격 아래)
+    # 가 가장 급하고, 안 산 것은 '지금 매수 가능'(목표가 이하)이 먼저다.
+    # 판단은 **한 번만** 계산해(`_wl_pre`) 표를 그릴 때 그대로 쓴다 (§4).
+    _WL_SELL_RANK = ('정리 검토', '일부 정리', '보유 유지', '추가 매수 가능',
+                     '보유 기준 미산출')
+    _WL_BUY_RANK = ('매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기',
+                    '과열 해소 대기', '거래량 회복 대기', '시장 국면 회복 대기',
+                    '신뢰도·표본 확보 대기', '데이터 부족', '권장가 괴리 과다',
+                    '추천 제외')
+    _wl_pre = {}          # 저장 색인 → (현재가, 판단) — 표가 이 값을 그대로 쓴다
+    for _pi, _pr in enumerate(_wl_body):
+        _pc = str(_pr.get('code'))
+        # 못 받으면 None 그대로 — 0 원으로 채우지 않는다 (§3)
+        _ppx = light_quote(f"{_pc}.KS") or light_quote(f"{_pc}.KQ")
+        _wl_pre[_pi] = (_ppx, _uk.watch_action(_pr, _ppx))
+    _wl_owned.sort(key=lambda it: str(it[1].get('name') or ''))
+    _wl_free.sort(key=lambda it: str(it[1].get('name') or ''))
+
+    def _wl_priority_line(rows, order):
+        """무리 머리의 우선순위 한 줄 — kind 를 급한 순서로, 이름은 이름순."""
+        _byk = {}
+        for _i2, _r2 in rows:
+            _a2 = _wl_pre[_i2][1]
+            if not _a2:
+                continue
+            _k2 = _a2['kind']
+            # '지금 매수 가능'(목표가 이하)은 '매수 가능' 앞에 둔다 — 같은 kind 의 label
+            if _k2 == '매수 가능' and _a2.get('label') == '지금 매수 가능':
+                _k2 = '지금 매수 가능'
+            _byk.setdefault(_k2, []).append(str(_r2.get('name') or ''))
+        _seq = (('지금 매수 가능',) + tuple(order)) if order is _WL_BUY_RANK else tuple(order)
+        _parts = []
+        for _k2 in _seq:
+            if _k2 in _byk:
+                _nm2 = sorted(_byk.pop(_k2))
+                _parts.append(f"**{_k2}** {len(_nm2)}종목 ({', '.join(_nm2[:5])}"
+                              + (f" 외 {len(_nm2) - 5}" if len(_nm2) > 5 else '') + ")")
+        for _k2, _nm2 in _byk.items():          # 순서표에 없는 kind 도 버리지 않는다
+            _parts.append(f"**{_k2}** {len(_nm2)}종목 ({', '.join(sorted(_nm2)[:5])})")
+        return " · ".join(_parts) if _parts else '판단할 값이 아직 없습니다'
+
+    _wl_groups = [('보유 중', _wl_owned,
+                   '매입가를 적은 종목 — 보유자 기준 · 이름순', _WL_SELL_RANK,
+                   '정리가 급한 순'),
+                  ('안 산 것', _wl_free,
+                   '매입가가 없는 종목 — 신규 매수 기준 · 이름순', _WL_BUY_RANK,
+                   '살 자리가 가까운 순')]
+
+    for _gname, _grows, _ghint, _gorder, _gtitle in _wl_groups:
         if not _grows:
             continue
         _uk.spacer(6)
@@ -4966,6 +5159,8 @@ else:
             f"<span style='font-weight:400; color:{_TOK['tx3']};'>"
             f"{len(_grows)}종목 · {_uk._esc(_ghint)}</span></div>",
             unsafe_allow_html=True)
+        # 우선순위 한 줄 (라운드 214) — 표는 이름순, 급한 것은 여기서 먼저 읽는다
+        st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))
         for _wi, _w in _grows:
             _wc = st.columns(_WL_COLS)
             _wcode = str(_w.get('code'))
@@ -4976,7 +5171,8 @@ else:
                     st.rerun()
             with _wc[1]:
                 # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
-                _px_w = light_quote(f"{_wcode}.KS") or light_quote(f"{_wcode}.KQ")
+                # 라운드 214 — 정렬 때 한 번 받은 값을 그대로 쓴다 (두 번 안 받는다)
+                _px_w = _wl_pre[_wi][0]
                 st.markdown(
                     f"<div style='padding-top:8px; font-size:13px;'>"
                     f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
@@ -5039,7 +5235,8 @@ else:
             # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
             # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
             with _wc[5]:
-                _act = _uk.watch_action(_w, _px_w)
+                # 라운드 214 — 정렬 때 이미 낸 판단을 그대로 쓴다 (§4 — 두 번 안 센다)
+                _act = _wl_pre[_wi][1]
                 _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
                 if not _act:
                     st.markdown(
@@ -5047,6 +5244,16 @@ else:
                         f"color:{_TOK['tx3']};'>아직 안 잼</div>",
                         unsafe_allow_html=True)
                 else:
+                    # 물타기 한 줄 (라운드 214) — 보유분만, 찍힌 값이 있을 때만 (§3)
+                    _ad_ok = _act.get('avg_down_ok') if _act['held'] else None
+                    if _ad_ok is None:
+                        _ad_html = ''
+                    else:
+                        _ad_html = (
+                            f"<br><span style='font-size:12px; "
+                            f"color:{_TOK['pos'] if _ad_ok else _TOK['warn']};' "
+                            f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
+                            f"물타기 {'가능' if _ad_ok else '불가'}</span>")
                     st.markdown(
                         f"<div style='padding-top:8px; font-size:13px; "
                         f"color:{_TOK[_act['tone']]};' "
@@ -5055,6 +5262,7 @@ else:
                         + (f"<br><span style='font-size:12px; "
                            f"color:{_TOK['tx3']};'>보유 기준</span>"
                            if _act['held'] else '')
+                        + _ad_html
                         + "</div>", unsafe_allow_html=True)
             # ── 사용자 입력 두 칸 ────────────────────────────────────
             with _wc[6]:
@@ -5228,7 +5436,11 @@ else:
                         # 보유자 기준 (라운드 169) — 다른 키다 (§4)
                         'snap_hold_trim': _co166.get('hold_trim'),
                         'snap_hold_stop': _co166.get('hold_stop'),
+                        # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
+                        'snap_sector': (_snp166.get('val_eval') or {}).get('sector'),
                     }
+                    # 물타기 판정 (라운드 214) — 매입가·수량이 있을 때만 찍힌다
+                    _vals166.update(_wl_avg_down_snap(_w166, _snp166))
                     _done166.append((_c166, _vals166))
                 except Exception as _ex166:                    # noqa: BLE001
                     # 실패를 통과로 적지 않는다 — 왜 못 냈는지 그대로 쓴다
@@ -5352,6 +5564,71 @@ else:
         st.markdown(_line169(
             f"안 산 것 {len(_pf_watch)}종목", _cnt_w169,
             "판단할 값이 아직 없습니다."))
+
+        # ── ②' 업종·시장 국면 — **서술만 한다** (라운드 214 · 사용자 요청) ──
+        # *"내 포트폴리오 견해에 대해서 섹터별 어떤지 시장상황도 보고 … 이런 거에
+        #   대한 판단 엔진도 만들어야 하지 않을까?"*
+        # 여기서 **점수를 만들지 않는다.** 포트폴리오 '점수'를 내려면 문턱이
+        # 필요한데, 원장은 **종목 단위**라 포트폴리오 단위 성적을 잴 수 없어
+        # 사전등록·실측이 불가능하다 (§2 — 잴 수 없는 문턱은 감이다). 그래서
+        # **잰 것만 서술한다** — 업종 비중은 산수(매입원가 · :4709 와 같은 정의),
+        # 업종 성적은 `sector_cycle.ledger_perf`(표시 전용 · 라운드 44), 국면은
+        # 종목 상세와 **같은 함수**(`_market_state_214`)가 낸 라벨이다 (§4).
+        _sec214, _sec_unknown = {}, []
+        for _nm169, _act169, _row169, _px169 in _wl_acts:
+            if not (_row169.get('paid') and _row169.get('qty')):
+                continue
+            try:
+                _cst = float(_row169['paid']) * float(_row169['qty'])
+            except (TypeError, ValueError):
+                continue
+            _sc = str(_row169.get('snap_sector') or '')
+            if _sc:
+                _sec214[_sc] = _sec214.get(_sc, 0.0) + _cst
+            else:
+                _sec_unknown.append(_nm169)
+        if _sec214 or _sec_unknown:
+            _sec_tot = sum(_sec214.values())
+            _sec_lines = []
+            for _sc, _v in sorted(_sec214.items(), key=lambda t: -t[1]):
+                _w = _v / _sec_tot * 100.0 if _sec_tot else 0.0
+                _perf = ''
+                try:
+                    import sector_cycle as _sc214
+                    _lp = _sc214.ledger_perf(_sc)
+                    if _lp and _lp.get('n'):
+                        _perf = (f" · 표본 {_lp['n']:,}건뿐" if _lp.get('small')
+                                 else f" · 이 업종 매수권 원장 적중 "
+                                      f"{_lp['hit']:.0f}%(n={_lp['n']:,})")
+                except Exception:                              # noqa: BLE001
+                    _perf = ''                # 실측 표 하나 때문에 화면이 죽지 않는다
+                _sec_lines.append(f"{_sc} **{_w:.0f}%**{_perf}")
+            _hhi = (sum((_v / _sec_tot) ** 2 for _v in _sec214.values())
+                    if _sec_tot else None)
+            _sec_md = "**업종별 (매입원가 비중)** — " + (
+                " · ".join(_sec_lines) if _sec_lines else "업종을 아직 못 읽었습니다")
+            if _hhi:
+                _sec_md += (f"  \n업종 집중도 HHI {_hhi:.2f} · 유효 업종 수 "
+                            f"{1.0 / _hhi:.1f}개 (1에 가까울수록 한 업종에 쏠림)")
+            if _sec_unknown:
+                _sec_md += ("  \n업종 미확인: " + ", ".join(_sec_unknown[:5])
+                            + (f" 외 {len(_sec_unknown) - 5}"
+                               if len(_sec_unknown) > 5 else '')
+                            + " — 종목을 열면 채워집니다")
+            st.markdown(_sec_md)
+        _ms214 = _market_state_214()
+        if _ms214 and _ms214.get('ko'):
+            _rg_md = f"**시장 국면** — {_ms214['ko']}"
+            if _ms214.get('slope_ko'):
+                _rg_md += f" · 60일선 {_ms214['slope_ko']}"
+            if _ms214.get('hit') is not None and _ms214.get('n'):
+                _rg_md += (f" · 이 국면의 매수권 적중 {_ms214['hit']:.1f}% "
+                           f"(n={_ms214['n']:,} · 개발 구간 · 라운드 52 실측)")
+            if _ms214.get('say'):
+                _rg_md += f"  \n{_ms214['say']}"
+            st.markdown(_rg_md)
+        else:
+            st.caption("시장 국면 — 지수를 못 받아 판정하지 않았습니다 (지어내지 않습니다).")
 
         # ── ③ 못 잰 것을 밝힌다 (§3) ────────────────────────────────
         if _pf_noprice:
@@ -6387,13 +6664,18 @@ try:
             # 보유자 기준 값 (라운드 169) — 신규 매수자 값과 **다른 키**다
             'snap_hold_trim': CORE.get('hold_trim'),
             'snap_hold_stop': CORE.get('hold_stop'),
+            # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
+            'snap_sector': val_eval.get('sector'),
         }
         _cw141 = portfolio.normalize_code(target_ticker)
         _items141, _dirty141 = [], False
         for _w141 in _wl_items():
             if portfolio.normalize_code(_w141.get('code')) == _cw141:
                 _new141 = dict(_w141)
-                for _k141, _v141 in _snap141.items():
+                # 물타기 판정 (라운드 214) — 이 줄의 매입가·수량으로, 같은 스냅샷에서
+                _s141 = dict(_snap141)
+                _s141.update(_wl_avg_down_snap(_w141, snap))
+                for _k141, _v141 in _s141.items():
                     # 못 낸 값은 **덮어쓰지 않는다** — 어제 잰 값이라도
                     # 오늘 미산출로 지워 버리면 화면이 더 비어 보인다.
                     if _v141 not in (None, ''):
@@ -6406,7 +6688,14 @@ try:
         if _dirty141:
             _wl_write(_items141)
 except Exception:                                              # noqa: BLE001
-    pass          # 관심종목 갱신 때문에 분석 화면이 죽지 않는다
+    # 관심종목 갱신 때문에 분석 화면이 죽지 않는다 — 다만 **왜 못 썼는지는
+    # 남긴다** (라운드 214). 종전 `pass` 는 실패를 통째로 삼켰고, 그 침묵이
+    # 물타기·업종 스탬프가 한 번도 안 찍히는 결함을 가렸다. 못 쓴 것을
+    # 표시 없이 지나가면 §3 위반이다 — 서버 로그에 역추적을 찍는다.
+    import sys as _sys141
+    import traceback as _tb141
+    print('[관심종목 스냅샷 갱신 실패 — 화면은 계속 그린다]\n'
+          + _tb141.format_exc(), file=_sys141.stderr)
 
 # 라운드 40 — 이모지(🟢🔴🟡🟠⚪)를 걷어내고 토큰 색 점으로 바꾼다.
 # 금융 터미널 레퍼런스 17종(Binance·Coinbase·Kraken·Stripe·Linear …)에
@@ -7175,12 +7464,9 @@ elif _cb and _cb.get('n', 0) < 5:
 # 이 두 값을 읽는다. 한 번만 계산해 네 곳이 같은 숫자를 말하게 한다 (§4).
 _rg58 = None
 try:
-    _ir58 = engine_init.get_index_regime('KOSPI')
-    if _ir58.get('available'):
-        import trade_plan as _tp58
-        _ms58 = _tp58.market_state(_ir58['price'], _ir58['sma20'],
-                                   _ir58['sma60'], _ir58.get('sma60_prev'))
-        _rg58 = (_ms58 or {}).get('code')
+    # 라운드 214 — 관심종목의 포트폴리오 견해와 **같은 함수**로 한 번만 받는다 (§4)
+    _ms58 = _market_state_214()
+    _rg58 = (_ms58 or {}).get('code')
 except Exception:                                              # noqa: BLE001
     pass
 _blend59 = None
