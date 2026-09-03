@@ -19390,8 +19390,15 @@ check("스냅샷이 있는 두 자리(채우기 버튼 · 종목 상세) 모두 
       str(_w231.count('_wl_avg_down_snap(')))
 check("비중 정의가 정식 보유 화면과 같다 (매입원가 기준)",
       'wpct = (paid * qty / tot * 100.0) if tot > 0 else None' in _w231)
-check("watch_action 이 물타기를 **다시 말할 뿐**이다 (`_held` 래퍼)",
-      'def _held(d):' in _uk231 and "d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'" in _uk231)
+# §6 — 라운드 221 이 이 검사를 현실에 맞췄다. 종전엔 `_held` 안의 한 줄
+#   (`d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'`)을 글자로
+#   요구했는데, R221 이 판별을 모듈 함수 `avg_down_class` 로 빼며 그 줄이
+#   옮겨 갔다. 잠글 것은 표기가 아니라 불변식 — 래퍼가 있고, 값을 다시 계산하지
+#   않고 찍힌 것을 **다시 말할 뿐**이며, 안 잰 것은 '아직 안 잼'이다.
+check("watch_action 이 물타기를 **다시 말할 뿐**이다 (`_held` 래퍼 → avg_down_class)",
+      'def _held(d):' in _uk231
+      and "_cls, _label, _why = avg_down_class(_ok, _fail)" in _uk231
+      and "return None, None, '아직 안 잼'" in _uk231)
 # 값으로 — 심어서 양방향 확인 (라운드 194 의 규율)
 try:
     import ui_kit as _uk231m
@@ -19423,9 +19430,12 @@ try:
           .get('avg_down_ok') is True)
 except Exception as _e231:                                     # noqa: BLE001
     check("watch_action 물타기 심기 실행", False, f'{type(_e231).__name__}: {_e231}')
-check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만)",
+# §6 — 라운드 221: 화면이 '가능/불가' 리터럴을 직접 찍지 않고 킷의 라벨
+#   (`avg_down_label` · 넷으로 갈린 것)을 읽는다. 보유분에만 · 찍힌 값이 있을
+#   때만 그리는 불변식은 그대로다.
+check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만 · 라벨은 킷이 낸다)",
       "_ad_ok = _act.get('avg_down_ok') if _act['held'] else None" in _w231
-      and "물타기 {'가능' if _ad_ok else '불가'}" in _w231)
+      and "_act.get('avg_down_label')" in _w231)
 # 채우기 버튼의 기준이 새 스탬프를 안다 — 모르면 옛 보유 행은 열기 전엔 영영 빈다
 check("채우기 버튼이 물타기 스탬프 없는 보유 행(매입가·수량 있음)도 대상으로 삼는다",
       "'snap_avg_down_ok' not in w" in _w231
@@ -20102,6 +20112,71 @@ check("업종 성적 표에 그 가짜 업종이 없다 (값으로 확인)",
 check("그래도 원장 행은 지우지 않았다 (R197 — 파생물을 줄이지 않는다)",
       int(_c235.get('miss_bad_label') or 0) > 0,
       detail=f"뺀 행 {_c235.get('miss_bad_label')}건 — 원장에는 그대로 있다")
+
+print()
+print("§238 R221 — 물타기 '불가' 한 낱말이 셋을 뭉뚱그렸다 (2026-09-04)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "진짜 다 물타기 불가이던데 진짜 맞아?" 실측(보유 16행): 16행 전부가
+#   같은 조건 하나('신규 진입 조건 통과')에 걸렸고 나머지 다섯은 행마다 달랐다
+#   (10·4·4·1건). 원장 250,725건 중 신규 매수 제목은 4건 — 그 게이트는 사실상
+#   늘 닫혀 있어 그것을 요구하는 물타기도 늘 '불가'다. 계산은 맞다. 그러나
+#   '불가' 한 낱말이 ① 시장 게이트 하나에만 막힌 것(포지션 조건 5개는 통과)
+#   ② 포지션 조건 미달 ③ 표본·데이터 게이트를 못 넘어 **판단하지 않은** 것을
+#   뭉뚱그렸다. ③은 불가가 아니라 미판정이다(§3). 문턱은 하나도 안 바꿨다 —
+#   찍힌 실패 목록의 이름을 갈라 읽을 뿐이다.
+import ui_kit as _uk238
+check("판별이 모듈 함수다 (심을 수 있어야 검사가 된다 · §6)",
+      callable(getattr(_uk238, 'avg_down_class', None)))
+with open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8') as _f238:
+    _qi238 = _f238.read()
+check("갈라 읽는 조건 이름이 엔진 리터럴과 같다 — 신규 진입 (두 벌 금지 · §4)",
+      f'("{_uk238.AVG_DOWN_MARKET_GATE}"' in _qi238)
+check("갈라 읽는 조건 이름이 엔진 리터럴과 같다 — 데이터·표본",
+      f'("{_uk238.AVG_DOWN_DATA_GATE}"' in _qi238)
+check("엔진의 물타기 조건은 여전히 6개이고 그 첫째가 신규 진입 게이트다 (규칙 불변)",
+      _qi238.count('add_checks = [') == 1
+      and 'averaging_down_allowed = all(ok for _, ok in add_checks)' in _qi238)
+_c238 = _uk238.avg_down_class
+check("심기 ① 시장 게이트 하나만 → '시장게이트' (포지션 조건은 통과)",
+      _c238(False, [_uk238.AVG_DOWN_MARKET_GATE])[0] == '시장게이트')
+check("심기 ② 표본·데이터 게이트가 끼면 → '보류' (불가가 아니라 미판정 · §3)",
+      _c238(False, [_uk238.AVG_DOWN_MARKET_GATE, _uk238.AVG_DOWN_DATA_GATE])[0] == '보류')
+check("심기 ③ 포지션 조건이 걸리면 → '포지션미달'",
+      _c238(False, [_uk238.AVG_DOWN_MARKET_GATE, '중기 추세 유지'])[0] == '포지션미달')
+check("심기 ④ 통과 → '가능' · 미측정 → None (지어내지 않는다)",
+      _c238(True, [])[0] == '가능' and _c238(None, [])[0] is None)
+check("심기 ⑤ 미충족 문구는 앞 셋만 적고 나머지는 '외 N' (R214 규칙 유지)",
+      '외 1' in _c238(False, ['a', 'b', 'c', 'd'])[2])
+_row238 = {'snap_bucket': '눌림목 매수 대기', 'paid': 10000, 'qty': 1, 'snap_px': 9000,
+           'snap_hold_stop': 8000, 'snap_avg_down_ok': '불가',
+           'snap_avg_down_fail': _uk238.AVG_DOWN_MARKET_GATE}
+_act238 = _uk238.watch_action(_row238, price=9000)
+check("watch_action 이 등급·라벨을 붙인다 (파일의 글자 값 그대로 읽어서)",
+      bool(_act238) and _act238.get('avg_down_class') == '시장게이트'
+      and '시장 게이트만' in str(_act238.get('avg_down_label')))
+check("화면이 킷의 라벨을 읽는다 ('불가' 리터럴을 직접 찍지 않는다 · §4)",
+      "_act.get('avg_down_label')" in _w231
+      and "물타기 {'가능' if _ad_ok else '불가'}" not in _w231)
+check("미판정은 경고색이 아니라 회색이다 (판단이 아니다 · §3)",
+      "_TOK['tx3'] if _ad_cls == '보류'" in _w231)
+# ── 실측 — 관심종목 파일(사용자 자료 · 있을 때만 · 값은 안 잠근다 · 항등식만) ──
+try:
+    import portfolio as _pf238
+    _items238, _ = _pf238.load_watchlist()
+    _held238 = [w for w in _items238 if w.get('paid') and w.get('qty')]
+    if _held238:
+        _cnt238 = {}
+        for _w238 in _held238:
+            _a238 = _uk238.watch_action(_w238)
+            _k238 = ((_a238 or {}).get('avg_down_class') or '미측정') if _a238 else '미측정'
+            _cnt238[_k238] = _cnt238.get(_k238, 0) + 1
+        check(f"보유 행 전부가 넷 중 하나로 갈린다 (항등식 · 이름은 안 찍는다) — {_cnt238}",
+              sum(_cnt238.values()) == len(_held238), scanned=len(_held238))
+    else:
+        skipped("보유 행의 등급 항등식", "관심종목에 보유 행이 없다 (사용자 자료 · 새 환경)")
+except Exception as _e238:                                   # noqa: BLE001
+    skipped("보유 행의 등급 항등식", f"{type(_e238).__name__}: {_e238}")
 
 print()
 print("=" * 72)

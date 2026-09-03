@@ -1113,6 +1113,49 @@ def breakeven_row(be, observed=None, theme='dark'):
 WATCH_HOLD_ACTIONS = ('정리 검토', '일부 정리', '추가 매수 가능', '보유 유지')
 
 
+#: `personalize_for_position` 의 6조건 이름 중 화면이 **갈라 읽는** 둘 (라운드 221).
+#:   값을 다시 계산하지 않는다 — 스냅샷에 찍힌 실패 목록의 **이름**만 본다.
+#:   이름은 `quant_indicators` 의 리터럴과 같아야 하므로 §238 이 그 리터럴을
+#:   잠근다 (두 벌이 되면 한쪽이 조용히 어긋난다 · §4).
+AVG_DOWN_MARKET_GATE = '신규 진입 조건 통과'
+AVG_DOWN_DATA_GATE = '데이터·표본 게이트 통과'
+
+
+def avg_down_class(ok, fails):
+    """물타기 판정을 **넷으로 가른다** (라운드 221 · 사용자: "진짜 다 불가야?").
+
+    실측(2026-09-04 · 보유 16행): 16행 **전부**가 같은 조건 하나('신규 진입
+    조건 통과')에 걸렸고, 나머지 다섯 조건은 행마다 달랐다(10·4·4·1건).
+    원장 250,725건 중 신규 매수 제목은 4건 — 그 게이트는 사실상 늘 닫혀 있어
+    그것을 **요구하는** 물타기도 늘 '불가'다. 계산은 맞지만 '불가' 한 낱말이
+    셋을 뭉뚱그렸다: ① 시장 게이트 하나에만 막힌 것(포지션 조건 5개는 통과)
+    ② 포지션 조건 미달 ③ 표본·데이터 게이트를 못 넘어 **판단하지 않은** 것.
+    ③은 불가가 아니라 미판정이다(§3 — 못 잰 것 ≠ 판단). 같은 줄에서 왜
+    막혔는지 말한다(§4 · R214 의 `_sig_class` 와 같은 모양).
+
+    반환 `(cls, label, why)` — cls ∈ {'가능','보류','시장게이트','포지션미달'} | None.
+    새 문턱 없음 — 이름만 읽는다.
+    """
+    _fail = [str(s).strip() for s in (fails or []) if str(s).strip()]
+    if ok is None:
+        return None, None, '아직 안 잼'
+    if ok:
+        return '가능', '물타기 가능', '6조건 전부 통과'
+    if AVG_DOWN_DATA_GATE in _fail:
+        return ('보류', '물타기 판정 보류',
+                '표본·데이터 게이트를 못 넘어 판단하지 않았다 — 불가가 아니라 미판정(§3)')
+    if _fail == [AVG_DOWN_MARKET_GATE]:
+        return ('시장게이트', '물타기 불가 · 시장 게이트만',
+                '포지션 조건 5개는 통과 — 신규 매수 게이트 하나에 막혔다. 엔진이 지금 '
+                '어떤 종목도 신규 매수로 내지 않으므로 물타기도 같이 막힌다')
+    # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
+    # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
+    _head, _more = _fail[:3], _fail[3:]
+    _why = ('미충족: ' + ' · '.join(_head)
+            + (f' 외 {len(_more)}' if _more else '')) if _fail else '조건 미충족'
+    return '포지션미달', '물타기 불가', _why
+
+
 def watch_action(row, price=None):
     """
     관심종목 한 줄의 판단. 반환:
@@ -1160,18 +1203,12 @@ def watch_action(row, price=None):
         _fr = (row or {}).get('snap_avg_down_fail')
         _fail = ([s for s in str(_fr).split(' · ') if s] if isinstance(_fr, str)
                  else list(_fr or []))
-        if _ok is None:
-            d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'
-        elif _ok:
-            d['avg_down_ok'], d['avg_down_why'] = True, '6조건 전부 통과'
-        else:
-            d['avg_down_ok'] = False
-            # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
-            # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
-            _head, _more = _fail[:3], _fail[3:]
-            d['avg_down_why'] = ('미충족: ' + ' · '.join(_head)
-                                 + (f' 외 {len(_more)}' if _more else '')
-                                 ) if _fail else '조건 미충족'
+        # 라운드 221 — 넷으로 가른다. 판별은 모듈 함수 하나(avg_down_class).
+        _cls, _label, _why = avg_down_class(_ok, _fail)
+        d['avg_down_ok'] = _ok
+        d['avg_down_class'] = _cls
+        d['avg_down_label'] = _label
+        d['avg_down_why'] = _why
         d['holder_title'] = (row or {}).get('snap_holder_title')
         return d
 
