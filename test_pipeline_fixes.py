@@ -19458,6 +19458,105 @@ check("4단계 요약이 미매핑·누락까지 센다 (완료+제외+미매핑
 check("제외 사유 첫 건을 요약 줄에 바로 적는다 (접힌 칸을 열지 않아도 보인다)",
       '_scan_why1 =' in _w231 and '{_scan_why1}' in _w231)
 
+# ════════════════════════════════════════════════════════════════════════
+# §233 — "산식은 개선 어떻게 잡고 있어?" (라운드 216)
+#
+#   원장 250,725행을 점수대×국면×구간으로 갈라 보니 '연습 vs 실전' 괴리는
+#   대부분 **국면 조성**(검증에 하락장 날짜 4 · 블라인드 22% 하락장)이고,
+#   하락장 블라인드에서 점수는 거꾸로 간다. 그 자리를 겨눈 R124 후보 4(반등
+#   확인)는 한 번도 사전등록되지 않았었다 — 이번에 썼고 R1(에피소드 하한 30)
+#   이 미달(train 191 · valid 3 · blind 6)이라 **판정을 잴 수 없다.** train
+#   관측은 가설 생성으로만 적었다(R84 §2 와 같은 지위).
+#   화면(모델 성적)에 국면×구간 표를 **표시 전용**으로 냈다 — 규칙 불변.
+#   숫자는 잠그지 않는다(표류). 사전등록의 존재·미달 기록·표의 존재·재사용만.
+# ════════════════════════════════════════════════════════════════════════
+print()
+print("=" * 72)
+print("§233 산식 개선 계획 — 반등 확인 사전등록(R1 미달) · 모델 성적 국면×구간 표 (라운드 216)")
+print("=" * 72)
+_pr233 = _os.path.join(PROJ, 'docs', 'PREREG_R216_REBOUND_CONFIRMATION.md')
+_pt233 = open(_pr233, encoding='utf-8').read() if _os.path.exists(_pr233) else ''
+check("반등 확인 사전등록이 있다 (R124 후보 4 — 그동안 안 쓰였던 것)", bool(_pt233))
+# ⚠️ 첫 집계(191·3·6)는 KOSPI/KOSDAQ 행이 섞인 날짜열이라 잘 정의되지 않았다 —
+#   시장별로 다시 셌다(KOSPI 114·0·1 / KOSDAQ 98·3·2). 문서가 그 수를 적는지 본다.
+check("R1(에피소드·날짜 하한 30 · R84 재사용)이 **미달**로 시장별 실측 기록돼 있다",
+      '**미달**' in _pt233 and '(KOSPI) train **114**' in _pt233
+      and 'valid **0**' in _pt233 and 'blind **1**' in _pt233
+      and 'valid **4**' in _pt233 and 'blind **17**' in _pt233)
+check("train 관측을 '판정이 아니다'로 적었다 (가설 생성 · R84 §2)",
+      'train 만의 관측 — 판정이 아니다' in _pt233)
+check("11/16 전에는 게이트에 넣지 않는다고 적었다 (R55 와 같은 자리)",
+      '2026-11-16 이전에는 게이트에 넣지 않는다' in _pt233)
+check("하한을 내리지 않는다고 적었다", '하한을 내리지 않는다' in _pt233)
+check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다.**' in _pt233
+      and _vc105.COST_PCT == 0.36)
+# 화면 — 국면×구간 표 (표시 전용 · 원장에서 그 자리에서 셈 · 하한·Wilson 재사용)
+check("모델 성적에 국면×구간 표가 있다",
+      "**②' 같은 신호를 국면 × 구간으로**" in _w231)
+check("표가 원장 로더(케이스 스터디와 같은 것)에서 센다 (§4)",
+      '_ldf216 = _load_case_ledger()' in _w231)
+check("Wilson 하한을 regime_policy 의 것으로 재사용한다 (§2-6)",
+      '_rp216.wilson_low(_h, _n)' in _w231)
+check("표본 하한이 옆 표와 같은 30 이다", 'if _n >= 30:' in _w231)
+check("괴리의 정체(국면 조성)와 '판정할 수 없다'를 화면 캡션이 말한다",
+      '국면 조성' in _w231 and '아직 판정할 수 없습니다' in _w231)
+check("표가 실패해도 화면이 죽지 않고 이유를 남긴다",
+      '[모델 성적 국면×구간 표 실패' in _w231)
+# ⚠️ 실측: '40~49점 … 60~64점' 이 한 문장에 있으면 GFM 이 물결표 둘을 취소선
+#   짝으로 읽어 "4049점" 으로 그렸다. 이스케이프(\~)를 잠근다 — 그리고 물결표
+#   짝이 다시 생기지 않는지 캡션 f-string 구간에서 **이스케이프 안 된 ~ 가
+#   둘 이상인 줄**이 없는지 본다.
+check("점수대 범위의 물결표를 이스케이프했다 (취소선 오독 방지)",
+      "40\\\\~49점" in _w231 and "60\\\\~64점" in _w231)
+_i231e = _w231.find("_inv216 = (f\" 하락장 블라인드")
+_i231f = _w231.find("st.caption(", _i231e) if _i231e >= 0 else -1
+_cap231 = _w231[_i231e:_i231f] if 0 < _i231e < _i231f else ''
+check("캡션 구간에 이스케이프 안 된 물결표 짝이 없다",
+      all(ln.count('~') - ln.count('\\\\~') < 2 for ln in _cap231.splitlines()),
+      scanned=len(_cap231))
+# ⚠️ 첫 판은 '에피소드'(BEAR→회복 전환)를 화면에서 셌는데, 원장 regime 이
+#   시장별이라 같은 날 두 국면이 있어 3·6 / 3·1 로 갈렸다(실측). **날짜**로 센다.
+# ── "5개(1개 실패)"의 진짜 원인 — 실패 사유가 rerun 을 못 넘었다 ───────────
+#   q_engine 은 모듈 수준에서 매 rerun 새로 만들어지고, 스캔은 끝나며 st.rerun()
+#   을 부른다. 결과는 세션에 남았지만 사유(`last_scan_failures`)는 옛 엔진에
+#   남아 요약이 늘 "제외 0" 을 읽었다 — 실측: 상위 5 → 완료 4 · 누락 1 ·
+#   '정밀분석 결과 없음'. 결과와 같은 곳(세션)에 사유를 남기고 거기서 읽는다.
+check("스캔 직후 실패 사유를 세션에 남긴다 (결과와 같은 곳 · §4)",
+      "st.session_state['scan_failures'] = list(" in _w231
+      and _w231.find("st.session_state['scan_failures'] = list(")
+      > _w231.find("st.session_state['scan_results'] = q_engine.run_screener_scan("))
+check("요약이 실패 사유를 세션에서 읽는다 (새 엔진의 빈 속성이 아니라)",
+      "scan_failures = list(st.session_state.get('scan_failures')" in _w231)
+check("하락장 표본 수를 손으로 적지 않고 원장에서 **날짜**로 센다 (§9 · 잘 정의된 단위)",
+      "_bdays216 = {}" in _w231
+      and "각 \"\n                               f\"{_bdays216['valid']}·{_bdays216['blind']}일뿐" in _w231
+      and '각 3·6개뿐' not in _w231 and '_eps216' not in _w231)
+# 값으로 — 하락장 블라인드 표본이 실제로 있고 검증 하락장이 작다는 R1 의 뿌리
+try:
+    import json as _j233
+    _n_vb, _n_bb = 0, 0
+    with open(_os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl'),
+              encoding='utf-8') as _f233:
+        for _ln233 in _f233:
+            if not _ln233.strip():
+                continue
+            _r233 = _j233.loads(_ln233)
+            if str(_r233.get('regime')) != 'BEAR' or _r233.get('success') is None:
+                continue
+            try:
+                if float(_r233.get('score') or 0) < 58:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            if _r233.get('split') == 'valid':
+                _n_vb += 1
+            elif _r233.get('split') == 'blind':
+                _n_bb += 1
+    check("하락장 매수권: 검증 케이스가 블라인드보다 훨씬 적다 (괴리의 뿌리 · 방향만 잠근다)",
+          0 < _n_vb < _n_bb, f'valid {_n_vb} · blind {_n_bb}', scanned=_n_vb + _n_bb)
+except FileNotFoundError:
+    check("원장이 없어 값 검사를 못 했다", False, '.portfolio/virtual_graded.jsonl 없음')
+
 print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
