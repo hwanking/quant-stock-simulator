@@ -246,6 +246,69 @@ import atexit as _atexit218                                      # noqa: E402
 _atexit218.register(_abort_summary)
 
 
+# ── 실시세 호출은 한 번 다시 받아 본다 (라운드 219) ───────────────────────
+#   R218 이 3절 하나를 감쌌는데, AST 로 세어 보니 실시세 호출 **29개 중 26개가
+#   맨몸**이었다(run_full_pipeline 24 · load_bitemporal_data 3 · 그 외 2).
+#   2026-09-03 하루에 두 번, 서로 다른 절(3절 005930 · 39절 069500)에서
+#   `The read operation timed out` 하나로 회귀가 통째로 죽었다.
+#
+#   호출부 26곳을 감싸는 것은 §6(R120)이 금지한 방식이고, 게다가 그 절반은
+#   **자기 엔진을 새로 만들어 쓰므로**(_q53b·_q54·_q56 …) 인스턴스 하나만
+#   감싸도 안 잡힌다. 그래서 **클래스 메서드를 한 곳에서** 감싼다.
+#     · 성공 경로는 그대로다 — 반환값을 그대로 돌려준다.
+#     · 실패하면 한 번만 다시 받아 본다. 두 번째도 실패하면 그대로 올린다
+#       (그때는 R218 의 중단 요약이 어디까지 갔는지 적는다).
+#     · 예산을 둔다 — 네트워크가 통째로 죽은 환경에서 실행 시간만 두 배가
+#       되지 않게. 예산이 바닥나면 재시도 없이 바로 올린다.
+#   ⚠️ 계산 파일은 고치지 않는다(§1). 이 감싸기는 **회귀 프로세스 안에서만**
+#      살고 `quant_indicators.py`·`bitemporal_engine.py` 파일은 그대로다.
+#   ⚠️ 일부러 '없는 종목'을 넣어 예외를 확인하는 검사(999999)는 재시도 한 번을
+#      더 쓴다 — 판정은 같고 예산만 1 준다.
+_RETRY_BUDGET = [8]
+
+#: **다시 받아도 소용없는 실패** — 엔진이 라운드 204 에서 사유를 갈라 적어 둔
+#: 문장이다('종목 페이지 없음'은 상장폐지·합병이라 이 코드로는 영영 못 받고,
+#: '수신 실패'는 일시 장애일 수 있다). 첫 판에 이걸 안 봐서, 일부러 없는 종목
+#: (999999)을 넣는 검사 둘이 **예산 8 중 2를 미리 태우고** 있었다 — 정작 진짜
+#: 네트워크 흔들림에 쓸 몫이 줄었다. R165 의 *"사유를 섞지 않는다"* 를 엔진은
+#: 지켰는데 내 래퍼가 어긴 것이다.
+#: ⚠️ 문장으로 가르는 것은 무르다(§6 — 낱말 판별은 낡는다). 그래서 §236 이
+#:    이 리터럴이 `bitemporal_engine.py` 에 아직 있는지 본다 — 문구가 바뀌면
+#:    검사가 먼저 걸리고, 조용히 '전부 재시도'로 돌아가지 않는다.
+_PERMANENT_MARK = '종목 페이지가 없습니다'
+
+
+def _retry_live(fn):
+    import functools as _ft
+    import time as _tm
+
+    @_ft.wraps(fn)
+    def _wrap(*a, **kw):
+        try:
+            return fn(*a, **kw)
+        except be.DataUnavailableError as _exc:
+            if _PERMANENT_MARK in str(_exc):
+                raise            # 상장폐지·합병 — 다시 받아도 같다 (R204)
+            if _RETRY_BUDGET[0] <= 0:
+                raise
+            _RETRY_BUDGET[0] -= 1
+            print(f"  [재시도] {fn.__name__} — {_exc} "
+                  f"(남은 재시도 예산 {_RETRY_BUDGET[0]})")
+            _tm.sleep(2)
+            return fn(*a, **kw)
+    return _wrap
+
+
+#: 감싼 자리 — 검사가 이 목록으로 커버리지를 센다 (손으로 적은 목록이 아니라
+#: 실제로 감싼 것을 그대로 쓴다)
+_LIVE_WRAPPED = []
+for _cls219, _meth219 in ((qi.QuantIndicatorsEngine, 'run_full_pipeline'),
+                          (qi.QuantIndicatorsEngine, 'run_screener_scan'),
+                          (be.BitemporalEngine, 'load_bitemporal_data'),
+                          (be.BitemporalEngine, 'fetch_index_daily')):
+    setattr(_cls219, _meth219, _retry_live(getattr(_cls219, _meth219)))
+    _LIVE_WRAPPED.append(f'{_cls219.__name__}.{_meth219}')
+
 engine = be.BitemporalEngine()
 q = qi.QuantIndicatorsEngine()
 SYMBOL = "005930.KS"
@@ -19887,6 +19950,108 @@ check(f"연구 레이더가 가장 최근 사전등록(R{_newest235})을 담는�
       detail=f'사전등록 {len(_pre235)}개 중 최신 R{_newest235}', scanned=len(_pre235))
 check("레이더가 R215·R217 의 판정도 담는다 (측정하고 화면에 안 올리면 없느니만 못하다)",
       '적정가 극단 괴리 (R215)' in _radar235 and '원장 표본 겹침 (R217)' in _radar235)
+
+print()
+print("§236 R219 — 실시세 호출을 한 곳에서 감싼다 (2026-09-03)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-03 하루에 두 번, 서로 다른 절에서 네트워크 시간초과 하나로 회귀가
+#   통째로 죽었다(3절 005930 · 39절 069500). R218 이 3절만 감쌌고, AST 로 세니
+#   실시세 호출 29개 중 26개가 맨몸이었다. 호출부를 26곳 고치는 것은 §6(R120)이
+#   금지한 방식이고, 절반은 자기 엔진을 새로 만들어 써서 인스턴스 감싸기로는
+#   안 잡힌다 — 그래서 **클래스 메서드를 한 곳에서** 감쌌다.
+check("감싼 자리를 손으로 적지 않고 실제 감싼 것을 쓴다 (목록은 낡는다 · §110)",
+      isinstance(_LIVE_WRAPPED, list) and len(_LIVE_WRAPPED) >= 4,
+      detail=', '.join(_LIVE_WRAPPED))
+check("감싸도 이름이 남는다 (functools.wraps — 재시도 로그가 무엇인지 말할 수 있다)",
+      qi.QuantIndicatorsEngine.run_full_pipeline.__name__ == 'run_full_pipeline')
+# ── 심기 — 한 번 실패 후 성공하면 값을 돌려주는가 (양방향) ──────────────────
+_calls236 = [0]
+
+
+def _flaky236(x):
+    _calls236[0] += 1
+    if _calls236[0] == 1:
+        raise be.DataUnavailableError('심은 일시적 실패')
+    return x * 2
+
+
+_budget_before236 = _RETRY_BUDGET[0]
+_wrapped236 = _retry_live(_flaky236)
+check("심기 ① 일시적 실패는 한 번 더 받아 성공값을 돌려준다",
+      _wrapped236(21) == 42 and _calls236[0] == 2)
+check("심기 ② 재시도는 예산을 쓴다 (무한 재시도가 아니다)",
+      _RETRY_BUDGET[0] == _budget_before236 - 1)
+
+
+def _always236(_x=None):
+    raise be.DataUnavailableError('심은 영구 실패')
+
+
+_raised236 = False
+try:
+    _retry_live(_always236)()
+except be.DataUnavailableError:
+    _raised236 = True
+check("심기 ③ 두 번째도 실패하면 그대로 올린다 (삼키지 않는다 — 중단 요약이 받는다)",
+      _raised236)
+_saved236, _RETRY_BUDGET[0] = _RETRY_BUDGET[0], 0
+_calls_zero236 = [0]
+
+
+def _count236(_x=None):
+    _calls_zero236[0] += 1
+    raise be.DataUnavailableError('예산 0')
+
+
+try:
+    _retry_live(_count236)()
+except be.DataUnavailableError:
+    pass
+_RETRY_BUDGET[0] = _saved236
+check("심기 ④ 예산이 바닥나면 재시도 없이 바로 올린다 (실행 시간이 두 배가 되지 않는다)",
+      _calls_zero236[0] == 1)
+check("심기 ⑤ 성공 경로는 손대지 않는다 (그대로 돌려준다)",
+      _retry_live(lambda v: v + 1)(1) == 2)
+# ── 다시 받아도 소용없는 실패는 재시도하지 않는다 (R204 가 가른 사유) ────────
+#   첫 판에 이걸 안 봐서 999999 검사 둘이 예산 8 중 2를 미리 태웠다.
+with open(_os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8') as _f236:
+    _be236 = _f236.read()
+check("엔진이 아직 그 문장으로 사유를 가른다 (문구가 바뀌면 여기서 먼저 걸린다)",
+      _PERMANENT_MARK in _be236
+      and "'item_page_missing'" in _be236 and 'page_status' in _be236)
+_perm_calls236 = [0]
+_perm_budget236 = _RETRY_BUDGET[0]
+
+
+def _perm236(_x=None):
+    _perm_calls236[0] += 1
+    raise be.DataUnavailableError(f'999999.KS: 네이버에 {_PERMANENT_MARK}(메인으로 넘어감)')
+
+
+try:
+    _retry_live(_perm236)()
+except be.DataUnavailableError:
+    pass
+check("심기 ⑥ '다시 받을 수 없는' 실패는 재시도하지 않는다 (호출 1회)",
+      _perm_calls236[0] == 1)
+check("심기 ⑦ 그래서 예산도 안 쓴다 (진짜 네트워크 흔들림에 남겨 둔다)",
+      _RETRY_BUDGET[0] == _perm_budget236)
+# ── 커버리지 — 이 파일이 부르는 실시세 메서드가 전부 감싸였나 (AST) ──────────
+import ast as _ast236
+_NET236 = {'run_full_pipeline', 'run_screener_scan', 'load_bitemporal_data',
+           'fetch_index_daily', 'generate_synthetic_bitemporal_data',
+           'fetch_daily_ohlcv', 'get_index_regime'}
+_called236 = set()
+for _n236 in _ast236.walk(_ast236.parse(_self235)):
+    if isinstance(_n236, _ast236.Call):
+        _nm236 = getattr(_n236.func, 'attr', None) or getattr(_n236.func, 'id', None)
+        if _nm236 in _NET236:
+            _called236.add(_nm236)
+_wrapped_names236 = {w.split('.')[-1] for w in _LIVE_WRAPPED}
+_uncovered236 = sorted(_called236 - _wrapped_names236)
+check("이 파일이 부르는 실시세 메서드가 전부 감싸였다 (새 호출이 생기면 여기서 걸린다)",
+      not _uncovered236, detail=f'미포함 {_uncovered236}', scanned=len(_called236))
 
 print()
 print("=" * 72)
