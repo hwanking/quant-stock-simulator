@@ -209,11 +209,41 @@ def emoji_hits(text):
             if c not in _EMOJI_KEEP]
 
 
+#: 마지막으로 들어간 절 — 중단 요약이 "어디까지 갔나"를 말하게 한다 (R218)
+_LAST_SECTION = ['(시작 전)']
+
+
 def section(title):
+    _LAST_SECTION[0] = str(title)
     print()
     print("=" * 72)
     print(title)
     print("=" * 72)
+
+
+# ── 중단돼도 요약은 찍는다 (라운드 218) ──────────────────────────────────
+#   §6 은 *"요약은 실행·실패·건너뜀을 함께 찍는다"* 고 적는데, **예외로 죽으면
+#   그 줄이 아예 안 나왔다.** 실제로 겪었다: 3절의 실시세 호출이 네트워크
+#   시간초과로 터지자 38줄짜리 로그에 트레이스백만 남고 요약이 없어서,
+#   "코드가 깨졌나 · 네트워크가 흔들렸나 · 몇 건까지 갔나"를 로그로 가릴 수
+#   없었다. 정상 종료가 요약을 찍으면 이 핸들러는 아무것도 안 한다.
+_SUMMARY_DONE = [False]
+
+
+def _abort_summary():
+    if _SUMMARY_DONE[0]:
+        return
+    print()
+    print("=" * 72)
+    print(f"⚠ 중단됨 — 요약을 찍기 전에 끝났다. 마지막 절: {_LAST_SECTION[0]}")
+    print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 {len(FAILURES)}건 · "
+          f"건너뜀 {len(SKIPPED)}건 (여기까지 · **전체 통과가 아니다**)")
+    if FAILURES:
+        print(f"실패 {len(FAILURES)}건: " + ", ".join(FAILURES[:20]))
+
+
+import atexit as _atexit218                                      # noqa: E402
+_atexit218.register(_abort_summary)
 
 
 engine = be.BitemporalEngine()
@@ -254,13 +284,35 @@ except be.DataUnavailableError:
 except Exception as exc:
     check("존재하지 않는 종목은 예외", False, f"{type(exc).__name__}")
 
-prices, fund = engine.load_bitemporal_data(SYMBOL, "2020-01-01", T_REF)
-check("실 일봉 적재", len(prices) > 500, f"{len(prices)}봉")
-check("데이터 출처 표기", prices['data_source'].iloc[0] == 'naver_daily_ohlcv')
-check("수급 미연동은 NaN (0/난수 아님)", bool(prices['foreign_cum_5d'].isna().all()))
-check("revenue_yoy 조작값 없음", fund['revenue_yoy_pct'].iloc[0] is None)
-check("audit_opinion 리터럴 없음", fund['audit_opinion'].iloc[0] is None)
-check("재무는 추정 스냅샷임을 명시", bool(fund['is_estimated'].iloc[0]))
+# ⚠️ 라운드 218 — 이 호출이 **맨몸이었다.** 네트워크가 한 번 흔들리면
+#   (실측: `Naver Finance fallback failed: The read operation timed out`)
+#   회귀 전체가 여기서 죽고 요약조차 안 나왔다. 그렇다고 통과로 세면 안
+#   된다 — 못 받은 것은 **건너뜀**이고, 건너뜀은 통과가 아니다(§6 · R188).
+#   한 번 다시 받아 보고(일시적 실패는 그걸로 지나간다), 그래도 안 되면
+#   사유를 **그대로** 적어 건너뛴다. 사유를 요약하지 않는 이유는 R165 —
+#   '코드를 못 읽었다'(우리 문제)와 '시세를 못 받았다'(상대 문제)를 같은
+#   문장으로 말하면 엉뚱한 곳을 파게 된다. 원문이 그것을 가른다.
+prices = fund = None
+for _try3 in (1, 2):
+    try:
+        prices, fund = engine.load_bitemporal_data(SYMBOL, "2020-01-01", T_REF)
+        break
+    except Exception as _exc3:                                 # noqa: BLE001
+        _why3 = f"{type(_exc3).__name__}: {_exc3}"
+        if _try3 == 1:
+            print(f"  [재시도] 실시세 적재 실패 — {_why3}")
+if prices is None:
+    for _nm3 in ("실 일봉 적재", "데이터 출처 표기", "수급 미연동은 NaN (0/난수 아님)",
+                 "revenue_yoy 조작값 없음", "audit_opinion 리터럴 없음",
+                 "재무는 추정 스냅샷임을 명시"):
+        skipped(_nm3, f"실시세를 두 번 다 못 받았다 — {_why3}")
+else:
+    check("실 일봉 적재", len(prices) > 500, f"{len(prices)}봉")
+    check("데이터 출처 표기", prices['data_source'].iloc[0] == 'naver_daily_ohlcv')
+    check("수급 미연동은 NaN (0/난수 아님)", bool(prices['foreign_cum_5d'].isna().all()))
+    check("revenue_yoy 조작값 없음", fund['revenue_yoy_pct'].iloc[0] is None)
+    check("audit_opinion 리터럴 없음", fund['audit_opinion'].iloc[0] is None)
+    check("재무는 추정 스냅샷임을 명시", bool(fund['is_estimated'].iloc[0]))
 
 
 # ---------------------------------------------------------------- 표본 통제
@@ -19692,8 +19744,13 @@ try:
     # 커버리지(파일의 n 합 ≥ 원장에서 같은 필터로 센 '행에 업종이 있는' 수)를 본다.
     with open(_os.path.join(PROJ, 'scripts', 'gen_sector_perf.py'), encoding='utf-8') as _f234:
         _gsp234 = _f234.read()
-    check("업종 성적 생성기가 원장 행의 업종을 먼저 읽고 패치는 보조다 (R73 규칙 · 한 쪽만 보지 않는다)",
-          "sec = (r.get('sector')" in _gsp234 and "or patch.get(" in _gsp234)
+    # §6 — 라운드 218 이 이 검사를 현실에 맞췄다. 종전에는 R217 이 쓴 한 줄
+    #   (`sec = (r.get('sector') or patch.get(...))`)을 글자로 요구했는데,
+    #   R218 이 그 자리를 세 단계(행 → 패치 → 같은 종목)로 넓히며 그 줄이
+    #   사라졌다. 잠글 것은 표기가 아니라 **불변식**이다 — 행의 업종을 보고,
+    #   패치만 보지 않는다. 세 단계 자체는 §235 가 본다.
+    check("업종 성적 생성기가 원장 행의 업종을 읽는다 (패치만 보지 않는다 · R73 규칙)",
+          "sec = r.get('sector')" in _gsp234 and "patch.get(" in _gsp234)
     with open(_os.path.join(PROJ, 'data', 'sector_perf.json'), encoding='utf-8') as _f234:
         _spf234 = _json.load(_f234)
     _sum_n234 = sum(int((v or {}).get('n') or 0) for v in (_spf234.get('sectors') or {}).values())
@@ -19719,11 +19776,125 @@ except Exception as _e234:                                   # noqa: BLE001
     check("원장 실측을 읽었다", False, detail=f'{type(_e234).__name__}: {_e234}')
 
 print()
+print("§235 R218 — 업종 성적 커버리지: 빠진 행을 세어 적는다 (2026-09-03)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R217 이 생성기의 출처를 고쳐(패치만 → 행+패치) n 합이 36,299 → 81,646 이
+#   됐는데, 그래도 개발구간 매수권 98,600행 중 16,954(17%)가 빠졌다. 정체를
+#   실측하니 ETF(구조상 업종 없음)는 2,697행뿐이고 **14,102행(83%)이 보통주
+#   인데 같은 종목의 다른 행에는 업종이 있었다** — 행마다 따로 물어서 빠진
+#   것이다. 업종은 날짜가 아니라 종목의 성질이므로 종목 단위로 채운다.
+#   업종이 두 가지로 기록된 종목은 **채우지 않는다**(모르는 것을 고르지
+#   않는다 · §3). 그리고 빠진 것을 사유별로 세어 산출물에 적는다 —
+#   안 적으면 화면은 이 표를 전수로 읽는다.
+import json as _json235
+with open(_os.path.join(PROJ, 'scripts', 'gen_sector_perf.py'), encoding='utf-8') as _f235:
+    _src235 = _f235.read()
+check("생성기가 업종을 세 단계로 찾는다 — 행 → 패치 → 같은 종목 (§4 · 한 곳)",
+      "sec = r.get('sector')" in _src235
+      and "sec = patch.get((str(r.get('ticker'))" in _src235
+      and "sec = ticker_sec.get(code)" in _src235)
+check("업종이 두 가지로 기록된 종목은 채우지 않는다 (모르는 것을 고르지 않는다 · §3)",
+      "ticker_sec = {c: next(iter(s)) for c, s in by_ticker.items() if len(s) == 1}" in _src235
+      and "ambiguous = {c for c, s in by_ticker.items() if len(s) > 1}" in _src235)
+check("ETF 목록을 못 읽어도 지어내지 않는다 — 그때는 '미상'으로 센다 (§3)",
+      "etf_codes = set()" in _src235 and "빠진 것은 ETF" in _src235)
+with open(_os.path.join(PROJ, 'data', 'sector_perf.json'), encoding='utf-8') as _f235:
+    _sp235 = _json235.load(_f235)
+_c235 = _sp235.get('coverage') or {}
+check("산출물이 커버리지를 적는다 (무엇이 빠졌는지 말하지 않으면 화면은 전수로 읽는다)",
+      all(k in _c235 for k in ('rows_eligible', 'by_row', 'by_patch', 'by_ticker',
+                               'miss_etf', 'miss_ambiguous', 'miss_unknown',
+                               'covered', 'covered_pct')))
+_parts235 = (_c235.get('by_row', 0) + _c235.get('by_patch', 0) + _c235.get('by_ticker', 0)
+             + _c235.get('miss_etf', 0) + _c235.get('miss_ambiguous', 0)
+             + _c235.get('miss_unknown', 0))
+check("셈이 맞는다 — 출처별 + 사유별 = 대상 행수 (R215 의 잣대) — "
+      f"{_parts235:,} vs {_c235.get('rows_eligible', 0):,}",
+      _parts235 == _c235.get('rows_eligible'), scanned=_c235.get('rows_eligible', 0))
+_nsum235 = sum(int((v or {}).get('n') or 0) for v in (_sp235.get('sectors') or {}).values())
+check("표의 n 합 = 커버리지가 말하는 담은 행수 (두 경로가 같은 것을 센다 · §4) — "
+      f"{_nsum235:,} vs {_c235.get('covered', 0):,}",
+      _nsum235 == _c235.get('covered'), scanned=_nsum235)
+check("종목 단계가 실제로 기여했다 (규칙이 존재만 하는 게 아니라 돌았다 · §6 실행 증거) — "
+      f"종목 단계 {_c235.get('by_ticker', 0):,}행",
+      int(_c235.get('by_ticker') or 0) > 0)
+check("업종 중복기록 규칙이 실제로 걸렸다 (심기 대신 실측 — 안 걸리면 규칙이 죽은 것)",
+      int(_c235.get('miss_ambiguous') or 0) > 0)
+check("ETF 는 빠지되 그 사실이 적힌다 (구조상 업종 없음 — 못 채운 것과 다르다 · §3)",
+      int(_c235.get('miss_etf') or 0) > 0)
+check("커버리지가 R217 시점(82.8%)보다 낫다 — 값이 아니라 방향만 잠근다 (R212) — "
+      f"{_c235.get('covered_pct')}%",
+      float(_c235.get('covered_pct') or 0) > 82.8)
+# ── 하네스 자신 — 중단돼도 요약을 찍는가 · 실시세는 못 받으면 건너뜀인가 ──
+#   오늘 실제로 겪었다: 3절의 실시세 호출이 네트워크 시간초과로 터지자 로그에
+#   트레이스백만 남고 요약이 없었다(38줄). §6 은 요약이 실행·실패·건너뜀을
+#   함께 찍으라 하는데 **하네스가 그 규칙을 자기한테는 안 지키고 있었다**
+#   (R188 이 같은 자리를 한 번 고쳤다 — 그때는 조용한 건너뜀, 이번은 중단).
+with open(_os.path.abspath(__file__), encoding='utf-8') as _f235:
+    _self235 = _f235.read()
+check("중단 요약이 atexit 에 걸려 있다 (예외로 죽어도 요약은 찍힌다)",
+      '_atexit218.register(_abort_summary)' in _self235
+      and 'def _abort_summary():' in _self235)
+# ⚠️ 이 검사는 처음에 `find(A) < find(B)` 로 썼다가 틀렸다 — 두 문자열이
+#    파일에 **각각 두 번** 나온다(중단 요약 안에 한 번, 마지막 요약에 한 번).
+#    find 는 첫 등장만 보므로 엉뚱한 짝을 견줬다. 순서가 아니라 **인접**을 본다.
+check("정상 종료는 중단 요약을 찍지 않는다 (깃발이 마지막 요약 바로 위에 선다)",
+      '_SUMMARY_DONE[0] = True          # 라운드 218 — 중단 요약이 겹쳐 찍히지 않게\n'
+      'print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 ' in _self235)
+# 심어서 확인 — 깃발이 서 있으면 아무것도 안 찍고, 내려가면 찍는다 (양방향)
+import io as _io235
+_buf235, _stdout235 = _io235.StringIO(), sys.stdout
+try:
+    sys.stdout = _buf235
+    _SUMMARY_DONE[0] = True
+    _abort_summary()
+    _quiet235 = _buf235.getvalue()
+    _SUMMARY_DONE[0] = False
+    _abort_summary()
+    _loud235 = _buf235.getvalue()[len(_quiet235):]
+finally:
+    sys.stdout = _stdout235
+    _SUMMARY_DONE[0] = False       # 원래 상태(아직 요약 전)로 되돌린다
+check("중단 요약 심기 — 깃발이 서면 조용하고, 내려가면 '중단됨'과 실행 건수를 찍는다",
+      _quiet235 == '' and '중단됨' in _loud235 and '실행' in _loud235
+      and _LAST_SECTION[0] in _loud235, detail=repr(_loud235[:60]))
+check("실시세를 못 받으면 통과가 아니라 건너뜀이다 (R188 · 사유는 원문 그대로 · R165)",
+      'skipped(_nm3, f"실시세를 두 번 다 못 받았다 — {_why3}")' in _self235
+      and '_why3 = f"{type(_exc3).__name__}: {_exc3}"' in _self235)
+check("실시세 적재는 한 번 다시 받아 본다 (일시적 실패로 회귀 전체를 잃지 않는다)",
+      'for _try3 in (1, 2):' in _self235 and '[재시도] 실시세 적재 실패' in _self235)
+# ── 화면의 연구 레이더가 **지금 하는 연구**를 담고 있는가 ──────────────────
+#   `data/research_radar.json` 은 후보 엔진·연구 상태의 **화면 단일 출처**인데
+#   (R82), 2026-08-23 이후 갱신되지 않아 R215(적정가 극단) · R216(반등 확인 ·
+#   지금 서 있는 개선 계획) · R217(표본 겹침)이 빠져 있었다. 사용자가 *"산식은
+#   개선 어떻게 잡고 있어?"* 라고 물을 때 화면이 답을 못 하는 상태였다.
+#   가장 최근 사전등록의 라운드 번호가 레이더에 있는지 본다 — 새 사전등록을
+#   쓰면 레이더에도 올리라는 톱니다. (연구가 아닌 사전등록이 나오면 이 검사를
+#   의도적으로 손봐야 한다 — 그때는 왜 바꿨는지 주석으로 남긴다 · §6)
+import glob as _glob235
+import re as _re235
+_pre235 = []
+for _pp235 in _glob235.glob(_os.path.join(PROJ, 'docs', 'PREREG_R*.md')):
+    _m235 = _re235.search(r'PREREG_R(\d+)', _os.path.basename(_pp235))
+    if _m235:
+        _pre235.append(int(_m235.group(1)))
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _f235:
+    _radar235 = _f235.read()
+_newest235 = max(_pre235) if _pre235 else 0
+check(f"연구 레이더가 가장 최근 사전등록(R{_newest235})을 담는다 — 화면이 '지금 하는 연구'를 말한다",
+      _newest235 > 0 and f'R{_newest235}' in _radar235,
+      detail=f'사전등록 {len(_pre235)}개 중 최신 R{_newest235}', scanned=len(_pre235))
+check("레이더가 R215·R217 의 판정도 담는다 (측정하고 화면에 안 올리면 없느니만 못하다)",
+      '적정가 극단 괴리 (R215)' in _radar235 and '원장 표본 겹침 (R217)' in _radar235)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
 #   통째로 안 돌아도 '전체 통과'가 찍혔고, "0건이 없다인지 못 봤다인지"를
 #   요약 수준에서 구분할 수 없었다 (§110 의 규율을 하네스가 안 지킨 자리).
+_SUMMARY_DONE[0] = True          # 라운드 218 — 중단 요약이 겹쳐 찍히지 않게
 print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 {len(FAILURES)}건 · "
       f"건너뜀 {len(SKIPPED)}건")
 if SKIPPED:
