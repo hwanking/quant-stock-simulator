@@ -1,342 +1,412 @@
 {
- "made": "2026-08-16",
+ "made": "2026-09-03",
  "basis": "개발 구간(train+valid) 매수권 58+ · 판정완료 · 블라인드 미포함 · 비용 0.36%p 차감",
  "note": "표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)",
  "sectors": {
   "반도체와반도체장비": {
-   "n": 5750,
-   "hit": 63.6,
-   "wilson_low": 62.4,
-   "ev": 0.317,
+   "n": 9743,
+   "hit": 62.5,
+   "wilson_low": 61.6,
+   "ev": 0.177,
    "small": false
   },
   "화학": {
-   "n": 1440,
-   "hit": 60.6,
-   "wilson_low": 58.0,
-   "ev": 0.022,
+   "n": 5019,
+   "hit": 60.0,
+   "wilson_low": 58.6,
+   "ev": -0.141,
    "small": false
   },
   "자동차부품": {
-   "n": 1048,
-   "hit": 59.8,
-   "wilson_low": 56.8,
-   "ev": -0.134,
+   "n": 4618,
+   "hit": 60.1,
+   "wilson_low": 58.7,
+   "ev": -0.116,
    "small": false
   },
   "자동차": {
-   "n": 223,
-   "hit": 60.1,
-   "wilson_low": 53.5,
-   "ev": -0.014,
-   "small": false
-  },
-  "양방향미디어와서비스": {
-   "n": 188,
-   "hit": 58.0,
-   "wilson_low": 50.8,
-   "ev": -0.287,
-   "small": false
-  },
-  "게임엔터테인먼트": {
-   "n": 727,
-   "hit": 61.5,
-   "wilson_low": 57.9,
-   "ev": -0.024,
-   "small": false
-  },
-  "철강": {
-   "n": 368,
-   "hit": 62.8,
-   "wilson_low": 57.7,
-   "ev": 0.119,
-   "small": false
-  },
-  "무선통신서비스": {
-   "n": 146,
-   "hit": 53.4,
-   "wilson_low": 45.3,
-   "ev": -0.546,
-   "small": false
-  },
-  "식품": {
-   "n": 990,
-   "hit": 57.5,
-   "wilson_low": 54.4,
-   "ev": -0.373,
-   "small": false
-  },
-  "우주항공과국방": {
-   "n": 442,
-   "hit": 62.7,
-   "wilson_low": 58.1,
-   "ev": 0.119,
-   "small": false
-  },
-  "에너지장비및서비스": {
-   "n": 441,
-   "hit": 63.5,
-   "wilson_low": 58.9,
-   "ev": 0.308,
-   "small": false
-  },
-  "다각화된통신서비스": {
-   "n": 11,
-   "hit": 45.5,
-   "wilson_low": 21.3,
-   "ev": -1.048,
-   "small": true
-  },
-  "비철금속": {
-   "n": 301,
-   "hit": 61.5,
-   "wilson_low": 55.9,
-   "ev": 0.062,
-   "small": false
-  },
-  "해운사": {
-   "n": 99,
-   "hit": 63.6,
-   "wilson_low": 53.8,
-   "ev": 0.481,
-   "small": false
-  },
-  "화장품": {
-   "n": 708,
-   "hit": 61.6,
-   "wilson_low": 57.9,
-   "ev": 0.039,
-   "small": false
-  },
-  "기계": {
-   "n": 1685,
-   "hit": 60.2,
-   "wilson_low": 57.9,
-   "ev": -0.066,
-   "small": false
-  },
-  "IT서비스": {
-   "n": 1365,
-   "hit": 58.1,
-   "wilson_low": 55.5,
-   "ev": -0.073,
-   "small": false
-  },
-  "전자장비와기기": {
-   "n": 1235,
-   "hit": 62.5,
-   "wilson_low": 59.8,
-   "ev": 0.132,
-   "small": false
-  },
-  "전기제품": {
-   "n": 1320,
-   "hit": 62.4,
-   "wilson_low": 59.8,
-   "ev": 0.16,
-   "small": false
-  },
-  "복합기업": {
-   "n": 320,
-   "hit": 57.2,
-   "wilson_low": 51.7,
-   "ev": -0.311,
-   "small": false
-  },
-  "조선": {
-   "n": 563,
-   "hit": 60.9,
-   "wilson_low": 56.8,
-   "ev": -0.04,
-   "small": false
-  },
-  "석유와가스": {
-   "n": 142,
-   "hit": 53.5,
-   "wilson_low": 45.3,
-   "ev": -0.848,
-   "small": false
-  },
-  "전자제품": {
-   "n": 143,
-   "hit": 56.6,
-   "wilson_low": 48.5,
-   "ev": -0.357,
-   "small": false
-  },
-  "백화점과일반상점": {
-   "n": 213,
+   "n": 994,
    "hit": 58.2,
-   "wilson_low": 51.5,
-   "ev": -0.248,
-   "small": false
-  },
-  "제약": {
-   "n": 2356,
-   "hit": 60.3,
-   "wilson_low": 58.3,
-   "ev": 0.037,
-   "small": false
-  },
-  "항공화물운송과물류": {
-   "n": 86,
-   "hit": 65.1,
-   "wilson_low": 54.6,
-   "ev": 0.31,
-   "small": false
-  },
-  "호텔,레스토랑,레저": {
-   "n": 408,
-   "hit": 61.3,
-   "wilson_low": 56.5,
-   "ev": -0.087,
-   "small": false
-  },
-  "담배": {
-   "n": 104,
-   "hit": 61.5,
-   "wilson_low": 51.9,
+   "wilson_low": 55.2,
    "ev": -0.237,
    "small": false
   },
+  "양방향미디어와서비스": {
+   "n": 682,
+   "hit": 58.8,
+   "wilson_low": 55.1,
+   "ev": -0.291,
+   "small": false
+  },
+  "게임엔터테인먼트": {
+   "n": 1407,
+   "hit": 60.3,
+   "wilson_low": 57.7,
+   "ev": -0.136,
+   "small": false
+  },
+  "철강": {
+   "n": 1753,
+   "hit": 58.5,
+   "wilson_low": 56.2,
+   "ev": -0.309,
+   "small": false
+  },
+  "무선통신서비스": {
+   "n": 587,
+   "hit": 59.3,
+   "wilson_low": 55.3,
+   "ev": -0.286,
+   "small": false
+  },
+  "식품": {
+   "n": 3026,
+   "hit": 57.1,
+   "wilson_low": 55.4,
+   "ev": -0.416,
+   "small": false
+  },
+  "우주항공과국방": {
+   "n": 806,
+   "hit": 61.9,
+   "wilson_low": 58.5,
+   "ev": -0.11,
+   "small": false
+  },
+  "에너지장비및서비스": {
+   "n": 882,
+   "hit": 62.0,
+   "wilson_low": 58.8,
+   "ev": 0.102,
+   "small": false
+  },
+  "다각화된통신서비스": {
+   "n": 252,
+   "hit": 63.5,
+   "wilson_low": 57.4,
+   "ev": -0.065,
+   "small": false
+  },
+  "비철금속": {
+   "n": 1626,
+   "hit": 58.0,
+   "wilson_low": 55.6,
+   "ev": -0.292,
+   "small": false
+  },
+  "해운사": {
+   "n": 601,
+   "hit": 57.6,
+   "wilson_low": 53.6,
+   "ev": -0.419,
+   "small": false
+  },
+  "화장품": {
+   "n": 1533,
+   "hit": 62.2,
+   "wilson_low": 59.7,
+   "ev": 0.135,
+   "small": false
+  },
+  "기계": {
+   "n": 2969,
+   "hit": 59.8,
+   "wilson_low": 58.0,
+   "ev": -0.176,
+   "small": false
+  },
+  "IT서비스": {
+   "n": 2343,
+   "hit": 58.5,
+   "wilson_low": 56.5,
+   "ev": -0.099,
+   "small": false
+  },
+  "전자장비와기기": {
+   "n": 2421,
+   "hit": 62.7,
+   "wilson_low": 60.7,
+   "ev": 0.097,
+   "small": false
+  },
+  "전기제품": {
+   "n": 2124,
+   "hit": 61.5,
+   "wilson_low": 59.4,
+   "ev": 0.047,
+   "small": false
+  },
+  "복합기업": {
+   "n": 1820,
+   "hit": 56.3,
+   "wilson_low": 54.0,
+   "ev": -0.494,
+   "small": false
+  },
+  "조선": {
+   "n": 1654,
+   "hit": 59.7,
+   "wilson_low": 57.4,
+   "ev": -0.198,
+   "small": false
+  },
+  "석유와가스": {
+   "n": 893,
+   "hit": 57.0,
+   "wilson_low": 53.7,
+   "ev": -0.403,
+   "small": false
+  },
+  "백화점과일반상점": {
+   "n": 948,
+   "hit": 56.3,
+   "wilson_low": 53.2,
+   "ev": -0.393,
+   "small": false
+  },
+  "제약": {
+   "n": 5404,
+   "hit": 60.8,
+   "wilson_low": 59.4,
+   "ev": -0.028,
+   "small": false
+  },
+  "항공화물운송과물류": {
+   "n": 679,
+   "hit": 59.9,
+   "wilson_low": 56.2,
+   "ev": -0.209,
+   "small": false
+  },
+  "호텔,레스토랑,레저": {
+   "n": 825,
+   "hit": 59.8,
+   "wilson_low": 56.4,
+   "ev": -0.163,
+   "small": false
+  },
+  "담배": {
+   "n": 341,
+   "hit": 61.6,
+   "wilson_low": 56.3,
+   "ev": -0.216,
+   "small": false
+  },
   "전기유틸리티": {
-   "n": 110,
-   "hit": 61.8,
-   "wilson_low": 52.5,
-   "ev": -0.111,
+   "n": 289,
+   "hit": 61.9,
+   "wilson_low": 56.2,
+   "ev": -0.03,
    "small": false
   },
   "무역회사와판매업체": {
-   "n": 43,
-   "hit": 53.5,
-   "wilson_low": 38.9,
-   "ev": -0.986,
+   "n": 418,
+   "hit": 58.6,
+   "wilson_low": 53.8,
+   "ev": -0.369,
    "small": false
   },
   "포장재": {
-   "n": 168,
-   "hit": 57.1,
-   "wilson_low": 49.6,
-   "ev": -0.406,
+   "n": 540,
+   "hit": 58.1,
+   "wilson_low": 53.9,
+   "ev": -0.204,
+   "small": false
+  },
+  "전자제품": {
+   "n": 386,
+   "hit": 60.6,
+   "wilson_low": 55.7,
+   "ev": -0.134,
    "small": false
   },
   "전기장비": {
-   "n": 840,
-   "hit": 61.2,
-   "wilson_low": 57.9,
-   "ev": -0.051,
+   "n": 1957,
+   "hit": 62.0,
+   "wilson_low": 59.9,
+   "ev": 0.132,
    "small": false
   },
   "건설": {
-   "n": 1220,
-   "hit": 57.8,
-   "wilson_low": 55.0,
-   "ev": -0.298,
+   "n": 2747,
+   "hit": 58.3,
+   "wilson_low": 56.4,
+   "ev": -0.338,
    "small": false
   },
   "건축자재": {
-   "n": 327,
-   "hit": 57.8,
-   "wilson_low": 52.4,
-   "ev": -0.399,
+   "n": 1316,
+   "hit": 57.4,
+   "wilson_low": 54.8,
+   "ev": -0.477,
    "small": false
   },
   "가정용기기와용품": {
-   "n": 412,
-   "hit": 54.9,
-   "wilson_low": 50.0,
-   "ev": -0.476,
+   "n": 879,
+   "hit": 56.9,
+   "wilson_low": 53.6,
+   "ev": -0.408,
    "small": false
   },
   "음료": {
-   "n": 33,
-   "hit": 69.7,
-   "wilson_low": 52.7,
-   "ev": 0.208,
+   "n": 114,
+   "hit": 70.2,
+   "wilson_low": 61.2,
+   "ev": 0.367,
    "small": false
   },
   "섬유,의류,신발,호화품": {
-   "n": 305,
-   "hit": 58.4,
-   "wilson_low": 52.8,
-   "ev": -0.275,
+   "n": 2240,
+   "hit": 55.9,
+   "wilson_low": 53.9,
+   "ev": -0.491,
    "small": false
   },
   "건강관리장비와용품": {
-   "n": 1375,
-   "hit": 58.9,
-   "wilson_low": 56.3,
-   "ev": -0.12,
+   "n": 2173,
+   "hit": 59.5,
+   "wilson_low": 57.5,
+   "ev": -0.112,
    "small": false
   },
   "생물공학": {
-   "n": 447,
-   "hit": 61.1,
-   "wilson_low": 56.5,
-   "ev": 0.07,
+   "n": 900,
+   "hit": 62.2,
+   "wilson_low": 59.0,
+   "ev": 0.283,
    "small": false
   },
   "생명과학도구및서비스": {
-   "n": 430,
-   "hit": 62.8,
-   "wilson_low": 58.1,
-   "ev": 0.456,
+   "n": 535,
+   "hit": 61.7,
+   "wilson_low": 57.5,
+   "ev": 0.271,
    "small": false
   },
   "핸드셋": {
-   "n": 1323,
-   "hit": 56.1,
-   "wilson_low": 53.4,
-   "ev": -0.623,
+   "n": 1566,
+   "hit": 56.2,
+   "wilson_low": 53.7,
+   "ev": -0.598,
    "small": false
   },
   "가스유틸리티": {
-   "n": 15,
-   "hit": 53.3,
-   "wilson_low": 30.1,
-   "ev": -1.069,
-   "small": true
+   "n": 563,
+   "hit": 59.0,
+   "wilson_low": 54.9,
+   "ev": -0.345,
+   "small": false
   },
   "방송과엔터테인먼트": {
-   "n": 370,
-   "hit": 65.1,
-   "wilson_low": 60.1,
-   "ev": 0.428,
+   "n": 770,
+   "hit": 62.6,
+   "wilson_low": 59.1,
+   "ev": 0.173,
    "small": false
   },
   "항공사": {
-   "n": 29,
-   "hit": 75.9,
-   "wilson_low": 57.9,
-   "ev": 2.58,
-   "small": true
+   "n": 89,
+   "hit": 64.0,
+   "wilson_low": 53.7,
+   "ev": 0.925,
+   "small": false
   },
-  "통신장비": {
-   "n": 773,
+  "디스플레이패널": {
+   "n": 418,
    "hit": 60.0,
-   "wilson_low": 56.5,
-   "ev": 0.028,
+   "wilson_low": 55.3,
+   "ev": -0.214,
+   "small": false
+  },
+  "교육서비스": {
+   "n": 457,
+   "hit": 55.1,
+   "wilson_low": 50.6,
+   "ev": -0.504,
    "small": false
   },
   "소프트웨어": {
-   "n": 343,
-   "hit": 59.5,
-   "wilson_low": 54.2,
-   "ev": -0.139,
+   "n": 488,
+   "hit": 59.6,
+   "wilson_low": 55.2,
+   "ev": -0.108,
+   "small": false
+  },
+  "건강관리기술": {
+   "n": 341,
+   "hit": 66.3,
+   "wilson_low": 61.1,
+   "ev": 0.362,
+   "small": false
+  },
+  "출판": {
+   "n": 47,
+   "hit": 59.6,
+   "wilson_low": 45.3,
+   "ev": -0.179,
+   "small": false
+  },
+  "건강관리업체및서비스": {
+   "n": 353,
+   "hit": 62.0,
+   "wilson_low": 56.9,
+   "ev": -0.046,
+   "small": false
+  },
+  "통신장비": {
+   "n": 1126,
+   "hit": 60.3,
+   "wilson_low": 57.4,
+   "ev": 0.007,
+   "small": false
+  },
+  "운송인프라": {
+   "n": 326,
+   "hit": 62.3,
+   "wilson_low": 56.9,
+   "ev": -0.421,
+   "small": false
+  },
+  "인터넷과카탈로그소매": {
+   "n": 186,
+   "hit": 64.0,
+   "wilson_low": 56.9,
+   "ev": 0.557,
+   "small": false
+  },
+  "가구": {
+   "n": 208,
+   "hit": 62.0,
+   "wilson_low": 55.3,
+   "ev": -0.048,
+   "small": false
+  },
+  "창업투자": {
+   "n": 417,
+   "hit": 64.7,
+   "wilson_low": 60.0,
+   "ev": 0.545,
    "small": false
   },
   "디스플레이장비및부품": {
-   "n": 946,
-   "hit": 61.8,
-   "wilson_low": 58.7,
+   "n": 1034,
+   "hit": 62.1,
+   "wilson_low": 59.1,
    "ev": 0.06,
    "small": false
   },
+  "상업서비스와공급품": {
+   "n": 731,
+   "hit": 53.8,
+   "wilson_low": 50.1,
+   "ev": -0.772,
+   "small": false
+  },
   "손해보험": {
-   "n": 76,
-   "hit": 67.1,
-   "wilson_low": 55.9,
-   "ev": 0.876,
+   "n": 100,
+   "hit": 70.0,
+   "wilson_low": 60.4,
+   "ev": 1.009,
    "small": false
   },
   "종이와목재": {
@@ -347,24 +417,17 @@
    "small": false
   },
   "증권": {
-   "n": 229,
-   "hit": 55.9,
+   "n": 233,
+   "hit": 55.8,
    "wilson_low": 49.4,
-   "ev": -0.813,
+   "ev": -0.817,
    "small": false
   },
-  "교육서비스": {
-   "n": 322,
-   "hit": 57.1,
-   "wilson_low": 51.7,
-   "ev": -0.291,
-   "small": false
-  },
-  "상업서비스와공급품": {
-   "n": 614,
-   "hit": 59.6,
-   "wilson_low": 55.7,
-   "ev": -0.314,
+  "부동산": {
+   "n": 108,
+   "hit": 49.1,
+   "wilson_low": 39.8,
+   "ev": -0.846,
    "small": false
   },
   "컴퓨터와주변기기": {
@@ -381,39 +444,18 @@
    "ev": 0.121,
    "small": false
   },
-  "출판": {
-   "n": 40,
-   "hit": 57.5,
-   "wilson_low": 42.2,
-   "ev": -0.107,
-   "small": false
-  },
-  "창업투자": {
-   "n": 331,
-   "hit": 65.3,
-   "wilson_low": 60.0,
-   "ev": 0.623,
-   "small": false
-  },
-  "가구": {
-   "n": 79,
-   "hit": 55.7,
-   "wilson_low": 44.7,
-   "ev": -0.502,
-   "small": false
-  },
-  "건강관리업체및서비스": {
-   "n": 245,
-   "hit": 65.3,
-   "wilson_low": 59.2,
-   "ev": 0.164,
+  "광고": {
+   "n": 185,
+   "hit": 58.4,
+   "wilson_low": 51.2,
+   "ev": -0.271,
    "small": false
   },
   "건축제품": {
-   "n": 73,
-   "hit": 56.2,
-   "wilson_low": 44.8,
-   "ev": -0.541,
+   "n": 139,
+   "hit": 58.3,
+   "wilson_low": 50.0,
+   "ev": -0.439,
    "small": false
   },
   "판매업체": {
@@ -423,33 +465,19 @@
    "ev": -0.201,
    "small": false
   },
-  "광고": {
-   "n": 142,
-   "hit": 59.2,
-   "wilson_low": 50.9,
-   "ev": -0.239,
-   "small": false
-  },
-  "건강관리기술": {
-   "n": 246,
-   "hit": 65.4,
-   "wilson_low": 59.3,
-   "ev": 0.305,
-   "small": false
-  },
   "식품과기본식료품소매": {
-   "n": 76,
-   "hit": 53.9,
-   "wilson_low": 42.8,
-   "ev": -0.578,
+   "n": 142,
+   "hit": 57.0,
+   "wilson_low": 48.8,
+   "ev": -0.353,
    "small": false
   },
-  "디스플레이패널": {
-   "n": 117,
-   "hit": 62.4,
-   "wilson_low": 53.4,
-   "ev": 0.353,
-   "small": false
+  "사무용전자제품": {
+   "n": 18,
+   "hit": 50.0,
+   "wilson_low": 29.0,
+   "ev": -0.976,
+   "small": true
   },
   "기타금융": {
    "n": 227,
@@ -458,18 +486,11 @@
    "ev": 0.15,
    "small": false
   },
-  "운송인프라": {
-   "n": 160,
-   "hit": 63.7,
-   "wilson_low": 56.1,
-   "ev": -0.401,
-   "small": false
-  },
-  "인터넷과카탈로그소매": {
-   "n": 164,
-   "hit": 63.4,
-   "wilson_low": 55.8,
-   "ev": 0.43,
+  "동일업종 PER": {
+   "n": 35,
+   "hit": 45.7,
+   "wilson_low": 30.5,
+   "ev": -0.98,
    "small": false
   },
   "레저용장비와제품": {
@@ -484,6 +505,13 @@
    "hit": 57.3,
    "wilson_low": 46.5,
    "ev": 0.066,
+   "small": false
+  },
+  "복합유틸리티": {
+   "n": 68,
+   "hit": 58.8,
+   "wilson_low": 47.0,
+   "ev": -0.165,
    "small": false
   }
  }
