@@ -3084,6 +3084,16 @@ def run_market_scan():
     with st.spinner(f"관심종목 {len(target)}개 정밀 분석 중... (4/4단계)"):
         st.session_state['scan_results'] = q_engine.run_screener_scan(
             target, t_ref_str, b_engine=engine_init, rho_cutoff=rho_cutoff)
+    # ⚠️ 라운드 216 — 실패 사유가 **rerun 을 못 넘고 있었다.** 라운드 37 이 조용히
+    #   사라지던 종목을 `q_engine.last_scan_failures` 에 남기게 했는데, `q_engine`
+    #   은 모듈 수준에서 **매 rerun 새로 만들어진다**(:1631). 스캔이 끝나면 이
+    #   함수가 st.rerun() 을 부르고, 다음 그리기의 요약 칸은 **새 엔진의 빈
+    #   목록**을 읽었다. 결과(scan_results)는 세션에 남고 사유만 증발해 화면이
+    #   "완료 4 · 제외 0" 이면서 그 종목은 '정밀분석 결과 없음'이라 적었다 —
+    #   사용자의 "5개(1개 실패)" 가 이것이다(실측: 상위 5 → 완료 4 · 누락 1).
+    #   결과와 **같은 곳**(세션)에 사유도 남긴다 (§4).
+    st.session_state['scan_failures'] = list(
+        getattr(q_engine, 'last_scan_failures', None) or [])
     # 다음번에 '얼마나 기다리면 되는지' 말할 수 있게 실제 소요를 남긴다.
     st.session_state['scan_last_secs'] = time.time() - _st['t0']
     _scan_done()
@@ -3202,7 +3212,10 @@ if st.session_state.get('show_screener', False):
             # [명세 §15] 필수조건을 모두 통과한 종목만 추천한다.
             # 통과 종목이 2개면 2개, 0개면 '현재 추천주 없음'.
             # 구버전은 통과 0개일 때 조건 미달 종목을 상승여력% 순으로 3칸 채워 넣었다.
-            scan_failures = getattr(q_engine, 'last_scan_failures', []) or []
+            # 라운드 216 — 사유는 **세션**에서 읽는다. 엔진 객체는 rerun 마다 새로
+            #   만들어져 그 속성은 스캔 다음 그리기부터 비어 있다 (:3087 주석).
+            scan_failures = list(st.session_state.get('scan_failures')
+                                 or getattr(q_engine, 'last_scan_failures', None) or [])
             # 분류가 빠진 행 하나 때문에 화면 전체가 죽지 않게 한다
             # (한 종목의 오류가 전체를 막지 않는다는 원칙을 표시 단계에도 적용)
             def _cat(row):
@@ -8915,6 +8928,81 @@ if _perf_cal.get('total_cases'):
             st.markdown("**② 매수권(60점 이상) 신호만** — 실제 추천이 나가는 구간")
             st.dataframe(pd.DataFrame(_rows_bz), width='stretch',
                          hide_index=True)
+        # ── ②' 국면 × 구간 — '연습 vs 실전' 괴리의 정체 (라운드 216) ──────
+        # 사용자: *"산식은 개선 어떻게 잡고 있어?"* 원장 250,725행을 점수대×
+        # 국면×구간으로 갈라 보니 괴리는 대부분 **국면 조성**이었다 — 검증
+        # 구간에 하락장이 거의 없었고(날짜 4) 블라인드는 22%가 하락장이며,
+        # 하락장 블라인드에서 점수는 거꾸로 간다. 그것을 숨기면 '연습 71.5%'
+        # 가 실력처럼 읽힌다 (§9). **표시 전용** — 규칙·확률 산출은 안 바꾼다.
+        # 값은 원장(케이스 스터디와 같은 로더)에서 그 자리에서 센다 (§4).
+        # 표본 하한 30 과 Wilson 하한은 옆 표 ②·③ 과 regime_policy 의 것을
+        # 그대로 쓴다 — 새 숫자 없음 (§2-6).
+        try:
+            import regime_policy as _rp216
+            _ldf216 = _load_case_ledger()
+            if _ldf216 is not None and {'score', 'regime', 'split', 'success'} <= set(_ldf216.columns):
+                _bz216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce') >= 58)
+                                 & _ldf216['success'].notna()]
+                _rows216 = []
+                _cell216 = {}
+                for _rg216 in ('BULL', 'SIDEWAYS', 'BEAR', '전체'):
+                    _row216 = {'국면': _rg216}
+                    _sub = _bz216 if _rg216 == '전체' else _bz216[_bz216['regime'] == _rg216]
+                    _hv = {}
+                    for _sp216, _lab216 in (('train', '학습'), ('valid', '검증'),
+                                            ('blind', '블라인드')):
+                        _s = _sub[_sub['split'] == _sp216]
+                        _n = int(len(_s))
+                        if _n >= 30:
+                            _h = float(_s['success'].astype(bool).mean() * 100.0)
+                            _row216[_lab216] = (f"{_h:.1f}% (n {_n:,} · 하한 "
+                                                f"{_rp216.wilson_low(_h, _n):.1f})")
+                            _hv[_sp216] = _h
+                        else:
+                            _row216[_lab216] = f"n {_n} — 표본 부족"
+                        _cell216[(_rg216, _sp216)] = (_n, _hv.get(_sp216))
+                    _row216['검증−블라인드'] = (f"{_hv['valid'] - _hv['blind']:+.1f}%p"
+                                           if ('valid' in _hv and 'blind' in _hv) else '—')
+                    _rows216.append(_row216)
+                st.markdown("**②' 같은 신호를 국면 × 구간으로** — '연습 vs 실전' 괴리의 정체")
+                st.dataframe(pd.DataFrame(_rows216), width='stretch', hide_index=True)
+                # 하락장 블라인드에서 점수가 거꾸로 가는지 — 그 자리에서 센다
+                _bb216 = _bz216[(_bz216['regime'] == 'BEAR') & (_bz216['split'] == 'blind')]
+                _lo216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce').between(40, 49))
+                                 & (_ldf216['regime'] == 'BEAR') & (_ldf216['split'] == 'blind')
+                                 & _ldf216['success'].notna()]
+                _hi216 = _bb216[pd.to_numeric(_bb216['score'], errors='coerce').between(60, 64)]
+                _inv216 = ''
+                if len(_lo216) >= 30 and len(_hi216) >= 30:
+                    # ⚠️ '40~49' 처럼 물결표가 한 문장에 **둘** 있으면 GFM 이 취소선
+                    #   짝으로 읽어 "4049점" 으로 그렸다(실측). 이스케이프한다.
+                    _inv216 = (f" 하락장 블라인드에서는 점수가 거꾸로 갑니다 — 40\\~49점 "
+                               f"{_lo216['success'].astype(bool).mean() * 100:.0f}%(n {len(_lo216):,}) · "
+                               f"60\\~64점 {_hi216['success'].astype(bool).mean() * 100:.0f}%(n {len(_hi216):,}).")
+                _vb216 = _cell216.get(('BEAR', 'valid'), (0, None))[0]
+                # 하락장 **날짜** 수 — 그 자리에서 센다 (손 숫자는 낡는다 · §9).
+                # ⚠️ '에피소드'(BEAR→회복 전환)로 세지 않는다 — 원장의 regime 은
+                #   KOSPI/KOSDAQ 행마다 따로 판정돼 같은 날 다를 수 있어 "하루 한
+                #   국면"이 어느 행을 잡느냐에 따라 3·6 도 3·1 도 된다(실측). 행 자체의
+                #   regime 으로 세는 날짜 수는 잘 정의된다 — 사전등록 R1 도 이 수를 쓴다.
+                _bdays216 = {}
+                for _sp216c in ('valid', 'blind'):
+                    _bd = _bz216[(_bz216['regime'] == 'BEAR') & (_bz216['split'] == _sp216c)]
+                    _bdays216[_sp216c] = int(_bd['date'].astype(str).str[:10].nunique())
+                _eps_txt216 = (f"검증·블라인드에서 매수권 신호가 난 하락장 날짜가 각 "
+                               f"{_bdays216['valid']}·{_bdays216['blind']}일뿐이라")
+                st.caption(
+                    f"검증 구간의 하락장 매수권 케이스는 **{_vb216:,}건**뿐이라 '연습' 적중률은 "
+                    f"하락장을 거의 안 본 값입니다. 블라인드는 하락장 비중이 커서 낮게 나옵니다 — "
+                    f"괴리의 상당 부분이 **국면 조성**입니다.{_inv216} 엔진의 실패는 하락장에 "
+                    f"몰려 있고, 그 자리를 겨눈 연구(반등 확인 · 사전등록 R216)는 {_eps_txt216} "
+                    f"**아직 판정할 수 없습니다** — 하한(30)을 내리지 않습니다. 이 표는 규칙을 "
+                    f"바꾸지 않는 표시 전용입니다.")
+        except Exception:                                      # noqa: BLE001
+            import sys as _sys216
+            import traceback as _tb216
+            print('[모델 성적 국면×구간 표 실패 — 나머지는 계속 그린다]\n'
+                  + _tb216.format_exc(), file=_sys216.stderr)
         _bands_p = [b for b in (_perf_cal.get('bands') or []) if b.get('n')]
         if _bands_p:
             st.markdown("**③ 점수대별 실측 적중률** — 점수가 확률로 이어지는가")
