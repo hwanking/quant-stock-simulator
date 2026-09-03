@@ -670,8 +670,14 @@ def _render_toolbar(here_html: str = '') -> None:
     #   ⚠️ **날짜를 여기 손으로 적지 않는다.** 열린 이슈의 `next_review` 를
     #     읽어 붙인다 — 이슈가 옮겨지면 화면도 따라 옮겨진다.
     #     이슈가 없는 축은 문구도 없다 (없는 계획을 지어내지 않는다 · §3).
-    _AX_ISSUE = {'scoring': 'model|score_not_separating',
-                 'model': 'model|vb_gap'}
+    #   ⚠️ 라운드 222 — 'model' 축이 걸어 둔 `model|vb_gap` 이 **닫혔다.**
+    #     일일 파이프라인의 감지 규칙(검증−블라인드 ≥ 10%p 면 열고, 아니면
+    #     닫는다 · 기존 규칙)이 2026-09-03 실행에서 괴리 5.4%p(65.4 vs 60.0)로
+    #     닫았다. §182 가 "이슈가 닫히면 화면 문구도 사라져야 한다 — 그때 이
+    #     검사가 알린다"고 적어 둔 그대로 알렸다. 닫힌 이슈를 열린 과제로
+    #     말하지 않는다. 모델 축의 진짜 '다음에 보는 시점'은 이슈가 아니라
+    #     전방 재평가일이고, 그 날짜는 `forward_eval`(R78 · 한 곳)에서만 읽는다.
+    _AX_ISSUE = {'scoring': 'model|score_not_separating'}
     _ax_plan = {}
     try:
         from improvement import issue_ops as _iop182
@@ -695,6 +701,18 @@ def _render_toolbar(here_html: str = '') -> None:
                     f"열린 과제: {str(_r182.get('title') or '')[:40]}.")
     except Exception:                                          # noqa: BLE001
         _ax_plan = {}          # 못 읽으면 계획 문구를 안 붙인다 (§3)
+    # 모델 축 — 전방 재평가일(박제 파일 · R78)을 읽는다. 날짜를 여기 적지 않는다.
+    #   못 읽으면 문구가 없다 — 없는 계획을 지어내지 않는다(§3).
+    try:
+        import forward_eval as _fe182
+        _fed182 = _fe182.eval_date()
+        if _fed182 and 'model' not in _ax_plan:
+            _ax_plan['model'] = (
+                f" 다음에 다시 보는 시점은 {_fed182} 입니다 — 전방 재평가"
+                f"(R55 국면 라우팅 판정 · R216 반등 확인 재측정) 뒤 모델 규칙을 "
+                f"다시 봅니다. 그 전엔 값이 바뀌지 않습니다.")
+    except Exception:                                          # noqa: BLE001
+        pass
 
     _chips = ''.join(
         f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
@@ -9143,8 +9161,15 @@ if _ledger_df is not None:
         try:
             _lr = _imp_last(_ic)
             _n_open_imp = len(_imp_ct.open_cases(_ic))
+            # 라운드 222 — 같은 추천이 모델 버전마다 다시 동결돼 있었다(463행 중
+            #   복사본 245). 복사본(dup_version)과 시험 픽스처(void_fixture)는
+            #   행으로는 남기되(R197) **세지 않는다.** 뺀 수는 옆에 적는다(§3).
             _n_all_imp = _ic.execute(
-                "SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+                "SELECT COUNT(*) FROM prediction_cases "
+                "WHERE status NOT IN ('dup_version', 'void_fixture')").fetchone()[0]
+            _n_excl_imp = _ic.execute(
+                "SELECT COUNT(*) FROM prediction_cases "
+                "WHERE status IN ('dup_version', 'void_fixture')").fetchone()[0]
         finally:
             _ic.close()
         _lr_txt = (f"{str(_lr['started_at'])[:16]} ({_lr['status']} · "
@@ -9155,7 +9180,9 @@ if _ledger_df is not None:
             st.caption(f"**실전 추천 추적 파이프라인**: 동결 케이스 "
                        f"{_n_all_imp}건 · 결과 확정 대기 {_n_open_imp}건 · "
                        f"마지막 실행 {_lr_txt}. 같은 봉에서 목표·손절이 함께 "
-                       "닿으면 성공으로 세지 않습니다 (선도달 확인 불가).")
+                       "닿으면 성공으로 세지 않습니다 (선도달 확인 불가)."
+                       + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
+                          f"행으로 남기되 세지 않았습니다 (R222)." if _n_excl_imp else ""))
         with _pc2:
             if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
                          width='stretch'):
