@@ -965,6 +965,20 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             return
         print(f'  전방 모드 — 채점 가능한 날짜 {len(probe)}개 '
               f'({probe[0]} ~ {probe[-1]}) · 종목 {len(pool):,}개')
+    # ⚠️ 라운드 217 — 격자는 **가장 최근 봉에서** 25봉씩 거슬러 뽑으므로
+    #   (`usable[::-spacing]`) 거래일마다 한 봉씩 밀린다. 완료 집합은
+    #   (종목, 날짜) 정확 일치라, 다른 날 돌릴 때마다 한 봉 어긋난 격자가
+    #   통째로 "새 케이스"였다. 실측(2026-09-03): 원장 250,725행 중 같은
+    #   종목 이웃 기준일이 20봉 창 안에서 겹치는 쌍이 72%, 25봉 간격을
+    #   지키는 부분집합은 122,554건(48.9%). 종목당 기준일 108·296·484·376
+    #   — 밀린 격자 여러 벌의 합집합이다. 위(:53)가 "간격은 건드리지 않는다"
+    #   고 적은 그 규칙을, 여기서 실제로 지킨다: 같은 종목에 35일(=25봉×7/5
+    #   · 새 숫자 아님) 안 케이스가 이미 있으면 계획에서 뺀다.
+    #   전방 모드는 제외 — R78 이 일부러 촘촘히 뽑고 에피소드로 병기한다.
+    #   원장 행은 지우지 않는다(R197). 규칙은 `ledger_view` 한 곳에 있다.
+    import ledger_view as _lv
+    done_by_tk = _lv.dates_by_ticker(done)
+    near_dup = 0
     skipped = 0
     for tk in pool:
         try:
@@ -973,8 +987,12 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             price_cache[tk] = pdf
             for d in make_asof_dates(pdf, n_dates=N_DATES,
                                      forward_from=forward_from):
-                if (tk, d) not in done:
-                    todo.append((tk, d))
+                if (tk, d) in done:
+                    continue
+                if not forward_from and _lv.too_close(done_by_tk.get(tk, ()), d):
+                    near_dup += 1
+                    continue
+                todo.append((tk, d))
         except Exception as exc:
             skipped += 1
             if skipped <= 10:
@@ -983,6 +1001,10 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         # 실패를 삼키더라도 집계로는 남긴다 (경로 기록기에서 98종목이
         # 전부 실패했는데 조용했던 사고가 있었다).
         print(f"  시세 미수신으로 건너뛴 종목 {skipped}개 / {len(pool)}개")
+    if near_dup:
+        # 0 이 아니면 격자가 밀린 것이다 — 그 수를 숨기지 않는다 (§3)
+        print(f"  같은 종목 {_lv.MIN_GAP_DAYS}일(25봉) 안에 이미 케이스가 있어 "
+              f"계획에서 뺀 기준일 {near_dup:,}건 (R217 · 격자 밀림 겹침 차단)")
     if forward_from and todo:
         # ⚠️ todo 는 **종목 단위로** 쌓인다 (위 루프가 종목마다 날짜 전부를
         #   붙인다). 하루 한도가 400건이면 그 순서로는 **종목 9개가 45일치**

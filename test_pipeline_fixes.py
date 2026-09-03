@@ -3774,8 +3774,14 @@ check("웹앱 히스토리 — 접힌 패널 + 앵커",
       and '업데이트 {_n_upd}건' in _w65)
 
 # ③ 케이스 축적 규율 — 목표 단계·중단 금지·운영 문서
-check("케이스 축적 목표 표시 (단계 목표·중단 금지)",
-      '10,000건' in _w65 and '중단하지 않습니다' in _w65)
+#   §6 — 라운드 217 이 이 검사를 현실에 맞췄다. 종전은 원장 캡션에 '다음 목표
+#   10,000건 · 축적은 중단하지 않습니다' 가 있는지 봤는데, 원장이 250,725행인
+#   지금 그 문구는 낡았고 옆의 '인접 기준일 중복은 25봉 간격 규칙으로 통제합니다'
+#   는 거짓이었다(격자가 날마다 밀려 72%가 겹침 · RESULT_R217). 캡션은 이제
+#   축적이 자동이 아님과 겹침 사실을 말한다 — 그것을 본다.
+check("케이스 축적 표시 — 자동이 아님 · 독립 사례 아님 · 25봉 안 재축적 금지 (R217)",
+      '축적은 자동이 아닙니다' in _w65 and '독립 사례가 아닙니다' in _w65
+      and '같은 종목 25봉 안에는 더 쌓지 않습니다' in _w65)
 check("운영 루틴 문서", _os.path.exists(
     _os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md")))
 _ops65 = open(_os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md"),
@@ -19556,6 +19562,161 @@ try:
           0 < _n_vb < _n_bb, f'valid {_n_vb} · blind {_n_bb}', scanned=_n_vb + _n_bb)
 except FileNotFoundError:
     check("원장이 없어 값 검사를 못 했다", False, '.portfolio/virtual_graded.jsonl 없음')
+
+print()
+print("§234 R217 — 원장 기준일 격자 밀림: 25봉 간격 규칙을 랩·화면이 한 곳에서 지킨다 (2026-09-03)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   랩의 격자는 **가장 최근 봉**에서 25봉씩 거슬러 뽑히므로(`usable[::-25]`)
+#   거래일마다 한 봉 밀리고, 완료 판정은 (종목, 날짜) 정확 일치라 다른 날
+#   돌릴 때마다 밀린 격자가 통째로 새 케이스였다. 실측(2026-09-03): 원장
+#   250,725행 중 같은 종목 이웃 기준일의 72%가 20봉 창 안에서 겹치고, 25봉
+#   간격을 지키는 부분집합은 122,554건(48.9%). 화면은 "독립 사례 N건 · 25봉
+#   간격 규칙으로 통제합니다" 라고 적고 있었다 — 둘 다 거짓.
+#   고침: 규칙은 `ledger_view` 한 곳(35일 = 25봉×7/5 · R54b 가 이미 쓰던
+#   규칙 · 새 숫자 아님). 랩은 전방 모드 밖에서 같은 종목 35일 안 케이스가
+#   있으면 계획에서 빼고, 화면은 겹침 없는 수를 그 자리에서 센다. 원장 행은
+#   지우지 않는다(R197). 값은 잠그지 않는다 — 축적하면 표류한다(R212).
+import ledger_view as _lv234
+check("규칙은 채택된 25봉의 달력 표기다 — 35일 (새 숫자 아님)",
+      _lv234.SPACING_BARS == 25 and _lv234.MIN_GAP_DAYS == 35)
+check("too_close: 3일 옆은 가깝다 (심기)",
+      _lv234.too_close(['2026-01-01', '2026-02-10'], '2026-01-04') is True)
+check("too_close: 같은 날도 가깝다",
+      _lv234.too_close(['2026-01-01'], '2026-01-01') is True)
+check("too_close: 40일 밖은 안 가깝다 (오탐 안 함)",
+      _lv234.too_close(['2026-01-01', '2026-02-10'], '2026-03-25') is False)
+check("too_close: 빈 목록은 안 가깝다",
+      _lv234.too_close([], '2026-01-01') is False)
+import pandas as _pd234
+_df234 = _pd234.DataFrame({'ticker': ['A', 'A', 'A', 'B'],
+                           'date': ['2026-01-04', '2026-01-01', '2026-02-10', '2026-01-02']})
+_m234 = _lv234.spaced_mask(_df234)
+check("spaced_mask: 3일 쌍은 이른 것 하나만 · 40일 뒤는 둘 다 · 다른 종목은 독립 (심기 · 양방향)",
+      list(_m234) == [False, True, True, True], detail=str(list(_m234)))
+check("spaced_mask: 입력 순서·인덱스를 보존한다",
+      list(_m234.index) == list(_df234.index))
+check("spaced_count: 빈 입력은 0",
+      _lv234.spaced_count(_pd234.DataFrame({'ticker': [], 'date': []})) == 0)
+# ── 랩 — 규칙을 한 곳에서 부르고, 전방 모드는 건드리지 않는다 ─────────────
+with open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'), encoding='utf-8') as _f234:
+    _lab234 = _f234.read()
+check("랩이 규칙을 한 곳(ledger_view)에서 부른다 (§4 · 두 벌 금지)",
+      'import ledger_view as _lv' in _lab234
+      and '_lv.too_close(done_by_tk.get(tk, ()), d)' in _lab234)
+check("랩의 간격 차단은 전방 모드 밖에서만 (R78 은 일부러 촘촘히 뽑는다)",
+      'if not forward_from and _lv.too_close(' in _lab234)
+check("랩이 뺀 기준일 수를 세어 찍는다 (0 이 아니면 격자가 밀린 것 · §3)",
+      'near_dup += 1' in _lab234 and 'near_dup:,' in _lab234)
+check("랩의 완료 판정(정확 일치)은 그대로 — 원장 행을 지우지 않는다 (R197)",
+      "done.add((r['ticker'], r['date']))" in _lab234)
+check("격자 자체는 안 바꿨다 — 25봉 간격 리터럴 그대로 (규칙 재사용)",
+      'spacing=25' in _lab234 and 'usable[::-spacing][:n_dates]' in _lab234)
+# ── 화면 — '독립 사례' 를 말하지 않고, 수는 그 자리에서 센다 ────────────────
+check("원장 캡션이 '독립 사례' 라고 말하지 않는다 (§9)",
+      '독립 사례 **' not in _w231 and '독립 사례가 아닙니다' in _w231)
+check("캡션이 겹침 없는 수를 그 자리에서 센다 (손으로 적은 수는 낡는다)",
+      'return _lv217.spaced_count(_df)' in _w231
+      and '_spaced_count_cached(_ledger_df, len(_ledger_df), _lg_last)' in _w231)
+check("캡션의 옛 거짓 문장이 없다 ('25봉 간격 규칙으로 통제합니다')",
+      '25봉 간격 규칙으로 통제합니다' not in _w231)
+check("셈이 실패해도 캡션은 그리고 사유를 남긴다 (§3)",
+      '[원장 간격 부분집합 셈 실패' in _w231 and '_tb217.print_exc()' in _w231)
+check("모델 성적 캡션도 표의 n 옆에 겹침 없는 비율을 같이 낸다 (같은 헬퍼)",
+      '_spaced_count_cached(_ldf216, len(_ldf216)' in _w231
+      and '표의 n 은 **케이스 수**이지 독립 표본' in _w231)
+check("겹침 없는 수를 세는 헬퍼는 한 곳이다 (§4 · 모듈 수준 캐시 · 25만 행 셈을 한 번만)",
+      _w231.count('def _spaced_count_cached(') == 1
+      and _w231.count('_spaced_count_cached(_l') == 2)
+# 헤더의 '유효 독립 표본'이 R54b effective_n.json(생성 스크립트 없는 고정본 ·
+# 2026-08-09 · 원장 60,462행 · 32,721)인 채로 '누적 케이스 250,725건' 옆에
+# 날짜 없이 서 있었다. 같은 정의를 세는 라운드 72 표본 감사 산출물을 읽는다.
+check("헤더의 유효 독립 표본은 표본 감사 산출물(sample_audit.json)에서 읽는다 — 생성 스크립트가 있는 파일",
+      "'data', 'sample_audit.json'" in _w231
+      and "_sa54['independent_episodes']" in _w231
+      and "'effective_n.json'" not in _w231)
+check("헤더의 유효 독립 표본 수는 기준 원장 행수와 잰 날짜를 같이 낸다 (날짜 없는 숫자는 낡는다 · §2)",
+      "원장 {int(_sa54.get('raw_cases') or 0):,}건 기준 · {_en54_made})" in _w231
+      and "_en54_made = str(_sa54.get('made') or '날짜 미기록')[:10]" in _w231)
+check("원장 캡션도 같은 표본 감사 객체로 에피소드 수를 낸다 (두 값을 따로 만들지 않는다 · §4)",
+      "**{int(_sa54['independent_episodes']):,}건**입니다" in _w231
+      and _w231.count("'data', 'sample_audit.json'") == 1)
+# R198 이 '원장 행수(ledger_rows)'로 세기로 했는데 사이드바·홈 카드 두 곳만
+# 고쳐져 헤더·모델 성적 캡션은 total_cases(249,748)를 띄웠다 — 같은 줄에
+# '원장 250,725건 기준'과 나란히. 호출부를 하나씩 고치면 이렇게 남는다(§6 R120).
+check("R198 의 '원장 행수' 결정이 헤더·모델 성적 캡션에도 닿는다 (total_cases 를 그대로 띄우는 자리 없음)",
+      "{_calib_all['total_cases']:,}건" not in _w231
+      and "{_perf_cal['total_cases']:,}건" not in _w231
+      and "_calib_all.get('ledger_rows') or _calib_all['total_cases']" in _w231
+      and "_perf_cal.get('ledger_rows') or _perf_cal['total_cases']" in _w231)
+# ── 문서 — 실측·날짜·거짓 문장 정정 ───────────────────────────────────────
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R217_LEDGER_GRID_OVERLAP.md'), encoding='utf-8') as _f234:
+    _doc234 = _f234.read()
+check("결과 문서가 실측 · 부분집합 · 날짜를 적는다",
+      all(s in _doc234 for s in ('122,554', '48.9%', '2026-09-03', '72%', '원장 행은 지우지 않았다')))
+with open(_os.path.join(PROJ, 'docs', 'OPERATIONS_ROUTINE.md'), encoding='utf-8') as _f234:
+    _ops234 = _f234.read()
+check("운영 루틴이 '매 거래일 자동 추가'를 사실로 적지 않는다",
+      '→ 이후 매 거래일 자동 추가' not in _ops234 and 'R217' in _ops234)
+# ── 실측 — 원장에서 직접 센다. 값은 안 잠근다(축적하면 표류) · 방향만 ────────
+try:
+    _led234 = _pd234.read_json(_os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl'),
+                               lines=True)
+    _tot234 = int(len(_led234))
+    _sp234 = _lv234.spaced_count(_led234) if _tot234 else 0
+    check("원장 실측: 25봉 간격을 지키는 부분집합은 전체보다 작다 (겹침이 실재한다) — "
+          f"전체 {_tot234:,} · 부분집합 {_sp234:,}",
+          0 < _sp234 < _tot234, scanned=_tot234)
+    # 헤더가 읽는 표본 감사 산출물이 **현재** 원장으로 만들어졌는가 — 기준 행수가
+    # 원장 행수와 같아야 한다. 갱신을 빼먹으면 여기서 걸린다(축적 뒤 4b 필수).
+    with open(_os.path.join(PROJ, 'data', 'sample_audit.json'), encoding='utf-8') as _f234:
+        _sa234 = _json.load(_f234)
+    check("표본 감사 산출물이 현재 원장으로 다시 만들어졌다 (기준 행수 = 원장 행수)",
+          int(_sa234.get('raw_cases') or 0) == _tot234,
+          detail=f"sample_audit raw_cases {_sa234.get('raw_cases')} vs 원장 {_tot234}")
+    check("표본 감사의 에피소드 수가 raw 보다 작다 (독립성 보정이 실제로 걸림)",
+          0 < int(_sa234.get('independent_episodes') or 0) < _tot234)
+    # 화면이 읽는 원장 파생물 셋(표본 감사 · ICC · 업종 성적)이 **마지막 축적**
+    # (배포 동봉본 bundle_meta.made) 뒤에 만들어졌는가. 셋 다 운영 루틴의 갱신
+    # 목록에 없어 R197~R213 여덟 배치 동안 한 번도 갱신되지 않았다 — 값을 잠그지
+    # 않고 신선도만 잠근다. 낡으면 여기서 걸린다.
+    with open(_os.path.join(PROJ, 'data', 'bundle_meta.json'), encoding='utf-8') as _f234:
+        _bm234 = str(_json.load(_f234).get('made') or '')[:10]
+    for _nm234 in ('sample_audit.json', 'effective_n_icc.json', 'sector_perf.json'):
+        with open(_os.path.join(PROJ, 'data', _nm234), encoding='utf-8') as _f234:
+            _md234 = str(_json.load(_f234).get('made') or '')[:10]
+        check(f"원장 파생물이 마지막 축적(동봉본 {_bm234}) 뒤에 만들어졌다 — {_nm234} ({_md234})",
+              bool(_bm234) and bool(_md234) and _md234 >= _bm234)
+    # 업종 성적 생성기가 **패치만** 읽어 R72 이후 행(원장 행에 업종 직접 기록)을
+    # 전부 놓치고 있었다 — R73 이 표본 감사에서 고친 그 결함의 생존자. 소스와
+    # 커버리지(파일의 n 합 ≥ 원장에서 같은 필터로 센 '행에 업종이 있는' 수)를 본다.
+    with open(_os.path.join(PROJ, 'scripts', 'gen_sector_perf.py'), encoding='utf-8') as _f234:
+        _gsp234 = _f234.read()
+    check("업종 성적 생성기가 원장 행의 업종을 먼저 읽고 패치는 보조다 (R73 규칙 · 한 쪽만 보지 않는다)",
+          "sec = (r.get('sector')" in _gsp234 and "or patch.get(" in _gsp234)
+    with open(_os.path.join(PROJ, 'data', 'sector_perf.json'), encoding='utf-8') as _f234:
+        _spf234 = _json.load(_f234)
+    _sum_n234 = sum(int((v or {}).get('n') or 0) for v in (_spf234.get('sectors') or {}).values())
+    _m234 = ((_led234['split'].astype(str) != 'blind')
+             & (_pd234.to_numeric(_led234['score'], errors='coerce') >= 58.0))
+    if 'outcome' in _led234.columns:
+        _m234 &= _led234['outcome'].astype(str) != 'OPEN'
+    _dev234 = _led234[_m234]
+    if 'sector' in _dev234.columns:
+        # ⚠️ pandas 의 str dtype 에서 결측은 NA 다 — astype(str) 뒤 'None'/'nan'
+        #   치환으로는 안 걸러진다(첫 판이 그래서 98,600 을 셌다 · 생성기 루프는
+        #   45,344). notna 로 먼저 거른다.
+        _sec234 = _dev234['sector']
+        _n_rowsec234 = int((_sec234.notna()
+                            & (_sec234.astype(str).str.strip() != '')
+                            & ~_sec234.astype(str).str.strip().isin(['None', 'nan', 'NaN', '<NA>'])).sum())
+    else:
+        _n_rowsec234 = 0
+    check("업종 성적의 n 합이 원장 행에 업종이 적힌 개발구간 매수권 행수 이상이다 (생성기가 행을 놓치지 않는다) — "
+          f"파일 {_sum_n234:,} · 원장 {_n_rowsec234:,}",
+          _n_rowsec234 > 0 and _sum_n234 >= _n_rowsec234, scanned=_n_rowsec234)
+except Exception as _e234:                                   # noqa: BLE001
+    check("원장 실측을 읽었다", False, detail=f'{type(_e234).__name__}: {_e234}')
 
 print()
 print("=" * 72)

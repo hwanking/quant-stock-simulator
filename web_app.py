@@ -4949,6 +4949,19 @@ def _wl_avg_down_snap(row, snapshot):
 _RG214_CACHE = {}
 
 
+# ── 라운드 217 — 원장의 '겹침 없는' 케이스 수 (25봉 간격 부분집합) ────────────
+#   규칙은 `ledger_view` 한 곳. 250,725행 셈이 pandas 루프로 3.5초였다(리스트
+#   루프로 0.2초) — 그래도 **여기서 한 번** 세고 캐시한다. 모델 성적 캡션과
+#   원장 캡션이 같은 헬퍼를 부른다(§4).
+#   캐시 키는 행수·마지막 기준일 — 원장이 자라면 다시 센다.
+import ledger_view as _lv217
+
+
+@st.cache_data(show_spinner=False)
+def _spaced_count_cached(_df, n_rows, last_date):
+    return _lv217.spaced_count(_df)
+
+
 def _market_state_214():
     """KOSPI 국면을 **한 그리기에 한 번만** 계산한다 (라운드 214).
 
@@ -7524,20 +7537,33 @@ if _blend59:
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
 if _calib_all.get('total_cases'):
+    # 라운드 217 — R198 이 '원장 행수(ledger_rows)'로 세기로 하고 사이드바·홈
+    #   카드는 고쳤는데 **여기와 모델 성적 캡션은 total_cases 그대로**였다.
+    #   그래서 헤더가 '누적 케이스 249,748건' 옆에 '원장 250,725건 기준'을
+    #   띄웠다 — 같은 줄 안에서 두 수. 같은 우선순위(:753)로 맞춘다.
     _extra_bits.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
-                       f"누적 케이스 {_calib_all['total_cases']:,}건")
+                       f"누적 케이스 {_calib_all.get('ledger_rows') or _calib_all['total_cases']:,}건")
     # 유효 독립 표본 (라운드 54b) — 같은 날 같은 업종 신호는 같은 시장
     # 사건 하나다. raw 건수로 신뢰구간을 좁히면 과신이 된다.
     try:
         import json as _json54
+        # 라운드 217 — 종전에는 R54b 의 `effective_n.json` 을 읽었다. 그 파일은
+        #   생성 스크립트가 없는 고정본이라(2026-08-09 · 원장 60,462행 · 32,721)
+        #   '누적 케이스 250,725건' 옆에 4배 작은 원장의 수가 날짜 없이 서
+        #   있었다. 같은 정의(④ 같은 종목 35일 에피소드)를 라운드 72 표본
+        #   감사(`scripts/sample_audit.py` → sample_audit.json)가 세므로 그것을
+        #   읽고, 기준 행수와 잰 날짜를 같이 낸다 — 낡으면 낡은 것이 보이게(§2).
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               'data', 'effective_n.json'),
+                               'data', 'sample_audit.json'),
                   encoding='utf-8') as _f54:
-            _en54 = (_json54.load(_f54).get('sets') or {}).get('전체 원장') or {}
-        if _en54.get('episodes'):
+            _sa54 = _json54.load(_f54)
+        _en54_made = str(_sa54.get('made') or '날짜 미기록')[:10]
+        if _sa54.get('independent_episodes'):
             _extra_bits.append(
-                f"유효 독립 표본 약 {_en54['episodes']:,}건"
-                f" (같은 종목 35일 내 재신호를 한 사건으로 묶음)")
+                f"유효 독립 표본 약 {int(_sa54['independent_episodes']):,}건"
+                f" (같은 종목 {int(_sa54.get('episode_days') or 35)}일 내 재신호를 "
+                f"한 사건으로 묶음 · "
+                f"원장 {int(_sa54.get('raw_cases') or 0):,}건 기준 · {_en54_made})")
     except Exception:                                          # noqa: BLE001
         pass                          # 표기 하나 때문에 화면이 죽지 않는다
 if _extra_bits:
@@ -8885,7 +8911,8 @@ if _perf_cal.get('total_cases'):
     # 배포 환경에는 .portfolio 가 없어 늘 동봉본을 읽는데, 그 사실을
     # 안 적으면 옛 표본으로 낸 숫자를 최신으로 읽게 된다(§3·§9).
     _cal_src = _artifact_source("calibration.json")
-    st.caption(f"과거 기준일 리플레이 **{_perf_cal['total_cases']:,}건** · "
+    # 라운드 217 — R198 의 '원장 행수' 결정을 여기도 따른다 (:753 과 같은 우선순위)
+    st.caption(f"과거 기준일 리플레이 **{_perf_cal.get('ledger_rows') or _perf_cal['total_cases']:,}건** · "
                f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
                + ("로컬 최신 기록" if _cal_src == 'live'
                   else "저장소 동봉본 (배포 환경 — 로컬 기록 없음)")
@@ -8991,13 +9018,27 @@ if _perf_cal.get('total_cases'):
                     _bdays216[_sp216c] = int(_bd['date'].astype(str).str[:10].nunique())
                 _eps_txt216 = (f"검증·블라인드에서 매수권 신호가 난 하락장 날짜가 각 "
                                f"{_bdays216['valid']}·{_bdays216['blind']}일뿐이라")
+                # 라운드 217 — 표의 n 은 케이스 수다. 같은 종목 기준일이 겹쳐 있어
+                #   독립 표본 수가 아니므로, 겹침 없는 비율을 같은 헬퍼로 세어 같이 낸다.
+                try:
+                    _spc216 = _spaced_count_cached(_ldf216, len(_ldf216),
+                                                   str(_ldf216['date'].max())[:10])
+                    _spshare216 = (f"**{_spc216 / max(1, len(_ldf216)):.1%}**"
+                                   f"({_spc216:,}건)")
+                except Exception:                              # noqa: BLE001
+                    import traceback as _tb217b
+                    print('[모델 성적 겹침 없는 비율 셈 실패 — 캡션은 수 없이 그린다]')
+                    _tb217b.print_exc()
+                    _spshare216 = "이번에 못 셌습니다(사유는 로그)"
                 st.caption(
                     f"검증 구간의 하락장 매수권 케이스는 **{_vb216:,}건**뿐이라 '연습' 적중률은 "
                     f"하락장을 거의 안 본 값입니다. 블라인드는 하락장 비중이 커서 낮게 나옵니다 — "
                     f"괴리의 상당 부분이 **국면 조성**입니다.{_inv216} 엔진의 실패는 하락장에 "
                     f"몰려 있고, 그 자리를 겨눈 연구(반등 확인 · 사전등록 R216)는 {_eps_txt216} "
                     f"**아직 판정할 수 없습니다** — 하한(30)을 내리지 않습니다. 이 표는 규칙을 "
-                    f"바꾸지 않는 표시 전용입니다.")
+                    f"바꾸지 않는 표시 전용입니다. 그리고 표의 n 은 **케이스 수**이지 독립 표본 "
+                    f"수가 아닙니다 — 같은 종목의 기준일이 25봉보다 촘촘히 겹쳐 있어(라운드 217) "
+                    f"25봉 간격을 지키는 부분집합은 전체의 {_spshare216}입니다.")
         except Exception:                                      # noqa: BLE001
             import sys as _sys216
             import traceback as _tb216
@@ -9047,11 +9088,41 @@ _ledger_df = _load_case_ledger()
 if _ledger_df is not None:
     st.markdown("### 과거 판단 하나하나 열어 보기")
     _lg_last = str(_ledger_df['date'].max())[:10] if 'date' in _ledger_df.columns else '—'
-    st.caption(f"독립 사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
+    # ⚠️ 라운드 217 — 이 줄은 "독립 사례 N건 · 인접 기준일 중복은 25봉 간격
+    #   규칙으로 통제합니다" 라고 적고 있었다. 둘 다 거짓이었다. 랩의 격자가
+    #   최근 봉 기준이라 거래일마다 밀리고 완료 판정은 정확 일치라, 다른 날
+    #   돌릴 때마다 밀린 격자가 통째로 새 케이스였다 — 같은 종목 이웃 기준일의
+    #   72%가 20봉 결과 창 안에서 겹친다(2026-09-03 실측 · 250,725행 중 25봉
+    #   간격을 지키는 부분집합 122,554건 · 48.9%). 수는 **여기서 그때그때 센다**
+    #   (손으로 적은 수는 낡는다) — 규칙은 `ledger_view` 한 곳, 랩도 같은 것을
+    #   부른다. 원장 행은 지우지 않았다(R197).
+    try:
+        _sp217 = _spaced_count_cached(_ledger_df, len(_ledger_df), _lg_last)
+        _sp_txt = (f"25봉(={_lv217.MIN_GAP_DAYS}일) 간격을 지키는 부분집합은 "
+                   f"**{_sp217:,}건({_sp217 / max(1, len(_ledger_df)):.1%})** 입니다")
+    except Exception:                                          # noqa: BLE001
+        import traceback as _tb217
+        print('[원장 간격 부분집합 셈 실패 — 캡션은 수 없이 그린다]')
+        _tb217.print_exc()
+        _sp_txt = "25봉 간격을 지키는 부분집합 수는 이번에 못 셌습니다(사유는 로그)"
+    # 같은 사실을 표본 감사(R72 · 같은 종목 35일 재신호 = 한 사건)로도 — 헤더가
+    # 읽은 그 객체를 그대로 쓴다. 두 값을 따로 만들지 않는다(§4).
+    _ep_txt217 = ""
+    try:
+        if _sa54.get('independent_episodes'):
+            _ep_txt217 = (f" 같은 종목 35일 안 재신호를 한 사건으로 묶으면 "
+                          f"**{int(_sa54['independent_episodes']):,}건**입니다"
+                          f"(표본 감사 {_en54_made}).")
+    except Exception:                                          # noqa: BLE001
+        pass                          # 헤더가 못 읽었으면 여기도 비운다 — 조용히 다른 값을 만들지 않는다
+    st.caption(f"사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
                "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.  \n"
-               f"**운영 상태**: 마지막 케이스 기준일 {_lg_last} · "
-               f"1단계 3,000·2단계 5,000 달성 — 다음 목표 **10,000건**. 축적은 중단하지 않습니다. "
-               "동일 종목·인접 기준일 중복은 25봉 간격 규칙으로 통제합니다.")
+               "**독립 사례가 아닙니다** — 같은 종목의 기준일이 25봉보다 촘촘히 "
+               f"겹쳐 있어 결과 창이 서로 겹칩니다. {_sp_txt}.{_ep_txt217} "
+               "(라운드 217 · 격자가 날마다 밀려 생긴 겹침 · 이후 축적은 이 간격을 지킵니다 · "
+               "원장 행은 지우지 않았습니다).  \n"
+               f"**운영 상태**: 마지막 케이스 기준일 {_lg_last} · 축적은 자동이 아닙니다 — "
+               "사람이 랩을 돌려야 자라고, 같은 종목 25봉 안에는 더 쌓지 않습니다.")
 
     # ── 지속 개선 파이프라인 상태 (실전 추천 추적 계층 — improvement DB) ────
     try:

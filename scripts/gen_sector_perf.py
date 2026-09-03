@@ -6,7 +6,8 @@
 매수권 신호가 과거에 실제로 얼마나 맞았는가**를 병기할 재료를 만든다.
 
   · 원장 개발 구간(train+valid) 매수권(58+) · 판정완료 행만
-  · 업종은 백필 패치의 sector (val_eval 기준)
+  · 업종은 **원장 행의 sector 를 먼저**, 없으면 백필 패치 (라운드 217 —
+    종전엔 패치만 봐서 R72 이후 행이 전부 빠졌다 · R73 의 규칙과 같게)
   · 블라인드는 읽지 않는다
   · n < 30 업종은 기록하되 화면에서 Wilson 하한과 함께 '표본 부족' 표기
 
@@ -70,7 +71,14 @@ with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
             continue
         if float(r.get('score') or 0) < 58.0:
             continue
-        sec = patch.get((str(r.get('ticker')), str(r.get('date'))[:10]))
+        # ⚠️ 라운드 217 — 여기가 **패치만** 봤다. 라운드 72 이후 랩은 업종을
+        #   원장 행에 직접 쓰고 패치는 그 전 60,462건용이다 — R73 이 표본
+        #   감사(`sample_audit.load_sectors`)에서 고친 바로 그 결함이 여기
+        #   남아 있었다. 그래서 원장이 250,725행이 돼도 이 표는 옛 60k 행만
+        #   세고 있었다(반도체 n 5,750 → 다시 만들어도 5,751). 행의 업종을
+        #   먼저, 없으면 패치 — 표본 감사와 같은 규칙.
+        sec = (r.get('sector')
+               or patch.get((str(r.get('ticker')), str(r.get('date'))[:10])))
         if not sec:
             continue
         a = agg.setdefault(sec, dict(n=0, k=0, net=0.0))
