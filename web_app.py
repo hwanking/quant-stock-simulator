@@ -5292,11 +5292,19 @@ else:
                     if _ad_ok is None:
                         _ad_html = ''
                     else:
+                        # 라운드 221 — '불가' 한 낱말이 셋을 뭉뚱그렸다: 시장 게이트
+                        #   하나에만 막힌 것 · 포지션 조건 미달 · 표본·데이터 미판정.
+                        #   라벨은 킷의 avg_down_class 가 낸다(§4 · 한 곳). 미판정은
+                        #   경고색이 아니라 회색 — 판단이 아니다(§3).
+                        _ad_cls = _act.get('avg_down_class')
+                        _ad_col = (_TOK['pos'] if _ad_ok
+                                   else _TOK['tx3'] if _ad_cls == '보류'
+                                   else _TOK['warn'])
                         _ad_html = (
-                            f"<br><span style='font-size:12px; "
-                            f"color:{_TOK['pos'] if _ad_ok else _TOK['warn']};' "
+                            f"<br><span style='font-size:12px; color:{_ad_col};' "
                             f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
-                            f"물타기 {'가능' if _ad_ok else '불가'}</span>")
+                            f"{_uk._esc(_act.get('avg_down_label') or ('물타기 가능' if _ad_ok else '물타기 불가'))}"
+                            f"</span>")
                     st.markdown(
                         f"<div style='padding-top:8px; font-size:13px; "
                         f"color:{_TOK[_act['tone']]};' "
