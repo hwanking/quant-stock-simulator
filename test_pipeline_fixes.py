@@ -3648,6 +3648,21 @@ _p61 = pm61._pm_path(_dk61, pm61._engine_version())
 for _old61 in (_p61, pm61._pm_path(_dk61)):
     if _os.path.exists(_old61):
         _os.remove(_old61)
+# ⚠️ 라운드 222 — 이 시험이 2099-01-01 리포트를 **사용자의 실제 이력 파일**에
+#   append 하고 있었다("이력은 append-only 로 남긴다"). 일일 파이프라인이 그
+#   줄을 읽어 시험 픽스처를 실제 추적 DB 에 동결했다 — 모델 버전마다 한 벌씩
+#   **7벌**(R165 의 "검사가 사용자 자료를 바꾸고 있었다"와 같은 자리). 이력
+#   쓰기는 임시 파일로 돌리고, 끝나면 되돌린다. '이력 추가 저장' 검사는 그
+#   임시 파일을 읽는다 — 검사는 그대로, 부작용만 없앤다.
+_hist_real61 = pm61.PM_HISTORY
+_hist_tmp61 = _os.path.join(PROJ, '_probe', 'pm_history_test61.jsonl')
+_os.makedirs(_os.path.dirname(_hist_tmp61), exist_ok=True)
+if _os.path.exists(_hist_tmp61):
+    _os.remove(_hist_tmp61)
+_n2099_real_before61 = (sum(1 for _l in open(_hist_real61, encoding='utf-8')
+                            if '"2099-01-01"' in _l)
+                        if _os.path.exists(_hist_real61) else 0)
+pm61.PM_HISTORY = _hist_tmp61
 _rep61, _new61 = pm61.build_report(q, _rows61, date_key=_dk61, market_label="시험")
 check("리포트 생성·고정 저장", _new61 and _os.path.exists(_p61))
 check("생성 시각·기준일 박제", _rep61.get('generated_at') and _rep61.get('data_asof'))
@@ -3668,8 +3683,15 @@ check("이력(jsonl) 추가 저장", len(_hist61) >= 1)
 check("리포트 파일명에 엔진 버전이 박힌다",
       pm61._engine_version() in _os.path.basename(_p61))
 for _old61 in (_p61, pm61._pm_path(_dk61)):   # 시험용 파일 정리
-    if _os.path.exists(_old61):               # (이력은 append-only 로 남긴다)
+    if _os.path.exists(_old61):
         _os.remove(_old61)
+pm61.PM_HISTORY = _hist_real61                 # 라운드 222 — 실제 이력 경로 복구
+_n2099_real_after61 = (sum(1 for _l in open(_hist_real61, encoding='utf-8')
+                           if '"2099-01-01"' in _l)
+                       if _os.path.exists(_hist_real61) else 0)
+check("시험 픽스처(2099-01-01)가 실제 이력 파일에 새로 들어가지 않았다 (R222 · 검사가 사용자 자료를 바꾸지 않는다)",
+      _n2099_real_after61 == _n2099_real_before61,
+      detail=f"실제 이력의 2099 줄 {_n2099_real_before61} → {_n2099_real_after61}")
 
 # ③ 화면 — 리포트 섹션·테마 토글
 _w61 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
@@ -17309,14 +17331,25 @@ try:
                 if str(r.get('status')) == 'open'}
 finally:
     _c182t.close()
-for _k182t in ('model|score_not_separating', 'model|vb_gap'):
+# §6 — 라운드 222 가 이 목록을 현실에 맞췄다. `model|vb_gap` 은 2026-09-03 일일
+#   파이프라인의 감지 규칙(검증−블라인드 ≥10%p 면 열고 아니면 닫는다)이 동봉본
+#   괴리 5.4%p 로 **닫았다.** 이 검사가 "이슈가 닫히면 화면 문구도 사라져야 한다
+#   — 그때 이 검사가 알린다"고 적어 둔 그대로 알렸다. 화면은 닫힌 이슈를 열린
+#   과제로 말하지 않고, 모델 축의 '다음에 보는 시점'은 이슈가 아니라 전방
+#   재평가일(`forward_eval` · R78 · 한 곳)에서 읽는다.
+for _k182t in ('model|score_not_separating',):
     check(f"연결한 이슈가 원장에 열려 있다 ({_k182t})",
           _k182t in _open182,
           '이슈가 닫히면 화면 문구도 사라져야 한다 — 그때 이 검사가 알린다')
 check("그 이슈들이 다음 점검 시점을 들고 있다",
       all(str(_open182[k].get('next_review') or _open182[k].get('eta') or '')[:4]
-          == '2026' for k in ('model|score_not_separating', 'model|vb_gap')
+          == '2026' for k in ('model|score_not_separating',)
           if k in _open182))
+check("닫힌 이슈(model|vb_gap)를 화면이 열린 과제로 걸어 두지 않는다 (R222)",
+      'model|vb_gap' not in _open182 and "'model': 'model|vb_gap'" not in _w182)
+check("모델 축의 '다음에 보는 시점'은 전방 재평가일에서 읽는다 (forward_eval · 한 곳 · 손으로 안 적는다)",
+      "_fed182 = _fe182.eval_date()" in _w182 and "_ax_plan['model'] = (" in _w182
+      and "'2026-11-16'" not in _w182.split('_AX_ISSUE')[-1][:2500])
 
 
 
@@ -20177,6 +20210,127 @@ try:
         skipped("보유 행의 등급 항등식", "관심종목에 보유 행이 없다 (사용자 자료 · 새 환경)")
 except Exception as _e238:                                   # noqa: BLE001
     skipped("보유 행의 등급 항등식", f"{type(_e238).__name__}: {_e238}")
+
+print()
+print("§239 R222 — 실전 추천 추적: 같은 추천이 모델 버전마다 다시 동결됐다 (2026-09-04)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   추적 DB 의 케이스 열쇠에 모델 버전이 들어 있어, 버전이 바뀔 때마다 이력
+#   전체가 '새 케이스'로 다시 동결됐다. 실측(2026-09-04): 463행 중 고유
+#   (종목,기준일) 218 · 복사본 245(53%) — 08-15 에는 같은 85건이 두 번. 그리고
+#   회귀 §61 이 2099-01-01 픽스처를 실제 이력에 append 해 그것이 버전마다
+#   유입됐다(7벌). R217 의 격자 밀림과 같은 모양 — 완료 판정의 열쇠가 틀렸다.
+#   고침: 추천의 정체는 (종목, 기준일) · 미래 기준일은 건너뜀 · 복사본은
+#   지우지 않고 표시(R197) · §61 은 임시 이력에 쓴다.
+import scripts.run_daily_improvement as _rdi239
+import scripts.mark_tracker_duplicates as _mtd239
+with open(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'), encoding='utf-8') as _f239:
+    _src239 = _f239.read()
+check("동결이 (종목,기준일) 로 이미 있는 추천을 건너뛴다 (버전은 도장이지 정체가 아니다)",
+      "existing = {(str(t), str(d)) for t, d in conn.execute(" in _src239
+      and "if (str(p['symbol']), _sig.isoformat()) in existing:" in _src239)
+check("미래 기준일은 동결하지 않는다 (있을 수 없는 값 · 픽스처 유입 차단)",
+      "if _sig > today:" in _src239 and "skipped_future += 1" in _src239)
+check("건너뛴 수를 세어 찍는다 (조용히 버리지 않는다 · §3)",
+      "이미 동결된 추천 건너뜀 {skipped_existing}건" in _src239
+      and "미래 기준일 건너뜀 {skipped_future}건" in _src239)
+# ── 심기 — 실제 DB 의 복사본 위에서 (원본은 안 건드린다) ──────────────────
+import io as _io239
+import json as _json239
+import shutil as _sh239
+import sqlite3 as _sq239
+import tempfile as _tf239
+_real_db239 = _os.path.join(PROJ, '.portfolio', 'improvement.db')
+if _os.path.exists(_real_db239):
+    _tmpd239 = _tf239.mkdtemp(prefix='r222_')
+    _db239 = _os.path.join(_tmpd239, 'copy.db')
+    _sh239.copy2(_real_db239, _db239)
+    _con239 = _sq239.connect(_db239)
+    _con239.row_factory = _sq239.Row
+    _one239 = _con239.execute(
+        "SELECT ticker, signal_date FROM prediction_cases "
+        "WHERE signal_date < '2026-09-04' ORDER BY signal_date LIMIT 1").fetchone()
+
+    def _line239(sym, d):
+        return _json239.dumps({
+            'symbol': sym, 'date': d, 'price': 1000.0, 'score': 61,
+            'reco_class': '조건부로 사도 되는 종목', 'rec_buy': 990.0,
+            'target': 1100.0, 'stop': 900.0, 'horizon_days': 20,
+            'asset_type': 'STOCK', 'confidence_band': {'hit_rate': 55}},
+            ensure_ascii=False)
+
+    _hist239 = _os.path.join(_tmpd239, 'hist.jsonl')
+    with _io239.open(_hist239, 'w', encoding='utf-8') as _hf239:
+        _hf239.write('\n'.join([
+            _line239('999999.KS', '2099-01-01'),                          # 미래 — 건너뜀
+            _line239(str(_one239['ticker']), str(_one239['signal_date'])),  # 이미 동결 — 건너뜀
+            _line239('999998.KS', '2026-08-20'),                          # 새 추천 — 동결
+        ]) + '\n')
+    _pm_real239 = _rdi239.PM_HISTORY
+    _rdi239.PM_HISTORY = _hist239
+    _n_before239 = _con239.execute("SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+    _buf239, _so239 = _io239.StringIO(), sys.stdout
+    try:
+        sys.stdout = _buf239
+        _added239 = _rdi239.make_create_new_cases(_con239, {})()
+    except Exception as _e239:                                 # noqa: BLE001
+        _added239 = f'ERR {type(_e239).__name__}: {_e239}'
+    finally:
+        sys.stdout = _so239
+        _rdi239.PM_HISTORY = _pm_real239
+    _n_after239 = _con239.execute("SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+    check("심기 ① 셋 중 새 추천 하나만 동결된다 (미래·기존은 건너뜀) — "
+          f"added={_added239} · 행 {_n_before239}→{_n_after239}",
+          _added239 == 1 and _n_after239 == _n_before239 + 1)
+    check("심기 ② 건너뛴 사유가 찍힌다 (기존 1 · 미래 1)",
+          '이미 동결된 추천 건너뜀 1건' in _buf239.getvalue()
+          and '미래 기준일 건너뜀 1건' in _buf239.getvalue(),
+          detail=_buf239.getvalue().strip()[:120])
+    _v1, _d1 = _mtd239.plan(_con239, '2026-09-04')
+    _mtd239.apply(_con239, _v1, _d1, '2026-09-04')
+    _v2, _d2 = _mtd239.plan(_con239, '2026-09-04')
+    check("심기 ③ 표시 스크립트는 멱등이다 (두 번째는 할 일이 없다)",
+          not _v2 and not _d2,
+          detail=f'1차 void {len(_v1)} dup {len(_d1)} · 2차 void {len(_v2)} dup {len(_d2)}')
+    _real239 = _con239.execute(
+        "SELECT COUNT(*) FROM prediction_cases WHERE status NOT IN ('dup_version','void_fixture')").fetchone()[0]
+    _dist239 = _con239.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT ticker, signal_date FROM prediction_cases "
+        "WHERE status NOT IN ('dup_version','void_fixture'))").fetchone()[0]
+    check("심기 ④ 표시 뒤엔 실제 케이스 수 = 고유 (종목,기준일) 수 (항등식)",
+          _real239 == _dist239 and _real239 > 0, scanned=_real239)
+    _total239 = _con239.execute("SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+    check("심기 ⑤ 행은 하나도 안 지웠다 (R197)", _total239 == _n_after239)
+    _con239.close()
+    _sh239.rmtree(_tmpd239, ignore_errors=True)
+    # ── 실제 DB 의 불변식 (값은 안 잠근다) ────────────────────────────────
+    _rc239 = _sq239.connect(_real_db239)
+    # ⚠️ 첫 판은 SQLite 의 date('now') 로 썼다가 틀렸다 — 그건 **UTC** 라 한국
+    #    아침엔 어제다. 오늘 동결한 추천 5건이 '미래'로 잡혔다. 파이프라인 자신이
+    #    쓰는 잣대(파이썬 로컬 date.today())로 견준다 — 두 시계를 섞지 않는다.
+    import datetime as _dt239
+    _fut239 = _rc239.execute(
+        "SELECT COUNT(*) FROM prediction_cases WHERE status='open' AND signal_date > ?",
+        (_dt239.date.today().isoformat(),)).fetchone()[0]
+    _rreal239 = _rc239.execute(
+        "SELECT COUNT(*) FROM prediction_cases WHERE status NOT IN ('dup_version','void_fixture')").fetchone()[0]
+    _rdist239 = _rc239.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT ticker, signal_date FROM prediction_cases "
+        "WHERE status NOT IN ('dup_version','void_fixture'))").fetchone()[0]
+    _rc239.close()
+    check("실제 추적 DB — 미래 기준일로 열린 케이스가 없다", _fut239 == 0, detail=f'{_fut239}건')
+    check(f"실제 추적 DB — 실제 케이스 {_rreal239:,} = 고유 (종목,기준일) {_rdist239:,} (복사본은 표시됐다)",
+          _rreal239 == _rdist239, scanned=_rreal239)
+else:
+    skipped("추적 DB 심기·불변식", "추적 DB 가 없다 (사용자 자료 · 새 환경)")
+# ── 화면 — 복사본·픽스처를 세지 않고, 뺐다고 말한다 ────────────────────────
+check("화면의 '동결 케이스'가 복사본·픽스처를 세지 않는다",
+      "WHERE status NOT IN ('dup_version', 'void_fixture')" in _w231)
+check("화면이 뺀 수를 옆에 적는다 (§3)",
+      "행으로 남기되 세지 않았습니다 (R222)" in _w231)
+# ── §61 — 픽스처를 실제 이력에 쓰지 않는다 ───────────────────────────────
+check("§61 이 임시 이력에 쓰고 실제 경로를 되돌린다 (검사가 사용자 자료를 바꾸지 않는다 · R165)",
+      "pm61.PM_HISTORY = _hist_tmp61" in _self235 and "pm61.PM_HISTORY = _hist_real61" in _self235)
 
 print()
 print("=" * 72)

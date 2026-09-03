@@ -63,6 +63,20 @@ def make_create_new_cases(conn, calib):
             return 0
         added = 0
         ver = _operating_version(calib)
+        # ⚠️ 라운드 222 — 여기가 **이력 전체를 매번 다시** 읽어 동결했다.
+        #   case_id 에 모델 버전이 들어 있어, 버전이 바뀔 때마다 지난 추천이
+        #   통째로 '새 케이스'였다(실측 2026-09-04: 463행 중 고유 (종목,기준일)
+        #   218 · 복사본 245 · 53%. 08-15 에는 같은 85건이 두 번 들어갔다).
+        #   R217 의 격자 밀림과 같은 모양이다 — 완료 판정의 열쇠가 잘못됐다.
+        #   추천의 **정체는 (종목, 기준일)** 이고 버전은 도장이다. 이미 동결된
+        #   쌍은 어느 버전이든 건너뛴다("이전 버전 케이스는 덮어쓰지 않는다"
+        #   의 뜻이 그것이다). 그리고 **미래 기준일**은 있을 수 없으므로 건너뛴다
+        #   — 회귀의 시험 픽스처(2099-01-01)가 이력에 남아 버전마다 유입됐다
+        #   (7벌). 건너뛴 수를 세어 찍는다 — 조용히 버리지 않는다(§3).
+        existing = {(str(t), str(d)) for t, d in conn.execute(
+            "SELECT ticker, signal_date FROM prediction_cases")}
+        today = date.today()
+        skipped_existing = skipped_future = 0
         with open(PM_HISTORY, encoding='utf-8') as f:
             for line in f:
                 try:
@@ -70,6 +84,16 @@ def make_create_new_cases(conn, calib):
                 except Exception:
                     continue
                 if not p.get('symbol') or not p.get('price'):
+                    continue
+                try:
+                    _sig = date.fromisoformat(str(p['date']))
+                except (TypeError, ValueError):
+                    continue
+                if _sig > today:
+                    skipped_future += 1          # 미래 기준일 — 있을 수 없다
+                    continue
+                if (str(p['symbol']), _sig.isoformat()) in existing:
+                    skipped_existing += 1        # 이미 동결된 추천 — 버전이 바뀌어도 같은 추천
                     continue
                 decision = RECO_CLASS_TO_DECISION.get(
                     str(p.get('reco_class')), Decision.UNAVAILABLE)
@@ -101,9 +125,12 @@ def make_create_new_cases(conn, calib):
                         source_payload=V.stamp(p))
                     if ct.save_prediction_case(conn, case):
                         added += 1
+                        existing.add((str(p['symbol']), _sig.isoformat()))
                 except ValueError:
                     continue
         conn.commit()
+        print(f"신규 동결 {added}건 · 이미 동결된 추천 건너뜀 {skipped_existing}건 · "
+              f"미래 기준일 건너뜀 {skipped_future}건 (R222)")
         return added
     return create_new_cases
 
