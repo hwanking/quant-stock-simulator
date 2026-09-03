@@ -19869,9 +19869,11 @@ check("산출물이 커버리지를 적는다 (무엇이 빠졌는지 말하지 
       all(k in _c235 for k in ('rows_eligible', 'by_row', 'by_patch', 'by_ticker',
                                'miss_etf', 'miss_ambiguous', 'miss_unknown',
                                'covered', 'covered_pct')))
+#   라운드 220 이 `miss_bad_label`(업종이 아닌 라벨이 적힌 행)을 더했다 —
+#   항등식은 **모든** 사유를 담아야 하므로 여기도 같이 센다.
 _parts235 = (_c235.get('by_row', 0) + _c235.get('by_patch', 0) + _c235.get('by_ticker', 0)
              + _c235.get('miss_etf', 0) + _c235.get('miss_ambiguous', 0)
-             + _c235.get('miss_unknown', 0))
+             + _c235.get('miss_unknown', 0) + _c235.get('miss_bad_label', 0))
 check("셈이 맞는다 — 출처별 + 사유별 = 대상 행수 (R215 의 잣대) — "
       f"{_parts235:,} vs {_c235.get('rows_eligible', 0):,}",
       _parts235 == _c235.get('rows_eligible'), scanned=_c235.get('rows_eligible', 0))
@@ -20052,6 +20054,54 @@ _wrapped_names236 = {w.split('.')[-1] for w in _LIVE_WRAPPED}
 _uncovered236 = sorted(_called236 - _wrapped_names236)
 check("이 파일이 부르는 실시세 메서드가 전부 감싸였다 (새 호출이 생기면 여기서 걸린다)",
       not _uncovered236, detail=f'미포함 {_uncovered236}', scanned=len(_called236))
+
+print()
+print("§237 R220 — 업종 파싱이 비교표 라벨을 업종으로 집었다 (2026-09-04)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   `bitemporal_engine` 의 업종 파싱이 `sise_group_detail…upjong` 링크의
+#   **첫 매치**를 그대로 업종으로 썼다. 그 링크는 페이지에 여러 개다 —
+#   회사 정보의 진짜 업종 · '더보기' · **'동일업종 비교' 표의 라벨**
+#   ('동일업종 PER' · '동일업종 등락률'). 진짜 업종 링크가 없는 종목에서는
+#   표 라벨이 첫 매치가 되어 그것이 업종으로 기록됐다.
+#   실측(2026-09-04): 원장에 `동일업종 PER` 이 업종인 행 **108건 · 종목 1개**
+#   (그 페이지엔 매치가 2개뿐이고 둘 다 표 라벨). 화면 업황 칸과 업종 성적
+#   표에 가짜 업종이 그대로 나갔다 — 라운드 164 의 *"못 읽은 것을 '다른 값'으로
+#   만들지 않는다"* 그대로다. 판별 실패는 None 이다(§3).
+#   영향 실측: 25종목 중 달라지는 것은 **그 1개뿐**, 나머지 24개는 글자까지 같다.
+check("업종 판별이 모듈 함수로 나와 있다 (심을 수 있어야 검사가 된다 · §6)",
+      hasattr(be, 'sector_from_html') and callable(be.sector_from_html))
+_HDR237 = ('<a href="/sise/sise_group_detail.naver?type=upjong&no=278">반도체와반도체장비</a>'
+           '<a href="/sise/sise_group_detail.naver?type=upjong&no=278">더보기</a>'
+           '<a href="/sise/sise_group_detail.naver?type=upjong&no=278">동일업종 PER</a>')
+_BAD237 = ('<a href="/sise/sise_group_detail.naver?type=upjong&no=41">동일업종 PER</a>'
+           '<a href="/sise/sise_group_detail.naver?type=upjong&no=41">동일업종 등락률</a>')
+check("심기 ① 진짜 업종이 있으면 그것을 돌려준다 (정상 종목은 그대로)",
+      be.sector_from_html(_HDR237) == '반도체와반도체장비')
+check("심기 ② 비교표 라벨만 있으면 None (없는 값을 지어내지 않는다 · §3)",
+      be.sector_from_html(_BAD237) is None)
+check("심기 ③ '더보기'도 업종이 아니다 (가구를 건너뛴다)",
+      be.sector_from_html(
+          '<a href="/sise/sise_group_detail.naver?type=upjong&no=1">더보기</a>') is None)
+check("심기 ④ 빈 HTML 은 None (자리를 채우지 않는다)",
+      be.sector_from_html('') is None and be.sector_from_html(None) is None)
+check("호출부가 그 함수를 쓴다 (파싱 규칙이 두 벌이 되지 않게 · §4)",
+      'sector = sector_from_html(html_m)' in _be236
+      and _be236.count('sise_group_detail') <= 2)
+# ── 소비자(업종 성적 생성기)도 같은 판별을 쓴다 — 원장 행은 안 지운다(R197) ──
+with open(_os.path.join(PROJ, 'scripts', 'gen_sector_perf.py'), encoding='utf-8') as _f237:
+    _gsp237 = _f237.read()
+check("생성기가 엔진의 판별을 그대로 쓴다 (라벨 목록을 베끼지 않는다 · §4)",
+      '_be_sec.SECTOR_LABEL_PREFIX' in _gsp237 and '_be_sec.SECTOR_NON_LABELS' in _gsp237
+      and 'import bitemporal_engine as _be_sec' in _gsp237)
+check("생성기가 그 행을 사유로 세어 적는다 (조용히 버리지 않는다 · §3)",
+      "cov['miss_bad_label'] += 1" in _gsp237 and 'miss_bad_label=0' in _gsp237)
+check("업종 성적 표에 그 가짜 업종이 없다 (값으로 확인)",
+      '동일업종 PER' not in (_sp235.get('sectors') or {}),
+      scanned=len(_sp235.get('sectors') or {}))
+check("그래도 원장 행은 지우지 않았다 (R197 — 파생물을 줄이지 않는다)",
+      int(_c235.get('miss_bad_label') or 0) > 0,
+      detail=f"뺀 행 {_c235.get('miss_bad_label')}건 — 원장에는 그대로 있다")
 
 print()
 print("=" * 72)
