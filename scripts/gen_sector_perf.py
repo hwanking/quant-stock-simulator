@@ -25,6 +25,7 @@ try:                       # 라운드 103 — 객체를 갈아끼우지 않는�
 except Exception:          # noqa: BLE001
     pass
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJ)   # 라운드 220 — 엔진의 업종 라벨 판별을 그대로 쓰려고
 P = os.path.join(PROJ, '.portfolio')
 COST = 0.36
 
@@ -51,6 +52,23 @@ def _code(tk):
     return str(tk or '').split('.')[0][:6]
 
 
+# 라운드 220 — 원장에는 **업종이 아닌 라벨**이 업종으로 적힌 행이 남아 있다
+#   (파서가 '동일업종 비교' 표의 라벨을 집었다 · 108행 · 종목 1개). 엔진은
+#   고쳤지만 원장 행은 지우지 않으므로(R197) 여기서 걸러 낸다. 판별은
+#   **엔진 한 곳**의 것을 그대로 쓴다(§4 — 두 벌 금지).
+import bitemporal_engine as _be_sec
+
+
+def _clean_sector(s):
+    """업종처럼 적혀 있지만 업종이 아닌 라벨은 None. 없는 값을 만들지 않는다."""
+    t = str(s or '').strip()
+    if not t:
+        return None
+    if t.startswith(_be_sec.SECTOR_LABEL_PREFIX) or t in _be_sec.SECTOR_NON_LABELS:
+        return None
+    return t
+
+
 patch = {}
 by_ticker = {}                         # 코드 → 그 종목에 기록된 업종 집합
 for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
@@ -58,9 +76,10 @@ for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
         for ln in f:
             try:
                 q = json.loads(ln)
-                patch[(q['ticker'], q['date'])] = q.get('sector')
-                if q.get('sector'):
-                    by_ticker.setdefault(_code(q['ticker']), set()).add(q['sector'])
+                _ps = _clean_sector(q.get('sector'))
+                patch[(q['ticker'], q['date'])] = _ps
+                if _ps:
+                    by_ticker.setdefault(_code(q['ticker']), set()).add(_ps)
             except Exception:                                  # noqa: BLE001
                 continue
 
@@ -88,8 +107,9 @@ def _rows():
 #   ⚠️ 다만 기록된 업종이 둘 이상인 종목(재분류·라벨 흔들림)은 **채우지
 #      않는다** — 어느 쪽인지 모르는 것을 고르면 그게 지어내는 것이다(§3).
 for r in _rows():
-    if r.get('sector'):
-        by_ticker.setdefault(_code(r.get('ticker')), set()).add(r['sector'])
+    _rs = _clean_sector(r.get('sector'))
+    if _rs:
+        by_ticker.setdefault(_code(r.get('ticker')), set()).add(_rs)
 ticker_sec = {c: next(iter(s)) for c, s in by_ticker.items() if len(s) == 1}
 ambiguous = {c for c, s in by_ticker.items() if len(s) > 1}
 
@@ -102,7 +122,7 @@ except Exception:                                              # noqa: BLE001
 
 agg = {}
 cov = dict(rows_eligible=0, by_row=0, by_patch=0, by_ticker=0,
-           miss_etf=0, miss_ambiguous=0, miss_unknown=0)
+           miss_etf=0, miss_ambiguous=0, miss_unknown=0, miss_bad_label=0)
 for r in _rows():
     if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
         continue
@@ -117,7 +137,11 @@ for r in _rows():
     #   먼저, 없으면 패치, 없으면 **같은 종목의 업종**(라운드 218) —
     #   출처를 세어 산출물에 적는다.
     code = _code(r.get('ticker'))
-    sec = r.get('sector')
+    _raw_sec = r.get('sector')
+    sec = _clean_sector(_raw_sec)
+    if _raw_sec and not sec:
+        cov['miss_bad_label'] += 1        # 업종이 아닌 라벨이 적혀 있었다 (R220)
+        continue
     if sec:
         cov['by_row'] += 1
     else:
@@ -160,7 +184,7 @@ doc = dict(
     coverage_note='업종 출처: 원장 행 → 하위점수 패치 → 같은 종목의 업종'
                   '(라운드 218). 빠진 것은 ETF(구조상 업종 없음) · 업종이 두 '
                   '가지로 기록된 종목(모르는 것을 고르지 않는다) · 한 번도 못 '
-                  '받은 종목이다.',
+                  '받은 종목이다. 업종이 아닌 라벨(비교표 라벨)이 적힌 행도 뺀다(라운드 220).',
     sectors=out)
 dst = os.path.join(PROJ, 'data', 'sector_perf.json')
 with open(dst, 'w', encoding='utf-8') as f:
@@ -170,7 +194,8 @@ print(f"  커버리지 {cov['covered']:,}/{cov['rows_eligible']:,}"
       f" ({cov['covered_pct']}%) — 행 {cov['by_row']:,} · 패치 "
       f"{cov['by_patch']:,} · 종목 {cov['by_ticker']:,}")
 print(f"  빠짐: ETF {cov['miss_etf']:,} · 업종 중복기록 "
-      f"{cov['miss_ambiguous']:,} · 미상 {cov['miss_unknown']:,}")
+      f"{cov['miss_ambiguous']:,} · 미상 {cov['miss_unknown']:,} · "
+      f"업종 아닌 라벨 {cov['miss_bad_label']:,}")
 for sec, v in sorted(out.items(), key=lambda x: -x[1]['n'])[:12]:
     print(f"  {sec:14s} n {v['n']:5,} · 적중 {v['hit']:5.1f}% "
           f"(W하한 {v['wilson_low']:5.1f}) · EV {v['ev']:+.3f}"

@@ -127,6 +127,38 @@ TIMEFRAME_NEWS_DB = {}
 #  또는 '읽었지만 못 알아냈다'이지, 'KOSPI 다'가 아니다.
 MARKET_BY_CODE = {}
 
+#: 업종 링크처럼 생겼지만 업종이 **아닌** 앵커 텍스트 (라운드 220).
+#:   네이버 종목 페이지에는 `sise_group_detail…type=upjong` 링크가 여러 개다:
+#:   ① 회사 정보의 진짜 업종 ② '더보기' ③ '동일업종 비교' 표의 라벨
+#:   ('동일업종 PER' · '동일업종 등락률'). ①이 없는 종목에서 ③이 첫 매치가
+#:   되어 업종으로 기록됐다(실측 2026-09-04 · 원장 108행 · 종목 1개).
+#:   ⚠️ 낱말로 가르는 것은 무르다(§6). 그래서 `sector_from_html` 을 모듈
+#:      함수로 빼 회귀가 **심어서** 양방향으로 확인한다(§237).
+SECTOR_NON_LABELS = ('더보기',)
+SECTOR_LABEL_PREFIX = '동일업종'
+
+
+def sector_from_html(html):
+    """네이버 종목 페이지 HTML → 업종명. **못 읽으면 None** (§3).
+
+    페이지 가구(비교표 라벨·'더보기')는 업종이 아니므로 건너뛴다. 남는 것이
+    없으면 자리를 채우지 않는다 — 라운드 164 가 적은 그대로, 못 읽은 것을
+    '다른 값'으로 만들지 않는다.
+    """
+    if not html:
+        return None
+    pats = (r'sise_group_detail\.naver\?type=upjong&no=\d+"[^>]*>(.*?)</a>',
+            r'업종\s*:\s*</?[^>]*>?\s*<a[^>]*>(.*?)</a>')
+    for pat in pats:
+        for raw in re.findall(pat, html, re.S):
+            text = re.sub(r'<.*?>', '', raw).strip()
+            if not text:
+                continue
+            if text.startswith(SECTOR_LABEL_PREFIX) or text in SECTOR_NON_LABELS:
+                continue                      # 페이지 가구 — 업종명이 아니다
+            return text
+    return None
+
 
 def market_of(ticker_or_code, meta=None):
     """'031510.KQ' · '031510' · meta → 'KOSPI' | 'KOSDAQ' | **None**.
@@ -854,12 +886,19 @@ class BitemporalEngine:
             # 4-1. 업종 (KRX 산업분류) — 기업유형 분류의 1차 근거.
             #      재무비율만으로 분류하면 '적자 + 고PBR'이라는 이유로 제조기업이
             #      바이오로 오분류된다. 업종은 그 오분류를 막는 가장 강한 신호다.
-            sector = None
-            sec_m = re.search(r'sise_group_detail\.naver\?type=upjong&no=\d+"[^>]*>(.*?)</a>', html_m)
-            if not sec_m:
-                sec_m = re.search(r'업종\s*:\s*</?[^>]*>?\s*<a[^>]*>(.*?)</a>', html_m)
-            if sec_m:
-                sector = re.sub(r'<.*?>', '', sec_m.group(1)).strip()
+            #      ⚠️ 라운드 220 — 여기가 **첫 번째** 업종 링크를 그대로 집었다.
+            #      그런데 그 링크는 페이지에 여러 개다: 회사 정보의 진짜 업종,
+            #      '더보기', 그리고 **'동일업종 비교' 표의 라벨**('동일업종 PER'
+            #      ·'동일업종 등락률'). 진짜 업종 링크가 없는 종목에서는 표
+            #      라벨이 첫 매치가 되어 **그것이 업종으로 기록됐다.**
+            #      실측(2026-09-04): 원장에 `동일업종 PER` 이 업종인 행 108건 ·
+            #      종목 1개(071840 — 그 페이지엔 매치가 2개뿐이고 둘 다 표 라벨).
+            #      화면 업황 칸과 업종 성적 표에 가짜 업종이 그대로 나갔다.
+            #      라운드 164 가 적은 그대로다 — **못 읽은 것을 '다른 값'으로
+            #      만들지 않는다.** 판별에 실패하면 None 이다(§3).
+            #      영향 실측: 25종목 중 달라지는 것은 **그 1개뿐**이고 나머지
+            #      24개 업종은 글자까지 같다(`_probe/r220_sector_impact.txt`).
+            sector = sector_from_html(html_m)
 
             # 5. PER, EPS, PBR, BPS, Dividend (Naver ID 1차 파싱)
             per_m = re.search(r'id="_per"[^>]*>([\d,\.]+)</em>', html_m)
