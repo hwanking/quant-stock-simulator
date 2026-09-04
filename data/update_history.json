@@ -5,6 +5,11 @@
    "date": "2026-09-04",
    "items": [
     {
+     "hash": "08bbcf7",
+     "subject": "R224 물타기 첫 조건은 중앙 판정 · 보유 계획은 잰 날에 고정 · 정리 사유 (v2026.09.04.3)",
+     "body": "사용자: \"물타기도 스마트하게 · 정리하는 이유도 써줘 — 적정가는 있는데 너무\n오래 기다려야 한다 · 1차 매도가가 넘었다 이런 것도.\"\n\n무엇이 있었나 (2026-09-04 실측)\n- 물타기 첫 조건 \"신규 진입 조건 통과\"가 코드에서는 eligible_for_top3(TOP3\n  선정용 15게이트 전부 통과 · 표본외 검증 게이트가 설계상 닫힘 · 원장 매수\n  의도 제목 56/250,725)를 읽어 보유 16행 전부 불가. \"더 살 수 있나\"의 답이\n  셋(TOP3 깃발 · bucket · actionable)이었다 (§4).\n- 보유자 기준값(현재가+0.7R · 현재가−2σ)이 방문마다 덮어써져 목표는 따라\n  오르고 손절은 따라 내렸다 — \"1차 매도가를 넘었다\"가 나올 수 없었다.\n- 종목 상세의 옛 물타기 안전성 계산기: 1.15/1.05/0.95/0.85 · 68/50 · '30% 축소'\n  · 평단 낮추기 주수 · 목표가 없으면 현재가×1.05 (§2·§3·§4).\n\n사전등록 R224 (측정 전 작성 · 기준 안 내림)\n- R1 이득 상한: 조건 1 에만 막힌 보유 행 6 · 실행 후보 계열 3 → R2 잰다.\n- R2: 25봉 부분집합(R217 재현 일치 122,554) 매수권 56,911쌍 · 직전 관측 대비\n  하락 중(A) vs 아님(B) · 날짜 군집 부트 2,000 · 시드 224.\n  train +1.7%p [−0.8, +4.1] · valid +3.9 [−4.5, +11.7] · blind −5.8 [−14.9, +8.8]\n  (블라인드 날짜 32) → (n): 세 구간 CI 모두 0 포함 · 부호 갈림. 하락 중이라는\n  사실이 판정을 바꾼다는 증거 없음(5%p 미만은 못 본다 · R113).\n  첫 조건 = verdict_core.actionable. 더 느슨한 게이트는 안 만든다.\n\n바꾼 것 (문턱 없음)\n- quant_indicators.personalize_for_position(new_entry_ok=) — 첫 조건·ADD 등급이\n  중앙 판정을 읽는다. 안 넘기면 데이터 게이트가 같이 떨어져 보류(§3).\n- web_app 호출부 셋(관심종목 채우기 · 종목 상세 스탬프 · 포트폴리오 탭)이\n  _core_of_snapshot 하나로 넘긴다. snap_new_entry 없는 보유 행은 다시 채운다.\n- portfolio.hold_plan_update — 기준값을 잰 날(snap_hold_at)에 고정, 창\n  20봉=28일(ledger_view.bars_to_days · MIN_GAP_DAYS 와 같은 ×7/5)이 끝나거나\n  두 선에 닿을 때만 다시 재고 사유를 snap_hold_log(최근 셋)에 남긴다. 안 산\n  종목은 늘 새 값. 화이트리스트 키 넷 + 저장→읽기 왕복 검사.\n- ui_kit.watch_action — 보유 행 '추가 매수 가능' = 물타기 6조건 통과 + 진입가\n  이하(답은 하나). hold_why(1차 매도가 넘음 +x% · 계획 잰 날과 창 진행 ·\n  적정가 거리와 원장 도달 비율 · 물타기) · hold_log.\n- ledger_view.reach_table/reach_share/reach_line — \"적정가까지 +X% · 같은\n  국면·구역 원장 n건 중 20봉 안에 그만큼 오른 비율 p%\" (창 끝 종가 수익 ·\n  분모 0 이면 None · '낮다'의 기준은 정하지 않는다 — 정하면 §2).\n- 종목 상세 옛 계산기 → 산수 + 한 곳 판정. 포트폴리오 견해에 정리·관리 사유.\n- 포트폴리오 탭 6조건 표시의 통과/미충족 글자가 둘 다 빈 글자였던 것을 고침.\n\n검증\n- 회귀 §241 (49건 · 실행 증거 셋 포함) · 전건 통과.\n- 계산 파일 중 바뀐 것은 quant_indicators.py 뿐(사전등록 근거). verdict_core ·\n  bitemporal_engine · price_axes · regime_policy · market_context · sector_cycle 불변.\n- 보유자 행동점수(옛 가중·문턱)는 손대지 않았다 — 실측되지 않은 합성 점수.\n\n근거: docs/PREREG_R224_AVG_DOWN.md · docs/RESULT_R224_AVG_DOWN.md ·\ndata/avg_down_r224.json · scripts/avg_down_r224.py"
+    },
+    {
      "hash": "3d39280",
      "subject": "Merge pull request #163 from hwanking/round-223-portfolio-sector-reading",
      "body": "R223 포트폴리오 \"섹터별로 좋은지\" — 숫자만 보여 주면 그게 판단이 된다 · 일곱 축 일정 (v2026.09.04.2)"
@@ -2138,11 +2143,6 @@
      "hash": "89c782b",
      "subject": "배포 복구 — requirements 에서 finance-datareader 제외",
      "body": "라운드 44 병합 직후 온라인 앱이 'Oh no. Error running app.' 로 죽었다.\n\n원인을 좁힌 순서:\n  · 로컬 회귀 1,877건 전건 통과 — 코드 자체는 정상\n  · FinanceDataReader 를 메타패스에서 **가려 놓고** 임포트해도\n    sector_cycle·news_feed·market_context·quant_indicators 전부 통과\n    (_probe/diag_cloud_boot.py)\n  · requirements 에 없는 최상단 임포트 0건\n  → 코드가 아니라 **설치 단계**가 유일한 남은 변수다\n\n단일 변수로 되돌린다. 앱이 죽는 것보다 업황이 '미연동'으로 나가는 게 낫다 —\nsector_cycle 은 수신 실패를 available=False 로 내리고 화면이 이유를 적는다.\n클라우드 파이썬에서 설치되는지 확인한 뒤 다시 넣는다."
-    },
-    {
-     "hash": "1324728",
-     "subject": "라운드 40~44 병합 — 디자인 정리 · 뉴스 실연동 · 섹터 사이클(기각, 표시 전용)",
-     "body": "PR #1. 회귀 1,877건 전건 통과.\n\n채택 — 이모지 200→0 · 공개 RSS 3곳 연동 · 뉴스를 룰북 게이트로 실제\n판단에 연결 · 섹터 사이클 데이터층(sector_cycle.py) · 적정가 3단계 분리 ·\n버전 축 5→7(valuation·sector) · 근거 없는 상수 시장조정 −2.0% 제거\n\n기각 — 메타 레이블링(valid 65.2% → blind 54.5%, 기준선 미달) ·\n섹터 오버레이(사전등록 게이트 미통과, mom60 은 블라인드에서 방향이 반대)\n두 건 모두 사전등록을 측정 전에 쓰고 기준을 사후에 내리지 않았다."
     }
    ]
   }

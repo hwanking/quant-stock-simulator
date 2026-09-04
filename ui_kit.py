@@ -1218,10 +1218,18 @@ def watch_action(row, price=None, today=None):
         (`snap_fair_reach` · 문턱 없음) · 물타기 판정. 어느 줄도 새 문턱을
         만들지 않는다. 계획이 끝났을 때 남긴 한 줄(`snap_hold_log`)은 `hold_log`.
         """
+        # 라운드 224 — 첫 조건의 출처가 바뀌었다(TOP3 깃발 → 중앙 판정). 그 전에 찍힌
+        #   스탬프(`snap_new_entry` 없음)는 옛 게이트의 답이라, 새 문구("중앙 판정이 …
+        #   보지 않는다")를 그대로 달면 재지 않은 것을 말하는 셈이다(§3). 사실대로 적고
+        #   채우기를 가리킨다 — 라벨(등급)은 같다, 이유만 다르다.
+        _stale = (_ad_ok is not None and not (row or {}).get('snap_new_entry'))
         d['avg_down_ok'] = _ad_ok
         d['avg_down_class'] = _ad_cls
         d['avg_down_label'] = _ad_label
-        d['avg_down_why'] = _ad_why
+        d['avg_down_why'] = ((_ad_why or '') + ' · 이 판정은 R224 이전 스탬프(첫 조건이 TOP3 '
+                             '깃발이던 때) — 다시 채우면 중앙 판정으로 갱신됩니다'
+                             if _stale else _ad_why)
+        d['avg_down_stale'] = _stale
         d['holder_title'] = (row or {}).get('snap_holder_title')
         why = [str(d.get('why') or '')]
         # ① 보유 계획 — 잰 날과 창 (기준값은 잰 날에 고정 · portfolio.hold_plan_update)
@@ -1255,9 +1263,9 @@ def watch_action(row, price=None, today=None):
             else:
                 why.append(f"현재가가 적정가({_fair:,.0f}원)보다 {-_up:.1f}% 위 — "
                            f"적정가는 이 보유의 이유가 못 됩니다")
-        # ③ 물타기
+        # ③ 물타기 (옛 스탬프면 그 사실까지 · 위 avg_down_why 와 같은 글)
         if _ad_label:
-            why.append(f"{_ad_label} — {_ad_why}")
+            why.append(f"{_ad_label} — {d['avg_down_why']}")
         d['hold_why'] = [w for w in why if w]
         _log = [s for s in str((row or {}).get('snap_hold_log') or '').split(' | ') if s]
         d['hold_log'] = _log

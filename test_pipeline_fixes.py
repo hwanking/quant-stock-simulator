@@ -20510,6 +20510,15 @@ check("심기 ③ 물타기 가능 + 진입가 위 → '보유 유지' · 이유
       _a3_241['kind'] == '보유 유지' and '진입가' in _a3_241['why'])
 check("'시장게이트' 라벨이 새 출처(신규 매수 판정)를 말한다",
       '신규 매수 판정만' in _uk241.avg_down_class(False, [_uk241.AVG_DOWN_MARKET_GATE])[1])
+# 옛 스탬프(snap_new_entry 없음)는 옛 게이트의 답이다 — 새 문구를 그대로 달면 재지 않은
+#   것을 말하는 셈(§3). 사실을 달고 채우기를 가리킨다. 라벨(등급)은 같고 이유만 다르다.
+_old241 = _uk241.watch_action(_row241, 10100)
+_new241 = _uk241.watch_action(dict(_row241, snap_new_entry='불가'), 10100)
+check("R224 이전 스탬프는 이유에 그 사실을 단다 (등급은 같다 · §3)",
+      _old241.get('avg_down_stale') is True and 'R224 이전 스탬프' in str(_old241.get('avg_down_why'))
+      and _old241.get('avg_down_class') == _new241.get('avg_down_class'))
+check("R224 이후 스탬프(snap_new_entry 있음)는 그 문구가 없다",
+      _new241.get('avg_down_stale') is False and 'R224 이전 스탬프' not in str(_new241.get('avg_down_why')))
 # ── ④ 보유 계획 고정 — 기준일에 고정 · 20봉 창 · 닿거나 끝나면 사유 로그 ─────
 _td241 = '2026-09-04'
 _r1_241 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
