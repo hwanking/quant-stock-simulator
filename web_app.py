@@ -5651,7 +5651,17 @@ else:
         # **잰 것만 서술한다** — 업종 비중은 산수(매입원가 · :4709 와 같은 정의),
         # 업종 성적은 `sector_cycle.ledger_perf`(표시 전용 · 라운드 44), 국면은
         # 종목 상세와 **같은 함수**(`_market_state_214`)가 낸 라벨이다 (§4).
-        _sec214, _sec_unknown = {}, []
+        _sec214, _sec_unknown, _sec_etf = {}, [], []
+        # 라운드 223 — ETF 는 업종이 **구조상 없다**(R218). "종목을 열면 채워집니다"
+        #   는 보통주 얘기다. 못 채운 것과 없는 것을 가른다(§3). ETF 목록을 못
+        #   읽으면 가르지 않는다 — 지어내지 않는다.
+        try:
+            import json as _json223
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   'data', 'etf_index.json'), encoding='utf-8') as _f223:
+                _etf223 = set((_json223.load(_f223).get('map') or {}).keys())
+        except Exception:                                      # noqa: BLE001
+            _etf223 = set()
         for _nm169, _act169, _row169, _px169 in _wl_acts:
             if not (_row169.get('paid') and _row169.get('qty')):
                 continue
@@ -5662,6 +5672,8 @@ else:
             _sc = str(_row169.get('snap_sector') or '')
             if _sc:
                 _sec214[_sc] = _sec214.get(_sc, 0.0) + _cst
+            elif str(_row169.get('code') or '').split('.')[0][:6] in _etf223:
+                _sec_etf.append(_nm169)
             else:
                 _sec_unknown.append(_nm169)
         if _sec214 or _sec_unknown:
@@ -5687,6 +5699,25 @@ else:
             if _hhi:
                 _sec_md += (f"  \n업종 집중도 HHI {_hhi:.2f} · 유효 업종 수 "
                             f"{1.0 / _hhi:.1f}개 (1에 가까울수록 한 업종에 쏠림)")
+            # 라운드 223 — 사용자: "섹터별로 좋은지 평가를 내리는 게 좋지 않을까?"
+            #   위 업종별 적중(53~70%)의 차이는 표본·국면 조성 차이 안에 있어
+            #   업종을 고르는 근거가 못 된다 — R46 업종 게이트 기각("업종 문제가
+            #   아니다") · R181 은 블라인드 날짜 부족으로 재측정을 전방 재평가
+            #   뒤로 미뤘다. 숫자만 보여 주고 이 말을 안 하면 사용자는 높은 업종을
+            #   고르라는 뜻으로 읽는다(§9). 날짜는 forward_eval 한 곳에서 읽는다.
+            try:
+                import forward_eval as _fe223
+                _fed223 = _fe223.eval_date() or '전방 재평가일 미기록'
+            except Exception:                                  # noqa: BLE001
+                _fed223 = '전방 재평가일 미기록'
+            _sec_md += (f"  \n위 업종별 적중 차이는 **업종을 고르는 근거가 못 됩니다** — "
+                        f"표본·국면 조성 차이 안에 있고, 업종 게이트는 실측에서 기각됐습니다"
+                        f"(R46). 업황 조정은 {_fed223} 전방 재평가 뒤 다시 잽니다(R181). "
+                        f"이 표는 비중을 세어 보여 줄 뿐입니다.")
+            if _sec_etf:
+                _sec_md += ("  \nETF(업종 없음 · 구조상): " + ", ".join(_sec_etf[:5])
+                            + (f" 외 {len(_sec_etf) - 5}" if len(_sec_etf) > 5 else '')
+                            + " — 위 업종 비중에는 들어 있지 않습니다")
             if _sec_unknown:
                 _sec_md += ("  \n업종 미확인: " + ", ".join(_sec_unknown[:5])
                             + (f" 외 {len(_sec_unknown) - 5}"
@@ -5721,6 +5752,27 @@ else:
                        + " — 위 '지금 계산해서 채우기' 로 채울 수 있습니다.")
 
         # ── ④ 이 견해가 무엇이고 무엇이 아닌가 (§9) ────────────────
+        # 라운드 223 — 이 문구가 '원장 184,759건'을 날짜 없이 박고 있었다(지금
+        #   250,725). 잰 날짜와 당시 행수는 손으로 적지 않고 R159 의 산출물
+        #   (`data/census_r159.json` 의 made · ledger_rows)에서 읽는다 — 그 파일은
+        #   판정한 날 그대로 두는 것이 맞고(R107), 옛 재평가일 리터럴을 .py 에
+        #   박으면 R78 의 잠금에 걸린다. 못 읽으면 라운드 번호만 적는다(§3).
+        try:
+            import json as _json159
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   'data', 'census_r159.json'), encoding='utf-8') as _f159:
+                _c159 = _json159.load(_f159)
+            _c159_when = (f"{str(_c159.get('made'))[:10]} 실측 · 당시 원장 "
+                          f"{int(_c159.get('ledger_rows') or 0):,}건 전수")
+            _c159_be = _c159.get('breakeven') or {}
+            _c159_verdict = (f"블라인드 적중 {float(_c159_be.get('blind_hit_pct')):.1f}% "
+                             f"vs 본전 {float(_c159_be.get('need_hit_pct')):.1f}%"
+                             if _c159_be.get('blind_hit_pct') is not None
+                             and _c159_be.get('need_hit_pct') is not None
+                             else "판정 수치는 산출물에 없음")
+        except Exception:                                      # noqa: BLE001
+            _c159_when = "실측 시점은 산출물을 못 읽어 미기록"
+            _c159_verdict = "판정 수치는 산출물을 못 읽어 미기록"
         _uk.note(
             "**이 견해가 하는 일** — 위 표의 판단을 **세어서** 보여 줄 "
             "뿐입니다. 판단 자체는 엔진이 발표한 가격선(버틸 수 없는 가격 · "
@@ -5728,8 +5780,9 @@ else:
             "기준을 만들지 않았습니다.  \n"
             "**하지 않는 일** — 비중을 얼마로 하라거나 무엇을 사라고 하지 "
             "않습니다. 이 엔진의 매수 신호에는 **비용 차감 뒤 실전에서 "
-            "재현되는 우위가 확인되지 않았습니다** (원장 184,759건 전수 — "
-            "블라인드 적중 50.4% vs 본전 63.7% · 라운드 159·168). "
+            f"재현되는 우위가 확인되지 않았습니다** (라운드 159·168 · "
+            f"{_c159_when} — {_c159_verdict}. 원장은 그 뒤 "
+            "커졌고 결론은 R215·R216 에서 다시 확인했습니다). "
             "평균 매수가는 보유 판단에만 쓰고 점수·적정가·예측에는 "
             "넣지 않습니다.", theme=_theme)
 
