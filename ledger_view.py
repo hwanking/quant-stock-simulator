@@ -98,3 +98,81 @@ def spaced_count(df, **kw):
     """`spaced_mask` 의 True 개수. 빈 입력이면 0."""
     m = spaced_mask(df, **kw)
     return int(m.sum()) if len(m) else 0
+
+
+# ── 라운드 224 — 보유 관리가 읽는 두 가지 (표시 전용 · 문턱 없음) ─────────
+#
+# ① 봉 → 달력일. 위 MIN_GAP_DAYS 와 같은 환산(×7/5)이다. 보유 계획의 창은
+#    엔진의 결과 창 `horizon_days`(20봉)이고, 화면은 날짜열만 가지므로 달력일로
+#    옮긴다 — 새 숫자가 아니다.
+# ② 적정가 도달 비율. 사용자: *"적정가는 [있는데] 너무 오래 기다려야 한다."*
+#    적정가까지 걸리는 시간은 이 원장이 못 잰다(옛 행에 적정가가 없다 · R215).
+#    잴 수 있는 것은 하나 — **같은 국면·같은 구역의 원장 케이스가 20봉 안에
+#    그만큼(적정가까지의 상승 여력) 오른 비율**이다. `close_return_pct` 는 창 끝
+#    종가 수익(손절·목표로 잘리지 않은 값)이라 mfe 의 함정(청산 봉까지만 잰다)
+#    이 없다. 분모가 0 이면 None — 비율을 만들지 않는다(§3). 어디까지가 '낮다'
+#    인지는 정하지 않는다 — 문턱을 고르면 §2 다. 수와 n 을 그대로 낸다.
+HORIZON_BARS = 20                              # 엔진 결과 창 (horizon_days)
+
+
+def bars_to_days(bars):
+    """봉 수 → 달력일 (×7/5 · MIN_GAP_DAYS 와 같은 환산). 20봉 = 28일."""
+    return int(bars) * 7 // 5
+
+
+def reach_table(records, regime_key='regime', zone_key='entry_zone',
+                ret_key='close_return_pct'):
+    """{(국면, 구역): 오름차순 창 끝 종가 수익 리스트}. `records` 는 dict 의 반복자
+    (원장 jsonl 한 줄씩) 또는 DataFrame — 둘 다 같은 표를 만든다.
+    화면이 원장 전체를 다시 들지 않게 세 칸만 남긴 작은 표다."""
+    out = {}
+    try:
+        import pandas as pd
+        if isinstance(records, pd.DataFrame):
+            records = records[[regime_key, zone_key, ret_key]].to_dict('records')
+    except Exception:                                          # noqa: BLE001
+        pass
+    for r in records:
+        rg, zn, rt = r.get(regime_key), r.get(zone_key), r.get(ret_key)
+        if not rg or not zn or rt is None:
+            continue
+        try:
+            rt = float(rt)
+        except (TypeError, ValueError):
+            continue
+        if rt != rt:                                           # NaN
+            continue
+        out.setdefault((str(rg), str(zn)), []).append(rt)
+    for k in out:
+        out[k].sort()
+    return out
+
+
+def reach_share(table, regime, zone, upside_pct):
+    """(비율 %, n) — 같은 (국면, 구역) 케이스 중 창 끝 종가 수익 ≥ upside_pct 인 비율.
+
+    upside_pct ≤ 0 이면 '이미 적정가 위' 라 비율의 뜻이 없다 → None.
+    n == 0 이면 None — 분모가 0 이면 비율을 만들지 않는다(§3). 문턱 없음.
+    """
+    try:
+        up = float(upside_pct)
+    except (TypeError, ValueError):
+        return None
+    if not table or up <= 0 or not regime or not zone:
+        return None
+    rets = table.get((str(regime), str(zone)))
+    if not rets:
+        return None
+    n = len(rets)
+    k = n - bisect.bisect_left(rets, up)
+    return round(100.0 * k / n, 1), n
+
+
+def reach_line(share, n, upside_pct, regime=None, zone=None, bars=HORIZON_BARS):
+    """화면 한 줄 — 숫자를 판단으로 바꾸지 않는다. 예:
+    '적정가까지 +38.2% · 같은 국면·구역 원장 1,204건 중 20봉 안에 그만큼 오른 비율 3.1%'"""
+    where = ''
+    if regime or zone:
+        where = f"({regime or '?'} · {zone or '?'}) "
+    return (f"적정가까지 {float(upside_pct):+.1f}% · 같은 국면·구역 {where}원장 {int(n):,}건 중 "
+            f"{int(bars)}봉 안에 그만큼 오른 비율 {float(share):.1f}%")

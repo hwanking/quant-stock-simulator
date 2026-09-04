@@ -2285,9 +2285,20 @@ WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
 #:   `snap_avg_down_ok` 는 **글자**('가능'/'불가')다: 숫자 칸(`_watch_num`)은
 #:   0 을 버리므로 bool·0/1 로는 '불가'가 사라진다. 실패 목록도 ' · ' 로
 #:   이은 글자 하나다. 세션도 같은 모양으로 찍는다 (§4 — 두 모양 금지).
+#: 라운드 224 — 보유 **계획**과 정리 사유. `snap_hold_at` 은 보유자 기준값
+#:   (`snap_hold_trim`·`snap_hold_stop`)을 **잰 날**이다. 그 두 값은 현재가에서
+#:   다시 계산되는 값이라(2σ 아래 · 0.7R 위) 종목을 열 때마다 새로 찍으면 목표는
+#:   따라 올라가고 손절은 따라 내려가 **어느 것도 닿지 않는다** — "1차 매도가를
+#:   넘었다"가 화면에 나올 수 없었다. 그래서 원장이 케이스를 채점하는 방식
+#:   그대로(기준일에 고정 · 20봉 창) 잰 날에 고정하고, 창이 끝나거나 닿았을 때만
+#:   다시 잰다(`hold_plan_update`). `snap_hold_log` 는 그때 남는 한 줄(최근 셋)
+#:   — *"정리하는 이유도 추후에 써줘"*. `snap_fair_reach` 는 적정가 도달 비율
+#:   한 줄(`ledger_view.reach_line` · 글자 — 0% 도 값이라 숫자 칸에 못 둔다).
 WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket',
                   'snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
-                  'snap_holder_key', 'snap_holder_title', 'snap_weight_basis')
+                  'snap_holder_key', 'snap_holder_title', 'snap_weight_basis',
+                  'snap_hold_at', 'snap_hold_log', 'snap_fair_reach',
+                  'snap_new_entry')
 #: ⚠️ 라운드 169 — `plan`('내 계획')을 **걷어냈다.**
 #:   라운드 164 에서 사용자 요청으로 넣었는데, 라운드 166 이 엔진 판단
 #:   칸을 붙이자 *"내 계획은 지워버리고 엔진 판단부터 제대로"* 로 요청이
@@ -2304,6 +2315,63 @@ def _watch_num(v):
     except (TypeError, ValueError):
         return None
     return f if f > 0 else None
+
+
+HOLD_LOG_KEEP = 3        # 최근 셋만 — 파일이 자라지 않게
+
+
+def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=True):
+    """보유자 기준값을 **고정할지 다시 잴지** 정한다 (라운드 224). 반환: 쓸 키만.
+
+    · 기준값이 없거나 잰 날이 없으면 → 새 값 + 오늘 날짜.
+    · 잰 날부터 창(`horizon_bars` → 달력일 ×7/5 · `ledger_view.bars_to_days`)이
+      지났거나, 현재가가 1차 매도가 이상 / 버틸 수 없는 가격 이하면 → **계획
+      종료**: 사유 한 줄을 `snap_hold_log` 에 남기고 새 값으로 다시 잰다.
+    · 그 밖(창 안 · 두 선 사이)이면 → **아무것도 안 쓴다**(옛 값 유지).
+    새 값이 없으면(None) 옛 값을 지우지 않는다 (§3 — 못 낸 값으로 덮지 않는다).
+    문턱 없음 — 엔진이 발표한 두 선과 창을 그대로 쓴다.
+    """
+    import datetime as _dt
+    import ledger_view as _lv
+    row = row or {}
+    old_trim, old_stop = _watch_num(row.get('snap_hold_trim')), _watch_num(row.get('snap_hold_stop'))
+    old_at = str(row.get('snap_hold_at') or '')[:10]
+    px = _watch_num(px)
+    today_s = str(today)[:10]
+    fresh = {}
+    if _watch_num(new_trim):
+        fresh['snap_hold_trim'] = float(new_trim)
+    if _watch_num(new_stop):
+        fresh['snap_hold_stop'] = float(new_stop)
+    if not held or not (old_trim or old_stop) or not old_at:
+        # 안 산 종목은 계획이 아니다 — 늘 오늘 값으로 갈고 사유를 남기지 않는다.
+        if fresh:
+            fresh['snap_hold_at'] = today_s
+        return fresh
+    reason = None
+    try:
+        age = (_dt.date.fromisoformat(today_s) - _dt.date.fromisoformat(old_at)).days
+    except ValueError:
+        age = None
+    days = _lv.bars_to_days(horizon_bars)
+    if px and old_trim and px >= old_trim:
+        reason = (f"{today_s} 1차 매도가 {old_trim:,.0f}원({old_at} 기준)을 넘음 "
+                  f"(현재가 {px:,.0f} · {(px / old_trim - 1) * 100:+.1f}%) → 일부 정리 검토 · 기준 다시 잼")
+    elif px and old_stop and px <= old_stop:
+        reason = (f"{today_s} 버틸 수 없는 가격 {old_stop:,.0f}원({old_at} 기준) 아래 "
+                  f"(현재가 {px:,.0f} · {(px / old_stop - 1) * 100:+.1f}%) → 정리 검토 · 기준 다시 잼")
+    elif age is not None and age >= days:
+        reason = (f"{today_s} 보유 계획 창({horizon_bars}봉={days}일 · {old_at} 기준) 경과 — "
+                  f"두 선 사이에서 결판 안 남 → 기준 다시 잼")
+    if reason is None:
+        return {}                                  # 창 안 · 두 선 사이 — 그대로 둔다
+    if not fresh:
+        return {}                                  # 새 값이 없으면 옛 값을 지우지 않는다
+    log = [s for s in str(row.get('snap_hold_log') or '').split(' | ') if s]
+    log.append(reason)
+    fresh['snap_hold_at'] = today_s
+    fresh['snap_hold_log'] = ' | '.join(log[-HOLD_LOG_KEEP:])
+    return fresh
 
 
 def save_watchlist(items, path=WATCHLIST_FILE):
