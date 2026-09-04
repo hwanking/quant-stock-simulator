@@ -16260,7 +16260,10 @@ _cases204 = [
     ('미보유 · 목표 매수가 위', None, 11000.0, '매수 가능', False),
     ('보유 · 손절선 아래', 10000.0, 7500.0, '정리 검토', True),
     ('보유 · 1차 목표 도달', 10000.0, 12500.0, '일부 정리', True),
-    ('보유 · 매수 구간', 10000.0, 8800.0, '추가 매수 가능', True),
+    # 라운드 224 — 물타기 판정이 **안 찍힌** 행은 '추가 매수 가능'이 아니다. "더 살 수
+    #   있나"의 답은 하나(물타기 6조건 통과 + 진입가 이하 · §4)이고, 안 찍힌 것은
+    #   미판정이라 '보유 유지'로 둔다. 찍힌 '가능' 의 경우는 바로 아래에서 심는다.
+    ('보유 · 매수 구간 (물타기 미판정)', 10000.0, 8800.0, '보유 유지', True),
     ('보유 · 그 사이', 10000.0, 10500.0, '보유 유지', True),
 ]
 for _d204, _paid204, _px204, _exp204, _held204 in _cases204:
@@ -16269,6 +16272,10 @@ for _d204, _paid204, _px204, _exp204, _held204 in _cases204:
     check(f"판단: {_d204} → {_exp204}",
           _a204 and _a204['kind'] == _exp204 and _a204['held'] == _held204,
           f"→ {_a204 and (_a204['kind'], _a204['held'])}")
+check("판단: 보유 · 매수 구간 + 물타기 가능 → 추가 매수 가능 (R224 · 6조건 통과 + 진입가 이하)",
+      (_uk204.watch_action(dict(_row204, paid=10000.0, snap_avg_down_ok='가능',
+                                snap_avg_down_fail=''), 8800.0) or {}).get('kind')
+      == '추가 매수 가능')
 check("아무것도 안 잰 종목은 판단하지 않는다 (§3)",
       _uk204.watch_action({}, 10000.0) is None)
 # ⚠️ 화면 실측에서 보유 13종목이 **전부 '보유 유지'** 로 나왔다 — 판단이
@@ -16336,10 +16343,17 @@ check("판단이 한 곳에서만 나온다 (_uk.watch_action)",
 # ── ⓔ 포트폴리오 견해 ────────────────────────────────────────────────
 check("관심종목 밑에 '내 포트폴리오 견해'가 있다",
       '내 포트폴리오 견해' in _wa204)
+# 라운드 224 — 종목 상세의 보유 포지션 블록이 **같은 함수**를 한 번 더 부른다
+#   (`watch_action(_row224, …)` · 관심종목 표와 같은 답을 내려고 · §4 는 '두 정의'를
+#   막지 '한 정의를 두 화면에서 부르는 것'을 막지 않는다). 견해 쪽 재계산 금지는
+#   그 호출을 뺀 수로 잰다.
+_wa_calls224 = _wa204.count('_uk.watch_action(') - _wa204.count('_uk.watch_action(_row224')
 check("견해가 표의 판단을 **다시 계산하지 않는다** (_wl_acts 재사용)",
-      '_wl_acts' in _wa204 and _wa204.count('_uk.watch_action(') == 1,
-      f"watch_action 호출 {_wa204.count('_uk.watch_action(')}회 — "
+      '_wl_acts' in _wa204 and _wa_calls224 == 1,
+      f"watch_action 호출 {_wa_calls224}회(종목 상세 R224 호출 제외) — "
       f"두 번 계산하면 두 값이 생긴다 (§4)")
+check("종목 상세의 보유 블록은 관심종목과 **같은 함수**를 부른다 (R224 · 다른 정의를 만들지 않는다)",
+      _wa204.count('_uk.watch_action(_row224') == 1)
 check("못 잰 것을 밝힌다 (현재가 미수신 · 엔진 값 없음)",
       '현재가 미수신이라 판단에서 뺀 종목' in _wa204
       and '엔진 값이 없어 판단하지 못한 종목' in _wa204)
@@ -19423,8 +19437,10 @@ check("관심종목 표 구간 안에서 watch_action 은 사전 계산 한 번�
       str(_code_calls231(_seg231w, '_uk.watch_action(')), scanned=len(_seg231w))
 
 # ── ③ 물타기 — 채택된 6조건 재사용 · 안 찍혔으면 None ─────────────────────
+# 라운드 224 — 시그니처에 `core`(중앙 판정)가 더해졌다. 첫 조건의 출처가 TOP3 깃발에서
+#   verdict_core.actionable 로 바뀌어서다(§241). 부르는 함수는 그대로다.
 check("스냅샷 찍는 함수가 personalize_for_position 을 부른다 (같은 함수 · §4)",
-      'def _wl_avg_down_snap(row, snapshot):' in _w231
+      'def _wl_avg_down_snap(row, snapshot, core=None):' in _w231
       and 'q_engine.personalize_for_position(snapshot, paid, qty,' in _w231)
 check("스냅샷이 있는 두 자리(채우기 버튼 · 종목 상세) 모두 물타기·업종을 찍는다",
       _w231.count('_wl_avg_down_snap(') == 3          # def 1 + 호출 2
@@ -19438,9 +19454,11 @@ check("비중 정의가 정식 보유 화면과 같다 (매입원가 기준)",
 #   요구했는데, R221 이 판별을 모듈 함수 `avg_down_class` 로 빼며 그 줄이
 #   옮겨 갔다. 잠글 것은 표기가 아니라 불변식 — 래퍼가 있고, 값을 다시 계산하지
 #   않고 찍힌 것을 **다시 말할 뿐**이며, 안 잰 것은 '아직 안 잼'이다.
+# 라운드 224 — 물타기 판정을 `_held` **앞에서** 읽는다: 보유자 kind('추가 매수 가능')가
+#   그 판정을 봐야 해서다(답은 하나 · §4). 다시 말할 뿐인 것은 그대로다.
 check("watch_action 이 물타기를 **다시 말할 뿐**이다 (`_held` 래퍼 → avg_down_class)",
       'def _held(d):' in _uk231
-      and "_cls, _label, _why = avg_down_class(_ok, _fail)" in _uk231
+      and "_ad_cls, _ad_label, _ad_why = avg_down_class(_ad_ok, _ad_fail)" in _uk231
       and "return None, None, '아직 안 잼'" in _uk231)
 # 값으로 — 심어서 양방향 확인 (라운드 194 의 규율)
 try:
@@ -20195,9 +20213,11 @@ _row238 = {'snap_bucket': '눌림목 매수 대기', 'paid': 10000, 'qty': 1, 's
            'snap_hold_stop': 8000, 'snap_avg_down_ok': '불가',
            'snap_avg_down_fail': _uk238.AVG_DOWN_MARKET_GATE}
 _act238 = _uk238.watch_action(_row238, price=9000)
+# 라운드 224 — 라벨이 '시장 게이트만' → '신규 매수 판정만'. 첫 조건의 출처가 TOP3
+#   깃발(늘 닫힘)에서 중앙 판정으로 바뀌어 낱말도 출처를 따른다(§241).
 check("watch_action 이 등급·라벨을 붙인다 (파일의 글자 값 그대로 읽어서)",
       bool(_act238) and _act238.get('avg_down_class') == '시장게이트'
-      and '시장 게이트만' in str(_act238.get('avg_down_label')))
+      and '신규 매수 판정만' in str(_act238.get('avg_down_label')))
 check("화면이 킷의 라벨을 읽는다 ('불가' 리터럴을 직접 찍지 않는다 · §4)",
       "_act.get('avg_down_label')" in _w231
       and "물타기 {'가능' if _ad_ok else '불가'}" not in _w231)
@@ -20383,6 +20403,216 @@ check("뉴스 축은 '원장에 재료가 없다'를 먼저 말한다 (없는 �
       '뉴스 재료가 없다' in _sch240 and '기준일 5개' in _sch240)
 check("일정 문서가 '업종을 고르는 판단 엔진'을 지금 만들지 않는 이유를 적는다 (§2)",
       '§2 위반' in _sch240 and 'R181 재측정' in _sch240)
+
+print()
+print("§241 R224 — 물타기의 첫 조건은 중앙 판정 · 보유 계획 고정 · 정리 사유 (2026-09-04)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "물타기도 스마트하게 · 정리하는 이유도 써줘 — 적정가는 있는데 너무 오래
+#   기다려야 한다 · 1차 매도가가 넘었다 이런 것도." 실측: 물타기 첫 조건이 읽던
+#   `eligible_for_top3` 는 TOP3 선정용 15개 게이트 전부 통과(표본외 검증 게이트가
+#   설계상 닫힘 · 원장 매수 의도 제목 56/250,725)라 보유 16행 전부 불가였고, 같은
+#   화면의 '추가 매수 가능'(bucket)·'실행 후보'(actionable)와 답이 셋이었다(§4).
+#   보유자 기준값은 현재가에서 다시 계산되는 값이라 종목을 열 때마다 목표는 올라가고
+#   손절은 내려가 어느 것도 닿지 않았다 — "1차 매도가를 넘었다"가 나올 수 없었다.
+#   종목 상세엔 옛 '물타기 안전성 계산기'가 1.15/1.05/0.95/0.85 · 68/50 · '30% 축소'
+#   · 평단 낮추기 주수 계산 · 목표가 없으면 현재가×1.05 를 쓰고 있었다(§2·§3·§4).
+import json as _json241
+import datetime as _dt241
+import tempfile as _tmp241
+import portfolio as _pf241
+import ui_kit as _uk241
+import ledger_view as _lv241
+# ── ① 사전등록 → 실측 → 판정 (측정 전 기준 · 기준 안 내림) ────────────
+with open(_os.path.join(PROJ, 'docs', 'PREREG_R224_AVG_DOWN.md'), encoding='utf-8') as _f241:
+    _pre241 = _f241.read()
+check("사전등록이 측정 전에 판정 기준 셋(h/n/b)을 적었다",
+      '작성 시각: 측정 전' in _pre241
+      and all(k in _pre241 for k in ('(h) 해로움 확인', '(n) 차이 없음', '(b) 더 좋음')))
+check("사전등록이 기준을 비용 순으로 적고 R1(이득 상한)을 먼저 쟀다 (§2-7)",
+      '비용 순' in _pre241 and 'R1 은 이미 쟀다' in _pre241)
+with open(_os.path.join(PROJ, 'data', 'avg_down_r224.json'), encoding='utf-8') as _f241:
+    _ad241 = _json241.load(_f241)
+check("재현 자기검사 — 부분집합 크기가 R217 발표값과 같다 (다르면 측정 중단)",
+      _ad241.get('spaced_rows') == _ad241.get('spaced_published_r217') == 122554
+      and 'abort' not in _ad241)
+_bs241 = _ad241.get('by_split') or {}
+check("세 구간 전부 잰다 · CI95 가 셋 다 있다",
+      all(isinstance((_bs241.get(s) or {}).get('hit_diff_ci95_pp'), list)
+          for s in ('train', 'valid', 'blind')))
+_ci241 = {s: _bs241[s]['hit_diff_ci95_pp'] for s in ('train', 'valid', 'blind')}
+check("판정 (n) 이 규칙대로다 — 어느 구간이든 CI95 가 0 을 포함하거나 부호가 갈린다 "
+      "(값이 아니라 불변식을 잠근다 · R213)",
+      _ad241.get('verdict') == 'n' and any(c[0] <= 0 <= c[1] for c in _ci241.values()))
+check("판정문이 R113 의 검정력 한계(5%p 미만은 못 본다)를 같이 적는다",
+      '5%p 미만' in str(_ad241.get('verdict_reason')))
+check("재사용 잣대 — 매수권 58 · 부트 2,000 · 시드 224 (새 숫자 없음)",
+      _ad241.get('buy_band') == 58.0 and _ad241.get('n_boot') == 2000
+      and _ad241.get('seed') == 224)
+# ── ② 배선 — 첫 조건의 출처 (엔진) ─────────────────────────────────────
+with open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8') as _f241:
+    _qi241 = _f241.read()
+_blk241 = _qi241[_qi241.index('add_checks = ['):_qi241.index('averaging_down_allowed = all(')]
+check("물타기 첫 조건이 중앙 판정(new_entry_ok)을 읽는다 — TOP3 깃발이 아니다",
+      '("신규 진입 조건 통과", bool(new_entry_ok))' in _blk241
+      and 'eligible_for_top3' not in _blk241)
+check("호출부가 안 넘기면(None) 데이터 게이트가 같이 떨어져 '보류'다 (§3 · 미판정)",
+      'new_entry_ok is not None' in _blk241)
+check("6조건은 그대로 6개다 (규칙 불변 · §238 과 같이)", _blk241.count('("') == 6)
+check("ADD 등급도 같은 출처를 읽는다 (두 벌 금지 · §4)",
+      "holder_action_score >= 68 and bool(new_entry_ok)" in _qi241
+      and "fs.get('eligible_for_top3'):\n            key = 'ADD'" not in _qi241)
+# 실행 증거 (R191 ① 존재는 실행이 아니다) — §3 의 실제 스냅샷에 세 값을 넣어 본다
+_snap241 = globals().get('snap')
+_pxn241 = globals().get('px_now')
+if isinstance(_snap241, dict) and 'four_scores' in _snap241 and _pxn241:
+    _pv_n = q.personalize_for_position(_snap241, _pxn241 * 1.2, 10, new_entry_ok=None)
+    _pv_f = q.personalize_for_position(_snap241, _pxn241 * 1.2, 10, new_entry_ok=False)
+    _pv_t = q.personalize_for_position(_snap241, _pxn241 * 1.2, 10, new_entry_ok=True)
+    _f_n = [l for l, ok in _pv_n['averaging_down_checks'] if not ok]
+    _f_f = [l for l, ok in _pv_f['averaging_down_checks'] if not ok]
+    _f_t = [l for l, ok in _pv_t['averaging_down_checks'] if not ok]
+    check("실행 증거 ① None → 첫 조건·데이터 게이트가 함께 떨어진다 → 킷이 '보류'",
+          _uk241.AVG_DOWN_MARKET_GATE in _f_n and _uk241.AVG_DOWN_DATA_GATE in _f_n
+          and _uk241.avg_down_class(False, _f_n)[0] == '보류')
+    check("실행 증거 ② False → 첫 조건만 떨어진다 (데이터 게이트는 True 일 때와 같다)",
+          _uk241.AVG_DOWN_MARKET_GATE in _f_f
+          and (_uk241.AVG_DOWN_DATA_GATE in _f_f) == (_uk241.AVG_DOWN_DATA_GATE in _f_t))
+    check("실행 증거 ③ True → 첫 조건은 통과 (나머지 다섯은 스냅샷대로)",
+          _uk241.AVG_DOWN_MARKET_GATE not in _f_t)
+else:
+    skipped("실행 증거 (personalize_for_position 세 값)", "§3 스냅샷이 없다")
+# ── ③ 화면 — 호출부 셋이 전부 중앙 판정을 넘긴다 · 두 정의 통일 ───────────
+check("관심종목 채우기가 CORE 를 넘긴다",
+      "_wl_avg_down_snap(_w166, _snp166, _co166)" in _w231)
+check("종목 상세 스탬프가 CORE 를 넘긴다", "_wl_avg_down_snap(_w141, snap, CORE)" in _w231)
+check("포트폴리오 탭이 같은 함수(_core_of_snapshot)로 중앙 판정을 낸다",
+      "new_entry_ok=_ne224p" in _w231
+      and "_ne224p = _core_of_snapshot(s).get('actionable')" in _w231)
+check("스냅샷 도우미가 new_entry_ok 를 넘기고 출처를 글자로 찍는다 (snap_new_entry)",
+      "new_entry_ok=_ne224" in _w231 and "'snap_new_entry'" in _w231)
+check("R224 이전 보유 행은 다시 채운다 (_wl_needs_fill · snap_new_entry 없음)",
+      "'snap_new_entry' not in w" in _w231)
+check("포트폴리오 탭의 통과/미충족 표시가 빈 글자가 아니다",
+      "f\"- {'통과' if ok else '미충족'} · {label}\"" in _w231
+      and "f\"- {'' if ok else ''} {label}\"" not in _w231)
+_row241 = {'paid': 10000, 'qty': 1, 'snap_px': 10100, 'snap_hold_trim': 11000,
+           'snap_hold_stop': 9000, 'snap_bucket': '오늘 매수 가능', 'snap_buy': 10200,
+           'snap_avg_down_ok': '불가', 'snap_avg_down_fail': _uk241.AVG_DOWN_MARKET_GATE}
+check("심기 ① bucket 매수 가능 + 물타기 불가 → '추가 매수 가능'이 아니다 (§4 · 답은 하나)",
+      _uk241.watch_action(_row241, 10100)['kind'] != '추가 매수 가능')
+check("심기 ② 물타기 가능 + 진입가 이하 → '추가 매수 가능'",
+      _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail=''),
+                          10100)['kind'] == '추가 매수 가능')
+_a3_241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail=''),
+                              10500)
+check("심기 ③ 물타기 가능 + 진입가 위 → '보유 유지' · 이유에 진입가",
+      _a3_241['kind'] == '보유 유지' and '진입가' in _a3_241['why'])
+check("'시장게이트' 라벨이 새 출처(신규 매수 판정)를 말한다",
+      '신규 매수 판정만' in _uk241.avg_down_class(False, [_uk241.AVG_DOWN_MARKET_GATE])[1])
+# ── ④ 보유 계획 고정 — 기준일에 고정 · 20봉 창 · 닿거나 끝나면 사유 로그 ─────
+_td241 = '2026-09-04'
+_r1_241 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
+           'snap_hold_at': '2026-08-30'}
+check("창 안·두 선 사이 → 아무것도 안 쓴다 (고정)",
+      _pf241.hold_plan_update(_r1_241, 11500, 9300, 10500, _td241) == {})
+_u241 = _pf241.hold_plan_update(_r1_241, 11500, 9300, 11200, _td241)
+check("1차 매도가 초과 → 사유 로그 + 새 기준 + 잰 날",
+      '넘음' in _u241.get('snap_hold_log', '') and _u241.get('snap_hold_at') == _td241
+      and _u241.get('snap_hold_trim') == 11500)
+check("버틸 수 없는 가격 아래 → 사유 로그",
+      '아래' in _pf241.hold_plan_update(_r1_241, 11500, 9300, 8900, _td241)
+      .get('snap_hold_log', ''))
+check("창(20봉=28일 · ledger_view.bars_to_days · ×7/5 는 MIN_GAP_DAYS 와 같은 환산) 경과 → 사유 로그",
+      '경과' in _pf241.hold_plan_update(dict(_r1_241, snap_hold_at='2026-08-01'),
+                                       11500, 9300, 10500, _td241).get('snap_hold_log', '')
+      and _lv241.bars_to_days(20) == 28 and _lv241.bars_to_days(25) == _lv241.MIN_GAP_DAYS)
+check("새 값이 없으면 옛 값을 지우지 않는다 (§3)",
+      _pf241.hold_plan_update(dict(_r1_241, snap_hold_at='2026-08-01'),
+                              None, None, 10500, _td241) == {})
+check("안 산 종목은 계획이 아니다 — 늘 새 값 · 로그 없음",
+      'snap_hold_log' not in _pf241.hold_plan_update(dict(_r1_241), 11500, 9300, 11200,
+                                                     _td241, held=False))
+check("로그는 최근 셋만 (파일이 자라지 않게)",
+      _pf241.hold_plan_update(dict(_r1_241, snap_hold_log='a | b | c'), 11500, 9300,
+                              11200, _td241)['snap_hold_log'].count(' | ') == 2)
+check("두 스탬프 자리가 hold_plan_update 를 부른다 (기준값을 직접 덮어쓰지 않는다)",
+      _w231.count('portfolio.hold_plan_update(') == 2
+      and "'snap_hold_trim': _co166.get('hold_trim')" not in _w231
+      and "'snap_hold_trim': CORE.get('hold_trim')" not in _w231)
+check("새 스냅샷 키 넷이 저장 화이트리스트에 있다 (R223 — 없으면 재시작에 사라진다)",
+      all(k in _pf241.WATCH_SNAP_TXT
+          for k in ('snap_hold_at', 'snap_hold_log', 'snap_fair_reach', 'snap_new_entry')))
+_p241 = _os.path.join(_tmp241.gettempdir(), 'gaeum_r224_wl_roundtrip.json')
+_items241 = [{'code': '005930', 'name': 'x', 'paid': 10000, 'qty': 1, 'snap_hold_trim': 11000,
+              'snap_hold_at': '2026-08-30', 'snap_hold_log': 'a | b',
+              'snap_fair_reach': '적정가까지 +1.0% · 비율 0.0%', 'snap_new_entry': '불가'}]
+_pf241.save_watchlist(_items241, path=_p241)
+_back241, _ = _pf241.load_watchlist(path=_p241)
+check("저장→읽기 왕복: 네 새 키가 파일에 남는다 (0% 도 값이라 글자다)",
+      bool(_back241) and all(_back241[0].get(k) == _items241[0][k]
+                             for k in ('snap_hold_at', 'snap_hold_log', 'snap_fair_reach',
+                                       'snap_new_entry')))
+try:
+    _os.remove(_p241)
+except OSError:
+    pass
+# ── ⑤ 정리 사유 — 잰 것만 · 문턱 없음 ──────────────────────────────────
+_base241 = {'paid': 10000, 'qty': 10, 'snap_px': 10500, 'snap_hold_trim': 11000,
+            'snap_hold_stop': 9000, 'snap_hold_at': '2026-08-30',
+            'snap_bucket': '눌림목 매수 대기', 'snap_buy': 10200, 'snap_fair': 14000,
+            'snap_fair_reach': ('적정가까지 +33.3% · 같은 국면·구역 (BULL · z) 원장 1,204건 중 '
+                                '20봉 안에 그만큼 오른 비율 3.1%'),
+            'snap_avg_down_ok': '불가', 'snap_avg_down_fail': _uk241.AVG_DOWN_MARKET_GATE}
+_tdd241 = _dt241.date(2026, 9, 4)
+_a241 = _uk241.watch_action(_base241, 11200, today=_tdd241)
+_w241 = ' | '.join(_a241['hold_why'])
+check("1차 매도가를 넘으면 그 사실과 %가 이유에 있다",
+      _a241['kind'] == '일부 정리' and '넘었습니다' in _a241['why'] and '+1.8%' in _a241['why'])
+check("보유 계획의 잰 날과 창 진행이 이유에 있다",
+      '2026-08-30 에 잰 것' in _w241 and '창 28일 중 5일째' in _w241)
+check("적정가 도달 비율 줄이 그대로 들어가고 '기다리는 비용은 사용자가' 를 붙인다 (문턱 없음)",
+      '오른 비율 3.1%' in _w241 and '기다리는 비용은 사용자가' in _w241)
+check("적정가가 현재가 아래면 '보유 이유가 못 됩니다'",
+      '보유의 이유가 못 됩니다' in ' | '.join(
+          _uk241.watch_action(dict(_base241, snap_fair=9000), 10500, today=_tdd241)['hold_why']))
+check("창이 지났으면 '다시 잽니다'",
+      '창(20봉=28일)이 지났습니다' in ' | '.join(
+          _uk241.watch_action(dict(_base241, snap_hold_at='2026-08-01'), 10500,
+                              today=_tdd241)['hold_why']))
+_t241 = _lv241.reach_table([{'regime': 'BULL', 'entry_zone': 'z', 'close_return_pct': 1.0},
+                            {'regime': 'BULL', 'entry_zone': 'z', 'close_return_pct': 5.0},
+                            {'regime': 'BULL', 'entry_zone': 'z', 'close_return_pct': None}])
+check("도달 비율은 분모가 0 이면 None · 여력 ≤ 0 이면 None (비율을 만들지 않는다 · §3)",
+      _lv241.reach_share(_t241, 'BULL', 'z', 2.0) == (50.0, 2)
+      and _lv241.reach_share(_t241, 'BEAR', 'z', 1.0) is None
+      and _lv241.reach_share(_t241, 'BULL', 'z', 0) is None)
+with open(_os.path.join(PROJ, 'ledger_view.py'), encoding='utf-8') as _f241:
+    _lvs241 = _f241.read()
+check("도달 비율은 창 끝 종가 수익(close_return_pct)을 쓴다 — mfe 는 청산 봉까지만 잰다",
+      "ret_key='close_return_pct'" in _lvs241)
+check("견해와 종목 상세가 같은 함수(watch_action)의 hold_why 를 그린다 (§4)",
+      "act.get('hold_why')" in _w231 and "(_act224 or {}).get('hold_why')" in _w231)
+# ── ⑥ 옛 '물타기 안전성 계산기' 가 없다 ─────────────────────────────────
+for _lit241 in ('머리 가격 (최상투 고점)', '1차 비중 30% 축소', "realtime_price * 1.05)",
+                'add_q = max(1, int(user_quantity', "final_score >= 68:\n        add_buy_status"):
+    check(f"옛 손문턱 리터럴이 화면에 없다 — {_lit241[:22]!r}", _lit241 not in _w231)
+check("옛 블록의 자리에 한 곳 판정이 있다",
+      '_pv224 = q_engine.personalize_for_position(' in _w231
+      and "_act224 = _uk.watch_action(_row224, realtime_price)" in _w231)
+# ── ⑦ 문서·레이더·규칙 ───────────────────────────────────────────────────
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R224_AVG_DOWN.md'), encoding='utf-8') as _f241:
+    _res241 = _f241.read()
+check("결과 문서가 판정 (n) 과 블라인드 점추정이 음이지만 CI 가 0 을 포함함을 숨기지 않는다",
+      '(n)' in _res241 and '−5.8' in _res241 and '0 을 포함' in _res241)
+check("결과 문서가 세 구간 표를 싣는다", all(s in _res241 for s in ('train', 'valid', 'blind')))
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _f241:
+    _rad241 = _json241.load(_f241)
+check("연구 레이더에 R224 가 있다 (새 사전등록 → 레이더 갱신 · §235 톱니)",
+      any('R224' in str(r.get('name')) for r in (_rad241.get('rows') or [])))
+with open(_os.path.join(PROJ, 'CLAUDE.md'), encoding='utf-8') as _f241:
+    _cl241 = _f241.read()
+check("CLAUDE.md 가 R224 를 적는다", 'R224' in _cl241 and 'hold_plan_update' in _cl241)
 
 print()
 print("=" * 72)

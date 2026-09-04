@@ -1145,9 +1145,15 @@ def avg_down_class(ok, fails):
         return ('보류', '물타기 판정 보류',
                 '표본·데이터 게이트를 못 넘어 판단하지 않았다 — 불가가 아니라 미판정(§3)')
     if _fail == [AVG_DOWN_MARKET_GATE]:
-        return ('시장게이트', '물타기 불가 · 시장 게이트만',
-                '포지션 조건 5개는 통과 — 신규 매수 게이트 하나에 막혔다. 엔진이 지금 '
-                '어떤 종목도 신규 매수로 내지 않으므로 물타기도 같이 막힌다')
+        # 라운드 224 — 첫 조건의 출처가 TOP3 깃발에서 **중앙 판정**(verdict_core.actionable)
+        #   으로 바뀌었다. 사전등록 R224: 직전 관측 대비 하락 중인 매수권 케이스의
+        #   적중률 차가 세 구간 CI95 모두 0 을 포함(train +1.7 · valid +3.9 · blind
+        #   −5.8%p) — 하락 중이라는 사실이 판정을 바꾼다는 증거가 없어 물타기의
+        #   첫 조건 = 신규 매수 판정이다. 5%p 미만은 이 잣대로 못 본다(R113).
+        return ('시장게이트', '물타기 불가 · 신규 매수 판정만',
+                '포지션 조건 5개는 통과 — 중앙 판정이 이 종목을 지금 살 수 있는 '
+                '후보로 보지 않는다. 물타기의 첫 조건은 신규 매수 판정과 같다(R224: '
+                '하락 중이라는 사실이 판정을 바꾼다는 증거 없음)')
     # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
     # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
     _head, _more = _fail[:3], _fail[3:]
@@ -1156,7 +1162,7 @@ def avg_down_class(ok, fails):
     return '포지션미달', '물타기 불가', _why
 
 
-def watch_action(row, price=None):
+def watch_action(row, price=None, today=None):
     """
     관심종목 한 줄의 판단. 반환:
 
@@ -1183,33 +1189,78 @@ def watch_action(row, price=None):
     if not bucket and not (h_stop or h_trim or buy):
         return None                      # 아직 아무것도 안 쟀다
 
-    def _held(d):
-        """보유자 판단에 **물타기 판정**을 붙인다 (라운드 214 · 사용자 요청).
+    # ── 물타기 판정을 먼저 읽는다 (라운드 224 — 보유자 kind 가 이것을 본다) ──
+    #   새 문턱을 만들지 않는다 — 스냅샷에 찍힌 `personalize_for_position` 의
+    #   6조건 결과(`snap_avg_down_ok`·`snap_avg_down_fail`)를 **다시 말할 뿐**
+    #   (§2-6 · §4). 안 찍혔으면 None — 지어내지 않는다 (§3). 파일은 글자
+    #   ('가능'/'불가')로 남기고(portfolio.WATCH_SNAP_TXT), 같은 세션의 옛 값은
+    #   bool 로 올 수 있다 — 둘 다 읽는다.
+    _ok_raw = (row or {}).get('snap_avg_down_ok')
+    if _ok_raw in (True, '가능'):
+        _ad_ok = True
+    elif _ok_raw in (False, '불가'):
+        _ad_ok = False
+    else:
+        _ad_ok = None
+    _fr = (row or {}).get('snap_avg_down_fail')
+    _ad_fail = ([s for s in str(_fr).split(' · ') if s] if isinstance(_fr, str)
+                else list(_fr or []))
+    _ad_cls, _ad_label, _ad_why = avg_down_class(_ad_ok, _ad_fail)
 
-        *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."*
-        새 문턱을 만들지 않는다 — 스냅샷에 찍힌 `personalize_for_position`
-        의 6조건 결과(`snap_avg_down_ok`·`snap_avg_down_fail`)를 **다시 말할
-        뿐**이다 (§2-6 · §4). 안 찍혔으면 None — 지어내지 않는다 (§3).
+    def _held(d):
+        """보유자 판단에 **물타기 판정 · 정리 사유**를 붙인다 (라운드 214 → 224).
+
+        *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."* (R214)
+        *"정리하는 이유도 써줘 — 적정가는 있는데 너무 오래 기다려야 한다 ·
+        1차 매도가가 넘었다 이런 것도."* (R224)
+        `hold_why` 는 이 행에 대해 **잰 것만** 문장으로 잇는다 — 판단 kind 의
+        이유 · 보유 계획의 기준 날짜와 창 · 적정가까지의 거리와 원장 도달 비율
+        (`snap_fair_reach` · 문턱 없음) · 물타기 판정. 어느 줄도 새 문턱을
+        만들지 않는다. 계획이 끝났을 때 남긴 한 줄(`snap_hold_log`)은 `hold_log`.
         """
-        _ok_raw = (row or {}).get('snap_avg_down_ok')
-        # 파일은 글자('가능'/'불가')로 남기고(portfolio.WATCH_SNAP_TXT), 같은 세션의
-        # 옛 값은 bool 로 올 수 있다 — 둘 다 읽는다. 그 밖은 '안 잼'이다 (§3).
-        if _ok_raw in (True, '가능'):
-            _ok = True
-        elif _ok_raw in (False, '불가'):
-            _ok = False
-        else:
-            _ok = None
-        _fr = (row or {}).get('snap_avg_down_fail')
-        _fail = ([s for s in str(_fr).split(' · ') if s] if isinstance(_fr, str)
-                 else list(_fr or []))
-        # 라운드 221 — 넷으로 가른다. 판별은 모듈 함수 하나(avg_down_class).
-        _cls, _label, _why = avg_down_class(_ok, _fail)
-        d['avg_down_ok'] = _ok
-        d['avg_down_class'] = _cls
-        d['avg_down_label'] = _label
-        d['avg_down_why'] = _why
+        d['avg_down_ok'] = _ad_ok
+        d['avg_down_class'] = _ad_cls
+        d['avg_down_label'] = _ad_label
+        d['avg_down_why'] = _ad_why
         d['holder_title'] = (row or {}).get('snap_holder_title')
+        why = [str(d.get('why') or '')]
+        # ① 보유 계획 — 잰 날과 창 (기준값은 잰 날에 고정 · portfolio.hold_plan_update)
+        _at = str((row or {}).get('snap_hold_at') or '')[:10]
+        if _at and (h_stop or h_trim):
+            _line = f"보유 기준값(버틸 수 없는 가격·1차 매도가)은 {_at} 에 잰 것"
+            try:
+                import datetime as _dt
+                import ledger_view as _lv
+                _td = today or _dt.date.today()
+                _age = (_td - _dt.date.fromisoformat(_at)).days
+                _days = _lv.bars_to_days(_lv.HORIZON_BARS)
+                if _age >= _days:
+                    _line += (f" · 창({_lv.HORIZON_BARS}봉={_days}일)이 지났습니다 — "
+                              f"종목을 열면 다시 잽니다")
+                else:
+                    _line += f" · 창 {_days}일 중 {_age}일째"
+            except Exception:                                  # noqa: BLE001
+                pass
+            why.append(_line)
+        # ② 적정가 — 거리와 원장 도달 비율. 시간을 재지 않는다(못 잰다 · R215).
+        _fair = _n((row or {}).get('snap_fair'))
+        if _fair and px:
+            _up = (_fair / px - 1.0) * 100.0
+            _reach = str((row or {}).get('snap_fair_reach') or '')
+            if _up > 0:
+                why.append(_reach if _reach else f"적정가 {_fair:,.0f}원까지 {_up:+.1f}%")
+                if _reach:
+                    why.append("이 창에서 닿기 어려운 크기면 적정가는 이 보유의 이유가 못 "
+                               "됩니다 — 기다리는 비용은 사용자가 정합니다")
+            else:
+                why.append(f"현재가가 적정가({_fair:,.0f}원)보다 {-_up:.1f}% 위 — "
+                           f"적정가는 이 보유의 이유가 못 됩니다")
+        # ③ 물타기
+        if _ad_label:
+            why.append(f"{_ad_label} — {_ad_why}")
+        d['hold_why'] = [w for w in why if w]
+        _log = [s for s in str((row or {}).get('snap_hold_log') or '').split(' | ') if s]
+        d['hold_log'] = _log
         return d
 
     if paid and px:
@@ -1230,18 +1281,26 @@ def watch_action(row, price=None):
         if h_trim and px >= h_trim:
             return _held(dict(kind='일부 정리', label='일부 정리', tone='pos',
                               held=True,
-                              why=f'팔 가격 1차({h_trim:,.0f}원)에 닿았습니다'))
-        if bucket == '오늘 매수 가능' and buy and px <= buy:
+                              why=f'1차 매도가({h_trim:,.0f}원)를 넘었습니다 '
+                                  f'({(px / h_trim - 1) * 100:+.1f}%)'))
+        # 라운드 224 — '추가 매수 가능'은 **물타기 판정과 같은 답**이어야 한다 (§4).
+        #   종전엔 bucket 만 봐서, 물타기가 '불가'인 행에 '추가 매수 가능'이 찍힐 수
+        #   있었다(한 종목에 "더 살 수 있나"의 답이 둘). 이제 6조건 전부 통과일 때만,
+        #   그리고 엔진의 진입가 이하일 때만이다. 진입가 위면 '보유 유지'로 두고
+        #   이유에 적는다.
+        if _ad_ok and buy and px <= buy:
             return _held(dict(kind='추가 매수 가능', label='추가 매수 가능',
                               tone='pos', held=True,
-                              why=f'목표 매수가({buy:,.0f}원) 이하이고 엔진이 '
-                                  f'매수 가능으로 봅니다'))
+                              why=f'물타기 6조건 전부 통과이고 진입가({buy:,.0f}원) '
+                                  f'이하입니다'))
         return _held(dict(kind='보유 유지', label='보유 유지', tone='tx2', held=True,
-                          why=('버틸 수 없는 가격과 팔 가격 1차 사이입니다'
-                               if (h_stop and h_trim) else
-                               (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
-                                if h_stop else
-                                f'팔 가격 1차({h_trim:,.0f}원)에 아직 못 미칩니다'))))
+                          why=(('버틸 수 없는 가격과 1차 매도가 사이입니다'
+                                if (h_stop and h_trim) else
+                                (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
+                                 if h_stop else
+                                 f'1차 매도가({h_trim:,.0f}원)에 아직 못 미칩니다'))
+                               + (f' · 물타기는 가능하나 진입가({buy:,.0f}원) 이하에서만'
+                                  if (_ad_ok and buy and px > buy) else ''))))
 
     # ── 미보유 관점 — bucket 을 그대로 짧게 말한다 ──────────────────
     if not bucket:

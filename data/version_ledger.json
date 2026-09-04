@@ -1,14 +1,40 @@
 {
  "axes": {
-  "model": "v2026.09.04.2",
+  "model": "v2026.09.04.3",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
-  "schema": "v2026.09.04.2",
+  "schema": "v2026.09.04.3",
   "news": "v2026.08.26.1",
   "sector": "v2026.08.27.1",
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "schema",
+   "axis_ko": "데이터 스키마",
+   "version": "v2026.09.04.3",
+   "previous": "v2026.09.04.2",
+   "kind": "algorithm",
+   "kind_ko": "알고리즘 변경",
+   "bump": "date",
+   "reason": "R224 관심종목 스냅샷에 보유 계획(snap_hold_at·snap_hold_log)·적정가 도달 비율(snap_fair_reach)·첫 조건 출처(snap_new_entry)",
+   "note": "보유자 기준값(snap_hold_trim·snap_hold_stop)은 이제 잰 날(snap_hold_at)에 고정되고 hold_plan_update 가 창 종료·도달 때만 다시 쓰며 사유를 snap_hold_log(최근 셋)에 남긴다. snap_fair_reach 는 ledger_view.reach_line 한 줄(글자 — 0% 도 값이라 숫자 칸에 못 둔다). snap_new_entry 없는 보유 행은 채우기 대상(옛 게이트의 답이라서). 저장→읽기 왕복을 §241 이 잠근다.",
+   "created_at": "2026-09-04T08:23:03+00:00",
+   "effective_from": "2026-09-04"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.04.3",
+   "previous": "v2026.09.04.2",
+   "kind": "gate",
+   "kind_ko": "게이트 변경",
+   "bump": "date",
+   "reason": "R224 물타기 첫 조건을 TOP3 깃발에서 중앙 판정(verdict_core.actionable)으로 · 보유자 기준값 잰 날 고정 · 정리 사유",
+   "note": "사용자: \"물타기도 스마트하게 · 정리하는 이유도 써줘\". 물타기 첫 조건 \"신규 진입 조건 통과\"가 코드에서는 eligible_for_top3(TOP3 선정용 15게이트 전부 통과 · 표본외 검증 게이트가 설계상 닫힘 · 원장 매수 의도 제목 56/250,725)를 읽어 보유 16행 전부 불가였고, \"더 살 수 있나\"의 답이 셋(TOP3 깃발·bucket·actionable)이었다(§4). 사전등록 R224 R2: 25봉 부분집합 매수권 56,911쌍에서 직전 관측 대비 하락 중 케이스의 적중 차 train +1.7 · valid +3.9 · blind −5.8%p — 세 구간 CI95 모두 0 포함·부호 갈림 → (n). 첫 조건 = actionable(new_entry_ok · 안 넘기면 보류). 보유자 기준값은 현재가에서 재계산돼 방문마다 덮어써지면 어느 선도 닿지 않아 portfolio.hold_plan_update 로 잰 날 고정(20봉=28일 창 · 닿거나 끝나면 사유 로그). watch_action 의 추가 매수 가능 = 물타기 6조건 통과+진입가 이하. 종목 상세의 옛 물타기 안전성 계산기(손문턱 넷)를 걷어냄. §241.",
+   "created_at": "2026-09-04T08:23:03+00:00",
+   "effective_from": "2026-09-04"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

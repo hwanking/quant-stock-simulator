@@ -2321,6 +2321,69 @@ with st.sidebar.expander(
 QUOTE_TTL_SEC = 60
 
 
+def _core_of_snapshot(snp):
+    """스냅샷 → 중앙 판정 (라운드 224). R169 의 관심종목 채우기 경로와 **같은 순서**다
+    (`build()` 의 첫 인자는 four_scores — 스냅샷을 통째로 넘기면 전부 None 이 된다).
+    포트폴리오 탭·관심종목 채우기·종목 상세가 이 하나를 부른다 (§4 · 두 벌 금지)."""
+    import verdict_core as _vc224
+    import next_action as _na224
+    _fs = (snp or {}).get('four_scores') or {}
+    _vd = (snp or {}).get('verdict')
+    if _vd is None:
+        _vd = q_engine.build_final_verdict(snp)
+    _nx224 = _na224.build(_fs, (snp or {}).get('tech_df'), _fs.get('current_price'), _vd)
+    return _vc224.build(_fs, verdict=_vd, price_axes=_fs.get('price_axes'),
+                        next_action=_nx224, realtime_price=_fs.get('current_price'))
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _reach_table_224():
+    """원장 → {(국면, 구역): 창 끝 종가 수익 오름차순} (라운드 224 · 표시 전용).
+    원장 전체 DataFrame(`_load_case_ledger`)을 다시 들지 않고 세 칸만 읽는다.
+    없으면 None — 지어내지 않는다 (§3)."""
+    import json as _json224
+    import ledger_view as _lv224
+    try:
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+
+        def _rows():
+            with open(_p, encoding='utf-8') as _f:
+                for _line in _f:
+                    try:
+                        yield _json224.loads(_line)
+                    except Exception:                          # noqa: BLE001
+                        continue
+        _t = _lv224.reach_table(_rows())
+        return _t or None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _fair_reach_snap(fs):
+    """적정가 도달 비율 한 줄 (라운드 224 · 사용자: "적정가는 있는데 너무 오래 기다려야
+    한다"). 시간은 못 잰다(옛 원장 행에 적정가가 없다 · R215). 잴 수 있는 것: 같은
+    국면·구역의 원장 케이스가 20봉 안에 적정가까지의 여력만큼 오른 **비율**.
+    문턱 없음 — 수와 n 만 낸다. 못 재면 '' (스냅샷 병합에서 떨어진다 · §3)."""
+    import ledger_view as _lv224
+    fs = fs or {}
+    try:
+        _fair = float(fs.get('displayed_fair_value') or 0)
+        _px = float(fs.get('current_price') or 0)
+    except (TypeError, ValueError):
+        return ''
+    if _fair <= 0 or _px <= 0:
+        return ''
+    _up = (_fair / _px - 1.0) * 100.0
+    _rg = str(((fs.get('regime_gate') or {}).get('cell') or '')).split('|')[0] or None
+    _zn = fs.get('entry_zone')
+    _r = _lv224.reach_share(_reach_table_224(), _rg, _zn, _up)
+    if not _r:
+        return ''
+    return _lv224.reach_line(_r[0], _r[1], _up, _rg, _zn)
+
+
 def light_quote(ticker):
     """사이드바용 경량 현재가 조회 (60초 캐시). 실패 시 None."""
     cache = st.session_state.setdefault('quote_cache', {})
@@ -4820,8 +4883,17 @@ if st.session_state.get('show_portfolio'):
                 for ticker, (m, s) in snaps.items():
                     px = float(s['tech_df']['adj_close'].iloc[-1])
                     w = (m['quantity'] * m['average_buy_price'] / total_cost * 100) if total_cost else None
+                    # 라운드 224 — 물타기 첫 조건은 중앙 판정. 못 내면 None → 보류 (§3)
+                    try:
+                        _ne224p = _core_of_snapshot(s).get('actionable')
+                    except Exception:                          # noqa: BLE001
+                        import traceback as _tb224p
+                        print('[포트폴리오 탭 중앙 판정 실패 — 물타기는 보류로 찍는다]')
+                        _tb224p.print_exc()
+                        _ne224p = None
                     pv = q_engine.personalize_for_position(
-                        s, m['average_buy_price'], m['quantity'], portfolio_weight_pct=w)
+                        s, m['average_buy_price'], m['quantity'], portfolio_weight_pct=w,
+                        new_entry_ok=_ne224p)
                     hzd = s['sim_res'].get('horizons_data') or {}
 
                     def _cell(H):
@@ -4886,9 +4958,15 @@ if st.session_state.get('show_portfolio'):
                             [{"구성요소": k, "점수": v} for k, v in pv['components'].items()]),
                             width='stretch', hide_index=True)
 
-                        st.markdown("**추가매수(물타기) 허용 조건** — 전부 통과해야 허용")
+                        # 라운드 224 — 통과/미충족 표시가 **둘 다 빈 글자**였다(이모지 걷어낼 때
+                        #   같이 사라짐). 그리고 넷으로 가른 판정(avg_down_class)을 같이 낸다 (§4).
+                        _cls_pv, _lbl_pv, _why_pv = _uk.avg_down_class(
+                            bool(pv.get('averaging_down_allowed')),
+                            [l for l, ok in (pv.get('averaging_down_checks') or []) if not ok])
+                        st.markdown(f"**추가매수(물타기) 허용 조건** — 전부 통과해야 허용 · "
+                                    f"판정 **{_lbl_pv or '미판정'}** ({_why_pv})")
                         for label, ok in pv['averaging_down_checks']:
-                            st.markdown(f"- {'' if ok else ''} {label}")
+                            st.markdown(f"- {'통과' if ok else '미충족'} · {label}")
                         if not pv['averaging_down_allowed']:
                             st.warning("추가매수 조건을 충족하지 못했습니다. 손실 중이라는 이유만으로 "
                                        "기계적 물타기를 권하지 않습니다.")
@@ -4912,7 +4990,7 @@ if st.session_state.get('show_portfolio'):
 #   들어가지 않는다 (§9 — 평균 매수가는 보유 판단에만. 앵커링 방지).
 #   보유 중이면 '내 보유종목'에 등록해야 포트폴리오 판단에 들어간다.
 # ═══════════════════════════════════════════════════════════════════════════
-def _wl_avg_down_snap(row, snapshot):
+def _wl_avg_down_snap(row, snapshot, core=None):
     """관심종목 한 줄의 **물타기 판정**을 스냅샷에 찍는다 (라운드 214 · 사용자 요청).
 
     *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."*
@@ -4937,8 +5015,12 @@ def _wl_avg_down_snap(row, snapshot):
             pass
     wpct = (paid * qty / tot * 100.0) if tot > 0 else None
     try:
+        # 라운드 224 — 첫 조건은 중앙 판정(verdict_core.actionable)이다. 호출부가
+        #   CORE 를 안 넘기면 None → 엔진이 '미판정'(보류)으로 찍는다 (§3).
+        _ne224 = (core.get('actionable') if isinstance(core, dict) else None)
         pv = q_engine.personalize_for_position(snapshot, paid, qty,
-                                               portfolio_weight_pct=wpct)
+                                               portfolio_weight_pct=wpct,
+                                               new_entry_ok=_ne224)
     except Exception:                                          # noqa: BLE001
         # 못 낸 것은 빈 dict 로 두되(§3 — 지어내지 않는다) **왜 못 냈는지는
         # 서버 로그에 남긴다.** 조용히 {} 만 돌려주면 물타기 칸이 영영 비어도
@@ -4956,6 +5038,9 @@ def _wl_avg_down_snap(row, snapshot):
         #   숫자 칸이 0 을 버려 사라지므로 글자다.
         'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가'),
         'snap_avg_down_fail': ' · '.join(_fails),
+        # 라운드 224 — 첫 조건이 무엇을 읽었는지 (중앙 판정 · 글자). 이 키가 없는 보유
+        #   행은 R224 이전 스탬프라 채우기 대상이다 (_wl_needs_fill).
+        'snap_new_entry': ('미판정' if _ne224 is None else ('가능' if _ne224 else '불가')),
         'snap_holder_key': pv.get('holder_action_key'),
         'snap_holder_title': pv.get('holder_action_title'),
         'snap_weight_basis': ('관심종목 보유분 매입원가 기준'
@@ -5445,6 +5530,12 @@ else:
         if (w.get('paid') and w.get('qty')
                 and 'snap_avg_down_ok' not in w):
             return True
+        # 라운드 224 — 물타기 첫 조건의 출처가 바뀌었다(TOP3 깃발 → 중앙 판정). 그 전에
+        #   찍힌 보유 행은 '불가'가 옛 게이트의 답이라 다시 채운다. 같은 규칙으로
+        #   매입가·수량 둘 다 있을 때만.
+        if (w.get('paid') and w.get('qty')
+                and 'snap_new_entry' not in w):
+            return True
         return False
 
     _fill_missing = [w for w in _wl_items() if _wl_needs_fill(w)]
@@ -5510,14 +5601,21 @@ else:
                         'snap_at': t_ref_str,
                         'snap_engine': str(_VER_NOW.get('model') or ''),
                         'snap_bucket': _co166.get('bucket'),
-                        # 보유자 기준 (라운드 169) — 다른 키다 (§4)
-                        'snap_hold_trim': _co166.get('hold_trim'),
-                        'snap_hold_stop': _co166.get('hold_stop'),
                         # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
                         'snap_sector': (_snp166.get('val_eval') or {}).get('sector'),
+                        # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
+                        'snap_fair_reach': _fair_reach_snap(_fs166),
                     }
-                    # 물타기 판정 (라운드 214) — 매입가·수량이 있을 때만 찍힌다
-                    _vals166.update(_wl_avg_down_snap(_w166, _snp166))
+                    # 물타기 판정 (라운드 214 → 224) — 매입가·수량이 있을 때만 찍힌다.
+                    #   첫 조건은 중앙 판정(_co166.actionable)이다.
+                    _vals166.update(_wl_avg_down_snap(_w166, _snp166, _co166))
+                    # 보유자 기준 (라운드 169 → 224) — 다른 키다 (§4). 보유 행은 잰 날에
+                    #   **고정**하고 창이 끝나거나 닿았을 때만 다시 잰다(사유는 로그로).
+                    _vals166.update(portfolio.hold_plan_update(
+                        _w166, _co166.get('hold_trim'), _co166.get('hold_stop'),
+                        _fs166.get('current_price'), t_ref_str,
+                        horizon_bars=int(_co166.get('horizon_days') or _lv217.HORIZON_BARS),
+                        held=bool(_w166.get('paid'))))
                     _done166.append((_c166, _vals166))
                 except Exception as _ex166:                    # noqa: BLE001
                     # 실패를 통과로 적지 않는다 — 왜 못 냈는지 그대로 쓴다
@@ -5641,6 +5739,32 @@ else:
         st.markdown(_line169(
             f"안 산 것 {len(_pf_watch)}종목", _cnt_w169,
             "판단할 값이 아직 없습니다."))
+
+        # ── ②'' 정리·관리 사유 — 보유 행마다 **잰 것만** 잇는다 (라운드 224) ──
+        # 사용자: *"정리하는 이유도 써줘 — 적정가는 있는데 너무 오래 기다려야 한다 ·
+        #   1차 매도가가 넘었다 이런 것도."* 문장은 `watch_action` 이 낸 `hold_why`
+        #   그대로다 (§4 — 여기서 새 판단을 만들지 않는다). 새 문턱 없음: 판단 kind
+        #   의 이유 · 보유 계획의 잰 날과 창 · 적정가 거리와 원장 도달 비율(수와 n)
+        #   · 물타기 판정. 계획이 끝날 때 남긴 한 줄(`hold_log`)이 '이력'이다.
+        _why224 = [(nm, act) for nm, act, *_ in _pf_held
+                   if act and act.get('hold_why')]
+        if _why224:
+            _why_html = [
+                f"<p style='margin:0 0 6px 0; font-size:13px; color:{_TOK['tx1']};'>"
+                f"<b>정리·관리 사유</b> <span style='color:{_TOK['tx3']};'>— 판단은 위 표와 "
+                f"같고 이유만 풀어 씁니다. 어느 줄도 새 문턱이 아닙니다 · 기다리는 비용은 "
+                f"사용자가 정합니다</span></p>"]
+            for _nm224, _act224 in sorted(_why224, key=lambda t: t[0]):
+                _lines224 = " · ".join(_uk._esc(w) for w in _act224['hold_why'])
+                _log224 = (_act224.get('hold_log') or [])
+                _why_html.append(
+                    f"<p style='margin:0 0 4px 0; font-size:12px; line-height:1.6; "
+                    f"color:{_TOK['tx2']};'><b style='color:{_TOK[_act224['tone']]};'>"
+                    f"{_uk._esc(_nm224)} · {_uk._esc(_act224['label'])}</b> — {_lines224}"
+                    + (f"<br><span style='color:{_TOK['tx3']};'>이력: "
+                       f"{_uk._esc(_log224[-1])}</span>" if _log224 else '')
+                    + "</p>")
+            st.markdown("".join(_why_html), unsafe_allow_html=True)
 
         # ── ②' 업종·시장 국면 — **서술만 한다** (라운드 214 · 사용자 요청) ──
         # *"내 포트폴리오 견해에 대해서 섹터별 어떤지 시장상황도 보고 … 이런 거에
@@ -6791,11 +6915,10 @@ try:
             # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
             # 그대로 담는다 (§4).
             'snap_bucket': CORE.get('bucket'),
-            # 보유자 기준 값 (라운드 169) — 신규 매수자 값과 **다른 키**다
-            'snap_hold_trim': CORE.get('hold_trim'),
-            'snap_hold_stop': CORE.get('hold_stop'),
             # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
             'snap_sector': val_eval.get('sector'),
+            # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
+            'snap_fair_reach': _fair_reach_snap(four_scores),
         }
         _cw141 = portfolio.normalize_code(target_ticker)
         _items141, _dirty141 = [], False
@@ -6804,7 +6927,14 @@ try:
                 _new141 = dict(_w141)
                 # 물타기 판정 (라운드 214) — 이 줄의 매입가·수량으로, 같은 스냅샷에서
                 _s141 = dict(_snap141)
-                _s141.update(_wl_avg_down_snap(_w141, snap))
+                _s141.update(_wl_avg_down_snap(_w141, snap, CORE))
+                # 보유자 기준 값 (라운드 169 → 224) — 신규 매수자 값과 **다른 키**다.
+                #   보유 행은 잰 날에 고정, 창이 끝나거나 닿았을 때만 다시 잰다.
+                _s141.update(portfolio.hold_plan_update(
+                    _w141, CORE.get('hold_trim'), CORE.get('hold_stop'),
+                    realtime_price, datetime.date.today().isoformat(),
+                    horizon_bars=int(CORE.get('horizon_days') or _lv217.HORIZON_BARS),
+                    held=bool(_w141.get('paid'))))
                 for _k141, _v141 in _s141.items():
                     # 못 낸 값은 **덮어쓰지 않는다** — 어제 잰 값이라도
                     # 오늘 미산출로 지워 버리면 화면이 더 비어 보인다.
@@ -9438,91 +9568,101 @@ with n3:
 
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 
-# 📌 [사용자 요청] 내 보유 포지션 맞춤 포트폴리오 진단 & 물타기 안전성 계산기
+# ── 내 보유 포지션 — 산수 · 물타기 판정 · 정리 사유 (라운드 224) ─────────────
+# 종전 블록('내 보유 포지션 맞춤 포트폴리오 진단 & 물타기 안전성 리포트')은
+# ① 평단/현재가 비율 1.15·1.05·0.95·0.85 로 '머리·어깨·허리·무릎·발목'을 나누고
+# ② 종합점수 68/50 으로 '매수·관망·매도'를 **따로** 판정하고 ③ "반등 시 1차 비중 30%
+# 축소"를 권하고 ④ 평단을 1차 목표가로 낮추는 데 필요한 주수를 계산했다.
+# ①~③은 잰 적 없는 숫자였고(§2), ②는 위 6조건과 **다른 경로**의 물타기 판정이었으며
+# (§4), ④는 :2113 이 이미 "평단 낮추기 목적의 추가 매수는 하지 마세요"로 폐기한 산식
+# 이다. 목표가가 없으면 현재가×1.05 를 지어 넣기도 했다(§3). 남기는 것은 산수(평단·
+# 수량·평가·손익)와 **한 곳**에서 나온 판정 — `personalize_for_position`(6조건 · 첫 조건은
+# 중앙 판정) 과 `ui_kit.watch_action`(관심종목과 같은 함수 · 정리 사유) 뿐이다.
 if user_entry_price > 0 and user_quantity > 0:
     eval_val = realtime_price * user_quantity
     cost_val = user_entry_price * user_quantity
     pnl_val = eval_val - cost_val
-    pnl_pct = (pnl_val / (cost_val + 1e-8)) * 100.0
-    
-    # 목표가·손절가 키는 target_tech_1st / stop_loss_price 이다 ('target_price_1st'는 존재하지 않는 키였음)
-    tp_1st = four_scores.get('target_tech_1st', realtime_price * 1.05)
-    sl_1st = four_scores.get('stop_loss_price', realtime_price * 0.95)
-
-    if user_entry_price >= realtime_price * 1.15:
-        user_pos_tag = "머리 가격 (최상투 고점)"
-        user_pos_color = "#ff453a"
-        user_pos_advice = f"현재 평단가({user_entry_price:,.0f}원)가 고점 부근입니다. 무분별한 물타기는 위험하며 반등 시 1차 비중 30% 축소를 권장합니다."
-    elif user_entry_price >= realtime_price * 1.05:
-        user_pos_tag = "어깨 가격 (고점 부근)"
-        user_pos_color = "#F2B84B"
-        user_pos_advice = f"평단가 대비 손실 구간({pnl_pct:.1f}%)입니다. 20일선 지지 안착 확인 전까지 추가 매수를 유의하세요."
-    elif user_entry_price >= realtime_price * 0.95:
-        user_pos_tag = "허리 가격 (평균 구간)"
-        user_pos_color = "#35C98B"
-        user_pos_advice = f"평단가 부근 형성 중입니다. 20일선 수급 안착 시 현재 보유량을 유지하며 관망합니다."
-    elif user_entry_price >= realtime_price * 0.85:
-        user_pos_tag = "무릎 가격 (저점 진입)"
-        user_pos_color = "#4C8DFF"
-        user_pos_advice = f"수익 구간({pnl_pct:+.1f}%)입니다. 1차 목표가({tp_1st:,.0f}원) 도달 시 분할 익절을 고려하세요."
-    else:
-        user_pos_tag = "발목 가격 (최저점 매수)"
-        user_pos_color = "#4C8DFF"
-        # ⚠️ 라운드 188 — '우수 진입 포지션'·'극대화' 는 우리가 잰 것이
-        #   아니다. 아는 사실은 '평단이 현재가보다 많이 아래'라는 산술뿐이다.
-        user_pos_advice = (f"평단이 현재가보다 크게 아래입니다({pnl_pct:+.1f}%). "
-                           f"이 자리가 유리했는지는 측정하지 않았습니다.")
-
-    sma_20_curr = tech_df['sma_20'].iloc[-1]
-    
-    final_score = four_scores.get('final_quant_score', 50)
-
-    if final_score >= 68:
-        add_buy_status = f"<b>매수 (비중 확대)</b><br><span style='font-size:13px; color:#9DAABC;'>단기 목표가 {tp_1st:,.0f}원 도달 시 익절</span>"
-        add_buy_color = "#35C98B"
-    elif final_score >= 50:
-        add_buy_status = f"<b>관망 (보유 비중 유지)</b><br><span style='font-size:13px; color:#9DAABC;'>물타기 금지 / {tp_1st:,.0f}원 반등 시 매도</span>"
-        add_buy_color = "#F2B84B"
-    else:
-        add_buy_status = f"<b>매도 (비중 축소)</b><br><span style='font-size:13px; color:#9DAABC;'>위험 구간 / {sl_1st:,.0f}원 이탈 시 전량 손절</span>"
-        add_buy_color = "#ff453a"
-
-
-    water_msg = ""
-    if user_entry_price > tp_1st and realtime_price < tp_1st:
-        add_q = max(1, int(user_quantity * (user_entry_price - tp_1st) / (tp_1st - realtime_price)))
-        add_cost = add_q * realtime_price
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #F2B84B;'><p style='margin:0; font-size:15px; color:#F3F6FA;'><b>맞춤형 물타기(평단가 인하) 시뮬레이션</b></p><p style='margin:4px 0 0 0; font-size:13px; color:#9DAABC;'>현재가 기준 <b>약 {add_q:,}주 ({add_cost:,.0f}원)</b> 추가 매수 시, 평단가를 AI 1차 목표가(<b>{tp_1st:,.0f}원</b>)로 낮춰 본전 탈출이 가능합니다.</p></div>"
-    elif user_entry_price > realtime_price and user_entry_price <= tp_1st:
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #35C98B;'><p style='margin:0; font-size:13px; color:#9DAABC;'>현재 평단가가 AI 1차 목표가({tp_1st:,.0f}원)보다 낮아, 본전 탈출을 위한 무리한 추가 물타기 없이 목표가 도달 시 수익 전환이 가능합니다.</p></div>"
-    elif user_entry_price > 0:
-        water_msg = f"<div style='margin-top:16px; background:#1C2635; padding:12px 16px; border-radius:10px; border-left: 4px solid #4C8DFF;'><p style='margin:0; font-size:13px; color:#9DAABC;'>현재 수익 구간입니다. 신규 매수(불타기) 시 평단가가 높아지므로, 잔여 물량은 보유 유지 및 단기 익절 대응을 권장합니다.</p></div>"
+    pnl_pct = (pnl_val / cost_val * 100.0) if cost_val else None
+    _pv224 = None
+    try:
+        _pv224 = q_engine.personalize_for_position(
+            snap, user_entry_price, user_quantity, new_entry_ok=CORE.get('actionable'))
+    except Exception:                                          # noqa: BLE001
+        import traceback as _tb224
+        print('[보유 포지션 물타기 판정 실패 — 칸을 비운다]')
+        _tb224.print_exc()
+    # 관심종목에 이 종목의 **보유 계획**(잰 날에 고정한 기준값)이 있으면 그것으로, 없으면
+    # 오늘의 CORE 값으로 — 관심종목 표와 같은 함수가 같은 답을 낸다 (§4).
+    _row224 = {}
+    try:
+        _cw224 = portfolio.normalize_code(target_ticker)
+        _row224 = dict(next((w for w in _wl_items()
+                             if portfolio.normalize_code(w.get('code')) == _cw224), {}) or {})
+    except Exception:                                          # noqa: BLE001
+        _row224 = {}
+    _row224.update({'paid': user_entry_price, 'qty': user_quantity, 'snap_px': realtime_price,
+                    'snap_bucket': CORE.get('bucket'),
+                    'snap_buy': (CORE.get('pullback_zone') or (CORE.get('buy_zone') or [None])[0]),
+                    'snap_fair': four_scores.get('displayed_fair_value')})
+    if not (_row224.get('snap_hold_trim') or _row224.get('snap_hold_stop')):
+        _row224['snap_hold_trim'] = CORE.get('hold_trim')
+        _row224['snap_hold_stop'] = CORE.get('hold_stop')
+        _row224.pop('snap_hold_at', None)
+    if _pv224:
+        _row224['snap_avg_down_ok'] = '가능' if _pv224.get('averaging_down_allowed') else '불가'
+        _row224['snap_avg_down_fail'] = ' · '.join(
+            l for l, ok in (_pv224.get('averaging_down_checks') or []) if not ok)
+    if not _row224.get('snap_fair_reach'):
+        _row224['snap_fair_reach'] = _fair_reach_snap(four_scores)
+    _act224 = _uk.watch_action(_row224, realtime_price)
+    _hold_src224 = (f"보유 계획 {_row224['snap_hold_at']} 기준" if _row224.get('snap_hold_at')
+                    else "오늘 기준값")
+    _why_lines224 = "".join(
+        f"<li style='margin:0 0 4px 0;'>{_uk._esc(w)}</li>"
+        for w in ((_act224 or {}).get('hold_why') or []))
+    _log224 = (_act224 or {}).get('hold_log') or []
+    _chk_html224 = ""
+    if _pv224:
+        _chk_html224 = "".join(
+            f"<li style='margin:0 0 2px 0; color:{_TOK['tx2']};'>"
+            f"<span style='color:{_TOK['pos'] if ok else _TOK['warn']};'>"
+            f"{'통과' if ok else '미충족'}</span> · {_uk._esc(l)}</li>"
+            for l, ok in (_pv224.get('averaging_down_checks') or []))
+    _ad_col224 = (_TOK['pos'] if (_act224 or {}).get('avg_down_ok')
+                  else (_TOK['tx3'] if (_act224 or {}).get('avg_down_class') == '보류'
+                        else _TOK['warn']))
+    _log_html224 = (f"<p style='margin:0 0 10px 0; font-size:12px; color:{_TOK['tx3']};'>"
+                    f"이력: {_uk._esc(_log224[-1])}</p>" if _log224 else "")
+    _chk_wrap224 = (f"<p style='margin:0 0 4px 0; font-size:12px; color:{_TOK['tx2']};'>"
+                    f"<b>추가매수(물타기) 6조건</b> — 전부 통과해야 허용 · 첫 조건은 중앙 "
+                    f"판정(R224)</p><ul style='margin:0 0 0 18px; padding:0; font-size:12px; "
+                    f"line-height:1.5;'>{_chk_html224}</ul>" if _chk_html224 else "")
     st.markdown(f"""
-    <div style='background: #161D2A; border-radius: 16px; padding: 20px 24px; margin: 12px 0 20px 0;'>
-        <div style='display:flex; justify-size:space-between; align-items:center; flex-wrap:wrap; gap:10px;'>
-            <h3 style='margin:0; color:{user_pos_color}; font-size:20px;'>내 보유 포지션 맞춤 포트폴리오 진단 & 물타기 안전성 리포트</h3>
-            <span style='background:{user_pos_color}; color:#000; padding:4px 16px; border-radius:14px; font-weight:bold; font-size:15px;'>{user_pos_tag}</span>
+    <div style='background:{_TOK['bg2']}; border-radius:16px; padding:20px 24px; margin:12px 0 20px 0;'>
+        <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;'>
+            <p style='margin:0; font-size:17px; font-weight:700; color:{_TOK['tx1']};'>내 보유 포지션 · 보유자 기준</p>
+            <span style='font-size:13px; color:{_TOK[(_act224 or {}).get('tone', 'tx3')]}; font-weight:700;'>
+                {_uk._esc((_act224 or {}).get('label') or '판단할 값이 아직 없습니다')}</span>
         </div>
-        <div style='display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin:16px 0;'>
-            <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
-                <p style='margin:0; font-size:13px; color:#9DAABC;'>내 평균 매수가</p>
-                <p style='margin:2px 0 0 0; font-size:20px; color:#F3F6FA; font-weight:bold;'>{user_entry_price:,.0f} 원</p>
-            </div>
-            <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
-                <p style='margin:0; font-size:13px; color:#9DAABC;'>보유 수량 / 총 평가금액</p>
-                <p style='margin:2px 0 0 0; font-size:17px; color:#F3F6FA; font-weight:bold;'>{user_quantity} 주 ({eval_val:,.0f} 원)</p>
-            </div>
-            <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
-                <p style='margin:0; font-size:13px; color:#9DAABC;'>평가 손익 (수익률)</p>
-                <p style='margin:2px 0 0 0; font-size:20px; color:{_TOK["up"] if pnl_val>=0 else _TOK["down"]}; font-weight:bold;'>{pnl_val:+,.0f} 원 ({pnl_pct:+.2f}%)</p>
-            </div>
-            <div style='background:#161D2A; padding:12px; border-radius:10px; text-align:center;'>
-                <p style='margin:0; font-size:13px; color:#9DAABC;'>매수 / 매도 전략</p>
-                <p style='margin:2px 0 0 0; font-size:15px; color:{add_buy_color};'>{add_buy_status}</p>
-            </div>
+        <div style='display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin:14px 0;'>
+            <div style='background:{_TOK['bg1']}; padding:12px; border-radius:10px; text-align:center;'>
+                <p style='margin:0; font-size:12px; color:{_TOK['tx2']};'>내 평균 매수가</p>
+                <p style='margin:2px 0 0 0; font-size:20px; color:{_TOK['tx1']}; font-weight:700;'>{user_entry_price:,.0f} 원</p></div>
+            <div style='background:{_TOK['bg1']}; padding:12px; border-radius:10px; text-align:center;'>
+                <p style='margin:0; font-size:12px; color:{_TOK['tx2']};'>보유 수량 / 평가금액</p>
+                <p style='margin:2px 0 0 0; font-size:17px; color:{_TOK['tx1']}; font-weight:700;'>{user_quantity:,} 주 ({eval_val:,.0f} 원)</p></div>
+            <div style='background:{_TOK['bg1']}; padding:12px; border-radius:10px; text-align:center;'>
+                <p style='margin:0; font-size:12px; color:{_TOK['tx2']};'>평가 손익 (수익률)</p>
+                <p style='margin:2px 0 0 0; font-size:20px; color:{_TOK['up'] if pnl_val >= 0 else _TOK['down']}; font-weight:700;'>{pnl_val:+,.0f} 원 ({fmt_pct(pnl_pct)})</p></div>
+            <div style='background:{_TOK['bg1']}; padding:12px; border-radius:10px; text-align:center;'>
+                <p style='margin:0; font-size:12px; color:{_TOK['tx2']};'>물타기 판정</p>
+                <p style='margin:2px 0 0 0; font-size:15px; color:{_ad_col224}; font-weight:700;'>
+                    {_uk._esc((_act224 or {}).get('avg_down_label') or '미판정')}</p></div>
         </div>
-        <p style='margin:0; font-size:15px; color:#F3F6FA;'><b>맞춤 대응 가이드</b>: {user_pos_advice}</p>
-        {water_msg}
+        <p style='margin:0 0 6px 0; font-size:13px; color:{_TOK['tx1']};'><b>정리·관리 사유</b>
+           <span style='font-size:12px; color:{_TOK['tx3']};'>· {_uk._esc(_hold_src224)} · 어느 줄도 새 문턱이 아닙니다 · 기다리는 비용은 사용자가 정합니다</span></p>
+        <ul style='margin:0 0 10px 18px; padding:0; font-size:13px; line-height:1.6; color:{_TOK['tx2']};'>{_why_lines224 or "<li>판단할 값이 아직 없습니다</li>"}</ul>
+        {_log_html224}{_chk_wrap224}
     </div>
     """, unsafe_allow_html=True)
 # 세부 점수 — v2 3단계 위계: 큰 숫자 카드 5장 대신 작은 수평 막대 (종합점수는
