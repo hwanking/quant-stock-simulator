@@ -5037,7 +5037,12 @@ def _wl_avg_down_snap(row, snapshot, core=None):
         #   같은 모양이 되도록 처음부터 글자로 찍는다 (§4). '불가'를 0 으로 두면
         #   숫자 칸이 0 을 버려 사라지므로 글자다.
         'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가'),
-        'snap_avg_down_fail': ' · '.join(_fails),
+        # ⚠️ 라운드 224 실측 — 실패가 없으면 ''(빈 글자)를 찍었는데, 스냅샷 병합은
+        #   None·'' 를 "못 낸 값"으로 보고 **건너뛴다**. 그래서 '가능'으로 바뀐 행이 옛
+        #   실패 목록('신규 진입 조건 통과 · …')을 그대로 안고 있었다(파일 16행 중 4행).
+        #   R223 의 "숫자 칸은 0 을 버린다"와 같은 모양 — 빈 글자도 값이다. '없음'으로
+        #   찍는다(watch_action 이 그 낱말을 빈 목록으로 읽는다).
+        'snap_avg_down_fail': ' · '.join(_fails) or '없음',
         # 라운드 224 — 첫 조건이 무엇을 읽었는지 (중앙 판정 · 글자). 이 키가 없는 보유
         #   행은 R224 이전 스탬프라 채우기 대상이다 (_wl_needs_fill).
         'snap_new_entry': ('미판정' if _ne224 is None else ('가능' if _ne224 else '불가')),
