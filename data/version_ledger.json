@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.07.1",
+  "model": "v2026.09.07.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.04.3",
@@ -9,6 +9,19 @@
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.07.2",
+   "previous": "v2026.09.07.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "R226 포트폴리오 견해를 한눈에 — 할 일 칩 · 구성 막대 · 채울 것 · 상세는 접는다 · 문구 정비(미보유 · 추천 제외)",
+   "note": "사용자: \"너무 길다 · 핵심만 · 잘 짜여 있는지 · 어디를 채울지 · 디자인 직관적 · 문구 프로페셔널\". 견해 절 본문 14,882자 → 1,102자(접힌 상세 제외). 판단 불변 — watch_action 결과를 세고 묶는 방법과 말만. ui_kit.chip_row · bar_list(그리기 부품) · watch_action.hold_brief(같은 함수의 짧은 판) · ledger_view.parse_reach_line. '안 산 것'→'미보유' · '사지 않음'→'추천 제외'. 포트폴리오 점수는 만들지 않는다(원장이 종목 단위 · R214). §243.",
+   "created_at": "2026-09-06T19:19:21+00:00",
+   "effective_from": "2026-09-07"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
