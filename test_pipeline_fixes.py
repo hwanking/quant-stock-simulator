@@ -20635,6 +20635,42 @@ with open(_os.path.join(PROJ, 'CLAUDE.md'), encoding='utf-8') as _f241:
 check("CLAUDE.md 가 R224 를 적는다", 'R224' in _cl241 and 'hold_plan_update' in _cl241)
 
 print()
+print("§242 R225 — 보유자 카드는 중앙 판정을 읽고 보유 계획을 같이 적는다 · 합성 점수는 옛 값이라고 말한다 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   종목 상세 "이미 갖고 있다면" 카드만 four_scores 를 **직접** 읽었다(§4 — 화면은
+#   verdict_core 하나만 읽는다 · CORE 는 정합이 깨진 값을 비운다). R224 가 보유 계획을
+#   잰 날에 고정하자 한 화면에 오늘 값(현재가 기준 재계산)과 계획 값이 같이 보이는데
+#   어느 것이 관리 기준인지 카드가 말하지 않았다. 포트폴리오 탭의 보유자 행동점수는
+#   사전등록·실측 없이 정한 옛 값인데 그 자리에 그 말이 없었다(R223 — 숫자만 보여 주면
+#   그게 판단이 된다).
+check("보유자 카드 두 값이 CORE(hold_trim·hold_stop)에서 온다 (§4)",
+      "_ex_tgt = fmt_num(CORE.get('hold_trim')" in _w231
+      and "_ex_stop = fmt_num(CORE.get('hold_stop')" in _w231
+      and "fmt_num(four_scores.get('target_tech_1st')" not in _w231
+      and "fmt_num(four_scores.get('stop_loss_price')" not in _w231)
+check("판정 근거 상세 표의 보유자 두 행도 CORE 를 읽는다 (같은 검사가 잡은 두 번째 자리)",
+      "fmt_num((CORE or {}).get('hold_trim'), ',.0f', '원', na='산출 불가')" in _w231
+      and "fmt_num((CORE or {}).get('hold_stop'), ',.0f', '원', na='산출 불가')" in _w231)
+check("보유자 목표 도달 가능성도 CORE 의 hold_trim 으로 잰다",
+      "realtime_price and CORE.get('hold_trim'):" in _w231
+      and "_up = (CORE['hold_trim'] / realtime_price - 1) * 100" in _w231)
+check("보유 계획 한 줄이 관심종목 행의 값을 **그대로** 읽는다 (새 계산 없음)",
+      "_pt225 = fmt_num(_row225.get('snap_hold_trim')" in _w231
+      and "_ps225 = fmt_num(_row225.get('snap_hold_stop')" in _w231
+      and "_row225.get('snap_hold_at')" in _w231)
+check("계획 줄이 카드 안에 들어가고 관리 기준이 계획 값임을 말한다",
+      "{_hold_reach_html}{_hold_plan_html}" in _w231
+      and '관리 기준은 계획 값' in _w231 and '오늘 값과 같습니다' in _w231)
+check("계획 줄은 계획이 있을 때만 (paid · snap_hold_at · 기준값 하나 이상)",
+      "_row225.get('paid') and _row225.get('snap_hold_at')" in _w231)
+check("포트폴리오 탭이 합성 점수의 가중치·문턱이 실측되지 않은 옛 값임을 그 자리에서 말한다 (§9)",
+      '사전등록·실측 없이 정한 옛 값' in _w231 and 'R224 §5' in _w231)
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R225_HOLDER_CARD.md'), encoding='utf-8') as _f242:
+    _res242 = _f242.read()
+check("결과 문서가 값·판정 불변을 적는다", '값·판정 불변' in _res242 and 'R225' in _res242)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
