@@ -5302,7 +5302,7 @@ else:
     _wl_groups = [('보유 중', _wl_owned,
                    '매입가를 적은 종목 — 보유자 기준 · 이름순', _WL_SELL_RANK,
                    '정리가 급한 순'),
-                  ('안 산 것', _wl_free,
+                  ('미보유', _wl_free,
                    '매입가가 없는 종목 — 신규 매수 기준 · 이름순', _WL_BUY_RANK,
                    '살 자리가 가까운 순')]
 
@@ -5698,27 +5698,35 @@ else:
 
     _uk.spacer(10)
     st.subheader("내 포트폴리오 견해")
+    # 라운드 226 — 사용자: "너무 길다 · 핵심만 간략하게 · 잘 짜여 있는지 · 어디를 채울지".
+    #   판단은 위 표의 `watch_action` 결과 그대로이고 여기서는 **세고 묶는다**(§4).
+    #   ① 규모(산수) ② 지금 할 일(급한 순 칩) ③ 구성(업종 막대 · 집중도) ④ 채울 것
+    #   (값이 비어 판단이 비는 자리 · §3) ⑤ 시장 국면 한 줄 ⑥ 상세는 접는다.
+    #   "잘 짜여 있는가"에 점수를 내지 않는다 — 여기서 **점수를 만들지 않는다.** 포트폴리오
+    #   '점수'를 내려면 문턱이 필요한데 원장은 **종목 단위**라 포트폴리오 단위 성적을 잴 수
+    #   없어 사전등록·실측이 불가능하다(R214 · §2). 무엇을 사라고도 하지 않는다(§9).
+    st.caption("관심종목 표의 판단을 세고 묶어서 보여 줍니다. 여기서 새 판단을 만들지 "
+               "않고, 무엇을 사라거나 비중을 정하라고 하지 않습니다.")
 
     if not _pf_held and not _pf_watch:
-        st.caption("아직 볼 것이 없습니다.")
+        st.caption("아직 표시할 항목이 없습니다 — 관심종목에 담고 매입가·수량을 적으면 "
+                   "여기서 봅니다.")
     else:
-        # ── ① 보유 — 금액은 산수, 판단은 위 표에서 그대로 ─────────
+        _today226 = datetime.date.today()
+        _days226 = _lv217.bars_to_days(_lv217.HORIZON_BARS)
+        # ── ① 규모 — 전부 산수 (매입가 × 수량) ─────────────────────────
         if _pf_cost > 0:
             _pl169 = _pf_val - _pf_cost
             _plp169 = _pl169 / _pf_cost * 100.0
             _top169 = max(_pf_held, key=lambda t: (t[3] or 0))
             _conc169 = (_top169[3] or 0) / _pf_val * 100 if _pf_val else 0
-            # 라운드 171 — 사용자 요청으로 **총 매입금액·총 매입수량**을
-            # 함께 낸다. 전부 산수다 (매입가 × 수량).
             _uk.stat_tiles([
                 dict(label='보유 종목',
                      value=f"{sum(1 for h in _pf_held if h[2]):,}개",
                      sub=f"총 {_pf_qty:,}주"),
                 dict(label='총 매입금액', value=f"{_pf_cost:,.0f}원"),
                 dict(label='평가금액', value=f"{_pf_val:,.0f}원"),
-                # ⚠️ 라운드 174 — 여기만 `pos`(초록)를 쓰고 있었다. 바로 위
-                #   표의 같은 값은 `up`(빨강)이라 **한 화면에 두 색 언어**가
-                #   있었다. 가격에서 나온 수는 한국 관행을 따른다 (§5).
+                # 가격에서 나온 수는 한국 관행(상승 빨강 · 하락 파랑)을 따른다 (§5)
                 dict(label='평가손익', value=f"{_pl169:+,.0f}원",
                      sub=f"{_plp169:+.1f}%",
                      tone=('up' if _pl169 >= 0 else 'down')),
@@ -5726,70 +5734,90 @@ else:
                      value=f"{_conc169:.0f}%", sub=str(_top169[0])[:14]),
             ], theme=_theme)
 
-        # ── ② 엔진이 지금 뭐라 하는가 — 세기만 한다 ────────────────
-        _cnt169 = {}
-        for _nm169, _act169, *_ in _pf_held:
-            if _act169:
-                _cnt169.setdefault(_act169['label'], []).append(_nm169)
-        _cnt_w169 = {}
-        for _nm169, _act169 in _pf_watch:
-            if _act169:
-                _cnt_w169.setdefault(_act169['label'], []).append(_nm169)
+        # ── ② 지금 할 일 — 표의 kind 를 급한 순으로 센다 (새 문턱 없음) ────
+        _held_by226, _watch_by226 = {}, {}
+        _n_avg_ok226 = _n_avg_hold226 = _n_plan_exp226 = 0
+        _nm_avg_ok226, _nm_plan_exp226, _nm_noqty226, _nm_avg_hold226 = [], [], [], []
+        for _nm226, _act226, _row226, _px226 in _wl_acts:
+            if _row226.get('paid'):
+                if not _row226.get('qty'):
+                    _nm_noqty226.append(_nm226)
+                if not _act226:
+                    continue
+                _held_by226.setdefault(_act226['kind'], []).append(_nm226)
+                if _act226.get('avg_down_ok'):
+                    _n_avg_ok226 += 1
+                    _nm_avg_ok226.append(_nm226)
+                if _act226.get('avg_down_class') == '보류':
+                    _n_avg_hold226 += 1
+                    _nm_avg_hold226.append(_nm226)
+                _at226 = str(_row226.get('snap_hold_at') or '')[:10]
+                if _at226:
+                    try:
+                        if (_today226 - datetime.date.fromisoformat(_at226)).days >= _days226:
+                            _n_plan_exp226 += 1
+                            _nm_plan_exp226.append(_nm226)
+                    except ValueError:
+                        pass
+            elif _act226:
+                _k226 = _act226['kind']
+                if _k226 == '매수 가능' and _act226.get('label') == '지금 매수 가능':
+                    _k226 = '지금 매수 가능'
+                _watch_by226.setdefault(_k226, []).append(_nm226)
+        _tone226 = {'정리 검토': 'neg', '일부 정리': 'pos', '추가 매수 가능': 'pos',
+                    '보유 유지': 'tx2', '보유 기준 미산출': 'tx3'}
+        _chips226 = [dict(label=k, count=len(_held_by226.get(k, [])),
+                          tone=_tone226.get(k, 'tx2'))
+                     for k in _WL_SELL_RANK]
+        for k, v in _held_by226.items():
+            if k not in _WL_SELL_RANK:                    # 순서표에 없는 kind 도 버리지 않는다
+                _chips226.append(dict(label=k, count=len(v), tone='tx2'))
+        if _n_avg_ok226:
+            _chips226.append(dict(label='물타기 가능', count=_n_avg_ok226, tone='pos',
+                                  sub='진입가 이하에서만'))
+        _uk.chip_row(_chips226, theme=_theme,
+                     title=f"보유 {len(_pf_held)}종목 · 지금 할 일 (급한 순)")
+        # 손댈 것이 있는 kind 만 이름을 적는다 — '보유 유지'는 그대로 두는 것이라 안 적는다
+        _act_names226 = []
+        for k in ('정리 검토', '일부 정리', '추가 매수 가능'):
+            if _held_by226.get(k):
+                _v = sorted(_held_by226[k])
+                _act_names226.append(f"**{k}** {', '.join(_v[:4])}"
+                                     + (f" 외 {len(_v) - 4}" if len(_v) > 4 else ''))
+        if _nm_avg_ok226:
+            _v = sorted(_nm_avg_ok226)
+            _act_names226.append(f"**물타기 가능** {', '.join(_v[:4])}"
+                                 + (f" 외 {len(_v) - 4}" if len(_v) > 4 else '')
+                                 + " — 엔진의 진입가 이하에서만")
+        if _act_names226:
+            st.caption(" · ".join(_act_names226))
+        elif _pf_held:
+            st.caption("지금 손댈 것은 없습니다 — 전부 두 선(버틸 수 없는 가격 · 1차 매도가) "
+                       "사이의 보유 유지입니다.")
+        _wseq226 = ('지금 매수 가능',) + tuple(_WL_BUY_RANK)
+        _wtone226 = {'지금 매수 가능': 'pos', '매수 가능': 'pos', '추천 제외': 'neg',
+                     '데이터 부족': 'tx3', '신뢰도·표본 확보 대기': 'tx3'}
+        _wchips226 = [dict(label=k, count=len(_watch_by226[k]),
+                           tone=_wtone226.get(k, 'brand' if '대기' in k else 'tx2'))
+                      for k in _wseq226 if k in _watch_by226]
+        for k, v in _watch_by226.items():
+            if k not in _wseq226:
+                _wchips226.append(dict(label=k, count=len(v), tone='tx2'))
+        if _pf_watch:
+            _uk.chip_row(_wchips226, theme=_theme,
+                         title=f"미보유 {len(_pf_watch)}종목 · 살 자리가 가까운 순")
+            _buy_now226 = sorted(_watch_by226.get('지금 매수 가능', []))
+            if _buy_now226:
+                st.caption("**지금 매수 가능** " + ", ".join(_buy_now226[:4])
+                           + (f" 외 {len(_buy_now226) - 4}" if len(_buy_now226) > 4 else '')
+                           + " — 목표 매수가 이하 · 판단은 표와 같습니다")
 
-        def _line169(title, d, empty):
-            if not d:
-                return f"**{title}** — {empty}"
-            return f"**{title}** — " + " · ".join(
-                f"{k} **{len(v)}종목**({', '.join(v[:3])}"
-                + (f" 외 {len(v) - 3}" if len(v) > 3 else '') + ")"
-                for k, v in sorted(d.items(), key=lambda t: -len(t[1])))
-
-        st.markdown(_line169(
-            f"보유 중 {len(_pf_held)}종목", _cnt169,
-            "매입가를 적은 종목이 없습니다 — 적으면 보유 기준으로 판단합니다."))
-        st.markdown(_line169(
-            f"안 산 것 {len(_pf_watch)}종목", _cnt_w169,
-            "판단할 값이 아직 없습니다."))
-
-        # ── ②'' 정리·관리 사유 — 보유 행마다 **잰 것만** 잇는다 (라운드 224) ──
-        # 사용자: *"정리하는 이유도 써줘 — 적정가는 있는데 너무 오래 기다려야 한다 ·
-        #   1차 매도가가 넘었다 이런 것도."* 문장은 `watch_action` 이 낸 `hold_why`
-        #   그대로다 (§4 — 여기서 새 판단을 만들지 않는다). 새 문턱 없음: 판단 kind
-        #   의 이유 · 보유 계획의 잰 날과 창 · 적정가 거리와 원장 도달 비율(수와 n)
-        #   · 물타기 판정. 계획이 끝날 때 남긴 한 줄(`hold_log`)이 '이력'이다.
-        _why224 = [(nm, act) for nm, act, *_ in _pf_held
-                   if act and act.get('hold_why')]
-        if _why224:
-            _why_html = [
-                f"<p style='margin:0 0 6px 0; font-size:13px; color:{_TOK['tx1']};'>"
-                f"<b>정리·관리 사유</b> <span style='color:{_TOK['tx3']};'>— 판단은 위 표와 "
-                f"같고 이유만 풀어 씁니다. 어느 줄도 새 문턱이 아닙니다 · 기다리는 비용은 "
-                f"사용자가 정합니다</span></p>"]
-            for _nm224, _act224 in sorted(_why224, key=lambda t: t[0]):
-                _lines224 = " · ".join(_uk._esc(w) for w in _act224['hold_why'])
-                _log224 = (_act224.get('hold_log') or [])
-                _why_html.append(
-                    f"<p style='margin:0 0 4px 0; font-size:12px; line-height:1.6; "
-                    f"color:{_TOK['tx2']};'><b style='color:{_TOK[_act224['tone']]};'>"
-                    f"{_uk._esc(_nm224)} · {_uk._esc(_act224['label'])}</b> — {_lines224}"
-                    + (f"<br><span style='color:{_TOK['tx3']};'>이력: "
-                       f"{_uk._esc(_log224[-1])}</span>" if _log224 else '')
-                    + "</p>")
-            st.markdown("".join(_why_html), unsafe_allow_html=True)
-
-        # ── ②' 업종·시장 국면 — **서술만 한다** (라운드 214 · 사용자 요청) ──
-        # *"내 포트폴리오 견해에 대해서 섹터별 어떤지 시장상황도 보고 … 이런 거에
-        #   대한 판단 엔진도 만들어야 하지 않을까?"*
-        # 여기서 **점수를 만들지 않는다.** 포트폴리오 '점수'를 내려면 문턱이
-        # 필요한데, 원장은 **종목 단위**라 포트폴리오 단위 성적을 잴 수 없어
-        # 사전등록·실측이 불가능하다 (§2 — 잴 수 없는 문턱은 감이다). 그래서
-        # **잰 것만 서술한다** — 업종 비중은 산수(매입원가 · :4709 와 같은 정의),
-        # 업종 성적은 `sector_cycle.ledger_perf`(표시 전용 · 라운드 44), 국면은
-        # 종목 상세와 **같은 함수**(`_market_state_214`)가 낸 라벨이다 (§4).
+        # ── ③ 구성 — 업종 비중(매입원가 · 산수) · 집중도 ───────────────
+        # 업종은 스냅샷의 `snap_sector`(종목을 열 때 엔진이 읽은 값). ETF 는 업종이
+        # 구조상 없다(R218) — 못 채운 것과 가른다(§3). 업종 원장 성적(표시 전용 ·
+        # 라운드 44)과 그 읽는 법(R223)은 아래 '상세'에 둔다 — 숫자만 앞에 세우면
+        # 그게 판단이 된다.
         _sec214, _sec_unknown, _sec_etf = {}, [], []
-        # 라운드 223 — ETF 는 업종이 **구조상 없다**(R218). "종목을 열면 채워집니다"
-        #   는 보통주 얘기다. 못 채운 것과 없는 것을 가른다(§3). ETF 목록을 못
-        #   읽으면 가르지 않는다 — 지어내지 않는다.
         try:
             import json as _json223
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -5811,54 +5839,77 @@ else:
                 _sec_etf.append(_nm169)
             else:
                 _sec_unknown.append(_nm169)
-        if _sec214 or _sec_unknown:
-            _sec_tot = sum(_sec214.values())
-            _sec_lines = []
+        _sec_tot = sum(_sec214.values())
+        _hhi = (sum((_v / _sec_tot) ** 2 for _v in _sec214.values()) if _sec_tot else None)
+        _sec_perf226 = []                       # 상세용 — (업종, 비중, 원장 성적 문구)
+        if _sec214:
+            _bars226 = []
             for _sc, _v in sorted(_sec214.items(), key=lambda t: -t[1]):
                 _w = _v / _sec_tot * 100.0 if _sec_tot else 0.0
+                _bars226.append(dict(label=_sc, pct=_w))
                 _perf = ''
                 try:
                     import sector_cycle as _sc214
                     _lp = _sc214.ledger_perf(_sc)
                     if _lp and _lp.get('n'):
-                        _perf = (f" · 표본 {_lp['n']:,}건뿐" if _lp.get('small')
-                                 else f" · 이 업종 매수권 원장 적중 "
-                                      f"{_lp['hit']:.0f}%(n={_lp['n']:,})")
+                        _perf = (f"표본 {_lp['n']:,}건뿐" if _lp.get('small')
+                                 else f"매수권 원장 적중 {_lp['hit']:.0f}% (n={_lp['n']:,})")
                 except Exception:                              # noqa: BLE001
                     _perf = ''                # 실측 표 하나 때문에 화면이 죽지 않는다
-                _sec_lines.append(f"{_sc} **{_w:.0f}%**{_perf}")
-            _hhi = (sum((_v / _sec_tot) ** 2 for _v in _sec214.values())
-                    if _sec_tot else None)
-            _sec_md = "**업종별 (매입원가 비중)** — " + (
-                " · ".join(_sec_lines) if _sec_lines else "업종을 아직 못 읽었습니다")
-            if _hhi:
-                _sec_md += (f"  \n업종 집중도 HHI {_hhi:.2f} · 유효 업종 수 "
-                            f"{1.0 / _hhi:.1f}개 (1에 가까울수록 한 업종에 쏠림)")
-            # 라운드 223 — 사용자: "섹터별로 좋은지 평가를 내리는 게 좋지 않을까?"
-            #   위 업종별 적중(53~70%)의 차이는 표본·국면 조성 차이 안에 있어
-            #   업종을 고르는 근거가 못 된다 — R46 업종 게이트 기각("업종 문제가
-            #   아니다") · R181 은 블라인드 날짜 부족으로 재측정을 전방 재평가
-            #   뒤로 미뤘다. 숫자만 보여 주고 이 말을 안 하면 사용자는 높은 업종을
-            #   고르라는 뜻으로 읽는다(§9). 날짜는 forward_eval 한 곳에서 읽는다.
-            try:
-                import forward_eval as _fe223
-                _fed223 = _fe223.eval_date() or '전방 재평가일 미기록'
-            except Exception:                                  # noqa: BLE001
-                _fed223 = '전방 재평가일 미기록'
-            _sec_md += (f"  \n위 업종별 적중 차이는 **업종을 고르는 근거가 못 됩니다** — "
-                        f"표본·국면 조성 차이 안에 있고, 업종 게이트는 실측에서 기각됐습니다"
-                        f"(R46). 업황 조정은 {_fed223} 전방 재평가 뒤 다시 잽니다(R181). "
-                        f"이 표는 비중을 세어 보여 줄 뿐입니다.")
+                _sec_perf226.append((_sc, _w, _perf))
+            _hhi_txt = (f" — 업종 집중도 HHI {_hhi:.2f} · 유효 업종 수 {1.0 / _hhi:.1f}개"
+                        f" (1에 가까울수록 한 업종에 쏠림)" if _hhi else '')
+            st.markdown(f"**업종별 (매입원가 비중)**{_hhi_txt}")
+            _uk.bar_list(_bars226, theme=_theme)
             if _sec_etf:
-                _sec_md += ("  \nETF(업종 없음 · 구조상): " + ", ".join(_sec_etf[:5])
-                            + (f" 외 {len(_sec_etf) - 5}" if len(_sec_etf) > 5 else '')
-                            + " — 위 업종 비중에는 들어 있지 않습니다")
-            if _sec_unknown:
-                _sec_md += ("  \n업종 미확인: " + ", ".join(_sec_unknown[:5])
-                            + (f" 외 {len(_sec_unknown) - 5}"
-                               if len(_sec_unknown) > 5 else '')
-                            + " — 종목을 열면 채워집니다")
-            st.markdown(_sec_md)
+                st.caption("ETF(업종 없음 · 구조상): " + ", ".join(_sec_etf[:5])
+                           + (f" 외 {len(_sec_etf) - 5}" if len(_sec_etf) > 5 else '')
+                           + " — 위 업종 비중에는 들어 있지 않습니다")
+        elif _sec_unknown or _sec_etf:
+            st.markdown("**업종별 (매입원가 비중)** — 업종을 아직 못 읽었습니다")
+
+        # ── ④ 채울 것 — 값이 비어 판단이 비는 자리 (§3) ──────────────────
+        # 사용자: "어디 부분을 채울지". 무엇을 사라는 뜻이 아니라 **어느 값이 없어서
+        # 판단이 비는지**다. 각 줄은 이유와 채우는 길을 같이 적는다.
+        _gaps226 = []
+        if _pf_noprice:
+            _gaps226.append(("현재가 미수신이라 판단에서 뺀 종목", _pf_noprice,
+                             "시세를 다시 받으면 채워집니다"))
+        if _pf_nojudge:
+            _gaps226.append(("엔진 값이 없어 판단하지 못한 종목", _pf_nojudge,
+                             "위 '지금 계산해서 채우기'로 채웁니다"))
+        if _nm_noqty226:
+            _gaps226.append(("매입가는 있고 수량이 없는 종목", _nm_noqty226,
+                             "수량을 적어야 비중·물타기 판정이 나옵니다"))
+        if _nm_avg_hold226:
+            _gaps226.append(("물타기 미판정 (표본·데이터 게이트)", _nm_avg_hold226,
+                             "불가가 아니라 판단하지 않은 것입니다 — 표본이 쌓이면 판정합니다"))
+        if _nm_plan_exp226:
+            _gaps226.append((f"보유 계획 창({_days226}일) 경과", _nm_plan_exp226,
+                             "종목을 열면 기준값을 다시 잽니다"))
+        if _sec_unknown:
+            _gaps226.append(("업종 미확인", _sec_unknown, "종목을 열면 채워집니다"))
+        if _gaps226:
+            _gap_html = [f"<p style='margin:0 0 6px 2px; font-size:13px; color:{_TOK['tx2']}; "
+                         f"font-weight:500;'>채울 것 — 값이 비어 판단이 비는 자리</p>"]
+            for _lbl226, _names226, _how226 in _gaps226:
+                _v = sorted(str(x) for x in _names226)
+                _gap_html.append(
+                    f"<div style='display:flex; gap:10px; align-items:baseline; padding:5px 0; "
+                    f"border-top:1px solid {_TOK['border']}; font-size:13px;'>"
+                    f"<span style='color:{_TOK['tx1']}; min-width:220px;'>{_uk._esc(_lbl226)} "
+                    f"<b style='color:{_TOK['warn']};'>{len(_v)}</b></span>"
+                    f"<span style='color:{_TOK['tx2']}; flex:1;'>"
+                    f"{_uk._esc(', '.join(_v[:4]) + (f' 외 {len(_v) - 4}' if len(_v) > 4 else ''))}"
+                    f"</span><span style='color:{_TOK['tx3']}; font-size:12px;'>"
+                    f"{_uk._esc(_how226)}</span></div>")
+            st.markdown(f"<div style='background:{_TOK['bg2']}; border-radius:14px; "
+                        f"padding:10px 16px; margin-top:8px;'>" + ''.join(_gap_html)
+                        + "</div>", unsafe_allow_html=True)
+        elif _pf_held:
+            st.caption("채울 것 없음 — 보유 행 전부 현재가·엔진 값·수량이 있습니다.")
+
+        # ── ⑤ 시장 국면 — 종목 상세와 같은 함수가 낸 라벨 (§4) ───────────
         _ms214 = _market_state_214()
         if _ms214 and _ms214.get('ko'):
             _rg_md = f"**시장 국면** — {_ms214['ko']}"
@@ -5873,25 +5924,48 @@ else:
         else:
             st.caption("시장 국면 — 지수를 못 받아 판정하지 않았습니다 (지어내지 않습니다).")
 
-        # ── ③ 못 잰 것을 밝힌다 (§3) ────────────────────────────────
-        if _pf_noprice:
-            st.caption("현재가 미수신이라 판단에서 뺀 종목: "
-                       + ", ".join(_pf_noprice[:6])
-                       + (f" 외 {len(_pf_noprice) - 6}" if len(_pf_noprice) > 6
-                          else ''))
-        if _pf_nojudge:
-            st.caption("엔진 값이 없어 판단하지 못한 종목: "
-                       + ", ".join(_pf_nojudge[:6])
-                       + (f" 외 {len(_pf_nojudge) - 6}" if len(_pf_nojudge) > 6
-                          else '')
-                       + " — 위 '지금 계산해서 채우기' 로 채울 수 있습니다.")
-
-        # ── ④ 이 견해가 무엇이고 무엇이 아닌가 (§9) ────────────────
-        # 라운드 223 — 이 문구가 '원장 184,759건'을 날짜 없이 박고 있었다(지금
-        #   250,725). 잰 날짜와 당시 행수는 손으로 적지 않고 R159 의 산출물
-        #   (`data/census_r159.json` 의 made · ledger_rows)에서 읽는다 — 그 파일은
-        #   판정한 날 그대로 두는 것이 맞고(R107), 옛 재평가일 리터럴을 .py 에
-        #   박으면 R78 의 잠금에 걸린다. 못 읽으면 라운드 번호만 적는다(§3).
+        # ── ⑥ 상세 — 접어 둔다: 종목별 사유(짧은 판) · 업종 원장 성적 · 이 견해의 범위 ──
+        # 긴 문장(hold_why)은 종목 상세가 그리고, 여기서는 같은 함수의 짧은 판
+        # (hold_brief)을 그린다(§4 · 한 함수 두 판). 업종별 적중은 R223 의 읽는 법과
+        # 반드시 같이 간다 — 숫자만 보여 주면 그게 판단이 된다.
+        _det226 = []
+        _brief_rows226 = [(nm, act) for nm, act, *_ in _pf_held
+                          if act and (act.get('hold_brief') or act.get('hold_why'))]
+        if _brief_rows226:
+            _det226.append(f"<p style='margin:0 0 4px 0; color:{_TOK['tx1']}; font-weight:700;'>"
+                           f"종목별 사유</p>")
+            for _nm224, _act224 in sorted(_brief_rows226, key=lambda t: t[0]):
+                _bits = _act224.get('hold_brief') or _act224.get('hold_why') or []
+                _log224 = (_act224.get('hold_log') or [])
+                _det226.append(
+                    f"<p style='margin:0 0 3px 0; color:{_TOK['tx2']};'>"
+                    f"<b style='color:{_TOK[_act224['tone']]};'>{_uk._esc(_nm224)}</b> · "
+                    f"{_uk._esc(_act224['label'])} — {' · '.join(_uk._esc(w) for w in _bits)}"
+                    + (f"<br><span style='color:{_TOK['tx3']};'>이력: {_uk._esc(_log224[-1])}</span>"
+                       if _log224 else '')
+                    + "</p>")
+            _det226.append(f"<p style='margin:6px 0 10px 0; color:{_TOK['tx3']};'>적정가의 "
+                           f"'도달 %'는 같은 국면·구역의 원장 케이스가 20봉 안에 그만큼 오른 "
+                           f"비율입니다. 시간은 재지 않았고, 이 창에서 닿기 어려운 크기면 "
+                           f"적정가는 그 보유의 이유가 못 됩니다 — 기다리는 비용은 사용자가 "
+                           f"정합니다. 어느 줄도 새 문턱이 아닙니다.</p>")
+        if _sec_perf226:
+            try:
+                import forward_eval as _fe223
+                _fed223 = _fe223.eval_date() or '전방 재평가일 미기록'
+            except Exception:                                  # noqa: BLE001
+                _fed223 = '전방 재평가일 미기록'
+            _det226.append(f"<p style='margin:0 0 4px 0; color:{_TOK['tx1']}; font-weight:700;'>"
+                           f"업종별 원장 성적 (표시 전용)</p>")
+            _det226.append("<p style='margin:0 0 4px 0;'>" + " · ".join(
+                f"{_uk._esc(_sc)} <b>{_w:.0f}%</b>" + (f" — {_uk._esc(_perf)}" if _perf else '')
+                for _sc, _w, _perf in _sec_perf226) + "</p>")
+            _det226.append(
+                f"<p style='margin:0 0 10px 0; color:{_TOK['tx3']};'>위 업종별 적중 차이는 "
+                f"<b>업종을 고르는 근거가 못 됩니다</b> — 표본·국면 조성 차이 안에 있고, "
+                f"업종 게이트는 실측에서 기각됐습니다(R46). 업황 조정은 {_uk._esc(_fed223)} "
+                f"전방 재평가 뒤 다시 잽니다(R181). 이 표는 비중을 세어 보여 줄 뿐입니다.</p>")
+        # 이 견해의 범위 (§9) — 잰 날짜·행수·판정 수치는 R159 산출물에서 읽는다 (R223)
         try:
             import json as _json159
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -5908,18 +5982,25 @@ else:
         except Exception:                                      # noqa: BLE001
             _c159_when = "실측 시점은 산출물을 못 읽어 미기록"
             _c159_verdict = "판정 수치는 산출물을 못 읽어 미기록"
+        _det226.append(f"<p style='margin:0 0 4px 0; color:{_TOK['tx1']}; font-weight:700;'>"
+                       f"이 견해의 범위</p>")
+        _det226.append(
+            f"<p style='margin:0; color:{_TOK['tx2']};'><b>하는 일</b> — 위 표의 판단을 세어서 "
+            f"보여 줍니다. 판단은 엔진이 발표한 가격선(버틸 수 없는 가격 · 팔 가격 1차 · 목표 "
+            f"매수가)과 현재가를 견준 것이고, 여기서 새 기준을 만들지 않았습니다.<br>"
+            f"<b>하지 않는 일</b> — 비중을 얼마로 하라거나 무엇을 사라고 하지 않습니다. "
+            f"이 엔진의 매수 신호에는 비용 차감 뒤 실전에서 <b>재현되는 우위가 확인되지 "
+            f"않았습니다</b> (라운드 159·168 · {_uk._esc(_c159_when)} — {_uk._esc(_c159_verdict)}. "
+            f"원장은 그 뒤 커졌고 결론은 R215·R216 에서 다시 확인했습니다). 평균 매수가는 "
+            f"보유 판단에만 쓰고 점수·적정가·예측에는 넣지 않습니다.</p>")
+        st.markdown(_uk.disclose("상세 — 종목별 사유 · 업종 원장 성적 · 이 견해의 범위",
+                                 ''.join(_det226), color=_TOK['tx3']),
+                    unsafe_allow_html=True)
+        # 한 줄 면책은 접지 않는다 (§9)
         _uk.note(
-            "**이 견해가 하는 일** — 위 표의 판단을 **세어서** 보여 줄 "
-            "뿐입니다. 판단 자체는 엔진이 발표한 가격선(버틸 수 없는 가격 · "
-            "팔 가격 1차 · 목표 매수가)과 현재가를 견준 것이고, 여기서 새 "
-            "기준을 만들지 않았습니다.  \n"
-            "**하지 않는 일** — 비중을 얼마로 하라거나 무엇을 사라고 하지 "
-            "않습니다. 이 엔진의 매수 신호에는 **비용 차감 뒤 실전에서 "
-            f"재현되는 우위가 확인되지 않았습니다** (라운드 159·168 · "
-            f"{_c159_when} — {_c159_verdict}. 원장은 그 뒤 "
-            "커졌고 결론은 R215·R216 에서 다시 확인했습니다). "
-            "평균 매수가는 보유 판단에만 쓰고 점수·적정가·예측에는 "
-            "넣지 않습니다.", theme=_theme)
+            "이 엔진의 매수 신호에는 비용 차감 뒤 실전에서 **재현되는 우위가 확인되지 않았습니다** "
+            f"(라운드 159·168 · {_c159_when} — {_c159_verdict}). 무엇을 사라거나 비중을 정하라고 "
+            "하지 않습니다.", theme=_theme)
 
     _uk.spacer(10)
     _wc1, _wc2 = st.columns([1, 3])

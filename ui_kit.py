@@ -749,6 +749,74 @@ def note(text: str, theme: str = 'dark') -> None:
         f"line-height:1.6;'>{_esc_md(text)}</p>", unsafe_allow_html=True)
 
 
+def chip_row(items, theme: str = 'dark', title: str = '') -> None:
+    """상태 칩 한 줄 (라운드 226) — [{'label','count','tone'(선택),'sub'(선택)}].
+
+    count 가 0 인 칩은 그리지 않는다(빈 칩은 정보가 아니다). 글자는 12px 이상(§77).
+    판단을 만들지 않는다 — 부르는 쪽이 이미 센 수를 그대로 그린다.
+    """
+    t = tokens(theme)
+    chips = []
+    for it in items:
+        try:
+            n = int(it.get('count') or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n <= 0:
+            continue
+        col = t.get(it.get('tone') or '', t['tx2'])
+        sub = (f"<span style='margin-left:6px; font-size:12px; color:{t['tx3']};'>"
+               f"{_esc(it.get('sub'))}</span>" if it.get('sub') else '')
+        chips.append(
+            f"<span style='display:inline-flex; align-items:center; gap:6px; "
+            f"padding:5px 11px; border-radius:999px; background:{t['card']}; "
+            f"border:1px solid {t['line']}; font-size:13px; color:{t['tx1']}; "
+            f"white-space:nowrap;'>"
+            f"<span style='width:8px; height:8px; border-radius:50%; background:{col}; "
+            f"display:inline-block;'></span>{_esc(it['label'])} "
+            f"<b style='color:{col}; font-variant-numeric:tabular-nums;'>{n}</b>{sub}</span>")
+    if not chips:
+        return
+    head = (f"<p style='margin:0 0 6px 2px; font-size:13px; color:{t['tx2']}; "
+            f"font-weight:500;'>{_esc(title)}</p>" if title else '')
+    st.markdown(head + "<div style='display:flex; flex-wrap:wrap; gap:8px;'>"
+                + ''.join(chips) + "</div>", unsafe_allow_html=True)
+
+
+def bar_list(items, theme: str = 'dark', title: str = '', max_rows: int = 6) -> None:
+    """비중 막대 목록 (라운드 226) — [{'label','pct','sub'(선택)}] · pct 는 0~100.
+
+    상위 max_rows 를 그리고 나머지는 '기타'로 합친다(합은 100 을 넘지 않는다).
+    """
+    t = tokens(theme)
+    rows_ = []
+    seq = sorted((it for it in items if it.get('pct') is not None),
+                 key=lambda it: -float(it['pct']))
+    head_rows, rest = seq[:max_rows], seq[max_rows:]
+    if rest:
+        head_rows = head_rows + [dict(label=f"기타 {len(rest)}개",
+                                      pct=sum(float(it['pct']) for it in rest))]
+    for it in head_rows:
+        pct = max(0.0, min(100.0, float(it['pct'])))
+        sub = (f"<span style='color:{t['tx3']}; font-size:12px;'> · {_esc(it.get('sub'))}</span>"
+               if it.get('sub') else '')
+        rows_.append(
+            f"<div style='display:grid; grid-template-columns:minmax(120px,1.4fr) 3fr 56px; "
+            f"align-items:center; gap:10px; padding:5px 0;'>"
+            f"<span style='font-size:13px; color:{t['tx1']}; overflow:hidden; "
+            f"text-overflow:ellipsis; white-space:nowrap;'>{_esc(it['label'])}{sub}</span>"
+            f"<span style='height:8px; background:{t['line']}; border-radius:4px; overflow:hidden;'>"
+            f"<span style='display:block; width:{pct:.1f}%; height:100%; background:{t['brand']};'></span></span>"
+            f"<span style='font-size:13px; color:{t['tx2']}; text-align:right; "
+            f"font-variant-numeric:tabular-nums;'>{pct:.0f}%</span></div>")
+    if not rows_:
+        return
+    head = (f"<p style='margin:0 0 4px 2px; font-size:13px; color:{t['tx2']}; "
+            f"font-weight:500;'>{_esc(title)}</p>" if title else '')
+    st.markdown(head + f"<div style='background:{t['card']}; border-radius:14px; "
+                f"padding:10px 16px;'>" + ''.join(rows_) + "</div>", unsafe_allow_html=True)
+
+
 def spacer(px: int = 24) -> None:
     st.markdown(f"<div style='height:{px}px'></div>", unsafe_allow_html=True)
 
@@ -1275,6 +1343,54 @@ def watch_action(row, price=None, today=None):
         d['hold_why'] = [w for w in why if w]
         _log = [s for s in str((row or {}).get('snap_hold_log') or '').split(' | ') if s]
         d['hold_log'] = _log
+        # ── 짧은 판 (라운드 226 · 사용자: "너무 길다 · 핵심만") — 같은 재료를 낱말로.
+        #   긴 문장(hold_why)은 종목 상세가, 짧은 판(hold_brief)은 포트폴리오 견해가 쓴다.
+        #   두 판 다 이 함수 하나에서 나온다(§4). 문턱 없음.
+        brief = []
+        _k = d.get('kind')
+        if _k == '일부 정리' and h_trim:
+            brief.append(f"1차 매도가 {h_trim:,.0f}원 넘음 {(px / h_trim - 1) * 100:+.1f}%")
+        elif _k == '정리 검토' and h_stop:
+            brief.append(f"버틸 수 없는 가격 {h_stop:,.0f}원 아래")
+        elif _k == '추가 매수 가능' and buy:
+            brief.append(f"진입가 {buy:,.0f}원 이하")
+        elif _k == '보유 유지':
+            brief.append('두 선 사이' if (h_stop and h_trim) else
+                         ('손절선 위' if h_stop else '1차 매도가 아래'))
+        if _at and (h_stop or h_trim):
+            try:
+                import datetime as _dt2
+                import ledger_view as _lv2
+                _td2 = today or _dt2.date.today()
+                _age2 = (_td2 - _dt2.date.fromisoformat(_at)).days
+                _days2 = _lv2.bars_to_days(_lv2.HORIZON_BARS)
+                brief.append(f"계획 창 경과 · 다시 잼" if _age2 >= _days2
+                             else f"계획 {_at[5:]} · {_age2}/{_days2}일")
+            except Exception:                                  # noqa: BLE001
+                brief.append(f"계획 {_at[5:]}")
+        if _fair and px:
+            _up2 = (_fair / px - 1.0) * 100.0
+            if _up2 > 0:
+                try:
+                    import ledger_view as _lv3
+                    _pr = _lv3.parse_reach_line((row or {}).get('snap_fair_reach'))
+                except Exception:                              # noqa: BLE001
+                    _pr = None
+                brief.append(f"적정가 {_up2:+.0f}% · {_pr['bars']}봉 도달 {_pr['share']:.1f}%"
+                             f"(n={_pr['n']:,})" if _pr else f"적정가 {_up2:+.0f}%")
+            else:
+                brief.append(f"현재가가 적정가보다 {-_up2:.0f}% 위")
+        if _ad_cls == '가능':
+            brief.append('물타기 가능 · 진입가 이하에서만' if _k != '추가 매수 가능' else '물타기 가능')
+        elif _ad_cls == '시장게이트':
+            brief.append('물타기 불가 · 신규 매수 판정')
+        elif _ad_cls == '포지션미달':
+            brief.append(f"물타기 불가 · 조건 {len(_ad_fail)}개 미충족")
+        elif _ad_cls == '보류':
+            brief.append('물타기 미판정')
+        if _stale and _ad_cls:
+            brief.append('R224 이전 스탬프')
+        d['hold_brief'] = brief
         return d
 
     if paid and px:
@@ -1337,7 +1453,7 @@ def watch_action(row, price=None, today=None):
         '권장가 괴리 과다': ('괴리 과다', 'warn'),
         '신뢰도·표본 확보 대기': ('표본 대기', 'tx3'),
         '데이터 부족': ('데이터 부족', 'tx3'),
-        '추천 제외': ('사지 않음', 'neg'),
+        '추천 제외': ('추천 제외', 'neg'),        # 라운드 226 — '사지 않음'은 판정이 아니라 지시처럼 읽혔다
     }
     lbl, tone = _short.get(bucket, (bucket[:7], 'tx3'))
     return dict(kind=bucket, label=lbl, tone=tone, held=False, why=bucket)

@@ -20611,8 +20611,10 @@ with open(_os.path.join(PROJ, 'ledger_view.py'), encoding='utf-8') as _f241:
     _lvs241 = _f241.read()
 check("도달 비율은 창 끝 종가 수익(close_return_pct)을 쓴다 — mfe 는 청산 봉까지만 잰다",
       "ret_key='close_return_pct'" in _lvs241)
-check("견해와 종목 상세가 같은 함수(watch_action)의 hold_why 를 그린다 (§4)",
-      "act.get('hold_why')" in _w231 and "(_act224 or {}).get('hold_why')" in _w231)
+# 라운드 226 — 견해는 같은 함수의 **짧은 판**(hold_brief)을, 종목 상세는 긴 문장(hold_why)을
+#   그린다. 두 판 다 watch_action 하나에서 나온다(§4 · 한 함수 두 판).
+check("견해와 종목 상세가 같은 함수(watch_action)의 hold_brief/hold_why 를 그린다 (§4)",
+      "act.get('hold_brief')" in _w231 and "(_act224 or {}).get('hold_why')" in _w231)
 # ── ⑥ 옛 '물타기 안전성 계산기' 가 없다 ─────────────────────────────────
 for _lit241 in ('머리 가격 (최상투 고점)', '1차 비중 30% 축소', "realtime_price * 1.05)",
                 'add_q = max(1, int(user_quantity', "final_score >= 68:\n        add_buy_status"):
@@ -20669,6 +20671,98 @@ check("포트폴리오 탭이 합성 점수의 가중치·문턱이 실측되지
 with open(_os.path.join(PROJ, 'docs', 'RESULT_R225_HOLDER_CARD.md'), encoding='utf-8') as _f242:
     _res242 = _f242.read()
 check("결과 문서가 값·판정 불변을 적는다", '값·판정 불변' in _res242 and 'R225' in _res242)
+
+print()
+print("§243 R226 — 포트폴리오 견해를 한눈에 판으로: 할 일 칩 · 구성 막대 · 채울 것 · 상세는 접는다 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "포트폴리오 너무 길다 · 핵심만 간략하게 · 잘 짜여 있는지 · 어디를 채울지 ·
+#   디자인은 직관적으로 · 문구는 프로페셔널하게." 견해 절이 본문 14,882자(2026-09-07
+#   실측)였고, 보유 16행마다 같은 문장("보유 기준값은 … 에 잰 것 · 창 28일 중 3일째 ·
+#   이 창에서 닿기 어려운 크기면 … 기다리는 비용은 사용자가 정합니다")이 되풀이됐다.
+#   판단은 하나도 안 바꿨다 — 세고 묶는 방법과 말만 바꿨다(§4). "잘 짜여 있는가"에 점수를
+#   내지 않는다(원장이 종목 단위 · R214 · §2) — 집중도·비중·할 일·채울 것을 낸다.
+import ui_kit as _uk243
+import ledger_view as _lv243
+check("킷에 칩 줄·비중 막대 도우미가 있다 (판단을 만들지 않는 그리기 부품)",
+      callable(getattr(_uk243, 'chip_row', None)) and callable(getattr(_uk243, 'bar_list', None)))
+with open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8') as _f243:
+    _uks243 = _f243.read()
+_cr243 = _uks243[_uks243.index('def chip_row('):_uks243.index('def bar_list(')]
+_bl243 = _uks243[_uks243.index('def bar_list('):_uks243.index('def spacer(')]
+check("칩·막대의 글자는 12px 이상이다 (§77 · 타이포 하한)",
+      all(int(m) >= 12 for m in _re.findall(r'font-size:(\d+)px', _cr243 + _bl243)))
+check("count 0 인 칩은 그리지 않는다 (빈 칩은 정보가 아니다)", 'if n <= 0:\n            continue' in _cr243)
+check("막대는 상위 max_rows 만 그리고 나머지는 '기타'로 합친다", "label=f\"기타 {len(rest)}개\"" in _bl243)
+# ── 견해 절 — 세고 묶는다 · 새 판단 없음 ─────────────────────────────────
+# ⚠️ '전체 비우기' 버튼은 사이드바에도 있다 — 끝 앵커는 시작 뒤에서 찾는다 (같은 실수로
+#   web_app 을 한 번 망가뜨렸다 · 슬라이스가 비면 검사가 통째로 거짓 실패한다).
+_vs243 = _w231.index('st.subheader("내 포트폴리오 견해")')
+_v243 = _w231[_vs243:_w231.index("if st.button(\"전체 비우기\"", _vs243)]
+check("검사 슬라이스가 비어 있지 않다 (앵커가 시작 뒤에 있다)", len(_v243) > 2000, scanned=len(_v243))
+check("할 일 칩이 순서표(_WL_SELL_RANK · _WL_BUY_RANK)의 kind 를 그대로 센다 (새 문턱 없음)",
+      "for k in _WL_SELL_RANK]" in _v243 and "_wseq226 = ('지금 매수 가능',) + tuple(_WL_BUY_RANK)" in _v243)
+check("견해는 watch_action 을 다시 부르지 않는다 — _wl_acts 만 읽는다 (§4)",
+      "for _nm226, _act226, _row226, _px226 in _wl_acts:" in _v243 and '_uk.watch_action(' not in _v243)
+check("손댈 것이 있는 kind 만 이름을 적는다 — 보유 유지는 안 적는다",
+      "for k in ('정리 검토', '일부 정리', '추가 매수 가능'):" in _v243
+      and "지금 손댈 것은 없습니다" in _v243)
+check("구성은 산수(매입원가 비중)와 집중도만 앞에 두고 업종 원장 성적은 상세로 내린다",
+      "_uk.bar_list(_bars226" in _v243 and '**업종별 (매입원가 비중)**' in _v243
+      and '업종 집중도 HHI' in _v243 and "업종별 원장 성적 (표시 전용)" in _v243)
+check("업종별 적중은 R223 의 읽는 법과 반드시 같이 간다 (숫자만 보여 주면 판단이 된다)",
+      '업종을 고르는 근거가 못 됩니다' in _v243 and '(R46)' in _v243
+      and "_fed223 = _fe223.eval_date()" in _v243)
+check("채울 것 — 값이 비어 판단이 비는 자리를 이유·채우는 길과 함께 낸다 (§3)",
+      '현재가 미수신이라 판단에서 뺀 종목' in _v243 and '엔진 값이 없어 판단하지 못한 종목' in _v243
+      and '매입가는 있고 수량이 없는 종목' in _v243 and '물타기 미판정 (표본·데이터 게이트)' in _v243
+      and '보유 계획 창(' in _v243 and '업종 미확인' in _v243
+      and 'ETF(업종 없음 · 구조상)' in _v243 and '종목을 열면 채워집니다' in _v243)
+check("채울 것이 없으면 그렇게 말한다 (0건은 '없다'라고 적어야 정보다)", '채울 것 없음' in _v243)
+check("계획 창 경과는 ledger_view 의 환산(20봉=28일)으로 센다 — 손으로 적은 28 이 없다",
+      "_days226 = _lv217.bars_to_days(_lv217.HORIZON_BARS)" in _v243
+      and ").days >= _days226" in _v243)
+check("상세(종목별 사유 · 업종 성적 · 범위)는 접는다 — disclose 하나",
+      "_uk.disclose(\"상세 — 종목별 사유 · 업종 원장 성적 · 이 견해의 범위\"" in _v243)
+check("종목별 사유는 같은 함수의 짧은 판(hold_brief)이다 · 없으면 긴 판으로 (§4)",
+      "act.get('hold_brief') or act.get('hold_why')" in _v243)
+check("한 줄 면책은 접지 않는다 (§9) — 우위 없음 · 잰 날짜와 수치는 R159 산출물에서",
+      "재현되는 우위가 확인되지 않았습니다**" in _v243 and "_c159_be.get('blind_hit_pct')" in _v243
+      and "'하는 일' 과 '하지 않는 일'" not in _v243)
+check("'안 산 것'은 화면에서 '미보유'로 — 정렬·판단 코드는 그대로",
+      "('미보유', _wl_free," in _w231 and "('안 산 것', _wl_free," not in _w231
+      and _w231.count(".sort(key=lambda it: str(it[1].get('name') or ''))") == 2)
+check("'사지 않음' 라벨은 '추천 제외'로 (지시처럼 읽히지 않게)",
+      "'추천 제외': ('추천 제외', 'neg')" in _uks243)
+# ── hold_brief — 심기 ─────────────────────────────────────────────────────
+import datetime as _dt243
+_b243 = {'paid': 10000, 'qty': 10, 'snap_px': 10500, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
+         'snap_hold_at': '2026-09-04', 'snap_bucket': '눌림목 매수 대기', 'snap_buy': 10200,
+         'snap_fair': 14000, 'snap_fair_reach': _lv243.reach_line(3.1, 1204, 33.3, 'BULL', 'z'),
+         'snap_avg_down_ok': '가능', 'snap_avg_down_fail': _uk243.AVG_DOWN_NO_FAIL, 'snap_new_entry': '가능'}
+_td243 = _dt243.date(2026, 9, 7)
+_a243 = _uk243.watch_action(_b243, 10500, today=_td243)
+_bb243 = ' · '.join(_a243.get('hold_brief') or [])
+check("짧은 판: 두 선 사이 · 계획 날짜/진행 · 적정가 %·도달 %(n) · 물타기",
+      '두 선 사이' in _bb243 and '계획 09-04 · 3/28일' in _bb243
+      and '적정가 +33% · 20봉 도달 3.1%(n=1,204)' in _bb243
+      and '물타기 가능 · 진입가 이하에서만' in _bb243)
+check("짧은 판은 긴 판보다 짧다 (그래야 '한눈에'다)",
+      len(_bb243) < len(' · '.join(_a243.get('hold_why') or [])))
+_a2_243 = _uk243.watch_action(dict(_b243, snap_hold_at='2026-08-01', snap_fair=9000,
+                                   snap_avg_down_ok='불가',
+                                   snap_avg_down_fail=_uk243.AVG_DOWN_MARKET_GATE), 11200, today=_td243)
+_bb2_243 = ' · '.join(_a2_243.get('hold_brief') or [])
+check("짧은 판: 1차 매도가 넘음 +% · 창 경과 · 적정가 아래 · 시장게이트",
+      '1차 매도가 11,000원 넘음 +1.8%' in _bb2_243 and '계획 창 경과 · 다시 잼' in _bb2_243
+      and '현재가가 적정가보다 20% 위' in _bb2_243 and '물타기 불가 · 신규 매수 판정' in _bb2_243)
+check("도달 비율 한 줄은 쓰는 쪽과 읽는 쪽이 같은 모듈이다 (reach_line ↔ parse_reach_line)",
+      (_lv243.parse_reach_line(_lv243.reach_line(0.0, 5, 12.5, 'BEAR', 'z')) or {}).get('share') == 0.0
+      and _lv243.parse_reach_line('x') is None)
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R226_PORTFOLIO_GLANCE.md'), encoding='utf-8') as _f243:
+    _res243 = _f243.read()
+check("결과 문서가 길이 실측(전·후)과 '판단 불변'을 적는다",
+      '14,882' in _res243 and '판단 불변' in _res243)
 
 print()
 print("=" * 72)

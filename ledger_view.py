@@ -176,3 +176,24 @@ def reach_line(share, n, upside_pct, regime=None, zone=None, bars=HORIZON_BARS):
         where = f"({regime or '?'} · {zone or '?'}) "
     return (f"적정가까지 {float(upside_pct):+.1f}% · 같은 국면·구역 {where}원장 {int(n):,}건 중 "
             f"{int(bars)}봉 안에 그만큼 오른 비율 {float(share):.1f}%")
+
+
+_REACH_RE = None
+
+
+def parse_reach_line(text):
+    """`reach_line` 이 만든 한 줄을 다시 읽는다 — {upside, n, bars, share} 또는 None.
+    쓰는 쪽과 읽는 쪽이 같은 모듈에 있어야 형식이 바뀌어도 한 곳만 고친다 (§4)."""
+    global _REACH_RE
+    import re
+    if _REACH_RE is None:
+        _REACH_RE = re.compile(
+            r'적정가까지 ([+\-−]?[\d.]+)% .*?원장 ([\d,]+)건 중 (\d+)봉 안에 그만큼 오른 비율 ([\d.]+)%')
+    m = _REACH_RE.search(str(text or ''))
+    if not m:
+        return None
+    try:
+        return dict(upside=float(m.group(1).replace('−', '-')), n=int(m.group(2).replace(',', '')),
+                    bars=int(m.group(3)), share=float(m.group(4)))
+    except ValueError:
+        return None
