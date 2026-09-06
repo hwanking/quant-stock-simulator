@@ -4957,6 +4957,12 @@ if st.session_state.get('show_portfolio'):
                         st.dataframe(pd.DataFrame(
                             [{"구성요소": k, "점수": v} for k, v in pv['components'].items()]),
                             width='stretch', hide_index=True)
+                        # 라운드 225 — 이 합성 점수의 가중치와 등급 문턱은 사전등록·실측 없이
+                        #   정한 옛 값이다(R224 §5). 숫자만 보여 주면 그게 판단이 된다(R223) —
+                        #   무엇이 실측된 것이고 무엇이 아닌지 그 자리에서 말한다 (§9).
+                        st.caption("이 점수의 가중치와 등급 문턱은 사전등록·실측 없이 정한 옛 값입니다 — "
+                                   "판단은 아래 물타기 6조건과 관심종목의 보유 기준값으로 하고, "
+                                   "이 점수는 참고로만 봅니다 (R224 §5 · §9).")
 
                         # 라운드 224 — 통과/미충족 표시가 **둘 다 빈 글자**였다(이모지 걷어낼 때
                         #   같이 사라짐). 그리고 넷으로 가른 판정(avg_down_class)을 같이 낸다 (§4).
@@ -7147,8 +7153,11 @@ else:
 _rec_sub_html = (f"<p style='margin:4px 0 0 0; font-size:12px; "
                  f"color:#9DAABC; line-height:1.6;'>{rec_buy_sub}</p>"
                  if rec_buy_sub else "")
-_ex_tgt = fmt_num(four_scores.get('target_tech_1st'), suffix='원', na='산출 불가')
-_ex_stop = fmt_num(four_scores.get('stop_loss_price'), suffix='원', na='산출 불가')
+# 라운드 225 — 여기만 four_scores 를 **직접** 읽고 있었다. 값은 CORE 의 hold_trim·
+#   hold_stop 과 같은 키에서 오지만, CORE 는 정합이 깨진 값을 비운다(§4 — 화면은
+#   verdict_core 하나만 읽는다). 보유자 값은 신규 매수자 값과 다른 키다.
+_ex_tgt = fmt_num(CORE.get('hold_trim'), suffix='원', na='산출 불가')
+_ex_stop = fmt_num(CORE.get('hold_stop'), suffix='원', na='산출 불가')
 
 # 권장 매수가에 샀을 때의 레벨. 위 두 값은 **현재가** 기준이라, 아직 안 산
 # 사람에게는 맞지 않는다. 실측(라운드 22b · 30종목)에서 권장 매수가가 나온
@@ -7372,12 +7381,37 @@ if _na_head:
 
 # 보유자 목표의 도달 가능성도 같은 잣대로 적는다
 _hold_reach_html = ''
-if _t1_sig is not None and realtime_price and four_scores.get('target_tech_1st'):
-    _up = (four_scores['target_tech_1st'] / realtime_price - 1) * 100
+if _t1_sig is not None and realtime_price and CORE.get('hold_trim'):
+    _up = (CORE['hold_trim'] / realtime_price - 1) * 100
     _hold_reach_html = (
         f"<p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; "
         f"line-height:1.6;'>1차 목표까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
         f"({_sig_pct}%) 대비 <b>{_t1_sig}σ</b> · {_t1_reach}</p>")
+
+# 라운드 225 — 위 두 값은 **오늘 현재가에서 다시 잰 값**이고, 관심종목의 보유 계획은
+#   잰 날에 고정된 값이다(R224 · portfolio.hold_plan_update). 한 화면에서 두 수가 다르게
+#   보이면 어느 것이 관리 기준인지 말해야 한다(§4). 계획이 있을 때만 적고, 값은 관심종목
+#   행에서 그대로 읽는다 — 새로 계산하지 않는다.
+_hold_plan_html = ''
+try:
+    _cw225 = portfolio.normalize_code(target_ticker)
+    _row225 = next((w for w in _wl_items()
+                    if portfolio.normalize_code(w.get('code')) == _cw225), None)
+    if (_row225 and _row225.get('paid') and _row225.get('snap_hold_at')
+            and (_row225.get('snap_hold_trim') or _row225.get('snap_hold_stop'))):
+        _pt225 = fmt_num(_row225.get('snap_hold_trim'), suffix='원', na='미산출')
+        _ps225 = fmt_num(_row225.get('snap_hold_stop'), suffix='원', na='미산출')
+        _same225 = (_pt225 == _ex_tgt and _ps225 == _ex_stop)
+        _hold_plan_html = (
+            f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
+            f"관심종목 <b>보유 계획({_uk._esc(str(_row225.get('snap_hold_at'))[:10])} 기준)</b>: "
+            f"1차 매도가 <b>{_pt225}</b> · 버틸 수 없는 가격 <b>{_ps225}</b>"
+            + (" — 오늘 값과 같습니다." if _same225 else
+               " — 위 두 값은 오늘 다시 재면 나오는 값이고, <b>관리 기준은 계획 값</b>입니다. "
+               "창(20봉)이 끝나거나 두 선에 닿으면 다시 잽니다.")
+            + "</p>")
+except Exception:                                              # noqa: BLE001
+    _hold_plan_html = ''            # 관심종목을 못 읽어도 카드는 그린다 — 줄만 비운다
 
 # 논리 검사에 걸린 것은 숨기지 않고 그 자리에 적는다 (경고 없는 모순이 제일 나쁘다)
 _logic_warn_html = ''
@@ -7555,7 +7589,7 @@ st.markdown(f"""
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#4C8DFF;'>{_ex_tgt}</p></div>
         <div><p style='margin:0; font-size:12px; color:#9DAABC;'>버틸 수 없는 가격 · 손실을 끊는 선</p>
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
-      </div>{_hold_reach_html}
+      </div>{_hold_reach_html}{_hold_plan_html}
     </div>
   </div>{_na_html}{_watch_html}{_logic_warn_html}
   <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
@@ -10617,7 +10651,7 @@ with tab_scen:
             </tr>
             <tr>
                 <td><b>3. 기술적 1차 목표가 <span style='color:#9DAABC;'>(보유자 · 현재가 기준)</span></b></td>
-                <td><b style='color:#4C8DFF;'>{fmt_num(four_scores.get('target_tech_1st'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td><b style='color:#4C8DFF;'>{fmt_num((CORE or {}).get('hold_trim'), ',.0f', '원', na='산출 불가')}</b></td>
                 <td>{four_scores.get('target_tech_1st_note', '')}
                     — <b>이미 보유한 사람</b>의 기준. 신규 매수자는
                     실행 진입가 기준 {fmt_num((CORE or {}).get('new_target'), ',.0f', '원', na='미산출')}</td>
@@ -10629,7 +10663,7 @@ with tab_scen:
             </tr>
             <tr>
                 <td><b>5. 손절가 <span style='color:#9DAABC;'>(보유자 · 현재가 기준)</span></b></td>
-                <td><b style='color:#ff453a;'>{fmt_num(four_scores.get('stop_loss_price'), ',.0f', '원', na='산출 불가')}</b></td>
+                <td><b style='color:#ff453a;'>{fmt_num((CORE or {}).get('hold_stop'), ',.0f', '원', na='산출 불가')}</b></td>
                 <td>{four_scores.get('stop_loss_note', '')}
                     — 신규 매수자는 실행 진입가 기준
                     {fmt_num((CORE or {}).get('new_stop'), ',.0f', '원', na='미산출')}</td>
