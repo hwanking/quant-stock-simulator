@@ -20519,6 +20519,17 @@ check("R224 이전 스탬프는 이유에 그 사실을 단다 (등급은 같다
       and _old241.get('avg_down_class') == _new241.get('avg_down_class'))
 check("R224 이후 스탬프(snap_new_entry 있음)는 그 문구가 없다",
       _new241.get('avg_down_stale') is False and 'R224 이전 스탬프' not in str(_new241.get('avg_down_why')))
+# 실측(2026-09-07 · 16행 다시 채움) — '가능'으로 바뀐 4행이 옛 실패 목록을 안고 있었다.
+#   실패가 없으면 ''(빈 글자)를 찍었고, 병합이 None·'' 를 "못 낸 값"으로 보고 건너뛰어서다
+#   (R223 의 0 과 같은 모양). 쓰는 쪽은 '없음', 읽는 쪽은 그 낱말을 빈 목록으로.
+check("실패 없음은 빈 글자가 아니라 '없음'으로 찍는다 (병합에서 떨어지지 않게)",
+      "' · '.join(_fails) or '없음'" in _w231 and _uk241.AVG_DOWN_NO_FAIL == '없음')
+_ok241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail='없음',
+                                  snap_new_entry='가능'), 10500)
+check("읽는 쪽이 '없음'을 빈 목록으로 본다 → '가능' · 이유는 '6조건 전부 통과'",
+      _ok241.get('avg_down_class') == '가능' and '6조건 전부 통과' in str(_ok241.get('avg_down_why')))
+check("빈 글자는 병합에서 떨어진다 — 두 스탬프 자리의 병합 규칙이 그대로다 (바꾸지 않았다)",
+      _w231.count("if _v166 not in (None, ''):") == 1 and _w231.count("if _v141 not in (None, ''):") == 1)
 # ── ④ 보유 계획 고정 — 기준일에 고정 · 20봉 창 · 닿거나 끝나면 사유 로그 ─────
 _td241 = '2026-09-04'
 _r1_241 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,

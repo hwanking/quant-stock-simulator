@@ -1119,6 +1119,10 @@ WATCH_HOLD_ACTIONS = ('정리 검토', '일부 정리', '추가 매수 가능', 
 #:   잠근다 (두 벌이 되면 한쪽이 조용히 어긋난다 · §4).
 AVG_DOWN_MARKET_GATE = '신규 진입 조건 통과'
 AVG_DOWN_DATA_GATE = '데이터·표본 게이트 통과'
+#: 실패 목록이 비었을 때 파일에 남기는 글자 (라운드 224) — 빈 글자('')는 스냅샷 병합이
+#:   "못 낸 값"으로 보고 건너뛰어 옛 목록이 살아남는다. 쓰는 쪽(web_app)과 읽는 쪽이
+#:   같은 낱말을 쓴다 (§4).
+AVG_DOWN_NO_FAIL = '없음'
 
 
 def avg_down_class(ok, fails):
@@ -1203,8 +1207,10 @@ def watch_action(row, price=None, today=None):
     else:
         _ad_ok = None
     _fr = (row or {}).get('snap_avg_down_fail')
-    _ad_fail = ([s for s in str(_fr).split(' · ') if s] if isinstance(_fr, str)
-                else list(_fr or []))
+    # '없음' 은 "실패 없음"의 글자 표기다 (라운드 224 — 빈 글자는 병합에서 떨어져 옛
+    #   목록이 남는다). 목록에서 뺀다.
+    _ad_fail = ([s for s in str(_fr).split(' · ') if s and s != AVG_DOWN_NO_FAIL]
+                if isinstance(_fr, str) else list(_fr or []))
     _ad_cls, _ad_label, _ad_why = avg_down_class(_ad_ok, _ad_fail)
 
     def _held(d):
