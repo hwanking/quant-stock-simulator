@@ -1215,7 +1215,7 @@ def avg_down_class(ok, fails):
         return '가능', '물타기 가능', '6조건 전부 통과'
     if AVG_DOWN_DATA_GATE in _fail:
         return ('보류', '물타기 판정 보류',
-                '표본·데이터 게이트를 못 넘어 판단하지 않았다 — 불가가 아니라 미판정(§3)')
+                '표본·데이터 게이트를 넘지 못해 판단하지 않았습니다 — 불가가 아니라 미판정입니다')
     if _fail == [AVG_DOWN_MARKET_GATE]:
         # 라운드 224 — 첫 조건의 출처가 TOP3 깃발에서 **중앙 판정**(verdict_core.actionable)
         #   으로 바뀌었다. 사전등록 R224: 직전 관측 대비 하락 중인 매수권 케이스의
@@ -1224,8 +1224,8 @@ def avg_down_class(ok, fails):
         #   첫 조건 = 신규 매수 판정이다. 5%p 미만은 이 잣대로 못 본다(R113).
         return ('시장게이트', '물타기 불가 · 신규 매수 판정만',
                 '포지션 조건 5개는 통과 — 중앙 판정이 이 종목을 지금 살 수 있는 '
-                '후보로 보지 않는다. 물타기의 첫 조건은 신규 매수 판정과 같다(R224: '
-                '하락 중이라는 사실이 판정을 바꾼다는 증거 없음)')
+                '후보로 보지 않습니다. 물타기의 첫 조건은 신규 매수 판정과 같습니다 '
+                '(실측: 하락 중이라는 사실이 판정을 바꾼다는 증거 없음)')
     # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
     # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
     _head, _more = _fail[:3], _fail[3:]
@@ -1300,8 +1300,8 @@ def watch_action(row, price=None, today=None):
         d['avg_down_ok'] = _ad_ok
         d['avg_down_class'] = _ad_cls
         d['avg_down_label'] = _ad_label
-        d['avg_down_why'] = ((_ad_why or '') + ' · 이 판정은 R224 이전 스탬프(첫 조건이 TOP3 '
-                             '깃발이던 때) — 다시 채우면 중앙 판정으로 갱신됩니다'
+        d['avg_down_why'] = ((_ad_why or '') + ' · 이 판정은 첫 조건의 기준이 바뀌기 전에 '
+                             '찍힌 것입니다 — 다시 채우면 중앙 판정으로 갱신됩니다'
                              if _stale else _ad_why)
         d['avg_down_stale'] = _stale
         d['holder_title'] = (row or {}).get('snap_holder_title')
@@ -1389,7 +1389,7 @@ def watch_action(row, price=None, today=None):
         elif _ad_cls == '보류':
             brief.append('물타기 미판정')
         if _stale and _ad_cls:
-            brief.append('R224 이전 스탬프')
+            brief.append('옛 기준 스탬프 · 다시 채우기')
         d['hold_brief'] = brief
         return d
 

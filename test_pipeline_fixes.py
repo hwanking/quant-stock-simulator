@@ -17744,8 +17744,10 @@ check("'최적 종목'이라 부르지 않는다", '최적 종목' not in _w217,
 check("'TOP 3 추천' 표기가 사라졌다", 'TOP 3 추천' not in _w217)
 check("제목이 실제 내용(필수조건 통과)을 말한다",
       '오늘 추천 필수조건을 통과한 종목' in _w217)
+# 라운드 227 — 화면에는 라운드 번호를 안 쓴다. 잠글 것은 '우열이 아니다'와 그 근거(실측
+#   날짜 · 차이 중앙값 0.0%p)다 — R110 의 발표값이지 번호가 아니다.
 check("나열 순서가 우열이 아님을 적는다",
-      '나열 순서는 우열이 아닙니다' in _w217 and '라운드 110' in _w217,
+      '나열 순서는 우열이 아닙니다' in _w217 and '차이 중앙값 0.0%p' in _w217,
       'R110 이 순위에 정보가 없다고 발표했다 (§9)')
 check("표 머리글이 '순위'가 아니라 '번호'다",
       '"번호", "종목명 (클릭)"' in _w217 and '"순위", "종목명' not in _w217)
@@ -20357,7 +20359,7 @@ else:
 check("화면의 '동결 케이스'가 복사본·픽스처를 세지 않는다",
       "WHERE status NOT IN ('dup_version', 'void_fixture')" in _w231)
 check("화면이 뺀 수를 옆에 적는다 (§3)",
-      "행으로 남기되 세지 않았습니다 (R222)" in _w231)
+      "행으로 남기되 세지 않았습니다." in _w231)   # R227: 화면에 라운드 번호 없음
 # ── §61 — 픽스처를 실제 이력에 쓰지 않는다 ───────────────────────────────
 check("§61 이 임시 이력에 쓰고 실제 경로를 되돌린다 (검사가 사용자 자료를 바꾸지 않는다 · R165)",
       "pm61.PM_HISTORY = _hist_tmp61" in _self235 and "pm61.PM_HISTORY = _hist_real61" in _self235)
@@ -20374,7 +20376,7 @@ print("-" * 72)
 #   그리고 면책 문구가 '원장 184,759건'을 날짜 없이 박고 있었다(지금 250,725).
 #   ETF 는 업종이 구조상 없는데 "종목을 열면 채워집니다"라고 적고 있었다(R218).
 check("업종 표가 '업종을 고르는 근거가 못 된다'고 말한다 (R46 · 숫자만 보여 주지 않는다 · §9)",
-      '업종을 고르는 근거가 못 됩니다' in _w231 and '(R46)' in _w231)
+      '업종을 고르는 근거가 못 됩니다' in _w231 and '업종 게이트는 실측에서 기각됐습니다' in _w231)  # R227: 번호 대신 문장
 check("그 재측정 날짜는 forward_eval 한 곳에서 읽는다 (손으로 적지 않는다)",
       "_fed223 = _fe223.eval_date()" in _w231
       and "'2026-11-16'" not in _w231.split('_fed223 = _fe223.eval_date()')[-1][:800])
@@ -20515,10 +20517,10 @@ check("'시장게이트' 라벨이 새 출처(신규 매수 판정)를 말한다
 _old241 = _uk241.watch_action(_row241, 10100)
 _new241 = _uk241.watch_action(dict(_row241, snap_new_entry='불가'), 10100)
 check("R224 이전 스탬프는 이유에 그 사실을 단다 (등급은 같다 · §3)",
-      _old241.get('avg_down_stale') is True and 'R224 이전 스탬프' in str(_old241.get('avg_down_why'))
+      _old241.get('avg_down_stale') is True and '기준이 바뀌기 전' in str(_old241.get('avg_down_why'))
       and _old241.get('avg_down_class') == _new241.get('avg_down_class'))
 check("R224 이후 스탬프(snap_new_entry 있음)는 그 문구가 없다",
-      _new241.get('avg_down_stale') is False and 'R224 이전 스탬프' not in str(_new241.get('avg_down_why')))
+      _new241.get('avg_down_stale') is False and '기준이 바뀌기 전' not in str(_new241.get('avg_down_why')))
 # 실측(2026-09-07 · 16행 다시 채움) — '가능'으로 바뀐 4행이 옛 실패 목록을 안고 있었다.
 #   실패가 없으면 ''(빈 글자)를 찍었고, 병합이 None·'' 를 "못 낸 값"으로 보고 건너뛰어서다
 #   (R223 의 0 과 같은 모양). 쓰는 쪽은 '없음', 읽는 쪽은 그 낱말을 빈 목록으로.
@@ -20667,7 +20669,7 @@ check("계획 줄이 카드 안에 들어가고 관리 기준이 계획 값임�
 check("계획 줄은 계획이 있을 때만 (paid · snap_hold_at · 기준값 하나 이상)",
       "_row225.get('paid') and _row225.get('snap_hold_at')" in _w231)
 check("포트폴리오 탭이 합성 점수의 가중치·문턱이 실측되지 않은 옛 값임을 그 자리에서 말한다 (§9)",
-      '사전등록·실측 없이 정한 옛 값' in _w231 and 'R224 §5' in _w231)
+      '사전등록·실측 없이 정한 옛 값' in _w231 and '이 점수는 참고로만 봅니다' in _w231)   # R227
 with open(_os.path.join(PROJ, 'docs', 'RESULT_R225_HOLDER_CARD.md'), encoding='utf-8') as _f242:
     _res242 = _f242.read()
 check("결과 문서가 값·판정 불변을 적는다", '값·판정 불변' in _res242 and 'R225' in _res242)
@@ -20711,7 +20713,7 @@ check("구성은 산수(매입원가 비중)와 집중도만 앞에 두고 업�
       "_uk.bar_list(_bars226" in _v243 and '**업종별 (매입원가 비중)**' in _v243
       and '업종 집중도 HHI' in _v243 and "업종별 원장 성적 (표시 전용)" in _v243)
 check("업종별 적중은 R223 의 읽는 법과 반드시 같이 간다 (숫자만 보여 주면 판단이 된다)",
-      '업종을 고르는 근거가 못 됩니다' in _v243 and '(R46)' in _v243
+      '업종을 고르는 근거가 못 됩니다' in _v243 and '업종 게이트는 실측에서 기각됐습니다' in _v243
       and "_fed223 = _fe223.eval_date()" in _v243)
 check("채울 것 — 값이 비어 판단이 비는 자리를 이유·채우는 길과 함께 낸다 (§3)",
       '현재가 미수신이라 판단에서 뺀 종목' in _v243 and '엔진 값이 없어 판단하지 못한 종목' in _v243
@@ -20763,6 +20765,79 @@ with open(_os.path.join(PROJ, 'docs', 'RESULT_R226_PORTFOLIO_GLANCE.md'), encodi
     _res243 = _f243.read()
 check("결과 문서가 길이 실측(전·후)과 '판단 불변'을 적는다",
       '14,882' in _res243 and '판단 불변' in _res243)
+
+print()
+print("§244 R227 — 화면 문구에서 내부 참조(§ · R숫자 · 라운드 N)를 걷어낸다 · 판정 문장은 합니다체 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "문구들도 다 정비해줘 프로페셔널하게." 화면 문자열(AST 상수 · 독스트링 제외)
+#   41건에 §3 · R224 · (R46) · 라운드 52 같은 **저장소 내부 참조**가 섞여 있었다
+#   (2026-09-07 실측 · web_app 37 · ui_kit 4 · 그중 절반은 <style> 안 CSS 주석이라 안
+#   보인다). 사용자는 라운드 번호를 모른다 — 근거는 날짜·표본 수로 적고, 번호는 문서에
+#   둔다. 물타기 판정 문장은 반말("판단하지 않았다")이었다 → 합니다체.
+#   판단·값 불변. 회귀가 잠근 옛 낱말은 새 낱말로 옮겼다(§240 · §241 · §243).
+import ast as _ast244
+_REF244 = _re.compile(r'§\s?\d+|\bR\d{2,3}\b|라운드 \d+')
+
+
+def _screen_refs244(src):
+    """화면 문자열 중 내부 참조를 품은 것 — (줄, 참조들, 앞 60자). 독스트링·CSS(<style ·
+    /*)·주석성 문자열은 뺀다. 한글이 없거나 8자 미만이면 화면 문구로 안 본다."""
+    tree = _ast244.parse(src)
+    doc_lines = set()
+    for node in _ast244.walk(tree):
+        if isinstance(node, (_ast244.FunctionDef, _ast244.AsyncFunctionDef,
+                             _ast244.ClassDef, _ast244.Module)):
+            if node.body and isinstance(node.body[0], _ast244.Expr) \
+                    and isinstance(getattr(node.body[0], 'value', None), _ast244.Constant) \
+                    and isinstance(node.body[0].value.value, str):
+                n0 = node.body[0]
+                doc_lines.update(range(n0.lineno, getattr(n0, 'end_lineno', n0.lineno) + 1))
+    out, seen = [], 0
+    for node in _ast244.walk(tree):
+        if not (isinstance(node, _ast244.Constant) and isinstance(node.value, str)):
+            continue
+        s = node.value
+        if len(s) < 8 or not _re.search(r'[가-힣]', s) or node.lineno in doc_lines:
+            continue
+        if '<style' in s or '/*' in s:
+            continue                                      # CSS 주석 — 화면에 안 보인다
+        seen += 1
+        m = sorted(set(_REF244.findall(s)))
+        if m:
+            out.append((node.lineno, m, s.strip().replace('\n', ' ')[:60]))
+    return out, seen
+
+
+for _fn244 in ('web_app.py', 'ui_kit.py'):
+    with open(_os.path.join(PROJ, _fn244), encoding='utf-8') as _f244:
+        _src244 = _f244.read()
+    _hits244, _seen244 = _screen_refs244(_src244)
+    check(f"{_fn244} 화면 문자열에 내부 참조가 없다 — {_hits244[:3]}",
+          not _hits244, scanned=_seen244)
+# 심기 — 잡히는가 · 오탐 안 하는가 (라운드 194 의 규율)
+_plant244 = 'x = "업종 게이트는 실측에서 기각됐습니다(R46)"\ny = "<style>/* 라운드 52 */</style>"\nz = "손절까지 0.7R 거리입니다"\n'
+_ph244, _ps244 = _screen_refs244(_plant244)
+check("심기 ① 화면 문구의 '(R46)' 을 잡는다", len(_ph244) == 1 and _ph244[0][1] == ['R46'])
+check("심기 ② CSS 주석 속 '라운드 52' 와 '0.7R' 은 오탐하지 않는다",
+      all('라운드 52' not in h[1] for h in _ph244) and _ps244 == 2)
+# 판정 문장은 합니다체 — 물타기 넷의 이유 끝이 '다.' 가 아니다 (반말 판별: '~았다 ·~는다 · ~다)' 끝)
+import ui_kit as _uk244
+_whys244 = [_uk244.avg_down_class(False, [_uk244.AVG_DOWN_DATA_GATE])[2],
+            _uk244.avg_down_class(False, [_uk244.AVG_DOWN_MARKET_GATE])[2],
+            _uk244.avg_down_class(False, ['a'])[2], _uk244.avg_down_class(True, [])[2]]
+check("물타기 이유 문장이 반말이 아니다 ('…않았다' · '…않는다' · '…같다' 없음)",
+      not any(_re.search(r'(않았다|않는다|같다|막혔다)\b', w or '') for w in _whys244),
+      str(_whys244))
+_st244 = _uk244.watch_action({'paid': 10000, 'qty': 1, 'snap_px': 9000, 'snap_hold_stop': 8000,
+                              'snap_avg_down_ok': '불가',
+                              'snap_avg_down_fail': _uk244.AVG_DOWN_MARKET_GATE}, price=9000)
+check("옛 스탬프 안내에 라운드 번호가 없다 (사용자는 번호를 모른다)",
+      '기준이 바뀌기 전' in str(_st244.get('avg_down_why')) and not _REF244.search(str(_st244.get('avg_down_why')))
+      and '옛 기준 스탬프' in ' · '.join(_st244.get('hold_brief') or []))
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R227_COPY_REFS.md'), encoding='utf-8') as _f244:
+    _res244 = _f244.read()
+check("결과 문서가 전·후 수와 '판정 불변'을 적는다", '41' in _res244 and '판정 불변' in _res244)
 
 print()
 print("=" * 72)
