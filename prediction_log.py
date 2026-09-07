@@ -129,12 +129,36 @@ def _bars_after(prices_df, start_date, days):
     return rows
 
 
+def first_touch(bars, target, stop):
+    """
+    (고가, 저가, …) 봉 열에서 목표·손절 중 **먼저 닿은 쪽**. 반환 (outcome, touched_at, same_bar).
+
+    같은 봉에서 둘 다 닿으면 '손절 먼저'로 본다 — 분봉이 없어 순서를 알 수 없으니
+    보수 쪽이다(유리한 쪽으로 가정하면 성적이 부풀려진다). 그때 same_bar=True.
+
+    ⚠️ 라운드 232 — 이 규칙은 **여기 한 곳**이다. 원장(scripts/calibration_lab.py →
+    grade_prediction)·전방 추적(improvement.performance)·화면이 같은 것을 부른다.
+    종전엔 improvement 쪽이 같은 봉을 'unresolved' 로 두고 진입을 권장매수가로 잡아
+    같은 추천을 두 규칙으로 세고 있었다 (docs/RESULT_R232_ONE_GRADER.md).
+    """
+    for i, bar in enumerate(bars, start=1):
+        hi, lo = bar[0], bar[1]
+        hit_sl = stop is not None and lo <= stop
+        hit_tp = target is not None and hi >= target
+        if hit_sl:
+            return 'STOP', i, bool(hit_tp)
+        if hit_tp:
+            return 'TARGET', i, False
+    return 'OPEN', None, False
+
+
 def grade_prediction(row, prices_df):
     """
     판정 한 건 채점. 반환 dict 또는 None(아직 채점 불가).
 
-    목표가·손절가 중 **먼저 닿은 쪽**으로 판정한다. 같은 봉에서 둘 다 닿으면
-    보수적으로 '손절 먼저'로 본다 — 유리한 쪽으로 가정하면 성적이 부풀려진다.
+    목표가·손절가 중 **먼저 닿은 쪽**으로 판정한다(`first_touch`). 같은 봉에서 둘 다
+    닿으면 보수적으로 '손절 먼저'로 본다 — 유리한 쪽으로 가정하면 성적이 부풀려진다.
+    진입은 row['price'](기록 시점 가격)다 — 권장매수가가 아니다.
     """
     bars = _bars_after(prices_df, row.get('date'), row.get('horizon_days') or 20)
     if not bars:
@@ -144,16 +168,7 @@ def grade_prediction(row, prices_df):
     if not entry:
         return None
 
-    outcome, touched_at = 'OPEN', None
-    for i, (hi, lo, _c) in enumerate(bars, start=1):
-        hit_sl = sl is not None and lo <= sl
-        hit_tp = tp is not None and hi >= tp
-        if hit_sl:
-            outcome, touched_at = 'STOP', i
-            break
-        if hit_tp:
-            outcome, touched_at = 'TARGET', i
-            break
+    outcome, touched_at, same_bar = first_touch(bars, tp, sl)
 
     last_close = bars[-1][2]
     ret_pct = (last_close / entry - 1.0) * 100.0
@@ -180,6 +195,8 @@ def grade_prediction(row, prices_df):
         'close_return_pct': ret_pct,
         'mfe_pct': mfe_pct,             # 최대 유리 이동 (경로 최고가 기준)
         'mae_pct': mae_pct,             # 최대 불리 이동 (경로 최저가 기준)
+        'same_bar': same_bar,           # 같은 봉에서 목표·손절 동시 도달 (손절 먼저로 봤다)
+        'last_close': last_close,       # 창 마지막 종가 (미도달 청산가)
     }
 
 

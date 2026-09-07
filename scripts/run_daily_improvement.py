@@ -5,8 +5,8 @@
 단계:
   1. 개장 전 리포트(premarket_history.jsonl)의 픽을 prediction_cases 로 동결
      저장 (중복은 case_id 해시로 자동 무시 — 재실행 안전)
-  2. 미결(open) 케이스를 실제 OHLC 경로로 판정
-     (같은 봉에서 목표·손절 동시 도달 → unresolved: 성공으로 세지 않는다)
+  2. 미결(open) 케이스를 실제 OHLC 경로로 판정 — 원장과 같은 채점기(R232 ·
+     prediction_log.grade_prediction: 진입 = 리포트 가격 · 같은 봉은 손절 먼저 · 닿으면 즉시)
   3. 운영 모델 지표 갱신 (calibration.json 실측 → model_versions)
   4. 주요 이슈 자동 감지 (issue_key 로 매일 중복 생성 방지, 해소 시 자동 닫음)
 
@@ -36,7 +36,7 @@ from improvement.daily_pipeline import run_daily_pipeline
 from improvement import case_tracker as ct
 from improvement import issue_tracker as it
 from improvement import model_registry as mr
-from improvement.performance import resolve_long_case
+from improvement.performance import resolution_from_grade
 from improvement.schemas import RECO_CLASS_TO_DECISION, Decision
 import versioning as V
 
@@ -148,7 +148,7 @@ def make_resolve_open_cases(conn):
                 break
         if eng is None:
             return 0
-        import pandas as pd
+        import prediction_log as plog
         resolved = 0
         cache = {}
         today = datetime.now().strftime('%Y-%m-%d')
@@ -167,21 +167,26 @@ def make_resolve_open_cases(conn):
             df = cache[tk]
             if df is None:
                 continue
-            sub = df[df['trade_date'].astype(str) > str(r['signal_date'])]
-            sub = sub.head(int(r['holding_days']))
-            if len(sub) < int(r['holding_days']):
-                continue                       # 보유기간 미경과 — 계속 open
-            frame = pd.DataFrame({
-                'high': sub['high_raw'] if 'high_raw' in sub.columns
-                else sub['high'],
-                'low': sub['low_raw'] if 'low_raw' in sub.columns
-                else sub['low'],
-                'close': sub['adj_close'],
-            })
-            entry = float(r['entry_price'] or r['reference_price'])
-            res = resolve_long_case(price_data=frame, entry_price=entry,
-                                    target_price=float(r['target_price']),
-                                    stop_price=float(r['stop_price']))
+            # ⚠️ 라운드 232 — 채점기는 하나다. 여기가 resolve_long_case 로 **따로** 채점했다:
+            #   진입 = 권장매수가(rec_buy · 닿은 적 없어도) · 같은 봉 = unresolved · 종가 = adj ·
+            #   MDD 는 청산 뒤 봉까지 · 20봉이 다 지나야 확정. 개장 전 절의 '사후 검증'은
+            #   prediction_log 로 진입 = 리포트 가격 · 닿으면 즉시 채점해 같은 페이지에서 다른
+            #   수를 냈다(실측 2026-09-07 · docs/RESULT_R232_ONE_GRADER.md: 51건 중 39건이
+            #   권장매수가 진입 · 그중 18건은 그 가격에 닿은 적이 없다 · 중앙 수익 +10.4% vs
+            #   +6.4%). 원장(scripts/calibration_lab.py)과 같은 함수로 같은 규칙: 진입 =
+            #   기준가(리포트 가격) · 먼저 닿은 선 · 같은 봉이면 손절 먼저(보수) · 원시가 ·
+            #   MDD 는 청산 봉까지. 닿음은 뒤 봉과 무관하게 최종이므로 그 자리에서 확정하고,
+            #   안 닿았으면 보유기간이 다 지나야 '미도달'로 확정한다(그 전엔 open).
+            g = plog.grade_prediction(
+                {'date': r['signal_date'], 'price': float(r['reference_price']),
+                 'target': float(r['target_price']), 'stop': float(r['stop_price']),
+                 'horizon_days': int(r['holding_days'])}, df)
+            if not g:
+                continue
+            if g['outcome'] == 'OPEN' and not g['matured']:
+                continue                       # 보유기간 미경과 · 미도달 — 계속 open
+            res = resolution_from_grade(g, target_price=float(r['target_price']),
+                                        stop_price=float(r['stop_price']))
             ct.resolve_case(conn, r['case_id'], status=res.status,
                             exit_price=res.exit_price,
                             realized_return=res.realized_return,

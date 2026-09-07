@@ -1,0 +1,980 @@
+{
+ "regraded_at": "2026-09-07 19:13",
+ "resolved_rows": 51,
+ "changed": 44,
+ "status_changed": 0,
+ "untouched": 7,
+ "no_bars": 0,
+ "rule": "prediction_log.grade_prediction — 진입 = 기준가(리포트 가격) · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · MDD 는 청산 봉까지 (R232)",
+ "per_case": [
+  {
+   "ticker": "006800.KS",
+   "date": "2026-08-01",
+   "before": {
+    "status": "success",
+    "realized_return": 0.19784932118742726,
+    "max_drawdown": 0.02635895151347034,
+    "exit_price": 37930.3
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.09783791606367596,
+    "max_drawdown": -0.05933429811866864,
+    "exit_price": 37930.3
+   },
+   "entry_was": 31665.33497084568,
+   "reference": 34550.0,
+   "changed": true
+  },
+  {
+   "ticker": "028670.KS",
+   "date": "2026-08-01",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.17036199096037175,
+    "max_drawdown": -0.20641453988888436,
+    "exit_price": 5101.698163102065
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.0673312316083976,
+    "max_drawdown": -0.10786106032906762,
+    "exit_price": 5101.698163102065
+   },
+   "entry_was": 6149.306212486196,
+   "reference": 5470.0,
+   "changed": true
+  },
+  {
+   "ticker": "047040.KS",
+   "date": "2026-08-01",
+   "before": {
+    "status": "success",
+    "realized_return": 0.09332885898624821,
+    "max_drawdown": -0.04147104851330208,
+    "exit_price": 13972.742817844251
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.0933288589862482,
+    "max_drawdown": -0.04147104851330208,
+    "exit_price": 13972.742817844251
+   },
+   "entry_was": null,
+   "reference": 12780.0,
+   "changed": false
+  },
+  {
+   "ticker": "255440.KQ",
+   "date": "2026-08-01",
+   "before": {
+    "status": "success",
+    "realized_return": 0.16717715693947754,
+    "max_drawdown": 0.009293680297397744,
+    "exit_price": 6279.413104334389
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.16717715693947752,
+    "max_drawdown": 0.009293680297397744,
+    "exit_price": 6279.413104334389
+   },
+   "entry_was": null,
+   "reference": 5380.0,
+   "changed": false
+  },
+  {
+   "ticker": "333430.KQ",
+   "date": "2026-08-01",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.10861423220973787,
+    "exit_price": 4504.328339747083
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.047440699126092396,
+    "exit_price": 4504.328339747083
+   },
+   "entry_was": null,
+   "reference": 4005.0,
+   "changed": true
+  },
+  {
+   "ticker": "006800.KS",
+   "date": "2026-08-02",
+   "before": {
+    "status": "success",
+    "realized_return": 0.19784932118742726,
+    "max_drawdown": 0.02635895151347034,
+    "exit_price": 37930.3
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.09783791606367596,
+    "max_drawdown": -0.05933429811866864,
+    "exit_price": 37930.3
+   },
+   "entry_was": 31665.33497084568,
+   "reference": 34550.0,
+   "changed": true
+  },
+  {
+   "ticker": "028670.KS",
+   "date": "2026-08-02",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.17036199096037175,
+    "max_drawdown": -0.20641453988888436,
+    "exit_price": 5101.698163102065
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.0673312316083976,
+    "max_drawdown": -0.10786106032906762,
+    "exit_price": 5101.698163102065
+   },
+   "entry_was": 6149.306212486196,
+   "reference": 5470.0,
+   "changed": true
+  },
+  {
+   "ticker": "047040.KS",
+   "date": "2026-08-02",
+   "before": {
+    "status": "success",
+    "realized_return": 0.09332885898624821,
+    "max_drawdown": -0.04147104851330208,
+    "exit_price": 13972.742817844251
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.0933288589862482,
+    "max_drawdown": -0.04147104851330208,
+    "exit_price": 13972.742817844251
+   },
+   "entry_was": null,
+   "reference": 12780.0,
+   "changed": false
+  },
+  {
+   "ticker": "255440.KQ",
+   "date": "2026-08-02",
+   "before": {
+    "status": "success",
+    "realized_return": 0.16717715693947754,
+    "max_drawdown": 0.009293680297397744,
+    "exit_price": 6279.413104334389
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.16717715693947752,
+    "max_drawdown": 0.009293680297397744,
+    "exit_price": 6279.413104334389
+   },
+   "entry_was": null,
+   "reference": 5380.0,
+   "changed": false
+  },
+  {
+   "ticker": "333430.KQ",
+   "date": "2026-08-02",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.10861423220973787,
+    "exit_price": 4504.328339747083
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.047440699126092396,
+    "exit_price": 4504.328339747083
+   },
+   "entry_was": null,
+   "reference": 4005.0,
+   "changed": true
+  },
+  {
+   "ticker": "028670.KS",
+   "date": "2026-08-03",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.17036199096037175,
+    "max_drawdown": -0.19177874246880233,
+    "exit_price": 5101.698163102065
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.0673312316083976,
+    "max_drawdown": -0.09140767824497253,
+    "exit_price": 5101.698163102065
+   },
+   "entry_was": 6149.306212486196,
+   "reference": 5470.0,
+   "changed": true
+  },
+  {
+   "ticker": "035720.KS",
+   "date": "2026-08-03",
+   "before": {
+    "status": "success",
+    "realized_return": 0.6888455909915683,
+    "max_drawdown": 0.46217129323779904,
+    "exit_price": 38808.86741502179
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.03767025173855054,
+    "max_drawdown": -0.018716577540106916,
+    "exit_price": 38808.86741502179
+   },
+   "entry_was": 22979.523777680603,
+   "reference": 37400.0,
+   "changed": true
+  },
+  {
+   "ticker": "047040.KS",
+   "date": "2026-08-03",
+   "before": {
+    "status": "success",
+    "realized_return": 0.09332885898624821,
+    "max_drawdown": 0.021126760563380254,
+    "exit_price": 13972.742817844251
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.0933288589862482,
+    "max_drawdown": 0.021126760563380254,
+    "exit_price": 13972.742817844251
+   },
+   "entry_was": null,
+   "reference": 12780.0,
+   "changed": false
+  },
+  {
+   "ticker": "319400.KQ",
+   "date": "2026-08-03",
+   "before": {
+    "status": "success",
+    "realized_return": 0.11424429502005706,
+    "max_drawdown": 0.032863849765258246,
+    "exit_price": 23733.403483927217
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.11424429502005706,
+    "max_drawdown": 0.04460093896713624,
+    "exit_price": 23733.403483927217
+   },
+   "entry_was": null,
+   "reference": 21300.0,
+   "changed": true
+  },
+  {
+   "ticker": "333430.KQ",
+   "date": "2026-08-03",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.10861423220973787,
+    "exit_price": 4504.328339747083
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.1246762396372243,
+    "max_drawdown": -0.01622971285892638,
+    "exit_price": 4504.328339747083
+   },
+   "entry_was": null,
+   "reference": 4005.0,
+   "changed": true
+  },
+  {
+   "ticker": "039200.KQ",
+   "date": "2026-08-04",
+   "before": {
+    "status": "success",
+    "realized_return": 0.06954534696364933,
+    "max_drawdown": -0.04005722460658079,
+    "exit_price": 37380.609876379545
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.06954534696364933,
+    "max_drawdown": -0.040057224606580795,
+    "exit_price": 37380.609876379545
+   },
+   "entry_was": null,
+   "reference": 34950.0,
+   "changed": false
+  },
+  {
+   "ticker": "079550.KS",
+   "date": "2026-08-04",
+   "before": {
+    "status": "unresolved",
+    "realized_return": -0.16240409207161122,
+    "max_drawdown": -0.17135549872122757,
+    "exit_price": 655000.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.16240409207161122,
+    "max_drawdown": -0.1713554987212276,
+    "exit_price": 655000.0
+   },
+   "entry_was": null,
+   "reference": 782000.0,
+   "changed": false
+  },
+  {
+   "ticker": "105840.KS",
+   "date": "2026-08-04",
+   "before": {
+    "status": "failure",
+    "realized_return": 0.32283558531784995,
+    "max_drawdown": 0.22916371867990337,
+    "exit_price": 12419.438047653122
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.14935355837992315,
+    "max_drawdown": -0.1842465753424658,
+    "exit_price": 12419.438047653122
+   },
+   "entry_was": 9388.49709328691,
+   "reference": 14600.0,
+   "changed": true
+  },
+  {
+   "ticker": "174900.KQ",
+   "date": "2026-08-04",
+   "before": {
+    "status": "success",
+    "realized_return": 0.16538461538461546,
+    "max_drawdown": -0.18681318681318682,
+    "exit_price": 31815.0
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.16538461538461546,
+    "max_drawdown": -0.07509157509157505,
+    "exit_price": 31815.0
+   },
+   "entry_was": null,
+   "reference": 27300.0,
+   "changed": true
+  },
+  {
+   "ticker": "483650.KS",
+   "date": "2026-08-04",
+   "before": {
+    "status": "success",
+    "realized_return": 1.0757426677262543,
+    "max_drawdown": 0.5895392031502866,
+    "exit_price": 262481.2746902284
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.08239700903186975,
+    "max_drawdown": -0.04948453608247427,
+    "exit_price": 262481.2746902284
+   },
+   "entry_was": 126451.74123522136,
+   "reference": 242500.0,
+   "changed": true
+  },
+  {
+   "ticker": "000210.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.05991752674658557,
+    "max_drawdown": -0.06465852167642383,
+    "exit_price": 46032.14790835083
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.11306073394314387,
+    "max_drawdown": -0.11753371868978801,
+    "exit_price": 46032.14790835083
+   },
+   "entry_was": 48966.07395417542,
+   "reference": 51900.0,
+   "changed": true
+  },
+  {
+   "ticker": "000660.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "unresolved",
+    "realized_return": 0.0659249525904575,
+    "max_drawdown": -0.08301067675018903,
+    "exit_price": 1596000.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.043165467625899234,
+    "max_drawdown": -0.17685851318944845,
+    "exit_price": 1596000.0
+   },
+   "entry_was": 1497291.1518032586,
+   "reference": 1668000.0,
+   "changed": true
+  },
+  {
+   "ticker": "001430.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.14923448685699214,
+    "max_drawdown": 0.017206994807506648,
+    "exit_price": 43440.584114360485
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.08195726312230356,
+    "max_drawdown": -0.03237858032378582,
+    "exit_price": 43440.584114360485
+   },
+   "entry_was": 37799.582775456794,
+   "reference": 40150.0,
+   "changed": true
+  },
+  {
+   "ticker": "001440.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "unresolved",
+    "realized_return": 0.03144086006484348,
+    "max_drawdown": -0.035535819160146365,
+    "exit_price": 26950.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.052724077328646694,
+    "max_drawdown": -0.11423550087873459,
+    "exit_price": 26950.0
+   },
+   "entry_was": 26128.497564373916,
+   "reference": 28450.0,
+   "changed": true
+  },
+  {
+   "ticker": "005380.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.11432973614172703,
+    "max_drawdown": -0.0004071271920628172,
+    "exit_price": 417486.45627374377
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.06365976120699046,
+    "max_drawdown": -0.014012738853503182,
+    "exit_price": 417486.45627374377
+   },
+   "entry_was": 374652.53123304015,
+   "reference": 392500.0,
+   "changed": true
+  },
+  {
+   "ticker": "006260.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.220187842567797,
+    "max_drawdown": -0.0754285086772487,
+    "exit_price": 357647.74107710586
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.11764919086595584,
+    "max_drawdown": -0.048437500000000015,
+    "exit_price": 357647.74107710586
+   },
+   "entry_was": 293108.7563734958,
+   "reference": 320000.0,
+   "changed": true
+  },
+  {
+   "ticker": "028670.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.13081795278471597,
+    "max_drawdown": 0.015243903931811964,
+    "exit_price": 6048.144155154088
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.07236598495639868,
+    "max_drawdown": 0.019503546099290725,
+    "exit_price": 6048.144155154088
+   },
+   "entry_was": 5348.468460604223,
+   "reference": 5640.0,
+   "changed": true
+  },
+  {
+   "ticker": "035420.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "unresolved",
+    "realized_return": -0.033684072933034215,
+    "max_drawdown": -0.05464032195376356,
+    "exit_price": 207500.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.08388520971302427,
+    "max_drawdown": -0.10375275938189843,
+    "exit_price": 207500.0
+   },
+   "entry_was": 214733.08489265977,
+   "reference": 226500.0,
+   "changed": true
+  },
+  {
+   "ticker": "047040.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.19817668096191343,
+    "max_drawdown": 0.075451422218336,
+    "exit_price": 16823.13818062142
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.10678540661983016,
+    "max_drawdown": 0.046052631578947345,
+    "exit_price": 16823.13818062142
+   },
+   "entry_was": 14040.615585270414,
+   "reference": 15200.0,
+   "changed": true
+  },
+  {
+   "ticker": "069500.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.20112463693773663,
+    "max_drawdown": 0.042590884805332685,
+    "exit_price": 111190.82856329679
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.10825105714439133,
+    "max_drawdown": -0.038024519087012876,
+    "exit_price": 111190.82856329679
+   },
+   "entry_was": 92572.26531193087,
+   "reference": 100330.0,
+   "changed": true
+  },
+  {
+   "ticker": "078930.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1275312469395864,
+    "max_drawdown": 0.026510690890281685,
+    "exit_price": 103744.97530179805
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.07063957999791604,
+    "max_drawdown": -0.025283797729618196,
+    "exit_price": 103744.97530179805
+   },
+   "entry_was": 92010.73192728711,
+   "reference": 96900.0,
+   "changed": true
+  },
+  {
+   "ticker": "103140.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.16706894105357262,
+    "max_drawdown": 0.02914754204701353,
+    "exit_price": 86525.35867235229
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.09111423294265177,
+    "max_drawdown": 0.023959646910466592,
+    "exit_price": 86525.35867235229
+   },
+   "entry_was": 74139.02951974836,
+   "reference": 79300.0,
+   "changed": true
+  },
+  {
+   "ticker": "229640.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "unresolved",
+    "realized_return": 0.027741520275714526,
+    "max_drawdown": -0.041716383156435666,
+    "exit_price": 43650.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.06730769230769229,
+    "max_drawdown": -0.13034188034188032,
+    "exit_price": 43650.0
+   },
+   "entry_was": 42471.76857104101,
+   "reference": 46800.0,
+   "changed": true
+  },
+  {
+   "ticker": "267260.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "success",
+    "realized_return": 0.2041082162308543,
+    "max_drawdown": -0.04168589811714518,
+    "exit_price": 845615.0524459513
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.10973103995531662,
+    "max_drawdown": -0.11679790026246717,
+    "exit_price": 845615.0524459513
+   },
+   "entry_was": 702274.9625386063,
+   "reference": 762000.0,
+   "changed": true
+  },
+  {
+   "ticker": "267270.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.06414189586421759,
+    "max_drawdown": -0.14343922523143815,
+    "exit_price": 125100.0
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.11839323467230445,
+    "max_drawdown": -0.14235377026074703,
+    "exit_price": 125100.0
+   },
+   "entry_was": 133674.11090116436,
+   "reference": 141900.0,
+   "changed": true
+  },
+  {
+   "ticker": "298040.KS",
+   "date": "2026-08-05",
+   "before": {
+    "status": "unresolved",
+    "realized_return": 0.03449138965610454,
+    "max_drawdown": -0.013341973682122532,
+    "exit_price": 2725000.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.06260749914000685,
+    "max_drawdown": -0.1059511523907809,
+    "exit_price": 2725000.0
+   },
+   "entry_was": 2634144.6891171033,
+   "reference": 2907000.0,
+   "changed": true
+  },
+  {
+   "ticker": "000660.KS",
+   "date": "2026-08-06",
+   "before": {
+    "status": "unresolved",
+    "realized_return": 0.09998646423338564,
+    "max_drawdown": -0.08301067675018903,
+    "exit_price": 1647000.0
+   },
+   "after": {
+    "status": "unresolved",
+    "realized_return": -0.01258992805755399,
+    "max_drawdown": -0.17685851318944845,
+    "exit_price": 1647000.0
+   },
+   "entry_was": 1497291.1518032586,
+   "reference": 1668000.0,
+   "changed": true
+  },
+  {
+   "ticker": "028670.KS",
+   "date": "2026-08-06",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1314412363896078,
+    "max_drawdown": -0.022630410011691637,
+    "exit_price": 6285.980223375953
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.07269287088326837,
+    "max_drawdown": -0.04436860068259385,
+    "exit_price": 6285.980223375953
+   },
+   "entry_was": 5555.72841187432,
+   "reference": 5860.0,
+   "changed": true
+  },
+  {
+   "ticker": "047040.KS",
+   "date": "2026-08-06",
+   "before": {
+    "status": "success",
+    "realized_return": 0.19858027441355697,
+    "max_drawdown": 0.007356801798231283,
+    "exit_price": 17966.386995488578
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.10698625973435473,
+    "max_drawdown": -0.03265557609365377,
+    "exit_price": 17966.386995488578
+   },
+   "entry_was": 14989.723574651016,
+   "reference": 16230.0,
+   "changed": true
+  },
+  {
+   "ticker": "066570.KS",
+   "date": "2026-08-06",
+   "before": {
+    "status": "success",
+    "realized_return": 0.15007069508993642,
+    "max_drawdown": 0.05424231846684702,
+    "exit_price": 194288.9098716814
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.08238947003722231,
+    "max_drawdown": -0.007799442896935904,
+    "exit_price": 194288.9098716814
+   },
+   "entry_was": 168936.492948799,
+   "reference": 179500.0,
+   "changed": true
+  },
+  {
+   "ticker": "267270.KS",
+   "date": "2026-08-06",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.06414189586421759,
+    "max_drawdown": -0.14343922523143815,
+    "exit_price": 125100.0
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.11839323467230445,
+    "max_drawdown": -0.14235377026074703,
+    "exit_price": 125100.0
+   },
+   "entry_was": 133674.11090116436,
+   "reference": 141900.0,
+   "changed": true
+  },
+  {
+   "ticker": "007070.KS",
+   "date": "2026-08-08",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.034165804007163736,
+    "max_drawdown": -0.11174824241360004,
+    "exit_price": 26476.798353126782
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.06607413216484015,
+    "max_drawdown": -0.07231040564373903,
+    "exit_price": 26476.798353126782
+   },
+   "entry_was": 27413.39917656339,
+   "reference": 28350.0,
+   "changed": true
+  },
+  {
+   "ticker": "011780.KS",
+   "date": "2026-08-08",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.06197016673118749,
+    "max_drawdown": -0.06916732657723978,
+    "exit_price": 117300.0
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.09490740740740744,
+    "max_drawdown": -0.10185185185185187,
+    "exit_price": 117300.0
+   },
+   "entry_was": 125049.32768634574,
+   "reference": 129600.0,
+   "changed": true
+  },
+  {
+   "ticker": "251270.KS",
+   "date": "2026-08-08",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.030876141649681,
+    "max_drawdown": -0.10018879567497285,
+    "exit_price": 38449.97881423257
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.05990271847842122,
+    "max_drawdown": -0.08557457212713937,
+    "exit_price": 38449.97881423257
+   },
+   "entry_was": 39674.989407116285,
+   "reference": 40900.0,
+   "changed": true
+  },
+  {
+   "ticker": "280360.KS",
+   "date": "2026-08-08",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1042013456664912,
+    "max_drawdown": 0.05546699895285645,
+    "exit_price": 124390.0
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.06407185628742518,
+    "max_drawdown": 0.04533789563729673,
+    "exit_price": 124390.0
+   },
+   "entry_was": 112651.55624757794,
+   "reference": 116900.0,
+   "changed": true
+  },
+  {
+   "ticker": "282330.KS",
+   "date": "2026-08-08",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.048059355934673254,
+    "max_drawdown": -0.06215459331776485,
+    "exit_price": 139059.02540837185
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.09171113384472995,
+    "max_drawdown": -0.1051600261267146,
+    "exit_price": 139059.02540837185
+   },
+   "entry_was": 146079.51270418594,
+   "reference": 153100.0,
+   "changed": true
+  },
+  {
+   "ticker": "007070.KS",
+   "date": "2026-08-09",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.034165804007163736,
+    "max_drawdown": -0.11174824241360004,
+    "exit_price": 26476.798353126782
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.06607413216484015,
+    "max_drawdown": -0.07231040564373903,
+    "exit_price": 26476.798353126782
+   },
+   "entry_was": 27413.39917656339,
+   "reference": 28350.0,
+   "changed": true
+  },
+  {
+   "ticker": "011780.KS",
+   "date": "2026-08-09",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.06197016673118749,
+    "max_drawdown": -0.06916732657723978,
+    "exit_price": 117300.0
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.09490740740740744,
+    "max_drawdown": -0.10185185185185187,
+    "exit_price": 117300.0
+   },
+   "entry_was": 125049.32768634574,
+   "reference": 129600.0,
+   "changed": true
+  },
+  {
+   "ticker": "251270.KS",
+   "date": "2026-08-09",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.030876141649681,
+    "max_drawdown": -0.10018879567497285,
+    "exit_price": 38449.97881423257
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.05990271847842122,
+    "max_drawdown": -0.08557457212713937,
+    "exit_price": 38449.97881423257
+   },
+   "entry_was": 39674.989407116285,
+   "reference": 40900.0,
+   "changed": true
+  },
+  {
+   "ticker": "280360.KS",
+   "date": "2026-08-09",
+   "before": {
+    "status": "success",
+    "realized_return": 0.1042013456664912,
+    "max_drawdown": 0.05546699895285645,
+    "exit_price": 124390.0
+   },
+   "after": {
+    "status": "success",
+    "realized_return": 0.06407185628742518,
+    "max_drawdown": 0.04533789563729673,
+    "exit_price": 124390.0
+   },
+   "entry_was": 112651.55624757794,
+   "reference": 116900.0,
+   "changed": true
+  },
+  {
+   "ticker": "282330.KS",
+   "date": "2026-08-09",
+   "before": {
+    "status": "failure",
+    "realized_return": -0.048059355934673254,
+    "max_drawdown": -0.06215459331776485,
+    "exit_price": 139059.02540837185
+   },
+   "after": {
+    "status": "failure",
+    "realized_return": -0.09171113384472995,
+    "max_drawdown": -0.1051600261267146,
+    "exit_price": 139059.02540837185
+   },
+   "entry_was": 146079.51270418594,
+   "reference": 153100.0,
+   "changed": true
+  }
+ ]
+}

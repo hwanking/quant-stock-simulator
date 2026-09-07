@@ -4313,17 +4313,29 @@ if _pmr:
                             f"{' / '.join(_b.get('reasons') or []) or '게이트 차단'}"
                             f"</span>", unsafe_allow_html=True)
     with st.expander("지난 개장 전 추천의 실제 성과 (사후 검증)"):
-        _hist = _pm_view.grade_history(engine_init)
+        # 라운드 232 — 여기가 prediction_log 로 이력 마지막 100행을 **다시 채점**하고 있었다
+        #   (진입 = 리포트 가격 · 닿으면 즉시). 모델 성적의 추적 줄은 DB(진입 = 권장매수가 ·
+        #   20봉 뒤)를 읽어 같은 페이지에서 다른 수를 냈다(실측 2026-09-07: 95건 목표 30 ·
+        #   손절 26 · 미결 39 vs 확정 51 성공 29 · 실패 15 · 미결 7). 채점은 일일 루틴이
+        #   원장과 같은 채점기로 한 번 하고, 화면은 읽기만 한다(§4).
+        _hist = _pm_view.grade_history()
         if _hist:
-            st.markdown(f"지난 추천 **{_hist['n']}건** — 목표 도달 {_hist['target']} · "
-                        f"손절 {_hist['stop']} · 미결 {_hist['open']} "
-                        f"(분모 = 목표+손절, 미결은 별도)")
-            for _h in _hist['rows'][::-1]:
-                _oe = {'TARGET': '', 'STOP': '', 'OPEN': ''}.get(_h['outcome'], '·')
-                st.caption(f"{_oe} {_h['date']} {_h['name']} ({_h['reco_class']}) → "
+            _t232 = _hist['tally']
+            _d232 = _hist.get('dates') or (None, None)
+            st.markdown(f"확정 **{_t232['resolved']}건** — 목표 도달 {_t232['success']} · "
+                        f"손절 {_t232['failure']} · 창 종료 미도달 {_t232['unresolved']}"
+                        + (f" (성공 비율 {_t232['success_pct']:.0f}% · 분모 {_t232['decided']} · "
+                           f"미도달 제외)" if _t232['decided'] else "")
+                        + f" · 판정 대기 {_t232['open']}건"
+                        + (f" · 기준일 {_d232[0]}~{_d232[1]}" if _d232[0] else ""))
+            st.caption("채점은 원장과 같은 규칙입니다 — 진입은 리포트 가격, 먼저 닿은 선으로 "
+                       "판정, 같은 봉이면 손절 먼저(보수), 닿으면 그 자리에서 확정. 모델 성적의 "
+                       "'실전 추천 추적' 줄과 같은 곳에서 읽습니다.")
+            for _h in _hist['rows']:
+                st.caption(f"{_h['date']} {_h['name']} ({_h['reco_class']}) → "
                            f"{_h['outcome']} {_h['return_pct']:+.1f}%")
         else:
-            st.caption("아직 채점할 과거 추천이 없습니다. 리포트가 쌓이면 여기서 "
+            st.caption("아직 채점된 과거 추천이 없습니다. 장 종료 후 추적 루틴이 돌면 여기서 "
                        "실제 성과를 그대로 보여줍니다 — 숨기지 않습니다.")
 elif st.session_state.get('scan_results') is None:
     st.caption("오늘의 개장 전 리포트는 위 **트렌드 탐색기**에서 스캔을 실행하면 "
@@ -9690,29 +9702,25 @@ if _ledger_df is not None:
             # 라운드 222 — 같은 추천이 모델 버전마다 다시 동결돼 있었다(463행 중
             #   복사본 245). 복사본(dup_version)과 시험 픽스처(void_fixture)는
             #   행으로는 남기되(R197) **세지 않는다.** 뺀 수는 옆에 적는다(§3).
-            _n_all_imp = _ic.execute(
-                "SELECT COUNT(*) FROM prediction_cases "
-                "WHERE status NOT IN ('dup_version', 'void_fixture')").fetchone()[0]
-            _n_excl_imp = _ic.execute(
-                "SELECT COUNT(*) FROM prediction_cases "
-                "WHERE status IN ('dup_version', 'void_fixture')").fetchone()[0]
             # 라운드 231 — 첫 수확(2026-09-07: 확정 10 = 성공 2 · 실패 8)이 있었는데 이 줄은
             #   '확정 대기 N'만 적고 있었다. 확정된 것의 갈래를 세어 그대로 낸다 (§9 —
-            #   성과를 좋게 보이게 쓰지 않는다 · 분모를 같이 적는다 · 미결은 따로).
-            _cnt_imp = dict(_ic.execute(
-                "SELECT status, COUNT(*) FROM prediction_cases "
-                "WHERE status IN ('success', 'failure', 'unresolved') "
-                "GROUP BY status").fetchall())
-            _n_ok_imp = int(_cnt_imp.get('success') or 0)
-            _n_bad_imp = int(_cnt_imp.get('failure') or 0)
-            _n_unres_imp = int(_cnt_imp.get('unresolved') or 0)
+            #   성과를 좋게 보이게 쓰지 않는다 · 분모를 같이 적는다 · 미도달은 따로).
+            # 라운드 232 — 셈은 case_tracker.tally 한 곳. 개장 전 절의 '사후 검증'도 같은 것을
+            #   읽는다 — 두 자리가 같은 추천을 두 규칙으로 세고 있었다(§4).
+            from improvement import case_tracker as _ict232
+            _t232b = _ict232.tally(_ic)
+            _n_all_imp = _t232b['frozen']
+            _n_excl_imp = _t232b['excluded']
+            _n_ok_imp = _t232b['success']
+            _n_bad_imp = _t232b['failure']
+            _n_unres_imp = _t232b['unresolved']
         finally:
             _ic.close()
         _n_dec_imp = _n_ok_imp + _n_bad_imp
         _tally_imp = (f" 확정 {_n_ok_imp + _n_bad_imp + _n_unres_imp}건 — 성공 {_n_ok_imp} · "
-                      f"실패 {_n_bad_imp} · 미결 {_n_unres_imp}"
+                      f"실패 {_n_bad_imp} · 미도달 {_n_unres_imp}"
                       + (f" (성공 비율 {_n_ok_imp / _n_dec_imp * 100:.0f}% · 분모 {_n_dec_imp} · "
-                         f"미결 제외 · 전방 표본은 아직 작습니다)" if _n_dec_imp else '')
+                         f"미도달 제외 · 전방 표본은 아직 작습니다)" if _n_dec_imp else '')
                       + "." if (_n_ok_imp + _n_bad_imp + _n_unres_imp) else "")
         # 라운드 231 — started_at 은 UTC(+00:00)로 저장된다. 그대로 자르면 17:26 실행이
         #   '08:26'으로 보인다(R222 의 date('now') 함정과 같은 자리). 현지 시각으로 바꿔 적는다.
@@ -9733,7 +9741,8 @@ if _ledger_df is not None:
             st.caption(f"**실전 추천 추적 파이프라인**: 동결 케이스 "
                        f"{_n_all_imp}건 · 결과 확정 대기 {_n_open_imp}건 · "
                        f"마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서 목표·손절이 함께 "
-                       "닿으면 성공으로 세지 않습니다 (선도달 확인 불가)."
+                       "닿으면 손절 먼저로 봅니다 — 원장과 같은 규칙 (성공으로 세지 않습니다). "
+                       "진입은 리포트 가격이고 닿으면 그 자리에서 확정합니다."
                        + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
                           f"행으로 남기되 세지 않았습니다." if _n_excl_imp else ""))
         with _pc2:
