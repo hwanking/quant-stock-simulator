@@ -21000,6 +21000,37 @@ check("결과 문서가 실측(중앙 5.7% · 1봉째 21%)과 '판단 불변'을
       '5.7' in _res247 and '21' in _res247 and '판단 불변' in _res247)
 
 print()
+print("§248 R231 — 추적 줄이 확정의 갈래(성공·실패·미결)를 낸다 · 참고 블록 둘은 접는다 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   첫 수확(2026-09-07 17:26 · 장 종료 뒤): 확정 10 = 08-08 5건(성공 1 · 실패 4) · 08-09
+#   5건(성공 1 · 실패 4). 그런데 화면의 추적 줄은 '동결 N · 확정 대기 N · 마지막 실행'만
+#   적고 갈래가 없었다 — 성과를 좋게 보이게 쓰지 않는다는 §9 는 나쁜 수를 그대로 내는
+#   것도 뜻한다. 분모(성공+실패)를 같이 적고 미결은 따로. 종목 상세의 참고 블록 둘
+#   ('모델 검증 반영' · '다른 원리는 뭐라고 하나')은 접는다 — 제목·내용 그대로(§85 잠금).
+import ui_kit as _uk248
+check("추적 줄이 성공·실패·미결과 분모를 같이 낸다 (§9 · 나쁜 수도 그대로)",
+      "WHERE status IN ('success', 'failure', 'unresolved') " in _w231
+      and "성공 {_n_ok_imp} · " in _w231 and "실패 {_n_bad_imp} · 미결 {_n_unres_imp}" in _w231
+      and "분모 {_n_dec_imp}" in _w231 and "미결 제외 · 전방 표본은 아직 작습니다" in _w231)
+check("분모가 0 이면 비율을 만들지 않는다 (§3)", "if _n_dec_imp else ''" in _w231)
+check("추적 줄이 그 갈래를 실제로 캡션에 넣는다", "마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서" in _w231)
+check("rows_html 이 있고 rows() 는 그것을 그린다 (그리는 규칙 한 곳)",
+      callable(getattr(_uk248, 'rows_html', None))
+      and "st.markdown(rows_html(items, theme, title), unsafe_allow_html=True)" in _uk231)
+_h248 = _uk248.rows_html([('a', 'b'), ('c', 'd', 'pos')], title='t')
+check("rows_html 은 제목·행을 HTML 로 돌려준다 (st 를 그리지 않는다)",
+      isinstance(_h248, str) and '>t</p>' in _h248 and '>a</span>' in _h248 and '>d</span>' in _h248)
+check("종목 상세의 참고 블록 둘이 접힌다 — 제목 그대로",
+      "_uk.disclose('모델 검증 반영 — 이번 판단에 쓰인 근거'" in _w231
+      and "_uk.disclose('다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)'" in _w231
+      and "_uk.rows_html(_rows_v, theme=_theme)" in _w231 and "_uk.rows_html(_rows_e, theme=_theme)" in _w231)
+with open(_os.path.join(PROJ, 'docs', 'OPERATIONS_ROUTINE.md'), encoding='utf-8') as _f248:
+    _ops248 = _f248.read()
+check("운영 문서가 첫 수확(장 종료 뒤 실행)과 누적 갈래를 적는다",
+      '2026-09-07 17:26 실행' in _ops248 and '성공 29 · 실패 15' in _ops248)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
