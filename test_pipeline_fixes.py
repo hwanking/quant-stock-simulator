@@ -21015,6 +21015,11 @@ check("추적 줄이 성공·실패·미결과 분모를 같이 낸다 (§9 · �
       and "분모 {_n_dec_imp}" in _w231 and "미결 제외 · 전방 표본은 아직 작습니다" in _w231)
 check("분모가 0 이면 비율을 만들지 않는다 (§3)", "if _n_dec_imp else ''" in _w231)
 check("추적 줄이 그 갈래를 실제로 캡션에 넣는다", "마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서" in _w231)
+# UTC 로 저장된 started_at 을 그대로 자르면 17:26 실행이 '08:26'으로 보였다 (R222 의 함정)
+check("마지막 실행 시각은 현지 시각으로 바꿔 적는다 (UTC 그대로 자르지 않는다)",
+      "def _local_ts231(v):" in _w231 and "_d.astimezone().strftime('%Y-%m-%d %H:%M')" in _w231
+      and "_lr_txt = (f\"{_local_ts231(_lr['started_at'])} (" in _w231
+      and "str(_lr['started_at'])[:16]} (" not in _w231)
 check("rows_html 이 있고 rows() 는 그것을 그린다 (그리는 규칙 한 곳)",
       callable(getattr(_uk248, 'rows_html', None))
       and "st.markdown(rows_html(items, theme, title), unsafe_allow_html=True)" in _uk231)
