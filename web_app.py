@@ -11341,8 +11341,24 @@ with tab_flow:
     show_tab_verdict('technical')
     st.subheader(f"[{resolved_name}] - 기술적 캔들/이동평균선 & 수급 차트 점검")
     
-    is_settled, settled_msg = q_engine.check_20sma_settlement(tech_df)
-    st.info(f"**20일선 안착 정량 규칙 검증**: {settled_msg}")
+    # 라운드 237 — 종전에는 '4개 조건 중 2개 충족 — 안착 대기' 한 줄뿐이라 **어느 두 개**인지
+    #   알 수 없었다. 가격이 20일선 위인데 거래량이 모자란 것과, 가격이 아래인데 보조 조건만
+    #   맞은 것은 기다릴 것이 다르다. 조건별로 값과 상태를 그대로 낸다.
+    _set237 = q_engine.settlement_report(tech_df)
+    if _set237['settled'] is None:
+        st.warning(f"**20일선 안착 점검**: {_set237['summary']}")
+    elif _set237['settled']:
+        st.success(f"**20일선 안착 점검**: {_set237['summary']}")
+    else:
+        st.info(f"**20일선 안착 점검**: {_set237['summary']}")
+    _uk.rows([(c['name'], f"{c['detail']} · {c['state']}",
+               ('pos' if c['state'] == '충족' else
+                ('neg' if c['state'] == '미충족' else 'warn')))
+              for c in _set237['checks']], theme=_theme,
+             title="조건별 결과 (문턱은 종전 그대로 · 가격 유지가 필수 전제)")
+    st.caption("이 탭 위의 점수는 볼린저 위치와 RSI 둘의 평균입니다 — 수급(외국인·기관)·"
+               "거래량·이 안착 결과는 그 점수에 들어가지 않습니다. 값이 클수록 최근 가격이 "
+               "눌린 자리라는 뜻이고, 오를 확률이 아닙니다.")
     
     recent_tech = tech_df.tail(90)
     x_dates = pd.to_datetime(recent_tech['trade_date'])

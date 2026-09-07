@@ -21461,6 +21461,107 @@ check("값 자체는 안 바꿨다 — tdst_support_str 는 여전히 '지지 �
       and '"N/A" if not tdst_available' in _q253)
 
 print()
+print("§254 R237 — 20일선 아래인데 '안착 성공'이 나왔다 · 점수 이름이 계산보다 넓었다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-08) ──────────────────────────────
+#   ① check_20sma_settlement 는 **네 조건 중 3개**면 '안착 성공'이라, 가격이 20일선 아래여도
+#      (c1 실패) 기울기·거래량·RSI 셋이 맞으면 성공이 나왔다. '안착'은 그 선 위에서 유지된다는
+#      뜻이므로 가격 조건을 필수 전제로 둔다. 문턱(2봉·0·1.2배·45)과 '3개' 규칙은 불변.
+#   ② 전처리가 결측을 채운다(기울기 0.0 · RSI 50.0 · 거래량비 1.0). 기울기는 결측이면 **항상
+#      0 이상**이라 통과했다 — 자료 부족이 '안착 대기'로 위장됐다(§3 · 못 잰 것 ≠ 안 맞는 것).
+#   ③ 관점 점수 이름이 '수급·기술'인데 계산은 볼린저 위치와 RSI 둘의 평균뿐이다.
+import pandas as _pd254
+import numpy as _np254
+import quant_indicators as _qi254
+
+_cls254 = None
+for _nm in dir(_qi254):
+    _o = getattr(_qi254, _nm)
+    if isinstance(_o, type) and hasattr(_o, 'SETTLE_MIN_BARS'):
+        _cls254 = _o
+        break
+# 여기서는 인스턴스를 만든다 — check_20sma_settlement 가 안에서 self.settlement_report 를
+# 부르므로 클래스를 self 로 넘기는 방식은 못 쓴다 (첫 판에 그렇게 썼다가 TypeError 로 걸렸다).
+_eng254 = _cls254() if _cls254 else None
+_rep254 = (lambda df: _eng254.settlement_report(df)) if _eng254 else (lambda df: None)
+
+
+def _mk254(n=30, close=90.0, sma=100.0, slope=0.01, vr=1.30, rsi=55.0):
+    return _pd254.DataFrame({'adj_close': [close] * n, 'sma_20': [sma] * n,
+                             'sma_20_slope': [slope] * n, 'volume_ratio': [vr] * n,
+                             'rsi_14': [rsi] * n})
+
+
+# ① 사용자가 재현한 입력 — 20일선 아래인데 나머지 셋이 충족
+_below254 = _rep254(_mk254())
+check("20일선 아래면 나머지 셋이 충족돼도 '안착 성공'이 아니다 (필수 전제)",
+      _below254 is not None and _below254['settled'] is False
+      and '필수 전제' in _below254['summary'] and '안착 성공' not in _below254['summary'])
+check("그래도 몇 개가 충족됐는지는 그대로 적는다 (사실을 지우지 않는다)",
+      '나머지 조건은 4개 중 3개 충족' in _below254['summary']
+      and [c['state'] for c in _below254['checks']] == ['미충족', '충족', '충족', '충족'])
+# 종전 규칙(3개 이상)이었다면 성공이었음을 같이 못박는다 — 무엇이 바뀌었는지 검사가 말한다
+check("종전 규칙이면 이 입력은 '성공'이었다 (바뀐 것이 무엇인지 검사가 말한다)",
+      sum(1 for c in _below254['checks'] if c['state'] == '충족') >= 3)
+
+# ② 가격 조건 충족 — 문턱과 '3개' 규칙은 그대로
+_above254 = _rep254(_mk254(close=110.0))
+check("20일선 위 + 나머지 셋 충족이면 안착 성공 (문턱·3개 규칙 불변)",
+      _above254['settled'] is True and '4개 조건 중 4개 충족' in _above254['summary']
+      and '안착 성공' in _above254['summary'])
+_above_2of4 = _rep254(_mk254(close=110.0, vr=1.0, rsi=40.0))
+check("20일선 위여도 보조 조건이 모자라면 안착 대기 (2개 충족)",
+      _above_2of4['settled'] is False and '4개 조건 중 2개 충족' in _above_2of4['summary']
+      and '안착 대기' in _above_2of4['summary'])
+
+# ③ 결측 — '확인 불가'는 '미충족'이 아니다
+_short254 = _rep254(_mk254(n=10))
+# 조건은 두 봉을 보는데 상세에 한 봉만 적으면 화면이 스스로 모순돼 보인다 (화면 실측에서 잡았다)
+check("가격 조건 상세는 두 봉을 다 적는다 (오늘 · 직전)",
+      '오늘' in _below254['checks'][0]['detail'] and '직전' in _below254['checks'][0]['detail']
+      and _below254['checks'][0]['detail'].count('vs') == 2)
+check("자료가 모자라면 확인 불가 — 대기로 위장하지 않는다 (§3)",
+      _short254['settled'] is None and '확인 불가' in _short254['summary']
+      and '조건에 안 맞는 것이 아닙니다' in _short254['summary']
+      and all(c['state'] == '확인 불가' for c in _short254['checks']))
+_nan254 = _mk254()
+_nan254['sma_20'] = _np254.nan
+check("20일선이 결측이면 확인 불가 (대체값으로 채우지 않는다)",
+      _rep254(_nan254)['settled'] is None)
+# 결측 대체값(기울기 0.0)이 '충족'으로 세어지던 자리 — 봉 수가 모자라면 세지 않는다
+check("기울기 결측 대체값(0.0)이 자료 부족에서 충족으로 세어지지 않는다",
+      [c['state'] for c in _short254['checks']].count('충족') == 0)
+_q254 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("필요 봉 수는 지표가 이미 쓰는 창 그대로다 (새 문턱을 만들지 않았다)",
+      "SETTLE_MIN_BARS = {'price': 20, 'slope': 23, 'volume': 20, 'rsi': 15}" in _q254
+      and "df['sma_20'] = df['adj_close'].rolling(20).mean()" in _q254
+      and "df['sma_20_slope'] = df['sma_20'].diff(3)" in _q254)
+check("옛 호출부 호환 함수는 남아 있고 같은 판정을 돌려준다",
+      _eng254.check_20sma_settlement(_mk254())[0] is False
+      and _eng254.check_20sma_settlement(_mk254(close=110.0))[0] is True)
+
+# ④ 관점 점수의 이름 — 계산에 없는 것을 이름에 넣지 않는다
+check("관점 이름이 '수급·기술'이 아니라 실제 재료를 적는다",
+      "add('technical', '가격 위치 (볼린저·RSI)'" in _q254
+      and "add('technical', '수급·기술'" not in _q254)
+check("산식은 그대로다 — 볼린저 위치와 RSI 둘의 평균",
+      "parts.append(float(np.clip(100 - bbp, 0, 100)))" in _q254
+      and "parts.append(float(np.clip(100 - rsi_v * 1.2, 0, 100)))" in _q254
+      and "float(np.mean(parts))" in _q254)
+# 사용자가 본 수(볼린저 73 · RSI 51 → 33)가 그 산식에서 나오는지 실제로 계산한다
+_s254 = float(_np254.mean([float(_np254.clip(100 - 73, 0, 100)),
+                           float(_np254.clip(100 - 51 * 1.2, 0, 100))]))
+check("실측 재현 — 볼린저 73% · RSI 51 이면 32.9 이고 화면 표기는 33점",
+      abs(_s254 - 32.9) < 1e-9 and f"{_s254:.0f}" == "33")
+check("그 점수에 무엇이 안 들어가는지 화면이 말한다 (수급·거래량·안착)",
+      "수급(외국인·기관)·거래량·20일선 안착 결과는 들어가지 않습니다" in _q254
+      and "수급(외국인·기관)·" in _w231 and "이 안착 결과는 그 점수에 들어가지 않습니다" in _w231)
+check("화면이 조건별 결과를 표로 낸다 (어느 두 개가 충족인지 보인다)",
+      "_set237 = q_engine.settlement_report(tech_df)" in _w231
+      and "조건별 결과 (문턱은 종전 그대로 · 가격 유지가 필수 전제)" in _w231
+      and "4개 조건 중 {passed_cnt}개 충족" not in _w231)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
