@@ -21641,6 +21641,67 @@ check("문서가 실행으로 확인한 사슬(275,844 → 270,327)과 잰 날�
       '275,844' in _doc255 and '270,327' in _doc255 and '2026-09-08' in _doc255)
 
 print()
+print("§256 R239 — 모델 이름이 받은 적 없는 자료를 약속하고 있었다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-08) ──────────────────────────────
+#   화면이 'FCFF (DCF)' · 'EV/EBITDA' · 'SOTP / 조정 NAV' · 'EV/Sales & GP' 라는 이름을 띄우고
+#   바로 옆에 'WACC 8.5% / 영구성장률 2.0%' 와 '미수신 입력 지표: 없음' 을 나란히 적었다.
+#   사용자는 잉여현금흐름·EBITDA·매출·사업부별 자료를 각각 받아 교차검증한 값으로 읽는다.
+#   **그런 자료는 하나도 받지 않는다** — 수신 입력은 EPS·BPS·PBR·PER·ROE·부채비율 여섯뿐이고
+#   (데이터 계층의 매출·순이익·영업현금흐름은 전부 None), 여덟 모형이 모두 그 여섯에서
+#   파생된다(ebitda_ps 조차 EPS·BPS 로 만든 추정치). 이름만 바꾼다 — 산식·계수·가중치 불변.
+_q256 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+
+# ① 이름은 실제 입력을 말한다 — 옛 이름은 'name' 자리에서 사라졌다
+_NEW256 = ['정상화 EPS × 고정 배수', 'EPS·BPS 추정 EBITDA 배수', 'EPS 기반 현금흐름 대용 모형',
+           'PBR-ROE 조정 배수', 'BPS 기반 배당 대용 모형', 'BPS 배수 (자산가치 대용)',
+           'BPS·추정 EBITDA 혼합 배수', '추정 EBITDA 영구환원 + BPS 가산']
+for _nm256 in _NEW256:
+    check(f"모델 이름 '{_nm256}' 이 한 곳에만 있다 (베끼지 않는다)",
+          _q256.count(f"'name': '{_nm256}'") == 1)
+_OLD256 = ['정상화 PER', 'EV/EBITDA', 'FCFF (DCF)', 'PBR-ROE / RIM',
+           '배당할인모형(DDM)', 'SOTP / 조정 NAV', 'EV/Sales & GP', '시나리오 DCF & 순현금']
+for _nm256 in _OLD256:
+    check(f"옛 이름 '{_nm256}' 이 'name' 자리에 남아 있지 않다",
+          f"'name': '{_nm256}'" not in _q256)
+check("이름이 약속하던 자료를 실제로 안 받는다는 사실이 코드에 적혀 있다",
+      '수신 입력은 EPS·BPS·PBR·PER·ROE·부채비율 여섯뿐이고' in _q256
+      and '산식·계수·가중치는 한 글자도 안 바꿨다' in _q256)
+
+# ② 계산 키·산식은 그대로다 (이름은 표시용 필드일 뿐)
+for _k256 in ('PER', 'EV_EBITDA', 'FCFF', 'PBR_ROE', 'DDM', 'SOTP', 'rNPV', 'EV_GP', 'DCF_SCENARIO'):
+    check(f"계산 키 model_results['{_k256}'] 는 그대로다",
+          f"model_results['{_k256}']" in _q256)
+check("산식·상수는 그대로다 (배수·WACC·영구성장률)",
+      "ebitda_ps = norm_eps * 1.45 + bps * 0.04" in _q256
+      and "wacc = 0.085" in _q256 and "terminal_g = 0.02" in _q256
+      and "fcff_ps = norm_eps * 0.85" in _q256)
+check("새 이름에 숫자가 없다 — 새 문턱을 만들지 않았다",
+      not any(any(_c.isdigit() for _c in _n) for _n in _NEW256))
+
+# ③ 입력을 한 문장으로 — 엔진이 내고 화면은 읽기만 한다 (§4)
+check("엔진이 '이 모형들이 쓰는 입력' 문장을 낸다",
+      "'model_inputs_note': (" in _q256
+      and '매출·영업현금흐름·EBITDA·사업부별 자료는 입력되지 ' in _q256
+      and '않습니다 — 그런 이름이 붙은 모형도 앞의 지표에서 파생한 값입니다.' in _q256)
+check("문장이 PER·PBR 도 쓴다는 사실을 빠뜨리지 않는다 (지어내지도 축소하지도 않는다)",
+      '일부는 ' in _q256 and 'PER·PBR 도 씁니다' in _q256)
+check("화면은 그 문장을 읽기만 한다 — 화면이 입력 목록을 다시 적지 않는다",
+      "{_uk._esc_md(val_eval.get('model_inputs_note') or '-')}" in _w231
+      and '<b>이 모형들이 쓰는 입력</b>' in _w231)
+
+# ④ '미수신 없음' 의 범위와 할인율의 적용 대상
+check("'미수신 입력 지표' 가 무엇만 보는지 그 자리에서 밝힌다",
+      '주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다.' in _w231
+      and '가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.' in _w231)
+check("할인율이 무엇에 적용되는지 적는다 (현금흐름표가 아니다)",
+      '현금흐름표가 아니라 정상화 주당순이익에 적용합니다.' in _w231
+      and 'WACC 8.5% / 영구성장률 2.0% (중복 할인 없음)' in _w231)
+_doc256 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R239_MODEL_NAMES.md'))
+check("문서가 실행 확인(적정가·신뢰도 불변)과 잰 날짜를 적는다",
+      '270,327' in _doc256 and '76.9' in _doc256 and '2026-09-08' in _doc256)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이

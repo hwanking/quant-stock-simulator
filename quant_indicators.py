@@ -2466,6 +2466,16 @@ class QuantIndicatorsEngine:
         wacc = 0.085
         terminal_g = 0.02
         
+        # ⚠️ 라운드 239 (사용자 지적) — 화면이 'FCFF (DCF)'·'EV/EBITDA'·'SOTP / 조정 NAV'·
+        #   'EV/Sales & GP' 라는 이름을 띄우고 바로 옆에 'WACC 8.5% / 영구성장률 2.0%' 와
+        #   '미수신 입력 지표: 없음' 을 나란히 적어, 사용자는 잉여현금흐름·EBITDA·매출·
+        #   사업부별 자료를 각각 받아 교차검증한 값으로 읽었다. **그런 자료는 하나도 받지
+        #   않는다** — 수신 입력은 EPS·BPS·PBR·PER·ROE·부채비율 여섯뿐이고(데이터 계층의
+        #   매출·순이익·영업현금흐름은 전부 None, EBITDA·배당금·사업부는 필드 자체가 없다),
+        #   여덟 모형이 모두 그 여섯에서 파생된 값이다(ebitda_ps 도 EPS·BPS 로 만든 추정치).
+        #   이름을 실제 입력에 맞춘다 — **산식·계수·가중치는 한 글자도 안 바꿨다.**
+        #   계산 키는 'name' 이 아니라 dict 키(PER·FCFF·EV_EBITDA …)와 가중치 매트릭스라
+        #   판정·적정가에 영향이 없다(이름 문자열은 각자의 정의 줄 한 곳에만 있다).
         model_results = {}
         
         # A. PER 모델
@@ -2474,7 +2484,7 @@ class QuantIndicatorsEngine:
         per_valid = (_have_norm_eps and _have_per
                      and norm_eps > 0 and per > 0 and type_probs['E_BIOTECH'] < 0.5 and type_probs['F_DEFICIT'] < 0.5)
         per_val = norm_eps * (8.15 if type_probs['B_CYCLICAL'] > 0.4 else (17.5 if type_probs['A_STABLE'] > 0.4 else 12.0))
-        model_results['PER'] = {'val': per_val, 'weight': blended_weights.get('PER', 0.0), 'valid': per_valid, 'name': '정상화 PER'}
+        model_results['PER'] = {'val': per_val, 'weight': blended_weights.get('PER', 0.0), 'valid': per_valid, 'name': '정상화 EPS × 고정 배수'}
         
         # B. EV/EBITDA 모델 (금융업 부채 차감 무효 처리!)
         ev_ebitda_valid = (_have_norm_eps and _have_bps
@@ -2483,29 +2493,29 @@ class QuantIndicatorsEngine:
             ev_val = (ebitda_ps * 5.0) + bps * 0.15 # 금융부채 전액 차감 제외 & 지분/순현금 반영
         else:
             ev_val = (ebitda_ps * 7.5) + (bps * 0.15)
-        model_results['EV_EBITDA'] = {'val': ev_val, 'weight': blended_weights.get('EV_EBITDA', 0.0), 'valid': ev_ebitda_valid, 'name': 'EV/EBITDA'}
+        model_results['EV_EBITDA'] = {'val': ev_val, 'weight': blended_weights.get('EV_EBITDA', 0.0), 'valid': ev_ebitda_valid, 'name': 'EPS·BPS 추정 EBITDA 배수'}
         
         # C. FCFF DCF 모델 (금융업 자동 제외)
         fcff_valid = (_have_norm_eps
                       and norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4)
         fcff_ps = norm_eps * 0.85
         fcff_val = ((fcff_ps * 1.03) / (wacc - terminal_g)) * 0.65 + (bps * 0.15 if type_probs['B_CYCLICAL']>0.4 else 0.0)
-        model_results['FCFF'] = {'val': fcff_val, 'weight': blended_weights.get('FCFF', 0.0), 'valid': fcff_valid, 'name': 'FCFF (DCF)'}
+        model_results['FCFF'] = {'val': fcff_val, 'weight': blended_weights.get('FCFF', 0.0), 'valid': fcff_valid, 'name': 'EPS 기반 현금흐름 대용 모형'}
         
         # D. PBR-ROE / RIM 모델 (금융업 우세 모델)
         pbr_roe_valid = (_have_bps and _have_roe and bps > 0 and roe > 0)
         pbr_val = bps * (1.0 + (roe - 7.0) / 10.0) if roe > 7.0 else bps * max(0.4, pbr)
-        model_results['PBR_ROE'] = {'val': pbr_val, 'weight': blended_weights.get('PBR_ROE', 0.0) + blended_weights.get('RIM', 0.0), 'valid': pbr_roe_valid, 'name': 'PBR-ROE / RIM'}
+        model_results['PBR_ROE'] = {'val': pbr_val, 'weight': blended_weights.get('PBR_ROE', 0.0) + blended_weights.get('RIM', 0.0), 'valid': pbr_roe_valid, 'name': 'PBR-ROE 조정 배수'}
         
         # E. DDM (배당할인모형)
         ddm_valid = (_have_bps and _have_roe and bps > 0 and roe > 0)
         ddm_val = bps * 0.85 * 1.03 / (wacc - 0.03) * 0.08
-        model_results['DDM'] = {'val': ddm_val, 'weight': blended_weights.get('DDM', 0.0), 'valid': ddm_valid, 'name': '배당할인모형(DDM)'}
+        model_results['DDM'] = {'val': ddm_val, 'weight': blended_weights.get('DDM', 0.0), 'valid': ddm_valid, 'name': 'BPS 기반 배당 대용 모형'}
         
         # F. SOTP / NAV (복합기업 및 지주형)
         sotp_valid = (_have_bps and bps > 0)
         sotp_val = (bps * 0.88 + bps * 0.27 + bps * 0.20 + bps * 0.15) * 0.85 if type_probs['B_CYCLICAL']>0.4 else bps * 1.25 * 0.85
-        model_results['SOTP'] = {'val': sotp_val, 'weight': blended_weights.get('SOTP', 0.0) + blended_weights.get('NAV', 0.0), 'valid': sotp_valid, 'name': 'SOTP / 조정 NAV'}
+        model_results['SOTP'] = {'val': sotp_val, 'weight': blended_weights.get('SOTP', 0.0) + blended_weights.get('NAV', 0.0), 'valid': sotp_valid, 'name': 'BPS 배수 (자산가치 대용)'}
         
         # G. rNPV — 파이프라인 데이터가 있어야만 성립한다.
         #    임상단계·성공확률·출시시점·마일스톤·로열티 중 어느 것도 연동되어 있지 않으므로
@@ -2523,12 +2533,12 @@ class QuantIndicatorsEngine:
         # H. EV/Sales & EV/Gross Profit (플랫폼 및 적자 고성장)
         ev_s_valid = (_have_bps and _have_norm_eps and bps > 0)
         ev_s_val = bps * 1.8 + ebitda_ps * 10.0
-        model_results['EV_GP'] = {'val': ev_s_val, 'weight': blended_weights.get('EV_GP', 0.0) + blended_weights.get('EV_SALES', 0.0), 'valid': ev_s_valid, 'name': 'EV/Sales & GP'}
+        model_results['EV_GP'] = {'val': ev_s_val, 'weight': blended_weights.get('EV_GP', 0.0) + blended_weights.get('EV_SALES', 0.0), 'valid': ev_s_valid, 'name': 'BPS·추정 EBITDA 혼합 배수'}
         
         # I. DCF 시나리오 & 현금자산
         dcf_s_valid = (_have_bps and _have_norm_eps and bps > 0)
         dcf_s_val = (ebitda_ps * 0.8) / (wacc - 0.03) + bps * 0.8
-        model_results['DCF_SCENARIO'] = {'val': dcf_s_val, 'weight': blended_weights.get('DCF_SCENARIO', 0.0) + blended_weights.get('CASH_ASSETS', 0.0) + blended_weights.get('NET_CASH', 0.0) + blended_weights.get('NORMALIZED_CF', 0.0) + blended_weights.get('RELATIVE', 0.0), 'valid': dcf_s_valid, 'name': '시나리오 DCF & 순현금'}
+        model_results['DCF_SCENARIO'] = {'val': dcf_s_val, 'weight': blended_weights.get('DCF_SCENARIO', 0.0) + blended_weights.get('CASH_ASSETS', 0.0) + blended_weights.get('NET_CASH', 0.0) + blended_weights.get('NORMALIZED_CF', 0.0) + blended_weights.get('RELATIVE', 0.0), 'valid': dcf_s_valid, 'name': '추정 EBITDA 영구환원 + BPS 가산'}
 
         # ---------------------------------------------------------
         # 4. 불허/유효하지 않은 모델 0% 자동 제외 및 가중치 재정규화 (Re-normalization)
@@ -2862,6 +2872,11 @@ class QuantIndicatorsEngine:
             # 라운드 238 — 화면의 '기초 펀더멘털 가치'는 최종값을 고정 보정으로 **되나눈**
             #   값이라 실제 모델 가중중앙값이 아니었다(윈저화·클립을 거치면 더 벌어진다).
             #   사슬을 있는 그대로 내보낸다: 가중중앙값 → 고정 보정 → 원시 → 수축 → 최종.
+            # 라운드 239 — 이름만으로는 무엇을 넣었는지 알 수 없다. 입력을 한 문장으로.
+            'model_inputs_note': (
+                '이 모형들의 입력은 주당순이익·주당순자산·자기자본이익률이고, 일부는 '
+                'PER·PBR 도 씁니다. 매출·영업현금흐름·EBITDA·사업부별 자료는 입력되지 '
+                '않습니다 — 그런 이름이 붙은 모형도 앞의 지표에서 파생한 값입니다.'),
             'model_weighted_median': float(weighted_median),
             'fair_fixed_haircut_pct': float((self.FAIR_FIXED_HAIRCUT - 1.0) * 100.0),
             'raw_target_value': float(raw_target_val),
