@@ -10928,65 +10928,135 @@ with tab_val:
 # [Section 11] 조건별 3가지 시나리오 & 가격 대응 전략
 with tab_scen:
     show_tab_verdict('scenario')
-    st.subheader(f"[{resolved_name}] - 조건별 20일 대응 시나리오 대시보드")
+    st.subheader(f"[{resolved_name}] - 조건별 대응 시나리오 (변동성 기준 · 예측 아님)")
     
-    atr_val = tech_df['vol_20'].iloc[-1] if 'vol_20' in tech_df.columns else 0.02
-    # Bullish scenario: +1 to +3 ATR
-    bull_target = curr_price * (1 + atr_val * 2.0)
-    bull_range_low = curr_price * (1 + atr_val * 1.5)
-    bull_range_high = curr_price * (1 + atr_val * 3.0)
-    bull_stop = curr_price * (1 - atr_val * 1.0)
-    # Sideways: -0.5 to +1 ATR  
-    side_target = curr_price * (1 - atr_val * 0.5)
-    side_range_low = curr_price * (1 - atr_val * 0.75)
-    side_range_high = curr_price * (1 + atr_val * 1.0)
-    side_stop = curr_price * (1 - atr_val * 1.5)
-    # Bearish: -1 to -2 ATR
-    bear_target = curr_price * (1 - atr_val * 1.0)
-    bear_range_low = curr_price * (1 - atr_val * 2.5)
-    bear_range_high = curr_price * (1 - atr_val * 1.5)
-    
-    st.markdown(f"""
+    # ⚠️ 라운드 235 (2026-09-08 · 사용자 지적) — 이 표는 **현재가에 변동성 배수를 더한 값에
+    #   '20일선'·'60일선'이라는 이름을 붙이고 있었다.** 실측(삼성전자 · 현재가 270,000원):
+    #   '20일선 복귀 276,157원' = 현재가×(1+변동성×0.5) · '60일선 지지 267,537원' =
+    #   현재가×(1−변동성×0.2) · '60일선 종가 이탈 263,843원' = 현재가×(1−변동성×0.5).
+    #   같은 60일선이 한 행에서 267,537원, 다른 행에서 263,843원이었고 **어느 것도 실제
+    #   이동평균이 아니었다.** 사용자가 그 가격을 이동평균선으로 알고 행동할 수 있다(§3 —
+    #   못 읽은 것을 다른 값으로 만들지 않는다). tech_df 에 sma_20 · sma_60 이 이미 있다.
+    #   그리고 변동성은 ATR 이 아니라 **20일 일간수익률 표준편차**다(vol_20).
+    #   배수(0.5 · 0.2 · 2.0 …)는 그대로 둔다 — 이름과 근거만 바로잡는다(값·판정 불변).
+    _vol235 = None
+    if 'vol_20' in tech_df.columns:
+        try:
+            _v = float(tech_df['vol_20'].iloc[-1])
+            _vol235 = _v if (_v == _v and _v > 0) else None
+        except (TypeError, ValueError, IndexError):
+            _vol235 = None
+
+    def _last235(col):
+        """tech_df 마지막 값 — 없거나 NaN 이면 None (기본값으로 채우지 않는다)."""
+        if col not in tech_df.columns:
+            return None
+        try:
+            v = float(tech_df[col].iloc[-1])
+            return v if (v == v and v > 0) else None
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    _ma20_235, _ma60_235, _rsi235 = _last235('sma_20'), _last235('sma_60'), _last235('rsi_14')
+
+    def _px235(v):
+        return f"{v:,.0f}{unit_str}" if v is not None else "확인 불가"
+
+    def _ma235(name, ma):
+        """이동평균선 조건 — 실제 값과 현재가의 위치. 없으면 '확인 불가'(대체값 금지)."""
+        if ma is None:
+            return f"{name} 확인 불가 (이동평균 미수신)"
+        return (f"{name} {ma:,.0f}{unit_str} — 현재가 "
+                f"{'위' if curr_price >= ma else '아래'}")
+
+    if _vol235 is None:
+        st.info("20일 일간수익률 표준편차를 받지 못해 참고 가격대를 만들지 않습니다. "
+                "변동성 없이 시나리오 가격을 지어내지 않습니다.")
+    else:
+        atr_val = _vol235          # 배수 계산은 종전 그대로 (이름만 아래에서 바로 적는다)
+        # Bullish scenario: +1 to +3 (변동성 배수)
+        bull_target = curr_price * (1 + atr_val * 2.0)
+        bull_range_low = curr_price * (1 + atr_val * 1.5)
+        bull_range_high = curr_price * (1 + atr_val * 3.0)
+        bull_stop = curr_price * (1 - atr_val * 1.0)
+        # Sideways: -0.5 to +1
+        side_range_low = curr_price * (1 - atr_val * 0.75)
+        side_range_high = curr_price * (1 + atr_val * 1.0)
+        side_stop = curr_price * (1 - atr_val * 1.5)
+        # Bearish: -1 to -2
+        bear_target = curr_price * (1 - atr_val * 1.0)
+        bear_range_low = curr_price * (1 - atr_val * 2.5)
+        bear_range_high = curr_price * (1 - atr_val * 1.5)
+
+        # 상승 확인선과 1차 참고 목표선의 정합 — 깨지면 숫자를 억지로 맞추지 않고 미산출.
+        #   (종전 식은 2차 목표×0.95 를 1차로 써서 변동성이 낮으면 확인선보다 낮아진다.)
+        _bull_mark235 = curr_price * (1 + atr_val * 0.5)
+        _bull_t1_235 = bull_target * 0.95
+        _bull_ok235 = _bull_t1_235 > _bull_mark235
+        _bull_t_txt235 = (f"{_bull_t1_235:,.0f}{unit_str} / {bull_target:,.0f}{unit_str}"
+                          if _bull_ok235 else
+                          "미산출 — 참고 목표선이 상승 확인선보다 낮습니다 (정합성 미충족)")
+        # 중앙 판정의 청산 기준 — 이 표가 손절선을 새로 만들지 않는다 (§4)
+        _stop_new235 = CORE.get('new_stop')
+        _stop_hold235 = CORE.get('hold_stop')
+        _stop_txt235 = " · ".join(
+            t for t in [(f"신규 진입자 손절 {_stop_new235:,.0f}{unit_str}"
+                         if _stop_new235 else None),
+                        (f"보유자 손절 {_stop_hold235:,.0f}{unit_str}"
+                         if _stop_hold235 else None)] if t) or "중앙 판정에 청산 기준 없음"
+
+        st.caption(
+            f"아래 가격대는 **20일 일간수익률 표준편차 {atr_val * 100:.2f}%** 에 배수를 곱해 만든 "
+            f"참고선입니다 — 평균 실제 범위(ATR)가 아니고, 20일 뒤 가격의 예측 구간도 아닙니다. "
+            f"이 화면은 중앙 판정을 설명하고 무엇이 바뀌면 다시 볼지를 적을 뿐, 새로운 매수·매도 "
+            f"기준을 만들지 않습니다. 청산 기준은 중앙 판정에서 옵니다 — {_stop_txt235}.")
+
+        st.markdown(f"""
     <table class='cross-val-matrix'>
         <thead>
             <tr>
                 <th>시나리오</th>
-                <th>진입 조건</th>
-                <th>예상 가격 범위</th>
-                <th>1차 / 2차 목표가</th>
-                <th>손절 및 위험 기준</th>
-                <th>실전 대응 전략</th>
+                <th>확인할 조건</th>
+                <th>변동성 배수 참고 가격대</th>
+                <th>참고 목표선</th>
+                <th>시나리오 무효화선</th>
+                <th>무엇을 하나</th>
             </tr>
         </thead>
         <tbody>
             <tr>
                 <td><b style='color:#35C98B;'>상승 시나리오</b></td>
-                <td>20일선 복귀(`{curr_price*(1 + atr_val*0.5):,.0f}{unit_str}`) + 거래량 1.2배 + 외인 전환</td>
+                <td>{_ma235('20일선 회복', _ma20_235)} · 거래량 1.2배 · 외국인 순매수 전환 —
+                    뒤 둘은 이 화면에서 판정하지 않습니다 (수급 미연동)</td>
                 <td><b>{bull_range_low:,.0f}{unit_str} ~ {bull_range_high:,.0f}{unit_str}</b></td>
-                <td>{bull_target*0.95:,.0f}{unit_str} / {bull_target:,.0f}{unit_str}</td>
+                <td>{_bull_t_txt235}</td>
                 <td>{bull_stop:,.0f}{unit_str} 하회 시 무효화</td>
-                <td>1차 분할 매수 검토</td>
+                <td>조건이 채워지면 중앙 판정을 다시 봅니다</td>
             </tr>
             <tr>
                 <td><b style='color:#F2B84B;'>횡보 시나리오</b></td>
-                <td>60일선 지지(`{curr_price*(1 - atr_val*0.2):,.0f}{unit_str}`) + 거래량 감소 및 RSI 리셋</td>
+                <td>{_ma235('60일선 지지', _ma60_235)} · 거래량 감소 ·
+                    RSI {f'{_rsi235:.1f}' if _rsi235 is not None else '확인 불가'}
+                    ('리셋'의 기준은 정해져 있지 않습니다)</td>
                 <td><b>{side_range_low:,.0f}{unit_str} ~ {side_range_high:,.0f}{unit_str}</b></td>
-                <td>{side_target:,.0f}{unit_str} / N/A</td>
+                <td>미산출 — 검증된 횡보 진입계획이 없어 목표선을 내지 않습니다</td>
                 <td>{side_stop:,.0f}{unit_str} 이탈 시 무효화</td>
-                <td>관망 및 지지 확인 후 접근</td>
+                <td>지지 유지 여부만 봅니다</td>
             </tr>
             <tr>
                 <td><b style='color:#ff453a;'>하락 시나리오</b></td>
-                <td>60일선 종가 이탈(`{curr_price*(1 - atr_val*0.5):,.0f}{unit_str}` 하회) + 기관 동반 매도</td>
+                <td>{_ma235('60일선 종가 이탈', _ma60_235)} · 기관 동반 매도 —
+                    뒤는 이 화면에서 판정하지 않습니다 (수급 미연동)</td>
                 <td><b>{bear_range_low:,.0f}{unit_str} ~ {bear_range_high:,.0f}{unit_str}</b></td>
-                <td>N/A (하방 지지선 탐색)</td>
-                <td>종가 {bear_target:,.0f}{unit_str} 이탈 즉시 손절</td>
-                <td>비중 축소 / 손절선 준수</td>
+                <td>해당 없음 (하방)</td>
+                <td>해당 없음 — 이 시나리오는 하회하면 <b>성립</b>합니다
+                    (확인선 {bear_target:,.0f}{unit_str})</td>
+                <td>중앙 판정의 청산 기준을 따릅니다 — {_stop_txt235}</td>
             </tr>
         </tbody>
     </table>
     """, unsafe_allow_html=True)
-    
+
     _uk.spacer(28)
     # [Section 1-6 Spec] 목표가격 5종 세트 산출 근거 표
     #
