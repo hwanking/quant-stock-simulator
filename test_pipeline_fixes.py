@@ -21407,6 +21407,60 @@ check("하락 행은 확인선을 무효화선이라 부르지 않는다",
       and "{bear_target:,.0f}{unit_str} 하회 시 무효화" not in _w231)
 
 print()
+print("§253 R236 — DeMARK: Perfected 의 주어 · 46점이 어디서 나왔나 · '지지'가 두 번 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-08) ──────────────────────────────
+#   ① 'Buy Setup 0/9 · Sell Setup 1/9' 바로 아래 'Perfected: 충족' — 모순으로 읽혔다.
+#      엔진의 perfected_status 는 **가장 최근에 완성된 9 셋업**을 두고 하는 말이라 진행 중인
+#      카운트와 다를 수 있다(계산은 맞고 주어가 빠졌다). '미충족'은 '완성된 셋업이 없었다'와
+#      '있었지만 조건을 못 채웠다'를 한 낱말로 말한다(R221 의 '불가' 와 같은 모양).
+#   ② 탭 머리는 '중립 46점'인데 아래는 'Bullish 6 · Bearish 11' 뿐이라 46 의 출처가 없었다.
+#   ③ 'TDST 지지 지지 유지' — 접두어 '지지' + 값 '지지 유지'.
+import numpy as _np253
+_q253 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+
+# ① 산식은 한 곳에서 나오고, 문장이 그 산식과 같은 계수를 적는다
+check("엔진의 DeMARK 종합 점수 산식은 그대로다 (50 + (Bullish − Bearish) × 0.9 · 0~100)",
+      "s = float(np.clip(50 + (bull - bear) * 0.9, 0, 100))" in _q253)
+check("엔진이 그 산식을 문장으로 낸다 — 계수가 바뀌면 이 검사가 걸린다",
+      "f\"종합 {s:.0f}점 = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한)\"" in _q253)
+# 사용자가 본 수(Bullish 6 · Bearish 11 → 46)가 그 산식에서 나오는지 실제로 계산한다
+_s253 = float(_np253.clip(50 + (6 - 11) * 0.9, 0, 100))
+check("실측 재현 — Bullish 6 · Bearish 11 이면 45.5 이고 화면 표기는 46점",
+      abs(_s253 - 45.5) < 1e-9 and f"{_s253:.0f}" == "46")
+check("화면은 그 문장을 읽기만 한다 — 산식을 다시 적지 않는다 (§4)",
+      "_dm_calc236 = next((r for r in (_dmv236.get('reasons') or [])" in _w231
+      and "if str(r).startswith('종합 ')), '')" in _w231
+      and "50 + (Bullish" not in _w231)
+check("그 문장이 실제로 화면 점수 칸에 들어간다",
+      '<span style="color:#9DAABC; font-size:13px;">{_dm_calc236}</span>' in _w231)
+
+# ② Perfected — 주어와 갈래
+check("Perfected 는 어느 셋업 기준인지 적는다 (매수·매도)",
+      "_perf_side236 = ('매수 셋업' if dm.get('buy_perfected')" in _w231
+      and "else ('매도 셋업' if dm.get('sell_perfected') else None))" in _w231
+      and "Perfected: {_perf_txt236}<br>" in _w231
+      and "Perfected: {dm.get('perfected_status', '미충족')}<br>" not in _w231)
+check("Perfected 의 주어를 화면이 말한다 — 진행 중 카운트가 아니다",
+      "가장 최근에 완성된 9 셋업" in _w231
+      and "카운트가 9에 닿지 않아도 지난 셋업이 완성됐을 수 있습니다" in _w231)
+check("'미충족'이 두 가지를 뜻한다고 적는다 (없었다 · 못 채웠다 · §3)",
+      "완성된 셋업이 아직 없었다는 뜻일 수도, 있었지만 조건을 못 채웠다는 뜻일 수도" in _w231
+      and "이 화면은 둘을 가르지 않습니다" in _w231)
+# 엔진이 실제로 '최근 완성된 셋업'을 보는지 — 화면 설명이 코드와 맞물린다
+check("엔진의 perfected 는 최근 완성된 셋업 색인을 본다 (화면 설명의 근거)",
+      "is_perfected_buy = buy_perfected_map.get(latest_buy_setup_idx, False) if latest_buy_setup_idx else False" in _q253
+      and "'perfected_status': \"충족\" if (is_perfected_buy or is_perfected_sell) else \"미충족\"" in _q253)
+
+# ③ 중복어
+check("TDST 줄에 '지지'가 두 번 나오지 않는다 (접두어 제거 · 값은 그대로)",
+      "f\"TDST: {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}\"" in _q253
+      and "TDST 지지 {fs.get('tdst_support_str'" not in _q253)
+check("값 자체는 안 바꿨다 — tdst_support_str 는 여전히 '지지 유지'/'이탈'/'N/A'",
+      '"지지 유지" if curr_price >= tdst_support else "이탈"' in _q253
+      and '"N/A" if not tdst_available' in _q253)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
