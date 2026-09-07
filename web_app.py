@@ -10257,12 +10257,25 @@ with tab_pred:
     #   같은 화면 아래가 *"다중 모델 앙상블은 구현되어 있지 않습니다"* 라고
     #   적어 한 화면이 두 말을 했다. 실제로 하는 일(7단계)만 적는다.
     st.subheader(f"[{resolved_name}] — 자기유사 예측 파이프라인 (7단계)")
-    
-    # [19-10] 거래 회피(Abstain) 알림
-    if sim_res.get('is_abstain'):
+
+    # 라운드 233 — 같은 조건(20일 표본 부족)에 알림이 셋이었다(거래 회피 · 표본 통제 · 확률
+    #   미표시 · 합쳐 ~300px). 그리고 match_count 는 **20일 지평**의 수인데 화면은 '유사패턴
+    #   표본 0건'이라 세 번 말한 뒤 아래 그래프를 60일 표본 12건으로 그려 '0건'과 '12건'이
+    #   한 화면에 있었다(2026-09-07 · 삼성전자). 지평별로 먼저 세고(hz) 게이트는 한 번만
+    #   말한다. 7단계 설명은 값이 아니라 설명이라 접는다. 값·판정은 그대로다.
+    hz = sim_res.get('horizons_data') or {}
+    _hz_line233 = _uk.horizon_counts_line(hz)
+    if not sim_res.get('probabilities_shown', False):
+        st.warning(
+            f"**확률 미표시** — {sim_res.get('blind_reason', '표본 부족')}. 확률은 20일 지평의 "
+            f"유사패턴 표본으로 내며, 이 구간에서는 산출·표시하지 않고 과거 관찰값만 제공합니다 — "
+            f"아래 표·그래프는 실제 관찰된 값이며 미래 확률로 해석하지 마십시오."
+            + (f" 지평별 유사패턴 표본: {_hz_line233}." if _hz_line233 else "")
+            + (" 이 구간은 예측 보류 · 거래 회피를 권장합니다." if sim_res.get('is_abstain') else ""))
+    elif sim_res.get('is_abstain'):
         st.warning(f"**퀀트 리스크 관리 알림**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이 감지되어 **`[예측 보류 / 거래 회피(Abstain)]`**를 권장합니다.")
-    
-    st.markdown(f"""
+
+    st.markdown(_uk.disclose("이 예측이 하는 일 — 7단계 (설명)", f"""
     <div style='background: #161D2A; border-radius: 16px; padding: 20px; margin-bottom: 20px;'>
         <h4 style='color: #35C98B !important; margin-top:0;'>자기유사 예측 파이프라인 — 실제 실행 단계</h4>
         <p style='font-size: 15px; margin: 4px 0; line-height: 1.7;'>
@@ -10279,12 +10292,7 @@ with tab_pred:
             유사도는 Pearson 상관과 DTW만 사용합니다.
         </p>
     </div>
-    """, unsafe_allow_html=True)
-
-    if not sim_res.get('probabilities_shown', False):
-        st.warning(f"**표본 통제** 유사패턴 표본 {sim_res.get('match_count', 0)}건 — "
-                   f"{sim_res.get('sample_tier_label', '')}. 이 구간에서는 확률을 산출·표시하지 않고 "
-                   f"과거 관찰값만 제공합니다.")
+    """), unsafe_allow_html=True)
 
     st.markdown(f"경로 기반 확률 대시보드 (목표가 +{TP_SL[0]:.0f}% vs 손절가 -{TP_SL[1]:.0f}% 선도달)")
     # 구버전은 사후확률을 9등분해 '9개 앙상블 모델 중 N개 상승'으로 표시했다.
@@ -10306,10 +10314,7 @@ with tab_pred:
          'sub': f"산출 가능 지평 {len(_scored)}개 기준"},
     ], theme=_theme)
 
-    if not sim_res.get('probabilities_shown', False):
-        st.info(f"**예측 확률 미표시** — {sim_res.get('blind_reason', '표본 부족')}. "
-                f"아래 '과거 관찰 성과'는 실제 관찰된 값이며 미래 확률로 해석하지 마십시오.")
-    else:
+    if sim_res.get('probabilities_shown', False):
         prob_val = sim_res.get('predicted_probability') or 50.0
         prob_color = "#35C98B" if prob_val >= 60.0 else ("#4C8DFF" if prob_val >= 50.0 else "#F2B84B")
 
@@ -10323,7 +10328,6 @@ with tab_pred:
         
     # ── [명세 §10] 다중기간(5·10·20·40·60·120일) 독립 예측 결과 ──────────────
     st.markdown("다중기간 독립 예측 (5 · 10 · 20 · 40 · 60 · 120 영업일)")
-    hz = sim_res.get('horizons_data') or {}
     if hz:
         hz_rows = []
         for H in [5, 10, 20, 40, 60, 120]:
@@ -10346,11 +10350,8 @@ with tab_pred:
         if hz_rows:
             st.dataframe(pd.DataFrame(hz_rows), width='stretch', hide_index=True)
 
+        # 라운드 233 — '기간 간 방향 일치도'는 위 확률 대시보드에 이미 있다(같은 값 두 번).
         _uk.stat_tiles([
-            {'label': '기간 간 방향 일치도',
-             'value': fmt_num(sim_res.get('horizon_consistency_score'),
-                              suffix='점'),
-             'sub': '산출 가능한 지평 기준'},
             # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을
             # 몇 봉까지 보고 골랐나**이다. 실행 보유기간(20거래일)과 다른
             # 값이라 이름을 갈랐다.
@@ -10406,32 +10407,40 @@ with tab_pred:
         st.info("다중기간 결과가 없습니다 (표본 부족).")
 
     st.markdown("과거 관찰 성과 세부 분리 지표 (20일)")
-    # 6칸을 한 줄에 넣으면 좁은 화면에서 값이 잘린다 — 3칸씩 두 줄로 나눈다.
-    _uk.stat_tiles([
-        {'label': '비슷했던 사례 수', 'value': f"{sim_res['match_count']}건",
-         'sub': sim_res['confidence_grade']},
-        {'label': '평균 수익률',
-         'value': (f"{sim_res['mean_perf']}%"
-                   if sim_res['mean_perf'] is not None else '산출 불가'),
-         'sub': '20거래일 보유 기준'},
-        {'label': '중앙값 수익률',
-         'value': (f"{sim_res['median_perf']}%"
-                   if sim_res['median_perf'] is not None else '산출 불가'),
-         'sub': '극단값에 덜 흔들리는 값'},
-    ], theme=_theme)
-    _uk.stat_tiles([
-        {'label': '최고 / 최저',
-         'value': (f"{sim_res['max_perf']}% / {sim_res['min_perf']}%"
-                   if sim_res['max_perf'] is not None else '산출 불가'),
-         'sub': '가장 좋았을 때와 나빴을 때'},
-        {'label': '평균 최대낙폭',
-         'value': (f"{sim_res['mdd']}%"
-                   if sim_res['mdd'] is not None else '산출 불가'),
-         'sub': '보유 중 겪은 평균 최대 하락', 'tone': 'neg'},
-        {'label': '오른 사례 / 내린 사례',
-         'value': f"{sim_res['win_count']} / {sim_res['loss_count']}",
-         'sub': '같은 조건에서의 결과 분포'},
-    ], theme=_theme)
+    # 라운드 233 — 20일 표본이 0건이면 여섯 칸이 전부 '산출 불가'였다(~330px). 없는 값을
+    #   여섯 번 말하지 않고 한 문장으로, 표본이 있는 지평이 어디인지와 함께.
+    if not sim_res.get('match_count'):
+        st.caption("20일 지평은 유사패턴 표본이 0건이라 관찰 성과(평균·중앙값·최고/최저·"
+                   "평균 최대낙폭·오른/내린 사례)를 낼 수 없습니다."
+                   + (f" 지평별 유사패턴 표본: {_hz_line233} — 표본이 있는 지평은 아래 "
+                      "'기간별 경로 분포'에서 고를 수 있습니다." if _hz_line233 else ""))
+    else:
+        # 6칸을 한 줄에 넣으면 좁은 화면에서 값이 잘린다 — 3칸씩 두 줄로 나눈다.
+        _uk.stat_tiles([
+            {'label': '비슷했던 사례 수', 'value': f"{sim_res['match_count']}건",
+             'sub': sim_res['confidence_grade']},
+            {'label': '평균 수익률',
+             'value': (f"{sim_res['mean_perf']}%"
+                       if sim_res['mean_perf'] is not None else '산출 불가'),
+             'sub': '20거래일 보유 기준'},
+            {'label': '중앙값 수익률',
+             'value': (f"{sim_res['median_perf']}%"
+                       if sim_res['median_perf'] is not None else '산출 불가'),
+             'sub': '극단값에 덜 흔들리는 값'},
+        ], theme=_theme)
+        _uk.stat_tiles([
+            {'label': '최고 / 최저',
+             'value': (f"{sim_res['max_perf']}% / {sim_res['min_perf']}%"
+                       if sim_res['max_perf'] is not None else '산출 불가'),
+             'sub': '가장 좋았을 때와 나빴을 때'},
+            {'label': '평균 최대낙폭',
+             'value': (f"{sim_res['mdd']}%"
+                       if sim_res['mdd'] is not None else '산출 불가'),
+             'sub': '보유 중 겪은 평균 최대 하락', 'tone': 'neg'},
+            {'label': '오른 사례 / 내린 사례',
+             'value': f"{sim_res['win_count']} / {sim_res['loss_count']}",
+             'sub': '같은 조건에서의 결과 분포'},
+        ], theme=_theme)
 
     # ── [명세 §10] 기간 선택형 경로 그래프 ─────────────────────────────────
     # 상·중·하 시나리오는 평균선의 평행이동이 아니라 시점별로 독립 계산한 분위수 경로다.

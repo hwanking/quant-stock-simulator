@@ -658,6 +658,26 @@ def sidebar_fact(label: str, value: str, theme: str = 'dark',
         unsafe_allow_html=True)
 
 
+HORIZONS_ALL = (5, 10, 20, 40, 60, 120)
+
+
+def horizon_counts_line(hz, order=HORIZONS_ALL) -> str:
+    """지평별 유사패턴 표본 수를 한 줄로 — "5일 195 · 10일 11 · 20일 0 · 40일 0 · 60일 12 · 120일 3" (라운드 233).
+
+    엔진의 match_count 는 **20일 지평**의 수인데, 화면은 그것을 '유사패턴 표본 0건'이라
+    세 번 말한 뒤 60일 표본 12건으로 그래프를 그려 '0건'과 '12건'이 한 화면에 있었다.
+    지평별로 먼저 세면 둘은 모순이 아니라 다른 지평이다. hz 에 없는 지평은 건너뛰고,
+    하나도 없으면 빈 문자열(호출부가 문장을 안 만든다 — 없는 값을 지어내지 않는다).
+    """
+    parts = []
+    for H in order:
+        h = (hz or {}).get(H)
+        if not h:
+            continue
+        parts.append(f"{H}일 {int(h.get('match_count') or 0)}")
+    return ' · '.join(parts)
+
+
 def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
     """
     지표 타일 줄 — st.metric 대체. 한 그룹 카드 안에 세로 헤어라인으로 나눈다.
