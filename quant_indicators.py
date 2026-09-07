@@ -1655,10 +1655,22 @@ class QuantIndicatorsEngine:
             reasons5.append(f"RSI {rsi_v:.0f}")
         if fs.get('market_regime_label'):
             reasons5.append(f"시장 국면: {fs['market_regime_label']}")
+        # 라운드 237 (사용자 지적) — 이 점수는 **볼린저 위치와 RSI 둘의 평균**이다. 수급
+        #   (외국인·기관)·거래량·20일선 안착 결과는 **들어가지 않는다.** 그런데 이름이
+        #   '수급·기술'이라 사용자는 33점을 "수급까지 본 종합 평가"로 읽었다. 산식은 한
+        #   글자도 안 바꾸고 이름과 설명만 실제에 맞춘다(§4 — 이름이 계산보다 넓으면 안 된다).
+        #   값이 클수록 최근 가격이 밴드 아래쪽·RSI 낮은 쪽, 즉 '눌린 자리'라는 뜻이다.
         if parts:
-            add('technical', '수급·기술', float(np.mean(parts)), reasons5)
+            reasons5.append("이 점수는 볼린저 위치와 RSI 둘의 평균입니다 — "
+                            "수급(외국인·기관)·거래량·20일선 안착 결과는 들어가지 않습니다")
+            if len(parts) == 2:
+                reasons5.append(f"점수를 더 낮춘 쪽: "
+                                f"{'볼린저 위치' if parts[0] < parts[1] else 'RSI'} "
+                                f"(값이 클수록 눌린 자리라는 뜻이고, 상승확률이 아닙니다)")
+            add('technical', '가격 위치 (볼린저·RSI)', float(np.mean(parts)), reasons5)
         else:
-            add('technical', '수급·기술', None, ["기술적 지표 산출 불가"], available=False)
+            add('technical', '가격 위치 (볼린저·RSI)', None,
+                ["볼린저 위치·RSI 를 산출하지 못했습니다"], available=False)
 
         # ── ⑥ 무결성·전략품질 ────────────────────────────────────────────
         sq = fs.get('strategy_quality_score')
@@ -4389,15 +4401,97 @@ class QuantIndicatorsEngine:
             _fs_out['price_axes_error'] = str(_e)
         return _fs_out
 
+    #: 각 조건을 재려면 최소 몇 봉이 필요한가 — 지표가 이미 쓰는 창 그대로다(새 문턱 아님).
+    #  sma_20 = rolling(20) · 기울기 = 그 위에 diff(3) · 거래량비 = 20일 평균 · RSI = 14일.
+    SETTLE_MIN_BARS = {'price': 20, 'slope': 23, 'volume': 20, 'rsi': 15}
+
+    def settlement_report(self, tech_df):
+        """
+        20일선 안착 점검 — **조건별 결과를 그대로** 돌려준다 (라운드 237).
+
+        ⚠️ 종전 규칙은 네 조건 중 **3개**면 '안착 성공'이라, 가격이 20일선 **아래**여도
+        기울기·거래량·RSI 셋이 맞으면 성공이 나왔다(사용자가 합성 입력으로 재현했고
+        여기 회귀 §254 가 그 입력을 심는다). '안착'은 가격이 그 선 **위에서 유지된다**는
+        뜻이므로 가격 조건을 **필수 전제**로 둔다. 문턱(2봉 · 기울기 0 · 1.2배 · RSI 45)과
+        '3개' 규칙은 한 글자도 바꾸지 않았다.
+
+        그리고 전처리가 결측을 대체값으로 채운다(기울기 0.0 · RSI 50.0 · 거래량비 1.0).
+        그래서 자료가 모자라도 조건이 '충족'으로 세어졌다 — 기울기는 결측이면 **항상
+        0 이상**이라 통과했다. 지표가 쓰는 창을 못 채우면 '확인 불가'로 적고 세지 않는다
+        (§3 — 못 잰 것과 조건에 안 맞는 것은 다르다).
+
+        반환: {'settled', 'summary', 'checks': [{'name','detail','state'}], 'bars'}
+              settled 는 True/False/None(확인 불가).
+        """
+        n = int(len(tech_df))
+        mb = self.SETTLE_MIN_BARS
+
+        def _v(col, i=-1):
+            if col not in tech_df.columns or n < abs(i):
+                return None
+            try:
+                x = float(tech_df[col].iloc[i])
+            except (TypeError, ValueError, IndexError):
+                return None
+            return None if x != x else x
+
+        checks = []
+
+        def _add(name, ok, detail, enough):
+            checks.append({'name': name, 'detail': detail,
+                           'state': ('확인 불가' if not enough
+                                     else ('충족' if ok else '미충족'))})
+
+        c_now, c_prev = _v('adj_close', -1), _v('adj_close', -2)
+        m_now, m_prev = _v('sma_20', -1), _v('sma_20', -2)
+        enough_p = (n >= mb['price'] and None not in (c_now, c_prev, m_now, m_prev))
+        c1 = bool(enough_p and c_now > m_now and c_prev > m_prev)
+        # ⚠️ 조건은 **두 봉**을 보는데 상세에 최근 한 봉만 적었더니 화면이
+        #    '종가 270,000 vs 20일선 259,075 · 미충족' 이 되어 스스로 모순돼 보였다
+        #    (실측 삼성전자: 직전 봉 255,500 < 257,125 라 미충족이 맞다). 두 봉을 다 적는다.
+        _add('최근 2거래일 종가가 20일선 위',
+             c1, (f"오늘 {c_now:,.0f} vs {m_now:,.0f} · "
+                  f"직전 {c_prev:,.0f} vs {m_prev:,.0f}" if enough_p
+                  else f"20일선을 산출할 자료가 모자랍니다 ({n}봉 · {mb['price']}봉 필요)"),
+             enough_p)
+
+        sl = _v('sma_20_slope')
+        enough_s = (n >= mb['slope'] and sl is not None)
+        _add('20일선 기울기 0 이상', bool(enough_s and sl >= 0.0),
+             (f"3거래일 대비 {sl * 100:+.2f}%" if enough_s
+              else f"기울기를 낼 자료가 모자랍니다 ({n}봉 · {mb['slope']}봉 필요)"), enough_s)
+
+        vr = _v('volume_ratio')
+        enough_v = (n >= mb['volume'] and vr is not None)
+        _add('거래량이 20일 평균의 1.2배 이상', bool(enough_v and vr >= 1.20),
+             (f"{vr:.2f}배" if enough_v
+              else f"거래량 평균을 낼 자료가 모자랍니다 ({n}봉 · {mb['volume']}봉 필요)"), enough_v)
+
+        rs = _v('rsi_14')
+        enough_r = (n >= mb['rsi'] and rs is not None)
+        _add('RSI 45 이상', bool(enough_r and rs >= 45.0),
+             (f"RSI {rs:.0f}" if enough_r
+              else f"RSI 를 낼 자료가 모자랍니다 ({n}봉 · {mb['rsi']}봉 필요)"), enough_r)
+
+        passed = sum(1 for c in checks if c['state'] == '충족')
+        p_state = checks[0]['state']
+        if p_state == '확인 불가':
+            settled, summary = None, (
+                "확인 불가 — 20일선을 산출할 자료가 모자랍니다 (조건에 안 맞는 것이 아닙니다)")
+        elif p_state == '미충족':
+            settled, summary = False, (
+                f"안착 아님 — 가격이 20일선 위에서 유지되지 않았습니다 (필수 전제). "
+                f"나머지 조건은 4개 중 {passed}개 충족")
+        else:
+            settled = passed >= 3
+            summary = (f"필수 전제(가격 유지) 충족 · 4개 조건 중 {passed}개 충족 — "
+                       f"{'안착 성공' if settled else '안착 대기'}")
+        return {'settled': settled, 'summary': summary, 'checks': checks, 'bars': n}
+
     def check_20sma_settlement(self, tech_df):
-        sub = tech_df.tail(5)
-        if len(sub) < 5: return False, "데이터 부족"
-        c1 = (sub['adj_close'].iloc[-1] > sub['sma_20'].iloc[-1]) and (sub['adj_close'].iloc[-2] > sub['sma_20'].iloc[-2])
-        c2 = sub['sma_20_slope'].iloc[-1] >= 0.0
-        c3 = sub['volume_ratio'].iloc[-1] >= 1.20
-        c4 = sub['rsi_14'].iloc[-1] >= 45.0
-        passed_cnt = sum([c1, c2, c3, c4])
-        return passed_cnt >= 3, f"4개 조건 중 {passed_cnt}개 충족 ({'안착 성공' if passed_cnt>=3 else '안착 대기'})"
+        """종전 호출부 호환 — (성공 여부, 한 줄 요약). 상세는 `settlement_report`."""
+        rep = self.settlement_report(tech_df)
+        return bool(rep['settled']), rep['summary']
 
     def compute_historical_pattern_prediction(self, df, current_features):
         import numpy as np
