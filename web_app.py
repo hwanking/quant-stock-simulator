@@ -2361,6 +2361,30 @@ def _reach_table_224():
         return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _touch_cdf_230():
+    """원장 → 봉째별 '두 선 중 하나에 닿은' 누적 비율 (라운드 230 · 표시 전용).
+    사용자: "다 보유 유지인데 맞아?" — 계획 n봉째에 아무 선에도 안 닿은 것이 얼마나 흔한지.
+    없으면 None — 지어내지 않는다 (§3)."""
+    import json as _json230
+    import ledger_view as _lv230
+    try:
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+
+        def _rows():
+            with open(_p, encoding='utf-8') as _f:
+                for _line in _f:
+                    try:
+                        yield _json230.loads(_line)
+                    except Exception:                          # noqa: BLE001
+                        continue
+        return _lv230.touch_cdf(_rows())
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def _fair_reach_snap(fs):
     """적정가 도달 비율 한 줄 (라운드 224 · 사용자: "적정가는 있는데 너무 오래 기다려야
     한다"). 시간은 못 잰다(옛 원장 행에 적정가가 없다 · R215). 잴 수 있는 것: 같은
@@ -5940,6 +5964,55 @@ else:
         elif _pf_held:
             st.caption("지금 손댈 것은 없습니다 — 전부 두 선(버틸 수 없는 가격 · 1차 매도가) "
                        "사이의 보유 유지입니다.")
+        # ── 라운드 230 — "다 보유 유지인데 맞아?" 를 화면이 먼저 답한다 ────────────
+        # ① 보유 행마다 현재가가 두 선에서 얼마나 떨어져 있나(산수 · 중앙·최소)
+        # ② 원장에서 계획 n봉째까지 두 선 중 하나에 닿은 케이스가 몇 %인가(touched_bar
+        #    누적 · 표시 전용). 문턱 없음 — "이 시점에 안 닿은 것이 얼마나 흔한가"를 보여 줄
+        #    뿐이다. 실측(2026-09-07 · 계획 1거래일째): 1봉째까지 21% · 3봉째 54% · 20봉째 96%.
+        _hold_rows230 = [(_row226, _px226) for _nm226, _act226, _row226, _px226 in _wl_acts
+                         if _row226.get('paid') and _act226 and _act226.get('kind') == '보유 유지']
+        if _hold_rows230:
+            _ds230, _dt230, _ages230 = [], [], []
+            for _row226, _px226 in _hold_rows230:
+                try:
+                    _pxf = float(_px226); _stf = float(_row226.get('snap_hold_stop') or 0)
+                    _trf = float(_row226.get('snap_hold_trim') or 0)
+                except (TypeError, ValueError):
+                    continue
+                if _pxf > 0 and _stf > 0:
+                    _ds230.append((1.0 - _stf / _pxf) * 100.0)     # 내려가야 닿는 폭
+                if _pxf > 0 and _trf > 0:
+                    _dt230.append((_trf / _pxf - 1.0) * 100.0)
+                _at230 = str(_row226.get('snap_hold_at') or '')[:10]
+                if _at230:
+                    try:
+                        _ages230.append((_today226 - datetime.date.fromisoformat(_at230)).days)
+                    except ValueError:
+                        pass
+            _parts230 = []
+            if _ds230:
+                _ds230.sort()
+                _parts230.append(f"버틸 수 없는 가격까지 중앙 −{_ds230[len(_ds230) // 2]:.1f}% "
+                                 f"(가장 가까운 행 −{_ds230[0]:.1f}%)")
+            if _dt230:
+                _dt230.sort()
+                _parts230.append(f"1차 매도가까지 중앙 +{_dt230[len(_dt230) // 2]:.1f}% "
+                                 f"(가장 가까운 행 +{_dt230[0]:.1f}%)")
+            _cdf230 = _touch_cdf_230()
+            if _cdf230 and _ages230:
+                _age230 = max(_ages230)
+                _bar230 = max(1, min(_lv217.HORIZON_BARS, _lv217.days_to_bars(_age230) or 1))
+                _cum230 = _cdf230['cum']
+                _parts230.append(
+                    f"원장 {_cdf230['n']:,}건에선 계획 {_bar230}봉째까지 "
+                    f"{_cum230.get(_bar230, 0):.0f}% · 3봉째 {_cum230.get(3, 0):.0f}% · "
+                    f"5봉째 {_cum230.get(5, 0):.0f}% · 20봉째 {_cum230.get(20, 0):.0f}%가 "
+                    f"어느 한 선에 닿았습니다")
+            if _parts230:
+                st.caption(f"보유 유지 {len(_hold_rows230)}종목이 맞는가 — 계획 "
+                           f"{max(_ages230) if _ages230 else '?'}일째 · "
+                           + " · ".join(_parts230)
+                           + ". 아직 어느 선에도 안 닿은 것이 지금 판단이고, 닿으면 표가 바뀝니다.")
         _wseq226 = ('지금 매수 가능',) + tuple(_WL_BUY_RANK)
         _wtone226 = {'지금 매수 가능': 'pos', '매수 가능': 'pos', '추천 제외': 'neg',
                      '데이터 부족': 'tx3', '신뢰도·표본 확보 대기': 'tx3'}

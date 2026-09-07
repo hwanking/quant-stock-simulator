@@ -1357,6 +1357,11 @@ def watch_action(row, price=None, today=None):
         elif _k == '보유 유지':
             brief.append('두 선 사이' if (h_stop and h_trim) else
                          ('손절선 위' if h_stop else '1차 매도가 아래'))
+            # 라운드 230 — "다 보유 유지인데 맞아?": 두 선까지의 거리 (산수 · 문턱 없음).
+            #   '손절선 x% 아래' = 현재가에서 그만큼 내려가야 닿는다 (1 − 손절/현재가).
+            if h_stop and h_trim and px:
+                brief.append(f"손절선 {(1 - h_stop / px) * 100:.1f}% 아래 · "
+                             f"1차 +{(h_trim / px - 1) * 100:.1f}% 위")
         if _at and (h_stop or h_trim):
             try:
                 import datetime as _dt2

@@ -197,3 +197,43 @@ def parse_reach_line(text):
                     bars=int(m.group(3)), share=float(m.group(4)))
     except ValueError:
         return None
+
+
+def touch_cdf(records, bars=HORIZON_BARS):
+    """{'n': 전체 케이스, 'cum': {봉: 그 봉째까지 두 선(손절·목표) 중 하나에 닿은 누적 비율 %}}.
+    사용자: "다 보유 유지인데 맞아?" — 계획 n봉째에 아무 선에도 안 닿은 것이 얼마나 흔한지
+    원장이 답한다(R230 · 표시 전용 · 문턱 없음). `records` 는 dict 반복자 또는 DataFrame.
+    분모가 0 이면 None."""
+    try:
+        import pandas as pd
+        if isinstance(records, pd.DataFrame):
+            records = records[['touched_bar', 'outcome']].to_dict('records')
+    except Exception:                                          # noqa: BLE001
+        pass
+    n = 0
+    hit = {}
+    for r in records:
+        n += 1
+        if r.get('outcome') not in ('TARGET', 'STOP'):
+            continue
+        try:
+            b = int(r.get('touched_bar'))
+        except (TypeError, ValueError):
+            continue
+        if b >= 1:
+            hit[b] = hit.get(b, 0) + 1
+    if n == 0:
+        return None
+    cum, acc = {}, 0
+    for b in range(1, int(bars) + 1):
+        acc += hit.get(b, 0)
+        cum[b] = round(100.0 * acc / n, 1)
+    return {'n': n, 'cum': cum}
+
+
+def days_to_bars(days):
+    """달력일 → 봉 수 (×5/7 · bars_to_days 의 역). 0 미만은 0."""
+    try:
+        return max(0, int(days) * 5 // 7)
+    except (TypeError, ValueError):
+        return 0
