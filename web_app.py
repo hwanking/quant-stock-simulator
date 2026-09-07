@@ -10952,10 +10952,11 @@ with tab_val:
     <tr><td><b>제외된 모델</b></td><td>{'<br>'.join(f"{d['name']} — {d['reason']}" for d in (val_eval.get('excluded_models') or [])) or '없음'}</td></tr>
     <tr><td><b>가치 기준선 조건</b></td><td>{' · '.join(('충족' if ok else '미충족') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
-    <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'}</td></tr>
+    <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'} <span style="color:#9DAABC; font-size:13px;">— 주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다. 가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.</span></td></tr>
+    <tr><td><b>이 모형들이 쓰는 입력</b></td><td>{_uk._esc_md(val_eval.get('model_inputs_note') or '-')}</td></tr>
     <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
     <tr><td><b>적정가 신뢰도</b></td><td>{val_eval.get('fair_value_confidence', 0):.0f}점 — {_uk._esc_md(val_eval.get('fair_value_status_note', ''))}</td></tr>
-    <tr><td><b>할인율 가정</b></td><td>WACC 8.5% / 영구성장률 2.0% (중복 할인 없음)</td></tr>
+    <tr><td><b>할인율 가정</b></td><td>WACC 8.5% / 영구성장률 2.0% (중복 할인 없음) <span style="color:#9DAABC; font-size:13px;">— 현금흐름표가 아니라 정상화 주당순이익에 적용합니다.</span></td></tr>
     <tr><td><b>최종 계산 기준일</b></td><td>{t_ref_date.strftime('%Y-%m-%d')} (Point-in-Time)</td></tr>
 </tbody>
 </table>
