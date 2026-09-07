@@ -5268,14 +5268,23 @@ else:
     #   **그 지적이 옳다** — 마우스를 올려야 보이는 것은 적은 게 아니다.
     #   묶은 열 이름에 둘 다 적는다. **글자 그대로** 적는다 — 상수로 빼면
     #   검사가 열 이름을 읽을 때 이름만 보이고 값이 안 보인다.
-    _wl_hdr = st.columns(_WL_COLS)
+    # 라운드 229 — 표는 기본이 **보기**다. 종전엔 30행마다 숫자 입력 둘과 '빼기'가 늘
+    #   그려져 표 한 절이 5,424px(2026-09-07 실측 · 화면 6장)였고, 모바일에선 칸이
+    #   세로로 쌓여 더 길었다. 매입가·수량은 가끔 고치는 값이라 편집 토글 뒤에 둔다.
+    #   판단·저장 규칙은 그대로 — 보기 모드는 저장된 값을 글자로 보여 줄 뿐이다.
+    #   '빼기'(되돌릴 수 없는 조작)도 편집 모드에서만 보인다.
+    _wl_edit = bool(st.toggle("매입가·수량 편집", key='wl_edit_mode', value=False,
+                              help="켜면 행마다 매입가·수량 입력칸과 '빼기'가 보입니다. "
+                                   "끄면 저장된 값을 글자로 보여 줍니다."))
+    _WL_HDR = ('종목', '현재가', '목표 매수가',
+               '1차 목표(진입가) · 2차 목표(현재가)',
+               '적정가', '엔진 판단', '매입가', '수량',
+               '매입가 대비 · 평가손익', '')
+    _wl_hdr = st.columns(_WL_COLS) if _wl_edit else None
     # 라운드 186 — '(권장가)' → '(진입가)'. 관심종목에는 추천 아닌 종목이
     # 섞이므로 열 이름의 '권장'은 절반의 행에서 거짓이다. '진입가'는 어느
     # 행에서도 참인 기준 표기다 (verdict_core.price_basis 와 같은 낱말).
-    for _c, _h in zip(_wl_hdr, ('종목', '현재가', '목표 매수가',
-                                '1차 목표(진입가) · 2차 목표(현재가)',
-                                '적정가', '엔진 판단', '매입가', '수량',
-                                '매입가 대비 · 평가손익', '')):
+    for _c, _h in zip(_wl_hdr or (), _WL_HDR):
         _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
                     f"padding-bottom:6px; line-height:1.35;'>"
                     f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
@@ -5286,6 +5295,31 @@ else:
             return f"{float(v):,.0f}원"
         except (TypeError, ValueError):
             return na
+
+    def _wl_fair_conf(w):
+        """적정가 신뢰도 글자·색 — 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
+        ⚠️ 라운드 166 — ETF 가 '0 낮음'으로 나왔다. 엔진은 적정가를 산출하지 않았고
+        (UNCALCULATED) 신뢰도 0.0 은 '못 쟀다'인데 화면이 0점짜리 낮은 신뢰도로 읽었다 —
+        미산출을 값으로 만든 것(§3). 적정가가 없으면 신뢰도도 없다 → '—'."""
+        try:
+            _fcv = float(w.get('snap_fair_conf'))
+        except (TypeError, ValueError):
+            _fcv = None
+        if w.get('snap_fair') in (None, '') or not _fcv:
+            return '—', _TOK['tx3']
+        if _fcv >= 70:
+            return f'{_fcv:.0f} 높음', _TOK['pos']
+        if _fcv >= 55:
+            return f'{_fcv:.0f} 보통', _TOK['tx2']
+        return f'{_fcv:.0f} 낮음', _TOK['warn']
+
+    def _wl_pnl(px, paid, qty):
+        """매입가 대비 %·평가손익 — 현재가나 매입가가 없으면 None (0 으로 채우지 않는다 · §3)."""
+        _ret = ((px / float(paid) - 1.0) * 100.0
+                if (px and paid and float(paid) > 0) else None)
+        _pl = ((px - float(paid)) * float(qty)
+               if (_ret is not None and qty) else None)
+        return _ret, _pl
 
     _wl_dirty = False
     #: 아래 '내 포트폴리오 견해'가 쓸 재료 (라운드 169) — 표를 그리면서
@@ -5372,6 +5406,71 @@ else:
             unsafe_allow_html=True)
         # 우선순위 한 줄 (라운드 214) — 표는 이름순, 급한 것은 여기서 먼저 읽는다
         st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))
+        if not _wl_edit:
+            # ── 라운드 229 — 보기 모드: HTML 표 하나 (행 ≈ 36px). 값의 출처는 편집 모드와
+            #   같다(_wl_pre · 저장된 매입가·수량 · _wl_fair_conf · _wl_pnl · watch_action).
+            #   이름은 ?pick= 링크 — 이름 버튼과 같은 pending_search 경로다(§4 · R164).
+            #   종전엔 30행 × 10칸의 위젯 격자라 절 하나가 5,4xx px(화면 6장)였다.
+            import urllib.parse as _up229
+            _trs229 = []
+            for _wi, _w in _grows:
+                _wcode = str(_w.get('code'))
+                _px_w, _act = _wl_pre[_wi]
+                _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
+                _paid229 = float(_w.get('paid') or 0.0)
+                _qty229 = int(_w.get('qty') or 0)
+                _ret229, _pl229 = _wl_pnl(_px_w, _paid229, _qty229)
+                _fct229, _fcc229 = _wl_fair_conf(_w)
+                _href229 = "?pick=" + _up229.quote(f"{_w.get('name') or _wcode} ({_wcode})")
+                if not _act:
+                    _jd229 = f"<span style='color:{_TOK['tx3']};'>아직 안 잼</span>"
+                else:
+                    _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
+                              f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
+                    _adl229 = _act.get('avg_down_label') if _act.get('held') else None
+                    if _adl229:
+                        _adc229 = (_TOK['pos'] if _act.get('avg_down_ok')
+                                   else _TOK['tx3'] if _act.get('avg_down_class') == '보류'
+                                   else _TOK['warn'])
+                        _jd229 += (f"<br><span style='font-size:12px; color:{_adc229};' "
+                                   f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
+                                   f"{_uk._esc(_adl229)}</span>")
+                if _ret229 is None:
+                    _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
+                else:
+                    _rc229 = _TOK['up'] if _ret229 >= 0 else _TOK['down']
+                    _pnl229 = (f"<span style='color:{_rc229}; font-weight:600;'>{_ret229:+.1f}%</span>"
+                               + (f"<br><span style='font-size:12px; color:{_rc229};'>{_pl229:+,.0f}원</span>"
+                                  if _pl229 is not None else
+                                  f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>수량 미입력</span>"))
+                _trs229.append(
+                    "<tr>"
+                    f"<td><a href='{_uk._esc_attr(_href229)}' target='_self' style='color:{_TOK['tx1']}; "
+                    f"text-decoration:none; font-weight:600;'>{_uk._esc(_w.get('name') or _wcode)}</a>"
+                    f"<span style='color:{_TOK['tx3']}; font-size:12px;'> {_uk._esc(_wcode)}</span></td>"
+                    f"<td class='n'>{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</td>"
+                    f"<td class='n'>{_wl_cell(_w.get('snap_buy'))}</td>"
+                    f"<td class='n'><span style='color:{_TOK['tx3']};'>1차 </span>{_wl_cell(_w.get('snap_t1'))}"
+                    f"<br><span style='color:{_TOK['tx3']};'>2차 </span>{_wl_cell(_w.get('snap_t2'))}</td>"
+                    f"<td class='n'>{_wl_cell(_w.get('snap_fair'))}<br><span style='font-size:12px; "
+                    f"color:{_fcc229};'>{_uk._esc(_fct229)}</span></td>"
+                    f"<td>{_jd229}</td>"
+                    f"<td class='n'>{_wl_cell(_paid229) if _paid229 > 0 else '—'}</td>"
+                    f"<td class='n'>{(f'{_qty229:,}주' if _qty229 > 0 else '—')}</td>"
+                    f"<td class='n'>{_pnl229}</td>"
+                    "</tr>")
+            _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8) else ''}>{_uk._esc(_h229)}</th>"
+                              for _i229, _h229 in enumerate(_WL_HDR[:9]))
+            st.markdown(
+                f"<div style='overflow-x:auto;'><table style='width:100%; border-collapse:collapse; "
+                f"font-size:13px; line-height:1.35; color:{_TOK['tx2']};'>"
+                f"<thead><tr style='color:{_TOK['tx3']}; font-size:12px; text-align:left;'>{_ths229}</tr></thead>"
+                f"<tbody>{''.join(_trs229)}</tbody></table></div>"
+                f"<style>table td, table th {{ padding:6px 8px; border-bottom:1px solid {_TOK['border']}; "
+                f"vertical-align:top; white-space:nowrap; }} table td.n, table th.n {{ text-align:right; "
+                f"font-variant-numeric:tabular-nums; }}</style>",
+                unsafe_allow_html=True)
+            continue
         for _wi, _w in _grows:
             _wc = st.columns(_WL_COLS)
             _wcode = str(_w.get('code'))
@@ -5413,24 +5512,7 @@ else:
             # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
             # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
             with _wc[4]:
-                _fc = _w.get('snap_fair_conf')
-                try:
-                    _fcv = float(_fc)
-                except (TypeError, ValueError):
-                    _fcv = None
-                # ⚠️ 라운드 166 — ETF 가 **'0 낮음'** 으로 나오고 있었다.
-                #   엔진은 적정가를 **산출하지 않았고**(status UNCALCULATED)
-                #   신뢰도 0.0 은 '못 쟀다'는 뜻인데, 화면이 그것을 **0점짜리
-                #   낮은 신뢰도**로 읽어 적었다 — 미산출을 값으로 만든 것이라
-                #   §3 위반이다. 적정가가 없으면 신뢰도도 없다.
-                if _w.get('snap_fair') in (None, '') or not _fcv:
-                    _fct, _fcc = '—', _TOK['tx3']
-                elif _fcv >= 70:
-                    _fct, _fcc = f'{_fcv:.0f} 높음', _TOK['pos']
-                elif _fcv >= 55:
-                    _fct, _fcc = f'{_fcv:.0f} 보통', _TOK['tx2']
-                else:
-                    _fct, _fcc = f'{_fcv:.0f} 낮음', _TOK['warn']
+                _fct, _fcc = _wl_fair_conf(_w)        # 라운드 229 — 보기 모드와 같은 포맷터
                 st.markdown(
                     f"<div style='padding-top:8px; font-size:13px; "
                     f"color:{_TOK['tx2']}; line-height:1.5;'>"
@@ -5485,26 +5567,36 @@ else:
                         + "</div>", unsafe_allow_html=True)
             # ── 사용자 입력 두 칸 ────────────────────────────────────
             with _wc[6]:
-                # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
-                # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
-                _pd = st.number_input(
-                    "매입가", min_value=0.0, step=100.0, format='%.0f',
-                    value=float(_w.get('paid') or 0.0),
-                    key=f"wl_pd_{_wcode}", label_visibility='collapsed')
+                if _wl_edit:
+                    # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
+                    # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
+                    _pd = st.number_input(
+                        "매입가", min_value=0.0, step=100.0, format='%.0f',
+                        value=float(_w.get('paid') or 0.0),
+                        key=f"wl_pd_{_wcode}", label_visibility='collapsed')
+                else:
+                    # 라운드 229 — 보기 모드: 저장된 값을 글자로 (없으면 '—' · §3)
+                    _pd = float(_w.get('paid') or 0.0)
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; color:{_TOK['tx2']};'>"
+                        f"{_wl_cell(_pd) if _pd > 0 else '—'}</div>", unsafe_allow_html=True)
             with _wc[7]:
-                _qt = st.number_input(
-                    "수량", min_value=0, step=1,
-                    value=int(_w.get('qty') or 0),
-                    key=f"wl_qt_{_wcode}", label_visibility='collapsed')
+                if _wl_edit:
+                    _qt = st.number_input(
+                        "수량", min_value=0, step=1,
+                        value=int(_w.get('qty') or 0),
+                        key=f"wl_qt_{_wcode}", label_visibility='collapsed')
+                else:
+                    _qt = int(_w.get('qty') or 0)
+                    st.markdown(
+                        f"<div style='padding-top:8px; font-size:13px; color:{_TOK['tx2']};'>"
+                        f"{f'{_qt:,}주' if _qt > 0 else '—'}</div>", unsafe_allow_html=True)
             # ── 매입가 대비 · 평가손익 (라운드 171) ─────────────────
             # ⚠️ 방금 입력된 값(`_pd`·`_qt`)으로 센다 — 저장본이 아니라.
             #   저장본으로 세면 방금 고친 값이 한 판 늦게 반영돼 화면이
             #   스스로 어긋난다 (§4).
             # ⚠️ 현재가를 못 받았으면 **비운다.** 0 으로 채우지 않는다 (§3).
-            _ret_w = ((_px_w / float(_pd) - 1.0) * 100.0
-                      if (_px_w and _pd and float(_pd) > 0) else None)
-            _pl_w = ((_px_w - float(_pd)) * float(_qt)
-                     if (_ret_w is not None and _qt) else None)
+            _ret_w, _pl_w = _wl_pnl(_px_w, _pd, _qt)        # 라운드 229 — 보기 모드와 같은 포맷터
             with _wc[8]:
                 if _ret_w is None:
                     # 매입가를 안 적었거나 현재가를 못 받았다 — 지어내지 않는다
@@ -5527,7 +5619,7 @@ else:
                         f"{_ret_w:+.1f}%{_pl_line}</div>",
                         unsafe_allow_html=True)
             with _wc[9]:
-                if st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
+                if _wl_edit and st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
                     _wl_remove(_wcode)
                     st.rerun()
             # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
