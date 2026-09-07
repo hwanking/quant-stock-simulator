@@ -20953,6 +20953,53 @@ check("결과 문서가 전·후 높이(px)와 '판단·저장 불변'을 적는
       '5,424' in _res246 and '판단·저장 불변' in _res246)
 
 print()
+print("§247 R230 — '다 보유 유지인데 맞아?'를 화면이 먼저 답한다 · 회귀 사전 점검기 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "다 보유 유지인데 보유 유지 맞아?" 실측(2026-09-07 · 보유 16행 · 계획 1거래일째):
+#   버틸 수 없는 가격까지 내려갈 폭 3.0~9.3%(중앙 5.7%), 1차 매도가까지 오를 폭 2.1~6.5%(중앙
+#   4.0%) 아래 — 어느 선에도 안 닿았으니 전부 '보유 유지'가 맞다. 원장 250,725건에선 두 선
+#   중 하나에 1봉째까지 21% · 3봉째 54% · 5봉째 70% · 20봉째 96%가 닿는다 — 첫 날엔 흔한
+#   그림이고, 며칠 안에 절반은 표가 바뀐다. 이 답을 화면(견해)에 둔다 — 표시 전용 · 문턱 없음.
+#   그리고 "백그라운드 명령어 실패가 계속 나온다": 전체 회귀(10분)가 이 세션에서 여섯 번
+#   소스 리터럴 문제로 '실패'했다. scripts/preflight.py 가 초 단위로 최근 절을 먼저 거른다.
+import ledger_view as _lv247
+import ui_kit as _uk247
+_t247 = _lv247.touch_cdf([{'touched_bar': 1, 'outcome': 'STOP'}, {'touched_bar': 3, 'outcome': 'TARGET'},
+                          {'touched_bar': None, 'outcome': 'TIME'}, {'touched_bar': 2, 'outcome': 'UNRESOLVED'}])
+check("touch_cdf — 두 선(손절·목표)에 닿은 것만 세고 누적한다 · 분모는 전체",
+      _t247 and _t247['n'] == 4 and _t247['cum'][1] == 25.0 and _t247['cum'][3] == 50.0
+      and _t247['cum'][20] == 50.0)
+check("touch_cdf — 빈 입력은 None (분모 0 이면 비율을 만들지 않는다 · §3)", _lv247.touch_cdf([]) is None)
+check("days_to_bars 는 bars_to_days 의 역이다 (×5/7)",
+      _lv247.days_to_bars(7) == 5 and _lv247.days_to_bars(3) == 2 and _lv247.days_to_bars(-1) == 0)
+_r247 = {'paid': 10000, 'qty': 1, 'snap_px': 10500, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000}
+_a247 = _uk247.watch_action(_r247, 10500)
+check("보유 유지의 짧은 판에 두 선까지의 거리가 붙는다 (산수 · 문턱 없음)",
+      _a247['kind'] == '보유 유지' and '손절선 14.3% 아래 · 1차 +4.8% 위' in ' · '.join(_a247.get('hold_brief') or []))
+check("견해가 '보유 유지가 맞는가' 줄을 낸다 — 두 선까지의 중앙·최소와 원장 도달 비율",
+      "보유 유지 {len(_hold_rows230)}종목이 맞는가" in _w231
+      and "어느 한 선에 닿았습니다" in _w231 and "_cdf230 = _touch_cdf_230()" in _w231
+      and "_lv217.days_to_bars(_age230)" in _w231)
+check("도달 비율 캐시는 원장 세 칸만 읽는다 (touched_bar · outcome) · 못 읽으면 None",
+      "return _lv230.touch_cdf(_rows())" in _w231)
+# ── 사전 점검기 ────────────────────────────────────────────────────────────
+import subprocess as _sp247
+_pf247 = _sp247.run([sys.executable, _os.path.join(PROJ, 'scripts', 'preflight.py'), '§246'],
+                    capture_output=True, text=True, encoding='utf-8', errors='replace',
+                    cwd=PROJ, timeout=180)
+check("scripts/preflight.py 가 지정 절을 초 단위로 돌리고 요약 줄을 찍는다",
+      _pf247.returncode == 0 and '③ 요약' in (_pf247.stdout or ''),
+      (_pf247.stdout or _pf247.stderr or '')[-200:])
+check("사전 점검기는 건너뜀을 통과로 세지 않는다 (미측정으로 따로 센다)",
+      '미측정' in open(_os.path.join(PROJ, 'scripts', 'preflight.py'), encoding='utf-8').read()
+      and "skips.append(" in open(_os.path.join(PROJ, 'scripts', 'preflight.py'), encoding='utf-8').read())
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R230_HOLD_CHECK.md'), encoding='utf-8') as _f247:
+    _res247 = _f247.read()
+check("결과 문서가 실측(중앙 5.7% · 1봉째 21%)과 '판단 불변'을 적는다",
+      '5.7' in _res247 and '21' in _res247 and '판단 불변' in _res247)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
