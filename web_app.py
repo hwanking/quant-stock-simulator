@@ -2614,7 +2614,20 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
     # **다시 불러오는 것**이므로, 기본을 펼침으로 두고 버튼을 '최신화'로 바꾼다.
     if 'show_screener' not in st.session_state:
         st.session_state['show_screener'] = True
-        st.session_state['pending_scan'] = True     # 첫 진입에 한 번 자동 스캔
+        # 라운드 228 — **먼저 보이고 나중에 잰다.** 종전엔 첫 진입마다 시장 스캔(순위
+        #   수집 + 후보 정밀 분석 · 2~3분)을 돌리고 나서야 홈이 그려졌다(2026-09-07 실측:
+        #   홈 첫 그림 150~200초). 오늘의 결론은 개장 전 고정 파일에 이미 있고 장중엔
+        #   다시 계산하지 않는 것이 규칙이다 — 그 파일이 있으면 스캔을 미루고 홈을 먼저
+        #   그린다. '최신화'를 누르면 그때 돈다. 파일이 없는 날(첫 세션)은 종전대로.
+        try:
+            import premarket as _pm228
+            _has_today228 = bool(_pm228.load_today_report())
+        except Exception:                                      # noqa: BLE001
+            _has_today228 = False
+        if _has_today228:
+            st.session_state['scan_deferred'] = True
+        else:
+            st.session_state['pending_scan'] = True     # 첫 진입에 한 번 자동 스캔
 
     # ① 검색창·② 빠른 선택은 위쪽 '분석할 종목' 절에 이미 있다.
     # ③ 전체 시장 스캔 조건 — 모바일에서 화면을 덜 먹도록 접어 둔다.
@@ -2673,6 +2686,10 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
                 f"최신화 완료 · **{_last}**  \n"
                 f"관심종목 {_n_att}개 · 정밀분석 {_n_deep}개  \n"
                 f"개장 전 추천은 전일 확정 데이터 기준으로 유지됩니다.")
+        elif st.session_state.get('scan_deferred'):
+            st.sidebar.caption("오늘 결론은 **개장 전 고정 파일**로 보여 줍니다 — "
+                               "'최신화'를 누르면 시장을 다시 스캔합니다 (수 분 · "
+                               "개장 전 결론은 바뀌지 않습니다).")
         else:
             st.sidebar.caption("아직 최신화하지 않았습니다 — "
                                "'최신화'를 누르면 시장 데이터를 불러옵니다.")
@@ -3198,6 +3215,7 @@ if st.session_state.get('pending_scan'):
     # 끝난 뒤 rerun 해서 사이드바가 완료 시각을 반영하게 한다.
     # 실패해도 finally 로 반드시 풀어 버튼이 영구 비활성되지 않게 한다.
     try:
+        st.session_state.pop('scan_deferred', None)      # 라운드 228 — 이제 실제로 잰다
         run_market_scan()
     finally:
         import datetime as _dt_scan
@@ -3285,10 +3303,39 @@ if st.session_state.get('show_screener', False):
         #   않음)였다. 우리가 없다고 발표한 것을 제목이 팔면 안 된다 (§9).
         #   목록이 실제로 담는 것은 '필수조건을 통과한 종목'이다.
         st.subheader("오늘 추천 필수조건을 통과한 종목")
-        if 'scan_results' not in st.session_state:
+        # 라운드 228 — 오늘 결론이 고정 파일에 있으면 첫 진입에 스캔을 돌리지 않는다.
+        #   여기서 '추천 없음'이라 적으면 거짓이다(안 잰 것이지 없는 것이 아니다 · §3) —
+        #   어디에 결론이 있고 다시 재려면 무엇을 누르는지 적는다.
+        _deferred228 = (bool(st.session_state.get('scan_deferred'))
+                        and 'scan_results' not in st.session_state)
+        if 'scan_results' not in st.session_state and not _deferred228:
             run_market_scan()
-        scan_results = st.session_state['scan_results']
-        if True:
+        scan_results = st.session_state.get('scan_results') or []
+        if _deferred228:
+            try:
+                import premarket as _pm228v
+                _pmd228 = _pm228v.load_today_report() or {}
+            except Exception:                                  # noqa: BLE001
+                _pmd228 = {}
+            _gen228 = str(_pmd228.get('generated_at') or '')[11:16]
+            _drift228 = _pmd228.get('engine_drift') or {}
+            st.markdown(
+                f"<div style='background:{_TOK['bg2']}; border-radius:14px; padding:14px 18px; "
+                f"margin-bottom:12px;'>"
+                f"<p style='margin:0 0 6px 0; font-size:15px; font-weight:700; color:{_TOK['tx1']};'>"
+                f"오늘의 결론은 아래 <b>개장 전 확정 리포트</b>에 있습니다"
+                + (f" <span style='font-weight:400; color:{_TOK['tx3']};'>· {_gen228} 고정</span>"
+                   if _gen228 else '')
+                + "</p>"
+                f"<p style='margin:0; font-size:13px; color:{_TOK['tx2']}; line-height:1.6;'>"
+                f"새 세션이라 시장 스캔(순위 수집 → 후보 정밀 분석 · 수 분)을 다시 돌리지 "
+                f"않았습니다. 개장 전 결론은 장중에 다시 계산하지 않는 것이 규칙이라, 돌려도 "
+                f"아래 리포트는 바뀌지 않습니다. 지금 시장을 다시 훑고 싶으면 사이드바의 "
+                f"<b>최신화</b>를 누르세요."
+                + (f" 고정 당시 엔진 {_uk._esc(_drift228.get('frozen_with'))} · 지금 "
+                   f"{_uk._esc(_drift228.get('current'))}." if _drift228 else '')
+                + "</p></div>", unsafe_allow_html=True)
+        if not _deferred228:
             
             # [명세 §15] 필수조건을 모두 통과한 종목만 추천한다.
             # 통과 종목이 2개면 2개, 0개면 '현재 추천주 없음'.
@@ -4015,15 +4062,29 @@ if _pmr:
     # 스캔해도 같은 파일이 재사용됐다 — 실행 불가능한 안내였다.
     # 이제 리포트는 날짜×엔진으로 저장되므로, 엔진이 바뀌면 다시 스캔이
     # 실제로 새 리포트를 만든다.
-    _pm_stale = bool(_pmr.get('stale_engine')) or not _pm_ver
-    if _pm_stale:
-        _pm_old = str(_pmr.get('stale_engine') or _pm_ver or '미상')
-        st.warning(
-            f"아래 리포트는 엔진 **{_pm_old}** 로 만든 것이고 현재 엔진은 "
-            f"**{_VER_NOW['model']}** 입니다. 가격·점수가 지금 산식과 다릅니다."
-            f"  \n**사이드바에서 스캔을 다시 실행하면 새 엔진으로 다시 만듭니다** "
-            f"(리포트를 날짜별이 아니라 날짜×엔진으로 저장하도록 고쳤습니다 — "
-            f"이제 다시 스캔이 실제로 갱신됩니다).")
+    # 라운드 228 — 종전(라운드 30)엔 엔진 버전이 다르면 '낡은 리포트'라 가격을 숨기고
+    #   재스캔을 안내했다. 그런데 정체는 날짜이고 버전은 도장이다(R222). 화면·문구 배포
+    #   에도 그 안내가 떴고 세션마다 똑같은 파일이 하나씩 늘었다. 이제 값은 그대로 두고
+    #   **드리프트를 도장으로 말한다**: 무엇이 바뀌었는지(종류)와 규칙 변경이 끼었는지.
+    #   규칙이 바뀐 날에도 오늘 결론은 고정 값이다 — 새 규칙은 내일 리포트부터(§9 ·
+    #   장중 재계산 금지). 값은 하나도 안 만든다.
+    _pm_drift = _pmr.get('engine_drift') or {}
+    if _pm_drift:
+        _kinds_ko = {'ui': '화면', 'copy': '문구', 'bugfix': '버그 수정', 'data_fix': '데이터 수정',
+                     'gate': '게이트', 'algorithm': '알고리즘', 'weight': '가중치',
+                     'engine_swap': '엔진 교체'}
+        _kinds228 = _pm_drift.get('kinds')
+        _kinds_txt = (' · '.join(sorted({_kinds_ko.get(k, k) for k in _kinds228}))
+                      if _kinds228 else ('변경 종류를 못 읽음' if _kinds228 is None else '변경 없음'))
+        if _pm_drift.get('rule_changed'):
+            st.warning(
+                f"이 리포트는 엔진 **{_pm_drift.get('frozen_with')}** 규칙으로 고정된 오늘 결론입니다. "
+                f"그 뒤 엔진이 **{_pm_drift.get('current')}** 로 바뀌었고 **규칙 변경**({_kinds_txt})이 "
+                f"끼어 있습니다 — 오늘 결론은 고정 값 그대로이고, 새 규칙은 내일 리포트부터 적용됩니다.")
+        else:
+            st.caption(
+                f"고정 당시 엔진 **{_pm_drift.get('frozen_with')}** · 지금 **{_pm_drift.get('current')}** "
+                f"({_kinds_txt}) — 값은 같습니다. 같은 날 파일 {int(_pm_drift.get('files_today') or 1)}개.")
     _CLS_COLOR = {'오늘 사도 되는 종목': '#35C98B', '조건부로 사도 되는 종목': '#4C8DFF',
                   '오늘은 기다려야 하는 종목': '#F2B84B', '오늘은 사면 안 되는 종목': '#ff453a'}
 
@@ -4066,16 +4127,9 @@ if _pmr:
                        if p['reco_class'] != '오늘은 사면 안 되는 종목'][:5]
     _picks_ban = [p for p in _picks_all
                   if p['reco_class'] == '오늘은 사면 안 되는 종목']
-    # 파일은 그대로 남기고(사후 선택 방지 감사 흔적), **화면에서만 접는다.**
-    if _pm_stale and _picks_show:
-        st.caption("이 리포트가 추천했던 종목: "
-                   + ", ".join(f"{_p.get('name')}({_p.get('code')})"
-                               for _p in _picks_show)
-                   + " — 가격·점수는 옛 엔진 값이라 표시하지 않습니다. "
-                     "다시 스캔하면 현재 엔진으로 다시 만듭니다.")
-        _picks_show = []
+    # 라운드 228 — 옛 엔진 값이라 접던 가지는 없앴다. 오늘 결론은 고정 값 그대로다.
 
-    if not _picks_show and not _pm_stale:
+    if not _picks_show:
         # 억지로 종목 수를 채우지 않는다 (사용자 사양 §2).
         # 다만 **후보를 아예 못 받은 것**과 **받았는데 다 떨어진 것**은
         # 다른 사실이다 (라운드 37). 앞의 경우를 뒤로 말하면 거짓이 된다.
@@ -4089,7 +4143,7 @@ if _pmr:
             st.error(f"**{_vc_view.NO_PICK_LINE}**")
 
     # ── 통과 못 한 종목 — 사유를 8분류로 명시 (사용자 사양 §2) ────────────
-    if _picks_gated and not _pm_stale:
+    if _picks_gated:                      # 라운드 228 — 낡음 가지가 없어졌다
         _by_bucket = {}
         for _g in _picks_gated:
             _c = _g.get('core') or {}

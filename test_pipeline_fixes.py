@@ -6063,17 +6063,21 @@ check("개장 전 리포트에 만든 엔진 버전을 찍는다",
 # 라운드 30: 경고 분기를 하나로 합쳤다. 종전에는 "다시 스캔하세요"라고
 # 하면서도 리포트 키가 날짜뿐이라 다시 스캔이 아무것도 갱신하지 못했다.
 check("엔진이 바뀌면 리포트가 낡았다고 경고한다",
-      '_pm_stale' in _w100 and '현재 엔진은' in _w100)
+      '_pm_drift' in _w100 and '고정 당시 엔진' in _w100)   # R228: 낡음 경고 → 드리프트 도장
 check("버전 기록이 없는 예전 리포트도 같은 경고를 받는다",
-      "bool(_pmr.get('stale_engine')) or not _pm_ver" in _w100)
+      "_pmr.get('engine_drift') or {}" in _w100)   # R228: stale_engine 은 더 안 쓴다
+# 라운드 228 — 재스캔 안내는 미룬 상태의 안내 카드가 한다: 사이드바 '최신화' 를 가리킨다.
 check("경고가 실제로 실행 가능한 조치를 가리킨다",
-      '다시 스캔이 실제로 갱신됩니다' in _w100)
+      '<b>최신화</b>를 누르세요' in _w100)   # 문장은 f-string 두 조각에 걸쳐 있다 — 한 조각만 본다
 # 라운드 30: 경고만 달고 옛 가격을 보여 주면 사용자는 그 숫자를 읽는다.
-check("낡은 리포트는 가격을 화면에 두지 않는다",
-      'if _pm_stale and _picks_show:' in _w100
-      and '_picks_show = []' in _w100)
-check("낡아도 어떤 종목이었는지는 밝힌다",
-      '이 리포트가 추천했던 종목' in _w100)
+# 라운드 228 — 종전(라운드 30)엔 엔진이 다르면 가격을 숨겼다. 정체는 날짜이고 버전은
+#   도장이라(R222) 오늘 결론은 고정 값 그대로 보여 주고 드리프트만 말한다.
+check("엔진이 달라도 오늘 결론은 고정 값 그대로 — 가격을 숨기던 가지가 없다",
+      'if _pm_stale and _picks_show:' not in _w100 and '_pm_stale' not in _w100)
+# 라운드 228 — 종목을 접지 않으니 '어떤 종목이었나'는 카드 자체가 말한다. 잠글 것은
+#   드리프트 도장(어느 엔진으로 고정 · 지금은 무엇 · 값은 같은가)이다.
+check("드리프트가 있어도 종목 카드를 그리고 도장을 찍는다",
+      "_pm_drift = _pmr.get('engine_drift') or {}" in _w100 and '값은 같습니다' in _w100)
 check("카드에도 정합 가드가 걸린다",
       'if e_stop is not None and float(e_stop) >= float(rec):' in _w100
       and 'if e_t1 is not None and float(e_t1) <= float(rec):' in _w100)
@@ -6471,14 +6475,17 @@ check("리포트 경로가 날짜×엔진으로 갈린다",
 check("경로에 엔진 버전이 들어간다",
       _v104 in _os.path.basename(_pm104._pm_path('2026-01-01', _v104)))
 _pmsrc104 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
-check("낡은 리포트를 재사용하지 않는다",
-      "if existing and not existing.get('stale_engine')" in _pmsrc104)
-check("낡음을 표시로 알린다", "old['stale_engine']" in _pmsrc104)
+# 라운드 228 — 같은 날 리포트는 버전이 달라도 오늘 결론이다(장중 재계산 금지 · 정체는
+#   날짜). 낡음 표시는 stale_engine 이 아니라 engine_drift 도장이다.
+check("같은 날 리포트가 있으면 다시 만들지 않는다 (정체는 날짜)",
+      "    if existing:\n        return existing, False" in _pmsrc104)
+check("드리프트를 도장으로 알린다", "latest['engine_drift'] = {" in _pmsrc104)
 check("옛 파일을 지우지 않는다 (감사 흔적)",
       '옛 파일은 지우지 않는다' in _pmsrc104)
 _w104 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+# 라운드 228 — 안내는 미룬 상태 카드의 '최신화' 다.
 check("화면 안내가 실행 가능해졌다",
-      '이제 다시 스캔이 실제로 갱신됩니다' in _w104)
+      '<b>최신화</b>를 누르세요' in _w104)
 check("실행 불가능했던 옛 안내를 지웠다",
       '실행하는 편이 안전합니다' not in _w104)
 
@@ -6556,9 +6563,9 @@ check("업데이트 이력에 안 적힌 커밋이 2개를 넘지 않는다 (해
 check("동결 리포트는 날짜×엔진으로 저장",
       "_pm_path(date_key, report['engine_version'])" in _p105)
 check("낡은 동결 리포트를 재사용하지 않는다",
-      "if existing and not existing.get('stale_engine')" in _p105)
+      "    if existing:\n        return existing, False" in _p105)   # R228
 check("낡으면 가격을 화면에 두지 않는다",
-      'if _pm_stale and _picks_show:' in _w105)
+      'if _pm_stale and _picks_show:' not in _w105)   # R228: 가격을 숨기지 않는다
 
 # ── ⑤ 추천 카드와 상세가 같은 중앙 판정을 읽는가 ──────────────────────
 check("중앙 판정 모듈이 있다", _os.path.exists(
@@ -20838,6 +20845,71 @@ check("옛 스탬프 안내에 라운드 번호가 없다 (사용자는 번호�
 with open(_os.path.join(PROJ, 'docs', 'RESULT_R227_COPY_REFS.md'), encoding='utf-8') as _f244:
     _res244 = _f244.read()
 check("결과 문서가 전·후 수와 '판정 불변'을 적는다", '41' in _res244 and '판정 불변' in _res244)
+
+print()
+print("§245 R228 — 먼저 보이고 나중에 잰다: 오늘 결론이 고정돼 있으면 첫 진입에 스캔을 미룬다 · 리포트의 정체는 날짜 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   실측(2026-09-07 09:52 · 새 세션): 첫 진입마다 시장 스캔(순위 수집 → 후보 정밀 분석)
+#   이 홈보다 먼저 돌아 홈 첫 그림이 150~200초였다. 그리고 리포트 열쇠가 날짜×엔진
+#   버전이라 화면·문구 배포 셋 뒤에 **똑같은 내용의 파일 넷**(38,041바이트)이 생겼고
+#   세션마다 재스캔이 돌았다 — R222 가 추적 DB 에서 걷어낸 "버전이 열쇠에 있으면 옛
+#   것이 매번 새 것" 그 모양. 오늘 결론은 개장 전 고정 파일에 있고 장중 재계산 금지가
+#   규칙이다. 그 파일이 있으면 스캔을 미루고 홈을 먼저 그린다('최신화'가 스캔).
+#   값·판정 불변. 정체는 날짜, 버전은 도장(engine_drift).
+import premarket as _pm245
+import tempfile as _tmp245
+import json as _json245
+check("첫 진입에 오늘 리포트가 있으면 스캔을 미룬다 (scan_deferred) · 없으면 종전대로 pending_scan",
+      "st.session_state['scan_deferred'] = True" in _w231
+      and "_has_today228 = bool(_pm228.load_today_report())" in _w231
+      and "st.session_state['pending_scan'] = True     # 첫 진입에 한 번 자동 스캔" in _w231)
+check("추천 절이 미룬 상태에서 '추천 없음'을 찍지 않고 안내 카드를 낸다 (§3)",
+      "if _deferred228:" in _w231 and "오늘의 결론은 아래 <b>개장 전 확정 리포트</b>에 있습니다" in _w231
+      and "if not _deferred228:" in _w231 and "        if True:\n" not in _w231)
+check("미룬 상태에서 scan_results 를 KeyError 없이 읽는다",
+      "scan_results = st.session_state.get('scan_results') or []" in _w231)
+check("'최신화'(pending_scan)가 돌면 미룸을 푼다 — 스캔 길은 하나",
+      "st.session_state.pop('scan_deferred', None)" in _w231
+      and len(_re.findall(r"^\s+run_market_scan\(\)", _w231, flags=_re.M)) == 2)   # 정의 줄은 세지 않는다
+check("사이드바가 미룬 상태를 말한다", "오늘 결론은 **개장 전 고정 파일**로 보여 줍니다" in _w231)
+# ── 리포트의 정체는 날짜 — 임시 폴더에서 심는다 (사용자 파일은 안 건드린다) ──
+_dir245 = _tmp245.mkdtemp(prefix='gaeum_r228_')
+_orig_dir245 = _pm245.PM_DIR
+try:
+    _pm245.PM_DIR = _dir245
+    _dk245 = '2099-02-02'
+    _rep245 = {'date': _dk245, 'generated_at': f'{_dk245} 05:00:00', 'engine_version': 'v2099.02.02.1',
+               'frozen': True, 'picks': [{'symbol': '000000.KS', 'name': 'x'}]}
+    with open(_pm245._pm_path(_dk245, 'v2099.02.02.1'), 'w', encoding='utf-8') as _f245:
+        _json245.dump(_rep245, _f245, ensure_ascii=False)
+    _got245 = _pm245.load_today_report(_dk245, engine_version='v2099.02.02.9')
+    check("같은 날 다른 버전 파일을 오늘 결론으로 돌려준다 (정체는 날짜)",
+          bool(_got245) and _got245.get('picks') and 'stale_engine' not in _got245)
+    check("드리프트를 도장으로 단다 (frozen_with · current · files_today)",
+          (_got245.get('engine_drift') or {}).get('frozen_with') == 'v2099.02.02.1'
+          and (_got245.get('engine_drift') or {}).get('current') == 'v2099.02.02.9'
+          and (_got245.get('engine_drift') or {}).get('files_today') == 1)
+    _same245 = _pm245.load_today_report(_dk245, engine_version='v2099.02.02.1')
+    check("같은 버전이면 드리프트가 없다", bool(_same245) and 'engine_drift' not in _same245)
+    _b245, _new245 = _pm245.build_report(None, [], date_key=_dk245)
+    check("같은 날 리포트가 있으면 버전이 달라도 다시 만들지 않는다 (장중 재계산 금지)",
+          _new245 is False and (_b245 or {}).get('generated_at') == f'{_dk245} 05:00:00')
+    check("없는 날은 None (지어내지 않는다)", _pm245.load_today_report('2099-03-03') is None)
+finally:
+    _pm245.PM_DIR = _orig_dir245
+    import shutil as _sh245
+    _sh245.rmtree(_dir245, ignore_errors=True)
+check("개장 전 절이 낡음 경고·가격 숨김 대신 드리프트 도장을 찍는다 (값은 그대로)",
+      "_pm_drift = _pmr.get('engine_drift') or {}" in _w231
+      and "if _pm_stale and _picks_show:" not in _w231
+      and "규칙 변경**({_kinds_txt})이" in _w231 and "값은 같습니다. 같은 날 파일" in _w231)
+check("규칙 변경 종류는 premarket 한 곳의 상수다 (gate · algorithm · weight · engine_swap)",
+      _pm245.RULE_KINDS == ('gate', 'algorithm', 'weight', 'engine_swap'))
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R228_HOME_FIRST.md'), encoding='utf-8') as _f245:
+    _res245 = _f245.read()
+check("결과 문서가 전·후 시간(초)과 파일 넷의 실측을 적는다",
+      '38,041' in _res245 and '초' in _res245 and '판정 불변' in _res245)
 
 print()
 print("=" * 72)
