@@ -699,6 +699,29 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
         + ''.join(cells) + "</div>", unsafe_allow_html=True)
 
 
+def rows_html(items: Sequence[tuple], theme: str = 'dark',
+              title: str = '') -> str:
+    """`rows()` 의 HTML 본체 — 접는 상세(disclose) 안에 넣을 때 쓴다 (라운드 231).
+    그리는 규칙은 rows() 와 같다 — 한 곳."""
+    t = tokens(theme)
+    head = (f"<p style='margin:0 0 8px 2px; font-size:13px; color:{t['tx2']}; "
+            f"font-weight:500;'>{_esc(title)}</p>" if title else '')
+    body = []
+    for i, it in enumerate(items):
+        label, value = it[0], it[1]
+        tone = t.get(it[2], t['tx1']) if len(it) > 2 and it[2] else t['tx1']
+        line = ('' if i == 0 else f"border-top:1px solid {t['line']};")
+        body.append(
+            f"<div style='display:flex; justify-content:space-between; "
+            f"align-items:baseline; gap:16px; padding:12px 0; {line}'>"
+            f"<span style='font-size:15px; color:{t['tx2']};'>{_esc(label)}</span>"
+            f"<span style='font-size:15px; font-weight:600; color:{tone}; "
+            f"font-variant-numeric:tabular-nums; text-align:right;'>"
+            f"{_esc(value)}</span></div>")
+    return (head + f"<div style='background:{t['card']}; border-radius:18px; "
+            f"padding:8px 20px;'>" + ''.join(body) + "</div>")
+
+
 def rows(items: Sequence[tuple], theme: str = 'dark',
          title: str = '') -> None:
     """
@@ -706,6 +729,8 @@ def rows(items: Sequence[tuple], theme: str = 'dark',
 
     items: [(label, value)] 또는 [(label, value, tone)]
     """
+    st.markdown(rows_html(items, theme, title), unsafe_allow_html=True)
+    return
     t = tokens(theme)
     head = (f"<p style='margin:0 0 8px 2px; font-size:13px; color:{t['tx2']}; "
             f"font-weight:500;'>{_esc(title)}</p>" if title else '')

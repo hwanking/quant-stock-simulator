@@ -9048,7 +9048,10 @@ for _vt in (_vd_v.get('vetoes') or [])[:2]:
 _rows_v.append(('검증 때문에 걸린 제한',
                 (f"{len(_gates_v)}건 적용" if _gates_v else '없음'),
                 'warn' if _gates_v else 'pos'))
-_uk.rows(_rows_v, theme=_theme, title='모델 검증 반영 — 이번 판단에 쓰인 근거')
+# 라운드 231 — 참고 정보라 접는다(세고 묶고 접기 · R226). 내용·제목은 그대로다.
+st.markdown(_uk.disclose('모델 검증 반영 — 이번 판단에 쓰인 근거',
+                         _uk.rows_html(_rows_v, theme=_theme), color=_TOK['tx3']),
+            unsafe_allow_html=True)
 if _gates_v:
     _uk.note('적용된 제한: ' + ' / '.join(_gates_v), theme=_theme)
 _uk.note(
@@ -9133,8 +9136,9 @@ if _bake and _bake.get('engines'):
         _rows_e.append((str(_e.get('desc') or _k),
                         f"{_lab} · 실전 적중 {_bl['hit']:.0f}% (n={_bl['n']})",
                         'pos' if _say is True else ''))
-    _uk.rows(_rows_e, theme=_theme,
-             title='다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)')
+    st.markdown(_uk.disclose('다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)',
+                             _uk.rows_html(_rows_e, theme=_theme), color=_TOK['tx3']),
+                unsafe_allow_html=True)
     _uk.note(
         "이 엔진들은 채택되지 않았습니다. 6개 후보를 같은 데이터로 겨뤄 봤고 "
         "전부 실전(안 본 기간)에서 현행보다 나빴습니다 — 특히 눌림 되돌림은 "
@@ -9692,8 +9696,24 @@ if _ledger_df is not None:
             _n_excl_imp = _ic.execute(
                 "SELECT COUNT(*) FROM prediction_cases "
                 "WHERE status IN ('dup_version', 'void_fixture')").fetchone()[0]
+            # 라운드 231 — 첫 수확(2026-09-07: 확정 10 = 성공 2 · 실패 8)이 있었는데 이 줄은
+            #   '확정 대기 N'만 적고 있었다. 확정된 것의 갈래를 세어 그대로 낸다 (§9 —
+            #   성과를 좋게 보이게 쓰지 않는다 · 분모를 같이 적는다 · 미결은 따로).
+            _cnt_imp = dict(_ic.execute(
+                "SELECT status, COUNT(*) FROM prediction_cases "
+                "WHERE status IN ('success', 'failure', 'unresolved') "
+                "GROUP BY status").fetchall())
+            _n_ok_imp = int(_cnt_imp.get('success') or 0)
+            _n_bad_imp = int(_cnt_imp.get('failure') or 0)
+            _n_unres_imp = int(_cnt_imp.get('unresolved') or 0)
         finally:
             _ic.close()
+        _n_dec_imp = _n_ok_imp + _n_bad_imp
+        _tally_imp = (f" 확정 {_n_ok_imp + _n_bad_imp + _n_unres_imp}건 — 성공 {_n_ok_imp} · "
+                      f"실패 {_n_bad_imp} · 미결 {_n_unres_imp}"
+                      + (f" (성공 비율 {_n_ok_imp / _n_dec_imp * 100:.0f}% · 분모 {_n_dec_imp} · "
+                         f"미결 제외 · 전방 표본은 아직 작습니다)" if _n_dec_imp else '')
+                      + "." if (_n_ok_imp + _n_bad_imp + _n_unres_imp) else "")
         _lr_txt = (f"{str(_lr['started_at'])[:16]} ({_lr['status']} · "
                    f"추가 {_lr['added_cases']} · 확정 {_lr['resolved_cases']})"
                    if _lr else "아직 실행 이력 없음")
@@ -9701,7 +9721,7 @@ if _ledger_df is not None:
         with _pc1:
             st.caption(f"**실전 추천 추적 파이프라인**: 동결 케이스 "
                        f"{_n_all_imp}건 · 결과 확정 대기 {_n_open_imp}건 · "
-                       f"마지막 실행 {_lr_txt}. 같은 봉에서 목표·손절이 함께 "
+                       f"마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서 목표·손절이 함께 "
                        "닿으면 성공으로 세지 않습니다 (선도달 확인 불가)."
                        + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
                           f"행으로 남기되 세지 않았습니다." if _n_excl_imp else ""))
