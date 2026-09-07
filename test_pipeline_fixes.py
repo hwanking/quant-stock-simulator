@@ -9789,9 +9789,10 @@ check("기사 목록에도 확인 필요 표시가 붙는다", "risk_review" in 
 #   **값은 안 바꾼다.** 무엇을 재는지 이름으로 가른다.
 check("실행 보유기간에 '실행 기준' 이 붙는다",
       '실행 기준 보유' in _w96)
-check("유사패턴 지평은 '관찰기간' 으로 부른다",
+# 라운드 234 — '최적 관찰기간'은 보유기간 추천처럼 읽혀 '관찰 점수가 가장 높은 기간'으로.
+check("유사패턴 지평은 '관찰기간' 으로 부른다 (R234: '최적'은 뺐다)",
       '유사패턴 관찰기간' in _w96
-      and '유사패턴 최적 관찰기간' in _w96)
+      and '관찰 점수가 가장 높은 기간' in _w96 and "'label': '유사패턴 최적 관찰기간'" not in _w96)
 # ⚠️ 라운드 98 — 처음엔 파일 전체를 훑다가 **내 주석**까지 세어 실패했다.
 #   왜 바꿨는지 적은 주석에 옛 이름이 들어가는데, 그것까지 실패로 세면
 #   결정을 기록하지 못하게 된다(§135 가 이미 겪은 것). 라운드 71 의
@@ -21229,14 +21230,15 @@ check("horizon_counts_line: 지평별 수를 순서대로 한 줄 · 없는 지�
       == "5일 12 · 20일 0 · 40일 12 · 120일 3")
 check("horizon_counts_line: 지평이 하나도 없으면 빈 문자열 (문장을 지어내지 않는다 · §3)",
       _uk250.horizon_counts_line({}) == '' and _uk250.horizon_counts_line(None) == '')
-_tab250 = _w231.split('자기유사 예측 파이프라인 (7단계)")')[1].split('다중기간 독립 예측 (5 · 10 · 20 · 40 · 60 · 120 영업일)')[0]
+_tab250 = _w231.split('자기유사 예측 파이프라인 (7단계)")')[1].split('기간별 자료량과 관찰 통계 (5 · 10 · 20 · 40 · 60 · 120 영업일)')[0]
 check("표본 게이트 알림은 하나 — 옛 셋(표본 통제 · 예측 확률 미표시 · 별도 거래 회피)이 없다",
       "**표본 통제** 유사패턴 표본" not in _w231 and "**예측 확률 미표시** —" not in _w231
       and _tab250.count('st.warning(') == 2 and _tab250.count('st.info(') == 0
-      and "**확률 미표시** — {sim_res.get('blind_reason', '표본 부족')}" in _tab250)
-check("알림이 지평별 수를 같이 말한다 (0건과 12건은 다른 지평)",
+      and "**20일 기준 예측 보류** — {sim_res.get('blind_reason', '표본 부족')}" in _tab250)
+# 라운드 234 — 지평별 수는 알림 문장이 아니라 바로 아래 표(기간별 자료량)가 말한다.
+check("알림이 지평별 수를 같이 말한다 (0건과 12건은 다른 지평) — R234: 표가 바로 아래에 있다",
       "_hz_line233 = _uk.horizon_counts_line(hz)" in _tab250
-      and "지평별 유사패턴 표본: {_hz_line233}." in _tab250
+      and '기간별 자료량과 관찰 통계' in _w231
       and "예측 보류 · 거래 회피를 권장합니다." in _tab250
       and "if sim_res.get('is_abstain') else" in _tab250)
 check("7단계 설명은 접힌다 — 내용은 그대로 (⑦ 표본 통제 줄 · 앙상블 없음 문구)",
@@ -21249,8 +21251,103 @@ check("20일 표본이 0건이면 타일 여섯 대신 한 문장 · 표본이 �
       and "20일 지평은 유사패턴 표본이 0건이라 관찰 성과" in _obs250
       and "'기간별 경로 분포'에서 고를 수 있습니다." in _obs250
       and _obs250.count("_uk.stat_tiles([") == 2 and "'label': '비슷했던 사례 수'" in _obs250)
-check("'기간 간 방향 일치도' 타일은 한 번만 (같은 값 두 번 금지 · §4)",
-      _w231.count("'label': '기간 간 방향 일치도'") == 1)
+# 라운드 234 — 점수 타일은 없애고 표 아래 캡션에서 분자·분모(상승 k · 하락 m)와 같이 말한다.
+check("'기간 간 방향 일치도' 타일은 없고 캡션이 분자·분모와 같이 말한다 (§4)",
+      _w231.count("'label': '기간 간 방향 일치도'") == 0 and "기간 간 방향 일치 {fmt_num(_hcs, suffix='점')} = 그중 같은 방향인 지평의 비율" in _w231)
+
+print()
+print("§251 R234 — 자기유사 예측 탭 정합성: 라벨=데이터 지평 · 표본 기준은 규칙집 한 곳 · 기간별 표가 먼저 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-07 저녁) ─────────────────────────
+#   ① 라벨은 "기본 40일"인데 데이터는 60일(40일 0건이라 밀림) ② 엔진이 '관찰 점수 최고 기간
+#   10일'을 골랐는데 화면 기본은 40일 고정 ③ 기준이 '10건 미달'과 '5건 미만'으로 갈려 보임
+#   ④ 20일 0건인데 화면 중심이 20일이라 카드마다 '미산출' ⑤ '산출 가능 지평 3개'가 어느
+#   지평인지 없음 ⑥ '방향 일치 67점'이 분자·분모 없이 큼 ⑦ '최적 관찰기간'·'전략 유형 확률'
+#   이 보유기간 추천·결과 확률처럼 읽힘 ⑧ 지표 묶음(n=12)이 어느 기간인지 없음.
+import ui_kit as _uk251
+import quant_indicators as _qi251
+
+# ① 표본 기준은 엔진 규칙집 한 곳 — 5 = 관찰값 하한 · 10 = 확률 하한 (둘은 다른 기준이지 모순이 아니다)
+_cls251 = None
+for _nm in dir(_qi251):
+    _o = getattr(_qi251, _nm)
+    if isinstance(_o, type) and hasattr(_o, 'SAMPLE_TIERS'):
+        _cls251 = _o
+        break
+# 등급 판정은 클래스 속성만 읽으므로 인스턴스 없이 클래스를 self 로 넘겨 부른다 (생성자 인자 무관)
+_tier251 = (lambda n: _cls251.classify_sample_tier(_cls251, n)[0]) if _cls251 else (lambda n: None)
+_pa251 = (lambda c: _cls251.probabilities_allowed(_cls251, c)) if _cls251 else (lambda c: None)
+check("엔진 표본 등급: 5 미만 미산출 · 10 미만 관찰값만 · 확률은 10 이상 (규칙집 한 곳)",
+      _cls251 is not None and _tier251(4) == 'INSUFFICIENT'
+      and _tier251(5) == 'OBSERVATION_ONLY' and _tier251(9) == 'OBSERVATION_ONLY'
+      and _tier251(10) == 'LOW_CONFIDENCE'
+      and _pa251('OBSERVATION_ONLY') is False and _pa251('LOW_CONFIDENCE') is True)
+check("화면은 그 기준을 SAMPLE_TIERS 에서 읽어 적는다 (숫자를 손으로 적지 않는다)",
+      "_thr234 = {code: thr for thr, code, _lb in (getattr(q_engine, 'SAMPLE_TIERS', ()) or ())}" in _w231
+      and "_min_obs234 = _thr234.get('INSUFFICIENT')" in _w231
+      and "_min_prob234 = _thr234.get('OBSERVATION_ONLY')" in _w231
+      and "관찰값 표시는 {_min_obs234}건 이상 · 확률 표시는 {_min_prob234}건 이상" in _w231)
+
+# ② 방향 요약 — 엔진 공식(같은 방향 비율)과 화면의 셈이 같은 경계를 쓴다
+_hz251 = {5: {'match_count': 195, 'win_rate': 61.0}, 10: {'match_count': 11, 'win_rate': 54.5},
+          20: {'match_count': 0, 'win_rate': None}, 40: {'match_count': 0, 'win_rate': None},
+          60: {'match_count': 12, 'win_rate': 41.7}, 120: {'match_count': 3, 'win_rate': None}}
+_d251 = _uk251.horizon_directions(_hz251)
+check("horizon_directions: 비교 가능 지평 3개(5·10·60) · 상승 2 · 하락 1 · 확률 기준 미달 지평(120일 n=3)은 따로",
+      [(H, n) for H, n, _d in _d251['scored']] == [(5, 195), (10, 11), (60, 12)]
+      and _d251['up'] == 2 and _d251['down'] == 1 and _d251['unscored'] == [(120, 3)])
+check("direction_word 는 엔진과 같은 경계(50 이상 = 상승)",
+      _uk251.direction_word(50.0) == '상승' and _uk251.direction_word(49.9) == '하락'
+      and _uk251.direction_word(None) == '—')
+_qsrc251 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진의 일치도 공식은 그대로다 — max(상승, 하락) / 지평 수 · 경계 50 (화면 설명과 맞물린다)",
+      "up_h = sum(1 for H in scored_h if horizons_data[H]['win_rate'] >= 50.0)" in _qsrc251
+      and "horizon_consistency_score = int(round((max(up_h, len(scored_h) - up_h) / len(scored_h)) * 100))" in _qsrc251)
+
+# ③ 화면 순서·문구
+_tab251 = _w231.split('자기유사 예측 파이프라인 (7단계)")')[1].split('with tab_val:')[0]
+check("순서: 결론 한 줄 → 기간별 표 → 20일 확률 → 20일 관찰 → 다른 기간 살펴보기",
+      _tab251.index('**20일 기준 예측 보류**') < _tab251.index('기간별 자료량과 관찰 통계')
+      < _tab251.index('20일 매매 확률 (목표가') < _tab251.index('과거 관찰 성과 세부 분리 지표 (20일)')
+      < _tab251.index('다른 기간 살펴보기 (기본 {default_h}일'))
+check("20일 확률이 없으면 '미산출' 카드 셋 대신 한 줄 (카드는 표시될 때만)",
+      "    if _shown234:\n        _uk.stat_tiles([" in _tab251
+      and "산출하지 않습니다 — 20일 유사사례 n={sim_res.get('match_count', 0)}" in _tab251
+      and _tab251.count("먼저 닿을 확률") == 2)
+check("비교 가능한 지평을 이름·n·방향으로 적고 일치도는 분자·분모(상승 k · 하락 m)와 같이",
+      "확률 비교가 가능한 지평 {len(_dir234['scored'])}개 — {_cmp234}" in _tab251
+      and "(상승 {_dir234['up']} · 하락 {_dir234['down']})" in _tab251
+      and "표본은 있으나 확률 표시 기준에 못 미쳐 비교에서 뺀 지평" in _tab251
+      and "산출 가능 지평 {len(_scored)}개 기준" not in _w231)
+check("라벨이 실제 기본 지평을 적고 기본은 엔진의 '관찰 점수가 가장 높은 기간'(표본 있을 때)",
+      "예측 기간 선택 (기본 40일" not in _w231
+      and 'f"다른 기간 살펴보기 (기본 {default_h}일 = {_why234} · ' in _tab251
+      and "_opt234 = sim_res.get('optimal_holding_period_days')" in _tab251
+      and "if _opt234 in avail_h:\n            default_h = _opt234" in _tab251)
+check("그래프·지표 묶음의 제목이 지평·n·등급·성격을 먼저 말하고 그래프 뒤 중복 경고는 없다",
+      "**{sel_h}거래일 유사패턴 관찰 결과** — n={h['match_count']} · {h['tier_label']} · " in _tab251
+      and '("예측" if show_forecast else "과거 관찰값 (미래 확률 아님)")' in _tab251
+      and "위 그래프는 **미래 예측이 아니라 과거 유사사례의 관찰 분포**입니다." not in _w231)
+check("이름 셋: '관찰 점수가 가장 높은 기간' · '전략 유형 적합도 구성' · 20일 확률 카드에 사건 정의",
+      "'label': '관찰 점수가 가장 높은 기간'" in _tab251 and "매매 보유기간 추천이 아닙니다" in _tab251
+      and '전략 유형 적합도 구성 (결과 확률이 아니라 분류 가중치의 구성비)' in _tab251
+      and '"전략 유형 확률: "' not in _w231
+      and "'sub': '손절가보다 목표가에 먼저 도달 · 20일 안'" in _tab251
+      and "'sub': '20일 뒤 방향 · Beta-Binomial 보정'" in _tab251)
+check("표에 '관찰승률 · 방향' 칸 — 칸 수는 10 그대로 (칸을 더하면 값이 잘려 보인다)",
+      '"관찰승률 · 방향": (f"{fmt_pct(h.get(\'obs_win_rate\'), signed=False)} · "' in _tab251
+      and _tab251.split('hz_rows.append({')[1].split('})')[0].count('": ') == 10)
+
+# ④ 연구 후보 — rho 수준별 커버리지 감사는 레이더에 후보로, 운영 rho 는 그대로
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _f251:
+    _rad251 = _json.load(_f251)
+_rho_rows251 = [r for r in _rad251['rows'] if 'rho' in _json.dumps(r, ensure_ascii=False) and '커버리지' in _json.dumps(r, ensure_ascii=False)]
+check("연구 레이더에 rho 수준별 유사도 커버리지 감사가 후보로 있고 운영 rho 를 바꾸지 않는다고 적혀 있다",
+      len(_rho_rows251) >= 1 and any('운영 rho' in _json.dumps(r, ensure_ascii=False) for r in _rho_rows251)
+      and "('rho_cutoff', 0.80)" in _w231, scanned=len(_rad251['rows']))
+_doc251 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R234_PREDICT_TAB_COHERENCE.md'))
+check("문서가 지적 여덟과 실측 지평별 수(5일 195 · 10일 11 · 60일 12)를 적는다",
+      '5일 195' in _doc251 and '60일 12' in _doc251 and '기본 40일' in _doc251 and '2026-09-07' in _doc251)
 
 print()
 print("=" * 72)
