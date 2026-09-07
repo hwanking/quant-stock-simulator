@@ -21562,6 +21562,85 @@ check("화면이 조건별 결과를 표로 낸다 (어느 두 개가 충족인�
       and "4개 조건 중 {passed_cnt}개 충족" not in _w231)
 
 print()
+print("§255 R238 — 화면에 없던 고정 −2% 를 계산 사슬로 드러낸다 · 배너/상세 낱말 · 업황 사유 중복 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-08) ──────────────────────────────
+#   ① 화면은 '기초 펀더멘털 가치 275,844 → 적정가 270,327' 만 보여 주고 그 사이의 −2.0% 를
+#      어디서도 말하지 않았다. raw_target_val = weighted_median * 0.98 이 최초 커밋부터 있고
+#      근거가 기록돼 있지 않다(R44 가 걷어낸 것은 별도의 market_adjustment_pct 였다).
+#      게다가 '기초'는 최종값을 0.98 로 **되나눈** 값이라 윈저화·클립이 걸리면 가중중앙값과
+#      달라진다. 지우는 것은 값이 바뀌는 변경이라(§2) 이번엔 **드러내기만** 한다.
+#   ② 배너 '적정가 이하 (안전마진 미확보)' 와 상세 '+0.1% (적정가 부근)' 가 한 화면에 있었다.
+#   ③ 업황 미적용 사유가 같은 탭에서 세 번 찍혔다.
+import quant_indicators as _qi255
+_q255 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_cls255 = None
+for _nm in dir(_qi255):
+    _o = getattr(_qi255, _nm)
+    if isinstance(_o, type) and hasattr(_o, 'FAIR_FIXED_HAIRCUT'):
+        _cls255 = _o
+        break
+
+# ① 상수에 이름이 있고, 리터럴이 두 자리에서 사라졌다 (다시 베끼면 걸린다)
+check("고정 보정이 이름 있는 상수다 · 값은 그대로 0.98 (지우지 않았다)",
+      _cls255 is not None and _cls255.FAIR_FIXED_HAIRCUT == 0.98)
+check("두 계산 자리가 그 상수를 부른다 — 리터럴 0.98 을 다시 적지 않는다",
+      "raw_target_val = weighted_median * self.FAIR_FIXED_HAIRCUT" in _q255
+      and "base_fair_value = float(target_fundamental / self.FAIR_FIXED_HAIRCUT)" in _q255
+      and "weighted_median * 0.98" not in _q255
+      and "target_fundamental / 0.98" not in _q255)
+check("근거가 기록돼 있지 않다는 사실과 제거 조건을 코드가 적는다",
+      "근거가 코드에도" in _q255 and "사전등록과 영향 측정이" in _q255)
+# 화면이 적는 '−2.0%' 가 그 상수에서 나오는지 실제로 계산한다 (표시 반올림까지)
+_hc255 = (_cls255.FAIR_FIXED_HAIRCUT - 1.0) * 100.0 if _cls255 else None
+check("실측 재현 — 상수에서 나온 보정률은 −2.0% 이고 화면 표기도 그렇다",
+      _hc255 is not None and abs(_hc255 + 2.0) < 1e-9 and f"{_hc255:+.1f}%" == "-2.0%")
+
+# ② 사슬이 밖으로 나오고 화면이 그것을 읽는다 (화면이 다시 계산하지 않는다 · §4)
+for _k255 in ('model_weighted_median', 'fair_fixed_haircut_pct', 'raw_target_value',
+              'fair_winsorized', 'fair_center_clipped'):
+    check(f"엔진이 '{_k255}' 를 val_eval 과 four_scores 둘 다에 싣는다",
+          _q255.count(f"'{_k255}'") >= 2)
+# 화면에 0.98 이라는 글자는 주석·다른 지표(ICC 0.98 등)에도 나온다 — 막을 것은 **연산**이다
+check("화면은 그 값을 읽기만 한다 — 0.98 로 곱하거나 나누지 않는다",
+      "_wm238 = four_scores.get('model_weighted_median')" in _w231
+      and "_raw238 = four_scores.get('raw_target_value')" in _w231
+      and "* 0.98" not in _w231 and "/ 0.98" not in _w231
+      and "*0.98" not in _w231 and "/0.98" not in _w231)
+check("적정가가 나온 순서를 화면이 적는다 (가중중앙값 → 고정 보정 → 수축 → 업황 → 최종)",
+      "적정가가 나온 순서 — " in _w231
+      and "f\"모델 가중중앙값 {_wm238:,.0f}{unit_str}\"" in _w231
+      and "f\"고정 보정 {_hc238_str} → {_raw238:,.0f}{unit_str}\"" in _w231
+      and "극단값 수축" in _w231 and "f\"업황조정 {mkt_adj_pct:+.1f}%\"" in _w231)
+check("근거가 없다는 것과 왜 아직 안 지웠는지를 화면이 말한다 (§9)",
+      "근거가 기록되어 " in _w231 and "있지 않습니다.**" in _w231
+      and "먼저 " in _w231 and "영향을 재고 나서 결정합니다" in _w231)
+check("옛 '기초 펀더멘털 가치' 라벨은 사라지고 실제 가중중앙값을 적는다",
+      "기초 펀더멘털 가치</p>" not in _w231
+      and ">모델 가중중앙값</p>" in _w231 and "{_wm238_str}" in _w231)
+
+# ③ 배너와 상세가 같은 화면에서 다른 말을 하지 않는다 — 문턱은 이미 채택된 띠 재사용
+check("배너가 괴리율과 엔진의 띠 낱말을 같이 낸다 (새 문턱 없음)",
+      "_gap238 = four_scores.get('upside_pct')" in _w231
+      and "_band238 = four_scores.get('upside_eval')" in _w231
+      and "차이는 {_gap238:+.1f}%뿐입니다 ({_band238}). " in _w231)
+check("게이트가 읽는 구역 낱말은 그대로다 (배너 문장만 늘렸다)",
+      'return "적정가 이하 (안전마진 미확보)", 60' in _q255
+      and 'elif _zone == "적정가 이하 (안전마진 미확보)":' in _w231)
+check("띠 낱말의 문턱도 그대로다 (±7% · 새로 만들지 않았다)",
+      'elif upside_pct >= -7.0: upside_eval = "적정가 부근"' in _q255)
+
+# ④ 업황 사유는 한 번만
+check("업황 미적용 사유가 한 자리에서만 나온다 (세 번 → 한 번)",
+      _w231.count("st.caption(_md_safe(_cy['why']))") == 1
+      and "st.caption(_md_safe(_cy.get('why') or '업종 미연동'))" not in _w231
+      and "st.caption(_md_safe(f\"업황조정 {mkt_adj_pct:+.1f}% — {mkt_adj_why}\"))" not in _w231
+      and "사유는 위 '업황조정 가치'에 적었습니다." in _w231)
+_doc255 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R238_FAIR_VALUE_CHAIN.md'))
+check("문서가 실행으로 확인한 사슬(275,844 → 270,327)과 잰 날짜를 적는다",
+      '275,844' in _doc255 and '270,327' in _doc255 and '2026-09-08' in _doc255)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
