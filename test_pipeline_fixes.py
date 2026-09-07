@@ -21067,26 +21067,6 @@ with open(_os.path.join(PROJ, 'docs', 'OPERATIONS_ROUTINE.md'), encoding='utf-8'
 check("운영 문서가 첫 수확(장 종료 뒤 실행)과 누적 갈래를 적는다",
       '2026-09-07 17:26 실행' in _ops248 and '성공 29 · 실패 15' in _ops248)
 
-print()
-print("=" * 72)
-# 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
-#   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
-#   통째로 안 돌아도 '전체 통과'가 찍혔고, "0건이 없다인지 못 봤다인지"를
-#   요약 수준에서 구분할 수 없었다 (§110 의 규율을 하네스가 안 지킨 자리).
-_SUMMARY_DONE[0] = True          # 라운드 218 — 중단 요약이 겹쳐 찍히지 않게
-print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 {len(FAILURES)}건 · "
-      f"건너뜀 {len(SKIPPED)}건")
-if SKIPPED:
-    print("건너뛴 검사 (통과가 아니다):")
-    for _sk_name, _sk_why in SKIPPED[:20]:
-        print(f"  - {_sk_name} — {_sk_why}")
-    if len(SKIPPED) > 20:
-        print(f"  … 외 {len(SKIPPED) - 20}건")
-if FAILURES:
-    print(f"실패 {len(FAILURES)}건: " + ", ".join(FAILURES))
-    sys.exit(1)
-print("전체 통과")
-sys.exit(0)
 
 print()
 print("§249 R232 — 같은 추천을 두 채점기가 따로 세고 있었다 · 채점기는 하나 (2026-09-07)")
@@ -21232,3 +21212,76 @@ _doc249 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R232_ONE_GRADER.md'))
 check("문서가 실측 수(39 · 18 · +10.4% vs +6.4% · 95 vs 51)와 잰 날짜를 적는다",
       '39건' in _doc249 and '18건' in _doc249 and '+10.4%' in _doc249 and '+6.4%' in _doc249
       and '95건' in _doc249 and '2026-09-07' in _doc249)
+
+print()
+print("§250 R233 — 자기유사 예측 탭: 한 조건에 알림 셋 · '0건'과 '12건'이 한 화면 → 지평별로 세고 한 번만 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   기본 종목(삼성전자)의 자기유사 예측 탭: 20일 표본 부족 한 조건에 알림이 셋(거래 회피 ·
+#   표본 통제 · 확률 미표시)이었고, match_count(=20일 지평)를 '유사패턴 표본 0건'이라 세 번
+#   말한 뒤 아래 그래프는 60일 표본 12건을 그렸다(40일은 0건). 20일 관찰 타일 여섯 칸은 전부 '산출 불가'.
+#   '기간 간 방향 일치도'는 두 번. 고침(표시 전용): 지평별로 먼저 세고(ui_kit.horizon_counts_line)
+#   게이트는 한 번 · 7단계 설명은 접고 · 빈 타일은 한 문장 · 중복 타일 제거. 값·판정 불변.
+import ui_kit as _uk250
+check("horizon_counts_line: 지평별 수를 순서대로 한 줄 · 없는 지평은 건너뜀",
+      _uk250.horizon_counts_line({5: {'match_count': 12}, 20: {'match_count': 0},
+                                  40: {'match_count': 12}, 120: {'match_count': 3}})
+      == "5일 12 · 20일 0 · 40일 12 · 120일 3")
+check("horizon_counts_line: 지평이 하나도 없으면 빈 문자열 (문장을 지어내지 않는다 · §3)",
+      _uk250.horizon_counts_line({}) == '' and _uk250.horizon_counts_line(None) == '')
+_tab250 = _w231.split('자기유사 예측 파이프라인 (7단계)")')[1].split('다중기간 독립 예측 (5 · 10 · 20 · 40 · 60 · 120 영업일)')[0]
+check("표본 게이트 알림은 하나 — 옛 셋(표본 통제 · 예측 확률 미표시 · 별도 거래 회피)이 없다",
+      "**표본 통제** 유사패턴 표본" not in _w231 and "**예측 확률 미표시** —" not in _w231
+      and _tab250.count('st.warning(') == 2 and _tab250.count('st.info(') == 0
+      and "**확률 미표시** — {sim_res.get('blind_reason', '표본 부족')}" in _tab250)
+check("알림이 지평별 수를 같이 말한다 (0건과 12건은 다른 지평)",
+      "_hz_line233 = _uk.horizon_counts_line(hz)" in _tab250
+      and "지평별 유사패턴 표본: {_hz_line233}." in _tab250
+      and "예측 보류 · 거래 회피를 권장합니다." in _tab250
+      and "if sim_res.get('is_abstain') else" in _tab250)
+check("7단계 설명은 접힌다 — 내용은 그대로 (⑦ 표본 통제 줄 · 앙상블 없음 문구)",
+      '_uk.disclose("이 예측이 하는 일 — 7단계 (설명)"' in _tab250
+      and "유사패턴 표본 {sim_res.get('match_count', 0)}건" in _tab250
+      and "다중 모델 앙상블은 구현되어 있지 않습니다" in _tab250)
+_obs250 = _w231.split('과거 관찰 성과 세부 분리 지표 (20일)")')[1].split('st.markdown("기간별 경로 분포")')[0]
+check("20일 표본이 0건이면 타일 여섯 대신 한 문장 · 표본이 있으면 타일 그대로",
+      "if not sim_res.get('match_count'):" in _obs250
+      and "20일 지평은 유사패턴 표본이 0건이라 관찰 성과" in _obs250
+      and "'기간별 경로 분포'에서 고를 수 있습니다." in _obs250
+      and _obs250.count("_uk.stat_tiles([") == 2 and "'label': '비슷했던 사례 수'" in _obs250)
+check("'기간 간 방향 일치도' 타일은 한 번만 (같은 값 두 번 금지 · §4)",
+      _w231.count("'label': '기간 간 방향 일치도'") == 1)
+
+print()
+print("=" * 72)
+# 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
+#   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
+#   통째로 안 돌아도 '전체 통과'가 찍혔고, "0건이 없다인지 못 봤다인지"를
+#   요약 수준에서 구분할 수 없었다 (§110 의 규율을 하네스가 안 지킨 자리).
+# 라운드 233 — 이 블록은 **파일 끝**이어야 한다. §249·§250 을 이 블록 뒤에 붙였더니 전체
+#   회귀에서 한 번도 안 돌았다(사전 점검은 절을 마커로 떼어 돌려 초록불 · 전체 실행 수는
+#   4,522 그대로). 자기 뒤에 절 머리가 있는지 스스로 본다 — 있으면 그 절은 안 돈 것이다.
+with open(__file__, encoding='utf-8') as _f_end233:
+    _src_end233 = _f_end233.read()
+_mark233 = '_SUMMARY_' + 'DONE[0] = True'
+# 첫 등장이 아니라 마지막 등장 — 같은 글자가 §235 의 검사 문자열에도 있어 첫 등장으로 재면
+#   §236 부터 전부 '요약 뒤'로 보인다(첫 실행에서 실제로 그렇게 걸렸다).
+_tail233 = _src_end233[_src_end233.rindex(_mark233):]
+_late233 = _re.findall(r'^print\(f?["\'](§\d+)', _tail233, _re.M)
+_all233 = _re.findall(r'^print\(f?["\'](§\d+)', _src_end233, _re.M)
+check("요약 블록 뒤에 절이 없다 — 있으면 그 절은 전체 회귀에서 안 돌았다 (R233)",
+      not _late233, detail=', '.join(_late233), scanned=len(_all233))
+_SUMMARY_DONE[0] = True          # 라운드 218 — 중단 요약이 겹쳐 찍히지 않게
+print(f"실행 {_CHECKS_RUN[0]:,}건 · 실패 {len(FAILURES)}건 · "
+      f"건너뜀 {len(SKIPPED)}건")
+if SKIPPED:
+    print("건너뛴 검사 (통과가 아니다):")
+    for _sk_name, _sk_why in SKIPPED[:20]:
+        print(f"  - {_sk_name} — {_sk_why}")
+    if len(SKIPPED) > 20:
+        print(f"  … 외 {len(SKIPPED) - 20}건")
+if FAILURES:
+    print(f"실패 {len(FAILURES)}건: " + ", ".join(FAILURES))
+    sys.exit(1)
+print("전체 통과")
+sys.exit(0)
