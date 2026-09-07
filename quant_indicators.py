@@ -384,6 +384,13 @@ class QuantIndicatorsEngine:
         post_mean = post_alpha / (post_alpha + post_beta)
         return round(float(post_mean * 100), 1)
 
+    #: 모델 가중중앙값에 곱하는 **고정 보정**. 최초 커밋부터 있었고 **근거가 코드에도
+    #  문서에도 기록되어 있지 않다.** 라운드 44 가 걷어낸 것은 이것이 아니라 별도의
+    #  'market_adjustment_pct: -2.0' 이었다 — 이것은 그 정리에서 살아남은 자리다.
+    #  ⚠️ 지우는 것은 **모든 종목의 적정가가 2% 움직이는 변경**이라 사전등록과 영향 측정이
+    #  먼저다(§2). 그때까지 **화면이 이 보정을 숨기지 않고 그대로 드러낸다**(라운드 238).
+    FAIR_FIXED_HAIRCUT = 0.98
+
     # [명세 §11] 유효표본 수 통제 구간 — 규칙집 [RULES_SAMPLE_TIERS] 가 단일 출처
     _ST = RULEBOOK.get('RULES_SAMPLE_TIERS', {})
     SAMPLE_TIERS = (
@@ -2614,7 +2621,7 @@ class QuantIndicatorsEngine:
         # 6. 베이지안 아웃라이어 수축 캘리브레이션 (산출 보류 0% 보장)
         # ---------------------------------------------------------
         # 원시 적정가 산출
-        raw_target_val = weighted_median * 0.98
+        raw_target_val = weighted_median * self.FAIR_FIXED_HAIRCUT
         raw_upside_pct = (raw_target_val / (curr_price + 1e-8) - 1.0) * 100.0
 
         # ── 모델 적용 범위(Out-of-Domain) 게이트 — **하방 전용** ──────────
@@ -2702,7 +2709,7 @@ class QuantIndicatorsEngine:
             target_fundamental = float(np.clip(target_fundamental, wide_range[0], wide_range[1]))
             center_clipped = True
 
-        base_fair_value = float(target_fundamental / 0.98)
+        base_fair_value = float(target_fundamental / self.FAIR_FIXED_HAIRCUT)
         upside_pct = float((target_fundamental / (curr_price + 1e-9) - 1.0) * 100.0)
         
         # 안전마진 결정 (우세 유형 반영)
@@ -2852,6 +2859,14 @@ class QuantIndicatorsEngine:
             'displayed_fair_value': displayed_fair_value,
             'preliminary_range_str': preliminary_range_str,
             'base_fair_value': float(base_fair_value),
+            # 라운드 238 — 화면의 '기초 펀더멘털 가치'는 최종값을 고정 보정으로 **되나눈**
+            #   값이라 실제 모델 가중중앙값이 아니었다(윈저화·클립을 거치면 더 벌어진다).
+            #   사슬을 있는 그대로 내보낸다: 가중중앙값 → 고정 보정 → 원시 → 수축 → 최종.
+            'model_weighted_median': float(weighted_median),
+            'fair_fixed_haircut_pct': float((self.FAIR_FIXED_HAIRCUT - 1.0) * 100.0),
+            'raw_target_value': float(raw_target_val),
+            'fair_winsorized': bool(abs(calibrated_upside_pct - raw_upside_pct) > 1e-9),
+            'fair_center_clipped': bool(center_clipped),
             'recommended_buy_price': recommended_buy_price,
             'margin_of_safety_pct': margin_of_safety * 100,
             'market_adjustment_pct': float(_sec_adj),
@@ -4162,6 +4177,11 @@ class QuantIndicatorsEngine:
             'fair_value_usable': fair_value_usable,
             'target_fundamental_note': f"시장조정 펀더멘털 적정가 ({upside_eval})",
             'base_fair_value': float(base_fair_value) if base_fair_value is not None else float(curr_price),
+            'model_weighted_median': val_eval.get('model_weighted_median'),
+            'fair_fixed_haircut_pct': val_eval.get('fair_fixed_haircut_pct'),
+            'raw_target_value': val_eval.get('raw_target_value'),
+            'fair_winsorized': val_eval.get('fair_winsorized'),
+            'fair_center_clipped': val_eval.get('fair_center_clipped'),
             'recommended_buy_price': float(recommended_buy_price) if recommended_buy_price is not None else None,
             'entry_review_price': entry_review_price,
             'entry_review_basis': entry_review_basis,

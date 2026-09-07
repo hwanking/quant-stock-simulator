@@ -9247,8 +9247,15 @@ if _zone == "판정 불가":
 elif _zone == "안전마진 확보":
     st.success(f"**[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 가치 기준선({_bem_str} · 적정가−안전마진) 이하입니다.")
 elif _zone == "적정가 이하 (안전마진 미확보)":
+    # 라운드 238 — 배너는 '적정가 이하', 아래 상세는 '+0.1% (적정가 부근)' 이라 한 화면이
+    #   두 말을 했다(사용자 지적). 배너의 낱말(게이트가 읽는 값)은 그대로 두고, **얼마나**
+    #   아래인지와 엔진이 이미 쓰는 띠 낱말을 같은 문장에 넣는다 — 새 문턱을 만들지 않는다.
+    _gap238 = four_scores.get('upside_pct')
+    _band238 = four_scores.get('upside_eval')
     st.info(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래이지만 "
-            f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+            + (f"차이는 {_gap238:+.1f}%뿐입니다 ({_band238}). " if _gap238 is not None
+               and _band238 else "")
+            + f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
 elif _zone:
     st.error(f"**[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
              f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
@@ -10722,7 +10729,10 @@ with tab_val:
                             + (", ".join(sorted(_rl)) if _rl else "없음")
                             + " · 미연동: " + ", ".join(_un)))
                 else:
-                    st.caption(_md_safe(_cy.get('why') or '업종 미연동'))
+                    # 라운드 238 — 같은 사유가 이 절에서 두 번, 아래 카드에서 또 한 번
+                    #   찍히고 있었다. 사유는 바로 아래 한 곳에서만 낸다.
+                    if not _cy.get('why'):
+                        st.caption("업종 미연동")
             if _cy.get('why') and not _cy.get('adjusted'):
                 st.caption(_md_safe(_cy['why']))
         # 업종 원장 실측 (라운드 54b) — 프록시 모멘텀이 '지금 업황'이라면
@@ -10763,6 +10773,17 @@ with tab_val:
     mkt_adj_pct = four_scores.get('market_adjustment_pct', 0.0)
     mkt_adj_why = four_scores.get('market_adjustment_why')
     conf_score = four_scores.get('fair_value_confidence', 0.0)
+    # ⚠️ 라운드 238 (사용자 지적) — 화면은 '기초 펀더멘털 가치 275,844 → 적정가 270,327'
+    #   만 보여 줬고 그 사이의 **−2.0%** 를 아무 데서도 말하지 않았다. 게다가 그 '기초'는
+    #   최종값을 0.98 로 **되나눈** 값이라 실제 모델 가중중앙값이 아니었다(윈저화·클립을
+    #   거치면 더 벌어진다). 엔진이 사슬을 그대로 내보내고 화면이 그것을 적는다.
+    _wm238 = four_scores.get('model_weighted_median')
+    _hc238 = four_scores.get('fair_fixed_haircut_pct')
+    _raw238 = four_scores.get('raw_target_value')
+    _wins238 = bool(four_scores.get('fair_winsorized'))
+    _clip238 = bool(four_scores.get('fair_center_clipped'))
+    _wm238_str = f"{_wm238:,.0f}{unit_str}" if _wm238 is not None else "미산출"
+    _hc238_str = f"{_hc238:+.1f}%" if _hc238 is not None else "미산출"
     # 장기 가치 참고선 — 적정가 × 안전마진. **오늘의 실행가가 아니다.**
     # 라운드 25 에 실행가 자리에서 폐기했고 37 에 배너에서 걷어냈는데,
     # 이 화면만 '권장 매수가 / 안전 매수 구간'이라는 옛 이름으로 남아
@@ -10783,6 +10804,18 @@ with tab_val:
     else:
         st.error(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 중심 적정가와 장기 가치 참고선을 산출하지 않았습니다.")
 
+    if _wm238 is not None and _raw238 is not None:
+        _steps238 = [f"모델 가중중앙값 {_wm238:,.0f}{unit_str}",
+                     f"고정 보정 {_hc238_str} → {_raw238:,.0f}{unit_str}"]
+        if _wins238 or _clip238:
+            _steps238.append("극단값 수축"
+                             + (" · 범위 안으로 되돌림" if _clip238 else ""))
+        _steps238.append(f"업황조정 {mkt_adj_pct:+.1f}%")
+        _steps238.append(f"최종 {fmt_num(four_scores.get('target_fundamental'), suffix=unit_str)}")
+        st.caption("적정가가 나온 순서 — " + " → ".join(_steps238)
+                   + ". 고정 보정은 이 저장소가 처음부터 갖고 있던 값이고 **근거가 기록되어 "
+                     "있지 않습니다.** 지우면 모든 종목의 적정가가 그만큼 움직이므로, 먼저 "
+                     "영향을 재고 나서 결정합니다 — 그때까지 숨기지 않고 그대로 보여 줍니다.")
     disp_price_str = f"{disp_price:,.0f}{unit_str}" if disp_price is not None else "산출 보류"
     if upside_pct is None:
         upside_display_str = f"<b style='color:#9DAABC;'>상승여력 미산출</b> ({upside_eval})"
@@ -10828,8 +10861,9 @@ with tab_val:
                 </p>
             </div>
             <div style="text-align: right; background: #1C2635; padding: 16px 20px; border-radius: 12px; ">
-                <p style="margin: 0; font-size: 13px; color: #9DAABC;">기초 펀더멘털 가치</p>
-                <p style="margin: 4px 0 8px 0; font-size: 17px; font-weight: bold; color: #F3F6FA;">{base_fair_val:,.0f}{unit_str}</p>
+                <p style="margin: 0; font-size: 13px; color: #9DAABC;">모델 가중중앙값</p>
+                <p style="margin: 4px 0 8px 0; font-size: 17px; font-weight: bold; color: #F3F6FA;">{_wm238_str}</p>
+                <p style="margin: 0; font-size: 13px; color: #9DAABC;">고정 보정: <b style="color:#F2B84B;">{_hc238_str}</b></p>
                 <p style="margin: 0; font-size: 13px; color: #9DAABC;">업황조정 영향: <b style="color:#F2B84B;">{mkt_adj_pct:+.1f}%</b></p>
                 <p style="margin: 4px 0 0 0; font-size: 13px; color: #9DAABC;">적정가 신뢰도: <b style="color:#4C8DFF;">{conf_score:.0f} / 100점</b></p>
             </div>
@@ -10869,8 +10903,10 @@ with tab_val:
     # 라운드 44 전까지 이 자리는 근거 없는 −2% 상수였고, 화면은 그걸
     # '시장조정'이라고만 불렀다. 수치가 없는 것보다 나쁜 건, 근거 없는
     # 수치를 근거 있는 척 보여 주는 것이다.
+    # 라운드 238 — 같은 사유가 위 '업황조정 가치' 절에 이미 있다. 여기서는 되풀이하지 않고
+    #   값만 적는다(사유를 세 번 찍고 있었다).
     if mkt_adj_why:
-        st.caption(_md_safe(f"업황조정 {mkt_adj_pct:+.1f}% — {mkt_adj_why}"))
+        st.caption(f"업황조정 {mkt_adj_pct:+.1f}% — 사유는 위 '업황조정 가치'에 적었습니다.")
 
     with st.expander("[적정가 산출 근거 & 기업유형별 평가모델 내역 펼쳐보기]", expanded=True):
         # 기업유형 소속 확률 (상위 4개)
