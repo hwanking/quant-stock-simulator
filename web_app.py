@@ -9714,7 +9714,18 @@ if _ledger_df is not None:
                       + (f" (성공 비율 {_n_ok_imp / _n_dec_imp * 100:.0f}% · 분모 {_n_dec_imp} · "
                          f"미결 제외 · 전방 표본은 아직 작습니다)" if _n_dec_imp else '')
                       + "." if (_n_ok_imp + _n_bad_imp + _n_unres_imp) else "")
-        _lr_txt = (f"{str(_lr['started_at'])[:16]} ({_lr['status']} · "
+        # 라운드 231 — started_at 은 UTC(+00:00)로 저장된다. 그대로 자르면 17:26 실행이
+        #   '08:26'으로 보인다(R222 의 date('now') 함정과 같은 자리). 현지 시각으로 바꿔 적는다.
+        def _local_ts231(v):
+            try:
+                import datetime as _dt231
+                _d = _dt231.datetime.fromisoformat(str(v))
+                if _d.tzinfo is None:
+                    _d = _d.replace(tzinfo=_dt231.timezone.utc)
+                return _d.astimezone().strftime('%Y-%m-%d %H:%M')
+            except Exception:                                  # noqa: BLE001
+                return str(v)[:16]
+        _lr_txt = (f"{_local_ts231(_lr['started_at'])} ({_lr['status']} · "
                    f"추가 {_lr['added_cases']} · 확정 {_lr['resolved_cases']})"
                    if _lr else "아직 실행 이력 없음")
         _pc1, _pc2 = st.columns([3, 1])
