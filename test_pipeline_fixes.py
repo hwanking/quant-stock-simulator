@@ -13867,13 +13867,15 @@ _pf184 = _read148(_os.path.join(PROJ, 'portfolio.py'))
 #   그러면서 검사도 고쳤다 — 종전에는 파일 어딘가에 그 **문자열이 있으면**
 #   통과였다(주석에 적어 두기만 해도 통과한다). 이제 **관심종목 머리글
 #   묶음 안에** 두 기준이 다 들어 있는지 AST 로 본다.
+# 라운드 229 — 머리글 리터럴은 zip 안이 아니라 `_WL_HDR = (…)` 하나다(보기 모드의 HTML
+#   표와 편집 모드의 위젯 머리가 같은 낱말을 쓰게). AST 로 그 대입의 튜플을 읽는다.
 _hdr184 = []
 for _n184 in _ast165.walk(_ast165.parse(
         '\n'.join(ln for _i184, ln in _la135.code_lines('web_app.py')))):
-    if (isinstance(_n184, _ast165.Call)
-            and getattr(_n184.func, 'id', '') == 'zip' and len(_n184.args) == 2
-            and getattr(_n184.args[0], 'id', '') == '_wl_hdr'):
-        for _e184 in getattr(_n184.args[1], 'elts', []):
+    if (isinstance(_n184, _ast165.Assign) and len(_n184.targets) == 1
+            and getattr(_n184.targets[0], 'id', '') == '_WL_HDR'
+            and isinstance(_n184.value, (_ast165.Tuple, _ast165.List))):
+        for _e184 in _n184.value.elts:
             _hdr184.append(_ast165.unparse(_e184))
 _hj184 = ' | '.join(_hdr184)
 check("관심종목 머리글을 코드에서 읽었다 (0개면 미측정)",
@@ -15745,11 +15747,11 @@ _wln201 = len(getattr(_WLC201[0].value, 'elts', [])) if _WLC201 else 0
 check("관심종목 표는 10칸을 넘지 않는다 (넘으면 입력값이 잘린다)",
       0 < _wln201 <= 10, f'{_wln201}칸')
 # 머리글과 칸이 어긋나면 zip 이 **조용히 잘라 먹는다** — 예외가 안 난다.
-_hdr201 = [len(a.args[1].elts) for a in _ast201.walk(_tree201)
-           if isinstance(a, _ast201.Call)
-           and getattr(a.func, 'id', '') == 'zip' and len(a.args) == 2
-           and getattr(a.args[0], 'id', '') == '_wl_hdr'
-           and isinstance(a.args[1], (_ast201.Tuple, _ast201.List))]
+# 라운드 229 — 머리글은 `_WL_HDR` 튜플 하나. zip 은 그것을 받는다.
+_hdr201 = [len(a.value.elts) for a in _ast201.walk(_tree201)
+           if isinstance(a, _ast201.Assign) and len(a.targets) == 1
+           and getattr(a.targets[0], 'id', '') == '_WL_HDR'
+           and isinstance(a.value, (_ast201.Tuple, _ast201.List))]
 check("머리글 수가 칸 수와 같다 (zip 이 말없이 자르지 않게)",
       _hdr201 == [_wln201], f'머리글 {_hdr201} vs 칸 {_wln201}')
 # 칸을 묶었으니 **묶인 값이 다 살아 있는지**를 본다 — 폭을 줄이려고
@@ -15759,9 +15761,12 @@ check("칸을 묶어도 값은 다 남는다 (1차·2차·적정가·신뢰도·
                                 "snap_fair_conf", "_ret_w", "_pl_w")))
 # ⚠️ 손익률은 **방금 입력된 값**으로 세야 한다. 저장본으로 세면 방금
 #   고친 매입가가 한 판 늦게 반영돼 화면이 스스로 어긋난다 (§4).
+# 라운드 229 — 계산은 공통 포맷터 `_wl_pnl` 한 곳이고, 편집 모드는 방금 입력된 `_pd`·`_qt`
+#   로 그것을 부른다(보기 모드는 저장값으로 — 입력이 없으니 같은 값이다).
 check("손익률을 방금 입력된 매입가·수량으로 센다 (저장본이 아니라)",
-      '_px_w / float(_pd) - 1.0' in _wa201
-      and "(_px_w - float(_pd)) * float(_qt)" in _wa201,
+      "_ret_w, _pl_w = _wl_pnl(_px_w, _pd, _qt)" in _wa201
+      and 'px / float(paid) - 1.0' in _wa201
+      and "(px - float(paid)) * float(qty)" in _wa201,
       '저장본으로 세면 한 판 늦게 반영된다')
 check("한국 관행 색을 쓴다 (오르면 빨강 · 내리면 파랑 · §5)",
       "_TOK['up'] if _ret_w >= 0 else _TOK['down']" in _wa201)
@@ -16193,7 +16198,8 @@ check("옛 자기모순 문구가 남아 있지 않다",
 
 # ── ⓒ 미산출을 0 점으로 적지 않는가 ──────────────────────────────────
 check("적정가가 없으면 신뢰도도 비운다 (0 을 '낮음'으로 읽지 않는다)",
-      "_w.get('snap_fair') in (None, '') or not _fcv" in _wa203,
+      "w.get('snap_fair') in (None, '') or not _fcv" in _wa203     # R229: _wl_fair_conf 안
+      and "def _wl_fair_conf(" in _wa203,
       'UNCALCULATED · confidence 0.0 은 못 쟀다는 뜻이다 (§3)')
 
 # ── ⓓ 룩스루는 표시 전용인가 (사전등록이 못 박은 것) ─────────────────
@@ -20910,6 +20916,41 @@ with open(_os.path.join(PROJ, 'docs', 'RESULT_R228_HOME_FIRST.md'), encoding='ut
     _res245 = _f245.read()
 check("결과 문서가 전·후 시간(초)과 파일 넷의 실측을 적는다",
       '38,041' in _res245 and '초' in _res245 and '판정 불변' in _res245)
+
+print()
+print("§246 R229 — 관심종목 표는 기본이 보기 모드(HTML 표 하나) · 입력·빼기는 편집 토글 뒤에 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   실측(2026-09-07 · 30행): 관심종목 절이 5,424px(화면 6장 · 버튼 61개 · <p> 148개)로
+#   페이지에서 가장 긴 절이었다. 30행 × 10칸의 **위젯 격자**라 행이 ~150px 였다. 입력을
+#   숨겨도 5,464px 였다(1차 실측) — 높이의 주범은 입력이 아니라 위젯 행 자체였다.
+#   보기 모드는 HTML 표 하나(행 ≈ 36px)로 그리고, 매입가·수량 입력과 '빼기'(되돌릴 수
+#   없는 조작)는 편집 토글 뒤에 둔다. 값의 출처는 두 모드가 같다(_wl_pre · 저장값 ·
+#   _wl_fair_conf · _wl_pnl · watch_action). 이름은 ?pick= 링크 — 버튼과 같은 경로(§4).
+check("보기/편집 토글이 있고 기본은 보기다",
+      "st.toggle(\"매입가·수량 편집\", key='wl_edit_mode', value=False" in _w231)
+check("보기 모드는 무리마다 HTML 표 하나 · 이름은 ?pick= 링크 (버튼과 같은 pending_search 경로)",
+      "if not _wl_edit:" in _w231 and "_href229 = \"?pick=\" + _up229.quote(" in _w231
+      and "<tbody>{''.join(_trs229)}</tbody></table></div>" in _w231)
+check("보기 모드도 견해 재료(_wl_acts)를 같은 모양으로 쌓는다 (§4)",
+      _w231.count("_wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))") == 2)
+check("적정가 신뢰도·손익 포맷터가 하나이고 두 모드가 같이 부른다 (두 벌 금지)",
+      _w231.count("def _wl_fair_conf(") == 1 and _w231.count("def _wl_pnl(") == 1
+      and _w231.count("_wl_fair_conf(_w)") == 2 and _w231.count("_wl_pnl(") >= 3)
+check("입력 두 칸·빼기는 편집 모드에서만 위젯이다 (키는 그대로 · 저장 규칙 불변)",
+      'key=f"wl_pd_{_wcode}"' in _w231 and 'key=f"wl_qt_{_wcode}"' in _w231
+      and 'if _wl_edit and st.button("빼기", width=\'stretch\', key=f"wlb_del_{_wcode}"):' in _w231
+      and "if ((_w.get('paid') or None) != (_pd or None)" in _w231)
+check("두 목표의 기준은 열 이름에 남는다 — 두 모드가 같은 머리 낱말을 쓴다",
+      "'1차 목표(진입가) · 2차 목표(현재가)'" in _w231 and "_WL_HDR[:9]" in _w231)
+check("보기 모드 표는 폭이 좁으면 스스로 가로 스크롤한다 (본문은 넘치지 않는다)",
+      "<div style='overflow-x:auto;'><table" in _w231)
+check("표 글자는 12px 이상이다 (§77)",
+      all(int(m) >= 12 for m in _re.findall(r'font-size:(\d+)px', _w231[_w231.index('_trs229 = []'):_w231.index("            continue\n        for _wi, _w in _grows:")])))
+with open(_os.path.join(PROJ, 'docs', 'RESULT_R229_WATCHLIST_VIEW_MODE.md'), encoding='utf-8') as _f246:
+    _res246 = _f246.read()
+check("결과 문서가 전·후 높이(px)와 '판단·저장 불변'을 적는다",
+      '5,424' in _res246 and '판단·저장 불변' in _res246)
 
 print()
 print("=" * 72)
