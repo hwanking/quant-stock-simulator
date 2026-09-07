@@ -1632,9 +1632,15 @@ class QuantIndicatorsEngine:
             add('demark', ' DeMARK', None, ["지표 산출 불가"], available=False)
         else:
             s = float(np.clip(50 + (bull - bear) * 0.9, 0, 100))
+            # 라운드 236 — ① 화면은 'Bullish 6 · Bearish 11' 과 '중립 46점'만 보여 줘 46 이
+            #   어디서 나왔는지 알 수 없었다. 산식을 **한 곳(여기)** 에서 문장으로 내고 화면은
+            #   그것을 읽는다(§4 — 화면이 산식을 다시 적으면 산식이 바뀔 때 문장만 낡는다).
+            #   ② 'TDST 지지 {tdst_support_str}' 는 값 자체가 '지지 유지'라 **'지지'가 두 번**
+            #   찍혔다. 값은 그대로 두고 접두어만 뺀다.
             add('demark', ' DeMARK', s, [
                 f"Bullish {bull} vs Bearish {bear} → {fs.get('demark_direction_text', '')}",
-                f"TDST 지지 {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}",
+                f"종합 {s:.0f}점 = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한)",
+                f"TDST: {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}",
             ])
 
         # ── ⑤ 수급·기술 ─────────────────────────────────────────────────

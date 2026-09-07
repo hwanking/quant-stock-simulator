@@ -11135,7 +11135,23 @@ with tab_scen:
 with tab_demark:
     show_tab_verdict('demark')
     dm = four_scores['demark_res']
-    
+
+    # ⚠️ 라운드 236 (사용자 지적) — 'Buy Setup 0/9 · Sell Setup 1/9' 바로 아래에
+    #   'Perfected: 충족' 이 찍혀 모순으로 읽혔다. 엔진의 perfected_status 는 **진행 중인
+    #   카운트가 아니라 가장 최근에 완성된 9 셋업**을 두고 하는 말이다(엔진은
+    #   latest_buy_setup_idx 의 완성 여부를 본다). 계산은 맞고 **주어가 빠져 있었다.**
+    #   그리고 '미충족'은 두 가지를 한 낱말로 말한다 — 완성된 셋업이 없었거나, 있었지만
+    #   조건을 못 채웠거나. 둘은 다른 상태다(같은 모양: 물타기 '불가' 한 낱말이 셋을
+    #   뭉뚱그렸던 자리). 값·판정은 그대로 두고 주어와 갈래를 적는다.
+    _perf_raw236 = dm.get('perfected_status', '미충족')
+    _perf_side236 = ('매수 셋업' if dm.get('buy_perfected')
+                     else ('매도 셋업' if dm.get('sell_perfected') else None))
+    _perf_txt236 = (f"{_perf_raw236} ({_perf_side236} 기준)" if _perf_side236 else _perf_raw236)
+    # 종합 점수 산식은 엔진이 문장으로 낸다 — 화면이 다시 적지 않는다 (§4)
+    _dmv236 = _TAB_VERDICT.get('demark') or {}
+    _dm_calc236 = next((r for r in (_dmv236.get('reasons') or [])
+                        if str(r).startswith('종합 ')), '')
+
     st.markdown(f"""
     <div style="background-color:#161D2A; padding:20px; border-radius:12px; margin-bottom:20px;">
         <h3 style="color:#F3F6FA; margin-top:0;">DeMARK 9-13 결합신호 종합 대시보드</h3>
@@ -11144,7 +11160,7 @@ with tab_demark:
                 <b style="color:#4C8DFF;">[DeMARK 카운트]</b><br>
                 Buy Setup: {dm.get('buy_setup_count', 0)}/9 완료<br>
                 Sell Setup: {dm.get('sell_setup_count', 0)}/9 완료<br>
-                Perfected: {dm.get('perfected_status', '미충족')}<br>
+                Perfected: {_perf_txt236}<br>
                 Buy Countdown: {dm.get('buy_13_status', '0/13')}<br>
                 Sell Countdown: {dm.get('sell_13_status', '0/13')}<br>
                 TDST 지지: {dm.get('tdst_support', 0):,.0f}{unit_str}<br>
@@ -11161,13 +11177,20 @@ with tab_demark:
             <div style="flex:1; min-width:250px;">
                 <b style="color:#F2B84B;">[최종 판정 점수]</b><br>
                 Bullish 점수: {dm.get('bullish_score', 50)} / 100점<br>
-                Bearish 점수: {dm.get('bearish_score', 50)} / 100점<br><br>
+                Bearish 점수: {dm.get('bearish_score', 50)} / 100점<br>
+                <span style="color:#9DAABC; font-size:13px;">{_dm_calc236}</span><br><br>
                 <b style="color:#35C98B; font-size:17px;">최종 판정: {dm.get('demark_label', '중립')}</b><br>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
+    st.caption(
+        "Perfected 는 **가장 최근에 완성된 9 셋업**을 두고 하는 말이라, 위의 진행 중인 카운트와 "
+        "다를 수 있습니다 (카운트가 9에 닿지 않아도 지난 셋업이 완성됐을 수 있습니다). "
+        "'미충족'은 완성된 셋업이 아직 없었다는 뜻일 수도, 있었지만 조건을 못 채웠다는 뜻일 수도 "
+        "있습니다 — 이 화면은 둘을 가르지 않습니다. 위 점수는 이 관점 하나만 본 것이고 매매 "
+        "판정이 아닙니다.")
     st.markdown(f"[{resolved_name}] DeMARK 9-13 & 다중 지표 정밀 차트")
     
     recent_dm_df = tech_df.tail(100).copy().reset_index(drop=True)
