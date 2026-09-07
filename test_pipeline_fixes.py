@@ -3697,7 +3697,8 @@ check("시험 픽스처(2099-01-01)가 실제 이력 파일에 새로 들어가�
 _w61 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("개장 전 리포트 섹션", "개장 전 확정 리포트" in _w61)
 check("사후 검증 패널 (숨김 금지)", "지난 개장 전 추천의 실제 성과" in _w61)
-check("적중률 분모 명시", "분모 = 목표+손절" in _w61)
+# R232: 사후 검증이 DB 를 읽으면서 분모는 tally 의 decided(목표+손절)이고 미도달은 따로 뺀다고 적는다.
+check("적중률 분모 명시", "분모 {_t232['decided']}" in _w61 and "미도달 제외)" in _w61)
 check("라이트/다크 토글", "라이트 모드" in _w61 and "ui_theme" in _w61)
 check("타이포 개선 (tabular-nums·Pretendard 계열)",
       "tnum" in _w61 and "Pretendard" in _w61)
@@ -4253,12 +4254,16 @@ except ValueError:
     check("reference_price<=0 거부", True)
 
 # ② 결과 판정 — 같은 봉 목표+손절 동시 도달은 성공으로 세지 않는다
+#   라운드 232 — 종전 이 검사는 'unresolved' 를 요구했다. 원장(prediction_log)은 같은 봉을
+#   '손절 먼저'로 보는데 전방 추적만 다른 규칙이라 같은 추천이 두 수로 났다. 이제 규칙은
+#   prediction_log.first_touch 한 곳이고 같은 봉은 failure(성공으로 세지 않는 것은 그대로).
 import pandas as _pd74
 _bar = lambda h, l, c: {'high': h, 'low': l, 'close': c}
 _res_both = _rlc(price_data=_pd74.DataFrame([_bar(112, 88, 100)]),
                  entry_price=95.0, target_price=110.0, stop_price=90.0)
-check("동일봉 목표·손절 → unresolved (임의 성공 금지)",
-      _res_both.status == 'unresolved')
+check("동일봉 목표·손절 → failure · 손절 먼저 (임의 성공 금지 · 원장과 같은 규칙)",
+      _res_both.status == 'failure' and '손절 먼저' in _res_both.reason
+      and abs(_res_both.realized_return - (90 / 95 - 1)) < 1e-9)
 _res_stop = _rlc(price_data=_pd74.DataFrame([_bar(105, 88, 92)]),
                  entry_price=95.0, target_price=110.0, stop_price=90.0)
 check("손절 선도달 → failure", _res_stop.status == 'failure'
@@ -20369,8 +20374,33 @@ if _os.path.exists(_real_db239):
 else:
     skipped("추적 DB 심기·불변식", "추적 DB 가 없다 (사용자 자료 · 새 환경)")
 # ── 화면 — 복사본·픽스처를 세지 않고, 뺐다고 말한다 ────────────────────────
-check("화면의 '동결 케이스'가 복사본·픽스처를 세지 않는다",
-      "WHERE status NOT IN ('dup_version', 'void_fixture')" in _w231)
+# R232: 셈이 web_app 의 SQL 에서 case_tracker.tally 로 옮겨 갔다 — 화면은 tally['frozen'] 을 읽고,
+#   빼는 규칙은 tally 의 EXCLUDED_STATUSES 한 곳. 글자가 아니라 값으로 본다(복사본을 심어 안 세는지).
+import tempfile as _tmp239b
+from datetime import date as _date239b
+from improvement import database as _idb239b, case_tracker as _ict239b
+from improvement.schemas import Decision as _Dec239b
+_db239b = _os.path.join(_tmp239b.gettempdir(), "improvement_test239b.db")
+if _os.path.exists(_db239b):
+    _os.remove(_db239b)
+_idb239b.initialize_database(_db239b)
+_c239b = _idb239b.get_connection(_db239b)
+for _i239b in range(3):
+    _ict239b.save_prediction_case(_c239b, _ict239b.create_prediction_case(
+        ticker="005930.KS", asset_type="STOCK", signal_date=_date239b(2026, 8, 1 + _i239b),
+        model_version="vT", rulebook_version="vT", decision=_Dec239b.CONDITIONAL_BUY,
+        total_score=58, confidence_score=60, reference_price=100.0, entry_price=None,
+        target_price=110.0, stop_price=90.0, holding_days=20, market_regime="t",
+        strategy_type="t", source_payload={'i': _i239b}))
+_c239b.execute("UPDATE prediction_cases SET status='dup_version' WHERE signal_date='2026-08-02'")
+_c239b.execute("UPDATE prediction_cases SET status='void_fixture' WHERE signal_date='2026-08-03'")
+_c239b.commit()
+_t239b = _ict239b.tally(_c239b)
+_c239b.close()
+check("화면의 '동결 케이스'가 복사본·픽스처를 세지 않는다 (tally 심기: 3행 중 복사본 1 · 픽스처 1 → 동결 1 · 뺀 수 2)",
+      _t239b['frozen'] == 1 and _t239b['excluded'] == 2 and _t239b['open'] == 1
+      and "_n_all_imp = _t232b['frozen']" in _w231 and "_n_excl_imp = _t232b['excluded']" in _w231
+      and _ict239b.EXCLUDED_STATUSES == ('dup_version', 'void_fixture'))
 check("화면이 뺀 수를 옆에 적는다 (§3)",
       "행으로 남기되 세지 않았습니다." in _w231)   # R227: 화면에 라운드 번호 없음
 # ── §61 — 픽스처를 실제 이력에 쓰지 않는다 ───────────────────────────────
@@ -21009,10 +21039,12 @@ print("-" * 72)
 #   것도 뜻한다. 분모(성공+실패)를 같이 적고 미결은 따로. 종목 상세의 참고 블록 둘
 #   ('모델 검증 반영' · '다른 원리는 뭐라고 하나')은 접는다 — 제목·내용 그대로(§85 잠금).
 import ui_kit as _uk248
-check("추적 줄이 성공·실패·미결과 분모를 같이 낸다 (§9 · 나쁜 수도 그대로)",
-      "WHERE status IN ('success', 'failure', 'unresolved') " in _w231
-      and "성공 {_n_ok_imp} · " in _w231 and "실패 {_n_bad_imp} · 미결 {_n_unres_imp}" in _w231
-      and "분모 {_n_dec_imp}" in _w231 and "미결 제외 · 전방 표본은 아직 작습니다" in _w231)
+# 라운드 232 — 셈이 web_app 의 SQL 에서 case_tracker.tally 로 옮겨 갔고(§4 · 개장 전 절과 한 곳)
+#   'unresolved' 의 낱말은 '미결' → '미도달'(창 종료 미도달이라는 뜻 그대로).
+check("추적 줄이 성공·실패·미도달과 분모를 같이 낸다 (§9 · 나쁜 수도 그대로)",
+      "_t232b = _ict232.tally(_ic)" in _w231
+      and "성공 {_n_ok_imp} · " in _w231 and "실패 {_n_bad_imp} · 미도달 {_n_unres_imp}" in _w231
+      and "분모 {_n_dec_imp}" in _w231 and "미도달 제외 · 전방 표본은 아직 작습니다" in _w231)
 check("분모가 0 이면 비율을 만들지 않는다 (§3)", "if _n_dec_imp else ''" in _w231)
 check("추적 줄이 그 갈래를 실제로 캡션에 넣는다", "마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서" in _w231)
 # UTC 로 저장된 started_at 을 그대로 자르면 17:26 실행이 '08:26'으로 보였다 (R222 의 함정)
@@ -21055,3 +21087,148 @@ if FAILURES:
     sys.exit(1)
 print("전체 통과")
 sys.exit(0)
+
+print()
+print("§249 R232 — 같은 추천을 두 채점기가 따로 세고 있었다 · 채점기는 하나 (2026-09-07)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   개장 전 절의 '사후 검증'은 prediction_log 로 이력 마지막 100행을 다시 채점했고(진입 =
+#   리포트 가격 · 닿으면 즉시), 모델 성적의 추적 줄은 improvement DB(진입 = 권장매수가 ·
+#   같은 봉 = unresolved · 20봉 뒤 · MDD 는 청산 뒤까지)를 읽었다. 실측(2026-09-07 19:05 ·
+#   data/grader_compare_r232.json): 화면 95건(목표 30·손절 26·미결 39) vs DB 확정 51
+#   (성공 29·실패 15·미결 7). 판정 등급은 51/51 같았지만 51건 중 39건이 권장매수가 진입이고
+#   그중 18건은 그 가격에 닿은 적이 없다 — 중앙 수익 +10.4% vs 리포트 가격 기준 +6.4%.
+#   고침: 선도달 규칙은 prediction_log.first_touch 한 곳 · 루틴은 원장과 같은 grade_prediction
+#   · 화면 두 자리는 case_tracker.tally 한 곳을 읽는다 · 확정 51건은 같은 규칙으로 재환산.
+import tempfile as _tmp249
+from datetime import date as _date249
+import pandas as _pd249
+import prediction_log as _plog249
+from improvement import performance as _perf249
+from improvement import database as _idb249
+from improvement import case_tracker as _ict249
+from improvement.schemas import Decision as _Dec249
+import premarket as _pm249
+
+# ① 규칙 한 곳 — first_touch
+check("first_touch: 같은 봉에서 둘 다 닿으면 손절 먼저 · same_bar=True",
+      _plog249.first_touch([(112, 88, 100)], 110, 90) == ('STOP', 1, True))
+check("first_touch: 목표만 닿은 봉은 TARGET · same_bar=False",
+      _plog249.first_touch([(100, 95, 98), (111, 94, 108)], 110, 90) == ('TARGET', 2, False))
+check("first_touch: 손절만 닿으면 STOP · 아무것도 없으면 OPEN",
+      _plog249.first_touch([(105, 88, 92)], 110, 90) == ('STOP', 1, False)
+      and _plog249.first_touch([(100, 94, 96)] * 3, 110, 90) == ('OPEN', None, False))
+_gp249 = _ast165.parse(_read148(_os.path.join(PROJ, 'prediction_log.py')))
+_calls249 = set()
+for _n in _ast165.walk(_gp249):
+    if isinstance(_n, _ast165.FunctionDef) and _n.name == 'grade_prediction':
+        for _c in _ast165.walk(_n):
+            if isinstance(_c, _ast165.Call) and isinstance(_c.func, _ast165.Name):
+                _calls249.add(_c.func.id)
+check("grade_prediction 은 first_touch 를 부른다 (규칙을 안에 다시 적지 않는다)",
+      'first_touch' in _calls249 and 'hit_sl = sl is not None' not in _read148(
+          _os.path.join(PROJ, 'prediction_log.py')).split('def grade_prediction')[1])
+_df249 = _pd249.DataFrame({'trade_date': ['2026-08-01', '2026-08-04', '2026-08-05'],
+                           'high_raw': [100, 112, 130], 'low_raw': [95, 88, 50],
+                           'close_raw': [98, 100, 60]})
+_g249 = _plog249.grade_prediction({'date': '2026-08-01', 'price': 95.0, 'target': 110.0,
+                                   'stop': 90.0, 'horizon_days': 20}, _df249)
+check("grade_prediction 이 same_bar·last_close 를 낸다 · MDD 는 청산 봉까지(뒤 봉 50 은 안 본다)",
+      _g249['outcome'] == 'STOP' and _g249['same_bar'] is True and _g249['last_close'] == 60
+      and abs(_g249['mae_pct'] - (88 / 95 - 1) * 100) < 1e-9)
+
+# ② improvement.performance 가 같은 규칙을 쓴다
+_bar249 = lambda h, l, c: {'high': h, 'low': l, 'close': c}
+_rs249 = _perf249.resolve_long_case(
+    price_data=_pd249.DataFrame([_bar249(105, 88, 92), _bar249(100, 50, 60)]),
+    entry_price=95.0, target_price=110.0, stop_price=90.0)
+check("resolve_long_case: MDD 는 청산 봉까지 (손절 뒤 봉의 50 을 성과처럼 세지 않는다)",
+      _rs249.status == 'failure' and abs(_rs249.max_drawdown - (88 / 95 - 1)) < 1e-9)
+_rg249 = _perf249.resolution_from_grade(_g249, target_price=110.0, stop_price=90.0)
+check("resolution_from_grade: 같은 봉 → failure · 사유에 '손절 먼저' · 수익은 grade 그대로",
+      _rg249.status == 'failure' and '손절 먼저' in _rg249.reason
+      and abs(_rg249.realized_return - (90 / 95 - 1)) < 1e-9 and _rg249.exit_price == 90.0)
+_gu249 = _plog249.grade_prediction({'date': '2026-08-01', 'price': 95.0, 'target': 200.0,
+                                    'stop': 10.0, 'horizon_days': 2}, _df249)
+_ru249 = _perf249.resolution_from_grade(_gu249, target_price=200.0, stop_price=10.0)
+check("resolution_from_grade: 미도달 → unresolved · 청산가 = 창 마지막 종가",
+      _ru249.status == 'unresolved' and _ru249.exit_price == 60.0)
+_src249 = _read148(_os.path.join(PROJ, 'improvement', 'performance.py'))
+check("performance.py 는 first_touch 를 들여와 쓰고 선도달 루프를 다시 적지 않는다",
+      'from prediction_log import first_touch' in _src249
+      and _src249.count('first_touch(') >= 1 and 't_hit and s_hit' not in _src249
+      and 'lo <= stop' not in _src249 and 'hi >= target' not in _src249)
+
+# ③ 일일 루틴 — 원장과 같은 채점기 · 진입 = 기준가 · 닿으면 즉시
+_rt249 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+check("루틴이 grade_prediction 으로 채점하고 진입은 reference_price 다",
+      "g = plog.grade_prediction(" in _rt249 and "'price': float(r['reference_price'])" in _rt249
+      and "resolution_from_grade(g," in _rt249 and "resolve_long_case(" not in _rt249
+      and "import resolve_long_case" not in _rt249
+      and "r['entry_price'] or r['reference_price']" not in _rt249)
+check("루틴은 닿으면 그 자리에서 확정하고, 미도달만 보유기간을 기다린다",
+      "if g['outcome'] == 'OPEN' and not g['matured']:" in _rt249
+      and "if len(sub) < int(r['holding_days']):" not in _rt249)
+
+# ④ 화면 두 자리는 tally 한 곳 — 심어서 왕복
+_db249 = _os.path.join(_tmp249.gettempdir(), "improvement_test249.db")
+if _os.path.exists(_db249):
+    _os.remove(_db249)
+_idb249.initialize_database(_db249)
+_c249 = _idb249.get_connection(_db249)
+for _i, (_tk, _st, _rr) in enumerate([("005930.KS", 'success', 0.10), ("000660.KS", 'failure', -0.05),
+                                       ("035420.KS", 'unresolved', 0.01), ("051910.KS", 'open', None)]):
+    _case = _ict249.create_prediction_case(
+        ticker=_tk, asset_type="STOCK", signal_date=_date249(2026, 8, 1 + _i), model_version="vT",
+        rulebook_version="vT", decision=_Dec249.CONDITIONAL_BUY, total_score=58, confidence_score=60,
+        reference_price=100.0, entry_price=95.0, target_price=110.0, stop_price=90.0, holding_days=20,
+        market_regime="테스트", strategy_type="조건부", source_payload={'a': _i})
+    _ict249.save_prediction_case(_c249, _case)
+    if _st != 'open':
+        _ict249.resolve_case(_c249, _case.case_id, status=_st, exit_price=100 * (1 + _rr),
+                             realized_return=_rr, max_drawdown=-0.02, reason='t')
+_c249.commit()
+_t249 = _ict249.tally(_c249)
+check("tally: 성공·실패·미도달·대기·확정·분모·비율을 한 번에 낸다",
+      (_t249['success'], _t249['failure'], _t249['unresolved'], _t249['open']) == (1, 1, 1, 1)
+      and _t249['resolved'] == 3 and _t249['decided'] == 2 and abs(_t249['success_pct'] - 50.0) < 1e-9
+      and _t249['frozen'] == 4 and _t249['excluded'] == 0)
+_h249 = _pm249.grade_history(conn=_c249, max_rows=10)
+check("grade_history 는 DB 를 읽어 같은 tally 와 확정 행(한글 결과 · 기준가 수익률)을 낸다",
+      _h249 is not None and _h249['tally'] == _t249 and len(_h249['rows']) == 3
+      and {r['outcome'] for r in _h249['rows']} == {'목표 도달', '손절', '미도달'}
+      and any(abs(r['return_pct'] - 10.0) < 1e-9 for r in _h249['rows'])
+      and _h249['dates'] == ('2026-08-01', '2026-08-03'))
+_c249.close()
+_ph249 = _read148(_os.path.join(PROJ, 'premarket.py'))
+_ghs249 = _ph249.split('def grade_history(')[1].split('\ndef ')[0]
+check("grade_history 는 시세를 받지도 다시 채점하지도 않는다 (읽기만 · §4)",
+      'generate_synthetic_bitemporal_data(' not in _ghs249 and 'grade_prediction(' not in _ghs249
+      and 'import prediction_log' not in _ghs249 and '_ct.tally(conn)' in _ghs249)
+check("화면: 사후 검증은 engine 없이 grade_history() · 추적 줄은 tally · 옛 SQL 셈 없음",
+      "_hist = _pm_view.grade_history()" in _w231 and "grade_history(engine_init)" not in _w231
+      and "_t232b = _ict232.tally(_ic)" in _w231
+      and "SELECT status, COUNT(*) FROM prediction_cases" not in _w231
+      and "WHERE status NOT IN ('dup_version', 'void_fixture')" not in _w231)
+check("화면 문구: 채점 규칙(진입 = 리포트 가격 · 손절 먼저 · 닿으면 확정)을 두 자리가 같이 말한다",
+      "채점은 원장과 같은 규칙입니다 — 진입은 리포트 가격" in _w231
+      and "닿으면 손절 먼저로 봅니다 — 원장과 같은 규칙" in _w231
+      and "창 종료 미도달 {_t232['unresolved']}" in _w231 and "판정 대기 {_t232['open']}건" in _w231)
+
+# ⑤ 측정·재환산 산출물 — 값이 아니라 구조·판정을 잠근다 (R213)
+with open(_os.path.join(PROJ, 'data', 'grader_compare_r232.json'), encoding='utf-8') as _f249:
+    _cmp249 = _json.load(_f249)
+check("비교 산출물: 재현 검사 통과 · 51건 전부 채점 · 등급 일치 표 · 진입 기준 셈이 있다",
+      _cmp249['reproduction']['ok'] is True and _cmp249['graded'] == _cmp249['resolved_rows']
+      and set(_cmp249['status_agreement_B_vs_A']) <= {'success|TARGET', 'failure|STOP', 'unresolved|OPEN'}
+      and _cmp249['entry_basis']['rec_buy_never_reached_before_touch'] <= _cmp249['entry_basis']['entry_is_rec_buy']
+      and 'screen_now_A_last100' in _cmp249)
+with open(_os.path.join(PROJ, 'data', 'regrade_cases_r232.json'), encoding='utf-8') as _f249:
+    _rg249j = _json.load(_f249)
+check("재환산 산출물: 건별 전·후가 있고 판정은 안 바뀌었다 (같은 봉 0건)",
+      _rg249j['status_changed'] == 0 and _rg249j['changed'] + _rg249j['untouched'] == _rg249j['resolved_rows']
+      and all('before' in p and 'after' in p for p in _rg249j['per_case']))
+_doc249 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R232_ONE_GRADER.md'))
+check("문서가 실측 수(39 · 18 · +10.4% vs +6.4% · 95 vs 51)와 잰 날짜를 적는다",
+      '39건' in _doc249 and '18건' in _doc249 and '+10.4%' in _doc249 and '+6.4%' in _doc249
+      and '95건' in _doc249 and '2026-09-07' in _doc249)

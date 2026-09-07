@@ -102,3 +102,30 @@ def today_added_count(conn: sqlite3.Connection, day: str) -> int:
     return conn.execute(
         "SELECT COUNT(*) FROM prediction_cases WHERE signal_date=?",
         (day,)).fetchone()[0]
+
+
+EXCLUDED_STATUSES = ('dup_version', 'void_fixture')
+
+
+def tally(conn: sqlite3.Connection) -> dict:
+    """
+    확정·대기의 갈래 — **한 곳** (라운드 232). 화면의 두 자리(개장 전 절의 '사후 검증' ·
+    모델 성적의 '실전 추천 추적' 줄)가 이것만 읽는다. 버전 복사본·시험 픽스처(R222)는
+    행으로 남기되 세지 않고 `excluded` 에 따로 센다(§3). 분모가 0 이면 비율은 None.
+    """
+    counts = dict(conn.execute(
+        "SELECT status, COUNT(*) FROM prediction_cases GROUP BY status").fetchall())
+    ok = int(counts.get('success') or 0)
+    bad = int(counts.get('failure') or 0)
+    un = int(counts.get('unresolved') or 0)
+    excluded = sum(int(counts.get(s) or 0) for s in EXCLUDED_STATUSES)
+    return {
+        'success': ok, 'failure': bad, 'unresolved': un,
+        'open': int(counts.get('open') or 0),
+        'data_error': int(counts.get('data_error') or 0),
+        'excluded': excluded,
+        'frozen': sum(int(v) for k, v in counts.items() if k not in EXCLUDED_STATUSES),
+        'resolved': ok + bad + un,
+        'decided': ok + bad,
+        'success_pct': (ok / (ok + bad) * 100.0) if (ok + bad) else None,
+    }

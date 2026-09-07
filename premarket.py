@@ -392,50 +392,62 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     return report, True
 
 
-def grade_history(b_engine, max_rows=100):
-    """
-    지난 추천들의 실제 성과 — 목표/손절 선도달 채점 (prediction_log 재사용).
-    반환: {'n','target','stop','open','rows':[...]} 또는 None(이력 없음)
-    """
+def _history_names():
+    """(종목, 기준일) → (이름, 분류). 이력 파일에서 — DB 행은 코드만 가진다."""
+    out = {}
     if not os.path.exists(PM_HISTORY):
-        return None
-    import prediction_log as plog
-    rows = []
+        return out
     with open(PM_HISTORY, encoding='utf-8') as f:
         for line in f:
             try:
-                rows.append(json.loads(line))
+                h = json.loads(line)
             except Exception:
                 continue
-    rows = rows[-max_rows:]
-    today = datetime.now().strftime('%Y-%m-%d')
-    cache, out = {}, []
+            out[(h.get('symbol'), h.get('date'))] = (h.get('name'), h.get('reco_class'))
+    return out
+
+
+OUTCOME_KO = {'success': '목표 도달', 'failure': '손절', 'unresolved': '미도달'}
+
+
+def grade_history(conn=None, max_rows=10):
+    """
+    지난 개장 전 추천의 실제 성과 — improvement DB 의 확정 결과를 **읽는다** (라운드 232).
+
+    종전엔 여기서 prediction_log 로 이력 마지막 100행을 다시 채점했다(진입 = 리포트 가격 ·
+    닿으면 즉시). 모델 성적의 추적 줄은 DB(진입 = 권장매수가 · 20봉 뒤 · 같은 봉은 미결)를
+    읽어 **같은 페이지에서 다른 수**를 냈다 — 실측 2026-09-07: 95건 목표 30·손절 26·미결 39
+    vs 확정 51 성공 29·실패 15·미결 7. 채점은 일일 루틴(scripts/run_daily_improvement.py →
+    prediction_log.grade_prediction · 원장과 같은 채점기)이 한 번 하고, 화면은 읽기만 한다(§4).
+    반환 {'tally','rows','dates'} 또는 None(케이스 없음 · DB 없음).
+    """
+    from improvement import case_tracker as _ct
+    from improvement.database import get_connection, DEFAULT_DB_PATH
+    own = conn is None
+    if own:
+        if not os.path.exists(DEFAULT_DB_PATH):
+            return None
+        conn = get_connection()
+    try:
+        t = _ct.tally(conn)
+        if not (t['resolved'] or t['open']):
+            return None
+        rows = conn.execute(
+            "SELECT ticker, signal_date, status, strategy_type, realized_return "
+            "FROM prediction_cases WHERE status IN ('success','failure','unresolved') "
+            "ORDER BY resolved_at DESC, signal_date DESC LIMIT ?", (int(max_rows),)).fetchall()
+        d1, d2 = conn.execute(
+            "SELECT MIN(signal_date), MAX(signal_date) FROM prediction_cases "
+            "WHERE status IN ('success','failure','unresolved')").fetchone()
+    finally:
+        if own:
+            conn.close()
+    names = _history_names()
+    out = []
     for r in rows:
-        if r.get('date') == today or not r.get('target') or not r.get('stop'):
-            continue
-        tk = r.get('symbol')
-        if tk not in cache:
-            try:
-                cache[tk], _ = b_engine.generate_synthetic_bitemporal_data(
-                    symbol=tk, start_date='2020-01-01', end_date=None)
-            except Exception:
-                cache[tk] = None
-        if cache[tk] is None:
-            continue
-        g = plog.grade_prediction(
-            {'date': r['date'], 'price': r.get('price'),
-             'target': r.get('target'), 'stop': r.get('stop'),
-             'horizon_days': r.get('horizon_days') or 20}, cache[tk])
-        if g:
-            out.append({'name': r.get('name'), 'date': r.get('date'),
-                        'reco_class': r.get('reco_class'),
-                        'outcome': g['outcome'], 'return_pct': g['return_pct']})
-    if not out:
-        return None
-    return {
-        'n': len(out),
-        'target': sum(1 for o in out if o['outcome'] == 'TARGET'),
-        'stop': sum(1 for o in out if o['outcome'] == 'STOP'),
-        'open': sum(1 for o in out if o['outcome'] == 'OPEN'),
-        'rows': out[-10:],
-    }
+        nm, rc = names.get((r['ticker'], r['signal_date']), (None, None))
+        out.append({'name': nm or r['ticker'], 'date': r['signal_date'],
+                    'reco_class': rc or r['strategy_type'] or '',
+                    'outcome': OUTCOME_KO.get(r['status'], r['status']),
+                    'return_pct': float(r['realized_return'] or 0.0) * 100.0})
+    return {'tally': t, 'rows': out, 'dates': (d1, d2)}
