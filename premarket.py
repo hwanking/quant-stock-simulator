@@ -41,17 +41,66 @@ def _pm_path(date_key, engine_version=None):
     return os.path.join(PM_DIR, f"premarket_{date_key}.json")
 
 
+def _same_day_files(date_key):
+    """오늘 리포트 파일 전부 — (생성 시각, 경로, 내용). 버전이 다른 파일도 같은 날이면 같은
+    결론이다(R228 · R222 "정체는 날짜, 버전은 도장")."""
+    import glob
+    out = []
+    for path in glob.glob(os.path.join(PM_DIR, f"premarket_{date_key}__*.json")) +             [_pm_path(date_key)]:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding='utf-8') as f:
+                d = json.load(f)
+        except Exception:
+            continue
+        out.append((str(d.get('generated_at') or ''), path, d))
+    out.sort(key=lambda t: t[0])
+    return out
+
+
+def _kinds_since(frozen_with, current):
+    """모델 축에서 `frozen_with` 뒤에 나온 변경 종류들 — 원장을 못 읽으면 None."""
+    try:
+        import versioning as _v
+        hist = [h for h in _v.history(limit=200, axis='model')]
+    except Exception:
+        return None
+    seen = False
+    kinds = []
+    for h in sorted(hist, key=lambda h: str(h.get('created_at') or '')):
+        if str(h.get('version')) == str(frozen_with):
+            seen = True
+            continue
+        if seen:
+            kinds.append(str(h.get('kind') or ''))
+        if str(h.get('version')) == str(current):
+            break
+    return kinds if seen else None
+
+
+RULE_KINDS = ('gate', 'algorithm', 'weight', 'engine_swap')
+
+
 def load_today_report(date_key=None, engine_version=None):
     """
-    오늘 리포트가 **현재 엔진으로** 고정돼 있으면 그대로 돌려준다.
+    오늘 리포트를 돌려준다 — **정체는 날짜, 버전은 도장** (라운드 228).
 
-    같은 날이라도 엔진이 다르면 그 리포트는 오늘의 결론이 아니다.
-    낡은 파일이 있으면 내용 대신 `superseded_by` 표시만 붙여 돌려주어,
-    화면이 "다시 스캔하세요"가 아니라 왜 비어 있는지 말할 수 있게 한다.
+    종전(라운드 30)에는 날짜 × 엔진 버전이 열쇠라, 같은 날 엔진 버전이 오르면 그날
+    리포트가 '없는 것'이 되어 다음 세션이 스캔을 다시 돌리고 파일을 하나 더 만들었다.
+    2026-09-07 실측: 화면·문구만 바꾼 배포 셋 뒤에 **똑같은 내용의 파일 넷**(38,041
+    바이트)이 생겼고, 세션마다 2~3분짜리 재스캔이 돌았다. R222 가 추적 DB 에서 같은
+    모양을 걷어냈다(버전이 열쇠에 있으면 옛 것이 매번 새 것이다).
+
+    · 현재 엔진으로 고정한 파일이 있으면 그대로.
+    · 없으면 **같은 날의 가장 최근 파일**을 돌려주되 `engine_drift` 를 단다 —
+      {'frozen_with', 'current', 'kinds'(그 뒤 변경 종류 · 못 읽으면 None),
+       'rule_changed'(게이트·알고리즘·가중치·엔진 교체가 끼었는가)}.
+      "장중 재계산 금지"가 이날의 규칙이다 — 새 규칙은 내일 리포트부터다.
+    · 아무것도 없으면 None.
     """
     date_key = date_key or datetime.now().strftime('%Y-%m-%d')
     ver = engine_version or _engine_version()
-
     p = _pm_path(date_key, ver)
     if os.path.exists(p):
         try:
@@ -59,21 +108,18 @@ def load_today_report(date_key=None, engine_version=None):
                 return json.load(f)
         except Exception:
             return None
-
-    # 현재 엔진 리포트가 없다 — 옛 형식(날짜만)이 남아 있는지 본다
-    legacy = _pm_path(date_key)
-    if os.path.exists(legacy):
-        try:
-            with open(legacy, encoding='utf-8') as f:
-                old = json.load(f)
-        except Exception:
-            return None
-        if str(old.get('engine_version') or '') == str(ver):
-            return old
-        old['stale_engine'] = str(old.get('engine_version') or '미상')
-        old['current_engine'] = str(ver)
-        return old
-    return None
+    files = _same_day_files(date_key)
+    if not files:
+        return None
+    _, _, latest = files[-1]
+    frozen_with = str(latest.get('engine_version') or '미상')
+    kinds = _kinds_since(frozen_with, ver)
+    latest['engine_drift'] = {
+        'frozen_with': frozen_with, 'current': str(ver), 'kinds': kinds,
+        'rule_changed': (any(k in RULE_KINDS for k in kinds) if kinds else None),
+        'files_today': len(files),
+    }
+    return latest
 
 
 def _classify_reco(row, easy_line):
@@ -290,9 +336,11 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     """
     date_key = date_key or datetime.now().strftime('%Y-%m-%d')
     existing = load_today_report(date_key)
-    # 엔진이 바뀌어 낡은 리포트라면 그대로 돌려주지 않는다. 다시 만든다.
-    # 이걸 안 해서 "다시 스캔하세요" 안내가 아무 효과가 없었다.
-    if existing and not existing.get('stale_engine'):
+    # 라운드 228 — 같은 날 리포트가 있으면 엔진 버전이 달라도 **그것이 오늘 결론**이다
+    #   (장중 재계산 금지 · 정체는 날짜). 종전에는 버전이 다르면 다시 만들어, 화면·문구
+    #   배포마다 똑같은 파일이 하나씩 늘고 세션마다 재스캔이 돌았다. 드리프트는 화면이
+    #   도장으로 말한다(`engine_drift`). 새 규칙은 내일 리포트부터.
+    if existing:
         return existing, False               # (리포트, 새로 생성했는가)
 
     picks = []
