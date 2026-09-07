@@ -678,6 +678,36 @@ def horizon_counts_line(hz, order=HORIZONS_ALL) -> str:
     return ' · '.join(parts)
 
 
+def direction_word(win_rate) -> str:
+    """지평의 관찰 방향 — 엔진과 같은 경계(승률 50 이상 = 상승 · 라운드 234). 없으면 '—'."""
+    if win_rate is None:
+        return '—'
+    return '상승' if float(win_rate) >= 50.0 else '하락'
+
+
+def horizon_directions(hz, order=HORIZONS_ALL) -> dict:
+    """지평별 방향 요약 (라운드 234) — 화면이 '방향 일치 67점'을 분자·분모와 같이 말하기 위한 재료.
+
+    엔진의 horizon_consistency_score 는 승률이 산출된 지평(scored) 중 같은 방향인 지평의
+    비율이다(max(상승, 하락) / 지평 수 · quant_indicators). 여기서는 그 지평 목록과 상승·하락
+    수를 **세기만** 한다 — 점수는 엔진 값을 그대로 쓴다. 표본은 있는데 승률이 없는 지평
+    (확률 표시 기준 미달)은 unscored 로 따로 낸다 — 왜 비교에서 빠졌는지 화면이 말해야 한다.
+    """
+    scored, unscored = [], []
+    for H in order:
+        h = (hz or {}).get(H)
+        if not h:
+            continue
+        n = int(h.get('match_count') or 0)
+        if h.get('win_rate') is None:
+            if n:
+                unscored.append((H, n))
+            continue
+        scored.append((H, n, direction_word(h.get('win_rate'))))
+    up = sum(1 for _H, _n, d in scored if d == '상승')
+    return {'scored': scored, 'unscored': unscored, 'up': up, 'down': len(scored) - up}
+
+
 def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
     """
     지표 타일 줄 — st.metric 대체. 한 그룹 카드 안에 세로 헤어라인으로 나눈다.

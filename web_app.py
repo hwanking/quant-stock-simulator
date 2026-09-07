@@ -10265,12 +10265,23 @@ with tab_pred:
     #   말한다. 7단계 설명은 값이 아니라 설명이라 접는다. 값·판정은 그대로다.
     hz = sim_res.get('horizons_data') or {}
     _hz_line233 = _uk.horizon_counts_line(hz)
-    if not sim_res.get('probabilities_shown', False):
+    # 라운드 234 — 사용자: "20일은 0건인데 5·10·60일 값까지 한 화면에 뒤섞여 무엇이 어느 기간의
+    #   값인지 알기 어렵다 · 라벨은 40일인데 데이터는 60일 · 기준이 5건인지 10건인지." 순서를
+    #   바꾼다: 결론 한 줄 → 기간별 자료량 표(방향 포함) → 20일 확률(없으면 카드 셋 대신 한 줄)
+    #   → 20일 관찰 → 다른 기간 살펴보기(제목에 지평). 표본 기준은 엔진의 규칙집(SAMPLE_TIERS)
+    #   에서 읽는다 — 5 = 관찰값 표시 하한 · 10 = 확률 표시 하한. 값·판정 불변.
+    _shown234 = bool(sim_res.get('probabilities_shown', False))
+    _thr234 = {code: thr for thr, code, _lb in (getattr(q_engine, 'SAMPLE_TIERS', ()) or ())}
+    _min_obs234 = _thr234.get('INSUFFICIENT')
+    _min_prob234 = _thr234.get('OBSERVATION_ONLY')
+    _rule234 = (f" (관찰값 표시는 {_min_obs234}건 이상 · 확률 표시는 {_min_prob234}건 이상)"
+                if _min_obs234 and _min_prob234 else "")
+    if not _shown234:
         st.warning(
-            f"**확률 미표시** — {sim_res.get('blind_reason', '표본 부족')}. 확률은 20일 지평의 "
-            f"유사패턴 표본으로 내며, 이 구간에서는 산출·표시하지 않고 과거 관찰값만 제공합니다 — "
-            f"아래 표·그래프는 실제 관찰된 값이며 미래 확률로 해석하지 마십시오."
-            + (f" 지평별 유사패턴 표본: {_hz_line233}." if _hz_line233 else "")
+            f"**20일 기준 예측 보류** — {sim_res.get('blind_reason', '표본 부족')}. 지금과 충분히 "
+            f"비슷했던 과거 20일 사례가 기준에 못 미쳐 20일 상승확률·목표/손절 선도달 확률을 "
+            f"표시하지 않습니다{_rule234}. 표본이 있는 기간의 값은 아래 표와 '다른 기간 살펴보기'에 "
+            f"있습니다 — 과거 관찰값이며 미래 확률이 아닙니다."
             + (" 이 구간은 예측 보류 · 거래 회피를 권장합니다." if sim_res.get('is_abstain') else ""))
     elif sim_res.get('is_abstain'):
         st.warning(f"**퀀트 리스크 관리 알림**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이 감지되어 **`[예측 보류 / 거래 회피(Abstain)]`**를 권장합니다.")
@@ -10294,40 +10305,9 @@ with tab_pred:
     </div>
     """), unsafe_allow_html=True)
 
-    st.markdown(f"경로 기반 확률 대시보드 (목표가 +{TP_SL[0]:.0f}% vs 손절가 -{TP_SL[1]:.0f}% 선도달)")
-    # 구버전은 사후확률을 9등분해 '9개 앙상블 모델 중 N개 상승'으로 표시했다.
-    # 실제 다중 모델 앙상블이 없으므로, 실제로 계산되는 지평 일치도로 대체한다.
-    _hcs = sim_res.get('horizon_consistency_score')
-    _scored = [H for H, hh in (sim_res.get('horizons_data') or {}).items()
-               if hh.get('win_rate') is not None]
-    _uk.stat_tiles([
-        {'label': f"목표가 +{TP_SL[0]:.0f}% 먼저 닿을 확률",
-         'value': fmt_pct(sim_res.get('tp_first_prob'), signed=False),
-         'sub': '손절가보다 목표가에 먼저 도달', 'tone': 'pos'},
-        {'label': f"손절가 -{TP_SL[1]:.0f}% 먼저 닿을 확률",
-         'value': fmt_pct(sim_res.get('sl_first_prob'), signed=False),
-         'sub': '목표가보다 손절가에 먼저 도달', 'tone': 'neg'},
-        {'label': '베이지안 사후 상승확률',
-         'value': fmt_pct(sim_res.get('bayes_prob'), signed=False),
-         'sub': 'Beta-Binomial 보정'},
-        {'label': '기간 간 방향 일치도', 'value': fmt_num(_hcs, suffix='점'),
-         'sub': f"산출 가능 지평 {len(_scored)}개 기준"},
-    ], theme=_theme)
-
-    if sim_res.get('probabilities_shown', False):
-        prob_val = sim_res.get('predicted_probability') or 50.0
-        prob_color = "#35C98B" if prob_val >= 60.0 else ("#4C8DFF" if prob_val >= 50.0 else "#F2B84B")
-
-        st.markdown(f"""
-        <div style='background: rgba(48, 209, 88, 0.10); border-radius: 12px; padding: 16px 20px; margin: 12px 0;'>
-            <span style='font-size: 17px; font-weight: bold; color: #F3F6FA;'>최종 예측 상승확률 (베이지안 사후보정): </span>
-            <span style='font-size: 20px; font-weight: 700; color: {prob_color}; margin-left: 8px;'>{sim_res['predicted_prob_str']}</span>
-            <span style='font-size: 15px; color: #9DAABC; margin-left: 12px;'>(95% 신뢰구간: <code style="color:#4C8DFF;">{sim_res['ci_str']}</code> | 분류: <b>{sim_res['confidence_grade']}</b>)</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    # ── [명세 §10] 다중기간(5·10·20·40·60·120일) 독립 예측 결과 ──────────────
-    st.markdown("다중기간 독립 예측 (5 · 10 · 20 · 40 · 60 · 120 영업일)")
+    # ── [명세 §10] 기간별 자료량과 관찰 통계 — 표 하나가 먼저다 (라운드 234) ──────────
+    st.markdown("기간별 자료량과 관찰 통계 (5 · 10 · 20 · 40 · 60 · 120 영업일)")
+    _dir234 = _uk.horizon_directions(hz)
     if hz:
         hz_rows = []
         for H in [5, 10, 20, 40, 60, 120]:
@@ -10338,7 +10318,9 @@ with tab_pred:
                 "기간": f"{H}일",
                 "유사패턴 표본": h.get('match_count', 0),
                 "등급": h.get('tier_label', '-'),
-                "관찰승률": fmt_pct(h.get('obs_win_rate'), signed=False),
+                # 방향은 칸을 더하지 않고 관찰승률 옆에 — 칸을 더하면 값이 잘려 보인다(라운드 174)
+                "관찰승률 · 방향": (f"{fmt_pct(h.get('obs_win_rate'), signed=False)} · "
+                                f"{_uk.direction_word(h.get('win_rate'))}"),
                 "평균": fmt_pct(h.get('mean_perf')),
                 "중앙값": fmt_pct(h.get('median_perf')),
                 "10~90분위": (f"{fmt_pct(h.get('p10_perf'))} ~ {fmt_pct(h.get('p90_perf'))}"
@@ -10350,14 +10332,26 @@ with tab_pred:
         if hz_rows:
             st.dataframe(pd.DataFrame(hz_rows), width='stretch', hide_index=True)
 
-        # 라운드 233 — '기간 간 방향 일치도'는 위 확률 대시보드에 이미 있다(같은 값 두 번).
+        # '방향 일치 67점'을 점수만 크게 두지 않는다 — 어느 지평끼리, 분자·분모가 무엇인지.
+        _hcs = sim_res.get('horizon_consistency_score')
+        if _dir234['scored']:
+            _cmp234 = " · ".join(f"{H}일(n={n} · {d})" for H, n, d in _dir234['scored'])
+            st.caption(
+                f"확률 비교가 가능한 지평 {len(_dir234['scored'])}개 — {_cmp234}. "
+                f"기간 간 방향 일치 {fmt_num(_hcs, suffix='점')} = 그중 같은 방향인 지평의 비율 "
+                f"(상승 {_dir234['up']} · 하락 {_dir234['down']})."
+                + (" 표본은 있으나 확률 표시 기준에 못 미쳐 비교에서 뺀 지평: "
+                   + ", ".join(f"{H}일(n={n})" for H, n in _dir234['unscored']) + "."
+                   if _dir234['unscored'] else ""))
+        else:
+            st.caption("확률 비교가 가능한 지평이 없습니다 — 어느 지평도 표본이 확률 표시 기준에 못 미칩니다.")
+
         _uk.stat_tiles([
-            # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을
-            # 몇 봉까지 보고 골랐나**이다. 실행 보유기간(20거래일)과 다른
-            # 값이라 이름을 갈랐다.
-            {'label': '유사패턴 최적 관찰기간',
+            # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을 몇 봉까지 보고
+            # 골랐나**이다. 라운드 234 — '최적'이라는 낱말도 뺀다: 보유기간 추천처럼 읽혔다.
+            {'label': '관찰 점수가 가장 높은 기간',
              'value': sim_res.get('optimal_holding_period_str', '산출 불가'),
-             'sub': '평균수익 × 승률 × 일치도 / √기간 · 매매 지시 아님'},
+             'sub': '평균수익 × 승률 × 일치도 / √기간 · 매매 보유기간 추천이 아닙니다'},
             {'label': '적용 상관 임계값',
              'value': f"rho ≥ {sim_res.get('rho_cutoff_applied', rho_cutoff)}",
              'sub': '왼쪽에서 설정한 값 그대로'},
@@ -10368,7 +10362,7 @@ with tab_pred:
             _elig = sim_res.get('horizon_eligibility') or {}
             _near = sim_res.get('horizon_nearest_miss')
             _nosam = sim_res.get('horizons_without_sample') or []
-            with st.expander("유사패턴 최적 관찰기간이 왜 미선정인가 — "
+            with st.expander("관찰 점수가 가장 높은 기간이 왜 미선정인가 — "
                              "지평별 판정 근거", expanded=True):
                 st.caption(
                     "게이트를 통과한 지평이 없다는 뜻이며, 오류가 아닙니다. "
@@ -10401,10 +10395,44 @@ with tab_pred:
                 'earnings_momentum': '실적 모멘텀', 'monthly_trend': '월봉 장기추세',
             }
             ordered = sorted(strat.items(), key=lambda kv: kv[1], reverse=True)
-            st.caption("전략 유형 확률: " + " · ".join(
-                f"{STRAT_KO.get(k, k)} {v:.0f}%" for k, v in ordered))
+            # 라운드 234 — 이 값은 결과 확률이 아니라 국면 규칙으로 더한 분류 가중치의 구성비다.
+            #   '확률'이라 부르면 "이 전략으로 성공할 확률 38%"로 읽힌다.
+            st.caption("전략 유형 적합도 구성 (결과 확률이 아니라 분류 가중치의 구성비): " + " · ".join(
+                f"{STRAT_KO.get(k, k)} {v:.0f}" for k, v in ordered))
     else:
         st.info("다중기간 결과가 없습니다 (표본 부족).")
+
+    # ── 20일 매매 확률 — 표시할 수 있을 때만 카드, 아니면 한 줄 (라운드 234) ──────────
+    st.markdown(f"20일 매매 확률 (목표가 +{TP_SL[0]:.0f}% vs 손절가 -{TP_SL[1]:.0f}% 선도달 · 방향 상승확률)")
+    if _shown234:
+        _uk.stat_tiles([
+            {'label': f"목표가 +{TP_SL[0]:.0f}% 먼저 닿을 확률",
+             'value': fmt_pct(sim_res.get('tp_first_prob'), signed=False),
+             'sub': '손절가보다 목표가에 먼저 도달 · 20일 안', 'tone': 'pos'},
+            {'label': f"손절가 -{TP_SL[1]:.0f}% 먼저 닿을 확률",
+             'value': fmt_pct(sim_res.get('sl_first_prob'), signed=False),
+             'sub': '목표가보다 손절가에 먼저 도달 · 20일 안', 'tone': 'neg'},
+            {'label': '베이지안 사후 상승확률',
+             'value': fmt_pct(sim_res.get('bayes_prob'), signed=False),
+             'sub': '20일 뒤 방향 · Beta-Binomial 보정'},
+        ], theme=_theme)
+        prob_val = sim_res.get('predicted_probability') or 50.0
+        prob_color = "#35C98B" if prob_val >= 60.0 else ("#4C8DFF" if prob_val >= 50.0 else "#F2B84B")
+
+        st.markdown(f"""
+        <div style='background: rgba(48, 209, 88, 0.10); border-radius: 12px; padding: 16px 20px; margin: 12px 0;'>
+            <span style='font-size: 17px; font-weight: bold; color: #F3F6FA;'>최종 예측 상승확률 (베이지안 사후보정): </span>
+            <span style='font-size: 20px; font-weight: 700; color: {prob_color}; margin-left: 8px;'>{sim_res['predicted_prob_str']}</span>
+            <span style='font-size: 15px; color: #9DAABC; margin-left: 12px;'>(95% 신뢰구간: <code style="color:#4C8DFF;">{sim_res['ci_str']}</code> | 분류: <b>{sim_res['confidence_grade']}</b>)</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    else:
+        # 종전엔 '미산출' 카드 셋이 나란히 섰다 — 없는 값을 세 번 크게 말하지 않는다.
+        st.caption(f"산출하지 않습니다 — 20일 유사사례 n={sim_res.get('match_count', 0)} · "
+                   f"{sim_res.get('sample_tier_label', '')}"
+                   + (f" (확률 표시 기준 {_min_prob234}건 이상)" if _min_prob234 else "")
+                   + ". 위 표의 다른 기간 값은 그 기간의 과거 관찰값입니다.")
 
     st.markdown("과거 관찰 성과 세부 분리 지표 (20일)")
     # 라운드 233 — 20일 표본이 0건이면 여섯 칸이 전부 '산출 불가'였다(~330px). 없는 값을
@@ -10460,6 +10488,14 @@ with tab_pred:
         default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h and H in core), None)
         if default_h is None:
             default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h), avail_h[0])
+        _why234 = "표본이 있는 중기 우선"
+        # 라운드 234 — 엔진이 이미 '관찰 점수가 가장 높은 기간'을 골랐는데 화면은 40일에 고정돼
+        #   있었고, 40일이 0건이면 60일로 밀리면서 라벨은 "기본 40일"이라 적었다(라벨과 데이터가
+        #   다른 지평). 엔진 값이 있고 표본이 있으면 그것이 기본이고, 라벨은 실제 기본값을 적는다.
+        _opt234 = sim_res.get('optimal_holding_period_days')
+        if _opt234 in avail_h:
+            default_h = _opt234
+            _why234 = "관찰 점수가 가장 높은 기간"
 
         def _h_label(H):
             mark = " " if H in core else ""
@@ -10468,7 +10504,7 @@ with tab_pred:
             return f"{H}일{mark}"
 
         sel_h = st.radio(
-            "예측 기간 선택 (기본 40일 · 는 전략 유형에 맞는 핵심 기간)",
+            f"다른 기간 살펴보기 (기본 {default_h}일 = {_why234} · 는 전략 유형에 맞는 핵심 기간)",
             ALL_H, index=ALL_H.index(default_h), horizontal=True,
             format_func=_h_label, key="horizon_pick")
 
@@ -10487,6 +10523,9 @@ with tab_pred:
 
         h = hz[sel_h]
         show_forecast = q_engine.probabilities_allowed(h['status'])
+        # 라운드 234 — 아래 그래프·지표가 어느 지평의 값인지 제목이 먼저 말한다 (n · 등급 · 성격).
+        st.markdown(f"**{sel_h}거래일 유사패턴 관찰 결과** — n={h['match_count']} · {h['tier_label']} · "
+                    + ("예측" if show_forecast else "과거 관찰값 (미래 확률 아님)"))
         days = np.arange(1, sel_h + 1)
 
         fig_pred, ax_p = plt.subplots(figsize=(12, 5.2))
@@ -10581,10 +10620,6 @@ with tab_pred:
         ax_p.grid(True, color='#1C2635', linestyle='--')
         ax_p.legend(facecolor='#161D2A', edgecolor='#1C2635', labelcolor='#F3F6FA', fontsize=8)
         st.pyplot(fig_pred)
-
-        if not show_forecast:
-            st.warning(f"유사패턴 표본 {h['match_count']}건 — {h['tier_label']}. "
-                       f"위 그래프는 **미래 예측이 아니라 과거 유사사례의 관찰 분포**입니다.")
 
         g1, g2, g3, g4, g5, g6 = st.columns(6)
         g1.metric("유사패턴 표본", f"{h['match_count']}건", h['tier_label'])
