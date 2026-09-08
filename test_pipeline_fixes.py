@@ -6320,10 +6320,25 @@ check("① 넓은 범위도 함께 준다",
       and _r103['value_band']['wide_high'] >= _r103['value_band']['high'])
 check("② 시장 공정가격이 별도로 나온다", _r103['market_fair']['available'])
 check("③ 실전 진입가격이 별도로 나온다", _r103['entry']['available'])
-check("세 축이 서로 다른 값이다",
-      len({round(_r103['value_band']['center']),
-           round(_r103['market_fair']['price']),
-           round(_r103['entry']['price'])}) == 3)
+# ⚠️ 라운드 243 — 이 검사가 **운영에서 나올 수 없는 픽스처**로만 성립하고 있었다.
+#   규칙집이 apply_to_fair_value = 0 이라 운영의 market_adjustment_pct 는 **항상 0**
+#   이고, 그러면 ②는 ①의 중심과 **같은 수**다. 픽스처만 −2.0 을 넣어 "셋이 다르다"가
+#   통과했으니 실제 화면 상태(같은 수인데 지평만 다름)를 영원히 못 잡았다.
+#   조정이 있을 때와 없을 때를 **둘 다** 잰다 — 없을 때는 같다고 말하는지까지.
+check("조정이 있으면 ②가 ①과 갈린다 (축이 실제로 반응한다)",
+      round(_r103['market_fair']['price']) != round(_r103['value_band']['center']))
+check("실전 진입가는 늘 다른 축이다 (변동성 기반)",
+      round(_r103['entry']['price']) != round(_r103['value_band']['center']))
+_r103z = _pa103.build(dict(_ve103, market_adjustment_pct=0.0), _fs103,
+                      curr_price=26350, bars=900)
+check("조정이 0 이면 ②는 ①의 중심과 같은 수다 (운영 상태 — 지어내지 않는다)",
+      round(_r103z['market_fair']['price']) == round(_r103z['value_band']['center']),
+      f"{_r103z['market_fair']['price']} vs {_r103z['value_band']['center']}")
+check("그때 화면이 같은 수라고 말한다 (칸만 다르면 따로 낸 값으로 읽힌다 · §3)",
+      '같은 값입니다' in str(_r103z['market_fair'].get('basis')),
+      str(_r103z['market_fair'].get('basis')))
+check("조정이 있을 때는 그 문장을 안 붙인다 (오탐 없음)",
+      '같은 값입니다' not in str(_r103['market_fair'].get('basis')))
 check("세 축의 지평을 명시한다",
       (_r103['value_band']['horizon'], _r103['market_fair']['horizon'],
        _r103['entry']['horizon']) == ('수년', '수개월', '수일'))
@@ -7720,8 +7735,16 @@ _mf114 = _pa103.market_fair(
     {'displayed_fair_value': 120.0, 'market_adjustment_pct': 0.0},
     {'available': True, 'center': 120.0, 'confidence': 85.0,
      'tier': 'normal', 'tier_ko': '정상', 'weight': 1.0})
-check("조정 0 이면 근거에 '조정' 이라 쓰지 않는다",
-      '조정' not in str(_mf114.get('basis') or ''), _mf114.get('basis'))
+# ⚠️ 라운드 243 — 이 검사가 낱말 '조정'을 통째로 막고 있었다. 막으려던 것은
+#   **조정한 적이 없는데 조정했다고 읽히는 것**('조정 +0.0%')이다. 그런데 조정이
+#   0 이면 이 축은 장기 가치 중심과 **같은 수**여서, 그 사실을 안 적으면 시장을
+#   반영해 따로 낸 값으로 읽힌다(§3). 뜻을 잠근다 — 0% 조정을 주장하지 않고,
+#   같은 수라는 사실은 말한다.
+check("조정 0 이면 '조정 0.0%' 를 주장하지 않는다 (뜻을 잠근다)",
+      not _re.search(r'조정\s*[+-]?0\.0%', str(_mf114.get('basis') or '')),
+      _mf114.get('basis'))
+check("대신 장기 가치 중심과 같은 수임을 적는다 (칸만 다르면 따로 낸 값으로 읽힌다)",
+      '같은 값입니다' in str(_mf114.get('basis') or ''), _mf114.get('basis'))
 
 # ══════════════════════════════════════════════════════════════════════
 # §115 — 시장 수준 축은 날짜 수가 표본이다 (라운드 45)
@@ -21920,6 +21943,67 @@ check("f-string 은 조각이 아니라 한 덩어리로 본다 (심기 — 이�
 _doc259 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R242_SCREEN_REF_SCOPE.md'))
 check("문서가 실측 수(대상 2→38 · 참조 25건)와 잰 날짜를 적는다",
       '2026-09-08' in _doc259 and '25건' in _doc259 and '38' in _doc259)
+
+print()
+print("§260 R243 — 같은 신뢰도가 두 이름 · '핵심 합리적 범위' 밖의 적정가 · 조정 0 인데 다른 지평 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (2026-09-08) ──────────────────────────────────────────
+#   ① 같은 77점이 한 화면에서 **두 이름**으로 불렸다 — 밸류에이션 배너는 '정상 표시',
+#      세 축 ① 칸은 '제한적'. 둘 다 맞는 말인데(하나는 **숫자를 낼지**, 하나는 **판정에
+#      얼마나 반영할지**) 무엇을 가르는 기준인지 안 적어 모순으로 읽힌다. 문턱은 어느
+#      쪽도 안 바꾸고 두 질문을 한 줄로 잇는다.
+#   ② '핵심 합리적 범위 (25~75분위)' 는 **기업 값어치의 합리적 구간**으로 읽힌다.
+#      실제로는 유효 모델들의 **출력 분포** 분위수이고, 중심값은 확장 구간(10~90) 안으로만
+#      되돌리므로 이 구간 **밖에 놓일 수 있다**. 모델이 하나면 구간은 한 점이다.
+#   ③ 규칙집이 apply_to_fair_value = 0 이라 업황 조정은 **항상 0** 이고, 그러면 ②축은
+#      ①축 중심과 **같은 수**다. 그런데 칸 이름만 '수개월'이라 따로 낸 값으로 읽힌다.
+import price_axes as _pa260
+
+# ① 두 이름 — 무엇을 가르는지 적는다 (문턱 불변)
+check("판정 반영 등급 경계는 그대로다 (80 / 60 / 40)",
+      [t[0] for t in _pa260.TIERS] == [80.0, 60.0, 40.0, 0.0])
+check("세 축 칸이 '판정 반영' 등급임을 말하고 축의 문장을 읽는다",
+      "신뢰도 {_b['confidence']:.0f}점 — 판정 반영 {_b['tier_ko']}" in _w231
+      and "f\": {_b['note']}\" if _b.get('note')" in _w231)
+check("배너가 두 질문을 한 줄로 잇는다 (표시 여부 · 판정 반영)",
+      '중심 적정가를 숫자로 낼지' in _w231 and '판정에 얼마나 반영할지' in _w231
+      and "_tier243 = str((_AX.get('value_band') or {}).get('tier_ko') or '')" in _w231)
+_b260 = _pa260.value_band(dict(fair_value_range_core=(24000, 30000),
+                               fair_value_range_wide=(21000, 34000),
+                               reference_fair_value=27000,
+                               fair_value_confidence=77.0, independent_models=3,
+                               fair_value_status='CALIBRATED',
+                               type_probabilities={'A_STABLE': 0.7}), bars=900)
+check("77점은 판정 반영 '제한적'이고 축이 그 뜻을 문장으로 낸다 (실측 재현)",
+      _b260.get('tier_ko') == '제한적' and '절반' in str(_b260.get('note')))
+
+# ② 범위 이름 — 무엇의 분위수인가 · 밖일 수 있다 · 한 점일 수 있다
+check("범위 이름이 '모델 출력'의 분위수라고 적는다",
+      '모델 출력 25~75분위' in _w231 and '모델 출력 10~90분위' in _w231
+      # 낱말이 아니라 **옛 라벨 전체**로 본다 — 왜 바꿨는지 적은 주석에도 그 낱말이 있다
+      and '핵심 합리적 범위 (25~75분위)' not in _w231)
+check("적정가가 그 구간 밖이면 그렇다고 적는다 (중심값은 확장 구간으로만 되돌린다)",
+      '위 적정가는 이 구간 밖입니다' in _w231
+      and 'not (float(_cr243[0]) <= float(disp_price) <= float(_cr243[1]))' in _w231)
+check("유효 모델이 하나면 구간이 한 점임을 적는다",
+      '유효 모델이 하나라 구간이 한 점입니다' in _w231)
+
+# ③ 조정이 0 이면 같은 수라고 말한다 (§103 이 값으로 잰다)
+_band260 = dict(available=True, center=27000.0, confidence=77.0,
+                tier='limited', tier_ko='제한적', weight=0.5)
+_m260 = _pa260.market_fair(dict(displayed_fair_value=27000.0,
+                                market_adjustment_pct=0.0), _band260)
+check("조정이 0 이면 ②가 ①과 같은 수이고 그 사실을 적는다",
+      round(_m260['price']) == 27000 and '같은 값입니다' in str(_m260['basis']))
+_m260b = _pa260.market_fair(dict(displayed_fair_value=27000.0,
+                                 market_adjustment_pct=-2.0), _band260)
+check("조정이 있으면 그 문장을 안 붙인다 (오탐 없음 · 심기)",
+      round(_m260b['price']) != 27000 and '같은 값입니다' not in str(_m260b['basis']))
+check("지평 이름은 그대로다 (수년 · 수개월 · 수일)",
+      _m260['horizon'] == '수개월' and _band260.get('center') == 27000.0)
+_doc260 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R243_TWO_NAMES.md'))
+check("문서가 잰 날짜와 '문턱 불변'을 적는다",
+      '2026-09-08' in _doc260 and '문턱' in _doc260)
 
 print()
 print("=" * 72)

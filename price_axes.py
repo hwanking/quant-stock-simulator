@@ -268,6 +268,10 @@ def market_fair(val_eval, band, regime_gate=None):
         parts.append(f"업황 조정 {adj:+.1f}%")
     if regime_adj:
         parts.append(f"{rg.get('cell_ko') or '국면'} 보정 {regime_adj:+.1f}%")
+    # 라운드 243 — 조정이 둘 다 0 이면 이 축은 ①과 **같은 수**다. 지평만 '수개월'
+    #   이라 적어 두면 시장을 반영해 따로 낸 값으로 읽힌다. 사실대로 적는다 (§3).
+    if not adj and not regime_adj:
+        parts.append('반영할 시장 조정이 없어 장기 가치 중심과 같은 값입니다')
     return dict(available=True, price=float(price), horizon='수개월',
                 basis=' · '.join(parts),
                 confidence=band.get('confidence'), tier=band.get('tier'),

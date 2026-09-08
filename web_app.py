@@ -10692,9 +10692,13 @@ with tab_val:
             st.caption("① 이 기업의 값어치는? · 수년")
             if _b.get('available'):
                 st.markdown(f"### {_b['low']:,.0f} ~ {_b['high']:,.0f}원")
+                # 라운드 243 — 등급 낱말만 적으면 무엇을 가르는 등급인지 알 수 없다.
+                #   이 등급은 **판정에 얼마나 반영할지**를 가른다 — 그 문장은 축이
+                #   이미 내고 있다(note). 화면은 읽기만 한다.
                 st.caption(_md_safe(
                     f"넓게 보면 {_b['wide_low']:,.0f}~{_b['wide_high']:,.0f}원 · "
-                    f"신뢰도 {_b['confidence']:.0f}점 ({_b['tier_ko']})"))
+                    f"신뢰도 {_b['confidence']:.0f}점 — 판정 반영 {_b['tier_ko']}"
+                    + (f": {_b['note']}" if _b.get('note') else '')))
                 # 라운드 38 — 범위의 **폭**을 말해 준다. LX인터내셔널이
                 # 31,860~78,511원(2.5배)이었는데 화면은 그냥 범위만 보여 줬다.
                 # 폭이 2배를 넘으면 "적정가가 좋다"고 읽으면 안 된다.
@@ -10840,6 +10844,16 @@ with tab_val:
         st.warning(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 아래 예비 모델 범위만 참고하십시오.")
     else:
         st.error(f"적정가 신뢰도 {conf_score:.0f}점 — {fv_note}. 중심 적정가와 장기 가치 참고선을 산출하지 않았습니다.")
+    # 라운드 243 — 같은 신뢰도가 한 화면에서 **두 이름**으로 불렸다(예: 77점이
+    #   여기서는 '정상 표시', 위 세 축 칸에서는 '제한적'). 둘 다 맞는 말인데
+    #   무엇을 가르는 기준인지 안 적어 모순으로 읽힌다. 문턱은 어느 쪽도 바꾸지
+    #   않고, 두 질문을 한 줄로 잇는다 (판정이 두 이름표를 달 때의 규칙).
+    _tier243 = str((_AX.get('value_band') or {}).get('tier_ko') or '')
+    if _tier243:
+        st.caption(f"이 등급은 **중심 적정가를 숫자로 낼지**를 가릅니다. 같은 "
+                   f"{conf_score:.0f}점을 **판정에 얼마나 반영할지**로 가르면 "
+                   f"'{_tier243}'입니다 (위 '이 기업의 값어치는?' 칸). 두 기준은 "
+                   f"경계가 달라 같은 점수가 다른 이름으로 불립니다.")
 
     if _wm238 is not None and _raw238 is not None:
         _steps238 = [f"모델 가중중앙값 {_wm238:,.0f}{unit_str}",
@@ -10853,6 +10867,21 @@ with tab_val:
                    + ". 고정 보정은 이 저장소가 처음부터 갖고 있던 값이고 **근거가 기록되어 "
                      "있지 않습니다.** 지우면 모든 종목의 적정가가 그만큼 움직이므로, 먼저 "
                      "영향을 재고 나서 결정합니다 — 그때까지 숨기지 않고 그대로 보여 줍니다.")
+    # 라운드 243 — '핵심 합리적 범위'라는 이름은 **기업 값어치의 합리적 구간**으로
+    #   읽힌다. 실제로는 유효 모델들의 **출력 분포** 25~75분위이고, 중심값은 확장
+    #   구간(10~90) 안으로만 되돌리므로 이 구간 **밖에 놓일 수 있다**. 모델이 하나뿐이면
+    #   구간은 한 점이다. 그 사실을 그 자리에서 적는다 — 값·산식은 그대로.
+    _core243 = ''
+    _cr243 = val_eval.get('fair_value_range_core')
+    _nm243 = val_eval.get('independent_models')
+    try:
+        if _nm243 is not None and int(_nm243) <= 1:
+            _core243 = ' <span style="color:#9DAABC;">— 유효 모델이 하나라 구간이 한 점입니다</span>'
+        elif (_cr243 and len(_cr243) == 2 and disp_price is not None
+                and not (float(_cr243[0]) <= float(disp_price) <= float(_cr243[1]))):
+            _core243 = ' <span style="color:#F2B84B;">— 위 적정가는 이 구간 밖입니다</span>'
+    except (TypeError, ValueError):
+        _core243 = ''
     disp_price_str = f"{disp_price:,.0f}{unit_str}" if disp_price is not None else "산출 보류"
     if upside_pct is None:
         upside_display_str = f"<b style='color:#9DAABC;'>상승여력 미산출</b> ({upside_eval})"
@@ -10893,8 +10922,8 @@ with tab_val:
                 <p style="font-size: 17px; font-weight: bold; margin: 0; color: #9DAABC;">{upside_display_str}</p>
                 <p style="font-size: 15px; color: #9DAABC; margin-top: 8px;">
                     참고 중심값 <b style="color:#F3F6FA;">{fmt_num(val_eval.get('reference_fair_value'), suffix=unit_str)}</b><br>
-                    핵심 합리적 범위 (25~75분위) <b style="color:#4C8DFF;">{val_eval.get('fair_value_range_core_str', '미산출')}</b><br>
-                    확장 불확실성 범위 (10~90분위) <b style="color:#9DAABC;">{val_eval.get('fair_value_range_wide_str', '미산출')}</b>
+                    모델 출력 25~75분위 <b style="color:#4C8DFF;">{val_eval.get('fair_value_range_core_str', '미산출')}</b>{_core243}<br>
+                    모델 출력 10~90분위 <b style="color:#9DAABC;">{val_eval.get('fair_value_range_wide_str', '미산출')}</b>
                 </p>
             </div>
             <div style="text-align: right; background: #1C2635; padding: 16px 20px; border-radius: 12px; ">
