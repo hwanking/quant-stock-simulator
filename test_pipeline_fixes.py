@@ -22250,6 +22250,112 @@ check("문서가 파일별 방침과 실측 수를 적는다",
       and '클라우드에만 있는 케이스가 0개' in _doc263)
 
 print()
+print("§264 R248 — 시장 판(유가·금·금리)을 한 판으로 · 판정에는 안 넣는다 (2026-09-09)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 요청 · 2026-09-09) ────────────────────────────
+#   *"시장, 글로벌 뉴스 컨텍스트 부분에 유가 금 금리 등등을 보면서 할건지랑 전체적으로
+#     다 개선해주고 디자인도 잘 보이게 … 엔진들에게도 반영해주고 연구할 수 있도록해줘"*
+#
+#   병렬 설계(에이전트 33개 · 적대적 검증)가 전제 하나를 뒤집었다 — **유가·구리·
+#   변동성지수·원달러·S&P500 은 이미 수집되고 있었다**(sector_cycle.MACRO ·
+#   2013-12-31~ · 3,189봉). 화면 어디에도 한 판으로 없었을 뿐이다. 진짜 새것은
+#   **금·미국채 10년 금리** 둘이다. 더하기 전에 실제로 오는지 확인했고
+#   (GC=F 3,189봉 · ^TNX 3,189봉), 안 오는 것(XAU/USD · US10YT=X · FRED:DGS10)은
+#   이름을 안 붙였다(§3).
+#
+#   **엔진 반영은 하지 않았다.** 근거가 없고(§2), 산식은 2026-11-16 전방 재평가까지
+#   동결이다(R78). 대신 화면이 그 사실을 말한다.
+import sector_cycle as _sc264
+import ui_kit as _uk264
+
+# ① 계열 — 요청에 있는 둘만 더했다 · 이름을 붙이기 전에 받아 봤다
+_keys264 = {k for _t, _ko, k in _sc264.MACRO}
+check("매크로 축에 금·미국채 10년 금리가 있다 (사용자가 이름을 댄 둘)",
+      'gold' in _keys264 and 'ust10' in _keys264, str(sorted(_keys264)))
+check("종전 축은 그대로다 — 유가·구리·변동성지수·원달러·S&P500·KOSPI·KOSDAQ",
+      {'oil', 'copper', 'vix', 'fx', 'spx', 'kospi', 'kosdaq'} <= _keys264)
+check("계열을 늘리기만 하지 않았다 — 9개다 (늘리기 쉽고 줄이기 어렵다)",
+      len(_sc264.MACRO) == 9, str(len(_sc264.MACRO)))
+check("금리는 %가 아니라 %p 로 읽는다고 코드가 정한다",
+      _sc264.RATE_KEYS == ('ust10',))
+
+# ② macro() 는 짧은 지평과 **절대 변화**를 같이 낸다 (금리용)
+_m264 = _sc264.macro()
+_ok264 = [k for k in ('oil', 'gold', 'ust10', 'vix')
+          if isinstance(_m264.get(k), dict)]
+check("매크로 축을 실제로 받는다 (0개면 미측정)", len(_ok264) >= 3,
+      f"받은 축 {len(_ok264)}/4 · 미수신 {_m264.get('missing')}",
+      scanned=len(_sc264.MACRO))
+if _ok264:
+    _v264 = _m264[_ok264[0]]
+    check("종전 키가 그대로다 — 읽는 쪽(띠·업황표)을 안 깬다",
+          all(k in _v264 for k in ('ko', 'ticker', 'chg60', 'last', 'last_date')))
+    check("짧은 지평과 절대 변화를 같이 낸다",
+          all(k in _v264 for k in ('chg5', 'chg20', 'diff5', 'diff20', 'is_rate')))
+_r264 = _m264.get('ust10')
+if isinstance(_r264, dict):
+    check("금리 축만 is_rate 다 (화면이 %p 를 고르는 근거)",
+          _r264.get('is_rate') is True
+          and (_m264.get('oil') or {}).get('is_rate') is False)
+
+# ③ 보드 — 판단을 만들지 않는 그리기 부품
+_bd264 = _uk264.macro_board(_m264)
+check("보드가 그려진다 (빈 문자열이면 화면이 조용히 빈다)", len(_bd264) > 500,
+      str(len(_bd264)))
+check("금리는 %p 로, 나머지는 % 로 적는다 (같은 이름에 다른 단위)",
+      '%p' in _bd264 and '%<' in _bd264.replace('%p', ''))
+check("일부만 못 받으면 그 줄만 '미수신' 이라 적는다 — 0 으로 안 채운다 (심기)",
+      '미수신' in _uk264.macro_board(
+          {'oil': {'ko': '유가', 'ticker': 'CL=F', 'last': 90.0,
+                   'chg5': 1.0, 'chg20': 2.0, 'last_date': '2026-09-08'},
+           'gold': None}))
+check("값이 하나도 없으면 빈 문자열 — 미수신 아홉 줄로 화면을 채우지 않는다",
+      _uk264.macro_board({}) == '' and _uk264.macro_board(None) == ''
+      and _uk264.macro_board({'oil': None}) == '')
+check("묶음은 판단이 아니라 분류다 — 코드가 그렇게 적는다",
+      '판단이 아니라 **분류**다' in _read148(_os.path.join(PROJ, 'ui_kit.py')))
+
+# ④ '내일 방어적으로?' — 이미 채택된 국면 게이트로만 답한다
+check("판정 문장이 킷 한 곳에서 나온다 (§4)",
+      callable(getattr(_uk264, 'regime_gate_line', None))
+      and "_uk.regime_gate_line(four_scores.get('regime_gate'))" in _w231)
+check("안 깎였을 때도 말한다 — 침묵하면 '재지 않았다'로 읽힌다",
+      '추가 제한 없음' in _uk264.regime_gate_line({'cell': 'BULL|저변동',
+                                                'level': '정상'}))
+check("깎였으면 무엇이 걸렸는지 적는다",
+      '신규 매수 차단' in _uk264.regime_gate_line({'cell': 'x', 'block_new': True})
+      and '제안 비중' in _uk264.regime_gate_line({'cell': 'x', 'size_mult': 0.5}))
+check("못 잰 칸은 판정 보류다 (§3)",
+      '판정 보류' in _uk264.regime_gate_line(None))
+check("매크로가 판정에 안 들어간다는 사실을 같은 자리에서 말한다 (§9)",
+      '이 판단에 들어가지 않습니다' in _w231 and '표시 전용입니다' in _w231)
+
+# ⑤ 판정 경로 불변 — 매크로는 점수를 안 건드린다
+import market_context as _mc264
+_gsrc264 = _read148(_os.path.join(PROJ, 'market_context.py'))
+check("글로벌 위험 산식이 읽는 키는 그대로 넷이다 (매크로가 안 끼어든다)",
+      _mc264.GLOBAL_SYMBOLS == (("%5EGSPC", "sp500", "S&P 500", 2),
+                                ("%5EIXIC", "nasdaq", "나스닥", 2),
+                                ("%5EVIX", "vix", "VIX (변동성지수)", 2),
+                                ("KRW=X", "usdkrw", "원/달러 환율", 2)))
+check("상한 문턱도 그대로다 (새 숫자를 만들지 않았다 · §2)",
+      _mc264.VIX_WARN == 25.0 and _mc264.VIX_EXTREME == 35.0)
+check("두 표가 무엇인지 화면이 가른다 — 어느 쪽이 판정 근거인지",
+      '점수 상한 판단이 읽는 값' in _w231
+      and '이 표가 상한 판단의 ' in _w231
+      and '판정에는 쓰이지 ' in _w231)
+
+# ⑥ 덤 — 시장 지수 호출에 캐시가 없었다
+check("시장 지수 호출이 캐시를 탄다 (rerun 마다 네 번 다시 받지 않는다)",
+      '@st.cache_data(ttl=600, show_spinner=False)\ndef _market_indices_cached():'
+      in _w231 and 'm_indices = _market_indices_cached()' in _w231
+      and 'm_indices = engine_init.get_market_indices()' not in _w231)
+_doc264 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R248_MACRO_BOARD.md'))
+check("문서가 실측 수와 '엔진 반영 안 함'을 적는다",
+      '2026-09-09' in _doc264 and '3,189' in _doc264
+      and '엔진' in _doc264 and '표시 전용' in _doc264)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이

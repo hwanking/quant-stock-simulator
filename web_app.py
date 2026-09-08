@@ -6426,7 +6426,17 @@ def _tn246(v):
         return None
 
 
-m_indices = engine_init.get_market_indices()
+# ⚠️ 라운드 248 — 이 호출에 **캐시가 없었다.** engine_init 은 모듈 수준이라
+#   rerun 마다 새로 만들어지고(라운드 216 이 q_engine 에서 당한 자리),
+#   네이버 2 + 야후 2 = 네 번을 매 그리기마다 다시 받았다. 같은 파일이 이미
+#   쓰는 패턴(@st.cache_data(ttl=600))을 그대로 씌운다 — market_context 의
+#   _TTL_GLOBAL 도 600 이라 **새 문턱이 아니다**(§2 재사용).
+@st.cache_data(ttl=600, show_spinner=False)
+def _market_indices_cached():
+    return engine_init.get_market_indices()
+
+
+m_indices = _market_indices_cached()
 
 if _home_cal.get('total_cases'):
     _sp = _home_cal.get('splits') or {}
@@ -9405,6 +9415,40 @@ st.markdown(f"### [{resolved_name}] 시장·글로벌·뉴스 컨텍스트")
 st.caption("이 판이 나쁠 때는 종목 점수가 좋아도 최종 점수에 상한이 걸립니다. "
            "좋아 보이는 뉴스로 점수를 **올리지는 않습니다** — 뉴스 해석은 사람이 합니다.")
 
+# ⚠️ 라운드 248 — 사용자 요청: *"유가 금 금리 등등을 보면서 할건지랑 …
+#   디자인도 잘 보이게."* 유가·구리·변동성지수·원달러·S&P500 은 **이미**
+#   매크로 축에 있었는데(2013-12-31~) 화면 어디에도 한 판으로 없었다 —
+#   띠에 다섯 줄이 흘러갈 뿐이었다. 금·미국채 10년 금리를 더해 한 판으로 낸다.
+#   **판정에는 안 들어간다.** 그 사실을 보드 바로 아래에서 말한다(§9).
+try:
+    import sector_cycle as _sc248
+    _macro248 = _sc248.macro()
+except Exception as _e248:                                 # noqa: BLE001
+    _macro248, _err248 = None, f'{type(_e248).__name__}: {_e248}'[:80]
+else:
+    _err248 = ''
+if _macro248:
+    st.markdown("**시장 판 — 지수 · 원자재 · 금리 · 환율**")
+    _bd248 = _uk.macro_board(_macro248, theme=_theme)
+    if _bd248:
+        st.markdown(_bd248, unsafe_allow_html=True)
+    _miss248 = list((_macro248 or {}).get('missing') or [])
+    st.caption(
+        "색은 **방향**입니다 — 좋고 나쁨이 아닙니다(금리·변동성지수는 오르는 "
+        "것이 위험 신호일 수 있습니다). 금리는 %p, 나머지는 % 로 읽습니다. "
+        "일별 종가 기준이며 못 받은 축은 '미수신'으로 둡니다."
+        + (f" 미수신: {', '.join(_miss248)}." if _miss248 else ''))
+    # 사용자 물음: *"이 방향이면 내일 방어적으로 세팅을 해야하는지."*
+    #   화면이 정직하게 낼 수 있는 답은 **이미 채택된 국면 게이트**뿐이다.
+    #   위 매크로는 그 판단에 안 들어간다 — 그 사실을 같은 자리에서 말한다.
+    #   판정 문장은 킷 한 곳에서 만든다 (§4 · 종전엔 깎였을 때만 말했다).
+    st.info(_uk.regime_gate_line(four_scores.get('regime_gate'))
+            + "  \n위 유가·금·금리·환율은 **이 판단에 들어가지 않습니다** — "
+              "표시 전용입니다. 매크로가 판정을 개선하는지는 아직 재지 "
+              "않았습니다.")
+elif _err248:
+    st.caption(f"시장 판을 그리지 못했습니다 — {_err248}")
+
 _ctx_c1, _ctx_c2 = st.columns([1, 1])
 with _ctx_c1:
     _dom = _mkt_ctx.get('domestic') or {}
@@ -9465,8 +9509,15 @@ with _ctx_c1:
             else:
                 _grows.append({"지표": _gv.get('label', _gk), "현재": "미수신",
                                "20일 변화": "—", "60일선": "—"})
+        # 라운드 248 — 위 매크로 보드와 **겹치는 이름이 있는데 수가 다를 수**
+        #   있다. 출처(야후 vs FinanceDataReader)와 창이 다르기 때문이다.
+        #   어느 쪽이 판정에 쓰이는지 적지 않으면 사용자는 모순으로 읽는다.
+        st.markdown("**점수 상한 판단이 읽는 값**")
         st.dataframe(pd.DataFrame(_grows), width='stretch', hide_index=True)
-        st.caption("출처: Yahoo Finance 일봉 (10분 캐시)")
+        st.caption("출처: Yahoo Finance 일봉 (10분 캐시). **이 표가 상한 판단의 "
+                   "근거입니다.** 위 '시장 판'은 다른 출처(FinanceDataReader 일별 "
+                   "종가)라 같은 이름이라도 수가 다를 수 있고, 판정에는 쓰이지 "
+                   "않습니다.")
     _gw = _mkt_ctx.get('global_warnings') or []
     if _gw:
         st.warning("**글로벌 위험 신호 " + str(len(_gw)) + "건**\n\n" +

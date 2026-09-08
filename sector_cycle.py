@@ -425,14 +425,32 @@ def proxy_momentum(gcode, as_of=None):
 
 
 #: 매크로 축 — 사양 §1 '매일 갱신'. 수신 실패는 그대로 남긴다.
+#: 라운드 248 — 사용자 요청(*"유가 금 금리 등등을 보면서"*)으로 **금·미국채
+#:   10년 금리** 둘을 더했다. 유가·구리·변동성지수·원달러·S&P500 은 **이미**
+#:   여기 있었다(2013-12-31~ · 3,189봉) — 새로 받는 것은 둘뿐이다.
+#:   더하기 전에 FinanceDataReader 로 실제로 오는지 확인했다(§3):
+#:     GC=F 3,189봉 · ^TNX 3,189봉 (2026-09-09 실측).
+#:     XAU/USD · US10YT=X · FRED:DGS10 은 **안 온다** — 이름을 안 붙였다.
+#:   계열은 늘리기 쉽고 줄이기 어렵다(라운드 129) — 요청에 있는 둘만 더한다.
+#:   이 층은 R44 판정으로 **표시 전용**이다. 점수·게이트가 읽지 않는다.
 MACRO = (('USD/KRW', '원달러', 'fx'), ('CL=F', 'WTI 유가', 'oil'),
-         ('HG=F', '구리', 'copper'), ('VIX', '변동성지수', 'vix'),
+         ('HG=F', '구리', 'copper'), ('GC=F', '금', 'gold'),
+         ('VIX', '변동성지수', 'vix'), ('^TNX', '미국채 10년 금리', 'ust10'),
          ('KS11', 'KOSPI', 'kospi'), ('KQ11', 'KOSDAQ', 'kosdaq'),
          ('US500', 'S&P500', 'spx'))
 
+#: **금리는 %가 아니라 %p 로 읽는다.** 4.81 → 4.70 은 −2.3% 이지만 −0.11%p 다.
+#:   화면이 이 목록을 보고 단위를 고른다 — 이름과 값이 어긋나지 않게(라운드 235).
+RATE_KEYS = ('ust10',)
+
 
 def macro(as_of=None):
-    """매크로 축 60일 변화율. 못 받은 축은 `None` 으로 남긴다."""
+    """매크로 축 변화율. 못 받은 축은 `None` 으로 남긴다.
+
+    라운드 248 — 60일만으로는 *"어제 왜 떨어졌나"* 를 못 본다. 5·20일과
+    **절대 변화**(금리는 %p 로 읽어야 한다)를 같이 낸다. 종전 키
+    (`chg60`·`last`·`last_date`)는 그대로다 — 읽는 쪽을 안 깬다.
+    """
     out, miss = {}, []
     for t, ko, key in MACRO:
         rows = _upto(series(t), as_of)
@@ -442,7 +460,18 @@ def macro(as_of=None):
             out[key] = None
         else:
             out[key] = dict(ko=ko, ticker=t, chg60=round(r, 2),
-                            last=rows[-1][1], last_date=rows[-1][0])
+                            last=rows[-1][1], last_date=rows[-1][0],
+                            # 짧은 지평 — 못 재면 None (지어내지 않는다)
+                            chg5=(round(_ret(rows, 5), 2)
+                                  if _ret(rows, 5) is not None else None),
+                            chg20=(round(_ret(rows, 20), 2)
+                                   if _ret(rows, 20) is not None else None),
+                            # 절대 변화 — 금리는 이것이 %p 다
+                            diff5=(round(rows[-1][1] - rows[-6][1], 3)
+                                   if len(rows) >= 6 else None),
+                            diff20=(round(rows[-1][1] - rows[-21][1], 3)
+                                    if len(rows) >= 21 else None),
+                            is_rate=(key in RATE_KEYS), bars=len(rows))
     out['missing'] = miss
     return out
 
