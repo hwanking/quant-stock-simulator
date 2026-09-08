@@ -22356,6 +22356,129 @@ check("문서가 실측 수와 '엔진 반영 안 함'을 적는다",
       and '엔진' in _doc264 and '표시 전용' in _doc264)
 
 print()
+print("§265 R249 — 매크로 축을 판정에 넣을 근거가 없다 · (a) 현행 유지 (2026-09-09)")
+print("-" * 72)
+# ── 무엇을 쟀나 ─────────────────────────────────────────────────────────
+#   라운드 248 이 유가·금·금리·환율을 **화면에** 올렸다. 이 절이 잠그는 것은
+#   그 다음 물음의 답이다 — **판정에 넣을 수 있나.** 사전등록대로 쟀고
+#   **아홉 축 전부 미달**이다(R3 방향 관문에서 일곱, CI 에서 둘).
+#
+#   제일 중요한 줄은 변동성지수다: train z **+5.17** (이 저장소가 잰 어떤
+#   재료보다 크다) · valid **−2.14** (반대 방향인데 유의) · blind +1.66.
+#   train 만 봤으면 '발견'했을 자리다 — 라운드 44 의 그 모양.
+#
+# ── 무엇을 잠그고 무엇을 안 잠그나 (라운드 213) ─────────────────────────
+#   ○ 잠근다: 판정(바뀌면 사람이 다시 판단해야 한다) · 재사용한 상수 ·
+#             매크로가 판정 경로에 안 들어갔다는 사실 · 문서가 적은 한계
+#   × 안 잠근다: 축별 차이·CI·z. **원장이 자라면 표류한다.** 라운드 211~213 이
+#             바로 그 값을 잠갔다가 축적에 깨졌다.
+import json as _json265
+
+_pre265 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R249_MACRO_AXIS.md'))
+_res265 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R249_MACRO_AXIS.md'))
+_ev265 = _os.path.join(PROJ, 'data', 'macro_ev_r249.json')
+
+# ① 판정 — 이것은 잠근다 (바뀌면 사람이 다시 판단한다)
+if _os.path.isfile(_ev265):
+    _j265 = _json265.loads(_read148(_ev265) or '{}')
+    check("판정은 (a) 현행 유지 — 통과 축 0개",
+          not _j265.get('passed_axes') and '현행 유지' in str(_j265.get('verdict')),
+          str(_j265.get('verdict')))
+    check("아홉 축을 전부 쟀다 (일부만 재고 '없다'고 하지 않는다)",
+          len(_j265.get('axes') or {}) == 9,
+          f"잰 축 {len(_j265.get('axes') or {})}",
+          scanned=len(_j265.get('axes') or {}))
+    check("표본 단위가 날짜다 — 케이스가 아니다 (라운드 45 의 그 사고)",
+          (_j265.get('dates') or {}).get('blind', 0) >= _j265.get('min_dates', 30)
+          and _j265.get('buy_cases', 0) > (_j265.get('dates') or {}).get('blind', 0),
+          f"블라인드 날짜 {(_j265.get('dates') or {}).get('blind')} · "
+          f"매수권 케이스 {_j265.get('buy_cases')}")
+    check("비용은 채택된 상수를 **불러온** 값이다 (라운드 191 · 새로 안 골랐다)",
+          abs(float(_j265.get('cost_pct', 0)) - 0.36) < 1e-9,
+          str(_j265.get('cost_pct')))
+else:
+    skipped("R249 산출물이 없다 — scripts/macro_ev_r249.py 를 돌린다")
+
+# ② 새 숫자를 만들지 않았다 — 스크립트가 상수를 어디서 가져오는지
+_sc265 = _read148(_os.path.join(PROJ, 'scripts', 'macro_ev_r249.py'))
+check("비용을 리터럴로 안 박고 verdict_core 에서 불러온다 (§4 — 한 곳)",
+      'from verdict_core import COST_PCT' in _sc265
+      and 'COST_PCT = 0.36' not in _sc265)
+check("구간 경계·매수권 문턱·날짜 하한이 이미 쓰는 값 그대로다",
+      'SPLIT_VALID_FROM = "2025-07-01"' in _sc265
+      and 'SPLIT_BLIND_FROM = "2026-02-01"' in _sc265
+      and 'BUY_SCORE = 58' in _sc265 and 'MIN_DATES = 30' in _sc265)
+check("누출 차단 — 매크로는 기준일 **전날까지**만 붙인다",
+      'sc._upto(px, d)' in _sc265 and '전날까지' in _sc265)
+check("부트스트랩이 **날짜를** 재추출한다 (케이스를 재추출하면 부풀려진다)",
+      'def boot_ci' in _sc265 and '날짜가 표본' in _sc265)
+check("국면은 시장별로 센다 (라운드 216 이 여기서 첫 집계를 틀렸다)",
+      '시장별 (R216)' in _sc265)
+
+# ③ 사전등록을 **재기 전에** 두 번 고쳤다 — 그 사실이 문서에 있다
+check("사전등록이 '극단' 대신 중앙값을 쓰는 이유를 적는다 (새 숫자 회피)",
+      '자료가 정하는 값' in _pre265 and '중앙값 가름은 극단을 재지 못한다' in _pre265)
+check("사전등록이 다중검정 보정을 적는다 (축이 아홉이다)",
+      'Bonferroni' in _pre265 and '2.78' in _pre265
+      and '결과를 본 뒤에 문턱을 올리지 않는다' in _pre265)
+check("두 보완이 R1 을 재기 **전**이라고 날짜와 함께 적혀 있다",
+      _pre265.count('R1 을 재기 **전에**') >= 2 and '2026-09-09' in _pre265)
+
+# ④ 결과 문서가 불리한 사실을 그대로 적는다 (§9)
+check("문서가 train 의 큰 z 와 valid 의 반대 부호를 같이 적는다",
+      '+5.17' in _res265 and '−2.14' in _res265
+      and 'train 만 봤으면' in _res265)
+check("문서가 '재고 미달' 과 '못 봤다' 를 가른다 (라운드 113)",
+      '재고 미달' in _res265 and '작은 효과는' in _res265)
+check("문서가 중앙값 가름의 한계를 적는다 — 극단은 안 쟀다",
+      '극단을 재지 못한다' in _res265 and '새 사전등록' in _res265)
+check("문서가 상한을 재기 전에 셌다고 적는다 (§2-7 · 라운드 170)",
+      '재기 전에' in _res265 and '33%' in _res265)
+
+# ⑤ 매크로는 판정 경로에 **안 들어갔다** — 이것이 이 절의 핵심 계약
+import verdict_core as _vc265
+import market_context as _mc265
+_paths265 = ['verdict_core.py', 'quant_indicators.py', 'price_axes.py',
+             'regime_policy.py']
+_leak265 = []
+for _rel265 in _paths265:
+    _s265 = _read148(_os.path.join(PROJ, _rel265))
+    for _k265 in ('gold', 'ust10', 'macro_ev_r249', 'GC=F', '^TNX'):
+        if _k265 in _s265:
+            _leak265.append(f"{_rel265}:{_k265}")
+check("매크로 키가 판정 파일에 새어 들어가지 않았다 (미달인 재료다)",
+      not _leak265, str(_leak265), scanned=len(_paths265))
+check("글로벌 위험 산식이 읽는 키는 여전히 넷이다 (매크로가 안 끼어든다)",
+      len(_mc265.GLOBAL_SYMBOLS) == 4)
+check("왕복 비용 상수는 한 곳뿐이다 (라운드 191 이 통일한 그 값)",
+      abs(_vc265.COST_PCT - 0.36) < 1e-9, str(_vc265.COST_PCT))
+
+# ⑥ 레이더 톱니 — 새 사전등록을 쓰면 레이더도 갱신한다 (§235 · 라운드 218)
+_rad265 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
+check("연구 레이더에 R248·R249 가 있다 (지금 하는 연구가 화면에 있다)",
+      'R248' in _rad265 and 'R249' in _rad265)
+check("레이더가 R249 의 한계를 적는다 — 통과가 아니라 미달이다",
+      '아홉 축 전부 미달' in _rad265)
+
+# ⑦ 산출물이 **어디까지 찬 원장**을 재고 만든 것인지 적는다
+#    이름을 `made` 로 하지 않았다 — 다른 산출물에서 `made` 는 '만든 날'이고
+#    여기 담기는 것은 '원장이 어디까지 찼나'다. 이름과 값이 다르면 지어낸
+#    값이다(라운드 235). 값 자체는 잠그지 않는다 — 원장이 자라면 움직인다.
+for _p265, _n265 in (('data/macro_ev_r249.json', 'R249 성적'),
+                     ('data/macro_sample_r249.json', 'R249 표본')):
+    _o265 = _json265.loads(_read148(_os.path.join(PROJ, _p265)) or '{}')
+    check(f"{_n265} 산출물이 원장 기준일을 적는다 (날짜 없는 숫자는 낡는다)",
+          bool((_o265.get('ledger_last_date') or '')[:4].isdigit()),
+          str(_o265.get('ledger_last_date')))
+
+# ⑧ 관문을 한 구간에만 걸었던 것을 문서가 적는다 (덩어리 표)
+check("문서가 구간별 덩어리 표를 낸다 — 관문은 모든 구간에 건다",
+      '## 5b.' in _res265 and '연속 덩어리 수' in _res265
+      and '한 구간에만 걸린 관문은' in _res265)
+check("가장 그럴듯해 보인 축이 가장 약하다는 사실을 적는다 (금 valid 2 덩어리)",
+      '제일 그럴듯해 보였던 축이 제일 약하다' in _res265)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
