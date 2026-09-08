@@ -40,6 +40,7 @@ import ast
 import io
 import json
 import os
+import re
 import sys
 import warnings
 
@@ -158,6 +159,71 @@ def prose_lines(src):
             out.add(i)
         depth = max(0, depth + opened - closed)
     return out
+
+
+#: 화면 문구에 있으면 안 되는 내부 참조 (라운드 227 → 242). 사용자는 라운드 번호를
+#:   모른다 — 근거는 날짜·표본 수로 적고 번호는 문서에 둔다. 판별식은 **한 곳**에만
+#:   둔다(베끼면 한쪽만 낡는다 · 라운드 192 가 같은 자리에서 일곱 벌을 걷어냈다).
+SCREEN_REF_RE = re.compile(r'§\s?\d+|\bR\d{2,3}\b|라운드 \d+')
+
+
+def screen_strings(src):
+    """화면에 나갈 수 있는 문자열 단위 — [(줄, 글자)].
+
+    ⚠️ f-string 은 **조각이 아니라 한 덩어리**로 본다. 조각만 보면 한글이 없는
+       끝조각(예: `f"...{x}%] · R59"` 의 `%] · R59`)이 '한글 있음' 조건을 빠져나간다
+       — 라운드 227 의 검사가 자기가 보던 파일 안에서 실제로 한 건을 놓쳤다.
+    산문(독스트링)·CSS(<style · /*)·8자 미만·한글 없는 것은 화면 문구로 보지 않는다.
+    """
+    tree = ast.parse(src)
+    doc_lines = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef, ast.Module)):
+            b = getattr(node, 'body', None)
+            if (b and isinstance(b[0], ast.Expr)
+                    and isinstance(getattr(b[0], 'value', None), ast.Constant)
+                    and isinstance(b[0].value.value, str)):
+                doc_lines.update(range(b[0].lineno,
+                                       (b[0].end_lineno or b[0].lineno) + 1))
+    inner = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            for part in ast.walk(node):
+                if part is not node:
+                    inner.add(id(part))
+    units = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            units.append((node.lineno, ''.join(
+                p.value if isinstance(p, ast.Constant)
+                and isinstance(p.value, str) else '\x00'
+                for p in node.values)))
+        elif (isinstance(node, ast.Constant) and isinstance(node.value, str)
+              and id(node) not in inner):
+            units.append((node.lineno, node.value))
+    out = []
+    for ln, s in units:
+        if len(s) < 8 or not re.search(r'[가-힣]', s) or ln in doc_lines:
+            continue
+        if '<style' in s or '/*' in s:
+            continue                       # CSS 주석 — 화면에 안 보인다
+        out.append((ln, s))
+    return out
+
+
+def screen_string_refs(src):
+    """(내부 참조를 품은 것들, **본 문자열 수**).
+
+    본 수를 함께 돌려주는 이유는 '0건'이 없다인지 못 봤다인지 가르기 위해서다.
+    """
+    hits = []
+    seen = screen_strings(src)
+    for ln, s in seen:
+        m = sorted(set(SCREEN_REF_RE.findall(s)))
+        if m:
+            hits.append((ln, m, s.strip().replace('\n', ' ')[:60]))
+    return hits, len(seen)
 
 
 def code_lines(name):

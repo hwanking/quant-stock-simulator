@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.08.6",
+  "model": "v2026.09.08.8",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.07.0",
@@ -9,6 +9,32 @@
   "valuation": "v2026.08.26.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.08.8",
+   "previous": "v2026.09.08.7",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "화면 문구 검사가 두 모듈만 봤고 f-string 조각을 놓쳤다 · 고정 숫자에 잰 날짜가 없었다",
+   "note": "대상을 유도(38개)로 넓히고 판별을 scripts/lineage_audit 한 곳으로 옮겨 내부 참조 24건을 걷어냈다(박제된 forward_eval 은 전방 재평가 뒤로 미룸). 진입가 근거에 잰 날짜·표본을 적고, 밴드 배율을 next_action.band_scale 하나로 빼 검사가 반올림된 값에서 다시 계산하지 않게 했다. 판정·문턱 불변 (라운드 242)",
+   "created_at": "2026-09-08T05:22:20+00:00",
+   "effective_from": "2026-09-08"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.08.7",
+   "previous": "v2026.09.08.6",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "관심종목 판정 사유가 파일에 안 남고, 제외가 풀려도 옛 사유가 남았다",
+   "note": "사유 없음을 마커로 남겨 병합이 옛 사유를 덮게 하고, 보여 줄지는 ui_kit.watch_action 한 곳(why_line)에서 정한다. 사유가 없는 미보유 행은 채우기 대상. 판정·문턱 불변 (라운드 241)",
+   "created_at": "2026-09-08T05:22:20+00:00",
+   "effective_from": "2026-09-08"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

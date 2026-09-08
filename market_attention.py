@@ -43,7 +43,7 @@ COMPONENT_SPEC = [
     {'key': 'event_catalyst', 'label': '뉴스·공시 촉매', 'weight': 0.20,
      'availability': 'full',
      'detail': 'DART 공시(RSS 50건) + **뉴스 기사**(연합뉴스·한국경제·'
-               '매일경제 공개 RSS, 라운드 41 실측 220건). 제목·시각·링크만 '
+               '매일경제 공개 RSS · 실측 220건). 제목·시각·링크만 '
                '보고 본문은 저장하지 않는다. 두 글자 종목명은 경계를 요구해 '
                '다른 상장사(GS vs GS건설)와 섞이지 않게 한다'},
     {'key': 'price_volatility', 'label': '가격·변동성 변화', 'weight': 0.15,

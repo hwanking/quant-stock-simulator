@@ -159,6 +159,13 @@ def atr_pct(tech_df, price, window=14):
     return v / p * 100.0
 
 
+def band_scale(a):
+    """변동성 배율 — 밴드 경계를 넓히는 배수. 문턱은 그대로(0.7~2.5 · 기준 2.0%)."""
+    if not a:
+        return 1.0
+    return min(SCALE_MAX, max(SCALE_MIN, a / BASE_ATR_PCT))
+
+
 def levels(tech_df, price):
     """지지·저항 후보를 실제 계산값에서만 뽑는다 — 없으면 안 넣는다."""
     out = {'supports': [], 'resists': []}
@@ -240,8 +247,13 @@ def build(four_scores, tech_df, price, verdict=None):
 
     a = atr_pct(tech_df, p)
     out['atr_pct'] = round(a, 2) if a else None
-    scale = min(SCALE_MAX, max(SCALE_MIN, a / BASE_ATR_PCT)) if a else 1.0
+    # 라운드 242 — 배율은 **반올림 전** 변동성으로 잰다. 검사가 `atr_pct`(둘째
+    #   자리 반올림)에서 같은 식을 다시 계산해, 값이 십분위 경계에 걸린 장중
+    #   어느 시점에만 실패했다. 규칙은 그대로 두고 **쓴 배율을 그대로 낸다** —
+    #   읽는 쪽이 다시 계산하지 않게 (§4 · 베낀 검사는 아무것도 증명하지 않는다).
+    scale = band_scale(a)
     edges = tuple(round(b * scale, 1) for b in BANDS)
+    out['band_scale'] = scale
     out['band_edges'] = edges
 
     lv = levels(tech_df, p)

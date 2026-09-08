@@ -1266,6 +1266,11 @@ AVG_DOWN_DATA_GATE = '데이터·표본 게이트 통과'
 #:   "못 낸 값"으로 보고 건너뛰어 옛 목록이 살아남는다. 쓰는 쪽(web_app)과 읽는 쪽이
 #:   같은 낱말을 쓴다 (§4).
 AVG_DOWN_NO_FAIL = '없음'
+#: 제외 사유가 **없을 때** 파일에 남기는 글자 (라운드 241). 같은 이유다 — 빈
+#:   글자('')는 스냅샷 병합이 "못 낸 값"으로 보고 건너뛰어, 제외가 풀린 행에
+#:   **옛 사유가 그대로 남는다**(실측: '오늘 매수 가능' 아래 '추격매수 위험').
+#:   쓰는 쪽(web_app 채우기 네 자리)과 읽는 쪽이 같은 낱말을 쓴다 (§4).
+WATCH_NO_WHY = '없음'
 
 
 def avg_down_class(ok, fails):
@@ -1356,6 +1361,14 @@ def watch_action(row, price=None, today=None):
                 if isinstance(_fr, str) else list(_fr or []))
     _ad_cls, _ad_label, _ad_why = avg_down_class(_ad_ok, _ad_fail)
 
+    # ── 제외 사유를 **보여 줄지**는 여기서 정한다 (라운드 241 · §4) ──────
+    #   종전에는 화면이 `snap_why` 를 직접 읽어 `held` 만 봤다. 그래서 제외가
+    #   풀려 '매수 가능'이 된 행에도 옛 사유('추격매수 위험')가 붙을 수 있었다
+    #   — 한 줄 안에서 스스로 모순이다. 판정은 한 곳에서 하고 화면은 읽기만.
+    _raw241 = str((row or {}).get('snap_why') or '').strip()
+    _why241 = (None if (not _raw241 or _raw241 == WATCH_NO_WHY
+                        or bucket == '오늘 매수 가능') else _raw241)
+
     def _held(d):
         """보유자 판단에 **물타기 판정 · 정리 사유**를 붙인다 (라운드 214 → 224).
 
@@ -1372,6 +1385,9 @@ def watch_action(row, price=None, today=None):
         #   보지 않는다")를 그대로 달면 재지 않은 것을 말하는 셈이다(§3). 사실대로 적고
         #   채우기를 가리킨다 — 라벨(등급)은 같다, 이유만 다르다.
         _stale = (_ad_ok is not None and not (row or {}).get('snap_new_entry'))
+        # 보유 행에는 제외 사유를 안 붙인다 — 보유자에게는 보유 기준값 문장이
+        #   답이다 (라운드 240 에서 정한 것 · 241 이 키로 명시한다).
+        d['why_line'] = None
         d['avg_down_ok'] = _ad_ok
         d['avg_down_class'] = _ad_cls
         d['avg_down_label'] = _ad_label
@@ -1518,10 +1534,10 @@ def watch_action(row, price=None, today=None):
     if bucket == '오늘 매수 가능':
         if buy and px and px <= buy:
             return dict(kind='매수 가능', label='지금 매수 가능', tone='pos',
-                        held=False,
+                        held=False, why_line=None,
                         why=f'목표 매수가({buy:,.0f}원) 이하입니다')
         return dict(kind='매수 가능', label='매수 가능', tone='pos',
-                    held=False,
+                    held=False, why_line=None,
                     why=(f'다만 목표 매수가 {buy:,.0f}원 이하로 내려와야 '
                          f'합니다' if buy else '엔진이 매수 가능으로 봅니다'))
     _short = {
@@ -1539,9 +1555,8 @@ def watch_action(row, price=None, today=None):
     # 라운드 240 — 종전 why 는 bucket 을 그대로 되풀이해 아무것도 더 말하지 않았다.
     #   중앙 판정이 결론과 함께 낸 사유(`exclude_reason` → `snap_why`)가 있으면 그것을
     #   쓴다. 없으면 종전대로 bucket — 지어내지 않는다.
-    _why240 = str((row or {}).get('snap_why') or '').strip()
     return dict(kind=bucket, label=lbl, tone=tone, held=False,
-                why=(_why240 or bucket))
+                why_line=_why241, why=(_why241 or bucket))
 
 
 # ── ETF 의 '적정가' — 순자산가치(NAV) · 라운드 164 ───────────────────────
