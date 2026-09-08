@@ -1559,6 +1559,122 @@ def watch_action(row, price=None, today=None):
                 why_line=_why241, why=(_why241 or bucket))
 
 
+def regime_gate_line(rg):
+    """국면 게이트가 **지금 실제로** 무엇을 걸고 있나 — 한 줄. 없으면 없다고 말한다.
+
+    라운드 248 — 사용자 물음: *"이 방향이면 내일 방어적으로 세팅을 해야하는지."*
+    화면이 정직하게 낼 수 있는 답은 **이미 채택된 것**뿐이다 — 국면×변동성 6칸과
+    그 칸의 실측 하한, 그리고 그것이 지금 건 제한(점수 상한·비중 배수·손절 배수).
+
+    종전에는 **깎였을 때만** 말했다(web_app 의 국면 경고). 안 깎였을 때 침묵하면
+    사용자는 '재지 않았다'로 읽는다 — 그래서 안 깎였을 때도 말한다.
+    못 잰 칸은 '판정 보류'라 적는다. 지어내지 않는다(§3).
+    """
+    g = rg or {}
+    cell = str(g.get('cell') or '').strip()
+    if not cell:
+        return '국면 판정 보류 — 지수를 못 받아 국면별 제한을 재지 않았습니다.'
+    bits = []
+    if g.get('score_after') is not None and g.get('score_before') is not None \
+            and g['score_after'] != g['score_before']:
+        bits.append(f"종합점수 {g['score_before']}→{g['score_after']}점")
+    try:
+        if float(g.get('size_mult') or 1.0) < 1.0:
+            bits.append(f"제안 비중 {float(g['size_mult']):.1f}배")
+    except (TypeError, ValueError):
+        pass
+    try:
+        if float(g.get('stop_mult') or 1.0) < 1.0:
+            bits.append(f"손절 폭 {float(g['stop_mult']):.1f}배")
+    except (TypeError, ValueError):
+        pass
+    if g.get('block_new'):
+        bits.append('신규 매수 차단')
+    head = f"지금 국면 칸 **{cell}**"
+    if g.get('level'):
+        head += f" ({g['level']})"
+    return head + (' — ' + ' · '.join(bits) if bits
+                   else ' — 국면별 추가 제한 없음')
+
+
+#: 매크로 보드의 묶음 — 사용자가 한눈에 읽는 순서다 (라운드 248).
+#:   판단이 아니라 **분류**다. 어느 묶음이 좋다는 뜻이 아니다.
+MACRO_GROUPS = (
+    ('국내 지수', ('kospi', 'kosdaq')),
+    ('해외 지수·변동성', ('spx', 'vix')),
+    ('원자재', ('oil', 'copper', 'gold')),
+    ('금리·환율', ('ust10', 'fx')),
+)
+
+
+def macro_board(macro, theme='dark'):
+    """매크로 축을 한 판으로. **판단을 만들지 않는다** — 받은 값을 줄로 옮길 뿐.
+
+    라운드 248 — 사용자 요청: *"유가 금 금리 등등을 보면서 … 디자인도 잘 보이게."*
+
+    · 색은 **방향**이다(한국 관행 · 오름 빨강 / 내림 파랑). 좋고 나쁨이 아니다 —
+      금리·변동성지수는 오르는 것이 위험 신호일 수 있다. 그 말을 캡션이 한다.
+    · 금리는 **%p** 로 읽는다(`is_rate`). 4.81 → 4.70 은 −2.3% 가 아니라 −0.11%p 다.
+    · 못 받은 축은 '미수신'이라 적는다. 0 으로 채우지 않는다.
+    """
+    m = macro or {}
+    t = tokens(theme)
+    # 값이 **하나도** 없으면 빈 문자열이다. 미수신 아홉 줄로 화면을 채우지
+    #   않는다 — 왜 못 받았는지는 부르는 쪽이 사유와 함께 적는다(§3).
+    if not any(isinstance(m.get(k), dict)
+               for _g, ks in MACRO_GROUPS for k in ks):
+        return ''
+    rows = []
+    for gname, keys in MACRO_GROUPS:
+        cells = []
+        for k in keys:
+            v = m.get(k)
+            if not isinstance(v, dict):
+                cells.append(
+                    f"<tr><td style='color:{t['tx3']};'>{_esc(str(k))}</td>"
+                    f"<td class='n' colspan='4' style='color:{t['tx3']};'>"
+                    f"미수신</td></tr>")
+                continue
+            rate = bool(v.get('is_rate'))
+
+            def _mv(pct, dif):
+                """금리는 %p · 나머지는 %. 못 재면 '—'."""
+                x = dif if rate else pct
+                if x is None:
+                    return f"<span style='color:{t['tx3']};'>—</span>"
+                col = t['up'] if x > 0 else t['down'] if x < 0 else t['tx3']
+                unit = '%p' if rate else '%'
+                return (f"<span style='color:{col};'>{x:+,.2f}{unit}</span>")
+
+            last = v.get('last')
+            cells.append(
+                "<tr>"
+                f"<td>{_esc(str(v.get('ko') or k))}"
+                f"<span style='color:{t['tx3']}; font-size:12px;'> "
+                f"{_esc(str(v.get('ticker') or ''))}</span></td>"
+                f"<td class='n'>{(f'{last:,.2f}' if last is not None else '—')}</td>"
+                f"<td class='n'>{_mv(v.get('chg5'), v.get('diff5'))}</td>"
+                f"<td class='n'>{_mv(v.get('chg20'), v.get('diff20'))}</td>"
+                f"<td class='n' style='color:{t['tx3']};'>"
+                f"{_esc(str(v.get('last_date') or ''))}</td>"
+                "</tr>")
+        if cells:
+            rows.append(
+                f"<tr><td colspan='5' style='padding-top:10px; font-size:12px; "
+                f"color:{t['tx3']}; font-weight:700;'>{_esc(gname)}</td></tr>"
+                + ''.join(cells))
+    if not rows:
+        return ''
+    head = ''.join(f"<th{' class=\'n\'' if i else ''}>{_esc(h)}</th>"
+                   for i, h in enumerate(('지표', '현재', '5일', '20일', '기준일')))
+    return (
+        f"<div style='overflow-x:auto;'><table style='width:100%; "
+        f"border-collapse:collapse; font-size:13px; line-height:1.35; "
+        f"color:{t['tx2']};'>"
+        f"<thead><tr style='color:{t['tx3']}; font-size:12px; text-align:left;'>"
+        f"{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
 # ── ETF 의 '적정가' — 순자산가치(NAV) · 라운드 164 ───────────────────────
 #
 # 사용자 요청: *"같은 주식도 검색해서 적정가 살때말때도 해줬으면 좋겠어"*
