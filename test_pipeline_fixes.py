@@ -22086,6 +22086,86 @@ check("문서가 실측 수(185,962 · 250,725 · 251,528)와 잰 날짜를 적�
       and '2026-09-08' in _doc261)
 
 print()
+print("§262 R246 — 카드가 중앙 판정을 안 읽었다 · 못 받은 값이 숫자로 나갔다 (2026-09-09)")
+print("-" * 72)
+# ── 무엇이 있었나 (병렬 감사 + 적대적 검증 · 2026-09-09) ────────────────
+#   ① **추천 카드가 하위 모듈의 결론을 그대로 읽었다.** 라운드 193 이 상세 화면에서
+#      고친 그 결함(next_action 은 가격 거리만 보고 게이트를 모른다)이 카드 경로에
+#      남아 있었다 — 상세는 CORE.get('next_headline')/('next_kind') 를 먼저 읽는데
+#      카드는 _n['headline'] · _n['kind'] 를 직접 읽어 **막힌 종목을 초록으로 승격**했다.
+#   ② **시장 카드가 수신 실패 시 박아 둔 숫자를 냈다.** 환율 1,421.00 · S&P500
+#      7,381.87/+65.72/+0.90% 가 기본값이라 네 개의 except 중 무엇이 걸려도 그대로
+#      화면에 나갔다. 같은 함수 안에서 KOSPI·KOSDAQ 만 'N/A' 였다 — 규칙이 갈렸다.
+#   ③ **(v or 0) / 1e8** 이 미수신을 0 으로 바꿔 na='미산출' 을 도달 불가로 만들었다.
+#      거래대금을 못 받은 종목이 '0억원'으로 나갔다.
+#   ④ 게이트 설명이 **통과 여부와 무관하게** '기준 통과'를 적었다.
+import verdict_core as _vc262
+import bitemporal_engine as _be262
+
+# ① 카드도 중앙 판정을 먼저 읽는다 (상세 화면과 같은 순서 · §4)
+check("카드가 결론 문장을 중앙 판정에서 먼저 읽는다",
+      "_nh246 = _core.get('next_headline') or _n.get('headline')" in _w231
+      and 'say = f"**{_nh246}**"' in _w231)
+check("카드의 kind 도 중앙 판정 먼저 — 하위 모듈이 초록으로 승격하지 못한다",
+      "_nk246 = _core.get('next_kind') or _n.get('kind')" in _w231
+      and "if _nk246 == 'buy_now':" in _w231
+      and "_NA_LABEL.get(_nk246)" in _w231)
+check("옛 직접 읽기가 카드에 남아 있지 않다",
+      'say = f"**{_n[\'headline\']}**"' not in _w231
+      and "if _n.get('kind') == 'buy_now':" not in _w231)
+check("조건 목록도 중앙 판정에서 받고 없을 때만 폴백한다 (상세와 같은 규칙)",
+      "if _core.get('next_conditions') is not None" in _w231)
+# 실행 증거 — 막힌 판정이면 카드가 쓸 결론이 하위 모듈 것과 달라진다
+_na262 = {'kind': 'buy_now', 'headline': '지금 분할매수할 수 있습니다',
+          'conditions': [{'text': '거의 닿았습니다'}]}
+_fs262 = dict(current_price=10000.0, entry_pullback_price=9800.0,
+              entry_stop_price=9000.0, entry_target_1st=11000.0,
+              entry_rr=1.5, asset_type='STOCK')
+_c262 = _vc262.build(_fs262, {'action': 'HOLD', 'headline': '', 'vetoes': ['심은 거부권']},
+                     None, _na262, 10000.0)
+check("실행 증거 — 거부권이 걸리면 중앙 판정의 결론이 하위 모듈과 다르다",
+      str(_c262.get('next_headline') or '') != str(_na262['headline']),
+      f"core={_c262.get('next_headline')!r} vs na={_na262['headline']!r}")
+
+# ② 시장 지수 — 못 받으면 'N/A' 이고 사유를 같이 낸다 (§3)
+_bsrc262 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("네 지수 기본값이 전부 'N/A' 다 — 박아 둔 숫자가 없다",
+      'usd_p, usd_c, usd_pct = "N/A", "0.00", "0.00%"' in _bsrc262
+      and 'sp500_p, sp500_c, sp500_pct = "N/A", "0.00", "0.00%"' in _bsrc262)
+for _lit262 in ('"1,421.00"', '"7,381.87"', '"+65.72"', '"+0.90%"'):
+    check(f"옛 고정값 {_lit262} 이 시세 계층에 없다", _lit262 not in _bsrc262)
+check("못 받은 사유를 삼키지 않고 반환에 싣는다 (except 넷 전부)",
+      _bsrc262.count("_why246[") == 4 and "'unavailable': _why246," in _bsrc262)
+check("화면이 미수신을 '0.00 0.00%' 가 아니라 사유로 그린다",
+      "return {'label': label, 'value': '미수신'," in _w231
+      and "_rz = str((m_indices.get('unavailable') or {}).get(key) or '')" in _w231)
+
+# ③ 미수신은 0 이 아니다
+check("억원 환산 도우미가 None 을 0 으로 바꾸지 않는다",
+      "def _tn246(v):" in _w231
+      and "return None if v is None else float(v) / 1e8" in _w231)
+check("거래대금 두 자리가 그 도우미를 쓴다 — (v or 0) / 1e8 이 없다",
+      _w231.count("_tn246(") >= 3
+      and "avg_turnover_20d') or 0) / 1e8" not in _w231
+      and "avg_turnover_20d'] or 0)/1e8" not in _w231)
+
+# ④ 게이트 설명이 통과/미달을 가른다 (판정 불리언은 그대로)
+check("게이트 조건 수는 그대로다 (자리를 인덱스로 읽는 검사가 있다)",
+      len(_c262.get('checks') or []) == 11, str(len(_c262.get('checks') or [])))
+# checks 는 dict 목록이다 — build() 가 (이름, ok, 설명) 튜플을 이 모양으로 낸다
+_d262 = {c['name']: (c['ok'], c['detail']) for c in (_c262.get('checks') or [])}
+_ok262, _txt262 = _d262.get('보유기간 안 도달 가능', (None, ''))
+check("미달인 조건에 '기준 통과' 라고 적지 않는다",
+      _ok262 or ('기준 통과' not in str(_txt262)),
+      f"ok={_ok262} · {str(_txt262)[:70]}")
+check("문턱·기준 낱말은 그대로다 (설명만 갈랐다)",
+      "f'{HORIZON}봉 실측 체결률 기준 '" in _read148(_os.path.join(PROJ, 'verdict_core.py'))
+      and _vc262.MAX_ENTRY_SIGMA == 2.1)
+_doc262 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R246_CARD_AND_NA.md'))
+check("문서가 잰 날짜와 '값·문턱 불변'을 적는다",
+      '2026-09-09' in _doc262 and '문턱' in _doc262)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
