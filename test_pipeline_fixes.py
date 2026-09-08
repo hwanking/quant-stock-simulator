@@ -20958,8 +20958,10 @@ print("-" * 72)
 #   보기 모드는 HTML 표 하나(행 ≈ 36px)로 그리고, 매입가·수량 입력과 '빼기'(되돌릴 수
 #   없는 조작)는 편집 토글 뒤에 둔다. 값의 출처는 두 모드가 같다(_wl_pre · 저장값 ·
 #   _wl_fair_conf · _wl_pnl · watch_action). 이름은 ?pick= 링크 — 버튼과 같은 경로(§4).
-check("보기/편집 토글이 있고 기본은 보기다",
-      "st.toggle(\"매입가·수량 편집\", key='wl_edit_mode', value=False" in _w231)
+# 라운드 240 — 토글 이름에 '빼기'를 넣었다. 기능·기본값은 그대로이고 이름만 바뀌었다
+#   (사용자가 빼기를 못 찾았다 — 편집 모드 안에 있는 줄 알 수 없는 이름이었다).
+check("보기/편집 토글이 있고 기본은 보기다 · 이름이 '빼기'도 말한다",
+      "st.toggle(\"매입가·수량 편집 · 빼기\", key='wl_edit_mode', value=False" in _w231)
 check("보기 모드는 무리마다 HTML 표 하나 · 이름은 ?pick= 링크 (버튼과 같은 pending_search 경로)",
       "if not _wl_edit:" in _w231 and "_href229 = \"?pick=\" + _up229.quote(" in _w231
       and "<tbody>{''.join(_trs229)}</tbody></table></div>" in _w231)
@@ -21700,6 +21702,72 @@ check("할인율이 무엇에 적용되는지 적는다 (현금흐름표가 아�
 _doc256 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R239_MODEL_NAMES.md'))
 check("문서가 실행 확인(적정가·신뢰도 불변)과 잰 날짜를 적는다",
       '270,327' in _doc256 and '76.9' in _doc256 and '2026-09-08' in _doc256)
+
+print()
+print("§257 R240 — 결론만 적고 사유는 안 적었다 · '빼기'가 이름에 없었다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (사용자 지적 · 2026-09-08) ──────────────────────────────
+#   ① *"미보유 추천 제외는 왜인지 간략하게 써주면 좋을 듯. 적정가는 현재가보다 높은데
+#      추천 제외라고 하니깐."* — 관심종목 표는 '추천 제외' 라는 **결론만** 적었다. 사유는
+#      중앙 판정이 이미 결론과 함께 내고 있었는데(exclude_reason) 스냅샷에 담지 않아
+#      화면까지 오지 못했다. 새 값을 만드는 것이 아니라 있는 것을 옮겨 적는다.
+#   ② *"관심, 미보유 빼기 기능 어디 있어? 각 종목마다."* — '빼기'는 편집 모드에만 있는데
+#      토글 이름이 '매입가·수량 편집'이라 그 안에 있는 줄 알 수 없었다. 되돌릴 수 없는
+#      조작을 기본 화면에 두지 않는 결정은 그대로 두고 **이름에 적는다**.
+import ui_kit as _uk257
+import portfolio as _pf257
+
+# ① 사유를 담는다 — 저장 화이트리스트 · 채우는 자리 넷
+check("저장 화이트리스트에 snap_why 가 있다 (파일에 남아야 재시작에 안 사라진다)",
+      'snap_why' in _pf257.WATCH_SNAP_TXT)
+check("사유는 중앙 판정의 exclude_reason 이다 — 새로 만들지 않는다",
+      _w231.count("'snap_why': ") == 4
+      and _w231.count("exclude_reason") >= 4
+      and "'snap_why': CORE.get('exclude_reason')" in _w231
+      and "'snap_why': _co166.get('exclude_reason')" in _w231
+      and "'snap_why': _co142.get('exclude_reason')" in _w231)
+# 저장→읽기 왕복 (문자열 검사로는 못 잡는다 · R223)
+_row257 = {'code': '000000', 'name': '심기', 'snap_at': '2026-09-08',
+           'snap_bucket': '추천 제외', 'snap_why': '거래비용 차감 후 기대값이 음수입니다'}
+_kept257 = {k: v for k, v in _row257.items()
+            if k in _pf257.WATCH_SNAP_TXT or k in ('code', 'name')}
+check("snap_why 가 저장 대상에 남는다 (화이트리스트 왕복)",
+      _kept257.get('snap_why') == '거래비용 차감 후 기대값이 음수입니다')
+
+# ② 킷 — 미보유 판단의 why 가 사유다 (심기)
+_a257 = _uk257.watch_action(_row257)
+check("미보유 행의 why 가 사유다 (종전엔 bucket 을 되풀이했다)",
+      _a257 is not None and _a257['held'] is False
+      and _a257['why'] == '거래비용 차감 후 기대값이 음수입니다'
+      and _a257['label'] == '추천 제외')
+_a257b = _uk257.watch_action({'code': '000000', 'snap_bucket': '추천 제외'})
+check("사유가 없으면 종전대로 bucket — 지어내지 않는다 (§3)",
+      _a257b is not None and _a257b['why'] == '추천 제외')
+# 보유 행은 종전 그대로 (사유가 보유자 문장을 덮지 않는다)
+_a257c = _uk257.watch_action({'code': '000000', 'paid': 100.0, 'snap_px': 110.0,
+                              'snap_bucket': '추천 제외', 'snap_why': '심기 사유',
+                              'snap_hold_stop': 90.0, 'snap_hold_trim': 120.0})
+check("보유 행의 판단 문장은 안 바뀐다 (사유는 미보유 쪽에만)",
+      _a257c is not None and _a257c['held'] is True
+      and _a257c['kind'] == '보유 유지' and '심기 사유' not in str(_a257c['why']))
+
+# ③ 표 — 미보유 행에만 사유 한 줄 · 긴 것은 자르고 전체는 툴팁
+check("표가 미보유 행에만 사유를 적는다",
+      "_wy240 = str(_w.get('snap_why') or '').strip()" in _w231
+      and "if _wy240 and not _act.get('held'):" in _w231)
+check("긴 사유는 자르고 전체는 툴팁에 둔다 (칸이 늘어나 값이 잘리지 않게)",
+      "_wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'" in _w231
+      and "title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>" in _w231)
+
+# ④ '빼기' 가 이름에 있다 — 기능은 그대로 편집 모드
+check("토글 이름이 '빼기'를 말한다 (기능을 옮기지 않았다)",
+      'st.toggle("매입가·수량 편집 · 빼기"' in _w231
+      and "if _wl_edit and st.button(\"빼기\"" in _w231)
+check("되돌릴 수 없는 조작을 기본 화면에 두지 않는 결정은 그대로다",
+      "되돌릴 수 없는 조작을 기본 화면에 두지 않는" in _w231)
+_doc257 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R240_WHY_AND_REMOVE.md'))
+check("문서가 사유가 언제 채워지는지 적는다 (옛 행은 다시 채워야 보인다)",
+      '다시 채운' in _doc257 and '2026-09-08' in _doc257)
 
 print()
 print("=" * 72)

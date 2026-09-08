@@ -1536,7 +1536,12 @@ def watch_action(row, price=None, today=None):
         '추천 제외': ('추천 제외', 'neg'),        # 라운드 226 — '사지 않음'은 판정이 아니라 지시처럼 읽혔다
     }
     lbl, tone = _short.get(bucket, (bucket[:7], 'tx3'))
-    return dict(kind=bucket, label=lbl, tone=tone, held=False, why=bucket)
+    # 라운드 240 — 종전 why 는 bucket 을 그대로 되풀이해 아무것도 더 말하지 않았다.
+    #   중앙 판정이 결론과 함께 낸 사유(`exclude_reason` → `snap_why`)가 있으면 그것을
+    #   쓴다. 없으면 종전대로 bucket — 지어내지 않는다.
+    _why240 = str((row or {}).get('snap_why') or '').strip()
+    return dict(kind=bucket, label=lbl, tone=tone, held=False,
+                why=(_why240 or bucket))
 
 
 # ── ETF 의 '적정가' — 순자산가치(NAV) · 라운드 164 ───────────────────────

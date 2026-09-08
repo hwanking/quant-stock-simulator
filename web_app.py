@@ -5309,7 +5309,11 @@ else:
     #   세로로 쌓여 더 길었다. 매입가·수량은 가끔 고치는 값이라 편집 토글 뒤에 둔다.
     #   판단·저장 규칙은 그대로 — 보기 모드는 저장된 값을 글자로 보여 줄 뿐이다.
     #   '빼기'(되돌릴 수 없는 조작)도 편집 모드에서만 보인다.
-    _wl_edit = bool(st.toggle("매입가·수량 편집", key='wl_edit_mode', value=False,
+    # 라운드 240 — 사용자: "관심, 미보유 빼기 기능 어디 있어? 각 종목마다." '빼기'는 편집
+    #   모드에만 있는데 토글 이름이 '매입가·수량 편집'이라 그 안에 있는 줄 알 수 없었다.
+    #   기능을 옮기지 않고 **이름에 적는다** — 되돌릴 수 없는 조작을 기본 화면에 두지 않는
+    #   결정은 그대로다. 표 아래 캡션이 두 경로(여기 · 사이드바 목록)를 같이 알려 준다.
+    _wl_edit = bool(st.toggle("매입가·수량 편집 · 빼기", key='wl_edit_mode', value=False,
                               help="켜면 행마다 매입가·수량 입력칸과 '빼기'가 보입니다. "
                                    "끄면 저장된 값을 글자로 보여 줍니다."))
     _WL_HDR = ('종목', '현재가', '목표 매수가',
@@ -5463,6 +5467,15 @@ else:
                 else:
                     _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
                               f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
+                    # 라운드 240 (사용자 지적) — 미보유 행은 '추천 제외' 같은 **결론만**
+                    #   적고 왜인지는 안 적었다: *"적정가는 현재가보다 높은데 추천 제외라고
+                    #   하니깐."* 사유는 중앙 판정이 이미 내고 있었다(exclude_reason). 결론
+                    #   아래 한 줄로 적고, 긴 것은 잘라 전체는 툴팁에 둔다. 판정 불변.
+                    _wy240 = str(_w.get('snap_why') or '').strip()
+                    if _wy240 and not _act.get('held'):
+                        _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
+                        _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
+                                   f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
                     _adl229 = _act.get('avg_down_label') if _act.get('held') else None
                     if _adl229:
                         _adc229 = (_TOK['pos'] if _act.get('avg_down_ok')
@@ -5794,6 +5807,7 @@ else:
                         'snap_at': t_ref_str,
                         'snap_engine': str(_VER_NOW.get('model') or ''),
                         'snap_bucket': _co166.get('bucket'),
+                        'snap_why': _co166.get('exclude_reason'),   # 라운드 240
                         # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
                         'snap_sector': (_snp166.get('val_eval') or {}).get('sector'),
                         # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
@@ -6680,6 +6694,7 @@ if _pm_today and _pm_today.get('picks'):
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
                         'snap_bucket': _co142.get('bucket'),   # 라운드 166
+                        'snap_why': _co142.get('exclude_reason'),   # 라운드 240
                         # 보유자 기준 (라운드 169) — 다른 키다 (§4)
                         'snap_hold_trim': _co142.get('hold_trim'),
                         'snap_hold_stop': _co142.get('hold_stop'),
@@ -7238,6 +7253,8 @@ try:
             # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
             # 그대로 담는다 (§4).
             'snap_bucket': CORE.get('bucket'),
+            # 라운드 240 — 결론 옆에 사유. 중앙 판정이 이미 내고 있던 값이다.
+            'snap_why': CORE.get('exclude_reason'),
             # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
             'snap_sector': val_eval.get('sector'),
             # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
@@ -9988,6 +10005,7 @@ if user_entry_price > 0 and user_quantity > 0:
         _row224 = {}
     _row224.update({'paid': user_entry_price, 'qty': user_quantity, 'snap_px': realtime_price,
                     'snap_bucket': CORE.get('bucket'),
+                    'snap_why': CORE.get('exclude_reason'),   # 라운드 240
                     'snap_buy': (CORE.get('pullback_zone') or (CORE.get('buy_zone') or [None])[0]),
                     'snap_fair': four_scores.get('displayed_fair_value')})
     if not (_row224.get('snap_hold_trim') or _row224.get('snap_hold_stop')):
