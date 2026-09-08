@@ -2264,6 +2264,41 @@ def _wl_remove(code):
     _wl_write(keep, '한 종목 뺐습니다')
 
 
+# ⚠️ 라운드 244 — 사용자: *"보유중, 미보유 각각 종목에 관심 없으면 빼기 버튼도
+#   각각 넣어줘."* 보기 모드는 HTML 표 하나라 위젯을 못 넣는다 — 행마다
+#   st.button 을 두면 행이 58px 에서 150px 로 돌아간다(라운드 229 실측).
+#   그래서 이름 링크와 **같은 길**(쿼리 파라미터)로 뺀다.
+#
+#   라운드 229·240 은 '되돌릴 수 없는 조작을 기본 화면에 두지 않는다'로 막아
+#   두었다. 사용자가 그 결정을 뒤집었으므로 **막는 대신 되돌릴 수 있게** 한다 —
+#   확인 대화상자는 매번 한 번 더 누르게 할 뿐이고, 실수를 되살리지는 못한다.
+#   뺀 행 전체를 쥐고 있다가 '되돌리기'로 그대로 되돌린다(값 손실 없음).
+def _wl_drop_from_query():
+    """?drop=<코드> 를 받아 한 종목을 뺀다. 받은 즉시 파라미터를 지운다."""
+    try:
+        raw = st.query_params.get('drop')
+    except Exception:                                      # noqa: BLE001
+        return
+    if not (raw and str(raw).strip()):
+        return
+    try:
+        del st.query_params['drop']
+    except Exception:                                      # noqa: BLE001
+        pass                     # 파라미터 하나 때문에 화면이 죽지 않는다
+    code = portfolio.normalize_code(str(raw).strip())
+    if not code:
+        return                   # 못 읽으면 아무것도 안 뺀다 (§3)
+    row = next((x for x in _wl_items()
+                if portfolio.normalize_code(x.get('code')) == code), None)
+    if row is None:
+        return                   # 이미 없는 종목 — 조용히 넘어간다
+    st.session_state['wl_undo'] = dict(row)
+    _wl_remove(code)
+
+
+_wl_drop_from_query()
+
+
 # ⚠️ 라운드 142 — 사용자 요청: "검색하는 종목에 관심추가 버튼도 넣어줘."
 #   버튼은 라운드 135 부터 여기 있었지만 **접힌 칸 안**이라, 검색 직후에는
 #   보이지 않았다. 라운드 136 에서 "관심목록 어디서 봐?" 라고 물은 것과
@@ -5311,15 +5346,33 @@ else:
     #   '빼기'(되돌릴 수 없는 조작)도 편집 모드에서만 보인다.
     # 라운드 240 — 사용자: "관심, 미보유 빼기 기능 어디 있어? 각 종목마다." '빼기'는 편집
     #   모드에만 있는데 토글 이름이 '매입가·수량 편집'이라 그 안에 있는 줄 알 수 없었다.
-    #   기능을 옮기지 않고 **이름에 적는다** — 되돌릴 수 없는 조작을 기본 화면에 두지 않는
-    #   결정은 그대로다. 표 아래 캡션이 두 경로(여기 · 사이드바 목록)를 같이 알려 준다.
+    #   기능을 옮기지 않고 이름에 적었다.
+    # 라운드 244 — 사용자가 다시 물었다: *"보유중, 미보유 각각 종목에 관심 없으면 빼기
+    #   버튼도 각각 넣어줘."* 두 번 물었으면 이름 문제가 아니다. **결정을 뒤집는다** —
+    #   되돌릴 수 없는 조작을 기본 화면에서 감추는 대신, 기본 화면에 두고 **되돌릴 수
+    #   있게** 한다(뺀 행 전체를 쥐고 '되돌리기'). 확인 대화상자는 한 번 더 누르게 할 뿐
+    #   실수를 되살리지 못한다. 편집 모드의 '빼기' 버튼도 그대로 둔다(두 경로가 같은
+    #   `_wl_remove` 를 부른다 · §4).
+    # 라운드 244 — 뺀 직후 되돌릴 수 있게. 확인 대화상자 대신 되돌리기다.
+    _undo244 = st.session_state.get('wl_undo')
+    if _undo244:
+        _uc244 = st.columns([4, 1, 1])
+        _uc244[0].info(f"**{_uk._esc(str(_undo244.get('name') or _undo244.get('code')))}**"
+                       f" 을(를) 관심종목에서 뺐습니다.")
+        if _uc244[1].button('되돌리기', key='wl_undo_btn', width='stretch'):
+            _wl_write(_wl_items() + [_undo244], '되돌렸습니다')
+            st.session_state.pop('wl_undo', None)
+            st.rerun()
+        if _uc244[2].button('닫기', key='wl_undo_close', width='stretch'):
+            st.session_state.pop('wl_undo', None)
+            st.rerun()
     _wl_edit = bool(st.toggle("매입가·수량 편집 · 빼기", key='wl_edit_mode', value=False,
                               help="켜면 행마다 매입가·수량 입력칸과 '빼기'가 보입니다. "
                                    "끄면 저장된 값을 글자로 보여 줍니다."))
     _WL_HDR = ('종목', '현재가', '목표 매수가',
                '1차 목표(진입가) · 2차 목표(현재가)',
                '적정가', '엔진 판단', '매입가', '수량',
-               '매입가 대비 · 평가손익', '')
+               '매입가 대비 · 평가손익', '관심')
     _wl_hdr = st.columns(_WL_COLS) if _wl_edit else None
     # 라운드 186 — '(권장가)' → '(진입가)'. 관심종목에는 추천 아닌 종목이
     # 섞이므로 열 이름의 '권장'은 절반의 행에서 거짓이다. '진입가'는 어느
@@ -5509,9 +5562,17 @@ else:
                     f"<td class='n'>{_wl_cell(_paid229) if _paid229 > 0 else '—'}</td>"
                     f"<td class='n'>{(f'{_qty229:,}주' if _qty229 > 0 else '—')}</td>"
                     f"<td class='n'>{_pnl229}</td>"
+                    # 라운드 244 — 행마다 빼기. 이름 링크와 같은 길(쿼리 파라미터)이라
+                    #   행 높이가 그대로다. 되돌리기는 표 위에 나온다.
+                    f"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' "
+                    f"title='관심종목에서 뺍니다 — 바로 되돌릴 수 있습니다' "
+                    f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
+                    f"빼기</a></td>"
                     "</tr>")
-            _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8) else ''}>{_uk._esc(_h229)}</th>"
-                              for _i229, _h229 in enumerate(_WL_HDR[:9]))
+            # 라운드 244 — 칸이 9 → 10 이다('관심'). 칸을 더하면 값이 잘려 보이므로
+            #   (라운드 201) 새 칸은 글자 하나짜리 링크뿐이고 숫자 칸은 안 건드렸다.
+            _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8, 9) else ''}>{_uk._esc(_h229)}</th>"
+                              for _i229, _h229 in enumerate(_WL_HDR))
             st.markdown(
                 f"<div style='overflow-x:auto;'><table style='width:100%; border-collapse:collapse; "
                 f"font-size:13px; line-height:1.35; color:{_TOK['tx2']};'>"

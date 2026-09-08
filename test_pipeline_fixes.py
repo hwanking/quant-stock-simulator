@@ -21013,8 +21013,11 @@ check("입력 두 칸·빼기는 편집 모드에서만 위젯이다 (키는 그
       'key=f"wl_pd_{_wcode}"' in _w231 and 'key=f"wl_qt_{_wcode}"' in _w231
       and 'if _wl_edit and st.button("빼기", width=\'stretch\', key=f"wlb_del_{_wcode}"):' in _w231
       and "if ((_w.get('paid') or None) != (_pd or None)" in _w231)
+# 라운드 244 — 보기 모드가 머리글 **전부**(10칸 · 마지막이 '관심')를 쓴다.
+#   종전엔 [:9] 로 잘라 빼기 칸이 없었다. 두 모드가 같은 튜플을 쓰는 것은 그대로.
 check("두 목표의 기준은 열 이름에 남는다 — 두 모드가 같은 머리 낱말을 쓴다",
-      "'1차 목표(진입가) · 2차 목표(현재가)'" in _w231 and "_WL_HDR[:9]" in _w231)
+      "'1차 목표(진입가) · 2차 목표(현재가)'" in _w231
+      and "for _i229, _h229 in enumerate(_WL_HDR))" in _w231)
 check("보기 모드 표는 폭이 좁으면 스스로 가로 스크롤한다 (본문은 넘치지 않는다)",
       "<div style='overflow-x:auto;'><table" in _w231)
 check("표 글자는 12px 이상이다 (§77)",
@@ -21805,8 +21808,13 @@ check("긴 사유는 자르고 전체는 툴팁에 둔다 (칸이 늘어나 값�
 check("토글 이름이 '빼기'를 말한다 (기능을 옮기지 않았다)",
       'st.toggle("매입가·수량 편집 · 빼기"' in _w231
       and "if _wl_edit and st.button(\"빼기\"" in _w231)
-check("되돌릴 수 없는 조작을 기본 화면에 두지 않는 결정은 그대로다",
-      "되돌릴 수 없는 조작을 기본 화면에 두지 않는" in _w231)
+# ⚠️ 라운드 244 — 이 검사의 **이름이 거짓**이 됐다. 사용자가 같은 것을 두 번
+#   물어(240 · 244) 결정을 뒤집었다 — 기본 화면에서 감추는 대신 **기본 화면에
+#   두고 되돌릴 수 있게** 한다. 잠글 것은 "감췄는가"가 아니라 "되돌릴 수 있는가"다.
+#   (인용문에 걸려 통과하고 있었다 — 통과하는 거짓 이름이 실패보다 나쁘다.)
+check("되돌릴 수 없는 조작에는 되돌리기가 붙는다 (감추는 대신)",
+      "st.session_state['wl_undo'] = dict(row)" in _w231
+      and "_wl_write(_wl_items() + [_undo244], '되돌렸습니다')" in _w231)
 _doc257 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R240_WHY_AND_REMOVE.md'))
 check("문서가 사유가 언제 채워지는지 적는다 (옛 행은 다시 채워야 보인다)",
       '다시 채운' in _doc257 and '2026-09-08' in _doc257)
@@ -22004,6 +22012,78 @@ check("지평 이름은 그대로다 (수년 · 수개월 · 수일)",
 _doc260 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R243_TWO_NAMES.md'))
 check("문서가 잰 날짜와 '문턱 불변'을 적는다",
       '2026-09-08' in _doc260 and '문턱' in _doc260)
+
+print()
+print("§261 R244·R245 — 행마다 빼기(되돌리기 포함) · 자동 축적이 갈라진 원장을 키우고 있었다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R244 사용자: *"보유중, 미보유 각각 종목에 관심 없으면 빼기 버튼도 각각 넣어줘."*
+#     같은 것을 두 번 물었다(240 · 244). 라운드 229·240 의 '되돌릴 수 없는 조작을
+#     기본 화면에 두지 않는다'를 **뒤집는다** — 감추는 대신 되돌릴 수 있게 한다.
+#     보기 모드는 HTML 표라 위젯을 못 넣으므로 이름 링크와 같은 길(쿼리 파라미터).
+#   R245 자동 축적(.github/workflows/daily_accumulate.yml)은 **돌고 있었다.** 그런데
+#     08-19~09-01 연속 실패 뒤 08-18 스냅샷에서 다시 시작해, 그 사이 손으로 키운
+#     65,566행이 빠진 원장(185,962)을 키우고 있었다. 로컬 250,725 와 갈라졌고
+#     (공통 185,159 · 로컬만 65,566 · 클라우드만 803), 신선도 가드는 밀림
+#     **−64,763** 을 찍고도 [OK] 였다 — `lag <= MAX_LAG` 가 음수에서 참이다.
+#     합집합 251,528 로 합쳤다(원본 virtual_predictions* 도 같이 — 안 그러면 다음
+#     랩 실행이 산출물을 다시 만들며 803행을 지운다). 지운 행 0.
+import scripts.study_freshness as _sf261
+import tempfile as _tf261
+
+# ① 행마다 빼기 — 이름 링크와 같은 길 · 되돌릴 수 있다
+check("?drop= 를 받는 길이 하나 있고 받은 즉시 파라미터를 지운다",
+      "def _wl_drop_from_query():" in _w231
+      and "del st.query_params['drop']" in _w231
+      and "_wl_drop_from_query()" in _w231)
+check("못 읽는 코드는 아무것도 빼지 않는다 (§3)",
+      "code = portfolio.normalize_code(str(raw).strip())" in _w231
+      and "return                   # 못 읽으면 아무것도 안 뺀다 (§3)" in _w231)
+check("뺀 행 **전체**를 쥔다 — 되돌리면 값이 그대로 돌아온다",
+      "st.session_state['wl_undo'] = dict(row)" in _w231
+      and "_wl_write(_wl_items() + [_undo244], '되돌렸습니다')" in _w231)
+check("표가 행마다 빼기 링크를 낸다 (보유·미보유 같은 표다)",
+      "f\"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' \"" in _w231)
+check("머리글이 10칸이고 마지막이 '관심' 이다 (칸을 더해도 숫자 칸은 안 건드렸다)",
+      "'매입가 대비 · 평가손익', '관심')" in _w231
+      and "for _i229, _h229 in enumerate(_WL_HDR))" in _w231)
+check("편집 모드의 빼기 버튼도 그대로다 — 두 길이 같은 _wl_remove 를 부른다 (§4)",
+      'if _wl_edit and st.button("빼기"' in _w231
+      and _w231.count('_wl_remove(') >= 3)
+
+# ② 신선도 가드 — 음의 밀림은 통과가 아니다 (심기 · 양방향)
+_now261 = _sf261.ledger_rows()
+check("원장을 읽는다 (0 이면 아래 심기가 뜻이 없다)", _now261 > 1000, str(_now261))
+_dir261 = _tf261.mkdtemp(prefix='r245_')
+
+
+def _plant261(rows):
+    p = _os.path.join(_dir261, f'plant_{rows}.json')
+    with open(p, 'w', encoding='utf-8') as f:
+        # 심기에는 made 를 넣지 않는다 — §156 이 박힌 날짜를 잡는다.
+        #   이 검사가 보는 것은 ledger_rows 뿐이다.
+        _json.dump({'ledger_rows': rows}, f)
+    return p
+
+
+_big261 = _plant261(_now261 + 5000)      # 지금보다 **큰** 원장에서 만든 산출물
+_ok261 = _plant261(_now261 - 10)         # 정상 시차
+check("심기 ① 산출물이 지금보다 큰 원장에서 만들어졌으면 실패다 (원장이 줄었다)",
+      _sf261.check(studies=((_big261, '심기 큰원장'),)) == 1)
+check("심기 ② 허용 안쪽의 정상 시차는 통과다 (오탐 없음)",
+      _sf261.check(studies=((_ok261, '심기 정상'),)) == 0)
+check("허용치는 그대로다 — 하루 축적량의 두 배 (새 숫자 아님)",
+      _sf261.MAX_LAG == 800)
+check("전제가 깨졌다는 사실을 파일이 적는다 (원장은 늘기만 하지 않았다)",
+      '음의 밀림' in _read148(_os.path.join(PROJ, 'scripts', 'study_freshness.py'))
+      and '185,962' in _read148(_os.path.join(PROJ, 'scripts', 'study_freshness.py')))
+# ③ 지금 실제 상태 — 값으로
+check("지금은 원장과 관측 산출물이 어긋나지 않는다 (값으로 확인)",
+      _sf261.check() == 0)
+_doc261 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R245_LEDGER_SPLIT.md'))
+check("문서가 실측 수(185,962 · 250,725 · 251,528)와 잰 날짜를 적는다",
+      '185,962' in _doc261 and '250,725' in _doc261 and '251,528' in _doc261
+      and '2026-09-08' in _doc261)
 
 print()
 print("=" * 72)
