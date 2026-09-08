@@ -22166,6 +22166,90 @@ check("문서가 잰 날짜와 '값·문턱 불변'을 적는다",
       '2026-09-09' in _doc262 and '문턱' in _doc262)
 
 print()
+print("§263 R247 — 갈라진 스냅샷을 합쳤다 · 가드가 축적을 버리지 않게 순서를 옮겼다 (2026-09-09)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 245 가 원장을 합치고 미뤄 둔 것 — 나머지 파일. 병렬 감사가 파일별
+#   권위를 실측했고(213개 중 바이트 동일 147 · 로컬에만 54 · 다름 12 · 클라우드에만 0),
+#   그중 다섯만 실제로 클라우드에 새 줄이 있었다:
+#     bar_paths_s0 +1,203 · entry_anchors_s0 +1,203 · forward_registry +300
+#     · news_events +32 · predictions +289(열쇠 기준)
+#   improvement.db 는 로컬이 상위집합이었다(클라우드에만 0) — 로컬 채택으로 잃는 케이스 0.
+#
+#   그리고 **가드가 축적을 버렸다.** 2026-09-08 실행(34227786793)이 2시간 16분을
+#   쌓고 '관측 연구 신선도 검사'(R245 가 음의 밀림을 잡게 고친 그 단계)에서 죽어
+#   업로드까지 못 갔다 — 그날 것이 통째로 사라졌다. 라운드 71c 가 이름 붙인
+#   *"쌓기는 쌓았는데 저장이 안 됐다"* 와 같은 모양이다. 이 파일이 계보 감사에
+#   대해 이미 적어 둔 규칙(**맨 뒤에 둔다** · 축적이 인질로 잡히지 않게)을
+#   신선도 검사에도 적용한다. 여전히 실패시킨다 — 순서만 바꾼다.
+import json as _js263
+_yml263 = _read148(_os.path.join(PROJ, '.github', 'workflows',
+                                 'daily_accumulate.yml'))
+_steps263 = _re.findall(r'^      - name: (.+)$', _yml263, _re.M)
+check("워크플로 단계를 읽었다 (0개면 미측정)", len(_steps263) >= 15,
+      str(len(_steps263)), scanned=len(_steps263))
+_i_up263 = next((i for i, n in enumerate(_steps263) if '올리기' in n), -1)
+_i_fr263 = next((i for i, n in enumerate(_steps263) if '신선도' in n), -1)
+check("신선도 검사가 업로드 **뒤**에 온다 — 실패해도 그날 축적을 잃지 않는다",
+      _i_up263 >= 0 and _i_fr263 > _i_up263,
+      f"업로드 {_i_up263} · 신선도 {_i_fr263}")
+check("그래도 여전히 실패시킨다 — 그 단계에 실패를 삼키는 표기가 없다",
+      'run: python scripts/study_freshness.py\n' in _yml263
+      and 'study_freshness.py || true' not in _yml263)
+check("왜 옮겼는지 파일이 적는다 (다음 사람이 되돌리지 않게)",
+      '축적을 먼저 끝내고' in _yml263 and '34227786793' in _yml263)
+
+# 합집합 규칙의 **불변식** — 값이 아니라 중복 없음을 잠근다 (R213)
+_pp263 = _os.path.join(PROJ, '.portfolio', 'predictions.jsonl')
+if _os.path.exists(_pp263):
+    _rows263, _bad263 = [], 0
+    for _ln263 in open(_pp263, encoding='utf-8', errors='replace'):
+        _ln263 = _ln263.strip()
+        if not _ln263:
+            continue
+        try:
+            _rows263.append(_js263.loads(_ln263))
+        except Exception:                                      # noqa: BLE001
+            _bad263 += 1
+    _k263 = [(str(r.get('ticker') or ''), str(r.get('date') or ''))
+             for r in _rows263]
+    check("합친 예측 로그에 (종목,날짜) 중복이 없다 — 기록 규약과 같은 열쇠다",
+          len(_k263) == len(set(_k263)),
+          f'행 {len(_k263):,} · 고유 {len(set(_k263)):,} · 파싱 실패 {_bad263}',
+          scanned=len(_k263))
+else:
+    skipped("§263 예측 로그 중복 검사", "predictions.jsonl 없음")
+
+_fr263 = _os.path.join(PROJ, '.portfolio', 'forward_registry.jsonl')
+if _os.path.exists(_fr263):
+    _fk263 = []
+    for _ln263 in open(_fr263, encoding='utf-8', errors='replace'):
+        _ln263 = _ln263.strip()
+        if not _ln263:
+            continue
+        try:
+            _r = _js263.loads(_ln263)
+        except Exception:                                      # noqa: BLE001
+            continue
+        _fk263.append((str(_r.get('ticker') or ''),
+                       str(_r.get('date') or '')[:10]))
+    check("합친 전방 기록부에 (종목,기준일) 중복이 없다 (추가 전용 규약)",
+          len(_fk263) == len(set(_fk263)),
+          f'행 {len(_fk263):,} · 고유 {len(set(_fk263)):,}', scanned=len(_fk263))
+    check("전방 기록부의 기준일이 하루짜리가 아니다 — 병합으로 되찾았다",
+          len({d for _, d in _fk263}) >= 2,
+          str(sorted({d for _, d in _fk263})[:8]))
+else:
+    skipped("§263 전방 기록부 검사", "forward_registry.jsonl 없음")
+
+_doc263 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R247_SNAPSHOT_MERGE.md'))
+check("문서가 파일별 방침과 실측 수를 적는다",
+      '2026-09-09' in _doc263 and '251,528' in _doc263 and '360' in _doc263
+      # 잃는 것이 없다는 **실측 주장** 두 개를 잠근다 (문구가 아니라 사실)
+      and '클라우드에만 있는 파일이 0개' in _doc263
+      and '클라우드에만 있는 케이스가 0개' in _doc263)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
