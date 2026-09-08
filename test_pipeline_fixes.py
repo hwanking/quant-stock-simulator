@@ -5925,12 +5925,22 @@ class _FakeDF:
         return self._n
 
 
+# ⚠️ 라운드 242 — 이 검사가 **반올림된** atr_pct 에서 배율을 다시 계산해, 장중
+#   변동성이 십분위 경계에 걸린 시점에 실패했다(2026-09-08 · 값도 규칙도 맞았다).
+#   엔진이 **쓴 배율**을 읽고, 규칙 자체는 심어서 잰다 (베낀 검사는 증명하지 않는다).
 _atr99 = _r99.get('atr_pct')
-if _atr99:
-    _sc99 = min(_na99.SCALE_MAX, max(_na99.SCALE_MIN,
-                                     _atr99 / _na99.BASE_ATR_PCT))
-    check("변동성이 크면 밴드가 넓어진다 (ATR 보정)",
-          abs(_r99['band_edges'][0] - round(_na99.BANDS[0] * _sc99, 1)) < 0.05)
+if _r99.get('band_scale'):
+    check("밴드 경계는 엔진이 쓴 배율로 만든다 (읽는 쪽이 다시 계산하지 않는다)",
+          _r99['band_edges'] == tuple(round(b * _r99['band_scale'], 1)
+                                      for b in _na99.BANDS),
+          f"atr={_atr99} scale={_r99['band_scale']} edges={_r99['band_edges']}")
+check("변동성이 크면 밴드가 넓어진다 (심기 — 규칙 자체를 잰다)",
+      _na99.band_scale(4.0) > _na99.band_scale(2.0) > _na99.band_scale(1.6),
+      f"{_na99.band_scale(1.6)} < {_na99.band_scale(2.0)} < {_na99.band_scale(4.0)}")
+check("배율이 위아래로 묶인다 (심기 — 극단값)",
+      _na99.band_scale(0.01) == _na99.SCALE_MIN
+      and _na99.band_scale(99.0) == _na99.SCALE_MAX
+      and _na99.band_scale(None) == 1.0)
 check("배율이 0.7~2.5 로 묶인다",
       _na99.SCALE_MIN == 0.7 and _na99.SCALE_MAX == 2.5)
 check("예상 대기기간 상한이 60거래일", _na99.MAX_WAIT_DAYS == 60)
@@ -8180,9 +8190,11 @@ check("매수·목표·손절이 다 있다",
       all(_b120.get(_k) for _k in ('entry', 'target', 'stop')))
 check("퍼센트와 원을 같이 낸다",
       _b120.get('target_pct') is not None and _b120.get('stop_pct') is not None)
+# 라운드 242 — 화면 문구에서 라운드 번호를 걷어냈다(사용자는 번호를 모른다).
+#   잠글 것은 번호가 아니라 **한계를 적었다는 사실**이다.
 check("목표 배수의 한계를 반드시 적는다",
-      '라운드 36' in str(_b120.get('target_caveat'))
-      and '양수가 아니었습니다' in str(_b120.get('target_caveat')))
+      '양수가 아니었습니다' in str(_b120.get('target_caveat'))
+      and '현행 기하' in str(_b120.get('target_caveat')))
 
 # 보유자 — 수익률 구간마다 지시가 달라지는가
 _heads = [_tp120.for_holder(_c120, a)['headline']
@@ -8224,7 +8236,8 @@ _h120 = _ukmod118.trade_plan_card(
 check("카드가 그려진다", len(_h120) > 1000)
 check("카드에 이모지가 없다",           # 라운드 192 — 판별식 단일화
       not emoji_hits(_h120), str(emoji_hits(_h120)[:3]))
-check("카드가 한계를 숨기지 않는다", '라운드 36' in _h120)
+check("카드가 한계를 숨기지 않는다",          # 라운드 242 — 번호 대신 내용으로
+      '양수가 아니었습니다' in _h120)
 check("화면이 지시서를 그린다",
       '_uk.trade_plan_card(' in _w120 and 'import trade_plan as _tp' in _w120)
 check("지시서 하나 때문에 화면이 죽지 않는다",
@@ -20820,51 +20833,54 @@ print("-" * 72)
 #   보인다). 사용자는 라운드 번호를 모른다 — 근거는 날짜·표본 수로 적고, 번호는 문서에
 #   둔다. 물타기 판정 문장은 반말("판단하지 않았다")이었다 → 합니다체.
 #   판단·값 불변. 회귀가 잠근 옛 낱말은 새 낱말로 옮겼다(§240 · §241 · §243).
-import ast as _ast244
-_REF244 = _re.compile(r'§\s?\d+|\bR\d{2,3}\b|라운드 \d+')
+# 라운드 242 — 이 검사가 **두 모듈만** 보고 있었다(web_app · ui_kit). 화면 문자열은
+#   38개 모듈에 흩어져 있고, 유도해서 훑으니 내부 참조 **25건**이 남아 있었다
+#   (2026-09-08 실측 · issue_ops 10 · gaeum_chat 4 · quant_indicators 3 · trade_plan 3 …).
+#   게다가 판별이 **자기가 보던 파일 안에서도** 한 건을 놓쳤다 — f-string 을 조각으로
+#   보면 한글 없는 끝조각(`…%] · R59`)이 '한글 있음' 조건을 빠져나간다. 대상은 유도로,
+#   판별은 모듈 함수 한 곳으로(`scripts/lineage_audit`) 옮긴다 — 베끼면 한쪽만 낡는다.
+import scripts.lineage_audit as _la244
+#: 아래 문구 검사들이 쓰는 판별식 — 모듈의 것을 **그대로** 가리킨다 (두 벌 금지)
+_REF244 = _la244.SCREEN_REF_RE
 
-
-def _screen_refs244(src):
-    """화면 문자열 중 내부 참조를 품은 것 — (줄, 참조들, 앞 60자). 독스트링·CSS(<style ·
-    /*)·주석성 문자열은 뺀다. 한글이 없거나 8자 미만이면 화면 문구로 안 본다."""
-    tree = _ast244.parse(src)
-    doc_lines = set()
-    for node in _ast244.walk(tree):
-        if isinstance(node, (_ast244.FunctionDef, _ast244.AsyncFunctionDef,
-                             _ast244.ClassDef, _ast244.Module)):
-            if node.body and isinstance(node.body[0], _ast244.Expr) \
-                    and isinstance(getattr(node.body[0], 'value', None), _ast244.Constant) \
-                    and isinstance(node.body[0].value.value, str):
-                n0 = node.body[0]
-                doc_lines.update(range(n0.lineno, getattr(n0, 'end_lineno', n0.lineno) + 1))
-    out, seen = [], 0
-    for node in _ast244.walk(tree):
-        if not (isinstance(node, _ast244.Constant) and isinstance(node.value, str)):
-            continue
-        s = node.value
-        if len(s) < 8 or not _re.search(r'[가-힣]', s) or node.lineno in doc_lines:
-            continue
-        if '<style' in s or '/*' in s:
-            continue                                      # CSS 주석 — 화면에 안 보인다
-        seen += 1
-        m = sorted(set(_REF244.findall(s)))
-        if m:
-            out.append((node.lineno, m, s.strip().replace('\n', ' ')[:60]))
-    return out, seen
-
-
-for _fn244 in ('web_app.py', 'ui_kit.py'):
-    with open(_os.path.join(PROJ, _fn244), encoding='utf-8') as _f244:
-        _src244 = _f244.read()
-    _hits244, _seen244 = _screen_refs244(_src244)
-    check(f"{_fn244} 화면 문자열에 내부 참조가 없다 — {_hits244[:3]}",
-          not _hits244, scanned=_seen244)
-# 심기 — 잡히는가 · 오탐 안 하는가 (라운드 194 의 규율)
-_plant244 = 'x = "업종 게이트는 실측에서 기각됐습니다(R46)"\ny = "<style>/* 라운드 52 */</style>"\nz = "손절까지 0.7R 거리입니다"\n'
-_ph244, _ps244 = _screen_refs244(_plant244)
-check("심기 ① 화면 문구의 '(R46)' 을 잡는다", len(_ph244) == 1 and _ph244[0][1] == ['R46'])
+_mods244 = sorted(_la244.reachable_modules())
+# 라운드 242 — **박제된 파일은 건드리지 않는다.** forward_eval.py 는 2026-11-16
+#   전방 재평가 대상이라 해시가 박혀 있고(data/freeze_pins.json), 화면 문구라도
+#   바꾸면 그 평가가 성립하지 않는다 — 재평가는 '그때 정한 것을 그대로' 재는
+#   일이다. 문구 규칙보다 측정 약속이 앞선다. 재평가 뒤에 고친다. 조용히 빼지
+#   않고 **몇 개를 왜 뺐는지** 찍는다 (0건이 '없다'인지 '안 봤다'인지 가르려고).
+with open(_os.path.join(PROJ, 'data', 'freeze_pins.json'), encoding='utf-8') as _fp244:
+    _pin244 = set((_json.load(_fp244) or {}).get('files') or {})
+_skip244 = [_m for _m in _mods244 if _m in _pin244]
+check("박제된 파일은 문구 검사에서 빼고 그 수를 적는다 (전방 재평가 뒤에 고친다)",
+      len(_skip244) >= 1, str(_skip244), scanned=len(_pin244))
+_hits244, _seen244 = [], 0
+for _fn244 in _mods244:
+    _p244 = _os.path.join(PROJ, _fn244)
+    if not _os.path.exists(_p244) or _fn244 in _pin244:
+        continue
+    with open(_p244, encoding='utf-8') as _f244:
+        _h244, _s244 = _la244.screen_string_refs(_f244.read())
+    _seen244 += _s244
+    _hits244 += [(_fn244, ln, refs, txt) for ln, refs, txt in _h244]
+check("검사 대상을 손으로 적지 않고 유도한다 (30개 이상)",
+      len(_mods244) >= 30, str(len(_mods244)), scanned=len(_mods244))
+check(f"화면 문자열에 내부 참조가 없다 — {_hits244[:3]}",
+      not _hits244, scanned=_seen244)
+# 심기 — 잡히는가 · 오탐 안 하는가 (라운드 194 의 규율 · 양방향)
+_plant244 = ('x = "업종 게이트는 실측에서 기각됐습니다(R46)"\n'
+             'y = "<style>/* 라운드 52 */</style>"\n'
+             'z = "손절까지 0.7R 거리입니다"\n')
+_ph244, _ps244 = _la244.screen_string_refs(_plant244)
+check("심기 ① 화면 문구의 '(R46)' 을 잡는다",
+      len(_ph244) == 1 and _ph244[0][1] == ['R46'], str(_ph244))
 check("심기 ② CSS 주석 속 '라운드 52' 와 '0.7R' 은 오탐하지 않는다",
-      all('라운드 52' not in h[1] for h in _ph244) and _ps244 == 2)
+      all('라운드 52' not in h[1] for h in _ph244) and _ps244 == 2, str(_ps244))
+# 심기 ③ — 이번에 뚫린 자리. f-string 을 조각으로 보면 이 줄이 안 잡힌다.
+_plant244b = 'a = f"계층 보정 확률 약 {p:.0f}% [{lo}~{hi}%] · R59"\n'
+_ph244b, _ps244b = _la244.screen_string_refs(_plant244b)
+check("심기 ③ f-string 끝조각의 'R59' 를 잡는다 (조각으로 보면 한글이 없어 빠져나간다)",
+      len(_ph244b) == 1 and _ph244b[0][1] == ['R59'], str(_ph244b))
 # 판정 문장은 합니다체 — 물타기 넷의 이유 끝이 '다.' 가 아니다 (반말 판별: '~았다 ·~는다 · ~다)' 끝)
 import ui_kit as _uk244
 _whys244 = [_uk244.avg_down_class(False, [_uk244.AVG_DOWN_DATA_GATE])[2],
@@ -21752,9 +21768,12 @@ check("보유 행의 판단 문장은 안 바뀐다 (사유는 미보유 쪽에�
       and _a257c['kind'] == '보유 유지' and '심기 사유' not in str(_a257c['why']))
 
 # ③ 표 — 미보유 행에만 사유 한 줄 · 긴 것은 자르고 전체는 툴팁
-check("표가 미보유 행에만 사유를 적는다",
-      "_wy240 = str(_w.get('snap_why') or '').strip()" in _w231
-      and "if _wy240 and not _act.get('held'):" in _w231)
+# 라운드 241 — 화면이 `snap_why` 를 직접 읽고 `held` 만 보던 것이 결함이었다:
+#   제외가 풀려 '오늘 매수 가능'이 된 행에 옛 사유가 그대로 붙었다. 보여 줄지는
+#   이제 킷이 정한다(`why_line`) — 이 검사도 그 자리를 잠근다 (§258 이 값으로 잰다).
+check("표가 미보유 행에만 사유를 적는다 · 판정은 킷 한 곳",
+      "_wy240 = str(_act.get('why_line') or '')" in _w231
+      and "if _wy240:" in _w231)
 check("긴 사유는 자르고 전체는 툴팁에 둔다 (칸이 늘어나 값이 잘리지 않게)",
       "_wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'" in _w231
       and "title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>" in _w231)
@@ -21768,6 +21787,139 @@ check("되돌릴 수 없는 조작을 기본 화면에 두지 않는 결정은 �
 _doc257 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R240_WHY_AND_REMOVE.md'))
 check("문서가 사유가 언제 채워지는지 적는다 (옛 행은 다시 채워야 보인다)",
       '다시 채운' in _doc257 and '2026-09-08' in _doc257)
+
+print()
+print("§258 R241 — 사유가 파일에 안 남고, 제외가 풀려도 옛 사유가 남았다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R240 이 미보유 행에 판정 사유를 적게 했는데, **사유가 없을 때 빈 글자('')를**
+#   찍었다. 저장은 빈 글자를 버리고(portfolio.save_watchlist) 스냅샷 병합도 건너뛴다
+#   (web_app 의 `not in (None, '')`). 실측 2026-09-08:
+#     · 관심종목 31행 중 사유가 있는 행 **1** — 나머지는 종목을 하나씩 열기 전엔
+#       영영 안 나온다(채우기 기준이 snap_why 를 안 봤다).
+#     · 제외가 풀려 '오늘 매수 가능'이 된 행에 **옛 사유가 그대로 남는다** —
+#       초록 라벨 아래 '추격매수 위험'이 붙는 자기모순.
+#   R224 덤 ②('빈 글자도 값이다')와 **같은 모양**이다. 고침도 같다 — 마커를 남기고,
+#   보여 줄지는 킷 한 곳에서 정한다(§4). 판정·문턱 불변.
+import ui_kit as _uk258
+import portfolio as _pf258
+
+# ① 마커 — 쓰는 쪽과 읽는 쪽이 같은 낱말 (§4)
+check("사유 없음의 글자 표기가 한 곳에 있다",
+      isinstance(_uk258.WATCH_NO_WHY, str) and _uk258.WATCH_NO_WHY.strip() != '')
+check("채우는 자리 넷이 전부 마커를 남긴다 (빈 글자면 키가 안 생긴다)",
+      _w231.count("or _uk.WATCH_NO_WHY") == 4
+      and _w231.count("'snap_why': ") == 4)
+_kept258 = {k: v for k, v in {'snap_why': _uk258.WATCH_NO_WHY}.items()
+            if k in _pf258.WATCH_SNAP_TXT and str(v or '').strip()}
+check("마커가 저장 화이트리스트를 통과한다 (저장→읽기 왕복)",
+      _kept258.get('snap_why') == _uk258.WATCH_NO_WHY)
+# 심기 — 빈 글자는 실제로 떨어진다 (이것이 결함의 정체다)
+_drop258 = {k: v for k, v in {'snap_why': ''}.items()
+            if k in _pf258.WATCH_SNAP_TXT and str(v or '').strip()}
+check("빈 글자는 저장에서 떨어진다 — 그래서 마커가 필요하다 (심기)",
+      'snap_why' not in _drop258)
+
+# ② 병합 — 제외가 풀리면 옛 사유가 덮인다
+_merged258 = {'snap_bucket': '추천 제외', 'snap_why': '현재가가 적정가보다 위'}
+for _k258, _v258 in {'snap_bucket': '오늘 매수 가능',
+                     'snap_why': _uk258.WATCH_NO_WHY}.items():
+    if _v258 not in (None, ''):          # web_app 의 병합 규칙과 같은 것
+        _merged258[_k258] = _v258
+check("병합이 옛 사유를 덮는다",
+      _merged258['snap_why'] == _uk258.WATCH_NO_WHY)
+
+# ③ 보여 줄지는 킷이 정한다 — 화면은 읽기만 (§4)
+check("화면이 snap_why 를 직접 읽지 않는다 (킷의 why_line 을 읽는다)",
+      "_wy240 = str(_act.get('why_line') or '')" in _w231
+      and "_wy240 = str(_w.get('snap_why') or '').strip()" not in _w231)
+check("마커는 안 보여 준다",
+      _uk258.watch_action({'code': '000001', 'snap_bucket': '추천 제외',
+                           'snap_why': _uk258.WATCH_NO_WHY,
+                           'snap_px': 100.0}).get('why_line') is None)
+check("매수 가능한 행에는 옛 사유를 안 붙인다 (한 줄 안의 모순)",
+      _uk258.watch_action({'code': '000001', 'snap_bucket': '오늘 매수 가능',
+                           'snap_why': '현재가가 적정가보다 위',
+                           'snap_px': 100.0}).get('why_line') is None)
+_ex258 = _uk258.watch_action({'code': '000001', 'snap_bucket': '추천 제외',
+                              'snap_why': '거래비용 차감 후 기대값이 음수입니다',
+                              'snap_px': 100.0})
+check("제외 행에는 사유를 그대로 낸다 (심기 — 잡는가)",
+      _ex258.get('why_line') == '거래비용 차감 후 기대값이 음수입니다')
+_hl258 = _uk258.watch_action({'code': '000001', 'paid': 100.0, 'qty': 1,
+                              'snap_px': 110.0, 'snap_bucket': '추천 제외',
+                              'snap_why': '심기 사유', 'snap_hold_stop': 90.0,
+                              'snap_hold_trim': 120.0})
+check("보유 행에는 안 붙이고 문장도 안 바뀐다",
+      _hl258.get('held') is True and _hl258.get('why_line') is None
+      and '심기 사유' not in str(_hl258.get('why')))
+
+# ④ 채우기 대상 — 사유가 없는 미보유 행 · 배너가 그것을 따로 말한다
+check("채우기 기준이 판정 사유를 본다",
+      "and 'snap_why' not in w):" in _w231 and "return '판정 사유'" in _w231)
+check("채우기 기준이 무엇이 모자란지 글자로 말한다 (배너가 뭉뚱그리지 않게)",
+      "return '엔진 값'" in _w231 and "return '보유자 기준값'" in _w231
+      and "return '물타기 판정'" in _w231 and "return '물타기 첫 조건'" in _w231)
+check("배너가 사유만 없는 행의 수를 따로 적는다",
+      "_nwhy241 = sum(1 for w in _fill_missing" in _w231
+      and "값은 다 있고 판정 사유만 " in _w231)
+_doc258 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R241_WHY_PERSIST.md'))
+check("문서가 실측 수와 잰 날짜를 적는다",
+      '2026-09-08' in _doc258 and '31행' in _doc258)
+
+print()
+print("§259 R242 — 고정 숫자에 잰 날짜가 없었다 · 검사가 반올림된 값에서 규칙을 다시 셌다 (2026-09-08)")
+print("-" * 72)
+# ── 무엇이 있었나 (2026-09-08) ──────────────────────────────────────────
+#   ① 진입가 근거 문자열이 *"실측 체결률 79.3% · 평균 3.4일"* 을 **날짜 없이** 적고
+#      있었다. 이 종목 값이 아니라 2026-08-04 에 경로 5,389건으로 잰 전체 실측인데,
+#      화면만 보면 이 종목의 체결률로 읽힌다 (날짜 없는 숫자는 반드시 낡는다 · §2).
+#   ② 밴드 검사가 **반올림된** atr_pct 에서 배율을 다시 계산했다. 엔진은 반올림 전
+#      값으로 재므로 십분위 경계에 걸리는 장중 어느 시점에만 어긋난다 — 값도 규칙도
+#      맞는데 검사만 실패했다(전체 회귀 4,682건 중 1건). 논리를 베낀 검사의 전형이다.
+import next_action as _na259
+import price_axes as _pa259
+import quant_indicators as _qi259
+
+# ① 고정 숫자에는 잰 날짜와 표본을 붙인다 — 이 종목 값이 아니라는 것도
+_ent259 = _pa259.entry({'entry_pullback_price': 100.0, 'current_price': 110.0})
+check("진입가 근거가 잰 날짜를 적는다 (날짜 없는 숫자는 낡는다)",
+      '2026-08-04' in str(_ent259.get('basis')))
+check("표본 수와 '이 종목 값이 아니다'를 같이 적는다",
+      '5,389' in str(_ent259.get('basis'))
+      and '이 종목 값이 아니라' in str(_ent259.get('basis')))
+_qsrc259 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진의 같은 근거 문자열도 잰 날짜·표본을 적는다 (두 자리가 어긋나지 않게)",
+      "'· 평균 3.4거래일 (2026-08-04 · 경로 5,389건)'" in _qsrc259)
+check("실측 수치 자체는 안 바꿨다 (79.3% · 3.4거래일 그대로)",
+      '79.3%' in str(_ent259.get('basis'))
+      and '3.4거래일' in str(_ent259.get('basis')))
+
+# ② 배율은 한 곳에서 재고, 쓴 값을 그대로 낸다
+check("배율 규칙이 모듈 함수 하나다 (심을 수 있어야 검사가 된다)",
+      callable(getattr(_na259, 'band_scale', None)))
+check("문턱은 그대로다 — 0.7~2.5 · 기준 2.0% · 밴드 5/10/15",
+      _na259.SCALE_MIN == 0.7 and _na259.SCALE_MAX == 2.5
+      and _na259.BASE_ATR_PCT == 2.0 and _na259.BANDS == (5.0, 10.0, 15.0))
+check("반올림 전 값과 반올림된 값이 다른 배율을 낸다 (결함의 정체 · 심기)",
+      _na259.band_scale(2.4249) != _na259.band_scale(2.42))
+check("build 가 쓴 배율을 출력에 싣는다 (읽는 쪽이 다시 계산하지 않게 · §4)",
+      "out['band_scale'] = scale" in _read148(_os.path.join(PROJ, 'next_action.py')))
+
+# ③ 화면 문구 판별 — 한 곳 · f-string 을 덩어리로 (§244 가 값으로 잰다)
+import scripts.lineage_audit as _la259
+# 자기 참조 주의 — 이 검사의 **문자열 자체**가 파일 안에 있다. 줄 머리의 def 로 좁힌다.
+check("판별식이 테스트 안에 다시 적혀 있지 않다 (모듈 함수 하나 · 베끼면 한쪽만 낡는다)",
+      not _re.search(r'^def _screen_refs',
+                     _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py')), _re.M)
+      and callable(getattr(_la259, 'screen_string_refs', None)))
+_h259, _s259 = _la259.screen_string_refs(
+    'a = f"업황은 좋습니다 {x}% · R59"\nb = "짧다"\n')
+check("f-string 은 조각이 아니라 한 덩어리로 본다 (심기 — 이번에 뚫린 자리)",
+      len(_h259) == 1 and _h259[0][1] == ['R59'], str(_h259))
+_doc259 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R242_SCREEN_REF_SCOPE.md'))
+check("문서가 실측 수(대상 2→38 · 참조 25건)와 잰 날짜를 적는다",
+      '2026-09-08' in _doc259 and '25건' in _doc259 and '38' in _doc259)
 
 print()
 print("=" * 72)

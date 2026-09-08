@@ -5471,8 +5471,10 @@ else:
                     #   적고 왜인지는 안 적었다: *"적정가는 현재가보다 높은데 추천 제외라고
                     #   하니깐."* 사유는 중앙 판정이 이미 내고 있었다(exclude_reason). 결론
                     #   아래 한 줄로 적고, 긴 것은 잘라 전체는 툴팁에 둔다. 판정 불변.
-                    _wy240 = str(_w.get('snap_why') or '').strip()
-                    if _wy240 and not _act.get('held'):
+                    #   라운드 241 — **보여 줄지**는 킷이 정한다(why_line). 화면이
+                    #   직접 읽으면 제외가 풀린 행에 옛 사유가 남는다 (§4).
+                    _wy240 = str(_act.get('why_line') or '')
+                    if _wy240:
                         _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
                         _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
                                    f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
@@ -5724,10 +5726,10 @@ else:
     #   그것을 채운다.
     def _wl_needs_fill(w):
         if not w.get('snap_at') or w.get('snap_buy') is None:
-            return True
+            return '엔진 값'
         if w.get('paid') and not (w.get('snap_hold_stop')
                                   or w.get('snap_hold_trim')):
-            return True
+            return '보유자 기준값'
         # 라운드 214 보완 — 물타기 스탬프가 없는 **보유** 행도 채울 대상이다.
         #   이 기준이 그 키를 몰라, R214 이전에 저장된 보유 16행은 종목을 하나씩
         #   열기 전엔 영영 '물타기' 칸이 비어 있었다. 매입가·수량 **둘 다** 있을
@@ -5735,16 +5737,26 @@ else:
         #   이 기준이 그 행을 매번 다시 채우자고 해 파이프라인만 헛돈다.
         if (w.get('paid') and w.get('qty')
                 and 'snap_avg_down_ok' not in w):
-            return True
+            return '물타기 판정'
         # 라운드 224 — 물타기 첫 조건의 출처가 바뀌었다(TOP3 깃발 → 중앙 판정). 그 전에
         #   찍힌 보유 행은 '불가'가 옛 게이트의 답이라 다시 채운다. 같은 규칙으로
         #   매입가·수량 둘 다 있을 때만.
         if (w.get('paid') and w.get('qty')
                 and 'snap_new_entry' not in w):
-            return True
-        return False
+            return '물타기 첫 조건'
+        # 라운드 241 — 판정 사유가 없는 **미보유** 행. R240 이 사유를 담게 했지만
+        #   이미 저장된 행에는 없어, 종목을 하나씩 열기 전엔 영영 안 나온다
+        #   (실측 2026-09-08: 31행 중 사유가 있는 행 **1**). 사유가 없을 때도
+        #   마커를 남기므로(ui_kit.WATCH_NO_WHY) 한 번 채우면 끝난다 — 빈 글자로
+        #   두면 이 기준이 매번 다시 채우자고 해 파이프라인만 헛돈다(R214 주석).
+        if (not w.get('paid') and w.get('snap_bucket')
+                and 'snap_why' not in w):
+            return '판정 사유'
+        return ''
 
     _fill_missing = [w for w in _wl_items() if _wl_needs_fill(w)]
+    _nwhy241 = sum(1 for w in _fill_missing
+                   if _wl_needs_fill(w) == '판정 사유')
     #: 한 번에 몇 개까지. 오래 걸린다는 사실을 숨기지 않고 나눠 돌린다.
     _WL_FILL_MAX = 5
     if _fill_missing:
@@ -5757,7 +5769,12 @@ else:
               f"가격 · 팔 가격 1차)까지 있어야 '엔진 판단'이 나옵니다. "
               f"한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
               f"**{_WL_FILL_MAX}종목씩** 채웁니다 — 없는 값을 지어내지 "
-              f"않고 실제로 계산합니다.")
+              f"않고 실제로 계산합니다."
+            # 라운드 241 — '엔진 값이 모자란'으로 뭉뚱그리면 거짓이다. 값은 다
+            #   있고 **판정 사유**만 없는 행이 섞여 있다 (R221 의 '불가' 와 같은 모양).
+            + (f"  \n이 중 **{_nwhy241}종목**은 값은 다 있고 판정 사유만 "
+               f"없습니다 — 채우면 '추천 제외' 아래에 왜인지 한 줄이 붙습니다."
+               if _nwhy241 else ''))
         _todo166 = _fill_missing[:_WL_FILL_MAX]
         if st.button(f"{len(_todo166)}종목 지금 계산해서 채우기",
                      key='wl_fill_now', type='primary'):
@@ -5807,7 +5824,7 @@ else:
                         'snap_at': t_ref_str,
                         'snap_engine': str(_VER_NOW.get('model') or ''),
                         'snap_bucket': _co166.get('bucket'),
-                        'snap_why': _co166.get('exclude_reason'),   # 라운드 240
+                        'snap_why': _co166.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
                         # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
                         'snap_sector': (_snp166.get('val_eval') or {}).get('sector'),
                         # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
@@ -6694,7 +6711,7 @@ if _pm_today and _pm_today.get('picks'):
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
                         'snap_bucket': _co142.get('bucket'),   # 라운드 166
-                        'snap_why': _co142.get('exclude_reason'),   # 라운드 240
+                        'snap_why': _co142.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
                         # 보유자 기준 (라운드 169) — 다른 키다 (§4)
                         'snap_hold_trim': _co142.get('hold_trim'),
                         'snap_hold_stop': _co142.get('hold_stop'),
@@ -7254,7 +7271,9 @@ try:
             # 그대로 담는다 (§4).
             'snap_bucket': CORE.get('bucket'),
             # 라운드 240 — 결론 옆에 사유. 중앙 판정이 이미 내고 있던 값이다.
-            'snap_why': CORE.get('exclude_reason'),
+            #   라운드 241 — 사유가 없을 때도 마커를 남긴다. 빈 글자면 파일에
+            #   키가 안 생기고 병합도 건너뛰어 **옛 사유가 살아남는다**.
+            'snap_why': CORE.get('exclude_reason') or _uk.WATCH_NO_WHY,
             # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
             'snap_sector': val_eval.get('sector'),
             # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
@@ -8109,7 +8128,7 @@ if _blend59:
     _extra_bits.append(
         f"계층 보정 확률 약 {_blend59['p'] * 100:.0f}% "
         f"[{_blend59['wilson_low'] * 100:.0f}~"
-        f"{_blend59['wilson_high'] * 100:.0f}%] · R59")
+        f"{_blend59['wilson_high'] * 100:.0f}%]")
 
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
@@ -10005,7 +10024,7 @@ if user_entry_price > 0 and user_quantity > 0:
         _row224 = {}
     _row224.update({'paid': user_entry_price, 'qty': user_quantity, 'snap_px': realtime_price,
                     'snap_bucket': CORE.get('bucket'),
-                    'snap_why': CORE.get('exclude_reason'),   # 라운드 240
+                    'snap_why': CORE.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
                     'snap_buy': (CORE.get('pullback_zone') or (CORE.get('buy_zone') or [None])[0]),
                     'snap_fair': four_scores.get('displayed_fair_value')})
     if not (_row224.get('snap_hold_trim') or _row224.get('snap_hold_stop')):

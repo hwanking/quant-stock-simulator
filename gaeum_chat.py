@@ -81,7 +81,7 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
 def _evidence(ctx, used):
     bits = ['중앙 판정']
     if '계층' in used and ctx.get('blend'):
-        bits.append('계층 보정(R59)')
+        bits.append('계층 보정')
     n_news = (ctx.get('news') or {}).get('total')
     if '뉴스' in used:
         bits.append(f"뉴스 {n_news if n_news is not None else 0}건")
@@ -202,8 +202,8 @@ def _ans_price_sell(ctx):
         out.append(f"보유자 기준(현재가 기준): 1차 일부 정리 {_w(ht) or NA} · "
                    f"방어선 {_w(hs) or NA}")
     out.append('목표 배수는 "최적"이 아니라 현행 기하입니다 — 0.4R~3.0R 어느 '
-               '배수도 세 구간 모두에서 양수가 아니었습니다 (라운드 36). '
-               '이른 익절·트레일링 12종도 현행을 이기지 못했습니다 (라운드 58b).')
+               '배수도 학습·검증·블라인드 세 구간 모두에서 양수가 아니었습니다. '
+               '이른 익절·트레일링 12종도 같은 잣대에서 현행을 이기지 못했습니다.')
     return '\n'.join(out)
 
 
@@ -262,7 +262,7 @@ def _ans_fair_gap(ctx):
         out.append(f"괴리 {g:+.1f}% — 오류가 아니라 두 질문이 다른 것입니다. "
                    f"적정가까지의 하락을 기다리는 것은 실측상 역선택이었습니다 "
                    f"(깊이 기다릴수록 체결된 것들의 성과가 나빴습니다 — "
-                   f"라운드 57 사전 조사).")
+                   f"2026-08-09 사전 조사).")
     return '\n'.join(out)
 
 
@@ -312,8 +312,8 @@ def _ans_prob_trust(ctx):
             f"{b['n_narrow']:,}건입니다 (구간 {b['wilson_low'] * 100:.0f}~"
             f"{b['wilson_high'] * 100:.0f}%).\n"
             f"검증: 사전등록 후 valid 1회에서 종전 유사사례 확률보다 "
-            f"Brier·보정도 모두 정확했습니다 (보정이탈 12.1 vs 35.4%p — "
-            f"라운드 59). 다만 이것은 과거 실측의 요약이지 미래 보장이 "
+            f"Brier·보정도 모두 정확했습니다 (보정이탈 12.1 vs 35.4%p · "
+            f"2026-08-09 실측). 다만 이것은 과거 실측의 요약이지 미래 보장이 "
             f"아니며, {_fe.pending_note()}.")
 
 

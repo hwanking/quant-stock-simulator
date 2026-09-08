@@ -252,7 +252,7 @@ def sector_reason(cyc):
             f'{cyc.get("ko") or "업종"} 업황은 {" · ".join(bits)} 입니다. '
             f'다만 업황 모멘텀이 국내 종목 결과를 예측하는지 원장 16,805건으로 '
             f'실측했고 게이트를 넘지 못해 **판정에는 넣지 않았습니다** '
-            f'(라운드 44).')
+            f'(2026-08-05 실측).')
 
 
 def build(core, fs, news_flags=None, sector_cycle=None):
