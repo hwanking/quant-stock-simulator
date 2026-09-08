@@ -2294,7 +2294,12 @@ WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
 #:   다시 잰다(`hold_plan_update`). `snap_hold_log` 는 그때 남는 한 줄(최근 셋)
 #:   — *"정리하는 이유도 추후에 써줘"*. `snap_fair_reach` 는 적정가 도달 비율
 #:   한 줄(`ledger_view.reach_line` · 글자 — 0% 도 값이라 숫자 칸에 못 둔다).
-WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket',
+#: `snap_why` — 그 판단의 **사유**(중앙 판정의 exclude_reason). 라운드 240 —
+#:   화면은 '추천 제외' 라는 결론만 적고 왜인지는 안 적었다. 사용자 지적:
+#:   *"적정가는 현재가보다 높은데 추천 제외라고 하니깐."* 사유는 이미
+#:   판정이 내고 있었고(verdict_core 가 bucket 과 함께 돌려준다) 담지를
+#:   않았다. 새로 만드는 값이 아니다 — 있는 것을 옮겨 적는다.
+WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket', 'snap_why',
                   'snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
                   'snap_holder_key', 'snap_holder_title', 'snap_weight_basis',
                   'snap_hold_at', 'snap_hold_log', 'snap_fair_reach',
