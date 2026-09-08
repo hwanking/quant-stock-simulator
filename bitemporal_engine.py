@@ -1500,10 +1500,18 @@ class BitemporalEngine:
         """
         네이버 증권 API & Yahoo Finance API를 통한 실시간 시장 지수 동적 파싱
         """
+        # ⚠️ 라운드 246 — 환율과 S&P500 은 **박아 둔 숫자**가 기본값이었다
+        #   (1,421.00 · 7,381.87 / +65.72 / +0.90%). 아래 네 개의 except 중
+        #   어느 것이 걸려도 그 값이 그대로 화면 카드에 나갔다 — 못 받은 것을
+        #   받은 것처럼 보이게 하는 자리다(§3 · §9). 같은 함수 안에서
+        #   KOSPI·KOSDAQ 만 이미 "N/A" 였다 — 규칙이 갈려 있었다.
+        #   넷 다 "N/A" 로 맞추고, 왜 못 받았는지 사유를 같이 돌려준다.
         kospi_p, kospi_c, kospi_pct = "N/A", "0.00", "0.00%"
         kosdaq_p, kosdaq_c, kosdaq_pct = "N/A", "0.00", "0.00%"
-        usd_p, usd_c, usd_pct = "1,421.00", "-0.00", "-0.00%"
-        sp500_p, sp500_c, sp500_pct = "7,381.87", "+65.72", "+0.90%"
+        usd_p, usd_c, usd_pct = "N/A", "0.00", "0.00%"
+        sp500_p, sp500_c, sp500_pct = "N/A", "0.00", "0.00%"
+        #: 못 받은 이유 — 침묵하지 않는다. 화면이 이것을 읽어 밝힌다.
+        _why246 = {}
         
         try:
             # 1. KOSPI 모바일 API 파싱
@@ -1515,8 +1523,8 @@ class BitemporalEngine:
                 sign = "+" if float(pct_val) > 0 else ("-" if float(pct_val) < 0 else "")
                 kospi_c = f"{sign}{diff_val}" if not diff_val.startswith(("+", "-")) else diff_val
                 kospi_pct = f"{sign}{abs(float(pct_val)):.2f}%"
-        except Exception:
-            pass
+        except Exception as _e246:                             # noqa: BLE001
+            _why246['kospi'] = f'{type(_e246).__name__}: {_e246}'[:90]
 
         try:
             # 2. KOSDAQ 모바일 API 파싱
@@ -1528,8 +1536,8 @@ class BitemporalEngine:
                 sign = "+" if float(pct_val) > 0 else ("-" if float(pct_val) < 0 else "")
                 kosdaq_c = f"{sign}{diff_val}" if not diff_val.startswith(("+", "-")) else diff_val
                 kosdaq_pct = f"{sign}{abs(float(pct_val)):.2f}%"
-        except Exception:
-            pass
+        except Exception as _e246:                             # noqa: BLE001
+            _why246['kosdaq'] = f'{type(_e246).__name__}: {_e246}'[:90]
 
         try:
             # 3. S&P 500 Yahoo Finance 실시간 파싱
@@ -1545,8 +1553,8 @@ class BitemporalEngine:
                     sp500_p = f"{curr_sp:,.2f}"
                     sp500_c = f"{sign}{abs(diff_sp):.2f}"
                     sp500_pct = f"{sign}{abs(pct_sp):.2f}%"
-        except Exception:
-            pass
+        except Exception as _e246:                             # noqa: BLE001
+            _why246['sp500'] = f'{type(_e246).__name__}: {_e246}'[:90]
 
         try:
             # 4. USD/KRW 환율 Yahoo Finance / Naver 실시간 파싱
@@ -1562,14 +1570,16 @@ class BitemporalEngine:
                     usd_p = f"{curr_usd:,.2f}"
                     usd_c = f"{sign}{abs(diff_u):.2f}"
                     usd_pct = f"{sign}{abs(pct_u):.2f}%"
-        except Exception:
-            pass
+        except Exception as _e246:                             # noqa: BLE001
+            _why246['usd_krw'] = f'{type(_e246).__name__}: {_e246}'[:90]
 
         return {
             'kospi': {'price': kospi_p, 'change': kospi_c, 'pct': kospi_pct},
             'kosdaq': {'price': kosdaq_p, 'change': kosdaq_c, 'pct': kosdaq_pct},
             'usd_krw': {'price': usd_p, 'change': usd_c, 'pct': usd_pct},
-            'sp500': {'price': sp500_p, 'change': sp500_c, 'pct': sp500_pct}
+            'sp500': {'price': sp500_p, 'change': sp500_c, 'pct': sp500_pct},
+            # 라운드 246 — 못 받은 것은 'N/A' 이고, 왜 못 받았는지는 여기 있다.
+            'unavailable': _why246,
         }
 
     def load_bitemporal_data(self, symbol="005930.KS", start_date="2020-01-01", end_date=None):

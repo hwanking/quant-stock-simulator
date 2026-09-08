@@ -2970,17 +2970,23 @@ def _build_reco_card(p, news_txt, conf_txt):
     _NA_LABEL = {'buy_now': '지금 분할매수', 'pullback': '눌림목 대기',
                  'breakout': '돌파 확인 대기', 'observe': '오늘 후보 아님',
                  'blocked': '매수 차단', 'no_data': '데이터 부족'}
+    # ⚠️ 라운드 246 — 여기서 읽던 `_n['kind']` 는 **하위 모듈**의 것이다.
+    #   next_action 은 가격 거리만 보고 게이트를 모른다. 그래서 중앙 판정이
+    #   막은 종목도 카드가 'buy_now' 를 보고 **초록(pos)으로 승격**했다 —
+    #   라운드 193 이 상세 화면에서 고친 그 결함이 카드에 그대로 남아 있었다
+    #   (상세는 CORE.get('next_kind') 를 먼저 읽는다). 결론은 한 곳에서 나온다(§4).
+    _nk246 = _core.get('next_kind') or _n.get('kind')
     label = (_core.get('bucket')
-             or _NA_LABEL.get(_n.get('kind'))
+             or _NA_LABEL.get(_nk246)
              or ('사실상 관망' if (far and rec) else
                  cls.replace('오늘은 ', '오늘 ') or '판단 보류'))
-    if _n.get('kind') == 'buy_now':
+    if _nk246 == 'buy_now':
         state = 'pos'
-    elif _n.get('kind') in ('blocked',):
+    elif _nk246 in ('blocked',):
         state = 'neg'
-    elif _n.get('kind') in ('observe', 'no_data'):
+    elif _nk246 in ('observe', 'no_data'):
         state = 'hold'
-    elif _n.get('kind'):
+    elif _nk246:
         state = 'warn'
     if _core.get('bucket') in ('추천 제외', '데이터 부족'):
         # 제외는 회색(관망)이 아니라 빨강 — 대기와 다른 말이다
@@ -2996,8 +3002,11 @@ def _build_reco_card(p, news_txt, conf_txt):
     # 산문도 카드 줄과 같은 이름을 쓴다 (라운드 186 — 줄 이름이 '검토
     # 기준가'인데 산문이 '권장 매수가'라 부르면 같은 카드가 두 말을 한다)
     _lb = str((_core.get('entry_label') if _core else None) or '검토 기준가')
-    if _n.get('headline'):
-        say = f"**{_n['headline']}**"
+    # 라운드 246 — 결론 문장도 중앙 판정이 낸다. 통과했을 때는 하위 모듈의
+    #   말이 그대로 올라오고(verdict_core 가 그렇게 넘긴다), 막혔을 때만 바뀐다.
+    _nh246 = _core.get('next_headline') or _n.get('headline')
+    if _nh246:
+        say = f"**{_nh246}**"
         if rec and gap is not None and gap > 0:
             say += f" 현재가는 {_lb}보다 {gap:.1f}% 높습니다."
     elif rec and gap is not None and gap > 0:
@@ -3072,7 +3081,13 @@ def _build_reco_card(p, news_txt, conf_txt):
         'horizon': (f"실행 기준 보유 {p['horizon_days']}거래일"
                     if p.get('horizon_days') else None),
         # 다음 조건 — 무엇을 기다리는지 카드에 적는다
-        'next_conditions': [c['text'] for c in (_n.get('conditions') or [])],
+        # 라운드 246 — 조건 목록도 중앙 판정에서 받는다. 막힌 카드에서
+        #   next_action 의 buy_now 조건 한 줄만 남으면 **무엇을 기다리는지**
+        #   말하지 못한다 (상세 화면이 라운드 197 에 같은 이유로 고쳤다).
+        'next_conditions': [c['text'] for c in
+                            (_core.get('next_conditions')
+                             if _core.get('next_conditions') is not None
+                             else (_n.get('conditions') or []))],
         # 왜 이 종목인가 (라운드 47) — 근거가 없으면 카드가 이 칸을 생략한다
         'why': p.get('why'),
         # 가치 프리미엄 (라운드 133) — 사용자 지적: "적정가보다 매수가가
@@ -6399,6 +6414,18 @@ _home_cal = _load_calibration_meta()
 #   나빴다"*)가 **한 번도 화면에 안 나왔다.** 경고는 안 나와도
 #   티가 안 나므로 아무도 몰랐다 — §226 이 AST 로 잡았다.
 #   조회는 네트워크를 타므로 **한 번만** 부른다(아래 중복 제거).
+# ⚠️ 라운드 246 — `(v or 0) / 1e8` 이 **미수신을 0 으로 바꿔** na='미산출' 을
+#   도달 불가로 만들고 있었다. 거래대금을 못 받은 종목이 화면에 '0억원'으로
+#   나갔다 — 못 잰 것을 잰 것처럼 보이게 하는 자리다(§3). 억 단위 환산은
+#   한 곳에서 하고, None 은 None 으로 넘긴다.
+def _tn246(v):
+    """거래대금(원) → 억원. 못 받았으면 None — 0 으로 바꾸지 않는다."""
+    try:
+        return None if v is None else float(v) / 1e8
+    except (TypeError, ValueError):
+        return None
+
+
 m_indices = engine_init.get_market_indices()
 
 if _home_cal.get('total_cases'):
@@ -6932,6 +6959,13 @@ _uk.section("시장", "국내·해외 지수와 환율 (전일 대비)", theme=_
 def _idx_tile(label, key):
     _d = m_indices.get(key) or {}
     _pct = str(_d.get('pct', ''))
+    # ⚠️ 라운드 246 — 못 받으면 값은 'N/A' 인데 부제가 '0.00 0.00%' 였다.
+    #   0.00% 는 **보합**이라는 숫자다 — 못 받은 것과 다르다(§3). 미수신이면
+    #   부제 자리에 사유를 적는다(엔진이 unavailable 로 같이 넘긴다).
+    if str(_d.get('price', 'N/A')) == 'N/A':
+        _rz = str((m_indices.get('unavailable') or {}).get(key) or '')
+        return {'label': label, 'value': '미수신',
+                'sub': (_rz[:40] if _rz else '수신하지 못했습니다'), 'tone': ''}
     # 한국 관례: 상승 = 빨강, 하락 = 파랑
     _tone = ('up' if _pct.strip().startswith(('+', '▲'))
              else 'down' if _pct.strip().startswith(('-', '▼')) else '')
@@ -7133,7 +7167,7 @@ st.markdown(f"""
         <div style='text-align: right; color: #9DAABC; font-size: 13px;'>
             <p style='margin:0;'>시가 {open_p:,.0f} · 고가 <span style='color:#ff453a;'>{high_p:,.0f}</span> · 저가 <span style='color:#0a84ff;'>{low_p:,.0f}</span>{unit_str}</p>
             <p style='margin:8px 0 0 0;'>거래량 {volume_p:,.0f}주 (20일 평균 대비 {fmt_num(tech_df['volume_ratio'].iloc[-1] if 'volume_ratio' in tech_df.columns else None, '.2f', '배')})</p>
-            <p style='margin:8px 0 0 0;'>20일 평균 거래대금 {fmt_num((four_scores.get('avg_turnover_20d') or 0) / 1e8, ',.0f', '억원', na='미산출')}</p>
+            <p style='margin:8px 0 0 0;'>20일 평균 거래대금 {fmt_num(_tn246(four_scores.get('avg_turnover_20d')), ',.0f', '억원', na='미산출')}</p>
         </div>
     </div>
     <hr style='border: 0; border-top: 1px solid #1C2635; margin: 16px 0 16px 0;'>
@@ -10304,7 +10338,7 @@ else:
         <p style='margin:4px 0; font-size:15px;'>- <b>기업유형 분류</b>: {profile['enterprise_class']} &nbsp;|&nbsp; <code>{_mix}</code></p>
         <p style='margin:4px 0; font-size:15px;'>- <b>적용 평가모델</b>: {_applied}</p>
         <p style='margin:4px 0; font-size:15px; color:#9DAABC;'>- <b>유효성 미통과 모델</b>: {_excluded}</p>
-        <p style='margin:4px 0; font-size:15px;'>- <b>20일 평균 거래대금</b>: {fmt_num((profile['metrics']['avg_turnover_20d'] or 0)/1e8, ',.0f', '억원', na='미산출')}
+        <p style='margin:4px 0; font-size:15px;'>- <b>20일 평균 거래대금</b>: {fmt_num(_tn246(profile['metrics']['avg_turnover_20d']), ',.0f', '억원', na='미산출')}
            &nbsp;|&nbsp; <b>유동성 점수</b>: {fmt_num(profile['metrics']['liquidity_score'], suffix='점')}
            &nbsp;|&nbsp; <b>미수신 입력</b>: {', '.join(profile['missing_inputs']) or '없음'}</p>
         <p style='margin:8px 0 0 0; font-size:13px; color:#F2B84B;'>{profile['qualitative_note']}</p>

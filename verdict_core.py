@@ -295,10 +295,16 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
          and depth_sigma <= MAX_ENTRY_SIGMA,
          (f'{depth_sigma:.2f}σ ({gap:+.1f}% · 상한 {MAX_ENTRY_SIGMA}σ · '
           f'{SIGMA_BASIS})' if depth_sigma is not None else '산출 불가')),
+        # ⚠️ 라운드 246 — 이 줄의 설명이 **통과 여부와 무관하게** '기준 통과'를
+        #   적고 있었다. 조건이 미달인 행 옆에 '기준 통과'가 찍혀, 같은 화면의
+        #   사유('60% 미만이라 추천에서 뺍니다')와 정면으로 어긋났다.
+        #   판정 불리언·문턱·산식은 그대로 두고 **설명만** 통과/미달로 가른다.
         ('보유기간 안 도달 가능', depth_sigma is not None
          and depth_sigma <= MAX_ENTRY_SIGMA,
-         (f'{HORIZON}봉 실측 체결률 기준 통과 · 모형 확률 {fill_p:.0f}% '
-          f'({FILL_MODEL_NOTE})'
+         ((f'{HORIZON}봉 실측 체결률 기준 '
+           + ('통과' if (depth_sigma is not None
+                        and depth_sigma <= MAX_ENTRY_SIGMA) else '미달')
+           + f' · 모형 확률 {fill_p:.0f}% ({FILL_MODEL_NOTE})')
           if fill_p is not None else '산출 불가')),
         ('목표·손절 산출', tgt is not None and stop is not None,
          '있음' if (tgt and stop) else '미산출'),
