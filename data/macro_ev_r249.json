@@ -1,0 +1,598 @@
+{
+ "ledger_last_date": "2026-08-03",
+ "verdict": "(a) 현행 유지 — 통과 축 0",
+ "passed_axes": [],
+ "cost_pct": 0.36,
+ "buy_score": 58,
+ "min_dates": 30,
+ "boot": 2000,
+ "seed": 249,
+ "z_bonf9": 2.78,
+ "ledger_rows": 251528,
+ "buy_cases": 109083,
+ "blind_dates": 52,
+ "blind_bear_days": 17,
+ "dates": {
+  "train": 2385,
+  "valid": 85,
+  "blind": 52
+ },
+ "axes": {
+  "fx": {
+   "ko": "원달러",
+   "ticker": "USD/KRW",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 1176.5699,
+     "ev_hi_net": -0.1738,
+     "ev_lo_net": -0.5561,
+     "diff": 0.3823,
+     "ci95": [
+      0.1243,
+      0.642
+     ],
+     "z": 2.907,
+     "ci95_excl0": true,
+     "bonf9_pass": true
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 1408.92,
+     "ev_hi_net": 1.6191,
+     "ev_lo_net": 0.3252,
+     "diff": 1.294,
+     "ci95": [
+      0.0703,
+      2.5884
+     ],
+     "z": 2.01,
+     "ci95_excl0": true,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 1482.1801,
+     "ev_hi_net": -0.2633,
+     "ev_lo_net": 0.4074,
+     "diff": -0.6706,
+     "ci95": [
+      -3.691,
+      2.4656
+     ],
+     "z": -0.42,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     0.3823,
+     1.294,
+     -0.6706
+    ]
+   }
+  },
+  "oil": {
+   "ko": "WTI 유가",
+   "ticker": "CL=F",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 61.28,
+     "ev_hi_net": -0.4332,
+     "ev_lo_net": -0.2967,
+     "diff": -0.1365,
+     "ci95": [
+      -0.4084,
+      0.1416
+     ],
+     "z": -0.998,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 62.02,
+     "ev_hi_net": 0.327,
+     "ev_lo_net": 1.6481,
+     "diff": -1.3211,
+     "ci95": [
+      -2.5298,
+      -0.0565
+     ],
+     "z": -2.112,
+     "ci95_excl0": true,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 90.32,
+     "ev_hi_net": 0.2678,
+     "ev_lo_net": -0.1237,
+     "diff": 0.3916,
+     "ci95": [
+      -2.7275,
+      3.2783
+     ],
+     "z": 0.25,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     -0.1365,
+     -1.3211,
+     0.3916
+    ]
+   }
+  },
+  "copper": {
+   "ko": "구리",
+   "ticker": "HG=F",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 3.0655,
+     "ev_hi_net": -0.2527,
+     "ev_lo_net": -0.4772,
+     "diff": 0.2245,
+     "ci95": [
+      -0.036,
+      0.4889
+     ],
+     "z": 1.69,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 5.03,
+     "ev_hi_net": 0.6631,
+     "ev_lo_net": 1.304,
+     "diff": -0.641,
+     "ci95": [
+      -1.893,
+      0.6258
+     ],
+     "z": -0.985,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 5.9795,
+     "ev_hi_net": 0.127,
+     "ev_lo_net": 0.0171,
+     "diff": 0.1099,
+     "ci95": [
+      -2.9022,
+      3.1638
+     ],
+     "z": 0.071,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     0.2245,
+     -0.641,
+     0.1099
+    ]
+   }
+  },
+  "gold": {
+   "ko": "금",
+   "ticker": "GC=F",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 1640.0,
+     "ev_hi_net": -0.1152,
+     "ev_lo_net": -0.6147,
+     "diff": 0.4994,
+     "ci95": [
+      0.2316,
+      0.7517
+     ],
+     "z": 3.851,
+     "ci95_excl0": true,
+     "bonf9_pass": true
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 3867.5,
+     "ev_hi_net": 1.4973,
+     "ev_lo_net": 0.4499,
+     "diff": 1.0474,
+     "ci95": [
+      -0.2575,
+      2.3636
+     ],
+     "z": 1.605,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 4651.5,
+     "ev_hi_net": 0.7728,
+     "ev_lo_net": -0.6288,
+     "diff": 1.4016,
+     "ci95": [
+      -1.6882,
+      4.7182
+     ],
+     "z": 0.884,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": true,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     0.4994,
+     1.0474,
+     1.4016
+    ]
+   }
+  },
+  "vix": {
+   "ko": "변동성지수",
+   "ticker": "VIX",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1192,
+     "n_lo": 1188,
+     "median": 16.59,
+     "ev_hi_net": -0.0268,
+     "ev_lo_net": -0.7042,
+     "diff": 0.6774,
+     "ci95": [
+      0.4119,
+      0.937
+     ],
+     "z": 5.165,
+     "ci95_excl0": true,
+     "bonf9_pass": true
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 16.38,
+     "ev_hi_net": 0.3065,
+     "ev_lo_net": 1.6691,
+     "diff": -1.3626,
+     "ci95": [
+      -2.6186,
+      -0.1457
+     ],
+     "z": -2.142,
+     "ci95_excl0": true,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 18.87,
+     "ev_hi_net": 1.3304,
+     "ev_lo_net": -1.1863,
+     "diff": 2.5166,
+     "ci95": [
+      -0.5244,
+      5.4183
+     ],
+     "z": 1.663,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     0.6774,
+     -1.3626,
+     2.5166
+    ]
+   }
+  },
+  "ust10": {
+   "ko": "미국채 10년 금리",
+   "ticker": "^TNX",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 2.351,
+     "ev_hi_net": -0.3943,
+     "ev_lo_net": -0.3356,
+     "diff": -0.0587,
+     "ci95": [
+      -0.3219,
+      0.2076
+     ],
+     "z": -0.433,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 4.151,
+     "ev_hi_net": 0.6629,
+     "ev_lo_net": 1.3041,
+     "diff": -0.6412,
+     "ci95": [
+      -1.8998,
+      0.594
+     ],
+     "z": -0.995,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 4.328,
+     "ev_hi_net": -1.3608,
+     "ev_lo_net": 1.5049,
+     "diff": -2.8657,
+     "ci95": [
+      -5.8944,
+      0.016
+     ],
+     "z": -1.919,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": true,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     -0.0587,
+     -0.6412,
+     -2.8657
+    ]
+   }
+  },
+  "kospi": {
+   "ko": "KOSPI",
+   "ticker": "KS11",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 2375.0,
+     "ev_hi_net": -0.4143,
+     "ev_lo_net": -0.3156,
+     "diff": -0.0988,
+     "ci95": [
+      -0.3689,
+      0.1591
+     ],
+     "z": -0.734,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 3486.19,
+     "ev_hi_net": 1.3356,
+     "ev_lo_net": 0.6154,
+     "diff": 0.7202,
+     "ci95": [
+      -0.5427,
+      1.9593
+     ],
+     "z": 1.113,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 6191.92,
+     "ev_hi_net": -0.3048,
+     "ev_lo_net": 0.4489,
+     "diff": -0.7537,
+     "ci95": [
+      -3.7641,
+      2.196
+     ],
+     "z": -0.488,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     -0.0988,
+     0.7202,
+     -0.7537
+    ]
+   }
+  },
+  "kosdaq": {
+   "ko": "KOSDAQ",
+   "ticker": "KQ11",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 749.31,
+     "ev_hi_net": -0.3883,
+     "ev_lo_net": -0.3416,
+     "diff": -0.0466,
+     "ci95": [
+      -0.3162,
+      0.2335
+     ],
+     "z": -0.343,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 859.54,
+     "ev_hi_net": 1.3039,
+     "ev_lo_net": 0.6479,
+     "diff": 0.656,
+     "ci95": [
+      -0.6017,
+      1.9456
+     ],
+     "z": 1.025,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 1116.41,
+     "ev_hi_net": -0.9684,
+     "ev_lo_net": 1.1124,
+     "diff": -2.0808,
+     "ci95": [
+      -5.0087,
+      0.9741
+     ],
+     "z": -1.334,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     -0.0466,
+     0.656,
+     -2.0808
+    ]
+   }
+  },
+  "spx": {
+   "ko": "S&P500",
+   "ticker": "US500",
+   "splits": {
+    "train": {
+     "n_dates": 2380,
+     "n_hi": 1190,
+     "n_lo": 1190,
+     "median": 3122.03,
+     "ev_hi_net": -0.2126,
+     "ev_lo_net": -0.5173,
+     "diff": 0.3047,
+     "ci95": [
+      0.0514,
+      0.5725
+     ],
+     "z": 2.293,
+     "ci95_excl0": true,
+     "bonf9_pass": false
+    },
+    "valid": {
+     "n_dates": 85,
+     "n_hi": 43,
+     "n_lo": 42,
+     "median": 6654.7202,
+     "ev_hi_net": 1.1194,
+     "ev_lo_net": 0.8368,
+     "diff": 0.2827,
+     "ci95": [
+      -0.9807,
+      1.5736
+     ],
+     "z": 0.43,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    },
+    "blind": {
+     "n_dates": 52,
+     "n_hi": 26,
+     "n_lo": 26,
+     "median": 7109.1401,
+     "ev_hi_net": -0.1536,
+     "ev_lo_net": 0.2977,
+     "diff": -0.4512,
+     "ci95": [
+      -3.703,
+      2.557
+     ],
+     "z": -0.283,
+     "ci95_excl0": false,
+     "bonf9_pass": false
+    }
+   },
+   "r3": {
+    "same_sign": false,
+    "all_ci_excl0": false,
+    "all_bonf9": false,
+    "diffs": [
+     0.3047,
+     0.2827,
+     -0.4512
+    ]
+   }
+  }
+ }
+}

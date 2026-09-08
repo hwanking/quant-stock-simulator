@@ -1,0 +1,85 @@
+{
+ "ledger_last_date": "2026-08-03",
+ "blind_dates": 52,
+ "min_dates": 30,
+ "axes": {
+  "fx": {
+   "ko": "원달러",
+   "joined": 52,
+   "median": 1482.1801,
+   "runs": 9,
+   "note": "시기가 갈려 있다"
+  },
+  "oil": {
+   "ko": "WTI 유가",
+   "joined": 52,
+   "median": 90.32,
+   "runs": 9,
+   "note": "시기가 갈려 있다"
+  },
+  "copper": {
+   "ko": "구리",
+   "joined": 52,
+   "median": 5.9795,
+   "runs": 10,
+   "note": "시기가 갈려 있다"
+  },
+  "gold": {
+   "ko": "금",
+   "joined": 52,
+   "median": 4651.5,
+   "runs": 7,
+   "note": "시기가 갈려 있다"
+  },
+  "vix": {
+   "ko": "변동성지수",
+   "joined": 52,
+   "median": 18.87,
+   "runs": 13,
+   "note": "시기가 갈려 있다"
+  },
+  "ust10": {
+   "ko": "미국채 10년 금리",
+   "joined": 52,
+   "median": 4.328,
+   "runs": 4,
+   "note": "시기가 갈려 있다"
+  },
+  "kospi": {
+   "ko": "KOSPI",
+   "joined": 52,
+   "median": 6191.92,
+   "runs": 4,
+   "note": "시기가 갈려 있다"
+  },
+  "kosdaq": {
+   "ko": "KOSDAQ",
+   "joined": 52,
+   "median": 1116.41,
+   "runs": 9,
+   "note": "시기가 갈려 있다"
+  },
+  "spx": {
+   "ko": "S&P500",
+   "joined": 52,
+   "median": 7109.1401,
+   "runs": 4,
+   "note": "시기가 갈려 있다"
+  }
+ },
+ "passed_axes": [
+  "fx",
+  "oil",
+  "copper",
+  "gold",
+  "vix",
+  "ust10",
+  "kospi",
+  "kosdaq",
+  "spx"
+ ],
+ "split_valid_from": "2025-07-01",
+ "split_blind_from": "2026-02-01",
+ "buy_score": 58,
+ "ledger_rows": 251528
+}
