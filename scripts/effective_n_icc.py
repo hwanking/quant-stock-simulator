@@ -248,7 +248,8 @@ def main():
 
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
-            made=_today(), method='ANOVA ICC + design effect',
+            made=_today(), ledger_rows=len(rows),   # 신선도 검사 규약 (라운드 259)
+            method='ANOVA ICC + design effect',
             buy_zone=BUY_ZONE, sets=result, sectors=sec, previous=prev,
             note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 상관 문턱을 '
                  '고르는 대신 설계효과(1+(n̄−1)ICC)를 그대로 쓴다. 날짜당 '

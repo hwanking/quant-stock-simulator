@@ -215,6 +215,7 @@ def main():
     with open(dst, 'w', encoding='utf-8') as f:
         json.dump(dict(
             made=_today(), span=[span[0], span[-1]],
+            ledger_rows=len(rows),      # 신선도 검사 규약 (라운드 259)
             raw_cases=len(rows), unique_tickers=len(tickers),
             unique_dates=len(dates), independent_episodes=ep,
             sector_cluster_effective_n=len(sec_pairs),

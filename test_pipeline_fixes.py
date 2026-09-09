@@ -22922,6 +22922,52 @@ else:
     skipped("R21 산출물이 없다 — scripts/loss_control_r21.py 를 돌린다")
 
 print()
+print("§273 R259 — 축적 루틴이 한 번도 안 만들던 산출물 셋을 클라우드가 만들고 신선도 검사가 본다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 217: 표본 감사·유효표본 ICC·업종 성적은 축적 루틴의 갱신 목록에 없어 여덟 배치
+#   동안 한 번도 갱신되지 않았다. 라운드 250: 신선도 검사가 이름을 대는 산출물은 2개뿐이다.
+#   고침: 세 생성기가 신선도 규약(ledger_rows)을 따르고, 워크플로가 셋을 만들며(축적 뒤 ·
+#   업로드 앞 · || true), 맨 뒤의 신선도 검사가 다섯을 본다. 생성기 셋은 합쳐 약 30초.
+import scripts.study_freshness as _sf273
+_names273 = [rel for rel, _ in _sf273.STUDIES]
+check("신선도 검사가 다섯 산출물을 본다 (둘 + 라운드 217 의 셋)",
+      len(_names273) == 5 and all(x in _names273 for x in (
+          'data/sample_audit.json', 'data/effective_n_icc.json', 'data/sector_perf.json')),
+      str(_names273), scanned=len(_names273))
+import json as _json273
+for _rel273 in ('data/sample_audit.json', 'data/effective_n_icc.json', 'data/sector_perf.json'):
+    _j273 = _json273.loads(_read148(_os.path.join(PROJ, _rel273)) or '{}')
+    check(f"{_rel273} 이 신선도 규약(ledger_rows)을 따른다",
+          isinstance(_j273.get('ledger_rows'), int) and _j273['ledger_rows'] > 0,
+          str(_j273.get('ledger_rows')))
+for _rel273, _lit273 in (('scripts/sample_audit.py', 'ledger_rows=len(rows)'),
+                         ('scripts/effective_n_icc.py', 'ledger_rows=len(rows)'),
+                         ('scripts/gen_sector_perf.py', 'ledger_rows=_ledger_rows()')):
+    check(f"{_rel273} 가 ledger_rows 를 쓴다", _lit273 in _read148(_os.path.join(PROJ, _rel273)))
+_yml273 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_steps273 = _re.findall(r'^      - name: (.+)$', _yml273, _re.M)
+_i_gen273 = next((i for i, n in enumerate(_steps273) if '관측 산출물 갱신' in n), -1)
+_i_acc273 = next((i for i, n in enumerate(_steps273) if '케이스 축적' in n), -1)
+_i_up273 = next((i for i, n in enumerate(_steps273) if '올리기' in n), -1)
+_i_fr273 = next((i for i, n in enumerate(_steps273) if '신선도' in n), -1)
+check("워크플로가 셋을 만든다 — 축적 뒤 · 업로드 앞 (만든 것이 올라가야 화면에 닿는다)",
+      0 <= _i_acc273 < _i_gen273 < _i_up273 < _i_fr273,
+      f"축적 {_i_acc273} · 갱신 {_i_gen273} · 업로드 {_i_up273} · 신선도 {_i_fr273}")
+check("그 단계는 || true 다 — 축적을 인질로 안 잡고, 안 만든 것은 맨 뒤 신선도 검사가 잡는다",
+      'python scripts/sample_audit.py || true' in _yml273
+      and 'python scripts/effective_n_icc.py || true' in _yml273
+      and 'python scripts/gen_sector_perf.py || true' in _yml273)
+# 지금 이 PC 에서 다섯 산출물이 실제로 최신인가 — 값이 아니라 판정(rc)만
+import io as _io273
+import contextlib as _ctx273
+_buf273 = _io273.StringIO()
+with _ctx273.redirect_stdout(_buf273):
+    _rc273 = _sf273.check()
+check("신선도 검사가 지금 다섯 산출물 전부를 최신으로 판정한다 (rc 0)", _rc273 == 0,
+      _buf273.getvalue().strip().split('\n')[-1][:120])
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
