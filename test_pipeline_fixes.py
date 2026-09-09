@@ -22690,6 +22690,63 @@ check("결과 문서가 '전수조사 후보 82건 중 확인한 것만 고쳤�
       '82' in _doc267 and '미검증' in _doc267 and '38.5%' in _doc267 and '24' in _doc267)
 
 print()
+print("§268 R253 — 전방 판정 기록이 긴 축적 뒤에 있어 22거래일 중 16일을 잃었다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   전방 기록부(11-16 재평가의 원장)가 지난 22거래일 중 **6일**만 담고 있었다.
+#   빠진 날은 실행이 실패하거나 시간을 다 쓴 날과 일치한다. 09-09 실행은 '전방
+#   구간 집중 축적'에 3시간 넘게 머물렀고(직전 성공에선 9초) 작업 한도 300분을
+#   그 단계가 다 먹으면 업로드 전에 죽는다 — 기록기(10분)는 그 뒤에 있었다.
+#   고침: 기록기를 축적 **앞**으로, 긴 두 단계에 시간 예산(실측 기반)과
+#   continue-on-error. 이 절은 **순서와 예산의 존재**를 잠근다 — 값(분)은 실측이
+#   바뀌면 바뀐다.
+_yml268 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_steps268 = _re.findall(r'^      - name: (.+)$', _yml268, _re.M)
+check("워크플로 단계를 읽었다 (0개면 미측정)", len(_steps268) >= 15,
+      str(len(_steps268)), scanned=len(_steps268))
+_i_rec268 = next((i for i, n in enumerate(_steps268) if '전방 판정 기록' in n), -1)
+_i_chk268 = next((i for i, n in enumerate(_steps268) if '전방 기록부 규약 검사' in n), -1)
+_i_acc268 = next((i for i, n in enumerate(_steps268) if '케이스 축적' in n), -1)
+_i_fwd268 = next((i for i, n in enumerate(_steps268) if '전방 구간 집중 축적' in n), -1)
+_i_frz268 = next((i for i, n in enumerate(_steps268) if '동결 해시 기록' in n), -1)
+check("전방 판정 기록이 케이스 축적 **앞**에 온다 — 축적이 인질로 잡지 않게",
+      0 <= _i_frz268 < _i_rec268 < _i_acc268,
+      f"동결 {_i_frz268} · 기록 {_i_rec268} · 축적 {_i_acc268}")
+check("규약 검사가 기록 바로 뒤에 온다 (둘은 한 쌍이다)",
+      _i_chk268 == _i_rec268 + 1, f"기록 {_i_rec268} · 검사 {_i_chk268}")
+check("동결 해시 기록은 여전히 기록기보다 앞이다 (기록기도 모델을 못 바꾸게)",
+      _i_frz268 < _i_rec268)
+
+
+def _step_block268(name):
+    i = _yml268.find(f'- name: {name}')
+    j = _yml268.find('\n      - name:', i + 1)
+    return _yml268[i:j if j > 0 else len(_yml268)]
+
+
+for _nm268 in ('케이스 축적 (기록만)', '전방 구간 집중 축적'):
+    _blk268 = _step_block268(_nm268)
+    check(f"'{_nm268}' 에 시간 예산(timeout-minutes)이 있다",
+          _re.search(r'timeout-minutes:\s*\d+', _blk268) is not None)
+    check(f"'{_nm268}' 은 예산이 끝나도 작업을 죽이지 않는다 (continue-on-error)",
+          'continue-on-error: true' in _blk268)
+_budget268 = sum(int(m) for m in _re.findall(r'timeout-minutes:\s*(\d+)', _yml268)
+                 if int(m) < 300)
+_job268 = _re.search(r'^    timeout-minutes:\s*(\d+)', _yml268, _re.M)
+check("단계 예산의 합이 작업 한도보다 작다 (업로드까지 갈 시간이 남는다)",
+      _job268 is not None and _budget268 < int(_job268.group(1)) - 20,
+      f"단계 합 {_budget268} · 작업 {_job268.group(1) if _job268 else None}")
+check("왜 옮겼는지 파일이 적는다 (실행 번호 · 22거래일 중 6일)",
+      '34353315440' in _yml268 and '22거래일 중 6일' in _yml268)
+# 기존 계약 불변 — 기록기 뒤에 || true 없는 규약 검사 (R97) · 신선도 검사는 맨 뒤 (R247)
+check("규약 검사는 여전히 || true 없이 건다 (R97)",
+      'run: python forward_registry.py' in _yml268
+      and 'forward_registry.py || true' not in _yml268)
+_i_up268 = next((i for i, n in enumerate(_steps268) if '올리기' in n), -1)
+_i_fr268 = next((i for i, n in enumerate(_steps268) if '신선도' in n), -1)
+check("신선도 검사는 여전히 업로드 뒤다 (R247 불변)", _i_fr268 > _i_up268 >= 0)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이

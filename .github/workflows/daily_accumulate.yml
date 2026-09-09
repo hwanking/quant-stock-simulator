@@ -139,29 +139,13 @@ jobs:
         run: |
           python scripts/model_freeze_guard.py --record
 
-      - name: 케이스 축적 (기록만)
-        run: |
-          python scripts/calibration_lab.py --limit 400 || true
-
-      # ⚠️ 라운드 78 — 전방 구간은 **날짜를 전부** 써야 한다.
-      #   기본 기준일 규칙은 25봉 간격이라 45거래일짜리 전방 구간에서
-      #   날짜가 2개뿐이다. R55 는 국면 라우팅이고 국면은 시장 수준
-      #   변수라 **날짜가 표본**이다 — 2개로는 평가가 성립하지 않는다.
-      #   (전수 스윕 하루는 케이스 3,000건이어도 국면 칸은 1칸이다.)
-      #
-      #   아직 20영업일이 안 지난 날짜는 usable 상한에서 자동으로 빠지므로
-      #   첫 수확일은 2026-09-07 이다. 그 전에는 "0개"라고 밝히고 끝난다 —
-      #   0건을 '다 했다'로 쓰지 않는다.
-      - name: 전방 구간 집중 축적 (재평가용 · 2026-09-07 부터 수확)
-        run: |
-          python scripts/calibration_lab.py --forward-only \
-            --universe --limit 400 || true
-
-      - name: 경로·기준선 보강 (신규 신호분)
-        run: |
-          python scripts/path_recorder.py || true
-          python scripts/entry_anchor_recorder.py || true
-
+      # ⚠️ 라운드 253 (2026-09-10) — 전방 판정 기록을 **축적 앞**으로 옮겼다.
+      #   실측: 전방 기록부가 지난 22거래일 중 6일만 담고 있었다. 빠진 16일은
+      #   실행이 실패하거나 시간을 다 쓴 날들이다 — 09-09 실행(34353315440)은 '전방
+      #   구간 집중 축적'에 3시간 넘게 머물렀고(직전 성공에선 9초), 작업 한도 300분을 그
+      #   단계가 다 먹으면 업로드 전에 죽어 그날 기록이 통째로 사라진다(라운드
+      #   71c·247 의 그 모양). 기록기는 10분이고 이 워크플로의 **목적**이다.
+      #   축적이 인질로 잡지 않게 한다 — R247 이 신선도 검사에 적용한 그 규칙.
       # ⚠️ 라운드 77 — 전방 재평가(R55·R57·R66)가 쓸 데이터를 **아무도
       #   자동으로 쌓고 있지 않았다.** predictions.jsonl 을 쓰는 것은
       #   web_app.py 와 premarket.py 뿐인데 둘 다 여기서 안 돈다.
@@ -185,6 +169,35 @@ jobs:
       #   색으로 찍지 않는다.
       - name: 전방 기록부 규약 검사
         run: python forward_registry.py
+
+      # ⚠️ 라운드 253 — 시간 예산. 09-07 실측 98분. 예산이 끝나면 이 단계만 접고
+      #   다음으로 간다(체크포인트에서 이어 돈다) — 업로드까지 가야 그날 것이 남는다.
+      - name: 케이스 축적 (기록만)
+        timeout-minutes: 120
+        continue-on-error: true
+        run: |
+          python scripts/calibration_lab.py --limit 400 || true
+
+      # ⚠️ 라운드 78 — 전방 구간은 **날짜를 전부** 써야 한다.
+      #   기본 기준일 규칙은 25봉 간격이라 45거래일짜리 전방 구간에서
+      #   날짜가 2개뿐이다. R55 는 국면 라우팅이고 국면은 시장 수준
+      #   변수라 **날짜가 표본**이다 — 2개로는 평가가 성립하지 않는다.
+      #   (전수 스윕 하루는 케이스 3,000건이어도 국면 칸은 1칸이다.)
+      #
+      #   아직 20영업일이 안 지난 날짜는 usable 상한에서 자동으로 빠지므로
+      #   첫 수확일은 2026-09-07 이다. 그 전에는 "0개"라고 밝히고 끝난다 —
+      #   0건을 '다 했다'로 쓰지 않는다.
+      - name: 전방 구간 집중 축적 (재평가용 · 2026-09-07 부터 수확)
+        timeout-minutes: 100
+        continue-on-error: true
+        run: |
+          python scripts/calibration_lab.py --forward-only \
+            --universe --limit 400 || true
+
+      - name: 경로·기준선 보강 (신규 신호분)
+        run: |
+          python scripts/path_recorder.py || true
+          python scripts/entry_anchor_recorder.py || true
 
       - name: 뉴스 사건 기록·사후 경로 채움 (관측 전용)
         run: |
