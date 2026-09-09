@@ -1072,6 +1072,15 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                 'demark_bull': (fs.get('demark_res') or {}).get('bullish_score'),
                 'demark_bear': (fs.get('demark_res') or {}).get('bearish_score'),
                 'win_rate': (snap.get('sim_res') or {}).get('obs_win_ratio'),
+                # 라운드 265 — win_rate 가 왜 비었는지를 남긴다. 원장 37.22% 가 비어 있는데
+                #   사유 칸이 없었고, 아래 eff_sample 로는 설명이 안 된다(20건 이상에서도 34%
+                #   결측) — 그 칸은 전략 백테스트 표본이고 win_rate 가 비는 조건은 **20일
+                #   유사패턴 매칭 건수**(R38 의 두 수)다. 엔진이 내는 사유를 그대로 옮긴다.
+                #   기존 행은 백필하지 않는다(축적 전체 · R215 와 같은 자리). 없으면 None.
+                'sim_match_count': (snap.get('sim_res') or {}).get('match_count'),
+                'sim_tier': ((snap.get('sim_res') or {}).get('sample_tier_label')
+                             if (snap.get('sim_res') or {}).get('sample_tier') == 'INSUFFICIENT'
+                             else (snap.get('sim_res') or {}).get('sample_tier')),
                 'eff_sample': fs.get('eff_sample_size'),
                 # ── 3차 확장 (라운드 50) — **하위점수를 남긴다** ──────────
                 # 라운드 49·50 에서 벽에 부딪혔다: 같은 날 안에서 종합점수로

@@ -23169,6 +23169,27 @@ check("61~120위는 자료가 없음을 추론이라고 부른다 (재지 않은
 check("바꾼 것이 없다고 적는다 (코드·문턱·스캔 깊이 불변)", '바꾼 것 — 없다' in _r264)
 
 print()
+print("§279 R265 — 엔진 자기 확률 결측 37.22% 의 사유가 원장에 없다 · 앞으로 쌓이는 행에 사유 두 칸 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   원장 win_rate(= sim_res.obs_win_ratio) 가 93,621행 비어 있는데 사유 칸이 없다. eff_sample 로는
+#   설명이 안 된다(20+ 에서도 34% 결측) — 그 칸은 전략 백테스트 표본이고 win_rate 가 비는 조건은
+#   20일 유사패턴 매칭 건수(R38 의 두 수)다. 엔진은 사유를 내는데 원장 행이 안 옮겼다.
+#   고침: 앞으로 쌓이는 행에 sim_match_count · sim_tier. 기존 행 백필 없음(축적 전체). 값 불변.
+_cl279 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+check("원장 행이 20일 매칭 건수를 sim_res 에서 남긴다 (sim_match_count)",
+      "'sim_match_count': (snap.get('sim_res') or {}).get('match_count')" in _cl279)
+check("원장 행이 표본 등급(INSUFFICIENT 면 사유 라벨)을 남긴다 (sim_tier)",
+      "'sim_tier':" in _cl279 and "sample_tier" in _cl279.split("'sim_tier':")[1][:200])
+check("win_rate 열 자체는 그대로다 (열을 더할 뿐 · 값 불변)",
+      "'win_rate': (snap.get('sim_res') or {}).get('obs_win_ratio')" in _cl279)
+_r265 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R265_WIN_RATE_REASON.md'))
+check("문서가 사유를 측정이 아니라 추론이라 부른다 (§3 · 못 잰 것을 잰 것처럼 쓰지 않는다)",
+      '추론이지 측정이 아니다' in _r265)
+check("문서가 eff_sample 로 설명되지 않음을 적는다 (R38 · 같은 이름의 두 수)",
+      '이 칸으로는 설명이 안 된다' in _r265 and '기존 행은 백필하지 않는다' in _r265)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
