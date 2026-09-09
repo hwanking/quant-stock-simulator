@@ -22827,6 +22827,65 @@ check("§9 헤드라인 수 옆에 어느 비용으로 뺀 값인지 적혀 있�
       and '어느 비용으로 뺀 값인지 같이 적는다' in ' '.join(_cm270.split()))
 
 print()
+print("§271 R256 — 일일 규칙이 재검토일 전의 이슈를 '오늘의 수'로 닫았다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   `model|vb_gap`(재검토 11-16 · 목표 "같은 국면끼리 5%p 이내")이 09-03 에 전체 구간
+#   괴리 < 10%p 로 자동 해결됐고, `usability|signal_rate`(재검토 09-16)는 08-15 에 신호율
+#   6.7% > 5% 로 닫혔다. 닫는 규칙과 이슈의 목표가 다른 것을 잰다. 고침은 기본 함수
+#   (`issue_tracker.resolve_by_key`) 한 곳 — 재검토일 전이면 닫지 않고 사유를 돌려준다.
+#   그리고 '매수 신호 발생률'은 매수권(58점+) 비율이지 매수 추천 비율이 아니다 — 이름을 잰 것에.
+import sqlite3 as _sq271
+import tempfile as _tf271
+from datetime import date as _date271, timedelta as _td271
+from improvement import database as _idb271
+from improvement import issue_tracker as _it271
+
+_db271 = _os.path.join(_tf271.gettempdir(), 'r256_issue_test.db')
+if _os.path.exists(_db271):
+    _os.remove(_db271)
+_idb271.initialize_database(_db271)
+_cn271 = _idb271.get_connection(_db271)
+# 확장 칸(next_review)이 **없는** DB 에서도 닫기가 죽지 않는다 — 여기서 죽으면 일일 파이프라인이 선다
+_it271.create_issue(_cn271, category='t', severity='low', title='t|bare', summary='s', issue_key='t|bare')
+_cn271.commit()
+try:
+    _why_b271 = _it271.resolve_by_key(_cn271, 't|bare')
+    _bare_ok271 = (_why_b271 is None and _cn271.execute(
+        "SELECT status FROM improvement_issues WHERE issue_key='t|bare'").fetchone()[0] == 'resolved')
+except Exception as _e271:                                     # noqa: BLE001
+    _bare_ok271, _why_b271 = False, f'{type(_e271).__name__}: {_e271}'
+check("next_review 칸이 없는 DB 에서도 종전처럼 닫는다 (심기 · 확장 전 스키마)", _bare_ok271, str(_why_b271))
+from improvement import issue_ops as _io271
+_io271.ensure_schema(_cn271)
+_fut271 = (_date271.today() + _td271(days=30)).isoformat()
+_pst271 = (_date271.today() - _td271(days=3)).isoformat()
+for _k271, _nr271 in (('t|future', _fut271), ('t|past', _pst271), ('t|none', None)):
+    _it271.create_issue(_cn271, category='t', severity='low', title=_k271, summary='s',
+                        issue_key=_k271)
+    _cn271.execute("UPDATE improvement_issues SET next_review=? WHERE issue_key=?", (_nr271, _k271))
+_cn271.commit()
+_why_f271 = _it271.resolve_by_key(_cn271, 't|future')
+_why_p271 = _it271.resolve_by_key(_cn271, 't|past')
+_why_n271 = _it271.resolve_by_key(_cn271, 't|none')
+_cn271.commit()
+_st271 = dict(_cn271.execute("SELECT issue_key, status FROM improvement_issues").fetchall())
+_cn271.close()
+check("재검토일이 아직 안 온 이슈는 닫지 않고 사유를 돌려준다 (심기)",
+      _st271.get('t|future') == 'open' and _why_f271 and '재검토일' in _why_f271, str(_why_f271))
+check("재검토일이 지난 이슈는 종전처럼 닫는다 (심기)", _st271.get('t|past') == 'resolved' and _why_p271 is None)
+check("재검토일이 없는 이슈도 종전처럼 닫는다 (심기)", _st271.get('t|none') == 'resolved' and _why_n271 is None)
+_rdi271 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+check("일일 규칙이 닫지 않은 사유를 찍는다 (조용히 넘기지 않는다 · §3)",
+      "print(f\"  이슈 {key} 닫지 않음 — {why}\")" in _rdi271
+      and _rdi271.count("_resolve('") == 3 and "it.resolve_by_key(conn, '" not in _rdi271)
+check("'매수 신호 발생률'이 잰 것(매수권 58점+ 비율)의 이름으로 바뀌었다",
+      "title='매수권(58점+) 발생률 과소'" in _rdi271 and '매수 추천 ' in _rdi271
+      and "title='매수 신호 발생률 과소'" not in _rdi271)
+check("읽는 쪽은 여전히 status 를 먼저 본다 (라운드 172 불변)",
+      "resolved = str(d.get('status') or '') == 'resolved'" in _read148(_os.path.join(PROJ, 'improvement', 'issue_ops.py')))
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이

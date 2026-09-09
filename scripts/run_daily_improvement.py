@@ -243,6 +243,13 @@ def make_detect_issues(conn, calib):
         sig = calib.get('signal_frequency') or {}
         ver = _operating_version(calib)
 
+        # 라운드 256 — 닫기는 재검토일을 본다(issue_tracker.resolve_by_key). 안 닫으면
+        #   그 사유를 찍는다 — 조용히 넘기면 "왜 아직 열려 있나"를 아무도 모른다(§3).
+        def _resolve(key):
+            why = it.resolve_by_key(conn, key)
+            if why:
+                print(f"  이슈 {key} 닫지 않음 — {why}")
+
         if (bz.get('n') or 0) < 30:
             it.create_issue(conn, category='validation', severity='medium',
                             title='고신뢰 신호 표본 부족',
@@ -250,7 +257,7 @@ def make_detect_issues(conn, calib):
                                     "적중률을 대표 성과로 쓰지 않는다.",
                             related_model=ver, issue_key='validation|high_conf_n')
         else:
-            it.resolve_by_key(conn, 'validation|high_conf_n')
+            _resolve('validation|high_conf_n')
 
         if (v.get('hit_rate') is not None and b.get('hit_rate') is not None
                 and v['hit_rate'] - b['hit_rate'] >= 10):
@@ -260,15 +267,18 @@ def make_detect_issues(conn, calib):
                                     f"{b['hit_rate']:.1f}% — 과최적화·장세 편중 조사.",
                             related_model=ver, issue_key='model|vb_gap')
         else:
-            it.resolve_by_key(conn, 'model|vb_gap')
+            _resolve('model|vb_gap')
 
+        # 라운드 256 — 이 수는 **매수권(58점+) 케이스의 비율**이지 매수 추천의 비율이
+        #   아니다(신규 매수 제목은 원장 251,528건 중 56건 · 0.022%). 이름을 잰 것에 맞춘다.
         if (sig.get('rate_pct') or 100) < 5.0:
             it.create_issue(conn, category='usability', severity='medium',
-                            title='매수 신호 발생률 과소',
-                            summary=f"신호율 {sig.get('rate_pct')}% — 실용성 점검.",
+                            title='매수권(58점+) 발생률 과소',
+                            summary=f"매수권 발생률 {sig.get('rate_pct')}% — 매수 추천 "
+                                    "자체의 비율이 아니다 · 실용성 점검.",
                             related_model=ver, issue_key='usability|signal_rate')
         else:
-            it.resolve_by_key(conn, 'usability|signal_rate')
+            _resolve('usability|signal_rate')
 
         # ── 조치 관리: 계획 부여 → 경과일 규칙 적용 (3일 방치 금지) ──────
         from improvement import issue_ops as _io
