@@ -39,6 +39,8 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 
 P = os.path.join(PROJ, '.portfolio')
+#: 두 번째 뿌리 (라운드 261) — 클라우드가 만든 관측 산출물 다섯이 zip 의 `data/` 로 온다.
+DATA_DIR = os.path.join(PROJ, 'data')
 ARCH = os.path.join(PROJ, '_archive')
 #: 받은 zip 을 두는 곳. **backup_research_data 가 만드는 곳과 달라야 한다.**
 #: 라운드 97b — 같은 폴더·같은 이름이라 받은 zip 이 방금 만든 백업을
@@ -127,6 +129,14 @@ def unsafe_members(path):
                 continue
             base = os.path.basename(info.filename)
             norm = info.filename.replace('\\', '/')
+            if norm.startswith('data/'):
+                # 라운드 261 — 두 번째 뿌리는 **목록 안의 이름만** 연다. 개인 자료 패턴과
+                #   목록 밖 json(`research_radar.json` 같은 git 추적 파일)은 여기서 잘린다.
+                #   하위 폴더·`..` 도 안 된다 — 넓히려면 목록(유도)을 넓힌다.
+                if (norm.count('/') != 1 or '..' in norm.split('/')
+                        or not _backup.picked_data(base)):
+                    bad.append((info.filename, 'data/ 목록 밖'))
+                continue
             # zip-slip 도 같이 막는다 — .portfolio/ 밖으로 못 나간다
             if not norm.startswith('.portfolio/') or '..' in norm.split('/'):
                 bad.append((info.filename, '경로가 .portfolio 밖'))
@@ -134,6 +144,41 @@ def unsafe_members(path):
             if any(fnmatch.fnmatch(base, d) for d in _backup.DENY):
                 bad.append((info.filename, '개인 자료 패턴'))
     return bad
+
+
+def _ledger_rows_of(text):
+    """산출물 본문에서 R259 규약 `ledger_rows` 를 읽는다 — 없으면 None (지어내지 않는다)."""
+    try:
+        v = json.loads(text).get('ledger_rows')
+        return int(v) if v is not None else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def data_newer(zip_text, local_path):
+    """zip 의 관측 산출물을 로컬 위에 써도 되나 (라운드 261).
+
+    `data/` 산출물은 줄 수로 비교할 수 없다 — **어느 원장에서 만들었나**(ledger_rows ·
+    R259 규약)로 견준다. zip 쪽이 로컬 이상의 원장이면 쓴다. 로컬이 없거나 옛 규약이면
+    쓴다. zip 쪽이 옛 규약이면 안 쓴다 — 규약 있는 로컬을 옛것으로 되돌리지 않는다.
+    """
+    if not os.path.exists(local_path):
+        return True
+    with open(local_path, encoding='utf-8', errors='replace') as f:
+        lr = _ledger_rows_of(f.read())
+    if lr is None:
+        return True
+    zr = _ledger_rows_of(zip_text)
+    if zr is None:
+        return False
+    return zr >= lr
+
+
+def data_members(path):
+    """zip 안의 `data/` 항목 이름 목록 (라운드 261 전의 zip 은 빈 목록)."""
+    with zipfile.ZipFile(path) as z:
+        return [i.filename for i in z.infolist()
+                if not i.is_dir() and i.filename.replace('\\', '/').startswith('data/')]
 
 
 def pattern_of(base):
@@ -144,7 +189,7 @@ def pattern_of(base):
     return None
 
 
-def extract(path, skip_patterns):
+def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
     """받은 zip 을 푼다 — **줄어드는 패턴은 건너뛴다** (라운드 93).
 
     전부-아니면-전무로 두면 쓸 수 없다는 것을 첫 실행에서 알았다.
@@ -160,6 +205,8 @@ def extract(path, skip_patterns):
     감시 패턴 밖의 작은 json(연구 결과·유니버스 등)은 줄 수로 비교할 수
     없다. 이쪽은 **없거나 zip 이 더 새 것일 때만** 쓴다 — 로컬에서만
     만든 산출물을 옛 스냅샷이 되돌리지 않게.
+
+    `data/` 항목(라운드 261)은 `data_newer` — 어느 원장에서 만들었나로 견준다.
     """
     import datetime as _dt
     wrote, kept, skipped = [], [], []
@@ -168,11 +215,24 @@ def extract(path, skip_patterns):
             if info.is_dir():
                 continue
             base = os.path.basename(info.filename)
+            norm = info.filename.replace('\\', '/')
+            if norm.startswith('data/'):
+                dst = os.path.join(data_dir, base)
+                with z.open(info) as src:
+                    body = src.read()
+                if not data_newer(body.decode('utf-8', errors='replace'), dst):
+                    kept.append(base)      # 로컬이 더 큰 원장에서 만든 것 — 안 건드린다
+                    continue
+                os.makedirs(data_dir, exist_ok=True)
+                with open(dst, 'wb') as out:
+                    out.write(body)
+                wrote.append(base)
+                continue
             pat = pattern_of(base)
             if pat and pat in skip_patterns:
                 skipped.append(base)
                 continue
-            dst = os.path.join(P, base)
+            dst = os.path.join(portfolio_dir, base)
             if pat is None and os.path.exists(dst):
                 zt = _dt.datetime(*info.date_time).timestamp()
                 if os.path.getmtime(dst) > zt:
@@ -240,6 +300,21 @@ def main():
             print(f'  {name}  ({why})')
         return 1
 
+    # 라운드 261 — 관측 산출물(data/)이 동봉됐는지, 그중 로컬보다 새 원장의 것이 몇인지.
+    dmem = data_members(zip_path)
+    dnew = []
+    with zipfile.ZipFile(zip_path) as z:
+        for m in dmem:
+            with z.open(m) as f:
+                txt = f.read().decode('utf-8', errors='replace')
+            if data_newer(txt, os.path.join(DATA_DIR, os.path.basename(m))):
+                dnew.append(os.path.basename(m))
+    if dmem:
+        print(f'\n관측 산출물(data/) {len(dmem)}개 동봉 · 이 PC 보다 새 원장의 것 {len(dnew)}개'
+              + (': ' + ', '.join(dnew) if dnew else ''))
+    else:
+        print('\n관측 산출물(data/) 0개 — 라운드 261 전의 zip 이다 (다음 클라우드 실행부터 실린다)')
+
     before = _guard.counts() if os.path.isdir(P) else {}
     after = zip_counts(zip_path)
     print('\n■ 지금(이 PC) → 받은 스냅샷')
@@ -266,10 +341,10 @@ def main():
                 print(f'  {k} — 로컬 {b:,}줄 vs 받은 것 {a:,}줄')
             print('  이 파일들은 늘기만 하는 성질이라, 큰 쪽이 맞는 쪽이다.')
             print('  일부러 되돌리려면 --allow-shrink 를 준다.')
-    if grew == 0 and not shrunk:
+    if grew == 0 and not shrunk and not dnew:
         print('\n달라지는 것이 없다 — 이미 최신이다.')
         return 0
-    if grew == 0 and skip:
+    if grew == 0 and skip and not dnew:
         print('\n커지는 항목이 없다 — 받을 것이 없다.')
         return 0
 
@@ -280,6 +355,9 @@ def main():
     os.makedirs(P, exist_ok=True)
     wrote, kept, skipped = extract(zip_path, skip)
     print(f'\n덮어씀 {len(wrote)}개 · 로컬 유지 {len(kept) + len(skipped)}개')
+    _dw = [b for b in wrote if b in dnew]
+    if dmem:
+        print(f'  관측 산출물(data/) 덮어씀 {len(_dw)}개 — git 에 올리려면 커밋은 사람이 한다(R261)')
     if skipped:
         print('  축소라 건너뜀: ' + ', '.join(sorted(skipped)[:6])
               + (' …' if len(skipped) > 6 else ''))

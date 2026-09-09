@@ -22993,6 +22993,68 @@ check("R216 결과 문서가 train 관측을 증거로 부르지 않는다",
       '증거가 아니라 가설 생성' in _r216)
 
 print()
+print("§275 R261 — 클라우드가 만든 관측 산출물 다섯이 릴리스에 안 실렸다 · 운반로 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R259 가 "만든 것이 올라가야 화면에 닿는다" 고 적었는데 업로드 화이트리스트는
+#   .portfolio/ 한 뿌리뿐이라 data/ 의 다섯은 신선도 검사를 통과한 직후 버려졌다.
+#   되받는 쪽의 zip-slip 가드도 .portfolio/ 밖을 전부 거부했다. 고침: 목록은
+#   study_freshness.STUDIES 에서 유도 · zip 의 두 번째 뿌리 data/ · 가드는 목록 안에서만
+#   연다 · 되돌림은 ledger_rows 로 막는다. 워크플로는 안 고쳤다.
+import json as _json275
+import tempfile as _tf275
+import zipfile as _zf275
+from scripts import backup_research_data as _bk275
+from scripts import pull_research_data as _pl275
+from scripts import study_freshness as _sf275
+_want275 = tuple(_os.path.basename(p) for p, _ in _sf275.STUDIES)
+check("운반 목록이 신선도 검사 목록에서 유도된다 (손 목록 아님 · 둘이 같다)",
+      tuple(_bk275.DATA_INCLUDE) == _want275 and len(_want275) >= 5, str(_bk275.DATA_INCLUDE),
+      scanned=len(_want275))
+check("유도가 소스에 있다 — 나중에 손 목록으로 되돌아가지 않는다",
+      'study_freshness' in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
+      and 'STUDIES' in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py')))
+check("data/ 고르기 — 목록 안은 참 · 개인 자료 패턴은 거짓 · 목록 밖 json 도 거짓 (심기 양방향)",
+      _bk275.picked_data('sample_audit.json') and not _bk275.picked_data('positions.json')
+      and not _bk275.picked_data('research_radar.json') and not _bk275.picked_data('holdings_x.json'))
+_td275 = _tf275.mkdtemp(prefix='r261_')
+def _mkzip275(name, members):
+    p = _os.path.join(_td275, name)
+    with _zf275.ZipFile(p, 'w') as z:
+        for arc, body in members:
+            z.writestr(arc, body)
+    return p
+_good275 = _mkzip275('good.zip', [('.portfolio/virtual_graded.jsonl', '{}\n{}\n'),
+                                   ('data/sample_audit.json', _json275.dumps({'ledger_rows': 999999999}))])
+_bad1275 = _mkzip275('bad1.zip', [('data/positions.json', '{}')])
+_bad2275 = _mkzip275('bad2.zip', [('data/research_radar.json', '{}')])
+_bad3275 = _mkzip275('bad3.zip', [('data/../x.json', '{}')])
+check("되받기 가드 — data/<목록 이름> 은 허용한다 (심기)", _pl275.unsafe_members(_good275) == [],
+      str(_pl275.unsafe_members(_good275)))
+check("되받기 가드 — data/positions.json 은 거부한다 (§9 · 심기)", len(_pl275.unsafe_members(_bad1275)) == 1)
+check("되받기 가드 — 목록 밖 data/research_radar.json 은 거부한다 (심기)", len(_pl275.unsafe_members(_bad2275)) == 1)
+check("되받기 가드 — data/../ 는 여전히 거부한다 (심기)", len(_pl275.unsafe_members(_bad3275)) == 1)
+_tp275 = _os.path.join(_td275, 'portfolio'); _tdd275 = _os.path.join(_td275, 'data')
+_os.makedirs(_tp275); _os.makedirs(_tdd275)
+_loc275 = _os.path.join(_tdd275, 'sample_audit.json')
+open(_loc275, 'w', encoding='utf-8').write(_json275.dumps({'ledger_rows': 5}))
+_w275, _k275, _s275 = _pl275.extract(_good275, set(), portfolio_dir=_tp275, data_dir=_tdd275)
+check("되받기 — zip 의 ledger_rows 가 로컬 이상이면 data/ 산출물을 쓴다 (심기)",
+      'sample_audit.json' in _w275 and _json275.load(open(_loc275, encoding='utf-8'))['ledger_rows'] == 999999999
+      and _os.path.exists(_os.path.join(_tp275, 'virtual_graded.jsonl')), f"wrote={_w275} kept={_k275}")
+open(_loc275, 'w', encoding='utf-8').write(_json275.dumps({'ledger_rows': 10 ** 12}))
+_w275b, _k275b, _s275b = _pl275.extract(_good275, set(), portfolio_dir=_tp275, data_dir=_tdd275)
+check("되받기 — 로컬이 더 큰 원장에서 만든 것이면 남긴다 (되돌리지 않는다 · 심기)",
+      'sample_audit.json' in _k275b and _json275.load(open(_loc275, encoding='utf-8'))['ledger_rows'] == 10 ** 12,
+      f"wrote={_w275b} kept={_k275b}")
+_arc275 = _bk275.arcnames(_os.path.join(PROJ, '.portfolio'), _os.path.join(PROJ, 'data'))
+check("백업 계획에 data/ 뿌리의 다섯이 data/<이름> 으로 들어간다 (실제 목록 · 실행 증거)",
+      all(f'data/{n}' in _arc275 for n in _want275) and not any(a.startswith('data/positions') for a in _arc275),
+      str([a for a in _arc275 if a.startswith('data/')]), scanned=len(_arc275))
+import shutil as _sh275
+_sh275.rmtree(_td275, ignore_errors=True)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
