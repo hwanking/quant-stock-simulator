@@ -431,8 +431,17 @@ check("손익비가 Mock 1.5 고정이 아님", fs['reward_risk_ratio'] is None 
       1.0 <= fs['reward_risk_ratio'] <= 3.05, str(fs['reward_risk_ratio']))
 check("분석신뢰도가 77 고정이 아님", isinstance(fs['analysis_confidence'], int))
 check("TOP3 차단사유 노출", isinstance(fs['top3_block_reasons'], list))
-check("Blind 미구현이면 추천 불가", (not q.BLIND_TEST_IMPLEMENTED)
-      <= (not fs['eligible_for_top3']))
+# 라운드 252 — 종전 `(not BLIND_TEST_IMPLEMENTED) <= (not eligible)` 는 깃발이 True 라
+#   좌변이 늘 False 였고 `False <= X` 는 항상 참이다 — 한 번도 잰 적 없는 검사였다
+#   (R195 "존재는 실행이 아니다"). 게다가 그 깃발은 엔진 어디서도 읽히지 않는다.
+#   게이트가 실제로 읽는 값(blind_test_status · :4029)으로 같은 뜻을 잰다.
+check("표본외 검증 미수행이면 추천 불가 (게이트가 실제로 읽는 값으로)",
+      fs.get('blind_test_status') != '미수행' or not fs['eligible_for_top3'],
+      f"blind_test_status={fs.get('blind_test_status')} · eligible={fs['eligible_for_top3']}")
+check("BLIND_TEST_IMPLEMENTED 는 엔진이 읽지 않는 죽은 깃발이다 — 누가 배선하면 이 검사를 고친다",
+      open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8',
+           errors='replace').read().count('BLIND_TEST_IMPLEMENTED') == 1,
+      "정의 한 곳 외에 읽는 곳이 생겼다")
 check("'신규 매수 보류'는 매수의도 아님", "신규 매수 보류" not in q.BUY_INTENT_TITLES)
 check("시장국면 배선됨", fs['market_regime_code'] in (
     'BULL_STRONG', 'BULL_MILD', 'SIDEWAYS', 'BEAR_PANIC', 'DECISION_PENDING'),
@@ -20481,8 +20490,14 @@ check("일정 문서의 전방 재평가일이 박제 파일의 값과 같다 (�
       bool(_fe240.eval_date()) and _fe240.eval_date() in _sch240)
 check("일정 문서가 09-30 결정(적정가 고배수·화면 체크리스트)과 R215·R181·R216 을 잇는다",
       '2026-09-30' in _sch240 and all(k in _sch240 for k in ('R215', 'R181', 'R216')))
+# 라운드 252 — 종전엔 '기준일 5개'(2026-09-04 의 수)를 글자로 잠가 문서를 못 고치게
+#   했다. 수는 표류한다 — 잠그는 것은 **의도**(원장에 재료가 없다 · 하한 30 · 잰 날짜가
+#   붙은 거래일 수)다. 휴장일을 뺀 수를 요구한다 — 33 은 휴장일 9개가 든 수였다.
 check("뉴스 축은 '원장에 재료가 없다'를 먼저 말한다 (없는 것을 잰다고 적지 않는다 · §3)",
-      '뉴스 재료가 없다' in _sch240 and '기준일 5개' in _sch240)
+      '뉴스 재료가 없다' in _sch240 and '하한 30' in _sch240)
+check("뉴스 축 표본 수에 잰 날짜와 '휴장일을 뺀 거래일 기준일'이 붙어 있다 (라운드 252)",
+      '2026-09-09 다시 셈' in _sch240 and '거래일 기준일' in _sch240
+      and '휴장일은 날짜가' in _sch240)
 check("일정 문서가 '업종을 고르는 판단 엔진'을 지금 만들지 않는 이유를 적는다 (§2)",
       '§2 위반' in _sch240 and 'R181 재측정' in _sch240)
 
@@ -22577,6 +22592,102 @@ check("문서가 R0 판별식의 실패를 적는다 (낱말을 담은 ≠ 설�
 # ⑦ 레이더 톱니 — 새 사전등록 → 레이더 (§235 · 라운드 218)
 _rad266 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
 check("연구 레이더에 R251 이 있다", 'R251' in _rad266 and '고정 보정' in _rad266)
+
+print()
+print("§267 R252 — 전수조사가 낸 후보 중 확인된 넷 · 고침이 한 판정자에게만 간 자리 (2026-09-09)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   전수조사(수집 7 · 후보 82 · 검증 단계는 사용량 한도로 죽음)에서 **내가 직접 확인한**
+#   것만 고쳤다. ① repair_ocr_code 를 직접 부르는 두 경로(CSV 가져오기 · OCR 텍스트)가
+#   실재 KRX 문자코드 296개 중 114개(38.5%)를 남의 종목으로 바꿨다 — 라운드 189 의
+#   가드가 _read_code_token 한 곳에만 있었다(R246 "고침이 판정자 한 명에게만"). ② 화면이
+#   "Blind/OOS 미구현이므로 모델검증 0점"이라 적었는데 구현돼 있고 매 종목 돈다. ③ 회귀
+#   §3 의 "Blind 미구현이면 추천 불가"는 `False <= X` 라 실패할 수 없는 검사였고 그 깃발은
+#   엔진이 읽지도 않는다. ④ 전방 추적에 토·일 기준일 9개가 섞여 날짜 표본을 부풀렸다 —
+#   뉴스 축 하한 '충족'(33)은 휴장일을 빼면 24 로 미달이다.
+import json as _json267
+import re as _re267
+import portfolio as _pf267
+import stock_code as _sc267
+from improvement import case_tracker as _ct267
+
+# ① repair_ocr_code — 실재 코드 모양이면 손대지 않는다 (기본값을 고쳤다 · R120e)
+_codes267 = set()
+for _rel267 in ('data/etf_index.json', 'data/etf_taxonomy_r170.json'):
+    _p267 = _os.path.join(PROJ, _rel267)
+    if not _os.path.isfile(_p267):
+        continue
+    _j267 = _json267.loads(_read148(_p267) or '{}')
+    _items267 = _j267 if isinstance(_j267, list) else (
+        _j267.get('items') or _j267.get('rows') or _j267.get('etfs') or [])
+    if isinstance(_items267, dict):
+        _items267 = list(_items267.values())
+    for _it267 in _items267:
+        _c267 = str((_it267.get('code') or _it267.get('ticker') or _it267.get('symbol') or '')
+                    if isinstance(_it267, dict) else _it267).split('.')[0].upper()
+        if _re267.fullmatch(r'[0-9A-Z]{6}', _c267) and not _c267.isdigit():
+            _codes267.add(_c267)
+_mangled267 = [c for c in sorted(_codes267) if _pf267.repair_ocr_code(c) not in (None, c)]
+check("실재 KRX 문자코드를 repair_ocr_code 가 직접 호출에서도 남의 코드로 바꾸지 않는다",
+      len(_codes267) >= 100 and not _mangled267,
+      f"바뀐 것 {len(_mangled267)}/{len(_codes267)} · 예 {_mangled267[:3]}",
+      scanned=len(_codes267))
+check("진짜 오독은 여전히 되살린다 — 가드가 교정 자체를 죽이지 않았다 (심기)",
+      _pf267.repair_ocr_code("0OO66O") == "000660" and _pf267.repair_ocr_code("l05560") == "105560")
+check("판별식은 stock_code 한 곳이다 — repair_ocr_code 가 그것을 부른다 (§4)",
+      'stock_code.looks_like_krx_alpha(t.upper())' in _read148(_os.path.join(PROJ, 'portfolio.py')))
+check("CSV 가져오기·OCR 텍스트 경로가 repair_ocr_code 를 직접 부른다 (그래서 기본값을 고쳤다)",
+      _read148(_os.path.join(PROJ, 'portfolio.py')).count('= repair_ocr_code(') >= 3)
+
+# ② 분석 신뢰도 — 항목 값·가중치는 엔진이 내고 화면은 읽는다 (R236 · §4)
+_qi267 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진이 analysis_confidence_parts(데이터·통계·모델검증 값과 가중치)를 내보낸다",
+      "'analysis_confidence_parts': {" in _qi267 and "'모델검증': (round(float(model_val_conf), 1)" in _qi267)
+check("화면이 그 항목을 읽고 '미구현이므로 0점'을 더는 말하지 않는다",
+      '_acp252' in _w231 and 'Blind/OOS 미구현이므로' not in _w231)
+check("깃발이 아니라 게이트가 읽는 값으로 '미수행이면 추천 불가'를 잰다 (§3 검사 교체)",
+      '게이트가 실제로 읽는 값으로' in _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py')))
+
+# ④ 휴장일 기준일 — 한 곳에서 가르고 동결이 건너뛰며 tally 가 거래일 수를 낸다
+check("휴장일 판정이 case_tracker 한 곳이다 (주말 + 저장소의 KRX 휴일)",
+      callable(getattr(_ct267, 'is_non_trading_date', None))
+      and _ct267.is_non_trading_date('2026-08-02') is True        # 일요일
+      and _ct267.is_non_trading_date('2026-08-15') is True        # 광복절(토)
+      and _ct267.is_non_trading_date('2026-09-09') is False)      # 수요일
+check("동결 단계가 휴장일 기준일을 건너뛰고 센다 (R222 의 미래 기준일과 같은 자리)",
+      'skipped_non_trading' in _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+      and 'ct.is_non_trading_date(' in _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py')))
+import sqlite3 as _sql267
+import tempfile as _tmp267
+_db267 = _os.path.join(_tmp267.gettempdir(), 'r252_tally_test.db')
+if _os.path.exists(_db267):
+    _os.remove(_db267)
+from improvement import database as _idb267
+_idb267.initialize_database(_db267)
+_cn267 = _idb267.get_connection(_db267)
+for _i267, (_d267, _st267) in enumerate((('2026-08-14', 'success'), ('2026-08-15', 'failure'),
+                                        ('2026-08-16', 'failure'), ('2026-08-18', 'success'))):
+    _cn267.execute("INSERT INTO prediction_cases (case_id, ticker, asset_type, signal_date, created_at, "
+                   "model_version, rulebook_version, decision, total_score, confidence_score, "
+                   "reference_price, holding_days, market_regime, strategy_type, data_hash, status) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (f'c{_i267}', '005930.KS', 'STOCK', _d267, '2026-08-01T00:00:00', 'v', 'v',
+                    'CONDITIONAL_BUY', 58.0, 60.0, 100.0, 20, 't', 's', f'h{_i267}', _st267))
+_cn267.commit()
+_t267 = _ct267.tally(_cn267)
+_cn267.close()
+check("tally 가 휴장일 행 수와 거래일 고유 기준일 수를 같이 낸다 (심기: 4행 중 휴장일 2 · 거래일 2)",
+      _t267.get('non_trading') == 2 and _t267.get('trading_dates') == 2
+      and _t267.get('decided') == 4, str({k: _t267.get(k) for k in ('non_trading', 'trading_dates', 'decided')}))
+check("행은 지우지 않는다 — 휴장일 행도 confirmed 로 남아 있다 (§3)", _t267.get('success') == 2 and _t267.get('failure') == 2)
+
+# ⑤ 문서 — 낡은 문장 둘
+_cm267 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+check("CLAUDE.md 가 '39절 등은 아직 맨몸'을 더는 말하지 않는다 (R219 뒤로 거짓이었다)",
+      '39절 등은 아직 맨몸**이고' not in _cm267 and '라운드 219 가 실시세 호출 자체를' in _cm267)
+_doc267 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R252_CENSUS_FOUR.md'))
+check("결과 문서가 '전수조사 후보 82건 중 확인한 것만 고쳤다'와 미검증 수를 적는다",
+      '82' in _doc267 and '미검증' in _doc267 and '38.5%' in _doc267 and '24' in _doc267)
 
 print()
 print("=" * 72)

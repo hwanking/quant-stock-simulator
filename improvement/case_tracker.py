@@ -107,6 +107,27 @@ def today_added_count(conn: sqlite3.Connection, day: str) -> int:
 EXCLUDED_STATUSES = ('dup_version', 'void_fixture')
 
 
+def is_non_trading_date(iso_day) -> bool:
+    """휴장일(주말 · KRX 휴일)인가 — **한 곳** (라운드 252).
+
+    실측 2026-09-09: 확정 169건 · 고유 기준일 33개 중 9개가 토·일이었고 일요일 픽은
+    토요일 픽과 5/5 같았다. 개장 전 리포트가 만들어진 날이 기준일로 들어와서다.
+    휴일 목록은 저장소가 이미 가진 것을 쓴다(손으로 안 적는다) — 못 읽으면 주말만 본다.
+    """
+    from datetime import date as _date
+    try:
+        y, m, d = (int(x) for x in str(iso_day)[:10].split('-'))
+        if _date(y, m, d).weekday() >= 5:
+            return True
+    except (TypeError, ValueError):
+        return False
+    try:
+        from bitemporal_engine import KRX_HOLIDAYS
+        return str(iso_day)[:10] in KRX_HOLIDAYS
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def tally(conn: sqlite3.Connection) -> dict:
     """
     확정·대기의 갈래 — **한 곳** (라운드 232). 화면의 두 자리(개장 전 절의 '사후 검증' ·
@@ -119,11 +140,23 @@ def tally(conn: sqlite3.Connection) -> dict:
     bad = int(counts.get('failure') or 0)
     un = int(counts.get('unresolved') or 0)
     excluded = sum(int(counts.get(s) or 0) for s in EXCLUDED_STATUSES)
+    # 라운드 252 — 휴장일 기준일은 **날짜 표본**을 부풀린다(토·일 픽이 같은 추천의
+    #   복사본). 행은 그대로 두고, 그 수와 **거래일 고유 기준일 수**를 같이 낸다 —
+    #   날짜가 표본인 판정(뉴스 축 하한 30 · R84)은 `trading_dates` 를 읽는다.
+    _days = conn.execute(
+        "SELECT signal_date, status FROM prediction_cases").fetchall()
+    non_trading = sum(1 for d, st in _days
+                      if st not in EXCLUDED_STATUSES and is_non_trading_date(d))
+    trading_dates = len({str(d)[:10] for d, st in _days
+                         if st in ('success', 'failure', 'unresolved')
+                         and not is_non_trading_date(d)})
     return {
         'success': ok, 'failure': bad, 'unresolved': un,
         'open': int(counts.get('open') or 0),
         'data_error': int(counts.get('data_error') or 0),
         'excluded': excluded,
+        'non_trading': non_trading,
+        'trading_dates': trading_dates,
         'frozen': sum(int(v) for k, v in counts.items() if k not in EXCLUDED_STATUSES),
         'resolved': ok + bad + un,
         'decided': ok + bad,
