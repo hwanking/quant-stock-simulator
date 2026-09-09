@@ -677,7 +677,10 @@ def _render_toolbar(here_html: str = '') -> None:
     #     검사가 알린다"고 적어 둔 그대로 알렸다. 닫힌 이슈를 열린 과제로
     #     말하지 않는다. 모델 축의 진짜 '다음에 보는 시점'은 이슈가 아니라
     #     전방 재평가일이고, 그 날짜는 `forward_eval`(R78 · 한 곳)에서만 읽는다.
-    _AX_ISSUE = {'scoring': 'model|score_not_separating'}
+    #   라운드 257 — 룰북 축도 잇는다: 손절 조이기 노출 결정(재검토 2026-09-15)이
+    #     열린 이슈로 있는데 칩이 말하지 않았다. 날짜는 여전히 이슈에서 읽는다.
+    _AX_ISSUE = {'scoring': 'model|score_not_separating',
+                 'rulebook': 'usability|loss_control_tradeoff'}
     _ax_plan = {}
     try:
         from improvement import issue_ops as _iop182
@@ -9207,13 +9210,39 @@ st.markdown(_uk.disclose('모델 검증 반영 — 이번 판단에 쓰인 근�
             unsafe_allow_html=True)
 if _gates_v:
     _uk.note('적용된 제한: ' + ' / '.join(_gates_v), theme=_theme)
+# 라운드 257 — 종전 문장은 국면별 제한을 '미구현'이라 적고 주요 이슈에 등록돼 있다고
+#   했다. 국면별 제한은 **구현돼 있다**(국면 게이트 · 전방 재평가
+#   대상). 가중치 조정은 근거가 없어 안 넣었고 그 이슈가 열려 있다 — 문장을 등록부에서
+#   읽어 만든다. 닫히면 문장도 바뀐다(R250 의 그 규칙 — 재고 나면 문구도 같이 바뀐다).
+_wt257 = ''
+try:
+    from improvement import issue_ops as _iop257
+    from improvement.database import get_connection as _icx257
+    _c257 = _icx257()
+    try:
+        _iop257.ensure_schema(_c257)
+        _open257 = {str(r.get('issue_key')): r for r in _iop257.issue_view(_c257, 40)
+                    if str(r.get('status')) == 'open'}
+    finally:
+        _c257.close()
+    _r257 = _open257.get('model|score_not_separating')
+    if _r257:
+        # 점검일 문구는 등록부가 조립한 것(review_label)을 그대로 쓴다 — 화면이 조립하면
+        # 조립 규칙이 두 곳에 생긴다(라운드 172 · §4). 첫 판에 여기서 조립했다가 §206 에 걸렸다.
+        _rl257 = str(_r257.get('review_label') or '')
+        _wt257 = (" 전략별 가중치 조정은 근거가 없어 넣지 않았습니다 — 열린 과제 "
+                  f"'{str(_r257.get('title') or '')[:30]}'"
+                  + (f" · {_rl257}" if _rl257 else '') + ".")
+    else:
+        _wt257 = " 전략별 가중치 조정은 근거가 없어 넣지 않았습니다(관련 과제는 닫혀 있습니다)."
+except Exception:                                              # noqa: BLE001
+    _wt257 = " 전략별 가중치 조정은 근거가 없어 넣지 않았습니다(과제 등록부를 읽지 못했습니다)."
 _uk.note(
     "검증이 판단에 쓰이는 방식: ① 점수대별 표본외 적중률이 낮으면 최종점수에 "
     "상한이 걸립니다 ② 유효표본이 모자라면 확률을 표시하지 않습니다 "
     "③ 비용 차감 후 기대수익이 0 이하면 신규 매수를 막습니다 "
-    "④ 자산 유형(주식·ETF·레버리지)별로 다른 기준을 씁니다. "
-    "아직 연결되지 않은 것도 있습니다 — 국면별 엔진 제한과 전략별 가중치 "
-    "조정은 미구현이며 주요 이슈에 등록돼 있습니다.", theme=_theme)
+    "④ 자산 유형(주식·ETF·레버리지)별로 다른 기준을 씁니다 "
+    "⑤ 국면별 제한은 국면 게이트로 적용됩니다(전방 재평가 대상)." + _wt257, theme=_theme)
 
 # ── 엔진들은 서로 뭐라고 하나 (라운드 10) ──────────────────────────────
 # 사용자 요구: "최종 결론에는 각 엔진의 판단을 보여주세요."
