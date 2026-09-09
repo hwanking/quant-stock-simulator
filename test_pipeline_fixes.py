@@ -23103,6 +23103,56 @@ check("일일 규칙이 매수권 표본 부족을 찍는다 (조용히 넘기�
       '매수권 괴리 미측정' in _rdi_src276)
 
 print()
+print("§277 R263 — 일일 개선 파이프라인이 평일 26일 중 24일 흔적이 없다 · 침묵을 실패로 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   pipeline_runs 14행 · 고유 날짜 6일 · 08-02~09-07 평일 26일 중 24일 기록 없음 — 전부 사람이
+#   돌린 시각. 클라우드 단계는 `|| true` 라 죽어도 초록불이었다. 파이프라인은 시작하자마자
+#   running 행을 커밋하므로 행이 없으면 시작도 못 한 것이다. 검사는 워크플로 맨 뒤(업로드 뒤).
+import tempfile as _tf277
+from datetime import datetime as _dt277, timezone as _tz277, timedelta as _td277
+from scripts import pipeline_run_check as _prc277
+from improvement import database as _idb277
+_db277 = _os.path.join(_tf277.gettempdir(), 'r263_runs_test.db')
+if _os.path.exists(_db277):
+    _os.remove(_db277)
+_idb277.initialize_database(_db277)
+_today277 = _dt277.now().astimezone().date()
+# 오늘이 휴장일이면 거래일 판정 심기가 무의미하다 — 가장 가까운 지난 거래일을 '오늘'로 쓴다
+from improvement.case_tracker import is_non_trading_date as _intd277
+_tday277 = _today277
+while _intd277(_tday277.isoformat()):
+    _tday277 -= _td277(days=1)
+_tday_s277 = _tday277.isoformat()
+_utc277 = lambda d, h: _dt277(d.year, d.month, d.day, h, 0, tzinfo=_tz277.utc).isoformat()  # noqa: E731
+check("실행 기록이 없으면 실패다 (심기 · 빈 DB)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277 = _idb277.get_connection(_db277)
+_cn277.execute("INSERT INTO pipeline_runs (run_id, pipeline_type, started_at, status) VALUES (?, 'daily', ?, 'running')",
+               ('DAILY-t277a', _utc277(_tday277 - _td277(days=1), 9)))
+_cn277.commit()
+check("어제 행만 있으면 실패다 — 오늘 기록이 없다 (심기)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277.execute("INSERT INTO pipeline_runs (run_id, pipeline_type, started_at, status) VALUES (?, 'daily', ?, 'running')",
+               ('DAILY-t277b', _utc277(_tday277, 9)))
+_cn277.commit()
+check("오늘 행이 running 으로 남아 있으면 실패다 — 죽은 채 남은 것 (심기)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277.execute("UPDATE pipeline_runs SET status='success', finished_at=? WHERE run_id='DAILY-t277b'", (_utc277(_tday277, 10),))
+_cn277.commit()
+check("오늘 success 행이 있으면 통과다 (심기)", _prc277.check(_db277, today=_tday_s277) == 0)
+_cn277.close()
+_sat277 = _tday277
+while _sat277.weekday() != 5:
+    _sat277 += _td277(days=1)
+check("휴장일(토요일)은 판정하지 않는다 — rc 0 (한 곳의 휴장일 판정 · R252)", _prc277.check(_db277, today=_sat277.isoformat()) == 0)
+check("DB 가 없으면 미측정(rc 2)이지 통과가 아니다 (심기)", _prc277.check(_db277 + '.none', today=_tday_s277) == 2)
+_yml277 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_i_up277 = _yml277.find('name: 새 스냅샷 올리기')
+_i_chk277 = _yml277.find('pipeline_run_check.py')
+check("워크플로가 검사를 부르고, 그 자리는 업로드 뒤다 (축적을 인질로 안 잡는다 · R247)",
+      _i_up277 > 0 and _i_chk277 > _i_up277)
+check("그 검사에 `|| true` 가 안 붙어 있다 (아무도 안 읽는 경고는 검사가 아니다)",
+      _i_chk277 > 0 and '|| true' not in _yml277[_i_chk277:_i_chk277 + 60])
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
