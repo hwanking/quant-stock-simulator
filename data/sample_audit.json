@@ -1,9 +1,10 @@
 {
- "made": "2026-09-08",
+ "made": "2026-09-10",
  "span": [
   "2011-01-14",
   "2026-08-03"
  ],
+ "ledger_rows": 251528,
  "raw_cases": 251528,
  "unique_tickers": 1547,
  "unique_dates": 2761,
@@ -12,8 +13,8 @@
  "sector_missing": 21608,
  "regime_effective_n": 3677,
  "forward_evaluated_n": 0,
- "forward_log_n": 356,
- "high_conf_forward_n": 53,
+ "forward_log_n": 646,
+ "high_conf_forward_n": 80,
  "forward_from": "2026-08-09",
  "episode_days": 35,
  "per_ticker": {

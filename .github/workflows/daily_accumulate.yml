@@ -213,6 +213,17 @@ jobs:
       #   둘 다 **관측 전용**이다: 점수·게이트·문턱을 읽기만 한다.
       #   FN/FP 와 취약 칸은 11/16 이후 새 사전등록의 후보 목록으로만 쓴다.
       #   (자동 축적·판정은 허용 / 자동 모델 변경은 금지 — 라운드 96 경계)
+      # ⚠️ 라운드 259 — 라운드 217 이 *"축적 루틴의 갱신 목록에 없어 여덟 배치 동안 한 번도
+      #   갱신되지 않았다"* 고 적은 셋(표본 감사 · 유효표본 ICC · 업종 성적). 화면이
+      #   그 값을 기준 행수·날짜와 같이 내므로, 안 만들면 화면이 낡은 원장을 말한다.
+      #   `|| true` 는 축적을 인질로 안 잡으려는 것이고, 안 만든 것은 맨 뒤의 신선도
+      #   검사가 잡는다(업로드 뒤 · R247).
+      - name: 관측 산출물 갱신 (표본 감사·유효표본 ICC·업종 성적 · 관측 전용)
+        run: |
+          python scripts/sample_audit.py || true
+          python scripts/effective_n_icc.py || true
+          python scripts/gen_sector_perf.py || true
+
       - name: FN/FP 연구·취약구간 지도 (관측 전용)
         run: |
           python scripts/miss_study.py || true

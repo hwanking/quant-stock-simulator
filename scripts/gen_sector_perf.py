@@ -174,8 +174,19 @@ for sec, a in agg.items():
         ev=round(a['net'] / a['n'], 3),
         small=a['n'] < 30)
 
+def _ledger_rows():
+    """신선도 검사 규약 (라운드 259) — 원장 몇 줄일 때 만들었나."""
+    n = 0
+    with open(os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl'),
+              encoding='utf-8', errors='replace') as _f:
+        for _ln in _f:
+            if _ln.strip():
+                n += 1
+    return n
+
+
 doc = dict(
-    made=_today(), basis='개발 구간(train+valid) 매수권 58+ · 판정완료 · '
+    made=_today(), ledger_rows=_ledger_rows(), basis='개발 구간(train+valid) 매수권 58+ · 판정완료 · '
     '블라인드 미포함 · 비용 0.36%p 차감',
     note='표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)',
     # 라운드 218 — **무엇이 빠졌는지 세어 적는다.** 이 표는 업종을 아는 행만

@@ -54,6 +54,11 @@ MAX_LAG = 800
 STUDIES = (
     ('data/miss_study.json', 'FN/FP 연구 (라운드 67)'),
     ('data/weakness_map.json', '취약구간 지도 (라운드 69)'),
+    # 라운드 259 — 라운드 217 이 '여덟 배치 동안 한 번도 갱신 안 됨'이라 적은 셋.
+    #   워크플로가 이제 만든다(관측 산출물 갱신 단계). 안 만들면 여기서 걸린다.
+    ('data/sample_audit.json', '표본 감사 (라운드 72·217)'),
+    ('data/effective_n_icc.json', '유효표본 ICC (라운드 80)'),
+    ('data/sector_perf.json', '업종 성적 (라운드 54b·218)'),
 )
 
 
