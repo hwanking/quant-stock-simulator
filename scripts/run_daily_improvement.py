@@ -259,14 +259,43 @@ def make_detect_issues(conn, calib):
         else:
             _resolve('validation|high_conf_n')
 
-        if (v.get('hit_rate') is not None and b.get('hit_rate') is not None
-                and v['hit_rate'] - b['hit_rate'] >= 10):
+        # 라운드 262 — 괴리는 화면이 머리로 내는 모집단(매수권 60점+)도 잰다. 종전엔 전체
+        #   구간(매수권 밖 포함)으로만 재서 5.4%p < 10 이라 '해소'를 내는 동안 매수권은
+        #   14.8%p 였다(2026-09-10 실측 · 69.0 vs 54.2). 문턱 10%p 는 그대로(이미 채택된 규칙) —
+        #   어느 모집단이든 넘으면 열고, 요약이 두 수를 같이 말한다(R233). 매수권 표본이
+        #   30 미만인 구간이 있으면 그 모집단은 판정하지 않고 찍는다(§3 · 하한 30 재사용).
+        bzv = (sp.get('buy_zone') or {}).get('valid') or {}
+        gap_all = None
+        if v.get('hit_rate') is not None and b.get('hit_rate') is not None:
+            gap_all = v['hit_rate'] - b['hit_rate']
+        gap_bz = None
+        if (bzv.get('hit_rate') is not None and bz.get('hit_rate') is not None
+                and (bzv.get('n') or 0) >= 30 and (bz.get('n') or 0) >= 30):
+            gap_bz = bzv['hit_rate'] - bz['hit_rate']
+        else:
+            print(f"  매수권 괴리 미측정 — 표본 valid {bzv.get('n', 0)} · "
+                  f"blind {bz.get('n', 0)} (하한 30)")
+        crossed = []
+        if gap_bz is not None and gap_bz >= 10:
+            crossed.append('매수권')
+        if gap_all is not None and gap_all >= 10:
+            crossed.append('전체')
+        if crossed:
+            parts = []
+            if gap_bz is not None:
+                parts.append(f"매수권(60점+) 검증 {bzv['hit_rate']:.1f}% vs 블라인드 "
+                             f"{bz['hit_rate']:.1f}% ({gap_bz:+.1f}%p · n "
+                             f"{int(bzv.get('n') or 0):,}·{int(bz.get('n') or 0):,})")
+            if gap_all is not None:
+                parts.append(f"전체 구간 {v['hit_rate']:.1f}% vs {b['hit_rate']:.1f}% "
+                             f"({gap_all:+.1f}%p)")
             it.create_issue(conn, category='model', severity='high',
                             title='검증-블라인드 괴리 감시',
-                            summary=f"검증 {v['hit_rate']:.1f}% vs 블라인드 "
-                                    f"{b['hit_rate']:.1f}% — 과최적화·장세 편중 조사.",
+                            summary=' · '.join(parts)
+                                    + f" — 10%p 넘은 모집단: {'·'.join(crossed)} · "
+                                      "과최적화·장세 편중 조사.",
                             related_model=ver, issue_key='model|vb_gap')
-        else:
+        elif gap_all is not None or gap_bz is not None:
             _resolve('model|vb_gap')
 
         # 라운드 256 — 이 수는 **매수권(58점+) 케이스의 비율**이지 매수 추천의 비율이

@@ -17433,8 +17433,11 @@ check("그 이슈들이 다음 점검 시점을 들고 있다",
       all(str(_open182[k].get('next_review') or _open182[k].get('eta') or '')[:4]
           == '2026' for k in ('model|score_not_separating',)
           if k in _open182))
-check("닫힌 이슈(model|vb_gap)를 화면이 열린 과제로 걸어 두지 않는다 (R222)",
-      'model|vb_gap' not in _open182 and "'model': 'model|vb_gap'" not in _w182)
+# 라운드 262 — 종전엔 "`model|vb_gap` 이 원장에 열려 있지 않다"까지 잠갔다. 그것은 살아 있는
+#   등록부의 상태라 일일 규칙이(매수권 괴리로) 다시 열면 회귀가 데이터로 깨진다(R213 · 표류하는
+#   값을 잠그지 않는다). 화면 불변식만 남긴다 — model 축을 그 이슈에 손으로 걸지 않는다.
+check("화면이 model 축을 vb_gap 이슈에 손으로 걸어 두지 않는다 (열림·닫힘은 일일 규칙이 정한다 · R222·R262)",
+      "'model': 'model|vb_gap'" not in _w182)
 check("모델 축의 '다음에 보는 시점'은 전방 재평가일에서 읽는다 (forward_eval · 한 곳 · 손으로 안 적는다)",
       "_fed182 = _fe182.eval_date()" in _w182 and "_ax_plan['model'] = (" in _w182
       and "'2026-11-16'" not in _w182.split('_AX_ISSUE')[-1][:2500])
@@ -23053,6 +23056,51 @@ check("백업 계획에 data/ 뿌리의 다섯이 data/<이름> 으로 들어간
       str([a for a in _arc275 if a.startswith('data/')]), scanned=len(_arc275))
 import shutil as _sh275
 _sh275.rmtree(_td275, ignore_errors=True)
+
+print()
+print("§276 R262 — 검증-블라인드 괴리 감시가 화면이 머리로 내는 모집단(매수권)도 잰다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   감시가 전체 구간(매수권 밖 포함)으로만 재서 5.4%p < 10 이라 '해소'를 내는 동안 매수권(60점+)
+#   은 14.8%p 였다(2026-09-10 실측 · valid 69.0 vs blind 54.2 · n 1,297·1,168). 이슈의 목표와
+#   화면 머리 수는 매수권이다. 문턱 10%p 불변 — 모집단을 하나 더 잰다(어느 쪽이든 ≥10 이면
+#   연다 · 요약이 어느 모집단이 넘었는지 말한다). 표본 30 미만이면 그 모집단은 판정하지 않는다.
+import tempfile as _tf276
+from scripts import run_daily_improvement as _rdi276
+from improvement import database as _idb276
+def _calib276(v_all, b_all, v_bz, b_bz, n_bz=1000):
+    return {'rulebook_version': 'v-test',
+            'splits': {'valid': {'n': 10000, 'hit_rate': v_all}, 'blind': {'n': 10000, 'hit_rate': b_all},
+                       'buy_zone': {'valid': {'n': n_bz, 'hit_rate': v_bz}, 'blind': {'n': n_bz, 'hit_rate': b_bz}}},
+            'signal_frequency': {'rate_pct': 6.7}}
+def _run276(calib):
+    db = _os.path.join(_tf276.gettempdir(), 'r262_vbgap_test.db')
+    if _os.path.exists(db):
+        _os.remove(db)
+    _idb276.initialize_database(db)
+    cn = _idb276.get_connection(db)
+    try:
+        _rdi276.make_detect_issues(cn, calib)()
+        cn.commit()
+        return cn.execute("SELECT status, summary FROM improvement_issues WHERE issue_key='model|vb_gap'").fetchall()
+    finally:
+        cn.close()
+_a276 = _run276(_calib276(65.4, 60.0, 69.0, 54.2))          # 오늘 실측 모양 — 전체 5.4 · 매수권 14.8
+check("매수권 괴리 14.8%p 면 전체가 5.4%p 여도 연다 (종전엔 안 열렸다 · 심기)",
+      len(_a276) == 1 and _a276[0][0] == 'open' and '매수권' in str(_a276[0][1]), str(_a276)[:200])
+check("요약이 두 모집단의 수를 같이 말한다 (같은 이름의 수가 둘이면 단위를 옆에 · R233)",
+      _a276 and '전체' in str(_a276[0][1]) and '14.8' in str(_a276[0][1]) and '5.4' in str(_a276[0][1]), str(_a276)[:200])
+_b276 = _run276(_calib276(72.0, 60.0, 60.0, 57.0))          # 전체만 12 — 종전 감도는 남긴다
+check("전체 괴리 12%p 면 매수권이 3%p 여도 연다 (종전 감도 유지 · 심기)",
+      len(_b276) == 1 and _b276[0][0] == 'open' and '전체' in str(_b276[0][1]), str(_b276)[:200])
+_c276 = _run276(_calib276(65.4, 60.0, 60.0, 57.0))          # 둘 다 안 넘음
+check("둘 다 10%p 미만이면 열지 않는다 (심기)", len(_c276) == 0, str(_c276)[:200])
+_d276 = _run276(_calib276(65.4, 60.0, 90.0, 10.0, n_bz=10))  # 매수권 표본 10 — 판정 안 함
+check("매수권 표본이 30 미만이면 그 모집단은 판정하지 않는다 (80%p 차이여도 · §3 · 심기)",
+      len(_d276) == 0, str(_d276)[:200])
+_rdi_src276 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+check("일일 규칙이 매수권 표본 부족을 찍는다 (조용히 넘기지 않는다 · §3)",
+      '매수권 괴리 미측정' in _rdi_src276)
 
 print()
 print("=" * 72)
