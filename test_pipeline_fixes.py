@@ -22968,6 +22968,31 @@ check("신선도 검사가 지금 다섯 산출물 전부를 최신으로 판정
       _buf273.getvalue().strip().split('\n')[-1][:120])
 
 print()
+print("§274 R260 — 문서 넷: 커버리지 분모 · 상대화의 처지 · 레이더 '연구 예정' · R216 결과 문서 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 (전수조사 R252 가 짚은 문서 결함) ─────────────────────────
+#   ① "커버리지 82.8% → 97.1%" 에 분모가 없었다 — 원장 전체가 아니라 개발 구간 매수권
+#      판정완료 98,822행이다. ② R111 절이 상대화를 '11/16 이후 후보'라 적는데 바로 아래
+#      R112 가 기각했다. ③ 레이더가 Cross-sectional Ranking 을 '연구 예정'이라 적었다 —
+#      계획이 없다. ④ R216 은 사전등록만 있고 결과 문서가 없었다.
+_cm274 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+check("커버리지 97% 옆에 분모(개발 구간 매수권 판정완료 98,822행)가 적혀 있다",
+      '98,822행' in _cm274 and '원장 전체 251,528행이 아니다' in _cm274)
+check("R111 의 상대화 문장이 R112 의 기각을 가리킨다 (전의 기록임을 표기)",
+      '라운드 112 가 그 후보를 쟀고 16개 전부 미달로 기각' in _cm274)
+import json as _json274
+_rad274 = _json274.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_row274 = next((r for r in (_rad274.get('rows') or []) if r.get('name') == 'Cross-sectional Ranking'), {})
+check("레이더가 Cross-sectional Ranking 을 '연구 예정'이라 하지 않는다 (계획이 없다 · §3)",
+      _row274 and '연구 예정' not in str(_row274.get('status')) and '전제 미충족' in str(_row274.get('status')),
+      str(_row274.get('status')))
+_r216 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R216_REBOUND_CONFIRMATION.md'))
+check("R216 결과 문서가 있고 미측정을 통과로 쓰지 않는다",
+      '미측정' in _r216 and '문턱은 내리지 않는다' in _r216 and '새로 잰 것은 없다' in _r216)
+check("R216 결과 문서가 train 관측을 증거로 부르지 않는다",
+      '증거가 아니라 가설 생성' in _r216)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
