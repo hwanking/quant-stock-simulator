@@ -22886,6 +22886,42 @@ check("읽는 쪽은 여전히 status 를 먼저 본다 (라운드 172 불변)",
       "resolved = str(d.get('status') or '') == 'resolved'" in _read148(_os.path.join(PROJ, 'improvement', 'issue_ops.py')))
 
 print()
+print("§272 R257·R258 — 버전 칩이 09-15 결정을 말한다 · '미구현' 거짓 문장 교체 · R21 재측정 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   ① 버전 칩의 '다음에 다시 보는 시점'이 scoring 축에만 붙었다 — 룰북 축의 열린 이슈
+#      (손절 조이기 노출 결정 · 재검토 2026-09-15)를 칩이 말하지 않았다.
+#   ② '모델 검증 반영' 절이 *"국면별 엔진 제한 … 미구현"* 이라 적었다 — 구현돼 있다
+#      (국면 게이트 · 전방 재평가 대상). 문장을 등록부에서 읽어 만든다.
+#   ③ 일정 문서 둘이 09-04 뒤 안 갱신됐다. ④ 09-15 결정 재료(라운드 21 · 0.6배)를 사전등록
+#      그대로 다시 쟀다 — 기각 그대로(어느 배수도 세 구간 미달).
+check("버전 칩이 룰북 축의 열린 이슈(손절 조이기 노출 결정)를 잇는다",
+      "'rulebook': 'usability|loss_control_tradeoff'" in _w231
+      and "'scoring': 'model|score_not_separating'" in _w231)
+check("'국면별 엔진 제한 … 미구현' 문장이 사라졌다 (구현돼 있다)",
+      '국면별 엔진 제한과 전략별 가중치' not in _w231
+      and '⑤ 국면별 제한은 국면 게이트로 적용됩니다' in _w231)
+check("가중치 조정 문장은 등록부에서 읽어 만든다 (닫히면 문장도 바뀐다)",
+      "_open257.get('model|score_not_separating')" in _w231
+      and '과제 등록부를 읽지 못했습니다' in _w231)
+for _rel272 in ('docs/SCHEDULE_R221_FORMULA.md', 'docs/SCHEDULE_R223_AXES.md'):
+    check(f"{_rel272} 가 09-04 뒤의 사실을 적는다 (R249·R251·R254·R253)",
+          '2026-09-10 갱신 (라운드 257)' in _read148(_os.path.join(PROJ, _rel272)))
+_dec272 = _read148(_os.path.join(PROJ, 'docs', 'DECISION_R257_STOP_TIGHTEN_EXPOSURE.md'))
+check("09-15 결정 재료 문서가 있고 결정을 대신하지 않는다",
+      '결정은 사람이 한다' in _dec272 and '(a) 노출한다' in _dec272 and '(b) 노출하지 않는다' in _dec272)
+check("결정 재료에 오늘 재측정 값이 있고 판정이 그대로(기각)라고 적는다",
+      '2026-09-10 다시 쟀다' in _dec272 and '판정은 그대로다' in _dec272 and '6,085건' in _dec272)
+import json as _json272
+_lc272 = _os.path.join(PROJ, '.portfolio', 'loss_control_r21.json')
+if _os.path.exists(_lc272):
+    _lj272 = _json272.loads(_read148(_lc272) or '{}')
+    check("R21 재측정 산출물에도 채택 없음이 남아 있다 (§93 과 같은 자물쇠)",
+          _lj272.get('adopted') in (None, [], ''), str(_lj272.get('adopted'))[:60])
+else:
+    skipped("R21 산출물이 없다 — scripts/loss_control_r21.py 를 돌린다")
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
