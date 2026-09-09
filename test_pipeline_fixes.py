@@ -22489,6 +22489,96 @@ check("가장 그럴듯해 보인 축이 가장 약하다는 사실을 적는다
       '제일 그럴듯해 보였던 축이 제일 약하다' in _res265)
 
 print()
+print("§266 R251 — 근거 없는 고정 보정 0.98 · 지울 근거도 유지할 근거도 못 세웠다 (2026-09-09)")
+print("-" * 72)
+# ── 무엇을 쟀나 ─────────────────────────────────────────────────────────
+#   라운드 238 이 미뤄 둔 그 상수. 사전등록 → R0(근거 없음) → R1(구역 9.8% 바뀜) →
+#   R2·R3(방향 +/−/+ · 블라인드만 유의 · 날짜 22) → **(다) 현행 유지.**
+#   코드는 한 줄도 안 바꿨다. 이 절이 잠그는 것은 **규칙·판정·실행 증거·문서화**다.
+#   간격·Δ·CI 같은 중간값은 잠그지 않는다 — 원장이 자라면 표류한다(라운드 213).
+import json as _json266
+import quant_indicators as _qi266
+
+_pre266 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R251_FIXED_HAIRCUT.md'))
+_res266 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R251_FIXED_HAIRCUT.md'))
+_r0_266 = _json266.loads(_read148(_os.path.join(PROJ, 'data', 'fixed_haircut_r251.json')) or '{}')
+_r1_266 = _json266.loads(_read148(_os.path.join(PROJ, 'data', 'haircut_impact_r251.json')) or '{}')
+_r2_266 = _json266.loads(_read148(_os.path.join(PROJ, 'data', 'haircut_r2_r251.json')) or '{}')
+
+# ① 판정 — 잠근다 (바뀌면 사람이 다시 판단한다)
+if _r2_266:
+    check("판정은 (다) 현행 유지 — 지울 근거도 유지할 근거도 못 세웠다",
+          str(_r2_266.get('verdict', '')).startswith('(다)'), str(_r2_266.get('verdict')))
+    check("세 구간을 전부 쟀다 (일부만 재고 판정하지 않는다)",
+          all(k in (_r2_266.get('splits') or {}) for k in ('train', 'valid', 'blind')),
+          str(sorted((_r2_266.get('splits') or {}).keys())), scanned=len(_r2_266.get('splits') or {}))
+else:
+    skipped("R251 R2 산출물이 없다 — scripts/haircut_r2_r251.py 를 돌린다")
+check("상수는 그대로다 — 0.98 (현행 유지는 코드 불변이다)",
+      abs(float(_qi266.QuantIndicatorsEngine.FAIR_FIXED_HAIRCUT) - 0.98) < 1e-12,
+      str(_qi266.QuantIndicatorsEngine.FAIR_FIXED_HAIRCUT))
+
+# ② 실행 증거 — 두 판이 정말 다른 상수로 돌았다 (존재는 실행이 아니다 · 라운드 191)
+if _r1_266:
+    check("R1 짝 자료에 실행 증거가 있다 — 켠 판 −2.0 · 끈 판 0.0 을 엔진 출력에서 셌다",
+          _r1_266.get('execution_evidence_ok') is True
+          and set(_r1_266.get('haircut_seen_on') or {}) == {'-2.0'}
+          and set(_r1_266.get('haircut_seen_off') or {}) == {'0.0'},
+          f"켠 {_r1_266.get('haircut_seen_on')} · 끈 {_r1_266.get('haircut_seen_off')}")
+    check("표본은 겹치지 않는 부분집합에서 뽑았다 (같은 종목 35일 규칙 · R217)",
+          0 < _r1_266.get('spaced_rows', 0) < _r1_266.get('ledger_rows', 0),
+          f"{_r1_266.get('spaced_rows')} / {_r1_266.get('ledger_rows')}")
+else:
+    skipped("R251 R1 산출물이 없다 — scripts/haircut_impact_r251.py 를 돌린다")
+
+# ③ 스크립트의 규칙 — 새 숫자를 안 만들었다
+_imp266 = _read148(_os.path.join(PROJ, 'scripts', 'haircut_impact_r251.py'))
+_r2s266 = _read148(_os.path.join(PROJ, 'scripts', 'haircut_r2_r251.py'))
+check("두 판을 실제로 따로 돌린다 — 되나누지 않는다 (사이에 윈저화·클립이 있다)",
+      "run(pick, 0.98, '켠 판')" in _imp266 and "run(pick, 1.00, '끈 판')" in _imp266
+      and 'fair_fixed_haircut_pct' in _imp266)
+check("R2 의 '싼 구역'은 R183 의 구역 이름 그대로다 (새 문턱 없음)",
+      "'안전마진 확보', '적정가 이하 (안전마진 미확보)'" in _r2s266
+      and "NA_ZONE = '판정 불가'" in _r2s266)
+check("부트스트랩이 날짜를 재추출한다 (같은 날 케이스는 시장을 공유한다)",
+      'by_date[dates[rng.randrange(len(dates))]]' in _r2s266)
+
+# ④ R0 의 판별식 — 낱말이 아니라 갈래로 센다 (첫 판이 틀렸던 자리)
+_r0s266 = _read148(_os.path.join(PROJ, 'scripts', 'fixed_haircut_r251.py'))
+check("R0 가 '근거를 대는 커밋'과 '없다고 적은 커밋'을 갈라 센다",
+      'commits_denying_basis' in _r0s266 and 'NO_BASIS = re.compile' in _r0s266
+      and (_r0_266.get('commits_denying_basis', 0) >= 1 if _r0_266 else True))
+check("R0 가 훑은 수를 찍는다 — 0건인지 못 봤는지",
+      (_r0_266.get('docs_scanned', 0) > 100 and _r0_266.get('modules_scanned', 0) >= 30)
+      if _r0_266 else False, str({k: _r0_266.get(k) for k in ('docs_scanned', 'modules_scanned')}),
+      scanned=_r0_266.get('docs_scanned', 0) if _r0_266 else 0)
+
+# ⑤ 사전등록이 판정 규칙 세 갈래를 **미리** 적었다 · 선례를 그대로 옮기지 않았다
+check("사전등록에 (가)(나)(다) 세 갈래가 있고 (다)는 현행 유지다",
+      '**(가)' in _pre266 and '**(나)' in _pre266 and '**(다)' in _pre266
+      and '지울 근거도 유지할 근거도 못 세웠다' in _pre266)
+check("사전등록이 R44 선례를 그대로 옮기지 않는다고 적는다 (게이트에 닿는 상수다)",
+      '선례를 그대로' in _pre266 and '게이트에 닿는다' in _pre266)
+check("사전등록이 배포는 11-16 이후라고 적는다 (R78 동결)",
+      '2026-11-16' in _pre266)
+
+# ⑥ 결과 문서 — 불리한 사실을 그대로 적는다 (§9)
+check("문서가 블라인드 단독 유의와 날짜 22 를 같이 적는다",
+      '블라인드 하나' in _res266 and '날짜 22' in _res266 and '라운드 213' in _res266)
+check("문서가 방향 어긋남을 적는다 (train + · valid − · blind +)",
+      'valid(−)' in _res266 and '어긋난다' in _res266)
+check("문서가 되나눔이 안 된다는 것을 실측으로 적는다 (최소 −15.613%)",
+      '−15.613%' in _res266)
+check("문서가 표본 백필의 비용과 R215 의 '전량' 을 갈라 적는다",
+      '118시간' in _res266 and '38분' in _res266 and '3행' in _res266)
+check("문서가 R0 판별식의 실패를 적는다 (낱말을 담은 ≠ 설명하는)",
+      '낱말을 담은' in _res266 and '라운드 238 자신' in _res266)
+
+# ⑦ 레이더 톱니 — 새 사전등록 → 레이더 (§235 · 라운드 218)
+_rad266 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
+check("연구 레이더에 R251 이 있다", 'R251' in _rad266 and '고정 보정' in _rad266)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
