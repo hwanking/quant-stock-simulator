@@ -126,6 +126,22 @@ def main(argv=None):
     print(f'① 컴파일 — 바뀐 .py {len(changed)}개 · 실패 {len(bad)}개')
     for b in bad:
         print('   ', b)
+    # ①' 정의보다 먼저 쓰는 이름 (라운드 255) — 컴파일은 통과하고 실행에서 NameError 다.
+    #   이 세션에서 두 번 걸렸다: §3 의 새 검사가 §148 에서야 정의되는 `_read148` 을 썼고,
+    #   절 드라이런은 그것을 '의존'(앞 절의 이름)으로 분류해 통과시켰다. 전체 회귀는 그
+    #   줄에 닿자마자 죽었다(37건에서) — 40분짜리 실행 뒤에야 알았다. 회귀 §226 이 같은
+    #   판별식(`scripts/usebefore_audit`)을 갖고 있지만 그 절보다 앞에서 죽으면 못 본다.
+    #   여기서 초 단위로 본다. 판별식은 한 곳 — 베끼지 않고 부른다.
+    ub_bad = []
+    try:
+        import scripts.usebefore_audit as _ub
+        _n_stmts, ub_bad = _ub.scan(src)
+        print(f"①' 정의 전 사용 — 최상위 문장 {_n_stmts:,}개 · 위반 {len(ub_bad)}건")
+        for x in ub_bad[:8]:
+            print('   ', x)
+    except Exception as e:                                     # noqa: BLE001
+        ub_bad = [f'감사 자체가 죽었다 — {type(e).__name__}: {e}']
+        print("①' 정의 전 사용 — 못 쟀다:", ub_bad[0])
     import json as _json
     base = {'_os': os, '_re': re, '_json': _json, 'PROJ': PROJ, 'sys': sys,
             '__file__': TEST}
@@ -180,8 +196,8 @@ def main(argv=None):
                 print('       FAIL', f)
         else:
             print(f'   {m:<6} 통과 · {runs}건{_sk}')
-    total_fail = len(bad) + n_fail_sections
-    print(f'③ 요약 — 컴파일 실패 {len(bad)} · 실패한 절 {n_fail_sections} · 의존으로 못 본 절 {n_dep} · '
+    total_fail = len(bad) + len(ub_bad) + n_fail_sections
+    print(f'③ 요약 — 컴파일 실패 {len(bad)} · 정의 전 사용 {len(ub_bad)} · 실패한 절 {n_fail_sections} · 의존으로 못 본 절 {n_dep} · '
           f'미측정 {n_skips}건 · '
           + ('전체 회귀로 넘어가도 된다 (미측정은 거기서 본다)' if total_fail == 0
              else '전체 회귀 전에 고친다'))

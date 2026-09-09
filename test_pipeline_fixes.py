@@ -22795,6 +22795,38 @@ _rad269 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
 check("연구 레이더가 R84 재측정(R254)을 적는다", 'R254' in _rad269 and '20/20' in _rad269)
 
 print()
+print("§270 R255 — 사전 점검이 '정의 전 사용'을 본다 · 헤드라인 수에 비용을 적는다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   ① 한 세션에서 두 번, 새 검사가 뒤 절에서야 정의되는 이름을 써서 전체 회귀가 37건에서
+#      NameError 로 죽었다. 절 드라이런은 그것을 '의존'으로 분류해 통과시켰고, 같은
+#      판별식을 가진 §226 은 그 줄보다 뒤라 못 봤다. 사전 점검 ①' 이 `usebefore_audit`
+#      을 부른다 — 판별식은 한 곳, 베끼지 않는다.
+#   ② §9 헤드라인 "차감 후 −0.388%" 는 R195 의 0.55%p 로 뺀 값이었고 운영 비용은
+#      0.36 이다(−0.198% · 부호 같음). 수 옆에 어느 비용인지 적는다.
+_pf270 = _read148(_os.path.join(PROJ, 'scripts', 'preflight.py'))
+check("사전 점검이 usebefore_audit 를 **부른다** (베끼지 않는다)",
+      'import scripts.usebefore_audit as _ub' in _pf270 and '_ub.scan(src)' in _pf270
+      and 'def scan(' not in _pf270)
+check("정의 전 사용 수가 사전 점검의 실패 합계에 들어간다 (찍기만 하지 않는다)",
+      'total_fail = len(bad) + len(ub_bad) + n_fail_sections' in _pf270)
+import scripts.usebefore_audit as _ub270
+_src270 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+_n270, _bad270 = _ub270.scan(_src270)
+check("이 파일 자체에 정의 전 사용이 없다", _n270 > 1000 and not _bad270,
+      str(_bad270[:3]), scanned=_n270)
+_i270 = _src270.find('check("TOP3 차단사유 노출"')
+_plant270 = _src270[:_i270] + "check('심기', _read148('x') == '')\n" + _src270[_i270:]
+_n2_270, _bad2_270 = _ub270.scan(_plant270)
+check("심어서 잡는다 — §3 자리에 _read148 을 쓰면 위반으로 나온다 (이 세션의 그 실수)",
+      _i270 > 0 and any(b.endswith(':_read148') for b in _bad2_270), str(_bad2_270[:3]))
+_cm270 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+check("규칙 파일이 사전 점검 ①' 을 적는다", '정의보다 먼저 쓰는 이름' in _cm270 and 'usebefore_audit' in _cm270)
+check("§9 헤드라인 수 옆에 어느 비용으로 뺀 값인지 적혀 있다 (0.55 · 운영 0.36 · −0.198%)",
+      '0.55%p** 로 뺀 것이다' in _cm270 and '−0.198%' in _cm270
+      and '어느 비용으로 뺀 값인지 같이 적는다' in ' '.join(_cm270.split()))
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
