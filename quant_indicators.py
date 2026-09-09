@@ -4304,6 +4304,18 @@ class QuantIndicatorsEngine:
             'execution_score': int(execution_score),
             
             'analysis_confidence': analysis_confidence_score,
+            # 라운드 252 — 화면이 산식 문장을 다시 적지 않게 **항목 값과 가중치**를
+            #   같이 내보낸다. 종전 화면은 "표본외 검증 미구현이라 모델검증 항목은
+            #   0점" 이라 적었는데 그 항목은 표본외 전략 품질 점수다(위
+            #   model_val_conf · 매 종목 계산된다). 값·가중치 불변.
+            'analysis_confidence_parts': {
+                '데이터': (round(float(data_conf), 1),
+                          float(WC.get('weight_data_confidence', 0.50))),
+                '통계': (round(float(stat_conf), 1),
+                        float(WC.get('weight_stat_confidence', 0.30))),
+                '모델검증': (round(float(model_val_conf), 1),
+                           float(WC.get('weight_model_validation_confidence', 0.20))),
+            },
             'strategy_quality_score': strategy_quality_score,
             'blind_test_status': "미수행" if blind_test_not_completed else "수행완료",
             'sq_cap': sq_cap,

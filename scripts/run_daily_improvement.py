@@ -76,7 +76,7 @@ def make_create_new_cases(conn, calib):
         existing = {(str(t), str(d)) for t, d in conn.execute(
             "SELECT ticker, signal_date FROM prediction_cases")}
         today = date.today()
-        skipped_existing = skipped_future = 0
+        skipped_existing = skipped_future = skipped_non_trading = 0
         with open(PM_HISTORY, encoding='utf-8') as f:
             for line in f:
                 try:
@@ -94,6 +94,14 @@ def make_create_new_cases(conn, calib):
                     continue
                 if (str(p['symbol']), _sig.isoformat()) in existing:
                     skipped_existing += 1        # 이미 동결된 추천 — 버전이 바뀌어도 같은 추천
+                    continue
+                # 라운드 252 — 휴장일 기준일도 있을 수 없다. 개장 전 리포트가 토·일에
+                #   만들어져 그 날짜로 들어왔고, 일요일 픽은 토요일 픽과 5/5 같았다
+                #   (같은 추천이 두 날짜). 행은 안 지우고 새로 안 만든다 — 세어 찍는다.
+                #   '이미 동결됨' 뒤에 둔다 — 이미 있는 것은 날짜가 어떻든 '기존'이다
+                #   (첫 판에 앞에 뒀다가 §239 의 심기가 걸렸다).
+                if ct.is_non_trading_date(_sig.isoformat()):
+                    skipped_non_trading += 1
                     continue
                 decision = RECO_CLASS_TO_DECISION.get(
                     str(p.get('reco_class')), Decision.UNAVAILABLE)
@@ -130,7 +138,8 @@ def make_create_new_cases(conn, calib):
                     continue
         conn.commit()
         print(f"신규 동결 {added}건 · 이미 동결된 추천 건너뜀 {skipped_existing}건 · "
-              f"미래 기준일 건너뜀 {skipped_future}건 (R222)")
+              f"미래 기준일 건너뜀 {skipped_future}건 (R222) · "
+              f"휴장일 기준일 건너뜀 {skipped_non_trading}건 (R252)")
         return added
     return create_new_cases
 

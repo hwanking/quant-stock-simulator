@@ -855,6 +855,13 @@ def repair_ocr_code(token):
         return None
     if sum(c.isdigit() for c in t) < 3:
         return None
+    # ⚠️ 라운드 252 — **실재 KRX 문자코드 모양이면 손대지 않는다.** 라운드 189 가
+    #    이 가드를 `_read_code_token` 에만 넣어, 이 함수를 **직접** 부르는 CSV
+    #    가져오기·OCR 텍스트 경로에서는 여전히 296개 중 114개(38.5%)가 남의 종목이
+    #    됐다(0000Z0 → 000020 동화약품). 호출부가 아니라 **기본값**을 고친다(R120e) —
+    #    판별식은 `stock_code` 한 곳(라운드 164·189 가 정한 자리).
+    if stock_code.looks_like_krx_alpha(t.upper()):
+        return None
     out = []
     for c in t:
         if c.isdigit():
