@@ -22747,6 +22747,54 @@ _i_fr268 = next((i for i, n in enumerate(_steps268) if '신선도' in n), -1)
 check("신선도 검사는 여전히 업로드 뒤다 (R247 불변)", _i_fr268 > _i_up268 >= 0)
 
 print()
+print("§269 R254 — R84(점수 횡단면 IC)를 사전등록 그대로 다시 쟀다 · 20/20 정보 없음 (2026-09-10)")
+print("-" * 72)
+# ── 무엇을 쟀나 ─────────────────────────────────────────────────────────
+#   라운드 84 는 날짜 하한(구간별 30 · 날짜당 10종목) 미달로 **미측정**이었다
+#   (valid 21 · blind 14). 원장이 251,528 으로 자라 하한이 찼다(valid 45 · blind 34) —
+#   사전등록을 한 글자도 안 고치고 다시 돌렸다(R110 의 선례). **20건 전부 정보 없음.**
+#   이 절이 잠그는 것: 판정 · 하한이 실제로 찼다는 사실 · 문서의 정직한 문장 ·
+#   스크립트 불변. IC·t 값은 잠그지 않는다(원장이 자라면 표류 · R213).
+import json as _json269
+
+_icj269 = _json269.loads(_read148(_os.path.join(PROJ, 'data', 'score_ic_r84.json')) or '{}')
+_doc269 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R84_RERUN_R254.md'))
+if _icj269:
+    _vs269 = [v['verdict'] for o in (_icj269.get('verdicts') or {}).values() for v in o.values()]
+    check("판정 20건이 전부 '정보 없음'이다 (미측정이 아니다 — 잣대를 댔다)",
+          len(_vs269) == 20 and set(_vs269) == {'정보 없음'},
+          str({v: _vs269.count(v) for v in set(_vs269)}), scanned=len(_vs269))
+    _d269 = {}
+    for _o269, _fs269 in (_icj269.get('result') or {}).items():
+        for _f269, _r269 in _fs269.items():
+            for _s269 in ('train', 'valid', 'blind'):
+                _n269 = ((_r269.get('by_split') or {}).get(_s269) or {}).get('min10', {}).get('dates') or 0
+                _d269[_s269] = max(_d269.get(_s269, 0), _n269)
+    check("세 구간 모두 날짜 하한 30 을 실제로 넘겼다 (그래서 미측정이 아니다)",
+          all(_d269.get(s, 0) >= 30 for s in ('train', 'valid', 'blind')), str(_d269))
+else:
+    skipped("R84 산출물이 없다 — scripts/score_ic_lab.py 를 돌린다")
+
+# 스크립트·사전등록 불변 — 결과를 보고 기준을 안 고쳤다
+import scripts.score_ic_lab as _ic269
+check("잣대가 8월 그대로다 (t 2.0 · 날짜 30 · 날짜당 5/10/20)",
+      _ic269.T_FLOOR == 2.0 and _ic269.MIN_DATES == 30 and tuple(_ic269.PER_DATE) == (5, 10, 20))
+
+# 문서 — 불리한 사실과 두 문장의 차이를 적는다
+check("문서가 '미측정'과 '정보 없음'을 가른다 (라운드 113 의 두 문장)",
+      '두 문장은 다르다' in _doc269 and '전부 정보 없음' in _doc269)
+check("문서가 valid 단독 유의(score t +2.7)를 채택하지 않았다고 적는다",
+      '+2.7' in _doc269 and '부호가 반대' in _doc269)
+check("문서가 vol20 의 세 구간 동부호를 판정이 아니라 관측으로 적는다",
+      '판정이 아니다' in _doc269 and '못 봤다' in _doc269 and '기준을 내리지 않는다' in _doc269)
+check("문서가 바꾼 것이 없다고 적는다 (점수·게이트·가중치·사전등록·스크립트)",
+      '바꾼 것 — 없다' in _doc269)
+
+# 레이더 톱니 (§235)
+_rad269 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
+check("연구 레이더가 R84 재측정(R254)을 적는다", 'R254' in _rad269 and '20/20' in _rad269)
+
+print()
 print("=" * 72)
 # 라운드 188 — **실행 건수와 건너뛴 건수를 함께 찍는다.**
 #   종전 요약은 실패만 출력했다. 그래서 산출물이 없는 환경에서 216건이
