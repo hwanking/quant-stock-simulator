@@ -1,0 +1,18 @@
+{
+ "gate": "R0",
+ "const": "FAIR_FIXED_HAIRCUT",
+ "commits_touching_098": 2,
+ "first_commit": "8a853c96d",
+ "commits_read": 2,
+ "commits_explaining": 0,
+ "commits_denying_basis": 1,
+ "docs_scanned": 264,
+ "docs_mentions": 99,
+ "docs_saying_no_basis": 2,
+ "modules_scanned": 38,
+ "sibling_constants": [
+  "quant_indicators.py:392 FAIR_FIXED_HAIRCUT=0.98"
+ ],
+ "verdict": "R0 통과 — 근거 없음 확인 · R1 으로",
+ "ledger_last_date": "2026-08-03"
+}

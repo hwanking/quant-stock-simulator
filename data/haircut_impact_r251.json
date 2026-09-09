@@ -1,0 +1,33 @@
+{
+ "gate": "R1",
+ "seed": 251,
+ "n_asked": 1500,
+ "ledger_rows": 251528,
+ "spaced_rows": 122556,
+ "sample": 1494,
+ "paired": 1486,
+ "err_on": 8,
+ "err_off": 8,
+ "haircut_seen_on": {
+  "-2.0": 1270
+ },
+ "haircut_seen_off": {
+  "0.0": 1272
+ },
+ "execution_evidence_ok": true,
+ "changes": {
+  "구역 바뀜": 146,
+  "최종 점수 바뀜": 93,
+  "권장매수가 생김/사라짐": 2,
+  "신뢰도 등급 바뀜": 5
+ },
+ "zone_moves": {
+  "적정가 이하 (안전마진 미확보) → 안전마진 확보": 23,
+  "적정가 소폭 초과 → 적정가 이하 (안전마진 미확보)": 60,
+  "적정가 초과 (추격매수 경고) → 적정가 소폭 초과": 43,
+  "적정가 크게 초과 (추격매수 위험) → 적정가 초과 (추격매수 경고)": 18,
+  "판정 불가 → 적정가 크게 초과 (추격매수 위험)": 2
+ },
+ "fair_delta_median_pct": 2.0408163265306145,
+ "pairs_file": ".portfolio\\haircut_pairs_r251.json"
+}
