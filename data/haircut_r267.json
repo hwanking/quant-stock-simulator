@@ -1,0 +1,80 @@
+{
+ "gate": "R2·R3 (R267)",
+ "seed": 267,
+ "boot": 2000,
+ "ledger_rows": 251528,
+ "spaced_rows": 122556,
+ "plan": {
+  "valid": {
+   "dates_all": 87,
+   "k": 20,
+   "cases": 573
+  },
+  "blind": {
+   "dates_all": 47,
+   "k": 20,
+   "cases": 438
+  },
+  "train": {
+   "dates_all": 2429,
+   "dates_used": 300,
+   "k": 6,
+   "cases": 1330
+  }
+ },
+ "pairs": 2240,
+ "joined": 2240,
+ "execution_evidence_ok": true,
+ "date_floor": 30,
+ "splits": {
+  "train": {
+   "n": 1263,
+   "dates": 287,
+   "spread_on": -0.4837,
+   "spread_off": -0.5387,
+   "n_cheap_on": 748,
+   "n_cheap_off": 751,
+   "delta": -0.055,
+   "ci95": [
+    -0.1642,
+    0.0343
+   ],
+   "boot_ok": 2000,
+   "ci95_excl0": false
+  },
+  "valid": {
+   "n": 552,
+   "dates": 81,
+   "spread_on": 0.157,
+   "spread_off": 0.096,
+   "n_cheap_on": 250,
+   "n_cheap_off": 252,
+   "delta": -0.061,
+   "ci95": [
+    -0.2415,
+    0.0573
+   ],
+   "boot_ok": 2000,
+   "ci95_excl0": false
+  },
+  "blind": {
+   "n": 425,
+   "dates": 38,
+   "spread_on": -0.0486,
+   "spread_off": -0.0327,
+   "n_cheap_on": 164,
+   "n_cheap_off": 169,
+   "delta": 0.0159,
+   "ci95": [
+    -0.9292,
+    0.8068
+   ],
+   "boot_ok": 2000,
+   "ci95_excl0": false
+  }
+ },
+ "verdict": "(다) 못 가린다 — 현행 유지 · 날짜 하한은 채웠다 (못 봤다가 아니라 보니 없다)",
+ "same_sign": false,
+ "all_ci_excl0": false,
+ "date_floor_ok": true
+}

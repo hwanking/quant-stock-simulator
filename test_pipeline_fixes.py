@@ -23112,6 +23112,40 @@ check("이 절이 도는 시점의 실행 수가 이미 그 하한을 넘는다 
       bool(_m280) and _CHECKS_RUN[0] >= int(_m280.group(1).replace(',', '')),
       f"실행 {_CHECKS_RUN[0]:,} · 하한 {_m280.group(1) if _m280 else '?'}")
 
+print()
+print("§281 R267 — 고정 보정 0.98 을 날짜 하한을 채우는 표본으로 다시 쟀다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   R251 의 (다)는 날짜(valid 26 · blind 22 < 30)의 한계였다. R267 은 겹치지 않는 부분집합의
+#   valid·blind 기준일 전부(87 · 47)를 쓴다. 잠그는 것: 사전등록이 결과보다 먼저 있다 · 레이더에
+#   있다 · 판정 기준이 R251 과 같다(스크립트가 R251 의 잣대·부트 함수를 부른다 · 베끼지 않는다) ·
+#   산출물에 실행 증거·날짜 하한·판정이 있다 · 0.98 은 코드에서 그대로다(11-16 전 배포 금지).
+#   Δ·CI 값은 잠그지 않는다(원장이 자라면 움직인다 · R213). 판정문은 잠근다(바뀌면 사람이 다시 본다).
+import json as _json281
+_pre281 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R267_HAIRCUT_DATE_FLOOR.md'))
+check("R267 사전등록이 있고 기준을 R251 §4 그대로라고 적는다",
+      '판정 기준은 R251 사전등록' in _pre281 and '11-16 전에는 배포하지 않는다' in _pre281)
+_rad281 = _json281.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+check("레이더에 R267 줄이 있다 (새 사전등록 → 레이더 · R218)",
+      any('R267' in str(r.get('name')) for r in (_rad281.get('rows') or [])))
+_scr281 = _read148(_os.path.join(PROJ, 'scripts', 'haircut_r267.py'))
+check("R267 스크립트가 R251 의 잣대·부트·조인 함수를 불러 쓴다 (베끼지 않는다 · R92)",
+      'from scripts import haircut_r2_r251 as _r2' in _scr281 and '_r2.spread(' in _scr281
+      and '_r2.boot_delta(' in _scr281 and '_r2.ledger_join(' in _scr281)
+_out281 = _json281.loads(_read148(_os.path.join(PROJ, 'data', 'haircut_r267.json')) or '{}')
+check("R267 산출물이 실행 증거 · 날짜 하한 · 판정을 담는다",
+      _out281.get('execution_evidence_ok') is True and _out281.get('date_floor') == 30
+      and bool(_out281.get('verdict')) and 'ledger_rows' in _out281, str(_out281.get('verdict'))[:80])
+check("valid·blind 날짜가 실제로 하한 30 을 넘었다 (R251 이 못 채운 것)",
+      all(int(((_out281.get('splits') or {}).get(s) or {}).get('dates') or 0) >= 30 for s in ('valid', 'blind')),
+      str({s: ((_out281.get('splits') or {}).get(s) or {}).get('dates') for s in ('valid', 'blind')}))
+_res281 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R267_HAIRCUT_DATE_FLOOR.md'))
+check("결과 문서의 판정이 산출물의 판정과 같은 갈래다",
+      bool(_res281) and str(_out281.get('verdict', ''))[:3] in _res281)
+import quant_indicators as _qi281
+check("코드의 고정 보정은 그대로 0.98 이다 (결과가 어떻든 11-16 전 배포 금지 · R78)",
+      abs(float(_qi281.QuantIndicatorsEngine.FAIR_FIXED_HAIRCUT) - 0.98) < 1e-9)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
