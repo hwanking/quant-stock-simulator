@@ -23146,6 +23146,25 @@ import quant_indicators as _qi281
 check("코드의 고정 보정은 그대로 0.98 이다 (결과가 어떻든 11-16 전 배포 금지 · R78)",
       abs(float(_qi281.QuantIndicatorsEngine.FAIR_FIXED_HAIRCUT) - 0.98) < 1e-9)
 
+print()
+print("§282 R268 — 전수조사 82건 상태표: 빠짐없이 · 요약 수 = 표의 수 · 미검증을 완료로 안 적는다 (2026-09-10)")
+print("-" * 72)
+_cs282 = _read148(_os.path.join(PROJ, 'docs', 'CENSUS_R252_STATUS.md'))
+_rows282 = [l for l in _cs282.splitlines() if _re.match(r'^\| \d+ \|', l)]
+check("상태표에 82건이 전부 있다 (번호 1~82 · 빠짐 없음)",
+      len(_rows282) == 82 and [int(l.split('|')[1]) for l in _rows282] == list(range(1, 83)),
+      f"{len(_rows282)}행", scanned=len(_rows282))
+_st282 = {}
+for l in _rows282:
+    _st282[l.split('|')[5].strip()] = _st282.get(l.split('|')[5].strip(), 0) + 1
+_sum282 = {m.group(1).strip(): int(m.group(2)) for m in _re.finditer(r'^\| (완료|부분|닫음\(이미 잰 것\)|남음) \| (\d+) \|', _cs282, _re.M)}
+check("요약 표의 수가 행을 센 수와 같다 (손으로 적은 합계가 아니다)", _sum282 == _st282, f"{_sum282} vs {_st282}")
+check("'완료' 행은 전부 라운드 번호(R…)를 근거로 든다 (미검증을 완료로 안 적는다 · §9)",
+      all(_re.search(r'R\d{2,3}', l.split('|')[6]) for l in _rows282 if l.split('|')[5].strip() == '완료'),
+      scanned=sum(1 for l in _rows282 if l.split('|')[5].strip() == '완료'))
+check("상태표가 종목 코드 여섯 자리를 담지 않는다 (제목만 옮긴다 · §9)",
+      not _re.search(r'\b\d{6}\b', _cs282), scanned=len(_rows282))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
