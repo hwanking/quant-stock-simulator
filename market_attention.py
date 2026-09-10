@@ -342,16 +342,28 @@ def fetch_sector_map(max_age_sec=3600, progress=None):
                 break
         groups.append((m.group(1), m.group(2).strip(), chg))
 
+    # 라운드 270 — 옛 업종 목록 페이지가 새 사이트로 넘어가면(2026-09-10 · 행 0개) 새 사이트의
+    #   JSON 목록으로 같은 셋(번호·이름·등락률)을 받는다. 구성종목도 업종당 1회 — 같은 규모.
+    use_api = not groups
+    if use_api:
+        groups = sector_groups_from_api(
+            {'groups': _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/industry", 'groups')})
+
     by_code, sectors = {}, {}
     for i, (no, name, chg) in enumerate(groups):
         if progress:
             progress(f"업종 상대강도 {i + 1}/{len(groups)} · {name}")
-        try:
-            h2 = be.fetch_html_with_retry(
-                f"https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}")
-        except Exception:
-            continue
-        codes = sorted(set(re.findall(r'code=(\d{6})', h2 or '')))
+        if use_api:
+            codes = sorted({str(s.get('itemCode'))
+                            for s in _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/industry/{no}", 'stocks')
+                            if isinstance(s, dict) and s.get('itemCode')})
+        else:
+            try:
+                h2 = be.fetch_html_with_retry(
+                    f"https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}")
+            except Exception:
+                continue
+            codes = sorted(set(re.findall(r'code=(\d{6})', h2 or '')))
         sectors[name] = {'no': no, 'change_pct': chg, 'count': len(codes)}
         for c in codes:
             by_code[c] = {'sector': name, 'sector_change_pct': chg}
@@ -388,6 +400,11 @@ def fetch_investor_flow(code, days=20):
         if len(rows) >= days:
             break
     if not rows:
+        # 라운드 270 — 옛 '외국인·기관' 페이지가 새 사이트로 넘어가면 표가 없다. 같은 값이
+        #   새 사이트의 투자자 추세 JSON(trend)에 있다 — 날짜·기관·외국인 순매매(주).
+        rows = flow_rows_from_trend(be.fetch_json_with_retry(
+            f"{be.NAVER_MOBILE_API}/stock/{code}/trend?pageSize={int(days)}&page=1"), days)
+    if not rows:
         return None
     return {
         'inst_5d': float(sum(r['inst'] for r in rows[:5])),
@@ -396,6 +413,61 @@ def fetch_investor_flow(code, days=20):
         'frgn_20d': float(sum(r['frgn'] for r in rows)),
         'days': len(rows),
     }
+
+
+def _api_all_pages(url_base, key, page_size=100, max_pages=40):
+    """새 사이트 목록 JSON 을 totalCount 까지 넘겨 가며 모은다 (pageSize 상한이 있어 200 은 400 이 난다 · 실측)."""
+    out = []
+    total = None
+    for page in range(1, max_pages + 1):
+        d = be.fetch_json_with_retry(f"{url_base}?page={page}&pageSize={page_size}", timeout=8, retries=2)
+        if not isinstance(d, dict):
+            break
+        items = d.get(key) or []
+        out.extend(items)
+        if total is None:
+            try:
+                total = int(d.get('totalCount') or 0)
+            except (TypeError, ValueError):
+                total = 0
+        if not items or page * page_size >= total:
+            break
+    return out
+
+
+def sector_groups_from_api(d):
+    """새 사이트 업종 목록 JSON → [(번호, 이름, 등락률)] — 옛 목록 페이지와 같은 셋. 순수 함수 (라운드 270)."""
+    out = []
+    for g in ((d or {}).get('groups') or []) if isinstance(d, dict) else []:
+        if not isinstance(g, dict) or g.get('no') is None or not g.get('name'):
+            continue
+        chg = (_signed(str(g.get('changeRate')).replace('%', ''))
+               if g.get('changeRate') not in (None, '', '-') else None)
+        out.append((str(g['no']), str(g['name']).strip(), chg))
+    return out
+
+
+def flow_rows_from_trend(rows, days=20):
+    """새 사이트 투자자 추세 JSON → [{'date': 'YYYY.MM.DD', 'inst', 'frgn'}] — 옛 표와 같은 뜻. 순수 함수 (라운드 270).
+
+    기관은 organPureBuyQuant · 외국인은 foreignerPureBuyQuant(주 · 부호 있음). 둘 다 못 읽으면 행을
+    만들지 않는다(옛 파서와 같다 · §3). 날짜는 bizdate(YYYYMMDD)를 옛 표기 'YYYY.MM.DD' 로.
+    """
+    out = []
+    for r in rows or [] if isinstance(rows, list) else []:
+        if not isinstance(r, dict):
+            continue
+        bd = str(r.get('bizdate') or '')
+        if not re.fullmatch(r'\d{8}', bd):
+            continue
+        inst = _signed(r.get('organPureBuyQuant'))
+        frgn = _signed(r.get('foreignerPureBuyQuant'))
+        if inst is None and frgn is None:
+            continue
+        out.append({'date': f"{bd[:4]}.{bd[4:6]}.{bd[6:]}", 'inst': inst or 0.0, 'frgn': frgn or 0.0})
+        if len(out) >= days:
+            break
+    return out
 
 
 def _signed(text):

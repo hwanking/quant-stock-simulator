@@ -23165,6 +23165,116 @@ check("'완료' 행은 전부 라운드 번호(R…)를 근거로 든다 (미검
 check("상태표가 종목 코드 여섯 자리를 담지 않는다 (제목만 옮긴다 · §9)",
       not _re.search(r'\b\d{6}\b', _cs282), scanned=len(_rows282))
 
+print()
+print("§283 R269 — 차트 구조 R1 은 백필로 못 연다 · 업종조정 '지금' 추기 · 상수 피처는 자료가 말한다 (2026-09-10)")
+print("-" * 72)
+import json as _json283
+_pre283 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R214_CHART_STRUCTURE.md'))
+check("R214 사전등록에 '백필해도 R1 미달(blind 25 < 30)' 추기가 있다 — 열리지 않는 관문에 시세를 다시 받지 않는다",
+      'R2 백필은 R1 을 못 연다' in _pre283 and 'blind 25 < 30' in _pre283 and '백필은 하지 않는다' in _pre283)
+_rad283 = _json283.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_row283 = next((r for r in (_rad283.get('rows') or []) if '(R214)' in str(r.get('name'))), None)
+check("레이더에 차트 구조(R214) 줄이 있고 상태가 'R1 미달 · 11-16 뒤'다 (사전등록 → 레이더 · R218)",
+      bool(_row283) and 'R1 미달' in str(_row283.get('status')) and '11-16' in str(_row283.get('status')))
+_r171 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R171_WATCHLIST_PNL.md'))
+check("R171 의 '열림 · 지금' 업종조정 줄에 '아직 안 열렸다' 추기가 붙어 있다 (열린 것과 하고 있는 것은 다르다)",
+      '아직 안 열렸다' in _r171 and '11-16 이후' in _r171)
+_ml283 = _read148(_os.path.join(PROJ, 'scripts', 'meta_label_lab.py'))
+check("메타 라벨 랩이 상수 피처를 자료로 찍는다 (손 목록으로 지우지 않는다 · 0건이면 0건)",
+      'const_cols' in _ml283 and 'np.nanstd(X[:, j])) == 0.0' in _ml283 and '상수 피처' in _ml283)
+
+print()
+print("§284 R270 — 네이버가 옛 종목 페이지를 새 사이트로 넘긴다 · JSON 경로가 같은 칸을 채운다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-10 오후부터 finance.naver.com/item/main.naver 가 stock.naver.com 으로 302 되어
+#   HTML 파서가 모든 종목을 '종목 페이지 없음'으로 읽었다(회귀 §17 이 그래서 죽었다 · 오전엔 통과).
+#   고침: 옛 표식이 없을 때만 m.stock.naver.com/api 로 같은 칸을 채운다. 여기서는 **순수 함수**를
+#   심어서 잰다 — 값을 지어내지 않는지(펀드 · 결측 · 추정치 제외 · 시장) · 옛 파서와 칸이 같은지.
+import bitemporal_engine as _be284
+_api284 = {
+    'basic': {'stockName': '시험전자', 'closePrice': '269,000', 'compareToPreviousClosePrice': '-500',
+              'fluctuationsRatio': '-0.19', 'stockExchangeType': {'code': 'KQ'}, 'stockEndType': 'stock'},
+    'integration': {'industryCode': 278, 'totalInfos': [
+        {'key': '시가', 'value': '268,000'}, {'key': '고가', 'value': '272,000'}, {'key': '저가', 'value': '263,500'},
+        {'key': '거래량', 'value': '30,033,115'}, {'key': 'PER', 'value': '12.07배'}, {'key': 'EPS', 'value': '22,292원'},
+        {'key': 'PBR', 'value': '3.13배'}, {'key': 'BPS', 'value': '86,052원'}]},
+    'finance': {'financeInfo': {'rowList': [
+        {'title': 'ROE', 'columns': {'202612': {'value': '15.00'}, '202312': {'value': '4.15'}, '202412': {'value': '9.03'}}},
+        {'title': '부채비율', 'columns': {'202612': {'value': '20.00'}, '202412': {'value': '27.93'}}}]}},
+    'industry_name': '반도체와반도체장비',
+}
+_i284 = _be284.info_from_mobile_api(_api284, prev={'sector': '옛업종'}, today_yyyymm='202609')
+check("JSON 경로가 이름·현재가·전일비·시고저·거래량을 옛 파서와 같은 칸에 넣는다",
+      _i284['name'] == '시험전자' and _i284['base_price'] == 269000.0 and _i284['diff_price'] == -500.0
+      and _i284['prev_close'] == 269500.0 and _i284['open_p'] == 268000.0 and _i284['volume'] == 30033115.0)
+check("시장은 stockExchangeType 에서 읽는다 — KQ → KOSDAQ (추정 아님)", _i284['market'] == 'KOSDAQ')
+check("재무는 받은 것만 — PER/EPS/PBR/BPS 는 단위 글자를 벗긴 수, ROE·부채비율은 **가장 최근 실적**(추정치 202612 제외)",
+      _i284['per'] == 12.07 and _i284['eps'] == 22292.0 and _i284['bps'] == 86052.0
+      and _i284['roe'] == 9.03 and _i284['debt'] == 27.93, f"roe={_i284['roe']} debt={_i284['debt']}")
+check("업종은 API 의 업종 이름 · 없으면 종전 값 (날짜가 아니라 종목의 성질 · R218)",
+      _i284['sector'] == '반도체와반도체장비'
+      and _be284.info_from_mobile_api({**_api284, 'industry_name': None}, prev={'sector': '옛업종'}, today_yyyymm='202609')['sector'] == '옛업종'
+      and _be284.info_from_mobile_api({**_api284, 'industry_name': None}, prev={}, today_yyyymm='202609')['sector'] is None)
+check("page_status 가 새 경로임을 말한다 (옛 파서의 'ok'/'item_page_missing' 과 다른 낱말)", _i284['page_status'] == 'ok_mobile_api')
+_fund284 = _be284.info_from_mobile_api({'basic': {'stockName': 'KODEX 200', 'closePrice': '111,865', 'stockExchangeType': {'code': 'KS'},
+                                                  'stockEndType': 'etf'}, 'integration': {'totalInfos': [{'key': 'PER', 'value': '12배'}]},
+                                        'finance': {}, 'industry_name': None}, today_yyyymm='202609')
+check("펀드(etf)는 EPS·BPS·PER·PBR 0 · ROE·부채 None — 적정가를 지어내지 않는다 (심기)",
+      _fund284['is_fund'] and _fund284['eps'] == 0.0 and _fund284['per'] == 0.0 and _fund284['roe'] is None and _fund284['debt'] is None)
+_miss284 = _be284.info_from_mobile_api({'basic': {'stockName': '빈종목', 'closePrice': '1,000', 'stockExchangeType': {}, 'stockEndType': 'stock'},
+                                        'integration': {'totalInfos': [{'key': 'PER', 'value': '-'}, {'key': 'BPS', 'value': 'N/A'}]},
+                                        'finance': {}, 'industry_name': None}, today_yyyymm='202609')
+check("못 받은 칸은 빈 값 — 시장 None · EPS/BPS None · ROE None · 시고저는 현재가 · 거래량 0 (옛 파서와 같은 뜻 · §3)",
+      _miss284['market'] is None and _miss284['eps'] is None and _miss284['bps'] is None and _miss284['roe'] is None
+      and _miss284['open_p'] == 1000.0 and _miss284['volume'] == 0.0, str({k: _miss284[k] for k in ('market', 'eps', 'bps', 'roe')}))
+check("_api_num 이 단위·쉼표·빈 표식을 옳게 읽는다 (심기)",
+      _be284._api_num('12.07배') == 12.07 and _be284._api_num('22,292원') == 22292.0 and _be284._api_num('46.81%') == 46.81
+      and _be284._api_num('-') is None and _be284._api_num('N/A') is None and _be284._api_num(None) is None and _be284._api_num('-6.26') == -6.26)
+_src284 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("실시세 파서가 옛 표식이 없을 때만 JSON 경로로 간다 (옛 페이지가 오면 옛 파서 그대로)",
+      "if not html_m or ('no_today' not in html_m and 'wrap_company' not in html_m):" in _src284
+      and 'api = fetch_naver_mobile_api(code)' in _src284)
+# 유니버스 — 옛 시가총액 페이지도 같은 날 새 사이트로 넘어갔다(코드 0개). JSON 목록은 ETF 가 섞여
+#   있으므로 **종목만** 남긴다(옛 페이지도 종목만 · R164 경계). 단위는 억원 그대로 · PER·ROE 는 없어 None.
+_stk284 = [{'stockEndType': 'stock', 'itemCode': '005930', 'stockName': '삼성전자', 'closePrice': '269,000',
+            'accumulatedTradingVolume': '21,010,910', 'marketValue': '15,726,489'},
+           {'stockEndType': 'etf', 'itemCode': '069500', 'stockName': 'KODEX 200', 'closePrice': '111,865', 'marketValue': '259,527'},
+           {'stockEndType': 'etn', 'itemCode': '500001', 'stockName': '어떤 ETN', 'closePrice': '10,000', 'marketValue': '100'},
+           {'stockEndType': 'stock', 'itemCode': '', 'stockName': '코드없음', 'closePrice': '1,000', 'marketValue': '1'}]
+_lst284 = _be284.BitemporalEngine.listing_from_api_stocks(_stk284, 'KOSPI')
+check("유니버스 JSON 목록은 종목만 남긴다 — ETF·ETN·코드 없음 제외 (심기 · R164 경계)",
+      [r['code'] for r in _lst284] == ['005930'], str([r['code'] for r in _lst284]))
+check("유니버스 칸이 옛 시총 페이지와 같다 — 가격 · 시총(억원) · 거래량 · PER/ROE 는 None",
+      _lst284 and _lst284[0]['price'] == 269000.0 and _lst284[0]['market_cap_eok'] == 15726489.0
+      and _lst284[0]['volume'] == 21010910.0 and _lst284[0]['per'] is None and _lst284[0]['roe'] is None
+      and _lst284[0]['market'] == 'KOSPI')
+check("폴백 유니버스가 부채비율 None 에 죽지 않고 'Unknown' 을 적는다 (종전 TypeError · §3)",
+      "\"Unknown\" if meta.get(\"debt\") is None" in _src284)
+# 검색 · 업종 목록 · 수급 — 같은 날 같은 이전. 순수 함수 셋을 심어서 잰다.
+_ac284 = _be284.search_hits_from_ac([
+    {'code': '018880', 'name': '한온시스템', 'typeCode': 'KOSPI', 'nationCode': 'KOR', 'category': 'stock'},
+    {'code': '018880', 'name': '한온시스템', 'typeCode': 'KOSPI', 'nationCode': 'KOR'},          # 중복
+    {'code': 'AAPL', 'name': '애플', 'typeCode': 'NASDAQ', 'nationCode': 'USA'},                 # 해외
+    {'code': '247540', 'name': '에코프로비엠', 'typeCode': 'KOSDAQ', 'nationCode': 'KOR'},
+    {'code': '', 'name': '코드없음'}])
+check("자동완성 검색은 국내 종목만 · 중복 제거 · 시장은 읽은 것 (심기)",
+      _ac284 == [('018880', '한온시스템', 'KOSPI'), ('247540', '에코프로비엠', 'KOSDAQ')], str(_ac284))
+import market_attention as _ma284
+_grp284 = _ma284.sector_groups_from_api({'groups': [{'no': 278, 'name': '반도체와반도체장비', 'changeRate': '0.07'},
+                                                     {'no': 41, 'name': '건설', 'changeRate': '-1.20'},
+                                                     {'no': 9, 'name': '', 'changeRate': '1'}, {'name': '번호없음'}]})
+check("업종 목록 JSON → (번호·이름·등락률) — 옛 목록 페이지와 같은 셋 · 빈 항목 제외 (심기)",
+      _grp284 == [('278', '반도체와반도체장비', 0.07), ('41', '건설', -1.2)], str(_grp284))
+_fl284 = _ma284.flow_rows_from_trend([
+    {'bizdate': '20260910', 'organPureBuyQuant': '+4,266,985', 'foreignerPureBuyQuant': '-5,769,453'},
+    {'bizdate': '20260909', 'organPureBuyQuant': '-', 'foreignerPureBuyQuant': '-'},                # 둘 다 못 읽음
+    {'bizdate': '2026-09-08', 'organPureBuyQuant': '1'},                                          # 날짜 모양 다름
+    {'bizdate': '20260908', 'organPureBuyQuant': '+2,406,250', 'foreignerPureBuyQuant': '+3,332,528'}], 20)
+check("수급 JSON → 날짜·기관·외국인 순매매 — 부호 보존 · 못 읽은 행은 안 만든다 (심기)",
+      _fl284 == [{'date': '2026.09.10', 'inst': 4266985.0, 'frgn': -5769453.0},
+                 {'date': '2026.09.08', 'inst': 2406250.0, 'frgn': 3332528.0}], str(_fl284))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
