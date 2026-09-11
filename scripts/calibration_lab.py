@@ -1334,6 +1334,15 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         show_block(b)
 
     # ── 실패 원인 분류 — 빈도와 손실 규모, 큰 손실부터 ─────────────────────
+    # 라운드 273 — 아래 분류는 **우선순위 사슬**이다: 한 건은 처음 맞는 유형 하나에만 세어지고
+    #   앞 가지가 참이면 뒤 가지는 세어지지 않는다(실측 · 매수권 58+ 실패: '시장 국면 역풍' 이
+    #   '노이즈 손절' 조건까지 만족하는 건을 train 9.31% · blind 7.38% 가져가고, valid 는 BEAR 가
+    #   4건뿐이라 뒤 가지 '방향 오판'이 44.71% 로 흘러간다 · 2026-09-09). 화면이 이 순서를 같이
+    #   내도록 산출물에 싣는다 — 문턱(70·85·0.5·5)·순서·이름 불변.
+    FAILURE_CHAIN = ('기간 내 미도달', '인버스 방향 해석', '레버리지 변동성', '자기유사 표본 부족',
+                     '과열 추격', '시장 국면 역풍', '노이즈 손절(목표 절반까지 갔다 반락)',
+                     '추세 역행(월10선 아래)', '방향 오판')
+
     def classify_failure(g):
         r, gr = g['row'], g['grade']
         if gr['outcome'] == 'OPEN':
@@ -1472,6 +1481,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         'breakdowns': breakdowns,
         'splits': splits_out,
         'failure_classes': fail_out,
+        'failure_chain': list(FAILURE_CHAIN),        # 라운드 273 — 분류 순서(우선순위 사슬)
         'signal_frequency': freq_out,
         'high_confidence': hc,
         'total_cases': len(graded),

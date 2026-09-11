@@ -304,7 +304,11 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
          ((f'{HORIZON}봉 실측 체결률 기준 '
            + ('통과' if (depth_sigma is not None
                         and depth_sigma <= MAX_ENTRY_SIGMA) else '미달')
-           + f' · 모형 확률 {fill_p:.0f}% ({FILL_MODEL_NOTE})')
+           + f' · 모형 확률 {fill_p:.0f}% ({FILL_MODEL_NOTE})'
+           # 라운드 273 — 이 줄의 판정 불리언은 바로 위 '진입 깊이 현실적' 과 **같은 식**이다
+           #   (σ 상한 하나 · R246 이 실재를 확인하고 자리 때문에 안 합쳤다). 이름이 다른 두 줄이
+           #   늘 같이 통과·미달하므로 그 사실을 설명이 말한다 — 값·문턱·자리·조건 수 불변.
+           + " · 판정은 위 '진입 깊이 현실적' 과 같은 규칙(σ 상한 하나)")
           if fill_p is not None else '산출 불가')),
         ('목표·손절 산출', tgt is not None and stop is not None,
          '있음' if (tgt and stop) else '미산출'),

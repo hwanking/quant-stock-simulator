@@ -9846,6 +9846,17 @@ if _perf_cal.get('total_cases'):
                 '실패 유형': f['class'], '건수': f['n'],
                 '누적 손실 기여': f"{f['total_loss']:+.1f}%p",
             } for f in _fails_p]), width='stretch', hide_index=True)
+            # 라운드 273 — 이 표는 나란한 원인이 아니라 **우선순위 사슬**이다. 한 건은 처음 맞는
+            #   유형 하나에만 세어지고 앞 유형이 뒤 유형을 먹는다 — 그래서 어떤 구간의 '방향 오판'
+            #   이 크다는 것은 그 앞 유형(예: 시장 국면 역풍)이 그 구간에 드물었다는 뜻일 수 있다.
+            #   순서는 원장 채점기가 산출물에 싣는다(§4 · 화면은 읽기만). 없으면 순서 없이 사실만.
+            _chain_p = _perf_cal.get('failure_chain') or []
+            st.caption("※ 한 건은 위 유형 중 **처음 맞는 하나**에만 세어집니다(우선순위 사슬). "
+                       "앞 유형이 많은 구간에서는 뒤 유형이 적게 보이고, 앞 유형이 드문 구간에서는 "
+                       "그 건들이 뒤 유형으로 흘러갑니다 — 유형별 건수는 원인의 크기가 아니라 "
+                       "사슬을 지난 뒤의 몫입니다."
+                       + (" 판정 순서: " + " → ".join(_chain_p) if _chain_p
+                          else " 판정 순서는 다음 채점 실행부터 여기에 표시됩니다."))
         _warn_lines = []
         _v_p, _b_p = _sp_p.get('valid') or {}, _sp_p.get('blind') or {}
         if (_v_p.get('hit_rate') is not None and _b_p.get('hit_rate') is not None

@@ -23364,6 +23364,41 @@ check("워크플로가 그 검사를 업로드 **뒤**에 `|| true` 없이 둔�
       and _yml286.rfind('scripts/forward_registry_check.py') > _yml286.find('새 스냅샷 올리기')
       and 'forward_registry_check.py || true' not in _yml286)
 
+print()
+print("§287 R273 — 같은 식인 두 게이트 줄은 설명이 그것을 말한다 · 실패 분류는 우선순위 사슬임을 화면이 말한다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   ① verdict_core 의 '진입 깊이 현실적' 과 '보유기간 안 도달 가능' 은 판정 불리언이 글자까지 같다
+#      (R246 이 확인 · 자리 때문에 안 합쳤다). 이름이 다른 두 줄이 늘 같이 통과·미달하는데 화면은
+#      서로 다른 것을 재는 것처럼 보였다(R237·R239 계열). 값·문턱·자리·조건 수 불변 — 설명만.
+#   ② 실패 원인 분류는 return 사슬(앞 가지가 뒤 가지를 먹는다)인데 화면은 나란한 원인 표로 냈다.
+#      순서는 채점기가 산출물(`failure_chain`)에 싣고 화면은 읽기만 한다(§4).
+import re as _re287
+_vc287 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_m287 = list(_re287.finditer(r"depth_sigma is not None\s*\n?\s*and depth_sigma <= MAX_ENTRY_SIGMA", _vc287))
+check("두 게이트 줄의 판정식이 여전히 같은 식이다 (조건 수 11 · 자리 불변 — 합치지 않았다)",
+      len(_m287) >= 2 and "('진입 깊이 현실적'" in _vc287 and "('보유기간 안 도달 가능'" in _vc287,
+      f"같은 식 {len(_m287)}곳")
+check("'보유기간 안 도달 가능' 의 설명이 위 줄과 같은 규칙임을 말한다 (이름이 계산보다 넓지 않게)",
+      "판정은 위 '진입 깊이 현실적' 과 같은 규칙" in _vc287
+      and _vc287.find("판정은 위 '진입 깊이 현실적' 과 같은 규칙") > _vc287.find("('보유기간 안 도달 가능'"))
+_cl287 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_chain_m = _re287.search(r"FAILURE_CHAIN = \((.*?)\)\n", _cl287, _re287.S)
+_chain287 = [x.strip().strip("'") for x in _chain_m.group(1).replace('\n', ' ').split("',") if x.strip().strip("'")] if _chain_m else []
+_pos287 = []
+for _lbl in _chain287:
+    _p = _cl287.find(f"return '{_lbl}'")
+    _pos287.append(_p)
+check("사슬 상수의 순서 = classify_failure 의 return 순서 (9유형 · 전부 존재 · 오름차순)",
+      len(_chain287) == 9 and all(p > 0 for p in _pos287) and _pos287 == sorted(_pos287),
+      f"{len(_chain287)}유형 · 위치 {_pos287}")
+check("채점기가 순서를 산출물에 싣는다 (failure_chain)", "'failure_chain': list(FAILURE_CHAIN)" in _cl287)
+_wa287 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 실패 원인 표 아래에 '처음 맞는 하나에만 세어진다'(사슬)를 말하고 순서는 산출물에서 읽는다 (§4)",
+      "처음 맞는 하나**에만 세어집니다(우선순위 사슬)" in _wa287
+      and "_perf_cal.get('failure_chain')" in _wa287
+      and "판정 순서는 다음 채점 실행부터 여기에 표시됩니다" in _wa287)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
