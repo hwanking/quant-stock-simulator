@@ -23324,6 +23324,16 @@ _r285n = _sp285.run([sys.executable, '-c', "print('\\u2014 em-dash'); print('R28
                     capture_output=True, env=_env285, cwd=PROJ, timeout=120)
 check("같은 print 가 엔진 없이는 실제로 죽는다 — 심기가 잡는 것을 확인 (양방향)",
       _r285n.returncode != 0 and b'UnicodeEncodeError' in _r285n.stderr, f"rc={_r285n.returncode}")
+# ── 순매수 상위 목록은 새 사이트에 없다 — 그 방식의 0 은 판정이 아니라 미수신이다 (§3) ──
+#   `fetch_candidate_pool` 이 출처 보고에 `why` 를 싣고, `find_attention_candidates` 가 'flow' 방식에서
+#   후보 0 이면 그 사유를 `unavailable` 로 옮긴다. 화면은 unavailable 을 경고로 낸다(이미 있는 길).
+_ma285_src = _read148(_os.path.join(PROJ, 'market_attention.py'))
+check("순매수 상위 출처 보고가 미수신일 때 사유(why)를 싣는다 — 소비자가 읽을 수 있게",
+      "'why': None if flow_ok > 0 else" in _ma285_src)
+check("'외국인·기관' 방식이 후보 0 + 출처 미수신이면 unavailable 에 그 사유를 옮긴다 (데이터 미수신 ≠ 추천 없음)",
+      "if strategy == 'flow' and not rows:" in _ma285_src
+      and "외국인·기관 순매수 상위 목록을 받지 못했습니다 — " in _ma285_src
+      and _ma285_src.find("if strategy == 'flow' and not rows:") < _ma285_src.rfind("'unavailable': unavailable"))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

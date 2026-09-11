@@ -1175,8 +1175,19 @@ def find_attention_candidates(strategy='composite', top_n=15,
         rows.append(row)
 
     rows.sort(key=lambda r: r['attention']['adjusted_attention_score'], reverse=True)
+    # 라운드 271 — '외국인·기관' 방식은 순매수 상위 **목록** 진입만 본다. 그 목록의 출처가
+    #   미수신이면(옛 페이지가 새 사이트로 넘어갔고 새 목록 끝점이 없다 · 2026-09-10) 후보는
+    #   구조적으로 0 인데, 사유 없이 0 을 내면 화면은 '후보 없음'(판정)으로 읽는다 —
+    #   데이터 미수신 ≠ 추천 없음(§3). 사유는 출처 보고의 `why` 를 그대로 옮긴다.
+    unavailable = None
+    if strategy == 'flow' and not rows:
+        _flow_src = next((r for r in report if r.get('source') == '외국인·기관 순매수 상위'), None)
+        if _flow_src is not None and not _flow_src.get('ok'):
+            unavailable = ("외국인·기관 순매수 상위 목록을 받지 못했습니다 — "
+                           + str(_flow_src.get('why') or '사유 미기록')
+                           + ". 종목별 수급(동시 순매수·순매수 전환)은 '종합 이슈' 방식이 봅니다.")
     return {'rows': rows[:top_n], 'pool_size': len(pool), 'deep_count': len(deep),
-            'sources': report, 'failures': failures, 'unavailable': None,
+            'sources': report, 'failures': failures, 'unavailable': unavailable,
             'used_confirmed_bars_only': live}
 
 
