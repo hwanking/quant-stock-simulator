@@ -23408,6 +23408,32 @@ check("화면이 실패 원인 표 아래에 '처음 맞는 하나에만 세어�
       and "_perf_cal.get('failure_chain')" in _wa287
       and "판정 순서는 다음 채점 실행부터 여기에 표시됩니다" in _wa287)
 
+print()
+print("§288 R274 — 화면의 '판정 불가·미수신·산출 불가' 옆에는 사유가 있다 — 렌더로 세고 0 을 요구한다 (PLAN_R177 §5.1 · 2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 177 이 렌더한 화면에서 이 세 낱말 14곳에 사유가 0% 임을 세고 "이 비율을 회귀가 센다"고
+#   적었다(§5.1). 그 뒤 회귀에 관련 검사가 0건이었다(전수조사 #67). 판별식은 scripts/unavailable_audit
+#   한 곳(R177 프로브도 같은 함수) · 렌더는 render_probe 자식 프로세스(R163) · scanned 는 찾은 표현 수.
+from scripts import unavailable_audit as _ua288
+_pl288 = _ua288.audit_text(_ua288.clean_render_text(["진입 위치: 판정 불가", "거래대금 미수신 — 응답 없음"]))
+check("심기 — 판별식이 사유 없음(판정 불가)과 사유 있음(미수신 —)을 가른다 (양방향)",
+      _pl288['판정 불가']['with_reason'] == 0 and _pl288['미수신']['with_reason'] == 1 and _pl288['scanned'] == 3,
+      str({k: v for k, v in _pl288.items() if k != 'scanned'})[:120])
+_r288 = _render(ticker='000720', want_unavailable=True)
+_au288 = (_r288.get('unavailable') or {}) if _r288.get('ok') else {}
+_sc288 = int(_au288.get('scanned') or 0)
+check("렌더가 돌고 '못 냈다' 표현을 실제로 찾았다 (0 이면 못 잰 것) · 업데이트 내역 카드는 뺀다(역사 산문 · 상태값 아님)",
+      _render_ok(_r288) and _sc288 > 0 and int(_au288.get('history_skipped') or 0) > 0,
+      f"ok={_r288.get('ok')} · 예외 {_r288.get('exceptions')} · 표현 {_sc288}곳 · 카드 제외 {_au288.get('history_skipped')}덩어리 · {str(_r288.get('error') or '')[:80]}",
+      scanned=_sc288)
+_n288, _yes288, _no288 = _ua288.core_summary(_au288)
+_wo288 = [s for w in _ua288.CORE for s in (_au288.get(w) or {}).get('without', [])]
+check("핵심 세 낱말(판정 불가·미수신·산출 불가)에 사유 없는 자리가 0 이다 — 못 낸 값 옆에는 사유를 적는다 (PLAN_R177 §5.1)",
+      _sc288 > 0 and _no288 == 0,
+      f"{_n288}곳 · 사유 {_yes288} · 없음 {_no288}" + (f" · 예: {_wo288[0][:110]}" if _wo288 else ''),
+      scanned=_sc288)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

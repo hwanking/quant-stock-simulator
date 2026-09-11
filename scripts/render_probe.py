@@ -56,6 +56,8 @@ def main():
     # 라운드 200 — 존재만이 아니라 **값**이 필요할 때가 있다.
     #   보유 연동은 '키가 있나' 가 아니라 '보유 중으로 왔나' 다.
     ap.add_argument('--want-val', action='append', default=[])
+    # 라운드 274 — "못 냈다" 표현의 사유 비율(PLAN_R177 §5.1). 판별식은 scripts/unavailable_audit 한 곳.
+    ap.add_argument('--want-unavailable', action='store_true')
     ap.add_argument('--timeout', type=int, default=1800)
     a = ap.parse_args()
 
@@ -114,6 +116,13 @@ def main():
         out['vals'] = {k: (v if isinstance(v, (str, int, float, bool))
                            or v is None else str(v)[:80])
                        for k, v in _vals.items()}
+        if a.want_unavailable:
+            from scripts import unavailable_audit as _ua     # PROJ 가 sys.path 에 있다 (위)
+            _txt = _ua.clean_render_text(
+                [getattr(m, 'value', '') for m in at.markdown]
+                + [getattr(c, 'value', '') for c in at.caption])
+            out['unavailable'] = _ua.audit_text(_txt)
+            out['unavailable']['history_skipped'] = _ua.clean_render_text.skipped
         out['ok'] = True
     except Exception as e:                                     # noqa: BLE001
         # 자식이 죽으면 부모가 그것을 **검사 실패가 아니라 실행 실패**로
