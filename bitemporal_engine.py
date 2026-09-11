@@ -6,9 +6,34 @@ import urllib.request
 import urllib.parse
 import json
 import re
+import sys
 import time
 
 import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
+
+
+def _stdout_tolerant():
+    """로그 줄 하나가 수집을 죽이지 않게 한다 (라운드 271 · 2026-09-11).
+
+    Windows 콘솔·streamlit 자식 프로세스의 표준출력이 cp949 면 로그의 '—' 한 글자가
+    UnicodeEncodeError 를 내고, 그것이 호출부의 ``except Exception`` 에 잡혀 **수집
+    실패**로 읽혔다 — 시총 1위 None · 전 종목 유니버스가 폴백 · 그 폴백의 print 에서 앱
+    사망. 프로브와 회귀는 stdout 을 utf-8 로 다시 열어 놓고 돌아 못 봤다(라운드 167 의
+    '데워진 프로세스'와 같은 모양). 인코딩은 바꾸지 않고(콘솔 설정은 사람의 것) 못 찍는
+    글자만 대체한다 — 로그는 깨진 채 남고 수집은 산다. §285 가 cp949 자식 프로세스로 심는다.
+    """
+    for stream_name in ('stdout', 'stderr'):
+        s = getattr(sys, stream_name, None)
+        if s is None or getattr(s, 'errors', None) in ('replace', 'backslashreplace', 'ignore',
+                                                        'xmlcharrefreplace', 'namereplace'):
+            continue
+        try:
+            s.reconfigure(errors='replace')
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+_stdout_tolerant()
 
 #: 네이버 종목 링크에서 코드를 뽑는 식. `\d{6}` 을 손으로 적지 않는다 —
 #: KRX 문자 포함 코드(ETF 1,161종목 중 296종목)를 통째로 놓친다.
@@ -244,6 +269,167 @@ def suffix_for(market):
     return {"KOSDAQ": ".KQ", "KOSPI": ".KS"}.get(str(market or "").upper(), "")
 
 
+# ── 라운드 270 (2026-09-10) — 네이버가 옛 종목 페이지를 새 사이트로 넘긴다 ──────────
+#   `finance.naver.com/item/main.naver?code=…` 가 이날 오후부터 `stock.naver.com/domestic/
+#   stock/<code>/price`(JS 앱 · no_today·wrap_company 없음)로 302 된다 — 세 종목·두 UA 전부.
+#   그러면 위 HTML 파서는 **모든 종목**을 '종목 페이지 없음'(라운드 204 의 사유)으로 읽고
+#   이름에 '<title>' 조각을 넣는다. 같은 날 오전엔 옛 페이지가 왔다(회귀 §17 이 통과했다).
+#   새 사이트가 쓰는 JSON(m.stock.naver.com/api)이 옛 페이지의 칸을 전부 준다 — 이름·현재가·
+#   전일비·시장(KS/KQ)·ETF 여부·시고저·거래량·PER/EPS/PBR/BPS·ROE·부채비율·업종 이름.
+#   HTML 에 옛 표식이 없을 때만 이 길로 간다(옛 페이지가 되살아나면 그대로 옛 파서).
+#   값을 지어내지 않는다 — 못 받은 칸은 옛 파서와 같은 의미의 빈 값(§3).
+NAVER_MOBILE_API = "https://m.stock.naver.com/api"
+_INDUSTRY_NAME_CACHE = {}          # 업종 번호 → 이름 (한 실행 안에서만)
+
+
+def _api_num(s):
+    """'269,000' · '12.07배' · '22,292원' · '46.81%' · '-6.26' → float · '-'/'N/A'/None → None."""
+    if s is None:
+        return None
+    t = re.sub(r'(배|원|%)$', '', str(s).strip().replace(',', ''))
+    if t in ('', '-', 'N/A'):
+        return None
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def _finance_latest_actual(fin, title, today_yyyymm):
+    """연간 재무표에서 `title` 행의 **가장 최근 실적** 값 — 추정치(기간이 오늘 이후)는 뺀다."""
+    for row in ((fin or {}).get('financeInfo') or {}).get('rowList') or []:
+        if str(row.get('title') or '').strip() != title:
+            continue
+        cols = row.get('columns') or {}
+        best = None
+        for period, cell in (cols.items() if isinstance(cols, dict) else []):
+            p = str(period)[:6]
+            if not p.isdigit() or int(p) >= int(today_yyyymm):
+                continue                                       # 추정치 — 안 쓴다
+            v = _api_num((cell or {}).get('value') if isinstance(cell, dict) else cell)
+            if v is None:
+                continue
+            if best is None or int(p) > best[0]:
+                best = (int(p), v)
+        return best[1] if best else None
+    return None
+
+
+def fetch_naver_mobile_api(code):
+    """새 네이버 증권 JSON 셋 — 못 받으면 None (basic 이 없으면 나머지는 안 묻는다)."""
+    basic = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stock/{code}/basic")
+    if not isinstance(basic, dict) or not basic.get('stockName'):
+        return None
+    integ = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stock/{code}/integration")
+    fin = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stock/{code}/finance/annual")
+    ind_no = (integ or {}).get('industryCode') if isinstance(integ, dict) else None
+    ind_name = None
+    if ind_no:
+        if ind_no in _INDUSTRY_NAME_CACHE:
+            ind_name = _INDUSTRY_NAME_CACHE[ind_no]
+        else:
+            g = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stocks/industry/{ind_no}?page=1&pageSize=1")
+            ind_name = ((g or {}).get('groupInfo') or {}).get('name') if isinstance(g, dict) else None
+            ind_name = str(ind_name).strip() if ind_name else None
+            _INDUSTRY_NAME_CACHE[ind_no] = ind_name
+    return {'basic': basic, 'integration': integ if isinstance(integ, dict) else {},
+            'finance': fin if isinstance(fin, dict) else {}, 'industry_name': ind_name}
+
+
+def fetch_naver_ac_search(query):
+    """새 네이버 증권 자동완성 — 종목만(target=stock). 못 받으면 []."""
+    q = urllib.parse.quote(str(query or '').strip())
+    if not q:
+        return []
+    d = fetch_json_with_retry(f"https://ac.stock.naver.com/ac?q={q}&target=stock", timeout=5, retries=2)
+    return (d or {}).get('items') or [] if isinstance(d, dict) else []
+
+
+def search_hits_from_ac(items):
+    """자동완성 항목 → [(코드, 이름, 시장|None)] · 국내 종목만 · 중복 제거. 순수 함수 (라운드 270)."""
+    out, seen = [], set()
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        code = str(it.get('code') or '').strip()
+        name = str(it.get('name') or '').strip()
+        if not code or not name or code in seen:
+            continue
+        if str(it.get('nationCode') or 'KOR').upper() != 'KOR':
+            continue
+        if not stock_code.find_codes(code):
+            continue
+        market = str(it.get('typeCode') or '').upper()
+        market = market if market in ('KOSPI', 'KOSDAQ') else None
+        seen.add(code)
+        out.append((code, name, market))
+    return out
+
+
+def info_from_mobile_api(api, prev=None, today_yyyymm=None):
+    """JSON 셋 → 옛 HTML 파서와 **같은 칸**의 info. 순수 함수 — 회귀가 심어서 잰다.
+
+    빈 칸의 의미는 옛 파서 그대로: 시고저는 못 받으면 현재가, 거래량은 0.0, 재무는
+    받은 것만(펀드는 EPS·BPS·PER·PBR 0 · ROE·부채 None), 업종은 못 받으면 **종전 값**
+    (업종은 날짜가 아니라 종목의 성질이다 · 라운드 218) 없으면 None.
+    """
+    b = (api or {}).get('basic') or {}
+    integ = (api or {}).get('integration') or {}
+    fin = (api or {}).get('finance') or {}
+    prev = prev or {}
+    if today_yyyymm is None:
+        today_yyyymm = datetime.datetime.now().strftime('%Y%m')
+    name = str(b.get('stockName') or '').strip()
+    price = _api_num(b.get('closePrice')) or 0.0
+    diff_p = _api_num(b.get('compareToPreviousClosePrice')) or 0.0
+    pct_p = _api_num(b.get('fluctuationsRatio')) or 0.0
+    exch = str(((b.get('stockExchangeType') or {}) if isinstance(b.get('stockExchangeType'), dict)
+                else {}).get('code') or '').upper()
+    market = {'KS': 'KOSPI', 'KQ': 'KOSDAQ'}.get(exch)
+    end_type = str(b.get('stockEndType') or '').lower()
+    is_fund = end_type in ('etf', 'etn') or BitemporalEngine.is_fund_like(name)
+    ti = {}
+    for x in (integ.get('totalInfos') or []):
+        if isinstance(x, dict) and x.get('key') not in ti:
+            ti[x.get('key')] = x.get('value')
+    open_p = _api_num(ti.get('시가')) or price
+    high_p = _api_num(ti.get('고가')) or price
+    low_p = _api_num(ti.get('저가')) or price
+    vol_p = _api_num(ti.get('거래량')) or 0.0
+    per = _api_num(ti.get('PER')) or 0.0
+    eps = _api_num(ti.get('EPS')) or 0.0
+    pbr = _api_num(ti.get('PBR')) or 0.0
+    bps = _api_num(ti.get('BPS')) or 0.0
+    if is_fund:
+        eps = bps = per = pbr = 0.0
+        roe = debt = None
+    else:
+        if bps <= 0 and pbr > 0:
+            bps = price / pbr
+        elif bps <= 0:
+            bps = None
+        if eps == 0 and per > 0:
+            eps = price / per
+        elif eps == 0:
+            eps = None
+        roe = _finance_latest_actual(fin, 'ROE', today_yyyymm)
+        if roe is None and bps and eps is not None and bps > 0:
+            roe = eps / bps * 100.0                            # 옛 파서와 같은 항등식
+        debt = _finance_latest_actual(fin, '부채비율', today_yyyymm)
+    sector = (api or {}).get('industry_name') or prev.get('sector')
+    return {
+        "sector": sector,
+        "page_status": "ok_mobile_api",
+        "is_fund": is_fund,
+        "market": market, "market_source": "새 네이버 증권 API stockExchangeType",
+        "name": name, "base_price": price, "raw_price": price, "prev_close": price - diff_p,
+        "diff_price": diff_p, "pct_change": pct_p, "open_p": open_p, "high_p": high_p,
+        "low_p": low_p, "volume": vol_p, "eps": eps, "bps": bps, "per": per, "pbr": pbr,
+        "roe": roe, "debt": debt, "vol": 0.025,
+        "net_f": None, "net_i": None, "net_r": None,
+    }
+
+
 STOCK_NAME_MAP = {
     "지역난방공사": "071320.KS", "071320": "071320.KS", "지역난방공사 (071320)": "071320.KS",
     "금호타이어": "073240.KS", "073240": "073240.KS", "금호타이어 (073240)": "073240.KS",
@@ -438,6 +624,16 @@ class BitemporalEngine:
             matches = re.findall(r'<a href="/item/main\.naver\?code=\d+" class="tltle">(.*?)</a>', html)
             if matches:
                 return matches[0].strip()
+        # 라운드 271 — 옛 시가총액 페이지가 새 사이트로 넘어가면 위 표가 없다(2026-09-11 실측:
+        #   사이드바가 '시총 1위 미수신'을 찍고 그 None 이 resolve_symbol 에서 앱을 죽였다).
+        #   같은 목록(시총 내림차순 · 종목만)을 fetch_market_listing 이 JSON 으로 받는다 — 첫 줄이 1위.
+        try:
+            rows = self.fetch_market_listing("KOSPI", max_pages=1)
+        except Exception:
+            rows = []
+        for it in rows or []:
+            if it.get('name') and not self._is_excluded_name(it['name']):
+                return it['name']
         # 수신 실패 시 **종목명을 지어내지 않는다** (§3 · 라운드 119).
         #   여기가 `return "삼성전자"` 였다. 화면 사이드바가 이 값을
         #   "오늘 시총 1위는 {값}" 으로 그대로 쓰므로, 네이버가 안 뜨는 날
@@ -509,7 +705,24 @@ class BitemporalEngine:
                         STOCK_NAME_MAP[label] = ticker_ks
                         STOCK_NAME_MAP[code] = ticker_ks
                 return res_list[:12]
-        return []
+        # 라운드 270 — 옛 검색 페이지도 새 사이트로 넘어가 결과 표가 없다. 새 사이트의
+        #   자동완성(ac.stock.naver.com · 종목만)이 이름·코드·시장을 준다. 시장은 여기서
+        #   **읽은 것**을 붙인다(옛 길은 .KS 를 박았다 — 실측이 있으면 실측을 따른다 · R159).
+        try:
+            items = fetch_naver_ac_search(q_clean)
+        except Exception:
+            items = []
+        res_list = []
+        for code, clean_name, market in search_hits_from_ac(items):
+            label = f"{clean_name} ({code})"
+            res_list.append(label)
+            tk = f"{code}{suffix_for(market) or '.KS'}"
+            if market:
+                MARKET_BY_CODE[code] = market
+            STOCK_NAME_MAP[clean_name] = tk
+            STOCK_NAME_MAP[label] = tk
+            STOCK_NAME_MAP[code] = tk
+        return res_list[:12]
 
     def fetch_market_cap_top(self, n=10, market="KOSPI"):
         """시가총액 상위 n종목 '이름 (코드)' 목록. 페이지 1장만 조회한다."""
@@ -543,7 +756,27 @@ class BitemporalEngine:
                         hot_list.append(clean_name)
                 if len(hot_list) >= 5:
                     return hot_list
-            
+
+        # 라운드 271 — 옛 페이지가 새 사이트(`stocklist/top`)로 302 된다(2026-09-10). 같은 목록이
+        #   `stocks/searchTop` JSON 에 있다(전 시장 · 종목·ETF 섞임 → 종목만 · R164 경계). 옛 표식이
+        #   없을 때만 이 길. 이 함수는 지금 호출부가 없다(죽은 경로) — 옛 주소 형제 전수에서
+        #   마지막으로 남은 것이라 같은 방식으로 옮겨 둔다. 없으면 여전히 빈 목록.
+        if not html or 'class="tltle"' not in html:
+            d = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stocks/searchTop?page=1&pageSize=20",
+                                      timeout=6, retries=2)
+            rows = (d or {}).get('stocks') if isinstance(d, dict) else None
+            hot_list = []
+            for s in rows or []:
+                if not isinstance(s, dict) or (s.get('stockEndType') or 'stock') != 'stock':
+                    continue
+                nm = str(s.get('stockName') or '').strip()
+                if nm and not self._is_excluded_name(nm):
+                    hot_list.append(nm)
+                if len(hot_list) >= 10:
+                    break
+            if len(hot_list) >= 5:
+                return hot_list
+
         # 수신 실패 시 특정 종목 목록을 지어내지 않는다 (구버전은 10종목 리터럴 반환)
         return []
 
@@ -810,6 +1043,33 @@ class BitemporalEngine:
         except Exception:
             html_m = None
 
+        # 라운드 270 — 옛 종목 페이지의 표식(no_today · wrap_company)이 없으면 새 사이트로
+        #   넘어간 것이다(또는 못 받았다). 그때는 새 네이버 증권 JSON 으로 같은 칸을 채운다.
+        #   옛 표식이 있으면 아래 옛 파서 그대로 — 두 길이 같은 info 모양을 낸다.
+        if not html_m or ('no_today' not in html_m and 'wrap_company' not in html_m):
+            api = None
+            try:
+                api = fetch_naver_mobile_api(code)
+            except Exception:
+                api = None
+            if api:
+                prev_info = metrics_of(query) or STOCK_METRICS_DB.get(code) or {}
+                info = info_from_mobile_api(api, prev=prev_info)
+                if info.get('market'):
+                    MARKET_BY_CODE[code] = info['market']
+                ticker, ticker_note = self._compose_ticker(
+                    query, code, info.get('market'), info['market_source'])
+                info['market_source'] = ticker_note
+                if info.get('name') and info.get('base_price'):
+                    stock_name = info['name']
+                    STOCK_METRICS_DB[ticker] = info
+                    STOCK_METRICS_DB[code] = info
+                    STOCK_METRICS_DB[stock_name] = info
+                    STOCK_NAME_MAP[stock_name] = ticker
+                    STOCK_NAME_MAP[f"{stock_name} ({code})"] = ticker
+                    STOCK_NAME_MAP[code] = ticker
+                    return ticker, stock_name, info
+
         market, market_src = self._detect_market(code, html_m)
         ticker, ticker_note = self._compose_ticker(query, code, market, market_src)
 
@@ -1017,7 +1277,9 @@ class BitemporalEngine:
         return ticker, query.split(' (')[0], STOCK_METRICS_DB.get(ticker, {})
 
     def resolve_symbol(self, user_input):
-        query = user_input.strip()
+        # 라운드 271 — 시총 1위 미수신이면 화면이 None 을 넘긴다. None.strip() 으로 앱 전체가
+        #   죽었다(2026-09-11 실측). 빈 입력과 같이 다룬다 — 아래 기본 종목으로 간다.
+        query = str(user_input or '').strip()
         if not query:
             return "005930.KS", "삼성전자"
             
@@ -1402,13 +1664,24 @@ class BitemporalEngine:
                 dps = float(m_dps.group(1).replace(',', ''))
             except ValueError:
                 dps = None
-        if not dps or dps <= 0:
-            return {"available": False,
-                    "reason": "주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."}
-
         m_fy = re.search(r'배당수익률\s*l?\s*(\d{4})\.(\d{2})', html or '')
         fiscal_month = int(m_fy.group(2)) if m_fy else 12
         fiscal_year_label = f"{m_fy.group(1)}.{m_fy.group(2)}" if m_fy else None
+        # 라운드 271 — 옛 종목 페이지가 새 사이트로 넘어가면 '주당배당금(원)' 표가 없다(라운드 270 의
+        #   그 이전). 종전엔 그것을 "공시되지 않았습니다"로 말했다 — 못 받은 것을 없는 것으로
+        #   말하는 §3 위반. 같은 값을 새 사이트 JSON(integration.totalInfos '주당배당금')에서 읽는다.
+        #   결산월은 그 JSON 에 없다 — 12 로 두고 추정임을 note 가 이미 말한다.
+        if (not dps) and html is not None and 'no_today' not in html and 'wrap_company' not in html:
+            integ = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stock/{code}/integration", timeout=6, retries=2)
+            ti = {x.get('key'): x.get('value')
+                  for x in ((integ or {}).get('totalInfos') or []) if isinstance(x, dict)} \
+                if isinstance(integ, dict) else {}
+            dps = _api_num(ti.get('주당배당금'))
+            if fiscal_year_label is None and dps:
+                fiscal_year_label = None            # 새 JSON 은 결산월을 안 준다 — 지어내지 않는다
+        if not dps or dps <= 0:
+            return {"available": False,
+                    "reason": "주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."}
 
         yield_pct = None
         if current_price and current_price > 0:
@@ -1789,6 +2062,12 @@ class BitemporalEngine:
                 r'<a href="/item/main\.naver\?code=(\d{6})" class="tltle">(.*?)</a>(.*?)</tr>',
                 html, re.DOTALL)
             if not rows:
+                # 라운드 270 — 첫 페이지부터 행이 없으면 옛 시가총액 페이지가 새 사이트로
+                #   넘어간 것이다(2026-09-10 실측: `stock.naver.com/market/stock/kr/stocklist/
+                #   capitalization` 으로 302 · 코드 0개). 새 사이트의 JSON 목록으로 같은 칸을
+                #   채운다 — 종목만(ETF·ETN 제외 · 옛 페이지도 종목만 실었다 · R164 경계).
+                if page == 1:
+                    return self.fetch_market_listing_api(market, max_pages=max_pages)
                 break
             page_new = 0
             for code, name, rest in rows:
@@ -1818,6 +2097,66 @@ class BitemporalEngine:
                 })
             if page_new == 0:
                 break
+        return out
+
+    @staticmethod
+    def listing_from_api_stocks(stocks, market):
+        """새 네이버 증권 시가총액 목록(JSON) → 옛 시총 페이지와 **같은 칸**. 순수 함수 (라운드 270).
+
+        `stockEndType == 'stock'` 만 남긴다 — 옛 페이지(sise_market_sum)도 종목만 실었고, ETF 를
+        유니버스에 넣으면 연구 표본이 바뀐다(라운드 164 가 참은 경계). `marketValue` 는 억원
+        (옛 `market_cap_eok` 과 같은 단위 · 실측: 삼성전자 15,726,489 = 1,572조 6,489억).
+        PER·ROE 는 이 목록에 없다 — None (§3 · 지어내지 않는다).
+        """
+        out = []
+        for s in stocks or []:
+            if not isinstance(s, dict) or str(s.get('stockEndType') or '').lower() != 'stock':
+                continue
+            code = str(s.get('itemCode') or '').strip()
+            name = str(s.get('stockName') or '').strip()
+            if not code or not name:
+                continue
+            out.append({
+                "code": code,
+                "name": name,
+                "market": market,
+                "price": _api_num(s.get('closePrice')),
+                "market_cap_eok": _api_num(s.get('marketValue')),
+                "shares_thousand": None,
+                "foreign_pct": None,
+                "volume": _api_num(s.get('accumulatedTradingVolume')),
+                "per": None,
+                "roe": None,
+            })
+        return out
+
+    def fetch_market_listing_api(self, market="KOSPI", max_pages=40, page_size=100):
+        """새 네이버 증권 JSON 목록으로 전 종목 (라운드 270). 실패 시 빈 리스트."""
+        out, seen = [], set()
+        total = None
+        # 옛 한도(페이지 50 × max_pages)와 같은 규모까지 — 목록엔 ETF 가 섞여 있으므로 그만큼 더 본다
+        hard_cap = max(1, (max_pages * 50 * 2) // page_size)
+        for page in range(1, hard_cap + 1):
+            d = fetch_json_with_retry(
+                f"{NAVER_MOBILE_API}/stocks/marketValue/{market}?page={page}&pageSize={page_size}",
+                timeout=8, retries=2)
+            if not isinstance(d, dict):
+                break
+            stocks = d.get('stocks') or []
+            if total is None:
+                try:
+                    total = int(d.get('totalCount') or 0)
+                except (TypeError, ValueError):
+                    total = 0
+            for row in self.listing_from_api_stocks(stocks, market):
+                if row['code'] in seen:
+                    continue
+                seen.add(row['code'])
+                out.append(row)
+            if not stocks or page * page_size >= (total or 0):
+                break
+        if out:
+            print(f"[Universe] {market} — 새 네이버 증권 JSON 목록 {len(out)}종목 (종목만 · ETF 제외)")
         return out
 
     def fetch_krx_universe(self, markets=("KOSPI", "KOSDAQ"), max_pages=40):
@@ -1898,7 +2237,10 @@ class BitemporalEngine:
                 "base_price": base_p,
                 "today_trade_value": base_p * today_volume,
                 "liquidity_confirmed": today_volume > 0,
-                "financial_risk": "None" if meta.get("debt", 0) < 150 else "High Debt"
+                # 라운드 270 — 부채비율이 None(미수신)이면 비교하지 않는다. 종전 `meta.get("debt", 0) < 150`
+                #   은 키가 None 으로 있을 때 TypeError 로 폴백 유니버스 전체를 죽였다. 모르면 'Unknown'(§3).
+                "financial_risk": ("Unknown" if meta.get("debt") is None
+                                   else ("None" if meta.get("debt") < 150 else "High Debt"))
             })
 
         return universe
@@ -1912,7 +2254,12 @@ class BitemporalEngine:
         if not m:
             m = re.search(r'id="_nowVal">([\d,]+)</span>', html)
         if not m:
-            return None, ms, "현재가 파싱 실패 (페이지 구조 변경 가능)"
+            # 라운드 270 — 옛 페이지가 새 사이트로 넘어가면 현재가 표식이 없다. 같은 값을 JSON 에서.
+            j, ms2, err2 = timed_fetch_json(f"{NAVER_MOBILE_API}/stock/{code}/basic")
+            p = _api_num((j or {}).get('closePrice')) if isinstance(j, dict) else None
+            if p:
+                return p, ms + ms2, None
+            return None, ms + ms2, "현재가 파싱 실패 (페이지 구조 변경 가능)"
         try:
             return float(m.group(1).replace(',', '')), ms, None
         except Exception as e:

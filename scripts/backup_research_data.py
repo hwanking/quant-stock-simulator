@@ -26,10 +26,19 @@ import zipfile
 from datetime import date
 
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJ not in sys.path:
+    sys.path.insert(0, PROJ)
+from scripts import study_freshness as _fresh                  # noqa: E402
+
 P = os.path.join(PROJ, '.portfolio')
 #: 만든 zip 을 두는 곳. **pull_research_data.INBOX 와 달라야 한다** —
 #: 같으면 받은 zip 이 방금 만든 백업을 덮어쓴다 (라운드 97b 실사고).
 OUT_DIR = os.path.join(PROJ, '_archive')
+#: 두 번째 뿌리 — `data/` 의 관측 산출물 (라운드 261). 클라우드가 매 평일 만드는
+#: 다섯(FN/FP · 취약구간 · 표본 감사 · ICC · 업종 성적)이 여기 없어서 신선도 검사를
+#: 통과한 직후 작업 컨테이너와 함께 버려졌다 — 라운드 259 의 *"만든 것이 올라가야
+#: 화면에 닿는다"* 가 이 자리에서 끊겨 있었다(화면은 git 의 `data/` 를 읽는다).
+DATA_DIR = os.path.join(PROJ, 'data')
 
 
 def _utf8_stdout():
@@ -104,11 +113,37 @@ INCLUDE = ('virtual_graded.jsonl',
 DENY = ('positions*', 'holdings*', '*secret*', '*credential*',
         '*.env', '*token*')
 
+#: `data/` 에서 실을 것 — **손으로 적지 않는다.** 신선도 검사가 보는 목록
+#: (`study_freshness.STUDIES`)에서 유도한다: 검사가 보는 것이 곧 실어 나르는 것이다.
+#: 한쪽에 넣고 다른 쪽을 잊는 날이 없다(R114 · 손 목록은 낡는다). 와일드카드가 아니라
+#: 이름이다 — `*.json` 처럼 열면 머리말의 약속이 깨진다.
+DATA_INCLUDE = tuple(os.path.basename(p) for p, _ in _fresh.STUDIES)
+
 
 def picked(name):
     if any(fnmatch.fnmatch(name, d) for d in DENY):
         return False
     return any(fnmatch.fnmatch(name, i) for i in INCLUDE)
+
+
+def picked_data(name):
+    """`data/<name>` 을 실을까 — DENY 먼저, 그 다음 유도된 이름 목록 (라운드 261)."""
+    if any(fnmatch.fnmatch(name, d) for d in DENY):
+        return False
+    return name in DATA_INCLUDE
+
+
+def arcnames(portfolio_dir=P, data_dir=DATA_DIR):
+    """백업이 담을 항목의 zip 안 이름 — 두 뿌리 (`.portfolio/…` · `data/…`).
+
+    쓰지 않고 계획만 낸다 — 검사가 실제 목록을 보되 200MB zip 을 만들지 않게.
+    """
+    out = []
+    if os.path.isdir(portfolio_dir):
+        out += [f'.portfolio/{f}' for f in sorted(os.listdir(portfolio_dir)) if picked(f)]
+    if os.path.isdir(data_dir):
+        out += [f'data/{f}' for f in sorted(os.listdir(data_dir)) if picked_data(f)]
+    return out
 
 
 def main():
@@ -120,14 +155,21 @@ def main():
     stamp = date.today().strftime('%Y%m%d')
     dst = os.path.join(out_dir, f'research_data_{stamp}.zip')
 
-    files = sorted(f for f in os.listdir(P) if picked(f))
+    arcs = arcnames(P, DATA_DIR)
+    files = [a for a in arcs if a.startswith('.portfolio/')]
+    dfiles = [a for a in arcs if a.startswith('data/')]
     denied = sorted(f for f in os.listdir(P) if not picked(f))
-    raw = sum(os.path.getsize(os.path.join(P, f)) for f in files)
-    print(f'포함 {len(files)}개 · 원본 {raw / 1048576:,.1f}MB')
+    raw = sum(os.path.getsize(os.path.join(PROJ, a)) for a in arcs)
+    print(f'포함 {len(files)}개 (.portfolio) · 관측 산출물 {len(dfiles)}개 (data · '
+          f'라운드 261) · 원본 {raw / 1048576:,.1f}MB')
+    if len(dfiles) < len(DATA_INCLUDE):
+        # 없는 것은 없다고 찍는다 — 신선도 검사가 맨 뒤에서 잡지만 여기서도 보이게.
+        missing = [n for n in DATA_INCLUDE if f'data/{n}' not in dfiles]
+        print(f'  ⚠ data/ 관측 산출물 {len(missing)}개가 없어 못 실었다: {", ".join(missing)}')
     with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED,
                          compresslevel=9) as z:
-        for f in files:
-            z.write(os.path.join(P, f), arcname=f'.portfolio/{f}')
+        for a in arcs:
+            z.write(os.path.join(PROJ, a), arcname=a)
     got = os.path.getsize(dst)
     print(f'압축 {got / 1048576:,.1f}MB ({got / max(1, raw) * 100:.0f}%) → {dst}')
     if denied:

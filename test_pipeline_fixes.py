@@ -11396,109 +11396,6 @@ check("동봉본 갱신 스크립트가 있다",
 
 
 # ══════════════════════════════════════════════════════════════════════
-# §158 — 규칙 문서의 숫자가 9배 어긋난 채 있었다 (라운드 109)
-#
-#   CLAUDE.md 는 **매 작업 전에 읽는** 문서다. 여기 숫자가 낡으면 그
-#   뒤의 모든 판단이 낡은 전제 위에 선다.
-#
-#       원장 건수      문서 19,883 · 실제 184,759   (9.3배)
-#       회귀 하한      문서  1,700 · 실제   2,719
-#
-#   §2 는 "원장으로 실측한다" 고 하는데, 그 규모를 2만 건으로 알고
-#   시작하면 표본 판단이 통째로 달라진다.
-#
-#   숫자만 갈면 내일 또 낡는다. **잰 날짜를 같이 적게** 하고, 검사는
-#   '자릿수가 어긋나는가' 만 본다 — 매일 자라는 값에 일일 정확도를
-#   요구하면 검사가 매일 깨지고, 곧 무시된다.
-# ══════════════════════════════════════════════════════════════════════
-print("\n" + "=" * 72)
-print("§158 규칙 문서의 숫자 — 날짜를 달고, 자릿수가 안 어긋나게 (라운드 109)")
-print("=" * 72)
-_md158 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
-check("규칙 문서를 읽었다 (0바이트면 미측정)", len(_md158) > 2000,
-      f'{len(_md158)}바이트')
-
-_m158 = _re.search(r'\*\*(\d{4}-\d\d-\d\d) 기준 ([\d,]+)건\*\*', _md158)
-check("원장 건수에 잰 날짜가 붙어 있다", bool(_m158),
-      '날짜 없는 숫자는 반드시 낡는다')
-if _m158:
-    _claim158 = int(_m158.group(2).replace(',', ''))
-    _now158 = _sf151.ledger_rows()
-    # 자릿수만 본다 — 매일 자라므로 일일 일치를 요구하지 않는다
-    check("문서의 원장 건수가 실제와 자릿수가 맞는다",
-          _now158 == 0 or 0.5 <= _claim158 / _now158 <= 2.0,
-          f'문서 {_claim158:,} · 실제 {_now158:,}')
-
-_m158b = _re.search(r'([\d,]+)건 이상 \((\d{4}-\d\d-\d\d) 기준\)', _md158)
-check("회귀 하한에도 잰 날짜가 붙어 있다", bool(_m158b),
-      '회귀 건수 표기에 날짜가 없다')
-if _m158b:
-    # 하한은 '이상' 이므로 **실제 검사 수가 그보다 많아야** 한다.
-    # 이 절이 도는 시점에 이미 2,700여 건이 실행됐다 — 그 수를 센다.
-    # (항상 참인 검사를 쓰지 않는다. 처음에 빈 문자열을 뒤져 +10^9 을
-    #  더하는 식으로 써 놓고 지웠다 — 못 깨지는 검사는 없는 것만 못하다.)
-    _floor158 = int(_m158b.group(1).replace(',', ''))
-    # ⚠️ 라운드 188 — 여기가 `len(FAILURES) + _CHECKS_RUN[0]` 이었다.
-    #   `check()` 는 성공·실패를 **모두** _CHECKS_RUN 에 올리므로 실패가
-    #   한 번 더 더해졌다 — **실패가 늘수록 하한을 넘기 쉬워지는** 셈이다.
-    #   실행 수는 _CHECKS_RUN 하나다.
-    _ran158 = _CHECKS_RUN[0]
-    check("문서의 회귀 하한을 실제 검사 수가 넘는다",
-          _ran158 >= _floor158, f'문서 {_floor158:,} · 실행 {_ran158:,}')
-    # 그리고 **건너뛴 검사가 하한을 갉아먹지 않았는지** 함께 본다.
-    check("건너뛴 검사가 전체의 5% 미만이다",
-          len(SKIPPED) < max(1, _ran158 * 0.05),
-          f'건너뜀 {len(SKIPPED)}건 / 실행 {_ran158:,}건 — '
-          f'산출물이 없으면 검사가 통째로 안 돈다')
-
-# ── 라운드 196 — 원장이 **자란다는 주장**도 사실이어야 한다 ─────────
-#   문서가 *"매 거래일 +400 안팎으로 자란다"* 고 적고 있었는데, 파일
-#   수정 시각을 보니 **2026-08-16 이후 한 건도 안 늘었다**(2026-08-31
-#   확인 · 15일). 건수에 날짜를 붙이는 규칙(§2-2)은 지켰지만 **자란다는
-#   주장에는 아무 확인이 없었다** — 그 문장 하나로 "표본이 곧 늘어난다"를
-#   전제한 계획이 서게 된다(R129 가 그 전제 위에서 상한을 계산했다).
-#   → 값으로 본다: 원장 파일이 마지막으로 바뀐 날을 문서가 알고 있는가.
-_lg196 = _os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
-if _os.path.exists(_lg196):
-    import datetime as _dt196
-    _mt196 = _dt196.date.fromtimestamp(_os.path.getmtime(_lg196))
-    _stale196 = (_dt196.date.today() - _mt196).days
-    check("원장 파일의 마지막 갱신일을 값으로 안다",
-          _mt196.year >= 2020, _mt196.isoformat())
-    # 오래 멈춰 있으면 문서가 **그 사실을 적고 있어야** 한다 (§3 · §9)
-    if _stale196 >= 7:
-        # ⚠️ 라운드 202 — 처음에 **어미까지** 적었다가(`그대로다`·`안
-        #   늘었다`) 문서를 과거형으로 고치자 못 알아봤다. 마침 그때는
-        #   원장이 하루밖에 안 돼 검사가 안 돌아 **조용히 지나갈 뻔했다.**
-        #   어미가 아니라 **어간**을 본다.
-        check("오래 안 자란 원장은 문서가 그 사실을 적는다",
-              any(k in _md158 for k in ('그대로', '안 늘었', '멎', '안 자란')),
-              f'{_stale196}일째 그대로인데 문서는 자란다고만 적고 있다')
-    # ⚠️ 여기서 한 번 걸렸다 — 처음엔 *"'매 거래일 +400' 이 문서에
-    #   없어야 한다"* 로 썼는데, **정정하면서 그 문장을 인용한 것**까지
-    #   위반으로 봤다. 인용과 주장은 다르다. 그러니 그 낱말이 나오면
-    #   **가까이에 정정이 붙어 있는가**를 본다.
-    _i196 = _md158.find('매 거래일 +400')
-    _near196 = (_md158[max(0, _i196 - 200):_i196 + 400] if _i196 >= 0 else '')
-    check("문서가 '매 거래일 자란다'를 근거 없이 주장하지 않는다",
-          _i196 < 0 or _stale196 < 7
-          or any(k in _near196 for k in ('사실이 아니', '그대로', '안 늘었')),
-          f'마지막 갱신 {_mt196.isoformat()} · {_stale196}일 경과인데 '
-          f'그 주장 옆에 정정이 없다')
-
-# 보호 계산 파일 줄 수도 문서가 말한다 — 크게 어긋나면 안 된다
-_m158c = _re.search(r'`quant_indicators\.py`[^|]*약\s*([\d,]+)\s*줄', _md158)
-if _m158c:
-    _cl158 = int(_m158c.group(1).replace(',', ''))
-    with open(_os.path.join(PROJ, 'quant_indicators.py'),
-              encoding='utf-8', errors='replace') as _f158:
-        _real158 = sum(1 for _ in _f158)
-    check("문서의 quant_indicators 줄 수가 실제와 가깝다",
-          abs(_cl158 - _real158) <= 500,
-          f'문서 {_cl158:,} · 실제 {_real158:,}')
-
-
-# ══════════════════════════════════════════════════════════════════════
 # §159 — 라운드 49 재측정 (라운드 110)
 #
 #   "순위에 정보가 없다" 는 원장 2만 건일 때 낸 결론인데 §9 에서 로드맵
@@ -17433,8 +17330,11 @@ check("그 이슈들이 다음 점검 시점을 들고 있다",
       all(str(_open182[k].get('next_review') or _open182[k].get('eta') or '')[:4]
           == '2026' for k in ('model|score_not_separating',)
           if k in _open182))
-check("닫힌 이슈(model|vb_gap)를 화면이 열린 과제로 걸어 두지 않는다 (R222)",
-      'model|vb_gap' not in _open182 and "'model': 'model|vb_gap'" not in _w182)
+# 라운드 262 — 종전엔 "`model|vb_gap` 이 원장에 열려 있지 않다"까지 잠갔다. 그것은 살아 있는
+#   등록부의 상태라 일일 규칙이(매수권 괴리로) 다시 열면 회귀가 데이터로 깨진다(R213 · 표류하는
+#   값을 잠그지 않는다). 화면 불변식만 남긴다 — model 축을 그 이슈에 손으로 걸지 않는다.
+check("화면이 model 축을 vb_gap 이슈에 손으로 걸어 두지 않는다 (열림·닫힘은 일일 규칙이 정한다 · R222·R262)",
+      "'model': 'model|vb_gap'" not in _w182)
 check("모델 축의 '다음에 보는 시점'은 전방 재평가일에서 읽는다 (forward_eval · 한 곳 · 손으로 안 적는다)",
       "_fed182 = _fe182.eval_date()" in _w182 and "_ax_plan['model'] = (" in _w182
       and "'2026-11-16'" not in _w182.split('_AX_ISSUE')[-1][:2500])
@@ -22991,6 +22891,585 @@ check("R216 결과 문서가 있고 미측정을 통과로 쓰지 않는다",
       '미측정' in _r216 and '문턱은 내리지 않는다' in _r216 and '새로 잰 것은 없다' in _r216)
 check("R216 결과 문서가 train 관측을 증거로 부르지 않는다",
       '증거가 아니라 가설 생성' in _r216)
+
+print()
+print("§275 R261 — 클라우드가 만든 관측 산출물 다섯이 릴리스에 안 실렸다 · 운반로 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R259 가 "만든 것이 올라가야 화면에 닿는다" 고 적었는데 업로드 화이트리스트는
+#   .portfolio/ 한 뿌리뿐이라 data/ 의 다섯은 신선도 검사를 통과한 직후 버려졌다.
+#   되받는 쪽의 zip-slip 가드도 .portfolio/ 밖을 전부 거부했다. 고침: 목록은
+#   study_freshness.STUDIES 에서 유도 · zip 의 두 번째 뿌리 data/ · 가드는 목록 안에서만
+#   연다 · 되돌림은 ledger_rows 로 막는다. 워크플로는 안 고쳤다.
+import json as _json275
+import tempfile as _tf275
+import zipfile as _zf275
+from scripts import backup_research_data as _bk275
+from scripts import pull_research_data as _pl275
+from scripts import study_freshness as _sf275
+_want275 = tuple(_os.path.basename(p) for p, _ in _sf275.STUDIES)
+check("운반 목록이 신선도 검사 목록에서 유도된다 (손 목록 아님 · 둘이 같다)",
+      tuple(_bk275.DATA_INCLUDE) == _want275 and len(_want275) >= 5, str(_bk275.DATA_INCLUDE),
+      scanned=len(_want275))
+check("유도가 소스에 있다 — 나중에 손 목록으로 되돌아가지 않는다",
+      'study_freshness' in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
+      and 'STUDIES' in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py')))
+check("data/ 고르기 — 목록 안은 참 · 개인 자료 패턴은 거짓 · 목록 밖 json 도 거짓 (심기 양방향)",
+      _bk275.picked_data('sample_audit.json') and not _bk275.picked_data('positions.json')
+      and not _bk275.picked_data('research_radar.json') and not _bk275.picked_data('holdings_x.json'))
+_td275 = _tf275.mkdtemp(prefix='r261_')
+def _mkzip275(name, members):
+    p = _os.path.join(_td275, name)
+    with _zf275.ZipFile(p, 'w') as z:
+        for arc, body in members:
+            z.writestr(arc, body)
+    return p
+_good275 = _mkzip275('good.zip', [('.portfolio/virtual_graded.jsonl', '{}\n{}\n'),
+                                   ('data/sample_audit.json', _json275.dumps({'ledger_rows': 999999999}))])
+_bad1275 = _mkzip275('bad1.zip', [('data/positions.json', '{}')])
+_bad2275 = _mkzip275('bad2.zip', [('data/research_radar.json', '{}')])
+_bad3275 = _mkzip275('bad3.zip', [('data/../x.json', '{}')])
+check("되받기 가드 — data/<목록 이름> 은 허용한다 (심기)", _pl275.unsafe_members(_good275) == [],
+      str(_pl275.unsafe_members(_good275)))
+check("되받기 가드 — data/positions.json 은 거부한다 (§9 · 심기)", len(_pl275.unsafe_members(_bad1275)) == 1)
+check("되받기 가드 — 목록 밖 data/research_radar.json 은 거부한다 (심기)", len(_pl275.unsafe_members(_bad2275)) == 1)
+check("되받기 가드 — data/../ 는 여전히 거부한다 (심기)", len(_pl275.unsafe_members(_bad3275)) == 1)
+_tp275 = _os.path.join(_td275, 'portfolio'); _tdd275 = _os.path.join(_td275, 'data')
+_os.makedirs(_tp275); _os.makedirs(_tdd275)
+_loc275 = _os.path.join(_tdd275, 'sample_audit.json')
+open(_loc275, 'w', encoding='utf-8').write(_json275.dumps({'ledger_rows': 5}))
+_w275, _k275, _s275 = _pl275.extract(_good275, set(), portfolio_dir=_tp275, data_dir=_tdd275)
+check("되받기 — zip 의 ledger_rows 가 로컬 이상이면 data/ 산출물을 쓴다 (심기)",
+      'sample_audit.json' in _w275 and _json275.load(open(_loc275, encoding='utf-8'))['ledger_rows'] == 999999999
+      and _os.path.exists(_os.path.join(_tp275, 'virtual_graded.jsonl')), f"wrote={_w275} kept={_k275}")
+open(_loc275, 'w', encoding='utf-8').write(_json275.dumps({'ledger_rows': 10 ** 12}))
+_w275b, _k275b, _s275b = _pl275.extract(_good275, set(), portfolio_dir=_tp275, data_dir=_tdd275)
+check("되받기 — 로컬이 더 큰 원장에서 만든 것이면 남긴다 (되돌리지 않는다 · 심기)",
+      'sample_audit.json' in _k275b and _json275.load(open(_loc275, encoding='utf-8'))['ledger_rows'] == 10 ** 12,
+      f"wrote={_w275b} kept={_k275b}")
+_arc275 = _bk275.arcnames(_os.path.join(PROJ, '.portfolio'), _os.path.join(PROJ, 'data'))
+check("백업 계획에 data/ 뿌리의 다섯이 data/<이름> 으로 들어간다 (실제 목록 · 실행 증거)",
+      all(f'data/{n}' in _arc275 for n in _want275) and not any(a.startswith('data/positions') for a in _arc275),
+      str([a for a in _arc275 if a.startswith('data/')]), scanned=len(_arc275))
+import shutil as _sh275
+_sh275.rmtree(_td275, ignore_errors=True)
+
+print()
+print("§276 R262 — 검증-블라인드 괴리 감시가 화면이 머리로 내는 모집단(매수권)도 잰다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   감시가 전체 구간(매수권 밖 포함)으로만 재서 5.4%p < 10 이라 '해소'를 내는 동안 매수권(60점+)
+#   은 14.8%p 였다(2026-09-10 실측 · valid 69.0 vs blind 54.2 · n 1,297·1,168). 이슈의 목표와
+#   화면 머리 수는 매수권이다. 문턱 10%p 불변 — 모집단을 하나 더 잰다(어느 쪽이든 ≥10 이면
+#   연다 · 요약이 어느 모집단이 넘었는지 말한다). 표본 30 미만이면 그 모집단은 판정하지 않는다.
+import tempfile as _tf276
+from scripts import run_daily_improvement as _rdi276
+from improvement import database as _idb276
+def _calib276(v_all, b_all, v_bz, b_bz, n_bz=1000):
+    return {'rulebook_version': 'v-test',
+            'splits': {'valid': {'n': 10000, 'hit_rate': v_all}, 'blind': {'n': 10000, 'hit_rate': b_all},
+                       'buy_zone': {'valid': {'n': n_bz, 'hit_rate': v_bz}, 'blind': {'n': n_bz, 'hit_rate': b_bz}}},
+            'signal_frequency': {'rate_pct': 6.7}}
+def _run276(calib):
+    db = _os.path.join(_tf276.gettempdir(), 'r262_vbgap_test.db')
+    if _os.path.exists(db):
+        _os.remove(db)
+    _idb276.initialize_database(db)
+    cn = _idb276.get_connection(db)
+    try:
+        _rdi276.make_detect_issues(cn, calib)()
+        cn.commit()
+        return cn.execute("SELECT status, summary FROM improvement_issues WHERE issue_key='model|vb_gap'").fetchall()
+    finally:
+        cn.close()
+_a276 = _run276(_calib276(65.4, 60.0, 69.0, 54.2))          # 오늘 실측 모양 — 전체 5.4 · 매수권 14.8
+check("매수권 괴리 14.8%p 면 전체가 5.4%p 여도 연다 (종전엔 안 열렸다 · 심기)",
+      len(_a276) == 1 and _a276[0][0] == 'open' and '매수권' in str(_a276[0][1]), str(_a276)[:200])
+check("요약이 두 모집단의 수를 같이 말한다 (같은 이름의 수가 둘이면 단위를 옆에 · R233)",
+      _a276 and '전체' in str(_a276[0][1]) and '14.8' in str(_a276[0][1]) and '5.4' in str(_a276[0][1]), str(_a276)[:200])
+_b276 = _run276(_calib276(72.0, 60.0, 60.0, 57.0))          # 전체만 12 — 종전 감도는 남긴다
+check("전체 괴리 12%p 면 매수권이 3%p 여도 연다 (종전 감도 유지 · 심기)",
+      len(_b276) == 1 and _b276[0][0] == 'open' and '전체' in str(_b276[0][1]), str(_b276)[:200])
+_c276 = _run276(_calib276(65.4, 60.0, 60.0, 57.0))          # 둘 다 안 넘음
+check("둘 다 10%p 미만이면 열지 않는다 (심기)", len(_c276) == 0, str(_c276)[:200])
+_d276 = _run276(_calib276(65.4, 60.0, 90.0, 10.0, n_bz=10))  # 매수권 표본 10 — 판정 안 함
+check("매수권 표본이 30 미만이면 그 모집단은 판정하지 않는다 (80%p 차이여도 · §3 · 심기)",
+      len(_d276) == 0, str(_d276)[:200])
+_rdi_src276 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+check("일일 규칙이 매수권 표본 부족을 찍는다 (조용히 넘기지 않는다 · §3)",
+      '매수권 괴리 미측정' in _rdi_src276)
+
+print()
+print("§277 R263 — 일일 개선 파이프라인이 평일 26일 중 24일 흔적이 없다 · 침묵을 실패로 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   pipeline_runs 14행 · 고유 날짜 6일 · 08-02~09-07 평일 26일 중 24일 기록 없음 — 전부 사람이
+#   돌린 시각. 클라우드 단계는 `|| true` 라 죽어도 초록불이었다. 파이프라인은 시작하자마자
+#   running 행을 커밋하므로 행이 없으면 시작도 못 한 것이다. 검사는 워크플로 맨 뒤(업로드 뒤).
+import tempfile as _tf277
+from datetime import datetime as _dt277, timezone as _tz277, timedelta as _td277
+from scripts import pipeline_run_check as _prc277
+from improvement import database as _idb277
+_db277 = _os.path.join(_tf277.gettempdir(), 'r263_runs_test.db')
+if _os.path.exists(_db277):
+    _os.remove(_db277)
+_idb277.initialize_database(_db277)
+_today277 = _dt277.now().astimezone().date()
+# 오늘이 휴장일이면 거래일 판정 심기가 무의미하다 — 가장 가까운 지난 거래일을 '오늘'로 쓴다
+from improvement.case_tracker import is_non_trading_date as _intd277
+_tday277 = _today277
+while _intd277(_tday277.isoformat()):
+    _tday277 -= _td277(days=1)
+_tday_s277 = _tday277.isoformat()
+_utc277 = lambda d, h: _dt277(d.year, d.month, d.day, h, 0, tzinfo=_tz277.utc).isoformat()  # noqa: E731
+check("실행 기록이 없으면 실패다 (심기 · 빈 DB)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277 = _idb277.get_connection(_db277)
+_cn277.execute("INSERT INTO pipeline_runs (run_id, pipeline_type, started_at, status) VALUES (?, 'daily', ?, 'running')",
+               ('DAILY-t277a', _utc277(_tday277 - _td277(days=1), 9)))
+_cn277.commit()
+check("어제 행만 있으면 실패다 — 오늘 기록이 없다 (심기)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277.execute("INSERT INTO pipeline_runs (run_id, pipeline_type, started_at, status) VALUES (?, 'daily', ?, 'running')",
+               ('DAILY-t277b', _utc277(_tday277, 9)))
+_cn277.commit()
+check("오늘 행이 running 으로 남아 있으면 실패다 — 죽은 채 남은 것 (심기)", _prc277.check(_db277, today=_tday_s277) == 1)
+_cn277.execute("UPDATE pipeline_runs SET status='success', finished_at=? WHERE run_id='DAILY-t277b'", (_utc277(_tday277, 10),))
+_cn277.commit()
+check("오늘 success 행이 있으면 통과다 (심기)", _prc277.check(_db277, today=_tday_s277) == 0)
+_cn277.close()
+_sat277 = _tday277
+while _sat277.weekday() != 5:
+    _sat277 += _td277(days=1)
+check("휴장일(토요일)은 판정하지 않는다 — rc 0 (한 곳의 휴장일 판정 · R252)", _prc277.check(_db277, today=_sat277.isoformat()) == 0)
+check("DB 가 없으면 미측정(rc 2)이지 통과가 아니다 (심기)", _prc277.check(_db277 + '.none', today=_tday_s277) == 2)
+_yml277 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_i_up277 = _yml277.find('name: 새 스냅샷 올리기')
+_i_chk277 = _yml277.find('pipeline_run_check.py')
+check("워크플로가 검사를 부르고, 그 자리는 업로드 뒤다 (축적을 인질로 안 잡는다 · R247)",
+      _i_up277 > 0 and _i_chk277 > _i_up277)
+check("그 검사에 `|| true` 가 안 붙어 있다 (아무도 안 읽는 경고는 검사가 아니다)",
+      _i_chk277 > 0 and '|| true' not in _yml277[_i_chk277:_i_chk277 + 60])
+
+print()
+print("§278 R264 — 정밀분석 5→120 확대의 이득 상한을 이미 가진 자료로 쟀다 · 매수 판정 0 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R188 이 비용(120종목 약 2.7분)을 재고 "이득 상한만 재면 된다"고 적은 채 열흘. 전방 기록부가
+#   매일 상위 60 전부에 판정을 남기므로 6~60위의 매수 판정 수가 곧 상한이다 — 6일 360행에서 0.
+#   조건부 후보 25행은 상위 5 와 동점(59·58)이라 확대가 드러내는 것은 형제들이다. 확대 안 함.
+#   값(0 · 25)은 잠그지 않는다 — 기록부가 자라며 움직인다. 문장과 판정만 잠근다.
+_r264 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R264_DEEP_SCAN_UPSIDE.md'))
+check("R264 결과 문서가 있고 판정이 '확대하지 않는다'다", '확대하지 않는다' in _r264 and '이득 상한 0' in _r264)
+check("상한을 새 측정이 아니라 이미 가진 자료(전방 기록부)로 셌다고 적는다 (§2-7)",
+      '이미 가진 자료' in _r264 and 'forward_registry' in _r264)
+check("61~120위는 자료가 없음을 추론이라고 부른다 (재지 않은 것을 잰 것처럼 쓰지 않는다 · §9)",
+      '이것은 **추론**이고' in _r264)
+check("바꾼 것이 없다고 적는다 (코드·문턱·스캔 깊이 불변)", '바꾼 것 — 없다' in _r264)
+
+print()
+print("§279 R265 — 엔진 자기 확률 결측 37.22% 의 사유가 원장에 없다 · 앞으로 쌓이는 행에 사유 두 칸 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   원장 win_rate(= sim_res.obs_win_ratio) 가 93,621행 비어 있는데 사유 칸이 없다. eff_sample 로는
+#   설명이 안 된다(20+ 에서도 34% 결측) — 그 칸은 전략 백테스트 표본이고 win_rate 가 비는 조건은
+#   20일 유사패턴 매칭 건수(R38 의 두 수)다. 엔진은 사유를 내는데 원장 행이 안 옮겼다.
+#   고침: 앞으로 쌓이는 행에 sim_match_count · sim_tier. 기존 행 백필 없음(축적 전체). 값 불변.
+_cl279 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+check("원장 행이 20일 매칭 건수를 sim_res 에서 남긴다 (sim_match_count)",
+      "'sim_match_count': (snap.get('sim_res') or {}).get('match_count')" in _cl279)
+check("원장 행이 표본 등급(INSUFFICIENT 면 사유 라벨)을 남긴다 (sim_tier)",
+      "'sim_tier':" in _cl279 and "sample_tier" in _cl279.split("'sim_tier':")[1][:200])
+check("win_rate 열 자체는 그대로다 (열을 더할 뿐 · 값 불변)",
+      "'win_rate': (snap.get('sim_res') or {}).get('obs_win_ratio')" in _cl279)
+_r265 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R265_WIN_RATE_REASON.md'))
+check("문서가 사유를 측정이 아니라 추론이라 부른다 (§3 · 못 잰 것을 잰 것처럼 쓰지 않는다)",
+      '추론이지 측정이 아니다' in _r265)
+check("문서가 eff_sample 로 설명되지 않음을 적는다 (R38 · 같은 이름의 두 수)",
+      '이 칸으로는 설명이 안 된다' in _r265 and '기존 행은 백필하지 않는다' in _r265)
+
+print()
+print("§280 R266 — 회귀 하한 대조(§158)를 파일 뒤로 옮기고 하한을 전체 실행 수에 맞췄다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   §6 의 하한 2,700 은 실제 실행 수(4,9xx)의 55% 였다 — §158 이 중간에 있어 "자기가 도는 시점까지의
+#   수"(2,796)와 견줬기 때문이다. 검사의 절반이 조용히 사라져도 하한은 넘었다. §158 을 요약 블록 앞으로
+#   옮기고 하한을 올렸다. 하한 값 자체는 규칙 문서의 수이지 측정값이 아니다 — 잠가도 된다(R213).
+_src280 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+# 첫 판에 틀렸다 — 이 절의 검사 문자열 자체가 '§158 …' 리터럴을 품어 find() 가 자기 자신을 잡았고,
+#   '# 라운드 188' 은 파일 앞쪽 R188 절에도 있다. 절 머리는 **마지막** 등장, 요약 마커는 줄바꿈까지.
+_i158_280 = _src280.rfind('print("§158 규칙 문서의 숫자')
+_i279_280 = _src280.find('print("§279 R265')
+_isum_280 = _src280.rfind('print("=" * 72)\n# 라운드 188')
+check("§158(회귀 하한 대조)이 §279 뒤 · 요약 블록 앞에 있다 (자기 시점이 아니라 전체 수와 견준다)",
+      _i279_280 > 0 and _i158_280 > _i279_280 and 0 < _isum_280 and _i158_280 < _isum_280,
+      f"§279 {_i279_280} · §158 {_i158_280} · 요약 {_isum_280}")
+_md280 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+_m280 = _re.search(r'([\d,]+)건 이상 \((\d{4}-\d\d-\d\d) 기준\)', _md280)
+check("규칙 문서의 회귀 하한이 4,000 을 넘는다 (실행 수의 절반짜리 하한이 아니다)",
+      bool(_m280) and int(_m280.group(1).replace(',', '')) >= 4000, _m280.group(0) if _m280 else '없음')
+check("규칙 문서가 '하한은 2,796보다 작아야 한다'를 더는 말하지 않는다 (옮겼으므로 거짓이 됐다)",
+      '2,796보다 작아야 한다' not in _md280)
+check("이 절이 도는 시점의 실행 수가 이미 그 하한을 넘는다 (하한이 실제 규모다)",
+      bool(_m280) and _CHECKS_RUN[0] >= int(_m280.group(1).replace(',', '')),
+      f"실행 {_CHECKS_RUN[0]:,} · 하한 {_m280.group(1) if _m280 else '?'}")
+
+print()
+print("§281 R267 — 고정 보정 0.98 을 날짜 하한을 채우는 표본으로 다시 쟀다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   R251 의 (다)는 날짜(valid 26 · blind 22 < 30)의 한계였다. R267 은 겹치지 않는 부분집합의
+#   valid·blind 기준일 전부(87 · 47)를 쓴다. 잠그는 것: 사전등록이 결과보다 먼저 있다 · 레이더에
+#   있다 · 판정 기준이 R251 과 같다(스크립트가 R251 의 잣대·부트 함수를 부른다 · 베끼지 않는다) ·
+#   산출물에 실행 증거·날짜 하한·판정이 있다 · 0.98 은 코드에서 그대로다(11-16 전 배포 금지).
+#   Δ·CI 값은 잠그지 않는다(원장이 자라면 움직인다 · R213). 판정문은 잠근다(바뀌면 사람이 다시 본다).
+import json as _json281
+_pre281 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R267_HAIRCUT_DATE_FLOOR.md'))
+check("R267 사전등록이 있고 기준을 R251 §4 그대로라고 적는다",
+      '판정 기준은 R251 사전등록' in _pre281 and '11-16 전에는 배포하지 않는다' in _pre281)
+_rad281 = _json281.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+check("레이더에 R267 줄이 있다 (새 사전등록 → 레이더 · R218)",
+      any('R267' in str(r.get('name')) for r in (_rad281.get('rows') or [])))
+_scr281 = _read148(_os.path.join(PROJ, 'scripts', 'haircut_r267.py'))
+check("R267 스크립트가 R251 의 잣대·부트·조인 함수를 불러 쓴다 (베끼지 않는다 · R92)",
+      'from scripts import haircut_r2_r251 as _r2' in _scr281 and '_r2.spread(' in _scr281
+      and '_r2.boot_delta(' in _scr281 and '_r2.ledger_join(' in _scr281)
+_out281 = _json281.loads(_read148(_os.path.join(PROJ, 'data', 'haircut_r267.json')) or '{}')
+check("R267 산출물이 실행 증거 · 날짜 하한 · 판정을 담는다",
+      _out281.get('execution_evidence_ok') is True and _out281.get('date_floor') == 30
+      and bool(_out281.get('verdict')) and 'ledger_rows' in _out281, str(_out281.get('verdict'))[:80])
+check("valid·blind 날짜가 실제로 하한 30 을 넘었다 (R251 이 못 채운 것)",
+      all(int(((_out281.get('splits') or {}).get(s) or {}).get('dates') or 0) >= 30 for s in ('valid', 'blind')),
+      str({s: ((_out281.get('splits') or {}).get(s) or {}).get('dates') for s in ('valid', 'blind')}))
+_res281 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R267_HAIRCUT_DATE_FLOOR.md'))
+check("결과 문서의 판정이 산출물의 판정과 같은 갈래다",
+      bool(_res281) and str(_out281.get('verdict', ''))[:3] in _res281)
+import quant_indicators as _qi281
+check("코드의 고정 보정은 그대로 0.98 이다 (결과가 어떻든 11-16 전 배포 금지 · R78)",
+      abs(float(_qi281.QuantIndicatorsEngine.FAIR_FIXED_HAIRCUT) - 0.98) < 1e-9)
+
+print()
+print("§282 R268 — 전수조사 82건 상태표: 빠짐없이 · 요약 수 = 표의 수 · 미검증을 완료로 안 적는다 (2026-09-10)")
+print("-" * 72)
+_cs282 = _read148(_os.path.join(PROJ, 'docs', 'CENSUS_R252_STATUS.md'))
+_rows282 = [l for l in _cs282.splitlines() if _re.match(r'^\| \d+ \|', l)]
+check("상태표에 82건이 전부 있다 (번호 1~82 · 빠짐 없음)",
+      len(_rows282) == 82 and [int(l.split('|')[1]) for l in _rows282] == list(range(1, 83)),
+      f"{len(_rows282)}행", scanned=len(_rows282))
+_st282 = {}
+for l in _rows282:
+    _st282[l.split('|')[5].strip()] = _st282.get(l.split('|')[5].strip(), 0) + 1
+_sum282 = {m.group(1).strip(): int(m.group(2)) for m in _re.finditer(r'^\| (완료|부분|닫음\(이미 잰 것\)|남음) \| (\d+) \|', _cs282, _re.M)}
+check("요약 표의 수가 행을 센 수와 같다 (손으로 적은 합계가 아니다)", _sum282 == _st282, f"{_sum282} vs {_st282}")
+check("'완료' 행은 전부 라운드 번호(R…)를 근거로 든다 (미검증을 완료로 안 적는다 · §9)",
+      all(_re.search(r'R\d{2,3}', l.split('|')[6]) for l in _rows282 if l.split('|')[5].strip() == '완료'),
+      scanned=sum(1 for l in _rows282 if l.split('|')[5].strip() == '완료'))
+check("상태표가 종목 코드 여섯 자리를 담지 않는다 (제목만 옮긴다 · §9)",
+      not _re.search(r'\b\d{6}\b', _cs282), scanned=len(_rows282))
+
+print()
+print("§283 R269 — 차트 구조 R1 은 백필로 못 연다 · 업종조정 '지금' 추기 · 상수 피처는 자료가 말한다 (2026-09-10)")
+print("-" * 72)
+import json as _json283
+_pre283 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R214_CHART_STRUCTURE.md'))
+check("R214 사전등록에 '백필해도 R1 미달(blind 25 < 30)' 추기가 있다 — 열리지 않는 관문에 시세를 다시 받지 않는다",
+      'R2 백필은 R1 을 못 연다' in _pre283 and 'blind 25 < 30' in _pre283 and '백필은 하지 않는다' in _pre283)
+_rad283 = _json283.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_row283 = next((r for r in (_rad283.get('rows') or []) if '(R214)' in str(r.get('name'))), None)
+check("레이더에 차트 구조(R214) 줄이 있고 상태가 'R1 미달 · 11-16 뒤'다 (사전등록 → 레이더 · R218)",
+      bool(_row283) and 'R1 미달' in str(_row283.get('status')) and '11-16' in str(_row283.get('status')))
+_r171 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R171_WATCHLIST_PNL.md'))
+check("R171 의 '열림 · 지금' 업종조정 줄에 '아직 안 열렸다' 추기가 붙어 있다 (열린 것과 하고 있는 것은 다르다)",
+      '아직 안 열렸다' in _r171 and '11-16 이후' in _r171)
+_ml283 = _read148(_os.path.join(PROJ, 'scripts', 'meta_label_lab.py'))
+check("메타 라벨 랩이 상수 피처를 자료로 찍는다 (손 목록으로 지우지 않는다 · 0건이면 0건)",
+      'const_cols' in _ml283 and 'np.nanstd(X[:, j])) == 0.0' in _ml283 and '상수 피처' in _ml283)
+
+print()
+print("§284 R270 — 네이버가 옛 종목 페이지를 새 사이트로 넘긴다 · JSON 경로가 같은 칸을 채운다 (2026-09-10)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-10 오후부터 finance.naver.com/item/main.naver 가 stock.naver.com 으로 302 되어
+#   HTML 파서가 모든 종목을 '종목 페이지 없음'으로 읽었다(회귀 §17 이 그래서 죽었다 · 오전엔 통과).
+#   고침: 옛 표식이 없을 때만 m.stock.naver.com/api 로 같은 칸을 채운다. 여기서는 **순수 함수**를
+#   심어서 잰다 — 값을 지어내지 않는지(펀드 · 결측 · 추정치 제외 · 시장) · 옛 파서와 칸이 같은지.
+import bitemporal_engine as _be284
+_api284 = {
+    'basic': {'stockName': '시험전자', 'closePrice': '269,000', 'compareToPreviousClosePrice': '-500',
+              'fluctuationsRatio': '-0.19', 'stockExchangeType': {'code': 'KQ'}, 'stockEndType': 'stock'},
+    'integration': {'industryCode': 278, 'totalInfos': [
+        {'key': '시가', 'value': '268,000'}, {'key': '고가', 'value': '272,000'}, {'key': '저가', 'value': '263,500'},
+        {'key': '거래량', 'value': '30,033,115'}, {'key': 'PER', 'value': '12.07배'}, {'key': 'EPS', 'value': '22,292원'},
+        {'key': 'PBR', 'value': '3.13배'}, {'key': 'BPS', 'value': '86,052원'}]},
+    'finance': {'financeInfo': {'rowList': [
+        {'title': 'ROE', 'columns': {'202612': {'value': '15.00'}, '202312': {'value': '4.15'}, '202412': {'value': '9.03'}}},
+        {'title': '부채비율', 'columns': {'202612': {'value': '20.00'}, '202412': {'value': '27.93'}}}]}},
+    'industry_name': '반도체와반도체장비',
+}
+_i284 = _be284.info_from_mobile_api(_api284, prev={'sector': '옛업종'}, today_yyyymm='202609')
+check("JSON 경로가 이름·현재가·전일비·시고저·거래량을 옛 파서와 같은 칸에 넣는다",
+      _i284['name'] == '시험전자' and _i284['base_price'] == 269000.0 and _i284['diff_price'] == -500.0
+      and _i284['prev_close'] == 269500.0 and _i284['open_p'] == 268000.0 and _i284['volume'] == 30033115.0)
+check("시장은 stockExchangeType 에서 읽는다 — KQ → KOSDAQ (추정 아님)", _i284['market'] == 'KOSDAQ')
+check("재무는 받은 것만 — PER/EPS/PBR/BPS 는 단위 글자를 벗긴 수, ROE·부채비율은 **가장 최근 실적**(추정치 202612 제외)",
+      _i284['per'] == 12.07 and _i284['eps'] == 22292.0 and _i284['bps'] == 86052.0
+      and _i284['roe'] == 9.03 and _i284['debt'] == 27.93, f"roe={_i284['roe']} debt={_i284['debt']}")
+check("업종은 API 의 업종 이름 · 없으면 종전 값 (날짜가 아니라 종목의 성질 · R218)",
+      _i284['sector'] == '반도체와반도체장비'
+      and _be284.info_from_mobile_api({**_api284, 'industry_name': None}, prev={'sector': '옛업종'}, today_yyyymm='202609')['sector'] == '옛업종'
+      and _be284.info_from_mobile_api({**_api284, 'industry_name': None}, prev={}, today_yyyymm='202609')['sector'] is None)
+check("page_status 가 새 경로임을 말한다 (옛 파서의 'ok'/'item_page_missing' 과 다른 낱말)", _i284['page_status'] == 'ok_mobile_api')
+_fund284 = _be284.info_from_mobile_api({'basic': {'stockName': 'KODEX 200', 'closePrice': '111,865', 'stockExchangeType': {'code': 'KS'},
+                                                  'stockEndType': 'etf'}, 'integration': {'totalInfos': [{'key': 'PER', 'value': '12배'}]},
+                                        'finance': {}, 'industry_name': None}, today_yyyymm='202609')
+check("펀드(etf)는 EPS·BPS·PER·PBR 0 · ROE·부채 None — 적정가를 지어내지 않는다 (심기)",
+      _fund284['is_fund'] and _fund284['eps'] == 0.0 and _fund284['per'] == 0.0 and _fund284['roe'] is None and _fund284['debt'] is None)
+_miss284 = _be284.info_from_mobile_api({'basic': {'stockName': '빈종목', 'closePrice': '1,000', 'stockExchangeType': {}, 'stockEndType': 'stock'},
+                                        'integration': {'totalInfos': [{'key': 'PER', 'value': '-'}, {'key': 'BPS', 'value': 'N/A'}]},
+                                        'finance': {}, 'industry_name': None}, today_yyyymm='202609')
+check("못 받은 칸은 빈 값 — 시장 None · EPS/BPS None · ROE None · 시고저는 현재가 · 거래량 0 (옛 파서와 같은 뜻 · §3)",
+      _miss284['market'] is None and _miss284['eps'] is None and _miss284['bps'] is None and _miss284['roe'] is None
+      and _miss284['open_p'] == 1000.0 and _miss284['volume'] == 0.0, str({k: _miss284[k] for k in ('market', 'eps', 'bps', 'roe')}))
+check("_api_num 이 단위·쉼표·빈 표식을 옳게 읽는다 (심기)",
+      _be284._api_num('12.07배') == 12.07 and _be284._api_num('22,292원') == 22292.0 and _be284._api_num('46.81%') == 46.81
+      and _be284._api_num('-') is None and _be284._api_num('N/A') is None and _be284._api_num(None) is None and _be284._api_num('-6.26') == -6.26)
+_src284 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("실시세 파서가 옛 표식이 없을 때만 JSON 경로로 간다 (옛 페이지가 오면 옛 파서 그대로)",
+      "if not html_m or ('no_today' not in html_m and 'wrap_company' not in html_m):" in _src284
+      and 'api = fetch_naver_mobile_api(code)' in _src284)
+# 유니버스 — 옛 시가총액 페이지도 같은 날 새 사이트로 넘어갔다(코드 0개). JSON 목록은 ETF 가 섞여
+#   있으므로 **종목만** 남긴다(옛 페이지도 종목만 · R164 경계). 단위는 억원 그대로 · PER·ROE 는 없어 None.
+_stk284 = [{'stockEndType': 'stock', 'itemCode': '005930', 'stockName': '삼성전자', 'closePrice': '269,000',
+            'accumulatedTradingVolume': '21,010,910', 'marketValue': '15,726,489'},
+           {'stockEndType': 'etf', 'itemCode': '069500', 'stockName': 'KODEX 200', 'closePrice': '111,865', 'marketValue': '259,527'},
+           {'stockEndType': 'etn', 'itemCode': '500001', 'stockName': '어떤 ETN', 'closePrice': '10,000', 'marketValue': '100'},
+           {'stockEndType': 'stock', 'itemCode': '', 'stockName': '코드없음', 'closePrice': '1,000', 'marketValue': '1'}]
+_lst284 = _be284.BitemporalEngine.listing_from_api_stocks(_stk284, 'KOSPI')
+check("유니버스 JSON 목록은 종목만 남긴다 — ETF·ETN·코드 없음 제외 (심기 · R164 경계)",
+      [r['code'] for r in _lst284] == ['005930'], str([r['code'] for r in _lst284]))
+check("유니버스 칸이 옛 시총 페이지와 같다 — 가격 · 시총(억원) · 거래량 · PER/ROE 는 None",
+      _lst284 and _lst284[0]['price'] == 269000.0 and _lst284[0]['market_cap_eok'] == 15726489.0
+      and _lst284[0]['volume'] == 21010910.0 and _lst284[0]['per'] is None and _lst284[0]['roe'] is None
+      and _lst284[0]['market'] == 'KOSPI')
+check("폴백 유니버스가 부채비율 None 에 죽지 않고 'Unknown' 을 적는다 (종전 TypeError · §3)",
+      "\"Unknown\" if meta.get(\"debt\") is None" in _src284)
+# 검색 · 업종 목록 · 수급 — 같은 날 같은 이전. 순수 함수 셋을 심어서 잰다.
+_ac284 = _be284.search_hits_from_ac([
+    {'code': '018880', 'name': '한온시스템', 'typeCode': 'KOSPI', 'nationCode': 'KOR', 'category': 'stock'},
+    {'code': '018880', 'name': '한온시스템', 'typeCode': 'KOSPI', 'nationCode': 'KOR'},          # 중복
+    {'code': 'AAPL', 'name': '애플', 'typeCode': 'NASDAQ', 'nationCode': 'USA'},                 # 해외
+    {'code': '247540', 'name': '에코프로비엠', 'typeCode': 'KOSDAQ', 'nationCode': 'KOR'},
+    {'code': '', 'name': '코드없음'}])
+check("자동완성 검색은 국내 종목만 · 중복 제거 · 시장은 읽은 것 (심기)",
+      _ac284 == [('018880', '한온시스템', 'KOSPI'), ('247540', '에코프로비엠', 'KOSDAQ')], str(_ac284))
+import market_attention as _ma284
+_grp284 = _ma284.sector_groups_from_api({'groups': [{'no': 278, 'name': '반도체와반도체장비', 'changeRate': '0.07'},
+                                                     {'no': 41, 'name': '건설', 'changeRate': '-1.20'},
+                                                     {'no': 9, 'name': '', 'changeRate': '1'}, {'name': '번호없음'}]})
+check("업종 목록 JSON → (번호·이름·등락률) — 옛 목록 페이지와 같은 셋 · 빈 항목 제외 (심기)",
+      _grp284 == [('278', '반도체와반도체장비', 0.07), ('41', '건설', -1.2)], str(_grp284))
+_fl284 = _ma284.flow_rows_from_trend([
+    {'bizdate': '20260910', 'organPureBuyQuant': '+4,266,985', 'foreignerPureBuyQuant': '-5,769,453'},
+    {'bizdate': '20260909', 'organPureBuyQuant': '-', 'foreignerPureBuyQuant': '-'},                # 둘 다 못 읽음
+    {'bizdate': '2026-09-08', 'organPureBuyQuant': '1'},                                          # 날짜 모양 다름
+    {'bizdate': '20260908', 'organPureBuyQuant': '+2,406,250', 'foreignerPureBuyQuant': '+3,332,528'}], 20)
+check("수급 JSON → 날짜·기관·외국인 순매매 — 부호 보존 · 못 읽은 행은 안 만든다 (심기)",
+      _fl284 == [{'date': '2026.09.10', 'inst': 4266985.0, 'frgn': -5769453.0},
+                 {'date': '2026.09.08', 'inst': 2406250.0, 'frgn': 3332528.0}], str(_fl284))
+
+print()
+print("§285 R271 — 시총 1위 · 배당 · 관심도 순위도 새 사이트로 넘어갔다 · None 이 앱을 죽이지 않는다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R270 을 띄우니 사이드바가 '시총 1위 미수신'(옛 시가총액 페이지 직접 파싱)을 찍고 그 None 이
+#   resolve_symbol 의 .strip() 에서 앱 전체를 죽였다. 배당은 옛 페이지의 표가 없어 "공시되지
+#   않았습니다"(못 받은 것을 없는 것으로 · §3)를 냈고, 관심도 순위 페이지 둘도 코드 0개였다.
+import bitemporal_engine as _be285
+import market_attention as _ma285
+_e285 = _be285.BitemporalEngine()
+try:
+    _t285, _n285 = _e285.resolve_symbol(None)
+    _ok285 = bool(_t285)
+except Exception as _x285:                                     # noqa: BLE001
+    _ok285, _t285 = False, f'{type(_x285).__name__}: {_x285}'
+check("resolve_symbol(None) 이 죽지 않고 빈 입력처럼 기본 종목으로 간다 (심기)", _ok285, str(_t285)[:80])
+_src285 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("시총 1위가 옛 표를 못 읽으면 JSON 시가총액 목록의 첫 줄을 쓴다 (지어내지 않는다 · 없으면 None)",
+      'rows = self.fetch_market_listing("KOSPI", max_pages=1)' in _src285
+      and 'return it[\'name\']' in _src285 and 'return None' in _src285.split('def fetch_realtime_market_cap_no1_stock')[1][:1800])
+check("배당은 옛 표가 없으면 새 JSON 의 주당배당금을 읽는다 — '공시 안 됨'은 그 뒤에만 말한다 (§3)",
+      "ti.get('주당배당금')" in _src285 and _src285.find("ti.get('주당배당금')") < _src285.find('"주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."'))
+_rk285 = _ma285.rank_rows_from_api_stocks([
+    {'itemCode': '007540', 'stockName': '샘표', 'stockEndType': 'stock', 'closePrice': '55,700', 'fluctuationsRatio': '29.99',
+     'accumulatedTradingVolume': '44,523', 'accumulatedTradingValue': '2,479', 'marketValue': '1,602'},
+    {'itemCode': '069500', 'stockName': 'KODEX 200', 'stockEndType': 'etf', 'closePrice': '111,865'},
+    {'itemCode': '00593', 'stockName': '코드짧음', 'stockEndType': 'stock'}], 'rise', limit=10)
+check("관심도 순위 JSON → 옛 순위 표와 같은 행 (거래대금 백만원 · 시총 억원 · 펀드·짧은 코드 제외 · 심기)",
+      list(_rk285) == ['007540'] and _rk285['007540']['turnover_mil'] == 2479.0 and _rk285['007540']['market_cap_eok'] == 1602.0
+      and _rk285['007540']['change_pct'] == 29.99 and _rk285['007540']['sources'] == {'rise'}, str(_rk285)[:160])
+# ── 세 결함의 뿌리는 로그 한 줄이었다 ──────────────────────────────────────────
+#   R270 의 성공 로그 "[Universe] KOSPI — …" 의 em-dash 가 cp949 표준출력(Windows 콘솔 · streamlit
+#   자식)에서 UnicodeEncodeError 를 내고, 호출부의 except Exception 이 그것을 '수집 실패'로 읽었다
+#   (시총 1위 None → 유니버스 폴백 → 폴백 print 에서 앱 사망). 프로브·회귀는 stdout 을 utf-8 로
+#   다시 열어 못 봤다. 고침은 엔진 import 시 못 찍는 글자만 대체(_stdout_tolerant · 인코딩 불변).
+#   차가운 cp949 자식 프로세스로 양방향을 심는다 — 엔진을 import 하면 산다 · 안 하면 죽는다.
+import subprocess as _sp285
+_env285 = dict(_os.environ, PYTHONIOENCODING='cp949')
+_env285.pop('PYTHONUTF8', None)
+_code285 = ("import sys; sys.path.insert(0, %r); import bitemporal_engine; "
+            "print('\\u2014 em-dash'); print('R285_OK')" % PROJ)
+_r285 = _sp285.run([sys.executable, '-c', _code285], capture_output=True, env=_env285, cwd=PROJ, timeout=120)
+check("cp949 표준출력에서 엔진을 import 하면 '—' 가 든 print 가 죽지 않는다 (차가운 자식 프로세스)",
+      _r285.returncode == 0 and b'R285_OK' in _r285.stdout,
+      f"rc={_r285.returncode} · {_r285.stderr.decode('cp949', 'replace').strip().splitlines()[-1:] }")
+_r285n = _sp285.run([sys.executable, '-c', "print('\\u2014 em-dash'); print('R285_OK')"],
+                    capture_output=True, env=_env285, cwd=PROJ, timeout=120)
+check("같은 print 가 엔진 없이는 실제로 죽는다 — 심기가 잡는 것을 확인 (양방향)",
+      _r285n.returncode != 0 and b'UnicodeEncodeError' in _r285n.stderr, f"rc={_r285n.returncode}")
+# ── 순매수 상위 목록은 새 사이트에 없다 — 그 방식의 0 은 판정이 아니라 미수신이다 (§3) ──
+#   `fetch_candidate_pool` 이 출처 보고에 `why` 를 싣고, `find_attention_candidates` 가 'flow' 방식에서
+#   후보 0 이면 그 사유를 `unavailable` 로 옮긴다. 화면은 unavailable 을 경고로 낸다(이미 있는 길).
+_ma285_src = _read148(_os.path.join(PROJ, 'market_attention.py'))
+check("순매수 상위 출처 보고가 미수신일 때 사유(why)를 싣는다 — 소비자가 읽을 수 있게",
+      "'why': None if flow_ok > 0 else" in _ma285_src)
+check("'외국인·기관' 방식이 후보 0 + 출처 미수신이면 unavailable 에 그 사유를 옮긴다 (데이터 미수신 ≠ 추천 없음)",
+      "if strategy == 'flow' and not rows:" in _ma285_src
+      and "외국인·기관 순매수 상위 목록을 받지 못했습니다 — " in _ma285_src
+      and _ma285_src.find("if strategy == 'flow' and not rows:") < _ma285_src.rfind("'unavailable': unavailable"))
+
+print()
+print("§286 R272 — 거래일에 전방 기록부의 오늘 행이 0 이면 워크플로가 붉어진다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-10 클라우드 실행(main = R260)은 25단계 전부 '성공'인데 증분이 전부 +0 이었다 — 네이버
+#   이전(R270)으로 전방 판정 기록 0건 · 케이스 축적 시간초과 · 경로 기록 0행. 증분 요약(R81)은
+#   원장의 0 을 정상으로 두는 것이 맞지만 전방 기록부는 거래일마다 반드시 는다. 값으로 심는다.
+import tempfile as _tf286
+import scripts.forward_registry_check as _frc286
+_d286 = _tf286.mkdtemp(prefix='r272_')
+_p286 = _os.path.join(_d286, 'forward_registry.jsonl')
+with open(_p286, 'w', encoding='utf-8') as _f286:
+    _f286.write('{"contract": "fr-1", "ticker": "000000.KS", "date": "2026-09-10", "action": "HOLD"}\n')
+    _f286.write('{"contract": "fr-1", "ticker": "000001.KS", "date": "2026-09-10", "action": "HOLD"}\n')
+    _f286.write('{"contract": "fr-1", "ticker": "000000.KS", "date": "2026-09-11", "action": "HOLD"}\n')
+check("심기 ① 거래일에 오늘 행이 있으면 통과 (rc 0)", _frc286.check(_p286, today='2026-09-11') == 0)
+check("심기 ② 거래일인데 오늘 행이 0 이면 실패 (rc 1) — 어제 행이 있어도 오늘의 0 은 0 이다",
+      _frc286.check(_p286, today='2026-09-09') == 1)
+check("심기 ③ 휴장일(토요일)이면 판정하지 않는다 (rc 0)", _frc286.check(_p286, today='2026-09-12') == 0)
+check("심기 ④ 파일이 없으면 미측정 (rc 2 · 통과가 아니다)",
+      _frc286.check(_os.path.join(_d286, 'none.jsonl'), today='2026-09-11') == 2)
+_t286, _bd286 = _frc286.count_by_date(_p286)
+check("날짜별 셈 — 전체 3 · 09-10 2 · 09-11 1", _t286 == 3 and _bd286 == {'2026-09-10': 2, '2026-09-11': 1}, str(_bd286))
+_yml286 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("워크플로가 그 검사를 업로드 **뒤**에 `|| true` 없이 둔다 (R247 · 축적은 인질이 아니다)",
+      'run: python scripts/forward_registry_check.py' in _yml286
+      and _yml286.rfind('scripts/forward_registry_check.py') > _yml286.find('새 스냅샷 올리기')
+      and 'forward_registry_check.py || true' not in _yml286)
+
+# ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
+#   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
+#   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
+#   절 안에서만 쓰인다(전 위치의 뒤 절이 안 읽는다 · 사전 점검 ①' 이 본다).
+# ══════════════════════════════════════════════════════════════════════
+# §158 — 규칙 문서의 숫자가 9배 어긋난 채 있었다 (라운드 109)
+#
+#   CLAUDE.md 는 **매 작업 전에 읽는** 문서다. 여기 숫자가 낡으면 그
+#   뒤의 모든 판단이 낡은 전제 위에 선다.
+#
+#       원장 건수      문서 19,883 · 실제 184,759   (9.3배)
+#       회귀 하한      문서  1,700 · 실제   2,719
+#
+#   §2 는 "원장으로 실측한다" 고 하는데, 그 규모를 2만 건으로 알고
+#   시작하면 표본 판단이 통째로 달라진다.
+#
+#   숫자만 갈면 내일 또 낡는다. **잰 날짜를 같이 적게** 하고, 검사는
+#   '자릿수가 어긋나는가' 만 본다 — 매일 자라는 값에 일일 정확도를
+#   요구하면 검사가 매일 깨지고, 곧 무시된다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§158 규칙 문서의 숫자 — 날짜를 달고, 자릿수가 안 어긋나게 (라운드 109)")
+print("=" * 72)
+_md158 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
+check("규칙 문서를 읽었다 (0바이트면 미측정)", len(_md158) > 2000,
+      f'{len(_md158)}바이트')
+
+_m158 = _re.search(r'\*\*(\d{4}-\d\d-\d\d) 기준 ([\d,]+)건\*\*', _md158)
+check("원장 건수에 잰 날짜가 붙어 있다", bool(_m158),
+      '날짜 없는 숫자는 반드시 낡는다')
+if _m158:
+    _claim158 = int(_m158.group(2).replace(',', ''))
+    _now158 = _sf151.ledger_rows()
+    # 자릿수만 본다 — 매일 자라므로 일일 일치를 요구하지 않는다
+    check("문서의 원장 건수가 실제와 자릿수가 맞는다",
+          _now158 == 0 or 0.5 <= _claim158 / _now158 <= 2.0,
+          f'문서 {_claim158:,} · 실제 {_now158:,}')
+
+_m158b = _re.search(r'([\d,]+)건 이상 \((\d{4}-\d\d-\d\d) 기준\)', _md158)
+check("회귀 하한에도 잰 날짜가 붙어 있다", bool(_m158b),
+      '회귀 건수 표기에 날짜가 없다')
+if _m158b:
+    # 하한은 '이상' 이므로 **실제 검사 수가 그보다 많아야** 한다.
+    # 이 절이 도는 시점에 이미 2,700여 건이 실행됐다 — 그 수를 센다.
+    # (항상 참인 검사를 쓰지 않는다. 처음에 빈 문자열을 뒤져 +10^9 을
+    #  더하는 식으로 써 놓고 지웠다 — 못 깨지는 검사는 없는 것만 못하다.)
+    _floor158 = int(_m158b.group(1).replace(',', ''))
+    # ⚠️ 라운드 188 — 여기가 `len(FAILURES) + _CHECKS_RUN[0]` 이었다.
+    #   `check()` 는 성공·실패를 **모두** _CHECKS_RUN 에 올리므로 실패가
+    #   한 번 더 더해졌다 — **실패가 늘수록 하한을 넘기 쉬워지는** 셈이다.
+    #   실행 수는 _CHECKS_RUN 하나다.
+    _ran158 = _CHECKS_RUN[0]
+    check("문서의 회귀 하한을 실제 검사 수가 넘는다",
+          _ran158 >= _floor158, f'문서 {_floor158:,} · 실행 {_ran158:,}')
+    # 그리고 **건너뛴 검사가 하한을 갉아먹지 않았는지** 함께 본다.
+    check("건너뛴 검사가 전체의 5% 미만이다",
+          len(SKIPPED) < max(1, _ran158 * 0.05),
+          f'건너뜀 {len(SKIPPED)}건 / 실행 {_ran158:,}건 — '
+          f'산출물이 없으면 검사가 통째로 안 돈다')
+
+# ── 라운드 196 — 원장이 **자란다는 주장**도 사실이어야 한다 ─────────
+#   문서가 *"매 거래일 +400 안팎으로 자란다"* 고 적고 있었는데, 파일
+#   수정 시각을 보니 **2026-08-16 이후 한 건도 안 늘었다**(2026-08-31
+#   확인 · 15일). 건수에 날짜를 붙이는 규칙(§2-2)은 지켰지만 **자란다는
+#   주장에는 아무 확인이 없었다** — 그 문장 하나로 "표본이 곧 늘어난다"를
+#   전제한 계획이 서게 된다(R129 가 그 전제 위에서 상한을 계산했다).
+#   → 값으로 본다: 원장 파일이 마지막으로 바뀐 날을 문서가 알고 있는가.
+_lg196 = _os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
+if _os.path.exists(_lg196):
+    import datetime as _dt196
+    _mt196 = _dt196.date.fromtimestamp(_os.path.getmtime(_lg196))
+    _stale196 = (_dt196.date.today() - _mt196).days
+    check("원장 파일의 마지막 갱신일을 값으로 안다",
+          _mt196.year >= 2020, _mt196.isoformat())
+    # 오래 멈춰 있으면 문서가 **그 사실을 적고 있어야** 한다 (§3 · §9)
+    if _stale196 >= 7:
+        # ⚠️ 라운드 202 — 처음에 **어미까지** 적었다가(`그대로다`·`안
+        #   늘었다`) 문서를 과거형으로 고치자 못 알아봤다. 마침 그때는
+        #   원장이 하루밖에 안 돼 검사가 안 돌아 **조용히 지나갈 뻔했다.**
+        #   어미가 아니라 **어간**을 본다.
+        check("오래 안 자란 원장은 문서가 그 사실을 적는다",
+              any(k in _md158 for k in ('그대로', '안 늘었', '멎', '안 자란')),
+              f'{_stale196}일째 그대로인데 문서는 자란다고만 적고 있다')
+    # ⚠️ 여기서 한 번 걸렸다 — 처음엔 *"'매 거래일 +400' 이 문서에
+    #   없어야 한다"* 로 썼는데, **정정하면서 그 문장을 인용한 것**까지
+    #   위반으로 봤다. 인용과 주장은 다르다. 그러니 그 낱말이 나오면
+    #   **가까이에 정정이 붙어 있는가**를 본다.
+    _i196 = _md158.find('매 거래일 +400')
+    _near196 = (_md158[max(0, _i196 - 200):_i196 + 400] if _i196 >= 0 else '')
+    check("문서가 '매 거래일 자란다'를 근거 없이 주장하지 않는다",
+          _i196 < 0 or _stale196 < 7
+          or any(k in _near196 for k in ('사실이 아니', '그대로', '안 늘었')),
+          f'마지막 갱신 {_mt196.isoformat()} · {_stale196}일 경과인데 '
+          f'그 주장 옆에 정정이 없다')
+
+# 보호 계산 파일 줄 수도 문서가 말한다 — 크게 어긋나면 안 된다
+_m158c = _re.search(r'`quant_indicators\.py`[^|]*약\s*([\d,]+)\s*줄', _md158)
+if _m158c:
+    _cl158 = int(_m158c.group(1).replace(',', ''))
+    with open(_os.path.join(PROJ, 'quant_indicators.py'),
+              encoding='utf-8', errors='replace') as _f158:
+        _real158 = sum(1 for _ in _f158)
+    check("문서의 quant_indicators 줄 수가 실제와 가깝다",
+          abs(_cl158 - _real158) <= 500,
+          f'문서 {_cl158:,} · 실제 {_real158:,}')
+
 
 print()
 print("=" * 72)

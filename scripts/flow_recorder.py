@@ -120,6 +120,13 @@ def fetch_page(code, page):
                     'inst': inst, 'frgn': frgn})
         if len(out) >= ROWS_PER_PAGE:
             break
+    if not out and html:
+        # 라운드 270 — 옛 페이지가 새 사이트로 넘어가면 표가 없다. 같은 값을 투자자 추세 JSON 에서
+        #   (같은 페이지 크기로 · 파싱은 market_attention 의 순수 함수 하나 — 베끼지 않는다).
+        d = be.fetch_json_with_retry(
+            f"{be.NAVER_MOBILE_API}/stock/{code}/trend?pageSize={ROWS_PER_PAGE}&page={page}")
+        out = [{'date': r['date'].replace('.', '-'), 'inst': r['inst'], 'frgn': r['frgn']}
+               for r in ma.flow_rows_from_trend(d, ROWS_PER_PAGE)]
     return out
 
 

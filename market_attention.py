@@ -222,6 +222,52 @@ def _parse_rank_table(html, source_tag, limit=None):
     return out
 
 
+def rank_rows_from_api_stocks(stocks, source_tag, limit=None):
+    """새 사이트 목록 JSON → 옛 순위 표와 같은 행. 순수 함수 (라운드 271).
+
+    거래대금(accumulatedTradingValue)은 백만원 · 시총(marketValue)은 억원 — 옛 표와 같은 단위
+    (실측: 삼성전자 2,479 ↔ '24.8억원'). 펀드·제외 이름은 옛 파서와 같은 규칙으로 뺀다.
+    """
+    out = {}
+    for s in stocks or []:
+        if limit is not None and len(out) >= limit:
+            break
+        if not isinstance(s, dict):
+            continue
+        code = str(s.get('itemCode') or '').strip()
+        name = str(s.get('stockName') or '').strip()
+        if not re.fullmatch(r'\d{6}', code) or not name:
+            continue
+        if str(s.get('stockEndType') or 'stock').lower() != 'stock':
+            continue
+        if _is_fund_like(name) or be.BitemporalEngine._is_excluded_name(name):
+            continue
+        out[code] = {
+            'code': code,
+            'name': name,
+            'price': be._api_num(s.get('closePrice')),
+            'change_pct': be._api_num(s.get('fluctuationsRatio')),
+            'volume': be._api_num(s.get('accumulatedTradingVolume')),
+            'turnover_mil': be._api_num(s.get('accumulatedTradingValue')),
+            'market_cap_eok': be._api_num(s.get('marketValue')),
+            'sources': {source_tag},
+        }
+    return out
+
+
+def _rank_from_api(market, tag, limit):
+    """상승률 상위는 전용 목록(up) · 거래대금 상위는 시가총액 목록을 거래대금으로 정렬 (라운드 271)."""
+    if tag == 'rise':
+        stocks = _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/up/{market}", 'stocks',
+                                page_size=100, max_pages=max(1, (limit + 99) // 100))
+        return rank_rows_from_api_stocks(stocks, tag, limit=limit)
+    stocks = _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/marketValue/{market}", 'stocks',
+                            page_size=100, max_pages=40)
+    stocks = sorted(stocks, key=lambda s: -(be._api_num((s or {}).get('accumulatedTradingValue')) or 0.0)
+                    if isinstance(s, dict) else 0.0)
+    return rank_rows_from_api_stocks(stocks, tag, limit=limit)
+
+
 def _parse_flow_names(html):
     """투자자별 순매수 상위 페이지에서 종목명만 뽑는다 (열 구성이 페이지마다 달라 이름만 신뢰)."""
     names = set()
@@ -270,6 +316,14 @@ def fetch_candidate_pool(pages_per_source=2, progress=None):
                 except Exception:
                     continue
                 part = _parse_rank_table(html, tag, limit=per_page)
+                if not part and page == 1:
+                    # 라운드 271 — 옛 순위 페이지가 새 사이트로 넘어갔다(2026-09-10 · 코드 0개).
+                    #   같은 순위를 새 사이트 JSON 으로: 상승률은 `stocks/up/{시장}`, 거래대금은
+                    #   시가총액 목록(`stocks/marketValue`)을 거래대금으로 정렬한다(전용 끝점 404).
+                    part = _rank_from_api(market, tag, limit=per_page * pages_per_source)
+                    got += len(part)
+                    merge(part, tag)
+                    break
                 got += len(part)
                 merge(part, tag)
         report.append({'source': label, 'count': got, 'ok': got > 0})
@@ -290,7 +344,14 @@ def fetch_candidate_pool(pages_per_source=2, progress=None):
             got = _parse_flow_names(html)
             flow_names |= got
             flow_ok += len(got)
-    report.append({'source': '외국인·기관 순매수 상위', 'count': flow_ok, 'ok': flow_ok > 0})
+    report.append({'source': '외국인·기관 순매수 상위', 'count': flow_ok, 'ok': flow_ok > 0,
+                   # 라운드 271 — 옛 순매수 상위 페이지가 새 사이트 시장 홈으로 넘어갔고(2026-09-10),
+                   #   새 사이트 번들에는 같은 목록의 JSON 끝점이 없다(차트용 지수 외국인 하나뿐).
+                   #   그래서 이 출처는 미수신이고 '순매수 상위 진입'은 아무도 못 받는다(전원 0 ·
+                   #   필터가 아니다 · §3). 종목별 투자자 추세(`stock/{code}/trend`)로 재는 동시
+                   #   순매수·순매수 전환은 그대로 산다. 지어내지 않는다.
+                   'why': None if flow_ok > 0 else
+                   "옛 순위 페이지가 새 사이트로 넘어갔고 새 사이트에 같은 목록 JSON 이 없다 (2026-09-10)"})
 
     return pool, flow_names, report
 
@@ -342,16 +403,28 @@ def fetch_sector_map(max_age_sec=3600, progress=None):
                 break
         groups.append((m.group(1), m.group(2).strip(), chg))
 
+    # 라운드 270 — 옛 업종 목록 페이지가 새 사이트로 넘어가면(2026-09-10 · 행 0개) 새 사이트의
+    #   JSON 목록으로 같은 셋(번호·이름·등락률)을 받는다. 구성종목도 업종당 1회 — 같은 규모.
+    use_api = not groups
+    if use_api:
+        groups = sector_groups_from_api(
+            {'groups': _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/industry", 'groups')})
+
     by_code, sectors = {}, {}
     for i, (no, name, chg) in enumerate(groups):
         if progress:
             progress(f"업종 상대강도 {i + 1}/{len(groups)} · {name}")
-        try:
-            h2 = be.fetch_html_with_retry(
-                f"https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}")
-        except Exception:
-            continue
-        codes = sorted(set(re.findall(r'code=(\d{6})', h2 or '')))
+        if use_api:
+            codes = sorted({str(s.get('itemCode'))
+                            for s in _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/industry/{no}", 'stocks')
+                            if isinstance(s, dict) and s.get('itemCode')})
+        else:
+            try:
+                h2 = be.fetch_html_with_retry(
+                    f"https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}")
+            except Exception:
+                continue
+            codes = sorted(set(re.findall(r'code=(\d{6})', h2 or '')))
         sectors[name] = {'no': no, 'change_pct': chg, 'count': len(codes)}
         for c in codes:
             by_code[c] = {'sector': name, 'sector_change_pct': chg}
@@ -388,6 +461,11 @@ def fetch_investor_flow(code, days=20):
         if len(rows) >= days:
             break
     if not rows:
+        # 라운드 270 — 옛 '외국인·기관' 페이지가 새 사이트로 넘어가면 표가 없다. 같은 값이
+        #   새 사이트의 투자자 추세 JSON(trend)에 있다 — 날짜·기관·외국인 순매매(주).
+        rows = flow_rows_from_trend(be.fetch_json_with_retry(
+            f"{be.NAVER_MOBILE_API}/stock/{code}/trend?pageSize={int(days)}&page=1"), days)
+    if not rows:
         return None
     return {
         'inst_5d': float(sum(r['inst'] for r in rows[:5])),
@@ -396,6 +474,61 @@ def fetch_investor_flow(code, days=20):
         'frgn_20d': float(sum(r['frgn'] for r in rows)),
         'days': len(rows),
     }
+
+
+def _api_all_pages(url_base, key, page_size=100, max_pages=40):
+    """새 사이트 목록 JSON 을 totalCount 까지 넘겨 가며 모은다 (pageSize 상한이 있어 200 은 400 이 난다 · 실측)."""
+    out = []
+    total = None
+    for page in range(1, max_pages + 1):
+        d = be.fetch_json_with_retry(f"{url_base}?page={page}&pageSize={page_size}", timeout=8, retries=2)
+        if not isinstance(d, dict):
+            break
+        items = d.get(key) or []
+        out.extend(items)
+        if total is None:
+            try:
+                total = int(d.get('totalCount') or 0)
+            except (TypeError, ValueError):
+                total = 0
+        if not items or page * page_size >= total:
+            break
+    return out
+
+
+def sector_groups_from_api(d):
+    """새 사이트 업종 목록 JSON → [(번호, 이름, 등락률)] — 옛 목록 페이지와 같은 셋. 순수 함수 (라운드 270)."""
+    out = []
+    for g in ((d or {}).get('groups') or []) if isinstance(d, dict) else []:
+        if not isinstance(g, dict) or g.get('no') is None or not g.get('name'):
+            continue
+        chg = (_signed(str(g.get('changeRate')).replace('%', ''))
+               if g.get('changeRate') not in (None, '', '-') else None)
+        out.append((str(g['no']), str(g['name']).strip(), chg))
+    return out
+
+
+def flow_rows_from_trend(rows, days=20):
+    """새 사이트 투자자 추세 JSON → [{'date': 'YYYY.MM.DD', 'inst', 'frgn'}] — 옛 표와 같은 뜻. 순수 함수 (라운드 270).
+
+    기관은 organPureBuyQuant · 외국인은 foreignerPureBuyQuant(주 · 부호 있음). 둘 다 못 읽으면 행을
+    만들지 않는다(옛 파서와 같다 · §3). 날짜는 bizdate(YYYYMMDD)를 옛 표기 'YYYY.MM.DD' 로.
+    """
+    out = []
+    for r in rows or [] if isinstance(rows, list) else []:
+        if not isinstance(r, dict):
+            continue
+        bd = str(r.get('bizdate') or '')
+        if not re.fullmatch(r'\d{8}', bd):
+            continue
+        inst = _signed(r.get('organPureBuyQuant'))
+        frgn = _signed(r.get('foreignerPureBuyQuant'))
+        if inst is None and frgn is None:
+            continue
+        out.append({'date': f"{bd[:4]}.{bd[4:6]}.{bd[6:]}", 'inst': inst or 0.0, 'frgn': frgn or 0.0})
+        if len(out) >= days:
+            break
+    return out
 
 
 def _signed(text):
@@ -1042,8 +1175,19 @@ def find_attention_candidates(strategy='composite', top_n=15,
         rows.append(row)
 
     rows.sort(key=lambda r: r['attention']['adjusted_attention_score'], reverse=True)
+    # 라운드 271 — '외국인·기관' 방식은 순매수 상위 **목록** 진입만 본다. 그 목록의 출처가
+    #   미수신이면(옛 페이지가 새 사이트로 넘어갔고 새 목록 끝점이 없다 · 2026-09-10) 후보는
+    #   구조적으로 0 인데, 사유 없이 0 을 내면 화면은 '후보 없음'(판정)으로 읽는다 —
+    #   데이터 미수신 ≠ 추천 없음(§3). 사유는 출처 보고의 `why` 를 그대로 옮긴다.
+    unavailable = None
+    if strategy == 'flow' and not rows:
+        _flow_src = next((r for r in report if r.get('source') == '외국인·기관 순매수 상위'), None)
+        if _flow_src is not None and not _flow_src.get('ok'):
+            unavailable = ("외국인·기관 순매수 상위 목록을 받지 못했습니다 — "
+                           + str(_flow_src.get('why') or '사유 미기록')
+                           + ". 종목별 수급(동시 순매수·순매수 전환)은 '종합 이슈' 방식이 봅니다.")
     return {'rows': rows[:top_n], 'pool_size': len(pool), 'deep_count': len(deep),
-            'sources': report, 'failures': failures, 'unavailable': None,
+            'sources': report, 'failures': failures, 'unavailable': unavailable,
             'used_confirmed_bars_only': live}
 
 

@@ -111,7 +111,16 @@ def featurize(rows):
             s = str(r.get(c))
             v += [1.0 if s == vv else 0.0 for vv in cat_vals[c]]
         X.append(v)
-    return np.array(X, dtype=float), names
+    X = np.array(X, dtype=float)
+    # 라운드 269 — 원장에서 **상수인 칸**을 찍는다. 뉴스 3칸(news_risk_count · news_fresh_count ·
+    #   news_available)은 리플레이 원장에서 폴백 상수라 정보가 0 인데 피처 목록에 살아 있었다
+    #   (전수조사 #34 · '못 잰 0'이 '측정된 0'으로 들어간다). 목록을 손으로 지우지 않는다 — 어느
+    #   칸이 상수인지는 **자료가 말한다.** 값·판정은 안 바꾼다(상수 열은 어떤 모형에서도 정보가
+    #   없다) · 찍기만 한다 — 0건이면 0건이라 찍는다.
+    if len(X):
+        const_cols = [names[j] for j in range(X.shape[1]) if float(np.nanstd(X[:, j])) == 0.0]
+        print(f"   상수 피처 {len(const_cols)}개 (정보 0 · 원장 폴백): {const_cols}")
+    return X, names
 
 
 def metrics(sub, base_n, months):
