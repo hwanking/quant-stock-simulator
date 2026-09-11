@@ -158,6 +158,8 @@ def _render(**kw):
         argv += ['--want-key', k]
     for k in kw.get('want_val') or []:        # 라운드 200 — 존재가 아니라 값
         argv += ['--want-val', k]
+    if kw.get('want_unavailable'):            # 라운드 274 — "못 냈다" 표현의 사유 비율 (PLAN_R177 §5.1)
+        argv += ['--want-unavailable']
     try:
         r = _sp.run(argv, cwd=PROJ, capture_output=True, text=True,
                     encoding='utf-8', errors='replace', timeout=2400)
@@ -3568,7 +3570,13 @@ check("비보유 응답에는 보유자 블록 없음",
 _w59 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("쉬운 결론 2단 배치 (비보유/보유)", "처음 사는 분께" in _w59
       and "이미 갖고 계신 분께" in _w59)
-check("기준 분리 경고 문구", "신규 매수 기준과 보유자 기준은 서로 다릅니다" in _w59)
+# ⚠️ 라운드 279 — 종전 이 검사는 *"신규 매수 기준과 보유자 기준은 서로 다릅니다"* 라는 **문장**을
+#   잠갔다. 그 문장은 뒤에 '신규 진입가와 보유자 **손절가**가 다른 값'만 적어 사용자가 헷갈린
+#   **매도가**는 이름조차 없었다("매도가가 각각 달라?" · 2026-09-11). 잠글 것은 낱말이 아니라
+#   **두 기준가를 이름으로 적었는가**다 — 그것이 이 검사가 지키려던 성질이다(R98b 의 그 고침).
+check("기준 분리 경고 문구 — 두 기준가(진입가·현재가)를 이름으로 적고 매도가까지 말한다",
+      '신규 매수 기준은 **진입가**, 보유자 기준은 **현재가**로 잽니다' in _w59
+      and '매도가·손절가가 다른 값으로 나오고, 그것이 정상입니다' in _w59)
 _lab59 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"), encoding='utf-8').read()
 check("고신뢰(65+) 계층 상시 보고", "고신뢰 신호 계층" in _lab59)
 check("표본 미달 시 과장 금지 로직", "표본 부족' 으로 보고" in _lab59
@@ -3926,8 +3934,15 @@ check("웹앱 히스토리 — 접힌 패널 + 앵커",
 #   지금 그 문구는 낡았고 옆의 '인접 기준일 중복은 25봉 간격 규칙으로 통제합니다'
 #   는 거짓이었다(격자가 날마다 밀려 72%가 겹침 · RESULT_R217). 캡션은 이제
 #   축적이 자동이 아님과 겹침 사실을 말한다 — 그것을 본다.
-check("케이스 축적 표시 — 자동이 아님 · 독립 사례 아님 · 25봉 안 재축적 금지 (R217)",
-      '축적은 자동이 아닙니다' in _w65 and '독립 사례가 아닙니다' in _w65
+#   §6 — 라운드 273 이 다시 현실에 맞췄다. '축적은 자동이 아닙니다'는 라운드 245(2026-09-08)가
+#   거짓으로 밝힌 문장인데(클라우드가 평일 17:00 KST 에 돈다 · 실패한 날만 빈다) 이 검사가 그
+#   낱말을 잠가 화면이 09-11 까지 옛 문장을 띄웠다 — 옛 사실을 잠근 검사(R213). 이제 자동이라는
+#   사실과 실패한 날이 빈다는 사실을 함께 잠근다. 옛 문장이 되살아나면 실패한다.
+check("케이스 축적 표시 — 자동(클라우드 · 실패한 날은 빈다) · 독립 사례 아님 · 25봉 안 재축적 금지 (R217 · R273)",
+      # 소스의 f-string 이 '클라우드가 " / "자동으로' 에서 두 조각으로 갈린다 — 한 조각 안의 글자만 잠근다(R230)
+      '자동으로 돌리며, 실패한 날은 비어 있습니다' in _w65
+      and '축적은 자동이 아닙니다 — 사람이' not in _w65
+      and '독립 사례가 아닙니다' in _w65
       and '같은 종목 25봉 안에는 더 쌓지 않습니다' in _w65)
 check("운영 루틴 문서", _os.path.exists(
     _os.path.join(PROJ, "docs", "OPERATIONS_ROUTINE.md")))
@@ -20658,9 +20673,15 @@ check("보유 계획 한 줄이 관심종목 행의 값을 **그대로** 읽는�
       "_pt225 = fmt_num(_row225.get('snap_hold_trim')" in _w231
       and "_ps225 = fmt_num(_row225.get('snap_hold_stop')" in _w231
       and "_row225.get('snap_hold_at')" in _w231)
+# ⚠️ 라운드 279 — 종전 이 검사는 두 조각의 **인접**(`{_hold_reach_html}{_hold_plan_html}`)을 잠갔다.
+#   R279 가 그 사이에 기준가 줄(`_hold_basis_html`)을 넣자 깨졌는데, 이 검사가 지키려던 것은
+#   '계획 줄이 **카드 안**에 있다'이지 '바로 옆에 붙어 있다'가 아니다(R98b — 조립 방식이 아니라
+#   성질을 본다). 카드 안이라는 성질로 바꾼다: 보유자 카드를 닫는 div 앞에 계획 줄이 있다.
+_card242 = _w231.split("이미 갖고 있다면 <span", 1)[-1].split("</div>\n  </div>", 1)[0]
 check("계획 줄이 카드 안에 들어가고 관리 기준이 계획 값임을 말한다",
-      "{_hold_reach_html}{_hold_plan_html}" in _w231
-      and '관리 기준은 계획 값' in _w231 and '오늘 값과 같습니다' in _w231)
+      '{_hold_plan_html}' in _card242 and '{_hold_reach_html}' in _card242
+      and '관리 기준은 계획 값' in _w231 and '오늘 값과 같습니다' in _w231,
+      f'카드 조각 {len(_card242)}자')
 check("계획 줄은 계획이 있을 때만 (paid · snap_hold_at · 기준값 하나 이상)",
       "_row225.get('paid') and _row225.get('snap_hold_at')" in _w231)
 check("포트폴리오 탭이 합성 점수의 가중치·문턱이 실측되지 않은 옛 값임을 그 자리에서 말한다 (§9)",
@@ -23363,6 +23384,210 @@ check("워크플로가 그 검사를 업로드 **뒤**에 `|| true` 없이 둔�
       'run: python scripts/forward_registry_check.py' in _yml286
       and _yml286.rfind('scripts/forward_registry_check.py') > _yml286.find('새 스냅샷 올리기')
       and 'forward_registry_check.py || true' not in _yml286)
+
+print()
+print("§287 R273 — 같은 식인 두 게이트 줄은 설명이 그것을 말한다 · 실패 분류는 우선순위 사슬임을 화면이 말한다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   ① verdict_core 의 '진입 깊이 현실적' 과 '보유기간 안 도달 가능' 은 판정 불리언이 글자까지 같다
+#      (R246 이 확인 · 자리 때문에 안 합쳤다). 이름이 다른 두 줄이 늘 같이 통과·미달하는데 화면은
+#      서로 다른 것을 재는 것처럼 보였다(R237·R239 계열). 값·문턱·자리·조건 수 불변 — 설명만.
+#   ② 실패 원인 분류는 return 사슬(앞 가지가 뒤 가지를 먹는다)인데 화면은 나란한 원인 표로 냈다.
+#      순서는 채점기가 산출물(`failure_chain`)에 싣고 화면은 읽기만 한다(§4).
+import re as _re287
+_vc287 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_m287 = list(_re287.finditer(r"depth_sigma is not None\s*\n?\s*and depth_sigma <= MAX_ENTRY_SIGMA", _vc287))
+check("두 게이트 줄의 판정식이 여전히 같은 식이다 (조건 수 11 · 자리 불변 — 합치지 않았다)",
+      len(_m287) >= 2 and "('진입 깊이 현실적'" in _vc287 and "('보유기간 안 도달 가능'" in _vc287,
+      f"같은 식 {len(_m287)}곳")
+check("'보유기간 안 도달 가능' 의 설명이 위 줄과 같은 규칙임을 말한다 (이름이 계산보다 넓지 않게)",
+      "판정은 위 '진입 깊이 현실적' 과 같은 규칙" in _vc287
+      and _vc287.find("판정은 위 '진입 깊이 현실적' 과 같은 규칙") > _vc287.find("('보유기간 안 도달 가능'"))
+_cl287 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_chain_m = _re287.search(r"FAILURE_CHAIN = \((.*?)\)\n", _cl287, _re287.S)
+_chain287 = [x.strip().strip("'") for x in _chain_m.group(1).replace('\n', ' ').split("',") if x.strip().strip("'")] if _chain_m else []
+_pos287 = []
+for _lbl in _chain287:
+    _p = _cl287.find(f"return '{_lbl}'")
+    _pos287.append(_p)
+check("사슬 상수의 순서 = classify_failure 의 return 순서 (9유형 · 전부 존재 · 오름차순)",
+      len(_chain287) == 9 and all(p > 0 for p in _pos287) and _pos287 == sorted(_pos287),
+      f"{len(_chain287)}유형 · 위치 {_pos287}")
+check("채점기가 순서를 산출물에 싣는다 (failure_chain)", "'failure_chain': list(FAILURE_CHAIN)" in _cl287)
+_wa287 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 실패 원인 표 아래에 '처음 맞는 하나에만 세어진다'(사슬)를 말하고 순서는 산출물에서 읽는다 (§4)",
+      "처음 맞는 하나**에만 세어집니다(우선순위 사슬)" in _wa287
+      and "_perf_cal.get('failure_chain')" in _wa287
+      and "판정 순서는 다음 채점 실행부터 여기에 표시됩니다" in _wa287)
+
+print()
+print("§288 R274 — 화면의 '판정 불가·미수신·산출 불가' 옆에는 사유가 있다 — 렌더로 세고 0 을 요구한다 (PLAN_R177 §5.1 · 2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 177 이 렌더한 화면에서 이 세 낱말 14곳에 사유가 0% 임을 세고 "이 비율을 회귀가 센다"고
+#   적었다(§5.1). 그 뒤 회귀에 관련 검사가 0건이었다(전수조사 #67). 판별식은 scripts/unavailable_audit
+#   한 곳(R177 프로브도 같은 함수) · 렌더는 render_probe 자식 프로세스(R163) · scanned 는 찾은 표현 수.
+from scripts import unavailable_audit as _ua288
+_pl288 = _ua288.audit_text(_ua288.clean_render_text(["진입 위치: 판정 불가", "거래대금 미수신 — 응답 없음"]))
+check("심기 — 판별식이 사유 없음(판정 불가)과 사유 있음(미수신 —)을 가른다 (양방향)",
+      _pl288['판정 불가']['with_reason'] == 0 and _pl288['미수신']['with_reason'] == 1 and _pl288['scanned'] == 3,
+      str({k: v for k, v in _pl288.items() if k != 'scanned'})[:120])
+_r288 = _render(ticker='000720', want_unavailable=True)
+_au288 = (_r288.get('unavailable') or {}) if _r288.get('ok') else {}
+_sc288 = int(_au288.get('scanned') or 0)
+check("렌더가 돌고 '못 냈다' 표현을 실제로 찾았다 (0 이면 못 잰 것) · 업데이트 내역 카드는 뺀다(역사 산문 · 상태값 아님)",
+      _render_ok(_r288) and _sc288 > 0 and int(_au288.get('history_skipped') or 0) > 0,
+      f"ok={_r288.get('ok')} · 예외 {_r288.get('exceptions')} · 표현 {_sc288}곳 · 카드 제외 {_au288.get('history_skipped')}덩어리 · {str(_r288.get('error') or '')[:80]}",
+      scanned=_sc288)
+_n288, _yes288, _no288 = _ua288.core_summary(_au288)
+_wo288 = [s for w in _ua288.CORE for s in (_au288.get(w) or {}).get('without', [])]
+check("핵심 세 낱말(판정 불가·미수신·산출 불가)에 사유 없는 자리가 0 이다 — 못 낸 값 옆에는 사유를 적는다 (PLAN_R177 §5.1)",
+      _sc288 > 0 and _no288 == 0,
+      f"{_n288}곳 · 사유 {_yes288} · 없음 {_no288}" + (f" · 예: {_wo288[0][:110]}" if _wo288 else ''),
+      scanned=_sc288)
+
+print()
+print("§289 R275 — 전방 기록부의 빠진 거래일을 화면이 말한다 — 셈은 한 곳 · 다시 만들 수 없다는 사실까지 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   11-16 재평가가 읽는 전방 기록부(fr-1)는 화면 어디에도 없었고, 빠진 날(R253 "22거래일 중 16일")은
+#   문서에만 있었다(상태표 #20 "화면 표시는 남음"). forward_registry.date_coverage 한 곳이 세고
+#   (거래일 판정은 case_tracker.is_non_trading_date 한 곳 · 시작은 forward_eval.FORWARD_FROM) 화면은
+#   행수 · 기록된 거래일/전체 · 빠진 날 · '다시 만들 수 없다'를 한 줄로 낸다.
+import tempfile as _tf289
+import forward_registry as _fr289
+_d289 = _tf289.mkdtemp(prefix='r275_')
+_p289 = _os.path.join(_d289, 'forward_registry.jsonl')
+with open(_p289, 'w', encoding='utf-8') as _f289:
+    for _t289, _dd289 in (('000000.KS', '2026-09-07'), ('000001.KS', '2026-09-07'), ('000000.KS', '2026-09-10')):
+        _f289.write('{"contract": "fr-1", "ticker": "%s", "date": "%s", "action": "HOLD"}\n' % (_t289, _dd289))
+_c289 = _fr289.date_coverage(_p289, start='2026-09-07', today='2026-09-11')
+check("심기 ① 09-07~09-11 거래일 5 중 기록 2(07 · 10) · 빠진 날 08 · 09 · 11 — 행 3",
+      _c289['rows'] == 3 and _c289['trading_days'] == 5 and _c289['recorded'] == 2
+      and _c289['missing'] == ['2026-09-08', '2026-09-09', '2026-09-11'], str(_c289))
+_c289b = _fr289.date_coverage(_p289, start='2026-09-05', today='2026-09-06')
+check("심기 ② 주말만 든 구간이면 거래일 0 · 빠진 날 0 (휴장일은 결손이 아니다 · R252 한 곳)",
+      _c289b['trading_days'] == 0 and _c289b['missing'] == [], str(_c289b))
+_c289c = _fr289.date_coverage(_os.path.join(_d289, 'none.jsonl'), start='2026-09-10', today='2026-09-11')
+check("심기 ③ 파일이 없으면 행 0 · 거래일은 그대로 세고 전부 빠진 날 (지어내지 않는다)",
+      _c289c['rows'] == 0 and _c289c['recorded'] == 0 and _c289c['missing'] == ['2026-09-10', '2026-09-11'], str(_c289c))
+_wa289 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 전방 기록부 줄을 date_coverage 한 곳에서 읽고 '다시 만들 수 없다'를 말한다 (§3 · 못 읽으면 미측정)",
+      "_fr275.date_coverage()" in _wa289 and "기록된 거래일 " in _wa289
+      and "빠진 날은 그날의 실시간 입력이라 다시 만들 수 없습니다" in _wa289
+      and "읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다" in _wa289)
+_fr289_src = _read148(_os.path.join(PROJ, 'forward_registry.py'))
+check("셈의 시작일과 거래일 판정을 새로 만들지 않았다 (forward_eval.FORWARD_FROM · case_tracker.is_non_trading_date)",
+      "_fe.FORWARD_FROM" in _fr289_src and "from improvement.case_tracker import is_non_trading_date" in _fr289_src)
+
+print()
+print("§290 R276 — 11-16 재평가 대상 셋(R55·R57·R66) 전부 사전등록 파일과 레이더 줄이 있다 · R66 파일은 R64 의 옮겨 적기 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R66 은 R64 문서 안 두 문단(§5b 정정 정의 · §5c 날짜)으로만 있었고 레이더에도 없었다(상태표 #32).
+#   파일로 옮겨 적었다 — 새 등록이 아니라 원문이 권위. 정의·게이트 문턱이 원문과 같은지를 글자로 잠근다.
+import json as _json290
+_r64_290 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R64_BREAKOUT_BYPASS.md'))
+_r66_290 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R66_FALSE_BREAKOUT.md'))
+_lits290 = ('5봉 이내 종가가 돌파선 아래로 마감', '에피소드 n ≥ 300', '거짓돌파율 < 50%', '2026-11-16')
+check("R66 사전등록 파일이 있고 스스로 '새 등록이 아니다 · 옮겨 적은 것' 이라 말한다 (원문이 권위)",
+      bool(_r66_290) and '새 등록이 아니다' in _r66_290 and '옮겨 적은 것' in _r66_290
+      and 'PREREG_R64_BREAKOUT_BYPASS.md' in _r66_290)
+check("정정 정의 · 에피소드 하한 300 · 거짓돌파율 50% · 재평가일이 R64 원문과 글자까지 같다 (문턱 불변)",
+      all(l in _r64_290 and l in _r66_290 for l in _lits290), str([l for l in _lits290 if not (l in _r64_290 and l in _r66_290)]))
+_rad290 = _json290.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_rows290 = _rad290.get('rows') if isinstance(_rad290, dict) else _rad290
+_rows290 = _rows290 if isinstance(_rows290, list) else []
+_names290 = [str(r.get('name') or '') for r in _rows290 if isinstance(r, dict)]
+_hit290 = {tag: [n for n in _names290 if f'({tag})' in n] for tag in ('R55', 'R57', 'R66')}
+check("레이더가 11-16 대상 셋(R55·R57·R66)을 전부 담고 셋 다 재평가일을 기다린다 (status_needs_eval_date)",
+      all(_hit290[t] for t in _hit290)
+      and all(bool(r.get('status_needs_eval_date')) for r in _rows290 if isinstance(r, dict) and any(f'({t})' in str(r.get('name')) for t in _hit290)),
+      str({t: v for t, v in _hit290.items()}), scanned=len(_names290))
+
+print()
+print("§291 R278 — 포트폴리오 견해가 종목 간 겹침(상관·분산효과·종목 HHI)을 낸다 — 같은 함수 · 한 번 계산 · 문턱 없음 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "포트폴리오에서 너무 중복되면 얻을 게 없다." 견해는 업종 HHI 만 냈고, 종목 간 가격이 같이
+#   움직이는 정도(상관·분산효과)는 종목 상세 아래 위험예산 블록에만 있었다. 같은 함수
+#   (calculate_portfolio_risk_budget)의 결과를 세션에 한 번 두고 두 자리가 읽는다(§4). 문턱 없음.
+_wa291 = _read148(_os.path.join(PROJ, 'web_app.py'))
+import re as _re291
+check("겹침 값은 도우미 한 곳(_risk_budget_once)이 만들고 두 자리(견해 · 위험예산 블록)가 읽는다 (§4)",
+      len(_re291.findall(r'^def _risk_budget_once\(', _wa291, _re291.M)) == 1
+      and _wa291.count('_risk_budget_once(') >= 3
+      and 'q_engine.calculate_portfolio_risk_budget(' in _wa291
+      and _wa291.count('q_engine.calculate_portfolio_risk_budget(') == 1,
+      f"def {len(_re291.findall(r'^def _risk_budget_once', _wa291, _re291.M))} · 호출 {_wa291.count('_risk_budget_once(')} · 원 함수 호출 {_wa291.count('q_engine.calculate_portfolio_risk_budget(')}")
+check("견해의 겹침 줄 — 평균·최대 상관 · 분산효과 · 종목 HHI 를 적고, 사라는 뜻도 팔라는 뜻도 아니라고 말한다 · 못 재면 사유",
+      '**겹침** — 보유 ' in _wa291 and '평균 상관 ' in _wa291 and '가장 닮은 두 종목 ' in _wa291
+      and '분산효과 ' in _wa291 and '사라는 뜻도 팔라는 뜻도 아닙니다' in _wa291
+      and '종목 간 상관을 못 쟀습니다' in _wa291)
+import quant_indicators as _qi291
+_rb291 = _qi291.QuantIndicatorsEngine().calculate_portfolio_risk_budget(positions=None)
+check("보유 구성이 없으면 산출하지 않고 사유를 돌려준다 (임의 배분을 만들지 않는다 · §3)",
+      _rb291.get('available') is False and '미입력' in str(_rb291.get('reason')), str(_rb291)[:100])
+
+print()
+print("§292 R279 — 매도가 이름이 겹치지 않고 기준가(진입가·현재가)를 밝힌다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"매도가가 각각 달라?"* 하나금융지주 한 화면에 '1차 목표'라는 **한 이름의 두 수**가 있었다 —
+#   보유자 카드 캡션이 hold_trim(142,241 · 현재가 기준)을 '1차 목표'라 부르고, 매매 지시서의 '1차 목표'는
+#   new_target(138,967 · 진입가 기준)이었다. 둘 다 "+3.2%" 라 더 헷갈렸다(같은 배수 · 다른 기준가).
+#   산수로 확인: 142,241 × (134,628 ÷ 137,800) = 138,967 — 원 단위까지 일치.
+#   고침은 이름과 기준 표기뿐이다. 값·문턱·산식 불변(R214 의 '두 이름표' · R243 의 거울상).
+_wa292 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_uk292 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+check("보유자 카드 캡션이 카드 자신의 이름('팔 가격 1차')으로 부른다 — 신규 매수자의 '1차 목표'를 빌리지 않는다",
+      "팔 가격 1차까지 <b>{_up:+.1f}%</b>" in _wa292 and "1차 목표까지 <b>{_up:+.1f}%</b>" not in _wa292)
+check("보유자 카드가 두 기준가(현재가 · 진입가)를 이름으로 적고, 옮겨서 맞는지를 그 자리에서 보인다 (§3 · 안 맞으면 맞다고 안 적는다)",
+      '_hold_basis_html' in _wa292
+      and '위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다' in _wa292
+      and '팔 가격 1차 × (진입가 ÷ 현재가)' in _wa292
+      and '한쪽이 지지·저항선에 걸려 비율이 그대로 옮겨지지는 않았습니다' in _wa292
+      and '{_hold_reach_html}{_hold_basis_html}{_hold_plan_html}' in _wa292)
+check("지시서의 1차 목표·손절은 '진입가 기준', 2차 목표는 '구조적 저항 · 진입가 대비' 라 적는다 (이미 채택된 낱말)",
+      "+ '진입가 기준')" in _uk292 and "+ '구조적 저항 · 진입가 대비')" in _uk292
+      and _uk292.count("+ '진입가 기준')") == 2)
+check("맺음 줄이 매도가까지 이름을 대고 두 기준가를 말한다 (종전엔 손절가만 적었다)",
+      '신규 매수 기준은 **진입가**, 보유자 기준은 **현재가**로 잽니다' in _wa292
+      and '매도가·손절가가 다른 값으로 나오고, 그것이 정상입니다' in _wa292
+      and '신규 진입가와 보유자 손절가가 ' not in _wa292)
+# 산수 자체는 엔진이 이미 잠근 규칙이다 — 여기서는 '옮기면 맞는다'는 판별식이 실제로 가르는지만 심는다.
+_px292, _ent292 = 137800.0, 134628.0
+check("심기 — 같은 배수면 '일치', 한쪽이 지지·저항에 걸리면 '불일치' 로 갈린다 (양방향)",
+      f"{142241.0 * _ent292 / _px292:,.0f}" == f"{138967.0:,.0f}"
+      and f"{142241.0 * _ent292 / _px292:,.0f}" != f"{140000.0:,.0f}")
+
+print()
+print("§293 R280 — 긴 단계의 예산 합이 job 한도 안에 '저장'의 자리를 남긴다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 253 이 두 단계에 120·100분 예산을 준 날은 집중 축적이 **0분**이었다(네이버 이전 · R270).
+#   R270·R271 이 수집을 되살리자 09-11 실행은 집중 축적이 100분을 다 쓰며 제대로 돌았고, 예산 없는
+#   '경로·기준선 보강'(09-10 실측 69분)까지 더해 10+120+100+69 = 299분이 job 한도 300분을 통째로
+#   먹었다 — 업로드 앞에서 죽었다(R71c·R247·R253 의 '쌓기는 쌓았는데 저장이 안 됐다').
+#   **수집이 성공할수록 저장이 밀리는 구조**였다. 예산은 실측에서 유도하고, 합이 한도 안에 들게 한다.
+_yml293 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+import re as _re293
+_job293 = _re293.search(r'^    timeout-minutes:\s*(\d+)', _yml293, _re293.M)
+_steps293 = [int(m) for m in _re293.findall(r'^        timeout-minutes:\s*(\d+)', _yml293, _re293.M)]
+check("긴 단계 셋에 전부 시간 예산이 있다 (하나만 예산 밖이면 그 하나가 저장 자리를 먹는다)",
+      len(_steps293) == 3, f"단계 예산 {_steps293}")
+_sum293 = sum(_steps293)
+_lim293 = int(_job293.group(1)) if _job293 else 0
+check("예산 합 + 기록기·꼬리 실측(10 + 15)이 job 한도 안에 든다 — 저장이 늘 선다",
+      _lim293 > 0 and _sum293 + 25 <= _lim293,
+      f"예산 합 {_sum293} + 25 = {_sum293 + 25} vs 한도 {_lim293}")
+check("job 한도가 플랫폼 상한(360) 안이다 — 넘겨 적으면 조용히 무시된다",
+      0 < _lim293 <= 360, f"{_lim293}분")
+check("잘려도 이어 돌게 continue-on-error 가 붙어 있다 (체크포인트로 다음 실행이 이어받는다)",
+      _yml293.count('continue-on-error: true') >= 3)
+check("업로드는 여전히 긴 단계 **뒤**이고 검사는 업로드 뒤다 (R247 — 축적을 인질로 잡지 않는다)",
+      _yml293.find('경로·기준선 보강') < _yml293.find('새 스냅샷 올리기')
+      < _yml293.find('관측 연구 신선도 검사') < _yml293.find('전방 기록부에 오늘 행이 있는지'))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

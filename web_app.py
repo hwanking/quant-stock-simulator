@@ -2206,6 +2206,36 @@ if 'watchlist' not in st.session_state:
 # 원격 노출 상태면 파일에 쓰지 않고 세션에만 둔다 — 앱 인스턴스가 하나라
 # `.portfolio/` 가 방문자 전원의 공용 파일이 된다 (§9).
 
+def _risk_budget_once(market_regime_code=None):
+    """보유 포트폴리오 위험예산(상관 · 분산효과 · 종목 HHI · 현금 비중)을 **한 번만** 계산해 세션에 둔다
+    (라운드 278). 사용자: *"포트폴리오에서 너무 중복되면 얻을 게 없다."* 견해는 업종 HHI 만 냈고 종목 간
+    가격이 같이 움직이는 정도는 종목 상세 아래 위험예산 블록에만 있었다 — 같은 함수
+    (`calculate_portfolio_risk_budget` · 실제 일봉)의 같은 결과를 두 자리가 읽는다(§4). 보유 구성이
+    바뀌면 다시 센다(열쇠 = 종목·수량 · 국면 코드). 문턱은 하나도 만들지 않는다."""
+    _pos = st.session_state.get('positions') or []
+    if not _pos:
+        # 보유 16종목은 관심종목 행(매입가·수량)에 있고 세션 `positions`(보유종목 상세 화면의 등록)는 비어
+        # 있을 수 있다 — 견해가 세는 그 보유로 잰다. 같은 보유를 두 이름으로 들고 한쪽만 재지 않는다(§4).
+        _pos = [{'ticker': str(_w.get('code') or ''), 'stock_name': str(_w.get('name') or _w.get('code') or ''),
+                 'quantity': float(_w.get('qty') or 0)}
+                for _w in (st.session_state.get('watchlist') or [])
+                if isinstance(_w, dict) and _w.get('paid') and _w.get('qty')]
+    try:
+        _sig = tuple(sorted((str(p.get('ticker') if isinstance(p, dict) else getattr(p, 'ticker', '')),
+                             float(p.get('quantity') if isinstance(p, dict) else getattr(p, 'quantity', 0) or 0))
+                            for p in _pos))
+    except Exception:                                          # noqa: BLE001
+        _sig = ('?', len(_pos))
+    _key = (_sig, market_regime_code)
+    _cached = st.session_state.get('_risk_budget_278')
+    if isinstance(_cached, dict) and _cached.get('key') == _key:
+        return _cached['value']
+    _val = q_engine.calculate_portfolio_risk_budget(
+        positions=_pos or None, b_engine=engine_init, market_regime_code=market_regime_code)
+    st.session_state['_risk_budget_278'] = {'key': _key, 'value': _val}
+    return _val
+
+
 def _go_stock(code, name=''):
     """
     그 종목을 보러 간다 — **이 함수 하나만** 쓴다 (라운드 164).
@@ -6209,6 +6239,28 @@ else:
         elif _sec_unknown or _sec_etf:
             st.markdown("**업종별 (매입원가 비중)** — 업종을 아직 못 읽었습니다")
 
+        # ── ③b 겹침 — 종목 간 가격이 같이 움직이는 정도 (라운드 278 · 표시 전용) ────
+        # 사용자: "너무 중복되면 얻을 게 없다." 업종 HHI 는 업종 겹침이고, 종목 쌍이 같이 움직이는지는
+        # 실제 일봉의 상관·분산효과가 말한다 — 종목 상세 아래 위험예산 블록이 이미 재던 값이다.
+        # 같은 함수의 같은 결과를 한 번 계산해 여기와 그 블록이 읽는다(§4). 문턱 없음 — 숫자와
+        # 읽는 법만(어느 쌍인지는 그 블록의 위험기여 표). 못 재면 못 쟀다고 적는다(§3).
+        try:
+            _rb278 = _risk_budget_once()
+        except Exception as _x278:                              # noqa: BLE001
+            _rb278 = {'available': False, 'reason': f'{type(_x278).__name__}: {_x278}'[:80]}
+        if _rb278.get('available') and _rb278.get('avg_correlation') is not None:
+            st.caption(
+                f"**겹침** — 보유 {_rb278['n_holdings']}종목의 일별 수익률이 같이 움직이는 정도: 평균 상관 "
+                f"{_rb278['avg_correlation']:.2f} · 가장 닮은 두 종목 {_rb278['max_correlation']:.2f} "
+                f"(최근 {_rb278['window_days']}거래일) · 분산효과 {_rb278['diversification_benefit_pct']:.0f}% "
+                f"(개별 변동성의 가중평균보다 포트폴리오 변동성이 그만큼 낮습니다) · 종목 집중도 HHI "
+                f"{_rb278['hhi']:.2f} (유효 종목수 {_rb278['effective_n']:.1f}개). 상관이 1 에 가까운 쌍은 한 종목처럼 "
+                "움직입니다 — 어느 쌍인지는 종목 상세의 위험예산 표(위험기여)에서 봅니다. 사라는 뜻도 팔라는 뜻도 아닙니다.")
+        elif _rb278.get('available'):
+            st.caption("**겹침** — 보유 종목이 하나라 종목 간 상관을 잴 수 없습니다.")
+        else:
+            st.caption(f"**겹침** — 종목 간 상관을 못 쟀습니다: {_rb278.get('reason') or '사유 미기록'}")
+
         # ── ④ 채울 것 — 값이 비어 판단이 비는 자리 (§3) ──────────────────
         # 사용자: "어디 부분을 채울지". 무엇을 사라는 뜻이 아니라 **어느 값이 없어서
         # 판단이 비는지**다. 각 줄은 이유와 채우는 길을 같이 적는다.
@@ -7836,13 +7888,38 @@ if _na_head:
         + "</div>")
 
 # 보유자 목표의 도달 가능성도 같은 잣대로 적는다
+# ⚠️ 라운드 279 — 이 줄이 보유자 값(hold_trim)을 **'1차 목표'** 라 불렀다. 그 이름은 바로 아래
+#   매매 지시서에서 **신규 매수자 값**(new_target · 진입가 기준)이 쓰는 이름이라, 한 화면에 같은
+#   이름의 두 수가 나왔다(하나금융지주: 팔 가격 1차 142,241 vs 1차 목표 138,967 · 둘 다 "+3.2%").
+#   R214 의 '두 이름표'와 R243 의 '같은 수가 두 이름'의 거울상이다. 카드 자신의 이름으로 부른다.
 _hold_reach_html = ''
 if _t1_sig is not None and realtime_price and CORE.get('hold_trim'):
     _up = (CORE['hold_trim'] / realtime_price - 1) * 100
     _hold_reach_html = (
         f"<p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; "
-        f"line-height:1.6;'>1차 목표까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
+        f"line-height:1.6;'>팔 가격 1차까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
         f"({_sig_pct}%) 대비 <b>{_t1_sig}σ</b> · {_t1_reach}</p>")
+
+# ── 두 기준가를 한 줄로 잇는다 (라운드 279) ──────────────────────────────
+# 사용자: *"매도가가 각각 달라?"* 맞다 — 그리고 그것이 정상이다. 엔진은 **같은 규칙**을 두 기준가에
+# 건다: 보유자는 **현재가**, 신규 매수자는 **진입가**. 종전 화면은 "다른 값인 것이 정상입니다"라고만
+# 적고 **왜·얼마나**를 안 적어, 사용자가 확인할 방법이 없었다. 두 기준가를 적고, 옮겨 보면 맞는지를
+# 그 자리에서 보인다 — 새 숫자를 만들지 않는다(CORE 값 셋의 곱셈 하나). 표시가 원 단위로 일치하지
+# 않으면(한쪽이 지지·저항선에 걸린 경우) 일치한다고 적지 않는다(§3).
+_hold_basis_html = ''
+_hb_trim, _hb_t1 = CORE.get('hold_trim'), CORE.get('new_target')
+_hb_entry = _core_entry or CORE.get('pullback_zone')
+if _hb_trim and _hb_t1 and _hb_entry and realtime_price:
+    _hb_moved = _hb_trim * _hb_entry / realtime_price
+    _hb_same = f"{_hb_moved:,.0f}" == f"{_hb_t1:,.0f}"
+    _hold_basis_html = (
+        f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
+        f"위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다. 아래 지시서의 1차 목표·손절은 "
+        f"<b>진입가 {_hb_entry:,.0f}원</b> 기준이라 같은 규칙인데도 수가 다릅니다"
+        + (f" — 팔 가격 1차 × (진입가 ÷ 현재가) = <b>{_hb_moved:,.0f}원</b>, 지시서의 1차 목표와 같습니다."
+           if _hb_same else
+           " — 한쪽이 지지·저항선에 걸려 비율이 그대로 옮겨지지는 않았습니다.")
+        + "</p>")
 
 # 라운드 225 — 위 두 값은 **오늘 현재가에서 다시 잰 값**이고, 관심종목의 보유 계획은
 #   잰 날에 고정된 값이다(R224 · portfolio.hold_plan_update). 한 화면에서 두 수가 다르게
@@ -8045,7 +8122,7 @@ st.markdown(f"""
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#4C8DFF;'>{_ex_tgt}</p></div>
         <div><p style='margin:0; font-size:12px; color:#9DAABC;'>버틸 수 없는 가격 · 손실을 끊는 선</p>
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
-      </div>{_hold_reach_html}{_hold_plan_html}
+      </div>{_hold_reach_html}{_hold_basis_html}{_hold_plan_html}
     </div>
   </div>{_na_html}{_watch_html}{_logic_warn_html}
   <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
@@ -8178,8 +8255,11 @@ with _ec2:
             위에서 <b>'보유 중'</b>을 선택하고 평균 매수가를 넣으면<br>
             보유·일부 매도·손절·추가 매수 여부를 <b>내 평단 기준</b>으로 알려드립니다.</p>
         </div>""", unsafe_allow_html=True)
-st.caption("신규 매수 기준과 보유자 기준은 서로 다릅니다 — 신규 진입가와 보유자 손절가가 "
-           "다른 값인 것이 정상입니다. 투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
+# 라운드 279 — 종전 이 줄은 '손절가'만 이름 대고 **매도가**는 안 적었다. 사용자가 헷갈린 것이
+#   매도가였다("매도가가 각각 달라?"). 두 기준가를 이름으로 적는다 — 문턱·값 불변.
+st.caption("신규 매수 기준은 **진입가**, 보유자 기준은 **현재가**로 잽니다 — 같은 규칙이라도 기준가가 "
+           "다르면 매도가·손절가가 다른 값으로 나오고, 그것이 정상입니다. "
+           "투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
 
 # 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
 _extra_bits = []
@@ -9846,6 +9926,17 @@ if _perf_cal.get('total_cases'):
                 '실패 유형': f['class'], '건수': f['n'],
                 '누적 손실 기여': f"{f['total_loss']:+.1f}%p",
             } for f in _fails_p]), width='stretch', hide_index=True)
+            # 라운드 273 — 이 표는 나란한 원인이 아니라 **우선순위 사슬**이다. 한 건은 처음 맞는
+            #   유형 하나에만 세어지고 앞 유형이 뒤 유형을 먹는다 — 그래서 어떤 구간의 '방향 오판'
+            #   이 크다는 것은 그 앞 유형(예: 시장 국면 역풍)이 그 구간에 드물었다는 뜻일 수 있다.
+            #   순서는 원장 채점기가 산출물에 싣는다(§4 · 화면은 읽기만). 없으면 순서 없이 사실만.
+            _chain_p = _perf_cal.get('failure_chain') or []
+            st.caption("※ 한 건은 위 유형 중 **처음 맞는 하나**에만 세어집니다(우선순위 사슬). "
+                       "앞 유형이 많은 구간에서는 뒤 유형이 적게 보이고, 앞 유형이 드문 구간에서는 "
+                       "그 건들이 뒤 유형으로 흘러갑니다 — 유형별 건수는 원인의 크기가 아니라 "
+                       "사슬을 지난 뒤의 몫입니다."
+                       + (" 판정 순서: " + " → ".join(_chain_p) if _chain_p
+                          else " 판정 순서는 다음 채점 실행부터 여기에 표시됩니다."))
         _warn_lines = []
         _v_p, _b_p = _sp_p.get('valid') or {}, _sp_p.get('blind') or {}
         if (_v_p.get('hit_rate') is not None and _b_p.get('hit_rate') is not None
@@ -9904,8 +9995,12 @@ if _ledger_df is not None:
                f"겹쳐 있어 결과 창이 서로 겹칩니다. {_sp_txt}.{_ep_txt217} "
                "(격자가 날마다 밀려 생긴 겹침 · 이후 축적은 이 간격을 지킵니다 · "
                "원장 행은 지우지 않았습니다).  \n"
-               f"**운영 상태**: 마지막 케이스 기준일 {_lg_last} · 축적은 자동이 아닙니다 — "
-               "사람이 랩을 돌려야 자라고, 같은 종목 25봉 안에는 더 쌓지 않습니다.")
+               # 라운드 273 — 종전 문장(축적이 자동이 아니며 사람이 랩을 돌려야 자란다는 것)은 2026-09-08
+               #   (라운드 245)부터 거짓이었다: 클라우드가 평일 장 마감 뒤 돌린다. 화면이 그 문장을
+               #   09-11 까지 띄우고 있었고 회귀 §65 가 그 낱말을 잠그고 있었다(옛 사실을 잠근 검사 ·
+               #   R213). 실패한 날이 비는 것까지 같이 말한다 — 참인 문장으로 바꾼다(R250).
+               f"**운영 상태**: 마지막 케이스 기준일 {_lg_last} · 축적은 평일 장 마감 뒤 클라우드가 "
+               "자동으로 돌리며, 실패한 날은 비어 있습니다. 같은 종목 25봉 안에는 더 쌓지 않습니다.")
 
     # ── 지속 개선 파이프라인 상태 (실전 추천 추적 계층 — improvement DB) ────
     try:
@@ -9964,6 +10059,25 @@ if _ledger_df is not None:
                        "진입은 리포트 가격이고 닿으면 그 자리에서 확정합니다."
                        + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
                           f"행으로 남기되 세지 않았습니다." if _n_excl_imp else ""))
+            # 라운드 275 — 전방 재평가(11-16)가 읽는 원장(전방 기록부 · 매 거래일 상위 60 박제)은 화면
+            #   어디에도 없었고, 빠진 날은 문서(R253 "22거래일 중 16일")에만 있었다. 셈은
+            #   forward_registry.date_coverage 한 곳(거래일 판정은 case_tracker 한 곳). 빠진 날은 다시
+            #   만들 수 없다는 사실까지 같이 말한다(§3). 못 읽으면 못 읽었다고 적는다.
+            try:
+                import forward_registry as _fr275
+                _cov275 = _fr275.date_coverage()
+                _miss275 = _cov275['missing']
+                _miss_txt275 = (" · 빠진 날 " + ", ".join(m[5:] for m in _miss275[:12])
+                                + (f" 외 {len(_miss275) - 12}일" if len(_miss275) > 12 else "")
+                                if _miss275 else "")
+                st.caption(f"**전방 판정 기록부** (재평가일 {_fe.eval_date_ko()} 에 읽는 원장 · 매 거래일 "
+                           f"상위 60 판정을 박제): {_cov275['rows']:,}행 · 기록된 거래일 "
+                           f"{_cov275['recorded']}/{_cov275['trading_days']} "
+                           f"({_cov275['start']} ~ {_cov275['end']}){_miss_txt275}. "
+                           "빠진 날은 그날의 실시간 입력이라 다시 만들 수 없습니다 — 재평가 표본은 "
+                           "기록된 날만큼입니다.")
+            except Exception as _x275:                              # noqa: BLE001
+                st.caption(f"**전방 판정 기록부**: 읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다.")
         with _pc2:
             if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
                          width='stretch'):
@@ -11803,9 +11917,8 @@ with tab_audit:
         sim_res, tech_df=tech_df, b_engine=engine_init)
     factor_data = q_engine.calculate_factor_attribution(
         sim_res, tech_df=tech_df, b_engine=engine_init)
-    risk_budget = q_engine.calculate_portfolio_risk_budget(
-        positions=st.session_state.get('positions'), b_engine=engine_init,
-        market_regime_code=four_scores.get('market_regime_code'))
+    # 라운드 278 — 견해의 '겹침' 줄과 같은 결과를 읽는다(한 번 계산 · §4).
+    risk_budget = _risk_budget_once(four_scores.get('market_regime_code'))
 
     st.markdown("전략 유효성 벤치마크 대조 & 팩터 귀속 분해 대시보드")
     ba1, ba2 = st.columns(2)

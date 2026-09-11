@@ -293,6 +293,37 @@ def coverage(path=REG_FILE):
     }
 
 
+def date_coverage(path=REG_FILE, start=None, today=None):
+    """전방 구간의 거래일 중 이 원장에 **기록된 날과 빠진 날** (라운드 275 · 상태표 #20).
+
+    ■ 왜
+      축소 가드(줄 수)와 오늘 행 검사(R272)는 앞으로의 결손을 잡지만, 이미 빠진 날은 화면 어디에도
+      없었다 — R253 이 "22거래일 중 16일을 잃었다"고 문서에만 적었다. 11-16 재평가가 읽는 표본의
+      크기를 사용자가 화면에서 알아야 한다(§3 · 못 낸 것을 없는 것으로 말하지 않는다).
+    ■ 셈
+      시작 = `forward_eval.FORWARD_FROM`(동결일 다음) · 끝 = 오늘(지역 날짜 · R222) · 거래일 판정은
+      `improvement.case_tracker.is_non_trading_date` 한 곳(R252). 새 숫자 없음.
+    반환: {'rows', 'dates', 'trading_days', 'recorded', 'missing': [...], 'start', 'end'}
+    """
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+    from improvement.case_tracker import is_non_trading_date
+    import forward_eval as _fe
+    rows = load(path)
+    have = {str(r.get('date'))[:10] for r in rows if r.get('date')}
+    s = _date.fromisoformat(str(start or _fe.FORWARD_FROM)[:10])
+    e = _date.fromisoformat(str(today)[:10]) if today else _dt.now().astimezone().date()
+    tdays, d = [], s
+    while d <= e:
+        iso = d.isoformat()
+        if not is_non_trading_date(iso):
+            tdays.append(iso)
+        d += _td(days=1)
+    missing = [x for x in tdays if x not in have]
+    return {'rows': len(rows), 'dates': sorted(have), 'trading_days': len(tdays),
+            'recorded': len(tdays) - len(missing), 'missing': missing,
+            'start': s.isoformat(), 'end': e.isoformat()}
+
+
 def _check(path=REG_FILE):
     """규약을 어긴 행이 있으면 실패시킨다 (워크플로가 부른다).
 

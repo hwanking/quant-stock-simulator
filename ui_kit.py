@@ -2070,14 +2070,20 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                  ('이 값 이하에서만' if _reco_b
                   else '매수 지시 아님 — 조건 충족 시 검토')),
             _row('돌파 매수', _won(b.get('breakout')), '거래량 동반 시'),
+            # 라운드 279 — 이 셋은 **진입가** 기준이고, 종목 상세의 보유자 카드('팔 가격 1차' ·
+            #   '버틸 수 없는 가격')는 **현재가** 기준이라 같은 규칙인데도 수가 다르다. 기준을 안
+            #   적으면 한 화면의 두 매도가가 모순으로 읽힌다(사용자 지적 2026-09-11). 값 불변 —
+            #   낱말은 이미 채택된 것(`verdict_core.price_basis` · 관심종목 열 이름)을 그대로 쓴다.
+            #   2차 목표만은 구조적 저항(시장에 실재하는 가격대)이라 기준가와 무관하다 — %만 진입가 대비.
             _row('1차 목표', _won(b.get('target')),
-                 (f"{b['target_pct']:+.1f}%" if b.get('target_pct') else ''),
+                 ((f"{b['target_pct']:+.1f}% · " if b.get('target_pct') else '') + '진입가 기준'),
                  t['up']),
             _row('2차 목표', _won(b.get('target2')),
-                 (f"{b['target2_pct']:+.1f}%" if b.get('target2_pct') else ''),
+                 ((f"{b['target2_pct']:+.1f}% · " if b.get('target2_pct') else '')
+                  + '구조적 저항 · 진입가 대비'),
                  t['up']),
             _row('손절', _won(b.get('stop')),
-                 (f"{b['stop_pct']:+.1f}%" if b.get('stop_pct') else ''),
+                 ((f"{b['stop_pct']:+.1f}% · " if b.get('stop_pct') else '') + '진입가 기준'),
                  t['down']),
             # 라운드 191 — 이 rr 은 CORE.rr(= entry_rr · 진입가·1차 목표)다.
             # 홈 표의 '손익비'(reward_risk_ratio · 현재가·2차)와 다른 값이라
