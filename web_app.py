@@ -7888,13 +7888,38 @@ if _na_head:
         + "</div>")
 
 # 보유자 목표의 도달 가능성도 같은 잣대로 적는다
+# ⚠️ 라운드 279 — 이 줄이 보유자 값(hold_trim)을 **'1차 목표'** 라 불렀다. 그 이름은 바로 아래
+#   매매 지시서에서 **신규 매수자 값**(new_target · 진입가 기준)이 쓰는 이름이라, 한 화면에 같은
+#   이름의 두 수가 나왔다(하나금융지주: 팔 가격 1차 142,241 vs 1차 목표 138,967 · 둘 다 "+3.2%").
+#   R214 의 '두 이름표'와 R243 의 '같은 수가 두 이름'의 거울상이다. 카드 자신의 이름으로 부른다.
 _hold_reach_html = ''
 if _t1_sig is not None and realtime_price and CORE.get('hold_trim'):
     _up = (CORE['hold_trim'] / realtime_price - 1) * 100
     _hold_reach_html = (
         f"<p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; "
-        f"line-height:1.6;'>1차 목표까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
+        f"line-height:1.6;'>팔 가격 1차까지 <b>{_up:+.1f}%</b> — 20일 변동폭"
         f"({_sig_pct}%) 대비 <b>{_t1_sig}σ</b> · {_t1_reach}</p>")
+
+# ── 두 기준가를 한 줄로 잇는다 (라운드 279) ──────────────────────────────
+# 사용자: *"매도가가 각각 달라?"* 맞다 — 그리고 그것이 정상이다. 엔진은 **같은 규칙**을 두 기준가에
+# 건다: 보유자는 **현재가**, 신규 매수자는 **진입가**. 종전 화면은 "다른 값인 것이 정상입니다"라고만
+# 적고 **왜·얼마나**를 안 적어, 사용자가 확인할 방법이 없었다. 두 기준가를 적고, 옮겨 보면 맞는지를
+# 그 자리에서 보인다 — 새 숫자를 만들지 않는다(CORE 값 셋의 곱셈 하나). 표시가 원 단위로 일치하지
+# 않으면(한쪽이 지지·저항선에 걸린 경우) 일치한다고 적지 않는다(§3).
+_hold_basis_html = ''
+_hb_trim, _hb_t1 = CORE.get('hold_trim'), CORE.get('new_target')
+_hb_entry = _core_entry or CORE.get('pullback_zone')
+if _hb_trim and _hb_t1 and _hb_entry and realtime_price:
+    _hb_moved = _hb_trim * _hb_entry / realtime_price
+    _hb_same = f"{_hb_moved:,.0f}" == f"{_hb_t1:,.0f}"
+    _hold_basis_html = (
+        f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
+        f"위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다. 아래 지시서의 1차 목표·손절은 "
+        f"<b>진입가 {_hb_entry:,.0f}원</b> 기준이라 같은 규칙인데도 수가 다릅니다"
+        + (f" — 팔 가격 1차 × (진입가 ÷ 현재가) = <b>{_hb_moved:,.0f}원</b>, 지시서의 1차 목표와 같습니다."
+           if _hb_same else
+           " — 한쪽이 지지·저항선에 걸려 비율이 그대로 옮겨지지는 않았습니다.")
+        + "</p>")
 
 # 라운드 225 — 위 두 값은 **오늘 현재가에서 다시 잰 값**이고, 관심종목의 보유 계획은
 #   잰 날에 고정된 값이다(R224 · portfolio.hold_plan_update). 한 화면에서 두 수가 다르게
@@ -8097,7 +8122,7 @@ st.markdown(f"""
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#4C8DFF;'>{_ex_tgt}</p></div>
         <div><p style='margin:0; font-size:12px; color:#9DAABC;'>버틸 수 없는 가격 · 손실을 끊는 선</p>
           <p style='margin:2px 0 0 0; font-size:22px; font-weight:700; color:#ff453a;'>{_ex_stop}</p></div>
-      </div>{_hold_reach_html}{_hold_plan_html}
+      </div>{_hold_reach_html}{_hold_basis_html}{_hold_plan_html}
     </div>
   </div>{_na_html}{_watch_html}{_logic_warn_html}
   <p style='margin:10px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.7;'>
@@ -8230,8 +8255,11 @@ with _ec2:
             위에서 <b>'보유 중'</b>을 선택하고 평균 매수가를 넣으면<br>
             보유·일부 매도·손절·추가 매수 여부를 <b>내 평단 기준</b>으로 알려드립니다.</p>
         </div>""", unsafe_allow_html=True)
-st.caption("신규 매수 기준과 보유자 기준은 서로 다릅니다 — 신규 진입가와 보유자 손절가가 "
-           "다른 값인 것이 정상입니다. 투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
+# 라운드 279 — 종전 이 줄은 '손절가'만 이름 대고 **매도가**는 안 적었다. 사용자가 헷갈린 것이
+#   매도가였다("매도가가 각각 달라?"). 두 기준가를 이름으로 적는다 — 문턱·값 불변.
+st.caption("신규 매수 기준은 **진입가**, 보유자 기준은 **현재가**로 잽니다 — 같은 규칙이라도 기준가가 "
+           "다르면 매도가·손절가가 다른 값으로 나오고, 그것이 정상입니다. "
+           "투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
 
 # 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
 _extra_bits = []
