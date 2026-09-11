@@ -3855,8 +3855,14 @@ check("산출물 경로 폴백 함수", '_artifact_path' in _w64
       and '".portfolio", "data"' in _w64)
 check("배포용 calibration.json 동봉",
       _os.path.exists(_os.path.join(PROJ, "data", "calibration.json")))
-check("배포용 원장 동봉",
-      _os.path.exists(_os.path.join(PROJ, "data", "virtual_graded.jsonl")))
+# ⚠️ 라운드 282 — 동봉 원장은 **눌려 있다**(평문 240MB 는 저장소 파일 한도를 넘는다).
+#   이 절은 `data/virtual_graded.jsonl` 을 손으로 적어 열고 있어서 갈아 끼운 날
+#   FileNotFoundError 로 회귀가 통째로 죽었다. 어디에 있는지는 **한 곳**에서 정한다 —
+#   `refresh_bundle._bundle_ledger_path()` 가 만드는 쪽이자 아는 쪽이다(§4 · 손 목록 금지).
+from scripts import refresh_bundle as _rb64
+_led64 = _rb64._bundle_ledger_path()
+check("배포용 원장 동봉 (눌린 것이든 평문이든 — 자리는 생성기가 안다)",
+      bool(_led64) and _os.path.exists(_led64), str(_led64))
 import json as _json64
 with open(_os.path.join(PROJ, "data", "calibration.json"),
           encoding='utf-8') as _f64:
@@ -3865,8 +3871,12 @@ check("동봉 산출물이 실측 구조 (splits·bands·failure_classes)",
       all(k in _cal64 for k in ('splits', 'bands', 'failure_classes',
                                 'total_cases')))
 # 민감정보 미포함 — 원장 첫 줄에 보유종목·평단가 계열 키가 없어야 한다
-with open(_os.path.join(PROJ, "data", "virtual_graded.jsonl"),
-          encoding='utf-8') as _f64b:
+if _led64.endswith('.gz'):
+    import gzip as _gz64
+    _f64b = _gz64.open(_led64, 'rt', encoding='utf-8')
+else:
+    _f64b = open(_led64, encoding='utf-8')
+with _f64b:
     _row64 = _json64.loads(_f64b.readline())
 check("원장에 개인 정보 없음 (평단가·수량·계좌 금지)",
       not any(k in _row64 for k in ('user_avg', 'avg_price', 'quantity',
@@ -23643,6 +23653,90 @@ check("검사한 그 파일이 올라간다 — zip 을 두 번 만들지 않고
       and '검사된 zip 이 없다' in _yml294)
 check("§9 검사는 여전히 업로드 **앞**이다 (R247 — 축적을 인질로 잡지 않되 개인 자료는 나가면 끝이다)",
       _yml294.find('upload_audit.py') < _yml294.find('새 스냅샷 올리기'))
+
+print()
+print("§295 R282 — 배포 동봉 원장을 꼬리 표본에서 전량(눌림)으로 · 읽는 길은 하나 (2026-09-12)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   `.portfolio/` 는 gitignore 라 배포에 없고, 화면은 `data/` 동봉본을 읽는다(R108).
+#   그 동봉본이 **꼬리 6,508행**(원장 251,528의 2.6%)이라 화면 숫자가 실제와 달랐다:
+#   닿음 누적이 3봉째 52.0 vs 54.0 · 20봉째 94.9 vs 96.2, 도달확률 가장 얇은 칸 20건 vs 926건.
+#   그리고 **꼬리를 늘려도 안 맞는다** — 생성 순서 덩어리라 이웃 행이 상관돼(R217) 수렴하지
+#   않는다(2026-09-12 실측 최대 어긋남 %p: 6,508→2.0 · 25,000→1.6 · 50,000→2.1 · 100,000→1.8 ·
+#   150,000→0.8 · 전량→0.0). 평문 240MB 는 저장소 파일 한도를 넘지만 gzip 31.8MB 는 들어간다.
+#   ⚠️ 눌러 싣는 것과 **펼치는 것**은 다르다 — 통째로 열면 최대 작업집합 3,424MB(컨테이너 약 1GB)
+#      라 나눠 읽기로 437MB 로 내렸다. 값·행·칸 불변.
+import gzip as _gz295
+import json as _jsn295
+from scripts import upload_audit as _ua295
+_src295 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_bundle295 = _os.path.join(PROJ, 'data', 'virtual_graded.jsonl.gz')
+
+check("동봉 원장은 눌린 파일 하나다 — 평문 표본이 같이 남아 있지 않다 (출처가 둘이면 한쪽만 낡는다 · §4)",
+      _os.path.exists(_bundle295)
+      and not _os.path.exists(_os.path.join(PROJ, 'data', 'virtual_graded.jsonl')))
+check("저장소 파일 한도 안이다 — 못 들어가는 것을 실었다고 적지 않는다",
+      _os.path.getsize(_bundle295) < 100 * 1024 * 1024,
+      f"{_os.path.getsize(_bundle295):,}바이트")
+# 눌린 파일이 줄바꿈 변환에 걸리면 리눅스 컨테이너가 받은 것이 깨진다. `core.autocrlf=true`
+# 이고 git 의 이진 판별은 앞 8,000바이트의 NUL 추측이다 — 추측에 맡기지 않고 적어 둔다(R220).
+_ga295 = _read148(_os.path.join(PROJ, '.gitattributes'))
+check("눌린 동봉본이 이진으로 선언돼 있다 — 줄바꿈 변환에 맡기지 않는다",
+      '*.gz binary' in _ga295)
+# 동봉본이 **표본이 아니라 전량**임을 메타가 말하는가 (표본이면 화면이 밝혀야 한다 · §3)
+with open(_os.path.join(PROJ, 'data', 'bundle_meta.json'), encoding='utf-8') as _f295:
+    _meta295 = _jsn295.load(_f295)
+check("동봉 메타가 전량임을 말한다 — 표본 행수와 원장 행수가 같다 (다르면 표본이고 그때는 밝혀야 한다)",
+      _meta295.get('sample_rows') == _meta295.get('ledger_rows_at_bundle')
+      and int(_meta295.get('sample_rows') or 0) > 200000,
+      f"표본 {_meta295.get('sample_rows')} · 원장 {_meta295.get('ledger_rows_at_bundle')}")
+# 실제로 열려야 한다 — 존재는 실행이 아니다 (R195)
+_n295 = 0
+with _gz295.open(_bundle295, 'rt', encoding='utf-8', errors='replace') as _f295:
+    for _ln295 in _f295:
+        if _ln295.strip():
+            _n295 += 1
+            if _n295 >= 5000:
+                break
+check("눌린 동봉본이 실제로 풀려 읽힌다 (존재는 실행이 아니다 · R195)",
+      _n295 == 5000, f"앞 {_n295}행 읽음", scanned=_n295)
+
+# ── 읽는 길은 하나다 (R120e — 호출부 말고 기본값) ────────────────────────
+check("`_open_artifact` 하나가 눌림을 가른다 — 산출물 소비자가 확장자를 직접 보지 않는다 (R246 — 고침이 판정자 한 명에게만 가면 안 된다)",
+      'def _open_artifact(' in _src295
+      and _src295.count("with open(_p, encoding='utf-8') as _f:") == 0
+      and _src295.count('with _open_artifact(_p) as _f:') >= 5,
+      f"_open_artifact 소비자 {_src295.count('with _open_artifact(_p) as _f:')}곳",
+      scanned=_src295.count('_p = _artifact_path('))
+check("`_artifact_path` 와 `_artifact_source` 가 같은 이름을 찾는다 — 어긋나면 '어느 쪽을 읽었나'가 거짓이 된다 (§4)",
+      _src295.count('fname + ".gz"') >= 2)
+check("케이스 화면은 원장을 **나눠** 읽는다 — 통째로 열면 배포 컨테이너를 넘는다 (실측 3,424MB vs 437MB)",
+      'chunksize=20000' in _src295
+      and 'pd.read_json(_p, lines=True)' not in _src295)
+
+# ── §9 — 나가는 것을 잰다. 판별식은 R281 것 하나 (베끼지 않는다) ─────────
+_paid295 = _sec295 = 0
+_rows295 = 0
+with _gz295.open(_bundle295, 'rt', encoding='utf-8', errors='replace') as _f295:
+    for _ln295 in _f295:
+        if not _ln295.strip():
+            continue
+        _rows295 += 1
+        if _ua295.PAID.search(_ln295):
+            _paid295 += 1
+        if _ua295.SECRET.search(_ln295):
+            _sec295 += 1
+check("새로 싣는 원장에 평단가·자격증명이 없다 — 전량을 훑는다 (§9 · 판별은 R281 것 하나)",
+      _rows295 > 200000 and _paid295 == 0 and _sec295 == 0,
+      f"{_rows295:,}행 · 평단가 {_paid295} · 자격증명 {_sec295}", scanned=_rows295)
+check("심기 — 평단가가 든 줄이면 잡고, 수량만 있는 공개 자료는 안 잡는다 (0건이 '없다'인지 '못 봤다'인지)",
+      bool(_ua295.PAID.search('{"ticker":"005930","paid":72500,"qty":10}'))
+      and not _ua295.PAID.search('{"ticker":"005930","qty":1832.12,"weight":null}'))
+# 동봉본을 만드는 쪽도 같은 규칙을 지키는가 (손 목록·표본 줄 수가 되살아나면 실패)
+_rb295 = _read148(_os.path.join(PROJ, 'scripts', 'refresh_bundle.py'))
+check("동봉본 생성기가 전량을 싣는다 — 옛 꼬리 표본 상수는 되살아나지 않았다",
+      'LEDGER_SAMPLE' not in _rb295 and 'GITHUB_FILE_LIMIT' in _rb295
+      and '--allow-shrink' in _rb295)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
