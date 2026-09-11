@@ -23589,6 +23589,61 @@ check("업로드는 여전히 긴 단계 **뒤**이고 검사는 업로드 뒤�
       _yml293.find('경로·기준선 보강') < _yml293.find('새 스냅샷 올리기')
       < _yml293.find('관측 연구 신선도 검사') < _yml293.find('전방 기록부에 오늘 행이 있는지'))
 
+print()
+print("§294 R281 — §9 검사가 '올라가는 zip' 을 열고, 검사한 그 파일이 올라간다 · 판별은 이름이 아니라 평단가 (2026-09-12)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   종전 §9 단계는 `ls .portfolio/positions* holdings*` 로 **이름만**, 그것도 **디렉터리**를 봤다.
+#   나가는 것은 zip 이고 라운드 261 이 두 번째 뿌리 `data/` 를 열었는데 그쪽은 아예 안 봤다 —
+#   *남아 있는 것*을 재고 *나가는 것*을 안 쟀다. 게다가 이름 판별은 실제로 오탐한다(실측):
+#   `etf_holdings_r167.json` 은 ETF 구성종목 공개 자료인데 이름에 holdings 가 있고 안에 qty 도 있다
+#   (설정단위당 주식수 · `{"name": "TIGER …", "weight": null, "qty": 1832.12}`). §9 가 금지하는 것은
+#   **평단가**이므로 그 모양으로 판정하고, 이름 닮음은 세어 적기만 한다(R194).
+import zipfile as _zip294
+import tempfile as _tf294
+import json as _json294
+from scripts import upload_audit as _ua294
+_d294 = _tf294.mkdtemp(prefix='r281_')
+
+def _mk294(name, payload):
+    p = _os.path.join(_d294, name)
+    with _zip294.ZipFile(p, 'w') as z:
+        for arc, body in payload.items():
+            z.writestr(arc, body)
+    return p
+
+# 심기 ① ETF 구성종목(공개 자료) — 이름도 닮고 qty 도 있지만 평단가가 없다 → 통과
+_ok294 = _mk294('ok.zip', {
+    '.portfolio/etf_holdings_r167.json': _json294.dumps(
+        {'source': 'WiseReport', 'holdings': {'0000D0': [
+            {'name': 'TIGER 단기통안채', 'weight': None, 'qty': 1832.12}]}}, ensure_ascii=False),
+    'data/research_radar.json': '{"rows": []}'})
+_a294 = _ua294.audit(_ok294)
+check("심기 ① ETF 구성종목은 이름·수량이 닮아도 통과한다 (이름 닮음은 세어 적기만)",
+      not _a294['paid'] and not _a294['secret'] and _a294['scanned'] == 2
+      and len(_a294['lookalike']) == 1, str(_a294)[:140], scanned=_a294['scanned'])
+# 심기 ② 사용자 보유(평단가) · ③ 자격증명 — 이름이 안 닮아도 잡힌다
+_bad294 = _mk294('bad.zip', {'.portfolio/notes.json': _json294.dumps(
+    [{'code': '005930', 'paid': 61200, 'qty': 10}], ensure_ascii=False)})
+_b294 = _ua294.audit(_bad294)
+check("심기 ② 평단가가 들면 이름이 안 닮아도 잡는다 (§9 의 그 값)",
+      len(_b294['paid']) == 1 and not _b294['lookalike'], str(_b294['paid'])[:120])
+_sec294 = _mk294('sec.zip', {'data/x.json': '{"api_key": "abcd1234efgh"}'})
+check("심기 ③ 값이 든 자격증명을 잡는다 (빈 값·null 은 자리만이라 안 센다)",
+      len(_ua294.audit(_sec294)['secret']) == 1
+      and not _ua294.audit(_mk294('e.zip', {'data/y.json': '{"api_key": ""}'}))['secret'])
+_yml294 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("워크플로가 zip 을 열어 검사한다 — 디렉터리 이름 훑기(ls positions*)는 남지 않았다",
+      'python scripts/upload_audit.py "$Z"' in _yml294
+      and 'ls .portfolio/positions*' not in _yml294)
+check("검사한 그 파일이 올라간다 — zip 을 두 번 만들지 않고 경로를 하나로 잇는다 (§4)",
+      'echo "AUDITED_ZIP=$Z" >> "$GITHUB_ENV"' in _yml294
+      and 'Z="$AUDITED_ZIP"' in _yml294
+      and _yml294.count('python scripts/backup_research_data.py') == 1
+      and '검사된 zip 이 없다' in _yml294)
+check("§9 검사는 여전히 업로드 **앞**이다 (R247 — 축적을 인질로 잡지 않되 개인 자료는 나가면 끝이다)",
+      _yml294.find('upload_audit.py') < _yml294.find('새 스냅샷 올리기'))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
