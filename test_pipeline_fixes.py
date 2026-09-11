@@ -23468,6 +23468,31 @@ _fr289_src = _read148(_os.path.join(PROJ, 'forward_registry.py'))
 check("셈의 시작일과 거래일 판정을 새로 만들지 않았다 (forward_eval.FORWARD_FROM · case_tracker.is_non_trading_date)",
       "_fe.FORWARD_FROM" in _fr289_src and "from improvement.case_tracker import is_non_trading_date" in _fr289_src)
 
+print()
+print("§290 R276 — 11-16 재평가 대상 셋(R55·R57·R66) 전부 사전등록 파일과 레이더 줄이 있다 · R66 파일은 R64 의 옮겨 적기 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R66 은 R64 문서 안 두 문단(§5b 정정 정의 · §5c 날짜)으로만 있었고 레이더에도 없었다(상태표 #32).
+#   파일로 옮겨 적었다 — 새 등록이 아니라 원문이 권위. 정의·게이트 문턱이 원문과 같은지를 글자로 잠근다.
+import json as _json290
+_r64_290 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R64_BREAKOUT_BYPASS.md'))
+_r66_290 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R66_FALSE_BREAKOUT.md'))
+_lits290 = ('5봉 이내 종가가 돌파선 아래로 마감', '에피소드 n ≥ 300', '거짓돌파율 < 50%', '2026-11-16')
+check("R66 사전등록 파일이 있고 스스로 '새 등록이 아니다 · 옮겨 적은 것' 이라 말한다 (원문이 권위)",
+      bool(_r66_290) and '새 등록이 아니다' in _r66_290 and '옮겨 적은 것' in _r66_290
+      and 'PREREG_R64_BREAKOUT_BYPASS.md' in _r66_290)
+check("정정 정의 · 에피소드 하한 300 · 거짓돌파율 50% · 재평가일이 R64 원문과 글자까지 같다 (문턱 불변)",
+      all(l in _r64_290 and l in _r66_290 for l in _lits290), str([l for l in _lits290 if not (l in _r64_290 and l in _r66_290)]))
+_rad290 = _json290.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_rows290 = _rad290.get('rows') if isinstance(_rad290, dict) else _rad290
+_rows290 = _rows290 if isinstance(_rows290, list) else []
+_names290 = [str(r.get('name') or '') for r in _rows290 if isinstance(r, dict)]
+_hit290 = {tag: [n for n in _names290 if f'({tag})' in n] for tag in ('R55', 'R57', 'R66')}
+check("레이더가 11-16 대상 셋(R55·R57·R66)을 전부 담고 셋 다 재평가일을 기다린다 (status_needs_eval_date)",
+      all(_hit290[t] for t in _hit290)
+      and all(bool(r.get('status_needs_eval_date')) for r in _rows290 if isinstance(r, dict) and any(f'({t})' in str(r.get('name')) for t in _hit290)),
+      str({t: v for t, v in _hit290.items()}), scanned=len(_names290))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
