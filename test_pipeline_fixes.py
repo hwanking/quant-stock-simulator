@@ -23335,6 +23335,35 @@ check("'외국인·기관' 방식이 후보 0 + 출처 미수신이면 unavailab
       and "외국인·기관 순매수 상위 목록을 받지 못했습니다 — " in _ma285_src
       and _ma285_src.find("if strategy == 'flow' and not rows:") < _ma285_src.rfind("'unavailable': unavailable"))
 
+print()
+print("§286 R272 — 거래일에 전방 기록부의 오늘 행이 0 이면 워크플로가 붉어진다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-10 클라우드 실행(main = R260)은 25단계 전부 '성공'인데 증분이 전부 +0 이었다 — 네이버
+#   이전(R270)으로 전방 판정 기록 0건 · 케이스 축적 시간초과 · 경로 기록 0행. 증분 요약(R81)은
+#   원장의 0 을 정상으로 두는 것이 맞지만 전방 기록부는 거래일마다 반드시 는다. 값으로 심는다.
+import tempfile as _tf286
+import scripts.forward_registry_check as _frc286
+_d286 = _tf286.mkdtemp(prefix='r272_')
+_p286 = _os.path.join(_d286, 'forward_registry.jsonl')
+with open(_p286, 'w', encoding='utf-8') as _f286:
+    _f286.write('{"contract": "fr-1", "ticker": "000000.KS", "date": "2026-09-10", "action": "HOLD"}\n')
+    _f286.write('{"contract": "fr-1", "ticker": "000001.KS", "date": "2026-09-10", "action": "HOLD"}\n')
+    _f286.write('{"contract": "fr-1", "ticker": "000000.KS", "date": "2026-09-11", "action": "HOLD"}\n')
+check("심기 ① 거래일에 오늘 행이 있으면 통과 (rc 0)", _frc286.check(_p286, today='2026-09-11') == 0)
+check("심기 ② 거래일인데 오늘 행이 0 이면 실패 (rc 1) — 어제 행이 있어도 오늘의 0 은 0 이다",
+      _frc286.check(_p286, today='2026-09-09') == 1)
+check("심기 ③ 휴장일(토요일)이면 판정하지 않는다 (rc 0)", _frc286.check(_p286, today='2026-09-12') == 0)
+check("심기 ④ 파일이 없으면 미측정 (rc 2 · 통과가 아니다)",
+      _frc286.check(_os.path.join(_d286, 'none.jsonl'), today='2026-09-11') == 2)
+_t286, _bd286 = _frc286.count_by_date(_p286)
+check("날짜별 셈 — 전체 3 · 09-10 2 · 09-11 1", _t286 == 3 and _bd286 == {'2026-09-10': 2, '2026-09-11': 1}, str(_bd286))
+_yml286 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("워크플로가 그 검사를 업로드 **뒤**에 `|| true` 없이 둔다 (R247 · 축적은 인질이 아니다)",
+      'run: python scripts/forward_registry_check.py' in _yml286
+      and _yml286.rfind('scripts/forward_registry_check.py') > _yml286.find('새 스냅샷 올리기')
+      and 'forward_registry_check.py || true' not in _yml286)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
