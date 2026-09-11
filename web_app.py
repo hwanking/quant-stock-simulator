@@ -9979,6 +9979,25 @@ if _ledger_df is not None:
                        "진입은 리포트 가격이고 닿으면 그 자리에서 확정합니다."
                        + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
                           f"행으로 남기되 세지 않았습니다." if _n_excl_imp else ""))
+            # 라운드 275 — 전방 재평가(11-16)가 읽는 원장(전방 기록부 · 매 거래일 상위 60 박제)은 화면
+            #   어디에도 없었고, 빠진 날은 문서(R253 "22거래일 중 16일")에만 있었다. 셈은
+            #   forward_registry.date_coverage 한 곳(거래일 판정은 case_tracker 한 곳). 빠진 날은 다시
+            #   만들 수 없다는 사실까지 같이 말한다(§3). 못 읽으면 못 읽었다고 적는다.
+            try:
+                import forward_registry as _fr275
+                _cov275 = _fr275.date_coverage()
+                _miss275 = _cov275['missing']
+                _miss_txt275 = (" · 빠진 날 " + ", ".join(m[5:] for m in _miss275[:12])
+                                + (f" 외 {len(_miss275) - 12}일" if len(_miss275) > 12 else "")
+                                if _miss275 else "")
+                st.caption(f"**전방 판정 기록부** (재평가일 {_fe.eval_date_ko()} 에 읽는 원장 · 매 거래일 "
+                           f"상위 60 판정을 박제): {_cov275['rows']:,}행 · 기록된 거래일 "
+                           f"{_cov275['recorded']}/{_cov275['trading_days']} "
+                           f"({_cov275['start']} ~ {_cov275['end']}){_miss_txt275}. "
+                           "빠진 날은 그날의 실시간 입력이라 다시 만들 수 없습니다 — 재평가 표본은 "
+                           "기록된 날만큼입니다.")
+            except Exception as _x275:                              # noqa: BLE001
+                st.caption(f"**전방 판정 기록부**: 읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다.")
         with _pc2:
             if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
                          width='stretch'):

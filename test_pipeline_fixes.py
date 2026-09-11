@@ -23434,6 +23434,40 @@ check("핵심 세 낱말(판정 불가·미수신·산출 불가)에 사유 없�
       f"{_n288}곳 · 사유 {_yes288} · 없음 {_no288}" + (f" · 예: {_wo288[0][:110]}" if _wo288 else ''),
       scanned=_sc288)
 
+print()
+print("§289 R275 — 전방 기록부의 빠진 거래일을 화면이 말한다 — 셈은 한 곳 · 다시 만들 수 없다는 사실까지 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   11-16 재평가가 읽는 전방 기록부(fr-1)는 화면 어디에도 없었고, 빠진 날(R253 "22거래일 중 16일")은
+#   문서에만 있었다(상태표 #20 "화면 표시는 남음"). forward_registry.date_coverage 한 곳이 세고
+#   (거래일 판정은 case_tracker.is_non_trading_date 한 곳 · 시작은 forward_eval.FORWARD_FROM) 화면은
+#   행수 · 기록된 거래일/전체 · 빠진 날 · '다시 만들 수 없다'를 한 줄로 낸다.
+import tempfile as _tf289
+import forward_registry as _fr289
+_d289 = _tf289.mkdtemp(prefix='r275_')
+_p289 = _os.path.join(_d289, 'forward_registry.jsonl')
+with open(_p289, 'w', encoding='utf-8') as _f289:
+    for _t289, _dd289 in (('000000.KS', '2026-09-07'), ('000001.KS', '2026-09-07'), ('000000.KS', '2026-09-10')):
+        _f289.write('{"contract": "fr-1", "ticker": "%s", "date": "%s", "action": "HOLD"}\n' % (_t289, _dd289))
+_c289 = _fr289.date_coverage(_p289, start='2026-09-07', today='2026-09-11')
+check("심기 ① 09-07~09-11 거래일 5 중 기록 2(07 · 10) · 빠진 날 08 · 09 · 11 — 행 3",
+      _c289['rows'] == 3 and _c289['trading_days'] == 5 and _c289['recorded'] == 2
+      and _c289['missing'] == ['2026-09-08', '2026-09-09', '2026-09-11'], str(_c289))
+_c289b = _fr289.date_coverage(_p289, start='2026-09-05', today='2026-09-06')
+check("심기 ② 주말만 든 구간이면 거래일 0 · 빠진 날 0 (휴장일은 결손이 아니다 · R252 한 곳)",
+      _c289b['trading_days'] == 0 and _c289b['missing'] == [], str(_c289b))
+_c289c = _fr289.date_coverage(_os.path.join(_d289, 'none.jsonl'), start='2026-09-10', today='2026-09-11')
+check("심기 ③ 파일이 없으면 행 0 · 거래일은 그대로 세고 전부 빠진 날 (지어내지 않는다)",
+      _c289c['rows'] == 0 and _c289c['recorded'] == 0 and _c289c['missing'] == ['2026-09-10', '2026-09-11'], str(_c289c))
+_wa289 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 전방 기록부 줄을 date_coverage 한 곳에서 읽고 '다시 만들 수 없다'를 말한다 (§3 · 못 읽으면 미측정)",
+      "_fr275.date_coverage()" in _wa289 and "기록된 거래일 " in _wa289
+      and "빠진 날은 그날의 실시간 입력이라 다시 만들 수 없습니다" in _wa289
+      and "읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다" in _wa289)
+_fr289_src = _read148(_os.path.join(PROJ, 'forward_registry.py'))
+check("셈의 시작일과 거래일 판정을 새로 만들지 않았다 (forward_eval.FORWARD_FROM · case_tracker.is_non_trading_date)",
+      "_fe.FORWARD_FROM" in _fr289_src and "from improvement.case_tracker import is_non_trading_date" in _fr289_src)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
