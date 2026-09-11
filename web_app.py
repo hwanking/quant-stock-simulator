@@ -2206,6 +2206,36 @@ if 'watchlist' not in st.session_state:
 # 원격 노출 상태면 파일에 쓰지 않고 세션에만 둔다 — 앱 인스턴스가 하나라
 # `.portfolio/` 가 방문자 전원의 공용 파일이 된다 (§9).
 
+def _risk_budget_once(market_regime_code=None):
+    """보유 포트폴리오 위험예산(상관 · 분산효과 · 종목 HHI · 현금 비중)을 **한 번만** 계산해 세션에 둔다
+    (라운드 278). 사용자: *"포트폴리오에서 너무 중복되면 얻을 게 없다."* 견해는 업종 HHI 만 냈고 종목 간
+    가격이 같이 움직이는 정도는 종목 상세 아래 위험예산 블록에만 있었다 — 같은 함수
+    (`calculate_portfolio_risk_budget` · 실제 일봉)의 같은 결과를 두 자리가 읽는다(§4). 보유 구성이
+    바뀌면 다시 센다(열쇠 = 종목·수량 · 국면 코드). 문턱은 하나도 만들지 않는다."""
+    _pos = st.session_state.get('positions') or []
+    if not _pos:
+        # 보유 16종목은 관심종목 행(매입가·수량)에 있고 세션 `positions`(보유종목 상세 화면의 등록)는 비어
+        # 있을 수 있다 — 견해가 세는 그 보유로 잰다. 같은 보유를 두 이름으로 들고 한쪽만 재지 않는다(§4).
+        _pos = [{'ticker': str(_w.get('code') or ''), 'stock_name': str(_w.get('name') or _w.get('code') or ''),
+                 'quantity': float(_w.get('qty') or 0)}
+                for _w in (st.session_state.get('watchlist') or [])
+                if isinstance(_w, dict) and _w.get('paid') and _w.get('qty')]
+    try:
+        _sig = tuple(sorted((str(p.get('ticker') if isinstance(p, dict) else getattr(p, 'ticker', '')),
+                             float(p.get('quantity') if isinstance(p, dict) else getattr(p, 'quantity', 0) or 0))
+                            for p in _pos))
+    except Exception:                                          # noqa: BLE001
+        _sig = ('?', len(_pos))
+    _key = (_sig, market_regime_code)
+    _cached = st.session_state.get('_risk_budget_278')
+    if isinstance(_cached, dict) and _cached.get('key') == _key:
+        return _cached['value']
+    _val = q_engine.calculate_portfolio_risk_budget(
+        positions=_pos or None, b_engine=engine_init, market_regime_code=market_regime_code)
+    st.session_state['_risk_budget_278'] = {'key': _key, 'value': _val}
+    return _val
+
+
 def _go_stock(code, name=''):
     """
     그 종목을 보러 간다 — **이 함수 하나만** 쓴다 (라운드 164).
@@ -6208,6 +6238,28 @@ else:
                            + " — 위 업종 비중에는 들어 있지 않습니다")
         elif _sec_unknown or _sec_etf:
             st.markdown("**업종별 (매입원가 비중)** — 업종을 아직 못 읽었습니다")
+
+        # ── ③b 겹침 — 종목 간 가격이 같이 움직이는 정도 (라운드 278 · 표시 전용) ────
+        # 사용자: "너무 중복되면 얻을 게 없다." 업종 HHI 는 업종 겹침이고, 종목 쌍이 같이 움직이는지는
+        # 실제 일봉의 상관·분산효과가 말한다 — 종목 상세 아래 위험예산 블록이 이미 재던 값이다.
+        # 같은 함수의 같은 결과를 한 번 계산해 여기와 그 블록이 읽는다(§4). 문턱 없음 — 숫자와
+        # 읽는 법만(어느 쌍인지는 그 블록의 위험기여 표). 못 재면 못 쟀다고 적는다(§3).
+        try:
+            _rb278 = _risk_budget_once()
+        except Exception as _x278:                              # noqa: BLE001
+            _rb278 = {'available': False, 'reason': f'{type(_x278).__name__}: {_x278}'[:80]}
+        if _rb278.get('available') and _rb278.get('avg_correlation') is not None:
+            st.caption(
+                f"**겹침** — 보유 {_rb278['n_holdings']}종목의 일별 수익률이 같이 움직이는 정도: 평균 상관 "
+                f"{_rb278['avg_correlation']:.2f} · 가장 닮은 두 종목 {_rb278['max_correlation']:.2f} "
+                f"(최근 {_rb278['window_days']}거래일) · 분산효과 {_rb278['diversification_benefit_pct']:.0f}% "
+                f"(개별 변동성의 가중평균보다 포트폴리오 변동성이 그만큼 낮습니다) · 종목 집중도 HHI "
+                f"{_rb278['hhi']:.2f} (유효 종목수 {_rb278['effective_n']:.1f}개). 상관이 1 에 가까운 쌍은 한 종목처럼 "
+                "움직입니다 — 어느 쌍인지는 종목 상세의 위험예산 표(위험기여)에서 봅니다. 사라는 뜻도 팔라는 뜻도 아닙니다.")
+        elif _rb278.get('available'):
+            st.caption("**겹침** — 보유 종목이 하나라 종목 간 상관을 잴 수 없습니다.")
+        else:
+            st.caption(f"**겹침** — 종목 간 상관을 못 쟀습니다: {_rb278.get('reason') or '사유 미기록'}")
 
         # ── ④ 채울 것 — 값이 비어 판단이 비는 자리 (§3) ──────────────────
         # 사용자: "어디 부분을 채울지". 무엇을 사라는 뜻이 아니라 **어느 값이 없어서
@@ -11837,9 +11889,8 @@ with tab_audit:
         sim_res, tech_df=tech_df, b_engine=engine_init)
     factor_data = q_engine.calculate_factor_attribution(
         sim_res, tech_df=tech_df, b_engine=engine_init)
-    risk_budget = q_engine.calculate_portfolio_risk_budget(
-        positions=st.session_state.get('positions'), b_engine=engine_init,
-        market_regime_code=four_scores.get('market_regime_code'))
+    # 라운드 278 — 견해의 '겹침' 줄과 같은 결과를 읽는다(한 번 계산 · §4).
+    risk_budget = _risk_budget_once(four_scores.get('market_regime_code'))
 
     st.markdown("전략 유효성 벤치마크 대조 & 팩터 귀속 분해 대시보드")
     ba1, ba2 = st.columns(2)

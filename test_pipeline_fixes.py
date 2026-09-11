@@ -23493,6 +23493,30 @@ check("레이더가 11-16 대상 셋(R55·R57·R66)을 전부 담고 셋 다 재
       and all(bool(r.get('status_needs_eval_date')) for r in _rows290 if isinstance(r, dict) and any(f'({t})' in str(r.get('name')) for t in _hit290)),
       str({t: v for t, v in _hit290.items()}), scanned=len(_names290))
 
+print()
+print("§291 R278 — 포트폴리오 견해가 종목 간 겹침(상관·분산효과·종목 HHI)을 낸다 — 같은 함수 · 한 번 계산 · 문턱 없음 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "포트폴리오에서 너무 중복되면 얻을 게 없다." 견해는 업종 HHI 만 냈고, 종목 간 가격이 같이
+#   움직이는 정도(상관·분산효과)는 종목 상세 아래 위험예산 블록에만 있었다. 같은 함수
+#   (calculate_portfolio_risk_budget)의 결과를 세션에 한 번 두고 두 자리가 읽는다(§4). 문턱 없음.
+_wa291 = _read148(_os.path.join(PROJ, 'web_app.py'))
+import re as _re291
+check("겹침 값은 도우미 한 곳(_risk_budget_once)이 만들고 두 자리(견해 · 위험예산 블록)가 읽는다 (§4)",
+      len(_re291.findall(r'^def _risk_budget_once\(', _wa291, _re291.M)) == 1
+      and _wa291.count('_risk_budget_once(') >= 3
+      and 'q_engine.calculate_portfolio_risk_budget(' in _wa291
+      and _wa291.count('q_engine.calculate_portfolio_risk_budget(') == 1,
+      f"def {len(_re291.findall(r'^def _risk_budget_once', _wa291, _re291.M))} · 호출 {_wa291.count('_risk_budget_once(')} · 원 함수 호출 {_wa291.count('q_engine.calculate_portfolio_risk_budget(')}")
+check("견해의 겹침 줄 — 평균·최대 상관 · 분산효과 · 종목 HHI 를 적고, 사라는 뜻도 팔라는 뜻도 아니라고 말한다 · 못 재면 사유",
+      '**겹침** — 보유 ' in _wa291 and '평균 상관 ' in _wa291 and '가장 닮은 두 종목 ' in _wa291
+      and '분산효과 ' in _wa291 and '사라는 뜻도 팔라는 뜻도 아닙니다' in _wa291
+      and '종목 간 상관을 못 쟀습니다' in _wa291)
+import quant_indicators as _qi291
+_rb291 = _qi291.QuantIndicatorsEngine().calculate_portfolio_risk_budget(positions=None)
+check("보유 구성이 없으면 산출하지 않고 사유를 돌려준다 (임의 배분을 만들지 않는다 · §3)",
+      _rb291.get('available') is False and '미입력' in str(_rb291.get('reason')), str(_rb291)[:100])
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
