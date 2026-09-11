@@ -222,6 +222,52 @@ def _parse_rank_table(html, source_tag, limit=None):
     return out
 
 
+def rank_rows_from_api_stocks(stocks, source_tag, limit=None):
+    """새 사이트 목록 JSON → 옛 순위 표와 같은 행. 순수 함수 (라운드 271).
+
+    거래대금(accumulatedTradingValue)은 백만원 · 시총(marketValue)은 억원 — 옛 표와 같은 단위
+    (실측: 삼성전자 2,479 ↔ '24.8억원'). 펀드·제외 이름은 옛 파서와 같은 규칙으로 뺀다.
+    """
+    out = {}
+    for s in stocks or []:
+        if limit is not None and len(out) >= limit:
+            break
+        if not isinstance(s, dict):
+            continue
+        code = str(s.get('itemCode') or '').strip()
+        name = str(s.get('stockName') or '').strip()
+        if not re.fullmatch(r'\d{6}', code) or not name:
+            continue
+        if str(s.get('stockEndType') or 'stock').lower() != 'stock':
+            continue
+        if _is_fund_like(name) or be.BitemporalEngine._is_excluded_name(name):
+            continue
+        out[code] = {
+            'code': code,
+            'name': name,
+            'price': be._api_num(s.get('closePrice')),
+            'change_pct': be._api_num(s.get('fluctuationsRatio')),
+            'volume': be._api_num(s.get('accumulatedTradingVolume')),
+            'turnover_mil': be._api_num(s.get('accumulatedTradingValue')),
+            'market_cap_eok': be._api_num(s.get('marketValue')),
+            'sources': {source_tag},
+        }
+    return out
+
+
+def _rank_from_api(market, tag, limit):
+    """상승률 상위는 전용 목록(up) · 거래대금 상위는 시가총액 목록을 거래대금으로 정렬 (라운드 271)."""
+    if tag == 'rise':
+        stocks = _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/up/{market}", 'stocks',
+                                page_size=100, max_pages=max(1, (limit + 99) // 100))
+        return rank_rows_from_api_stocks(stocks, tag, limit=limit)
+    stocks = _api_all_pages(f"{be.NAVER_MOBILE_API}/stocks/marketValue/{market}", 'stocks',
+                            page_size=100, max_pages=40)
+    stocks = sorted(stocks, key=lambda s: -(be._api_num((s or {}).get('accumulatedTradingValue')) or 0.0)
+                    if isinstance(s, dict) else 0.0)
+    return rank_rows_from_api_stocks(stocks, tag, limit=limit)
+
+
 def _parse_flow_names(html):
     """투자자별 순매수 상위 페이지에서 종목명만 뽑는다 (열 구성이 페이지마다 달라 이름만 신뢰)."""
     names = set()
@@ -270,6 +316,14 @@ def fetch_candidate_pool(pages_per_source=2, progress=None):
                 except Exception:
                     continue
                 part = _parse_rank_table(html, tag, limit=per_page)
+                if not part and page == 1:
+                    # 라운드 271 — 옛 순위 페이지가 새 사이트로 넘어갔다(2026-09-10 · 코드 0개).
+                    #   같은 순위를 새 사이트 JSON 으로: 상승률은 `stocks/up/{시장}`, 거래대금은
+                    #   시가총액 목록(`stocks/marketValue`)을 거래대금으로 정렬한다(전용 끝점 404).
+                    part = _rank_from_api(market, tag, limit=per_page * pages_per_source)
+                    got += len(part)
+                    merge(part, tag)
+                    break
                 got += len(part)
                 merge(part, tag)
         report.append({'source': label, 'count': got, 'ok': got > 0})
@@ -290,7 +344,14 @@ def fetch_candidate_pool(pages_per_source=2, progress=None):
             got = _parse_flow_names(html)
             flow_names |= got
             flow_ok += len(got)
-    report.append({'source': '외국인·기관 순매수 상위', 'count': flow_ok, 'ok': flow_ok > 0})
+    report.append({'source': '외국인·기관 순매수 상위', 'count': flow_ok, 'ok': flow_ok > 0,
+                   # 라운드 271 — 옛 순매수 상위 페이지가 새 사이트 시장 홈으로 넘어갔고(2026-09-10),
+                   #   새 사이트 번들에는 같은 목록의 JSON 끝점이 없다(차트용 지수 외국인 하나뿐).
+                   #   그래서 이 출처는 미수신이고 '순매수 상위 진입'은 아무도 못 받는다(전원 0 ·
+                   #   필터가 아니다 · §3). 종목별 투자자 추세(`stock/{code}/trend`)로 재는 동시
+                   #   순매수·순매수 전환은 그대로 산다. 지어내지 않는다.
+                   'why': None if flow_ok > 0 else
+                   "옛 순위 페이지가 새 사이트로 넘어갔고 새 사이트에 같은 목록 JSON 이 없다 (2026-09-10)"})
 
     return pool, flow_names, report
 

@@ -23275,6 +23275,56 @@ check("수급 JSON → 날짜·기관·외국인 순매매 — 부호 보존 · 
       _fl284 == [{'date': '2026.09.10', 'inst': 4266985.0, 'frgn': -5769453.0},
                  {'date': '2026.09.08', 'inst': 2406250.0, 'frgn': 3332528.0}], str(_fl284))
 
+print()
+print("§285 R271 — 시총 1위 · 배당 · 관심도 순위도 새 사이트로 넘어갔다 · None 이 앱을 죽이지 않는다 (2026-09-11)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R270 을 띄우니 사이드바가 '시총 1위 미수신'(옛 시가총액 페이지 직접 파싱)을 찍고 그 None 이
+#   resolve_symbol 의 .strip() 에서 앱 전체를 죽였다. 배당은 옛 페이지의 표가 없어 "공시되지
+#   않았습니다"(못 받은 것을 없는 것으로 · §3)를 냈고, 관심도 순위 페이지 둘도 코드 0개였다.
+import bitemporal_engine as _be285
+import market_attention as _ma285
+_e285 = _be285.BitemporalEngine()
+try:
+    _t285, _n285 = _e285.resolve_symbol(None)
+    _ok285 = bool(_t285)
+except Exception as _x285:                                     # noqa: BLE001
+    _ok285, _t285 = False, f'{type(_x285).__name__}: {_x285}'
+check("resolve_symbol(None) 이 죽지 않고 빈 입력처럼 기본 종목으로 간다 (심기)", _ok285, str(_t285)[:80])
+_src285 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("시총 1위가 옛 표를 못 읽으면 JSON 시가총액 목록의 첫 줄을 쓴다 (지어내지 않는다 · 없으면 None)",
+      'rows = self.fetch_market_listing("KOSPI", max_pages=1)' in _src285
+      and 'return it[\'name\']' in _src285 and 'return None' in _src285.split('def fetch_realtime_market_cap_no1_stock')[1][:1800])
+check("배당은 옛 표가 없으면 새 JSON 의 주당배당금을 읽는다 — '공시 안 됨'은 그 뒤에만 말한다 (§3)",
+      "ti.get('주당배당금')" in _src285 and _src285.find("ti.get('주당배당금')") < _src285.find('"주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."'))
+_rk285 = _ma285.rank_rows_from_api_stocks([
+    {'itemCode': '007540', 'stockName': '샘표', 'stockEndType': 'stock', 'closePrice': '55,700', 'fluctuationsRatio': '29.99',
+     'accumulatedTradingVolume': '44,523', 'accumulatedTradingValue': '2,479', 'marketValue': '1,602'},
+    {'itemCode': '069500', 'stockName': 'KODEX 200', 'stockEndType': 'etf', 'closePrice': '111,865'},
+    {'itemCode': '00593', 'stockName': '코드짧음', 'stockEndType': 'stock'}], 'rise', limit=10)
+check("관심도 순위 JSON → 옛 순위 표와 같은 행 (거래대금 백만원 · 시총 억원 · 펀드·짧은 코드 제외 · 심기)",
+      list(_rk285) == ['007540'] and _rk285['007540']['turnover_mil'] == 2479.0 and _rk285['007540']['market_cap_eok'] == 1602.0
+      and _rk285['007540']['change_pct'] == 29.99 and _rk285['007540']['sources'] == {'rise'}, str(_rk285)[:160])
+# ── 세 결함의 뿌리는 로그 한 줄이었다 ──────────────────────────────────────────
+#   R270 의 성공 로그 "[Universe] KOSPI — …" 의 em-dash 가 cp949 표준출력(Windows 콘솔 · streamlit
+#   자식)에서 UnicodeEncodeError 를 내고, 호출부의 except Exception 이 그것을 '수집 실패'로 읽었다
+#   (시총 1위 None → 유니버스 폴백 → 폴백 print 에서 앱 사망). 프로브·회귀는 stdout 을 utf-8 로
+#   다시 열어 못 봤다. 고침은 엔진 import 시 못 찍는 글자만 대체(_stdout_tolerant · 인코딩 불변).
+#   차가운 cp949 자식 프로세스로 양방향을 심는다 — 엔진을 import 하면 산다 · 안 하면 죽는다.
+import subprocess as _sp285
+_env285 = dict(_os.environ, PYTHONIOENCODING='cp949')
+_env285.pop('PYTHONUTF8', None)
+_code285 = ("import sys; sys.path.insert(0, %r); import bitemporal_engine; "
+            "print('\\u2014 em-dash'); print('R285_OK')" % PROJ)
+_r285 = _sp285.run([sys.executable, '-c', _code285], capture_output=True, env=_env285, cwd=PROJ, timeout=120)
+check("cp949 표준출력에서 엔진을 import 하면 '—' 가 든 print 가 죽지 않는다 (차가운 자식 프로세스)",
+      _r285.returncode == 0 and b'R285_OK' in _r285.stdout,
+      f"rc={_r285.returncode} · {_r285.stderr.decode('cp949', 'replace').strip().splitlines()[-1:] }")
+_r285n = _sp285.run([sys.executable, '-c', "print('\\u2014 em-dash'); print('R285_OK')"],
+                    capture_output=True, env=_env285, cwd=PROJ, timeout=120)
+check("같은 print 가 엔진 없이는 실제로 죽는다 — 심기가 잡는 것을 확인 (양방향)",
+      _r285n.returncode != 0 and b'UnicodeEncodeError' in _r285n.stderr, f"rc={_r285n.returncode}")
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

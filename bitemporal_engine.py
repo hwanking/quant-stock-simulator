@@ -6,9 +6,34 @@ import urllib.request
 import urllib.parse
 import json
 import re
+import sys
 import time
 
 import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
+
+
+def _stdout_tolerant():
+    """로그 줄 하나가 수집을 죽이지 않게 한다 (라운드 271 · 2026-09-11).
+
+    Windows 콘솔·streamlit 자식 프로세스의 표준출력이 cp949 면 로그의 '—' 한 글자가
+    UnicodeEncodeError 를 내고, 그것이 호출부의 ``except Exception`` 에 잡혀 **수집
+    실패**로 읽혔다 — 시총 1위 None · 전 종목 유니버스가 폴백 · 그 폴백의 print 에서 앱
+    사망. 프로브와 회귀는 stdout 을 utf-8 로 다시 열어 놓고 돌아 못 봤다(라운드 167 의
+    '데워진 프로세스'와 같은 모양). 인코딩은 바꾸지 않고(콘솔 설정은 사람의 것) 못 찍는
+    글자만 대체한다 — 로그는 깨진 채 남고 수집은 산다. §285 가 cp949 자식 프로세스로 심는다.
+    """
+    for stream_name in ('stdout', 'stderr'):
+        s = getattr(sys, stream_name, None)
+        if s is None or getattr(s, 'errors', None) in ('replace', 'backslashreplace', 'ignore',
+                                                        'xmlcharrefreplace', 'namereplace'):
+            continue
+        try:
+            s.reconfigure(errors='replace')
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+_stdout_tolerant()
 
 #: 네이버 종목 링크에서 코드를 뽑는 식. `\d{6}` 을 손으로 적지 않는다 —
 #: KRX 문자 포함 코드(ETF 1,161종목 중 296종목)를 통째로 놓친다.
@@ -599,6 +624,16 @@ class BitemporalEngine:
             matches = re.findall(r'<a href="/item/main\.naver\?code=\d+" class="tltle">(.*?)</a>', html)
             if matches:
                 return matches[0].strip()
+        # 라운드 271 — 옛 시가총액 페이지가 새 사이트로 넘어가면 위 표가 없다(2026-09-11 실측:
+        #   사이드바가 '시총 1위 미수신'을 찍고 그 None 이 resolve_symbol 에서 앱을 죽였다).
+        #   같은 목록(시총 내림차순 · 종목만)을 fetch_market_listing 이 JSON 으로 받는다 — 첫 줄이 1위.
+        try:
+            rows = self.fetch_market_listing("KOSPI", max_pages=1)
+        except Exception:
+            rows = []
+        for it in rows or []:
+            if it.get('name') and not self._is_excluded_name(it['name']):
+                return it['name']
         # 수신 실패 시 **종목명을 지어내지 않는다** (§3 · 라운드 119).
         #   여기가 `return "삼성전자"` 였다. 화면 사이드바가 이 값을
         #   "오늘 시총 1위는 {값}" 으로 그대로 쓰므로, 네이버가 안 뜨는 날
@@ -721,7 +756,27 @@ class BitemporalEngine:
                         hot_list.append(clean_name)
                 if len(hot_list) >= 5:
                     return hot_list
-            
+
+        # 라운드 271 — 옛 페이지가 새 사이트(`stocklist/top`)로 302 된다(2026-09-10). 같은 목록이
+        #   `stocks/searchTop` JSON 에 있다(전 시장 · 종목·ETF 섞임 → 종목만 · R164 경계). 옛 표식이
+        #   없을 때만 이 길. 이 함수는 지금 호출부가 없다(죽은 경로) — 옛 주소 형제 전수에서
+        #   마지막으로 남은 것이라 같은 방식으로 옮겨 둔다. 없으면 여전히 빈 목록.
+        if not html or 'class="tltle"' not in html:
+            d = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stocks/searchTop?page=1&pageSize=20",
+                                      timeout=6, retries=2)
+            rows = (d or {}).get('stocks') if isinstance(d, dict) else None
+            hot_list = []
+            for s in rows or []:
+                if not isinstance(s, dict) or (s.get('stockEndType') or 'stock') != 'stock':
+                    continue
+                nm = str(s.get('stockName') or '').strip()
+                if nm and not self._is_excluded_name(nm):
+                    hot_list.append(nm)
+                if len(hot_list) >= 10:
+                    break
+            if len(hot_list) >= 5:
+                return hot_list
+
         # 수신 실패 시 특정 종목 목록을 지어내지 않는다 (구버전은 10종목 리터럴 반환)
         return []
 
@@ -1222,7 +1277,9 @@ class BitemporalEngine:
         return ticker, query.split(' (')[0], STOCK_METRICS_DB.get(ticker, {})
 
     def resolve_symbol(self, user_input):
-        query = user_input.strip()
+        # 라운드 271 — 시총 1위 미수신이면 화면이 None 을 넘긴다. None.strip() 으로 앱 전체가
+        #   죽었다(2026-09-11 실측). 빈 입력과 같이 다룬다 — 아래 기본 종목으로 간다.
+        query = str(user_input or '').strip()
         if not query:
             return "005930.KS", "삼성전자"
             
@@ -1607,13 +1664,24 @@ class BitemporalEngine:
                 dps = float(m_dps.group(1).replace(',', ''))
             except ValueError:
                 dps = None
-        if not dps or dps <= 0:
-            return {"available": False,
-                    "reason": "주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."}
-
         m_fy = re.search(r'배당수익률\s*l?\s*(\d{4})\.(\d{2})', html or '')
         fiscal_month = int(m_fy.group(2)) if m_fy else 12
         fiscal_year_label = f"{m_fy.group(1)}.{m_fy.group(2)}" if m_fy else None
+        # 라운드 271 — 옛 종목 페이지가 새 사이트로 넘어가면 '주당배당금(원)' 표가 없다(라운드 270 의
+        #   그 이전). 종전엔 그것을 "공시되지 않았습니다"로 말했다 — 못 받은 것을 없는 것으로
+        #   말하는 §3 위반. 같은 값을 새 사이트 JSON(integration.totalInfos '주당배당금')에서 읽는다.
+        #   결산월은 그 JSON 에 없다 — 12 로 두고 추정임을 note 가 이미 말한다.
+        if (not dps) and html is not None and 'no_today' not in html and 'wrap_company' not in html:
+            integ = fetch_json_with_retry(f"{NAVER_MOBILE_API}/stock/{code}/integration", timeout=6, retries=2)
+            ti = {x.get('key'): x.get('value')
+                  for x in ((integ or {}).get('totalInfos') or []) if isinstance(x, dict)} \
+                if isinstance(integ, dict) else {}
+            dps = _api_num(ti.get('주당배당금'))
+            if fiscal_year_label is None and dps:
+                fiscal_year_label = None            # 새 JSON 은 결산월을 안 준다 — 지어내지 않는다
+        if not dps or dps <= 0:
+            return {"available": False,
+                    "reason": "주당배당금이 공시되지 않았습니다 (무배당이거나 미집계)."}
 
         yield_pct = None
         if current_price and current_price > 0:
