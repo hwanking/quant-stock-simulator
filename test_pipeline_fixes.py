@@ -3855,8 +3855,14 @@ check("산출물 경로 폴백 함수", '_artifact_path' in _w64
       and '".portfolio", "data"' in _w64)
 check("배포용 calibration.json 동봉",
       _os.path.exists(_os.path.join(PROJ, "data", "calibration.json")))
-check("배포용 원장 동봉",
-      _os.path.exists(_os.path.join(PROJ, "data", "virtual_graded.jsonl")))
+# ⚠️ 라운드 282 — 동봉 원장은 **눌려 있다**(평문 240MB 는 저장소 파일 한도를 넘는다).
+#   이 절은 `data/virtual_graded.jsonl` 을 손으로 적어 열고 있어서 갈아 끼운 날
+#   FileNotFoundError 로 회귀가 통째로 죽었다. 어디에 있는지는 **한 곳**에서 정한다 —
+#   `refresh_bundle._bundle_ledger_path()` 가 만드는 쪽이자 아는 쪽이다(§4 · 손 목록 금지).
+from scripts import refresh_bundle as _rb64
+_led64 = _rb64._bundle_ledger_path()
+check("배포용 원장 동봉 (눌린 것이든 평문이든 — 자리는 생성기가 안다)",
+      bool(_led64) and _os.path.exists(_led64), str(_led64))
 import json as _json64
 with open(_os.path.join(PROJ, "data", "calibration.json"),
           encoding='utf-8') as _f64:
@@ -3865,8 +3871,12 @@ check("동봉 산출물이 실측 구조 (splits·bands·failure_classes)",
       all(k in _cal64 for k in ('splits', 'bands', 'failure_classes',
                                 'total_cases')))
 # 민감정보 미포함 — 원장 첫 줄에 보유종목·평단가 계열 키가 없어야 한다
-with open(_os.path.join(PROJ, "data", "virtual_graded.jsonl"),
-          encoding='utf-8') as _f64b:
+if _led64.endswith('.gz'):
+    import gzip as _gz64
+    _f64b = _gz64.open(_led64, 'rt', encoding='utf-8')
+else:
+    _f64b = open(_led64, encoding='utf-8')
+with _f64b:
     _row64 = _json64.loads(_f64b.readline())
 check("원장에 개인 정보 없음 (평단가·수량·계좌 금지)",
       not any(k in _row64 for k in ('user_avg', 'avg_price', 'quantity',
@@ -23588,6 +23598,268 @@ check("잘려도 이어 돌게 continue-on-error 가 붙어 있다 (체크포인
 check("업로드는 여전히 긴 단계 **뒤**이고 검사는 업로드 뒤다 (R247 — 축적을 인질로 잡지 않는다)",
       _yml293.find('경로·기준선 보강') < _yml293.find('새 스냅샷 올리기')
       < _yml293.find('관측 연구 신선도 검사') < _yml293.find('전방 기록부에 오늘 행이 있는지'))
+
+print()
+print("§294 R281 — §9 검사가 '올라가는 zip' 을 열고, 검사한 그 파일이 올라간다 · 판별은 이름이 아니라 평단가 (2026-09-12)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   종전 §9 단계는 `ls .portfolio/positions* holdings*` 로 **이름만**, 그것도 **디렉터리**를 봤다.
+#   나가는 것은 zip 이고 라운드 261 이 두 번째 뿌리 `data/` 를 열었는데 그쪽은 아예 안 봤다 —
+#   *남아 있는 것*을 재고 *나가는 것*을 안 쟀다. 게다가 이름 판별은 실제로 오탐한다(실측):
+#   `etf_holdings_r167.json` 은 ETF 구성종목 공개 자료인데 이름에 holdings 가 있고 안에 qty 도 있다
+#   (설정단위당 주식수 · `{"name": "TIGER …", "weight": null, "qty": 1832.12}`). §9 가 금지하는 것은
+#   **평단가**이므로 그 모양으로 판정하고, 이름 닮음은 세어 적기만 한다(R194).
+import zipfile as _zip294
+import tempfile as _tf294
+import json as _json294
+from scripts import upload_audit as _ua294
+_d294 = _tf294.mkdtemp(prefix='r281_')
+
+def _mk294(name, payload):
+    p = _os.path.join(_d294, name)
+    with _zip294.ZipFile(p, 'w') as z:
+        for arc, body in payload.items():
+            z.writestr(arc, body)
+    return p
+
+# 심기 ① ETF 구성종목(공개 자료) — 이름도 닮고 qty 도 있지만 평단가가 없다 → 통과
+_ok294 = _mk294('ok.zip', {
+    '.portfolio/etf_holdings_r167.json': _json294.dumps(
+        {'source': 'WiseReport', 'holdings': {'0000D0': [
+            {'name': 'TIGER 단기통안채', 'weight': None, 'qty': 1832.12}]}}, ensure_ascii=False),
+    'data/research_radar.json': '{"rows": []}'})
+_a294 = _ua294.audit(_ok294)
+check("심기 ① ETF 구성종목은 이름·수량이 닮아도 통과한다 (이름 닮음은 세어 적기만)",
+      not _a294['paid'] and not _a294['secret'] and _a294['scanned'] == 2
+      and len(_a294['lookalike']) == 1, str(_a294)[:140], scanned=_a294['scanned'])
+# 심기 ② 사용자 보유(평단가) · ③ 자격증명 — 이름이 안 닮아도 잡힌다
+_bad294 = _mk294('bad.zip', {'.portfolio/notes.json': _json294.dumps(
+    [{'code': '005930', 'paid': 61200, 'qty': 10}], ensure_ascii=False)})
+_b294 = _ua294.audit(_bad294)
+check("심기 ② 평단가가 들면 이름이 안 닮아도 잡는다 (§9 의 그 값)",
+      len(_b294['paid']) == 1 and not _b294['lookalike'], str(_b294['paid'])[:120])
+_sec294 = _mk294('sec.zip', {'data/x.json': '{"api_key": "abcd1234efgh"}'})
+check("심기 ③ 값이 든 자격증명을 잡는다 (빈 값·null 은 자리만이라 안 센다)",
+      len(_ua294.audit(_sec294)['secret']) == 1
+      and not _ua294.audit(_mk294('e.zip', {'data/y.json': '{"api_key": ""}'}))['secret'])
+_yml294 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("워크플로가 zip 을 열어 검사한다 — 디렉터리 이름 훑기(ls positions*)는 남지 않았다",
+      'python scripts/upload_audit.py "$Z"' in _yml294
+      and 'ls .portfolio/positions*' not in _yml294)
+check("검사한 그 파일이 올라간다 — zip 을 두 번 만들지 않고 경로를 하나로 잇는다 (§4)",
+      'echo "AUDITED_ZIP=$Z" >> "$GITHUB_ENV"' in _yml294
+      and 'Z="$AUDITED_ZIP"' in _yml294
+      and _yml294.count('python scripts/backup_research_data.py') == 1
+      and '검사된 zip 이 없다' in _yml294)
+check("§9 검사는 여전히 업로드 **앞**이다 (R247 — 축적을 인질로 잡지 않되 개인 자료는 나가면 끝이다)",
+      _yml294.find('upload_audit.py') < _yml294.find('새 스냅샷 올리기'))
+
+print()
+print("§295 R282 — 배포 동봉 원장을 꼬리 표본에서 전량(눌림)으로 · 읽는 길은 하나 (2026-09-12)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   `.portfolio/` 는 gitignore 라 배포에 없고, 화면은 `data/` 동봉본을 읽는다(R108).
+#   그 동봉본이 **꼬리 6,508행**(원장 251,528의 2.6%)이라 화면 숫자가 실제와 달랐다:
+#   닿음 누적이 3봉째 52.0 vs 54.0 · 20봉째 94.9 vs 96.2, 도달확률 가장 얇은 칸 20건 vs 926건.
+#   그리고 **꼬리를 늘려도 안 맞는다** — 생성 순서 덩어리라 이웃 행이 상관돼(R217) 수렴하지
+#   않는다(2026-09-12 실측 최대 어긋남 %p: 6,508→2.0 · 25,000→1.6 · 50,000→2.1 · 100,000→1.8 ·
+#   150,000→0.8 · 전량→0.0). 평문 240MB 는 저장소 파일 한도를 넘지만 gzip 31.8MB 는 들어간다.
+#   ⚠️ 눌러 싣는 것과 **펼치는 것**은 다르다 — 통째로 열면 최대 작업집합 3,424MB(컨테이너 약 1GB)
+#      라 나눠 읽기로 437MB 로 내렸다. 값·행·칸 불변.
+import gzip as _gz295
+import json as _jsn295
+from scripts import upload_audit as _ua295
+_src295 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_bundle295 = _os.path.join(PROJ, 'data', 'virtual_graded.jsonl.gz')
+
+check("동봉 원장은 눌린 파일 하나다 — 평문 표본이 같이 남아 있지 않다 (출처가 둘이면 한쪽만 낡는다 · §4)",
+      _os.path.exists(_bundle295)
+      and not _os.path.exists(_os.path.join(PROJ, 'data', 'virtual_graded.jsonl')))
+check("저장소 파일 한도 안이다 — 못 들어가는 것을 실었다고 적지 않는다",
+      _os.path.getsize(_bundle295) < 100 * 1024 * 1024,
+      f"{_os.path.getsize(_bundle295):,}바이트")
+# 눌린 파일이 줄바꿈 변환에 걸리면 리눅스 컨테이너가 받은 것이 깨진다. `core.autocrlf=true`
+# 이고 git 의 이진 판별은 앞 8,000바이트의 NUL 추측이다 — 추측에 맡기지 않고 적어 둔다(R220).
+_ga295 = _read148(_os.path.join(PROJ, '.gitattributes'))
+check("눌린 동봉본이 이진으로 선언돼 있다 — 줄바꿈 변환에 맡기지 않는다",
+      '*.gz binary' in _ga295)
+# 동봉본이 **표본이 아니라 전량**임을 메타가 말하는가 (표본이면 화면이 밝혀야 한다 · §3)
+with open(_os.path.join(PROJ, 'data', 'bundle_meta.json'), encoding='utf-8') as _f295:
+    _meta295 = _jsn295.load(_f295)
+check("동봉 메타가 전량임을 말한다 — 표본 행수와 원장 행수가 같다 (다르면 표본이고 그때는 밝혀야 한다)",
+      _meta295.get('sample_rows') == _meta295.get('ledger_rows_at_bundle')
+      and int(_meta295.get('sample_rows') or 0) > 200000,
+      f"표본 {_meta295.get('sample_rows')} · 원장 {_meta295.get('ledger_rows_at_bundle')}")
+# 실제로 열려야 한다 — 존재는 실행이 아니다 (R195)
+_n295 = 0
+with _gz295.open(_bundle295, 'rt', encoding='utf-8', errors='replace') as _f295:
+    for _ln295 in _f295:
+        if _ln295.strip():
+            _n295 += 1
+            if _n295 >= 5000:
+                break
+check("눌린 동봉본이 실제로 풀려 읽힌다 (존재는 실행이 아니다 · R195)",
+      _n295 == 5000, f"앞 {_n295}행 읽음", scanned=_n295)
+
+# ── 읽는 길은 하나다 (R120e — 호출부 말고 기본값) ────────────────────────
+check("`_open_artifact` 하나가 눌림을 가른다 — 산출물 소비자가 확장자를 직접 보지 않는다 (R246 — 고침이 판정자 한 명에게만 가면 안 된다)",
+      'def _open_artifact(' in _src295
+      and _src295.count("with open(_p, encoding='utf-8') as _f:") == 0
+      and _src295.count('with _open_artifact(_p) as _f:') >= 5,
+      f"_open_artifact 소비자 {_src295.count('with _open_artifact(_p) as _f:')}곳",
+      scanned=_src295.count('_p = _artifact_path('))
+check("`_artifact_path` 와 `_artifact_source` 가 같은 이름을 찾는다 — 어긋나면 '어느 쪽을 읽었나'가 거짓이 된다 (§4)",
+      _src295.count('fname + ".gz"') >= 2)
+check("케이스 화면은 원장을 **나눠** 읽는다 — 통째로 열면 배포 컨테이너를 넘는다 (실측 3,424MB vs 437MB)",
+      'chunksize=20000' in _src295
+      and 'pd.read_json(_p, lines=True)' not in _src295)
+
+# ── §9 — 나가는 것을 잰다. 판별식은 R281 것 하나 (베끼지 않는다) ─────────
+_paid295 = _sec295 = 0
+_rows295 = 0
+with _gz295.open(_bundle295, 'rt', encoding='utf-8', errors='replace') as _f295:
+    for _ln295 in _f295:
+        if not _ln295.strip():
+            continue
+        _rows295 += 1
+        if _ua295.PAID.search(_ln295):
+            _paid295 += 1
+        if _ua295.SECRET.search(_ln295):
+            _sec295 += 1
+check("새로 싣는 원장에 평단가·자격증명이 없다 — 전량을 훑는다 (§9 · 판별은 R281 것 하나)",
+      _rows295 > 200000 and _paid295 == 0 and _sec295 == 0,
+      f"{_rows295:,}행 · 평단가 {_paid295} · 자격증명 {_sec295}", scanned=_rows295)
+check("심기 — 평단가가 든 줄이면 잡고, 수량만 있는 공개 자료는 안 잡는다 (0건이 '없다'인지 '못 봤다'인지)",
+      bool(_ua295.PAID.search('{"ticker":"005930","paid":72500,"qty":10}'))
+      and not _ua295.PAID.search('{"ticker":"005930","qty":1832.12,"weight":null}'))
+# 동봉본을 만드는 쪽도 같은 규칙을 지키는가 (손 목록·표본 줄 수가 되살아나면 실패)
+_rb295 = _read148(_os.path.join(PROJ, 'scripts', 'refresh_bundle.py'))
+check("동봉본 생성기가 전량을 싣는다 — 옛 꼬리 표본 상수는 되살아나지 않았다",
+      'LEDGER_SAMPLE' not in _rb295 and 'GITHUB_FILE_LIMIT' in _rb295
+      and '--allow-shrink' in _rb295)
+
+print()
+print("§296 R283 — 전방 기록부 가드가 판정하는 날이 수집한 날과 같은가 (2026-09-13)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R272 의 가드는 '오늘 = 이 프로세스의 지역 날짜' 로 봤다. 그런데 가드는 워크플로 **맨 뒤**
+#   에서 돌고 수집(기록기)은 **맨 앞**에서 돈다(R253). 예약 지연이 2026-08-27 부터 42~77분에서
+#   276~726분으로 늘어 시작이 21:36~23:06 KST 가 됐고, 실행이 2~7시간이라 끝나는 시각이 한국
+#   날짜로 다음 날이다 — 최근 예약 12회 중 **6회가 날짜를 넘겼고 셋은 판정까지 뒤집혔다**
+#   (2026-09-13 실측). 그중 하나가 2026-09-10 — 전방 0건이라 R272 가 잡으라고 만들어진 바로
+#   그 날인데, 가드는 09-11 을 보고 '통과'를 냈을 것이다.
+#   고침: 판정일을 **가장 최근에 정규장이 끝난 거래일**로 유도한다. 마감 시각은 이미 채택된
+#   `bitemporal_engine.MARKET_CLOSE` 하나를 부른다 — 15:30 을 여기서 다시 적지 않는다(§2-6).
+import datetime as _dt296
+import json as _jsn296
+import tempfile as _tf296
+import scripts.forward_registry_check as _frc296
+_KST296 = _dt296.timezone(_dt296.timedelta(hours=9))
+
+
+def _anch296(y, m, d, hh, mm):
+    return _frc296.anchor_day(_dt296.datetime(y, m, d, hh, mm, tzinfo=_KST296))
+
+
+# 심기 — 2026-09-07(월) ~ 09-11(금) · 09-12(토) · 09-13(일)
+_cases296 = [
+    ((2026, 9, 7, 21, 42), '2026-09-07', '월 21:42 — 마감을 지났으니 그날'),
+    ((2026, 9, 8, 2, 36), '2026-09-07', '화 02:36 — 화요일 장은 아직 안 열렸다 · 월요일을 묻는다'),
+    ((2026, 9, 12, 4, 25), '2026-09-11', '토 04:25 — 금요일을 묻는다'),
+    ((2026, 9, 11, 23, 59), '2026-09-11', '금 23:59 — 그날'),
+    ((2026, 9, 11, 9, 0), '2026-09-10', '금 09:00 — 마감 전이라 전날'),
+    ((2026, 9, 13, 12, 0), '2026-09-11', '일 정오 — 금요일을 묻는다'),
+]
+_wrong296 = []
+for _now296, _want296, _why296 in _cases296:
+    _got296 = _anch296(*_now296)
+    if _got296 != _want296:
+        _wrong296.append(f'{_why296} → {_got296} (기대 {_want296})')
+check("심기 — 판정일이 '가장 최근에 장이 끝난 거래일'이다 (자정을 넘겨 돌아도 수집한 날을 묻는다)",
+      not _wrong296, ' · '.join(_wrong296)[:200], scanned=len(_cases296))
+# 종전 규칙(달력상 오늘)과 **실제로 달라지는** 자리가 있어야 한다 — 안 달라지면 안 고친 것이다
+_diff296 = sum(1 for (_n296, _w296, _) in _cases296
+               if _w296 != _dt296.date(_n296[0], _n296[1], _n296[2]).isoformat())
+check("종전 규칙(달력상 오늘)과 실제로 갈리는 자리가 있다 — 없으면 고친 게 아니다",
+      _diff296 >= 3, f'{_diff296}/{len(_cases296)} 자리에서 갈린다', scanned=len(_cases296))
+
+# ── 만들어진 이유였던 그 날을 이제 잡는가 (R272 의 2026-09-10 · 전방 0건) ──
+_d296 = _tf296.mkdtemp(prefix='r283_')
+_p296 = _os.path.join(_d296, 'fr.jsonl')
+with open(_p296, 'w', encoding='utf-8') as _f296:
+    for _dd296 in ('2026-09-07', '2026-09-11'):          # 09-10 은 일부러 없다
+        for _i296 in range(3):
+            _f296.write(_jsn296.dumps({'ticker': f'00593{_i296}', 'date': _dd296}) + '\n')
+check("만들어진 이유였던 날을 잡는다 — 09-10 이 0건이면 실패다 (종전 가드는 09-11 을 보고 통과를 냈을 것)",
+      _frc296.check(_p296, today='2026-09-10') == 1
+      and _frc296.check(_p296, today='2026-09-11') == 0)
+# ── 규칙은 한 곳 · 판정자는 둘 다 그것을 부른다 (R246 · R192) ─────────────
+_td296 = _read148(_os.path.join(PROJ, 'scripts', 'trading_day.py'))
+_src296 = _read148(_os.path.join(PROJ, 'scripts', 'forward_registry_check.py'))
+_prc296 = _read148(_os.path.join(PROJ, 'scripts', 'pipeline_run_check.py'))
+check("마감 시각은 이미 채택된 상수 하나를 부른다 — 규칙 파일이 15:30 을 다시 적지 않는다 (§2-6 · R192)",
+      'MARKET_CLOSE' in _td296 and '15, 30' not in _td296
+      and 'from bitemporal_engine import MARKET_CLOSE' in _td296)
+check("꼬리 검사 **둘 다** 같은 유도를 부른다 — 고침이 판정자 한 명에게만 가지 않았다 (R246)",
+      'from scripts.trading_day import anchor_day' in _src296
+      and 'from scripts.trading_day import anchor_day' in _prc296
+      and 'def anchor_day(' not in _src296 and 'def anchor_day(' not in _prc296,
+      scanned=2)
+check("어느 쪽도 '오늘 = 지역 날짜'로 떨어지지 않는다 — 그 줄이 되살아나면 실패다",
+      'datetime.now().astimezone().date().isoformat()' not in _src296
+      and 'today or datetime.now()' not in _prc296)
+check("판정일을 못 유도하면 미측정이다 — 몰래 '오늘'로 떨어지지 않는다 (§3)",
+      '판정할 거래일을 유도하지 못했다' in _src296
+      and '판정할 거래일을 유도하지 못했다' in _prc296)
+# 로그가 '오늘'이라 말하지 않는다 — 자정을 넘기면 그 낱말이 거짓이었다
+check("로그가 판정일과 지금을 갈라 적는다 — 넘겼으면 넘겼다고 말한다",
+      '판정일 {today}' in _src296 and '넘겼다' in _src296
+      and '오늘 {today} · 전방 기록부' not in _src296
+      and '판정일 {today}' in _prc296 and '넘겼다' in _prc296)
+# 두 검사가 같은 시각에 같은 날을 판정하는가 — 값으로 (글자 대조가 아니라 실행)
+import scripts.pipeline_run_check as _prcm296
+check("같은 시각에 두 검사가 같은 판정일을 쓴다 (값으로 확인 · 존재는 실행이 아니다 · R195)",
+      _frc296.anchor_day is _prcm296.anchor_day
+      and _anch296(2026, 9, 8, 2, 36) == '2026-09-07')
+
+print()
+print("§297 R284 — 수급·공시는 '매일'이 아니라 '열기 전에' 채운다 · 경계를 못 박는다 (2026-09-13)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   상태표 #53 이 *"수급·공시 수집이 20일째 멈췄다 · 확인 전"* 이라 적어 둔 자리를 쟀다.
+#   멈춘 것이 아니라 **자동 축적 워크플로에 한 번도 배선된 적이 없었다** — 사람이 이 PC 에서
+#   돌린 날만 쌓였고 수급 2026-08-19(거래일 17일 결손) · 공시 08-21(15일)에서 멈췄다.
+#   R137 이 *"앞으로 매일 쌓이는 것은 비용이 거의 없다"* 고 적었는데 그 셈은 **되가져오는 값**을
+#   안 셌다: 두 파일이 수급 72MB · 공시 574MB 다(2026-09-13 실측 · 지금 동봉본이 88MB).
+#   그리고 이 둘을 읽는 코드는 전부 연구 스크립트다 — 운영이 매일 필요로 하지 않는다.
+#   대신 **소급된다**(R130 이 연 길) — 그날 안에 되채워 결손 0 으로 만들었다.
+#   그래서 배선하지 않는다. 이 절은 그 경계를 못 박는다 — 넘으려면 646MB 셈을 다시 본다(R164).
+import json as _jsn297
+import scripts.flow_recorder as _fr297
+_yml297 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("자동 축적이 이 둘을 부르지 않는다 — 배선하려면 이 검사가 먼저 실패한다 (되가져오는 값 646MB · R261)",
+      'flow_recorder' not in _yml297 and 'disclosure_recorder' not in _yml297,
+      scanned=2)
+# 소급이 가능한 근거 = 멱등 열쇠. **값으로** 본다 (존재는 실행이 아니다 · R195)
+_have297 = _fr297.load_have()
+check("수급 기록기가 (종목, 날짜) 열쇠로 이미 받은 것을 안다 — 그래서 몇 번을 돌려도 같다",
+      len(_have297) > 100000
+      and all(isinstance(k, tuple) and len(k) == 2 for k in list(_have297)[:50]),
+      f'{len(_have297):,}쌍', scanned=len(_have297))
+# 공시 기록기는 접수번호로 가른다 — 같은 규율, 다른 열쇠
+_dr297 = _read148(_os.path.join(PROJ, 'scripts', 'disclosure_recorder.py'))
+check("공시 기록기는 접수번호로 가른다 (같은 멱등 규율 · 열쇠만 다르다)",
+      "have" in _dr297 and "'rcp'" in _dr297)
+# 정정이 문서에 붙어 있는가 — 다시 '매일'로 돌아가면 이 검사가 잡는다 (R250 · R213 은 문장을 잠근다)
+_r137 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R137_FLOW_TICKER_CURVE.md'))
+check("R137 의 '매일 쌓인다 · 비용이 거의 없다'에 정정이 붙어 있다 (원문은 둔다 · R260)",
+      '앞으로 매일' in _r137 and '한 번도 배선되지 않았다' in _r137
+      and '574MB' in _r137)
+# 그리고 판정 경로 밖이라는 §182 의 격리는 그대로여야 한다 — 여기서 한 번 더 값으로
+check("두 자료는 여전히 판정·화면 밖이다 — 연구 스크립트만 읽는다 (§182 의 격리 불변)",
+      'flow_daily' not in _read148(_os.path.join(PROJ, 'web_app.py'))
+      and 'disclosures_daily' not in _read148(_os.path.join(PROJ, 'web_app.py')),
+      scanned=1)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -2417,7 +2417,7 @@ def _reach_table_224():
             return None
 
         def _rows():
-            with open(_p, encoding='utf-8') as _f:
+            with _open_artifact(_p) as _f:
                 for _line in _f:
                     try:
                         yield _json224.loads(_line)
@@ -2442,7 +2442,7 @@ def _touch_cdf_230():
             return None
 
         def _rows():
-            with open(_p, encoding='utf-8') as _f:
+            with _open_artifact(_p) as _f:
                 for _line in _f:
                     try:
                         yield _json230.loads(_line)
@@ -2872,12 +2872,28 @@ import premarket as _pm_mod
 # 정의를 위로 올려 **두 자리가 같은 파일을 읽게** 한다 (§4). 함수 본문은
 # 한 글자도 안 바꿨다 — 순수 이동이다.
 def _artifact_path(fname):
+    # 라운드 282 — `.gz` 도 같은 이름으로 찾는다. 배포 동봉본의 원장은
+    # 눌러서 싣는다(눌러야 저장소 파일 한도 안에 들어간다). 읽는 쪽은
+    # `_open_artifact` 하나가 가른다 — 호출부가 확장자를 보지 않는다.
     _base = os.path.dirname(os.path.abspath(__file__))
     for _d in (".portfolio", "data"):
-        _p = os.path.join(_base, _d, fname)
-        if os.path.exists(_p):
-            return _p
+        for _n in (fname, fname + ".gz"):
+            _p = os.path.join(_base, _d, _n)
+            if os.path.exists(_p):
+                return _p
     return None
+
+
+def _open_artifact(path):
+    """산출물 열기 — 눌린 것이면 풀어서 준다 (라운드 282).
+
+    호출부마다 `if path.endswith('.gz')` 를 적으면 언젠가 한 곳이 빠진다
+    (라운드 120e — 호출부 말고 기본값을 고친다). 여는 길은 여기 하나다.
+    """
+    if str(path).endswith('.gz'):
+        import gzip as _gz
+        return _gz.open(path, 'rt', encoding='utf-8')
+    return open(path, encoding='utf-8')
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -2887,7 +2903,7 @@ def _load_calibration_meta():
         _p = _artifact_path("calibration.json")
         if not _p:
             return {}
-        with open(_p, encoding='utf-8') as _f:
+        with _open_artifact(_p) as _f:
             return _json_cal.load(_f)
     except Exception:
         return {}
@@ -2909,7 +2925,7 @@ def _cal_made_date():
         _p = _artifact_path("bundle_meta.json")
         if not _p:
             return None
-        with open(_p, encoding='utf-8') as _f:
+        with _open_artifact(_p) as _f:
             return (_json_md.load(_f) or {}).get('made') or None
     except Exception:
         return None
@@ -6425,21 +6441,35 @@ def _artifact_source(fname):
       쪽을 읽었는지 밝힌다.** 조용한 폴백은 §3 위반이다.
     """
     _base = os.path.dirname(os.path.abspath(__file__))
-    if os.path.exists(os.path.join(_base, ".portfolio", fname)):
-        return 'live'
-    if os.path.exists(os.path.join(_base, "data", fname)):
-        return 'bundle'
+    # 라운드 282 — 동봉본은 눌려 있을 수 있다. 찾는 이름이 `_artifact_path`
+    # 와 어긋나면 "어느 쪽을 읽었나"가 거짓이 된다 (§4).
+    for _n in (fname, fname + ".gz"):
+        if os.path.exists(os.path.join(_base, ".portfolio", _n)):
+            return 'live'
+    for _n in (fname, fname + ".gz"):
+        if os.path.exists(os.path.join(_base, "data", _n)):
+            return 'bundle'
     return None
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_case_ledger():
-    """가상 백테스트 원장 — 케이스 스터디 화면 전용. 없으면 None."""
+    """가상 백테스트 원장 — 케이스 스터디 화면 전용. 없으면 None.
+
+    ⚠️ 라운드 282 — **나눠 읽는다.** 종전처럼 `pd.read_json(lines=True)` 으로
+      통째로 열면 25만행에서 최대 작업집합이 **3,424MB** 였다(실측 · 정작
+      만들어진 DataFrame 은 131MB — 봉우리는 파싱 중간값이다). 배포 컨테이너는
+      약 1GB 라 그대로 두면 원장을 다 실은 날 앱이 죽는다. 나눠 읽으면 같은
+      행·같은 칸에 **437MB** 다(실측 · 6초). 값은 한 글자도 안 바뀐다.
+    """
     try:
         _p = _artifact_path("virtual_graded.jsonl")
         if not _p:
             return None
-        _df = pd.read_json(_p, lines=True)
+        _parts = [_c for _c in pd.read_json(_p, lines=True, chunksize=20000)]
+        if not _parts:
+            return None
+        _df = pd.concat(_parts, ignore_index=True) if len(_parts) > 1 else _parts[0]
         return _df if len(_df) else None
     except Exception:
         return None
@@ -6452,7 +6482,7 @@ def _load_update_history():
         _p = _artifact_path("update_history.json")
         if not _p:
             return None
-        with open(_p, encoding='utf-8') as _f:
+        with _open_artifact(_p) as _f:
             return _json_uh.load(_f)
     except Exception:
         return None
