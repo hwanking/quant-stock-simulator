@@ -23738,6 +23738,90 @@ check("동봉본 생성기가 전량을 싣는다 — 옛 꼬리 표본 상수�
       'LEDGER_SAMPLE' not in _rb295 and 'GITHUB_FILE_LIMIT' in _rb295
       and '--allow-shrink' in _rb295)
 
+print()
+print("§296 R283 — 전방 기록부 가드가 판정하는 날이 수집한 날과 같은가 (2026-09-13)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R272 의 가드는 '오늘 = 이 프로세스의 지역 날짜' 로 봤다. 그런데 가드는 워크플로 **맨 뒤**
+#   에서 돌고 수집(기록기)은 **맨 앞**에서 돈다(R253). 예약 지연이 2026-08-27 부터 42~77분에서
+#   276~726분으로 늘어 시작이 21:36~23:06 KST 가 됐고, 실행이 2~7시간이라 끝나는 시각이 한국
+#   날짜로 다음 날이다 — 최근 예약 12회 중 **6회가 날짜를 넘겼고 셋은 판정까지 뒤집혔다**
+#   (2026-09-13 실측). 그중 하나가 2026-09-10 — 전방 0건이라 R272 가 잡으라고 만들어진 바로
+#   그 날인데, 가드는 09-11 을 보고 '통과'를 냈을 것이다.
+#   고침: 판정일을 **가장 최근에 정규장이 끝난 거래일**로 유도한다. 마감 시각은 이미 채택된
+#   `bitemporal_engine.MARKET_CLOSE` 하나를 부른다 — 15:30 을 여기서 다시 적지 않는다(§2-6).
+import datetime as _dt296
+import json as _jsn296
+import tempfile as _tf296
+import scripts.forward_registry_check as _frc296
+_KST296 = _dt296.timezone(_dt296.timedelta(hours=9))
+
+
+def _anch296(y, m, d, hh, mm):
+    return _frc296.anchor_day(_dt296.datetime(y, m, d, hh, mm, tzinfo=_KST296))
+
+
+# 심기 — 2026-09-07(월) ~ 09-11(금) · 09-12(토) · 09-13(일)
+_cases296 = [
+    ((2026, 9, 7, 21, 42), '2026-09-07', '월 21:42 — 마감을 지났으니 그날'),
+    ((2026, 9, 8, 2, 36), '2026-09-07', '화 02:36 — 화요일 장은 아직 안 열렸다 · 월요일을 묻는다'),
+    ((2026, 9, 12, 4, 25), '2026-09-11', '토 04:25 — 금요일을 묻는다'),
+    ((2026, 9, 11, 23, 59), '2026-09-11', '금 23:59 — 그날'),
+    ((2026, 9, 11, 9, 0), '2026-09-10', '금 09:00 — 마감 전이라 전날'),
+    ((2026, 9, 13, 12, 0), '2026-09-11', '일 정오 — 금요일을 묻는다'),
+]
+_wrong296 = []
+for _now296, _want296, _why296 in _cases296:
+    _got296 = _anch296(*_now296)
+    if _got296 != _want296:
+        _wrong296.append(f'{_why296} → {_got296} (기대 {_want296})')
+check("심기 — 판정일이 '가장 최근에 장이 끝난 거래일'이다 (자정을 넘겨 돌아도 수집한 날을 묻는다)",
+      not _wrong296, ' · '.join(_wrong296)[:200], scanned=len(_cases296))
+# 종전 규칙(달력상 오늘)과 **실제로 달라지는** 자리가 있어야 한다 — 안 달라지면 안 고친 것이다
+_diff296 = sum(1 for (_n296, _w296, _) in _cases296
+               if _w296 != _dt296.date(_n296[0], _n296[1], _n296[2]).isoformat())
+check("종전 규칙(달력상 오늘)과 실제로 갈리는 자리가 있다 — 없으면 고친 게 아니다",
+      _diff296 >= 3, f'{_diff296}/{len(_cases296)} 자리에서 갈린다', scanned=len(_cases296))
+
+# ── 만들어진 이유였던 그 날을 이제 잡는가 (R272 의 2026-09-10 · 전방 0건) ──
+_d296 = _tf296.mkdtemp(prefix='r283_')
+_p296 = _os.path.join(_d296, 'fr.jsonl')
+with open(_p296, 'w', encoding='utf-8') as _f296:
+    for _dd296 in ('2026-09-07', '2026-09-11'):          # 09-10 은 일부러 없다
+        for _i296 in range(3):
+            _f296.write(_jsn296.dumps({'ticker': f'00593{_i296}', 'date': _dd296}) + '\n')
+check("만들어진 이유였던 날을 잡는다 — 09-10 이 0건이면 실패다 (종전 가드는 09-11 을 보고 통과를 냈을 것)",
+      _frc296.check(_p296, today='2026-09-10') == 1
+      and _frc296.check(_p296, today='2026-09-11') == 0)
+# ── 규칙은 한 곳 · 판정자는 둘 다 그것을 부른다 (R246 · R192) ─────────────
+_td296 = _read148(_os.path.join(PROJ, 'scripts', 'trading_day.py'))
+_src296 = _read148(_os.path.join(PROJ, 'scripts', 'forward_registry_check.py'))
+_prc296 = _read148(_os.path.join(PROJ, 'scripts', 'pipeline_run_check.py'))
+check("마감 시각은 이미 채택된 상수 하나를 부른다 — 규칙 파일이 15:30 을 다시 적지 않는다 (§2-6 · R192)",
+      'MARKET_CLOSE' in _td296 and '15, 30' not in _td296
+      and 'from bitemporal_engine import MARKET_CLOSE' in _td296)
+check("꼬리 검사 **둘 다** 같은 유도를 부른다 — 고침이 판정자 한 명에게만 가지 않았다 (R246)",
+      'from scripts.trading_day import anchor_day' in _src296
+      and 'from scripts.trading_day import anchor_day' in _prc296
+      and 'def anchor_day(' not in _src296 and 'def anchor_day(' not in _prc296,
+      scanned=2)
+check("어느 쪽도 '오늘 = 지역 날짜'로 떨어지지 않는다 — 그 줄이 되살아나면 실패다",
+      'datetime.now().astimezone().date().isoformat()' not in _src296
+      and 'today or datetime.now()' not in _prc296)
+check("판정일을 못 유도하면 미측정이다 — 몰래 '오늘'로 떨어지지 않는다 (§3)",
+      '판정할 거래일을 유도하지 못했다' in _src296
+      and '판정할 거래일을 유도하지 못했다' in _prc296)
+# 로그가 '오늘'이라 말하지 않는다 — 자정을 넘기면 그 낱말이 거짓이었다
+check("로그가 판정일과 지금을 갈라 적는다 — 넘겼으면 넘겼다고 말한다",
+      '판정일 {today}' in _src296 and '넘겼다' in _src296
+      and '오늘 {today} · 전방 기록부' not in _src296
+      and '판정일 {today}' in _prc296 and '넘겼다' in _prc296)
+# 두 검사가 같은 시각에 같은 날을 판정하는가 — 값으로 (글자 대조가 아니라 실행)
+import scripts.pipeline_run_check as _prcm296
+check("같은 시각에 두 검사가 같은 판정일을 쓴다 (값으로 확인 · 존재는 실행이 아니다 · R195)",
+      _frc296.anchor_day is _prcm296.anchor_day
+      and _anch296(2026, 9, 8, 2, 36) == '2026-09-07')
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
