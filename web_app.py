@@ -5542,8 +5542,33 @@ else:
         # 못 받으면 None 그대로 — 0 원으로 채우지 않는다 (§3)
         _ppx = light_quote(f"{_pc}.KS") or light_quote(f"{_pc}.KQ")
         _wl_pre[_pi] = (_ppx, _uk.watch_action(_pr, _ppx))
+    def _wl_kind_of(act):
+        """무리 순서표가 쓰는 kind — '지금 매수 가능'(목표가 이하)은 별도 이름이다.
+        우선순위 줄과 표 정렬이 **같은 함수**를 쓴다 (§4 — 두 곳에 두면 갈라진다)."""
+        if not act:
+            return None
+        _k = act.get('kind')
+        if _k == '매수 가능' and act.get('label') == '지금 매수 가능':
+            return '지금 매수 가능'
+        return _k
+
+    def _wl_seq(order):
+        return (('지금 매수 가능',) + tuple(order)) if order is _WL_BUY_RANK else tuple(order)
+
+    def _wl_rank(order, act):
+        """순서표에서의 자리 — 없는 kind 는 맨 뒤(버리지 않는다)."""
+        _seq = _wl_seq(order)
+        _k = _wl_kind_of(act)
+        return _seq.index(_k) if _k in _seq else len(_seq)
+
+    # 라운드 286 — 사용자: *"미보유는 좋은거 위로 정렬해줘야지"*. 미보유 표를 **살 자리가
+    #   가까운 순**으로 놓는다. 순서는 이미 우선순위 줄이 쓰던 `_WL_BUY_RANK` 그대로이고
+    #   (새 문턱 없음 · §2-6) 같은 자리 안에서는 이름순이다. **점수순이 아니다** — 같은 날
+    #   종목을 점수로 세우는 것은 정보가 없다고 이 저장소가 이미 쟀다.
+    #   보유 중은 이름순 그대로 둔다 — 가진 것은 이름으로 찾는다.
     _wl_owned.sort(key=lambda it: str(it[1].get('name') or ''))
-    _wl_free.sort(key=lambda it: str(it[1].get('name') or ''))
+    _wl_free.sort(key=lambda it: (_wl_rank(_WL_BUY_RANK, _wl_pre[it[0]][1]),
+                                  str(it[1].get('name') or '')))
 
     def _wl_priority_line(rows, order):
         """무리 머리의 우선순위 한 줄 — kind 를 급한 순서로, 이름은 이름순."""
@@ -5552,12 +5577,10 @@ else:
             _a2 = _wl_pre[_i2][1]
             if not _a2:
                 continue
-            _k2 = _a2['kind']
-            # '지금 매수 가능'(목표가 이하)은 '매수 가능' 앞에 둔다 — 같은 kind 의 label
-            if _k2 == '매수 가능' and _a2.get('label') == '지금 매수 가능':
-                _k2 = '지금 매수 가능'
+            # 표 정렬과 **같은 함수**로 kind 를 정한다 (§4 — 라운드 286)
+            _k2 = _wl_kind_of(_a2)
             _byk.setdefault(_k2, []).append(str(_r2.get('name') or ''))
-        _seq = (('지금 매수 가능',) + tuple(order)) if order is _WL_BUY_RANK else tuple(order)
+        _seq = _wl_seq(order)
         _parts = []
         for _k2 in _seq:
             if _k2 in _byk:
@@ -5572,7 +5595,8 @@ else:
                    '매입가를 적은 종목 — 보유자 기준 · 이름순', _WL_SELL_RANK,
                    '정리가 급한 순'),
                   ('미보유', _wl_free,
-                   '매입가가 없는 종목 — 신규 매수 기준 · 이름순', _WL_BUY_RANK,
+                   '매입가가 없는 종목 — 신규 매수 기준 · 살 자리가 가까운 순'
+                   '(같은 자리는 이름순)', _WL_BUY_RANK,
                    '살 자리가 가까운 순')]
 
     for _gname, _grows, _ghint, _gorder, _gtitle in _wl_groups:
@@ -5587,6 +5611,14 @@ else:
             unsafe_allow_html=True)
         # 우선순위 한 줄 (라운드 214) — 표는 이름순, 급한 것은 여기서 먼저 읽는다
         st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))
+        if _gorder is _WL_BUY_RANK:
+            # 라운드 286 — '위에 있는 것이 좋은 종목'으로 읽히면 안 된다. 이 차례는
+            # **살 수 있는 자리인가**의 갈래이지 종목의 우열이 아니다 — 같은 날 종목을
+            # 점수로 세우는 데 정보가 없다는 것은 이미 재 두었다(표시 전용 · 문턱 없음).
+            st.caption("위에 있을수록 **지금 손댈 수 있는 자리**라는 뜻입니다 — "
+                       "종목의 좋고 나쁨을 매긴 순위가 아닙니다. 같은 날 종목을 점수로 "
+                       "세우는 것에는 정보가 없었습니다(개발 구간 166,132건 · 기준일 "
+                       "2,609일 · 2026-08-16 실측).")
         if not _wl_edit:
             # ── 라운드 229 — 보기 모드: HTML 표 하나 (행 ≈ 36px). 값의 출처는 편집 모드와
             #   같다(_wl_pre · 저장된 매입가·수량 · _wl_fair_conf · _wl_pnl · watch_action).
