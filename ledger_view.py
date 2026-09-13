@@ -231,6 +231,76 @@ def touch_cdf(records, bars=HORIZON_BARS):
     return {'n': n, 'cum': cum}
 
 
+#: 매수권 하한 — 이 저장소가 이미 쓰는 값(원장 요약·감시가 같은 58 을 쓴다). 새 숫자 아님.
+BUY_ZONE_SCORE = 58
+
+
+def demark_complete_lift(records, min_score=BUY_ZONE_SCORE):
+    """차트의 '13 매수' 표식이 원장에서 무엇을 했나 — 구간별 (라운드 285 · 표시 전용).
+
+    사용자: *"삼성전자 13매수 나왔는데 사야 하는 거 맞아?"* 차트는 그 표식을 크게 그리면서
+    **얼마짜리인지 한 줄도 안 적고 있었다** — 숫자만 보여 주면 그게 판단이 된다(R223).
+
+    가르는 값은 엔진이 이미 원장에 찍는 `demark_state == 'COMPLETE'`(= 매수 카운트다운 13
+    완성 · `quant_indicators` 의 `buy_cd >= 13` 가지)다. **새 문턱을 만들지 않는다** —
+    매수권 하한도 이미 쓰는 58 을 그대로 쓴다.
+
+    돌려주는 것: {split: {'yes': (n, 적중%, 날짜수), 'no': (...), 'diff': %p}} · 판정은 안 한다.
+    분모가 0 인 칸은 담지 않는다(§3 — 비율을 만들지 않는다).
+    """
+    box = {}
+    for r in records:
+        sp = r.get('split')
+        ok = r.get('success')
+        if sp not in ('train', 'valid', 'blind') or ok is None:
+            continue
+        try:
+            if float(r.get('score') or 0) < float(min_score):
+                continue
+        except (TypeError, ValueError):
+            continue
+        key = (sp, str(r.get('demark_state')) == 'COMPLETE')
+        cell = box.setdefault(key, [0, 0, set()])
+        cell[0] += 1
+        cell[1] += 1 if ok else 0
+        cell[2].add(str(r.get('date'))[:10])
+    out = {}
+    for sp in ('train', 'valid', 'blind'):
+        y, n = box.get((sp, True)), box.get((sp, False))
+        if not y or not n or not y[0] or not n[0]:
+            continue
+        y_rate = 100.0 * y[1] / y[0]
+        n_rate = 100.0 * n[1] / n[0]
+        out[sp] = {'yes': (y[0], round(y_rate, 1), len(y[2])),
+                   'no': (n[0], round(n_rate, 1), len(n[2])),
+                   'diff': round(y_rate - n_rate, 1)}
+    return out or None
+
+
+def demark_lift_line(lift):
+    """위 결과 → 화면 한 줄. 없으면 None (지어내지 않는다).
+
+    **판정을 대신 내리지 않는다** — 세 구간 부호가 갈리는지만 사실로 적는다(R44·R213 의
+    그 규칙). 부호가 같아도 '사라'가 되지 않게 문장은 그대로 둔다.
+    """
+    if not lift:
+        return None
+    seen = [lift[s]['diff'] for s in ('train', 'valid', 'blind') if s in lift]
+    if not seen:
+        return None
+    parts = []
+    for sp, label in (('train', '학습'), ('valid', '검증'), ('blind', '실전')):
+        if sp in lift:
+            d = lift[sp]
+            parts.append(f"{label} {d['diff']:+.1f}%p(n {d['yes'][0]}·날짜 {d['yes'][2]})")
+    mixed = not (all(v > 0 for v in seen) or all(v < 0 for v in seen))
+    tail = ('세 구간의 방향이 서로 어긋나 근거로 쓰지 않습니다'
+            if mixed else '방향은 같지만 이 표식만으로 판단하지 않습니다')
+    return ('차트의 13 매수·매도 표식은 **판정에 들어가지 않습니다** — 원장에서 '
+            '매수권 안 13 완성과 그 외의 적중 차이를 재면 ' + ' · '.join(parts)
+            + f'. {tail}.')
+
+
 def days_to_bars(days):
     """달력일 → 봉 수 (×5/7 · bars_to_days 의 역). 0 미만은 0."""
     try:

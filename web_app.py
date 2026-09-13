@@ -2430,6 +2430,30 @@ def _reach_table_224():
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _demark_lift_285():
+    """차트의 '13 매수' 표식이 원장에서 무엇을 했나 → 캡션 한 줄 (라운드 285 · 표시 전용).
+    규칙은 `ledger_view` 한 곳이고 여기는 읽어서 그릴 뿐이다(§4).
+    없으면 None — 지어내지 않는다 (§3)."""
+    import json as _json285
+    import ledger_view as _lv285
+    try:
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+
+        def _rows():
+            with _open_artifact(_p) as _f:
+                for _line in _f:
+                    try:
+                        yield _json285.loads(_line)
+                    except Exception:                          # noqa: BLE001
+                        continue
+        return _lv285.demark_lift_line(_lv285.demark_complete_lift(_rows()))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def _touch_cdf_230():
     """원장 → 봉째별 '두 선 중 하나에 닿은' 누적 비율 (라운드 230 · 표시 전용).
     사용자: "다 보유 유지인데 맞아?" — 계획 n봉째에 아무 선에도 안 닿은 것이 얼마나 흔한지.
@@ -8766,6 +8790,15 @@ try:
                "**보유자** 기준 목표·손절이 파선으로 함께 그려집니다 — "
                "두 기준은 서로 다른 숫자이므로 이름표를 보고 구분해 주세요. "
                "차트 데이터는 이 화면 안에만 있고 외부로 전송되지 않습니다.")
+    # 라운드 285 — 표식은 큼직한데 그게 얼마짜리인지는 한 줄도 없었다. 사용자가
+    # '13 매수'를 매수 신호로 읽고 물었다 — 숫자만 보여 주면 그게 판단이 된다.
+    # 값은 원장에서 그 자리에서 센다(손으로 적은 수는 낡는다 · 문턱 없음 · 표시 전용).
+    _dm285 = _demark_lift_285()
+    if _dm285:
+        st.caption(_dm285)
+    else:
+        st.caption("차트의 13 매수·매도 표식은 **판정에 들어가지 않습니다** — "
+                   "원장으로 그 값어치를 이번에는 세지 못했습니다(원장을 못 읽었습니다).")
 except Exception as _cp_err:
     st.caption(f"종합 차트를 그리지 못했습니다: {_cp_err}")
 

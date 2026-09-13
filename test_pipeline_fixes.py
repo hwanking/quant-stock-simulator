@@ -23861,6 +23861,74 @@ check("두 자료는 여전히 판정·화면 밖이다 — 연구 스크립트�
       and 'disclosures_daily' not in _read148(_os.path.join(PROJ, 'web_app.py')),
       scanned=1)
 
+print()
+print("§298 R285 — 차트의 '13 매수' 표식이 얼마짜리인지 화면이 말한다 (2026-09-14)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"삼성전자 13매수 나왔는데 사야 하는 거 맞아?"* 차트가 `13 매수` 를 큼직한
+#   화살표로 그리면서 **그게 얼마짜리인지는 한 줄도 안 적고 있었다** — 숫자만 보여 주면
+#   그게 판단이 된다(R223 의 업종 적중과 같은 자리).
+#   원장에서 세니(2026-09-14) 매수권 안 13 완성 − 그 외 적중 차이가
+#   train +0.8 · valid **−9.0** · blind +13.2 %p 로 **부호가 어긋난다**(블라인드 날짜 14).
+#   규칙은 `ledger_view` 한 곳에 두고 화면은 읽어서 그린다. 문턱 없음 · 표시 전용 ·
+#   매수권 하한도 이미 쓰는 58 을 재사용한다(§2-6).
+import ledger_view as _lv298
+_src298 = _read148(_os.path.join(PROJ, 'web_app.py'))
+
+
+def _row298(sp, done, ok, score=60, date='2026-09-01'):
+    return {'split': sp, 'success': ok, 'score': score, 'date': date,
+            'demark_state': 'COMPLETE' if done else 'FORMING'}
+
+
+# 심기 ① 가르는 값은 demark_state == COMPLETE 다 (이름·수량이 아니라 엔진의 상태값)
+_p298 = ([_row298('train', True, True)] * 6 + [_row298('train', True, False)] * 4
+         + [_row298('train', False, True)] * 5 + [_row298('train', False, False)] * 5)
+_l298 = _lv298.demark_complete_lift(_p298)
+check("심기 ① 13 완성과 그 외를 상태값으로 가르고 적중 차이를 낸다",
+      _l298 and _l298['train']['yes'][0] == 10 and _l298['train']['no'][0] == 10
+      and abs(_l298['train']['diff'] - 10.0) < 1e-9, str(_l298)[:140], scanned=len(_p298))
+# 심기 ② 매수권 밖(58 미만)은 안 센다 — 하한은 이미 쓰는 값
+_p298b = _p298 + [_row298('train', True, False, score=10)] * 50
+check("심기 ② 매수권 하한 아래 행은 안 센다 (새 문턱을 만들지 않고 58 을 재사용)",
+      _lv298.demark_complete_lift(_p298b)['train']['yes'][0] == 10
+      and _lv298.BUY_ZONE_SCORE == 58, scanned=len(_p298b))
+# 심기 ③ 한쪽이 비면 그 구간은 담지 않는다 — 분모 0 으로 비율을 만들지 않는다 (§3)
+check("심기 ③ 13 완성이 하나도 없는 구간은 담지 않는다 (분모 0 으로 비율 금지)",
+      'valid' not in (_lv298.demark_complete_lift(
+          [_row298('valid', False, True)] * 5) or {}))
+check("빈 입력이면 None — 지어내지 않는다",
+      _lv298.demark_complete_lift(iter([])) is None
+      and _lv298.demark_lift_line(None) is None)
+# 문장은 **판정을 대신 내리지 않는다** — 부호가 갈리면 갈린다고 적는다
+_mix298 = {'train': {'yes': (9, 60.0, 9), 'no': (9, 50.0, 9), 'diff': 10.0},
+           'valid': {'yes': (9, 40.0, 9), 'no': (9, 50.0, 9), 'diff': -10.0}}
+_same298 = {'train': {'yes': (9, 60.0, 9), 'no': (9, 50.0, 9), 'diff': 10.0},
+            'valid': {'yes': (9, 60.0, 9), 'no': (9, 50.0, 9), 'diff': 10.0}}
+check("부호가 갈리면 갈린다고 적고, 같아도 '사라'가 되지 않는다 (문장이 판정을 대신 내리지 않는다)",
+      '어긋나' in _lv298.demark_lift_line(_mix298)
+      and '어긋나' not in _lv298.demark_lift_line(_same298)
+      and '판정에 들어가지 않습니다' in _lv298.demark_lift_line(_same298)
+      and all(w not in _lv298.demark_lift_line(_same298)
+              for w in ('매수하세요', '사세요', '유리합니다')))
+# 화면이 그것을 실제로 부르는가 · 규칙을 베껴 적지 않았는가 (§4 · R192)
+check("차트 캡션이 이 줄을 부른다 — 못 세면 그 사실을 적는다 (§3)",
+      '_demark_lift_285()' in _src298
+      and 'demark_lift_line' in _src298
+      and '이번에는 세지 못했습니다' in _src298)
+# ⚠️ 첫 판에 "web_app 에 'COMPLETE' 리터럴이 없다"로 잡았다가 **오탐**했다 — 그 낱말은
+#   DeMARK 카드의 색·기준선을 그리는 자리에도 있고 그건 이 규칙과 무관하다(R194 · 넓어서 오탐).
+#   물어야 할 것은 "**이 함수가** 판별을 다시 적는가"이므로 함수 본문만 떼어 본다.
+#   끝 앵커는 시작 뒤에서 찾는다(R226) — 슬라이스 길이를 같이 찍는다.
+_i298 = _src298.index('def _demark_lift_285():')
+_body298 = _src298[_i298:_src298.index('\n@st.cache_data', _i298)]
+check("판별을 화면이 다시 적지 않는다 — 이 함수는 ledger_view 를 부르기만 한다 (§4 · 베낀 판별식 금지)",
+      len(_body298) > 200
+      and 'demark_complete_lift' in _body298 and 'demark_lift_line' in _body298
+      and 'COMPLETE' not in _body298 and '58' not in _body298
+      and 'demark_state' not in _body298,
+      f'함수 본문 {len(_body298)}자', scanned=1)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
