@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""일일 개선 파이프라인이 오늘 실제로 돌았나 — 값으로 판정한다 (라운드 263).
+"""일일 개선 파이프라인이 마지막 거래일에 실제로 돌았나 — 값으로 판정한다 (라운드 263).
 
 ■ 왜 필요한가 — 실측 2026-09-10
   `pipeline_runs` 14행 · 고유 날짜 6일 · 2026-08-02~09-07 평일 26일 중 **24일 기록 없음.**
@@ -10,9 +10,18 @@
   했다**는 뜻이다. 원인은 그날 로그에 있고, 이 검사는 침묵을 붉게 만든다(R102·R259 의
   신선도 검사와 같은 모양 · 검사 대상은 산출물이 아니라 실행 기록).
 
-■ 판정 (오늘 = 이 프로세스의 지역 날짜 · 워크플로는 TZ=Asia/Seoul · R222 의 UTC 함정)
+⚠️ **판정하는 날이 파이프라인이 돈 날이 아니었다** (라운드 283 · 2026-09-13). 종전에는
+  '오늘 = 이 프로세스의 지역 날짜' 였다. 이 검사는 작업 **맨 뒤**에서 도는데, 예약 지연이
+  2026-08-27 부터 42~77분에서 276~726분으로 늘어 시작이 21:36~23:06 KST 가 됐고 실행이
+  2~7시간이라 **최근 예약 12회 중 6회가 한국 날짜를 넘겼다.** 그러면 화요일 새벽에 도는
+  검사가 "화요일에 파이프라인이 돌았나"를 묻는다 — 월요일 실행을 못 보고 **거짓 실패**를
+  내고, 금요일 실행은 토요일을 물어 **휴장일로 조용히 통과**한다. 판정일을 한 곳
+  (`scripts/trading_day.anchor_day`)에서 유도한다 — 전방 기록부 가드와 **같은 규칙**이다
+  (R246 — 고침이 판정자 한 명에게만 가면 안 된다).
+
+■ 판정 (판정일 = 마지막으로 장이 끝난 거래일 · 워크플로는 TZ=Asia/Seoul · R222 의 UTC 함정)
   · 휴장일                                → 판정하지 않는다 (rc 0 · 그날은 안 도는 게 맞다)
-  · 오늘 시작한 행이 없다                  → 실패 (rc 1)
+  · 판정일에 시작한 행이 없다              → 실패 (rc 1)
   · 있는데 success/partial_success 가 아니다 → 실패 (rc 1 · 'running' 은 죽은 채 남은 것)
   · 표를 못 읽는다                          → 미측정 (rc 2 · 통과가 아니다)
   휴장일 판정은 한 곳(`improvement.case_tracker.is_non_trading_date` · R252)을 부른다.
@@ -32,6 +41,7 @@ if PROJ not in sys.path:
     sys.path.insert(0, PROJ)
 from improvement.database import DEFAULT_DB_PATH                # noqa: E402
 from improvement.case_tracker import is_non_trading_date          # noqa: E402
+from scripts.trading_day import anchor_day, wall_date             # noqa: E402
 
 OK_STATUS = ('success', 'partial_success')
 
@@ -52,7 +62,11 @@ def _local_date(iso):
 
 
 def check(db_path=DEFAULT_DB_PATH, today=None):
-    today = today or datetime.now().astimezone().date().isoformat()
+    if not today:
+        today = anchor_day()
+        if not today:
+            print('>> 못 쟀다 — 판정할 거래일을 유도하지 못했다. 미측정이다.')
+            return 2
     if is_non_trading_date(today):
         print(f'{today} 휴장일 — 일일 파이프라인은 그날 안 돈다. 판정하지 않는다.')
         return 0
@@ -68,20 +82,22 @@ def check(db_path=DEFAULT_DB_PATH, today=None):
     except sqlite3.Error as exc:
         print(f'>> 못 쟀다 — pipeline_runs 를 못 읽었다 ({type(exc).__name__}: {exc}). 미측정이다.')
         return 2
-    print(f'오늘 {today} · 최근 실행 기록 {len(rows)}건:')
+    _wall = wall_date()
+    _note = '' if _wall == today else f' (이 검사가 도는 지금은 {_wall} 이다 — 넘겼다)'
+    print(f'판정일 {today} · 마지막으로 장이 끝난 거래일{_note} · 최근 실행 기록 {len(rows)}건:')
     for r in rows:
         print(f'  {r[0]}  시작 {r[1]}  끝 {r[2]}  {r[3]}  +{r[4]} 확정 {r[5]} 오류 {r[6]}')
     todays = [r for r in rows if _local_date(r[1]) == today]
     if not todays:
-        print(f'\n>> 실패 — 오늘({today}) 시작한 실행 기록이 없다. 파이프라인이 시작조차 못 했다 '
+        print(f'\n>> 실패 — 판정일({today}) 에 시작한 실행 기록이 없다. 파이프라인이 시작조차 못 했다 '
               f'(시작하면 running 행을 먼저 커밋한다). 그날 단계 로그를 본다.')
         return 1
     bad = [r for r in todays if r[3] not in OK_STATUS]
     if bad:
-        print(f'\n>> 실패 — 오늘 실행 {len(todays)}건 중 {len(bad)}건이 '
+        print(f'\n>> 실패 — 판정일 실행 {len(todays)}건 중 {len(bad)}건이 '
               f'{[r[3] for r in bad]} 로 끝났다(running 은 죽은 채 남은 것).')
         return 1
-    print(f'\n>> 통과 — 오늘 실행 {len(todays)}건 · {[r[3] for r in todays]}')
+    print(f'\n>> 통과 — 판정일 실행 {len(todays)}건 · {[r[3] for r in todays]}')
     return 0
 
 
