@@ -307,3 +307,67 @@ def days_to_bars(days):
         return max(0, int(days) * 5 // 7)
     except (TypeError, ValueError):
         return 0
+
+
+# ── 손절 폭 좁히기의 대가 (라운드 293) ─────────────────────────────────
+#   사용자가 2026-09-15 에 *"노출해줘, 대가 같이 적고"* 로 골랐다. 그 대가를 **손으로
+#   적지 않는다** — 라운드 21 사전등록이 만들고 라운드 258 이 지금 원장으로 다시 채운
+#   산출물(`.portfolio/loss_control_r21.json`)을 읽어 그 자리에서 문장으로 만든다
+#   (손으로 적은 수는 낡는다 · R285 와 같은 자리). 못 읽으면 None — 지어내지 않는다(§3).
+def stop_tighten_cost(art, mult):
+    """{split: {'reach_delta','ev_delta','avg_loss_delta','worst_delta','n'}} 또는 None.
+
+    art: loss_control_r21.json 을 읽은 dict · mult: 견줄 배수(예: 0.6).
+    기준선은 같은 표의 **1.0** 이다 — 다른 데서 가져오지 않는다(§4).
+    """
+    tbl = (art or {}).get('table') or {}
+    key, base = f'{float(mult):g}', '1'
+    out = {}
+    for sp, row in tbl.items():
+        if not isinstance(row, dict):
+            continue
+        a = row.get(key) or row.get(f'{float(mult):.1f}')
+        b = row.get(base) or row.get('1.0')
+        if not (isinstance(a, dict) and isinstance(b, dict)):
+            continue
+        try:
+            out[sp] = {
+                'n': a.get('n'),
+                'reach_delta': float(a['reach']) - float(b['reach']),
+                'ev_delta': float(a['ev']) - float(b['ev']),
+                'avg_loss_delta': float(a['avg_loss']) - float(b['avg_loss']),
+                'worst_delta': float(a['worst']) - float(b['worst']),
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out or None
+
+
+def stop_tighten_cost_line(cost, mult):
+    """대가 한 줄 — **좋은 쪽만 쓰지 않는다**(§9). 줄어드는 손실과 잃는 도달률을
+    같은 문장에 넣고, 구간별로 적는다. 못 세면 그 사실을 돌려준다(§3)."""
+    if not cost:
+        return ('손절을 좁혔을 때의 대가를 지금 셀 수 없습니다 — 실측 산출물을 '
+                '읽지 못했습니다. 켜기 전에 대가를 확인할 수 없으므로 '
+                '권하지 않습니다.')
+    parts = []
+    for sp, label in (('train', '학습'), ('valid', '검증'), ('blind', '실전')):
+        d = cost.get(sp)
+        if not d:
+            continue
+        # 평균 손실은 **음수**다 — 차이가 양수면 손실 폭이 *줄어든 것*이다.
+        #   `+1.98%p` 로 적으면 손실이 **늘어난 것처럼** 읽힌다(§9 는 좋은 쪽만
+        #   쓰지 말라는 규칙이지, 나쁜 쪽으로 읽히게 쓰라는 규칙이 아니다).
+        _al = d['avg_loss_delta']
+        _alw = (f"평균 손실 폭 {abs(_al):.2f}%p {'축소' if _al > 0 else '확대'}"
+                if _al else "평균 손실 폭 그대로")
+        parts.append(f"{label} 목표도달률 {d['reach_delta']:+.1f}%p · "
+                     f"{_alw}(n {d['n']:,})")
+    if not parts:
+        return ('손절을 좁혔을 때의 대가를 구간별로 세지 못했습니다 — 산출물에 '
+                '견줄 칸이 없습니다.')
+    return (f'손절 폭을 {float(mult):g}배로 좁히면 **손실은 줄고 목표도달률은 '
+            f'떨어집니다** — ' + ' · '.join(parts)
+            + '. 이것은 **개선이 아니라 맞바꿈**입니다. 기본값으로는 사전등록 기준'
+              '(기대값 · 도달률 −5%p 이내)을 세 구간 모두에서 통과하지 못해 '
+              '기각된 값이고, 판정·점수·추천에는 들어가지 않습니다.')

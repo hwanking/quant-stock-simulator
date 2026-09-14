@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.14.2",
+  "model": "v2026.09.15.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.15.1",
+   "previous": "v2026.09.14.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "2026-09-15 결정 — 손절 폭 좁게(0.6배)를 보유자 손절 한 칸에만 거는 선택지로 노출한다. 기본은 현행이고 대가를 같은 카드에 항상 적는다",
+   "note": "기본값·산식·문턱·게이트·판정·신규 매수자 값 불변 · 배수는 R21 사전등록 격자값 · 근거 docs/RESULT_R293_STOP_TIGHTEN_OPTION.md",
+   "created_at": "2026-09-14T18:18:11+00:00",
+   "effective_from": "2026-09-15"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

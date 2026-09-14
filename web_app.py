@@ -2418,8 +2418,12 @@ def _core_of_snapshot(snp):
     if _vd is None:
         _vd = q_engine.build_final_verdict(snp)
     _nx224 = _na224.build(_fs, (snp or {}).get('tech_df'), _fs.get('current_price'), _vd)
+    # 라운드 293 — 보유자 손절 토글은 **여기도 같이** 넘긴다. 안 넘기면 포트폴리오·
+    #   관심종목이 상세 화면과 다른 손절을 띄운다(§4 — 값이 갈라지는 자리).
     return _vc224.build(_fs, verdict=_vd, price_axes=_fs.get('price_axes'),
-                        next_action=_nx224, realtime_price=_fs.get('current_price'))
+                        next_action=_nx224, realtime_price=_fs.get('current_price'),
+                        tighten_hold_stop=bool(
+                            st.session_state.get('stop_tighten_293')))
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -7587,9 +7591,22 @@ verdict = q_engine.build_final_verdict(snap)
 import next_action as _na
 import verdict_core as _vcore
 _NA = _na.build(four_scores, tech_df, realtime_price, verdict)
+
+
+# ── 손절 폭 좁게 — 사용자가 고르는 선택지 (라운드 293 · 2026-09-15 결정) ──
+#   일정 문서 셋이 이 날로 잡아 둔 룰북 결정에서 사용자가 *"노출해줘, 대가 같이
+#   적고"* 를 골랐다. 기본은 **현행(끔)** 이고, 켜도 바뀌는 것은 **보유자 손절 한
+#   칸**뿐이다 — 판정·점수·게이트·신규 매수자 값은 안 건드린다. 배수를 곱하는 자리는
+#   `verdict_core` **한 곳**이고 화면은 그 결과를 읽기만 한다(§4).
+def _tighten_on():
+    """세션 토글 — 읽는 곳이 여럿이라 한 함수로 둔다(쓰기만 하는 키를 안 만든다 · R164)."""
+    return bool(st.session_state.get('stop_tighten_293'))
+
+
 CORE = _vcore.build(four_scores, verdict=verdict,
                     price_axes=four_scores.get('price_axes'),
-                    next_action=_NA, realtime_price=realtime_price)
+                    next_action=_NA, realtime_price=realtime_price,
+                    tighten_hold_stop=_tighten_on())
 
 # ── 관심종목 값 채우기 (라운드 141) ──────────────────────────────────
 # 사용자 요청: 관심종목에 목표 매수가·1차·2차 목표·적정가를 **가져온다.**
@@ -8320,6 +8337,40 @@ st.markdown(f"""
     DeMARK 는 <b>시점</b> 신호이며 진입 기준가(<b>가격</b> 기준)와 함께 볼 때만 의미가 있습니다.</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ── 손절 폭 좁게 — 선택지 (라운드 293 · 2026-09-15 사용자 결정) ──────────
+#   위 카드가 하나의 HTML 덩어리라 위젯을 그 안에 못 넣는다(R239 가 같은 자리에서
+#   걸렸다) — **바로 아래**에 붙여 같은 카드의 일부로 읽히게 한다.
+#   ⚠️ 대가는 **켜야 보이는 것이 아니라 늘 보인다.** 켤지 말지를 정하기 전에 대가를
+#   알아야 하기 때문이다(§9 — 좋은 쪽만 쓰지 않는다). 수는 손으로 안 적고 실측
+#   산출물에서 그 자리에서 만든다(손으로 적은 수는 낡는다).
+_st293_c1, _st293_c2 = st.columns([1, 3])
+with _st293_c1:
+    st.toggle(f"손절 폭 좁게 ({_vcore.STOP_TIGHTEN_MULT:g}배)",
+              key='stop_tighten_293',
+              help="보유자 손절 한 칸만 바뀝니다. 판정·점수·추천·신규 매수자 "
+                   "가격에는 들어가지 않습니다.")
+with _st293_c2:
+    try:
+        import json as _json293
+        import ledger_view as _lv293
+        _art293 = None
+        _p293 = _artifact_path('loss_control_r21.json')
+        if _p293:
+            with _open_artifact(_p293) as _f293:
+                _art293 = _json293.load(_f293)
+        _cost293 = _lv293.stop_tighten_cost(_art293, _vcore.STOP_TIGHTEN_MULT)
+        st.caption(_md_safe(_lv293.stop_tighten_cost_line(
+            _cost293, _vcore.STOP_TIGHTEN_MULT)))
+    except Exception as _e293:                                 # noqa: BLE001
+        st.caption(f"손절 좁히기의 대가를 읽지 못했습니다 — "
+                   f"{type(_e293).__name__}. 대가를 모르는 채로 켜지 마세요.")
+# 켜 두었으면 **무엇이 바뀌었는지**를 그 자리에서 말한다 — 배수는 엔진이 낸 값을
+#   읽는다(화면이 다시 곱하지 않는다 · §4).
+if CORE.get('hold_stop_mult') and CORE['hold_stop_mult'] != 1.0:
+    st.caption(f"지금 **켜져 있습니다** — 위 '버틸 수 없는 가격'은 현재가까지의 "
+               f"거리를 {CORE['hold_stop_mult']:g}배로 좁힌 값입니다. "
+               f"팔 가격·판정·점수·추천은 그대로입니다.")
 
 # ── 알림 감시 등록·해제 ─────────────────────────────────────────────────
 # 관망 조건을 저장해 두면 다음에 이 종목을 열 때 오늘 값으로 다시 재서

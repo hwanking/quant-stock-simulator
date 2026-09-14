@@ -110,6 +110,22 @@ MIN_TURNOVER = 3e8      #: 20일 평균 거래대금 하한 (3억 · 저유동�
 #: **게이트는 σ 문턱 하나만 쓴다.** 확률은 화면 표시용이다 — 같은 것을 두 번
 #: 거르면 이유 없이 두 배로 엄격해진다.
 HORIZON = 20
+
+#: 손절 폭 좁히기 — **사용자가 고르는 선택지**이고 기본값이 아니다 (라운드 293 · 2026-09-15).
+#:
+#: 이 수는 새로 고른 것이 **아니다** — 라운드 21 의 사전등록이 배수 0.5~1.0 격자를 재고
+#: 그중 0.6 을 대표로 발표한 값이고, 라운드 258 이 지금 원장(경로 있는 매수권 6,085건)으로
+#: **한 글자도 안 고치고** 다시 쟀다. 결정 문서가 *"0.6 을 다른 수로 바꾸지 않는다 —
+#: 그건 새 문턱이다(§2)"* 라고 못 박아 두었다.
+#:
+#: ⚠️ **기본값으로는 기각된 값이다.** 세 구간 어느 배수도 사전등록 기준(③ 기대값 ④ 목표
+#: 도달률 −5%p 이내)을 만족하지 못했다 — 손실 폭이 약 3분의 1 주는 대신 목표도달률이
+#: 10~15%p 떨어진다. 그래서 **기본은 1.0(현행)** 이고, 켜는 것은 사람의 취향 선택이며,
+#: 켜면 **같은 카드에 그 대가를 적는다**(§9 — 좋은 쪽만 쓰지 않는다).
+#:
+#: ⚠️ 적용 범위는 **보유자 손절 한 칸**뿐이다. 판정·점수·게이트·신규 매수자 값(new_stop)
+#: 에는 안 들어간다 — 들어가면 그건 선택지가 아니라 규칙 변경이다.
+STOP_TIGHTEN_MULT = 0.6
 #: 실측 대조 (라운드 35): 모형이 낸 확률과 원장 실측 체결률
 #:   1.0σ 모형 82% vs 실측 78.3%  ·  2.0σ 모형 47% vs 실측 60.3%
 #: 모형은 깊은 쪽에서 실제보다 비관적이다(추세·변동성 군집을 무시하므로).
@@ -195,9 +211,14 @@ def fill_probability(entry, price, vol_20, horizon=HORIZON):
 
 
 def build(four_scores, verdict=None, price_axes=None, next_action=None,
-          realtime_price=None):
+          realtime_price=None, tighten_hold_stop=False):
     """
     모든 화면이 공유할 단일 판정.
+
+    tighten_hold_stop — **보유자 손절만** 좁힌다(라운드 293 · 기본 False = 현행).
+      사용자가 화면에서 고른 선택지를 여기 한 곳으로 넘긴다(§4 — 화면마다 배수를
+      따로 곱하면 값이 갈라진다). 판정·점수·게이트·`new_stop` 은 **안 건드린다.**
+      쓴 배수는 `hold_stop_mult` 로 함께 내보내 화면이 **읽기만** 한다(R236).
 
     반환 키 (사용자 사양 §6 전부):
       action · recommended · buy_zone · pullback_zone · breakout_price ·
@@ -240,6 +261,13 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     # ── ② 보유자 값은 별도 키 (신규 매수자와 절대 섞지 않는다) ────────
     hold_trim = _f(fs.get('target_tech_1st'))
     hold_stop = _f(fs.get('stop_loss_price'))
+    # 라운드 293 — 사용자가 고른 '손절 폭 좁게'. **여기 한 곳**에서만 곱한다(§4).
+    #   가격이 아니라 **현재가까지의 거리**를 좁힌다 — 손절은 현재가 아래에 있고
+    #   '좁힌다'는 그 간격을 줄인다는 뜻이다. 현재가를 모르면 손대지 않는다(§3).
+    hold_stop_mult = 1.0
+    if tighten_hold_stop and px and hold_stop is not None and hold_stop < px:
+        hold_stop = px - (px - hold_stop) * STOP_TIGHTEN_MULT
+        hold_stop_mult = STOP_TIGHTEN_MULT
     if px:
         if hold_stop is not None and hold_stop >= px:
             hold_stop = None
@@ -445,6 +473,9 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         new_target=tgt, new_stop=stop, rr=rr,
         # 보유자 가격 (절대 섞지 않는다)
         hold_trim=hold_trim, hold_stop=hold_stop,
+        # 라운드 293 — 이 값에 어느 배수가 걸렸는지 **엔진이 말한다.** 화면이 배수를
+        #   다시 곱하거나 다시 적지 않게(§4 · R236). 안 켰으면 1.0 이다.
+        hold_stop_mult=hold_stop_mult,
         # 판단 부가
         horizon_days=int(_f(fs.get('horizon_days')) or 20),
         reach_prob=fill_p, reach_label=reach, reach_sigma=sigma,

@@ -24397,6 +24397,92 @@ check("보유 칩 제목이 표 차례와 같은 말을 한다 — '급한 순'�
       '지금 할 일 (손댈 수 있는 순)' in _w305
       and '지금 할 일 (급한 순)' not in _w305)
 
+print()
+print("§306 R293 — 손절 좁히기는 **선택지**다 · 기본 불변 · 대가는 늘 같은 카드에 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   일정 문서 셋이 2026-09-15 로 잡아 둔 룰북 결정에서 사용자가 **(a) 노출**을 골랐다
+#   (*"노출해줘 대가 같이 적고"*). 이 절이 지키는 것은 **그 결정의 조건들**이다:
+#     ① 기본값은 안 바뀐다 — 기각된 값을 기본으로 삼지 않는다
+#     ② 켜도 바뀌는 것은 **보유자 손절 한 칸**뿐이다(판정·점수·게이트·신규값 불변)
+#     ③ 배수는 라운드 21 사전등록 격자의 0.6 **그대로** — 결정 문서가 *"0.6 을 다른
+#        수로 바꾸지 않는다 · 그건 새 문턱이다"* 라고 못 박았다
+#     ④ 대가는 **켜야 보이는 것이 아니라 늘 보인다** — 켤지 정하기 전에 알아야 한다
+#     ⑤ 대가 수는 **손으로 안 적는다** — 실측 산출물에서 그 자리에서 만든다
+import verdict_core as _vc306
+import ledger_view as _lv306
+_w306 = _read148(_os.path.join(PROJ, 'web_app.py'))
+
+# ① 기본은 꺼짐 — 안 켜면 종전과 **같은 값**이다
+_fs306 = {'current_price': 10000.0, 'stop_loss_price': 9000.0,
+          'target_tech_1st': 11000.0}
+_a306 = _vc306.build(_fs306)
+_b306 = _vc306.build(_fs306, tighten_hold_stop=True)
+check("기본은 꺼짐 — 안 켜면 배수 1.0 이고 보유자 손절이 엔진 값 그대로다",
+      _a306.get('hold_stop_mult') == 1.0 and _a306.get('hold_stop') == 9000.0,
+      f"mult={_a306.get('hold_stop_mult')} · stop={_a306.get('hold_stop')}")
+
+# ② 켜면 **보유자 손절만** 바뀐다 — 나머지가 하나라도 바뀌면 선택지가 아니라 규칙 변경이다
+_moved306 = sorted(k for k in set(_a306) | set(_b306)
+                   if k not in ('hold_stop', 'hold_stop_mult')
+                   and _a306.get(k) != _b306.get(k))
+check("켜도 **보유자 손절 한 칸**만 바뀐다 (판정·점수·게이트·신규 매수자 값 불변)",
+      not _moved306, str(_moved306), scanned=len(set(_a306) | set(_b306)))
+check("켜면 손절이 현재가 쪽으로 좁아진다 — 거리에 배수를 건다(가격에 거는 것이 아니다)",
+      _b306.get('hold_stop') == 10000.0 - (10000.0 - 9000.0) * _vc306.STOP_TIGHTEN_MULT
+      and _b306.get('hold_stop_mult') == _vc306.STOP_TIGHTEN_MULT,
+      f"{_a306.get('hold_stop')} → {_b306.get('hold_stop')}")
+check("현재가를 모르면 손대지 않는다 (§3 — 못 잰 값으로 값을 만들지 않는다)",
+      _vc306.build({'stop_loss_price': 9000.0},
+                   tighten_hold_stop=True).get('hold_stop_mult') == 1.0)
+
+# ③ 배수는 R21 격자값 그대로 — 새 문턱이 아니다
+check("배수가 라운드 21 사전등록 격자의 값이다 (새 문턱을 만들지 않았다 · §2)",
+      _vc306.STOP_TIGHTEN_MULT == 0.6)
+_dec306 = _read148(_os.path.join(PROJ, 'docs',
+                                 'DECISION_R257_STOP_TIGHTEN_EXPOSURE.md'))
+check("결정 문서가 '0.6 을 다른 수로 바꾸지 않는다'를 적어 두었다 (그 약속을 지킨다)",
+      '0.6 을 다른 수로 바꾸지 않는다' in _dec306, f'{len(_dec306)}자')
+
+# ④⑤ 대가 — 늘 보이고, 실측에서 나오고, 좋은 쪽만 쓰지 않는다
+_i306 = _w306.index("st.toggle(f\"손절 폭 좁게")
+_blk306 = _w306[_i306:_w306.index('CORE.get(\'hold_stop_mult\')', _i306)]
+check("대가 문구가 토글과 **같은 자리**에 있고 켜짐 여부로 감싸여 있지 않다 (늘 보인다)",
+      'stop_tighten_cost_line' in _blk306 and 'if _tighten_on()' not in _blk306
+      and "if st.session_state.get('stop_tighten_293')" not in _blk306,
+      f'{len(_blk306)}자')
+check("대가 수를 화면이 손으로 적지 않는다 — 산출물을 읽어 그 자리에서 만든다",
+      "_artifact_path('loss_control_r21.json')" in _w306
+      and '11%p' not in _blk306 and '10~15%p' not in _blk306)
+import json as _json306
+_p306 = _os.path.join(PROJ, '.portfolio', 'loss_control_r21.json')
+_art306 = None
+if _os.path.exists(_p306):
+    with open(_p306, encoding='utf-8') as _f306:
+        _art306 = _json306.load(_f306)
+_cost306 = _lv306.stop_tighten_cost(_art306, _vc306.STOP_TIGHTEN_MULT)
+check("산출물에서 세 구간의 대가를 실제로 읽어 냈다 (0개를 재고 통과하지 않는다)",
+      bool(_cost306) and len(_cost306) >= 3,
+      str(sorted((_cost306 or {}).keys())), scanned=len(_cost306 or {}))
+_line306 = _lv306.stop_tighten_cost_line(_cost306, _vc306.STOP_TIGHTEN_MULT)
+check("대가 문장이 **잃는 것**을 말한다 — 좋은 쪽만 쓰지 않는다 (§9)",
+      '목표도달률' in _line306 and '맞바꿈' in _line306
+      and ('기각' in _line306), _line306[:90])
+check("대가 문장이 '평균 손실 +N%p' 로 손실이 **늘어난 것처럼** 읽히지 않는다",
+      '평균 손실 폭' in _line306 and '축소' in _line306, _line306[:120])
+check("못 읽으면 그 사실을 말하고 권하지 않는다 (§3 — 0 이나 빈 칸으로 두지 않는다)",
+      '읽지 못했습니다' in _lv306.stop_tighten_cost_line(None, 0.6))
+
+# ⑥ 배수를 곱하는 자리는 **한 곳**이다 (§4 — 화면마다 곱하면 값이 갈라진다)
+check("배수를 곱하는 자리가 verdict_core 한 곳이다 — 화면은 읽기만 한다",
+      _read148(_os.path.join(PROJ, 'verdict_core.py')).count(
+          '* STOP_TIGHTEN_MULT') == 1
+      and 'STOP_TIGHTEN_MULT' not in _w306.replace(
+          '_vcore.STOP_TIGHTEN_MULT', ''))
+check("두 호출부가 같은 토글을 넘긴다 — 상세와 포트폴리오가 다른 손절을 띄우지 않는다",
+      _w306.count('tighten_hold_stop=') == 2
+      and "st.session_state.get('stop_tighten_293')" in _w306)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
