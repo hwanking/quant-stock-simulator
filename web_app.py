@@ -1790,6 +1790,12 @@ _NAV_SUB = [
         #   종전에는 '오늘의 시장'에 있었다(본문 다섯 번째였을 때).
         {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
          'href': '#nav-updates'},
+        # 라운드 287 — 교차검증 칸을 페이지 맨 아래로 내렸다. 앵커만 두고 메뉴에
+        #   안 넣으면 **아무도 못 가는 절**이 된다(라운드 122·124 의 거울상 —
+        #   회귀가 실제로 그렇게 잡았다). 이 칸이 재는 것은 시세의 정합이므로
+        #   '검증과 이력' 이 제자리다.
+        {'key': 'crossval', 'label': '시세 교차검증', 'icon': 'sliders',
+         'href': '#nav-crossval'},
     ]},
     # 도움 — 본문 맨 끝 (16)
     {'title': '5. 도움', 'items': [
@@ -3394,9 +3400,12 @@ st.markdown(
 # --- 종목 검색기 렌더링 ---
 if st.session_state.get('show_screener', False):
     _uk.spacer(28)
-    st.subheader("네이버·다음 실시간 시세 교차검증 상태 (Cross-Validation)")
-    st.caption("※ 네이버증권과 다음금융은 현재 공식 API가 아닌 웹 스크래핑/폴링 방식으로 연결되어 있으므로, 2차 교차검증 출처로만 사용됩니다.")
-    
+    # ⚠️ 라운드 287 — 사용자: *"교차검증 상태는 맨밑으로."* 그런데 이 덩어리는
+    #   **보여 주는 칸이자 게이트**다 — 아래 `if not comparable / elif diff > 1.0` 이
+    #   스캔을 중단시키고, 추천 목록이 그 `else` 안에 들어 있다. 통째로 내리면
+    #   **안전장치가 같이 내려간다**(R247 이 신선도 검사를 옮기며 2시간 16분을 잃은
+    #   그 모양). 그래서 **부르는 것과 막는 것은 여기 그대로 두고**, 두 카드의 HTML 만
+    #   변수에 담아 페이지 맨 아래에서 그린다. 값·판정·중단 조건 불변.
     with st.spinner("네이버·다음 실시간 시세 조회 및 정합성 검증 중..."):
         cv_data = engine_init.verify_realtime_sources(target_ticker)
 
@@ -3408,9 +3417,10 @@ if st.session_state.get('show_screener', False):
     nv_col = "#35C98B" if cv_nv['ok'] else "#ff453a"
     dm_col = "#35C98B" if (cv_dm['ok'] and "오류" not in cv_dm['cross_val']) else "#ff453a"
 
-    cv_col1, cv_col2 = st.columns(2)
-    with cv_col1:
-        st.markdown(f"""
+    # 아래 두 카드는 **그리지 않고 담아 둔다** — 맨 아래에서 그린다(라운드 287).
+    _cv_panel_287 = []
+    if True:
+        _cv_panel_287.append(f"""
         <div style='background:#161D2A; padding:16px; border-radius:10px; '>
             <h4 style='color:{nv_col}; margin:0 0 8px 0;'>네이버증권 (Naver Finance)</h4>
             <p style='margin:2px 0; font-size:13px; color:#9DAABC;'>- 연결 상태: <b>{cv_nv['status']}</b></p>
@@ -3420,9 +3430,8 @@ if st.session_state.get('show_screener', False):
             <p style='margin:2px 0; font-size:13px; color:#9DAABC;'>- 실측 응답시간: {cv_nv['delay_ms']}ms</p>
             <p style='margin:2px 0; font-size:13px; color:#F2B84B;'>- API 인증: {cv_nv['is_official']}</p>
         </div>
-        """, unsafe_allow_html=True)
-    with cv_col2:
-        st.markdown(f"""
+        """)
+        _cv_panel_287.append(f"""
         <div style='background:#161D2A; padding:16px; border-radius:10px; '>
             <h4 style='color:{dm_col}; margin:0 0 8px 0;'>다음금융 (Daum Finance)</h4>
             <p style='margin:2px 0; font-size:13px; color:#9DAABC;'>- 연결 상태: <b>{cv_dm['status']}</b></p>
@@ -3432,7 +3441,8 @@ if st.session_state.get('show_screener', False):
             <p style='margin:2px 0; font-size:13px; color:#9DAABC;'>- 실측 응답시간: {cv_dm['delay_ms']}ms</p>
             <p style='margin:2px 0; font-size:13px; color:#F2B84B;'>- API 인증: {cv_dm['is_official']}</p>
         </div>
-        """, unsafe_allow_html=True)
+        """)
+        st.session_state['cv_panel_287'] = _cv_panel_287
 
     if not cv_data.get('comparable'):
         st.error("**실시간 시세 교차검증 불가**: 네이버·다음 중 최소 한 곳에서 현재가를 수신하지 못했습니다. "
@@ -5566,7 +5576,12 @@ else:
     #   (새 문턱 없음 · §2-6) 같은 자리 안에서는 이름순이다. **점수순이 아니다** — 같은 날
     #   종목을 점수로 세우는 것은 정보가 없다고 이 저장소가 이미 쟀다.
     #   보유 중은 이름순 그대로 둔다 — 가진 것은 이름으로 찾는다.
-    _wl_owned.sort(key=lambda it: str(it[1].get('name') or ''))
+    # 라운드 287 — 사용자: *"보유중에서 진짜 필요없지?"* **재 보니 필요했다.**
+    #   그날 보유 16행 중 **정리 검토가 2행**이었고 이름순이라 하나가 **10번째**에
+    #   묻혀 있었다(2026-09-14 실측). 파는 쪽 판단은 늦으면 값을 잃으므로 오히려
+    #   미보유보다 급하다 — 같은 방식으로 세운다(순서표는 `_WL_SELL_RANK` 그대로).
+    _wl_owned.sort(key=lambda it: (_wl_rank(_WL_SELL_RANK, _wl_pre[it[0]][1]),
+                                   str(it[1].get('name') or '')))
     _wl_free.sort(key=lambda it: (_wl_rank(_WL_BUY_RANK, _wl_pre[it[0]][1]),
                                   str(it[1].get('name') or '')))
 
@@ -5592,7 +5607,8 @@ else:
         return " · ".join(_parts) if _parts else '판단할 값이 아직 없습니다'
 
     _wl_groups = [('보유 중', _wl_owned,
-                   '매입가를 적은 종목 — 보유자 기준 · 이름순', _WL_SELL_RANK,
+                   '매입가를 적은 종목 — 보유자 기준 · 정리가 급한 순'
+                   '(같은 자리는 이름순)', _WL_SELL_RANK,
                    '정리가 급한 순'),
                   ('미보유', _wl_free,
                    '매입가가 없는 종목 — 신규 매수 기준 · 살 자리가 가까운 순'
@@ -5611,14 +5627,15 @@ else:
             unsafe_allow_html=True)
         # 우선순위 한 줄 (라운드 214) — 표는 이름순, 급한 것은 여기서 먼저 읽는다
         st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))
-        if _gorder is _WL_BUY_RANK:
-            # 라운드 286 — '위에 있는 것이 좋은 종목'으로 읽히면 안 된다. 이 차례는
-            # **살 수 있는 자리인가**의 갈래이지 종목의 우열이 아니다 — 같은 날 종목을
-            # 점수로 세우는 데 정보가 없다는 것은 이미 재 두었다(표시 전용 · 문턱 없음).
-            st.caption("위에 있을수록 **지금 손댈 수 있는 자리**라는 뜻입니다 — "
-                       "종목의 좋고 나쁨을 매긴 순위가 아닙니다. 같은 날 종목을 점수로 "
-                       "세우는 것에는 정보가 없었습니다(개발 구간 166,132건 · 기준일 "
-                       "2,609일 · 2026-08-16 실측).")
+        # 라운드 286·287 — '위에 있는 것이 좋은 종목'으로 읽히면 안 된다. 이 차례는
+        # **지금 손볼 자리인가**의 갈래이지 종목의 우열이 아니다 — 같은 날 종목을
+        # 점수로 세우는 데 정보가 없다는 것은 이미 재 두었다(표시 전용 · 문턱 없음).
+        st.caption(("위에 있을수록 **지금 손댈 수 있는 자리**라는 뜻입니다"
+                    if _gorder is _WL_BUY_RANK else
+                    "위에 있을수록 **지금 손봐야 할 자리**라는 뜻입니다")
+                   + " — 종목의 좋고 나쁨을 매긴 순위가 아닙니다. 같은 날 종목을 점수로 "
+                     "세우는 것에는 정보가 없었습니다(개발 구간 166,132건 · 기준일 "
+                     "2,609일 · 2026-08-16 실측).")
         if not _wl_edit:
             # ── 라운드 229 — 보기 모드: HTML 표 하나 (행 ≈ 36px). 값의 출처는 편집 모드와
             #   같다(_wl_pre · 저장된 매입가·수량 · _wl_fair_conf · _wl_pnl · watch_action).
@@ -12301,6 +12318,24 @@ if _uh_home and _uh_home.get('days'):
                 '카테고리': u['category'], '내용': u['subject'],
             } for u in _sel_upd[40:]]), width='stretch',
                 hide_index=True)
+
+
+# ── 실시간 시세 교차검증 상태 — 맨 아래 (라운드 287 · 사용자 요청) ──────────
+# 부르는 것과 **막는 것**은 위(스캔 앞)에 그대로 있다 — 여기 있는 것은 **보여 주는
+# 칸**뿐이다. 두 출처가 안 맞으면 스캔은 위에서 이미 멈춘다(값·중단 조건 불변).
+_cv_show_287 = st.session_state.get('cv_panel_287')
+if _cv_show_287:
+    _uk.spacer(28)
+    st.markdown('<div id="nav-crossval"></div>', unsafe_allow_html=True)
+    st.markdown("### 네이버·다음 실시간 시세 교차검증 상태")
+    st.caption("두 곳이 안 맞으면 위쪽 스캔이 그 자리에서 멈춥니다 — 이 칸은 그때 "
+               "무엇이 어긋났는지 보는 자리입니다. 네이버증권·다음금융은 공식 API가 "
+               "아니라 웹 조회로 연결돼 있어 **2차 대조 출처로만** 씁니다.")
+    _cv_c1_287, _cv_c2_287 = st.columns(2)
+    with _cv_c1_287:
+        st.markdown(_cv_show_287[0], unsafe_allow_html=True)
+    with _cv_c2_287:
+        st.markdown(_cv_show_287[1], unsafe_allow_html=True)
 
 
 # ── 고객센터 — 안 될 때 여기부터 (실제 대처법만, 빈 약속 금지) ───────────────
