@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.11.1",
+  "model": "v2026.09.14.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.14.1",
+   "previous": "v2026.09.11.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "'산출 불가' 요약 줄이 관점 이름만 적고 사유를 버리고 있었다 — 엔진이 관점마다 이미 내던 사유(reasons[0])를 같은 줄에 싣는다",
+   "note": "값·문턱·가중치·산식 불변 · 표시 문구만 · 근거 docs/RESULT_R289_REASON_BESIDE_THE_BLANK.md",
+   "created_at": "2026-09-14T11:58:05+00:00",
+   "effective_from": "2026-09-14"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

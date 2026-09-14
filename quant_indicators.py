@@ -1869,9 +1869,17 @@ class QuantIndicatorsEngine:
             summary.append("신호 이견 화해: " + str(_n))
         if vetoes:
             summary.append("거부 조건 " + str(len(vetoes)) + "건이 매수 결론을 막고 있습니다")
-        na = [t['label'] for t in tabs if t['score'] is None]
+        # ⚠️ 라운드 289 — 종전엔 **이름만** 나열했다("산출 불가 관점: A, B").
+        #   이름은 *무엇이* 비었는지만 말하고 *왜* 는 말하지 않는다. 그런데 이
+        #   함수는 관점마다 사유를 **이미 내고 있다**(`add(..., reasons=[…])`) —
+        #   결론과 함께 낸 사유가 이 한 줄에서 버려지고 있었다(라운드 240 과 같은
+        #   모양 · §3 "못 낸 값 옆에는 이유를 쓴다"). 옮겨 적는다.
+        #   사유 문장은 **손으로 쓰지 않는다** — 그 관점이 낸 첫 줄 그대로다(§4).
+        na = [t for t in tabs if t['score'] is None]
         if na:
-            summary.append("산출 불가 관점: " + ", ".join(na))
+            summary.append("산출 불가 — " + " · ".join(
+                f"{t['label']}: {(t.get('reasons') or ['사유 미기록'])[0]}"
+                for t in na))
 
         return {
             'headline': headline,
