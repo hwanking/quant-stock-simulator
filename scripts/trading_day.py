@@ -58,6 +58,29 @@ def anchor_day(now=None, max_back=MAX_BACK_DAYS):
     return None
 
 
+def session_end(day):
+    """그 거래일의 **정규장 마감 시각** (지역 시간 · aware datetime) · 못 구하면 None.
+
+    ⚠️ 라운드 294 — 판정일을 옳게 유도해 놓고도 **견주는 쪽**이 틀릴 수 있다.
+      실행 기록 검사가 *"기록의 지역 **날짜**가 판정일과 같은가"* 를 물었는데, 예약
+      지연이 커져 작업이 자정을 넘기면 판정일 2026-09-14 의 파이프라인이 **09-15
+      05:20 KST** 에 시작한다 — 날짜가 안 맞아 *"시작조차 못 했다"* 는 **거짓 실패**가
+      났다(2026-09-15 실측 · 그 실행 기록은 `success` 로 남아 있었다).
+      판정일 D 의 일은 **D 의 장이 끝난 뒤** 벌어지므로, 견줄 것은 날짜가 아니라
+      **`session_end(D) 이후`** 라는 창이다. 마감 시각은 여기서도 다시 안 적는다.
+    """
+    try:
+        from bitemporal_engine import MARKET_CLOSE
+    except Exception:                                          # noqa: BLE001
+        return None
+    try:
+        from datetime import date as _date
+        d = _date.fromisoformat(str(day))
+    except (TypeError, ValueError):
+        return None
+    return datetime.combine(d, MARKET_CLOSE).astimezone()
+
+
 def wall_date():
     """이 프로세스가 실제로 도는 지금의 지역 날짜 — 로그에 판정일과 같이 적는다."""
     return datetime.now().astimezone().date().isoformat()

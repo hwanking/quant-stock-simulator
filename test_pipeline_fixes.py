@@ -24510,6 +24510,72 @@ check("관심종목 저장 두 자리가 **배수 전 값**을 쓴다 (한 곳�
       _w306.count("get('hold_stop_base')") >= 4,
       f"hold_stop_base 참조 {_w306.count(chr(39) + 'hold_stop_base' + chr(39))}회")
 
+print()
+print("§307 R294 — 판정일을 옳게 구해도 **견주는 쪽**이 틀릴 수 있다 · 꼬리 검사는 서로를 인질로 안 잡는다 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 280·283·281 의 첫 시험이던 2026-09-15 클라우드 실행에서 **예산은 통했다** —
+#   케이스 축적·집중 축적·업로드가 처음으로 다 지나갔다(R71c·R247·R253·R280 에서 네 번
+#   죽었던 자리). 그런데 꼬리에서 둘이 나왔다.
+#     ⓐ 실행 기록 검사가 **거짓으로 실패**했다. 판정일 유도는 옳았는데(2026-09-14 ·
+#        R283) 견주기가 *"기록의 지역 **날짜**가 판정일과 같은가"* 였다. 지연이 커져
+#        작업이 자정을 넘기면 판정일 09-14 의 파이프라인이 **09-15 05:20 KST** 에
+#        시작한다 — 날짜가 안 맞아 *"시작조차 못 했다"* 가 나왔다. **그 기록은
+#        `success` 였다.** 판정일 D 의 일은 **D 의 장이 끝난 뒤** 벌어지므로 견줄 것은
+#        날짜가 아니라 **창**이다(`session_end(D)` 이후). 마감 시각은 재사용한다.
+#     ⓑ 그 거짓 실패 때문에 **바로 다음 단계(R272 의 전방 기록부 가드)가 통째로
+#        건너뛰어졌다.** 꼬리 검사를 업로드 뒤에 둔 이유가 *"축적이 인질로 잡히지
+#        않게"* 인데(R247), 정작 **검사끼리 서로를 인질로** 잡고 있었다 — 그것도 가장
+#        필요한 날에. 셋 다 `if: always()` 로 따로 답하게 했다(순서 불변).
+import scripts.trading_day as _td307
+_close307 = _td307.session_end('2026-09-14')
+check("판정일의 장 마감 시각을 유도한다 (마감 시각을 다시 적지 않는다 · §2-6)",
+      _close307 is not None and _close307.hour == 15 and _close307.minute == 30,
+      str(_close307))
+check("못 구하면 None 이다 — 몰래 다른 값으로 안 떨어진다 (§3)",
+      _td307.session_end('말도 안 되는 날짜') is None
+      and _td307.session_end(None) is None)
+
+
+def _after307(iso):
+    from datetime import datetime as _dt
+    try:
+        return _dt.fromisoformat(str(iso)).astimezone() >= _close307
+    except (TypeError, ValueError):
+        return False
+
+
+# 심기 — **클라우드가 실제로 낸 그 값**을 그대로 되돌린다(자정을 넘긴 시작)
+_CASES307 = [
+    ('2026-09-14T20:20:13.268222+00:00', True),   # 실측: 09-15 05:20 KST · success 였다
+    ('2026-09-14T13:00:00+00:00', True),          # 옛 시대 — 같은 날 22:00 KST
+    ('2026-09-14T06:31:00+00:00', True),          # 마감 직후 15:31 KST
+    ('2026-09-14T00:00:00+00:00', False),         # 마감 **전** 09:00 KST — 그날 일이 아니다
+    ('2026-09-13T13:00:00+00:00', False),         # 전날 저녁
+    ('망가진 값', False),
+]
+_bad307 = [i for i, (_iso, _want) in enumerate(_CASES307) if _after307(_iso) != _want]
+check("심기 — 자정을 넘긴 시작을 잡고, 마감 전·전날은 여전히 안 잡는다 (양방향)",
+      not _bad307, str(_bad307), scanned=len(_CASES307))
+_src307 = _read148(_os.path.join(PROJ, 'scripts', 'pipeline_run_check.py'))
+check("실행 기록 검사가 **날짜 같기**가 아니라 **마감 뒤 창**으로 견준다",
+      'session_end(' in _src307 and '_started_after_close' in _src307
+      and "_local_date(r[1]) == today" not in _src307)
+# ⓑ 꼬리 검사 셋이 서로를 인질로 잡지 않는다
+_wf307 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_tail307 = ('관측 연구 신선도 검사', '일일 개선 파이프라인 실행 기록 검사',
+            '전방 기록부에 오늘 행이 있는지 검사 (거래일 0 = 실패)')
+_noalways307 = []
+for _n307 in _tail307:
+    _i307 = _wf307.index(f'- name: {_n307}')
+    if 'if: always()' not in _wf307[_i307:_i307 + 260]:
+        _noalways307.append(_n307)
+check("꼬리 검사 셋이 **따로 답한다** — 하나가 실패해도 나머지가 건너뛰지 않는다 (R247 의 규칙을 검사끼리도)",
+      not _noalways307, str(_noalways307), scanned=len(_tail307))
+check("순서는 안 건드렸다 — 꼬리 검사는 여전히 업로드 **뒤**다 (R247 이 여기서 2시간 16분을 잃었다)",
+      _wf307.index('- name: 새 스냅샷 올리기')
+      < _wf307.index('- name: 일일 개선 파이프라인 실행 기록 검사'))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

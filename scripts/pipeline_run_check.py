@@ -41,7 +41,7 @@ if PROJ not in sys.path:
     sys.path.insert(0, PROJ)
 from improvement.database import DEFAULT_DB_PATH                # noqa: E402
 from improvement.case_tracker import is_non_trading_date          # noqa: E402
-from scripts.trading_day import anchor_day, wall_date             # noqa: E402
+from scripts.trading_day import anchor_day, session_end, wall_date  # noqa: E402
 
 OK_STATUS = ('success', 'partial_success')
 
@@ -87,10 +87,29 @@ def check(db_path=DEFAULT_DB_PATH, today=None):
     print(f'판정일 {today} · 마지막으로 장이 끝난 거래일{_note} · 최근 실행 기록 {len(rows)}건:')
     for r in rows:
         print(f'  {r[0]}  시작 {r[1]}  끝 {r[2]}  {r[3]}  +{r[4]} 확정 {r[5]} 오류 {r[6]}')
-    todays = [r for r in rows if _local_date(r[1]) == today]
+    # ⚠️ 라운드 294 — 종전엔 *"기록의 지역 **날짜**가 판정일과 같은가"* 를 물었다. 판정일
+    #   유도는 옳았는데(R283) **견주는 쪽**이 틀렸다: 예약 지연이 커져 작업이 자정을 넘기면
+    #   판정일 2026-09-14 의 파이프라인이 **09-15 05:20 KST** 에 시작한다 — 날짜가 안 맞아
+    #   *"시작조차 못 했다"* 는 **거짓 실패**가 났다(2026-09-15 실측 · 그 기록은 `success`
+    #   였다). 판정일 D 의 일은 **D 의 장이 끝난 뒤** 벌어지므로 견줄 것은 날짜가 아니라
+    #   **창**이다 — `session_end(D)` 이후에 시작한 실행. 두 시대(자정 전에 끝나던 때 ·
+    #   넘기는 지금)가 **둘 다** 이 창에 든다. 새 문턱을 만들지 않았다(마감 시각 재사용).
+    _cut = session_end(today)
+    if _cut is None:
+        print('>> 못 쟀다 — 판정일의 장 마감 시각을 유도하지 못했다. 미측정이다.')
+        return 2
+
+    def _started_after_close(iso):
+        try:
+            return datetime.fromisoformat(str(iso)).astimezone() >= _cut
+        except (TypeError, ValueError):
+            return False
+
+    todays = [r for r in rows if _started_after_close(r[1])]
     if not todays:
-        print(f'\n>> 실패 — 판정일({today}) 에 시작한 실행 기록이 없다. 파이프라인이 시작조차 못 했다 '
-              f'(시작하면 running 행을 먼저 커밋한다). 그날 단계 로그를 본다.')
+        print(f'\n>> 실패 — 판정일({today}) 장 마감({_cut:%Y-%m-%d %H:%M}) 뒤에 시작한 실행 '
+              f'기록이 없다. 파이프라인이 시작조차 못 했다 (시작하면 running 행을 먼저 '
+              f'커밋한다). 그날 단계 로그를 본다.')
         return 1
     bad = [r for r in todays if r[3] not in OK_STATUS]
     if bad:
