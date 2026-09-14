@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.14.1",
+  "model": "v2026.09.14.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.14.2",
+   "previous": "v2026.09.14.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "제외 사유 한 칸이 스스로 어긋났다 — 사유는 '사례가 쌓인다고 풀리는 조건이 아닙니다' 인데 이름은 '표본 확보 대기' 였다. 기다릴 것이 없는 갈래를 '표본외 성적 미달' 로 가른다",
+   "note": "산식·문턱·게이트·판정 불변 · 사유 문장 불변 · 이름만 · 근거 docs/RESULT_R292_ACCOUNT_AND_ORDER.md",
+   "created_at": "2026-09-14T14:07:58+00:00",
+   "effective_from": "2026-09-14"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
