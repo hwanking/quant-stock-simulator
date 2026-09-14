@@ -7006,7 +7006,13 @@ if _pm_today and _pm_today.get('picks'):
                         'snap_why': _co142.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
                         # 보유자 기준 (라운드 169) — 다른 키다 (§4)
                         'snap_hold_trim': _co142.get('hold_trim'),
-                        'snap_hold_stop': _co142.get('hold_stop'),
+                        # 라운드 293 — **배수를 걸기 전 값**을 저장한다. 관심종목 값은
+                        #   잰 날에 고정되므로(R224) 켠 채로 채우면 취향이 고정값으로
+                        #   굳어 나중에 꺼도 남는다. 저장 칸은 늘 엔진이 잰 것 하나만
+                        #   뜻해야 한다 — 좁힌 값은 화면이 그 자리에서 보여 준다.
+                        'snap_hold_stop': (_co142.get('hold_stop_base')
+                                           if _co142.get('hold_stop_base') is not None
+                                           else _co142.get('hold_stop')),
                     }
                     _n142 = dict(_w142)
                     for _k, _v in _snap.items():
@@ -10548,7 +10554,10 @@ if user_entry_price > 0 and user_quantity > 0:
                     'snap_fair': four_scores.get('displayed_fair_value')})
     if not (_row224.get('snap_hold_trim') or _row224.get('snap_hold_stop')):
         _row224['snap_hold_trim'] = CORE.get('hold_trim')
-        _row224['snap_hold_stop'] = CORE.get('hold_stop')
+        # 라운드 293 — 배수를 걸기 **전** 값으로 저장한다(위 채우기 경로와 같은 규칙).
+        _row224['snap_hold_stop'] = (CORE.get('hold_stop_base')
+                                     if CORE.get('hold_stop_base') is not None
+                                     else CORE.get('hold_stop'))
         _row224.pop('snap_hold_at', None)
     if _pv224:
         _row224['snap_avg_down_ok'] = '가능' if _pv224.get('averaging_down_allowed') else '불가'

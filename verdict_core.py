@@ -265,6 +265,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     #   가격이 아니라 **현재가까지의 거리**를 좁힌다 — 손절은 현재가 아래에 있고
     #   '좁힌다'는 그 간격을 줄인다는 뜻이다. 현재가를 모르면 손대지 않는다(§3).
     hold_stop_mult = 1.0
+    hold_stop_base = hold_stop          # 배수를 걸기 **전**의 값 — 저장은 이것으로 한다
     if tighten_hold_stop and px and hold_stop is not None and hold_stop < px:
         hold_stop = px - (px - hold_stop) * STOP_TIGHTEN_MULT
         hold_stop_mult = STOP_TIGHTEN_MULT
@@ -476,6 +477,11 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         # 라운드 293 — 이 값에 어느 배수가 걸렸는지 **엔진이 말한다.** 화면이 배수를
         #   다시 곱하거나 다시 적지 않게(§4 · R236). 안 켰으면 1.0 이다.
         hold_stop_mult=hold_stop_mult,
+        # ⚠️ 배수를 걸기 **전**의 값. **저장은 이것으로 한다** — 관심종목·보유 계획은
+        #   잰 날에 고정되므로(R224), 켠 채로 채우면 **취향이 고정값으로 굳어** 나중에
+        #   끈 뒤에도 남는다(R240·R241 의 '값만 남고 사유는 없다' 와 같은 자리).
+        #   저장 칸은 늘 **엔진이 잰 것** 하나만 뜻해야 한다.
+        hold_stop_base=hold_stop_base,
         # 판단 부가
         horizon_days=int(_f(fs.get('horizon_days')) or 20),
         reach_prob=fill_p, reach_label=reach, reach_sigma=sigma,
