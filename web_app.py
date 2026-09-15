@@ -11266,6 +11266,19 @@ with tab_pred:
             ax_p.fill_between(days, min(_my, curr_price), max(_my, curr_price),
                               color=(_TOK['up'] if curr_price >= _my else _TOK['down']), alpha=0.07)
 
+        # ── 판정의 창이 어디서 끝나는지 그림 안에 표시한다 (라운드 300) ──────
+        #   위 기준선(진입·목표·손절)은 전부 **20봉 창**의 값인데(엔진의 채점·확률·
+        #   원장 모두 같은 창) x축은 60·120일까지 간다. 선을 끝까지 그으면 "이 목표가
+        #   두 달 안 아무 때나 유효하다"로 읽히는데 **그렇게 잰 적이 없다**(§3).
+        #   지우지 않고 **경계를 긋는다** — 그 뒤는 판정이 안 닿는 구간이라고 말한다.
+        import ledger_view as _lv300                 # 창 길이는 한 곳에서 읽는다(§4)
+        _hz300 = int(_lv300.HORIZON_BARS)
+        if sel_h > _hz300:
+            ax_p.axvline(_hz300, color='#9DAABC', linestyle='--', linewidth=1.2,
+                         alpha=0.7, zorder=4,
+                         label=f"판정 창 끝 ({_hz300}봉)")
+            ax_p.axvspan(_hz300, sel_h, color='#9DAABC', alpha=0.06, zorder=0)
+
         title_kind = "예측" if show_forecast else "과거 유사사례 관찰"
         ax_p.set_title(
             f"[{resolved_name}] {sel_h}영업일 {title_kind} — 유사패턴 표본 {h['match_count']}건 · {h['tier_label']}",
@@ -11311,6 +11324,27 @@ with tab_pred:
         elif curr_price:
             st.caption("같은 국면·구역의 원장 사례를 찾지 못해 견줄 수 없습니다 — "
                        "위 값은 유사패턴 표본만으로 그린 것입니다.")
+
+        # ── 그래프의 지평과 판정의 창은 다르다 (라운드 300) ────────────────
+        #   진입·목표·손절은 전부 **20봉 창**의 값이고 채점·확률·원장도 같은 창인데,
+        #   이 그래프는 고른 지평만큼(최대 120일) 그린다. 침묵하면 "그 목표가 끝까지
+        #   유효하다"로 읽힌다 — 화면이 경계를 스스로 적는다(R250 · R288 의 그 규칙).
+        #   숫자는 **손으로 안 적는다** — 원장에서 그 자리에서 센다(R285 · 동봉본이
+        #   바뀌면 수도 바뀐다 · R282). 못 세면 그 문장만 뺀다(§3).
+        if sel_h > _hz300:
+            _tc300 = _touch_cdf_230()
+            _res300 = ''
+            if _tc300 and _tc300.get('cum'):
+                _pc300 = _tc300['cum'].get(_hz300)
+                if isinstance(_pc300, (int, float)):
+                    _res300 = (f" 원장 **{_tc300['n']:,}건**에서는 {_hz300}봉째까지 "
+                               f"**{_pc300:.1f}%** 가 목표·손절 중 하나에 닿아 "
+                               f"결판이 납니다.")
+            st.caption(_md_safe(
+                f"가로선(진입·목표·손절)과 확률은 모두 **{_hz300}봉 창**의 값입니다 — "
+                f"이 그래프는 고른 지평 **{sel_h}일**까지 그리므로 점선 오른쪽은 "
+                f"**판정이 닿지 않는 구간**입니다(그 구간을 재 본 적이 없습니다)."
+                + _res300))
 
 # [Section 8 & 8-1] 밸류에이션 및 적정가 (시장조정 펀더멘털 적정가 단일 체제)
 with tab_val:
