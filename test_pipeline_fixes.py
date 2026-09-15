@@ -19558,13 +19558,29 @@ check("두 무리 다 **순서표순**이다 — 보유는 정리가 급한 순,
 #   (`'kind': '…'`)만 찾아 1개만 봤다 ② **미보유 쪽 kind 는 `kind=bucket` 으로 변수**라
 #   킷 소스에 글자로 없다(중앙 판정의 bucket 이 출처다). 그래서 이 검사는 **글자로 있는
 #   보유 쪽만** 잰다 — 못 재는 것을 잰 척하지 않는다(§3).
-_KINDS292 = set(_re.findall(r"kind=['\"]([^'\"]+)['\"]", _read148(
-    _os.path.join(PROJ, 'ui_kit.py'))))
+#   ⚠️ 라운드 304 — 이 검사가 **또 조립이었다.** 킷 소스에서 `kind='…'` **글자**를 세는
+#     방식이라, 보유자 다섯 갈래를 `ui_kit.holder_kind` 한 곳으로 올리자(중앙 판정과
+#     채팅이 같은 것을 부르게) 리터럴이 1개로 줄며 깨졌다. 재려던 것은 *"순서표의 이름이
+#     킷이 **실제로 내는** kind 인가"* 이므로 이제 **돌려서** 모은다 — 글자보다 강하고
+#     이름이 바뀌어도 선다(R195 · R98b 계열의 다섯 번째).
+import ui_kit as _uk292                                        # noqa: E402
+_KINDS292 = set()
+#     ⚠️ 격자가 다섯 갈래를 **전부 밟는지** 아래 검사가 확인한다 — 첫 판에 1차 매도가를
+#       전부 현재가 **위**로만 둬서 '일부 정리'가 한 번도 안 나왔다(같은 실수를 이 라운드에
+#       두 번 했다 · R113 의 *안 나온 것과 안 재진 것*).
+for _hs292 in (None, 10400.0, 9800.0):
+    for _ht292 in (None, 9500.0, 10200.0, 11000.0):
+        for _buy292 in (9900.0, 10100.0):
+            for _ad292 in (True, False):
+                _k292, _ = _uk292.holder_kind(10000.0, _hs292, _ht292,
+                                              buy=_buy292, avg_down_ok=_ad292)
+                if _k292:
+                    _KINDS292.add(_k292)
 _sell292 = _re.search(r"_WL_SELL_RANK = \(([^)]*)\)", _w231)
 _S292 = _re.findall(r"'([^']+)'", _sell292.group(1)) if _sell292 else []
-check("보유 순서표의 이름과 킷의 kind 를 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
+check("보유 순서표의 이름과 킷이 **실제로 내는** kind 를 찾아냈다 (0개를 재고 통과하지 않는다)",
       len(_S292) >= 4 and len(_KINDS292) >= 5,
-      f'순서표 {len(_S292)}개 · 킷의 kind 리터럴 {len(_KINDS292)}개',
+      f'순서표 {len(_S292)}개 · 킷이 돌려 낸 kind {sorted(_KINDS292)}',
       scanned=len(_S292) + len(_KINDS292))
 _bad292 = [n for n in _S292 if n not in _KINDS292]
 check("보유 순서표가 `watch_action` 이 실제로 내는 kind 만 쓴다 — 이름을 지어내지 않는다 (§3)",
@@ -25128,6 +25144,87 @@ if _ok315:
               _os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
           and 'carried_over' in _read148(
               _os.path.join(PROJ, 'scripts', 'calibration_lab.py')))
+
+print("\n" + "=" * 72)
+print("§316 R304 — 가늠 AI 가 보유자 행동을 **스스로 골랐다** · 격자 120칸 중 64칸이 어긋났다 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙여 넣은 분석문이 이 자리를 짚었다: *"`_ans_holder()` 에는 수익률 구간에
+#   따라 '보유 유지'·'물타기 금지'·'비중 축소 검토' 문장을 **자체적으로 선택하는 분기**가
+#   있습니다. 이 결과가 중앙 보유자 판정과 항상 일치하는지 확인해야 합니다."*
+#   **의견 대신 셌다**(R287). 재는 것이 처음부터 달랐다 — 챗은 **평단 대비 수익률**
+#   (+5 / 0 / −7 · 저장소 어디에도 없는 손으로 고른 수 · §2)로, 중앙은 **가격선 위치**
+#   (버틸 수 없는 가격 · 1차 매도가 · 진입가 · 물타기 6조건)로 고른다.
+#   실측(격자 120칸 · 현재가 고정 · 평단 5 × 손절 3 × 매도 2 × 진입 2 × 물타기 2):
+#       **어긋남 64칸(53%)** — 정리 검토→보유 유지 **32** · 추가 매수 가능→보유 유지 16 ·
+#       보유 유지→정리 검토 12 · 추가 매수 가능→정리 검토 **4**(정반대)
+#   가장 나쁜 갈래는 **중앙이 팔라는데 챗이 들고 있으라는 32칸**이다(평단이 낮아 수익
+#   중이면 챗은 무조건 유지라고 했다). R193·R246 의 *"화면도 판정자다"* 가 채팅에 남아
+#   있었다. 고침: 다섯 갈래를 `ui_kit.holder_kind` **한 곳**으로 올리고(분기·이름·이유
+#   문장 그대로 · 새 문턱 없음) 관심종목과 챗이 **같은 함수**를 부른다.
+#   ⚠️ 첫 격자에 버틸 수 없는 가격을 전부 현재가 **아래**로만 둬서 중앙이 '정리 검토'를
+#   한 번도 안 냈다 — 그 방향은 *안 나온 것이 아니라 안 재진 것*이라 값을 넣어 다시 쟀다.
+import itertools as _it316                                     # noqa: E402
+import gaeum_chat as _gc316                                    # noqa: E402
+import ui_kit as _uk316                                        # noqa: E402
+
+check("보유자 판정 함수가 **한 곳**에 있다 (관심종목·채팅이 같은 것을 부른다 · §4)",
+      callable(getattr(_uk316, 'holder_kind', None))
+      and '_uk304.holder_kind(' in _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+      and 'holder_kind(px, h_stop, h_trim' in _read148(_os.path.join(PROJ, 'ui_kit.py')))
+# ⓐ 손으로 고른 수익률 문턱이 **사라졌다** — 그 셋은 저장소 어디에도 근거가 없었다(§2)
+_gsrc316 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+_hold316 = _gsrc316[_gsrc316.index('def _ans_holder('):]
+_hold316 = _hold316[:_hold316.index('\ndef ')]
+check("채팅이 평단 대비 수익률로 행동을 고르지 않는다 (+5 / 0 / −7 분기 제거)",
+      'ret > 5' not in _hold316 and 'ret >= 0' not in _hold316
+      and 'ret > -7' not in _hold316, scanned=len(_hold316.splitlines()))
+# ⓑ **값으로** 잰다 — 격자를 돌려 둘이 같은 답을 내는지 (글자만 보지 않는다 · R195)
+
+
+def _chat_kind316(text):
+    for _k in ('보유 기준 미산출', '추가 매수 가능', '정리 검토', '일부 정리', '보유 유지'):
+        if f'판정: **{_k}**' in text or f'판정: {_k}' in text:
+            return _k
+    if '비중 축소' in text:
+        return '정리 검토'
+    if '보유 유지' in text:
+        return '보유 유지'
+    return '기타'
+
+
+_PX316 = 10000.0
+_bad316, _seen316 = [], 0
+for _avg, _hs, _ht, _buy, _ad in _it316.product(
+        (6000.0, 9000.0, 9500.0, 10500.0, 14000.0),
+        (10400.0, 9800.0, 9000.0), (10200.0, 11000.0),
+        (9900.0, 10100.0), (True, False)):
+    _row316 = {'snap_px': _PX316, 'paid': _avg, 'snap_bucket': '보유 유지',
+               'snap_hold_stop': _hs, 'snap_hold_trim': _ht, 'snap_buy': _buy,
+               'snap_avg_down_ok': '가능' if _ad else '불가',
+               'snap_avg_down_fail': '없음' if _ad else '신규 진입 조건 통과'}
+    _c316 = _uk316.watch_action(_row316, price=_PX316)
+    if not _c316:
+        continue
+    _seen316 += 1
+    _t316 = _gc316._ans_holder(
+        {'price': _PX316, 'hold_trim': _ht, 'hold_stop': _hs,
+         'entry': _buy, 'avg_down_ok': _ad}, _avg)
+    if _chat_kind316(_t316) != _c316['kind']:
+        _bad316.append((_avg, _hs, _ht, _buy, _ad, _c316['kind'], _chat_kind316(_t316)))
+check("격자 전 칸에서 채팅과 중앙 보유자 판정이 **같은 답**이다",
+      _seen316 >= 100 and not _bad316,
+      f'칸 {_seen316}개 · 어긋남 {len(_bad316)}개 {_bad316[:2]}', scanned=_seen316)
+# ⓒ 물타기 결과를 모르면 '추가 매수 가능'을 **주장하지 않는다** (§3)
+_unknown316 = _gc316._ans_holder(
+    {'price': _PX316, 'hold_trim': 10200.0, 'hold_stop': 9800.0,
+     'entry': 10100.0, 'avg_down_ok': None}, 9000.0)
+check("물타기 판정을 못 받으면 '추가 매수 가능'을 주장하지 않는다 (§3)",
+      '추가 매수 가능' not in _unknown316 and '판정을 못 받아' in _unknown316,
+      _unknown316[-90:])
+# ⓓ 평단이 예측에 스며들지 않는다 — 답변이 그 경계를 스스로 적는다 (§9)
+check("평단은 보유 판단에만 쓴다고 답변이 적는다",
+      '보유 판단에만' in _unknown316)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -48,7 +48,7 @@ def _w(v, suffix='원'):
 
 def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
                   regime_code=None, sector=None, news=None, versions=None,
-                  user_avg=None, user_qty=None, cb=None):
+                  user_avg=None, user_qty=None, cb=None, avg_down_ok=None):
     """중앙 스냅샷 → 대화 컨텍스트. 계산하지 않고 모아서 이름만 붙인다."""
     core = core or {}
     fs = fs or {}
@@ -75,6 +75,10 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
         blend=blend, regime_code=regime_code, sector=sector,
         news=news or {}, versions=versions or {}, cb=cb or {},
         user_avg=user_avg, user_qty=user_qty, holder_ret_pct=ret,
+        # 라운드 304 — 물타기 6조건 결과. **모르면 None 이고, 그러면 '추가 매수
+        #   가능'을 주장하지 않는다**(§3). 이 칸을 채우는 곳은 `personalize_for_position`
+        #   하나이고 여기서 다시 계산하지 않는다(§4).
+        avg_down_ok=avg_down_ok,
     )
 
 
@@ -214,21 +218,35 @@ def _ans_holder(ctx, avg):
                 "'보유 중' 선택에서 평단을 입력해 주세요.")
     ret = (float(px) / float(avg) - 1) * 100
     ht, hs = ctx.get('hold_trim'), ctx.get('hold_stop')
-    out = [f"현재 약 {ret:+.1f}% 구간입니다 (평단 {_w(avg)} 기준)."]
-    if ret > 5:
-        out.append(f"전략: 보유 유지 — 1차 일부 정리 {_w(ht) or NA}, "
-                   f"방어선 {_w(hs) or NA}.")
-    elif ret >= 0:
-        out.append(f"전략: 보유 유지 — 방어선 {_w(hs) or NA} 이탈 시 원칙대로.")
-    elif ret > -7:
-        out.append('전략: 물타기(평단 낮추기)는 하지 마세요. '
-                   f"방어선 {_w(hs) or NA} 종가 이탈 시 정리.")
-    else:
-        out.append('전략: 비중 축소를 검토하세요 — 반등 시 '
-                   f"{_w(ht) or '기술 반등 지점'} 부근에서.")
     e = ctx.get('entry')
-    out.append('추가 매수는 ' + (f"실행 기준({_w(e)} 이하)과 실행 가능 판정을 "
-                             f"모두 충족할 때만." if e else '지금은 금지.'))
+    # ⚠️ 라운드 304 — 여기가 **행동을 스스로 골랐다.** 평단 대비 수익률
+    #   +5 / 0 / −7 로 '보유 유지'·'물타기 금지'·'비중 축소'를 갈랐는데, 그 셋은
+    #   저장소 어디에도 없는 **손으로 고른 수**(§2)이고 중앙 보유자 판정은 전혀 다른
+    #   것(가격선 위치)을 본다. 격자 120칸에서 **64칸(53%)** 이 어긋났고, 가장 나쁜
+    #   갈래는 중앙이 **'정리 검토'** 인데 챗이 **'보유 유지'** 라 한 **32칸**이다
+    #   — 평단이 낮아 수익 중이면 챗은 무조건 유지라고 했다.
+    #   → 판정은 **중앙과 같은 함수**(`ui_kit.holder_kind`)에서 받는다. 이 답변은
+    #     그것을 **말로 옮길 뿐**이다(§4 · R193·R246 의 *화면도 판정자다*).
+    #   ⚠️ 물타기 6조건 결과는 이 화면 컨텍스트에 없다 — 그러면 '추가 매수 가능'을
+    #     **주장하지 않고** 모른다고 적는다(§3). 지어낸 허락이 가장 비싼 오답이다.
+    import ui_kit as _uk304
+    _ad = ctx.get('avg_down_ok')
+    kind, why = _uk304.holder_kind(px, hs, ht, buy=e, avg_down_ok=_ad)
+    out = [f"현재 약 {ret:+.1f}% 구간입니다 (평단 {_w(avg)} 기준) — "
+           f"평단은 **보유 판단에만** 쓰고 예측·적정가·점수에는 안 들어갑니다."]
+    if not kind:
+        out.append(f"판정: {why}")
+        return '\n'.join(out)
+    out.append(f"판정: **{kind}** — {why}.")
+    out.append(f"기준값(현재가 기준): 팔 가격 1차 {_w(ht) or NA} · "
+               f"버틸 수 없는 가격 {_w(hs) or NA}.")
+    if _ad is None:
+        out.append('추가 매수(물타기) 가능 여부는 이 화면에서 판정을 못 받아 '
+                   '말하지 않습니다 — 관심종목 행에서 6조건 결과와 함께 봅니다.')
+    elif kind == '추가 매수 가능':
+        out.append(f"추가 매수는 실행 기준({_w(e)} 이하)에서만.")
+    else:
+        out.append('추가 매수는 지금 조건이 아닙니다.')
     out.append('신규 매수 기준과 보유자 기준은 다른 값입니다 — 섞지 않습니다.')
     return '\n'.join(out)
 

@@ -1314,6 +1314,56 @@ def avg_down_class(ok, fails):
     return '포지션미달', '물타기 불가', _why
 
 
+def holder_kind(px, hold_stop, hold_trim, buy=None, avg_down_ok=None):
+    """보유자 행동 판정 — **이 저장소에서 유일한 자리**. `(kind, why)` 또는 `(None, 사유)`.
+
+    ⚠️ 라운드 304 — 사용자가 붙여 넣은 분석문이 짚었다: *"`_ans_holder()` 에는 수익률
+    구간에 따라 '보유 유지'·'물타기 금지'·'비중 축소 검토' 문장을 **자체적으로 선택하는
+    분기**가 있습니다. 이 결과가 중앙 보유자 판정과 항상 일치하는지 확인해야 합니다."*
+
+    **세어 보니 어긋났다.** 격자 120칸에서 **64칸(53%)** 이 다른 답이었고, 가장 나쁜
+    갈래는 중앙이 **'정리 검토'** 인데 챗이 **'보유 유지'** 라고 하는 **32칸**이다
+    (평단이 낮아 수익 중이면 챗은 무조건 유지라고 했다). 챗은 **평단 대비 수익률**
+    (+5/0/−7 · 저장소 어디에도 없는 손으로 고른 수 · §2)로 고르고, 중앙은 **가격선
+    위치**(버틸 수 없는 가격 · 1차 매도가 · 진입가 · 물타기 6조건)로 고른다 — 재는
+    것이 처음부터 달랐다. R193·R246 의 *"화면도 판정자다"* 가 채팅 화면에 남아 있었다.
+
+    분기는 `watch_action` 의 것을 **그대로** 옮겼다 — 새 문턱 없음 · 판정 불변.
+    `avg_down_ok` 를 모르면(None) '추가 매수 가능'은 **주장하지 않는다**(§3).
+    """
+    def _n(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    px, h_stop, h_trim, buy = _n(px), _n(hold_stop), _n(hold_trim), _n(buy)
+    if not px:
+        return None, '현재가를 모르면 보유 판단을 하지 않습니다'
+    # 보유자 가격선이 하나도 없으면 **판단하지 않는다** (R214 의 그 자리)
+    if not (h_stop or h_trim):
+        return ('보유 기준 미산출',
+                '이 종목의 보유자 기준값(버틸 수 없는 가격·팔 가격 1차)을 아직 '
+                '안 냈습니다 — 채우면 판단합니다')
+    if h_stop and px <= h_stop:
+        return '정리 검토', f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다'
+    if h_trim and px >= h_trim:
+        return ('일부 정리',
+                f'1차 매도가({h_trim:,.0f}원)를 넘었습니다 '
+                f'({(px / h_trim - 1) * 100:+.1f}%)')
+    if avg_down_ok and buy and px <= buy:
+        return ('추가 매수 가능',
+                f'물타기 6조건 전부 통과이고 진입가({buy:,.0f}원) 이하입니다')
+    return ('보유 유지',
+            ('버틸 수 없는 가격과 1차 매도가 사이입니다'
+             if (h_stop and h_trim) else
+             (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다' if h_stop else
+              f'1차 매도가({h_trim:,.0f}원)에 아직 못 미칩니다'))
+            + (f' · 물타기는 가능하나 진입가({buy:,.0f}원) 이하에서만'
+               if (avg_down_ok and buy and px > buy) else ''))
+
+
 def watch_action(row, price=None, today=None):
     """
     관심종목 한 줄의 판단. 반환:
@@ -1495,38 +1545,20 @@ def watch_action(row, price=None, today=None):
         #   '보유 유지'라고 적으면 *못 잰 것*을 *판단*으로 만드는 것이라
         #   §3 위반이다. 화면 실측에서 실제로 13종목이 전부 '보유 유지'로
         #   나왔고, 그건 판단이 아니라 값이 없었던 것이다.
-        if not (h_stop or h_trim):
-            return _held(dict(kind='보유 기준 미산출', label='보유 기준 미산출',
-                              tone='tx3', held=True,
-                              why='이 종목의 보유자 기준값(버틸 수 없는 가격·팔 '
-                                  '가격 1차)을 아직 안 냈습니다 — 채우면 판단합니다'))
-        if h_stop and px <= h_stop:
-            return _held(dict(kind='정리 검토', label='정리 검토', tone='neg',
-                              held=True,
-                              why=f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다'))
-        if h_trim and px >= h_trim:
-            return _held(dict(kind='일부 정리', label='일부 정리', tone='pos',
-                              held=True,
-                              why=f'1차 매도가({h_trim:,.0f}원)를 넘었습니다 '
-                                  f'({(px / h_trim - 1) * 100:+.1f}%)'))
+        # 라운드 304 — 판정은 `holder_kind` **한 곳**이다. 종전엔 이 다섯 갈래가 여기
+        #   에만 있었고, 가늠 AI 는 **자기 문턱**(평단 대비 +5/0/−7)으로 따로 골라
+        #   격자 120칸 중 **64칸(53%)** 이 어긋났다(§4 · R193·R246 의 그 자리).
+        #   이름·순서·이유 문장은 그대로 — 자리만 옮겼다.
         # 라운드 224 — '추가 매수 가능'은 **물타기 판정과 같은 답**이어야 한다 (§4).
         #   종전엔 bucket 만 봐서, 물타기가 '불가'인 행에 '추가 매수 가능'이 찍힐 수
         #   있었다(한 종목에 "더 살 수 있나"의 답이 둘). 이제 6조건 전부 통과일 때만,
         #   그리고 엔진의 진입가 이하일 때만이다. 진입가 위면 '보유 유지'로 두고
         #   이유에 적는다.
-        if _ad_ok and buy and px <= buy:
-            return _held(dict(kind='추가 매수 가능', label='추가 매수 가능',
-                              tone='pos', held=True,
-                              why=f'물타기 6조건 전부 통과이고 진입가({buy:,.0f}원) '
-                                  f'이하입니다'))
-        return _held(dict(kind='보유 유지', label='보유 유지', tone='tx2', held=True,
-                          why=(('버틸 수 없는 가격과 1차 매도가 사이입니다'
-                                if (h_stop and h_trim) else
-                                (f'버틸 수 없는 가격({h_stop:,.0f}원) 위입니다'
-                                 if h_stop else
-                                 f'1차 매도가({h_trim:,.0f}원)에 아직 못 미칩니다'))
-                               + (f' · 물타기는 가능하나 진입가({buy:,.0f}원) 이하에서만'
-                                  if (_ad_ok and buy and px > buy) else ''))))
+        _hk, _hw = holder_kind(px, h_stop, h_trim, buy=buy, avg_down_ok=_ad_ok)
+        _TONE304 = {'보유 기준 미산출': 'tx3', '정리 검토': 'neg', '일부 정리': 'pos',
+                    '추가 매수 가능': 'pos', '보유 유지': 'tx2'}
+        return _held(dict(kind=_hk, label=_hk, tone=_TONE304.get(_hk, 'tx2'),
+                          held=True, why=_hw))
 
     # ── 미보유 관점 — bucket 을 그대로 짧게 말한다 ──────────────────
     if not bucket:
