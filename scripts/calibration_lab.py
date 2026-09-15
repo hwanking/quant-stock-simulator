@@ -890,6 +890,37 @@ def wilson_low(hit, n, z=1.96):
     return max(0.0, (centre - margin) / denom) * 100.0
 
 
+def price_for_grading(eng, ticker, cache, failed):
+    """채점용 일봉 — **성공도 실패도 기억한다.** 못 받으면 None.
+
+    ⚠️ 라운드 303 — 종전에는 `cache` 가 **성공만** 기억했다. 실패하면 `failed` 에
+    넣고 `continue` 했는데, 다음 행에서 같은 종목의 `cache.get` 은 여전히 None 이라
+    **또 받아왔다.** 상장폐지 종목처럼 원장에 수십~수백 행이 있으면 그 수만큼
+    네트워크 왕복을 되풀이한다.
+
+    실측(클라우드 로그 2026-09-14 · 로그가 잘려 있어 **하한**): 8종목에 실패 요청
+    **627회**, 한 종목은 **243회**. 그 종목들은 이미 *"[건너뜀] … 종목 페이지가
+    없습니다"* 로 **영구 실패라고 한 번 찍혀 있었다** — 기억만 안 했다. 그날 이
+    단계는 120분 예산을 다 쓰고 시간초과됐고 원장 증분은 **+0** 이었다.
+
+    동작은 그대로다 — 실패 종목은 어차피 채점에서 빠지고 종전 채점을
+    `carried_over` 로 이어받는다(R197). **값·판정 불변 · 요청만 안 한다.**
+    """
+    if ticker in failed:
+        return None                       # 이미 못 받았다 — 다시 묻지 않는다
+    pdf = cache.get(ticker)
+    if pdf is not None:
+        return pdf
+    try:
+        pdf, _ = eng.generate_synthetic_bitemporal_data(
+            symbol=ticker, start_date='2015-01-01', end_date=None)
+    except Exception:                                          # noqa: BLE001
+        failed.add(ticker)
+        return None
+    cache[ticker] = pdf
+    return pdf
+
+
 def main(limit=200, universe_top=None, shard=None, forward_from=None):
     global VIRT_FILE
     if shard:
@@ -1172,16 +1203,10 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     drop_price, drop_grade = 0, 0
     drop_tickers = set()
     for r in rows:
-        pdf = price_cache.get(r['ticker'])
+        pdf = price_for_grading(eng, r['ticker'], price_cache, drop_tickers)
         if pdf is None:
-            try:
-                pdf, _ = eng.generate_synthetic_bitemporal_data(
-                    symbol=r['ticker'], start_date='2015-01-01', end_date=None)
-                price_cache[r['ticker']] = pdf
-            except Exception:
-                drop_price += 1
-                drop_tickers.add(r['ticker'])
-                continue
+            drop_price += 1
+            continue
         g = plog.grade_prediction(r, pdf)
         if g:
             graded.append({'row': r, 'grade': g})

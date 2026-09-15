@@ -25053,6 +25053,82 @@ check("누적 케이스 줄과 원장 캡션 **둘 다** 어디까지인지 적�
       '기준일 {_span302[0]}~**{_span302[1]}**까지' in _w314
       and '기준일은 **{_sp302[0]} ~ {_sp302[1]}** 까지입니다' in _w314)
 
+print("\n" + "=" * 72)
+print("§315 R303 — 캐시가 **성공만 기억하고 실패는 안 기억했다** · 같은 종목을 243번 다시 물었다 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 302 가 *"왜 원장이 안 자라나"* 를 다음 라운드로 남겼다. 클라우드 단계 로그를
+#   열었더니(R272 의 길) 답이 두 줄에 있었다:
+#       가상 판정 계획: 완료 251,528건 · **남음 0건**   ← 새로 만들 케이스가 없다
+#       채점 대상 가상 판정: **251,528건**              ← 그런데 **전부 다시 채점**한다
+#   그리고 그 채점이 **120분 예산을 다 쓰고 시간초과**했고 원장 증분은 **+0** 이었다
+#   (`virtual_graded 251,528 → 251,528 (+0)` · 원시 예측은 +400 — 20봉이 안 닫혀 아직
+#   채점 대상이 아니다).
+#   왜 그렇게 오래 걸렸나 — 로그를 세니 **8종목에 실패 요청 627회**(로그가 잘려 있어
+#   **하한**), 한 종목은 **243회**다. 그 종목들은 이미 *"[건너뜀] … 종목 페이지가
+#   없습니다"* 로 **영구 실패라고 한 번 찍혀 있었다.** 원인은 한 줄이다 —
+#   `price_cache` 가 **성공만** 기억해서, 실패한 종목의 다음 행마다 `cache.get` 이
+#   None 이라 **또 받아왔다**(원장에 81행 있으면 81번 × 엔드포인트 3개 ≈ 243).
+#   고침은 **실패도 기억하는 것**이다. 실패 종목은 어차피 채점에서 빠지고 종전 채점을
+#   `carried_over` 로 이어받으므로(R197) **값·판정 불변 · 요청만 안 한다.**
+import importlib.util as _ilu315                                # noqa: E402
+_spec315 = _ilu315.spec_from_file_location(
+    'calibration_lab_315', _os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_lab315 = _ilu315.module_from_spec(_spec315)
+try:
+    _spec315.loader.exec_module(_lab315)
+    _ok315 = True
+except Exception as _e315:                                     # noqa: BLE001
+    _ok315 = False
+    skipped("R303 채점 캐시 — 랩 모듈 적재",
+            f'{type(_e315).__name__}: {_e315}')
+
+if _ok315:
+    check("채점용 시세를 **한 함수**가 가져온다 (루프가 직접 안 받는다 · §4)",
+          callable(getattr(_lab315, 'price_for_grading', None)))
+
+    class _FailEng315:
+        """늘 실패하는 엔진 — 몇 번 불렸는지 센다 (심어서 잰다 · R195)."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate_synthetic_bitemporal_data(self, symbol=None, **kw):
+            self.calls += 1
+            raise RuntimeError('종목 페이지가 없습니다 (심은 영구 실패)')
+
+    _e = _FailEng315()
+    _cache315, _failed315 = {}, set()
+    _got = [_lab315.price_for_grading(_e, 'X99999.KS', _cache315, _failed315)
+            for _ in range(50)]
+    check("같은 종목이 50행이어도 **한 번만** 묻는다 (실패를 기억한다)",
+          _e.calls == 1, f'호출 {_e.calls}회 · 실패 기억 {sorted(_failed315)}')
+    check("실패하면 전부 None 이다 — 지어낸 일봉으로 채점하지 않는다 (§3)",
+          all(g is None for g in _got), f'None 아닌 것 {sum(1 for g in _got if g is not None)}개')
+
+    class _OnceEng315:
+        """한 번만 주는 엔진 — 성공도 기억하는지 본다(종전 동작이 안 깨졌나)."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate_synthetic_bitemporal_data(self, symbol=None, **kw):
+            self.calls += 1
+            return ('일봉', '재무')
+
+    _o = _OnceEng315()
+    _c2, _f2 = {}, set()
+    _vals = [_lab315.price_for_grading(_o, 'Y88888.KS', _c2, _f2)
+             for _ in range(20)]
+    check("성공은 종전대로 한 번만 받아 캐시한다 (고치면서 안 깨뜨렸다)",
+          _o.calls == 1 and all(v == '일봉' for v in _vals),
+          f'호출 {_o.calls}회')
+    check("실패 종목 목록은 호출부가 그대로 쓴다 (carried_over 가 이어받는 그 목록)",
+          'price_for_grading(eng, r[' in _read148(
+              _os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+          and 'carried_over' in _read148(
+              _os.path.join(PROJ, 'scripts', 'calibration_lab.py')))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
