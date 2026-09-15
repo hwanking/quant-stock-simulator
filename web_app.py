@@ -11164,6 +11164,38 @@ with tab_pred:
                   label=f"비관 군집 평균 (n={cs.get('bear', 0)})")
         ax_p.axhline(curr_price, color='#F3F6FA', linestyle='-', linewidth=1.2, label="현재가")
 
+        # ── 원장이 말하는 같은 자리 (라운드 296) ──────────────────────────
+        #   사용자: *"그래프 고쳐줘 원장으로 재서."* 위 밴드는 **유사패턴 몇 건**으로
+        #   그린 것이다 — 이 종목은 6건이었고, 엔진 자신은 10건 미만이면 확률로
+        #   환산하지 않는다(§11). **확률로 못 쓴다고 정한 표본으로 분위 밴드를
+        #   그리고 있었다.** 원장은 같은 (국면 · 구역)에서 훨씬 많이 준다 —
+        #   실측(2026-09-15): 칸 18개 · 최대 **42,284건** · 중앙 n 은 천 단위다.
+        #   그리고 두 밴드는 실제로 다르다: 6건은 25~75분위가 −2.5~**+16.7%**,
+        #   원장 같은 칸은 −5.9~**+6.8%**(중앙 **0.0%**)였다. 표본이 큰 쪽을
+        #   **같은 그림 안에** 놓아 눈으로 견줄 수 있게 한다(§4 · 표는 한 곳에서).
+        _lq296 = None
+        try:
+            import ledger_view as _lv296
+            _rg296 = str(((four_scores.get('regime_gate') or {}).get('cell')
+                          or '')).split('|')[0] or None
+            _zn296 = four_scores.get('entry_zone')
+            _lq296 = _lv296.outcome_quantiles(_reach_table_224(), _rg296, _zn296)
+        except Exception:                                      # noqa: BLE001
+            _lq296 = None                                      # 못 읽으면 안 그린다(§3)
+        if _lq296 and curr_price:
+            _hb296 = min(int(_lv296.HORIZON_BARS), int(sel_h))   # 원장 창은 20봉이다
+            _p25 = curr_price * (1 + _lq296['p25'] / 100.0)
+            _p75 = curr_price * (1 + _lq296['p75'] / 100.0)
+            _p50 = curr_price * (1 + _lq296['p50'] / 100.0)
+            # 원장은 **경로**가 아니라 창 끝 분포다 — 그래서 선이 아니라 그 지점의
+            #   세로 막대로 그린다. 경로처럼 그리면 없는 모양을 지어내는 것이다(§3).
+            ax_p.vlines(_hb296, _p25, _p75, color='#F2B84B', linewidth=7,
+                        alpha=0.55, zorder=5,
+                        label=f"원장 {_lq296['n']:,}건 · {_hb296}봉 뒤 25~75분위")
+            ax_p.plot([_hb296], [_p50], marker='_', markersize=16,
+                      color='#F2B84B', markeredgewidth=3, zorder=6,
+                      label=f"원장 중앙 ({_lq296['p50']:+.1f}%)")
+
         # 보유 여부를 먼저 알아야 한다 — 보유자 기준선을 그릴지가 여기서 갈린다
         _my = None
         for _p in (st.session_state.get('positions') or []):
@@ -11241,11 +11273,36 @@ with tab_pred:
         g1.metric("유사패턴 표본", f"{h['match_count']}건", h['tier_label'])
         g2.metric("ESS", fmt_num(h.get('ess'), '.1f', '건'), "분포 쏠림 보정")
         g3.metric("평균 / 중앙값", f"{fmt_pct(h['mean_perf'])} / {fmt_pct(h['median_perf'])}")
-        g4.metric("25~75분위", f"{fmt_pct(h.get('p10_perf'))} ~ {fmt_pct(h.get('p90_perf'))}", "10~90분위")
+        # ⚠️ 라운드 296 — 이 칸은 큰 이름이 **25~75분위** 인데 값은 `p10_perf`~`p90_perf`
+        #   (즉 10~90분위)였다. 이름이 가리키는 것과 자리에 넣은 값이 다르면 표시 오류가
+        #   아니라 **지어낸 값**이다(R235 가 '60일선'에서 고친 그 자리 · §3).
+        #   값을 바꾸지 않고 **이름을 값에 맞춘다** — 좁은 쪽(25~75)으로 읽으면 실제보다
+        #   범위가 좁다고 오해한다.
+        g4.metric("10~90분위", f"{fmt_pct(h.get('p10_perf'))} ~ {fmt_pct(h.get('p90_perf'))}",
+                  "유사사례 관측 범위")
         g5.metric("평균 MDD", fmt_pct(h['mdd']))
         g6.metric(f"목표 / 손절 선도달",
                   f"{fmt_pct(h['tp_first_prob'], signed=False)} / {fmt_pct(h['sl_first_prob'], signed=False)}"
                   if show_forecast else "미산출")
+
+        # ── 원장이 말하는 같은 자리 (라운드 296) ──────────────────────────
+        #   칸을 **더하지 않는다** — 여섯 칸에 일곱째를 붙이면 값이 잘려 보인다(R171 의
+        #   그 사고). 줄로 적는다. 위 여섯 칸은 **유사패턴 몇 건**의 값이고, 아래 줄은
+        #   같은 (국면·구역)의 **원장 수천~수만 건**이다 — 어느 쪽이 큰 표본인지 말한다.
+        if _lq296:
+            st.caption(_md_safe(_lv296.outcome_band_line(_lq296)))
+            # 두 표본이 실제로 얼마나 다른지는 **수로** 적는다 — '다르다'는 말만으로는
+            #   어느 쪽으로 다른지 모른다(§3). 못 잰 값이면 그 칸을 비운다.
+            _m296 = h.get('median_perf')
+            if isinstance(_m296, (int, float)):
+                st.caption(_md_safe(
+                    f"이 종목 유사패턴 **{h['match_count']}건**의 중앙은 "
+                    f"**{_m296:+.1f}%** 이고, 같은 자리 원장 **{_lq296['n']:,}건**의 중앙은 "
+                    f"**{_lq296['p50']:+.1f}%** 입니다. 표본이 작을수록 좋아 보이기도 "
+                    f"나빠 보이기도 하므로, 둘이 다르면 **큰 쪽을 먼저** 봅니다."))
+        elif curr_price:
+            st.caption("같은 국면·구역의 원장 사례를 찾지 못해 견줄 수 없습니다 — "
+                       "위 값은 유사패턴 표본만으로 그린 것입니다.")
 
 # [Section 8 & 8-1] 밸류에이션 및 적정가 (시장조정 펀더멘털 적정가 단일 체제)
 with tab_val:
