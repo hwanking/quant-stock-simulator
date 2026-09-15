@@ -1023,6 +1023,13 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     near_open = None            # 막힌 후보가 열리는 가장 이른 **기준일** (R309)
     newest_cand = None          # 이번에 만든 후보 중 가장 최신 기준일
     skipped = 0
+    # ⚠️ 라운드 311 — **120분이 어디로 갔는지 아무도 안 찍고 있었다.** 09-15 실행에서
+    #   이 단계는 예산 120분을 통째로 썼는데(전방 단계도 100분 전부), 로그에는 단계
+    #   안의 시간 배분이 없다. 이 PC 에서 투영하면 12분이라 **자릿수가 안 맞는다** —
+    #   러너의 회선이 다르다는 뜻이고, 그러면 답은 이 PC 가 아니라 **거기서 재는 것**
+    #   이다(R310 이 버퍼를 꺼 두어 이제 죽어도 그때까지의 말이 남는다).
+    #   여기서 하는 일은 하나 — **구간마다 초와 종목 수를 찍는다.** 값·판정 불변.
+    _t_plan = time.time()
     for tk in pool:
         try:
             pdf, _f = eng.generate_synthetic_bitemporal_data(
@@ -1045,6 +1052,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             skipped += 1
             if skipped <= 10:
                 print(f"  [건너뜀] {tk} — {type(exc).__name__}: {exc}")
+    print(f"  [시간] 계획 루프 {time.time() - _t_plan:,.0f}초 — "
+          f"종목 {len(pool):,}개 시세 적재 (종목당 "
+          f"{(time.time() - _t_plan) / max(len(pool), 1):.2f}초)")
     if skipped:
         # 실패를 삼키더라도 집계로는 남긴다 (경로 기록기에서 98종목이
         # 전부 실패했는데 조용했던 사고가 있었다).
@@ -1228,8 +1238,18 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     graded = []
     drop_price, drop_grade = 0, 0
     drop_tickers = set()
+    # 라운드 311 — 채점은 **캐시에 없는 종목만** 새로 받는다. 몇 개를 받았는지와
+    #   몇 초가 걸렸는지를 찍는다 — 그래야 다음 시간초과 때 '적재'와 '채점' 중
+    #   어느 쪽이 예산을 먹었는지 갈린다.
+    _t_grade = time.time()
+    _fetched_here = 0
     for r in rows:
+        # 실패도 기억하므로(R303) '캐시에도 없고 실패 목록에도 없던' 경우만 센다 —
+        # 안 그러면 실패 종목의 행 수만큼 부풀어 R303 의 그 수가 되살아난 것처럼 보인다.
+        _new = (r['ticker'] not in price_cache and r['ticker'] not in drop_tickers)
         pdf = price_for_grading(eng, r['ticker'], price_cache, drop_tickers)
+        if _new:
+            _fetched_here += 1
         if pdf is None:
             drop_price += 1
             continue
@@ -1238,6 +1258,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             graded.append({'row': r, 'grade': g})
         else:
             drop_grade += 1
+    print(f"  [시간] 채점 {time.time() - _t_grade:,.0f}초 — {len(rows):,}행 · "
+          f"이 단계에서 새로 받은 종목 {_fetched_here:,}개 "
+          f"(계획 루프가 담아 둔 것 {len(pool):,}개)")
     if drop_price or drop_grade:
         print(f"  ⚠️ 채점에서 빠진 케이스 {drop_price + drop_grade}건 — "
               f"시세 미수신 {drop_price}건({len(drop_tickers)}종목) · "
