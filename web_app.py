@@ -2956,6 +2956,40 @@ def _load_calibration_meta():
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _sample_audit_302():
+    """표본 감사 산출물(`data/sample_audit.json`) — **파일을 여는 자리는 여기 하나다.**
+
+    라운드 302 — 종전엔 화면이 이 파일을 직접 열었고, 기준일 범위를 내려고 내가
+    **두 번째로 여는 자리**를 만들었다가 회귀에 걸렸다(§4 — 두 값을 따로 만들지 않는다).
+    못 읽으면 `{}` — 소비자는 빈 dict 를 그대로 다룬다(§3).
+    """
+    try:
+        import json as _json302
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'data', 'sample_audit.json'),
+                  encoding='utf-8') as _f302:
+            return _json302.load(_f302) or {}
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
+def _ledger_span_302():
+    """원장이 **어디까지의 케이스인가** — `(첫 기준일, 마지막 기준일)` · 없으면 None.
+
+    라운드 302 — 화면은 *"누적 케이스 251,528건"* 과 *"원장 251,528건 기준 · (감사한
+    날)"* 을 적으면서 **케이스가 언제까지인지는 한 번도 안 적었다.** 실측(2026-09-15):
+    행 251,528 · 기준일 **2011-01-14 ~ 2026-08-03** — 마지막 케이스가 **6주 전**이다.
+    결과 창(20봉)과 embargo 때문에 최근 기준일이 밀리는 것은 구조이지만, 그 사실을
+    안 적으면 사용자는 *"오늘까지의 시장을 담은 수"* 로 읽는다(§9 의 *날짜 없는 숫자는
+    반드시 낡는다*). **새로 세지 않는다** — 표본 감사가 이미 `span` 으로 낸다(§4).
+    """
+    _sp = (_sample_audit_302() or {}).get('span') or []
+    if len(_sp) == 2 and all(_sp):
+        return str(_sp[0])[:10], str(_sp[1])[:10]
+    return None                        # 못 읽으면 None — 지어내지 않는다 (§3)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def _cal_made_date():
     """캘리브레이션 숫자를 **언제 쟀나** — 없으면 None (지어내지 않는다).
 
@@ -8577,22 +8611,27 @@ if _calib_all.get('total_cases'):
     #   카드는 고쳤는데 **여기와 모델 성적 캡션은 total_cases 그대로**였다.
     #   그래서 헤더가 '누적 케이스 249,748건' 옆에 '원장 250,725건 기준'을
     #   띄웠다 — 같은 줄 안에서 두 수. 같은 우선순위(:753)로 맞춘다.
+    # 라운드 302 — '누적 케이스 N건' 옆에 **어디까지의 케이스인가**를 적는다.
+    #   실측(2026-09-15): 마지막 기준일 2026-08-03 — 6주 전이다. 안 적으면 오늘까지의
+    #   시장을 담은 수로 읽힌다(§9). 못 읽으면 그 조각만 빠진다(§3).
+    _span302 = _ledger_span_302()
     _bits_src.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
-                       f"누적 케이스 {_calib_all.get('ledger_rows') or _calib_all['total_cases']:,}건")
+                     f"누적 케이스 {_calib_all.get('ledger_rows') or _calib_all['total_cases']:,}건"
+                     + (f" (기준일 {_span302[0]}~**{_span302[1]}**까지)"
+                        if _span302 else ""))
     # 유효 독립 표본 (라운드 54b) — 같은 날 같은 업종 신호는 같은 시장
     # 사건 하나다. raw 건수로 신뢰구간을 좁히면 과신이 된다.
     try:
-        import json as _json54
         # 라운드 217 — 종전에는 R54b 의 `effective_n.json` 을 읽었다. 그 파일은
         #   생성 스크립트가 없는 고정본이라(2026-08-09 · 원장 60,462행 · 32,721)
         #   '누적 케이스 250,725건' 옆에 4배 작은 원장의 수가 날짜 없이 서
         #   있었다. 같은 정의(④ 같은 종목 35일 에피소드)를 라운드 72 표본
         #   감사(`scripts/sample_audit.py` → sample_audit.json)가 세므로 그것을
         #   읽고, 기준 행수와 잰 날짜를 같이 낸다 — 낡으면 낡은 것이 보이게(§2).
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               'data', 'sample_audit.json'),
-                  encoding='utf-8') as _f54:
-            _sa54 = _json54.load(_f54)
+        # 라운드 302 — 파일을 여는 자리는 **한 곳**(`_sample_audit_302`)이다.
+        #   종전엔 여기서 직접 열었고, 내가 기준일 범위를 내려고 **두 번째로 열었다가**
+        #   회귀에 걸렸다(§4 — 두 값을 따로 만들지 않는다). 검사가 제 일을 했다.
+        _sa54 = _sample_audit_302()
         _en54_made = str(_sa54.get('made') or '날짜 미기록')[:10]
         if _sa54.get('independent_episodes'):
             _bits_src.append(
@@ -10293,8 +10332,14 @@ if _ledger_df is not None:
                           f"(표본 감사 {_en54_made}).")
     except Exception:                                          # noqa: BLE001
         pass                          # 헤더가 못 읽었으면 여기도 비운다 — 조용히 다른 값을 만들지 않는다
+    # 라운드 302 — 여기도 **어디까지의 케이스인가**를 같이 낸다(같은 함수 · §4).
+    _sp302 = _ledger_span_302()
+    _sp302_txt = (f" 기준일은 **{_sp302[0]} ~ {_sp302[1]}** 까지입니다 — 결과 창(20봉)이"
+                  f" 닫혀야 채점되므로 최근 몇 주는 아직 들어 있지 않습니다."
+                  if _sp302 else "")
     st.caption(f"사례 **{len(_ledger_df):,}건** (가상 백테스트 원장 그대로 — "
-               "당시 점수·판정·이후 실제 경로·실패 원인). 필터로 직접 확인하세요.  \n"
+               f"당시 점수·판정·이후 실제 경로·실패 원인).{_sp302_txt} "
+               "필터로 직접 확인하세요.  \n"
                "**독립 사례가 아닙니다** — 같은 종목의 기준일이 25봉보다 촘촘히 "
                f"겹쳐 있어 결과 창이 서로 겹칩니다. {_sp_txt}.{_ep_txt217} "
                "(격자가 날마다 밀려 생긴 겹침 · 이후 축적은 이 간격을 지킵니다 · "
