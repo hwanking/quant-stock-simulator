@@ -64,6 +64,9 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
         headline=vd.get('headline') or '', score=vd.get('score'),
         action=vd.get('action'), vetoes=list(vd.get('vetoes') or []),
         bucket=core.get('bucket'), actionable=core.get('actionable'),
+        # 라운드 305 — 갈래마다 **언제 다시 보나**가 다르다. 사유는 중앙 판정이
+        #   결론과 함께 내고 있었고(`exclude_reason` · R240) 챗이 안 읽었을 뿐이다.
+        bucket_why=core.get('exclude_reason'),
         entry=core.get('pullback_zone'), buy_zone=core.get('buy_zone'),
         breakout=core.get('breakout_price'),
         new_target=core.get('new_target'), new_stop=core.get('new_stop'),
@@ -172,7 +175,29 @@ def _ans_buy_now(ctx):
                    f"({b['wilson_low'] * 100:.0f}~{b['wilson_high'] * 100:.0f}%)")
     if why:
         lines.append('이유: ' + ' / '.join(why))
-    lines.append(f"{_w(e)} 부근까지 눌린 뒤 지지가 확인되면 다시 후보가 됩니다.")
+    # ⚠️ 라운드 305 — 여기 **한 문장이 아홉 갈래를 덮고 있었다**:
+    #   *"{진입가} 부근까지 눌린 뒤 지지가 확인되면 다시 후보가 됩니다."*
+    #   전수로 재니 9갈래의 마지막 줄이 **글자까지 같았고**, 그중 대부분에서 거짓이다 —
+    #     · '표본외 성적 미달' · '신뢰도·표본 확보 대기' · '데이터 부족'
+    #       → 가격이 눌린다고 **안 풀린다**(R292·R298 이 이름까지 갈라 둔 칸이다)
+    #     · '돌파 후 매수 대기' → 오히려 **올라가야** 후보가 된다. **방향이 반대**다
+    #     · '오늘 매수 가능' → 지금 가능한데 "눌린 뒤 다시 후보"는 **스스로 모순**이다
+    #   R221('불가' 한 낱말이 셋) · R298('표본 대기' 한 문장이 셋)과 같은 계열이다.
+    #   → **갈래가 정하게** 한다. 사유는 중앙 판정이 결론과 함께 내고 있었고
+    #     (`exclude_reason` · R240) 챗이 안 읽었을 뿐이다 — 새 문장을 짓지 않는다(§4).
+    _b305 = str(ctx.get('bucket') or '')
+    if ctx.get('actionable'):
+        pass                              # 지금 가능한 자리에 "눌리면 다시"는 모순이다
+    elif _b305.startswith('돌파') and ctx.get('breakout'):
+        lines.append(f"{_w(ctx['breakout'])} 회복이 확인되면 다시 후보가 됩니다 "
+                     f"— 이 자리는 눌림이 아니라 **돌파**를 기다립니다.")
+    elif _b305.startswith('눌림목') or _b305.startswith('과열'):
+        lines.append(f"{_w(e)} 부근까지 눌린 뒤 지지가 확인되면 다시 후보가 됩니다.")
+    else:
+        _why305 = str(ctx.get('bucket_why') or '').strip()
+        lines.append(('언제 다시 보나: ' + _why305) if _why305 else
+                     ('이 갈래는 가격이 눌린다고 풀리는 조건이 아닙니다 — '
+                      '사유를 받지 못해 언제 다시 보는지 말하지 않습니다.'))
     return '\n'.join(lines)
 
 

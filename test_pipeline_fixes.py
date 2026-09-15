@@ -25226,6 +25226,133 @@ check("물타기 판정을 못 받으면 '추가 매수 가능'을 주장하지 
 check("평단은 보유 판단에만 쓴다고 답변이 적는다",
       '보유 판단에만' in _unknown316)
 
+print("\n" + "=" * 72)
+print("§317 R305 — 한 문장이 **아홉 갈래**를 덮었다 · 그리고 유도에는 안 흔들린다 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙여 넣은 분석문의 두 요구를 이어서 쟀다.
+#   ① **유도 저항** — *"같은 스냅샷에서 낙관·비관·중립 질문을 넣어도 새 사실이 없다면
+#      핵심 수치와 중앙 결론이 유지되는지 시험한다."* → **셋의 답이 글자까지 같았다.**
+#      외부 LLM 없이 중앙 스냅샷을 조합하는 구조의 강점이고, **그래서 잠근다** —
+#      나중에 외부 LLM 을 붙이면 이 검사가 **먼저** 붉어진다.
+#   ② **반증 점검**의 '판단이 바뀔 조건' — 여기서 하나 나왔다. 아홉 갈래에 같은 질문을
+#      넣고 **마지막 줄**(= 언제 다시 보나)을 그대로 보니 **9갈래가 글자까지 같았다**:
+#          *"{진입가} 부근까지 눌린 뒤 지지가 확인되면 다시 후보가 됩니다."*
+#      그중 대부분에서 **거짓**이다 — '표본외 성적 미달'·'신뢰도·표본 확보 대기'·'데이터
+#      부족'은 가격이 눌린다고 **안 풀리고**(R292·R298 이 이름까지 갈라 둔 칸), '돌파 후
+#      매수 대기'는 오히려 **올라가야** 후보가 되며(방향이 반대), '오늘 매수 가능'은
+#      지금 가능한데 "눌린 뒤 다시 후보"라 **스스로 모순**이다. R221·R298 과 같은 계열.
+#   고침: 갈래가 정하게 하고, 사유는 **중앙 판정이 결론과 함께 내던 것**(`exclude_reason`
+#   · R240)을 읽는다 — 새 문장을 짓지 않는다(§4). 못 받으면 *"가격이 눌린다고 풀리는
+#   조건이 아닙니다 — 사유를 받지 못해 언제 다시 보는지 말하지 않습니다"*(§3).
+#   ⚠️ **첫 판별식이 넓어 9/9 '있음'을 찍었다** — 틀 문장에 '이유:'·'이하'가 늘 있어서다.
+#   낱말 세기를 그만두고 **마지막 줄을 그대로** 봤다(R194 의 그 자리).
+import gaeum_chat as _gc317                                    # noqa: E402
+
+
+def _ctx317(bucket, actionable=False, why=None, breakout=240000.0):
+    return _gc317.build_context(
+        name='시험전자', ticker='000001.KS', price=231000.0,
+        core=dict(bucket=bucket, actionable=actionable, recommended=actionable,
+                  exclude_reason=why, pullback_zone=211023.0,
+                  buy_zone=(208913, 213133), breakout_price=breakout,
+                  new_target=236572.0, new_stop=174524.0, rr=0.7,
+                  horizon_days=20, hold_trim=258968.0, hold_stop=191046.0),
+        fs=dict(displayed_fair_value=173656.0, recommended_buy_price=147608.0,
+                fair_value_status='CAUTION'),
+        verdict=dict(headline='지금은 사지 마세요', score=49, action='HOLD',
+                     vetoes=['유사패턴 표본 0건']),
+        regime_code='BEAR', versions=dict(model='v1'))
+
+
+# ⓐ 유도 저항 — 분위기만 바꾼 세 질문의 답이 같은가 (값으로 · 사용자가 제안한 시험)
+_c317 = _ctx317('추천 제외', why='표본이 모자랍니다')
+_tone317 = [_gc317.answer(q, _c317) for q in (
+    '이 종목 좋아 보이는데 지금 사도 되지?',
+    '이 종목 위험해 보이는데 사면 안 되지?',
+    '지금 사도 돼?')]
+check("질문의 분위기만 바꿔도 답이 **같다** (낙관·비관·중립 · 새 사실 없음)",
+      len(set(_tone317)) == 1, f'서로 다른 답 {len(set(_tone317))}개',
+      scanned=len(_tone317))
+# ⓑ 갈래마다 **언제 다시 보나**가 다르다 — 한 문장이 아홉을 덮지 않는다
+_BK317 = ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기', '과열 해소 대기',
+          '신뢰도·표본 확보 대기', '표본외 성적 미달', '권장가 괴리 과다',
+          '데이터 부족', '추천 제외')
+_last317 = {}
+for _b317 in _BK317:
+    _a317 = _gc317.answer('지금 사도 돼?', _ctx317(
+        _b317, actionable=(_b317 == '오늘 매수 가능'),
+        why=f'({_b317} 사유)'))
+    _ln317 = [l for l in _a317.split('\n')
+              if l.strip() and not l.startswith('근거:')][-1]
+    _last317[_b317] = _ln317
+check("갈래마다 마지막 줄이 다르다 — 한 문장이 아홉을 덮지 않는다",
+      len(set(_last317.values())) >= 5,
+      f'서로 다른 마지막 줄 {len(set(_last317.values()))}개 / 갈래 {len(_BK317)}개',
+      scanned=len(_BK317))
+# ⓒ **거짓이던 세 자리**를 각각 값으로 본다
+check("'오늘 매수 가능'에는 '눌린 뒤 다시 후보'를 붙이지 않는다 (스스로 모순이던 자리)",
+      '눌린 뒤' not in _last317['오늘 매수 가능'], _last317['오늘 매수 가능'])
+check("'돌파 후 매수 대기'는 **돌파가 회복**을 말한다 (방향이 반대였다)",
+      '회복' in _last317['돌파 후 매수 대기']
+      and '눌린 뒤' not in _last317['돌파 후 매수 대기'],
+      _last317['돌파 후 매수 대기'])
+for _k317 in ('표본외 성적 미달', '신뢰도·표본 확보 대기', '데이터 부족'):
+    check(f"'{_k317}' 에 **가격이 눌리면 풀린다**고 말하지 않는다 (R292·R298 의 그 칸)",
+          '눌린 뒤' not in _last317[_k317], _last317[_k317])
+# ⓓ 사유를 못 받으면 **지어내지 않는다** (§3)
+_nowhy317 = _gc317.answer('지금 사도 돼?', _ctx317('데이터 부족', why=None))
+check("사유를 못 받으면 언제 다시 보는지 **말하지 않는다** (지어내지 않는다 · §3)",
+      '사유를 받지 못해' in _nowhy317 and '눌린 뒤' not in _nowhy317,
+      _nowhy317.split('\n')[-2][:70])
+
+print("\n" + "=" * 72)
+print("§318 R306 — 한 등록부에 '오늘'이 **둘**이었다 · 자정 직후에만 보이는 하루 차이 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R305 를 커밋하려고 돌린 전체 회귀가 **처음** 붉어졌다(00시대에 돌린 탓이다):
+#       화면이 원장과 같은 말을 한다 — ['usability|loss_control_tradeoff',
+#                                     ['점검일이 1일 지났는데 안 적음']]
+#   **내 변경 때문인지부터 셌다**(R289 의 순서) — 아니었다. 재검토일 2026-09-15 인
+#   이슈를 화면이 *"다음 점검 2026-09-15"* 라 적었는데, 지역 날짜로는 **1일 지남**이다.
+#   원인: `issue_ops._today()` 가 **UTC 날짜**를 돌려줬다. 그런데 등록부에 적히는
+#   날짜(`next_review`·`eta`)는 사람이 KST 로 정한 날이고, **닫는 쪽**
+#   (`issue_tracker.resolve_by_key` · R256)은 이미 **지역 날짜**로 견주고 있었다 —
+#   **한 등록부에 '오늘'이 둘**이었고 KST 00:00~09:00 에 하루 어긋난다.
+#   라운드 222(SQLite `date('now')`)·라운드 283(꼬리 검사)이 고친 **그 자리**다.
+#   고침: 정의를 `issue_ops._today()` **한 곳**에 두고 닫는 쪽이 그것을 부른다(§4).
+import datetime as _dt318                                      # noqa: E402
+from improvement import issue_ops as _io318                    # noqa: E402
+from improvement import issue_tracker as _it318                # noqa: E402
+
+check("등록부의 '오늘'이 **지역 날짜**다 (등록부에 적힌 날짜와 같은 시간대)",
+      _io318._today() == _dt318.datetime.now().date(),
+      f'등록부 {_io318._today()} vs 지역 {_dt318.datetime.now().date()}')
+check("UTC 로 읽지 않는다 — 두 날짜가 갈리는 새벽에 하루 어긋나던 자리",
+      'datetime.now(timezone.utc).astimezone().date()'
+      in _read148(_os.path.join(PROJ, 'improvement', 'issue_ops.py')))
+# 닫는 쪽과 보여 주는 쪽이 **같은 함수**를 부른다 (§4)
+_tsrc318 = _read148(_os.path.join(PROJ, 'improvement', 'issue_tracker.py'))
+check("닫는 쪽이 같은 '오늘'을 부른다 (두 곳에 정의하지 않는다)",
+      'from improvement.issue_ops import _today as _today_local' in _tsrc318
+      and 'today = _today_local()' in _tsrc318
+      and 'datetime.now(timezone.utc).astimezone().date()' not in _tsrc318,
+      scanned=len(_tsrc318.splitlines()))
+# 심어서 잰다 — 어제가 점검일이면 '지남'이라 적는가 (값으로 · R195)
+_y318 = (_io318._today() - _dt318.timedelta(days=1)).isoformat()
+_p318 = _io318._display_fields(
+    {'status': 'open', 'work_status': _io318.ST_CHECKING, 'fixable_now': 1,
+     'next_review': _y318}, 10)
+check("어제가 점검일이면 '1일 지남'이라 적는다 (심어서 확인)",
+      '1일 지남' in str(_p318.get('review_label')), str(_p318.get('review_label')))
+_t318 = _io318._today().isoformat()
+_p318b = _io318._display_fields(
+    {'status': 'open', 'work_status': _io318.ST_CHECKING, 'fixable_now': 1,
+     'next_review': _t318}, 10)
+check("오늘이 점검일이면 아직 '지남'이 아니다 (오탐하지 않는다 · 양방향)",
+      '지남' not in str(_p318b.get('review_label')),
+      str(_p318b.get('review_label')))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

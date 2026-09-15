@@ -88,7 +88,12 @@ def resolve_by_key(conn: sqlite3.Connection, issue_key: str) -> Optional[str]:
     if nr:
         try:
             due = datetime.fromisoformat(nr).date()
-            today = datetime.now(timezone.utc).astimezone().date()
+            # 라운드 306 — '오늘'의 정의는 **한 곳**이다(`issue_ops._today`). 종전엔
+            #   여기만 지역 날짜였고 표시 쪽은 UTC 라, KST 00~09시에 둘이 하루
+            #   어긋났다(§4 — 같은 등록부에 '오늘'이 둘이면 한쪽만 고치게 된다).
+            #   늦은 임포트다 — 모듈 수준에서 서로를 부르면 순환이 된다.
+            from improvement.issue_ops import _today as _today_local
+            today = _today_local()
             if due > today:
                 return f"재검토일 {nr} 전 — 오늘의 수로 닫지 않는다"
         except ValueError:

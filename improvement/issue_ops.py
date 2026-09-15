@@ -268,7 +268,20 @@ PLAYBOOK = {
 
 
 def _today():
-    return datetime.now(timezone.utc).date()
+    """등록부의 '오늘' — **지역 날짜**다. 이 자리가 유일한 정의다 (라운드 306).
+
+    ⚠️ 종전에는 `datetime.now(timezone.utc).date()` 였다. 그런데 이 등록부에 적히는
+    날짜(`next_review`·`eta`)는 사람이 KST 로 정한 날이고, **닫는 쪽**
+    (`issue_tracker.resolve_by_key` · 라운드 256)은 이미 지역 날짜로 견주고 있었다 —
+    **한 등록부에 '오늘'이 둘이었다.**
+
+    어긋나는 창은 **KST 00:00~09:00**(UTC 로는 전날)이다. 그래서 낮에 돌리면 안 보이고
+    자정 직후에만 보인다 — 실제로 2026-09-16 00시대에 전체 회귀가 처음 잡았다
+    (재검토일 09-15 인 이슈를 화면이 *"다음 점검 2026-09-15"* 라 적었고, 지역 날짜로는
+    **1일 지남**이었다). 라운드 222 가 SQLite `date('now')` 에서, 라운드 283 이 꼬리
+    검사에서 고친 **그 자리**다 — *검사의 '오늘'은 사건의 날이 아니다.*
+    """
+    return datetime.now(timezone.utc).astimezone().date()
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
