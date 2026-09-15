@@ -25478,6 +25478,73 @@ _cl320 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
 check("실패도 기억하는 시세 함수가 그대로 있다 (R303 · 클라우드 실측 627회 → 10회)",
       'def price_for_grading(' in _cl320 and 'failed' in _cl320)
 
+print("\n" + "=" * 72)
+print("§321 R310 — 시간초과한 단계가 **로그를 통째로 잃었다** (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R309 가 09-15 실행을 읽다가 봤다: `전방 구간 집중 축적`은 09-14·09-15 **둘 다**
+#   100분 시간초과했는데 09-15 로그의 그 단계에는 스크립트 출력이 **한 줄도 없다**
+#   (`##[error] … has timed out` 한 줄뿐). 그래서 증분이 09-14 **+400** · 09-15 **+0**
+#   으로 갈린 **이유**를 로그로 못 본다 — 무엇을 했는지는 행수로 알지만 왜는 모른다.
+#   같은 실행의 `케이스 축적`은 **앞부분만** 보였다(계획·채점 대상 줄은 있고 그 뒤가 없다).
+#   → 추측하지 않고 **심어서** 쟀다: 자식을 파일로 보내고 죽이면 기본은 **남은 줄 0**,
+#     `-u` 면 **남은 줄 5**. 파이프로 나가는 stdout 은 블록 버퍼라 죽임을 당하면 아직
+#     안 비운 버퍼가 통째로 사라진다. 앞부분만 보인 것은 버퍼가 한 번 찼기 때문이고,
+#     전방 단계는 찍는 양이 적어 한 번도 안 찼다.
+#   **예산을 준 긴 단계일수록 죽을 때 말이 없어진다 — 하필 이유를 가장 알고 싶은
+#   단계다.** R218 의 '중단 요약' · R250·R263 의 *"`|| true` 뒤의 침묵"* 과 같은 자리.
+#   고침은 워크플로 job 환경변수 **한 줄**이고 순서·예산은 안 건드렸다(R247).
+import subprocess as _sp321                                    # noqa: E402
+import sys as _sys321                                          # noqa: E402
+import time as _time321                                        # noqa: E402
+
+_probe321 = _os.path.join(PROJ, '_probe')
+_os.makedirs(_probe321, exist_ok=True)
+_child321 = _os.path.join(_probe321, '_s321_child.py')
+with open(_child321, 'w', encoding='utf-8') as _f321:
+    _f321.write("import time\nfor i in range(5):\n    print('line %d' % i)\n"
+                "time.sleep(30)\n")
+
+
+def _kill321(unbuffered):
+    """자식을 파일로 보내고 죽인다 — 워크플로의 `timeout-minutes` 와 같은 모양."""
+    _log = _os.path.join(_probe321,
+                         '_s321_out_%s.txt' % ('u' if unbuffered else 'buf'))
+    _args = [_sys321.executable] + (['-u'] if unbuffered else []) + [_child321]
+    with open(_log, 'w', encoding='utf-8') as _f:
+        _p = _sp321.Popen(_args, stdout=_f, stderr=_sp321.DEVNULL)
+        _t0 = _time321.time()
+        while _time321.time() - _t0 < 2.5 and _p.poll() is None:
+            _time321.sleep(0.25)
+        _p.kill()
+        _p.wait()
+    with open(_log, encoding='utf-8', errors='replace') as _f:
+        return len([l for l in _f.read().splitlines() if l.strip()])
+
+
+_n_buf321 = _kill321(False)
+_n_u321 = _kill321(True)
+check("죽임을 당하면 **안 비운 버퍼가 사라진다** (심기 — 진단 자체를 재현한다)",
+      _n_buf321 == 0, f'기본 버퍼링에서 남은 줄 {_n_buf321}')
+check("`-u`(버퍼 없음)면 찍은 줄이 **그대로 남는다** (양방향 · 고침이 실제로 듣는다)",
+      _n_u321 == 5, f'남은 줄 {_n_u321}')
+
+_wf321 = _read148(_os.path.join(PROJ, '.github', 'workflows',
+                                'daily_accumulate.yml'))
+check("워크플로가 버퍼를 끄고 돈다 — 죽어도 그때까지의 말이 남는다",
+      'PYTHONUNBUFFERED' in _wf321)
+# job 전체에 걸린다 — 단계마다 손으로 적으면 새 단계가 빠진다 (R114 · 손 목록은 낡는다)
+_i321 = _wf321.find('env:\n      TZ: Asia/Seoul')
+check("단계마다가 아니라 **job 환경**에 있다 (새 단계도 자동으로 받는다)",
+      _i321 > 0 and 'PYTHONUNBUFFERED' in _wf321[_i321:_i321 + 90],
+      _wf321[_i321:_i321 + 80].replace('\n', ' / ') if _i321 > 0 else '못 찾음')
+# ⚠️ 순서·예산은 **안 건드렸다** — R247 이 여기서 2시간 16분치를 잃었다
+check("긴 단계의 예산과 job 한도가 그대로다 (더한 것은 환경변수 한 줄뿐 · R280)",
+      'timeout-minutes: 350' in _wf321 and 'timeout-minutes: 120' in _wf321
+      and 'timeout-minutes: 100' in _wf321 and 'timeout-minutes: 90' in _wf321)
+check("왜 넣었는지가 워크플로 안에 적혀 있다 (실측값과 함께 · 번호가 아니라 사실)",
+      '블록 버퍼' in _wf321 and '남은 줄' in _wf321)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
