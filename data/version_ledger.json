@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.15.4",
+  "model": "v2026.09.15.5",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.15.5",
+   "previous": "v2026.09.15.4",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "상한 사유를 **목록으로** 내보낸다 — 화면이 이어 붙인 한 덩어리를 300자에서 말없이 자르고 있었다. 그리고 내부 불일치 상한(49점)만 사유 목록에 안 실리고 있어 한 줄을 더했다. 늘 None 이던 죽은 키 verdict[cap] 은 걷어냈다(만드는 곳 0 · 읽는 곳 0)",
+   "note": "점수·문턱·게이트·판정 불변 · 목록 한 줄 추가와 키 제거 · 근거 docs/RESULT_R301_A_TRUNCATED_REASON.md",
+   "created_at": "2026-09-15T11:54:37+00:00",
+   "effective_from": "2026-09-15"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

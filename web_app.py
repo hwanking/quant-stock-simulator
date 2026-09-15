@@ -8505,8 +8505,16 @@ st.caption("신규 매수 기준은 **진입가**, 보유자 기준은 **현재�
            "다르면 매도가·손절가가 다른 값으로 나오고, 그것이 정상입니다. "
            "투자 권유가 아니며 판단 책임은 본인에게 있습니다.")
 
-# 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 한 줄 요약
-_extra_bits = []
+# 변동성 관리 비중 · 상대 모멘텀 · 실전 적중률 — 결론 바로 아래 요약
+# ⚠️ 라운드 301 — 종전에는 이 조각 **일곱 개**가 `·` 하나로 이어져 **366자 한 줄**이었다
+#   (렌더 덤프에서 산문 줄을 길이 순으로 세니 위쪽이었다). 서로 다른 것을 재는 수들이라
+#   한 줄로 읽히지 않는다 — 종목 이야기 · 확률 이야기 · 표본 출처가 섞여 있었다.
+#   **문구는 한 글자도 안 바꾸고** 무리로만 나눈다(값·판정 불변 · R233 의 '묶고 접는다').
+#   ⚠️ 계층 보정 확률은 **접지 않는다** — 다른 캡션이 *"대신 계층 보정 확률(아래 줄)을
+#   보세요"* 라고 이 줄을 가리킨다(R288 의 *가리키는 문구가 먼저 낡는다*).
+_bits_stock = []      # 이 종목에 대한 것
+_bits_prob = []       # 확률·성적에 대한 것 (가리키는 문구가 있으므로 늘 보인다)
+_bits_src = []        # 표본·출처 (규모와 날짜)
 # ⚠️ 라운드 187 — '자본의 20% 이내' 라는 비중 제안이 **추천하지 않는
 #   종목에도** 붙어 있었다. 사용자 지적: 신규 매수를 권하지 않으면서
 #   얼마나 사라고 적으면 그 자체가 매수 지시로 읽힌다. 실제로 결론이
@@ -8516,28 +8524,28 @@ _extra_bits = []
 #   → 다만 **조용히 감추지 않는다** (§3) — 왜 안 내는지 적는다.
 _pos_sug = four_scores.get('suggested_position_pct')
 if _pos_sug and CORE.get('recommended'):
-    _extra_bits.append(f"변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
+    _bits_stock.append(f"변동성 관리 비중 제안: 자본의 **{_pos_sug:.0f}% 이내** "
                        f"({four_scores.get('suggested_position_basis', '')})")
 elif _pos_sug:
-    _extra_bits.append(
+    _bits_stock.append(
         "변동성 관리 비중 제안은 **표시하지 않습니다** — 이 종목은 오늘 "
         "추천 필수조건을 통과하지 못했습니다. 얼마나 살지는 살 만한 자리일 "
         "때만 말합니다.")
 _rm = four_scores.get('rel_mom_detail')
 if _rm and _rm.get('relative') is not None:
-    _extra_bits.append(f"상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
+    _bits_stock.append(f"상대 모멘텀(12-1): **{_rm['relative']:+.1f}%p** "
                        f"(종목 {_rm['stock']:+.1f}% vs {_rm['market']} {_rm['index']:+.1f}%)")
 _tr = four_scores.get('track_record')
 if _tr and _tr.get('hit_rate') is not None:
-    _extra_bits.append(f"실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
+    _bits_prob.append(f"실전 판정 적중률 **{_tr['hit_rate']:.0f}%** "
                        f"({_tr.get('decided', 0)}건 판정 완료 — 점수 확신에 반영)")
 _cb = four_scores.get('calibration_band')
 if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5:
-    _extra_bits.append(
+    _bits_prob.append(
         f"가상 백테스트: 이 점수대({_cb['lo']}~{_cb['hi']}점)의 과거 리플레이 적중률 "
         f"**{_cb['hit_rate']:.0f}%** (n={_cb['n']}, Wilson 하한 {_cb['wilson_low']:.0f}%)")
 elif _cb and _cb.get('n', 0) < 5:
-    _extra_bits.append(f"이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
+    _bits_prob.append(f"이 점수대({_cb['lo']}~{_cb['hi']}점) 리플레이 표본 "
                        f"{_cb.get('n', 0)}건 — 표본 부족으로 적중률 미표시")
 # 계층 보정 확률(R59)·국면 — 배너·고정 패널·가늠 AI 타일·대화가 전부
 # 이 두 값을 읽는다. 한 번만 계산해 네 곳이 같은 숫자를 말하게 한다 (§4).
@@ -8557,7 +8565,7 @@ try:
 except Exception:                                              # noqa: BLE001
     pass
 if _blend59:
-    _extra_bits.append(
+    _bits_prob.append(
         f"계층 보정 확률 약 {_blend59['p'] * 100:.0f}% "
         f"[{_blend59['wilson_low'] * 100:.0f}~"
         f"{_blend59['wilson_high'] * 100:.0f}%]")
@@ -8569,7 +8577,7 @@ if _calib_all.get('total_cases'):
     #   카드는 고쳤는데 **여기와 모델 성적 캡션은 total_cases 그대로**였다.
     #   그래서 헤더가 '누적 케이스 249,748건' 옆에 '원장 250,725건 기준'을
     #   띄웠다 — 같은 줄 안에서 두 수. 같은 우선순위(:753)로 맞춘다.
-    _extra_bits.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
+    _bits_src.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
                        f"누적 케이스 {_calib_all.get('ledger_rows') or _calib_all['total_cases']:,}건")
     # 유효 독립 표본 (라운드 54b) — 같은 날 같은 업종 신호는 같은 시장
     # 사건 하나다. raw 건수로 신뢰구간을 좁히면 과신이 된다.
@@ -8587,22 +8595,24 @@ if _calib_all.get('total_cases'):
             _sa54 = _json54.load(_f54)
         _en54_made = str(_sa54.get('made') or '날짜 미기록')[:10]
         if _sa54.get('independent_episodes'):
-            _extra_bits.append(
+            _bits_src.append(
                 f"유효 독립 표본 약 {int(_sa54['independent_episodes']):,}건"
                 f" (같은 종목 {int(_sa54.get('episode_days') or 35)}일 내 재신호를 "
                 f"한 사건으로 묶음 · "
                 f"원장 {int(_sa54.get('raw_cases') or 0):,}건 기준 · {_en54_made})")
     except Exception:                                          # noqa: BLE001
         pass                          # 표기 하나 때문에 화면이 죽지 않는다
-if _extra_bits:
-    # ⚠️ 라운드 295 — 여기가 **라운드 44 가 고친 그 사고의 생존자**였다. 이 줄은 조각을
-    #   이어 붙이는데 그중 둘에 물결표가 있다(`55~59점` · `[48~54%]`). Streamlit 마크다운이
-    #   그 둘을 **쌍으로 묶어 취소선**으로 만들어, 물결표 둘이 사라지고(`5559점`·`[4854%]`)
-    #   **그 사이의 적중률·표본수·계층 보정 확률이 통째로 줄 그어진 채** 나가고 있었다.
-    #   실측: 렌더된 페이지의 `<del>` 한 개 = 바로 이 문장(2026-09-15).
-    #   `_md_safe` 는 처음부터 있었다 — **이 호출부에만 안 닿았다**(R246 의 그 모양).
-    #   조각마다 감싸지 않고 **넘기는 자리 한 곳**에서 막는다(R44 가 정한 그대로 · R120e).
-    st.caption(_md_safe("  ·  ".join(_extra_bits)))
+# ⚠️ 라운드 295 — 여기가 **라운드 44 가 고친 그 사고의 생존자**였다. 이 줄들은 조각을
+#   이어 붙이는데 그중 둘에 물결표가 있다(`55~59점` · `[48~54%]`). Streamlit 마크다운이
+#   그 둘을 **쌍으로 묶어 취소선**으로 만들어, 물결표 둘이 사라지고(`5559점`·`[4854%]`)
+#   **그 사이의 적중률·표본수·계층 보정 확률이 통째로 줄 그어진 채** 나가고 있었다.
+#   실측: 렌더된 페이지의 `<del>` 한 개 = 바로 이 문장(2026-09-15).
+#   `_md_safe` 는 처음부터 있었다 — **이 호출부에만 안 닿았다**(R246 의 그 모양).
+#   조각마다 감싸지 않고 **넘기는 자리 한 곳**에서 막는다(R44 가 정한 그대로 · R120e).
+#   라운드 301 이 한 줄을 세 무리로 나눴어도 **막는 자리는 그대로 한 곳**이다.
+for _bits301 in (_bits_stock, _bits_prob, _bits_src):
+    if _bits301:
+        st.caption(_md_safe("  ·  ".join(_bits301)))
 
 # ── 우측 고정 요약 패널 (v2) — 긴 분석을 읽어도 핵심 판단은 계속 보인다 ─────
 # 넓은 화면에서만 표시 (본문 1440px + 사이드바 + 패널 폭이 확보될 때).
@@ -8940,8 +8950,26 @@ with _vc1:
     if verdict['cap_applied']:
         st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** 게이트 상한 적용 → "
                     f"**{verdict['score']}점**")
-        if verdict.get('gate_reason'):
-            st.caption("상한 사유: " + str(verdict['gate_reason'])[:300])
+        # ── 상한 사유는 **목록**이다 — 이어 붙여 자르지 않는다 (라운드 301) ──
+        #   종전엔 `gate_reason`(' / ' 로 이은 한 덩어리)을 **300자에서 말없이**
+        #   잘랐다. 실측(2026-09-15 렌더): 사유 7개 · 307자로 마지막 사유가 문장
+        #   중간에서 끊겨 나갔고, **몇 개가 잘렸는지도 안 적었다**(§3 · R194 —
+        #   '못 봤다'와 '없다'를 구분할 수 없게 만드는 그 모양). 엔진은 처음부터
+        #   목록(`cap_reasons`)을 내고 있었다 — 버리지 말고 옮긴다(R289).
+        _caps301 = list(verdict.get('cap_reasons') or [])
+        if _caps301:
+            st.caption(f"상한 사유 **{len(_caps301)}개** — 이 중 가장 낮은 상한이 "
+                       f"최종 점수를 정합니다.")
+            _HEAD301 = 2                    # 접기 전에 보여 주는 수 (자르는 것이 아니다)
+            for _r301 in _caps301[:_HEAD301]:
+                st.caption(_md_safe("· " + str(_r301)))
+            if len(_caps301) > _HEAD301:
+                with st.expander(f"나머지 상한 사유 {len(_caps301) - _HEAD301}개"):
+                    for _r301 in _caps301[_HEAD301:]:
+                        st.caption(_md_safe("· " + str(_r301)))
+        elif verdict.get('gate_reason'):
+            # 목록을 못 받으면 있는 것이라도 낸다 — 다만 **자르지 않는다**
+            st.caption(_md_safe("상한 사유: " + str(verdict['gate_reason'])))
     else:
         st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** = 최종 **{verdict['score']}점** "
                     f"(상한 미적용)")

@@ -1777,7 +1777,13 @@ class QuantIndicatorsEngine:
         ]
         raw_sum = sum(c['contribution'] for c in composition
                       if c['contribution'] is not None)
-        cap = fs.get('final_score_cap')
+        # ⚠️ 라운드 301 — 여기 있던 `cap = fs.get('final_score_cap')` 를 걷어냈다.
+        #   그 키를 **만드는 곳이 저장소에 0곳**이라 늘 None 이었고(2026-09-15 전수),
+        #   그것을 실어 보내던 `verdict['cap']` 을 **읽는 곳도 0곳**이었다 — 회귀도
+        #   안 읽는다. 라운드 164 의 '쓰기만 하는 죽은 키' 와 라운드 297 의 '읽는 곳이
+        #   없는 표' 가 만나는 자리다. 필요해지면 **만드는 쪽과 함께** 다시 넣는다.
+        #   (실제 상한은 `final_action_score = min(원점수, 14개 상한)` 로 걸리고,
+        #    각 상한의 사유는 `cap_reasons` 에 **목록으로** 이미 실려 있다.)
         cap_applied = (base is not None and raw_sum - base > 0.5)
 
         # ── 거부권 — 평균으로 상쇄되면 안 되는 조건들 ────────────────────
@@ -1928,9 +1934,12 @@ class QuantIndicatorsEngine:
             'title': fs.get('final_action_title'),
             'composition': composition,        # 실제 점수를 만든 산식
             'raw_weighted_sum': round(raw_sum, 1),
-            'cap': cap,
             'cap_applied': cap_applied,
             'gate_reason': fs.get('gate_reason'),
+            # 라운드 301 — 화면이 `gate_reason`(‘ / ’ 로 이은 한 덩어리)을 잘라 쓰고
+            #   있었다. 사유는 원래 **목록**이므로 목록을 그대로 싣는다(§4 · R289 의
+            #   *버리지 말고 옮긴다*). 값·순서·문구는 엔진 것 그대로다.
+            'cap_reasons': list(fs.get('cap_reasons') or []),
             'vetoes': vetoes,
             'summary': summary,
             'disagreement': (None if disagreement is None else round(disagreement, 1)),
@@ -3974,6 +3983,13 @@ class QuantIndicatorsEngine:
         if contradiction_detected:
             final_action_score = min(final_action_score, 49)
             final_action_title = '재검토 필요'
+            # 라운드 301 — 이 상한만 `cap_reasons` 에 **안 실리고 있었다.** 사유는
+            #   바로 위에서 이미 만들어 두고(`contradiction_reasons`) 다른 목록으로만
+            #   갔다 — 그래서 화면의 '상한 사유' 목록이 **실제로 걸린 상한을 빠뜨릴 수**
+            #   있었다(R240·R289 의 *사유는 있는데 소비자까지 안 온다*). 점수·문턱은
+            #   불변이고, 목록에 한 줄이 더해질 뿐이다.
+            for _cr301 in (contradiction_reasons or ['내부 불일치']):
+                cap_reasons.append(f"{_cr301} → 상한 49점")
 
         # ========================================================
         # [명세 §15] TOP3 필수조건 — 통과/미통과 사유를 전부 남긴다
