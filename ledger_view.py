@@ -53,6 +53,28 @@ def too_close(sorted_dates, d, min_gap_days=MIN_GAP_DAYS):
     return False
 
 
+def unblock_date(sorted_dates, d, min_gap_days=MIN_GAP_DAYS):
+    """`d` 가 `too_close` 로 막혔을 때, **기준일이 언제가 되어야 열리는지**.
+
+    막은 것은 `d` 바로 앞의 케이스다(뒤엣것은 `d` 보다 미래라 후보가 나아가면
+    멀어지지 않는다). 그 케이스 + `min_gap_days` 가 답이다 — 같은 규칙을
+    거꾸로 읽은 것뿐이고 **새 숫자가 아니다.** 안 막혔으면 None.
+
+    ⚠️ 이것은 **기준일**이지 달력 날짜가 아니다. 후보 기준일은 마지막 봉에서
+    20봉 뒤에 서므로(`make_asof_dates`) 실제로 그 날이 오는 것은 더 나중이고,
+    후보는 거래일로 나아가는데 이 값은 달력일이라 **환산하지 않는다** —
+    환산하면 그 순간 손으로 고른 수가 된다 (§2 · R307 이 그렇게 틀렸다).
+    """
+    if not sorted_dates or not too_close(sorted_dates, d, min_gap_days):
+        return None
+    d = str(d)[:10]
+    i = bisect.bisect_left(sorted_dates, d)
+    prev = sorted_dates[i - 1] if i - 1 >= 0 else None
+    if prev is None:
+        return None
+    return (_day(prev) + _dt.timedelta(days=int(min_gap_days))).isoformat()
+
+
 def dates_by_ticker(pairs):
     """{(ticker, date), ...} → {ticker: [date, ...] 오름차순}."""
     out = {}

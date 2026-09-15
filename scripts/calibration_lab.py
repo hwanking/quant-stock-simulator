@@ -1020,6 +1020,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     import ledger_view as _lv
     done_by_tk = _lv.dates_by_ticker(done)
     near_dup = 0
+    near_open = None            # 막힌 후보가 열리는 가장 이른 **기준일** (R309)
+    newest_cand = None          # 이번에 만든 후보 중 가장 최신 기준일
     skipped = 0
     for tk in pool:
         try:
@@ -1028,10 +1030,15 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             price_cache[tk] = pdf
             for d in make_asof_dates(pdf, n_dates=N_DATES,
                                      forward_from=forward_from):
+                if newest_cand is None or d > newest_cand:
+                    newest_cand = d
                 if (tk, d) in done:
                     continue
                 if not forward_from and _lv.too_close(done_by_tk.get(tk, ()), d):
                     near_dup += 1
+                    _ub = _lv.unblock_date(done_by_tk.get(tk, ()), d)
+                    if _ub and (near_open is None or _ub < near_open):
+                        near_open = _ub
                     continue
                 todo.append((tk, d))
         except Exception as exc:
@@ -1068,8 +1075,27 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         print(f"  전방 모드 — 새로 쌓을 것 없음 (기록 완료 {len(done):,}건). "
               f"날짜는 있으나 전부 이미 쌓았다.")
 
+    if near_dup and not todo:
+        # ⚠️ 라운드 309 — **'남음 0' 은 '다 했다'가 아니었다.** 09-14·09-15 실행이
+        #   둘 다 남음 0 을 찍었는데, 09-15 는 새 후보 615건이 **전부** 이 규칙에
+        #   막힌 것이었다(near_dup 615). 로그만 보면 두 경우가 같은 글자다 —
+        #   R284 가 *"멈췄다 · 돈 적이 없다"* 를 가른 그 자리이고, 여기서는
+        #   *"다 했다"* 와 *"잠겼다"* 다. 언제 열리는지는 **셀 수 있다**(R298 —
+        #   기다리라고 적을 거면 얼마나인지도 적는다). 규칙을 거꾸로 읽을 뿐
+        #   새 숫자를 만들지 않는다.
+        print(f"  ⚠️ 남음 0 이지만 **다 한 것이 아니다** — 새 후보 {near_dup:,}건이 "
+              f"전부 겹침 규칙에 막혔다.")
+        if near_open:
+            print(f"     가장 이른 것은 기준일이 {near_open} 이 되어야 열린다 "
+                  f"(이번 최신 후보 {newest_cand}). 후보는 거래일마다 한 봉씩 "
+                  f"나아간다 — 달력 날짜로는 환산하지 않는다 (§2).")
     total_planned = len(done) + len(todo)
-    print(f"가상 판정 계획: 완료 {len(done)}건 · 남음 {len(todo)}건 (계획 {total_planned}건)")
+    # ⚠️ '완료'는 **예측 파일 전체**의 수이고 이번 계획이 본 것은 pool 뿐이다
+    #   (축적 단계는 `--universe` 가 없어 고정 목록 셋 = 600종목 · R309).
+    #   같은 줄에 두 수를 같이 적는다 — 분모를 안 적으면 원장 전체를 다 본 줄로
+    #   읽힌다 (R233 · R260 의 그 자리).
+    print(f"가상 판정 계획: 완료 {len(done)}건 · 남음 {len(todo)}건 "
+          f"(계획 {total_planned}건 · 이번 pool 종목 {len(pool):,}개)")
     t0 = time.time()
     ran = 0
     for tk, d in todo:
