@@ -4372,10 +4372,24 @@ if _pmr:
                            f"({_gp:+.1f}%)" if _c.get('pullback_zone')
                            and _gp is not None else '')
                         + f"  \n{_c.get('exclude_reason') or ''}")
-                    _fail = [c for c in (_c.get('checks') or []) if not c['ok']]
+                    # ⚠️ 라운드 312 — 여기가 **미충족만, 그것도 말없이 4개까지만**
+                    #   적고 있었다. 실측(리포트 87개 · core 있는 후보 398개):
+                    #   **16개(4.0%)가 잘린 채 나갔고**(최대 미충족 5개) 통과한 조건 수는
+                    #   **어느 종목에서도 안 적었다**. 자르고 안 적는 것은 R301 이 상한
+                    #   사유에서 고친 그 결함이고, '통과한 것을 안 적는 것'은 붙여 넣은
+                    #   분석문이 요구한 *"확인된 사실"* 이 화면에 없다는 뜻이다.
+                    #   고침: **안 자른다**(최대 5개라 줄이 길어지지 않는다) · 분모와
+                    #   통과 수를 먼저 말한다. 판정·문턱·조건 수 불변.
+                    _all_ck312 = list(_c.get('checks') or [])
+                    _fail = [c for c in _all_ck312 if not c['ok']]
+                    if _all_ck312:
+                        st.caption(
+                            f"조건 {len(_all_ck312)}개 중 "
+                            f"**통과 {len(_all_ck312) - len(_fail)}개** · "
+                            f"미충족 {len(_fail)}개")
                     if _fail:
-                        st.caption("미충족: " + " · ".join(
-                            f"{c['name']}({c['detail']})" for c in _fail[:4]))
+                        st.caption(_md_safe("미충족: " + " · ".join(
+                            f"{c['name']}({c['detail']})" for c in _fail)))
     # 한 줄에 5개를 우겨 넣으면 카드 폭이 ~280px 로 줄어 '242,500원'의 원이
     # 잘리고 종목명이 어색하게 접힌다. 한 줄 3개로 두면 ~450px 이 나온다.
     # 스트림릿 컬럼은 자동 줄바꿈이 없으므로 직접 묶어서 여러 줄로 만든다.
