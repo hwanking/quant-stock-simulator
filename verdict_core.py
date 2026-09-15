@@ -375,7 +375,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
                              depth_sigma, turnover=turnover,
                              heat=_heat_txt(fs),
                              regime_block=bool(rg.get('block_new')),
-                             vetoes=vetoes, vb_reason=vb_reason)
+                             vetoes=vetoes, vb_reason=vb_reason,
+                             oos_gap=fs.get('blind_test_gap'))
 
     # 내일 실제로 손댈 수 있는가 — 오늘의 추천에 올릴지 가르는 단 하나의 기준.
     #
@@ -537,9 +538,48 @@ def _heat_txt(fs):
     return ' · '.join(parts)
 
 
+def oos_wait_line(gap):
+    """'표본 대기' 의 사유 한 줄 — **얼마나 더 있어야 풀리는지**까지 적는다 (라운드 298).
+
+    사용자: *"표본 대기가 나오면 개선해줘야지."* 종전 문장은 갈래 셋을 한 문장으로
+    묶어 *"일봉이 모자라 … 거래일이 쌓이면 다시 봅니다"* 라고만 했는데, **셋 중
+    하나만 일봉 이야기**다. 엔진이 이미 사유와 수를 내고 있었고(`blind_test_gap`)
+    스냅샷이 그것을 안 싣고 있었다 — 라운드 289 와 같은 자리다.
+
+    새 문턱을 만들지 않는다 — 봉→달력일 환산은 이미 채택된 `ledger_view.bars_to_days`
+    (20봉 = 28일) 하나를 부른다. 못 받으면 **모른다고 적는다**(§3).
+    """
+    g = gap if isinstance(gap, dict) else {}
+    kind = str(g.get('kind') or '')
+    head = '이 종목은 표본외 검증을 아직 하지 못했습니다'
+    if kind == 'bars':
+        n, need = g.get('bars'), g.get('bars_need')
+        if n is not None and need is not None and need > n:
+            import ledger_view as _lv298
+            left = int(need) - int(n)
+            return (f'{head} — 일봉이 {int(n)}봉으로 검증에 필요한 {int(need)}봉에 '
+                    f'못 미칩니다. {left}거래일(약 {_lv298.bars_to_days(left)}일) '
+                    f'더 쌓이면 검증을 시작합니다.')
+        return f'{head} — 일봉이 모자라 학습·검증 구간을 나눌 수 없습니다.'
+    if kind == 'split':
+        return (f'{head} — 일봉은 있으나 학습 구간을 떼고 나면 검증 구간이 남지 '
+                f'않습니다. 거래일이 쌓이면 다시 봅니다.')
+    if kind == 'preds':
+        p, need = g.get('preds'), g.get('preds_need')
+        cnt = (f'{int(p)}건뿐이라 기준 {int(need)}건에 못 미칩니다'
+               if p is not None and need is not None else '기준에 못 미칩니다')
+        return (f'{head} — 일봉은 충분합니다. 과거에 지금과 닮은 구간이 '
+                f'{cnt}. 거래일이 쌓이면 늘 수 있지만 얼마나 걸릴지는 못 잽니다 '
+                f'— 닮은 구간이 나오는 빈도에 달렸습니다.')
+    txt = str(g.get('reason') or '').strip()
+    if txt:
+        return f'{head} — {txt}'
+    return f'{head}. 사유를 받지 못했습니다.'
+
+
 def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
             turnover=None, heat=None, regime_block=False, vetoes=None,
-            vb_reason=None):
+            vb_reason=None, oos_gap=None):
     """
     왜 추천에서 빠졌는가 — **무엇을 기다리면 되는지**를 이름에 넣는다.
 
@@ -599,9 +639,9 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
     #   기다리면 된다고 말해 놓고 영원히 안 풀리면, 화면이 없는 길을
     #   가리킨 것이다 (§3 · §9). 두 경우를 갈라서 말한다.
     if '표본외 검증 통과' in failed:
-        return '신뢰도·표본 확보 대기', (
-            '이 종목은 표본외 검증을 아직 하지 못했습니다 — 일봉이 모자라 '
-            '학습·검증 구간을 나눌 수 없습니다. 거래일이 쌓이면 다시 봅니다.')
+        # 라운드 298 — 사유는 갈래마다 다르고 **얼마나 더 있어야 하는지**를 적는다.
+        #   종전 한 문장은 갈래 셋 중 하나에서만 참이었다.
+        return '신뢰도·표본 확보 대기', oos_wait_line(oos_gap)
     if '신뢰도·전략품질 기준' in failed:
         # 라운드 292 — 종전엔 이 갈래도 이름이 '신뢰도·표본 확보 대기' 였다. 사유는
         #   *"사례가 쌓인다고 풀리는 조건이 아닙니다"* 라고 적으면서 이름은 **확보

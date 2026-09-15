@@ -843,13 +843,18 @@ class QuantIndicatorsEngine:
         prices = np.asarray(tech_df['adj_close'].values, dtype=float)
         n = len(prices)
         need = self.OOS_MIN_TRAIN_BARS + 2 * horizon + embargo + 30
+        # 라운드 298 — 사유 문장에 든 수를 **칸으로도** 같이 낸다. 화면이 *"얼마나 더
+        #   있어야 풀리나"* 를 말하려면 문장을 되파싱해야 했고, 그러면 문장을 고칠
+        #   때마다 화면이 낡는다(§4 — 규칙은 낸 쪽이 갖는다). 문턱·판정 불변.
         if n < need:
             return {"available": False,
-                    "reason": f"봉 수 부족 ({n} < {need}) — 표본외 검증 불가"}
+                    "reason": f"봉 수 부족 ({n} < {need}) — 표본외 검증 불가",
+                    "gap_kind": "bars", "bars": int(n), "bars_need": int(need)}
 
         split = max(self.OOS_MIN_TRAIN_BARS, int(n * (1.0 - oos_fraction)))
         if split >= n - horizon - 1:
-            return {"available": False, "reason": "표본외 구간이 확보되지 않음"}
+            return {"available": False, "reason": "표본외 구간이 확보되지 않음",
+                    "gap_kind": "split", "bars": int(n), "bars_need": None}
 
         Wz = self._zscored_windows(prices, horizon)          # 윈도우 i = prices[i:i+H]
         ends = np.arange(len(Wz)) + horizon - 1              # 각 윈도우의 마지막 봉 인덱스
@@ -908,8 +913,13 @@ class QuantIndicatorsEngine:
 
         n_pred = len(preds)
         if n_pred < self.OOS_MIN_TRADES:
+            # 라운드 298 — 이 갈래는 **봉이 모자란 것이 아니다**(위 need 는 넘었다).
+            #   유사 패턴이 조건을 채운 시점이 적은 것이라, 거래일이 쌓여도 얼마나
+            #   걸릴지는 못 잰다. 화면이 그 차이를 말할 수 있게 갈래를 싣는다.
             return {"available": False,
-                    "reason": f"표본외 예측 건수 부족 ({n_pred}건 < {self.OOS_MIN_TRADES}건)"}
+                    "reason": f"표본외 예측 건수 부족 ({n_pred}건 < {self.OOS_MIN_TRADES}건)",
+                    "gap_kind": "preds", "preds": int(n_pred),
+                    "preds_need": int(self.OOS_MIN_TRADES), "bars": int(n)}
 
         p = np.asarray(preds) / 100.0
         y = np.asarray(actual_up, dtype=float)
@@ -985,8 +995,14 @@ class QuantIndicatorsEngine:
         가중치는 analysis_rulebook_ko.txt [RULES_STRATEGY_QUALITY_WEIGHTS] 를 따른다.
         """
         if not oos or not oos.get("available"):
+            # 라운드 298 — 사유와 **같이 온 수**도 그대로 옮긴다. 여기서 버리면
+            #   화면이 *"얼마나 더 있어야 하나"* 를 영영 못 말한다(R289 의 그 자리).
+            _o = oos or {}
             return {"available": False,
-                    "reason": (oos or {}).get("reason", "표본외 검증 미수행"),
+                    "reason": _o.get("reason", "표본외 검증 미수행"),
+                    "gap_kind": _o.get("gap_kind"),
+                    "bars": _o.get("bars"), "bars_need": _o.get("bars_need"),
+                    "preds": _o.get("preds"), "preds_need": _o.get("preds_need"),
                     "score": None, "components": {}}
 
         W = RULEBOOK.get('RULES_STRATEGY_QUALITY_WEIGHTS', {})
@@ -1519,7 +1535,31 @@ class QuantIndicatorsEngine:
     #      평균은 나쁜 조건을 좋은 조건으로 상쇄해버리기 때문이다.
     # ═════════════════════════════════════════════════════════════════════
 
-    #: 탭 → 종합 점수 가중치 (합 1.0). 규칙집에서 읽고 없으면 아래 기본값.
+    #: ⚠️ 라운드 297 (2026-09-15) — **이 표는 종합 점수에 곱해지지 않는다.**
+    #:
+    #:   이름이 *"탭 → 종합 점수 가중치"* 였고 규칙집(`RULES_TAB_WEIGHTS`)에 있으며
+    #:   회귀가 **합 = 1.0** 과 **규칙집 일치**까지 검사한다 — 모든 신호가 "이것이 점수를
+    #:   만든다"고 말한다. 그런데 **읽는 코드가 없다.** AST 로 web_app 에서 닿는 39개
+    #:   모듈을 전수로 훑어 확인했다: **정의 1곳 · 읽는 곳 0곳.**
+    #:
+    #:   종합 점수의 정본은 `final_action_score`(규칙집 기반)이고, 이 파일
+    #:   :1721 이 그 이유를 적어 두었다 — *"한때 이 함수가 탭 가중평균으로 별도 점수를
+    #:   만들어 화면에 49점과 65점이 동시에 떴다 … 탭 점수는 관점별 독립 판정으로만 쓰고
+    #:   **합산하지 않는다**."* 그 결정이 내려질 때 **표만 남았다.**
+    #:
+    #:   실제 사고: 2026-09-15 에 내가 사용자에게 *"DeMARK 는 종합 점수의 13%"* 라고
+    #:   말했다. 이 표를 보고 그렇게 읽은 것이다. **사실이 아니다** — DeMARK 가 종합
+    #:   점수에 닿는 경로는 하나뿐이고 그 크기는 **약 1점**이다:
+    #:       demark_bullish_signal (7개 신호 중 하나 · TDST 까지 2개)
+    #:         → signal_consensus_score = clip(50 + (강세−약세)×10, 0, 100)
+    #:         → final_action_raw_score += 합의도 × 0.10        ⇒ 신호 하나 ≤ 1.0점
+    #:
+    #:   **지우지 않았다** — 규칙집에도 있는 값이라 지우는 것은 규칙집을 건드리는 별도
+    #:   결정이고, 탭 화면이 관점 순서를 말할 때 쓸 수 있는 자료다. 대신 **이름과 주석이
+    #:   사실을 말하게** 하고, 회귀가 *"곱해지지 않는다"* 를 잠근다(§309 계열).
+    #:   **이름이 하는 일보다 크게 말하면 읽는 사람이 없는 근거를 있다고 읽는다**(R237).
+    #:
+    #: 탭별 표시용 가중치 (합 1.0 · **종합 점수 산식이 아니다**). 규칙집에서 읽는다.
     TAB_WEIGHTS = {
         'pattern':    rb('RULES_TAB_WEIGHTS', 'pattern', 0.25),    # 자기유사 예측
         'valuation':  rb('RULES_TAB_WEIGHTS', 'valuation', 0.22),  # 밸류에이션
@@ -4326,6 +4366,17 @@ class QuantIndicatorsEngine:
             },
             'strategy_quality_score': strategy_quality_score,
             'blind_test_status': "미수행" if blind_test_not_completed else "수행완료",
+            # 라운드 298 — '미수행' 은 **왜** 를 안 말한다. 갈래가 셋이고(봉 부족 ·
+            #   구간 못 나눔 · 예측 건수 부족) 그중 하나만 '일봉이 모자라'다.
+            #   엔진이 이미 내고 있던 사유와 수를 여기서 싣는다 (§4 · 화면은 읽기만).
+            'blind_test_gap': (None if not blind_test_not_completed else {
+                'kind': strategy_quality.get('gap_kind'),
+                'reason': strategy_quality.get('reason'),
+                'bars': strategy_quality.get('bars'),
+                'bars_need': strategy_quality.get('bars_need'),
+                'preds': strategy_quality.get('preds'),
+                'preds_need': strategy_quality.get('preds_need'),
+            }),
             'sq_cap': sq_cap,
 
             # 시장·글로벌·뉴스가 점수에 실제로 들어간 내역 (상한과는 별개)

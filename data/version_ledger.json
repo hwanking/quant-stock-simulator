@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.15.1",
+  "model": "v2026.09.15.4",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,45 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.15.4",
+   "previous": "v2026.09.15.3",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "'표본 대기'의 사유를 갈래별로 낸다 — 표본외 검증을 못 한 이유가 셋인데(봉 부족 · 구간 못 나눔 · 예측 건수 부족) 화면은 하나로 말했고 그중 하나에서는 거짓이었다. 엔진이 내던 사유·수를 스냅샷(blind_test_gap)까지 옮기고, 봉 부족일 때는 남은 거래일을 센다",
+   "note": "값·문턱·게이트·판정 불변 · 표본 40종목 중 예측 건수 부족 1건 실측 · 근거 docs/RESULT_R298_HOW_MUCH_LONGER.md",
+   "created_at": "2026-09-15T10:13:56+00:00",
+   "effective_from": "2026-09-15"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.15.3",
+   "previous": "v2026.09.15.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "TAB_WEIGHTS 가 종합 점수에 곱해지지 않는다는 사실을 표 옆에 적는다 (AST 전수: 39개 모듈에서 정의 1곳 · 읽는 곳 0곳). 이름도 '탭별 표시용 가중치 · 종합 점수 산식이 아니다' 로. 바로 앞 항목(v2026.09.15.2)은 R289 스크립트를 실수로 재실행해 생긴 것이라 사유가 이 라운드와 다르다 — 이력은 안 지우고 여기서 바로잡는다",
+   "note": "값·산식·문턱·게이트 불변 · 주석과 이름만 · 근거 docs/RESULT_R297_DEAD_WEIGHT_TABLE.md",
+   "created_at": "2026-09-15T10:01:36+00:00",
+   "effective_from": "2026-09-15"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.15.2",
+   "previous": "v2026.09.15.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "'산출 불가' 요약 줄이 관점 이름만 적고 사유를 버리고 있었다 — 엔진이 관점마다 이미 내던 사유(reasons[0])를 같은 줄에 싣는다",
+   "note": "값·문턱·가중치·산식 불변 · 표시 문구만 · 근거 docs/RESULT_R289_REASON_BESIDE_THE_BLANK.md",
+   "created_at": "2026-09-15T10:00:52+00:00",
+   "effective_from": "2026-09-15"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

@@ -490,10 +490,40 @@ def _close_enough(a, b):
     return abs(a - b) / max(abs(a), 1e-9) < (0.01 if _market_open else 1e-12)
 
 
-check("교차검증 가격이 난수가 아님" + (" (장중: 1% 이내 허용)" if _market_open else " (장 마감: 완전 동일)"),
-      _close_enough(cv1['naver']['price'], cv2['naver']['price'])
-      and _close_enough(cv1['daum']['price'], cv2['daum']['price']),
-      f"naver {cv1['naver']['price']}→{cv2['naver']['price']}, daum {cv1['daum']['price']}→{cv2['daum']['price']}")
+_cvtxt = (f"naver {cv1['naver']['price']}→{cv2['naver']['price']}, "
+          f"daum {cv1['daum']['price']}→{cv2['daum']['price']}")
+_cv_same = (_close_enough(cv1['naver']['price'], cv2['naver']['price'])
+            and _close_enough(cv1['daum']['price'], cv2['daum']['price']))
+# ⚠️ 라운드 299 (2026-09-15) — 이 검사가 **'장 마감'인데 값이 움직여** 붉어졌다
+#   (naver 249,500 두 번 동일 · daum 249,000 → 249,500 으로 **따라 올라옴**).
+#   그 자리에서 쟀다: 같은 호출을 6회 돌리니 두 출처가 **한 값으로 완전히 고정**
+#   (250,000 · 바뀐 횟수 0)이고, 그 250,000 은 회귀가 본 249,500 과도 다르다 —
+#   **시간외 단일가 구간에는 마감 뒤에도 보고 가격이 움직이고**, 두 서버가 서로 다른
+#   순간에 갱신한다. 즉 `장 마감 = 값이 못 움직인다` 는 이 검사의 전제가 거짓이었다.
+#   그렇다고 허용 오차를 키우지 않는다 — 옛 결함(`random.choice` ±0.2%)은 **매 호출**
+#   값이 달라지므로, 이미 채택된 모양(R218·R219 의 *한 번 재시도 후 건너뜀* ·
+#   R295 의 *우리 수행은 실패로 · 남의 값 어긋남은 사유와 함께 건너뜀*)을 그대로 쓴다:
+#   다시 물어 **더는 안 바뀌면** 남의 갱신이므로 `skipped()`(통과가 아니다), 계속
+#   바뀌면 그것이 난수의 서명이므로 **실패**. 새 문턱·새 시간창을 만들지 않았다.
+#   그리고 우리 코드에 난수가 없다는 것은 **바로 아래 AST 검사**가 따로 잠근다.
+_CVNAME = ("교차검증 가격이 난수가 아님"
+           + (" (장중: 1% 이내 허용)" if _market_open else " (장 마감: 완전 동일)"))
+if _cv_same:
+    check(_CVNAME, True, _cvtxt)
+else:
+    _cv3 = engine.verify_realtime_sources(SYMBOL)
+    _cv4 = engine.verify_realtime_sources(SYMBOL)
+    _settled = all(_close_enough((_cv3[_k] or {}).get('price'),
+                                 (_cv4[_k] or {}).get('price'))
+                   for _k in ('naver', 'daum'))
+    _cvtxt2 = (f"재측정 naver {_cv3['naver']['price']}→{_cv4['naver']['price']}, "
+               f"daum {_cv3['daum']['price']}→{_cv4['daum']['price']}")
+    if _settled:
+        skipped(_CVNAME,
+                f"남의 서버가 갱신 중이었다 — 첫 쌍 {_cvtxt} 인데 {_cvtxt2} 로 "
+                f"고정됐다. 우리 난수는 매 호출 달라진다(아래 AST 검사가 따로 본다).")
+    else:
+        check(_CVNAME, False, f"{_cvtxt} · {_cvtxt2} — 다시 물어도 계속 바뀐다")
 def find_random_usage(filename):
     """AST 로 실제 random / np.random 호출을 찾는다 (주석·독스트링은 자연히 제외)."""
     import ast
@@ -2116,6 +2146,42 @@ check("ETF 도 결론은 나옴", bool(_etf_vd['headline']))
 
 check("탭 가중치 합 = 1.0", abs(sum(q.TAB_WEIGHTS.values()) - 1.0) < 1e-9,
       str(sum(q.TAB_WEIGHTS.values())))
+# ⚠️ 라운드 297 — 위 검사가 이 표에 **없는 권위**를 준다. 합이 1.0 이고 규칙집과 맞으면
+#   "이것이 종합 점수를 만든다"로 읽히는데, **곱하는 코드가 없다.** 실제로 2026-09-15 에
+#   그렇게 읽고 사용자에게 *"DeMARK 는 점수의 13%"* 라고 잘못 말했다. 검사는 합만 보고
+#   **쓰이는지는 안 봤다** — 라운드 164 의 *"쓰기만 하고 아무도 안 읽는 키는 죽은 버튼"* 과
+#   라운드 195 의 *"존재는 실행이 아니다"* 가 만나는 자리다. 그 사실을 여기서 잠근다.
+import ast as _ast297
+_read297 = []
+for _rel297 in sorted(set(_reach16()) | {'quant_indicators.py'}):
+    _p297 = _os.path.join(PROJ, _rel297)
+    if not _os.path.exists(_p297):
+        continue
+    try:
+        # `_read148` 은 §148 에서야 정의된다 — 여기서 부르면 전체 회귀가 NameError 로
+        #   죽는다(사전 점검 ①' 가 그것을 잡았다 · CLAUDE.md §6 이 적어 둔 함정).
+        with open(_p297, encoding='utf-8', errors='replace') as _f297:
+            _t297 = _ast297.parse(_f297.read())
+    except SyntaxError:
+        continue
+    for _n297 in _ast297.walk(_t297):
+        if (isinstance(_n297, _ast297.Name) and _n297.id == 'TAB_WEIGHTS'
+                and isinstance(_n297.ctx, _ast297.Load)):
+            _read297.append(f'{_rel297}:{_n297.lineno}')
+        if isinstance(_n297, _ast297.Attribute) and _n297.attr == 'TAB_WEIGHTS':
+            _read297.append(f'{_rel297}:{_n297.lineno}')
+check("탭 가중치를 **읽는 운영 코드가 없다** — 종합 점수 산식이 아니다 (이 표를 산식으로 읽지 않게)",
+      not _read297, str(_read297)[:120], scanned=len(set(_reach16())))
+with open(_os.path.join(PROJ, 'quant_indicators.py'),
+          encoding='utf-8', errors='replace') as _f297b:
+    _qsrc297 = _f297b.read()
+check("그 사실이 표 옆에 적혀 있다 — 이름이 하는 일보다 크게 말하지 않는다 (§3 · R237)",
+      '**이 표는 종합 점수에 곱해지지 않는다.**' in _qsrc297)
+# 그리고 **진짜 경로**를 잠근다 — DeMARK 는 신호 합의도를 통해 ≤1점 들어간다
+check("DeMARK 의 실제 경로가 그대로다 — 7개 신호 중 하나 → 합의도 → 가중치 0.10",
+      'demark_bullish_signal, tdst_bullish_signal' in _qsrc297
+      and '(bullish_consensus - bearish_consensus) * 10' in _qsrc297
+      and "signal_consensus_score * WF.get('weight_signal_consensus', 0.10)" in _qsrc297)
 
 
 section("40. 배포 전 정합성 — 교차검증 게이트 · 합성값 위장 금지")
@@ -2142,7 +2208,12 @@ check("출처 1개면 '대조 불가' (통과로 위장하지 않음)", _cc_one[
 _esrc40 = open(_os.path.join(PROJ, "bitemporal_engine.py"), encoding='utf-8').read()
 _active = [l for l in _esrc40.splitlines()
            if 'price * 0.8' in l and not l.strip().startswith('#')]
-check("bps = price*0.8 합성 코드 제거 (주석만 남음)", not _active, str(_active[:1]))
+# ⚠️ 라운드 299 — 이 검사는 **'0건'을 주장하는 스캐너**인데 `scanned=` 가 없었고,
+#   §225 의 '인접한 커버리지 주장'(±40줄) 예외로만 통과하고 있었다. 라운드 297 이
+#   바로 위에 절을 넣자 그 이웃이 창 밖으로 밀려 **드러났다** — 창을 넓히는 것은
+#   실패를 보고 검사를 무르게 하는 것이라(§2-5) 하지 않는다. 자기 커버리지를 적는다.
+check("bps = price*0.8 합성 코드 제거 (주석만 남음)", not _active, str(_active[:1]),
+      scanned=len(_esrc40.splitlines()))
 check("역산 불가 시 None 처리", 'bps = None' in _esrc40 and 'eps = None' in _esrc40)
 
 # ③ 유사도 결합 가중치가 규칙집에서 온다
@@ -12760,7 +12831,11 @@ check("품질 하한이 상수로 있다 (손으로 적은 값이 아니다)",
       f"MIN_QUALITY={getattr(_vc172, 'MIN_QUALITY', None)}")
 
 # ⓐ 검증을 **못 한** 경우 — 쌓으면 풀린다고 말해도 참이다
-_r172a = _vc172._bucket(['표본외 검증 통과'], {}, None, None, None)
+# ⚠️ 라운드 298 — 종전 이 줄은 사유 칸을 안 넘겼고, 그때는 어느 갈래든 문장이 하나라
+#   그래도 됐다. 지금은 갈래가 셋이고 **'쌓이면 풀린다'가 참인 갈래는 봉 부족뿐**이라,
+#   그 갈래를 명시해서 잰다(나머지 둘은 §310 이 따로 본다). 판정·칸 이름 불변.
+_r172a = _vc172._bucket(['표본외 검증 통과'], {}, None, None, None,
+                        oos_gap={'kind': 'bars', 'bars': 300, 'bars_need': 490})
 # ⓑ 검증은 했고 **성적이 미달**인 경우 — 쌓아도 안 풀린다
 _r172b = _vc172._bucket(['신뢰도·전략품질 기준'], {}, None, None, None)
 check("두 실패가 서로 다른 문장을 낸다",
@@ -24719,6 +24794,113 @@ check("분위 칸의 **이름이 값과 맞는다** — p10~p90 을 '25~75분위
 check("지표 칸이 여섯 그대로다 — 원장은 칸이 아니라 줄로 붙였다",
       'g1, g2, g3, g4, g5, g6 = st.columns(6)' in _w309
       and 'st.columns(7)' not in _w309)
+
+print("\n" + "=" * 72)
+print("§310 R298 — '표본 대기'가 **얼마나 더 있어야 하는지**를 말한다 · 갈래 셋을 안 뭉갠다 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"표본대기가 나오면 개선해줘야지."* 라운드 128·292 가 이 칸의 **사유**와
+#   **이름**을 갈랐는데, 남은 쪽('신뢰도·표본 확보 대기')의 문장은 여전히 하나였다:
+#       *"일봉이 모자라 학습·검증 구간을 나눌 수 없습니다. 거래일이 쌓이면 다시 봅니다."*
+#   엔진은 이 자리에서 **세 갈래**를 내고 있었고 사유에 수까지 싣고 있었다:
+#       ⓐ 봉 수 부족 (n < need)            — 일봉 이야기가 맞다. 남은 봉을 셀 수 있다
+#       ⓑ 표본외 구간이 확보되지 않음       — 봉은 있는데 구간이 안 나뉜다
+#       ⓒ 표본외 예측 건수 부족 (N건 < 20건) — **일봉은 충분하다.** 닮은 구간이 적은 것
+#   ⓒ 에서 *"일봉이 모자라"* 는 거짓이고, ⓒ 는 언제 풀릴지도 못 잰다. 그런데 스냅샷이
+#   사유를 안 싣고 있어 화면이 셋을 구분할 재료 자체가 없었다 — 라운드 289 와 같은 자리
+#   (사유는 엔진이 내는데 소비자까지 안 온다). 문턱·판정·칸 이름은 하나도 안 바꿨다.
+import verdict_core as _vc310                                  # noqa: E402
+import ledger_view as _lv310                                   # noqa: E402
+_q310 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_v310 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_w310 = _read148(_os.path.join(PROJ, 'web_app.py'))
+
+# ① 엔진이 갈래를 **칸으로** 싣는다 — 문장을 되파싱하지 않는다(§4).
+#   글자가 아니라 **돌려서** 본다 (R195 · 존재는 실행이 아니다).
+import pandas as _pd310                                        # noqa: E402
+import quant_indicators as _qi310                              # noqa: E402
+_eng310 = _qi310.QuantIndicatorsEngine()
+_short310 = _pd310.DataFrame({'adj_close': [100.0 + i for i in range(120)]})
+_oos310 = _eng310.run_blind_oos_backtest(_short310, horizon=20)
+check("봉이 모자라면 갈래와 **수**를 같이 낸다 (문장만이 아니다)",
+      _oos310.get('available') is False and _oos310.get('gap_kind') == 'bars'
+      and _oos310.get('bars') == 120 and _oos310.get('bars_need') == 490,
+      str(_oos310), scanned=1)
+_sq310 = _eng310.compute_strategy_quality(_oos310)
+check("품질 계산이 그 칸을 **버리지 않고** 옮긴다",
+      _sq310.get('gap_kind') == 'bars' and _sq310.get('bars') == 120
+      and _sq310.get('bars_need') == 490, str(_sq310))
+check("스냅샷이 사유를 싣고, 판정이 그것을 읽는다",
+      "'blind_test_gap'" in _q310 and "blind_test_gap" in _v310)
+
+# ② 세 갈래가 **서로 다른 말**을 한다 — 값으로 본다(글자만 보지 않는다 · R195)
+_a310 = _vc310.oos_wait_line({'kind': 'bars', 'bars': 300, 'bars_need': 490})
+_b310 = _vc310.oos_wait_line({'kind': 'split', 'bars': 600})
+_c310 = _vc310.oos_wait_line({'kind': 'preds', 'preds': 7, 'preds_need': 20})
+check("세 갈래가 서로 다른 문장이다",
+      len({_a310, _b310, _c310}) == 3, f'{_a310[:24]} / {_b310[:24]} / {_c310[:24]}')
+# ③ 봉 부족은 **남은 수**를 적는다 — 490-300 = 190 거래일 · 환산은 채택된 규칙 하나
+check("봉 부족은 남은 거래일을 센다 (490 − 300 = 190)",
+      '190거래일' in _a310 and '300봉' in _a310 and '490봉' in _a310, _a310)
+check("달력일 환산은 ledger_view 규칙을 그대로 쓴다 (새 숫자 없음)",
+      f'약 {_lv310.bars_to_days(190)}일' in _a310
+      and 'bars_to_days' in _v310, _a310[-40:])
+# ④ **거짓말을 안 한다** — 예측 건수 부족에는 '일봉이 모자라'가 없고 기한도 약속 안 한다
+check("예측 건수 부족에 '일봉이 모자라'라고 말하지 않는다",
+      '일봉이 모자라' not in _c310 and '일봉은 충분합니다' in _c310, _c310)
+check("예측 건수 부족은 **언제 풀리는지 모른다**고 적는다",
+      '얼마나 걸릴지는 못 잽니다' in _c310, _c310)
+check("예측 건수 부족도 **수를 적는다** (7건 < 20건)",
+      '7건' in _c310 and '20건' in _c310, _c310)
+# ⑤ 사유를 못 받으면 **모른다고 적는다** — 옛 문장을 기본값으로 쓰지 않는다(§3)
+_n310 = _vc310.oos_wait_line(None)
+check("사유 미수신이면 지어내지 않는다",
+      '사유를 받지 못했습니다' in _n310 and '일봉' not in _n310, _n310)
+# ⑥ 칸 이름·판정은 불변이다 — 이 라운드는 문장만 고쳤다
+check("칸 이름은 그대로 '신뢰도·표본 확보 대기' 다",
+      _vc310._bucket(['표본외 검증 통과'], {}, None, None, None,
+                     oos_gap={'kind': 'preds', 'preds': 7, 'preds_need': 20})[0]
+      == '신뢰도·표본 확보 대기')
+check("성적 미달 칸의 문장은 한 글자도 안 건드렸다",
+      '사례가 쌓인다고 풀리는 조건이 아닙니다' in _v310)
+# ⑦ 'Blind Test: 미수행' 옆에도 사유가 붙는다 — 상태는 사유가 아니다(§3 · R274)
+check("판정 근거 상세의 Blind Test 줄이 사유를 같이 낸다",
+      "{four_scores.get('blind_test_status', '미수행')}{_bt_tail298}" in _w310
+      and "_uk._esc(_bt_why298 or '사유 미수신')" in _w310)
+
+print("\n" + "=" * 72)
+print("§311 R299 — '장 마감이면 값이 못 움직인다'는 전제가 거짓이었다 · 무르게 하지 않고 갈랐다 (2026-09-15)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R297·R298 을 커밋하려고 돌린 전체 회귀에서 §8 이 붉어졌다 — `장 마감: 완전 동일`
+#   인데 naver 249,500(두 번 동일) · daum 249,000 → **249,500 으로 따라 올라왔다.**
+#   **내 변경 때문인지부터 쟀다**(R289 의 순서): 같은 호출을 6회 돌리니 두 출처가
+#   **한 값에 완전히 고정**(250,000 · 바뀐 횟수 0)이고, 그 250,000 은 회귀가 본
+#   249,500 과도 다르다 — **시간외 단일가 구간에는 마감 뒤에도 보고 가격이 움직이고**
+#   두 서버가 서로 다른 순간에 갱신한다. 검사의 전제가 거짓이었다.
+#   ⚠️ 그래도 **허용 오차를 키우지 않았다** — 옛 결함(`random.choice` ±0.2%)은 매 호출
+#   값이 달라지므로, 이미 채택된 모양(R218·R219 재시도 후 건너뜀 · R295 의 *우리
+#   수행은 실패로 · 남의 값 어긋남은 사유와 함께 건너뜀*)을 그대로 썼다.
+#   곁들여 §225 가 **제 일을 했다** — `bps = price*0.8` 스캐너가 `scanned=` 없이
+#   '인접 커버리지 주장(±40줄)' 예외로만 통과하고 있었는데, R297 이 위에 절을 넣자
+#   이웃이 창 밖으로 밀려 드러났다. **창을 넓히지 않고** 그 검사에 커버리지를 적었다.
+_t311 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+# ① 문턱은 그대로다 — 무르게 하지 않았다는 것을 값으로 본다
+check("장 마감 허용 오차가 그대로 0 이다 (1e-12) · 장중만 1%",
+      "(0.01 if _market_open else 1e-12)" in _t311)
+# ② 어긋남을 **통과로 위장하지 않는다** — 건너뜀으로 적는다(§6)
+check("두 호출이 갈리면 `skipped()` 로 적는다 — check(..., True) 로 넘기지 않는다",
+      'skipped(_CVNAME,' in _t311 and 'check(_CVNAME, False,' in _t311)
+check("건너뜀 사유에 **다시 물은 값**이 들어간다 (사유 없는 건너뜀 금지 · §3)",
+      '재측정 naver' in _t311 and '남의 서버가 갱신 중이었다' in _t311)
+# ③ 우리 코드의 난수는 **따로** 잠긴다 — 이 갈림이 그 가드를 대신하지 않는다
+check("데이터 계층 난수 검사가 여전히 있다 (AST · 이 갈림과 별개)",
+      'def find_random_usage(' in _t311
+      and '데이터 계층에 random 호출 없음' in _t311)
+# ④ §225 의 예외 창은 **안 넓혔다** — 드러난 검사가 자기 커버리지를 적었다
+check("§225 인접 창은 ±40 그대로이고, 드러난 스캐너가 scanned 를 적는다",
+      'n.lineno - 40 <= c <= n.lineno + 6' in _t311
+      and 'scanned=len(_esrc40.splitlines())' in _t311)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -9733,6 +9733,14 @@ st.markdown("<div id='nav-basis'></div>", unsafe_allow_html=True)
 # 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
 action_bg_color = "#161D2A"
 
+# 라운드 298 — '미수행' 은 상태이지 사유가 아니다(§3 · R274 가 센 그 모양). 엔진이
+#   이미 사유와 수를 내고 있으므로(`blind_test_gap`) 같은 줄에 적는다. 못 받으면
+#   '사유 미수신' — 지어내지 않는다.
+_bt_gap298 = four_scores.get('blind_test_gap') or {}
+_bt_why298 = str(_bt_gap298.get('reason') or '').strip()
+_bt_tail298 = ('' if four_scores.get('blind_test_status') != '미수행'
+               else f" — {_uk._esc(_bt_why298 or '사유 미수신')}")
+
 st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; ">
 <div style="margin-bottom:20px;">
@@ -9745,7 +9753,7 @@ st.markdown(f'''
     <h4 style="color:#F3F6FA; margin:0 0 8px 0;">신뢰도 통제 상한</h4>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 분석 신뢰도: {four_scores.get('analysis_confidence', 0)}점</p>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 전략 품질: {fmt_num(four_scores.get('strategy_quality_score'), suffix='점', na='미검증')}</p>
-    <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- Blind Test: {four_scores.get('blind_test_status', '미수행')}</p>
+    <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- Blind Test: {four_scores.get('blind_test_status', '미수행')}{_bt_tail298}</p>
     <p style="color:#F2B84B; margin:8px 0 2px 0; font-size:15px; font-weight:bold;">- 최종점수 상한 캡: {four_scores.get('sq_cap', 100)}점</p>
 </div>
 </div>
