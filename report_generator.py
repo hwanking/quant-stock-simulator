@@ -62,6 +62,24 @@ class QuantReportGenerator:
         match_cnt = sim_res.get('match_count', 0)
         pred_prob_str = sim_res.get('predicted_prob_str', '산출 불가')
         tier_label = sim_res.get('sample_tier_label', sim_res.get('blind_reason', ''))
+        # ⚠️ 라운드 318 — `산출 불가` 옆에 **사유가 없었다.** 사유는 **바로 윗줄**
+        #   (유효 패턴 표본 수의 등급 라벨)에 있었는데, 줄로 읽는 쪽에서는 그 줄에
+        #   없으면 없는 것과 같다 — R289 가 타일에서 겪은 *"배치로 붙여 준 것은
+        #   글자에는 안 남는다"* 의 줄 단위 판이다. 사유를 **새로 짓지 않고**
+        #   엔진이 이미 낸 등급 라벨을 같은 줄로 옮긴다(§4). 없으면 안 적는다(§3).
+        #   같은 갈래가 **바로 아래 줄**에도 있다(최적 보유기간). 오늘은 값이 있어
+        #   검사에 안 걸렸지만 표본이 작은 날이면 같은 모양으로 빈다 — 같이 고친다.
+        #   사유가 두 줄에 되풀이되는 것보다 **빈 값 옆에 사유가 없는 것**이 나쁘다(§3).
+        _NA318 = ('산출 불가', '미산출', 'N/A')
+
+        def _why_of318(v):
+            return (f" — {tier_label}"
+                    if (str(v).strip() in _NA318 and str(tier_label).strip())
+                    else "")
+
+        _why318 = _why_of318(pred_prob_str)
+        _hold318 = sim_res.get('optimal_holding_period_str', '산출 불가')
+        _hold_why318 = _why_of318(_hold318)
 
         rsi_val = tech_df['rsi_14'].iloc[-1] if 'rsi_14' in tech_df.columns else None
         vol_ratio = tech_row.get('volume_ratio')
@@ -112,11 +130,11 @@ class QuantReportGenerator:
 
 #### 3. 자기유사 과거 백테스트 관찰 통계 (표본 통제)
 - **유효 패턴 표본 수**: `{match_cnt}건` (`{tier_label}`)
-- **예측 상승확률**: **`{pred_prob_str}`**
+- **예측 상승확률**: **`{pred_prob_str}`**{_why318}
 - **과거 관찰 성과**: 평균 `{_pct(sim_res.get('mean_perf'))}` | 중앙값 `{_pct(sim_res.get('median_perf'))}` | 평균 MDD `{_pct(sim_res.get('mdd'))}`
 - **분포 (10~90분위)**: `{_pct(sim_res.get('min_perf'))} ~ {_pct(sim_res.get('max_perf'))}`
 - **95% Wilson 신뢰구간**: `{sim_res.get('ci_str', 'N/A')}`
-- **최적 보유기간**: `{sim_res.get('optimal_holding_period_str', '산출 불가')}`
+- **최적 보유기간**: `{_hold318}`{_hold_why318}
 
 ---
 
