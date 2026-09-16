@@ -742,10 +742,13 @@ def stat_tiles(items: Sequence[dict], theme: str = 'dark') -> None:
             f"line-height:1.15; white-space:nowrap; overflow:hidden; "
             f"text-overflow:ellipsis; font-variant-numeric:tabular-nums;'>"
             f"{_esc(it['value'])}</p>{sub}</div>")
+    # ⚠️ 라운드 323 — 카드가 `overflow-x:auto; scrollbar-width:none` 이라 폭이 모자라면 오른쪽이
+    #   **스크롤바 없이 가려졌다** — 사용자 화면에서 '왼쪽에서 설정한 값 그대로'가 '… 그대'로 끊겨
+    #   보였다(가로 스크롤할 수 있다는 표시가 없으니 잘린 것과 같다). 모자라면 **다음 줄로 흘린다.**
     st.markdown(
         f"<div style='background:{t['card']}; border-radius:18px; "
-        f"padding:20px 8px; display:flex; align-items:stretch; "
-        f"overflow-x:auto; scrollbar-width:none;'>"
+        f"padding:20px 8px; display:flex; flex-wrap:wrap; row-gap:14px; "
+        f"align-items:stretch;'>"
         + ''.join(cells) + "</div>", unsafe_allow_html=True)
 
 
@@ -1307,10 +1310,13 @@ def avg_down_class(ok, fails):
         #   적중률 차가 세 구간 CI95 모두 0 을 포함(train +1.7 · valid +3.9 · blind
         #   −5.8%p) — 하락 중이라는 사실이 판정을 바꾼다는 증거가 없어 물타기의
         #   첫 조건 = 신규 매수 판정이다. 5%p 미만은 이 잣대로 못 본다(R113).
+        # 라운드 322 — 사용자: *"물타기 불가 · 신규 매수 판정만 진짜 쉽게 설명 써줘."* 이유 문장을
+        #   **처음 사는 사람 기준**으로 풀어 쓴다(규칙·등급 불변 · 출처 낱말 '신규 매수 판정'은 남긴다).
         return ('시장게이트', '추가매수 안 함 · 지금은 새로 살 때 아님',
-                '포지션 조건 5개는 통과 — 중앙 판정이 이 종목을 지금 살 수 있는 '
-                '후보로 보지 않습니다. 물타기의 첫 조건은 신규 매수 판정과 같습니다 '
-                '(실측: 하락 중이라는 사실이 판정을 바꾼다는 증거 없음)')
+                '이 종목을 오늘 처음 산다고 해도 엔진이 사라고 하지 않는 상태라, 더 사는 것(물타기)도 '
+                '권하지 않습니다. 가격·손절선 같은 나머지 조건 5개는 괜찮습니다 — 엔진이 신규 매수 판정을 '
+                '사도 된다로 바꾸는 날 추가매수 가능으로 바뀝니다 '
+                '(실측: 떨어지고 있다는 사실만으로 판단이 좋아진다는 증거는 없었습니다)')
     # 앞 셋만 적고 나머지는 '외 N' — 자르기는 슬라이스로 한다. 비교식에
     # 숫자를 두면 §2 문턱 검사(watch_action 안 Compare 의 숫자)에 걸린다.
     _head, _more = _fail[:3], _fail[3:]

@@ -7120,14 +7120,15 @@ print("=" * 72)
 _q108 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
 _w108 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 
+# 라운드 323 — 이름은 그대로 '유사패턴 표본'이고 수는 **관측 건수**를 읽는다(표본 미달 갈래는 match_count 가 0).
 check("거부 문구가 '유사패턴 표본'이라고 말한다",
-      '유사패턴 표본 {sim.get(\'match_count\', 0)}건' in _q108)
+      "유사패턴 표본 {sim.get('observed_match_count', sim.get('match_count', 0))}건" in _q108)
 check("거부 문구에 '유효표본'을 쓰지 않는다",
       "유효표본 {sim.get('match_count', 0)}건" not in _q108)
 check("왜 이름을 갈랐는지 코드에 남긴다",
       '같은 말이 두 숫자를' in _q108 and 'LX인터내셔널' in _q108)
 check("화면도 match_count 를 '유사패턴 표본'으로 부른다",
-      "유사패턴 표본 {sim_res.get('match_count', 0)}건" in _w108)
+      "유사패턴 표본 {sim_res.get('observed_match_count', sim_res.get('match_count', 0))}건" in _w108)
 check("화면이 match_count 에 '유효표본'을 쓰지 않는다",
       "유효표본 {sim_res.get('match_count', 0)}건" not in _w108
       and "유효표본 {h['match_count']}건" not in _w108)
@@ -21485,12 +21486,14 @@ check("알림이 지평별 수를 같이 말한다 (0건과 12건은 다른 지�
       and "if sim_res.get('is_abstain') else" in _tab250)
 check("7단계 설명은 접힌다 — 내용은 그대로 (⑦ 표본 통제 줄 · 앙상블 없음 문구)",
       '_uk.disclose("이 예측이 하는 일 — 7단계 (설명)"' in _tab250
-      and "유사패턴 표본 {sim_res.get('match_count', 0)}건" in _tab250
+      # 라운드 323 — 관측 건수를 읽는다(표본 미달 갈래는 match_count 가 0 으로 박힌다)
+      and "유사패턴 표본 {sim_res.get('observed_match_count', sim_res.get('match_count', 0))}건" in _tab250
       and "다중 모델 앙상블은 구현되어 있지 않습니다" in _tab250)
 _obs250 = _w231.split('과거 관찰 성과 세부 분리 지표 (20일)")')[1].split('st.markdown("기간별 경로 분포")')[0]
 check("20일 표본이 0건이면 타일 여섯 대신 한 문장 · 표본이 있으면 타일 그대로",
       "if not sim_res.get('match_count'):" in _obs250
-      and "20일 지평은 유사패턴 표본이 0건이라 관찰 성과" in _obs250
+      # 라운드 323 — '0건'을 글자로 박지 않는다(표본 미달 갈래는 1~4건일 수 있다) · 관측 건수를 읽는다
+      and "20일 지평은 유사패턴 표본이 {_obs323}건이라 관찰 성과" in _obs250
       and "'기간별 경로 분포'에서 고를 수 있습니다." in _obs250
       and _obs250.count("_uk.stat_tiles([") == 2 and "'label': '비슷했던 사례 수'" in _obs250)
 # 라운드 234 — 점수 타일은 없애고 표 아래 캡션에서 분자·분모(상승 k · 하락 m)와 같이 말한다.
@@ -21554,7 +21557,8 @@ check("순서: 결론 한 줄 → 기간별 표 → 20일 확률 → 20일 관�
       < _tab251.index('다른 기간 살펴보기 (기본 {default_h}일'))
 check("20일 확률이 없으면 '미산출' 카드 셋 대신 한 줄 (카드는 표시될 때만)",
       "    if _shown234:\n        _uk.stat_tiles([" in _tab251
-      and "산출하지 않습니다 — 20일 유사사례 n={sim_res.get('match_count', 0)}" in _tab251
+      # 라운드 323 — 관측 건수(표본 미달 갈래는 match_count 가 0 으로 박힌다)
+      and "산출하지 않습니다 — 20일 유사사례 n={sim_res.get('observed_match_count', sim_res.get('match_count', 0))}" in _tab251
       and _tab251.count("먼저 닿을 확률") == 2)
 check("비교 가능한 지평을 이름·n·방향으로 적고 일치도는 분자·분모(상승 k · 하락 m)와 같이",
       "확률 비교가 가능한 지평 {len(_dir234['scored'])}개 — {_cmp234}" in _tab251
@@ -26106,6 +26110,122 @@ _lbl330 = [_uk330.avg_down_class(True, [])[1],
            _uk330.avg_down_class(False, [_uk330.AVG_DOWN_DATA_GATE])[1]]
 check("이름표가 '물타기 가능/불가'가 아니라 추가매수로 무엇을 하라는 말이다 (등급은 그대로)",
       all('추가매수' in s for s in _lbl330) and not any('물타기' in s for s in _lbl330), str(_lbl330))
+
+print("\n" + "=" * 72)
+print("§331 R323 — '0건'이 0 이 아니었다 · 산출 불가 사유에 건수와 문턱 · 산식 캡션 · 경로 지평 범위 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자 화면: *"산출 불가 — 자기유사 예측 … 유효표본 0건 — 확률 산출 기준(10건) 미달"* · *"산출 불가 —
+#     대응 시나리오 … 표본 부족으로 목표·손절 선도달 확률 미산출"* · *"미선정 (자격 요건 통과 지평 없음)"* ·
+#     *"평균수익 × 승률 × 일치도 / √기간"* · *"왼쪽에서 설정한 값 그대"* · *"경로 분포 너무 단기 너무 장기 아니게."*
+#   ① 20일 유사패턴이 **1~4건**이면 엔진이 `_empty_blind_result` 로 `match_count` 를 **0 으로 박았고**(계산 쪽이
+#     그 뜻으로 읽는다 · 그대로 둠), 화면·카드·거부권이 그 칸을 관측 건수로 읽어 *"0건 · 닮은 자리를 하나도 못
+#     찾았다"* 를 말했다(§3 의 지어낸 0). 관측 건수를 `observed_match_count` 로 **따로** 싣는다.
+#   ② 문턱을 한 말로 뭉뚱그렸다 — 5건 미만(관찰값조차 안 냄)과 5~9건(관찰값만)은 다른 말이다(규칙집에서 읽는다).
+#   ③ 캡션의 산식이 엔진과 달랐다(승률 항은 없고 비용 차감·표본 신뢰·선도달비가 빠짐).
+#   ④ 타일 카드가 숨긴 가로 스크롤이라 오른쪽이 잘려 보였다 → 다음 줄로 흘린다.
+#   ⑤ 경로 그래프 지평을 판정 창(20봉)의 절반~세 배로 — 엔진이 낸 지평에서 거른다.
+_q331 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_w331 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_u331 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+check("표본 미달 갈래가 관측 건수를 따로 싣는다 · match_count(계산용 0)는 그대로",
+      "res['observed_match_count'] = int(match_cnt)" in _q331
+      and "'match_count': 0, 'sample_tier': 'INSUFFICIENT'" in _q331
+      and "'observed_match_count': int(match_cnt)," in _q331)
+check("산출 불가 사유가 관측 건수와 **규칙집 문턱**을 말한다 (5건 미만 · 5~9건을 가른다)",
+      "_mc_obs = int(sim.get('observed_match_count', mc) or 0)" in _q331
+      and "_t_obs = self.SAMPLE_TIERS[0][0]" in _q331 and "_t_prob = self.SAMPLE_TIERS[1][0]" in _q331
+      and "관찰값을 내는 하한({_t_obs}건)에도 못 미칩니다" in _q331
+      and "확률은 {_t_prob}건부터 냅니다" in _q331)
+import gaeum_ai as _ga331                                                      # noqa: E402
+_g331 = _ga331.build({}, {'match_count': 0, 'observed_match_count': 3, 'probabilities_shown': False}, {})
+_g331b = _ga331.build({}, {'match_count': 0, 'observed_match_count': 0, 'probabilities_shown': False}, {})
+check("심기 — 관측 3건이면 카드가 '찾지 못했다'를 말하지 않고 3건을 말한다 · 0건이면 그대로 찾지 못했다 (양방향)",
+      _g331['sample_n'] == 3 and '찾지 못' not in _ga331.sentence(_g331) and '3건' in _ga331.sentence(_g331)
+      and '찾지 못' in _ga331.sentence(_g331b), f"{_ga331.sentence(_g331)} / {_ga331.sentence(_g331b)}")
+check("화면의 표본 수 자리들이 관측 건수를 읽는다 (0 박힘을 옮기지 않는다)",
+      _w331.count("observed_match_count") >= 4
+      and "20일 지평은 유사패턴 표본이 {_obs323}건이라" in _w331)
+check("관찰 점수 기간의 산식 캡션이 엔진 식과 같다 · 미선정이면 세 자격을 적는다",
+      "(비용 차감 평균수익 × 표본 신뢰 × 기간 간 일치도 × 목표/손절 선도달비) ÷ √기간" in _w331
+      and "평균수익 × 승률 × 일치도 / √기간" not in _w331
+      and "eff = (net * stat_conf * ((horizon_consistency_score or 0) / 100.0)" in _q331
+      and "* rr_factor) / np.sqrt(H)" in _q331)
+_st331 = _u331[_u331.index("def stat_tiles("):_u331.index("def rows_html(")]
+# 카드를 그리는 호출만 본다 — 고친 이유를 적은 주석에 옛 글자가 있다(검사가 자기 주석을 세지 않게 · R314)
+_st331 = _st331[_st331.rindex("st.markdown("):]
+check("타일 카드는 폭이 모자라면 다음 줄로 흘린다 (숨긴 가로 스크롤로 자르지 않는다)",
+      "flex-wrap:wrap" in _st331 and "scrollbar-width:none" not in _st331, _st331[:160])
+check("경로 그래프 지평 = 엔진이 낸 지평 중 판정 창의 절반~세 배 · 뺀 지평은 사유와 함께 적는다",
+      "_eng_h323 = sorted(H for H in (hz or {}).keys() if isinstance(H, int))" in _w331
+      and "ALL_H = [H for H in _eng_h323 if _win323 // 2 <= H <= _win323 * 3] or [_win323]" in _w331
+      and "ALL_H = [5, 10, 20, 40, 60, 120]" not in _w331
+      and "그 기간의 표본 수는 위 기간별 표에 그대로 있습니다" in _w331)
+_lv331 = __import__('ledger_view')
+_h331 = [H for H in (5, 10, 20, 40, 60, 120)
+         if int(_lv331.HORIZON_BARS) // 2 <= H <= int(_lv331.HORIZON_BARS) * 3]
+check("심기 — 판정 창 20봉이면 고를 수 있는 지평은 10·20·40·60 (5·120 은 뺀다)",
+      _h331 == [10, 20, 40, 60], str(_h331))
+
+print("\n" + "=" * 72)
+print("§332 R324·R325·R326 — 가늠 AI 챗봇 창 · 시간외 거래 시간 · 금액으로 본 보유 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R324 사용자: *"가늠 AI는 자연스럽게 물어보면 챗으로 · 물어보기 위치를 맨 위로 · 오른쪽 아래 가늠 AI는
+#     챗봇처럼."* 알약을 누르면 입력바만 올라오고 답은 페이지 한가운데 쌓였다 → 대화 구역을 한 그릇
+#     (`gn_ask_panel`)에 담아 열렸을 때 입력바 위 창으로 띄운다 · 종목 화면 맨 위에 여는 길 · 인사·감사·
+#     못 알아들은 질문에도 대화가 이어진다(값은 여전히 중앙 판정뿐).
+#   R325 사용자: *"장도 이제 8시로 바뀐다면서 새로운 정책도 반영해줘."* 확인: KRX 정규장은 그대로 ·
+#     2026-09-14 시간외 16:00~20:00 연속매매 신설 · 08:00 은 넥스트레이드 프리마켓. 현재가는 15:30 종가라
+#     값·판정 불변 — 16:00~20:00 에 '장 종료'로만 적던 말을 고친다.
+#   R326 사용자: *"포트폴리오를 보고 보유·축소를 전체 금액을 보고도 판단해서 추천."* 1단계는 사실만(금액 표).
+_w332 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R324 대화 구역이 한 그릇에 담기고, 열리면 입력바 위 창으로 뜬다 (CSS · 그릇 열쇠가 같다)",
+      "with st.container(key='gn_ask_panel'):" in _w332
+      and "body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{" in _w332
+      and "position: fixed; right: 18px; bottom: 150px;" in _w332)
+check("R324 창 안을 누르는 것은 닫기가 아니다 · 열면 최근 말풍선으로 내린다",
+      "if (panel && panel.contains(e.target)) return;" in _w332
+      and "p.scrollTop = p.scrollHeight;" in _w332 and "watch_();" in _w332)
+check("R324 차례는 말풍선 → 추천 질문 → 입력 (말풍선 자리를 먼저 비워 두고 뒤에서 채운다)",
+      _w332.index("_hist60 = st.container()") < _w332.index("_gch.QUICK_QUESTIONS[:9]")
+      < _w332.index("with _hist60:"))
+check("R324 종목 화면 맨 위에서 챗봇 창을 여는 길 (알약과 같은 동작 · 스크립트 없으면 앵커)",
+      "<a href='#nav-ask' class='gn-ask-open-link' " in _w332
+      and _w332.index('<div id="nav-verdict"></div>') < _w332.index("— 가늠 AI에게 물어보기</a></div>")
+      < _w332.index("_banner_sub_html = ("))
+import gaeum_chat as _gc332                                                     # noqa: E402
+_ctx332 = _gc332.build_context(name='시험종목', ticker='X', price=1000, core={}, fs={},
+                               verdict=dict(headline='지금은 사지 마세요', score=40))
+_hi332 = _gc332.answer('안녕', _ctx332)
+_ty332 = _gc332.answer('고마워요', _ctx332)
+_un332 = _gc332.answer('오늘 점심 뭐 먹지', _ctx332)
+check("R324 인사·감사에 대화로 답한다 · 모르는 질문은 거절 문구 그대로 + 오늘 결론(중앙 판정 문장)을 잇는다",
+      '안녕하세요' in _hi332 and '천만에요' in _ty332
+      and '지어내는 대신 답하지' in _un332 and '이렇게 물어보시면 답합니다' in _un332
+      and '지금은 사지 마세요' in _un332, _un332[:200])
+# R325 — 시간외 시각은 한 곳 · 심기로 시각별 문장을 잰다(판정·값은 안 건드린다)
+_ss332 = _w332[_w332.index("_KRX_SESSIONS_325 = {"):_w332.index("if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):")]
+_ns332 = {'datetime': __import__('datetime')}
+exec(compile(_ss332, 's325', 'exec'), _ns332)
+_f332 = _ns332['_session_note_325']
+_dt332 = __import__('datetime')
+_mk332 = {'is_trading_day': True, 'state': '장 종료'}
+_at332 = lambda h, m: _f332(_mk332, now=_dt332.datetime(2026, 9, 16, h, m))       # noqa: E731
+check("R325 심기 — 17:00 시간외 거래 중 · 15:50 종가매매 · 20:30 · 휴장일 · 장중은 빈 문장",
+      '시간외 거래 중' in _at332(17, 0) and '종가매매' in _at332(15, 50)
+      and _at332(20, 30) == '' and _at332(15, 35) == ''
+      and _f332({'is_trading_day': False, 'state': '휴장일'}, now=_dt332.datetime(2026, 9, 16, 17, 0)) == ''
+      and _f332({'is_trading_day': True, 'state': '장중'}, now=_dt332.datetime(2026, 9, 16, 10, 0)) == '',
+      f"{_at332(17, 0)} / {_at332(15, 50)}")
+check("R325 문장이 가격 기준(15:30 정규장 종가)을 같이 말한다 · 사이드바와 종목 머리 두 자리가 같은 함수",
+      '15:30 정규장 종가' in _at332(17, 0) and _w332.count("_session_note_325(_mkt)") >= 4)
+check("R326 금액으로 본 보유 — 손댈 수 있는 순 → 금액 큰 순 · 추천은 아직 안 한다고 적는다",
+      "return (_rank326.get(_kd, len(_rank326)), -(t[3] or 0))" in _w332
+      and "'비중(평가금액)': v / _pf_val * 100.0" in _w332
+      and "(_pl / abs(_pl_tot326) * 100.0) if _pl_tot326 else None" in _w332
+      and "'비중을 줄이세요/늘리세요' 같은 추천은 아직 하지 않습니다" in _w332
+      and _os.path.exists(_os.path.join(PROJ, 'docs', 'PLAN_R326_PORTFOLIO_SIZING.md')))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

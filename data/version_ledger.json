@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.15.5",
+  "model": "v2026.09.16.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.16.1",
+   "previous": "v2026.09.15.5",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "표본 미달 갈래의 관측 건수를 따로 싣는다(observed_match_count) · 산출 불가 사유에 건수·문턱",
+   "note": "라운드 323 — 20일 유사패턴 1~4건도 \"0건\"으로 적던 문장 수정. match_count·판정·문턱 불변.",
+   "created_at": "2026-09-16T13:56:51+00:00",
+   "effective_from": "2026-09-16"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

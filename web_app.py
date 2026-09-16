@@ -3078,6 +3078,39 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
                                "'최신화'를 누르면 시장 데이터를 불러옵니다.")
 
 
+# ── 라운드 325 — 시간외 거래 시간 (사용자: "장도 이제 8시로 바뀐다면서 새로운 정책도 반영해줘") ──
+#   조사(2026-09-16 · KRX·보도 · docs/RESULT_R323_R326_ZERO_CHAT_SESSION_AMOUNT.md): **KRX 정규장은 그대로
+#   09:00~15:30** 이고, 2026-09-14 부터 **시간외(애프터마켓) 16:00~20:00 연속매매**가 생겼다(종전
+#   16:00~18:00 10분 단일가는 폐지 · 종가매매 15:40~16:00). **08:00** 은 넥스트레이드(대체거래소)의
+#   프리마켓(08:00~08:50)이고 KRX 의 07:00 프리마켓은 2027년 하반기로 미뤄졌다 — "KRX 가 8시에 연다"는
+#   확인되지 않았다(§3 · 지어내지 않는다).
+#   확인한 것: 우리가 쓰는 현재가(`basic.closePrice`)는 **15:30 정규장 종가**다(8종목 일봉 종가와 전부
+#   일치 · 시간외 가격은 `overMarketPriceInfo` 로 따로 온다). 그래서 **값·판정·채점은 안 바뀐다.**
+#   바뀐 것은 *지금 장이 열려 있는가* 의 말뿐이다 — 16:00~20:00 에도 거래가 되는데 화면은 '장 종료'
+#   라고만 적었다. 시각은 거래소가 정한 사실이라 한 곳에 두고 날짜와 함께 적는다(손으로 고른 문턱 아님).
+_KRX_SESSIONS_325 = {                 # 2026-09-14 시행 (KRX) · 출처와 날짜는 결과 문서에
+    'close_trade': (datetime.time(15, 40), datetime.time(16, 0)),    # 장 종료 후 종가매매
+    'after_market': (datetime.time(16, 0), datetime.time(20, 0)),    # 시간외 연속매매
+}
+
+
+def _session_note_325(mkt, now=None):
+    """정규장 밖에서 **지금 열려 있는 시간외 거래**를 한 줄로. 없으면 ''(판정·값 불변 · 표시 전용)."""
+    try:
+        if not mkt or not mkt.get('is_trading_day') or mkt.get('state') != '장 종료':
+            return ''
+        _t = (now or datetime.datetime.now()).time()
+        _ct, _am = _KRX_SESSIONS_325['close_trade'], _KRX_SESSIONS_325['after_market']
+        if _am[0] <= _t < _am[1]:
+            return ("KRX 시간외 거래 중(16:00~20:00) — 화면 가격·판정은 15:30 정규장 종가 기준이고 "
+                    "시간외 체결가는 다를 수 있습니다")
+        if _ct[0] <= _t < _ct[1]:
+            return "장 종료 후 종가매매 중(15:40~16:00) — 화면 가격은 15:30 정규장 종가입니다"
+        return ''
+    except Exception:                                          # noqa: BLE001
+        return ''
+
+
 if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
 
     _uk.sidebar_section("분석 기준", theme=_theme)
@@ -3088,6 +3121,7 @@ if _uk.acc_row(_SB_STEPS[3], _sb_open, _sb_busy):
     st.sidebar.caption(
         f"시장 상태: **{_mkt['state']}** 확정 분석 기준일 **{_resolved_date}**"
         + ("" if _mkt['holiday_data_available'] else " 해당 연도 공휴일 미등록 (주말만 판정)")
+        + (f"  \n{_session_note_325(_mkt)}" if _session_note_325(_mkt) else "")
     )
     t_ref_date = _keep('t_ref', st.sidebar.date_input(
         "백테스트 기준일 (t_ref)", value=_kept('t_ref', _resolved_date)))
@@ -6424,14 +6458,56 @@ else:
                                      + (f" 외 {len(_v) - 4}" if len(_v) > 4 else ''))
         if _nm_avg_ok226:
             _v = sorted(_nm_avg_ok226)
-            _act_names226.append(f"**물타기 가능** {', '.join(_v[:4])}"
+            _act_names226.append(f"**추가매수 조건 통과** {', '.join(_v[:4])}"
                                  + (f" 외 {len(_v) - 4}" if len(_v) > 4 else '')
-                                 + " — 엔진의 진입가 이하에서만")
+                                 + " — 엔진의 진입가 이하로 내려오면")
         if _act_names226:
             st.caption(" · ".join(_act_names226))
         elif _pf_held:
             st.caption("지금 손댈 것은 없습니다 — 전부 두 선(버틸 수 없는 가격 · 1차 매도가) "
                        "사이의 보유 유지입니다.")
+
+        # ── ②b 금액으로 본 보유 (라운드 326 · 표시 전용) ──────────────────────────
+        # 사용자: *"포트폴리오를 보고 보유할지 말지 줄일지도 · 전체적인 금액을 보고도 판단해서 추천해
+        #   주는 시스템."* **1단계는 사실만** — 종목마다 지금 할 일(표의 판단 그대로)과 **금액**(비중 ·
+        #   평가손익 · 전체 손익 중 몫)을 한 표에 놓고, *큰 금액에서 손댈 것*이 먼저 보이게 세운다
+        #   (손댈 수 있는 순 → 같은 자리 안에서는 금액 큰 순). 비중을 줄이라/늘리라는 **추천은 아직
+        #   만들지 않는다** — "몇 % 넘으면 줄인다" 같은 수는 손으로 고르면 §2 이고, 원장은 종목 단위라
+        #   포트폴리오 규칙을 아직 못 잰다. 그 연구 계획은 docs/PLAN_R326_PORTFOLIO_SIZING.md 에 둔다.
+        _amt326 = [(nm, act, c, v) for nm, act, c, v in _pf_held if c and v]
+        if _amt326 and _pf_val > 0:
+            _pl_tot326 = _pf_val - _pf_cost
+            _rank326 = {k: i for i, k in enumerate(_WL_SELL_RANK)}
+
+            def _k326(t):
+                _kd = (t[1] or {}).get('kind')
+                return (_rank326.get(_kd, len(_rank326)), -(t[3] or 0))
+            _rows326 = []
+            for nm, act, c, v in sorted(_amt326, key=_k326):
+                _pl = v - c
+                _rows326.append({
+                    '종목': nm,
+                    '지금 할 일': (act or {}).get('kind') or '판단 없음',
+                    '비중(평가금액)': v / _pf_val * 100.0,
+                    '평가금액': v,
+                    '평가손익': _pl,
+                    '수익률(%)': (v / c - 1.0) * 100.0,
+                    # 전체 손익이 0 이면 몫을 만들지 않는다(분모 0 · §3)
+                    '전체 손익 중 몫(%)': (_pl / abs(_pl_tot326) * 100.0) if _pl_tot326 else None,
+                })
+            st.markdown("**금액으로 본 보유** — 손댈 수 있는 순, 같은 자리 안에서는 금액이 큰 순")
+            st.dataframe(pd.DataFrame(_rows326), hide_index=True, width='stretch',
+                         column_config={
+                             '비중(평가금액)': st.column_config.NumberColumn(format='%.1f%%'),
+                             '평가금액': st.column_config.NumberColumn(format='%d원'),
+                             '평가손익': st.column_config.NumberColumn(format='%+d원'),
+                             '수익률(%)': st.column_config.NumberColumn(format='%+.1f'),
+                             '전체 손익 중 몫(%)': st.column_config.NumberColumn(format='%+.0f'),
+                         })
+            st.caption("사실만 세운 표입니다 — 금액이 크고 손댈 자리인 종목이 위에 옵니다. "
+                       "'비중을 줄이세요/늘리세요' 같은 추천은 아직 하지 않습니다: 몇 %에서 줄일지를 "
+                       "손으로 정하면 근거 없는 규칙이 되고, 과거 사례로 먼저 재 봐야 합니다. "
+                       "'전체 손익 중 몫'은 이 종목 손익을 전체 손익의 크기로 나눈 값입니다(부호는 방향).")
         # ── 라운드 230 — "다 보유 유지인데 맞아?" 를 화면이 먼저 답한다 ────────────
         # ① 보유 행마다 현재가가 두 선에서 얼마나 떨어져 있나(산수 · 중앙·최소)
         # ② 원장에서 계획 n봉째까지 두 선 중 하나에 닿은 케이스가 몇 %인가(touched_bar
@@ -7627,7 +7703,7 @@ st.markdown(f"""
                 {curr_p_formatted} <span style='font-size: 17px; font-weight: 700; margin-left: 8px;'>{chg_text}</span>
             </div>
             <p style='margin: 8px 0 0 0; color: #9DAABC; font-size: 13px;'>
-                {_mkt['state']} · 분석 기준일 {t_ref_str} · 통화 {unit_currency} · 단위 {unit_str}
+                {_mkt['state']} · 분석 기준일 {t_ref_str} · 통화 {unit_currency} · 단위 {unit_str}{(' · ' + _uk._esc(_session_note_325(_mkt))) if _session_note_325(_mkt) else ''}
             </p>
         </div>
         <div style='text-align: right; color: #9DAABC; font-size: 13px;'>
@@ -8408,6 +8484,18 @@ else:
                 "뜻입니다.")
 
 st.markdown('<div id="nav-verdict"></div>', unsafe_allow_html=True)
+# 라운드 324 — 사용자: *"가늠 AI에게 물어보기 위치를 맨 위로 올리는 게 좋지 않아?"* 대화 구역은 그 답에
+#   쓰는 재료(판단 근거·뉴스·계층 보정)가 다 계산된 **뒤**에만 설 수 있어 통째로 올리면 재료가 비거나
+#   계산을 두 번 한다(§4). 대신 종목 화면 **맨 위**에서 바로 여는 길을 둔다 — 누르면 오른쪽 아래 챗봇
+#   창이 뜬다(스크립트가 `.gn-ask-open-link` 를 알약과 같은 동작으로 묶는다). 스크립트가 없으면
+#   앵커로 대화 구역까지 내려간다.
+st.markdown(
+    f"<div style='display:flex; justify-content:flex-end; margin:0 0 6px 0;'>"
+    f"<a href='#nav-ask' class='gn-ask-open-link' "
+    f"style='font-size:13px; font-weight:600; color:{_TOK['brand']}; text-decoration:none; "
+    f"box-shadow:inset 0 0 0 1px {_TOK['border']}; border-radius:999px; padding:6px 14px;'>"
+    f"{_uk._esc(resolved_name)} — 가늠 AI에게 물어보기</a></div>",
+    unsafe_allow_html=True)
 # 헤드라인만으로는 '조건부'가 안 보인다 — 신규 매수자용 쉬운 결론 한 줄을
 # 배너 안에 병기해, "지금은 사지 마세요"가 '31,665원 이하로 내려오면 산다'는
 # 조건부인지 완전 회피인지 배너에서 바로 구분되게 한다.
@@ -8922,6 +9010,22 @@ body.gn-ask-open .gn-ask-fab {{
 @media (prefers-reduced-motion: reduce) {{
   .gn-ask-fab, body.gn-ask-ready [data-testid="stBottom"] {{
     transition: none; }} }}
+
+/* ── 챗봇 패널 (라운드 324) ────────────────────────────────────────────
+   사용자: "오른쪽 아래에 있는 가늠 AI는 챗봇처럼 만들어주는 게 좋을 듯."
+   종전엔 알약을 누르면 **입력바만** 올라오고 답은 페이지 한가운데(대화 구역)에 쌓여,
+   묻는 자리와 답이 나오는 자리가 화면 몇 장 떨어져 있었다. 대화 구역 자체를
+   (`st.container(key='gn_ask_panel')`) 열렸을 때 **입력바 바로 위에 뜨는 창**으로 띄운다 —
+   대화·추천 질문·입력이 한 자리에 모인다. 닫히면 원래 자리의 구역으로 돌아간다. */
+body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{
+  position: fixed; right: 18px; bottom: 150px; z-index: 9991;   /* 입력바(실측 높이 140px) 바로 위 */
+  width: min(440px, calc(100vw - 28px)); max-height: min(62vh, 620px);
+  overflow-y: auto; overscroll-behavior: contain;
+  background: {_TOK['bg2']};
+  border-radius: 16px; padding: 12px 14px 8px 14px;
+  box-shadow: inset 0 0 0 1px {_TOK['border']}, 0 14px 44px rgba(0,0,0,.45); }}
+@media (max-width: 640px) {{
+  body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{ right: 8px; bottom: 140px; }} }}
 </style>
 <a class="gn-ask-fab" id="gn-ask-fab" href="#nav-ask"
    title="{_uk._esc(resolved_name)}에 대해 물어보기"
@@ -8975,8 +9079,26 @@ try:
     D.body.classList.add('gn-ask-ready');
   }
 
+  // 챗봇 창은 **가장 최근 말**이 보이게 연다. 질문을 보내면 Streamlit 이 다시
+  //   그리면서 말풍선이 늘어나므로, 창 안이 바뀔 때마다 맨 아래로 내린다.
+  function toBottom_() {
+    const p = D.querySelector('.st-key-gn_ask_panel');
+    if (p) p.scrollTop = p.scrollHeight;
+  }
+  // 이 스크립트는 대화 구역보다 **먼저** 그려지므로, 창을 찾는 일은 열 때 한다(없으면 조용히 넘어간다).
+  function watch_() {
+    const p = D.querySelector('.st-key-gn_ask_panel');
+    if (!p || p.dataset.gnObs === '1') return;
+    p.dataset.gnObs = '1';
+    new MutationObserver(function () {
+      if (D.body.classList.contains('gn-ask-open')) toBottom_();
+    }).observe(p, {childList: true, subtree: true});
+  }
+
   function open_() {
     D.body.classList.add('gn-ask-open');
+    watch_();
+    setTimeout(toBottom_, 60);
     // 애니메이션(0.28s)이 끝난 뒤 커서를 넣는다 — 올라오는 도중에 넣으면
     // 브라우저가 스크롤을 함께 흔든다.
     setTimeout(function () {
@@ -9009,6 +9131,10 @@ try:
   D.addEventListener('mousedown', function (e) {
     if (!D.body.classList.contains('gn-ask-open')) return;
     const bar = D.querySelector('[data-testid="stBottom"]');
+    // 챗봇 창 안(말풍선·추천 질문)을 누르는 것은 **닫기가 아니다.**
+    const panel = D.querySelector('.st-key-gn_ask_panel');
+    if (panel && panel.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.gn-ask-open-link')) return;
     if (bar && !bar.contains(e.target) && e.target !== fab
         && !fab.contains(e.target)) {
       close_();
@@ -9749,12 +9875,18 @@ try:
     _ck60 = f"gchat_{str(target_ticker).replace('.', '_')}"
     if _ck60 not in st.session_state:
         st.session_state[_ck60] = []
-    # 추천 질문 칩 — 한 줄 배치
-    _qcols = st.columns(3)
-    _pending_q = None
-    for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
-        if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
-            _pending_q = _qq
+    # ── 라운드 324 — 챗봇 창 (사용자: "자연스럽게 내가 물어보면 챗으로 대답 · 챗봇처럼") ──────
+    #   대화·추천 질문을 **한 그릇**(`gn_ask_panel`)에 담는다 — 알약을 누르면 이 그릇이 입력바 위에
+    #   창으로 뜬다(CSS 위). 차례는 채팅 앱처럼 **말풍선 → 추천 질문 → 입력**이다. 질문을 먼저
+    #   처리해야 말풍선에 방금 답이 들어가므로, 말풍선 자리를 먼저 비워 두고 뒤에서 채운다.
+    with st.container(key='gn_ask_panel'):
+        _hist60 = st.container()
+        st.caption("이런 걸 물어볼 수 있어요")
+        _qcols = st.columns(3)
+        _pending_q = None
+        for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
+            if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
+                _pending_q = _qq
     _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
                              key=f'{_ck60}_in')
     _ask60 = _typed_q or _pending_q
@@ -9763,13 +9895,20 @@ try:
         st.session_state[_ck60].append(('assistant',
                                         _gch.answer(_ask60, _ctx60)))
         st.session_state[_ck60] = st.session_state[_ck60][-12:]
-    for _role60, _msg60 in st.session_state[_ck60]:
-        with st.chat_message(_role60):
-            st.markdown(_md_safe(_msg60))
-    if not st.session_state[_ck60]:
-        st.caption("답은 이 화면의 중앙 판정 값만 씁니다 — 다른 화면과 다른 "
-                   "가격을 만들지 않고, 없는 값은 없다고 말합니다. 평단 등 "
-                   "개인 정보는 이 PC 를 떠나지 않습니다.")
+    with _hist60:
+        if not st.session_state[_ck60]:
+            # 빈 창에 안내 말풍선 하나 — 무엇을 물으면 되는지 먼저 말한다(대화처럼 시작한다)
+            with st.chat_message('assistant'):
+                st.markdown(_md_safe(
+                    f"안녕하세요. **{resolved_name}** 에 대해 편하게 물어보세요 — "
+                    f"'지금 사도 돼?' · '얼마에 사야 해?' · '왜 추천에서 빠졌어?' · "
+                    f"'나 OO원에 갖고 있는데 어떻게 해?' 처럼요."))
+                st.caption("답은 이 화면의 중앙 판정 값만 씁니다 — 다른 화면과 다른 "
+                           "가격을 만들지 않고, 없는 값은 없다고 말합니다. 평단 등 "
+                           "개인 정보는 이 PC 를 떠나지 않습니다.")
+        for _role60, _msg60 in st.session_state[_ck60]:
+            with st.chat_message(_role60):
+                st.markdown(_md_safe(_msg60))
 except Exception:                                              # noqa: BLE001
     pass                          # 대화 한 칸 때문에 분석 화면이 죽지 않는다
 
@@ -9804,7 +9943,7 @@ if _blv.get('n'):
     _rows_v.append(('추천 신호의 실전 성적 (안 본 기간)',
                     f"{_blv['hit_rate']:.0f}% · {_blv['n']:,}건"))
 _rows_v.append(('비슷했던 과거 사례',
-                f"{sim_res.get('match_count', 0):,}건 · "
+                f"{sim_res.get('observed_match_count', sim_res.get('match_count', 0)):,}건 · "   # 라운드 323 — 관측 건수
                 f"{sim_res.get('confidence_grade', '—')}"))
 # 이번 판단에 실제로 걸린 게이트·상한을 그대로 적는다
 _gates_v = []
@@ -11167,7 +11306,7 @@ with tab_pred:
             <b>④ 독립성 확보</b>: 매칭 간 최소 H영업일 간격 강제 (중복 이벤트 제거)<br>
             <b>⑤ 경로 확률</b>: 손절(-{TP_SL[1]:.0f}%) vs 목표(+{TP_SL[0]:.0f}%) 선도달 여부를 매칭별로 실제 경로 추적<br>
             <b>⑥ 베이지안 보정</b>: Beta-Binomial 사후평균 (사후확률: <b style='color:#35C98B;'>{fmt_pct(sim_res.get('bayes_prob'), signed=False)}</b>) + 95% Wilson 구간<br>
-            <b>⑦ 표본 통제</b>: 유사패턴 표본 {sim_res.get('match_count', 0)}건 · 등급 <b>{sim_res.get('sample_tier_label', '-')}</b> — 10건 미만이면 확률 미표시
+            <b>⑦ 표본 통제</b>: 유사패턴 표본 {sim_res.get('observed_match_count', sim_res.get('match_count', 0))}건 · 등급 <b>{sim_res.get('sample_tier_label', '-')}</b> — 10건 미만이면 확률 미표시
         </p>
         <p style='font-size: 12px; color:#9DAABC; margin: 8px 0 0 0;'>
             ※ 거래량·수급·RSI를 유사도에 반영하는 다중거리 모델과 다중 모델 앙상블은 구현되어 있지 않습니다.
@@ -11220,12 +11359,23 @@ with tab_pred:
         _uk.stat_tiles([
             # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을 몇 봉까지 보고
             # 골랐나**이다. 라운드 234 — '최적'이라는 낱말도 뺀다: 보유기간 추천처럼 읽혔다.
+            # 라운드 323 — ① 부제의 산식이 **엔진과 달랐다**(승률 항은 없고 비용 차감·표본 신뢰·
+            #   목표/손절 선도달비가 빠져 있었다 · quant_indicators 의 eff 식). 엔진 식 그대로 적는다.
+            #   ② 미선정일 때 값 칸이 '미선정 (자격 요건 통과 지평 없음)' 한 줄이라 좁으면 …로 잘렸고
+            #   **무엇이 모자라는지** 안 말했다 — 값은 짧게, 부제에 세 자격을 적는다(문턱은 엔진 값).
             {'label': '관찰 점수가 가장 높은 기간',
-             'value': sim_res.get('optimal_holding_period_str', '산출 불가'),
-             'sub': '평균수익 × 승률 × 일치도 / √기간 · 매매 보유기간 추천이 아닙니다'},
+             'value': (sim_res.get('optimal_holding_period_str', '산출 불가')
+                       if sim_res.get('optimal_holding_period_days') else '미선정'),
+             'sub': ('(비용 차감 평균수익 × 표본 신뢰 × 기간 간 일치도 × 목표/손절 선도달비) ÷ √기간 · '
+                     '매매 보유기간 추천이 아닙니다'
+                     if sim_res.get('optimal_holding_period_days') else
+                     f"비용 차감 후 수익이 남고 · 유효표본 "
+                     f"{q_engine.GATES.get('min_effective_samples', 10):.0f}건 이상이고 · "
+                     f"목표에 먼저 닿는 쪽이 많은 기간이 없습니다 — 아래 표에 기간별로 무엇이 모자라는지"
+                     f" 적었습니다")},
             {'label': '적용 상관 임계값',
              'value': f"rho ≥ {sim_res.get('rho_cutoff_applied', rho_cutoff)}",
-             'sub': '왼쪽에서 설정한 값 그대로'},
+             'sub': '왼쪽에서 설정한 값 그대로 · 낮추면 비슷한 과거가 늘지만 덜 닮습니다'},
         ], theme=_theme)
 
         # ── 미선정이면 '고장'이 아니라 '판정'임을 근거와 함께 보여준다 ─────────
@@ -11300,7 +11450,7 @@ with tab_pred:
         
     else:
         # 종전엔 '미산출' 카드 셋이 나란히 섰다 — 없는 값을 세 번 크게 말하지 않는다.
-        st.caption(f"산출하지 않습니다 — 20일 유사사례 n={sim_res.get('match_count', 0)} · "
+        st.caption(f"산출하지 않습니다 — 20일 유사사례 n={sim_res.get('observed_match_count', sim_res.get('match_count', 0))} · "
                    f"{sim_res.get('sample_tier_label', '')}"
                    + (f" (확률 표시 기준 {_min_prob234}건 이상)" if _min_prob234 else "")
                    + ". 위 표의 다른 기간 값은 그 기간의 과거 관찰값입니다.")
@@ -11308,8 +11458,10 @@ with tab_pred:
     st.markdown("과거 관찰 성과 세부 분리 지표 (20일)")
     # 라운드 233 — 20일 표본이 0건이면 여섯 칸이 전부 '산출 불가'였다(~330px). 없는 값을
     #   여섯 번 말하지 않고 한 문장으로, 표본이 있는 지평이 어디인지와 함께.
+    # 라운드 323 — 표본 미달 갈래는 match_count 가 0 으로 박혀 1~4건도 '0건'이라 적었다. 수는 관측 건수로.
+    _obs323 = int(sim_res.get('observed_match_count', sim_res.get('match_count', 0)) or 0)
     if not sim_res.get('match_count'):
-        st.caption("20일 지평은 유사패턴 표본이 0건이라 관찰 성과(평균·중앙값·최고/최저·"
+        st.caption(f"20일 지평은 유사패턴 표본이 {_obs323}건이라 관찰 성과(평균·중앙값·최고/최저·"
                    "평균 최대낙폭·오른/내린 사례)를 낼 수 없습니다."
                    + (f" 지평별 유사패턴 표본: {_hz_line233} — 표본이 있는 지평은 아래 "
                       "'기간별 경로 분포'에서 고를 수 있습니다." if _hz_line233 else ""))
@@ -11346,20 +11498,36 @@ with tab_pred:
     st.markdown("기간별 경로 분포")
 
     core = sim_res.get('core_horizons') or [10, 20, 40]
-    ALL_H = [5, 10, 20, 40, 60, 120]
+    # ⚠️ 라운드 323 — 사용자: *"경로 분포도 고민해서 정리해주고 너무 단기 너무 장기 아니게."*
+    #   종전엔 5~120일 여섯 지평 전부 · 기본은 40일 우선이었다. 그런데 이 앱의 판정·원장 채점·
+    #   목표/손절 선도달은 전부 **20봉 창**이다(ledger_view.HORIZON_BARS · R300 이 그림에 경계를 그었다).
+    #   5일은 왕복 비용·잡음에 묻히고, 120일은 그 창의 6배라 **잰 적 없는 구간이 대부분**이다.
+    #   그래서 고를 수 있는 지평을 **판정 창의 절반~세 배**로 좁힌다(창에서 유도 · 손으로 고른 목록이
+    #   아니다 · 엔진 지평 목록에서 거른다). 뺀 지평의 표본 수는 위 기간별 표에 그대로 있다.
+    #   기본은 엔진이 고른 기간(그 범위 안일 때) → 판정 창 → 창에 가까운 순이다.
+    import ledger_view as _lv323
+    _win323 = int(_lv323.HORIZON_BARS)
+    # 지평 목록은 **엔진이 낸 지평**(horizons_data 의 열쇠)에서 읽는다 — 화면이 목록을 다시 적지 않는다(§4).
+    _eng_h323 = sorted(H for H in (hz or {}).keys() if isinstance(H, int))
+    ALL_H = [H for H in _eng_h323 if _win323 // 2 <= H <= _win323 * 3] or [_win323]
+    _cut323 = [H for H in _eng_h323 if H not in ALL_H]
     avail_h = [H for H in ALL_H if (hz.get(H) or {}).get('status') != 'INSUFFICIENT']
     # ⚠️ 표본이 없는 지평을 목록에서 빼버리면 '기능이 사라진 것'처럼 보인다.
-    #    6개 지평은 항상 노출하고, 표본이 없으면 그 사실과 이유를 보여준다.
+    #    고를 수 있는 지평은 항상 노출하고, 표본이 없으면 그 사실과 이유를 보여준다.
+    if _cut323:
+        st.caption(f"경로 그래프는 판정 창({_win323}봉)의 절반~세 배인 "
+                   + "·".join(f"{H}일" for H in ALL_H) + "만 고를 수 있습니다 — "
+                   + "·".join(f"{H}일" for H in _cut323)
+                   + "은 너무 짧거나(비용·잡음에 묻힘) 너무 길어(판정이 재 본 적 없는 구간) 뺐고, "
+                     "그 기간의 표본 수는 위 기간별 표에 그대로 있습니다.")
     if not avail_h:
         st.info("표본이 충분한 예측 기간이 없어 경로 그래프를 표시하지 않습니다.")
     else:
-        # 기본 선택은 중기(40일 우선, 없으면 60일)로 둔다. 짧은 기간은 표본이 많아
-        # 기본으로 잡히기 쉬운데, 노이즈가 커서 판단 근거로는 약하다.
-        PREFERRED_DEFAULT_H = (40, 60, 20, 120, 10, 5)
-        default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h and H in core), None)
-        if default_h is None:
-            default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h), avail_h[0])
-        _why234 = "표본이 있는 중기 우선"
+        # 기본 선택: 판정 창과 같은 기간 → 창에 가까운 순(같으면 짧은 쪽). 엔진이 고른 기간이
+        #   범위 안에 있으면 아래에서 그것이 이긴다(라운드 234).
+        PREFERRED_DEFAULT_H = tuple(sorted(ALL_H, key=lambda H: (abs(H - _win323), H)))
+        default_h = next((H for H in PREFERRED_DEFAULT_H if H in avail_h), avail_h[0])
+        _why234 = f"판정 창({_win323}봉)에 가장 가까운 기간"
         # 라운드 234 — 엔진이 이미 '관찰 점수가 가장 높은 기간'을 골랐는데 화면은 40일에 고정돼
         #   있었고, 40일이 0건이면 60일로 밀리면서 라벨은 "기본 40일"이라 적었다(라벨과 데이터가
         #   다른 지평). 엔진 값이 있고 표본이 있으면 그것이 기본이고, 라벨은 실제 기본값을 적는다.
@@ -11369,13 +11537,15 @@ with tab_pred:
             _why234 = "관찰 점수가 가장 높은 기간"
 
         def _h_label(H):
-            mark = " " if H in core else ""
+            # 라운드 323 — 표식이 공백 한 칸이라(이모지를 걷어낼 때 남은 자리) 라벨의 '· 는 핵심
+            #   기간'이 가리키는 것이 없었다. 글자 표식 '*' 로 둔다(§5 · 이모지 아님).
+            mark = "*" if H in core else ""
             if H not in avail_h:
                 return f"{H}일{mark} (표본없음)"
             return f"{H}일{mark}"
 
         sel_h = st.radio(
-            f"다른 기간 살펴보기 (기본 {default_h}일 = {_why234} · 는 전략 유형에 맞는 핵심 기간)",
+            f"다른 기간 살펴보기 (기본 {default_h}일 = {_why234} · * 는 전략 유형에 맞는 핵심 기간)",
             ALL_H, index=ALL_H.index(default_h), horizontal=True,
             format_func=_h_label, key="horizon_pick")
 

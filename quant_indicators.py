@@ -750,6 +750,11 @@ class QuantIndicatorsEngine:
         if tier_code == 'INSUFFICIENT':
             res = self._empty_blind_result(curr_p, f"20일 유효표본 {match_cnt}건 — {tier_label}")
             res.update(multi_horizon_meta)
+            # ⚠️ 라운드 323 — `_empty_blind_result` 는 `match_count` 를 **0 으로 박는다**(계산 쪽 —
+            #   유효 거래 수 등 — 이 그 뜻으로 읽으므로 그대로 둔다). 그런데 화면·요약·거부권 문장이
+            #   같은 칸을 **관측 건수**로 읽어, 20일 유사패턴이 1~4건일 때도 *"0건 · 닮은 자리를 하나도
+            #   못 찾았다"* 를 말했다(사용자 화면 · §3 의 지어낸 0). 관측 건수는 **따로** 싣는다.
+            res['observed_match_count'] = int(match_cnt)
             return res
 
         show_prob = self.probabilities_allowed(tier_code)
@@ -767,6 +772,7 @@ class QuantIndicatorsEngine:
 
         return {
             'match_count': match_cnt,
+            'observed_match_count': int(match_cnt),   # 라운드 323 — 화면용 관측 건수(표본 미달 갈래와 같은 이름)
             'sample_tier': tier_code,
             'sample_tier_label': tier_label,
             'probabilities_shown': show_prob,
@@ -1625,10 +1631,18 @@ class QuantIndicatorsEngine:
         obs = sim.get('obs_win_ratio')
         mp = sim.get('mean_perf')
         mc = sim.get('match_count') or 0
+        # 라운드 323 — 문장에는 **관측 건수**를 쓴다(표본 미달 갈래는 match_count 가 0 으로 박힌다).
+        #   문턱도 규칙집 한 곳에서 읽는다 — 5건 미만(관찰값조차 안 냄)과 5~9건(관찰값만)은 다른 말이다.
+        _mc_obs = int(sim.get('observed_match_count', mc) or 0)
+        _t_obs = self.SAMPLE_TIERS[0][0]
+        _t_prob = self.SAMPLE_TIERS[1][0]
         allowed = bool(sim.get('probabilities_shown'))
         if not allowed or wr is None:
             add('pattern', '자기유사 예측',
-                None, [f"유효표본 {mc}건 — 확률 산출 기준(10건) 미달, 관찰값만 참고"],
+                None, [(f"유효표본 {_mc_obs}건 — 관찰값을 내는 하한({_t_obs}건)에도 못 미칩니다 · "
+                        f"확률은 {_t_prob}건부터 냅니다"
+                        if _mc_obs < _t_obs else
+                        f"유효표본 {_mc_obs}건 — 확률 산출 기준({_t_prob}건) 미달, 관찰값만 참고")],
                 available=False)
         else:
             net = (mp or 0.0) - self.TOTAL_COST_PCT
@@ -1660,8 +1674,10 @@ class QuantIndicatorsEngine:
         tp = sim.get('tp_first_prob')
         sl = sim.get('sl_first_prob')
         if tp is None or sl is None:
+            # 라운드 323 — "표본 부족"만 적으면 **몇 건이고 몇 건이 필요한지**를 모른다(사용자 지적).
             add('scenario', '대응 시나리오', None,
-                ["표본 부족으로 목표·손절 선도달 확률 미산출"], available=False)
+                [f"20일 유사패턴 {_mc_obs}건 — 목표·손절 중 어느 쪽에 먼저 닿는지의 확률은 "
+                 f"{_t_prob}건부터 냅니다"], available=False)
         else:
             nt = sim.get('no_touch_prob')
             if nt is None:
@@ -1797,7 +1813,7 @@ class QuantIndicatorsEngine:
             # 화면에 "유효표본 132건"이 떠 있었다. 같은 말이 두 숫자를
             # 가리키면 사용자는 화면을 못 믿는다. 이름을 갈라 준다.
             vetoes.append(
-                f"유사패턴 표본 {sim.get('match_count', 0)}건 — "
+                f"유사패턴 표본 {sim.get('observed_match_count', sim.get('match_count', 0))}건 — "
                 f"확률 판단 기준 미달 (과거에 지금과 닮은 자리를 "
                 f"충분히 찾지 못했습니다)")
         # [라운드 3] 이 거부권은 매수 결론의 42%를 막는 최대 차단자인데,

@@ -72,7 +72,9 @@ def build(four_scores: dict, sim_res: dict, verdict: dict,
     fs, sim, vd = four_scores or {}, sim_res or {}, verdict or {}
     calib = _calib()
 
-    n = sim.get('match_count')
+    # 라운드 323 — **관측 건수**를 읽는다. 표본 미달 갈래(20일 유사패턴 1~4건)는 엔진이 `match_count`
+    #   를 0 으로 박아, 이 카드가 *"비슷한 과거 사례를 찾지 못했습니다"* 라는 거짓을 말했다(§3).
+    n = sim.get('observed_match_count', sim.get('match_count'))
     up = sim.get('predicted_probability')
     tp = sim.get('tp_first_prob')
     sl = sim.get('sl_first_prob')
