@@ -41,7 +41,6 @@ THR, COST = 58.0, 0.36
 PURGE_FROM = '2025-06-01'
 MIN_CELL_N = 200               # 사전등록 §3
 INNER_VAL_FROM = '2024-09-01'  # 메타 변형 선택용 train 내부 경계
-IDX_CACHE = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 
 
 def _today():
@@ -63,20 +62,13 @@ def wilson_low(k, n, z=1.96):
 
 
 def kospi_series():
-    """코스피 일봉 — 캐시 우선. 네트워크 실패 시 캐시라도 쓴다."""
-    if os.path.exists(IDX_CACHE):
-        with open(IDX_CACHE, encoding='utf-8') as f:
-            c = json.load(f)
-        return c['dates'], c['closes']
-    import bitemporal_engine as be
-    r = be.BitemporalEngine().fetch_index_daily('KOSPI', count=3000)
-    if r is None:
+    """코스피 일봉 — 캐시 우선(재현). 받는 곳은 `scripts/kospi_index` 한 곳이다 (라운드 330)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kospi_index as _ki
+    got = _ki.series(prefer_cache=True)
+    if not got:
         raise SystemExit('코스피 일봉을 받지 못했다 — 측정 중단 (지어내지 않는다)')
-    dates = [str(x) for x in r[0]]
-    closes = [float(x) for x in r[1]]
-    with open(IDX_CACHE, 'w', encoding='utf-8') as f:
-        json.dump({'dates': dates, 'closes': closes, 'made': _today()}, f)
-    return dates, closes
+    return got[0], got[1]
 
 
 def build_states():

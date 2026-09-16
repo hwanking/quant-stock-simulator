@@ -911,9 +911,12 @@ def price_for_grading(eng, ticker, cache, failed):
     pdf = cache.get(ticker)
     if pdf is not None:
         return pdf
+    # 라운드 330 — 일봉만 받는다(`fetch_daily_bars`). 채점은 원시 일봉만 쓰고 실시간 삼중 확인은
+    #   종목당 시간만 먹었다(클라우드 5.82초 · 이 PC 차갑게 1.31초 → 0.14초 · 같은 일봉 19/19).
+    #   곁들여 삼중 확인이 '종목 페이지 없음'으로 거부하던 상장폐지 8종목도 일봉은 받을 수 있어,
+    #   이어받던(carried_over) 761행이 다시 채점된다 — 저장된 채점과 761/761 같았다.
     try:
-        pdf, _ = eng.generate_synthetic_bitemporal_data(
-            symbol=ticker, start_date='2015-01-01', end_date=None)
+        pdf = eng.fetch_daily_bars(ticker)
     except Exception:                                          # noqa: BLE001
         failed.add(ticker)
         return None
@@ -986,8 +989,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         probe = None
         for tk in pool[:8]:
             try:
-                pdf, _f = eng.generate_synthetic_bitemporal_data(
-                    symbol=tk, start_date='2015-01-01', end_date=None)
+                pdf = eng.fetch_daily_bars(tk)             # 달력만 본다 — 일봉만 (라운드 330)
             except Exception:                                  # noqa: BLE001
                 continue
             price_cache[tk] = pdf
@@ -1032,8 +1034,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     _t_plan = time.time()
     for tk in pool:
         try:
-            pdf, _f = eng.generate_synthetic_bitemporal_data(
-                symbol=tk, start_date='2015-01-01', end_date=None)
+            # 라운드 330 — 계획은 기준일 달력만, 캐시는 채점만 쓴다 → 일봉만 받는다. 케이스를 만드는
+            #   `run_full_pipeline` 은 자기 적재(실시간 확인·재무 메타 포함)를 따로 한다 — 판정 불변.
+            pdf = eng.fetch_daily_bars(tk)
             price_cache[tk] = pdf
             for d in make_asof_dates(pdf, n_dates=N_DATES,
                                      forward_from=forward_from):

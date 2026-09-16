@@ -1859,34 +1859,17 @@ class BitemporalEngine:
         """실제 일봉 시계열을 적재한다. (구버전 이름: generate_synthetic_bitemporal_data)"""
         return self.generate_synthetic_bitemporal_data(symbol, start_date, end_date)
 
-    def generate_synthetic_bitemporal_data(self, symbol="005930.KS", start_date="2020-01-01", end_date=None):
-        if not end_date: end_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        
-        # ⚠️ 라운드 167 — 여기가 **재무지표를 지어내고 있었다.**
-        #
-        #     meta = STOCK_METRICS_DB.get(symbol, {"eps": 5000.0,
-        #            "bps": 45000.0, "pbr": 1.5, "roe": 12.0, ...})
-        #
-        #   `.get(symbol, 기본값)` 이라 **처음 보는 종목**은 통째로 저 리터럴을
-        #   받았다. 그리고 이 함수 바로 다음 줄이 DB 를 채우므로 **순서만
-        #   뒤바뀐 것**이었다 — 읽고 나서 채우고 있었다.
-        #
-        #   실측(차가운 프로세스 · 실제 파이프라인):
-        #       롯데리츠 적정가 **52,714원 · 신뢰도 70.8 · CALIBRATED**
-        #       SK리츠   적정가 **52,714원** (똑같다)
-        #       ← 참값은 3,915 / 5,672 이고 상태는 CAUTION 이어야 한다
-        #   재무가 공시되지 않는 종목(리츠 등)이 전부 같은 가짜 적정가를
-        #   받고 있었고, 화면에 그대로 나갔다.
-        #
-        #   이 파일 :787 주석이 *"구버전은 eps=현재가×0.08, bps=현재가×0.7
-        #   … 재무지표를 통째로 지어내 DB에 넣었다"* 고 적어 둔 그 결함의
-        #   **생존자**다. §3 이 금지한 그것 — 없는 값을 지어내지 않는다.
-        #
-        #   고침: **먼저 채우고 나서 읽는다.** 없으면 `{}` 다.
-        realtime_target_price, check_status, matrix = self.get_realtime_stock_price_triple_check(symbol)
-        meta = STOCK_METRICS_DB.get(symbol) or STOCK_METRICS_DB.get(
-            str(symbol).split('.')[0]) or {}
-        
+    def fetch_daily_bars(self, symbol="005930.KS"):
+        """일봉만 받는다 — 실시간 삼중 확인·재무 메타는 부르지 않는다. 반환: prices_df.
+
+        ⚠️ 라운드 330 — `generate_synthetic_bitemporal_data` 는 일봉 앞에 **실시간 삼중 확인**
+        (네이버 basic · 다음 시세 · 재시도)을 먼저 부른다. 재무 메타를 채우려는 것이고(라운드 167 ·
+        먼저 채우고 나서 읽는다) 화면 분석에는 필요하다. 그런데 **리플레이 채점·계획은 일봉만 쓴다** —
+        원장 랩이 종목마다 그 확인을 부르느라 클라우드에서 종목당 5.82초(600종목 58분 · 2026-09-16
+        실행 로그)를 썼고, 이 PC 에서 차갑게 재면 삼중 확인 0.67초 · 일봉 요청 0.18초였다(30종목).
+        몸통은 그 함수에서 **글자 그대로 옮겼다** — 코드 판별·원천 봉 정제·수신 실패 사유가 같다.
+        그 함수는 이제 이것을 부른다(한 곳 · §4).
+        """
         prices_df = None
 
         # ⚠️ 라운드 165 — 여기가 `''.join(filter(str.isdigit, symbol))` 이었다.
@@ -1973,6 +1956,37 @@ class BitemporalEngine:
         prices_df['foreign_cum_5d'] = np.nan
         prices_df['institution_cum_5d'] = np.nan
         prices_df['retail_cum_5d'] = np.nan
+        return prices_df
+
+    def generate_synthetic_bitemporal_data(self, symbol="005930.KS", start_date="2020-01-01", end_date=None):
+        if not end_date: end_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        # ⚠️ 라운드 167 — 여기가 **재무지표를 지어내고 있었다.**
+        #
+        #     meta = STOCK_METRICS_DB.get(symbol, {"eps": 5000.0,
+        #            "bps": 45000.0, "pbr": 1.5, "roe": 12.0, ...})
+        #
+        #   `.get(symbol, 기본값)` 이라 **처음 보는 종목**은 통째로 저 리터럴을
+        #   받았다. 그리고 이 함수 바로 다음 줄이 DB 를 채우므로 **순서만
+        #   뒤바뀐 것**이었다 — 읽고 나서 채우고 있었다.
+        #
+        #   실측(차가운 프로세스 · 실제 파이프라인):
+        #       롯데리츠 적정가 **52,714원 · 신뢰도 70.8 · CALIBRATED**
+        #       SK리츠   적정가 **52,714원** (똑같다)
+        #       ← 참값은 3,915 / 5,672 이고 상태는 CAUTION 이어야 한다
+        #   재무가 공시되지 않는 종목(리츠 등)이 전부 같은 가짜 적정가를
+        #   받고 있었고, 화면에 그대로 나갔다.
+        #
+        #   이 파일 :787 주석이 *"구버전은 eps=현재가×0.08, bps=현재가×0.7
+        #   … 재무지표를 통째로 지어내 DB에 넣었다"* 고 적어 둔 그 결함의
+        #   **생존자**다. §3 이 금지한 그것 — 없는 값을 지어내지 않는다.
+        #
+        #   고침: **먼저 채우고 나서 읽는다.** 없으면 `{}` 다.
+        realtime_target_price, check_status, matrix = self.get_realtime_stock_price_triple_check(symbol)
+        meta = STOCK_METRICS_DB.get(symbol) or STOCK_METRICS_DB.get(
+            str(symbol).split('.')[0]) or {}
+        
+        prices_df = self.fetch_daily_bars(symbol)
 
         # 재무: 분기별 과거 재무제표 시계열은 미연동이다.
         # 구버전은 2020년 1분기 행에도 '오늘자' EPS/BPS/PER/ROE 를 채우고

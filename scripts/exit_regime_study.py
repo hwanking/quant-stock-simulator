@@ -29,24 +29,22 @@ H = 20
 
 import trade_plan as tp                                       # noqa: E402
 
-IDX_CACHE = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 KO = {'ABOVE_BOTH': '① 상승(20·60 위)', 'REBOUND': '② 반등 초기',
       'PULLBACK': '③ 조정', 'BEAR': '④ 약세'}
 
 
 def build_states():
-    with open(IDX_CACHE, encoding='utf-8') as f:
-        c = json.load(f)
-    dates, closes = c['dates'], c['closes']
-    arr = np.array(closes, dtype=float)
-    out = {}
-    for i in range(65, len(arr)):
-        st = tp.market_state(arr[i], arr[i - 19:i + 1].mean(),
-                             arr[i - 59:i + 1].mean(),
-                             arr[i - 64:i - 4].mean())
-        d8 = dates[i][:10].replace('.', '-').replace('-', '')[:8]
-        key = f'{d8[:4]}-{d8[4:6]}-{d8[6:8]}'
-        out[key] = st.get('code')
+    """날짜 → 4상태 코드. 코스피 일봉은 `scripts/kospi_index` 한 곳에서 받는다 (라운드 330).
+
+    재현이 목적이라 **캐시가 있으면 그대로** 쓰고 없을 때만 받는다(`prefer_cache=True`) — 종전엔
+    `_probe/` 캐시를 직접 열어 이 PC 밖(깨끗한 체크아웃·클라우드)에서는 FileNotFoundError 였다.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kospi_index as _ki
+    got = _ki.states(prefer_cache=True)
+    if not got:
+        raise SystemExit('코스피 일봉을 받지 못했다 — 측정 중단 (지어내지 않는다)')
+    out = got[0]
     return out
 
 

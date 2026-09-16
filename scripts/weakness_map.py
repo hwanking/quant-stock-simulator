@@ -44,7 +44,6 @@ import forward_eval as _fe                                     # noqa: E402
 #: 찾았다 — 회귀가 검사 대상 파일을 **손으로 다섯 개** 적어 둔 탓이다.
 _FE = _fe.eval_date() or '재평가일 미기록'
 
-IDX = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')
 ST_KO = {'ABOVE_BOTH': '상승', 'REBOUND': '반등초기', 'PULLBACK': '조정',
          'BEAR': '약세'}
 
@@ -74,17 +73,20 @@ def ep_n(sub):
 
 
 def states():
-    with open(IDX, encoding='utf-8') as f:
-        c = json.load(f)
-    arr = np.array(c['closes'], dtype=float)
-    dts = c['dates']
-    out = {}
-    for i in range(65, len(arr)):
-        st = tp.market_state(arr[i], arr[i - 19:i + 1].mean(),
-                             arr[i - 59:i + 1].mean(),
-                             arr[i - 64:i - 4].mean())
-        d8 = dts[i][:10].replace('.', '-').replace('-', '')[:8]
-        out[f'{d8[:4]}-{d8[4:6]}-{d8[6:8]}'] = st.get('code')
+    """(날짜 → 4상태 코드, 출처, 마지막 날짜). 코스피 일봉은 `scripts/kospi_index` 한 곳 (라운드 330).
+
+    ⚠️ 종전엔 `_probe/kospi_daily_cache.json` 을 **직접** 열었다 — gitignored 라 클라우드에는 없고
+    쓰는 곳도 이 스크립트가 아니어서, 자동 축적에서 이 파일은 매번 FileNotFoundError 로 죽었고
+    `|| true` 가 삼켰다. 원장이 801줄 자란 2026-09-16 실행에서 신선도 검사가 처음 붉어져 드러났다.
+    관측 산출물이므로 **먼저 받고**(캐시는 2026-08-07 에 멈춰 있었다) 못 받으면 캐시, 둘 다 없으면
+    멈춘다 — 국면 없는 지도를 만들지 않는다(§3).
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kospi_index as _ki
+    got = _ki.states(prefer_cache=False)
+    if not got:
+        raise SystemExit('코스피 일봉을 받지 못했다(실시간·캐시 모두) — 취약구간 지도를 만들지 않는다')
+    out = got
     return out
 
 
@@ -102,7 +104,8 @@ def cell(sub):
 
 
 def main():
-    stt = states()
+    stt, idx_src, idx_last = states()
+    print(f"코스피 일봉 — {idx_src} · 마지막 {idx_last}")
     paths = {}
     for path in sorted(glob.glob(os.path.join(P, 'bar_paths_s*.jsonl'))):
         with open(path, encoding='utf-8') as f:
@@ -148,6 +151,9 @@ def main():
             if isinstance(r.get('vol20'), (int, float))]
     t1, t2 = np.percentile(vols, 33.3), np.percentile(vols, 66.7)
     base = cell(rows)
+    # 국면이 빈 행은 '약세·상승이 아닌 것'이 아니라 **지수가 그 날짜를 못 덮은 것**이다 — 세어 적는다(§3)
+    no_state = sum(1 for r in rows if r.get('_st') is None)
+    print(f"국면 미기록 {no_state:,}행 / {len(rows):,}행 (지수 일봉이 덮지 못한 기준일)")
     print(f"기준선 (매수권 전체) n {base['n']:,} · 적중 {base['hit']}% · "
           f"EV {base['ev']:+.3f} · PF {base['pf']}\n")
 
@@ -205,6 +211,8 @@ def main():
                        .isoformat(timespec='seconds'),
                        ledger_rows=_ledger_rows,
                        joined_n=len(rows),
+                       index_source=idx_src, index_last=idx_last,
+                       regime_missing_n=no_state,
                        base=base, axes=out,
                        min_n=MIN_N,
                        note='관측 전용 — 점수·게이트를 바꾸지 않는다. '

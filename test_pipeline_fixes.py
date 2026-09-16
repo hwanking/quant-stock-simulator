@@ -5131,8 +5131,13 @@ check("워크포워드는 시간순 분할 (앞을 보고 뒤를 맞힌다)",
 
 _lab86 = open(_os.path.join(PROJ, "scripts", "calibration_lab.py"),
               encoding='utf-8').read()
-check("과거 데이터 수집 범위가 2015년으로 확장됐다",
-      "start_date='2015-01-01'" in _lab86)
+# 라운드 330 — 이 검사는 랩의 `start_date='2015-01-01'` **글자**를 못 박고 있었다. 그런데 적재 함수는
+#   start_date 를 **읽지 않는다**(늘 fchart count=3000 · 데이터 천장). 랩이 일봉만 받는 `fetch_daily_bars`
+#   로 옮기며 그 글자가 사라지자 깨졌다 — 재려던 것(과거를 천장까지 받는다)을 받는 자리에서 잰다.
+_be86 = open(_os.path.join(PROJ, "bitemporal_engine.py"), encoding='utf-8').read()
+_fdb86 = _be86[_be86.find('def fetch_daily_bars'):_be86.find('def generate_synthetic_bitemporal_data')]
+check("과거 데이터 수집 범위가 데이터 천장(3,000봉 · 2015년 이전부터)까지다",
+      'count=3000' in _fdb86 and 'eng.fetch_daily_bars(' in _lab86, f'일봉 함수 {len(_fdb86)}자')
 # 라운드 72 — 종목당 기준일이 80 → 108 로 올랐다. 이 검사는 80 을 못 박고
 # 있었다. 108 은 손으로 고른 값이 아니라 **데이터 천장**이다: 제공처가
 # 종목당 약 3,000봉만 주고, 앞 260봉(워밍업)·뒤 21봉(채점)을 빼면 usable
@@ -16076,7 +16081,9 @@ check("심어 두면 실제로 잡는다 (그리고 판별은 오탐하지 않�
 #    ⚠️ 이 목록은 **손으로 적은 것**이라 낡는다. 위 idiom 검사가 일반
 #    그물이고, 이건 오늘 자리를 못 박는 자물쇠다 — 둘을 같이 둔다.
 _SITES202 = {
-    'bitemporal_engine.py': ('generate_synthetic_bitemporal_data',
+    # 라운드 330 — 일봉 수신(코드 판별 포함)이 `fetch_daily_bars` 로 **글자 그대로** 옮겨 갔다.
+    #   `generate_synthetic_bitemporal_data` 는 그것을 부른다 — 코드를 읽는 자리는 이제 저 함수다.
+    'bitemporal_engine.py': ('fetch_daily_bars',
                              'fetch_dividend_info'),
     'market_context.py': ('fetch_stock_news', 'fetch_stock_disclosures'),
 }
@@ -25177,7 +25184,7 @@ if _ok315:
         def __init__(self):
             self.calls = 0
 
-        def generate_synthetic_bitemporal_data(self, symbol=None, **kw):
+        def fetch_daily_bars(self, symbol=None):        # 라운드 330 — 채점은 일봉만 받는다
             self.calls += 1
             raise RuntimeError('종목 페이지가 없습니다 (심은 영구 실패)')
 
@@ -25196,9 +25203,9 @@ if _ok315:
         def __init__(self):
             self.calls = 0
 
-        def generate_synthetic_bitemporal_data(self, symbol=None, **kw):
+        def fetch_daily_bars(self, symbol=None):        # 라운드 330 — 채점은 일봉만 받는다
             self.calls += 1
-            return ('일봉', '재무')
+            return '일봉'
 
     _o = _OnceEng315()
     _c2, _f2 = {}, set()
@@ -26365,6 +26372,123 @@ check("R329 준비 표시는 입력바 유무에 걸지 않는다 (입력바가 
       and "if (D.querySelector('[data-testid=\"stBottom\"]')) {" not in _js335)
 check("R329 바깥 클릭 닫기는 입력바가 없어도 된다",
       "if ((!bar || !bar.contains(e.target)) && e.target !== fab" in _js335)
+
+print("\n" + "=" * 72)
+print("§336 R330 — 클라우드에서만 죽던 취약구간 지도 · 리플레이가 실시간 확인을 부르던 적재 (2026-09-17)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   ① 2026-09-16 클라우드 축적이 '관측 연구 신선도 검사'에서 실패했다 — 취약구간 지도가 09-08 에 멈춰
+#      원장 밀림 801줄(허용 800). 그날 단계 로그에 원인이 있었다: `weakness_map.py` 가
+#      `_probe/kospi_daily_cache.json`(gitignored · 이 PC 에만 있음 · 쓰는 곳은 다른 스크립트)을 직접 열어
+#      **클라우드에서는 매번** FileNotFoundError 였고 `|| true` 가 삼켰다. 같은 파일을 직접 여는 연구
+#      스크립트가 다섯 더 있었다. 이 PC 의 캐시도 2026-08-07 에 멈춰 있었다.
+#   ② R311 이 달아 둔 계기가 답했다: 계획 루프 **3,494초 — 600종목 · 종목당 5.82초**, 이어 채점이 시간초과.
+#      적재 함수가 일봉 앞에 **실시간 삼중 확인**을 부른다 — 리플레이 계획·채점은 일봉만 쓴다.
+#      이 PC 차갑게 30종목: 옛 적재 1.31초 → 일봉만 0.14초 · 같은 일봉 19/19 · 거부되던 상장폐지 8종목은
+#      일봉을 받을 수 있고 그 761행 재채점이 저장값과 761/761 같다.
+import ast as _ast336
+import importlib.util as _ilu336
+import tempfile as _tf336
+_SCR336 = _os.path.join(PROJ, 'scripts')
+_spec336 = _ilu336.spec_from_file_location('_kospi_index336', _os.path.join(_SCR336, 'kospi_index.py'))
+_ki336 = _ilu336.module_from_spec(_spec336)
+_spec336.loader.exec_module(_ki336)
+_closes336 = [100.0 + (i % 17) - (i % 5) * 0.7 + i * 0.05 for i in range(120)]
+_dates336 = [f"2026{1 + i // 28:02d}{1 + i % 28:02d}" for i in range(120)]
+
+
+class _Fetch336:
+    def __init__(self, ok=True):
+        self.ok, self.calls = ok, 0
+
+    def __call__(self, name, count=None):
+        self.calls += 1
+        if not self.ok:
+            raise RuntimeError('심은 수신 실패')
+        return (_dates336, _closes336)
+
+
+with _tf336.TemporaryDirectory() as _td336:
+    _cp336 = _os.path.join(_td336, 'k.json')
+    _f1 = _Fetch336(True)
+    _g1 = _ki336.series(prefer_cache=False, cache_path=_cp336, fetcher=_f1)
+    check("R330 코스피 일봉 — 받으면 '실시간 수신'이고 캐시를 남긴다",
+          bool(_g1) and _g1[2] == '실시간 수신' and _os.path.exists(_cp336) and _f1.calls == 1, str(_g1 and _g1[2]))
+    _f2 = _Fetch336(False)
+    _g2 = _ki336.series(prefer_cache=False, cache_path=_cp336, fetcher=_f2)
+    check("R330 못 받으면 캐시로 · 출처를 캐시라고 적는다",
+          bool(_g2) and _g2[2].startswith('캐시') and _g2[1] == _closes336, str(_g2 and _g2[2]))
+    _f3 = _Fetch336(True)
+    _g3 = _ki336.series(prefer_cache=True, cache_path=_cp336, fetcher=_f3)
+    check("R330 재현용(prefer_cache)은 캐시가 있으면 받지 않는다",
+          bool(_g3) and _f3.calls == 0, f'호출 {_f3.calls}')
+    _g4 = _ki336.series(prefer_cache=False, cache_path=_os.path.join(_td336, 'none.json'),
+                        fetcher=_Fetch336(False), write_cache=False)
+    check("R330 둘 다 없으면 None — 지어낸 국면으로 지도를 만들지 않는다 (§3)", _g4 is None, str(_g4))
+import numpy as _np336
+import trade_plan as _tp336
+_arr336 = _np336.array(_closes336)
+_manual336 = {}
+for _i336 in range(65, len(_arr336)):
+    _d8 = _dates336[_i336]
+    _manual336[f'{_d8[:4]}-{_d8[4:6]}-{_d8[6:8]}'] = _tp336.market_state(
+        _arr336[_i336], _arr336[_i336 - 19:_i336 + 1].mean(), _arr336[_i336 - 59:_i336 + 1].mean(),
+        _arr336[_i336 - 64:_i336 - 4].mean()).get('code')
+check("R330 국면 판정은 trade_plan.market_state 그대로 (새 규칙 없음 · 종전 여섯 벌과 같은 식)",
+      _ki336.states_from(_dates336, _closes336) == _manual336, f'{len(_manual336)}일')
+# ── 캐시 파일을 직접 여는 스크립트가 없다 (한 곳 · 심기 양방향) ──────────────────
+def _opens_cache336(src):
+    try:
+        _t = _ast336.parse(src)
+    except SyntaxError:
+        return False
+    for _n in _ast336.walk(_t):
+        if isinstance(_n, _ast336.Call) and len(_n.args) >= 3:
+            _vals = [a.value for a in _n.args if isinstance(a, _ast336.Constant) and isinstance(a.value, str)]
+            if '_probe' in _vals and 'kospi_daily_cache.json' in _vals:
+                return True
+    return False
+
+
+_scripts336 = sorted(f for f in _os.listdir(_SCR336) if f.endswith('.py'))
+_bad336 = [f for f in _scripts336 if f != 'kospi_index.py'
+           and _opens_cache336(_read148(_os.path.join(_SCR336, f)))]
+check("R330 코스피 캐시 경로를 만드는 곳은 scripts/kospi_index.py 하나다 (클라우드에 없는 파일을 직접 열지 않는다)",
+      not _bad336 and _opens_cache336(_read148(_os.path.join(_SCR336, 'kospi_index.py'))),
+      f'위반 {_bad336}', scanned=len(_scripts336))
+check("R330 심기 — 캐시 경로를 만드는 줄은 잡고 주석 속 파일 이름은 안 잡는다",
+      _opens_cache336("IDX = os.path.join(PROJ, '_probe', 'kospi_daily_cache.json')\n")
+      and not _opens_cache336("# _probe/kospi_daily_cache.json 을 직접 열었다\n"))
+_wm336 = _json.load(open(_os.path.join(PROJ, 'data', 'weakness_map.json'), encoding='utf-8'))
+check("R330 취약구간 지도가 지수 출처·마지막 날짜·국면 미기록 행수를 같이 적는다",
+      _wm336.get('index_source') and _wm336.get('index_last')
+      and isinstance(_wm336.get('regime_missing_n'), int), str({k: _wm336.get(k) for k in
+                                                                ('index_source', 'index_last', 'regime_missing_n')}))
+# ── 엔진: 일봉만 받는 함수 · 적재 함수가 그것을 부른다 · 랩은 일봉만 받는다 ─────────
+_be336 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_fns336 = {n.name: n for n in _ast336.walk(_ast336.parse(_be336)) if isinstance(n, _ast336.FunctionDef)}
+
+
+def _calls336(fn):
+    return {getattr(c.func, 'attr', None) for c in _ast336.walk(fn) if isinstance(c, _ast336.Call)}
+
+
+_fdb336 = _fns336.get('fetch_daily_bars')
+_gsb336 = _fns336.get('generate_synthetic_bitemporal_data')
+check("R330 fetch_daily_bars 는 실시간 삼중 확인을 부르지 않고 코드를 stock_code 로 읽는다",
+      bool(_fdb336) and 'get_realtime_stock_price_triple_check' not in _calls336(_fdb336)
+      and 'normalize' in _calls336(_fdb336))
+check("R330 적재 함수는 삼중 확인(재무 메타) 뒤에 fetch_daily_bars 를 부른다 — 일봉 수신은 한 곳 (§4)",
+      bool(_gsb336) and {'get_realtime_stock_price_triple_check', 'fetch_daily_bars'} <= _calls336(_gsb336)
+      and 'fchart.stock.naver.com' not in (_ast336.get_source_segment(_be336, _gsb336) or ''))
+_lab336 = _read148(_os.path.join(_SCR336, 'calibration_lab.py'))
+_labcalls336 = [getattr(c.func, 'attr', None) for c in _ast336.walk(_ast336.parse(_lab336))
+                if isinstance(c, _ast336.Call)]
+check("R330 원장 랩(계획·채점)은 일봉만 받는다 — 옛 적재 호출 0 · 일봉 호출 3",
+      _labcalls336.count('generate_synthetic_bitemporal_data') == 0
+      and _labcalls336.count('fetch_daily_bars') == 3,
+      f"옛 {_labcalls336.count('generate_synthetic_bitemporal_data')} · 일봉 {_labcalls336.count('fetch_daily_bars')}",
+      scanned=len(_labcalls336))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
