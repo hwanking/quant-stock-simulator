@@ -1288,13 +1288,18 @@ def avg_down_class(ok, fails):
     반환 `(cls, label, why)` — cls ∈ {'가능','보류','시장게이트','포지션미달'} | None.
     새 문턱 없음 — 이름만 읽는다.
     """
+    # 라운드 322 — 사용자: *"보유 유지 물타기 불가 · 신규 매수 판정만 이게 뭐고 · 보유 유지 물타기
+    #   가능 이게 뭐야 · 쉽게."* 이름표를 **무엇을 하라는 말인지**로 바꿨다(등급 cls·규칙·이유 문장
+    #   불변). '물타기 가능'은 *조건을 통과했다*는 뜻이지 *지금 사라*가 아니었는데(진입가 위면 kind 는
+    #   '보유 유지') 낱말만 보면 지금 사라로 읽혔다 — '추가매수 조건 통과'로 적고, 가격은 표의 짧은
+    #   줄(`avg_down_short`)이 말한다.
     _fail = [str(s).strip() for s in (fails or []) if str(s).strip()]
     if ok is None:
         return None, None, '아직 안 잼'
     if ok:
-        return '가능', '물타기 가능', '6조건 전부 통과'
+        return '가능', '추가매수 조건 통과', '6조건 전부 통과'
     if AVG_DOWN_DATA_GATE in _fail:
-        return ('보류', '물타기 판정 보류',
+        return ('보류', '추가매수 판단 보류',
                 '표본·데이터 게이트를 넘지 못해 판단하지 않았습니다 — 불가가 아니라 미판정입니다')
     if _fail == [AVG_DOWN_MARKET_GATE]:
         # 라운드 224 — 첫 조건의 출처가 TOP3 깃발에서 **중앙 판정**(verdict_core.actionable)
@@ -1302,7 +1307,7 @@ def avg_down_class(ok, fails):
         #   적중률 차가 세 구간 CI95 모두 0 을 포함(train +1.7 · valid +3.9 · blind
         #   −5.8%p) — 하락 중이라는 사실이 판정을 바꾼다는 증거가 없어 물타기의
         #   첫 조건 = 신규 매수 판정이다. 5%p 미만은 이 잣대로 못 본다(R113).
-        return ('시장게이트', '물타기 불가 · 신규 매수 판정만',
+        return ('시장게이트', '추가매수 안 함 · 지금은 새로 살 때 아님',
                 '포지션 조건 5개는 통과 — 중앙 판정이 이 종목을 지금 살 수 있는 '
                 '후보로 보지 않습니다. 물타기의 첫 조건은 신규 매수 판정과 같습니다 '
                 '(실측: 하락 중이라는 사실이 판정을 바꾼다는 증거 없음)')
@@ -1311,7 +1316,7 @@ def avg_down_class(ok, fails):
     _head, _more = _fail[:3], _fail[3:]
     _why = ('미충족: ' + ' · '.join(_head)
             + (f' 외 {len(_more)}' if _more else '')) if _fail else '조건 미충족'
-    return '포지션미달', '물타기 불가', _why
+    return '포지션미달', '추가매수 안 함', _why
 
 
 def holder_kind(px, hold_stop, hold_trim, buy=None, avg_down_ok=None):
@@ -1526,14 +1531,25 @@ def watch_action(row, price=None, today=None):
                              f"(n={_pr['n']:,})" if _pr else f"적정가 {_up2:+.0f}%")
             else:
                 brief.append(f"현재가가 적정가보다 {-_up2:.0f}% 위")
+        # ── 표에 쓰는 **짧은 한 줄** (라운드 322) — 무엇을 하라는 말인지 · 가격까지.
+        #   '보유 유지'인데 조건은 통과한 행은 *지금 사라*가 아니라 *진입가 이하로 내려오면*이다
+        #   (holder_kind 의 같은 갈래 · 새 문턱 없음). '추가 매수 가능' 행은 kind 가 이미 그 말이다.
         if _ad_cls == '가능':
-            brief.append('물타기 가능 · 진입가 이하에서만' if _k != '추가 매수 가능' else '물타기 가능')
+            _short = (f"진입가 {buy:,.0f}원 이하 — 지금 추가매수 가능" if _k == '추가 매수 가능' and buy
+                      else f"추가매수는 {buy:,.0f}원 이하로 내려오면" if buy
+                      else '추가매수 조건 통과 · 진입가 미산출')
         elif _ad_cls == '시장게이트':
-            brief.append('물타기 불가 · 신규 매수 판정')
+            _short = '추가매수 안 함 · 지금은 새로 살 때 아님'
         elif _ad_cls == '포지션미달':
-            brief.append(f"물타기 불가 · 조건 {len(_ad_fail)}개 미충족")
+            _short = f"추가매수 안 함 · 조건 {len(_ad_fail)}개 미충족"
         elif _ad_cls == '보류':
-            brief.append('물타기 미판정')
+            _short = '추가매수 판단 보류 · 표본 부족'
+        elif (row or {}).get('qty'):
+            _short = "추가매수 아직 안 잼 · 아래 '지금 계산해서 채우기'"
+        else:
+            _short = '수량을 넣으면 추가매수를 잽니다'
+        d['avg_down_short'] = _short
+        brief.append(_short)
         if _stale and _ad_cls:
             brief.append('옛 기준 스탬프 · 다시 채우기')
         d['hold_brief'] = brief

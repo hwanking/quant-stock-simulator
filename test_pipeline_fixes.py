@@ -13606,9 +13606,11 @@ check("본문에서 보유종목이 관심종목보다 먼저다 (묶음 안에�
       0 < _i180h < _i180w, f'holdings@{_i180h} · watchlist@{_i180w}')
 
 # ⓑ 지울 수 있는가 — 본문에서도
-check("본문에서 하나씩 뺄 수 있다", 'wlb_del_' in _w180)
+# 라운드 321 — 옛 행별 입력칸 격자(`wlb_del_`·`wlb_go_` 버튼)를 목록 편집기로 바꿨다.
+#   뜻은 그대로다: 빼기는 보기 표의 행마다 `?drop=` 링크(R244), 종목으로 가는 길은 `?pick=` 링크.
+check("본문에서 하나씩 뺄 수 있다", "<a href='?drop={_uk._esc_attr(_wcode)}'" in _w180)
 check("본문에서 전체 비우기가 있다", 'wlb_clear' in _w180)
-check("목록에서 그 종목으로 갈 수 있다", 'wlb_go_' in _w180)
+check("목록에서 그 종목으로 갈 수 있다", '_href229 = "?pick=" + _up229.quote(' in _w180)
 
 # ⓒ 메모 칸 — 저장 왕복에서 살아남는가 (값으로 확인한다)
 import portfolio as _pf180                                     # noqa: E402
@@ -14010,8 +14012,18 @@ check("엔진 값 칸에 입력 위젯을 두지 않았다",
 #   바뀌었다. 검사가 옛 구현을 요구하므로 **현실에 맞춘다** (§6).
 #   지키려는 것은 처음부터 같다 — **사용자가 적는 칸은 매입가·수량
 #   둘뿐이고, 엔진 값 칸에는 입력 위젯이 없다.**
-check("사용자 입력은 매입가·수량 둘뿐이다",
-      'wl_pd_' in _w184 and 'wl_qt_' in _w184)
+# 라운드 321 — 입력은 행별 위젯(`wl_pd_`·`wl_qt_`)이 아니라 목록 편집기의 두 열이다. 뜻은
+#   그대로 — **사용자가 적는 칸은 매입가·수량 둘뿐이고 나머지(코드·종목·현재가)는 잠겨 있다.**
+# 같은 날 사용자: *"현재가는 내가 고치는 게 아니잖아 · 헷갈린다."* → 편집 표에는 이름(잠김)과
+#   고치는 두 칸만 있다. 현재가는 편집 표에 **없고** 읽기 전용 계산 결과에만 있다.
+_cfg184 = _w184[_w184.index("    _cfg = {\n"):]
+_cfg184 = _cfg184[:_cfg184.index("    }\n")]
+check("사용자 입력은 매입가·수량 둘뿐이다 (편집기의 나머지 열은 잠겨 있다)",
+      "'종목': st.column_config.TextColumn('종목', disabled=True)" in _cfg184
+      and "'매입가': st.column_config.NumberColumn('매입가 (원)', min_value=0" in _cfg184
+      and "'수량': st.column_config.NumberColumn('수량 (주)', min_value=0" in _cfg184
+      and "'현재가'" not in _cfg184 and "'코드'" not in _cfg184,
+      _cfg184[:200].replace('\n', ' '))
 check("옛 메모 입력칸은 남아 있지 않다 (값이 두 곳에서 오지 않는다 · §4)",
       'wl_mm_' not in _w184)
 check("'내 계획' 입력칸도 남아 있지 않다 (라운드 169 에 걷어냈다)",
@@ -15840,13 +15852,19 @@ check("총 매입금액·총 매입수량을 포트폴리오 견해에 낸다",
 #   그 아래로 내려가면 number_input 이 값을 자른다.
 import ast as _ast201                                            # noqa: E402
 _tree201 = _ast201.parse(_wa201)
+# 라운드 321 — 칸 너비표 `_WL_COLS` 는 옛 입력칸 격자의 것이라 격자와 함께 걷어냈다(읽는
+#   곳이 없는 값은 죽은 값이다 · R164). 칸 수 상한의 뜻은 그대로 — 보기 표의 머리글
+#   `_WL_HDR` 로 센다(표는 그 튜플로 칸을 만든다).
 _WLC201 = [n for n in _ast201.walk(_tree201)
            if isinstance(n, _ast201.Assign)
-           and any(getattr(t, 'id', '') == '_WL_COLS' for t in n.targets)]
+           and any(getattr(t, 'id', '') == '_WL_HDR' for t in n.targets)]
 check("관심종목 표의 칸 수를 코드에서 셀 수 있다", len(_WLC201) == 1,
-      f'_WL_COLS 대입 {len(_WLC201)}건')
+      f'_WL_HDR 대입 {len(_WLC201)}건')
+check("옛 격자의 칸 너비표는 남아 있지 않다 (죽은 값)",
+      not [n for n in _ast201.walk(_tree201) if isinstance(n, _ast201.Assign)
+           and any(getattr(t, 'id', '') == '_WL_COLS' for t in n.targets)])
 _wln201 = len(getattr(_WLC201[0].value, 'elts', [])) if _WLC201 else 0
-check("관심종목 표는 10칸을 넘지 않는다 (넘으면 입력값이 잘린다)",
+check("관심종목 표는 10칸을 넘지 않는다 (넘으면 값이 잘린다)",
       0 < _wln201 <= 10, f'{_wln201}칸')
 # 머리글과 칸이 어긋나면 zip 이 **조용히 잘라 먹는다** — 예외가 안 난다.
 # 라운드 229 — 머리글은 `_WL_HDR` 튜플 하나. zip 은 그것을 받는다.
@@ -15858,20 +15876,25 @@ check("머리글 수가 칸 수와 같다 (zip 이 말없이 자르지 않게)",
       _hdr201 == [_wln201], f'머리글 {_hdr201} vs 칸 {_wln201}')
 # 칸을 묶었으니 **묶인 값이 다 살아 있는지**를 본다 — 폭을 줄이려고
 # 값을 지우면 그건 결함이다 (§3).
+# 라운드 321 — 손익 변수는 옛 격자의 `_ret_w`·`_pl_w` 가 아니라 보기 표의 `_ret229`·`_pl229` 다.
 check("칸을 묶어도 값은 다 남는다 (1차·2차·적정가·신뢰도·손익)",
       all(k in _wa201 for k in ("snap_t1", "snap_t2", "snap_fair",
-                                "snap_fair_conf", "_ret_w", "_pl_w")))
+                                "snap_fair_conf", "_ret229", "_pl229")))
 # ⚠️ 손익률은 **방금 입력된 값**으로 세야 한다. 저장본으로 세면 방금
 #   고친 매입가가 한 판 늦게 반영돼 화면이 스스로 어긋난다 (§4).
 # 라운드 229 — 계산은 공통 포맷터 `_wl_pnl` 한 곳이고, 편집 모드는 방금 입력된 `_pd`·`_qt`
 #   로 그것을 부른다(보기 모드는 저장값으로 — 입력이 없으니 같은 값이다).
+# 라운드 321 — 입력은 목록 편집기로 옮겼다. 뜻은 그대로 — **방금 입력된 값**(편집기의 지금 값)
+#   으로 센다. 보기 표는 저장값으로 센다(입력이 없는 자리라 같은 값이다).
 check("손익률을 방금 입력된 매입가·수량으로 센다 (저장본이 아니라)",
-      "_ret_w, _pl_w = _wl_pnl(_px_w, _pd, _qt)" in _wa201
+      "return {_c: (_out.iloc[_k]['매입가'], _out.iloc[_k]['수량'])" in _wa201
+      and "_p, _q = _edits.get(_c, (None, None))" in _wa201
+      and "_cost, _val, _pnl, _ret = _wl_position_calc(_px, _p, _q)" in _wa201
       and 'px / float(paid) - 1.0' in _wa201
       and "(px - float(paid)) * float(qty)" in _wa201,
       '저장본으로 세면 한 판 늦게 반영된다')
 check("한국 관행 색을 쓴다 (오르면 빨강 · 내리면 파랑 · §5)",
-      "_TOK['up'] if _ret_w >= 0 else _TOK['down']" in _wa201)
+      "_TOK['up'] if _ret229 >= 0 else _TOK['down']" in _wa201)
 check("관심종목에서 자유 메모 입력칸은 없앴다",
       'wl_mm_' not in _wa201, '옛 입력칸이 남아 있으면 값이 두 곳에서 온다 (§4)')
 # ⚠️ `if '(' in name` 이 이름에 괄호가 든 종목을 통째로 걸렀다
@@ -15977,9 +16000,12 @@ check("죽은 키를 심어 두면 실제로 잡는다", _pd201w == ['zzz_dead_k
       str(_pd201w))
 # 그리고 종목으로 넘어가는 길이 하나인가 (§4)
 _wa201b = '\n'.join(ln for _i, ln in _la16.code_lines('web_app.py'))
-check("종목 보러 가는 길이 `_go_stock` 하나다",
+# 라운드 321 — 옛 격자의 이름 버튼(`_go_stock` 호출 하나)이 없어졌다. 관심종목 행은 `?pick=`
+#   링크로 가고 그 길도 같은 `pending_search` 에 닿는다(§4 · 라운드 56). 정의 + 호출 ≥ 1.
+check("종목 보러 가는 길이 `_go_stock` 하나다 (?pick= 도 같은 pending_search 에 닿는다)",
       'def _go_stock' in _wa201b
-      and _wa201b.count('_go_stock(') >= 3,
+      and _wa201b.count('_go_stock(') >= 2
+      and "st.session_state['pending_search'] = str(_qp_pick).strip()" in _wa201b,
       f"호출 {_wa201b.count('_go_stock(')}회")
 check("옛 `ticker_input` 경로가 남아 있지 않다",
       'ticker_input' not in _wa201b)
@@ -17596,8 +17622,11 @@ check("그 문장이 기본 매력도·적정가 상태를 실제로 본다",
       or "_q61" in _w214)
 
 # ⑧ 관심종목 — 입력 즉시 이동·반영 (라운드 184 요청)
+# 라운드 321 — 옛 격자의 `_wl_write(_wl_body)` 저장 길은 걷어냈다. 저장은 이제 목록 편집기의
+#   '변경 N개 저장' 한 곳이고, 성질(저장 직후 rerun → 보유중 이동이 즉시)은 그대로 본다.
 check("매입가 저장 직후 rerun 해 보유중 이동이 즉시다",
-      'st.rerun()' in _w214.split('_wl_write(_wl_body)')[-1][:700])
+      'st.rerun()' in _w214.split('_wl_write(_new_items, ')[-1][:400]
+      and '_wl_write(_wl_body)' not in _w214)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -19600,13 +19629,15 @@ check("우선순위 한 줄이 무리 머리에 나온다",
       'st.caption(f"{_gtitle}: " + _wl_priority_line(_grows, _gorder))' in _w231)
 check("판단·현재가를 한 번만 계산해(`_wl_pre`) 표가 그대로 쓴다",
       '_wl_pre[_pi] = (_ppx, _uk.watch_action(_pr, _ppx))' in _w231
-      and '_px_w = _wl_pre[_wi][0]' in _w231
-      and '_act = _wl_pre[_wi][1]' in _w231)
+      # 라운드 321 — 옛 격자 줄(`_px_w = _wl_pre[_wi][0]`)은 걷어냈고 보기 표가 한 번에 푼다
+      and '_px_w, _act = _wl_pre[_wi]' in _w231)
 # ⚠️ 첫 판은 파일 전체에서 `_uk.watch_action(` 을 1개로 세었다 — 다른 화면
 #   (사이드바·요약 칸)도 부르므로 4개다. **표 구간만** 잘라 센다. 내 판별식이
 #   또 넓었다 (memory: my-discriminators-are-wrong-until-planted).
 _i231c = _w231.find('_wl_pre = {}')
-_i231d = _w231.find('if _wl_dirty:', _i231c)
+# 라운드 321 — 끝 앵커가 옛 격자의 저장 블록('if _wl_dirty:')이었다. 격자가 없어져 표 구간
+#   다음에 오는 메모 줄로 옮긴다(시작 뒤에서 찾는다 · R226).
+_i231d = _w231.find('_old_memo = [', _i231c)
 _seg231w = _w231[_i231c:_i231d] if 0 < _i231c < _i231d else ''
 
 
@@ -19678,9 +19709,11 @@ except Exception as _e231:                                     # noqa: BLE001
 # §6 — 라운드 221: 화면이 '가능/불가' 리터럴을 직접 찍지 않고 킷의 라벨
 #   (`avg_down_label` · 넷으로 갈린 것)을 읽는다. 보유분에만 · 찍힌 값이 있을
 #   때만 그리는 불변식은 그대로다.
+# 라운드 321 — 옛 격자 줄(`_ad_ok = …`)은 걷어냈다. 보기 표가 같은 불변식을 지킨다.
 check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만 · 라벨은 킷이 낸다)",
-      "_ad_ok = _act.get('avg_down_ok') if _act['held'] else None" in _w231
-      and "_act.get('avg_down_label')" in _w231)
+      # 라운드 322 — 이름표 대신 킷의 짧은 한 줄(무엇을 하라는 말 · 진입가)을 먼저 읽는다
+      "_adl229 = ((_act.get('avg_down_short') or _act.get('avg_down_label'))" in _w231
+      and "if _adl229:" in _w231)
 # 채우기 버튼의 기준이 새 스탬프를 안다 — 모르면 옛 보유 행은 열기 전엔 영영 빈다
 check("채우기 버튼이 물타기 스탬프 없는 보유 행(매입가·수량 있음)도 대상으로 삼는다",
       "'snap_avg_down_ok' not in w" in _w231
@@ -20401,12 +20434,15 @@ _act238 = _uk238.watch_action(_row238, price=9000)
 #   깃발(늘 닫힘)에서 중앙 판정으로 바뀌어 낱말도 출처를 따른다(§241).
 check("watch_action 이 등급·라벨을 붙인다 (파일의 글자 값 그대로 읽어서)",
       bool(_act238) and _act238.get('avg_down_class') == '시장게이트'
-      and '신규 매수 판정만' in str(_act238.get('avg_down_label')))
+      # 라운드 322 — 이름표를 '무엇을 하라는 말'로 바꿨다(사용자: "이게 뭐야 · 쉽게"). 등급은 그대로.
+      and '지금은 새로 살 때 아님' in str(_act238.get('avg_down_label')))
 check("화면이 킷의 라벨을 읽는다 ('불가' 리터럴을 직접 찍지 않는다 · §4)",
       "_act.get('avg_down_label')" in _w231
       and "물타기 {'가능' if _ad_ok else '불가'}" not in _w231)
+# 라운드 321 — 옛 격자의 `_ad_cls` 는 격자와 함께 걷어냈다. 보기 표가 같은 규칙을 쓴다.
 check("미판정은 경고색이 아니라 회색이다 (판단이 아니다 · §3)",
-      "_TOK['tx3'] if _ad_cls == '보류'" in _w231)
+      # 라운드 322 — 안 잰 것(None)도 회색이다(판단이 아니다)
+      "else _TOK['tx3'] if _act.get('avg_down_class') in ('보류', None)" in _w231)
 # ── 실측 — 관심종목 파일(사용자 자료 · 있을 때만 · 값은 안 잠근다 · 항등식만) ──
 try:
     import portfolio as _pf238
@@ -20723,8 +20759,18 @@ _a3_241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_
                               10500)
 check("심기 ③ 물타기 가능 + 진입가 위 → '보유 유지' · 이유에 진입가",
       _a3_241['kind'] == '보유 유지' and '진입가' in _a3_241['why'])
+# 라운드 322 — 이름표는 '무엇을 하라는 말'(새로 살 때 아님)로, 출처(신규 매수 판정)는 이유 문장이 말한다.
 check("'시장게이트' 라벨이 새 출처(신규 매수 판정)를 말한다",
-      '신규 매수 판정만' in _uk241.avg_down_class(False, [_uk241.AVG_DOWN_MARKET_GATE])[1])
+      '새로 살 때 아님' in _uk241.avg_down_class(False, [_uk241.AVG_DOWN_MARKET_GATE])[1]
+      and '신규 매수 판정' in _uk241.avg_down_class(False, [_uk241.AVG_DOWN_MARKET_GATE])[2])
+# 라운드 322 — 사용자: *"보유 유지 물타기 가능 이게 뭐야 · 추가매수 가능 맞는지."* 조건은 통과했지만
+#   진입가 위라 kind 는 '보유 유지'다. 표의 짧은 줄이 **지금 사라가 아니라 얼마 이하에서**를 말해야 한다.
+_a4_241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail=''), 10100)
+check("짧은 줄 — 조건 통과 · 진입가 위면 '추가매수는 N원 이하로 내려오면' · 진입가 이하면 '지금 추가매수 가능'",
+      '이하로 내려오면' in str(_a3_241.get('avg_down_short'))
+      and '지금 추가매수 가능' in str(_a4_241.get('avg_down_short'))
+      and '지금' not in str(_a3_241.get('avg_down_short')),
+      f"{_a3_241.get('avg_down_short')} / {_a4_241.get('avg_down_short')}")
 # 옛 스탬프(snap_new_entry 없음)는 옛 게이트의 답이다 — 새 문구를 그대로 달면 재지 않은
 #   것을 말하는 셈(§3). 사실을 달고 채우기를 가리킨다. 라벨(등급)은 같고 이유만 다르다.
 _old241 = _uk241.watch_action(_row241, 10100)
@@ -20936,7 +20982,7 @@ check("업종별 적중은 R223 의 읽는 법과 반드시 같이 간다 (숫�
       and "_fed223 = _fe223.eval_date()" in _v243)
 check("채울 것 — 값이 비어 판단이 비는 자리를 이유·채우는 길과 함께 낸다 (§3)",
       '현재가 미수신이라 판단에서 뺀 종목' in _v243 and '엔진 값이 없어 판단하지 못한 종목' in _v243
-      and '매입가는 있고 수량이 없는 종목' in _v243 and '물타기 미판정 (표본·데이터 게이트)' in _v243
+      and '매입가는 있고 수량이 없는 종목' in _v243 and '추가매수 판단 보류 (표본·데이터 게이트)' in _v243
       and '보유 계획 창(' in _v243 and '업종 미확인' in _v243
       and 'ETF(업종 없음 · 구조상)' in _v243 and '종목을 열면 채워집니다' in _v243)
 check("채울 것이 없으면 그렇게 말한다 (0건은 '없다'라고 적어야 정보다)", '채울 것 없음' in _v243)
@@ -20970,7 +21016,8 @@ _bb243 = ' · '.join(_a243.get('hold_brief') or [])
 check("짧은 판: 두 선 사이 · 계획 날짜/진행 · 적정가 %·도달 %(n) · 물타기",
       '두 선 사이' in _bb243 and '계획 09-04 · 3/28일' in _bb243
       and '적정가 +33% · 20봉 도달 3.1%(n=1,204)' in _bb243
-      and '물타기 가능 · 진입가 이하에서만' in _bb243)
+      # 라운드 322 — '물타기 가능 · 진입가 이하에서만' → 가격을 적은 한 줄('… 이하로 내려오면')
+      and ('이하로 내려오면' in _bb243 or '추가매수 조건 통과' in _bb243))
 check("짧은 판은 긴 판보다 짧다 (그래야 '한눈에'다)",
       len(_bb243) < len(' · '.join(_a243.get('hold_why') or [])))
 _a2_243 = _uk243.watch_action(dict(_b243, snap_hold_at='2026-08-01', snap_fair=9000,
@@ -20979,7 +21026,7 @@ _a2_243 = _uk243.watch_action(dict(_b243, snap_hold_at='2026-08-01', snap_fair=9
 _bb2_243 = ' · '.join(_a2_243.get('hold_brief') or [])
 check("짧은 판: 1차 매도가 넘음 +% · 창 경과 · 적정가 아래 · 시장게이트",
       '1차 매도가 11,000원 넘음 +1.8%' in _bb2_243 and '계획 창 경과 · 다시 잼' in _bb2_243
-      and '현재가가 적정가보다 20% 위' in _bb2_243 and '물타기 불가 · 신규 매수 판정' in _bb2_243)
+      and '현재가가 적정가보다 20% 위' in _bb2_243 and '추가매수 안 함 · 지금은 새로 살 때 아님' in _bb2_243)
 check("도달 비율 한 줄은 쓰는 쪽과 읽는 쪽이 같은 모듈이다 (reach_line ↔ parse_reach_line)",
       (_lv243.parse_reach_line(_lv243.reach_line(0.0, 5, 12.5, 'BEAR', 'z')) or {}).get('share') == 0.0
       and _lv243.parse_reach_line('x') is None)
@@ -21141,20 +21188,25 @@ print("-" * 72)
 #   _wl_fair_conf · _wl_pnl · watch_action). 이름은 ?pick= 링크 — 버튼과 같은 경로(§4).
 # 라운드 240 — 토글 이름에 '빼기'를 넣었다. 기능·기본값은 그대로이고 이름만 바뀌었다
 #   (사용자가 빼기를 못 찾았다 — 편집 모드 안에 있는 줄 알 수 없는 이름이었다).
-check("보기/편집 토글이 있고 기본은 보기다 · 이름이 '빼기'도 말한다",
-      "st.toggle(\"매입가·수량 편집 · 빼기\", key='wl_edit_mode', value=False" in _w231)
-check("보기 모드는 무리마다 HTML 표 하나 · 이름은 ?pick= 링크 (버튼과 같은 pending_search 경로)",
-      "if not _wl_edit:" in _w231 and "_href229 = \"?pick=\" + _up229.quote(" in _w231
+# 라운드 321 — 사용자: *"매입가 수량 리스트에서 수정할 수 있도록 · 넣으면 계산 바로 쉽게 ·
+#   한번에 여러개."* 편집 토글이 켜던 **행별 입력칸 격자**(한 칸만 바꿔도 앱 전체를 다시
+#   돌려 곧바로 저장)를 **목록 편집기 하나**로 바꿨다. 보기 표는 이제 늘 그린다. 아래 검사들이
+#   옛 격자의 글자를 요구하고 있어 현실에 맞춘다(§6) — 지키려던 뜻(기본은 보기 · 판단 재료는
+#   한 번만 쌓는다 · 포맷터 한 벌 · 입력은 매입가·수량뿐)은 그대로다.
+check("편집 토글이 있고 기본은 보기다 (값을 안 줘도 기본값은 꺼짐 · 이름이 무엇을 여는지 말한다)",
+      "st.toggle(\"매입가·수량 한꺼번에 고치기\", key='wl_edit_mode'," in _w231
+      and "key='wl_edit_mode', value=" not in _w231)
+check("보기 표는 무리마다 HTML 표 하나 · 늘 그린다 · 이름은 ?pick= 링크",
+      "if not _wl_edit:" not in _w231 and "_href229 = \"?pick=\" + _up229.quote(" in _w231
       and "<tbody>{''.join(_trs229)}</tbody></table></div>" in _w231)
-check("보기 모드도 견해 재료(_wl_acts)를 같은 모양으로 쌓는다 (§4)",
-      _w231.count("_wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))") == 2)
-check("적정가 신뢰도·손익 포맷터가 하나이고 두 모드가 같이 부른다 (두 벌 금지)",
+check("견해 재료(_wl_acts)를 보기 표 한 곳에서 쌓는다 (§4 · 격자가 없어져 한 곳)",
+      _w231.count("_wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))") == 1)
+check("적정가 신뢰도·손익 포맷터가 하나다 (두 벌 금지)",
       _w231.count("def _wl_fair_conf(") == 1 and _w231.count("def _wl_pnl(") == 1
-      and _w231.count("_wl_fair_conf(_w)") == 2 and _w231.count("_wl_pnl(") >= 3)
-check("입력 두 칸·빼기는 편집 모드에서만 위젯이다 (키는 그대로 · 저장 규칙 불변)",
-      'key=f"wl_pd_{_wcode}"' in _w231 and 'key=f"wl_qt_{_wcode}"' in _w231
-      and 'if _wl_edit and st.button("빼기", width=\'stretch\', key=f"wlb_del_{_wcode}"):' in _w231
-      and "if ((_w.get('paid') or None) != (_pd or None)" in _w231)
+      and _w231.count("_wl_fair_conf(_w)") == 1 and _w231.count("_wl_pnl(") >= 2)
+check("입력은 목록 편집기 한 곳이고 옛 행별 입력칸·빼기 버튼은 남아 있지 않다",
+      "st.data_editor(" in _w231 and "@st.fragment\ndef _wl_bulk_editor(" in _w231.replace('\r\n', '\n')
+      and 'key=f"wl_pd_{_wcode}"' not in _w231 and 'key=f"wlb_del_{_wcode}"' not in _w231)
 # 라운드 244 — 보기 모드가 머리글 **전부**(10칸 · 마지막이 '관심')를 쓴다.
 #   종전엔 [:9] 로 잘라 빼기 칸이 없었다. 두 모드가 같은 튜플을 쓰는 것은 그대로.
 check("두 목표의 기준은 열 이름에 남는다 — 두 모드가 같은 머리 낱말을 쓴다",
@@ -21162,8 +21214,12 @@ check("두 목표의 기준은 열 이름에 남는다 — 두 모드가 같은 
       and "for _i229, _h229 in enumerate(_WL_HDR))" in _w231)
 check("보기 모드 표는 폭이 좁으면 스스로 가로 스크롤한다 (본문은 넘치지 않는다)",
       "<div style='overflow-x:auto;'><table" in _w231)
+# 라운드 321 — 끝 앵커였던 격자 루프를 걷어냈다. 보기 표 끝 다음 줄(`_old_memo = [`)을
+#   **시작 뒤에서** 찾는다(R226). 본 font-size 수가 0 이면 통과가 아니다(R194).
+_s246 = _w231.index('_trs229 = []')
+_fs246 = [int(m) for m in _re.findall(r'font-size:(\d+)px', _w231[_s246:_w231.index('_old_memo = [', _s246)])]
 check("표 글자는 12px 이상이다 (§77)",
-      all(int(m) >= 12 for m in _re.findall(r'font-size:(\d+)px', _w231[_w231.index('_trs229 = []'):_w231.index("            continue\n        for _wi, _w in _grows:")])))
+      bool(_fs246) and all(m >= 12 for m in _fs246), scanned=len(_fs246))
 with open(_os.path.join(PROJ, 'docs', 'RESULT_R229_WATCHLIST_VIEW_MODE.md'), encoding='utf-8') as _f246:
     _res246 = _f246.read()
 check("결과 문서가 전·후 높이(px)와 '판단·저장 불변'을 적는다",
@@ -21947,9 +22003,15 @@ check("긴 사유는 자르고 전체는 툴팁에 둔다 (칸이 늘어나 값�
       and "title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>" in _w231)
 
 # ④ '빼기' 가 이름에 있다 — 기능은 그대로 편집 모드
-check("토글 이름이 '빼기'를 말한다 (기능을 옮기지 않았다)",
-      'st.toggle("매입가·수량 편집 · 빼기"' in _w231
-      and "if _wl_edit and st.button(\"빼기\"" in _w231)
+# 라운드 321 — 옛 격자(토글 뒤의 '빼기' 버튼)를 걷어냈다. 이 검사가 지키려던 성질은
+#   "빼기를 사용자가 찾을 수 있다"이다: 빼기는 R244 뒤로 **보기 표의 행마다** 있는 링크이고
+#   토글 이름은 **그 토글이 여는 것**(매입가·수량 편집)만 말한다 — 빼기를 이름에 넣으면
+#   토글을 켜야 빼기가 된다고 읽힌다(이제 거짓이다).
+check("빼기는 토글 없이 행마다 있다 · 토글 이름은 그 토글이 여는 것만 말한다",
+      'st.toggle("매입가·수량 한꺼번에 고치기"' in _w231
+      and "<a href='?drop={_uk._esc_attr(_wcode)}'" in _w231
+      # 옛 격자의 '토글을 켜야 빼기' 길만 없는지 본다 — 종목 찾기의 '빼기' 버튼(다른 자리)은 그대로다
+      and "if _wl_edit and st.button(\"빼기\"" not in _w231)
 # ⚠️ 라운드 244 — 이 검사의 **이름이 거짓**이 됐다. 사용자가 같은 것을 두 번
 #   물어(240 · 244) 결정을 뒤집었다 — 기본 화면에서 감추는 대신 **기본 화면에
 #   두고 되돌릴 수 있게** 한다. 잠글 것은 "감췄는가"가 아니라 "되돌릴 수 있는가"다.
@@ -22189,9 +22251,11 @@ check("표가 행마다 빼기 링크를 낸다 (보유·미보유 같은 표다
 check("머리글이 10칸이고 마지막이 '관심' 이다 (칸을 더해도 숫자 칸은 안 건드렸다)",
       "'매입가 대비 · 평가손익', '관심')" in _w231
       and "for _i229, _h229 in enumerate(_WL_HDR))" in _w231)
-check("편집 모드의 빼기 버튼도 그대로다 — 두 길이 같은 _wl_remove 를 부른다 (§4)",
-      'if _wl_edit and st.button("빼기"' in _w231
-      and _w231.count('_wl_remove(') >= 3)
+# 라운드 321 — 편집 모드의 빼기 버튼은 옛 입력칸 격자와 함께 걷어냈다. 빼기의 길은 보기 표의
+#   `?drop=` 링크 하나이고 그것이 `_wl_remove` 를 부른다(정의 1 + 부름 1).
+check("빼기의 길이 하나로 모였고 같은 _wl_remove 를 부른다 (§4)",
+      'if _wl_edit and st.button("빼기"' not in _w231
+      and _w231.count('_wl_remove(') >= 2)
 
 # ② 신선도 가드 — 음의 밀림은 통과가 아니다 (심기 · 양방향)
 _now261 = _sf261.ledger_rows()
@@ -25796,6 +25860,253 @@ check("이어 붙인 문장이 `_md_safe` 를 지난다 (§308)",
 check("화면이 조건을 다시 적지 않는다 — `core.checks` 를 읽어서 센다",
       "_ck316 = (_g316.get('core') or {}).get('checks') or []" in _w327)
 
+print("\n" + "=" * 72)
+print("§328 R319 — 죽은 칸 16개를 전부 눈으로 봤다 · 살아 있는 × 1.03 은 도달 불가였다 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R313 이 *"16개는 후보이고 둘만 눈으로 확인했다"* 고 적었다. 나머지 열넷을 열었다:
+#     · 이름표·설명 글 넷(value_floor_basis · entry_levels_note · target_trajectory_20d_note
+#       · sq_grade)
+#     · 진짜 값인데 안 읽히는 아홉(entry_premium_pct · timing_weight_sum · context_ 다섯 ·
+#       relative_momentum_12_1 · m10_val — 같은 재료의 다른 칸은 읽힌다)
+#     · **손으로 고른 수 하나 더** — `buy_entry_range_str` 가 `권장 매수가 × 0.97 ~ 권장
+#       매수가` 를 '매수 구간'이라 만든다(3% 띠 · 근거 없음 · 아무도 안 읽는다)
+#   그리고 같은 `× 1.03` 을 저장소 전체에서 찾자 **살아 있는 자리**가 나왔다 — 1차 목표
+#   계산에서 `risk_abs <= 0`(손절가 ≥ 현재가)이면 `target_tech_1st = 현재가 × 1.03` ·
+#   2차 `× 1.05` 로 채운다(§3 의 모양). 계산부라 **고치기 전에 셌다**(§2-7):
+#       원장 251,528행 중 목표 = 현재가 × 1.03 (원 단위 일치)   715행
+#       원장 251,528행 중 손절가 ≥ 현재가 (그 갈래의 조건)       **0행**
+#   **715행은 우연한 일치**다 — 예시 다섯 전부 손절이 현재가 아래(정상 갈래)였다. 값으로
+#   재면 715건의 '지어낸 목표'를 발표할 뻔했고, **조건으로 재니 0**이다(R194 · 좁으면
+#   부풀린다가 아니라 **엉뚱한 것을 재면** 부풀린다).
+#   0 인 이유도 **구조**다: `base_risk = 현재가 × max(손절 바닥, 변동성 × 배수)` 이고
+#   바닥 = 규칙집 `stop_floor_pct`(3.0) × 국면 `stop_mult`(최소 0.7) = **2.1%** 라,
+#   손절 거리가 **늘 0 보다 크다**(TDST 지지로 바꿔도 0.5R~1.5R 안). 즉 그 갈래는 지금
+#   규칙에서 **도달 불가**다 — 원장이 못 담는 짧은 이력 종목에서도 마찬가지다.
+#   **코드는 안 고쳤다** — 도달 불가 갈래를 지워도 관측되는 것이 없고 계산부다(§1).
+#   대신 **그 갈래를 막고 있는 두 사실**을 잠근다: 규칙집 바닥 > 0 · 국면 배수 최소 > 0.
+#   누가 둘 중 하나를 0 으로 만들면 이 절이 먼저 붉어지고, 그때 +3%·+5% 가 살아난다.
+import regime_policy as _rp328                                 # noqa: E402
+
+_rb328 = _read148(_os.path.join(PROJ, 'analysis_rulebook_ko.txt'))
+_m328 = _re.search(r'^\s*stop_floor_pct\s*=\s*([0-9.]+)', _rb328, _re.M)
+_floor328 = float(_m328.group(1)) if _m328 else None
+_mults328 = ([float(_d['stop_mult']) for _lo, _d in _rp328.BANDS]
+             + [float(_rp328.NO_SAMPLE['stop_mult'])])
+check("규칙집의 손절 바닥을 **읽어서** 안다 (못 읽으면 미측정)",
+      _floor328 is not None, str(_floor328))
+check("국면 손절 배수를 **표에서 유도해** 안다 (손 목록 아님)",
+      len(_mults328) >= 4, str(_mults328), scanned=len(_mults328))
+_eff_floor328 = (_floor328 or 0) * min(1.0, min(_mults328 or [0]))
+check("손절 바닥 × 국면 배수 최소 > 0 — 그래서 `× 1.03`·`× 1.05` 갈래는 도달 불가다",
+      _eff_floor328 > 0,
+      f'바닥 {_floor328}% × 최소 배수 {min(_mults328 or [0])} = {_eff_floor328:.2f}%')
+# 심기 — 변동성 0 · 가장 낮은 배수에서도 손절 거리가 양수인가 (엔진과 같은 식 · 양방향)
+_px328 = 10000.0
+_base328 = _px328 * max(_eff_floor328 / 100.0, 0.0 * 2.0)
+check("심기: 변동성 0 · 최저 배수에서도 손절 거리가 양수다 (갈래 조건 불성립)",
+      _px328 - (_px328 - _base328) > 0, f'손절 거리 {_base328:.1f}원')
+_base0_328 = _px328 * max(0.0, 0.0 * 2.0)
+check("심기 반대쪽: 바닥이 0 이고 변동성도 0 이면 거리가 0 — 그때 갈래가 살아난다 (오탐 확인)",
+      _px328 - (_px328 - _base0_328) == 0)
+# 엔진 식이 그대로인지 — 위 심기가 엔진을 베낀 것이 아니라 같은 식임을 소스로 확인한다
+_qi328 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진의 손절 식이 위 심기와 같다 (바닥·배수·max)",
+      'base_risk = curr_price * max(_stop_floor, vol_20 * _stop_mult)' in _qi328
+      and "_stop_floor *= min(1.0, _stop_regime_mult)" in _qi328)
+check("도달 불가 갈래는 아직 코드에 있다 — 지우는 것은 별도 결정 (§1)",
+      'target_tech_1st = float(curr_price * 1.03)' in _qi328)
+
+print("\n" + "=" * 72)
+print("§329 R320·R321 — 매입가·수량을 **목록에서 여러 개 한꺼번에** 고친다 · 곧바로 계산 · 되돌리기 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   R320 사용자: *"보유중에 수량 및 매입가 바꿀 수 있게 해줘야지."* 기능은 있었다(토글 → 행별
+#     입력칸 격자). 그런데 켜면 **표 전체가 위젯 격자**가 되고, **한 칸만 바꿔도 앱 전체를 다시
+#     돌려**(수십 초) 곧바로 저장했다. 첫 고침은 행마다 '고치기' → 그 종목 하나만 입력칸 둘이었다.
+#   R321 사용자: *"매입가 수량 리스트에서 수정할 수 있도록 · 넣으면 계산 바로 쉽게 · 한번에
+#     여러개 고칠수도 있게."* 한 종목 칸은 요구를 못 채운다 — **편집 길을 목록 편집기 하나로
+#     합쳤다**(§4 — 길이 여럿이면 한쪽만 고치게 된다): `st.data_editor`(매입가·수량 열만 열림) +
+#     `st.fragment`(셀을 고치면 그 함수만 다시 돌아 손익이 곧바로 바뀐다) + 저장은 한 번에(바뀐
+#     행만) + 되돌리기(바뀌기 전 값). 옛 격자(169줄)는 걷어냈고, 행의 '고치기' 링크는 편집기를 켠다.
+#   확인은 쓰기를 막은 채(§9 · R165) 앱을 통째로 돌려 했다 — **사용자 파일은 안 바꿨다.**
+#   ⚠️ R320 확인 중 브라우저 창을 사용자와 같이 쓰다가 보유 두 행이 비었다(누가 눌렀는지 가릴
+#     수 없게 됐다). 그래서 되돌리기를 **처음부터** 붙였다. 쓰는 기능은 창이 아니라 쓰기를 막은
+#     앱 테스트로 확인한다(memory: the-browser-pane-is-shared-with-the-user).
+_w329 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("?edit= 를 받는 길이 하나 있고 받은 즉시 파라미터를 지운다 · 목록 편집기를 켠다",
+      "def _wl_edit_from_query():" in _w329
+      and "del st.query_params['edit']" in _w329
+      and "\n_wl_edit_from_query()\n" in _w329
+      and "st.session_state['wl_edit_mode'] = True" in _w329)
+check("못 읽는 코드·목록에 없는 종목은 아무것도 안 연다 (§3)",
+      "return                   # 못 읽으면 아무것도 안 연다 (§3)" in _w329
+      and "if any(portfolio.normalize_code(x.get('code')) == code for x in _wl_items()):" in _w329)
+check("보기 표가 행마다 '고치기' 링크를 낸다 (빼기와 같은 칸 · 칸 수 그대로)",
+      "f\"<br><a href='?edit={_uk._esc_attr(_wcode)}' target='_self' \"" in _w329
+      and "'매입가 대비 · 평가손익', '관심')" in _w329)
+check("편집 길은 목록 편집기 하나다 — 한 종목 칸(R320 첫 판)은 남아 있지 않다 (§4)",
+      "wl_edit_code" not in _w329 and "_wl_bulk_editor(" in _w329
+      and "_new['paid'] = _pd or None" not in _w329)
+check("편집기는 **부분 재실행**으로 돈다 — 셀을 고칠 때 앱 전체를 다시 안 돌린다",
+      "@st.fragment\ndef _wl_bulk_editor(px_by_code):" in _w329.replace('\r\n', '\n'))
+# ⚠️ 사용자: *"수정한 뒤에 저장 버튼이 인식이 안 되거나 없어."* — 버튼이 계산 표 아래 맨 끝에 있었고
+#   `disabled=(_n == 0)` 이라, 칸에 쓰는 중(아직 Enter 전) 누르면 **잠긴 버튼**이라 아무 일도 안 났다.
+#   이제 버튼은 **표 바로 아래 · 잠그지 않는다** · 바뀐 것이 없으면 그렇게 **말한다**(조용히 무시 안 함).
+_bf329 = _w329[_w329.index("def _wl_bulk_editor(px_by_code):"):_w329.index("def _wl_edit_from_query():")]
+check("저장은 **한 번에** — 바뀐 행 수를 먼저 말하고, 바뀐 것이 없으면 누른 뒤 그렇게 말한다 (잠그지 않는다)",
+      'f"변경 {_n}개 저장"' in _bf329
+      # 버튼 호출 한 줄만 본다 — 같은 함수의 '종목' 열 설정에도 disabled=True 가 있다(그건 잠가야 맞다)
+      and "disabled=" not in _bf329[_bf329.index("_sc[1].button("):_bf329.index("key='wl_bulk_save'") + 80]
+      and "바뀐 칸이 없습니다" in _bf329)
+check("저장 버튼은 편집 표 **바로 아래**다 — 계산 결과·합계보다 앞",
+      _bf329.index("key='wl_bulk_save'") < _bf329.index("st.dataframe(")
+      and _bf329.index("key='wl_bulk_save'") < _bf329.index("if _tc > 0:")
+      and _bf329.index("expanded=_focus_unheld)") < _bf329.index("key='wl_bulk_save'"))
+check("현재가는 정렬에 쓴 값을 그대로 넘긴다 — 두 번 안 받는다 (§4)",
+      "_wl_bulk_editor({portfolio.normalize_code(_wl_body[_bi].get('code')): _bv[0]" in _w329)
+
+# 규칙을 **돌려서** 잰다 — 앱을 띄우지 않고 함수 본문만 떼어 실행한다(심기 · 양방향)
+import ast as _ast329                                          # noqa: E402
+import portfolio as _pf329                                     # noqa: E402
+_want329 = ('_wl_pos_num', '_wl_with_position', '_wl_apply_edits', '_wl_position_calc')
+_fns329 = [n for n in _ast329.parse(_w329).body
+           if isinstance(n, _ast329.FunctionDef) and n.name in _want329]
+_ns329 = {'portfolio': _pf329}
+exec(compile(_ast329.Module(body=_fns329, type_ignores=[]), 'wl321', 'exec'), _ns329)
+check("규칙 함수 넷을 떼어 돌릴 수 있다 (못 떼면 미측정)",
+      all(callable(_ns329.get(k)) for k in _want329),
+      str([k for k in _want329 if not callable(_ns329.get(k))]), scanned=len(_fns329))
+if all(callable(_ns329.get(k)) for k in _want329):
+    _f329 = _ns329['_wl_with_position']
+    _r329 = {'code': '005930', 'name': 'n', 'paid': 1000.0, 'qty': 3, 'snap_px': 1234}
+    _a329 = _f329(_r329, 1500, 10)
+    check("값을 넣으면 그대로 적히고 **다른 칸은 보존**된다 (엔진 스냅샷을 지우지 않는다)",
+          _a329['paid'] == 1500.0 and _a329['qty'] == 10 and _a329['snap_px'] == 1234
+          and _r329['qty'] == 3, str(_a329))
+    _b329 = _f329(_r329, 0, 5)
+    check("매입가 0 → None (보유가 아니게 된다) · 수량은 남는다",
+          _b329['paid'] is None and _b329['qty'] == 5, str(_b329))
+    # ⚠️ 표 편집기는 빈 칸을 NaN 으로 넘긴다 — NaN 은 참(truthy)이라 옛 규칙은 NaN 을 저장했다
+    _n329 = _f329(_r329, float('nan'), float('nan'))
+    check("빈 칸(NaN)은 None 이다 — 못 읽은 것을 값으로 저장하지 않는다 (§3)",
+          _n329['paid'] is None and _n329['qty'] is None, str(_n329))
+    _ap329 = _ns329['_wl_apply_edits']
+    _items329 = [{'code': '005930', 'name': 'a', 'paid': 1000.0, 'qty': 3},
+                 {'code': '000660', 'name': 'b', 'paid': 2000.0, 'qty': 1},
+                 {'code': '035420', 'name': 'c'}]
+    _new329, _undo329 = _ap329(_items329, {'005930': (1000, 3),       # 안 바뀜
+                                           '000660': (2500, 4),       # 바뀜
+                                           '035420': (3000, 2)})      # 미보유 → 보유
+    check("여러 행을 한 번에 — **실제로 바뀐 행만** 되돌리기 목록에 오른다",
+          sorted(_undo329) == ['000660', '035420'], str(_undo329))
+    check("행을 덧붙이거나 지우지 않는다 — 수·순서 그대로 (같은 종목이 두 줄로 안 는다)",
+          [x['code'] for x in _new329] == ['005930', '000660', '035420'])
+    check("바뀐 값이 적히고 미보유 행은 매입가를 받아 보유가 된다",
+          _new329[1]['paid'] == 2500.0 and _new329[1]['qty'] == 4
+          and _new329[2]['paid'] == 3000.0 and _new329[0] is _items329[0])
+    _back329, _ = _ap329(_new329, {c: (v[0], v[1]) for c, v in _undo329.items()})
+    check("되돌리기 = 옛 값을 같은 함수로 되적기 — 원래 목록과 매입가·수량이 같아진다",
+          [(x.get('paid'), x.get('qty')) for x in _back329]
+          == [(1000.0, 3), (2000.0, 1), (None, None)],
+          str([(x.get('paid'), x.get('qty')) for x in _back329]))
+    _pc329 = _ns329['_wl_position_calc']
+    check("곧바로 계산 — 매입금액·평가금액·손익·수익률 (산수)",
+          _pc329(1100, 1000, 10) == (10000.0, 11000.0, 1000.0, 10.000000000000009)
+          or (lambda r: r[0] == 10000 and r[1] == 11000 and r[2] == 1000
+              and abs(r[3] - 10.0) < 1e-9)(_pc329(1100, 1000, 10)),
+          str(_pc329(1100, 1000, 10)))
+    check("현재가나 수량이 없으면 그 칸을 **비운다** — 0 으로 채우지 않는다 (§3)",
+          _pc329(None, 1000, 10)[1:3] == (None, None) and _pc329(1100, 1000, None)[:3]
+          == (None, None, None) and abs(_pc329(1100, 1000, None)[3] - 10.0) < 1e-9)
+# 화면 문구가 **실제 규칙**과 같은지 — 보유 여부를 가르는 규칙이 매입가 하나인 동안만 참이다
+check("안내 문구('매입가를 비우거나 0 → 미보유')가 보유 규칙과 맞다 — 규칙이 매입가 하나다",
+      "_wl_owned = [(_i, _r) for _i, _r in enumerate(_wl_body) if _r.get('paid')]" in _w329
+      and '매입가를 비우거나 0 으로 ' in _w329
+      and '두면 **미보유**로 옮겨집니다' in _w329)
+check("평단이 점수·적정가·추천에 안 들어간다는 말이 같이 있다 (§9)",
+      '점수·적정가·추천에는 들어가지 않습니다.' in _w329)
+check("합계는 분모가 0 이면 비율을 안 만든다 (§3)",
+      "if _tc > 0:" in _w329 and "합계를 내지 않습니다" in _w329)
+# ⚠️ 저장은 **되돌릴 수 있어야** 한다 — '빼기'(R244)와 같은 원칙.
+check("저장 직전에 **바뀌기 전 값**을 쥔다 (쓰기보다 먼저)",
+      "st.session_state['wl_undo_bulk'] = _undo" in _w329
+      and _w329.index("st.session_state['wl_undo_bulk'] = _undo")
+      < _w329.index('_wl_write(_new_items, f"매입가·수량 {_n}개를 저장했습니다")'))
+check("되돌리기는 같은 함수(`_wl_apply_edits`)로 되적는다 — 덧붙이지 않는다",
+      "_back321, _ = _wl_apply_edits(" in _w329)
+# 본문 primary 버튼 대비 — 파랑 바탕을 전제로 글자를 어둡게 뒤집었는데 본문에선 바탕이 어두웠다
+#   (실측 1.22:1 · '저장' · '5종목 지금 계산해서 채우기'). 전제를 같은 규칙 안에 둔다.
+_pr329 = _w329[_w329.index('.stApp button[data-testid="stBaseButton-primary"],\n    .stApp button[kind="primary"] {{'):]
+_pr329 = _pr329[:_pr329.index('}}')]
+check("primary 규칙이 글자(어둡게)와 **바탕(브랜드 파랑)을 같이** 잡는다 — 전제를 한 규칙에",
+      "color: {_TOK['bg1']} !important;" in _pr329
+      and "background-color: {_TOK['brand']} !important;" in _pr329,
+      _pr329[:160].replace('\n', ' '))
+# 사용자: *"미보유 종목에 고치기 누르면 바로 고칠 수 있게."* — '고치기'가 편집기만 켜고 미보유 칸은
+#   접힌 채였다. 누른 종목을 그 표 맨 위로 · 미보유면 칸을 펼친다 · 저장하면 안내가 끝난다.
+check("'고치기'로 고른 종목을 기억하고, 편집기가 그 종목을 맨 위에 두고 미보유면 칸을 펼친다",
+      "st.session_state['wl_edit_focus'] = code" in _w329
+      and "return sorted(rows, key=lambda w: portfolio.normalize_code(w.get('code')) != _focus)" in _w329
+      and "expanded=_focus_unheld)" in _w329
+      and "st.session_state.pop('wl_edit_focus', None)" in _w329)
+# ⚠️ 미보유 표 — 매입가가 전부 빈 칸이면 streamlit 이 그 열을 EMPTY 로 봐 **입력이 안 됐다**
+#   (사용자가 잡았다 · 보유와 섞였던 첫 판은 FLOAT 라 안 드러났다). 규칙(숫자 열로 못 박기)이
+#   편집 표 함수 안에 있는지, 그리고 그 규칙이 실제로 EMPTY → FLOAT 로 바꾸는지 심어서 잰다.
+check("편집 표가 매입가·수량을 숫자 열로 못 박는다 (빈 칸만 있는 미보유 표도 입력이 된다)",
+      "_df[_col] = _pd321.to_numeric(_df[_col], errors='coerce').astype('float64')" in _w329
+      and _w329.index("def _grid(rows, key):") < _w329.index("astype('float64')")
+      < _w329.index("_out = st.data_editor(_df, key=key"))
+try:
+    import pandas as _pd329
+    import pyarrow as _pa329
+    from streamlit.elements.lib import column_config_utils as _ccu329
+    def _kind329(_s):
+        _d = _pd329.DataFrame({'매입가': _s}, index=['a', 'b'])
+        return str(_ccu329.determine_dataframe_schema(_d, _pa329.Schema.from_pandas(_d)).get('매입가'))
+    _raw329 = _kind329([None, None])
+    _fix329 = _kind329(_pd329.to_numeric(_pd329.Series([None, None]), errors='coerce').astype('float64'))
+    check("심기 — 전부 빈 칸은 EMPTY(입력 불가)이고 숫자 열로 못 박으면 FLOAT 다 (양방향)",
+          _raw329.endswith('EMPTY') and _fix329.endswith('FLOAT'), f"{_raw329} → {_fix329}")
+except ImportError as _e329:
+    skipped("심기 — 빈 칸 열 종류 (streamlit 내부 함수 위치가 바뀌었다)", str(_e329))
+
+print("\n" + "=" * 72)
+print("§330 R322 — 보유 행의 추가매수 문구를 '무엇을 하라는 말'로 · 안 잰 종목을 먼저 채운다 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"보유 유지 물타기 불가 · 신규 매수 판정만 이게 뭐고 · 보유 유지 물타기 가능 이게 뭐야 ·
+#     쉽게 · 추가매수 가능 맞는지 · 전체적으로 유기적으로 연동되는지 전수조사 · 아직 안 잼 개선."*
+#   전수(보유 16행 · 읽기만): '추가 매수 가능'인데 조건이 안 맞는 행 0 · 가늠 AI 와 관심종목 판단이
+#     다른 행 0 — **판단은 맞물려 있었다.** 어긋난 것은 **낱말**이었다: '물타기 가능'은 *조건 통과*
+#     인데 진입가 위면 kind 가 '보유 유지'라, 낱말만 보면 *지금 사라*로 읽혔다.
+#   그리고 '아직 안 잼' 종목은 파일 **맨 끝**(새로 담은 것)이라 5개씩 채우는 차례에서 15개 중 15번째 —
+#     3번 눌러야 닿았다. 채우기를 급한 순(보유 → 한 번도 안 잰 것 → 나머지)으로 세운다.
+_w330 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("채우기 순서 — 보유 행 먼저, 그다음 한 번도 안 잰 행 (파일 순서가 아니다 · 안정 정렬)",
+      "_fill_missing = sorted([w for w in _wl_items() if _wl_needs_fill(w)]," in _w330
+      and "key=lambda w: (0 if w.get('paid') else 1," in _w330
+      and "0 if _wl_needs_fill(w) == '엔진 값' else 1))" in _w330)
+check("'아직 안 잼' 칸이 채우는 길을 같은 칸에 적는다 (어떻게 재는지 모르면 안 잰 채로 남는다)",
+      "아래 '지금 계산해서 채우기' · 또는 이름을 눌러 열기" in _w330)
+# 심기 — 채우기 순서 규칙을 돌려 본다(같은 키 식 · 파일 순서가 뒤집히는지)
+_rows330 = [dict(code='a', snap_at='x', snap_buy=1, snap_bucket='b'),          # 미보유 · 사유만 없음
+            dict(code='b'),                                                     # 미보유 · 한 번도 안 잼
+            dict(code='c', paid=100, qty=1, snap_at='x', snap_buy=1)]           # 보유 · 기준값 없음
+def _nf330(w):
+    return '엔진 값' if not w.get('snap_at') else ('보유자 기준값' if w.get('paid') else '판정 사유')
+_ord330 = [w['code'] for w in sorted(_rows330, key=lambda w: (0 if w.get('paid') else 1,
+                                                              0 if _nf330(w) == '엔진 값' else 1))]
+check("심기 — 파일 순서 a·b·c 가 보유(c) → 안 잰 것(b) → 나머지(a) 로 선다",
+      _ord330 == ['c', 'b', 'a'], str(_ord330))
+import ui_kit as _uk330                                                         # noqa: E402
+_lbl330 = [_uk330.avg_down_class(True, [])[1],
+           _uk330.avg_down_class(False, [_uk330.AVG_DOWN_MARKET_GATE])[1],
+           _uk330.avg_down_class(False, ['손절선 위'])[1],
+           _uk330.avg_down_class(False, [_uk330.AVG_DOWN_DATA_GATE])[1]]
+check("이름표가 '물타기 가능/불가'가 아니라 추가매수로 무엇을 하라는 말이다 (등급은 그대로)",
+      all('추가매수' in s for s in _lbl330) and not any('물타기' in s for s in _lbl330), str(_lbl330))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
@@ -25892,7 +26203,12 @@ if _os.path.exists(_lg196):
           f'그 주장 옆에 정정이 없다')
 
 # 보호 계산 파일 줄 수도 문서가 말한다 — 크게 어긋나면 안 된다
-_m158c = _re.search(r'`quant_indicators\.py`[^|]*약\s*([\d,]+)\s*줄', _md158)
+# ⚠️ 라운드 322 — 이 식이 **표의 그 줄을 한 번도 못 잡았다.** `[^|]*` 가 표 칸 경계 `|` 에서 멈춰
+#   `| \`quant_indicators.py\` | … (약 5,300줄) |` 는 늘 불일치였고, 검사는 **조용히 건너뛰었다**
+#   (R194 — 못 본 것을 통과로). 그러다 본문 다른 자리의 `quant_indicators.py` 뒤 '약 170줄'(관심종목
+#   격자 이야기)에 걸려 처음 붉어졌다. 표의 그 칸만 읽고, 못 찾으면 **실패**로 적는다.
+_m158c = _re.search(r'\|\s*`quant_indicators\.py`\s*\|[^|\n]*약\s*([\d,]+)\s*줄', _md158)
+check("문서 표에서 quant_indicators 줄 수를 찾았다 (못 찾으면 아래 검사가 안 돈다)", bool(_m158c))
 if _m158c:
     _cl158 = int(_m158c.group(1).replace(',', ''))
     with open(_os.path.join(PROJ, 'quant_indicators.py'),

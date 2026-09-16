@@ -912,9 +912,18 @@ st.markdown(f"""
        실제로는 tx2 가 얹혀 **1.23:1** 이었다(회색 글자가 파란 배경에 거의
        안 보였다). 더 어두운 파랑을 새로 만들지 않고(§5) 글자를 뒤집는다.
        → 6.15:1 */
+    /* 라운드 320 — 위 문단이 전제한 **'브랜드 파랑 채움'이 본문에서는 없었다.**
+       바로 위 전역 `.stButton > button {{ background: hover !important }}` 가 primary
+       까지 어둡게 칠해, 본문 primary 버튼은 **어두운 바탕 위 어두운 글자 1.22:1** 이었다
+       (브라우저 실측 2026-09-16 · '5종목 지금 계산해서 채우기' · 새 '저장'). 사이드바는
+       제 규칙이 파랑을 칠해 5.86:1 로 멀쩡했다 — 그래서 한 곳만 보고 통과로 읽혔다.
+       글자를 뒤집은 전제(파랑 바탕)를 **같은 규칙 안에** 적어 둔다. 더 구체적이라
+       전역 규칙을 이긴다. 라이트 테마는 뒤에서 모든 버튼을 따로 잡으므로 안 닿는다. */
     .stApp button[data-testid="stBaseButton-primary"],
     .stApp button[kind="primary"] {{
         color: {_TOK['bg1']} !important;
+        background-color: {_TOK['brand']} !important;
+        border-color: {_TOK['brand']} !important;
     }}
     .stApp button[data-testid="stBaseButton-primary"] *,
     .stApp button[kind="primary"] * {{
@@ -2348,6 +2357,242 @@ def _wl_drop_from_query():
 
 
 _wl_drop_from_query()
+
+
+# ⚠️ 라운드 320 — 사용자: *"보유중에 수량 및 매입가 바꿀 수 있게 해줘야지."*
+#   기능은 **있었다** — 절 위 토글 '매입가·수량 편집 · 빼기' 를 켜면 입력칸이 나온다.
+#   그런데 켜는 순간 **표 전체(보유+미보유 36행)가 위젯 격자**로 바뀐다(라운드 229 가
+#   5,424px 로 잰 그 모양) — 한 종목 수량을 고치려고 화면 전체를 바꿔야 했다.
+#   라운드 244 가 '빼기'를 같은 이유로 기본 표에 꺼냈다(*"두 번 물었으면 이름 문제가
+#   아니다"*). 같은 길을 쓴다: 행마다 `?edit=<코드>` 링크 → **그 종목 하나만** 입력칸 둘.
+#   표 높이는 그대로고, 토글 경로도 그대로 둔다. 두 길이 **같은 규칙**
+#   (`_wl_with_position`)으로 행을 바꾼다(§4).
+def _wl_pos_num(v, as_int=False):
+    """매입가·수량 한 칸 → 양수면 그 수, 아니면 None.
+
+    ⚠️ 라운드 321 — 표 편집기(`st.data_editor`)는 빈 칸을 **NaN** 으로 넘긴다. 그런데
+    `float('nan')` 은 참(truthy)이라 종전 규칙(`paid if paid else None`)은 NaN 을 **값 있음**
+    으로 보고 매입가 칸에 NaN 을 저장했을 것이다 — 못 읽은 것을 값으로 만드는 자리(§3).
+    NaN · 0 이하 · 숫자 아님은 전부 None 이다.
+    """
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f or f <= 0:                       # NaN 은 자기 자신과 다르다
+        return None
+    return int(round(f)) if as_int else f
+
+
+def _wl_with_position(row, paid, qty):
+    """행 하나에 매입가·수량을 적은 새 행. 0·빈 칸은 '없음'(None)으로 둔다.
+
+    보유 여부는 **매입가가 있느냐** 하나로 갈린다(`_wl_owned`). 그러니 매입가를 0 으로
+    두면 그 행은 미보유로 옮겨진다 — 옛 편집 격자가 쓰던 규칙 그대로다(`_pd or None`).
+    """
+    new = dict(row)
+    new['paid'] = _wl_pos_num(paid)
+    new['qty'] = _wl_pos_num(qty, as_int=True)
+    return new
+
+
+def _wl_apply_edits(items, edits):
+    """여러 행의 매입가·수량을 한 번에 적용한다 (라운드 321 · 순수 함수).
+
+    `edits` = {코드: (매입가, 수량)}. **실제로 바뀐 행만** 바꾸고, 되돌리기에 쓸 **바뀌기 전
+    값**을 같이 돌려준다 → (새 목록, {코드: (옛 매입가, 옛 수량, 이름)}).
+    행을 덧붙이거나 지우지 않는다 — 코드로 찾아 그 자리에서 갈아 끼운다(같은 종목이 두 줄로
+    늘지 않는다 · 순서도 그대로).
+    """
+    out, undo = [], {}
+    for it in items:
+        c = portfolio.normalize_code(it.get('code'))
+        if c in edits:
+            p_new = _wl_pos_num(edits[c][0])
+            q_new = _wl_pos_num(edits[c][1], as_int=True)
+            p_old = _wl_pos_num(it.get('paid'))
+            q_old = _wl_pos_num(it.get('qty'), as_int=True)
+            if (p_new, q_new) != (p_old, q_old):
+                undo[c] = (p_old, q_old, str(it.get('name') or c))
+                out.append(_wl_with_position(it, p_new, q_new))
+                continue
+        out.append(it)
+    return out, undo
+
+
+def _wl_position_calc(px, paid, qty):
+    """한 행의 매입금액·평가금액·평가손익·수익률. 못 구하는 칸은 None (0 으로 채우지 않는다 · §3)."""
+    paid = _wl_pos_num(paid)
+    qty = _wl_pos_num(qty, as_int=True)
+    px = _wl_pos_num(px)
+    cost = paid * qty if (paid and qty) else None
+    value = px * qty if (px and qty) else None
+    pnl = (value - cost) if (cost is not None and value is not None) else None
+    ret = ((px / paid - 1.0) * 100.0) if (px and paid) else None
+    return cost, value, pnl, ret
+
+
+@st.fragment
+def _wl_bulk_editor(px_by_code):
+    """매입가·수량을 **목록에서 여러 개 한꺼번에** 고친다 (라운드 321).
+
+    사용자: *"매입가 수량 리스트에서 수정할 수 있도록 해줘 매입가 넣고 수량 넣으면 계산 바로
+    쉽게 될 수 있도록 한번에 여러개 고칠수도 있게."*
+    종전 편집 격자는 행마다 입력칸 둘을 그리고 **한 칸만 바꿔도 앱 전체를 다시 돌려**(수십 초)
+    곧바로 저장했다 — '바로 쉽게'와 '여러 개 한꺼번에'의 정반대였다.
+    · 표 편집기 하나 — 매입가·수량 칸만 열리고 나머지는 잠긴다
+    · `st.fragment` — 셀을 고치면 **이 함수만** 다시 돌아 계산 표가 곧바로 바뀐다
+    · 저장은 **한 번에** — 바뀐 행만 적고, 되돌리기에 쓸 옛 값을 쥔다(빼기 R244 와 같은 원칙)
+    """
+    import pandas as _pd321
+    _items = _wl_items()
+    if not _items:
+        st.caption("관심종목이 비어 있습니다 — 종목을 먼저 담아 주세요.")
+        return
+    _bver = int(st.session_state.get('wl_bulk_ver') or 0)   # `_ver` 는 모듈 별칭(versioning)이라 안 쓴다
+    # ⚠️ 사용자(같은 날): *"현재가는 내가 고치는 게 아니잖아 · 헷갈리고 보유종목이랑 나눠줘야."*
+    #   첫 판은 한 표에 코드·종목·현재가(잠김)·매입가·수량을 보유·미보유 섞어 놓았다 — 고칠 수 없는
+    #   칸이 고칠 칸 옆에 있었다. 편집 표에는 **고치는 칸(매입가·수량)과 이름만** 둔다. 현재가는
+    #   아래 **계산 결과**(읽기 전용)에만 나온다. 보유 중과 미보유는 **다른 표**다 — 미보유는 새로
+    #   샀을 때만 여는 칸이라 접어 둔다. 행 열쇠는 숨긴 코드(이름이 같아도 안 섞인다).
+    # ⚠️ 사용자: *"미보유 종목에 고치기 누르면 바로 고칠 수 있게 해줘야 하는 거 아냐?"* — 행의
+    #   '고치기'(`?edit=`)가 편집기를 켜기만 하고, 미보유 칸은 **접힌 채** 그 종목이 23행 어딘가에
+    #   있었다. 누른 종목(`wl_edit_focus`)을 **그 표 맨 위**로 올리고, 미보유면 칸을 **펼친다.**
+    #   보기 순서만 바뀐다(저장 순서·행 수 그대로 · 행 열쇠는 코드라 순서와 무관).
+    _focus = portfolio.normalize_code(st.session_state.get('wl_edit_focus') or '') or None
+
+    def _front(rows):
+        return sorted(rows, key=lambda w: portfolio.normalize_code(w.get('code')) != _focus)  # 안정 정렬
+
+    _held = _front([w for w in _items if _wl_pos_num(w.get('paid'))])
+    _unheld = _front([w for w in _items if not _wl_pos_num(w.get('paid'))])
+    _focus_row = next((w for w in _held + _unheld
+                       if portfolio.normalize_code(w.get('code')) == _focus), None)
+    _focus_unheld = bool(_focus_row) and not _wl_pos_num(_focus_row.get('paid'))
+    _fk = f"_{_focus}" if _focus_row else ''   # 맨 위 행이 바뀌면 편집 상태를 새로 시작(행 번호가 어긋나지 않게)
+    _cfg = {
+        '종목': st.column_config.TextColumn('종목', disabled=True),
+        '매입가': st.column_config.NumberColumn('매입가 (원)', min_value=0, step=1, format='%d'),
+        '수량': st.column_config.NumberColumn('수량 (주)', min_value=0, step=1, format='%d'),
+    }
+
+    def _grid(rows, key):
+        """편집 표 하나 → {코드: (매입가, 수량)} (편집기의 **지금 값** · 저장 전이어도)."""
+        _codes = [portfolio.normalize_code(w.get('code')) for w in rows]
+        _df = _pd321.DataFrame(
+            [{'종목': str(w.get('name') or w.get('code')),
+              '매입가': _wl_pos_num(w.get('paid')),
+              '수량': _wl_pos_num(w.get('qty'), as_int=True)} for w in rows],
+            index=_codes)
+        # ⚠️ 미보유 표는 매입가가 **전부 빈 칸**이라 pandas 가 그 열을 object 로 두고, streamlit 은
+        #   그것을 EMPTY 종류로 봐 **입력이 안 됐다**(사용자: *"미보유는 매입가 및 수량 수정 못하잖아"*).
+        #   첫 판은 보유 행과 섞여 숫자 열(FLOAT)이라 안 드러났다 — 표를 가르자 드러났다.
+        #   두 칸을 숫자 열로 못 박는다(빈 칸은 NaN · 저장 규칙 `_wl_pos_num` 이 None 으로 둔다).
+        for _col in ('매입가', '수량'):
+            _df[_col] = _pd321.to_numeric(_df[_col], errors='coerce').astype('float64')
+        _out = st.data_editor(_df, key=key, hide_index=True, num_rows='fixed', width='stretch',
+                              height=min(38 + 35 * len(rows), 420), column_config=_cfg)
+        return {_c: (_out.iloc[_k]['매입가'], _out.iloc[_k]['수량'])
+                for _k, _c in enumerate(_codes)}
+
+    _edits = {}
+    if _focus_row:
+        st.info(f"고른 종목 **{_md_safe(str(_focus_row.get('name') or _focus))}** — "
+                f"{'아래 미보유 표' if _focus_unheld else '보유 중 표'} **맨 위**에 두었습니다. "
+                f"매입가·수량 칸을 두 번 눌러 넣고 '변경 저장'을 누르세요.")
+    st.markdown(f"**보유 중 {len(_held)}종목** — 매입가·수량 칸을 두 번 눌러 고치세요")
+    if _held:
+        _edits.update(_grid(_held, f'wl_bulk_held_{_bver}{_fk}'))
+    else:
+        st.caption("보유 중인 종목이 없습니다 — 새로 샀으면 아래 미보유 칸에 매입가·수량을 넣으세요.")
+    with st.expander(f"미보유 {len(_unheld)}종목 — 새로 샀으면 여기서 매입가·수량을 넣으세요",
+                     expanded=_focus_unheld):
+        if _unheld:
+            _edits.update(_grid(_unheld, f'wl_bulk_new_{_bver}{_fk}'))
+        else:
+            st.caption("미보유 종목이 없습니다.")
+    # ── 저장 — **표 바로 아래** · 늘 누를 수 있다 ─────────────────────────────────
+    # ⚠️ 사용자: *"수정한 뒤에 저장 버튼이 인식이 안 되거나 없어."* 둘 다 실제였다.
+    #   ① 버튼이 계산 결과 표(보유 행 수만큼)·합계 **아래** 맨 끝에 있어 표를 고친 자리에서 안 보였다.
+    #   ② 버튼이 `disabled=(바뀐 행 0)` 이었다. 표 칸은 **입력을 마쳐야(Enter·다른 칸)** 값이 넘어가므로
+    #      칸에 쓰는 중에 곧바로 저장을 누르면 **아직 잠긴 버튼**을 누른 것이 되어 아무 일도 안 났다.
+    #   → 버튼을 표 바로 아래로 올리고 **잠그지 않는다.** 누른 순간의 표 값으로 세어, 바뀐 것이 없으면
+    #     그렇게 말한다(조용히 무시하지 않는다).
+    _new_items, _undo = _wl_apply_edits(_items, _edits)
+    _n = len(_undo)
+    _sc = st.columns([3, 1])
+    _sc[0].caption(f"바뀐 행 **{_n}개** — 칸에 넣은 뒤 **Enter** 를 누르면 반영됩니다. 저장 전에는 파일에 "
+                   f"안 적습니다. 매입가를 비우거나 0 으로 "
+                   f"두면 **미보유**로 옮겨집니다. 매입가·수량은 보유 판단에만 쓰이고 "
+                   f"점수·적정가·추천에는 들어가지 않습니다.")
+    if _sc[1].button(f"변경 {_n}개 저장" if _n else "변경 저장", key='wl_bulk_save', type='primary',
+                     width='stretch'):
+        if _n == 0:
+            st.warning("바뀐 칸이 없습니다 — 매입가·수량을 넣고 **Enter** 를 누른 뒤 다시 저장하세요.")
+        else:
+            st.session_state['wl_undo_bulk'] = _undo            # 바뀌기 **전** 값
+            _wl_write(_new_items, f"매입가·수량 {_n}개를 저장했습니다")
+            st.session_state['wl_bulk_ver'] = _bver + 1          # 편집기 상태를 새로 시작
+            st.session_state.pop('wl_edit_focus', None)          # 고른 종목 안내는 저장으로 끝난다
+            st.rerun()                                           # 표·포트폴리오 견해까지 다시 그린다
+    # ── 곧바로 계산 — 편집 표의 **지금 값**으로 센다 · 현재가는 받아 온 값(고치는 칸이 아니다) ──
+    _rows, _tc, _tv = [], 0.0, 0.0
+    for _w in _held + _unheld:
+        _c = portfolio.normalize_code(_w.get('code'))
+        _p, _q = _edits.get(_c, (None, None))
+        _px = _wl_pos_num(px_by_code.get(_c))
+        _cost, _val, _pnl, _ret = _wl_position_calc(_px, _p, _q)
+        if _cost is not None and _val is not None:
+            _tc += _cost
+            _tv += _val
+        if _wl_pos_num(_p):
+            _rows.append({'종목': str(_w.get('name') or _c), '현재가': _px, '매입금액': _cost,
+                          '평가금액': _val, '평가손익': _pnl, '수익률(%)': _ret})
+    if _rows:
+        st.caption("계산 결과 — 현재가는 자동으로 받아 온 값입니다(고치는 칸이 아닙니다).")
+        st.dataframe(_pd321.DataFrame(_rows), hide_index=True, width='stretch',
+                     column_config={
+                         '현재가': st.column_config.NumberColumn(format='%d원'),
+                         '매입금액': st.column_config.NumberColumn(format='%d원'),
+                         '평가금액': st.column_config.NumberColumn(format='%d원'),
+                         '평가손익': st.column_config.NumberColumn(format='%+d원'),
+                         '수익률(%)': st.column_config.NumberColumn(format='%+.2f'),
+                     })
+    # 합계 — 매입금액·평가금액을 **둘 다** 구한 행만 더한다. 분모가 0 이면 비율을 안 만든다(§3).
+    if _tc > 0:
+        st.markdown(f"**합계** — 매입 {_tc:,.0f}원 · 평가 {_tv:,.0f}원 · "
+                    f"손익 {_tv - _tc:+,.0f}원 · 수익률 {(_tv / _tc - 1) * 100:+.2f}%")
+    else:
+        st.caption("매입가·수량·현재가가 모두 있는 행이 없어 합계를 내지 않습니다.")
+
+
+def _wl_edit_from_query():
+    """?edit=<코드> 를 받아 **목록 편집기**를 켠다. 받은 즉시 파라미터를 지운다.
+
+    라운드 321 — 종전(라운드 320)엔 그 종목 하나만 입력칸을 열었다. 사용자가 *"리스트에서 ·
+    한번에 여러개"* 를 원해 편집 길을 **목록 편집기 하나**로 합쳤다(§4 — 길이 여럿이면 한쪽만
+    고치게 된다). 이 링크는 그 편집기를 켜는 길이다. 토글 위젯이 만들어지기 **전**(모듈 첫머리)에
+    불리므로 세션 키를 바꿔도 된다.
+    """
+    try:
+        raw = st.query_params.get('edit')
+    except Exception:                                      # noqa: BLE001
+        return
+    if not (raw and str(raw).strip()):
+        return
+    try:
+        del st.query_params['edit']
+    except Exception:                                      # noqa: BLE001
+        pass
+    code = portfolio.normalize_code(str(raw).strip())
+    if not code:
+        return                   # 못 읽으면 아무것도 안 연다 (§3)
+    if any(portfolio.normalize_code(x.get('code')) == code for x in _wl_items()):
+        st.session_state['wl_edit_mode'] = True
+        st.session_state['wl_edit_focus'] = code     # 편집기가 이 종목을 맨 위에 · 미보유면 칸을 펼친다
+
+
+_wl_edit_from_query()
 
 
 # ⚠️ 라운드 142 — 사용자 요청: "검색하는 종목에 관심추가 버튼도 넣어줘."
@@ -5530,7 +5775,9 @@ else:
     #   폭은 브라우저에서 재서 맞췄다 (실측 — 표 996px · 칸 사이 16px).
     #   버튼은 좌우 여백이 **20px 씩 고정**이라 61px 칸에서도 '빼기' 가
     #   두 줄로 접혔다 (61 − 40 = 21px < 글자 30px). 81px 로 넓혀 닫았다.
-    _WL_COLS = [1.35, 0.85, 0.9, 1.1, 1.0, 1.2, 1.2, 0.75, 1.15, 1.0]
+    # 라운드 321 — `_WL_COLS`(옛 행별 입력칸 격자의 열 너비)는 걷어냈다. 격자가 목록
+    #   편집기로 바뀌어 읽는 곳이 없다(죽은 값 · R164). 위의 열 묶음 이야기는 보기
+    #   표(`_WL_HDR`)가 그대로 따른다.
     #
     # ⚠️ 두 목표의 **기준은 열 이름에 남긴다** (§4 · §184). 라운드 30 에서
     #   신규 매수자 값과 보유자 값이 섞여 손절이 진입 위로 나갔다. 칸을
@@ -5565,21 +5812,35 @@ else:
         if _uc244[2].button('닫기', key='wl_undo_close', width='stretch'):
             st.session_state.pop('wl_undo', None)
             st.rerun()
-    _wl_edit = bool(st.toggle("매입가·수량 편집 · 빼기", key='wl_edit_mode', value=False,
-                              help="켜면 행마다 매입가·수량 입력칸과 '빼기'가 보입니다. "
-                                   "끄면 저장된 값을 글자로 보여 줍니다."))
+    # 라운드 320·321 — 매입가·수량 저장 직후 **되돌리기**. '빼기'(라운드 244)와 같은 원칙이다 —
+    #   확인 대화상자 대신 되돌릴 수 있게. 매입가를 비우면 보유 기록이 통째로 사라지는데, 첫
+    #   판은 되돌릴 길이 없었다(개발 중 실제로 보유 두 행이 비었다 — 누가 눌렀든 되돌릴 길이
+    #   있어야 했다). 바뀐 행들의 **옛 매입가·수량**을 쥐었다가 코드로 그 자리에 되적는다.
+    _ub321 = st.session_state.get('wl_undo_bulk')
+    if _ub321:
+        _uc321 = st.columns([4, 1, 1])
+        _uc321[0].info(f"매입가·수량 **{len(_ub321)}개** 종목을 바꿨습니다.")
+        if _uc321[1].button('되돌리기', key='wl_undo_bulk_btn', width='stretch'):
+            _back321, _ = _wl_apply_edits(
+                _wl_items(), {c: (v[0], v[1]) for c, v in _ub321.items()})
+            _wl_write(_back321, '되돌렸습니다')
+            st.session_state.pop('wl_undo_bulk', None)
+            st.session_state['wl_bulk_ver'] = int(st.session_state.get('wl_bulk_ver') or 0) + 1
+            st.rerun()
+        if _uc321[2].button('닫기', key='wl_undo_bulk_close', width='stretch'):
+            st.session_state.pop('wl_undo_bulk', None)
+            st.rerun()
+    # 라운드 321 — 토글 이름에서 '빼기'를 뺐다. 빼기는 라운드 244 부터 표의 행마다 늘 있고,
+    #   켜면 나오던 행별 입력칸 격자(와 그 안의 빼기 버튼)는 목록 편집기로 바뀌었다.
+    #   `value=` 는 안 준다 — 행의 '고치기' 링크가 모듈 첫머리에서 이 키를 켜는데, 기본값과
+    #   세션 값을 같이 주면 스트림릿이 화면에 경고를 띄운다.
+    _wl_edit = bool(st.toggle("매입가·수량 한꺼번에 고치기", key='wl_edit_mode',
+                              help="켜면 목록 편집기가 열립니다 — 여러 종목의 매입가·수량을 "
+                                   "고치면 손익이 곧바로 계산되고, 저장은 한 번에 합니다."))
     _WL_HDR = ('종목', '현재가', '목표 매수가',
                '1차 목표(진입가) · 2차 목표(현재가)',
                '적정가', '엔진 판단', '매입가', '수량',
                '매입가 대비 · 평가손익', '관심')
-    _wl_hdr = st.columns(_WL_COLS) if _wl_edit else None
-    # 라운드 186 — '(권장가)' → '(진입가)'. 관심종목에는 추천 아닌 종목이
-    # 섞이므로 열 이름의 '권장'은 절반의 행에서 거짓이다. '진입가'는 어느
-    # 행에서도 참인 기준 표기다 (verdict_core.price_basis 와 같은 낱말).
-    for _c, _h in zip(_wl_hdr or (), _WL_HDR):
-        _c.markdown(f"<div style='font-size:12px; color:{_TOK['tx3']}; "
-                    f"padding-bottom:6px; line-height:1.35;'>"
-                    f"{_uk._esc(_h)}</div>", unsafe_allow_html=True)
 
     def _wl_cell(v, na='—'):
         """엔진 값 한 칸. 없으면 지어내지 않고 '—' 로 둔다 (§3)."""
@@ -5613,7 +5874,6 @@ else:
                if (_ret is not None and qty) else None)
         return _ret, _pl
 
-    _wl_dirty = False
     #: 아래 '내 포트폴리오 견해'가 쓸 재료 (라운드 169) — 표를 그리면서
     #: 모은다. 판단을 **두 번 계산하지 않는다** (§4).
     _wl_acts = []
@@ -5664,6 +5924,11 @@ else:
         # 못 받으면 None 그대로 — 0 원으로 채우지 않는다 (§3)
         _ppx = light_quote(f"{_pc}.KS") or light_quote(f"{_pc}.KQ")
         _wl_pre[_pi] = (_ppx, _uk.watch_action(_pr, _ppx))
+    # 라운드 321 — 목록 편집기. 토글(또는 행의 '고치기')로 켜면 보기 표 **위에** 열린다.
+    #   현재가는 방금 정렬에 쓴 값(`_wl_pre`)을 그대로 넘긴다 — 두 번 안 받는다(§4).
+    if _wl_edit:
+        _wl_bulk_editor({portfolio.normalize_code(_wl_body[_bi].get('code')): _bv[0]
+                         for _bi, _bv in _wl_pre.items()})
     def _wl_kind_of(act):
         """무리 순서표가 쓰는 kind — '지금 매수 가능'(목표가 이하)은 별도 이름이다.
         우선순위 줄과 표 정렬이 **같은 함수**를 쓴다 (§4 — 두 곳에 두면 갈라진다)."""
@@ -5748,260 +6013,102 @@ else:
                    + " — 종목의 좋고 나쁨을 매긴 순위가 아닙니다. 같은 날 종목을 점수로 "
                      "세우는 것에는 정보가 없었습니다(개발 구간 166,132건 · 기준일 "
                      "2,609일 · 2026-08-16 실측).")
-        if not _wl_edit:
-            # ── 라운드 229 — 보기 모드: HTML 표 하나 (행 ≈ 36px). 값의 출처는 편집 모드와
-            #   같다(_wl_pre · 저장된 매입가·수량 · _wl_fair_conf · _wl_pnl · watch_action).
-            #   이름은 ?pick= 링크 — 이름 버튼과 같은 pending_search 경로다(§4 · R164).
-            #   종전엔 30행 × 10칸의 위젯 격자라 절 하나가 5,4xx px(화면 6장)였다.
-            import urllib.parse as _up229
-            _trs229 = []
-            for _wi, _w in _grows:
-                _wcode = str(_w.get('code'))
-                _px_w, _act = _wl_pre[_wi]
-                _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
-                _paid229 = float(_w.get('paid') or 0.0)
-                _qty229 = int(_w.get('qty') or 0)
-                _ret229, _pl229 = _wl_pnl(_px_w, _paid229, _qty229)
-                _fct229, _fcc229 = _wl_fair_conf(_w)
-                _href229 = "?pick=" + _up229.quote(f"{_w.get('name') or _wcode} ({_wcode})")
-                if not _act:
-                    _jd229 = f"<span style='color:{_TOK['tx3']};'>아직 안 잼</span>"
-                else:
-                    _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
-                              f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
-                    # 라운드 240 (사용자 지적) — 미보유 행은 '추천 제외' 같은 **결론만**
-                    #   적고 왜인지는 안 적었다: *"적정가는 현재가보다 높은데 추천 제외라고
-                    #   하니깐."* 사유는 중앙 판정이 이미 내고 있었다(exclude_reason). 결론
-                    #   아래 한 줄로 적고, 긴 것은 잘라 전체는 툴팁에 둔다. 판정 불변.
-                    #   라운드 241 — **보여 줄지**는 킷이 정한다(why_line). 화면이
-                    #   직접 읽으면 제외가 풀린 행에 옛 사유가 남는다 (§4).
-                    _wy240 = str(_act.get('why_line') or '')
-                    if _wy240:
-                        _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
-                        _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
-                                   f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
-                    _adl229 = _act.get('avg_down_label') if _act.get('held') else None
-                    if _adl229:
-                        _adc229 = (_TOK['pos'] if _act.get('avg_down_ok')
-                                   else _TOK['tx3'] if _act.get('avg_down_class') == '보류'
-                                   else _TOK['warn'])
-                        _jd229 += (f"<br><span style='font-size:12px; color:{_adc229};' "
-                                   f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
-                                   f"{_uk._esc(_adl229)}</span>")
-                if _ret229 is None:
-                    _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
-                else:
-                    _rc229 = _TOK['up'] if _ret229 >= 0 else _TOK['down']
-                    _pnl229 = (f"<span style='color:{_rc229}; font-weight:600;'>{_ret229:+.1f}%</span>"
-                               + (f"<br><span style='font-size:12px; color:{_rc229};'>{_pl229:+,.0f}원</span>"
-                                  if _pl229 is not None else
-                                  f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>수량 미입력</span>"))
-                _trs229.append(
-                    "<tr>"
-                    f"<td><a href='{_uk._esc_attr(_href229)}' target='_self' style='color:{_TOK['tx1']}; "
-                    f"text-decoration:none; font-weight:600;'>{_uk._esc(_w.get('name') or _wcode)}</a>"
-                    f"<span style='color:{_TOK['tx3']}; font-size:12px;'> {_uk._esc(_wcode)}</span></td>"
-                    f"<td class='n'>{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</td>"
-                    f"<td class='n'>{_wl_cell(_w.get('snap_buy'))}</td>"
-                    f"<td class='n'><span style='color:{_TOK['tx3']};'>1차 </span>{_wl_cell(_w.get('snap_t1'))}"
-                    f"<br><span style='color:{_TOK['tx3']};'>2차 </span>{_wl_cell(_w.get('snap_t2'))}</td>"
-                    f"<td class='n'>{_wl_cell(_w.get('snap_fair'))}<br><span style='font-size:12px; "
-                    f"color:{_fcc229};'>{_uk._esc(_fct229)}</span></td>"
-                    f"<td>{_jd229}</td>"
-                    f"<td class='n'>{_wl_cell(_paid229) if _paid229 > 0 else '—'}</td>"
-                    f"<td class='n'>{(f'{_qty229:,}주' if _qty229 > 0 else '—')}</td>"
-                    f"<td class='n'>{_pnl229}</td>"
-                    # 라운드 244 — 행마다 빼기. 이름 링크와 같은 길(쿼리 파라미터)이라
-                    #   행 높이가 그대로다. 되돌리기는 표 위에 나온다.
-                    f"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' "
-                    f"title='관심종목에서 뺍니다 — 바로 되돌릴 수 있습니다' "
-                    f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
-                    f"빼기</a></td>"
-                    "</tr>")
-            # 라운드 244 — 칸이 9 → 10 이다('관심'). 칸을 더하면 값이 잘려 보이므로
-            #   (라운드 201) 새 칸은 글자 하나짜리 링크뿐이고 숫자 칸은 안 건드렸다.
-            _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8, 9) else ''}>{_uk._esc(_h229)}</th>"
-                              for _i229, _h229 in enumerate(_WL_HDR))
-            st.markdown(
-                f"<div style='overflow-x:auto;'><table style='width:100%; border-collapse:collapse; "
-                f"font-size:13px; line-height:1.35; color:{_TOK['tx2']};'>"
-                f"<thead><tr style='color:{_TOK['tx3']}; font-size:12px; text-align:left;'>{_ths229}</tr></thead>"
-                f"<tbody>{''.join(_trs229)}</tbody></table></div>"
-                f"<style>table td, table th {{ padding:6px 8px; border-bottom:1px solid {_TOK['border']}; "
-                f"vertical-align:top; white-space:nowrap; }} table td.n, table th.n {{ text-align:right; "
-                f"font-variant-numeric:tabular-nums; }}</style>",
-                unsafe_allow_html=True)
-            continue
+        # ── 라운드 229 → 321 — 보기 표는 **늘** 그린다. 편집은 위의 목록 편집기가 맡고
+        #   (셀을 고치면 그 표만 다시 계산 · 저장은 한 번에), 이 표는 저장된 값을 보여 준다.
+        # ── 라운드 229 — 보기 모드: HTML 표 하나 (행 ≈ 36px). 값의 출처는 편집 모드와
+        #   같다(_wl_pre · 저장된 매입가·수량 · _wl_fair_conf · _wl_pnl · watch_action).
+        #   이름은 ?pick= 링크 — 이름 버튼과 같은 pending_search 경로다(§4 · R164).
+        #   종전엔 30행 × 10칸의 위젯 격자라 절 하나가 5,4xx px(화면 6장)였다.
+        import urllib.parse as _up229
+        _trs229 = []
         for _wi, _w in _grows:
-            _wc = st.columns(_WL_COLS)
             _wcode = str(_w.get('code'))
-            with _wc[0]:
-                if st.button(f"{_w.get('name')} · {_wcode}", width='stretch',
-                             key=f"wlb_go_{_wcode}"):
-                    _go_stock(_wcode, _w.get('name'))
-                    st.rerun()
-            with _wc[1]:
-                # 못 받으면 '미수신'이라 쓴다 — 0 원으로 채우지 않는다 (§3)
-                # 라운드 214 — 정렬 때 한 번 받은 값을 그대로 쓴다 (두 번 안 받는다)
-                _px_w = _wl_pre[_wi][0]
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px;'>"
-                    f"{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</div>",
-                    unsafe_allow_html=True)
-            # ── 목표 매수가 — 읽기 전용 ─────────────────────────────
-            with _wc[2]:
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx2']};'>{_wl_cell(_w.get('snap_buy'))}</div>",
-                    unsafe_allow_html=True)
-            # ── 1차·2차 목표 한 칸 (라운드 171) ─────────────────────
-            # 기준(권장가/현재가)은 **열 이름에** 있다. 여기서는 어느 쪽인지만
-            # 표시하고, 제목 속성으로 한 번 더 풀어 쓴다.
-            with _wc[3]:
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx2']}; line-height:1.5;' "
-                    f"title='1차는 권장 진입가 기준 · "
-                    f"2차는 현재가 기준으로 잰 값입니다'>"
-                    f"<span style='color:{_TOK['tx3']};'>1차 </span>"
-                    f"{_wl_cell(_w.get('snap_t1'))}<br>"
-                    f"<span style='color:{_TOK['tx3']};'>2차 </span>"
-                    f"{_wl_cell(_w.get('snap_t2'))}</div>",
-                    unsafe_allow_html=True)
-            # ── 적정가 + 신뢰도 한 칸 (라운드 143 → 171) ─────────────
-            # 값과 신뢰도는 같이 다녀야 한다. 적정가 4,615원만 보여 주면
-            # "3배 싸다"는 인상만 남고 **그 4,615원을 믿을 수 있는지**는
-            # 안 보인다. 구간은 엔진이 이미 쓰는 70/55 를 재사용한다 (§2).
-            with _wc[4]:
-                _fct, _fcc = _wl_fair_conf(_w)        # 라운드 229 — 보기 모드와 같은 포맷터
-                st.markdown(
-                    f"<div style='padding-top:8px; font-size:13px; "
-                    f"color:{_TOK['tx2']}; line-height:1.5;'>"
-                    f"{_wl_cell(_w.get('snap_fair'))}<br>"
-                    f"<span style='font-size:12px; color:{_fcc};'>"
-                    f"{_uk._esc(_fct)}</span></div>",
-                    unsafe_allow_html=True)
-            # ── 엔진 판단 (라운드 166 → 169) ─────────────────────────
-            # 사용자 요청: *"엔진 판단부터 제대로 되도록 해줘. 지금 보유한
-            # 상태에서는 더 매수인지 매도인지, 없으면 매수인지."*
-            #
-            # 판단은 `_uk.watch_action()` **한 곳**에서 나온다 (§4). 그 함수는
-            # 새 문턱을 만들지 않고 엔진이 발표한 가격선(hold_stop·hold_trim·
-            # 목표 매수가)과 현재가를 견주어 다시 말할 뿐이다.
-            with _wc[5]:
-                # 라운드 214 — 정렬 때 이미 낸 판단을 그대로 쓴다 (§4 — 두 번 안 센다)
-                _act = _wl_pre[_wi][1]
-                _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
-                if not _act:
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; "
-                        f"color:{_TOK['tx3']};'>아직 안 잼</div>",
-                        unsafe_allow_html=True)
-                else:
-                    # 물타기 한 줄 (라운드 214) — 보유분만, 찍힌 값이 있을 때만 (§3)
-                    _ad_ok = _act.get('avg_down_ok') if _act['held'] else None
-                    if _ad_ok is None:
-                        _ad_html = ''
-                    else:
-                        # 라운드 221 — '불가' 한 낱말이 셋을 뭉뚱그렸다: 시장 게이트
-                        #   하나에만 막힌 것 · 포지션 조건 미달 · 표본·데이터 미판정.
-                        #   라벨은 킷의 avg_down_class 가 낸다(§4 · 한 곳). 미판정은
-                        #   경고색이 아니라 회색 — 판단이 아니다(§3).
-                        _ad_cls = _act.get('avg_down_class')
-                        _ad_col = (_TOK['pos'] if _ad_ok
-                                   else _TOK['tx3'] if _ad_cls == '보류'
-                                   else _TOK['warn'])
-                        _ad_html = (
-                            f"<br><span style='font-size:12px; color:{_ad_col};' "
-                            f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
-                            f"{_uk._esc(_act.get('avg_down_label') or ('물타기 가능' if _ad_ok else '물타기 불가'))}"
-                            f"</span>")
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; "
-                        f"color:{_TOK[_act['tone']]};' "
-                        f"title='{_uk._esc_attr(_act['why'])}'>"
-                        f"{_uk._esc(_act['label'])}"
-                        + (f"<br><span style='font-size:12px; "
-                           f"color:{_TOK['tx3']};'>보유 기준</span>"
-                           if _act['held'] else '')
-                        + _ad_html
-                        + "</div>", unsafe_allow_html=True)
-            # ── 사용자 입력 두 칸 ────────────────────────────────────
-            with _wc[6]:
-                if _wl_edit:
-                    # format='%.0f' — 소수점 두 자리가 좁은 칸에서 자리를 먹어
-                    # 값이 잘렸다. 원 단위라 소수점이 뜻이 없다.
-                    _pd = st.number_input(
-                        "매입가", min_value=0.0, step=100.0, format='%.0f',
-                        value=float(_w.get('paid') or 0.0),
-                        key=f"wl_pd_{_wcode}", label_visibility='collapsed')
-                else:
-                    # 라운드 229 — 보기 모드: 저장된 값을 글자로 (없으면 '—' · §3)
-                    _pd = float(_w.get('paid') or 0.0)
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; color:{_TOK['tx2']};'>"
-                        f"{_wl_cell(_pd) if _pd > 0 else '—'}</div>", unsafe_allow_html=True)
-            with _wc[7]:
-                if _wl_edit:
-                    _qt = st.number_input(
-                        "수량", min_value=0, step=1,
-                        value=int(_w.get('qty') or 0),
-                        key=f"wl_qt_{_wcode}", label_visibility='collapsed')
-                else:
-                    _qt = int(_w.get('qty') or 0)
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; color:{_TOK['tx2']};'>"
-                        f"{f'{_qt:,}주' if _qt > 0 else '—'}</div>", unsafe_allow_html=True)
-            # ── 매입가 대비 · 평가손익 (라운드 171) ─────────────────
-            # ⚠️ 방금 입력된 값(`_pd`·`_qt`)으로 센다 — 저장본이 아니라.
-            #   저장본으로 세면 방금 고친 값이 한 판 늦게 반영돼 화면이
-            #   스스로 어긋난다 (§4).
-            # ⚠️ 현재가를 못 받았으면 **비운다.** 0 으로 채우지 않는다 (§3).
-            _ret_w, _pl_w = _wl_pnl(_px_w, _pd, _qt)        # 라운드 229 — 보기 모드와 같은 포맷터
-            with _wc[8]:
-                if _ret_w is None:
-                    # 매입가를 안 적었거나 현재가를 못 받았다 — 지어내지 않는다
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; "
-                        f"color:{_TOK['tx3']};'>—</div>", unsafe_allow_html=True)
-                else:
-                    # 한국 관행 — 오르면 빨강, 내리면 파랑 (§5)
-                    _rt_col = _TOK['up'] if _ret_w >= 0 else _TOK['down']
-                    _pl_line = (
-                        f"<br><span style='font-size:12px;'>{_pl_w:+,.0f}원</span>"
-                        f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
-                        f"매입 {float(_pd) * float(_qt):,.0f}원</span>"
-                        if _pl_w is not None else
-                        f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
-                        f"수량 미입력</span>")
-                    st.markdown(
-                        f"<div style='padding-top:8px; font-size:13px; "
-                        f"font-weight:600; line-height:1.5; color:{_rt_col};'>"
-                        f"{_ret_w:+.1f}%{_pl_line}</div>",
-                        unsafe_allow_html=True)
-            with _wc[9]:
-                if _wl_edit and st.button("빼기", width='stretch', key=f"wlb_del_{_wcode}"):
-                    _wl_remove(_wcode)
-                    st.rerun()
-            # 입력이 바뀌었으면 그때만 저장한다 (매 rerun 마다 쓰지 않는다)
-            if ((_w.get('paid') or None) != (_pd or None)
-                    or int(_w.get('qty') or 0) != int(_qt or 0)):
-                _new = dict(_w)
-                _new['paid'] = _pd or None
-                _new['qty'] = _qt or None
-                _wl_body[_wi] = _new
-                _wl_dirty = True
-    if _wl_dirty:
-        _wl_write(_wl_body)
-        # ⚠️ 라운드 184 — 사용자 요청: *"평단이랑 갯수 넣으면 자동적으로
-        #   내 포트폴리오 견해에 반영 및 보유중으로 이동해야지."*
-        #   보유/안 산 것 묶음과 포트폴리오 견해는 이 render 의 **첫머리**
-        #   에서 계산되므로, 방금 입력한 값은 다음 rerun 에야 반영됐다 —
-        #   한 번 더 눌러야 움직이는 화면이었다. 저장 직후 rerun 해서
-        #   즉시 이동·반영되게 한다.
-        #   무한 rerun 없음 — rerun 뒤에는 입력값과 저장값이 같아
-        #   `_wl_dirty` 가 다시 서지 않는다.
-        st.rerun()
+            _px_w, _act = _wl_pre[_wi]
+            _wl_acts.append((str(_w.get('name') or _wcode), _act, _w, _px_w))
+            _paid229 = float(_w.get('paid') or 0.0)
+            _qty229 = int(_w.get('qty') or 0)
+            _ret229, _pl229 = _wl_pnl(_px_w, _paid229, _qty229)
+            _fct229, _fcc229 = _wl_fair_conf(_w)
+            _href229 = "?pick=" + _up229.quote(f"{_w.get('name') or _wcode} ({_wcode})")
+            if not _act:
+                # 라운드 322 — '아직 안 잼'만 적으면 어떻게 재는지 모른다. 채우는 길을 같은 칸에.
+                _jd229 = (f"<span style='color:{_TOK['tx3']};'>아직 안 잼</span>"
+                          f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
+                          f"아래 '지금 계산해서 채우기' · 또는 이름을 눌러 열기</span>")
+            else:
+                _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
+                          f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
+                # 라운드 240 (사용자 지적) — 미보유 행은 '추천 제외' 같은 **결론만**
+                #   적고 왜인지는 안 적었다: *"적정가는 현재가보다 높은데 추천 제외라고
+                #   하니깐."* 사유는 중앙 판정이 이미 내고 있었다(exclude_reason). 결론
+                #   아래 한 줄로 적고, 긴 것은 잘라 전체는 툴팁에 둔다. 판정 불변.
+                #   라운드 241 — **보여 줄지**는 킷이 정한다(why_line). 화면이
+                #   직접 읽으면 제외가 풀린 행에 옛 사유가 남는다 (§4).
+                _wy240 = str(_act.get('why_line') or '')
+                if _wy240:
+                    _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
+                    _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
+                               f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
+                # 라운드 322 — 이름표 대신 **짧은 한 줄**(무엇을 하라는 말인지 · 진입가까지)을 쓴다.
+                #   '물타기 가능'만 적으면 진입가 위인 행도 *지금 사라*로 읽혔다(사용자 지적).
+                _adl229 = ((_act.get('avg_down_short') or _act.get('avg_down_label'))
+                           if _act.get('held') else None)
+                if _adl229:
+                    _adc229 = (_TOK['pos'] if _act.get('avg_down_ok')
+                               else _TOK['tx3'] if _act.get('avg_down_class') in ('보류', None)
+                               else _TOK['warn'])
+                    _jd229 += (f"<br><span style='font-size:12px; color:{_adc229};' "
+                               f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
+                               f"{_uk._esc(_adl229)}</span>")
+            if _ret229 is None:
+                _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
+            else:
+                _rc229 = _TOK['up'] if _ret229 >= 0 else _TOK['down']
+                _pnl229 = (f"<span style='color:{_rc229}; font-weight:600;'>{_ret229:+.1f}%</span>"
+                           + (f"<br><span style='font-size:12px; color:{_rc229};'>{_pl229:+,.0f}원</span>"
+                              if _pl229 is not None else
+                              f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>수량 미입력</span>"))
+            _trs229.append(
+                "<tr>"
+                f"<td><a href='{_uk._esc_attr(_href229)}' target='_self' style='color:{_TOK['tx1']}; "
+                f"text-decoration:none; font-weight:600;'>{_uk._esc(_w.get('name') or _wcode)}</a>"
+                f"<span style='color:{_TOK['tx3']}; font-size:12px;'> {_uk._esc(_wcode)}</span></td>"
+                f"<td class='n'>{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</td>"
+                f"<td class='n'>{_wl_cell(_w.get('snap_buy'))}</td>"
+                f"<td class='n'><span style='color:{_TOK['tx3']};'>1차 </span>{_wl_cell(_w.get('snap_t1'))}"
+                f"<br><span style='color:{_TOK['tx3']};'>2차 </span>{_wl_cell(_w.get('snap_t2'))}</td>"
+                f"<td class='n'>{_wl_cell(_w.get('snap_fair'))}<br><span style='font-size:12px; "
+                f"color:{_fcc229};'>{_uk._esc(_fct229)}</span></td>"
+                f"<td>{_jd229}</td>"
+                f"<td class='n'>{_wl_cell(_paid229) if _paid229 > 0 else '—'}</td>"
+                f"<td class='n'>{(f'{_qty229:,}주' if _qty229 > 0 else '—')}</td>"
+                f"<td class='n'>{_pnl229}</td>"
+                # 라운드 244 — 행마다 빼기. 이름 링크와 같은 길(쿼리 파라미터)이라
+                #   행 높이가 그대로다. 되돌리기는 표 위에 나온다.
+                f"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' "
+                f"title='관심종목에서 뺍니다 — 바로 되돌릴 수 있습니다' "
+                f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
+                f"빼기</a>"
+                # 라운드 320 — 같은 칸에 '고치기'(그 종목 하나만 매입가·수량 입력칸을 연다).
+                #   빼기와 같은 길(쿼리 파라미터)이라 행 높이·칸 수가 그대로다.
+                f"<br><a href='?edit={_uk._esc_attr(_wcode)}' target='_self' "
+                f"title='이 종목의 매입가·수량을 고칩니다' "
+                f"style='color:{_TOK['brand']}; text-decoration:none; font-size:12px;'>"
+                f"고치기</a></td>"
+                "</tr>")
+        # 라운드 244 — 칸이 9 → 10 이다('관심'). 칸을 더하면 값이 잘려 보이므로
+        #   (라운드 201) 새 칸은 글자 하나짜리 링크뿐이고 숫자 칸은 안 건드렸다.
+        _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8, 9) else ''}>{_uk._esc(_h229)}</th>"
+                          for _i229, _h229 in enumerate(_WL_HDR))
+        st.markdown(
+            f"<div style='overflow-x:auto;'><table style='width:100%; border-collapse:collapse; "
+            f"font-size:13px; line-height:1.35; color:{_TOK['tx2']};'>"
+            f"<thead><tr style='color:{_TOK['tx3']}; font-size:12px; text-align:left;'>{_ths229}</tr></thead>"
+            f"<tbody>{''.join(_trs229)}</tbody></table></div>"
+            f"<style>table td, table th {{ padding:6px 8px; border-bottom:1px solid {_TOK['border']}; "
+            f"vertical-align:top; white-space:nowrap; }} table td.n, table th.n {{ text-align:right; "
+            f"font-variant-numeric:tabular-nums; }}</style>",
+            unsafe_allow_html=True)
 
     _old_memo = [(str(_w.get('name') or ''), str(_w.get('memo') or ''))
                  for _w in _wl_items() if str(_w.get('memo') or '').strip()]
@@ -6064,7 +6171,13 @@ else:
             return '판정 사유'
         return ''
 
-    _fill_missing = [w for w in _wl_items() if _wl_needs_fill(w)]
+    # 라운드 322 — 채우는 **순서**. 종전엔 관심종목 파일 순서라, 새로 담아 **맨 끝**에 붙은 종목
+    #   (한 번도 안 잰 것)이 한 번에 5개씩 채우는 차례에서 3번째 누름에야 닿았다(실측 15개 중
+    #   15번째 · 사용자: *"아직 안 잼인데 개선해주고"*). 급한 순으로 세운다 — ① 보유 행
+    #   ② 한 번도 안 잰 행('엔진 값') ③ 나머지. 같은 자리 안에서는 파일 순서 그대로(안정 정렬).
+    _fill_missing = sorted([w for w in _wl_items() if _wl_needs_fill(w)],
+                           key=lambda w: (0 if w.get('paid') else 1,
+                                          0 if _wl_needs_fill(w) == '엔진 값' else 1))
     _nwhy241 = sum(1 for w in _fill_missing
                    if _wl_needs_fill(w) == '판정 사유')
     #: 한 번에 몇 개까지. 오래 걸린다는 사실을 숨기지 않고 나눠 돌린다.
@@ -6296,8 +6409,8 @@ else:
             if k not in _WL_SELL_RANK:                    # 순서표에 없는 kind 도 버리지 않는다
                 _chips226.append(dict(label=k, count=len(v), tone='tx2'))
         if _n_avg_ok226:
-            _chips226.append(dict(label='물타기 가능', count=_n_avg_ok226, tone='pos',
-                                  sub='진입가 이하에서만'))
+            _chips226.append(dict(label='추가매수 조건 통과', count=_n_avg_ok226, tone='pos',
+                                  sub='진입가 이하로 내려오면'))
         # 라운드 292 — 칩 차례는 `_WL_SELL_RANK` 를 그대로 따르므로 표와 같이 바뀐다.
         #   제목만 그 순서표가 실제로 무엇인지에 맞춘다(손댈 수 있는 것이 먼저).
         _uk.chip_row(_chips226, theme=_theme,
@@ -6481,7 +6594,7 @@ else:
             _gaps226.append(("매입가는 있고 수량이 없는 종목", _nm_noqty226,
                              "수량을 적어야 비중·물타기 판정이 나옵니다"))
         if _nm_avg_hold226:
-            _gaps226.append(("물타기 미판정 (표본·데이터 게이트)", _nm_avg_hold226,
+            _gaps226.append(("추가매수 판단 보류 (표본·데이터 게이트)", _nm_avg_hold226,
                              "불가가 아니라 판단하지 않은 것입니다 — 표본이 쌓이면 판정합니다"))
         if _nm_plan_exp226:
             _gaps226.append((f"보유 계획 창({_days226}일) 경과", _nm_plan_exp226,
