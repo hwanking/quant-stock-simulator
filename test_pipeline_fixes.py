@@ -26091,8 +26091,10 @@ check("채우기 순서 — 보유 행 먼저, 그다음 한 번도 안 잰 행 
       "_fill_missing = sorted([w for w in _wl_items() if _wl_needs_fill(w)]," in _w330
       and "key=lambda w: (0 if w.get('paid') else 1," in _w330
       and "0 if _wl_needs_fill(w) == '엔진 값' else 1))" in _w330)
+# 라운드 327 — 길을 **가리키던** 문구가 그 종목만 바로 재는 링크로 바뀌었다(사용자 지적 · §333 이 링크를 잠근다).
+#   이 검사가 지키려던 성질(칸에서 재는 길이 보인다)은 그대로 본다.
 check("'아직 안 잼' 칸이 채우는 길을 같은 칸에 적는다 (어떻게 재는지 모르면 안 잰 채로 남는다)",
-      "아래 '지금 계산해서 채우기' · 또는 이름을 눌러 열기" in _w330)
+      "지금 재기 (1~3분)</a>" in _w330 and "?measure={_uk._esc_attr(_wcode)}" in _w330)
 # 심기 — 채우기 순서 규칙을 돌려 본다(같은 키 식 · 파일 순서가 뒤집히는지)
 _rows330 = [dict(code='a', snap_at='x', snap_buy=1, snap_bucket='b'),          # 미보유 · 사유만 없음
             dict(code='b'),                                                     # 미보유 · 한 번도 안 잼
