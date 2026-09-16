@@ -521,6 +521,20 @@ def answer(question, ctx):
     # 원문 q 는 그대로 두고 평단 추출 등 다른 곳에서 계속 쓴다.
     intent = intent_of(q)
     used = ''
+    # ── 라운드 328 — 설명 질문 ("○○가 뭐야?") ─────────────────────────────────────
+    #   사용자: *"챗봇처럼 말처럼 대답 · 시스템 안쪽 수정은 안 되지만 전체적인 거 다 설명할 수 있게."*
+    #   **강한 신호**(뭐야·뜻·의미·설명·모르겠…)면 종목 질문보다 먼저 사전을 찾는다 — "물타기가 뭐야?" 는 보유자
+    #   질문이 아니라 말뜻 질문이다. **약한 신호**(알려줘…)는 종목 질문으로 못 알아들었을 때만 찾는다 — "진입가
+    #   알려줘" 는 가격 질문이다. 사전은 **설명만** 한다(이 종목의 값은 안 만든다 · gaeum_glossary 머리말).
+    import gaeum_glossary as _gl
+    _gl_hit = None
+    if _gl.is_explain_question(q) or (_gl.is_weak_explain(q) and intent in (None, 'verdict')):
+        _gl_hit = _gl.lookup(q)
+    if _gl_hit:
+        _title, _body = _gl_hit
+        return (f"**{_title}** — 쉽게 말씀드릴게요.\n\n{_body}\n\n"
+                f"이 종목에 대입해서 보고 싶으시면 \"지금 사도 돼?\" · \"왜 지금 매수를 막았어?\" 처럼 물어보세요. "
+                f"그래도 이해가 안 되시면 아래 '메일로 물어보기'를 눌러 주세요.")
     if intent == 'holder':
         avg = _avg_from_question(q, ctx.get('price')) or ctx.get('user_avg')
         body = _ans_holder(ctx, avg)
@@ -565,9 +579,47 @@ def answer(question, ctx):
         else:
             body = ('이 질문은 제가 아직 못 알아들었습니다. 없는 값을 지어내는 대신 답하지 '
                     '않는 쪽을 택했습니다.\n'
-                    f'이렇게 물어보시면 답합니다 — {_eg}\n\n'
+                    f'이렇게 물어보시면 답합니다 — {_eg} · 말뜻은 "○○가 뭐야?" 처럼요.\n'
+                    "그래도 해결이 안 되면 아래 '메일로 물어보기'로 보내 주세요.\n\n"
                     f'참고로 {_nm} 의 **오늘 결론**은 이렇습니다.\n' + _ans_verdict(ctx))
+    # 라운드 328 — 말처럼 시작한다(첫 줄 한마디 · 값은 그 아래 중앙 판정 문장 그대로). 인사·감사·못 알아들음은
+    #   이미 말로 시작하므로 안 붙인다.
+    _lead = _LEADS.get(intent)
+    if _lead:
+        body = _lead + '\n' + body
     return body + '\n\n' + _evidence(ctx, used)
+
+
+#: 의도별 말머리 (라운드 328) — 챗봇이 **말하듯** 시작하게 한다. 값·판정 문장은 건드리지 않는다.
+_LEADS = {
+    'buy_now': '결론부터 말씀드릴게요.',
+    'price_buy': '사는 가격부터 정리해 드릴게요.',
+    'price_sell': '파는 가격을 정리해 드릴게요.',
+    'holder': '갖고 계신 입장에서 보면요.',
+    'why_blocked': '왜 막혔는지 순서대로 말씀드릴게요.',
+    'fair_gap': '적정가 이야기를 해 볼게요.',
+    'news': '뉴스 쪽을 보면요.',
+    'similar': '과거에 비슷했던 자리를 찾아봤습니다.',
+    'prob_trust': '확률을 얼마나 믿어도 되는지 말씀드릴게요.',
+    'verdict': '오늘 이 종목을 한마디로 하면요.',
+}
+
+#: 이해가 안 될 때 질문을 보낼 곳 (라운드 328 · 사용자가 정한 주소). **사용자가 누르는** 메일 링크로만 쓴다 —
+#:   앱이 메일을 보내지 않고, 평단·수량 같은 개인 값은 본문에 넣지 않는다(§9 · PRIVATE_KEYS).
+CONTACT_EMAIL = 'hwanlab@gmail.com'
+
+
+def mailto_link(name, ticker, last_question=None):
+    """'메일로 물어보기' 링크 — **종목과 마지막 질문만** 싣는다.
+
+    ⚠️ 답은 싣지 않는다 — 보유자 답에는 평단이 들어갈 수 있다(§9 · PRIVATE_KEYS). 질문은 사용자가 직접 친
+    글이라 그대로 두되, 메일 창에서 보내기 전에 사용자가 고칠 수 있다(앱이 보내지 않는다)."""
+    from urllib.parse import quote
+    subj = f"[가늠] {name or ticker} 질문"
+    body = (f"종목: {name} ({ticker})\n"
+            f"질문: {last_question or '(여기에 적어 주세요)'}\n"
+            "\n무엇이 이해가 안 됐는지 적어 주세요:\n")
+    return f"mailto:{CONTACT_EMAIL}?subject={quote(subj)}&body={quote(body)}"
 
 
 QUICK_QUESTIONS = ('지금 사도 돼?', '얼마에 사야 해?', '얼마에 팔아?',

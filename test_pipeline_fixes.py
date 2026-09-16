@@ -26269,6 +26269,55 @@ check("③ 적정가 산출 불가 문장이 적자 사실(수신값)·쉬운 �
       and "_ood_gap = float(self.FV_CONF.get('out_of_domain_gap_pct', 70.0))" in _q333
       and "if raw_upside_pct < -_ood_gap:" in _q333)
 
+print("\n" + "=" * 72)
+print("§334 R328 — 가늠 AI 가 말뜻을 설명한다 · 말머리 · 메일로 물어보기 · 창 닫기/최소화 · 오른쪽 바와 본문 (2026-09-17)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"챗봇처럼 말처럼 대답 · 시스템 안쪽 수정은 안 되지만 전체적인 거 다 설명할 수 있게 · 이해가 안 되면
+#     메일 보내기로 · 챗봇에 닫기 혹은 최소화 버튼 · 전체적으로 오른쪽 바와 왼쪽 글의 위치도 맞춰주고."*
+#   ① 챗은 종목 질문만 알았다 — "적정가가 뭐야?" 는 적정가 **값** 답으로 갔다. 설명 사전(gaeum_glossary)을 두고
+#     강한 신호(뭐야·뜻…)면 먼저, 약한 신호(알려줘…)는 못 알아들었을 때만 찾는다.
+#   ② 답이 값 목록으로 시작했다 — 의도별 말머리 한 줄(값·판정 문장 불변).
+#   ③ 메일 링크는 **사용자 메일 프로그램**을 연다(앱은 안 보낸다) · 종목·마지막 질문만 · 답·평단 안 싣는다(§9).
+#   ④ 창에 닫기·최소화가 없었다(Esc·바깥 클릭만).
+#   ⑤ 넓은 화면(1761px+)에서 오른쪽 고정 요약 패널이 본문 오른쪽 약 220px 를 덮었다(실측 1920px).
+import gaeum_glossary as _gl334                                                    # noqa: E402
+import gaeum_chat as _gc334                                                        # noqa: E402
+_ctx334 = _gc334.build_context(name='시험종목', ticker='000001.KS', price=1000, core={}, fs={},
+                               verdict=dict(headline='지금은 사지 마세요', score=40))
+_ex334 = _gc334.answer('물타기가 뭐야?', _ctx334)
+_ex334b = _gc334.answer('적정가 산출 불가는 무슨 뜻이야?', _ctx334)
+_pb334 = _gc334.answer('진입가 알려줘', _ctx334)
+check("① 강한 신호의 말뜻 질문은 사전이 답한다 (구체적인 항목이 먼저 — '산출 불가'가 '적정가'보다 앞)",
+      '물타기(추가매수)' in _ex334 and '쉽게 말씀드릴게요' in _ex334
+      and '적정가 산출 불가' in _ex334b, _ex334b[:80])
+check("① 약한 신호('알려줘')의 가격 질문은 사전이 아니라 종목 답이다 (가격 질문을 설명으로 삼키지 않는다)",
+      '쉽게 말씀드릴게요' not in _pb334 and _gc334.intent_of('진입가 알려줘') == 'price_buy', _pb334[:80])
+check("① 사전 항목에 이모지·내부 참조(R·§·라운드 번호)가 없다 (화면 문자열 규칙)",
+      all(not _re.search(r'(§\d|\bR\d{2,3}\b|라운드\s*\d)', t + b) for _, t, b in _gl334.ENTRIES)
+      and len(_gl334.ENTRIES) >= 20, str(len(_gl334.ENTRIES)))
+check("② 종목 답은 말머리 한 줄로 시작하고 값 문장은 그 아래에 그대로다",
+      _gc334.answer('지금 사도 돼?', _ctx334).startswith('결론부터 말씀드릴게요.\n'))
+_ml334 = _gc334.mailto_link('시험종목', '000001.KS', '나 12,345원에 갖고 있는데 어떻게 해?')
+check("③ 메일 링크 — 정한 주소 · 제목에 종목 · 답은 안 싣는다 (평단이 든 답이 새지 않게)",
+      _ml334.startswith('mailto:hwanlab@gmail.com?subject=') and '%EA%B0%80%EB%8A%A0' in _ml334
+      and 'answer' not in _gc334.mailto_link.__code__.co_varnames, _ml334[:80])
+_w334 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("③ 창 안에 메일 링크가 있고 마지막 질문만 넘긴다",
+      "_gch.mailto_link(resolved_name, target_ticker, _last_q60)" in _w334
+      and "메일로 물어보기</a>" in _w334)
+check("④ 창 머리에 최소화·닫기 · 창일 때만 보인다 · 문서 전체에서 누름을 받는다",
+      "class='gn-ask-min'" in _w334 and "class='gn-ask-close'" in _w334
+      and ".gn-ask-head {{ display: none; }}" in _w334
+      and "body.gn-ask-ready.gn-ask-open .gn-ask-head {{" in _w334
+      and "e.target.closest('.gn-ask-close, .gn-ask-min, .gn-ask-head')" in _w334
+      and "body.gn-ask-ready.gn-ask-open.gn-ask-mini .st-key-gn_ask_panel {{" in _w334)
+check("⑤ 오른쪽 고정 패널이 보이는 폭에서만 본문 오른쪽을 패널 폭만큼 비운다 (패널 규칙의 수 그대로)",
+      "@media (min-width: 1761px) {{" in _w334
+      and "padding-right: calc(248px + 22px + 32px) !important;" in _w334
+      and ".qside {{ position: fixed; right: 22px; top: 120px; width: 248px;" in _w334
+      and "@media (max-width: 1760px) {{ .qside {{ display: none; }} }}" in _w334)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

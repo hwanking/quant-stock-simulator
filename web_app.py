@@ -8978,6 +8978,11 @@ st.markdown(f"""
    오른쪽 아래 '가늠 AI' 버튼과 겹치지 않게 아래를 비운다. */
 .qside {{ max-height: calc(100vh - 200px); overflow-y: auto; }}
 @media (max-width: 1760px) {{ .qside {{ display: none; }} }}
+/* 라운드 328 — 사용자: "전체적으로 오른쪽 바와 왼쪽 글의 위치도 맞춰주고." 실측(1920px): 패널은 x 1650~1898 에
+   떠 있는데 본문 글은 1870 까지 뻗어 **패널이 본문 오른쪽 약 220px 를 덮었다**. 패널이 보이는 폭에서만 본문
+   오른쪽을 패널 폭 + 오른쪽 여백 + 간격만큼 비운다(패널 규칙의 수를 그대로 쓴다 · 새 크기 아님). */
+@media (min-width: 1761px) {{
+  [data-testid="stMainBlockContainer"] {{ padding-right: calc(248px + 22px + 32px) !important; }} }}
 </style>
 <!-- 라운드 53c — 이 고정 패널이 '진입 검토가'로 recommended_buy_price 를,
      '1차 목표가'·'손절가'로 보유자 값을 이름표 없이 싣고 있었다. 화면 오른쪽에
@@ -9067,6 +9072,21 @@ body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{
   box-shadow: inset 0 0 0 1px {_TOK['border']}, 0 14px 44px rgba(0,0,0,.45); }}
 @media (max-width: 640px) {{
   body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{ right: 8px; bottom: 140px; }} }}
+/* 창 머리 — 제목 · 최소화 · 닫기 (라운드 328). 창일 때만 보인다. */
+.gn-ask-head {{ display: none; }}
+body.gn-ask-ready.gn-ask-open .gn-ask-head {{
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: -12px; z-index: 2; background: {_TOK['bg2']};
+  padding: 6px 0 8px 0; cursor: default; }}
+.gn-ask-head .gn-ask-title {{ font-size: 15px; font-weight: 700; color: {_TOK['tx1']}; }}
+.gn-ask-head a {{ color: {_TOK['tx2']}; text-decoration: none; font-size: 17px; line-height: 1;
+  padding: 4px 9px; border-radius: 8px; margin-left: 2px; }}
+.gn-ask-head a:hover {{ background: {_TOK['hover']}; color: {_TOK['tx1']}; }}
+/* 최소화 — 창은 머리만 남기고 오른쪽 아래로 내린다. 입력바는 숨긴다. 머리를 누르면 다시 편다. */
+body.gn-ask-ready.gn-ask-open.gn-ask-mini .st-key-gn_ask_panel {{
+  max-height: 52px; overflow: hidden; bottom: 18px; cursor: pointer; }}
+body.gn-ask-ready.gn-ask-open.gn-ask-mini [data-testid="stBottom"] {{
+  transform: translateY(115%); opacity: 0; pointer-events: none; }}
 </style>
 <a class="gn-ask-fab" id="gn-ask-fab" href="#nav-ask"
    title="{_uk._esc(resolved_name)}에 대해 물어보기"
@@ -9153,7 +9173,25 @@ try:
 
   fab.addEventListener('click', function (e) {
     e.preventDefault();
+    D.body.classList.remove('gn-ask-mini');
     open_();
+  });
+
+  // 창 머리의 최소화·닫기 (창은 이 스크립트보다 늦게 그려지므로 문서 전체에서 받는다).
+  D.addEventListener('click', function (e) {
+    const t = e.target.closest ? e.target.closest('.gn-ask-close, .gn-ask-min, .gn-ask-head') : null;
+    if (!t || !D.body.classList.contains('gn-ask-open')) return;
+    if (t.classList.contains('gn-ask-close')) {
+      e.preventDefault(); D.body.classList.remove('gn-ask-mini'); close_(); return;
+    }
+    if (t.classList.contains('gn-ask-min')) {
+      e.preventDefault(); D.body.classList.toggle('gn-ask-mini');
+      if (!D.body.classList.contains('gn-ask-mini')) setTimeout(toBottom_, 60);
+      return;
+    }
+    if (D.body.classList.contains('gn-ask-mini')) {   // 최소화된 머리를 누르면 다시 편다
+      D.body.classList.remove('gn-ask-mini'); setTimeout(toBottom_, 60);
+    }
   });
 
   // 고정 요약 패널의 '가늠 AI에게 물어보기 →' 도 같은 동작을 해야 한다.
@@ -9921,13 +9959,24 @@ try:
     #   창으로 뜬다(CSS 위). 차례는 채팅 앱처럼 **말풍선 → 추천 질문 → 입력**이다. 질문을 먼저
     #   처리해야 말풍선에 방금 답이 들어가므로, 말풍선 자리를 먼저 비워 두고 뒤에서 채운다.
     with st.container(key='gn_ask_panel'):
+        # 라운드 328 — 사용자: *"챗봇에 닫기 버튼 혹은 최소화 버튼도 넣어줘."* 창 머리(제목 · 최소화 · 닫기).
+        #   창으로 떠 있을 때만 보인다(CSS) — 페이지 안 구역일 때는 위 절 제목이 이미 있다. 누르는 동작은 스크립트가
+        #   문서 전체에서 받는다(창은 스크립트보다 늦게 그려진다). 글자는 이모지가 아니다(§5).
+        st.markdown(
+            f"<div class='gn-ask-head'><span class='gn-ask-title'>가늠 AI · {_uk._esc(resolved_name)}</span>"
+            f"<span><a href='#nav-ask' class='gn-ask-min' title='최소화' aria-label='최소화'>&#8212;</a>"
+            f"<a href='#nav-ask' class='gn-ask-close' title='닫기' aria-label='닫기'>&#215;</a></span></div>",
+            unsafe_allow_html=True)
         _hist60 = st.container()
-        st.caption("이런 걸 물어볼 수 있어요")
+        st.caption("이런 걸 물어볼 수 있어요 · 말뜻은 \"○○가 뭐야?\" 처럼")
         _qcols = st.columns(3)
         _pending_q = None
         for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
             if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
                 _pending_q = _qq
+        # 라운드 328 — 사용자: *"이게 이해가 안 되면 메일 보내기로 (주소)로 보낼 수 있게."* 누르면 **사용자의 메일
+        #   프로그램**이 종목·마지막 질문이 채워진 새 메일을 연다(앱은 보내지 않는다 · 답·평단은 안 싣는다 · §9).
+        _mail60 = st.empty()
     _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
                              key=f'{_ck60}_in')
     _ask60 = _typed_q or _pending_q
@@ -9936,6 +9985,13 @@ try:
         st.session_state[_ck60].append(('assistant',
                                         _gch.answer(_ask60, _ctx60)))
         st.session_state[_ck60] = st.session_state[_ck60][-12:]
+    _last_q60 = next((m for r, m in reversed(st.session_state[_ck60]) if r == 'user'), None)
+    _mail60.markdown(
+        f"<p style='margin:6px 0 2px 0; font-size:12px; color:{_TOK['tx3']};'>이해가 안 되면 "
+        f"<a href='{_uk._esc_attr(_gch.mailto_link(resolved_name, target_ticker, _last_q60))}' "
+        f"style='color:{_TOK['brand']}; text-decoration:none; font-weight:600;'>메일로 물어보기</a>"
+        f" · 종목과 마지막 질문만 담깁니다(평단 등은 안 담깁니다)</p>",
+        unsafe_allow_html=True)
     with _hist60:
         if not st.session_state[_ck60]:
             # 빈 창에 안내 말풍선 하나 — 무엇을 물으면 되는지 먼저 말한다(대화처럼 시작한다)
