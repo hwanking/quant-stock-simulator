@@ -2595,6 +2595,27 @@ def _wl_edit_from_query():
 _wl_edit_from_query()
 
 
+def _wl_measure_from_query():
+    """?measure=<코드> — 표의 '지금 재기'. 받은 즉시 파라미터를 지우고, 관심종목에 있는 종목이면
+    채우기 단계가 그 한 종목을 바로 재도록 세션에 남긴다(라운드 327). 못 읽으면 아무것도 안 한다(§3)."""
+    try:
+        raw = st.query_params.get('measure')
+    except Exception:                                      # noqa: BLE001
+        return
+    if not (raw and str(raw).strip()):
+        return
+    try:
+        del st.query_params['measure']
+    except Exception:                                      # noqa: BLE001
+        pass
+    code = portfolio.normalize_code(str(raw).strip())
+    if code and any(portfolio.normalize_code(x.get('code')) == code for x in _wl_items()):
+        st.session_state['wl_measure_code'] = code
+
+
+_wl_measure_from_query()
+
+
 # ⚠️ 라운드 142 — 사용자 요청: "검색하는 종목에 관심추가 버튼도 넣어줘."
 #   버튼은 라운드 135 부터 여기 있었지만 **접힌 칸 안**이라, 검색 직후에는
 #   보이지 않았다. 라운드 136 에서 "관심목록 어디서 봐?" 라고 물은 것과
@@ -6066,9 +6087,13 @@ else:
             _href229 = "?pick=" + _up229.quote(f"{_w.get('name') or _wcode} ({_wcode})")
             if not _act:
                 # 라운드 322 — '아직 안 잼'만 적으면 어떻게 재는지 모른다. 채우는 길을 같은 칸에.
+                # 라운드 327 — 사용자: *"아직 안 잼 · 아래 '지금 계산해서 채우기' … 개선해주고."* 길을
+                #   가리키는 것으로는 부족했다(그 버튼은 화면 아래 · 5개씩 · 차례). 칸 자체를 **누르면 이
+                #   종목만 바로 재는 링크**로 만든다(`?measure=` · 채우기 버튼과 같은 코드).
                 _jd229 = (f"<span style='color:{_TOK['tx3']};'>아직 안 잼</span>"
-                          f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>"
-                          f"아래 '지금 계산해서 채우기' · 또는 이름을 눌러 열기</span>")
+                          f"<br><a href='?measure={_uk._esc_attr(_wcode)}' target='_self' "
+                          f"style='font-size:12px; color:{_TOK['brand']}; text-decoration:none;'>"
+                          f"지금 재기 (1~3분)</a>")
             else:
                 _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
                           f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
@@ -6081,6 +6106,11 @@ else:
                 _wy240 = str(_act.get('why_line') or '')
                 if _wy240:
                     _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
+                    # 라운드 327 — 사용자가 *"… 사…"* 를 짚었다. 같은 칸 폭(34자) 안에서 **첫 문장이 끝나면
+                    #   거기서** 자른다 — 낱말 가운데서 끊긴 조각보다 한 문장이 낫다. 전체는 그대로 툴팁에.
+                    _s327 = _wy240.find('다. ')
+                    if len(_wy240) > 34 and 0 < _s327 + 2 <= 34:
+                        _wys240 = _wy240[:_s327 + 2] + ' …'
                     _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
                                f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
                 # 라운드 322 — 이름표 대신 **짧은 한 줄**(무엇을 하라는 말인지 · 진입가까지)을 쓴다.
@@ -6233,8 +6263,19 @@ else:
                f"없습니다 — 채우면 '추천 제외' 아래에 왜인지 한 줄이 붙습니다."
                if _nwhy241 else ''))
         _todo166 = _fill_missing[:_WL_FILL_MAX]
-        if st.button(f"{len(_todo166)}종목 지금 계산해서 채우기",
-                     key='wl_fill_now', type='primary'):
+        # 라운드 327 — 표의 '지금 재기'(`?measure=`)로 고른 **한 종목**은 버튼을 안 눌러도 바로 잰다.
+        #   사용자가 누른 링크라 사용자가 시작한 것이고, 채우는 길은 이 버튼과 **같은 코드**다(§4).
+        _mcode327 = st.session_state.pop('wl_measure_code', None)
+        _mrow327 = [w for w in _fill_missing
+                    if portfolio.normalize_code(w.get('code')) == _mcode327] if _mcode327 else []
+        if _mrow327:
+            _todo166 = _mrow327[:1]
+            st.info(f"**{_todo166[0].get('name') or _mcode327}** 을(를) 지금 계산합니다 — 1~3분 걸립니다.")
+        _clicked166 = st.button(f"{len(_fill_missing[:_WL_FILL_MAX])}종목 지금 계산해서 채우기",
+                                key='wl_fill_now', type='primary')
+        if _clicked166:
+            _todo166 = _fill_missing[:_WL_FILL_MAX]
+        if _mrow327 or _clicked166:
             import verdict_core as _vc166
             import next_action as _na
             _bar166 = st.progress(0.0)

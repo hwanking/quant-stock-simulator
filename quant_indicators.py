@@ -2734,13 +2734,25 @@ class QuantIndicatorsEngine:
                     _ood_ctx.append(f"PBR {float(pbr):,.1f}배")
             except (TypeError, ValueError):
                 pass
+            # 라운드 327 — 사용자: *"시장조정 펀더멘털 적정가 미산출 · 산출 불가 — 멀티플 모델 적용 범위 밖 …
+            #   -84% 괴리 … 개선해줘."* 괄호 속 이유는 PER>100·PBR>10 일 때만 붙어, 그 밖(예: **적자**)에서는
+            #   *왜* 가 통째로 없었다. 수신한 값에서 **사실만** 더한다(적자면 적자라고 · 문턱 새로 안 만듦)
+            #   그리고 쉬운 말 한 줄과 **대신 볼 것**을 적는다. 게이트·문턱·값 불변(표시 문장).
+            try:
+                if in_eps is not None and float(in_eps) <= 0:
+                    _ood_ctx.insert(0, "최근 이익이 적자(주당순이익 0 이하)")
+            except (TypeError, ValueError):
+                pass
             _ood_note = (
                 f"산출 불가 — 멀티플 모델 적용 범위 밖. 모델 적정가가 시장가격과 "
                 f"{raw_upside_pct:+.0f}% 괴리"
                 + (f" ({', '.join(_ood_ctx)} — 이익·자산이 아니라 성장 기대가 "
                    f"가격을 지배)" if _ood_ctx else "")
                 + ". 이 구간에서는 현재 이익·장부가 기반 적정가가 성립하지 않아 "
-                  "숫자를 제시하지 않습니다.")
+                  "숫자를 제시하지 않습니다."
+                + " 쉽게 말하면 — 지금 주가가 회사가 버는 이익·가진 자산으로 계산한 값보다 훨씬 높아, "
+                  "시장이 앞으로의 성장이나 실적 회복을 먼저 값에 넣은 상태입니다. 이 계산법으로는 "
+                  "싸다·비싸다를 말할 수 없으니, 대신 매매 판정·차트의 원장 분포(같은 자리 과거 결과)를 보세요.")
             return {
                 'target_fundamental': curr_price, 'base_fair_value': curr_price,
                 'displayed_fair_value': None,

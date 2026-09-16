@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.09.16.1",
+  "model": "v2026.09.16.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.02.3",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.09.08.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.09.16.2",
+   "previous": "v2026.09.16.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "적정가 산출 불가(모델 적용 범위 밖) 문장에 적자 사실과 쉬운 설명·대신 볼 것",
+   "note": "라운드 327 — OUT_OF_DOMAIN 게이트·문턱(70%)·값 불변. 표시 문장만.",
+   "created_at": "2026-09-16T14:43:44+00:00",
+   "effective_from": "2026-09-16"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

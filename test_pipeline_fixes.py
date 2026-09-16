@@ -26227,6 +26227,46 @@ check("R326 금액으로 본 보유 — 손댈 수 있는 순 → 금액 큰 순
       and "'비중을 줄이세요/늘리세요' 같은 추천은 아직 하지 않습니다" in _w332
       and _os.path.exists(_os.path.join(PROJ, 'docs', 'PLAN_R326_PORTFOLIO_SIZING.md')))
 
+print("\n" + "=" * 72)
+print("§333 R327 — 옛 스냅샷의 '표본 대기' · '아직 안 잼'을 누르면 잰다 · 적정가 산출 불가를 쉬운 말로 (2026-09-16)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자 화면 셋: ① *"표본 대기 · 표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. 사…"* — R292(09-14)가
+#     이 사유를 '표본외 성적 미달'로 갈랐는데 09-10 스냅샷은 옛 이름을 안고 있었다 ② *"아직 안 잼 · 아래 '지금
+#     계산해서 채우기' · 또는 이름을 눌러 열기"* — 길만 가리키고 재지는 않았다 ③ *"시장조정 펀더멘털 적정가 미산출 ·
+#     산출 불가 — 멀티플 모델 적용 범위 밖 … -84% 괴리"* — 괄호 속 이유가 PER>100·PBR>10 에서만 붙어 적자 종목엔
+#     *왜* 가 없었다.
+import ui_kit as _uk333                                                          # noqa: E402
+_vc333 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+check("① 판별 낱말이 중앙 판정의 '표본외 성적 미달' 사유 문장 머리와 같다 (두 곳이 어긋나면 옛 가름이 조용히 죽는다)",
+      ("return '표본외 성적 미달', (\n            '" + _uk333.OOS_FAIL_WHY_HEAD) in _vc333)
+_row333 = dict(code='000001', name='x', snap_bucket='신뢰도·표본 확보 대기', snap_px=1000, snap_buy=900,
+               snap_why='표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. 사례가 쌓인다고 풀리는 조건이 아닙니다.')
+_a333 = _uk333.watch_action(_row333)
+_b333 = _uk333.watch_action(dict(_row333, snap_why='일봉이 모자라 학습·검증 구간을 나눌 수 없습니다.'))
+check("① 심기 — 옛 이름 + 성적 미달 사유 → '성적 미달' · 옛 이름 + 다른 사유 → 그대로 '표본 대기' (양방향)",
+      _a333['kind'] == '표본외 성적 미달' and _a333['label'] == '성적 미달'
+      and _b333['kind'] == '신뢰도·표본 확보 대기' and _b333['label'] == '표본 대기',
+      f"{_a333['label']} / {_b333['label']}")
+_w333 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("① 표의 사유 한 줄은 같은 폭(34자) 안에서 첫 문장이 끝나면 거기서 자른다 (전체는 툴팁)",
+      "_s327 = _wy240.find('다. ')" in _w333
+      and "if len(_wy240) > 34 and 0 < _s327 + 2 <= 34:" in _w333)
+check("② '아직 안 잼' 칸이 그 종목만 바로 재는 링크다 · 받는 길 하나 · 채우기 버튼과 같은 코드로 잰다",
+      "<a href='?measure={_uk._esc_attr(_wcode)}' target='_self' " in _w333
+      and "def _wl_measure_from_query():" in _w333 and "\n_wl_measure_from_query()\n" in _w333
+      and "del st.query_params['measure']" in _w333
+      and "_mcode327 = st.session_state.pop('wl_measure_code', None)" in _w333
+      and "if _mrow327 or _clicked166:" in _w333
+      and _w333.count("_snp166, _ = get_shared_snapshot(") == 1)
+_q333 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("③ 적정가 산출 불가 문장이 적자 사실(수신값)·쉬운 말·대신 볼 것을 적는다 · 게이트·문턱은 그대로",
+      '_ood_ctx.insert(0, "최근 이익이 적자(주당순이익 0 이하)")' in _q333
+      and "if in_eps is not None and float(in_eps) <= 0:" in _q333
+      and "쉽게 말하면 — 지금 주가가 회사가 버는 이익·가진 자산으로 계산한 값보다 훨씬 높아" in _q333
+      and "_ood_gap = float(self.FV_CONF.get('out_of_domain_gap_pct', 70.0))" in _q333
+      and "if raw_upside_pct < -_ood_gap:" in _q333)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
