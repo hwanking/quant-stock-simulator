@@ -4366,6 +4366,28 @@ if _pmr:
             _by_bucket.setdefault(_c.get('bucket') or '추천 제외', []).append(
                 (_g, _c))
         st.markdown("###### 오늘 추천에 올리지 못한 종목과 이유")
+        # ⚠️ 라운드 316 — 화면은 종목마다 미충족을 적지만 **무엇이 가장 자주
+        #   막는지**는 안 적었다. 사용자가 내내 묻는 자리다(*"왜 살 게 없어?"*).
+        #   R221 이 물타기에서 한 그 일 — *"전 종목이 같은 답이면 먼저 조건별로
+        #   센다"* — 을 추천 게이트에 한다. 자료는 이미 있다(`core.checks`).
+        #   ⚠️ 이 수는 **세어 본 것**이지 *"이 조건을 풀어야 한다"* 가 아니다 —
+        #   R223 이 업종 적중에서 겪은 그 자리(숫자만 보여 주면 그게 판단이 된다).
+        _cnt316, _tot316 = {}, 0
+        for _g316 in _picks_gated:
+            _ck316 = (_g316.get('core') or {}).get('checks') or []
+            if not _ck316:
+                continue
+            _tot316 += 1
+            for _c316 in _ck316:
+                if not _c316.get('ok'):
+                    _cnt316[_c316['name']] = _cnt316.get(_c316['name'], 0) + 1
+        if _tot316 and _cnt316:
+            _top316 = sorted(_cnt316.items(), key=lambda x: (-x[1], x[0]))[0]
+            st.caption(_md_safe(
+                f"오늘 후보 {_tot316}종목을 가장 많이 막은 조건은 "
+                f"**{_top316[0]}** 입니다 ({_top316[1]}/{_tot316}종목). "
+                f"조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 "
+                f"아닙니다."))
         for _bk in _vc_view.BUCKETS:
             _items = _by_bucket.get(_bk)
             if not _items:
