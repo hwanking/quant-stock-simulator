@@ -4060,8 +4060,17 @@ if st.session_state.get('show_screener', False):
                             _ec1.markdown(
                                 f"**{_r['name']}** `{_r['code']}` · "
                                 f"관심 {_r['attention']['adjusted_attention_score']:.0f}점  \n"
+                                # ⚠️ 라운드 314 — 여기가 `_why[:120]` 이었다. 사유가
+                                #   120자를 넘으면 **문장 중간에서 끊기고** 잘렸다는
+                                #   말도 없었다(R301 이 상한 사유 307자에서 고친 그
+                                #   모양 · R312 가 제외 사유 목록에서 고친 그 모양).
+                                #   이 칸은 종목마다 한 줄이고 사유는 한 문장이라
+                                #   **안 자르는 것**이 가장 짧은 고침이다.
+                                #   곁들여 이 문자열은 `unsafe_allow_html` 로 나가는데
+                                #   이스케이프를 안 지나고 있었다 — 킷의 기본 이스케이퍼를
+                                #   지나게 했다(R120e · 값·판정 불변).
                                 f"<span style='color:#F2B84B;font-size:13px;'>"
-                                f"제외 사유: {_why[:120]}</span>",
+                                f"제외 사유: {_uk._esc(_why)}</span>",
                                 unsafe_allow_html=True)
                             if _ec2.button("분석 →", key=f"attx_{_r['code']}",
                                            width='stretch'):
@@ -4943,7 +4952,13 @@ if st.session_state.get('show_portfolio'):
                            f"수익률·평가손익은 이 현재가 기준입니다. "
                            f"화면에서 읽은 값은 별도로 보관해 평단가·수량 검증에 씁니다.")
             if _pxfail:
-                st.caption("시세 조회 실패: " + ", ".join(_pxfail[:6]))
+                # ⚠️ 라운드 314 — 여기가 **수를 안 적고** 이름 여섯 개만 나열했다.
+                #   실패를 세어 찍는 것은 R37·R197 이 이미 정한 규칙이다(§3) —
+                #   *"몇 종목이 실패했나"* 가 없으면 여섯 개가 전부인지 알 수 없다.
+                st.caption(f"시세 조회 실패 {len(_pxfail)}종목: "
+                           + ", ".join(_pxfail[:6])
+                           + (f" 외 {len(_pxfail) - 6}종목"
+                              if len(_pxfail) > 6 else ''))
 
             # 실시간 시세 기준 평가 요약 — 원본 화면과 눈으로 대조할 수 있게
             _s_cost = sum((r.get('보유수량') or 0) * (r.get('평균매수가') or 0)
