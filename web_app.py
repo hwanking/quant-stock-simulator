@@ -7457,9 +7457,15 @@ if _etf_is:
 _fv_note_html = ""
 if (four_scores.get('displayed_fair_value') is None
         and four_scores.get('fair_value_status_note')):
+    # ⚠️ 라운드 315 — 여기가 `[:48]` 이었다. 엔진이 내는 사유는 이렇게 생겼다:
+    #   *"산출 불가 — 멀티플 모델 적용 범위 밖. 모델 적정가가 시장가격과 −89% 괴리
+    #   (PER 103배 — 이익·자산이 아니라 성장 기대가 가격을 지배). …"* (실측 110자)
+    #   48자에서 자르면 **괴리율까지만** 남고 *왜 그런지*가 통째로 사라진다 —
+    #   하필 사용자가 알고 싶은 부분이다(R240·R289·R298 의 '사유를 버리는' 자리).
+    #   이 칸은 타일 아래 캡션이라 길어도 접히지 않는다 — **안 자른다**.
     _fv_note_html = (f"<p style='margin: 2px 0 0 0; font-size: 12px; "
                      f"color: #9DAABC;'>"
-                     f"{_uk._esc_md(str(four_scores.get('fair_value_status_note'))[:48])}</p>")
+                     f"{_uk._esc_md(str(four_scores.get('fair_value_status_note')))}</p>")
 
 # 배당은 fetch_dividend_info 하나만 쓴다.
 # 구버전은 헤더와 하단 패널이 서로 다른 경로로 계산해 같은 종목의 DPS 가 두 값이었다
@@ -9409,9 +9415,13 @@ try:
                           f"({four_scores.get('fair_value_status')})",
                           '부정 참고' if _fg61 > 10 else '중립 참고'))
     else:
+        # 라운드 315 — 이 줄은 2열 목록의 오른쪽 칸이라 길면 줄이 커진다. 그래서
+        #   여기서는 자르되 **잘렸다고 보이게** 한다(말줄임). 전체 문장은 같은
+        #   화면의 적정가 타일 아래 캡션이 그대로 낸다 — 자른 것을 감추지 않는다(R301).
+        _fvn315 = str(four_scores.get('fair_value_status_note') or '적정가 미산출')
         _eng_rows.append(('펀더멘털', '미산출',
-                          str(four_scores.get('fair_value_status_note')
-                              or '적정가 미산출')[:40], '판단 불가'))
+                          _fvn315 if len(_fvn315) <= 40 else _fvn315[:40] + '…',
+                          '판단 불가'))
     # ⚠️ 라운드 81b — 이 줄의 n 은 **raw 건수**다. 같은 날 같은 업종
     #   종목은 함께 움직이므로 독립 관측이 아니다. 숫자만 보면 실제보다
     #   단단해 보인다. 그래서 그 업종의 **실측 ICC 를 옆에 적는다.**
