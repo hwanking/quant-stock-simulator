@@ -26185,7 +26185,8 @@ _w332 = _read148(_os.path.join(PROJ, 'web_app.py'))
 check("R324 대화 구역이 한 그릇에 담기고, 열리면 입력바 위 창으로 뜬다 (CSS · 그릇 열쇠가 같다)",
       "with st.container(key='gn_ask_panel'):" in _w332
       and "body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{" in _w332
-      and "position: fixed; right: 18px; bottom: 150px;" in _w332)
+      # 라운드 329 — 입력칸이 창 안으로 들어가 입력바 높이(140px)를 비워 둘 이유가 없어졌다(150px → 18px)
+      and "position: fixed; right: 18px; bottom: 18px;" in _w332)
 check("R324 창 안을 누르는 것은 닫기가 아니다 · 열면 최근 말풍선으로 내린다",
       "if (panel && panel.contains(e.target)) return;" in _w332
       and "p.scrollTop = p.scrollHeight;" in _w332 and "watch_();" in _w332)
@@ -26317,6 +26318,53 @@ check("⑤ 오른쪽 고정 패널이 보이는 폭에서만 본문 오른쪽을
       and "padding-right: calc(248px + 22px + 32px) !important;" in _w334
       and ".qside {{ position: fixed; right: 22px; top: 120px; width: 248px;" in _w334
       and "@media (max-width: 1760px) {{ .qside {{ display: none; }} }}" in _w334)
+
+print("\n" + "=" * 72)
+print("§335 R329 — 가늠 AI 질문 하나에 앱 전체가 다시 돌았다 · 대화만 다시 돈다 (2026-09-17)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"챗봇처럼 바로 말처럼 대답."* 추천 질문을 누르거나 입력하면 Streamlit 이 앱 전체(시세·엔진·차트·관심종목)를
+#   다시 돌려 답이 40~60초 뒤에 떴다. 답 조합기 자체는 밀리초다. 대화를 `st.fragment` 로 감싸 이 조각만 다시 돈다.
+#   브라우저 실측(조각 안 입력 · 네트워크 없는 시험 앱): 버튼·전송 뒤 전체 실행 1 그대로 · 조각 실행 1→2→3.
+#   조각 안의 입력칸은 하단 고정이 아니라 놓인 자리에 그려지므로 창 안 맨 아래로 옮겼다 — 그러면 하단 입력바가
+#   없어지므로 ① 준비 표시를 입력바 유무에 걸면 창이 영영 안 뜨고 ② 바깥 클릭 닫기가 입력바를 전제하면 안 닫힌다.
+import ast as _ast335                                                             # noqa: E402
+_w335 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_t335 = _ast335.parse(_w335)
+_frag335 = [n for n in _ast335.walk(_t335) if isinstance(n, _ast335.FunctionDef)
+            and any((isinstance(d, _ast335.Attribute) and d.attr == 'fragment') for d in n.decorator_list)]
+_chat335 = [f for f in _frag335
+            if any(isinstance(c, _ast335.Call) and isinstance(c.func, _ast335.Attribute) and c.func.attr == 'chat_input'
+                   for c in _ast335.walk(f))]
+_all_ci335 = [c for c in _ast335.walk(_t335) if isinstance(c, _ast335.Call)
+              and isinstance(c.func, _ast335.Attribute) and c.func.attr == 'chat_input']
+check("R329 가늠 AI 입력칸은 조각(st.fragment) 안에 있다 · 조각 밖 입력칸은 없다 (누름·입력이 앱 전체를 다시 돌리지 않게)",
+      len(_chat335) == 1 and len(_all_ci335) == 1, f"조각 {len(_frag335)} · 입력칸 든 조각 {len(_chat335)} · 입력칸 {len(_all_ci335)}",
+      scanned=len(_all_ci335))
+_fn335 = _chat335[0] if _chat335 else None
+_calls335 = ({c.func.attr for c in _ast335.walk(_fn335) if isinstance(c, _ast335.Call)
+              and isinstance(c.func, _ast335.Attribute)} if _fn335 else set())
+check("R329 조각 안에서 답을 만들고(answer) 말풍선·메일 링크까지 그린다 (조각 밖에서 그리면 다시 돌 때 안 바뀐다)",
+      {'answer', 'chat_message', 'mailto_link', 'chat_input'} <= _calls335, str(sorted(_calls335))[:200])
+check("R329 조각 재실행은 바깥 try 를 안 지나므로 예외를 조각 안에서 받는다",
+      bool(_fn335) and any(isinstance(s, _ast335.Try) for s in _fn335.body))
+_ci_in_panel335 = False
+if _fn335:
+    for _w in _ast335.walk(_fn335):
+        if isinstance(_w, _ast335.With) and "gn_ask_panel" in _ast335.unparse(_w.items[0].context_expr):
+            _ci_in_panel335 = any(isinstance(c, _ast335.Call) and isinstance(c.func, _ast335.Attribute)
+                                  and c.func.attr == 'chat_input' for c in _ast335.walk(_w))
+check("R329 입력칸은 창 그릇(gn_ask_panel) 안이다 · CSS 가 창 바닥에 붙인다",
+      _ci_in_panel335
+      and 'body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel [data-testid="stChatInput"] {{' in _w335
+      and 'position: sticky; bottom: -8px;' in _w335)
+_js335 = _w335[_w335.index("const fab = D.getElementById('gn-ask-fab');"):]
+_js335 = _js335[:_js335.index('</script>')]
+check("R329 준비 표시는 입력바 유무에 걸지 않는다 (입력바가 없어졌으므로 걸면 창이 영영 안 뜬다)",
+      "D.body.classList.add('gn-ask-ready');" in _js335
+      and "if (D.querySelector('[data-testid=\"stBottom\"]')) {" not in _js335)
+check("R329 바깥 클릭 닫기는 입력바가 없어도 된다",
+      "if ((!bar || !bar.contains(e.target)) && e.target !== fab" in _js335)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -9064,14 +9064,17 @@ body.gn-ask-open .gn-ask-fab {{
    (`st.container(key='gn_ask_panel')`) 열렸을 때 **입력바 바로 위에 뜨는 창**으로 띄운다 —
    대화·추천 질문·입력이 한 자리에 모인다. 닫히면 원래 자리의 구역으로 돌아간다. */
 body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{
-  position: fixed; right: 18px; bottom: 150px; z-index: 9991;   /* 입력바(실측 높이 140px) 바로 위 */
+  position: fixed; right: 18px; bottom: 18px; z-index: 9991;   /* 입력이 창 안에 있다 (라운드 329) */
   width: min(440px, calc(100vw - 28px)); max-height: min(62vh, 620px);
   overflow-y: auto; overscroll-behavior: contain;
   background: {_TOK['bg2']};
   border-radius: 16px; padding: 12px 14px 8px 14px;
   box-shadow: inset 0 0 0 1px {_TOK['border']}, 0 14px 44px rgba(0,0,0,.45); }}
 @media (max-width: 640px) {{
-  body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{ right: 8px; bottom: 140px; }} }}
+  body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel {{ right: 8px; bottom: 8px; }} }}
+/* 라운드 329 — 입력칸은 창 맨 아래에 붙어 있게(말풍선이 길어져도 스크롤 없이 바로 친다). */
+body.gn-ask-ready.gn-ask-open .st-key-gn_ask_panel [data-testid="stChatInput"] {{
+  position: sticky; bottom: -8px; z-index: 2; background: {_TOK['bg2']}; padding: 6px 0 8px 0; }}
 /* 창 머리 — 제목 · 최소화 · 닫기 (라운드 328). 창일 때만 보인다. */
 .gn-ask-head {{ display: none; }}
 body.gn-ask-ready.gn-ask-open .gn-ask-head {{
@@ -9134,11 +9137,10 @@ try:
     return D.scrollingElement || D.documentElement;
   }
 
-  // 입력바가 실제로 있을 때만 숨김 CSS 를 켠다. 없으면 켜 봐야 숨길
-  // 것도 없고, 혹시 선택자가 바뀌면 애먼 것을 지운다.
-  if (D.querySelector('[data-testid="stBottom"]')) {
-    D.body.classList.add('gn-ask-ready');
-  }
+  // 입력칸이 챗봇 창 **안**으로 들어가 하단 입력바(stBottom)가 없어졌다. 종전엔 입력바가
+  // 있을 때만 켰는데 이제 그 조건이면 창이 영영 안 뜬다. 스크립트가 붙었으면 켠다(못 붙으면 클래스가
+  // 안 생겨 대화 구역·입력이 페이지 안에 그대로 보인다 — 대화는 여전히 된다).
+  D.body.classList.add('gn-ask-ready');
 
   // 챗봇 창은 **가장 최근 말**이 보이게 연다. 질문을 보내면 Streamlit 이 다시
   //   그리면서 말풍선이 늘어나므로, 창 안이 바뀔 때마다 맨 아래로 내린다.
@@ -9214,7 +9216,7 @@ try:
     const panel = D.querySelector('.st-key-gn_ask_panel');
     if (panel && panel.contains(e.target)) return;
     if (e.target.closest && e.target.closest('.gn-ask-open-link')) return;
-    if (bar && !bar.contains(e.target) && e.target !== fab
+    if ((!bar || !bar.contains(e.target)) && e.target !== fab
         && !fab.contains(e.target)) {
       close_();
     }
@@ -9954,58 +9956,71 @@ try:
     _ck60 = f"gchat_{str(target_ticker).replace('.', '_')}"
     if _ck60 not in st.session_state:
         st.session_state[_ck60] = []
-    # ── 라운드 324 — 챗봇 창 (사용자: "자연스럽게 내가 물어보면 챗으로 대답 · 챗봇처럼") ──────
-    #   대화·추천 질문을 **한 그릇**(`gn_ask_panel`)에 담는다 — 알약을 누르면 이 그릇이 입력바 위에
-    #   창으로 뜬다(CSS 위). 차례는 채팅 앱처럼 **말풍선 → 추천 질문 → 입력**이다. 질문을 먼저
-    #   처리해야 말풍선에 방금 답이 들어가므로, 말풍선 자리를 먼저 비워 두고 뒤에서 채운다.
-    with st.container(key='gn_ask_panel'):
-        # 라운드 328 — 사용자: *"챗봇에 닫기 버튼 혹은 최소화 버튼도 넣어줘."* 창 머리(제목 · 최소화 · 닫기).
-        #   창으로 떠 있을 때만 보인다(CSS) — 페이지 안 구역일 때는 위 절 제목이 이미 있다. 누르는 동작은 스크립트가
-        #   문서 전체에서 받는다(창은 스크립트보다 늦게 그려진다). 글자는 이모지가 아니다(§5).
-        st.markdown(
-            f"<div class='gn-ask-head'><span class='gn-ask-title'>가늠 AI · {_uk._esc(resolved_name)}</span>"
-            f"<span><a href='#nav-ask' class='gn-ask-min' title='최소화' aria-label='최소화'>&#8212;</a>"
-            f"<a href='#nav-ask' class='gn-ask-close' title='닫기' aria-label='닫기'>&#215;</a></span></div>",
-            unsafe_allow_html=True)
-        _hist60 = st.container()
-        st.caption("이런 걸 물어볼 수 있어요 · 말뜻은 \"○○가 뭐야?\" 처럼")
-        _qcols = st.columns(3)
-        _pending_q = None
-        for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
-            if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
-                _pending_q = _qq
-        # 라운드 328 — 사용자: *"이게 이해가 안 되면 메일 보내기로 (주소)로 보낼 수 있게."* 누르면 **사용자의 메일
-        #   프로그램**이 종목·마지막 질문이 채워진 새 메일을 연다(앱은 보내지 않는다 · 답·평단은 안 싣는다 · §9).
-        _mail60 = st.empty()
-    _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
-                             key=f'{_ck60}_in')
-    _ask60 = _typed_q or _pending_q
-    if _ask60:
-        st.session_state[_ck60].append(('user', _ask60))
-        st.session_state[_ck60].append(('assistant',
-                                        _gch.answer(_ask60, _ctx60)))
-        st.session_state[_ck60] = st.session_state[_ck60][-12:]
-    _last_q60 = next((m for r, m in reversed(st.session_state[_ck60]) if r == 'user'), None)
-    _mail60.markdown(
-        f"<p style='margin:6px 0 2px 0; font-size:12px; color:{_TOK['tx3']};'>이해가 안 되면 "
-        f"<a href='{_uk._esc_attr(_gch.mailto_link(resolved_name, target_ticker, _last_q60))}' "
-        f"style='color:{_TOK['brand']}; text-decoration:none; font-weight:600;'>메일로 물어보기</a>"
-        f" · 종목과 마지막 질문만 담깁니다(평단 등은 안 담깁니다)</p>",
-        unsafe_allow_html=True)
-    with _hist60:
-        if not st.session_state[_ck60]:
-            # 빈 창에 안내 말풍선 하나 — 무엇을 물으면 되는지 먼저 말한다(대화처럼 시작한다)
-            with st.chat_message('assistant'):
-                st.markdown(_md_safe(
-                    f"안녕하세요. **{resolved_name}** 에 대해 편하게 물어보세요 — "
-                    f"'지금 사도 돼?' · '얼마에 사야 해?' · '왜 추천에서 빠졌어?' · "
-                    f"'나 OO원에 갖고 있는데 어떻게 해?' 처럼요."))
-                st.caption("답은 이 화면의 중앙 판정 값만 씁니다 — 다른 화면과 다른 "
-                           "가격을 만들지 않고, 없는 값은 없다고 말합니다. 평단 등 "
-                           "개인 정보는 이 PC 를 떠나지 않습니다.")
-        for _role60, _msg60 in st.session_state[_ck60]:
-            with st.chat_message(_role60):
-                st.markdown(_md_safe(_msg60))
+    # ── 라운드 329 — 질문 하나에 40~60초 (사용자: "챗봇처럼 바로 말처럼 대답") ─────────────────────
+    #   추천 질문을 누르거나 입력하면 Streamlit 이 **앱 전체**(시세·엔진·차트·관심종목)를 다시 돌린 뒤에야 답이 떴다.
+    #   답 자체는 조합기라 밀리초다 — 느린 것은 답이 아니라 다시 그리기였다. 대화를 조각(`st.fragment`)으로 감싸
+    #   누름·입력이 **이 조각만** 다시 돌게 한다. 맥락(`_ctx60`)은 마지막 전체 실행이 만든 것을 그대로 쓴다 —
+    #   값을 새로 만들지 않는다(§4). 조각 안의 입력칸은 하단 고정이 아니라 놓인 자리에 그려지므로 창 **안**
+    #   맨 아래로 옮겼다(CSS 가 창 바닥에 붙인다). 조각 재실행은 바깥 try 를 안 지나므로 예외는 조각 안에서 받는다.
+    @st.fragment
+    def _gn_chat_fragment(_ctx60, _ck60):
+        try:
+            # ── 라운드 324 — 챗봇 창 (사용자: "자연스럽게 내가 물어보면 챗으로 대답 · 챗봇처럼") ──────
+            #   대화·추천 질문을 **한 그릇**(`gn_ask_panel`)에 담는다 — 알약을 누르면 이 그릇이 입력바 위에
+            #   창으로 뜬다(CSS 위). 차례는 채팅 앱처럼 **말풍선 → 추천 질문 → 입력**이다. 질문을 먼저
+            #   처리해야 말풍선에 방금 답이 들어가므로, 말풍선 자리를 먼저 비워 두고 뒤에서 채운다.
+            with st.container(key='gn_ask_panel'):
+                # 라운드 328 — 사용자: *"챗봇에 닫기 버튼 혹은 최소화 버튼도 넣어줘."* 창 머리(제목 · 최소화 · 닫기).
+                #   창으로 떠 있을 때만 보인다(CSS) — 페이지 안 구역일 때는 위 절 제목이 이미 있다. 누르는 동작은 스크립트가
+                #   문서 전체에서 받는다(창은 스크립트보다 늦게 그려진다). 글자는 이모지가 아니다(§5).
+                st.markdown(
+                    f"<div class='gn-ask-head'><span class='gn-ask-title'>가늠 AI · {_uk._esc(resolved_name)}</span>"
+                    f"<span><a href='#nav-ask' class='gn-ask-min' title='최소화' aria-label='최소화'>&#8212;</a>"
+                    f"<a href='#nav-ask' class='gn-ask-close' title='닫기' aria-label='닫기'>&#215;</a></span></div>",
+                    unsafe_allow_html=True)
+                _hist60 = st.container()
+                st.caption("이런 걸 물어볼 수 있어요 · 말뜻은 \"○○가 뭐야?\" 처럼")
+                _qcols = st.columns(3)
+                _pending_q = None
+                for _qi, _qq in enumerate(_gch.QUICK_QUESTIONS[:9]):
+                    if _qcols[_qi % 3].button(_qq, key=f'{_ck60}_q{_qi}'):
+                        _pending_q = _qq
+                # 라운드 328 — 사용자: *"이게 이해가 안 되면 메일 보내기로 (주소)로 보낼 수 있게."* 누르면 **사용자의 메일
+                #   프로그램**이 종목·마지막 질문이 채워진 새 메일을 연다(앱은 보내지 않는다 · 답·평단은 안 싣는다 · §9).
+                _mail60 = st.empty()
+                _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
+                                         key=f'{_ck60}_in')
+            _ask60 = _typed_q or _pending_q
+            if _ask60:
+                st.session_state[_ck60].append(('user', _ask60))
+                st.session_state[_ck60].append(('assistant',
+                                                _gch.answer(_ask60, _ctx60)))
+                st.session_state[_ck60] = st.session_state[_ck60][-12:]
+            _last_q60 = next((m for r, m in reversed(st.session_state[_ck60]) if r == 'user'), None)
+            _mail60.markdown(
+                f"<p style='margin:6px 0 2px 0; font-size:12px; color:{_TOK['tx3']};'>이해가 안 되면 "
+                f"<a href='{_uk._esc_attr(_gch.mailto_link(resolved_name, target_ticker, _last_q60))}' "
+                f"style='color:{_TOK['brand']}; text-decoration:none; font-weight:600;'>메일로 물어보기</a>"
+                f" · 종목과 마지막 질문만 담깁니다(평단 등은 안 담깁니다)</p>",
+                unsafe_allow_html=True)
+            with _hist60:
+                if not st.session_state[_ck60]:
+                    # 빈 창에 안내 말풍선 하나 — 무엇을 물으면 되는지 먼저 말한다(대화처럼 시작한다)
+                    with st.chat_message('assistant'):
+                        st.markdown(_md_safe(
+                            f"안녕하세요. **{resolved_name}** 에 대해 편하게 물어보세요 — "
+                            f"'지금 사도 돼?' · '얼마에 사야 해?' · '왜 추천에서 빠졌어?' · "
+                            f"'나 OO원에 갖고 있는데 어떻게 해?' 처럼요."))
+                        st.caption("답은 이 화면의 중앙 판정 값만 씁니다 — 다른 화면과 다른 "
+                                   "가격을 만들지 않고, 없는 값은 없다고 말합니다. 평단 등 "
+                                   "개인 정보는 이 PC 를 떠나지 않습니다.")
+                for _role60, _msg60 in st.session_state[_ck60]:
+                    with st.chat_message(_role60):
+                        st.markdown(_md_safe(_msg60))
+        except Exception:                                      # noqa: BLE001
+            pass                  # 대화 한 칸 때문에 분석 화면이 죽지 않는다
+
+    _gn_chat_fragment(_ctx60, _ck60)
 except Exception:                                              # noqa: BLE001
     pass                          # 대화 한 칸 때문에 분석 화면이 죽지 않는다
 
