@@ -1817,6 +1817,78 @@ def nav_row(np_, price=None, nav=None, at=None, theme='dark'):
         f"{_esc(nums)}{_esc(np_['line'])}{when}</div></div>")
 
 
+def etf_profile_block(prof, premium_pct=None, band_line=None, theme='dark'):
+    """ETF 카드 안 — 괴리율로 본 적정가 · 무엇을 따라가나 · 분배금 · 담은 것 (라운드 332).
+
+    값은 `etf_registry.profile` 이 받은 것만 쓴다. 없는 줄은 안 그린다(§3). 괴리율 수는 화면의 NAV 줄과
+    **같은 출처**(`nav_of`)만 받는다 — 프로필에도 괴리가 있지만 받은 시각이 달라 두 수가 한 화면에 나온다(§4).
+    """
+    t = tokens(theme)
+    rows = []
+    # ① 괴리율로 본 적정가 — ETF 의 적정가는 추정이 아니라 발표값(NAV)이다
+    fv = ("<b style='color:" + t['tx1'] + ";'>괴리율로 본 적정가</b> — ETF 의 적정가는 매일 발표되는 "
+          "<b>NAV</b> 자체입니다. 괴리율은 그 값보다 <b>얼마나 비싸게·싸게 사는지</b>만 말하고, 담긴 자산이 "
+          "싼지 비싼지는 말하지 않습니다(그 물음은 아래 '담은 기업들의 가치'가 답합니다 — 국내 주식형 일부만).")
+    if band_line:
+        fv += ' ' + _esc(band_line)
+    rows.append(fv)
+    if prof:
+        # ② 무엇을 따라가나
+        bits = []
+        if prof.get('issuer'):
+            bits.append(f"운용 {_esc(prof['issuer'])}")
+        if prof.get('listed'):
+            bits.append(f"상장 {_esc(prof['listed'])}")
+        if prof.get('fee_pct') is not None:
+            bits.append(f"총보수 연 {prof['fee_pct']:g}%")
+        if prof.get('tracking_error_pct') is not None:
+            bits.append(f"추적오차 {prof['tracking_error_pct']:g}%")
+        if prof.get('base_index') or bits:
+            line = "<b style='color:" + t['tx1'] + ";'>무엇을 따라가나</b> — "
+            line += (f"<b>{_esc(prof['base_index'])}</b>" if prof.get('base_index') else '기초지수 미수신')
+            if bits:
+                line += ' · ' + ' · '.join(bits)
+            if prof.get('summary'):
+                line += f"<br><span style='color:{t['tx3']};'>{_esc(prof['summary'])}</span>"
+            rows.append(line)
+        # ③ 분배금
+        dv = prof.get('div') or {}
+        if dv.get('dps_ttm') is not None:
+            if dv['dps_ttm'] > 0:
+                ms = dv.get('months') or []
+                line = (f"<b style='color:{t['tx1']};'>분배금</b> — 최근 1년 합 <b>{dv['dps_ttm']:,.0f}원</b>"
+                        + (f" · 분배율 {dv['yield_ttm_pct']:g}%" if dv.get('yield_ttm_pct') is not None else '')
+                        + (f" · 올해 {'·'.join(str(m) for m in ms)}월 지급" if ms else '')
+                        + (f"({dv['count_this_year']}회)" if dv.get('count_this_year') else '')
+                        + ". 분배금은 NAV 에서 빠져나가므로 분배 기준일 다음 날 가격이 그만큼 낮아지는 것이 "
+                          "정상입니다 — 분배율이 높다고 수익이 그만큼 더 나는 것은 아닙니다.")
+            else:
+                line = (f"<b style='color:{t['tx1']};'>분배금</b> — 최근 1년 분배가 없습니다"
+                        " (받은 값이 0원입니다).")
+            rows.append(line)
+        # ④ 담은 것
+        assets = [(a, w) for a, w in (prof.get('assets') or []) if w and w > 0][:4]
+        top = [(n, w) for n, w in (prof.get('top') or [])][:5]
+        if assets or top:
+            line = f"<b style='color:{t['tx1']};'>담은 것</b> — "
+            if assets:
+                line += ' · '.join(f"{_esc(a)} {w:.1f}%" for a, w in assets)
+            if top:
+                line += (' · ' if assets else '') + '상위 ' + ', '.join(
+                    _esc(n) + (f" {w:.1f}%" if w is not None else '') for n, w in top)
+            rows.append(line)
+        if prof.get('at'):
+            rows.append(f"<span style='color:{t['tx3']};'>네이버 ETF 정보 {_esc(prof['at'])} 조회"
+                        + (f" · 성과 기준일 {_esc(prof['ref_date'])}" if prof.get('ref_date') else '')
+                        + "</span>")
+    else:
+        rows.append(f"<span style='color:{t['tx3']};'>추종 지수·분배금·구성 정보를 받지 못했습니다 — "
+                    "값을 지어내지 않고 비워 둡니다.</span>")
+    inner = ''.join(f"<p style='margin:0 0 6px 0;'>{r}</p>" for r in rows)
+    return (f"<div style='margin-top:11px; padding:10px 12px; background:{t['raised']}; "
+            f"border-radius:8px; font-size:12px; line-height:1.6; color:{t['tx2']};'>{inner}</div>")
+
+
 def reco_card(p: dict, theme: str = 'dark') -> str:
     """
     오늘의 추천·관망 카드 한 장.

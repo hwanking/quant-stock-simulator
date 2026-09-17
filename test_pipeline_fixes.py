@@ -26563,6 +26563,75 @@ check("R331 화면의 사후 검증 호출은 전부 try 안이고, 못 읽으�
       and '기록이 없다는 뜻이 아닙니다' in _w337, f'호출 {len(_calls337)} · try 안 {len(_in_try337)}',
       scanned=len(_calls337))
 
+print("\n" + "=" * 72)
+print("§338 R332 — ETF: 괴리율로 본 적정가 · 추종 지수 · 분배금 (배당 칸이 ETF 를 전부 '무배당'이라 적었다 · 2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"ETF 들 괴리율로 적정가 · 배당 정보 · 뭘 추종하는지."* NAV·괴리율은 라운드 164 부터 있었다. 없던 것은
+#   추종 지수 · 분배금(배당 칸이 주식 페이지 문법이라 ETF 는 전부 '무배당·미공시') · 괴리를 무엇과 견줄지. 네이버
+#   `etfAnalysis` 한 곳에서 받고(없는 칸 None), 괴리율은 **제도가 정한 범위**(LP 종가 관리 의무 국내형 2% · 해외형 5% ·
+#   2026-08-19 시행)와 나란히만 적는다 — 신호가 아니다(§2). 괴리율 수는 NAV 줄과 같은 출처 하나만(§4).
+import etf_registry as _er338
+import ui_kit as _uk338
+import gaeum_glossary as _gl338
+_doc338 = {
+    'itemCode': 'X00001', 'itemName': '시험 지수 ETF', 'etfBaseIndex': '시험 지수 200',
+    'etfSummary': '시험 지수를 따라갑니다.', 'issuerName': '시험운용', 'listedDate': '20200102',
+    'totalFee': '0.15', 'chaseErrorRate': '0.38', 'deviationSign': '-', 'deviationRate': '0.2', 'nav': '10000.5',
+    'dividend': {'dividendYieldTtm': '0.8', 'dividendPerShareTtm': '849', 'dividendCountThisYear': '3',
+                 'dividendMonthThisYear': '1,4,7'},
+    'etfTop10MajorConstituentAssets': [{'itemName': '가종목', 'etfWeight': '32.94%'},
+                                        {'itemName': '나종목', 'etfWeight': '-'}, {'itemName': '', 'etfWeight': '1%'}],
+    'assetPortfolioList': [{'detailTypeCode': 'CASH', 'weight': 0.08}, {'detailTypeCode': 'EQUITY', 'weight': 98.89},
+                           {'detailTypeCode': 'OTHERS', 'weight': 0.0}, {'detailTypeCode': 'NEWTYPE', 'weight': 1.0}],
+}
+_p338 = _er338.parse_profile(_doc338)
+check("R332 받은 칸만 옮긴다 — 추종 지수·보수·추적오차·부호 있는 괴리·상장일·분배(합·율·지급월·횟수)",
+      _p338 and _p338['base_index'] == '시험 지수 200' and _p338['fee_pct'] == 0.15
+      and _p338['tracking_error_pct'] == 0.38 and _p338['deviation_pct'] == -0.2 and _p338['listed'] == '2020-01-02'
+      and _p338['div'] == {'yield_ttm_pct': 0.8, 'dps_ttm': 849.0, 'months': [1, 4, 7], 'count_this_year': 3},
+      str(_p338)[:200])
+check("R332 비중 '-' 는 None(0 으로 안 채운다) · 이름 없는 행은 버린다 · 자산 코드는 옮기고 모르는 코드는 그대로",
+      _p338 and _p338['top'] == [('가종목', 32.94), ('나종목', None)]
+      and _p338['assets'][0] == ('주식', 98.89) and ('NEWTYPE', 1.0) in _p338['assets'] and ('기타', 0.0) in _p338['assets'],
+      str(_p338 and (_p338['top'], _p338['assets'])))
+_boom338 = []
+
+
+def _raise338(c):
+    _boom338.append(c)
+    raise RuntimeError('심은 수신 실패')
+
+
+check("R332 못 받거나 ETF 가 아니면 None — 지어내지 않는다 (빈 응답 · 예외 · 코드 판별 실패)",
+      _er338.parse_profile({}) is None and _er338.parse_profile(None) is None
+      and _er338.profile('900001', fetch=_raise338) is None and _er338.profile('!!', fetch=_raise338) is None
+      and _boom338 == ['900001'], str(_boom338))
+check("R332 괴리 관리 범위는 제도의 수(국내형 2% · 해외형 5% · 2026-08-19) — 안·밖만 말한다 (양방향)",
+      dict(_er338.LP_BAND_PCT) == {'국내형': 2.0, '해외형': 5.0} and _er338.LP_BAND_SINCE == '2026-08-19'
+      and '국내형 2% 안 · 해외형 5% 안' in _er338.lp_band_line(-1.5)
+      and '국내형 2% 밖 · 해외형 5% 안' in _er338.lp_band_line(3.0)
+      and '국내형 2% 밖 · 해외형 5% 밖' in _er338.lp_band_line(6.0)
+      and _er338.lp_band_line(None) is None
+      and not any(w in _er338.lp_band_line(3.0) for w in ('사세요', '파세요', '매수', '매도')))
+_b338 = _uk338.etf_profile_block(_p338, -0.11, _er338.lp_band_line(-0.11), theme='dark')
+_b338l = _uk338.etf_profile_block(dict(_p338, div=dict(_p338['div'], dps_ttm=0.0)), None, None, theme='light')
+_b338n = _uk338.etf_profile_block(None, None, None, theme='dark')
+check("R332 ETF 칸 — 적정가는 NAV 라고 말하고 괴리율이 자산의 싸고 비쌈을 말하지 않는다고 적는다 · 분배 0원은 '없다' · 못 받으면 그렇다고",
+      'NAV</b> 자체입니다' in _b338 and '담긴 자산이 싼지 비싼지는 말하지 않습니다' in _b338
+      and '시험 지수 200' in _b338 and '849원' in _b338 and '분배율이 높다고 수익이 그만큼 더 나는 것은 아닙니다' in _b338
+      and '최근 1년 분배가 없습니다' in _b338l and '받지 못했습니다' in _b338n)
+_w338 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R332 배당 두 칸은 ETF 면 분배금을 쓰고(받았을 때만) 주식은 종전 문구 그대로 · 카드는 같은 괴리 출처를 넘긴다",
+      "if _etf_is and _etf_div332.get('dps_ttm') is not None:" in _w338
+      and "{_div_tile_label}</p>" in _w338 and "{_divd_tile_sub}</p>" in _w338
+      and "na='무배당·미공시'" in _w338
+      and "_uk.etf_profile_block(_etf_prof, (_etf_nav or {}).get('premium_pct')," in _w338)
+check("R332 가늠 AI 사전 — '괴리율이 뭐야'는 ETF 항목, '적정가가 뭐야'는 종전 항목 그대로",
+      (_gl338.lookup('괴리율이 뭐야?') or ('', ''))[0] == 'ETF 괴리율·NAV·분배금'
+      and (_gl338.lookup('적정가가 뭐야?') or ('', ''))[0] == '적정가',
+      str((_gl338.lookup('괴리율이 뭐야?') or ('',))[0]))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

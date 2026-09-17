@@ -238,6 +238,145 @@ def nav_of(code):
     return None
 
 
+
+# ── 라운드 332 — 무엇을 추종하나 · 분배금 · 보수 · 추적오차 · 괴리 관리 범위 ───────────────────
+#   사용자: *"ETF 들 괴리율로 적정가 찾을 수 있지 않을까? 배당 정보도 넣어 주고 뭘 추종하는지도."*
+#   ⓐ ETF 에는 적정가에 해당하는 **발표값**(NAV)이 이미 있고 괴리율도 화면에 있었다(라운드 164).
+#   ⓑ 그런데 배당 칸은 **주식 페이지 문법**으로만 읽어 ETF 는 전부 *'무배당·미공시'* 였다 — 실측
+#      2026-09-18: 시총 1위 지수 ETF 최근 1년 분배금 849원 · 채권혼합 커버드콜 ETF 2,235원(분배율 28.2%)인데
+#      화면은 셋 다 '무배당'이었다(§3 — 못 읽은 것을 '없다'로 적었다).
+#   ⓒ 추종 지수는 아예 없었다.
+#   네이버 새 사이트의 `etfAnalysis` 가 이 칸을 전부 준다. 받은 그대로 옮기고, 없는 칸은 None 이다.
+
+PROFILE_URL = 'https://m.stock.naver.com/api/stock/{code}/etfAnalysis'
+_PROFILE_MEMO = {}
+
+#: 거래소 유동성공급자(LP)의 **종가 기준 괴리율 관리 의무 범위** — 금융당국 · 2026-08-19 시행
+#: (종전 국내형 3% · 해외형 6%). 우리가 고른 수가 아니라 **제도가 정한 수**이고, 화면은 이 범위와
+#: 오늘 괴리를 **나란히** 적을 뿐 매수·매도 신호로 쓰지 않는다(§2). ETF 가 국내형인지 해외형인지는
+#: 기초지수로 정해지는데 우리는 그 분류를 받지 않으므로 **두 범위를 다 적는다**(가르지 않는다 · §3).
+LP_BAND_PCT = (('국내형', 2.0), ('해외형', 5.0))
+LP_BAND_SINCE = '2026-08-19'
+
+#: 자산 유형 코드 → 사람 말 (받은 코드를 옮기기만 한다 · 모르는 코드는 그대로 적는다)
+_ASSET_KO = {'EQUITY': '주식', 'BOND': '채권', 'CASH': '현금성', 'FUTURES': '선물', 'OTHERS': '기타',
+             'DERIVATIVE': '파생', 'COMMODITY': '원자재', 'ETC': '기타', 'REITS': '리츠'}
+
+
+def _f(v):
+    """'0.15' · '849' · '32.94%' · '6,924' → float. 못 읽으면 None."""
+    if v is None:
+        return None
+    s = str(v).replace(',', '').replace('%', '').strip()
+    if s in ('', '-', 'None'):
+        return None
+    try:
+        x = float(s)
+    except ValueError:
+        return None
+    return x if x == x else None
+
+
+def parse_profile(doc):
+    """`etfAnalysis` 응답 dict → 화면에 쓸 칸만. 순수 함수(심어서 잰다). 없으면 None.
+
+    반환 키: name · base_index · summary · issuer · listed · fee_pct · tracking_error_pct ·
+    deviation_pct(부호 포함) · nav · div{yield_ttm_pct, dps_ttm, months, count_this_year} ·
+    top[(이름, 비중%)] · assets[(유형, 비중%)]
+    """
+    if not isinstance(doc, dict) or not (doc.get('itemCode') or doc.get('itemName')):
+        return None
+    dev = _f(doc.get('deviationRate'))
+    if dev is not None and str(doc.get('deviationSign') or '') == '-':
+        dev = -dev
+    listed = str(doc.get('listedDate') or '')
+    listed = (f'{listed[:4]}-{listed[4:6]}-{listed[6:8]}'
+              if len(listed) == 8 and listed.isdigit() else None)
+    dv = doc.get('dividend') or {}
+    months = []
+    for m in str(dv.get('dividendMonthThisYear') or '').split(','):
+        m = m.strip()
+        if m.isdigit() and 1 <= int(m) <= 12:
+            months.append(int(m))
+    top = []
+    for a in (doc.get('etfTop10MajorConstituentAssets') or [])[:10]:
+        nm = str(a.get('itemName') or '').strip()
+        if nm:
+            top.append((nm, _f(a.get('etfWeight'))))
+    assets = []
+    for a in (doc.get('assetPortfolioList') or []):
+        w = _f(a.get('weight'))
+        code = str(a.get('detailTypeCode') or '').strip()
+        if code and w is not None:
+            assets.append((_ASSET_KO.get(code, code), w))
+    assets.sort(key=lambda t: -t[1])
+    base = str(doc.get('etfBaseIndex') or '').strip() or None
+    return {
+        'name': str(doc.get('itemName') or '').strip() or None,
+        'base_index': base,
+        'summary': str(doc.get('etfSummary') or '').strip() or None,
+        'issuer': str(doc.get('issuerName') or '').strip() or None,
+        'listed': listed,
+        'fee_pct': _f(doc.get('totalFee')),
+        'tracking_error_pct': _f(doc.get('chaseErrorRate')),
+        'deviation_pct': dev,
+        'nav': _f(doc.get('nav')),
+        'div': {'yield_ttm_pct': _f(dv.get('dividendYieldTtm')),
+                'dps_ttm': _f(dv.get('dividendPerShareTtm')),
+                'months': months,
+                'count_this_year': (int(_f(dv.get('dividendCountThisYear')))
+                                    if _f(dv.get('dividendCountThisYear')) is not None else None)},
+        'top': top,
+        'assets': assets,
+        'ref_date': str(doc.get('navPerformanceReferenceDate') or '').strip() or None,
+    }
+
+
+def profile(code, fetch=None):
+    """한 ETF 의 추종 지수·분배금·보수 등. 못 받으면 None — 지어내지 않는다.
+
+    같은 종목은 `TTL_SEC` 안에 다시 받지 않는다(라운드 164 의 목록 캐시와 같은 수).
+    `fetch` 는 시험용(심기) — 없으면 네이버에 묻는다.
+    """
+    c = stock_code.normalize(code)
+    if not c:
+        return None
+    hit = _PROFILE_MEMO.get(c)
+    if hit and fetch is None and (time.time() - hit[0]) <= TTL_SEC:
+        return hit[1]
+    try:
+        if fetch is not None:
+            doc = fetch(c)
+        else:
+            req = urllib.request.Request(PROFILE_URL.format(code=c), headers={
+                'User-Agent': 'Mozilla/5.0', 'Referer': 'https://m.stock.naver.com/'})
+            doc = json.loads(urllib.request.urlopen(req, timeout=10).read().decode('utf-8'))
+    except Exception as e:                                     # noqa: BLE001
+        print(f'[etf_registry] ETF 정보 수신 실패 {c}: {type(e).__name__}')
+        return None
+    got = parse_profile(doc)
+    if got is not None:
+        got['at'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+        if fetch is None:
+            _PROFILE_MEMO[c] = (time.time(), got)
+    return got
+
+
+def lp_band_line(premium_pct):
+    """오늘 괴리율을 거래소 LP 관리 의무 범위(국내형 2% · 해외형 5%)와 **나란히** 적는 한 문장.
+
+    범위 안·밖만 말하고 사라·팔라는 말은 하지 않는다. 괴리가 없으면 None.
+    """
+    if premium_pct is None:
+        return None
+    a = abs(float(premium_pct))
+    parts = []
+    for kind, band in LP_BAND_PCT:
+        parts.append(f"{kind} {band:g}% {'안' if a <= band else '밖'}")
+    return (f"거래소가 유동성공급자에게 지키게 하는 종가 괴리율 범위(국내형 2% · 해외형 5% · "
+            f"{LP_BAND_SINCE} 시행)와 견주면 지금 {float(premium_pct):+.2f}% 는 " + ' · '.join(parts)
+            + " 입니다. 장중 괴리는 종가 기준과 다를 수 있습니다.")
+
 #: 룩스루 적정가 산출물 (라운드 167). 사전등록 기준을 통과한 ETF 만 들어 있다.
 LOOKTHROUGH = os.path.join(_BASE, 'data', 'etf_lookthrough_r167.json')
 

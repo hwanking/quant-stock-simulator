@@ -7694,6 +7694,13 @@ try:
         _etf_gap = etf_registry.lookthrough_gap(target_ticker)
 except Exception:                                              # noqa: BLE001
     _etf_is, _etf_nav, _etf_lt, _etf_gap = None, None, None, None
+# 라운드 332 — 추종 지수·분배금·보수·추적오차·구성. 따로 받는다(실패해도 NAV 칸은 산다).
+_etf_prof = None
+if _etf_is:
+    try:
+        _etf_prof = etf_registry.profile(target_ticker)
+    except Exception:                                          # noqa: BLE001
+        _etf_prof = None
 
 _etf_tile_html = ""
 if _etf_is:
@@ -7734,6 +7741,26 @@ div_info = engine_init.fetch_dividend_info(target_ticker, current_price=realtime
 div_payout = div_info.get('dps') if div_info.get('available') else None
 div_yield = div_info.get('dividend_yield_pct') if div_info.get('available') else None
 div_date = div_info.get('estimated_ex_date') if div_info.get('available') else None
+# ⚠️ 라운드 332 — 위 배당 조회는 **주식 페이지 문법**이라 ETF 는 늘 '공시되지 않았습니다'였고, 칸은 분배금을
+#   받는 ETF 에도 *'무배당·미공시'* 를 적었다(실측 2026-09-18: 시총 1위 지수 ETF 최근 1년 분배 849원). ETF 는
+#   `etf_registry.profile` 의 분배금(최근 1년 합 · 분배율 · 올해 지급월)을 쓴다. 날짜는 추정하지 않는다 —
+#   ETF 분배 기준일은 운용사가 정하고 월말 관례가 주식과 다르다(§3). 못 받으면 종전 문구 그대로.
+_div_tile_label, _divd_tile_label = '주당 배당금 (수익률)', '배당락일 (추정)'
+_div_tile_value = (f"{fmt_num(div_payout, ',.0f', '원', na='무배당·미공시')} "
+                   f"({fmt_pct(div_yield, digits=2)})")
+_divd_tile_value = div_date or '—'
+_divd_tile_sub = (('D-' + str(div_info['days_to_ex']) + ' · 관례 추정')
+                  if div_info.get('available') and div_info.get('days_to_ex') is not None
+                  else '공시 미연동')
+_etf_div332 = (_etf_prof or {}).get('div') or {}
+if _etf_is and _etf_div332.get('dps_ttm') is not None:
+    _div_tile_label, _divd_tile_label = '분배금 최근 1년 (분배율)', 'ETF 분배 지급월 (올해)'
+    _div_tile_value = (f"{_etf_div332['dps_ttm']:,.0f}원 "
+                       f"({fmt_pct(_etf_div332.get('yield_ttm_pct'), digits=2)})")
+    _m332 = _etf_div332.get('months') or []
+    _divd_tile_value = ('·'.join(str(m) for m in _m332) + '월') if _m332 else '올해 지급 없음'
+    _divd_tile_sub = (f"올해 {_etf_div332['count_this_year']}회 · 날짜는 운용사 공시"
+                      if _etf_div332.get('count_this_year') is not None else '날짜는 운용사 공시')
 
 debt_val = _metric(stock_info.get('debt'), _lf.get('debt_to_equity'))
 # (예전에 있던 fair_target 은 어디서도 쓰이지 않는 죽은 변수였고,
@@ -7785,13 +7812,13 @@ st.markdown(f"""
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #F3F6FA; font-weight: bold;'>{fmt_num(bps_val, ',.0f', '원', na='미수신')}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
-            <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>주당 배당금 (수익률)</p>
-            <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{fmt_num(div_payout, ',.0f', '원', na='무배당·미공시')} ({fmt_pct(div_yield, digits=2)})</p>
+            <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>{_div_tile_label}</p>
+            <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{_div_tile_value}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
-            <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>배당락일 (추정)</p>
-            <p style='margin: 4px 0 0 0; font-size: 15px; color: #9DAABC; font-weight: bold;'>{div_date or '—'}</p>
-            <p style='margin: 2px 0 0 0; font-size: 12px; color: #F2B84B;'>{('D-' + str(div_info['days_to_ex']) + ' · 관례 추정') if div_info.get('available') and div_info.get('days_to_ex') is not None else '공시 미연동'}</p>
+            <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>{_divd_tile_label}</p>
+            <p style='margin: 4px 0 0 0; font-size: 15px; color: #9DAABC; font-weight: bold;'>{_divd_tile_value}</p>
+            <p style='margin: 2px 0 0 0; font-size: 12px; color: #F2B84B;'>{_divd_tile_sub}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
             <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>부채비율 (재무안전)</p>
@@ -7835,6 +7862,10 @@ if _etf_is:
             + _uk.nav_row(_nav_p, (_etf_nav or {}).get('price'),
                           (_etf_nav or {}).get('nav'),
                           (_etf_nav or {}).get('at'), theme=_theme)
+            # ── 라운드 332 — 괴리율로 본 적정가 · 무엇을 따라가나 · 분배금 · 담은 것 ─────────────
+            + _uk.etf_profile_block(_etf_prof, (_etf_nav or {}).get('premium_pct'),
+                                    etf_registry.lp_band_line((_etf_nav or {}).get('premium_pct')),
+                                    theme=_theme)
             + ("" if _etf_nav else
                f"<p style='margin:9px 0 0 0; font-size:12px; "
                f"color:{_TOK['warn']};'>NAV 미수신 — 네이버 ETF 목록 응답이 "
