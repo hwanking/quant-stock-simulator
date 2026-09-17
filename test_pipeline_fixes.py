@@ -23713,6 +23713,13 @@ _pl288 = _ua288.audit_text(_ua288.clean_render_text(["진입 위치: 판정 불�
 check("심기 — 판별식이 사유 없음(판정 불가)과 사유 있음(미수신 —)을 가른다 (양방향)",
       _pl288['판정 불가']['with_reason'] == 0 and _pl288['미수신']['with_reason'] == 1 and _pl288['scanned'] == 3,
       str({k: v for k, v in _pl288.items() if k != 'scanned'})[:120])
+# 라운드 331 — 마크다운으로 값을 감싸도(굵게·코드) 화면이 읽는 글자로 잰다 · 규칙은 그대로(양방향)
+_md288 = _ua288.audit_text(_ua288.clean_render_text([
+    "- **예측 상승확률**: **`산출 불가`** — 20일 유효표본 2건 — 미산출",
+    "- **확률**: **`산출 불가`** 유사사례 9건"]))
+check("심기 — 굵게·코드로 감싼 값도 뒤에 붙은 사유를 읽고, 구분자 없이 붙은 글은 여전히 사유로 안 센다 (양방향)",
+      _md288['산출 불가']['n'] == 2 and _md288['산출 불가']['with_reason'] == 1,
+      str(_md288.get('산출 불가'))[:160])
 _r288 = _render(ticker='000720', want_unavailable=True)
 _au288 = (_r288.get('unavailable') or {}) if _r288.get('ok') else {}
 _sc288 = int(_au288.get('scanned') or 0)
@@ -26489,6 +26496,72 @@ check("R330 원장 랩(계획·채점)은 일봉만 받는다 — 옛 적재 호
       and _labcalls336.count('fetch_daily_bars') == 3,
       f"옛 {_labcalls336.count('generate_synthetic_bitemporal_data')} · 일봉 {_labcalls336.count('fetch_daily_bars')}",
       scanned=len(_labcalls336))
+
+print("\n" + "=" * 72)
+print("§337 R331 — 배포 앱이 빈 DB 파일에서 통째로 죽었다 · 여는 곳 한 곳에서 표를 갖춘다 (2026-09-17)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 배포 화면을 붙였다: `sqlite3.OperationalError` · premarket.grade_history → case_tracker.tally ·
+#   "SELECT status, COUNT(*) FROM prediction_cases". 새로 뜬 컨테이너에서 화면 맨 위 버전 칩이 초기화 없이
+#   연결을 열어 **빈 파일**을 만들었고(sqlite 는 연결만 열어도 파일을 만든다), 아래 사후 검증이 '파일이 있다'만
+#   보고 조회하다 `no such table: prediction_cases` 로 죽었다. 이 PC 는 DB 에 표가 있어 한 번도 안 보였다.
+#   재현(임시 경로 · HEAD 모듈): 같은 순서에서 HEAD 는 그 예외 · 새 코드는 조회 성공(확정 0).
+import ast as _ast337
+import sqlite3 as _sq337
+import tempfile as _tf337
+from improvement import database as _db337
+from improvement import case_tracker as _ct337
+import premarket as _pm337
+with _tf337.TemporaryDirectory() as _td337:
+    _p337 = _os.path.join(_td337, 'improvement.db')
+    _c337 = _db337.get_connection(_p337)                 # 위 — 연결만 열고 닫는 자리
+    _c337.close()
+    _c337 = _db337.get_connection(_p337)                 # 아래 — 조회하는 자리
+    try:
+        _t337, _e337 = _ct337.tally(_c337), None
+    except Exception as _ex337:                          # noqa: BLE001
+        _t337, _e337 = None, f'{type(_ex337).__name__}: {_ex337}'
+    finally:
+        _c337.close()
+    check("R331 새 경로: 연결을 먼저 연 자리가 있어도 조회가 죽지 않는다 (여는 곳이 표를 갖춘다)",
+          _e337 is None and _t337 and _t337['resolved'] == 0, str(_e337))
+    # 심기 — 표 없는 빈 파일을 직접 만들면 옛 조회는 정말 죽는다(검사가 '죽는 상태'를 재현하는지)
+    _p337b = _os.path.join(_td337, 'bare.db')
+    _sq337.connect(_p337b).close()
+    _raw337 = _sq337.connect(_p337b)
+    try:
+        _raw337.execute("SELECT status, COUNT(*) FROM prediction_cases GROUP BY status").fetchall()
+        _bare_dies337 = False
+    except _sq337.OperationalError:
+        _bare_dies337 = True
+    finally:
+        _raw337.close()
+    check("R331 심기 — 표 없는 빈 파일에서 그 조회는 실제로 죽는다 (재현이 사고와 같은 상태)", _bare_dies337)
+    check("R331 사후 검증은 표 없는 빈 파일에서 죽지 않고 '기록 없음'(None)이다",
+          _pm337.grade_history(db_path=_p337b) is None)
+    # 있는 행은 안 건드린다 — 초기화를 여러 번 불러도
+    _c337 = _db337.get_connection(_p337)
+    _c337.execute("INSERT INTO pipeline_runs(run_id, pipeline_type, started_at, status) "
+                  "VALUES ('r331', 'daily', '2026-09-17', 'success')")
+    _c337.commit()
+    _c337.close()
+    _db337._READY.discard(_os.path.abspath(_p337))
+    _db337.initialize_database(_p337)
+    _c337 = _db337.get_connection(_p337)
+    _n337 = _c337.execute("SELECT COUNT(*) FROM pipeline_runs").fetchone()[0]
+    _c337.close()
+    check("R331 표를 갖추는 일은 있는 행을 안 건드린다 (다시 불러도 1행 그대로)", _n337 == 1, str(_n337))
+# 화면: 사후 검증 호출이 try 안에 있다 — 칸 하나 때문에 앱 전체가 죽지 않는다
+_w337 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_in_try337 = [n for n in _ast337.walk(_ast337.parse(_w337)) if isinstance(n, _ast337.Try)
+              and any(isinstance(c, _ast337.Call) and getattr(c.func, 'attr', None) == 'grade_history'
+                      for b in n.body for c in _ast337.walk(b))]
+_calls337 = [c for c in _ast337.walk(_ast337.parse(_w337))
+             if isinstance(c, _ast337.Call) and getattr(c.func, 'attr', None) == 'grade_history']
+check("R331 화면의 사후 검증 호출은 전부 try 안이고, 못 읽으면 '기록이 없다는 뜻이 아닙니다'를 적는다",
+      len(_calls337) >= 1 and len(_in_try337) >= len(_calls337)
+      and '기록이 없다는 뜻이 아닙니다' in _w337, f'호출 {len(_calls337)} · try 안 {len(_in_try337)}',
+      scanned=len(_calls337))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

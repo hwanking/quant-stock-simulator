@@ -13,13 +13,37 @@ _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB_PATH = os.path.join(_BASE, '.portfolio', 'improvement.db')
 
 
-def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+#: 이 프로세스에서 표를 이미 갖춘 DB 경로 (라운드 331).
+_READY: set = set()
+
+
+def _open(db_path: str) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
+
+
+def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    """연결 — **처음 여는 경로면 표부터 갖춘다** (라운드 331).
+
+    ⚠️ 배포 앱이 `sqlite3.OperationalError: no such table: prediction_cases` 로 통째로 죽었다
+    (2026-09-17). `sqlite3.connect` 는 연결만 열어도 **빈 파일을 만든다** — 새로 뜬 컨테이너에서
+    화면 맨 위 버전 칩이 초기화 없이 연결을 열어 '파일은 있고 표는 없는' DB 를 남겼고, 아래의
+    사후 검증이 '파일이 있다'만 보고 조회하다 죽었다. 초기화를 부르는 자리(모델 성적 줄)와 안 부르는
+    자리(버전 칩 · 사후 검증 · 이슈 화면)가 섞여 있었다 — 호출부마다 고치지 않고 여는 곳 한 곳에서
+    갖춘다(R120e). `CREATE TABLE IF NOT EXISTS` 라 있는 행은 안 건드리고 프로세스당 한 번이다.
+    못 갖추면(읽기 전용 등) 연결은 그대로 돌려준다 — 조회가 실패하면 호출부가 사유를 적는다.
+    """
+    key = os.path.abspath(db_path)
+    if key not in _READY:
+        try:
+            initialize_database(db_path)
+        except Exception:                                      # noqa: BLE001
+            pass
+    return _open(db_path)
 
 
 @contextmanager
@@ -36,7 +60,7 @@ def transaction(db_path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
 
 
 def initialize_database(db_path: str = DEFAULT_DB_PATH) -> None:
-    conn = get_connection(db_path)
+    conn = _open(db_path)
     try:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS prediction_cases (
@@ -159,5 +183,6 @@ def initialize_database(db_path: str = DEFAULT_DB_PATH) -> None:
             conn.commit()
         except Exception:
             pass
+        _READY.add(os.path.abspath(db_path))
     finally:
         conn.close()

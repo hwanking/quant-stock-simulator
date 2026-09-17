@@ -4846,8 +4846,16 @@ if _pmr:
         #   20봉 뒤)를 읽어 같은 페이지에서 다른 수를 냈다(실측 2026-09-07: 95건 목표 30 ·
         #   손절 26 · 미결 39 vs 확정 51 성공 29 · 실패 15 · 미결 7). 채점은 일일 루틴이
         #   원장과 같은 채점기로 한 번 하고, 화면은 읽기만 한다(§4).
-        _hist = _pm_view.grade_history()
-        if _hist:
+        # 라운드 331 — 이 한 줄이 DB 예외로 **배포 앱 전체**를 죽였다. 사후 검증 칸 하나 때문에 화면이
+        #   죽지 않게 받고, 못 읽었다는 사실과 사유를 그 자리에 적는다(§3 · '추천 없음'과 섞지 않는다).
+        _hist, _hist_err = None, None
+        try:
+            _hist = _pm_view.grade_history()
+        except Exception as _e331:                             # noqa: BLE001
+            _hist_err = f"{type(_e331).__name__}"
+        if _hist_err:
+            st.caption(f"사후 검증 기록을 읽지 못했습니다 ({_hist_err}) — 기록이 없다는 뜻이 아닙니다.")
+        elif _hist:
             _t232 = _hist['tally']
             _d232 = _hist.get('dates') or (None, None)
             st.markdown(f"확정 **{_t232['resolved']}건** — 목표 도달 {_t232['success']} · "

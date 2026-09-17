@@ -410,7 +410,7 @@ def _history_names():
 OUTCOME_KO = {'success': '목표 도달', 'failure': '손절', 'unresolved': '미도달'}
 
 
-def grade_history(conn=None, max_rows=10):
+def grade_history(conn=None, max_rows=10, db_path=None):
     """
     지난 개장 전 추천의 실제 성과 — improvement DB 의 확정 결과를 **읽는다** (라운드 232).
 
@@ -422,12 +422,19 @@ def grade_history(conn=None, max_rows=10):
     반환 {'tally','rows','dates'} 또는 None(케이스 없음 · DB 없음).
     """
     from improvement import case_tracker as _ct
-    from improvement.database import get_connection, DEFAULT_DB_PATH
+    from improvement.database import get_connection, initialize_database, DEFAULT_DB_PATH
     own = conn is None
     if own:
-        if not os.path.exists(DEFAULT_DB_PATH):
+        path = db_path or DEFAULT_DB_PATH
+        if not os.path.exists(path):
             return None
-        conn = get_connection()
+        # ⚠️ 라운드 331 — 배포 앱이 여기서 **통째로 죽었다**(sqlite3.OperationalError · 2026-09-17).
+        #   파일이 있는지만 봤는데, `get_connection` 은 연결만 열어도 **빈 파일을 만든다** — 새로 뜬
+        #   컨테이너에서 다른 자리가 먼저 연결을 열면 '파일은 있고 표는 없는' 상태가 되고 첫 SELECT 가
+        #   죽는다. 같은 DB 를 읽는 다른 자리(모델 성적의 추적 줄)는 이미 `initialize_database` 를 먼저
+        #   부르고 있었다 — 그 순서를 여기도 따른다(CREATE TABLE IF NOT EXISTS · 있는 행은 안 건드린다).
+        initialize_database(path)
+        conn = get_connection(path)
     try:
         t = _ct.tally(conn)
         if not (t['resolved'] or t['open']):
