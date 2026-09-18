@@ -26632,6 +26632,113 @@ check("R332 가늠 AI 사전 — '괴리율이 뭐야'는 ETF 항목, '적정가
       and (_gl338.lookup('적정가가 뭐야?') or ('', ''))[0] == '적정가',
       str((_gl338.lookup('괴리율이 뭐야?') or ('',))[0]))
 
+print("\n" + "=" * 72)
+print("§339 R333 — 90분에서 잘리던 단계: 그 워크플로의 기록기 전부가 일봉만 받는다 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-17 클라우드 축적(성공 · 3h26m)이 라운드 330 의 두 고침을 증명했다(계획 루프 3,494 → 506초 ·
+#   종목당 5.82 → 0.84초 · 취약구간 지도 재생성 · 원장 252,329 → 252,729). 남은 실패는 하나 —
+#   `##[error] The action '경로·기준선 보강 (신규 신호분)' has timed out after 90 minutes.`
+#   그 단계는 기록기 **둘을 이어** 돌리는데 둘 다 옛 적재 함수를 부르고 있었다(종목당 2.03초 · 경로 기록기
+#   1,547종목 3,144초 = 52분 → 진입기준선 기록기가 1,040/1,547 · 2,224초에서 잘렸다). 둘 다 **일봉만** 쓴다.
+#   ⚠️ 대상을 그 단계로만 적었다가 **유도가 둘을 더 찾았다** — 다음 단계의 뉴스 사후 경로 채움과 일일 개선
+#   파이프라인의 케이스 채점도 같은 자리였다(재무 df 를 `_` 로 버린다). 그래서 이 검사는 그 단계가 아니라
+#   **워크플로가 부르는 스크립트 전부**를 훑는다(손 목록 금지 · R114).
+#   ⚠️ 값이 안 바뀌는 근거 둘: ① 기록기가 넘기던 `start_date` 를 적재 함수가 **한 번도 안 읽는다**
+#   (일봉은 늘 count=3000) ② 기록기가 읽는 칸이 일봉 함수가 만드는 칸 안에 있다.
+import ast as _ast339
+import re as _re339
+_SCR339 = _os.path.join(PROJ, 'scripts')
+_yml339 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml')).replace('\r\n', '\n')
+_lines339 = _yml339.split('\n')
+# ── 시간초과한 그 단계: 이어 도는 기록기 둘 · 예산 90분 (끝 앵커는 시작 뒤에서 · R226) ──
+_i339 = next((k for k, ln in enumerate(_lines339)
+              if '경로·기준선 보강' in ln and ln.lstrip().startswith('- name:')), None)
+_end339 = next((k for k in range(_i339 + 1, len(_lines339))
+                if _lines339[k].lstrip().startswith('- name:')), len(_lines339)) if _i339 is not None else 0
+_step339 = _lines339[_i339:_end339] if _i339 is not None else []
+_names339 = [_w.split('scripts/')[1].split()[0] for _w in _step339 if 'scripts/' in _w and '.py' in _w]
+_budget339 = next((int(ln.split(':')[1].strip()) for ln in _step339 if 'timeout-minutes:' in ln), None)
+check("R333 시간초과한 단계는 기록기 둘을 이 차례로 이어 돌리고 예산은 90분 그대로다 (순서·예산은 안 건드렸다 · R247)",
+      _names339 == ['path_recorder.py', 'entry_anchor_recorder.py'] and _budget339 == 90,
+      f'{_names339} · {_budget339}분 · 줄 {len(_step339)}')
+
+
+def _discards_fund339(src):
+    """옛 적재 함수를 부르면서 **재무 df 를 버리는** 자리를 찾는다(그 자리는 일봉만 쓰면 된다).
+
+    재무 df 를 실제로 쓰는 호출은 안 잡는다 — 그때는 이 함수가 맞는 함수다.
+    """
+    _hit = []
+    try:
+        _t = _ast339.parse(src)
+    except SyntaxError:
+        return _hit
+    for _n in _ast339.walk(_t):
+        if not isinstance(_n, _ast339.Assign) or _n.value is None:
+            continue
+        _cs = [c for c in _ast339.walk(_n.value) if isinstance(c, _ast339.Call)
+               and getattr(c.func, 'attr', None) in ('load_bitemporal_data', 'generate_synthetic_bitemporal_data')]
+        if not _cs:
+            continue
+        _tgt = _n.targets[0]
+        _snd = _tgt.elts[1] if isinstance(_tgt, _ast339.Tuple) and len(_tgt.elts) == 2 else None
+        if _snd is not None and isinstance(_snd, _ast339.Name) and _snd.id.startswith('_'):
+            _hit.append((_n.lineno, getattr(_cs[0].func, 'attr', None)))
+    return _hit
+
+
+# ── 대상은 워크플로에서 유도한다 (손 목록 금지 · R114) ────────────────────────
+_wfnames339 = sorted(set(_re339.findall(r'scripts/([A-Za-z0-9_]+\.py)', _yml339)))
+_wfsrc339 = {n: _read148(_os.path.join(_SCR339, n)) for n in _wfnames339
+             if _os.path.exists(_os.path.join(_SCR339, n))}
+_bad339 = {n: _discards_fund339(v) for n, v in _wfsrc339.items() if _discards_fund339(v)}
+check("R333 클라우드가 부르는 스크립트 중 재무 df 를 버리면서 옛 적재 함수를 쓰는 자리가 없다 (일봉만 받는다)",
+      not _bad339, f'위반 {_bad339}', scanned=len(_wfsrc339))
+_bars339 = {n: [getattr(c.func, 'attr', None) for c in _ast339.walk(_ast339.parse(v))
+                if isinstance(c, _ast339.Call)].count('fetch_daily_bars') for n, v in _wfsrc339.items()}
+check("R333 그 자리들은 일봉 전용 함수를 부른다 — 기록기 셋 · 원장 랩 · 일일 개선 (합 7회)",
+      sum(_bars339.values()) == 7 and all(_bars339.get(n) == 1 for n in
+                                          ('path_recorder.py', 'entry_anchor_recorder.py',
+                                           'news_event_recorder.py', 'run_daily_improvement.py')),
+      str({k: v for k, v in _bars339.items() if v}), scanned=len(_bars339))
+check("R333 심기 — 재무 df 를 버리는 호출은 잡고, 실제로 쓰는 호출·일봉 호출은 안 잡는다 (양방향)",
+      len(_discards_fund339("df, _f = eng.load_bitemporal_data(tk, start_date='2014-01-01')\n")) == 1
+      and len(_discards_fund339("cache[tk], _ = eng.generate_synthetic_bitemporal_data(symbol=tk)\n")) == 1
+      and not _discards_fund339("df, fund = eng.load_bitemporal_data(tk)\nprint(fund)\n")
+      and not _discards_fund339("df = eng.fetch_daily_bars(tk)\n"))
+# ── 값이 안 바뀌는 근거 ① 버린 인자는 읽히지 않았다 ────────────────────────────
+_be339 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_fns339 = {n.name: n for n in _ast339.walk(_ast339.parse(_be339)) if isinstance(n, _ast339.FunctionDef)}
+_gsb339, _lbd339 = _fns339.get('generate_synthetic_bitemporal_data'), _fns339.get('load_bitemporal_data')
+check("R333 기록기가 넘기던 start_date 는 적재 함수가 한 번도 읽지 않는다 — 버려도 받는 봉이 같다",
+      bool(_gsb339) and bool(_lbd339)
+      and 'start_date' not in {x.id for x in _ast339.walk(_gsb339) if isinstance(x, _ast339.Name)}
+      and 'start_date' in {a.arg for a in _lbd339.args.args},
+      str(sorted({x.id for x in _ast339.walk(_gsb339) if isinstance(x, _ast339.Name)} & {'start_date', 'end_date'})))
+# ── 값이 안 바뀌는 근거 ② 읽는 칸이 일봉 함수가 만드는 칸 안에 있다 ──────────────────
+_fdb339 = _fns339.get('fetch_daily_bars')
+_made339 = {k.value for d in _ast339.walk(_fdb339) for k in getattr(d, 'keys', [])
+            if isinstance(k, _ast339.Constant) and isinstance(k.value, str)} if _fdb339 else set()
+
+
+def _cols339(src):
+    """df['x'] · cache[tk]['x'] 처럼 일봉 df 에서 읽는 칸 이름을 모은다."""
+    return {n.slice.value for n in _ast339.walk(_ast339.parse(src))
+            if isinstance(n, _ast339.Subscript) and isinstance(n.slice, _ast339.Constant)
+            and isinstance(n.slice.value, str) and isinstance(n.value, _ast339.Name) and n.value.id == 'df'}
+
+
+_need339 = {n: _cols339(v) for n, v in _wfsrc339.items() if n in
+            ('path_recorder.py', 'entry_anchor_recorder.py', 'news_event_recorder.py')}
+check("R333 기록기가 읽는 일봉 칸이 일봉 함수가 만드는 칸 안에 있다 (날짜·시·고·저·종가·거래량)",
+      bool(_made339) and all(v and v <= _made339 for v in _need339.values()),
+      f'{ {n: sorted(v - _made339) for n, v in _need339.items()} } · 만드는 칸 {len(_made339)}',
+      scanned=len(_need339))
+check("R333 심기 — 없는 칸(재무)을 읽으면 위 검사가 잡는다 (양방향)",
+      not (_cols339("x = df['fundamental_pbr']\n") <= _made339)
+      and _cols339("y = df['adj_close']\n") <= _made339)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

@@ -169,8 +169,9 @@ def make_resolve_open_cases(conn):
             tk = r['ticker']
             if tk not in cache:
                 try:
-                    cache[tk], _ = eng.generate_synthetic_bitemporal_data(
-                        symbol=tk, start_date='2024-01-01', end_date=None)
+                    # 라운드 333 — 일봉만 쓴다(아래 grade_prediction 이 원장 채점과 같은 함수다).
+                    #   적재 함수는 일봉 앞에 실시간 삼중 확인을 부르고 여기는 그 재무 df 를 버린다.
+                    cache[tk] = eng.fetch_daily_bars(tk)
                 except Exception:
                     cache[tk] = None
             df = cache[tk]

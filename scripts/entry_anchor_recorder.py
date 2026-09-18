@@ -90,7 +90,9 @@ def main():
             if not todo:
                 continue
             try:
-                df, _f = eng.load_bitemporal_data(tk, start_date='2014-01-01')
+                # 라운드 333 — 일봉만 쓴다(ATR·20일 평균·표준편차). 같은 단계의 경로 기록기와 같은 이유로
+                #   일봉 전용 함수로 바꾼다(라운드 330 · 값 불변 · 받는 초만 줄어든다).
+                df = eng.fetch_daily_bars(tk)
             except Exception:                                  # noqa: BLE001
                 skip += 1
                 continue

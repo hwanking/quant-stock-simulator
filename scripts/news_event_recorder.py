@@ -146,7 +146,9 @@ def resolve(path=None):
         tk = r['ticker']
         if tk not in cache:
             try:
-                df, _ = eng.load_bitemporal_data(tk, start_date='2024-01-01')
+                # 라운드 333 — 일봉만 쓴다(종가·고가·저가). 같은 워크플로의 기록기 셋이 함께 옮겼다 —
+                #   적재 함수는 일봉 앞에 실시간 삼중 확인을 부르고 여기는 그 재무 df 를 버린다.
+                df = eng.fetch_daily_bars(tk)
                 cache[tk] = df
             except Exception:                                  # noqa: BLE001
                 cache[tk] = None
