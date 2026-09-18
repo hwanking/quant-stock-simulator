@@ -26739,6 +26739,99 @@ check("R333 심기 — 없는 칸(재무)을 읽으면 위 검사가 잡는다 (
       not (_cols339("x = df['fundamental_pbr']\n") <= _made339)
       and _cols339("y = df['adj_close']\n") <= _made339)
 
+print("\n" + "=" * 72)
+print("§340 R334 — '0건'의 사유를 세어서 말한다 (뉴스 사후 경로 채움 · 2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-09-17 클라우드 로그: `사후 경로 채움 0건 / 대기 41건 (총 89건)` 아래에
+#   *"가장 오래된 대기 기록이 2026-08-10 이고, 20영업일이 지나야 채워진다"*. 그런데 08-10 은 그날로부터
+#   **27거래일 전**이라 그 행의 사유가 될 수 없다 — 함수가 넷을 같은 `continue` 로 버리고(시세 미수신 ·
+#   봉 부족 · 신호일 뒤 거래일 없음 · 20영업일 미경과) 그중 **재 보지도 않은 하나**를 사유로 댔다
+#   (§3 · R318 '상태는 사유가 아니다' 계열). 원장 복사본 실측(2026-09-18 · 72행): 채움 48 ·
+#   **20영업일 미경과 22(가장 오래된 2026-09-02)** · **시세 미수신 2(가장 오래된 2026-08-10)** —
+#   옛 문장이 대기라고 부른 그 08-10 행은 **기다려도 안 채워진다**. 채우는 규칙·문턱·칸 불변.
+import importlib.util as _ilu340
+import io as _io340
+import contextlib as _ctx340
+import tempfile as _tf340
+import pandas as _pd340
+import bitemporal_engine as _be340
+_spec340 = _ilu340.spec_from_file_location(
+    '_ner340', _os.path.join(PROJ, 'scripts', 'news_event_recorder.py'))
+_ner340 = _ilu340.module_from_spec(_spec340)
+_spec340.loader.exec_module(_ner340)
+_H340 = _ner340.H
+_bd340 = [d.strftime('%Y-%m-%d') for d in _pd340.bdate_range('2026-05-01', periods=80)]
+_bars340 = _pd340.DataFrame({
+    'trade_date': _bd340,
+    'adj_close': [1000.0 + i for i in range(len(_bd340))],
+    'high_raw': [1010.0 + i for i in range(len(_bd340))],
+    'low_raw': [990.0 + i for i in range(len(_bd340))],
+})
+
+
+class _FakeEng340:
+    """티커별로 정해 둔 답을 준다 — 일봉 · 짧은 일봉 · 수신 실패."""
+
+    def fetch_daily_bars(self, symbol="005930.KS"):
+        if symbol == 'FAIL':
+            raise RuntimeError('심은 수신 실패')
+        if symbol == 'SHORT':
+            return _bars340.head(_H340 - 1).copy()
+        return _bars340.copy()
+
+
+def _run340(rows):
+    with _tf340.TemporaryDirectory() as _td:
+        _p = _os.path.join(_td, 'news_events.jsonl')
+        with open(_p, 'w', encoding='utf-8') as _f:
+            for _r in rows:
+                _f.write(_json.dumps(_r, ensure_ascii=False) + '\n')
+        _orig = _be340.BitemporalEngine
+        _be340.BitemporalEngine = _FakeEng340
+        _buf = _io340.StringIO()
+        try:
+            with _ctx340.redirect_stdout(_buf):
+                _done = _ner340.resolve(path=_p)
+        finally:
+            _be340.BitemporalEngine = _orig
+        _after = [_json.loads(_l) for _l in open(_p, encoding='utf-8') if _l.strip()]
+        return _done, _buf.getvalue(), _after
+
+
+_old340 = _bd340[5]                                   # 20봉이 지난 신호일
+_new340 = _bd340[-3]                                  # 아직 20봉이 안 지난 신호일
+_rows340 = [
+    {'ticker': 'OK1', 'date': _old340, 'events': {'실적': 1}},
+    {'ticker': 'FAIL', 'date': _old340, 'events': {'실적': 1}},
+    {'ticker': 'SHORT', 'date': _old340, 'events': {'실적': 1}},
+    {'ticker': 'OK2', 'date': _new340, 'events': {'실적': 1}},
+]
+_d340, _out340, _aft340 = _run340(_rows340)
+check("R334 채울 수 있는 행만 채운다 (규칙 불변) · 사유 넷을 갈라 센다 — 시세 미수신 · 봉 부족 · 미경과",
+      _d340 == 1 and '시세 미수신 1건' in _out340 and '봉 부족 1건' in _out340
+      and f'{_H340}영업일 미경과 1건' in _out340, _out340.strip()[:300])
+check("R334 사유마다 그 사유로 걸린 행의 가장 오래된 날짜를 적는다 (남의 날짜를 빌려 쓰지 않는다)",
+      f'미경과 1건(가장 오래된 {_new340})' in _out340
+      and f'시세 미수신 1건(가장 오래된 {_old340})' in _out340, _out340.strip()[:300])
+check("R334 셈이 맞는다 — 채움 + 사유 = 대기 (안 맞으면 그 사실을 찍는다)",
+      '셈이 안 맞는다' not in _out340 and sum(1 for _r in _aft340 if _r.get('resolved')) == 1,
+      _out340.strip()[:200])
+# ── '0건' 의 문장: 전부 대기일 때와 아닐 때가 다르다 (양방향) ────────────────────
+_d340b, _out340b, _ = _run340([{'ticker': 'OK2', 'date': _new340, 'events': {}},
+                               {'ticker': 'OK3', 'date': _new340, 'events': {}}])
+_d340c, _out340c, _ = _run340([{'ticker': 'FAIL', 'date': _old340, 'events': {}},
+                               {'ticker': 'OK2', 'date': _new340, 'events': {}}])
+check("R334 전부 미경과면 '고장이 아니라 대기'라고 적고 그 사유의 가장 오래된 날짜를 댄다",
+      _d340b == 0 and '고장이 아니라 대기다' in _out340b and _new340 in _out340b, _out340b.strip()[:200])
+check("R334 미경과가 전부가 아니면 '전부 대기'라고 말하지 않는다 — 몇 건뿐인지 적는다 (§3)",
+      _d340c == 0 and '고장이 아니라 대기다' not in _out340c
+      and '전부 대기는 아니다' in _out340c and f'{_H340}영업일 미경과는 1건뿐' in _out340c,
+      _out340c.strip()[:250])
+check("R334 사유를 버리는 맨 `continue` 로 돌아가지 않는다 — 네 갈래 전부 세는 자리를 지난다",
+      _read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py')).count('_skip(') == 5,
+      str(_read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py')).count('_skip(')))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

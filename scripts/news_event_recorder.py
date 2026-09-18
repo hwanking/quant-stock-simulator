@@ -142,6 +142,20 @@ def resolve(path=None):
         return 0
     eng = be.BitemporalEngine()
     cache, done = {}, 0
+    # ⚠️ 라운드 334 — 여기는 넷을 같은 `continue` 로 버리고 있었고, 그 뒤 '0건' 줄이
+    #   **재 보지도 않은 사유**(20영업일 미경과)를 댔다. 2026-09-17 클라우드 실행이 그것을
+    #   드러냈다 — *"가장 오래된 대기 기록이 2026-08-10 … 20영업일이 지나야 채워진다"* 인데
+    #   08-10 은 그날로부터 **27거래일 전**이라 그 행의 사유가 될 수 없다(§3 · R318·R284 계열).
+    #   사유를 세어 찍고(R37·R197 이 이미 정한 규칙) '미경과'는 **그 사유로 걸린 행의**
+    #   가장 오래된 날짜로만 말한다. 채우는 규칙·문턱은 한 글자도 안 바꿨다.
+    skip, skip_oldest = {}, {}
+
+    def _skip(reason, row):
+        skip[reason] = skip.get(reason, 0) + 1
+        d = str(row.get('date'))[:10]
+        if d and (reason not in skip_oldest or d < skip_oldest[reason]):
+            skip_oldest[reason] = d
+
     for r in todo:
         tk = r['ticker']
         if tk not in cache:
@@ -153,7 +167,11 @@ def resolve(path=None):
             except Exception:                                  # noqa: BLE001
                 cache[tk] = None
         df = cache[tk]
-        if df is None or len(df) < H + 2:
+        if df is None:
+            _skip('시세 미수신', r)
+            continue
+        if len(df) < H + 2:
+            _skip('봉 부족', r)
             continue
         dates = list(df['trade_date'].astype(str).str[:10])
         try:
@@ -161,10 +179,12 @@ def resolve(path=None):
         except ValueError:
             later = [i for i, d in enumerate(dates) if d > r['date']]
             if not later:
-                continue                    # 아직 다음 거래일이 없다
+                _skip('신호일 뒤 거래일 없음', r)
+                continue
             j = later[0] - 1
         if j + H >= len(dates):
-            continue                        # 20봉이 아직 안 찼다 — 다음에
+            _skip(f'{H}영업일 미경과', r)
+            continue
         C = df['adj_close'].astype(float).tolist()
         Hi = df['high_raw'].astype(float).tolist()
         Lo = df['low_raw'].astype(float).tolist()
@@ -181,13 +201,21 @@ def resolve(path=None):
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + '\n')
     print(f'사후 경로 채움 {done}건 / 대기 {len(todo)}건 (총 {len(rows)}건)')
-    # ⚠️ 0건이 '정상 대기'인지 '고장'인지 밝힌다 (라운드 103).
-    #   20영업일이 안 지난 기록만 있으면 0건이 맞다. 그 경우 **언제부터
-    #   채워지는지**를 같이 적어야 사람이 기다릴 수 있다.
+    # ⚠️ 0건이 '정상 대기'인지 '고장'인지 밝힌다 (라운드 103 · 사유는 **세어서** 말한다 · 라운드 334).
+    if skip:
+        print('  못 채운 사유 — ' + ' · '.join(
+            f'{k} {v}건(가장 오래된 {skip_oldest.get(k, "?")})'
+            for k, v in sorted(skip.items(), key=lambda kv: -kv[1])))
+    if done + sum(skip.values()) != len(todo):
+        print(f'  ⚠️ 셈이 안 맞는다 — 채움 {done} + 사유 {sum(skip.values())} != 대기 {len(todo)}')
     if done == 0 and todo:
-        _oldest = min(str(r.get('date'))[:10] for r in todo)
-        print(f'  0건은 고장이 아니라 대기일 수 있다 — 가장 오래된 대기 '
-              f'기록이 {_oldest} 이고, {H}영업일이 지나야 채워진다.')
+        _waitk = f'{H}영업일 미경과'
+        if skip.get(_waitk) == len(todo):
+            print(f'  0건은 고장이 아니라 대기다 — 대기 행 전부가 아직 {H}영업일이 '
+                  f'안 지났고, 가장 오래된 것이 {skip_oldest[_waitk]} 이다.')
+        else:
+            print(f'  0건이 전부 대기는 아니다 — {H}영업일 미경과는 '
+                  f'{skip.get(_waitk, 0)}건뿐이고 나머지는 위 사유다.')
 
     res = [r for r in rows if r.get('resolved')]
     if len(res) >= 30:
