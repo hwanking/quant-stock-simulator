@@ -262,7 +262,7 @@ def _ans_holder(ctx, avg):
     if not kind:
         out.append(f"판정: {why}")
         return '\n'.join(out)
-    out.append(f"판정: **{kind}** — {why}.")
+    out.append(f"판정: **{_uk304.hold_label(kind)}** — {why}.")
     out.append(f"기준값(현재가 기준): 팔 가격 1차 {_w(ht) or NA} · "
                f"버틸 수 없는 가격 {_w(hs) or NA}.")
     if _ad is None:

@@ -2386,6 +2386,27 @@ def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=T
     return fresh
 
 
+def mark_sold(items, code):
+    """'팔았음' — 그 종목의 **보유 기록(매입가·수량)만** 비우고 관심종목 행은 남긴다 (라운드 338).
+
+    사용자: *"매도가 나오면 팔 수 있게도 해주고."* 실제 매도는 증권사에서 하고, 여기서는 **판 뒤의
+    기록**만 받는다. 되돌리기용으로 바뀌기 전 행을 그대로 돌려준다(R244·R321 과 같은 원칙).
+    못 읽는 코드·없는 종목이면 아무것도 안 바꾼다(§3). 반환: (새 목록, 바뀌기 전 행 | None).
+    """
+    c = normalize_code(code)
+    if not c:
+        return list(items or []), None
+    out, old = [], None
+    for w in (items or []):
+        if old is None and normalize_code(w.get('code')) == c:
+            old = dict(w)
+            nw = {k: v for k, v in w.items() if k not in ('paid', 'qty')}
+            out.append(nw)
+        else:
+            out.append(w)
+    return out, old
+
+
 def save_watchlist(items, path=WATCHLIST_FILE):
     """items: [{'code': '028670', 'name': '팬오션',
                 'target_buy': 4200, 'paid': 4500, 'memo': '...'}, ...]

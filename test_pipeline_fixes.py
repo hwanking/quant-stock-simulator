@@ -19342,16 +19342,27 @@ check("저장은 여전히 쓰기 금지를 본다",
 # ── 값으로 — 쓰기 금지로 렌더해도 **보유가 읽히는가** ────────────────
 #   존재가 아니라 값을 본다(§222 의 교훈). 그리고 이 확인은 **파일을
 #   바꾸지 않아야** 한다 — §201 이 이미 그것을 재고 있다.
-_own228 = _render(ticker='004370.KS',
-                  want_val=['pos_mode_004370_KS'])
-if _own228.get('ok'):
-    _pm228 = (_own228.get('vals') or {}).get('pos_mode_004370_KS')
-    check("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
-          _pm228 == '보유 중',
-          f'pos_mode={_pm228!r} — 빈 목록을 보면 아직 없음이 된다')
+# ⚠️ 라운드 340 — 종전엔 종목 하나를 **손으로** 박아 두었다(사용자가 실제로 들고 있던 종목). 사용자가 그
+#   보유 기록을 비우자(2026-09-18 19:37 · '팔았음' 의 모양) 이 검사가 붉어졌다 — 검사가 재려는 성질은
+#   *"쓰기 금지 렌더에서도 보유 행이 읽힌다"* 이지 *"그 종목이 보유 중이다"* 가 아니다. 사용자 자료에 기대는
+#   고정값은 사용자가 자료를 바꾸는 날 거짓이 된다(R165·R320 계열). 보유 행을 **파일에서 유도**하고, 하나도
+#   없으면 미측정으로 적는다(§3).
+_held228 = [w for w in (pf.load_watchlist()[0] or []) if (w.get('paid') or 0) > 0]
+if _held228:
+    _hc228 = pf.normalize_code(_held228[0].get('code'))
+    _htk228 = f"{_hc228}.KS" if not str(_held228[0].get('code') or '').endswith(('.KS', '.KQ')) else str(_held228[0]['code'])
+    _own228 = _render(ticker=_htk228, want_val=[f"pos_mode_{_htk228.replace('.', '_')}"])
+    if _own228.get('ok'):
+        _pm228 = (_own228.get('vals') or {}).get(f"pos_mode_{_htk228.replace('.', '_')}")
+        check("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
+              _pm228 == '보유 중',
+              f'pos_mode={_pm228!r} — 빈 목록을 보면 아직 없음이 된다 (보유 행 {len(_held228)}개 중 첫 행으로 쟀다)')
+    else:
+        skipped("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
+                f"렌더 실패 — {_own228.get('error')}")
 else:
     skipped("쓰기 금지 렌더에서도 관심종목 평단이 읽힌다",
-            f"렌더 실패 — {_own228.get('error')}")
+            "이 PC 의 관심종목에 매입가가 적힌 행이 하나도 없다 — 잴 보유 행이 없다 (건너뜀은 통과가 아니다)")
 
 print()
 
@@ -22009,8 +22020,11 @@ check("보유 행의 판단 문장은 안 바뀐다 (사유는 미보유 쪽에�
 check("표가 미보유 행에만 사유를 적는다 · 판정은 킷 한 곳",
       "_wy240 = str(_act.get('why_line') or '')" in _w231
       and "if _wy240:" in _w231)
+# 라운드 338 — 종전엔 인라인 자르기 글자(`[:33] + '…'`)를 못 박았다. 그 인라인 판별이 `find()` 의 −1 을
+#   못 걸러 '유 …' 를 냈고, 자르기는 킷 한 곳(`clip_reason`)으로 갔다(§344 가 심어서 잰다). 여기서는
+#   **킷을 부르는지**와 **전체가 툴팁에 있는지**만 본다 — 글자 락은 옳은 변경마다 깨진다(R98b 계열).
 check("긴 사유는 자르고 전체는 툴팁에 둔다 (칸이 늘어나 값이 잘리지 않게)",
-      "_wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'" in _w231
+      "_wys240 = _uk.clip_reason(_wy240, 34)" in _w231
       and "title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>" in _w231)
 
 # ④ '빼기' 가 이름에 있다 — 기능은 그대로 편집 모드
@@ -25271,8 +25285,11 @@ check("채팅이 평단 대비 수익률로 행동을 고르지 않는다 (+5 / 
 
 
 def _chat_kind316(text):
+    # 라운드 338 — 챗은 kind 가 아니라 사람용 이름표(`ui_kit.hold_label`)를 찍는다. 같은 표로 되돌려 읽는다 —
+    #   표를 여기 베끼면 두 벌이 된다(§4).
     for _k in ('보유 기준 미산출', '추가 매수 가능', '정리 검토', '일부 정리', '보유 유지'):
-        if f'판정: **{_k}**' in text or f'판정: {_k}' in text:
+        _lb = _uk316.hold_label(_k)
+        if f'판정: **{_lb}**' in text or f'판정: {_lb}' in text or f'판정: **{_k}**' in text:
             return _k
     if '비중 축소' in text:
         return '정리 검토'
@@ -26272,9 +26289,12 @@ check("① 심기 — 옛 이름 + 성적 미달 사유 → '성적 미달' · �
       and _b333['kind'] == '신뢰도·표본 확보 대기' and _b333['label'] == '표본 대기',
       f"{_a333['label']} / {_b333['label']}")
 _w333 = _read148(_os.path.join(PROJ, 'web_app.py'))
+# 라운드 338 — 그 인라인 판별(`0 < _s327 + 2`)이 바로 '유 …' 의 원인이었다. 성질(첫 문장에서 자른다)은
+#   그대로 킷 `clip_reason` 에서 **값으로** 본다 · 화면은 그 함수를 부른다.
 check("① 표의 사유 한 줄은 같은 폭(34자) 안에서 첫 문장이 끝나면 거기서 자른다 (전체는 툴팁)",
-      "_s327 = _wy240.find('다. ')" in _w333
-      and "if len(_wy240) > 34 and 0 < _s327 + 2 <= 34:" in _w333)
+      "_wys240 = _uk.clip_reason(_wy240, 34)" in _w333
+      and _uk333.clip_reason('첫 문장입니다. 둘째 문장은 길어서 칸을 넘칩니다 아주 많이 그리고 더 길게', 34)
+      == '첫 문장입니다. …')
 check("② '아직 안 잼' 칸이 그 종목만 바로 재는 링크다 · 받는 길 하나 · 채우기 버튼과 같은 코드로 잰다",
       "<a href='?measure={_uk._esc_attr(_wcode)}' target='_self' " in _w333
       and "def _wl_measure_from_query():" in _w333 and "\n_wl_measure_from_query()\n" in _w333
@@ -27061,6 +27081,74 @@ check("R337 펼침 라벨은 마크다운 이스케이퍼(_md_safe)를 지난다
       and (getattr(_exp343[0].args[0].func, 'id', None)
            or getattr(_exp343[0].args[0].func, 'attr', None)) == '_md_safe',
       f'{len(_exp343)}곳', scanned=len(_exp343))
+
+print("\n" + "=" * 72)
+print("§344 R338 — '유 …' · 보유 판정 이름표는 '무엇을 하라' · 매도 판정이 뜨면 '팔았음' (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"유 … 이게 뭐야? · 정리 검토가 팔라는거지? 확실하게 · 매도가 나오면 팔 수 있게."*
+#   ① 관심종목 표의 사유 칸이 미보유 행 여섯에서 전부 `유 …` — 라운드 327 의 첫 문장 자르기가 `find()`
+#      의 −1 을 못 걸러(`0 < -1 + 2` 는 참) '다. ' 없는 긴 사유는 **첫 글자**만 남았다. 킷 한 곳
+#      (`clip_reason`)으로 빼고 심어서 잰다(R120e).
+#   ② '정리 검토'는 kind 의 이름이지 사람에게 하는 말이 아니었다 — 이름표 표(`HOLD_LABELS`)를 한 곳에
+#      두고 화면·챗이 그것을 읽는다(kind·순서표·색·저장값 불변 · R322·R292·R327). 이유 문장이
+#      "계획대로면 파는 자리" 를 말한다(그 선은 잰 날에 고정된 보유 계획의 손절선 · R224).
+#   ③ 매도 판정이 뜬 보유 행에만 '팔았음' — 보유 기록(매입가·수량)만 비우고 행은 남긴다 · 되돌리기.
+#      규칙은 `portfolio.mark_sold` 순수 함수 하나. 실제 매도는 증권사에서 한다.
+import ui_kit as _uk344
+import portfolio as _pf344
+# ── ① 사유 자르기 (양방향 심기) ──────────────────────────────────────────
+_long344 = '유사패턴 표본 0건이라 확률로 환산하지 않습니다 — 닮은 자리를 못 찾은 것이라 기다려 열린다는 보장이 없습니다'
+_sent344 = '비용 차감 기대값이 음수입니다. 왕복 비용 0.36% 를 빼면 남는 우위가 없습니다'
+check("R338 '다. ' 가 없는 긴 사유는 칸 폭에서 자르고 말줄임 — 첫 글자만 남지 않는다 ('유 …' 재발 방지)",
+      _uk344.clip_reason(_long344, 34) == _long344[:33] + '…' and len(_uk344.clip_reason(_long344, 34)) == 34,
+      repr(_uk344.clip_reason(_long344, 34)))
+check("R338 첫 문장이 칸 안에서 끝나면 거기서 자른다 (R327 규칙 그대로) · 짧은 사유는 그대로",
+      _uk344.clip_reason(_sent344, 34) == '비용 차감 기대값이 음수입니다. …'
+      and _uk344.clip_reason('짧다', 34) == '짧다' and _uk344.clip_reason(None, 34) == '')
+_w344 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R338 화면은 자르기를 킷 함수로 한다 — 옛 인라인 판별(_s327)은 없다",
+      '_uk.clip_reason(_wy240' in _w344 and '_s327' not in _w344)
+# ── ② 이름표 한 곳 · 소비자 전원 ─────────────────────────────────────────
+check("R338 이름표 표가 보유 판정 kind 전부를 덮는다 — '정리 검토'는 '매도 — 손절선 아래' 로 보인다",
+      all(k in _uk344.HOLD_LABELS for k in _uk344.WATCH_HOLD_ACTIONS + ('보유 기준 미산출',))
+      and _uk344.hold_label('정리 검토') == '매도 — 손절선 아래'
+      and _uk344.hold_label('일부 정리').startswith('일부 매도')
+      and _uk344.hold_label('모르는 kind') == '모르는 kind',
+      str(_uk344.HOLD_LABELS), scanned=len(_uk344.HOLD_LABELS))
+_kind344, _why344 = _uk344.holder_kind(392000, 394928, 445339)
+check("R338 손절선 아래의 이유 문장이 '무엇을 하라'를 말한다 — 계획대로면 파는 자리",
+      _kind344 == '정리 검토' and '계획대로면 파는 자리' in _why344 and '394,928원' in _why344, _why344)
+_kind344b, _why344b = _uk344.holder_kind(10185, 9000, 9996)
+check("R338 1차 매도가 넘음도 같은 규칙 — '넘었습니다' 는 그대로(R241 락)이고 '일부 파는 자리' 를 잇는다",
+      _kind344b == '일부 정리' and '넘었습니다' in _why344b and '일부 파는 자리' in _why344b, _why344b)
+_act344 = _uk344.watch_action({'code': '000001', 'paid': 429239, 'qty': 3, 'snap_hold_stop': 394928,
+                               'snap_hold_trim': 445339, 'snap_at': '2026-09-15'}, price=392000)
+check("R338 관심종목 행의 label 은 이름표 표에서 온다 (kind 는 그대로)",
+      _act344 and _act344['kind'] == '정리 검토' and _act344['label'] == '매도 — 손절선 아래',
+      str(_act344 and (_act344['kind'], _act344['label'])))
+_gc344 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+check("R338 이름표 소비자 — 관심종목 칩·이름 캡션·금액 표·가늠 AI 가 전부 hold_label 을 부른다 (§4)",
+      _w344.count('_uk.hold_label(') >= 3 and 'hold_label(kind)' in _gc344,
+      f"web_app {_w344.count('_uk.hold_label(')} · chat {_gc344.count('hold_label(')}",
+      scanned=_w344.count('_uk.hold_label(') + _gc344.count('hold_label('))
+# ── ③ 팔았음 — 순수 함수 (심기 양방향) ────────────────────────────────────
+_items344 = [{'code': '000001', 'name': '가', 'paid': 1000.0, 'qty': 3, 'snap_buy': 900.0},
+             {'code': '000002', 'name': '나', 'paid': 2000.0, 'qty': 5},
+             {'code': '000003', 'name': '다'}]
+_new344, _old344 = _pf344.mark_sold(_items344, '000002')
+check("R338 mark_sold — 그 종목의 매입가·수량만 비우고 행·다른 칸·다른 행은 그대로 · 바뀌기 전 행을 돌려준다",
+      _old344 == _items344[1] and [w['code'] for w in _new344] == ['000001', '000002', '000003']
+      and 'paid' not in _new344[1] and 'qty' not in _new344[1] and _new344[1]['name'] == '나'
+      and _new344[0] == _items344[0] and _new344[2] == _items344[2], str(_new344[1]))
+_same344, _none344 = _pf344.mark_sold(_items344, '999999')
+check("R338 mark_sold — 없는 종목·못 읽는 코드는 아무것도 안 바꾼다 (§3)",
+      _same344 == _items344 and _none344 is None
+      and _pf344.mark_sold(_items344, '!!')[1] is None)
+check("R338 '팔았음' 링크는 매도 판정(정리 검토·일부 정리)이 뜬 보유 행에만 · ?sold= 길이 빼기와 같은 자리에 있다",
+      "?sold=" in _w344 and '_wl_sold_from_query()' in _w344
+      and "_act.get('kind') in ('정리 검토', '일부 정리')" in _w344
+      and "st.session_state['wl_undo_sold']" in _w344 and 'wl_undo_sold_btn' in _w344)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

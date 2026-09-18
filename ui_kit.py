@@ -1258,6 +1258,41 @@ def breakeven_row(be, observed=None, theme='dark'):
 #: 보유 중일 때 나올 수 있는 말 — 순서가 곧 우선순위다.
 WATCH_HOLD_ACTIONS = ('정리 검토', '일부 정리', '추가 매수 가능', '보유 유지')
 
+#: 라운드 338 — 사용자: *"정리 검토가 팔라는거지? 확실하게 이야기해줘 표현을."* kind 는 **판정의
+#:   이름**이라 안 바꾼다(순서표·색 지도·저장 스냅샷·챗이 그 이름으로 잇는다 · R292·R327). 화면과 챗이
+#:   **사람에게 보이는 글자**만 이 표에서 받는다 — 무엇을 하라는 말인지가 이름표에 들어간다(R322 의 그 규칙).
+#:   '정리 검토'는 현재가가 **버틸 수 없는 가격 아래**라는 뜻이고, 그 선은 잰 날에 고정된 보유 계획의
+#:   손절선이다(R224) — 계획대로면 파는 자리다. 새 문턱 없음 · 판정 불변.
+HOLD_LABELS = {
+    '정리 검토': '매도 — 손절선 아래',
+    '일부 정리': '일부 매도 — 1차 매도가 넘음',
+    '추가 매수 가능': '추가 매수 가능',
+    '보유 유지': '보유 유지',
+    '보유 기준 미산출': '보유 기준 미산출',
+}
+
+
+def hold_label(kind):
+    """보유 판정 kind → 화면·챗에 보이는 이름표 (한 곳 · §4). 모르는 kind 는 그대로 돌려준다."""
+    return HOLD_LABELS.get(kind, kind or '')
+
+
+def clip_reason(text, width=34):
+    """관심종목 표의 사유 한 줄을 칸 폭에 맞게 자른다 — 전체는 툴팁에 있다.
+
+    라운드 327 이 *"낱말 가운데서 끊긴 조각보다 한 문장이 낫다"* 며 첫 문장 끝('다. ')에서 자르게
+    했는데, 그 판별이 `find()` 의 **−1(없음)** 을 못 걸렀다 — `0 < -1 + 2` 가 참이라 '다. ' 가 **없는**
+    긴 사유는 **첫 글자 하나**만 남았다. 화면 실측(2026-09-18): 미보유 행 여섯이 전부 `유 …`
+    (*"유사패턴 …"* 의 첫 글자). 사용자: *"유 … 이게 뭐야?"* 여기 한 곳에 두고 심어서 잰다(R120e).
+    """
+    s = '' if text is None else str(text)
+    if len(s) <= width:
+        return s
+    cut = s.find('다. ')
+    if 0 <= cut and cut + 2 <= width:
+        return s[:cut + 2] + ' …'
+    return s[:width - 1] + '…'
+
 
 #: `personalize_for_position` 의 6조건 이름 중 화면이 **갈라 읽는** 둘 (라운드 221).
 #:   값을 다시 계산하지 않는다 — 스냅샷에 찍힌 실패 목록의 **이름**만 본다.
@@ -1361,11 +1396,14 @@ def holder_kind(px, hold_stop, hold_trim, buy=None, avg_down_ok=None):
                 '이 종목의 보유자 기준값(버틸 수 없는 가격·팔 가격 1차)을 아직 '
                 '안 냈습니다 — 채우면 판단합니다')
     if h_stop and px <= h_stop:
-        return '정리 검토', f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다'
+        # 라운드 338 — "팔라는 거지?" 에 문장이 답한다: 그 선은 보유 계획의 손절선이다.
+        return ('정리 검토',
+                f'현재가가 버틸 수 없는 가격({h_stop:,.0f}원) 아래입니다 — '
+                f'계획대로면 파는 자리입니다')
     if h_trim and px >= h_trim:
         return ('일부 정리',
                 f'1차 매도가({h_trim:,.0f}원)를 넘었습니다 '
-                f'({(px / h_trim - 1) * 100:+.1f}%)')
+                f'({(px / h_trim - 1) * 100:+.1f}%) — 계획대로면 일부 파는 자리입니다')
     if avg_down_ok and buy and px <= buy:
         return ('추가 매수 가능',
                 f'물타기 6조건 전부 통과이고 진입가({buy:,.0f}원) 이하입니다')
@@ -1582,7 +1620,7 @@ def watch_action(row, price=None, today=None):
         _hk, _hw = holder_kind(px, h_stop, h_trim, buy=buy, avg_down_ok=_ad_ok)
         _TONE304 = {'보유 기준 미산출': 'tx3', '정리 검토': 'neg', '일부 정리': 'pos',
                     '추가 매수 가능': 'pos', '보유 유지': 'tx2'}
-        return _held(dict(kind=_hk, label=_hk, tone=_TONE304.get(_hk, 'tx2'),
+        return _held(dict(kind=_hk, label=hold_label(_hk), tone=_TONE304.get(_hk, 'tx2'),
                           held=True, why=_hw))
 
     # ── 미보유 관점 — bucket 을 그대로 짧게 말한다 ──────────────────

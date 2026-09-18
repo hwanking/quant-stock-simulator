@@ -2359,6 +2359,34 @@ def _wl_drop_from_query():
 _wl_drop_from_query()
 
 
+def _wl_sold_from_query():
+    """?sold=<코드> — 표의 '팔았음'. 보유 기록(매입가·수량)만 비우고 관심종목에는 남긴다 (라운드 338).
+
+    사용자: *"매도가 나오면 팔 수 있게도 해주고."* 매도 자체는 증권사에서 한다 — 여기서는 판 뒤의
+    기록만 받아 그 행이 **미보유 관점**으로 넘어가게 한다. 빼기(R244)와 같은 길(쿼리 파라미터 ·
+    행 높이 불변)이고 같은 원칙(확인 대화상자 대신 **되돌리기**)이다. 규칙은 `portfolio.mark_sold`
+    한 곳.
+    """
+    try:
+        raw = st.query_params.get('sold')
+    except Exception:                                      # noqa: BLE001
+        return
+    if not (raw and str(raw).strip()):
+        return
+    try:
+        del st.query_params['sold']
+    except Exception:                                      # noqa: BLE001
+        pass
+    items, old = portfolio.mark_sold(_wl_items(), str(raw).strip())
+    if old is None or not (old.get('paid') or old.get('qty')):
+        return                   # 못 읽었거나 보유 기록이 없던 행 — 아무것도 안 바꾼다 (§3)
+    st.session_state['wl_undo_sold'] = old
+    _wl_write(items, '매도로 기록했습니다 — 보유에서 뺐고 관심종목에는 남습니다')
+
+
+_wl_sold_from_query()
+
+
 # ⚠️ 라운드 320 — 사용자: *"보유중에 수량 및 매입가 바꿀 수 있게 해줘야지."*
 #   기능은 **있었다** — 절 위 토글 '매입가·수량 편집 · 빼기' 를 켜면 입력칸이 나온다.
 #   그런데 켜는 순간 **표 전체(보유+미보유 36행)가 위젯 격자**로 바뀐다(라운드 229 가
@@ -5875,6 +5903,21 @@ else:
         if _uc244[2].button('닫기', key='wl_undo_close', width='stretch'):
             st.session_state.pop('wl_undo', None)
             st.rerun()
+    # 라운드 338 — '팔았음' 직후 되돌리기 (빼기와 같은 원칙 · 바뀌기 전 행을 통째로 되돌린다).
+    _undo338 = st.session_state.get('wl_undo_sold')
+    if _undo338:
+        _uc338 = st.columns([4, 1, 1])
+        _uc338[0].info(f"**{_uk._esc(str(_undo338.get('name') or _undo338.get('code')))}** 을(를) "
+                       f"매도로 기록했습니다 — 보유 기록(매입가·수량)을 비웠고 관심종목에는 남아 있습니다.")
+        if _uc338[1].button('되돌리기', key='wl_undo_sold_btn', width='stretch'):
+            _c338 = portfolio.normalize_code(_undo338.get('code'))
+            _wl_write([(_undo338 if portfolio.normalize_code(w.get('code')) == _c338 else w)
+                       for w in _wl_items()], '되돌렸습니다')
+            st.session_state.pop('wl_undo_sold', None)
+            st.rerun()
+        if _uc338[2].button('닫기', key='wl_undo_sold_close', width='stretch'):
+            st.session_state.pop('wl_undo_sold', None)
+            st.rerun()
     # 라운드 320·321 — 매입가·수량 저장 직후 **되돌리기**. '빼기'(라운드 244)와 같은 원칙이다 —
     #   확인 대화상자 대신 되돌릴 수 있게. 매입가를 비우면 보유 기록이 통째로 사라지는데, 첫
     #   판은 되돌릴 길이 없었다(개발 중 실제로 보유 두 행이 비었다 — 누가 눌렀든 되돌릴 길이
@@ -6113,12 +6156,10 @@ else:
                 #   직접 읽으면 제외가 풀린 행에 옛 사유가 남는다 (§4).
                 _wy240 = str(_act.get('why_line') or '')
                 if _wy240:
-                    _wys240 = _wy240 if len(_wy240) <= 34 else _wy240[:33] + '…'
-                    # 라운드 327 — 사용자가 *"… 사…"* 를 짚었다. 같은 칸 폭(34자) 안에서 **첫 문장이 끝나면
-                    #   거기서** 자른다 — 낱말 가운데서 끊긴 조각보다 한 문장이 낫다. 전체는 그대로 툴팁에.
-                    _s327 = _wy240.find('다. ')
-                    if len(_wy240) > 34 and 0 < _s327 + 2 <= 34:
-                        _wys240 = _wy240[:_s327 + 2] + ' …'
+                    # 라운드 327 — 첫 문장 끝에서 자른다 · 전체는 툴팁에.
+                    # 라운드 338 — 그 판별이 `find()` 의 −1 을 못 걸러 '다. ' 없는 사유가 **첫 글자**만
+                    #   남았다(화면의 `유 …`). 자르기는 킷 한 곳(`clip_reason`)이 하고 심어서 잰다.
+                    _wys240 = _uk.clip_reason(_wy240, 34)
                     _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
                                f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
                 # 라운드 322 — 이름표 대신 **짧은 한 줄**(무엇을 하라는 말인지 · 진입가까지)을 쓴다.
@@ -6166,7 +6207,16 @@ else:
                 f"<br><a href='?edit={_uk._esc_attr(_wcode)}' target='_self' "
                 f"title='이 종목의 매입가·수량을 고칩니다' "
                 f"style='color:{_TOK['brand']}; text-decoration:none; font-size:12px;'>"
-                f"고치기</a></td>"
+                f"고치기</a>"
+                # 라운드 338 — 매도 판정(손절선 아래 · 1차 매도가 넘음)이 뜬 보유 행에만 '팔았음'.
+                #   실제 매도는 증권사에서 · 여기서는 판 뒤의 기록(보유 해제)만 받는다. 되돌릴 수 있다.
+                + ((f"<br><a href='?sold={_uk._esc_attr(_wcode)}' target='_self' "
+                    f"title='판 뒤에 누릅니다 — 매입가·수량을 비워 미보유로 넘깁니다 (되돌릴 수 있습니다)' "
+                    f"style='color:{_TOK['neg']}; text-decoration:none; font-size:12px;'>"
+                    f"팔았음</a>")
+                   if (_act and _act.get('held') and _act.get('kind') in ('정리 검토', '일부 정리'))
+                   else '')
+                + "</td>"
                 "</tr>")
         # 라운드 244 — 칸이 9 → 10 이다('관심'). 칸을 더하면 값이 잘려 보이므로
         #   (라운드 201) 새 칸은 글자 하나짜리 링크뿐이고 숫자 칸은 안 건드렸다.
@@ -6485,7 +6535,7 @@ else:
                 _watch_by226.setdefault(_k226, []).append(_nm226)
         _tone226 = {'정리 검토': 'neg', '일부 정리': 'pos', '추가 매수 가능': 'pos',
                     '보유 유지': 'tx2', '보유 기준 미산출': 'tx3'}
-        _chips226 = [dict(label=k, count=len(_held_by226.get(k, [])),
+        _chips226 = [dict(label=_uk.hold_label(k), count=len(_held_by226.get(k, [])),
                           tone=_tone226.get(k, 'tx2'))
                      for k in _WL_SELL_RANK]
         for k, v in _held_by226.items():
@@ -6503,7 +6553,7 @@ else:
         for k in ('정리 검토', '일부 정리', '추가 매수 가능'):
             if _held_by226.get(k):
                 _v = sorted(_held_by226[k])
-                _act_names226.append(f"**{k}** {', '.join(_v[:4])}"
+                _act_names226.append(f"**{_uk.hold_label(k)}** {', '.join(_v[:4])}"
                                      + (f" 외 {len(_v) - 4}" if len(_v) > 4 else ''))
         if _nm_avg_ok226:
             _v = sorted(_nm_avg_ok226)
@@ -6536,7 +6586,7 @@ else:
                 _pl = v - c
                 _rows326.append({
                     '종목': nm,
-                    '지금 할 일': (act or {}).get('kind') or '판단 없음',
+                    '지금 할 일': _uk.hold_label((act or {}).get('kind')) or '판단 없음',
                     '비중(평가금액)': v / _pf_val * 100.0,
                     '평가금액': v,
                     '평가손익': _pl,
