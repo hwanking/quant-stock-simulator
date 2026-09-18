@@ -26974,6 +26974,94 @@ else:
     skipped("R336 원장에 재무 칸이 없다",
             ".portfolio/virtual_graded.jsonl 이 이 PC 에 없다 (건너뜀은 통과가 아니다)")
 
+print("\n" + "=" * 72)
+print("§343 R337 — 커밋 원문이 마크다운 파서로 그냥 갔다 (업데이트 내역 펼침 라벨 · 2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 *"실행해줘"* 라 해서 앱을 띄우고 **렌더된 DOM 을 셌더니** `<del>` 이 한 개 있었다:
+#   `2026-09-17 · 기타 · R329 — … (40<del>60초 → 0.45</del>2초)` — 물결표 둘(`40~60초`·`0.45~2초`)을
+#   마크다운이 취소선으로 묶어 **`40‾2초`** 로 나갔다(라운드 44·295 와 같은 사고 · **세 번째 자리**).
+#   바로 위 요약 목록은 HTML 로 나가며 `_uk._esc` 를 지나 멀쩡했는데(파서가 안 건드린다),
+#   `st.expander` **라벨은 마크다운**이라 그 자리만 무방비였다 — R246 의 *"고침이 판정자 한 명에게만"*.
+#   제목은 **이력 원문이라 못 바꾼다**(라운드 180) → 넘기는 자리에서 막는다(`_md_safe` · R44·R120e).
+#   고친 뒤 브라우저 실측: 펼침 라벨 68개 · `<del>` **0개** · 그 줄이 `(40~60초 → 0.45~2초)` 그대로.
+import ast as _ast343
+_w343 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_tree343 = _ast343.parse(_w343)
+_MD343 = {'expander', 'caption', 'markdown', 'info', 'warning', 'error', 'success', 'radio', 'selectbox'}
+_SAFE343 = ('_md_safe', '_esc', '_esc_attr')
+
+
+def _guarded343(node):
+    """그 인자가 이스케이프 함수를 지나는가 (어느 쪽이든 — 마크다운은 _md_safe · HTML 은 _esc)."""
+    for _n in _ast343.walk(node):
+        if isinstance(_n, _ast343.Call):
+            _nm = getattr(_n.func, 'id', None) or getattr(_n.func, 'attr', None)
+            if _nm in _SAFE343:
+                return True
+    return False
+
+
+def _reads_commit343(node):
+    """커밋 이력 원문(`_u[...]` · `_dt_u[...]`)을 보간하는가 — 우리가 만든 수가 아니라 **남의 글**이다."""
+    for _n in _ast343.walk(node):
+        if isinstance(_n, _ast343.Subscript) and isinstance(_n.value, _ast343.Name) \
+                and _n.value.id in ('_u', '_dt_u'):
+            return True
+        if isinstance(_n, _ast343.Call) and getattr(_n.func, 'attr', None) == 'get' \
+                and isinstance(getattr(_n.func, 'value', None), _ast343.Name) \
+                and _n.func.value.id in ('_u', '_dt_u'):
+            return True
+    return False
+
+
+# ⚠️ 첫 판은 첫 인자가 **f-string 일 때만** 셌다 — 그러면 `_md_safe(f"…")` 로 감싸는 순간
+#   고친 자리가 **스스로 범위 밖으로** 떨어져 `scanned` 가 1 이 된다(감싼 것을 확인 못 한다).
+#   f-string 을 **품고 있는** 호출도 자리로 세고, 이스케이프 여부는 구조로 본다.
+_sites343, _bad343 = [], []
+for _n343 in _ast343.walk(_tree343):
+    if not isinstance(_n343, _ast343.Call) or not _n343.args:
+        continue
+    if getattr(_n343.func, 'attr', None) not in _MD343:
+        continue
+    _a343 = _n343.args[0]
+    _has_f343 = isinstance(_a343, _ast343.JoinedStr) or any(
+        isinstance(_x, _ast343.JoinedStr) for _x in _ast343.walk(_a343))
+    if not _has_f343 or not _reads_commit343(_a343):
+        continue
+    _sites343.append(_n343.lineno)
+    if not _guarded343(_a343):
+        _bad343.append(f"{_n343.lineno}:{getattr(_n343.func, 'attr', None)}")
+check("R337 커밋 이력 원문을 화면 위젯에 넘기는 자리는 전부 이스케이프를 지난다 (제목은 못 바꾸니 넘기는 자리에서 막는다)",
+      not _bad343 and len(_sites343) >= 1, f'무방비 {_bad343} · 자리 {_sites343}',
+      scanned=len(_sites343))
+# ── 그 제목이 실제로 어떻게 되는지 — 심어서 잰다 (양방향) ─────────────────────
+#   ⚠️ `import web_app` 은 **앱 전체를 실행한다**(스크립트다). 첫 판에 그렇게 썼다가 사전 점검이
+#   Streamlit 경고 2만 자를 토했다 — 이미 위에서 AST 로 떼어 둔 `_mdsafe114` 를 그대로 부른다
+#   (이미 있는 판별식을 새로 쓰지 않는다 · R192·R290).
+_subj343 = 'R329 — 가늠 AI 질문 하나에 앱 전체가 다시 돌았다 · 대화만 다시 돈다 (40~60초 → 0.45~2초)'
+_out343 = _mdsafe114(_subj343)
+check("R337 물결표 둘이 든 제목은 파서가 못 묶게 막힌다 — 숫자가 취소선으로 사라지지 않는다",
+      _out343.count('\\~') == 2 and '40' in _out343 and '0.45' in _out343 and '2초' in _out343,
+      _out343[-46:])
+check("R337 심기 — 물결표가 없는 제목은 글자가 그대로고, 굵기 표기는 살아 있다 (R120 의 그 규칙)",
+      _mdsafe114('R333 — 90분에서 잘리던 단계') == 'R333 — 90분에서 잘리던 단계'
+      and _mdsafe114('**굵게** 적은 제목') == '**굵게** 적은 제목')
+# ── 두 경로는 서로 다른 이스케이퍼를 쓴다 (HTML 은 _esc · 마크다운은 _md_safe) ──────
+_home343 = [ln for ln in _w343.splitlines() if "_uk._esc(_u['subject'])" in ln]
+check("R337 요약 목록(HTML 로 나가는 자리)은 킷의 HTML 이스케이퍼를 그대로 쓴다 — 파서를 안 지나므로 물결표는 문제가 아니다",
+      len(_home343) == 1, f'{len(_home343)}곳', scanned=len(_home343))
+# 펼침 라벨은 **마크다운**이므로 HTML 이스케이퍼가 아니라 `_md_safe` 를 지나야 한다 —
+#   글자로 못 박지 않고 그 호출의 첫 인자가 실제로 그 함수인지 본다(R98b 계열의 조립 락을 안 만든다).
+_exp343 = [_n for _n in _ast343.walk(_tree343)
+           if isinstance(_n, _ast343.Call) and getattr(_n.func, 'attr', None) == 'expander'
+           and _n.args and _reads_commit343(_n.args[0])]
+check("R337 펼침 라벨은 마크다운 이스케이퍼(_md_safe)를 지난다 — 라벨은 HTML 이 아니다",
+      len(_exp343) == 1 and isinstance(_exp343[0].args[0], _ast343.Call)
+      and (getattr(_exp343[0].args[0].func, 'id', None)
+           or getattr(_exp343[0].args[0].func, 'attr', None)) == '_md_safe',
+      f'{len(_exp343)}곳', scanned=len(_exp343))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

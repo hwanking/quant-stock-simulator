@@ -13108,7 +13108,14 @@ if _uh_home and _uh_home.get('days'):
                    "(보기 좋게 지어내지 않습니다).")
         for _u in _sel_upd[:40]:
             _dt_u = _u.get('detail') or {}
-            with st.expander(f"{_u['date']} · {_u['category']} · {_u['subject']}",
+            # ⚠️ 라운드 337 — 이 라벨만 **커밋 원문을 마크다운 파서에 그냥** 넘기고 있었다.
+            #   바로 위 요약 목록은 HTML 로 나가며 `_uk._esc` 를 지나는데(파서가 안 건드린다),
+            #   `st.expander` 라벨은 **마크다운**이다. 제목에 물결표가 둘이면 그 사이가 취소선으로
+            #   먹힌다 — 2026-09-18 화면 실측: `R329 … (40~60초 → 0.45~2초)` 가
+            #   `40<del>60초 → 0.45</del>2초` 로 나갔다(라운드 44·295 와 같은 사고 · 세 번째 자리).
+            #   제목은 이력 원문이라 **못 바꾼다**(라운드 180) — 넘기는 자리에서 막는다.
+            with st.expander(_md_safe(f"{_u['date']} · {_u['category']} · "
+                                      f"{_u['subject']}"),
                              expanded=False):
                 for _lab, _val in (("변경 전 문제", _dt_u.get('problem')),
                                    ("변경 이유", _dt_u.get('why')),
