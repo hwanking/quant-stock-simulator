@@ -26909,6 +26909,71 @@ else:
     skipped("R335 원장에 찍힌 사건 이름이 표 안에 있다",
             ".portfolio/news_events.jsonl 이 이 PC 에 없다 — 클라우드 원장에서만 잴 수 있다 (건너뜀은 통과가 아니다)")
 
+print("\n" + "=" * 72)
+print("§342 R336 — 재무 시점 보관은 정말 안 하고 있다 · 그런데 연간 재무는 이미 같은 응답에 온다 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   상태표 #47(*"자본 효율(ROE·FCF 추세) — 재무 시점 보관을 오늘도 시작하지 않았다"*)을 쟀다.
+#   **전제는 참이다** — 원장 43칸에 재무 칸이 하나도 없고(eps·bps·per·pbr·roe 계열 0), 날짜와 재무가
+#   같이 든 파일도 없다(2026-09-18 실측 · 250,000행 표본).
+#   ⚠️ 그런데 **비용을 재다가 다른 것이 나왔다**: 엔진이 종목마다 부르는 `finance/annual` 응답에는
+#   **16개 항목 × 4개 연도**(매출액·영업이익·당기순이익·ROE·부채비율·EPS …)가 들어 있는데 `info` 는
+#   그중 **ROE·부채비율 둘만** 옮긴다. 라운드 239 가 *"매출·순이익은 필드 자체가 없다"* 고 적은 그 입력이
+#   **같은 응답에 이미 오고 있다** — 안 받는 게 아니라 **버리는** 것이다(R240·R289·R298 의 재무판).
+#   ⚠️ **계산부는 한 글자도 안 바꿨다** — 적정가 모형에 매출·순이익을 넣는 것은 §1 의 계산부 변경이고
+#   11-16 전방 재평가 동결 대상이다(§2 사전등록 거리). 여기서는 **사실만 못 박는다**: 오늘 `info` 가
+#   싣는 재무 칸이 여섯이고, 늘리려면 이 절이 먼저 붉어진다(R164 의 경계 락과 같은 모양).
+import bitemporal_engine as _be342
+_api342 = {
+    'basic': {'stockName': '시험전자', 'closePrice': '10,000', 'compareToPreviousClosePrice': '0',
+              'fluctuationsRatio': '0', 'stockExchangeType': {'code': 'KS'}, 'stockEndType': 'stock'},
+    'integration': {'industryCode': 1, 'totalInfos': [
+        {'key': 'PER', 'value': '10.00배'}, {'key': 'EPS', 'value': '1,000원'},
+        {'key': 'PBR', 'value': '1.00배'}, {'key': 'BPS', 'value': '10,000원'}]},
+    'finance': {'financeInfo': {'rowList': [
+        {'title': 'ROE', 'columns': {'202612': {'value': '15.00'}, '202412': {'value': '9.03'}}},
+        {'title': '부채비율', 'columns': {'202412': {'value': '27.93'}}},
+        {'title': '매출액', 'columns': {'202612': {'value': '3,000,000'}, '202412': {'value': '2,500,000'}}},
+        {'title': '당기순이익', 'columns': {'202412': {'value': '300,000'}}},
+        {'title': '영업이익', 'columns': {'202412': {'value': '400,000'}}}]}},
+    'industry_name': '반도체와반도체장비',
+}
+_i342 = _be342.info_from_mobile_api(_api342, prev={}, today_yyyymm='202609')
+_fin342 = sorted(k for k in _i342 if k in ('eps', 'bps', 'per', 'pbr', 'roe', 'debt', 'revenue',
+                                           'net_income', 'op_income', 'ebitda', 'fcf', 'dps'))
+check("R336 오늘 info 가 싣는 재무 칸은 여섯이다 (늘리는 것은 계산부 변경 · §1 · 11-16 동결 · 이 절이 먼저 붉어진다)",
+      _fin342 == ['bps', 'debt', 'eps', 'pbr', 'per', 'roe'], str(_fin342), scanned=len(_i342))
+check("R336 ROE·부채비율은 **가장 최근 실적**에서 온다 — 추정치(오늘보다 뒤 기준월)를 안 쓴다 (R270 규칙 그대로)",
+      _i342['roe'] == 9.03 and _i342['debt'] == 27.93, f"{_i342['roe']} · {_i342['debt']}")
+# ── 같은 응답에 있는데 안 쓰는 항목 — 사실을 재서 적는다(지어내지 않는다 · §3) ──────
+_rows342 = (((_api342['finance'].get('financeInfo') or {}).get('rowList')) or [])
+_titles342 = [r.get('title') for r in _rows342]
+_unused342 = [t for t in _titles342 if t not in ('ROE', '부채비율')]
+check("R336 연간 재무 응답에는 info 가 안 쓰는 항목이 같이 온다 — '안 받는 것'과 '버리는 것'은 다르다",
+      _unused342 == ['매출액', '당기순이익', '영업이익'], str(_unused342), scanned=len(_titles342))
+check("R336 그 항목들은 **이미 있는 한 함수**로 읽힌다 — 새 파서가 필요한 것이 아니다 (읽는 곳은 한 곳 · §4)",
+      _be342._finance_latest_actual(_api342['finance'], '매출액', '202609') == 2500000.0
+      and _be342._finance_latest_actual(_api342['finance'], '없는항목', '202609') is None,
+      str(_be342._finance_latest_actual(_api342['finance'], '매출액', '202609')))
+# ── 시점 보관은 아직 없다 — 원장 칸으로 잰다(값이 아니라 칸 이름) ───────────────
+_led342 = _os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
+if _os.path.exists(_led342):
+    with open(_led342, encoding='utf-8') as _f342:
+        _k342 = set()
+        for _n342, _ln342 in enumerate(_f342):
+            if _n342 >= 3:
+                break
+            try:
+                _k342 |= set(_json.loads(_ln342).keys())
+            except Exception:                                  # noqa: BLE001
+                pass
+    _fink342 = sorted(k for k in _k342 if any(w in k for w in ('eps', 'bps', 'pbr', 'per', 'roe', 'debt')))
+    check("R336 원장에 재무 칸이 없다 — 시점 보관은 아직 시작되지 않았다 (상태표 #47 의 전제는 참)",
+          not _fink342, f'재무 계열 칸 {_fink342} · 훑은 칸 {len(_k342)}', scanned=len(_k342))
+else:
+    skipped("R336 원장에 재무 칸이 없다",
+            ".portfolio/virtual_graded.jsonl 이 이 PC 에 없다 (건너뜀은 통과가 아니다)")
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
