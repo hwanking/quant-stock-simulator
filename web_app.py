@@ -12144,6 +12144,49 @@ with tab_val:
                    f"'{_tier243}'입니다 (위 '이 기업의 값어치는?' 칸). 두 기준은 "
                    f"경계가 달라 같은 점수가 다른 이름으로 불립니다.")
 
+    # ── 라운드 339 — 연간 재무 발표치 (표시 전용) ─────────────────────────────
+    #   사용자: *"적정가는 진짜 펀더멘털은 진짜 좋은 주식인지 판단해 주고 · 전면적으로 검토."*
+    #   라운드 336 이 셌다 — 엔진이 이미 받는 응답에 매출액·영업이익·당기순이익 등 16항목 × 4개 연도가
+    #   오는데 `info` 는 ROE·부채비율 둘만 옮긴다. 이 적정가는 **EPS·BPS·PER·PBR·ROE·부채비율 여섯**으로만
+    #   여덟 모형을 만든다(R239 · §342 가 그 수를 잠근다). 매출·이익 추세를 판정에 넣는 것은 §1 계산부 변경이자
+    #   §2 사전등록 거리라 **넣지 않았다** — 대신 **발표치를 그대로 보여 주고** 이 판단이 그것을 쓰지 않는다는
+    #   사실을 같은 자리에 적는다(§3 · R248 의 매크로 판과 같은 '표시 전용' 규칙). 추정치 열은 응답의 표시 그대로.
+    _fin339 = None
+    try:
+        import fin_view as _fv339
+        _fin339 = _fv339.annual_table(
+            bitemporal_engine.ANNUAL_FIN_BY_CODE.get(portfolio.normalize_code(target_ticker)))
+    except Exception:                                          # noqa: BLE001
+        _fin339 = None
+    if _fin339:
+        _th339 = "".join(
+            f"<th style='text-align:right; padding:4px 8px; color:{_TOK['tx3']}; font-weight:600;'>{_uk._esc(p['title'])}"
+            + (f"<br><span style='font-size:12px; color:{_TOK['tx3']}; font-weight:400;'>추정</span>"
+               if p['estimate'] else '') + "</th>"
+            for p in _fin339['periods'])
+        _trs339 = []
+        for _r339 in _fin339['rows']:
+            _tds339 = "".join(
+                f"<td style='text-align:right; padding:4px 8px; font-variant-numeric:tabular-nums; "
+                f"color:{_TOK['tx3'] if c['estimate'] else _TOK['tx1']};'>"
+                + ('—' if c['value'] is None else f"{c['value']:,.0f}" if abs(c['value']) >= 100
+                   else f"{c['value']:,.2f}") + "</td>"
+                for c in _r339['cells'])
+            _trs339.append(f"<tr><td style='padding:4px 8px; color:{_TOK['tx2']};'>{_uk._esc(_r339['item'])}</td>{_tds339}</tr>")
+        st.markdown(
+            f"<div style='margin:8px 0 2px; font-size:13px; color:{_TOK['tx1']}; font-weight:600;'>"
+            f"연간 재무 발표치 (표시 전용)</div>"
+            f"<table style='width:100%; font-size:13px; border-collapse:collapse;'><thead><tr>"
+            f"<th style='text-align:left; padding:4px 8px; color:{_TOK['tx3']}; font-weight:600;'>항목</th>{_th339}</tr></thead>"
+            f"<tbody>{''.join(_trs339)}</tbody></table>",
+            unsafe_allow_html=True)
+        st.caption(f"{_fv339.UNIT_NOTE}. 재작성된 현재 보고치라 시점 자료가 아닙니다. **이 화면의 적정가·점수에는 "
+                   f"EPS·BPS·PER·PBR·ROE·부채비율 여섯만 들어갑니다** — 매출·이익의 추세는 아직 판정에 쓰지 않습니다"
+                   f"(쓸 근거를 재지 않았습니다 · 좋은 기업인지의 점수는 만들지 않았습니다).")
+    else:
+        st.caption("연간 재무 발표치 표를 못 받았습니다 — 이 종목은 옛 페이지 경로로 받았거나 응답에 재무 표가 "
+                   "없습니다. 못 받은 것이지 재무가 없다는 뜻이 아닙니다.")
+
     if _wm238 is not None and _raw238 is not None:
         _steps238 = [f"모델 가중중앙값 {_wm238:,.0f}{unit_str}",
                      f"고정 보정 {_hc238_str} → {_raw238:,.0f}{unit_str}"]

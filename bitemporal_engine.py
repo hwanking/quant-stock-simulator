@@ -280,6 +280,10 @@ def suffix_for(market):
 #   값을 지어내지 않는다 — 못 받은 칸은 옛 파서와 같은 의미의 빈 값(§3).
 NAVER_MOBILE_API = "https://m.stock.naver.com/api"
 _INDUSTRY_NAME_CACHE = {}          # 업종 번호 → 이름 (한 실행 안에서만)
+#: 라운드 339 — 종목별 `finance/annual` 응답(16항목 × 4개 연도)을 **그대로** 보관한다(한 실행 안에서만).
+#:   라운드 336 이 셌듯 이 응답은 이미 받고 있었고 `info` 는 ROE·부채비율 둘만 옮긴다. 화면이 발표치 표를
+#:   **표시 전용**으로 그리려고 여기서 읽는다 — `info` 의 재무 칸은 여전히 여섯이다(§342 가 잠근다 · §1).
+ANNUAL_FIN_BY_CODE = {}
 
 
 def _api_num(s):
@@ -1053,6 +1057,7 @@ class BitemporalEngine:
             except Exception:
                 api = None
             if api:
+                ANNUAL_FIN_BY_CODE[code] = api.get('finance') or {}     # 라운드 339 · 표시 전용 보관
                 prev_info = metrics_of(query) or STOCK_METRICS_DB.get(code) or {}
                 info = info_from_mobile_api(api, prev=prev_info)
                 if info.get('market'):

@@ -27150,6 +27150,55 @@ check("R338 '팔았음' 링크는 매도 판정(정리 검토·일부 정리)이
       and "_act.get('kind') in ('정리 검토', '일부 정리')" in _w344
       and "st.session_state['wl_undo_sold']" in _w344 and 'wl_undo_sold_btn' in _w344)
 
+print("\n" + "=" * 72)
+print("§345 R339 — 연간 재무 발표치 표(표시 전용) · 이 적정가가 무엇을 쓰는지 같은 자리에 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"적정가는 진짜 펀더멘털은 진짜 좋은 주식인지 판단해 주고 · 전면적으로 검토."* 라운드 336 이 셌다 —
+#   엔진이 이미 받는 `finance/annual` 응답에 16항목 × 4개 연도가 오는데 `info` 는 ROE·부채비율 둘만 옮긴다.
+#   점수·문턱은 잰 근거가 있어야 만든다(§2) — **발표치를 그대로 보여 주고** 이 적정가가 여섯 칸만 쓴다는 사실을
+#   같은 자리에 적는다(§3 · R248 의 표시 전용 규칙). 추정치 열은 응답의 `isConsensus` 그대로 — 우리가 안 고른다.
+#   응답은 엔진이 한 실행 안에서 보관만 하고(`ANNUAL_FIN_BY_CODE`) `info` 의 재무 칸은 여전히 여섯이다(§342).
+import fin_view as _fv345
+_pay345 = {'financeInfo': {
+    'trTitleList': [{'key': '202412', 'title': '2024.12.', 'isConsensus': 'N'},
+                    {'key': '202512', 'title': '2025.12.', 'isConsensus': 'N'},
+                    {'key': '202612', 'title': '2026.12.', 'isConsensus': 'Y'}],
+    'rowList': [
+        {'title': '매출액', 'columns': {'202412': {'value': '34,387'}, '202512': {'value': '35,143'},
+                                     '202612': {'value': '37,575'}}},
+        {'title': '당기순이익', 'columns': {'202412': {'value': '1,576'}, '202512': {'value': '1,701'},
+                                        '202612': {'value': '-'}}},
+        {'title': 'ROE', 'columns': {'202412': {'value': '5.12'}, '202512': {'value': '5.30'}, '202612': {'value': '6.01'}}},
+        {'title': '없는항목', 'columns': {'202412': {'value': '1'}}},
+    ]}}
+_t345 = _fv345.annual_table(_pay345)
+check("R339 발표치 표 — 연도 열은 응답 순서 그대로 · 추정 열은 isConsensus 로만 표시 · 값은 수로 · '-' 는 None",
+      _t345 and [p['title'] for p in _t345['periods']] == ['2024.12.', '2025.12.', '2026.12.']
+      and [p['estimate'] for p in _t345['periods']] == [False, False, True]
+      and [r['item'] for r in _t345['rows']] == ['매출액', '당기순이익', 'ROE']
+      and _t345['rows'][0]['cells'][1]['value'] == 35143.0
+      and _t345['rows'][1]['cells'][2]['value'] is None and _t345['rows'][1]['cells'][2]['estimate'] is True,
+      str(_t345 and [(r['item'], [c['value'] for c in r['cells']]) for r in _t345['rows']]))
+check("R339 발표치 표 — 못 받았으면 None (빈 응답 · None · 항목 없음) — 지어내지 않는다",
+      _fv345.annual_table({}) is None and _fv345.annual_table(None) is None
+      and _fv345.annual_table({'financeInfo': {'trTitleList': _pay345['financeInfo']['trTitleList'],
+                                               'rowList': [{'title': '엉뚱', 'columns': {}}]}}) is None)
+_fvsrc345 = _read148(_os.path.join(PROJ, 'fin_view.py'))
+check("R339 수 파싱은 엔진의 _api_num 한 곳을 쓴다 — 파서를 베끼지 않는다 (§4)",
+      'from bitemporal_engine import _api_num' in _fvsrc345 and 'def _api_num' not in _fvsrc345)
+_be345 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+check("R339 엔진은 받은 연간 재무 응답을 보관만 한다 — info 의 재무 칸은 여섯 그대로 (§342 가 잠근다)",
+      'ANNUAL_FIN_BY_CODE = {}' in _be345 and "ANNUAL_FIN_BY_CODE[code] = api.get('finance') or {}" in _be345)
+_w345 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R339 화면은 표시 전용이라고 말하고 이 적정가가 여섯 칸만 쓴다는 사실을 같은 자리에 적는다 (§3)",
+      '_fv339.annual_table(' in _w345 and '연간 재무 발표치 (표시 전용)' in _w345
+      and 'EPS·BPS·PER·PBR·ROE·부채비율 여섯만 들어갑니다' in _w345
+      and '좋은 기업인지의 점수는 만들지 않았습니다' in _w345
+      and '못 받은 것이지 재무가 없다는 뜻이 아닙니다' in _w345)
+check("R339 단위는 환산하지 않고 표기를 옮겼다고 적는다 — 응답에 단위 칸이 없다",
+      '환산하지 않았습니다' in _fv345.UNIT_NOTE and '_fv339.UNIT_NOTE' in _w345)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
