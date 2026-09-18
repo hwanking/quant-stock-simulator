@@ -323,6 +323,73 @@ def demark_lift_line(lift):
             + f'. {tail}.')
 
 
+# ── 선에 닿은 뒤 판 것 vs 든 것 (라운드 340 · 표시 전용) ─────────────────────
+#   사용자: *"(보유 종목 하나) 진짜 팔어? 면밀히 검토해줘."* 화면은 '매도 — 손절선 아래' 라고만 적고 그 선을 넘어 파는
+#   것이 원장에서 무엇을 했는지는 안 적었다(R285 의 '값어치 없는 표식'과 같은 자리). 채점기는 두 값을 다
+#   남긴다 — `return_pct`(선에 닿아 판 수익률)와 `close_return_pct`(창 끝 종가 수익률 · R296). 그 둘을
+#   구간별로 **세기만** 한다. 새 문턱 없음 · 판정 없음 — 부호가 갈리면 갈린다고 적는다(R44·R213).
+EXIT_TAIL_PCT = {'STOP': -10.0, 'TARGET': 0.0}   # '꼬리' 문장의 기준 — 손절은 −10% 아래, 목표는 마이너스 종료
+
+
+def exit_vs_hold(records, outcome):
+    """{split: {'n', 'exit_mean', 'hold_mean', 'exit_med', 'hold_med', 'hold_better_pct', 'diff_mean',
+    'diff_med', 'tail_pct'}} · 분모 0 인 구간은 담지 않는다 · 하나도 없으면 None."""
+    box = {}
+    for r in records:
+        if r.get('outcome') != outcome:
+            continue
+        sp = r.get('split')
+        if sp not in ('train', 'valid', 'blind'):
+            continue
+        try:
+            ex, hd = float(r.get('return_pct')), float(r.get('close_return_pct'))
+        except (TypeError, ValueError):
+            continue
+        box.setdefault(sp, []).append((ex, hd))
+    out = {}
+    tail = EXIT_TAIL_PCT.get(outcome, 0.0)
+    for sp, pairs in box.items():
+        if not pairs:
+            continue
+        exs = sorted(p[0] for p in pairs)
+        hds = sorted(p[1] for p in pairs)
+        diffs = sorted(p[1] - p[0] for p in pairs)
+        n = len(pairs)
+        mid = lambda a: a[n // 2] if n % 2 else (a[n // 2 - 1] + a[n // 2]) / 2.0     # noqa: E731
+        out[sp] = {
+            'n': n,
+            'exit_mean': round(sum(exs) / n, 2), 'hold_mean': round(sum(hds) / n, 2),
+            'exit_med': round(mid(exs), 2), 'hold_med': round(mid(hds), 2),
+            'hold_better_pct': round(100.0 * sum(1 for d in diffs if d > 0) / n, 1),
+            'diff_mean': round(sum(diffs) / n, 2), 'diff_med': round(mid(diffs), 2),
+            'tail_pct': round(100.0 * sum(1 for h in hds if h < tail) / n, 1),
+        }
+    return out or None
+
+
+def exit_vs_hold_line(res, outcome):
+    """위 결과 → 화면 한 줄. 없으면 None. **판정을 대신 내리지 않는다** — 세 구간 부호가 갈리면 그 사실만."""
+    if not res:
+        return None
+    what = '손절선' if outcome == 'STOP' else '1차 목표'
+    seen = [res[s]['diff_med'] for s in ('train', 'valid', 'blind') if s in res]
+    if not seen:
+        return None
+    parts = []
+    for sp, label in (('train', '학습'), ('valid', '검증'), ('blind', '실전')):
+        if sp in res:
+            d = res[sp]
+            parts.append(f"{label} {d['hold_better_pct']:.0f}%(n {d['n']:,})")
+    mixed = not (all(v > 0 for v in seen) or all(v < 0 for v in seen))
+    tail_txt = ('' if 'blind' not in res else
+                (f" · 실전에서 안 팔고 들었을 때 {'−10% 아래로' if outcome == 'STOP' else '마이너스로'} 끝난 비율 "
+                 f"{res['blind']['tail_pct']:.0f}%"))
+    tail = ('구간마다 방향이 갈려 어느 쪽이 낫다고 말하지 않습니다'
+            if mixed else '방향은 같지만 이것만으로 팔지 말지를 정하지 않습니다')
+    return (f"원장에서 {what}에 닿은 뒤 **안 팔고 창 끝까지 든 쪽이 더 나았던 비율**: " + ' · '.join(parts)
+            + f"{tail_txt}. {tail}.")
+
+
 def days_to_bars(days):
     """달력일 → 봉 수 (×5/7 · bars_to_days 의 역). 0 미만은 0."""
     try:

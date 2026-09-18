@@ -1,19 +1,19 @@
 {
- "made": "2026-09-12",
- "ledger_rows": 251528,
+ "made": "2026-09-18",
+ "ledger_rows": 252729,
  "basis": "개발 구간(train+valid) 매수권 58+ · 판정완료 · 블라인드 미포함 · 비용 0.36%p 차감",
  "note": "표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)",
  "coverage": {
-  "rows_eligible": 98822,
-  "by_row": 45528,
+  "rows_eligible": 98820,
+  "by_row": 45530,
   "by_patch": 36302,
-  "by_ticker": 14073,
-  "miss_etf": 2697,
+  "by_ticker": 14132,
+  "miss_etf": 2693,
   "miss_ambiguous": 32,
-  "miss_unknown": 155,
+  "miss_unknown": 96,
   "miss_bad_label": 35,
-  "covered": 95903,
-  "covered_pct": 97.0
+  "covered": 95964,
+  "covered_pct": 97.1
  },
  "coverage_note": "업종 출처: 원장 행 → 하위점수 패치 → 같은 종목의 업종(라운드 218). 빠진 것은 ETF(구조상 업종 없음) · 업종이 두 가지로 기록된 종목(모르는 것을 고르지 않는다) · 한 번도 못 받은 종목이다. 업종이 아닌 라벨(비교표 라벨)이 적힌 행도 뺀다(라운드 220).",
  "sectors": {
@@ -130,10 +130,10 @@
    "small": false
   },
   "비철금속": {
-   "n": 1764,
-   "hit": 58.1,
-   "wilson_low": 55.8,
-   "ev": -0.3,
+   "n": 1766,
+   "hit": 59.5,
+   "wilson_low": 57.1,
+   "ev": -0.177,
    "small": false
   },
   "해운사": {
@@ -206,6 +206,13 @@
    "ev": -0.405,
    "small": false
   },
+  "전자제품": {
+   "n": 408,
+   "hit": 60.3,
+   "wilson_low": 55.5,
+   "ev": -0.154,
+   "small": false
+  },
   "백화점과일반상점": {
    "n": 1027,
    "hit": 57.3,
@@ -222,9 +229,9 @@
   },
   "제약": {
    "n": 6491,
-   "hit": 60.2,
-   "wilson_low": 59.0,
-   "ev": -0.089,
+   "hit": 59.6,
+   "wilson_low": 58.4,
+   "ev": -0.178,
    "small": false
   },
   "항공화물운송과물류": {
@@ -267,13 +274,6 @@
    "hit": 58.4,
    "wilson_low": 54.2,
    "ev": -0.19,
-   "small": false
-  },
-  "전자제품": {
-   "n": 408,
-   "hit": 60.3,
-   "wilson_low": 55.5,
-   "ev": -0.154,
    "small": false
   },
   "전기장비": {
@@ -332,6 +332,13 @@
    "ev": 0.034,
    "small": false
   },
+  "문구류": {
+   "n": 27,
+   "hit": 55.6,
+   "wilson_low": 37.3,
+   "ev": -1.074,
+   "small": true
+  },
   "생명과학도구및서비스": {
    "n": 698,
    "hit": 60.7,
@@ -344,6 +351,13 @@
    "hit": 59.1,
    "wilson_low": 56.8,
    "ev": -0.204,
+   "small": false
+  },
+  "부동산": {
+   "n": 167,
+   "hit": 50.3,
+   "wilson_low": 42.8,
+   "ev": -0.807,
    "small": false
   },
   "디스플레이패널": {
@@ -423,6 +437,13 @@
    "ev": -0.905,
    "small": false
   },
+  "복합유틸리티": {
+   "n": 68,
+   "hit": 58.8,
+   "wilson_low": 47.0,
+   "ev": -0.165,
+   "small": false
+  },
   "손해보험": {
    "n": 100,
    "hit": 70.0,
@@ -435,13 +456,6 @@
    "hit": 59.1,
    "wilson_low": 50.4,
    "ev": 0.433,
-   "small": false
-  },
-  "부동산": {
-   "n": 108,
-   "hit": 49.1,
-   "wilson_low": 39.8,
-   "ev": -0.846,
    "small": false
   },
   "컴퓨터와주변기기": {
@@ -512,20 +526,6 @@
    "hit": 57.3,
    "wilson_low": 46.5,
    "ev": 0.066,
-   "small": false
-  },
-  "문구류": {
-   "n": 27,
-   "hit": 55.6,
-   "wilson_low": 37.3,
-   "ev": -1.074,
-   "small": true
-  },
-  "복합유틸리티": {
-   "n": 68,
-   "hit": 58.8,
-   "wilson_low": 47.0,
-   "ev": -0.165,
    "small": false
   }
  }

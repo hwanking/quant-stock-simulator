@@ -2770,6 +2770,29 @@ def _demark_lift_285():
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _exit_vs_hold_340(outcome):
+    """선에 닿은 뒤 판 것 vs 든 것 → 캡션 한 줄 (라운드 340 · 표시 전용). 규칙은 `ledger_view` 한 곳(§4).
+    없으면 None — 지어내지 않는다(§3)."""
+    import json as _json340
+    import ledger_view as _lv340
+    try:
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+
+        def _rows():
+            with _open_artifact(_p) as _f:
+                for _line in _f:
+                    try:
+                        yield _json340.loads(_line)
+                    except Exception:                          # noqa: BLE001
+                        continue
+        return _lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows(), outcome), outcome)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def _touch_cdf_230():
     """원장 → 봉째별 '두 선 중 하나에 닿은' 누적 비율 (라운드 230 · 표시 전용).
     사용자: "다 보유 유지인데 맞아?" — 계획 n봉째에 아무 선에도 안 닿은 것이 얼마나 흔한지.
@@ -6173,6 +6196,15 @@ else:
                     _jd229 += (f"<br><span style='font-size:12px; color:{_adc229};' "
                                f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
                                f"{_uk._esc(_adl229)}</span>")
+                # 라운드 340 — 보유 계획이 **선에 닿아 다시 잰** 이력을 행에 보인다. 이 앱의 규칙은 '닿으면
+                #   다시 잼'(R224)이라 오후엔 '매도 — 손절선 아래'였던 행이 저녁엔 '보유 유지'로 바뀔 수 있다
+                #   — 그 사실을 행이 말하지 않으면 사용자는 엔진이 말을 바꿨다고 읽는다(2026-09-18 실측 ·
+                #   보유 두 행). 가장 최근 이력 한 줄만 · 전체는 툴팁에. 규칙은 안 바꿨다.
+                _hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]
+                if _act.get('held') and _hlog340:
+                    _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
+                               f"title='{_uk._esc_attr(' | '.join(_hlog340))}'>"
+                               f"{_uk._esc(_uk.clip_reason(_hlog340[-1], 34))}</span>")
             if _ret229 is None:
                 _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
             else:
@@ -6239,6 +6271,21 @@ else:
                    + " · ".join(f"{_n}: {_m}" for _n, _m in _old_memo[:6])
                    + (f" 외 {len(_old_memo) - 6}건"
                       if len(_old_memo) > 6 else ''))
+
+    # ── 라운드 340 — 매도 판정이 뜬 보유 행이 있으면 그 선을 넘어 파는 것이 원장에서 무엇을 했는지 한 줄 ──
+    #   사용자: *"진짜 팔어? 면밀히 검토해줘."* 값은 그 자리에서 센다(손으로 적은 수는 낡는다 · R285) ·
+    #   판정을 대신 내리지 않는다 — 구간마다 부호가 갈리면 갈린다고만 적는다(R44·R213). 못 세면 그 줄만 빠진다.
+    #   판단은 표가 쓴 `_wl_pre`(한 번만 계산 · §4)에서 그대로 읽는다 — 다시 계산하지 않는다.
+    try:
+        _kinds340 = {(_v340[1] or {}).get('kind') for _v340 in _wl_pre.values()
+                     if _v340[1] and _v340[1].get('held')}
+    except Exception:                                          # noqa: BLE001
+        _kinds340 = set()
+    for _kd340, _oc340 in (('정리 검토', 'STOP'), ('일부 정리', 'TARGET')):
+        if _kd340 in _kinds340:
+            _ln340 = _exit_vs_hold_340(_oc340)
+            if _ln340:
+                st.caption(f"**{_uk.hold_label(_kd340)}** 이 뜬 종목이 있습니다 — {_ln340}")
 
     # ── 언제 잰 값인가 · 아직 안 본 종목은 그렇게 말한다 (§3) ────────
     _stale = [w for w in _wl_items() if not w.get('snap_at')]

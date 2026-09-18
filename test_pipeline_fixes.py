@@ -27199,6 +27199,55 @@ check("R339 화면은 표시 전용이라고 말하고 이 적정가가 여섯 �
 check("R339 단위는 환산하지 않고 표기를 옮겼다고 적는다 — 응답에 단위 칸이 없다",
       '환산하지 않았습니다' in _fv345.UNIT_NOTE and '_fv339.UNIT_NOTE' in _w345)
 
+print("\n" + "=" * 72)
+print("§346 R340 — 매도 판정 옆에 원장의 값어치 · 닿아서 다시 잰 이력을 행에 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"(보유 종목 하나) 진짜 팔어? 면밀히 검토해줘."* ① 화면은 '매도 — 손절선 아래'라고만 적고 그 선을 넘어 파는 것이
+#   원장에서 무엇을 했는지 안 적었다. 채점기가 두 값(선에 닿아 판 수익률 · 창 끝 종가 수익률)을 다 남기므로
+#   구간별로 **세기만** 한다 — 실측(2026-09-18 · 손절 97,789건): 든 쪽이 나은 비율 train 48.9 · valid 55.9 ·
+#   blind 46.8% → 부호가 갈려 우위 없음 · 실전에서 들었을 때 45%가 −10% 아래로 끝남(손절은 기대값이 아니라
+#   꼬리를 자르는 규칙). ② 보유 계획은 '닿으면 다시 잼'(R224)이라 오후의 '매도'가 저녁의 '보유 유지'로
+#   바뀌었는데 행이 그 이력을 안 보여 줬다 — 가장 최근 이력 한 줄을 행에 · 전체는 툴팁에. 규칙은 안 바꿨다.
+import ledger_view as _lv346
+_rec346 = [
+    {'outcome': 'STOP', 'split': 'train', 'return_pct': -5.0, 'close_return_pct': -4.0},
+    {'outcome': 'STOP', 'split': 'train', 'return_pct': -5.0, 'close_return_pct': -12.0},
+    {'outcome': 'STOP', 'split': 'valid', 'return_pct': -5.0, 'close_return_pct': -2.0},
+    {'outcome': 'STOP', 'split': 'blind', 'return_pct': -8.0, 'close_return_pct': -11.0},
+    {'outcome': 'STOP', 'split': 'blind', 'return_pct': -8.0, 'close_return_pct': -9.0},
+    {'outcome': 'TARGET', 'split': 'blind', 'return_pct': 4.0, 'close_return_pct': 6.0},
+    {'outcome': 'STOP', 'split': 'nope', 'return_pct': -1.0, 'close_return_pct': -1.0},
+    {'outcome': 'STOP', 'split': 'train', 'return_pct': None, 'close_return_pct': -1.0},
+]
+_r346 = _lv346.exit_vs_hold(_rec346, 'STOP')
+check("R340 exit_vs_hold — 구간별 n·평균·중앙·든 쪽이 나은 비율·꼬리 비율 · 모르는 구간과 값 없는 행은 뺀다",
+      _r346 and set(_r346) == {'train', 'valid', 'blind'}
+      and _r346['train']['n'] == 2 and _r346['train']['hold_better_pct'] == 50.0
+      and _r346['train']['tail_pct'] == 50.0 and _r346['train']['diff_med'] == -3.0
+      and _r346['valid']['hold_better_pct'] == 100.0 and _r346['blind']['hold_better_pct'] == 0.0
+      and _r346['blind']['tail_pct'] == 50.0, str(_r346))
+check("R340 exit_vs_hold — 그 갈래가 하나도 없으면 None (지어내지 않는다)",
+      _lv346.exit_vs_hold(_rec346, 'OPEN') is None and _lv346.exit_vs_hold([], 'STOP') is None)
+_ln346 = _lv346.exit_vs_hold_line(_r346, 'STOP')
+check("R340 한 줄 — 비율 셋과 실전 꼬리를 적고, 부호가 갈리면 '말하지 않는다'고 적는다 (판정 대신 내리지 않음)",
+      _ln346 and '손절선' in _ln346 and '학습 50%' in _ln346 and '실전 0%' in _ln346
+      and '−10% 아래로 끝난 비율 50%' in _ln346 and '어느 쪽이 낫다고 말하지 않습니다' in _ln346, _ln346)
+_same346 = {sp: dict(_r346['train'], diff_med=1.0) for sp in ('train', 'valid', 'blind')}
+check("R340 한 줄 — 부호가 같아도 '팔지 말지를 정하지 않는다'고 적는다 (양방향) · 없으면 None",
+      '이것만으로 팔지 말지를 정하지 않습니다' in _lv346.exit_vs_hold_line(_same346, 'TARGET')
+      and '1차 목표' in _lv346.exit_vs_hold_line(_same346, 'TARGET')
+      and _lv346.exit_vs_hold_line(None, 'STOP') is None)
+check("R340 꼬리의 기준은 표 한 곳 — 손절은 −10% 아래 · 목표는 마이너스 종료 (새 문턱 아님 · 서술 기준)",
+      _lv346.EXIT_TAIL_PCT == {'STOP': -10.0, 'TARGET': 0.0})
+_w346 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R340 화면 — 매도 판정이 뜬 보유 행이 있을 때만 그 줄을 그리고, 규칙은 ledger_view 한 곳을 부른다 (§4)",
+      "def _exit_vs_hold_340(outcome):" in _w346 and "_lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows(), outcome), outcome)" in _w346
+      and "for _kd340, _oc340 in (('정리 검토', 'STOP'), ('일부 정리', 'TARGET')):" in _w346)
+check("R340 화면 — 보유 행에 '닿아서 다시 잼' 이력 한 줄 (전체는 툴팁 · 킷의 자르기)",
+      "_hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]" in _w346
+      and "_uk.clip_reason(_hlog340[-1], 34)" in _w346)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
