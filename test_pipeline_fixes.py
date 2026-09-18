@@ -23459,8 +23459,14 @@ check("상태표에 82건이 전부 있다 (번호 1~82 · 빠짐 없음)",
 _st282 = {}
 for l in _rows282:
     _st282[l.split('|')[5].strip()] = _st282.get(l.split('|')[5].strip(), 0) + 1
-_sum282 = {m.group(1).strip(): int(m.group(2)) for m in _re.finditer(r'^\| (완료|부분|닫음\(이미 잰 것\)|남음) \| (\d+) \|', _cs282, _re.M)}
-check("요약 표의 수가 행을 센 수와 같다 (손으로 적은 합계가 아니다)", _sum282 == _st282, f"{_sum282} vs {_st282}")
+# ⚠️ 라운드 335 — 여기가 상태 이름 **넷을 손으로** 적고 있었다(완료·부분·닫음(이미 잰 것)·남음).
+#   새 상태('닫음(사실 아님)' — 주장이 사실이 아니어서 닫은 것)를 더하자 요약 줄이 파싱에서 빠져
+#   *"요약 수 ≠ 행 수"* 로 붉어졌다. 손 목록은 반드시 낡는다(R114) — 요약 줄 모양(두 칸 · 둘째가 수)으로
+#   **유도**한다. 이름이 뭐든 요약과 행이 맞는지만 본다.
+_sum282 = {m.group(1).strip(): int(m.group(2)) for m in
+           _re.finditer(r'^\| ([^|0-9][^|]*) \| (\d+) \|\s*$', _cs282, _re.M)}
+check("요약 표의 수가 행을 센 수와 같다 (손으로 적은 합계가 아니다 · 상태 이름도 표에서 유도한다)",
+      _sum282 == _st282, f"{_sum282} vs {_st282}", scanned=len(_sum282))
 check("'완료' 행은 전부 라운드 번호(R…)를 근거로 든다 (미검증을 완료로 안 적는다 · §9)",
       all(_re.search(r'R\d{2,3}', l.split('|')[6]) for l in _rows282 if l.split('|')[5].strip() == '완료'),
       scanned=sum(1 for l in _rows282 if l.split('|')[5].strip() == '완료'))
@@ -26831,6 +26837,77 @@ check("R334 미경과가 전부가 아니면 '전부 대기'라고 말하지 않
 check("R334 사유를 버리는 맨 `continue` 로 돌아가지 않는다 — 네 갈래 전부 세는 자리를 지난다",
       _read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py')).count('_skip(') == 5,
       str(_read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py')).count('_skip(')))
+
+print("\n" + "=" * 72)
+print("§341 R335 — 사건 유형은 표 한 곳이 정한다 · 산문에 수를 박지 않는다 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   전수조사 상태표 #49 가 *"뉴스 이벤트 타입 12종 약속이 코드에 0종 — 기록기는 기존 5종만 찍는다"* 라
+#   적어 두었다. 세어 보니 **둘 다 아니다**: `news_feed.EVENT_TYPES` 가 유형을 정하고(오늘 10종),
+#   기록기는 그 표의 결과(`event_types`)를 그대로 옮기며, 원장 72행에 **5종만 보이는 것은 그 다섯만
+#   일어났다**는 뜻이다(자사주·배당 6 · 신사업·계약 6 · 수주·공급 5 · 임상·인허가 3 · 실적 3 · 2026-09-18).
+#   ⚠️ 그 대신 진짜 결함이 하나 있었다 — 기록기 산문이 *"사건 유형 10종을 태깅"* 이라고 **수를 박아**
+#   두었다. 표가 늘면 산문만 낡는다(R242·R250 계열). 표 이름으로 바꿨다.
+#   ⚠️ 그리고 내 첫 조사 도구가 표를 **못 찾았다**(dict 만 훑었는데 표는 tuple) — 유도가 좁으면
+#   '없다'가 나온다(R194).
+import ast as _ast341
+import news_feed as _nf341
+_labels341 = [lb for lb, _w in _nf341.EVENT_TYPES]
+check("R335 사건 유형 표 — 이름이 겹치지 않고 낱말이 빈 유형이 없다 (표가 곧 정의다)",
+      len(_labels341) == len(set(_labels341)) and len(_labels341) >= 5
+      and all(w for _lb, w in _nf341.EVENT_TYPES), f'{len(_labels341)}종', scanned=len(_labels341))
+# ── 태깅은 표를 지난다 — 기록기가 제 목록을 따로 들지 않는다 (§4) ────────────────
+_ner341 = _read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py'))
+_strs341 = {n.value for n in _ast341.walk(_ast341.parse(_ner341))
+            if isinstance(n, _ast341.Constant) and isinstance(n.value, str)}
+_own341 = sorted(lb for lb in _labels341 if lb in _strs341)
+check("R335 기록기는 유형 이름을 제 소스에 적지 않는다 — 표의 결과를 옮기기만 한다 (§4)",
+      not _own341 and 'event_types' in _ner341, f'제 소스에 든 유형 {_own341}',
+      scanned=len(_labels341))
+# ── 산문에 수를 박지 않는다 (양방향 심기) ──────────────────────────────────
+import re as _re341
+
+
+def _prose_count341(txt):
+    """'유형 N종' 처럼 **수를 박은** 산문을 찾는다(표 길이가 바뀌면 낡는 문장)."""
+    return [m.group(0) for m in _re341.finditer(r'유형[^\n]{0,6}?(\d+)\s*종', txt)]
+
+
+check("R335 기록기·표 파일 산문에 '유형 N종' 이 박혀 있지 않다 (표가 늘면 산문만 낡는다)",
+      not _prose_count341(_ner341) and not _prose_count341(_read148(_os.path.join(PROJ, 'news_feed.py'))),
+      f'{_prose_count341(_ner341)} · {_prose_count341(_read148(_os.path.join(PROJ, "news_feed.py")))}',
+      scanned=2)
+check("R335 심기 — 수를 박은 산문은 잡고 표 이름으로 적은 산문은 안 잡는다 (양방향)",
+      _prose_count341('사건 유형 10종을 태깅하지만\n') == ['유형 10종']
+      and not _prose_count341('사건 유형은 news_feed.EVENT_TYPES 가 정한다\n'))
+# ── 태깅이 실제로 그 이름을 낸다 (심은 기사 한 건) ──────────────────────────
+_lb341, _kw341 = _nf341.EVENT_TYPES[0][0], _nf341.EVENT_TYPES[0][1][0]
+_item341 = [{'title': f'테스트종목, {_kw341} 소식', 'dt': None, 'link': '', 'source': '심기'}]
+_got341 = _nf341.for_stock('테스트종목', items=_item341)
+check("R335 표의 낱말이 든 제목은 그 표의 이름으로 태깅된다 — 기록기가 원장에 적는 이름이 이것이다",
+      (_got341.get('event_types') or {}).get(_lb341) == 1, str(_got341.get('event_types')))
+# ── 원장에 찍힌 이름이 표 안에 있다 (파일이 있을 때 · 없으면 그 사실을 적는다) ──────
+_nl341 = _os.path.join(PROJ, '.portfolio', 'news_events.jsonl')
+if _os.path.exists(_nl341):
+    _seen341, _rows341 = {}, 0
+    with open(_nl341, encoding='utf-8') as _f341:
+        for _ln341 in _f341:
+            _ln341 = _ln341.strip()
+            if not _ln341:
+                continue
+            try:
+                _r341 = _json.loads(_ln341)
+            except Exception:                                  # noqa: BLE001
+                continue
+            _rows341 += 1
+            for _k341 in (_r341.get('events') or {}):
+                _seen341[_k341] = _seen341.get(_k341, 0) + 1
+    _stale341 = sorted(k for k in _seen341 if k not in _labels341)
+    check("R335 원장에 찍힌 사건 이름이 표 안에 있다 — 이름을 갈면 옛 행이 홀로 남는다 (R327 계열)",
+          not _stale341, f'표 밖 이름 {_stale341} · 원장 유형 {len(_seen341)}종', scanned=_rows341)
+else:
+    skipped("R335 원장에 찍힌 사건 이름이 표 안에 있다",
+            ".portfolio/news_events.jsonl 이 이 PC 에 없다 — 클라우드 원장에서만 잴 수 있다 (건너뜀은 통과가 아니다)")
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
