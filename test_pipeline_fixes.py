@@ -22143,17 +22143,21 @@ import quant_indicators as _qi259
 
 # ① 고정 숫자에는 잰 날짜와 표본을 붙인다 — 이 종목 값이 아니라는 것도
 _ent259 = _pa259.entry({'entry_pullback_price': 100.0, 'current_price': 110.0})
+# ⚠️ 라운드 344 — 이 락은 글자('2026-08-04' · '79.3%' · '3.4거래일')를 못 박고 있었다. 산출물과 대 보니
+#   79.3% 는 5,389건이 아니라 블라인드 280건의 값이고 3.4거래일은 출처가 없었다 — **틀린 수를 잠그고 있었다.**
+#   재려던 성질(날짜 · 표본 수 · '이 종목 값이 아니다' · 두 자리가 같은 말)로 옮긴다. 수 자체는 §349 가 산출물과 댄다.
+import entry_facts as _ef259
+_facts259 = _ef259.load() or {}
 check("진입가 근거가 잰 날짜를 적는다 (날짜 없는 숫자는 낡는다)",
-      '2026-08-04' in str(_ent259.get('basis')))
+      bool(_facts259.get('made')) and str(_facts259.get('made')) in str(_ent259.get('basis')))
 check("표본 수와 '이 종목 값이 아니다'를 같이 적는다",
-      '5,389' in str(_ent259.get('basis'))
+      f"{int(_facts259['splits']['all']['n']):,}" in str(_ent259.get('basis'))
       and '이 종목 값이 아니라' in str(_ent259.get('basis')))
 _qsrc259 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
-check("엔진의 같은 근거 문자열도 잰 날짜·표본을 적는다 (두 자리가 어긋나지 않게)",
-      "'· 평균 3.4거래일 (2026-08-04 · 경로 5,389건)'" in _qsrc259)
-check("실측 수치 자체는 안 바꿨다 (79.3% · 3.4거래일 그대로)",
-      '79.3%' in str(_ent259.get('basis'))
-      and '3.4거래일' in str(_ent259.get('basis')))
+check("엔진의 같은 근거 문자열도 같은 함수가 낸다 (두 자리가 어긋나지 않게)",
+      "__import__('entry_facts').line()" in _qsrc259 and '_ef.line()' in _read148(_os.path.join(PROJ, 'price_axes.py')))
+check("근거 문장에 손으로 적은 옛 수가 없다 (79.3% · 3.4거래일은 산출물의 전체 값이 아니었다)",
+      '79.3%' not in str(_ent259.get('basis')) and '3.4거래일' not in str(_ent259.get('basis')))
 
 # ② 배율은 한 곳에서 재고, 쓴 값을 그대로 낸다
 check("배율 규칙이 모듈 함수 하나다 (심을 수 있어야 검사가 된다)",
@@ -27329,6 +27333,48 @@ check("R342 같은 이름이 백업 화이트리스트와 증분 요약에 있�
       "'book_pit.jsonl'" in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
       and "'book_pit.jsonl'" in _read148(_os.path.join(PROJ, 'scripts', 'snapshot_guard.py'))
       and all('book_pit' not in _read148(_os.path.join(PROJ, _f)) for _f in _judges348), scanned=len(_judges348))
+
+print("\n" + "=" * 72)
+print("§349 R344 — 도달 비율 옆에 닿은 뒤 성적 · 수는 산출물에서 읽는다 (2026-09-21)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙인 글의 제안: "체결률 79.3% 의 체결된 사례를 꺼내 그 뒤의 순수익·손절률을 이어 보라." 세어 보니
+#   **이미 재어져 있었다**(라운드 32 산출물 · 엔진 10종 × 세 구간) — 같은 행에 목표 먼저·손절 먼저·비용 차감
+#   평균·신호당 평균이 있는데 화면은 도달 비율만 글자로 박고 있었고, 그 79.3% 는 전체가 아니라 블라인드 280건이었다.
+import entry_facts as _ef349
+_f349 = _ef349.load()
+_a349 = ((_f349 or {}).get('splits') or {}).get('all') or {}
+_ln349 = _ef349.line()
+check("R344 실어 나르는 요약본이 읽힌다 · 전체·학습·검증·블라인드 네 칸",
+      bool(_f349) and all(k in _f349['splits'] for k in ('all', 'train', 'valid', 'blind')), str(_f349)[:120])
+check("R344 문장의 수가 산출물의 **전체** 칸과 같다 (도달 비율 · 대기일 · 표본 수 · 닿은 뒤 평균 · 신호당 평균)",
+      all(t in _ln349 for t in (f"{_a349['fill_rate']:.1f}%", f"{_a349['days']:.2f}거래일", f"{int(_a349['n']):,}건",
+                                f"{_a349['ret']:+.2f}%", f"{_a349['ev_sig']:+.2f}%",
+                                f"목표 먼저 {_a349['tgt_first']:.1f}%", f"손절 먼저 {_a349['stop_first']:.1f}%")), _ln349[:200])
+check("R344 일봉 모의 체결임 · 이 종목 값이 아님 · 닿는 것과 남는 것이 다른 사실임을 같은 줄에 적는다",
+      '실제 주문 체결과 다를 수' in _ln349 and '이 종목 값이 아니라' in _ln349 and '다른 사실' in _ln349)
+_mk349 = lambda tr, va, bl: dict(made='심기용 날짜', cost_pct=0.36, max_bars=20, splits=dict(
+    all=dict(n=100, fill_rate=50.0, days=2.0, tgt_first=50.0, stop_first=40.0, ret=0.1, ev_sig=0.05),
+    train=dict(ret=tr), valid=dict(ret=va), blind=dict(ret=bl)))
+check("R344 구간 부호가 갈리면 갈린다고, 같으면 같다고만 적는다 — 사라·말라를 대신 말하지 않는다 (양방향 심기)",
+      '부호가 갈립니다' in _ef349.line(_mk349(-0.5, 0.6, -1.3)) and '부호가 같습니다' in _ef349.line(_mk349(0.5, 0.6, 1.3))
+      and not any(w in _ef349.line(_mk349(0.5, 0.6, 1.3)) for w in ('사세요', '매수하세요', '유리합니다', '추천')))
+check("R344 못 읽으면 수를 지어내지 않는다 (None · 빈 칸 · 없는 경로)",
+      all('읽지 못해' in _ef349.line(x) and '%' not in _ef349.line(x)
+          for x in (None, {}, dict(splits=dict(all=dict(n=1)))))
+      and _ef349.load(_os.path.join(PROJ, 'data', 'no_such_entry_facts_349.json')) is None)
+_src349 = _os.path.join(PROJ, '.portfolio', 'entry_bakeoff_r32.json')
+if _os.path.exists(_src349):
+    with open(_src349, encoding='utf-8') as _fh349:
+        _s349 = __import__('json').load(_fh349)
+    check("R344 요약본이 원본 산출물과 같다 (두 벌이 어긋나지 않게 · 원본이 있는 PC 에서만 댄다)",
+          all(_f349['splits'][k] == _s349['engines'][_f349['engine']][k] for k in ('all', 'train', 'valid', 'blind'))
+          and _f349['cost_pct'] == _s349['cost_pct'])
+else:
+    skipped("R344 요약본 = 원본 대조", "원본 산출물(.portfolio/entry_bakeoff_r32.json)이 이 환경에 없다")
+_pa349 = __import__('price_axes').entry({'entry_pullback_price': 100.0, 'current_price': 110.0})
+check("R344 화면이 읽는 진입가 근거가 그 문장을 싣고 진입가는 그대로다 (계산 불변)",
+      _ln349 in str(_pa349.get('basis')) and _pa349.get('price') == 100.0)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

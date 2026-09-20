@@ -288,8 +288,11 @@ def entry(four_scores, curr_price=None):
     fs = four_scores or {}
     px = _f(curr_price) or _f(fs.get('current_price'))
     p = _f(fs.get('entry_pullback_price'))
-    basis = ('현재가 − 20일 변동성 1σ · 체결률 79.3% · 평균 3.4거래일 '
-             '(2026-08-04 · 경로 5,389건 실측 — 이 종목 값이 아니라 전체 실측입니다)')
+    # 라운드 344 — 종전엔 '체결률 79.3% · 평균 3.4거래일 (경로 5,389건)' 을 글자로 박았다. 79.3% 는 블라인드
+    #   280건의 값이었고 3.4거래일은 산출물에 없었으며, 같은 행의 '닿은 뒤 성적'은 화면에 안 나갔다.
+    #   수는 산출물에서 읽고(entry_facts 한 곳 · §4) 닿은 뒤 성적을 같은 줄에 적는다. 진입가 계산은 불변.
+    import entry_facts as _ef
+    basis = '현재가 − 20일 변동성 1σ · ' + _ef.line()
     if p is None:
         p = _f(fs.get('recommended_buy_price'))
         basis = '적정가 − 안전마진 (변동성 기반 진입가 미산출 시 폴백)'

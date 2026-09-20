@@ -1,0 +1,71 @@
+{
+ "made": "2026-08-05",
+ "source": ".portfolio/entry_bakeoff_r32.json (라운드 32 진입 엔진 대결 · 파일 수정시각 2026-08-05)",
+ "note": "일봉 경로로 모의한 값이다 — 실제 주문 체결 기록이 아니다. fill_rate = 20봉 안에 진입가에 닿은 신호 비율 · ret = 닿은 거래의 비용 차감 평균 수익(%) · ev_sig = 못 산 신호를 0 으로 넣은 신호당 평균(%).",
+ "engine": "변동성 1배 (현행)",
+ "cost_pct": 0.36,
+ "thr": 58.0,
+ "max_bars": 20,
+ "splits": {
+  "all": {
+   "n": 5389,
+   "fill_n": 4219,
+   "fill_rate": 78.3,
+   "nofill_rate": 21.7,
+   "days": 3.05,
+   "tgt_first": 54.2,
+   "stop_first": 39.3,
+   "ret": -0.453,
+   "rr": 0.63,
+   "pf": 0.81,
+   "mdd": -57.69,
+   "ev_sig": -0.354,
+   "low": 52.7
+  },
+  "train": {
+   "n": 4579,
+   "fill_n": 3595,
+   "fill_rate": 78.5,
+   "nofill_rate": 21.5,
+   "days": 3.04,
+   "tgt_first": 53.3,
+   "stop_first": 40.5,
+   "ret": -0.517,
+   "rr": 0.64,
+   "pf": 0.78,
+   "mdd": -53.09,
+   "ev_sig": -0.406,
+   "low": 51.6
+  },
+  "valid": {
+   "n": 530,
+   "fill_n": 402,
+   "fill_rate": 75.8,
+   "nofill_rate": 24.2,
+   "days": 2.37,
+   "tgt_first": 67.7,
+   "stop_first": 27.6,
+   "ret": 0.608,
+   "rr": 0.62,
+   "pf": 1.36,
+   "mdd": -36.29,
+   "ev_sig": 0.461,
+   "low": 62.9
+  },
+  "blind": {
+   "n": 280,
+   "fill_n": 222,
+   "fill_rate": 79.3,
+   "nofill_rate": 20.7,
+   "days": 4.35,
+   "tgt_first": 45.0,
+   "stop_first": 40.5,
+   "ret": -1.333,
+   "rr": 0.65,
+   "pf": 0.69,
+   "mdd": -57.69,
+   "ev_sig": -1.057,
+   "low": 38.6
+  }
+ }
+}
