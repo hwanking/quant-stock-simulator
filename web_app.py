@@ -6286,6 +6286,18 @@ else:
             _ln340 = _exit_vs_hold_340(_oc340)
             if _ln340:
                 st.caption(f"**{_uk.hold_label(_kd340)}** 이 뜬 종목이 있습니다 — {_ln340}")
+            # 라운드 346 — 목표에서 안 팔고 손절만 지킨 경우의 실측(사전등록 · 규칙은 안 바꿨다 · 표시 전용)
+            if _oc340 == 'TARGET':
+                try:
+                    import json as _json346
+                    import ledger_view as _lv346
+                    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data',
+                                           'exit_rule_r346.json'), encoding='utf-8') as _f346:
+                        _ln346 = _lv346.no_target_line(_json346.load(_f346))
+                except Exception:                                  # noqa: BLE001
+                    _ln346 = None
+                if _ln346:
+                    st.caption(_ln346)
 
     # ── 언제 잰 값인가 · 아직 안 본 종목은 그렇게 말한다 (§3) ────────
     _stale = [w for w in _wl_items() if not w.get('snap_at')]

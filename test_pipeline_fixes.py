@@ -27376,6 +27376,46 @@ _pa349 = __import__('price_axes').entry({'entry_pullback_price': 100.0, 'current
 check("R344 화면이 읽는 진입가 근거가 그 문장을 싣고 진입가는 그대로다 (계산 불변)",
       _ln349 in str(_pa349.get('basis')) and _pa349.get('price') == 100.0)
 
+print("\n" + "=" * 72)
+print("§350 R346 — 목표 없이 손절만 지킨 규칙: 사전등록대로 재고 (나) · 규칙 불변 · 화면엔 사실만 (2026-09-21)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: "진짜 산식 바꿔줬으면 좋겠는데 방법 없는지." 세 구간 방향이 같았던 가장 강한 후보(청산 규칙)를 사전등록해
+#   일봉 경로로 쟀다. 학습·검증은 평균 CI 가 0 을 제외했고 블라인드가 0 을 포함해 (나) — 기준을 내리지 않았다.
+#   판정(verdict)은 잠근다 — 바뀌면 사람이 다시 판단해야 한다(R208·R213). 중간 측정값은 안 잠근다.
+import ledger_view as _lv350
+with open(_os.path.join(PROJ, 'data', 'exit_rule_r346.json'), encoding='utf-8') as _fh350:
+    _art350 = __import__('json').load(_fh350)
+_pre350 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R346_NO_TARGET_KEEP_STOP.md'))
+_scr350 = _read148(_os.path.join(PROJ, 'scripts', 'exit_rule_r346.py'))
+check("R346 기준은 재기 전에 적었고 스크립트가 그 수를 그대로 쓴다 (날짜 30 · 재현 99% · 0.05%p · 시드 346)",
+      all(t in _pre350 for t in ('≥ 30', '99% 이상', '0.05%p', '시드 346'))
+      and all(t in _scr350 for t in ('DATE_FLOOR = 30', 'REPRO_MATCH = 99.0', 'REPRO_RET = 0.05', 'SEED, BOOT = 346, 2000')))
+check("R346 규칙을 새로 짓지 않았다 — 채점기의 first_touch 를 부르고 후보는 목표만 None",
+      'from prediction_log import first_touch' in _scr350 and 'first_touch(bars, None, sl)' in _scr350
+      and 'first_touch(bars, tp, sl)' in _scr350)
+_c350 = _art350['counts']
+check("R346 셈이 맞는다 — 매수권 = 경로 없음 + 짧은 경로 + 경로 있음 · 간격 부분집합은 그 이하 · 재현 검사를 통과했다",
+      _c350['buy_zone'] == _c350['no_path'] + _c350['short_path'] + _c350['with_path']
+      and 0 < _c350['spaced'] <= _c350['with_path'] and _art350['R0']['ok'] and _art350['repro']['ok'], str(_c350))
+check("R346 판정은 (나) — 바뀌면 사람이 다시 판단한다 · (가)가 아닌 한 규칙 문서·엔진은 그대로다",
+      str(_art350.get('verdict', '')).startswith('(나)'), str(_art350.get('verdict')))
+_ln350 = _lv350.no_target_line(_art350)
+check("R346 화면 한 줄이 산출물의 수를 그대로 싣고 '규칙은 바꾸지 않았다'를 말한다 · 물결표 없음 · 권유 낱말 없음",
+      bool(_ln350) and all(f"{_art350['splits'][k]['diff_mean']:+.2f}%p" in _ln350 for k in ('train', 'valid', 'blind'))
+      and '규칙은 바꾸지 않았습니다' in _ln350 and '~' not in _ln350
+      and not any(w in _ln350 for w in ('파세요', '팔지 마세요', '들고 가세요', '유리합니다', '추천')), str(_ln350)[:160])
+check("R346 CI 가 0 을 포함하는 구간에만 그 말을 붙인다 · 모양이 다르면 None (양방향 심기)",
+      _ln350.count('오차 범위에 0 포함') == sum(1 for k in ('train', 'valid', 'blind')
+                                            if _art350['splits'][k]['ci95'][0] <= 0 <= _art350['splits'][k]['ci95'][1])
+      and _lv350.no_target_line(None) is None and _lv350.no_target_line({'splits': {'train': {}}}) is None)
+_w350 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i350 = _w350.find("_lv346.no_target_line(")
+check("R346 화면은 '일부 매도'(목표 도달) 갈래에서만 그 줄을 그리고 엔진 파일은 이 산출물을 안 읽는다 (표시 전용)",
+      _i350 > 0 and "if _oc340 == 'TARGET':" in _w350[_i350 - 700:_i350]
+      and all('exit_rule_r346' not in _read148(_os.path.join(PROJ, _f)) for _f in
+              ('quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py')), scanned=4)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

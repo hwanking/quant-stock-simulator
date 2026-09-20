@@ -499,3 +499,32 @@ def outcome_band_line(q, bars=HORIZON_BARS):
             f"(중앙 {q['p50']:+.1f}% · 10~90분위 {q['p10']:+.1f}~{q['p90']:+.1f}%). "
             f"위 경로 그래프의 밴드는 **유사패턴 몇 건**으로 그린 것이라 이것과 다릅니다 "
             f"— 표본이 큰 쪽은 이 줄입니다.")
+
+
+# ── 라운드 346 — '손절은 지키고 1차 목표에서 안 판' 경우 (표시 전용) ──────────────────────
+#   사전등록(docs/PREREG_R346_NO_TARGET_KEEP_STOP.md)대로 일봉 경로로 쟀고 판정은 (나) — 학습·검증은 평균 CI 가 0 을
+#   제외하지만 블라인드가 0 을 포함해 **규칙은 안 바꿨다.** 그래도 '일부 매도' 판정 앞에 선 보유자에게는 그 수가
+#   쓸모 있는 사실이라 같은 자리에 적는다(R285·R340). 수는 산출물에서 읽고 판정을 대신 내리지 않는다.
+def no_target_line(art):
+    """data/exit_rule_r346.json(dict) → 화면 한 줄. 모양이 다르면 None(지어내지 않는다 · §3).
+    물결표를 쓰지 않는다 — 캡션은 마크다운이라 둘이 만나면 취소선이 된다(R295·R337)."""
+    sp = (art or {}).get('splits') or {}
+    need = ('diff_mean', 'ci95', 'cand_better_pct', 'cand_worse_pct', 'target_then_stop_pct')
+    if any(k not in sp or any(sp[k].get(f) is None for f in need) for k in ('train', 'valid', 'blind')):
+        return None
+    parts = []
+    for k, ko in (('train', '학습'), ('valid', '검증'), ('blind', '실전')):
+        lo, hi = sp[k]['ci95']
+        parts.append(f"{ko} {sp[k]['diff_mean']:+.2f}%p" + ('' if (lo > 0 or hi < 0) else '(오차 범위에 0 포함)'))
+    better = [sp[k]['cand_better_pct'] for k in ('train', 'valid', 'blind')]
+    worse = [sp[k]['cand_worse_pct'] for k in ('train', 'valid', 'blind')]
+    back = [sp[k]['target_then_stop_pct'] for k in ('train', 'valid', 'blind')]
+    n = ((art or {}).get('counts') or {}).get('spaced')
+    passed = str((art or {}).get('verdict') or '').startswith('(가)')
+    tail = ('미리 정한 기준(세 구간 모두)을 넘었지만 독립 확인 전이라 규칙은 아직 바꾸지 않았습니다'
+            if passed else '미리 정한 기준(세 구간 모두 통과)을 못 넘어 규칙은 바꾸지 않았습니다')
+    return (f"같은 자리에서 **손절선은 지키고 1차 목표에서는 안 판** 경우를 일봉 경로로 다시 재면"
+            f"({art.get('made')}" + (f" · 매수권 {int(n):,}건 · 같은 종목 35일 간격" if n else '') + "): "
+            f"평균 차이 {' · '.join(parts)}. 다만 그쪽이 더 나았던 경우는 {min(better):.0f}%에서 {max(better):.0f}%, "
+            f"더 나빴던 경우는 {min(worse):.0f}%에서 {max(worse):.0f}%입니다 — 목표를 지난 뒤 손절선까지 되밀린 비율이 "
+            f"{min(back):.0f}%에서 {max(back):.0f}%이기 때문입니다. {tail}.")

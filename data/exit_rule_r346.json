@@ -1,0 +1,101 @@
+{
+ "made": "2026-09-21",
+ "prereg": "docs/PREREG_R346_NO_TARGET_KEEP_STOP.md",
+ "seed": 346,
+ "boot": 2000,
+ "counts": {
+  "buy_zone": 109448,
+  "no_path": 0,
+  "short_path": 0,
+  "with_path": 109448,
+  "spaced": 69057
+ },
+ "splits": {
+  "train": {
+   "n": 59131,
+   "dates": 2203,
+   "base_mean": 0.128,
+   "cand_mean": 0.932,
+   "diff_mean": 0.804,
+   "ci95": [
+    0.463,
+    1.163
+   ],
+   "diff_median": 0.0,
+   "cand_better_pct": 24.1,
+   "cand_worse_pct": 33.0,
+   "target_rows": 33746,
+   "target_then_stop_pct": 38.0,
+   "base_p05": -8.32,
+   "cand_p05": -9.27
+  },
+  "valid": {
+   "n": 5432,
+   "dates": 64,
+   "base_mean": 0.753,
+   "cand_mean": 2.905,
+   "diff_mean": 2.153,
+   "ci95": [
+    0.658,
+    3.937
+   ],
+   "diff_median": 0.0,
+   "cand_better_pct": 27.1,
+   "cand_worse_pct": 35.6,
+   "target_rows": 3404,
+   "target_then_stop_pct": 33.0,
+   "base_p05": -8.19,
+   "cand_p05": -9.06
+  },
+  "blind": {
+   "n": 4494,
+   "dates": 48,
+   "base_mean": -0.487,
+   "cand_mean": -0.137,
+   "diff_mean": 0.351,
+   "ci95": [
+    -1.366,
+    2.767
+   ],
+   "diff_median": 0.0,
+   "cand_better_pct": 18.6,
+   "cand_worse_pct": 34.1,
+   "target_rows": 2370,
+   "target_then_stop_pct": 50.8,
+   "base_p05": -15.0,
+   "cand_p05": -16.36
+  }
+ },
+ "R0": {
+  "dates": {
+   "train": 2203,
+   "valid": 64,
+   "blind": 48
+  },
+  "floor": 30,
+  "ok": true
+ },
+ "repro": {
+  "n": 69057,
+  "outcome_match_pct": 99.5,
+  "ret_mean_diff": 0.0352,
+  "ok": true
+ },
+ "R1": {
+  "ok": false,
+  "per_split": {
+   "train": true,
+   "valid": true,
+   "blind": false
+  }
+ },
+ "R2": {
+  "ok": true,
+  "per_split": {
+   "train": true,
+   "valid": true,
+   "blind": true
+  }
+ },
+ "verdict": "(나) 후보 유지 · 현행 유지 — 블라인드만 CI 가 0 포함"
+}
