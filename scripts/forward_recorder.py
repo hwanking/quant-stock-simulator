@@ -172,6 +172,19 @@ def main():
     print(f'전방 기록부 {reg_wrote}건 추가 · 규약 거부 {reg_bad}건 '
           f'→ 누적 {cov["n"]:,}건 (규약 통과 {cov["valid"]:,}건 · '
           f'신규 레벨 있음 {cov["with_new_levels"]:,}건)')
+    # ── 라운드 341 — 재무 시점 보관: 오늘 정밀분석한 종목의 연간 재무 응답을 **오늘 날짜로** 남긴다.
+    #   라운드 336·339 — 응답은 이미 받아 뒀고(추가 네트워크 0) 소급이 안 되는 자료라 시작한 날부터만 쌓인다.
+    #   실패해도 판정 기록은 안 죽는다(따로 세어 찍는다 · §3). 범위는 이 기록기가 본 종목(상위 {top})뿐이다.
+    try:
+        import fin_pit
+        _pit_rows = fin_pit.rows_from(getattr(be, 'ANNUAL_FIN_BY_CODE', {}), t_ref)
+        _pit_w, _pit_s = fin_pit.append_rows(fin_pit.PATH, _pit_rows)
+        _pit_cov = fin_pit.coverage(fin_pit.PATH)
+        print(f'재무 시점 보관 — 오늘 {_pit_w}줄 새로 · 이미 있음 {_pit_s}줄 · 받은 응답 없음 '
+              f'{len(getattr(be, "ANNUAL_FIN_BY_CODE", {})) - len(_pit_rows)}종목 → 누적 {_pit_cov["rows"]:,}줄 · '
+              f'종목 {_pit_cov["codes"]} · 날짜 {_pit_cov["dates"]} ({_pit_cov["first"]} ~ {_pit_cov["last"]})')
+    except Exception as _pit_e:                                  # noqa: BLE001
+        print(f'재무 시점 보관 실패 — {type(_pit_e).__name__}: {_pit_e} (판정 기록과 무관 · 오늘 몫은 못 남겼다)')
     # ⚠️ 라운드 97 — 여기가 `wrote == 0` 하나로 실패를 판정했다. 원장이
     #   둘이 되면서 **한쪽은 이미 다 있고 다른 쪽만 새로 쌓는 날**이
     #   정상인데 그걸 실패로 읽었다(실측: 기록부 6건을 넣고도 종료코드 1).

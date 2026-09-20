@@ -27248,6 +27248,51 @@ check("R340 화면 — 보유 행에 '닿아서 다시 잼' 이력 한 줄 (전�
       "_hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]" in _w346
       and "_uk.clip_reason(_hlog340[-1], 34)" in _w346)
 
+print("\n" + "=" * 72)
+print("§347 R341 — 재무 시점 보관을 오늘 시작한다 · 이미 받는 응답을 날짜와 함께 남긴다 (2026-09-18)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 336: 재무 시점 자료가 없고(원장 재무 칸 0) 받는 연간 재무는 재작성된 현재 보고치라 소급이 안 된다 —
+#   시작한 날부터만 쌓이고 12개월 뒤 열린다. 늦출수록 손해라 시작한다. 추가 네트워크 0 — 라운드 339 가 보관해
+#   둔 응답(`ANNUAL_FIN_BY_CODE`)을 전방 판정 기록기 끝에서 날짜와 함께 옮겨 적는다(멱등 · '-' 는 None ·
+#   범위는 그날 정밀분석한 종목 = 클라우드 상위 60). 백업 화이트리스트·증분 요약·되받기에 같은 이름을 넣는다.
+import tempfile as _tf347
+import fin_pit as _fp347
+_pay347 = {'financeInfo': {
+    'trTitleList': [{'key': '202412', 'title': '2024.12.', 'isConsensus': 'N'},
+                    {'key': '202612', 'title': '2026.12.', 'isConsensus': 'Y'}],
+    'rowList': [{'title': '매출액', 'columns': {'202412': {'value': '34,387'}, '202612': {'value': '37,575'}}},
+                {'title': 'ROE', 'columns': {'202412': {'value': '5.12'}, '202612': {'value': '-'}}}]}}
+_rows347 = _fp347.rows_from({'000002': _pay347, '000001': _pay347, '000003': {}, '000004': None}, '2026-09-18')
+check("R341 시점 행 — 종목·날짜마다 한 줄 · 연도 열의 추정 여부는 응답 그대로 · '-' 는 None · 빈 응답은 건너뛴다",
+      [r['code'] for r in _rows347] == ['000001', '000002']
+      and _rows347[0]['date'] == '2026-09-18'
+      and [p['estimate'] for p in _rows347[0]['periods']] == [False, True]
+      and _rows347[0]['items']['매출액'] == {'202412': 34387.0, '202612': 37575.0}
+      and _rows347[0]['items']['ROE'] == {'202412': 5.12, '202612': None}, str(_rows347[:1])[:300])
+with _tf347.TemporaryDirectory() as _td347:
+    _p347 = _os.path.join(_td347, 'fin_pit.jsonl')
+    _w1, _s1 = _fp347.append_rows(_p347, _rows347)
+    _w2, _s2 = _fp347.append_rows(_p347, _rows347)
+    _w3, _s3 = _fp347.append_rows(_p347, _fp347.rows_from({'000001': _pay347}, '2026-09-19'))
+    _cov347 = _fp347.coverage(_p347)
+    check("R341 append 는 멱등이다 — 같은 (종목, 날짜)는 한 번만 · 다음 날은 새로 쓴다 · 커버리지를 센다",
+          (_w1, _s1) == (2, 0) and (_w2, _s2) == (0, 2) and (_w3, _s3) == (1, 0)
+          and _cov347 == dict(rows=3, codes=2, dates=2, first='2026-09-18', last='2026-09-19'),
+          f'{(_w1, _s1)} {(_w2, _s2)} {(_w3, _s3)} {_cov347}')
+check("R341 없는 파일의 커버리지는 rows 0 (지어내지 않는다)",
+      _fp347.coverage(_os.path.join(_tf347.gettempdir(), 'no_such_fin_pit_347.jsonl'))['rows'] == 0)
+_fpsrc347 = _read148(_os.path.join(PROJ, 'fin_pit.py'))
+check("R341 수 파싱은 엔진의 _api_num 한 곳 (§4) · 값을 해석·선별하지 않는다 (규칙은 사전등록으로)",
+      'from bitemporal_engine import _api_num' in _fpsrc347 and 'def _api_num' not in _fpsrc347)
+_fr347 = _read148(_os.path.join(PROJ, 'scripts', 'forward_recorder.py'))
+check("R341 전방 판정 기록기가 끝에서 시점 행을 옮겨 적고 몇 줄 썼는지 찍는다 (실패해도 판정 기록은 안 죽는다)",
+      'fin_pit.rows_from(' in _fr347 and 'fin_pit.append_rows(' in _fr347 and '재무 시점 보관' in _fr347)
+_bk347 = _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
+_sg347 = _read148(_os.path.join(PROJ, 'scripts', 'snapshot_guard.py'))
+check("R341 같은 이름이 백업 화이트리스트와 증분 요약에 있다 — 만든 것이 실린 것이 되게 (R261·R284)",
+      "'fin_pit.jsonl'" in _bk347 and "'fin_pit.jsonl'" in _sg347)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

@@ -56,7 +56,9 @@ WATCH = ('virtual_predictions*.jsonl', 'virtual_graded.jsonl',
          'news_events.jsonl', 'predictions.jsonl',
          # 라운드 97 — 전방 기록부(fr-1). 11/16 재평가가 읽는 원장이므로
          # 줄어들면 그 자리에서 잡아야 한다.
-         'forward_registry.jsonl')
+         'forward_registry.jsonl',
+         # 라운드 341 — 재무 시점 보관. 소급이 안 되는 자료라 줄어들면 그날 것을 잃은 것이다.
+         'fin_pit.jsonl')
 
 
 def counts():
