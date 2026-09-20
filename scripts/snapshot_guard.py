@@ -58,7 +58,9 @@ WATCH = ('virtual_predictions*.jsonl', 'virtual_graded.jsonl',
          # 줄어들면 그 자리에서 잡아야 한다.
          'forward_registry.jsonl',
          # 라운드 341 — 재무 시점 보관. 소급이 안 되는 자료라 줄어들면 그날 것을 잃은 것이다.
-         'fin_pit.jsonl')
+         'fin_pit.jsonl',
+         # 라운드 342 — 잔여 호가 시점 보관. 같은 이유.
+         'book_pit.jsonl')
 
 
 def counts():

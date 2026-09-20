@@ -185,6 +185,25 @@ def main():
               f'종목 {_pit_cov["codes"]} · 날짜 {_pit_cov["dates"]} ({_pit_cov["first"]} ~ {_pit_cov["last"]})')
     except Exception as _pit_e:                                  # noqa: BLE001
         print(f'재무 시점 보관 실패 — {type(_pit_e).__name__}: {_pit_e} (판정 기록과 무관 · 오늘 몫은 못 남겼다)')
+    # ── 라운드 342 — 잔여 호가(5단) 시점 보관. 소급이 안 되는 자료라 같은 자리에서 같이 남긴다.
+    #   밤에 도는 이 기록기가 받는 것은 **시간외 마감 뒤 남은 호가**다(정규장 마감 호가·체결강도가 아니다).
+    #   받은 시각·장 상태를 같이 적는다. 판정에 안 들어간다 · 실패해도 판정 기록은 안 죽는다.
+    try:
+        import datetime as _dt342
+        import book_pit
+        import stock_code as _sc342
+        _bk_codes = [_sc342.strip_suffix(u['symbol']) for u in uni[:top]]
+        _bk_basic = (be.fetch_json_with_retry(f"{be.NAVER_MOBILE_API}/stock/{_bk_codes[0]}/basic", timeout=6, retries=2)
+                     if _bk_codes else None)
+        _bk_status = (_bk_basic or {}).get('marketStatus')
+        _bk_rows, _bk_fail = book_pit.rows_for(
+            _bk_codes, t_ref, _dt342.datetime.now().astimezone().isoformat(timespec='seconds'), _bk_status)
+        _bk_w, _bk_s = book_pit.append_rows(book_pit.PATH, _bk_rows)
+        _bk_cov = book_pit.coverage(book_pit.PATH)
+        print(f'잔여 호가 시점 보관 — 오늘 {_bk_w}줄 새로 · 이미 있음 {_bk_s}줄 · 못 받음 {_bk_fail}종목 · 장 상태 {_bk_status} '
+              f'→ 누적 {_bk_cov["rows"]:,}줄 · 날짜 {_bk_cov["dates"]}')
+    except Exception as _bk_e:                                   # noqa: BLE001
+        print(f'잔여 호가 시점 보관 실패 — {type(_bk_e).__name__}: {_bk_e} (판정 기록과 무관 · 오늘 몫은 못 남겼다)')
     # ⚠️ 라운드 97 — 여기가 `wrote == 0` 하나로 실패를 판정했다. 원장이
     #   둘이 되면서 **한쪽은 이미 다 있고 다른 쪽만 새로 쌓는 날**이
     #   정상인데 그걸 실패로 읽었다(실측: 기록부 6건을 넣고도 종료코드 1).

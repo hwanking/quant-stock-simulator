@@ -27293,6 +27293,43 @@ _sg347 = _read148(_os.path.join(PROJ, 'scripts', 'snapshot_guard.py'))
 check("R341 같은 이름이 백업 화이트리스트와 증분 요약에 있다 — 만든 것이 실린 것이 되게 (R261·R284)",
       "'fin_pit.jsonl'" in _bk347 and "'fin_pit.jsonl'" in _sg347)
 
+print("\n" + "=" * 72)
+print("§348 R342 — 잔여 호가(5단) 시점 보관 · 이름이 값보다 넓지 않게 (2026-09-21)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙인 영상 요약의 제안(호가 잔량·체결강도 · ML · 클라우드 이전)을 하나씩 쟀다. 공개 끝점이 주는 것은
+#   5단 호가뿐이고 체결강도는 못 찾았다. 밤에 도는 기록기가 받는 것은 **시간외 마감 뒤 남은 호가**다 — 정규장
+#   마감 호가가 아니다. 소급이 안 되므로 보관만 시작하고(판정 불반영) 이름·독스트링이 그 경계를 말한다.
+import book_pit as _bp348
+_pay348 = {'totalSell': '446,211', 'totalBuy': '192,648',
+           'sellInfo': [{'price': '262,000', 'count': '101,001', 'rate': 100}, {'price': '', 'count': '0', 'rate': 0}],
+           'buyInfos': [{'price': '259,500', 'count': '48,062', 'rate': 47}]}
+_b348 = _bp348.parse(_pay348)
+check("R342 호가 파서 — 합계·단별 [가격, 잔량] · 빈 가격은 None (0 으로 안 바꾼다 · §3)",
+      _b348 == dict(total_sell=446211.0, total_buy=192648.0,
+                    sells=[[262000.0, 101001.0], [None, 0.0]], buys=[[259500.0, 48062.0]]), str(_b348)[:200])
+check("R342 모양이 다른 응답은 None — 자리를 채우지 않는다 (양방향 심기)",
+      _bp348.parse(None) is None and _bp348.parse({}) is None and _bp348.parse({'totalSell': '1'}) is None
+      and _bp348.parse({'totalSell': '1', 'totalBuy': '2'}) is not None)
+_r348, _f348 = _bp348.rows_for(['000001', '000002', '0040Y0'], '2026-09-21', '2026-09-21T22:00:00+09:00', 'CLOSE',
+                               getter=lambda c: None if c == '000002' else _pay348)
+check("R342 못 받은 종목은 세고 건너뛴다 · 받은 시각·장 상태를 같이 남긴다 · 문자 코드도 그대로",
+      _f348 == 1 and [r['code'] for r in _r348] == ['000001', '0040Y0']
+      and all(r['fetched_at'].startswith('2026-09-21T22') and r['market_status'] == 'CLOSE' and r['date'] == '2026-09-21'
+              for r in _r348), f'{_f348} {_r348[:1]}')
+check("R342 쓰기·세기는 재무 시점 보관과 같은 함수다 (§4 · 베끼지 않는다)",
+      _bp348.append_rows is _bp348.fin_pit.append_rows and _bp348.coverage is _bp348.fin_pit.coverage)
+_bpsrc348 = _read148(_os.path.join(PROJ, 'book_pit.py'))
+_fr348 = _read148(_os.path.join(PROJ, 'scripts', 'forward_recorder.py'))
+check("R342 이름이 값보다 넓지 않다 — 모듈이 시간외 잔여 호가임을 말하고(정규장 마감 호가·체결강도 아님) 기록기가 장 상태를 찍는다",
+      '시간외' in _bpsrc348 and '마감 호가가 아니고' in _bpsrc348 and '체결강도도 아니다' in _bpsrc348
+      and 'book_pit.rows_for(' in _fr348 and '장 상태' in _fr348)
+_judges348 = ('quant_indicators.py', 'verdict_core.py', 'web_app.py', 'price_axes.py', 'regime_policy.py')
+check("R342 같은 이름이 백업 화이트리스트와 증분 요약에 있다 (R261) · 판정·화면 경로는 이 모듈을 안 읽는다",
+      "'book_pit.jsonl'" in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
+      and "'book_pit.jsonl'" in _read148(_os.path.join(PROJ, 'scripts', 'snapshot_guard.py'))
+      and all('book_pit' not in _read148(_os.path.join(PROJ, _f)) for _f in _judges348), scanned=len(_judges348))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
