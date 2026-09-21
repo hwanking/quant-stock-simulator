@@ -37,6 +37,23 @@ def load(path=PATH):
     return d
 
 
+def _cost_gap(measured):
+    """잰 당시 비용과 오늘 운영 비용이 다르면 그 사실을 같은 줄에 적는다 (라운드 350).
+
+    같은 화면에 비용이 둘이면 사용자는 어느 것이 기준인지 모른다. 이 표는 그때의 실측이라
+    **그때의 비용**으로 차감돼 있고, 다시 재지 않는 한 그 수가 맞다 — 고칠 것은 수가 아니라
+    **어느 비용으로 뺀 값인지 적는 것**이다. 운영 비용은 늦은 임포트로 읽어 순환을 만들지
+    않는다. 못 읽으면 아무 말도 안 붙인다(§3).
+    """
+    try:
+        from verdict_core import COST_PCT as _op
+        if measured is None or abs(float(measured) - float(_op)) < 1e-9:
+            return ''
+        return f" (잰 당시 비용입니다 — 지금 운영 비용은 {float(_op):g}%)"
+    except Exception:                                          # noqa: BLE001
+        return ''
+
+
 def line(facts='__load__'):
     """진입가 근거의 실측 꼬리 문장."""
     d = load() if facts == '__load__' else facts
@@ -57,7 +74,7 @@ def line(facts='__load__'):
     return (f"{int(d.get('max_bars') or 20)}봉 안에 이 가격에 닿은 비율 {a['fill_rate']:.1f}% · 평균 {a['days']:.2f}거래일 "
             f"({d.get('made')} · 매수권 신호 {int(a['n']):,}건 · 일봉으로 모의한 값이라 실제 주문 체결과 다를 수 있습니다) · "
             f"닿은 뒤에는 목표 먼저 {a['tgt_first']:.1f}% · 손절 먼저 {a['stop_first']:.1f}% · "
-            f"왕복 비용 {d.get('cost_pct')}% 차감 평균 {a['ret']:+.2f}%"
+            f"왕복 비용 {d.get('cost_pct')}% 차감 평균 {a['ret']:+.2f}%" + _cost_gap(d.get('cost_pct'))
             + (f" ({per_txt}{tail})" if per_txt else '')
             + f" · 못 산 신호까지 넣은 신호당 평균 {a['ev_sig']:+.2f}% — "
             f"가격에 닿는 것과 닿은 뒤 이익이 남는 것은 다른 사실이고, 이 종목 값이 아니라 전체 실측입니다")

@@ -6885,7 +6885,9 @@ if _os.path.exists(_b32):
           all(k in _d32['engines']['변동성 1배 (현행)']['blind']
               for k in ('fill_rate', 'nofill_rate', 'days', 'tgt_first',
                         'stop_first', 'ret', 'rr', 'pf', 'mdd', 'ev_sig')))
-    check("거래비용을 차감했다", _d32['cost_pct'] == 0.36)
+    # 라운드 350 — 운영값은 0.41 이 됐지만 이 산출물은 **잰 당시**(0.36)의 값이다. 재측정이
+    #   아니므로 수는 그대로 두고, 화면 문장이 '어느 비용으로 뺀 값인지'를 적는다(§353).
+    check("거래비용을 차감했다 (잰 당시 0.36 · 재측정 아님)", _d32['cost_pct'] == 0.36)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -18339,8 +18341,14 @@ _uk221 = '\n'.join(ln for _i221, ln in _la135.code_lines('ui_kit.py'))
 _ex221 = _read148(_os.path.join(PROJ, 'scripts', 'exec_sim.py'))
 
 # ── ⓐ **값이 안 바뀌었는가** — 이것이 이 절의 핵심이다 ─────────────
-check("verdict_core.COST_PCT 가 0.36 그대로다",
-      _vc105.COST_PCT == 0.36, str(_vc105.COST_PCT))
+# ⚠️ 라운드 350 (2026-09-22) — **사람이 0.41 로 올렸다.** 이 절이 재려던 것은
+#   *"라운드 191 이 그날 밤 감으로 안 바꿨다"* 이고 그 사실은 그대로다(R205 기각 기록도
+#   아래에 남아 있다). 바뀐 근거는 성적이 아니라 **2026년 증권거래세 0.15 → 0.20%** 라는
+#   세율 사실이다. 그러므로 이제 잠글 것은 리터럴이 아니라 **규칙집 항목 합과 같은가**다.
+check("verdict_core.COST_PCT 가 규칙집 항목 합과 같다 (라운드 350 · 손으로 고른 수가 아니다)",
+      _vc105.COST_PCT == 0.41
+      and abs(_vc105.COST_PCT - qi.QuantIndicatorsEngine.TOTAL_COST_PCT) < 1e-9,
+      str(_vc105.COST_PCT))
 check("TOTAL_COST_PCT 가 0.41 그대로다",
       qi.QuantIndicatorsEngine.TOTAL_COST_PCT == 0.41,
       str(qi.QuantIndicatorsEngine.TOTAL_COST_PCT))
@@ -18415,8 +18423,9 @@ if _os.path.exists(_r205p):
 check("기각 사실이 COST_PCT 주석에 있다",
       '라운드 205' in _vcraw221 and '기각 · 0.36 유지' in _vcraw221
       and 'cost_unify_r205' in _vcraw221)
-check("기각 뒤에도 값이 그대로다 (측정 후 기준 불변)",
-      _vc105.COST_PCT == 0.36 and qi.QuantIndicatorsEngine.TOTAL_COST_PCT == 0.41
+# 라운드 350 이 값을 바꿨어도 **기각은 취소되지 않았다** — 그 사실이 주석에 남아 있는지 본다.
+check("기각을 취소하지 않았다 — 바꾼 근거가 성적이 아니라고 적혀 있다 (§9)",
+      '기각은 취소하지 않는다' in _vcraw221 and '이득을 주장하지 않는다' in _vcraw221
       and qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT == 0.3)
 
 # ── 라운드 208 — R205 의 '역선별' 관찰을 사전등록으로 재쟀다 ─────────
@@ -19866,8 +19875,11 @@ if _os.path.exists(_ar232):
           and _r232['measured_at_rows'] > 200000)
 check("결과 문서가 R1 미달과 'R2 는 열지 않는다'를 적었다",
       '**둘 다 미달.**' in _rst232 and '열지 않는다' in _rst232)
-check("값은 하나도 안 바꿨다 (밸류 게이트 상수 불변 · 문서에도 적음)",
-      _vc105.COST_PCT == 0.36 and '**값은 하나도 안 바꿨다.**' in _rst232)
+# ⚠️ 라운드 350 — 종전엔 이 줄이 `COST_PCT == 0.36` 을 **대리 증거**로 삼았다. 그 상수는
+#   이 라운드와 **무관한 이유**(2026년 거래세)로 움직였다 — 남의 값을 대리로 잠그면 남이
+#   움직이는 날 거짓으로 붉어진다. 이 절이 재려던 것은 R215 가 값을 안 바꿨다는 기록이다.
+check("값은 하나도 안 바꿨다 (문서에 적혀 있다)",
+      '**값은 하나도 안 바꿨다.**' in _rst232)
 # 랩이 앞으로 적정가 숫자를 남긴다 — 이게 없으면 정확도는 영영 못 잰다
 _lab232 = open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'),
                encoding='utf-8').read()
@@ -19916,8 +19928,8 @@ check("train 관측을 '판정이 아니다'로 적었다 (가설 생성 · R84 
 check("11/16 전에는 게이트에 넣지 않는다고 적었다 (R55 와 같은 자리)",
       '2026-11-16 이전에는 게이트에 넣지 않는다' in _pt233)
 check("하한을 내리지 않는다고 적었다", '하한을 내리지 않는다' in _pt233)
-check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다.**' in _pt233
-      and _vc105.COST_PCT == 0.36)
+# ⚠️ 라운드 350 — 위와 같은 이유로 무관한 상수를 대리 증거에서 뺐다.
+check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다.**' in _pt233)
 # 화면 — 국면×구간 표 (표시 전용 · 원장에서 그 자리에서 셈 · 하한·Wilson 재사용)
 check("모델 성적에 국면×구간 표가 있다",
       "**②' 같은 신호를 국면 × 구간으로**" in _w231)
@@ -22628,7 +22640,9 @@ if _os.path.isfile(_ev265):
           and _j265.get('buy_cases', 0) > (_j265.get('dates') or {}).get('blind', 0),
           f"블라인드 날짜 {(_j265.get('dates') or {}).get('blind')} · "
           f"매수권 케이스 {_j265.get('buy_cases')}")
-    check("비용은 채택된 상수를 **불러온** 값이다 (라운드 191 · 새로 안 골랐다)",
+    # 라운드 350 이 운영값을 0.41 로 올렸다 — 이 산출물은 **잰 당시**(2026-09-09)의 0.36 이고
+    #   다시 재지 않는 한 그 수가 맞다. 바뀌어야 하는 것은 수가 아니라 이름표다.
+    check("비용은 잰 당시의 채택 상수를 **불러온** 값이다 (0.36 · 2026-09-09 · 새로 안 골랐다)",
           abs(float(_j265.get('cost_pct', 0)) - 0.36) < 1e-9,
           str(_j265.get('cost_pct')))
 else:
@@ -22638,7 +22652,8 @@ else:
 _sc265 = _read148(_os.path.join(PROJ, 'scripts', 'macro_ev_r249.py'))
 check("비용을 리터럴로 안 박고 verdict_core 에서 불러온다 (§4 — 한 곳)",
       'from verdict_core import COST_PCT' in _sc265
-      and 'COST_PCT = 0.36' not in _sc265)
+      and not any(f'COST_PCT = {_v265}' in _sc265
+                  for _v265 in ('0.30', '0.36', '0.41', '0.55')))
 check("구간 경계·매수권 문턱·날짜 하한이 이미 쓰는 값 그대로다",
       'SPLIT_VALID_FROM = "2025-07-01"' in _sc265
       and 'SPLIT_BLIND_FROM = "2026-02-01"' in _sc265
@@ -22685,8 +22700,9 @@ check("매크로 키가 판정 파일에 새어 들어가지 않았다 (미달�
       not _leak265, str(_leak265), scanned=len(_paths265))
 check("글로벌 위험 산식이 읽는 키는 여전히 넷이다 (매크로가 안 끼어든다)",
       len(_mc265.GLOBAL_SYMBOLS) == 4)
-check("왕복 비용 상수는 한 곳뿐이다 (라운드 191 이 통일한 그 값)",
-      abs(_vc265.COST_PCT - 0.36) < 1e-9, str(_vc265.COST_PCT))
+check("왕복 비용 상수는 한 곳뿐이고 규칙집 항목 합과 같다 (라운드 191 통일 · 라운드 350 세율 반영)",
+      abs(_vc265.COST_PCT - qi.QuantIndicatorsEngine.TOTAL_COST_PCT) < 1e-9,
+      str(_vc265.COST_PCT))
 
 # ⑥ 레이더 톱니 — 새 사전등록을 쓰면 레이더도 갱신한다 (§235 · 라운드 218)
 _rad265 = _read148(_os.path.join(PROJ, 'data', 'research_radar.json'))
@@ -27497,6 +27513,73 @@ check("R349 20봉 칸이 라운드 348 의 운영 rho 칸과 같은 수다 (같�
       _ph352[str(_a352['judgment_window_bars'])]['prob_ok'] == _a348b['per_rho']['0.80']['prob_ok']
       and _ph352[str(_a352['judgment_window_bars'])]['zero'] == _a348b['per_rho']['0.80']['obs_zero'],
       f"{_ph352[str(_a352['judgment_window_bars'])]} vs {_a348b['per_rho']['0.80']}")
+
+print("\n" + "=" * 72)
+print("§353 R350 — 운영 왕복 비용 0.36 → 0.41 · 바꾼 근거는 성적이 아니라 세율이다 (2026-09-22)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자 결정: *"거래비용 0.41로 바꿔줘."* 라운드 205 의 R1 이 *"세금을 0.15 로 두면 0.36 이
+#   정확히 나오지만 **세율 근거 문서가 저장소에 없다**"* 고 적어 두었고, 2026-09-16 조사가 그
+#   근거를 더했다 — 2026-01-01 양도분부터 증권거래세가 0.15 → 0.20% 다. 그러면 0.36 은
+#   **2025년 세율로 만든 수**이고 오늘의 법정 세율로 적으면 규칙집 항목 합 그대로 0.41 이다.
+#   ⚠️ **R205 의 기각은 취소하지 않는다** — 그 근거는 성적(R4)이었고 오늘도 그대로다. 바꾼
+#   근거는 성적이 아니라 비용 가정이 사실과 달랐다는 것이라 **이득을 주장하지 않는다**(§9).
+#   그리고 대가는 **바꾸기 전에** 셌다(§2-7): 양수 후보 1 → 0 · 벽 0.31 → 0.36%p.
+import entry_facts as _ef353
+import gaeum_glossary as _gg353
+import quant_indicators as _qi353
+import verdict_core as _vc353
+_qe353 = _qi353.QuantIndicatorsEngine
+_vcsrc353 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+_res353 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R350_THE_TAX_RAISED_THE_FLOOR.md'))
+# ── ① 값은 고른 것이 아니라 규칙집 항목 합이다 ───────────────────────────
+check("R350 운영 게이트 비용이 0.41 이고 규칙집 항목 합과 같다 (손으로 고른 수가 아니다 · §2-6)",
+      abs(_vc353.COST_PCT - 0.41) < 1e-9
+      and abs(_vc353.COST_PCT - _qe353.TOTAL_COST_PCT) < 1e-9
+      and abs(_qe353.TOTAL_COST_PCT - sum(_qe353.COST_BREAKDOWN.values())) < 1e-9,
+      f"COST_PCT={_vc353.COST_PCT} TOTAL={_qe353.TOTAL_COST_PCT}")
+_tax353 = _qi353.rb('RULES_TRADING_COSTS', 'transaction_tax', -1.0)
+_com353 = _qi353.rb('RULES_TRADING_COSTS', 'commission_round_trip', -1.0)
+_slp353 = _qi353.rb('RULES_TRADING_COSTS', 'slippage', -1.0)
+check("R350 그 합을 만드는 항목이 규칙집에서 읽힌다 — 거래세 0.20 (2026년 법정 세율)",
+      abs(_tax353 - 0.20) < 1e-9 and abs(_com353 - 0.03) < 1e-9 and abs(_slp353 - 0.18) < 1e-9,
+      f"세금 {_tax353} · 수수료 {_com353} · 슬리피지 {_slp353}", scanned=len(_qe353.COST_BREAKDOWN))
+# ── ② 바꾼 근거를 코드가 말한다 · 옛 기각을 지우지 않았다 ────────────────
+check("R350 바꾼 근거가 코드에 있다 — 세율 사실이고, 성적이 좋아져서가 아니다",
+      '라운드 350' in _vcsrc353 and '0.15% → 0.20%' in _vcsrc353
+      and '기각은 취소하지 않는다' in _vcsrc353 and '이득을 주장하지 않는다' in _vcsrc353)
+check("R350 라운드 191·205 의 기록을 지우지 않았다 (원문은 둔다)",
+      all(_t353 in _vcsrc353 for _t353 in
+          ('기각 · 0.36 유지', '48.8', '267', 'cost_unify_r205', 'PREREG_R191')))
+# ── ③ 대가를 바꾸기 **전에** 셌고 이득을 주장하지 않는다 ─────────────────
+check("R350 결과 문서가 '바꾸기 전에 셌다'와 그 수를 적는다 (§2-7 · 이득이 아니라 대가다)",
+      bool(_res353) and '바꾸기 전에' in _res353 and '418' in _res353
+      and '1 → 0' in _res353 and '0.36%p' in _res353)
+check("R350 결과 문서가 성과를 좋게 보이게 쓰지 않는다 (§9)",
+      bool(_res353) and '추천 수는' in _res353
+      and not any(_w353 in _res353 for _w353 in ('성적이 좋아졌', '개선되었', '우위가 생겼')))
+# ── ④ 화면 — 수를 손으로 안 적는다 · 잰 당시 비용과 다르면 그 사실을 적는다 ─
+_gtxt353 = ' '.join(_t353 for _c353, _h353, _t353 in _gg353.ENTRIES if '거래비용' in _c353)
+check("R350 설명 사전이 비용을 운영 상수에서 읽는다 (옛 0.36 이 글자로 남아 있지 않다)",
+      f'{_vc353.COST_PCT:g}%' in _gtxt353 and '0.36%가' not in _gtxt353
+      and '약 0.31%p' not in _gtxt353, _gtxt353[:90])
+_fake353 = dict(made='심기용 날짜', cost_pct=0.36, max_bars=20, splits=dict(
+    all=dict(n=100, fill_rate=50.0, days=2.0, tgt_first=50.0, stop_first=40.0, ret=0.1, ev_sig=0.05),
+    train=dict(ret=0.1), valid=dict(ret=0.2), blind=dict(ret=0.3)))
+check("R350 잰 당시 비용이 오늘 운영 비용과 다르면 그 사실을 같은 줄에 적는다 (양방향 심기)",
+      '지금 운영 비용은' in _ef353.line(_fake353)
+      and '지금 운영 비용은' not in _ef353.line(dict(_fake353, cost_pct=_vc353.COST_PCT))
+      and '%' not in _ef353.line(None))
+# ── ⑤ 게이트 변경은 버전으로 남는다 — 11-16 이 앞뒤를 가를 자리 ──────────
+import json as _j353
+with open(_os.path.join(PROJ, 'data', 'version_ledger.json'), encoding='utf-8') as _fh353:
+    _vl353 = _j353.load(_fh353)
+_rel353 = [_h353 for _h353 in _vl353['history']
+           if _h353.get('axis') == 'rulebook' and _h353.get('kind') == 'gate'
+           and '0.41' in str(_h353.get('reason'))]
+check("R350 게이트 변경이 버전 원장에 사유·시행일로 남았다 (전방 재평가가 앞뒤를 가를 날짜)",
+      len(_rel353) == 1 and _rel353[0].get('effective_from') == '2026-09-22',
+      str(_rel353[:1])[:180], scanned=len(_vl353['history']))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
