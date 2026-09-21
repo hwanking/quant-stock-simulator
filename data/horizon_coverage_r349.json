@@ -1,0 +1,73 @@
+{
+ "made": "2026-09-21",
+ "source": "rho_coverage_r348.json",
+ "reused_asof_dates": [
+  "2026-09-18",
+  "2026-08-14",
+  "2026-07-10",
+  "2026-06-05",
+  "2026-05-01",
+  "2026-03-27"
+ ],
+ "registry_day": "2026-09-17",
+ "rho": 0.8,
+ "judgment_window_bars": 20,
+ "floors": {
+  "observation": 5,
+  "probability": 10
+ },
+ "cells": 360,
+ "elapsed_sec": 203.7,
+ "per_horizon": {
+  "5": {
+   "obs_ok": 360,
+   "prob_ok": 359,
+   "zero": 0,
+   "n": 360,
+   "median": 181,
+   "max": 265
+  },
+  "10": {
+   "obs_ok": 321,
+   "prob_ok": 298,
+   "zero": 5,
+   "n": 360,
+   "median": 54,
+   "max": 118
+  },
+  "20": {
+   "obs_ok": 236,
+   "prob_ok": 197,
+   "zero": 69,
+   "n": 360,
+   "median": 13,
+   "max": 63
+  },
+  "40": {
+   "obs_ok": 184,
+   "prob_ok": 132,
+   "zero": 96,
+   "n": 360,
+   "median": 5,
+   "max": 31
+  },
+  "60": {
+   "obs_ok": 183,
+   "prob_ok": 109,
+   "zero": 103,
+   "n": 360,
+   "median": 5,
+   "max": 23
+  },
+  "120": {
+   "obs_ok": 133,
+   "prob_ok": 13,
+   "zero": 113,
+   "n": 360,
+   "median": 3,
+   "max": 11
+  }
+ },
+ "sparsest_horizon": 120,
+ "judgment_window_is_sparsest": false
+}

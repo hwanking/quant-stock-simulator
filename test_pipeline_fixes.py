@@ -27463,6 +27463,41 @@ check("R348 화면은 '예측 보류' 경고가 뜰 때만 그리고 판정 파�
       and all('rho_coverage_r348' not in _read148(_os.path.join(PROJ, _f)) for _f in
               ('quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py')), scanned=4)
 
+print("\n" + "=" * 72)
+print("§352 R349 — 지평별 커버리지: 같은 표본을 다시 읽고, 판정 창이 유독 비는지 본다 (2026-09-21)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 348 이 제 결과 문서에 "지평별 분포는 안 쟀다"고 적었다. 같은 표본(그 종목·그 기준일)에서 채웠다 —
+#   오늘 다시 고르면 장 마감 뒤라 판정일이 옮겨가 같은 칸이 아니다. 답: 판정 창(20봉)은 유독 비는 지평이
+#   아니고 커버리지는 지평이 길수록 **단조로** 준다. 창·문턱·판정은 아무것도 안 바꿨다.
+import json as _j352
+import ledger_view as _lv352                                                       # noqa: E402
+import ui_kit as _uk352                                                           # noqa: E402
+with open(_os.path.join(PROJ, 'data', 'horizon_coverage_r349.json'), encoding='utf-8') as _fh352:
+    _a352 = _j352.load(_fh352)
+with open(_os.path.join(PROJ, 'data', 'rho_coverage_r348.json'), encoding='utf-8') as _fh352b:
+    _a348b = _j352.load(_fh352b)
+check("R349 표본을 새로 안 골랐다 — 라운드 348 의 기준일·모집단 날짜를 그대로 읽는다 (같은 칸이라야 나란히 읽는다)",
+      _a352['reused_asof_dates'] == _a348b['asof_dates']
+      and _a352['registry_day'] == _a348b['registry_day'] and _a352['cells'] == _a348b['cells'],
+      f"{_a352['cells']} vs {_a348b['cells']}")
+check("R349 운영 rho·하한이 라운드 348 과 같다 (두 표가 다른 기준으로 서면 나란히 못 읽는다)",
+      _a352['rho'] == _a348b['operating_rho'] and _a352['floors'] == _a348b['floors'])
+_ph352 = _a352['per_horizon']
+_ord352 = [str(x) for x in _uk352.HORIZONS_ALL]
+check("R349 지평 목록이 화면이 쓰는 그 목록이다 (§4 · 손 목록 아님)", sorted(_ph352, key=int) == sorted(_ord352, key=int))
+check("R349 커버리지는 지평이 길수록 단조로 줄고 0건은 단조로 는다 (뒤집히면 잣대가 틀린 것이다)",
+      all(_ph352[a]['prob_ok'] >= _ph352[b]['prob_ok'] and _ph352[a]['zero'] <= _ph352[b]['zero']
+          for a, b in zip(_ord352, _ord352[1:])),
+      str({k: (v['prob_ok'], v['zero']) for k, v in sorted(_ph352.items(), key=lambda kv: int(kv[0]))}))
+check("R349 판정 창은 원장이 쓰는 그 창이고, 그것이 '가장 비는 지평'인지를 값으로 적는다 (오늘은 아니다)",
+      _a352['judgment_window_bars'] == _lv352.HORIZON_BARS
+      and _a352['judgment_window_is_sparsest'] is (_a352['sparsest_horizon'] == _a352['judgment_window_bars']))
+check("R349 20봉 칸이 라운드 348 의 운영 rho 칸과 같은 수다 (같은 표본·같은 기준이면 같아야 한다)",
+      _ph352[str(_a352['judgment_window_bars'])]['prob_ok'] == _a348b['per_rho']['0.80']['prob_ok']
+      and _ph352[str(_a352['judgment_window_bars'])]['zero'] == _a348b['per_rho']['0.80']['obs_zero'],
+      f"{_ph352[str(_a352['judgment_window_bars'])]} vs {_a348b['per_rho']['0.80']}")
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
