@@ -11553,6 +11553,16 @@ with tab_pred:
             f"표시하지 않습니다{_rule234}. 표본이 있는 기간의 값은 아래 표와 '다른 기간 살펴보기'에 "
             f"있습니다 — 과거 관찰값이며 미래 확률이 아닙니다."
             + (" 이 구간은 예측 보류 · 거래 회피를 권장합니다." if sim_res.get('is_abstain') else ""))
+        # 라운드 348 — 왜 비는지를 모집단으로 잰 사실(사전등록 · 표시 전용 · 기준은 안 바꿨다).
+        try:
+            import json as _json348
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data',
+                                   'rho_coverage_r348.json'), encoding='utf-8') as _f348:
+                _ln348 = _uk.rho_coverage_line(_json348.load(_f348))
+        except Exception:                                      # noqa: BLE001
+            _ln348 = None
+        if _ln348:
+            st.caption(_md_safe(_ln348))
     elif sim_res.get('is_abstain'):
         st.warning(f"**퀀트 리스크 관리 알림**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이 감지되어 **`[예측 보류 / 거래 회피(Abstain)]`**를 권장합니다.")
 

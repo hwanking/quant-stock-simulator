@@ -27416,6 +27416,53 @@ check("R346 화면은 '일부 매도'(목표 도달) 갈래에서만 그 줄을 
       and all('exit_rule_r346' not in _read148(_os.path.join(PROJ, _f)) for _f in
               ('quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py')), scanned=4)
 
+print("\n" + "=" * 72)
+print("§351 R348 — 비는 자리의 까닭을 모집단으로 쟀다 · 기준은 안 바꿨다 (2026-09-21)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 두 번 짚은 '산출 불가'(R295 · R323~326)의 **원인**이 한 번도 안 재어져 있었다(상태표 #25·#57 ·
+#   레이더에 '미측정(사전등록 전)'). 사전등록대로 재니 비는 까닭은 대개 희소성이 아니라 **기준의 엄격함**이었다
+#   — 그래도 운영 기준(rho 0.80)·표본 하한(5·10)은 **한 글자도 안 바꿨다**(느슨하게 채운 값의 보정은 미측정).
+import json as _j351
+import ui_kit as _uk351                                                          # noqa: E402
+with open(_os.path.join(PROJ, 'data', 'rho_coverage_r348.json'), encoding='utf-8') as _fh351:
+    _art351 = _j351.load(_fh351)
+_pre351 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R348_RHO_COVERAGE.md'))
+_scr351 = _read148(_os.path.join(PROJ, 'scripts', 'rho_coverage_r348.py'))
+check("R348 기준은 재기 전에 적었고 스크립트가 손으로 문턱을 안 적는다 (하한은 엔진의 SAMPLE_TIERS 에서 읽는다)",
+      '이득 상한' in _pre351 and '0 이면 접는다' in _pre351
+      and 'q.SAMPLE_TIERS[0][0]' in _scr351 and 'q.SAMPLE_TIERS[1][0]' in _scr351)
+check("R348 규칙을 새로 짓지 않았다 — 닮음은 엔진 함수를 그대로 부르고 간격은 채택된 35일을 읽는다",
+      'run_self_similarity_backtest(' in _scr351 and 'lv.MIN_GAP_DAYS' in _scr351)
+_floors351 = _art351.get('floors') or {}
+check("R348 산출물의 하한이 오늘 엔진의 값과 같다 (손으로 적은 5·10 이 아니다)",
+      _floors351.get('observation') == int(qi.QuantIndicatorsEngine.SAMPLE_TIERS[0][0])
+      and _floors351.get('probability') == int(qi.QuantIndicatorsEngine.SAMPLE_TIERS[1][0]), str(_floors351))
+_per351 = _art351['per_rho']
+check("R348 느슨할수록 커버리지가 단조로 늘고 빈 칸은 단조로 준다 (셈이 뒤집히면 잣대가 틀린 것이다)",
+      all(_per351[a]['prob_ok'] <= _per351[b]['prob_ok'] and _per351[a]['obs_zero'] >= _per351[b]['obs_zero']
+          for a, b in zip(['0.90', '0.85', '0.80', '0.75'], ['0.85', '0.80', '0.75', '0.70'])),
+      str({k: (v['prob_ok'], v['obs_zero']) for k, v in _per351.items()}))
+check("R348 운영 기준은 산출물과 무관하게 그대로다 — 엔진 기본값 0.80 · 감사는 읽기만 한다",
+      _art351['operating_rho'] == 0.80
+      and 'rho_cutoff=0.80' in _read148(_os.path.join(PROJ, 'scripts', 'forward_recorder.py'))
+      and 'rho_cutoff=0.80' in _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py')))
+_ln351 = _uk351.rho_coverage_line(_art351)
+check("R348 화면 한 줄이 산출물의 수를 그대로 싣고 '기준은 바꾸지 않았다'를 말한다 · 물결표 없음 · 권유 낱말 없음",
+      bool(_ln351) and f"{int(_art351['R0']['base_prob_ok']):,}칸" in _ln351
+      and f"{int(_art351['R0']['loosest_prob_ok']):,}칸" in _ln351
+      and '기준은 바꾸지 않았습니다' in _ln351 and '~' not in _ln351
+      and not any(w in _ln351 for w in ('낮추세요', '낮추는 것이 좋', '권합니다', '사세요')), str(_ln351)[:160])
+check("R348 모양이 다르면 None — 수를 지어내지 않는다 (양방향 심기)",
+      _uk351.rho_coverage_line(None) is None and _uk351.rho_coverage_line({}) is None
+      and _uk351.rho_coverage_line({'per_rho': {}, 'cells': 1}) is None)
+_w351 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i351 = _w351.find('.rho_coverage_line(')
+check("R348 화면은 '예측 보류' 경고가 뜰 때만 그리고 판정 파일은 이 산출물을 안 읽는다 (표시 전용)",
+      _i351 > 0 and '20일 기준 예측 보류' in _w351[max(0, _i351 - 1500):_i351]
+      and all('rho_coverage_r348' not in _read148(_os.path.join(PROJ, _f)) for _f in
+              ('quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py')), scanned=4)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

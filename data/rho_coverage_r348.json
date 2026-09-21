@@ -1,0 +1,80 @@
+{
+ "made": "2026-09-21",
+ "prereg": "docs/PREREG_R348_RHO_COVERAGE.md",
+ "rhos": [
+  0.9,
+  0.85,
+  0.8,
+  0.75,
+  0.7
+ ],
+ "operating_rho": 0.8,
+ "horizon_bars": 20,
+ "gap_days": 35,
+ "registry_day": "2026-09-17",
+ "n_codes": 60,
+ "asof_dates": [
+  "2026-09-18",
+  "2026-08-14",
+  "2026-07-10",
+  "2026-06-05",
+  "2026-05-01",
+  "2026-03-27"
+ ],
+ "floors": {
+  "observation": 5,
+  "probability": 10
+ },
+ "elapsed_sec": 891.7,
+ "cells": 360,
+ "bars_fail": 0,
+ "per_rho": {
+  "0.90": {
+   "obs_ok": 104,
+   "prob_ok": 76,
+   "n": 360,
+   "obs_median": 0,
+   "obs_max": 39,
+   "obs_zero": 188
+  },
+  "0.85": {
+   "obs_ok": 177,
+   "prob_ok": 147,
+   "n": 360,
+   "obs_median": 4,
+   "obs_max": 54,
+   "obs_zero": 113
+  },
+  "0.80": {
+   "obs_ok": 236,
+   "prob_ok": 197,
+   "n": 360,
+   "obs_median": 13,
+   "obs_max": 63,
+   "obs_zero": 69
+  },
+  "0.75": {
+   "obs_ok": 282,
+   "prob_ok": 247,
+   "n": 360,
+   "obs_median": 25,
+   "obs_max": 67,
+   "obs_zero": 30
+  },
+  "0.70": {
+   "obs_ok": 315,
+   "prob_ok": 292,
+   "n": 360,
+   "obs_median": 36,
+   "obs_max": 76,
+   "obs_zero": 15
+  }
+ },
+ "R0": {
+  "base_prob_ok": 197,
+  "loosest_prob_ok": 292,
+  "gain": 95,
+  "note": "rho 를 가장 낮은 수준까지 낮췄을 때 확률 하한을 새로 넘는 칸 수 (이득 상한)"
+ },
+ "verdict": "(나) 커버리지는 는다 — 보정은 별도 측정 · rho 불변"
+}

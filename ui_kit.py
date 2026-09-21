@@ -678,6 +678,37 @@ def horizon_counts_line(hz, order=HORIZONS_ALL) -> str:
     return ' · '.join(parts)
 
 
+def rho_coverage_line(art):
+    """'20일 예측 보류' 옆에 붙는 사실 한 줄 (라운드 348 · 표시 전용).
+
+    사용자가 두 번 물었다 — *"이건 매번 산출 불가인데 도움이 되냐"*. 그때는 문구만 고쳤고 원인은 안 쟀다.
+    사전등록(docs/PREREG_R348_RHO_COVERAGE.md)대로 재 보니 이 자리가 비는 것은 대개 **닮은 구간이 없어서가
+    아니라 닮음 기준이 엄해서**였다. 그래도 **기준은 안 바꿨다** — 느슨하게 잡아 더 채운 값이 맞는지는 아직
+    안 쟀기 때문이다(그 측정은 날짜 하한을 못 채웠다). 수는 산출물에서 읽고 못 읽으면 None(§3).
+
+    물결표를 쓰지 않는다 — 캡션은 마크다운이라 둘이 만나면 취소선이 된다(R295·R337).
+    """
+    a = art or {}
+    per, r0 = a.get('per_rho') or {}, a.get('R0') or {}
+    base, loose, cells = r0.get('base_prob_ok'), r0.get('loosest_prob_ok'), a.get('cells')
+    rhos = [float(x) for x in (a.get('rhos') or [])]
+    op, floors = a.get('operating_rho'), a.get('floors') or {}
+    if not (per and cells and rhos and op and floors.get('probability')) or base is None or loose is None:
+        return None
+    lo = min(rhos)
+    zero_op = ((per.get(f'{float(op):.2f}') or {}).get('obs_zero'))
+    zero_lo = ((per.get(f'{lo:.2f}') or {}).get('obs_zero'))
+    if zero_op is None or zero_lo is None:
+        return None
+    gain = int(loose) - int(base)
+    return (f"이 자리가 비는 까닭을 {a.get('made')} 에 모집단으로 재 봤습니다 — 종목 {a.get('n_codes')}개 × 기준일 "
+            f"{len(a.get('asof_dates') or [])}개 = {int(cells):,}칸. 지금 기준(닮음 {float(op):.2f})에서 확률을 낼 만큼 "
+            f"모인 칸은 {int(base):,}칸이고, 기준을 {lo:.2f}까지 낮추면 {int(loose):,}칸이 됩니다(+{gain:,}). "
+            f"닮은 구간이 **하나도** 없는 칸은 {int(zero_op):,} → {int(zero_lo):,}칸으로 줄어듭니다 — 즉 대개는 "
+            f"닮은 구간이 없어서가 아니라 **닮음 기준이 엄해서** 비는 자리입니다. "
+            f"그래도 기준은 바꾸지 않았습니다 — 느슨하게 잡아 채운 값이 맞는지를 아직 재지 못했습니다.")
+
+
 def direction_word(win_rate) -> str:
     """지평의 관찰 방향 — 엔진과 같은 경계(승률 50 이상 = 상승 · 라운드 234). 없으면 '—'."""
     if win_rate is None:
