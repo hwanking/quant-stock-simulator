@@ -27581,6 +27581,48 @@ check("R350 게이트 변경이 버전 원장에 사유·시행일로 남았다 
       len(_rel353) == 1 and _rel353[0].get('effective_from') == '2026-09-22',
       str(_rel353[:1])[:180], scanned=len(_vl353['history']))
 
+print("\n" + "=" * 72)
+print("§354 R351 — 상태표 #52 를 막던 것은 사전등록이 아니라 정의였다 · 레이더의 낡은 두 줄 (2026-09-22)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   상태표 #52 의 사유가 *"표본 조건은 넘김 · 사전등록 없음"* 이라, **사전등록만 쓰면 열리는**
+#   항목으로 읽혔다. 열기 전에 세니 아니었다 — 후보 이름의 앞 절반('펀더 훼손 없음')을 가를
+#   자료가 없다(원장 34칸에 재무 0 · 시점 재무는 2026-09-18 시작 · 소급 불가). 표본은 진짜로
+#   넘는다(매수권 28,496건 · 거래일 1,250). 그리고 ①의 기각(R131 5/5)은 **횡단면 잣대**라
+#   진입 후보인 ②를 대신 기각하지 않는다 — 다른 시험을 안 하고 기각이라 적으면 지어내는 것이다.
+#   곁들여 레이더 두 줄이 낡아 있었다: 결정된 후보를 '측정 전'이라 적고(그 줄의 근거 칸이
+#   **거짓으로 밝혀진 13%** 를 싣고 있었다) · 계획 없는 후보를 '연구 예정'이라 적었다.
+import json as _j354
+_res354 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R351_WHAT_ACTUALLY_BLOCKS_ITEM_52.md'))
+_cen354 = _read148(_os.path.join(PROJ, 'docs', 'CENSUS_R252_STATUS.md'))
+_row354 = [_l354 for _l354 in _cen354.splitlines() if _l354.startswith('| 52 |')]
+check("R351 상태표 #52 의 사유가 '사전등록 없음'이 아니라 정의 미관측을 적는다 · 갈래는 여전히 남음",
+      len(_row354) == 1 and '사전등록 없음' not in _row354[0]
+      and '정의' in _row354[0] and '| 남음 |' in _row354[0]
+      and '28,496' in _row354[0] and '1,250' in _row354[0], str(_row354)[:160])
+check("R351 결과 문서가 ①의 기각을 ②에 빌려 오지 않는다고 적는다 (다른 잣대 · §3)",
+      bool(_res354) and '빌려 오지 않는다' in _res354
+      and '잣대가 다르다' in _res354 and '기각이라 적으면' in _res354)
+check("R351 결과 문서가 표본은 넘는다는 사실과 열리는 시점을 같이 적는다 (닫은 것이 아니다)",
+      bool(_res354) and '표본이 막는 것이 아니다' in _res354 and '12개월' in _res354)
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _fh354:
+    _rad354 = _j354.load(_fh354)
+_by354 = {str(_r354.get('name')): _r354 for _r354 in _rad354['rows']}
+_dm354 = _by354.get('DeMARK 관점 가중치 (R296)') or {}
+check("R351 레이더가 결정된 후보를 '측정 전'이라 안 적는다 — (다) 현행 유지로 고쳤다",
+      '측정 전' not in str(_dm354.get('status')) and '(다)' in str(_dm354.get('status'))
+      and 'R297' in str(_dm354.get('status')) + str(_dm354.get('limit')), str(_dm354.get('status')))
+check("R351 레이더가 거짓으로 밝혀진 수를 근거로 싣지 않는다 (13% 가 아니라 약 1%)",
+      '종합 점수의 13% 를 차지하는' not in str(_dm354.get('strength'))
+      and '약 1%' in str(_dm354.get('strength')), str(_dm354.get('strength'))[:110])
+_ts354 = _by354.get('TSFM (Chronos·TimesFM)') or {}
+check("R351 계획 없는 후보를 '연구 예정'이라 안 적는다 — 막는 것은 환경이 아니라 사전 확률",
+      '연구 예정' not in str(_ts354.get('status'))
+      and '사전 확률' in str(_ts354.get('status')) + str(_ts354.get('limit')), str(_ts354.get('status')))
+check("R351 레이더 줄 수는 그대로다 — 지운 줄 없이 문구만 고쳤다",
+      len(_rad354['rows']) >= 30 and _rad354.get('made') == '2026-09-22',
+      f"{len(_rad354['rows'])}줄 · made={_rad354.get('made')}", scanned=len(_rad354['rows']))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
