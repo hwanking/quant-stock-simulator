@@ -131,6 +131,9 @@ def _blank(why, kind='미산출'):
     return dict(available=False, why=why, kind=kind)
 
 
+import model_kinds as _mk359            # 라운드 359 — 모형 재료 가름 (한 곳)
+
+
 def value_band(val_eval, asset_type=None, bars=None):
     """
     ① 장기 가치 범위 — 숫자 하나가 아니라 범위.
@@ -179,7 +182,15 @@ def value_band(val_eval, asset_type=None, bars=None):
         center=_f(ve.get('reference_fair_value')),
         confidence=conf, tier=code, tier_ko=ko, weight=weight,
         horizon='수년',
-        basis=(f"이익·장부가 모델 {int(ve.get('independent_models') or 0)}종의 "
+        # 라운드 359 — 종전에는 언제나 **"이익·장부가 모델 N종"** 이라 적었다.
+        #   라운드 358 뒤 적자 종목에는 자산 기반 모형만 남는데(실측 적자 34종목 전부 ·
+        #   그중 28종목은 유효 모형이 **하나**뿐 · 2026-09-22), 그 문장은 **이익 모형이
+        #   한 종도 안 섰는데 섰다고 말한다.** 이름이 계산보다 넓으면 사용자는 없는
+        #   근거를 있다고 읽는다(라운드 237·239 가 두 번 고친 자리).
+        #   가름은 `model_kinds` 한 곳이 정하고 여기는 **읽기만** 한다(§4).
+        #   못 가르면 종전 표현 그대로다 — 수·범위·분위·판정은 한 글자도 안 바뀐다.
+        basis=(f"{_mk359.basis_kind_ko(ve.get('model_results'))} 모델 "
+               f"{int(ve.get('independent_models') or 0)}종의 "
                f"25~75분위 범위 (넓게 보면 "
                f"{wlo:,.0f}~{whi:,.0f}원)"),
         note=('판정에 그대로 반영합니다.' if code == 'normal' else

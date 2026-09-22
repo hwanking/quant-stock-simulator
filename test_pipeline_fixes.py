@@ -28084,6 +28084,118 @@ check("R358 화면의 '제외된 모델' 칸이 그 사유를 그대로 읽는�
       and "val_eval.get('excluded_models')" in _w360
       and "d['reason']" in _w360, scanned=3)
 
+# ══════════════════════════════════════════════════════════════════════
+# §361 — 서지도 않은 모형을 이름으로 불렀다 (라운드 359)
+#
+#   라운드 358 뒤 적자 종목에는 자산 기반 모형만 남는다. 실측(2026-09-22 ·
+#   유니버스 앞 200종목에서 고른 표본): 적자 **34종목 전부** 자산 모형만이고
+#   **28종목은 유효 모형이 하나**뿐인데, 축 설명은 언제나
+#   *"이익·장부가 모델 N종의 25~75분위 범위"* 라고 적고 있었다 —
+#   **이익 모형이 한 종도 안 섰는데 섰다고 말한다**(R237·R239 의 그 자리).
+#   흑자 대조 25종목은 전부 이익 모형을 포함하고 유효 모형이 4~7종이다.
+#
+#   고침은 **가름 하나**다(`model_kinds`) — 문턱·수·범위·분위·판정 불변.
+#   가르는 규칙은 **산출값 식이 정상화 EPS·추정 EBITDA 를 쓰는가**이고,
+#   유효 조건이 아니라 **값 식**으로 가른다(rNPV 는 유효 조건에 이익이 안
+#   보이지만 값은 `bps*8.5 + norm_eps*15.0` 이다).
+#
+#   여기서 잠그는 것: ⓐ 손 목록이 **유도와 같은가**(낡으면 붉어진다 · R114)
+#   ⓑ 가름 양방향 심기 ⓒ 축 설명이 실제로 갈리는가 ⓓ 못 가르면 종전 표현
+#   ⓔ 가름을 정하는 자리가 한 곳인가(§4) ⓕ 화면은 **세기만** 하는가.
+print("§361 R359 — 서지도 않은 모형을 이름으로 불렀다 (2026-09-23)")
+import model_kinds as _mk361
+_qi361 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+# ── ⓐ 손 목록이 낡는지 — 엔진의 **산출값 식**에서 유도해 대 본다 ──────────
+#   ⚠️ 판별식 첫 판이 좁았다: `= {'val': VAR` 를 한 줄로만 찾아 여러 줄로 쓴
+#      rNPV 를 놓치고 모형을 8개라 셌다(실제 9개). 열쇠 줄을 찾고 그 **뒤**에서
+#      값 변수를 읽는다 (R194 · 0 은 '없다'가 아니라 '못 봤다').
+import re as _re361
+_EARNTOK361 = ('norm_eps', 'ebitda_ps', 'fcff_ps')
+_earn361, _asset361, _unread361 = set(), set(), set()
+for _m361 in _re361.finditer(r"model_results\['([A-Za-z_]+)'\]\s*=\s*\{", _qi361):
+    _k361 = _m361.group(1)
+    _vm361 = _re361.search(r"'val'\s*:\s*([A-Za-z_][A-Za-z_0-9]*)",
+                           _qi361[_m361.end():_m361.end() + 400])
+    _em361 = (_re361.search(r'^\s*%s\s*=\s*(.+)$' % _re361.escape(_vm361.group(1)),
+                            _qi361, _re361.M) if _vm361 else None)
+    if not _em361:
+        _unread361.add(_k361)
+    elif any(_t in _em361.group(1) for _t in _EARNTOK361):
+        _earn361.add(_k361)
+    else:
+        _asset361.add(_k361)
+check("R359 모형 재료 목록이 엔진의 산출값 식에서 유도한 것과 같다 (낡으면 붉어진다)",
+      not _unread361
+      and _earn361 == set(_mk361.EARNINGS_MODELS)
+      and _asset361 == set(_mk361.ASSET_MODELS),
+      f'유도 이익 {sorted(_earn361)} · 자산 {sorted(_asset361)} · 못 읽음 {sorted(_unread361)}',
+      scanned=len(_earn361) + len(_asset361) + len(_unread361))
+check("R359 가름을 정하는 자리는 한 곳이다 (§4)",
+      _qi361.count('ASSET_MODELS = ') == 0
+      and _read148(_os.path.join(PROJ, 'model_kinds.py')).count('ASSET_MODELS = ') == 1,
+      '엔진에 0 · 킷에 1 이어야 한다')
+
+
+# ── ⓑ 가름 — 심어서 양방향으로 잰다 ───────────────────────────────────────
+def _mr361(valid, extra=None):
+    _o = {_k: {'valid': _k in valid, 'val': 1.0, 'name': _k}
+          for _k in tuple(_mk361.ASSET_MODELS) + tuple(_mk361.EARNINGS_MODELS)}
+    if extra:
+        _o[extra] = {'valid': True, 'val': 1.0, 'name': extra}
+    return _o
+
+
+_cases361 = [
+    ('자산만 한 종', _mr361({'SOTP'}), True),
+    ('자산만 세 종', _mr361(set(_mk361.ASSET_MODELS)), True),
+    ('이익이 섞임', _mr361({'PER', 'SOTP'}), False),
+    ('이익만', _mr361({'PER', 'FCFF'}), False),
+    ('모르는 키가 있으면 자산만이라 안 한다', _mr361({'SOTP'}, extra='NEW_MODEL_361'), False),
+    ('유효 0개', _mr361(set()), False),
+]
+_bad361 = [(_t, _mk361.split(_m)['asset_only']) for _t, _m, _want in _cases361
+           if _mk361.split(_m)['asset_only'] is not _want]
+check("R359 '자산 모형만'을 양방향으로 가른다 (심기 6칸 · 오탐 없음)",
+      not _bad361, str(_bad361), scanned=len(_cases361))
+# ── ⓒ 축 설명이 실제로 갈리고, 값·범위는 그대로다 ──────────────────────────
+import price_axes as _pa361
+
+
+def _ve361(valid, n):
+    return {'model_results': _mr361(valid), 'independent_models': n,
+            'fair_value_confidence': 77.0,
+            'fair_value_range_core': (9000.0, 11000.0),
+            'fair_value_range_wide': (8000.0, 12000.0),
+            'reference_fair_value': 10000.0}
+
+
+_b_asset361 = _pa361.value_band(_ve361({'SOTP'}, 1)) or {}
+_b_mixed361 = _pa361.value_band(_ve361({'PER', 'SOTP'}, 2)) or {}
+check("R359 자산 모형만이면 축 설명이 '장부가 모델' 이라고만 적는다",
+      _b_asset361.get('available') is True
+      and str(_b_asset361.get('basis', '')).startswith('장부가 모델'),
+      str(_b_asset361.get('basis'))[:70])
+check("R359 이익 모형이 서면 종전 표현 그대로다 (오탐 없음)",
+      str(_b_mixed361.get('basis', '')).startswith('이익·장부가 모델'),
+      str(_b_mixed361.get('basis'))[:70])
+check("R359 문구만 바뀌고 범위·중심값·등급은 그대로다",
+      (_b_asset361.get('low'), _b_asset361.get('high'), _b_asset361.get('center'),
+       _b_asset361.get('tier')) ==
+      (_b_mixed361.get('low'), _b_mixed361.get('high'), _b_mixed361.get('center'),
+       _b_mixed361.get('tier')),
+      f"{_b_asset361.get('low')}~{_b_asset361.get('high')} vs "
+      f"{_b_mixed361.get('low')}~{_b_mixed361.get('high')}")
+# ── ⓓ 못 가르면 종전 표현 그대로 (§3) ─────────────────────────────────────
+check("R359 모형 결과를 못 받으면 옛 표현을 그대로 쓴다 — 없는 가름을 주장하지 않는다",
+      _mk361.basis_kind_ko(None) == '이익·장부가'
+      and _mk361.basis_kind_ko({}) == '이익·장부가',
+      f"{_mk361.basis_kind_ko(None)} · {_mk361.basis_kind_ko({})}", scanned=2)
+# ── ⓕ 화면은 **세기만** 한다 — 제 문턱·제 목록을 안 만든다 ────────────────
+_w361 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R359 화면이 가름을 스스로 정하지 않고 킷을 부른다 (§4)",
+      'model_kinds' in _w361 and "_split359['asset_only']" in _w361
+      and 'ASSET_MODELS' not in _w361, scanned=3)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
