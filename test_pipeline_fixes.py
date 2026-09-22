@@ -8358,13 +8358,28 @@ check("목표 배수의 한계를 반드시 적는다",
       '양수가 아니었습니다' in str(_b120.get('target_caveat'))
       and '현행 기하' in str(_b120.get('target_caveat')))
 
-# 보유자 — 수익률 구간마다 지시가 달라지는가
-_heads = [_tp120.for_holder(_c120, a)['headline']
-          for a in (23000, 25500, 27000, 30000)]
-check("보유자 지시가 수익률에 따라 갈린다", len(set(_heads)) == 4,
-      ' / '.join(_h[:10] for _h in _heads))
-check("손실 구간에서 물타기를 막는다",
-      any('물타기' in _h for _h in _heads))
+# 보유자 — ⚠️ 라운드 357 이 이 계약을 **뒤집었다.**
+#   종전 검사는 *"수익률 구간마다 지시가 달라진다"* 를 요구했다. 그런데 그 갈래를 고르던 수
+#   (평단 대비 +5 / 0 / −7)는 근거 없는 손으로 고른 값이었고, 라운드 304 가 가늠 AI 에서
+#   이미 걷어낸 그 수다. 지시서만 남아 있어 중앙 판정과 격자 30칸 중 **21칸(70%)** 이
+#   어긋났다(중앙은 팔라는데 지시서는 들고 있으라 한 칸이 셋). 이제 갈래는 **가격선**이
+#   정하므로, **평단만 바꿔도 갈래는 같아야** 한다 — 검사를 그쪽으로 뒤집는다.
+#   (무르게 한 것이 아니다: 종전에는 '달라야 한다', 지금은 '같아야 한다' — 둘 다 실패할 수 있다.)
+_plans120 = [_tp120.for_holder(_c120, a) for a in (23000, 25500, 27000, 30000)]
+_heads = [_p120['headline'] for _p120 in _plans120]
+check("보유자 지시가 **평단이 아니라 가격선**으로 갈린다 (평단만 바뀌면 갈래가 같다)",
+      len({_p120.get('kind') for _p120 in _plans120}) == 1
+      and len(set(_heads)) == 1,
+      ' / '.join(str(_p120.get('kind')) for _p120 in _plans120))
+check("보유자 지시가 수익률을 **사실로는** 싣는다 (판정엔 안 쓰고 적기는 한다 · §9)",
+      len({round(_p120['ret_pct'], 2) for _p120 in _plans120}) == 4
+      and all('%' in _p120['body'] for _p120 in _plans120))
+check("손실 구간에서 물타기를 막는 말이 남아 있다",
+      any('물타기' in (_p120['headline'] + _p120['body'] + _p120['add_note'])
+          for _p120 in (_tp120.for_holder(dict(_c120, current_price=_px120), 30000)
+                        for _px120 in (float(_c120.get('hold_stop') or 0) - 1.0,
+                                       float(_c120.get('current_price') or 0)))
+          if _p120.get('available')))
 check("평단이 없으면 아무것도 만들지 않는다",
       _tp120.for_holder(_c120, None).get('available') is False)
 
@@ -27916,6 +27931,74 @@ check("R356 레이더가 보류와 미충족 사유를 적는다 · status 에 �
 check("R356 레이더가 모집단 문제와 수집 비용 추정을 적는다 (상위 60 ≠ 시장 전체)",
       len(_row358) == 1 and '상위 60종목' in str(_row358[0].get('limit'))
       and '추정' in str(_row358[0].get('limit')))
+
+print("\n" + "=" * 72)
+print("§359 R357 — 라운드 304 의 고침이 판정자 한 명에게만 갔다 (매매 지시서 · 2026-09-23)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   라운드 304 는 가늠 AI 의 보유자 답이 **평단 대비 수익률**(+5 / 0 / −7 · 근거 없는 손으로 고른
+#   수)로 갈래를 고르는 것을 찾아 `ui_kit.holder_kind` 한 곳으로 올렸다. 그런데 매매 지시서
+#   (`trade_plan.for_holder`)에는 **그 수가 그대로 남아 있었고 그 함수는 죽지 않았다** —
+#   `build()` 가 부르고 화면이 그 카드를 그린다(R246 의 *"고침이 판정자 한 명에게만 갔다"*).
+#   ⚠️ 내가 처음엔 `for_holder` 를 **이름으로** 찾아 "아무도 안 읽는다" 고 적을 뻔했다 —
+#   호출이 `build()` 를 통해 가기 때문이다. **이름으로 찾으면 간접 호출을 놓친다.**
+#   실측(격자 30칸 · 고치기 전): 어긋남 **21칸(70%)** · 그중 '지시서 유지 vs 중앙 정리' 3칸.
+import ast as _ast359
+import trade_plan as _tp359
+import ui_kit as _uk359
+_src359 = _read148(_os.path.join(PROJ, 'trade_plan.py'))
+_fns359 = {n.name: n for n in _ast359.walk(_ast359.parse(_src359))
+           if isinstance(n, _ast359.FunctionDef)}
+_fh359 = _fns359.get('for_holder')
+_calls359 = ({(getattr(c.func, 'attr', None) or getattr(c.func, 'id', None))
+              for c in _ast359.walk(_fh359) if isinstance(c, _ast359.Call)} if _fh359 else set())
+check("R357 매매 지시서가 갈래를 **킷 한 곳**에서 받는다 (§4 · 라운드 304 와 같은 자리)",
+      bool(_fh359) and 'holder_kind' in _calls359)
+_body359 = _ast359.get_source_segment(_src359, _fh359) or ''
+check("R357 그 함수에 손으로 고른 갈래 수가 없다 (+5 / −7 은 갈래를 고르지 않는다)",
+      bool(_body359) and '5.0' not in _body359 and '-7.0' not in _body359,
+      f'{len(_body359)}자')
+# ── 값으로 — 두 판정자가 같은 답을 내는가 (매번 돈다 · 손으로 적은 수 없음) ──
+_STOP359, _TRIM359, _BUY359 = 94_000.0, 110_000.0, 99_000.0
+_bad359 = []
+for _px359 in (90_000, 95_000, 99_000, 103_000, 108_000, 112_000):
+    for _avg359 in (85_000, 95_000, 100_000, 105_000, 112_000):
+        _core359 = dict(current_price=_px359, hold_trim=_TRIM359, hold_stop=_STOP359,
+                        pullback_zone=_BUY359, buy_zone=_BUY359)
+        _p359 = _tp359.for_holder(_core359, _avg359)
+        _k359, _ = _uk359.holder_kind(_px359, _STOP359, _TRIM359, buy=_BUY359, avg_down_ok=None)
+        if _p359.get('kind') != _k359:
+            _bad359.append((_px359, _avg359, _p359.get('kind'), _k359))
+check("R357 지시서와 중앙 판정이 같은 갈래를 낸다 — 격자 30칸 어긋남 0 (고치기 전 21칸)",
+      not _bad359, str(_bad359[:3]), scanned=30)
+# ── 옛 갈래는 남아 있지만 **부르는 곳이 0곳**이다 ────────────────────────
+_legacy359 = [f for f in _la135.reachable_modules()
+              if '_for_holder_legacy' in _read148(_os.path.join(PROJ, f))
+              and f != 'trade_plan.py']
+check("R357 옛 갈래(_for_holder_legacy)를 부르는 곳이 없다 — 기록으로만 남긴다",
+      not _legacy359 and _src359.count('_for_holder_legacy') == 1,
+      f"밖 {_legacy359} · 안 {_src359.count('_for_holder_legacy')}회")
+# ── 킷을 못 부르면 옛 수로 되돌아가지 않는다 (심기 · §3) ─────────────────
+import sys as _sys359
+_saved359 = _sys359.modules.get('ui_kit')
+try:
+    _sys359.modules['ui_kit'] = None       # import 가 실패하게 만든다
+    _fail359 = _tp359.for_holder(dict(current_price=100_000, hold_trim=110_000,
+                                      hold_stop=94_000, pullback_zone=99_000), 95_000)
+finally:
+    if _saved359 is not None:
+        _sys359.modules['ui_kit'] = _saved359
+    else:
+        _sys359.modules.pop('ui_kit', None)
+check("R357 판정을 못 불러오면 **옛 규칙으로 대신 판단하지 않는다** (심기 · §3)",
+      _fail359.get('available') is False and '옛 규칙으로 대신 판단하지' in str(_fail359.get('reason')),
+      str(_fail359)[:120])
+# ── 화면 경로가 살아 있다 (이름으로 찾으면 놓치는 그 경로) ───────────────
+_w359 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_u359 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+check("R357 지시서 경로가 살아 있다 — build() 가 부르고 화면이 그 카드를 그린다",
+      'holder=for_holder(' in _src359 and '_tp.build(CORE' in _w359
+      and 'trade_plan_card(_plan' in _w359 and "p.get('holder')" in _u359, scanned=4)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

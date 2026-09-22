@@ -187,7 +187,89 @@ def for_buyer(core, fs=None):
 # ───────────────────────────────────────────────────────────────────
 
 def for_holder(core, avg, qty=None):
-    """보유자 지시. 평단이 없으면 아무것도 만들지 않는다."""
+    """보유자 지시. 평단이 없으면 아무것도 만들지 않는다.
+
+    ⚠️ 라운드 357 — **여기가 라운드 304 의 나머지 절반이었다.**
+
+    라운드 304 는 가늠 AI 의 보유자 답이 **평단 대비 수익률**(+5 / 0 / −7 · 저장소 어디에도
+    근거가 없는 손으로 고른 수)로 갈래를 고르고, 중앙 판정은 **가격선 위치**(버틸 수 없는
+    가격 · 1차 매도가 · 진입가)로 고르는 것을 찾아 `ui_kit.holder_kind` 한 곳으로 올렸다.
+    그런데 **이 함수에는 그 수가 그대로 남아 있었다** — 그리고 이 함수는 죽지 않았다:
+    `build()` 가 부르고 화면이 그 카드를 그린다. 라운드 246 의 *"고침이 판정자 한 명에게만
+    갔다"* 가 또 일어난 것이다.
+
+    실측(격자 30칸 · 고치기 전): **어긋남 21칸(70%)** — 그중 **지시서 '유지' vs 중앙
+    '정리' 3칸**이 가장 나쁘다(중앙은 팔라는데 지시서가 들고 있으라 한다).
+
+    고침은 라운드 304 와 같다 — **갈래는 `holder_kind` 가 정하고 이 함수는 말로 옮긴다.**
+    문장·값·가격은 그대로다. 평단은 **수익률을 적는 데만** 쓴다(§9 — 판정에 안 쓴다).
+    킷을 못 불러오면 **옛 수로 되돌아가지 않고** 판단을 비운다(§3).
+    """
+    a, px = _f(avg), _f(core.get('current_price'))
+    if not (a and px):
+        return dict(available=False)
+    ret = (px / a - 1.0) * 100.0
+    trim, hstop = _f(core.get('hold_trim')), _f(core.get('hold_stop'))
+    buy = _f(core.get('pullback_zone')) or _f(core.get('buy_zone'))
+
+    try:                       # 늦은 임포트 — 연구 스크립트가 이 파일을 쓸 때 화면 모듈을 안 끈다
+        import ui_kit as _uk357
+        kind, why = _uk357.holder_kind(px, hstop, trim, buy=buy,
+                                       avg_down_ok=core.get('avg_down_ok'))
+    except Exception:                                          # noqa: BLE001
+        return dict(available=False,
+                    reason='보유 판정을 불러오지 못했습니다 — 옛 규칙으로 대신 판단하지 '
+                           '않습니다')
+
+    _ret_txt = f'현재 {ret:+.1f}% ' + ('수익' if ret >= 0 else '손실') + '입니다(평단 기준).'
+    if kind == '정리 검토':
+        head = '매도 — 계획대로면 파는 자리입니다'
+        body = (f'{_ret_txt} '
+                + (f'{hstop:,.0f}원(버틸 수 없는 가격)을 밑돌았습니다. ' if hstop else '')
+                + '계획을 세운 날 정한 선이고, 오늘 값으로 다시 고르지 않습니다.')
+        add = '여기서 평단을 낮추려는 추가 매수(물타기)는 하지 않습니다.'
+    elif kind == '일부 정리':
+        head = '일부 매도 — 1차 매도가를 넘었습니다'
+        body = (f'{_ret_txt} '
+                + (f'{trim:,.0f}원(1차 매도가)을 넘었습니다. ' if trim else '')
+                + '일부를 덜어내고 남은 물량은 손절선을 지켜 두세요.')
+        add = '추가 매수는 하지 않습니다 — 이미 1차 매도가 위입니다.'
+    elif kind == '추가 매수 가능':
+        head = '보유 유지 · 추가매수 조건을 통과했습니다'
+        body = (f'{_ret_txt} '
+                + (f'{hstop:,.0f}원 이탈 시 정리합니다. ' if hstop else '')
+                + '조건을 통과했다는 뜻이지 지금 사라는 뜻은 아닙니다.')
+        add = (f'추가 매수를 본다면 {buy:,.0f}원 이하입니다.' if buy
+               else '추가 매수 기준가는 산출되지 않았습니다.')
+    elif kind == '보유 유지':
+        head = '보유를 유지합니다'
+        body = (f'{_ret_txt} '
+                + (f'{trim:,.0f}원에 닿으면 1차 정리를 검토하세요. ' if trim else '')
+                + (f'{hstop:,.0f}원 종가 이탈 시 정리합니다.' if hstop else ''))
+        add = ('가격이 내렸다는 이유만으로 추가 매수(물타기)하지 않습니다 — '
+               '매수구간까지 눌렸을 때만 봅니다.')
+    else:
+        head = '판단 보류'
+        body = f'{_ret_txt} ' + str(why or '보유 기준값을 받지 못했습니다.')
+        add = '기준값이 없어 추가 매수 여부를 말하지 않습니다.'
+    # ⚠️ 칸 이름은 **옛 반환 그대로**다 — 카드가 `avg`·`add_note`·`trim`·`stop` 을 읽는다.
+    #   라운드 357 이 처음에 `add=` 로 바꿨다가 화면이 `KeyError: 'avg'` 로 죽었다
+    #   (갈래 논리를 격자로만 확인하고 카드를 한 번도 안 그렸다 · R195). 더한 칸은 `kind` 뿐이다.
+    out = dict(available=True, avg=a, ret_pct=round(ret, 2),
+               headline=head, body=body, add_note=add,
+               trim=trim, stop=hstop, kind=kind)
+    if qty:
+        out['pnl'] = round((px - a) * float(qty))
+    return out
+
+
+def _for_holder_legacy(core, avg, qty=None):
+    """⚠️ 옛 갈래 — **쓰지 않는다.** 라운드 357 이 남겨 둔 기록이다.
+
+    평단 대비 +5 / 0 / −7 로 갈래를 골랐다. 그 수는 저장소 어디에도 근거가 없고, 라운드
+    304 가 같은 수를 챗에서 걷어냈다. 지우지 않고 남기는 것은 *무엇이 어떻게 달랐는지*를
+    나중에 셀 수 있게 하기 위해서다 — 부르는 곳은 **0곳**이고 회귀가 그것을 잠근다.
+    """
     a, px = _f(avg), _f(core.get('current_price'))
     if not (a and px):
         return dict(available=False)
