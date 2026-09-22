@@ -28000,6 +28000,90 @@ check("R357 지시서 경로가 살아 있다 — build() 가 부르고 화면�
       'holder=for_holder(' in _src359 and '_tp.build(CORE' in _w359
       and 'trade_plan_card(_plan' in _w359 and "p.get('holder')" in _u359, scanned=4)
 
+# ══════════════════════════════════════════════════════════════════════
+# §360 — 적자를 양수 이익으로 바꿔 놓고 "양수 이익이 있을 때만" 을 검사했다 (라운드 358)
+#
+#   `norm_eps` 한 줄이 EPS 가 0 이하인 종목에 **양수 이익을 만들어 준다**:
+#   ROE 가 10 이하면 `bps × max(0.02, roe/100)` 이고 ROE 가 음수면 언제나 BPS 의 2%,
+#   ROE 가 10 을 넘어도 `max(1.0, 음수)` 가 1.0 을 만든다. 그래서 적자 폭이 −100 이든
+#   −4,000 이든 **같은 값**이 나온다. 그 위에서 PER · EV/EBITDA · FCFF 의
+#   `norm_eps > 0` · `ebitda_ps > 0` 검사는 **늘 참**이었다 — 저자가 적어 둔 검사가
+#   지어낸 값에 먹힌 것이다(라운드 188 이 바로 아래에 *"지어낸 대체값으로 모델을
+#   살리지 않는다"* 고 적어 두었다 · 라운드 167 과 같은 계열).
+#
+#   고침은 **산식을 안 바꾼다** — 깃발(`_eps_synth`)을 세워 그 셋만 무효로 돌린다.
+#   자산 기반(PBR-ROE · DDM · SOTP)은 그대로다: 적자 기업은 자산으로 재는 것이 맞다.
+#   H(EV_GP)·I(DCF_SCENARIO)는 유효 조건이 `bps > 0` 이라 **안 건드렸다**(아래가 잠근다).
+#
+#   여기서 잠그는 것: ⓐ 원인(식의 성질) ⓑ 깃발이 셋 전부에 ⓒ **값으로 · 심어서 양방향**
+#   ⓓ 자산 모형은 살아 있다 ⓔ 사유가 붙는다 ⓕ 화면이 그 사유를 읽는 경로.
+print("§360 R358 — 적자를 양수 이익으로 바꿔 놓고 '양수 이익이 있을 때만' 을 검사했다 (2026-09-23)")
+_qi360 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+# ── ⓐ 원인 — 식을 **떼어 와서** 돌린다(베끼지 않는다 · R192) ──────────────
+import re as _re360
+_m360 = _re360.search(r'^\s*norm_eps = (.+)$', _qi360, _re360.M)
+_expr360 = _m360.group(1) if _m360 else ''
+_vals360 = [eval(_expr360, {'max': max}, dict(eps=_e, roe=_r, bps=10000.0))
+            for _e, _r in ((-100.0, -1.0), (-1000.0, -10.0), (-4000.0, -40.0))] if _expr360 else []
+check("R358 적자 EPS 가 양수 정상화 EPS 가 된다 — 적자 폭이 달라도 같은 값 (원인)",
+      bool(_vals360) and all(_v > 0 for _v in _vals360) and len(set(_vals360)) == 1,
+      f'{_expr360[:40]} → {_vals360}', scanned=len(_vals360))
+# ── ⓑ 깃발이 **지어낸 이익을 쓰는 유효조건 전부**에 있다 (이름으로 찾는다) ──
+#   셋(PER·EV/EBITDA·FCFF)은 norm_eps 를, 둘(EV_GP·DCF_SCENARIO)은 ebitda_ps 를 쓴다.
+#   ebitda_ps 는 바로 그 norm_eps 로 만든 값이므로 같은 깃발을 받는다.
+_EARNV360 = ('per_valid', 'ev_ebitda_valid', 'fcff_valid', 'ev_s_valid', 'dcf_s_valid')
+_flagged360 = [_n for _n in _EARNV360
+               if _re360.search(_n + r' = \((?:[^\n]*\n?){0,3}?[^\n]*not _eps_synth', _qi360)]
+check("R358 깃발이 지어낸 이익을 쓰는 유효조건 **다섯 곳 전부**에 있다",
+      len(_flagged360) == len(_EARNV360), f'{_flagged360}', scanned=len(_EARNV360))
+check("R358 깃발을 만드는 자리는 한 곳이다 (§4)",
+      _qi360.count('_eps_synth = ') == 1, f"{_qi360.count('_eps_synth = ')}회")
+# ── ⓒⓓⓔ 값으로 — 합성 입력으로 엔진을 돌려 **양방향**으로 심는다 ──────────
+import numpy as _np360
+import pandas as _pd360
+import quant_indicators as _qimod360
+_eng360 = _qimod360.QuantIndicatorsEngine()
+
+
+def _val360(_eps, _roe, _per):
+    _t = _pd360.DataFrame({'adj_close': _np360.full(60, 10000.0),
+                           'vol_20': _np360.full(60, 0.02)})
+    _f = _pd360.DataFrame([{'eps': _eps, 'roe': _roe, 'bps': 10000.0,
+                            'per': _per, 'pbr': 1.0, 'debt_ratio': 50.0}])
+    return (_eng360.evaluate_valuation_metric(_t, _f, symbol=None)
+            or {}).get('model_results') or {}
+
+
+_loss360 = _val360(-1000.0, -10.0, -5.0)
+_prof360 = _val360(1500.0, 15.0, 8.0)
+_EARN360 = ('PER', 'EV_EBITDA', 'FCFF', 'EV_GP', 'DCF_SCENARIO')
+check("R358 적자에서 지어낸 이익을 쓰는 모형 **다섯이 전부 무효**다 (심기 · 값으로)",
+      all((_loss360.get(_k) or {}).get('valid') is False for _k in _EARN360),
+      str({_k: (_loss360.get(_k) or {}).get('valid') for _k in _EARN360}),
+      scanned=len(_EARN360))
+# 흑자 쪽은 **깃발 때문에** 빠지지 않는지를 본다 — 극단값 제외(§ 위 블록)는 별개 사유다.
+_pwhy360 = [(_prof360.get(_k) or {}).get('exclusion_reason') or '' for _k in _EARN360]
+check("R358 흑자에서는 깃발이 안 선다 — 반대 방향도 심는다 (오탐 아님)",
+      all((_prof360.get(_k) or {}).get('valid') is True for _k in ('PER', 'EV_EBITDA', 'FCFF'))
+      and not any('적자' in _w for _w in _pwhy360),
+      str(_pwhy360)[:110], scanned=len(_EARN360))
+check("R358 적자에서도 자산 기반(SOTP)은 살아 있다 — 적자는 자산으로 잰다",
+      (_loss360.get('SOTP') or {}).get('valid') is True,
+      str((_loss360.get('SOTP') or {}).get('valid')))
+# ROE 가 음수면 PBR-ROE·DDM 도 스스로 빠지므로 **BPS 배수 하나**만 남는다.
+check("R358 적자·ROE 음수면 남는 유효 모형이 SOTP 하나다 — 적정가 = BPS 배수",
+      sorted(_k for _k, _m in _loss360.items() if _m.get('valid')) == ['SOTP'],
+      str(sorted(_k for _k, _m in _loss360.items() if _m.get('valid'))), scanned=len(_loss360))
+_why360 = [(_loss360.get(_k) or {}).get('exclusion_reason') or '' for _k in _EARN360]
+check("R358 빠진 다섯에 **사유**가 붙는다 — 상태만 남기지 않는다 (§3)",
+      all('적자' in _w for _w in _why360), str(_why360[:1])[:90], scanned=len(_EARN360))
+# ── ⓕ 화면이 그 사유를 읽는 경로가 살아 있다 ───────────────────────────────
+_w360 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("R358 화면의 '제외된 모델' 칸이 그 사유를 그대로 읽는다",
+      "'excluded_models': [{'name': m['name'], 'reason': m.get('exclusion_reason')}" in _qi360
+      and "val_eval.get('excluded_models')" in _w360
+      and "d['reason']" in _w360, scanned=3)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

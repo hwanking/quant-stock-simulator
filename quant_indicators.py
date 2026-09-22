@@ -2535,6 +2535,37 @@ class QuantIndicatorsEngine:
         # 3. 모델별 개별 적정가 산출 & 유효성 검사 (Validity Check)
         # ---------------------------------------------------------
         norm_eps = max(1.0, eps * 1.05 if roe > 10 else (eps if eps > 0 else bps * max(0.02, roe/100.0)))
+        # ⚠️ 라운드 358 — 위 한 줄이 **적자를 양수 이익으로 바꾼다.**
+        #   EPS 가 0 이하이면 어느 가지로 가든 결과가 양수다: ROE 가 10 이하면
+        #   `bps × max(0.02, roe/100)` 이고 ROE 가 음수면 언제나 **BPS 의 2%** 이며,
+        #   ROE 가 10 을 넘어도 `max(1.0, 음수)` 가 1.0 을 만든다.
+        #   실측(이 식을 그대로 떼어 돌림 · BPS 10,000): EPS −100 · −1,000 · −4,000 이
+        #   **전부 +200** 이고 추정 EBITDA 도 전부 690 이다 — **적자 폭이 지워진다.**
+        #
+        #   바로 아래 라운드 188 주석이 *"지어낸 대체값으로 모델을 살리지 않는다"* 고
+        #   적어 두었는데, 그 대체값이 **이 줄에서 이미 만들어져** 검사를 통과하고 있었다
+        #   (`norm_eps > 0` · `ebitda_ps > 0` 은 지어낸 값 덕에 늘 참이다).
+        #   라운드 167 이 재무 미공시 26종목에서 같은 값의 가짜 적정가를 찾아낸 그 계열이다.
+        #
+        #   값은 **안 바꾼다**(배수·계수·가중치 전부 그대로 · §2). 대신 **깃발**을 세우고,
+        #   **저자가 이미 적어 둔 검사를 되살린다** — `norm_eps > 0` · `ebitda_ps > 0` 이
+        #   요구한 것은 "양수 이익이 있을 때만" 이고 그 뜻이 지어낸 값에 먹혔다.
+        #   → PER · EV/EBITDA · FCFF 가 무효로 간다. 자산 기반(PBR-ROE · DDM · SOTP)은
+        #     그대로다 — **적자 기업은 자산으로 재는 것이 맞다.**
+        #   H(EV_GP)·I(DCF_SCENARIO)도 같은 깃발을 받는다. 둘의 유효 조건은 `bps > 0`
+        #     하나뿐이지만 **주재료는 ebitda_ps** 이고(H 는 거기에 10배를 곱한다),
+        #     ebitda_ps 는 바로 위에서 norm_eps 로 만든 값이다 — 즉 **지어낸 이익을
+        #     쓰는 모형**이다. 라운드 239 가 이미 적었듯 매출·매출총이익은 한 번도
+        #     받은 적이 없다. 남는 것은 자산 기반 셋(PBR-ROE · DDM · SOTP)이고,
+        #     ROE 가 음수면 앞의 둘도 스스로 빠져 **SOTP(BPS 배수)만** 남는다.
+        #     그것이 적자 기업에 정직한 답이다.
+        #   ⚠️ 이 범위는 **영향을 재고 나서** 넓혔다. 처음에는 셋만 뺐는데, 적자 34종목
+        #     중 17종목의 적정가가 **올라갔다**(중앙 +52.6% · 최대 +276%) — 지어낸
+        #     이익이 낮은 값을 내며 우연히 **브레이크** 노릇을 하고 있었고, 그것만
+        #     떼자 BPS 배수 둘이 남아 적자 기업이 **더 좋아 보이게** 됐다.
+        #     넓힌 근거는 그 방향이 아니라 위의 구조다(방향을 보고 기준을 고른 것이
+        #     아니라는 사실까지 결과 문서에 적는다 · §2).
+        _eps_synth = bool(eps is not None and float(eps) <= 0)
         ebitda_ps = norm_eps * 1.45 + bps * 0.04
         wacc = 0.085
         terminal_g = 0.02
@@ -2554,13 +2585,13 @@ class QuantIndicatorsEngine:
         # A. PER 모델
         # 라운드 188 — `and _have_*` 가 더해진 자리들은 **수신 여부**다.
         # 지어낸 대체값으로 모델을 살리지 않는다 (위 주석 참조).
-        per_valid = (_have_norm_eps and _have_per
+        per_valid = (_have_norm_eps and _have_per and not _eps_synth
                      and norm_eps > 0 and per > 0 and type_probs['E_BIOTECH'] < 0.5 and type_probs['F_DEFICIT'] < 0.5)
         per_val = norm_eps * (8.15 if type_probs['B_CYCLICAL'] > 0.4 else (17.5 if type_probs['A_STABLE'] > 0.4 else 12.0))
         model_results['PER'] = {'val': per_val, 'weight': blended_weights.get('PER', 0.0), 'valid': per_valid, 'name': '정상화 EPS × 고정 배수'}
         
         # B. EV/EBITDA 모델 (금융업 부채 차감 무효 처리!)
-        ev_ebitda_valid = (_have_norm_eps and _have_bps
+        ev_ebitda_valid = (_have_norm_eps and _have_bps and not _eps_synth
                            and ebitda_ps > 0 and type_probs['C_FINANCIAL'] < 0.4)
         if type_probs['B_CYCLICAL'] > 0.4:
             ev_val = (ebitda_ps * 5.0) + bps * 0.15 # 금융부채 전액 차감 제외 & 지분/순현금 반영
@@ -2569,7 +2600,7 @@ class QuantIndicatorsEngine:
         model_results['EV_EBITDA'] = {'val': ev_val, 'weight': blended_weights.get('EV_EBITDA', 0.0), 'valid': ev_ebitda_valid, 'name': 'EPS·BPS 추정 EBITDA 배수'}
         
         # C. FCFF DCF 모델 (금융업 자동 제외)
-        fcff_valid = (_have_norm_eps
+        fcff_valid = (_have_norm_eps and not _eps_synth
                       and norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4)
         fcff_ps = norm_eps * 0.85
         fcff_val = ((fcff_ps * 1.03) / (wacc - terminal_g)) * 0.65 + (bps * 0.15 if type_probs['B_CYCLICAL']>0.4 else 0.0)
@@ -2604,14 +2635,21 @@ class QuantIndicatorsEngine:
             'exclusion_reason': None if rnpv_valid else "검증 가능한 파이프라인 데이터 없음 (임상단계·성공확률·출시시점 미연동)"}
         
         # H. EV/Sales & EV/Gross Profit (플랫폼 및 적자 고성장)
-        ev_s_valid = (_have_bps and _have_norm_eps and bps > 0)
+        ev_s_valid = (_have_bps and _have_norm_eps and not _eps_synth and bps > 0)
         ev_s_val = bps * 1.8 + ebitda_ps * 10.0
         model_results['EV_GP'] = {'val': ev_s_val, 'weight': blended_weights.get('EV_GP', 0.0) + blended_weights.get('EV_SALES', 0.0), 'valid': ev_s_valid, 'name': 'BPS·추정 EBITDA 혼합 배수'}
         
         # I. DCF 시나리오 & 현금자산
-        dcf_s_valid = (_have_bps and _have_norm_eps and bps > 0)
+        dcf_s_valid = (_have_bps and _have_norm_eps and not _eps_synth and bps > 0)
         dcf_s_val = (ebitda_ps * 0.8) / (wacc - 0.03) + bps * 0.8
         model_results['DCF_SCENARIO'] = {'val': dcf_s_val, 'weight': blended_weights.get('DCF_SCENARIO', 0.0) + blended_weights.get('CASH_ASSETS', 0.0) + blended_weights.get('NET_CASH', 0.0) + blended_weights.get('NORMALIZED_CF', 0.0) + blended_weights.get('RELATIVE', 0.0), 'valid': dcf_s_valid, 'name': '추정 EBITDA 영구환원 + BPS 가산'}
+        # 라운드 358 — 빠졌으면 **왜** 빠졌는지 남긴다(§3). 화면의 '제외된 모델' 칸이
+        #   이 사유를 그대로 읽는다 — 사유가 없으면 그 칸에 아예 안 나온다.
+        #   (이 블록은 H·I 정의 **뒤**에 있어야 한다 — 앞에 두면 아직 없는 키다.)
+        if _eps_synth:
+            for _k358 in ('PER', 'EV_EBITDA', 'FCFF', 'EV_GP', 'DCF_SCENARIO'):
+                model_results[_k358]['exclusion_reason'] = (
+                    "적자(EPS 0 이하) — 양수 이익을 지어내 적용하지 않습니다")
 
         # ---------------------------------------------------------
         # 4. 불허/유효하지 않은 모델 0% 자동 제외 및 가중치 재정규화 (Re-normalization)
