@@ -5,11 +5,84 @@ import datetime
 import urllib.request
 import urllib.parse
 import json
+import os
+import pickle
 import re
 import sys
 import time
 
 import stock_code                      # 단축코드를 읽는 한 곳 (라운드 164)
+
+
+#: 일봉 디스크 캐시 — **기본은 꺼짐**이다 (라운드 353 · 2026-09-22).
+#:
+#: ■ 무엇을 고치나
+#:   자동 축적 job 은 같은 실행 안에서 일봉을 **두 번** 받는다. `케이스 축적` 이 pool
+#:   600종목(+채점 중 964종목)을 받고, `전방 구간 집중 축적` 이 **별도 프로세스**라
+#:   그것을 하나도 물려받지 못한 채 1,582종목을 다시 받는다. 2026-09-21 실행 로그:
+#:   계획 루프 783초(600종목) · 2,084초(1,582종목) — 둘 다 종목당 약 1.3초이고
+#:   전부 수신 대기다. 뒤 단계는 그 35분 때문에 100분 예산에서 매번 잘린다.
+#:
+#: ■ 열쇠는 (마지막으로 장이 끝난 거래일, 종목코드)
+#:   일봉은 봉이 하나 닫힐 때만 바뀐다. 지역 날짜를 쓰지 않는다 — 자정을 넘겨 도는
+#:   실행에서 '오늘'이 둘이 되는 그 자리다(라운드 283·306). 판정일이 넘어가면
+#:   디렉터리 이름이 달라져 **옛 캐시는 자동으로 안 읽힌다**(지우는 규칙이 따로 없다).
+#:   판정일을 못 구하면 캐시를 **안 쓴다** — 모르는 채로 재사용하지 않는다(§3).
+#:
+#: ■ 값을 바꾸지 않는다
+#:   pickle 로 프레임을 그대로 싣는다. json 왕복은 dtype 이 바뀌어 같은 프레임이
+#:   아니게 된다(실측 2026-09-22: `trade_date` 등 str 칸이 달라진다) — 그러면 캐시가
+#:   아니라 **다른 자료**이고 §4 가 금지한 두 경로가 된다.
+#:
+#: ■ 기본이 꺼짐인 이유
+#:   앱·회귀·사람이 돌리는 스크립트는 한 글자도 안 바뀌어야 한다. 켜는 것은 환경변수
+#:   하나이고, 그 변수를 세우는 곳은 자동 축적 워크플로뿐이다.
+BARS_CACHE_ENV = 'GAEUM_BARS_CACHE'
+
+
+def bars_cache_path(symbol):
+    """이 종목의 캐시 파일 자리. 꺼져 있거나 판정일·종목코드를 못 구하면 None."""
+    root = (os.environ.get(BARS_CACHE_ENV) or '').strip()
+    if not root:
+        return None
+    code = stock_code.normalize(symbol)
+    if not code:
+        return None
+    try:
+        import scripts.trading_day as _td   # 늦은 임포트 — 순환을 만들지 않는다
+        day = _td.anchor_day()
+    except Exception:                                          # noqa: BLE001
+        day = None
+    if not day:
+        return None
+    return os.path.join(root, str(day), f'{code}.pkl')
+
+
+def bars_cache_get(symbol):
+    """캐시에 있으면 그 프레임, 없거나 못 읽으면 None (못 읽은 것을 값으로 만들지 않는다)."""
+    p = bars_cache_path(symbol)
+    if not p or not os.path.exists(p):
+        return None
+    try:
+        with open(p, 'rb') as f:
+            return pickle.load(f)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def bars_cache_put(symbol, df):
+    """받은 프레임을 그대로 싣는다. 실패해도 조용히 지나간다 — 캐시는 수집을 죽이지 않는다."""
+    p = bars_cache_path(symbol)
+    if not p or df is None:
+        return
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        tmp = p + '.tmp'
+        with open(tmp, 'wb') as f:
+            pickle.dump(df, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, p)                 # 반쯤 쓰인 파일을 읽지 않게
+    except Exception:                                          # noqa: BLE001
+        pass
 
 
 def _stdout_tolerant():
@@ -1865,6 +1938,21 @@ class BitemporalEngine:
         return self.generate_synthetic_bitemporal_data(symbol, start_date, end_date)
 
     def fetch_daily_bars(self, symbol="005930.KS"):
+        """일봉만 받는다. 같은 판정일의 두 번째 요청은 **디스크 캐시**에서 돌려준다 (라운드 353).
+
+        캐시는 **기본이 꺼짐**이고 환경변수로 켠 프로세스만 쓴다 — 켜지 않으면 이 함수는
+        종전과 글자 그대로 같은 일을 한다(`_fetch_daily_bars_live`). 켜도 돌려주는 프레임은
+        같다: 받은 것을 pickle 로 그대로 싣고 그대로 돌려준다. 자세한 규칙은 이 파일 위쪽
+        `bars_cache_path` 주석에 있다.
+        """
+        hit = bars_cache_get(symbol)
+        if hit is not None:
+            return hit
+        df = self._fetch_daily_bars_live(symbol)
+        bars_cache_put(symbol, df)
+        return df
+
+    def _fetch_daily_bars_live(self, symbol="005930.KS"):
         """일봉만 받는다 — 실시간 삼중 확인·재무 메타는 부르지 않는다. 반환: prices_df.
 
         ⚠️ 라운드 330 — `generate_synthetic_bitemporal_data` 는 일봉 앞에 **실시간 삼중 확인**

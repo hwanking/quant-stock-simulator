@@ -30,3 +30,6 @@ __pycache__/
 *.tmp
 holdings.png
 hts.png
+
+# 일봉 디스크 캐시 (라운드 353) — 같은 job 안에서만 산다. 커밋하지 않는다.
+_bars_cache/

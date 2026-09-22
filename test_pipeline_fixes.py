@@ -16085,7 +16085,10 @@ check("심어 두면 실제로 잡는다 (그리고 판별은 오탐하지 않�
 _SITES202 = {
     # 라운드 330 — 일봉 수신(코드 판별 포함)이 `fetch_daily_bars` 로 **글자 그대로** 옮겨 갔다.
     #   `generate_synthetic_bitemporal_data` 는 그것을 부른다 — 코드를 읽는 자리는 이제 저 함수다.
-    'bitemporal_engine.py': ('fetch_daily_bars',
+    # 라운드 353 — 일봉 몸통이 `_fetch_daily_bars_live` 로 **이름만** 옮겨 갔다(캐시
+     #   껍데기가 그것을 부른다). 코드를 읽는 자리는 몸통이므로 여기도 같이 옮긴다 —
+     #   계약은 한 글자도 안 바뀌었다.
+    'bitemporal_engine.py': ('_fetch_daily_bars_live',
                              'fetch_dividend_info'),
     'market_context.py': ('fetch_stock_news', 'fetch_stock_disclosures'),
 }
@@ -26526,11 +26529,27 @@ def _calls336(fn):
     return {getattr(c.func, 'attr', None) for c in _ast336.walk(fn) if isinstance(c, _ast336.Call)}
 
 
-_fdb336 = _fns336.get('fetch_daily_bars')
+# 라운드 353 — 몸통이 `_fetch_daily_bars_live` 로 옮겨 가고 `fetch_daily_bars` 는 캐시
+#   껍데기가 됐다. 계약(삼중 확인을 안 부른다 · 코드를 stock_code 로 읽는다)은 **몸통**에
+#   있으므로 몸통에서 본다. 그리고 껍데기가 실제로 그 몸통을 부르는지도 **더** 본다 —
+#   껍데기가 딴 데를 부르면 이 계약이 껍데기를 통과해도 무의미하다(R195 의 '존재는 실행이 아니다').
+_fdb336 = _fns336.get('_fetch_daily_bars_live')
+_shell336 = _fns336.get('fetch_daily_bars')
 _gsb336 = _fns336.get('generate_synthetic_bitemporal_data')
-check("R330 fetch_daily_bars 는 실시간 삼중 확인을 부르지 않고 코드를 stock_code 로 읽는다",
+check("R330 일봉 함수는 실시간 삼중 확인을 부르지 않고 코드를 stock_code 로 읽는다 (몸통에서 본다)",
       bool(_fdb336) and 'get_realtime_stock_price_triple_check' not in _calls336(_fdb336)
       and 'normalize' in _calls336(_fdb336))
+# ⚠️ `_calls336` 은 **속성 호출**(a.b())만 센다 — 껍데기는 캐시를 **맨 이름**으로 부르므로
+#   그 그물에 안 걸린다(내 첫 판이 그래서 거짓으로 붉어졌다). 그물을 넓힌다 — 무르게 하는
+#   것이 아니라 **못 보던 것을 보게** 하는 쪽이다.
+_shellcalls336 = ({(getattr(c.func, 'attr', None) or getattr(c.func, 'id', None))
+                   for c in _ast336.walk(_shell336) if isinstance(c, _ast336.Call)}
+                  if _shell336 else set())
+check("R353 캐시 껍데기는 그 몸통을 부른다 — 껍데기가 딴 데를 부르면 위 계약이 무의미하다",
+      bool(_shell336) and '_fetch_daily_bars_live' in _shellcalls336
+      and {'bars_cache_get', 'bars_cache_put'} <= _shellcalls336
+      and 'get_realtime_stock_price_triple_check' not in _shellcalls336,
+      str(sorted(x for x in _shellcalls336 if x)))
 check("R330 적재 함수는 삼중 확인(재무 메타) 뒤에 fetch_daily_bars 를 부른다 — 일봉 수신은 한 곳 (§4)",
       bool(_gsb336) and {'get_realtime_stock_price_triple_check', 'fetch_daily_bars'} <= _calls336(_gsb336)
       and 'fchart.stock.naver.com' not in (_ast336.get_source_segment(_be336, _gsb336) or ''))
@@ -26763,7 +26782,8 @@ check("R333 기록기가 넘기던 start_date 는 적재 함수가 한 번도 �
       and 'start_date' in {a.arg for a in _lbd339.args.args},
       str(sorted({x.id for x in _ast339.walk(_gsb339) if isinstance(x, _ast339.Name)} & {'start_date', 'end_date'})))
 # ── 값이 안 바뀌는 근거 ② 읽는 칸이 일봉 함수가 만드는 칸 안에 있다 ──────────────────
-_fdb339 = _fns339.get('fetch_daily_bars')
+# 라운드 353 — 칸을 만드는 것은 캐시 껍데기가 아니라 몸통이다(이름만 옮겼다).
+_fdb339 = _fns339.get('_fetch_daily_bars_live')
 _made339 = {k.value for d in _ast339.walk(_fdb339) for k in getattr(d, 'keys', [])
             if isinstance(k, _ast339.Constant) and isinstance(k.value, str)} if _fdb339 else set()
 
@@ -27622,6 +27642,95 @@ check("R351 계획 없는 후보를 '연구 예정'이라 안 적는다 — 막�
 check("R351 레이더 줄 수는 그대로다 — 지운 줄 없이 문구만 고쳤다",
       len(_rad354['rows']) >= 30 and _rad354.get('made') == '2026-09-22',
       f"{len(_rad354['rows'])}줄 · made={_rad354.get('made')}", scanned=len(_rad354['rows']))
+
+print("\n" + "=" * 72)
+print("§355 R353 — 같은 job 이 일봉을 두 번 받고 있었다 · 캐시는 기본 꺼짐 (2026-09-22)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   `전방 구간 집중 축적` 이 100분 예산에서 매번 잘린다(09-14 · 09-15 · 09-21). 라운드 311 이
+#   단 계기가 원인을 말한다 — 계획 루프만 2,084초(1,582종목 · 종목당 1.32초)이고 전부 수신
+#   대기다. 그런데 **바로 앞 단계가 같은 job 에서 이미 1,564종목의 일봉을 받았다.** 별도
+#   프로세스라 물려받지 못한다. 디스크 캐시 하나로 그 35분이 빈다.
+#   ⚠️ 값을 바꾸지 않는다: pickle 로 그대로 싣는다. json 왕복은 dtype 이 바뀌어 **같은
+#   프레임이 아니게 된다**(2026-09-22 실측) — 그러면 캐시가 아니라 다른 자료다(§4).
+#   ⚠️ 열쇠에 지역 날짜를 안 쓴다 — 자정을 넘겨 도는 실행에서 '오늘'이 둘이 되는 그 자리다
+#   (R283·R306). 마지막으로 장이 끝난 거래일을 쓰고, 그것도 못 구하면 캐시를 **안 쓴다**.
+import shutil as _sh355
+import tempfile as _tf355
+import bitemporal_engine as _be355
+import pandas as _pd355
+check("R353 캐시는 **기본이 꺼짐**이다 — 환경변수가 없으면 자리가 None (앱·회귀 동작 불변)",
+      _os.environ.get(_be355.BARS_CACHE_ENV) in (None, '')
+      and _be355.bars_cache_path('005930') is None
+      and _be355.bars_cache_get('005930') is None)
+_root355 = _tf355.mkdtemp(prefix='r355_')
+_calls355 = [0]
+_real355 = _be355.BitemporalEngine._fetch_daily_bars_live
+_df355 = _pd355.DataFrame({'trade_date': ['2026-09-21'], 'adj_close': [100.0]})
+
+
+def _fake355(self, symbol="005930.KS"):
+    _calls355[0] += 1
+    return _df355.copy()
+
+
+try:
+    _be355.BitemporalEngine._fetch_daily_bars_live = _fake355
+    _eng355 = _be355.BitemporalEngine()
+    # ⓐ 꺼져 있으면 두 번 받는다 (심기 · 양방향)
+    _os.environ.pop(_be355.BARS_CACHE_ENV, None)
+    _calls355[0] = 0
+    _eng355.fetch_daily_bars('005930')
+    _eng355.fetch_daily_bars('005930')
+    _off355 = _calls355[0]
+    # ⓑ 켜면 두 번째는 캐시에서 — 그리고 **프레임이 같다**
+    _os.environ[_be355.BARS_CACHE_ENV] = _root355
+    _calls355[0] = 0
+    _a355 = _eng355.fetch_daily_bars('005930')
+    _b355 = _eng355.fetch_daily_bars('005930')
+    _on355 = _calls355[0]
+    try:
+        _pd355.testing.assert_frame_equal(_a355, _b355, check_exact=True)
+        _same355 = True
+    except AssertionError:
+        _same355 = False
+    check("R353 켜면 같은 판정일의 두 번째 요청이 망을 안 탄다 · 꺼져 있으면 매번 탄다 (양방향 심기)",
+          _off355 == 2 and _on355 == 1, f'꺼짐 {_off355}회 · 켜짐 {_on355}회')
+    check("R353 캐시가 돌려주는 프레임이 받은 것과 **값·칸·dtype 까지 같다** (§4)", _same355)
+    # ⓒ 열쇠가 판정일이다 — 다른 날 디렉터리는 안 읽는다
+    _p355 = _be355.bars_cache_path('005930')
+    _day355 = _os.path.basename(_os.path.dirname(_p355 or ''))
+    import scripts.trading_day as _td355
+    check("R353 열쇠는 **마지막으로 장이 끝난 거래일**이다 — 지역 날짜가 아니다 (R283·R306)",
+          bool(_p355) and _day355 == (_td355.anchor_day() or ''), str(_p355))
+    _moved355 = _os.path.join(_root355, '1999-01-04', _os.path.basename(_p355))
+    _os.makedirs(_os.path.dirname(_moved355), exist_ok=True)
+    _sh355.move(_p355, _moved355)
+    _calls355[0] = 0
+    _eng355.fetch_daily_bars('005930')
+    check("R353 판정일이 넘어가면 옛 캐시는 안 읽힌다 (지우는 규칙을 따로 두지 않는다)",
+          _calls355[0] == 1, f'{_calls355[0]}회')
+    # ⓓ 깨진 캐시는 조용히 다시 받는다 — 캐시가 수집을 죽이지 않는다
+    with open(_be355.bars_cache_path('005930'), 'wb') as _fh355:
+        _fh355.write(b'\x00\x01broken')
+    _calls355[0] = 0
+    _c355 = _eng355.fetch_daily_bars('005930')
+    check("R353 못 읽는 캐시는 그냥 다시 받는다 — 캐시가 수집을 죽이지 않는다",
+          _calls355[0] == 1 and len(_c355) == 1, f'{_calls355[0]}회')
+finally:
+    _os.environ.pop(_be355.BARS_CACHE_ENV, None)
+    _be355.BitemporalEngine._fetch_daily_bars_live = _real355
+    _sh355.rmtree(_root355, ignore_errors=True)
+# ⓔ 워크플로 — 켜는 줄은 하나이고 순서·예산은 그대로다 (R247)
+_wf355 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+check("R353 워크플로가 캐시를 job 환경변수 한 줄로 켠다 · 단계마다 손으로 적지 않는다 (R114)",
+      _wf355.count('GAEUM_BARS_CACHE') == 1 and 'GAEUM_BARS_CACHE: _bars_cache' in _wf355)
+check("R353 예산 넷은 그대로다 — 순서·예산은 안 건드렸다 (R247 이 여기서 2시간 16분을 잃었다)",
+      all(f'timeout-minutes: {_m355}' in _wf355 for _m355 in (120, 100, 90))
+      and 'timeout-minutes: 350' in _wf355, scanned=4)
+check("R353 캐시는 올라가지 않는다 — 커밋 제외이고 백업 화이트리스트 밖이다",
+      '_bars_cache/' in _read148(_os.path.join(PROJ, '.gitignore'))
+      and '_bars_cache' not in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py')))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
