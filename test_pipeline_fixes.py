@@ -27732,6 +27732,53 @@ check("R353 캐시는 올라가지 않는다 — 커밋 제외이고 백업 화�
       '_bars_cache/' in _read148(_os.path.join(PROJ, '.gitignore'))
       and '_bars_cache' not in _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py')))
 
+print("\n" + "=" * 72)
+print("§356 R354 — 지수 월봉 매크로 스위치: 재료는 있고 표본이 없다 · 제안의 수는 안 썼다 (2026-09-22)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙인 제안: 지수(KOSPI·KOSDAQ)가 월봉 10선 아래면 그 시장 종목의 신규 매수를 막자.
+#   절반은 이미 엔진에 있다(개별 종목 월봉 10선 게이트 · 이격 상한). 새로운 것은 '지수에 건다'
+#   하나이고, 그것을 잴 표본이 없다 — 시장 수준 축이라 표본은 **날짜**이고(R45) 블라인드 이탈
+#   날짜가 10 으로 이미 채택된 하한 30 에 미달한다. 검증 구간에는 이탈 달이 아예 없다.
+#   ⚠️ 제안서의 손으로 고른 수(상한 50·55 · 15% · 10% · +3~4%)는 **하나도 안 썼다**(§2).
+_res356 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R354_THE_INDEX_SWITCH_CANNOT_BE_JUDGED_YET.md'))
+check("R354 결과 문서가 '못 잰다'와 그 수(블라인드 이탈 날짜 10 · 하한 30)를 적는다",
+      bool(_res356) and '오늘은 못 잰다' in _res356 and '10 < 30' in _res356
+      and '기준을 내리지 않는다' in _res356)
+check("R354 사전등록을 쓰지 않았다고 적는다 — 표본 전의 사전등록은 재지 않은 등록이 된다",
+      bool(_res356) and '사전등록을 쓰지 않았다' in _res356)
+# ── 판정 경로에 안 새어 들어갔다 (R249 와 같은 계약) ─────────────────────
+_paths356 = ['verdict_core.py', 'quant_indicators.py', 'price_axes.py', 'regime_policy.py']
+_leak356 = []
+for _rel356 in _paths356:
+    _s356 = _read148(_os.path.join(PROJ, _rel356))
+    for _k356 in ('Macro_Trend_Status', 'macro_trend_status', 'index_m10', 'kospi_m10',
+                  'kosdaq_m10', 'index_month_ma'):
+        if _k356 in _s356:
+            _leak356.append(f'{_rel356}:{_k356}')
+check("R354 지수 월봉 키가 판정 파일에 새어 들어가지 않았다 (미달인 재료다)",
+      not _leak356, str(_leak356), scanned=len(_paths356))
+# ── 기존 월봉 10선 게이트는 그대로다 (일봉 200일 프록시 · 이격 상한 67) ──
+_qi356 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("R354 기존 월봉 10선 게이트가 그대로다 — 일봉 200일 프록시 · 이격 상한 67 · 추세 역행 매수 제한",
+      '월봉 10이평선 (일봉 200일 이동평균 프록시)' in _qi356
+      and 'm10_overheat_cap = 67' in _qi356 and '추세 역행 매수 제한' in _qi356)
+check("R354 제안의 손으로 고른 수가 규칙집에 안 들어갔다 (§2 — 문턱은 측정 전에 등록한다)",
+      not any(_t356 in _read148(_os.path.join(PROJ, 'analysis_rulebook_ko.txt'))
+              for _t356 in ('macro_trend', 'index_m10', 'monthly_ma10')), scanned=3)
+# ── 레이더가 보류와 그 사유를 적는다 ─────────────────────────────────────
+import json as _j356
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _fh356:
+    _rad356 = _j356.load(_fh356)
+_row356 = [r for r in _rad356['rows'] if '지수 월봉' in str(r.get('name'))]
+check("R354 레이더가 보류와 미충족 사유를 적는다 · status 에 날짜를 안 적는다 (§130)",
+      len(_row356) == 1 and '보류' in str(_row356[0].get('status'))
+      and '하한 30' in str(_row356[0].get('status'))
+      and '2026-' not in str(_row356[0].get('status')), str(_row356[:1])[:140])
+check("R354 레이더가 '이름은 같고 계산이 다르다'는 실측을 적는다 (일봉 200일 프록시 vs 월봉 10개월선)",
+      len(_row356) == 1 and '12.5%' in str(_row356[0].get('limit'))
+      and '프록시' in str(_row356[0].get('limit')))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
