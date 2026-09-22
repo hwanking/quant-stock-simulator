@@ -27779,6 +27779,94 @@ check("R354 레이더가 '이름은 같고 계산이 다르다'는 실측을 적
       len(_row356) == 1 and '12.5%' in str(_row356[0].get('limit'))
       and '프록시' in str(_row356[0].get('limit')))
 
+print("\n" + "=" * 72)
+print("§357 R355 — 가늠 AI: 못 알아들은 것보다 엉뚱한 것을 답한 것이 나빴다 (2026-09-23)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자: *"이 종목만 보는 게 아니라 전체를 아무거나 물어봐도."* 세어 보니 종목 밖 20개 중
+#   19개를 못 답했고, 가장 나쁜 것은 **"오늘 시장 어때?" 와 "내 계좌 어때?" 가 둘 다 '어때' 에
+#   걸려 이 종목의 결론을 답한 것**이었다(R214·R304 계열). 종목 밖 표를 종목 표보다 **먼저** 본다.
+#   ⚠️ 답할 수 없는 것은 **답하지 않는다** — 계좌 전체는 이 대화가 받는 맥락이 아니라서 어느
+#   화면이 답하는지 알려 주고 끝낸다. 예측 요구에는 예측을 쓰지 않는다(R288 의 규칙).
+import gaeum_chat as _gc357
+import gaeum_glossary as _gg357
+# ── ① 종목 밖 표가 **먼저** 판정된다 (자리로 잠근다) ─────────────────────
+_src357 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+_i_g357 = _src357.find('for name, words in _GLOBAL_INTENTS')
+_i_s357 = _src357.find('for name, words in _INTENTS')
+check("R355 종목 밖 의도표를 종목 표보다 먼저 본다 (자리가 곧 우선순위다)",
+      0 < _i_g357 < _i_s357, f'global@{_i_g357} · stock@{_i_s357}')
+# ── ② 양방향 — 종목 밖은 제 갈래로, 종목 질문은 안 샌다 ──────────────────
+_WANT357 = {
+    'market': ('오늘 시장 어때?', '지금 국면이 뭐야?', '코스피 어때?', '간밤에 무슨 일 있었어?',
+               '오늘 살 만한 종목 있어?', '추천 왜 하나도 없어?'),
+    'portfolio': ('내 계좌 어때?', '내 포트폴리오 위험해?', '지금 뭘 팔아야 해?',
+                  '현금 비중 얼마나 가져가야 해?', '업종이 너무 몰려 있나?'),
+    'engine': ('이 시스템 성적이 어때?', '너 얼마나 맞아?', '원장이 몇 건이야?', '언제 업데이트됐어?'),
+    'howto': ('이 화면 어떻게 봐?', '관심종목은 어떻게 추가해?'),
+    'forecast': ('내일 오를까?',),
+}
+_STOCK357 = {'buy_now': ('지금 사도 돼?', '사 말어?', '들어가도 될까?'),
+             'price_buy': ('얼마에 사야 해?', '진입가?'),
+             'price_sell': ('얼마에 팔아?', '목표가 얼마야?'),
+             'holder': ('보유 중이면 어떻게 해?', '물렸는데 어떡해?'),
+             'why_blocked': ('왜 지금 매수를 막았어?',),
+             'fair_gap': ('적정가와 매수가가 왜 달라?',),
+             'news': ('뉴스 영향은?',), 'similar': ('비슷한 과거 사례는?',),
+             'prob_trust': ('확률은 믿을 수 있어?',)}
+_bad357 = [f'{q}→{_gc357.intent_of(q)}(기대 {w})'
+           for w, qs in _WANT357.items() for q in qs if _gc357.intent_of(q) != w]
+check("R355 종목 밖 물음이 제 갈래로 간다 (시장·계좌·엔진·사용법·예측)",
+      not _bad357, str(_bad357[:3]), scanned=sum(len(v) for v in _WANT357.values()))
+_leak357 = [f'{q}→{_gc357.intent_of(q)}(기대 {w})'
+            for w, qs in _STOCK357.items() for q in qs if _gc357.intent_of(q) != w]
+check("R355 종목 질문은 하나도 안 샌다 (넓힌 그물이 종목을 삼키지 않는다 · 양방향)",
+      not _leak357, str(_leak357[:3]), scanned=sum(len(v) for v in _STOCK357.values()))
+check("R355 추천 질문 버튼은 여전히 전부 답을 받는다",
+      all(_gc357.intent_of(b) is not None for b in _gc357.QUICK_QUESTIONS),
+      scanned=len(_gc357.QUICK_QUESTIONS))
+# ── ③ 답이 실제로 나오고, 없는 값을 만들지 않는다 (존재는 실행이 아니다 · R195) ──
+_ctx357 = _gc357.build_context(
+    name='심기용 종목', ticker='000000.KS', price=10000,
+    core={'bucket': '오늘 매수 가능', 'actionable': True, 'pullback_zone': 9500,
+          'new_target': 10700, 'new_stop': 9100, 'rr': 0.7, 'horizon_days': 28},
+    fs={'displayed_fair_value': 12000},
+    verdict={'headline': '심기용 결론', 'score': 61, 'action': 'HOLD'},
+    regime_code='BEAR', versions={'model': 'v0.0.0'})
+_a_mkt357 = _gc357.answer('오늘 시장 어때?', _ctx357)
+_a_pf357 = _gc357.answer('내 계좌 어때?', _ctx357)
+_a_fc357 = _gc357.answer('내일 오를까?', _ctx357)
+_a_eng357 = _gc357.answer('이 시스템 성적이 어때?', _ctx357)
+check("R355 시장 답은 국면을 맥락에서 읽고 지수 숫자를 새로 만들지 않는다",
+      '하락' in _a_mkt357 and '새로 만들지 않습니다' in _a_mkt357
+      and '근거: 시장 국면' in _a_mkt357)
+check("R355 계좌 전체는 **답하지 않고** 어느 화면이 답하는지 말한다 (지어내지 않는다)",
+      '답하지 않겠습니다' in _a_pf357 and '포트폴리오 화면' in _a_pf357
+      and '지어내지 않기' in _a_pf357 and '근거: 이 대화가 받은 맥락' in _a_pf357)
+check("R355 예측 요구에 예측을 쓰지 않는다 — 못 하는 것을 먼저 말하고 잰 것을 준다",
+      '말하지 않겠습니다' in _a_fc357 and '재 본 적이 없는 값' in _a_fc357
+      and '심기용 결론' in _a_fc357)
+check("R355 엔진 답이 **두 비용을 같이 적는다** (계약값 0.55 · 오늘 운영값) — 어느 비용으로 뺀 값인지",
+      '0.55%' in _a_eng357 and '오늘 매수 판정이 쓰는 왕복 비용은' in _a_eng357
+      and '우위가 없습니다' in _a_eng357)
+# ── ④ 설명 사전 — 구조는 적고, 재지 않은 것은 재지 않았다고 적는다 ──────
+_cc357 = _gg357.lookup('커버드콜이 뭐야?')
+check("R355 커버드콜 설명이 구조(상방이 잘린다)를 적고 **재 본 적 없다**를 같이 적는다 (§3)",
+      bool(_cc357) and '따라 오르는 몫이 잘립니다' in _cc357[1]
+      and '재 본 적이 없습니다' in _cc357[1] and '세금을 계산하지 않습니다' in _cc357[1])
+check("R355 설명 사전이 세율·건보료 수치를 적지 않는다 (확인하지 않은 수를 화면에 박지 않는다)",
+      bool(_cc357) and not any(_t357 in _cc357[1] for _t357 in ('15.4', '2,000만', '2000만')),
+      scanned=1)
+_tr357 = _gg357.lookup('총손익이 뭐야?')
+check("R355 '분배금 포함 손익' 설명이 **실제 수령 내역이 없다**는 사실을 적는다",
+      bool(_tr357) and '가정값' in _tr357[1] and '갖고 있지 않습니다' in _tr357[1])
+# ── ⑤ 보유 관련 세 칸은 여전히 죽어 있다 — 채운 척하지 않는다 ────────────
+_pf357 = _read148(_os.path.join(PROJ, 'portfolio.py'))
+_dead357 = [k for k in ('dividend_received', 'realized_pnl', 'fees_paid')
+            if _pf357.count(k) == 1]
+check("R355 배당·실현손익·수수료 칸은 선언뿐이고 이 라운드가 채운 척하지 않았다 (쓰는 곳 0)",
+      len(_dead357) == 3, str(_dead357), scanned=3)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
