@@ -27639,8 +27639,14 @@ _ts354 = _by354.get('TSFM (Chronos·TimesFM)') or {}
 check("R351 계획 없는 후보를 '연구 예정'이라 안 적는다 — 막는 것은 환경이 아니라 사전 확률",
       '연구 예정' not in str(_ts354.get('status'))
       and '사전 확률' in str(_ts354.get('status')) + str(_ts354.get('limit')), str(_ts354.get('status')))
+# ⚠️ 라운드 356 — 여기가 처음엔 `made == '2026-09-22'` 였다. 레이더는 **줄을 더할 때마다**
+#   made 가 갱신되므로, 그 날짜를 등호로 잠그면 다음에 줄을 더하는 날 **거짓으로 붉어진다**
+#   (실제로 하루 만에 그랬다). 이 검사가 재려던 것은 *"줄을 지우지 않고 문구만 고쳤다"* 이니
+#   그 성질만 잠근다 — 줄이 줄면 실패하고, 날짜는 **형식과 방향**만 본다.
 check("R351 레이더 줄 수는 그대로다 — 지운 줄 없이 문구만 고쳤다",
-      len(_rad354['rows']) >= 30 and _rad354.get('made') == '2026-09-22',
+      len(_rad354['rows']) >= 30
+      and _re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(_rad354.get('made') or ''))
+      and str(_rad354.get('made')) >= '2026-09-22',
       f"{len(_rad354['rows'])}줄 · made={_rad354.get('made')}", scanned=len(_rad354['rows']))
 
 print("\n" + "=" * 72)
@@ -27866,6 +27872,50 @@ _dead357 = [k for k in ('dividend_received', 'realized_pnl', 'fees_paid')
             if _pf357.count(k) == 1]
 check("R355 배당·실현손익·수수료 칸은 선언뿐이고 이 라운드가 채운 척하지 않았다 (쓰는 곳 0)",
       len(_dead357) == 3, str(_dead357), scanned=3)
+
+print("\n" + "=" * 72)
+print("§358 R356 — 마법 공식: 원형은 재료가 없고 간편형은 시점 자료가 없다 (2026-09-23)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   사용자가 붙인 제안(그린블라트 마법 공식)을 **잴 수 있는지**부터 셌다. 원형은 EBIT·시가총액·
+#   차입금·현금을 하나도 안 받아 만들 수 없고, ROA 변형은 총자산을 안 받는다. ROE+PER 변형은
+#   오늘 값만 되고 **과거로는 못 잰다** — 원장에 재무 0칸이고 받는 4개 연도는 재작성된 현재
+#   보고치라 과거에 붙이면 누출이다. 검증은 전방으로만 열리고 그 시계는 시점 재무 보관이다.
+#   ⚠️ 제안의 손으로 고른 수(+5점 · 상위 30% · PER 1·2 미만 · PBR 0.2 미만)는 하나도 안 썼다(§2).
+import json as _j358
+_res358 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R356_THE_MAGIC_FORMULA_HAS_NO_MATERIALS.md'))
+_be358 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_MISSING358 = ('ebit', 'total_assets', 'market_cap', 'net_debt')
+_seen358 = {k: (_be358.count(f"'{k}'") + _be358.count(f'"{k}"')) for k in _MISSING358}
+check("R356 원형이 요구하는 칸은 수집부에 **하나도 없다** — 없으면 만들지 않는다 (§3)",
+      all(v == 0 for v in _seen358.values()), str(_seen358), scanned=len(_MISSING358))
+check("R356 결과 문서가 세 갈래의 답과 '과거로는 못 잰다'를 적는다",
+      bool(_res358) and '못 만든다' in _res358 and '과거로 되돌려 검증할 수 없다' in _res358
+      and '전방으로만' in _res358)
+check("R356 사전등록을 쓰지 않았다고 적는다 (재료가 없는데 등록부터 쓰면 재지 않은 등록이 된다)",
+      bool(_res358) and '사전등록도 **안 썼다**' in _res358)
+check("R356 라운드 112 의 기각을 빌려 오지 않는다고 적는다 (다른 시험이다)",
+      bool(_res358) and '기각을 빌려 오지는 않는다' in _res358
+      and '사전 확률이 낮다' in _res358)
+# ── 제안의 값이 코드·규칙집에 안 들어갔다 ────────────────────────────────
+_files358 = ('quant_indicators.py', 'verdict_core.py', 'price_axes.py',
+             'regime_policy.py', 'analysis_rulebook_ko.txt')
+_leak358 = [f for f in _files358
+            if any(t in _read148(_os.path.join(PROJ, f))
+                   for t in ('magic_formula', 'magic formula', '마법 공식'))]
+check("R356 마법 공식이 판정 파일·규칙집에 새어 들어가지 않았다 (미달인 재료다)",
+      not _leak358, str(_leak358), scanned=len(_files358))
+# ── 레이더 ──────────────────────────────────────────────────────────────
+with open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8') as _fh358:
+    _rad358 = _j358.load(_fh358)
+_row358 = [r for r in _rad358['rows'] if '마법 공식' in str(r.get('name'))]
+check("R356 레이더가 보류와 미충족 사유를 적는다 · status 에 날짜를 안 적는다 (§130)",
+      len(_row358) == 1 and '보류' in str(_row358[0].get('status'))
+      and '재료 0' in str(_row358[0].get('status'))
+      and '2026-' not in str(_row358[0].get('status')), str(_row358[:1])[:150])
+check("R356 레이더가 모집단 문제와 수집 비용 추정을 적는다 (상위 60 ≠ 시장 전체)",
+      len(_row358) == 1 and '상위 60종목' in str(_row358[0].get('limit'))
+      and '추정' in str(_row358[0].get('limit')))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
