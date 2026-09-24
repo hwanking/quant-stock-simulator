@@ -1,25 +1,25 @@
 {
- "made": "2026-09-18",
+ "made": "2026-09-24",
  "span": [
   "2011-01-14",
   "2026-08-18"
  ],
- "ledger_rows": 252729,
- "raw_cases": 252729,
+ "ledger_rows": 254329,
+ "raw_cases": 254329,
  "unique_tickers": 1547,
- "unique_dates": 2765,
- "independent_episodes": 46979,
- "sector_cluster_effective_n": 48941,
- "sector_missing": 21832,
- "regime_effective_n": 3683,
- "forward_evaluated_n": 1201,
- "forward_log_n": 955,
- "high_conf_forward_n": 104,
+ "unique_dates": 2767,
+ "independent_episodes": 46983,
+ "sector_cluster_effective_n": 49075,
+ "sector_missing": 22155,
+ "regime_effective_n": 3685,
+ "forward_evaluated_n": 2801,
+ "forward_log_n": 1195,
+ "high_conf_forward_n": 173,
  "forward_from": "2026-08-09",
  "episode_days": 35,
  "per_ticker": {
   "min": 1,
-  "median": 109,
+  "median": 110,
   "max": 927
  },
  "by_year": {
@@ -38,11 +38,11 @@
   "2023": 26645,
   "2024": 28458,
   "2025": 28455,
-  "2026": 18894
+  "2026": 20494
  },
  "regime_counts": {
-  "BEAR": 74253,
-  "SIDEWAYS": 88150,
+  "BEAR": 74578,
+  "SIDEWAYS": 89425,
   "BULL": 90270,
   "None": 56
  },
