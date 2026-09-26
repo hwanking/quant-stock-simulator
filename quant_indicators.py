@@ -3873,7 +3873,8 @@ class QuantIndicatorsEngine:
             m10_overheat_cap = int(_XL.get('m10_below_cap', 64))
             cap_reasons.append(
                 f"월봉 10선 아래 ({m10_disparity:+.1f}%) — 추세 역행 매수 제한 "
-                f"(리플레이 실측 −8.7%p) → 상한 {m10_overheat_cap}점")
+                f"(리플레이 실측 −8.7%p) → 상한 {m10_overheat_cap}점 "
+                f"· 이 선은 일봉 200일 이동평균으로 잽니다")
 
         # 시장·글로벌·뉴스 상한 — 종목이 좋아도 판이 나쁘면 점수를 제한한다.
         # 올리는 데는 쓰지 않는다(좋은 뉴스로 점수를 얹지 않는다). 사유는 항상 남긴다.

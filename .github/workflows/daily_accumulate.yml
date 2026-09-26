@@ -260,11 +260,15 @@ jobs:
       #   그 값을 기준 행수·날짜와 같이 내므로, 안 만들면 화면이 낡은 원장을 말한다.
       #   `|| true` 는 축적을 인질로 안 잡으려는 것이고, 안 만든 것은 맨 뒤의 신선도
       #   검사가 잡는다(업로드 뒤 · R247).
-      - name: 관측 산출물 갱신 (표본 감사·유효표본 ICC·업종 성적 · 관측 전용)
+      # ⚠️ 라운드 365 — 진입가 축척 감사를 여기 더했다. 판별식이 일봉을 종목마다
+      #   받아야 해서(실측 252초) 회귀에 못 넣는다 — 만들고, 맨 뒤의 신선도
+      #   검사가 낡음을 보고, 회귀는 그 산출물을 읽는다(라운드 259 의 모양).
+      - name: 관측 산출물 갱신 (표본 감사·유효표본 ICC·업종 성적·진입가 축척 · 관측 전용)
         run: |
           python scripts/sample_audit.py || true
           python scripts/effective_n_icc.py || true
           python scripts/gen_sector_perf.py || true
+          python scripts/entry_scale_audit.py || true
 
       - name: FN/FP 연구·취약구간 지도 (관측 전용)
         run: |

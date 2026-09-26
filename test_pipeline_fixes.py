@@ -23185,8 +23185,13 @@ print("-" * 72)
 #   업로드 앞 · || true), 맨 뒤의 신선도 검사가 다섯을 본다. 생성기 셋은 합쳐 약 30초.
 import scripts.study_freshness as _sf273
 _names273 = [rel for rel, _ in _sf273.STUDIES]
-check("신선도 검사가 다섯 산출물을 본다 (둘 + 라운드 217 의 셋)",
-      len(_names273) == 5 and all(x in _names273 for x in (
+# ⚠️ 라운드 365 — 종전에는 `len == 5` 였다. 산출물을 **더** 보게 하는 변경에
+#   깨졌다(진입가 축척 감사를 더했다) — 늘어나는 것이 옳은 자리에서 수를 못 박고
+#   있었다(R98b 계열). 지키려는 것은 *목록에 그 셋이 있나*이므로 성질로 옮긴다.
+#   **무르게 한 것이 아니다** — 이름별 조건은 그대로이고 **줄면 여전히 실패**한다.
+check("신선도 검사가 라운드 217 의 셋을 본다 (둘 + 셋이 바탕 · 더 늘 수 있다)",
+      len(_names273) >= 5 and all(x in _names273 for x in (
+          'data/miss_study.json', 'data/weakness_map.json',
           'data/sample_audit.json', 'data/effective_n_icc.json', 'data/sector_perf.json')),
       str(_names273), scanned=len(_names273))
 import json as _json273
@@ -26777,8 +26782,12 @@ check("R333 클라우드가 부르는 스크립트 중 재무 df 를 버리면�
       not _bad339, f'위반 {_bad339}', scanned=len(_wfsrc339))
 _bars339 = {n: [getattr(c.func, 'attr', None) for c in _ast339.walk(_ast339.parse(v))
                 if isinstance(c, _ast339.Call)].count('fetch_daily_bars') for n, v in _wfsrc339.items()}
-check("R333 그 자리들은 일봉 전용 함수를 부른다 — 기록기 셋 · 원장 랩 · 일일 개선 (합 7회)",
-      sum(_bars339.values()) == 7 and all(_bars339.get(n) == 1 for n in
+# ⚠️ 라운드 365 — 종전에는 `sum == 7` 이었다. 일봉 전용 함수를 **더** 부르는
+#   변경에 깨졌다(진입가 축척 감사가 그것을 쓴다) — 그런데 더 부르는 것은 이 절이
+#   **바라는 방향**이다(옛 적재 함수를 쓰지 말라는 절이다). 총합만 하한으로 옮기고
+#   이름별 조건은 그대로 둔다 — **줄면 여전히 실패**한다(R98b 계열).
+check("R333 그 자리들은 일봉 전용 함수를 부른다 — 기록기 넷이 각각 한 번 (합 7회 이상)",
+      sum(_bars339.values()) >= 7 and all(_bars339.get(n) == 1 for n in
                                           ('path_recorder.py', 'entry_anchor_recorder.py',
                                            'news_event_recorder.py', 'run_daily_improvement.py')),
       str({k: v for k, v in _bars339.items() if v}), scanned=len(_bars339))
@@ -28310,6 +28319,49 @@ _src362 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
 check("이 절이 제 맹점을 수로 적어 둔다 (초록불이 '오염 없음'이 아니라고 말한다)",
       '"오염이 없다"는 뜻이 아니다' in _src362
       and '_CAUSE_N362' in _src362, scanned=2)
+
+# ── 라운드 365 — **원인** 은 산출물이 잰다 (증상은 16 중 7 을 못 봤다) ────
+#   생성기 `scripts/entry_scale_audit.py` 가 종목마다 일봉을 한 번 받아
+#   `원장 진입가 == 그날 봉 종가` 를 전수로 본다(실측 252초 · 그래서 회귀 밖).
+#   워크플로의 '관측 산출물 갱신' 단계가 만들고 신선도 검사가 낡음을 보며
+#   여기서는 **읽기만** 한다(§4 · 라운드 259 의 모양).
+#   ⚠️ 판별식에 문턱이 없다 — 어긋남은 항등식이고, 실측에서 정상 종목은
+#     어긋난 행이 **0개**였다. 값이 아니라 **늘지 않는 것**을 잠근다(§324).
+_ESA362 = _os.path.join(PROJ, 'data', 'entry_scale_audit.json')
+check("진입가 축척 감사 산출물이 있다 (없으면 회귀가 원인을 못 본다 · §225)",
+      _os.path.exists(_ESA362), _ESA362)
+if _os.path.exists(_ESA362):
+    with open(_ESA362, encoding='utf-8') as _f362b:
+        _esa362 = _json.load(_f362b)
+    _OFFENDERS_MAX362 = 16      # 2026-09-27 실측 · 늘면 실패 · 줄면 통과
+    check("그 산출물이 신선도 규약을 따른다 (ledger_rows · 라운드 259)",
+          isinstance(_esa362.get('ledger_rows'), int)
+          and _esa362['ledger_rows'] > 100000,
+          str(_esa362.get('ledger_rows')))
+    check("실제로 잰 종목 수가 있다 (0 은 통과가 아니다)",
+          (_esa362.get('measured') or 0) > 500,
+          f"잰 종목 {_esa362.get('measured')} · 못 읽음 {_esa362.get('unread')}",
+          scanned=_esa362.get('measured') or 0)
+    check("못 읽은 종목을 0 으로 세지 않고 따로 적는다 (§3)",
+          'unread' in _esa362 and 'unread_sample' in _esa362)
+    print(f"   어긋난 행이 0개인 종목 {_esa362.get('clean')} · "
+          f"하나라도 어긋난 종목 {_esa362.get('offenders')} "
+          f"(상한 {_OFFENDERS_MAX362}) · 행 {_esa362.get('offender_rows')}")
+    check("진입가가 그날 봉과 어긋난 종목이 늘지 않았다 (원인 잣대 · 문턱 없음)",
+          (_esa362.get('offenders') or 0) <= _OFFENDERS_MAX362,
+          f"{_esa362.get('offenders')}개 > 상한 {_OFFENDERS_MAX362} — "
+          f"새로 어긋난 종목이 있다 (라운드 365 의 감사를 열어 본다)",
+          scanned=_esa362.get('measured') or 0)
+    # 증상 잣대가 몇 개를 놓치는지 산출물이 **스스로** 적는가 — 초록불을
+    # '오염 없음'으로 읽지 않게 하는 것이 이 절의 요점이다
+    check("산출물이 증상 잣대의 맹점을 수로 적는다 (1봉째 잣대가 놓치는 종목 수)",
+          isinstance(_esa362.get('symptom_missed'), int)
+          and _esa362['symptom_missed'] > 0,
+          f"증상 잣대가 놓치는 종목 {_esa362.get('symptom_missed')} / "
+          f"{_esa362.get('offenders')}")
+    check("원인 잣대가 증상 잣대보다 넓다 (그래서 증상만 잠그면 안 된다)",
+          (_esa362.get('offenders') or 0) >= len(_pin362),
+          f"원인 {_esa362.get('offenders')} vs 증상 {len(_pin362)}")
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
