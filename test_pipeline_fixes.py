@@ -28196,6 +28196,121 @@ check("R359 화면이 가름을 스스로 정하지 않고 킷을 부른다 (§4
       'model_kinds' in _w361 and "_split359['asset_only']" in _w361
       and 'ASSET_MODELS' not in _w361, scanned=3)
 
+
+# ══════════════════════════════════════════════════════════════════════
+# §362 — 채점이 1봉에 박힌 종목이 조용히 늘지 않는다 (라운드 364)
+#
+#   ■ 무엇이 깨졌나
+#   원장 진입가가 기준일 **2026-08-10** 앞에서 그날 실제 봉 종가와 **상수배**로
+#   어긋난다(실측 배율 0.20 ~ 10.0). 채점은 매 실행 다시 도므로(R197·R303)
+#   어긋난 진입가를 오늘 봉과 견주게 되고, 목표·손절이 진입가에서 2~3% 거리라
+#   작은 어긋남으로도 결과가 1봉에 박힌다:
+#     · 진입가가 낮으면 → 1봉째 TARGET (지어낸 승리)
+#     · 진입가가 높으면 → 1봉째 STOP   (지어낸 패배)
+#
+#   ■ 이 검사가 무엇을 보고 무엇을 **못 보는지** (R194 의 규율)
+#   진짜 판별식은 **원인**이다 — `원장 진입가 ÷ 그날 봉 종가 ≠ 1`. 그것으로
+#   전수를 재면 2026-09-26 실측 **16종목**이고, 분포가 **완전히 갈린다**
+#   (1,382종목은 어긋난 행이 **0개** · 16종목은 96~100%). 문턱이 필요 없다.
+#   그런데 그 판별식은 **일봉을 종목마다 받아야** 하므로(약 4분) 회귀에 못 넣는다.
+#   여기서 쓰는 것은 **증상**(1봉째 박힘)이고, 그것은 배율이 1~2%만 어긋난
+#   종목을 **놓친다** — 실측으로 16 중 **7개**를 못 본다(그중 둘은 1봉 비율이
+#   20.4% · 10.7% 로 대조군 중앙 21% 보다도 정상처럼 보인다).
+#   ⚠️ 그러므로 이 절이 초록이어도 **"오염이 없다"는 뜻이 아니다.**
+#     원인 기반 전수는 생성기가 필요하고 그것은 별도 라운드다(R259 의 모양).
+#
+#   ■ 왜 90% 인가 — 고른 수이고, 그렇게 적는다
+#   1봉째 비율은 대조군 중앙 21% 대이고 박힌 것들은 90.9~100% 다. 첫 판에
+#   *"48~91 이 비어 있다"* 고 적었다가 **한 종목이 90.9 라 자기 검사에 걸렸다** —
+#   그 종목은 배율 0.9092 로 **원인 쪽에서 확인**해 넣었다(R319 · 갈래는 조건으로).
+#   ⚠️ 값을 잠그지 않고 **늘지 않는 것**을 잠근다(§324 의 모양 · R213).
+#   자리는 손으로 안 적는다 — 동봉본 자리는 생성기 한 곳이 안다(R282 · §64).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§362 채점이 1봉에 박힌 종목이 늘지 않는다 (라운드 364)")
+print("=" * 72)
+import collections as _c362                                      # noqa: E402
+import importlib.util as _iu362                                  # noqa: E402
+
+_PINNED_MAX362 = 9      # 2026-09-26 실측(증상 잣대) · 늘면 실패 · 줄면 통과
+_CAUSE_N362 = 16        # 같은 날 원인 잣대로 잰 수 — 이 검사가 7개를 못 본다
+_MIN_ROWS362 = 20
+
+_spec362 = _iu362.spec_from_file_location(
+    'rb362', _os.path.join(PROJ, 'scripts', 'refresh_bundle.py'))
+_rb362 = _iu362.module_from_spec(_spec362)
+_spec362.loader.exec_module(_rb362)
+_lp362 = _rb362._bundle_ledger_path()
+check("동봉 원장 자리를 생성기 한 곳에서 얻는다 (손으로 적지 않는다 · R282)",
+      bool(_lp362) and _os.path.exists(_lp362), str(_lp362))
+
+
+def _iter362(path):
+    if path.endswith('.gz'):
+        import gzip as _g
+        return _g.open(path, 'rt', encoding='utf-8', errors='replace')
+    return open(path, encoding='utf-8', errors='replace')
+
+
+_by362 = _c362.defaultdict(lambda: [0, 0])
+_oc362 = _c362.defaultdict(_c362.Counter)
+_rows362 = 0
+if _lp362:
+    with _iter362(_lp362) as _f362:
+        for _ln362 in _f362:
+            _ln362 = _ln362.strip()
+            if not _ln362:
+                continue
+            try:
+                _r362 = _json.loads(_ln362)
+            except Exception:                                    # noqa: BLE001
+                continue
+            _rows362 += 1
+            _tk362 = str(_r362.get('ticker'))
+            _by362[_tk362][0] += 1
+            if _r362.get('touched_bar') == 1:
+                _by362[_tk362][1] += 1
+            _oc362[_tk362][str(_r362.get('outcome'))] += 1
+check("동봉 원장을 실제로 읽었다 (0행은 통과가 아니다 · §225)",
+      _rows362 > 100000, f"{_rows362:,}행", scanned=_rows362)
+
+_pct362 = sorted((b / a * 100.0) for a, b in _by362.values() if a >= _MIN_ROWS362)
+check("종목별 1봉째 비율을 셀 수 있다",
+      len(_pct362) > 500, f"종목 {len(_pct362)}개", scanned=len(_pct362))
+if _pct362:
+    _mid362 = _pct362[len(_pct362) // 2]
+    print(f"   1봉째 비율 — 중앙 {_mid362:.1f}% · 최대 {_pct362[-1]:.1f}%")
+    check("대다수 종목의 1봉째 비율은 낮다 (중앙 50% 미만) — 박힘이 정상이 아니다",
+          _mid362 < 50.0, f"중앙 {_mid362:.1f}%")
+
+_pin362 = sorted(tk for tk, (a, b) in _by362.items()
+                 if a >= _MIN_ROWS362 and b / a > 0.90)
+print(f"   1봉째 90% 초과 종목 {len(_pin362)}개 (상한 {_PINNED_MAX362})"
+      f" · 원인 잣대로는 {_CAUSE_N362}개였다 (이 검사가 못 보는 것 "
+      f"{_CAUSE_N362 - _PINNED_MAX362}개)")
+check("채점이 1봉에 박힌 종목이 늘지 않았다 (값이 아니라 증가를 잠근다 · §324)",
+      len(_pin362) <= _PINNED_MAX362,
+      f"{len(_pin362)}개 > 상한 {_PINNED_MAX362} — 새로 오염된 종목이 있다 "
+      f"(진입가 ÷ 그날 봉 이 1 인지 본다 · R364)",
+      scanned=len(_pct362))
+# 두 방향이 다 있는지 — 한 방향만 보면 거울상을 놓친다(R363 이 그랬다)
+_dir362 = _c362.Counter()
+for _tk362 in _pin362:
+    for _k362, _v362 in _oc362[_tk362].items():
+        _dir362[_k362] += _v362
+if _pin362:
+    print(f"   박힌 종목의 결과 갈래 {dict(_dir362.most_common(3))}")
+check("판별식이 방향 무관이다 — 박힌 종목에 TARGET 쪽과 STOP 쪽이 둘 다 있다 "
+      "(한 방향만 보면 거울상을 놓친다 · R363 의 mfe>300% 가 그랬다)",
+      (not _pin362)
+      or (_dir362.get('TARGET', 0) > 0 and _dir362.get('STOP', 0) > 0),
+      f"{dict(_dir362.most_common(3))}", scanned=len(_pin362))
+# 이 검사가 제 한계를 적고 있는지 — 초록불을 '오염 없음'으로 읽지 않게
+_src362 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
+check("이 절이 제 맹점을 수로 적어 둔다 (초록불이 '오염 없음'이 아니라고 말한다)",
+      '"오염이 없다"는 뜻이 아니다' in _src362
+      and '_CAUSE_N362' in _src362, scanned=2)
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
