@@ -28363,6 +28363,171 @@ if _os.path.exists(_ESA362):
           (_esa362.get('offenders') or 0) >= len(_pin362),
           f"원인 {_esa362.get('offenders')} vs 증상 {len(_pin362)}")
 
+# ══════════════════════════════════════════════════════════════════════
+# §363 — 원장이 **자체 모순**인가 (라운드 368)
+#
+#   ■ 왜 이 절이 이제야 있나
+#   라운드 17c 가 이 물음을 위해 `scripts/ledger_consistency_r17c.py` 를 만들었고
+#   독스트링에 불변식 다섯을 적어 두었다. 라운드 363 이 그것을 찾았다 — **저장소
+#   전체에서 부르는 곳 0곳**(R195 '존재는 실행이 아니다' · R284 '배선된 적이 없다' ·
+#   R297 '읽는 곳 0곳'이 만나는 자리). 돌리면 68.6% 가 '위반'이라 그대로는 못 넣었고,
+#   R363 은 *"경계를 오늘 고르면 결과를 보고 고른 문턱이다(§2-5)"* 라며 접었다.
+#
+#   ■ 라운드 368 이 그 68.6% 를 갈랐더니 **틀린 것은 원장이 아니라 검사였다**
+#   셋 다 문턱이 아니라 **정의**로 갈린다:
+#     ① *"mfe ≥ 0 이고 mae ≤ 0"* 은 **애초에 불변식이 아니다.** 이 엔진의 mfe/mae 는
+#        진입 **다음 봉부터의** 최고·최저를 진입가에 견준 값이라(`path = bars[:upto]`)
+#        갭상승해 진입가 아래로 안 내려가면 **mae > 0 이 옳다**(실측 21,856행).
+#        바르게 적으면 조건부다 — `mae > 0 이면 outcome ≠ STOP`.
+#     ②③ 은 **outcome == 'OPEN' 에서만** 불변식이다(그때만 두 창이 같다 · 청산이
+#        있으면 mfe/mae 는 청산 봉까지 · close_return 은 20봉 전체).
+#     ④⑤ 는 진짜 불변식인데 **허용 오차가 틀렸다** — 원장은 `round(..., 2)` 로 담는데
+#        옛 검사는 `1e-6` 으로 견줬다. 걸린 911행 **전부 배율 1.000**(반올림이 유일한
+#        원인)이라 R363 이 *"미분류"* 로 남긴 ⑤ 771 · ④ 140 은 결함이 아니었다.
+#   바르게 적으니 254,329행 **전부 통과**다. 허용 오차는 결과를 보고 늘린 것이 아니라
+#   **저장 정밀도에서 유도**했고(§2-5), 아래 ⓐ 가 랩의 반올림 자리와 대 본다.
+#
+#   ■ 이 절이 **못 보는 것** (R194 의 규율)
+#   다섯은 전부 **행 안**의 정합이다. 라운드 364 의 결함(원장 진입가가 일봉 계열과
+#   축척이 어긋난 16종목)은 행과 **바깥 세계**의 불일치라 못 본다 — 실제로 그 16종목에
+#   대 봐도 위반 0 이다. 그래서 `scripts/entry_scale_audit.py`(R365)가 따로 있어야 하고,
+#   **어느 쪽도 다른 쪽을 대신하지 않는다.** 초록이어도 "오염이 없다"는 뜻이 아니다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§363 원장 자체 정합 — 바르게 적은 불변식 (라운드 368)")
+print("=" * 72)
+import importlib.util as _iu363                                   # noqa: E402
+
+import ledger_view as _lvmod363                                   # noqa: E402
+
+# ── ⓐ 허용 오차가 **고른 값이 아니라 유도한 값**인가 ─────────────────────────
+#   랩이 소수 자리를 바꾸면 이 검사가 먼저 붉어지고, 그때 상수를 같이 옮긴다(R164 경계 락).
+#   ⚠️ `[^)]*` 로 한 번 훑었다가 **0개**를 셌다 — `.get('mae_pct')` 의 닫는 괄호를 못 넘는다.
+#     0 을 '없다'로 읽으면 랩이 반올림을 안 한다는 뜻이 되므로, 줄을 집어 끝에서 자리를 뗀다.
+_lab363 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_labln363 = [_l for _l in _lab363.splitlines() if "'mae_pct': round(" in _l]
+_dp363 = (_re.findall(r',\s*(\d+)\)\s*,?\s*$', _labln363[0].strip())
+          if len(_labln363) == 1 else [])
+check("허용 오차는 원장 저장 정밀도에서 유도한다 (랩의 반올림 자리와 같다)",
+      len(_dp363) == 1 and int(_dp363[0]) == _lvmod363.LEDGER_STORED_DP
+      and abs(_lvmod363.CONSISTENCY_TOL - 0.5 * 10.0 ** -int(_dp363[0])) < 1e-8,
+      f"랩 {_dp363} · 킷 {_lvmod363.LEDGER_STORED_DP} · tol {_lvmod363.CONSISTENCY_TOL:.5f}",
+      scanned=len(_labln363))
+
+# ── ⓑ 규칙이 두 벌이 아닌가 — 옛 스크립트가 그 함수를 부른다 (§4 · R192) ─────
+#   ⚠️ 첫 판은 `'1e-6' not in 원문` 이었는데 **그 스크립트의 독스트링이 1e-6 을 설명한다** —
+#     내가 넣은 설명 때문에 내 검사가 실패했다(R314·R337·§324 와 같은 자리 · 이 세션 세 번째).
+#     **산문이 아니라 코드를 본다** — 주석·문자열 토큰을 떼고 남은 코드에서만 찾는다.
+def _code_only363(_p):
+    # 내장 `open` 을 쓴다 — `io` 는 이 파일 앞쪽에서 임포트되지만, 절만 떼어 돌리는
+    # 사전 점검에서는 그 이름이 없어 절이 '의존'으로 분류되고 **9건 중 1건만 돈다**.
+    # 절은 되도록 자기 힘으로 서게 한다(§6 의 드라이런이 실제로 보게).
+    import tokenize as _tk363
+    _out = []
+    with open(_p, 'rb') as _fh:
+        for _t in _tk363.tokenize(_fh.readline):
+            if _t.type in (_tk363.COMMENT, _tk363.STRING):
+                continue
+            _out.append(_t.string)
+    return ' '.join(_out)
+
+
+_r17cpath363 = _os.path.join(PROJ, 'scripts', 'ledger_consistency_r17c.py')
+_r17c363 = _code_only363(_r17cpath363)
+check("옛 정합 스크립트는 판정을 ledger_view 에 맡긴다 (논리를 베끼지 않는다)",
+      _r17c363.count('consistency_violations') == 1 and '1e-6' not in _r17c363
+      and 'ledger_view' in _r17c363,
+      f"코드 {len(_r17c363)}자 · 부름 {_r17c363.count('consistency_violations')}",
+      scanned=len(_r17c363))
+
+# ── ⓒ **오탐 안 하는가** — 옛 판을 68.6% 붉게 만든 합법적인 행들을 심는다 ────
+_ok363 = [
+    # 갭상승해 진입가 아래로 안 내려간 뒤 목표 도달 → mae > 0 이 옳다 (옛 ① 이 잡던 행)
+    dict(price=100.0, target=104.5, stop=97.0, outcome='TARGET',
+         mfe_pct=4.50, mae_pct=+1.28, close_return_pct=-3.45),
+    # 진입 다음 봉부터 내리 빠져 손절 → mfe < 0 이 옳다 (옛 ① 이 잡던 행)
+    dict(price=100.0, target=104.5, stop=97.0, outcome='STOP',
+         mfe_pct=-0.28, mae_pct=-3.35, close_return_pct=-3.91),
+    # 청산 뒤 반등해 종가가 '청산 봉까지의 최고'보다 높다 → 창이 다르다 (옛 ②③ 이 잡던 행)
+    dict(price=100.0, target=110.0, stop=97.0, outcome='STOP',
+         mfe_pct=1.18, mae_pct=-3.24, close_return_pct=+3.38),
+    # 반올림 경계 — 실제 원장 행(손절폭 6.1120% · 담긴 mae -6.11) (옛 ⑤ 가 771건 잡던 자리)
+    dict(price=5890.0, target=6142.0, stop=5530.0, outcome='STOP',
+         mfe_pct=-1.19, mae_pct=-6.11, close_return_pct=-6.11),
+]
+_ofire363 = [(_i, _lvmod363.consistency_violations(_r)) for _i, _r in enumerate(_ok363)]
+check("합법적인 행을 오탐하지 않는다 — 옛 판이 붉게 만든 네 모양 (심기)",
+      all(not _v for _i, _v in _ofire363),
+      f"잡힌 것: {[_x for _x in _ofire363 if _x[1]]}", scanned=len(_ok363))
+
+# ── ⓓ **잡는가** — 진짜 모순을 심는다. 안 잡으면 아무것도 증명하지 않는다(R194) ──
+_bad363 = [
+    ('① mae>0 인데 STOP', dict(price=100.0, target=104.5, stop=97.0, outcome='STOP',
+                             mfe_pct=2.0, mae_pct=+1.0, close_return_pct=+0.5)),
+    ('② OPEN 인데 종가>최고', dict(price=100.0, target=110.0, stop=90.0, outcome='OPEN',
+                              mfe_pct=2.0, mae_pct=-1.0, close_return_pct=+3.0)),
+    ('③ OPEN 인데 종가<최저', dict(price=100.0, target=110.0, stop=90.0, outcome='OPEN',
+                              mfe_pct=2.0, mae_pct=-1.0, close_return_pct=-2.0)),
+    ('④ TARGET인데 mfe<목표폭', dict(price=100.0, target=110.0, stop=97.0, outcome='TARGET',
+                                mfe_pct=5.0, mae_pct=-1.0, close_return_pct=+5.0)),
+    ('⑤ STOP인데 |mae|<손절폭', dict(price=100.0, target=104.5, stop=97.0, outcome='STOP',
+                                 mfe_pct=-0.5, mae_pct=-2.0, close_return_pct=-2.0)),
+]
+_bfire363 = [(_nm, _nm in _lvmod363.consistency_violations(_r)) for _nm, _r in _bad363]
+check("심은 모순 다섯을 전부 이름까지 맞춰 잡는다 (양방향)",
+      all(_h for _nm, _h in _bfire363),
+      f"못 잡음: {[_n for _n, _h in _bfire363 if not _h]}", scanned=len(_bad363))
+check("칸을 못 읽으면 통과로 세지 않는다 (§3 · 0건이 '없다'인지 '못 봤다'인지 갈린다)",
+      _lvmod363.consistency_violations({}) == ('칸 못 읽음',)
+      and _lvmod363.consistency_violations(
+          dict(price=0.0, mfe_pct=1.0, mae_pct=-1.0, close_return_pct=0.0)) == ('진입가 0',))
+check("그 통과가 허용 오차를 늘려서 얻은 것이 아니다 — 옛 1e-6 으로는 ⑤ 가 붉어졌다",
+      _lvmod363.consistency_violations(
+          dict(price=5890.0, target=6142.0, stop=5530.0, outcome='STOP',
+               mfe_pct=-1.19, mae_pct=-6.11, close_return_pct=-6.11),
+          tol=1e-6) == ('⑤ STOP인데 |mae|<손절폭',))
+
+# ── ⓔ 원장 전량 — 자리는 **생성기 한 곳**에서 얻는다 (손으로 안 적는다 · R282·§64) ──
+_spec363 = _iu363.spec_from_file_location(
+    'rb363', _os.path.join(PROJ, 'scripts', 'refresh_bundle.py'))
+_rb363 = _iu363.module_from_spec(_spec363)
+_spec363.loader.exec_module(_rb363)
+_lp363 = _rb363._bundle_ledger_path()
+if not _lp363 or not _os.path.exists(_lp363):
+    skipped("원장 전량이 자체 정합", f"동봉 원장을 못 찾았다 ({_lp363})")
+else:
+    def _iter363(_p):
+        if _p.endswith('.gz'):
+            import gzip as _g363
+            return _g363.open(_p, 'rt', encoding='utf-8', errors='replace')
+        return open(_p, encoding='utf-8', errors='replace')
+
+    _n363 = 0
+    _v363 = {}
+    with _iter363(_lp363) as _f363:
+        for _ln363 in _f363:
+            _ln363 = _ln363.strip()
+            if not _ln363:
+                continue
+            try:
+                _r363 = _json.loads(_ln363)
+            except Exception:                                     # noqa: BLE001
+                continue
+            _n363 += 1
+            for _k363 in _lvmod363.consistency_violations(_r363):
+                _v363[_k363] = _v363.get(_k363, 0) + 1
+    check("원장 전량이 자체 정합 — 바르게 적은 불변식 위반 0",
+          not _v363 and _n363 > 100000, f"위반 {_v363} · 행 {_n363:,}", scanned=_n363)
+
+# ── ⓕ 행 안의 정합은 라운드 364 의 축척 결함을 **대신하지 않는다** ──────────
+check("행 안의 정합이 축척 감사를 대신하지 않는다 (감사가 따로 있다 · R365)",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'entry_scale_audit.py'))
+      and not _lvmod363.consistency_violations(
+          # 진입가·목표·손절이 **함께** 5배로 어긋난 행 — 행 안에서는 아무 모순이 없다
+          dict(price=500.0, target=522.5, stop=485.0, outcome='TARGET',
+               mfe_pct=4.50, mae_pct=+1.28, close_return_pct=+2.0)))
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

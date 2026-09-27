@@ -528,3 +528,80 @@ def no_target_line(art):
             f"평균 차이 {' · '.join(parts)}. 다만 그쪽이 더 나았던 경우는 {min(better):.0f}%에서 {max(better):.0f}%, "
             f"더 나빴던 경우는 {min(worse):.0f}%에서 {max(worse):.0f}%입니다 — 목표를 지난 뒤 손절선까지 되밀린 비율이 "
             f"{min(back):.0f}%에서 {max(back):.0f}%이기 때문입니다. {tail}.")
+
+
+# ── 라운드 368 — 원장이 **자체 모순**인가 (mfe/mae/close_return) ──────────────────────────
+#   라운드 17c 가 이 물음을 위해 `scripts/ledger_consistency_r17c.py` 를 만들었고, 라운드 363 이
+#   그것을 찾았다 — **저장소 전체에서 부르는 곳 0곳**(R195 '존재는 실행이 아니다' · R284 '배선된 적이
+#   없다' · R297 '읽는 곳 0곳'이 만나는 자리). 돌려 보면 68.6% 가 '위반'이라 그대로는 못 넣었고,
+#   R363 은 *"경계를 오늘 고르면 결과를 보고 고른 문턱이다(§2-5)"* 라며 접었다.
+#
+#   그 68.6% 를 하나씩 가르니 **틀린 것은 원장이 아니라 검사였다.** 셋 다 문턱이 아니라 정의다:
+#
+#   ⓐ ① *"mfe ≥ 0 이고 mae ≤ 0"* 은 **애초에 불변식이 아니다.** 교과서의 MFE/MAE 는 진입점을
+#      포함해 0 에서 시작하지만, 이 엔진의 값은 `prediction_log.grade_prediction` 의
+#      `path = bars[:upto]` — **진입 다음 봉부터의** 최고·최저를 진입가에 견준 것이다. 갭상승해
+#      진입가 아래로 한 번도 안 내려가면 `min(low) > entry` 라 **mae > 0 이 옳다**(실측 21,856행).
+#      바르게 적으면 **조건부**다 — 손절가 < 진입가 < 목표가 이므로 `mae > 0 이면 outcome ≠ STOP` ·
+#      `mfe < 0 이면 outcome ≠ TARGET`. (R237·R239·R359 와 같은 계열 — 이름이 계산보다 넓었다.)
+#   ⓑ ②③ 은 **outcome == 'OPEN' 에서만** 불변식이다. 청산이 있으면 mfe/mae 는 **청산 봉까지**,
+#      `close_return_pct` 는 **20봉 전체**라 두 창이 다르다(`MODEL_VERSIONS.md` 가 이미 적어 둔
+#      사실이고, 그 창 차이가 이 검사가 배선 안 된 까닭일 것이다). OPEN 이면 `upto = len(bars)` 라
+#      창이 같아진다 — 실측 위반 **0 / 9,819**.
+#   ⓒ ④⑤ 는 진짜 불변식인데(청산 봉이 경로에 **들어간다**) **허용 오차가 틀렸다.** 원장은
+#      `calibration_lab` 이 `round(mfe_pct, 2)` 로 담는데 검사는 `1e-6` 으로 견줬다 — 2자리로 담긴
+#      수의 허용 오차는 **마지막 자리의 반**이다. 걸린 911행 전부 배율(최저가÷손절가) **1.000**,
+#      즉 반올림이 유일한 원인이다. R363 이 *"미분류"* 로 남긴 ⑤ 771 · ④ 140 은 **결함이 아니었다.**
+#
+#   바르게 적으면 **254,329행 전부 통과**다(2026-09-27). 허용 오차는 결과를 보고 늘린 것이 아니라
+#   **저장 정밀도에서 유도**했다(§2-5) — 아래 상수가 그 자리이고, 회귀가 랩의 반올림 자리와 대 본다.
+#
+#   ⚠️ **이 다섯은 전부 '행 안'의 정합이다.** 라운드 364 의 결함(원장 진입가가 **일봉 계열**과
+#   축척이 어긋난 16종목)은 행과 **바깥 세계**의 불일치라 어떤 내부 불변식도 못 본다 — 실제로
+#   바르게 적은 다섯을 그 16종목에 대 봐도 위반 0 이다. 그래서 `scripts/entry_scale_audit.py`(R365)가
+#   따로 있어야 한다. **둘 중 어느 쪽도 다른 쪽을 대신하지 않는다.**
+#: 원장이 담는 소수 자리 — `scripts/calibration_lab.py` 의 `round(..., 2)`. 회귀가 둘을 대 본다.
+LEDGER_STORED_DP = 2
+#: 허용 오차 = 마지막 자리의 반 + float 여유. **고른 값이 아니라 저장 정밀도에서 유도한 값.**
+CONSISTENCY_TOL = 0.5 * 10.0 ** (-LEDGER_STORED_DP) + 1e-9
+
+
+def consistency_violations(row, tol=CONSISTENCY_TOL):
+    """원장 한 행이 자체 모순인가. **어긴 불변식 이름들**을 tuple 로 돌린다(없으면 빈 tuple).
+
+    칸을 못 읽으면 `('칸 못 읽음',)` 이다 — **통과로 세지 않는다**(§3 · 0건이 '없다'인지
+    '못 봤다'인지 갈려야 한다 · R194). 순수 함수 — 파일도 네트워크도 안 읽는다.
+    """
+    try:
+        p = float(row['price'])
+        mfe = float(row['mfe_pct'])
+        mae = float(row['mae_pct'])
+        cl = float(row['close_return_pct'])
+    except (KeyError, TypeError, ValueError):
+        return ('칸 못 읽음',)
+    if not p:
+        return ('진입가 0',)
+    oc = row.get('outcome')
+    out = []
+    # ⓐ ① 은 조건부로만 불변식이다 (위 주석)
+    if mae > tol and oc == 'STOP':
+        out.append('① mae>0 인데 STOP')
+    if mfe < -tol and oc == 'TARGET':
+        out.append('① mfe<0 인데 TARGET')
+    # ⓑ ②③ 은 OPEN 에서만 두 창이 같다
+    if oc == 'OPEN':
+        if cl > mfe + tol:
+            out.append('② OPEN 인데 종가>최고')
+        if cl < mae - tol:
+            out.append('③ OPEN 인데 종가<최저')
+    # ⓒ ④⑤ — 청산 봉이 경로에 들어가므로 반드시 성립한다
+    try:
+        if oc == 'TARGET' and row.get('target') is not None:
+            if mfe < (float(row['target']) / p - 1.0) * 100.0 - tol:
+                out.append('④ TARGET인데 mfe<목표폭')
+        if oc == 'STOP' and row.get('stop') is not None:
+            if abs(mae) < (1.0 - float(row['stop']) / p) * 100.0 - tol:
+                out.append('⑤ STOP인데 |mae|<손절폭')
+    except (TypeError, ValueError, ZeroDivisionError):
+        out.append('목표·손절 못 읽음')
+    return tuple(out)

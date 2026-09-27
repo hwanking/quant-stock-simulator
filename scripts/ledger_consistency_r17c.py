@@ -10,15 +10,32 @@
   (가) 내 재시뮬 함수가 틀렸다
   (나) 원장의 mfe/mae 와 close_return 이 **서로 다른 창**을 재고 있다
 
-어느 쪽인지 가른다. (나)라면 라운드 17 의 결과 전체가 무효다 —
-OPEN 버킷이 총수익의 대부분을 만들고 있었기 때문이다.
+답은 **(나)** 였고 `MODEL_VERSIONS.md` 가 그 사실을 적었다 — mfe/mae 는 **청산 봉까지**,
+close_return_pct 는 **20봉 전체**다.
 
-불변식 (성립해야 하는 것):
-  ① mfe ≥ 0 이고 mae ≤ 0
-  ② close_return ≤ mfe          (최고점보다 높게 끝날 수 없다)
-  ③ close_return ≥ mae          (최저점보다 낮게 끝날 수 없다)
-  ④ outcome=TARGET 이면 mfe ≥ 목표폭
-  ⑤ outcome=STOP   이면 |mae| ≥ 손절폭
+────────────────────────────────────────────────────────────────────────
+■ 라운드 368 (2026-09-27) — 이 파일의 불변식 다섯 중 셋이 틀리게 적혀 있었다
+
+라운드 363 이 이 스크립트를 찾았다 — **저장소 전체에서 부르는 곳 0곳**이었고
+돌리면 전부 통과 31.4%(68.6% '위반')였다. 그래서 회귀에 배선할 수 없었다.
+라운드 368 이 그 68.6% 를 갈랐더니 **틀린 것은 원장이 아니라 이 검사였다**:
+
+  ① *"mfe ≥ 0 이고 mae ≤ 0"* — **애초에 불변식이 아니다.** 이 엔진의 mfe/mae 는
+     진입 **다음 봉부터의** 최고·최저를 진입가에 견준 값이라(`path = bars[:upto]`)
+     갭상승해 진입가 아래로 안 내려가면 mae > 0 이 **옳다**. 조건부로만 참이다.
+  ②③ — **outcome == 'OPEN' 에서만** 불변식이다(그때만 두 창이 같아진다).
+  ④⑤ — 진짜 불변식인데 **허용 오차가 틀렸다.** 원장은 `round(..., 2)` 로 담는데
+     이 검사는 `1e-6` 으로 견줬다. 걸린 911행 전부 배율 1.000 — 반올림이다.
+
+바르게 적은 다섯을 254,329행에 대면 **위반 0**이다. 판정 규칙은 이제
+`ledger_view.consistency_violations` **한 곳**에 있고(§4 · R120e) 이 스크립트와
+회귀가 **같은 함수를 부른다** — 여기에 논리를 다시 적으면 두 벌이 된다(R192).
+
+⚠️ 이 다섯은 전부 **행 안**의 정합이다. 라운드 364 의 결함(원장 진입가가 일봉
+계열과 축척이 어긋난 16종목)은 행과 **바깥 세계**의 불일치라 못 본다 —
+`scripts/entry_scale_audit.py`(R365)가 따로 있어야 하는 까닭이다.
+
+⚠️ 원장을 리스트로 담지 않는다(라운드 282 — 통째로 열면 GB 단위다). 줄 단위로 읽는다.
 """
 import io
 import json
@@ -27,69 +44,59 @@ import sys
 from collections import Counter
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE)
 LED = os.path.join(BASE, '.portfolio', 'virtual_graded.jsonl')
+
+import ledger_view as lv                                        # noqa: E402
 
 
 def main():
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    rows = []
-    with open(LED, encoding='utf-8') as f:
-        for ln in f:
-            ln = ln.strip()
-            if ln:
-                try:
-                    rows.append(json.loads(ln))
-                except Exception:
-                    pass
-    print(f'원장 {len(rows):,}건\n')
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:                                           # noqa: BLE001
+        pass
 
     bad = Counter()
     examples = {}
-    n_ok = 0
-    for r in rows:
-        mfe, mae = r.get('mfe_pct'), r.get('mae_pct')
-        cl, p = r.get('close_return_pct'), r.get('price')
-        t, s, o = r.get('target'), r.get('stop'), r.get('outcome')
-        if mfe is None or mae is None or cl is None:
-            bad['필드 없음'] += 1
-            continue
-        mfe, mae, cl = float(mfe), float(mae), float(cl)
-        hit = False
-        if mfe < -1e-9:
-            bad['① mfe < 0'] += 1
-            hit = True
-        if mae > 1e-9:
-            bad['① mae > 0'] += 1
-            hit = True
-        if cl > mfe + 1e-6:
-            bad['② 종가 > 최고점'] += 1
-            examples.setdefault('② 종가 > 최고점', r)
-            hit = True
-        if cl < mae - 1e-6:
-            bad['③ 종가 < 최저점'] += 1
-            examples.setdefault('③ 종가 < 최저점', r)
-            hit = True
-        if p and t and o == 'TARGET':
-            tp = (t / p - 1) * 100
-            if mfe < tp - 1e-6:
-                bad['④ TARGET인데 mfe < 목표폭'] += 1
-                examples.setdefault('④ TARGET인데 mfe < 목표폭', r)
-                hit = True
-        if p and s and o == 'STOP':
-            sp = (1 - s / p) * 100
-            if abs(mae) < sp - 1e-6:
-                bad['⑤ STOP인데 |mae| < 손절폭'] += 1
-                examples.setdefault('⑤ STOP인데 |mae| < 손절폭', r)
-                hit = True
-        if not hit:
-            n_ok += 1
+    n = n_ok = 0
+    by_oc = Counter()
+    opens = []
+    horizon = Counter()
+    tb = []
 
-    print('■ 불변식 위반')
+    with io.open(LED, encoding='utf-8', errors='replace') as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:                                   # noqa: BLE001
+                continue
+            n += 1
+            by_oc[r.get('outcome')] += 1
+            horizon[r.get('horizon_days')] += 1
+            if r.get('touched_bar') is not None:
+                tb.append(int(r['touched_bar']))
+            if r.get('outcome') == 'OPEN' and r.get('close_return_pct') is not None:
+                opens.append(float(r['close_return_pct']))
+
+            v = lv.consistency_violations(r)          # ← 규칙은 한 곳에서 (§4)
+            if not v:
+                n_ok += 1
+            for k in v:
+                bad[k] += 1
+                examples.setdefault(k, r)
+
+    print(f'원장 {n:,}건 · 허용 오차 {lv.CONSISTENCY_TOL:.4f}%p '
+          f'(저장 {lv.LEDGER_STORED_DP}자리에서 유도)\n')
+
+    print('■ 불변식 위반 (라운드 368 이 바르게 적은 판)')
     if not bad:
         print('  없음 — 원장은 자체 정합이다')
     for k, v in bad.most_common():
-        print(f'  {k:28s} {v:>7,}건 ({v / len(rows) * 100:.1f}%)')
-    print(f'  전부 통과 {n_ok:,}건 ({n_ok / len(rows) * 100:.1f}%)')
+        print(f'  {k:28s} {v:>7,}건 ({v / max(n, 1) * 100:.1f}%)')
+    print(f'  전부 통과 {n_ok:,}건 ({n_ok / max(n, 1) * 100:.1f}%)')
 
     for k, r in examples.items():
         print(f'\n■ 예시 — {k}')
@@ -98,25 +105,23 @@ def main():
                     'touched_bar', 'horizon_days'):
             print(f'    {fld:20s} = {r.get(fld)}')
 
-    # OPEN 사례만 따로 — 여기가 문제였다
-    print('\n■ OPEN(현행 기준 미도달) 사례의 종가수익 분포')
-    op = [float(r['close_return_pct']) for r in rows
-          if r.get('outcome') == 'OPEN' and r.get('close_return_pct') is not None]
-    if op:
-        op.sort()
-        print(f'  n={len(op):,}  최소 {op[0]:+.1f}%  '
-              f'25% {op[len(op) // 4]:+.1f}%  중앙 {op[len(op) // 2]:+.1f}%  '
-              f'75% {op[len(op) * 3 // 4]:+.1f}%  최대 {op[-1]:+.1f}%')
-        print(f'  평균 {sum(op) / len(op):+.2f}%')
+    print('\n■ outcome 분포 — '
+          + ' · '.join(f'{k} {v:,}' for k, v in by_oc.most_common()))
 
-    # 현행 목표·손절 폭과 mfe/mae 의 관계 — horizon 이 같은 창인가
+    # OPEN 사례만 따로 — 라운드 17b 가 여기서 걸렸다 (그리고 그 값은 옳았다)
+    print('\n■ OPEN(현행 기준 미도달) 사례의 종가수익 분포')
+    if opens:
+        opens.sort()
+        print(f'  n={len(opens):,}  최소 {opens[0]:+.1f}%  '
+              f'25% {opens[len(opens) // 4]:+.1f}%  중앙 {opens[len(opens) // 2]:+.1f}%  '
+              f'75% {opens[len(opens) * 3 // 4]:+.1f}%  최대 {opens[-1]:+.1f}%')
+        print(f'  평균 {sum(opens) / len(opens):+.2f}%')
+
     print('\n■ horizon_days 분포 (mfe/mae/close 가 같은 창을 보는지)')
-    print('  ' + ' · '.join(f'{k}일={v:,}' for k, v in
-                            Counter(r.get('horizon_days') for r in rows).most_common()))
+    print('  ' + ' · '.join(f'{k}일={v:,}' for k, v in horizon.most_common()))
     print('\n■ touched_bar 분포 요약')
-    tb = [r.get('touched_bar') for r in rows if r.get('touched_bar') is not None]
     if tb:
-        tb = sorted(int(x) for x in tb)
+        tb.sort()
         print(f'  n={len(tb):,}  중앙 {tb[len(tb) // 2]}봉  최대 {tb[-1]}봉')
 
 
