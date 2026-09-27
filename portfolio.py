@@ -2407,6 +2407,62 @@ def mark_sold(items, code):
     return out, old
 
 
+#: 라운드 370 — 계산 결과와 **같이** 보여 줄 가정 둘(R367 이 체결 가정에 속을 뻔한 자리).
+ADD_ON_ASSUMES = ('손절선 가격에 그대로 팔린다고 가정했습니다 — 갭이 나거나 팔리지 않으면 더 잃습니다',
+                  '거래비용은 빼지 않았습니다')
+
+
+def add_on_risk(paid, qty, px, stop=None, add_qty=0, add_px=None):
+    """추가매수 **전후**의 평단·평가손익·위험 (라운드 370 · 순수 함수 · 문턱 없음).
+
+    사용자가 붙인 검토문: *"평단은 내려가도 앞으로의 위험은 커진다 — 추가매수 뒤 총위험을
+    다시 계산해 보여 줘야 한다."* 라운드 357 도 *"지금 화면에는 거래 단위 손실예산이라는
+    개념 자체가 없다 · 계산기가 먼저다"* 라고 적어 두었다. 이 함수는 사용자가 정한 추가
+    수량의 **결과만** 셈한다 — 좋다·나쁘다를 가르는 수는 하나도 없다(§2). 추가매수를 해도
+    되는지는 여전히 중앙 판정(`ui_kit.holder_kind` · `avg_down_ok`) 한 곳이 정한다(§4).
+
+    반환 dict — before/after 각각:
+      qty · avg(평단) · cost(매입금액) · value(현재가 평가) · pnl(평가손익)
+      · loss_at_stop(손절선에 다 팔면 총손익) · risk_to_stop(현재가에서 손절선까지 더 잃을 금액)
+    그리고 add_qty · add_px · stop · stop_breached · assumes.
+
+    지어내지 않는다(§3):
+      · 입력을 못 읽으면(None·NaN·음수·0·소수 주식 수) **None** — 자리를 채우지 않는다
+      · 손절선이 없으면 손절 칸 둘 다 None
+      · 손절선이 이미 현재가 **이상**이면(선을 넘었다) '앞으로 더 잃을 금액'은 정의가 안 된다 —
+        음수를 만들지 않고 None 과 `stop_breached=True` 를 돌려준다
+    평균 매수가는 보유 판단에만 쓴다(§9) — 이 계산이 바로 그 보유 판단이다.
+    """
+    def _num(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f == f else None          # NaN — 편집기의 빈 칸(R321)
+
+    paid, px, stop = _num(paid), _num(px), _num(stop)
+    q0 = _num(qty)
+    dq = 0.0 if add_qty in (None, '') else _num(add_qty)
+    apx = px if add_px in (None, '') else _num(add_px)
+    if None in (paid, px, q0, dq, apx) or paid <= 0 or px <= 0 or q0 <= 0:
+        return None
+    if dq < 0 or apx <= 0 or q0 != int(q0) or dq != int(dq):
+        return None
+    q0, dq = int(q0), int(dq)
+    has_stop = stop is not None and stop > 0
+    breached = has_stop and stop >= px
+
+    def _side(q, cost):
+        d = dict(qty=q, avg=cost / q, cost=cost, value=q * px, pnl=q * px - cost)
+        d['loss_at_stop'] = (q * stop - cost) if has_stop else None
+        d['risk_to_stop'] = (q * (px - stop)) if (has_stop and not breached) else None
+        return d
+
+    return dict(before=_side(q0, paid * q0), after=_side(q0 + dq, paid * q0 + apx * dq),
+                add_qty=dq, add_px=apx, stop=stop if has_stop else None,
+                stop_breached=breached, assumes=ADD_ON_ASSUMES)
+
+
 def save_watchlist(items, path=WATCHLIST_FILE):
     """items: [{'code': '028670', 'name': '팬오션',
                 'target_buy': 4200, 'paid': 4500, 'memo': '...'}, ...]

@@ -11303,6 +11303,73 @@ if user_entry_price > 0 and user_quantity > 0:
         {_log_html224}{_chk_wrap224}
     </div>
     """, unsafe_allow_html=True)
+
+    # ── 라운드 370 — 추가매수하면 위험이 얼마나 느나 (계산이지 판정이 아니다) ─────────
+    # 검토문: *"평단은 내려가도 앞으로의 위험은 커진다 — 추가매수 뒤 총위험을 보여 줘야 한다."*
+    # 위 주석의 ④(평단을 목표가로 낮추는 **주수**를 셈한 옛 블록)와 다르다 — 그것은 물타기를
+    # 돕는 셈이었고, 이것은 사용자가 정한 수량의 **결과**(평단·총손실·앞으로의 위험)를 보일
+    # 뿐이다. 규칙은 `portfolio.add_on_risk` 한 곳(§4) · 문턱 없음(§2) · 파일에 안 쓴다 ·
+    # 판정(추가매수 가능 여부)은 위 '물타기 판정'이 정한다. 조각으로 감싸 입력마다 앱 전체가
+    # 다시 돌지 않게 한다(라운드 329).
+    _stop370 = _row224.get('snap_hold_stop')
+
+    @st.fragment
+    def _add_on_calc370():
+        with st.expander("추가매수하면 위험이 얼마나 느나 — 계산이지 판정이 아닙니다", expanded=False):
+            _c1, _c2 = st.columns(2)
+            _dq370 = _c1.number_input("추가할 수량 (주)", min_value=0, value=0, step=1,
+                                      key=f"addon_qty_{target_ticker}")
+            _apx370 = _c2.number_input("추가 매수 가격 (원)", min_value=0.0,
+                                       value=float(realtime_price or 0), step=1.0,
+                                       key=f"addon_px_{target_ticker}")
+            if not _dq370:
+                st.caption("추가할 수량을 넣으면 전후를 나란히 보여 드립니다. 추가매수를 해도 되는지는 "
+                           "위의 '물타기 판정'이 정합니다.")
+                return
+            _r370 = portfolio.add_on_risk(user_entry_price, user_quantity, realtime_price,
+                                          _stop370, _dq370, _apx370)
+            if not _r370:
+                st.caption("입력을 읽지 못해 계산하지 않았습니다 — 수량은 0 이상의 정수, 가격은 0 보다 커야 합니다.")
+                return
+            _b, _a = _r370['before'], _r370['after']
+
+            def _w(v):
+                return '—' if v is None else f"{v:+,.0f} 원"
+
+            _rows = [("보유 수량", f"{_b['qty']:,} 주", f"{_a['qty']:,} 주"),
+                     ("평균 매수가", f"{_b['avg']:,.0f} 원", f"{_a['avg']:,.0f} 원"),
+                     ("매입 금액", f"{_b['cost']:,.0f} 원", f"{_a['cost']:,.0f} 원"),
+                     ("현재가 기준 평가손익", _w(_b['pnl']), _w(_a['pnl'])),
+                     ("손절선에 다 팔면 총손익", _w(_b['loss_at_stop']), _w(_a['loss_at_stop'])),
+                     ("현재가에서 손절선까지 더 잃을 금액",
+                      _w(-_b['risk_to_stop'] if _b['risk_to_stop'] is not None else None),
+                      _w(-_a['risk_to_stop'] if _a['risk_to_stop'] is not None else None))]
+            _tr = "".join(
+                f"<tr><td style='padding:6px 10px; color:{_TOK['tx2']};'>{_uk._esc(k)}</td>"
+                f"<td style='padding:6px 10px; text-align:right; color:{_TOK['tx1']};'>{_uk._esc(x)}</td>"
+                f"<td style='padding:6px 10px; text-align:right; color:{_TOK['tx1']}; font-weight:700;'>"
+                f"{_uk._esc(y)}</td></tr>" for k, x, y in _rows)
+            st.markdown(
+                f"<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+                f"<tr><th style='text-align:left; padding:6px 10px; color:{_TOK['tx3']};'></th>"
+                f"<th style='text-align:right; padding:6px 10px; color:{_TOK['tx3']};'>추가 전</th>"
+                f"<th style='text-align:right; padding:6px 10px; color:{_TOK['tx3']};'>"
+                f"{_r370['add_qty']:,}주 · {_r370['add_px']:,.0f}원 추가 후</th></tr>{_tr}</table>",
+                unsafe_allow_html=True)
+            _notes = []
+            if _r370['stop'] is None:
+                _notes.append("보유 계획의 손절선이 없어 손절 두 줄은 계산하지 않았습니다.")
+            else:
+                _notes.append(f"손절선은 보유 계획의 {_r370['stop']:,.0f}원을 썼습니다.")
+            if _r370['stop_breached']:
+                _notes.append("현재가가 이미 손절선 아래라 '더 잃을 금액'은 계산하지 않았습니다 — "
+                              "계획대로면 파는 자리입니다.")
+            _notes.extend(_r370['assumes'])
+            _notes.append("평단이 내려가도 이미 난 손실은 그대로이고, 앞으로 걸리는 금액은 추가한 만큼 "
+                          "커집니다. 추가매수를 해도 되는지는 위의 '물타기 판정'이 정합니다.")
+            st.caption(_md_safe(" · ".join(_notes)))
+
+    _add_on_calc370()
 # 세부 점수 — v2 3단계 위계: 큰 숫자 카드 5장 대신 작은 수평 막대 (종합점수는
 # 위 배너 한 곳뿐이며, 여기는 관찰용 세부 지표다)
 st.markdown('<div id="nav-scores"></div>', unsafe_allow_html=True)

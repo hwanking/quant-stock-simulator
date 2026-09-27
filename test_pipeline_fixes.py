@@ -28609,6 +28609,84 @@ check("§364 심기 — 규칙집과 같은 표본은 통과시킨다 (오탐 �
       _n364(_reason_text364(_pl_ok364, '추세 역행 매수 제한')) == _rbn364)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §365 — 추가매수 전후의 위험 (라운드 370 · 계산이지 판정이 아니다)
+#
+#   검토문의 예시(10,000원 100주에 8,500원 100주 추가 · 손절 8,000)를 **값으로** 심는다:
+#   평단 9,250 · 평가손실 −150,000 그대로 · 손절 시 총손익 −200,000 → −250,000 ·
+#   현재가에서 손절까지 50,000 → 100,000. 문턱이 하나도 없는 셈이라 §2 에 안 걸린다.
+#   ⚠️ 옛 블록(평단을 목표가로 낮추는 **주수**)과 다르다 — 그것은 물타기를 돕는 셈이었다.
+#   ⚠️ 가정(손절선 가격에 체결 · 비용 제외)을 결과와 **같이** 낸다 — R367 이 그 가정에 속을
+#     뻔했다. 화면은 가정 문장을 `portfolio.ADD_ON_ASSUMES` 한 곳에서 읽는다(§4).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§365 추가매수 전후의 위험 — 계산이지 판정이 아니다 (라운드 370)")
+print("=" * 72)
+import portfolio as _pf365                                         # noqa: E402
+import ast as _ast365                                              # noqa: E402
+
+_r365 = _pf365.add_on_risk(10000, 100, 8500, 8000, 100)
+check("검토문의 예시 — 평단 10,000 → 9,250",
+      _r365 and _r365['before']['avg'] == 10000 and _r365['after']['avg'] == 9250)
+check("검토문의 예시 — 평단이 내려가도 지금의 평가손실은 그대로 (−150,000)",
+      _r365 and _r365['before']['pnl'] == _r365['after']['pnl'] == -150000)
+check("검토문의 예시 — 손절 시 총손익 −200,000 → −250,000 · 앞으로의 위험 50,000 → 100,000",
+      _r365 and _r365['before']['loss_at_stop'] == -200000
+      and _r365['after']['loss_at_stop'] == -250000
+      and _r365['before']['risk_to_stop'] == 50000 and _r365['after']['risk_to_stop'] == 100000)
+_r0_365 = _pf365.add_on_risk(10000, 100, 8500, 8000, 0)
+check("추가 0 이면 전후가 같다", _r0_365 and _r0_365['before'] == _r0_365['after'])
+_rb365 = _pf365.add_on_risk(10000, 100, 7900, 8000, 50)
+check("손절선을 이미 넘었으면 '앞으로 더 잃을 금액'은 None — 음수를 안 만든다 (§3)",
+      _rb365 and _rb365['stop_breached'] and _rb365['after']['risk_to_stop'] is None
+      and _rb365['before']['risk_to_stop'] is None)
+_bad365 = [_pf365.add_on_risk(None, 100, 8500, 8000, 10),
+           _pf365.add_on_risk(10000, 0, 8500),
+           _pf365.add_on_risk(10000, 100, 8500, 8000, -1),
+           _pf365.add_on_risk(10000, 100, 8500, 8000, float('nan')),
+           _pf365.add_on_risk(10000, 100.5, 8500),
+           _pf365.add_on_risk(10000, 100, 0)]
+check("못 읽는 입력은 None — 자리를 채우지 않는다 (§3)",
+      all(x is None for x in _bad365), f"{_bad365}", scanned=len(_bad365))
+_rn365 = _pf365.add_on_risk(10000, 100, 8500, None, 100)
+check("손절선이 없으면 손절 칸 둘 다 None — 지어내지 않는다",
+      _rn365 and _rn365['after']['loss_at_stop'] is None
+      and _rn365['after']['risk_to_stop'] is None and _rn365['after']['avg'] == 9250)
+check("가정 둘(손절선 가격 체결 · 비용 제외)을 결과와 같이 돌려준다",
+      _r365 and _r365['assumes'] == _pf365.ADD_ON_ASSUMES
+      and any('손절선 가격' in a for a in _pf365.ADD_ON_ASSUMES)
+      and any('비용' in a for a in _pf365.ADD_ON_ASSUMES))
+
+# ── 화면 — 계산 한 곳을 부르고 · 파일에 안 쓰고 · 판정을 대신하지 않는다 ─────────
+_wa365 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_fn365 = None
+for _n in _ast365.walk(_ast365.parse(_wa365)):
+    if isinstance(_n, _ast365.FunctionDef) and _n.name == '_add_on_calc370':
+        _fn365 = _n
+        break
+_src365 = _ast365.get_source_segment(_wa365, _fn365) if _fn365 else ''
+_calls365 = [(_c.func.attr if isinstance(_c.func, _ast365.Attribute) else
+              getattr(_c.func, 'id', '')) for _c in _ast365.walk(_fn365)
+             if isinstance(_c, _ast365.Call)] if _fn365 else []
+_strs365 = ''.join(c.value for c in _ast365.walk(_fn365)
+                   if isinstance(c, _ast365.Constant) and isinstance(c.value, str)) if _fn365 else ''
+check("화면 계산기를 찾았다 (0자면 미측정)", bool(_src365), f"{len(_src365)}자",
+      scanned=len(_src365))
+check("화면은 계산을 portfolio.add_on_risk 한 곳에서 받는다 (§4)",
+      _calls365.count('add_on_risk') == 1, f"{_calls365.count('add_on_risk')}회")
+check("화면 계산기는 파일에 쓰지 않는다 — 보유 기록을 바꾸지 않는다",
+      not any(c in _calls365 for c in ('save_watchlist', 'save_positions', 'open', 'write')),
+      f"{sorted(set(_calls365))}", scanned=len(_calls365))
+check("화면이 가정 문장을 한 곳에서 읽는다 — 다시 적지 않는다",
+      "_r370['assumes']" in _src365 and '손절선 가격에 그대로' not in _strs365)
+check("화면이 '판정이 아니다' 를 말하고 판정 자리를 가리킨다 (§4)",
+      '판정이 아닙니다' in _strs365 and "물타기 판정" in _strs365)
+check("조각으로 감싸 입력마다 앱 전체가 다시 돌지 않는다 (라운드 329)",
+      _fn365 is not None and any(
+          (isinstance(d, _ast365.Attribute) and d.attr == 'fragment')
+          for d in _fn365.decorator_list))
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
