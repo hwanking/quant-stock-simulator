@@ -28528,6 +28528,87 @@ check("행 안의 정합이 축척 감사를 대신하지 않는다 (감사가 �
                mfe_pct=4.50, mae_pct=+1.28, close_return_pct=+2.0)))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §364 — 상한 사유의 근거 표본 · 재현되지 않는다고 적는다 (라운드 369)
+#
+#   월봉 10선 아래(64)·52주 저점권(64) 두 상한은 사유 문장에 소표본 실측을 근거로 적는다
+#   (−8.7%p · 1,073건 / −5.5%p · 327건). 같은 양을 같은 모양으로 원장 251,551행에서 재니
+#   +0.89%p · +0.36%p — **부호가 반대**다(2026-09-27). 상한은 **안 바꿨다**(게이트 변경 ·
+#   사전등록 없음 · 동결). 화면은 ① 그 수가 나온 **표본**을 붙이고(R344) ② 재현되지 않는다는
+#   사실을 **수 없이** 적는다(손으로 적은 새 수는 원장이 자라면 낡는다).
+#   ⚠️ 표본 수는 손으로 적지 않고 **규칙집의 근거 줄에서 유도해** 화면과 대 본다.
+#   ⚠️ 문자열은 AST 로 읽는다 — 주석은 AST 에 없으므로 고친 이유를 적은 주석이 검사에
+#     걸리지 않는다(R314·R368 이 한 시간에 두 번 당한 자리).
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§364 상한 사유의 근거 표본 — 재현되지 않는다고 적는다 (라운드 369)")
+print("=" * 72)
+import ast as _ast364                                              # noqa: E402
+
+
+def _reason_text364(src, needle):
+    """src 에서 needle 을 담은 호출의 문자열 조각을 이어 돌려준다 — 가장 짧은 것(그 문장)."""
+    _hits = []
+    for _n in _ast364.walk(_ast364.parse(src)):
+        if isinstance(_n, _ast364.Call):
+            _t = ''.join(c.value for c in _ast364.walk(_n)
+                         if isinstance(c, _ast364.Constant) and isinstance(c.value, str))
+            if needle in _t:
+                _hits.append(_t)
+    return min(_hits, key=len) if _hits else None
+
+
+def _n364(t):
+    _m = _re.search(r'리플레이\s*([\d,]+)건', t or '')
+    return _m.group(1) if _m else None
+
+
+def _rb_n364(rb, key):
+    """규칙집에서 key 줄 바로 위(8줄 안)의 '리플레이 N건' 근거 줄을 찾는다."""
+    _ls = rb.splitlines()
+    for _i, _l in enumerate(_ls):
+        if _l.strip().startswith(key):
+            for _j in range(_i - 1, max(-1, _i - 8), -1):
+                _m = _re.search(r'리플레이\s*([\d,]+)건', _ls[_j])
+                if _m:
+                    return _m.group(1)
+            return None
+    return None
+
+
+_qi364 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_rb364 = _read148(_os.path.join(PROJ, 'analysis_rulebook_ko.txt'))
+_m10_364 = _reason_text364(_qi364, '추세 역행 매수 제한')
+_rng_364 = _reason_text364(_qi364, '저점권 낙폭 추격 제한')
+check("월봉 10선 아래 상한의 사유가 근거 표본을 적고, 규칙집의 표본과 같다 (R344)",
+      _n364(_m10_364) is not None
+      and _n364(_m10_364) == _rb_n364(_rb364, 'm10_below_cap'),
+      f"화면 {_n364(_m10_364)} · 규칙집 {_rb_n364(_rb364, 'm10_below_cap')}",
+      scanned=int(_m10_364 is not None))
+check("52주 저점권 상한의 사유가 근거 표본을 적고, 규칙집의 표본과 같다 (R344)",
+      _n364(_rng_364) is not None
+      and _n364(_rng_364) == _rb_n364(_rb364, 'range_low_pct'),
+      f"화면 {_n364(_rng_364)} · 규칙집 {_rb_n364(_rb364, 'range_low_pct')}",
+      scanned=int(_rng_364 is not None))
+check("두 사유가 재현되지 않는다는 사실을 적는다 — 새 수는 안 적는다 (손으로 적은 수는 낡는다)",
+      all(_t and '재현되지 않아' in _t and '251,551' not in _t and '0.89' not in _t
+          and '0.36' not in _t for _t in (_m10_364, _rng_364)),
+      scanned=sum(1 for _t in (_m10_364, _rng_364) if _t))
+check("규칙집이 두 근거 줄 아래에 재측정 결과를 적어 두었다 (조용히 지워지지 않는다)",
+      _rb364.count('재측정(라운드 369)') == 2, f"{_rb364.count('재측정(라운드 369)')}곳")
+# ── 심기 — 표본이 없거나 규칙집과 다르면 잡는가 (양방향 · R194) ─────────
+_pl_no364 = 'x.append(f"월봉 10선 아래 — 추세 역행 매수 제한 (리플레이 실측 −8.7%p)")\n'
+_pl_bad364 = 'x.append(f"월봉 10선 아래 — 추세 역행 매수 제한 (리플레이 999건 실측)")\n'
+_pl_ok364 = 'x.append(f"월봉 10선 아래 — 추세 역행 매수 제한 (리플레이 1,073건 실측)")\n'
+_rbn364 = _rb_n364(_rb364, 'm10_below_cap')
+check("§364 심기 — 표본이 없는 사유를 잡는다",
+      _n364(_reason_text364(_pl_no364, '추세 역행 매수 제한')) is None)
+check("§364 심기 — 규칙집과 다른 표본을 잡는다",
+      _n364(_reason_text364(_pl_bad364, '추세 역행 매수 제한')) != _rbn364)
+check("§364 심기 — 규칙집과 같은 표본은 통과시킨다 (오탐 없음)",
+      _n364(_reason_text364(_pl_ok364, '추세 역행 매수 제한')) == _rbn364)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
