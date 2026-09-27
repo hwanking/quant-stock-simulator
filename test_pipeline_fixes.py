@@ -16516,7 +16516,11 @@ check("관심종목 밑에 '내 포트폴리오 견해'가 있다",
 #   (`watch_action(_row224, …)` · 관심종목 표와 같은 답을 내려고 · §4 는 '두 정의'를
 #   막지 '한 정의를 두 화면에서 부르는 것'을 막지 않는다). 견해 쪽 재계산 금지는
 #   그 호출을 뺀 수로 잰다.
-_wa_calls224 = _wa204.count('_uk.watch_action(') - _wa204.count('_uk.watch_action(_row224')
+#   라운드 371 — 머리 문장 옆 한 줄이 **같은 함수·같은 행**(`watch_action(_wrow371, …)` · 관심종목
+#   행 그대로)을 한 번 더 부른다. R224 와 같은 성질(한 정의를 두 화면에서 부르는 것)이라 그 호출도
+#   뺀다 — §366 이 그 호출이 새 판정을 만들지 않는지를 따로 본다.
+_wa_calls224 = (_wa204.count('_uk.watch_action(') - _wa204.count('_uk.watch_action(_row224')
+                - _wa204.count('_uk.watch_action(_wrow371'))
 check("견해가 표의 판단을 **다시 계산하지 않는다** (_wl_acts 재사용)",
       '_wl_acts' in _wa204 and _wa_calls224 == 1,
       f"watch_action 호출 {_wa_calls224}회(종목 상세 R224 호출 제외) — "
@@ -28685,6 +28689,90 @@ check("조각으로 감싸 입력마다 앱 전체가 다시 돌지 않는다 (�
       _fn365 is not None and any(
           (isinstance(d, _ast365.Attribute) and d.attr == 'fragment')
           for d in _fn365.decorator_list))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §366 — 표의 '매도'와 상세의 '보유 유지' 사이 (라운드 371)
+#
+#   사용자: *"관심종목에서는 팔라고 하고 밑에 조건이 갖춰지면 후보라고 하는데 뭐가 어떻게
+#   된거야?"* 세어 보니 ① 표는 옛 계획(손절선)으로 '매도'를 그렸고 같은 실행 뒤쪽에서 종목을
+#   열자 규칙(닿으면 다시 잼 · R224)이 계획을 오늘 값으로 다시 재 '보유 유지'가 됐다(표 → 중앙
+#   판정 → 다시 잼 순서) ② 그 사이를 잇는 이력 줄은 표가 34자로 잘라 "→ 정리 검토 · 기준 다시
+#   잼"이 툴팁에만 있었다 ③ 머리 문장은 **새로 사려는 사람**의 판정이라 다른 물음이다.
+#   고침: 킷이 이력 문장을 읽어 짧게 다시 말하고(생성기 출력을 그대로 심는다 · §4) 선을 넘겨
+#   다시 잰 계획은 이유에 그 사실을 적으며, 채우기 자리가 그때만 한 번 다시 그리고, 머리 문장
+#   옆에 보유 판정을 같은 함수로 잇는다. 규칙·판정·문턱 불변.
+# ══════════════════════════════════════════════════════════════════════
+print("=" * 72)
+print("§366 표의 '매도'와 상세의 '보유 유지' 사이 — 선을 넘겨 다시 잰 계획은 그렇게 말한다 (라운드 371)")
+print("=" * 72)
+import ui_kit as _uk366                                            # noqa: E402
+import portfolio as _pf366                                         # noqa: E402
+import datetime as _dt366                                          # noqa: E402
+
+_row366 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
+           'snap_hold_at': '2026-08-30'}
+_td366 = '2026-09-04'
+_lines366 = {
+    'stop': _pf366.hold_plan_update(_row366, 11500, 9300, 8900, _td366)['snap_hold_log'],
+    'trim': _pf366.hold_plan_update(_row366, 11500, 9300, 11200, _td366)['snap_hold_log'],
+    'expiry': _pf366.hold_plan_update(dict(_row366, snap_hold_at='2026-08-01'),
+                                      11500, 9300, 10500, _td366)['snap_hold_log'],
+}
+_parsed366 = {k: _uk366.hold_log_parse(v) for k, v in _lines366.items()}
+check("생성기(hold_plan_update)의 세 갈래 문장을 킷이 전부 읽는다 — 갈래·날짜·옛 값·옛 기준일",
+      _parsed366['stop'] == dict(kind='stop', date=_td366, old=9000.0, old_at='2026-08-30')
+      and _parsed366['trim'] == dict(kind='trim', date=_td366, old=11000.0, old_at='2026-08-30')
+      and _parsed366['expiry'] == dict(kind='expiry', date=_td366, old=None, old_at='2026-08-01'),
+      f"{_parsed366}", scanned=len(_parsed366))
+check("모르는 문장은 None — 지어내지 않는다 (§3) · 못 읽는 줄은 종전대로 자른다",
+      _uk366.hold_log_parse('2026-09-04 아무 말') is None and _uk366.hold_log_parse(None) is None
+      and _uk366.hold_log_short('a' * 60) == _uk366.clip_reason('a' * 60, 34))
+_short366 = _uk366.hold_log_short(_lines366['stop'], new_stop=9300, new_trim=11500, today=_td366)
+check("표의 짧은 줄 — 어느 선을 넘겨 다시 쟀고 새 선이 얼마인지 (오늘이면 '오늘' · 아니면 날짜)",
+      _short366 == '오늘 손절선 9,000원 넘겨 기준 다시 잼 → 새 손절선 9,300원'
+      and _uk366.hold_log_short(_lines366['stop'], new_stop=9300,
+                                today='2026-09-05').startswith('09/04 손절선')
+      and '새 1차 11,500원' in _uk366.hold_log_short(_lines366['trim'], new_trim=11500, today=_td366)
+      and _uk366.hold_log_short(_lines366['expiry'], today=_td366) == '오늘 계획 창 지나 기준 다시 잼',
+      _short366)
+# 사용자 화면의 모양 — 손절선을 넘겨 오늘 다시 잰 행: 새 계획 위에서는 '보유 유지'인데 그 사실을 말한다
+_after366 = dict(_row366, snap_bucket='추천 제외', snap_hold_trim=11500, snap_hold_stop=9300,
+                 snap_hold_at=_td366, snap_hold_log=_lines366['stop'])
+_a366 = _uk366.watch_action(_after366, 9500, today=_dt366.date(2026, 9, 4))
+check("선을 넘겨 오늘 다시 잰 행 — kind 는 새 계획대로 '보유 유지' · hold_reset 이 그 사실을 싣는다",
+      bool(_a366) and _a366['kind'] == '보유 유지'
+      and (_a366.get('hold_reset') or {}).get('kind') == 'stop')
+check("이유 둘째 줄이 '옛 계획으로는 파는 자리였다 · 새 선'을 말하고 규칙은 안 바꿨다고 적는다",
+      len(_a366.get('hold_why') or []) >= 2 and '파는 자리였습니다' in _a366['hold_why'][1]
+      and '9,000원' in _a366['hold_why'][1] and '9,300원' in _a366['hold_why'][1]
+      and '규칙은 바꾸지 않았습니다' in _a366['hold_why'][1], str(_a366.get('hold_why'))[:300])
+check("표의 짧은 줄이 같은 행에 실린다 (hold_log_short)", _a366.get('hold_log_short') == _short366)
+_o366 = _uk366.watch_action(dict(_after366, snap_hold_at='2026-09-10'), 9500,
+                            today=_dt366.date(2026, 9, 10))
+check("이력의 날짜가 잰 날과 다르면(그 뒤 다시 잰 계획) hold_reset 은 None · 그 문장을 안 넣는다",
+      bool(_o366) and _o366.get('hold_reset') is None
+      and not any('파는 자리였습니다' in w for w in (_o366.get('hold_why') or [])))
+_n366 = _uk366.watch_action(dict(_after366, snap_hold_log=''), 9500, today=_dt366.date(2026, 9, 4))
+check("이력이 없는 행 — 짧은 줄은 빈 글자 · hold_reset None (지어내지 않는다)",
+      bool(_n366) and _n366.get('hold_log_short') == '' and _n366.get('hold_reset') is None)
+# ── 화면 ────────────────────────────────────────────────────────────────
+_wa366 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i366 = _wa366.index('관심종목 값 채우기 (라운드 141)')
+_j366 = _wa366.index('라운드 40 — 이모지', _i366)          # 끝 앵커는 시작 뒤에서 (R226)
+_blk366 = _wa366[_i366:_j366]
+check("채우기 자리가 계획이 끝나 다시 재어졌는지(사유 줄 실림)를 보고 그때만 다시 그린다",
+      "'snap_hold_log' in _hp141" in _blk366 and '_r371_rerun_' in _blk366
+      and _blk366.count('st.rerun()') == 1 and 'portfolio.hold_plan_update(' in _blk366,
+      f"{len(_blk366)}자", scanned=len(_blk366))
+check("다시 그리기는 세션 키로 잠근다 — 같은 날 같은 종목은 한 번",
+      'not st.session_state.get(_rk371)' in _blk366 and 'st.session_state[_rk371] = True' in _blk366)
+check("관심종목 표의 이력 줄은 킷의 짧은 줄을 읽는다 — 34자 자르기가 아니라",
+      "_act.get('hold_log_short')" in _wa366 and "_act.get('hold_reset')" in _wa366)
+check("머리 문장 옆에 보유 판정을 같은 함수(watch_action · 같은 행)로 읽어 잇는다 — 새 판정을 만들지 않는다",
+      '새로 사려는 사람에게 하는 말입니다' in _wa366
+      and '_uk.watch_action(_wrow371, realtime_price)' in _wa366
+      and '{_held_line_html}' in _wa366)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

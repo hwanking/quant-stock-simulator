@@ -1325,6 +1325,63 @@ def clip_reason(text, width=34):
     return s[:width - 1] + '…'
 
 
+#: 라운드 371 — 보유 계획이 끝난 사유 한 줄(`portfolio.hold_plan_update` 가 남긴 문장)을 읽는 자리.
+#:   사용자: *"관심종목에서는 팔라고 하고 밑에서는 조건이 갖춰지면 후보라는데 뭐가 어떻게 된거야?"*
+#:   표는 옛 계획(09-04 손절선)으로 '매도'를 그렸고, 종목을 열자 규칙(닿으면 다시 잼 · R224)이 계획을
+#:   오늘 값으로 다시 재 '보유 유지'가 됐다. 그 사이를 잇는 말은 이력 줄에 있었는데 표가 34자로 잘라
+#:   *"2026-09-27 버틸 수 없는 가격 6,115원(2026-…"* 까지만 남고 **"→ 정리 검토 · 기준 다시 잼"** 은
+#:   툴팁에만 있었다(R301·R312·R314 의 *말없이 자르는 자리*). 문장을 되파싱하므로 생성기 출력을 그대로
+#:   넣어 세 갈래가 다 읽히는지 심어서 잰다(§4) — 모르는 문장은 None(지어내지 않는다 · §3).
+_HOLD_LOG_RX = (
+    ('stop', _re.compile(r'^(\d{4}-\d{2}-\d{2}) 버틸 수 없는 가격 ([\d,]+)원\((\d{4}-\d{2}-\d{2}) 기준\) 아래')),
+    ('trim', _re.compile(r'^(\d{4}-\d{2}-\d{2}) 1차 매도가 ([\d,]+)원\((\d{4}-\d{2}-\d{2}) 기준\)을 넘음')),
+    ('expiry', _re.compile(r'^(\d{4}-\d{2}-\d{2}) 보유 계획 창\(.*?· (\d{4}-\d{2}-\d{2}) 기준\) 경과')),
+)
+
+
+def hold_log_parse(line):
+    """보유 계획 종료 사유 한 줄 → `dict(kind, date, old, old_at)` 또는 None.
+
+    kind: 'stop'(버틸 수 없는 가격 아래) · 'trim'(1차 매도가 넘음) · 'expiry'(창 경과 · old 는 None).
+    """
+    s = '' if line is None else str(line).strip()
+    for kind, rx in _HOLD_LOG_RX:
+        m = rx.match(s)
+        if not m:
+            continue
+        if kind == 'expiry':
+            return dict(kind=kind, date=m.group(1), old=None, old_at=m.group(2))
+        try:
+            old = float(m.group(2).replace(',', ''))
+        except ValueError:
+            return None
+        return dict(kind=kind, date=m.group(1), old=old, old_at=m.group(3))
+    return None
+
+
+def hold_log_short(line, new_stop=None, new_trim=None, today=None, width=34):
+    """관심종목 표의 이력 한 줄 — 어느 선을 넘겨 다시 쟀고 새 선이 얼마인지. 못 읽는 문장은 종전대로 자른다."""
+    p = hold_log_parse(line)
+    if not p:
+        return clip_reason(line, width)
+
+    def _won(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f"{f:,.0f}원" if f > 0 else None
+
+    when = '오늘' if (today and p['date'] == str(today)[:10]) else p['date'][5:].replace('-', '/')
+    if p['kind'] == 'stop':
+        s = f"{when} 손절선 {_won(p['old'])} 넘겨 기준 다시 잼"
+        return s + (f" → 새 손절선 {_won(new_stop)}" if _won(new_stop) else '')
+    if p['kind'] == 'trim':
+        s = f"{when} 1차 매도가 {_won(p['old'])} 넘어 기준 다시 잼"
+        return s + (f" → 새 1차 {_won(new_trim)}" if _won(new_trim) else '')
+    return f"{when} 계획 창 지나 기준 다시 잼"
+
+
 #: `personalize_for_position` 의 6조건 이름 중 화면이 **갈라 읽는** 둘 (라운드 221).
 #:   값을 다시 계산하지 않는다 — 스냅샷에 찍힌 실패 목록의 **이름**만 본다.
 #:   이름은 `quant_indicators` 의 리터럴과 같아야 하므로 §238 이 그 리터럴을
@@ -1564,9 +1621,31 @@ def watch_action(row, price=None, today=None):
         # ③ 물타기 (옛 스탬프면 그 사실까지 · 위 avg_down_why 와 같은 글)
         if _ad_label:
             why.append(f"{_ad_label} — {d['avg_down_why']}")
-        d['hold_why'] = [w for w in why if w]
         _log = [s for s in str((row or {}).get('snap_hold_log') or '').split(' | ') if s]
         d['hold_log'] = _log
+        # ④ 라운드 371 — 지금 계획이 **선을 넘겨** 다시 잰 것이면(마지막 이력의 날짜 = 잰 날) 그 사실을
+        #   문장으로 잇는다. 옛 계획대로면 파는 자리였다는 것과 새 선을 같은 줄에 — 없으면 사용자는
+        #   표의 '매도'와 상세의 '보유 유지'를 엔진이 말을 바꾼 것으로 읽는다(R340 이 이력 줄을 넣었지만
+        #   표가 잘라 그 말이 툴팁에만 있었다). 규칙·판정 불변 · 새 문턱 없음.
+        _last371 = hold_log_parse(_log[-1]) if _log else None
+        _reset371 = _last371 if (_last371 and _at and _last371['date'] == _at) else None
+        d['hold_reset'] = _reset371
+        try:
+            import datetime as _dt371
+            _td371 = today or _dt371.date.today()
+        except Exception:                                      # noqa: BLE001
+            _td371 = today
+        d['hold_log_short'] = (hold_log_short(_log[-1], new_stop=h_stop, new_trim=h_trim,
+                                              today=_td371) if _log else '')
+        if _reset371 and _reset371['kind'] == 'stop' and h_stop:
+            why.insert(1, (f"옛 계획(버틸 수 없는 가격 {_reset371['old']:,.0f}원 · {_reset371['old_at']} 기준)"
+                           f"으로는 파는 자리였습니다 — 닿으면 다시 재는 규칙대로 {_at} 에 기준을 다시 쟀고, "
+                           f"새 버틸 수 없는 가격은 {h_stop:,.0f}원입니다 · 규칙은 바꾸지 않았습니다"))
+        elif _reset371 and _reset371['kind'] == 'trim' and h_trim:
+            why.insert(1, (f"옛 계획(1차 매도가 {_reset371['old']:,.0f}원 · {_reset371['old_at']} 기준)"
+                           f"으로는 일부 파는 자리였습니다 — 닿으면 다시 재는 규칙대로 {_at} 에 기준을 다시 "
+                           f"쟀고, 새 1차 매도가는 {h_trim:,.0f}원입니다 · 규칙은 바꾸지 않았습니다"))
+        d['hold_why'] = [w for w in why if w]
         # ── 짧은 판 (라운드 226 · 사용자: "너무 길다 · 핵심만") — 같은 재료를 낱말로.
         #   긴 문장(hold_why)은 종목 상세가, 짧은 판(hold_brief)은 포트폴리오 견해가 쓴다.
         #   두 판 다 이 함수 하나에서 나온다(§4). 문턱 없음.

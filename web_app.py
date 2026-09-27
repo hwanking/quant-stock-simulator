@@ -6202,9 +6202,15 @@ else:
                 #   보유 두 행). 가장 최근 이력 한 줄만 · 전체는 툴팁에. 규칙은 안 바꿨다.
                 _hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]
                 if _act.get('held') and _hlog340:
-                    _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
+                    # 라운드 371 — 34자로 자르면 "→ 정리 검토 · 기준 다시 잼" 이 툴팁에만 남았다(사용자:
+                    #   *"관심종목에서는 팔라고 하고 …"*). 킷이 그 문장을 **읽어서 짧게 다시 말한다**
+                    #   (어느 선을 넘겨 다시 쟀고 새 선이 얼마인지 · 못 읽으면 종전대로 자른다). 지금
+                    #   계획이 선을 넘겨 다시 잰 것이면 경고색 — 판정이 바뀐 자리다.
+                    _hcol371 = _TOK['warn'] if _act.get('hold_reset') else _TOK['tx3']
+                    _jd229 += (f"<br><span style='font-size:12px; color:{_hcol371};' "
                                f"title='{_uk._esc_attr(' | '.join(_hlog340))}'>"
-                               f"{_uk._esc(_uk.clip_reason(_hlog340[-1], 34))}</span>")
+                               f"{_uk._esc(_act.get('hold_log_short') or _uk.clip_reason(_hlog340[-1], 34))}"
+                               f"</span>")
             if _ret229 is None:
                 _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
             else:
@@ -8119,7 +8125,7 @@ try:
             'snap_fair_reach': _fair_reach_snap(four_scores),
         }
         _cw141 = portfolio.normalize_code(target_ticker)
-        _items141, _dirty141 = [], False
+        _items141, _dirty141, _reset141 = [], False, False
         for _w141 in _wl_items():
             if portfolio.normalize_code(_w141.get('code')) == _cw141:
                 _new141 = dict(_w141)
@@ -8128,11 +8134,14 @@ try:
                 _s141.update(_wl_avg_down_snap(_w141, snap, CORE))
                 # 보유자 기준 값 (라운드 169 → 224) — 신규 매수자 값과 **다른 키**다.
                 #   보유 행은 잰 날에 고정, 창이 끝나거나 닿았을 때만 다시 잰다.
-                _s141.update(portfolio.hold_plan_update(
+                _hp141 = portfolio.hold_plan_update(
                     _w141, CORE.get('hold_trim'), CORE.get('hold_stop'),
                     realtime_price, datetime.date.today().isoformat(),
                     horizon_bars=int(CORE.get('horizon_days') or _lv217.HORIZON_BARS),
-                    held=bool(_w141.get('paid'))))
+                    held=bool(_w141.get('paid')))
+                # 계획이 **끝나서**(선에 닿음 · 창 경과) 다시 잰 경우만 사유 줄이 실린다
+                _reset141 = 'snap_hold_log' in _hp141
+                _s141.update(_hp141)
                 for _k141, _v141 in _s141.items():
                     # 못 낸 값은 **덮어쓰지 않는다** — 어제 잰 값이라도
                     # 오늘 미산출로 지워 버리면 화면이 더 비어 보인다.
@@ -8145,6 +8154,15 @@ try:
                 _items141.append(_w141)
         if _dirty141:
             _wl_write(_items141)
+            # 라운드 371 — 관심종목 표는 이 자리보다 **앞**에서 그려졌다(표 → 중앙 판정 → 여기). 이 실행에서
+            #   보유 계획이 선을 넘겨 다시 재어졌으면, 위의 표는 옛 계획으로 '매도 — 손절선 아래'를 그렸고
+            #   아래 상세는 새 계획으로 '보유 유지'를 그린다 — 한 화면에 두 답(사용자 실측 2026-09-27).
+            #   그 경우에만 **한 번** 다시 그린다(세션 키로 같은 날 같은 종목은 두 번 안 돈다 · 스냅샷은
+            #   세션 캐시라 재계산이 없다 · 값·판정 불변). 다시 그린 표는 새 계획과 이력 줄을 함께 낸다.
+            _rk371 = f"_r371_rerun_{_cw141}_{datetime.date.today().isoformat()}"
+            if _reset141 and not st.session_state.get(_rk371):
+                st.session_state[_rk371] = True
+                st.rerun()
 except Exception:                                              # noqa: BLE001
     # 관심종목 갱신 때문에 분석 화면이 죽지 않는다 — 다만 **왜 못 썼는지는
     # 남긴다** (라운드 214). 종전 `pass` 는 실패를 통째로 삼켰고, 그 침묵이
@@ -8708,6 +8726,29 @@ _banner_sub_html = (
     f"<p style='margin:8px 0 0 0; font-size:17px; font-weight:700; "
     f"color:#F3F6FA;'>{_banner_sub}</p>" if _banner_sub
     and _banner_sub not in str(verdict['headline']) else "")
+# 라운드 371 — 이 머리 문장은 **새로 사려는 사람**의 판정이고, 보유자의 판정(버틸 수 없는 가격 · 1차
+#   매도가 · 물타기 6조건)은 다른 물음이다. 사용자: *"관심종목에서는 팔라고 하고 밑에 조건이 갖춰지면
+#   후보라고 하는데 뭐가 어떻게 된거야?"* — 같은 종목에 두 이름표가 붙을 때는 그 이유가 같은 줄에
+#   있어야 한다(R214). 보유 중이면 보유 판정을 **같은 함수**(관심종목 표와 같은 `watch_action` · 같은
+#   행)로 읽어 한 줄로 잇는다. 관심종목에 없이 사이드바에만 적은 보유는 자리만 가리킨다(§3 · 계획 없음).
+_held_line_html = ''
+if user_entry_price > 0:
+    try:
+        _cw371 = portfolio.normalize_code(target_ticker)
+        _wrow371 = next((w for w in _wl_items()
+                         if portfolio.normalize_code(w.get('code')) == _cw371), None)
+        _hact371 = (_uk.watch_action(_wrow371, realtime_price)
+                    if _wrow371 and (_wrow371.get('paid') or 0) > 0 else None)
+        _hlbl371 = (_hact371 or {}).get('label') if (_hact371 or {}).get('held') else None
+    except Exception:                                          # noqa: BLE001
+        _hlbl371 = None
+    _held_line_html = (
+        f"<p style='margin:8px 0 0 0; font-size:13px; color:#9DAABC; line-height:1.5;'>"
+        f"이 문장은 새로 사려는 사람에게 하는 말입니다 — 보유 중인 판단은 다른 물음이라 따로 냅니다: "
+        + (f"<b style='color:#F3F6FA;'>{_uk._esc(_hlbl371)}</b> (관심종목 표와 같은 판정 · "
+           f"아래 '내 보유 포지션 · 보유자 기준' 칸에 이유)" if _hlbl371
+           else "아래 '내 보유 포지션 · 보유자 기준' 칸")
+        + "</p>")
 
 # 매수·매도 성공 확률이 최우선이다 — 점수 바로 아래에 실측 확률을 1등으로 표시.
 # 원천은 리플레이 실측(점수대 캘리브레이션)뿐이며, 표본이 부족하면 %를 숨기고
@@ -8784,7 +8825,7 @@ st.markdown(f"""
       <p style='margin:0; font-size:13px; color:#9DAABC; font-weight:700;'>
         {resolved_name} · 오늘의 판단</p>
       <p style='margin:4px 0 0 0; font-size:40px; font-weight:800; color:{_vc}; line-height:1.15;'>
-        {_vi} {verdict['headline']}</p>{_banner_sub_html}
+        {_vi} {verdict['headline']}</p>{_banner_sub_html}{_held_line_html}
     </div>
     <div style='text-align:right;'>
       <p style='margin:0; font-size:13px; color:#9DAABC;'>판단 점수</p>
