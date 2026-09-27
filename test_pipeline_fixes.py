@@ -26353,7 +26353,9 @@ check("② '아직 안 잼' 칸이 그 종목만 바로 재는 링크다 · 받�
       and "def _wl_measure_from_query():" in _w333 and "\n_wl_measure_from_query()\n" in _w333
       and "del st.query_params['measure']" in _w333
       and "_mcode327 = st.session_state.pop('wl_measure_code', None)" in _w333
-      and "if _mrow327 or _clicked166:" in _w333
+      # 라운드 373 — 같은 조건에 '기준 다시 재기'(`_rrow373`)가 한 갈래 더 붙었다. 재는 코드는 여전히
+      #   하나(아래 `get_shared_snapshot` 1회)이고 §367 이 그 갈래를 따로 본다.
+      and "if _mrow327 or _clicked166 or _rrow373:" in _w333
       and _w333.count("_snp166, _ = get_shared_snapshot(") == 1)
 _q333 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
 check("③ 적정가 산출 불가 문장이 적자 사실(수신값)·쉬운 말·대신 볼 것을 적는다 · 게이트·문턱은 그대로",
@@ -28719,15 +28721,24 @@ import datetime as _dt366                                          # noqa: E402
 _row366 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
            'snap_hold_at': '2026-08-30'}
 _td366 = '2026-09-04'
+# 라운드 373 — 손절선 아래는 이제 **계획 유지**(자동 재측정 안 함 · 사용자 결정 2026-09-28)다. 옛 자동
+#   문장('→ 정리 검토 · 기준 다시 잼')은 저장된 이력에 남아 있으므로 글자로 심어 여전히 읽히는지 본다.
+_legacy366 = (f"{_td366} 버틸 수 없는 가격 9,000원(2026-08-30 기준) 아래 (현재가 8,900 · -1.1%) "
+              f"→ 정리 검토 · 기준 다시 잼")
 _lines366 = {
-    'stop': _pf366.hold_plan_update(_row366, 11500, 9300, 8900, _td366)['snap_hold_log'],
+    'stop': _legacy366,
+    'stop_hold': _pf366.hold_plan_update(_row366, 11500, 9300, 8900, _td366)['snap_hold_log'],
+    'manual': _pf366.hold_plan_update(_row366, 11500, 9300, 8900, _td366,
+                                      remeasure=True)['snap_hold_log'],
     'trim': _pf366.hold_plan_update(_row366, 11500, 9300, 11200, _td366)['snap_hold_log'],
     'expiry': _pf366.hold_plan_update(dict(_row366, snap_hold_at='2026-08-01'),
                                       11500, 9300, 10500, _td366)['snap_hold_log'],
 }
 _parsed366 = {k: _uk366.hold_log_parse(v) for k, v in _lines366.items()}
-check("생성기(hold_plan_update)의 세 갈래 문장을 킷이 전부 읽는다 — 갈래·날짜·옛 값·옛 기준일",
+check("생성기(hold_plan_update)의 갈래 문장을 킷이 전부 읽는다 — 갈래·날짜·옛 값·옛 기준일 (옛 자동 문장 포함)",
       _parsed366['stop'] == dict(kind='stop', date=_td366, old=9000.0, old_at='2026-08-30')
+      and _parsed366['stop_hold'] == dict(kind='stop_hold', date=_td366, old=9000.0, old_at='2026-08-30')
+      and _parsed366['manual'] == dict(kind='manual', date=_td366, old=9000.0, old_at='2026-08-30')
       and _parsed366['trim'] == dict(kind='trim', date=_td366, old=11000.0, old_at='2026-08-30')
       and _parsed366['expiry'] == dict(kind='expiry', date=_td366, old=None, old_at='2026-08-01'),
       f"{_parsed366}", scanned=len(_parsed366))
@@ -28739,20 +28750,24 @@ check("표의 짧은 줄 — 어느 선을 넘겨 다시 쟀고 새 선이 얼�
       _short366 == '오늘 손절선 9,000원 넘겨 기준 다시 잼 → 새 손절선 9,300원'
       and _uk366.hold_log_short(_lines366['stop'], new_stop=9300,
                                 today='2026-09-05').startswith('09/04 손절선')
+      and _uk366.hold_log_short(_lines366['stop_hold'], new_stop=9000, today=_td366)
+      == '오늘 손절선 9,000원 넘김 — 계획 유지 (다시 재기는 사람이)'
+      and _uk366.hold_log_short(_lines366['manual'], new_stop=9300, today=_td366)
+      == '오늘 사람이 기준 다시 잼 (옛 손절선 9,000원) → 새 손절선 9,300원'
       and '새 1차 11,500원' in _uk366.hold_log_short(_lines366['trim'], new_trim=11500, today=_td366)
       and _uk366.hold_log_short(_lines366['expiry'], today=_td366) == '오늘 계획 창 지나 기준 다시 잼',
       _short366)
-# 사용자 화면의 모양 — 손절선을 넘겨 오늘 다시 잰 행: 새 계획 위에서는 '보유 유지'인데 그 사실을 말한다
+# 사용자 화면의 모양 — (옛 규칙으로) 손절선을 넘겨 오늘 다시 잰 행: 새 계획 위에서는 '보유 유지'인데 그 사실을 말한다
 _after366 = dict(_row366, snap_bucket='추천 제외', snap_hold_trim=11500, snap_hold_stop=9300,
                  snap_hold_at=_td366, snap_hold_log=_lines366['stop'])
 _a366 = _uk366.watch_action(_after366, 9500, today=_dt366.date(2026, 9, 4))
 check("선을 넘겨 오늘 다시 잰 행 — kind 는 새 계획대로 '보유 유지' · hold_reset 이 그 사실을 싣는다",
       bool(_a366) and _a366['kind'] == '보유 유지'
       and (_a366.get('hold_reset') or {}).get('kind') == 'stop')
-check("이유 둘째 줄이 '옛 계획으로는 파는 자리였다 · 새 선'을 말하고 규칙은 안 바꿨다고 적는다",
+check("이유 둘째 줄이 '옛 계획으로는 파는 자리였다 · 새 선'을 말하고 지금은 계획을 둔다고 적는다",
       len(_a366.get('hold_why') or []) >= 2 and '파는 자리였습니다' in _a366['hold_why'][1]
       and '9,000원' in _a366['hold_why'][1] and '9,300원' in _a366['hold_why'][1]
-      and '규칙은 바꾸지 않았습니다' in _a366['hold_why'][1], str(_a366.get('hold_why'))[:300])
+      and '그대로 둡니다' in _a366['hold_why'][1], str(_a366.get('hold_why'))[:300])
 check("표의 짧은 줄이 같은 행에 실린다 (hold_log_short)", _a366.get('hold_log_short') == _short366)
 _o366 = _uk366.watch_action(dict(_after366, snap_hold_at='2026-09-10'), 9500,
                             today=_dt366.date(2026, 9, 10))
@@ -28779,6 +28794,82 @@ check("머리 문장 옆에 보유 판정을 같은 함수(watch_action · 같�
       '새로 사려는 사람에게 하는 말입니다' in _wa366
       and '_uk.watch_action(_wrow371, realtime_price)' in _wa366
       and '{_held_line_html}' in _wa366)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §367 — 손절선을 넘긴 계획은 그대로 둔다 (라운드 373 · 사용자 결정 2026-09-28)
+#
+#   라운드 371 이 "닿으면 다시 잼" 규칙이 매도 판정을 스스로 지운다는 것을 보이게 했고(보유 14행
+#   중 넘긴 3행 전부), 사용자가 갈래 셋 중 **넘긴 계획은 그대로 둔다**를 골랐다. 손절선 아래에서는
+#   값·잰 날을 안 건드리고 이력에 한 번만 남기며, 다시 재는 길은 사람이 누르는 '기준 다시 재기'
+#   (`?remeasure=` · 채우기 단계가 `remeasure=True` 로 잰다)뿐이다. 1차 매도가·창 경과는 종전대로.
+# ══════════════════════════════════════════════════════════════════════
+print("=" * 72)
+print("§367 손절선을 넘긴 계획은 그대로 둔다 — 다시 재기는 사람이 (라운드 373)")
+print("=" * 72)
+import portfolio as _pf367                                         # noqa: E402
+import ui_kit as _uk367                                            # noqa: E402
+import datetime as _dt367                                          # noqa: E402
+
+_row367 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
+           'snap_hold_at': '2026-08-30'}
+_u367 = _pf367.hold_plan_update(_row367, 11500, 9300, 8900, '2026-09-04')
+check("손절선 아래 → 값·잰 날을 안 건드린다 (이력 한 줄만)",
+      set(_u367) == {'snap_hold_log'} and _pf367.HOLD_LOG_KEEP_TAIL in _u367['snap_hold_log'],
+      str(_u367))
+_row367b = dict(_row367, snap_hold_log=_u367['snap_hold_log'])
+check("같은 계획에 두 번째 방문 → 아무것도 안 쓴다 (이력이 방문마다 늘지 않는다)",
+      _pf367.hold_plan_update(_row367b, 11500, 9300, 8800, '2026-09-05') == {})
+check("현재가가 다시 올라와 두 선 사이면 → 그대로 (창 안)",
+      _pf367.hold_plan_update(_row367b, 11500, 9300, 9500, '2026-09-05') == {})
+_m367 = _pf367.hold_plan_update(_row367b, 11500, 9300, 8800, '2026-09-05', remeasure=True)
+check("사람이 '기준 다시 재기' → 새 값 + 오늘 잰 날 + 사람이 쟀다는 이력",
+      _m367.get('snap_hold_stop') == 9300.0 and _m367.get('snap_hold_trim') == 11500.0
+      and _m367.get('snap_hold_at') == '2026-09-05'
+      and _pf367.HOLD_LOG_MANUAL_HEAD in _m367.get('snap_hold_log', '')
+      and (_uk367.hold_log_parse(_m367['snap_hold_log'].split(' | ')[-1]) or {}).get('kind') == 'manual',
+      str(_m367))
+check("'기준 다시 재기'인데 새 값이 없으면 옛 값을 지우지 않는다 (§3)",
+      _pf367.hold_plan_update(_row367b, None, None, 8800, '2026-09-05', remeasure=True) == {})
+check("1차 매도가 넘음·창 경과는 종전대로 자동 재측정",
+      '넘음' in _pf367.hold_plan_update(_row367, 11500, 9300, 11200, '2026-09-04').get('snap_hold_log', '')
+      and '경과' in _pf367.hold_plan_update(dict(_row367, snap_hold_at='2026-08-01'), 11500, 9300,
+                                         10500, '2026-09-04').get('snap_hold_log', ''))
+# 화면 — 넘긴 채 서 있는 행은 '매도'이고, 그 사실과 푸는 길 둘을 같은 줄에 적는다
+_s367 = _uk367.watch_action(dict(_row367b, snap_bucket='추천 제외'), 8900,
+                            today=_dt367.date(2026, 9, 5))
+check("넘긴 채 서 있는 행 — kind '정리 검토'(매도) 그대로 · 이유에 '팔았음'과 '기준 다시 재기'가 같이",
+      bool(_s367) and _s367['kind'] == '정리 검토' and _s367['label'] == _uk367.hold_label('정리 검토')
+      and any("'팔았음'" in w and '기준 다시 재기' in w for w in (_s367.get('hold_why') or [])),
+      str(_s367.get('hold_why'))[:300])
+check("표의 짧은 줄이 '계획 유지'를 말한다 · hold_reset 은 None (다시 잰 것이 아니다)",
+      '계획 유지' in str(_s367.get('hold_log_short')) and _s367.get('hold_reset') is None)
+_mr367 = dict(_row367b, snap_hold_stop=9300, snap_hold_trim=11500, snap_hold_at='2026-09-05',
+              snap_hold_log=_m367['snap_hold_log'], snap_bucket='추천 제외')
+_a367 = _uk367.watch_action(_mr367, 9500, today=_dt367.date(2026, 9, 5))
+check("사람이 다시 잰 행 — hold_reset kind 'manual' · 이유가 '사람이 기준을 다시 쟀습니다' 와 옛·새 손절선",
+      (_a367.get('hold_reset') or {}).get('kind') == 'manual'
+      and any('사람이 기준을 다시 쟀습니다' in w and '9,000원' in w and '9,300원' in w
+              for w in (_a367.get('hold_why') or [])), str(_a367.get('hold_why'))[:300])
+_wa367 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면에 `?remeasure=` 길이 있다 — 받는 함수 · 표의 링크(정리 검토 행만) · 보유 카드의 링크",
+      'def _wl_remeasure_from_query' in _wa367 and "st.query_params.get('remeasure')" in _wa367
+      and "_act.get('kind') == '정리 검토')" in _wa367 and "?remeasure={_uk._esc_attr(_wcode)}" in _wa367
+      and "?remeasure={_uk._esc_attr(str(_row224.get('code')))}" in _wa367)
+check("채우기 단계가 그 한 종목만 remeasure=True 로 잰다 — 값이 다 있어도 돈다",
+      'remeasure=bool(_rrow373) and _c166 == _rcode373' in _wa367
+      and 'if _fill_missing or _rrow373:' in _wa367
+      and "st.session_state.pop('wl_remeasure_code', None)" in _wa367)
+_i367 = _wa367.index('관심종목 값 채우기 (라운드 141)')
+_j367 = _wa367.index('라운드 40 — 이모지', _i367)              # 끝 앵커는 시작 뒤에서 (R226)
+check("상세의 자동 경로는 remeasure 를 안 넘긴다 — 종목을 여는 것만으로는 다시 안 잰다",
+      'remeasure' not in _wa367[_i367:_j367] and _wa367.count('remeasure=bool(') == 1,
+      f"{_j367 - _i367}자", scanned=_j367 - _i367)
+# 잰 날의 '오늘'은 두 자리(상세 · 채우기)가 **같은 값**(분석 기준일)이어야 한다 — 휴장일에 열면 달력 날짜와
+#   기준일이 갈려 같은 계획에 '오늘'이 둘이었다(앱 테스트가 잡았다 · R222·R306 의 세 번째).
+check("보유 계획의 '잰 날'은 상세·채우기 두 자리 다 분석 기준일(t_ref_str)이다 — 달력 날짜가 아니다",
+      'realtime_price, t_ref_str,' in _wa367[_i367:_j367]
+      and "datetime.date.today().isoformat(),\n                    horizon_bars" not in _wa367[_i367:_j367])
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

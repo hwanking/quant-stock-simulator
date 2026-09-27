@@ -2332,13 +2332,28 @@ def _watch_num(v):
 HOLD_LOG_KEEP = 3        # 최근 셋만 — 파일이 자라지 않게
 
 
-def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=True):
+#: 라운드 373 — 손절선을 넘긴 계획은 **그대로 둔다**(사용자 결정 · 2026-09-28). 그 사실을 이력에
+#:   한 번 남길 때 쓰는 꼬리 — 읽는 쪽(`ui_kit.hold_log_parse`)이 이 글자로 가른다.
+HOLD_LOG_KEEP_TAIL = '→ 계획 유지 · 다시 재기는 사람이'
+#: 사람이 '기준 다시 재기'를 눌러 다시 잰 이력의 머리 — 같은 이유로 한 곳에 둔다.
+HOLD_LOG_MANUAL_HEAD = '사람이 기준을 다시 잼'
+
+
+def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=True,
+                     remeasure=False):
     """보유자 기준값을 **고정할지 다시 잴지** 정한다 (라운드 224). 반환: 쓸 키만.
 
     · 기준값이 없거나 잰 날이 없으면 → 새 값 + 오늘 날짜.
     · 잰 날부터 창(`horizon_bars` → 달력일 ×7/5 · `ledger_view.bars_to_days`)이
-      지났거나, 현재가가 1차 매도가 이상 / 버틸 수 없는 가격 이하면 → **계획
-      종료**: 사유 한 줄을 `snap_hold_log` 에 남기고 새 값으로 다시 잰다.
+      지났거나, 현재가가 1차 매도가 이상이면 → **계획 종료**: 사유 한 줄을
+      `snap_hold_log` 에 남기고 새 값으로 다시 잰다.
+    · 현재가가 **버틸 수 없는 가격 이하**면 → **계획을 그대로 둔다**(라운드 373 ·
+      사용자 결정 2026-09-28). 종전엔 여기서도 다시 쟀는데, 그러면 '매도' 판정이
+      종목을 여는 순간 스스로 지워졌다(보유 14행 중 손절선을 넘긴 3행이 전부 그랬다 ·
+      R371). 이력에 그 사실을 **한 번만** 남기고(같은 계획에 두 번 안 적는다) 값·잰 날은
+      안 건드린다 — '팔았음'을 누르거나 `remeasure=True`(사람이 '기준 다시 재기')로
+      부를 때까지 표와 상세 모두 '매도'가 남는다.
+    · `remeasure=True` 면 어느 경우든 새 값으로 다시 재고 사유에 **사람이** 잰 것이라 적는다.
     · 그 밖(창 안 · 두 선 사이)이면 → **아무것도 안 쓴다**(옛 값 유지).
     새 값이 없으면(None) 옛 값을 지우지 않는다 (§3 — 못 낸 값으로 덮지 않는다).
     문턱 없음 — 엔진이 발표한 두 선과 창을 그대로 쓴다.
@@ -2366,12 +2381,25 @@ def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=T
     except ValueError:
         age = None
     days = _lv.bars_to_days(horizon_bars)
-    if px and old_trim and px >= old_trim:
+    log = [s for s in str(row.get('snap_hold_log') or '').split(' | ') if s]
+    if remeasure:
+        if not fresh:
+            return {}                              # 새 값이 없으면 옛 값을 지우지 않는다
+        reason = (f"{today_s} {HOLD_LOG_MANUAL_HEAD} (옛 버틸 수 없는 가격 "
+                  f"{(old_stop or 0):,.0f}원 · 1차 {(old_trim or 0):,.0f}원 · {old_at} 기준"
+                  + (f" · 현재가 {px:,.0f}" if px else '') + ") → 새 기준")
+    elif px and old_trim and px >= old_trim:
         reason = (f"{today_s} 1차 매도가 {old_trim:,.0f}원({old_at} 기준)을 넘음 "
                   f"(현재가 {px:,.0f} · {(px / old_trim - 1) * 100:+.1f}%) → 일부 정리 검토 · 기준 다시 잼")
     elif px and old_stop and px <= old_stop:
-        reason = (f"{today_s} 버틸 수 없는 가격 {old_stop:,.0f}원({old_at} 기준) 아래 "
-                  f"(현재가 {px:,.0f} · {(px / old_stop - 1) * 100:+.1f}%) → 정리 검토 · 기준 다시 잼")
+        # 라운드 373 — 손절선 아래: 계획 유지. 이력은 같은 계획(같은 old_at)에 한 번만.
+        _marker = f"({old_at} 기준) 아래"
+        if any(_marker in s and HOLD_LOG_KEEP_TAIL in s for s in log):
+            return {}
+        line = (f"{today_s} 버틸 수 없는 가격 {old_stop:,.0f}원({old_at} 기준) 아래 "
+                f"(현재가 {px:,.0f} · {(px / old_stop - 1) * 100:+.1f}%) {HOLD_LOG_KEEP_TAIL}")
+        log.append(line)
+        return {'snap_hold_log': ' | '.join(log[-HOLD_LOG_KEEP:])}
     elif age is not None and age >= days:
         reason = (f"{today_s} 보유 계획 창({horizon_bars}봉={days}일 · {old_at} 기준) 경과 — "
                   f"두 선 사이에서 결판 안 남 → 기준 다시 잼")
@@ -2379,7 +2407,6 @@ def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=T
         return {}                                  # 창 안 · 두 선 사이 — 그대로 둔다
     if not fresh:
         return {}                                  # 새 값이 없으면 옛 값을 지우지 않는다
-    log = [s for s in str(row.get('snap_hold_log') or '').split(' | ') if s]
     log.append(reason)
     fresh['snap_hold_at'] = today_s
     fresh['snap_hold_log'] = ' | '.join(log[-HOLD_LOG_KEEP:])

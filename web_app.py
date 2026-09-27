@@ -2644,6 +2644,29 @@ def _wl_measure_from_query():
 _wl_measure_from_query()
 
 
+def _wl_remeasure_from_query():
+    """?remeasure=<코드> — 표·보유 카드의 '기준 다시 재기' (라운드 373). 손절선을 넘긴 보유 계획은
+    이제 그대로 두므로(사용자 결정 2026-09-28) 다시 재는 것은 **사람이 누를 때**뿐이다. 받은 즉시
+    파라미터를 지우고, 관심종목에 있는 종목이면 채우기 단계가 그 한 종목을 `remeasure=True` 로
+    재도록 세션에 남긴다 — 채우는 길은 '지금 재기'와 **같은 코드**다(§4). 못 읽으면 아무것도 안 한다(§3)."""
+    try:
+        raw = st.query_params.get('remeasure')
+    except Exception:                                      # noqa: BLE001
+        return
+    if not (raw and str(raw).strip()):
+        return
+    try:
+        del st.query_params['remeasure']
+    except Exception:                                      # noqa: BLE001
+        pass
+    code = portfolio.normalize_code(str(raw).strip())
+    if code and any(portfolio.normalize_code(x.get('code')) == code for x in _wl_items()):
+        st.session_state['wl_remeasure_code'] = code
+
+
+_wl_remeasure_from_query()
+
+
 # ⚠️ 라운드 142 — 사용자 요청: "검색하는 종목에 관심추가 버튼도 넣어줘."
 #   버튼은 라운드 135 부터 여기 있었지만 **접힌 칸 안**이라, 검색 직후에는
 #   보이지 않았다. 라운드 136 에서 "관심목록 어디서 봐?" 라고 물은 것과
@@ -6254,6 +6277,14 @@ else:
                     f"팔았음</a>")
                    if (_act and _act.get('held') and _act.get('kind') in ('정리 검토', '일부 정리'))
                    else '')
+                # 라운드 373 — 손절선을 넘긴 계획은 그대로 두므로(사용자 결정 2026-09-28) 다시 재는 길은
+                #   사람이 누르는 이 링크뿐이다. '팔았음'과 같은 자리 · 같은 길(쿼리 파라미터).
+                + ((f"<br><a href='?remeasure={_uk._esc_attr(_wcode)}' target='_self' "
+                    f"title='버틸 수 없는 가격·팔 가격 1차를 오늘 값으로 다시 잽니다 — 계획은 그때까지 그대로입니다' "
+                    f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
+                    f"기준 다시 재기</a>")
+                   if (_act and _act.get('held') and _act.get('kind') == '정리 검토')
+                   else '')
                 + "</td>"
                 "</tr>")
         # 라운드 244 — 칸이 9 → 10 이다('관심'). 칸을 더하면 값이 잘려 보이므로
@@ -6369,22 +6400,28 @@ else:
                    if _wl_needs_fill(w) == '판정 사유')
     #: 한 번에 몇 개까지. 오래 걸린다는 사실을 숨기지 않고 나눠 돌린다.
     _WL_FILL_MAX = 5
-    if _fill_missing:
-        _fm_names = ", ".join(str(w.get('name')) for w in _fill_missing[:8])
-        st.warning(
-            f"**엔진 값이 모자란 종목 {len(_fill_missing)}개** — {_fm_names}"
-            + (f" 외 {len(_fill_missing) - 8}종목"
-               if len(_fill_missing) > 8 else '')
-            + f"  \n매입가를 적은 종목은 **보유자 기준값**(버틸 수 없는 "
-              f"가격 · 팔 가격 1차)까지 있어야 '엔진 판단'이 나옵니다. "
-              f"한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
-              f"**{_WL_FILL_MAX}종목씩** 채웁니다 — 없는 값을 지어내지 "
-              f"않고 실제로 계산합니다."
-            # 라운드 241 — '엔진 값이 모자란'으로 뭉뚱그리면 거짓이다. 값은 다
-            #   있고 **판정 사유**만 없는 행이 섞여 있다 (R221 의 '불가' 와 같은 모양).
-            + (f"  \n이 중 **{_nwhy241}종목**은 값은 다 있고 판정 사유만 "
-               f"없습니다 — 채우면 '추천 제외' 아래에 왜인지 한 줄이 붙습니다."
-               if _nwhy241 else ''))
+    # 라운드 373 — '기준 다시 재기'(`?remeasure=`)로 고른 한 종목은 값이 다 있어도 여기서 다시 잰다.
+    #   손절선을 넘긴 계획은 이제 스스로 안 바뀌므로(사용자 결정 2026-09-28) 이 길이 유일한 재측정이다.
+    _rcode373 = st.session_state.pop('wl_remeasure_code', None)
+    _rrow373 = [w for w in _wl_items()
+                if portfolio.normalize_code(w.get('code')) == _rcode373] if _rcode373 else []
+    if _fill_missing or _rrow373:
+        if _fill_missing:
+            _fm_names = ", ".join(str(w.get('name')) for w in _fill_missing[:8])
+            st.warning(
+                f"**엔진 값이 모자란 종목 {len(_fill_missing)}개** — {_fm_names}"
+                + (f" 외 {len(_fill_missing) - 8}종목"
+                   if len(_fill_missing) > 8 else '')
+                + f"  \n매입가를 적은 종목은 **보유자 기준값**(버틸 수 없는 "
+                  f"가격 · 팔 가격 1차)까지 있어야 '엔진 판단'이 나옵니다. "
+                  f"한 종목 정밀분석이 **1~3분** 걸립니다. 한 번에 "
+                  f"**{_WL_FILL_MAX}종목씩** 채웁니다 — 없는 값을 지어내지 "
+                  f"않고 실제로 계산합니다."
+                # 라운드 241 — '엔진 값이 모자란'으로 뭉뚱그리면 거짓이다. 값은 다
+                #   있고 **판정 사유**만 없는 행이 섞여 있다 (R221 의 '불가' 와 같은 모양).
+                + (f"  \n이 중 **{_nwhy241}종목**은 값은 다 있고 판정 사유만 "
+                   f"없습니다 — 채우면 '추천 제외' 아래에 왜인지 한 줄이 붙습니다."
+                   if _nwhy241 else ''))
         _todo166 = _fill_missing[:_WL_FILL_MAX]
         # 라운드 327 — 표의 '지금 재기'(`?measure=`)로 고른 **한 종목**은 버튼을 안 눌러도 바로 잰다.
         #   사용자가 누른 링크라 사용자가 시작한 것이고, 채우는 길은 이 버튼과 **같은 코드**다(§4).
@@ -6394,11 +6431,15 @@ else:
         if _mrow327:
             _todo166 = _mrow327[:1]
             st.info(f"**{_todo166[0].get('name') or _mcode327}** 을(를) 지금 계산합니다 — 1~3분 걸립니다.")
-        _clicked166 = st.button(f"{len(_fill_missing[:_WL_FILL_MAX])}종목 지금 계산해서 채우기",
-                                key='wl_fill_now', type='primary')
+        if _rrow373:
+            _todo166 = _rrow373[:1]
+            st.info(f"**{_todo166[0].get('name') or _rcode373}** 의 보유 기준(버틸 수 없는 가격 · "
+                    f"팔 가격 1차)을 오늘 값으로 다시 잽니다 — 사람이 눌렀습니다 · 1~3분 걸립니다.")
+        _clicked166 = (st.button(f"{len(_fill_missing[:_WL_FILL_MAX])}종목 지금 계산해서 채우기",
+                                 key='wl_fill_now', type='primary') if _fill_missing else False)
         if _clicked166:
             _todo166 = _fill_missing[:_WL_FILL_MAX]
-        if _mrow327 or _clicked166:
+        if _mrow327 or _clicked166 or _rrow373:
             import verdict_core as _vc166
             import next_action as _na
             _bar166 = st.progress(0.0)
@@ -6460,7 +6501,9 @@ else:
                         _w166, _co166.get('hold_trim'), _co166.get('hold_stop'),
                         _fs166.get('current_price'), t_ref_str,
                         horizon_bars=int(_co166.get('horizon_days') or _lv217.HORIZON_BARS),
-                        held=bool(_w166.get('paid'))))
+                        held=bool(_w166.get('paid')),
+                        # 라운드 373 — 사람이 '기준 다시 재기'를 누른 그 종목만 강제로 다시 잰다
+                        remeasure=bool(_rrow373) and _c166 == _rcode373))
                     _done166.append((_c166, _vals166))
                 except Exception as _ex166:                    # noqa: BLE001
                     # 실패를 통과로 적지 않는다 — 왜 못 냈는지 그대로 쓴다
@@ -8134,9 +8177,12 @@ try:
                 _s141.update(_wl_avg_down_snap(_w141, snap, CORE))
                 # 보유자 기준 값 (라운드 169 → 224) — 신규 매수자 값과 **다른 키**다.
                 #   보유 행은 잰 날에 고정, 창이 끝나거나 닿았을 때만 다시 잰다.
+                # 라운드 373 — '잰 날'은 **분석 기준일**(t_ref_str · 채우기 단계와 같은 값)이다. 종전엔 이
+                #   자리만 달력 날짜라 휴장일에 열면 채우기 단계는 09-23, 여기는 09-28 로 **같은 계획에
+                #   '오늘'이 둘**이었다(R222·R306 의 그 모양 · 세 번째).
                 _hp141 = portfolio.hold_plan_update(
                     _w141, CORE.get('hold_trim'), CORE.get('hold_stop'),
-                    realtime_price, datetime.date.today().isoformat(),
+                    realtime_price, t_ref_str,
                     horizon_bars=int(CORE.get('horizon_days') or _lv217.HORIZON_BARS),
                     held=bool(_w141.get('paid')))
                 # 계획이 **끝나서**(선에 닿음 · 창 경과) 다시 잰 경우만 사유 줄이 실린다
@@ -11312,6 +11358,14 @@ if user_entry_price > 0 and user_quantity > 0:
                         else _TOK['warn']))
     _log_html224 = (f"<p style='margin:0 0 10px 0; font-size:12px; color:{_TOK['tx3']};'>"
                     f"이력: {_uk._esc(_log224[-1])}</p>" if _log224 else "")
+    # 라운드 373 — 손절선을 넘긴 계획은 그대로 두므로(사용자 결정 2026-09-28) 이 카드에도 다시 재는 길을
+    #   둔다 — 표의 링크와 **같은 길**(`?remeasure=` · 채우기 단계가 잰다 · §4). 관심종목에 있는 행만.
+    if ((_act224 or {}).get('kind') == '정리 검토' and _row224.get('code')):
+        _log_html224 += (f"<p style='margin:0 0 10px 0; font-size:12px; color:{_TOK['tx2']};'>"
+                         f"이 계획은 그대로 둡니다 — 판 뒤엔 관심종목 표의 '팔았음', 계획을 오늘 값으로 "
+                         f"다시 재려면 <a href='?remeasure={_uk._esc_attr(str(_row224.get('code')))}' "
+                         f"target='_self' style='color:{_TOK['brand']}; text-decoration:none;'>"
+                         f"기준 다시 재기</a> (1~3분)</p>")
     _chk_wrap224 = (f"<p style='margin:0 0 4px 0; font-size:12px; color:{_TOK['tx2']};'>"
                     f"<b>추가매수(물타기) 6조건</b> — 전부 통과해야 허용 · 첫 조건은 중앙 "
                     f"판정</p><ul style='margin:0 0 0 18px; padding:0; font-size:12px; "
