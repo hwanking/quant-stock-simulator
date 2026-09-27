@@ -1046,8 +1046,16 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                     continue
                 if not forward_from and _lv.too_close(done_by_tk.get(tk, ()), d):
                     near_dup += 1
+                    # 라운드 372 — '언제 열리나'는 **마지막 케이스 뒤의 후보**에서만 센다. 격자가 한 봉
+                    #   밀리면 옛 후보도 전부 새 후보가 되어 겹침에 막히는데(09-25 실행 52,183건), 그
+                    #   후보들은 두 케이스 **사이**(간격 = 35일)에 있어 아무리 나아가도 안 열린다.
+                    #   그것까지 최소를 잡으니 *"2015-08-21 이 되어야 열린다"* 가 찍혔다 — 이미 지난
+                    #   날이라 문장이 거짓이다(§3). 열릴 수 있는 것은 그 종목의 마지막 케이스보다
+                    #   **뒤**에 선 후보뿐이다. 규칙·문턱 불변 — 세는 대상만 좁혔다.
+                    _done_tk = done_by_tk.get(tk, ())
+                    _beyond_last = bool(_done_tk) and d > _done_tk[-1]
                     _ub = _lv.unblock_date(done_by_tk.get(tk, ()), d)
-                    if _ub and (near_open is None or _ub < near_open):
+                    if _beyond_last and _ub and (near_open is None or _ub < near_open):
                         near_open = _ub
                     continue
                 todo.append((tk, d))
