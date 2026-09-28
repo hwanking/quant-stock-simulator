@@ -28870,6 +28870,22 @@ check("상세의 자동 경로는 remeasure 를 안 넘긴다 — 종목을 여�
 check("보유 계획의 '잰 날'은 상세·채우기 두 자리 다 분석 기준일(t_ref_str)이다 — 달력 날짜가 아니다",
       'realtime_price, t_ref_str,' in _wa367[_i367:_j367]
       and "datetime.date.today().isoformat(),\n                    horizon_bars" not in _wa367[_i367:_j367])
+# 재고 나면 화면 문구도 같이 바뀐다(R250) — 규칙을 바꾼 뒤 보유자 카드 캡션과 설명 사전이 여전히
+#   "두 선에 닿으면 다시 잽니다"라 적고 있었다(손절선 쪽이 거짓). 화면 **문자열 상수**만 본다 — 왜 바뀌었는지
+#   적은 주석이 그 글자를 품고 있으므로 원문 검색이면 자기 주석에 걸린다(R314·§324).
+import ast as _ast367
+import io as _io367
+def _strs367(path):
+    _t = _ast367.parse(_io367.open(path, encoding='utf-8').read())
+    return [n.value for n in _ast367.walk(_t) if isinstance(n, _ast367.Constant) and isinstance(n.value, str)]
+_s367 = _strs367('web_app.py') + _strs367('gaeum_glossary.py')
+#   ⚠️ 첫 판의 옛 패턴 '닿거나 20봉 창이 끝나면 다시' 는 **새 문장**('1차 매도가에 닿거나 20봉 창이 …')도 잡았다 —
+#   옛 문장을 가르는 것은 어느 선인지 안 적은 '고정하고, 닿거나' 다(판별식이 넓으면 제 고침을 결함으로 센다).
+_old367 = [s for s in _s367 if '두 선에 닿으면 다시' in s or '고정하고, 닿거나' in s]
+_new367 = [s for s in _s367 if '1차 매도가에 닿' in s and ('계획은 그대로 두' in s or '계획은 그대로 둔' in s)]
+check("보유자 카드·설명 사전이 손절선을 넘겨도 다시 재지 않는다고 말한다 — 옛 '두 선에 닿으면 다시 잰다' 0",
+      len(_old367) == 0 and len(_new367) >= 2,
+      f"옛 문장 {len(_old367)} · 새 문장 {len(_new367)} · 본 문자열 {len(_s367):,}", scanned=len(_s367))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
