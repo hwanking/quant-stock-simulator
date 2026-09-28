@@ -1022,7 +1022,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     import ledger_view as _lv
     done_by_tk = _lv.dates_by_ticker(done)
     near_dup = 0
-    near_open = None            # 막힌 후보가 열리는 가장 이른 **기준일** (R309)
+    _open_by_stock = []         # [(그 종목 격자 끝, 그 종목의 가장 이른 열리는 기준일)] (R309·R379)
     newest_cand = None          # 이번에 만든 후보 중 가장 최신 기준일
     skipped = 0
     # ⚠️ 라운드 311 — **120분이 어디로 갔는지 아무도 안 찍고 있었다.** 09-15 실행에서
@@ -1038,8 +1038,10 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             #   `run_full_pipeline` 은 자기 적재(실시간 확인·재무 메타 포함)를 따로 한다 — 판정 불변.
             pdf = eng.fetch_daily_bars(tk)
             price_cache[tk] = pdf
-            for d in make_asof_dates(pdf, n_dates=N_DATES,
-                                     forward_from=forward_from):
+            _cands = make_asof_dates(pdf, n_dates=N_DATES,
+                                     forward_from=forward_from)
+            _tk_open = None     # 이 종목의 가장 이른 열리는 기준일 (라운드 379)
+            for d in _cands:
                 if newest_cand is None or d > newest_cand:
                     newest_cand = d
                 if (tk, d) in done:
@@ -1055,10 +1057,14 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                     _done_tk = done_by_tk.get(tk, ())
                     _beyond_last = bool(_done_tk) and d > _done_tk[-1]
                     _ub = _lv.unblock_date(done_by_tk.get(tk, ()), d)
-                    if _beyond_last and _ub and (near_open is None or _ub < near_open):
-                        near_open = _ub
+                    if _beyond_last and _ub and (_tk_open is None or _ub < _tk_open):
+                        _tk_open = _ub
                     continue
                 todo.append((tk, d))
+            if _tk_open and _cands:
+                # 라운드 379 — 종목마다 격자 끝과 같이 담아 두고, 루프가 끝난 뒤 시장 격자 끝에 선
+                #   종목과 뒤처진 종목을 가른다(`ledger_view.split_open_by_frontier` 한 곳).
+                _open_by_stock.append((max(_cands), _tk_open))
         except Exception as exc:
             skipped += 1
             if skipped <= 10:
@@ -1106,10 +1112,21 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         #   새 숫자를 만들지 않는다.
         print(f"  ⚠️ 남음 0 이지만 **다 한 것이 아니다** — 새 후보 {near_dup:,}건이 "
               f"전부 겹침 규칙에 막혔다.")
-        if near_open:
-            print(f"     가장 이른 것은 기준일이 {near_open} 이 되어야 열린다 "
-                  f"(이번 최신 후보 {newest_cand}). 후보는 거래일마다 한 봉씩 "
+        # ⚠️ 라운드 379 — 한 줄로 최소를 잡으니 09-28 실행이 *"2026-05-08 이 되어야 열린다 (이번
+        #   최신 후보 2026-08-26)"* 를 찍었다 — 열릴 날이 최신 후보보다 앞이다. 그 값은 최근 봉
+        #   사이가 비어 격자 끝이 04-07 인 종목 하나의 것이었고 시장 격자 끝에 선 573종목의 답은
+        #   09-14 였다. 두 무리를 갈라 적는다(원장이 언제 자라는지는 앞 무리가 말한다).
+        _split = _lv.split_open_by_frontier(_open_by_stock, newest_cand)
+        _fr_open, _fr_n = _split['front']
+        _lg_open, _lg_n = _split['lag']
+        if _fr_open:
+            print(f"     시장 격자 끝({newest_cand})에 선 종목 {_fr_n:,}개 — 가장 이른 것은 "
+                  f"기준일이 {_fr_open} 이 되어야 열린다. 후보는 거래일마다 한 봉씩 "
                   f"나아간다 — 달력 날짜로는 환산하지 않는다 (§2).")
+        if _lg_open:
+            print(f"     격자 끝이 그보다 앞선 종목 {_lg_n:,}개(최근 봉 사이가 비었다) — 각자 제 "
+                  f"봉으로 나아가며 가장 이른 것은 기준일 {_lg_open}. 원장이 언제 자라는지는 "
+                  f"위 줄이 말한다.")
     total_planned = len(done) + len(todo)
     # ⚠️ '완료'는 **예측 파일 전체**의 수이고 이번 계획이 본 것은 pool 뿐이다
     #   (축적 단계는 `--universe` 가 없어 고정 목록 셋 = 600종목 · R309).

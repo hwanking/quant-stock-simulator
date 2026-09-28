@@ -29252,6 +29252,35 @@ check("되살린 행에도 '기준 다시 재기' 길이 있다 — 표와 보�
       and "or (_act224 or {}).get('hold_stop_revived'))" in _wa371)
 
 
+print("\n" + "=" * 72)
+print("§372 '언제 열리나'를 시장 격자 끝에 선 종목과 뒤처진 종목으로 가른다 (라운드 379)")
+print("=" * 72)
+# 09-28 실행이 *"가장 이른 것은 기준일이 2026-05-08 이 되어야 열린다 (이번 최신 후보 2026-08-26)"* 를 찍었다 —
+#   열릴 날이 최신 후보보다 앞이다. 그 값은 최근 봉 사이가 비어 격자 끝이 04-07 인 종목의 것이었고 시장 격자
+#   끝(08-26)에 선 573종목의 답은 09-14 였다(2026-09-29 실측 · pool 600 · 실패 4). 가르는 기준은 '같은 날인가'
+#   하나 — 새 숫자 없음. 규칙은 `ledger_view.split_open_by_frontier` 한 곳.
+import ledger_view as _lv372
+_sp372 = _lv372.split_open_by_frontier(
+    [('2026-08-26', '2026-09-14'), ('2026-08-26', '2026-09-22'), ('2026-04-07', '2026-05-08'),
+     ('2026-08-25', '2026-09-30'), ('2026-08-26', None)], '2026-08-26')
+check("격자 끝에 선 종목과 뒤처진 종목을 가른다 — 앞 무리의 최소가 09-14 · 뒤처진 무리의 05-08 은 섞지 않는다",
+      _sp372 == {'front': ('2026-09-14', 2), 'lag': ('2026-05-08', 2)}, str(_sp372))
+check("가르는 기준은 '같은 날인가' 하나 — 하루만 앞서도 뒤처진 무리 · 열릴 날이 없는 종목은 안 센다",
+      _lv372.split_open_by_frontier([('2026-08-25', '2026-09-14')], '2026-08-26')
+      == {'front': (None, 0), 'lag': ('2026-09-14', 1)}
+      and _lv372.split_open_by_frontier([], '2026-08-26') == {'front': (None, 0), 'lag': (None, 0)})
+import scripts.lineage_audit as _la372                         # noqa: E402
+_lab372 = '\n'.join(ln for _i372, ln in _la372.code_lines('scripts/calibration_lab.py'))
+check("랩이 그 함수를 부르고 한 줄 최소(`near_open`)는 코드에서 사라졌다 · 두 무리를 따로 적는다",
+      '_lv.split_open_by_frontier(_open_by_stock, newest_cand)' in _lab372
+      and 'near_open' not in _lab372
+      and '시장 격자 끝(' in _lab372 and '격자 끝이 그보다 앞선 종목' in _lab372, str(len(_lab372)))
+check("라운드 372 의 좁힘(마지막 케이스 뒤의 후보만)은 그대로 — 그 위에서 무리만 가른다",
+      '_beyond_last = bool(_done_tk) and d > _done_tk[-1]' in _lab372
+      and 'if _beyond_last and _ub and' in _lab372
+      and '_open_by_stock.append((max(_cands), _tk_open))' in _lab372)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

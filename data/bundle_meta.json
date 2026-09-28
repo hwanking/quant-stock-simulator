@@ -1,7 +1,7 @@
 {
- "made": "2026-09-28",
- "sample_rows": 255129,
- "ledger_rows_at_bundle": 255129,
- "compressed_bytes": 32456263,
+ "made": "2026-09-29",
+ "sample_rows": 255529,
+ "ledger_rows_at_bundle": 255529,
+ "compressed_bytes": 32524355,
  "note": "라운드 282 부터 원장 **전체**를 눌러서 동봉한다. sample_rows 와 ledger_rows_at_bundle 이 같으면 표본이 아니라 전량이라는 뜻이다. 다르면 표본이고, 화면은 그것을 밝혀야 한다 — 전체인 척하면 §3·§9 위반이다."
 }

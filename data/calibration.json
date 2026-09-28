@@ -1,5 +1,5 @@
 {
- "generated_from": "255129건 가상 판정 · 판정 완료 245139건",
+ "generated_from": "255529건 가상 판정 · 판정 완료 245485건",
  "bands": [
   {
    "lo": 0,
@@ -13,47 +13,47 @@
   {
    "lo": 40,
    "hi": 49,
-   "n": 83124,
-   "hit": 49062,
-   "hit_rate": 59.022664934314996,
-   "wilson_low": 58.68792638149812,
-   "avg_return": 0.11971401550643992
+   "n": 83286,
+   "hit": 49134,
+   "hit_rate": 58.99430876737988,
+   "wilson_low": 58.65986235008231,
+   "avg_return": 0.11412258877237813
   },
   {
    "lo": 50,
    "hi": 54,
-   "n": 22689,
-   "hit": 13545,
-   "hit_rate": 59.69853232844109,
-   "wilson_low": 59.05869266026242,
-   "avg_return": 0.11759600665425722
+   "n": 22726,
+   "hit": 13559,
+   "hit_rate": 59.66294112470298,
+   "wilson_low": 59.02353849586681,
+   "avg_return": 0.11533776833382706
   },
   {
    "lo": 55,
    "hi": 59,
-   "n": 122681,
-   "hit": 73361,
-   "hit_rate": 59.79817575663713,
-   "wilson_low": 59.52350456236005,
-   "avg_return": 0.11860545165986393
+   "n": 122807,
+   "hit": 73422,
+   "hit_rate": 59.78649425521346,
+   "wilson_low": 59.511951474328704,
+   "avg_return": 0.11672474451034522
   },
   {
    "lo": 60,
    "hi": 64,
-   "n": 15613,
-   "hit": 9362,
-   "hit_rate": 59.9628514699289,
-   "wilson_low": 59.19191748628304,
-   "avg_return": 0.14786649010467667
+   "n": 15632,
+   "hit": 9370,
+   "hit_rate": 59.941146366427844,
+   "wilson_low": 59.17061867186829,
+   "avg_return": 0.14442242994351212
   },
   {
    "lo": 65,
    "hi": 69,
-   "n": 911,
+   "n": 913,
    "hit": 546,
-   "hit_rate": 59.934138309549944,
-   "wilson_low": 56.71668270721598,
-   "avg_return": 0.1864123818010615
+   "hit_rate": 59.802847754654984,
+   "wilson_low": 56.58779584052832,
+   "avg_return": 0.16325012574585424
   },
   {
    "lo": 70,
@@ -68,62 +68,62 @@
  "lifts": [
   {
    "label": "월봉 10선 위",
-   "yes_n": 116228,
-   "yes_rate": 59.58805107203084,
-   "no_n": 128911,
-   "no_rate": 59.48367478337768
+   "yes_n": 116336,
+   "yes_rate": 59.57485215238619,
+   "no_n": 129149,
+   "no_rate": 59.456132064514634
   },
   {
    "label": "DeMARK 매수 신호",
-   "yes_n": 14614,
-   "yes_rate": 62.139044751608054,
-   "no_n": 230525,
-   "no_rate": 59.36796442902072
+   "yes_n": 14625,
+   "yes_rate": 62.11965811965812,
+   "no_n": 230860,
+   "no_rate": 59.347223425452654
   },
   {
    "label": "순기대수익 양수",
-   "yes_n": 86222,
-   "yes_rate": 59.76664888311568,
-   "no_n": 158917,
-   "no_rate": 59.40648262929705
+   "yes_n": 86383,
+   "yes_rate": 59.73513307016427,
+   "no_n": 159102,
+   "no_rate": 59.391459566818774
   },
   {
    "label": "적정가 이하 진입",
-   "yes_n": 202464,
-   "yes_rate": 59.66492808598072,
-   "no_n": 42675,
-   "no_rate": 58.90802577621558
+   "yes_n": 202707,
+   "yes_rate": 59.64668215700494,
+   "no_n": 42778,
+   "no_rate": 58.8760577867128
   }
  ],
  "entry_candidates": {
   "main": {
-   "n": 43596,
-   "hit": 25973,
-   "hit_rate": 59.57656665749151,
-   "wilson_low": 59.115075404511295,
-   "avg_return": 0.1784989594235844
+   "n": 43696,
+   "hit": 26013,
+   "hit_rate": 59.53176492127425,
+   "wilson_low": 59.07072513393583,
+   "avg_return": 0.17101607844353073
   },
   "holdout": {
-   "n": 26190,
-   "hit": 15775,
-   "hit_rate": 60.232913325696835,
-   "wilson_low": 59.63871015955012,
-   "avg_return": 0.24603024483728916
+   "n": 26202,
+   "hit": 15783,
+   "hit_rate": 60.23585985802611,
+   "wilson_low": 59.64180012582576,
+   "avg_return": 0.24735927463486895
   },
   "all": {
-   "n": 69786,
-   "hit": 41748,
-   "hit_rate": 59.8228871120282,
-   "wilson_low": 59.45861274927155,
-   "avg_return": 0.20384278719684737
+   "n": 69898,
+   "hit": 41796,
+   "hit_rate": 59.79570230907895,
+   "wilson_low": 59.4316815011697,
+   "avg_return": 0.1996341279815067
   }
  },
  "breakdowns": {
   "by_asset_type": [
    {
     "label": "STOCK",
-    "n": 228084,
-    "hit": 135463,
+    "n": 228384,
+    "hit": 135606,
     "hit_rate": 59.4,
     "wilson_low": 59.2,
     "avg_return": 0.18,
@@ -134,27 +134,27 @@
    },
    {
     "label": "ETF",
-    "n": 14490,
-    "hit": 8991,
-    "hit_rate": 62.0,
-    "wilson_low": 61.3,
-    "avg_return": 0.23,
+    "n": 14534,
+    "hit": 9002,
+    "hit_rate": 61.9,
+    "wilson_low": 61.1,
+    "avg_return": 0.22,
     "median_return": 2.1,
     "profit_factor": 1.16,
-    "avg_mae": -2.35,
-    "avg_return_after_cost": -0.32
+    "avg_mae": -2.36,
+    "avg_return_after_cost": -0.33
    },
    {
     "label": "ETF_LEV",
-    "n": 1471,
-    "hit": 898,
+    "n": 1473,
+    "hit": 899,
     "hit_rate": 61.0,
     "wilson_low": 58.5,
-    "avg_return": 0.37,
+    "avg_return": 0.38,
     "median_return": 2.44,
     "profit_factor": 1.15,
     "avg_mae": -4.1,
-    "avg_return_after_cost": -0.18
+    "avg_return_after_cost": -0.17
    },
    {
     "label": "ETF_INV",
@@ -172,9 +172,9 @@
   "by_market": [
    {
     "label": "KOSPI",
-    "n": 155048,
-    "hit": 92663,
-    "hit_rate": 59.8,
+    "n": 155222,
+    "hit": 92742,
+    "hit_rate": 59.7,
     "wilson_low": 59.5,
     "avg_return": 0.19,
     "median_return": 2.1,
@@ -184,15 +184,15 @@
    },
    {
     "label": "KOSDAQ",
-    "n": 90091,
-    "hit": 53276,
+    "n": 90263,
+    "hit": 53352,
     "hit_rate": 59.1,
     "wilson_low": 58.8,
-    "avg_return": 0.17,
-    "median_return": 2.4,
-    "profit_factor": 1.07,
-    "avg_mae": -4.13,
-    "avg_return_after_cost": -0.38
+    "avg_return": 0.16,
+    "median_return": 2.39,
+    "profit_factor": 1.06,
+    "avg_mae": -4.14,
+    "avg_return_after_cost": -0.39
    }
   ],
   "by_regime": [
@@ -210,20 +210,20 @@
    },
    {
     "label": "SIDEWAYS",
-    "n": 86084,
-    "hit": 53757,
+    "n": 86411,
+    "hit": 53902,
     "hit_rate": 62.4,
     "wilson_low": 62.1,
-    "avg_return": 0.49,
+    "avg_return": 0.48,
     "median_return": 2.18,
-    "profit_factor": 1.24,
-    "avg_mae": -1.91,
-    "avg_return_after_cost": -0.06
+    "profit_factor": 1.23,
+    "avg_mae": -1.93,
+    "avg_return_after_cost": -0.07
    },
    {
     "label": "BEAR",
-    "n": 72243,
-    "hit": 41530,
+    "n": 72262,
+    "hit": 41540,
     "hit_rate": 57.5,
     "wilson_low": 57.1,
     "avg_return": -0.0,
@@ -261,15 +261,15 @@
   },
   "blind": {
    "label": "blind",
-   "n": 17405,
-   "hit": 10256,
-   "hit_rate": 58.9,
-   "wilson_low": 58.2,
-   "avg_return": 0.19,
-   "median_return": 3.12,
-   "profit_factor": 1.05,
-   "avg_mae": -4.52,
-   "avg_return_after_cost": -0.36
+   "n": 17751,
+   "hit": 10411,
+   "hit_rate": 58.7,
+   "wilson_low": 57.9,
+   "avg_return": 0.15,
+   "median_return": 3.08,
+   "profit_factor": 1.04,
+   "avg_mae": -4.58,
+   "avg_return_after_cost": -0.4
   },
   "buy_zone": {
    "train": {
@@ -298,48 +298,48 @@
    },
    "blind": {
     "label": "60+ blind",
-    "n": 1327,
-    "hit": 717,
-    "hit_rate": 54.0,
-    "wilson_low": 51.3,
-    "avg_return": -0.72,
-    "median_return": 2.88,
-    "profit_factor": 0.84,
-    "avg_mae": -7.07,
-    "avg_return_after_cost": -1.27
+    "n": 1348,
+    "hit": 725,
+    "hit_rate": 53.8,
+    "wilson_low": 51.1,
+    "avg_return": -0.76,
+    "median_return": 2.87,
+    "profit_factor": 0.83,
+    "avg_mae": -7.09,
+    "avg_return_after_cost": -1.31
    }
   }
  },
  "failure_classes": [
   {
    "class": "시장 국면 역풍",
-   "n": 29391,
-   "total_loss": -158989.4
+   "n": 29395,
+   "total_loss": -159017.0
   },
   {
    "class": "방향 오판",
-   "n": 20370,
-   "total_loss": -119416.0
+   "n": 20407,
+   "total_loss": -119729.3
   },
   {
    "class": "노이즈 손절(목표 절반까지 갔다 반락)",
-   "n": 21037,
-   "total_loss": -107301.9
+   "n": 21072,
+   "total_loss": -107632.1
   },
   {
    "class": "추세 역행(월10선 아래)",
-   "n": 19882,
-   "total_loss": -92909.1
+   "n": 19975,
+   "total_loss": -93756.6
   },
   {
    "class": "과열 추격",
-   "n": 7436,
-   "total_loss": -44300.7
+   "n": 7457,
+   "total_loss": -44495.8
   },
   {
    "class": "레버리지 변동성",
-   "n": 573,
-   "total_loss": -3622.9
+   "n": 574,
+   "total_loss": -3640.2
   },
   {
    "class": "인버스 방향 해석",
@@ -364,25 +364,25 @@
   "방향 오판"
  ],
  "signal_frequency": {
-  "total": 255129,
-  "buy_zone": 16916,
+  "total": 255529,
+  "buy_zone": 16939,
   "rate_pct": 6.6
  },
  "high_confidence": {
   "label": "고신뢰(65+)",
-  "n": 931,
+  "n": 933,
   "hit": 557,
-  "hit_rate": 59.8,
-  "wilson_low": 56.6,
-  "avg_return": 0.2,
-  "median_return": 2.78,
-  "profit_factor": 1.07,
-  "avg_mae": -4.23,
-  "avg_return_after_cost": -0.35
+  "hit_rate": 59.7,
+  "wilson_low": 56.5,
+  "avg_return": 0.18,
+  "median_return": 2.76,
+  "profit_factor": 1.06,
+  "avg_mae": -4.25,
+  "avg_return_after_cost": -0.37
  },
- "total_cases": 255129,
+ "total_cases": 255529,
  "carried_over": 0,
- "ledger_rows": 255129,
+ "ledger_rows": 255529,
  "rulebook_version": "v2026.08.02",
  "note": "실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. 리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 쓰인다는 한계가 있다. carried_over 는 시세를 더는 받을 수 없어 이번 실행에서 다시 채점하지 못한 행이다 — 원장에는 남기고 통계에서는 뺀다(다시 못 재는 것과 없던 일로 하는 것은 다르다)."
 }

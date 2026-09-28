@@ -75,6 +75,31 @@ def unblock_date(sorted_dates, d, min_gap_days=MIN_GAP_DAYS):
     return (_day(prev) + _dt.timedelta(days=int(min_gap_days))).isoformat()
 
 
+def split_open_by_frontier(per_stock, newest):
+    """종목별 '가장 이른 열리는 기준일'을 **시장 격자 끝에 선 종목**과 **뒤처진 종목**으로 가른다.
+
+    `per_stock`: [(그 종목 격자 끝 기준일, 그 종목의 가장 이른 열리는 기준일), ...]
+    `newest`   : 이번에 만든 후보 중 가장 최신 기준일(시장 격자 끝).
+    반환: {'front': (최소 또는 None, 종목 수), 'lag': (최소 또는 None, 종목 수)}
+
+    ■ 왜 가르는가 (라운드 379 · 2026-09-29)
+      09-28 실행이 *"가장 이른 것은 기준일이 2026-05-08 이 되어야 열린다 (이번 최신 후보
+      2026-08-26)"* 를 찍었다 — 열릴 날이 최신 후보보다 **앞**이라 읽는 사람에게는 이미
+      열렸어야 하는 날로 보인다. 그 값을 낸 종목은 마지막 봉이 09-28 인데 격자 끝이
+      **04-07** 이었다(최근 봉 사이가 비어 20봉 앞이 4월로 간다). 그 종목의 후보는 **자기
+      봉**으로 나아가므로 거짓은 아니지만, 시장 격자 끝에 선 573종목의 답(**09-14**)과 한
+      줄에 섞으면 원장이 언제 자라는지를 말하지 못한다. 규칙·문턱 불변 — 세는 대상을
+      격자 끝으로 가를 뿐이고 가르는 기준은 '같은 날인가' 하나다(새 숫자 없음).
+    """
+    front, lag = [], []
+    for stock_newest, ub in per_stock:
+        if not ub:
+            continue
+        (front if stock_newest == newest else lag).append(ub)
+    return {'front': (min(front) if front else None, len(front)),
+            'lag': (min(lag) if lag else None, len(lag))}
+
+
 def dates_by_ticker(pairs):
     """{(ticker, date), ...} → {ticker: [date, ...] 오름차순}."""
     out = {}
