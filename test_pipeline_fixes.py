@@ -5198,8 +5198,13 @@ check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
 # (versioning.AXES 가 5 → 7 로 늘었는데 화면은 5개만 그렸다).
 # 그래서 리터럴이 아니라 **의도**를 검사한다 — 상태·버전이 한 줄에 있고,
 # 축 목록을 versioning 이 정하는가.
-check("상단 바 한 줄에 상태와 엔진 버전이 함께 있다",
-      '_STATUS_TOP' in _w86 and '_AX_KO' in _w86 and 'class="here"' in _w86)
+# 라운드 376 — 사용자(2026-09-28)가 시스템 버전·데이터 갱신 정보를 **사이드바 맨 아래**로 옮겨 달라고 했다.
+#   이 검사의 이름("상단 바 한 줄에 …")이 거짓이 되므로 사실로 옮긴다: 상태와 7축 칩은 한 함수가 만들고
+#   (`_version_meta_html`) 사이드바 푸터가 그리며, 상단 바는 업데이트 한 줄과 '보는 중' 만 남는다.
+check("상태와 엔진 버전은 한 함수가 함께 만들고 사이드바 푸터가 그린다 · 상단 바엔 업데이트 한 줄과 보는 중",
+      '_STATUS_TOP' in _w86 and '_AX_KO' in _w86 and 'class="here"' in _w86
+      and 'def _version_meta_html():' in _w86
+      and '_st376, _chips376 = _version_meta_html()' in _w86)
 check("버전 칩 축 목록을 화면이 손으로 나열하지 않는다",
       'for _a in _ver.AXES' in _w86 and "'valuation': '적정가'" in _w86)
 
@@ -5225,8 +5230,10 @@ check("활성 단계 셀렉터 특이도를 일반 규칙과 맞춘다",
       'div.st-key-_acc_' in _u87)
 
 _w87 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("좌측 메뉴 — 1차 탭 + 링크 그룹 + 설정 4단계",
-      '_NAV_MAIN' in _w87 and '_NAV_SUB' in _w87
+# 라운드 376 — 상단 1차 탭(`_NAV_MAIN`)은 넷이 아래 묶음과 같은 앵커라 걷어냈고, 그 자리에 **이 종목 목차**
+#   (`_NAV_LOCAL`)가 왔다. 검사가 재려던 것(메뉴 둘 + 설정 4단계)은 그대로다.
+check("좌측 메뉴 — 이 종목 목차 + 전역 묶음 + 설정 4단계",
+      '_NAV_LOCAL' in _w87 and '_NAV_SUB' in _w87
       and "'key': 'pick'" in _w87 and "'key': 'crit'" in _w87)
 check("검색은 아코디언 밖 — 접혀도 항상 보인다",
       '종목 검색·선택 (아코디언 밖 · 항상 보인다)' in _w87
@@ -5972,9 +5979,10 @@ _w98 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("상태 줄을 따로 그리지 않는다 (한 줄로 합침)",
       '_uk.status_bar(' not in _w98)
 # 라운드 44 — '5축' 이 아니라 versioning.AXES 전부다 (7축).
-check("상태·판단수·엔진 축·보는 중이 한 바에 들어간다",
+# 라운드 376 — 한 바에서 사이드바 푸터로(위 §86 과 같은 이유). '한 곳에서 한 번' 이라는 성질은 그대로다.
+check("상태·판단수·엔진 축은 사이드바 푸터 한 곳에 · 상단 바엔 보는 중",
       '_STATUS_TOP' in _w98 and 'for _a in _ver.AXES' in _w98
-      and 'class="here"' in _w98)
+      and 'class="here"' in _w98 and _w98.count('_version_meta_html()') == 2)
 check("룰북·산식이 바 안에서 두 번 나오지 않는다",
       _w98.count("f\"룰북 {_VER_NOW['rulebook']}\"") == 0
       and _w98.count("f\"산식 {_VER_NOW['scoring']}\"") == 0)
@@ -11343,8 +11351,11 @@ check("개장 전 결론에 앵커가 있다",
       'id="nav-premarket-line"' in _w154)
 check("내비가 그 앵커를 가리킨다",
       "'#nav-premarket-line'" in _w154)
-check("같은 이름 두 곳을 이름으로 가른다",
-      "'개장 전 결론'" in _w154 and "'이 종목 한 줄 결론'" in _w154)
+# 라운드 376 — 종목의 '한 줄 결론' 은 전역 메뉴에서 나와 **'이 종목 · {종목명}' 제목 아래 목차**로 갔다. 두 곳을
+#   가르는 것은 이제 항목 글자가 아니라 그 제목이다 — 성질(두 곳이 이름으로 갈린다)은 그대로 본다.
+check("같은 이름 두 곳을 이름으로 가른다 — 개장 전 결론 · '이 종목 · {종목명}' 목차의 한 줄 결론",
+      "'개장 전 결론'" in _w154 and "'label': '한 줄 결론'" in _w154
+      and '_uk.nav_toc(f"이 종목 · {resolved_name}", _NAV_LOCAL' in _w154)
 # 방향어를 쓰지 않는다 — 위아래가 바뀌면 반드시 틀린다
 check("'아래 오늘의 추천' 같은 방향어를 안 쓴다",
       "아래 '오늘의 추천'" not in _w154, '방향어가 남아 있다')
@@ -12677,7 +12688,7 @@ for _n170 in _ast165.walk(_tree170):
         continue
     _nm170 = [t.id for t in _n170.targets
               if isinstance(t, _ast165.Name)]
-    if not any(x in ('_NAV_MAIN', '_NAV_SUB') for x in _nm170):
+    if not any(x in ('_NAV_LOCAL', '_NAV_SUB') for x in _nm170):
         continue
     for _c170 in _ast165.walk(_n170.value):
         if not isinstance(_c170, _ast165.Dict):
@@ -12751,8 +12762,9 @@ for _n170 in _ast165.walk(_tree170):
                             _items170.append(_iv170.value.lstrip('#'))
         _grp170.append((_title170, _items170))
 
+# 라운드 376 — 전역 묶음은 셋이다(이 종목 → 검색 아래 목차 · 도움 → 검증과 이력 끝). 하한을 그 수로.
 check("메뉴 묶음을 실제로 찾아냈다 (0개를 재고 통과하지 않는다)",
-      len(_grp170) >= 4, f'{len(_grp170)}묶음')
+      len(_grp170) >= 3, f'{len(_grp170)}묶음')
 _zig170 = []
 for _t170, _hs170 in _grp170:
     _seq170 = [_pos170[h] for h in _hs170 if h in _pos170]
@@ -12777,8 +12789,10 @@ check("묶음 안에서 본문 순서가 뒤집히지 않는다", not _zig170, s
 #    ⚠ 두 목록을 한 줄로 이어 세지 않는다. `_NAV_MAIN`(상단바)과
 #      `_NAV_SUB`(사이드바)는 다른 목록이고, 이어 세면 경계에서 항상
 #      한 번 튀어 보인다 — 없는 결함을 만들어 내는 세는 법이다.
-_MAX_INV170 = {'_NAV_MAIN': 0, '_NAV_SUB': 1}
-_navlist170 = {'_NAV_MAIN': [], '_NAV_SUB': []}
+# 라운드 376 — `_NAV_MAIN`(상단 5개 · 넷이 중복)을 걷어내고 `_NAV_LOCAL`(이 종목 목차)이 그 자리에 왔다.
+#   상한은 옛 상단 목록의 0 을 그대로 물려받는다 — 목차는 본문 순서와 같아야 한다.
+_MAX_INV170 = {'_NAV_LOCAL': 0, '_NAV_SUB': 1}
+_navlist170 = {'_NAV_LOCAL': [], '_NAV_SUB': []}
 for _n170 in _ast165.walk(_tree170):
     if not isinstance(_n170, _ast165.Assign):
         continue
@@ -13658,7 +13672,8 @@ check("메뉴에 관심종목 항목이 있다",
       "'href': '#nav-watchlist'" in _w180
       and "'label': '관심종목'" in _w180)
 check("'내 자산' 묶음에 넣었다 (보유종목 옆)",
-      _re.search(r"'2\. 내 자산'[\s\S]{0,600}#nav-watchlist", _w180)
+      # 라운드 376 — 묶음 번호(2.)를 뗐다. 성질(보유종목 옆 같은 묶음)만 본다.
+      _re.search(r"'(?:2\. )?내 자산'[\s\S]{0,600}#nav-watchlist", _w180)
       is not None)
 # 본문 순서가 메뉴 순서와 같은가 — 보유종목이 먼저다 (§170 ⓔ 와 같은 기준)
 _i180h = _w180.find('id="nav-holdings"')
@@ -21009,9 +21024,11 @@ check("판정 근거 상세 표의 보유자 두 행도 CORE 를 읽는다 (같�
 check("보유자 목표 도달 가능성도 CORE 의 hold_trim 으로 잰다",
       "realtime_price and CORE.get('hold_trim'):" in _w231
       and "_up = (CORE['hold_trim'] / realtime_price - 1) * 100" in _w231)
-check("보유 계획 한 줄이 관심종목 행의 값을 **그대로** 읽는다 (새 계산 없음)",
+# 라운드 378 — 손절선은 행의 값을 **판단과 같은 한 곳**(`_uk.effective_hold_stop` · 행의 값과 행의 이력만 읽는다 ·
+#   새 계산 없음)으로 읽는다. 옛 규칙이 선을 넘긴 뒤 낮춘 행에서 캡션이 낮춘 선을, 표 판단이 옛 선을 말하면 §4 다.
+check("보유 계획 한 줄이 관심종목 행의 값을 **그대로** 읽는다 (새 계산 없음 · 손절선은 판단과 같은 한 곳)",
       "_pt225 = fmt_num(_row225.get('snap_hold_trim')" in _w231
-      and "_ps225 = fmt_num(_row225.get('snap_hold_stop')" in _w231
+      and "_ps225 = fmt_num(_uk.effective_hold_stop(_row225)[0]" in _w231
       and "_row225.get('snap_hold_at')" in _w231)
 # ⚠️ 라운드 279 — 종전 이 검사는 두 조각의 **인접**(`{_hold_reach_html}{_hold_plan_html}`)을 잠갔다.
 #   R279 가 그 사이에 기준가 줄(`_hold_basis_html`)을 넣자 깨졌는데, 이 검사가 지키려던 것은
@@ -28802,11 +28819,18 @@ _a366 = _uk366.watch_action(_after366, 9500, today=_dt366.date(2026, 9, 4))
 check("선을 넘겨 오늘 다시 잰 행 — kind 는 새 계획대로 '보유 유지' · hold_reset 이 그 사실을 싣는다",
       bool(_a366) and _a366['kind'] == '보유 유지'
       and (_a366.get('hold_reset') or {}).get('kind') == 'stop')
-check("이유 둘째 줄이 '옛 계획으로는 파는 자리였다 · 새 선'을 말하고 지금은 계획을 둔다고 적는다",
-      len(_a366.get('hold_why') or []) >= 2 and '파는 자리였습니다' in _a366['hold_why'][1]
-      and '9,000원' in _a366['hold_why'][1] and '9,300원' in _a366['hold_why'][1]
-      and '그대로 둡니다' in _a366['hold_why'][1], str(_a366.get('hold_why'))[:300])
-check("표의 짧은 줄이 같은 행에 실린다 (hold_log_short)", _a366.get('hold_log_short') == _short366)
+# 라운드 378 — 옛 규칙이 선을 넘긴 뒤 다시 잰 **바로 그 계획**(마지막 이력 = 잰 날)은 이제 **옛 선으로 본다**
+#   (사용자 결정 '넘긴 계획은 그대로' 를 그 결정 전에 다시 재어진 행에도 · `effective_hold_stop`). 그래서 이 행의
+#   이유 둘째 줄은 R371 의 "옛 계획으로는 파는 자리였다 · 새 선" 이 아니라 **옛 선 · 그때 다시 잰 선 · 옛 선으로 본다**
+#   이고, 짧은 줄은 '옛 계획으로 봄' 판이다. 현재가 9,500 은 옛 선 9,000 위라 kind 는 여전히 '보유 유지'(위 검사).
+check("이유 둘째 줄이 옛 선(9,000)과 그때 다시 잰 선(9,300)을 말하고 옛 선으로 본다고 적는다 (라운드 378)",
+      len(_a366.get('hold_why') or []) >= 2 and '9,000원' in _a366['hold_why'][1]
+      and '9,300원' in _a366['hold_why'][1] and '옛 손절선으로 봅니다' in _a366['hold_why'][1]
+      and '다시 쟀습니다' in _a366['hold_why'][1], str(_a366.get('hold_why'))[:300])
+check("표의 짧은 줄이 같은 행에 실린다 — 되살린 행은 '옛 계획으로 봄' 판 (라운드 378)",
+      _a366.get('hold_log_short') == _uk366.hold_log_short(_lines366['stop'], new_stop=9300, new_trim=11500,
+                                                          today=_td366, revived=True)
+      and '옛 계획으로 봄' in _a366.get('hold_log_short'))
 _o366 = _uk366.watch_action(dict(_after366, snap_hold_at='2026-09-10'), 9500,
                             today=_dt366.date(2026, 9, 10))
 check("이력의 날짜가 잰 날과 다르면(그 뒤 다시 잰 계획) hold_reset 은 None · 그 문장을 안 넣는다",
@@ -29015,6 +29039,217 @@ _i368 = _wf368.find('scripts/calendar_truth.py')
 check("워크플로 꼬리가 대조기를 부른다 — 업로드 뒤 · if: always()",
       _i368 > 0 and _i368 > _wf368.find('scripts/forward_registry_check.py') > 0
       and 'if: always()' in _wf368[_wf368.rfind('- name:', 0, _i368):_i368])
+
+
+print("\n" + "=" * 72)
+print("§369 휴장일은 규칙으로 다시 유도해 대 본다 · 사이드바 전역/종목 목차 분리 (라운드 376)")
+print("=" * 72)
+# 사용자(2026-09-28): "무슨 날짜가 휴일로 지정되면 맞는지 항상 확인할 수 있는 시스템으로" · "사이드바 효율적으로".
+#   ① 규칙 대조기(`krx_holiday_rules`) — 공휴일 법 규칙으로 날짜를 다시 유도해 표와 날짜마다 대 본다. 일봉 대조
+#      (§368)는 지나간 날만 보지만 이것은 **미래도** 본다. 표에 해를 더하면서 규칙표(LUNAR)를 안 더하면 여기서
+#      '못 댄 해' 로 실패한다 — 규칙 없이 날짜를 넣지 못하게 하는 것이 이 시스템의 요점이다.
+#   ② 사이드바 — 전역 메뉴와 이 종목 목차를 가르고, 중복 상단 목록을 걷어내고, 부가 정보는 맨 아래로.
+import datetime as _dt369
+import io as _io369
+import krx_holiday_rules as _khr369
+import bitemporal_engine as _be369
+_a369 = _khr369.audit()
+check("휴장일 표의 모든 해를 규칙으로 대 봤다 — 규칙표 없는 해가 표에 없다",
+      _a369['no_rule_years'] == [] and len(_a369['years']) >= 3,
+      f"대 본 해 {_a369['years']} · 못 댄 해 {_a369['no_rule_years']}")
+check("휴장일 표가 규칙과 평일 전부 일치한다 (미래 포함)", _a369['mismatch'] == [],
+      f"평일 {len(_a369['rows'])}일 · 어긋남 {_a369['mismatch']}", scanned=len(_a369['rows']))
+# 심기 — 이 세션의 세 결함을 되살린 옛 표를 넣으면 셋을 정확히 잡는가
+_old369 = (set(_be369.KRX_HOLIDAYS) | {'2026-09-28'}) - {'2027-05-03', '2025-01-27'}
+_m369 = {m['date']: m['status'] for m in _khr369.audit(table=_old369)['mismatch']}
+check("옛 표를 심으면 세 결함을 잡는다 — 09-28(표에만) · 2025-01-27 · 2027-05-03(미래 · 규칙상)",
+      _m369 == {'2026-09-28': '표에만 있음 — 규칙에 없는 휴장',
+                '2025-01-27': '규칙상 휴장인데 표에 없음',
+                '2027-05-03': '규칙상 휴장인데 표에 없음'}, str(_m369))
+# 규칙 단위 — 대체공휴일의 갈래가 법과 같은가 (실제로 휴장이었던 날로 확인된 것들)
+_e25, _e26, _e27 = (_khr369.expected_closed(y) for y in (2025, 2026, 2027))
+check("어린이날·부처님오신날이 한 날(2025-05-05)이면 다음 날이 대체다", '2025-05-06' in _e25)
+check("추석 연휴가 일요일(2025-10-05)과 겹치면 연휴 뒤 첫 평일(10-08)이 대체다", '2025-10-08' in _e25)
+check("추석 연휴가 토요일(2026-09-26)과 겹친 것은 대체가 아니다 — 09-28 은 규칙상 거래일", '2026-09-28' not in _e26)
+check("설 연휴가 일요일(2027-02-07)과 겹쳐 대체는 하나(2/9)뿐이다", '2027-02-09' in _e27 and '2027-02-10' not in _e27)
+check("규칙표가 없는 해는 지어내지 않는다 (None)", _khr369.expected_closed(2099) is None)
+# 매일 밤의 검사가 규칙까지 본다 — 일봉을 못 받아도 규칙 어긋남은 실패로 낸다
+from scripts import calendar_truth as _ct369
+import contextlib as _cl369
+with _cl369.redirect_stdout(_io369.StringIO()):
+    _rc369 = _ct369.check(fetch=lambda sym: None, holidays=_old369)
+check("매일 밤 검사(calendar_truth)가 규칙 어긋남을 일봉 없이도 실패로 낸다", _rc369 == 1, f"rc {_rc369}")
+
+# ② 사이드바
+_wa369 = _io369.open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("상단 중복 목록(`_NAV_MAIN`)을 그리지 않는다 — 넷이 아래 묶음과 같은 앵커였다",
+      'nav_list(_NAV_MAIN' not in _wa369 and '\n_NAV_MAIN = [' not in _wa369)
+check("이 종목 목차는 검색 바로 아래 자리에, 종목이 확정된 뒤 이름과 함께 채운다",
+      "_SB_TOC = st.sidebar.container(key='sb_toc')" in _wa369
+      and _wa369.index("_SB_PICK = st.sidebar.container()") < _wa369.index("_SB_TOC = st.sidebar.container(")
+      and '_SB_TOC.markdown(_uk.nav_toc(f"이 종목 · {resolved_name}", _NAV_LOCAL' in _wa369)
+check("목차는 스크롤해도 붙어 있다 — sticky 를 감싼 칸에 건다(목차 div 자신은 칸과 높이가 같아 안 걸렸다)",
+      'div:has(> .st-key-sb_toc)' in _wa369 and 'position: sticky; top: 60px;' in _wa369)
+check("전역 메뉴는 접는 묶음 셋이고 첫 묶음만 펼친다",
+      "with st.sidebar.expander(_g376['title'], expanded=(_gi376 == 0)):" in _wa369)
+import ast as _ast369
+_navsub369 = None
+for _n369 in _ast369.walk(_ast369.parse(_wa369)):
+    if isinstance(_n369, _ast369.Assign) and any(getattr(t, 'id', '') == '_NAV_SUB' for t in _n369.targets):
+        _navsub369 = [next(v.value for k, v in zip(g.keys, g.values) if getattr(k, 'value', '') == 'title')
+                      for g in _n369.value.elts]
+check("전역 묶음은 오늘의 시장 · 내 자산 · 검증과 이력 셋이다 (이 종목·도움 묶음은 없다)",
+      _navsub369 == ['오늘의 시장', '내 자산', '검증과 이력'], str(_navsub369))
+_foot369 = _wa369.index('_st376, _chips376 = _version_meta_html()')
+check("푸터가 사이드바의 마지막 그리기다 — 보유종목 상세 토글 뒤 · 처음으로·라이트 모드가 푸터 안",
+      _wa369.index('show_portfolio = st.sidebar.toggle(') < _foot369
+      < _wa369.index('key="btn_home"') and _foot369 < _wa369.index('key="tgl_theme"'))
+check("스캔 진행 막대는 '최신화' 아래 미리 잡은 자리에 — 푸터 아래로 떨어지지 않는다",
+      '_SB_SCAN_BAR = st.sidebar.empty()' in _wa369
+      and "_bar = _SB_SCAN_BAR if '_SB_SCAN_BAR' in globals() else st.sidebar.empty()" in _wa369)
+_tb369 = _wa369[_wa369.index('def _render_toolbar('):_wa369.index('def _version_meta_html():')]
+check("상단 바에 버전 칩이 없다 — 업데이트 한 줄 · 보는 중만",
+      '_chips' not in _tb369 and 'class=\'qvers\'' in _tb369 and 'APP_UPDATED' in _tb369)
+check("휴장일 확인 절 — 앵커 · 메뉴 항목 · 이 절만 다시 도는 버튼",
+      '<div id="nav-holidays"></div>' in _wa369 and "'href': '#nav-holidays'" in _wa369
+      and '@st.fragment\ndef _holiday_panel376():' in _wa369)
+check("푸터와 본문 절이 휴장일 한 줄을 같은 함수로 읽는다 (§4)",
+      _wa369.count('_holiday_line376()') == 3)
+# 목차 알약의 글자 대비 — 두 테마 모두 AA (§171 과 같은 계산 · 팔레트가 유일 출처)
+import ui_kit as _uk369
+for _nm369, _pal369 in (('dark', _uk369.DARK), ('light', _uk369.LIGHT)):
+    _r369 = _cr171(_pal369['tx2'], _pal369['card'])
+    check(f"[{_nm369}] 목차 알약 글자(tx2 on card) 대비가 AA(4.5) 이상", _r369 >= 4.5, f"{_r369:.2f}")
+_html369 = _uk369.nav_toc('이 종목 · 시험', [{'key': 'a', 'label': '<b>x</b>', 'href': "#nav-a'"}])
+check("목차 부품이 라벨·주소를 이스케이프한다", '<b>x</b>' not in _html369 and "#nav-a'" not in _html369)
+
+
+print("\n" + "=" * 72)
+print("§370 ETF 구조 사실 · 분배금 포함 12개월 · 원장 적용 범위 · 짧은 이력의 사유 (라운드 377)")
+print("=" * 72)
+# 사용자가 붙인 영상 둘(레버리지 ETF 무한매수법 · 커버드콜의 함정)에서 **확인되는 사실만** 가져왔다. 점수 0점 ·
+#   매매 금지 · N분할 · 30% 투트랙 · '횡보장이면 보유' 는 넣지 않았다 — 원장에서 잰 적 없는 규칙이다(§2).
+#   구조는 운용사 요약 문장과 추종지수 이름에서 읽는다(실제 응답 문장을 그대로 심는다).
+import etf_registry as _er370
+import ui_kit as _uk370
+import io as _io370
+_S_SINGLE = ('이 투자신탁은 한국거래소에서 산출하는 X 지수를 기초지수로 하여 1좌당 순자산가치의 일간변동률이 '
+             '기초지수 일간수익률의 양(+)의 2배수로 연동하여 투자신탁재산을 운용할 계획입니다.')
+_S_INV2 = ('투자신탁의 순자산가치의 일간변동률을 F-KOSPI200 지수의 일별 수익률의 음 2배수(-2배수)의 수익률로 '
+           '추적하고자 하는 운용목적을 달성하기 위하여')
+_S_INV1 = '1좌당 순자산가치의 일간변동률을 기초지수인 F-KOSPI200 지수 일간변동률의 음의 1배수와 유사하도록'
+_S_CC = '주식 포트폴리오를 보유하면서 콜옵션을 매도하는 커버드콜 전략을 활용하여 주가하락 위험을 부분적으로 방어하고'
+_p370 = lambda summ, base='', name='': {'summary': summ, 'base_index': base, 'name': name}
+_a370 = _er370.structure_of(_p370(_S_SINGLE, 'KRX X 레버리지 지수', 'KODEX X단일종목레버리지'))
+check("운용사 요약의 '양(+)의 2배수' → 일간 2배 · 단일종목(상품명)", _a370 == {
+    'mult': 2.0, 'daily_reset': True, 'covered_call': False, 'single_stock': True}, str(_a370))
+check("'음 2배수(-2배수)' 와 '음의 1배수' → −2 · −1 (인버스)",
+      _er370.structure_of(_p370(_S_INV2))['mult'] == -2.0 and _er370.structure_of(_p370(_S_INV1))['mult'] == -1.0)
+check("콜옵션 매도 문장 · 추종지수 이름의 커버드콜 → 커버드콜",
+      _er370.structure_of(_p370(_S_CC))['covered_call']
+      and _er370.structure_of(_p370('', '코스피 200 타겟 15% 위클리 커버드콜 지수'))['covered_call'])
+check("구조를 말하지 않는 요약은 아무것도 주장하지 않는다 (배수 None · 기어드 아님)",
+      _er370.structure_of(_p370('KOSPI200 지수를 추적합니다'))['mult'] is None
+      and not _er370.is_geared(_er370.structure_of(_p370('KOSPI200 지수를 추적합니다')))
+      and _er370.structure_of(None) is None)
+# 12개월 합계 — 붙여 준 분석문의 예(1주 10,000 → 9,200 · 분배금 1,200 · 비용·재투자 없음 → +4%)를 그대로 심는다
+_b370 = [('2025-09-01', 10000.0), ('2025-12-01', 9800.0), ('2026-09-28', 9200.0)]
+_t370 = _er370.ttm_total_return(_b370, 1200.0)
+check("분배금 포함 12개월: 가격 −8% · 분배금 +12% · 합계 +4% (분석문의 예)",
+      _t370 and abs(_t370['price_pct'] + 8.0) < 1e-9 and abs(_t370['dist_pct'] - 12.0) < 1e-9
+      and abs(_t370['total_pct'] - 4.0) < 1e-9 and _t370['start'] == '2025-09-01', str(_t370))
+check("1년치가 없으면 합계를 안 만든다 · 분배금을 못 받으면 합계 None(0 으로 안 채움)",
+      _er370.ttm_total_return([('2026-06-01', 100.0), ('2026-09-28', 90.0)], 5.0) is None
+      and _er370.ttm_total_return(_b370, None)['total_pct'] is None)
+check("상품명 갈래(원장 범위를 셀 때만) — 단일종목 레버리지 · 커버드콜 · 인버스 · 레버리지 · 없음",
+      [_er370.class_label(n) for n in ('KODEX X단일종목레버리지', 'A 200커버드콜', 'B 인버스2X', 'C 레버리지', 'D 200')]
+      == ['단일종목 레버리지', '커버드콜', '인버스', '레버리지', None])
+_h370 = _uk370.etf_structure_block(_a370, None, 0, '단일종목 레버리지', 0)
+check("단일종목 레버리지 블록 — 하루 2배 · 여러 날은 2배가 아님 · 회사 하나 · 원장 0행이면 '재 본 적이 없다'",
+      '하루 수익률의 2배' in _h370 and '여러 날의 수익률은 2배가 아닙니다' in _h370
+      and '기초가 회사 하나' in _h370 and '한 번도 재 본 적이 없습니다' in _h370)
+_h370b = _uk370.etf_structure_block(_er370.structure_of(_p370(_S_CC)), _t370, 7, '커버드콜', 354)
+check("커버드콜 블록 — 상승분이 잘림 · 분배율은 수익률이 아님 · 목표가가 옵션을 반영 안 함 · 12개월 합계 +4.0%",
+      '상승분이 잘리고' in _h370b and '분배율은 수익률이 아닙니다' in _h370b
+      and '옵션으로 잘리는 상승분을 따로 계산하지 않았습니다' in _h370b and '합계 +4.0%' in _h370b
+      and '한 번도' not in _h370b)
+check("평범한 ETF(구조 없음 · 분배금 없음)는 블록을 안 만든다",
+      _uk370.etf_structure_block(_er370.structure_of(_p370('KOSPI200 지수')), None, 5, None, None) == '')
+check("영상 제안의 규칙은 넣지 않았다 — 0점·매매 금지·N분할·30% 투트랙 낱말이 블록에 없다",
+      not any(w in (_h370 + _h370b) for w in ('0점', '매매를 금지', '분할하여', '30%', '투트랙')))
+_wa370 = _io370.open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("ETF 카드와 분석 멈춤 메시지가 같은 함수로 구조 블록을 그린다 (§4)",
+      _wa370.count('_etf_struct_html377(target_ticker,') == 2
+      and '+ _etf_struct_html' in _wa370)
+# 주석은 빼고 본다 — 왜 바뀌었는지 적은 주석이 옛 글자를 품는다(첫 판이 제 주석에 걸렸다 · R314·§324 와 같은 일).
+from scripts import lineage_audit as _la370
+_wa370c = '\n'.join(ln for _i, ln in _la370.code_lines('web_app.py'))
+check("룩스루 배수의 '못 잰 이유'가 사실이다 — 종전 '원장에 ETF 가 없어' 는 거짓(원장에 ETF 행이 있다)",
+      '원장에 ETF 가 없어 검증할 표본이' not in _wa370c
+      and '배수는 오늘 한 번 잰 값이라 과거 원장 케이스에' in _wa370c)
+# 짧은 이력의 사유 — 받았는데 100봉 이하와 못 받은 것을 가른다(하한 100 은 그대로)
+_be370 = _io370.open(_os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8').read()
+check("일봉을 받았는데 100개 이하면 '수신 실패' 가 아니라 받은 개수와 필요한 개수를 말한다 (하한 불변)",
+      "f\"{symbol}: 일봉을 {_n_recv}개 받았습니다 — 분석에는 100개가 넘게 필요합니다\"" in _be370
+      and 'if len(df_real) > 100:' in _be370 and '_n_recv = len(df_real)' in _be370)
+check("분석 못 하는 종목은 트레이스백 대신 엔진의 사유를 적고 멈춘다",
+      'except bitemporal_engine.DataUnavailableError as _dx377:' in _wa370
+      and '은(는) 지금 분석할 수 없습니다 — {_dx377}' in _wa370)
+check("렌더 재시도는 '받았는데 짧음'을 다시 그리지 않는다 — 그 문장엔 재시도 낱말이 없다",
+      _RENDER_FETCH_FAIL not in '일봉을 84개 받았습니다 — 분석에는 100개가 넘게 필요합니다')
+
+
+print("\n" + "=" * 72)
+print("§371 옛 규칙이 손절선을 넘긴 뒤 낮춘 계획은 옛 선으로 본다 (라운드 378)")
+print("=" * 72)
+# 사용자(2026-09-29): "손절선 넘겨 기준 다시 잼 → 새 손절선 … 근데 왜 보유해야 해? 계속 떨어지는 거 아냐?"
+#   라운드 373 결정(넘긴 계획은 그대로) **전에** 옛 규칙이 손절선을 이미 낮춘 3행이 '보유 유지'였다. 읽는 쪽 한 곳
+#   (`ui_kit.effective_hold_stop`)이 이력의 옛 선을 판단에 쓴다 · 파일 불변 · '기준 다시 재기' 로 풀린다.
+import portfolio as _pf371
+_OLD371 = ('2026-09-27 버틸 수 없는 가격 6,115원(2026-09-04 기준) 아래 (현재가 6,090 · -0.4%) '
+           '→ 정리 검토 · 기준 다시 잼')     # 옛 규칙(라운드 224~372)이 남긴 문장 그대로
+_row371 = {'code': '000001', 'paid': 6455.0, 'qty': 10, 'snap_px': 6090.0, 'snap_hold_stop': 5844.77,
+           'snap_hold_trim': 6700.0, 'snap_hold_at': '2026-09-27', 'snap_hold_log': _OLD371}
+_e371, _r371 = _uk370.effective_hold_stop(_row371)
+check("옛 규칙이 낮춘 계획이면 판단 손절선 = 이력의 옛 선(6,115) · 파일 값(5,845)은 그대로",
+      _e371 == 6115.0 and _r371 and _r371['kind'] == 'stop' and _row371['snap_hold_stop'] == 5844.77)
+_w371 = _uk370.watch_action(_row371)
+check("그 행은 현재가가 옛 선 아래면 '매도 — 손절선 아래' · 짧은 줄이 '옛 계획으로 봄'",
+      _w371['kind'] == '정리 검토' and '옛 계획으로 봄' in _w371['hold_log_short']
+      and any('옛 손절선으로 봅니다' in x for x in _w371['hold_why']), str(_w371.get('kind')))
+check("선 위로 회복하면 '보유 유지' — 남는 것은 선이고 판정은 가격을 선에 댄 결과",
+      _uk370.watch_action(dict(_row371, snap_px=6230.0))['kind'] == '보유 유지')
+_man371 = dict(_row371, snap_hold_at='2026-09-29',
+               snap_hold_log=_OLD371 + ' | 2026-09-29 사람이 기준을 다시 잼 (옛 버틸 수 없는 가격 5,845원 · 1차 '
+                                       '6,700원 · 2026-09-27 기준 · 현재가 6,090) → 새 기준')
+check("사람이 '기준 다시 재기' 를 누르면 되살림이 풀린다 (마지막 이력이 사람의 재측정)",
+      _uk370.effective_hold_stop(_man371) == (5844.77, None))
+check("R373 뒤의 계획(선 아래 '계획 유지')과 창 경과 행은 되살리지 않는다 — 옛 규칙의 재측정만",
+      _uk370.effective_hold_stop(dict(_row371, snap_hold_log='2026-09-27 보유 계획 창(20봉=28일 · 2026-08-30 기준) '
+                                                            '경과 — 두 선 사이에서 결판 안 남 → 기준 다시 잼'))[1] is None)
+# 계획 갱신도 같은 선을 본다 — 선 아래에서는 창이 지나도 다시 재지 않고 '계획 유지' 한 줄만(한 번)
+_u1 = _pf371.hold_plan_update(_row371, 6500.0, 5700.0, 6000.0, '2026-10-30')
+check("계획 갱신이 옛 선으로 본다 — 선 아래면 창이 지나도 안 다시 잰다 · '계획 유지' 한 줄(옛 기준일로)",
+      set(_u1) == {'snap_hold_log'} and '6,115원(2026-09-04 기준) 아래' in _u1['snap_hold_log']
+      and _pf371.HOLD_LOG_KEEP_TAIL in _u1['snap_hold_log'], str(_u1))
+_row371b = dict(_row371, **_u1)
+check("'계획 유지' 한 줄이 붙어도 되살림은 선다(서로를 무르지 않는다) · 두 번째 방문은 아무것도 안 쓴다",
+      _uk370.effective_hold_stop(_row371b)[0] == 6115.0
+      and _pf371.hold_plan_update(_row371b, 6500.0, 5700.0, 6000.0, '2026-10-31') == {})
+_wa371 = _io370.open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("손절선을 읽는 화면 자리가 같은 한 곳을 부른다 — 표 판단 · 보유 카드 캡션 · 추가매수 계산기 · 견해 거리 · 챗",
+      _wa371.count('_uk.effective_hold_stop(') >= 4
+      and 'plan_stop=_plan_stop378, plan_trim=_plan_trim378,' in _wa371)
+import gaeum_chat as _gc371
+_ctx371 = _gc371.build_context(name='x', ticker='x', price=100.0, core={'hold_stop': 90.0, 'hold_trim': 120.0},
+                               fs={}, verdict={}, plan_stop=97.0, plan_trim=110.0)
+check("챗도 보유 계획(판단과 같은 선)으로 답한다 — 계획이 없으면 종전대로 오늘 값",
+      _ctx371['hold_stop'] == 97.0 and _ctx371['hold_trim'] == 110.0
+      and _gc371.build_context(name='x', ticker='x', price=100.0, core={'hold_stop': 90.0}, fs={},
+                               verdict={})['hold_stop'] == 90.0)
+check("되살린 행에도 '기준 다시 재기' 길이 있다 — 표와 보유 카드 같은 조건",
+      "or (_act or {}).get('hold_stop_revived'))" in _wa371
+      and "or (_act224 or {}).get('hold_stop_revived'))" in _wa371)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

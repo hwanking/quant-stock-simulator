@@ -87,15 +87,36 @@ def bar_dates_live(fetch=None):
     return dates, notes
 
 
+def rule_mismatches(holidays):
+    """라운드 376 — 법의 규칙으로 다시 유도한 날짜와 표를 대 본다(`krx_holiday_rules` 한 곳).
+    일봉은 지나간 날만 보지만 이것은 **미래 날짜도** 지금 본다(2027-05-03 누락이 그 예). 반환 (어긋남 행, 못 댄 해)."""
+    try:
+        import krx_holiday_rules as khr
+        res = khr.audit(table=holidays)
+        return res['mismatch'], res['no_rule_years'], len(res['rows'])
+    except Exception as exc:                                      # noqa: BLE001
+        print('규칙 대조 실패 (%s: %s)' % (type(exc).__name__, exc))
+        return None, [], 0
+
+
 def check(fetch=None, holidays=None):
     if holidays is None:
         import bitemporal_engine as be
         holidays = be.KRX_HOLIDAYS
+    rule_bad, no_rule, n_rule = rule_mismatches(holidays)
+    if rule_bad is None:
+        print('>> 규칙 대조를 못 했다 — 그 절반은 미측정이다.')
+    elif rule_bad:
+        print('>> 실패 — 규칙과 어긋나는 날(미래 포함): %s'
+              % ', '.join('%s %s%s' % (m['date'], m['status'], (' · ' + m['reason']) if m['reason'] else '')
+                          for m in rule_bad))
+    else:
+        print('규칙 대조 — 평일 %d일 전부 일치%s' % (n_rule, (' · 규칙표 없는 해 %s' % no_rule) if no_rule else ''))
     dates, notes = bar_dates_live(fetch)
     print('일봉: ' + ' · '.join(notes))
     if not dates:
         print('>> 못 쟀다 — 일봉을 한 종목도 못 받았다. 미측정이다(통과가 아니다).')
-        return 2
+        return 1 if rule_bad else 2
     end = dt.date.fromisoformat(max(dates))
     start = end - dt.timedelta(days=WINDOW_DAYS)
     wrong, missing = mismatches(dates, holidays, start, end)
@@ -107,9 +128,12 @@ def check(fetch=None, holidays=None):
     if missing:
         print('>> 실패 — 평일인데 봉이 없고 표에도 없는 날: %s (공휴일이면 표에 넣는다 · '
               '거래정지면 종목을 바꿔 본다)' % ', '.join(missing))
-    if wrong or missing:
+    if wrong or missing or rule_bad:
         return 1
-    print('>> 통과 — 표와 실제 거래일이 평일 %d일 전부 맞다.' % n_wd)
+    if rule_bad is None:
+        print('>> 일봉 대조는 통과(평일 %d일) · 규칙 대조는 미측정.' % n_wd)
+        return 2
+    print('>> 통과 — 표와 실제 거래일이 평일 %d일 전부 맞고, 규칙과도 평일 %d일 전부 맞다.' % (n_wd, n_rule))
     return 0
 
 

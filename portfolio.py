@@ -2363,6 +2363,18 @@ def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=T
     row = row or {}
     old_trim, old_stop = _watch_num(row.get('snap_hold_trim')), _watch_num(row.get('snap_hold_stop'))
     old_at = str(row.get('snap_hold_at') or '')[:10]
+    # 라운드 378 — 옛 규칙이 손절선을 넘긴 뒤 **낮춘** 계획이면 판단과 같은 선(이력의 옛 손절선)을 쓴다. 규칙은
+    #   `ui_kit.effective_hold_stop` 한 곳(이력 문장의 파서도 거기 하나 · 여기서 다시 적지 않는다). 안 쓰면 이 함수는
+    #   낮춘 선으로 보고 창이 지나면 스스로 다시 재어 '매도'를 지운다 — 2026-09-28 결정이 막으려던 그것이다.
+    stop_at = old_at
+    try:
+        from ui_kit import effective_hold_stop as _ehs378
+        _eff378, _rev378 = _ehs378(row)
+        if _rev378 and _eff378:
+            old_stop = _eff378
+            stop_at = str(_rev378.get('old_at') or old_at)[:10]
+    except Exception:                                          # noqa: BLE001
+        pass
     px = _watch_num(px)
     today_s = str(today)[:10]
     fresh = {}
@@ -2393,10 +2405,10 @@ def hold_plan_update(row, new_trim, new_stop, px, today, horizon_bars=20, held=T
                   f"(현재가 {px:,.0f} · {(px / old_trim - 1) * 100:+.1f}%) → 일부 정리 검토 · 기준 다시 잼")
     elif px and old_stop and px <= old_stop:
         # 라운드 373 — 손절선 아래: 계획 유지. 이력은 같은 계획(같은 old_at)에 한 번만.
-        _marker = f"({old_at} 기준) 아래"
+        _marker = f"({stop_at} 기준) 아래"
         if any(_marker in s and HOLD_LOG_KEEP_TAIL in s for s in log):
             return {}
-        line = (f"{today_s} 버틸 수 없는 가격 {old_stop:,.0f}원({old_at} 기준) 아래 "
+        line = (f"{today_s} 버틸 수 없는 가격 {old_stop:,.0f}원({stop_at} 기준) 아래 "
                 f"(현재가 {px:,.0f} · {(px / old_stop - 1) * 100:+.1f}%) {HOLD_LOG_KEEP_TAIL}")
         log.append(line)
         return {'snap_hold_log': ' | '.join(log[-HOLD_LOG_KEEP:])}

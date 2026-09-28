@@ -1989,6 +1989,7 @@ class BitemporalEngine:
                 f"않았습니다 (수신 실패와 다릅니다).")
 
         # 2. 네이버 증권 (Naver Finance) 실시간 일봉 데이터 연동 시도
+        _n_recv = None          # 라운드 377 — 받은 봉 수(받았는데 짧은 것과 못 받은 것을 가른다)
         try:
             import urllib.request
             import xml.etree.ElementTree as ET
@@ -2014,6 +2015,7 @@ class BitemporalEngine:
                                 'volume': float(parts[5])
                             })
                 df_real = pd.DataFrame(records)
+                _n_recv = len(df_real)
 
                 if len(df_real) > 100:
                     # ── 원천 봉 정제 (최종 감사에서 실측된 원천 결함 2종) ──────
@@ -2043,6 +2045,13 @@ class BitemporalEngine:
         #    그 위에서 계산된 유사패턴·손익비·벤치마크는 전부 의미가 없다.
         #    이제는 예외를 던져 상위 단계가 해당 종목을 분석 대상에서 제외하게 한다.
         if prices_df is None:
+            # ⚠️ 라운드 377 — 봉을 **받았는데** 100개 이하이면(상장한 지 얼마 안 된 종목 · 실측 2026-09-28: 2026-05-27
+            #   상장 ETF) 종전엔 이것도 '수신 실패' 라 적었다 — 받은 것을 못 받았다고 말하는 것이다(§3 · 라운드 165 의
+            #   "사유를 섞지 않는다"). 100 이라는 하한은 그대로다(바꾸지 않는다) — 문장만 사실대로.
+            if _n_recv:
+                raise DataUnavailableError(
+                    f"{symbol}: 일봉을 {_n_recv}개 받았습니다 — 분석에는 100개가 넘게 필요합니다"
+                    f"(상장한 지 얼마 안 된 종목). 합성 가격으로 채우지 않고 분석에서 제외합니다.")
             raise DataUnavailableError(
                 f"{symbol}: 네이버 일봉 시계열 수신 실패 — 합성 가격으로 대체하지 않고 분석에서 제외합니다.")
 

@@ -642,9 +642,27 @@ def _render_toolbar(here_html: str = '') -> None:
     # 내비는 좌측 사이드바 한 곳에만 둔다 (참조 화면과 같다). 여기는 지금
     # 보고 있는 종목만 표시한다 — 같은 링크를 두 곳에 두면 어느 쪽이
     # 현재 위치인지 알 수 없다.
+    # 라운드 376 (2026-09-28 · 사용자: "시스템 버전·룰북 버전·데이터 최종 갱신 시각은 메인 화면 공간을 차지하지
+    #   않도록 사이드바 맨 아래 작고 옅은 글씨로") — 엔진 7축 칩과 데이터 점검 상태는 **사이드바 푸터**로 옮겼다
+    #   (`_version_meta_html` 을 푸터가 부른다). 종전 요구("업데이트가 가장 중요하다 — 맨 위")는 끊지 않는다 —
+    #   상단 바에 **최근 업데이트 한 줄**을 남기고 누르면 이력으로 간다.
     if not here_html:
         _NAV_SLOT.empty()
         return
+    _NAV_SLOT.markdown(
+        f'<div class="qnav">'
+        f"<a href='#nav-updates' class='qvers' title='누르면 업데이트 이력으로 갑니다 · "
+        f"엔진 버전은 왼쪽 사이드바 맨 아래에 있습니다'>"
+        f"<span style='font-size:12px; color:{_TOK['tx3']};'>업데이트</span> "
+        f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']};'>{APP_UPDATED}</span></a>"
+        f'<span class="here">{here_html}</span></div>',
+        unsafe_allow_html=True)
+
+
+def _version_meta_html():
+    """엔진 7축 버전 칩과 데이터 점검 상태 — (상태 HTML, 칩 HTML). 사이드바 푸터가 그린다(라운드 376).
+
+    칩의 뜻·툴팁·축 목록 규칙은 종전 상단 바 그대로다(아래 주석은 그 이력)."""
     # 상단 바는 **한 줄**이다. 예전에는 두 줄이었고 룰북·산식이 양쪽에 두 번,
     # '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
     # 왼쪽: 상태 점 + 되돌려 본 판단 수 + 엔진 5축 버전 (누르면 업데이트 이력)
@@ -743,12 +761,7 @@ def _render_toolbar(here_html: str = '') -> None:
            f"margin-right:10px; white-space:nowrap;'>{_uk._esc(_st_more)}"
            f"</span>" if _st_more else ''))
 
-    _NAV_SLOT.markdown(
-        f'<div class="qnav">{_status}'
-        f"<a href='#nav-updates' class='qvers' "
-        f"title='누르면 업데이트 이력으로 갑니다'>{_chips}</a>"
-        f'<span class="here">{here_html}</span></div>',
-        unsafe_allow_html=True)
+    return _status, _chips
 
 
 # ── 최상단 업데이트 바 (탭보다 위) ──────────────────────────────────────
@@ -1731,15 +1744,18 @@ st.sidebar.markdown("""
 # ── 좌측 내비 (참조 화면 구조) — 로고 · 1차 탭 · 서브 항목 ────────────────
 # 내비는 앵커 링크다. 눌리면 그 구역으로 이동한다. 화면이 한 장이라
 # 라우팅 대신 앵커를 쓰지만, 보이는 구조와 동작은 참조와 같다.
-_NAV_MAIN = [
-    {'key': 'top', 'label': '홈', 'icon': 'home', 'href': '#nav-top'},
-    {'key': 'verdict', 'label': '종목 분석', 'icon': 'compass',
-     'href': '#nav-verdict'},
-    {'key': 'perf', 'label': '모델 성적', 'icon': 'chart', 'href': '#nav-perf'},
-    {'key': 'updates', 'label': '업데이트', 'icon': 'bell',
-     'href': '#nav-updates'},
-    {'key': 'support', 'label': '고객센터', 'icon': 'life',
-     'href': '#nav-support'},
+# 라운드 376 (2026-09-28 · 사용자: "앱 전체 메뉴와 현재 종목 목차가 한곳에 뒤섞여 있고 '모델 성적'·'고객센터'
+#   가 위아래에 중복") — 종전 `_NAV_MAIN`(홈·종목 분석·모델 성적·업데이트·고객센터) 다섯 중 **넷이 아래 묶음과
+#   같은 앵커**였다(종목 분석 = 이 종목 한 줄 결론). 걷어내고, 그 자리에 **지금 보는 종목의 목차**를 둔다 —
+#   전역 묶음 사이에 끼어 있던 '3. 이 종목' 을 떼어 검색 바로 아래로 올린 것이다. '점수 요인' 도 이 종목의
+#   세부 점수라 여기로 온다. 본문 순서와 같은 차례다(§170 — 뒤집힘 0).
+_NAV_LOCAL = [
+    {'key': 'verdict', 'label': '한 줄 결론', 'href': '#nav-verdict'},
+    {'key': 'chart', 'label': '차트', 'href': '#nav-chart'},
+    {'key': 'gaeum', 'label': '가늠 AI', 'href': '#nav-gaeum'},
+    {'key': 'basis', 'label': '판정 근거', 'href': '#nav-basis'},
+    {'key': 'context', 'label': '시장·뉴스', 'href': '#nav-context'},
+    {'key': 'scores', 'label': '점수 요인', 'href': '#nav-scores'},
 ]
 # 라운드 125 — 묶음을 **본문 인접성**으로 다시 짰다.
 #
@@ -1753,7 +1769,11 @@ _NAV_MAIN = [
 #   괄호 안 숫자가 본문 등장 순서다 — 묶음 안에서 단조로워야 한다.
 _NAV_SUB = [
     # 시장 전체 이야기 — 종목을 고르기 전에 보는 것들 (1 · 3)
-    {'title': '1. 오늘의 시장', 'items': [
+    {'title': '오늘의 시장', 'items': [
+        # 라운드 376 — 걷어낸 상단 '홈' 의 자리. 로고는 검색어·스캔 결과를 **비우며** 첫 화면으로 가고
+        #   이것은 **비우지 않고** 맨 위로만 간다(둘은 다른 동작이다).
+        {'key': 'top', 'label': '맨 위 · 오늘의 판단', 'icon': 'home',
+         'href': '#nav-top'},
         {'key': 'premarket', 'label': '오늘의 추천', 'icon': 'chart',
          'href': '#nav-premarket'},
         # 라운드 105 — '한 줄 결론' 이라는 이름이 **두 곳**에 있다.
@@ -1772,27 +1792,15 @@ _NAV_SUB = [
     #   접힌 칸에만 뒀더니 사용자가 "관심목록 리스트 어디서 봐?" 라고
     #   물었다. 라운드 105 와 같은 모양이다 — 화면에는 있는데 갈 길이 없다.
     #   본문 순서(보유종목 → 관심종목)와 같은 차례로 둔다 (§170 ⓔ).
-    {'title': '2. 내 자산', 'items': [
+    {'title': '내 자산', 'items': [
         {'key': 'holdings', 'label': '내 보유종목', 'icon': 'wallet',
          'href': '#nav-holdings'},
         {'key': 'watchlist', 'label': '관심종목', 'icon': 'target',
          'href': '#nav-watchlist'},
     ]},
-    # 이 종목 이야기 — 판정부터 근거까지 한 줄기 (6 · 7 · 8 · 10 · 11)
-    {'title': '3. 이 종목', 'items': [
-        {'key': 'verdict', 'label': '이 종목 한 줄 결론', 'icon': 'doc',
-         'href': '#nav-verdict'},
-        {'key': 'chart', 'label': '차트', 'icon': 'chart',
-         'href': '#nav-chart'},
-        {'key': 'gaeum', 'label': '가늠 AI', 'icon': 'compass',
-         'href': '#nav-gaeum'},
-        {'key': 'basis', 'label': '판정 근거', 'icon': 'doc',
-         'href': '#nav-basis'},
-        {'key': 'context', 'label': '시장·뉴스', 'icon': 'news',
-         'href': '#nav-context'},
-    ]},
+    # 라운드 376 — '3. 이 종목' 은 전역 메뉴가 아니다. 검색 바로 아래 `_NAV_LOCAL` 로 옮겼다.
     # 검증과 이력 (10 · 11 · 12 · 13)
-    {'title': '4. 검증과 이력', 'items': [
+    {'title': '검증과 이력', 'items': [
         # 라운드 290 — 홈 첫 화면의 '이 판단, 얼마나 믿을 수 있나' 에는 앵커를
         #   줬지만 **메뉴 항목은 안 만들었다.** 뜻으로는 이 묶음이 맞는데, 그
         #   자리에 넣으면 목록 전체의 뒤집힘이 1 → 2 가 된다. 그 상한 1 은 왜 1
@@ -1805,8 +1813,7 @@ _NAV_SUB = [
         # 본문에는 있는데 메뉴에 없어 **찾을 길이 없던** 절들 (라운드 124)
         {'key': 'cases', 'label': '사례 모음', 'icon': 'doc',
          'href': '#nav-cases'},
-        {'key': 'scores', 'label': '점수 요인', 'icon': 'chart',
-         'href': '#nav-scores'},
+        # 라운드 376 — '점수 요인' 은 이 종목의 세부 점수라 `_NAV_LOCAL` 로 옮겼다.
         # 라운드 127 — 본문 블록을 여기로 내렸으므로 메뉴도 따라온다.
         #   종전에는 '오늘의 시장'에 있었다(본문 다섯 번째였을 때).
         {'key': 'updates', 'label': '업데이트 내역', 'icon': 'bell',
@@ -1815,11 +1822,12 @@ _NAV_SUB = [
         #   안 넣으면 **아무도 못 가는 절**이 된다(라운드 122·124 의 거울상 —
         #   회귀가 실제로 그렇게 잡았다). 이 칸이 재는 것은 시세의 정합이므로
         #   '검증과 이력' 이 제자리다.
+        # 라운드 376 — 휴장일 표를 규칙·실제 거래일과 대 보는 절. 본문에서 교차검증 **앞**이라 메뉴도 앞(§170 ⓔ).
+        {'key': 'holidays', 'label': '휴장일 확인', 'icon': 'sliders',
+         'href': '#nav-holidays'},
         {'key': 'crossval', 'label': '시세 교차검증', 'icon': 'sliders',
          'href': '#nav-crossval'},
-    ]},
-    # 도움 — 본문 맨 끝 (16)
-    {'title': '5. 도움', 'items': [
+        # 라운드 376 — 종전 '5. 도움' 한 항목짜리 묶음. 본문 맨 끝이라 이 묶음 끝에 붙인다.
         {'key': 'support', 'label': '고객센터', 'icon': 'life',
          'href': '#nav-support'},
     ]},
@@ -1881,30 +1889,32 @@ st.sidebar.markdown(
 # 그래서 **자리만 먼저 잡아 두고** 코드는 제자리에서 이 자리에 그린다 —
 # 스트림릿 컨테이너는 호출 시점이 아니라 잡아 둔 위치에 렌더된다.
 _SB_PICK = st.sidebar.container()
-
+# 라운드 376 — 지금 보는 종목의 목차. 종목이 확정된 뒤 채운다(이름을 제목에 넣는다 · `_SB_PICK` 과 같은 방식).
+#   스크롤해도 검색 아래 붙어 있게 sticky 로 둔다 — 전역 메뉴와 설정 아코디언은 그 아래로 흘러간다.
+_SB_TOC = st.sidebar.container(key='sb_toc')
 st.sidebar.markdown(
-    # 검색 블록과 메뉴는 성격이 다르다 — 붙여 놓으면 드롭다운의 연장으로
-    # 보인다. 선을 긋지 않고 여백으로만 나눈다 (§78).
-    "<div style='margin-top:18px;'>"
-    + _uk.nav_list(_NAV_MAIN, active='top', theme=_theme)
-    + _uk.nav_groups(_NAV_SUB, theme=_theme)
-    + "</div>",
+    f"""<style>
+  /* 목차 자신의 div 는 감싼 칸과 높이가 같아 sticky 가 안 걸린다(브라우저 실측 · 스크롤하면 -318px 로
+     밀려 올라갔다). **감싼 칸**에 건다 — 그 부모가 사이드바 전체 블록이라 거기 기준으로 붙는다.
+     top 은 사이드바 머리(접기 버튼 · sticky · 높이 60px)의 바로 아래. */
+  section[data-testid="stSidebar"] div:has(> .st-key-sb_toc) {{
+      position: sticky; top: 60px; z-index: 60; background: {_TOK['bg2']};
+  }}
+  section[data-testid="stSidebar"] .st-key-sb_toc {{
+      padding-bottom: 2px; border-bottom: 1px solid {_TOK['border']};
+  }}
+  section[data-testid="stSidebar"] a.qnav-toc:hover {{
+      border-color: {_TOK['brand']} !important; color: {_TOK['brand']} !important;
+  }}
+</style>""",
     unsafe_allow_html=True)
-st.sidebar.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-if st.sidebar.button("처음으로", width='content', key="btn_home",
-                     help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
-                          "보유종목은 지워지지 않습니다."):
-    _go_home()
 
-st.sidebar.caption(f"업데이트 {APP_UPDATED} · 제목이나 '처음으로'를 누르면 "
-                   f"첫 화면으로 돌아갑니다")
-
-# 라이트/다크 테마 토글
-_theme_is_light = st.sidebar.toggle("라이트 모드", value=(_theme == 'light'),
-                                    key="tgl_theme")
-if _theme_is_light != (_theme == 'light'):
-    st.session_state['ui_theme'] = 'light' if _theme_is_light else 'dark'
-    st.rerun()
+# 라운드 376 — 전역 메뉴는 **접는 묶음 셋**이다(오늘의 시장 · 내 자산 · 검증과 이력). 종전엔 상단 목록 다섯과
+#   번호 묶음 다섯이 전부 펼쳐져 있어(항목 23줄) 설정 아코디언이 화면 아래로 밀렸다. 첫 묶음만 펼쳐 둔다.
+#   묶음을 열고 닫는 것은 브라우저 안의 일이라 **앱을 다시 돌리지 않는다**(링크는 앵커 이동뿐).
+for _gi376, _g376 in enumerate(_NAV_SUB):
+    with st.sidebar.expander(_g376['title'], expanded=(_gi376 == 0)):
+        st.markdown(_uk.nav_list(_g376['items'], theme=_theme), unsafe_allow_html=True)
 
 default_stock_no1 = engine_init.fetch_realtime_market_cap_no1_stock()
 
@@ -2168,6 +2178,10 @@ realtime_price, check_status, matrix_data = engine_init.get_realtime_stock_price
 # 상단 툴바 오른쪽 끝에 지금 보는 종목 — 스크롤 중에도 잊지 않게 (sticky)
 _render_toolbar(f"보는 중 <b>{_uk._esc(resolved_name)}</b> "
                 f"{_uk._esc(target_ticker)}")
+# 라운드 376 — 사이드바 검색 아래 '이 종목' 목차를 채운다(자리는 위에서 잡았다). 제목에 이름을 넣어 전역 메뉴와
+#   다른 것(지금 보는 종목의 목차)임을 말한다. 종목이 확정되지 않으면 이 줄까지 오지 않으므로 목차도 없다.
+_SB_TOC.markdown(_uk.nav_toc(f"이 종목 · {resolved_name}", _NAV_LOCAL, theme=_theme),
+                 unsafe_allow_html=True)
 
 # 맨 위 실시간 띠 — 지금 보는 종목까지 확정된 뒤에 채운다
 _render_ticker([dict(kind='live', text=f'분석 중 {resolved_name} '
@@ -3080,11 +3094,11 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
     # '종목 찾기'가 두 번 나온다 (라운드 38 실행 확인에서 잡음).
     # '코스피·코스닥 전체' 라고 쓰고 있었지만 실제 출발점은 네이버 순위
     # 페이지 2종(거래대금 상위·상승률 상위)이다. 전 종목 목록이 아니다.
-    st.sidebar.caption("코스피·코스닥의 **거래대금·상승률 순위 상위**에서 관심종목을 "
-                       "먼저 추리고, 그중 **퀀트 최종 행동조건**을 통과한 종목만 "
-                       "추천합니다. 전 종목을 정밀분석하지는 않습니다 — "
-                       "거래가 한산한 종목은 순위에 오르지 않아 후보에서 빠집니다. "
-                       "관심도와 매수 판단은 별개입니다.")
+    # 라운드 376 — 사이드바를 줄이며 이 설명(5줄 · 121px)을 두 문장으로 줄였다. 뺀 것 없이 **뜻은 그대로**다 —
+    #   출발점이 순위 상위라는 것 · 최종 조건을 통과한 것만 · 전 종목 정밀분석이 아니라는 것(§96 이 잠근다).
+    #   '한산한 종목은 빠진다' · '관심도와 매수 판단은 별개' 는 스캔 결과 칸이 같은 말을 더 자세히 한다.
+    st.sidebar.caption("**거래대금·상승률 순위 상위**에서 후보를 추려 퀀트 최종 행동조건을 "
+                       "통과한 종목만 추천합니다 — 전 종목을 정밀분석하지는 않습니다.")
 
     # ── 종목 찾기는 **항상 열려 있다** (라운드 38) ──────────────────────
     # 종전에는 기본이 접힘이었고, 버튼이 '스캔 / 닫기' 라 한 번 더 누르면
@@ -3171,6 +3185,9 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
         else:
             st.sidebar.caption("아직 최신화하지 않았습니다 — "
                                "'최신화'를 누르면 시장 데이터를 불러옵니다.")
+    # 라운드 376 — 스캔 진행 막대의 자리. 종전엔 스캔 함수가 부를 때 사이드바 **끝**에 새로 만들어졌는데,
+    #   이제 끝에는 푸터가 있어 막대가 푸터 아래로 떨어진다. '최신화' 바로 아래에 미리 잡는다.
+    _SB_SCAN_BAR = st.sidebar.empty()
 
 
 # ── 라운드 325 — 시간외 거래 시간 (사용자: "장도 이제 8시로 바뀐다면서 새로운 정책도 반영해줘") ──
@@ -3271,6 +3288,55 @@ st.sidebar.caption("증권사 CSV·Excel 가져오기 또는 직접 입력. "
                       "이 브라우저 세션에만 유지됩니다.")
                    + (f" · 저장 {st.session_state.get('positions_saved_at')}"
                       if st.session_state.get('positions_saved_at') else " · 미저장"))
+
+
+# ── 라운드 376 — 사이드바 맨 아래 푸터: 시스템 정보 · 휴장일 확인 · 처음으로 · 테마 ─────────────────
+#   사용자(2026-09-28): "시스템 버전, 데이터 갱신 시각 등 부가 정보는 메인 화면 공간을 차지하지 않도록 사이드바
+#   맨 아래에 작고 옅은 글씨로" · "무슨 날짜가 휴일로 지정되면 맞는지 항상 확인할 수 있게". 이 줄 뒤에는 사이드바에
+#   그리는 호출이 없다(스캔 진행 막대는 '최신화' 아래 자리를 미리 잡았다) — 그래서 여기가 맨 아래다.
+def _holiday_line376():
+    """휴장일 표의 규칙 대조 한 줄 — 화면 두 자리(푸터 · 본문 절)가 같은 함수를 읽는다(§4)."""
+    try:
+        import krx_holiday_rules as _khr
+        _up, _res = _khr.upcoming(n=1)
+        _nm = len(_res['mismatch'])
+        _nx = (f" · 다음 휴장 {_up[0]['date'][5:]}({_up[0]['wd']}) {_up[0]['reason']}" if _up else '')
+        if _nm:
+            return (f"휴장일 표가 규칙과 {_nm}곳 어긋납니다 — 확인이 필요합니다{_nx}", 'neg')
+        return (f"휴장일 표 · 규칙과 평일 {len(_res['rows'])}일 일치{_nx}", 'tx3')
+    except Exception as _e376:                                  # noqa: BLE001
+        return (f"휴장일 표를 대 보지 못했습니다 ({type(_e376).__name__}) — 미확인", 'warn')
+
+
+# Streamlit 의 divider 는 위아래 여백까지 65px 이다(브라우저 실측) — 푸터를 가르는 데는 얇은 선이면 된다.
+st.sidebar.markdown(f"<div style='border-top:1px solid {_TOK['border']}; margin:14px 0 8px 0;'></div>",
+                    unsafe_allow_html=True)
+try:
+    _st376, _chips376 = _version_meta_html()
+except Exception:                                              # noqa: BLE001
+    _st376, _chips376 = '', ''           # 못 그리면 비운다 — 앱을 죽이지 않는다
+_hl376, _ht376 = _holiday_line376()
+st.sidebar.markdown(
+    f"<div style='font-size:12px; line-height:1.7; color:{_TOK['tx3']};'>"
+    f"<div>{_st376}</div>"
+    f"<a href='#nav-updates' class='qvers' style='text-decoration:none; display:block;' "
+    f"title='누르면 업데이트 이력으로 갑니다'>{_chips376}</a>"
+    f"<a href='#nav-holidays' style='text-decoration:none; color:{_TOK.get(_ht376, _TOK['tx3'])};'>"
+    f"{_uk._esc(_hl376)}</a>"
+    f"<div>앱 업데이트 {APP_UPDATED}</div></div>",
+    unsafe_allow_html=True)
+_fc1_376, _fc2_376 = st.sidebar.columns([1, 1])
+with _fc1_376:
+    if st.button("처음으로", width='content', key="btn_home",
+                 help="첫 화면으로 돌아갑니다 (검색어·스캔 결과·열린 화면 초기화). "
+                      "보유종목은 지워지지 않습니다."):
+        _go_home()
+with _fc2_376:
+    # 라이트/다크 테마 토글
+    _theme_is_light = st.toggle("라이트 모드", value=(_theme == 'light'), key="tgl_theme")
+if _theme_is_light != (_theme == 'light'):
+    st.session_state['ui_theme'] = 'light' if _theme_is_light else 'dark'
+    st.rerun()
 
 # --- 관심종목 스캔 실행 (위젯은 위에서 이미 그렸고, 여기서 t_ref·rho 를 써서 돌린다) ---
 # 파라미터가 바뀌면 이전 스캔 결과는 더 이상 같은 스냅샷이 아니므로 폐기한다
@@ -3617,7 +3683,7 @@ _SCAN_STEPS = ('종목·시장 구분 확인', '관심종목 발굴', '관심지
 
 def run_market_scan():
     """관심종목 발굴 → 정밀 퀀트 분석. 두 단계를 명확히 분리한다."""
-    _bar = st.sidebar.empty()
+    _bar = _SB_SCAN_BAR if '_SB_SCAN_BAR' in globals() else st.sidebar.empty()   # 라운드 376 — 자리는 위에서
     _st = {'step': 0, 't0': time.time()}
 
     def _scan_done():
@@ -6283,7 +6349,10 @@ else:
                     f"title='버틸 수 없는 가격·팔 가격 1차를 오늘 값으로 다시 잽니다 — 계획은 그때까지 그대로입니다' "
                     f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
                     f"기준 다시 재기</a>")
-                   if (_act and _act.get('held') and _act.get('kind') == '정리 검토')
+                   # 라운드 378 — 옛 손절선으로 보는 행(되살림)에도 길을 준다: 이력 줄이 "낮춘 선은 '기준 다시
+                   #   재기'로" 라고 가리키는데 선 위로 회복한 행(보유 유지)엔 링크가 없었다.
+                   if (_act and _act.get('held') and (_act.get('kind') == '정리 검토')
+                       or (_act or {}).get('hold_stop_revived'))
                    else '')
                 + "</td>"
                 "</tr>")
@@ -6726,7 +6795,8 @@ else:
             _ds230, _dt230, _ages230 = [], [], []
             for _row226, _px226 in _hold_rows230:
                 try:
-                    _pxf = float(_px226); _stf = float(_row226.get('snap_hold_stop') or 0)
+                    # 라운드 378 — 판단과 같은 손절선(옛 규칙이 낮춘 행은 옛 선 · `effective_hold_stop` 한 곳)
+                    _pxf = float(_px226); _stf = float(_uk.effective_hold_stop(_row226)[0] or 0)
                     _trf = float(_row226.get('snap_hold_trim') or 0)
                 except (TypeError, ValueError):
                     continue
@@ -7680,6 +7750,54 @@ if m_indices['kospi']['price'] == 'N/A' or m_indices['kosdaq']['price'] == 'N/A'
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 
 # 파이프라인 연산 실행 — 화면 전체가 이 단일 스냅샷 하나만 사용한다
+# ── 라운드 377 — ETF 구조 사실 · 분배금 포함 12개월 · 원장 적용 범위 (표시 전용 · 판정 불변) ─────────────
+#   원장 행 수는 ETF 를 볼 때만 센다 — 25만행을 줄 단위로 훑어 종목 코드만 뽑는다(파싱 없이 · 10분 캐시).
+#   두 자리가 부른다: ETF 카드 · 분석을 못 할 때의 멈춤 메시지(상장이 짧은 ETF 도 구조는 말할 수 있다 · §4).
+@st.cache_data(ttl=600, show_spinner=False)
+def _ledger_code_rows377():
+    try:
+        import re as _re377
+        _p = _artifact_path("virtual_graded.jsonl")
+        if not _p:
+            return None
+        _rx = _re377.compile(r'"ticker":\s*"([0-9A-Z]{6})')
+        _cnt = {}
+        with _open_artifact(_p) as _f:
+            for _ln in _f:
+                _m = _rx.search(_ln)
+                if _m:
+                    _cnt[_m.group(1)] = _cnt.get(_m.group(1), 0) + 1
+        return _cnt
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _etf_struct_html377(ticker, prof, tdf=None):
+    """구조 블록 HTML — 못 그리면 ''(카드·멈춤 메시지는 산다). 일봉(tdf)이 없으면 12개월 합계만 빠진다."""
+    try:
+        _st = etf_registry.structure_of(prof)
+        _bars = []
+        if tdf is not None and 'adj_close' in tdf.columns:
+            _d = (tdf['trade_date'] if 'trade_date' in tdf.columns else tdf.index)
+            _bars = list(zip([str(x)[:10] for x in _d], tdf['adj_close'].tolist()))
+        _ttm = etf_registry.ttm_total_return(_bars, ((prof or {}).get('div') or {}).get('dps_ttm'))
+        _cnt = _ledger_code_rows377()
+        _code = str(ticker).split('.')[0]
+        _own = _cnt.get(_code, 0) if _cnt is not None else None
+        _lab = etf_registry.class_label((prof or {}).get('name'))
+        _cls = None
+        if _cnt is not None and _lab:
+            _ix = etf_registry.index() or {}
+            _nm = (_ix.get('rows') if isinstance(_ix, dict) and 'rows' in _ix else _ix) or {}
+            _pairs = (_nm.items() if isinstance(_nm, dict)
+                      else [(r.get('code'), r.get('name')) for r in _nm])
+            _cls = sum(_cnt.get(str(c), 0) for c, n in _pairs
+                       if etf_registry.class_label(n if isinstance(n, str) else (n or {}).get('name')) == _lab)
+        return _uk.etf_structure_block(_st, _ttm, _own, _lab, _cls, theme=_theme)
+    except Exception:                                          # noqa: BLE001
+        return ''
+
+
 # 기본 스피너는 '무언가 돌고 있다'만 말한다. 어느 단계인지 보여야 기다릴 수 있다.
 _prog = st.empty()
 _t0 = time.time()
@@ -7705,6 +7823,22 @@ try:
                                 elapsed=_elapsed), unsafe_allow_html=True)
     # 다음 분석의 예상 시간을 알려주기 위해 기억해 둔다
     st.session_state['_last_analysis_sec'] = _elapsed
+except bitemporal_engine.DataUnavailableError as _dx377:
+    # 라운드 377 — 종전엔 이 예외가 **잡히지 않아** 화면이 트레이스백으로 죽었다(실측: 2026-05-27 상장 단일종목
+    #   레버리지 ETF · 봉 84개). 엔진이 낸 사유를 그대로 옮기고(새 문장 안 지음 · §4) 여기서 멈춘다 — 이 아래는
+    #   전부 이 종목의 분석 결과에 기댄다. 사이드바에서 다른 종목을 고르면 된다.
+    _prog.empty()
+    st.error(f"**{resolved_name}** 은(는) 지금 분석할 수 없습니다 — {_dx377}")
+    # ETF 면 구조 사실은 분석 없이도 말할 수 있다(레버리지·단일종목·커버드콜 · 원장 적용 범위) — 같은 함수로.
+    try:
+        if etf_registry.is_etf(target_ticker):
+            _sh377 = _etf_struct_html377(target_ticker, etf_registry.profile(target_ticker), None)
+            if _sh377:
+                st.markdown(_sh377, unsafe_allow_html=True)
+    except Exception:                                          # noqa: BLE001
+        pass
+    st.caption("값을 지어내지 않고 멈춥니다. 왼쪽 사이드바에서 다른 종목을 고를 수 있습니다.")
+    st.stop()
 finally:
     _prog.empty()          # 끝나면 조용히 사라진다
 
@@ -7859,6 +7993,12 @@ if _etf_is:
         _etf_prof = etf_registry.profile(target_ticker)
     except Exception:                                          # noqa: BLE001
         _etf_prof = None
+
+
+# 라운드 377 — 구조 블록은 `_etf_struct_html377` 한 함수가 만든다(파이프라인 호출 앞에 정의 · 멈춤 메시지도 부른다).
+_etf_struct_html = ''
+if _etf_is and _etf_prof:
+    _etf_struct_html = _etf_struct_html377(target_ticker, _etf_prof, tech_df)
 
 _etf_tile_html = ""
 if _etf_is:
@@ -8024,6 +8164,8 @@ if _etf_is:
             + _uk.etf_profile_block(_etf_prof, (_etf_nav or {}).get('premium_pct'),
                                     etf_registry.lp_band_line((_etf_nav or {}).get('premium_pct')),
                                     theme=_theme)
+            # ── 라운드 377 — 구조(레버리지·인버스·커버드콜·단일종목) · 분배금 포함 12개월 · 원장 적용 범위 ──
+            + _etf_struct_html
             + ("" if _etf_nav else
                f"<p style='margin:9px 0 0 0; font-size:12px; "
                f"color:{_TOK['warn']};'>NAV 미수신 — 네이버 ETF 목록 응답이 "
@@ -8057,8 +8199,12 @@ if _etf_is:
                  f"NAV 는 방금 받은 값입니다</span>"
                f"<br><span style='color:{_TOK['tx3']};'>"
                f"<b>표시 전용입니다.</b> 이 값이 실제 성과를 가르는지는 "
-               f"<b>재지 않았습니다</b> — 원장에 ETF 가 없어 검증할 표본이 "
-               f"없습니다. 점수·게이트·추천에 들어가지 않습니다. "
+               # 라운드 377 — 종전 이유("원장에 ETF 가 없어 검증할 표본이 없습니다")는 이제 거짓이다(2026-09-28
+               #   원장 255,129행 중 ETF 목록에 있는 코드 20,887행). 못 잰 진짜 이유는 배수가 **오늘 한 번** 잰
+               #   값이라 과거 케이스에 붙일 수 없다는 것이다(재고 나면 문구도 바뀐다 · R250).
+               f"<b>재지 않았습니다</b> — 배수는 오늘 한 번 잰 값이라 과거 원장 케이스에 "
+               f"붙일 수 없습니다(원장에 ETF 케이스는 있지만 그때의 배수가 없습니다). "
+               f"점수·게이트·추천에 들어가지 않습니다. "
                f"구성종목은 정기변경으로 바뀌고, 구성종목 적정가도 매일 "
                f"바뀝니다.</span></div>")
             # ── 못 내는 ETF — **왜 못 내는지** (라운드 171) ──────────
@@ -8676,7 +8822,8 @@ try:
     if (_row225 and _row225.get('paid') and _row225.get('snap_hold_at')
             and (_row225.get('snap_hold_trim') or _row225.get('snap_hold_stop'))):
         _pt225 = fmt_num(_row225.get('snap_hold_trim'), suffix='원', na='미산출')
-        _ps225 = fmt_num(_row225.get('snap_hold_stop'), suffix='원', na='미산출')
+        # 라운드 378 — 판단과 같은 손절선(옛 규칙이 낮춘 행은 옛 선 · `effective_hold_stop` 한 곳 · §4)
+        _ps225 = fmt_num(_uk.effective_hold_stop(_row225)[0], suffix='원', na='미산출')
         _same225 = (_pt225 == _ex_tgt and _ps225 == _ex_stop)
         _hold_plan_html = (
             f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
@@ -10185,7 +10332,19 @@ try:
                 f"{resolved_name} 대화 — 종목을 바꾸면 대화도 그 종목 "
                 f"것으로 분리됩니다", theme=_theme, top=28)
     # _news60 은 위 '판단 근거' 대시보드에서 이미 수신 — 재수신하지 않는다
+    # 라운드 378 — 보유 계획이 있는 관심종목 행이면 챗도 그 계획(손절선은 판단과 같은 한 곳)으로 답한다(§4).
+    _plan_stop378 = _plan_trim378 = None
+    try:
+        _cw378 = portfolio.normalize_code(target_ticker)
+        _wr378 = next((w for w in _wl_items()
+                       if portfolio.normalize_code(w.get('code')) == _cw378), None)
+        if _wr378 and (_wr378.get('paid') or 0) > 0:
+            _plan_stop378 = _uk.effective_hold_stop(_wr378)[0]
+            _plan_trim378 = _wr378.get('snap_hold_trim')
+    except Exception:                                          # noqa: BLE001
+        _plan_stop378 = _plan_trim378 = None
     _ctx60 = _gch.build_context(
+        plan_stop=_plan_stop378, plan_trim=_plan_trim378,
         name=resolved_name, ticker=target_ticker, price=realtime_price,
         core=CORE, fs=four_scores, verdict=verdict, blend=_blend59,
         regime_code=_rg58, sector=val_eval.get('sector'), news=_news60,
@@ -11364,7 +11523,8 @@ if user_entry_price > 0 and user_quantity > 0:
                     f"이력: {_uk._esc(_log224[-1])}</p>" if _log224 else "")
     # 라운드 373 — 손절선을 넘긴 계획은 그대로 두므로(사용자 결정 2026-09-28) 이 카드에도 다시 재는 길을
     #   둔다 — 표의 링크와 **같은 길**(`?remeasure=` · 채우기 단계가 잰다 · §4). 관심종목에 있는 행만.
-    if ((_act224 or {}).get('kind') == '정리 검토' and _row224.get('code')):
+    if ((((_act224 or {}).get('kind') == '정리 검토') or (_act224 or {}).get('hold_stop_revived'))
+            and _row224.get('code')):   # 라운드 378 — 되살린 행에도 같은 길(위 표와 같은 조건)
         _log_html224 += (f"<p style='margin:0 0 10px 0; font-size:12px; color:{_TOK['tx2']};'>"
                          f"이 계획은 그대로 둡니다 — 판 뒤엔 관심종목 표의 '팔았음', 계획을 오늘 값으로 "
                          f"다시 재려면 <a href='?remeasure={_uk._esc_attr(str(_row224.get('code')))}' "
@@ -11410,7 +11570,8 @@ if user_entry_price > 0 and user_quantity > 0:
     # 뿐이다. 규칙은 `portfolio.add_on_risk` 한 곳(§4) · 문턱 없음(§2) · 파일에 안 쓴다 ·
     # 판정(추가매수 가능 여부)은 위 '물타기 판정'이 정한다. 조각으로 감싸 입력마다 앱 전체가
     # 다시 돌지 않게 한다(라운드 329).
-    _stop370 = _row224.get('snap_hold_stop')
+    # 라운드 378 — 판단과 같은 손절선(옛 규칙이 낮춘 행은 옛 선 · `effective_hold_stop` 한 곳 · §4)
+    _stop370 = _uk.effective_hold_stop(_row224)[0]
 
     @st.fragment
     def _add_on_calc370():
@@ -13499,6 +13660,72 @@ if _uh_home and _uh_home.get('days'):
                 '카테고리': u['category'], '내용': u['subject'],
             } for u in _sel_upd[40:]]), width='stretch',
                 hide_index=True)
+
+
+# ── 라운드 376 — 휴장일 확인: 휴일로 지정된 날이 맞는지 **늘 볼 수 있게** ─────────────────────────────
+#   사용자(2026-09-28): "오늘 밤 대체휴일 아닌데? 나 출근했는데" → "무슨 날짜가 휴일로 지정되면 맞는지 항상 확인할 수
+#   있는 시스템으로". 두 잣대를 같이 낸다 — ① 법의 규칙으로 다시 유도한 날짜와 표를 날짜마다 대 본다(미래 날짜도 지금
+#   걸린다 · `krx_holiday_rules`) ② 지난 날짜는 실제로 장이 열렸는지 일봉으로 본다(`scripts/calendar_truth` · 매일 밤
+#   클라우드도 같은 것을 돈다). 표를 고치지 않는다 — 어긋나면 어긋났다고만 적는다(고치는 것은 사람이 사유와 함께).
+#   버튼은 이 절만 다시 돈다(`st.fragment` · 앱 전체를 다시 돌리지 않는다 · 라운드 329).
+#   자리는 시세 교차검증 **앞**이다 — 교차검증 칸은 '고객센터 바로 앞' 이 라운드 287 의 결정이라(§300) 그 사이에
+#   끼지 않는다. 메뉴도 같은 차례(휴장일 확인 → 시세 교차검증 → 고객센터 · §170 ⓔ).
+_uk.spacer(28)
+st.markdown('<div id="nav-holidays"></div>', unsafe_allow_html=True)
+st.markdown("### 휴장일 확인 — 휴일로 지정된 날이 맞는가")
+
+
+@st.fragment
+def _holiday_panel376():
+    try:
+        import krx_holiday_rules as _khr
+        _up, _res = _khr.upcoming(n=12)
+    except Exception as _e:                                    # noqa: BLE001
+        st.warning(f"휴장일 규칙 대조를 못 했습니다 ({type(_e).__name__}: {_e}) — 미확인입니다.")
+        return
+    _hl, _ = _holiday_line376()
+    st.caption(
+        f"{_hl}. 엔진의 휴장일 표를 **공휴일 법 규칙으로 다시 유도한 날짜**와 날짜마다 대 봅니다 — 설·추석은 "
+        "일요일이나 다른 공휴일과 겹칠 때만 대체되고, 국경일·어린이날·부처님오신날·성탄절·노동절은 토·일 겹침도 "
+        "대체됩니다. 선거일·임시공휴일은 규칙으로 못 내므로 출처와 함께 따로 적어 둡니다. "
+        f"대 본 해: {', '.join(str(y) for y in _res['years'])}"
+        + (f" · 규칙표가 없어 못 댄 해: {', '.join(str(y) for y in _res['no_rule_years'])}"
+           if _res['no_rule_years'] else ''))
+    if _res['mismatch']:
+        st.error("규칙과 어긋나는 날: " + " · ".join(
+            f"{m['date']}({m['wd']}) {m['status']}" + (f" — {m['reason']}" if m['reason'] else '')
+            for m in _res['mismatch']))
+    if _up:
+        _rows = ''.join(
+            f"<tr><td style='padding:4px 10px 4px 0; white-space:nowrap;'>{u['date']} ({u['wd']})</td>"
+            f"<td style='padding:4px 10px 4px 0;'>{_uk._esc(u['reason'] or '사유 없음')}</td>"
+            f"<td style='padding:4px 0; color:{_TOK['pos'] if u['status'] == '일치' else _TOK['neg']};'>"
+            f"{'규칙과 일치' if u['status'] == '일치' else _uk._esc(u['status'])}</td></tr>"
+            for u in _up)
+        st.markdown(
+            f"<table style='font-size:13px; color:{_TOK['tx2']}; border-collapse:collapse;'>"
+            f"<tr><th style='text-align:left; padding:4px 10px 4px 0; color:{_TOK['tx3']};'>다가오는 평일 휴장</th>"
+            f"<th style='text-align:left; padding:4px 10px 4px 0; color:{_TOK['tx3']};'>사유</th>"
+            f"<th style='text-align:left; padding:4px 0; color:{_TOK['tx3']};'>규칙 대조</th></tr>{_rows}</table>",
+            unsafe_allow_html=True)
+    if st.button("지난 날짜를 실제 거래일과 대 보기", key='btn_holiday_truth376',
+                 help="대표 종목 둘(코스피200 ETF · 시총 1위)의 일봉을 받아, 표가 휴장이라 한 날에 장이 열렸는지 · 평일인데 봉이 "
+                      "없는 날이 표에 빠졌는지 봅니다. 수 초 걸립니다. 저장하는 것은 없습니다."):
+        try:
+            import io as _io376
+            import contextlib as _cl376
+            from scripts import calendar_truth as _ct376
+            _buf = _io376.StringIO()
+            with _cl376.redirect_stdout(_buf):
+                _rc = _ct376.check()
+            _msg = _buf.getvalue().strip().splitlines()
+            (st.success if _rc == 0 else st.error if _rc == 1 else st.warning)(
+                "  \n".join(_msg[-3:]) if _msg else f"결과 코드 {_rc}")
+        except Exception as _e:                                # noqa: BLE001
+            st.warning(f"일봉 대조를 못 했습니다 ({type(_e).__name__}: {_e}) — 미측정입니다.")
+
+
+_holiday_panel376()
 
 
 # ── 실시간 시세 교차검증 상태 — 맨 아래 (라운드 287 · 사용자 요청) ──────────

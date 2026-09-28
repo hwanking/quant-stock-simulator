@@ -48,8 +48,15 @@ def _w(v, suffix='원'):
 
 def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
                   regime_code=None, sector=None, news=None, versions=None,
-                  user_avg=None, user_qty=None, cb=None, avg_down_ok=None):
-    """중앙 스냅샷 → 대화 컨텍스트. 계산하지 않고 모아서 이름만 붙인다."""
+                  user_avg=None, user_qty=None, cb=None, avg_down_ok=None,
+                  plan_stop=None, plan_trim=None):
+    """중앙 스냅샷 → 대화 컨텍스트. 계산하지 않고 모아서 이름만 붙인다.
+
+    라운드 378 — `plan_stop`·`plan_trim`: 이 종목이 **보유 계획이 있는 관심종목 행**이면 그 계획 값(손절선은
+    `ui_kit.effective_hold_stop`)을 받는다. 보유자 판단은 **계획 값이 관리 기준**이다(라운드 225) — 종전엔 챗만
+    오늘 다시 잰 값(`core`)으로 판단해, 옛 규칙이 손절선을 낮춘 행에서 표는 '매도'인데 챗은 '보유 유지'라 말할 수
+    있었다(§4). 안 넘기면 종전대로 `core` 의 값이다.
+    """
     core = core or {}
     fs = fs or {}
     vd = verdict or {}
@@ -71,7 +78,8 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
         breakout=core.get('breakout_price'),
         new_target=core.get('new_target'), new_stop=core.get('new_stop'),
         rr=core.get('rr'), horizon=core.get('horizon_days'),
-        hold_trim=core.get('hold_trim'), hold_stop=core.get('hold_stop'),
+        hold_trim=(plan_trim if plan_trim else core.get('hold_trim')),
+        hold_stop=(plan_stop if plan_stop else core.get('hold_stop')),
         fair=fs.get('displayed_fair_value'),
         value_floor=fs.get('recommended_buy_price'),
         fv_status=fs.get('fair_value_status'),

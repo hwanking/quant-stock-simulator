@@ -344,6 +344,28 @@ def nav_groups(groups: Sequence[dict], active: str = '',
     return ''.join(out)
 
 
+def nav_toc(title: str, items: Sequence[dict], theme: str = 'dark') -> str:
+    """
+    지금 보고 있는 종목의 목차 — 사이드바 검색 바로 아래 (라운드 376).
+
+    전역 메뉴(오늘의 시장·내 자산·검증과 이력)와 **한 목록에 섞지 않는다** — 종전엔
+    '3. 이 종목' 이 전역 묶음 사이에 끼어 있어 무엇이 앱 전체이고 무엇이 이 종목인지
+    갈리지 않았다. 알약 모양으로 줄바꿈해 세로 공간을 적게 쓴다(여섯 항목 ≈ 두 줄).
+    items: [{'key','label','href'}]
+    """
+    t = tokens(theme)
+    pills = ''.join(
+        f"<a href='{_esc_attr(it.get('href') or '#')}' class='qnav-toc' "
+        f"style='display:inline-block; padding:5px 10px; margin:0 6px 6px 0; "
+        f"border-radius:999px; border:1px solid {t['line']}; "
+        f"font-size:12px; color:{t['tx2']}; text-decoration:none; "
+        f"white-space:nowrap;'>{_esc(it['label'])}</a>"
+        for it in items)
+    return (f"<div style='padding:10px 2px 4px 2px;'>"
+            f"<p style='margin:0 0 7px 2px; font-size:12px; font-weight:600; "
+            f"color:{t['tx3']};'>{_esc(title)}</p>{pills}</div>")
+
+
 def acc_css(steps, active='', busy='', theme='dark'):
     """
     아코디언 줄 모양 — 한 번만 주입한다. 버튼을 제목 줄처럼 보이게 한다.
@@ -1370,7 +1392,44 @@ def hold_log_parse(line):
     return None
 
 
-def hold_log_short(line, new_stop=None, new_trim=None, today=None, width=34):
+def effective_hold_stop(row):
+    """보유 판단에 쓸 **버틸 수 없는 가격** — (값, 되살린 이력 또는 None). 라운드 378 · 읽는 쪽만 · 파일 불변.
+
+    2026-09-28 사용자 결정(라운드 373): *손절선을 넘긴 계획은 그대로 둔다* — 다시 재는 것은 사람이 누를 때뿐.
+    그 결정 **전에** 옛 규칙(닿으면 다시 잼)이 이미 손절선을 낮춘 행이 있었다(보유 14행 중 3행 · 이력에
+    "손절선 N원 넘겨 기준 다시 잼 → 새 손절선 M원"). 라운드 373 은 옛 1차 매도가가 이력에 없어 그 행들을 **되돌리지
+    않았고**, 그래서 그 셋은 선을 넘긴 뒤 **낮아진 선** 기준으로 '보유 유지'가 됐다. 사용자: *"왜 보유해야 해?
+    계속 떨어지는 거 아냐?"* — 그 '보유 유지'는 새 판단이 아니라 옛 규칙이 선을 내린 결과였다.
+    그래서 **지금 계획이 바로 그 자동 재측정으로 만들어진 것이면**(마지막 이력이 옛 규칙의 손절선 재측정이고 그 날짜 =
+    잰 날) 판단에는 **이력에 남은 옛 손절선**을 쓴다. 사람이 '기준 다시 재기'를 누르면 마지막 이력이 바뀌어 이 규칙이
+    풀린다. 1차 매도가는 옛 값이 이력에 없어 지금 값을 그대로 쓴다(지어내지 않는다 · §3). 새 문턱 없음.
+    """
+    def _n(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+    r = row or {}
+    cur = _n(r.get('snap_hold_stop'))
+    log = [x for x in str(r.get('snap_hold_log') or '').split(' | ') if x]
+    # 뒤에 붙은 '계획 유지' 줄(라운드 373 이 선 아래에서 한 번 남긴다)은 건너뛴다 — 그 줄은 계획을 바꾸지 않는다.
+    #   건너뛰지 않으면 되살린 행이 선 아래에서 한 줄을 남기는 순간 다시 낮춘 선으로 돌아간다(서로를 무른다).
+    last = None
+    for x in reversed(log):
+        pp = hold_log_parse(x)
+        if pp and pp.get('kind') == 'stop_hold':
+            continue
+        last = pp
+        break
+    at = str(r.get('snap_hold_at') or '')[:10]
+    if (last and last.get('kind') == 'stop' and at and last.get('date') == at
+            and _n(last.get('old'))):
+        return _n(last['old']), last
+    return cur, None
+
+
+def hold_log_short(line, new_stop=None, new_trim=None, today=None, width=34, revived=False):
     """관심종목 표의 이력 한 줄 — 어느 선을 넘겨 다시 쟀고 새 선이 얼마인지. 못 읽는 문장은 종전대로 자른다."""
     p = hold_log_parse(line)
     if not p:
@@ -1385,6 +1444,9 @@ def hold_log_short(line, new_stop=None, new_trim=None, today=None, width=34):
 
     when = '오늘' if (today and p['date'] == str(today)[:10]) else p['date'][5:].replace('-', '/')
     if p['kind'] == 'stop':
+        if revived:                      # 라운드 378 — 판단은 옛 손절선으로 본다(effective_hold_stop)
+            return (f"{when} 손절선 {_won(p['old'])} 넘김 — 옛 계획으로 봄"
+                    + (f" (그때 다시 잰 선 {_won(new_stop)}은 '기준 다시 재기'로)" if _won(new_stop) else ''))
         s = f"{when} 손절선 {_won(p['old'])} 넘겨 기준 다시 잼"
         return s + (f" → 새 손절선 {_won(new_stop)}" if _won(new_stop) else '')
     if p['kind'] == 'stop_hold':
@@ -1540,7 +1602,9 @@ def watch_action(row, price=None, today=None):
     px = _n(price) or _n((row or {}).get('snap_px'))
     paid = _n((row or {}).get('paid'))
     bucket = str((row or {}).get('snap_bucket') or '')
-    h_stop = _n((row or {}).get('snap_hold_stop'))
+    # 라운드 378 — 판단에 쓰는 손절선은 한 곳(`effective_hold_stop`)에서. 파일의 값은 `h_stop_plan` 으로 남긴다.
+    h_stop_plan = _n((row or {}).get('snap_hold_stop'))
+    h_stop, _rev378 = effective_hold_stop(row)
     h_trim = _n((row or {}).get('snap_hold_trim'))
     buy = _n((row or {}).get('snap_buy'))
 
@@ -1651,9 +1715,18 @@ def watch_action(row, price=None, today=None):
             _td371 = today or _dt371.date.today()
         except Exception:                                      # noqa: BLE001
             _td371 = today
-        d['hold_log_short'] = (hold_log_short(_log[-1], new_stop=h_stop, new_trim=h_trim,
-                                              today=_td371) if _log else '')
-        if _reset371 and _reset371['kind'] == 'stop' and h_stop:
+        d['hold_log_short'] = (hold_log_short(_log[-1], new_stop=h_stop_plan, new_trim=h_trim,
+                                              today=_td371, revived=bool(_rev378)) if _log else '')
+        d['hold_stop_revived'] = _rev378
+        d['hold_stop_eff'] = h_stop
+        if _rev378 and h_stop:
+            # 옛 규칙의 재측정은 선을 낮출 수도 올릴 수도 있었다(회귀 픽스처는 9,000 → 9,300) — 방향을 사실대로.
+            _moved378 = ('낮췄습니다' if (h_stop_plan or 0) < h_stop else '다시 쟀습니다')
+            why.insert(1, (f"옛 계획의 버틸 수 없는 가격 {h_stop:,.0f}원({_rev378['old_at']} 기준)을 {_rev378['date']} 에 "
+                           f"넘겼고, 그때 규칙(닿으면 다시 잼)이 선을 {h_stop_plan or 0:,.0f}원으로 {_moved378}. "
+                           f"2026-09-28 결정(넘긴 계획은 그대로)을 이 종목에도 적용해 **옛 손절선으로 봅니다** — "
+                           f"낮춘 선으로 보려면 '기준 다시 재기'를 누르세요(1차 매도가는 옛 값이 이력에 없어 지금 값)"))
+        elif _reset371 and _reset371['kind'] == 'stop' and h_stop:
             why.insert(1, (f"옛 계획(버틸 수 없는 가격 {_reset371['old']:,.0f}원 · {_reset371['old_at']} 기준)"
                            f"으로는 파는 자리였습니다 — 그때 규칙(닿으면 다시 잼)대로 {_at} 에 기준을 다시 쟀고, "
                            f"새 버틸 수 없는 가격은 {h_stop:,.0f}원입니다 · 2026-09-28 부터는 손절선을 넘긴 "
@@ -1669,8 +1742,11 @@ def watch_action(row, price=None, today=None):
         #   순간 다시 재어 '매도'가 스스로 지워졌다(보유 14행 중 넘긴 3행 전부). 이 판정이 서 있는 동안
         #   그 사실과 푸는 길 둘을 같은 줄에 적는다 — 낱말만 보면 "엔진이 아직 안 봤나"로 읽힌다.
         if d.get('kind') == '정리 검토':
+            # 라운드 378 — 종전 "…누를 때까지 이 판정이 남습니다" 는 넘친 말이었다: 남는 것은 **계획(선)** 이고 판정은
+            #   현재가를 그 선에 대 본 결과라 가격이 선 위로 돌아오면 '보유 유지' 가 된다(실측 2026-09-29 · 3행 중 2행).
             why.insert(1, "이 계획은 손절선을 넘긴 뒤에도 그대로 둡니다(2026-09-28 사용자 결정) — "
-                          "'팔았음'을 누르거나 '기준 다시 재기'를 누를 때까지 이 판정이 남습니다")
+                          "'팔았음'을 누르거나 '기준 다시 재기'를 누를 때까지 이 선이 남고, 현재가가 선 아래인 동안 "
+                          "판정은 '매도'입니다")
         d['hold_why'] = [w for w in why if w]
         # ── 짧은 판 (라운드 226 · 사용자: "너무 길다 · 핵심만") — 같은 재료를 낱말로.
         #   긴 문장(hold_why)은 종목 상세가, 짧은 판(hold_brief)은 포트폴리오 견해가 쓴다.
@@ -1989,6 +2065,63 @@ def nav_row(np_, price=None, nav=None, at=None, theme='dark'):
         f"<div style='font-size:12px; line-height:1.5; color:{t['tx2']};'>"
         f"<b style='color:{col};'>ETF · NAV 대비 {_esc(np_['kind_ko'])}</b> · "
         f"{_esc(nums)}{_esc(np_['line'])}{when}</div></div>")
+
+
+def etf_structure_block(struct, ttm=None, own_rows=None, cls_label=None, cls_rows=None,
+                        theme='dark') -> str:
+    """ETF 구조 사실 · 분배금 포함 12개월 · 원장 적용 범위 — 라운드 377 (표시 전용 · 판정 불변).
+
+    사용자가 붙인 영상 둘에서 **확인되는 사실만** 옮겼다. 점수 0점·매매 금지·N분할·'횡보장이면 보유' 같은 규칙은
+    넣지 않는다 — 원장에서 잰 적이 없는 규칙이다(§2). 대신 구조가 무엇이고, 분배금을 받고도 벌었는지, 이 엔진의
+    규칙이 이 상품군에서 잰 것인지를 같은 카드에 적는다(값어치를 같은 화면에 — 라운드 285).
+    struct: `etf_registry.structure_of` · ttm: `etf_registry.ttm_total_return` · own_rows/cls_rows: 원장 행 수.
+    쓸 것이 없으면 '' 를 돌려준다.
+    """
+    t = tokens(theme)
+    s = struct or {}
+    lines = []
+    mult = s.get('mult')
+    geared = bool(s.get('daily_reset')) and mult is not None and mult != 1.0
+    if geared:
+        k = f"{mult:+g}".replace('+', '')
+        lines.append(
+            f"<b style='color:{t['tx1']};'>하루 수익률의 {k}배를 따라가는 구조</b> — 운용사 설명대로 매일 다시 "
+            f"맞춥니다. 그래서 <b>여러 날의 수익률은 {k}배가 아닙니다</b>: 오르내림을 되풀이하는 장에서는 기초가 "
+            f"제자리여도 잃을 수 있고, 한 방향으로 계속 가는 장에서는 {k}배보다 더 벌거나 더 잃을 수 있습니다.")
+        if s.get('single_stock'):
+            lines.append(
+                f"<b style='color:{t['tx1']};'>기초가 회사 하나입니다(단일종목)</b> — 여러 종목에 나눠 담은 지수와 "
+                f"달리 그 회사 하나의 악재가 {k}배로 옵니다.")
+    if s.get('covered_call'):
+        lines.append(
+            f"<b style='color:{t['tx1']};'>콜옵션을 파는 구조(커버드콜)</b> — 옵션을 팔아 받은 돈을 분배금으로 "
+            f"나눠 줍니다. 기초자산이 크게 오를 때 <b>상승분이 잘리고</b>, 떨어질 때는 받은 돈만큼만 덜 떨어집니다"
+            f"(손실을 막아 주지는 않습니다). <b>분배율은 수익률이 아닙니다.</b> 아래 목표가는 이 ETF 자신의 가격 "
+            f"움직임으로 잰 값이고, 옵션으로 잘리는 상승분을 따로 계산하지 않았습니다.")
+    tt = ttm or {}
+    if tt.get('total_pct') is not None and (tt.get('dist_pct') or 0) > 0:
+        _c = t['up'] if tt['total_pct'] > 0 else t['down'] if tt['total_pct'] < 0 else t['tx2']
+        lines.append(
+            f"<b style='color:{t['tx1']};'>분배금 포함 최근 12개월</b> ({_esc(tt['start'])} ~ {_esc(tt['end'])}): "
+            f"가격 {tt['price_pct']:+.1f}% · 분배금 {tt['dist_pct']:+.1f}% (1년 전 가격 대비) · "
+            f"<b style='color:{_c};'>합계 {tt['total_pct']:+.1f}%</b> — 분배금을 받고도 전체로 벌었는지는 이 합계가 "
+            f"말합니다. 재투자·세금·매매비용은 빼지 않았고 운용보수는 가격에 이미 들어 있습니다. 분배금은 네이버의 "
+            f"'최근 12개월 합'이라 가격 구간과 며칠 어긋날 수 있습니다.")
+    if (geared or s.get('covered_call')) and own_rows is not None:
+        _cl = (f" · 같은 상품군(상품명으로 가른 '{_esc(cls_label)}') {cls_rows:,}행" if cls_label and cls_rows is not None
+               else '')
+        _zero = (cls_rows == 0) if cls_label and cls_rows is not None else (own_rows == 0)
+        lines.append(
+            f"<span style='color:{t['tx3']};'>이 엔진의 규칙과 확률은 원장(되돌려 본 판단)에서 잰 것입니다 — 이 상품은 "
+            f"원장에 {own_rows:,}행{_cl}."
+            + (" 이 상품군에서는 <b>한 번도 재 본 적이 없습니다</b> — 이 엔진이 내는 판정은 다른 자산에서 잰 규칙을 "
+               "그대로 적용한 것입니다." if _zero else '')
+            + "</span>")
+    if not lines:
+        return ''
+    return (f"<div style='margin-top:11px; padding:10px 12px; background:{t['raised']}; border-radius:8px; "
+            f"font-size:12px; line-height:1.65; color:{t['tx2']};'>"
+            + '<br>'.join(lines) + "</div>")
 
 
 def etf_profile_block(prof, premium_pct=None, band_line=None, theme='dark'):

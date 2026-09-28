@@ -362,6 +362,88 @@ def profile(code, fetch=None):
     return got
 
 
+# ── 라운드 377 — 상품 구조(레버리지·인버스·커버드콜·단일종목)와 분배금 포함 12개월 ─────────────────────
+#   사용자가 붙인 영상 둘(레버리지 ETF 무한매수법 · 커버드콜의 함정)에서 **사실로 확인되는 것만** 가져왔다.
+#   구조는 상품명이 아니라 **운용사 요약 문장과 추종지수 이름**에서 읽는다 — 요약이 "일간수익률의 양(+)의 2배수",
+#   "음 2배수(-2배수)", "콜옵션을 매도하는 커버드콜" 처럼 구조를 직접 말한다(2026-09-28 · 클래스마다 실제 응답을
+#   열어 확인). 단일종목만 상품명('단일종목')으로 가른다 — 거래소 상품명에 그 낱말이 들어가고 요약은 기초 회사를
+#   지수 이름으로만 부른다. 못 읽으면 칸이 None 이다(지어내지 않는다 · §3). 판정·점수·게이트에 들어가지 않는다.
+import re as _re377
+
+_MULT_RX = _re377.compile(r'(양|음)\s*(?:\(\s*[+\-]\s*\)|\(\s*[陽陰]\s*\))?\s*의?\s*(\d+(?:\.\d+)?)\s*배수')
+
+
+def structure_of(prof):
+    """`parse_profile` 결과 → {'mult', 'daily_reset', 'covered_call', 'single_stock'}. 순수 함수 · 없으면 None.
+
+    mult: 요약이 말하는 **일간** 배수(부호 포함 · 인버스는 음수). 못 읽으면 None.
+    daily_reset: 배수가 '일간/일별' 수익률에 걸려 있다고 요약이 말하는가.
+    covered_call: 요약이나 추종지수 이름에 커버드콜·콜옵션이 있는가.
+    single_stock: 상품명에 '단일종목' 이 있는가.
+    """
+    if not isinstance(prof, dict):
+        return None
+    summ = str(prof.get('summary') or '')
+    base = str(prof.get('base_index') or '')
+    name = str(prof.get('name') or '')
+    m = _MULT_RX.search(summ)
+    mult = (float(m.group(2)) * (-1.0 if m.group(1) == '음' else 1.0)) if m else None
+    low = (summ + ' ' + base).lower()
+    return {
+        'mult': mult,
+        'daily_reset': bool(m) and ('일간' in summ or '일별' in summ),
+        'covered_call': ('커버드콜' in low or 'covered call' in low or '콜옵션' in low),
+        'single_stock': '단일종목' in name,
+    }
+
+
+def is_geared(struct):
+    """하루 수익률을 1배가 아니게(레버리지·인버스) 따라가는가. 모르면 False — 주장하지 않는다."""
+    s = struct or {}
+    return bool(s.get('daily_reset')) and s.get('mult') is not None and s['mult'] != 1.0
+
+
+def ttm_total_return(bars, dps_ttm):
+    """분배금 포함 최근 12개월 — 순수 함수. `bars`: [(ISO 날짜, 종가)] (종가는 **분배금을 더하지 않은** 가격).
+
+    시작 = 마지막 봉에서 365일 전 **이전의** 마지막 봉. 1년치가 없으면 None(상장 1년 미만 · 합계를 안 만든다).
+    분배금(`dps_ttm`)을 못 받았으면 가격만 내고 합계는 None(§3 — 0 으로 채우지 않는다).
+    재투자·세금·매매비용은 넣지 않는다(운용보수는 가격에 이미 들어 있다).
+    """
+    try:
+        pts = sorted((str(d)[:10], float(c)) for d, c in (bars or []) if c is not None and float(c) > 0)
+    except (TypeError, ValueError):
+        return None
+    if len(pts) < 2:
+        return None
+    from datetime import date as _d, timedelta as _td
+    end_d, p1 = pts[-1]
+    cut = (_d.fromisoformat(end_d) - _td(days=365)).isoformat()
+    before = [p for p in pts if p[0] <= cut]
+    if not before:
+        return None
+    start_d, p0 = before[-1]
+    price_pct = (p1 / p0 - 1.0) * 100.0
+    dist_pct = (float(dps_ttm) / p0 * 100.0) if dps_ttm is not None else None
+    return {'start': start_d, 'end': end_d, 'p0': p0, 'p1': p1, 'price_pct': price_pct,
+            'dist_pct': dist_pct,
+            'total_pct': (price_pct + dist_pct) if dist_pct is not None else None}
+
+
+def class_label(name):
+    """원장 적용 범위를 셀 때 쓰는 **상품명** 갈래 — 구조 판정이 아니라 수를 세는 이름표다(화면이 그렇게 적는다)."""
+    n = str(name or '')
+    if '단일종목' in n and '레버리지' in n:
+        return '단일종목 레버리지'
+    if '커버드콜' in n:
+        return '커버드콜'
+    if '인버스' in n:
+        return '인버스'
+    if '레버리지' in n:
+        return '레버리지'
+    return None
+
+
 def lp_band_line(premium_pct):
     """오늘 괴리율을 거래소 LP 관리 의무 범위(국내형 2% · 해외형 5%)와 **나란히** 적는 한 문장.
 
