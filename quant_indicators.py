@@ -2135,11 +2135,21 @@ class QuantIndicatorsEngine:
                                  + (f" — {w(chase_max)} 위에서는 특히 금지" if chase_max else "")
                                  + f"). {w(rec)} 아래로 오면 나눠서 검토하세요. {odds}")}
             else:
-                _ney_txt = (f"{_ney:+.2f}%" if _ney is not None else "미산출")
+                # ⚠️ 라운드 382 — 이 문장이 **다른 수를 같은 이름**으로 불렀다. 여기 값은
+                #   `net_expected_return` = 유사패턴 **평균 수익** − 0.30(경로 수익 · 위 R191 주석)이고,
+                #   같은 화면 매매 지시서의 '비용 차감 기대값'은 중앙 판정이 **점수대 적중률 × 목표·손절 −
+                #   0.41** 로 낸 다른 수다(verdict_core). 그래서 한 화면이 *"기대값 미산출"* 과 *"기대값
+                #   −0.25%"* 를 같이 적었다(외부 검토 · 2026-09-29). 수는 안 바꾸고 **이름을 계산에 맞춘다**
+                #   (R239·R359) — 그리고 못 잰 값(None)을 *"양수가 아니라"* 로 읽지 않는다(§3).
+                if _ney is not None:
+                    _ney_why = (f"유사패턴 평균 수익(비용 차감)이 {_ney:+.2f}%로 양수가 아니라 "
+                                f"신규 매수를 권하지 않습니다. ")
+                else:
+                    _ney_why = ("유사패턴 평균 수익(비용 차감)은 표본이 모자라 산출하지 못했습니다 — "
+                                "매수를 권할 근거가 없어 신규 매수를 권하지 않습니다. ")
                 nb = {'emoji': '',
                       'line': f'{w(rec)}은 매수 권고가 아니라 관찰 기준 가격입니다.',
-                      'detail': (f"비용 차감 후 기대값이 {_ney_txt}로 양수가 아니라 "
-                                 f"신규 매수를 권하지 않습니다. {w(rec)}은 변동성으로 "
+                      'detail': (_ney_why + f"{w(rec)}은 변동성으로 "
                                  f"계산한 관찰 기준일 뿐 '싸다'는 뜻이 아닙니다. "
                                  f"지금 가격({w(curr_price)})은 그 기준보다도 높습니다"
                                  + (f" (추격매수 금지 — {w(chase_max)} 위에서는 특히)"
@@ -2534,7 +2544,20 @@ class QuantIndicatorsEngine:
         # ---------------------------------------------------------
         # 3. 모델별 개별 적정가 산출 & 유효성 검사 (Validity Check)
         # ---------------------------------------------------------
-        norm_eps = max(1.0, eps * 1.05 if roe > 10 else (eps if eps > 0 else bps * max(0.02, roe/100.0)))
+        # ⚠️ 라운드 381 — **EPS 를 못 받으면 위 대체값(`eps = 현재가 ÷ 15`)이 이 줄로 흘렀다.** 그 대체값은
+        #   주석대로 **분류 산식용**인데(:2420), 여기서 정상화 EPS 가 되어 이익 모형 넷(EV/EBITDA · FCFF ·
+        #   EV_GP · DCF_SCENARIO)이 **현재가의 배수**로 섰다 — 라운드 167·188 이 걷어낸 그 모양이고, 아래
+        #   라운드 358 의 깃발도 **채운 값**(양수)을 봐서 못 막았다. 외부 검토가 ROE −7% · EPS 미수신 종목에서
+        #   이 경로를 재현했다(2026-09-29). 바로 위 :2452 주석은 *"norm_eps 는 eps 가 없으면 bps·roe 로
+        #   유도된다"* 고 약속했는데 코드는 그렇게 하지 않았다.
+        #   → 모형에는 **받은 값만** 쓴다: EPS 를 받았으면 그것, 못 받았으면 받은 BPS·ROE 의 **항등식**
+        #     (EPS = BPS × ROE — 가격에서 만든 값이 아니다 · 약속된 그 유도), 그것도 없으면 None(그때는
+        #     `_have_norm_eps` 가 이미 거짓이라 이익 모형은 서지 않는다). 식·배수·계수는 한 글자도 안 바꿨다.
+        #   실측(2026-09-29 · 유니버스 2,449종목): EPS 못 받음 7 · 그중 BPS·ROE 받음 **3**(ROE>0 2 · ≤0 1).
+        _eps_model = (in_eps if in_eps is not None
+                      else (bps * roe / 100.0 if (_have_bps and _have_roe) else None))
+        _e381 = float(_eps_model) if _eps_model is not None else 0.0
+        norm_eps = max(1.0, _e381 * 1.05 if roe > 10 else (_e381 if _e381 > 0 else bps * max(0.02, roe/100.0)))
         # ⚠️ 라운드 358 — 위 한 줄이 **적자를 양수 이익으로 바꾼다.**
         #   EPS 가 0 이하이면 어느 가지로 가든 결과가 양수다: ROE 가 10 이하면
         #   `bps × max(0.02, roe/100)` 이고 ROE 가 음수면 언제나 **BPS 의 2%** 이며,
@@ -2565,7 +2588,9 @@ class QuantIndicatorsEngine:
         #     떼자 BPS 배수 둘이 남아 적자 기업이 **더 좋아 보이게** 됐다.
         #     넓힌 근거는 그 방향이 아니라 위의 구조다(방향을 보고 기준을 고른 것이
         #     아니라는 사실까지 결과 문서에 적는다 · §2).
-        _eps_synth = bool(eps is not None and float(eps) <= 0)
+        # 라운드 381 — 깃발은 **모형에 쓰는 이익**(`_eps_model` · 받은 값 또는 BPS×ROE)으로 판정한다. 종전엔
+        #   분류용 대체값 `eps` 를 봐서 EPS 미수신이면 늘 '양수'였다(위 주석).
+        _eps_synth = bool(_eps_model is not None and float(_eps_model) <= 0)
         ebitda_ps = norm_eps * 1.45 + bps * 0.04
         wacc = 0.085
         terminal_g = 0.02
@@ -2600,8 +2625,12 @@ class QuantIndicatorsEngine:
         model_results['EV_EBITDA'] = {'val': ev_val, 'weight': blended_weights.get('EV_EBITDA', 0.0), 'valid': ev_ebitda_valid, 'name': 'EPS·BPS 추정 EBITDA 배수'}
         
         # C. FCFF DCF 모델 (금융업 자동 제외)
+        # 라운드 381 — 경기민감형이면 아래 식이 `bps × 0.15` 를 더하는데, BPS 를 못 받으면 그 bps 는
+        #   `현재가 × 0.8`(분류용 대체값)이다 — 이 모형만 `_have_bps` 를 안 봤다(EV/EBITDA·EV_GP·DCF_S 는 본다).
+        #   그 자리만 받은 BPS 를 요구한다(식 불변 · 못 받으면 이 모형이 무효 · 실측 BPS 못 받고 EPS 받은 7종목).
         fcff_valid = (_have_norm_eps and not _eps_synth
-                      and norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4)
+                      and norm_eps > 0 and type_probs['C_FINANCIAL'] < 0.4
+                      and (_have_bps or type_probs['B_CYCLICAL'] <= 0.4))
         fcff_ps = norm_eps * 0.85
         fcff_val = ((fcff_ps * 1.03) / (wacc - terminal_g)) * 0.65 + (bps * 0.15 if type_probs['B_CYCLICAL']>0.4 else 0.0)
         model_results['FCFF'] = {'val': fcff_val, 'weight': blended_weights.get('FCFF', 0.0), 'valid': fcff_valid, 'name': 'EPS 기반 현금흐름 대용 모형'}
@@ -2647,9 +2676,16 @@ class QuantIndicatorsEngine:
         #   이 사유를 그대로 읽는다 — 사유가 없으면 그 칸에 아예 안 나온다.
         #   (이 블록은 H·I 정의 **뒤**에 있어야 한다 — 앞에 두면 아직 없는 키다.)
         if _eps_synth:
+            # 라운드 381 — EPS 를 못 받고 BPS×ROE 로 본 이익이 0 이하인 경우는 사유를 그대로 적는다(§3 · 받은 것과
+            #   유도한 것을 가른다).
+            _why381 = ("적자(EPS 0 이하) — 양수 이익을 지어내 적용하지 않습니다" if in_eps is not None
+                       else "EPS 미수신 · 받은 BPS×ROE 로 보면 이익 0 이하 — 양수 이익을 지어내 적용하지 않습니다")
             for _k358 in ('PER', 'EV_EBITDA', 'FCFF', 'EV_GP', 'DCF_SCENARIO'):
-                model_results[_k358]['exclusion_reason'] = (
-                    "적자(EPS 0 이하) — 양수 이익을 지어내 적용하지 않습니다")
+                model_results[_k358]['exclusion_reason'] = _why381
+        if (not _have_bps and type_probs['B_CYCLICAL'] > 0.4 and not _eps_synth
+                and _have_norm_eps and 'exclusion_reason' not in model_results['FCFF']):
+            model_results['FCFF']['exclusion_reason'] = (
+                "BPS 미수신 — 경기민감형 가산분(BPS × 0.15)을 가격에서 만든 값으로 채우지 않습니다")
 
         # ---------------------------------------------------------
         # 4. 불허/유효하지 않은 모델 0% 자동 제외 및 가중치 재정규화 (Re-normalization)

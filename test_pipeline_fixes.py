@@ -21976,7 +21976,9 @@ check("옛 '기초 펀더멘털 가치' 라벨은 사라지고 실제 가중중�
 check("배너가 괴리율과 엔진의 띠 낱말을 같이 낸다 (새 문턱 없음)",
       "_gap238 = four_scores.get('upside_pct')" in _w231
       and "_band238 = four_scores.get('upside_eval')" in _w231
-      and "차이는 {_gap238:+.1f}%뿐입니다 ({_band238}). " in _w231)
+      # 라운드 382 — '차이는 N%뿐입니다' 는 +0.1% 사례의 낱말이 +90% 에도 붙어 거짓이 됐다 → 이름을 붙인
+      #   '상승여력 N%(적정가 ÷ 현재가 − 1 · 띠)' 로. 괴리율과 띠 낱말을 같이 낸다는 성질은 그대로다.
+      and "적정가까지 상승여력은 {_gap238:+.1f}%입니다(적정가 ÷ 현재가 − 1 · {_band238}). " in _w231)
 check("게이트가 읽는 구역 낱말은 그대로다 (배너 문장만 늘렸다)",
       'return "적정가 이하 (안전마진 미확보)", 60' in _q255
       and 'elif _zone == "적정가 이하 (안전마진 미확보)":' in _w231)
@@ -23955,8 +23957,9 @@ check("보유자 카드 캡션이 카드 자신의 이름('팔 가격 1차')으�
 check("보유자 카드가 두 기준가(현재가 · 진입가)를 이름으로 적고, 옮겨서 맞는지를 그 자리에서 보인다 (§3 · 안 맞으면 맞다고 안 적는다)",
       '_hold_basis_html' in _wa292
       and '위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다' in _wa292
-      and '팔 가격 1차 × (진입가 ÷ 현재가)' in _wa292
-      and '한쪽이 지지·저항선에 걸려 비율이 그대로 옮겨지지는 않았습니다' in _wa292
+      # 라운드 382 — 곱셈 표기는 뺐다(뜻은 그대로 · 원 단위로 같을 때만 '같다') · 안 맞을 때 원인을 단정하지 않는다
+      and '기준가를 진입가로 옮기면 <b>{_hb_moved:,.0f}원</b>으로 지시서의 1차 목표와 같습니다' in _wa292
+      and '여기서는 가르지 않습니다' in _wa292 and '_hb_same = ' in _wa292
       and '{_hold_reach_html}{_hold_basis_html}{_hold_plan_html}' in _wa292)
 check("지시서의 1차 목표·손절은 '진입가 기준', 2차 목표는 '구조적 저항 · 진입가 대비' 라 적는다 (이미 채택된 낱말)",
       "+ '진입가 기준')" in _uk292 and "+ '구조적 저항 · 진입가 대비')" in _uk292
@@ -28099,7 +28102,8 @@ _qi360 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
 import re as _re360
 _m360 = _re360.search(r'^\s*norm_eps = (.+)$', _qi360, _re360.M)
 _expr360 = _m360.group(1) if _m360 else ''
-_vals360 = [eval(_expr360, {'max': max}, dict(eps=_e, roe=_r, bps=10000.0))
+# 라운드 381 — 식의 입력 이름이 `eps` 에서 `_e381`(모형에 쓰는 받은 이익)로 바뀌었다(식은 그대로). 둘 다 넘긴다.
+_vals360 = [eval(_expr360, {'max': max}, dict(eps=_e, _e381=_e, roe=_r, bps=10000.0))
             for _e, _r in ((-100.0, -1.0), (-1000.0, -10.0), (-4000.0, -40.0))] if _expr360 else []
 check("R358 적자 EPS 가 양수 정상화 EPS 가 된다 — 적자 폭이 달라도 같은 값 (원인)",
       bool(_vals360) and all(_v > 0 for _v in _vals360) and len(set(_vals360)) == 1,
@@ -29279,6 +29283,98 @@ check("라운드 372 의 좁힘(마지막 케이스 뒤의 후보만)은 그대�
       '_beyond_last = bool(_done_tk) and d > _done_tk[-1]' in _lab372
       and 'if _beyond_last and _ub and' in _lab372
       and '_open_by_stock.append((max(_cands), _tk_open))' in _lab372)
+
+
+print("\n" + "=" * 72)
+print("§373 받은 값만 모형에 · 없는 값과 견주지 않는다 · 이름이 계산을 말한다 (라운드 381·382)")
+print("=" * 72)
+# 외부 검토 두 편(2026-09-29 · 한 종목 화면)을 코드로 가렸다. 라운드 381 — EPS 를 못 받으면 분류용 대체값
+#   (현재가 ÷ 15)이 정상화 EPS 로 흘러 이익 모형 넷이 **현재가의 배수**로 섰다(라운드 358 깃발도 그 채운 값을 봤다 ·
+#   유니버스 2,449종목 중 닿는 종목 3). 라운드 382 — 화면 문장 열둘(없는 값과 견줌 · 같은 이름의 다른 수 · 지평이
+#   다른 두 중앙 · 통과 조건 이름을 차단으로 · 받은 적자를 '미수신'으로 …).
+import scripts.lineage_audit as _la373                         # noqa: E402
+import numpy as _np373
+import pandas as _pd373
+import quant_indicators as _qi373
+_eng373 = _qi373.QuantIndicatorsEngine()
+
+
+def _mr373(_px, _eps, _roe, _bps=10000.0):
+    _t = _pd373.DataFrame({'adj_close': _np373.full(60, float(_px)), 'vol_20': _np373.full(60, 0.02)})
+    _f = _pd373.DataFrame([{'eps': _eps, 'roe': _roe, 'bps': _bps, 'per': None, 'pbr': 1.0,
+                            'debt_ratio': 50.0}])
+    return (_eng373.evaluate_valuation_metric(_t, _f, symbol=None) or {}).get('model_results') or {}
+
+
+_EARN373 = ('EV_EBITDA', 'FCFF', 'EV_GP', 'DCF_SCENARIO')
+_a373, _b373 = _mr373(10000.0, None, 10.0), _mr373(20000.0, None, 10.0)
+_va373 = {_k: round((_a373.get(_k) or {}).get('val') or 0) for _k in _EARN373}
+_vb373 = {_k: round((_b373.get(_k) or {}).get('val') or 0) for _k in _EARN373}
+check("R381 EPS 를 못 받아도 이익 모형 값이 **현재가에 안 묶인다** — 가격을 두 배로 해도 같은 값 (BPS×ROE 항등식)",
+      _va373 == _vb373 and all(_v > 0 for _v in _va373.values()), f'{_va373} vs {_vb373}',
+      scanned=len(_EARN373))
+_n373 = _mr373(10000.0, None, -7.0)
+check("R381 EPS 미수신 · ROE 음수면 이익을 쓰는 모형 다섯이 무효이고 사유가 'EPS 미수신' 을 말한다",
+      all((_n373.get(_k) or {}).get('valid') is False for _k in _EARN373 + ('PER',))
+      and all('EPS 미수신' in str((_n373.get(_k) or {}).get('exclusion_reason') or '') for _k in _EARN373),
+      str({_k: (_n373.get(_k) or {}).get('valid') for _k in _EARN373}), scanned=len(_EARN373) + 1)
+check("R381 받은 적자(EPS −1,000)의 사유는 종전 문장 그대로다 (받은 것과 유도한 것을 가른다)",
+      '적자(EPS 0 이하)' in str((_mr373(10000.0, -1000.0, -10.0).get('FCFF') or {}).get('exclusion_reason') or ''))
+_q373 = '\n'.join(_ln for _i, _ln in _la373.code_lines('quant_indicators.py'))
+check("R381 모형 입력은 받은 값에서 — 깃발도 그것으로 · 경기민감형 FCFF 는 받은 BPS 를 요구",
+      '_eps_synth = bool(_eps_model is not None and float(_eps_model) <= 0)' in _q373
+      and "and (_have_bps or type_probs['B_CYCLICAL'] <= 0.4))" in _q373
+      and 'bps * roe / 100.0 if (_have_bps and _have_roe) else None' in _q373)
+check("R382 쉬운 설명이 다른 수를 '기대값'이라 부르지 않는다 (유사패턴 평균 수익 · 못 잰 값을 음수로 안 읽음)",
+      '유사패턴 평균 수익(비용 차감)' in _q373 and '비용 차감 후 기대값이 {' not in _q373)
+_w373 = '\n'.join(_ln for _i, _ln in _la373.code_lines('web_app.py'))
+check("R382 안전마진 문장 — 가치 기준선이 없으면 견주지 않고 미충족 조건을 적는다 · '뿐' 안 씀",
+      'if _bem_raw382 is not None:' in _w373 and "(snap.get('val_eval') or {}).get('buy_price_checks')" in _w373
+      and '%뿐입니다' not in _w373)
+check("R382 목표 폭 표가 '이 종목 1차 목표를 그 안에 잡는다' 고 거짓말하지 않는다 · range_pct None 에 안 죽는다",
+      '이 종목의 1차 목표를 이 표로 정하지는' in _w373 and '그 안에 들어오도록 잡습니다' not in _w373
+      and "isinstance(_rng382, (list, tuple))" in _w373)
+check("R382 지평이 다른 두 중앙을 견주지 않는다 (같을 때만 '표본이 큰 쪽')",
+      'if sel_h == _hz300:' in _w373 and '두 수를 견주지 않습니다' in _w373 and '큰 쪽을 먼저' not in _w373)
+check("R382 '살 가격' 은 중앙 판정이 추천을 통과시켰을 때만 — 아니면 관찰 기준",
+      "elif (CORE or {}).get('recommended'):" in _w373 and '관찰 기준 — 매수 신호 아님' in _w373
+      and "{_rec_label382}" in _w373)
+check("R382 받은 적자 EPS 를 '미수신' 으로 안 적는다 · PER 은 '적자 — 산출 안 함'",
+      "eps_val = _metric(stock_info.get('eps'), _lf.get('eps'))\n" in _w373 + '\n'
+      and "na=_per_na382" in _w373)
+check("R382 통과 조건 이름을 차단으로 읽지 않게 '미충족' 을 붙인다",
+      "' 미충족**입니다 ({_top316[1]}/{_tot316}종목)" in _w373)
+check("R382 업종 막대가 분모(분석한 몫·빠진 몫)를 같은 기준으로 적는다",
+      '계좌 전체의 분산도로 읽지 마세요' in _w373 and "_cost382['etf'] += _cst" in _w373)
+check("R382 판단 없는 행도 칩으로 센다 — 제목의 수와 칩의 합이 맞는다 (보유·미보유 둘 다)",
+      _w373.count("label='아직 안 잼'") >= 2)
+check("R382 '데이터 점검 완료' 는 한 일(원장 집계표 읽기)의 이름으로",
+      "'원장 집계 읽음'" in _w373 and '데이터 점검 완료' not in _w373 and '데이터 점검 중' not in _w373)
+check("R382 처음 잰 행이면 같은 실행에서 표를 한 번 다시 그린다 (표와 같은 함수로 가른다)",
+      '_reset141 = _reset141 or _first382' in _w373
+      and "(globals().get('_wl_acts') or [])" in _w373 and '_prev382[0] is None' in _w373)
+check("R382 해외 표 캡션이 '해외 지표로 거는 상한만' 이라 말하고 국내 표에 출처가 붙는다",
+      '해외 지표로 거는 상한만이고' in _w373 and "출처: 네이버 금융 지수 일봉 (위 '상장시장 국면' 과 같은 원천)" in _w373)
+import ui_kit as _uk373
+_vp373 = _uk373.value_premium(9000, 10000)
+check("R382 자산 모형만이면 '장부가로 보면 싼' · 못 가르면(None)·다른 갈래는 그대로 (심기 양방향)",
+      '장부가로 보면' in _uk373.value_premium_basis(_vp373, True)['line']
+      and _uk373.value_premium_basis(_vp373, None) == _vp373
+      and _uk373.value_premium_basis(_uk373.value_premium(11000, 10000), True)['line']
+      == _uk373.value_premium(11000, 10000)['line'])
+import premarket as _pm373
+_ao373 = _pm373._asset_only_of({'val_eval': {'displayed_fair_value': 100.0, 'model_results': {
+    'SOTP': {'valid': True}, 'PER': {'valid': False}}}})
+_ae373 = _pm373._asset_only_of({'val_eval': {'displayed_fair_value': 100.0, 'model_results': {
+    'SOTP': {'valid': True}, 'PER': {'valid': True}}}})
+check("R382 카드가 읽는 가름(자산 모형만인가) — 자산만 True · 이익 섞임 False · 적정가 없으면 None",
+      _ao373 is True and _ae373 is False and _pm373._asset_only_of({'val_eval': {}}) is None)
+import live_ticker as _lt373
+_band373 = [_r['text'] for _r in _lt373._market({
+    'kospi': {'last': 100.0, 'chg60': 1.0, 'last_date': '2026-09-17'},
+    'spx': {'last': 200.0, 'chg60': 1.0, 'last_date': '2026-09-28'}})]
+check("R382 띠가 앞선 날의 값에만 기준일을 붙인다 (값은 그대로 · 날짜를 숨기지 않는다)",
+      _band373[0].endswith('09-17 기준') and '기준' not in _band373[1], str(_band373))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

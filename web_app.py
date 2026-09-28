@@ -782,11 +782,14 @@ try:
     #   **두 수가 갈렸다**: total_cases 183,792 vs 원장 184,769.
     #   연구 문서와 스크립트는 **원장 행수**를 센다(`ledger_rows()`).
     #   화면이 다른 수를 내밀면 §4 위반이다 — 원장 쪽으로 맞춘다.
-    _STATUS_TOP = ('데이터 점검 완료', 'pos',
+    # ⚠️ 라운드 382 — 이름이 계산보다 넓었다. *"데이터 점검 완료"* 는 이 파일(원장 집계표)이 **열리고
+    #   읽히는지만** 보고 켜졌다 — 시세 교차검증·시장 자료 신선도·재무 수신 어느 것도 안 본다(외부 검토 ·
+    #   R237·R239 계열). 한 일을 한 이름으로: '원장 집계 읽음'. 못 읽으면 '진행 중'이 아니라 못 읽은 것이다(§3).
+    _STATUS_TOP = ('원장 집계 읽음', 'pos',
                    f"되돌려 본 판단 "
                    f"{_cal_top.get('ledger_rows') or _cal_top.get('total_cases', 0):,}건")
 except Exception:
-    _STATUS_TOP = ('데이터 점검 중', 'warn', '')
+    _STATUS_TOP = ('원장 집계 못 읽음', 'warn', '')
 
 _render_toolbar()               # 우선 비워서 그린다 (자리 이동 방지)
 
@@ -3664,8 +3667,10 @@ def _build_reco_card(p, news_txt, conf_txt):
         # 없었다.** `권장 매수가 -7.5%` 만 보고 싼 줄 알았다가 상세에서
         # 적정가를 보면 어긋난다. 계산은 킷 한 곳에서만 한다 (§4).
         # 표시 전용 — 판정·게이트에 안 쓴다 (라운드 28b).
-        'value_premium': _uk.value_premium(rec,
-                                           p.get('displayed_fair_value')),
+        # 라운드 382 — 적정가가 자산 모형으로만 섰으면 '장부가로 보면 싼'으로 좁힌다(행에 실린 가름을 읽는다 ·
+        #   옛 리포트는 그 칸이 없어 None — 종전 문장 그대로).
+        'value_premium': _uk.value_premium_basis(
+            _uk.value_premium(rec, p.get('displayed_fair_value')), p.get('fair_asset_only')),
     }
 
 # ── 낡은 리포트는 가격을 화면에 두지 않는다 (라운드 30) ──────────────
@@ -4823,9 +4828,13 @@ if _pmr:
                     _cnt316[_c316['name']] = _cnt316.get(_c316['name'], 0) + 1
         if _tot316 and _cnt316:
             _top316 = sorted(_cnt316.items(), key=lambda x: (-x[1], x[0]))[0]
+            # 라운드 382 — 조건 이름은 **통과 조건**으로 적혀 있다('강제 차단 없음' · '과열·저유동성 아님').
+            #   그대로 넣으니 *"가장 많이 막은 조건은 강제 차단 없음"* — 차단이 없다는 것이 막았다는 말이
+            #   됐다(외부 검토). 이름은 중앙 판정 그대로 두고 **미충족**이라고 적는다(이름을 바꾸면 회귀·
+            #   저장 스냅샷이 읽는 낱말이 바뀐다 · R327).
             st.caption(_md_safe(
                 f"오늘 후보 {_tot316}종목을 가장 많이 막은 조건은 "
-                f"**{_top316[0]}** 입니다 ({_top316[1]}/{_tot316}종목). "
+                f"**'{_top316[0]}' 미충족**입니다 ({_top316[1]}/{_tot316}종목). "
                 f"조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 "
                 f"아닙니다."))
         for _bk in _vc_view.BUCKETS:
@@ -6718,6 +6727,11 @@ else:
         for k, v in _held_by226.items():
             if k not in _WL_SELL_RANK:                    # 순서표에 없는 kind 도 버리지 않는다
                 _chips226.append(dict(label=k, count=len(v), tone='tx2'))
+        # 라운드 382 — 판단이 아직 없는 행(표의 '아직 안 잼')이 칩에서 빠져 **제목의 수와 칩의 합이
+        #   안 맞았다**(외부 검토: 미보유 34 vs 칩 합 33). 버리지 않고 제 칩으로 센다(§3 · 셈이 맞게).
+        _n_nojudge_held382 = sum(1 for _n382, _a382, _c382, _v382 in _pf_held if not _a382)
+        if _n_nojudge_held382:
+            _chips226.append(dict(label='아직 안 잼', count=_n_nojudge_held382, tone='tx3'))
         if _n_avg_ok226:
             _chips226.append(dict(label='추가매수 조건 통과', count=_n_avg_ok226, tone='pos',
                                   sub='진입가 이하로 내려오면'))
@@ -6846,6 +6860,9 @@ else:
         for k, v in _watch_by226.items():
             if k not in _wseq226:
                 _wchips226.append(dict(label=k, count=len(v), tone='tx2'))
+        _n_nojudge_watch382 = sum(1 for _n382, _a382 in _pf_watch if not _a382)
+        if _n_nojudge_watch382:                           # 라운드 382 — 위 보유 칩과 같은 까닭
+            _wchips226.append(dict(label='아직 안 잼', count=_n_nojudge_watch382, tone='tx3'))
         if _pf_watch:
             _uk.chip_row(_wchips226, theme=_theme,
                          title=f"미보유 {len(_pf_watch)}종목 · 살 자리가 가까운 순")
@@ -6861,6 +6878,7 @@ else:
         # 라운드 44)과 그 읽는 법(R223)은 아래 '상세'에 둔다 — 숫자만 앞에 세우면
         # 그게 판단이 된다.
         _sec214, _sec_unknown, _sec_etf = {}, [], []
+        _cost382 = {'etf': 0.0, 'unknown': 0.0}          # 라운드 382 — 분모에서 빠진 몫
         try:
             import json as _json223
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -6880,8 +6898,10 @@ else:
                 _sec214[_sc] = _sec214.get(_sc, 0.0) + _cst
             elif str(_row169.get('code') or '').split('.')[0][:6] in _etf223:
                 _sec_etf.append(_nm169)
+                _cost382['etf'] += _cst
             else:
                 _sec_unknown.append(_nm169)
+                _cost382['unknown'] += _cst
         _sec_tot = sum(_sec214.values())
         _hhi = (sum((_v / _sec_tot) ** 2 for _v in _sec214.values()) if _sec_tot else None)
         _sec_perf226 = []                       # 상세용 — (업종, 비중, 원장 성적 문구)
@@ -6904,6 +6924,17 @@ else:
                         f" (1에 가까울수록 한 업종에 쏠림)" if _hhi else '')
             st.markdown(f"**업종별 (매입원가 비중)**{_hhi_txt}")
             _uk.bar_list(_bars226, theme=_theme)
+            # 라운드 382 — 막대의 분모가 **업종을 아는 개별 주식**뿐인데 그 사실을 안 적었다. 외부 검토가
+            #   ETF 두 종목(평가금액 약 43%)이 빠진 표를 계좌 전체 분산으로 읽힌다고 짚었다. 분모에 든 몫과
+            #   빠진 몫을 **같은 기준(매입원가)**으로 적는다 — 계산은 산수뿐이고 문턱 없음(§3 · R233 단위).
+            _all382 = _sec_tot + _cost382['etf'] + _cost382['unknown']
+            if _all382 > 0 and (_cost382['etf'] or _cost382['unknown']):
+                st.caption(
+                    f"이 막대는 보유 매입원가의 **{_sec_tot / _all382 * 100:.1f}%**(업종을 아는 개별 주식)만 "
+                    f"나눈 것입니다"
+                    + (f" — ETF {_cost382['etf'] / _all382 * 100:.1f}%" if _cost382['etf'] else "")
+                    + (f" · 업종 미확인 {_cost382['unknown'] / _all382 * 100:.1f}%" if _cost382['unknown'] else "")
+                    + "는 빠졌습니다. 계좌 전체의 분산도로 읽지 마세요.")
             if _sec_etf:
                 st.caption("ETF(업종 없음 · 구조상): " + ", ".join(_sec_etf[:5])
                            + (f" 외 {len(_sec_etf) - 5}" if len(_sec_etf) > 5 else '')
@@ -7962,8 +7993,15 @@ per_val = _metric(four_scores.get('fwd_per'), stock_info.get('per'),
 pbr_val = _metric(four_scores.get('pbr'), stock_info.get('pbr'),
                   _lf.get('pbr'), positive_only=True)
 roe_val = _metric(stock_info.get('roe'), _lf.get('roe'))          # ROE 는 음수도 유효
-eps_val = _metric(stock_info.get('eps'), _lf.get('eps'), positive_only=True)
+# ⚠️ 라운드 382 — EPS 를 `positive_only` 로 읽어 **받은 음수(적자)** 를 '미수신'으로 적고 있었다(외부 검토 화면:
+#   ROE −7% 종목이 'EPS·PER 미수신' — 실제로는 EPS −881원을 받았다). 적자는 못 받은 것이 아니다(§3 · 받은 값을
+#   다른 말로 바꾸지 않는다). EPS 는 음수도 유효하고 **0 만** 미수신으로 본다(이 코드베이스의 0 = 빈 칸 관례).
+#   PER 은 적자면 정의되지 않으므로 타일이 '미수신' 대신 '적자 — 산출 안 함'이라 적는다(아래 타일).
+eps_val = _metric(stock_info.get('eps'), _lf.get('eps'))
+if eps_val == 0:
+    eps_val = None
 bps_val = _metric(stock_info.get('bps'), _lf.get('bps'), positive_only=True)
+_per_na382 = ('적자 — 산출 안 함' if (eps_val is not None and eps_val < 0) else '미수신')
 
 # ── ETF 는 '적정가' 자리가 다르다 (라운드 164) ──────────────────────────
 # 기업 적정가(EPS·BPS)는 펀드에 성립하지 않는다 — 엔진이 이미 건너뛴다.
@@ -8091,7 +8129,7 @@ st.markdown(f"""
     <div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px;'>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
             <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>PER (주가수익비율)</p>
-            <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{fmt_num(per_val, '.1f', '배', na='미수신')}</p>
+            <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{fmt_num(per_val, '.1f', '배', na=_per_na382)}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
             <p style='margin: 0; font-size: 12px; color: #9DAABC; font-weight: bold;'>PBR (주가순자산비율)</p>
@@ -8341,6 +8379,14 @@ try:
                         if _new141.get(_k141) != _v141:
                             _dirty141 = True
                         _new141[_k141] = _v141
+                # 라운드 382 — 표가 '아직 안 잼'을 그렸는데 이 실행에서 **처음** 잰 행이면 표도 한 번 다시
+                #   그린다(외부 검토: 본문엔 결과가 있는데 같은 화면 표는 '아직 안 잼'). '표가 무엇을 그렸나'는
+                #   **표가 이미 계산한 값**(`_wl_acts` · 판정 없음 = None)을 그대로 읽는다 — 판정을 다시 부르지
+                #   않는다(§4 · §204 가 재계산을 센다). 지금은 중앙 판정의 결론이 스냅샷에 실렸으면 잰 것이다.
+                _prev382 = [_a for _n, _a, _r, _p in (globals().get('_wl_acts') or [])
+                            if portfolio.normalize_code(_r.get('code')) == _cw141]
+                _first382 = bool(_prev382) and _prev382[0] is None and bool(_new141.get('snap_bucket'))
+                _reset141 = _reset141 or _first382
                 _items141.append(_new141)
             else:
                 _items141.append(_w141)
@@ -8489,7 +8535,14 @@ if rec_buy_val is not None:
                     f"<b>가치 매수</b>, 위 값에서 들어가는 것은 "
                     f"<b>타이밍 매수</b>입니다 — 둘 다 맞을 수 있습니다.")
             elif _gap_fv <= -3.0:
+                # 라운드 382 — 자산 기반 모형으로만 선 적정가면 '장부가로 보면'으로 좁힌다(카드와 같은 가름 ·
+                #   `premarket._asset_only_of` 한 곳 · 못 가르면 종전 문장).
+                import premarket as _pm382
+                _ao382 = _pm382._asset_only_of(snap)
                 rec_buy_sub = (
+                    (f"장부가로 보면 싼 자리입니다 — 적정가 {_fair:,.0f}원보다 {_gap_fv:+.1f}% 아래입니다. "
+                     f"이 적정가는 자산 기반 모형으로만 서서 이익 대비 싼지는 말하지 않습니다.")
+                    if _ao382 is True else
                     f"가치로 봐도 싼 자리입니다 — 적정가 {_fair:,.0f}원보다 "
                     f"{_gap_fv:+.1f}% 아래입니다.")
                 rec_buy_more = (
@@ -8550,6 +8603,16 @@ else:
 _rec_sub_html = (f"<p style='margin:4px 0 0 0; font-size:12px; "
                  f"color:#9DAABC; line-height:1.6;'>{rec_buy_sub}</p>"
                  if rec_buy_sub else "")
+# 라운드 382 — 칸 제목 *"살 가격 · 이 값 이하에서"* 는 막힌 값(안전마진선 1.15배 · 라운드 63)이 아니면 **늘**
+#   붙었다. 그래서 중앙 판정이 추천 조건에서 뺀 종목(머리 문장 '신규 매수 보류' · 비용 차감 기대값 음수)에서도
+#   같은 칸이 사라고 적었고, 쉬운 설명은 같은 값을 *"매수 권고가 아니라 관찰 기준 가격"* 이라 불렀다(외부 검토).
+#   '살 가격'은 추천 조건을 **전부** 통과했을 때만 — 이름은 중앙 판정이 이미 정한다(`entry_label` · 라운드 186 · §4).
+if _rec_blocked:
+    _rec_label382 = '여기까지 오면 다시 볼 값'
+elif (CORE or {}).get('recommended'):
+    _rec_label382 = '살 가격 · 이 값 이하에서'
+else:
+    _rec_label382 = f"{(CORE or {}).get('entry_label') or '검토 기준가'} · 관찰 기준 — 매수 신호 아님"
 # 라운드 225 — 여기만 four_scores 를 **직접** 읽고 있었다. 값은 CORE 의 hold_trim·
 #   hold_stop 과 같은 키에서 오지만, CORE 는 정합이 깨진 값을 비운다(§4 — 화면은
 #   verdict_core 하나만 읽는다). 보유자 값은 신규 매수자 값과 다른 키다.
@@ -8801,13 +8864,20 @@ _hb_entry = _core_entry or CORE.get('pullback_zone')
 if _hb_trim and _hb_t1 and _hb_entry and realtime_price:
     _hb_moved = _hb_trim * _hb_entry / realtime_price
     _hb_same = f"{_hb_moved:,.0f}" == f"{_hb_t1:,.0f}"
+    # 라운드 382 — 외부 검토가 이 줄을 *"개발자용 수식이 화면에 샌 것"* 이라 짚었다. 수식은 **맞다**(원 단위로
+    #   같을 때만 적는다 · 라운드 279 가 사용자 물음 *"매도가가 각각 달라?"* 에 답하려고 넣었다). 뜻은 두고
+    #   **곱셈 표기만** 뺀다 — 기준가 둘과 옮긴 값만 적는다. 그리고 안 맞을 때의 문장이 **재지 않은 원인**을
+    #   적고 있었다(*"지지·저항선에 걸려"*) — 보유자 값은 엔진이 받은 가격에서, 여기 나눗셈은 실시간 가격으로
+    #   하므로 두 가격의 받은 시각 차이도 원인일 수 있다. 가르지 않았다고 적는다(§3).
     _hold_basis_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
         f"위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다. 아래 지시서의 1차 목표·손절은 "
         f"<b>진입가 {_hb_entry:,.0f}원</b> 기준이라 같은 규칙인데도 수가 다릅니다"
-        + (f" — 팔 가격 1차 × (진입가 ÷ 현재가) = <b>{_hb_moved:,.0f}원</b>, 지시서의 1차 목표와 같습니다."
+        + (f" — 기준가를 진입가로 옮기면 <b>{_hb_moved:,.0f}원</b>으로 지시서의 1차 목표와 같습니다."
            if _hb_same else
-           " — 한쪽이 지지·저항선에 걸려 비율이 그대로 옮겨지지는 않았습니다.")
+           f" — 기준가를 진입가로 옮기면 {_hb_moved:,.0f}원이라 지시서의 1차 목표 "
+           f"{_hb_t1:,.0f}원과 원 단위로 맞지 않습니다(지지·저항선에 걸렸거나 두 가격을 받은 시각이 "
+           f"달라서일 수 있습니다 — 여기서는 가르지 않습니다).")
         + "</p>")
 
 # 라운드 225 — 위 두 값은 **오늘 현재가에서 다시 잰 값**이고, 관심종목의 보유 계획은
@@ -9036,7 +9106,7 @@ st.markdown(f"""
     <div style='background:#161D2A; border-radius:14px; padding:14px 16px;'>
       <p style='margin:0 0 10px 0; font-size:13px; color:#35C98B; font-weight:700;'>
         아직 안 샀다면 <span style='color:#9DAABC; font-weight:400;'>· 신규 매수 기준</span></p>
-      <p style='margin:0; font-size:12px; color:#9DAABC;'>{'여기까지 오면 다시 볼 값' if _rec_blocked else '살 가격 · 이 값 이하에서'}</p>
+      <p style='margin:0; font-size:12px; color:#9DAABC;'>{_rec_label382}</p>
       <p style='margin:2px 0 0 0; font-size:{'17' if _rec_is_far else '22'}px; font-weight:700;
                 color:{'#9DAABC' if _rec_is_far else '#35C98B'};'>{rec_buy_display}</p>{_rec_sub_html}{_reach_html}{_entry_lv_html}{_buy_more_html}
       <p style='margin:14px 0 0 0; font-size:12px; color:#9DAABC;'>언제 사나 · 하락이 지치는 자리</p>
@@ -10612,12 +10682,20 @@ if _tp_pol and (_tp_pol.get('splits') or {}).get('valid'):
                         f"{_s['reach_rate']:.0f}% 도달 · {_s['zone']}", _tone))
     _uk.rows(_rows_t, theme=_theme,
              title='얼마에 팔 것인가 — 목표별 도달 확률 (매수권 사례 실측)')
+    # 라운드 382 — *"이 종목의 1차 목표도 그 안에 들어오도록 잡습니다"* 는 거짓이었다. 엔진의 1차 목표는
+    #   손절 거리 배수 · 구조적 저항 · 변동성 하한으로 잡고(quant_indicators 의 진입가 기준 목표) 이 파일의
+    #   `range_pct` 를 **읽는 곳이 저장소에 0곳**이다(외부 검토가 +6.9% 목표 옆의 '3~5%' 로 짚었다).
+    #   표는 원장에서 센 사실이라 둔다 — 이 종목 목표와의 관계만 사실대로. 그리고 생성기가
+    #   `range_pct: None` 을 쓸 수 있어 `[0]` 이 TypeError 로 화면을 죽일 수 있었다 → 없으면 그 조각만 뺀다(§3).
+    _rng382 = _rec.get('range_pct')
     _uk.note(
         f"무릎(자주 닿지만 얇다) · 어깨(폭과 확률의 균형) · 머리(대부분 못 닿는다). "
-        f"실측상 어깨는 "
-        f"{_rec.get('range_pct', [3, 5])[0]:.0f}~{_rec.get('range_pct', [3, 5])[1]:.0f}% "
-        f"구간입니다. 이 종목의 1차 목표도 그 안에 들어오도록 잡습니다 — "
-        f"더 높은 목표는 기대값이 오히려 줄어듭니다.", theme=_theme)
+        + (f"실측상 어깨는 {_rng382[0]:.0f}~{_rng382[1]:.0f}% 구간입니다. "
+           if isinstance(_rng382, (list, tuple)) and len(_rng382) == 2
+           and all(isinstance(_x, (int, float)) for _x in _rng382) else "")
+        + "이 표는 목표 폭마다 닿은 비율을 원장에서 센 것이고, **이 종목의 1차 목표를 이 표로 정하지는 "
+          "않습니다** — 1차 목표는 손절 거리·구조적 저항·변동성으로 따로 잡으므로 이 구간 밖일 수 있습니다.",
+        theme=_theme)
 
 st.markdown("<div id='nav-basis'></div>", unsafe_allow_html=True)
 # 🎯 [판정 근거 상세 — 시간축 3단계 정리보다 위에 배치. 실행 가격은 위 배너 한 곳에서만 표기]
@@ -10690,10 +10768,27 @@ elif _zone == "적정가 이하 (안전마진 미확보)":
     #   아래인지와 엔진이 이미 쓰는 띠 낱말을 같은 문장에 넣는다 — 새 문턱을 만들지 않는다.
     _gap238 = four_scores.get('upside_pct')
     _band238 = four_scores.get('upside_eval')
-    st.info(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래이지만 "
-            + (f"차이는 {_gap238:+.1f}%뿐입니다 ({_band238}). " if _gap238 is not None
-               and _band238 else "")
-            + f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. 안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+    # 라운드 382 — 이 문장이 두 가지를 틀리게 말하고 있었다(외부 검토 · 2026-09-29 화면).
+    #   ① **없는 값과 견줬다.** 이 구역은 가치 기준선(`buy_entry_max`)이 없어도 적정가만 있으면 붙는다
+    #      (quant_indicators `_zone_of` · 라운드 178). 그때 `_bem_str` 는 '미산출'인데 문장은 늘
+    #      *"가치 기준선(미산출)보다는 높습니다"* 를 적었다 — 없는 값보다 높다는 말은 거짓이다(§3).
+    #   ② *"차이는 +90.1%뿐입니다"* — '뿐'은 라운드 238 이 **+0.1%** 사례에 쓴 낱말이 그대로 남아
+    #      상승여력 90% 에도 붙었다. 수는 적정가 ÷ 현재가 − 1(상승여력)이라고 이름을 붙인다.
+    #   가치 기준선이 **있으면** 현재가 > 기준선일 때만 이 구역이므로 그 비교는 참이다(그대로 둔다).
+    #   없으면 **왜 없는지**를 엔진이 낸 조건 목록(`buy_price_checks`)에서 읽어 적는다(새 문장·문턱 없음 · §4).
+    _bem_raw382 = four_scores.get('buy_entry_max')
+    _gap_txt382 = (f"적정가까지 상승여력은 {_gap238:+.1f}%입니다(적정가 ÷ 현재가 − 1 · {_band238}). "
+                   if _gap238 is not None and _band238 else "")
+    if _bem_raw382 is not None:
+        _base_txt382 = (f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. "
+                        f"안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+    else:
+        _bpc382 = [lb for lb, ok in ((snap.get('val_eval') or {}).get('buy_price_checks') or []) if not ok]
+        _base_txt382 = ("가치 기준선(적정가−안전마진)은 산출하지 않았습니다"
+                        + (f" — 미충족: {' · '.join(_bpc382)}" if _bpc382 else "")
+                        + ". 그래서 안전마진이 확보됐는지는 판단하지 않고, 이 적정가를 매수 근거로 쓰지 않습니다.")
+    st.info(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래입니다. "
+            + _gap_txt382 + _base_txt382)
 elif _zone:
     st.error(f"**[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
              f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
@@ -10757,7 +10852,11 @@ with _ctx_c1:
         if _dd_rows:
             st.dataframe(pd.DataFrame(_dd_rows), width='stretch',
                          hide_index=True)
-            st.caption("이격 = 현재가÷이동평균−1 · 52주 위치 = 저점 0%~고점 100% "
+            # 라운드 382 — 이 표에 출처가 없어 바로 아래 해외 표의 *"출처: Yahoo Finance"* 가 이 표까지
+            #   덮는 것처럼 읽혔다(외부 검토 · 위 '상장시장 국면' 줄은 네이버 금융이라 적는다). 같은 원천
+            #   (`fetch_domestic_detail` → 엔진의 지수 일봉)이라 이름을 붙인다.
+            st.caption("출처: 네이버 금융 지수 일봉 (위 '상장시장 국면' 과 같은 원천). "
+                       "이격 = 현재가÷이동평균−1 · 52주 위치 = 저점 0%~고점 100% "
                        "구간에서의 현재 위치. 전부 일봉 실계산이며 해석을 덧붙이지 "
                        "않습니다.")
     except Exception:
@@ -10790,8 +10889,11 @@ with _ctx_c1:
         #   판을 옮기며 거짓이 됐고, 그때 내가 *"**첫 화면의** '간밤·전일 시황' 판"* 으로
         #   고쳤다 — **또 자리로 가리킨 것**이다. 실측하니 그 절은 페이지의 **30% 지점**
         #   이라 '첫 화면'이 아니다(2026-09-14 · 앵커 19개 기준). 이름만으로 가리킨다.
+        # 라운드 382 — *"이 표가 상한 판단의 근거입니다"* 는 넓었다 — 국내 지수 국면(위 '상장시장 국면')도
+        #   상한을 건다(market_context 의 국내 약세 상한). 이 표가 근거인 것은 **해외 지표로 거는 상한**이다.
         st.caption("출처: Yahoo Finance 일봉 (10분 캐시). **이 표가 상한 판단의 "
-                   "근거입니다.** '간밤·전일 시황' 절의 판은 다른 출처"
+                   "근거입니다** — 해외 지표로 거는 상한만이고, 국내 지수로 거는 상한은 위 "
+                   "'상장시장 국면'(네이버 금융 지수 일봉)이 근거입니다. '간밤·전일 시황' 절의 판은 다른 출처"
                    "(FinanceDataReader 일별 종가)라 같은 이름이라도 수가 다를 수 "
                    "있고, 판정에는 쓰이지 않습니다.")
     _gw = _mkt_ctx.get('global_warnings') or []
@@ -12328,13 +12430,25 @@ with tab_pred:
             st.caption(_md_safe(_lv296.outcome_band_line(_lq296)))
             # 두 표본이 실제로 얼마나 다른지는 **수로** 적는다 — '다르다'는 말만으로는
             #   어느 쪽으로 다른지 모른다(§3). 못 잰 값이면 그 칸을 비운다.
+            # ⚠️ 라운드 382 — **지평이 다른 두 중앙을 견주고 있었다.** 유사패턴 값은 고른 지평(`sel_h`
+            #   · 기본은 엔진의 관찰 최적 기간이라 10일일 수 있다)이고 원장은 늘 20봉 창(`_hz300`)이다
+            #   (외부 검토: *"10거래일 35건 +1.8% vs 원장 20봉 5,158건 −0.9% — 둘이 다르면 큰 쪽"*).
+            #   같은 이름의 수가 둘이면 단위를 옆에 적는다(R233) — 지평이 같을 때만 견주고, 다르면
+            #   두 수에 지평을 붙이고 **견주지 않는다고** 적는다. '큰 쪽'은 값이 아니라 **표본**이 큰 쪽이다.
             _m296 = h.get('median_perf')
             if isinstance(_m296, (int, float)):
-                st.caption(_md_safe(
-                    f"이 종목 유사패턴 **{h['match_count']}건**의 중앙은 "
-                    f"**{_m296:+.1f}%** 이고, 같은 자리 원장 **{_lq296['n']:,}건**의 중앙은 "
-                    f"**{_lq296['p50']:+.1f}%** 입니다. 표본이 작을수록 좋아 보이기도 "
-                    f"나빠 보이기도 하므로, 둘이 다르면 **큰 쪽을 먼저** 봅니다."))
+                if sel_h == _hz300:
+                    st.caption(_md_safe(
+                        f"같은 {_hz300}봉 창에서 이 종목 유사패턴 **{h['match_count']}건**의 중앙은 "
+                        f"**{_m296:+.1f}%** 이고, 같은 자리 원장 **{_lq296['n']:,}건**의 중앙은 "
+                        f"**{_lq296['p50']:+.1f}%** 입니다. 표본이 작을수록 좋아 보이기도 "
+                        f"나빠 보이기도 하므로, 둘이 다르면 **표본이 큰 쪽(원장)을 먼저** 봅니다."))
+                else:
+                    st.caption(_md_safe(
+                        f"이 종목 유사패턴 **{h['match_count']}건**의 중앙 **{_m296:+.1f}%** 는 "
+                        f"**{sel_h}영업일** 값이고, 같은 자리 원장 **{_lq296['n']:,}건**의 중앙 "
+                        f"**{_lq296['p50']:+.1f}%** 는 **{_hz300}봉** 창의 값입니다 — 기간이 달라 "
+                        f"두 수를 견주지 않습니다. 견주려면 위에서 {_hz300}일을 고르세요."))
         elif curr_price:
             st.caption("같은 국면·구역의 원장 사례를 찾지 못해 견줄 수 없습니다 — "
                        "위 값은 유사패턴 표본만으로 그린 것입니다.")

@@ -219,6 +219,24 @@ def _na_of(row):
         return None
 
 
+def _asset_only_of(snap):
+    """라운드 382 — 이 스냅샷의 적정가가 자산 기반 모형으로만 섰는가. 못 가르면 None(§3 · 지어내지 않는다).
+
+    가름은 `model_kinds.split` 한 곳이 한다(라운드 359 · §4). 적정가가 없으면 물음 자체가 없으므로 None.
+    """
+    try:
+        ve = (snap or {}).get('val_eval') or {}
+        if ve.get('displayed_fair_value') is None:
+            return None
+        import model_kinds as _mk
+        s = _mk.split(ve.get('model_results'))
+        if not (s['asset'] or s['earnings'] or s['unknown']):
+            return None
+        return bool(s['asset_only'])
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def pick_from_scan_row(q_engine, r):
     """
     스캔 행 하나 → 추천 카드가 읽는 pick dict.
@@ -285,6 +303,9 @@ def pick_from_scan_row(q_engine, r):
         # 그 4,615원을 **믿을 수 있는지**는 안 보인다. 값과 신뢰도는
         # 같이 다녀야 한다.
         'fair_value_confidence': fs.get('fair_value_confidence'),
+        # 라운드 382 — 그 적정가가 **자산 기반 모형으로만** 섰는가(라운드 359 의 가름 · `model_kinds` 한 곳).
+        #   카드가 '가치로 봐도 싼'을 '장부가로 보면 싼'으로 좁히는 데만 쓴다(표시 전용). 못 가르면 None.
+        'fair_asset_only': _asset_only_of(snap),
         'entry_zone': fs.get('entry_zone'),
         'chase_max': fs.get('buy_entry_max'),
         # 현재가 기준 (보유자용) — 카드에서는 경고 상자로만 안내한다

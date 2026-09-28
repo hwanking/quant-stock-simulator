@@ -61,8 +61,17 @@ def _market(macro):
     """지수·환율·변동성 — sector_cycle.macro() 결과를 줄로."""
     out = []
     m = macro or {}
-    for key, ko in (('kospi', 'KOSPI'), ('kosdaq', 'KOSDAQ'),
-                    ('spx', 'S&P500'), ('fx', '원달러'), ('vix', 'VIX')):
+    _keys = (('kospi', 'KOSPI'), ('kosdaq', 'KOSDAQ'),
+             ('spx', 'S&P500'), ('fx', '원달러'), ('vix', 'VIX'))
+    # 라운드 382 — 띠가 **날짜 없이** 값을 적었다. 2026-09-29 실측: 코스피·코스닥 원천(지수 일봉 캐시)이
+    #   09-17 에서 멈춰 있었고(같은 수집의 미국 지수·환율·VIX 는 09-28) 띠는 6,724.34 를 적었다 —
+    #   같은 화면의 시장 카드(다른 출처 · 당일 종가 6,889.74)와 달라 모순으로 읽혔다(외부 검토).
+    #   값은 그대로 두고, **이 띠에서 가장 늦은 날보다 앞선 값**에만 기준일을 붙인다(문턱 없음 · 날짜
+    #   비교 하나). 원천이 왜 멈췄는지는 이 띠가 고칠 수 없다 — 날짜를 숨기지 않는 것까지다(§3).
+    _dates = [str((m.get(k) or {}).get('last_date') or '')[:10] for k, _ko in _keys
+              if isinstance(m.get(k), dict)]
+    _newest = max([d for d in _dates if d] or [''])
+    for key, ko in _keys:
         v = m.get(key)
         if not isinstance(v, dict):
             continue
@@ -73,6 +82,9 @@ def _market(macro):
         txt = f"{ko} {last:,.2f}"
         if chg is not None:
             txt += f" ({chg:+.1f}% · 60일)"
+        _d = str(v.get('last_date') or '')[:10]
+        if _d and _newest and _d < _newest:
+            txt += f" · {_d[5:]} 기준"
         # 지수는 오르면 빨강(한국 관행)이 아니라 여기서는 상태색만 쓴다 —
         # 띠는 판단이 아니라 알림이라 방향색을 붙이지 않는다
         out.append(dict(kind='market', text=txt))

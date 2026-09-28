@@ -1190,6 +1190,25 @@ def value_premium(entry, fair):
     return dict(pct=round(pct, 1), kind=kind, kind_ko=ko, line=line)
 
 
+def value_premium_basis(vp, asset_only):
+    """라운드 382 — 적정가가 **자산 기반 모형으로만** 섰으면 '가치로 봐도 싼'을 '장부가로 보면 싼'으로 좁힌다.
+
+    라운드 359 가 같은 사실을 적정가 신뢰도 줄 아래 한 곳에만 적었고, 카드와 상세 배너는 여전히
+    *"가치로 봐도 싼 자리입니다"* 라 적었다(외부 검토 · ROE 음수 · EPS 미수신 종목 · 2026-09-29).
+    그 적정가는 BPS 배수라 **장부가 대비** 싼지를 말하지 이익 대비 싼지를 말하지 않는다(R237·R239 ·
+    이름이 계산보다 넓으면 없는 근거를 있다고 읽는다). 가름은 `model_kinds` 가 하고 여기는 문장만.
+    `asset_only` 가 None(못 가름 · 옛 리포트)이면 **그대로 둔다** — 모르는 것을 한쪽으로 몰지 않는다(§3).
+    수·갈래(kind)·문턱 불변 — 문장과 짧은 이름만.
+    """
+    if not vp or asset_only is not True or vp.get('kind') != 'value':
+        return vp
+    out = dict(vp)
+    out['kind_ko'] = '장부가 기준'
+    out['line'] = (f"장부가로 보면 싼 자리입니다 — 매수가가 적정가보다 {vp['pct']:+.1f}% 아래입니다. "
+                   f"이 적정가는 자산 기반 모형으로만 서서 이익 대비 싼지는 말하지 않습니다.")
+    return out
+
+
 def value_row(vp, theme='dark'):
     """가치 프리미엄 한 줄. `value_premium()` 결과를 그대로 받는다."""
     if not vp:
