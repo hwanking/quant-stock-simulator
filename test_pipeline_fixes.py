@@ -146,7 +146,31 @@ def _release(*names_or_objs):
 # **프로세스를 나누면** 끝날 때 OS 가 전부 회수한다.
 #
 # 검사의 뜻은 하나도 바꾸지 않는다 — 예외 개수·첫 문구·세션 키만 받는다.
+#: 라운드 375 — 렌더가 **일봉 수신 실패**로 죽으면 한 번 다시 그린다. 2026-09-28 전체 회귀에서 §49 의 렌더가
+#:   그 순간 네이버 일봉을 못 받아 실패했고, 곧바로 같은 일봉을 세 번 받으니 3/3 성공 · 같은 렌더도 예외 0 이었다.
+#:   실시세 호출은 이미 한 번 재시도한다(R219 `_retry_live`) — 렌더만 그 규칙 밖이었다. 조건은 엔진의 그 문장
+#:   하나이고, 영구 사유(`_PERMANENT_MARK` · 상장폐지)는 다시 그려도 같으므로 안 한다(R204). 예산은 같은
+#:   `_RETRY_BUDGET` 을 쓴다. 두 번째도 실패면 **그대로 실패**다 — 건너뜀으로 바꾸지 않는다(계속 못 받는 것은
+#:   순간 결손이 아니다).
+_RENDER_FETCH_FAIL = '일봉 시계열 수신 실패'
+
+
 def _render(**kw):
+    """렌더 한 건 — 일봉 수신 실패로 죽었으면 한 번 다시 (라운드 375 · 위 주석)."""
+    res = _render_once(**kw)
+    try:
+        blob = '%s %s' % (res.get('error') or '', res.get('first') or '')
+        if ((not _render_ok(res)) and _RENDER_FETCH_FAIL in blob
+                and _PERMANENT_MARK not in blob and _RETRY_BUDGET[0] > 0):
+            _RETRY_BUDGET[0] -= 1
+            print(f"  [재시도] 렌더 {kw.get('ticker')} — 일봉 수신 실패 (남은 재시도 예산 {_RETRY_BUDGET[0]})")
+            res = _render_once(**kw)
+    except Exception:                                          # noqa: BLE001
+        pass
+    return res
+
+
+def _render_once(**kw):
     """scripts/render_probe.py 로 렌더 한 건. dict 반환(실행 실패면 error)."""
     import json as _j, subprocess as _sp
     argv = [sys.executable, _os.path.join(PROJ, 'scripts', 'render_probe.py')]
@@ -9906,8 +9930,9 @@ check("고친 달력에서 규칙(65번째 거래일)의 투영은 11-13 · 45�
       f"65번째 {_proj375} · 45번째 {_nth143('2026-08-10', 45)}")
 _r375doc = _os.path.join(PROJ, 'docs', 'RESULT_R375_THE_CALENDAR_CLOSED_A_TRADING_DAY.md')
 _r375txt = _io43.open(_r375doc, encoding='utf-8').read() if _os.path.exists(_r375doc) else ''
-check("박제일(11-16)과 규칙의 투영(11-13)이 갈린 사실이 문서에 적혀 있다 — 말과 사실을 묶는다",
-      '2026-11-13' in _r375txt and '2026-11-16' in _r375txt and '사람' in _r375txt,
+# 2026-09-28 사용자 결정 — "11-16 그대로". 결정이 문서에 남았는지까지 본다.
+check("박제일(11-16)과 규칙의 투영(11-13)이 갈린 사실과 사용자의 11-16 유지 결정이 문서에 적혀 있다",
+      '2026-11-13' in _r375txt and '2026-11-16' in _r375txt and '11-16 그대로 두고' in _r375txt,
       f"{len(_r375txt)}자", scanned=len(_r375txt))
 check("첫 수확일도 그대로다 (20번째 거래일)",
       _nth143('2026-08-10', 20) == '2026-09-07')
@@ -28945,6 +28970,42 @@ try:
         check("실제 일봉과 표가 최근 창에서 전부 맞는다 (scripts/calendar_truth)", _rc368 == 0, f"rc {_rc368}")
 except Exception as _e368:                                      # noqa: BLE001
     skipped("실제 일봉과 표 대조", f"{type(_e368).__name__}: {_e368}")
+# 렌더 재시도(라운드 375) — 일봉 수신 실패로 죽은 렌더만 한 번 더 그린다. 심어서 양방향.
+_calls368 = []
+_orig368 = _render_once
+_bud368 = _RETRY_BUDGET[0]
+def _stub368(seq):
+    def _f(**kw):
+        _calls368.append(kw.get('ticker'))
+        return seq[min(len(_calls368) - 1, len(seq) - 1)]
+    return _f
+_fail368 = {'ok': True, 'exceptions': 1, 'first': "035760.KQ: 네이버 일봉 시계열 수신 실패 — 합성 가격으로", 'error': ''}
+_good368 = {'ok': True, 'exceptions': 0, 'first': '', 'error': ''}
+_perm368 = {'ok': True, 'exceptions': 1, 'first': '일봉 시계열 수신 실패 · ' + _PERMANENT_MARK, 'error': ''}
+try:
+    _RETRY_BUDGET[0] = max(_bud368, 1)
+    globals()['_render_once'] = _stub368([_fail368, _good368]); _calls368.clear()
+    _ra368 = _render(ticker='X')
+    _na368 = len(_calls368)
+    _RETRY_BUDGET[0] = max(_bud368, 1)
+    globals()['_render_once'] = _stub368([_perm368, _good368]); _calls368.clear()
+    _rb368 = _render(ticker='X')
+    _nb368 = len(_calls368)
+    globals()['_render_once'] = _stub368([{'ok': True, 'exceptions': 1, 'first': 'KeyError x', 'error': ''}, _good368])
+    _calls368.clear()
+    _RETRY_BUDGET[0] = max(_bud368, 1)
+    _rc368b = _render(ticker='X')
+    _nc368 = len(_calls368)
+finally:
+    globals()['_render_once'] = _orig368
+    _RETRY_BUDGET[0] = _bud368
+check("렌더가 일봉 수신 실패로 죽으면 한 번 다시 그리고, 다시 성공하면 통과로 센다",
+      _na368 == 2 and _render_ok(_ra368), f"호출 {_na368}")
+check("영구 사유(상장폐지)나 다른 예외는 다시 그리지 않는다 — 코드 결함을 재시도로 덮지 않는다",
+      _nb368 == 1 and not _render_ok(_rb368) and _nc368 == 1 and not _render_ok(_rc368b),
+      f"영구 {_nb368} · 다른 예외 {_nc368}")
+check("재시도가 걸리는 문장이 엔진의 그 예외 문장과 같다 — 엔진 문장이 바뀌면 재시도가 조용히 꺼진다",
+      _RENDER_FETCH_FAIL in _io368.open(_os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8').read())
 _wf368 = _io368.open(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'), encoding='utf-8').read()
 _i368 = _wf368.find('scripts/calendar_truth.py')
 check("워크플로 꼬리가 대조기를 부른다 — 업로드 뒤 · if: always()",
