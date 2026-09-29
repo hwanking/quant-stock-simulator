@@ -29419,6 +29419,31 @@ check("띠도 마지막 시도가 실패면 그 사실을 먼저 적는다 ('마
       [_b['text'] for _b in _bz374] == ['최신화 실패 09:10:00', '마지막 갱신 08:00:00'], str(_bz374))
 
 
+print("\n" + "=" * 72)
+print("§375 같은 거부 조건을 한 화면에 두 번 연달아 싣지 않는다 (라운드 384)")
+print("=" * 72)
+# 외부 검토: 한 종목 화면에 같은 경고가 여섯 번. 그중 '주요 이슈'와 '매수 결론을 막는 조건 N건' 목록은 몇 줄 사이에
+#   같은 문장을 되풀이했다. 목록 쪽이 전부를 그리므로 이슈 쪽은 가리키기만 한다(목록을 불완전하게 만들지 않는다 · R312).
+import product_ops as _po375
+_vd375 = {'vetoes': ['유사패턴 표본 5건 — 확률 판단 기준 미달', '비용 차감 기대값 음수'],
+          'cap_applied': True, 'score': 49}
+_fs375 = {'gate_reason': '가' * 200}
+_on375 = _po375.build_stock_issues(_fs375, _vd375, {}, name='시험')
+_off375 = _po375.build_stock_issues(_fs375, _vd375, {}, name='시험', include_vetoes=False)
+check("기본은 종전 그대로(거부 조건을 싣는다) · 끄면 거부 조건만 빠지고 나머지 이슈는 남는다",
+      sum('차단 조건' in _i['title'] for _i in _on375) == 2
+      and not any('차단 조건' in _i['title'] for _i in _off375)
+      and any('상한 적용' in _i['title'] for _i in _off375))
+_cap375 = next(_i for _i in _off375 if '상한 적용' in _i['title'])['detail']
+check("상한 사유를 150자에서 자르면 잘랐다고 적는다 (말없이 자르지 않는다 · R314)",
+      _cap375.endswith('…') and '가' * 149 in _cap375 and '가' * 150 not in _cap375)
+_w375 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("화면이 이슈에서 거부 조건을 빼고 전체 목록을 **이름으로** 가리킨다 (자리 낱말 없이)",
+      'include_vetoes=False)' in _w375
+      and "'매수 결론을 막는 조건' 목록에 전부 있습니다." in _w375
+      and "if verdict['vetoes']:\n    st.error(\"**매수 결론을 막는 조건 \"" in _w375)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

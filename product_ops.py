@@ -201,23 +201,30 @@ def build_global_issues(calib, market_ctx=None):
     return issues
 
 
-def build_stock_issues(four_scores, verdict, news_flags=None, name=''):
+def build_stock_issues(four_scores, verdict, news_flags=None, name='', include_vetoes=True):
     """
     종목 이슈 — 이미 계산된 게이트·경고·뉴스 낱말 감지의 재표현만.
+
+    `include_vetoes=False` (라운드 384) — 같은 화면이 **거부 조건 전체 목록**을 따로 그리면
+    여기서 앞의 둘을 다시 싣지 않는다. 외부 검토가 한 종목 화면에서 같은 경고가 여섯 번 나온다고 짚었고,
+    그중 이 목록과 '매수 결론을 막는 조건 N건' 목록은 몇 줄 사이에 같은 문장을 되풀이했다. 목록 자체는
+    빠짐없이 아래에 있으므로 줄어드는 정보는 없다(라운드 312 · 목록을 불완전하게 만들지 않는다).
     """
     issues = []
     fs = four_scores or {}
     vd = verdict or {}
     nf = news_flags or {}
 
-    for veto in (vd.get('vetoes') or [])[:2]:
+    for veto in ((vd.get('vetoes') or [])[:2] if include_vetoes else []):
         issues.append(_issue('추천', '높음',
                              f"{name} 신규 매수 차단 조건", str(veto), scope=name))
     if vd.get('cap_applied') and fs.get('gate_reason'):
+        # 라운드 384 — 150자에서 **말없이** 잘렸다(라운드 301·314 의 자리). 자르면 잘랐다고 적는다.
+        _gr = str(fs.get('gate_reason'))
         issues.append(_issue(
             '추천', '중간', f"{name} 점수 상한 적용",
             f"가중합보다 낮은 {vd.get('score')}점으로 제한 — "
-            + str(fs.get('gate_reason'))[:150], scope=name))
+            + (_gr if len(_gr) <= 150 else _gr[:149] + '…'), scope=name))
     if nf.get('risk_count'):
         issues.append(_issue(
             '뉴스', '중간',

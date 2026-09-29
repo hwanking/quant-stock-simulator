@@ -9773,10 +9773,17 @@ if _comp_scored and _comp_avg is not None:
 
 # ── 이 종목의 주요 이슈 (v4) — 이미 계산된 경고의 재표현만, 요약 + 전체 보기 ──
 _nf_iss = ((snap.get('market_context') or {}).get('news_flags') or {})
+# 라운드 384 — 거부 조건은 몇 줄 아래 '매수 결론을 막는 조건 N건' 목록이 **전부** 그린다. 여기서 앞의 둘을
+#   다시 실으면 같은 문장이 한 화면에 두 번 연달아 나온다(외부 검토: 한 종목에 같은 경고 여섯 번). 여기서는
+#   빼고 그 목록을 가리킨다 — 목록은 빠짐없이 아래에 있다.
 _issues_stock = _pops.build_stock_issues(four_scores, verdict, _nf_iss,
-                                         name=resolved_name)
-if _issues_stock:
+                                         name=resolved_name, include_vetoes=False)
+if _issues_stock or verdict.get('vetoes'):
     st.markdown("#### 이 종목의 주요 이슈")
+if verdict.get('vetoes'):
+    st.caption(f"신규 매수를 막는 조건 {len(verdict['vetoes'])}건은 "
+               f"'매수 결론을 막는 조건' 목록에 전부 있습니다.")
+if _issues_stock:
     for _is in _issues_stock[:3]:
         _bc, _bt = _SEV_BADGE.get(_is['severity'], ('#9DAABC', '—'))
         st.markdown(
