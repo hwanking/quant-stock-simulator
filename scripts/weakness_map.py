@@ -125,7 +125,7 @@ def main():
                 except Exception:                              # noqa: BLE001
                     continue
 
-    rows = []
+    elig = []
     _ledger_rows = 0        # 원장이 몇 줄일 때 잰 것인지 — 낡음 판정의 근거
     with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
         for ln in f:
@@ -140,13 +140,49 @@ def main():
             if (r.get('split') == 'blind' or r.get('outcome') == 'OPEN'
                     or float(r.get('score') or 0) < 58.0):
                 continue
-            k = (str(r['ticker']), str(r['date'])[:10])
-            p = paths.get(k)
-            if p and p.get('n_bars', 0) >= H:
-                r['_lo'] = [b[2] for b in p['bars'][:H]]
-            r['_st'] = stt.get(str(r['date'])[:10])
-            r['_sec'] = patch.get(k)
-            rows.append(r)
+            elig.append(r)
+
+    # ── 라운드 391 — 통계 행(`ledger_view.stat_rows` · 한 곳 · §4) ─────────────────────────────
+    #   운영 보정표(랩)·화면 통계와 같은 규칙으로 센다: 진입가 축척이 어긋난 행(지어낸 승패 · R364)과 시장
+    #   접미사만 다른 복사본(R390)을 셈에서 뺀다(원장 행은 안 지운다 · R197) · 뺀 수를 산출물에 적는다.
+    import ledger_view as _lv391
+    _keys391 = _lv391.scale_mismatch_keys()
+    _cnt391 = {}
+    # 업종은 **원장 행을 먼저**, 없으면 패치 (라운드 73·217 의 규칙). ⚠️ 라운드 391 — 여기가 패치만 봤다.
+    #   라운드 72 이후 랩은 업종을 원장 행에 직접 쓰고 패치는 그 전 60,462건용이라, 원장이 25만 행이 돼도
+    #   이 지도의 업종 칸은 옛 행만 셌다(2026-09-30 실측: 반도체 n 5,751 · 같은 모집단의 업종 성적은 11,808).
+    #   업종이 아닌 라벨(비교표 라벨 · R220)은 엔진의 판별로 거른다(§4 — 두 벌 금지).
+    import bitemporal_engine as _be391
+    sec_src = dict(row=0, patch=0, none=0, bad_label=0)
+
+    def _sec391(r, k):
+        s = str(r.get('sector') or '').strip()
+        if s and (s.startswith(_be391.SECTOR_LABEL_PREFIX) or s in _be391.SECTOR_NON_LABELS):
+            sec_src['bad_label'] += 1
+            return None
+        if s:
+            sec_src['row'] += 1
+            return s
+        s = patch.get(k)
+        if s:
+            sec_src['patch'] += 1
+            return s
+        sec_src['none'] += 1
+        return None
+
+    rows = []
+    for r in _lv391.stat_rows(elig, _keys391, _cnt391):
+        k = (str(r['ticker']), str(r['date'])[:10])
+        p = paths.get(k)
+        if p and p.get('n_bars', 0) >= H:
+            r['_lo'] = [b[2] for b in p['bars'][:H]]
+        r['_st'] = stt.get(str(r['date'])[:10])
+        r['_sec'] = _sec391(r, k)
+        rows.append(r)
+    print(f"통계에서 뺀 행: 축척 어긋남 {_cnt391.get('scale', 0):,} · 복사본 {_cnt391.get('dup', 0):,}"
+          + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름'))
+    print(f"업종 출처: 원장 행 {sec_src['row']:,} · 패치 {sec_src['patch']:,} · 없음 {sec_src['none']:,} · "
+          f"업종 아닌 라벨 {sec_src['bad_label']:,}")
     vols = [float(r['vol20']) for r in rows
             if isinstance(r.get('vol20'), (int, float))]
     t1, t2 = np.percentile(vols, 33.3), np.percentile(vols, 66.7)
@@ -211,6 +247,11 @@ def main():
                        .isoformat(timespec='seconds'),
                        ledger_rows=_ledger_rows,
                        joined_n=len(rows),
+                       # 라운드 391 — 통계 행 규칙으로 뺀 수 · 업종 출처(행 → 패치)
+                       stat_excluded=dict(scale=int(_cnt391.get('scale', 0)),
+                                          dup=int(_cnt391.get('dup', 0))),
+                       scale_audit_read=_keys391 is not None,
+                       sector_source=sec_src,
                        index_source=idx_src, index_last=idx_last,
                        regime_missing_n=no_state,
                        base=base, axes=out,

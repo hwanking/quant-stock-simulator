@@ -87,7 +87,7 @@ def main():
                 except Exception:                              # noqa: BLE001
                     continue
 
-    rows = []
+    elig = []
     with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
         for ln in f:
             ln = ln.strip()
@@ -99,11 +99,35 @@ def main():
                 continue
             if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
                 continue
-            b = band_of(float(r.get('score') or 0))
-            if not b:
+            if not band_of(float(r.get('score') or 0)):
                 continue
-            rows.append((r, b, states.get(str(r['date'])[:10]),
-                         patch.get((str(r['ticker']), str(r['date'])[:10]))))
+            elig.append(r)
+
+    # ── 라운드 391 — 통계 행(`ledger_view.stat_rows` · 한 곳 · §4) · 업종은 원장 행 먼저 ─────────────
+    #   ⚠️ 이 스크립트를 고쳐도 **운영 표(`data/hier_prob_tables.json` · 2026-08-09 · R59)는 다시 만들지 않았다.**
+    #   그 표는 판정 중에 읽히는 확률의 재료라 다시 만들면 화면 확률이 움직인다 — 모델 변경이고(버전·사유)
+    #   11-16 전방 재평가 동결 중이다. 여기 고친 것은 **다음에 누가 다시 만들 때** 같은 규칙(축척 어긋남·
+    #   복사본 제외)을 타게 하는 것뿐이다. 업종도 종전엔 패치만 봤다(라운드 72 이후 행은 원장 행에 업종이
+    #   있다 · R73·R217 의 규칙) — L2 층이 옛 행만 셌다.
+    import ledger_view as _lv391
+    _keys391 = _lv391.scale_mismatch_keys()
+    _cnt391 = {}
+    import bitemporal_engine as _be391
+
+    def _row_sec(r):
+        """원장 행의 업종 — 업종이 아닌 라벨(비교표 라벨 · R220)은 엔진의 판별로 거른다(§4)."""
+        s = str(r.get('sector') or '').strip()
+        if not s or s.startswith(_be391.SECTOR_LABEL_PREFIX) or s in _be391.SECTOR_NON_LABELS:
+            return None
+        return s
+
+    rows = []
+    for r in _lv391.stat_rows(elig, _keys391, _cnt391):
+        k = (str(r['ticker']), str(r['date'])[:10])
+        rows.append((r, band_of(float(r.get('score') or 0)), states.get(k[1]),
+                     _row_sec(r) or patch.get(k)))
+    print(f"통계에서 뺀 행: 축척 어긋남 {_cnt391.get('scale', 0):,} · 복사본 {_cnt391.get('dup', 0):,}"
+          + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름'))
 
     vols = [float(r['vol20']) for r, _, _, _ in rows
             if isinstance(r.get('vol20'), (int, float))]
@@ -135,6 +159,9 @@ def main():
                     '사전등록에 명시되지 않았던 점을 공개한다 (세 후보 '
                     '전부 내부검증에서 기준선 대비 우위였다)',
                vol_terciles=[round(t1, 5), round(t2, 5)],
+               stat_excluded=dict(scale=int(_cnt391.get('scale', 0)),
+                                  dup=int(_cnt391.get('dup', 0))),   # 라운드 391
+               scale_audit_read=_keys391 is not None,
                cells={k: v for k, v in tab.items() if v[0] >= 1})
     dst = os.path.join(PROJ, 'data', 'hier_prob_tables.json')
     with open(dst, 'w', encoding='utf-8') as f:

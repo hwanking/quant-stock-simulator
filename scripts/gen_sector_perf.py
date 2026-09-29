@@ -27,7 +27,13 @@ except Exception:          # noqa: BLE001
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)   # 라운드 220 — 엔진의 업종 라벨 판별을 그대로 쓰려고
 P = os.path.join(PROJ, '.portfolio')
-COST = 0.36
+# ⚠️ 라운드 391 — 여기 `COST = 0.36` 이 박혀 있었다. 이 표는 매일 다시 만드는 **화면용** 산출물이고
+#   (연구 재현용 상수가 아니다 · R255 가 남긴 것은 그 라운드들의 스크립트다), 화면은 이 EV 를 중앙 판정
+#   바로 옆 '이번 판단을 만든 근거들'에 비용 이름 없이 냈다 — 판정은 2026-09-22 부터 0.41(R350)로 빼는데
+#   이 줄만 0.36 으로 빼고 있었다(한 화면에 비용 둘 · R350·R386 이 고친 자리). 운영 비용 한 곳을 읽고
+#   산출물에 `cost_pct` 로 적어 화면이 그 수를 같이 낸다(§4).
+import verdict_core as _vc391
+COST = float(_vc391.COST_PCT)
 
 
 def _today():
@@ -123,11 +129,27 @@ except Exception:                                              # noqa: BLE001
 agg = {}
 cov = dict(rows_eligible=0, by_row=0, by_patch=0, by_ticker=0,
            miss_etf=0, miss_ambiguous=0, miss_unknown=0, miss_bad_label=0)
-for r in _rows():
-    if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
-        continue
-    if float(r.get('score') or 0) < 58.0:
-        continue
+
+
+def _eligible():
+    """개발 구간(train+valid) 매수권 58+ · 판정완료 행."""
+    for r in _rows():
+        if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
+            continue
+        if float(r.get('score') or 0) < 58.0:
+            continue
+        yield r
+
+
+# ── 라운드 391 — 적중률은 통계 행(`ledger_view.stat_rows` · 한 곳 · §4)으로 센다 ─────────────────
+#   운영 보정표(랩)·화면 통계와 같은 규칙: 진입가 축척이 어긋난 행(지어낸 승패 · R364)과 시장 접미사만 다른
+#   복사본(R390)을 셈에서 뺀다(원장 행은 안 지운다 · R197). 복사본은 두 행의 구간·점수·결과가 같으므로 대상
+#   필터 뒤에 걸러도 같은 집합이다. 뺀 수는 `stat_excluded` 로 적는다 — 대상 행수(rows_eligible)는 뺀 뒤의
+#   수라 커버리지 항등식(§235)은 그대로 선다.
+import ledger_view as _lv391
+_keys391 = _lv391.scale_mismatch_keys()
+_cnt391 = {}
+for r in _lv391.stat_rows(_eligible(), _keys391, _cnt391):
     cov['rows_eligible'] += 1
     # ⚠️ 라운드 217 — 여기가 **패치만** 봤다. 라운드 72 이후 랩은 업종을
     #   원장 행에 직접 쓰고 패치는 그 전 60,462건용이다 — R73 이 표본
@@ -172,6 +194,7 @@ for sec, a in agg.items():
         n=a['n'], hit=round(a['k'] / a['n'] * 100, 1),
         wilson_low=round(wilson_low(a['k'], a['n']), 1),
         ev=round(a['net'] / a['n'], 3),
+        cost_pct=COST,                 # 라운드 391 — 행마다 싣는다: 읽는 쪽(`sector_cycle.ledger_perf`)이 행을 그대로 넘긴다
         small=a['n'] < 30)
 
 def _ledger_rows():
@@ -187,7 +210,10 @@ def _ledger_rows():
 
 doc = dict(
     made=_today(), ledger_rows=_ledger_rows(), basis='개발 구간(train+valid) 매수권 58+ · 판정완료 · '
-    '블라인드 미포함 · 비용 0.36%p 차감',
+    f'블라인드 미포함 · 비용 {COST:g}%p 차감(운영 왕복 비용) · 축척 어긋남·복사본 제외',
+    cost_pct=COST,                     # 라운드 391 — 화면이 EV 옆에 어느 비용으로 뺐는지 적는다
+    stat_excluded=dict(scale=int(_cnt391.get('scale', 0)), dup=int(_cnt391.get('dup', 0))),
+    scale_audit_read=_keys391 is not None,
     note='표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)',
     # 라운드 218 — **무엇이 빠졌는지 세어 적는다.** 이 표는 업종을 아는 행만
     #   담는다. 그 사실을 산출물이 말하지 않으면 화면은 전수처럼 보인다(§3).
@@ -204,6 +230,9 @@ print(f'업종 {len(out)}개 → {dst}')
 print(f"  커버리지 {cov['covered']:,}/{cov['rows_eligible']:,}"
       f" ({cov['covered_pct']}%) — 행 {cov['by_row']:,} · 패치 "
       f"{cov['by_patch']:,} · 종목 {cov['by_ticker']:,}")
+print(f"  통계에서 뺀 행(대상 앞): 축척 어긋남 {_cnt391.get('scale', 0):,} · 복사본 "
+      f"{_cnt391.get('dup', 0):,}" + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름')
+      + f" · 비용 {COST:g}% 차감")
 print(f"  빠짐: ETF {cov['miss_etf']:,} · 업종 중복기록 "
       f"{cov['miss_ambiguous']:,} · 미상 {cov['miss_unknown']:,} · "
       f"업종 아닌 라벨 {cov['miss_bad_label']:,}")

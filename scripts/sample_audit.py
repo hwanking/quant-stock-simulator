@@ -108,12 +108,22 @@ def load_sectors(rows):
     return out
 
 
+def _code6(tk):
+    """종목의 정체 = 코드 6자리 (시장 접미사는 도장 · `ledger_view.code6` 한 곳을 부른다 · 라운드 391)."""
+    import ledger_view as _lv391
+    return _lv391.code6(tk)
+
+
 def episodes(rows):
-    """같은 종목이 EPISODE_DAYS 안에 다시 나오면 한 경험으로 센다."""
+    """같은 종목이 EPISODE_DAYS 안에 다시 나오면 한 경험으로 센다.
+
+    라운드 391 — 종목을 **코드 6자리**로 묶는다. 종전엔 전체 티커(005930.KS)로 묶어, 시장 접미사만
+    다르게 들어간 같은 종목(원장 25종목 · R390)이 두 흐름으로 갈려 에피소드를 두 번 셌다.
+    """
     last, n = {}, 0
-    for r in sorted(rows, key=lambda x: (str(x.get('ticker')),
+    for r in sorted(rows, key=lambda x: (_code6(x.get('ticker')),
                                          str(x.get('date')))):
-        tk = str(r.get('ticker'))
+        tk = _code6(r.get('ticker'))
         try:
             d = date.fromisoformat(str(r.get('date'))[:10])
         except ValueError:
@@ -148,13 +158,23 @@ def main():
         return 1
     sect = load_sectors(rows)
 
-    tickers = {str(r.get('ticker')) for r in rows}
-    dates = {str(r.get('date'))[:10] for r in rows}
-    ep = episodes(rows)
+    # ── 라운드 391 — 정보량은 통계 행(`ledger_view.stat_rows` · 한 곳 · §4)으로 센다 ──
+    #   ① raw cases 와 신선도 규약(ledger_rows)은 **원장 행 전체**다(§234 가 '기준 행수 = 원장 행수'를 잠근다).
+    #   ②~⑧·연도·밀도·국면은 운영 보정표(랩)·화면 통계와 같은 행으로 센다 — 진입가 축척이 어긋난 행
+    #   (지어낸 승패 · R364)과 시장 접미사만 다른 복사본(R390)을 빼고, 뺀 수를 산출물에 적는다.
+    #   원장 행은 지우지 않는다(R197).
+    import ledger_view as _lv391
+    _keys391 = _lv391.scale_mismatch_keys()
+    _cnt391 = {}
+    srows = list(_lv391.stat_rows(rows, _keys391, _cnt391))
+
+    tickers = {_code6(r.get('ticker')) for r in srows}
+    dates = {str(r.get('date'))[:10] for r in srows}
+    ep = episodes(srows)
 
     # ⑤ 섹터군집 — 같은 날 같은 섹터 종목은 대체로 같이 움직인다
     sec_pairs, no_sec = set(), 0
-    for r in rows:
+    for r in srows:
         k = (str(r.get('ticker')), str(r.get('date'))[:10])
         s = sect.get(k)
         if s:
@@ -164,10 +184,10 @@ def main():
 
     # ⑥ 시장국면 — 시장 충격은 그 날 전 종목에 공통이다
     regime_dates = {(str(r.get('date'))[:10], str(r.get('regime')))
-                    for r in rows}
+                    for r in srows}
 
     # ⑦⑧ 전방
-    fwd_ledger = [r for r in rows if str(r.get('date'))[:10] >= FORWARD_FROM]
+    fwd_ledger = [r for r in srows if str(r.get('date'))[:10] >= FORWARD_FROM]
     flog = forward_log()
     fwd_log_new = [r for r in flog if str(r.get('date'))[:10] >= FORWARD_FROM]
     hi = [r for r in flog
@@ -180,7 +200,10 @@ def main():
     print('■ 표본 감사 — raw 가 아니라 정보량')
     print(f'  기간 {span[0]} ~ {span[-1]}')
     print(f'  ① raw cases                    {len(rows):>9,}')
-    print(f'  ② 고유 종목                     {len(tickers):>9,}')
+    print(f'     통계 행 (②~⑧의 모집단)       {len(srows):>9,}'
+          f'   (축척 어긋남 {_cnt391.get("scale", 0):,} · 복사본 {_cnt391.get("dup", 0):,} 제외'
+          + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름') + ')')
+    print(f'  ② 고유 종목 (코드 6자리)        {len(tickers):>9,}')
     print(f'  ③ 고유 거래일                   {len(dates):>9,}')
     print(f'  ④ 독립 에피소드 ({EPISODE_DAYS}일 묶음)   {ep:>9,}'
           f'   (raw 대비 {ep / len(rows) * 100:.0f}%)')
@@ -194,21 +217,21 @@ def main():
 
     print('\n■ 연도별 분포 (얇은 해가 있으면 국면이 빠진 것이다)')
     for y in sorted(yrs):
-        c = sum(1 for r in rows if str(r.get('date'))[:4] == y)
-        bar = '█' * max(1, round(c / max(1, len(rows)) * 60))
+        c = sum(1 for r in srows if str(r.get('date'))[:4] == y)
+        bar = '█' * max(1, round(c / max(1, len(srows)) * 60))
         print(f'  {y}  {c:>7,}  {bar}')
 
     print('\n■ 종목당 밀도')
-    per = Counter(str(r.get('ticker')) for r in rows)
+    per = Counter(_code6(r.get('ticker')) for r in srows)
     vals = sorted(per.values())
     print(f'  종목당 건수 — 최소 {vals[0]} · 중앙 {vals[len(vals) // 2]} · '
           f'최대 {vals[-1]}')
 
     print('\n■ 국면 기록 상태')
-    rg = Counter(str(r.get('regime')) for r in rows)
+    rg = Counter(str(r.get('regime')) for r in srows)
     for k, c in rg.most_common():
         mark = '  ← 미기록' if k in ('None', 'none', '') else ''
-        print(f'  {k:10s} {c:>7,} ({c / len(rows) * 100:4.1f}%){mark}')
+        print(f'  {k:10s} {c:>7,} ({c / len(srows) * 100:4.1f}%){mark}')
 
     dst = os.path.join(PROJ, 'data', 'sample_audit.json')
     os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -227,10 +250,17 @@ def main():
             forward_from=FORWARD_FROM, episode_days=EPISODE_DAYS,
             per_ticker=dict(min=vals[0], median=vals[len(vals) // 2],
                             max=vals[-1]),
-            by_year={y: sum(1 for r in rows
+            by_year={y: sum(1 for r in srows
                             if str(r.get('date'))[:4] == y)
                      for y in sorted(yrs)},
             regime_counts=dict(rg),
+            # 라운드 391 — ②~⑧은 통계 행(`ledger_view.stat_rows`)으로 센다. 뺀 수와 그 사유를 같이 적는다(§3).
+            stat_rows=len(srows),
+            stat_excluded=dict(scale=int(_cnt391.get('scale', 0)), dup=int(_cnt391.get('dup', 0))),
+            scale_audit_read=_keys391 is not None,
+            stat_note='①·ledger_rows 는 원장 행 전체, ②~⑧·연도·밀도·국면은 통계 행이다 — 진입가 축척이 '
+                      '어긋난 행(지어낸 승패)과 시장 접미사만 다른 복사본을 뺀다(원장 행은 안 지운다). '
+                      '종목은 코드 6자리로 센다.',
             note='세기만 한다 — 점수·게이트를 바꾸지 않는다. raw 개수보다 '
                  '④~⑥(독립성 보정)과 ⑦⑧(전방)을 우선해 읽는다.'),
             f, ensure_ascii=False, indent=1)

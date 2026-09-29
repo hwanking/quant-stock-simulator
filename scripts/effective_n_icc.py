@@ -206,10 +206,22 @@ def by_sector(rows, min_per_date=2):
 def main():
     rows = load()
     print(f'원장 {len(rows):,}건')
-    buy = [r for r in rows if (r.get('score') or 0) >= BUY_ZONE]
+    # ── 라운드 391 — 상관은 통계 행(`ledger_view.stat_rows` · 한 곳 · §4)으로 잰다 ──────────────
+    #   진입가 축척이 어긋난 행은 종가 수익률이 수백 % 로 찍혀(R364 · 지어낸 값) 분산을 통째로 흔들고,
+    #   시장 접미사만 다른 복사본(R390)은 **같은 날 같은 값**이 두 번 들어가 날짜 안 상관을 부풀린다.
+    #   둘 다 셈에서만 빼고(원장 행은 안 지운다 · R197) 뺀 수를 적는다. ledger_rows 는 원장 행 전체다.
+    sys.path.insert(0, PROJ)
+    import ledger_view as _lv391
+    _keys391 = _lv391.scale_mismatch_keys()
+    _cnt391 = {}
+    srows = list(_lv391.stat_rows(rows, _keys391, _cnt391))
+    print(f'통계 행 {len(srows):,}건 (축척 어긋남 {_cnt391.get("scale", 0):,} · '
+          f'복사본 {_cnt391.get("dup", 0):,} 제외'
+          + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름') + ')')
+    buy = [r for r in srows if (r.get('score') or 0) >= BUY_ZONE]
     print(f'매수권({BUY_ZONE}+) {len(buy):,}건\n')
 
-    sets = {'전체 원장': rows, f'매수권({BUY_ZONE}+)': buy}
+    sets = {'전체 원장': srows, f'매수권({BUY_ZONE}+)': buy}
     result = {}
     for name, sub in sets.items():
         print(f'── {name} ──')
@@ -249,6 +261,9 @@ def main():
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(dict(
             made=_today(), ledger_rows=len(rows),   # 신선도 검사 규약 (라운드 259)
+            stat_rows=len(srows),                    # 라운드 391 — 잰 모집단(통계 행)
+            stat_excluded=dict(scale=int(_cnt391.get('scale', 0)), dup=int(_cnt391.get('dup', 0))),
+            scale_audit_read=_keys391 is not None,
             method='ANOVA ICC + design effect',
             buy_zone=BUY_ZONE, sets=result, sectors=sec, previous=prev,
             note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 상관 문턱을 '

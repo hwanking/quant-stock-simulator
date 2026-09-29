@@ -71,7 +71,7 @@ def main():
                 except Exception:                              # noqa: BLE001
                     continue
 
-    rows = []
+    elig = []
     _ledger_rows = 0        # 원장이 몇 줄일 때 잰 것인지 — 낡음 판정의 근거
     with open(os.path.join(P, 'virtual_graded.jsonl'), encoding='utf-8') as f:
         for ln in f:
@@ -85,17 +85,40 @@ def main():
             _ledger_rows += 1
             if r.get('split') == 'blind' or r.get('outcome') == 'OPEN':
                 continue
-            k = (str(r['ticker']), str(r['date'])[:10])
-            p = paths.get(k)
-            if not p or p.get('n_bars', 0) < H:
-                continue
-            bars = p['bars'][:H]
-            r['_hi'] = [b[1] for b in bars]
-            r['_lo'] = [b[2] for b in bars]
-            r['_cl'] = [b[3] for b in bars]
-            r['_fl'] = flags.get(k)
-            r['_sector'] = patch.get(k)
-            rows.append(r)
+            elig.append(r)
+
+    # ── 라운드 391 — 통계 행(`ledger_view.stat_rows` · 한 곳 · §4) · 업종은 원장 행 먼저 ─────────────
+    #   ⚠️ 이 연구의 '대표 놓침 사례' 머리가 **+1,668%** 였다 — 라운드 363 이 그 수에서 출발해 진입가 축척이
+    #   어긋난 행(경로가 진입가의 5~10배로 찍힌다 · 지어낸 상승)을 찾았는데, 이 연구 자신은 그 행을 계속 셌다.
+    #   운영 보정표(랩)·화면 통계와 같은 규칙으로 축척 어긋남과 시장 접미사만 다른 복사본(R390)을 셈에서 뺀다
+    #   (원장 행은 안 지운다 · R197). 업종도 종전엔 패치만 봤다(라운드 72 이후 행은 원장 행에 업종이 있다 ·
+    #   R73·R217) — 업종이 아닌 라벨(R220)은 엔진의 판별로 거른다(§4).
+    import ledger_view as _lv391
+    import bitemporal_engine as _be391
+    _keys391 = _lv391.scale_mismatch_keys()
+    _cnt391 = {}
+
+    def _row_sec(r):
+        s = str(r.get('sector') or '').strip()
+        if not s or s.startswith(_be391.SECTOR_LABEL_PREFIX) or s in _be391.SECTOR_NON_LABELS:
+            return None
+        return s
+
+    rows = []
+    for r in _lv391.stat_rows(elig, _keys391, _cnt391):
+        k = (str(r['ticker']), str(r['date'])[:10])
+        p = paths.get(k)
+        if not p or p.get('n_bars', 0) < H:
+            continue
+        bars = p['bars'][:H]
+        r['_hi'] = [b[1] for b in bars]
+        r['_lo'] = [b[2] for b in bars]
+        r['_cl'] = [b[3] for b in bars]
+        r['_fl'] = flags.get(k)
+        r['_sector'] = _row_sec(r) or patch.get(k)
+        rows.append(r)
+    print(f"통계에서 뺀 행: 축척 어긋남 {_cnt391.get('scale', 0):,} · 복사본 {_cnt391.get('dup', 0):,}"
+          + ('' if _keys391 is not None else ' · 축척 감사 못 읽음 — 행 도장으로만 거름'))
     print(f'결합 {len(rows):,}건 (개발 구간 · blind 제외)\n')
 
     below = [r for r in rows if float(r.get('score') or 0) < 58]
@@ -172,7 +195,10 @@ def main():
         #: 이 값으로 낡음을 **판정**한다 — 원장이 자란 만큼 벌어진다
         ledger_rows=_ledger_rows,
         joined_n=len(rows),
-        basis='개발 구간 · 판정완료 · blind 제외 · 경로 21봉 결합',
+        # 라운드 391 — 통계 행 규칙으로 뺀 수(축척 어긋남 · 복사본)
+        stat_excluded=dict(scale=int(_cnt391.get('scale', 0)), dup=int(_cnt391.get('dup', 0))),
+        scale_audit_read=_keys391 is not None,
+        basis='개발 구간 · 판정완료 · blind 제외 · 경로 21봉 결합 · 축척 어긋남·복사본 제외',
         note='관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 여기서 나온 '
              f'패턴은 {_FE} 이후 새 사전등록의 후보 목록으로만 쓴다.',
         fn_rule=f'score<58 & 20봉 최고 >= +{FN_UP:.0f}%',

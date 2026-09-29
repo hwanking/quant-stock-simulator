@@ -30222,6 +30222,110 @@ check("연결은 표준 라이브러리로 · 키는 저장소에 없다 · 모�
       _gl381.DEFAULT_MODEL == 'claude-opus-5-5' and 'sk-ant' not in _read148(_os.path.join(PROJ, 'gaeum_llm.py'))
       and 'import requests' not in _read148(_os.path.join(PROJ, 'gaeum_llm.py')))
 
+print("\n" + "=" * 72)
+print("§382 원장을 세는 생성기는 통계 행 한 곳을 지난다 · 업종 성적의 비용 (라운드 391)")
+print("=" * 72)
+# 라운드 390 이 운영 보정표(랩)와 화면 캡션을 `ledger_view.stat_rows` 위로 옮기고 *"아직 남은 것"* 으로 적어 둔
+#   생성기를 옮겼다(2026-09-30). 같은 원장에서 옛 코드와 새 코드를 대 보니: 유효표본 ICC(전체 원장 · 날짜당 5건+)가
+#   0.054 → **0.134** — 전부 진입가 축척이 어긋난 행 때문이었다(그 2,342행 중 771행의 20봉 종가 수익률이 ±100% 밖 ·
+#   복사본만 빼면 0.0552). 화면에 ICC 를 띄우는 업종 50개 중 4개가 0.05 넘게 움직였다(0.04 → 0.29 가 하나).
+#   표본 감사는 종목을 전체 티커로 세어 접미사만 다른 같은 종목을 둘로 셌다(고유 종목 1,548 → 1,522 · 에피소드
+#   47,005 → 45,074). 업종 성적은 이 표만 **0.36** 으로 비용을 빼면서 화면에 비용 이름 없이 나갔다(판정은 0.41 ·
+#   R350). 취약구간 지도·놓침 연구·계층 표 생성기는 업종을 **패치만** 봤다(R73·R217 의 생존자).
+import ast as _ast382                                             # noqa: E402
+import re as _re382                                               # noqa: E402
+#: 원장을 읽지만 통계를 내지 않는 스크립트 — 사유와 함께 적는다(없는 이름이 남으면 실패한다 · 낡은 예외).
+_EXEMPT382 = {
+    'scripts/backup_research_data.py': '파일을 옮긴다 — 세지 않는다',
+    'scripts/contamination_audit.py': '감사기 — 오염을 세려면 모든 행을 본다',
+    'scripts/entry_scale_audit.py': '감사기 — 축척이 어긋난 행을 찾는 쪽',
+    'scripts/lineage_audit.py': '감사기 — 행 안 정합은 모든 행이 대상(화면에 안 나간다)',
+    'scripts/entry_anchor_recorder.py': '행마다 기준선을 기록한다 — 통계가 아니다',
+    'scripts/path_recorder.py': '행마다 경로를 기록한다 — 통계가 아니다',
+    'scripts/snapshot_guard.py': '줄 수로 축소를 감시한다',
+    'scripts/study_freshness.py': '줄 수로 신선도를 판정한다',
+}
+
+
+def _reads_ledger_without_stat382(src):
+    """(원장을 읽는가, stat_rows 를 부르는가) — 주석은 안 본다: 문자열 상수·호출 이름만(AST)."""
+    _t = _ast382.parse(src)
+    _reads = any(isinstance(n, _ast382.Constant) and isinstance(n.value, str) and 'virtual_graded' in n.value
+                 for n in _ast382.walk(_t))
+    _calls = {getattr(n.func, 'attr', getattr(n.func, 'id', None))
+              for n in _ast382.walk(_t) if isinstance(n, _ast382.Call)}
+    return _reads, 'stat_rows' in _calls
+
+
+_yml382 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+_wf382 = sorted(set(_re382.findall(r'python (?:-u )?(scripts/[\w/]+\.py)', _yml382)))
+_readers382, _bad382 = [], []
+for _s382 in _wf382:
+    _p382 = _os.path.join(PROJ, _s382)
+    if not _os.path.exists(_p382):
+        continue
+    _rd382, _st382 = _reads_ledger_without_stat382(_read148(_p382))
+    if _rd382:
+        _readers382.append(_s382)
+        if not _st382 and _s382 not in _EXEMPT382:
+            _bad382.append(_s382)
+check("워크플로가 부르는 스크립트 중 원장을 읽는 것은 통계 행(`stat_rows`)을 지나거나, 통계가 아닌 사유가 적혀 있다",
+      len(_readers382) >= 10 and not _bad382, f'위반 {_bad382} · 원장을 읽는 것 {len(_readers382)}개',
+      scanned=len(_readers382))
+check("예외 목록에 낡은 이름이 없다 (전부 지금도 원장을 읽는 워크플로 스크립트)",
+      set(_EXEMPT382) <= set(_readers382), str(sorted(set(_EXEMPT382) - set(_readers382))))
+check("통계를 내는 여섯이 실제로 통계 행을 지난다 (표본 감사·ICC·업종 성적·취약구간·놓침 연구·계층 표)",
+      all(_reads_ledger_without_stat382(_read148(_os.path.join(PROJ, 'scripts', _n382)))[1]
+          for _n382 in ('sample_audit.py', 'effective_n_icc.py', 'gen_sector_perf.py', 'weakness_map.py',
+                        'miss_study.py', 'gen_hier_tables.py')))
+check("심기 — 원장을 읽고 stat_rows 를 안 부르는 스크립트는 잡고, 부르는 것은 통과 · 주석의 파일 이름은 안 센다",
+      _reads_ledger_without_stat382("P = 'x/virtual_graded.jsonl'\nrows = open(P)\n") == (True, False)
+      and _reads_ledger_without_stat382("P = 'virtual_graded.jsonl'\nimport ledger_view as lv\n"
+                                        "r = list(lv.stat_rows(open(P)))\n") == (True, True)
+      and _reads_ledger_without_stat382("# virtual_graded.jsonl 을 읽던 자리\nx = 1\n") == (False, False))
+check("계층 표 생성기는 자동 실행에 없다 — 운영 표를 다시 만드는 것은 모델 변경이다(사람이 버전·사유와 함께)",
+      'gen_hier_tables' not in _yml382)
+# 표본 감사 — 종목의 정체는 코드 6자리 · raw 는 원장 행 전체
+import scripts.sample_audit as _sa382                             # noqa: E402
+_ep382 = _sa382.episodes([{'ticker': '123456.KS', 'date': '2026-01-02'},
+                          {'ticker': '123456.KQ', 'date': '2026-01-12'},
+                          {'ticker': '654321.KS', 'date': '2026-01-12'}])
+check("표본 감사의 에피소드는 종목을 코드 6자리로 묶는다 — 접미사만 다른 같은 종목 10일 뒤 재신호는 한 사건",
+      _ep382 == 2, f'에피소드 {_ep382}')
+_sas382 = _read148(_os.path.join(PROJ, 'scripts', 'sample_audit.py'))
+check("표본 감사는 원장 행 전체를 raw·신선도로 두고, 정보량은 통계 행으로 센다",
+      'raw_cases=len(rows)' in _sas382 and 'ledger_rows=len(rows)' in _sas382
+      and 'tickers = {_code6(' in _sas382 and 'ep = episodes(srows)' in _sas382)
+# 업종 성적 — 비용은 운영 비용 한 곳 · 화면이 그 비용을 적는다
+_gsp382 = _read148(_os.path.join(PROJ, 'scripts', 'gen_sector_perf.py'))
+_costlit382 = [n for n in _ast382.walk(_ast382.parse(_gsp382)) if isinstance(n, _ast382.Assign)
+               and any(isinstance(t, _ast382.Name) and t.id == 'COST' for t in n.targets)
+               and isinstance(n.value, _ast382.Constant)]
+check("업종 성적 생성기가 비용을 숫자로 박지 않고 운영 비용(`verdict_core.COST_PCT`)을 읽는다 · 행마다 싣는다",
+      not _costlit382 and 'COST = float(_vc391.COST_PCT)' in _gsp382 and 'cost_pct=COST,' in _gsp382,
+      f'숫자 대입 {len(_costlit382)}곳')
+_wa382 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면의 업황 줄이 EV 옆에 어느 비용으로 뺐는지 적는다 · 칸이 없는 옛 산출물이면 비용을 안 붙인다",
+      "_cost61 = _sp61.get('cost_pct')" in _wa382 and '왕복 비용 {float(_cost61):g}% 차감' in _wa382
+      and 'isinstance(_cost61, (int, float))' in _wa382)
+# 산출물 — 새 칸을 싣고 있으면 항등식이 맞는다(옛 코드가 만든 판은 칸이 없다 · 클라우드 복원이 하루 늦게 준다)
+_art382 = {}
+for _nm382 in ('sample_audit.json', 'effective_n_icc.json', 'sector_perf.json', 'weakness_map.json',
+               'miss_study.json'):
+    try:
+        _art382[_nm382] = _json.loads(_read148(_os.path.join(PROJ, 'data', _nm382)) or '{}')
+    except Exception:                                          # noqa: BLE001
+        _art382[_nm382] = {}
+_with382 = {k: v for k, v in _art382.items() if isinstance(v.get('stat_excluded'), dict)}
+_okx382 = all(isinstance(v['stat_excluded'].get(x), int) and v['stat_excluded'][x] >= 0
+              for v in _with382.values() for x in ('scale', 'dup'))
+_sa_doc382 = _art382.get('sample_audit.json') or {}
+_id382 = ('stat_rows' not in _sa_doc382
+          or _sa_doc382['raw_cases'] - _sa_doc382['stat_rows']
+          == _sa_doc382['stat_excluded']['scale'] + _sa_doc382['stat_excluded']['dup'])
+check("산출물이 뺀 수를 싣고 있으면 음이 아닌 정수이고, 표본 감사는 raw − 통계 행 = 축척 + 복사본 이다",
+      _okx382 and _id382, f"칸을 실은 산출물 {sorted(_with382)} · 옛 판 {sorted(set(_art382) - set(_with382))}")
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

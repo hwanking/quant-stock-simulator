@@ -10545,10 +10545,15 @@ try:
             _ic61 = (_icc61 or {}).get(str(_sp61['sector']))
             _icctxt61 = (f" · 같은 날 상관 ICC {_ic61['icc']:.2f}"
                          if (_ic61 and _ic61.get('report')) else '')
+            # 라운드 391 — EV 가 **어느 비용으로 뺀 값인지** 같이 적는다. 종전엔 이 표만 0.36 으로 빼고 이름이
+            #   없었다(판정은 0.41 · R350). 생성기가 운영 비용 한 곳을 읽어 행에 싣는다 — 옛 산출물이라 칸이
+            #   없으면 비용을 적지 않는다(모르는 수를 붙이지 않는다 · §3).
+            _cost61 = _sp61.get('cost_pct')
+            _costtxt61 = (f" · 왕복 비용 {float(_cost61):g}% 차감 " if isinstance(_cost61, (int, float)) else " ")
             _eng_rows.append(('업황(표시 전용)',
                               f"{_sp61['sector']}",
                               f"원장 실측 적중 {_sp61['hit']}% · "
-                              f"EV {_sp61['ev']:+.2f} "
+                              f"EV {_sp61['ev']:+.2f}{_costtxt61}"
                               f"(n {_sp61['n']:,} raw{_icctxt61})",
                               _tone61))
     except Exception:                                          # noqa: BLE001
