@@ -462,13 +462,16 @@ def grade_history(conn=None, max_rows=10, db_path=None):
         t = _ct.tally(conn)
         if not (t['resolved'] or t['open']):
             return None
-        rows = conn.execute(
+        # 라운드 389 — 목록·기준일 범위도 집계(tally)와 같은 모집단이다: 휴장일 기준일 행은
+        #   갈래에서 빠지므로 여기서도 뺀다(한 칸에서 집계와 목록이 다른 행을 세면 §4).
+        _all = conn.execute(
             "SELECT ticker, signal_date, status, strategy_type, realized_return "
             "FROM prediction_cases WHERE status IN ('success','failure','unresolved') "
-            "ORDER BY resolved_at DESC, signal_date DESC LIMIT ?", (int(max_rows),)).fetchall()
-        d1, d2 = conn.execute(
-            "SELECT MIN(signal_date), MAX(signal_date) FROM prediction_cases "
-            "WHERE status IN ('success','failure','unresolved')").fetchone()
+            "ORDER BY resolved_at DESC, signal_date DESC").fetchall()
+        _all = [r for r in _all if not _ct.is_non_trading_date(r['signal_date'])]
+        rows = _all[:int(max_rows)]
+        _ds = sorted(str(r['signal_date'])[:10] for r in _all)
+        d1, d2 = (_ds[0], _ds[-1]) if _ds else (None, None)
     finally:
         if own:
             conn.close()

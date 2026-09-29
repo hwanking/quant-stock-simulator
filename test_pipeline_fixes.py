@@ -16600,9 +16600,12 @@ check("관심종목 밑에 '내 포트폴리오 견해'가 있다",
 #   뺀다 — §366 이 그 호출이 새 판정을 만들지 않는지를 따로 본다.
 #   라운드 386 — 종목 상세가 보유 기준선을 **한 번** 정해 지시서·쉬운 결론이 같이 쓰게 하는 호출(`watch_action(_row386, …)`)
 #   도 같은 성질(같은 함수 · 같은 행)이라 뺀다 — §377 이 그 값이 표와 같은 선인지 따로 본다.
+#   라운드 388 — 보유 변경 기록이 **바뀌기 전 행**에 대해 같은 함수를 한 번 부른다(`watch_action(_o, …)` · 그 순간 표가
+#   뭐라고 했는지 적으려고). 새 판정을 만들지 않고 같은 행을 같은 함수로 읽는 것이라 같은 사유로 뺀다 — §379.
 _wa_calls224 = (_wa204.count('_uk.watch_action(') - _wa204.count('_uk.watch_action(_row224')
                 - _wa204.count('_uk.watch_action(_wrow371')
-                - _wa204.count('_uk.watch_action(_row386'))
+                - _wa204.count('_uk.watch_action(_row386')
+                - _wa204.count('_uk.watch_action(_o, _px.get(_c))'))
 check("견해가 표의 판단을 **다시 계산하지 않는다** (_wl_acts 재사용)",
       '_wl_acts' in _wa204 and _wa_calls224 == 1,
       f"watch_action 호출 {_wa_calls224}회(종목 상세 R224 호출 제외) — "
@@ -20734,15 +20737,17 @@ if _os.path.exists(_db239b):
     _os.remove(_db239b)
 _idb239b.initialize_database(_db239b)
 _c239b = _idb239b.get_connection(_db239b)
+# 라운드 389 — 종전 픽스처는 2026-08-01(토)·02(일)에서 시작했다. 휴장일 기준일은 이제 갈래에서 빠지므로
+#   (tally) 이 절이 재려는 것(복사본·픽스처 빼기)과 섞이지 않게 거래일(08-03 월~)로 옮겼다.
 for _i239b in range(3):
     _ict239b.save_prediction_case(_c239b, _ict239b.create_prediction_case(
-        ticker="005930.KS", asset_type="STOCK", signal_date=_date239b(2026, 8, 1 + _i239b),
+        ticker="005930.KS", asset_type="STOCK", signal_date=_date239b(2026, 8, 3 + _i239b),
         model_version="vT", rulebook_version="vT", decision=_Dec239b.CONDITIONAL_BUY,
         total_score=58, confidence_score=60, reference_price=100.0, entry_price=None,
         target_price=110.0, stop_price=90.0, holding_days=20, market_regime="t",
         strategy_type="t", source_payload={'i': _i239b}))
-_c239b.execute("UPDATE prediction_cases SET status='dup_version' WHERE signal_date='2026-08-02'")
-_c239b.execute("UPDATE prediction_cases SET status='void_fixture' WHERE signal_date='2026-08-03'")
+_c239b.execute("UPDATE prediction_cases SET status='dup_version' WHERE signal_date='2026-08-04'")
+_c239b.execute("UPDATE prediction_cases SET status='void_fixture' WHERE signal_date='2026-08-05'")
 _c239b.commit()
 _t239b = _ict239b.tally(_c239b)
 _c239b.close()
@@ -21421,8 +21426,9 @@ check("견해가 '보유 유지가 맞는가' 줄을 낸다 — 두 선까지의
       "보유 유지 {len(_hold_rows230)}종목이 맞는가" in _w231
       and "어느 한 선에 닿았습니다" in _w231 and "_cdf230 = _touch_cdf_230()" in _w231
       and "_lv217.days_to_bars(_age230)" in _w231)
+# 라운드 389 — 행 흐름은 `_ledger_stat_rows389()` 한 곳이 만든다(축척 어긋난 행을 뺀다) · `_rows` 는 그 흐름이다.
 check("도달 비율 캐시는 원장 세 칸만 읽는다 (touched_bar · outcome) · 못 읽으면 None",
-      "return _lv230.touch_cdf(_rows())" in _w231)
+      "return _lv230.touch_cdf(_rows)" in _w231 and "_rows = _ledger_stat_rows389()" in _w231)
 # ── 사전 점검기 ────────────────────────────────────────────────────────────
 import subprocess as _sp247
 _pf247 = _sp247.run([sys.executable, _os.path.join(PROJ, 'scripts', 'preflight.py'), '§246'],
@@ -21569,7 +21575,8 @@ _c249 = _idb249.get_connection(_db249)
 for _i, (_tk, _st, _rr) in enumerate([("005930.KS", 'success', 0.10), ("000660.KS", 'failure', -0.05),
                                        ("035420.KS", 'unresolved', 0.01), ("051910.KS", 'open', None)]):
     _case = _ict249.create_prediction_case(
-        ticker=_tk, asset_type="STOCK", signal_date=_date249(2026, 8, 1 + _i), model_version="vT",
+        # 라운드 389 — 종전엔 08-01(토)·02(일)에서 시작했다. 휴장일 기준일은 갈래에서 빠지므로 거래일로 옮겼다.
+        ticker=_tk, asset_type="STOCK", signal_date=_date249(2026, 8, 3 + _i), model_version="vT",
         rulebook_version="vT", decision=_Dec249.CONDITIONAL_BUY, total_score=58, confidence_score=60,
         reference_price=100.0, entry_price=95.0, target_price=110.0, stop_price=90.0, holding_days=20,
         market_regime="테스트", strategy_type="조건부", source_payload={'a': _i})
@@ -21588,7 +21595,7 @@ check("grade_history 는 DB 를 읽어 같은 tally 와 확정 행(한글 결과
       _h249 is not None and _h249['tally'] == _t249 and len(_h249['rows']) == 3
       and {r['outcome'] for r in _h249['rows']} == {'목표 도달', '손절', '미도달'}
       and any(abs(r['return_pct'] - 10.0) < 1e-9 for r in _h249['rows'])
-      and _h249['dates'] == ('2026-08-01', '2026-08-03'))
+      and _h249['dates'] == ('2026-08-03', '2026-08-05'))
 _c249.close()
 _ph249 = _read148(_os.path.join(PROJ, 'premarket.py'))
 _ghs249 = _ph249.split('def grade_history(')[1].split('\ndef ')[0]
@@ -23049,11 +23056,18 @@ for _i267, (_d267, _st267) in enumerate((('2026-08-14', 'success'), ('2026-08-15
                     'CONDITIONAL_BUY', 58.0, 60.0, 100.0, 20, 't', 's', f'h{_i267}', _st267))
 _cn267.commit()
 _t267 = _ct267.tally(_cn267)
+_rows267 = _cn267.execute("SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
 _cn267.close()
-check("tally 가 휴장일 행 수와 거래일 고유 기준일 수를 같이 낸다 (심기: 4행 중 휴장일 2 · 거래일 2)",
+# 라운드 389 — 종전엔 휴장일 행도 성공·실패에 세고(decided 4) 그 수만 옆에 적었다. 실측에서 휴장일
+#   50건 중 44건이 다음 거래일 같은 종목 케이스와 겹쳐(같은 추천을 두 번 채점) 갈래에서 뺀다.
+check("tally 가 휴장일 행 수와 거래일 고유 기준일 수를 같이 내고, 휴장일 행은 갈래에서 뺀다 "
+      "(심기: 4행 중 휴장일 2 · 거래일 2 → decided 2)",
       _t267.get('non_trading') == 2 and _t267.get('trading_dates') == 2
-      and _t267.get('decided') == 4, str({k: _t267.get(k) for k in ('non_trading', 'trading_dates', 'decided')}))
-check("행은 지우지 않는다 — 휴장일 행도 confirmed 로 남아 있다 (§3)", _t267.get('success') == 2 and _t267.get('failure') == 2)
+      and _t267.get('decided') == 2 and _t267.get('non_trading_decided') == 2,
+      str({k: _t267.get(k) for k in ('non_trading', 'non_trading_decided', 'trading_dates', 'decided')}))
+check("행은 지우지 않는다 — 휴장일 행도 DB 에 남고 동결 수(frozen)에 든다 (§3 · R197)",
+      _rows267 == 4 and _t267.get('frozen') == 4 and _t267.get('success') == 2 and _t267.get('failure') == 0,
+      f"행 {_rows267} · frozen {_t267.get('frozen')} · 성공 {_t267.get('success')} · 실패 {_t267.get('failure')}")
 
 # ⑤ 문서 — 낡은 문장 둘
 _cm267 = _read148(_os.path.join(PROJ, 'CLAUDE.md'))
@@ -27435,7 +27449,8 @@ check("R340 꼬리의 기준은 표 한 곳 — 손절은 −10% 아래 · 목�
       _lv346.EXIT_TAIL_PCT == {'STOP': -10.0, 'TARGET': 0.0})
 _w346 = _read148(_os.path.join(PROJ, 'web_app.py'))
 check("R340 화면 — 매도 판정이 뜬 보유 행이 있을 때만 그 줄을 그리고, 규칙은 ledger_view 한 곳을 부른다 (§4)",
-      "def _exit_vs_hold_340(outcome):" in _w346 and "_lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows(), outcome), outcome)" in _w346
+      # 라운드 389 — 행 흐름을 `_ledger_stat_rows389()` 한 곳이 만든다(축척 어긋난 행을 뺀다) · `_rows` 는 그 흐름이다
+      "def _exit_vs_hold_340(outcome):" in _w346 and "_lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows, outcome), outcome)" in _w346
       and "for _kd340, _oc340 in (('정리 검토', 'STOP'), ('일부 정리', 'TARGET')):" in _w346)
 check("R340 화면 — 보유 행에 '닿아서 다시 잼' 이력 한 줄 (전체는 툴팁 · 킷의 자르기)",
       "_hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]" in _w346
@@ -28463,7 +28478,12 @@ check("진입가 축척 감사 산출물이 있다 (없으면 회귀가 원인�
 if _os.path.exists(_ESA362):
     with open(_ESA362, encoding='utf-8') as _f362b:
         _esa362 = _json.load(_f362b)
-    _OFFENDERS_MAX362 = 16      # 2026-09-27 실측 · 늘면 실패 · 줄면 통과
+    # 2026-09-27 실측 16 · 늘면 실패 · 줄면 통과.
+    # 라운드 389(2026-09-29) — 이 가드가 제 일을 했다: 03:04 판 16 → 19:31 판 **19**. 새 3종목(ETF)은 어젯밤
+    #   감사에서 전부 쟀고(못 읽음 0) 정상이었는데, 오늘 봉 이력이 원장 진입가와 **일정 비율**(1~1.5%)로 어긋났다 —
+    #   자료원이 과거 봉을 고쳐 쓴 것이다(열어 본 결과 · docs/RESULT_R389). 세 종목의 행은 R389 의 행 목록으로
+    #   운영 보정표·화면 통계에서 빠진다. 열어 보고 적은 뒤 상한을 옮긴다 — 결과를 보고 검사를 무르게 한 것이 아니다.
+    _OFFENDERS_MAX362 = 19
     check("그 산출물이 신선도 규약을 따른다 (ledger_rows · 라운드 259)",
           isinstance(_esa362.get('ledger_rows'), int)
           and _esa362['ledger_rows'] > 100000,
@@ -29873,6 +29893,178 @@ check("옛 기준으로 찍힌 추가매수 허락은 쓰지 않는다('아직 �
 check("옛 기준 허락이 찍힌 보유 행은 채우기 대상이다 (다시 재면 새 기준)",
       "if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'" in _w378
       and "'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님'))," in _w378)
+
+
+print("\n" + "=" * 72)
+print("§379 보유 변경 기록 — 추가로 산 물량만의 손익을 셀 수 있게 · 이 PC 에만 (라운드 388)")
+print("=" * 72)
+# 사용자: *"추가매수하라고 해서 더 샀는데 결국 손해 — 거의 추가매수한 게 손해 본 듯."* 앱이 체결 기록을 안 남겨 답할 수
+#   없었다. 바뀐 순간의 평단·수량과 그때 앱이 뭐라고 했는지를 이 PC 에만 적는다. 판 가격은 받지 않는다(§3).
+import holding_log as _hl379                                   # noqa: E402
+import tempfile as _tf379                                      # noqa: E402
+_b379 = [{'code': '111111', 'name': '가', 'paid': 10000, 'qty': 100},
+         {'code': '222222', 'name': '나', 'paid': 5000, 'qty': 10},
+         {'code': '333333', 'name': '다', 'paid': 7000, 'qty': 30},
+         {'code': '444444', 'name': '라'},
+         {'code': '555555', 'name': '마', 'paid': 3000, 'qty': 50},
+         {'code': '666666', 'name': '바', 'paid': 1000, 'qty': 5}]
+_a379 = [{'code': '111111', 'name': '가', 'paid': 9250, 'qty': 200},        # 추가
+         {'code': '222222', 'name': '나', 'paid': 5000, 'qty': 4},          # 일부 매도
+         {'code': '333333', 'name': '다'},                                    # 전부 매도
+         {'code': '444444', 'name': '라', 'paid': 12000, 'qty': 3},          # 새로 삼
+         {'code': '555555', 'name': '마', 'paid': 3100, 'qty': 50},          # 평단 정정
+         {'code': '666666', 'name': '바', 'paid': 1000, 'qty': 5}]           # 그대로
+_e379 = _hl379.change_events(_b379, _a379, '2026-09-29T10:00:00', {'111111': 8900.0},
+                             {'111111': ('추가 매수 가능', '추가매수 조건 통과')}, batch='b1')
+_k379 = {e['code']: e for e in _e379}
+check("바뀐 행만 적고 갈래를 가른다 — 추가·일부 매도·전부 매도·새로 삼·정정 (그대로인 행은 안 적는다)",
+      [_k379[c]['kind'] for c in ('111111', '222222', '333333', '444444', '555555')]
+      == ['add', 'reduce', 'sell_all', 'buy', 'fix'] and '666666' not in _k379, str([e['kind'] for e in _e379]))
+check("추가 단가는 산수 — (새 평단×새 수량 − 옛 평단×옛 수량) ÷ 늘어난 수량 = 8,500원 · 그때 앱 판단을 같이 적는다",
+      _k379['111111']['qty'] == 100 and abs(_k379['111111']['price'] - 8500.0) < 1e-9
+      and _k379['111111']['app_kind'] == '추가 매수 가능' and _k379['111111']['px_at_record'] == 8900.0)
+check("판 가격은 지어내지 않는다 — 일부·전부 매도의 price 는 None",
+      _k379['222222']['price'] is None and _k379['333333']['price'] is None and _k379['222222']['qty'] == 6)
+_tmp379 = _os.path.join(_tf379.mkdtemp(prefix='r388_'), 'holding_log.jsonl')
+_hl379.append(_e379, _tmp379)
+_hl379.append(_hl379.change_events([{'code': '777777', 'paid': 100, 'qty': 1}],
+                                   [{'code': '777777', 'paid': 90, 'qty': 3}], 't2', batch='b2'), _tmp379)
+_hl379.mark_undone('b2', 't3', _tmp379)
+_ld379 = _hl379.load(_tmp379)
+check("되돌린 묶음은 지우지 않고 읽을 때 뺀다 (기록은 덧붙이기만)",
+      {e['batch'] for e in _ld379} == {'b1'} and len(_ld379) == 5
+      and sum(1 for _l in open(_tmp379, encoding='utf-8')) == 7)
+_sold379 = _hl379.change_events([{'code': '111111', 'paid': 9250, 'qty': 200}], [{'code': '111111'}],
+                                't4', {'111111': 8000.0}, batch='b4')
+_tr379 = _hl379.add_tranches(_e379, {'111111': 8000.0})
+_tr379s = _hl379.add_tranches(_e379 + _sold379, {'111111': 9999.0})
+check("추가 물량 손익 — 보유 중이면 지금 가격 기준(8,000 → −50,000원) · 이후 팔았으면 '이후 매도' · 확정 손익은 모른다고",
+      len(_tr379) == 1 and _tr379[0]['status'] == '보유 중' and _tr379[0]['pnl'] == -50000.0
+      and _tr379s[0]['status'] == '이후 매도' and _tr379s[0]['px'] == 8000.0
+      and '확정 손익은 모름' in _tr379s[0]['px_basis'], str(_tr379s))
+check("빈 칸(NaN)은 값이 아니다 — 매입가 NaN 은 '없음'으로 읽는다",
+      _hl379._num(float('nan')) is None and _hl379._num(0) is None and _hl379._num('abc') is None)
+import scripts.backup_research_data as _bk379                  # noqa: E402
+import scripts.lineage_audit as _la379                         # noqa: E402
+_w379 = '\n'.join(_ln for _i, _ln in _la379.code_lines('web_app.py'))
+check("이 PC 에만 — 로컬 저장이 꺼져 있으면 안 적는다 · 백업 묶음에 안 실린다 · 저장·팔았음·되돌리기 네 자리에 이어져 있다",
+      'if not ALLOW_LOCAL_STORE:\n        return None' in _w379
+      and not _bk379.picked('holding_log.jsonl') and 'holding_log*' in _bk379.DENY
+      and "_hl_record(_items, _new_items, px_by_code)" in _w379
+      and "st.session_state['wl_undo_sold_batch'] = _hl_record(" in _w379
+      and "_hl_undo(st.session_state.pop('wl_undo_sold_batch', None))" in _w379
+      and "_hl_undo(st.session_state.pop('wl_undo_bulk_batch', None))" in _w379, scanned=4)
+
+
+print("\n" + "=" * 72)
+print("§380 데이터 오염 점검 — 휴장일 중복 채점 · 진입가 축척 어긋난 행 · 닿지 않는 필터 (라운드 389)")
+print("=" * 72)
+# 사용자: *"데이터 오염에 대해서 전반적으로 점검해줘."* 저장소마다 날짜·중복·픽스처·불변식·축척·구간·동봉본을 셌다.
+#   깨끗한 곳이 대부분이었고, 실재한 셋을 고쳤다: ① 추적 집계가 휴장일 기준일 옛 케이스(대부분 다음 거래일
+#   추천의 복사본)를 성공·실패에 셌다 ② 진입가 축척이 어긋난 원장 행이 운영 보정표·화면 통계에 들어갔다
+#   ③ 사례 필터의 국면 선택지 하나가 원장에 없는 값이었다. 행은 하나도 안 지웠다(R197).
+import sqlite3 as _sq380                                        # noqa: E402
+import tempfile as _tf380                                       # noqa: E402
+import ast as _ast380                                           # noqa: E402
+from improvement import database as _idb380, case_tracker as _ict380   # noqa: E402
+import premarket as _pm380                                      # noqa: E402
+import ledger_view as _lv380                                    # noqa: E402
+import artifact_io as _aio380                                   # noqa: E402
+
+# ① 추적 집계 — 토요일 픽(월요일 픽의 복사본)은 갈래에서 빠지고 따로 센다
+_db380 = _os.path.join(_tf380.mkdtemp(prefix='r389_'), 'improvement.db')
+_idb380.initialize_database(_db380)
+_c380 = _idb380.get_connection(_db380)
+for _i380, (_d380, _st380, _tk380) in enumerate((('2026-08-08', 'success', '005930.KS'),    # 토 — 복사본
+                                                 ('2026-08-10', 'failure', '005930.KS'),    # 월 — 같은 추천
+                                                 ('2026-08-11', 'success', '000660.KS'),
+                                                 ('2026-08-12', 'open', '035420.KS'))):
+    _c380.execute("INSERT INTO prediction_cases (case_id, ticker, asset_type, signal_date, created_at, "
+                  "model_version, rulebook_version, decision, total_score, confidence_score, "
+                  "reference_price, holding_days, market_regime, strategy_type, data_hash, status, "
+                  "realized_return) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (f'k{_i380}', _tk380, 'STOCK', _d380, '2026-08-01T00:00:00', 'v', 'v', 'CONDITIONAL_BUY',
+                   58.0, 60.0, 100.0, 20, 't', 's', f'h{_i380}', _st380, 0.01))
+_c380.commit()
+_t380 = _ict380.tally(_c380)
+_h380 = _pm380.grade_history(conn=_c380, max_rows=10)
+_rows380 = _c380.execute("SELECT COUNT(*) FROM prediction_cases").fetchone()[0]
+_c380.close()
+check("휴장일 기준일 케이스는 성공·실패·분모에서 빠진다 (심기: 토요일 성공 1 · 거래일 성공 1·실패 1 → 50%)",
+      (_t380['success'], _t380['failure'], _t380['decided']) == (1, 1, 2)
+      and abs(_t380['success_pct'] - 50.0) < 1e-9 and _t380['open'] == 1,
+      str({k: _t380.get(k) for k in ('success', 'failure', 'decided', 'success_pct', 'open')}))
+check("뺀 수를 따로 낸다 — non_trading 1 · 그중 확정 1 · 행은 DB 에 그대로 (frozen 4 · R197)",
+      _t380['non_trading'] == 1 and _t380['non_trading_decided'] == 1 and _t380['frozen'] == 4 and _rows380 == 4)
+check("사후 검증 목록·기준일 범위도 같은 모집단이다 — 토요일 행이 목록에 없고 범위는 거래일부터 (§4)",
+      _h380 is not None and len(_h380['rows']) == 2
+      and all(r['date'] != '2026-08-08' for r in _h380['rows'])
+      and _h380['dates'] == ('2026-08-10', '2026-08-11') and _h380['tally'] == _t380, str(_h380 and _h380['dates']))
+import scripts.lineage_audit as _la380                          # noqa: E402
+_w380 = '\n'.join(_ln for _i, _ln in _la380.code_lines('web_app.py'))
+check("화면 두 자리가 뺀 휴장일 케이스 수를 말한다 (추적 줄 · 사후 검증 · §3)",
+      "_n_hol_imp = int(_t232b.get('non_trading') or 0)" in _w380
+      and "휴장일 기준일 옛 케이스" in _w380 and "휴장일(주말·공휴일)을 기준일로 잡은 옛 케이스" in _w380)
+
+# ② 진입가 축척 어긋난 행 — 목록은 한 곳 · 운영 보정표와 화면이 같은 것을 읽는다
+_esa380 = _aio380.load_json(_lv380.SCALE_AUDIT_FILE)
+_keys380 = _lv380.scale_mismatch_keys()
+if _esa380 is not None and isinstance(_esa380.get('offender_keys'), dict):
+    _codes380 = {str(c).split('.')[0] for c in (_esa380.get('offender_codes') or [])}
+    check("감사 산출물이 어긋난 행(종목→기준일)을 싣고, 그 수가 머리의 수와 같고, 종목은 어긋난 종목 목록 안이다",
+          _keys380 is not None and len(_keys380) == _esa380.get('offender_key_rows')
+          and {c for c, _d in _keys380} <= _codes380 and len(_keys380) > 0,
+          f"행 {len(_keys380 or ())} · 머리 {_esa380.get('offender_key_rows')} · 종목 {len(_codes380)}",
+          scanned=len(_keys380 or ()))
+else:
+    skipped("감사 산출물의 행 목록 대조", "entry_scale_audit.json 이 없거나 행 목록(offender_keys)이 없는 옛 판")
+_orig380 = _aio380.load_json
+try:
+    _aio380.load_json = lambda f, base=None: {'offender_keys': {'111111.KS': ['2026-08-03', '2026-08-04']}}
+    _k380 = _lv380.scale_mismatch_keys()
+    _cnt380 = {}
+    _kept380 = list(_lv380.drop_scale_mismatch(
+        [{'ticker': '111111.KS', 'date': '2026-08-03'}, {'ticker': '111111.KQ', 'date': '2026-08-04 00:00:00'},
+         {'ticker': '111111.KS', 'date': '2026-08-05'}, {'ticker': '222222.KS', 'date': '2026-08-03'}],
+        _k380, _cnt380))
+    _aio380.load_json = lambda f, base=None: {'offender_codes': ['111111.KS']}     # 옛 판 — 행 목록 없음
+    _old380 = _lv380.scale_mismatch_keys()
+    _aio380.load_json = lambda f, base=None: None                                  # 못 읽음
+    _none380 = _lv380.scale_mismatch_keys()
+finally:
+    _aio380.load_json = _orig380
+check("심기: 목록의 (종목, 기준일)만 빠진다 — 시장 접미사·시각 꼬리는 무시 · 같은 종목 다른 날은 남는다",
+      _cnt380.get('dropped') == 2 and [(r['ticker'], r['date']) for r in _kept380]
+      == [('111111.KS', '2026-08-05'), ('222222.KS', '2026-08-03')], str(_kept380))
+check("못 읽으면(없음 · 행 목록 없는 옛 판) None — 거르지 않고 걸렀다고 말하지도 않는다 (§3)",
+      _old380 is None and _none380 is None and _lv380.is_scale_mismatch({'ticker': '1', 'date': '2'}, None) is False)
+_lab380 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_labt380 = _ast380.parse(_lab380)
+_decided380 = [n for n in _ast380.walk(_labt380) if isinstance(n, _ast380.Assign)
+               and any(isinstance(t, _ast380.Name) and t.id == 'decided' for t in n.targets)]
+_src_dec380 = _ast380.get_source_segment(_lab380, _decided380[0].value) if _decided380 else ''
+check("운영 보정표는 걸러진 행으로 만든다 — decided 는 stat_graded 에서 · 원장 저장은 graded 전부 (R197)",
+      len(_decided380) == 1 and 'stat_graded' in _src_dec380
+      and "stat_graded = [g for g in graded if not _lv_cost386.is_scale_mismatch(g['row'], _scale_keys389)]" in _lab380
+      and "        for g in graded:\n            rec = dict(g['row'])" in _lab380
+      and "'scale_excluded': scale_excluded if _scale_keys389 is not None else None," in _lab380,
+      _src_dec380, scanned=len(_decided380))
+check("화면 통계 넷(도달표·DeMARK·팔기 vs 들기·닿음 누적)이 한 행 흐름을 읽는다 — 베낀 _rows() 가 없다 (§4)",
+      _w380.count('_ledger_stat_rows389()') >= 4
+      and all(f'import json as _json{n}' not in _w380 for n in (224, 285, 340, 230))
+      and 'if _lv389.is_scale_mismatch(_r, _keys):' in _w380)
+check("국면×구간 표와 사례 필터도 같은 목록으로 거른다 (키 모양은 ledger_view.scale_key 한 곳)",
+      _w380.count('_scale_ok_mask389(') >= 3 and '_lv389m.scale_key(t, d) not in _keys' in _w380)
+
+# ③ 사례 필터 — 선택지가 원장의 값이다 (없는 값은 늘 '사례 없음'을 낸다)
+_wt380 = _ast380.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
+_opts380 = None
+for _n380 in _ast380.walk(_wt380):
+    if (isinstance(_n380, _ast380.Call) and getattr(_n380.func, 'attr', None) == 'selectbox'
+            and any(k.arg == 'key' and getattr(k.value, 'value', None) == 'cs_regime' for k in _n380.keywords)):
+        _opts380 = [e.value for e in _n380.args[1].elts]
+check("사례 필터의 국면 선택지 = 원장 regime 값(BULL·SIDEWAYS·BEAR) — 'NEUTRAL' 없음",
+      _opts380 == ['전체', 'BULL', 'SIDEWAYS', 'BEAR'], str(_opts380), scanned=1)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

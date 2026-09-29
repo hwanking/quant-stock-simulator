@@ -2327,6 +2327,51 @@ def _wl_write(items, msg=''):
         st.session_state['wl_flash'] = msg
 
 
+def _hl_record(before, after, px_by_code=None):
+    """매입가·수량이 바뀐 행을 **이 PC 에만** 적는다 (라운드 388 · `holding_log`). 묶음 id 를 돌려준다.
+
+    사용자: *"추가매수하라고 해서 더 샀는데 결국 손해 — 거의 추가매수한 게 손해 본 듯."* 앱이 체결 기록을 안 남겨
+    그 물음에 답할 수 없었다. 앞으로는 바뀐 순간의 평단·수량과 **그때 앱이 뭐라고 했는지**(표 판정 · 추가매수 판정)를
+    적어, 추가로 산 물량만의 손익을 셀 수 있게 한다. 로컬 저장이 꺼져 있으면(배포 앱 · 회귀의 쓰기 금지) 안 적는다(§9).
+    """
+    if not ALLOW_LOCAL_STORE:
+        return None
+    try:
+        import holding_log as _hl388
+        _px = px_by_code or {}
+        _old = {portfolio.normalize_code(w.get('code')): w for w in (before or [])}
+        _said = {}
+        for _w388 in (after or []):
+            _c = portfolio.normalize_code(_w388.get('code'))
+            _o = _old.get(_c)
+            if _o is None or ((_o.get('paid'), _o.get('qty')) == (_w388.get('paid'), _w388.get('qty'))):
+                continue
+            # 바뀌기 **전** 행으로 — 사용자가 산 그 순간 표가 뭐라고 했나(같은 함수 · 같은 행)
+            _a = _uk.watch_action(_o, _px.get(_c))
+            if _a:
+                _said[_c] = (_a.get('label') or _a.get('kind'), _a.get('avg_down_label'))
+        _at = datetime.datetime.now().isoformat(timespec='seconds')
+        _evs = _hl388.change_events(before, after, _at, _px, _said, batch=_at)
+        _hl388.append(_evs)
+        return _at if _evs else None
+    except Exception:                                          # noqa: BLE001
+        import sys as _sys388
+        import traceback as _tb388
+        print('[보유 변경 기록 실패 — 저장은 그대로 했다]\n' + _tb388.format_exc(), file=_sys388.stderr)
+        return None
+
+
+def _hl_undo(batch):
+    """되돌리기 — 그 묶음을 기록에서 **지우지 않고** 되돌렸다고 적는다(읽는 쪽이 뺀다)."""
+    if not (ALLOW_LOCAL_STORE and batch):
+        return
+    try:
+        import holding_log as _hl388u
+        _hl388u.mark_undone(batch, datetime.datetime.now().isoformat(timespec='seconds'))
+    except Exception:                                          # noqa: BLE001
+        pass
+
+
 def _wl_add(code, name):
     """이미 있으면 아무것도 안 한다 — 같은 종목이 두 줄로 늘지 않는다."""
     c = portfolio.normalize_code(code)
@@ -2397,10 +2442,14 @@ def _wl_sold_from_query():
         del st.query_params['sold']
     except Exception:                                      # noqa: BLE001
         pass
-    items, old = portfolio.mark_sold(_wl_items(), str(raw).strip())
+    _before388 = _wl_items()
+    items, old = portfolio.mark_sold(_before388, str(raw).strip())
     if old is None or not (old.get('paid') or old.get('qty')):
         return                   # 못 읽었거나 보유 기록이 없던 행 — 아무것도 안 바꾼다 (§3)
     st.session_state['wl_undo_sold'] = old
+    # 라운드 388 — 보유 변경 기록(이 PC 만). 판 가격은 안 받는다 — 참고 가격은 그 행에 남아 있던 마지막 가격이다.
+    st.session_state['wl_undo_sold_batch'] = _hl_record(
+        _before388, items, {portfolio.normalize_code(old.get('code')): old.get('snap_px')})
     _wl_write(items, '매도로 기록했습니다 — 보유에서 뺐고 관심종목에는 남습니다')
 
 
@@ -2466,6 +2515,47 @@ def _wl_apply_edits(items, edits):
                 continue
         out.append(it)
     return out, undo
+
+
+def _wl_add_tranches(px_by_code):
+    """추가로 산 물량만의 손익 — 이 PC 의 보유 변경 기록에서 (라운드 388 · 표시 전용).
+
+    평단·수량의 변화로 추가 단가를 **산수로** 구한다(`holding_log.add_tranches`). 그 순간 앱이 뭐라고 했는지도
+    같이 적는다 — *"추가매수하라고 해서 샀다"* 가 기록으로 남아야 그 허락이 값을 했는지 셀 수 있다. 판 가격은 안
+    받으므로 판 물량의 확정 손익은 '모름'이다(§3). 기록이 없으면 한 줄로 그 사실만 적는다.
+    """
+    if not ALLOW_LOCAL_READ:
+        return
+    try:
+        import holding_log as _hl388r
+        _rows = _hl388r.add_tranches(_hl388r.load(), px_by_code)
+    except Exception:                                          # noqa: BLE001
+        return
+    if not _rows:
+        st.caption("추가로 산 물량 기록이 아직 없습니다 — 보유 종목의 매입가·수량을 저장하면 그때부터 이 PC 에만 "
+                   "적어, 추가로 산 물량만의 손익을 따로 셉니다(지난 거래는 앱이 기록하지 않아 되살릴 수 없습니다).")
+        return
+    import pandas as _pd388
+    _held = [r for r in _rows if r['status'] == '보유 중']
+    _pnl_h = [r['pnl'] for r in _held if r['pnl'] is not None]
+    _said = [r for r in _rows if (r.get('app_kind') or '') == '추가 매수 가능']
+    with st.expander(f"추가로 산 물량 {len(_rows)}건 — 그 물량만의 손익 (이 PC 의 기록)", expanded=False):
+        st.dataframe(_pd388.DataFrame([{
+            '기록': str(r['at'])[:16].replace('T', ' '), '종목': r['name'], '추가 수량': r['qty'],
+            '추가 단가(계산)': r['price'], '그때 앱 판단': r.get('app_kind') or '기록 없음',
+            '상태': r['status'], '기준 가격': r['px'], '그 물량 손익': r['pnl'], '수익률(%)': r['ret']}
+            for r in _rows]), hide_index=True, width='stretch',
+            column_config={'추가 단가(계산)': st.column_config.NumberColumn(format='%d원'),
+                           '기준 가격': st.column_config.NumberColumn(format='%d원'),
+                           '그 물량 손익': st.column_config.NumberColumn(format='%+d원'),
+                           '수익률(%)': st.column_config.NumberColumn(format='%+.2f')})
+        st.caption(
+            (f"보유 중인 추가 물량 {len(_held)}건의 평가손익 합 {sum(_pnl_h):+,.0f}원"
+             + (f"(가격을 못 받은 {len(_held) - len(_pnl_h)}건 제외)" if len(_pnl_h) < len(_held) else '')
+             + " · " if _held else '')
+            + f"그때 앱이 '추가 매수 가능'이라 했던 것 {len(_said)}건. "
+            "추가 단가는 저장 전후 평단·수량으로 계산한 값이고(증권사 평단을 그대로 옮기면 실제와 같습니다), "
+            "판 물량은 판 가격을 받지 않아 확정 손익을 모릅니다 — '기준 가격'은 매도를 적을 때 앱이 가진 가격입니다.")
 
 
 def _wl_position_calc(px, paid, qty):
@@ -2579,6 +2669,8 @@ def _wl_bulk_editor(px_by_code):
             st.warning("바뀐 칸이 없습니다 — 매입가·수량을 넣고 **Enter** 를 누른 뒤 다시 저장하세요.")
         else:
             st.session_state['wl_undo_bulk'] = _undo            # 바뀌기 **전** 값
+            # 라운드 388 — 바뀐 행을 이 PC 의 보유 변경 기록에(추가로 산 물량을 나중에 셀 수 있게 · §9 로컬만)
+            st.session_state['wl_undo_bulk_batch'] = _hl_record(_items, _new_items, px_by_code)
             _wl_write(_new_items, f"매입가·수량 {_n}개를 저장했습니다")
             st.session_state['wl_bulk_ver'] = _bver + 1          # 편집기 상태를 새로 시작
             st.session_state.pop('wl_edit_focus', None)          # 고른 종목 안내는 저장으로 끝난다
@@ -2763,26 +2855,53 @@ def _core_of_snapshot(snp):
                             st.session_state.get('stop_tighten_293')))
 
 
+def _ledger_stat_rows389():
+    """원장 행 흐름 — **화면 통계용** (라운드 389). 진입가 축척이 어긋난 행(라운드 364 · 지어낸 승리·패배)은
+    뺀다. 목록은 `ledger_view.scale_mismatch_keys` 한 곳이고 운영 보정표(`calibration_lab`)도 같은 것을 읽는다(§4).
+    원장 파일은 안 바꾼다(R197). 원장이 없으면 None — 부르는 쪽이 그대로 None 을 낸다(§3).
+    종전엔 캡션 넷이 같은 `_rows()` 를 넷 벌 적어 두고 있었다 — 한 곳에서 거르려고 모았다."""
+    import json as _json389
+    import ledger_view as _lv389
+    _p = _artifact_path("virtual_graded.jsonl")
+    if not _p:
+        return None
+    _keys = _lv389.scale_mismatch_keys()
+
+    def _rows():
+        with _open_artifact(_p) as _f:
+            for _line in _f:
+                try:
+                    _r = _json389.loads(_line)
+                except Exception:                              # noqa: BLE001
+                    continue
+                if _lv389.is_scale_mismatch(_r, _keys):
+                    continue
+                yield _r
+    return _rows()
+
+
+def _scale_ok_mask389(df):
+    """원장 DataFrame → 진입가 축척이 어긋나지 **않은** 행의 불리언 (라운드 389). 키 모양은 ledger_view.scale_key
+    한 곳(§4). 목록을 못 읽으면 전부 True(거르지 않는다 — 걸렀다고 말하지도 않는다 · §3)."""
+    import ledger_view as _lv389m
+    _keys = _lv389m.scale_mismatch_keys()
+    if not _keys or not {'ticker', 'date'} <= set(df.columns):
+        return pd.Series(True, index=df.index)
+    return pd.Series([_lv389m.scale_key(t, d) not in _keys for t, d in zip(df['ticker'], df['date'])],
+                     index=df.index)
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _reach_table_224():
     """원장 → {(국면, 구역): 창 끝 종가 수익 오름차순} (라운드 224 · 표시 전용).
     원장 전체 DataFrame(`_load_case_ledger`)을 다시 들지 않고 세 칸만 읽는다.
     없으면 None — 지어내지 않는다 (§3)."""
-    import json as _json224
     import ledger_view as _lv224
     try:
-        _p = _artifact_path("virtual_graded.jsonl")
-        if not _p:
+        _rows = _ledger_stat_rows389()
+        if _rows is None:
             return None
-
-        def _rows():
-            with _open_artifact(_p) as _f:
-                for _line in _f:
-                    try:
-                        yield _json224.loads(_line)
-                    except Exception:                          # noqa: BLE001
-                        continue
-        _t = _lv224.reach_table(_rows())
+        _t = _lv224.reach_table(_rows)
         return _t or None
     except Exception:                                          # noqa: BLE001
         return None
@@ -2793,21 +2912,12 @@ def _demark_lift_285():
     """차트의 '13 매수' 표식이 원장에서 무엇을 했나 → 캡션 한 줄 (라운드 285 · 표시 전용).
     규칙은 `ledger_view` 한 곳이고 여기는 읽어서 그릴 뿐이다(§4).
     없으면 None — 지어내지 않는다 (§3)."""
-    import json as _json285
     import ledger_view as _lv285
     try:
-        _p = _artifact_path("virtual_graded.jsonl")
-        if not _p:
+        _rows = _ledger_stat_rows389()
+        if _rows is None:
             return None
-
-        def _rows():
-            with _open_artifact(_p) as _f:
-                for _line in _f:
-                    try:
-                        yield _json285.loads(_line)
-                    except Exception:                          # noqa: BLE001
-                        continue
-        return _lv285.demark_lift_line(_lv285.demark_complete_lift(_rows()))
+        return _lv285.demark_lift_line(_lv285.demark_complete_lift(_rows))
     except Exception:                                          # noqa: BLE001
         return None
 
@@ -2816,21 +2926,12 @@ def _demark_lift_285():
 def _exit_vs_hold_340(outcome):
     """선에 닿은 뒤 판 것 vs 든 것 → 캡션 한 줄 (라운드 340 · 표시 전용). 규칙은 `ledger_view` 한 곳(§4).
     없으면 None — 지어내지 않는다(§3)."""
-    import json as _json340
     import ledger_view as _lv340
     try:
-        _p = _artifact_path("virtual_graded.jsonl")
-        if not _p:
+        _rows = _ledger_stat_rows389()
+        if _rows is None:
             return None
-
-        def _rows():
-            with _open_artifact(_p) as _f:
-                for _line in _f:
-                    try:
-                        yield _json340.loads(_line)
-                    except Exception:                          # noqa: BLE001
-                        continue
-        return _lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows(), outcome), outcome)
+        return _lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows, outcome), outcome)
     except Exception:                                          # noqa: BLE001
         return None
 
@@ -2840,21 +2941,12 @@ def _touch_cdf_230():
     """원장 → 봉째별 '두 선 중 하나에 닿은' 누적 비율 (라운드 230 · 표시 전용).
     사용자: "다 보유 유지인데 맞아?" — 계획 n봉째에 아무 선에도 안 닿은 것이 얼마나 흔한지.
     없으면 None — 지어내지 않는다 (§3)."""
-    import json as _json230
     import ledger_view as _lv230
     try:
-        _p = _artifact_path("virtual_graded.jsonl")
-        if not _p:
+        _rows = _ledger_stat_rows389()
+        if _rows is None:
             return None
-
-        def _rows():
-            with _open_artifact(_p) as _f:
-                for _line in _f:
-                    try:
-                        yield _json230.loads(_line)
-                    except Exception:                          # noqa: BLE001
-                        continue
-        return _lv230.touch_cdf(_rows())
+        return _lv230.touch_cdf(_rows)
     except Exception:                                          # noqa: BLE001
         return None
 
@@ -5067,7 +5159,10 @@ if _pmr:
                         + (f" (성공 비율 {_t232['success_pct']:.0f}% · 분모 {_t232['decided']} · "
                            f"미도달 제외)" if _t232['decided'] else "")
                         + f" · 판정 대기 {_t232['open']}건"
-                        + (f" · 기준일 {_d232[0]}~{_d232[1]}" if _d232[0] else ""))
+                        + (f" · 기준일 {_d232[0]}~{_d232[1]}" if _d232[0] else "")
+                        # 라운드 389 — 휴장일 기준일 옛 케이스는 세지 않는다(같은 추천의 복사본).
+                        + (f" · 휴장일 기준일 옛 케이스 {_t232['non_trading']}건은 세지 않음"
+                           if _t232.get('non_trading') else ""))
             st.caption("채점은 원장과 같은 규칙입니다 — 진입은 리포트 가격, 먼저 닿은 선으로 "
                        "판정, 같은 봉이면 손절 먼저(보수), 닿으면 그 자리에서 확정. 모델 성적의 "
                        "'실전 추천 추적' 줄과 같은 곳에서 읽습니다.")
@@ -6094,6 +6189,7 @@ else:
             _c338 = portfolio.normalize_code(_undo338.get('code'))
             _wl_write([(_undo338 if portfolio.normalize_code(w.get('code')) == _c338 else w)
                        for w in _wl_items()], '되돌렸습니다')
+            _hl_undo(st.session_state.pop('wl_undo_sold_batch', None))     # 라운드 388
             st.session_state.pop('wl_undo_sold', None)
             st.rerun()
         if _uc338[2].button('닫기', key='wl_undo_sold_close', width='stretch'):
@@ -6111,6 +6207,7 @@ else:
             _back321, _ = _wl_apply_edits(
                 _wl_items(), {c: (v[0], v[1]) for c, v in _ub321.items()})
             _wl_write(_back321, '되돌렸습니다')
+            _hl_undo(st.session_state.pop('wl_undo_bulk_batch', None))     # 라운드 388
             st.session_state.pop('wl_undo_bulk', None)
             st.session_state['wl_bulk_ver'] = int(st.session_state.get('wl_bulk_ver') or 0) + 1
             st.rerun()
@@ -6216,6 +6313,9 @@ else:
     if _wl_edit:
         _wl_bulk_editor({portfolio.normalize_code(_wl_body[_bi].get('code')): _bv[0]
                          for _bi, _bv in _wl_pre.items()})
+    # 라운드 388 — 추가로 산 물량만의 손익 (이 PC 의 보유 변경 기록 · 기록된 것만 · 현재가는 방금 받은 값 그대로)
+    _wl_add_tranches({portfolio.normalize_code(_wl_body[_bi].get('code')): _bv[0]
+                      for _bi, _bv in _wl_pre.items()})
     def _wl_kind_of(act):
         """무리 순서표가 쓰는 kind — '지금 매수 가능'(목표가 이하)은 별도 이름이다.
         우선순위 줄과 표 정렬이 **같은 함수**를 쓴다 (§4 — 두 곳에 두면 갈라진다)."""
@@ -11255,8 +11355,11 @@ if _perf_cal.get('total_cases'):
             import regime_policy as _rp216
             _ldf216 = _load_case_ledger()
             if _ldf216 is not None and {'score', 'regime', 'split', 'success'} <= set(_ldf216.columns):
+                # 라운드 389 — 적중률은 진입가 축척이 어긋난 행(지어낸 승리·패배 · R364)을 빼고 센다.
+                #   목록은 ledger_view 한 곳(§4). 겹침 없는 비율(아래)은 원장 전체 행수 그대로다.
+                _ok389 = _scale_ok_mask389(_ldf216)
                 _bz216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce') >= 58)
-                                 & _ldf216['success'].notna()]
+                                 & _ldf216['success'].notna() & _ok389]
                 _rows216 = []
                 _cell216 = {}
                 for _rg216 in ('BULL', 'SIDEWAYS', 'BEAR', '전체'):
@@ -11284,7 +11387,7 @@ if _perf_cal.get('total_cases'):
                 _bb216 = _bz216[(_bz216['regime'] == 'BEAR') & (_bz216['split'] == 'blind')]
                 _lo216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce').between(40, 49))
                                  & (_ldf216['regime'] == 'BEAR') & (_ldf216['split'] == 'blind')
-                                 & _ldf216['success'].notna()]
+                                 & _ldf216['success'].notna() & _ok389]
                 _hi216 = _bb216[pd.to_numeric(_bb216['score'], errors='coerce').between(60, 64)]
                 _inv216 = ''
                 if len(_lo216) >= 30 and len(_hi216) >= 30:
@@ -11458,6 +11561,7 @@ if _ledger_df is not None:
             _n_ok_imp = _t232b['success']
             _n_bad_imp = _t232b['failure']
             _n_unres_imp = _t232b['unresolved']
+            _n_hol_imp = int(_t232b.get('non_trading') or 0)
         finally:
             _ic.close()
         _n_dec_imp = _n_ok_imp + _n_bad_imp
@@ -11488,7 +11592,11 @@ if _ledger_df is not None:
                        "닿으면 손절 먼저로 봅니다 — 원장과 같은 규칙 (성공으로 세지 않습니다). "
                        "진입은 리포트 가격이고 닿으면 그 자리에서 확정합니다."
                        + (f" 같은 추천의 버전 복사본·시험 픽스처 {_n_excl_imp}건은 "
-                          f"행으로 남기되 세지 않았습니다." if _n_excl_imp else ""))
+                          f"행으로 남기되 세지 않았습니다." if _n_excl_imp else "")
+                       # 라운드 389 — 휴장일 기준일 케이스는 대부분 다음 거래일 추천의 복사본이다.
+                       + (f" 휴장일(주말·공휴일)을 기준일로 잡은 옛 케이스 {_n_hol_imp}건도 "
+                          f"행으로 남기되 세지 않았습니다 — 대부분 다음 거래일의 같은 추천과 겹칩니다."
+                          if _n_hol_imp else ""))
             # 라운드 275 — 전방 재평가(11-16)가 읽는 원장(전방 기록부 · 매 거래일 상위 60 박제)은 화면
             #   어디에도 없었고, 빠진 날은 문서(R253 "22거래일 중 16일")에만 있었다. 셈은
             #   forward_registry.date_coverage 한 곳(거래일 판정은 case_tracker 한 곳). 빠진 날은 다시
@@ -11550,9 +11658,18 @@ if _ledger_df is not None:
             _f_score = st.selectbox("점수대", ["전체", "60점 이상(매수권)",
                                     "55~59", "50~54", "50 미만"], key="cs_score")
         with _cf4:
-            _f_reg = st.selectbox("시장 국면", ["전체", "BULL", "NEUTRAL", "BEAR"],
+            # ⚠️ 라운드 389 — 선택지가 'NEUTRAL' 이었는데 원장 regime 은 BULL·SIDEWAYS·BEAR 다(실측 2026-09-29:
+            #   SIDEWAYS 90,602행 · NEUTRAL 0행). 그 선택지는 **늘** '해당하는 사례가 없습니다'를 냈다 —
+            #   없는 게 아니라 이름이 달랐다(§3). 원장의 값 그대로 쓴다.
+            _f_reg = st.selectbox("시장 국면", ["전체", "BULL", "SIDEWAYS", "BEAR"],
                                   key="cs_regime")
-        _cs = _ledger_df
+        # 라운드 389 — 셈(적중·손절·평균)은 진입가 축척이 어긋난 행(지어낸 승리·패배 · R364)을 빼고 낸다.
+        _ok389b = _scale_ok_mask389(_ledger_df)
+        _n_scale389 = int((~_ok389b).sum())
+        _cs = _ledger_df[_ok389b]
+        if _n_scale389:
+            st.caption(f"진입가가 그날 실제 봉과 어긋난 행 {_n_scale389:,}건은 여기서 세지 않습니다 — "
+                       "그 행은 채점이 첫날에 박혀 지어낸 승리·패배가 됩니다(원장에는 남아 있습니다).")
         if _f_split != "전체":
             _cs = _cs[_cs['split'] == _f_split.split('(')[0]]
         if _f_out == "성공(목표 선도달)":

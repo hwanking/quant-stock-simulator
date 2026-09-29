@@ -133,29 +133,37 @@ def tally(conn: sqlite3.Connection) -> dict:
     확정·대기의 갈래 — **한 곳** (라운드 232). 화면의 두 자리(개장 전 절의 '사후 검증' ·
     모델 성적의 '실전 추천 추적' 줄)가 이것만 읽는다. 버전 복사본·시험 픽스처(R222)는
     행으로 남기되 세지 않고 `excluded` 에 따로 센다(§3). 분모가 0 이면 비율은 None.
+    휴장일 기준일 행(R252 전의 옛 동결)도 행으로 남기되 갈래에서 빼고 `non_trading` ·
+    `non_trading_decided` 에 따로 센다(라운드 389).
     """
     counts = dict(conn.execute(
         "SELECT status, COUNT(*) FROM prediction_cases GROUP BY status").fetchall())
-    ok = int(counts.get('success') or 0)
-    bad = int(counts.get('failure') or 0)
-    un = int(counts.get('unresolved') or 0)
     excluded = sum(int(counts.get(s) or 0) for s in EXCLUDED_STATUSES)
     # 라운드 252 — 휴장일 기준일은 **날짜 표본**을 부풀린다(토·일 픽이 같은 추천의
     #   복사본). 행은 그대로 두고, 그 수와 **거래일 고유 기준일 수**를 같이 낸다 —
     #   날짜가 표본인 판정(뉴스 축 하한 30 · R84)은 `trading_dates` 를 읽는다.
+    # 라운드 389 — 그런데 성공·실패는 **여전히 휴장일 행까지** 세고 있었다. 실측 2026-09-29:
+    #   휴장일 기준일 50건 중 44건이 **다음 거래일의 같은 종목 케이스와 겹친다** — 같은 추천을
+    #   두 번 채점한 것이다. 동결은 R252 부터 휴장일을 건너뛰므로(새 행은 안 생긴다) 옛 행에도
+    #   **같은 규칙**을 적용한다: 행은 안 지우고(R197) 갈래·분모에서 빼며 그 수를 따로 낸다(§3).
+    #   화면 두 자리(사후 검증 · 추적 줄)가 이것만 읽으므로 둘이 같이 바뀐다(§4).
     _days = conn.execute(
         "SELECT signal_date, status FROM prediction_cases").fetchall()
-    non_trading = sum(1 for d, st in _days
-                      if st not in EXCLUDED_STATUSES and is_non_trading_date(d))
-    trading_dates = len({str(d)[:10] for d, st in _days
-                         if st in ('success', 'failure', 'unresolved')
-                         and not is_non_trading_date(d)})
+    _live = [(str(d)[:10], st) for d, st in _days if st not in EXCLUDED_STATUSES]
+    _hol = [(d, st) for d, st in _live if is_non_trading_date(d)]
+    _trd = [(d, st) for d, st in _live if not is_non_trading_date(d)]
+    ok = sum(1 for _, st in _trd if st == 'success')
+    bad = sum(1 for _, st in _trd if st == 'failure')
+    un = sum(1 for _, st in _trd if st == 'unresolved')
+    non_trading = len(_hol)
+    trading_dates = len({d for d, st in _trd if st in ('success', 'failure', 'unresolved')})
     return {
         'success': ok, 'failure': bad, 'unresolved': un,
-        'open': int(counts.get('open') or 0),
+        'open': sum(1 for _, st in _trd if st == 'open'),
         'data_error': int(counts.get('data_error') or 0),
         'excluded': excluded,
         'non_trading': non_trading,
+        'non_trading_decided': sum(1 for _, st in _hol if st in ('success', 'failure', 'unresolved')),
         'trading_dates': trading_dates,
         'frozen': sum(int(v) for k, v in counts.items() if k not in EXCLUDED_STATUSES),
         'resolved': ok + bad + un,

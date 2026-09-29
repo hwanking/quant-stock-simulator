@@ -1306,9 +1306,23 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         if drop_tickers:
             print(f"     시세를 못 받은 종목: {', '.join(sorted(drop_tickers))}")
 
-    decided = [g for g in graded if g['grade']['outcome'] in ('TARGET', 'STOP')]
+    # ⚠️ 라운드 389 — **통계는 진입가 축척이 어긋난 행을 빼고 낸다.** 라운드 364 가 찾은 그 행들은
+    #   진입가가 그날 봉과 5~10배(또는 0.2배) 어긋나 채점이 1봉째에 박힌다 — 지어낸 승리·패배다.
+    #   이 표(`bands`)를 중앙 판정의 비용 차감 기대값이 **판정 중에** 읽는다(verdict_core). 실측
+    #   2026-09-29: 그 행 2,795(종목 16)을 빼면 60~64점대 적중률이 +0.42%p 움직였다.
+    #   원장에는 **전부 쓴다**(R197 — 파생물을 줄이지 않는다 · 아래 저장부는 `graded` 를 쓴다).
+    #   목록은 `ledger_view.scale_mismatch_keys` 한 곳(§4). 못 읽으면 거르지 않고 그 사실을 적는다(§3).
+    _scale_keys389 = _lv_cost386.scale_mismatch_keys()
+    stat_graded = [g for g in graded if not _lv_cost386.is_scale_mismatch(g['row'], _scale_keys389)]
+    scale_excluded = len(graded) - len(stat_graded)
+    if _scale_keys389 is None:
+        print("  ⚠️ 진입가 축척 감사(entry_scale_audit.json)의 행 목록을 못 읽어 거르지 않았습니다")
+    else:
+        print(f"  진입가 축척이 어긋난 행 {scale_excluded:,}건은 통계에서 뺍니다 (원장에는 남긴다)")
+
+    decided = [g for g in stat_graded if g['grade']['outcome'] in ('TARGET', 'STOP')]
     print(f"판정 완료(목표 또는 손절 도달): {len(decided)}건 · "
-          f"미결 {len(graded) - len(decided)}건")
+          f"미결 {len(stat_graded) - len(decided)}건")
 
     # 점수대 캘리브레이션 — 세분화 (60·65·70·75·80대의 실제 성공률 검증 요구)
     BANDS = [(0, 39), (40, 49), (50, 54), (55, 59), (60, 64), (65, 69), (70, 100)]
@@ -1319,7 +1333,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     for lo, hi in BANDS:
         sub = [g for g in decided if lo <= g['row']['score'] <= hi]
         hit = sum(1 for g in sub if g['grade']['outcome'] == 'TARGET')
-        rets = [g['grade']['return_pct'] for g in graded
+        rets = [g['grade']['return_pct'] for g in stat_graded
                 if lo <= g['row']['score'] <= hi]
         n = len(sub)
         hr = hit / n * 100.0 if n else None
@@ -1507,13 +1521,13 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         fail_out.append({'class': cls, 'n': st['n'], 'total_loss': round(st['loss'], 1)})
 
     # ── 신호 빈도 — 적중률만 높이려 신호를 말려 죽이지 않는지 감시 ─────────
-    n_buy = sum(1 for g in graded if g['row']['score'] >= 60)
+    n_buy = sum(1 for g in stat_graded if g['row']['score'] >= 60)
     print("\n" + "=" * 74)
     print("신호 빈도 (매수권 = 점수 60+)")
     print("=" * 74)
-    print(f"  전체 분석 {len(graded)}건 · 매수권 {n_buy}건 · 발생률 {n_buy/len(graded)*100:.1f}%")
-    freq_out = {'total': len(graded), 'buy_zone': n_buy,
-                'rate_pct': round(n_buy / len(graded) * 100, 1)}
+    print(f"  전체 분석 {len(stat_graded)}건 · 매수권 {n_buy}건 · 발생률 {n_buy/max(1, len(stat_graded))*100:.1f}%")
+    freq_out = {'total': len(stat_graded), 'buy_zone': n_buy,
+                'rate_pct': round(n_buy / len(stat_graded) * 100, 1) if stat_graded else None}
 
     # ── 고신뢰 신호 계층 (90% 검증 목표의 잣대) — 점수 65+ ────────────────────
     hc = perf_block([g for g in decided if g['row']['score'] >= 65], "고신뢰(65+)")
@@ -1619,6 +1633,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         #   ⚠️ 각 행의 점수·목표·손절은 **그 행을 만든 날의 엔진**이 냈다(행마다 다르다) — 이 값은 그것이 아니다.
         'rulebook_version': _rulebook_now386(),
         'cost_pct_after_cost': _lv_cost386.CALIB_COST_PCT,
+        # 라운드 389 — 진입가 축척이 어긋나 통계에서 뺀 행(원장에는 남는다). None = 감사 목록을 못 읽어 안 걸렀다.
+        'scale_excluded': scale_excluded if _scale_keys389 is not None else None,
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

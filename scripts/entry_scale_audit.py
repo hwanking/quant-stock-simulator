@@ -123,16 +123,21 @@ def main():
         except Exception:                                      # noqa: BLE001
             unread.append(tk)
             continue
-        mult = [bars[d] / p for d, p, _tb, _oc in led if d in bars and p]
+        _pairs = [(d, bars[d] / p) for d, p, _tb, _oc in led if d in bars and p]
+        mult = [v for _d, v in _pairs]
         if len(mult) < MIN_ROWS:
             unread.append(tk)          # 댈 수 있는 행이 모자라다 — 0 이 아니다
             continue
-        off = sum(1 for v in mult if abs(v - 1.0) > EPS)
+        # 라운드 389 — 어긋난 **행**(기준일)을 같이 적는다. 종목 단위로만 적으면 부분 오염 종목
+        #   (어긋남 16.9% · 32.6% · R365)의 정상 행까지 통계에서 빼게 된다. 같은 항등식이다.
+        _off_days = sorted(d for d, v in _pairs if abs(v - 1.0) > EPS)
+        off = len(_off_days)
         one = sum(1 for _d, _p, tb, _oc in led if tb == 1)
         rows[tk] = dict(n=len(led), matched=len(mult),
                         median_mult=round(statistics.median(mult), 4),
                         off=off, off_pct=round(off / len(mult) * 100, 1),
-                        pinned_pct=round(one / len(led) * 100, 1))
+                        pinned_pct=round(one / len(led) * 100, 1),
+                        off_days=_off_days)
         if i % 300 == 0:
             print(f'   {i:>5}/{len(codes)} · 잰 종목 {len(rows):,} · '
                   f'못 읽음 {len(unread)} · {time.time() - t0:.0f}s')
@@ -157,6 +162,10 @@ def main():
         print(f'   {tk} : 배율 {v["median_mult"]:.4f} · 1봉째 {v["pinned_pct"]:.1f}%')
 
     bad_rows = sum(rows[tk]['n'] for tk in bad)
+    # 라운드 389 — 어긋난 행 자체(종목 → 기준일 목록). 운영 통계(보정표)와 화면 통계가 이것 하나로
+    #   거른다(`ledger_view.scale_mismatch_keys` · §4). 봉과 못 댄 행(그날 봉 없음)은 **모른다**라 안 넣는다.
+    off_keys = {tk: rows[tk].pop('off_days') for tk in list(rows)}
+    off_keys = {tk: ds for tk, ds in off_keys.items() if ds}
     doc = {
         'made': time.strftime('%Y-%m-%d'),
         'made_at': time.strftime('%Y-%m-%d %H:%M'),
@@ -171,6 +180,8 @@ def main():
         'offenders': len(bad),
         'offender_rows': bad_rows,
         'offender_codes': bad,
+        'offender_keys': off_keys,
+        'offender_key_rows': sum(len(v) for v in off_keys.values()),
         'symptom_missed': len(missed),
         'symptom_missed_codes': missed,
         'rows': {tk: rows[tk] for tk in bad},

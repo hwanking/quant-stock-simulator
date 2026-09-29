@@ -41,6 +41,55 @@ MIN_GAP_DAYS = SPACING_BARS * 7 // 5          # = 35
 #:   랩과 화면이 이 한 곳을 읽는다(§4).
 CALIB_COST_PCT = 0.55
 
+#: 라운드 389 — 원장 진입가가 그날 봉 종가와 어긋난 행의 목록을 담는 산출물(라운드 365 가 배선).
+SCALE_AUDIT_FILE = 'entry_scale_audit.json'
+
+
+def scale_mismatch_keys():
+    """진입가 축척이 어긋난 원장 행 → {(종목코드 6자리, 기준일)} (라운드 389).
+
+    라운드 364 가 찾은 결함이다 — 그 행들은 진입가가 그날 봉과 5~10배(또는 0.2배) 어긋나 채점이
+    1봉째에 박힌다(지어낸 승리·패배). 원장 행은 **지우지 않는다**(R197) — 통계에서만 뺀다.
+    판별식은 `scripts/entry_scale_audit.py` 의 항등식(`진입가 == 그날 봉 종가`)이고 문턱이 없다.
+    운영 보정표(`calibration_lab`)와 화면 통계가 **이 하나**를 읽는다(§4).
+    못 읽으면(산출물 없음 · 옛 판이라 행 목록이 없음) None — 그때는 거르지 않고 그 사실을 적는다(§3).
+    """
+    try:
+        import artifact_io
+        doc = artifact_io.load_json(SCALE_AUDIT_FILE)
+    except Exception:                                          # noqa: BLE001
+        return None
+    keys = (doc or {}).get('offender_keys')
+    if not isinstance(keys, dict):
+        return None
+    out = set()
+    for code, days in keys.items():
+        for d in days or ():
+            out.add(scale_key(code, d))
+    return out
+
+
+def scale_key(ticker, date):
+    """(종목코드 6자리, 기준일) — 감사 목록과 원장 행을 같은 모양으로 맞춘다(시장 접미사를 뗀다)."""
+    return (str(ticker or '').split('.')[0], str(date or '')[:10])
+
+
+def is_scale_mismatch(row, keys):
+    """원장 한 행이 `scale_mismatch_keys()` 에 드는가. keys 가 None·빈 집합이면 False(거를 목록이 없다)."""
+    if not keys:
+        return False
+    return scale_key((row or {}).get('ticker'), (row or {}).get('date')) in keys
+
+
+def drop_scale_mismatch(rows, keys, counter=None):
+    """행 흐름에서 축척이 어긋난 행을 빼며 흘린다. `counter`(dict)가 있으면 뺀 수를 'dropped' 에 센다."""
+    for r in rows:
+        if is_scale_mismatch(r, keys):
+            if counter is not None:
+                counter['dropped'] = counter.get('dropped', 0) + 1
+            continue
+        yield r
+
 
 def _day(d):
     return _dt.date.fromisoformat(str(d)[:10])

@@ -113,7 +113,8 @@ INCLUDE = ('virtual_graded.jsonl',
 
 #: 절대 넣지 않을 것 — 개인 자료 (INCLUDE 에 걸려도 여기서 잘린다)
 DENY = ('positions*', 'holdings*', '*secret*', '*credential*',
-        '*.env', '*token*')
+        '*.env', '*token*',
+        'holding_log*')                  # 라운드 388 — 사용자의 평단·수량 변경 기록(개인 자료 · 이 PC 에만)
 
 #: `data/` 에서 실을 것 — **손으로 적지 않는다.** 신선도 검사가 보는 목록
 #: (`study_freshness.STUDIES`)에서 유도한다: 검사가 보는 것이 곧 실어 나르는 것이다.
