@@ -3176,7 +3176,17 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
         _n_att = len((st.session_state.get('attention_result') or {})
                      .get('rows') or [])
         _n_deep = len(st.session_state.get('scan_results') or [])
-        if _last:
+        # 라운드 383 — 시도와 성공을 가른다(킷 한 곳 · `scan_status_line`). 실패·후보 0 이면 그렇게 적고,
+        #   끝까지 갔으면 분석 실패·출처 불일치로 빠진 후보를 센다(채택된 유동성 하한은 실패로 안 센다).
+        _tone383, _line383 = _uk.scan_status_line(
+            st.session_state.get('scan_tried_at'), _last, st.session_state.get('scan_outcome'),
+            _n_att, _n_deep)
+        if _line383:
+            _fn383 = st.sidebar.warning if _tone383 in ('fail', 'empty') else st.sidebar.caption
+            _fn383(_line383 + ("  \n개장 전 추천은 전일 확정 데이터 기준으로 유지됩니다."
+                               if _tone383 in ('ok', 'partial') else ''))
+        elif _last:
+            # 이 세션에서 시도 기록이 없는데 성공 시각만 있는 경우(옛 세션 상태) — 종전 문장 그대로
             st.sidebar.caption(
                 f"최신화 완료 · **{_last}**  \n"
                 f"관심종목 {_n_att}개 · 정밀분석 {_n_deep}개  \n"
@@ -3808,7 +3818,9 @@ def run_market_scan():
         _bar.empty()
         st.session_state['scan_results'] = []
         st.session_state['scan_universe_total'] = att.get('pool_size', 0)
-        return
+        # 라운드 383 — 끝까지 가지 못한 것을 '완료'로 적지 않게 **결과를 돌려준다**(아래 호출부가 적는다).
+        return {'kind': 'empty',
+                'reason': str(att.get('unavailable') or '관심종목 후보가 0개입니다')}
 
     # 2단계 — 후보에 시장 구분을 붙여 기존 정밀 파이프라인에 넘긴다
 
@@ -3853,6 +3865,13 @@ def run_market_scan():
             row['attention'] = src['attention']
             row['selection_reason'] = src['selection_reason']
             row['attention_components'] = src['attention_components']
+    # 라운드 383 — 끝까지 갔다. 빠진 후보를 **사유 갈래로** 센다 — 채택된 유동성 하한은 실패가 아니다
+    #   (라운드 216 이 "1개 실패"의 정체를 그것으로 밝혔다). 코드를 못 찾은 후보(미매핑)는 분석 실패로 센다.
+    _kinds383 = [_uk.scan_failure_kind(_f.get('reason'))
+                 for _f in (st.session_state.get('scan_failures') or [])]
+    return {'kind': 'ok',
+            'n_err': _kinds383.count('error') + len(unmapped),
+            'n_xcheck': _kinds383.count('xcheck')}
 
 
 if st.session_state.get('pending_scan'):
@@ -3862,15 +3881,35 @@ if st.session_state.get('pending_scan'):
     # 버튼도 눌리는 상태가 된다(실측). 플래그는 스캔이 끝날 때까지 켜 두고,
     # 끝난 뒤 rerun 해서 사이드바가 완료 시각을 반영하게 한다.
     # 실패해도 finally 로 반드시 풀어 버튼이 영구 비활성되지 않게 한다.
+    # ⚠️ 라운드 383 — 완료 시각을 `finally:` 에서 **무조건** 찍고 있었다. 스캔이 예외로 죽거나 후보를 하나도
+    #   못 받아도 사이드바는 *"최신화 완료 · HH:MM:SS"* 였고, 그 아래 스캔 결과는 **옛 성공**의 것이었다(§3 ·
+    #   라운드 376 이 미룬 사용자 제안 "성공·부분 성공·실패 구분 · 마지막 시도와 성공 시각 분리").
+    #   시도 시각(`scan_tried_at`)은 늘, 성공 시각(`scan_done_at` · 띠가 '마지막 갱신'으로 읽는 그 키)은
+    #   **끝까지 갔을 때만** 찍는다. 예외는 삼키지 않고 서버 로그에 역추적을 남기고 사유를 화면에 적는다.
+    _outcome383 = None
     try:
         st.session_state.pop('scan_deferred', None)      # 라운드 228 — 이제 실제로 잰다
-        run_market_scan()
+        _outcome383 = run_market_scan()
+    except Exception as _ex383:                          # noqa: BLE001
+        import sys as _sys383
+        import traceback as _tb383
+        print('[시장 스캔 실패 — 사이드바에 사유를 적는다]\n' + _tb383.format_exc(), file=_sys383.stderr)
+        _outcome383 = {'kind': 'fail', 'reason': f"{type(_ex383).__name__}: {_ex383}"}
+        # 예외로 멈추면 스캔 안의 끄는 곳(`_scan_done`)을 못 지난다 — 종전엔 예외가 화면까지 올라가 페이지가
+        #   멈췄으므로 안 보였다. 이제 계속 그리므로 같은 세 키를 여기서 내린다(켜진 채 남으면 '처리 중'이 영원하다).
+        st.session_state['scan_busy'] = False
+        st.session_state['scan_stage'] = ''
+        st.session_state['_sb_busy'] = ''
     finally:
         import datetime as _dt_scan
-        st.session_state['scan_done_at'] = (
-            _dt_scan.datetime.now().strftime('%H:%M:%S'))
+        _now383 = _dt_scan.datetime.now().strftime('%H:%M:%S')
+        st.session_state['scan_tried_at'] = _now383
+        st.session_state['scan_outcome'] = (_outcome383 if isinstance(_outcome383, dict)
+                                            else {'kind': 'fail', 'reason': '스캔이 중간에 멈췄습니다(사유 미기록)'})
+        if st.session_state['scan_outcome'].get('kind') == 'ok':
+            st.session_state['scan_done_at'] = _now383
         st.session_state['pending_scan'] = False
-    st.rerun()          # 사이드바에 '최신화 완료 · HH:MM:SS' 를 띄운다
+    st.rerun()          # 사이드바에 시도·결과를 띄운다
 
 # 3. 메인 타이틀
 import uuid
@@ -3960,9 +3999,20 @@ if st.session_state.get('show_screener', False):
         #   어디에 결론이 있고 다시 재려면 무엇을 누르는지 적는다.
         _deferred228 = (bool(st.session_state.get('scan_deferred'))
                         and 'scan_results' not in st.session_state)
-        if 'scan_results' not in st.session_state and not _deferred228:
+        # 라운드 383 — 방금 시도한 스캔이 **예외로 실패**해 결과가 없으면 여기서 다시 부르지 않는다. 종전엔 이
+        #   자리가 곧바로 한 번 더 돌려 같은 예외로 페이지가 멈췄다(심어서 확인 · 앱 테스트). 그리고 빈 목록으로
+        #   '추천 없음'을 적으면 거짓이다(§3 · 못 받은 것 ≠ 추천 없음) — 실패라고 적고 목록은 안 그린다.
+        _failed383 = (((st.session_state.get('scan_outcome') or {}).get('kind') == 'fail')
+                      and 'scan_results' not in st.session_state)
+        if 'scan_results' not in st.session_state and not _deferred228 and not _failed383:
             run_market_scan()
         scan_results = st.session_state.get('scan_results') or []
+        if _failed383:
+            st.warning(
+                "**시장 스캔이 실패해 이 목록을 채우지 못했습니다** — "
+                + _md_safe(str((st.session_state.get('scan_outcome') or {}).get('reason') or '사유 미기록'))
+                + ". 추천이 없다는 뜻이 아닙니다(재지 못했습니다). 사이드바의 **최신화**를 다시 누르거나, "
+                  "아래 개장 전 확정 리포트를 보세요.")
         if _deferred228:
             try:
                 import premarket as _pm228v
@@ -3987,8 +4037,8 @@ if st.session_state.get('show_screener', False):
                 + (f" 고정 당시 엔진 {_uk._esc(_drift228.get('frozen_with'))} · 지금 "
                    f"{_uk._esc(_drift228.get('current'))}." if _drift228 else '')
                 + "</p></div>", unsafe_allow_html=True)
-        if not _deferred228:
-            
+        if not _deferred228 and not _failed383:
+
             # [명세 §15] 필수조건을 모두 통과한 종목만 추천한다.
             # 통과 종목이 2개면 2개, 0개면 '현재 추천주 없음'.
             # 구버전은 통과 0개일 때 조건 미달 종목을 상승여력% 순으로 3칸 채워 넣었다.

@@ -52,6 +52,12 @@ def _busy(session):
         stage = str(s.get('scan_stage') or '시장 데이터 최신화 중')
         out.append(dict(kind='live', text=stage))
     done = s.get('scan_done_at')
+    # 라운드 383 — `scan_done_at` 은 이제 **끝까지 간 최신화**만 찍는다(시도는 `scan_tried_at`). 마지막 시도가
+    #   실패했으면 그 사실을 먼저 적는다 — '마지막 갱신'만 보이면 방금 새로 잰 줄 안다(§3).
+    _oc = s.get('scan_outcome') or {}
+    if not s.get('scan_busy') and _oc.get('kind') in ('fail', 'empty') and s.get('scan_tried_at'):
+        out.append(dict(kind='idle', text=(f"최신화 실패 {s.get('scan_tried_at')}" if _oc.get('kind') == 'fail'
+                                            else f"최신화 후보 0개 {s.get('scan_tried_at')}")))
     if done and not s.get('scan_busy'):
         out.append(dict(kind='idle', text=f'마지막 갱신 {done}'))
     return out

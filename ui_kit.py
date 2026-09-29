@@ -1209,6 +1209,59 @@ def value_premium_basis(vp, asset_only):
     return out
 
 
+#: 라운드 383 — 스캔 제외 사유의 **문장 머리**(`quant_indicators.run_screener_scan` 이 만든다 · 읽기만).
+#:   채택된 유동성 하한은 실패가 아니라 규칙이고, 두 출처 시세 불일치는 못 믿어서 뺀 것이며, 나머지는
+#:   예외(시세·계산 오류)다. 머리 글자가 엔진 문장과 같은지는 회귀가 잠근다(R221·R327 의 방식).
+SCAN_RULE_HEAD = '20일 평균 거래대금 '
+SCAN_XCHECK_HEAD = '시세 교차검증 실패'
+
+
+def scan_failure_kind(reason):
+    """스캔 제외 사유 한 줄 → 'rule'(채택된 하한) · 'xcheck'(두 출처 불일치) · 'error'(그 밖 · 예외)."""
+    s = str(reason or '')
+    if s.startswith(SCAN_RULE_HEAD):
+        return 'rule'
+    if s.startswith(SCAN_XCHECK_HEAD):
+        return 'xcheck'
+    return 'error'
+
+
+def scan_status_line(tried_at, ok_at, outcome, n_att=0, n_deep=0):
+    """사이드바 '최신화' 아래 상태 한 칸 — **시도와 성공을 가른다** (라운드 383). 반환 (갈래, 마크다운).
+
+    ■ 왜 (라운드 376 이 미룬 사용자 제안 · 2026-09-29 확인)
+      완료 시각을 `finally:` 에서 찍어, 스캔이 **예외로 죽거나 후보를 하나도 못 받아도** *"최신화 완료 ·
+      HH:MM:SS"* 가 나갔다. 화면 아래의 스캔 결과는 **옛 성공**의 것인데 방금 새로 잰 것처럼 읽혔다(§3).
+      갈래: 'fail'(예외 · 사유와 마지막 성공 시각) · 'empty'(후보 0 · 사유) · 'partial'(끝까지 갔지만 분석
+      실패·출처 불일치로 빠진 후보가 있다) · 'ok'. 채택된 유동성 하한으로 빠진 것은 실패로 세지 않는다.
+      사유가 길면 자르되 **잘랐다고 표시한다**(…) — 전체는 본문 요약 줄과 서버 로그에 있다(R314).
+    """
+    o = outcome or {}
+    kind = o.get('kind')
+    why = str(o.get('reason') or '사유 미기록')
+    if len(why) > 140:
+        why = why[:139] + '…'
+    last_ok = (f"화면의 스캔 결과는 마지막 성공(**{ok_at}**) 것입니다." if ok_at
+               else "이 세션에서 끝까지 간 최신화는 아직 없습니다.")
+    if tried_at and kind == 'fail':
+        return 'fail', f"**최신화 실패** · {tried_at} — {why}  \n{last_ok}"
+    if tried_at and kind == 'empty':
+        return 'empty', f"최신화 · {tried_at} — **후보 0개**: {why}"
+    if tried_at and kind == 'ok':
+        n_err = int(o.get('n_err') or 0)
+        n_x = int(o.get('n_xcheck') or 0)
+        tail = []
+        if n_err:
+            tail.append(f"분석 실패 {n_err}개")
+        if n_x:
+            tail.append(f"두 출처 시세 불일치로 뺀 {n_x}개")
+        head = ("**최신화 부분 완료**" if tail else "최신화 완료") + f" · **{tried_at}**"
+        return ('partial' if tail else 'ok'), (
+            f"{head}  \n관심종목 {n_att}개 · 정밀분석 {n_deep}개"
+            + (f"  \n{' · '.join(tail)} — 사유는 본문 요약 줄" if tail else ''))
+    return None, ''
+
+
 def value_row(vp, theme='dark'):
     """가치 프리미엄 한 줄. `value_premium()` 결과를 그대로 받는다."""
     if not vp:

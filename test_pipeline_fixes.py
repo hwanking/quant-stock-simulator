@@ -21239,12 +21239,14 @@ check("첫 진입에 오늘 리포트가 있으면 스캔을 미룬다 (scan_def
       and "st.session_state['pending_scan'] = True     # 첫 진입에 한 번 자동 스캔" in _w231)
 check("추천 절이 미룬 상태에서 '추천 없음'을 찍지 않고 안내 카드를 낸다 (§3)",
       "if _deferred228:" in _w231 and "오늘의 결론은 아래 <b>개장 전 확정 리포트</b>에 있습니다" in _w231
-      and "if not _deferred228:" in _w231 and "        if True:\n" not in _w231)
+      # 라운드 383 — 스캔이 예외로 실패한 상태도 같은 자리에서 목록을 안 그린다(추천 없음이 아니라 못 잰 것)
+      and "if not _deferred228 and not _failed383:" in _w231 and "        if True:\n" not in _w231)
 check("미룬 상태에서 scan_results 를 KeyError 없이 읽는다",
       "scan_results = st.session_state.get('scan_results') or []" in _w231)
 check("'최신화'(pending_scan)가 돌면 미룸을 푼다 — 스캔 길은 하나",
       "st.session_state.pop('scan_deferred', None)" in _w231
-      and len(_re.findall(r"^\s+run_market_scan\(\)", _w231, flags=_re.M)) == 2)   # 정의 줄은 세지 않는다
+      # 라운드 383 — 첫 호출이 결과를 받게 됐다(`_outcome383 = run_market_scan()`) — 대입 앞머리도 센다.
+      and len(_re.findall(r"^\s+(?:\w+\s*=\s*)?run_market_scan\(\)", _w231, flags=_re.M)) == 2)   # 정의 줄은 세지 않는다
 check("사이드바가 미룬 상태를 말한다", "오늘 결론은 **개장 전 고정 파일**로 보여 줍니다" in _w231)
 # ── 리포트의 정체는 날짜 — 임시 폴더에서 심는다 (사용자 파일은 안 건드린다) ──
 _dir245 = _tmp245.mkdtemp(prefix='gaeum_r228_')
@@ -29375,6 +29377,46 @@ _band373 = [_r['text'] for _r in _lt373._market({
     'spx': {'last': 200.0, 'chg60': 1.0, 'last_date': '2026-09-28'}})]
 check("R382 띠가 앞선 날의 값에만 기준일을 붙인다 (값은 그대로 · 날짜를 숨기지 않는다)",
       _band373[0].endswith('09-17 기준') and '기준' not in _band373[1], str(_band373))
+
+
+print("\n" + "=" * 72)
+print("§374 '최신화 완료' 는 끝까지 갔을 때만 — 시도와 성공을 가른다 (라운드 383)")
+print("=" * 72)
+# 완료 시각을 `finally:` 에서 무조건 찍어, 스캔이 예외로 죽거나 후보를 0개 받아도 "최신화 완료 · HH:MM:SS" 였고
+#   아래 스캔 결과는 옛 성공의 것이었다(§3 · 라운드 376 이 미룬 사용자 제안). 갈래는 킷 한 곳이 정한다.
+import ui_kit as _uk374
+_t374, _l374 = _uk374.scan_status_line('09:10:00', None, {'kind': 'fail', 'reason': 'ConnectionError: x'})
+_t374b, _l374b = _uk374.scan_status_line('09:10:00', '08:00:00', {'kind': 'fail', 'reason': 'x'})
+check("실패면 '최신화 실패' · 사유 · 마지막 성공 시각(없으면 없다고) — '완료' 라 적지 않는다",
+      _t374 == 'fail' and '최신화 실패' in _l374 and 'ConnectionError' in _l374 and '아직 없습니다' in _l374
+      and '08:00:00' in _l374b and '완료' not in _l374 + _l374b, _l374)
+_t374c, _l374c = _uk374.scan_status_line('09:10:00', '09:10:00', {'kind': 'ok', 'n_err': 1}, 5, 4)
+_t374d, _l374d = _uk374.scan_status_line('09:10:00', '09:10:00', {'kind': 'ok'}, 5, 5)
+_t374e, _l374e = _uk374.scan_status_line('09:10:00', None, {'kind': 'empty', 'reason': '순위 페이지 없음'})
+check("끝까지 갔어도 분석 실패가 있으면 '부분 완료' · 없으면 '완료' · 후보 0 은 따로",
+      _t374c == 'partial' and '부분 완료' in _l374c and '분석 실패 1개' in _l374c
+      and _t374d == 'ok' and '최신화 완료' in _l374d and _t374e == 'empty' and '후보 0개' in _l374e)
+check("채택된 유동성 하한은 실패로 안 센다 — 머리 글자가 엔진 문장과 같다 (심기 · 양방향)",
+      _uk374.scan_failure_kind('20일 평균 거래대금 17.0억원 < 20억원') == 'rule'
+      and _uk374.scan_failure_kind('시세 교차검증 실패 — a') == 'xcheck'
+      and _uk374.scan_failure_kind('ValueError: b') == 'error'
+      and 'f"20일 평균 거래대금 {' in open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+      and 'f"시세 교차검증 실패 — {' in open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read())
+import scripts.lineage_audit as _la374                         # noqa: E402
+_w374 = '\n'.join(_ln for _i, _ln in _la374.code_lines('web_app.py'))
+check("성공 시각(scan_done_at)은 결과가 ok 일 때만 찍고 시도 시각은 늘 · 스캔이 결과를 돌려준다",
+      "if st.session_state['scan_outcome'].get('kind') == 'ok':" in _w374
+      and "st.session_state['scan_tried_at'] = _now383" in _w374
+      and "return {'kind': 'empty'," in _w374 and "return {'kind': 'ok'," in _w374
+      and "_uk.scan_status_line(" in _w374)
+import live_ticker as _lt374
+_bz374 = _lt374._busy({'scan_outcome': {'kind': 'fail'}, 'scan_tried_at': '09:10:00',
+                       'scan_done_at': '08:00:00'})
+check("실패한 뒤 같은 세션에서 스캔을 **다시 부르지 않고**(같은 예외로 페이지가 멈췄다) '추천 없음' 대신 실패를 적는다",
+      "if 'scan_results' not in st.session_state and not _deferred228 and not _failed383:" in _w374
+      and '추천이 없다는 뜻이 아닙니다(재지 못했습니다)' in _w374)
+check("띠도 마지막 시도가 실패면 그 사실을 먼저 적는다 ('마지막 갱신' 은 끝까지 간 시각)",
+      [_b['text'] for _b in _bz374] == ['최신화 실패 09:10:00', '마지막 갱신 08:00:00'], str(_bz374))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
