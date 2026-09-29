@@ -3656,22 +3656,36 @@ check("신뢰도 미달 → 판단 보류 (억지 판단 금지)",
       '판단을 보류' in _e59c['new_buyer']['line'])
 
 # 보유자 분기
-_h1 = q.build_easy_advice(_fs59, _v59, 10500, user_avg=9500)['holder']
-check("수익 중 정상 → 계속 보유 + 손절 유지", '계속 보유' in _h1['line'])
-_h2 = q.build_easy_advice(_fs59, _v59, 9300, user_avg=10500)['holder']
-check("손절선 이탈 → 정리 검토", '손절' in _h2['line'] and '이탈' in _h2['line'])
+# ⚠️ 라운드 386 — 이 검사들이 **옛 판정자**의 갈래를 잠그고 있었다: 평단 대비 수익이면 '계속 보유' · 수익 +
+#   추세선 이격 25% 초과면 '절반 매도' · 손실 −15% 이하면 '비중 축소' · 추가매수는 점수 58+ 와 추세만. 같은 화면의
+#   표·보유 카드·지시서·가늠 AI 는 `ui_kit.holder_kind` 한 곳(가격선 + 물타기 6조건)으로 고르고, 이 카드만 달라
+#   격자 160칸 중 86칸이 어긋났다(라운드 304·357 의 세 번째 자리). 갈래는 이제 holder_kind 가 정한다 — 검사를
+#   그 **성질**로 옮긴다(R98b · 글자 말고 성질).
+import ui_kit as _uk59                                         # noqa: E402
+_h1 = q.build_easy_advice(_fs59, _v59, 10500, user_avg=9500, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+check("두 선 사이 → 중앙과 같은 '보유 유지' (평단 수익률로 고르지 않는다)",
+      _h1['kind'] == _uk59.holder_kind(10500, 9400, 10800, buy=10000)[0] == '보유 유지'
+      and '보유 유지' in _h1['line'], _h1['line'])
+_h2 = q.build_easy_advice(_fs59, _v59, 9300, user_avg=10500, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+check("손절선 아래 → 매도 (표와 같은 이름표)", _h2['kind'] == '정리 검토' and '매도' in _h2['line'], _h2['line'])
 _fs59o = dict(_fs59); _fs59o['m10_disparity'] = 30.0
-_h3 = q.build_easy_advice(_fs59o, _v59, 10500, user_avg=8000)['holder']
-check("수익+과열 → 일부 매도(절반)", '일부 매도' in _h3['line'])
+_h3 = q.build_easy_advice(_fs59o, _v59, 10500, user_avg=8000, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+check("이격 과열은 보유 갈래를 바꾸지 않는다 — 중앙이 쓰지 않는 문턱(25%)이다",
+      _h3['kind'] == _h1['kind'] and '절반' not in _h3['line'], _h3['line'])
 _fs59d = dict(_fs59); _fs59d['m10_disparity'] = -8.0
 _v59d = {'score': 45, 'action': 'HOLD', 'vetoes': ['순기대수익 음수']}
-_h4 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=11500)['holder']
-check("손실+하락추세 → 물타기 금지", '물타기' in _h4['line'] and '마세요' in _h4['line'])
-_h5 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=13000)['holder']
-check("깊은 손실 → 반등 시 비중 축소", '비중 축소' in _h5['line'])
-_h6 = q.build_easy_advice(_fs59, _v59, 9800, user_avg=11500)['holder']
-check("조건 충족 손실 → 가격 지정 분할 추가매수 허용",
-      '이하에서만' in _h6['line'])
+_h4 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=11500, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+_h5 = q.build_easy_advice(_fs59d, _v59d, 9800, user_avg=13000, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+check("손실 폭(−15%)으로 갈래를 고르지 않는다 — 두 평단이 같은 갈래 · 물타기 금지를 적는다",
+      _h4['kind'] == _h5['kind'] == '보유 유지' and '비중 축소' not in _h5['line']
+      and '물타기' in _h4['detail'], _h5['line'])
+_h6 = q.build_easy_advice(_fs59, _v59, 9800, user_avg=11500, judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+_h6b = q.build_easy_advice(_fs59, _v59, 9800, user_avg=11500,
+                           hold_levels=dict(stop=9400, trim=10800, buy=10000, avg_down_ok=True),
+                           judge=_uk59.holder_kind, label=_uk59.hold_label)['holder']
+check("물타기 6조건을 모르면 '추가 매수 가능'을 주장하지 않는다 · 통과했고 진입가 이하면 가격을 지정해 말한다",
+      _h6['kind'] == '보유 유지' and _h6b['kind'] == '추가 매수 가능' and '이하에서만' in _h6b['line'],
+      _h6b['line'])
 check("보유자 가격 세트가 신규와 분리",
       '손절가(보유 기준)' in _h6['prices'] and _h6['prices']['평균 매수가'] == 11500)
 check("비보유 응답에는 보유자 블록 없음",
@@ -3730,7 +3744,13 @@ check("매수 조언에 본전 스탑 규칙 포함",
 check("검증 근거(1,950건) 명시", '1,950건' in _e60['new_buyer']['detail'])
 _h60 = q.build_easy_advice(_fs60, {'score': 62, 'action': 'HOLD', 'vetoes': []},
                            10500, user_avg=9500)['holder']
-check("수익 중 보유자에게 본전 손절 상향 조언", '본전' in _h60['detail'])
+# ⚠️ 라운드 386 — 종전 검사는 '수익 중 보유자에게 본전 손절 상향 조언'을 잠갔다. 그 문장은 채택된 조언('목표의 절반에
+#   닿으면')을 '평단보다 위면'으로 넓혀 적었고, 같은 화면의 보유 카드가 *"관리 기준은 계획 값"* 이라 적는 손절선과
+#   다른 선을 권했다. 본전 조언은 매매 지시서의 '산 뒤에는' 한 곳에 채택된 조건 그대로 남는다.
+import trade_plan as _tp60                                     # noqa: E402
+check("보유자 카드는 계획 손절선과 다른 선(본전)을 권하지 않는다 · 본전 조언은 산 뒤 규칙에 채택 조건 그대로",
+      '본전' not in _h60['detail']
+      and dict(_tp60.POST_ENTRY).get('목표의 절반에 닿으면') == '손절선을 최소 본전까지 올립니다.')
 
 
 section("61. 뉴스 범위·후행 분류 · 개장 전 확정 리포트 · 테마 토글")
@@ -6433,8 +6453,11 @@ check("자기기각을 모듈에 기록했다",
       '라운드 27b' in _q102_rp and '스스로 기각' in _q102_rp)
 check("n=16 로 차단하지 않는다", _pol102['block_new'] is False,
       f"거친 하락 level={_pol102['level']}")
-check("거친 하락의 실전 표본 부족을 밝힌다",
-      '실전 표본은 16건뿐' in _pol102['why'], _pol102['why'][:80])
+# 라운드 386 — 문장이 *"실전 표본은 16건뿐이라 판단 근거로 쓰지 않았습니다"* 였는데 그 16건은 통합 표본에 **들어
+#   있다**(거짓 · 외부 검토). 지키려던 성질(표본 부족을 밝힌다)은 그대로, 문장은 계산과 같게.
+check("거친 하락의 실전 표본 부족을 밝힌다 (통합 표본에는 들어 있다고)",
+      '실전 표본 16건은' in _pol102['why'] and '못 미쳐' in _pol102['why']
+      and '합쳐져 있고' in _pol102['why'], _pol102['why'][:80])
 check("거친 하락 판단 근거는 통합 표본", _pol102['basis'] == '통합 표본')
 check("통합 표본이 실전보다 훨씬 크다",
       _pol102['pooled_n'] > _pol102['blind_n'] * 5,
@@ -6772,7 +6795,7 @@ _b105 = dict(current_price=26350, entry_pullback_price=25150,
              entry_stop_price=24200, entry_target_1st=26800, entry_rr=1.74,
              target_tech_1st=27900, stop_loss_price=25000,
              analysis_confidence=78, strategy_quality_score=62,
-             final_action_score=63, blind_test_not_completed=False,
+             final_action_score=63, blind_test_status='수행완료',
              horizon_days=20, calibration_band={'hit_rate': 59.0, 'n': 8436},
              bb_position=62, williams_r=-35, rsi_14=58,
              rec_buy_sigma=0.45, rec_buy_reach='가까움',
@@ -8012,7 +8035,7 @@ _FS116 = dict(entry_pullback_price=98.5, current_price=100.0,
                                     wilson_low=55.0),
               range_position_pct=55.0, bb_position_pct=50.0,
               williams_r_value=-50.0, rsi_value=52.0,
-              blind_test_status='통과')
+              blind_test_status='수행완료')
 _VD116 = {'action': 'BUY', 'headline': '', 'vetoes': []}
 
 # ① 진입 깊이가 노출을 가른다 — 새 문턱을 만들지 않고 2.1σ 를 재사용
@@ -8375,7 +8398,7 @@ _FS120 = dict(entry_pullback_price=24800.0, current_price=25800.0,
                                     wilson_low=56.0),
               range_position_pct=52.0, bb_position_pct=44.0,
               williams_r_value=-55.0, rsi_value=48.0,
-              blind_test_status='통과')
+              blind_test_status='수행완료')
 _c120 = _vc105.build(_FS120, {'action': 'BUY', 'headline': '', 'vetoes': []},
                      None, {'kind': 'pullback'}, 25800.0)
 _b120 = _tp120.for_buyer(_c120, _FS120)
@@ -8506,8 +8529,11 @@ check("쉬운 결론이 폐기된 적정가×안전마진을 말하지 않는다
 check("쉬운 결론의 매수가 = 중앙 판정 진입가", '211,023' in _nbt)
 check("쉬운 결론의 신규 손절 = 진입 기준 손절",
       _ez['new_buyer']['prices']['손절가(신규 진입 기준으로 재설정)'] == 196000.0)
+# 라운드 386 — 보유자 갈래는 화면이 넘기는 판정 함수(ui_kit.holder_kind)로 정한다(엔진이 화면 모듈을 안 부른다).
+import ui_kit as _uk120h                                        # noqa: E402
 _hz = qi.QuantIndicatorsEngine.build_easy_advice(
-    _FS120E, _VD120E, 231000.0, user_avg=250000.0)['holder']
+    _FS120E, _VD120E, 231000.0, user_avg=250000.0,
+    judge=_uk120h.holder_kind, label=_uk120h.hold_label)['holder']
 check("보유자 문단은 보유자 손절을 쓴다",
       _hz['prices']['손절가(보유 기준)'] == 174524.0
       and '174,524' in _hz['detail'])
@@ -16572,8 +16598,11 @@ check("관심종목 밑에 '내 포트폴리오 견해'가 있다",
 #   라운드 371 — 머리 문장 옆 한 줄이 **같은 함수·같은 행**(`watch_action(_wrow371, …)` · 관심종목
 #   행 그대로)을 한 번 더 부른다. R224 와 같은 성질(한 정의를 두 화면에서 부르는 것)이라 그 호출도
 #   뺀다 — §366 이 그 호출이 새 판정을 만들지 않는지를 따로 본다.
+#   라운드 386 — 종목 상세가 보유 기준선을 **한 번** 정해 지시서·쉬운 결론이 같이 쓰게 하는 호출(`watch_action(_row386, …)`)
+#   도 같은 성질(같은 함수 · 같은 행)이라 뺀다 — §377 이 그 값이 표와 같은 선인지 따로 본다.
 _wa_calls224 = (_wa204.count('_uk.watch_action(') - _wa204.count('_uk.watch_action(_row224')
-                - _wa204.count('_uk.watch_action(_wrow371'))
+                - _wa204.count('_uk.watch_action(_wrow371')
+                - _wa204.count('_uk.watch_action(_row386'))
 check("견해가 표의 판단을 **다시 계산하지 않는다** (_wl_acts 재사용)",
       '_wl_acts' in _wa204 and _wa_calls224 == 1,
       f"watch_action 호출 {_wa_calls224}회(종목 상세 R224 호출 제외) — "
@@ -17776,7 +17805,7 @@ _FS215 = dict(entry_pullback_price=38681.0, current_price=41350.0,
               strategy_quality_score=60, vol_20=0.033,
               avg_turnover_20d=1e9,
               calibration_band=dict(hit_rate=55.0, n=1200),
-              blind_test_status='통과', bb_position_pct=50.0,
+              blind_test_status='수행완료', bb_position_pct=50.0,
               williams_r_value=-50.0, rsi_value=52.0,
               displayed_fair_value=None, fair_value_status='OUT_OF_DOMAIN',
               entry_zone='판정 불가', chase_buy_status='판정 불가')
@@ -17814,7 +17843,7 @@ _FS215o = dict(entry_pullback_price=98.5, current_price=100.0,
                analysis_confidence=70, strategy_quality_score=60,
                vol_20=0.03, avg_turnover_20d=1e9,
                calibration_band=dict(hit_rate=58.0, n=1200),
-               blind_test_status='통과', bb_position_pct=50.0,
+               blind_test_status='수행완료', bb_position_pct=50.0,
                williams_r_value=-50.0, rsi_value=52.0,
                displayed_fair_value=90.0, fair_value_status='CALIBRATED',
                fair_overshoot_pct=11.1,
@@ -18342,7 +18371,7 @@ _FS220 = dict(entry_pullback_price=93.3, current_price=100.0,
               analysis_confidence=70, strategy_quality_score=60,
               vol_20=0.03, avg_turnover_20d=1e9,
               calibration_band=dict(hit_rate=58.0, n=1200),
-              blind_test_status='통과', bb_position_pct=50.0,
+              blind_test_status='수행완료', bb_position_pct=50.0,
               williams_r_value=-50.0, rsi_value=52.0)
 _c220 = _vc105.build(_FS220, {'action': 'BUY', 'vetoes': []}, None,
                      {'kind': 'pullback'}, 100.0)
@@ -18537,7 +18566,7 @@ _FS221 = dict(entry_pullback_price=99.0, current_price=100.0,
               analysis_confidence=70, strategy_quality_score=60,
               vol_20=0.03, avg_turnover_20d=1e9,
               calibration_band=dict(hit_rate=58.0, n=1200),
-              blind_test_status='통과', bb_position_pct=50.0,
+              blind_test_status='수행완료', bb_position_pct=50.0,
               williams_r_value=-50.0, rsi_value=52.0,
               displayed_fair_value=120.0, fair_value_status='CALIBRATED',
               fair_overshoot_pct=-16.0)
@@ -18845,7 +18874,7 @@ _c206 = _vc105.build(
          analysis_confidence=70, strategy_quality_score=60,
          vol_20=0.03, avg_turnover_20d=1e9,
          calibration_band=dict(hit_rate=58.0, n=1200),
-         blind_test_status='통과', bb_position_pct=50.0,
+         blind_test_status='수행완료', bb_position_pct=50.0,
          williams_r_value=-50.0, rsi_value=52.0,
          displayed_fair_value=120.0, fair_value_status='CALIBRATED',
          fair_overshoot_pct=-16.0),
@@ -18936,7 +18965,7 @@ def _mk224(**over):
                 analysis_confidence=70, strategy_quality_score=60,
                 vol_20=0.03, avg_turnover_20d=1e9,
                 calibration_band=dict(hit_rate=58.0, n=1200),
-                blind_test_status='통과', bb_position_pct=50.0,
+                blind_test_status='수행완료', bb_position_pct=50.0,
                 williams_r_value=-50.0, rsi_value=52.0,
                 displayed_fair_value=120.0, fair_value_status='CALIBRATED',
                 fair_overshoot_pct=-16.0)
@@ -29467,6 +29496,249 @@ _w376 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 check("보유 카드가 ETF 일 때 판단과 같은 손절선(effective_hold_stop)으로 그 한 줄을 붙인다",
       "_uk.distribution_vs_stop(realtime_price, _uk.effective_hold_stop(_row225)[0]," in _w376
       and 'if _etf_is:\n            _dv385' in _w376)
+
+
+print("\n" + "=" * 72)
+print("§377 통합 감사 — 배포 화면·판정자·계산이 이 PC 와 같은 답을 내는가 (라운드 386)")
+print("=" * 72)
+# 외부 검토 두 편(2026-09-29)의 주장을 코드로 가렸다. 실재한 것만 잠근다 — 각 줄의 실측은 결과 문서에.
+import ast as _ast377                                          # noqa: E402
+import shutil as _sh377                                        # noqa: E402
+import tempfile as _tf377                                      # noqa: E402
+import quant_indicators as _qi377                              # noqa: E402
+import artifact_io as _aio377                                  # noqa: E402
+import regime_policy as _rp377                                 # noqa: E402
+import verdict_core as _vc377                                  # noqa: E402
+import trade_plan as _tp377                                    # noqa: E402
+import ui_kit as _uk377                                        # noqa: E402
+import ledger_view as _lv377                                   # noqa: E402
+import scripts.lineage_audit as _la377                         # noqa: E402
+
+# ① 산출물 찾는 길 — .portfolio → data, 평문 → .gz, 못 읽으면 None (빈 dict 가 아니다)
+_tmp377 = _tf377.mkdtemp(prefix='r386_')
+try:
+    for _d in ('.portfolio', 'data'):
+        _os.makedirs(_os.path.join(_tmp377, _d))
+    with open(_os.path.join(_tmp377, 'data', 'a.json'), 'w', encoding='utf-8') as _f377:
+        _f377.write('{"src": "data"}')
+    _only_data = _aio377.load_json('a.json', base=_tmp377)
+    with open(_os.path.join(_tmp377, '.portfolio', 'a.json'), 'w', encoding='utf-8') as _f377:
+        _f377.write('{"src": "live"}')
+    _both = _aio377.load_json('a.json', base=_tmp377)
+    import gzip as _gz377                                      # noqa: E402
+    with _gz377.open(_os.path.join(_tmp377, 'data', 'b.json.gz'), 'wt', encoding='utf-8') as _f377:
+        _f377.write('{"src": "gz"}')
+    with open(_os.path.join(_tmp377, 'data', 'bad.json'), 'w', encoding='utf-8') as _f377:
+        _f377.write('{not json')
+    check("엔진 쪽 찾는 길: 동봉본만 있으면 동봉본 · 둘 다면 이 PC 것 · .gz 도 · 없거나 깨지면 None",
+          _only_data == {'src': 'data'} and _both == {'src': 'live'}
+          and _aio377.load_json('b.json', base=_tmp377) == {'src': 'gz'}
+          and _aio377.load_json('none.json', base=_tmp377) is None
+          and _aio377.load_json('bad.json', base=_tmp377) is None
+          and _aio377.source('a.json', base=_tmp377) == 'live'
+          and _aio377.source('b.json', base=_tmp377) == 'bundle')
+    # 화면의 `_artifact_path` 와 **같은 차례**인가 — 함수 본문을 떼어 같은 폴더에 대 본다(베끼지 않는다 · R192)
+    _wsrc377 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+    _fn377 = next(_n for _n in _ast377.walk(_ast377.parse(_wsrc377))
+                  if isinstance(_n, _ast377.FunctionDef) and _n.name == '_artifact_path')
+    _g377 = {'os': _os, '__file__': _os.path.join(_tmp377, 'web_app.py')}
+    exec(compile(_ast377.Module(body=[_fn377], type_ignores=[]), 'web_app._artifact_path', 'exec'), _g377)
+    _same377 = [(_g377['_artifact_path'](_nm) == _aio377.find(_nm, base=_tmp377))
+                for _nm in ('a.json', 'b.json', 'bad.json', 'none.json')]
+    check("화면(web_app._artifact_path)과 엔진(artifact_io.find)이 같은 파일을 고른다 (§4 · 심기 4가지)",
+          all(_same377), str(_same377), scanned=len(_same377))
+finally:
+    _sh377.rmtree(_tmp377, ignore_errors=True)
+
+# ② 판정 중에 읽는 두 파일이 배포 화면에도 있다 — 국면 게이트 파일을 동봉했고 이 PC 것과 같다
+_rbd377 = _os.path.join(PROJ, 'data', 'regime_breakdown.json')
+_rbl377 = _os.path.join(PROJ, '.portfolio', 'regime_breakdown.json')
+check("국면 게이트 파일이 동봉돼 있다 (배포 앱은 빈 .portfolio 에서 뜬다 · R331)",
+      _os.path.exists(_rbd377) and _os.path.exists(_os.path.join(PROJ, 'data', 'calibration.json')))
+if _os.path.exists(_rbl377):
+    check("동봉본이 이 PC 의 게이트 파일과 바이트까지 같다 (다르면 배포 화면이 다른 상한을 건다)",
+          open(_rbd377, 'rb').read() == open(_rbl377, 'rb').read())
+else:
+    skipped("동봉 국면 파일과 이 PC 파일 대조", ".portfolio/regime_breakdown.json 없음 (작업 트리 · 배포 환경)")
+_code377 = {f: '\n'.join(_ln for _i, _ln in _la377.code_lines(f))
+            for f in ('quant_indicators.py', 'regime_policy.py', 'gaeum_ai.py')}
+check("판정 중 읽는 자리 셋이 artifact_io 로 찾는다 — '.portfolio' 만 보는 길이 코드에 남지 않았다",
+      '_aio386.load_json("calibration.json")' in _code377['quant_indicators.py']
+      and '".portfolio", "calibration.json"' not in _code377['quant_indicators.py']
+      and "_aio.load_json(os.path.basename(BREAKDOWN))" in _code377['regime_policy.py']
+      and "_aio.load_json('calibration.json')" in _code377['gaeum_ai.py']
+      and "'.portfolio', 'calibration.json'" not in _code377['gaeum_ai.py'], scanned=3)
+
+# ③ 못 읽은 것과 표본이 없는 것을 가른다 · 30건 미만 블라인드 문장이 계산과 같다
+_ld377 = _rp377._load
+try:
+    _rp377._load = lambda: None
+    _p377 = _rp377.policy('BULL', 0.01)
+finally:
+    _rp377._load = _ld377
+check("국면 파일을 못 읽으면 '표본이 없다'가 아니라 '읽지 못했다' — 상한은 모를 때의 것 그대로(새 수 없음)",
+      _p377['basis'] == '성적 파일 못 읽음' and '읽지 못했습니다' in _p377['why']
+      and '표본이 없다는 뜻이 아닙니다' in _p377['why']
+      and _p377['score_cap'] == _rp377.NO_SAMPLE['score_cap'], _p377['why'])
+_bd377 = {'cells6': {'BULL|calm': {'train': {'n': 200, 'hit': 60.0}, 'blind': {'n': 16, 'hit': 10.0}}}}
+_w377 = _rp377.policy('BULL', 0.01, breakdown=_bd377)['why']
+check("30건 미만 블라인드는 '통합 표본에 합쳐져 있다'고 적는다 — '판단 근거로 쓰지 않았다'(거짓)가 아니다",
+      '합쳐져 있고' in _w377 and '판단 근거로 쓰지 않았습니다' not in _w377
+      and _rp377.policy('BULL', 0.01, breakdown=_bd377)['pooled_n'] == 216, _w377)
+
+# ④ '표본외 검증 통과' 는 엔진이 실제로 내는 값을 읽는다 — 모르면 통과가 아니다
+_fsb377 = dict(current_price=10000, entry_pullback_price=9900, entry_stop_price=9500,
+               entry_target_1st=10300, entry_rr=1.2, target_tech_1st=10400, stop_loss_price=9600,
+               analysis_confidence=70, strategy_quality_score=None, final_action_score=60,
+               vol_20=0.02, avg_turnover_20d=5e9, horizon_days=20,
+               blind_test_gap={'kind': 'bars', 'bars': 400, 'bars_need': 490})
+
+
+def _oos377(fs):
+    _c = _vc377.build(fs, verdict={'action': 'HOLD', 'vetoes': []})
+    return next(_x for _x in _c['checks'] if _x['name'] == '표본외 검증 통과'), _c
+
+
+_o1, _c1 = _oos377(dict(_fsb377, blind_test_status='미수행'))
+_o2, _ = _oos377(dict(_fsb377, blind_test_status=_vc377.OOS_DONE, strategy_quality_score=62))
+_o3, _ = _oos377(dict(_fsb377))
+check("검증 못 한 종목은 이 조건에서 막힌다 · 한 종목은 통과 · 값이 없으면 통과가 아니다(미수신)",
+      _o1['ok'] is False and _o2['ok'] is True and _o3['ok'] is False and _o3['detail'] == '미수신')
+check("검증 못 한 종목의 칸이 '표본외 성적 미달'(검증은 마쳤다는 거짓)이 아니라 '확보 대기'이고 얼마나 남았는지 적는다",
+      _c1['bucket'] == '신뢰도·표본 확보 대기' and '90거래일' in _c1['exclude_reason'],
+      f"{_c1['bucket']} · {_c1['exclude_reason'][:60]}")
+_qsrc377 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+check("그 글자가 엔진의 리터럴과 같다 · 엔진이 내지 않는 키를 읽는 자리가 판정 코드에 없다",
+      f"'blind_test_status': \"미수행\" if blind_test_not_completed else \"{_vc377.OOS_DONE}\"" in _qsrc377
+      and "fs.get('blind_test_not_completed')" not in '\n'.join(
+          _ln for _i, _ln in _la377.code_lines('verdict_core.py')))
+_t377a = next(_x for _x in _vc377.build(dict(_fsb377, avg_turnover_20d=None),
+                                        verdict={'vetoes': []})['checks'] if _x['name'] == '과열·저유동성 아님')
+_t377b = next(_x for _x in _vc377.build(dict(_fsb377, avg_turnover_20d=0.0),
+                                        verdict={'vetoes': []})['checks'] if _x['name'] == '과열·저유동성 아님')
+check("거래대금을 못 받으면 거르지 않되 그렇다고 적는다 · 0 은 받은 값이다(0 → 미달)",
+      _t377a['ok'] is True and '거래대금 미수신 (저유동성으로 보지 않음)' in _t377a['detail']
+      and _t377b['ok'] is False and '거래대금 0.0억' in _t377b['detail'], _t377a['detail'])
+
+# ⑤ '이미 갖고 계신 분께' 카드가 중앙 보유 판정과 같은 갈래 (라운드 304·357 의 세 번째 자리)
+_miss377, _cells377 = 0, 0
+for _px in (90_000, 94_000, 95_000, 99_000, 103_000, 108_000, 110_000, 112_000):
+    for _avg in (80_000, 100_000, 125_000):
+        for _m10 in (10.0, 30.0):
+            for _ad in (None, True, False):
+                _fs = dict(stop_loss_price=94_000.0, target_tech_1st=110_000.0,
+                           entry_pullback_price=99_000.0, m10_disparity=_m10)
+                _h = _qi377.QuantIndicatorsEngine.build_easy_advice(_fs, {'score': 60, 'action': 'HOLD', 'vetoes': []}, float(_px),
+                                         user_avg=float(_avg),
+                                         hold_levels=dict(stop=94_000.0, trim=110_000.0, buy=99_000.0,
+                                                          avg_down_ok=_ad, basis='시험'),
+                                         judge=_uk377.holder_kind, label=_uk377.hold_label)['holder']
+                _k = _uk377.holder_kind(_px, 94_000.0, 110_000.0, buy=99_000.0, avg_down_ok=_ad)[0]
+                _cells377 += 1
+                _miss377 += int(_h.get('kind') != _k)
+check("쉬운 결론의 보유자 갈래 = holder_kind (격자 · 평단·이격과 무관 · 고치기 전 160칸 중 86칸이 달랐다)",
+      _miss377 == 0, f"어긋남 {_miss377}/{_cells377}", scanned=_cells377)
+_hp377 = _qi377.QuantIndicatorsEngine.build_easy_advice(dict(stop_loss_price=90_000.0, target_tech_1st=120_000.0), {'score': 60,
+                             'vetoes': []}, 95_000.0, user_avg=100_000.0,
+                             hold_levels=dict(stop=96_000.0, trim=110_000.0, basis='보유 계획(2026-09-01 기준)'),
+                             judge=_uk377.holder_kind, label=_uk377.hold_label)['holder']
+check("화면이 넘긴 보유 계획의 선으로 판정한다 (오늘 값 90,000 이 아니라 계획 96,000 아래 → 매도)",
+      _hp377['kind'] == '정리 검토' and '보유 계획(2026-09-01 기준)' in _hp377['detail'], _hp377['line'])
+_hx377 = _qi377.QuantIndicatorsEngine.build_easy_advice(dict(stop_loss_price=94_000.0), {'score': 60, 'vetoes': []}, 99_000.0,
+                                                       user_avg=90_000.0)['holder']
+check("판정 함수를 못 받으면 옛 규칙(평단 수익률)으로 돌아가지 않고 판단을 비운다 (§3)",
+      _hx377['kind'] is None and '판단 보류' in _hx377['line'], _hx377['line'])
+_eb377 = _qi377.QuantIndicatorsEngine.build_easy_advice(dict(entry_pullback_price=10000, entry_target_1st=10800, entry_stop_price=9400),
+                             {'score': 70, 'action': 'BUY', 'vetoes': []}, 9800,
+                             core={'recommended': False, 'actionable': False,
+                                   'exclude_reason': '비용 차감 기대값이 음수입니다.'})['new_buyer']
+_ep377 = _qi377.QuantIndicatorsEngine.build_easy_advice(dict(entry_pullback_price=10000, net_expected_return=2.0), {'score': 62,
+                             'action': 'HOLD', 'vetoes': []}, 10500,
+                             core={'recommended': False, 'actionable': False,
+                                   'exclude_reason': '손익비가 기준에 못 미칩니다.'})['new_buyer']
+check("중앙 판정이 막으면 쉬운 결론이 '지금 사도 됩니다'·'…사세요' 를 쓰지 않고 막은 사유를 옮긴다 (R193)",
+      '사도 됩니다' not in _eb377['line'] and '비용 차감 기대값이 음수입니다.' in _eb377['detail']
+      and '사세요' not in _ep377['line'] and '손익비가 기준에 못 미칩니다.' in _ep377['detail'],
+      _eb377['line'] + ' | ' + _ep377['line'])
+_tpb377 = _tp377.build({'current_price': 95_000.0, 'hold_stop': 90_000.0, 'hold_trim': 120_000.0}, {},
+                       avg=100_000.0, hold_core={'current_price': 95_000.0, 'hold_stop': 96_000.0,
+                                                 'hold_trim': 110_000.0})
+check("매매 지시서의 보유자 칸도 넘겨받은 계획 선으로 판정한다 (hold_core)",
+      _tpb377['holder'].get('kind') == '정리 검토', str(_tpb377['holder'].get('headline')))
+_wc377 = '\n'.join(_ln for _i, _ln in _la377.code_lines('web_app.py'))
+check("화면이 한 번 정한 보유 기준선(_HOLD_LV386)을 지시서와 쉬운 결론이 같이 쓴다 · 기준선은 표와 같은 watch_action",
+      '_act386 = _uk.watch_action(_row386, realtime_price) or {}' in _wc377
+      and 'market=_mkt_state, hold_core=_hold_core386)' in _wc377
+      and 'core=CORE, hold_levels=_HOLD_LV386,' in _wc377
+      and 'judge=_uk.holder_kind, label=_uk.hold_label)' in _wc377
+      and 'user_avg=None, user_qty=None, core=CORE)' in _wc377)
+_pm377 = '\n'.join(_ln for _i, _ln in _la377.code_lines('premarket.py'))
+check("개장 전 카드도 중앙 판정을 먼저 만들고 쉬운 결론에 넘긴다",
+      _pm377.index('_core = _core_of(q_engine, r, fs, verdict)')
+      < _pm377.index("r.get('base_price'), core=_core)"))
+
+# ⑥ 산 뒤 규칙과 성적표 — 손절은 '닿으면'(원장 채점 · R367), 성적표가 이 규칙으로 채점되지 않는다고 적는다
+_pe377 = dict(_tp377.POST_ENTRY)
+check("산 뒤 규칙의 손절이 '종가 이탈'이 아니다 (채점·보유 판정과 같은 말)",
+      '손절가에 닿으면' in _pe377 and not any('종가' in _k for _k in _pe377))
+check("그 규칙이 성적표의 채점 규칙이 아님을 · 잰 것과 못 잰 것을 날짜와 함께 적는다",
+      "'1차 목표나 손절에 먼저 닿으면 전량 청산" in _tp377.POST_ENTRY_CAVEAT
+      and '2026-08-02' in _tp377.POST_ENTRY_CAVEAT and '2026-09-21' in _tp377.POST_ENTRY_CAVEAT
+      and '재현할 수 없기 때문' not in _tp377.POST_ENTRY_CAVEAT)
+
+# ⑦ DeMARK 카운트다운 — 결함 셋(외부 검토 재현)
+_td377 = _qi377.td_countdown
+_a377 = _td377([0, 1, 2, 3, 4, 5, 6, 7, 8] + [9] * 15, [False] * 9 + [True] * 15)
+_b377 = _td377([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0], [False] * 10 + [True, True, False])
+_c377 = _td377([0, 1, 2, 3, 4, 5, 6, 7, 8] + [9] * 13, [False] * 9 + [True] * 13)
+check("셋업이 9 로 머무는 동안에도 카운트다운이 쌓인다 (종전 최대 0)",
+      max(_a377['series']) == 13 and _a377['series'].count(13) == 1, str(_a377['series']))
+check("마지막 봉이 조건을 못 채워도 지금 카운트는 진행 중인 수다 (종전 0)", _b377['current'] == 2)
+check("13 확인에 쓰는 8·13 번째 봉 위치를 기록한다 (종전 늘 None → 확인이 늘 거짓)",
+      _c377['current'] == 13 and _c377['idx8'] == 16 and _c377['idx13'] == 21)
+_qc377 = '\n'.join(_ln for _i, _ln in _la377.code_lines('quant_indicators.py'))
+check("엔진이 매수·매도 둘 다 그 함수로 센다 · 셋업 9 마다 되돌리던 옛 고리가 없다",
+      '_bcd = td_countdown(buy_setup_count, _b_q)' in _qc377
+      and '_scd = td_countdown(sell_setup_count, _s_q)' in _qc377
+      and 'in_b_countdown' not in _qc377 and 'in_s_countdown' not in _qc377)
+check("원장의 13 값어치 문장이 '정의가 바뀐 날'을 적는다 (원장 행 대부분은 옛 계산이다)",
+      _lv377.DEMARK_DEF_CHANGED in (_lv377.demark_lift_line(
+          {'train': {'yes': (9, 60.0, 9), 'no': (9, 50.0, 9), 'diff': 10.0}}) or ''))
+
+# ⑧ 같은 이름 '비용 차감'이 두 비용 — 어느 비용인지 적는다 · 비용 수는 한 자리
+_lab377 = '\n'.join(_ln for _i, _ln in _la377.code_lines(_os.path.join('scripts', 'calibration_lab.py')))
+check("집계 랩의 비용은 ledger_view 한 자리(0.55 그대로) · 머리의 옛 룰북 글자 대신 실행한 날의 축",
+      _lv377.CALIB_COST_PCT == 0.55
+      and '- _lv_cost386.CALIB_COST_PCT, 2)' in _lab377 and '- 0.55' not in _lab377
+      and "'rulebook_version': _rulebook_now386()," in _lab377
+      and '"v2026.08.02"' not in _lab377)
+check("모델 점검 표가 비용을 이름에 적고 운영 비용과 견주지 말라고 적는다 · 블라인드 예외(국면 게이트)를 밝힌다",
+      '_cost_lbl386: f"{_s[\'avg_return_after_cost\']:+.2f}%",' in _wc377
+      and '운영 비용 {_vc386.COST_PCT:g}% 로 빼므로' in _wc377
+      and '그 게이트를 잴 때 이 블라인드는 독립 표본이 아닙니다' in _wc377)
+check("이익 모형의 EPS 가 유도값이면 엔진이 그 출처를 내고 화면이 같은 칸에 적는다 (값·산식 불변)",
+      "'eps_basis': ('수신' if in_eps is not None" in _qc377
+      and "else ('BPS×ROE 유도' if _eps_model is not None else None))," in _qc377
+      and "if val_eval.get('eps_basis') == 'BPS×ROE 유도' else '')" in _wc377
+      and '{_eps_basis_note386}</td></tr>' in _wsrc377)
+
+# ⑨ 읽는 곳은 있는데 만드는 곳이 0 인 칸 — 계층 보정 확률의 층 둘이 운영에서 한 번도 안 쓰였다
+check("엔진이 range_position_pct · market 을 원장과 같은 정의로 four_scores 에 싣는다",
+      "four_scores['range_position_pct'] = price_pos.get('range_pos_pct')" in _qc377
+      and "four_scores['market'] = _be386.market_of(symbol)" in _qc377
+      and 'import ui_kit' not in _qc377
+      and "'range_pos': (snap.get('price_pos') or {}).get('range_pos_pct')," in _lab377
+      and "'market': 'KOSDAQ' if tk.endswith('.KQ') else 'KOSPI'," in _lab377)
+import case_layers as _cl377                                   # noqa: E402
+_fsx377 = {'vol_20': 0.012, 'm10_disparity': 5.0}
+_bp0 = _cl377.blended_prob(49, regime_code='BEAR', fs=_fsx377)
+_bp1 = _cl377.blended_prob(49, regime_code='BEAR', fs=dict(_fsx377, market='KOSPI', range_position_pct=40))
+check("두 칸을 받으면 계층 확률이 그 층을 실제로 쓴다 (L3 시장×변동성 · L4b 눌림)",
+      _bp0 is not None and _bp1 is not None and _bp1['layers'] > _bp0['layers'],
+      f"층 {(_bp0 or {}).get('layers')} → {(_bp1 or {}).get('layers')}")
+check("엔진 비교 표가 원장 칸 이름(m10_above)을 four_scores 에서 찾지 않는다 — 이격으로 같은 정의",
+      "_m10 = bool(four_scores.get('m10_above'))" not in _wc377
+      and "_m10 = (float(_m10d386) >= 0) if _m10d386 is not None else None" in _wc377)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

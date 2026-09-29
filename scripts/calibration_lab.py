@@ -35,6 +35,16 @@ import numpy as np
 import bitemporal_engine as be
 import prediction_log as plog
 import quant_indicators as qi
+import ledger_view as _lv_cost386                   # 라운드 386 — 집계 비용의 한 자리
+
+
+def _rulebook_now386():
+    """집계표 머리에 적을 룰북 축 버전 — 실행한 날의 값(라운드 386). 못 읽으면 None(§3)."""
+    try:
+        import versioning as _ver386
+        return _ver386.current('rulebook')
+    except Exception:                                          # noqa: BLE001
+        return None
 
 #: 원본 예측 원장. `--shard i/n` 을 주면 워커별 샤드 파일로 갈린다.
 VIRT_BASE = os.path.join(PROJ, ".portfolio", "virtual_predictions.jsonl")
@@ -1390,7 +1400,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             'profit_factor': round(wins / losses, 2) if losses > 0 else None,
             'avg_mae': round(float(np.mean(maes)), 2) if maes else None,
             # 왕복 거래비용 차감 (수수료+세금+슬리피지 총합의 보수적 추정 0.55%)
-            'avg_return_after_cost': round(float(np.mean(rets)) - 0.55, 2),
+            # 라운드 386 — 수는 그대로, 자리는 한 곳(ledger_view.CALIB_COST_PCT · 화면이 같은 수를 라벨로 읽는다)
+            'avg_return_after_cost': round(float(np.mean(rets)) - _lv_cost386.CALIB_COST_PCT, 2),
         }
         return out
 
@@ -1602,7 +1613,12 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         #   원장 행수와 total_cases 가 다를 수 있고, 그 차이를 여기 적는다.
         'carried_over': len(_prev_rows),
         'ledger_rows': len(graded) + len(_prev_rows),
-        'rulebook_version': "v2026.08.02",
+        # ⚠️ 라운드 386 — 여기가 글자 그대로 "v2026.08.02" 였다. 이 표는 매 실행 **지금의** 채점 규칙으로
+        #   다시 만들어지는데 머리는 두 달 전 날짜를 적어, 화면의 '규칙집 v2026.08.02' 가 이 표의 판으로
+        #   읽혔다(외부 검토 · 2026-09-29). 실행한 날의 룰북 축 버전을 적는다 — 없으면 None(§3).
+        #   ⚠️ 각 행의 점수·목표·손절은 **그 행을 만든 날의 엔진**이 냈다(행마다 다르다) — 이 값은 그것이 아니다.
+        'rulebook_version': _rulebook_now386(),
+        'cost_pct_after_cost': _lv_cost386.CALIB_COST_PCT,
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

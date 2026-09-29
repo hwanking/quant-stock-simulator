@@ -127,6 +127,9 @@ COST_PCT = 0.41         #: 규칙집 RULES_TRADING_COSTS 항목 합과 같다 (�
 MIN_CONF = 45           #: 분석 신뢰도 하한
 MIN_QUALITY = 40        #: 전략 품질(표본외) 하한
 MIN_TURNOVER = 3e8      #: 20일 평균 거래대금 하한 (3억 · 저유동성 배제)
+#: 표본외 검증을 **마친** 상태의 글자 — 엔진(`quant_indicators` four_scores 의 `blind_test_status`)이
+#: 내는 리터럴과 같아야 한다(라운드 386 · 회귀가 엔진 소스의 리터럴과 대 본다).
+OOS_DONE = '수행완료'
 
 #: 도달 확률 — 위 σ 문턱을 사람이 읽을 수 있는 확률로 바꾼 값.
 #: 무추세 랜덤워크의 최저점 분포(반사원리): P(20봉 최저 ≤ −g) = 2·Φ(−g/σ√20)
@@ -378,13 +381,25 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
          and (quality is not None and quality >= MIN_QUALITY),
          f'신뢰 {conf:.0f} · 품질 {quality:.0f}'
          if (conf is not None and quality is not None) else '미산출'),
+        # 라운드 386 — 거래대금을 못 받으면 **거르지 않는다**(§3 · 라운드 37 — 못 잰 것으로 거르면
+        #   2,997종목이 전부 탈락했다). 그 규칙은 그대로다. 다만 설명이 그 사실을 안 적어, 못 잰 행과
+        #   잰 행이 같은 '통과'로 보였다 — 과열 지표 미수신이 이미 적는 말투를 그대로 쓴다.
+        #   (종전 `if turnover` 는 0 을 '못 받음'으로 읽었다 — 0 은 받은 값이다.)
         ('과열·저유동성 아님',
          (not _overheated(fs))
          and (turnover is None or turnover >= MIN_TURNOVER),
          _heat_txt(fs)
-         + (f' · 거래대금 {turnover / 1e8:.1f}억' if turnover else '')),
-        ('표본외 검증 통과', not fs.get('blind_test_not_completed'),
-         str(fs.get('blind_test_status') or '미수행')),
+         + (f' · 거래대금 {turnover / 1e8:.1f}억' if turnover is not None
+            else ' · 거래대금 미수신 (저유동성으로 보지 않음)')),
+        # ⚠️ 라운드 386 — 이 조건이 `fs.get('blind_test_not_completed')` 를 읽었는데 **엔진은 그 키를
+        #   내보낸 적이 없다**(지역 변수일 뿐 · four_scores 에는 `blind_test_status` '미수행'/'수행완료'
+        #   만 있다). 그래서 이 조건은 **늘 통과**였고, 설명 칸이 '미수행'이라 적는 행에 초록 체크가
+        #   붙었다(리포트 99개 · 후보 458개 중 16개). 그 결과 검증을 **못 한** 종목이 품질 점수 None 으로
+        #   다음 조건에 걸려 *"표본외 검증은 마쳤고 … 성적이 기준에 못 미쳤습니다"*(표본외 성적 미달)
+        #   라는 거짓 사유를 받을 수 있었다. 외부 검토가 짚었다(R297·R313 의 '만드는 곳 0' 과 같은 자리).
+        #   엔진이 **실제로 내는** 값을 읽는다. 모르면(키 없음) 통과로 세지 않는다(§3).
+        ('표본외 검증 통과', fs.get('blind_test_status') == OOS_DONE,
+         str(fs.get('blind_test_status') or '미수신')),
         ('강제 차단 없음', not vetoes and not rg.get('block_new'),
          f'{len(vetoes)}건' if vetoes else '없음'),
         # 라운드 185 — 밸류 게이트 (R183 블라인드 실측: 적정가 이하만 양수

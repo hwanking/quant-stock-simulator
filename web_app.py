@@ -774,9 +774,12 @@ _VER_NOW = _ver.snapshot()
 # 예전에는 줄이 둘이었고 룰북·산식이 양쪽에 **두 번** 나왔으며,
 # '운영 버전' 칩은 모델 축과 같은 값이라 세 번째 중복이었다.
 try:
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           '.portfolio', 'calibration.json'), encoding='utf-8') as _f:
-        _cal_top = json.load(_f)
+    # 라운드 386 — `.portfolio/` 만 보면 배포 앱(빈 .portfolio)은 동봉본이 있어도 '못 읽음'을 띄웠다.
+    #   찾는 길은 artifact_io 한 곳(`.portfolio` → `data` · 아래 `_artifact_path` 와 같은 차례).
+    import artifact_io as _aio386
+    _cal_top = _aio386.load_json('calibration.json')
+    if not isinstance(_cal_top, dict):
+        raise ValueError('원장 집계표를 읽지 못했습니다')
     # ⚠️ 라운드 198 — 여기가 `total_cases` 였다. 라운드 197 이 '이어받은
     #   행'(시세를 더는 못 받아 다시 채점하지 못한 케이스)을 도입하면서
     #   **두 수가 갈렸다**: total_cases 183,792 vs 원장 184,769.
@@ -4246,10 +4249,12 @@ if st.session_state.get('show_screener', False):
                     #   화면이 우리가 재서 없다고 발표한 우위를 팔고 있었다 —
                     #   §9 가 금지한 바로 그것이다. 옛 값은 **그때 값이라고**
                     #   적고, 지금 값을 나란히 둔다.
+                    import ledger_view as _lv386c       # 라운드 386 — 어느 비용인지(집계 랩의 보수 가정 · 한 곳)
                     _bl_txt188 = (
                         f"지금 원장에서 매수권(60+) 블라인드는 "
                         f"적중 {_bl188['hit_rate']}%(n={_bl188['n']:,}) · "
-                        f"비용후 {_bl188['avg_return_after_cost']:+.2f}%"
+                        f"비용후({_lv386c.CALIB_COST_PCT:g}% 차감) "
+                        f"{_bl188['avg_return_after_cost']:+.2f}%"
                         + (f" · 잰 날 {_made188}" if _made188 else "")
                         + "로, 그 우위는 재현되지 않았습니다."
                         if _bl188.get('hit_rate') is not None else
@@ -7318,11 +7323,11 @@ if _home_cal.get('total_cases'):
     # 평균 한 줄은 사용자가 오늘 자기 상황에 적용할 수 없다. 적중률을
     # 지배하는 것은 점수가 아니라 시장 국면이라는 것이 실측으로 확인됐다
     # (docs/MODEL_VERSIONS.md 라운드 4~7). 그래서 나눠서 보여 준다.
+    # 라운드 386 — 게이트(regime_policy)와 같은 파일을 같은 길로 읽는다. `.portfolio` 만 보면 배포 앱은
+    #   이 표를 못 그리면서 게이트는 (종전엔) '표본 없음' 상한을 걸었다 — 이제 둘 다 동봉본을 읽는다.
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               '.portfolio', 'regime_breakdown.json'),
-                  encoding='utf-8') as _rf:
-            _rb = json.load(_rf)
+        import artifact_io as _aio386b
+        _rb = _aio386b.load_json('regime_breakdown.json')
     except Exception:
         _rb = None
     # ── 전날 미국장 경고 (라운드 16) ────────────────────────────────
@@ -8968,6 +8973,30 @@ try:
 except Exception:                                              # noqa: BLE001
     _hold_plan_html = ''            # 관심종목을 못 읽어도 카드는 그린다 — 줄만 비운다
 
+# 라운드 386 — 보유자 기준선을 **한 번** 정해 매매 지시서·'이미 갖고 계신 분께' 카드가 같이 쓴다.
+#   관심종목에 보유 계획이 있으면 그 값(표·보유 카드·가늠 AI 와 같은 `watch_action` · 같은 행 · 옛 규칙이
+#   낮춘 선은 옛 선 · R378)이 관리 기준이다(R225). 종전엔 지시서는 오늘 다시 잰 값으로, 쉬운 카드는
+#   **자기 규칙**(평단 수익률 · 이격 25% · −15%)으로 따로 골라, 한 화면에 보유 판단이 셋이었다.
+#   계획이 없으면 None — 두 칸 다 이 스냅샷의 보유자 값으로 `holder_kind` 를 부른다(같은 함수 · 같은 값).
+_HOLD_LV386 = None
+try:
+    _cw386 = portfolio.normalize_code(target_ticker)
+    _row386 = next((w for w in _wl_items()
+                    if portfolio.normalize_code(w.get('code')) == _cw386), None)
+    if (_row386 and (_row386.get('paid') or 0) > 0
+            and (_row386.get('snap_hold_stop') or _row386.get('snap_hold_trim'))):
+        _act386 = _uk.watch_action(_row386, realtime_price) or {}
+        if _act386.get('held'):
+            _HOLD_LV386 = dict(
+                stop=_act386.get('hold_stop_eff'),
+                trim=_row386.get('snap_hold_trim'),
+                buy=_row386.get('snap_buy'),
+                avg_down_ok=_act386.get('avg_down_ok'),
+                basis=f"보유 계획({str(_row386.get('snap_hold_at') or '')[:10]} 기준)",
+                kind=_act386.get('kind'))
+except Exception:                                              # noqa: BLE001
+    _HOLD_LV386 = None
+
 # 논리 검사에 걸린 것은 숨기지 않고 그 자리에 적는다 (경고 없는 모순이 제일 나쁘다)
 _logic_warn_html = ''
 if _logic_warn:
@@ -9032,9 +9061,10 @@ st.markdown(
 # 배너 안에 병기해, "지금은 사지 마세요"가 '31,665원 이하로 내려오면 산다'는
 # 조건부인지 완전 회피인지 배너에서 바로 구분되게 한다.
 try:
+    # 라운드 386 — 중앙 판정(CORE)을 넘긴다. 안 넘기면 이 카드가 엔진 판정만 보고 '사세요'를 적을 수 있다.
     _easy_nb_banner = q_engine.build_easy_advice(
         four_scores, verdict, realtime_price,
-        user_avg=None, user_qty=None)['new_buyer']
+        user_avg=None, user_qty=None, core=CORE)['new_buyer']
     _banner_sub = str(_easy_nb_banner.get('line') or '')
     # 라운드 37 — 이 문장은 엔진의 옛 권장 매수가(적정가 × 안전마진)로
     # 만들어진다. 배너 본문은 이미 중앙 판정의 실행 진입가를 보여 주므로,
@@ -9306,10 +9336,17 @@ try:
     except Exception:                                        # noqa: BLE001
         _mkt_state = None
 
+    # 라운드 386 — 보유자 칸은 보유 계획의 기준선으로 판정한다(있을 때 · 위 _HOLD_LV386 · 같은 화면의
+    #   보유 카드와 같은 선). 신규 매수자 칸은 그대로 CORE.
+    _hold_core386 = None
+    if _HOLD_LV386:
+        _hold_core386 = dict(CORE, hold_stop=_HOLD_LV386['stop'], hold_trim=_HOLD_LV386['trim'],
+                             pullback_zone=_HOLD_LV386['buy'] or CORE.get('pullback_zone'),
+                             avg_down_ok=_HOLD_LV386['avg_down_ok'])
     _plan = _tp.build(CORE, four_scores,
                       avg=(user_entry_price if user_entry_price > 0 else None),
                       qty=(user_quantity if user_quantity > 0 else None),
-                      market=_mkt_state)
+                      market=_mkt_state, hold_core=_hold_core386)
     st.markdown(_uk.trade_plan_card(_plan, name=resolved_name, theme=_theme),
                 unsafe_allow_html=True)
 except Exception:                                            # noqa: BLE001
@@ -9319,7 +9356,9 @@ except Exception:                                            # noqa: BLE001
 _easy = q_engine.build_easy_advice(
     four_scores, verdict, realtime_price,
     user_avg=(user_entry_price if user_entry_price > 0 else None),
-    user_qty=(user_quantity if user_quantity > 0 else None))
+    user_qty=(user_quantity if user_quantity > 0 else None),
+    core=CORE, hold_levels=_HOLD_LV386,                  # 라운드 386 — 지시서·표와 같은 판정자·같은 선
+    judge=_uk.holder_kind, label=_uk.hold_label)         #   규칙은 킷 한 곳 · 엔진은 받기만(판정 경로 격리)
 _ec1, _ec2 = st.columns(2)
 with _ec1:
     _nb = _easy['new_buyer']
@@ -10656,7 +10695,11 @@ if _bake and _bake.get('engines'):
 
     def _eng_says(key):
         """이 종목에 대해 그 엔진이라면 뭐라고 할지 — 원장과 같은 규칙으로."""
-        _m10 = bool(four_scores.get('m10_above'))
+        # 라운드 386 — `m10_above` 는 원장 칸 이름이고 four_scores 에는 **없다**(만드는 곳 0) — 늘 거짓이라 추세 엔진
+        #   두 줄이 이 종목에 대해 늘 '관망'이라 적었다. 원장(calibration_lab)과 같은 정의로 읽는다(이격 ≥ 0 이면 위).
+        #   이격을 못 받으면 None — 그 엔진 줄은 '판단 보류'가 된다(§3).
+        _m10d386 = four_scores.get('m10_disparity')
+        _m10 = (float(_m10d386) >= 0) if _m10d386 is not None else None
         _rsi = four_scores.get('rsi_value')
         _bbp = four_scores.get('bb_position_pct')
         _rp = four_scores.get('range_position_pct') or price_pos.get('pct')
@@ -11107,14 +11150,41 @@ if _perf_cal.get('total_cases'):
     # 배포 환경에는 .portfolio 가 없어 늘 동봉본을 읽는데, 그 사실을
     # 안 적으면 옛 표본으로 낸 숫자를 최신으로 읽게 된다(§3·§9).
     _cal_src = _artifact_source("calibration.json")
+    # 라운드 386 — 두 조각을 바로잡는다(외부 검토 · 2026-09-29).
+    #   ① '규칙집 v2026.08.02' 는 집계 랩이 **글자로 박아 둔 옛 날짜**였다 — 각 행을 만든 엔진 판도, 이 표를
+    #      만든 날의 룰북도 아니다. 랩이 이제 실행한 날의 룰북 축을 적는다(`cost_pct_after_cost` 와 같이 들어간다).
+    #      옛 형식 파일이면 그 조각을 **안 적는다**(§3 — 모르는 판을 판이라 부르지 않는다).
+    #   ② *"블라인드는 모델 선택에 쓰지 않습니다"* 는 한 곳에서 거짓이다 — 국면 게이트(regime_policy)가
+    #      2026-08-03 원장의 학습·검증·블라인드를 **합친** 성적을 읽는다(라운드 27b 의 설계). 그 게이트를 잴 때
+    #      그 블라인드는 독립 표본이 아니다. 규칙은 안 바꾸고(바꾸면 게이트 변경 · 사전등록) 사실을 적는다.
+    _rbv386 = (f"집계한 날 룰북 {_perf_cal.get('rulebook_version')} · "
+               if (_perf_cal.get('cost_pct_after_cost') is not None
+                   and _perf_cal.get('rulebook_version')) else '')
+    try:
+        import forward_eval as _fe386
+        _ff386 = str(_fe386.FORWARD_FROM)[:10]
+    except Exception:                                          # noqa: BLE001
+        _ff386 = None
     # 라운드 217 — R198 의 '원장 행수' 결정을 여기도 따른다 (:753 과 같은 우선순위)
     st.caption(f"과거 기준일 리플레이 **{_perf_cal.get('ledger_rows') or _perf_cal['total_cases']:,}건** · "
-               f"규칙집 {_perf_cal.get('rulebook_version', '—')} · "
+               + _rbv386
                + ("로컬 최신 기록" if _cal_src == 'live'
                   else "저장소 동봉본 (배포 환경 — 로컬 기록 없음)")
                + " · 시간 분할: 학습 <2025-07 / 검증 ~2026-01 / "
                "블라인드 ≥2026-02 "
-               "(블라인드는 보고 전용 — 모델 선택에 쓰지 않습니다)")
+               "(블라인드는 보고 전용 — 모델 선택에 쓰지 않습니다. 예외 하나: 국면 게이트는 2026-08-03 "
+               "원장의 세 구간을 **합친** 성적을 읽으므로, 그 게이트를 잴 때 이 블라인드는 독립 표본이 아닙니다"
+               + (f" · 독립 평가는 {_ff386} 부터의 전방 기록부로 합니다" if _ff386 else "")
+               + ")")
+    # 라운드 386 — 집계표가 뺀 비용. 새 형식 파일은 스스로 적고(cost_pct_after_cost), 옛 형식이면 그 파일을 만든
+    #   랩의 상수(한 곳 · ledger_view)를 읽는다 — 같은 수다(랩이 그 상수로 뺀다).
+    try:
+        import ledger_view as _lvc386
+        _calib_cost386 = float(_perf_cal.get('cost_pct_after_cost') or _lvc386.CALIB_COST_PCT)
+    except Exception:                                          # noqa: BLE001
+        _calib_cost386 = None
+    _cost_lbl386 = (f'비용 차감 평균수익 ({_calib_cost386:g}% 차감)' if _calib_cost386 is not None
+                    else '비용 차감 평균수익')
     with st.expander("성과 분해 · 점수대 캘리브레이션 · 실패 원인 (펼쳐보기)",
                      expanded=False):
         _sp_p = _perf_cal.get('splits') or {}
@@ -11129,12 +11199,23 @@ if _perf_cal.get('total_cases'):
                 '적중률': f"{_s['hit_rate']:.1f}%",
                 'Wilson 하한': f"{_s['wilson_low']:.1f}%",
                 'Profit Factor': f"{_s['profit_factor']:.2f}",
-                '비용 차감 평균수익': f"{_s['avg_return_after_cost']:+.2f}%",
+                # 라운드 386 — 어느 비용으로 뺀 값인지 이름에 적는다(§2 · R255). 집계표는 보수 가정으로,
+                #   중앙 판정의 '비용 차감 기대값'은 운영 비용으로 뺀다 — 같은 이름이 두 수였다.
+                _cost_lbl386: f"{_s['avg_return_after_cost']:+.2f}%",
             })
         if _rows_sp:
             st.markdown("**① 시간 분할 성과** — 검증·블라인드가 실력입니다")
             st.dataframe(pd.DataFrame(_rows_sp), width='stretch',
                          hide_index=True)
+            try:
+                import verdict_core as _vc386
+                if _calib_cost386 is None:
+                    raise ValueError('집계 비용을 못 읽었다')
+                st.caption(f"이 표의 비용 차감은 집계 랩의 보수 가정 {_calib_cost386:g}% 로 뺀 값입니다. 종목 화면의 "
+                           f"'비용 차감 기대값'은 운영 비용 {_vc386.COST_PCT:g}% 로 빼므로 두 수를 그대로 "
+                           f"견주지 마세요.")
+            except Exception:                                  # noqa: BLE001
+                pass
         _bz_p = (_sp_p.get('buy_zone') or {})
         _rows_bz = []
         for _k, _lab in (('train', '학습'), ('valid', '검증'), ('blind', '블라인드')):
@@ -12926,6 +13007,12 @@ with tab_val:
                 excluded_rows += f"<tr><td>{nm}</td><td colspan='2'>유효성 검사 미통과 → 가중치 0%</td></tr>"
         if not used_rows:
             used_rows = "<tr><td colspan='3'>유효 모델 없음</td></tr>"
+        # 라운드 386 — 이익 모형의 EPS 를 **유도했을 때만** 그 사실을 같은 칸에 적는다(엔진이 eps_basis 로 낸다 · §4).
+        _eps_basis_note386 = (
+            "<br><span style='color:#9DAABC; font-size:13px;'>이익 모형의 주당순이익은 받지 못해 받은 "
+            "주당순자산 × 자기자본이익률로 유도했습니다 — 자기자본이익률이 평균 자본 기준이면 실제 주당순이익과 "
+            "다를 수 있습니다.</span>"
+            if val_eval.get('eps_basis') == 'BPS×ROE 유도' else '')
 
         st.markdown(f'''
 <table class="cross-val-matrix">
@@ -12945,7 +13032,7 @@ with tab_val:
     <tr><td><b>제외된 모델</b></td><td>{'<br>'.join(f"{d['name']} — {d['reason']}" for d in (val_eval.get('excluded_models') or [])) or '없음'}</td></tr>
     <tr><td><b>가치 기준선 조건</b></td><td>{' · '.join(('충족' if ok else '미충족') + ' ' + lb for lb, ok in (val_eval.get('buy_price_checks') or []))}</td></tr>
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
-    <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'} <span style="color:#9DAABC; font-size:13px;">— 주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다. 가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.</span></td></tr>
+    <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'} <span style="color:#9DAABC; font-size:13px;">— 주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다. 가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.</span>{_eps_basis_note386}</td></tr>
     <tr><td><b>이 모형들이 쓰는 입력</b></td><td>{_uk._esc_md(val_eval.get('model_inputs_note') or '-')}</td></tr>
     <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
     <tr><td><b>적정가 신뢰도</b></td><td>{val_eval.get('fair_value_confidence', 0):.0f}점 — {_uk._esc_md(val_eval.get('fair_value_status_note', ''))}</td></tr>

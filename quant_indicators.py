@@ -56,6 +56,53 @@ def rb(section, key, default):
     return RULEBOOK.get(section, {}).get(key, default)
 
 
+def td_countdown(setup_count, qualifies):
+    """DeMARK 카운트다운 하나(매수 또는 매도) — 라운드 386.
+
+    setup_count  봉마다의 셋업 수(0~9 · 9 에서 멈춘다)
+    qualifies    봉마다 카운트다운 조건을 만족했는가(매수: 종가 ≤ 2봉 전 저가 · 매도: 종가 ≥ 2봉 전 고가)
+
+    반환: dict(series, current, idx8, idx13)
+      series   조건을 만족한 봉에만 그 봉의 카운트(차트가 '13' 을 찍는 자리 · 종전과 같은 뜻)
+      current  **지금** 카운트 — 진행 중이면 마지막으로 센 수, 13 을 마친 봉이 마지막 봉이면 13,
+               끝났거나 시작 전이면 0
+      idx8 · idx13  가장 최근 카운트다운의 8·13 번째 봉 위치(없으면 None)
+
+    ⚠️ 종전 코드의 결함 셋(외부 검토가 짚고 합성 입력으로 재현 · 2026-09-29):
+      ① 셋업이 9 로 **머무는** 동안(하락이 이어지는 동안) 매 봉 카운트를 0 으로 되돌렸다 — 카운트다운이
+         가장 필요한 자리에서 0 에 묶였다. 이제 셋업이 **완성되는 봉**(8 → 9)에서만 새로 시작한다.
+      ② '지금 카운트'를 series 의 마지막 칸으로 읽었는데 series 는 조건을 만족한 봉에만 값이 있어,
+         마지막 봉이 조건을 못 채우면 진행 중인 카운트가 0 으로 읽혔다.
+      ③ 13 확인(13 번째 봉의 저가 ≤ 8 번째 봉의 종가)에 쓰는 봉 위치를 **아무도 기록하지 않아** 확인이
+         늘 거짓이었다.
+    바꾸지 않은 것: 반대 방향 셋업이 카운트다운을 취소하는 규칙 · 확인 실패 시 13 을 미루는 규칙 ·
+    셋업 9 에서의 상한(min 9) — 표준 정의에 있지만 종전 코드에 없던 것을 여기서 더하면 결함 고침이
+    아니라 새 규칙이다(§2). 조건 식과 13 의 수는 한 글자도 안 바꿨다.
+    """
+    n = len(setup_count)
+    series = [0] * n
+    cur, active = 0, False
+    idx8 = idx13 = None
+    for t in range(n):
+        if setup_count[t] == 9 and (t == 0 or setup_count[t - 1] == 8):
+            active, cur, idx8, idx13 = True, 0, None, None       # 셋업 완성 봉 — 그 봉도 셀 수 있다
+        if active and t >= 2 and bool(qualifies[t]):
+            cur += 1
+            series[t] = cur
+            if cur == 8:
+                idx8 = t
+            if cur >= 13:
+                idx13 = t
+                active = False
+    if active:
+        current = cur
+    elif idx13 is not None and idx13 == n - 1:
+        current = 13
+    else:
+        current = 0
+    return dict(series=series, current=current, idx8=idx8, idx13=idx13)
+
+
 class QuantSnapshot(dict):
     """
     [명세 §17] 모든 화면이 공유하는 단일 최종 결과 객체.
@@ -1269,41 +1316,22 @@ class QuantIndicatorsEngine:
             tdst_support = float(closes[-1] * 0.95)
 
         # 4. Historical Countdown 13 Series & TDST Level Tracking
-        buy_cd_series = np.zeros(n, dtype=int)
-        sell_cd_series = np.zeros(n, dtype=int)
-        
-        curr_b_cd = 0
-        in_b_countdown = False
-        for t in range(n):
-            if buy_setup_count[t] == 9:
-                in_b_countdown = True
-                curr_b_cd = 0
-            elif in_b_countdown:
-                if t >= 2 and closes[t] <= lows[t-2]:
-                    curr_b_cd += 1
-                    buy_cd_series[t] = curr_b_cd
-                    if curr_b_cd >= 13:
-                        in_b_countdown = False
-                        
-        curr_s_cd = 0
-        in_s_countdown = False
-        for t in range(n):
-            if sell_setup_count[t] == 9:
-                in_s_countdown = True
-                curr_s_cd = 0
-            elif in_s_countdown:
-                if t >= 2 and closes[t] >= highs[t-2]:
-                    curr_s_cd += 1
-                    sell_cd_series[t] = curr_s_cd
-                    if curr_s_cd >= 13:
-                        in_s_countdown = False
+        # ⚠️ 라운드 386 — 카운트다운을 모듈 함수 `td_countdown` 한 곳으로 옮기며 결함 셋을 고쳤다
+        #   (셋업 9 유지 중 매 봉 초기화 · 지금 카운트를 series 끝 칸으로 읽음 · 8·13 봉 위치 미기록).
+        #   조건 식(종가 ≤ 2봉 전 저가 / 종가 ≥ 2봉 전 고가)과 13 은 그대로다. 자세한 것은 함수 독스트링.
+        _b_q = [t >= 2 and closes[t] <= lows[t - 2] for t in range(n)]
+        _s_q = [t >= 2 and closes[t] >= highs[t - 2] for t in range(n)]
+        _bcd = td_countdown(buy_setup_count, _b_q)
+        _scd = td_countdown(sell_setup_count, _s_q)
+        buy_cd_series = np.asarray(_bcd['series'], dtype=int)
+        sell_cd_series = np.asarray(_scd['series'], dtype=int)
 
-        buy_countdown = buy_cd_series[-1] if n > 0 else 0
-        sell_countdown = sell_cd_series[-1] if n > 0 else 0
-        buy_countdown_idx_8 = None
-        buy_countdown_idx_13 = None
-        sell_countdown_idx_8 = None
-        sell_countdown_idx_13 = None
+        buy_countdown = int(_bcd['current'])
+        sell_countdown = int(_scd['current'])
+        buy_countdown_idx_8 = _bcd['idx8']
+        buy_countdown_idx_13 = _bcd['idx13']
+        sell_countdown_idx_8 = _scd['idx8']
+        sell_countdown_idx_13 = _scd['idx13']
 
         buy_13_confirmed = False
         if buy_countdown >= 13 and buy_countdown_idx_13 is not None and buy_countdown_idx_8 is not None:
@@ -2026,8 +2054,18 @@ class QuantIndicatorsEngine:
         }
 
     @staticmethod
-    def build_easy_advice(fs, verdict, curr_price, user_avg=None, user_qty=None):
+    def build_easy_advice(fs, verdict, curr_price, user_avg=None, user_qty=None,
+                          core=None, hold_levels=None, judge=None, label=None):
         """
+        judge · label — 보유자 갈래를 정하는 함수(`ui_kit.holder_kind`)와 이름표 함수(`ui_kit.hold_label`).
+                      **화면이 넘긴다**(라운드 386). 엔진이 화면 모듈을 불러오면 판정 경로에 화면 모듈이 들어와
+                      격리 검사(§182 · R192)가 깨진다 — 규칙의 자리는 그대로 한 곳(ui_kit)이고 여기는 받기만 한다.
+                      안 넘기면 보유자 갈래를 **정하지 않는다**(옛 규칙으로 돌아가지 않는다 · §3).
+        core        — 화면의 중앙 판정(verdict_core.build). 넘기면 '지금 사도 됩니다'·'…이하로 내려올
+                      때만 사세요' 는 중앙 판정이 막지 않을 때만 쓴다(라운드 386 · R193 — 결론 문장은
+                      중앙 판정이 낸다). 안 넘기면 종전 그대로.
+        hold_levels — 보유자 기준선 {stop, trim, buy, avg_down_ok, basis}. 관심종목의 보유 계획이
+                      있으면 화면이 그 값을 넘긴다(라운드 225 · 관리 기준은 계획 값).
         사용자 상황별 '아주 쉬운 결론'. 신규 매수자와 보유자의 기준을 절대 섞지 않는다.
 
         반환:
@@ -2102,17 +2140,25 @@ class QuantIndicatorsEngine:
         if score is None:
             nb = {'emoji': '', 'line': '데이터가 부족해 판단할 수 없습니다.',
                   'detail': "분석에 필요한 데이터가 모자랍니다. 무리해서 사지 마세요."}
-        elif action in ('BUY', 'ACCUMULATE') and not vetoes:
+        # ⚠️ 라운드 386 — 이 카드는 **엔진 판정(action)** 만 보고 *"지금 사도 됩니다"* 를 적었다. 같은 화면의
+        #   매매 지시서·결론 배너는 **중앙 판정**(비용 차감 기대값·손익비·밸류 등 11조건)을 읽는다 — 중앙이
+        #   막아도 이 카드가 사라고 할 수 있는 두 번째 판정자였다(R193·R246). 화면이 core 를 넘기면 그것을 따른다.
+        elif (action in ('BUY', 'ACCUMULATE') and not vetoes
+              and (core is None or core.get('recommended'))):
             _rec_key = '권장 매수가(1차 분할)'      # 매수를 실제로 권하는 분기
             _half = ((curr_price + t1) / 2 if curr_price and t1 and t1 > curr_price
                      else None)
+            # 라운드 386 — 근거 수에 **잰 날**과 **대가**를 붙인다(§2 · §9). 종전 *"1,950건 검증에서 손실 확률을
+            #   약 1/3 줄였습니다"* 는 날짜가 없고, 같은 측정에서 비용 차감 평균이 여전히 음수였다는 것을 안
+            #   적었다(docs/MODEL_VERSIONS.md 2026-08-02 · 손실 비율 39.6 → 26.6% · 블라인드 46.2 → 33.5%).
             nb = {'emoji': '', 'line': '지금 사도 됩니다 (나눠서).',
                   'detail': (f"한 번에 다 사지 말고 나눠 사세요. 1차는 지금, "
                              f"손절선(잃음을 멈추는 선) {w(stop)}을 지키세요. "
                              f"1차 목표(먼저 일부 이익실현) {w(t1)}, 2차 목표 {w(t2)}. "
                              + (f"가격이 {w(_half)}(목표의 절반)에 닿으면 손절선을 "
-                                f"본전(산 가격)으로 올리세요 — 1,950건 검증에서 "
-                                f"손실 확률을 약 1/3 줄였습니다. " if _half else "")
+                                f"본전(산 가격)으로 올리세요 — 2026-08-02 경로 1,950건에서 "
+                                f"손실로 끝난 비율을 약 3분의 1 줄였습니다(비용 차감 평균은 여전히 "
+                                f"음수였습니다). " if _half else "")
                              + odds)}
         elif rec is not None and curr_price and curr_price > rec:
             # ⚠️ 라운드 184 — **비용 후 기대값이 양수가 아닌데** "…이하로
@@ -2127,7 +2173,9 @@ class QuantIndicatorsEngine:
                 _ney = float(_ney) if _ney is not None else None
             except (TypeError, ValueError):
                 _ney = None
-            if _ney is not None and _ney > 0:
+            # 라운드 386 — 중앙 판정이 '실행 가능(actionable)'이 아니면 '사세요'를 쓰지 않는다(위 분기와 같은 이유).
+            if (_ney is not None and _ney > 0
+                    and (core is None or core.get('actionable'))):
                 _rec_key = '권장 매수가(1차 분할)'  # 조건부지만 매수를 권한다
                 nb = {'emoji': '', 'line': f'{w(rec)} 이하로 내려올 때만 사세요.',
                       'detail': (f"지금 가격({w(curr_price)})은 계산된 매수 구간보다 높습니다. "
@@ -2141,7 +2189,14 @@ class QuantIndicatorsEngine:
                 #   0.41** 로 낸 다른 수다(verdict_core). 그래서 한 화면이 *"기대값 미산출"* 과 *"기대값
                 #   −0.25%"* 를 같이 적었다(외부 검토 · 2026-09-29). 수는 안 바꾸고 **이름을 계산에 맞춘다**
                 #   (R239·R359) — 그리고 못 잰 값(None)을 *"양수가 아니라"* 로 읽지 않는다(§3).
-                if _ney is not None:
+                if _ney is not None and _ney > 0:
+                    # 라운드 386 — 유사패턴 평균은 양수인데 **중앙 판정이 막은** 경우. 막은 사유는 중앙 판정의
+                    #   것을 옮긴다(새로 짓지 않는다 · §4).
+                    _ney_why = ("유사패턴 평균 수익(비용 차감)은 "
+                                f"{_ney:+.2f}%지만 중앙 판정이 막았습니다 — "
+                                + str((core or {}).get('exclude_reason') or '매수 조건 미충족')
+                                + " 신규 매수를 권하지 않습니다. ")
+                elif _ney is not None:
                     _ney_why = (f"유사패턴 평균 수익(비용 차감)이 {_ney:+.2f}%로 양수가 아니라 "
                                 f"신규 매수를 권하지 않습니다. ")
                 else:
@@ -2163,7 +2218,9 @@ class QuantIndicatorsEngine:
                             "실행할 수 없는 숫자였습니다(2026-08-04 폐기). "
                             "이 종목은 근거가 더 생길 때까지 관망이 안전합니다."}
         else:
-            _why = vetoes[0] if vetoes else "매수 조건 미충족"
+            # 라운드 386 — 거부권이 없으면 중앙 판정이 낸 사유를 옮긴다(화면이 core 를 넘긴 경우 · §4).
+            _why = (vetoes[0] if vetoes
+                    else (str((core or {}).get('exclude_reason') or '').strip() or "매수 조건 미충족"))
             nb = {'emoji': '', 'line': '지금은 사지 마세요 — 조건이 충족될 때까지 기다리세요.',
                   'detail': (f"막는 조건: {_why}. 가격은 매수 구간({w(rec)} 이하)이어도 "
                              f"이 조건이 풀려야 삽니다. {odds}")}
@@ -2178,62 +2235,66 @@ class QuantIndicatorsEngine:
 
         # ── 보유자 ────────────────────────────────────────────────────
         #
-        # 여기서는 h_trim·h_stop(보유자 · 현재가 기준)만 쓴다. 위 신규 매수자
-        # 문단의 t1·stop 은 **진입가 기준**이라 이미 사 놓은 사람에게는 남의
-        # 숫자다. 라운드 53 이전에는 두 문단이 같은 변수를 나눠 쓰고 있었다.
+        # ⚠️ 라운드 386 — **라운드 304·357 의 세 번째 자리였다.** 이 문단이 자기 규칙으로 보유자 행동을
+        #   골랐다: 평단 대비 수익이면 '계속 보유' · 수익 + 추세선 이격 25% 초과면 '절반 매도' · 손실
+        #   −15% 이하면 '비중 축소'(저장소 어디에도 근거가 없는 손으로 고른 수 · §2) · 추가매수는 점수
+        #   58+ 와 추세만 보고 물타기 6조건을 안 봤다. 같은 화면의 관심종목 표·보유 카드·매매 지시서·
+        #   가늠 AI 는 `ui_kit.holder_kind` 한 곳(가격선 위치 + 6조건)으로 고른다. 격자 160칸(고치기 전 ·
+        #   `_probe/r386_easy_holder.py`)에서 **86칸(54%)** 이 달랐고, 가장 나쁜 것은 이 카드가
+        #   *"추가 매수 가능"* 인데 중앙이 **'매도'** 인 8칸이다(지어낸 허락 · R304 가 가장 비싼 오답이라
+        #   적은 그 모양). 외부 검토(2026-09-29)가 *"같은 사실을 같은 기준으로"* 를 짚었다.
+        #   고침은 R304·R357 과 같다 — **갈래는 holder_kind 가 정하고 이 문단은 말로 옮긴다.** 기준선은
+        #   화면이 넘긴 `hold_levels`(관심종목의 보유 계획이 있으면 그 값 · 라운드 225 "관리 기준은
+        #   계획 값") — 안 넘기면 이 스냅샷의 보유자 값. 평단은 **수익률을 적는 데만** 쓴다(§9).
+        #   킷을 못 부르면 옛 규칙으로 돌아가지 않고 판단을 비운다(§3).
         holder = None
         if user_avg and user_avg > 0 and curr_price:
             ret = (curr_price / float(user_avg) - 1.0) * 100.0
-            add_ok = (score is not None and score >= 58 and not downtrend
-                      and not vetoes and rec is not None and curr_price <= rec)
-            if h_stop is not None and curr_price < h_stop:
-                holder = {'emoji': '',
-                          'line': '손절 기준을 이탈했습니다 — 정리(손절)를 검토하세요.',
-                          'detail': (f"현재가가 손절선 {w(h_stop)} 아래입니다. "
-                                     f"현재 {ret:+.1f}%. 손실이 더 커지기 전에 정리하는 것이 "
-                                     f"원칙입니다. 반등을 기다리는 선택은 '기대'이지 근거가 아닙니다.")}
-            elif ret > 0 and overheat:
-                holder = {'emoji': '',
-                          'line': '수익 중 — 일부 매도(절반 이익실현)를 권합니다.',
-                          'detail': (f"현재 {ret:+.1f}% 수익. 단기 과열 신호(장기 추세선 대비 "
-                                     f"+{m10:.0f}%)가 강합니다. 절반은 지금 팔고, 나머지는 "
-                                     f"손절선을 {w(h_stop)}으로 올려 지키며 {w(t2)}까지 보유하세요.")}
-            elif ret > 0:
-                _be_note = ("" if not (h_stop is not None and float(user_avg) > h_stop)
-                            else f"이미 수익 중이니 손절선을 본전({w(float(user_avg))}) "
-                                 f"위로 올려 두는 것도 좋습니다 — 이익을 손실로 되돌리지 "
-                                 f"않는 검증된 운용입니다. ")
-                holder = {'emoji': '',
-                          'line': '계속 보유하세요 — 목표가까지, 손절가는 지키면서.',
-                          'detail': (f"현재 {ret:+.1f}% 수익. {w(h_trim)} 도달 시 일부 매도, "
-                                     f"{w(t2)}가 최종 목표입니다. {_be_note}종가가 {w(h_stop)} 아래로 "
-                                     f"내려가면 원칙대로 정리하세요. 추가 매수는 "
-                                     + ("가능 구간입니다 (나눠서)." if add_ok else "지금은 하지 마세요."))}
-            elif add_ok:
-                holder = {'emoji': '',
-                          'line': f'보유 유지 — 추가 매수는 {w(rec)} 이하에서만 나눠서.',
-                          'detail': (f"현재 {ret:+.1f}%. 추세가 살아 있고 매수 구간 안이라 "
-                                     f"분할 추가매수를 검토할 수 있습니다. 단, 손절선 {w(h_stop)}은 "
-                                     f"반드시 지키세요. {odds}")}
+            hl = dict(hold_levels or {})
+            _hs = hl.get('stop', h_stop)
+            _ht = hl.get('trim', h_trim)
+            _hb = hl.get('buy', rec)
+            _had = hl.get('avg_down_ok')
+            _basis = str(hl.get('basis') or '오늘 값')
+            _ret_txt = f"현재 {ret:+.1f}% " + ('수익' if ret >= 0 else '손실') + "입니다(평단 기준). "
+            try:
+                if judge is None:
+                    raise LookupError('보유 판정 함수를 받지 못했다')
+                _kind, _why = judge(curr_price, _hs, _ht, buy=_hb, avg_down_ok=_had)
+                _label = (label(_kind) if (label and _kind) else _kind)
+            except Exception:                                      # noqa: BLE001
+                _kind, _why, _label = None, '보유 판정을 불러오지 못했습니다 — 옛 규칙으로 대신 판단하지 않습니다', None
+            _no_avg_down = ("가격이 내렸다는 이유만으로 추가 매수(물타기)하지 않습니다 — "
+                            "물타기 6조건을 통과하고 진입가 이하일 때만 봅니다.")
+            if _kind == '정리 검토':
+                holder = {'emoji': '', 'line': f"{_label} · 계획대로면 파는 자리입니다",
+                          'detail': (_ret_txt + f"{_why}. 기준선은 {_basis}입니다. "
+                                     "반등을 기다리는 선택은 '기대'이지 근거가 아닙니다. "
+                                     "여기서 평단을 낮추려는 추가 매수는 하지 않습니다.")}
+            elif _kind == '일부 정리':
+                holder = {'emoji': '', 'line': f"{_label} · 일부를 덜어내는 자리입니다",
+                          'detail': (_ret_txt + f"{_why}. 남은 물량은 손절선 {w(_hs)}에 닿으면 "
+                                     f"정리합니다(기준선: {_basis}). 추가 매수는 하지 않습니다.")}
+            elif _kind == '추가 매수 가능':
+                holder = {'emoji': '', 'line': f"{_label} · {w(_hb)} 이하에서만 나눠서",
+                          'detail': (_ret_txt + f"{_why}. 조건을 통과했다는 뜻이지 지금 사라는 뜻은 "
+                                     f"아닙니다. 손절선 {w(_hs)}은 반드시 지키세요(기준선: {_basis}). "
+                                     + odds)}
+            elif _kind == '보유 유지':
+                holder = {'emoji': '', 'line': f"{_label} · 손절선은 지키면서",
+                          'detail': (_ret_txt + f"{_why}. {w(_ht)}에 닿으면 일부 매도, 손절선 "
+                                     f"{w(_hs)}에 닿으면 정리합니다(기준선: {_basis}). " + _no_avg_down)}
             else:
-                _deep = ret <= -15.0
-                holder = {'emoji': '',
-                          'line': ('물타기(평단 낮추기 목적의 추가 매수)는 하지 마세요.'
-                                   if not _deep else
-                                   '추가 매수 금지 — 반등 시 비중 축소를 검토하세요.'),
-                          'detail': (f"현재 {ret:+.1f}% 손실. "
-                                     + ("하락 추세가 끝나지 않았습니다. " if downtrend else "")
-                                     + (f"기술적 반등이 나오면 {w(h_trim)} 부근에서 비중을 줄이는 "
-                                        f"쪽을 검토하세요. " if _deep else "")
-                                     + f"평단을 낮추려는 추가 매수는 손실을 키우는 경우가 더 "
-                                       f"많습니다. 추세 회복({'월 추세선 회복' if downtrend else '조건 충족'})과 "
-                                       f"거래량 확인 후에만 재검토하세요. 종가 {w(h_stop)} 이탈 시 정리.")}
+                holder = {'emoji': '', 'line': ('판단 보류 — 보유 기준값이 없습니다.'
+                                                if _kind == '보유 기준 미산출' else '판단 보류'),
+                          'detail': _ret_txt + str(_why or '보유 기준값을 받지 못했습니다.')}
+            holder['kind'] = _kind
             holder['ret_pct'] = round(ret, 2)
             holder['prices'] = {'평균 매수가': float(user_avg),
                                 '현재가': float(curr_price),
-                                '손절가(보유 기준)': h_stop,
-                                '반등 시 축소 가격': h_trim, '최종 목표가': t2,
-                                '추가 매수 허용가': (rec if add_ok else None)}
+                                '손절가(보유 기준)': _hs,
+                                '1차 매도가(보유 기준)': _ht, '최종 목표가': t2,
+                                '추가 매수 허용가': (_hb if _kind == '추가 매수 가능' else None)}
 
         return {'new_buyer': nb, 'holder': holder, 'odds_note': odds}
 
@@ -3073,6 +3134,11 @@ class QuantIndicatorsEngine:
                                 for m in model_results.values()
                                 if not m['valid'] and m.get('exclusion_reason')],
             'missing_inputs': missing_inputs,
+            # 라운드 386 — 이익 모형에 쓴 EPS 가 **받은 값인지 유도한 값인지**(외부 검토 · 2026-09-29). 라운드 381 이
+            #   EPS 미수신이면 받은 BPS×ROE 로 유도하게 했는데, ROE 가 평균 자본 기준이면 기말 BPS 와 곱한 값은
+            #   실제 EPS 와 다를 수 있다 — 유도했다는 사실을 화면이 적게 한다(값·산식 불변 · 표시 전용).
+            'eps_basis': ('수신' if in_eps is not None
+                          else ('BPS×ROE 유도' if _eps_model is not None else None)),
             'debt_ratio': in_debt,
             'roe': in_roe,
             'per': in_per,
@@ -4009,12 +4075,11 @@ class QuantIndicatorsEngine:
         calib_band = None
         try:
             if not hasattr(self, '_calibration'):
-                self._calibration = None
-                _cal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                         ".portfolio", "calibration.json")
-                if os.path.exists(_cal_path):
-                    with open(_cal_path, encoding='utf-8') as _cf:
-                        self._calibration = json.load(_cf)
+                # 라운드 386 — `.portfolio/` 에서만 찾으면 배포 앱(빈 .portfolio)은 점수대 적중률을
+                #   못 읽어 비용 차감 기대값이 전 종목 '산출 불가'가 된다(같은 파일이 data/ 에 동봉돼
+                #   있는데도). 찾는 길은 artifact_io 한 곳 — 화면과 같은 차례(.portfolio → data).
+                import artifact_io as _aio386
+                self._calibration = _aio386.load_json("calibration.json")
             if self._calibration:
                 for _b in self._calibration.get('bands', []):
                     if _b['lo'] <= final_action_score <= _b['hi']:
@@ -5490,6 +5555,20 @@ class QuantIndicatorsEngine:
 
         four_scores = self.compute_four_separated_scores(symbol, tech_df, fund_df, sim_res, val_eval)
         price_pos = self.compute_decoupled_price_position(tech_df, val_eval)
+        # ⚠️ 라운드 386 — 읽는 곳은 있는데 **만드는 곳이 0** 인 칸 둘(R297·R313 의 거울상 · 이번 감사가 AST 로 셌다).
+        #   계층 보정 확률(case_layers — 화면 타일 '계층 보정 확률'), 선정 이유(why_pick — '52주 고점권' 위험 ·
+        #   뉴스 선반영 판정), 엔진 비교 표가 four_scores 의 `range_position_pct` · `market` 을 읽는데 엔진은 둘 다
+        #   내지 않았다. 그래서 계층 확률의 L3(시장 × 변동성)·L4b(눌림·돌파) 층은 **운영에서 한 번도 안 쓰였고** —
+        #   그 확률을 채택한 R59 게이트는 원장 칸(range_pos · market)으로 **다 쓰는** 판을 쟀다(학습·운영이 다른 식) —
+        #   선반영 판정은 늘 '모름'이었다. 원장(calibration_lab)과 **같은 정의**로 싣는다(새 계산 없음 · 표시 칸).
+        #   시장은 접미사로 직접 유도하지 않고 **소유 함수**(`bitemporal_engine.market_of` · 라운드 159·207 — 실측이
+        #   접미사보다 앞선다)를 부른다. 원장은 접미사로 적었으므로 접미사가 틀린 드문 종목에서만 다를 수 있다.
+        four_scores['range_position_pct'] = price_pos.get('range_pos_pct')
+        try:
+            import bitemporal_engine as _be386
+            four_scores['market'] = _be386.market_of(symbol)
+        except Exception:                                          # noqa: BLE001
+            four_scores['market'] = None
         self.current_oos_result = None      # 종목 간 누수 방지
 
         last_row = prices_df.iloc[-1]

@@ -255,18 +255,20 @@ def pick_from_scan_row(q_engine, r):
         verdict = q_engine.build_final_verdict(snap) if snap else None
     except Exception:
         verdict = None
+    # 라운드 386 — 중앙 판정을 **먼저** 만들고 쉬운 결론에 넘긴다. 종전엔 쉬운 결론이 엔진 판정만 보고
+    #   '사세요'를 적을 수 있었고(두 번째 판정자 · R193), 카드 분류(reco_class)가 그 문장을 읽었다.
+    _core = _core_of(q_engine, r, fs, verdict)
     try:
         easy = q_engine.build_easy_advice(
             fs, verdict or {'score': r.get('final_score'),
                             'action': 'HOLD', 'vetoes': []},
-            r.get('base_price'))
+            r.get('base_price'), core=_core)
         easy_nb = easy['new_buyer']
     except Exception:
         easy_nb = {'emoji': '', 'line': '판단 보류', 'detail': ''}
 
     nf = ((snap.get('market_context') or {}).get('news_flags') or {})
     cb = fs.get('calibration_band') or {}
-    _core = _core_of(q_engine, r, fs, verdict)
     return {
         'code': str(r.get('symbol', '')).split('.')[0],
         'symbol': r.get('symbol'),

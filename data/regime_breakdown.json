@@ -1,0 +1,274 @@
+{
+ "generated_from": "virtual_graded.jsonl",
+ "vol_split": 0.03,
+ "min_cell_n": 30,
+ "mode": "6",
+ "gap3": 31.8,
+ "gap6": 6.5,
+ "regime_ko": {
+  "BULL": "상승",
+  "SIDEWAYS": "옆걸음",
+  "BEAR": "하락"
+ },
+ "vol_ko": {
+  "calm": "차분한",
+  "rough": "거친"
+ },
+ "buy_zone": {
+  "train": {
+   "BULL": {
+    "n": 700,
+    "hit": 59.1,
+    "ci_low": 55.5,
+    "ci_high": 62.7,
+    "net": -0.23,
+    "mae": 3.8,
+    "vol": 2.55
+   },
+   "SIDEWAYS": {
+    "n": 1080,
+    "hit": 54.8,
+    "ci_low": 51.8,
+    "ci_high": 57.8,
+    "net": -0.53,
+    "mae": 4.19,
+    "vol": 2.77
+   },
+   "BEAR": {
+    "n": 588,
+    "hit": 59.5,
+    "ci_low": 55.5,
+    "ci_high": 63.4,
+    "net": -0.13,
+    "mae": 4.12,
+    "vol": 2.84
+   }
+  },
+  "valid": {
+   "BULL": {
+    "n": 328,
+    "hit": 54.0,
+    "ci_low": 48.6,
+    "ci_high": 59.3,
+    "net": -0.61,
+    "mae": 4.42,
+    "vol": 2.64
+   },
+   "SIDEWAYS": {
+    "n": 175,
+    "hit": 72.0,
+    "ci_low": 64.9,
+    "ci_high": 78.1,
+    "net": 0.9,
+    "mae": 3.69,
+    "vol": 2.79
+   },
+   "BEAR": {
+    "n": 27,
+    "hit": 85.2,
+    "ci_low": 67.5,
+    "ci_high": 94.1,
+    "net": 2.92,
+    "mae": 3.13,
+    "vol": 3.26
+   }
+  },
+  "blind": {
+   "BULL": {
+    "n": 136,
+    "hit": 61.0,
+    "ci_low": 52.6,
+    "ci_high": 68.8,
+    "net": 0.89,
+    "mae": 5.68,
+    "vol": 4.41
+   },
+   "SIDEWAYS": {
+    "n": 128,
+    "hit": 56.2,
+    "ci_low": 47.6,
+    "ci_high": 64.5,
+    "net": -0.28,
+    "mae": 7.68,
+    "vol": 5.09
+   },
+   "BEAR": {
+    "n": 16,
+    "hit": 12.5,
+    "ci_low": 3.5,
+    "ci_high": 36.0,
+    "net": -10.3,
+    "mae": 13.9,
+    "vol": 6.69
+   }
+  }
+ },
+ "cells6": {
+  "BULL|calm": {
+   "train": {
+    "n": 496,
+    "hit": 59.3,
+    "ci_low": 54.9,
+    "ci_high": 63.5,
+    "net": -0.24,
+    "mae": 2.97,
+    "vol": 1.85
+   },
+   "valid": {
+    "n": 225,
+    "hit": 54.2,
+    "ci_low": 47.7,
+    "ci_high": 60.6,
+    "net": -0.61,
+    "mae": 3.42,
+    "vol": 1.89
+   },
+   "blind": {
+    "n": 38,
+    "hit": 57.9,
+    "ci_low": 42.2,
+    "ci_high": 72.1,
+    "net": -0.12,
+    "mae": 3.1,
+    "vol": 2.13
+   }
+  },
+  "BULL|rough": {
+   "train": {
+    "n": 204,
+    "hit": 58.8,
+    "ci_low": 52.0,
+    "ci_high": 65.4,
+    "net": -0.21,
+    "mae": 5.81,
+    "vol": 4.26
+   },
+   "valid": {
+    "n": 103,
+    "hit": 53.4,
+    "ci_low": 43.8,
+    "ci_high": 62.7,
+    "net": -0.61,
+    "mae": 6.61,
+    "vol": 4.29
+   },
+   "blind": {
+    "n": 98,
+    "hit": 62.2,
+    "ci_low": 52.4,
+    "ci_high": 71.2,
+    "net": 1.28,
+    "mae": 6.68,
+    "vol": 5.3
+   }
+  },
+  "SIDEWAYS|calm": {
+   "train": {
+    "n": 724,
+    "hit": 54.3,
+    "ci_low": 50.6,
+    "ci_high": 57.9,
+    "net": -0.55,
+    "mae": 3.14,
+    "vol": 1.94
+   },
+   "valid": {
+    "n": 109,
+    "hit": 77.1,
+    "ci_low": 68.3,
+    "ci_high": 84.0,
+    "net": 1.06,
+    "mae": 2.42,
+    "vol": 1.9
+   },
+   "blind": {
+    "n": 20,
+    "hit": 55.0,
+    "ci_low": 34.2,
+    "ci_high": 74.2,
+    "net": -0.07,
+    "mae": 3.68,
+    "vol": 2.43
+   }
+  },
+  "SIDEWAYS|rough": {
+   "train": {
+    "n": 356,
+    "hit": 55.9,
+    "ci_low": 50.7,
+    "ci_high": 61.0,
+    "net": -0.5,
+    "mae": 6.31,
+    "vol": 4.46
+   },
+   "valid": {
+    "n": 66,
+    "hit": 63.6,
+    "ci_low": 51.6,
+    "ci_high": 74.2,
+    "net": 0.63,
+    "mae": 5.78,
+    "vol": 4.25
+   },
+   "blind": {
+    "n": 108,
+    "hit": 56.5,
+    "ci_low": 47.1,
+    "ci_high": 65.5,
+    "net": -0.32,
+    "mae": 8.42,
+    "vol": 5.58
+   }
+  },
+  "BEAR|calm": {
+   "train": {
+    "n": 380,
+    "hit": 58.2,
+    "ci_low": 53.1,
+    "ci_high": 63.0,
+    "net": -0.32,
+    "mae": 3.24,
+    "vol": 2.01
+   },
+   "valid": {
+    "n": 11,
+    "hit": 81.8,
+    "ci_low": 52.3,
+    "ci_high": 94.9,
+    "net": 1.48,
+    "mae": 2.25,
+    "vol": 2.14
+   },
+   "blind": null
+  },
+  "BEAR|rough": {
+   "train": {
+    "n": 208,
+    "hit": 62.0,
+    "ci_low": 55.3,
+    "ci_high": 68.3,
+    "net": 0.22,
+    "mae": 5.72,
+    "vol": 4.34
+   },
+   "valid": {
+    "n": 16,
+    "hit": 87.5,
+    "ci_low": 64.0,
+    "ci_high": 96.5,
+    "net": 3.91,
+    "mae": 3.74,
+    "vol": 4.03
+   },
+   "blind": {
+    "n": 16,
+    "hit": 12.5,
+    "ci_low": 3.5,
+    "ci_high": 36.0,
+    "net": -10.3,
+    "mae": 13.9,
+    "vol": 6.69
+   }
+  }
+ }
+}

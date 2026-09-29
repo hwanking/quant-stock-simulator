@@ -33,10 +33,10 @@ def _wilson(hit: int, n: int, z: float = 1.96):
 
 
 def _calib():
+    # 라운드 386 — 배포 앱은 빈 .portfolio 에서 뜬다. 엔진·화면과 같은 길(artifact_io)로 찾는다.
     try:
-        with open(os.path.join(BASE, '.portfolio', 'calibration.json'),
-                  encoding='utf-8') as f:
-            return json.load(f)
+        import artifact_io as _aio
+        return _aio.load_json('calibration.json') or {}
     except Exception:
         return {}
 

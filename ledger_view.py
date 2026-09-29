@@ -33,6 +33,14 @@ import datetime as _dt
 SPACING_BARS = 25
 MIN_GAP_DAYS = SPACING_BARS * 7 // 5          # = 35
 
+#: 원장 집계표(calibration.json)의 '비용 차감 평균수익'이 빼는 왕복 비용(%) — 라운드 386.
+#:   집계 랩(`scripts/calibration_lab.py`)이 2026-08 부터 **보수적 추정 0.55** 로 빼 왔고(라운드 195 의 §55
+#:   계약값과 같다), 중앙 판정의 운영 비용은 `verdict_core.COST_PCT`(오늘 0.41 · 라운드 350)다. 두 수가 한
+#:   사이트에 '비용 차감'이라는 같은 이름으로 나가므로(외부 검토 · 2026-09-29) 화면이 **어느 비용인지**를
+#:   같이 적는다. 수는 바꾸지 않았다 — 바꾸면 그동안 발표한 표가 전부 움직인다(R255 · 각 라운드 재현용).
+#:   랩과 화면이 이 한 곳을 읽는다(§4).
+CALIB_COST_PCT = 0.55
+
 
 def _day(d):
     return _dt.date.fromisoformat(str(d)[:10])
@@ -281,6 +289,10 @@ def touch_cdf(records, bars=HORIZON_BARS):
 #: 매수권 하한 — 이 저장소가 이미 쓰는 값(원장 요약·감시가 같은 58 을 쓴다). 새 숫자 아님.
 BUY_ZONE_SCORE = 58
 
+#: DeMARK 카운트다운 계산을 고친 날(라운드 386 · `quant_indicators.td_countdown`). 원장의 `demark_state`
+#: 는 그 행을 만든 날의 계산으로 찍혔으므로, 이 날 앞의 행과 뒤의 행은 13 의 정의가 다르다.
+DEMARK_DEF_CHANGED = '2026-09-29'
+
 
 def demark_complete_lift(records, min_score=BUY_ZONE_SCORE):
     """차트의 '13 매수' 표식이 원장에서 무엇을 했나 — 구간별 (라운드 285 · 표시 전용).
@@ -345,7 +357,12 @@ def demark_lift_line(lift):
             if mixed else '방향은 같지만 이 표식만으로 판단하지 않습니다')
     return ('차트의 13 매수·매도 표식은 **판정에 들어가지 않습니다** — 원장에서 '
             '매수권 안 13 완성과 그 외의 적중 차이를 재면 ' + ' · '.join(parts)
-            + f'. {tail}.')
+            + f'. {tail}. '
+            # 라운드 386 — 카운트다운 계산을 고쳤다(셋업 9 가 이어지는 동안 매 봉 0 으로 돌아가던 결함). 원장 행
+            #   대부분은 그 전 계산으로 찍힌 13 이라, 지금 차트의 13 과 **같은 정의가 아니다** — 말하지 않으면
+            #   이 수가 지금 표식의 값어치로 읽힌다(§3).
+            + f'원장 행 대부분은 {DEMARK_DEF_CHANGED} 전 카운트다운 계산으로 찍힌 13 이라, 지금 차트의 13 과 '
+              '같은 정의가 아닙니다.')
 
 
 # ── 선에 닿은 뒤 판 것 vs 든 것 (라운드 340 · 표시 전용) ─────────────────────

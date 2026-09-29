@@ -102,11 +102,19 @@ def cell_ko(key):
 
 
 def _load():
+    """국면 성적 파일 — 못 읽으면 **None** (빈 dict 가 아니다).
+
+    ⚠️ 라운드 386 — 종전엔 `.portfolio/` 에서만 찾고 못 읽으면 `{}` 를 돌려줬다. 배포 앱은 빈
+      `.portfolio/` 에서 뜨므로 **모든 종목이 '표본 없음' 상한**(점수 55 · 신뢰도 60 · 손절 0.9배)을
+      받았고, 사유 문장은 *"표본이 없습니다"* 라는 거짓을 적었다(표본은 있고 파일을 못 읽은 것이다).
+      찾는 길은 `artifact_io` 한 곳(`.portfolio` → `data` 동봉본 · 화면과 같은 차례)이다.
+    """
     try:
-        with open(BREAKDOWN, encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        import artifact_io as _aio
+        d = _aio.load_json(os.path.basename(BREAKDOWN))
+    except Exception:                                          # noqa: BLE001
+        d = None
+    return d if isinstance(d, dict) else None
 
 
 SPLITS = ('train', 'valid', 'blind')
@@ -151,8 +159,16 @@ def policy(regime, vol20, breakdown=None):
         out['why'] = '국면을 판정하지 못해 국면별 제한을 걸지 않습니다.'
         return out
     d = breakdown if breakdown is not None else _load()
-    cell = ((d.get('cells6') or {}).get(key) or {})
     out['cell'], out['cell_ko'] = key, cell_ko(key)
+    if d is None:
+        # 라운드 386 — 파일을 **못 읽은 것**과 칸에 **표본이 없는 것**은 다르다(§3). 모르는 것은 같으므로
+        #   거는 상한은 '표본 없음'과 같게 두되(모르면 낮춘다 · 새 수 없음), 이유를 사실대로 적는다.
+        out.update(NO_SAMPLE)
+        out['basis'] = '성적 파일 못 읽음'
+        out['why'] = (f"{out['cell_ko']} 국면의 성적 파일을 **읽지 못했습니다** — 표본이 없다는 뜻이 "
+                      f"아닙니다. 모르는 상태이므로 점수와 신뢰도에 상한을 겁니다.")
+        return out
+    cell = ((d.get('cells6') or {}).get(key) or {})
 
     pn, pk = _pool(cell)
     bl = cell.get('blind') or {}
@@ -183,8 +199,12 @@ def policy(regime, vol20, breakdown=None):
             break
 
     if bn and bn < MIN_N:
-        note = (f" 실전 표본은 {bn}건뿐이라 판단 근거로 쓰지 않았습니다"
-                f" (기준 {MIN_N}건)")
+        # ⚠️ 라운드 386 — 종전 문장은 *"판단 근거로 쓰지 않았습니다"* 였는데, 이 칸의 블라인드는 위
+        #   통합 표본(_pool)에 **들어 있다**(라운드 27b 의 설계). 빠지는 것은 '실전 하한을 따로 보는 것'
+        #   뿐이다. 외부 검토가 짚었다. 실측(2026-08-03 파일 · 30건 미만 칸 둘): 빼도 구간이 바뀌는 칸 0 —
+        #   규칙은 그대로 두고 문장을 계산에 맞춘다(R239·R359).
+        note = (f" 실전 표본 {bn}건은 위 통합 표본에 합쳐져 있고, {MIN_N}건에 못 미쳐 "
+                f"실전 하한을 따로 보지는 않았습니다")
     elif out['blind_low'] is not None:
         note = (f" 실전만 보면 {bhit:.0f}%(n={bn}, 하한 "
                 f"{out['blind_low']:.0f}%)입니다")
