@@ -30352,6 +30352,61 @@ check("오염 점검이 두 판정자(채점 도장·축척 감사)의 행 불�
       and (_sj382 is None or all(k in _sj382 for k in ('stamp_only', 'audit_only_stamped_same'))),
       str(_sj382))
 
+print("\n" + "=" * 72)
+print("§383 되받기가 이 PC 에만 있는 예측 행을 지우지 않는다 — 열쇠로 합친다 (라운드 392)")
+print("=" * 72)
+# `predictions.jsonl` 은 이 PC 의 앱과 클라우드 기록기가 **둘 다** 덧붙이는 파일인데, 되받기가 통째로 덮어
+#   이 PC 에만 있던 행이 되받을 때마다 사라졌다(2026-09-30 · 4행 · 손으로 합쳤다 · R247 도 손으로). 받은 쪽이
+#   더 길면 축소 가드도 못 막는다. 이제 (종목코드 6자리, 기준일)로 합친다 — 오염 점검이 이 파일의 중복을 세는
+#   열쇠와 같다(R390). 줄은 글자 그대로 옮기고 못 읽은 로컬 줄도 버리지 않는다(R197).
+import json as _js383                                            # noqa: E402
+import zipfile as _zf383                                         # noqa: E402
+import tempfile as _tf383                                        # noqa: E402
+from scripts import pull_research_data as _pr383                 # noqa: E402
+from scripts import snapshot_guard as _sg383                     # noqa: E402
+
+
+def _row383(tk, d, act='HOLD'):
+    return _js383.dumps({'ticker': tk, 'date': d, 'action': act}, ensure_ascii=False)
+
+
+_inc383 = [_row383('111111.KS', '2026-09-28'), _row383('222222.KS', '2026-09-28')]
+_loc383 = [_row383('222222.KQ', '2026-09-28', 'BUY'),     # 접미사만 다른 같은 예측 → 받은 쪽을 쓴다
+           _row383('333333.KS', '2026-09-29'),             # 이 PC 에만 있다 → 남는다
+           '{깨진 줄']                                     # 못 읽는 줄 → 버리지 않는다
+_m383, _c383 = _pr383.union_merge(_inc383, _loc383)
+check("심기 — 받은 줄이 먼저 · 이 PC 에만 있는 열쇠는 남고 · 접미사만 다른 같은 예측은 한 번만 · 못 읽은 줄도 안 버린다",
+      _m383 == _inc383 + [_loc383[1], _loc383[2]]
+      and _c383 == dict(incoming=2, local_only=1, local_dup=1, local_unparsed=1, total=4), str(_c383))
+_m2383, _c2383 = _pr383.union_merge(_m383, _loc383)
+check("멱등 — 합친 결과를 다시 받은 쪽으로 넣어도 늘지 않는다",
+      _m2383 == _m383 and _c2383['local_only'] == 0, str(_c2383))
+_m3383, _c3383 = _pr383.union_merge([_inc383[0]], _inc383 + [_loc383[1]])
+check("받은 쪽이 더 짧아도(축소) 합집합이다 — 어느 쪽 행도 안 잃는다",
+      len(_m3383) == 3 and _c3383['local_only'] == 2, str(_c3383))
+check("합치는 파일은 축소 가드가 지키는 파일이다 (감시 목록 밖의 이름을 적지 않았다)",
+      _pr383.UNION_FILES and all(f in _sg383.WATCH for f in _pr383.UNION_FILES), str(sorted(_pr383.UNION_FILES)))
+# extract 왕복 — 임시 zip · 임시 폴더(사용자 .portfolio 는 안 건드린다)
+_d383 = _tf383.mkdtemp(prefix='r392_')
+_zp383 = _os.path.join(_d383, 'snap.zip')
+with _zf383.ZipFile(_zp383, 'w') as _z383:
+    _z383.writestr('predictions.jsonl', '\n'.join(_inc383) + '\n')
+_pd383 = _os.path.join(_d383, 'portfolio')
+_os.makedirs(_pd383)
+with open(_os.path.join(_pd383, 'predictions.jsonl'), 'w', encoding='utf-8') as _f383:
+    _f383.write('\n'.join(_loc383[:2]) + '\n')
+_w383, _k383, _s383 = _pr383.extract(_zp383, {'predictions.jsonl'}, portfolio_dir=_pd383,
+                                     data_dir=_os.path.join(_d383, 'data'))
+with open(_os.path.join(_pd383, 'predictions.jsonl'), encoding='utf-8') as _f383:
+    _after383 = [ln for ln in _f383.read().splitlines() if ln.strip()]
+check("되받기(extract)가 그 파일을 덮지 않고 합친다 — 축소 건너뜀 목록에 있어도 합친다 · 셈을 남긴다",
+      _after383 == _inc383 + [_loc383[1]] and 'predictions.jsonl' in _w383
+      and _pr383.MERGED.get('predictions.jsonl', {}).get('local_only') == 1,
+      f"{len(_after383)}줄 · {_pr383.MERGED}")
+_src383 = _read148(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'))
+check("미리보기와 적용 둘 다 '이 PC 에만 N줄'을 찍는다 (조용히 합치지 않는다 · §3)",
+      _src383.count("이 PC 에만 {cnt['local_only']:,}") >= 2)
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

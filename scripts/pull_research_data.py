@@ -181,6 +181,60 @@ def data_members(path):
                 if not i.is_dir() and i.filename.replace('\\', '/').startswith('data/')]
 
 
+#: 합집합으로 받는 파일 (라운드 392) — **로컬 앱도 쓰고 클라우드 기록기도 쓰는** 추가 전용 기록.
+#: `predictions.jsonl` 은 이 PC 의 앱(web_app·premarket)과 클라우드의 전방 기록기가 둘 다 덧붙인다
+#: (forward_recorder 독스트링 · R97). 통째로 덮으면 **이 PC 에만 있던 행이 되받을 때마다 사라진다** —
+#: 2026-09-30 되받기에서 4행(09-28·09-29 기준일)이 그렇게 사라질 뻔했고 손으로 열쇠 합집합을 했다
+#: (라운드 247 도 같은 파일을 손으로 합쳤다). 축소 가드도 못 막는다 — 받은 쪽이 더 길면 '늘었다'로 본다.
+#: 열쇠는 (종목코드 6자리, 기준일)이다 — 오염 점검이 이 파일의 중복을 세는 열쇠와 같다(R390 ·
+#: `ledger_view.scale_key` · 시장 접미사만 다른 같은 예측을 두 번 넣지 않는다).
+UNION_FILES = frozenset({'predictions.jsonl'})
+#: 마지막 extract 가 합친 파일의 셈 — main 이 찍는다(조용히 합치지 않는다 · §3).
+MERGED = {}
+
+
+def union_merge(incoming, local_lines):
+    """받은 줄 + 로컬에만 있는 열쇠의 줄 → (합친 줄, 셈 dict). 순수 함수 (라운드 392).
+
+    받은 것이 먼저다(클라우드가 늘 더 많이 쓴다). 로컬 줄은 **글자 그대로** 붙인다 — 다시 쓰지 않는다.
+    못 읽은 로컬 줄은 열쇠를 못 대므로 **버리지 않고** 붙이고 센다(행을 지우지 않는다 · R197 ·
+    그 줄은 오염 점검의 `parse_fail` 이 따로 잡는다). 받은 쪽 줄은 손대지 않는다.
+    같은 입력을 두 번 넣어도 결과가 같다(멱등 — 합친 결과를 다시 받은 쪽으로 넣어도 늘지 않는다)."""
+    import ledger_view as _lv392
+
+    def _key(ln):
+        try:
+            r = json.loads(ln)
+        except Exception:                                      # noqa: BLE001
+            return None
+        if not isinstance(r, dict):
+            return None
+        return _lv392.scale_key(r.get('ticker'), r.get('date'))
+
+    inc = [ln for ln in (s.strip() for s in incoming) if ln]
+    have = {k for k in (_key(ln) for ln in inc) if k is not None}
+    inc_set = set(inc)
+    add, dup, only, unparsed = [], 0, 0, 0
+    for ln in (s.strip() for s in local_lines):
+        if not ln:
+            continue
+        k = _key(ln)
+        if k is None:
+            unparsed += 1
+            if ln not in inc_set:
+                inc_set.add(ln)
+                add.append(ln)
+            continue
+        if k in have:
+            dup += 1
+            continue
+        have.add(k)
+        add.append(ln)
+        only += 1
+    return inc + add, dict(incoming=len(inc), local_only=only, local_dup=dup,
+                           local_unparsed=unparsed, total=len(inc) + len(add))
+
+
 def pattern_of(base):
     """이 파일이 어느 감시 패턴에 속하나 (없으면 None)."""
     for pat in _guard.WATCH:
@@ -210,12 +264,28 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
     """
     import datetime as _dt
     wrote, kept, skipped = [], [], []
+    MERGED.clear()
     with zipfile.ZipFile(path) as z:
         for info in z.infolist():
             if info.is_dir():
                 continue
             base = os.path.basename(info.filename)
             norm = info.filename.replace('\\', '/')
+            if base in UNION_FILES and not norm.startswith('data/'):
+                # 라운드 392 — 덮지 않고 합친다. 축소 여부와 무관하다(합집합은 두 쪽 모두보다 작지 않다).
+                dst = os.path.join(portfolio_dir, base)
+                with z.open(info) as src:
+                    incoming = src.read().decode('utf-8', errors='replace').splitlines()
+                local = []
+                if os.path.exists(dst):
+                    with open(dst, encoding='utf-8', errors='replace') as f:
+                        local = f.read().splitlines()
+                merged, cnt = union_merge(incoming, local)
+                with open(dst, 'w', encoding='utf-8', newline='\n') as out:
+                    out.write('\n'.join(merged) + ('\n' if merged else ''))
+                MERGED[base] = cnt
+                wrote.append(base)
+                continue
             if norm.startswith('data/'):
                 dst = os.path.join(data_dir, base)
                 with z.open(info) as src:
@@ -323,12 +393,28 @@ def main():
         b = (before.get(k) or {}).get('lines', 0)
         a = (after.get(k) or {}).get('lines', 0)
         mark = ''
-        if a < b:
+        if k in UNION_FILES:
+            mark = '  ← 덮지 않고 (종목 6자리, 날짜)로 합친다'
+            grew += int(a != b)
+        elif a < b:
             shrunk.append((k, b, a))
             mark = '  ← 줄어든다'
         elif a > b:
             grew += 1
         print(f'  {k:30s} {b:>9,} → {a:>9,} ({a - b:+,}){mark}')
+    # 라운드 392 — 합칠 파일은 미리보기에서도 몇 줄이 이 PC 에만 있어 남는지 적는다
+    with zipfile.ZipFile(zip_path) as z:
+        for info in z.infolist():
+            base = os.path.basename(info.filename)
+            if base in UNION_FILES and not info.filename.replace('\\', '/').startswith('data/'):
+                dst = os.path.join(P, base)
+                local = []
+                if os.path.exists(dst):
+                    with open(dst, encoding='utf-8', errors='replace') as f:
+                        local = f.read().splitlines()
+                _m, cnt = union_merge(z.read(info).decode('utf-8', errors='replace').splitlines(), local)
+                print(f"  {base}: 받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,}"
+                      f" (같은 열쇠 {cnt['local_dup']:,} · 못 읽은 로컬 줄 {cnt['local_unparsed']:,})")
 
     skip = set()
     if shrunk:
@@ -355,6 +441,9 @@ def main():
     os.makedirs(P, exist_ok=True)
     wrote, kept, skipped = extract(zip_path, skip)
     print(f'\n덮어씀 {len(wrote)}개 · 로컬 유지 {len(kept) + len(skipped)}개')
+    for base, cnt in MERGED.items():
+        print(f"  합침 {base}: 받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,}"
+              f" (같은 열쇠 {cnt['local_dup']:,} · 못 읽은 로컬 줄 {cnt['local_unparsed']:,})")
     _dw = [b for b in wrote if b in dnew]
     if dmem:
         print(f'  관측 산출물(data/) 덮어씀 {len(_dw)}개 — git 에 올리려면 커밋은 사람이 한다(R261)')
