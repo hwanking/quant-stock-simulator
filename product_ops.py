@@ -166,8 +166,8 @@ def build_global_issues(calib, market_ctx=None):
     if (bz.get('n') or 0) < 30:
         issues.append(_issue(
             '모델', '높음',
-            f"고신뢰(60점+) 신호 표본 부족 경고 유지 (n={bz.get('n', 0)})",
-            f"블라인드 고신뢰 적중률 {bz.get('hit_rate', 0):.0f}%는 표본이 적어 "
+            f"매수권(60점+) 신호 표본 부족 경고 유지 (n={bz.get('n', 0)})",
+            f"블라인드 매수권(60점+) 적중률 {bz.get('hit_rate', 0):.0f}%는 표본이 적어 "
             "확정 성능으로 인정하지 않습니다. 30건까지는 참고만 하세요."))
     if (v.get('hit_rate') is not None and b.get('hit_rate') is not None
             and v['hit_rate'] - b['hit_rate'] >= 10):

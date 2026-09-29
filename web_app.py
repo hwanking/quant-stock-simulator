@@ -4365,18 +4365,32 @@ if st.session_state.get('show_screener', False):
 
             _SIG_KO_214 = {'live': '실행 후보', 'wait': None, 'drop': None}
 
+            # ── 라운드 393 — 배너가 *"아래 표에서 종목을 눌러 조건을 확인하세요"* 라 적었는데 사용자가 물었다:
+            #   *"어디를 눌러?"* 아래에는 표가 없고(카드 · 접힌 칸 둘), 판정이 '뺌'인 종목(예: 표본외 성적
+            #   미달)은 **'추천·대기에서 뺀 종목' 접힌 칸에 이름·사유 글자만** 있어 누를 것이 없었다 — '분석 보기'
+            #   버튼은 실행·대기 카드에만 있었다. 안내가 거짓이었다. 종목마다 **아래 어느 칸에 있는지**를 적고
+            #   (가르는 함수는 목록과 같은 `_sig_class` · §4), 세 칸 모두에 같은 '분석 보기'를 둔다. 관심 목록에
+            #   없어 아래 칸에 안 나오는 종목은 그렇다고 적는다(지어낸 길을 가리키지 않는다 · §3).
+            _att_codes393 = {str(_ar.get('code')) for _ar in
+                             ((st.session_state.get('attention_result') or {}).get('rows') or [])}
+            _WHERE_393 = {'live': "아래 '다음 거래일에 실제로 손댈 수 있는 후보'",
+                          'wait': "아래 '조건 충족을 기다리는 후보' 칸",
+                          'drop': "아래 '추천·대기에서 뺀 종목' 칸"}
+
             def _sig_tag(r):
-                """배너 한 종목: 이름(점수 · 판정). 못 냈으면 그렇게 적는다 (§3)."""
+                """배너 한 종목: 이름(점수 · 판정 → 아래 어느 칸). 못 냈으면 그렇게 적는다 (§3)."""
                 _cd = str(r.get('symbol', '')).split('.')[0]
                 _co = ((_pick_of(_cd, r) or {}).get('core') or {})
-                _cls = _sig_class(_co) if _co else None
-                if _cls == 'live':
+                _cls = _sig_class(_co)
+                if _co and _cls == 'live':
                     _tag = '실행 후보'
                 elif _co.get('bucket'):
                     _tag = str(_co.get('bucket'))
                 else:
                     _tag = '판정 미산출'
-                return f"{r.get('name')}({r.get('final_score')}점 · {_tag})"
+                _where = (_WHERE_393[_cls] if _cd in _att_codes393
+                          else '아래 목록에 없음 · 검색으로 여세요')
+                return f"{r.get('name')}({r.get('final_score')}점 · {_tag} → {_where})"
             _bz_rate_txt = (f"{_sf188['rate_pct']}%" if _sf188.get('rate_pct')
                             is not None else "미산출")
             if _made188:
@@ -4388,9 +4402,24 @@ if st.session_state.get('show_screener', False):
                 [r for r in scan_results
                  if 58 <= (r.get('final_score') or 0) < 60],
                 key=lambda r: r.get('final_score') or 0, reverse=True)
+            # ⚠️ 라운드 393 — 이 계층의 이름이 **'고신뢰'** 였다. 그런데 같은 파일(`calibration.json`)이 말하는 이 계층의
+            #   블라인드 적중은 전체 블라인드보다 **낮다**(2026-09-30 · 60점+ 54.5% · n=1,320 vs 전체 58.8% · 통계 행 기준).
+            #   화면 사용자가 *"어디를 눌러?"* 하고 붙인 그 배너에서 '표본외 성적 미달' 판정 종목이 '고신뢰' 이름을 달고
+            #   있었다 — 이름이 계산보다 넓으면 사용자는 없는 근거를 있다고 읽는다(R237·R239·R359 · §9). 이름은 **점수 띠**
+            #   로 좁히고, 그 띠가 블라인드에서 어땠는지를 **같은 파일에서 읽어** 같은 줄에 적는다(낮으면 낮다고 · 손으로
+            #   적은 수는 낡는다 · 못 읽으면 그 조각만 뺀다 · §3). 계층·문턱·판정은 불변.
+            _bzt393 = ''
+            _all393 = ((_cal188.get('splits') or {}).get('blind') or {})
+            if _bl188.get('hit_rate') is not None and _all393.get('hit_rate') is not None:
+                _cmp393 = ('보다 낮습니다' if _bl188['hit_rate'] < _all393['hit_rate'] else
+                           '보다 높습니다' if _bl188['hit_rate'] > _all393['hit_rate'] else '과 같습니다')
+                _bzt393 = (f"점수가 높은 띠라는 뜻이지 더 잘 맞는다는 뜻이 아닙니다 — 이 띠의 블라인드 적중은 "
+                           f"{_bl188['hit_rate']}%(n={int(_bl188.get('n') or 0):,})로 전체 블라인드 "
+                           f"{_all393['hit_rate']}%{_cmp393}"
+                           + (f" (잰 날 {_made188})" if _made188 else "") + ".  \n")
             if _bz_rows:
                 st.success(
-                    f"**고신뢰 매수권(60점+) {len(_bz_rows)}종목** — "
+                    f"**매수권 60점+ {len(_bz_rows)}종목** — "
                     + " · ".join(_sig_tag(r) for r in _bz_rows[:5])
                     # ⚠️ 라운드 188 — 여기가 '실측 신호율 2.9%' 로 **박혀**
                     #   있었다. 원장이 자란 지금 값은 7.2% 다(2.5배 차이).
@@ -4398,8 +4427,9 @@ if st.session_state.get('show_screener', False):
                     #   띄우고 있어 **한 앱이 두 숫자를 말했다.**
                     #   날짜 없는 숫자는 반드시 낡는다 (§9) — 파일에서 읽고
                     #   잰 날을 함께 적는다.
-                    + f"  \n실측 신호율 {_bz_rate_txt}의 드문 구간입니다. "
-                      f"아래 표에서 종목을 눌러 조건을 확인하세요.")
+                    + f"  \n실측 신호율 {_bz_rate_txt}의 드문 구간입니다. " + _bzt393
+                    + "종목마다 아래 어느 칸에 있는지 적었습니다 — 그 칸의 '분석 보기'를 "
+                      "누르면 그 종목의 조건을 봅니다.")
             if _ext_rows:
                 # 라운드 2.5: 이 중 '적정가 이하' 종목이 실측상 가장 좋다
                 # (검증 64.2% → 블라인드 61.9%·비용후 +1.15%)
@@ -4714,6 +4744,12 @@ if st.session_state.get('show_screener', False):
                                 f"**{_rr0['name']}** `{_rr0['code']}` · "
                                 f"{_bk}"
                                 + (f"  \n{_rz}" if _rz else ""))
+                            # 라운드 393 — 이 칸에만 누를 것이 없었다(배너가 '눌러 확인하라'고 가리키는데).
+                            #   실행·대기 카드의 '분석 보기'와 **같은 경로**(pending_search · §4).
+                            if st.button("분석 보기", key=f"att_drop_{_rr0['code']}"):
+                                st.session_state['pending_search'] = (
+                                    f"{_rr0['name']} ({_rr0['code']})")
+                                st.rerun()
 
                 if not _scored_rows:
                     st.info("행동점수까지 산출된 후보가 없습니다. 아래 제외 사유를 확인하세요.")
@@ -11580,7 +11616,7 @@ if _perf_cal.get('total_cases'):
         _bzb_p = (_bz_p.get('blind') or {})
         if (_bzb_p.get('n') or 0) < 30:
             _warn_lines.append(
-                f"고신뢰(60점+) 블라인드 표본이 {_bzb_p.get('n', 0)}건으로 부족합니다 "
+                f"매수권(60점+) 블라인드 표본이 {_bzb_p.get('n', 0)}건으로 부족합니다 "
                 "— 90% 목표 달성 여부는 표본 100건 이상에서 판정합니다.")
         _note_p = str(_perf_cal.get('note') or '')
         if _note_p:

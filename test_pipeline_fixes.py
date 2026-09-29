@@ -4226,8 +4226,10 @@ check("모델 상태 — 상시 표시·화면 최상단 고정",
       < _w68.index('# 개장 전 한 줄 결론')
       < _w68.index('# ── 주요 이슈 (v4)')
       < _w68.index('# 시장 지수 — 배경정보'))
+# 라운드 393 — 이름이 '고신뢰 매수권(60점+)' → '매수권 60점+' 로 좁혀졌다(그 띠의 블라인드 적중이 전체보다 낮다 ·
+#   같은 파일에서 읽어 같은 줄에 적는다 · §384). 이 검사가 재려던 것은 이름이 아니라 60점+ 띠가 강조되는 것이다.
 check("매수권(60점+) 스캔 강조 — 트렌드 탐색기 연동",
-      "고신뢰 매수권(60점+)" in _w68 and "_bz_rows" in _w68)
+      "매수권 60점+ {len(_bz_rows)}종목" in _w68 and "_bz_rows" in _w68)
 check("매수권 없음 = 관망 결론 (날조 금지)",
       "없는 날은 관망이 결론입니다" in _w68)
 check("v5 폴리시 — 접이식 카드화·pill 버튼",
@@ -4248,8 +4250,8 @@ check("규율 — 미공개 원칙 (선택에 못 쓰면 보지 않는다)",
       '볼 이유가 없다' in _ss69)
 
 _w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("스캔 2계층 — 고신뢰(60+)·확장(58~59) 분리 표시",
-      '고신뢰 매수권(60점+)' in _w69 and '확장 신호(58~59점)' in _w69)
+check("스캔 2계층 — 매수권 60점+·확장(58~59) 분리 표시 (라운드 393 이 '고신뢰' 를 뺐다 · 계층은 그대로)",
+      '매수권 60점+ {len(_bz_rows)}종목' in _w69 and '확장 신호(58~59점)' in _w69)
 check("확장 신호 정직 표기 — 최신 실측·비용후 음수·탐색용",
       '블라인드 55.3%(n=226)' in _w69 and '탐색용' in _w69)
 _mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
@@ -30406,6 +30408,49 @@ check("되받기(extract)가 그 파일을 덮지 않고 합친다 — 축소 �
 _src383 = _read148(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'))
 check("미리보기와 적용 둘 다 '이 PC 에만 N줄'을 찍는다 (조용히 합치지 않는다 · §3)",
       _src383.count("이 PC 에만 {cnt['local_only']:,}") >= 2)
+
+print("\n" + "=" * 72)
+print("§384 신호 배너가 가리키는 자리가 실제로 있고 누를 수 있다 (라운드 393)")
+print("=" * 72)
+# 사용자: *"어디를 눌러?"* 배너가 *"아래 표에서 종목을 눌러 조건을 확인하세요"* 라 적었는데 아래에는 표가 없고,
+#   판정이 '뺌'인 종목(표본외 성적 미달 등)은 '추천·대기에서 뺀 종목' 접힌 칸에 **글자만** 있어 누를 것이 없었다.
+#   종목마다 아래 어느 칸인지 적고(목록과 같은 `_sig_class`) 세 칸 모두에 같은 '분석 보기'를 둔다.
+#   쓰기를 막은 앱 테스트(실제 스캔 · 2026-09-30)로 배너 1 · 뺀 칸 버튼 3 · 누르면 검색 입력이 그 종목 · 예외 0.
+import ast as _ast384                                            # noqa: E402
+import scripts.lineage_audit as _la384                           # noqa: E402  (절 안에서만 — 앞 절 이름에 기대지 않는다)
+_wa384 = '\n'.join(_ln for _i, _ln in _la384.code_lines('web_app.py'))
+_t384 = _ast384.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
+_fn384 = {n.name: n for n in _ast384.walk(_t384) if isinstance(n, _ast384.FunctionDef)}
+_rets384 = {n.value.value for n in _ast384.walk(_fn384['_sig_class'])
+            if isinstance(n, _ast384.Return) and isinstance(n.value, _ast384.Constant)}
+_where384 = set()
+for _n384 in _ast384.walk(_t384):
+    if (isinstance(_n384, _ast384.Assign) and any(isinstance(t, _ast384.Name) and t.id == '_WHERE_393'
+                                                 for t in _n384.targets)
+            and isinstance(_n384.value, _ast384.Dict)):
+        _where384 = {k.value for k in _n384.value.keys if isinstance(k, _ast384.Constant)}
+check("배너가 없는 '표'를 가리키지 않는다 (화면으로 나가는 코드 줄 · 주석 제외)",
+      '아래 표에서 종목을 눌러' not in _wa384)
+check("판정 분류가 낼 수 있는 모든 갈래에 '아래 어느 칸'이 적혀 있다 (분류 함수에서 유도 · 빠진 갈래가 없다)",
+      bool(_rets384) and _rets384 <= _where384, f"분류 {sorted(_rets384)} · 자리 {sorted(_where384)}",
+      scanned=len(_rets384))
+_drop384 = _wa384[_wa384.find("추천·대기에서 뺀 {len(_dropped)}종목"):]
+_drop384 = _drop384[:_drop384.find('if not _scored_rows:')]
+check("'추천·대기에서 뺀 종목' 칸에도 '분석 보기'가 있고 실행·대기 카드와 같은 경로(pending_search · 이름 (코드))다",
+      'st.button("분석 보기", key=f"att_drop_' in _drop384
+      and "st.session_state['pending_search'] = (" in _drop384
+      and 'f"{_rr0[\'name\']} ({_rr0[\'code\']})"' in _drop384, f"조각 {len(_drop384)}자")
+check("관심 목록에 없어 아래 칸에 안 나오는 종목은 그렇다고 적는다 (지어낸 길을 가리키지 않는다 · §3)",
+      "'아래 목록에 없음 · 검색으로 여세요'" in _wa384 and '_cd in _att_codes393' in _wa384)
+# '고신뢰' 라는 이름 — 같은 파일이 그 띠의 블라인드 적중을 전체보다 낮게 적는다(2026-09-30 · 54.5% · n=1,320 vs 58.8%).
+#   화면으로 나가는 두 모듈의 코드 줄에서 그 낱말이 되살아나지 않고, 배너가 그 비교를 파일에서 읽어 같은 줄에 적는다.
+_po384 = '\n'.join(_ln for _i, _ln in _la384.code_lines('product_ops.py'))
+check("화면 모듈이 60점+ 띠를 '고신뢰'라 부르지 않는다 (web_app · product_ops 코드 줄 · 주석 제외)",
+      '고신뢰' not in _wa384 and '고신뢰' not in _po384)
+check("배너가 그 띠의 블라인드 적중을 전체 블라인드와 **같은 파일에서** 견줘 적는다 (낮으면 낮다고 · 못 읽으면 그 조각만 뺀다)",
+      "_all393 = ((_cal188.get('splits') or {}).get('blind') or {})" in _wa384
+      and "'보다 낮습니다' if _bl188['hit_rate'] < _all393['hit_rate']" in _wa384
+      and "_bzt393 = ''" in _wa384 and '+ _bzt393' in _wa384)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
