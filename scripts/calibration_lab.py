@@ -878,13 +878,17 @@ def virt_files():
 
 
 def load_done():
+    """이미 만든 케이스 — **(종목코드 6자리, 기준일)** 열쇠 (라운드 390).
+    ⚠️ 종전엔 (접미사까지 든 티커, 기준일)이었다. 같은 종목의 시장 접미사가 바뀌면(.KS ↔ .KQ) 옛 케이스가 안 보여
+    **같은 종목·같은 날을 다시 만들었다** — 2026-09-29 실측 원장 2,499쌍(25종목) · 원본 예측 287쌍, 전부 진입가·결과까지
+    같은 복사본. 정체는 코드이고 접미사는 도장이다(R222 의 그 규칙). 열쇠 모양은 `ledger_view.scale_key` 한 곳."""
     done = set()
     for path in virt_files():
         with open(path, encoding="utf-8") as f:
             for line in f:
                 try:
                     r = json.loads(line)
-                    done.add((r['ticker'], r['date']))
+                    done.add(_lv_cost386.scale_key(r['ticker'], r['date']))
                 except Exception:
                     continue
     return done
@@ -1054,9 +1058,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             for d in _cands:
                 if newest_cand is None or d > newest_cand:
                     newest_cand = d
-                if (tk, d) in done:
+                if _lv.scale_key(tk, d) in done:          # 라운드 390 — 접미사를 뗀 열쇠로 묻는다
                     continue
-                if not forward_from and _lv.too_close(done_by_tk.get(tk, ()), d):
+                if not forward_from and _lv.too_close(done_by_tk.get(_lv.code6(tk), ()), d):
                     near_dup += 1
                     # 라운드 372 — '언제 열리나'는 **마지막 케이스 뒤의 후보**에서만 센다. 격자가 한 봉
                     #   밀리면 옛 후보도 전부 새 후보가 되어 겹침에 막히는데(09-25 실행 52,183건), 그
@@ -1064,9 +1068,9 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                     #   그것까지 최소를 잡으니 *"2015-08-21 이 되어야 열린다"* 가 찍혔다 — 이미 지난
                     #   날이라 문장이 거짓이다(§3). 열릴 수 있는 것은 그 종목의 마지막 케이스보다
                     #   **뒤**에 선 후보뿐이다. 규칙·문턱 불변 — 세는 대상만 좁혔다.
-                    _done_tk = done_by_tk.get(tk, ())
+                    _done_tk = done_by_tk.get(_lv.code6(tk), ())
                     _beyond_last = bool(_done_tk) and d > _done_tk[-1]
-                    _ub = _lv.unblock_date(done_by_tk.get(tk, ()), d)
+                    _ub = _lv.unblock_date(_done_tk, d)
                     if _beyond_last and _ub and (_tk_open is None or _ub < _tk_open):
                         _tk_open = _ub
                     continue
@@ -1281,6 +1285,16 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     #   어느 쪽이 예산을 먹었는지 갈린다.
     _t_grade = time.time()
     _fetched_here = 0
+    _close_by390 = {}
+
+    def _closes390(pdf):
+        """일봉 → {기준일: 원시 종가} (없거나 못 읽으면 None — 그 행의 도장은 '댈 수 없음')."""
+        try:
+            dcol = 'trade_date' if 'trade_date' in pdf.columns else pdf.columns[0]
+            ccol = 'close_raw' if 'close_raw' in pdf.columns else 'close'
+            return {str(d)[:10]: float(c) for d, c in zip(pdf[dcol], pdf[ccol])}
+        except Exception:                                      # noqa: BLE001
+            return None
     for r in rows:
         # 실패도 기억하므로(R303) '캐시에도 없고 실패 목록에도 없던' 경우만 센다 —
         # 안 그러면 실패 종목의 행 수만큼 부풀어 R303 의 그 수가 되살아난 것처럼 보인다.
@@ -1293,7 +1307,14 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             continue
         g = plog.grade_prediction(r, pdf)
         if g:
-            graded.append({'row': r, 'grade': g})
+            # 라운드 390 — **채점하는 봉으로** 진입가 축척을 그 자리에서 댄다(`ledger_view.entry_scale_off` ·
+            #   R364 의 항등식). 감사 산출물을 다음 실행에 읽는 길(R389)은 하루 늦고, 클라우드는 실행 첫머리에 옛
+            #   스냅샷을 되받아 그 파일을 덮는다 — 같은 봉으로 채점과 판정을 한 번에 하면 둘 다 없다.
+            if r['ticker'] not in _close_by390:
+                _close_by390[r['ticker']] = _closes390(pdf)
+            _px390 = (_close_by390[r['ticker']] or {}).get(str(r.get('date'))[:10])
+            graded.append({'row': r, 'grade': g,
+                           'scale_off': _lv_cost386.entry_scale_off(r.get('price'), _px390)})
         else:
             drop_grade += 1
     print(f"  [시간] 채점 {time.time() - _t_grade:,.0f}초 — {len(rows):,}행 · "
@@ -1313,12 +1334,23 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     #   원장에는 **전부 쓴다**(R197 — 파생물을 줄이지 않는다 · 아래 저장부는 `graded` 를 쓴다).
     #   목록은 `ledger_view.scale_mismatch_keys` 한 곳(§4). 못 읽으면 거르지 않고 그 사실을 적는다(§3).
     _scale_keys389 = _lv_cost386.scale_mismatch_keys()
-    stat_graded = [g for g in graded if not _lv_cost386.is_scale_mismatch(g['row'], _scale_keys389)]
-    scale_excluded = len(graded) - len(stat_graded)
+    # 라운드 390 — 그 자리에서 찍은 도장(scale_off True)도 뺀다(감사 목록을 못 읽은 날에도 걸러진다).
+    #   그리고 같은 (종목 6자리, 기준일)의 두 번째 행부터 뺀다(접미사만 다른 복사본 2,499쌍 · 실측 2026-09-29).
+    #   규칙은 화면과 같은 `ledger_view.stat_rows` 한 곳이다(§4).
+    _rows390 = [dict(g['row'], entry_scale_off=g.get('scale_off')) for g in graded]
+    _cnt390 = {}
+    _keep390 = {id(r) for r in _lv_cost386.stat_rows(_rows390, _scale_keys389, _cnt390)}
+    stat_graded = [g for g, r in zip(graded, _rows390) if id(r) in _keep390]
+    print(f"  통계에서 뺀 행 — 진입가 축척 {_cnt390.get('scale', 0):,} · 같은 종목·날짜 복사본 "
+          f"{_cnt390.get('dup', 0):,} (원장에는 남긴다)")
+    _stamp390 = {'off': sum(1 for g in graded if g.get('scale_off') is True),
+                 'same': sum(1 for g in graded if g.get('scale_off') is False),
+                 'unknown': sum(1 for g in graded if g.get('scale_off') is None)}
+    print(f"  진입가 축척 도장(채점 봉으로 그 자리에서) — 어긋남 {_stamp390['off']:,} · 같음 {_stamp390['same']:,} · "
+          f"댈 수 없음 {_stamp390['unknown']:,}")
+    scale_excluded = _cnt390.get('scale', 0)          # 진입가 축척으로 뺀 행만(복사본은 stat_excluded.dup)
     if _scale_keys389 is None:
-        print("  ⚠️ 진입가 축척 감사(entry_scale_audit.json)의 행 목록을 못 읽어 거르지 않았습니다")
-    else:
-        print(f"  진입가 축척이 어긋난 행 {scale_excluded:,}건은 통계에서 뺍니다 (원장에는 남긴다)")
+        print("  ⚠️ 진입가 축척 감사(entry_scale_audit.json)의 행 목록을 못 읽었습니다 — 채점 자리의 도장으로만 거릅니다")
 
     decided = [g for g in stat_graded if g['grade']['outcome'] in ('TARGET', 'STOP')]
     print(f"판정 완료(목표 또는 손절 도달): {len(decided)}건 · "
@@ -1601,6 +1633,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                 'success': g['grade']['outcome'] == 'TARGET',
                 'split': split_of(g['row']['date']),
                 'failure_class': classify_failure(g),
+                # 라운드 390 — 채점 봉으로 댄 진입가 축척(True 어긋남 · False 같음 · None 댈 수 없음)
+                'entry_scale_off': g.get('scale_off'),
             })
             gf.write(json.dumps(rec, ensure_ascii=False) + "\n")
         for rec in _prev_rows:          # 라운드 197 — 다시 못 잰 종목의 종전 채점
@@ -1634,7 +1668,12 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         'rulebook_version': _rulebook_now386(),
         'cost_pct_after_cost': _lv_cost386.CALIB_COST_PCT,
         # 라운드 389 — 진입가 축척이 어긋나 통계에서 뺀 행(원장에는 남는다). None = 감사 목록을 못 읽어 안 걸렀다.
-        'scale_excluded': scale_excluded if _scale_keys389 is not None else None,
+        'scale_excluded': scale_excluded,
+        # 라운드 390 — 뺀 까닭별 수(진입가 축척 · 같은 종목·날짜 복사본)
+        'stat_excluded': {'scale': _cnt390.get('scale', 0), 'dup': _cnt390.get('dup', 0)},
+        # 라운드 390 — 채점 자리의 도장 셈(감사 목록이 없어도 선다) · 감사 목록을 읽었는지
+        'scale_stamp': _stamp390,
+        'scale_audit_read': _scale_keys389 is not None,
         'note': ("실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. "
                  "리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·"
                  "실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 "

@@ -2446,6 +2446,62 @@ def mark_sold(items, code):
     return out, old
 
 
+def _change_num(v, as_int=False):
+    """저장 규칙과 같은 모양 — 양수만 값, 0·빈 칸·NaN·못 읽는 것은 None (라운드 390)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f or f <= 0:                                     # NaN · 0 · 음수
+        return None
+    return int(round(f)) if as_int else f
+
+
+def describe_position_changes(before, after, px_by_code=None):
+    """매입가·수량 저장의 **무엇이 바뀌나** — 종목 이름과 전/후 값 (라운드 390 · 순수 함수 · 문턱 없음).
+
+    사용자: *"수량 및 매입가 수정하면 변경 저장에 수량이나 종목이 나오던데 안 나올 때도 있다."* 재현하니
+    칸을 고치는 중(Enter 전)에 저장을 누르면 **그 칸 값이 빠진 채** 저장됐다 — 매입가만 들어가고 수량은
+    비었는데 화면은 *"1개 종목을 바꿨습니다"* 만 적어 무엇이 들어갔는지 알 수 없었다. 저장 **전** 줄과
+    저장 **후** 줄이 이 함수 하나를 읽는다(§4). 매입가는 있는데 수량이 비면 `missing_qty` 로 따로 센다 —
+    보유로 옮겨지지만 손익을 못 세는 행이다(§3 · 지어내지 않고 비었다고 말한다).
+    `px_by_code` 가 있으면 새 매입가의 **현재가 대비 수익률**(`ret_pct`)을 같이 싣는다 — 문턱이 아니라 사실이다.
+    오타(자릿수 하나 빠진 매입가)는 수익률이 수천 %로 나와 저장 전에 눈에 띈다(실측 2026-09-29: 저장된 행 하나가
+    매입가·현재가 차이로 +2,054% 였다 · 맞는 값인지는 사용자만 안다).
+    반환: [{code, name, paid_old, paid_new, qty_old, qty_new, missing_qty, px, ret_pct}] (바뀐 행만 · 순서는 after 그대로).
+    """
+    old = {normalize_code(w.get('code')): w for w in (before or [])}
+    pxs = {normalize_code(k): v for k, v in (px_by_code or {}).items()}
+    out = []
+    for w in (after or []):
+        c = normalize_code(w.get('code'))
+        o = old.get(c)
+        if o is None:
+            continue
+        p0, q0 = _change_num(o.get('paid')), _change_num(o.get('qty'), as_int=True)
+        p1, q1 = _change_num(w.get('paid')), _change_num(w.get('qty'), as_int=True)
+        if (p0, q0) == (p1, q1):
+            continue
+        px = _change_num(pxs.get(c))
+        out.append({'code': c, 'name': str(w.get('name') or o.get('name') or c),
+                    'paid_old': p0, 'paid_new': p1, 'qty_old': q0, 'qty_new': q1,
+                    'missing_qty': p1 is not None and q1 is None,
+                    'px': px, 'ret_pct': ((px / p1 - 1.0) * 100.0) if (px and p1) else None})
+    return out
+
+
+def change_line(ch):
+    """바뀐 행 하나를 한 줄로 — '(종목) 매입가 2,500원 · 수량 비어 있음 (현재가 87,000원 대비 +3,380.0%)' (라운드 390).
+    매입가가 비면 '미보유로 옮김'이라 적는다(저장 규칙 그대로 · 매입가 0·빈 칸 = 미보유)."""
+    def _w(v, unit):
+        return f"{v:,.0f}{unit}" if v is not None else '비어 있음'
+    if ch.get('paid_new') is None:
+        return f"{ch['name']} 매입가 비움 → 미보유로 옮김"
+    tail = (f" (현재가 {ch['px']:,.0f}원 대비 {ch['ret_pct']:+,.1f}%)"
+            if ch.get('ret_pct') is not None else '')
+    return f"{ch['name']} 매입가 {_w(ch['paid_new'], '원')} · 수량 {_w(ch['qty_new'], '주')}{tail}"
+
+
 #: 라운드 370 — 계산 결과와 **같이** 보여 줄 가정 둘(R367 이 체결 가정에 속을 뻔한 자리).
 ADD_ON_ASSUMES = ('손절선 가격에 그대로 팔린다고 가정했습니다 — 갭이 나거나 팔리지 않으면 더 잃습니다',
                   '거래비용은 빼지 않았습니다')

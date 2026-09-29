@@ -2,14 +2,16 @@
 """
 가늠 AI에게 물어보기 — 종목 전용 결정적 답변 조합기 (라운드 60).
 
-■ 왜 외부 LLM 이 아닌가
+■ 왜 외부 LLM 이 아닌가 (라운드 60) — 그리고 라운드 390 에 무엇이 바뀌었나
   · CLAUDE.md §9 — 포트폴리오(평단·수량)를 외부 API/LLM 에 보내지 않는다.
     보유자 질문에는 평단이 필요하므로, 외부 호출과 양립할 수 없다
   · 요구 명세 자체가 결정적이다: "중앙 엔진 값만 쓰고, 재계산·창작 금지,
     없으면 없다고 말하고, 결론부터". LLM 은 이 규칙을 어길 수 있고,
     조합기는 어길 수 없다
-  외부 모델 연동이 필요해지면 `external_llm_stub()` 자리에 붙이되,
-  그때도 포트폴리오 필드는 페이로드에서 제외해야 한다 (아래 가드).
+  라운드 390 — 사용자가 대화형을 골랐다(*"ChatGPT 처럼 대화하면서"*). 이 조합기는 그대로 두고(**정해진 답**),
+  화면의 대화 칸만 `answer(..., allow_llm=True)` 로 대화형 모델(`gaeum_llm`)을 부른다. 모델은 정해진 답과 공개
+  판정 값만 받고, 보유·계좌 질문과 그 답은 밖으로 안 나간다(`gaeum_llm.is_private_question` · `PRIVATE_KEYS`).
+  키가 없으면 종전과 글자까지 같다.
 
 ■ 원칙
   · 모든 가격·확률은 build_context 로 받은 중앙 스냅샷 값 그대로.
@@ -32,11 +34,6 @@ NA = '현재 엔진에서 이 값은 산출되지 않았습니다.'
 #: 외부 전송 금지 필드 — external_llm_stub 을 구현하더라도 이 키들은
 #: 페이로드에 넣지 않는다 (CLAUDE.md §9)
 PRIVATE_KEYS = ('user_avg', 'user_qty', 'holder_ret_pct')
-
-
-def external_llm_stub(question, safe_context):
-    """외부 LLM 자리 — 현재 미연동. None 을 돌려 조합기가 답한다."""
-    return None
 
 
 def _w(v, suffix='원'):
@@ -657,13 +654,40 @@ def intent_of(question):
     return None
 
 
-def answer(question, ctx):
-    """질문 → 결론부터 답. 중앙 스냅샷 밖의 숫자는 절대 만들지 않는다."""
+def answer(question, ctx, history=None, allow_llm=False):
+    """질문 → 결론부터 답. 중앙 스냅샷 밖의 숫자는 절대 만들지 않는다.
+
+    라운드 390 — 사용자: *"ChatGPT 처럼 대화하면서 · 다양하게 정보도 묻고 확장성 있게."* `allow_llm=True`(화면의
+    대화 칸만 넘긴다)이고 키가 있으면 대화형 모델(`gaeum_llm`)이 **앱의 정해진 답과 공개 판정 값**을 받아 말로 풀고,
+    이어지는 대화를 기억한다. 그래도 ① 보유·계좌 질문은 밖으로 안 보내고 정해진 답으로 답하며 ② 종목 질문이면 앱의
+    결론 한 줄을 **앱이** 답 머리에 붙이고 ③ 연결이 안 되면 정해진 답에 사유를 붙여 낸다(§3). 기본(`allow_llm=False`)
+    은 종전과 글자까지 같다 — 회귀·유도 저항 검사(R305)가 그 길을 잰다."""
     q = str(question or '').strip()
-    ext = external_llm_stub(q, {k: v for k, v in ctx.items()
-                                if k not in PRIVATE_KEYS})
-    if ext:
-        return ext
+    rule = _rule_answer(q, ctx)
+    if not allow_llm:
+        return rule
+    try:
+        import gaeum_llm as _gll
+    except Exception:                                          # noqa: BLE001
+        return rule
+    if not _gll.enabled():
+        return rule
+    if _gll.is_private_question(q):
+        return rule + '\n\n_보유·계좌 이야기는 밖으로 보내지 않아, 이 PC 의 정해진 답으로 답했습니다._'
+    text, why = _gll.ask(q, history, ctx, rule)
+    if not text:
+        return rule + f'\n\n_대화형 AI 에 닿지 못해 정해진 답으로 대신했습니다 — {why}._'
+    anchor = ''
+    if intent_of(q) in {name for name, _ in _INTENTS}:
+        _hl = (ctx or {}).get('headline') or (ctx or {}).get('bucket')
+        if _hl:
+            anchor = f"**앱의 결론** — {_hl}\n\n"
+    return (f"{anchor}{text}\n\n근거: 앱의 판정 값과 정해진 답을 대화형 AI({_gll.model_name()})가 말로 풀었습니다 — "
+            "숫자는 앱이 낸 값만 씁니다")
+
+
+def _rule_answer(q, ctx):
+    """정해진 답(라운드 60~355 의 조합기 그대로) — 중앙 스냅샷 밖의 숫자는 만들지 않는다."""
     # 원문 q 는 그대로 두고 평단 추출 등 다른 곳에서 계속 쓴다.
     intent = intent_of(q)
     used = ''

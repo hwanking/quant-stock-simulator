@@ -20156,15 +20156,18 @@ check("spaced_count: 빈 입력은 0",
 # ── 랩 — 규칙을 한 곳에서 부르고, 전방 모드는 건드리지 않는다 ─────────────
 with open(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'), encoding='utf-8') as _f234:
     _lab234 = _f234.read()
+# 라운드 390 — 완료 열쇠를 코드 6자리로 바꿔(접미사만 다른 복사본 2,499쌍) 종목 조회도 `_lv.code6(tk)` 로 한다.
 check("랩이 규칙을 한 곳(ledger_view)에서 부른다 (§4 · 두 벌 금지)",
       'import ledger_view as _lv' in _lab234
-      and '_lv.too_close(done_by_tk.get(tk, ()), d)' in _lab234)
+      and '_lv.too_close(done_by_tk.get(_lv.code6(tk), ()), d)' in _lab234)
 check("랩의 간격 차단은 전방 모드 밖에서만 (R78 은 일부러 촘촘히 뽑는다)",
       'if not forward_from and _lv.too_close(' in _lab234)
 check("랩이 뺀 기준일 수를 세어 찍는다 (0 이 아니면 격자가 밀린 것 · §3)",
       'near_dup += 1' in _lab234 and 'near_dup:,' in _lab234)
+# 라운드 390 — 완료 판정은 여전히 **정확 일치**이고 원장 행을 지우지 않는다. 열쇠만 (티커, 날짜) → (코드 6자리, 날짜)
+#   — 접미사가 바뀐 종목을 새 케이스로 봐서 같은 종목·같은 날을 다시 만들던 자리다(열쇠 모양은 ledger_view 한 곳).
 check("랩의 완료 판정(정확 일치)은 그대로 — 원장 행을 지우지 않는다 (R197)",
-      "done.add((r['ticker'], r['date']))" in _lab234)
+      "done.add(_lv_cost386.scale_key(r['ticker'], r['date']))" in _lab234)
 check("격자 자체는 안 바꿨다 — 25봉 간격 리터럴 그대로 (규칙 재사용)",
       'spacing=25' in _lab234 and 'usable[::-spacing][:n_dates]' in _lab234)
 # ── 화면 — '독립 사례' 를 말하지 않고, 수는 그 자리에서 센다 ────────────────
@@ -25724,8 +25727,10 @@ _lab320 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
 check("랩이 '남음 0' 을 '다 한 것이 아니다' 와 갈라 적는다",
       '남음 0 이지만 **다 한 것이 아니다**' in _lab320
       and 'if near_dup and not todo:' in _lab320)
+# 라운드 390 — 종목 조회가 코드 6자리 열쇠로 바뀌어 같은 값(`_done_tk`)을 넘긴다.
 check("랩이 **언제 열리는지**를 킷에서 읽어 적는다 (베끼지 않는다 · §4)",
-      '_lv.unblock_date(done_by_tk.get(tk, ()), d)' in _lab320
+      '_lv.unblock_date(_done_tk, d)' in _lab320
+      and "_done_tk = done_by_tk.get(_lv.code6(tk), ())" in _lab320
       and '이 되어야 열린다' in _lab320)
 check("달력 날짜로 환산하지 않는다 — 환산하면 손으로 고른 수가 된다 (§2 · R307 이 그렇게 틀렸다)",
       '달력 날짜로는 환산하지 않는다' in _lab320
@@ -30023,7 +30028,8 @@ try:
     _aio380.load_json = lambda f, base=None: {'offender_keys': {'111111.KS': ['2026-08-03', '2026-08-04']}}
     _k380 = _lv380.scale_mismatch_keys()
     _cnt380 = {}
-    _kept380 = list(_lv380.drop_scale_mismatch(
+    # 라운드 390 — 거르는 길은 `stat_rows` 하나로 합쳤다(축척 + 같은 종목·날짜 복사본 · 옛 drop_scale_mismatch 는 걷음)
+    _kept380 = list(_lv380.stat_rows(
         [{'ticker': '111111.KS', 'date': '2026-08-03'}, {'ticker': '111111.KQ', 'date': '2026-08-04 00:00:00'},
          {'ticker': '111111.KS', 'date': '2026-08-05'}, {'ticker': '222222.KS', 'date': '2026-08-03'}],
         _k380, _cnt380))
@@ -30034,7 +30040,7 @@ try:
 finally:
     _aio380.load_json = _orig380
 check("심기: 목록의 (종목, 기준일)만 빠진다 — 시장 접미사·시각 꼬리는 무시 · 같은 종목 다른 날은 남는다",
-      _cnt380.get('dropped') == 2 and [(r['ticker'], r['date']) for r in _kept380]
+      _cnt380.get('scale') == 2 and [(r['ticker'], r['date']) for r in _kept380]
       == [('111111.KS', '2026-08-05'), ('222222.KS', '2026-08-03')], str(_kept380))
 check("못 읽으면(없음 · 행 목록 없는 옛 판) None — 거르지 않고 걸렀다고 말하지도 않는다 (§3)",
       _old380 is None and _none380 is None and _lv380.is_scale_mismatch({'ticker': '1', 'date': '2'}, None) is False)
@@ -30044,15 +30050,16 @@ _decided380 = [n for n in _ast380.walk(_labt380) if isinstance(n, _ast380.Assign
                and any(isinstance(t, _ast380.Name) and t.id == 'decided' for t in n.targets)]
 _src_dec380 = _ast380.get_source_segment(_lab380, _decided380[0].value) if _decided380 else ''
 check("운영 보정표는 걸러진 행으로 만든다 — decided 는 stat_graded 에서 · 원장 저장은 graded 전부 (R197)",
+      # 라운드 390 — 거르는 규칙을 화면과 같은 `ledger_view.stat_rows` 로 옮겼다(축척 + 같은 종목·날짜 복사본)
       len(_decided380) == 1 and 'stat_graded' in _src_dec380
-      and "stat_graded = [g for g in graded if not _lv_cost386.is_scale_mismatch(g['row'], _scale_keys389)]" in _lab380
+      and "_keep390 = {id(r) for r in _lv_cost386.stat_rows(_rows390, _scale_keys389, _cnt390)}" in _lab380
       and "        for g in graded:\n            rec = dict(g['row'])" in _lab380
-      and "'scale_excluded': scale_excluded if _scale_keys389 is not None else None," in _lab380,
+      and "'scale_excluded': scale_excluded," in _lab380,
       _src_dec380, scanned=len(_decided380))
 check("화면 통계 넷(도달표·DeMARK·팔기 vs 들기·닿음 누적)이 한 행 흐름을 읽는다 — 베낀 _rows() 가 없다 (§4)",
       _w380.count('_ledger_stat_rows389()') >= 4
       and all(f'import json as _json{n}' not in _w380 for n in (224, 285, 340, 230))
-      and 'if _lv389.is_scale_mismatch(_r, _keys):' in _w380)
+      and 'return _lv389.stat_rows(_parsed(), _keys)' in _w380)
 check("국면×구간 표와 사례 필터도 같은 목록으로 거른다 (키 모양은 ledger_view.scale_key 한 곳)",
       _w380.count('_scale_ok_mask389(') >= 3 and '_lv389m.scale_key(t, d) not in _keys' in _w380)
 
@@ -30065,6 +30072,155 @@ for _n380 in _ast380.walk(_wt380):
         _opts380 = [e.value for e in _n380.args[1].elts]
 check("사례 필터의 국면 선택지 = 원장 regime 값(BULL·SIDEWAYS·BEAR) — 'NEUTRAL' 없음",
       _opts380 == ['전체', 'BULL', 'SIDEWAYS', 'BEAR'], str(_opts380), scanned=1)
+
+
+print("\n" + "=" * 72)
+print("§381 편집기 저장 누락 · 오염을 들어오는 자리에서 막기 · 대화형 가늠 AI (라운드 390)")
+print("=" * 72)
+# ① 사용자: *"수량 및 매입가 수정하면 변경 저장에 수량이나 종목이 나오던데 안 나올 때도 있다."* 재현(쓰기를 막은 앱 ·
+#   2026-09-29): 수량 칸을 고치는 중(Enter 전)에 저장을 누르니 매입가만 저장되고 수량은 비었다. 저장될 내용을 이름·값으로
+#   먼저 보이고(수량 빈 칸 경고 · 현재가 대비 수익률), 누르는 순간 고치는 칸을 확정하는 스크립트를 심는다.
+# ② 오염 방안 — 채점 자리에서 진입가 축척 도장 · 완료 열쇠를 코드 6자리로 · 통계는 `stat_rows` 한 곳 · 매일 오염 점검.
+# ③ 대화형 가늠 AI — 키가 있을 때만 · 공개 판정 값만 · 보유·계좌 이야기는 안 나간다 · 앱의 결론을 머리에.
+import portfolio as _pf381                                       # noqa: E402
+import ledger_view as _lv381                                     # noqa: E402
+import scripts.lineage_audit as _la381                           # noqa: E402
+_b381 = [{'code': '111111', 'name': '가', 'paid': 10000, 'qty': 10},
+         {'code': '222222', 'name': '나'},
+         {'code': '333333', 'name': '다', 'paid': 5000, 'qty': 3},
+         {'code': '444444', 'name': '라', 'paid': 7000, 'qty': 2}]
+_a381 = [{'code': '111111', 'name': '가', 'paid': 10000, 'qty': 10},             # 그대로
+         {'code': '222222', 'name': '나', 'paid': 2500, 'qty': float('nan')},     # 매입가만 · 수량 빈 칸(NaN)
+         {'code': '333333', 'name': '다'},                                        # 매입가 비움 → 미보유
+         {'code': '444444', 'name': '라', 'paid': 7000, 'qty': 5}]                # 수량만
+_c381 = _pf381.describe_position_changes(_b381, _a381, {'222222': 87000, '444444': 7700})
+_k381 = {c['code']: c for c in _c381}
+check("바뀐 행만 적고(그대로인 행 없음) · 수량이 빈 행을 따로 가린다(NaN 은 빈 칸)",
+      set(_k381) == {'222222', '333333', '444444'} and _k381['222222']['missing_qty'] is True
+      and _k381['444444']['missing_qty'] is False and _k381['222222']['qty_new'] is None, str(_c381))
+_l381 = {c: _pf381.change_line(_k381[c]) for c in _k381}
+check("한 줄에 이름·값 · 빈 칸은 '비어 있음' · 매입가 비움은 '미보유로 옮김' · 현재가 대비 수익률(사실 · 문턱 없음)",
+      _l381['222222'] == '나 매입가 2,500원 · 수량 비어 있음 (현재가 87,000원 대비 +3,380.0%)'
+      and _l381['333333'] == '다 매입가 비움 → 미보유로 옮김'
+      and _l381['444444'].startswith('라 매입가 7,000원 · 수량 5주 (현재가 7,700원 대비 +10.0%'), str(_l381))
+_w381 = '\n'.join(_ln for _i, _ln in _la381.code_lines('web_app.py'))
+_wraw381 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("편집기: 저장 전 줄·수량 경고·저장 후 무엇을 저장했나가 한 함수를 읽는다 · 고치는 칸 확정 스크립트를 편집기 앞에 심는다",
+      "_chg390 = portfolio.describe_position_changes(_items, _new_items, px_by_code)" in _w381
+      and "st.session_state['wl_undo_bulk_desc'] = [portfolio.change_line(_c) for _c in _chg390]" in _w381
+      and "_wl_commit_js()\n        _wl_bulk_editor(" in _w381
+      and all(x in _wraw381 for x in ("'.st-key-wl_bulk_save'", "classList.contains('gdg-input')",
+                                        "key: 'Enter'", 'W.__gnCommitBound')))
+# ② 오염 — 채점 자리의 도장 · 같은 판정 한 곳
+check("진입가 축척 판정은 한 곳 — 같음 False · 어긋남 True · 댈 수 없음 None (심기 양방향)",
+      _lv381.entry_scale_off(8020, 8020) is False and _lv381.entry_scale_off(802, 8020) is True
+      and _lv381.entry_scale_off(10000, 9846) is True and _lv381.entry_scale_off(10000, 9995) is False
+      and _lv381.entry_scale_off(None, 100) is None and _lv381.entry_scale_off(100, None) is None
+      and _lv381.SCALE_EPS == 0.01)
+_cnt381 = {}
+_kept381 = list(_lv381.stat_rows([
+    {'ticker': '555555.KS', 'date': '2026-08-03', 'entry_scale_off': False},
+    {'ticker': '555555.KQ', 'date': '2026-08-03', 'entry_scale_off': False},     # 접미사만 다른 복사본
+    {'ticker': '555555.KS', 'date': '2026-08-04', 'entry_scale_off': True},      # 채점 자리 도장
+    {'ticker': '666666.KS', 'date': '2026-08-03'}], None, _cnt381))
+check("통계 행: 같은 (종목 6자리, 기준일)의 두 번째부터 빼고 · 도장 찍힌 행을 뺀다(감사 목록이 없어도) · 수를 센다",
+      [(r['ticker'], r['date']) for r in _kept381] == [('555555.KS', '2026-08-03'), ('666666.KS', '2026-08-03')]
+      and _cnt381 == {'dup': 1, 'scale': 1}, str(_cnt381))
+_lab381 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+check("랩: 완료 열쇠가 코드 6자리 · 채점 봉으로 도장을 찍어 원장에 싣는다 · 통계는 stat_rows",
+      "done.add(_lv_cost386.scale_key(r['ticker'], r['date']))" in _lab381
+      and "if _lv.scale_key(tk, d) in done:" in _lab381
+      and "'scale_off': _lv_cost386.entry_scale_off(r.get('price'), _px390)" in _lab381
+      and "'entry_scale_off': g.get('scale_off')," in _lab381
+      and "done.add((r['ticker'], r['date']))" not in _lab381)
+import scripts.contamination_audit as _ca381                    # noqa: E402
+_d381 = _ca381.date_checks([
+    {'date': '2026-08-03', 'ticker': '777777.KS'}, {'date': '2026-08-03', 'ticker': '777777.KQ'},   # 복사본
+    {'date': '2099-01-01', 'ticker': '777777.KS'},                                                   # 픽스처
+    {'date': '2026-12-30', 'ticker': '777777.KS'},                                                   # 미래(12-31 은 연말 휴장이라 안 쓴다)
+    {'date': '2026-08-08', 'ticker': '777777.KS'},                                                   # 토요일
+    {'date': '', 'ticker': '777777.KS'}, {'date': '2026-08-04', 'ticker': '삼성'}], 'date', 'ticker', '2026-09-29')
+check("오염 점검 심기: 복사본·픽스처·미래·휴장일·빈 날짜·코드 모양을 각각 1 로 센다",
+      (_d381['dup'], _d381['fixture'], _d381['future'], _d381['holiday'], _d381['empty'], _d381['bad_code'])
+      == (1, 1, 1, 1, 1, 1), str(_d381))
+check("알려진 옛 오염은 늘 때만 실패 — 같으면 통과 · 하나 늘면 실패 · 목록 밖 칸은 0 이 아니면 실패",
+      _ca381.hard_nonzero({'ledger': {'dup': 2499}}) == []
+      and _ca381.hard_nonzero({'ledger': {'dup': 2500}}) != []
+      and _ca381.hard_nonzero({'ledger': {'future': 1}}) != [])
+import artifact_io as _aio381                                     # noqa: E402
+_caj381 = _aio381.load_json('contamination_audit.json')
+if _caj381 is not None:
+    check("오염 점검 산출물 — 본 행이 있고 · 0 이어야 하는 수가 0 이다 · 못 잰 곳을 적는다",
+          (_caj381.get('scanned_rows') or 0) > 100000 and _caj381.get('hard_nonzero') == []
+          and isinstance(_caj381.get('unmeasured'), list),
+          f"본 행 {_caj381.get('scanned_rows')} · {_caj381.get('hard_nonzero')}",
+          scanned=_caj381.get('scanned_rows') or 0)
+else:
+    skipped("오염 점검 산출물", "data/contamination_audit.json 이 아직 없다(클라우드 첫 실행 전)")
+_wf381 = _read148(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'))
+import scripts.study_freshness as _sf381                         # noqa: E402
+check("매일 만든다(관측 산출물 갱신) · 꼬리에서 따로 붉힌다(if: always()) · 신선도 목록에 있다(= 업로드에 실린다)",
+      'python scripts/contamination_audit.py || true' in _wf381
+      and "- name: 데이터 오염 점검 (0 이어야 하는 수)\n        if: always()\n        run: python scripts/contamination_audit.py --verify" in _wf381
+      and 'data/contamination_audit.json' in [s[0] for s in _sf381.STUDIES])
+# ③ 대화형 가늠 AI — 가짜 운송으로 무엇이 나가는지 본다(네트워크 없음)
+import gaeum_chat as _gc381                                       # noqa: E402
+import gaeum_llm as _gl381                                        # noqa: E402
+_ctx381 = _gc381.build_context(
+    name='시험전자', ticker='000001.KS', price=231000.0,
+    core=dict(bucket='추천 제외', actionable=False, exclude_reason='비용 차감 기대값 음수',
+              pullback_zone=211023.0, new_target=236572.0, new_stop=174524.0, hold_trim=258968.0,
+              hold_stop=191046.0),
+    fs=dict(displayed_fair_value=173656.0), verdict=dict(headline='지금은 사지 마세요', score=49),
+    regime_code='BEAR', versions=dict(model='v1'), user_avg=200000.0, user_qty=30, avg_down_ok=False)
+_q381 = '지금 사도 돼?'
+_rule381 = _gc381.answer(_q381, _ctx381)
+_env381 = {k: _os.environ.get(k) for k in ('ANTHROPIC_API_KEY', 'GAEUM_LLM_OFF')}
+_sent381 = []
+_orig_t381 = _gl381.TRANSPORT
+try:
+    _os.environ.pop('ANTHROPIC_API_KEY', None)
+    _os.environ.pop('GAEUM_LLM_OFF', None)
+    _off381 = _gc381.answer(_q381, _ctx381, history=[], allow_llm=True) if not _gl381.api_key() else None
+    _os.environ['ANTHROPIC_API_KEY'] = 'test-key-not-real'
+    _gl381.TRANSPORT = lambda body, key: (_sent381.append(body) or
+                                          {'content': [{'type': 'text', 'text': '말로 풀었습니다. 이어서 물어볼까요?'}]})
+    _hist381 = [('user', '나 200,000원에 30주 갖고 있는데 어떻게 해?'), ('assistant', '평단 200,000원 기준으로 …'),
+                ('user', '적정가가 뭐야?'), ('assistant', '적정가는 …')]
+    _on381 = _gc381.answer(_q381, _ctx381, history=_hist381, allow_llm=True)
+    _n_before381 = len(_sent381)
+    _priv381 = _gc381.answer('나 평단 200,000원인데 물타기 할까?', _ctx381, history=[], allow_llm=True)
+    _priv_sent381 = len(_sent381) - _n_before381
+    _anch381 = []
+    for _fq381 in ('지금 사도 돼? 무조건 오르겠지?', '지금 사도 돼? 망할 것 같은데', '지금 사도 돼?'):
+        _anch381.append(_gc381.answer(_fq381, _ctx381, history=[], allow_llm=True).split('\n\n')[0])
+    _gl381.TRANSPORT = lambda body, key: (_ for _ in ()).throw(TimeoutError('시험'))
+    _fail381 = _gc381.answer(_q381, _ctx381, history=[], allow_llm=True)
+finally:
+    _gl381.TRANSPORT = _orig_t381
+    for _k381e, _v381e in _env381.items():
+        if _v381e is None:
+            _os.environ.pop(_k381e, None)
+        else:
+            _os.environ[_k381e] = _v381e
+import json as _json381                                           # noqa: E402
+_body381 = _json381.dumps(_sent381[0], ensure_ascii=False) if _sent381 else ''
+check("키가 없으면 대화형도 정해진 답과 글자까지 같다 (회귀·배포는 키 없이 돈다)",
+      _off381 is None or _off381 == _rule381)
+check("보내는 것에 평단·수량·보유 계획이 없다 · 보유 질문과 그 답은 대화 기억에서 빠진다 · 말뜻 대화는 남는다",
+      bool(_sent381) and all(x not in _body381 for x in ('200,000', 'user_avg', 'user_qty', 'hold_trim',
+                                                           'hold_stop', 'avg_down_ok', '30주', '258968', '191046'))
+      and '적정가가 뭐야?' in _body381 and '지금은 사지 마세요' in _body381, _body381[:300])
+check("보유·계좌 질문은 밖으로 한 번도 안 나간다 — 정해진 답에 그 사실을 붙인다",
+      _priv_sent381 == 0 and '밖으로 보내지 않아' in _priv381)
+check("대화형 답 머리에 앱의 결론을 앱이 붙인다 — 낙관·비관·중립 질문에 그 줄이 글자까지 같다 (R305 의 유도 저항)",
+      len(set(_anch381)) == 1 and _anch381[0] == '**앱의 결론** — 지금은 사지 마세요'
+      and '말로 풀었습니다' in _on381 and '숫자는 앱이 낸 값만' in _on381, str(_anch381))
+check("연결이 안 되면 정해진 답에 사유를 붙여 낸다 (지어내지 않는다 · §3)",
+      _fail381.startswith(_rule381) and '정해진 답으로 대신했습니다' in _fail381 and 'TimeoutError' in _fail381)
+check("연결은 표준 라이브러리로 · 키는 저장소에 없다 · 모델 기본값은 최신 모델",
+      _gl381.DEFAULT_MODEL == 'claude-opus-5-5' and 'sk-ant' not in _read148(_os.path.join(PROJ, 'gaeum_llm.py'))
+      and 'import requests' not in _read148(_os.path.join(PROJ, 'gaeum_llm.py')))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

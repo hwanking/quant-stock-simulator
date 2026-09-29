@@ -263,12 +263,15 @@ jobs:
       # ⚠️ 라운드 365 — 진입가 축척 감사를 여기 더했다. 판별식이 일봉을 종목마다
       #   받아야 해서(실측 252초) 회귀에 못 넣는다 — 만들고, 맨 뒤의 신선도
       #   검사가 낡음을 보고, 회귀는 그 산출물을 읽는다(라운드 259 의 모양).
-      - name: 관측 산출물 갱신 (표본 감사·유효표본 ICC·업종 성적·진입가 축척 · 관측 전용)
+      # ⚠️ 라운드 390 — 데이터 오염 점검을 더했다(저장소마다 '0 이어야 하는 수'를 센다 · 수초 · 고치지 않고 센다).
+      #   만드는 것은 여기(`|| true`), 붉게 만드는 것은 맨 뒤 꼬리 검사다(R247 · 축적을 인질로 안 잡는다).
+      - name: 관측 산출물 갱신 (표본 감사·유효표본 ICC·업종 성적·진입가 축척·오염 점검 · 관측 전용)
         run: |
           python scripts/sample_audit.py || true
           python scripts/effective_n_icc.py || true
           python scripts/gen_sector_perf.py || true
           python scripts/entry_scale_audit.py || true
+          python scripts/contamination_audit.py || true
 
       - name: FN/FP 연구·취약구간 지도 (관측 전용)
         run: |
@@ -416,3 +419,9 @@ jobs:
       - name: 휴장일 표 대 실제 거래일 검사
         if: always()
         run: python scripts/calendar_truth.py
+
+      # 라운드 390 — 위 '관측 산출물 갱신'이 만든 오염 점검을 읽어, 0 이어야 하는 수가 0 이 아니면 붉게 만든다
+      #   (알려진 옛 오염은 늘 때만). 업로드 뒤 · 꼬리 · `if: always()` (R247·R294). 못 읽으면 '통과 아님'으로 끝난다.
+      - name: 데이터 오염 점검 (0 이어야 하는 수)
+        if: always()
+        run: python scripts/contamination_audit.py --verify

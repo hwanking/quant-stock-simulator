@@ -53,7 +53,9 @@ MIN_ROWS = 20
 #: 라운드 364 실측에서 정상 종목은 배율이 **정확히 1.0000** 이었고
 #: 어긋난 종목은 1.5% 이상이었다 — 그 사이를 가르는 값이 아니라
 #: **같은 값인지**를 보는 오차다.
-EPS = 0.01
+#: 라운드 390 — 판정은 `ledger_view.entry_scale_off` 한 곳이다(채점 자리가 같은 것을 부른다 · §4).
+import ledger_view as _lv390                                      # noqa: E402
+EPS = _lv390.SCALE_EPS
 
 
 def _utf8():
@@ -130,7 +132,8 @@ def main():
             continue
         # 라운드 389 — 어긋난 **행**(기준일)을 같이 적는다. 종목 단위로만 적으면 부분 오염 종목
         #   (어긋남 16.9% · 32.6% · R365)의 정상 행까지 통계에서 빼게 된다. 같은 항등식이다.
-        _off_days = sorted(d for d, v in _pairs if abs(v - 1.0) > EPS)
+        _off_days = sorted(d for d, p, _tb, _oc in led
+                           if d in bars and _lv390.entry_scale_off(p, bars[d]) is True)
         off = len(_off_days)
         one = sum(1 for _d, _p, tb, _oc in led if tb == 1)
         rows[tk] = dict(n=len(led), matched=len(mult),

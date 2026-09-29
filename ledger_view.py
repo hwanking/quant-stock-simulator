@@ -44,6 +44,26 @@ CALIB_COST_PCT = 0.55
 #: 라운드 389 — 원장 진입가가 그날 봉 종가와 어긋난 행의 목록을 담는 산출물(라운드 365 가 배선).
 SCALE_AUDIT_FILE = 'entry_scale_audit.json'
 
+#: 라운드 390 — '같은 값인가'를 보는 허용 오차(배율 1 에서 1%). 라운드 365 감사가 쓰던 그 수이고 새로 고른 값이
+#:   아니다 — 정상 종목은 배율이 정확히 1.0000, 어긋난 종목은 1.5% 이상이었다(R364 실측). 감사와 채점이 **같은
+#:   판정**을 쓰도록 여기 한 곳에 둔다(§4).
+SCALE_EPS = 0.01
+
+
+def entry_scale_off(price, bar_close, eps=SCALE_EPS):
+    """원장 진입가가 그날 봉 종가와 **다른 축척**인가 (라운드 390 · 항등식 · 문턱 없음).
+
+    True = 어긋남 · False = 같음 · None = 댈 수 없음(봉 없음·값 못 읽음 — '같다'로 세지 않는다 · §3).
+    채점하는 자리(`calibration_lab`)가 **그때 쓰는 봉으로** 이것을 불러 행에 도장(`entry_scale_off`)을 찍는다 —
+    감사 산출물을 다음 실행에 읽는 방식(R389)은 하루 늦고 클라우드 복원이 덮어쓴다(R389 결과 문서)."""
+    try:
+        p, b = float(price), float(bar_close)
+    except (TypeError, ValueError):
+        return None
+    if not (p > 0 and b > 0) or p != p or b != b:
+        return None
+    return abs(b / p - 1.0) > eps
+
 
 def scale_mismatch_keys():
     """진입가 축척이 어긋난 원장 행 → {(종목코드 6자리, 기준일)} (라운드 389).
@@ -69,26 +89,50 @@ def scale_mismatch_keys():
     return out
 
 
+def code6(ticker):
+    """종목코드 6자리 — 시장 접미사(.KS/.KQ)를 뗀다. 같은 종목의 **정체**는 이것이다(접미사는 도장 · R222 의 모양)."""
+    return str(ticker or '').split('.')[0]
+
+
 def scale_key(ticker, date):
     """(종목코드 6자리, 기준일) — 감사 목록과 원장 행을 같은 모양으로 맞춘다(시장 접미사를 뗀다)."""
-    return (str(ticker or '').split('.')[0], str(date or '')[:10])
+    return (code6(ticker), str(date or '')[:10])
 
 
-def is_scale_mismatch(row, keys):
-    """원장 한 행이 `scale_mismatch_keys()` 에 드는가. keys 가 None·빈 집합이면 False(거를 목록이 없다)."""
-    if not keys:
-        return False
-    return scale_key((row or {}).get('ticker'), (row or {}).get('date')) in keys
+def stat_rows(rows, keys=None, counter=None):
+    """통계에 쓰는 원장 행만 흘린다 (라운드 390 · 한 곳 · §4).
 
-
-def drop_scale_mismatch(rows, keys, counter=None):
-    """행 흐름에서 축척이 어긋난 행을 빼며 흘린다. `counter`(dict)가 있으면 뺀 수를 'dropped' 에 센다."""
+    빼는 것 둘 — 행은 원장에 그대로 두고(R197) **셈에서만** 뺀다:
+      ① 진입가 축척이 어긋난 행(`is_scale_mismatch` · 도장 또는 감사 목록 · R364·R389·R390)
+      ② 같은 (종목 6자리, 기준일)의 **두 번째 행부터** — 2026-09-29 실측: 원장 2,499쌍(25종목)이 시장 접미사만
+         다르게(.KS/.KQ) 두 번 들어가 있었고 **2,499/2,499 가 진입가·결과까지 같은 복사본**이었다. 완료 판정이
+         접미사까지 든 열쇠로 물어 접미사가 바뀐 종목을 새 케이스로 봤다(R222 의 '열쇠에 바뀌는 것이 들면 옛 것이
+         매번 새 것'). 먼저 나온 행을 쓴다.
+    `counter`(dict)가 있으면 'scale'·'dup' 에 뺀 수를 센다."""
+    seen = set()
     for r in rows:
         if is_scale_mismatch(r, keys):
             if counter is not None:
-                counter['dropped'] = counter.get('dropped', 0) + 1
+                counter['scale'] = counter.get('scale', 0) + 1
             continue
+        k = scale_key((r or {}).get('ticker'), (r or {}).get('date'))
+        if k in seen:
+            if counter is not None:
+                counter['dup'] = counter.get('dup', 0) + 1
+            continue
+        seen.add(k)
         yield r
+
+
+def is_scale_mismatch(row, keys):
+    """원장 한 행이 진입가 축척이 어긋난 행인가 — 행의 도장(`entry_scale_off` · 라운드 390 · 채점 자리에서 찍음)
+    **또는** 감사 목록(`scale_mismatch_keys()` · 라운드 389). 둘 다 같은 항등식이고, 도장은 하루 늦지 않는다.
+    둘 다 없으면 False(거를 근거가 없다)."""
+    if (row or {}).get('entry_scale_off') is True:
+        return True
+    if not keys:
+        return False
+    return scale_key((row or {}).get('ticker'), (row or {}).get('date')) in keys
 
 
 def _day(d):

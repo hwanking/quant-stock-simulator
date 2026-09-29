@@ -2570,6 +2570,64 @@ def _wl_position_calc(px, paid, qty):
     return cost, value, pnl, ret
 
 
+#: 라운드 390 — '변경 저장'을 누르는 순간 **고치는 중인 칸을 먼저 확정**한다.
+#   재현(쓰기를 막은 앱 · 2026-09-29): 수량 칸에 30 을 넣고 Enter 없이 곧바로 저장을 누르니 매입가만 저장되고
+#   수량은 비었다(편집기가 칸 값을 서버로 넘기기 **전에** 저장이 돌았다). 서버는 확정되지 않은 칸 값을 볼 수
+#   없으므로 누르는 쪽에서 막는다: 누름을 잠깐 붙잡고 → 그 칸에 Enter 를 보내 확정하고 → 저장을 다시 누른다.
+#   고치는 칸이 없으면 아무 일도 안 한다(평소 누름 그대로). 스크립트는 부모 문서에 **한 번만** 심는다
+#   (iframe 이 다시 그려져도 처리기가 사라지지 않게 부모 쪽 스크립트로 둔다).
+_WL_COMMIT_JS = """
+<script>
+(function () {
+  const W = window.parent;
+  if (!W || !W.document || W.__gnCommitBound) return;
+  W.__gnCommitBound = true;
+  const s = W.document.createElement('script');
+  s.textContent = `(function () {
+    function editing() {
+      const a = document.activeElement;
+      return (a && a.classList && a.classList.contains('gdg-input')) ? a : null;
+    }
+    function saveBox(t) { return (t && t.closest) ? t.closest('.st-key-wl_bulk_save') : null; }
+    let held = null;
+    document.addEventListener('pointerdown', function (e) {
+      const box = saveBox(e.target);
+      if (!box) return;
+      const ed = editing();
+      if (!ed) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      ed.dispatchEvent(new KeyboardEvent('keydown',
+        {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true}));
+      held = box;
+    }, true);
+    document.addEventListener('click', function (e) {
+      if (!held || !e.isTrusted || !saveBox(e.target)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const box = held;
+      held = null;
+      setTimeout(function () {
+        const b = (box.isConnected ? box : document.querySelector('.st-key-wl_bulk_save'));
+        const btn = b ? b.querySelector('button') : null;
+        if (btn) btn.click();
+      }, 450);
+    }, true);
+  })();`;
+  W.document.head.appendChild(s);
+})();
+</script>
+"""
+
+
+def _wl_commit_js():
+    """저장 누름 전에 고치는 중인 칸을 확정하는 스크립트를 부모 문서에 심는다(높이 0 · 한 번만 · 라운드 390).
+    못 심으면 조용히 넘어간다 — 그때도 저장할 내용 줄과 수량 경고가 무엇이 저장되는지 보인다."""
+    try:
+        import streamlit.components.v1 as _cjs390
+        _cjs390.html(_WL_COMMIT_JS, height=0)
+    except Exception:                                          # noqa: BLE001
+        pass
+
+
 @st.fragment
 def _wl_bulk_editor(px_by_code):
     """매입가·수량을 **목록에서 여러 개 한꺼번에** 고친다 (라운드 321).
@@ -2658,17 +2716,30 @@ def _wl_bulk_editor(px_by_code):
     #     그렇게 말한다(조용히 무시하지 않는다).
     _new_items, _undo = _wl_apply_edits(_items, _edits)
     _n = len(_undo)
+    # 라운드 390 — 사용자: *"변경 저장에 수량이나 종목이 나오던데 안 나올 때도 있다."* 재현(쓰기를 막은 앱 ·
+    #   2026-09-29): 칸을 고치는 중(Enter 전)에 저장을 누르면 **그 칸 값이 빠진 채** 저장됐다 — 매입가만
+    #   들어가고 수량은 비었는데 화면은 *"1개 종목을 바꿨습니다"* 만 적었다. 저장될 내용을 **이름과 값으로**
+    #   먼저 보이고(아래 줄), 저장 버튼을 누르는 순간 고치는 중인 칸을 먼저 확정한다(`_wl_commit_js`).
+    _chg390 = portfolio.describe_position_changes(_items, _new_items, px_by_code)
     _sc = st.columns([3, 1])
     _sc[0].caption(f"바뀐 행 **{_n}개** — 칸에 넣은 뒤 **Enter** 를 누르면 반영됩니다. 저장 전에는 파일에 "
                    f"안 적습니다. 매입가를 비우거나 0 으로 "
                    f"두면 **미보유**로 옮겨집니다. 매입가·수량은 보유 판단에만 쓰이고 "
                    f"점수·적정가·추천에는 들어가지 않습니다.")
+    if _chg390:
+        _sc[0].markdown("저장할 내용 — " + ' / '.join(
+            _md_safe(portfolio.change_line(_c)) for _c in _chg390))
+        _miss390 = [_c['name'] for _c in _chg390 if _c['missing_qty']]
+        if _miss390:
+            _sc[0].warning(f"수량이 비어 있습니다: {_md_safe(', '.join(_miss390))} — 이대로 저장하면 보유로 옮겨지지만 "
+                           "손익을 셀 수 없습니다. 수량 칸에 넣고 **Enter** 를 누르세요.")
     if _sc[1].button(f"변경 {_n}개 저장" if _n else "변경 저장", key='wl_bulk_save', type='primary',
                      width='stretch'):
         if _n == 0:
             st.warning("바뀐 칸이 없습니다 — 매입가·수량을 넣고 **Enter** 를 누른 뒤 다시 저장하세요.")
         else:
             st.session_state['wl_undo_bulk'] = _undo            # 바뀌기 **전** 값
+            st.session_state['wl_undo_bulk_desc'] = [portfolio.change_line(_c) for _c in _chg390]  # 무엇을 저장했나
             # 라운드 388 — 바뀐 행을 이 PC 의 보유 변경 기록에(추가로 산 물량을 나중에 셀 수 있게 · §9 로컬만)
             st.session_state['wl_undo_bulk_batch'] = _hl_record(_items, _new_items, px_by_code)
             _wl_write(_new_items, f"매입가·수량 {_n}개를 저장했습니다")
@@ -2867,17 +2938,16 @@ def _ledger_stat_rows389():
         return None
     _keys = _lv389.scale_mismatch_keys()
 
-    def _rows():
+    def _parsed():
         with _open_artifact(_p) as _f:
             for _line in _f:
                 try:
-                    _r = _json389.loads(_line)
+                    yield _json389.loads(_line)
                 except Exception:                              # noqa: BLE001
                     continue
-                if _lv389.is_scale_mismatch(_r, _keys):
-                    continue
-                yield _r
-    return _rows()
+    # 라운드 390 — 축척 어긋남에 더해 같은 (종목 6자리, 기준일)의 복사본도 뺀다. 규칙은 채점 랩과 같은
+    #   `ledger_view.stat_rows` 한 곳이다(§4 · 접미사만 다른 복사본 2,499쌍 · 실측 2026-09-29).
+    return _lv389.stat_rows(_parsed(), _keys)
 
 
 def _scale_ok_mask389(df):
@@ -2885,10 +2955,19 @@ def _scale_ok_mask389(df):
     한 곳(§4). 목록을 못 읽으면 전부 True(거르지 않는다 — 걸렀다고 말하지도 않는다 · §3)."""
     import ledger_view as _lv389m
     _keys = _lv389m.scale_mismatch_keys()
-    if not _keys or not {'ticker', 'date'} <= set(df.columns):
-        return pd.Series(True, index=df.index)
-    return pd.Series([_lv389m.scale_key(t, d) not in _keys for t, d in zip(df['ticker'], df['date'])],
-                     index=df.index)
+    _ok = pd.Series(True, index=df.index)
+    # 라운드 390 — 채점 자리에서 찍은 도장(행의 `entry_scale_off`)도 같이 본다(감사 목록과 같은 항등식).
+    if 'entry_scale_off' in df.columns:
+        # 읽는 쪽 자료형이 파이썬 bool · numpy bool · 실수(1.0/NaN) 어느 것이든 '참인 것만' 어긋남으로 센다
+        _ok &= ~(df['entry_scale_off'] == True).fillna(False).astype(bool)   # noqa: E712
+    if _keys and {'ticker', 'date'} <= set(df.columns):
+        _ok &= pd.Series([_lv389m.scale_key(t, d) not in _keys for t, d in zip(df['ticker'], df['date'])],
+                         index=df.index)
+    # 라운드 390 — 같은 (종목 6자리, 기준일)의 두 번째 행부터 뺀다(`ledger_view.stat_rows` 와 같은 규칙 · 남은 행 중 먼저 것).
+    if {'ticker', 'date'} <= set(df.columns):
+        _k390 = pd.Series([_lv389m.scale_key(t, d) for t, d in zip(df['ticker'], df['date'])], index=df.index)
+        _ok &= ~(_k390.where(_ok).duplicated(keep='first') & _ok)
+    return _ok
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -6202,17 +6281,22 @@ else:
     _ub321 = st.session_state.get('wl_undo_bulk')
     if _ub321:
         _uc321 = st.columns([4, 1, 1])
-        _uc321[0].info(f"매입가·수량 **{len(_ub321)}개** 종목을 바꿨습니다.")
+        # 라운드 390 — 무엇을 저장했는지 이름과 값으로 적는다(수량이 빠진 채 저장된 것을 그 자리에서 보이게).
+        _desc390 = [str(x) for x in (st.session_state.get('wl_undo_bulk_desc') or [])]
+        _uc321[0].info(f"매입가·수량 **{len(_ub321)}개** 종목을 바꿨습니다"
+                       + (" — " + ' / '.join(_md_safe(x) for x in _desc390) if _desc390 else '.'))
         if _uc321[1].button('되돌리기', key='wl_undo_bulk_btn', width='stretch'):
             _back321, _ = _wl_apply_edits(
                 _wl_items(), {c: (v[0], v[1]) for c, v in _ub321.items()})
             _wl_write(_back321, '되돌렸습니다')
             _hl_undo(st.session_state.pop('wl_undo_bulk_batch', None))     # 라운드 388
             st.session_state.pop('wl_undo_bulk', None)
+            st.session_state.pop('wl_undo_bulk_desc', None)
             st.session_state['wl_bulk_ver'] = int(st.session_state.get('wl_bulk_ver') or 0) + 1
             st.rerun()
         if _uc321[2].button('닫기', key='wl_undo_bulk_close', width='stretch'):
             st.session_state.pop('wl_undo_bulk', None)
+            st.session_state.pop('wl_undo_bulk_desc', None)
             st.rerun()
     # 라운드 321 — 토글 이름에서 '빼기'를 뺐다. 빼기는 라운드 244 부터 표의 행마다 늘 있고,
     #   켜면 나오던 행별 입력칸 격자(와 그 안의 빼기 버튼)는 목록 편집기로 바뀌었다.
@@ -6311,6 +6395,7 @@ else:
     # 라운드 321 — 목록 편집기. 토글(또는 행의 '고치기')로 켜면 보기 표 **위에** 열린다.
     #   현재가는 방금 정렬에 쓴 값(`_wl_pre`)을 그대로 넘긴다 — 두 번 안 받는다(§4).
     if _wl_edit:
+        _wl_commit_js()
         _wl_bulk_editor({portfolio.normalize_code(_wl_body[_bi].get('code')): _bv[0]
                          for _bi, _bv in _wl_pre.items()})
     # 라운드 388 — 추가로 산 물량만의 손익 (이 PC 의 보유 변경 기록 · 기록된 것만 · 현재가는 방금 받은 값 그대로)
@@ -10606,8 +10691,9 @@ except Exception:                                              # noqa: BLE001
     pass                          # 설명 칸 때문에 분석 화면이 죽지 않는다
 
 # ── 가늠 AI에게 물어보기 (라운드 60) — 종목 전용 결정적 답변 조합기 ─────
-# 외부 LLM 미사용: §9(포트폴리오 외부 전송 금지)와 양립하지 않고, 요구
-# 명세("중앙 값만·재계산 금지·없으면 없다고") 자체가 결정적 조합기다.
+# 라운드 60: 외부 LLM 미사용 — §9(포트폴리오 외부 전송 금지)와 요구 명세("중앙 값만·재계산 금지·
+# 없으면 없다고")가 결정적 조합기였다. 라운드 390: 사용자가 대화형을 골랐다 — 키가 있으면 대화형 모델이
+# 정해진 답과 공개 판정 값만 받아 말로 풀고(`gaeum_llm`), 보유·계좌 이야기는 밖으로 안 나간다.
 # 모든 가격은 CORE/four_scores 를 그대로 읽는다 — 여기서 만들지 않는다.
 try:
     import gaeum_chat as _gch
@@ -10670,14 +10756,29 @@ try:
                 # 라운드 328 — 사용자: *"이게 이해가 안 되면 메일 보내기로 (주소)로 보낼 수 있게."* 누르면 **사용자의 메일
                 #   프로그램**이 종목·마지막 질문이 채워진 새 메일을 연다(앱은 보내지 않는다 · 답·평단은 안 싣는다 · §9).
                 _mail60 = st.empty()
-                _typed_q = st.chat_input('이 종목에 대해 무엇이든 물어보세요',
+                # 라운드 390 — 대화형 AI 가 켜졌는지와 무엇을 보내는지를 늘 적는다(켜기 전에 알 수 있게 · §9).
+                try:
+                    import gaeum_llm as _gll390
+                    if _gll390.enabled():
+                        st.caption(f"대화형 AI 켜짐 · {_gll390.model_name()} — 이 종목의 공개 판정 값·시장 국면·엔진 성적만 "
+                                   "보냅니다. 평단·수량·보유·계좌 이야기는 보내지 않고 이 PC 의 정해진 답으로 답합니다.")
+                    else:
+                        st.caption("대화형 AI 꺼짐 — 정해진 답으로 대화합니다. 켜려면 `ANTHROPIC_API_KEY` 를 환경변수나 "
+                                   "Streamlit secrets 에 넣으세요(저장소에는 적지 않습니다).")
+                except Exception:                              # noqa: BLE001
+                    pass
+                _typed_q = st.chat_input('이 종목 · 시장 · 말뜻 — 무엇이든 물어보세요',
                                          key=f'{_ck60}_in')
             _ask60 = _typed_q or _pending_q
             if _ask60:
+                # 라운드 390 — 대화형(ChatGPT 처럼): 지금까지의 대화를 같이 넘긴다(보유·계좌 이야기는 `gaeum_llm` 이
+                #   빼고 보낸다). 키가 없으면 종전의 정해진 답과 글자까지 같다.
+                _prev60 = list(st.session_state[_ck60])
                 st.session_state[_ck60].append(('user', _ask60))
-                st.session_state[_ck60].append(('assistant',
-                                                _gch.answer(_ask60, _ctx60)))
-                st.session_state[_ck60] = st.session_state[_ck60][-12:]
+                with st.spinner('생각하는 중…'):
+                    _ans60 = _gch.answer(_ask60, _ctx60, history=_prev60, allow_llm=True)
+                st.session_state[_ck60].append(('assistant', _ans60))
+                st.session_state[_ck60] = st.session_state[_ck60][-24:]
             _last_q60 = next((m for r, m in reversed(st.session_state[_ck60]) if r == 'user'), None)
             _mail60.markdown(
                 f"<p style='margin:6px 0 2px 0; font-size:12px; color:{_TOK['tx3']};'>이해가 안 되면 "
@@ -11668,8 +11769,9 @@ if _ledger_df is not None:
         _n_scale389 = int((~_ok389b).sum())
         _cs = _ledger_df[_ok389b]
         if _n_scale389:
-            st.caption(f"진입가가 그날 실제 봉과 어긋난 행 {_n_scale389:,}건은 여기서 세지 않습니다 — "
-                       "그 행은 채점이 첫날에 박혀 지어낸 승리·패배가 됩니다(원장에는 남아 있습니다).")
+            st.caption(f"통계에서 뺀 행 {_n_scale389:,}건은 여기서 세지 않습니다 — 진입가가 그날 실제 봉과 어긋난 행"
+                       "(채점이 첫날에 박혀 지어낸 승리·패배가 됩니다)과, 같은 종목·같은 날이 시장 표기만 달리해 두 번 "
+                       "들어간 복사본입니다(원장에는 남아 있습니다).")
         if _f_split != "전체":
             _cs = _cs[_cs['split'] == _f_split.split('(')[0]]
         if _f_out == "성공(목표 선도달)":
