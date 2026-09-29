@@ -1,11 +1,11 @@
 {
- "made": "2026-09-29",
- "made_at": "2026-09-29 21:43",
- "ledger_rows": 255529,
- "took_sec": 7.1,
+ "made": "2026-09-30",
+ "made_at": "2026-09-30 01:23",
+ "ledger_rows": 255930,
+ "took_sec": 5.2,
  "stores": {
   "ledger": {
-   "rows": 255529,
+   "rows": 255930,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -19,7 +19,7 @@
    "parse_fail": 0
   },
   "virtual_predictions": {
-   "rows": 134032,
+   "rows": 134433,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -29,7 +29,7 @@
    "parse_fail": 0
   },
   "forward_registry": {
-   "rows": 960,
+   "rows": 1020,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -40,7 +40,7 @@
    "empty_versions": 0
   },
   "predictions": {
-   "rows": 1351,
+   "rows": 1410,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -50,7 +50,7 @@
    "parse_fail": 0
   },
   "fin_pit": {
-   "rows": 242,
+   "rows": 302,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -60,7 +60,7 @@
    "parse_fail": 0
   },
   "book_pit": {
-   "rows": 240,
+   "rows": 300,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
@@ -77,42 +77,51 @@
  },
  "info": {
   "scale_stamp": {
-   "missing": 255529
+   "same": 253332,
+   "off": 2598
   },
   "blind_share_by_band": {
    "40": {
-    "decided": 83387,
-    "blind": 7172,
-    "blind_pct": 8.6
+    "decided": 83551,
+    "blind": 7334,
+    "blind_pct": 8.8
    },
    "50": {
-    "decided": 22726,
-    "blind": 1200,
-    "blind_pct": 5.3
+    "decided": 22762,
+    "blind": 1237,
+    "blind_pct": 5.4
    },
    "55": {
-    "decided": 122807,
-    "blind": 8031,
-    "blind_pct": 6.5
+    "decided": 122926,
+    "blind": 8149,
+    "blind_pct": 6.6
    },
    "60": {
-    "decided": 15632,
-    "blind": 1252,
-    "blind_pct": 8.0
+    "decided": 15651,
+    "blind": 1271,
+    "blind_pct": 8.1
    },
    "65": {
-    "decided": 933,
-    "blind": 96,
-    "blind_pct": 10.3
+    "decided": 934,
+    "blind": 97,
+    "blind_pct": 10.4
    }
   },
   "legacy_holiday_cases": 50,
   "news_weekend_rows": 25,
   "premarket_holiday_reports": 17,
   "scale_audit": {
-   "made": "2026-09-29",
+   "made": "2026-09-30",
    "offenders": 19,
-   "offender_key_rows": 2342
+   "offender_key_rows": 2598,
+   "small_offenders": 22,
+   "small_offender_key_rows": 256
+  },
+  "scale_judges": {
+   "stamp_off": 2598,
+   "audit_rows": 2598,
+   "stamp_only": 0,
+   "audit_only_stamped_same": 0
   }
  },
  "hard_nonzero": [],
@@ -121,6 +130,6 @@
   "ledger.dup": 2499,
   "virtual_predictions.dup": 287
  },
- "scanned_rows": 392850,
+ "scanned_rows": 393891,
  "note": "0 이어야 하는 수(hard)와 알림(info)을 가른다. 문턱이 없다 — 전부 항등식이다. 이름·코드·가격은 안 담는다(§9). 못 읽은 저장소는 0 으로 세지 않고 unmeasured 에 적는다(§3)."
 }

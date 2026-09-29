@@ -1,10 +1,10 @@
 {
  "made": "2026-09-30",
- "made_at": "2026-09-29T15:21:30+00:00",
- "ledger_rows": 255529,
- "joined_n": 223276,
+ "made_at": "2026-09-29T16:24:33+00:00",
+ "ledger_rows": 255930,
+ "joined_n": 223177,
  "stat_excluded": {
-  "scale": 2163,
+  "scale": 2264,
   "dup": 2295
  },
  "scale_audit_read": true,
@@ -12,10 +12,10 @@
  "note": "관측 전용 — 점수·게이트·문턱을 바꾸지 않는다. 여기서 나온 패턴은 2026-11-16 이후 새 사전등록의 후보 목록으로만 쓴다.",
  "fn_rule": "score<58 & 20봉 최고 >= +10%",
  "fp_rule": "score>=58 & outcome=STOP",
- "fn_n": 44665,
- "below_n": 126720,
- "fp_n": 38500,
- "inbuy_n": 96556,
+ "fn_n": 44654,
+ "below_n": 126634,
+ "fp_n": 38499,
+ "inbuy_n": 96543,
  "fn_end_median": 9.5,
  "fn_positive_close_pct": 84.5,
  "fn_sectors": {

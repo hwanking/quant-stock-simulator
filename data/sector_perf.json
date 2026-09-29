@@ -1,20 +1,20 @@
 {
  "made": "2026-09-30",
- "ledger_rows": 255529,
+ "ledger_rows": 255930,
  "basis": "개발 구간(train+valid) 매수권 58+ · 판정완료 · 블라인드 미포함 · 비용 0.41%p 차감(운영 왕복 비용) · 축척 어긋남·복사본 제외",
  "cost_pct": 0.41,
  "stat_excluded": {
-  "scale": 848,
+  "scale": 856,
   "dup": 1083
  },
  "scale_audit_read": true,
  "note": "표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)",
  "coverage": {
-  "rows_eligible": 96889,
+  "rows_eligible": 96876,
   "by_row": 44946,
   "by_patch": 35418,
   "by_ticker": 13684,
-  "miss_etf": 2678,
+  "miss_etf": 2665,
   "miss_ambiguous": 32,
   "miss_unknown": 96,
   "miss_bad_label": 35,

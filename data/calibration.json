@@ -1,59 +1,59 @@
 {
- "generated_from": "255529건 가상 판정 · 판정 완료 245485건",
+ "generated_from": "255930건 가상 판정 · 판정 완료 240840건",
  "bands": [
   {
    "lo": 0,
    "hi": 39,
-   "n": 101,
-   "hit": 52,
-   "hit_rate": 51.48514851485149,
-   "wilson_low": 41.86375530960129,
-   "avg_return": -0.43996240545341414
+   "n": 98,
+   "hit": 49,
+   "hit_rate": 50.0,
+   "wilson_low": 40.289010851687394,
+   "avg_return": -0.5488178657057291
   },
   {
    "lo": 40,
    "hi": 49,
-   "n": 83286,
-   "hit": 49134,
-   "hit_rate": 58.99430876737988,
-   "wilson_low": 58.65986235008231,
-   "avg_return": 0.11412258877237813
+   "n": 81815,
+   "hit": 48210,
+   "hit_rate": 58.92562488541221,
+   "wilson_low": 58.58809915116975,
+   "avg_return": 0.1103348046405584
   },
   {
    "lo": 50,
    "hi": 54,
-   "n": 22726,
-   "hit": 13559,
-   "hit_rate": 59.66294112470298,
-   "wilson_low": 59.02353849586681,
-   "avg_return": 0.11533776833382706
+   "n": 22359,
+   "hit": 13309,
+   "hit_rate": 59.52412898609061,
+   "wilson_low": 58.87915576744378,
+   "avg_return": 0.10361237476564993
   },
   {
    "lo": 55,
    "hi": 59,
-   "n": 122807,
-   "hit": 73422,
-   "hit_rate": 59.78649425521346,
-   "wilson_low": 59.511951474328704,
-   "avg_return": 0.11672474451034522
+   "n": 120415,
+   "hit": 72130,
+   "hit_rate": 59.901175102769585,
+   "wilson_low": 59.62404231987999,
+   "avg_return": 0.12939708564314858
   },
   {
    "lo": 60,
    "hi": 64,
-   "n": 15632,
-   "hit": 9370,
-   "hit_rate": 59.941146366427844,
-   "wilson_low": 59.17061867186829,
-   "avg_return": 0.14442242994351212
+   "n": 15240,
+   "hit": 9188,
+   "hit_rate": 60.28871391076116,
+   "wilson_low": 59.50936210730404,
+   "avg_return": 0.1747809104669641
   },
   {
    "lo": 65,
    "hi": 69,
-   "n": 913,
-   "hit": 546,
-   "hit_rate": 59.802847754654984,
-   "wilson_low": 56.58779584052832,
-   "avg_return": 0.16325012574585424
+   "n": 893,
+   "hit": 539,
+   "hit_rate": 60.358342665173566,
+   "wilson_low": 57.11224475654642,
+   "avg_return": 0.24599264311169308
   },
   {
    "lo": 70,
@@ -68,93 +68,93 @@
  "lifts": [
   {
    "label": "월봉 10선 위",
-   "yes_n": 116336,
-   "yes_rate": 59.57485215238619,
-   "no_n": 129149,
-   "no_rate": 59.456132064514634
+   "yes_n": 113948,
+   "yes_rate": 59.65703654298452,
+   "no_n": 126892,
+   "no_rate": 59.466317813573745
   },
   {
    "label": "DeMARK 매수 신호",
-   "yes_n": 14625,
-   "yes_rate": 62.11965811965812,
-   "no_n": 230860,
-   "no_rate": 59.347223425452654
+   "yes_n": 14324,
+   "yes_rate": 62.1963138788048,
+   "no_n": 226516,
+   "no_rate": 59.38962369104169
   },
   {
    "label": "순기대수익 양수",
-   "yes_n": 86383,
-   "yes_rate": 59.73513307016427,
-   "no_n": 159102,
-   "no_rate": 59.391459566818774
+   "yes_n": 84580,
+   "yes_rate": 59.80728304563727,
+   "no_n": 156260,
+   "no_rate": 59.420837066427744
   },
   {
    "label": "적정가 이하 진입",
-   "yes_n": 202707,
-   "yes_rate": 59.64668215700494,
-   "no_n": 42778,
-   "no_rate": 58.8760577867128
+   "yes_n": 198793,
+   "yes_rate": 59.74003108761375,
+   "no_n": 42047,
+   "no_rate": 58.68908602278403
   }
  ],
  "entry_candidates": {
   "main": {
-   "n": 43696,
-   "hit": 26013,
-   "hit_rate": 59.53176492127425,
-   "wilson_low": 59.07072513393583,
-   "avg_return": 0.17101607844353073
+   "n": 42517,
+   "hit": 25377,
+   "hit_rate": 59.68671354987417,
+   "wilson_low": 59.21958838998813,
+   "avg_return": 0.19153088224980835
   },
   "holdout": {
-   "n": 26202,
-   "hit": 15783,
-   "hit_rate": 60.23585985802611,
-   "wilson_low": 59.64180012582576,
-   "avg_return": 0.24735927463486895
+   "n": 25857,
+   "hit": 15580,
+   "hit_rate": 60.254476544069306,
+   "wilson_low": 59.656502034238024,
+   "avg_return": 0.25497035547153885
   },
   "all": {
-   "n": 69898,
-   "hit": 41796,
-   "hit_rate": 59.79570230907895,
-   "wilson_low": 59.4316815011697,
-   "avg_return": 0.1996341279815067
+   "n": 68374,
+   "hit": 40957,
+   "hit_rate": 59.90142451809167,
+   "wilson_low": 59.533516647755555,
+   "avg_return": 0.21552179193908036
   }
  },
  "breakdowns": {
   "by_asset_type": [
    {
     "label": "STOCK",
-    "n": 228384,
-    "hit": 135606,
+    "n": 224015,
+    "hit": 133099,
     "hit_rate": 59.4,
     "wilson_low": 59.2,
-    "avg_return": 0.18,
+    "avg_return": 0.19,
     "median_return": 2.1,
     "profit_factor": 1.08,
-    "avg_mae": -1.9,
-    "avg_return_after_cost": -0.37
+    "avg_mae": -3.86,
+    "avg_return_after_cost": -0.36
    },
    {
     "label": "ETF",
-    "n": 14534,
-    "hit": 9002,
-    "hit_rate": 61.9,
-    "wilson_low": 61.1,
-    "avg_return": 0.22,
+    "n": 14256,
+    "hit": 8849,
+    "hit_rate": 62.1,
+    "wilson_low": 61.3,
+    "avg_return": 0.23,
     "median_return": 2.1,
     "profit_factor": 1.16,
-    "avg_mae": -2.36,
-    "avg_return_after_cost": -0.33
+    "avg_mae": -2.35,
+    "avg_return_after_cost": -0.32
    },
    {
     "label": "ETF_LEV",
-    "n": 1473,
-    "hit": 899,
-    "hit_rate": 61.0,
-    "wilson_low": 58.5,
-    "avg_return": 0.38,
+    "n": 1475,
+    "hit": 901,
+    "hit_rate": 61.1,
+    "wilson_low": 58.6,
+    "avg_return": 0.4,
     "median_return": 2.44,
-    "profit_factor": 1.15,
+    "profit_factor": 1.16,
     "avg_mae": -4.1,
-    "avg_return_after_cost": -0.17
+    "avg_return_after_cost": -0.15
    },
    {
     "label": "ETF_INV",
@@ -172,169 +172,169 @@
   "by_market": [
    {
     "label": "KOSPI",
-    "n": 155222,
-    "hit": 92742,
-    "hit_rate": 59.7,
-    "wilson_low": 59.5,
-    "avg_return": 0.19,
+    "n": 153351,
+    "hit": 91293,
+    "hit_rate": 59.5,
+    "wilson_low": 59.3,
+    "avg_return": 0.17,
     "median_return": 2.1,
-    "profit_factor": 1.1,
-    "avg_mae": -0.67,
-    "avg_return_after_cost": -0.36
+    "profit_factor": 1.09,
+    "avg_mae": -3.36,
+    "avg_return_after_cost": -0.38
    },
    {
     "label": "KOSDAQ",
-    "n": 90263,
-    "hit": 53352,
-    "hit_rate": 59.1,
-    "wilson_low": 58.8,
-    "avg_return": 0.16,
-    "median_return": 2.39,
-    "profit_factor": 1.06,
-    "avg_mae": -4.14,
-    "avg_return_after_cost": -0.39
+    "n": 87489,
+    "hit": 52143,
+    "hit_rate": 59.6,
+    "wilson_low": 59.3,
+    "avg_return": 0.22,
+    "median_return": 2.42,
+    "profit_factor": 1.09,
+    "avg_mae": -4.48,
+    "avg_return_after_cost": -0.33
    }
   ],
   "by_regime": [
    {
     "label": "BULL",
-    "n": 86761,
-    "hit": 50621,
-    "hit_rate": 58.3,
+    "n": 84963,
+    "hit": 49599,
+    "hit_rate": 58.4,
     "wilson_low": 58.0,
     "avg_return": 0.03,
     "median_return": 2.1,
     "profit_factor": 1.02,
-    "avg_mae": -1.74,
+    "avg_mae": -3.67,
     "avg_return_after_cost": -0.52
    },
    {
     "label": "SIDEWAYS",
-    "n": 86411,
-    "hit": 53902,
+    "n": 84947,
+    "hit": 53018,
     "hit_rate": 62.4,
     "wilson_low": 62.1,
-    "avg_return": 0.48,
-    "median_return": 2.18,
-    "profit_factor": 1.23,
-    "avg_mae": -1.93,
-    "avg_return_after_cost": -0.07
+    "avg_return": 0.49,
+    "median_return": 2.17,
+    "profit_factor": 1.24,
+    "avg_mae": -3.68,
+    "avg_return_after_cost": -0.06
    },
    {
     "label": "BEAR",
-    "n": 72262,
-    "hit": 41540,
+    "n": 70879,
+    "hit": 40788,
     "hit_rate": 57.5,
-    "wilson_low": 57.1,
-    "avg_return": -0.0,
+    "wilson_low": 57.2,
+    "avg_return": 0.01,
     "median_return": 2.1,
     "profit_factor": 1.0,
-    "avg_mae": -2.22,
-    "avg_return_after_cost": -0.55
+    "avg_mae": -4.0,
+    "avg_return_after_cost": -0.54
    }
   ]
  },
  "splits": {
   "train": {
    "label": "train",
-   "n": 211075,
-   "hit": 124798,
-   "hit_rate": 59.1,
+   "n": 206926,
+   "hit": 122411,
+   "hit_rate": 59.2,
    "wilson_low": 58.9,
-   "avg_return": 0.14,
+   "avg_return": 0.15,
    "median_return": 2.1,
    "profit_factor": 1.07,
-   "avg_mae": -1.72,
-   "avg_return_after_cost": -0.41
+   "avg_mae": -3.63,
+   "avg_return_after_cost": -0.4
   },
   "valid": {
    "label": "valid",
-   "n": 16659,
-   "hit": 10885,
-   "hit_rate": 65.3,
-   "wilson_low": 64.6,
+   "n": 16251,
+   "hit": 10634,
+   "hit_rate": 65.4,
+   "wilson_low": 64.7,
    "avg_return": 0.72,
-   "median_return": 2.21,
+   "median_return": 2.22,
    "profit_factor": 1.4,
-   "avg_mae": -2.05,
+   "avg_mae": -3.42,
    "avg_return_after_cost": 0.17
   },
   "blind": {
    "label": "blind",
-   "n": 17751,
-   "hit": 10411,
-   "hit_rate": 58.7,
-   "wilson_low": 57.9,
-   "avg_return": 0.15,
-   "median_return": 3.08,
-   "profit_factor": 1.04,
-   "avg_mae": -4.58,
-   "avg_return_after_cost": -0.4
+   "n": 17663,
+   "hit": 10391,
+   "hit_rate": 58.8,
+   "wilson_low": 58.1,
+   "avg_return": 0.18,
+   "median_return": 3.11,
+   "profit_factor": 1.05,
+   "avg_mae": -5.7,
+   "avg_return_after_cost": -0.37
   },
   "buy_zone": {
    "train": {
     "label": "60+ train",
-    "n": 13921,
-    "hit": 8309,
-    "hit_rate": 59.7,
-    "wilson_low": 58.9,
-    "avg_return": 0.23,
-    "median_return": 2.35,
-    "profit_factor": 1.1,
-    "avg_mae": -4.0,
-    "avg_return_after_cost": -0.32
+    "n": 13572,
+    "hit": 8143,
+    "hit_rate": 60.0,
+    "wilson_low": 59.2,
+    "avg_return": 0.26,
+    "median_return": 2.36,
+    "profit_factor": 1.11,
+    "avg_mae": -4.15,
+    "avg_return_after_cost": -0.29
    },
    "valid": {
     "label": "60+ valid",
-    "n": 1296,
-    "hit": 893,
-    "hit_rate": 68.9,
-    "wilson_low": 66.3,
-    "avg_return": 1.1,
-    "median_return": 2.72,
-    "profit_factor": 1.57,
-    "avg_mae": -3.98,
-    "avg_return_after_cost": 0.55
+    "n": 1261,
+    "hit": 875,
+    "hit_rate": 69.4,
+    "wilson_low": 66.8,
+    "avg_return": 1.13,
+    "median_return": 2.73,
+    "profit_factor": 1.6,
+    "avg_mae": -3.78,
+    "avg_return_after_cost": 0.58
    },
    "blind": {
     "label": "60+ blind",
-    "n": 1348,
-    "hit": 725,
-    "hit_rate": 53.8,
-    "wilson_low": 51.1,
-    "avg_return": -0.76,
-    "median_return": 2.87,
-    "profit_factor": 0.83,
-    "avg_mae": -7.09,
-    "avg_return_after_cost": -1.31
+    "n": 1320,
+    "hit": 720,
+    "hit_rate": 54.5,
+    "wilson_low": 51.8,
+    "avg_return": -0.66,
+    "median_return": 2.99,
+    "profit_factor": 0.85,
+    "avg_mae": -6.94,
+    "avg_return_after_cost": -1.21
    }
   }
  },
  "failure_classes": [
   {
    "class": "시장 국면 역풍",
-   "n": 29395,
-   "total_loss": -159017.0
+   "n": 28776,
+   "total_loss": -154850.0
   },
   {
    "class": "방향 오판",
-   "n": 20407,
-   "total_loss": -119729.3
+   "n": 19866,
+   "total_loss": -116231.0
   },
   {
    "class": "노이즈 손절(목표 절반까지 갔다 반락)",
-   "n": 21072,
-   "total_loss": -107632.1
+   "n": 20839,
+   "total_loss": -106361.6
   },
   {
    "class": "추세 역행(월10선 아래)",
-   "n": 19975,
-   "total_loss": -93756.6
+   "n": 19545,
+   "total_loss": -91600.2
   },
   {
    "class": "과열 추격",
-   "n": 7457,
-   "total_loss": -44495.8
+   "n": 7293,
+   "total_loss": -43481.2
   },
   {
    "class": "레버리지 변동성",
@@ -364,25 +364,37 @@
   "방향 오판"
  ],
  "signal_frequency": {
-  "total": 255529,
-  "buy_zone": 16939,
+  "total": 250833,
+  "buy_zone": 16522,
   "rate_pct": 6.6
  },
  "high_confidence": {
   "label": "고신뢰(65+)",
-  "n": 933,
-  "hit": 557,
-  "hit_rate": 59.7,
-  "wilson_low": 56.5,
-  "avg_return": 0.18,
-  "median_return": 2.76,
-  "profit_factor": 1.06,
-  "avg_mae": -4.25,
-  "avg_return_after_cost": -0.37
+  "n": 913,
+  "hit": 550,
+  "hit_rate": 60.2,
+  "wilson_low": 57.0,
+  "avg_return": 0.26,
+  "median_return": 2.8,
+  "profit_factor": 1.09,
+  "avg_mae": -4.77,
+  "avg_return_after_cost": -0.29
  },
- "total_cases": 255529,
+ "total_cases": 255930,
  "carried_over": 0,
- "ledger_rows": 255529,
- "rulebook_version": "v2026.08.02",
+ "ledger_rows": 255930,
+ "rulebook_version": "v2026.09.27.1",
+ "cost_pct_after_cost": 0.55,
+ "scale_excluded": 2598,
+ "stat_excluded": {
+  "scale": 2598,
+  "dup": 2499
+ },
+ "scale_stamp": {
+  "off": 2598,
+  "same": 253332,
+  "unknown": 0
+ },
+ "scale_audit_read": false,
  "note": "실제 판정 엔진을 과거 기준일 리플레이로 돌려 채점한 결과다. 리플레이는 그 날 알 수 있었던 것만 쓴다(시장 컨텍스트·상대모멘텀·실시간 시세 차단). 재무·배당 게시값은 이력이 없어 현재 게시값이 쓰인다는 한계가 있다. carried_over 는 시세를 더는 받을 수 없어 이번 실행에서 다시 채점하지 못한 행이다 — 원장에는 남기고 통계에서는 뺀다(다시 못 재는 것과 없던 일로 하는 것은 다르다)."
 }

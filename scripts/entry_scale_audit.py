@@ -45,8 +45,9 @@ os.chdir(PROJ)
 LEDGER = os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl')
 OUT = os.path.join(PROJ, 'data', 'entry_scale_audit.json')
 
-#: 종목당 최소 행 — 한두 행으로 "어긋났다"고 적지 않는다.
-#: 라운드 364 가 쓴 그 수이고 새로 고른 값이 아니다.
+#: 종목당 최소 행 — 한두 행으로 "이 **종목**이 어긋났다"고 적지 않는다(종목 단위 목록 `offenders` 에만 쓴다).
+#: 라운드 364 가 쓴 그 수이고 새로 고른 값이 아니다. ⚠️ 라운드 391 — 행 목록(`offender_keys`)에는 이 하한을
+#: 쓰지 않는다: 항등식은 행 하나로도 사실이고, 이 하한 밑 종목도 재서 `small_*` 로 따로 적는다.
 MIN_ROWS = 20
 
 #: 원 단위 반올림·표기 차이를 어긋남으로 세지 않기 위한 허용 오차.
@@ -104,11 +105,35 @@ def main():
 
     eng = be.BitemporalEngine()
     rows, unread = {}, []
+    # ⚠️ 라운드 391 — 여기가 20행 미만 종목을 **조용히 건너뛰었다**(몇 개를 건너뛰었는지도 안 적었다 · R194).
+    #   2026-09-30 실측: 1,549종목 중 139종목(1,623행)이 안 재졌고, 채점 자리의 도장(R390 · 같은 항등식)이 그중
+    #   22종목 256행을 어긋남으로 찍었다 — 배율 0.94~0.99 로 종목마다 일정한 계단(R389 의 '자료원이 과거 봉을
+    #   고쳐 쓴다'와 같은 모양 · 2024년 상장 종목들). 그래서 감사는 2,342행, 도장은 2,598행을 말했다(§4 — 두 판정자).
+    #   항등식은 행 하나로도 사실이므로 **행 목록(offender_keys)에는 전부 넣고**, 종목 단위 목록(offenders ·
+    #   R364 의 정의 · §362 상한)은 20행 이상 그대로 두고 작은 종목은 **따로** 적는다(small_*).
+    small, small_unread = {}, []
     t0 = time.time()
     codes = sorted(by)
     for i, tk in enumerate(codes, 1):
         led = by[tk]
         if len(led) < MIN_ROWS:
+            try:
+                df = eng.fetch_daily_bars(symbol=tk)
+            except Exception:                                  # noqa: BLE001
+                df = None
+            if df is None or not len(df):
+                small_unread.append(tk)
+                continue
+            dcol = 'trade_date' if 'trade_date' in df.columns else df.columns[0]
+            try:
+                bars = {str(df[dcol].iloc[k])[:10]: float(df['close_raw'].iloc[k])
+                        for k in range(len(df))}
+            except Exception:                                  # noqa: BLE001
+                small_unread.append(tk)
+                continue
+            _m = [(d, _lv390.entry_scale_off(p, bars[d])) for d, p, _tb, _oc in led if d in bars and p]
+            small[tk] = dict(n=len(led), matched=len(_m),
+                             off_days=sorted(d for d, v in _m if v is True))
             continue
         try:
             df = eng.fetch_daily_bars(symbol=tk)
@@ -169,6 +194,13 @@ def main():
     #   거른다(`ledger_view.scale_mismatch_keys` · §4). 봉과 못 댄 행(그날 봉 없음)은 **모른다**라 안 넣는다.
     off_keys = {tk: rows[tk].pop('off_days') for tk in list(rows)}
     off_keys = {tk: ds for tk, ds in off_keys.items() if ds}
+    # 라운드 391 — 20행 미만 종목의 어긋난 행도 행 목록에 넣는다(항등식은 행 하나로도 사실이다).
+    small_bad = sorted(tk for tk, v in small.items() if v['off_days'])
+    for tk in small_bad:
+        off_keys[tk] = small[tk]['off_days']
+    print(f'\n■ {MIN_ROWS}행 미만 종목 — 잰 것 {len(small):,} · 못 읽음 {len(small_unread)} · '
+          f'어긋난 행이 있는 종목 {len(small_bad)} · 그 행 {sum(len(small[t]["off_days"]) for t in small_bad):,}'
+          f' (종목 단위 목록·상한에는 안 넣는다 — 따로 적는다)')
     doc = {
         'made': time.strftime('%Y-%m-%d'),
         'made_at': time.strftime('%Y-%m-%d %H:%M'),
@@ -185,6 +217,15 @@ def main():
         'offender_codes': bad,
         'offender_keys': off_keys,
         'offender_key_rows': sum(len(v) for v in off_keys.values()),
+        # 라운드 391 — 20행 미만 종목(종목 단위 목록 밖 · 행 목록 안). 원장의 모든 종목이 네 갈래 중 하나에
+        #   든다(tickers = measured + unread + small_measured + small_unread) — 조용히 건너뛴 종목이 없다.
+        'tickers': len(by),
+        'small_measured': len(small),
+        'small_unread': len(small_unread),
+        'small_rows': sum(v['n'] for v in small.values()),
+        'small_offenders': len(small_bad),
+        'small_offender_codes': small_bad,
+        'small_offender_key_rows': sum(len(small[t]['off_days']) for t in small_bad),
         'symptom_missed': len(missed),
         'symptom_missed_codes': missed,
         'rows': {tk: rows[tk] for tk in bad},

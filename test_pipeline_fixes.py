@@ -30015,8 +30015,11 @@ check("화면 두 자리가 뺀 휴장일 케이스 수를 말한다 (추적 줄
 _esa380 = _aio380.load_json(_lv380.SCALE_AUDIT_FILE)
 _keys380 = _lv380.scale_mismatch_keys()
 if _esa380 is not None and isinstance(_esa380.get('offender_keys'), dict):
-    _codes380 = {str(c).split('.')[0] for c in (_esa380.get('offender_codes') or [])}
-    check("감사 산출물이 어긋난 행(종목→기준일)을 싣고, 그 수가 머리의 수와 같고, 종목은 어긋난 종목 목록 안이다",
+    # 라운드 391 — 20행 미만 종목의 어긋난 행도 행 목록에 들어간다(종목 단위 목록 밖 · `small_offender_codes`).
+    #   종전 감사는 그 종목을 조용히 건너뛰어 행 목록 2,342 vs 채점 도장 2,598 이 됐다(22종목 256행).
+    _codes380 = {str(c).split('.')[0] for c in ((_esa380.get('offender_codes') or [])
+                                                 + (_esa380.get('small_offender_codes') or []))}
+    check("감사 산출물이 어긋난 행(종목→기준일)을 싣고, 그 수가 머리의 수와 같고, 종목은 어긋난 종목 목록(작은 종목 포함) 안이다",
           _keys380 is not None and len(_keys380) == _esa380.get('offender_key_rows')
           and {c for c, _d in _keys380} <= _codes380 and len(_keys380) > 0,
           f"행 {len(_keys380 or ())} · 머리 {_esa380.get('offender_key_rows')} · 종목 {len(_codes380)}",
@@ -30325,6 +30328,29 @@ _id382 = ('stat_rows' not in _sa_doc382
           == _sa_doc382['stat_excluded']['scale'] + _sa_doc382['stat_excluded']['dup'])
 check("산출물이 뺀 수를 싣고 있으면 음이 아닌 정수이고, 표본 감사는 raw − 통계 행 = 축척 + 복사본 이다",
       _okx382 and _id382, f"칸을 실은 산출물 {sorted(_with382)} · 옛 판 {sorted(set(_art382) - set(_with382))}")
+# 축척 감사 — 20행 미만 종목을 조용히 건너뛰었다(2026-09-30 실측 139종목 · 1,623행). 채점 도장은 그중 22종목 256행을
+#   어긋남으로 찍어 두 판정자가 2,598 vs 2,342 로 갈렸다. 이제 모든 종목이 네 갈래 중 하나에 들고, 작은 종목의 어긋난
+#   행은 행 목록에 들어간다(종목 단위 목록·§362 상한은 R364 정의 그대로).
+_esa382 = _json.loads(_read148(_os.path.join(PROJ, 'data', 'entry_scale_audit.json')) or '{}')
+_parts382 = [_esa382.get(k) for k in ('measured', 'unread', 'small_measured', 'small_unread')]
+check("축척 감사가 원장의 모든 종목을 네 갈래(잰 것·못 읽음·20행 미만 잰 것·20행 미만 못 읽음) 중 하나에 넣는다 — 조용히 건너뛰지 않는다",
+      isinstance(_esa382.get('tickers'), int) and all(isinstance(x, int) for x in _parts382)
+      and sum(_parts382) == _esa382['tickers'] and _esa382['tickers'] > 1000,
+      f"종목 {_esa382.get('tickers')} · 갈래 {_parts382}", scanned=_esa382.get('tickers') or 0)
+_small_rows382 = _esa382.get('small_offender_key_rows')
+check("작은 종목의 어긋난 행이 행 목록에 들어 있다 (행 목록 = 큰 종목 몫 + 작은 종목 몫)",
+      isinstance(_small_rows382, int)
+      and _esa382.get('offender_key_rows') == sum(len(v) for v in (_esa382.get('offender_keys') or {}).values())
+      and sum(len(v) for c, v in (_esa382.get('offender_keys') or {}).items()
+              if c in set(_esa382.get('small_offender_codes') or [])) == _small_rows382,
+      f"행 목록 {_esa382.get('offender_key_rows')} · 작은 종목 몫 {_small_rows382}")
+_ca382 =_json.loads(_read148(_os.path.join(PROJ, 'data', 'contamination_audit.json')) or '{}')
+_sj382 = ((_ca382.get('info') or {}).get('scale_judges'))
+check("오염 점검이 두 판정자(채점 도장·축척 감사)의 행 불일치를 수로 적는다 — 열쇠(종목코드)는 산출물에 안 싣는다 (§9)",
+      "'_stamp_off_keys'" not in _json.dumps(_ca382, ensure_ascii=False)
+      and 'def scale_judges(' in _read148(_os.path.join(PROJ, 'scripts', 'contamination_audit.py'))
+      and (_sj382 is None or all(k in _sj382 for k in ('stamp_only', 'audit_only_stamped_same'))),
+      str(_sj382))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

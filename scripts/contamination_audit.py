@@ -126,6 +126,7 @@ def ledger_checks(rows_iter, today, bounds):
     base_rows = []
     bad_px = order = inv = split_bad = 0
     stamp = collections.Counter()
+    stamp_off, stamp_same = set(), set()
     band = collections.defaultdict(lambda: [0, 0])       # 점수대 → [판정 완료, 그중 블라인드]
     for r in rows_iter:
         base_rows.append({'date': r.get('date'), 'ticker': r.get('ticker')})
@@ -142,6 +143,8 @@ def ledger_checks(rows_iter, today, bounds):
             split_bad += int(r.get('split') != exp)
         v = r.get('entry_scale_off', 'missing')
         stamp['missing' if v == 'missing' else ('off' if v is True else ('same' if v is False else 'unknown'))] += 1
+        if v is True or v is False:      # 라운드 391 — 두 판정자(도장·감사)를 행으로 대 보려고 열쇠를 모은다
+            (stamp_off if v is True else stamp_same).add(lv.scale_key(r.get('ticker'), r.get('date')))
         sc = r.get('score')
         if r.get('outcome') in ('TARGET', 'STOP') and isinstance(sc, (int, float)):
             lo = 40 if sc < 50 else (50 if sc < 55 else (55 if sc < 60 else (60 if sc < 65 else 65)))
@@ -153,8 +156,22 @@ def ledger_checks(rows_iter, today, bounds):
     info = {'scale_stamp': dict(stamp),
             'blind_share_by_band': {str(k): {'decided': v[0], 'blind': v[1],
                                              'blind_pct': round(100.0 * v[1] / v[0], 1) if v[0] else None}
-                                    for k, v in sorted(band.items())}}
+                                    for k, v in sorted(band.items())},
+            # 산출물에는 안 싣는다(열쇠에 종목코드가 든다 · §9) — run() 이 수로 바꾸고 뺀다
+            '_stamp_off_keys': stamp_off, '_stamp_same_keys': stamp_same}
     return out, info
+
+
+def scale_judges(stamp_off, stamp_same, audit_keys):
+    """채점 도장과 축척 감사 — 같은 항등식을 쓰는 두 판정자가 행에서 갈리는 수 (라운드 391 · 알림).
+
+    감사를 못 읽으면(None) 대지 않는다(§3). 도장은 채점하는 그 봉으로, 감사는 같은 날 뒤에 다시 받은 봉으로 재므로
+    자료원이 그 사이 과거 봉을 고쳐 쓰면(R389) 정당하게 갈릴 수 있다 — 그래서 실패가 아니라 알림이다."""
+    if audit_keys is None:
+        return None
+    return {'stamp_off': len(stamp_off), 'audit_rows': len(audit_keys),
+            'stamp_only': len(stamp_off - audit_keys),
+            'audit_only_stamped_same': len(audit_keys & stamp_same)}
 
 
 def tracker_checks(db_path, today):
@@ -272,9 +289,19 @@ def run(today=None):
     try:
         esa = json.load(io.open(os.path.join(PROJ, 'data', 'entry_scale_audit.json'), encoding='utf-8'))
         info['scale_audit'] = {'made': esa.get('made'), 'offenders': esa.get('offenders'),
-                               'offender_key_rows': esa.get('offender_key_rows')}
+                               'offender_key_rows': esa.get('offender_key_rows'),
+                               # 라운드 391 — 20행 미만 종목(종목 목록 밖 · 행 목록 안) · 옛 판이면 None
+                               'small_offenders': esa.get('small_offenders'),
+                               'small_offender_key_rows': esa.get('small_offender_key_rows')}
     except Exception:                                          # noqa: BLE001
         info['scale_audit'] = None
+    _off391 = info.pop('_stamp_off_keys', set())
+    _same391 = info.pop('_stamp_same_keys', set())
+    try:
+        import ledger_view as _lv391
+        info['scale_judges'] = scale_judges(_off391, _same391, _lv391.scale_mismatch_keys())
+    except Exception:                                          # noqa: BLE001
+        info['scale_judges'] = None
     hard = hard_nonzero(stores)
     return {
         'made': today, 'made_at': time.strftime('%Y-%m-%d %H:%M'),
