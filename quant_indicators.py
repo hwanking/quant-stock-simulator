@@ -5755,16 +5755,31 @@ class QuantIndicatorsEngine:
         #   사실이 판정을 바꾼다는 증거가 없다(5%p 미만은 이 잣대로 못 본다 · R113).
         #   그래서 물타기의 첫 조건 = 신규 매수 판정. 호출부가 안 넘기면(None)
         #   미판정 — 데이터 게이트가 같이 떨어져 '보류'가 된다(§3 · 지어내지 않는다).
+        # ⚠️ 라운드 387 — 사용자: *"추가매수 된다고 해서 더 샀는데 결국 손해 — 면밀히 다시 봐 줘."* 세어 보니
+        #   이 조건들이 **엔진 자신이 사지 말라는 자리**에서 추가매수를 허락했다.
+        #   ① 첫 조건이 읽던 값(호출부의 `actionable`)은 '오늘 매수 가능'뿐 아니라 **'눌림목 매수 대기'** 에서도
+        #      참이다. 개장 전 리포트 99개 · 후보 458개에서 actionable 26 · 신규 매수 추천(recommended) **0** —
+        #      26개 전부 '눌림목 매수 대기'였고 중앙 판정의 비용 차감 기대값이 **전부 음수**(−0.09 ~ −0.28%)였다.
+        #      이제 호출부가 **recommended**(중앙 판정 11조건 전부 통과)를 넘긴다 — 이름('신규 진입 조건 통과')이
+        #      비로소 계산과 같다: *오늘 처음 산다면 엔진이 사라고 하는가.* 새 문턱이 아니라 이미 있는 판정이다.
+        #   ② 둘째 조건 이름이 *"거래비용 차감 후 기대수익"* 이었는데 읽는 값은 **유사패턴 평균 수익 − 0.30**
+        #      (라운드 382 가 다른 화면에서 이름을 고친 그 수)이다. 중앙 판정의 비용 차감 기대값이 음수여도 이
+        #      칸은 양수일 수 있었다 — 이름을 계산에 맞춘다(중앙 기대값은 ① 이 이제 요구한다).
+        #   ③ 중기 추세를 **모르면**(월봉 10선 상태 없음) 통과로 셌다 · 계좌 비중을 **모르면** 통과로 셌다 —
+        #      위험을 더하는 허락에서 못 잰 것을 통과로 세지 않는다(§3 · 멈출 때의 기본값은 차단 쪽).
+        #   손절선 이탈은 여기에 안 더했다 — 이 함수의 손절(`stop_loss_price`)은 현재가에서 다시 잰 값이라 늘
+        #   현재가 아래이고(도달 불가 갈래 · R319), 실제로 넘는 선(보유 계획)은 `holder_kind` 가 **먼저** 가른다.
         ey = fs.get('net_expected_return')
         rr = fs.get('reward_risk_ratio')
+        _m10_known = fs.get('m10_status') in ('위', '아래')
         add_checks = [
             ("신규 진입 조건 통과", bool(new_entry_ok)),
-            ("거래비용 차감 후 기대수익 양수", ey is not None and ey > 0),
+            ("유사패턴 평균 수익(비용 차감) 양수", ey is not None and ey > 0),
             ("손익비(현재가·2차) 기준 통과",
              rr is not None and rr >= self.GATES.get('min_reward_risk', 1.3)),
-            ("중기 추세 유지", not m10_broken),
+            ("중기 추세 유지", _m10_known and not m10_broken),
             ("포트폴리오 비중 상한 미초과",
-             portfolio_weight_pct is None or portfolio_weight_pct <= 25.0),
+             portfolio_weight_pct is not None and portfolio_weight_pct <= 25.0),
             ("데이터·표본 게이트 통과", sample_ok and market_snapshot.get('status') == 'OK'
              and new_entry_ok is not None),
         ]

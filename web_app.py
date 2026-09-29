@@ -5720,8 +5720,10 @@ if st.session_state.get('show_portfolio'):
                     px = float(s['tech_df']['adj_close'].iloc[-1])
                     w = (m['quantity'] * m['average_buy_price'] / total_cost * 100) if total_cost else None
                     # 라운드 224 — 물타기 첫 조건은 중앙 판정. 못 내면 None → 보류 (§3)
+                    # 라운드 387 — `actionable` 이 아니라 `recommended`(신규 매수 추천 · 11조건 전부). actionable 은
+                    #   '눌림목 매수 대기'(엔진이 아직 사지 말라는 칸)에서도 참이었다.
                     try:
-                        _ne224p = _core_of_snapshot(s).get('actionable')
+                        _ne224p = _core_of_snapshot(s).get('recommended')
                     except Exception:                          # noqa: BLE001
                         import traceback as _tb224p
                         print('[포트폴리오 탭 중앙 판정 실패 — 물타기는 보류로 찍는다]')
@@ -5857,9 +5859,10 @@ def _wl_avg_down_snap(row, snapshot, core=None):
             pass
     wpct = (paid * qty / tot * 100.0) if tot > 0 else None
     try:
-        # 라운드 224 — 첫 조건은 중앙 판정(verdict_core.actionable)이다. 호출부가
-        #   CORE 를 안 넘기면 None → 엔진이 '미판정'(보류)으로 찍는다 (§3).
-        _ne224 = (core.get('actionable') if isinstance(core, dict) else None)
+        # 라운드 224 — 첫 조건은 중앙 판정이다. 호출부가 CORE 를 안 넘기면 None → 엔진이 '미판정'(보류)으로
+        #   찍는다 (§3). 라운드 387 — 읽는 값이 `actionable` 에서 `recommended` 로(신규 매수 추천 · 11조건 전부).
+        #   actionable 은 '눌림목 매수 대기'에서도 참이라, 엔진이 사지 말라는 자리에서 추가매수를 허락했다.
+        _ne224 = (core.get('recommended') if isinstance(core, dict) else None)
         pv = q_engine.personalize_for_position(snapshot, paid, qty,
                                                portfolio_weight_pct=wpct,
                                                new_entry_ok=_ne224)
@@ -5887,7 +5890,9 @@ def _wl_avg_down_snap(row, snapshot, core=None):
         'snap_avg_down_fail': ' · '.join(_fails) or '없음',
         # 라운드 224 — 첫 조건이 무엇을 읽었는지 (중앙 판정 · 글자). 이 키가 없는 보유
         #   행은 R224 이전 스탬프라 채우기 대상이다 (_wl_needs_fill).
-        'snap_new_entry': ('미판정' if _ne224 is None else ('가능' if _ne224 else '불가')),
+        # 라운드 387 — 첫 조건의 **출처가 바뀌었다**(actionable → recommended). 옛 스탬프('가능'/'불가')와
+        #   가르려고 글자를 바꾼다 — 읽는 쪽(watch_action)이 옛 '가능'을 추가매수 허락으로 쓰지 않는다.
+        'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님')),
         'snap_holder_key': pv.get('holder_action_key'),
         'snap_holder_title': pv.get('holder_action_title'),
         'snap_weight_basis': ('관심종목 보유분 매입원가 기준'
@@ -6511,6 +6516,11 @@ else:
         #   매입가·수량 둘 다 있을 때만.
         if (w.get('paid') and w.get('qty')
                 and 'snap_new_entry' not in w):
+            return '물타기 첫 조건'
+        # 라운드 387 — 첫 조건이 다시 바뀌었다(actionable → recommended). 옛 기준에서 **허락**('가능')이 찍힌
+        #   행만 다시 채운다 — 옛 '불가'는 새 기준에서도 불가다(추천은 실행 후보보다 좁다).
+        if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'
+                and w.get('snap_avg_down_ok') in (True, '가능')):
             return '물타기 첫 조건'
         # 라운드 241 — 판정 사유가 없는 **미보유** 행. R240 이 사유를 담게 했지만
         #   이미 저장된 행에는 없어, 종목을 하나씩 열기 전엔 영영 안 나온다
@@ -11717,8 +11727,24 @@ if user_entry_price > 0 and user_quantity > 0:
     pnl_pct = (pnl_val / cost_val * 100.0) if cost_val else None
     _pv224 = None
     try:
+        # 라운드 387 — 첫 조건은 신규 매수 추천(recommended) · 비중은 관심종목 표와 같은 정의(매입원가 기준)로
+        #   넘긴다 — 안 넘기면 엔진이 이제 '비중 모름'을 통과로 세지 않는다.
+        _wtot387 = 0.0
+        _in387 = False
+        for _w387 in _wl_items():
+            try:
+                _wtot387 += float(_w387.get('paid') or 0) * float(_w387.get('qty') or 0)
+                _in387 = _in387 or (portfolio.normalize_code(_w387.get('code'))
+                                    == portfolio.normalize_code(target_ticker))
+            except (TypeError, ValueError):
+                pass
+        if not _in387:
+            _wtot387 += float(user_entry_price) * float(user_quantity)
+        _wpct387 = ((float(user_entry_price) * float(user_quantity) / _wtot387 * 100.0)
+                    if _wtot387 > 0 else None)
         _pv224 = q_engine.personalize_for_position(
-            snap, user_entry_price, user_quantity, new_entry_ok=CORE.get('actionable'))
+            snap, user_entry_price, user_quantity, portfolio_weight_pct=_wpct387,
+            new_entry_ok=CORE.get('recommended'))
     except Exception:                                          # noqa: BLE001
         import traceback as _tb224
         print('[보유 포지션 물타기 판정 실패 — 칸을 비운다]')
@@ -11745,6 +11771,8 @@ if user_entry_price > 0 and user_quantity > 0:
                                      else CORE.get('hold_stop'))
         _row224.pop('snap_hold_at', None)
     if _pv224:
+        # 라운드 387 — 방금 잰 판정의 첫 조건 출처도 같이 적는다(옛 스탬프로 읽혀 지워지지 않게 · watch_action)
+        _row224['snap_new_entry'] = '추천' if CORE.get('recommended') else '추천 아님'
         _row224['snap_avg_down_ok'] = '가능' if _pv224.get('averaging_down_allowed') else '불가'
         _row224['snap_avg_down_fail'] = ' · '.join(
             l for l, ok in (_pv224.get('averaging_down_checks') or []) if not ok)

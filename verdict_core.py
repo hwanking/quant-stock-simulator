@@ -177,7 +177,18 @@ BUCKETS = ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수
 
 #: 내일(다음 거래일) 실제로 손댈 수 있는 칸 — 오늘의 추천에 올릴 것들.
 #: 나머지는 **메인에서 숨기고** 관심목록으로 내린다.
+#: ⚠️ 라운드 387 — 뒤의 두 칸('눌림목 매수 대기' · '돌파 후 매수 대기')은 이제 새로 만들어지지 않는다(`_bucket` 주석).
+#:   이름은 옛 스냅샷·리포트를 읽으려고 남긴다 — 옛 리포트의 그 칸이 '실행 후보'로 다시 살아나지 않게 읽는 쪽이
+#:   `WAIT_BUCKETS_RETIRED` 로 가른다.
 ACTIONABLE_BUCKETS = ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 매수 대기')
+#: 라운드 387 — 가격이 움직이거나 시간이 지나면 풀릴 수 있는 조건(이름은 checks 의 리터럴 그대로). 미충족이
+#:   이것뿐일 때만 '기다렸다 사라'를 말할 수 있다. 손익비(진입가·1차)·비용 차감 기대값은 여기 없다 — 진입가
+#:   기준 비율이라 가격이 내려와도 셈이 그대로다.
+WAIT_CURABLE_CHECKS = ('진입 깊이 현실적', '보유기간 안 도달 가능', '과열·저유동성 아님')
+#: 라운드 387 — 기다려도 풀리지 않는 미충족에 '대기' 이름을 주던 두 칸(더는 만들지 않는다)
+WAIT_BUCKETS_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
+#: 그 사유 문장의 머리 — 읽는 쪽(옛 스냅샷 재해석)이 같은 말을 쓴다(§4)
+WAIT_NOT_CURED_HEAD = '진입가·목표·손절이 현재가를 따라 같은 비율로 다시 잡혀,'
 
 NO_PICK_LINE = ("오늘은 전일 확정 데이터 기준으로 다음 거래일에 실제 매수를 "
                 "검토할 수 있는 종목이 없습니다. 무리하게 진입하지 않고 "
@@ -461,18 +472,29 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     #    존재 이유("무엇을 기다리는지 반드시 적는다")를 잃는다.
     #    그래서 막았을 때는 조건도 **중앙 판정의 미충족 항목**으로 낸다.
     #    통과했을 때는 next_action 의 조건을 **그대로** 쓴다.
+    # ⚠️ 라운드 387 — R193 은 next_action 의 **buy_now** 만 막았다. 그런데 'pullback'·'breakout' 가지의 머리
+    #   문장도 매수 지시다(*"X원 부근에서 지지 확인 후 사세요"* · *"X원을 돌파한 뒤 지지하면 사세요"*). 남은 미충족이
+    #   **기다려서 풀리는 것뿐**(진입 깊이·도달 · 과열·저유동성)일 때만 그 문장을 그대로 쓰고, 아니면 막는다 —
+    #   눌리거나 돌파해도 손익비·기대값 셈은 그대로라(위 `_bucket` 주석) 그 자리에서도 사라고 할 근거가 없다.
     _na_kind = str(na.get('kind') or '')
     _na_head = str(na.get('headline') or '')
     _na_conds = list(na.get('conditions') or [])
-    if bucket == '오늘 매수 가능' or _na_kind != 'buy_now':
+    _instructs_buy = _na_kind in ('buy_now', 'pullback', 'breakout')
+    wait_curable = bool(failed) and all(f in WAIT_CURABLE_CHECKS for f in failed)
+    # buy_now('지금 분할매수할 수 있습니다')는 종전(R193)대로 추천일 때만 — 기다릴 것이 남은 자리에서 '지금'은 모순이다.
+    if (bucket == '오늘 매수 가능' or not _instructs_buy
+            or (wait_curable and _na_kind != 'buy_now')):
         next_kind, next_headline = _na_kind, _na_head
         next_conditions = _na_conds
     else:
         next_kind = 'blocked'
         _tail = f' — {reason}' if reason else f' — {bucket}'
-        next_headline = ((f'{entry:,.0f}원까지 내려와도 오늘은 아직 '
-                          f'못 삽니다') if entry
-                         else '오늘은 아직 못 삽니다') + _tail
+        if _na_kind == 'breakout':
+            next_headline = '돌파해도 오늘은 아직 못 삽니다' + _tail
+        else:
+            next_headline = ((f'{entry:,.0f}원까지 내려와도 오늘은 아직 '
+                              f'못 삽니다') if entry
+                             else '오늘은 아직 못 삽니다') + _tail
         next_conditions = [
             dict(kind='gate', level=None,
                  text=(f"{n} — {d}" if d else str(n)))
@@ -499,6 +521,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         # 라운드 193 — '다음 조건' 칸의 결론 문장. 화면은 이것만 읽는다.
         next_kind=next_kind, next_headline=next_headline,
         next_conditions=next_conditions,
+        # 라운드 387 — 남은 미충족이 기다려서 풀리는 것뿐인가(지시서가 '눌리면 사라'를 쓸지 여기서 읽는다 · §4)
+        wait_curable=wait_curable,
         # 라운드 206 — 괴리 밴드도 여기로 지나간다 (§4 — 카드가 자기만의
         #   문턱을 만들지 않게). next_action 의 채택 규칙(BANDS × ATR)이
         #   유일 출처이고 여기는 통로다. 없으면 None — 지어내지 않는다(§3).
@@ -689,25 +713,24 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
             '표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. '
             '사례가 쌓인다고 풀리는 조건이 아닙니다 — 이 종목에서 이 전략의 '
             '표본외 성적이 살아나야 합니다.')
+    # ⚠️ 라운드 387 — 여기까지 내려온 미충족은 **기다려서 풀리지 않는 것뿐**이다. 위 갈래가 가격·시간으로 풀릴 수
+    #   있는 것(진입 깊이·도달 · 과열·저유동성)과 밸류·거부권·표본·신뢰도를 먼저 가져갔으므로 남는 것은 손익비
+    #   (진입가·1차)와 비용 차감 기대값이다. 그런데 이 두 셈은 **가격이 내려와도 거의 그대로다** — 진입가는 늘
+    #   '현재가 × (1 − 20일 변동성)'이고 손절·목표는 그 진입가에서 같은 비율(변동성 배수 · 손절거리 0.7배)로 다시
+    #   잡혀 비율이 안 바뀐다(적중률은 점수대 하나가 정한다).
+    #   종전엔 이 칸을 '눌림목 매수 대기'·'돌파 후 매수 대기'(실행 후보)로 올리고 *"더 낮은 자리에서만 셈이
+    #   맞습니다"* · *"눌림을 기다립니다"* 라 적었다. 개장 전 리포트 99개 · 후보 458개에서 그렇게 올라간 26개의
+    #   비용 차감 기대값이 **전부 음수**(−0.09 ~ −0.28%)였고 신규 매수 추천은 **0**이었다. 사용자는 그 '대기'와
+    #   그 위에 선 추가매수 허락을 보고 더 샀다가 손실을 냈다(2026-09-29). 기다려 풀리지 않는 칸에 기다림의
+    #   이름을 주지 않는다(라운드 292 의 규칙 · 라운드 305 의 '한 문장이 여러 갈래'). 두 이름은 옛 스냅샷을 읽으려고
+    #   BUCKETS 에 남겨 두고(읽는 쪽이 같은 가름을 적용한다 · ui_kit.watch_action · R327) 새로 만들지는 않는다.
     kind = str(na.get('kind') or '')
-    if kind == 'breakout':
-        return '돌파 후 매수 대기', '돌파 후 재지지를 확인해야 합니다.'
-    if kind == 'pullback':
-        return '눌림목 매수 대기', '눌림을 기다립니다.'
-    if kind == 'observe':
-        # 종전 '장기 관찰' — 조건이 없으면 화면에 둘 이유가 없다.
-        # 손익비·기대값처럼 **가격이 움직여야 풀리는** 조건이면 눌림목 대기,
-        # 그것도 아니면 추천에서 뺀다.
-        # 라운드 191 — 체크 이름을 '손익비(진입가·1차) 기준 이상' 으로
-        #   갈랐으므로 여기 매칭도 같이 맞춘다. 이름만 바뀌었다.
-        if any(x in failed for x in ('손익비(진입가·1차) 기준 이상',
-                                     '비용 차감 기대값 양수')):
-            return '눌림목 매수 대기', (
-                '지금 가격에서는 손익비(진입가·1차)·기대값이 기준에 '
-            '못 미칩니다. '
-                '더 낮은 자리에서만 셈이 맞습니다.')
-        return '추천 제외', _unmet(failed)
-    return '눌림목 매수 대기', _unmet(failed)
+    base = _unmet(failed)
+    if kind in ('pullback', 'breakout', 'observe'):
+        wait = {'pullback': '눌림', 'breakout': '돌파'}.get(kind, '가격 변화')
+        return '추천 제외', (f'{base} — {WAIT_NOT_CURED_HEAD} {wait}를 기다려도 이 셈은 거의 그대로입니다. '
+                             f'기다린다고 풀리는 조건이 아닙니다.')
+    return '추천 제외', base
 
 
 def _unmet(failed):

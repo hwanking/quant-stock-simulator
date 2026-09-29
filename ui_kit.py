@@ -1584,6 +1584,10 @@ WATCH_NO_WHY = '없음'
 #: '표본외 성적 미달' 갈래 사유 문장의 머리 (라운드 327) — `verdict_core` 가 그 갈래에 내는 문장이 이것으로
 #:   시작한다. R292 이전 스냅샷(옛 이름 '신뢰도·표본 확보 대기')을 같은 가름으로 읽을 때 쓴다(§333 이 잠근다).
 OOS_FAIL_WHY_HEAD = '표본외 검증은 마쳤고'
+#: 라운드 387 — 중앙 판정이 더는 만들지 않는 두 대기 칸과 그 사유 머리. `verdict_core.WAIT_BUCKETS_RETIRED` ·
+#:   `WAIT_NOT_CURED_HEAD` 와 글자까지 같아야 한다(§378 이 잠근다 · 킷은 판정 모듈을 부르지 않는다).
+_WAIT_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
+_WAIT_NOT_CURED_HEAD = '진입가·목표·손절이 현재가를 따라 같은 비율로 다시 잡혀,'
 
 
 def avg_down_class(ok, fails):
@@ -1735,6 +1739,12 @@ def watch_action(row, price=None, today=None):
     #   목록이 남는다). 목록에서 뺀다.
     _ad_fail = ([s for s in str(_fr).split(' · ') if s and s != AVG_DOWN_NO_FAIL]
                 if isinstance(_fr, str) else list(_fr or []))
+    # 라운드 387 — 첫 조건의 출처가 `actionable` → `recommended`(신규 매수 추천)로 바뀌었다. 옛 기준의 **허락**은
+    #   엔진이 아직 사지 말라는 칸('눌림목 매수 대기')에서 나왔을 수 있다(리포트 후보 458개 중 actionable 26 · 추천 0 ·
+    #   그 26개의 비용 차감 기대값 전부 음수). 옛 글자('가능')로 찍힌 허락은 추가매수 허락으로 쓰지 않고 '아직 안 잼'으로
+    #   둔다 — 채우기 기준이 그 행을 다시 고른다. 새 스탬프는 '추천'/'추천 아님' 이다.
+    if _ad_ok and (row or {}).get('snap_new_entry') == '가능':
+        _ad_ok, _ad_fail = None, []
     _ad_cls, _ad_label, _ad_why = avg_down_class(_ad_ok, _ad_fail)
 
     # ── 제외 사유를 **보여 줄지**는 여기서 정한다 (라운드 241 · §4) ──────
@@ -1899,9 +1909,15 @@ def watch_action(row, price=None, today=None):
         # ── 표에 쓰는 **짧은 한 줄** (라운드 322) — 무엇을 하라는 말인지 · 가격까지.
         #   '보유 유지'인데 조건은 통과한 행은 *지금 사라*가 아니라 *진입가 이하로 내려오면*이다
         #   (holder_kind 의 같은 갈래 · 새 문턱 없음). '추가 매수 가능' 행은 kind 가 이미 그 말이다.
+        # 라운드 387 — 이 판정은 **찍힌 날**의 것이다. 가격이 나중에 진입가로 내려와 이 행이 '추가 매수 가능'으로
+        #   바뀌어도 그 사이 다시 잰 적은 없다 — 종전 *"지금 추가매수 가능"* 은 옛 판정을 오늘의 지시로 읽히게 했다
+        #   (사용자: 추가매수하라 해서 샀다가 손실). 판정 날짜와 '사기 전에 다시 재라'를 같은 줄에 적는다.
+        _at_ad = str((row or {}).get('snap_at') or '')[:10]
+        _when_ad = f"{_at_ad} 판정" if _at_ad else "판정 날짜 모름"
         if _ad_cls == '가능':
-            _short = (f"진입가 {buy:,.0f}원 이하 — 지금 추가매수 가능" if _k == '추가 매수 가능' and buy
-                      else f"추가매수는 {buy:,.0f}원 이하로 내려오면" if buy
+            _short = (f"진입가 {buy:,.0f}원 이하 · 추가매수 조건 통과({_when_ad}) — 사기 전에 '지금 재기'로 다시 확인"
+                      if _k == '추가 매수 가능' and buy
+                      else f"추가매수 조건 통과({_when_ad}) · {buy:,.0f}원 이하에서만 — 그때 다시 잰 판정으로" if buy
                       else '추가매수 조건 통과 · 진입가 미산출')
         elif _ad_cls == '시장게이트':
             _short = '추가매수 안 함 · 지금은 새로 살 때 아님'
@@ -1976,6 +1992,16 @@ def watch_action(row, price=None, today=None):
     #   (판별 낱말은 verdict_core 의 문장 머리 · §333 이 두 곳이 같은지 잠근다).
     if bucket == '신뢰도·표본 확보 대기' and OOS_FAIL_WHY_HEAD in _raw241:
         bucket = '표본외 성적 미달'
+    # ⚠️ 라운드 387 — 중앙 판정은 2026-09-29 부터 '눌림목 매수 대기'·'돌파 후 매수 대기'를 **만들지 않는다**(기다려서
+    #   풀리지 않는 미충족 — 손익비·기대값 — 에 기다림의 이름을 줬다 · verdict_core._bucket). 그 전 스냅샷은 옛 이름과
+    #   옛 사유(*"더 낮은 자리에서만 셈이 맞습니다"* · *"눌림을 기다립니다"*)를 안고 있다. R327 과 같은 방식으로 **읽는
+    #   쪽이 같은 가름을 적용한다** — 그 두 칸은 구조상 늘 그 미충족을 안고 있었으므로(위 갈래가 풀리는 것을 먼저
+    #   가져갔다) '추천 제외'로 읽고, 옛 사유는 새 사유 문장 머리로 바꿔 말한다(새로 재지 않는다).
+    _retired387 = bucket in _WAIT_RETIRED
+    if _retired387:
+        bucket = '추천 제외'
+        _why241 = (f"옛 분류 '눌림·돌파 대기'였습니다 — {_WAIT_NOT_CURED_HEAD} 기다려도 손익비(진입가·1차)·기대값 셈은 거의 그대로라 "
+                   f"추천 제외로 읽습니다(다시 채우면 새 판정)")
     lbl, tone = _short.get(bucket, (bucket[:7], 'tx3'))
     # 라운드 240 — 종전 why 는 bucket 을 그대로 되풀이해 아무것도 더 말하지 않았다.
     #   중앙 판정이 결론과 함께 낸 사유(`exclude_reason` → `snap_why`)가 있으면 그것을

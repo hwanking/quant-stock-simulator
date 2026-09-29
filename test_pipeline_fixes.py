@@ -17861,15 +17861,24 @@ check("그 사유가 숫자로 말한다",
 # ⓓ §3 — 못 잰 것(UNCALCULATED)은 종전 동작 그대로다 (과차단 금지)
 _c215u = _vc105.build(dict(_FS215, fair_value_status='UNCALCULATED'),
                       _VD215, None, None, 41350.0)
-check("UNCALCULATED 는 밸류 게이트로 안 막는다 (§3)",
-      _c215u['bucket'] != '추천 제외', _c215u['bucket'])
+# 라운드 387 — 이 꼴은 기대값 실패로 '추천 제외'가 된다(기다려도 안 풀리는 미충족을 더는 '대기'로 올리지 않는다).
+#   이 검사가 지키려던 것 — **밸류 게이트**가 UNCALCULATED 를 막지 않는다 — 은 밸류 칸과 사유로 본다.
+check("UNCALCULATED 는 밸류 게이트로 안 막는다 (§3) — 밸류 칸은 통과 · 사유가 밸류가 아니다",
+      _c215u['checks'][10]['ok'] is True
+      and '적정가 산출 불가' not in str(_c215u['exclude_reason']),
+      f"{_c215u['bucket']} · {_c215u['checks'][10]}")
 # ⓔ 적정가 이하 + EV 실패 — 종전 '눌림목 매수 대기' 승격 유지 (과차단 금지)
 _c215d = _vc105.build(dict(_FS215, displayed_fair_value=45000.0,
                            fair_value_status='CALIBRATED',
                            fair_overshoot_pct=-8.1),
                       _VD215, None, {'kind': 'observe'}, 41350.0)
-check("적정가 이하는 종전 분류 그대로다 (이 게이트는 차단만 한다)",
-      _c215d['bucket'] == '눌림목 매수 대기', _c215d['bucket'])
+# 라운드 387 — 종전엔 이 꼴(적정가 이하 + 기대값 실패)을 '눌림목 매수 대기'(실행 후보)로 올렸다. 기대값은 진입가
+#   기준 비율이라 눌려도 셈이 그대로다 — 기다려 풀리지 않는 칸에 기다림의 이름을 주지 않는다(verdict_core._bucket).
+#   이 절이 지키려던 성질(밸류 게이트는 **차단만** 하고 다른 분류를 건드리지 않는다)은 그대로 본다: 밸류 칸은 통과다.
+check("적정가 이하 + 기대값 실패는 '추천 제외' — 밸류 게이트가 아니라 기다려도 안 풀리는 기대값 때문이라고 적는다",
+      _c215d['bucket'] == '추천 제외' and _c215d['checks'][10]['ok'] is True
+      and _vc105.WAIT_NOT_CURED_HEAD in str(_c215d['exclude_reason']),
+      f"{_c215d['bucket']} · {str(_c215d['exclude_reason'])[:60]}")
 check("그 조건 칸이 통과로 찍힌다",
       _c215d['checks'][10]['ok'] is True
       and '적정가 대비' in _c215d['checks'][10]['detail'],
@@ -18574,8 +18583,13 @@ _c221 = _vc105.build(_FS221, {'action': 'HOLD', 'vetoes': []}, None,
                      {'kind': 'observe'}, 100.0)
 check("체크 목록에 갈린 이름이 있다",
       "손익비(진입가·1차) 기준 이상" in [_x["name"] for _x in _c221["checks"]])
-check("이름을 갈라도 분류 매칭이 살아 있다",
-      _c221["bucket"] == "눌림목 매수 대기", _c221["bucket"])
+# 라운드 387 — 손익비·기대값 실패는 더 이상 '눌림목 매수 대기'로 올리지 않는다(눌려도 셈이 그대로다). 갈린 이름이
+#   사유에 **그대로** 실리는지를 본다 — 이 검사가 지키려던 것(이름과 분류 문장이 맞물린다)은 그대로다.
+check("이름을 갈라도 분류 문장이 그 이름을 싣는다 (기다려도 안 풀린다는 사유와 함께)",
+      _c221["bucket"] == "추천 제외"
+      and "손익비(진입가·1차) 기준 이상" in str(_c221["exclude_reason"])
+      and _vc105.WAIT_NOT_CURED_HEAD in str(_c221["exclude_reason"]),
+      f"{_c221['bucket']} · {str(_c221['exclude_reason'])[:70]}")
 
 print()
 
@@ -20872,9 +20886,11 @@ else:
 check("관심종목 채우기가 CORE 를 넘긴다",
       "_wl_avg_down_snap(_w166, _snp166, _co166)" in _w231)
 check("종목 상세 스탬프가 CORE 를 넘긴다", "_wl_avg_down_snap(_w141, snap, CORE)" in _w231)
-check("포트폴리오 탭이 같은 함수(_core_of_snapshot)로 중앙 판정을 낸다",
+# 라운드 387 — 읽는 값이 actionable → recommended(신규 매수 추천). actionable 은 '눌림목 매수 대기'에서도
+#   참이라 엔진이 사지 말라는 자리에서 추가매수를 허락했다(리포트 후보 458 중 actionable 26 · 추천 0).
+check("포트폴리오 탭이 같은 함수(_core_of_snapshot)로 중앙 판정(신규 매수 추천)을 낸다",
       "new_entry_ok=_ne224p" in _w231
-      and "_ne224p = _core_of_snapshot(s).get('actionable')" in _w231)
+      and "_ne224p = _core_of_snapshot(s).get('recommended')" in _w231)
 check("스냅샷 도우미가 new_entry_ok 를 넘기고 출처를 글자로 찍는다 (snap_new_entry)",
       "new_entry_ok=_ne224" in _w231 and "'snap_new_entry'" in _w231)
 check("R224 이전 보유 행은 다시 채운다 (_wl_needs_fill · snap_new_entry 없음)",
@@ -20901,10 +20917,15 @@ check("'시장게이트' 라벨이 새 출처(신규 매수 판정)를 말한다
 # 라운드 322 — 사용자: *"보유 유지 물타기 가능 이게 뭐야 · 추가매수 가능 맞는지."* 조건은 통과했지만
 #   진입가 위라 kind 는 '보유 유지'다. 표의 짧은 줄이 **지금 사라가 아니라 얼마 이하에서**를 말해야 한다.
 _a4_241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail=''), 10100)
-check("짧은 줄 — 조건 통과 · 진입가 위면 '추가매수는 N원 이하로 내려오면' · 진입가 이하면 '지금 추가매수 가능'",
-      '이하로 내려오면' in str(_a3_241.get('avg_down_short'))
-      and '지금 추가매수 가능' in str(_a4_241.get('avg_down_short'))
-      and '지금' not in str(_a3_241.get('avg_down_short')),
+# 라운드 387 — 그 판정은 **찍힌 날**의 것이다. 가격이 나중에 진입가로 내려와 '추가 매수 가능'으로 바뀌어도
+#   그 사이 다시 잰 적이 없다 — 종전 *"지금 추가매수 가능"* 은 옛 판정을 오늘의 지시로 읽히게 했다(사용자: 추가매수
+#   하라 해서 샀다가 손실). 판정 날짜와 '사기 전에 다시 재라'를 같은 줄에.
+check("짧은 줄 — 조건 통과는 판정 날짜와 함께 · '지금 추가매수 가능'이라 하지 않고 사기 전 다시 재라고 적는다",
+      '이하에서만' in str(_a3_241.get('avg_down_short'))
+      and '다시 잰 판정' in str(_a3_241.get('avg_down_short'))
+      and '사기 전에' in str(_a4_241.get('avg_down_short'))
+      and '판정' in str(_a4_241.get('avg_down_short'))
+      and '지금 추가매수 가능' not in str(_a4_241.get('avg_down_short')),
       f"{_a3_241.get('avg_down_short')} / {_a4_241.get('avg_down_short')}")
 # 옛 스탬프(snap_new_entry 없음)는 옛 게이트의 답이다 — 새 문구를 그대로 달면 재지 않은
 #   것을 말하는 셈(§3). 사실을 달고 채우기를 가리킨다. 라벨(등급)은 같고 이유만 다르다.
@@ -20920,10 +20941,16 @@ check("R224 이후 스탬프(snap_new_entry 있음)는 그 문구가 없다",
 #   (R223 의 0 과 같은 모양). 쓰는 쪽은 '없음', 읽는 쪽은 그 낱말을 빈 목록으로.
 check("실패 없음은 빈 글자가 아니라 '없음'으로 찍는다 (병합에서 떨어지지 않게)",
       "' · '.join(_fails) or '없음'" in _w231 and _uk241.AVG_DOWN_NO_FAIL == '없음')
+# 라운드 387 — 새 스탬프의 첫 조건 글자는 '추천'/'추천 아님'(출처가 신규 매수 추천으로 바뀌었다).
 _ok241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail='없음',
-                                  snap_new_entry='가능'), 10500)
+                                  snap_new_entry='추천'), 10500)
 check("읽는 쪽이 '없음'을 빈 목록으로 본다 → '가능' · 이유는 '6조건 전부 통과'",
       _ok241.get('avg_down_class') == '가능' and '6조건 전부 통과' in str(_ok241.get('avg_down_why')))
+_old387 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail='없음',
+                                   snap_new_entry='가능'), 10100)
+check("옛 기준(actionable)으로 찍힌 허락은 추가매수 허락으로 쓰지 않는다 — '아직 안 잼' · 표는 '추가 매수 가능'이 아니다",
+      _old387.get('avg_down_class') is None and _old387.get('kind') != '추가 매수 가능',
+      f"{_old387.get('avg_down_class')} · {_old387.get('kind')}")
 check("빈 글자는 병합에서 떨어진다 — 두 스탬프 자리의 병합 규칙이 그대로다 (바꾸지 않았다)",
       _w231.count("if _v166 not in (None, ''):") == 1 and _w231.count("if _v141 not in (None, ''):") == 1)
 # ── ④ 보유 계획 고정 — 기준일에 고정 · 20봉 창 · 닿거나 끝나면 사유 로그 ─────
@@ -21146,7 +21173,8 @@ import datetime as _dt243
 _b243 = {'paid': 10000, 'qty': 10, 'snap_px': 10500, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
          'snap_hold_at': '2026-09-04', 'snap_bucket': '눌림목 매수 대기', 'snap_buy': 10200,
          'snap_fair': 14000, 'snap_fair_reach': _lv243.reach_line(3.1, 1204, 33.3, 'BULL', 'z'),
-         'snap_avg_down_ok': '가능', 'snap_avg_down_fail': _uk243.AVG_DOWN_NO_FAIL, 'snap_new_entry': '가능'}
+         # 라운드 387 — 첫 조건 출처가 신규 매수 추천으로 바뀌어 새 스탬프 글자는 '추천'이다(옛 '가능'은 허락으로 안 쓴다)
+         'snap_avg_down_ok': '가능', 'snap_avg_down_fail': _uk243.AVG_DOWN_NO_FAIL, 'snap_new_entry': '추천'}
 _td243 = _dt243.date(2026, 9, 7)
 _a243 = _uk243.watch_action(_b243, 10500, today=_td243)
 _bb243 = ' · '.join(_a243.get('hold_brief') or [])
@@ -29739,6 +29767,112 @@ check("두 칸을 받으면 계층 확률이 그 층을 실제로 쓴다 (L3 시
 check("엔진 비교 표가 원장 칸 이름(m10_above)을 four_scores 에서 찾지 않는다 — 이격으로 같은 정의",
       "_m10 = bool(four_scores.get('m10_above'))" not in _wc377
       and "_m10 = (float(_m10d386) >= 0) if _m10d386 is not None else None" in _wc377)
+
+
+print("\n" + "=" * 72)
+print("§378 추가매수 허락은 신규 매수 추천일 때만 · 기다려도 안 풀리는 칸에 '대기'를 주지 않는다 (라운드 387)")
+print("=" * 72)
+# 사용자: *"추가매수 된다고 해서 더 샀는데 결국 손해 — 면밀히 다시 봐 줘."* 세어 보니 물타기 첫 조건이 읽던 actionable 은
+#   '눌림목 매수 대기'에서도 참이었고(리포트 후보 458 · actionable 26 · 추천 0 · 그 26개 비용 차감 기대값 전부 음수),
+#   그 칸은 손익비·기대값처럼 **가격이 내려와도 셈이 그대로인** 미충족을 '눌림을 기다린다'로 불렀다.
+import pandas as _pd378                                        # noqa: E402
+import verdict_core as _vc378                                  # noqa: E402
+import ui_kit as _uk378                                        # noqa: E402
+import quant_indicators as _qi378                              # noqa: E402
+import scripts.lineage_audit as _la378                         # noqa: E402
+
+# ① 물타기 조건 — 모르는 것을 통과로 세지 않는다 · 둘째 조건의 이름이 계산과 같다
+_snap378 = {'four_scores': {'final_action_score': 70, 'net_expected_return': 0.5, 'reward_risk_ratio': 2.0,
+                            'm10_status': '위', 'm10_slope': 0.1, 'stop_loss_price': 9000.0,
+                            'target_tech_1st': 11000.0},
+            'sim_res': {'horizons_data': {}, 'probabilities_shown': True},
+            'tech_df': _pd378.DataFrame({'adj_close': [10000.0]}), 'status': 'OK'}
+_eng378 = _qi378.QuantIndicatorsEngine()
+
+
+def _ad378(snap, **kw):
+    _pv = _eng378.personalize_for_position(snap, 10500.0, 10, **kw)
+    return _pv['averaging_down_allowed'], [l for l, ok in _pv['averaging_down_checks'] if not ok]
+
+
+_all378 = _ad378(_snap378, portfolio_weight_pct=10.0, new_entry_ok=True)
+_wnone378 = _ad378(_snap378, portfolio_weight_pct=None, new_entry_ok=True)
+_snap378m = dict(_snap378, four_scores=dict(_snap378['four_scores'], m10_status=None))
+_m10none378 = _ad378(_snap378m, portfolio_weight_pct=10.0, new_entry_ok=True)
+check("전부 알고 전부 맞으면 통과 · 비중을 모르면 통과가 아니다 · 월봉 10선 상태를 모르면 '추세 유지'가 아니다",
+      _all378[0] is True and _wnone378[0] is False and _wnone378[1] == ['포트폴리오 비중 상한 미초과']
+      and _m10none378[0] is False and _m10none378[1] == ['중기 추세 유지'],
+      f"{_all378} · {_wnone378} · {_m10none378}")
+_names378 = [l for l, _ in _eng378.personalize_for_position(_snap378, 10500.0, 10, portfolio_weight_pct=10.0,
+                                                             new_entry_ok=True)['averaging_down_checks']]
+check("둘째 조건의 이름이 읽는 값(유사패턴 평균 − 0.30)과 같다 — 중앙 판정의 '비용 차감 기대값'과 다른 수다 · 조건은 여섯 그대로",
+      '유사패턴 평균 수익(비용 차감) 양수' in _names378 and '거래비용 차감 후 기대수익 양수' not in _names378
+      and len(_names378) == 6 and _names378[0] == _uk378.AVG_DOWN_MARKET_GATE, str(_names378))
+_w378 = '\n'.join(_ln for _i, _ln in _la378.code_lines('web_app.py'))
+check("호출부 셋이 첫 조건에 **신규 매수 추천**(recommended)을 넘긴다 — actionable 이 아니다",
+      "_ne224p = _core_of_snapshot(s).get('recommended')" in _w378
+      and "_ne224 = (core.get('recommended') if isinstance(core, dict) else None)" in _w378
+      and "new_entry_ok=CORE.get('recommended'))" in _w378
+      and "get('actionable')" not in _w378.split('def _wl_avg_down_snap', 1)[1].split('def ', 1)[0],
+      scanned=3)
+check("종목 상세도 비중을 넘긴다(관심종목과 같은 정의) — 안 넘기면 이제 통과가 아니다",
+      "portfolio_weight_pct=_wpct387," in _w378)
+
+# ② 중앙 판정 — 손익비·기대값 실패를 '대기'로 올리지 않는다 · 매수 지시 문장도 막는다
+_fs378 = dict(current_price=10000.0, entry_pullback_price=9800.0, entry_stop_price=9400.0,
+              entry_target_1st=10100.0, entry_rr=0.75, analysis_confidence=70, strategy_quality_score=60,
+              final_action_score=62, vol_20=0.02, avg_turnover_20d=5e9, horizon_days=20,
+              blind_test_status=_vc378.OOS_DONE, calibration_band={'hit_rate': 59.0, 'n': 5000},
+              displayed_fair_value=12000.0, fair_value_status='CALIBRATED', fair_overshoot_pct=-16.0)
+_c378 = {k: _vc378.build(_fs378, verdict={'action': 'HOLD', 'vetoes': []},
+                         next_action={'kind': k, 'headline': '9,700원 부근에서 지지 확인 후 사세요.',
+                                      'conditions': []})
+         for k in ('pullback', 'breakout', 'observe')}
+check("기대값만 막는 종목은 눌림·돌파·관찰 어느 갈래든 '추천 제외' · 실행 후보가 아니다 · 기다려도 안 풀린다고 적는다",
+      all(_c['bucket'] == '추천 제외' and _c['actionable'] is False and not _c['recommended']
+          and _vc378.WAIT_NOT_CURED_HEAD in str(_c['exclude_reason']) for _c in _c378.values()),
+      ' | '.join(f"{k}:{c['bucket']}" for k, c in _c378.items()))
+check("그 종목에 '눌리면 사세요'를 그대로 싣지 않는다 — 내려와도 오늘은 못 산다고 · 돌파는 돌파해도 못 산다고",
+      _c378['pullback']['next_kind'] == 'blocked' and '내려와도 오늘은 아직 못 삽니다' in _c378['pullback']['next_headline']
+      and '사세요' not in _c378['pullback']['next_headline']
+      and '돌파해도 오늘은 아직 못 삽니다' in _c378['breakout']['next_headline']
+      and _c378['pullback']['wait_curable'] is False)
+_fs378h = dict(_fs378, entry_pullback_price=9000.0, entry_stop_price=8600.0,   # 진입 깊이만 모자라게
+               entry_target_1st=9300.0)                                          # (기다리면 풀리는 조건)
+_c378h = _vc378.build(dict(_fs378h, calibration_band={'hit_rate': 90.0, 'n': 5000}),
+                      verdict={'action': 'HOLD', 'vetoes': []},
+                      next_action={'kind': 'pullback', 'headline': '9,000원 부근에서 지지 확인 후 사세요.',
+                                   'conditions': []})
+check("미충족이 기다리면 풀리는 것뿐이면(진입 깊이) 그 문장을 그대로 둔다 — 막는 것은 풀리지 않을 때만",
+      _c378h['wait_curable'] is True and _c378h['next_headline'] == '9,000원 부근에서 지지 확인 후 사세요.',
+      f"{_c378h['failed']} · {_c378h['next_headline']}")
+check("두 칸 이름은 옛 스냅샷을 읽으려고 남고 새로 만들어지지 않는다 · 킷의 사본이 판정 모듈과 글자까지 같다",
+      set(_vc378.WAIT_BUCKETS_RETIRED) <= set(_vc378.BUCKETS)
+      and tuple(_uk378._WAIT_RETIRED) == tuple(_vc378.WAIT_BUCKETS_RETIRED)
+      and _uk378._WAIT_NOT_CURED_HEAD == _vc378.WAIT_NOT_CURED_HEAD
+      and "return '눌림목 매수 대기'" not in open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read()
+      and "return '돌파 후 매수 대기'" not in open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read())
+
+# ③ 읽는 쪽 — 옛 스냅샷의 '대기'와 옛 허락을 같은 가름으로 읽는다 (R327 의 방식)
+_nh378 = _uk378.watch_action({'snap_bucket': '눌림목 매수 대기', 'snap_buy': 9000,
+                              'snap_why': '지금 가격에서는 손익비(진입가·1차)·기대값이 기준에 못 미칩니다. 더 낮은 자리에서만 셈이 맞습니다.'},
+                             10000)
+check("옛 '눌림목 매수 대기' 미보유 행은 '추천 제외'로 읽고 옛 사유('더 낮은 자리에서만 셈이 맞습니다')를 되풀이하지 않는다",
+      _nh378['kind'] == '추천 제외' and _uk378._WAIT_NOT_CURED_HEAD in str(_nh378['why'])
+      and '더 낮은 자리에서만' not in str(_nh378['why']), str(_nh378['why'])[:80])
+_hold378 = {'paid': 11000, 'qty': 10, 'snap_px': 9500, 'snap_buy': 9800, 'snap_hold_stop': 9000,
+            'snap_hold_trim': 12000, 'snap_bucket': '눌림목 매수 대기', 'snap_avg_down_ok': '가능',
+            'snap_avg_down_fail': '없음', 'snap_new_entry': '가능', 'snap_at': '2026-09-07'}
+_ha378 = _uk378.watch_action(_hold378, 9500)
+_hb378 = _uk378.watch_action(dict(_hold378, snap_new_entry='추천'), 9500)
+check("옛 기준으로 찍힌 추가매수 허락은 쓰지 않는다('아직 안 잼') · 새 기준 허락은 판정 날짜와 '사기 전 다시 재기'를 단다",
+      _ha378['kind'] == '보유 유지' and _ha378.get('avg_down_class') is None
+      and _hb378['kind'] == '추가 매수 가능' and '2026-09-07 판정' in str(_hb378.get('avg_down_short'))
+      and '사기 전에' in str(_hb378.get('avg_down_short')),
+      f"{_ha378['kind']}/{_ha378.get('avg_down_class')} · {_hb378.get('avg_down_short')}")
+check("옛 기준 허락이 찍힌 보유 행은 채우기 대상이다 (다시 재면 새 기준)",
+      "if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'" in _w378
+      and "'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님'))," in _w378)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
