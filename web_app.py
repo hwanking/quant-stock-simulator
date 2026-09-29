@@ -8957,6 +8957,14 @@ try:
                "계획은 그대로 두고 '매도' 판정이 남습니다 — '팔았음'이나 '기준 다시 재기'를 누를 때까지"
                "(2026-09-28 부터).")
             + "</p>")
+        # 라운드 385 — 매달 분배금이 나가는 ETF 면, 가격과 손절선의 차이가 분배금 한 달치 안일 때 그 사실을 붙인다
+        #   (사용자 *"진짜 매도 맞지?"* · 판정은 그대로 · 문장은 킷 한 곳 · 못 읽으면 빈 글자).
+        if _etf_is:
+            _dv385 = _uk.distribution_vs_stop(realtime_price, _uk.effective_hold_stop(_row225)[0],
+                                              _etf_div332, datetime.date.today().month)
+            if _dv385:
+                _hold_plan_html += (f"<p style='margin:6px 0 0 0; font-size:12px; color:#9DAABC; "
+                                    f"line-height:1.6;'>{_uk._esc(_dv385)}</p>")
 except Exception:                                              # noqa: BLE001
     _hold_plan_html = ''            # 관심종목을 못 읽어도 카드는 그린다 — 줄만 비운다
 

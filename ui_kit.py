@@ -1262,6 +1262,40 @@ def scan_status_line(tried_at, ok_at, outcome, n_att=0, n_deep=0):
     return None, ''
 
 
+def distribution_vs_stop(price, stop, div, month_now):
+    """라운드 385 — **매달 분배금이 나가는 ETF** 에서 가격과 손절선의 차이가 한 달치 분배금 평균 안이면 한 문장. 아니면 ''.
+
+    ■ 왜 (사용자: *"진짜 매도 맞지?"* · 2026-09-29 · 보유 커버드콜 ETF 한 행)
+      이 엔진은 가격을 **조정하지 않는다**(라운드 364 · 원시 종가 = 조정 종가). 분배금이 나가는 날 가격이 그만큼
+      빠지는데 손절선은 그 가격과 견준다. 그 행은 12개월 분배금 합이 가격의 약 27% 라 한 달 평균이 약 2.2% 이고,
+      손절선까지 거리도 그만큼이었다 — **한 번의 분배금만으로 손실 없이 선 아래**로 갈 수 있는 자리다.
+      판정은 안 바꾼다(언제 나갔는지를 받지 않아 가를 수 없다 · §3). 사실만 옆에 적는다.
+    ■ 문턱 없음 — 두 잰 양(가격과 선의 차이 · 12개월 합 ÷ 12)을 견줄 뿐이다. 매달 나가는지는 올해 지급 횟수가
+      지난 달 수 이상인지로 본다(받은 칸 그대로). 못 읽으면 ''(지어내지 않는다).
+    """
+    try:
+        p, s = float(price), float(stop)
+        d = div or {}
+        dps = float(d.get('dps_ttm'))
+        cnt = int(d.get('count_this_year'))
+        m = int(month_now)
+    except (TypeError, ValueError):
+        return ''
+    if not (p > 0 and s > 0 and dps > 0) or cnt < max(1, m - 1):
+        return ''
+    avg = dps / 12.0
+    gap = p - s
+    if abs(gap) > avg:
+        return ''
+    head = (f"이 상품은 매달 분배금이 나갑니다(12개월 합 {dps:,.0f}원 · 한 달 평균 약 {avg:,.0f}원). "
+            f"분배금이 나가는 날 가격이 그만큼 빠지는데 이 엔진은 분배금을 가격에 되돌려 넣지 않고 손절선과 견줍니다")
+    if gap < 0:
+        return (f"{head} — 지금 가격이 선보다 {-gap:,.0f}원 아래지만 한 달치 평균보다 작은 차이라, '선 아래' 판정에 "
+                f"분배금 몫이 섞여 있을 수 있습니다(언제 나갔는지는 받지 않아 가르지 못합니다 · 판정은 그대로).")
+    return (f"{head} — 지금 가격은 선보다 {gap:,.0f}원 위지만 한 달치 평균보다 가까워, 분배금이 나가는 날 "
+            f"손실 없이도 선 아래로 갈 수 있습니다.")
+
+
 def value_row(vp, theme='dark'):
     """가치 프리미엄 한 줄. `value_premium()` 결과를 그대로 받는다."""
     if not vp:

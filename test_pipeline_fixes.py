@@ -29444,6 +29444,31 @@ check("화면이 이슈에서 거부 조건을 빼고 전체 목록을 **이름�
       and "if verdict['vetoes']:\n    st.error(\"**매수 결론을 막는 조건 \"" in _w375)
 
 
+print("\n" + "=" * 72)
+print("§376 매달 분배금이 나가는 ETF — 손절선과의 차이가 분배금 한 달치 안이면 그 사실을 적는다 (라운드 385)")
+print("=" * 72)
+# 사용자 *"진짜 매도 맞지?"* — 보유 커버드콜 ETF 한 행. 엔진은 가격을 조정하지 않아(R364) 분배금이 나가는 날 가격이
+#   빠지는데 손절선은 그 가격과 견준다. 판정은 그대로 두고 사실만(문턱 없음 · 두 잰 양을 견줄 뿐).
+import ui_kit as _uk376
+# 심는 수는 일부러 실제 보유와 다른 둥근 수다(§9 — 가격·분배금 수준으로 보유를 알아볼 수 없게).
+_dv376 = {'dps_ttm': 2400.0, 'count_this_year': 9}           # 한 달 평균 200
+_below376 = _uk376.distribution_vs_stop(9900, 10000, _dv376, 9)
+_above376 = _uk376.distribution_vs_stop(10150, 10000, _dv376, 9)
+check("선 아래 · 차이가 한 달치(12개월 합 ÷ 12) 안 → '분배금 몫이 섞여 있을 수' · 판정은 그대로라고",
+      '100원 아래' in _below376 and '섞여 있을 수 있습니다' in _below376 and '판정은 그대로' in _below376, _below376)
+check("선 위 · 한 달치보다 가까움 → '손실 없이도 선 아래로 갈 수'",
+      '150원 위' in _above376 and '손실 없이도' in _above376, _above376)
+check("멀면 · 매달 안 나가면 · 분배금 없으면 아무 말도 안 한다 (심기 양방향)",
+      _uk376.distribution_vs_stop(10300, 10000, _dv376, 9) == ''
+      and _uk376.distribution_vs_stop(9900, 10000, {'dps_ttm': 2400.0, 'count_this_year': 3}, 9) == ''
+      and _uk376.distribution_vs_stop(9900, 10000, {'dps_ttm': None, 'count_this_year': 9}, 9) == ''
+      and _uk376.distribution_vs_stop(9900, None, _dv376, 9) == '')
+_w376 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("보유 카드가 ETF 일 때 판단과 같은 손절선(effective_hold_stop)으로 그 한 줄을 붙인다",
+      "_uk.distribution_vs_stop(realtime_price, _uk.effective_hold_stop(_row225)[0]," in _w376
+      and 'if _etf_is:\n            _dv385' in _w376)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
