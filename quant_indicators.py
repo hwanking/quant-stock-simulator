@@ -56,6 +56,26 @@ def rb(section, key, default):
     return RULEBOOK.get(section, {}).get(key, default)
 
 
+#: 라운드 406 — DeMARK 근거 점수의 항목과 무리(표시 전용 · 값은 compute_demark_indicators 가 그대로 만든다).
+#:   'core' 는 DeMARK 9-13 자체(셋업·완벽 셋업·카운트다운·13 확인·TDST), 'confirm' 은 같은 점수에 더해지는 보조지표다.
+#:   화면 탭 이름이 'DeMARK' 라 사용자는 전부 DeMARK 가 낸 점수로 읽는다 — 어느 몫이 어디서 왔는지 가르는 표.
+DEMARK_PARTS = (
+    ('setup', '셋업 진행도', 'core'),
+    ('perfected', '완벽 셋업(5봉 안)', 'core'),
+    ('countdown', '카운트다운 진행도', 'core'),
+    ('cd13', '13 · 8봉 대비 확인', 'core'),
+    ('tdst', 'TDST 지지 유지/이탈', 'core'),
+    ('bb_pos', '볼린저 밴드 내 위치', 'confirm'),
+    ('bb_reentry', '볼린저 밴드 재진입', 'confirm'),
+    ('williams', 'Williams %R 수준', 'confirm'),
+    ('williams_rev', 'Williams %R 반전', 'confirm'),
+    ('rsi', 'RSI 수준', 'confirm'),
+    ('rsi_rev', 'RSI 반전', 'confirm'),
+    ('volume', '거래량 동반', 'confirm'),
+    ('flow', '외국인·기관 순매수/순매도', 'confirm'),
+)
+
+
 def td_countdown(setup_count, qualifies):
     """DeMARK 카운트다운 하나(매수 또는 매도) — 라운드 386.
 
@@ -83,6 +103,9 @@ def td_countdown(setup_count, qualifies):
     series = [0] * n
     cur, active = 0, False
     idx8 = idx13 = None
+    # 라운드 406 — 13 을 마친 카운트다운 **전부**의 (8번째 봉, 13번째 봉) 위치. 종전엔 가장 최근 것만 남겨
+    #   차트가 과거의 13 을 전부 '확정'이라 적었다(확인은 최근 것 하나만 했다). 값·흐름 불변 — 기록만 더한다.
+    runs = []
     for t in range(n):
         if setup_count[t] == 9 and (t == 0 or setup_count[t - 1] == 8):
             active, cur, idx8, idx13 = True, 0, None, None       # 셋업 완성 봉 — 그 봉도 셀 수 있다
@@ -94,13 +117,14 @@ def td_countdown(setup_count, qualifies):
             if cur >= 13:
                 idx13 = t
                 active = False
+                runs.append((idx8, idx13))
     if active:
         current = cur
     elif idx13 is not None and idx13 == n - 1:
         current = 13
     else:
         current = 0
-    return dict(series=series, current=current, idx8=idx8, idx13=idx13)
+    return dict(series=series, current=current, idx8=idx8, idx13=idx13, runs=runs)
 
 
 class QuantSnapshot(dict):
@@ -445,6 +469,11 @@ class QuantIndicatorsEngine:
     #  ⚠️ **기본은 빈 집합**이다 — 운영 엔진은 아래 스위치가 전부 꺼진 채 종전과 글자까지 같은 길을 탄다.
     #  켜는 곳은 그림자 기록기 한 곳뿐이고, 회귀가 '꺼짐 = 종전 값'을 심어서 잰다.
     corrections = frozenset()
+
+    #: 라운드 406 — DeMARK 근거 점수의 ADX 추세 필터(값 그대로 옮김 · 종전엔 식 안의 30·60 리터럴).
+    #:   ADX 가 이 값 이상이고 반대 방향 추세가 우세하면 그 방향 근거 점수를 아래 상한으로 누른다. 점수에 더하지는 않는다.
+    DEMARK_ADX_CAP_AT = 30
+    DEMARK_ADX_CAP_SCORE = 60
 
     # [명세 §11] 유효표본 수 통제 구간 — 규칙집 [RULES_SAMPLE_TIERS] 가 단일 출처
     _ST = RULEBOOK.get('RULES_SAMPLE_TIERS', {})
@@ -1308,23 +1337,40 @@ class QuantIndicatorsEngine:
         latest_buy_setup_idx = buy_setup_completed_indices[-1] if buy_setup_completed_indices else None
         latest_sell_setup_idx = sell_setup_completed_indices[-1] if sell_setup_completed_indices else None
 
+        # 라운드 406 — 봉 위치를 날짜로(화면이 '언제 완성된 셋업인가'를 적게). 날짜 칸이 없으면 None.
+        _dates406 = (df['trade_date'].astype(str).str[:10].tolist() if 'trade_date' in df.columns else None)
+
+        def _date406(i):
+            try:
+                return _dates406[i] if (_dates406 is not None and i is not None) else None
+            except (IndexError, TypeError):
+                return None
+
         # TDST Support/Resistance (NaN-safe)
+        # 라운드 406 — **어디서 나온 선인지**를 같이 낸다(값 불변). 완성된 셋업이 없으면 최근 20봉 고·저로,
+        #   그것도 못 구하면 종가 ±5% 로 채우는데 셋 다 'TDST' 라 불렸다 — 뒤의 둘은 TDST 가 아니다(이름이 계산보다 넓다).
         if latest_buy_setup_idx is not None and latest_buy_setup_idx >= 8:
             setup_start = latest_buy_setup_idx - 8
             tdst_resistance = float(np.nanmax(true_highs[setup_start : latest_buy_setup_idx + 1]))
+            tdst_resistance_source = 'setup'
         else:
             tdst_resistance = float(np.nanmax(true_highs[-20:])) if n >= 20 else float(np.nanmax(true_highs))
-            
+            tdst_resistance_source = 'recent'
+
         if latest_sell_setup_idx is not None and latest_sell_setup_idx >= 8:
             setup_start = latest_sell_setup_idx - 8
             tdst_support = float(np.nanmin(true_lows[setup_start : latest_sell_setup_idx + 1]))
+            tdst_support_source = 'setup'
         else:
             tdst_support = float(np.nanmin(true_lows[-20:])) if n >= 20 else float(np.nanmin(true_lows))
+            tdst_support_source = 'recent'
 
         if np.isnan(tdst_resistance) or tdst_resistance <= 0:
             tdst_resistance = float(closes[-1] * 1.05)
+            tdst_resistance_source = 'price_fill'
         if np.isnan(tdst_support) or tdst_support <= 0:
             tdst_support = float(closes[-1] * 0.95)
+            tdst_support_source = 'price_fill'
 
         # 4. Historical Countdown 13 Series & TDST Level Tracking
         # ⚠️ 라운드 386 — 카운트다운을 모듈 함수 `td_countdown` 한 곳으로 옮기며 결함 셋을 고쳤다
@@ -1353,6 +1399,18 @@ class QuantIndicatorsEngine:
         if sell_countdown >= 13 and sell_countdown_idx_13 is not None and sell_countdown_idx_8 is not None:
             if highs[sell_countdown_idx_13] >= closes[sell_countdown_idx_8]:
                 sell_13_confirmed = True
+
+        # 라운드 406 — 13 을 마친 **모든** 카운트다운에 같은 확인(13번째 봉 저가 ≤ 8번째 봉 종가 · 매도는 거울상)을
+        #   대 본 결과(봉마다 +1 확인 · −1 미확인 · 0 13 아님). 식은 위 두 줄과 같다 — 차트가 과거의 13 을 전부
+        #   '확정'이라 적던 것을 사실대로 가른다. 점수·판정은 여전히 지금 카운트다운(위 두 변수)만 읽는다.
+        buy_13_check_series = [0] * n
+        for _i8, _i13 in _bcd.get('runs', []):
+            if _i8 is not None and _i13 is not None:
+                buy_13_check_series[_i13] = 1 if lows[_i13] <= closes[_i8] else -1
+        sell_13_check_series = [0] * n
+        for _i8, _i13 in _scd.get('runs', []):
+            if _i8 is not None and _i13 is not None:
+                sell_13_check_series[_i13] = 1 if highs[_i13] >= closes[_i8] else -1
 
         t = n - 1
         
@@ -1405,74 +1463,92 @@ class QuantIndicatorsEngine:
         #    bullish 8 / bearish 0 으로 고정되고 라벨은 늘 '방향성 탐색 중' 이었다.
         #    (매수셋업 5/9 로 진행 중인 종목도 0점)
         #    이제 **상태(state)** 를 점수화한다 — 진행도·밴드 위치·지표 수준.
+        # 라운드 406 — 항목별 기여를 **같은 식 그대로** 옆에 적는다(`_bp`·`_sp` · 표시 전용). 더하는 순서·식은
+        #   한 글자도 안 바꿨다 — `_b(...)`·`_s(...)` 는 받은 값을 기록하고 그대로 돌려준다. 상한 전 원점수 = 항목 합.
+        _bp, _sp = {}, {}
+
+        def _b(key, v):
+            _bp[key] = _bp.get(key, 0.0) + float(v)
+            return v
+
+        def _s(key, v):
+            _sp[key] = _sp.get(key, 0.0) + float(v)
+            return v
+
         bullish_score = 0.0
         # 셋업 진행도 (0~9) — 9 완성이면 만점
-        bullish_score += min(buy_setup_count[t], 9) / 9.0 * 14.0
+        bullish_score += _b('setup', min(buy_setup_count[t], 9) / 9.0 * 14.0)
         if is_perfected_buy and latest_buy_setup_idx and (t - latest_buy_setup_idx <= 5):
-            bullish_score += 10
+            bullish_score += _b('perfected', 10)
         # 카운트다운 진행도 (0~13)
-        bullish_score += min(buy_countdown, 13) / 13.0 * 16.0
+        bullish_score += _b('countdown', min(buy_countdown, 13) / 13.0 * 16.0)
         if buy_countdown >= 13 and buy_13_confirmed:
-            bullish_score += 10
+            bullish_score += _b('cd13', 10)
         # 볼린저 위치 — 아래쪽일수록 반등 여지
         if bb_position_pct is not None:
-            bullish_score += float(np.clip((50.0 - bb_position_pct) / 50.0, 0, 1)) * 12.0
+            bullish_score += _b('bb_pos', float(np.clip((50.0 - bb_position_pct) / 50.0, 0, 1)) * 12.0)
         if bollinger_lower_reentry:
-            bullish_score += 6
+            bullish_score += _b('bb_reentry', 6)
         # Williams %R 침체권 (-80 이하) 및 회복
         if not np.isnan(williams_r[t]):
-            bullish_score += float(np.clip((-williams_r[t] - 50.0) / 40.0, 0, 1)) * 10.0
+            bullish_score += _b('williams', float(np.clip((-williams_r[t] - 50.0) / 40.0, 0, 1)) * 10.0)
         if williams_r_buy_reversal:
-            bullish_score += 5
+            bullish_score += _b('williams_rev', 5)
         # RSI 낮을수록 가점 (30 이하에서 최대)
         if not np.isnan(rsi[t]):
-            bullish_score += float(np.clip((50.0 - rsi[t]) / 25.0, 0, 1)) * 8.0
+            bullish_score += _b('rsi', float(np.clip((50.0 - rsi[t]) / 25.0, 0, 1)) * 8.0)
         if rsi_bullish_reversal:
-            bullish_score += 5
+            bullish_score += _b('rsi_rev', 5)
         if vol_confirmed:
-            bullish_score += 6
+            bullish_score += _b('volume', 6)
         if tdst_support_maintained:
-            bullish_score += 6
+            bullish_score += _b('tdst', 6)
         # 수급 확인은 실제 값이 있을 때만 가점한다 (NaN이면 가점도 감점도 없음)
         _inst = df['institution_net'].iloc[-1] if 'institution_net' in df.columns else np.nan
         _forg = df['foreign_net'].iloc[-1] if 'foreign_net' in df.columns else np.nan
-        if not pd.isna(_inst) and _inst > 0: bullish_score += 5
-        elif not pd.isna(_forg) and _forg > 0: bullish_score += 5
+        if not pd.isna(_inst) and _inst > 0: bullish_score += _b('flow', 5)
+        elif not pd.isna(_forg) and _forg > 0: bullish_score += _b('flow', 5)
 
         bearish_score = 0.0
-        bearish_score += min(sell_setup_count[t], 9) / 9.0 * 14.0
+        bearish_score += _s('setup', min(sell_setup_count[t], 9) / 9.0 * 14.0)
         if is_perfected_sell and latest_sell_setup_idx and (t - latest_sell_setup_idx <= 5):
-            bearish_score += 10
-        bearish_score += min(sell_countdown, 13) / 13.0 * 16.0
+            bearish_score += _s('perfected', 10)
+        bearish_score += _s('countdown', min(sell_countdown, 13) / 13.0 * 16.0)
         if sell_countdown >= 13 and sell_13_confirmed:
-            bearish_score += 10
+            bearish_score += _s('cd13', 10)
         if bb_position_pct is not None:
-            bearish_score += float(np.clip((bb_position_pct - 50.0) / 50.0, 0, 1)) * 12.0
+            bearish_score += _s('bb_pos', float(np.clip((bb_position_pct - 50.0) / 50.0, 0, 1)) * 12.0)
         if bollinger_upper_reentry:
-            bearish_score += 6
+            bearish_score += _s('bb_reentry', 6)
         if not np.isnan(williams_r[t]):
-            bearish_score += float(np.clip((williams_r[t] + 50.0) / 40.0, 0, 1)) * 10.0
+            bearish_score += _s('williams', float(np.clip((williams_r[t] + 50.0) / 40.0, 0, 1)) * 10.0)
         if williams_r_sell_reversal:
-            bearish_score += 5
+            bearish_score += _s('williams_rev', 5)
         if not np.isnan(rsi[t]):
-            bearish_score += float(np.clip((rsi[t] - 50.0) / 25.0, 0, 1)) * 8.0
+            bearish_score += _s('rsi', float(np.clip((rsi[t] - 50.0) / 25.0, 0, 1)) * 8.0)
         if rsi_bearish_reversal:
-            bearish_score += 5
+            bearish_score += _s('rsi_rev', 5)
         if down_vol_confirmed:
-            bearish_score += 6
+            bearish_score += _s('volume', 6)
         if not tdst_support_maintained:
-            bearish_score += 6
-        if not pd.isna(_inst) and _inst < 0: bearish_score += 5
-        elif not pd.isna(_forg) and _forg < 0: bearish_score += 5
+            bearish_score += _s('tdst', 6)
+        if not pd.isna(_inst) and _inst < 0: bearish_score += _s('flow', 5)
+        elif not pd.isna(_forg) and _forg < 0: bearish_score += _s('flow', 5)
+
+        _bull_raw406, _bear_raw406 = float(bullish_score), float(bearish_score)
 
         # ADX Trend Filter (Cap scores at 60 if counter-trend)
+        # 라운드 406 — 문턱·상한을 클래스 상수로 옮겼다(값 30·60 그대로) · 화면이 '지금 작동했나'를 읽게 기록한다.
         curr_adx = adx[t]
-        if curr_adx >= 30:
+        _adx_cap_bull = _adx_cap_bear = False
+        if curr_adx >= self.DEMARK_ADX_CAP_AT:
             if minus_di[t] > plus_di[t]: # Strong downtrend -> Cap bullish
-                bullish_score = min(bullish_score, 60)
+                _adx_cap_bull = bullish_score > self.DEMARK_ADX_CAP_SCORE
+                bullish_score = min(bullish_score, self.DEMARK_ADX_CAP_SCORE)
             if plus_di[t] > minus_di[t]: # Strong uptrend -> Cap bearish
-                bearish_score = min(bearish_score, 60)
-                
+                _adx_cap_bear = bearish_score > self.DEMARK_ADX_CAP_SCORE
+                bearish_score = min(bearish_score, self.DEMARK_ADX_CAP_SCORE)
+
         # 7. Final Output Construction
         bullish_score = int(round(min(100, bullish_score)))
         bearish_score = int(round(min(100, bearish_score)))
@@ -1544,7 +1620,35 @@ class QuantIndicatorsEngine:
             'buy_countdown_series': buy_cd_series,
             'sell_countdown_series': sell_cd_series,
             'buy_countdown_idx_13': buy_countdown_idx_13,
-            'sell_countdown_idx_13': sell_countdown_idx_13
+            'sell_countdown_idx_13': sell_countdown_idx_13,
+            # ── 라운드 406 — 표시 전용 재료(값·판정 불변) ────────────────────────────────
+            # 근거 점수의 항목별 기여(상한 전) · 무리별 합 · ADX 필터가 지금 작동했나
+            'bullish_parts': {k: round(v, 2) for k, v in _bp.items()},
+            'bearish_parts': {k: round(v, 2) for k, v in _sp.items()},
+            'bullish_raw': round(_bull_raw406, 2), 'bearish_raw': round(_bear_raw406, 2),
+            'adx_cap': {'at': self.DEMARK_ADX_CAP_AT, 'score': self.DEMARK_ADX_CAP_SCORE,
+                        'applied_bull': bool(_adx_cap_bull), 'applied_bear': bool(_adx_cap_bear)},
+            # 가장 최근에 완성된 셋업 — 날짜·몇 봉 전·완벽 여부(True/False · 봉이 모자라 못 가르면 None)
+            'latest_buy_setup_date': _date406(latest_buy_setup_idx),
+            'latest_buy_setup_bars_ago': (None if latest_buy_setup_idx is None else int(t - latest_buy_setup_idx)),
+            # ⚠️ 지도 값은 numpy bool 이라 화면의 `is True` 가 늘 거짓이었다(첫 렌더가 둘 다 '판정 불가') — 파이썬 bool 로.
+            'latest_buy_setup_perfected': (None if (latest_buy_setup_idx is None
+                                                    or buy_perfected_map.get(latest_buy_setup_idx) is None)
+                                           else bool(buy_perfected_map[latest_buy_setup_idx])),
+            'latest_sell_setup_date': _date406(latest_sell_setup_idx),
+            'latest_sell_setup_bars_ago': (None if latest_sell_setup_idx is None else int(t - latest_sell_setup_idx)),
+            'latest_sell_setup_perfected': (None if (latest_sell_setup_idx is None
+                                                     or sell_perfected_map.get(latest_sell_setup_idx) is None)
+                                            else bool(sell_perfected_map[latest_sell_setup_idx])),
+            # TDST 선이 어디서 나왔나 — 'setup'(그 셋업) · 'recent'(최근 20봉 고·저) · 'price_fill'(종가 ±5%)
+            'tdst_support_source': tdst_support_source,
+            'tdst_support_setup_date': (_date406(latest_sell_setup_idx) if tdst_support_source == 'setup' else None),
+            'tdst_resistance_source': tdst_resistance_source,
+            'tdst_resistance_setup_date': (_date406(latest_buy_setup_idx) if tdst_resistance_source == 'setup'
+                                           else None),
+            # 13 을 마친 봉마다 8봉 대비 확인(+1 확인 · −1 미확인 · 0 13 아님) — 차트가 과거 13 을 사실대로 가른다
+            'buy_13_check_series': buy_13_check_series,
+            'sell_13_check_series': sell_13_check_series,
         }
 
     def _empty_demark_result(self):
@@ -1641,6 +1745,29 @@ class QuantIndicatorsEngine:
         if score >= sell:
             return "비우호적", "#ff7a45"
         return "매우 비우호적", "#ff453a"
+
+    @staticmethod
+    def _demark_tab_word(label):
+        """라운드 406 — DeMARK 탭 머리의 우호도 낱말을 엔진의 **방향 판정 하나**(`demark_label`)에서 옮긴다.
+
+        방향 판정은 `compute_demark_indicators` 가 두 근거 점수의 차이로 이미 낸다 — 여기는 그 갈래를 탭 공통
+        낱말(매수·매도 같은 행동어가 아닌 우호도 · 라운드 187)로 옮길 뿐이고 새 문턱이 없다. 색은
+        `_verdict_from_score` 의 같은 낱말 색 그대로. 모르는 라벨이면 None(종전 낱말을 둔다 · §3).
+        """
+        s = str(label or '')
+        if s.startswith('중립'):
+            return "중립", "#ff9f0a"
+        if s.startswith('변동성 확대'):
+            return "방향 충돌", "#ff9f0a"
+        if s.startswith('강한 분할매수'):
+            return "매우 우호적", "#30d158"
+        if s.startswith(('매수 확인', '예비 매수')):
+            return "우호적", "#7bd88f"
+        if s.startswith('강한 매도'):
+            return "매우 비우호적", "#ff453a"
+        if s.startswith(('매도 확인', '예비 매도')):
+            return "비우호적", "#ff7a45"
+        return None
 
     def build_tab_verdicts(self, snap):
         """
@@ -1739,11 +1866,21 @@ class QuantIndicatorsEngine:
             #   그것을 읽는다(§4 — 화면이 산식을 다시 적으면 산식이 바뀔 때 문장만 낡는다).
             #   ② 'TDST 지지 {tdst_support_str}' 는 값 자체가 '지지 유지'라 **'지지'가 두 번**
             #   찍혔다. 값은 그대로 두고 접두어만 뺀다.
+            # 라운드 406 — 같은 두 수를 **두 판정자**가 읽고 있었다: 이 탭 머리의 낱말은 위 균형지수를 탭 공통 문턱
+            #   (45 미만 '비우호적')에 댔고, 엔진의 방향 판정(`demark_label` · 두 근거 점수의 차이)은 같은 종목을
+            #   '중립'이라 했다(외부 검토 · 2026-10-01 · Bullish 8 · Bearish 16 → 43 '비우호적' vs 차이 −8 '중립').
+            #   낱말은 방향 판정 **하나**에서 옮긴다(`_demark_tab_word`) — 수(43)는 그대로 두되 '균형지수'라 부르고
+            #   방향 판정과 다른 수라고 적는다. 점수·다른 탭·중앙 판정 불변.
             add('demark', ' DeMARK', s, [
                 f"Bullish {bull} vs Bearish {bear} → {fs.get('demark_direction_text', '')}",
-                f"종합 {s:.0f}점 = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한)",
+                f"균형지수 {s:.0f} = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한) — "
+                f"방향 판정은 이 수가 아니라 두 근거 점수의 차이({bull - bear:+d})로 합니다",
                 f"TDST: {fs.get('tdst_support_str', '-')} · 저항 {fs.get('tdst_resist_str', '-')}",
             ])
+            _w406 = self._demark_tab_word(fs.get('demark_direction_text'))
+            if _w406:
+                tabs[-1]['verdict'], tabs[-1]['color'] = _w406
+            tabs[-1]['score_name'] = '균형지수'
 
         # ── ⑤ 수급·기술 ─────────────────────────────────────────────────
         bbp = fs.get('bb_position_pct')
@@ -2059,7 +2196,12 @@ class QuantIndicatorsEngine:
 
         if buy_cd >= 13:
             state = 'COMPLETE'
-            headline = "매수 카운트다운 13 완성 — 소진 확인"
+            # 라운드 406 — 종전 '소진 확인' 은 8봉 대비 확인을 **안 보고** 적었다(확인에 실패한 13 도 같은 문장).
+            #   엔진이 대 본 결과(마지막 봉 = 지금 13)를 그대로 적는다. 옛 스냅샷엔 그 칸이 없어 '확인 기록 없음'.
+            _chk406 = list(dm.get('buy_13_check_series') or [])
+            _c406 = int(_chk406[-1]) if _chk406 else 0
+            headline = ("매수 카운트다운 13 완성 — "
+                        + ('8봉 대비 확인' if _c406 == 1 else '8봉 대비 미확인' if _c406 == -1 else '확인 기록 없음'))
         elif buy_setup >= 9:
             state = 'SETUP_DONE'
             headline = f"매수 셋업 9 완성 · 카운트다운 {buy_cd}/13 진행"

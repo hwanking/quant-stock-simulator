@@ -12440,7 +12440,9 @@ def show_tab_verdict(key):
     t = _TAB_VERDICT.get(key)
     if not t:
         return
-    score_txt = "—" if t['score'] is None else f"{t['score']}점"
+    # 라운드 406 — 엔진이 수의 이름을 따로 주면(DeMARK '균형지수') 그 이름으로 적는다 · 없으면 종전대로 'N점'.
+    score_txt = ("—" if t['score'] is None
+                 else f"{t['score_name']} {t['score']}" if t.get('score_name') else f"{t['score']}점")
     st.markdown(
         f"<div style='background:#161D2A;border-left:6px solid {t['color']};"
         f"border-radius:10px;padding:12px 16px;margin-bottom:12px;'>"
@@ -13674,54 +13676,142 @@ with tab_demark:
     #   그리고 '미충족'은 두 가지를 한 낱말로 말한다 — 완성된 셋업이 없었거나, 있었지만
     #   조건을 못 채웠거나. 둘은 다른 상태다(같은 모양: 물타기 '불가' 한 낱말이 셋을
     #   뭉뚱그렸던 자리). 값·판정은 그대로 두고 주어와 갈래를 적는다.
-    _perf_raw236 = dm.get('perfected_status', '미충족')
-    _perf_side236 = ('매수 셋업' if dm.get('buy_perfected')
-                     else ('매도 셋업' if dm.get('sell_perfected') else None))
-    _perf_txt236 = (f"{_perf_raw236} ({_perf_side236} 기준)" if _perf_side236 else _perf_raw236)
-    # 종합 점수 산식은 엔진이 문장으로 낸다 — 화면이 다시 적지 않는다 (§4)
+    # 라운드 406 — 외부 검토 두 편(2026-10-01)을 코드로 가려 **값·판정은 그대로 두고** 화면을 다시 짰다.
+    #   ① 머리 낱말은 엔진의 방향 판정 하나에서(탭 공통 문턱과 둘이 다른 말을 했다 · 엔진 `_demark_tab_word`).
+    #   ② '지금 진행'과 '가장 최근에 완성된 셋업'을 다른 칸으로 — 날짜·몇 봉 전·완벽 여부 셋(완벽 · 완벽 아님 ·
+    #      봉이 모자라 못 가름)을 엔진이 낸 그대로(라운드 236 이 한 줄에 섞어 두고 긴 설명으로 막던 자리).
+    #   ③ TDST 선이 **어디서 나왔나** — 셋업에서 난 선만 TDST 라 부르고, 완성된 셋업이 없어 최근 20봉 고·저로 채운
+    #      선은 그렇게 부른다(이름이 계산보다 넓었다 · R237·R239·R359 계열).
+    #   ④ 근거 점수는 DeMARK 자체 몫과 보조지표 몫을 **갈라** 보인다(엔진이 같은 식으로 항목을 적는다 · 합 = 원점수).
+    #      30종목 실측(2026-10-01): 근거 점수 중 DeMARK 자체 몫 중앙 49% — 절반이 보조지표다.
+    #   ⑤ ADX 는 점수에 더하지 않는다 — 상한 조건과 지금 작동했는지를 적는다(값은 엔진 상수).
+    #   옛 스냅샷(라운드 406 전 · 새 칸이 없다)은 종전 표시로 떨어진다(없는 값을 지어내지 않는다 · §3).
     _dmv236 = _TAB_VERDICT.get('demark') or {}
+    # 균형지수 산식은 엔진이 문장으로 낸다 — 화면이 다시 적지 않는다 (§4). 옛 스냅샷의 문장('종합 …')도 읽는다.
     _dm_calc236 = next((r for r in (_dmv236.get('reasons') or [])
-                        if str(r).startswith('종합 ')), '')
+                        if str(r).startswith(('균형지수 ', '종합 '))), '')
+    _has406 = 'latest_buy_setup_perfected' in dm
+
+    def _setup406(side_ko):
+        """가장 최근에 완성된 셋업 9 한 줄 — 날짜 · 몇 봉 전 · 완벽 여부(엔진 값 그대로)."""
+        key = 'buy' if side_ko == '매수' else 'sell'
+        d, ago = dm.get(f'latest_{key}_setup_date'), dm.get(f'latest_{key}_setup_bars_ago')
+        if d is None and ago is None:
+            return f"{side_ko} 셋업 9: 완성된 적 없음"
+        perf = dm.get(f'latest_{key}_setup_perfected')
+        state = ('완벽(Perfected)' if perf is True else '완벽 아님' if perf is False
+                 else '완벽 여부 판정 불가(봉 부족)')
+        return (f"{side_ko} 셋업 9: {d or '날짜 미상'}"
+                + (f" · {int(ago)}봉 전" if ago is not None else '') + f" · {state}")
+
+    def _tdst406(kind):
+        """TDST 선 한 줄 — 셋업에서 난 선만 TDST 라 부른다. 지지는 매도 셋업, 저항은 매수 셋업에서 난다."""
+        is_sup = kind == 'support'
+        val = dm.get('tdst_support' if is_sup else 'tdst_resistance')
+        src = dm.get(f'tdst_{kind}_source')
+        d = dm.get(f'tdst_{kind}_setup_date')
+        name, side = ('지지', '매도') if is_sup else ('저항', '매수')
+        if val is None:
+            return f"TDST {name}: 산출 불가"
+        if not _has406 or src is None:
+            return f"TDST {name}: {val:,.0f}{unit_str}"
+        if src == 'setup':
+            return f"TDST {name}: {val:,.0f}{unit_str} ({d or '날짜 미상'} {side} 셋업 9에서)"
+        if src == 'recent':
+            return (f"최근 20봉 {'저점' if is_sup else '고점'} 참고선: {val:,.0f}{unit_str} "
+                    f"(완성된 {side} 셋업이 없어 TDST 가 아닙니다)")
+        return f"TDST {name}: 산출 불가 (가격에서 채운 값 {val:,.0f}{unit_str} · 참고하지 마세요)"
+
+    _cap406 = dm.get('adx_cap') or {}
+    _adx406 = dm.get('adx')
+    _adx_line406 = (
+        f"ADX {float(_adx406):.1f} — 점수에 더하지 않습니다. {_cap406['at']} 이상이면서 반대 방향 추세가 우세할 때만 "
+        f"그 방향 근거 점수를 {_cap406['score']}으로 누르고, 지금은 "
+        + ('작동 중' if (_cap406.get('applied_bull') or _cap406.get('applied_bear')) else '작동하지 않습니다')
+        if (_cap406 and _adx406 is not None) else f"ADX 추세강도: {fmt_num(_adx406, '.1f')}")
+
+    import quant_indicators as _qi406
+    _parts406 = getattr(_qi406, 'DEMARK_PARTS', ())     # (키, 이름, 무리) — 엔진 한 곳
+
+    def _share406(parts):
+        """근거 점수(상한 전) 중 DeMARK 자체 몫 · 보조지표 몫 — 엔진이 적은 항목에서 센다."""
+        core_keys = {p[0] for p in _parts406 if p[2] == 'core'}
+        core = sum(v for k, v in (parts or {}).items() if k in core_keys)
+        return core, sum((parts or {}).values()) - core
+
+    _bc406, _bx406 = _share406(dm.get('bullish_parts'))
+    _sc406, _sx406 = _share406(dm.get('bearish_parts'))
+    _ev406 = (f"Bullish 중 DeMARK 자체 {_bc406:.0f} · 보조지표 {_bx406:.0f} / "
+              f"Bearish 중 DeMARK 자체 {_sc406:.0f} · 보조지표 {_sx406:.0f} (상한 전)"
+              if (_has406 and _parts406) else '')
 
     st.markdown(f"""
     <div style="background-color:#161D2A; padding:20px; border-radius:12px; margin-bottom:20px;">
-        <h3 style="color:#F3F6FA; margin-top:0;">DeMARK 9-13 결합신호 종합 대시보드</h3>
+        <h3 style="color:#F3F6FA; margin-top:0;">DeMARK 9-13 (간이판) · 보조지표</h3>
         <div style="display:flex; justify-content:space-between; flex-wrap:wrap; color:#F3F6FA; font-size:16px; line-height:1.6;">
             <div style="flex:1; min-width:250px;">
-                <b style="color:#4C8DFF;">[DeMARK 카운트]</b><br>
-                Buy Setup: {dm.get('buy_setup_count', 0)}/9 완료<br>
-                Sell Setup: {dm.get('sell_setup_count', 0)}/9 완료<br>
-                Perfected: {_perf_txt236}<br>
+                <b style="color:#4C8DFF;">[지금 진행]</b><br>
+                Buy Setup: {dm.get('buy_setup_count', 0)}/9 진행<br>
+                Sell Setup: {dm.get('sell_setup_count', 0)}/9 진행<br>
                 Buy Countdown: {dm.get('buy_13_status', '0/13')}<br>
                 Sell Countdown: {dm.get('sell_13_status', '0/13')}<br>
-                TDST 지지: {dm.get('tdst_support', 0):,.0f}{unit_str}<br>
-                TDST 저항: {dm.get('tdst_resistance', 0):,.0f}{unit_str}<br>
+                <b style="color:#4C8DFF;">[가장 최근에 완성된 셋업 — 지금 진행과 별개]</b><br>
+                {(_setup406('매수') + '<br>' + _setup406('매도')) if _has406 else ('Perfected: ' + str(dm.get('perfected_status', '미충족')))}<br>
+                {_tdst406('support')}<br>
+                {_tdst406('resistance')}<br>
             </div>
             <div style="flex:1; min-width:250px;">
-                <b style="color:#0a84ff;">[다중 지표 확인]</b><br>
+                <b style="color:#0a84ff;">[보조 지표 — 같은 근거 점수에 더해집니다]</b><br>
                 Bollinger: {dm.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(dm.get('bb_position_pct'), '.0f', '%')} · 폭 {fmt_num(dm.get('bb_width_pct'), '.1f', '%')}){'  ← 하단 재진입' if dm.get('bollinger_lower_reentry') else ('  ← 상단 재진입' if dm.get('bollinger_upper_reentry') else '')}<br>
                 Williams %R: {'-80 상향 회복 (매수형)' if dm.get('williams_r_buy_reversal') else '-20 하향 이탈 (매도형)' if dm.get('williams_r_sell_reversal') else f"{dm.get('williams_r_val', 0):.1f}"}<br>
                 RSI: {fmt_num(dm.get('rsi_value'), '.0f')}{' (침체권 반등)' if dm.get('rsi_bullish_reversal') else (' (과열권 반락)' if dm.get('rsi_bearish_reversal') else '')}<br>
-                거래량: {'조건 충족 (20일 평균 1.2배 상회)' if dm.get('vol_confirmed') else '평이함'}<br>
-                ADX 추세강도: {dm.get('adx', 0):.1f}<br>
+                거래량: {'오른 날 20일 평균 1.2배 이상' if dm.get('vol_confirmed') else '평이함'}<br>
+                {_adx_line406}<br>
             </div>
             <div style="flex:1; min-width:250px;">
-                <b style="color:#F2B84B;">[최종 판정 점수]</b><br>
-                Bullish 점수: {dm.get('bullish_score', 50)} / 100점<br>
-                Bearish 점수: {dm.get('bearish_score', 50)} / 100점<br>
+                <b style="color:#F2B84B;">[방향 판정]</b><br>
+                Bullish 근거 {dm.get('bullish_score', 0)} · Bearish 근거 {dm.get('bearish_score', 0)}
+                <span style="color:#9DAABC; font-size:13px;">(상한 100 · 확률 아님)</span><br>
+                <span style="color:#9DAABC; font-size:13px;">{_ev406}</span><br>
                 <span style="color:#9DAABC; font-size:13px;">{_dm_calc236}</span><br><br>
-                <b style="color:#35C98B; font-size:17px;">최종 판정: {dm.get('demark_label', '중립')}</b><br>
+                <b style="color:#35C98B; font-size:17px;">방향: {dm.get('demark_label', '중립')}</b><br>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
+    # 근거 점수가 어디서 왔나 — 엔진이 같은 식으로 적은 항목(합 = 상한 전 원점수 · 0 인 항목은 안 적는다)
+    if _has406 and _parts406:
+        _bp406, _sp406 = dm.get('bullish_parts') or {}, dm.get('bearish_parts') or {}
+        _rows406 = [(nm, ('DeMARK 자체' if grp == 'core' else '보조지표'),
+                     _bp406.get(k, 0.0), _sp406.get(k, 0.0))
+                    for k, nm, grp in _parts406
+                    if _bp406.get(k) or _sp406.get(k)]
+        _tbl406 = "".join(
+            f"<tr><td style='padding:3px 8px;'>{_uk._esc(nm)}</td>"
+            f"<td style='padding:3px 8px; color:{_TOK['tx2']};'>{g}</td>"
+            f"<td style='padding:3px 8px; text-align:right;'>{b:.1f}</td>"
+            f"<td style='padding:3px 8px; text-align:right;'>{s:.1f}</td></tr>"
+            for nm, g, b, s in _rows406)
+        st.markdown(_uk.disclose(
+            f"Bullish {dm.get('bullish_score', 0)} · Bearish {dm.get('bearish_score', 0)} 은 어디서 왔나",
+            f"<table style='font-size:13px; border-collapse:collapse; margin-top:6px;'>"
+            f"<thead><tr><th style='text-align:left; padding:3px 8px;'>항목</th>"
+            f"<th style='text-align:left; padding:3px 8px;'>무리</th>"
+            f"<th style='text-align:right; padding:3px 8px;'>Bullish</th>"
+            f"<th style='text-align:right; padding:3px 8px;'>Bearish</th></tr></thead>"
+            f"<tbody>{_tbl406}</tbody></table>"
+            f"<p style='margin:6px 0 0 0; font-size:13px; color:{_TOK['tx2']};'>"
+            f"합(상한 전) Bullish {float(dm.get('bullish_raw') or 0):.1f} · Bearish {float(dm.get('bearish_raw') or 0):.1f} "
+            f"— 100 을 넘으면 100 에서 자르고, ADX 조건이 맞으면 반대 방향을 {_cap406.get('score', '—')} 으로 누른 뒤 "
+            f"반올림한 것이 위 두 수입니다. 점수는 조건이 얼마나 갖춰졌나를 센 것이지 확률이 아닙니다.</p>"),
+            unsafe_allow_html=True)
+
     st.caption(
-        "Perfected 는 **가장 최근에 완성된 9 셋업**을 두고 하는 말이라, 위의 진행 중인 카운트와 "
-        "다를 수 있습니다 (카운트가 9에 닿지 않아도 지난 셋업이 완성됐을 수 있습니다). "
-        "'미충족'은 완성된 셋업이 아직 없었다는 뜻일 수도, 있었지만 조건을 못 채웠다는 뜻일 수도 "
-        "있습니다 — 이 화면은 둘을 가르지 않습니다. 위 점수는 이 관점 하나만 본 것이고 매매 "
-        "판정이 아닙니다.")
+        "이 화면의 9-13 은 **간이판**입니다 — 표준 Sequential 과 달리 13번째 봉이 8번째 봉 대비 확인에 실패해도 "
+        "13 을 뒤로 미루지 않고, 반대 방향 셋업이 카운트다운을 취소하는 규칙과 13 뒤의 위험선(Risk Level)이 "
+        "없으며, 새 셋업이 완성되면 조건 없이 카운트다운을 새로 시작합니다. 그래서 아래 차트의 13 표식에 "
+        "확인 여부를 따로 적습니다. 위 점수는 이 관점 하나만 본 것이고 매매 판정이 아닙니다.")
     st.markdown(f"[{resolved_name}] DeMARK 9-13 & 다중 지표 정밀 차트")
     
     recent_dm_df = tech_df.tail(100).copy().reset_index(drop=True)
@@ -13783,45 +13873,76 @@ with tab_demark:
     s_setup = full_s_setup[-100:] if len(full_s_setup) >= 100 else full_s_setup
     b_cd = full_b_cd[-100:] if len(full_b_cd) >= 100 else full_b_cd
     s_cd = full_s_cd[-100:] if len(full_s_cd) >= 100 else full_s_cd
-    
+    # 라운드 406 — 13 마다 엔진이 대 본 8봉 대비 확인(+1 확인 · −1 미확인 · 0 13 아님). 옛 스냅샷엔 없다(빈 목록).
+    _b_chk406 = list(dm.get('buy_13_check_series') or [])[-len(closes):]
+    _s_chk406 = list(dm.get('sell_13_check_series') or [])[-len(closes):]
+
+    def _tail_start406(series):
+        """지금 진행 중인 셋업(마지막 봉까지 이어진 1 이상의 줄)이 시작한 창 안의 위치 — 없으면 창 끝 뒤."""
+        k = len(series)
+        while k > 0 and int(series[k - 1]) > 0:
+            k -= 1
+        return k
+
+    # 라운드 406 — 1~7 은 **지금 진행 중인 셋업에만** 적는다. 지난 셋업은 8·9 만(외부 검토: 숫자가 너무 많아 9·13 을
+    #   못 찾는다 · 2026-10-01). 문턱이 아니라 '지금 진행 중인가' 하나로 가른다.
+    _b_tail406, _s_tail406 = _tail_start406(b_setup), _tail_start406(s_setup)
+
+    def _chk_txt406(v):
+        return ('8봉 대비 확인' if v == 1 else '8봉 대비 미확인' if v == -1 else '확인 기록 없음')
+
     for i in range(len(closes)):
         b_cnt = int(b_setup[i]) if i < len(b_setup) else 0
         s_cnt = int(s_setup[i]) if i < len(s_setup) else 0
         b_c_cnt = int(b_cd[i]) if i < len(b_cd) else 0
         s_c_cnt = int(s_cd[i]) if i < len(s_cd) else 0
-        
+
         p_range = highs[i] - lows[i] if highs[i] != lows[i] else closes[i]*0.02
-        
+
         # Setup Markers (Green for Buy, Red for Sell)
-        if b_cnt > 0:
+        if b_cnt > 0 and (b_cnt >= 8 or i >= _b_tail406):
             ax_main.text(dates[i], lows[i] - p_range*0.8, str(b_cnt), color='#35C98B', fontsize=9, ha='center', va='top', fontweight='bold')
             if b_cnt == 9:
                 ax_main.scatter(dates[i], lows[i] - p_range*1.6, color='#35C98B', marker='^', s=160, zorder=5)
-                ax_main.annotate('매수준비 9', xy=(dates[i], lows[i] - p_range*2.8), color='#35C98B', fontsize=10, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
-                
-        if s_cnt > 0:
+                ax_main.annotate('매수 셋업 9', xy=(dates[i], lows[i] - p_range*2.8), color='#35C98B', fontsize=10, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
+
+        if s_cnt > 0 and (s_cnt >= 8 or i >= _s_tail406):
             ax_main.text(dates[i], highs[i] + p_range*0.8, str(s_cnt), color='#ff453a', fontsize=9, ha='center', va='bottom', fontweight='bold')
             if s_cnt == 9:
                 ax_main.scatter(dates[i], highs[i] + p_range*1.6, color='#ff453a', marker='v', s=160, zorder=5)
-                ax_main.annotate('매도경계 9', xy=(dates[i], highs[i] + p_range*2.8), color='#ff453a', fontsize=10, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
-        
-        # Countdown 13 Markers (High Priority)
+                ax_main.annotate('매도 셋업 9', xy=(dates[i], highs[i] + p_range*2.8), color='#ff453a', fontsize=10, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
+
+        # Countdown 13 Markers — 라운드 406: 종전 표식 글자(13 '확정' + 행동어)는 둘 다 넘친 말이었다. 확인은 가장 최근
+        #   카운트다운 하나만 했고(30종목 전 기간 실측 13 중 43% 가 미확인), 지난 봉의 표식에 행동어를 붙이면 지금
+        #   사라는 말로 읽힌다(라운드 187·285). 날짜와 확인 여부만 적고, 미확인은 속이 빈 표식으로 가른다.
         if b_c_cnt >= 13:
-            ax_main.scatter(dates[i], lows[i] - p_range*2.0, color='#35C98B', marker='D', s=200, zorder=8)
-            ax_main.annotate('13 확정 · 매수 타이밍', xy=(dates[i], lows[i] - p_range*3.8), color='#35C98B', fontsize=11, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
+            _c = int(_b_chk406[i]) if i < len(_b_chk406) else 0
+            ax_main.scatter(dates[i], lows[i] - p_range*2.0, marker='D', s=200, zorder=8,
+                            facecolors=('#35C98B' if _c == 1 else 'none'), edgecolors='#35C98B', linewidths=2)
+            ax_main.annotate(f"매수 13 ({dates[i]:%m-%d}) · {_chk_txt406(_c)}", xy=(dates[i], lows[i] - p_range*3.8), color='#35C98B', fontsize=10, ha='center', va='top', fontweight='bold', backgroundcolor='#161D2A')
         elif s_c_cnt >= 13:
-            ax_main.scatter(dates[i], highs[i] + p_range*2.0, color='#ff453a', marker='D', s=200, zorder=8)
-            ax_main.annotate('13 확정 · 매도 타이밍', xy=(dates[i], highs[i] + p_range*3.8), color='#ff453a', fontsize=11, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
+            _c = int(_s_chk406[i]) if i < len(_s_chk406) else 0
+            ax_main.scatter(dates[i], highs[i] + p_range*2.0, marker='D', s=200, zorder=8,
+                            facecolors=('#ff453a' if _c == 1 else 'none'), edgecolors='#ff453a', linewidths=2)
+            ax_main.annotate(f"매도 13 ({dates[i]:%m-%d}) · {_chk_txt406(_c)}", xy=(dates[i], highs[i] + p_range*3.8), color='#ff453a', fontsize=10, ha='center', va='bottom', fontweight='bold', backgroundcolor='#161D2A')
 
     # Info Box inside Chart (Top Left overlay)
-    info_str = f"[DeMARK 9-13 현황]\n" \
+    # 라운드 406 — 'Perfected: 충족' 한 줄 대신 가장 최근에 완성된 셋업을 방향별로(지금 진행과 별개) · TDST 는 출처와 함께.
+    _perf_box406 = ((f"• 최근 완성 매수 셋업: {dm.get('latest_buy_setup_date') or '없음'}"
+                     + (" 완벽" if dm.get('latest_buy_setup_perfected') is True
+                        else " 완벽 아님" if dm.get('latest_buy_setup_perfected') is False else '') + "\n"
+                     f"• 최근 완성 매도 셋업: {dm.get('latest_sell_setup_date') or '없음'}"
+                     + (" 완벽" if dm.get('latest_sell_setup_perfected') is True
+                        else " 완벽 아님" if dm.get('latest_sell_setup_perfected') is False else ''))
+                    if _has406 else f"• Perfected: {dm.get('perfected_status', '미충족')}")
+    info_str = f"[DeMARK 9-13 간이판 · 지금]\n" \
                f"• Buy Setup: {dm.get('buy_setup_count', 0)}/9\n" \
                f"• Sell Setup: {dm.get('sell_setup_count', 0)}/9\n" \
-               f"• Perfected: {dm.get('perfected_status', '미충족')}\n" \
                f"• Buy Countdown: {dm.get('buy_13_status', '0/13')}\n" \
                f"• Sell Countdown: {dm.get('sell_13_status', '0/13')}\n" \
-               f"• TDST 지지: {dm.get('tdst_support', 0):,.0f}{unit_str}\n" \
-               f"• TDST 저항: {dm.get('tdst_resistance', 0):,.0f}{unit_str}"
+               f"{_perf_box406}\n" \
+               f"• {_tdst406('support')}\n" \
+               f"• {_tdst406('resistance')}"
 
     ax_main.text(0.02, 0.96, info_str, transform=ax_main.transAxes, fontsize=8,
                  verticalalignment='top', color='#F3F6FA',
@@ -13864,9 +13985,16 @@ with tab_demark:
         ax_rsi.fill_between(dates, 0, 30, color='#35C98B', alpha=0.1)
         ax_rsi.set_ylim(0, 100)
     ax_rsi.set_ylabel('RSI 14', color='#9DAABC')
-    
+
     plt.tight_layout()
     st.pyplot(fig_dm)
+    # 라운드 406 — 과거 표식이 무엇인지 그림 바로 아래에 적는다(외부 검토 · 지난 13 표식이 지금 타점으로 읽혔다).
+    #   나이로 흐리게 하는 규칙(몇 봉 이상 숨김 등)은 **안 만들었다** — 그 봉 수가 손으로 고른 수다(§2). 날짜를 적고
+    #   '지금'은 위 [지금 진행] 칸이 말한다고 가리킨다.
+    st.caption(
+        "차트의 9·13 표식은 **오늘의 계산식으로 지난 100봉을 다시 계산한 것**이라, 그날 이 앱이 실제로 낸 신호와 다를 수 "
+        "있습니다. 표식 옆 날짜가 그 봉이고, 지금 상태는 위 [지금 진행] 칸이 말합니다. 속이 빈 13 은 8봉 대비 확인에 "
+        "실패한 13 입니다(표준이면 13 을 뒤로 미루는 자리). 1~7 은 지금 진행 중인 셋업에만 적습니다.")
 
 with tab_flow:
     show_tab_verdict('technical')

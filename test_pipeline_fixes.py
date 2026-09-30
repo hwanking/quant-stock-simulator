@@ -21912,31 +21912,33 @@ _q253 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
 # ① 산식은 한 곳에서 나오고, 문장이 그 산식과 같은 계수를 적는다
 check("엔진의 DeMARK 종합 점수 산식은 그대로다 (50 + (Bullish − Bearish) × 0.9 · 0~100)",
       "s = float(np.clip(50 + (bull - bear) * 0.9, 0, 100))" in _q253)
+# 라운드 406 — 이름을 '균형지수'로 바꾸고 방향 판정과 다른 수라고 같은 문장에 적는다(계수·식 불변).
 check("엔진이 그 산식을 문장으로 낸다 — 계수가 바뀌면 이 검사가 걸린다",
-      "f\"종합 {s:.0f}점 = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한)\"" in _q253)
+      "f\"균형지수 {s:.0f} = 50 + (Bullish {bull} − Bearish {bear}) × 0.9 (0~100 제한) — \"" in _q253)
 # 사용자가 본 수(Bullish 6 · Bearish 11 → 46)가 그 산식에서 나오는지 실제로 계산한다
 _s253 = float(_np253.clip(50 + (6 - 11) * 0.9, 0, 100))
 check("실측 재현 — Bullish 6 · Bearish 11 이면 45.5 이고 화면 표기는 46점",
       abs(_s253 - 45.5) < 1e-9 and f"{_s253:.0f}" == "46")
 check("화면은 그 문장을 읽기만 한다 — 산식을 다시 적지 않는다 (§4)",
       "_dm_calc236 = next((r for r in (_dmv236.get('reasons') or [])" in _w231
-      and "if str(r).startswith('종합 ')), '')" in _w231
+      and "if str(r).startswith(('균형지수 ', '종합 '))), '')" in _w231
       and "50 + (Bullish" not in _w231)
 check("그 문장이 실제로 화면 점수 칸에 들어간다",
       '<span style="color:#9DAABC; font-size:13px;">{_dm_calc236}</span>' in _w231)
 
 # ② Perfected — 주어와 갈래
-check("Perfected 는 어느 셋업 기준인지 적는다 (매수·매도)",
-      "_perf_side236 = ('매수 셋업' if dm.get('buy_perfected')" in _w231
-      and "else ('매도 셋업' if dm.get('sell_perfected') else None))" in _w231
-      and "Perfected: {_perf_txt236}<br>" in _w231
-      and "Perfected: {dm.get('perfected_status', '미충족')}<br>" not in _w231)
+# 라운드 406 — R236 은 한 줄에 섞어 두고 긴 설명으로 막았다. 이제 '지금 진행'과 '가장 최근에 완성된 셋업'을 다른
+#   칸으로 가르고, 완성된 셋업을 방향별로 날짜·몇 봉 전·완벽 여부 **셋**(완벽 · 완벽 아님 · 봉 부족으로 못 가름)으로
+#   적는다 — '없었다'와 '못 채웠다'를 이제 가른다. 잠그는 성질(주어를 적는다 · 두 갈래를 섞지 않는다)은 같다.
+check("Perfected 는 어느 셋업 기준인지 적는다 (매수·매도 따로 · 날짜와 함께)",
+      "_setup406('매수') + '<br>' + _setup406('매도')" in _w231
+      and "[가장 최근에 완성된 셋업 — 지금 진행과 별개]" in _w231
+      and "Perfected: {_perf_txt236}<br>" not in _w231)
 check("Perfected 의 주어를 화면이 말한다 — 진행 중 카운트가 아니다",
-      "가장 최근에 완성된 9 셋업" in _w231
-      and "카운트가 9에 닿지 않아도 지난 셋업이 완성됐을 수 있습니다" in _w231)
-check("'미충족'이 두 가지를 뜻한다고 적는다 (없었다 · 못 채웠다 · §3)",
-      "완성된 셋업이 아직 없었다는 뜻일 수도, 있었지만 조건을 못 채웠다는 뜻일 수도" in _w231
-      and "이 화면은 둘을 가르지 않습니다" in _w231)
+      "[지금 진행]" in _w231 and "셋업 9: 완성된 적 없음" in _w231)
+check("'미충족'이 두 가지를 뜻하던 것을 가른다 (없었다 · 못 채웠다 · 봉 부족 · §3)",
+      "'완벽 아님' if perf is False" in _w231 and "'완벽 여부 판정 불가(봉 부족)'" in _w231
+      and "이 화면은 둘을 가르지 않습니다" not in _w231)
 # 엔진이 실제로 '최근 완성된 셋업'을 보는지 — 화면 설명이 코드와 맞물린다
 check("엔진의 perfected 는 최근 완성된 셋업 색인을 본다 (화면 설명의 근거)",
       "is_perfected_buy = buy_perfected_map.get(latest_buy_setup_idx, False) if latest_buy_setup_idx else False" in _q253
@@ -31450,6 +31452,113 @@ _lv394 = __import__('ledger_view')
 _ob394 = _lv394.outcome_band_line({'n': 1000, 'p10': -9, 'p25': -4, 'p50': 0, 'p75': 4, 'p90': 9})
 check("원장 기준선 문장이 '큰 쪽 = 더 믿을 쪽'으로 읽히지 않는다",
       '기준선입니다' in (_ob394 or '') and '표본이 큰 쪽은 이 줄입니다' not in (_ob394 or ''))
+
+
+print("=" * 72)
+print("§395 DeMARK — 판정자 하나 · 근거 점수의 몫 · 13 확인은 전부 · 선의 출처 (라운드 406)")
+print("=" * 72)
+# 외부 검토 두 편(2026-10-01)을 코드로 가렸다. 값·판정은 안 바꾸고(뜬 입력 30종목 · 옛 키 28개 전부 같음) 이것만 잠근다:
+#   ① 탭 머리 낱말은 엔진의 방향 판정 하나에서 — 균형지수(43)를 탭 공통 문턱에 대 '비우호적'이라 부르지 않는다
+#   ② 근거 점수를 항목별로 같은 식 그대로 적는다(합 = 상한 전 원점수) · DeMARK 자체/보조지표 무리
+#   ③ 13 을 마친 카운트다운 **전부**에 8봉 대비 확인을 대 본다(종전엔 최근 것만 · 차트는 전부 '확정')
+#   ④ TDST 선의 출처 · 최근 완성 셋업의 날짜·완벽 여부 셋
+import numpy as _np395                                           # noqa: E402
+import pandas as _pd395                                          # noqa: E402
+import quant_indicators as _qi395                                # noqa: E402
+
+_Q395 = _qi395.QuantIndicatorsEngine
+# ① 낱말 — 엔진 라벨 여덟 갈래를 전부 심는다(모르는 라벨은 None · 종전 낱말을 둔다)
+_words395 = {lab: (_Q395._demark_tab_word(lab) or (None,))[0] for lab in (
+    '중립 (매수·매도 우열 없음)', '변동성 확대·방향 충돌 (신규 진입 보류)', '강한 분할매수', '매수 확인',
+    '예비 매수 (신호 약함)', '강한 매도', '매도 확인', '예비 매도', '산출 불가 (데이터 부족)')}
+check("DeMARK 탭 낱말은 방향 판정에서 옮긴다 — 중립은 중립 · 우호도 낱말만(행동어 없음) · 모르면 None",
+      _words395['중립 (매수·매도 우열 없음)'] == '중립' and _words395['예비 매도'] == '비우호적'
+      and _words395['매수 확인'] == '우호적' and _words395['강한 분할매수'] == '매우 우호적'
+      and _words395['강한 매도'] == '매우 비우호적' and _words395['산출 불가 (데이터 부족)'] is None
+      and not any(w and ('매수' in w or '매도' in w) for w in _words395.values()), str(_words395))
+# 외부 검토가 본 그 수(Bullish 8 · Bearish 16 → 43)를 탭 함수에 그대로 넣어 본다
+_snap395 = {'four_scores': {'demark_bullish_score': 8, 'demark_bearish_score': 16,
+                            'demark_direction_text': '중립 (매수·매도 우열 없음)',
+                            'tdst_support_str': '지지 유지', 'tdst_resist_str': '저항 미돌파'},
+            'sim_res': {}, 'val_eval': {}, 'oos_result': {}}
+try:
+    _tab395 = next(t for t in _Q395().build_tab_verdicts(_snap395) if t['key'] == 'demark')
+except Exception as _e395:                                       # noqa: BLE001
+    _tab395 = {'err': repr(_e395)}
+check("같은 두 수에 탭 머리가 '중립 · 균형지수 43' — '비우호적 43점' 이 아니다 (점수 불변)",
+      _tab395.get('verdict') == '중립' and _tab395.get('score') == 43
+      and _tab395.get('score_name') == '균형지수'
+      and any('방향 판정은 이 수가 아니라' in str(r) for r in _tab395.get('reasons') or []), str(_tab395)[:200])
+
+# ② ③ ④ — 합성 일봉(하락 뒤 상승 · 셋업·카운트다운이 생기게)으로 엔진을 실제로 돌린다
+_n395 = 220
+_px395 = _np395.concatenate([_np395.linspace(200, 120, 120), _np395.linspace(120, 180, 100)])
+_px395 = _px395 * (1 + 0.01 * _np395.sin(_np395.arange(_n395)))
+_df395 = _pd395.DataFrame({'trade_date': _pd395.date_range('2025-01-01', periods=_n395, freq='B').strftime('%Y-%m-%d'),
+                           'adj_close': _px395})
+_df395['open'] = _df395['adj_close'].shift(1).fillna(_df395['adj_close'])
+_df395['high'] = _df395[['open', 'adj_close']].max(axis=1) * 1.01
+_df395['low'] = _df395[['open', 'adj_close']].min(axis=1) * 0.99
+_df395['volume'] = 1e6
+_q395 = _Q395()
+_dm395 = _q395.compute_demark_indicators(_q395.compute_technical_indicators(_df395))
+_keys395 = {p[0] for p in _qi395.DEMARK_PARTS}
+_bpsum395 = sum((_dm395.get('bullish_parts') or {}).values())
+_spsum395 = sum((_dm395.get('bearish_parts') or {}).values())
+check("근거 점수의 항목 합 = 상한 전 원점수 · 항목 이름은 엔진 표 한 곳(DEMARK_PARTS) 안",
+      abs(_bpsum395 - float(_dm395.get('bullish_raw') or 0)) < 0.05
+      and abs(_spsum395 - float(_dm395.get('bearish_raw') or 0)) < 0.05
+      and set(_dm395.get('bullish_parts') or {}) <= _keys395 and set(_dm395.get('bearish_parts') or {}) <= _keys395,
+      f"{_bpsum395:.2f}/{_dm395.get('bullish_raw')} · {_spsum395:.2f}/{_dm395.get('bearish_raw')}")
+check("무리는 둘뿐 — DeMARK 자체(셋업·완벽·카운트다운·13 확인·TDST)와 보조지표",
+      {p[2] for p in _qi395.DEMARK_PARTS} == {'core', 'confirm'}
+      and {p[0] for p in _qi395.DEMARK_PARTS if p[2] == 'core'} == {'setup', 'perfected', 'countdown', 'cd13', 'tdst'})
+_bcs395 = [int(x) for x in list(_dm395.get('buy_countdown_series', []))]
+_bchk395 = list(_dm395.get('buy_13_check_series') or [])
+_scs395 = [int(x) for x in list(_dm395.get('sell_countdown_series', []))]
+_schk395 = list(_dm395.get('sell_13_check_series') or [])
+_b13_395 = [i for i, x in enumerate(_bcs395) if x >= 13]
+_s13_395 = [i for i, x in enumerate(_scs395) if x >= 13]
+check("13 을 마친 봉마다 8봉 대비 확인이 적힌다 — 확인 칸이 있는 자리 = 13 인 자리 (전부 · 최근 것만이 아니다)",
+      len(_bchk395) == len(_bcs395) and len(_schk395) == len(_scs395)
+      and [i for i, v in enumerate(_bchk395) if v] == _b13_395
+      and [i for i, v in enumerate(_schk395) if v] == _s13_395
+      and set(_bchk395) | set(_schk395) <= {-1, 0, 1},
+      f"매수 13 {len(_b13_395)} · 매도 13 {len(_s13_395)}", scanned=len(_bcs395))
+# td_countdown 의 runs — 13 을 마친 카운트다운의 (8, 13) 위치를 전부 남기고 마지막 것이 idx8·idx13 과 같다
+_cd395 = _qi395.td_countdown([0, 1, 2, 3, 4, 5, 6, 7, 8] + [9] * 13 + [0, 1, 2, 3, 4, 5, 6, 7, 8] + [9] * 13,
+                             ([False] * 9 + [True] * 13) * 2)
+check("카운트다운 기록 — 13 을 마친 것 전부를 남기고 마지막이 종전의 idx8·idx13 과 같다 (심기)",
+      len(_cd395['runs']) == 2 and _cd395['runs'][-1] == (_cd395['idx8'], _cd395['idx13'])
+      and all(b - a == 5 for a, b in _cd395['runs']), str(_cd395['runs']))
+check("TDST 선의 출처와 최근 완성 셋업의 완벽 여부 셋 — 엔진이 낸다",
+      _dm395.get('tdst_support_source') in ('setup', 'recent', 'price_fill')
+      and _dm395.get('tdst_resistance_source') in ('setup', 'recent', 'price_fill')
+      # 값이 아니라 **형**을 본다 — numpy bool 은 `in (True, False, None)` 을 통과하지만 화면의 `is True` 는 늘 거짓이었다
+      #   (첫 렌더가 둘 다 '판정 불가'를 적어 잡았다).
+      and type(_dm395.get('latest_buy_setup_perfected')) in (bool, type(None))
+      and type(_dm395.get('latest_sell_setup_perfected')) in (bool, type(None))
+      and (_dm395.get('latest_buy_setup_date') is None) == (_dm395.get('latest_buy_setup_bars_ago') is None),
+      f"{_dm395.get('tdst_support_source')}/{_dm395.get('tdst_resistance_source')} · "
+      f"{_dm395.get('latest_buy_setup_date')}")
+check("ADX 필터의 문턱·상한은 클래스 상수(값 30·60 그대로) · 식이 그 상수를 읽는다",
+      _Q395.DEMARK_ADX_CAP_AT == 30 and _Q395.DEMARK_ADX_CAP_SCORE == 60
+      and (_dm395.get('adx_cap') or {}).get('at') == 30
+      and 'if curr_adx >= self.DEMARK_ADX_CAP_AT:' in _read148(_os.path.join(PROJ, 'quant_indicators.py')))
+# 화면
+_wa395 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("차트가 과거 13 에 행동어를 안 붙이고 날짜와 확인 여부를 적는다 · 재계산이라고 말한다",
+      "'13 확정 · 매수 타이밍'" not in _wa395 and "'13 확정 · 매도 타이밍'" not in _wa395
+      and "매수 13 ({dates[i]:%m-%d}) · {_chk_txt406(_c)}" in _wa395
+      and '오늘의 계산식으로 지난 100봉을 다시 계산한 것' in _wa395
+      and "'매수준비 9'" not in _wa395 and "'매도경계 9'" not in _wa395)
+check("대시보드가 간이판이라고 말하고(미루기·취소·위험선 없음) 근거 점수를 확률로 부르지 않는다",
+      '이 화면의 9-13 은 **간이판**입니다' in _wa395 and '(상한 100 · 확률 아님)' in _wa395
+      and '/ 100점<br>' not in _wa395)
+check("ADX 는 '점수에 더하지 않는다'와 지금 작동했는지를 적는다 (새 문턱 없이 엔진 상수로)",
+      "점수에 더하지 않습니다. {_cap406['at']} 이상이면서" in _wa395 and "_cap406.get('applied_bull')" in _wa395)
+check("탭 머리가 엔진이 준 수의 이름을 쓴다 (없으면 종전 'N점')",
+      "f\"{t['score_name']} {t['score']}\" if t.get('score_name') else f\"{t['score']}점\"" in _wa395)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
