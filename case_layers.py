@@ -135,6 +135,42 @@ def blended_prob(score, sector=None, regime_code=None, fs=None):
                 label=label)
 
 
+def baseline_note(art=None, table_made=None):
+    """이 확률을 **'늘 같은 확률'** 과 견준 블라인드 결과 한 문장 (라운드 401 · 표시 전용).
+
+    외부 검토(2026-10-01)가 짚었다 — 라운드 59 의 게이트와 라운드 397 은 이 확률을 **다른 확률**(종전
+    유사사례 확률 · 다시 적합한 표)과만 견줬고, **아무것도 모르는 예측**(학습 구간 적중률 하나를 모든
+    행에 내는 것)과는 안 견줬다. 견주니 블라인드에서 가려지지 않았다(`scripts/brier_baseline_r401.py`).
+    그 사실을 이 확률 옆에 적는다 — 없으면 '검증 게이트 통과'가 **기본값보다 낫다**로 읽힌다.
+
+    값은 산출물에서 읽는다(손으로 적은 수는 낡는다). 문장은 차이의 **신뢰구간 부호**로만 가른다 —
+    문턱 없음. 산출물이 **지금 운영 표와 다른 표**와 견준 것이면 None(낡은 비교를 지금 표의 성적처럼
+    말하지 않는다 · §3). 못 읽어도 None.
+    `art`·`table_made` 는 회귀가 갈래를 심어 보려고 받는다(기본은 파일과 운영 표).
+    """
+    try:
+        a = art
+        if a is None:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'hier_prob_baseline.json')
+            with open(p, encoding='utf-8') as f:
+                a = json.load(f)
+        made = table_made if table_made is not None else (_hier_doc() or {}).get('made')
+        if not made or a.get('table_made') != made:
+            return None
+        d, lo, hi = float(a['d']), float(a['d_lo']), float(a['d_hi'])
+        head = (f"블라인드 {int(a['rows']):,}행(기준일 {int(a['dates'])}일 · {a['made']} 잼)에서 이 확률의 "
+                f"Brier {float(a['brier_table']):.4f} 를 '늘 {float(a['train_q']) * 100:.1f}%'(이 확률 표를 만든 "
+                f"개발 구간의 적중률 하나)라고 말하는 것 {float(a['brier_const']):.4f} 와 견주면 차이 {d:+.4f} "
+                f"(95% [{lo:+.4f}, {hi:+.4f}])")
+        if lo <= 0.0 <= hi:
+            return head + " — 가려지지 않습니다. 이 확률이 기본값보다 더 잘 맞는다는 근거는 아직 없습니다."
+        if hi < 0.0:
+            return head + " — 이 확률이 기본값보다 더 잘 맞았습니다."
+        return head + " — 이 확률이 기본값보다 덜 맞았습니다."
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def self_history(ticker):
     """이 종목 자체의 과거 신호 이력 (표시 전용 · R59 혼합 미포함).
 

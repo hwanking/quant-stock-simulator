@@ -10153,15 +10153,34 @@ if (_up_raw is not None and _up_shr is not None
 _vc1, _vc2 = st.columns([1.15, 1])
 with _vc1:
     st.markdown("**이 점수는 이렇게 나왔습니다**")
+    # 라운드 401 — 아래 표는 **첫 단계**(세 항목의 가중합)다. 종전엔 이것이 최종 점수의 산식인 것처럼 보였고,
+    #   최종과의 차이를 전부 '게이트 상한'이라 불렀다(외부 검토 2026-10-01 · 신뢰도 조정·기회점수만으로도 차이가
+    #   난다). 사슬은 엔진이 싣고(verdict['score_chain']) 화면은 읽기만 한다(§4). 없으면 그 줄만 빠진다(§3).
+    st.caption("1단계 — 세 항목의 가중합(종합 품질). 최종 점수까지는 아래 사슬을 거칩니다.")
     st.dataframe(pd.DataFrame([{
         "구성 항목": c['label'],
         "점수": "—" if c['score'] is None else f"{c['score']}",
         "비중(1단계 안)": f"{c['weight_pct']:.0f}%",
         "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
     } for c in verdict['composition']]), width='stretch', hide_index=True)
+    _ch401 = verdict.get('score_chain')
+    if _ch401:
+        _dp401 = " · ".join(f"{k} 약 {v:.1f}%" for k, v in (_ch401.get('direct_pct') or {}).items())
+        st.markdown(_md_safe(
+            f"1단계 **{_ch401['rq']:.1f}** → 분석 신뢰도 {_ch401['conf']:.0f}점으로 50 쪽에 당김 "
+            f"**{_ch401['ca']:.1f}** → 기회 {_ch401['opp']}·실행 {_ch401['exe']}·신호 합의 "
+            f"{_ch401['sc']:.0f} 와 합친 원점수 **{_ch401['raw']:.1f}** "
+            f"(가중 {_ch401['w_ca']:.2f}·{_ch401['w_opp']:.2f}·{_ch401['w_exe']:.2f}·{_ch401['w_sc']:.2f}) → "
+            + (f"상한 적용 → **{_ch401['final']}점**" if verdict.get('cap_applied')
+               else f"상한에 안 걸림 → **{_ch401['final']}점**")))
+        if _dp401:
+            st.caption(_md_safe(
+                f"그래서 세 항목이 최종 점수에 **직접** 닿는 몫은 {_dp401} 입니다(1단계 비중 × 신뢰도 × "
+                f"{_ch401['w_ca']:.2f} · 상한 전 · 같은 재료가 기회·실행 점수로도 들어가는 간접 경로는 뺀 값)."))
+    elif verdict.get('cap_applied') is None:
+        st.caption("이 화면의 스냅샷에는 상한 직전 원점수가 없어 상한이 걸렸는지 가를 수 없습니다 — "
+                   "종목을 다시 분석하면 사슬이 보입니다.")
     if verdict['cap_applied']:
-        st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** 게이트 상한 적용 → "
-                    f"**{verdict['score']}점**")
         # ── 상한 사유는 **목록**이다 — 이어 붙여 자르지 않는다 (라운드 301) ──
         #   종전엔 `gate_reason`(' / ' 로 이은 한 덩어리)을 **300자에서 말없이**
         #   잘랐다. 실측(2026-09-15 렌더): 사유 7개 · 307자로 마지막 사유가 문장
@@ -10182,10 +10201,10 @@ with _vc1:
         elif verdict.get('gate_reason'):
             # 목록을 못 받으면 있는 것이라도 낸다 — 다만 **자르지 않는다**
             st.caption(_md_safe("상한 사유: " + str(verdict['gate_reason'])))
-    else:
-        st.markdown(f"가중합 **{verdict['raw_weighted_sum']:.0f}점** = 최종 **{verdict['score']}점** "
-                    f"(상한 미적용)")
-    st.caption("이 표가 **유일한 종합 점수 산식**입니다. 아래 관점별 판정은 근거를 보여줄 뿐 "
+    # 라운드 401 — 종전 `else` 는 "가중합 X점 = 최종 Y점 (상한 미적용)" 이었다. 1단계 가중합과 최종은 상한이
+    #   없어도 다르다(신뢰도 조정·기회점수) — 거짓 등식이라 걷어냈고, 그 자리는 점수 사슬 줄이 말한다.
+    st.caption("이 표와 점수 사슬(1단계 → 신뢰도 → 원점수 → 상한)이 **유일한 종합 점수 산식**입니다. "
+               "관점별 판정은 근거를 보여줄 뿐 "
                "따로 합산하지 않습니다 — 점수가 둘이면 어느 쪽을 믿을지 알 수 없습니다.")
 with _vc2:
     st.markdown("**관점별 독립 판정** (합산하지 않음)")
@@ -10397,11 +10416,20 @@ st.caption(_md_safe(
     "닿은 비율**이라 서로 다른 질문의 답입니다 — 목표 폭이 커질수록 "
     "도달률은 내려갑니다."))
 if _blend59:
+    # 라운드 401 — 외부 검토(2026-10-01): 게이트는 이 확률을 **다른 확률**과만 견줬고 '늘 같은 확률'과는 안
+    #   견줬다. 견준 결과(블라인드 · 산출물에서 읽음)를 같은 캡션에 잇는다 — 없으면 '검증 게이트 통과'가
+    #   '기본값보다 낫다'로 읽힌다. 못 읽거나 지금 표와 다른 표의 비교면 그 문장만 빠진다(§3).
+    try:
+        import case_layers as _cl401
+        _bl401 = _cl401.baseline_note()
+    except Exception:                                          # noqa: BLE001
+        _bl401 = None
     st.caption(_md_safe(
         "계층 보정 확률은 이 종목만의 확률이 아니라 같은 점수대·국면·자리"
         "·업종 계층의 실측을 표본 크기에 따라 섞은 값입니다 (검증 게이트 "
-        "통과 — Brier·보정도에서 종전 유사사례 확률보다 정확). 초근접 "
-        f"유사사례는 {_g.get('sample_n') or 0}건으로 여전히 부족하며, 그 "
+        "통과 — Brier·보정도에서 종전 유사사례 확률보다 정확). "
+        + (f"다만 {_bl401} " if _bl401 else "")
+        + f"초근접 유사사례는 {_g.get('sample_n') or 0}건으로 여전히 부족하며, 그 "
         "사실은 아래 한계에 그대로 둡니다."))
 _uk.spacer(12)
 

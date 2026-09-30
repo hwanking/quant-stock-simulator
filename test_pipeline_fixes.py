@@ -2120,9 +2120,24 @@ check("산식 비중 합 100%", abs(sum(c['weight_pct'] for c in _comp) - 100.0)
 _raw = sum(c['contribution'] for c in _comp if c['contribution'] is not None)
 check("가중합이 규칙집 가중치와 일치",
       abs(_raw - _vd['raw_weighted_sum']) < 0.2, f"{_raw:.1f} vs {_vd['raw_weighted_sum']}")
-check("상한이 적용되면 최종 점수 ≤ 가중합",
-      (not _vd['cap_applied']) or _vd['score'] <= _vd['raw_weighted_sum'] + 0.5,
-      f"cap={_vd['cap_applied']} {_vd['score']} vs {_vd['raw_weighted_sum']}")
+# 라운드 401 — 종전 검사는 "상한이 적용되면 최종 ≤ 가중합(RQ)" 이었는데, 그 전제가 틀렸다: 최종 점수는
+#   RQ 가 아니라 원점수 RAW(= 신뢰도 조정 CA × 가중 + 기회·실행·합의)에 상한을 건 값이다(외부 검토 2026-10-01).
+#   상한 여부는 RAW 로 가르고, 사슬의 산수가 엔진 값으로 재현되는지 본다(가중치는 엔진이 실은 것 · 새 숫자 없음).
+_ch401 = _vd.get('score_chain')
+check("점수 사슬(RQ → CA → RAW → 최종)이 실리고 최종이 종합 점수와 같다",
+      _ch401 is not None and _ch401['final'] == _vd['score'] and abs(_ch401['rq'] - _vd['raw_weighted_sum']) < 1.0,
+      str(_ch401)[:200])
+if _ch401:
+    _ca_exp401 = 50 + (_ch401['rq'] - 50) * _ch401['conf'] / 100.0
+    if _ch401['rq'] < 50:
+        _ca_exp401 = min(_ch401['rq'] + 3, _ca_exp401, 50)
+    _raw_exp401 = (_ch401['w_ca'] * _ch401['ca'] + _ch401['w_opp'] * float(_ch401['opp'] or 0)
+                   + _ch401['w_exe'] * float(_ch401['exe'] or 0) + _ch401['w_sc'] * float(_ch401['sc'] or 0))
+    check("사슬의 산수가 엔진 값으로 재현된다 (CA · RAW · 상한이면 최종 ≤ RAW)",
+          abs(_ca_exp401 - _ch401['ca']) < 0.6 and abs(_raw_exp401 - _ch401['raw']) < 1.0
+          and ((not _vd['cap_applied']) or _vd['score'] <= max(_ch401['raw'], 0.0) + 0.5)
+          and _vd['score'] <= max(_ch401['raw'], 0.0) + 0.5,     # 엔진이 int(max(0, …)) 로 바닥을 둔다
+          f"CA {_ca_exp401:.2f}/{_ch401['ca']} · RAW {_raw_exp401:.2f}/{_ch401['raw']} · 최종 {_vd['score']}")
 check("탭 점수는 합산하지 않는다 (관점별 판정 전용)",
       'contributions' not in _vd)
 
@@ -30955,6 +30970,61 @@ check("휴대폰·태블릿에서 상단 바는 붙어 따라오지 않고 칩 �
       '.qnav { position: static !important; }' in _mob389
       and '.qnav a.qvers.qchips { white-space: nowrap !important; overflow-x: auto !important;' in _mob389,
       _mob389[:120])
+
+
+print("=" * 72)
+print("§390 외부 검토 대조 — 기본값과 견준 줄 · 1.00σ 항등식 · 점수 사슬 (라운드 401)")
+print("=" * 72)
+# 외부 검토(2026-10-01)의 주장을 코드로 대 봤다(docs/RESULT_R401_EXTERNAL_REVIEW_CHECK.md). 여기 잠그는 것은
+#   **값·판정을 바꾸지 않은 고침**뿐이다 — 값이 바뀌는 고침(윈저화·확률 점수 범위·기대값 계약)은 사람의 결정이다.
+import ast as _ast390                                            # noqa: E402
+import case_layers as _cl390                                     # noqa: E402
+import verdict_core as _vc390                                    # noqa: E402
+_wa390 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_gc390 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+_qi390 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+# ① 계층 확률을 '늘 같은 확률'과 견준 줄 — 신뢰구간 부호로만 가르고, 다른 표와 견준 산출물이면 말하지 않는다
+# made 는 날짜 모양을 쓰지 않는다 — 심은 값이지 판정일도 생성일도 아니다(§156 이 날짜 리터럴을 잡는다)
+_art390 = dict(table_made='T', rows=100, dates=40, made='심은 날', train_q=0.6, brier_table=0.24,
+               brier_const=0.242, d=-0.002, d_lo=-0.004, d_hi=0.001)
+_n0 = _cl390.baseline_note(_art390, table_made='T')
+_n1 = _cl390.baseline_note(dict(_art390, d_hi=-0.0005), table_made='T')
+_n2 = _cl390.baseline_note(dict(_art390, d=0.003, d_lo=0.001, d_hi=0.005), table_made='T')
+_n3 = _cl390.baseline_note(_art390, table_made='다른 표')
+check("기본값과 견준 줄 — 0 을 걸치면 '가려지지 않는다' · 아래면 '더 잘' · 위면 '덜' · 다른 표면 말하지 않는다 (심기)",
+      _n0 and '가려지지 않습니다' in _n0 and _n1 and '더 잘 맞았습니다' in _n1
+      and _n2 and '덜 맞았습니다' in _n2 and _n3 is None,
+      f"{str(_n0)[-40:]} | {str(_n1)[-20:]} | {str(_n2)[-20:]} | {_n3}")
+_real390 = _cl390.baseline_note()
+check("실제 산출물이 지금 운영 표와 견준 것이다 (낡은 비교면 화면이 그 줄을 안 낸다 — 그 상태를 여기서 먼저 본다)",
+      _real390 is not None, '산출물 없음이거나 운영 표가 바뀌었다 — scripts/brier_baseline_r401.py 를 다시 돌린다')
+check("화면 캡션과 가늠 AI 가 같은 함수를 부른다 (§4 — 문장을 두 번 쓰지 않는다)",
+      '_cl401.baseline_note()' in _wa390 and '_cl401.baseline_note()' in _gc390
+      and '다만 {_bl401}' in _wa390 and '다만 {_bl}' in _gc390)
+# ② 진입 깊이 — 진입가가 현재가 × (1 − vol20) 이면 정의상 1.00σ 이고 그때만 그 사실을 적는다(심기 양방향)
+def _chk390(entry):
+    _b = _vc390.build(dict(current_price=10000, vol_20=0.02, entry_pullback_price=entry,
+                           entry_stop_price=entry * 0.97, entry_target_1st=entry * 1.021, entry_rr=0.7),
+                      verdict={'action': 'HOLD', 'vetoes': []})
+    return {c['name']: c['detail'] for c in _b['checks']}
+_d1, _d15 = _chk390(9800.0), _chk390(9700.0)
+_NOTE390 = '늘 1.00σ 입니다'
+check("1.00σ 일 때만 두 조건 설명에 '늘 1.00σ · 걸러낸 적 없다'를 붙인다 (1.5σ 에는 안 붙인다)",
+      _NOTE390 in _d1['진입 깊이 현실적'] and _NOTE390 in _d1['보유기간 안 도달 가능']
+      and _NOTE390 not in _d15['진입 깊이 현실적'] and _NOTE390 not in _d15['보유기간 안 도달 가능'],
+      f"{_d1['진입 깊이 현실적'][:40]} | {_d15['진입 깊이 현실적'][:40]}")
+# ③ 점수 사슬 — 엔진이 중간 값을 내보내고(값은 안 바꾼다) 화면의 거짓 등식은 없다
+_keys390 = set()
+for _n in _ast390.walk(_ast390.parse(_qi390)):
+    if (isinstance(_n, _ast390.Assign) and isinstance(_n.value, _ast390.Dict)
+            and any(isinstance(t, _ast390.Name) and t.id == '_fs_out' for t in _n.targets)):
+        _keys390 |= {k.value for k in _n.value.keys if isinstance(k, _ast390.Constant)}
+check("엔진이 점수 사슬의 중간 값 넷을 내보낸다 (1단계 · 신뢰도 조정 · 원점수 · 신호 합의)",
+      {'raw_quant_score', 'confidence_adjusted_score', 'final_action_raw_score',
+       'signal_consensus_score'} <= _keys390, str(sorted(_keys390 & {'raw_quant_score'})), scanned=len(_keys390))
+check("화면에서 '가중합 = 최종 (상한 미적용)' 거짓 등식을 걷어냈고 사슬을 읽는다",
+      "= 최종 **{verdict['score']}점**" not in _wa390 and "verdict.get('score_chain')" in _wa390
+      and "'score_chain': chain" in _qi390)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

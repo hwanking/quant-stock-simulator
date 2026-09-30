@@ -361,13 +361,22 @@ def _ans_prob_trust(ctx):
     if not b:
         return (NA + ' (계층 보정 확률) — 점수대 원실측만 참고할 수 있고, '
                 '그 값도 이 종목만의 확률은 아닙니다.')
+    # 라운드 401 — 다른 확률과만 견준 결과만 말하면 '기본값보다 낫다'로 읽힌다 · 화면 캡션과 같은 함수(§4) ·
+    #   못 읽으면 그 문장만 빠진다(§3)
+    try:
+        import case_layers as _cl401
+        _bl = _cl401.baseline_note()
+    except Exception:                                          # noqa: BLE001
+        _bl = None
     return (f"계층 보정 약 {b['p'] * 100:.0f}% 의 근거: {b['layers']}개 층을 "
             f"표본 크기에 따라 섞었고, 가장 좁은 층의 n 은 "
             f"{b['n_narrow']:,}건입니다 (구간 {b['wilson_low'] * 100:.0f}~"
             f"{b['wilson_high'] * 100:.0f}%).\n"
             f"검증: 사전등록 후 valid 1회에서 종전 유사사례 확률보다 "
             f"Brier·보정도 모두 정확했습니다 (보정이탈 12.1 vs 35.4%p · "
-            f"2026-08-09 실측). 다만 이것은 과거 실측의 요약이지 미래 보장이 "
+            f"2026-08-09 실측). "
+            + (f"다만 {_bl} " if _bl else "")
+            + f"그리고 이것은 과거 실측의 요약이지 미래 보장이 "
             f"아니며, {_fe.pending_note()}.")
 
 

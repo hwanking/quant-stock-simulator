@@ -69,11 +69,17 @@ def produced_keys():
     return keys, lines
 
 
+#: 훑지 않는 디렉터리. ⚠️ 라운드 401 — `.claude/` 를 더했다. 그 아래 `worktrees/<이름>/` 에 **다른 세션의 저장소
+#:   통째 사본**이 생기는데(작업 트리), 그 사본의 회귀 파일이 죽은 칸 이름을 글자로 적고 있어 **모든 죽은 칸이 '읽힌다'**
+#:   로 세어졌다(훑은 파일 221 → 483 · 죽은 칸 16 → 0). 이 저장소의 소비자가 아니다 — 유도가 넓으면 결함에 눈이 먼다
+#:   (R274 의 *넓어도 부풀린다* 의 거울상).
+SKIP_DIRS = ('.git', '__pycache__', '_probe', '.portfolio', '.claude')
+
+
 def _py_files():
     out = []
     for root, dirs, names in os.walk(PROJ):
-        dirs[:] = [d for d in dirs
-                   if d not in ('.git', '__pycache__', '_probe', '.portfolio')]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for n in names:
             if n.endswith('.py'):
                 out.append(os.path.relpath(os.path.join(root, n), PROJ))

@@ -1,0 +1,18 @@
+{
+ "made": "2026-10-01",
+ "ledger_rows": 255930,
+ "table_made": "2026-08-09",
+ "rows": 17663,
+ "dates": 82,
+ "train_q": 0.59614,
+ "const_basis": "train+valid (운영 표가 적합한 자료)",
+ "blind_hit": 0.58829,
+ "brier_table": 0.24162,
+ "brier_const": 0.24227,
+ "d": -0.00065,
+ "d_lo": -0.00306,
+ "d_hi": 0.00166,
+ "boot": 2000,
+ "seed": 401,
+ "source": "scripts/brier_baseline_r401.py"
+}

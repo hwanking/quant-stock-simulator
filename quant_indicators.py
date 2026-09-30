@@ -1821,6 +1821,32 @@ class QuantIndicatorsEngine:
         ]
         raw_sum = sum(c['contribution'] for c in composition
                       if c['contribution'] is not None)
+        # 라운드 401 — 위 세 항목의 가중합(RQ)은 **첫 단계**다. 최종 점수는
+        #   RQ → 신뢰도 조정 CA = 50 + (RQ − 50) × 신뢰도/100 → 원점수 RAW = CA×가중 + 기회×가중 + 실행×가중
+        #   + 합의×가중 → 상한 14개 → 최종 이다(가중치는 규칙집 W_FINAL 그대로 읽는다 · 새 숫자 없음).
+        #   종전엔 RQ 와 최종의 차이를 전부 '게이트 상한'이라 불렀다 — 신뢰도 조정·기회점수만으로도 차이가
+        #   나므로 **거짓 귀속**이었다(외부 검토 2026-10-01). 상한이 걸렸는지는 **RAW** 로 가른다.
+        #   중간 값이 없는 옛 스냅샷이면 사슬을 지어내지 않고 '가를 수 없음'(None)으로 둔다(§3).
+        _rq = fs.get('raw_quant_score')
+        _ca = fs.get('confidence_adjusted_score')
+        _raw = fs.get('final_action_raw_score')
+        _conf = fs.get('analysis_confidence')
+        _WF = self.W_FINAL
+        chain = None
+        if None not in (_rq, _ca, _raw, _conf) and base is not None:
+            _w_ca = float(_WF.get('weight_confidence_adjusted', 0.45))
+            chain = dict(
+                rq=float(_rq), ca=float(_ca), raw=float(_raw), final=int(round(base)),
+                conf=float(_conf), w_ca=_w_ca,
+                w_opp=float(_WF.get('weight_opportunity', 0.30)),
+                w_exe=float(_WF.get('weight_execution', 0.15)),
+                w_sc=float(_WF.get('weight_signal_consensus', 0.10)),
+                opp=fs.get('opportunity_score'), exe=fs.get('execution_score'),
+                sc=fs.get('signal_consensus_score'),
+                # 첫 단계 비중이 최종 점수에 **직접** 닿는 몫 — 항목 비중 × 신뢰도/100 × CA 가중(산수 · 상한 전)
+                direct_pct={c['label']: round(c['weight_pct'] * float(_conf) / 100.0 * _w_ca, 1)
+                            for c in composition},
+            )
         # ⚠️ 라운드 301 — 여기 있던 `cap = fs.get('final_score_cap')` 를 걷어냈다.
         #   그 키를 **만드는 곳이 저장소에 0곳**이라 늘 None 이었고(2026-09-15 전수),
         #   그것을 실어 보내던 `verdict['cap']` 을 **읽는 곳도 0곳**이었다 — 회귀도
@@ -1828,7 +1854,8 @@ class QuantIndicatorsEngine:
         #   없는 표' 가 만나는 자리다. 필요해지면 **만드는 쪽과 함께** 다시 넣는다.
         #   (실제 상한은 `final_action_score = min(원점수, 14개 상한)` 로 걸리고,
         #    각 상한의 사유는 `cap_reasons` 에 **목록으로** 이미 실려 있다.)
-        cap_applied = (base is not None and raw_sum - base > 0.5)
+        # 라운드 401 — 상한이 걸렸는지는 상한 **직전**의 원점수(RAW)로 가른다. RAW 가 없으면 None(가를 수 없음).
+        cap_applied = (None if chain is None else (chain['raw'] - chain['final'] > 0.5))
 
         # ── 거부권 — 평균으로 상쇄되면 안 되는 조건들 ────────────────────
         vetoes = []
@@ -1940,7 +1967,7 @@ class QuantIndicatorsEngine:
             summary.append(f"가장 우호적: {top['label']} {top['score']}점")
             summary.append(f"가장 부정적: {low['label']} {low['score']}점")
         if cap_applied:
-            summary.append(f"가중합 {raw_sum:.0f}점이 게이트 상한에 걸려 {base}점으로 제한됨")
+            summary.append(f"원점수 {chain['raw']:.0f}점이 게이트 상한에 걸려 {chain['final']}점으로 제한됨")
         if disagreement is not None and disagreement >= 20:
             summary.append(f"관점 간 이견 큼 (표준편차 {disagreement:.0f}점) — 확신을 낮춰 잡으세요")
         # DeMARK 매수 포인트는 '시점' 판단이라 결론 요약에 함께 실어 준다
@@ -1976,8 +2003,9 @@ class QuantIndicatorsEngine:
             'action': action,
             'score': None if base is None else int(round(base)),
             'title': fs.get('final_action_title'),
-            'composition': composition,        # 실제 점수를 만든 산식
+            'composition': composition,        # 첫 단계(RQ)를 만든 세 항목 — 최종까지는 'chain'
             'raw_weighted_sum': round(raw_sum, 1),
+            'score_chain': chain,              # 라운드 401 — RQ → CA → RAW → 상한 → 최종 (없으면 None)
             'cap_applied': cap_applied,
             'gate_reason': fs.get('gate_reason'),
             # 라운드 301 — 화면이 `gate_reason`(‘ / ’ 로 이은 한 덩어리)을 잘라 쓰고
@@ -4549,7 +4577,16 @@ class QuantIndicatorsEngine:
             'risk_safety_score': int(risk_safety_score),
             'opportunity_score': int(opportunity_score),
             'execution_score': int(execution_score),
-            
+            # 라운드 401 — 외부 검토(2026-10-01)가 짚었다: 화면의 '이 점수는 이렇게 나왔습니다' 는 첫 단계
+            #   (세 항목 가중합 · RQ)만 보여 주고, 그것과 최종 점수의 차이를 **전부 '게이트 상한'** 이라 불렀다.
+            #   실제 사슬은 RQ → 신뢰도 조정(CA) → 기회·실행·합의와 합친 원점수(RAW) → 상한 → 최종이라, 차이는
+            #   상한 없이도 난다. 사슬을 말하려면 중간 값이 있어야 한다 — **값은 한 글자도 안 바꾸고 내보내기만**
+            #   한다(계산은 위 그대로 · 소비자는 build_verdict 한 곳).
+            'raw_quant_score': round(float(raw_quant_score), 1),
+            'confidence_adjusted_score': round(float(confidence_adjusted_score), 1),
+            'final_action_raw_score': round(float(final_action_raw_score), 1),
+            'signal_consensus_score': round(float(signal_consensus_score), 1),
+
             'analysis_confidence': analysis_confidence_score,
             # 라운드 252 — 화면이 산식 문장을 다시 적지 않게 **항목 값과 가중치**를
             #   같이 내보낸다. 종전 화면은 "표본외 검증 미구현이라 모델검증 항목은

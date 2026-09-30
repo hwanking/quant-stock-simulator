@@ -326,6 +326,14 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     # 고정 %는 변동성 큰 종목을 부당하게 잘랐다.
     depth_sigma = (round(abs(gap) / (vol20 * 100.0), 2)
                    if (gap is not None and vol20 and vol20 > 0) else None)
+    # 라운드 401 — 외부 검토(2026-10-01)가 짚은 항등식: 진입가를 `현재가 × (1 − vol20)` 으로 잡으면(price_axes)
+    #   위 식은 **정의상 1.00** 이다. 실측(개장 전 리포트 후보 493개 · 값이 있는 468개 **전부 1.00**) — 아래 두
+    #   조건(진입 깊이 · 보유기간 안 도달)은 걸러낸 적이 없고 걸러낼 수 없다. 판정·문턱·이름·순서는 안 바꾸고
+    #   그 사실을 설명에 적는다(없으면 '실측으로 도달 가능성을 쟀다'로 읽힌다 · §3). 진입가를 다른 근거로
+    #   잡은 날(1.00 이 아닌 값)에는 이 말을 안 붙인다 — 참일 때만 적는다.
+    _depth_identity = depth_sigma is not None and abs(depth_sigma - 1.0) < 1e-9
+    _DEPTH_ID_NOTE = (' · 진입가를 현재가에서 변동성 한 단위 아래로 잡으므로 이 값은 늘 1.00σ 입니다 — '
+                      '이 조건은 도달 가능성을 따로 재지 않고, 걸러낸 적이 없습니다')
     sigma = _f(fs.get('rec_buy_sigma'))
     reach = fs.get('rec_buy_reach')
     conf = _f(fs.get('analysis_confidence'))
@@ -372,7 +380,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         ('진입 깊이 현실적', depth_sigma is not None
          and depth_sigma <= MAX_ENTRY_SIGMA,
          (f'{depth_sigma:.2f}σ ({gap:+.1f}% · 상한 {MAX_ENTRY_SIGMA}σ · '
-          f'{SIGMA_BASIS})' if depth_sigma is not None else '산출 불가')),
+          f'{SIGMA_BASIS})' + (_DEPTH_ID_NOTE if _depth_identity else '')
+          if depth_sigma is not None else '산출 불가')),
         # ⚠️ 라운드 246 — 이 줄의 설명이 **통과 여부와 무관하게** '기준 통과'를
         #   적고 있었다. 조건이 미달인 행 옆에 '기준 통과'가 찍혀, 같은 화면의
         #   사유('60% 미만이라 추천에서 뺍니다')와 정면으로 어긋났다.
@@ -386,7 +395,8 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
            # 라운드 273 — 이 줄의 판정 불리언은 바로 위 '진입 깊이 현실적' 과 **같은 식**이다
            #   (σ 상한 하나 · R246 이 실재를 확인하고 자리 때문에 안 합쳤다). 이름이 다른 두 줄이
            #   늘 같이 통과·미달하므로 그 사실을 설명이 말한다 — 값·문턱·자리·조건 수 불변.
-           + " · 판정은 위 '진입 깊이 현실적' 과 같은 규칙(σ 상한 하나)")
+           + " · 판정은 위 '진입 깊이 현실적' 과 같은 규칙(σ 상한 하나)"
+           + (_DEPTH_ID_NOTE if _depth_identity else ''))
           if fill_p is not None else '산출 불가')),
         ('목표·손절 산출', tgt is not None and stop is not None,
          '있음' if (tgt and stop) else '미산출'),
