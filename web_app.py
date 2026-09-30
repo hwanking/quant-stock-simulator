@@ -6524,6 +6524,13 @@ else:
                     _wys240 = _uk.clip_reason(_wy240, 34)
                     _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx3']};' "
                                f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
+                # 라운드 396 — 옛 규칙으로 찍힌 '… 대기'(기다려도 안 풀리는 조건을 안 가림)는 다시 재야 가려진다.
+                #   '아직 안 잼' 칸과 **같은 링크**(`?measure=` · 채우기와 같은 코드 · R327)를 붙인다 — 새로 재는 것은
+                #   누른 사람이다(자동으로 재지 않는다 · R166).
+                if _act.get('remeasure'):
+                    _jd229 += (f"<br><a href='?measure={_uk._esc_attr(_wcode)}' target='_self' "
+                               f"style='font-size:12px; color:{_TOK['brand']}; text-decoration:none;'>"
+                               f"지금 재기 (1~3분)</a>")
                 # 라운드 322 — 이름표 대신 **짧은 한 줄**(무엇을 하라는 말인지 · 진입가까지)을 쓴다.
                 #   '물타기 가능'만 적으면 진입가 위인 행도 *지금 사라*로 읽혔다(사용자 지적).
                 _adl229 = ((_act.get('avg_down_short') or _act.get('avg_down_label'))

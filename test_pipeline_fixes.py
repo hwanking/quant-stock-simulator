@@ -30706,6 +30706,116 @@ check("랩이 splits['ext_zone'] 에 58~59점 띠를 60점+ 와 같은 셈으로
 check("배너의 판정 셈과 아래 목록이 같은 분류 함수를 부른다 (따로 세는 경로 없음)",
       _w386.count('_sig_cnt[_sig_class(_co)] += 1') == 1 and '_cls = _sig_class(_cr)' in _w386)
 
+print("\n" + "=" * 72)
+print("§387 '… 대기'는 기다리면 풀릴 것만 남았을 때만 (라운드 396)")
+print("=" * 72)
+# 사용자(2026-09-30): *"미보유에서 과열대기가 좋은거야 거래량 대기가 좋은거야?"* 라운드 387 은 *"기다려 풀리지 않는 칸에
+#   기다림의 이름을 주지 않는다"* 를 `_bucket` 끝 갈래에만 적용했고, 기다림의 이름을 주는 갈래 넷(국면·거래량·과열·표본
+#   확보)은 그보다 앞이라 손익비·비용 기대값이 같이 걸려도 '… 대기'를 받았다. 개장 전 리포트 100개(2026-09-30): '과열 해소
+#   대기' 40개 전부 · '신뢰도·표본 확보 대기' 10개 중 9개가 비용 차감 기대값도 못 넘었다(과열이 풀려 살 수 있게 된 것 0).
+import ast as _ast387                                            # noqa: E402
+import glob as _glob387                                          # noqa: E402
+import json as _json387                                          # noqa: E402
+import verdict_core as _vc387                                    # noqa: E402
+import ui_kit as _uk387                                          # noqa: E402
+_T387 = _vc387.MIN_TURNOVER
+_F387 = '비용 차감 기대값 양수'
+_cases387 = [
+    # (미충족, 거래대금, 국면차단, 기대 칸, 사유에 있어야 할 말)
+    (['과열·저유동성 아님', _F387], _T387 * 10, False, '추천 제외', '과열 해소를 기다려도'),
+    (['과열·저유동성 아님'], _T387 * 10, False, '과열 해소 대기', _vc387.WAIT_ONLY_HEAD),
+    (['과열·저유동성 아님', '진입 깊이 현실적'], _T387 * 10, False, '과열 해소 대기', _vc387.WAIT_ONLY_HEAD),
+    (['과열·저유동성 아님', '손익비(진입가·1차) 기준 이상'], _T387 / 10, False, '추천 제외', '거래 회복을 기다려도'),
+    (['과열·저유동성 아님'], _T387 / 10, False, '거래량 회복 대기', _vc387.WAIT_ONLY_HEAD),
+    (['강제 차단 없음', _F387], None, True, '추천 제외', '국면 회복을 기다려도'),
+    (['강제 차단 없음'], None, True, '시장 국면 회복 대기', _vc387.WAIT_ONLY_HEAD),
+    (['표본외 검증 통과', _F387], None, False, '추천 제외', '표본외 검증을 기다려도'),
+    (['표본외 검증 통과'], None, False, '신뢰도·표본 확보 대기', _vc387.WAIT_ONLY_HEAD),
+]
+_bad387 = []
+for _fl, _to, _rb, _want, _say in _cases387:
+    _b, _r = _vc387._bucket(_fl, {}, None, None, None, turnover=_to, heat='RSI 80',
+                            regime_block=_rb, vetoes=[])
+    if _b != _want or _say not in str(_r):
+        _bad387.append((_fl, _to, _rb, _b, str(_r)[:60]))
+check("기다려도 안 풀리는 미충족(손익비·비용 기대값)이 같이 걸리면 '… 대기'를 주지 않는다 · 아니면 준다 (갈래 넷 · 심기 양방향)",
+      not _bad387, str(_bad387)[:300], scanned=len(_cases387))
+# 실제 자료로 — 저장된 개장 전 리포트의 미충족 목록을 새 규칙에 흘려, 안 풀리는 조건이 걸린 후보가 '… 대기'를 받지 않는지
+_WN387 = ('과열 해소 대기', '거래량 회복 대기', '시장 국면 회복 대기', '신뢰도·표본 확보 대기')
+_seen387, _leak387, _moved387 = 0, [], 0
+for _p387 in sorted(_glob387.glob(_os.path.join(PROJ, '.portfolio', 'premarket_*.json'))):
+    try:
+        _d387 = _json387.load(open(_p387, encoding='utf-8'))
+    except Exception:                                            # noqa: BLE001
+        continue
+    for _pk387 in (_d387.get('picks') or []):
+        _c387 = _pk387.get('core') or {}
+        _fl387 = [str(x) for x in (_c387.get('failed') or [])]
+        if not _fl387:
+            continue
+        _seen387 += 1
+        # 잰 값으로 미달인 것만 '안 풀린다' — 저장된 조건 설명이 산출 불가면 빼고 넘긴다(build 와 같은 가름)
+        _st387 = [str(_ch.get('name')) for _ch in (_c387.get('checks') or [])
+                  if not _ch.get('ok') and _ch.get('name') in _vc387.NOT_CURED_BY_WAITING
+                  and '산출' not in str(_ch.get('detail') or '')]
+        _nb387, _ = _vc387._bucket(_fl387, _pk387.get('next_action') or {}, _c387.get('gap_pct'), None, None,
+                                   depth=_c387.get('depth_sigma'), turnover=_c387.get('turnover'), vetoes=[],
+                                   stuck=_st387)
+        if _nb387 in _WN387 and _st387:
+            _leak387.append((_os.path.basename(_p387), _nb387))
+        if str(_c387.get('bucket')) in _WN387 and _nb387 not in _WN387:
+            _moved387 += 1
+if _seen387:
+    check("저장된 리포트 후보를 새 규칙에 흘리면 안 풀리는 조건이 걸린 후보가 '… 대기'를 받지 않는다 (실제 자료)",
+          not _leak387, f"새 규칙 '대기' 중 안 풀리는 조건 걸림 {len(_leak387)} · 옛 '대기'에서 빠진 것 {_moved387}",
+          scanned=_seen387)
+else:
+    skipped("저장된 리포트 후보 재분류", "개장 전 리포트가 이 환경에 없다 (gitignored)")
+# 중앙 판정 전체(build)로 — 기대값을 **못 잰** 것(적중률 표본 없음 · 산출 불가)은 '안 풀린다'로 세지 않는다(§3).
+#   ⚠️ 첫 판은 이름만 보고 못 잰 것도 안 풀린다고 셌다 — 라운드 386 의 검사(검증 못 한 종목은 '확보 대기')가 전체 회귀에서
+#   붉어져 잡았다. 같은 종목에 적중률 표본을 넣어 기대값을 **재면** 음수라 그때는 추천 제외다(심기 양방향).
+_fs387 = dict(current_price=10000, entry_pullback_price=9900, entry_stop_price=9500,
+              entry_target_1st=10300, entry_rr=1.2, target_tech_1st=10400, stop_loss_price=9600,
+              analysis_confidence=70, strategy_quality_score=None, final_action_score=60,
+              vol_20=0.02, avg_turnover_20d=5e9, horizon_days=20, blind_test_status='미수행',
+              blind_test_gap={'kind': 'bars', 'bars': 400, 'bars_need': 490})
+_na387 = _vc387.build(_fs387, verdict={'action': 'HOLD', 'vetoes': []})
+_me387 = _vc387.build(dict(_fs387, calibration_band={'hit_rate': 50.0, 'n': 100}),
+                      verdict={'action': 'HOLD', 'vetoes': []})
+_ev387 = next((_x for _x in _me387['checks'] if _x['name'] == _F387), {})
+check("기대값을 못 잰 종목은 기다림을 잃지 않는다('확보 대기') · 재서 음수면 추천 제외 (build · 심기 양방향)",
+      _na387['bucket'] == '신뢰도·표본 확보 대기' and _vc387.WAIT_ONLY_HEAD in str(_na387['exclude_reason'])
+      and _ev387.get('ok') is False and '산출' not in str(_ev387.get('detail'))
+      and _me387['bucket'] == '추천 제외' and '표본외 검증을 기다려도' in str(_me387['exclude_reason'])
+      and _na387['recommended'] == _me387['recommended'] is False,
+      f"{_na387['bucket']} | {_me387['bucket']} · 기대값 {_ev387.get('detail')}")
+# 판정 모듈과 킷이 같은 글자를 쓴다 · 조건 이름은 checks 리터럴과 같다
+_vcsrc387 = _ast387.parse(_read148(_os.path.join(PROJ, 'verdict_core.py')))
+_names387 = set()
+for _n387 in _ast387.walk(_vcsrc387):
+    if (isinstance(_n387, _ast387.Assign) and any(getattr(t, 'id', None) == 'checks' for t in _n387.targets)
+            and isinstance(_n387.value, _ast387.List)):
+        _names387 |= {e.elts[0].value for e in _n387.value.elts
+                      if isinstance(e, _ast387.Tuple) and e.elts and isinstance(e.elts[0], _ast387.Constant)}
+check("안 풀리는 조건 이름·기다리는 칸 이름이 판정 모듈의 리터럴과 같고 킷의 사본이 글자까지 같다",
+      set(_vc387.NOT_CURED_BY_WAITING) <= _names387 and set(_uk387._WAIT_NAMED) <= set(_vc387.BUCKETS)
+      and _uk387._WAIT_ONLY_HEAD == _vc387.WAIT_ONLY_HEAD,
+      f"조건 {sorted(set(_vc387.NOT_CURED_BY_WAITING) - _names387)} 없음", scanned=len(_names387))
+# 읽는 쪽 — 옛 규칙의 '… 대기' 스냅샷은 다시 가를 수 없으므로 그렇다고 적고 다시 재는 길을 준다(재지 않은 것을 말하지 않는다)
+_old387 = _uk387.watch_action({'snap_bucket': '과열 해소 대기',
+                               'snap_why': '급등 직후라 추격 위험이 큽니다. RSI 80가 풀린 뒤 다시 봅니다.'}, 10000)
+_new387 = _uk387.watch_action({'snap_bucket': '과열 해소 대기',
+                               'snap_why': _vc387.WAIT_ONLY_HEAD + '급등 직후라 추격 위험이 큽니다.'}, 10000)
+check("옛 규칙의 '과열 해소 대기' 미보유 행은 옛 판정이라 적고 다시 재는 길(remeasure)을 준다 · 새 규칙 행은 그대로",
+      _old387 and _old387.get('remeasure') is True and str(_old387.get('why_line') or '').startswith(_uk387._WAIT_UNSORTED)
+      and _old387['kind'] == '과열 해소 대기'
+      and _new387 and _new387.get('remeasure') is False and _uk387._WAIT_UNSORTED not in str(_new387.get('why_line')),
+      f"{(_old387 or {}).get('why_line')!s:.60} | {(_new387 or {}).get('why_line')!s:.60}")
+_wa387 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i387 = _wa387.find("if _act.get('remeasure'):")
+check("관심종목 표가 그 행에 '아직 안 잼'과 같은 '지금 재기' 링크(?measure=)를 붙인다",
+      _i387 > 0 and "?measure={_uk._esc_attr(_wcode)}" in _wa387[_i387:_i387 + 400])
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

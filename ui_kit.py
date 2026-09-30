@@ -1588,6 +1588,12 @@ OOS_FAIL_WHY_HEAD = '표본외 검증은 마쳤고'
 #:   `WAIT_NOT_CURED_HEAD` 와 글자까지 같아야 한다(§378 이 잠근다 · 킷은 판정 모듈을 부르지 않는다).
 _WAIT_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
 _WAIT_NOT_CURED_HEAD = '진입가·목표·손절이 현재가를 따라 같은 비율로 다시 잡혀,'
+#: 라운드 396 — 중앙 판정이 기다림의 이름을 줄 때 사유 앞에 붙이는 머리(`verdict_core.WAIT_ONLY_HEAD` 와 글자까지 같다 ·
+#:   회귀가 잠근다). 이 머리가 없는 '… 대기' 스냅샷은 그 규칙 **전**에 찍혀, 기다려도 안 풀리는 조건이 같이 걸렸는지
+#:   가르지 않은 판정이다(개장 전 리포트 2026-09-30 실측: 그런 '과열 해소 대기' 40개 전부가 같이 걸려 있었다).
+_WAIT_ONLY_HEAD = '기다리면 풀릴 수 있는 조건만 남았습니다 — '
+_WAIT_NAMED = ('과열 해소 대기', '거래량 회복 대기', '시장 국면 회복 대기', '신뢰도·표본 확보 대기')
+_WAIT_UNSORTED = '옛 규칙 판정(안 풀리는 조건을 안 가림) — 다시 재면 가려집니다. '
 
 
 def avg_down_class(ok, fails):
@@ -2002,12 +2008,19 @@ def watch_action(row, price=None, today=None):
         bucket = '추천 제외'
         _why241 = (f"옛 분류 '눌림·돌파 대기'였습니다 — {_WAIT_NOT_CURED_HEAD} 기다려도 손익비(진입가·1차)·기대값 셈은 거의 그대로라 "
                    f"추천 제외로 읽습니다(다시 채우면 새 판정)")
+    # ⚠️ 라운드 396 — 사용자: *"미보유에서 과열대기가 좋은거야 거래량 대기가 좋은거야?"* 중앙 판정은 이제 기다리면 풀릴
+    #   것만 남았을 때만 '… 대기'를 준다(verdict_core._bucket). 그 전 스냅샷은 미충족 목록을 안 담고 있어 **다시 가를 수
+    #   없다** — R387 처럼 '추천 제외'로 읽으면 재지 않은 것을 말하는 셈이다(§3). 이름은 두고, 옛 규칙의 판정이라는 것과
+    #   다시 재는 길을 같은 칸에 적는다(`remeasure` → 화면이 '지금 재기' 링크를 붙인다 · 새로 재지 않는다).
+    _unsorted396 = bucket in _WAIT_NAMED and _WAIT_ONLY_HEAD not in _raw241
+    if _unsorted396:
+        _why241 = _WAIT_UNSORTED + (_why241 or '')
     lbl, tone = _short.get(bucket, (bucket[:7], 'tx3'))
     # 라운드 240 — 종전 why 는 bucket 을 그대로 되풀이해 아무것도 더 말하지 않았다.
     #   중앙 판정이 결론과 함께 낸 사유(`exclude_reason` → `snap_why`)가 있으면 그것을
     #   쓴다. 없으면 종전대로 bucket — 지어내지 않는다.
     return dict(kind=bucket, label=lbl, tone=tone, held=False,
-                why_line=_why241, why=(_why241 or bucket))
+                why_line=_why241, why=(_why241 or bucket), remeasure=_unsorted396)
 
 
 def regime_gate_line(rg):

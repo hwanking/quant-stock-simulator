@@ -189,6 +189,12 @@ WAIT_CURABLE_CHECKS = ('진입 깊이 현실적', '보유기간 안 도달 가�
 WAIT_BUCKETS_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
 #: 그 사유 문장의 머리 — 읽는 쪽(옛 스냅샷 재해석)이 같은 말을 쓴다(§4)
 WAIT_NOT_CURED_HEAD = '진입가·목표·손절이 현재가를 따라 같은 비율로 다시 잡혀,'
+#: 라운드 396 — 기다려도 풀리지 않는 미충족(이름은 checks 리터럴 그대로). 라운드 387 이 잰 둘 — 진입가 기준 비율이라
+#:   가격이 움직이거나 과열·국면·표본이 풀려도 셈이 거의 그대로다(점수대 적중률도 40~64점이 58.9~59.9% 로 평평하다).
+NOT_CURED_BY_WAITING = ('손익비(진입가·1차) 기준 이상', '비용 차감 기대값 양수')
+#: 라운드 396 — 기다림의 이름을 준 칸의 사유 머리. 이 머리가 있어야 **기다리면 풀릴 수 있는 것만 남았다**는 뜻이다
+#:   (읽는 쪽이 이 머리로 새 규칙의 판정과 옛 스냅샷을 가른다 · 킷에 같은 글자 · 회귀가 잠근다).
+WAIT_ONLY_HEAD = '기다리면 풀릴 수 있는 조건만 남았습니다 — '
 
 NO_PICK_LINE = ("오늘은 전일 확정 데이터 기준으로 다음 거래일에 실제 매수를 "
                 "검토할 수 있는 종목이 없습니다. 무리하게 진입하지 않고 "
@@ -419,13 +425,17 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     ]
     failed = [c[0] for c in checks if not c[1]]
     recommended = not failed
+    # 라운드 396 — '기다려도 안 풀린다'는 **잰 값이 미달**일 때만 말한다. 산출 불가(적중률 표본 30 미만 · 가격 미산출)로
+    #   못 넘은 것은 판단이 아니라 못 잰 것이다(§3) — 그걸 '안 풀린다'로 세면 못 잰 것이 기다림을 지운다(첫 회귀가 잡았다).
+    _meas396 = {'손익비(진입가·1차) 기준 이상': rr is not None, '비용 차감 기대값 양수': exp_ret is not None}
+    stuck = [n for n in failed if n in NOT_CURED_BY_WAITING and _meas396.get(n)]
 
     bucket, reason = _bucket(failed, na, gap, entry, sigma, fill_p,
                              depth_sigma, turnover=turnover,
                              heat=_heat_txt(fs),
                              regime_block=bool(rg.get('block_new')),
                              vetoes=vetoes, vb_reason=vb_reason,
-                             oos_gap=fs.get('blind_test_gap'))
+                             oos_gap=fs.get('blind_test_gap'), stuck=stuck)
 
     # 내일 실제로 손댈 수 있는가 — 오늘의 추천에 올릴지 가르는 단 하나의 기준.
     #
@@ -641,7 +651,7 @@ def oos_wait_line(gap):
 
 def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
             turnover=None, heat=None, regime_block=False, vetoes=None,
-            vb_reason=None, oos_gap=None):
+            vb_reason=None, oos_gap=None, stuck=None):
     """
     왜 추천에서 빠졌는가 — **무엇을 기다리면 되는지**를 이름에 넣는다.
 
@@ -649,6 +659,22 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
     """
     if not failed:
         return '오늘 매수 가능', ''
+    # ⚠️ 라운드 396 — 라운드 387 이 *"기다려 풀리지 않는 칸에 기다림의 이름을 주지 않는다"* 를 이 함수 **끝**(손익비·
+    #   기대값만 남은 갈래)에만 적용했다. 그런데 기다림의 이름을 주는 갈래 넷(국면 · 거래량 · 과열 · 표본 확보)은 그보다
+    #   **앞**에 있어, 그 둘이 같이 걸려도 먼저 '… 대기'를 받았다. 사용자: *"미보유에서 과열대기가 좋은거야 거래량
+    #   대기가 좋은거야?"* 세어 보니(개장 전 리포트 100개 · 2026-09-30) '과열 해소 대기' 후보 **40개 전부**가 '비용 차감
+    #   기대값 양수'도 못 넘었고(30개는 신뢰도·전략품질도), '신뢰도·표본 확보 대기' 10개 중 9개도 그랬다 — 과열이 풀려도
+    #   살 수 있게 된 것은 **0개**다. 기다리면 풀릴 것만 남았을 때만 '대기'라 부르고, 아니면 추천 제외로 그 이유를 적는다.
+    #   판정(recommended · actionable)·문턱·조건 불변 — 바뀐 것은 이름과 사유다.
+    #   `stuck` 은 `build` 가 **잰 값으로** 미달인 것만 골라 넘긴다(산출 불가는 빼고). 안 넘기면(직접 부르는 자리) 이름으로 본다.
+    _stuck = (list(stuck) if stuck is not None
+              else [f for f in failed if f in NOT_CURED_BY_WAITING])
+
+    def _not_cured(what):
+        # what 은 조사까지 붙인 말이다('과열 해소를' · '거래 회복을') — 받침 유무로 조사가 갈린다
+        return '추천 제외', (f'{_unmet(_stuck)} — {WAIT_NOT_CURED_HEAD} {what} 기다려도 이 셈은 '
+                            f'거의 그대로입니다. 기다린다고 풀리는 조건이 아닙니다.')
+
     if '권장 매수가 산출' in failed or '목표·손절 산출' in failed:
         return '데이터 부족', '실행 가격을 산출하지 못했습니다.'
     # 라운드 185 — 밸류 게이트는 기다림이 아니라 제외다. OUT_OF_DOMAIN 은
@@ -659,8 +685,10 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
         return '추천 제외', str(vb_reason or '펀더멘털 밸류 검증 미통과')
     if '강제 차단 없음' in failed:
         if regime_block:
+            if _stuck:
+                return _not_cured('국면 회복을')
             return '시장 국면 회복 대기', (
-                '지금 시장 국면에서 이 전략의 성적이 무너져 신규 매수를 '
+                WAIT_ONLY_HEAD + '지금 시장 국면에서 이 전략의 성적이 무너져 신규 매수를 '
                 '막고 있습니다. 국면이 돌아서면 다시 봅니다.')
         # 거부권은 이미 사람이 읽을 수 있는 문장이다 — 그걸 그대로 낸다.
         # 종전에는 "매수를 막는 조건이 있습니다"로 뭉뜽그려서, 무엇이 막는지
@@ -673,12 +701,18 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
     if '과열·저유동성 아님' in failed:
         # 과열과 저유동성은 기다리는 것이 다르다 — 섞어 부르지 않는다
         if turnover is not None and turnover < MIN_TURNOVER:
+            if _stuck:
+                return _not_cured('거래 회복을')
             return '거래량 회복 대기', (
-                f'20일 평균 거래대금이 {turnover / 1e8:.1f}억으로 기준'
+                WAIT_ONLY_HEAD
+                + f'20일 평균 거래대금이 {turnover / 1e8:.1f}억으로 기준'
                 f'({MIN_TURNOVER / 1e8:.0f}억)에 못 미칩니다. 거래가 붙어야 '
                 f'계산한 가격에 실제로 체결됩니다.')
+        if _stuck:
+            return _not_cured('과열 해소를')
         return '과열 해소 대기', (
-            f'급등 직후라 추격 위험이 큽니다. {heat or "과열 지표"}가 '
+            WAIT_ONLY_HEAD
+            + f'급등 직후라 추격 위험이 큽니다. {heat or "과열 지표"}가 '
             f'풀린 뒤 다시 봅니다.')
     if '진입 깊이 현실적' in failed or '보유기간 안 도달 가능' in failed:
         g = f'{gap:+.1f}%' if gap is not None else '산출 불가'
@@ -703,7 +737,9 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
     if '표본외 검증 통과' in failed:
         # 라운드 298 — 사유는 갈래마다 다르고 **얼마나 더 있어야 하는지**를 적는다.
         #   종전 한 문장은 갈래 셋 중 하나에서만 참이었다.
-        return '신뢰도·표본 확보 대기', oos_wait_line(oos_gap)
+        if _stuck:
+            return _not_cured('표본외 검증을')
+        return '신뢰도·표본 확보 대기', WAIT_ONLY_HEAD + oos_wait_line(oos_gap)
     if '신뢰도·전략품질 기준' in failed:
         # 라운드 292 — 종전엔 이 갈래도 이름이 '신뢰도·표본 확보 대기' 였다. 사유는
         #   *"사례가 쌓인다고 풀리는 조건이 아닙니다"* 라고 적으면서 이름은 **확보
