@@ -20649,13 +20649,18 @@ check("watch_action 이 등급·라벨을 붙인다 (파일의 글자 값 그대
       bool(_act238) and _act238.get('avg_down_class') == '시장게이트'
       # 라운드 322 — 이름표를 '무엇을 하라는 말'로 바꿨다(사용자: "이게 뭐야 · 쉽게"). 등급은 그대로.
       and '지금은 새로 살 때 아님' in str(_act238.get('avg_down_label')))
-check("화면이 킷의 라벨을 읽는다 ('불가' 리터럴을 직접 찍지 않는다 · §4)",
-      "_act.get('avg_down_label')" in _w231
+check("화면이 킷의 문장을 읽는다 ('불가' 리터럴을 직접 찍지 않는다 · §4)",
+      # 라운드 403 — 표의 추가매수 줄은 킷의 hold_add_line(가능할 때만) · 나머지 상태는 킷이 모은 툴팁(hold_tip)
+      "_act.get('hold_add_line')" in _w231 and "_act.get('hold_tip')" in _w231
       and "물타기 {'가능' if _ad_ok else '불가'}" not in _w231)
 # 라운드 321 — 옛 격자의 `_ad_cls` 는 격자와 함께 걷어냈다. 보기 표가 같은 규칙을 쓴다.
-check("미판정은 경고색이 아니라 회색이다 (판단이 아니다 · §3)",
-      # 라운드 322 — 안 잰 것(None)도 회색이다(판단이 아니다)
-      "else _TOK['tx3'] if _act.get('avg_down_class') in ('보류', None)" in _w231)
+# 라운드 403 — 표가 '가능'이 아닌 추가매수 상태를 **아예 그리지 않는다**(툴팁으로). 그러니 미판정·안 잰 것이
+#   경고색으로 칠해질 자리가 없다 — 킷이 그 행에 줄을 안 만드는지(값으로)와 표가 등급으로 경고색을 고르지 않는지를 본다.
+check("미판정은 경고색으로 안 그린다 — 표에 보이는 추가매수 줄은 '가능'일 때만 (판단이 아니다 · §3)",
+      bool(_act238) and _act238.get('hold_add_line') is None
+      and "_TOK['warn'] if _act.get('avg_down_class')" not in _w231
+      and "else _TOK['warn'])" not in _w231[_w231.find("_act.get('hold_add_line')") - 400:
+                                           _w231.find("_act.get('hold_add_line')") + 400])
 # ── 실측 — 관심종목 파일(사용자 자료 · 있을 때만 · 값은 안 잠근다 · 항등식만) ──
 try:
     import portfolio as _pf238
@@ -22236,8 +22241,9 @@ check("보유 행의 판단 문장은 안 바뀐다 (사유는 미보유 쪽에�
 #   제외가 풀려 '오늘 매수 가능'이 된 행에 옛 사유가 그대로 붙었다. 보여 줄지는
 #   이제 킷이 정한다(`why_line`) — 이 검사도 그 자리를 잠근다 (§258 이 값으로 잰다).
 check("표가 미보유 행에만 사유를 적는다 · 판정은 킷 한 곳",
+      # 라운드 403 — 옛 판정 행(remeasure)은 사유를 '지금 다시 재기' 링크의 툴팁으로 옮겼다(같은 말을 두 번 안 한다)
       "_wy240 = str(_act.get('why_line') or '')" in _w231
-      and "if _wy240:" in _w231)
+      and "if _wy240 and not _act.get('remeasure'):" in _w231)
 # 라운드 338 — 종전엔 인라인 자르기 글자(`[:33] + '…'`)를 못 박았다. 그 인라인 판별이 `find()` 의 −1 을
 #   못 걸러 '유 …' 를 냈고, 자르기는 킷 한 곳(`clip_reason`)으로 갔다(§344 가 심어서 잰다). 여기서는
 #   **킷을 부르는지**와 **전체가 툴팁에 있는지**만 본다 — 글자 락은 옳은 변경마다 깨진다(R98b 계열).
