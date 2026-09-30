@@ -23,8 +23,10 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import threading
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+_ONCE_LOCK = threading.Lock()
 #: 찾는 차례 — 화면(`web_app._artifact_path`)과 같다
 DIRS = ('.portfolio', 'data')
 
@@ -60,3 +62,29 @@ def load_json(fname, base=BASE):
             return json.load(f)
     except Exception:                                          # noqa: BLE001
         return None
+
+
+def load_once(cache, path):
+    """게으른 한 번 읽기 — **'읽었다'는 읽은 뒤에 찍는다** (라운드 402).
+
+    `cache` 는 부르는 모듈이 제 것으로 가진 `{'loaded': bool, 'doc': ...}` 다. 못 읽으면 `doc` 은 None 이고
+    다시 읽지 않는다(종전 동작 그대로 · 경로도 부르는 쪽이 정한다 — `find` 의 차례를 쓰지 않는다).
+
+    ■ 왜 필요한가
+      종전 세 곳(`case_layers._doc` · `case_layers._hier_doc` · `sector_cycle.ledger_perf`)이 깃발을 **읽기 전에**
+      올렸다. 그 사이에 다른 세션의 스레드가 오면 깃발은 섰는데 문서는 아직 None 이라 **None 을 받았다** —
+      2026-10-01 서버를 막 띄운 첫 화면이 '계층 보정 확률 **미산출**'을 냈고 같은 페이지를 다시 그리자 '약 66%'
+      였다(부르는 쪽이 `except: pass` 로 받아 사유도 안 남았다 · §3). json.load 를 늦춰 심으면 셋 다 재현된다.
+      Streamlit 은 세션마다 스레드가 따로 돌므로 '처음 부른 사람'이 둘일 수 있다.
+    """
+    if cache.get('loaded'):
+        return cache.get('doc')
+    with _ONCE_LOCK:
+        if not cache.get('loaded'):
+            try:
+                with open(path, encoding='utf-8') as f:
+                    cache['doc'] = json.load(f)
+            except Exception:                                  # noqa: BLE001
+                cache['doc'] = None
+            cache['loaded'] = True                             # 문서를 넣은 **뒤에** 선다
+    return cache.get('doc')

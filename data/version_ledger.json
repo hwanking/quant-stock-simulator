@@ -5,10 +5,23 @@
   "rulebook": "v2026.09.27.1",
   "schema": "v2026.09.09.1",
   "news": "v2026.08.26.1",
-  "sector": "v2026.09.09.1",
+  "sector": "v2026.10.01.1",
   "valuation": "v2026.09.23.1"
  },
  "history": [
+  {
+   "axis": "sector",
+   "axis_ko": "섹터 사이클",
+   "version": "v2026.10.01.1",
+   "previous": "v2026.09.09.1",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "업종 성적 표를 읽는 게으른 캐시가 깃발을 읽기 전에 올렸다 — 동시에 부른 세션이 None 을 받았다",
+   "note": "sector_cycle.ledger_perf 가 _PERF 깃발을 파일을 읽기 **전에** 세워, 그 사이 다른 세션의 스레드가 '이 업종 실측 없음'(None)을 받았다(case_layers 의 두 캐시와 같은 모양 · 서버를 막 띄운 첫 화면에서 계층 보정 확률이 '미산출'로 나온 사고). 읽는 자리를 artifact_io.load_once 한 곳으로 모았다 — 문서를 넣은 뒤에 깃발을 세우고 잠금 안에서 한 번만 읽는다. 경로·실패 동작·표 값 불변.",
+   "created_at": "2026-09-30T18:26:35+00:00",
+   "effective_from": "2026-10-01"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

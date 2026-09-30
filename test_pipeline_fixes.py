@@ -31027,6 +31027,118 @@ check("화면에서 '가중합 = 최종 (상한 미적용)' 거짓 등식을 걷
       and "'score_chain': chain" in _qi390)
 
 
+print("=" * 72)
+print("§391 게으른 파일 캐시 — '읽었다'는 읽은 뒤에 찍는다 (라운드 402)")
+print("=" * 72)
+# 서버를 막 띄운 첫 화면이 '계층 보정 확률 미산출'을 냈고 다시 그리자 '약 66%'였다. 세 캐시가 깃발을 읽기 **전에**
+#   올려, 그 사이 다른 세션의 스레드가 None 을 받았다(부르는 쪽 except: pass 가 사유도 안 남겼다).
+#   읽는 자리를 artifact_io.load_once 한 곳으로 모았다 — 경로·실패 동작은 그대로. 여기서 셋을 **심어서** 잰다.
+import ast as _ast391                                            # noqa: E402
+import json as _js391                                            # noqa: E402
+import os as _os391                                              # noqa: E402
+import threading as _th391                                       # noqa: E402
+import time as _tm391                                            # noqa: E402
+import artifact_io as _aio391                                    # noqa: E402
+import case_layers as _cl391                                     # noqa: E402
+import sector_cycle as _sc391                                    # noqa: E402
+
+
+def _race391(cache, call, after):
+    """캐시를 비우고 json.load 를 늦춘 채 스레드 A 가 읽는 중에 본 스레드가 부른다 → 본 스레드가 받은 것."""
+    _orig = _aio391.json.load
+    _saved = dict(cache)
+    cache['loaded'], cache['doc'] = False, None
+    _aio391.json.load = lambda f, *a, **k: (_tm391.sleep(0.3), _orig(f, *a, **k))[1]
+    try:
+        _t = _th391.Thread(target=call)
+        _t.start()
+        _tm391.sleep(0.05)
+        call()
+        _got = after()
+        _t.join()
+    finally:
+        _aio391.json.load = _orig
+        cache.clear()
+        cache.update(_saved)
+    return _got
+
+
+_r391 = {
+    'case_layers._doc': _race391(_cl391._CACHE, _cl391._doc, lambda: _cl391._CACHE.get('doc')),
+    'case_layers._hier_doc': _race391(_cl391._HIER, _cl391._hier_doc, lambda: _cl391._HIER.get('doc')),
+    'sector_cycle.ledger_perf': _race391(_sc391._PERF, lambda: _sc391.ledger_perf('반도체와반도체장비'),
+                                         lambda: _sc391._PERF.get('doc')),
+}
+check("읽는 도중에 부른 두 번째 스레드도 문서를 받는다 — 세 캐시 모두 (심기 · json.load 0.3초 지연)",
+      all(v is not None for v in _r391.values()),
+      str({k: (v is not None) for k, v in _r391.items()}), scanned=len(_r391))
+
+
+def _bad391(cache, path):
+    """옛 모양 — 깃발을 먼저 올리고 읽는다(이 시험이 그것을 잡는지 보려고 심는다)."""
+    if not cache.get('loaded'):
+        cache['loaded'] = True
+        with open(path, encoding='utf-8') as _f:
+            cache['doc'] = _aio391.json.load(_f)
+    return cache.get('doc')
+
+
+_bc391 = {'loaded': False, 'doc': None}
+_bp391 = _os391.path.join(PROJ, 'data', 'case_layers.json')
+check("심기 반대쪽 — 깃발을 먼저 올리는 옛 모양은 같은 시험에서 None 을 받는다 (시험이 눈멀지 않았다)",
+      _race391(_bc391, lambda: _bad391(_bc391, _bp391), lambda: _bc391.get('doc')) is None)
+# 같은 파일을 같은 내용으로 읽는다 (경로를 바꾸지 않았다)
+_same391 = []
+for _fn391, _doc391 in (('case_layers.json', _cl391._doc()), ('hier_prob_tables.json', _cl391._hier_doc())):
+    with open(_os391.path.join(PROJ, 'data', _fn391), encoding='utf-8') as _f391:
+        _same391.append(_js391.load(_f391) == _doc391)
+check("모은 뒤에도 같은 파일을 같은 내용으로 읽는다 (case_layers 두 표)", all(_same391), str(_same391),
+      scanned=len(_same391))
+# 실패 동작은 그대로 — 못 읽으면 None 이고 다시 안 읽는다
+_miss391 = {'loaded': False, 'doc': None}
+check("못 읽으면 None · 깃발은 선다 (다시 읽지 않는다 — 종전 동작)",
+      _aio391.load_once(_miss391, _os391.path.join(PROJ, 'data', '__없는_파일_r402__.json')) is None
+      and _miss391['loaded'] is True
+      and _aio391.load_once(_miss391, _os391.path.join(PROJ, 'data', 'case_layers.json')) is None,
+      str(_miss391))
+
+
+# 구조 — '[loaded] = True' 깃발을 올리는 자리는 artifact_io 한 곳뿐 (AST · 주석·문자열은 안 센다)
+def _flag_sites391(src):
+    _n = 0
+    for _node in _ast391.walk(_ast391.parse(src)):
+        if isinstance(_node, _ast391.Assign) and isinstance(_node.value, _ast391.Constant) \
+                and _node.value.value is True:
+            for _tg in _node.targets:
+                if isinstance(_tg, _ast391.Subscript) and isinstance(_tg.slice, _ast391.Constant) \
+                        and _tg.slice.value == 'loaded':
+                    _n += 1
+    return _n
+
+
+check("판별식 심기 — 옛 모양(깃발 먼저)은 잡고, 깃발이 없는 코드는 안 잡는다 (양방향)",
+      _flag_sites391("C = {}\nif not C.get('loaded'):\n    C['loaded'] = True\n") == 1
+      and _flag_sites391("C = {}\nC['doc'] = 1\n") == 0)
+_scan391, _sites391 = 0, {}
+for _root391, _dirs391, _fs391 in _os391.walk(PROJ):
+    if any(p in _root391 for p in ('.git', '.claude', '_probe', '_archive', 'venv', '__pycache__')):
+        continue
+    for _fn391 in _fs391:
+        if not _fn391.endswith('.py') or _fn391 == 'test_pipeline_fixes.py':
+            continue
+        _p391 = _os391.path.join(_root391, _fn391)
+        try:
+            with open(_p391, encoding='utf-8') as _f391:
+                _k391 = _flag_sites391(_f391.read())
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        _scan391 += 1
+        if _k391:
+            _sites391[_os391.path.relpath(_p391, PROJ).replace('\\', '/')] = _k391
+check("'loaded' 깃발을 올리는 자리는 artifact_io.load_once 하나뿐이다 (새 캐시는 그것을 부른다)",
+      _sites391 == {'artifact_io.py': 1}, str(_sites391), scanned=_scan391)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

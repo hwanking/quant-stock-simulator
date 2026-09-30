@@ -491,16 +491,11 @@ def ledger_perf(sector):
     """이 업종 매수권 신호의 원장 실측. 없으면 None — 지어내지 않는다."""
     if not sector:
         return None
-    if not _PERF['loaded']:
-        _PERF['loaded'] = True
-        try:
-            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             'data', 'sector_perf.json')
-            with open(p, encoding='utf-8') as f:
-                _PERF['doc'] = json.load(f)
-        except Exception:                                      # noqa: BLE001
-            _PERF['doc'] = None
-    doc = _PERF['doc']
+    # 라운드 402 — 깃발을 읽기 **전에** 올려, 동시에 부른 두 번째 세션이 '이 업종 실측 없음'(None)을 받았다.
+    #   읽는 자리는 한 곳(`artifact_io.load_once`) · 경로·실패 동작은 그대로.
+    import artifact_io
+    doc = artifact_io.load_once(
+        _PERF, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'sector_perf.json'))
     if not doc:
         return None
     row = (doc.get('sectors') or {}).get(str(sector))

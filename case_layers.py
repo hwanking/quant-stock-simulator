@@ -20,16 +20,10 @@ _CACHE = {'loaded': False, 'doc': None}
 
 
 def _doc():
-    if not _CACHE['loaded']:
-        _CACHE['loaded'] = True
-        try:
-            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             'data', 'case_layers.json')
-            with open(p, encoding='utf-8') as f:
-                _CACHE['doc'] = json.load(f)
-        except Exception:                                      # noqa: BLE001
-            _CACHE['doc'] = None
-    return _CACHE['doc']
+    # 라운드 402 — 깃발을 읽기 **전에** 올려 동시에 부른 두 번째 세션이 None 을 받았다. 한 곳이 읽는다.
+    import artifact_io
+    return artifact_io.load_once(
+        _CACHE, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'case_layers.json'))
 
 
 def _band_of(score):
@@ -63,16 +57,10 @@ _HIER = {'loaded': False, 'doc': None}
 
 
 def _hier_doc():
-    if not _HIER['loaded']:
-        _HIER['loaded'] = True
-        try:
-            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             'data', 'hier_prob_tables.json')
-            with open(p, encoding='utf-8') as f:
-                _HIER['doc'] = json.load(f)
-        except Exception:                                      # noqa: BLE001
-            _HIER['doc'] = None
-    return _HIER['doc']
+    # 라운드 402 — 서버를 막 띄운 첫 화면이 이 경로로 '계층 보정 확률 미산출'을 냈다(다시 그리면 값이 나왔다)
+    import artifact_io
+    return artifact_io.load_once(
+        _HIER, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'hier_prob_tables.json'))
 
 
 def blended_prob(score, sector=None, regime_code=None, fs=None):
