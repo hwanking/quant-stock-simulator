@@ -4228,10 +4228,13 @@ check("모델 상태 — 상시 표시·화면 최상단 고정",
       < _w68.index('# 시장 지수 — 배경정보'))
 # 라운드 393 — 이름이 '고신뢰 매수권(60점+)' → '매수권 60점+' 로 좁혀졌다(그 띠의 블라인드 적중이 전체보다 낮다 ·
 #   같은 파일에서 읽어 같은 줄에 적는다 · §384). 이 검사가 재려던 것은 이름이 아니라 60점+ 띠가 강조되는 것이다.
-check("매수권(60점+) 스캔 강조 — 트렌드 탐색기 연동",
-      "매수권 60점+ {len(_bz_rows)}종목" in _w68 and "_bz_rows" in _w68)
-check("매수권 없음 = 관망 결론 (날조 금지)",
-      "없는 날은 관망이 결론입니다" in _w68)
+# 라운드 395 — 점수 띠를 '신호' 배너로 따로 내지 않고 **판정 셈을 머리로** 한 칸에 낸다(그 띠들의 블라인드 적중이
+#   전체보다 낮다 · 2026-09-30). 재려던 것은 '점수 높은 종목이 스캔 결과 위에 모여 보인다'이므로 그것을 본다.
+check("점수 58점 이상 종목이 스캔 결과 위에 한 칸으로 모인다 — 머리는 판정 셈 (라운드 395)",
+      "점수 58점 이상 {len(_hi395)}종목 — 오늘 판정: 실행 가능" in _w68 and "_hi395" in _w68)
+# 종전 *"없는 날은 관망이 결론입니다"* 는 점수 띠가 없다는 것으로 판정을 대신 말했다 — 판정은 아래 목록이 한다(§4).
+check("점수 58점 이상이 없어도 결론을 지어내지 않는다 — 판정 목록을 가리킨다 (날조 금지)",
+      "이번 스캔에는 점수 58점 이상 종목이 없습니다. 사도 되는지는 아래 판정 목록이 말합니다." in _w68)
 check("v5 폴리시 — 접이식 카드화·pill 버튼",
       "border-radius: 999px" in _w68
       and 'stExpander' in _w68)
@@ -4250,10 +4253,17 @@ check("규율 — 미공개 원칙 (선택에 못 쓰면 보지 않는다)",
       '볼 이유가 없다' in _ss69)
 
 _w69 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("스캔 2계층 — 매수권 60점+·확장(58~59) 분리 표시 (라운드 393 이 '고신뢰' 를 뺐다 · 계층은 그대로)",
-      '매수권 60점+ {len(_bz_rows)}종목' in _w69 and '확장 신호(58~59점)' in _w69)
-check("확장 신호 정직 표기 — 최신 실측·비용후 음수·탐색용",
-      '블라인드 55.3%(n=226)' in _w69 and '탐색용' in _w69)
+# 라운드 395 — 이 두 계층은 **표시 전용**으로 채택됐고(점수 산식·게이트 불변) 그 근거(*"58+ 가 검증→블라인드 60%대로
+#   재현"*)가 오늘 원장에서 재현되지 않는다(2026-09-30 · 블라인드 58~59점 58.35% · 60점+ 54.55% · 전체 58.83%).
+#   그래서 두 띠를 '신호'로 따로 내지 않고, 띠별 블라인드 적중을 **파일에서 읽어** 전체와 견준다. 재려던 것
+#   (정직 표기)은 그대로 — 옛 수(6,508건 시절)를 오늘 값처럼 내지 않고 오늘 값을 낸다.
+import scripts.lineage_audit as _la69                            # noqa: E402
+_w69c = '\n'.join(_ln for _i, _ln in _la69.code_lines('web_app.py'))
+check("스캔 점수 띠를 '신호' 배너로 따로 내지 않는다 — 띠별 블라인드 적중을 파일에서 읽어 견준다 (라운드 395)",
+      '확장 신호(58~59점)' not in _w69c and '매수권 60점+ {len(' not in _w69c
+      and "('60점 이상', _bl188), ('58~59점', _ez395)" in _w69c)
+check("옛 수(원장 6,508건 시절)를 배너에 내지 않는다 — 오늘 값은 파일에서 (정직 표기 · 코드 줄)",
+      '55.3%(n=226)' not in _w69c and '58.9%(n=95)' not in _w69c and '탐색용' not in _w69c)
 _mv69 = open(_os.path.join(PROJ, "docs", "MODEL_VERSIONS.md"),
              encoding='utf-8').read()
 check("MODEL_VERSIONS 라운드 2 기록 — 채택 범위·KPI 불변",
@@ -4364,8 +4374,13 @@ _w73 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("추천 카드 갭% 표기", '_gap_pct' in _w73 and '권장보다' in _w73)
 check("갭 큰 조건부 — 사실상 관망 경고 (표시 임계 7%)",
       '단기 도달 가능성이 낮습니다' in _w73)
-check("확장 신호 — 적정가 이하 구분·실측 병기",
-      '적정가 이하 진입' in _w73 and '58.9%(n=95)' in _w73)
+# 라운드 395 — 58~59점 띠 안의 '적정가 이하 진입'은 오늘 원장에서 그 띠의 96~97% 라 따로 가를 조건이 아니었고
+#   (train 72,845/74,858 · blind 5,507/5,755), 옛 주장(블라인드 58.9% · 비용후 +0.55%)은 재현되지 않는다(오늘 58.20% ·
+#   운영비용 차감 −0.60%). 배너가 그 부분집합을 따로 세워 좋은 쪽처럼 내지 않는지 본다(§9 · 코드 줄).
+import scripts.lineage_audit as _la73                            # noqa: E402
+_w73c = '\n'.join(_ln for _i, _ln in _la73.code_lines('web_app.py'))
+check("배너가 '적정가 이하 진입' 부분집합을 따로 세워 좋은 쪽처럼 내지 않는다 (라운드 395 · 옛 수 인용 없음)",
+      '적정가 이하 진입 {len(' not in _w73c and '58.9%(n=95)' not in _w73c)
 _pm73 = open(_os.path.join(PROJ, "premarket.py"), encoding='utf-8').read()
 check("premarket — entry_zone 저장 (다음 리포트부터)",
       "'entry_zone': fs.get('entry_zone')" in _pm73)
@@ -18157,10 +18172,16 @@ check("그 자리가 우위 미확인을 밝힌다",
       '재현되는 우위는 확인되지' in _tp218)
 check("'유일한 비용후 양수 계층' 주장이 사라졌다",
       '유일한 비용후 양수' not in _w218)
-check("옛 값은 '그때 값'이라고 적는다",
-      '원장 6,508건 시점(2026-08-02)' in _w218)
-check("신호율을 파일에서 읽는다 (손으로 박지 않는다)",
-      "_sf188['rate_pct']" in _w218 and '실측 신호율 2.9%' not in _w218)
+# 라운드 395 — 추천 절 배너가 옛 수를 '그때 값'이라 적어 인용하던 자리를 **걷었다**(그 띠를 신호로 내지 않는다 ·
+#   오늘 값은 파일에서). 재려던 것은 '옛 값을 오늘 값처럼 내지 않는다'이므로 그것을 코드 줄에서 본다. 신호율은 이제
+#   그 배너에 없고 홈 타일이 같은 파일에서 읽는다.
+import scripts.lineage_audit as _la218                           # noqa: E402
+_w218c = '\n'.join(_ln for _i, _ln in _la218.code_lines('web_app.py'))
+check("옛 값을 오늘 값처럼 내지 않는다 — 배너가 6,508건 시절 수를 인용하지 않는다 (코드 줄)",
+      '55.3%(n=226)' not in _w218c and '58.9%(n=95)' not in _w218c)
+check("신호율을 파일에서 읽는다 (손으로 박지 않는다 · 홈 타일)",
+      "_sig = _home_cal.get('signal_frequency') or {}" in _w218
+      and "_sig['rate_pct']" in _w218 and '실측 신호율 2.9%' not in _w218)
 check("잰 날짜를 붙인다 (§9)",
       'def _cal_made_date' in _w218 and '잰 날' in _w218)
 check("'적중률 극대화' 를 제목에 쓰지 않는다", '적중률 극대화' not in _w218)
@@ -19695,9 +19716,9 @@ _uk231 = open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
 
 # ── ① 배너와 실행 후보가 **같은 메모·같은 분류 함수**를 읽는다 (§4) ────────
 check("판정 메모 `_pick_of` 가 정의돼 있다", 'def _pick_of(code, sr):' in _w231)
-check("배너가 `_sig_tag` 로 종목 옆에 판정을 붙인다 (60+ · 58~59 둘 다)",
-      _w231.count('.join(_sig_tag(r) for r in _bz_rows[:5])') == 1
-      and _w231.count('.join(_sig_tag(r) for r in _ext_rows[:6])') == 1)
+# 라운드 395 — 두 띠를 한 칸(`_hi395`)으로 모았고 종목을 자르지 않는다(스캔 결과는 정밀분석 깊이만큼이다).
+check("배너가 `_sig_tag` 로 종목 옆에 판정을 붙인다 (58점 이상 전부 · 자르지 않는다)",
+      _w231.count('.join(_sig_tag(r) for r in _hi395)') == 1)
 # `_built` 구간에는 직접 호출이 남아 있으면 안 된다 — 두 번째 계산 경로가 된다
 _i231a = _w231.find('_built = []')
 _i231b = _w231.find('_live, _wait, _dropped = [], [], []')
@@ -19714,9 +19735,10 @@ check("가르는 함수 `_sig_class` 가 하나이고 배너·목록 둘 다 부
 check("대기 튜플이 한 곳(`_WAIT_OK_214`)뿐이다 — 베낀 사본 없음",
       _w231.count("_WAIT_OK_214 = (") == 1
       and _w231.count("_WAIT_OK = (") == 0)
-check("배너가 신호→판정 요약 한 줄을 낸다 (실행 가능·조건 대기·뺌)",
-      '신호 {len(_bz_rows) + len(_ext_rows)}종목의 판정' in _w231
-      and "같은 판정**입니다" in _w231)
+# 라운드 395 — 요약 한 줄이 캡션에서 **머리**로 올라갔다(판정이 먼저다). 재려던 것(실행 가능·조건 대기·뺌)은 그대로.
+check("배너 머리가 판정 셈이다 (실행 가능·조건 대기·뺌 · 점수는 판정이 아니라고 같은 칸에서)",
+      "오늘 판정: 실행 가능 {_sig_cnt['live']}" in _w231
+      and "추천에서 뺌 {_sig_cnt['drop']}" in _w231 and '점수는 판정이 아닙니다' in _w231)
 check("판정을 못 낸 신호는 그렇게 적는다 (§3)", "_tag = '판정 미산출'" in _w231)
 
 # ── ② 관심종목 — 이름순 · 우선순위 한 줄 · 판단 한 번 (§2-6 · §4) ───────
@@ -30456,10 +30478,13 @@ check("관심 목록에 없어 아래 칸에 안 나오는 종목은 그렇다�
 _po384 = '\n'.join(_ln for _i, _ln in _la384.code_lines('product_ops.py'))
 check("화면 모듈이 60점+ 띠를 '고신뢰'라 부르지 않는다 (web_app · product_ops 코드 줄 · 주석 제외)",
       '고신뢰' not in _wa384 and '고신뢰' not in _po384)
-check("배너가 그 띠의 블라인드 적중을 전체 블라인드와 **같은 파일에서** 견줘 적는다 (낮으면 낮다고 · 못 읽으면 그 조각만 뺀다)",
-      "_all393 = ((_cal188.get('splits') or {}).get('blind') or {})" in _wa384
-      and "'보다 낮습니다' if _bl188['hit_rate'] < _all393['hit_rate']" in _wa384
-      and "_bzt393 = ''" in _wa384 and '+ _bzt393' in _wa384)
+# 라운드 395 — 비교가 띠 하나(60점+)에서 둘(60점+ · 58~59점)로 넓어졌고 변수 이름이 바뀌었다. 재려던 성질
+#   (같은 파일에서 읽어 전체와 견준다 · 낮으면 낮다고 · 못 읽는 띠는 그 조각만 뺀다)을 그대로 본다.
+check("배너가 점수 띠의 블라인드 적중을 전체 블라인드와 **같은 파일에서** 견줘 적는다 (낮으면 낮다고 · 못 읽으면 그 조각만 뺀다)",
+      "_all395 = ((_cal188.get('splits') or {}).get('blind') or {})" in _wa384
+      and "'전체보다 낮음' if _b395['hit_rate'] < _all395['hit_rate']" in _wa384
+      and "if _b395.get('hit_rate') is None or not _b395.get('n'):" in _wa384
+      and "if _bands395 else \"\"" in _wa384)
 
 print("\n" + "=" * 72)
 print("§385 닫힌 이슈가 다시 열린다 · 괴리 판정자는 하나 · 열린 과제는 화면에 (라운드 394)")
@@ -30644,6 +30669,42 @@ check("일일 규칙이 여는 과제 이름이 잰 것과 같다 — '고신뢰
       bool(_titles385) and not any(('고신뢰' in t) or ('58점' in t) for t in _titles385),
       str(_titles385), scanned=len(_titles385))
 _sh385.rmtree(_td385, ignore_errors=True)
+
+print("\n" + "=" * 72)
+print("§386 점수 띠를 '신호'로 내지 않는다 · 판정이 먼저다 (라운드 395)")
+print("=" * 72)
+# 사용자(2026-09-30): *"확장 신호(58~59점) 1종목 — (종목)(59점 · 추천 제외 …) … 추천에서는 제외가 되어 있고 확장신호는
+#   있고 뭐가 맞는거야 근본적으로 개선해줘야지."* 추천 절이 원점수 띠 둘을 '매수권'·'확장 신호'라는 초록·파랑 배너로
+#   먼저 내고 판정은 그 아래 캡션에서 말했다. 두 띠는 표시 전용으로 채택됐고(라운드 2 · 원장 3,059건) 그 근거가 오늘
+#   원장에서 재현되지 않는다(2026-09-30 · 블라인드 58~59점 58.35% · 60점+ 54.55% · 전체 58.83%). 판정 셈을 머리로,
+#   점수는 속성으로, 띠별 블라인드 적중은 파일에서 — 점수·문턱·판정·게이트 불변.
+import ast as _ast386                                            # noqa: E402
+import scripts.lineage_audit as _la386                           # noqa: E402
+_w386 = '\n'.join(_ln for _i, _ln in _la386.code_lines('web_app.py'))
+# ⚠️ 첫 판은 '드문 구간' 낱말을 봤다가 실패 원인 분류 캡션의 *"앞 유형이 드문 구간에서는"* 에 걸렸다(판별식이 넓었다 ·
+#   R274). 옛 배너의 문구 그 자체(*"실측 신호율 …의 드문 구간입니다"*)를 본다.
+check("추천 절이 점수 띠를 '신호'라 부르지 않는다 — '확장 신호'·'실측 신호율 …의 드문 구간'·'매수권 60점+ N종목' 머리 없음 (코드 줄)",
+      '확장 신호' not in _w386 and '실측 신호율' not in _w386 and '매수권 60점+ {len(' not in _w386)
+check("배너 색은 판정이 정한다 — 실행 후보가 있을 때만 초록(성공) · 이어 붙인 문장은 _md_safe 를 지난다",
+      "(st.success if _sig_cnt['live'] else st.info)(_md_safe(" in _w386)
+check("실행 후보가 아닌 종목 옆에는 판정이 결론과 함께 낸 사유를 옮긴다 (새 문장을 안 짓는다 · 자르면 잘랐다고)",
+      "_uk.clip_reason(str(_co.get('exclude_reason') or '').split(' (')[0], 40)" in _w386
+      and "('' if _cls == 'live' else" in _w386)
+# 랩이 58~59점 띠의 세 구간 성적을 60점+ 와 **같은 셈**(perf_block · 판정 완료)으로 낸다 — 화면이 손으로 적지 않게
+_lab386 = _ast386.parse(_read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py')))
+_ez386 = [n for n in _ast386.walk(_lab386)
+          if isinstance(n, _ast386.Assign) and any(
+              isinstance(t, _ast386.Subscript) and isinstance(t.slice, _ast386.Constant)
+              and t.slice.value == 'ext_zone' for t in n.targets)]
+_cmp386 = [n for n in _ast386.walk(_lab386)
+           if isinstance(n, _ast386.Compare) and len(n.ops) == 2
+           and isinstance(n.left, _ast386.Constant) and n.left.value == 58
+           and isinstance(n.comparators[-1], _ast386.Constant) and n.comparators[-1].value == 60]
+check("랩이 splits['ext_zone'] 에 58~59점 띠를 60점+ 와 같은 셈으로 낸다 (58 <= 점수 < 60 · 구조)",
+      len(_ez386) == 1 and len(_cmp386) >= 1, f"대입 {len(_ez386)} · 비교 {len(_cmp386)}")
+# 판정 셈과 목록이 같은 함수 — 배너가 따로 세지 않는다(라운드 214 · §4)
+check("배너의 판정 셈과 아래 목록이 같은 분류 함수를 부른다 (따로 세는 경로 없음)",
+      _w386.count('_sig_cnt[_sig_class(_co)] += 1') == 1 and '_cls = _sig_class(_cr)' in _w386)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

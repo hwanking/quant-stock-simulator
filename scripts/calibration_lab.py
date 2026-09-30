@@ -1501,6 +1501,17 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                         and g['row']['score'] >= 60], f"60+ {sp}")
         splits_out['buy_zone'][sp] = b
         show_block(b)
+    # 라운드 395 — 58~59점 띠도 같은 셈으로 낸다. 화면 추천 절이 이 띠를 '확장 신호'라 불러 왔는데 그 근거
+    #   (라운드 2 · 원장 3,059건 · *"58+ 가 검증→블라인드 60%대로 재현"*)가 오늘 원장에서 재현되지 않는다
+    #   (2026-09-30 · 블라인드 58~59점 58.35% vs 전체 58.83%). 화면은 이 수를 **파일에서** 읽어 전체와 견준다 —
+    #   손으로 적은 수는 낡는다(그 배너가 두 달 전 6,508건 시절 수를 인용하고 있었다).
+    print("  --- 58~59점 띠만 ---")
+    splits_out['ext_zone'] = {}
+    for sp in ('train', 'valid', 'blind'):
+        b = perf_block([g for g in decided if split_of(g['row']['date']) == sp
+                        and 58 <= g['row']['score'] < 60], f"58~59 {sp}")
+        splits_out['ext_zone'][sp] = b
+        show_block(b)
 
     # ── 실패 원인 분류 — 빈도와 손실 규모, 큰 손실부터 ─────────────────────
     # 라운드 273 — 아래 분류는 **우선순위 사슬**이다: 한 건은 처음 맞는 유형 하나에만 세어지고
