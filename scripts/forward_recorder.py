@@ -118,6 +118,7 @@ def main():
 
     t0, wrote, failed = time.time(), 0, 0
     reg_wrote, reg_bad = 0, 0
+    _op404 = {}                             # 라운드 404 — 종목 → (기준일, 운영 판) · 그림자 기록이 읽는다
     for i, sym in enumerate(pool, 1):
         try:
             snap = q.run_full_pipeline(sym, t_ref, b_engine=eng,
@@ -151,6 +152,13 @@ def main():
                                next_action=snap.get('next_action'))
             reg_ok, reg_why = _fr.record(
                 _fr.build_row(sym, snap, vc_row, name=names.get(sym)))
+            # 라운드 404 — 교정본 그림자 기록이 견줄 **운영 판**을 여기서 옮겨 둔다(계산 없음 · 기록부와 같은 값).
+            #   실패해도 운영 기록은 이미 끝났다.
+            try:
+                import forward_shadow as _fsh404
+                _op404[sym] = (str(snap.get('t_ref') or t_ref), _fsh404.side(snap, vc_row))
+            except Exception:                                  # noqa: BLE001
+                pass
             if reg_ok:
                 reg_wrote += 1
             elif reg_why and '이미 있다' not in reg_why[0]:
@@ -204,6 +212,40 @@ def main():
               f'→ 누적 {_bk_cov["rows"]:,}줄 · 날짜 {_bk_cov["dates"]}')
     except Exception as _bk_e:                                   # noqa: BLE001
         print(f'잔여 호가 시점 보관 실패 — {type(_bk_e).__name__}: {_bk_e} (판정 기록과 무관 · 오늘 몫은 못 남겼다)')
+    # ── 라운드 404 — 교정본 그림자 기록 (사용자 결정 2026-10-01 · 사전등록 docs/PREREG_R404_SHADOW_CORRECTIONS.md).
+    #   운영 기록(판정 원장·전방 기록부·시점 보관)이 **전부 끝난 뒤** 따로 만든 엔진 인스턴스에만 고침 다섯을 켜서
+    #   같은 기준일로 다시 판정하고 운영 판과 나란히 적는다. 운영 엔진(`q`)은 스위치가 꺼진 채 이미 끝났다 —
+    #   그림자가 무엇을 하든 오늘의 운영 기록을 못 바꾼다. 실패해도 판정 기록과 무관하다(따로 세어 찍는다 · §3).
+    #   운영 판이 없는 종목(오늘 이미 기록돼 이번 실행이 건너뛴 종목)은 그림자도 건너뛴다 — 다른 계산에서 온 운영 값과
+    #   견주지 않는다.
+    try:
+        import forward_shadow as _fsh
+        _q404 = qi.QuantIndicatorsEngine()
+        _q404.corrections = frozenset(_fsh.CORRECTIONS)
+        _st404 = _fr.stamp().get('versions')
+        _rows404, _fail404, _t404 = [], 0, time.time()
+        for _sym404, (_d404, _op) in _op404.items():
+            try:
+                _snap404 = _q404.run_full_pipeline(_sym404, t_ref, b_engine=eng, rho_cutoff=0.80)
+                _vd404 = _q404.build_final_verdict(_snap404)
+                _vc404 = _vc.build(_snap404['four_scores'], verdict=_vd404,
+                                   price_axes=_snap404['four_scores'].get('price_axes'),
+                                   next_action=_snap404.get('next_action'), corrections=_fsh.CORRECTIONS)
+                import stock_code as _sc404
+                _rows404.append(_fsh.make_row(_sc404.strip_suffix(_sym404), _d404, _op,
+                                              _fsh.side(_snap404, _vc404), versions=_st404))
+            except Exception as _e404:                         # noqa: BLE001
+                _fail404 += 1
+                if _fail404 <= 3:
+                    print(f'  [그림자 실패] {_sym404} — {type(_e404).__name__}: {str(_e404)[:60]}')
+        _w404, _s404 = _fsh.append_rows(_fsh.PATH, _rows404)
+        _cov404 = _fsh.coverage(_fsh.PATH)
+        _chg404 = sum(1 for r in _rows404 if r['diff'])
+        print(f'교정본 그림자 기록({_fsh.SPEC} · {"·".join(_fsh.CORRECTIONS)}) — 대상 {len(_op404)}종목 · 오늘 '
+              f'{_w404}줄 새로 · 이미 있음 {_s404}줄 · 실패 {_fail404} · 값이 달라진 행 {_chg404}/{len(_rows404)} · '
+              f'{time.time() - _t404:,.0f}s → 누적 {_cov404["rows"]:,}줄 · 날짜 {_cov404["dates"]}')
+    except Exception as _sh_e:                                   # noqa: BLE001
+        print(f'교정본 그림자 기록 실패 — {type(_sh_e).__name__}: {_sh_e} (판정 기록과 무관 · 오늘 몫은 못 남겼다)')
     # ⚠️ 라운드 97 — 여기가 `wrote == 0` 하나로 실패를 판정했다. 원장이
     #   둘이 되면서 **한쪽은 이미 다 있고 다른 쪽만 새로 쌓는 날**이
     #   정상인데 그걸 실패로 읽었다(실측: 기록부 6건을 넣고도 종료코드 1).

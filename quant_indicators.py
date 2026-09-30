@@ -438,6 +438,14 @@ class QuantIndicatorsEngine:
     #  먼저다(§2). 그때까지 **화면이 이 보정을 숨기지 않고 그대로 드러낸다**(라운드 238).
     FAIR_FIXED_HAIRCUT = 0.98
 
+    #: 라운드 404 — **교정본 그림자 기록**의 스위치(사용자 결정 2026-10-01: *"교정본 그림자 기록으로 해줘"*).
+    #  외부 검토가 찾은 산식 결함 중 값이 바뀌는 고침(B1·B2·B4·B5 · B3 는 verdict_core)은 11-16 전방 평가가
+    #  끝날 때까지 **운영에 안 넣고**, 따로 만든 엔진 인스턴스에만 켜서 같은 날 같은 종목의 값을 옆 파일에
+    #  적는다(`forward_shadow.py` · 사전등록 docs/PREREG_R404_SHADOW_CORRECTIONS.md).
+    #  ⚠️ **기본은 빈 집합**이다 — 운영 엔진은 아래 스위치가 전부 꺼진 채 종전과 글자까지 같은 길을 탄다.
+    #  켜는 곳은 그림자 기록기 한 곳뿐이고, 회귀가 '꺼짐 = 종전 값'을 심어서 잰다.
+    corrections = frozenset()
+
     # [명세 §11] 유효표본 수 통제 구간 — 규칙집 [RULES_SAMPLE_TIERS] 가 단일 출처
     _ST = RULEBOOK.get('RULES_SAMPLE_TIERS', {})
     SAMPLE_TIERS = (
@@ -2726,6 +2734,11 @@ class QuantIndicatorsEngine:
         
         # D. PBR-ROE / RIM 모델 (금융업 우세 모델)
         pbr_roe_valid = (_have_bps and _have_roe and bps > 0 and roe > 0)
+        # 라운드 404 · 그림자 B4 — ROE 7% 이하 가지는 `BPS × 받은 PBR ≈ 현재가`라 가치를 재지 않고 가격을 되돌린다
+        #   (외부 검토 · 시총 순 앞 120종목 중 해당 22 · 그중 20 이 현재가의 0.992~1.007배). 교정본은 그 가지에서
+        #   이 모형을 무효로 돌린다(식 불변 · 새 숫자 없음 · 7 은 이미 있는 가지 경계). 운영은 꺼져 있다.
+        if 'B4' in self.corrections and pbr_roe_valid and roe <= 7.0:
+            pbr_roe_valid = False
         pbr_val = bps * (1.0 + (roe - 7.0) / 10.0) if roe > 7.0 else bps * max(0.4, pbr)
         model_results['PBR_ROE'] = {'val': pbr_val, 'weight': blended_weights.get('PBR_ROE', 0.0) + blended_weights.get('RIM', 0.0), 'valid': pbr_roe_valid, 'name': 'PBR-ROE 조정 배수'}
         
@@ -2947,7 +2960,12 @@ class QuantIndicatorsEngine:
             }
 
         # 극단적 모델 편차/이상치 윈저화(Winsorization) 수축 방정식
-        if raw_upside_pct > 45.0:
+        # 라운드 404 · 그림자 B1 — 아래 식은 경계에서 **역전**한다: 원 +45 초과~+126.5% 가 전부 45% 아래로,
+        #   −35 미만~−69.9% 가 −35% 보다 덜 나쁘게 간다(외부 검토 · 엔진 식을 떼어 돌려 확인). 교정본은 이미 있는
+        #   상·하한(+48 · −40)으로 **자르기만** 한다 — 연속·단조 · 새 숫자 없음. 운영은 꺼져 있다.
+        if 'B1' in self.corrections:
+            calibrated_upside_pct = float(min(48.0, max(-40.0, raw_upside_pct)))
+        elif raw_upside_pct > 45.0:
             # 45% 초과 극단 저평가 수치는 현실적 12개월 펀더멘털 상한(+25%~+48%)으로 로그 수축
             calibrated_upside_pct = 25.0 + (raw_upside_pct - 25.0) ** 0.45 * 2.5
             calibrated_upside_pct = min(48.0, calibrated_upside_pct)
@@ -3000,8 +3018,15 @@ class QuantIndicatorsEngine:
             '추정치 안정성': (c_stable, 0.10), '단위·회계 검증': (c_account, 0.10),
             'OOS 보정성능': (c_oos, 0.10),
         }
+        # 라운드 404 · 그림자 B5 — 계산 순서상 가격방향 OOS 가 이 자리에 아직 없어 위 칸은 **늘 40**(잰 적 없는
+        #   기본값)이다(외부 검토). 교정본은 못 잰 칸을 빼고 나머지 여섯의 가중치 합으로 나눈다 — 못 잰 것을 값으로
+        #   만들지 않는다(§3) · 새 숫자 없음. 잰 값이 있으면(available) 그대로 쓴다. 운영은 꺼져 있다.
+        if 'B5' in self.corrections and not _sq.get('available'):
+            conf_parts.pop('OOS 보정성능', None)
+        _wsum404 = sum(w for _v, w in conf_parts.values())
         fair_value_confidence = float(np.clip(
-            sum(v * w for v, w in conf_parts.values()), 0.0, 95.0))
+            sum(v * w for v, w in conf_parts.values()) / (_wsum404 if 'B5' in self.corrections else 1.0),
+            0.0, 95.0))
 
         # [명세 §10] 70↑ 전체 표시 / 55~69 참고 중심값+넓은 범위 / 45~54 범위만 / 45↓ 보류
         # 신뢰도가 낮다는 이유로 모든 정보를 숨기지 않는다.
@@ -3431,6 +3456,11 @@ class QuantIndicatorsEngine:
             raw_probability_score = 50 + ((win_rate / 100.0) - 0.50) * 400
             statistical_confidence = min(1.0, eff_trades / 30.0)
             probability_edge_score = 50 + (raw_probability_score - 50) * statistical_confidence
+            # 라운드 404 · 그림자 B2 — 이 점수는 자르지 않고 매매 적합도·기회점수에 들어가 0~100 밖으로 나간다
+            #   (외부 검토 · 매칭 수가 있는 원장 2,838행의 13.67% · −63.3~250). 교정본은 다른 항목이 이미 쓰는
+            #   0~100 으로 자른다 — 새 숫자 없음. 운영은 꺼져 있다.
+            if 'B2' in self.corrections:
+                probability_edge_score = float(np.clip(probability_edge_score, 0.0, 100.0))
         else:
             probability_edge_score = 50
 

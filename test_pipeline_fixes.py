@@ -31210,6 +31210,115 @@ check("옛 규칙 판정 행은 링크 한 줄 — 사유 줄을 따로 안 그�
       and "옛 판정 — 지금 다시 재기 (1~3분)</a>" in _wa392 and "title='{_uk._esc_attr(_wy240)}' " in _wa392)
 
 
+print("=" * 72)
+print("§393 교정본 그림자 기록 — 운영은 꺼진 채 · 켜는 곳은 한 곳 · 스위치마다 심기 (라운드 404)")
+print("=" * 72)
+# 사용자 결정(2026-10-01): "교정본 그림자 기록으로 해줘." 외부 검토의 고침 다섯(B1~B5)은 11-16 전방 평가 동안 운영에
+#   안 넣고 따로 만든 엔진 인스턴스에만 켜서 옆 파일에 적는다(사전등록 docs/PREREG_R404_SHADOW_CORRECTIONS.md · 측정 전 커밋).
+#   여기서 잠그는 것: ① 운영은 꺼져 있다(기본 빈 집합 · 켜는 곳은 기록기의 따로 만든 인스턴스 하나) ② 스위치는 이름으로만
+#   읽힌다 ③ 스위치마다 켰을 때만 값이 바뀐다(합성 입력 · 양방향) ④ 기록기가 운영 기록을 다 쓴 **뒤에** 돈다 ⑤ 파일이 실린다.
+import ast as _ast393                                            # noqa: E402
+import os as _os393                                              # noqa: E402
+import tempfile as _tf393                                        # noqa: E402
+import numpy as _np393                                           # noqa: E402
+import pandas as _pd393                                          # noqa: E402
+import entry_facts as _ef393                                     # noqa: E402
+import forward_shadow as _fsh393                                 # noqa: E402
+import quant_indicators as _qi393                                # noqa: E402
+import verdict_core as _vc393                                    # noqa: E402
+
+check("운영 엔진은 스위치가 전부 꺼져 있다 — 클래스 기본이 빈 집합 · 교정본 이름은 다섯",
+      _qi393.QuantIndicatorsEngine.corrections == frozenset()
+      and _qi393.QuantIndicatorsEngine().corrections == frozenset()
+      and tuple(_fsh393.CORRECTIONS) == ('B1', 'B2', 'B3', 'B4', 'B5'))
+# ② 엔진이 스위치를 읽는 자리는 전부 `'Bn' in self.corrections` 모양이다 (AST · 다른 읽기가 생기면 실패)
+with open(_os393.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8') as _f393:
+    _qt393 = _ast393.parse(_f393.read())
+_uses393, _odd393 = [], 0
+for _n393 in _ast393.walk(_qt393):
+    if isinstance(_n393, _ast393.Attribute) and _n393.attr == 'corrections' \
+            and isinstance(_n393.value, _ast393.Name) and _n393.value.id == 'self':
+        _uses393.append(_n393)
+_ins393 = set()
+for _n393 in _ast393.walk(_qt393):
+    if isinstance(_n393, _ast393.Compare) and len(_n393.ops) == 1 and isinstance(_n393.ops[0], _ast393.In) \
+            and isinstance(_n393.left, _ast393.Constant) and isinstance(_n393.comparators[0], _ast393.Attribute) \
+            and _n393.comparators[0].attr == 'corrections':
+        _ins393.add(_n393.left.value)
+        _odd393 -= 1
+_odd393 += len(_uses393)
+check("엔진은 스위치를 `'Bn' in self.corrections` 로만 읽는다 — 이름은 B1·B2·B4·B5 (B3 은 중앙 판정)",
+      _odd393 == 0 and _ins393 == {'B1', 'B2', 'B4', 'B5'}, f'읽기 {len(_uses393)} · 이름 {sorted(_ins393)}',
+      scanned=len(_uses393))
+# ③ 스위치마다 — 합성 입력 · 꺼짐/켜짐 양방향
+_off393 = _qi393.QuantIndicatorsEngine()
+_on393 = _qi393.QuantIndicatorsEngine()
+_on393.corrections = frozenset({'B1', 'B4', 'B5'})
+
+
+def _val393(_e, _px, eps=1500.0, roe=15.0, per=8.0):
+    _t = _pd393.DataFrame({'adj_close': _np393.full(60, float(_px)), 'vol_20': _np393.full(60, 0.02)})
+    _f = _pd393.DataFrame([{'eps': eps, 'roe': roe, 'bps': 10000.0, 'per': per, 'pbr': 1.0, 'debt_ratio': 50.0}])
+    return _e.evaluate_valuation_metric(_t, _f, symbol=None) or {}
+
+
+_b4o = (_val393(_off393, 10000, eps=500.0, roe=5.0, per=20.0).get('model_results') or {}).get('PBR_ROE') or {}
+_b4n = (_val393(_on393, 10000, eps=500.0, roe=5.0, per=20.0).get('model_results') or {}).get('PBR_ROE') or {}
+check("B4 — ROE 5% 에서 PBR 가지 모형이 꺼짐이면 유효 · 켜짐이면 무효",
+      _b4o.get('valid') is True and _b4n.get('valid') is False, f"{_b4o.get('valid')} → {_b4n.get('valid')}")
+_c5o = _val393(_off393, 10000).get('fair_value_confidence')
+_c5n = _val393(_on393, 10000).get('fair_value_confidence')
+check("B5 — 늘 40 인 검증 칸을 빼고 나머지 여섯으로: 켜짐 = (꺼짐 − 0.10×40) ÷ 0.90",
+      _c5o is not None and _c5n is not None and abs(_c5n - (_c5o - 4.0) / 0.9) < 1e-6, f'{_c5o} → {_c5n}')
+# B1 — 원 괴리율 +44% 와 +46% 를 만드는 가격을 **엔진 자신의** 가중중앙값에서 유도한다(손으로 가격을 안 고른다)
+_base393 = _val393(_off393, 10000)
+_fair393 = 10000.0 * (1.0 + float(_base393.get('raw_upside_pct') or 0.0) / 100.0)
+_p44, _p46 = _fair393 / 1.44, _fair393 / 1.46
+_u = {(k, r): _val393(e, p).get('upside_pct') for k, e in (('off', _off393), ('on', _on393))
+      for r, p in ((44, _p44), (46, _p46))}
+check("B1 — 경계 역전: 꺼짐은 원 +46% 가 +44% 보다 낮게 나오고(역전) · 켜짐은 순서를 지킨다 (양방향)",
+      None not in _u.values() and _u[('off', 46)] < _u[('off', 44)] and _u[('on', 46)] >= _u[('on', 44)],
+      str({f'{k}{r}': round(v, 2) for (k, r), v in _u.items() if v is not None}))
+# B3 — 중앙 판정 · 같은 계획의 실측(산출물)으로 · 꺼짐은 종전 식 그대로
+_fs393 = {'current_price': 10000.0, 'entry_pullback_price': 9800.0, 'entry_stop_price': 9500.0,
+          'entry_target_1st': 10300.0, 'calibration_band': {'hit_rate': 60.0, 'n': 100}}
+_b3o, _b3n = _vc393.build(_fs393), _vc393.build(_fs393, corrections=('B3',))
+_a393 = ((_ef393.load() or {}).get('splits') or {}).get('all') or {}
+_up393, _dn393 = (10300 / 9800 - 1) * 100, (9500 / 9800 - 1) * 100
+check("B3 — 꺼짐은 종전 식(점수대 적중률) · 켜짐은 같은 계획의 실측(닿을 확률 × (목표 먼저 · 손절 먼저 − 비용))",
+      _b3o.get('expected_return') == round(0.6 * _up393 + 0.4 * _dn393 - _vc393.COST_PCT, 2)
+      and _b3n.get('expected_return') == round(_a393['fill_rate'] / 100 * (_a393['tgt_first'] / 100 * _up393
+                                                + _a393['stop_first'] / 100 * _dn393 - _vc393.COST_PCT), 2),
+      f"{_b3o.get('expected_return')} → {_b3n.get('expected_return')}")
+check("꺼짐은 종전과 같다 — build(fs) 와 build(fs, corrections=()) 의 출력이 칸마다 같다",
+      _vc393.build(_fs393) == _vc393.build(_fs393, corrections=()))
+# ④ 기록기 — 운영 기록(판정 원장·기록부·시점 보관)을 다 쓴 **뒤에** 따로 만든 인스턴스에서 돈다
+with open(_os393.path.join(PROJ, 'scripts', 'forward_recorder.py'), encoding='utf-8') as _f393:
+    _rec393 = _f393.read()
+_i_reg393 = _rec393.find('_fr.record(')
+_i_book393 = _rec393.find('잔여 호가 시점 보관 실패')
+_i_sh393 = _rec393.find('_q404 = qi.QuantIndicatorsEngine()')
+_rt393 = _ast393.parse(_rec393)
+_assign393 = [_ast393.unparse(t) for n in _ast393.walk(_rt393) if isinstance(n, _ast393.Assign)
+              for t in n.targets if isinstance(t, _ast393.Attribute) and t.attr == 'corrections']
+check("기록기는 운영 기록을 다 쓴 뒤에 교정 인스턴스를 만든다 · 스위치를 켜는 자리는 그 인스턴스 하나",
+      0 < _i_reg393 < _i_book393 < _i_sh393 and _assign393 == ['_q404.corrections'], str(_assign393))
+# ⑤ 파일 — 멱등 · 칸 · 실리는 목록
+_row393 = _fsh393.make_row('000001', '2026-10-01', {'score': 50, 'bucket': 'x'}, {'score': 51, 'bucket': 'x'})
+_tmp393 = _os393.path.join(_tf393.mkdtemp(), 'fs393.jsonl')
+_w1, _s1 = _fsh393.append_rows(_tmp393, [_row393])
+_w2, _s2 = _fsh393.append_rows(_tmp393, [_row393])
+check("그림자 한 줄 — 규약 이름 · 달라진 칸만 diff · 같은 (종목, 날짜)는 한 번만 (멱등)",
+      _row393['spec'] == _fsh393.SPEC and _row393['diff'] == ['score'] and (_w1, _s1, _w2, _s2) == (1, 0, 0, 1),
+      f"{_row393['diff']} · {(_w1, _s1, _w2, _s2)}")
+with open(_os393.path.join(PROJ, 'scripts', 'backup_research_data.py'), encoding='utf-8') as _f393:
+    _bk393 = _f393.read()
+with open(_os393.path.join(PROJ, 'scripts', 'snapshot_guard.py'), encoding='utf-8') as _f393:
+    _sg393 = _f393.read()
+check("그림자 파일이 업로드 화이트리스트와 축소 감시에 있다 (그날 것만 만들 수 있다 — 잃으면 영영이다)",
+      "'forward_shadow.jsonl'" in _bk393 and "'forward_shadow.jsonl'" in _sg393)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

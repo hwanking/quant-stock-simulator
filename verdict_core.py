@@ -254,7 +254,7 @@ def fill_probability(entry, price, vol_20, horizon=HORIZON):
 
 
 def build(four_scores, verdict=None, price_axes=None, next_action=None,
-          realtime_price=None, tighten_hold_stop=False):
+          realtime_price=None, tighten_hold_stop=False, corrections=()):
     """
     모든 화면이 공유할 단일 판정.
 
@@ -365,7 +365,24 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     cb = fs.get('calibration_band') or {}
     hit = _f(cb.get('hit_rate'))
     exp_ret = None
-    if entry and tgt and stop and hit is not None and (cb.get('n') or 0) >= 30:
+    if 'B3' in (corrections or ()):
+        # 라운드 404 · 그림자 B3 — 운영 식의 p 는 **현재가에 산** 채점의 적중률인데, 목표·손절은 **눌림 진입가**에서
+        #   잰다(외부 검토 · 두 계획이 섞였다). 교정본은 같은 계획(눌림 진입가 · 20봉)으로 잰 실측을 쓴다 — 라운드 32
+        #   산출물(`data/entry_fill_facts.json` · 현행 엔진 · 전 구간): 닿을 확률 × (닿은 뒤 목표 먼저 × 목표폭 + 손절
+        #   먼저 × 손절폭 − 왕복 비용). 미결(20봉 안에 둘 다 안 닿음)은 **0 으로 둔다**(그 몫의 수익은 산출물에 없다 ·
+        #   사전등록에 가정으로 적었다). 산출물을 못 읽으면 None(지어내지 않는다 · §3). 운영은 꺼져 있다.
+        try:
+            import entry_facts as _ef404
+            _a404 = ((_ef404.load() or {}).get('splits') or {}).get('all') or {}
+            _fill404, _pt404, _ps404 = (_f(_a404.get('fill_rate')), _f(_a404.get('tgt_first')),
+                                        _f(_a404.get('stop_first')))
+        except Exception:                                      # noqa: BLE001
+            _fill404 = _pt404 = _ps404 = None
+        if entry and tgt and stop and None not in (_fill404, _pt404, _ps404):
+            up = (tgt / entry - 1.0) * 100.0
+            dn = (stop / entry - 1.0) * 100.0
+            exp_ret = round(_fill404 / 100.0 * (_pt404 / 100.0 * up + _ps404 / 100.0 * dn - COST_PCT), 2)
+    elif entry and tgt and stop and hit is not None and (cb.get('n') or 0) >= 30:
         p = hit / 100.0
         up = (tgt / entry - 1.0) * 100.0
         dn = (stop / entry - 1.0) * 100.0

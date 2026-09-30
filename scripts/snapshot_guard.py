@@ -60,7 +60,9 @@ WATCH = ('virtual_predictions*.jsonl', 'virtual_graded.jsonl',
          # 라운드 341 — 재무 시점 보관. 소급이 안 되는 자료라 줄어들면 그날 것을 잃은 것이다.
          'fin_pit.jsonl',
          # 라운드 342 — 잔여 호가 시점 보관. 같은 이유.
-         'book_pit.jsonl')
+         'book_pit.jsonl',
+         # 라운드 404 — 교정본 그림자 기록. 그날의 운영·교정 판은 다시 못 만든다(같은 이유).
+         'forward_shadow.jsonl')
 
 
 def counts():
