@@ -4273,7 +4273,10 @@ if st.session_state.get('show_screener', False):
             _scan_unm = len(st.session_state.get('attention_unmapped') or [])
             _scan_lost = max(0, int(scan_depth) - len(scan_results)
                              - len(scan_failures) - _scan_unm)
-            _scan_why1 = ((" — 예: " + _uk._esc(str(scan_failures[0].get('reason') or '')[:48]))
+            # 라운드 394 — 48자에서 **말없이** 잘렸다(라운드 314·315 의 자리 · 감사 도구가 cp949 콘솔에서 이 줄 앞에서
+            #   죽어 목록에 안 나왔다). 전체는 아래 접힌 칸에 있으므로 자르되 잘랐다고 적는다.
+            _why1_394 = str(scan_failures[0].get('reason') or '') if scan_failures else ''
+            _scan_why1 = ((" — 예: " + _uk._esc(_why1_394 if len(_why1_394) <= 48 else _why1_394[:47] + '…'))
                           if scan_failures else "")
 
             st.markdown(f"""
@@ -7936,26 +7939,37 @@ _issues_global = _pops.build_global_issues(_gi_calib, _gi_mkt)
 # 배지 색도 토큰에서만 온다 — 라이트에서 자기 틴트 위 대비가 무너졌었다
 _SEV_BADGE = {'높음': (_TOK['neg'], '높음'), '중간': (_TOK['warn'], '중간'),
               '낮음': (_TOK['tx2'], '낮음')}
-if _issues_global:
-    # 토글형 (v5) — 접힌 상태에서도 건수·최상위 이슈가 제목에 보인다
-    with st.expander(f"주요 이슈 {len(_issues_global)}건 — "
-                     f"{_issues_global[0]['title']}", expanded=False):
+# ⚠️ 라운드 394 — 이 칸 전체가 `if _issues_global:` 안에 있었다. 그래서 화면 규칙(위 함수)이 경고를 하나도
+#   안 내는 날에는 **이슈 등록부의 열린 과제**(원인·영향·조치·점검일)까지 통째로 안 보였다 — 2026-09-30:
+#   화면 규칙 0건 · 등록부 열린 과제 2건(하나는 점검일이 오늘 · 하나는 15일 지남). 등록부는 따로 읽고
+#   둘 중 하나라도 있으면 칸을 연다. 등록부를 못 읽으면 종전과 같다(§3 · 없는 과제를 지어내지 않는다).
+try:
+    from improvement import issue_ops as _iops
+    from improvement.database import get_connection as _icx
+    _ic2 = _icx()
+    try:
+        _iops.ensure_schema(_ic2)
+        _tracked = [r for r in _iops.issue_view(_ic2, 12)
+                    if r.get('cause')]
+    finally:
+        _ic2.close()
+except Exception:
+    _tracked = []
+_open_tracked = [r for r in _tracked if str(r.get('status') or '') == 'open']
+if _issues_global or _open_tracked:
+    # 토글형 (v5) — 접힌 상태에서도 건수·최상위 이슈가 제목에 보인다. 제목은 **진행 중 과제**를 먼저
+    #   센다(라운드 394 · 자동 경고와 과제가 같은 괴리를 두 번 말할 수 있어 합쳐 세지 않는다).
+    _iss_title = (f"주요 이슈 — 진행 중 과제 {len(_open_tracked)}건"
+                  + (f" · 자동 경고 {len(_issues_global)}건" if _issues_global else '')
+                  + f" — {(_open_tracked[0] if _open_tracked else _issues_global[0])['title']}"
+                  if _open_tracked else
+                  f"주요 이슈 {len(_issues_global)}건 — {_issues_global[0]['title']}")
+    # 펼침 라벨은 마크다운이다 — 등록부 제목은 자료라 물결표 짝이 생기면 취소선이 된다(라운드 337 의 자리)
+    with st.expander(_md_safe(_iss_title), expanded=False):
         # ── 조치 관리 (경고만 띄우지 않는다) ─────────────────────────
         # 각 이슈의 원인·영향·조치·예정일·상태를 함께 보여준다.
         # 3일 넘게 방치되면 성격이 자동 재분류되므로 같은 경고가 설명 없이
         # 반복되지 않는다.
-        try:
-            from improvement import issue_ops as _iops
-            from improvement.database import get_connection as _icx
-            _ic2 = _icx()
-            try:
-                _iops.ensure_schema(_ic2)
-                _tracked = [r for r in _iops.issue_view(_ic2, 12)
-                            if r.get('cause')]
-            finally:
-                _ic2.close()
-        except Exception:
-            _tracked = []
         if _tracked:
             _ST_TONE = {'해결 완료': 'pos', '검증 중': 'brand', '수정 중': 'warn',
                         '확인 중': 'warn', '즉시 수정 불가': 'tx2',
@@ -7993,8 +8007,11 @@ if _issues_global:
                     f"line-height:1.6;'><b>왜 생겼나</b> "
                     f"{_uk._esc_md(_tr.get('cause',''))}<br>"
                     f"<b>영향</b> {_uk._esc_md(_tr.get('user_impact',''))}<br>"
-                    f"<b>지금 하는 일</b> "
-                    f"{_uk._esc_md(_tr.get('action_plan',''))}<br>"
+                    # 라운드 394 — 닫힌 과제의 조치 칸은 그때의 계획이다. '지금 하는 일'로 적으면 끝난 일을
+                    #   진행 중으로 읽는다(라운드 172 가 배지에서 고친 그 모양 · 칸 이름에도 적용).
+                    + ("<b>지금 하는 일</b> " if str(_tr.get('status') or '') == 'open'
+                       else "<b>당시 계획</b> ")
+                    + f"{_uk._esc_md(_tr.get('action_plan',''))}<br>"
                     f"<b>임시 안전조치</b> "
                     f"{_uk._esc_md(_tr.get('safeguard',''))}<br>"
                     f"<b>목표</b> {_uk._esc_md(_tr.get('target',''))}"
@@ -11607,12 +11624,17 @@ if _perf_cal.get('total_cases'):
                        + (" 판정 순서: " + " → ".join(_chain_p) if _chain_p
                           else " 판정 순서는 다음 채점 실행부터 여기에 표시됩니다."))
         _warn_lines = []
-        _v_p, _b_p = _sp_p.get('valid') or {}, _sp_p.get('blind') or {}
-        if (_v_p.get('hit_rate') is not None and _b_p.get('hit_rate') is not None
-                and _v_p['hit_rate'] - _b_p['hit_rate'] >= 10):
+        # ⚠️ 라운드 394 — 여기가 같은 괴리의 **세 번째 판정자**였다(전체 구간만 · 문턱 10 을 여기서 다시 적음).
+        #   2026-09-30: 전체 6.6%p 라 이 경고는 안 나왔고, 이 표가 머리로 내는 매수권(60점+)은 14.9%p 였다.
+        #   판정은 `product_ops.vb_gap` 하나 — 등록부·'주요 이슈'와 같은 함수다(§4). 이 줄은 회귀가 구조로 찾았다.
+        import product_ops as _po394p
+        _g394p = _po394p.vb_gap(_perf_cal)
+        if _g394p['crossed']:
             _warn_lines.append(
-                f"검증({_v_p['hit_rate']:.1f}%)과 블라인드({_b_p['hit_rate']:.1f}%) "
-                "적중률 괴리가 큽니다 — 특정 장세 편중·과최적화 가능성을 감시 중입니다.")
+                f"검증과 블라인드의 적중률 괴리가 {_po394p.VB_GAP_PP}%p를 넘었습니다"
+                f"({'·'.join(_g394p['crossed'])}) — " + ' · '.join(_g394p['parts'])
+                + ". 블라인드 구간에는 검증 구간에 거의 없던 하락장이 섞여 있습니다. "
+                  "같은 국면끼리의 격차는 전방 재평가 때 잽니다.")
         _bzb_p = (_bz_p.get('blind') or {})
         if (_bzb_p.get('n') or 0) < 30:
             _warn_lines.append(

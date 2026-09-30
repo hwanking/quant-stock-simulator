@@ -130,6 +130,12 @@ def scan_engine_text():
 
 
 if __name__ == '__main__':
+    # 라운드 394 — cp949 콘솔에서 목록의 em-dash 한 글자에 `UnicodeEncodeError` 로 **목록 중간에서 죽었다**
+    #   (42곳 중 몇 곳을 찍고 멈춰 뒤쪽 자리를 못 봤다). 인코딩은 그대로 두고 못 찍는 글자만 바꾼다(라운드 271 의 자리).
+    try:
+        sys.stdout.reconfigure(errors='replace')
+    except Exception:                                          # noqa: BLE001
+        pass
     r = scan()
     print('자르는 자리 %d곳 · 그중 옆에서 개수를 말하는 곳 %d곳'
           % (len(r), sum(1 for x in r if x['has_count'])))

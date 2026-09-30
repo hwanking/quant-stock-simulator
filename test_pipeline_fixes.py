@@ -23272,9 +23272,12 @@ _rdi271 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
 check("일일 규칙이 닫지 않은 사유를 찍는다 (조용히 넘기지 않는다 · §3)",
       "print(f\"  이슈 {key} 닫지 않음 — {why}\")" in _rdi271
       and _rdi271.count("_resolve('") == 3 and "it.resolve_by_key(conn, '" not in _rdi271)
-check("'매수 신호 발생률'이 잰 것(매수권 58점+ 비율)의 이름으로 바뀌었다",
-      "title='매수권(58점+) 발생률 과소'" in _rdi271 and '매수 추천 ' in _rdi271
-      and "title='매수 신호 발생률 과소'" not in _rdi271)
+# ⚠️ 라운드 394 — 이 락이 라운드 256 의 **틀린 이름**('58점+')을 지키고 있었다. 그 수(`signal_frequency`)는
+#   처음부터 `score >= 60` 을 센다 — 락을 잰 것의 이름(60점+)으로 옮겼다(재려던 것은 '이름 = 잰 것'이다).
+check("'매수 신호 발생률'이 잰 것(매수권 60점+ 비율)의 이름으로 바뀌었다",
+      "title='매수권(60점+) 발생률 과소'" in _rdi271 and '매수 추천 ' in _rdi271
+      and "title='매수 신호 발생률 과소'" not in _rdi271
+      and "title='매수권(58점+) 발생률 과소'" not in _rdi271)
 check("읽는 쪽은 여전히 status 를 먼저 본다 (라운드 172 불변)",
       "resolved = str(d.get('status') or '') == 'resolved'" in _read148(_os.path.join(PROJ, 'improvement', 'issue_ops.py')))
 
@@ -23493,9 +23496,15 @@ check("둘 다 10%p 미만이면 열지 않는다 (심기)", len(_c276) == 0, st
 _d276 = _run276(_calib276(65.4, 60.0, 90.0, 10.0, n_bz=10))  # 매수권 표본 10 — 판정 안 함
 check("매수권 표본이 30 미만이면 그 모집단은 판정하지 않는다 (80%p 차이여도 · §3 · 심기)",
       len(_d276) == 0, str(_d276)[:200])
-_rdi_src276 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
-check("일일 규칙이 매수권 표본 부족을 찍는다 (조용히 넘기지 않는다 · §3)",
-      '매수권 괴리 미측정' in _rdi_src276)
+# 라운드 394 — 이 검사는 글자('매수권 괴리 미측정')가 일일 규칙 파일에 있는지 봤는데, 판정이 `product_ops.vb_gap`
+#   한 곳으로 옮겨 가며 글자도 옮겨 갔다. 재려던 것은 **찍는가**이므로 돌려서 출력을 본다(글자를 못 박지 않는다).
+import contextlib as _ctx276
+import io as _io276
+_buf276 = _io276.StringIO()
+with _ctx276.redirect_stdout(_buf276):
+    _run276(_calib276(65.4, 60.0, 90.0, 10.0, n_bz=10))
+check("일일 규칙이 매수권 표본 부족을 찍는다 (조용히 넘기지 않는다 · §3 · 돌려서 봄)",
+      '매수권 괴리 미측정' in _buf276.getvalue(), _buf276.getvalue().strip()[:160])
 
 print()
 print("§277 R263 — 일일 개선 파이프라인이 평일 26일 중 24일 흔적이 없다 · 침묵을 실패로 (2026-09-10)")
@@ -30451,6 +30460,190 @@ check("배너가 그 띠의 블라인드 적중을 전체 블라인드와 **같�
       "_all393 = ((_cal188.get('splits') or {}).get('blind') or {})" in _wa384
       and "'보다 낮습니다' if _bl188['hit_rate'] < _all393['hit_rate']" in _wa384
       and "_bzt393 = ''" in _wa384 and '+ _bzt393' in _wa384)
+
+print("\n" + "=" * 72)
+print("§385 닫힌 이슈가 다시 열린다 · 괴리 판정자는 하나 · 열린 과제는 화면에 (라운드 394)")
+print("=" * 72)
+# 무엇이 있었나(2026-09-30):
+#   ① 이슈 등록부의 `issue_key` 칸이 UNIQUE 인데 삽입이 `INSERT OR IGNORE` 라, 같은 키의 **닫힌** 행이 있으면 새 행이
+#      조용히 무시됐다(그러고도 새 id 를 돌려줬다). `model|vb_gap` 은 09-03 에 닫힌 뒤 매수권 괴리 14.9%p 에도 한 번도
+#      안 열렸다 — 라운드 262 의 회귀(§276)는 매번 **빈 DB** 로 재서 그 상태를 밟지 않았다. 여기서는 **실제 등록부의
+#      모양**(닫힌 같은 키가 이미 있음)을 심고, 실제 등록부의 **복사본**에도 돌린다.
+#   ② 같은 괴리를 화면 규칙(전체만)과 등록부(매수권+전체)가 따로 쟀다 → `product_ops.vb_gap` 하나.
+#   ③ '주요 이슈' 칸 전체가 화면 규칙의 경고가 있을 때만 열려, 등록부의 열린 과제가 안 보였다.
+#   ④ 열린 과제의 문구는 코드(PLAYBOOK) 한 곳에서 읽는다 — 등록부 칸은 그날의 복사본이라 낡아 있었다.
+import ast as _ast385                                            # noqa: E402
+import re as _re385                                              # noqa: E402
+import shutil as _sh385                                          # noqa: E402
+import tempfile as _tf385                                        # noqa: E402
+import product_ops as _po385                                     # noqa: E402
+import forward_eval as _fe385                                    # noqa: E402
+from improvement import database as _db385                      # noqa: E402
+from improvement import issue_tracker as _it385                 # noqa: E402
+from improvement import issue_ops as _io385                     # noqa: E402
+from scripts import run_daily_improvement as _rdi385            # noqa: E402
+_td385 = _tf385.mkdtemp(prefix='r394_')
+
+
+def _fresh385(name):
+    _p = _os.path.join(_td385, name)
+    _db385.initialize_database(_p)
+    _c = _db385.get_connection(_p)
+    _io385.ensure_schema(_c)
+    return _c
+
+
+# 2026-09-30 실측 모양 — 전체 6.6%p(문턱 미만) · 매수권 14.9%p(넘음)
+_cal385 = {'rulebook_version': 'v-test',
+           'splits': {'valid': {'n': 16251, 'hit_rate': 65.4}, 'blind': {'n': 17663, 'hit_rate': 58.8},
+                      'buy_zone': {'valid': {'n': 1261, 'hit_rate': 69.4},
+                                   'blind': {'n': 1320, 'hit_rate': 54.5}}},
+           'signal_frequency': {'rate_pct': 6.6}}
+_c385 = _fresh385('reopen.db')
+_id385 = _it385.create_issue(_c385, category='model', severity='high', title='검증-블라인드 괴리 감시',
+                             summary='옛 요약', issue_key='model|vb_gap')
+_c385.execute("UPDATE improvement_issues SET status='resolved', resolved_at='2026-09-03T22:28:15' "
+              "WHERE issue_id=?", (_id385,))
+_c385.commit()
+_rdi385.make_detect_issues(_c385, _cal385)()
+_c385.commit()
+_rows385 = _c385.execute("SELECT issue_id, issue_key, status, summary, next_review FROM improvement_issues "
+                         "WHERE issue_key LIKE 'model|vb_gap%' ORDER BY created_at").fetchall()
+_open385 = [r for r in _rows385 if r[1] == 'model|vb_gap' and r[2] == 'open']
+check("같은 키의 닫힌 행이 이미 있어도 조건이 다시 넘으면 새로 연다 (종전엔 조용히 무시 · 실제 등록부 모양 · 심기)",
+      len(_open385) == 1 and '14.9' in str(_open385[0][3]), str([tuple(r) for r in _rows385])[:260])
+check("닫힌 행은 지우지도 되돌리지도 않는다 — 열쇠 뒤에 @<id> 를 달아 이력으로 남는다",
+      any(r[0] == _id385 and r[1] == f'model|vb_gap@{_id385}' and r[2] == 'resolved' and r[3] == '옛 요약'
+          for r in _rows385), str([tuple(r) for r in _rows385])[:260])
+_fed385 = str(_fe385.eval_date() or '')[:10]
+check("다시 연 괴리 과제의 점검일은 전방 재평가일이다 (같은 국면끼리 견주려면 전방 표본이 필요 · 날짜는 박제 파일 한 곳)",
+      bool(_open385) and bool(_fed385) and str(_open385[0][4])[:10] == _fed385,
+      f"점검일 {(_open385[0][4] if _open385 else None)} · 전방 재평가 {_fed385}")
+check("이미 열려 있으면 None — 만든 척하지 않는다 (종전엔 넣지 못해도 새 id 를 돌려줬다)",
+      _it385.create_issue(_c385, category='model', severity='high', title='t', summary='s',
+                          issue_key='model|vb_gap') is None)
+_c385.execute("UPDATE improvement_issues SET status='resolved' WHERE issue_key='model|vb_gap'")
+_id385b = _it385.create_issue(_c385, category='model', severity='high', title='t', summary='두 번째 재발',
+                              issue_key='model|vb_gap')
+_keys385 = [r[0] for r in _c385.execute("SELECT issue_key FROM improvement_issues "
+                                        "WHERE issue_key LIKE 'model|vb_gap%'").fetchall()]
+check("닫고 다시 열기를 거듭해도 열쇠가 안 겹친다 — 살아 있는 열쇠 하나 · 이력 둘",
+      bool(_id385b) and _keys385.count('model|vb_gap') == 1 and len(_keys385) == 3
+      and len(set(_keys385)) == 3, str(_keys385))
+_c385.close()
+
+# ② 판정자는 하나 — 같은 모양에서 화면 규칙과 등록부가 같은 답을 낸다(종전: 화면 '없음' · 등록부 '넘음')
+_gi385 = _po385.build_global_issues(_cal385, {'index_missing': False})
+check("화면의 '주요 이슈' 규칙도 매수권 괴리를 잰다 — 전체 6.6%p 여도 매수권 14.9%p 면 경고 (종전엔 0건)",
+      any('괴리' in i['title'] and '매수권' in i['title'] for i in _gi385)
+      and _po385.vb_gap(_cal385)['crossed'] == ['매수권'], str([i['title'] for i in _gi385]))
+# 대상은 손으로 안 적는다(R114) — 화면이 닿는 모듈 전부 + 일일 규칙. 표기는 둘 다 본다(x['hit_rate'] · x.get('hit_rate')).
+#   ⚠️ 첫 판은 모듈 셋을 손으로 적었고 그래도 **세 번째 판정자**(모델 성적 화면의 '반드시 함께 읽어야 하는 한계')를
+#   잡았다 — 손 목록이 우연히 맞았을 뿐이라 유도로 바꿨다.
+import scripts.lineage_audit as _la385                           # noqa: E402
+
+
+def _hit385(n):
+    return ((isinstance(n, _ast385.Subscript) and isinstance(n.slice, _ast385.Constant)
+             and n.slice.value == 'hit_rate')
+            or (isinstance(n, _ast385.Call) and isinstance(n.func, _ast385.Attribute) and n.func.attr == 'get'
+                and n.args and isinstance(n.args[0], _ast385.Constant) and n.args[0].value == 'hit_rate'))
+
+
+_mods385 = sorted(set(_la385.reachable_modules('web_app.py'))
+                  | {_os.path.join('scripts', 'run_daily_improvement.py')})
+_hr385, _seen385 = {}, 0
+for _m385 in _mods385:
+    _p385 = _os.path.join(PROJ, _m385)
+    if not _os.path.exists(_p385):
+        continue
+    try:
+        _tree385 = _ast385.parse(_read148(_p385))
+    except SyntaxError:
+        continue
+    _seen385 += 1
+    _fns385 = [n for n in _ast385.walk(_tree385) if isinstance(n, (_ast385.FunctionDef, _ast385.AsyncFunctionDef))]
+    for _n385 in _ast385.walk(_tree385):
+        if (isinstance(_n385, _ast385.BinOp) and isinstance(_n385.op, _ast385.Sub)
+                and _hit385(_n385.left) and _hit385(_n385.right)):
+            _own385 = [f.name for f in _fns385
+                       if f.lineno <= _n385.lineno <= (f.end_lineno or f.lineno)]
+            _hr385.setdefault(_m385, []).append(_own385[-1] if _own385 else '(모듈)')
+check("검증−블라인드 괴리를 빼서 재는 자리는 `product_ops.vb_gap` 하나뿐이다 (구조 · 화면 도달 모듈 전부 + 일일 규칙)",
+      set(_hr385) == {'product_ops.py'} and set(_hr385['product_ops.py']) == {'vb_gap'},
+      str(_hr385), scanned=_seen385)
+
+# ③ 실제 등록부의 **복사본**에 오늘 calibration 으로 돌린다 — 원본은 안 건드린다(수정시각으로 확인)
+_real385 = _os.path.join(PROJ, '.portfolio', 'improvement.db')
+_rcal385 = _rdi385._load_calib()
+if _os.path.exists(_real385) and (_rcal385.get('splits') or {}):
+    _mt385 = _os.path.getmtime(_real385)
+    _cp385 = _os.path.join(_td385, 'real_copy.db')
+    _sh385.copyfile(_real385, _cp385)
+    _rc385 = _db385.get_connection(_cp385)
+    try:
+        _io385.ensure_schema(_rc385)
+        _rdi385.make_detect_issues(_rc385, _rcal385)()
+        _rc385.commit()
+        _ro385 = _rc385.execute("SELECT COUNT(*) FROM improvement_issues WHERE issue_key='model|vb_gap' "
+                                "AND status='open'").fetchone()[0]
+    finally:
+        _rc385.close()
+    _want385 = bool(_po385.vb_gap(_rcal385)['crossed'])
+    check("실제 등록부(복사본)에서도 괴리가 넘으면 과제가 열려 있다 (넘지 않으면 안 연다 · 실행 증거)",
+          (_ro385 == 1) if _want385 else True,
+          f"넘은 모집단 {_po385.vb_gap(_rcal385)['crossed']} · 열린 행 {_ro385}")
+    check("실제 등록부 원본은 안 바뀌었다 (복사본에만 돌렸다 · 수정시각)",
+          _os.path.getmtime(_real385) == _mt385)
+else:
+    skipped("실제 등록부 복사본 재현", "등록부나 calibration 이 이 환경에 없다 (gitignored)")
+
+# ④ 열린 과제의 문구는 PLAYBOOK 한 곳 · 닫힌 과제는 그때의 등록부 칸 그대로
+_cv385 = _fresh385('view.db')
+_it385.create_issue(_cv385, category='usability', severity='medium', title='손절', summary='s',
+                    issue_key='usability|loss_control_tradeoff')
+_cv385.execute("UPDATE improvement_issues SET cause='옛 원인', action_plan='선택지로 노출할지 검토합니다' "
+               "WHERE issue_key='usability|loss_control_tradeoff'")
+_hid385 = _it385.create_issue(_cv385, category='validation', severity='medium', title='표본',
+                              summary='s', issue_key='validation|high_conf_n')
+_cv385.execute("UPDATE improvement_issues SET status='resolved', cause='그때의 원인' WHERE issue_id=?",
+               (_hid385,))
+_cv385.commit()
+_vw385 = {str(r.get('issue_key')).split('@')[0]: r for r in _io385.issue_view(_cv385, 12)}
+_cv385.close()
+_pbl385 = _io385.PLAYBOOK['usability|loss_control_tradeoff']
+check("열린 과제의 원인·조치 문구는 코드(PLAYBOOK)에서 읽는다 — 등록부의 낡은 복사본을 안 쓴다 (심기)",
+      _vw385.get('usability|loss_control_tradeoff', {}).get('action_plan') == _pbl385['action']
+      and _vw385['usability|loss_control_tradeoff'].get('cause') == _pbl385['cause'],
+      str(_vw385.get('usability|loss_control_tradeoff', {}).get('action_plan'))[:80])
+check("닫힌 과제는 그때의 등록부 칸 그대로다 (이력을 오늘 문장으로 덮지 않는다)",
+      _vw385.get('validation|high_conf_n', {}).get('cause') == '그때의 원인')
+_pbv385 = _io385.PLAYBOOK['model|vb_gap']
+_pbs385 = _io385.PLAYBOOK['model|score_not_separating']
+check("이번에 화면에 나가게 된 과제 문구의 수에는 잰 날짜가 붙어 있다 (날짜 없는 수는 낡는다 · §2)",
+      all(_re385.search(r'20\d\d-\d\d-\d\d', t) for t in (_pbv385['cause'], _pbv385['action'],
+                                                       _pbs385['cause'], _pbs385['action'])))
+
+# ⑤ 화면 — 등록부를 칸 밖에서 먼저 읽고, 열린 과제만 있어도 칸을 연다(구조)
+_tw385 = _ast385.parse(_read148(_os.path.join(PROJ, 'web_app.py')))
+_gate385 = [n for n in _ast385.walk(_tw385)
+            if isinstance(n, _ast385.If) and isinstance(n.test, _ast385.BoolOp)
+            and isinstance(n.test.op, _ast385.Or)
+            and {getattr(v, 'id', None) for v in n.test.values} == {'_issues_global', '_open_tracked'}]
+_trk385 = [n.lineno for n in _ast385.walk(_tw385)
+           if isinstance(n, _ast385.Assign) and any(getattr(t, 'id', None) == '_tracked' for t in n.targets)]
+check("'주요 이슈' 칸은 화면 경고나 등록부의 열린 과제 중 하나만 있어도 열린다 (등록부는 칸 밖에서 먼저 읽는다)",
+      len(_gate385) == 1 and bool(_trk385) and max(_trk385) < _gate385[0].lineno,
+      f"게이트 {len(_gate385)} · _tracked 대입 줄 {_trk385}", scanned=len(_gate385))
+_titles385 = []
+for _n385 in _ast385.walk(_ast385.parse(_read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py')))):
+    if (isinstance(_n385, _ast385.Call) and getattr(_n385.func, 'attr', None) == 'create_issue'):
+        _titles385 += [k.value.value for k in _n385.keywords
+                       if k.arg == 'title' and isinstance(k.value, _ast385.Constant)]
+check("일일 규칙이 여는 과제 이름이 잰 것과 같다 — '고신뢰'·'58점+' 없음(신호율은 60점+ 를 센다)",
+      bool(_titles385) and not any(('고신뢰' in t) or ('58점' in t) for t in _titles385),
+      str(_titles385), scanned=len(_titles385))
+_sh385.rmtree(_td385, ignore_errors=True)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

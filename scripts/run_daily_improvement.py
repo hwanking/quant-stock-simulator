@@ -251,9 +251,12 @@ def make_detect_issues(conn, calib):
             if why:
                 print(f"  이슈 {key} 닫지 않음 — {why}")
 
+        # 라운드 394 — 이름을 화면과 맞춘다(라운드 393 이 화면에서 '고신뢰'를 '매수권 60점+'로 좁혔다 ·
+        #   그 띠의 블라인드 적중이 전체보다 낮아 이름이 계산보다 넓었다). 이미 등록부에 있는 옛 행의
+        #   제목은 이력이라 안 바꾼다.
         if (bz.get('n') or 0) < 30:
             it.create_issue(conn, category='validation', severity='medium',
-                            title='고신뢰 신호 표본 부족',
+                            title='매수권(60점+) 신호 표본 부족',
                             summary=f"60점+ 블라인드 {bz.get('n', 0)}건 — "
                                     "적중률을 대표 성과로 쓰지 않는다.",
                             related_model=ver, issue_key='validation|high_conf_n')
@@ -265,45 +268,34 @@ def make_detect_issues(conn, calib):
         #   14.8%p 였다(2026-09-10 실측 · 69.0 vs 54.2). 문턱 10%p 는 그대로(이미 채택된 규칙) —
         #   어느 모집단이든 넘으면 열고, 요약이 두 수를 같이 말한다(R233). 매수권 표본이
         #   30 미만인 구간이 있으면 그 모집단은 판정하지 않고 찍는다(§3 · 하한 30 재사용).
-        bzv = (sp.get('buy_zone') or {}).get('valid') or {}
-        gap_all = None
-        if v.get('hit_rate') is not None and b.get('hit_rate') is not None:
-            gap_all = v['hit_rate'] - b['hit_rate']
-        gap_bz = None
-        if (bzv.get('hit_rate') is not None and bz.get('hit_rate') is not None
-                and (bzv.get('n') or 0) >= 30 and (bz.get('n') or 0) >= 30):
-            gap_bz = bzv['hit_rate'] - bz['hit_rate']
-        else:
-            print(f"  매수권 괴리 미측정 — 표본 valid {bzv.get('n', 0)} · "
-                  f"blind {bz.get('n', 0)} (하한 30)")
-        crossed = []
-        if gap_bz is not None and gap_bz >= 10:
-            crossed.append('매수권')
-        if gap_all is not None and gap_all >= 10:
-            crossed.append('전체')
-        if crossed:
-            parts = []
-            if gap_bz is not None:
-                parts.append(f"매수권(60점+) 검증 {bzv['hit_rate']:.1f}% vs 블라인드 "
-                             f"{bz['hit_rate']:.1f}% ({gap_bz:+.1f}%p · n "
-                             f"{int(bzv.get('n') or 0):,}·{int(bz.get('n') or 0):,})")
-            if gap_all is not None:
-                parts.append(f"전체 구간 {v['hit_rate']:.1f}% vs {b['hit_rate']:.1f}% "
-                             f"({gap_all:+.1f}%p)")
-            it.create_issue(conn, category='model', severity='high',
-                            title='검증-블라인드 괴리 감시',
-                            summary=' · '.join(parts)
-                                    + f" — 10%p 넘은 모집단: {'·'.join(crossed)} · "
-                                      "과최적화·장세 편중 조사.",
-                            related_model=ver, issue_key='model|vb_gap')
-        elif gap_all is not None or gap_bz is not None:
+        # 라운드 394 — 괴리의 판정은 `product_ops.vb_gap` **한 곳**이다. 종전엔 이 자리와 화면의 '주요 이슈'가
+        #   같은 괴리를 따로 쟀고 모집단이 달랐다(여기는 매수권+전체 · 화면은 전체만 → 2026-09-30 한쪽은 괴리
+        #   14.9%p · 한쪽은 '없음'). 판정 규칙·문턱·표본 하한은 한 글자도 안 바꿨다(옮겼을 뿐이다).
+        import product_ops as _po394
+        _g394 = _po394.vb_gap(calib)
+        if _g394['unmeasured']:
+            print(f"  {_g394['unmeasured']}")
+        if _g394['crossed']:
+            _new394 = it.create_issue(
+                conn, category='model', severity='high',
+                title='검증-블라인드 괴리 감시',
+                summary=' · '.join(_g394['parts'])
+                        + f" — {_po394.VB_GAP_PP}%p 넘은 모집단: {'·'.join(_g394['crossed'])}",
+                related_model=ver, issue_key='model|vb_gap')
+            # 연 것은 찍는다 — 조용히 열리거나 조용히 안 열리면 무엇이 됐는지 아무도 모른다(라운드 394 가
+            #   그렇게 20일을 몰랐다 · §3)
+            if _new394:
+                print(f"  이슈 model|vb_gap 열림 — {' · '.join(_g394['parts'])}")
+        elif _g394['gap_all'] is not None or _g394['gap_bz'] is not None:
             _resolve('model|vb_gap')
 
-        # 라운드 256 — 이 수는 **매수권(58점+) 케이스의 비율**이지 매수 추천의 비율이
-        #   아니다(신규 매수 제목은 원장 251,528건 중 56건 · 0.022%). 이름을 잰 것에 맞춘다.
+        # 라운드 256 이 이 이름을 *"매수권(58점+) 케이스의 비율"* 이라 적었는데 **틀렸다**(라운드 394 정정) —
+        #   `calibration_lab` 의 `signal_frequency` 는 처음(v2026.08.02)부터 **60점+** 를 센다
+        #   (`score >= 60` · 로그 머리도 '매수권 = 점수 60+'). 매수 추천 자체의 비율이 아니라는 R256 의 요지는
+        #   그대로다(신규 매수 제목은 원장 251,528건 중 56건 · 0.022%). 이름을 잰 것에 맞춘다.
         if (sig.get('rate_pct') or 100) < 5.0:
             it.create_issue(conn, category='usability', severity='medium',
-                            title='매수권(58점+) 발생률 과소',
+                            title='매수권(60점+) 발생률 과소',
                             summary=f"매수권 발생률 {sig.get('rate_pct')}% — 매수 추천 "
                                     "자체의 비율이 아니다 · 실용성 점검.",
                             related_model=ver, issue_key='usability|signal_rate')

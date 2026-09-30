@@ -15,7 +15,16 @@ def create_issue(conn: sqlite3.Connection, *, category: str, severity: str,
                  issue_key: Optional[str] = None) -> Optional[str]:
     """
     issue_key(안 주면 category|title)가 이미 open 이면 만들지 않는다 —
-    같은 경고가 매일 새 줄로 쌓이는 것을 막는다. 생성 시 issue_id 반환.
+    같은 경고가 매일 새 줄로 쌓이는 것을 막는다. 생성 시 issue_id 반환 · 못 만들었으면 None.
+
+    ⚠️ 라운드 394 (2026-09-30) — **닫힌 키는 영영 다시 열리지 않았다.** `issue_key` 칸이 UNIQUE 인데 삽입이
+      `INSERT OR IGNORE` 라, 같은 키의 **닫힌** 행이 있으면 새 행이 조용히 무시됐다 — 그러고도 새 id 를
+      돌려줘 부른 쪽은 연 줄 알았다. 실측: `model|vb_gap` 은 2026-09-03 에 닫힌 뒤, 라운드 262 가 *매수권
+      괴리(14.9%p)로도 연다* 고 고친 날(09-10)부터 매일 밤 열려야 했는데 **한 번도 안 열렸다**. 라운드 262 의
+      회귀는 매번 **빈 DB** 를 새로 만들어 재서 이 상태(닫힌 같은 키가 이미 있음)를 한 번도 밟지 않았다.
+      → 닫힌 행은 **지우지도 되돌리지도 않는다**(이력 · 라운드 256). 그 행의 열쇠 뒤에 `@<issue_id>` 를 붙여
+        이력으로 남기고 — 열쇠 칸은 늘 '지금 살아 있는 그 이슈' 하나를 가리킨다(`apply_playbook` ·
+        `resolve_by_key` 가 열쇠로 찾는다) — 새 행을 연다. 넣지 못하면 None(만든 척하지 않는다 · §3).
     """
     key = issue_key or f"{category}|{title}"
     dup = conn.execute(
@@ -23,8 +32,13 @@ def create_issue(conn: sqlite3.Connection, *, category: str, severity: str,
         "WHERE issue_key=? AND status='open'", (key,)).fetchone()
     if dup:
         return None
+    old = conn.execute(
+        "SELECT issue_id FROM improvement_issues WHERE issue_key=?", (key,)).fetchone()
+    if old:
+        conn.execute("UPDATE improvement_issues SET issue_key=? WHERE issue_id=?",
+                     (f"{key}@{old[0]}", old[0]))
     issue_id = f"ISSUE-{uuid.uuid4().hex[:12]}"
-    conn.execute(
+    cur = conn.execute(
         """
         INSERT OR IGNORE INTO improvement_issues (
             issue_id, issue_key, created_at, category, severity,
@@ -33,7 +47,7 @@ def create_issue(conn: sqlite3.Connection, *, category: str, severity: str,
         """,
         (issue_id, key, datetime.now(timezone.utc).isoformat(), category,
          severity, title, summary, detail, related_model, related_ticker))
-    return issue_id
+    return issue_id if cur.rowcount == 1 else None
 
 
 def list_open_issues(conn: sqlite3.Connection, limit: int = 5) -> list:

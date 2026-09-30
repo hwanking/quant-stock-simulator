@@ -152,6 +152,54 @@ def _issue(kind, sev, title, detail, scope='전체'):
             'created': datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 
+#: 검증−블라인드 괴리 문턱(%p) · 모집단 표본 하한 — 이미 채택된 규칙 그대로(라운드 262 · 하한 30 은 R84 재사용)
+VB_GAP_PP = 10
+VB_GAP_MIN_N = 30
+
+
+def vb_gap(calib):
+    """검증−블라인드 괴리 — **판정자는 이 하나다** (라운드 394 · §4).
+
+    ⚠️ 종전엔 같은 괴리를 두 곳이 따로 쟀다 — 이슈 등록부(일일 파이프라인)는 라운드 262 부터 **매수권(60점+)과
+      전체 두 모집단**으로 재는데, 화면의 '주요 이슈'(여기)는 **전체 구간 하나**로만 쟀다. 2026-09-30 실측:
+      전체 65.4 vs 58.8(6.6%p · 문턱 미만) · 매수권 69.4 vs 54.5(14.9%p · 넘음) — 한쪽은 '괴리 없음', 한쪽은
+      '괴리'였다(라운드 246 의 *고침이 판정자 한 명에게만 갔다*). 둘 다 이 함수를 부른다.
+
+    반환: dict(gap_all, gap_bz, crossed, parts, unmeasured) — crossed 는 문턱을 넘은 모집단 이름 목록,
+      parts 는 두 모집단의 수를 같이 적은 조각(같은 이름의 수가 둘이면 단위를 옆에 · R233),
+      unmeasured 는 매수권 표본이 하한 미만이라 판정하지 않았을 때의 사유(아니면 None · §3).
+    """
+    sp = (calib or {}).get('splits') or {}
+    v, b = sp.get('valid') or {}, sp.get('blind') or {}
+    bzv = (sp.get('buy_zone') or {}).get('valid') or {}
+    bzb = (sp.get('buy_zone') or {}).get('blind') or {}
+    gap_all = None
+    if v.get('hit_rate') is not None and b.get('hit_rate') is not None:
+        gap_all = v['hit_rate'] - b['hit_rate']
+    gap_bz, unmeasured = None, None
+    if (bzv.get('hit_rate') is not None and bzb.get('hit_rate') is not None
+            and (bzv.get('n') or 0) >= VB_GAP_MIN_N and (bzb.get('n') or 0) >= VB_GAP_MIN_N):
+        gap_bz = bzv['hit_rate'] - bzb['hit_rate']
+    else:
+        unmeasured = (f"매수권 괴리 미측정 — 표본 valid {bzv.get('n', 0)} · "
+                      f"blind {bzb.get('n', 0)} (하한 {VB_GAP_MIN_N})")
+    crossed = []
+    if gap_bz is not None and gap_bz >= VB_GAP_PP:
+        crossed.append('매수권')
+    if gap_all is not None and gap_all >= VB_GAP_PP:
+        crossed.append('전체')
+    parts = []
+    if gap_bz is not None:
+        parts.append(f"매수권(60점+) 검증 {bzv['hit_rate']:.1f}% vs 블라인드 "
+                     f"{bzb['hit_rate']:.1f}% ({gap_bz:+.1f}%p · n "
+                     f"{int(bzv.get('n') or 0):,}·{int(bzb.get('n') or 0):,})")
+    if gap_all is not None:
+        parts.append(f"전체 구간 {v['hit_rate']:.1f}% vs {b['hit_rate']:.1f}% "
+                     f"({gap_all:+.1f}%p)")
+    return dict(gap_all=gap_all, gap_bz=gap_bz, crossed=crossed, parts=parts,
+                unmeasured=unmeasured)
+
+
 def build_global_issues(calib, market_ctx=None):
     """
     전역 이슈 — calibration.json 실측과 시장 컨텍스트 실측에서만 만든다.
@@ -160,7 +208,6 @@ def build_global_issues(calib, market_ctx=None):
     issues = []
     c = calib or {}
     sp = c.get('splits') or {}
-    v, b = sp.get('valid') or {}, sp.get('blind') or {}
     bz = (sp.get('buy_zone') or {}).get('blind') or {}
 
     if (bz.get('n') or 0) < 30:
@@ -169,13 +216,16 @@ def build_global_issues(calib, market_ctx=None):
             f"매수권(60점+) 신호 표본 부족 경고 유지 (n={bz.get('n', 0)})",
             f"블라인드 매수권(60점+) 적중률 {bz.get('hit_rate', 0):.0f}%는 표본이 적어 "
             "확정 성능으로 인정하지 않습니다. 30건까지는 참고만 하세요."))
-    if (v.get('hit_rate') is not None and b.get('hit_rate') is not None
-            and v['hit_rate'] - b['hit_rate'] >= 10):
+    # 라운드 394 — 괴리 판정은 `vb_gap` 하나(등록부와 같은 함수). 종전 설명 *"장세 변화·과최적화 가능성을
+    #   조사하고 있습니다 — 상세: docs/BLIND_GAP_REPORT.md. 블라인드 개선이 최우선 과제입니다"* 는 두 가지가
+    #   사실이 아니었다 — 그 보고서는 자동으로 다시 만들어지지 않고(워크플로에 없다), 사용자는 저장소 문서를
+    #   열 수 없다. 잰 수만 적는다(국면으로 가른 설명과 조치는 등록부 과제 카드가 한 곳에서 말한다 · §4).
+    _g = vb_gap(c)
+    if _g['crossed']:
         issues.append(_issue(
             '모델', '높음',
-            f"검증({v['hit_rate']:.1f}%)-블라인드({b['hit_rate']:.1f}%) 괴리 감시 중",
-            "장세 변화·과최적화 가능성을 조사하고 있습니다 — 상세: "
-            "docs/BLIND_GAP_REPORT.md. 블라인드 개선이 최우선 과제입니다."))
+            f"검증-블라인드 괴리 {VB_GAP_PP}%p 넘음 — {'·'.join(_g['crossed'])}",
+            ' · '.join(_g['parts'])))
     sig = c.get('signal_frequency') or {}
     if sig.get('rate_pct') is not None and sig['rate_pct'] < 5:
         issues.append(_issue(
