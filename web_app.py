@@ -646,16 +646,23 @@ def _render_toolbar(here_html: str = '') -> None:
     #   않도록 사이드바 맨 아래 작고 옅은 글씨로") — 엔진 7축 칩과 데이터 점검 상태는 **사이드바 푸터**로 옮겼다
     #   (`_version_meta_html` 을 푸터가 부른다). 종전 요구("업데이트가 가장 중요하다 — 맨 위")는 끊지 않는다 —
     #   상단 바에 **최근 업데이트 한 줄**을 남기고 누르면 이력으로 간다.
-    if not here_html:
-        _NAV_SLOT.empty()
-        return
+    # 라운드 399 (2026-10-01 · 사용자: 본문 맨 위 빈 줄을 가리키며 *"요기에 예전처럼 엔진정보 넣자"*) — R376 이 칩을
+    #   사이드바 푸터로 옮긴 결정(그때의 사용자 요청)을 **되돌린다.** 상단 바: 상태 점 · 되돌려 본 판단 수 · 엔진 축
+    #   버전 칩(누르면 업데이트 이력) · 업데이트 날짜 · 보는 중. 종목을 고르기 전에도 그린다(그 줄이 비어 있었다).
+    #   같은 칩을 두 곳에 두지 않는다 — 푸터에서는 뺐다(§4 · 칩을 만드는 함수는 여전히 `_version_meta_html` 하나).
+    try:
+        _st399, _chips399 = _version_meta_html()
+    except Exception:                                          # noqa: BLE001
+        _st399, _chips399 = '', ''         # 못 그리면 비운다 — 앱을 죽이지 않는다
     _NAV_SLOT.markdown(
-        f'<div class="qnav">'
-        f"<a href='#nav-updates' class='qvers' title='누르면 업데이트 이력으로 갑니다 · "
-        f"엔진 버전은 왼쪽 사이드바 맨 아래에 있습니다'>"
+        f'<div class="qnav">{_st399}'
+        f"<a href='#nav-updates' class='qvers qchips' title='누르면 업데이트 이력으로 갑니다 · 버전은 앱 출시일이 "
+        f"아니라 그 축이 마지막으로 바뀐 시점입니다'>{_chips399}</a>"
+        f"<a href='#nav-updates' class='qvers qupd' title='누르면 업데이트 이력으로 갑니다'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>업데이트</span> "
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']};'>{APP_UPDATED}</span></a>"
-        f'<span class="here">{here_html}</span></div>',
+        + (f'<span class="here">{here_html}</span>' if here_html else '')
+        + '</div>',
         unsafe_allow_html=True)
 
 
@@ -1572,6 +1579,14 @@ if _theme == 'light':
     </style>
     """, unsafe_allow_html=True)
 
+# ── 제미나이 톤 — 전역 층들 뒤에 한 번 (라운드 399) ───────────────────────────
+# 사용자: "제미나이 사이트 스타일로 전체로 바꿔줄래? 사이트 다시 단장하고 싶어졌어." 위의 전역 층들(킷 전역 ·
+# 애플 정돈 · 옛 다크 규칙 · 라이트 오버라이드)을 하나씩 고치지 않고 층 하나로 덮는다 — 그래서 **그 넷 뒤**여야
+# 한다(앞에 두면 뒤 층이 이긴다 · 회귀가 자리를 잠근다). ⚠️ '맨 뒤'는 아니다 — 아래에 좁은 자리(사이드바 버튼 ·
+# 표 · 카드) 블록이 8개 더 오고, 그중 사이드바 버튼 블록은 특이도로 이 층을 이겨서 gemini_css 가 그 자리만 한
+# 단계 더 구체적으로 적는다. 글꼴·모서리·채움·선택 표시만 바꾸고 값·판정은 불변.
+st.markdown(f"<style>{_uk.gemini_css(_theme)}</style>", unsafe_allow_html=True)
+
 # ── 브라우저 클립보드 붙여넣기 컴포넌트 ──────────────────────────────────────
 # 사용자 브라우저의 paste 이벤트로 이미지를 받는다. 서버 클립보드를 읽는 방식과 달리
 # 온라인(클라우드) 접속에서도 그대로 동작하고, 이미지는 이 앱 서버까지만 전달된다.
@@ -1884,8 +1899,10 @@ st.sidebar.markdown(
     unsafe_allow_html=True)
 
 st.sidebar.markdown(
-    f"<div style='padding:4px 0 14px 0;'>"
-    f"{_uk.logo(_theme, size=30, href='?home=1', title='첫 화면으로 (검색어·스캔 결과 초기화)')}"
+    # 라운드 399 — 제미나이 톤 로고(반짝임 마크 · 그라디언트 워드마크) + 한 줄. 이 줄은 CSS(`ui_kit.gemini_css`)가
+    #   사이드바 머리줄(접기 버튼 줄)로 끌어올린다 — 종전엔 머리줄 60px 과 빈 style 칸 둘 아래에 있어 위가 비어 보였다.
+    f"<div style='padding:0 0 12px 0;'>"
+    f"{_uk.logo(_theme, size=36, sub='되돌려 재 보고 판단하는 퀀트', href='?home=1', title='첫 화면으로 (검색어·스캔 결과 초기화)')}"
     f"</div>",
     unsafe_allow_html=True)
 
@@ -3498,19 +3515,13 @@ def _holiday_line376():
 # Streamlit 의 divider 는 위아래 여백까지 65px 이다(브라우저 실측) — 푸터를 가르는 데는 얇은 선이면 된다.
 st.sidebar.markdown(f"<div style='border-top:1px solid {_TOK['border']}; margin:14px 0 8px 0;'></div>",
                     unsafe_allow_html=True)
-try:
-    _st376, _chips376 = _version_meta_html()
-except Exception:                                              # noqa: BLE001
-    _st376, _chips376 = '', ''           # 못 그리면 비운다 — 앱을 죽이지 않는다
+# 라운드 399 — 엔진 상태·버전 칩·업데이트 날짜는 사용자 요청으로 **상단 바로 돌아갔다**(`_render_toolbar`).
+#   같은 칩을 두 곳에 두지 않으므로 푸터에는 휴장일 대조 한 줄과 처음으로·라이트 모드만 남는다.
 _hl376, _ht376 = _holiday_line376()
 st.sidebar.markdown(
-    f"<div style='font-size:12px; line-height:1.7; color:{_TOK['tx3']};'>"
-    f"<div>{_st376}</div>"
-    f"<a href='#nav-updates' class='qvers' style='text-decoration:none; display:block;' "
-    f"title='누르면 업데이트 이력으로 갑니다'>{_chips376}</a>"
+    f"<div style='font-size:13px; line-height:1.7; color:{_TOK['tx3']};'>"
     f"<a href='#nav-holidays' style='text-decoration:none; color:{_TOK.get(_ht376, _TOK['tx3'])};'>"
-    f"{_uk._esc(_hl376)}</a>"
-    f"<div>앱 업데이트 {APP_UPDATED}</div></div>",
+    f"{_uk._esc(_hl376)}</a></div>",
     unsafe_allow_html=True)
 _fc1_376, _fc2_376 = st.sidebar.columns([1, 1])
 with _fc1_376:
@@ -4096,7 +4107,11 @@ st.markdown(
     f"letter-spacing:0.04em; color:{_TOK['tx3']};'>오늘의 판단</p>"
     f"<h1 style='font-size:40px; font-weight:700; letter-spacing:-0.026em; "
     f"line-height:1.15; margin:0 0 10px 0; color:{_TOK['tx1']};'>"
-    f"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; "
+    # 라운드 399 — 제미나이 인사말처럼 대제목(40px 굵게)에만 서명 그라디언트. 큰 글자라 3:1 기준을 넘는다.
+    f"<span class='gm-grad' style='background:{_uk.GEMINI_GRADIENT}; "
+    f"-webkit-background-clip:text; background-clip:text; "
+    f"-webkit-text-fill-color:transparent;'>{_uk._esc(resolved_name)}</span>"
+    f"<span style='color:{_TOK['tx3']}; "
     f"font-size:20px; font-weight:500; letter-spacing:-0.01em; "
     f"margin-left:10px;'>{_uk._esc(target_ticker)}</span></h1>"
     f"<p style='margin:0; font-size:17px; color:{_TOK['tx2']}; "
@@ -6567,7 +6582,7 @@ else:
                               f"<br><span style='font-size:12px; color:{_TOK['tx3']};'>수량 미입력</span>"))
             _trs229.append(
                 "<tr>"
-                f"<td><a href='{_uk._esc_attr(_href229)}' target='_self' style='color:{_TOK['tx1']}; "
+                f"<td class='nm'><a href='{_uk._esc_attr(_href229)}' target='_self' style='color:{_TOK['tx1']}; "
                 f"text-decoration:none; font-weight:600;'>{_uk._esc(_w.get('name') or _wcode)}</a>"
                 f"<span style='color:{_TOK['tx3']}; font-size:12px;'> {_uk._esc(_wcode)}</span></td>"
                 f"<td class='n'>{(f'{_px_w:,.0f}원' if _px_w else '미수신')}</td>"
@@ -6576,13 +6591,13 @@ else:
                 f"<br><span style='color:{_TOK['tx3']};'>2차 </span>{_wl_cell(_w.get('snap_t2'))}</td>"
                 f"<td class='n'>{_wl_cell(_w.get('snap_fair'))}<br><span style='font-size:12px; "
                 f"color:{_fcc229};'>{_uk._esc(_fct229)}</span></td>"
-                f"<td>{_jd229}</td>"
+                f"<td class='jd'>{_jd229}</td>"
                 f"<td class='n'>{_wl_cell(_paid229) if _paid229 > 0 else '—'}</td>"
                 f"<td class='n'>{(f'{_qty229:,}주' if _qty229 > 0 else '—')}</td>"
                 f"<td class='n'>{_pnl229}</td>"
                 # 라운드 244 — 행마다 빼기. 이름 링크와 같은 길(쿼리 파라미터)이라
                 #   행 높이가 그대로다. 되돌리기는 표 위에 나온다.
-                f"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' "
+                f"<td class='n lk'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' "
                 f"title='관심종목에서 뺍니다 — 바로 되돌릴 수 있습니다' "
                 f"style='color:{_TOK['tx3']}; text-decoration:none; font-size:12px;'>"
                 f"빼기</a>"
@@ -6617,14 +6632,23 @@ else:
         #   (라운드 201) 새 칸은 글자 하나짜리 링크뿐이고 숫자 칸은 안 건드렸다.
         _ths229 = "".join(f"<th{' class=\'n\'' if _i229 in (1, 2, 3, 4, 6, 7, 8, 9) else ''}>{_uk._esc(_h229)}</th>"
                           for _i229, _h229 in enumerate(_WL_HDR))
+        # 라운드 399 — 판단 칸만 줄바꿈을 허락한다. 종전엔 모든 칸이 nowrap 이라 판단 칸의 여러 줄(판정 · 추가매수
+        #   · 이력)이 한 줄로 늘어나 표가 1,783px(본문 1,050px)이 되고 판단이 화면 밖으로 잘렸다(브라우저 실측
+        #   2026-10-01 · 1440px). 숫자 칸은 그대로 한 줄 · 칸 여백을 넓혀 따닥따닥 붙어 보이던 행을 띄운다.
         st.markdown(
-            f"<div style='overflow-x:auto;'><table style='width:100%; border-collapse:collapse; "
-            f"font-size:13px; line-height:1.35; color:{_TOK['tx2']};'>"
+            f"<div style='overflow-x:auto;'><table class='wl' style='width:100%; border-collapse:collapse; "
+            f"font-size:13px; line-height:1.5; color:{_TOK['tx2']};'>"
             f"<thead><tr style='color:{_TOK['tx3']}; font-size:12px; text-align:left;'>{_ths229}</tr></thead>"
             f"<tbody>{''.join(_trs229)}</tbody></table></div>"
-            f"<style>table td, table th {{ padding:6px 8px; border-bottom:1px solid {_TOK['border']}; "
+            f"<style>table td, table th {{ padding:10px 6px; border-bottom:1px solid {_TOK['border']}; "
             f"vertical-align:top; white-space:nowrap; }} table td.n, table th.n {{ text-align:right; "
-            f"font-variant-numeric:tabular-nums; }}</style>",
+            f"font-variant-numeric:tabular-nums; }} table td.jd {{ white-space:normal; min-width:180px; "
+            f"max-width:340px; }} table td.nm {{ white-space:normal; min-width:130px; max-width:180px; }} "
+            f"table td.lk {{ white-space:normal; min-width:64px; }} "
+            f"table th {{ white-space:normal; }} "
+            # 라운드 399 — Streamlit 마크다운 표 규칙(칸 여백 6px 12px)이 위 `table td` 보다 구체적이라 여백이
+            #   한 번도 안 먹었다(브라우저 실측). 이 표에만 이름을 붙여 이긴다 — 다른 표는 그대로다.
+            f".stApp table.wl td, .stApp table.wl th {{ padding:10px 6px !important; }}</style>",
             unsafe_allow_html=True)
 
     _old_memo = [(str(_w.get('name') or ''), str(_w.get('memo') or ''))
@@ -10132,7 +10156,7 @@ with _vc1:
     st.dataframe(pd.DataFrame([{
         "구성 항목": c['label'],
         "점수": "—" if c['score'] is None else f"{c['score']}",
-        "비중": f"{c['weight_pct']:.0f}%",
+        "비중(1단계 안)": f"{c['weight_pct']:.0f}%",
         "기여": "—" if c['contribution'] is None else f"{c['contribution']:.1f}",
     } for c in verdict['composition']]), width='stretch', hide_index=True)
     if verdict['cap_applied']:

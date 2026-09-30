@@ -4827,8 +4827,12 @@ check("팔레트는 킷이 유일 출처 — web_app 이 직접 정의하지 않
       '_pal(_uk.DARK)' in _w81 and '_pal(_uk.LIGHT)' in _w81)
 _cfg81 = open(_os.path.join(PROJ, ".streamlit", "config.toml"),
               encoding='utf-8').read()
-check("Streamlit 자체 크롬도 같은 토큰 — 배경 일치",
-      '#0B0F17' in _cfg81)
+# 라운드 399 — 여기가 배경 리터럴('#0B0F17')을 요구하고 있었다. 바로 아래 두 검사처럼 **값이 팔레트와
+#   같은지**로 본다 — 팔레트를 바꾸면(제미나이 톤 · #131314) 리터럴 검사만 깨지고 뜻은 그대로였다(R98b 계열).
+_bg81 = _re.search(r'backgroundColor\s*=\s*"(#[0-9A-Fa-f]{6})"', _cfg81)
+check("Streamlit 자체 크롬도 같은 토큰 — 배경 일치 (값으로)",
+      bool(_bg81) and _bg81.group(1).upper() == _uk81.DARK['bg'].upper(),
+      f'config={_bg81.group(1) if _bg81 else "없음"} · 팔레트={_uk81.DARK["bg"]}')
 # 라운드 116 — primaryColor 가 #4C8DFF 라 주요 버튼만 팔레트 밖 파랑이었다.
 # ui_kit 의 brand 는 "다크의 모든 표면에서 4.5 를 넘기려고 명도를 조정한
 # 값" 이므로 그쪽에 맞춘다. 여기도 리터럴이 아니라 **값**으로 본다.
@@ -5228,8 +5232,13 @@ check("h1 고정 규칙도 인라인 크기를 존중한다",
       '.stApp h1:not([style*="font-size"])' in _w86)
 check("로고가 제목 역할 — 홈 버튼은 조용한 보조",
       '로고가 제목 역할을 하므로 이 버튼은 조용한 보조로 둔다' in _w86)
+# 라운드 399 — 제목의 종목명을 서명 그라디언트 span 으로 감쌌다(값·자리 불변). 옛 검사는 이름 바로 뒤에 코드 span 이
+#   붙는 **글자 모양**을 요구했다 — 뜻(h1 안에 종목명 · 그 옆에 코드)으로 본다.
+_h1_86 = _w86[_w86.find("<h1 style='font-size:40px"):]
+_h1_86 = _h1_86[:_h1_86.find('</h1>')]
 check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
-      "f\"{_uk._esc(resolved_name)}<span style='color:{_TOK['tx3']}; \"" in _w86)
+      '{_uk._esc(resolved_name)}</span>' in _h1_86 and '{_uk._esc(target_ticker)}</span>' in _h1_86,
+      f'h1 조각 {len(_h1_86)}자')
 # 라운드 44 — 예전에는 "_AX_KO = {'model': '모델'" 이라는 **리터럴**을 요구했다.
 # 그런데 축 목록을 화면에 손으로 나열해 둔 것이 바로 이번에 고친 결함이다
 # (versioning.AXES 가 5 → 7 로 늘었는데 화면은 5개만 그렸다).
@@ -5238,10 +5247,12 @@ check("본문 제목이 종목명 (사이드바 로고와 중복 제거)",
 # 라운드 376 — 사용자(2026-09-28)가 시스템 버전·데이터 갱신 정보를 **사이드바 맨 아래**로 옮겨 달라고 했다.
 #   이 검사의 이름("상단 바 한 줄에 …")이 거짓이 되므로 사실로 옮긴다: 상태와 7축 칩은 한 함수가 만들고
 #   (`_version_meta_html`) 사이드바 푸터가 그리며, 상단 바는 업데이트 한 줄과 '보는 중' 만 남는다.
-check("상태와 엔진 버전은 한 함수가 함께 만들고 사이드바 푸터가 그린다 · 상단 바엔 업데이트 한 줄과 보는 중",
+# 라운드 399 — 사용자(2026-10-01)가 본문 맨 위 빈 줄을 가리키며 *"요기에 예전처럼 엔진정보 넣자"* — R376 의 결정을
+#   되돌렸다. 성질(한 함수가 만든다 · 한 곳에만 그린다)은 그대로이고 그리는 자리만 상단 바로 돌아갔다.
+check("상태와 엔진 버전은 한 함수가 함께 만들고 상단 바가 그린다 (라운드 399 · 사용자 요청으로 푸터에서 되돌림)",
       '_STATUS_TOP' in _w86 and '_AX_KO' in _w86 and 'class="here"' in _w86
       and 'def _version_meta_html():' in _w86
-      and '_st376, _chips376 = _version_meta_html()' in _w86)
+      and '_st399, _chips399 = _version_meta_html()' in _w86)
 check("버전 칩 축 목록을 화면이 손으로 나열하지 않는다",
       'for _a in _ver.AXES' in _w86 and "'valuation': '적정가'" in _w86)
 
@@ -5459,7 +5470,10 @@ check("_TOK 키가 전부 유효하다 (오타 없음)", not _bad91, str(_bad91)
 
 # ui_kit 팔레트 키도 같은 방식으로 잠근다
 _UK91 = {'bg', 'card', 'raised', 'line', 'tx1', 'tx2', 'tx3', 'brand',
-         'up', 'down', 'pos', 'warn', 'neg'}
+         'up', 'down', 'pos', 'warn', 'neg',
+         # 라운드 399 — 제미나이 톤의 선택 알약(면·글자)과 브랜드로 채운 버튼 위 글자. 두 테마 모두 정의돼 있고
+         #   §389 가 대비를 값으로 잠근다.
+         'sel_bg', 'sel_tx', 'on_brand'}
 # ⚠️ ui_kit 에는 t(팔레트) 말고 it/step(항목 dict)도 있다. 팔레트만 봐야
 #    하므로 `t['...']` 중 앞이 식별자가 아닌 것만 센다 (it['key'] 제외).
 _u91 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
@@ -5820,8 +5834,10 @@ _u95 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
 check("상단 바에 엔진 버전 축을 빠짐없이 보여 준다",
       'for _a in _ver.AXES' in _w95 and "'news': '뉴스'" in _w95
       and "'sector': '업황'" in _w95)
+# 라운드 399 — 칩 링크에 두 줄 배치용 클래스를 더했다('qvers qchips'). 옛 검사는 class 글자 전체를 요구했다 —
+#   재려던 것은 "그 클래스의 링크가 업데이트 이력으로 가는가"다.
 check("엔진 버전 칩이 업데이트 이력으로 간다",
-      "class='qvers'" in _w95 and "href='#nav-updates'" in _w95)
+      "<a href='#nav-updates' class='qvers" in _w95)
 import inspect as _insp95                                        # noqa: E402
 import ui_kit as _uk95                                           # noqa: E402
 # 라운드 120d — 이 검사가 `_esc(version_href)` 라는 **소스 문자열**을 요구하고
@@ -6017,7 +6033,8 @@ check("상태 줄을 따로 그리지 않는다 (한 줄로 합침)",
       '_uk.status_bar(' not in _w98)
 # 라운드 44 — '5축' 이 아니라 versioning.AXES 전부다 (7축).
 # 라운드 376 — 한 바에서 사이드바 푸터로(위 §86 과 같은 이유). '한 곳에서 한 번' 이라는 성질은 그대로다.
-check("상태·판단수·엔진 축은 사이드바 푸터 한 곳에 · 상단 바엔 보는 중",
+# 라운드 399 — 다시 상단 바로(사용자 요청). '한 곳에서 한 번'(정의 1 + 부르는 곳 1)은 그대로다.
+check("상태·판단수·엔진 축은 상단 바 한 곳에 · 보는 중도 같은 바",
       '_STATUS_TOP' in _w98 and 'for _a in _ver.AXES' in _w98
       and 'class="here"' in _w98 and _w98.count('_version_meta_html()') == 2)
 check("룰북·산식이 바 안에서 두 번 나오지 않는다",
@@ -22459,8 +22476,11 @@ check("못 읽는 코드는 아무것도 빼지 않는다 (§3)",
 check("뺀 행 **전체**를 쥔다 — 되돌리면 값이 그대로 돌아온다",
       "st.session_state['wl_undo'] = dict(row)" in _w231
       and "_wl_write(_wl_items() + [_undo244], '되돌렸습니다')" in _w231)
+# 라운드 399 — 링크 칸에 줄바꿈 허용 클래스를 더했다(`n` → `n lk` · 표가 화면 폭을 넘던 것). 재려던 것은 "행마다
+#   빼기 링크가 나가는가"다 — 클래스 목록 전체가 아니라 링크의 모양으로 본다.
 check("표가 행마다 빼기 링크를 낸다 (보유·미보유 같은 표다)",
-      "f\"<td class='n'><a href='?drop={_uk._esc_attr(_wcode)}' target='_self' \"" in _w231)
+      "<a href='?drop={_uk._esc_attr(_wcode)}' target='_self' " in _w231
+      and _re.search(r"<td class='n[^']*'><a href='\?drop=", _w231) is not None)
 check("머리글이 10칸이고 마지막이 '관심' 이다 (칸을 더해도 숫자 칸은 안 건드렸다)",
       "'매입가 대비 · 평가손익', '관심')" in _w231
       and "for _i229, _h229 in enumerate(_WL_HDR))" in _w231)
@@ -29221,7 +29241,8 @@ for _n369 in _ast369.walk(_ast369.parse(_wa369)):
                       for g in _n369.value.elts]
 check("전역 묶음은 오늘의 시장 · 내 자산 · 검증과 이력 셋이다 (이 종목·도움 묶음은 없다)",
       _navsub369 == ['오늘의 시장', '내 자산', '검증과 이력'], str(_navsub369))
-_foot369 = _wa369.index('_st376, _chips376 = _version_meta_html()')
+# 라운드 399 — 푸터의 첫 그리기는 이제 휴장일 한 줄이다(엔진 칩은 상단 바로 돌아갔다).
+_foot369 = _wa369.index('_hl376, _ht376 = _holiday_line376()')
 check("푸터가 사이드바의 마지막 그리기다 — 보유종목 상세 토글 뒤 · 처음으로·라이트 모드가 푸터 안",
       _wa369.index('show_portfolio = st.sidebar.toggle(') < _foot369
       < _wa369.index('key="btn_home"') and _foot369 < _wa369.index('key="tgl_theme"'))
@@ -29229,8 +29250,13 @@ check("스캔 진행 막대는 '최신화' 아래 미리 잡은 자리에 — �
       '_SB_SCAN_BAR = st.sidebar.empty()' in _wa369
       and "_bar = _SB_SCAN_BAR if '_SB_SCAN_BAR' in globals() else st.sidebar.empty()" in _wa369)
 _tb369 = _wa369[_wa369.index('def _render_toolbar('):_wa369.index('def _version_meta_html():')]
-check("상단 바에 버전 칩이 없다 — 업데이트 한 줄 · 보는 중만",
-      '_chips' not in _tb369 and 'class=\'qvers\'' in _tb369 and 'APP_UPDATED' in _tb369)
+# 라운드 399 — 뒤집었다: 사용자(2026-10-01) *"요기에 예전처럼 엔진정보 넣자"*. 칩은 상단 바에 있고 푸터에는 없다
+#   (같은 칩을 두 곳에 두지 않는다 · 끝 앵커는 시작 뒤에서 찾는다 — R226).
+_ft369 = _wa369[_foot369:_wa369.index('key="tgl_theme"', _foot369)]
+check("상단 바에 엔진 칩이 있고 푸터에는 없다 (라운드 399 · 사용자 요청으로 되돌림)",
+      # 링크에 두 줄 배치 클래스가 붙어 'qvers qchips'·'qvers qupd' 가 됐다 — 클래스 이름이 있는지로 본다
+      '_chips399' in _tb369 and "class='qvers " in _tb369 and 'APP_UPDATED' in _tb369
+      and '_version_meta_html' not in _ft369, f'푸터 슬라이스 {len(_ft369)}자')
 check("휴장일 확인 절 — 앵커 · 메뉴 항목 · 이 절만 다시 도는 버튼",
       '<div id="nav-holidays"></div>' in _wa369 and "'href': '#nav-holidays'" in _wa369
       and '@st.fragment\ndef _holiday_panel376():' in _wa369)
@@ -30815,6 +30841,120 @@ _wa387 = _read148(_os.path.join(PROJ, 'web_app.py'))
 _i387 = _wa387.find("if _act.get('remeasure'):")
 check("관심종목 표가 그 행에 '아직 안 잼'과 같은 '지금 재기' 링크(?measure=)를 붙인다",
       _i387 > 0 and "?measure={_uk._esc_attr(_wcode)}" in _wa387[_i387:_i387 + 400])
+
+
+print("=" * 72)
+print("§389 제미나이 톤 — 대비는 네 면 모두에서 · 층 자리 · 글꼴 · 아이콘 · 상단 바 (라운드 399)")
+print("=" * 72)
+# 사용자(2026-10-01): *"제미나이 사이트 스타일로 전체로 바꿔줄래?"* · *"글자 크기 작은 것 · 안 보이는 것"* ·
+#   *"요기에 예전처럼 엔진정보 넣자."* 색을 새로 골랐으므로 **값으로** 잰다 — 눈대중 색은 한 면에서만 맞는다.
+import re as _re388                                              # noqa: E402
+import ui_kit as _uk388                                          # noqa: E402
+
+
+def _ratio388(a, b):
+    """WCAG 대비 — 이 절만 떼어 도는 사전 점검에서도 서게 §78 의 것을 빌리지 않는다(같은 식)."""
+    def _l(h):
+        c = [int(h.lstrip('#')[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    la, lb = _l(a) + 0.05, _l(b) + 0.05
+    return max(la, lb) / min(la, lb)
+
+
+_SURF388 = {'dark': _uk388.DARK_NAV, 'light': _uk388.LIGHT_NAV}
+_bad388, _n388 = [], 0
+for _th388 in ('dark', 'light'):
+    _t388 = _uk388.tokens(_th388)
+    _faces388 = (_t388['bg'], _t388['card'], _t388['raised'], _SURF388[_th388])
+    for _k388 in ('tx1', 'tx2', 'tx3', 'up', 'down', 'pos', 'warn', 'neg'):
+        for _f388 in _faces388:
+            _n388 += 1
+            if _ratio388(_t388[_k388], _f388) < 4.5:
+                _bad388.append((_th388, _k388, _f388, round(_ratio388(_t388[_k388], _f388), 2)))
+    for _a388, _b388 in (('sel_tx', 'sel_bg'), ('on_brand', 'brand')):
+        _n388 += 1
+        if _ratio388(_t388[_a388], _t388[_b388]) < 4.5:
+            _bad388.append((_th388, _a388, _b388, round(_ratio388(_t388[_a388], _t388[_b388]), 2)))
+check("글자 3단·의미색이 본문·카드·올린 면·사이드바 네 면 모두에서 4.5:1 이상 · 선택 알약·채운 버튼 글자도 (두 테마)",
+      not _bad388, str(_bad388)[:300], scanned=_n388)
+# 서명 그라디언트 세 점 — 큰 글자 기준 3:1 (그래서 큰 글자에만 쓴다)
+_stops388 = _re388.findall(r'#[0-9A-Fa-f]{6}', _uk388.GEMINI_GRADIENT)
+_gbad388 = [(_c, _f) for _th in ('dark', 'light')
+            for _f in (_uk388.tokens(_th)['bg'], _SURF388[_th]) for _c in _stops388
+            if _ratio388(_c, _f) < 3.0]
+check("서명 그라디언트 세 점이 두 테마 본문·사이드바에서 큰 글자 기준(3:1) 이상",
+      len(_stops388) == 3 and not _gbad388, str(_gbad388), scanned=len(_stops388) * 4)
+# 그라디언트 글자는 큰 글자에만 — gm-grad 를 쓰는 자리의 글자 크기가 28px 이상이거나 h1 안이다
+_wa388 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_uks388 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
+_gm388 = [m.start() for m in _re388.finditer(r"class='gm-grad'", _wa388 + '\n' + _uks388)]
+_gsmall388 = []
+for _p388 in _gm388:
+    _ctx388 = (_wa388 + '\n' + _uks388)[max(0, _p388 - 400):_p388 + 300]
+    _sz388 = [int(x) for x in _re388.findall(r'font-size:\s*(\d+)px', _ctx388[400:])]
+    if not ('<h1' in _ctx388 or (_sz388 and _sz388[0] >= 28)):
+        _gsmall388.append(_ctx388[400:460])
+check("그라디언트 글자(gm-grad)는 대제목(h1)이나 28px 이상 글자에만 쓴다",
+      _gm388 and not _gsmall388, str(_gsmall388)[:200], scanned=len(_gm388))
+# 층 자리 — 전역 층들(킷 전역 · 라이트 오버라이드) **뒤**에 한 번
+_ig388 = _wa388.find('_uk.gemini_css(_theme)')
+_iglob388 = _wa388.find('_uk.global_css(_theme)')
+_ilight388 = _wa388.find("\nif _theme == 'light':")
+check("제미나이 층을 한 번만 주입하고 전역 층(킷 전역 · 라이트 오버라이드) 뒤에 둔다",
+      _wa388.count('_uk.gemini_css(') == 1 and 0 < _iglob388 < _ilight388 < _ig388,
+      f"주입 {_wa388.count('_uk.gemini_css(')}회 · 자리 {_iglob388}/{_ilight388}/{_ig388}")
+# 글꼴 — Google Sans Flex 먼저, 한글 대체 글꼴이 뒤에 · 아이콘 글꼴·코드는 덮지 않는다
+_css388 = {_th: _uk388.gemini_css(_th) for _th in ('dark', 'light')}
+check("글꼴 목록이 Google Sans Flex 로 시작하고 한글 글꼴(Noto Sans KR · 맑은 고딕)로 내려간다 · 받는 주소가 층 안에",
+      _uk388.FONT_STACK.startswith('"Google Sans Flex"') and '"Noto Sans KR"' in _uk388.FONT_STACK
+      and '"Malgun Gothic"' in _uk388.FONT_STACK and _uk388.FONT_IMPORT in _css388['dark'])
+_frule388 = next((ln for ln in _css388['dark'].splitlines() if 'font-family:' in ln or '.stApp *:not(' in ln), '')
+check("글꼴 규칙이 아이콘(stIconMaterial · translate=no · 인라인 Material · role=img)과 코드를 빼고 건다",
+      all(_x in _css388['dark'] for _x in ('[data-testid="stIconMaterial"]', '[translate="no"]',
+                                            '[style*="Material Symbols"]', '[role="img"]', ':not(code)')),
+      _frule388[:120])
+# 상단 바 — 엔진 정보는 늘 그리고(보는 종목이 없어도) · 칩 줄은 한 줄을 통째로 쓴다(네 줄로 꺾이던 것)
+check("상단 바가 엔진 상태·버전 칩을 늘 그리고 칩 덩어리를 둘째 줄로 떼어 둔다",
+      '_st399, _chips399 = _version_meta_html()' in _wa388 and "class='qvers qchips'" in _wa388
+      and '.qnav .qchips {{ order: 2; flex-basis: 100%; }}' in _uks388
+      and 'padding: 10px 120px' not in _uks388)
+# 관심종목 표 — 칸 여백이 Streamlit 마크다운 표 규칙에 먹히지 않게 이 표에만 걸었다
+check("관심종목 표의 칸 여백을 그 표(table.wl)에만 건다 · 판정·이름 칸은 줄을 넘긴다",
+      '.stApp table.wl td, .stApp table.wl th {{ padding:10px 6px !important; }}' in _wa388
+      and 'table td.jd {{ white-space:normal' in _wa388 and 'table td.nm {{ white-space:normal' in _wa388
+      and "<table class='wl'" in _wa388)
+# 글자 크기 — 두 전역 층(킷 전역 · 제미나이)이 적는 크기가 타입 스케일 안이고, **연속값(clamp·vw·cqw)으로
+#   글자 크기를 정하지 않는다**. 첫 판의 타일 값 clamp(20px, 13cqw, 28px) 가 22.62px 을 냈다(브라우저 실측 ·
+#   §77 의 소스 정규식은 'font-size:clamp(' 를 숫자로 안 읽어 못 봤다). 스케일은 §77 한 곳 — 그래서 이 검사가 절 끝이다.
+_lay388 = {_th: _uk388.global_css(_th) + _css388[_th] for _th in ('dark', 'light')}
+_sz388all = {int(x) for _c in _lay388.values() for x in _re388.findall(r'font-size:\s*(\d+)px', _c)}
+_fluid388 = sorted({m for _src in (_uks388, _wa388)
+                    for m in _re388.findall(r'font-size:\s*(?:clamp|min|max|calc)\([^;\'"]*', _src)}
+                   | {m for _src in (_uks388, _wa388)
+                      for m in _re388.findall(r'font-size:\s*[0-9.]+(?:vw|vh|cqw|cqi)', _src)})
+check("두 전역 층의 글자 크기가 타입 스케일 안 · 글자 크기를 연속값(clamp·vw·cqw)으로 정하는 자리 0 (킷·화면)",
+      _sz388all and _sz388all <= TYPE_SCALE and not _fluid388 and {20, 22, 28} <= _sz388all,
+      f"층 {sorted(_sz388all)} · 연속값 {_fluid388[:4]}", scanned=len(_sz388all))
+# 타일 값 단 — 휴대폰(375px)에서 바닥 20px 이 '35,488,337원' 을 잘랐다(21개 중 4개 · 브라우저 실측). 단마다 문턱이
+#   **같은 비율**(글자 = 내용 폭의 13%)에서 나오는지 본다 — 문턱 = ceil(단 ÷ 0.13) · 단은 스케일 안 · 바닥은 스케일 최소.
+import math as _math389                                          # noqa: E402
+_steps389 = [(int(w), int(s)) for w, s in _re388.findall(
+    r'@container \(min-width: (\d+)px\) \{\{ \.gm-tv \{\{ font-size: (\d+)px !important', _uks388)]
+_floor389 = _re388.search(r'\.gm-tv \{\{ font-size: (\d+)px !important; \}\}', _uks388)
+check("타일 값 단의 문턱이 전부 같은 비율(13%)에서 나오고 단·바닥이 스케일 안이다",
+      len(_steps389) >= 5 and all(w == _math389.ceil(s / 0.13) and s in TYPE_SCALE for w, s in _steps389)
+      # 바닥은 스케일 안이고 첫 단보다 작다(스케일 최소 12 가 아니라 이 층의 바닥 13 — 12px 을 13 으로 올리는 규칙과 같다)
+      and _floor389 and int(_floor389.group(1)) in TYPE_SCALE
+      and int(_floor389.group(1)) < min(s for _w, s in _steps389),
+      str(_steps389), scanned=len(_steps389))
+# 휴대폰·태블릿 상단 바 — sticky 로 206px(화면의 25%)를 덮었고 칩이 여러 줄로 꺾였다. 붙어 따라오지 않게 · 칩은 한 줄
+#   가로 밀기 · 셀렉터는 web_app 의 `.qnav a.qvers`(white-space: normal !important)보다 구체적이어야 먹는다(첫 판이 안 먹었다)
+_mob389 = _css388['dark'][_css388['dark'].find('@media (max-width: 768px)'):]
+check("휴대폰·태블릿에서 상단 바는 붙어 따라오지 않고 칩 줄은 한 줄 가로 밀기다 (셀렉터가 이기는 구체성)",
+      '.qnav { position: static !important; }' in _mob389
+      and '.qnav a.qvers.qchips { white-space: nowrap !important; overflow-x: auto !important;' in _mob389,
+      _mob389[:120])
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
