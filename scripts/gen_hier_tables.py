@@ -75,7 +75,9 @@ def proxies_of(r):
     return out
 
 
-def main():
+def main(dst=None):
+    """dst 를 주면 거기에 쓴다(라운드 397 — 운영 표 `data/hier_prob_tables.json` 을 건드리지 않고 새 판을 만들어
+    옛 판과 견주려고). 안 주면 종전대로 운영 자리에 쓴다."""
     states = build_states()
     patch = {}
     for path in sorted(glob.glob(os.path.join(P, 'subscore_patch*.jsonl'))):
@@ -163,11 +165,11 @@ def main():
                                   dup=int(_cnt391.get('dup', 0))),   # 라운드 391
                scale_audit_read=_keys391 is not None,
                cells={k: v for k, v in tab.items() if v[0] >= 1})
-    dst = os.path.join(PROJ, 'data', 'hier_prob_tables.json')
+    dst = dst or os.path.join(PROJ, 'data', 'hier_prob_tables.json')
     with open(dst, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False)
     print(f'셀 {len(doc["cells"]):,}개 → {dst}')
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else None)
