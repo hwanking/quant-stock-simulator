@@ -1737,6 +1737,13 @@ def clip_reason(text, width=34):
     cut = s.find('다. ')
     if 0 <= cut and cut + 2 <= width:
         return s[:cut + 2] + ' …'
+    # 라운드 403 — 사용자: *"엔진 판단 간단하게 해줘 너무 어려워."* 사유가 괄호 설명 가운데서 끊겼다
+    #   (*"… 확률 판단 기준 미달 (과거에 지금과…"*). 칸 폭의 절반 넘게 간 뒤 괄호가 열리면 그 앞에서 자른다 —
+    #   괄호는 설명이고 앞말이 판정이다(라운드 386 의 표 칸이 같은 자리에서 `split(' (')` 로 자른 것과 같은 규칙 ·
+    #   전체는 툴팁). 기준은 칸 폭에서 유도한다 — 새 숫자 없음.
+    par = s.find(' (')
+    if width // 2 <= par <= width - 2:
+        return s[:par] + ' …'
     return s[:width - 1] + '…'
 
 
@@ -2227,6 +2234,40 @@ def watch_action(row, price=None, today=None):
         if _stale and _ad_cls:
             brief.append('옛 기준 스탬프 · 다시 채우기')
         d['hold_brief'] = brief
+        # ── 관심종목 표 칸 (라운드 403 · 사용자: *"엔진 판단 간단하게 해줘 너무 어려워"*) ──────────
+        #   한 칸에 판정 · 물타기 · 계획 이력 · 링크가 네 줄까지 쌓였고, 긴 이력은 문장 중간에서 잘렸다
+        #   ('(20' · '(2026-'). 보이는 것은 **판정 + 그 판정을 가르는 가격 한 줄**이고, 옛 계획의 선으로
+        #   판단하는 행에만 짧은 한 줄을 더한다. 나머지(판정 이유 · 물타기 상태 · 이력 전체)는 툴팁이다.
+        #   판정 · kind · 선 · 문턱은 안 바꾼다 — 같은 재료를 덜 보여 줄 뿐이다. 추가매수는 **'가능'일 때만**
+        #   보이고, 라운드 387 의 판정 날짜와 '사기 전 다시 재기'는 그 줄에 남긴다.
+        _hl403 = None
+        if _k == '정리 검토' and h_stop and px:
+            _hl403 = f"손절선 {h_stop:,.0f}원 아래 ({(px / h_stop - 1) * 100:+.1f}%)"
+        elif _k == '일부 정리' and h_trim and px:
+            _hl403 = f"1차 매도가 {h_trim:,.0f}원 넘음 ({(px / h_trim - 1) * 100:+.1f}%)"
+        elif _k == '추가 매수 가능' and buy:
+            _hl403 = f"{buy:,.0f}원 이하 · {_when_ad} — 사기 전 '지금 재기'로 확인"
+        elif _k == '보유 유지':
+            if h_stop and h_trim:
+                _hl403 = f"손절선 {h_stop:,.0f}원 · 1차 매도가 {h_trim:,.0f}원 사이"
+            elif h_stop:
+                _hl403 = f"손절선 {h_stop:,.0f}원 위"
+            elif h_trim:
+                _hl403 = f"1차 매도가 {h_trim:,.0f}원 아래"
+        d['hold_line'] = _hl403
+        d['hold_add_line'] = (f"추가매수는 {buy:,.0f}원 이하에서 ({_when_ad} · 사기 전 다시 재기)"
+                              if (_ad_cls == '가능' and _k != '추가 매수 가능' and buy) else None)
+        if _rev378:
+            d['hold_note'] = (f"옛 계획({str(_rev378.get('old_at') or '')[5:]}) 손절선으로 판단 · "
+                              f"새 선은 '기준 다시 재기'")
+        elif _reset371:
+            d['hold_note'] = f"{str(_reset371.get('date') or '')[5:]} 선에 닿아 다시 잰 계획"
+        else:
+            d['hold_note'] = None
+        _tip403 = [str(d.get('why') or '')]
+        _tip403.append(f"추가매수: {_short}" + (f" — {d['avg_down_why']}" if d.get('avg_down_why') else ''))
+        _tip403 += [f"기준 이력: {_x}" for _x in _log]
+        d['hold_tip'] = '\n'.join(_x for _x in _tip403 if _x)
         return d
 
     if paid and px:

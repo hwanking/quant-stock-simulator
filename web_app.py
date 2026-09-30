@@ -6523,8 +6523,10 @@ else:
                           f"style='font-size:12px; color:{_TOK['brand']}; text-decoration:none;'>"
                           f"지금 재기 (1~3분)</a>")
             else:
+                # 라운드 403 — 보유 행의 툴팁은 킷이 모은 전체(판정 이유 · 추가매수 상태 · 기준 이력)다.
+                _tip403 = (_act.get('hold_tip') if _act.get('held') else None) or _act['why']
                 _jd229 = (f"<span style='color:{_TOK[_act['tone']]}; font-weight:600;' "
-                          f"title='{_uk._esc_attr(_act['why'])}'>{_uk._esc(_act['label'])}</span>")
+                          f"title='{_uk._esc_attr(_tip403)}'>{_uk._esc(_act['label'])}</span>")
                 # 라운드 240 (사용자 지적) — 미보유 행은 '추천 제외' 같은 **결론만**
                 #   적고 왜인지는 안 적었다: *"적정가는 현재가보다 높은데 추천 제외라고
                 #   하니깐."* 사유는 중앙 판정이 이미 내고 있었다(exclude_reason). 결론
@@ -6532,7 +6534,9 @@ else:
                 #   라운드 241 — **보여 줄지**는 킷이 정한다(why_line). 화면이
                 #   직접 읽으면 제외가 풀린 행에 옛 사유가 남는다 (§4).
                 _wy240 = str(_act.get('why_line') or '')
-                if _wy240:
+                # 라운드 403 — 옛 규칙 판정 행은 사유 줄과 '지금 재기' 링크가 같은 말을 두 번 했다(사유는 잘리기까지
+                #   했다). 그 행은 링크 한 줄만 보이고 사유는 링크의 툴팁이다.
+                if _wy240 and not _act.get('remeasure'):
                     # 라운드 327 — 첫 문장 끝에서 자른다 · 전체는 툴팁에.
                     # 라운드 338 — 그 판별이 `find()` 의 −1 을 못 걸러 '다. ' 없는 사유가 **첫 글자**만
                     #   남았다(화면의 `유 …`). 자르기는 킷 한 곳(`clip_reason`)이 하고 심어서 잰다.
@@ -6544,34 +6548,30 @@ else:
                 #   누른 사람이다(자동으로 재지 않는다 · R166).
                 if _act.get('remeasure'):
                     _jd229 += (f"<br><a href='?measure={_uk._esc_attr(_wcode)}' target='_self' "
+                               f"title='{_uk._esc_attr(_wy240)}' "
                                f"style='font-size:12px; color:{_TOK['brand']}; text-decoration:none;'>"
-                               f"지금 재기 (1~3분)</a>")
-                # 라운드 322 — 이름표 대신 **짧은 한 줄**(무엇을 하라는 말인지 · 진입가까지)을 쓴다.
-                #   '물타기 가능'만 적으면 진입가 위인 행도 *지금 사라*로 읽혔다(사용자 지적).
-                _adl229 = ((_act.get('avg_down_short') or _act.get('avg_down_label'))
-                           if _act.get('held') else None)
-                if _adl229:
-                    _adc229 = (_TOK['pos'] if _act.get('avg_down_ok')
-                               else _TOK['tx3'] if _act.get('avg_down_class') in ('보류', None)
-                               else _TOK['warn'])
-                    _jd229 += (f"<br><span style='font-size:12px; color:{_adc229};' "
-                               f"title='{_uk._esc_attr(_act.get('avg_down_why') or '')}'>"
-                               f"{_uk._esc(_adl229)}</span>")
-                # 라운드 340 — 보유 계획이 **선에 닿아 다시 잰** 이력을 행에 보인다. 이 앱의 규칙은 '닿으면
-                #   다시 잼'(R224)이라 오후엔 '매도 — 손절선 아래'였던 행이 저녁엔 '보유 유지'로 바뀔 수 있다
-                #   — 그 사실을 행이 말하지 않으면 사용자는 엔진이 말을 바꿨다고 읽는다(2026-09-18 실측 ·
-                #   보유 두 행). 가장 최근 이력 한 줄만 · 전체는 툴팁에. 규칙은 안 바꿨다.
-                _hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]
-                if _act.get('held') and _hlog340:
-                    # 라운드 371 — 34자로 자르면 "→ 정리 검토 · 기준 다시 잼" 이 툴팁에만 남았다(사용자:
-                    #   *"관심종목에서는 팔라고 하고 …"*). 킷이 그 문장을 **읽어서 짧게 다시 말한다**
-                    #   (어느 선을 넘겨 다시 쟀고 새 선이 얼마인지 · 못 읽으면 종전대로 자른다). 지금
-                    #   계획이 선을 넘겨 다시 잰 것이면 경고색 — 판정이 바뀐 자리다.
-                    _hcol371 = _TOK['warn'] if _act.get('hold_reset') else _TOK['tx3']
-                    _jd229 += (f"<br><span style='font-size:12px; color:{_hcol371};' "
-                               f"title='{_uk._esc_attr(' | '.join(_hlog340))}'>"
-                               f"{_uk._esc(_act.get('hold_log_short') or _uk.clip_reason(_hlog340[-1], 34))}"
-                               f"</span>")
+                               f"옛 판정 — 지금 다시 재기 (1~3분)</a>")
+                # 라운드 403 — 사용자: *"엔진 판단 간단하게 해줘 너무 어려워."* 보유 행 한 칸에 판정 · 물타기 ·
+                #   계획 이력이 네 줄까지 쌓였고 긴 이력은 문장 중간에서 잘렸다. 보이는 것은 **판정을 가르는 가격
+                #   한 줄**(킷의 hold_line) · 추가매수가 **가능할 때만** 그 줄 · 옛 계획의 선으로 판단할 때만 짧은 한
+                #   줄(hold_note)이고, 나머지는 판정 이름의 툴팁(hold_tip)이다. 판정·선·문턱 불변 — 문장은 킷이
+                #   만들고 화면은 읽기만 한다(§4). 라운드 322(무엇을 하라는 말 · 가격까지) · 340·371(판정이 바뀐
+                #   자리를 행이 말한다)이 지키던 것은 남긴다 — 가격은 hold_line 에, 판정이 바뀐 자리는 hold_note 에.
+                if _act.get('held'):
+                    if _act.get('hold_line'):
+                        _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>"
+                                   f"{_uk._esc(_act['hold_line'])}</span>")
+                    if _act.get('hold_add_line'):
+                        _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['pos']};'>"
+                                   f"{_uk._esc(_act['hold_add_line'])}</span>")
+                    if _act.get('hold_note'):
+                        _jd229 += (f"<br><span style='font-size:12px; color:{_TOK['warn']};'>"
+                                   f"{_uk._esc(_act['hold_note'])}</span>")
+                    if _act.get('kind') == '보유 기준 미산출':
+                        # 판단할 선이 없다 — '아직 안 잼' 칸과 같은 링크(`?measure=` · 누른 사람이 잰다 · R327)
+                        _jd229 += (f"<br><a href='?measure={_uk._esc_attr(_wcode)}' target='_self' "
+                                   f"style='font-size:12px; color:{_TOK['brand']}; text-decoration:none;'>"
+                                   f"지금 재기 (1~3분)</a>")
             if _ret229 is None:
                 _pnl229 = f"<span style='color:{_TOK['tx3']};'>—</span>"
             else:

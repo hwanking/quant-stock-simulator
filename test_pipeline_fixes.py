@@ -19915,10 +19915,12 @@ except Exception as _e231:                                     # noqa: BLE001
 #   (`avg_down_label` · 넷으로 갈린 것)을 읽는다. 보유분에만 · 찍힌 값이 있을
 #   때만 그리는 불변식은 그대로다.
 # 라운드 321 — 옛 격자 줄(`_ad_ok = …`)은 걷어냈다. 보기 표가 같은 불변식을 지킨다.
-check("표가 보유분에만 물타기 줄을 그린다 (찍힌 값이 있을 때만 · 라벨은 킷이 낸다)",
+check("표가 보유분에만 추가매수 줄을 그린다 — 가능할 때만(킷의 hold_add_line) · 나머지 상태는 툴팁(hold_tip)",
       # 라운드 322 — 이름표 대신 킷의 짧은 한 줄(무엇을 하라는 말 · 진입가)을 먼저 읽는다
-      "_adl229 = ((_act.get('avg_down_short') or _act.get('avg_down_label'))" in _w231
-      and "if _adl229:" in _w231)
+      # 라운드 403 — 사용자: "엔진 판단 간단하게 해줘 너무 어려워". 추가매수 상태는 늘 보이던 줄에서 툴팁으로
+      #   옮겼고 '가능'일 때만 보인다(가격·판정 날짜·사기 전 다시 재기 — 킷이 만든다). 보유분에만은 그대로다.
+      "if _act.get('held'):" in _w231 and "_act.get('hold_add_line')" in _w231
+      and "_act.get('hold_tip')" in _w231)
 # 채우기 버튼의 기준이 새 스탬프를 안다 — 모르면 옛 보유 행은 열기 전엔 영영 빈다
 check("채우기 버튼이 물타기 스탬프 없는 보유 행(매입가·수량 있음)도 대상으로 삼는다",
       "'snap_avg_down_ok' not in w" in _w231
@@ -27525,9 +27527,10 @@ check("R340 화면 — 매도 판정이 뜬 보유 행이 있을 때만 그 줄�
       # 라운드 389 — 행 흐름을 `_ledger_stat_rows389()` 한 곳이 만든다(축척 어긋난 행을 뺀다) · `_rows` 는 그 흐름이다
       "def _exit_vs_hold_340(outcome):" in _w346 and "_lv340.exit_vs_hold_line(_lv340.exit_vs_hold(_rows, outcome), outcome)" in _w346
       and "for _kd340, _oc340 in (('정리 검토', 'STOP'), ('일부 정리', 'TARGET')):" in _w346)
-check("R340 화면 — 보유 행에 '닿아서 다시 잼' 이력 한 줄 (전체는 툴팁 · 킷의 자르기)",
-      "_hlog340 = [str(x) for x in (_act.get('hold_log') or []) if str(x).strip()]" in _w346
-      and "_uk.clip_reason(_hlog340[-1], 34)" in _w346)
+check("R340 화면 — 판정이 옛 계획의 선에 기대는 행은 그 사실을 한 줄로 · 이력 전체는 툴팁 (라운드 403 에서 옮김)",
+      # 라운드 403 — 종전엔 모든 보유 행에 최근 이력 한 줄을 34자로 잘라 그렸다(문장 중간에서 끊겼다).
+      #   이제 판정이 바뀐 자리(옛 선으로 판단 · 선에 닿아 다시 잰 계획)만 킷의 hold_note 로 보이고 전체는 툴팁이다.
+      "_act.get('hold_note')" in _w346 and "_act.get('hold_tip')" in _w346)
 
 print("\n" + "=" * 72)
 print("§347 R341 — 재무 시점 보관을 오늘 시작한다 · 이미 받는 응답을 날짜와 함께 남긴다 (2026-09-18)")
@@ -29006,8 +29009,10 @@ check("채우기 자리가 계획이 끝나 다시 재어졌는지(사유 줄 �
       f"{len(_blk366)}자", scanned=len(_blk366))
 check("다시 그리기는 세션 키로 잠근다 — 같은 날 같은 종목은 한 번",
       'not st.session_state.get(_rk371)' in _blk366 and 'st.session_state[_rk371] = True' in _blk366)
-check("관심종목 표의 이력 줄은 킷의 짧은 줄을 읽는다 — 34자 자르기가 아니라",
-      "_act.get('hold_log_short')" in _wa366 and "_act.get('hold_reset')" in _wa366)
+check("관심종목 표는 판정이 바뀐 자리를 킷의 줄(hold_note)로 말하고 이력은 자르지 않는다(툴팁 전체)",
+      # 라운드 403 — 표가 킷의 hold_log_short 를 직접 그리던 줄을 걷고 hold_note(판정이 옛 계획에 기댈 때만)로
+      #   옮겼다. hold_log_short·hold_reset 은 킷이 여전히 내고(위 검사들) 상세·툴팁이 쓴다.
+      "_act.get('hold_note')" in _wa366 and "_act.get('hold_tip')" in _wa366)
 check("머리 문장 옆에 보유 판정을 같은 함수(watch_action · 같은 행)로 읽어 잇는다 — 새 판정을 만들지 않는다",
       '새로 사려는 사람에게 하는 말입니다' in _wa366
       and '_uk.watch_action(_wrow371, realtime_price)' in _wa366
@@ -31137,6 +31142,72 @@ for _root391, _dirs391, _fs391 in _os391.walk(PROJ):
             _sites391[_os391.path.relpath(_p391, PROJ).replace('\\', '/')] = _k391
 check("'loaded' 깃발을 올리는 자리는 artifact_io.load_once 하나뿐이다 (새 캐시는 그것을 부른다)",
       _sites391 == {'artifact_io.py': 1}, str(_sites391), scanned=_scan391)
+
+
+print("=" * 72)
+print("§392 관심종목 '엔진 판단' 칸 — 판정 + 가르는 가격 한 줄 · 나머지는 툴팁 (라운드 403)")
+print("=" * 72)
+# 사용자(2026-10-01): "엔진 판단 간단하게 해줘 너무 어려워." 한 칸에 판정·물타기·이력·링크가 네 줄까지 쌓였고 긴 이력은
+#   문장 중간에서 잘렸다. 킷이 hold_line(판정을 가르는 가격) · hold_add_line(추가매수가 가능할 때만) · hold_note(옛 계획의
+#   선으로 판단할 때만) · hold_tip(나머지 전부)을 내고 표는 읽기만 한다. 판정·선·문턱 불변을 같이 잠근다.
+import ui_kit as _uk392                                          # noqa: E402
+
+_b392 = {'paid': 11000, 'qty': 10, 'snap_buy': 9800, 'snap_hold_stop': 9000, 'snap_hold_trim': 12000,
+         'snap_hold_at': '2026-09-25', 'snap_bucket': '눌림목 매수 대기', 'snap_avg_down_ok': '불가',
+         'snap_avg_down_fail': '신규 진입 조건 통과', 'snap_new_entry': '보류', 'snap_at': '2026-09-29'}
+_ok392 = dict(_b392, snap_avg_down_ok='가능', snap_avg_down_fail='없음', snap_new_entry='추천')
+_OLD392 = ('2026-09-27 버틸 수 없는 가격 6,115원(2026-09-04 기준) 아래 (현재가 6,090 · -0.4%) '
+           '→ 정리 검토 · 기준 다시 잼')
+_rv392 = {'code': '000001', 'paid': 6455.0, 'qty': 10, 'snap_hold_stop': 5844.77, 'snap_hold_trim': 6700.0,
+          'snap_hold_at': '2026-09-27', 'snap_hold_log': _OLD392}
+_c392 = {
+    'sell': _uk392.watch_action(_b392, 8800),
+    'trim': _uk392.watch_action(_b392, 12300),
+    'hold': _uk392.watch_action(_b392, 10500),
+    'add': _uk392.watch_action(_ok392, 9500),
+    'hold_ok': _uk392.watch_action(_ok392, 10500),
+    'revived': _uk392.watch_action(_rv392, 6090.0),
+}
+check("판정은 그대로다 — 매도·일부 매도·보유 유지·추가 매수 가능 (값을 덜 보여 줄 뿐 · 킷의 holder_kind 그대로)",
+      [(_c392[k] or {}).get('kind') for k in ('sell', 'trim', 'hold', 'add', 'hold_ok', 'revived')]
+      == ['정리 검토', '일부 정리', '보유 유지', '추가 매수 가능', '보유 유지', '정리 검토'],
+      str([(_c392[k] or {}).get('kind') for k in _c392]), scanned=len(_c392))
+check("보이는 한 줄은 판정을 가르는 가격이다 — 매도는 손절선 아래 · 일부 매도는 1차 매도가 넘음 · 보유는 두 선 사이",
+      _c392['sell']['hold_line'] == '손절선 9,000원 아래 (-2.2%)'
+      and _c392['trim']['hold_line'] == '1차 매도가 12,000원 넘음 (+2.5%)'
+      and _c392['hold']['hold_line'] == '손절선 9,000원 · 1차 매도가 12,000원 사이',
+      f"{_c392['sell']['hold_line']} | {_c392['trim']['hold_line']} | {_c392['hold']['hold_line']}")
+check("추가매수는 가능할 때만 보이고, 가격·판정 날짜·'사기 전 다시 재기'를 단다 (라운드 387 의 안전장치 그대로)",
+      '9,800원 이하' in _c392['add']['hold_line'] and '2026-09-29 판정' in _c392['add']['hold_line']
+      and '사기 전' in _c392['add']['hold_line']
+      and '9,800원 이하' in str(_c392['hold_ok']['hold_add_line']) and '사기 전' in str(_c392['hold_ok']['hold_add_line'])
+      and _c392['hold']['hold_add_line'] is None and _c392['sell']['hold_add_line'] is None,
+      f"{_c392['add']['hold_line']} | {_c392['hold_ok']['hold_add_line']}")
+check("옛 계획의 선으로 판단하는 행만 짧은 한 줄(hold_note) — 그 선과 푸는 길 · 다른 행은 없다",
+      '옛 계획(09-04)' in str(_c392['revived']['hold_note']) and '기준 다시 재기' in str(_c392['revived']['hold_note'])
+      and _c392['revived']['hold_line'] == '손절선 6,115원 아래 (-0.4%)'
+      and all(_c392[k]['hold_note'] is None for k in ('sell', 'trim', 'hold', 'add', 'hold_ok')),
+      str(_c392['revived']['hold_note']))
+check("툴팁에 나머지가 다 있다 — 판정 이유 · 추가매수 상태 · 기준 이력 전체 (자르지 않는다)",
+      _c392['revived']['why'] in _c392['revived']['hold_tip'] and '추가매수:' in _c392['revived']['hold_tip']
+      and _OLD392 in _c392['revived']['hold_tip']
+      and '추가매수 안 함' in _c392['hold']['hold_tip'],
+      _c392['revived']['hold_tip'][:120])
+check("보이는 줄은 말줄임 없이 끝난다 — 문장 중간에서 자르지 않는다",
+      all(not str(_c392[k].get(f) or '').endswith('…') for k in _c392
+          for f in ('hold_line', 'hold_add_line', 'hold_note')), scanned=len(_c392) * 3)
+# 미보유 행 — 사유가 괄호 설명 가운데서 끊기던 것 · 옛 판정 행은 같은 말을 두 번 했다
+_par392 = '유사패턴 표본 0건 — 확률 판단 기준 미달 (과거에 지금과 닮은 자리가 모자랍니다)'
+check("사유 자르기 — 칸 절반을 넘긴 뒤 열리는 괄호 앞에서 자른다 · 앞쪽 괄호는 안 자른다 (양방향 · 기준은 칸 폭에서)",
+      _uk392.clip_reason(_par392, 34) == '유사패턴 표본 0건 — 확률 판단 기준 미달 …'
+      and _uk392.clip_reason('짧은 (괄호) 뒤에 아주 긴 설명이 이어져서 칸을 넘칩니다 계속 계속', 34).endswith('…')
+      and not _uk392.clip_reason('짧은 (괄호) 뒤에 아주 긴 설명이 이어져서 칸을 넘칩니다 계속 계속', 34)
+      .startswith('짧은 …'),
+      repr(_uk392.clip_reason(_par392, 34)))
+_wa392 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("옛 규칙 판정 행은 링크 한 줄 — 사유 줄을 따로 안 그리고 링크의 툴팁에 둔다",
+      "if _wy240 and not _act.get('remeasure'):" in _wa392
+      and "옛 판정 — 지금 다시 재기 (1~3분)</a>" in _wa392 and "title='{_uk._esc_attr(_wy240)}' " in _wa392)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
