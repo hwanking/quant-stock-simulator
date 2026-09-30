@@ -261,6 +261,38 @@ def _cache_write(name, obj):
 #: 부분표본에서 나온 값이었다. 원장 최소일보다 넉넉히 앞에서 시작한다.
 SERIES_START = '2014-01-01'
 
+#: 라운드 405 — FinanceDataReader 의 KS11·KQ11 이 **2026-09-17 에서 멈췄다**(그날 값도 장 마감 전 값이었다).
+#:   화면 '간밤·전일 시황'의 KOSPI·KOSDAQ 칸이 날짜만 붙인 채 2주 묵은 값을 내고 있었다.
+#:   같은 지수를 네이버 차트(`bitemporal_engine.fetch_index_daily` · 벤치마크 대조가 이미 쓰는 길 · §4)에서
+#:   받아 **겹치는 날은 네이버 값**으로 이어 붙인다 — 네이버는 약 3,000봉(2014-07~)만 주므로 그 앞은 FDR 그대로.
+#:   이어 붙여도 되는지 먼저 쟀다(2026-10-01): 겹침 2,993일 중 종가가 다른 날 **1일**(FDR 의 마지막 날 ·
+#:   KOSPI 6,724.34 vs 6,715.41) · 나머지 2,992일은 소수 둘째 자리까지 같다.
+_NAVER_INDEX = {'KS11': 'KOSPI', 'KQ11': 'KOSDAQ'}
+
+
+def _naver_index(name, start):
+    """네이버 지수 일봉 → `{'YYYY-MM-DD': close}`. 못 받으면 None (지어내지 않는다)."""
+    try:
+        import bitemporal_engine as _be
+        got = _be.BitemporalEngine().fetch_index_daily(name, count=3000)
+    except Exception:                                        # noqa: BLE001
+        return None
+    if not got:
+        return None
+    out = {}
+    for d, c in zip(*got):
+        s = str(d)
+        if len(s) != 8 or not s.isdigit():
+            continue
+        k = f'{s[:4]}-{s[4:6]}-{s[6:]}'
+        try:
+            fv = float(c)
+        except (TypeError, ValueError):
+            continue
+        if k >= start and fv == fv and fv > 0:
+            out[k] = fv
+    return out or None
+
 
 def series(ticker, start=SERIES_START):
     """
@@ -277,22 +309,26 @@ def series(ticker, start=SERIES_START):
         with _LOCK:
             _MEM[key] = hit
         return hit
+    out = {}
     try:
         import FinanceDataReader as fdr
         df = fdr.DataReader(ticker, start)
-        if df is None or df.empty or 'Close' not in df.columns:
-            return None
-        out = {}
-        for idx, v in df['Close'].items():
-            try:
-                fv = float(v)
-            except (TypeError, ValueError):
-                continue
-            if fv == fv and fv > 0:
-                out[str(idx)[:10]] = fv
-        if len(out) < 30:
-            return None
+        if df is not None and not df.empty and 'Close' in df.columns:
+            for idx, v in df['Close'].items():
+                try:
+                    fv = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if fv == fv and fv > 0:
+                    out[str(idx)[:10]] = fv
     except Exception:                                        # noqa: BLE001
+        out = {}
+    if ticker in _NAVER_INDEX:
+        nv = _naver_index(_NAVER_INDEX[ticker], start)
+        if nv:
+            out.update(nv)
+            out = dict(sorted(out.items()))
+    if len(out) < 30:
         return None
     _cache_write(key, out)
     with _LOCK:

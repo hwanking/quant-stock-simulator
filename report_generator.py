@@ -19,6 +19,17 @@ def _pct(v, digits=1, signed=True, na="미산출"):
     return f"{v:+.{digits}f}%" if signed else f"{v:.{digits}f}%"
 
 
+def _path_yield_label():
+    """라운드 405 — '순기대수익' 칸의 이름. 무엇의 평균이고 어느 비용을 뺐는지 적는다(비용은 엔진 상수를 읽는다 ·
+    손으로 적은 수는 낡는다). 못 읽으면 비용 조각만 뺀다(§3)."""
+    try:
+        from quant_indicators import QuantIndicatorsEngine as _Q
+        cost = f"비용 {_Q._PATH_YIELD_COST_PCT:g}% 차감 · "
+    except Exception:                                          # noqa: BLE001
+        cost = ''
+    return f"유사패턴 평균 순수익 ({cost}중앙 판정의 기대값과 다른 수)"
+
+
 class QuantReportGenerator:
     """
     [Section 14] analysis_rulebook_ko.txt 정적 규칙집 기반 AI 퀀트 정밀 레포트 생성기.
@@ -150,7 +161,7 @@ class QuantReportGenerator:
 - **1차 목표가**: `{_num(tp1, ",.0f", unit_str)}` | **2차 목표가**: `{_num(tp2, ",.0f", unit_str)}`
 - **손절가**: `{_num(sl, ",.0f", unit_str)}`
 - **손익비 (Reward/Risk)**: **`{_num(rr, ".2f")}`**
-- **순기대수익 (거래비용 차감)**: `{_pct(fs.get('net_expected_return'))}`
+- **{_path_yield_label()}**: `{_pct(fs.get('net_expected_return'))}`
 
 ---
 

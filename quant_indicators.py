@@ -730,7 +730,10 @@ class QuantIndicatorsEngine:
             if ess < MIN_ESS:
                 reasons.append(f"ESS {ess:.0f} < {MIN_ESS:.0f}")
             if net <= 0:
-                reasons.append(f"순기대수익 {net:+.1f}% ≤ 0")
+                # 라운드 405 — '순기대수익' 이 이 저장소에서 세 값을 가리켰다(여기는 유사패턴 평균 − 운영 비용 ·
+                #   점수 상한은 − 0.3% · 중앙 판정의 기대값은 목표·손절·확률로 셈한 다른 수). 무엇의 평균이고 어느
+                #   비용을 뺐는지 이름에 적는다. 값·판정 불변.
+                reasons.append(f"유사패턴 평균 순수익 {net:+.1f}% ≤ 0 (비용 {self.TOTAL_COST_PCT:g}% 차감)")
             if tp is None or sl is None or tp <= sl:
                 reasons.append("목표가 선도달확률이 손절가 선도달확률 이하")
             eligible = not reasons
@@ -767,7 +770,7 @@ class QuantIndicatorsEngine:
                 net = (hi['mean_perf'] or 0.0) - self.TOTAL_COST_PCT
                 need = []
                 if net <= 0:
-                    need.append(f"순기대수익이 {abs(net):.2f}%p 더 필요 "
+                    need.append(f"유사패턴 평균 순수익이 {abs(net):.2f}%p 더 필요 "
                                 f"(현재 {net:+.2f}%, 거래비용 {self.TOTAL_COST_PCT:.2f}% 차감 후)")
                 ess = hi.get('ess') or 0.0
                 if ess < MIN_ESS:
@@ -3391,7 +3394,7 @@ class QuantIndicatorsEngine:
         # 거래비용 차감 후 순기대수익. 표본이 없으면 '0'이 아니라 '미산출'이다.
         # ⚠️ 라운드 191 — 여기 0.3 은 저장소의 **세 번째 비용값**이다
         #   (0.30 / 0.36 / 0.41). 같은 개념인데 자리마다 다르고, 이 값은
-        #   TOP3 게이트 `_num_gate("순기대수익", …, 2.0)` 의 입력이다.
+        #   TOP3 게이트 `_num_gate(f"유사패턴 평균 순수익(비용 …)", …, 2.0)` 의 입력이다(이름은 라운드 405).
         #   바꾸면 게이트가 움직이므로 여기서 정하지 않는다 —
         #   계보와 판정 기준은 verdict_core.COST_PCT 주석과
         #   docs/PREREG_R191_COST_UNIFY.md 에 적었다.
@@ -3967,12 +3970,15 @@ class QuantIndicatorsEngine:
             cap_reasons.append(f"유효표본 {eff_sample_size:.0f}건 (10건 미만) → 상한 64점")
 
         expected_return_cap = 100
+        # 라운드 405 — 이름을 계산에 맞춘다(유사패턴 평균에서 비용 0.3% 를 뺀 값 · 중앙 판정의 '기대값'과 다른 수).
+        #   문턱·상한·판정 불변.
         if expected_path_yield is None:
             expected_return_cap = 59
-            cap_reasons.append("순기대수익 미산출 (표본 부족) → 상한 59점")
+            cap_reasons.append("유사패턴 평균 순수익 미산출 (표본 부족) → 상한 59점")
         elif expected_path_yield < 2.0:
             expected_return_cap = 59
-            cap_reasons.append(f"순기대수익 {expected_path_yield:+.1f}% (2.0% 미만) → 상한 59점")
+            cap_reasons.append(f"유사패턴 평균 순수익 {expected_path_yield:+.1f}% "
+                               f"(비용 {self._PATH_YIELD_COST_PCT:g}% 차감 · 2.0% 미만) → 상한 59점")
 
         if is_fund_asset:
             # ETF: 적정가가 없으므로 '판정 불가' 상한을 걸지 않는다 (비적용)
@@ -4291,7 +4297,8 @@ class QuantIndicatorsEngine:
             _num_gate("리스크 안전성", risk_safety_score, G.get('min_risk_safety', 55)),
             _num_gate("기회점수", opportunity_score, G.get('min_opportunity', 65)),
             _num_gate("실행가능성", execution_score, G.get('min_execution', 60)),
-            _num_gate("순기대수익", _ey, G.get('min_expected_return_pct', 2.0), "{:+.1f}%"),
+            _num_gate(f"유사패턴 평균 순수익(비용 {self._PATH_YIELD_COST_PCT:g}%)", _ey,
+                      G.get('min_expected_return_pct', 2.0), "{:+.1f}%"),
             # 라운드 192 — 벌거벗은 '손익비' 였다. 이 게이트가 재는 것은
             #   reward_risk_ratio(2차 목표 · 현재가 기준 · 문턱 1.3)이고,
             #   같은 화면 지시서의 '손익비 0.7:1' 은 entry_rr(1차 · 진입가

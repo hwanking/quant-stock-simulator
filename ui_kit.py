@@ -584,7 +584,9 @@ def update_bar(version: str, headline: str, theme: str = 'dark',
 #  이름을 지어내지 않는다. 각 단계는 실제로 코드가 하는 일이다.
 STEPS = [
     ('collect', '데이터 수집'),
-    ('crosscheck', '가격 교차검증'),
+    # 라운드 405 — '가격 교차검증'은 모형·값을 검증하는 단계처럼 읽혔다. 실제로 하는 일은 네이버·다음 두 곳의
+    #   **현재가를 대 보는 것**뿐이다(외부 검토 · 2026-10-01). 하는 일을 이름으로.
+    ('crosscheck', '현재가 두 출처 대조'),
     ('indicators', '기술지표 계산'),
     ('news', '뉴스 분석'),
     ('similar', '과거 유사사례 탐색'),
@@ -1494,6 +1496,25 @@ def value_premium_basis(vp, asset_only):
     out['line'] = (f"장부가로 보면 싼 자리입니다 — 매수가가 적정가보다 {vp['pct']:+.1f}% 아래입니다. "
                    f"이 적정가는 자산 기반 모형으로만 서서 이익 대비 싼지는 말하지 않습니다.")
     return out
+
+
+def price_vs_fair_clause(price, fair):
+    """라운드 405 — '가치로 봐도 싼 자리'의 주어는 **매수가**다. 지금 가격이 적정가와 어떤 관계인지 같은 줄에 적는다.
+
+    상세 배너가 *"가치로 봐도 싼 자리입니다 — 적정가 X원보다 −y% 아래"* 라 적었는데 그 −y% 는 **매수가**의 괴리이고
+    지금 가격은 적정가 위일 수 있다(외부 검토 · 2026-10-01). 주어가 빠지면 사용자는 옆의 수(지금 가격)를 주어로 읽는다
+    (R236). 둘 중 하나라도 없으면 '' — 지어내지 않는다(§3). 새 문턱 없음 — 위·아래만 말한다.
+    """
+    try:
+        p, f = float(price), float(fair)
+    except (TypeError, ValueError):
+        return ''
+    if not (p > 0 and f > 0):
+        return ''
+    pct = (p / f - 1.0) * 100.0
+    if abs(pct) < 0.05:
+        return f" 지금 가격 {p:,.0f}원은 적정가와 같습니다."
+    return f" 지금 가격 {p:,.0f}원은 적정가보다 {pct:+.1f}% {'위' if pct > 0 else '아래'}입니다."
 
 
 #: 라운드 383 — 스캔 제외 사유의 **문장 머리**(`quant_indicators.run_screener_scan` 이 만든다 · 읽기만).

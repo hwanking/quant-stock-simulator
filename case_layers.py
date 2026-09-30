@@ -137,6 +137,29 @@ def baseline_note(art=None, table_made=None):
     `art`·`table_made` 는 회귀가 갈래를 심어 보려고 받는다(기본은 파일과 운영 표).
     """
     try:
+        a, side = _baseline_cmp(art, table_made)
+        if a is None:
+            return None
+        d, lo, hi = float(a['d']), float(a['d_lo']), float(a['d_hi'])
+        head = (f"블라인드 {int(a['rows']):,}행(기준일 {int(a['dates'])}일 · {a['made']} 잼)에서 이 확률의 "
+                f"Brier {float(a['brier_table']):.4f} 를 '늘 {float(a['train_q']) * 100:.1f}%'(이 확률 표를 만든 "
+                f"개발 구간의 적중률 하나)라고 말하는 것 {float(a['brier_const']):.4f} 와 견주면 차이 {d:+.4f} "
+                f"(95% [{lo:+.4f}, {hi:+.4f}])")
+        if side == 'tie':
+            return head + " — 가려지지 않습니다. 이 확률이 기본값보다 더 잘 맞는다는 근거는 아직 없습니다."
+        if side == 'better':
+            return head + " — 이 확률이 기본값보다 더 잘 맞았습니다."
+        return head + " — 이 확률이 기본값보다 덜 맞았습니다."
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _baseline_cmp(art=None, table_made=None):
+    """(산출물, 갈래) — 갈래는 'tie'(가려지지 않음) · 'better' · 'worse'. 못 읽거나 표가 다르면 (None, None).
+
+    `baseline_note`(긴 문장)와 `baseline_tag`(짧은 꼬리표)가 **같은 판정**을 읽게 한 곳에 둔다(§4 · 라운드 405).
+    """
+    try:
         a = art
         if a is None:
             p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'hier_prob_baseline.json')
@@ -144,17 +167,26 @@ def baseline_note(art=None, table_made=None):
                 a = json.load(f)
         made = table_made if table_made is not None else (_hier_doc() or {}).get('made')
         if not made or a.get('table_made') != made:
-            return None
-        d, lo, hi = float(a['d']), float(a['d_lo']), float(a['d_hi'])
-        head = (f"블라인드 {int(a['rows']):,}행(기준일 {int(a['dates'])}일 · {a['made']} 잼)에서 이 확률의 "
-                f"Brier {float(a['brier_table']):.4f} 를 '늘 {float(a['train_q']) * 100:.1f}%'(이 확률 표를 만든 "
-                f"개발 구간의 적중률 하나)라고 말하는 것 {float(a['brier_const']):.4f} 와 견주면 차이 {d:+.4f} "
-                f"(95% [{lo:+.4f}, {hi:+.4f}])")
-        if lo <= 0.0 <= hi:
-            return head + " — 가려지지 않습니다. 이 확률이 기본값보다 더 잘 맞는다는 근거는 아직 없습니다."
-        if hi < 0.0:
-            return head + " — 이 확률이 기본값보다 더 잘 맞았습니다."
-        return head + " — 이 확률이 기본값보다 덜 맞았습니다."
+            return None, None
+        lo, hi = float(a['d_lo']), float(a['d_hi'])
+        side = 'tie' if lo <= 0.0 <= hi else ('better' if hi < 0.0 else 'worse')
+        return a, side
+    except Exception:                                          # noqa: BLE001
+        return None, None
+
+
+def baseline_tag(art=None, table_made=None):
+    """라운드 405 — 이 확률을 **숫자 하나만** 내는 좁은 자리(오른쪽 요약 패널 · 판단 근거 줄)에 붙이는 짧은 꼬리표.
+
+    긴 문장(`baseline_note`)은 확률 캡션 한 곳에만 있었고, 같은 '약 66%' 가 오른쪽 패널과 판단 근거 줄에서는
+    아무 말 없이 나갔다(외부 검토 · 2026-10-01). 같은 판정(`_baseline_cmp`)을 읽어 몇 글자로 적는다.
+    가려지지 않을 때만 붙인다 — 나은 갈래는 긴 문장이 말한다. 못 읽으면 None(§3).
+    """
+    a, side = _baseline_cmp(art, table_made)
+    if a is None or side != 'tie':
+        return None
+    try:
+        return f"기본값 {float(a['train_q']) * 100:.0f}%와 못 가림"
     except Exception:                                          # noqa: BLE001
         return None
 

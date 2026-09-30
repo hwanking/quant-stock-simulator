@@ -4116,8 +4116,11 @@ st.markdown(
     f"margin-left:10px;'>{_uk._esc(target_ticker)}</span></h1>"
     f"<p style='margin:0; font-size:17px; color:{_TOK['tx2']}; "
     f"line-height:1.6; letter-spacing:-0.01em;'>"
+    # 라운드 405 — 종전 둘째 문장('미래 정보를 잘라냈다')은 넘친 말이었다. 가격은 기준일까지만
+    #   잘라 쓰지만 과거 케이스의 적정가·밸류 칸은 **오늘 공시된 재무**로 계산됐다(R336 · R389 · 시점 재무 보관은
+    #   2026-09-18 에 시작). 잘라낸 것과 못 잘라낸 것을 같이 적는다.
     f"과거로 되돌려 실제로 맞았는지 세어 본 뒤에 판단합니다. "
-    f"미래 정보는 잘라내고 검증했습니다.</p></div>",
+    f"가격은 그날까지만 잘라 썼고, 재무는 오늘 공시된 값을 썼습니다.</p></div>",
     unsafe_allow_html=True)
 
 # --- 종목 검색기 렌더링 ---
@@ -4837,7 +4840,7 @@ if st.session_state.get('show_screener', False):
                         _entry_badge = "진입후보 " if r.get('entry_candidate') else ""
                         if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
                                      width='stretch',
-                                     help=("진입 후보 — 적정가 이하 & 순기대수익 양수. "
+                                     help=("진입 후보 — 적정가 이하 & 유사패턴 평균 순수익 양수. "
                                            "점수대별 실측 적중률은 종합 결론의 "
                                            "'가상 백테스트' 표기를 보세요."
                                            if r.get('entry_candidate') else None)):
@@ -8810,10 +8813,12 @@ if rec_buy_val is not None:
                     f"위 값은 <b>가격 조건만</b> 본 숫자라, 도달해도 "
                     f"매수 신호로 바뀌지 않습니다.")
             elif _gap_fv >= 3.0:
+                # 라운드 405 — 세 갈래 모두 주어(이 매수가)를 적고 지금 가격과 적정가의 관계를 같은 줄에(킷 한 곳).
                 rec_buy_sub = (
-                    f"가치로 보면 아직 싸지 않습니다 — 적정가 "
-                    f"{_fair:,.0f}원보다 {_gap_fv:+.1f}% 위입니다. "
-                    f"타이밍으로는 이 값 아래부터 해 볼 만합니다.")
+                    f"가치로 보면 아직 싸지 않습니다 — 이 매수가는 적정가 "
+                    f"{_fair:,.0f}원보다 {_gap_fv:+.1f}% 위입니다."
+                    + _uk.price_vs_fair_clause(realtime_price, _fair)
+                    + " 타이밍으로는 이 값 아래부터 해 볼 만합니다.")
                 rec_buy_more = (
                     f"<b>두 가격은 다른 질문에 답합니다.</b><br>"
                     f"· 적정가 {_fair:,.0f}원 = <b>얼마면 싼가</b> "
@@ -8831,11 +8836,11 @@ if rec_buy_val is not None:
                 import premarket as _pm382
                 _ao382 = _pm382._asset_only_of(snap)
                 rec_buy_sub = (
-                    (f"장부가로 보면 싼 자리입니다 — 적정가 {_fair:,.0f}원보다 {_gap_fv:+.1f}% 아래입니다. "
+                    (f"장부가로 보면 싼 자리입니다 — 이 매수가는 적정가 {_fair:,.0f}원보다 {_gap_fv:+.1f}% 아래입니다. "
                      f"이 적정가는 자산 기반 모형으로만 서서 이익 대비 싼지는 말하지 않습니다.")
                     if _ao382 is True else
-                    f"가치로 봐도 싼 자리입니다 — 적정가 {_fair:,.0f}원보다 "
-                    f"{_gap_fv:+.1f}% 아래입니다.")
+                    f"가치로 봐도 싼 자리입니다 — 이 매수가는 적정가 {_fair:,.0f}원보다 "
+                    f"{_gap_fv:+.1f}% 아래입니다.") + _uk.price_vs_fair_clause(realtime_price, _fair)
                 rec_buy_more = (
                     f"타이밍 기준과 가치 기준이 <b>같은 방향</b>을 "
                     f"가리킵니다. 드문 자리지만 그것만으로 안전하지는 "
@@ -8843,8 +8848,8 @@ if rec_buy_val is not None:
                     f"거래량이 충분한지를 함께 보세요.")
             else:
                 rec_buy_sub = (
-                    f"적정가({_fair:,.0f}원)와 거의 같은 자리입니다 "
-                    f"({_gap_fv:+.1f}%).")
+                    f"이 매수가는 적정가({_fair:,.0f}원)와 거의 같은 자리입니다 "
+                    f"({_gap_fv:+.1f}%)." + _uk.price_vs_fair_clause(realtime_price, _fair))
                 rec_buy_more = (
                     f"<b>얼마면 싼가</b>(가치)와 <b>어디부터 들어갈 만한가</b>"
                     f"(타이밍)가 겹치는 자리입니다. 두 기준이 서로 다른 값을 "
@@ -8988,8 +8993,21 @@ _reach_more = ''
 if _rc_sig is not None:
     _rc_col = '#F2B84B' if _rec_is_far else '#9DAABC'
     # 표면은 사람 말로만 — σ 같은 기호는 아래 '자세히'로 내린다 (라운드 79).
+    # 라운드 405 — '닿을 만한' 은 σ 띠의 이름이지 잰 비율이 아니었다. 운영 진입가는 거의 늘 이 띠(하루 σ 1배)에
+    #   놓이므로 같은 규칙의 진입가 **전체 실측**(일봉 모의 · `entry_facts` 한 곳)을 옆에 적는다. 못 읽으면 안 붙인다.
+    _fill405 = None
+    try:
+        import entry_facts as _ef405
+        _efd405 = _ef405.load() or {}
+        _efa405 = (_efd405.get('splits') or {}).get('all') or {}
+        if _efa405.get('fill_rate') is not None:
+            _fill405 = (float(_efa405['fill_rate']), int(_efd405.get('max_bars') or 20))
+    except Exception:                                          # noqa: BLE001
+        _fill405 = None
     _reach_word = {'가까움': '금방 닿을 거리입니다',
-                   '닿을 만함': '20일 안에 닿을 만한 거리입니다',
+                   '닿을 만함': ('20일 안에 닿을 만한 거리입니다'
+                                + (f" — 같은 규칙의 진입가 전체로는 {_fill405[0]:.1f}%가 {_fill405[1]}봉 안에 "
+                                   f"닿았습니다(일봉 모의 · 이 종목 값이 아닙니다)" if _fill405 else '')),
                    '멀다': '20일 안에 닿기는 쉽지 않습니다',
                    '사실상 도달 어려움': '20일 안에 닿기 어렵습니다',
                    }.get(str(_rc_reach), str(_rc_reach))
@@ -9353,13 +9371,17 @@ _be_banner = _uk.breakeven_hit_rate(
     _core_entry, _e_stop, _e_t1, q_engine.TOTAL_COST_PCT)
 if (_cb_banner.get('hit_rate') is not None
         and (_cb_banner.get('n') or 0) >= 30):
+    # 라운드 405 — 종전 이름('비슷했던 과거 …')은 계산보다 넓었다. 이 수는 이 종목과 닮은 과거가
+    #   아니라 **원장 전체에서 같은 점수대**였던 판단의 적중률이다(`calibration_band` · 모든 종목). 닮은 과거
+    #   (자기유사 패턴)는 따로 있고 표본이 훨씬 작다 — 이름이 같으면 큰 표본의 수가 작은 표본의 말을 빌린다.
+    #   Wilson 하한의 약어는 사용자가 모르는 말이라 뜻으로 적는다. 값 불변.
     _prob_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC;'>"
-        f"비슷했던 과거에서 맞은 비율</p>"
+        f"같은 점수대 과거 판단이 맞은 비율 (원장 전 종목)</p>"
         f"<p style='margin:0; font-size:28px; font-weight:700; "
         f"color:#F3F6FA; line-height:1.1;'>{_cb_banner['hit_rate']:.0f}%"
         f"<span style='font-size:13px; color:#9DAABC;'> "
-        f"(n={_cb_banner['n']:,} · W하한 "
+        f"(n={_cb_banner['n']:,} · 보수적으로 잡으면 "
         f"{fmt_num(_cb_banner.get('wilson_low'), '.0f', '%', na='—')})</span></p>"
         + _uk.breakeven_row(_be_banner, _cb_banner['hit_rate'],
                             theme=_theme))
@@ -9686,11 +9708,20 @@ try:
         regime_code=_rg58, fs=four_scores)
 except Exception:                                              # noqa: BLE001
     pass
+# 라운드 405 — 숫자 하나만 내는 좁은 자리(이 줄 · 오른쪽 요약 패널)에도 '늘 같은 확률'과 못 가린다는 꼬리표를
+#   붙인다(`case_layers.baseline_tag` · 긴 문장과 같은 판정). 못 읽으면 안 붙인다.
+_bltag405 = None
+try:
+    import case_layers as _cl405
+    _bltag405 = _cl405.baseline_tag() if _blend59 else None
+except Exception:                                              # noqa: BLE001
+    _bltag405 = None
 if _blend59:
     _bits_prob.append(
         f"계층 보정 확률 약 {_blend59['p'] * 100:.0f}% "
         f"[{_blend59['wilson_low'] * 100:.0f}~"
-        f"{_blend59['wilson_high'] * 100:.0f}%]")
+        f"{_blend59['wilson_high'] * 100:.0f}%]"
+        + (f" · {_bltag405}" if _bltag405 else ''))
 
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
@@ -9703,7 +9734,10 @@ if _calib_all.get('total_cases'):
     #   실측(2026-09-15): 마지막 기준일 2026-08-03 — 6주 전이다. 안 적으면 오늘까지의
     #   시장을 담은 수로 읽힌다(§9). 못 읽으면 그 조각만 빠진다(§3).
     _span302 = _ledger_span_302()
-    _bits_src.append(f"모델 {_calib_all.get('rulebook_version', '')} · "
+    # 라운드 405 — 이 값은 집계 파일이 적은 **룰북** 버전인데 '모델'이라 붙여, 같은 화면 아래의 '모델 v…'(모델 축)와
+    #   다른 수가 같은 이름을 달았다(실측 · 모델 v2026.10.01.3 옆에 '모델 v2026.09.27.1'). 같은 값을 모델 성적 칸은
+    #   이미 '집계한 날 룰북'이라 부른다 — 같은 이름으로(§4).
+    _bits_src.append(f"집계한 날 룰북 {_calib_all.get('rulebook_version', '')} · "
                      f"누적 케이스 {_calib_all.get('ledger_rows') or _calib_all['total_cases']:,}건"
                      + (f" (기준일 {_span302[0]}~**{_span302[1]}**까지)"
                         if _span302 else ""))
@@ -9785,7 +9819,7 @@ st.markdown(f"""
     <tr><td><a href="#nav-basis">1차 목표 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td><a href="#nav-basis">손절 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td><a href="#nav-basis">분석 신뢰도</a></td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
-    <tr><td><a href="#nav-perf">계층 보정 확률</a></td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}</td></tr>
+    <tr><td><a href="#nav-perf">계층 보정 확률</a></td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}{(f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>{_uk._esc(_bltag405)}</span>" if _bltag405 else '')}</td></tr>
     <tr><td><a href="#nav-perf">이 점수대 원실측</a></td><td>{_sum_band}</td></tr>
   </table>
   <p style='margin:8px 0 0 0;'><a href='#nav-ask' class='gn-ask-open-link'
@@ -10499,7 +10533,9 @@ _rows_g = [
     ('이 점수대의 리플레이 성적 (학습·검증 포함 전체)',
      (f"{_g['oos_hit']:.0f}% · {_g['oos_n']:,}건 기준"
       if _g.get('oos_hit') is not None else _gai.NA)),
-    ('95% 신뢰구간',
+    # 라운드 405 — 이 구간은 사례를 **서로 독립으로** 보고 낸 값이다. 원장은 같은 종목 이웃 기준일이 20봉 결과 창을
+    #   공유해(겹침 72% · R217) 실제 불확실성은 이 구간보다 넓다. 값 불변 — 읽는 법을 이름 옆에 적는다.
+    ('95% 신뢰구간 (사례를 독립으로 본 값 · 실제로는 더 넓다)',
      (f"{_g['ci_low']:.0f}% ~ {_g['ci_high']:.0f}%"
       if _g.get('ci_low') is not None else _gai.NA)),
     ('신뢰도', str(_g.get('confidence') or _gai.NA),
@@ -12284,12 +12320,21 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
         """, unsafe_allow_html=True)
 
     blocks = four_scores.get('top3_block_reasons', [])
+    # 라운드 187 — 'TOP 3' 를 뗐다. 이 목록은 순위가 아니라 필수조건이고, 순위에 정보가 있다는 근거가 없다(R110).
+    # 라운드 405 — 이 묶음(엔진 `gate_checks` · `eligible_for_top3`)은 **시장 스캔의 '필수조건 통과' 목록**을 가르고,
+    #   이 종목의 매수 결론은 중앙 판정(`verdict_core` 의 조건)이 정한다. 한 화면에 '추천 조건'이 둘이라 사용자는
+    #   어느 것이 결론인지 모른다(외부 검토 · 2026-10-01). 어느 목록의 조건인지 이름에 적는다(이미 접힌 칸 안이다 —
+    #   expander 는 겹쳐 못 쓴다). 조건·판정 불변 — 두 묶음을 하나로 합치는 것은 스캔 목록이 바뀌는 일이라 사람이 정한다.
+    _gc405 = four_scores.get('gate_checks') or []
+    _lbl405 = (f"시장 스캔 목록의 필수조건 {len(_gc405)}개 중 미충족 {len(blocks)}개"
+               if _gc405 else "시장 스캔 목록의 필수조건")
+    st.markdown(f"**{_lbl405}** (참고)")
+    st.caption("이 묶음은 시장 스캔의 '필수조건을 통과한 종목' 목록을 가르는 조건입니다. "
+               "이 종목을 살지 말지는 위 결론(중앙 판정의 조건)이 정하고, 두 묶음은 다른 답을 낼 수 있습니다.")
     if blocks:
-        # 라운드 187 — 'TOP 3' 를 뗐다. 이 목록은 순위가 아니라
-        # **추천 필수조건**이고, 순위에 정보가 있다는 근거가 없다(R110).
-        st.markdown("**추천 필수조건 미충족**\n\n" + "\n".join(f"- {b}" for b in blocks))
+        st.markdown("\n".join(f"- {_md_safe(str(b))}" for b in blocks))
     else:
-        st.markdown("**추천 필수조건 전부 통과**")
+        st.markdown("전부 통과")
 
 # 🏢 [6대 영역 세부 프로필 (Section 18)]
 with st.expander("4대 분리 점수 세부 산출 근거 및 실시간 정량 기여도 펼쳐보기"):
@@ -12463,7 +12508,12 @@ with tab_pred:
         except Exception:                                      # noqa: BLE001
             _ln348 = None
         if _ln348:
-            st.caption(_md_safe(_ln348))
+            # 라운드 405 — 모집단 실측은 이 종목의 사실이 아니라 배경이라 접는다(경고 바로 아래 긴 캡션이 경고를
+            #   덮었다 · 외부 검토). 내용은 한 글자도 안 바꿨다 — 펼치면 그대로다(R226 의 '세고 묶고 접기').
+            st.markdown(_uk.disclose('왜 이렇게 자주 비나 — 전체 종목에서 잰 것',
+                                     f"<p style='margin:6px 0 0 0; font-size:13px; line-height:1.6;'>"
+                                     f"{_uk._esc(_ln348)}</p>"),
+                        unsafe_allow_html=True)
     elif sim_res.get('is_abstain'):
         st.warning(f"**퀀트 리스크 관리 알림**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이 감지되어 **`[예측 보류 / 거래 회피(Abstain)]`**를 권장합니다.")
 
@@ -12514,18 +12564,33 @@ with tab_pred:
             st.dataframe(pd.DataFrame(hz_rows), width='stretch', hide_index=True)
 
         # '방향 일치 67점'을 점수만 크게 두지 않는다 — 어느 지평끼리, 분자·분모가 무엇인지.
+        # 라운드 405 — 종전 문장이 둘을 틀리게 말했다(외부 검토 · 2026-10-01). ① '확률로 비교할 수 있다'고 적은
+        #   묶음에 **관찰값만 내는 지평**(표본이 확률 하한 미만 · 엔진은 승률을 셈한다)도 들어 있었다 — 그 지평은
+        #   화면이 확률로는 안 내는 값인데 일치도에는 들어간다. ② 뺀 지평의 사유를 '확률 표시 기준 미달'이라
+        #   적었는데 실제로는 **관찰값 하한** 미만이다(엔진이 승률을 안 셈한다). 그리고 지평들은 같은 과거 시점에서
+        #   출발해 창이 겹치므로 서로 독립인 표가 아니다 — 같은 방향이 근거가 여럿이라는 뜻이 아니다.
+        #   기준은 규칙집(SAMPLE_TIERS)에서 읽는다(위 `_min_obs234`·`_min_prob234`). 점수·판정 불변.
         _hcs = sim_res.get('horizon_consistency_score')
         if _dir234['scored']:
-            _cmp234 = " · ".join(f"{H}일(n={n} · {d})" for H, n, d in _dir234['scored'])
+            def _obs405(n):
+                return bool(_min_prob234 and n < _min_prob234)
+            _cmp234 = " · ".join(f"{H}일(n={n} · {d}" + (" · 관찰값" if _obs405(n) else "") + ")"
+                                 for H, n, d in _dir234['scored'])
+            _any_obs405 = any(_obs405(n) for _H, n, _d in _dir234['scored'])
             st.caption(
-                f"확률 비교가 가능한 지평 {len(_dir234['scored'])}개 — {_cmp234}. "
+                f"승률이 계산된 지평 {len(_dir234['scored'])}개 — {_cmp234}. "
                 f"기간 간 방향 일치 {fmt_num(_hcs, suffix='점')} = 그중 같은 방향인 지평의 비율 "
                 f"(상승 {_dir234['up']} · 하락 {_dir234['down']})."
-                + (" 표본은 있으나 확률 표시 기준에 못 미쳐 비교에서 뺀 지평: "
+                + (f" '관찰값' 지평은 표본이 {_min_prob234}건 미만이라 확률로는 내지 않는 값인데 이 비율에는 들어갑니다."
+                   if _any_obs405 else "")
+                + " 지평들은 같은 과거 시점에서 출발해 창이 겹치므로 서로 독립인 표가 아닙니다 — "
+                  "방향이 같다고 근거가 여러 개인 것은 아닙니다."
+                + ((f" 표본이 관찰값 기준({_min_obs234}건)에도 못 미쳐 승률을 안 낸 지평: " if _min_obs234
+                    else " 표본이 관찰값 기준에도 못 미쳐 승률을 안 낸 지평: ")
                    + ", ".join(f"{H}일(n={n})" for H, n in _dir234['unscored']) + "."
                    if _dir234['unscored'] else ""))
         else:
-            st.caption("확률 비교가 가능한 지평이 없습니다 — 어느 지평도 표본이 확률 표시 기준에 못 미칩니다.")
+            st.caption("승률이 계산된 지평이 없습니다 — 어느 지평도 표본이 관찰값 기준에 못 미칩니다.")
 
         _uk.stat_tiles([
             # 라운드 98 — '최적 보유기간'은 매매 지시가 아니라 **유사패턴을 몇 봉까지 보고
@@ -12562,7 +12627,9 @@ with tab_pred:
                 if _elig:
                     st.dataframe(pd.DataFrame([{
                         "지평": f"{H}일",
-                        "순기대수익(비용차감)": f"{v.get('net_expected_return', 0):+.2f}%",
+                        # 라운드 405 — 이름을 계산에 맞춘다(엔진 `horizon_eligibility` · 유사패턴 평균 − 운영 비용).
+                        f"유사패턴 평균 순수익(비용 {q_engine.TOTAL_COST_PCT:g}% 차감)":
+                            f"{v.get('net_expected_return', 0):+.2f}%",
                         "자격": "통과" if v['eligible'] else "미달",
                         "미달 사유": " · ".join(v['reasons']) or "—",
                     } for H, v in sorted(_elig.items())]),
@@ -12596,6 +12663,21 @@ with tab_pred:
 
     # ── 20일 매매 확률 — 표시할 수 있을 때만 카드, 아니면 한 줄 (라운드 234) ──────────
     st.markdown(f"20일 매매 확률 (목표가 +{TP_SL[0]:.0f}% vs 손절가 -{TP_SL[1]:.0f}% 선도달 · 방향 상승확률)")
+    # 라운드 405 — 이 두 선(규칙집 take_profit_pct·stop_loss_pct)은 유사패턴 연구가 **모든 종목에 같게** 쓰는 고정 기준이고, 매매 계획의 1차 목표·
+    #   손절(진입가에서 대개 2~3% · 중앙 판정)과 다른 선이다. 같은 '목표가·손절가' 낱말이라 사용자는 계획의 가격에
+    #   닿을 확률로 읽는다(외부 검토 · 2026-10-01). 계획 쪽 거리는 중앙 판정 값에서 셈하고 못 셈하면 안 적는다(§3·§4).
+    try:
+        _pe405 = float((CORE or {}).get('pullback_zone') or 0)
+        _pt405 = float((CORE or {}).get('new_target') or 0)
+        _ps405 = float((CORE or {}).get('new_stop') or 0)
+        _plan405 = ((_pt405 / _pe405 - 1) * 100, (1 - _ps405 / _pe405) * 100) if (_pe405 > 0 and _pt405 > 0 and _ps405 > 0) else None
+    except Exception:                                          # noqa: BLE001
+        _plan405 = None
+    st.caption(
+        f"+{TP_SL[0]:.0f}% · −{TP_SL[1]:.0f}% 는 유사패턴 연구가 모든 종목에 같게 쓰는 고정 기준입니다 — "
+        + (f"매매 계획의 1차 목표 +{_plan405[0]:.1f}% · 손절 −{_plan405[1]:.1f}%(진입가 기준)와 다른 선이라, "
+           if _plan405 else "매매 계획의 1차 목표·손절과 다른 선이라, ")
+        + "이 확률을 계획한 가격에 닿을 확률로 읽으면 안 됩니다.")
     if _shown234:
         _uk.stat_tiles([
             {'label': f"목표가 +{TP_SL[0]:.0f}% 먼저 닿을 확률",
@@ -12914,7 +12996,10 @@ with tab_pred:
                         f"같은 {_hz300}봉 창에서 이 종목 유사패턴 **{h['match_count']}건**의 중앙은 "
                         f"**{_m296:+.1f}%** 이고, 같은 자리 원장 **{_lq296['n']:,}건**의 중앙은 "
                         f"**{_lq296['p50']:+.1f}%** 입니다. 표본이 작을수록 좋아 보이기도 "
-                        f"나빠 보이기도 하므로, 둘이 다르면 **표본이 큰 쪽(원장)을 먼저** 봅니다."))
+                        # 라운드 405 — 종전 꼬리('다르면 원장부터')는 원장을 이 종목의 더 나은 추정처럼
+                        #   말했다. 원장은 이 종목 모양과 무관한 기준선이다 — 무엇을 가를 수 없는지까지 적는다.
+                        f"나빠 보이기도 하는데, 원장은 이 종목의 모양이 아니라 같은 국면·구역 전체의 기준선이라 "
+                        f"둘이 다를 때 그 차이가 우연인지 이 종목의 사정인지는 이 표본으로 가를 수 없습니다."))
                 else:
                     st.caption(_md_safe(
                         f"이 종목 유사패턴 **{h['match_count']}건**의 중앙 **{_m296:+.1f}%** 는 "
@@ -13197,10 +13282,13 @@ with tab_val:
                              + (" · 범위 안으로 되돌림" if _clip238 else ""))
         _steps238.append(f"업황조정 {mkt_adj_pct:+.1f}%")
         _steps238.append(f"최종 {fmt_num(four_scores.get('target_fundamental'), suffix=unit_str)}")
+        # 라운드 405 — 종전 꼬리('먼저 재고 결정한다')는 라운드 251·267 뒤로 낡은 말이었다(재고 나면
+        #   화면 문구도 바뀐다 · R250). 잰 결과(끄고 켠 두 판 · 세 구간 적중 차이 0 근처 · 구역 9.8% 이동)와 남은 것
+        #   (지울지는 사람의 정책 결정)을 짧게 적는다. 숨기지 않는 것은 그대로다.
         st.caption("적정가가 나온 순서 — " + " → ".join(_steps238)
-                   + ". 고정 보정은 이 저장소가 처음부터 갖고 있던 값이고 **근거가 기록되어 "
-                     "있지 않습니다.** 지우면 모든 종목의 적정가가 그만큼 움직이므로, 먼저 "
-                     "영향을 재고 나서 결정합니다 — 그때까지 숨기지 않고 그대로 보여 줍니다.")
+                   + ". 고정 보정은 **근거가 기록되어 있지 않습니다** — 끄고 켠 두 판으로 재 보니 적중 차이가 "
+                     "세 구간 모두 0 근처였고(2026-09-10), 끄면 표본의 9.8%에서 적정가 구역이 바뀝니다. "
+                     "지울지는 사람이 정할 일로 남아 있습니다.")
     # 라운드 243 — '핵심 합리적 범위'라는 이름은 **기업 값어치의 합리적 구간**으로
     #   읽힌다. 실제로는 유효 모델들의 **출력 분포** 25~75분위이고, 중심값은 확장
     #   구간(10~90) 안으로만 되돌리므로 이 구간 **밖에 놓일 수 있다**. 모델이 하나뿐이면

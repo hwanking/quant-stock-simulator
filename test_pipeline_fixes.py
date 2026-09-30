@@ -4518,8 +4518,10 @@ check("파이프라인 실행 로그 기록", _n_runs >= 2)
 section("75. 확률 최우선 — 배너 실측 확률 격상 · 연구 후보 등록부 · 상태 UI")
 
 _w75 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
+# 라운드 405 — 이름을 계산에 맞게 좁혔다('같은 점수대' · 원장 전 종목). 잠그는 성질(배너가 실측 적중률을 낸다)은 같다.
 check("배너 — 실측 성공률을 점수 옆 1등으로",
-      '비슷했던 과거에서 맞은 비율' in _w75 and '_prob_html' in _w75)
+      '같은 점수대 과거 판단이 맞은 비율' in _w75 and '_prob_html' in _w75
+      and '비슷했던 과거에서 맞은 비율' not in _w75)
 check("배너 — 표본<30이면 %를 숨기고 '표본 부족' 표시",
       '표시 보류' in _w75 and '>= 30' in _w75)
 check("확률 원천은 리플레이 실측뿐 (요행 수치 금지 주석)",
@@ -21799,10 +21801,13 @@ check("20일 확률이 없으면 '미산출' 카드 셋 대신 한 줄 (카드�
       # 라운드 323 — 관측 건수(표본 미달 갈래는 match_count 가 0 으로 박힌다)
       and "산출하지 않습니다 — 20일 유사사례 n={sim_res.get('observed_match_count', sim_res.get('match_count', 0))}" in _tab251
       and _tab251.count("먼저 닿을 확률") == 2)
+# 라운드 405 — 이름을 사실에 맞게 고쳤다('확률 비교가 가능한' 묶음에 관찰값 지평이 섞여 있었고, 뺀 지평의 사유는
+#   확률 기준이 아니라 관찰값 기준이었다). 잠그는 성질(지평을 이름·n·방향으로 · 분자·분모)은 같다.
 check("비교 가능한 지평을 이름·n·방향으로 적고 일치도는 분자·분모(상승 k · 하락 m)와 같이",
-      "확률 비교가 가능한 지평 {len(_dir234['scored'])}개 — {_cmp234}" in _tab251
+      "승률이 계산된 지평 {len(_dir234['scored'])}개 — {_cmp234}" in _tab251
       and "(상승 {_dir234['up']} · 하락 {_dir234['down']})" in _tab251
-      and "표본은 있으나 확률 표시 기준에 못 미쳐 비교에서 뺀 지평" in _tab251
+      and "승률을 안 낸 지평: " in _tab251
+      and "확률 비교가 가능한 지평" not in _tab251
       and "산출 가능 지평 {len(_scored)}개 기준" not in _w231)
 check("라벨이 실제 기본 지평을 적고 기본은 엔진의 '관찰 점수가 가장 높은 기간'(표본 있을 때)",
       "예측 기간 선택 (기본 40일" not in _w231
@@ -22097,9 +22102,12 @@ check("적정가가 나온 순서를 화면이 적는다 (가중중앙값 → �
       and "f\"모델 가중중앙값 {_wm238:,.0f}{unit_str}\"" in _w231
       and "f\"고정 보정 {_hc238_str} → {_raw238:,.0f}{unit_str}\"" in _w231
       and "극단값 수축" in _w231 and "f\"업황조정 {mkt_adj_pct:+.1f}%\"" in _w231)
+# 라운드 405 — '먼저 재고 결정한다'는 라운드 251·267 이 잰 뒤로 낡은 말이었다. 잠그는 성질(근거가 없다는 것과
+#   왜 아직 안 지웠는지)은 같고, 이제 '왜'는 잰 결과와 남은 정책 결정이다.
 check("근거가 없다는 것과 왜 아직 안 지웠는지를 화면이 말한다 (§9)",
-      "근거가 기록되어 " in _w231 and "있지 않습니다.**" in _w231
-      and "먼저 " in _w231 and "영향을 재고 나서 결정합니다" in _w231)
+      "고정 보정은 **근거가 기록되어 있지 않습니다**" in _w231
+      and "끄고 켠 두 판으로 재 보니" in _w231 and "지울지는 사람이 정할 일로" in _w231
+      and "영향을 재고 나서 결정합니다" not in _w231)
 check("옛 '기초 펀더멘털 가치' 라벨은 사라지고 실제 가중중앙값을 적는다",
       "기초 펀더멘털 가치</p>" not in _w231
       and ">모델 가중중앙값</p>" in _w231 and "{_wm238_str}" in _w231)
@@ -24777,10 +24785,12 @@ check("사유의 내용은 그대로다 — 문턱 10건과 그 까닭은 라운
 
 # ④ 계산부를 고쳤으면 그 축 버전이 따라와야 한다 (§7 · §109 가 커밋 날짜로 다시 본다)
 import versioning as _ver302
+# 라운드 405 — 종전엔 최근 model 이력 **20개** 안에서만 찾았다. 그 뒤 model 축이 스무 번 넘게 나가(2026-10-01)
+#   09-14 줄이 창 밖으로 밀려 거짓 실패했다. 잠그는 성질은 '그날 그 릴리스가 있다'라 창 크기와 무관하다 — 전부 본다.
 check("계산부를 고친 날짜에 model 축 버전이 있다 (표시 문구만이므로 kind='ui')",
       any(_e.get('axis') == 'model' and _e.get('kind') == 'ui'
           and _e.get('effective_from') == '2026-09-14'
-          for _e in _ver302.history(limit=20, axis='model')),
+          for _e in _ver302.history(limit=100000, axis='model')),
       _ver302.current('model'))
 
 print()
@@ -25156,8 +25166,12 @@ check("분위를 값으로 낸다 (n · p10 · 중앙 · p90)",
       and _q309['p50'] == 50.0 and _q309['p90'] == 90.0, str(_q309))
 check("문장이 **n 을 반드시 적는다** — 표본 크기 없이 분포를 내놓지 않는다",
       '101' in (_lv309.outcome_band_line(_q309) or ''))
-check("문장이 어느 쪽이 큰 표본인지 말한다 (작은 표본과 견주라고 적는다)",
-      '표본이 큰 쪽은 이 줄입니다' in (_lv309.outcome_band_line(_q309) or ''))
+# 라운드 405 — '큰 쪽을 더 믿어라'로 읽히던 꼬리를 고쳤다. 잠그는 성질(어느 쪽이 큰 표본인지 말한다)에 더해
+#   그 큰 표본이 **이 종목의 모양이 아닌 기준선**이라는 것까지 말한다.
+check("문장이 어느 쪽이 큰 표본인지 말한다 (그리고 그 큰 표본이 기준선이라는 것도)",
+      '표본은 이 줄이 훨씬 크지만' in (_lv309.outcome_band_line(_q309) or '')
+      and '기준선입니다' in (_lv309.outcome_band_line(_q309) or '')
+      and '표본이 큰 쪽은 이 줄입니다' not in (_lv309.outcome_band_line(_q309) or ''))
 # ③ 화면 — 원장 표는 **이미 있는 한 곳**에서 온다 (원장을 두 번 훑지 않는다 · §4)
 check("그래프가 캐시된 원장 표를 그대로 쓴다 (새 스캔을 만들지 않았다)",
       '_lv296.outcome_quantiles(_reach_table_224(), _rg296, _zn296)' in _w309)
@@ -31323,6 +31337,119 @@ with open(_os393.path.join(PROJ, 'scripts', 'snapshot_guard.py'), encoding='utf-
     _sg393 = _f393.read()
 check("그림자 파일이 업로드 화이트리스트와 축소 감시에 있다 (그날 것만 만들 수 있다 — 잃으면 영영이다)",
       "'forward_shadow.jsonl'" in _bk393 and "'forward_shadow.jsonl'" in _sg393)
+
+
+print("=" * 72)
+print("§394 외부 검토 네 편 — 계산보다 넓던 이름 · 낡은 문장 · 끊긴 지수 자료 (라운드 405)")
+print("=" * 72)
+# 외부 검토 네 편(2026-10-01)의 주장을 코드로 가려, 값·판정을 안 바꾸는 것만 고쳤다. 잠그는 것:
+#   ① KOSPI·KOSDAQ 이 FDR 에서 09-17 에 멈췄다 — 네이버 지수 일봉을 이어 붙인다(겹치는 날은 네이버 · 심기 양방향)
+#   ② 이름이 계산보다 넓었다 — '비슷했던 과거'(실은 점수대 전체) · '순기대수익'(세 값) · '확률 비교 가능'(관찰값 포함)
+#   ③ 주어가 빠졌다 — '가치로 봐도 싼'의 주어는 매수가 · 지금 가격과 적정가의 관계를 같은 줄에(킷 한 곳)
+#   ④ 잰 뒤에도 '재고 결정한다'고 적던 문장 · '미래 정보는 잘라냈다'는 넘친 문장
+import sys as _sys394                                            # noqa: E402
+import types as _types394                                        # noqa: E402
+import pandas as _pd394                                          # noqa: E402
+import sector_cycle as _sc394                                    # noqa: E402
+import ui_kit as _uk394                                          # noqa: E402
+import case_layers as _cl394                                     # noqa: E402
+
+# ① 지수 이어 붙이기 — 네트워크 없이 심는다(FDR 은 가짜 모듈 · 캐시 읽기·쓰기는 끈다 · 끝나면 되돌린다)
+_idx394 = _pd394.date_range('2026-07-01', periods=40, freq='B')
+_fdr_df394 = _pd394.DataFrame({'Close': [100.0 + i for i in range(40)]}, index=_idx394)
+_last394 = str(_idx394[-1])[:10]
+_fake394 = _types394.ModuleType('FinanceDataReader')
+_fake394.DataReader = lambda t, s=None: _fdr_df394
+_nv394 = {_last394: 999.0, '2099-01-02': 1234.0}
+_saved394 = (_sys394.modules.get('FinanceDataReader'), _sc394._naver_index, _sc394._cache_read, _sc394._cache_write)
+try:
+    _sys394.modules['FinanceDataReader'] = _fake394
+    _sc394._naver_index = lambda name, start: dict(_nv394)
+    _sc394._cache_read = lambda name, ttl: None
+    _sc394._cache_write = lambda name, obj: None
+    with _sc394._LOCK:
+        for _k394 in ('px_KS11_plant394', 'px_US500_plant394'):
+            _sc394._MEM.pop(_k394, None)
+    _ks394 = _sc394.series('KS11', start='plant394')
+    _us394 = _sc394.series('US500', start='plant394')
+finally:
+    if _saved394[0] is not None:
+        _sys394.modules['FinanceDataReader'] = _saved394[0]
+    else:
+        _sys394.modules.pop('FinanceDataReader', None)
+    _sc394._naver_index, _sc394._cache_read, _sc394._cache_write = _saved394[1:]
+    with _sc394._LOCK:
+        for _k394 in ('px_KS11_plant394', 'px_US500_plant394'):
+            _sc394._MEM.pop(_k394, None)
+check("KOSPI 계열은 네이버 지수 일봉을 이어 붙인다 — 겹치는 날은 네이버 값 · 뒤의 날이 붙고 · 날짜순",
+      bool(_ks394) and _ks394.get(_last394) == 999.0 and _ks394.get('2099-01-02') == 1234.0
+      and list(_ks394) == sorted(_ks394) and len(_ks394) == 41, str(len(_ks394 or {})))
+check("지수 아닌 계열은 네이버를 안 부른다 (심기 양방향)",
+      bool(_us394) and _us394.get(_last394) == 139.0 and '2099-01-02' not in _us394)
+check("이어 붙일 대상은 KS11·KQ11 둘뿐이고 받는 길은 엔진의 지수 일봉 한 곳 (§4)",
+      _sc394._NAVER_INDEX == {'KS11': 'KOSPI', 'KQ11': 'KOSDAQ'}
+      and 'fetch_index_daily(name, count=3000)' in _read148(_os.path.join(PROJ, 'sector_cycle.py')))
+
+# ② ③ ④ 화면 문장
+_wa394 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("머리 문장이 잘라낸 것(가격)과 못 잘라낸 것(오늘 재무)을 같이 말한다",
+      '미래 정보는 잘라내고 검증했습니다' not in _wa394
+      and '가격은 그날까지만 잘라 썼고, 재무는 오늘 공시된 값을 썼습니다' in _wa394)
+check("적정가 괴리 문장 세 갈래가 주어(이 매수가)를 적고 지금 가격과의 관계를 킷 한 곳에서 붙인다",
+      _wa394.count('_uk.price_vs_fair_clause(realtime_price, _fair)') == 3
+      and _wa394.count('이 매수가는 적정가') >= 3)
+_pc1 = _uk394.price_vs_fair_clause(120, 100)
+_pc2 = _uk394.price_vs_fair_clause(80, 100)
+check("지금 가격 문장 — 위·아래를 수로 · 못 받으면 빈 글자 (심기 양방향)",
+      '+20.0% 위' in _pc1 and '-20.0% 아래' in _pc2
+      and _uk394.price_vs_fair_clause(None, 100) == '' and _uk394.price_vs_fair_clause(100, 0) == '',
+      f"{_pc1} | {_pc2}")
+check("확률 배너 이름이 계산에 맞다 — 같은 점수대 · 원장 전 종목 · 약어(W하한) 없음",
+      '같은 점수대 과거 판단이 맞은 비율 (원장 전 종목)' in _wa394 and 'W하한' not in _wa394)
+check("신뢰구간 줄이 사례를 독립으로 본 값임을 이름 옆에 적는다",
+      "'95% 신뢰구간 (사례를 독립으로 본 값 · 실제로는 더 넓다)'" in _wa394)
+check("도달 문장이 '닿을 만한' 옆에 같은 규칙의 실측 비율을 산출물에서 읽어 붙인다 (못 읽으면 안 붙인다)",
+      '_ef405.load()' in _wa394 and "if _fill405 else ''" in _wa394)
+check("고정 보정 문장이 잰 결과와 남은 결정을 말한다 — '재고 결정한다'는 없다",
+      '끄고 켠 두 판으로 재 보니' in _wa394 and '영향을 재고 나서 결정합니다' not in _wa394)
+check("유사패턴 연구 기준(+·−)이 매매 계획의 목표·손절과 다른 선임을 같은 자리에서 말한다",
+      '유사패턴 연구가 모든 종목에 같게 쓰는 고정 기준입니다' in _wa394
+      and "(CORE or {}).get('new_target')" in _wa394)
+check("스캔 목록의 필수조건 묶음을 그 이름으로 부르고 매수 결론은 중앙 판정이라 적는다 (겹친 expander 없음)",
+      '시장 스캔 목록의 필수조건' in _wa394 and '**추천 필수조건 미충족**' not in _wa394
+      and 'st.expander(_lbl405' not in _wa394)
+check("모집단 실측 줄은 접는다 (내용은 그대로 — 펼치면 산출물의 문장)",
+      "_uk.disclose('왜 이렇게 자주 비나 — 전체 종목에서 잰 것'" in _wa394 and '_uk._esc(_ln348)' in _wa394)
+# ② 순기대수익 — 무엇의 평균이고 어느 비용을 뺐는지
+_qi394 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진의 상한 사유·게이트 이름이 '유사패턴 평균 순수익'과 뺀 비용을 적는다 (옛 이름 게이트 없음)",
+      '유사패턴 평균 순수익 미산출 (표본 부족) → 상한 59점' in _qi394
+      and '_num_gate(f"유사패턴 평균 순수익(비용 {self._PATH_YIELD_COST_PCT:g}%)"' in _qi394
+      and '_num_gate("순기대수익"' not in _qi394
+      and 'reasons.append(f"순기대수익' not in _qi394)
+import report_generator as _rg394                                # noqa: E402
+check("레포트 칸 이름도 같은 뜻 · 비용은 엔진 상수에서 읽는다",
+      _rg394._path_yield_label().startswith('유사패턴 평균 순수익 (비용 ')
+      and '중앙 판정의 기대값과 다른 수' in _rg394._path_yield_label())
+check("분석 단계 이름이 하는 일(현재가 두 출처 대조)을 말한다",
+      dict(_uk394.STEPS).get('crosscheck') == '현재가 두 출처 대조')
+# 계층 확률의 짧은 꼬리표 — 긴 문장과 같은 판정을 읽는다
+_art394 = {'table_made': 'T', 'made': 'M', 'rows': 10, 'dates': 3, 'brier_table': 0.24,
+           'brier_const': 0.24, 'train_q': 0.596, 'd': -0.0007, 'd_lo': -0.003, 'd_hi': 0.0017}
+check("계층 확률 꼬리표 — 가려지지 않을 때만 · 나은 갈래·다른 표면 None (심기 양방향)",
+      _cl394.baseline_tag(_art394, table_made='T') == '기본값 60%와 못 가림'
+      and _cl394.baseline_tag(dict(_art394, d_hi=-0.0001), table_made='T') is None
+      and _cl394.baseline_tag(_art394, table_made='다른 표') is None
+      and '가려지지 않습니다' in (_cl394.baseline_note(_art394, table_made='T') or ''))
+check("오른쪽 요약 패널과 판단 근거 줄이 같은 꼬리표를 붙인다",
+      _wa394.count('_bltag405') >= 3 and '_cl405.baseline_tag()' in _wa394)
+check("집계 파일의 룰북 버전을 '모델'이라 부르지 않는다 (같은 화면의 모델 축 버전과 다른 수)",
+      "f\"집계한 날 룰북 {_calib_all.get('rulebook_version', '')} · \"" in _wa394
+      and "f\"모델 {_calib_all.get('rulebook_version'" not in _wa394)
+_lv394 = __import__('ledger_view')
+_ob394 = _lv394.outcome_band_line({'n': 1000, 'p10': -9, 'p25': -4, 'p50': 0, 'p75': 4, 'p90': 9})
+check("원장 기준선 문장이 '큰 쪽 = 더 믿을 쪽'으로 읽히지 않는다",
+      '기준선입니다' in (_ob394 or '') and '표본이 큰 쪽은 이 줄입니다' not in (_ob394 or ''))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
