@@ -1,7 +1,7 @@
 {
- "made": "2026-09-30",
- "made_at": "2026-09-29T16:24:49+00:00",
- "ledger_rows": 255930,
+ "made": "2026-10-01",
+ "made_at": "2026-09-30T16:28:25+00:00",
+ "ledger_rows": 256330,
  "joined_n": 96876,
  "stat_excluded": {
   "scale": 856,
@@ -15,7 +15,7 @@
   "bad_label": 35
  },
  "index_source": "실시간 수신",
- "index_last": "2026-09-29",
+ "index_last": "2026-09-30",
  "regime_missing_n": 15,
  "base": {
   "n": 96876,

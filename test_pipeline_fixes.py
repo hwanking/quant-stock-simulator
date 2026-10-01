@@ -31793,6 +31793,58 @@ check("국면 보정이 '시장 국면'이라는 이름과 식을 달고 업황 
       str((_r398.get('market_fair') or {}).get('basis'))[:90])
 
 
+print("=" * 72)
+print("§399 되받기 묶음 · 동봉본이 화면이 읽는 칸을 담는다 · 0행으로 오는 원천은 실패로 적는다 (라운드 410)")
+print("=" * 72)
+# ① 라운드 395 는 *"58~59점 띠의 블라인드 적중은 다음 클라우드 실행부터 파일에 있다"* 고 적었다. 클라우드는 그 칸을 만들었는데
+#    이 PC 와 배포 동봉본(data/)은 그 전 판이라 화면이 그 띠를 **조용히 빼고** 있었다(못 읽는 띠는 그 조각만 뺀다 · §3).
+#    되받고(pull) 동봉본을 다시 눌러 담았다. 값은 잠그지 않고 **화면이 읽는 칸이 있는가**만 본다(R213).
+import json as _json399                                            # noqa: E402
+with open(_os.path.join(PROJ, 'data', 'calibration.json'), encoding='utf-8') as _fh399:
+    _cal399 = _json399.load(_fh399)
+_ez399 = (((_cal399.get('splits') or {}).get('ext_zone') or {}).get('blind') or {})
+check("배포 동봉본 calibration.json 에 58~59점 띠의 블라인드 칸(hit_rate · n)이 있다 — 화면이 그 띠를 그린다",
+      _ez399.get('hit_rate') is not None and int(_ez399.get('n') or 0) > 0
+      and "get('ext_zone')" in _read148(_os.path.join(PROJ, 'web_app.py')), str(_ez399)[:80])
+with open(_os.path.join(PROJ, 'data', 'bundle_meta.json'), encoding='utf-8') as _fh399b:
+    _bm399 = _json399.load(_fh399b)
+check("동봉본은 원장 전량이다 (표본 행수 = 그때 원장 행수)",
+      int(_bm399.get('sample_rows') or 0) == int(_bm399.get('ledger_rows_at_bundle') or -1) > 0, str(_bm399)[:80])
+
+# ② 상폐 목록이 **예외 없이 0행**으로 온다(2026-10-01 실측). 예외만 잡으면 이력이 빠진 마스터가 조용히 굳는다 — 심어서 본다.
+import importlib.util as _ilu399                                  # noqa: E402
+import types as _types399                                         # noqa: E402
+import pandas as _pd399                                           # noqa: E402
+_spec399 = _ilu399.spec_from_file_location('_dnm399', _os.path.join(PROJ, 'scripts', 'disclosure_name_match.py'))
+_dnm399 = _ilu399.module_from_spec(_spec399)
+_spec399.loader.exec_module(_dnm399)
+_fake399 = _types399.ModuleType('FinanceDataReader')
+_fake399.StockListing = lambda name: (
+    _pd399.DataFrame({'Code': ['000001'], 'Name': ['가상'], 'Market': ['KOSPI']}) if name == 'KRX'
+    else _pd399.DataFrame({'Symbol': [], 'Name': [], 'Market': []}))
+_tmp399 = _os.path.join(PROJ, '_probe', '__name_master_plant399.json')
+_saved399 = (sys.modules.get('FinanceDataReader'), _dnm399.MASTER)
+try:
+    sys.modules['FinanceDataReader'] = _fake399
+    _dnm399.MASTER = _tmp399
+    if _os.path.exists(_tmp399):
+        _os.remove(_tmp399)
+    _doc399 = _dnm399.build_master()
+finally:
+    if _saved399[0] is None:
+        sys.modules.pop('FinanceDataReader', None)
+    else:
+        sys.modules['FinanceDataReader'] = _saved399[0]
+    if _os.path.exists(_tmp399):
+        _os.remove(_tmp399)
+check("상폐 목록이 0행으로 오면 실패로 적고 스냅샷에 남긴다 (조용히 '이력 없음'이 되지 않는다)",
+      '0행' in str(_doc399.get('delisting_note') or '') and len(_doc399.get('rows') or []) == 1,
+      str(_doc399.get('delisting_note')))
+_dnm_src399 = _read148(_os.path.join(PROJ, 'scripts', 'disclosure_name_match.py'))
+check("마스터를 읽는 쪽도 그 사실을 찍는다 (옛 구간 매칭률이 낮게 나오는 까닭)",
+      "m.get('delisting_note')" in _dnm_src399)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

@@ -69,6 +69,7 @@ def build_master():
     rows = [dict(code=str(r.Code), name=str(r.Name), mkt=str(r.Market),
                  live=True)
             for r in cur.itertuples()]
+    delisting_note = None
     try:
         dl = fdr.StockListing('KRX-DELISTING')
         for r in dl.itertuples():
@@ -78,8 +79,15 @@ def build_master():
             rows.append(dict(code=str(r.Symbol), name=nm,
                              mkt=str(r.Market), live=False,
                              delisted=str(getattr(r, 'DelistingDate', ''))[:10]))
+        # 라운드 410 — 이 원천은 2026-10-01 실측 **예외 없이 0행**을 돌려준다(같은 날 업종표 KRX-DESC 는 404 ·
+        #   라운드 409). 예외만 잡으면 상폐·사명 변경 이력이 조용히 빠진 마스터가 스냅샷으로 굳고, 옛 구간 매칭률이
+        #   소리 없이 내려간다(§3 — 못 받은 것을 '없다'로 만들지 않는다). 0행도 실패로 적고 마스터에 남긴다.
+        if len(dl) == 0:
+            delisting_note = '상폐 목록이 0행으로 왔다 — 원천이 응답만 하고 자료를 주지 않았다(현재 상장만 썼다)'
     except Exception as e:                                     # noqa: BLE001
-        print(f'   (상폐 목록 실패 — 현재 상장만 쓴다: {type(e).__name__})')
+        delisting_note = f'상폐 목록 실패 — 현재 상장만 썼다 ({type(e).__name__})'
+    if delisting_note:
+        print(f'   ({delisting_note})')
     # ETF 는 DART 공시의 발행 주체가 아니다(운용사가 공시한다). 유니버스를
     # 주식/ETF 로 가르기 위해 코드만 담는다 — 이름 매칭에는 안 쓴다.
     etf_codes = []
@@ -89,7 +97,9 @@ def build_master():
     except Exception as e:                                     # noqa: BLE001
         print(f'   (ETF 목록 실패 — 유니버스를 못 가른다: {type(e).__name__})')
     doc = {'made': date.today().isoformat(), 'rows': rows,
-           'etf_codes': etf_codes}
+           'etf_codes': etf_codes,
+           # 라운드 410 — 상폐 이력을 못 받았으면 그 사실이 스냅샷에 남는다(None = 받았다)
+           'delisting_note': delisting_note}
     with open(MASTER, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False)
     return doc
@@ -106,6 +116,8 @@ def main():
     print(f"■ 이름 마스터: {len(rows):,}행 "
           f"(현재 {len(live_rows):,} · 상폐 {len(rows) - len(live_rows):,}) "
           f"— 스냅샷 {m['made']}")
+    if m.get('delisting_note'):
+        print(f"   주의: {m['delisting_note']} — 옛 구간 매칭률이 그만큼 낮게 나온다")
 
     # 이름 → 코드 집합 (정확·정규화 각각). live 를 우선 대지 않는다 —
     # 충돌은 해소하지 않고 **적는다**.
