@@ -281,11 +281,9 @@ def build_stock_issues(four_scores, verdict, news_flags=None, name='', include_v
             f"{name} 뉴스 제목에 확인 필요 낱말 {nf['risk_count']}건",
             "위험 낱말이 걸린 기사가 있어 점수에 상한이 걸렸습니다. "
             "기사 원문을 직접 확인하세요.", scope=name))
-    if fs.get('m10_disparity') is not None and fs.get('m10_overheat'):
-        issues.append(_issue(
-            '리스크', '중간', f"{name} 월봉 10선 과열권",
-            f"월10선 이격 {fs['m10_disparity']:+.1f}% — 추격 매수 위험 구간입니다.",
-            scope=name))
+    # 라운드 411 — 여기 있던 '월봉 10선 과열권' 이슈를 걷었다. `m10_overheat` 를 엔진이 내지 않아 **한 번도 안 떴고**
+    #   (라운드 386), 같은 사실(이격 +25% 이상이면 상한 67점)은 이미 위 '점수 상한 적용' 이슈의 사유로 나간다 — 되살리면
+    #   같은 경고가 두 번이다(라운드 384 가 이웃한 되풀이를 걷은 자리).
     _cb = fs.get('calibration_band') or {}
     if _cb and (_cb.get('n') or 0) < 5:
         issues.append(_issue(

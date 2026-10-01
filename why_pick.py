@@ -61,7 +61,6 @@ def quant_reasons(core, fs, limit=3):
     """
     out = []
     fs = fs or {}
-    px = _f(core.get('current_price'))
 
     # ① 과거 같은 자리에서 얼마나 맞았나 — 표본을 반드시 같이 낸다
     # ⚠️ 라운드 185 — 종전 제목이 '검증된 적중률'이었다. 이 표본
@@ -117,12 +116,9 @@ def quant_reasons(core, fs, limit=3):
                     f'20일 평균 거래대금 {tv / 1e8:.0f}억으로 계산한 가격에 '
                     f'체결될 만합니다.'))
 
-    # ⑥ 지지선이 가까운가
-    sup = _f(fs.get('support_price')) or _f(fs.get('bb_lower'))
-    if sup and px and 0 < (px - sup) / px < 0.15:
-        out.append(('가까운 지지선',
-                    f'{_won(sup)} 부근에 지지선이 있어 손절 자리가 '
-                    f'분명합니다.'))
+    # ⑥ (라운드 411 걷음) '가까운 지지선' — `support_price`·`bb_lower` 를 four_scores 에서 읽었는데 엔진은 둘 다 내지 않아
+    #   **한 번도 안 돌았다**(라운드 386 이 '읽는 곳은 있고 만드는 곳이 0 인 칸'으로 셌다). 되살리지 않는다 — 15% 라는 손으로
+    #   고른 거리(§2)에 기대고, *"손절 자리가 분명합니다"* 는 엔진의 손절(변동성·바닥 기준)과 다른 선을 손절로 부르는 말이다.
 
     return out[:limit] if limit else out
 
@@ -197,15 +193,14 @@ def news_reason(nf, core, fs):
 
     # 선반영 판정 — 좋은 뉴스라도 이미 올랐으면 매수 근거가 아니다
     rp = _f(fs.get('range_position_pct')) or _f(fs.get('range_pos'))
-    chg20 = _f(fs.get('change_20d_pct')) or _f(fs.get('return_20d_pct'))
+    # 라운드 411 — 여기 있던 '최근 20거래일 +15% 이상이면 선반영' 갈래를 걷었다. `change_20d_pct`·`return_20d_pct` 를
+    #   엔진이 내지 않아 **한 번도 안 돌았고**(라운드 386), 15% 는 손으로 고른 문턱이다(§2). 선반영은 규칙집 값(52주 범위
+    #   위치 · RULES_SECTOR.price_priced_in_range_pos)으로만 가른다.
     priced = None
     why_priced = ''
     if rp is not None and rp >= PRICED_IN_RANGE_POS:
         priced = True
         why_priced = f'52주 범위의 {rp:.0f}% 지점'
-    elif chg20 is not None and chg20 >= 15.0:
-        priced = True
-        why_priced = f'최근 20거래일 {chg20:+.0f}%'
     elif rp is not None:
         priced = False
         why_priced = f'52주 범위의 {rp:.0f}% 지점'

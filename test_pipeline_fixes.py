@@ -31845,6 +31845,62 @@ check("마스터를 읽는 쪽도 그 사실을 찍는다 (옛 구간 매칭률�
       "m.get('delisting_note')" in _dnm_src399)
 
 
+print("=" * 72)
+print("§400 실시간 수신이 둘 다 실패하면 시드 표의 지어낸 값으로 분석하지 않는다 · 안 돌던 읽기 셋 (라운드 411)")
+print("=" * 72)
+import bitemporal_engine as _be400                                 # noqa: E402
+_saved400 = (_be400.fetch_html_with_retry, _be400.fetch_naver_mobile_api, _be400.fetch_json_with_retry)
+_rows400 = {k: _be400.STOCK_METRICS_DB.get(k) for k in ('999996.KS', '999995.KS', '999996', '999995')}
+_eng400 = _be400.BitemporalEngine()
+_eng400.fetch_daum_price_live = lambda code: (None, 0, '심기')
+_seed_msg400, _live_out400, _live_err400 = '', None, ''
+try:
+    _be400.fetch_html_with_retry = lambda *a, **k: None          # 옛 페이지 실패
+    _be400.fetch_naver_mobile_api = lambda *a, **k: None         # 새 API 실패
+    _be400.fetch_json_with_retry = lambda *a, **k: None
+    # 시드 모양의 행 — 가격은 있는데 실시간 수신의 표식(page_status)이 없다 (머리의 시드 19종목과 같은 모양)
+    _be400.STOCK_METRICS_DB['999996.KS'] = {'name': '시험시드', 'base_price': 207000.0, 'net_f': 2483.0, 'eps': 12372.0}
+    try:
+        _eng400.get_realtime_stock_price_triple_check('999996.KS')
+    except _be400.DataUnavailableError as _e400:
+        _seed_msg400 = str(_e400)
+    # 실시간 수신이 쓴 모양의 행 — 막히지 않아야 한다(과잉 차단 아님)
+    _be400.STOCK_METRICS_DB['999995.KS'] = {'name': '시험실시간', 'sector': '시험', 'base_price': 12350.0,
+                                            'page_status': 'ok_mobile_api'}
+    try:
+        _live_out400 = _eng400.get_realtime_stock_price_triple_check('999995.KS')
+    except Exception as _e400b:                                   # noqa: BLE001
+        _live_err400 = f'{type(_e400b).__name__}: {_e400b}'
+finally:
+    _be400.fetch_html_with_retry, _be400.fetch_naver_mobile_api, _be400.fetch_json_with_retry = _saved400
+    for _k400, _v400 in _rows400.items():
+        if _v400 is None:
+            _be400.STOCK_METRICS_DB.pop(_k400, None)
+        else:
+            _be400.STOCK_METRICS_DB[_k400] = _v400
+check("수신이 둘 다 실패하면 시드 행의 가격으로 분석하지 않고 그 사유로 제외한다 (심기)",
+      '현재가 수신 실패' in _seed_msg400 and '시드' in _seed_msg400, _seed_msg400[:90])
+check("실시간 수신이 쓴 행(page_status 있음)은 막히지 않는다 — 과잉 차단이 아니다 (심기)",
+      _live_out400 is not None and float(_live_out400[0]) == 12350.0, _live_err400[:90])
+# 아직 실시간으로 덮이지 않은 시드 행(업종 칸이 없다) — 표식이 없어야 위 가름이 성립한다
+_seed400 = {k: v for k, v in _be400.STOCK_METRICS_DB.items()
+            if str(k).endswith(('.KS', '.KQ')) and (v or {}).get('base_price') and not (v or {}).get('sector')}
+check("머리의 시드 행에는 실시간 표식(page_status)이 없다 — 표식으로 가르는 것이 성립한다",
+      all(not (v or {}).get('page_status') for v in _seed400.values()), scanned=len(_seed400))
+
+# 읽는 곳은 있고 만드는 곳이 0 이던 칸 셋(라운드 386) — 걷었다. AST 로 그 키를 읽는 자리가 0 인지 본다(주석은 안 본다).
+import ast as _ast400                                              # noqa: E402
+_dead400 = ('support_price', 'change_20d_pct', 'return_20d_pct', 'm10_overheat')
+_reads400 = []
+for _fn400 in ('why_pick.py', 'product_ops.py'):
+    for _nd400 in _ast400.walk(_ast400.parse(_read148(_os.path.join(PROJ, _fn400)))):
+        if (isinstance(_nd400, _ast400.Call) and getattr(_nd400.func, 'attr', None) == 'get' and _nd400.args
+                and isinstance(_nd400.args[0], _ast400.Constant) and _nd400.args[0].value in _dead400):
+            _reads400.append(f'{_fn400}:{_nd400.lineno}:{_nd400.args[0].value}')
+check("안 돌던 읽기 셋(가까운 지지선 · 20일 등락 선반영 · 월봉 10선 과열권 이슈)을 다시 읽지 않는다",
+      not _reads400, str(_reads400), scanned=2)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

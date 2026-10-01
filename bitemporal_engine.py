@@ -1439,6 +1439,20 @@ class BitemporalEngine:
                     f"없습니다. 시세 미수신과는 다른 사유입니다.")
             raise DataUnavailableError(f"{symbol}: 현재가 수신 실패 — 분석에서 제외합니다.")
 
+        # ⚠️ 라운드 411 — **시드 표의 지어낸 값이 현재가로 나갔다.** 이 파일 머리의 `STOCK_METRICS_DB` 는 종목명·시장을 위한
+        #   시드(19종목)인데 가격·EPS·BPS·수급 칸까지 박혀 있다(예: 한 대형주 기준가 207,000 · 외국인 순매수 2,483). 위
+        #   :1414 가 그 행을 실시간으로 덮어쓰려 하지만, **옛 페이지와 새 API 가 둘 다 실패하면**(네트워크 한 번) 덮어쓰지 못한 채
+        #   이리로 와 그 시드 행을 현재가로 받아 분석을 끝까지 돌렸다 — 실측(2026-10-02 · 두 수신 함수를 실패로 심은 차가운
+        #   프로세스): 시드 종목은 예외 없이 207,000원으로 분석되고 상태 문장은 *"출처 2개 중 1개 정상 수신"* 이었다(시드 밖
+        #   종목은 정상적으로 '수신 실패'). 같은 행이 `generate_synthetic_bitemporal_data` 의 재무(EPS·BPS)가 되어 적정가까지
+        #   흘렀고, 리플레이도 이 함수를 지난다. 라운드 164·167·188 이 걷어낸 *"실패하면 남의 값"* 의 같은 계열이다.
+        #   실시간 수신이 쓴 행에는 언제나 `page_status` 가 있다(두 경로 모두) — 없으면 시드 행이다. 시드 행으로는 분석하지
+        #   않는다(§3 · 시드는 이름·시장 표로만 남는다).
+        if not meta.get('page_status'):
+            raise DataUnavailableError(
+                f"{symbol}: 현재가 수신 실패 — 이번에 실시간으로 받은 값이 없고 코드 안의 오래된 시드 값만 있습니다. "
+                f"그 값으로 분석하지 않고 제외합니다.")
+
         val_ok, val_msg = self.validate_input_data(krx_base_price, symbol)
         if not val_ok:
             raise DataUnavailableError(f"{symbol}: 가격 유효성 검사 실패 — {val_msg}")
