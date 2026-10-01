@@ -22172,9 +22172,13 @@ check("이름이 약속하던 자료를 실제로 안 받는다는 사실이 코
 for _k256 in ('PER', 'EV_EBITDA', 'FCFF', 'PBR_ROE', 'DDM', 'SOTP', 'rNPV', 'EV_GP', 'DCF_SCENARIO'):
     check(f"계산 키 model_results['{_k256}'] 는 그대로다",
           f"model_results['{_k256}']" in _q256)
+# 라운드 409 — 할인율·영구성장률을 클래스 상수로 옮겼다(화면이 같은 수를 글자로 다시 적던 것을 한 곳으로 · §4).
+#   이 검사가 지키던 것은 *값이 그대로인가* 이므로 글자 대신 값과 읽는 자리를 본다(R98b 의 글자 락).
+from quant_indicators import QuantIndicatorsEngine as _Q256c        # noqa: E402
 check("산식·상수는 그대로다 (배수·WACC·영구성장률)",
       "ebitda_ps = norm_eps * 1.45 + bps * 0.04" in _q256
-      and "wacc = 0.085" in _q256 and "terminal_g = 0.02" in _q256
+      and _Q256c.FAIR_DISCOUNT_RATE == 0.085 and _Q256c.FAIR_TERMINAL_GROWTH == 0.02
+      and "wacc = self.FAIR_DISCOUNT_RATE" in _q256 and "terminal_g = self.FAIR_TERMINAL_GROWTH" in _q256
       and "fcff_ps = norm_eps * 0.85" in _q256)
 check("새 이름에 숫자가 없다 — 새 문턱을 만들지 않았다",
       not any(any(_c.isdigit() for _c in _n) for _n in _NEW256))
@@ -22194,9 +22198,11 @@ check("화면은 그 문장을 읽기만 한다 — 화면이 입력 목록을 �
 check("'미수신 입력 지표' 가 무엇만 보는지 그 자리에서 밝힌다",
       '주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다.' in _w231
       and '가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.' in _w231)
+# 라운드 409 — 화면이 '8.5% / 2.0%' 를 글자로 다시 적던 것을 엔진 클래스 상수에서 읽게 했다(§4). 잠그는 것은
+#   '무엇에 적용되는가' 문장과, 수를 화면이 아니라 엔진이 쥐고 있다는 것이다.
 check("할인율이 무엇에 적용되는지 적는다 (현금흐름표가 아니다)",
       '현금흐름표가 아니라 정상화 주당순이익에 적용합니다.' in _w231
-      and 'WACC 8.5% / 영구성장률 2.0% (중복 할인 없음)' in _w231)
+      and 'FAIR_DISCOUNT_RATE' in _w231 and 'WACC 8.5% / 영구성장률 2.0%' not in _w231)
 _doc256 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R239_MODEL_NAMES.md'))
 check("문서가 실행 확인(적정가·신뢰도 불변)과 잰 날짜를 적는다",
       '270,327' in _doc256 and '76.9' in _doc256 and '2026-09-08' in _doc256)
@@ -31413,8 +31419,9 @@ check("확률 배너 이름이 계산에 맞다 — 같은 점수대 · 원장 �
       '같은 점수대 과거 판단이 맞은 비율 (원장 전 종목)' in _wa394 and 'W하한' not in _wa394)
 check("신뢰구간 줄이 사례를 독립으로 본 값임을 이름 옆에 적는다",
       "'95% 신뢰구간 (사례를 독립으로 본 값 · 실제로는 더 넓다)'" in _wa394)
-check("도달 문장이 '닿을 만한' 옆에 같은 규칙의 실측 비율을 산출물에서 읽어 붙인다 (못 읽으면 안 붙인다)",
-      '_ef405.load()' in _wa394 and "if _fill405 else ''" in _wa394)
+# 라운드 409 — 비율만 붙이던 것을 `entry_facts.reach_clause()`(닿은 뒤 성적까지 한 문장)로 옮겼다 — 성질은 같다.
+check("도달 문장이 '닿을 만한' 옆에 같은 규칙의 실측을 산출물에서 읽어 붙인다 (못 읽으면 안 붙인다)",
+      '_ef405.reach_clause()' in _wa394 and "if _fill405 else ''" in _wa394)
 check("고정 보정 문장이 잰 결과와 남은 결정을 말한다 — '재고 결정한다'는 없다",
       '끄고 켠 두 판으로 재 보니' in _wa394 and '영향을 재고 나서 결정합니다' not in _wa394)
 check("유사패턴 연구 기준(+·−)이 매매 계획의 목표·손절과 다른 선임을 같은 자리에서 말한다",
@@ -31645,6 +31652,145 @@ for _nd397 in _ast397.walk(_ast397.parse(_wa397)):
             _gap397 += 1
 check("빈 구간 캡션(범위 '~' 둘)은 `_md_safe` 를 지난다 — 취소선으로 범위가 붙어 나가지 않게",
       _gap397 >= 1 and _gap397_safe >= 1, f"caption {_gap397} · _md_safe {_gap397_safe}", scanned=_gap397)
+
+
+print("=" * 72)
+print("§398 밸류에이션 탭 — 업종표가 404 · 단계별 괴리율 · 도달률엔 닿은 뒤 성적 · 탭 낱말은 위치 구분에서 (라운드 409)")
+print("=" * 72)
+import sector_cycle as _sc398                                     # noqa: E402
+import entry_facts as _ef398                                      # noqa: E402
+import price_axes as _pa398                                       # noqa: E402
+from quant_indicators import QuantIndicatorsEngine as _Q398       # noqa: E402
+_wa398 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_qs398 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_scs398 = _read148(_os.path.join(PROJ, 'sector_cycle.py'))
+
+# ① 업종표 — 원천이 답하지 않으면 마지막으로 받은 판을 쓰고, 그것도 없으면 빈 표를 **기억한다** (심기 · 끝나면 되돌린다)
+_mem398 = dict(_sc398._MEM)
+_cp398, _cr398, _ship398 = _sc398._cache_path, _sc398._cache_read, _sc398.SHIPPED_INDUSTRY
+_fdr398 = sys.modules.get('FinanceDataReader')
+
+
+class _DeadFdr398:                                                # 원천이 404 를 내는 모양
+    @staticmethod
+    def StockListing(_name):
+        raise IOError('HTTP Error 404: Not Found')
+
+
+try:
+    sys.modules['FinanceDataReader'] = _DeadFdr398
+    _sc398._cache_read = lambda name, ttl: None
+    _sc398._cache_path = lambda name: _os.path.join(PROJ, '_probe', '__없는_사본__.json')
+    _sc398.SHIPPED_INDUSTRY = _os.path.join(PROJ, '_probe', '__없는_동봉본__.json')
+    _sc398._MEM.clear()
+    _empty398 = _sc398.industry_map()
+    _memo398 = ('krx_desc' in _sc398._MEM) and _sc398._MEM['krx_desc'] == {}
+    _why_none398 = str(_sc398.for_stock('000001').get('why') or '')
+    _sc398.SHIPPED_INDUSTRY = _ship398
+    _sc398._MEM.clear()
+    _got398 = _sc398.industry_map()
+    _asof398 = _sc398.industry_asof()
+    _sc398._MEM['krx_desc'] = {'000002': '반도체 제조업'}
+    _why_miss398 = str(_sc398.for_stock('000001').get('why') or '')
+finally:
+    _sc398._cache_path, _sc398._cache_read, _sc398.SHIPPED_INDUSTRY = _cp398, _cr398, _ship398
+    if _fdr398 is None:
+        sys.modules.pop('FinanceDataReader', None)
+    else:
+        sys.modules['FinanceDataReader'] = _fdr398
+    _sc398._MEM.clear()
+    _sc398._MEM.update(_mem398)
+check("원천도 사본도 없으면 빈 표를 돌려주고 그 실패를 **기억한다** (종목마다 다시 묻지 않는다)",
+      _empty398 == {} and _memo398)
+check("업종표가 통째로 없을 때와 이 종목만 없을 때 사유가 다르다 (종전엔 한 문장)",
+      '받지 못해' in _why_none398 and '이 종목이 없어' in _why_miss398 and '거래소 업종표(KSIC)' in _why_miss398,
+      f"{_why_none398[:40]} / {_why_miss398[:40]}")
+check("원천이 404 면 저장소 동봉본을 쓰고 그 판 날짜·출처를 낸다",
+      len(_got398) >= 1000 and _asof398 is not None and _asof398[1] == '저장소 동봉본'
+      and str(_asof398[0])[:4] == '2026', f"{len(_got398)} · {_asof398}")
+import json as _json398                                            # noqa: E402
+with open(_sc398.SHIPPED_INDUSTRY, encoding='utf-8') as _fh398:
+    _doc398 = _json398.load(_fh398)
+_rows398 = _doc398.get('rows') or {}
+check("동봉본은 열쇠가 종목코드 6자리이고 값은 업종명뿐이다 (종목명·가격 없음)",
+      len(_rows398) >= 1000 and all(len(str(k)) == 6 for k in _rows398)
+      and set(_doc398) == {'made', 'source', 'note', 'rows'}, scanned=len(_rows398))
+check("동봉본을 만드는 스크립트가 있다 (손으로 만든 산출물이 아니다)",
+      _os.path.exists(_os.path.join(PROJ, 'scripts', 'ship_krx_industry.py'))
+      and "industry_asof=sc.get('industry_asof')" in _read148(_os.path.join(PROJ, 'price_axes.py'))
+      and "_cy.get('industry_asof')" in _wa398)
+
+# ② 탭 낱말은 엔진의 적정가 대비 위치 구분에서 — 점수 식은 그대로(이견 계산에 들어가는 값이라 안 바꿨다)
+_tabs398 = _Q398().build_tab_verdicts({'four_scores': {}, 'sim_res': {}, 'oos_result': {},
+                                       'val_eval': {'upside_pct': 1.2, 'fair_value_confidence': 75.0,
+                                                    'upside_eval': '적정가 부근'}})
+_v398 = next(t for t in _tabs398 if t['key'] == 'valuation')
+_exp398 = int(round(min(100.0, max(0.0, 50 + 1.2 * 0.8)) * (0.6 + 0.4 * 75.0 / 95.0)))
+check("밸류에이션 탭 머리 낱말은 위치 구분('적정가 부근')이고 점수는 종전 식 그대로다 (심기)",
+      _v398['verdict'] == '적정가 부근' and _v398['score'] == _exp398 == 47
+      and _v398.get('score_name') == '가치 위치 점수', f"{_v398['verdict']} · {_v398['score']}")
+check("점수 식과 '0 쪽으로 깎인다'는 한계를 엔진이 근거 줄에 적는다 (화면이 다시 적지 않는다)",
+      any('신뢰도 계수' in r and '아래쪽으로 깎이는 식' in r for r in _v398['reasons']))
+_tabs398b = _Q398().build_tab_verdicts({'four_scores': {}, 'sim_res': {}, 'oos_result': {},
+                                        'val_eval': {'upside_pct': 1.2, 'fair_value_confidence': 75.0,
+                                                     'upside_eval': '모델 불확실성이 커 가치판단 보류'}})
+check("보류 낱말은 탭 머리로 옮기지 않는다 (종전 낱말을 둔다)",
+      next(t for t in _tabs398b if t['key'] == 'valuation')['verdict'] != '모델 불확실성이 커 가치판단 보류')
+
+# ③ 할인율은 엔진 상수 한 곳 — 값 그대로
+check("할인율·영구성장률이 클래스 상수이고 값이 종전과 같다 (0.085 · 0.02)",
+      _Q398.FAIR_DISCOUNT_RATE == 0.085 and _Q398.FAIR_TERMINAL_GROWTH == 0.02
+      and 'wacc = self.FAIR_DISCOUNT_RATE' in _qs398 and 'wacc = 0.085' not in _qs398)
+
+# ④ 도달률 문장에는 닿은 뒤 성적이 같이 붙는다 (심기 양방향)
+_ff398 = {'max_bars': 20, 'cost_pct': 0.36,                      # reach_clause 는 산출 날짜를 안 읽는다
+          'splits': {'all': {'n': 5389, 'fill_rate': 78.3, 'days': 3.05, 'ret': -0.45},
+                     'train': {'ret': -0.52}, 'valid': {'ret': 0.61}, 'blind': {'ret': -1.33}}}
+_rc398 = _ef398.reach_clause(_ff398)
+check("도달 비율과 닿은 뒤 비용 차감 평균·구간 부호가 한 문장에 있다",
+      '78.3%' in _rc398 and '-0.45%' in _rc398 and '블라인드 -1.33' in _rc398
+      and '부호가 갈립니다' in _rc398 and '닿는 것과 이익이 남는 것은 다른 사실' in _rc398, _rc398[:80])
+check("닿은 뒤 성적을 못 읽으면 도달 비율도 안 붙인다 (좋아 보이는 절반만 내지 않는다)",
+      _ef398.reach_clause({'splits': {'all': {'fill_rate': 78.3}}}) == ''
+      and _ef398.reach_clause(None) == '')
+
+# ⑤ 화면 문자열 — 옛 이름은 문자열 상수에 없다(AST · 주석은 안 본다) · 새 문장은 있다
+import ast as _ast398                                              # noqa: E402
+_strs398 = [n.value for n in _ast398.walk(_ast398.parse(_wa398))
+            if isinstance(n, _ast398.Constant) and isinstance(n.value, str)]
+_old398 = [o for o in ('가중중앙값 원시 괴리율', '(Point-in-Time)', '기업유형 소속 확률', 'WACC 8.5%')
+           if any(o in s for s in _strs398)]
+check("옛 이름 넷(원시 괴리율 · Point-in-Time · 소속 확률 · 글자로 적은 WACC 8.5%)이 화면 문자열에 없다",
+      not _old398, str(_old398), scanned=len(_strs398))
+check("단계별 괴리율·가격 기준일·분류 비중·모형 독립성·추정 열 문장이 화면에 있다",
+      '현재가 대비 괴리율 — 단계별' in _wa398 and '모델 가중중앙값 대비' in _wa398
+      and '재무는 오늘 게시된 값이라 그날 시점의 자료가 아닙니다' in _wa398
+      and '기업유형 분류 비중 (업종·재무 규칙 · 확률 아님)' in _wa398
+      and '서로 독립된 {_n409}개의 근거가 아닙니다' in _wa398
+      and '적정가에 들어가지 않습니다' in _wa398)
+# 단계별 괴리율의 되돌림은 항등식이다 — 가중중앙값 × (1 + 보정) = 보정 뒤 값 (실측 한 종목의 세 수로 심는다)
+_wm398, _px398, _hc398 = 278223.72, 275000.0, -2.0
+_raw398 = (_wm398 * (1 + _hc398 / 100.0) / _px398 - 1) * 100.0
+_back398 = ((1 + _raw398 / 100.0) / (1 + _hc398 / 100.0) - 1) * 100.0
+check("보정 뒤 괴리와 보정 폭에서 가중중앙값 대비 괴리를 되돌리는 식이 맞다 (화면이 쓰는 그 식)",
+      abs(_back398 - (_wm398 / _px398 - 1) * 100.0) < 1e-9
+      and '((1.0 + float(_rup409) / 100.0) / (1.0 + float(_hc238) / 100.0) - 1.0) * 100.0' in _wa398)
+check("업종 성적의 비용후 평균은 수익률이라 % 로 적고, n 은 겹치는 행 수라고 말한다",
+      "f\"{_sp['ev']:+.3f}%\")" in _wa398 and "f\"{_sp['ev']:+.3f}%p\")" not in _wa398
+      and '독립 사례 수는 이보다 적습니다' in _wa398)
+
+# ⑥ 세 축의 문장 — 범위는 확률 구간이 아니다 · 국면 보정은 업황 조정이 아니다
+_ve398 = dict(fair_value_confidence=80.0, fair_value_range_core=(90.0, 110.0),
+              fair_value_range_wide=(80.0, 120.0), reference_fair_value=100.0, displayed_fair_value=100.0,
+              independent_models=3, upside_pct=0.0, model_results={})
+_r398 = _pa398.build(_ve398, {'entry_pullback_price': 95.0,
+                              'regime_gate': {'size_mult': 0.7, 'cell_ko': '거친 옆걸음'}}, 100.0, bars=900)
+check("가치 범위 문장이 '확률 구간이 아니다'를 말한다",
+      '확률 구간이 아닙니다' in str((_r398.get('value_band') or {}).get('basis') or ''))
+check("국면 보정이 '시장 국면'이라는 이름과 식을 달고 업황 조정과 다르다고 말한다 (값 그대로)",
+      '시장 국면(거친 옆걸음) 보정 -3.0%' in str((_r398.get('market_fair') or {}).get('basis') or '')
+      and '업황 조정과는 다른 값' in str((_r398.get('market_fair') or {}).get('basis') or ''),
+      str((_r398.get('market_fair') or {}).get('basis'))[:90])
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

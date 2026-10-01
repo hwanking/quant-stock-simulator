@@ -189,10 +189,12 @@ def value_band(val_eval, asset_type=None, bars=None):
         #   근거를 있다고 읽는다(라운드 237·239 가 두 번 고친 자리).
         #   가름은 `model_kinds` 한 곳이 정하고 여기는 **읽기만** 한다(§4).
         #   못 가르면 종전 표현 그대로다 — 수·범위·분위·판정은 한 글자도 안 바뀐다.
+        # 라운드 409 — 이 범위는 **모델끼리 낸 값의 퍼짐**이다. '이 기업의 값어치' 칸 아래 큰 숫자로 서고
+        #   바로 옆에 신뢰도 점수가 붙어 확률 구간(예: 75% 신뢰구간)으로 읽혔다(외부 검토 2026-10-01). 분위·수 불변.
         basis=(f"{_mk359.basis_kind_ko(ve.get('model_results'))} 모델 "
                f"{int(ve.get('independent_models') or 0)}종의 "
                f"25~75분위 범위 (넓게 보면 "
-               f"{wlo:,.0f}~{whi:,.0f}원)"),
+               f"{wlo:,.0f}~{whi:,.0f}원) — 모델끼리 낸 값의 퍼짐이지 확률 구간이 아닙니다"),
         note=('판정에 그대로 반영합니다.' if code == 'normal' else
               '판정에 절반만 반영합니다.' if code == 'limited' else
               '화면 표시용입니다 — 판정에는 넣지 않습니다.'),
@@ -239,6 +241,8 @@ def cycle_band(val_eval, band):
         # 언제 받은 값인지 같이 보낸다 — 신선도를 화면이 말할 수 있어야 한다
         last_date=sc.get('last_date'), fresh=sc.get('fresh'),
         collected_at=sc.get('collected_at'),
+        # 라운드 409 — 업종표 원천이 답하지 않아 **마지막으로 받은 판**을 썼으면 그 날짜·출처(없으면 None)
+        industry_asof=sc.get('industry_asof'), industry_src=sc.get('industry_src'),
         sources=sc.get('sources') or [],
         proxy_note=sc.get('proxy_note'),
         real_indicators=sc.get('real_indicators') or [],
@@ -278,7 +282,11 @@ def market_fair(val_eval, band, regime_gate=None):
     if adj:
         parts.append(f"업황 조정 {adj:+.1f}%")
     if regime_adj:
-        parts.append(f"{rg.get('cell_ko') or '국면'} 보정 {regime_adj:+.1f}%")
+        # 라운드 409 — '거친 옆걸음 보정 −3%' 만 적으면 그것이 무엇인지(시장 국면인지 업종인지) 알 수 없고, 같은 화면의
+        #   '업황 조정 0%' 와 한 낱말('조정·보정')로 섞여 읽혔다(외부 검토 2026-10-01). 국면 보정이라는 것과 그 식을
+        #   그대로 적는다 — 값·식은 안 바꿨다.
+        parts.append(f"시장 국면({rg.get('cell_ko') or '국면'}) 보정 {regime_adj:+.1f}% — 국면 게이트의 비중 배수 "
+                     f"{size:g} 에서 (1 − 배수) × 10 으로 낸 값이고 업황 조정과는 다른 값입니다")
     # 라운드 243 — 조정이 둘 다 0 이면 이 축은 ①과 **같은 수**다. 지평만 '수개월'
     #   이라 적어 두면 시장을 반영해 따로 낸 값으로 읽힌다. 사실대로 적는다 (§3).
     if not adj and not regime_adj:

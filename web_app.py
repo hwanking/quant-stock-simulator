@@ -8995,19 +8995,17 @@ if _rc_sig is not None:
     # 표면은 사람 말로만 — σ 같은 기호는 아래 '자세히'로 내린다 (라운드 79).
     # 라운드 405 — '닿을 만한' 은 σ 띠의 이름이지 잰 비율이 아니었다. 운영 진입가는 거의 늘 이 띠(하루 σ 1배)에
     #   놓이므로 같은 규칙의 진입가 **전체 실측**(일봉 모의 · `entry_facts` 한 곳)을 옆에 적는다. 못 읽으면 안 붙인다.
-    _fill405 = None
+    # 라운드 409 — 도달 비율만 적으면 매수가의 근거로 읽혔다(닿은 뒤 비용 차감 평균은 음수 · 구간마다 부호가 갈린다).
+    #   두 사실을 한 문장에 적는 자리는 `entry_facts.reach_clause` 한 곳이다(§4). 못 읽으면 ''.
+    _fill405 = ''
     try:
         import entry_facts as _ef405
-        _efd405 = _ef405.load() or {}
-        _efa405 = (_efd405.get('splits') or {}).get('all') or {}
-        if _efa405.get('fill_rate') is not None:
-            _fill405 = (float(_efa405['fill_rate']), int(_efd405.get('max_bars') or 20))
+        _fill405 = _ef405.reach_clause()
     except Exception:                                          # noqa: BLE001
-        _fill405 = None
+        _fill405 = ''
     _reach_word = {'가까움': '금방 닿을 거리입니다',
                    '닿을 만함': ('20일 안에 닿을 만한 거리입니다'
-                                + (f" — 같은 규칙의 진입가 전체로는 {_fill405[0]:.1f}%가 {_fill405[1]}봉 안에 "
-                                   f"닿았습니다(일봉 모의 · 이 종목 값이 아닙니다)" if _fill405 else '')),
+                                + (f" — {_fill405}" if _fill405 else '')),
                    '멀다': '20일 안에 닿기는 쉽지 않습니다',
                    '사실상 도달 어려움': '20일 안에 닿기 어렵습니다',
                    }.get(str(_rc_reach), str(_rc_reach))
@@ -13115,6 +13113,10 @@ with tab_val:
                         _mm.append(f"최종 수신 {_cy['last_date']}"
                                    + ("" if _cy.get('fresh', True)
                                       else " (신선하지 않음)"))
+                    # 라운드 409 — 업종표 원천이 응답하지 않아 마지막으로 받은 판을 썼으면 그 날짜를 같이 적는다.
+                    if _cy.get('industry_asof'):
+                        _mm.append(f"업종표 {_cy['industry_asof']} 판({_cy.get('industry_src') or '사본'} · "
+                                   f"원천이 응답하지 않아 마지막으로 받은 판)")
                     st.caption(_md_safe(f"{_cy.get('sector_ko') or '업종'} · "
                                         + " · ".join(_mm)))
                     if _cy.get('proxy_note'):
@@ -13141,14 +13143,18 @@ with tab_val:
             import sector_cycle as _scp
             _sp = _scp.ledger_perf(val_eval.get('sector'))
             if _sp:
+                # 라운드 409 — 비용후 평균은 **수익률 평균**이라 단위가 % 다(%p 는 두 비율의 차이에 쓴다). 그리고 n 은
+                #   **행 수**다 — 같은 종목의 이웃 기준일이 결과 창 안에서 겹쳐 독립 사례 수보다 크다(라운드 217 ·
+                #   외부 검토 2026-10-01: *"11,591건을 독립 표본으로 읽으면 안 된다"*). 새로 센 수는 없다.
                 _sp_head = (f"표본 {_sp['n']}건뿐이라 판단 근거로 쓰기 이릅니다"
                             if _sp.get('small') else
                             f"적중 {_sp['hit']:.1f}% (Wilson 하한 "
                             f"{_sp['wilson_low']:.1f}) · 비용후 평균 "
-                            f"{_sp['ev']:+.3f}%p")
+                            f"{_sp['ev']:+.3f}%")
                 st.caption(_md_safe(
                     f"이 업종({_sp['sector']}) 매수권 신호의 과거 실측 — "
-                    f"{_sp_head} · n {_sp['n']:,} · 개발 구간 · 표시 전용"))
+                    f"{_sp_head} · 행 {_sp['n']:,}건(같은 종목의 이웃 기준일이 겹쳐 독립 사례 수는 이보다 적습니다) · "
+                    f"개발 구간 · 표시 전용"))
         except Exception:                                       # noqa: BLE001
             pass                       # 실측 표 하나 때문에 축 화면이 죽지 않는다
         for _n in (_AX.get('notes') or []):
@@ -13233,6 +13239,17 @@ with tab_val:
             f"이익을 재료로 쓰는 모형은 한 종도 서지 못했습니다(어느 모형이 왜 빠졌는지는 "
             f"같은 화면의 '제외된 모델' 칸에 있습니다). 그래서 이 수는 **장부가 대비** 싼지를 "
             f"말하고, 이익 대비 싼지는 말하지 않습니다.")
+    elif _split359 and (len(_split359['asset']) + len(_split359['earnings']) + len(_split359['unknown'])) >= 2:
+        # 라운드 409 — 모형 수가 **독립된 근거의 수**로 읽혔다(외부 검토 2026-10-01: *"6개 모델이 동의했다와 같은
+        #   EPS/BPS 를 여섯 식에 넣었다는 다르다"*). 여덟 모형은 전부 같은 여섯 수에서 파생된다(라운드 239 · 아래
+        #   '이 모형들이 쓰는 입력' 칸). 가름은 `model_kinds` 한 곳 · 세기만 한다 · 신뢰도 산식은 안 바꿨다.
+        _n409 = len(_split359['asset']) + len(_split359['earnings']) + len(_split359['unknown'])
+        st.caption(
+            f"이 적정가를 만든 모형 {_n409}종은 서로 독립된 {_n409}개의 근거가 아닙니다 — 모두 같은 재무 여섯 수"
+            f"(EPS·BPS·ROE·PER·PBR·부채비율)에서 파생되고, 재료로 나누면 이익 기반 {len(_split359['earnings'])}종 · "
+            f"자산 기반 {len(_split359['asset'])}종"
+            + (f" · 가르지 못한 것 {len(_split359['unknown'])}종" if _split359['unknown'] else '')
+            + "입니다. 모형끼리 값이 비슷해도 서로 확인해 준 것은 아닙니다.")
 
     # ── 라운드 339 — 연간 재무 발표치 (표시 전용) ─────────────────────────────
     #   사용자: *"적정가는 진짜 펀더멘털은 진짜 좋은 주식인지 판단해 주고 · 전면적으로 검토."*
@@ -13270,9 +13287,14 @@ with tab_val:
             f"<th style='text-align:left; padding:4px 8px; color:{_TOK['tx3']}; font-weight:600;'>항목</th>{_th339}</tr></thead>"
             f"<tbody>{''.join(_trs339)}</tbody></table>",
             unsafe_allow_html=True)
+        # 라운드 409 — 외부 검토가 '추정 열의 ROE 55%·EPS 47,736 이 적정가에 그대로 들어갔다'고 읽었다. 아니다 — 그
+        #   종목에서 엔진이 쓴 값은 EPS 22,292 · ROE 10.85(2025 확정)였고(2026-10-01 실측), 추정 열은 응답에 실려 오는
+        #   제공처 컨센서스 표시값일 뿐 `info` 로 옮겨지지 않는다(라운드 336·339). 그 사실을 표 바로 아래에 적는다.
         st.caption(f"{_fv339.UNIT_NOTE}. 재작성된 현재 보고치라 시점 자료가 아닙니다. **이 화면의 적정가·점수에는 "
                    f"EPS·BPS·PER·PBR·ROE·부채비율 여섯만 들어갑니다** — 매출·이익의 추세는 아직 판정에 쓰지 않습니다"
-                   f"(쓸 근거를 재지 않았습니다 · 좋은 기업인지의 점수는 만들지 않았습니다).")
+                   f"(쓸 근거를 재지 않았습니다 · 좋은 기업인지의 점수는 만들지 않았습니다). **'추정' 열은 제공처 "
+                   f"컨센서스를 그대로 옮긴 것이고 적정가에 들어가지 않습니다** — 적정가가 쓴 값은 아래 '평가 시점 "
+                   f"ROE / PER / PBR' 칸에 있습니다.")
     else:
         st.caption("연간 재무 발표치 표를 못 받았습니다 — 이 종목은 옛 페이지 경로로 받았거나 응답에 재무 표가 "
                    "없습니다. 못 받은 것이지 재무가 없다는 뜻이 아닙니다.")
@@ -13431,9 +13453,28 @@ with tab_val:
             "다를 수 있습니다.</span>"
             if val_eval.get('eps_basis') == 'BPS×ROE 유도' else '')
 
+        # 라운드 409 — 단계별 괴리율. 종전 행 이름은 '가중중앙값 원시 괴리율'이었는데 실제 값(`raw_upside_pct`)은 **고정
+        #   보정을 곱한 뒤**의 괴리였다 — 가중중앙값 278,224원 · 현재가 269,500원이면 +3.2% 여야 하는데 +1.2% 를 적었다
+        #   (외부 검토 2026-10-01). 가중중앙값 대비 괴리는 엔진이 내는 두 값(보정 뒤 괴리 · 보정 폭)에서 산수로 되돌린다
+        #   — 화면의 현재가가 아니라 엔진이 쓴 가격 기준이라 같은 사슬 안에서 맞는다. 못 구하면 '미산출'(§3).
+        _rup409 = val_eval.get('raw_upside_pct')
+        try:
+            _wmg409 = ((1.0 + float(_rup409) / 100.0) / (1.0 + float(_hc238) / 100.0) - 1.0) * 100.0
+        except (TypeError, ValueError, ZeroDivisionError):
+            _wmg409 = None
+        _chain409 = (f"모델 가중중앙값 대비 {fmt_pct(_wmg409)} → 고정 보정({_hc238_str}) 뒤 {fmt_pct(_rup409)} "
+                     f"→ 극단값 수축 뒤(최종) {fmt_pct(val_eval.get('upside_pct'))}")
+        # 라운드 409 — 할인율·영구성장률은 엔진 클래스 상수에서 읽는다(종전엔 화면이 같은 수를 글자로 다시 적었다 · §4).
+        try:
+            _dr409 = (f"할인율 {QuantIndicatorsEngine.FAIR_DISCOUNT_RATE * 100:.1f}% / 영구성장률 "
+                      f"{QuantIndicatorsEngine.FAIR_TERMINAL_GROWTH * 100:.1f}% (중복 할인 없음)")
+        except Exception:                                      # noqa: BLE001
+            _dr409 = '엔진 상수를 읽지 못했습니다'
+        # 라운드 409 — 이 비중은 맞을 확률이 아니다. 업종 사전값과 재무 규칙 가점을 섞어 정규화한 **분류 가중치**이고
+        #   모형 혼합 가중치를 만드는 데 쓴다(보정된 확률이 아니다 · 외부 검토 2026-10-01). 이름만 바꾼다.
         st.markdown(f'''
 <table class="cross-val-matrix">
-<thead><tr><th>기업유형 소속 확률</th><th>비중</th></tr></thead>
+<thead><tr><th>기업유형 분류 비중 (업종·재무 규칙 · 확률 아님)</th><th>비중</th></tr></thead>
 <tbody>{type_rows}</tbody>
 </table>
 
@@ -13451,10 +13492,10 @@ with tab_val:
     <tr><td><b>평가 시점 ROE / PER / PBR</b></td><td>{fmt_num(val_eval.get('roe'), '.2f', '%')} / {fmt_num(val_eval.get('per'), '.2f', '배')} / {fmt_num(val_eval.get('pbr'), '.2f', '배')} (BPS {fmt_num(val_eval.get('bps'), ',.0f', unit_str)})</td></tr>
     <tr><td><b>미수신 입력 지표</b></td><td>{', '.join(val_eval.get('missing_inputs') or []) or '없음'} <span style="color:#9DAABC; font-size:13px;">— 주당순이익·주당순자산·자기자본이익률·PER·PBR·부채비율 여섯 개만 봅니다. 가치평가에 필요한 자료가 다 있다는 뜻이 아닙니다.</span>{_eps_basis_note386}</td></tr>
     <tr><td><b>이 모형들이 쓰는 입력</b></td><td>{_uk._esc_md(val_eval.get('model_inputs_note') or '-')}</td></tr>
-    <tr><td><b>가중중앙값 원시 괴리율</b></td><td>{fmt_pct(val_eval.get('raw_upside_pct'))} → 윈저화 후 {fmt_pct(val_eval.get('upside_pct'))}</td></tr>
+    <tr><td><b>현재가 대비 괴리율 — 단계별</b></td><td>{_chain409}</td></tr>
     <tr><td><b>적정가 신뢰도</b></td><td>{val_eval.get('fair_value_confidence', 0):.0f}점 — {_uk._esc_md(val_eval.get('fair_value_status_note', ''))}</td></tr>
-    <tr><td><b>할인율 가정</b></td><td>WACC 8.5% / 영구성장률 2.0% (중복 할인 없음) <span style="color:#9DAABC; font-size:13px;">— 현금흐름표가 아니라 정상화 주당순이익에 적용합니다.</span></td></tr>
-    <tr><td><b>최종 계산 기준일</b></td><td>{t_ref_date.strftime('%Y-%m-%d')} (Point-in-Time)</td></tr>
+    <tr><td><b>할인율 가정</b></td><td>{_dr409} <span style="color:#9DAABC; font-size:13px;">— 현금흐름표가 아니라 정상화 주당순이익에 적용합니다. 이름은 WACC(기업 전체 현금흐름에 쓰는 할인율)지만 주주 몫인 주당순이익에 적용하므로 실제로는 자기자본 쪽 할인율 자리입니다.</span></td></tr>
+    <tr><td><b>가격 기준일</b></td><td>{t_ref_date.strftime('%Y-%m-%d')} <span style="color:#9DAABC; font-size:13px;">— 가격은 그날까지만 썼습니다. 재무는 오늘 게시된 값이라 그날 시점의 자료가 아닙니다.</span></td></tr>
 </tbody>
 </table>
 ''', unsafe_allow_html=True)

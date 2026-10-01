@@ -54,6 +54,30 @@ def _cost_gap(measured):
         return ''
 
 
+def reach_clause(facts='__load__'):
+    """진입가 바로 옆의 짧은 도달 문장 (라운드 409).
+
+    라운드 405 가 진입가 옆에 *"같은 규칙의 진입가 전체로는 78.3%가 20봉 안에 닿았습니다"* 를 붙였는데, 같은 행의
+    **닿은 뒤 성적**(비용 차감 평균 −0.45% · 블라인드 −1.33% · 부호 갈림)은 그 자리에 없었다 — 외부 검토(2026-10-01):
+    *"싸게 살 기회가 자주 온다와 그 가격에서 사면 돈이 된다는 다른 이야기다."* 라운드 344 가 `line()` 에서 고친 그
+    모양이 짧은 문장에 다시 생긴 것이다. 두 사실을 **한 문장**에 적는다. 수는 산출물에서 읽고 못 읽으면 ''(§3).
+    """
+    d = load() if facts == '__load__' else facts
+    a = ((d or {}).get('splits') or {}).get('all') or {}
+    if not d or a.get('fill_rate') is None or a.get('ret') is None:
+        return ''
+    per = [(ko, (d['splits'].get(k) or {}).get('ret')) for k, ko in SPLIT_KO]
+    per = [(ko, v) for ko, v in per if v is not None]
+    signs = {(v > 0) - (v < 0) for _, v in per}
+    per_txt = ' · '.join(f'{ko} {v:+.2f}' for ko, v in per)
+    tail = ('' if len(per) < 2 else ' — 구간마다 부호가 갈립니다' if len(signs) > 1 else ' — 세 구간 부호가 같습니다')
+    return (f"같은 규칙의 진입가 전체로는 {a['fill_rate']:.1f}%가 {int(d.get('max_bars') or 20)}봉 안에 닿았지만, "
+            f"닿은 뒤 왕복 비용 {d.get('cost_pct')}% 차감 평균은 {a['ret']:+.2f}%입니다"
+            + _cost_gap(d.get('cost_pct'))
+            + (f" ({per_txt}{tail})" if per_txt else '')
+            + " — 닿는 것과 이익이 남는 것은 다른 사실입니다(일봉 모의 · 이 종목 값이 아닙니다)")
+
+
 def line(facts='__load__'):
     """진입가 근거의 실측 꼬리 문장."""
     d = load() if facts == '__load__' else facts

@@ -336,6 +336,44 @@ def series(ticker, start=SERIES_START):
     return out
 
 
+#: 라운드 409 — 업종표(KSIC) 원천인 FinanceDataReader `StockListing('KRX-DESC')` 가 **HTTP 404** 를 낸다
+#:   (2026-10-01 실측 · 로컬 사본은 2026-09-11 판이 마지막). 캐시 유효시간(7일)이 09-18 에 지난 뒤로 매 호출이 빈
+#:   dict 를 돌려줘 **모든 종목**의 업황 칸이 *"업종 분류를 받지 못해"* 를 적었다 — 같은 화면이 다른 출처의 업종명
+#:   ('반도체와반도체장비')을 띄우고 있어 모순으로 읽혔다(외부 검토 2026-10-01). 업종은 종목의 성질이라 몇 주 사이에
+#:   잘 안 바뀌므로(라운드 218) 원천이 답하지 않으면 **마지막으로 받은 판**을 쓰고 그 날짜를 같이 낸다.
+#:   차례: 새로 받기 → 로컬 사본(유효시간 무시) → 저장소 동봉본(배포 앱은 `.portfolio/` 가 비어 뜬다 · 라운드 331).
+#:   동봉본은 `scripts/ship_krx_industry.py` 가 로컬 사본에서 만든다(공개 상장 목록의 업종명뿐 · 종목명 없음).
+SHIPPED_INDUSTRY = os.path.join(BASE, 'data', 'krx_industry_ksic.json')
+
+
+def _stale_industry():
+    """마지막으로 받은 업종표 → (dict, 판 날짜, 출처). 없으면 (None, None, None)."""
+    try:
+        p = _cache_path('krx_desc')
+        if os.path.exists(p):
+            with open(p, encoding='utf-8') as f:
+                doc = json.load(f)
+            if isinstance(doc, dict) and doc:
+                return doc, time.strftime('%Y-%m-%d', time.localtime(os.path.getmtime(p))), '로컬 사본'
+    except Exception:                                        # noqa: BLE001
+        pass
+    try:
+        with open(SHIPPED_INDUSTRY, encoding='utf-8') as f:
+            doc = json.load(f)
+        rows = doc.get('rows') if isinstance(doc, dict) else None
+        if isinstance(rows, dict) and rows:
+            return rows, str(doc.get('made') or '') or None, '저장소 동봉본'
+    except Exception:                                        # noqa: BLE001
+        pass
+    return None, None, None
+
+
+def industry_asof():
+    """업종표가 **마지막으로 받은 판**이면 `(판 날짜, 출처)`. 새로 받은 판이거나 아직 안 읽었으면 None."""
+    with _LOCK:
+        return _MEM.get('krx_desc_stale')
+
+
 def industry_map():
     """종목코드(6자리) → KSIC 업종명. 실패 시 빈 dict."""
     # 파이프라인이 **종목마다** 부른다. 메모리 캐시가 없으면 2,759항목 JSON을
@@ -348,6 +386,7 @@ def industry_map():
         with _LOCK:
             _MEM['krx_desc'] = hit
         return hit
+    out = None
     try:
         import FinanceDataReader as fdr
         df = fdr.StockListing('KRX-DESC')
@@ -359,9 +398,20 @@ def industry_map():
             if code and ind and ind.lower() != 'nan':
                 out[code] = ind
     except Exception:                                        # noqa: BLE001
-        return {}
-    _cache_write('krx_desc', out)
-    return out
+        out = None
+    if out:
+        _cache_write('krx_desc', out)
+        with _LOCK:
+            _MEM['krx_desc'] = out
+        return out
+    # 원천이 답하지 않았다 — 마지막으로 받은 판을 쓴다. 그것도 없으면 빈 dict 를 **기억한다**
+    # (실패를 안 기억하면 종목마다 다시 묻는다 · 라운드 303 의 '캐시는 실패도 기억해야 캐시다').
+    doc, asof, src = _stale_industry()
+    with _LOCK:
+        _MEM['krx_desc'] = doc or {}
+        if doc:
+            _MEM['krx_desc_stale'] = (asof, src)
+    return doc or {}
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -548,11 +598,19 @@ def for_stock(code, industry=None, as_of=None):
     """
     code = str(code or '').split('.')[0].zfill(6)
     ind = industry
+    _from_map = False
     if not ind:
-        ind = (industry_map() or {}).get(code)
-    if not ind:
-        return dict(available=False, linked=False, industry=None,
-                    why='업종 분류를 받지 못해 업황을 연결할 수 없습니다.')
+        _imap = industry_map() or {}
+        ind = _imap.get(code)
+        _from_map = bool(ind)
+        if not ind:
+            # 라운드 409 — 두 사유를 가른다. 종전 문장 하나('업종 분류를 받지 못해')가 **업종표가 통째로 없는 것**과
+            #   **업종표에 이 종목이 없는 것**을 같이 말했고, 같은 화면이 다른 출처의 업종명을 띄워 모순으로 읽혔다.
+            #   업황 연결은 거래소 업종표(KSIC)로 한다는 것을 문장에 적는다(§3 · 사유는 사실대로).
+            return dict(available=False, linked=False, industry=None,
+                        why=('업황 연결에 쓰는 거래소 업종표(KSIC)를 받지 못해 업황을 연결할 수 없습니다.'
+                             if not _imap else
+                             '업황 연결에 쓰는 거래소 업종표(KSIC)에 이 종목이 없어 업황을 연결할 수 없습니다.'))
     gcode = group_of(ind)
     if not gcode:
         return dict(available=False, linked=False, industry=ind,
@@ -560,4 +618,9 @@ def for_stock(code, industry=None, as_of=None):
     m = proxy_momentum(gcode, as_of=as_of)
     m['industry'] = ind
     m['code'] = code
+    # 마지막으로 받은 업종표를 썼으면 그 판 날짜를 같이 싣는다 — 화면이 '언제 받은 업종'인지 말할 수 있게.
+    _st = industry_asof() if _from_map else None
+    if _st:
+        m['industry_asof'] = _st[0]
+        m['industry_src'] = _st[1]
     return m
