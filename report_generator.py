@@ -131,7 +131,7 @@ class QuantReportGenerator:
 #### 2. 펀더멘털 및 적정가
 - **PER**: `{_num(per, ".2f", "배")}` | **PBR**: `{_num(pbr, ".2f", "배")}` | **BPS**: `{_num(bps, ",.0f", unit_str)}` | **ROE**: `{_num(roe, ".2f", "%")}`
 - **부채비율**: `{_num(debt_ratio, ".1f", "%")}` | **Piotroski F-Score**: `{_num(fundamental_dict.get('piotroski_f_score'), ".0f", "/9")}`
-- **시장조정 적정가**: **`{_num(fair_disp, ",.0f", unit_str, na="산출 보류 (신뢰도 미달)")}`**
+- **펀더멘털 적정가**:**`{_num(fair_disp, ",.0f", unit_str, na="산출 보류 (신뢰도 미달)")}`**
 - **적정가 신뢰도**: `{val_eval.get('fair_value_confidence', 0):.0f}점` — {val_eval.get('fair_value_status_note', '')}
 - **실행 진입가 (신규 매수자 · 오늘 쓰는 값)**: **`{_num(rec_buy, ",.0f", unit_str + " 이하", na="미산출")}`**
 - **장기 가치 참고선 (적정가 − 안전마진)**: `{_num(value_floor, ",.0f", unit_str, na="미산출")}` — 오늘의 매수가가 아님

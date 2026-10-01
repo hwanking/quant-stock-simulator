@@ -21986,9 +21986,11 @@ def _mk254(n=30, close=90.0, sma=100.0, slope=0.01, vr=1.30, rsi=55.0):
 
 # ① 사용자가 재현한 입력 — 20일선 아래인데 나머지 셋이 충족
 _below254 = _rep254(_mk254())
-check("20일선 아래면 나머지 셋이 충족돼도 '안착 성공'이 아니다 (필수 전제)",
+# 라운드 407 — 충족 낱말을 '안착 성공' → '안착 조건 충족'(지금 상태 · 이후 상승이 아니다)으로 바꿨다. 성질은 같다.
+check("20일선 아래면 나머지 셋이 충족돼도 '안착 조건 충족'이 아니다 (필수 전제)",
       _below254 is not None and _below254['settled'] is False
-      and '필수 전제' in _below254['summary'] and '안착 성공' not in _below254['summary'])
+      and '필수 전제' in _below254['summary'] and '안착 조건 충족' not in _below254['summary']
+      and '안착 성공' not in _below254['summary'])
 check("그래도 몇 개가 충족됐는지는 그대로 적는다 (사실을 지우지 않는다)",
       '나머지 조건은 4개 중 3개 충족' in _below254['summary']
       and [c['state'] for c in _below254['checks']] == ['미충족', '충족', '충족', '충족'])
@@ -21998,9 +22000,10 @@ check("종전 규칙이면 이 입력은 '성공'이었다 (바뀐 것이 무엇
 
 # ② 가격 조건 충족 — 문턱과 '3개' 규칙은 그대로
 _above254 = _rep254(_mk254(close=110.0))
-check("20일선 위 + 나머지 셋 충족이면 안착 성공 (문턱·3개 규칙 불변)",
+check("20일선 위 + 나머지 셋 충족이면 안착 조건 충족 (문턱·3개 규칙 불변 · 이후 상승이라 말하지 않는다)",
       _above254['settled'] is True and '4개 조건 중 4개 충족' in _above254['summary']
-      and '안착 성공' in _above254['summary'])
+      and '안착 조건 충족' in _above254['summary'] and '이후 상승을 뜻하지 않습니다' in _above254['summary']
+      and '안착 성공' not in _above254['summary'])
 _above_2of4 = _rep254(_mk254(close=110.0, vr=1.0, rsi=40.0))
 check("20일선 위여도 보조 조건이 모자라면 안착 대기 (2개 충족)",
       _above_2of4['settled'] is False and '4개 조건 중 2개 충족' in _above_2of4['summary']
@@ -31559,6 +31562,89 @@ check("ADX 는 '점수에 더하지 않는다'와 지금 작동했는지를 적�
       "점수에 더하지 않습니다. {_cap406['at']} 이상이면서" in _wa395 and "_cap406.get('applied_bull')" in _wa395)
 check("탭 머리가 엔진이 준 수의 이름을 쓴다 (없으면 종전 'N점')",
       "f\"{t['score_name']} {t['score']}\" if t.get('score_name') else f\"{t['score']}점\"" in _wa395)
+
+
+print("=" * 72)
+print("§396 차트와 거래량 — 눌림 지수를 우호도로 부르지 않는다 · 네 축 · 그리는 것을 이름으로 (라운드 407)")
+print("=" * 72)
+# 외부 검토 두 편(2026-10-01). '비우호적 38'과 '20일선 안착 4/4'가 한 화면에서 모순으로 읽혔다 — 38 은 볼린저 위치·RSI 로 잰
+#   **눌린 정도**이고 안착은 추세 상태다. 값·산식·문턱 불변. 잠그는 것: ① 탭 낱말은 엔진의 볼린저 위치 구분에서 · 수는 '눌림 지수'
+#   ② 국면은 점수 밖 참고 ③ 안착은 '조건 충족'(이후 상승 아님) · 중앙 판정 영향 없음 ④ 범례·제목이 그리는 것 그대로 ⑤ 빈 수급 절 없음.
+import quant_indicators as _qi396                                # noqa: E402
+_snap396 = {'four_scores': {'bb_position_pct': 63.0, 'rsi_value': 50.0, 'bb_state': '중앙권',
+                            'market_regime_label': '횡보장'},
+            'sim_res': {}, 'val_eval': {}, 'oos_result': {}}
+try:
+    _tab396 = next(t for t in _qi396.QuantIndicatorsEngine().build_tab_verdicts(_snap396) if t['key'] == 'technical')
+except Exception as _e396:                                       # noqa: BLE001
+    _tab396 = {'err': repr(_e396)}
+check("검토가 본 수(볼린저 63% · RSI 50)에 탭 머리가 '중앙권 · 눌림 지수 38' — '비우호적'이 아니다 (점수 불변)",
+      _tab396.get('verdict') == '중앙권' and _tab396.get('score') == 38
+      and _tab396.get('score_name') == '눌림 지수' and _tab396.get('color') == '#4C8DFF', str(_tab396)[:200])
+check("시장 국면은 점수 근거 목록에서 '점수 밖 참고'라고 이름에 적는다",
+      any('시장 국면 (점수 밖 참고): 횡보장' == str(r) for r in _tab396.get('reasons') or [])
+      and not any(str(r).startswith('시장 국면:') for r in _tab396.get('reasons') or []))
+_wa396 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("안착 점검은 중앙 판정에 안 들어간다고 화면이 말한다 — 엔진의 옛 판정 함수는 회귀 말고 부르는 곳이 없다",
+      "중앙 판정 영향: **없음**" in _wa396 and 'check_20sma_settlement(' not in _wa396)
+check("제목·범례가 그리는 것 그대로 — 캔들·수급·수정종가·수급선이라 부르지 않는다 · 볼린저 선을 그린다",
+      "- 종가·이동평균선 & 거래량 점검\")" in _wa396 and "기술적 캔들/이동평균선 & 수급 차트 점검" not in _wa396
+      and "label=f\"{resolved_name} 종가\"" in _wa396 and "수정종가\"" not in _wa396
+      and "label=\"60일선 (수급선)\"" not in _wa396 and "label=\"볼린저 상·하단 (20일 · 2σ)\"" in _wa396
+      and "RSI 14 (단순 평균 방식)" in _wa396)
+check("네 축 상태판(추세·가격 위치·거래 강도·수급) — 안착 점검은 한 번만 계산한다",
+      "title=\"지금 기술 상태 — 네 가지를 따로 봅니다 (판정 아님)\"" in _wa396
+      and _wa396.count("q_engine.settlement_report(tech_df)") == 1)
+check("수급이 없으면 빈 절(제목·큰 안내 상자)을 만들지 않고 한 줄 — 가짜 곡선도 안 그린다",
+      "st.caption(\"외국인·기관·개인 순매매 시계열은 이 화면에 연결되어 있지 않아 그리지 않습니다" in _wa396
+      and "st.info(\"**투자자별 수급 데이터 미연동**" not in _wa396)
+
+
+print("=" * 72)
+print("§397 대응 시나리오 — 조건은 상태로 · 무효화선 = 진입가의 식 · 이름이 계산보다 넓던 세 칸 (라운드 408)")
+print("=" * 72)
+_wa397 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("이동평균 조건이 '지금 충족인가'를 같은 줄에 — '이탈'은 아래일 때 충족 (현재가 기준)",
+      "_ok = _above if '이탈' not in name else (not _above)" in _wa397
+      and "{'지금 충족' if _ok else '아직 아님'}" in _wa397)
+check("거래량 조건은 엔진이 이미 잰 값(vol_confirmed · 같은 문턱)을 읽는다 — 새 계산 없음",
+      "_dm408.get('vol_confirmed')" in _wa397 and "{_vol_txt408}" in _wa397)
+check("가격대에 배수를 적고, 표 아래가 빈 구간 · 무효화선 = 진입가의 식 · 손절선 아님을 말한다",
+      "현재가 + 하루 변동성 × 1.5~3" in _wa397 and "세 가격대는 이어져 있지 않습니다" in _wa397
+      and "실행 진입가를 잡는 식과 같은 선(현재가 − 하루 변동성 × 1)" in _wa397
+      and "무효화선은 손절선이 아닙니다" in _wa397 and "거두는 조건은 정해 두지 않았습니다" in _wa397)
+_q397 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("'ATR / DeMARK 구조적 위험선'은 식 그대로(손절 거리의 2배) — 엔진 설명도 식을 적는다",
+      "6. ATR / DeMARK 구조적 위험선" not in _wa397 and "6. 변동성 위험선" in _wa397
+      and "atr_risk_level = float(curr_price - base_risk * 2.0)" in _q397
+      and "'atr_risk_level_note': '현재가 − 손절 거리 × 2" in _q397)
+import ast as _ast397                                            # noqa: E402
+_strs397 = []
+for _fn397 in ('web_app.py', 'report_generator.py'):
+    for _nd397 in _ast397.walk(_ast397.parse(_read148(_os.path.join(PROJ, _fn397)))):
+        if isinstance(_nd397, _ast397.Constant) and isinstance(_nd397.value, str) and '시장조정' in _nd397.value:
+            _strs397.append((_fn397, _nd397.value[:40]))
+check("'시장조정 펀더멘털 적정가'라는 이름이 화면·레포트 문자열에 없다 (조정 대상이 없는 이름 · 주석은 안 본다)",
+      not _strs397 and "'target_fundamental_note': f\"펀더멘털 적정가 ({upside_eval})\"" in _q397,
+      str(_strs397[:3]))
+# 첫 렌더에서 빈 구간 캡션의 두 '~' 가 마크다운 취소선으로 묶여 범위가 숫자 둘이 붙은 채 나갔다(R44·R295·R337) —
+#   그 문장을 품은 f-string 이 `_md_safe(...)` 호출 **안**에 있는지 구조로 본다(글자를 못 박지 않는다 · 주석은 안 본다).
+_gap397 = 0
+_gap397_safe = 0
+for _nd397 in _ast397.walk(_ast397.parse(_wa397)):
+    if isinstance(_nd397, _ast397.Call):
+        _inner397 = [_c397 for _a397 in _nd397.args for _c397 in _ast397.walk(_a397)
+                     if isinstance(_c397, _ast397.Constant) and isinstance(_c397.value, str)
+                     and '세 가격대는 이어져 있지 않습니다' in _c397.value]
+        if not _inner397:
+            continue
+        _fname397 = getattr(_nd397.func, 'id', None) or getattr(_nd397.func, 'attr', None)
+        if _fname397 == '_md_safe':
+            _gap397_safe += 1
+        elif _fname397 == 'caption':
+            _gap397 += 1
+check("빈 구간 캡션(범위 '~' 둘)은 `_md_safe` 를 지난다 — 취소선으로 범위가 붙어 나가지 않게",
+      _gap397 >= 1 and _gap397_safe >= 1, f"caption {_gap397} · _md_safe {_gap397_safe}", scanned=_gap397)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

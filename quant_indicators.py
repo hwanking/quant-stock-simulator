@@ -1893,7 +1893,9 @@ class QuantIndicatorsEngine:
             parts.append(float(np.clip(100 - rsi_v * 1.2, 0, 100)))
             reasons5.append(f"RSI {rsi_v:.0f}")
         if fs.get('market_regime_label'):
-            reasons5.append(f"시장 국면: {fs['market_regime_label']}")
+            # 라운드 407 — 국면은 이 점수에 **안 들어간다**(아래 평균은 볼린저·RSI 둘뿐). 근거 목록에 섞어 두면 들어간 것으로
+            #   읽힌다(외부 검토 · 2026-10-01) — 점수 밖 참고라고 이름에 적는다.
+            reasons5.append(f"시장 국면 (점수 밖 참고): {fs['market_regime_label']}")
         # 라운드 237 (사용자 지적) — 이 점수는 **볼린저 위치와 RSI 둘의 평균**이다. 수급
         #   (외국인·기관)·거래량·20일선 안착 결과는 **들어가지 않는다.** 그런데 이름이
         #   '수급·기술'이라 사용자는 33점을 "수급까지 본 종합 평가"로 읽었다. 산식은 한
@@ -1907,6 +1909,14 @@ class QuantIndicatorsEngine:
                                 f"{'볼린저 위치' if parts[0] < parts[1] else 'RSI'} "
                                 f"(값이 클수록 눌린 자리라는 뜻이고, 상승확률이 아닙니다)")
             add('technical', '가격 위치 (볼린저·RSI)', float(np.mean(parts)), reasons5)
+            # 라운드 407 — 이 수는 **눌린 정도**(밴드 아래쪽·RSI 낮을수록 큼)이지 우호·비우호가 아니다. 탭 공통 문턱에 대
+            #   '비우호적 38'이라 부르면, 같은 화면의 '20일선 안착 조건 4/4' 와 모순으로 읽힌다(외부 검토 두 편 · 2026-10-01).
+            #   낱말은 엔진이 이미 가진 볼린저 위치 구분(`bb_state` · 하단 이탈·하단권·중앙권·상단권·상단 돌파)에서 옮기고
+            #   색은 중립 하나로 · 수는 '눌림 지수'라 부른다. 산식·점수 불변 · 새 문턱 없음.
+            _bbs407 = str(fs.get('bb_state') or '').split(' (')[0].strip()
+            if _bbs407 and _bbs407 != '산출 불가':
+                tabs[-1]['verdict'], tabs[-1]['color'] = _bbs407, "#4C8DFF"
+            tabs[-1]['score_name'] = '눌림 지수'
         else:
             add('technical', '가격 위치 (볼린저·RSI)', None,
                 ["볼린저 위치·RSI 를 산출하지 못했습니다"], available=False)
@@ -4644,7 +4654,8 @@ class QuantIndicatorsEngine:
             'fair_value_status': fair_value_status,
             'fair_value_status_note': val_eval.get('fair_value_status_note', ''),
             'fair_value_usable': fair_value_usable,
-            'target_fundamental_note': f"시장조정 펀더멘털 적정가 ({upside_eval})",
+            # 라운드 408 — '시장조정'은 조정하는 대상이 없는 이름이었다(이 파일의 업황 조정 주석 · 규칙집 apply_to_fair_value 0).
+            'target_fundamental_note': f"펀더멘털 적정가 ({upside_eval})",
             'base_fair_value': float(base_fair_value) if base_fair_value is not None else float(curr_price),
             'model_weighted_median': val_eval.get('model_weighted_median'),
             'fair_fixed_haircut_pct': val_eval.get('fair_fixed_haircut_pct'),
@@ -4691,13 +4702,16 @@ class QuantIndicatorsEngine:
             'target_tech_1st': target_tech_1st,
             'target_tech_1st_note': '1차 분할익절 목표 (도달확률 우선 — 손절거리 0.7배·변동성 기반)',
             'target_tech_2nd': target_tech_2nd,
-            'target_tech_2nd_note': '2차 구조적 목표 (최근접 저항 1R~3R)',
+            # 라운드 408 — 어느 가격 기준인지 적는다(현재가 + 1R~3R 안의 가장 가까운 저항 · 없으면 2R).
+            'target_tech_2nd_note': '2차 구조적 목표 (현재가 기준 · 1R~3R 안 최근접 저항, 없으면 2R)',
             'target_trajectory_20d': float(curr_price * 1.03),
             'target_trajectory_20d_note': '20일 궤적 목표가',
             'stop_loss_price': stop_loss_price,
             'stop_loss_note': '변동성 2σ 손절 (노이즈 손절 방지)',
             'atr_risk_level': atr_risk_level,
-            'atr_risk_level_note': '위험 관리 구간',
+            # 라운드 408 — 화면이 이 값을 'ATR / DeMARK 구조적 위험선'이라 불렀는데 식은 **현재가 − 손절 거리 × 2** 다
+            #   (손절 거리 = 현재가 × max(바닥, 20일 변동성 × 배수)) — ATR 도 DeMARK 도 안 쓴다. 식을 적는다(값 불변).
+            'atr_risk_level_note': '현재가 − 손절 거리 × 2 (손절 거리 = 변동성·바닥 기준 · ATR·DeMARK 를 쓰지 않습니다)',
             
             'demark_res': dm,
             'demark_bullish_score': int(dm.get('bullish_score', 0)),
@@ -5005,8 +5019,10 @@ class QuantIndicatorsEngine:
                 f"나머지 조건은 4개 중 {passed}개 충족")
         else:
             settled = passed >= 3
+            # 라운드 407 — 종전 낱말 '안착 성공'은 **이후 상승이 확인된 것**처럼 읽혔다(외부 검토 · 2026-10-01). 이 판정은
+            #   지금 가격·기울기·거래량·RSI 의 **상태**다 — 조건이 갖춰졌다고 적는다. 문턱·'3개' 규칙·settled 값 불변.
             summary = (f"필수 전제(가격 유지) 충족 · 4개 조건 중 {passed}개 충족 — "
-                       f"{'안착 성공' if settled else '안착 대기'}")
+                       f"{'안착 조건 충족 (지금 상태이지 이후 상승을 뜻하지 않습니다)' if settled else '안착 대기'}")
         return {'settled': settled, 'summary': summary, 'checks': checks, 'bars': n}
 
     def check_20sma_settlement(self, tech_df):

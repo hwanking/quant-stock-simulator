@@ -8455,7 +8455,7 @@ st.markdown(f"""
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #35C98B; font-weight: bold;'>{fmt_num(debt_val, '.1f', '%', na='미수신')}</p>
         </div>
         <div style='background: #161D2A; padding: 8px 12px; border-radius: 12px; text-align: center;'>
-            <p style='margin: 0; font-size: 12px; color: #4C8DFF; font-weight: bold;'>시장조정 펀더멘털 적정가</p>
+            <p style='margin: 0; font-size: 12px; color: #4C8DFF; font-weight: bold;'>펀더멘털 적정가</p>
             <p style='margin: 4px 0 0 0; font-size: 17px; color: #4C8DFF; font-weight: bold;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원')}</p>{_fv_note_html}
         </div>{_etf_tile_html}
     </div>
@@ -8484,7 +8484,7 @@ if _etf_is:
             f"color:{_TOK['tx2']};'>"
             "<b style='color:" + _TOK['tx1'] + ";'>이 종목은 ETF 입니다</b> — "
             "기업이 아니라 펀드라서 <b>EPS·BPS·ROE 가 존재하지 않습니다.</b> "
-            "그래서 위 '시장조정 펀더멘털 적정가'는 <b>만들지 않습니다</b> "
+            "그래서 '펀더멘털 적정가' 칸은 <b>만들지 않습니다</b> "
             "— 없는 값을 지어내지 않기 위해서입니다. ETF 에서 그 자리에 "
             "해당하는 값은 <b>순자산가치(NAV)</b>이고, 그것은 추정이 아니라 "
             "<b>발표되는 값</b>입니다."
@@ -13160,7 +13160,8 @@ with tab_val:
             st.caption(f"판정 반영: {_pol.get('why', '')}")
         st.divider()
 
-    st.subheader(f"[{resolved_name}] - 시장조정 펀더멘털 적정가")
+    # 라운드 408 — '시장조정'은 조정하는 대상이 없는 이름이었다(업황 조정은 규칙집이 0 · 엔진 주석이 스스로 그렇게 적는다).
+    st.subheader(f"[{resolved_name}] - 펀더멘털 적정가")
 
     target_price = four_scores.get('target_fundamental', realtime_price)
     disp_price = four_scores.get('displayed_fair_value')
@@ -13341,7 +13342,7 @@ with tab_val:
     <div style="background: #161D2A; border-radius: 18px; padding: 24px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
             <div>
-                <h3 style="margin-top:0; color:#4C8DFF;">시장조정 펀더멘털 적정가 (캘리브레이션 연동)</h3>
+                <h3 style="margin-top:0; color:#4C8DFF;">펀더멘털 적정가 (캘리브레이션 연동)</h3>
                 <p style="font-size: 34px; font-weight: bold; margin: 4px 0; color: #F3F6FA;">{disp_price_str}</p>
                 <p style="font-size: 17px; font-weight: bold; margin: 0; color: #9DAABC;">{upside_display_str}</p>
                 <p style="font-size: 15px; color: #9DAABC; margin-top: 8px;">
@@ -13496,11 +13497,24 @@ with tab_scen:
         return f"{v:,.0f}{unit_str}" if v is not None else "확인 불가"
 
     def _ma235(name, ma):
-        """이동평균선 조건 — 실제 값과 현재가의 위치. 없으면 '확인 불가'(대체값 금지)."""
+        """이동평균선 조건 — 실제 값과 현재가의 위치. 없으면 '확인 불가'(대체값 금지).
+
+        라운드 408 — 위치만 적어 '20일선 회복'이 이미 위에 있는 종목에서도 **해야 할 일**처럼 읽혔다(외부 검토 ·
+        2026-10-01). 그 조건이 **지금 충족인가**를 같은 줄에 적는다('이탈'은 아래일 때 충족 · 현재가 기준).
+        """
         if ma is None:
             return f"{name} 확인 불가 (이동평균 미수신)"
+        _above = curr_price >= ma
+        _ok = _above if '이탈' not in name else (not _above)
         return (f"{name} {ma:,.0f}{unit_str} — 현재가 "
-                f"{'위' if curr_price >= ma else '아래'}")
+                f"{'위' if _above else '아래'} · <b>{'지금 충족' if _ok else '아직 아님'}</b>")
+
+    # 라운드 408 — '거래량 1.2배'는 엔진이 이미 잰다(DeMARK 의 `vol_confirmed` = 오른 날 · 거래량 ≥ 20일 평균 × 1.2 · 같은
+    #   문턱). 그 값을 그대로 읽어 상태로 적는다 — 새 계산 없음. DeMARK 가 산출 불가면 확인 불가.
+    _dm408 = four_scores.get('demark_res') or {}
+    _vol_txt408 = ((f"거래량 1.2배(오른 날 · 20일 평균 대비) — "
+                    f"<b>{'지금 충족' if _dm408.get('vol_confirmed') else '아직 아님'}</b>")
+                   if _dm408.get('rsi_value') is not None else "거래량 1.2배 — 확인 불가")
 
     if _vol235 is None:
         st.info("20일 일간수익률 표준편차를 받지 못해 참고 가격대를 만들지 않습니다. "
@@ -13559,19 +13573,22 @@ with tab_scen:
         <tbody>
             <tr>
                 <td><b style='color:#35C98B;'>상승 시나리오</b></td>
-                <td>{_ma235('20일선 회복', _ma20_235)} · 거래량 1.2배 · 외국인 순매수 전환 —
-                    뒤 둘은 이 화면에서 판정하지 않습니다 (수급 미연동)</td>
-                <td><b>{bull_range_low:,.0f}{unit_str} ~ {bull_range_high:,.0f}{unit_str}</b></td>
+                <td>{_ma235('20일선 회복', _ma20_235)} · {_vol_txt408} · 외국인 순매수 전환 —
+                    이것은 이 화면에서 판정하지 않습니다 (수급 미연동)</td>
+                <td><b>{bull_range_low:,.0f}{unit_str} ~ {bull_range_high:,.0f}{unit_str}</b>
+                    <br><span style='font-size:12px; color:#9DAABC;'>현재가 + 하루 변동성 × 1.5~3</span></td>
                 <td>{_bull_t_txt235}</td>
-                <td>{bull_stop:,.0f}{unit_str} 하회 시 무효화</td>
+                <td>{bull_stop:,.0f}{unit_str} 하회 시 무효화
+                    <br><span style='font-size:12px; color:#9DAABC;'>실행 진입가를 잡는 식과 같은 선(현재가 − 하루 변동성 × 1)</span></td>
                 <td>조건이 채워지면 중앙 판정을 다시 봅니다</td>
             </tr>
             <tr>
                 <td><b style='color:#F2B84B;'>횡보 시나리오</b></td>
                 <td>{_ma235('60일선 지지', _ma60_235)} · 거래량 감소 ·
                     RSI {f'{_rsi235:.1f}' if _rsi235 is not None else '확인 불가'}
-                    ('리셋'의 기준은 정해져 있지 않습니다)</td>
-                <td><b>{side_range_low:,.0f}{unit_str} ~ {side_range_high:,.0f}{unit_str}</b></td>
+                    ('리셋'의 기준은 정해져 있지 않습니다) — 거래량 감소도 기준이 없어 둘은 판정하지 않습니다</td>
+                <td><b>{side_range_low:,.0f}{unit_str} ~ {side_range_high:,.0f}{unit_str}</b>
+                    <br><span style='font-size:12px; color:#9DAABC;'>현재가 − 0.75 ~ + 1 × 하루 변동성</span></td>
                 <td>미산출 — 검증된 횡보 진입계획이 없어 목표선을 내지 않습니다</td>
                 <td>{side_stop:,.0f}{unit_str} 이탈 시 무효화</td>
                 <td>지지 유지 여부만 봅니다</td>
@@ -13580,15 +13597,29 @@ with tab_scen:
                 <td><b style='color:#ff453a;'>하락 시나리오</b></td>
                 <td>{_ma235('60일선 종가 이탈', _ma60_235)} · 기관 동반 매도 —
                     뒤는 이 화면에서 판정하지 않습니다 (수급 미연동)</td>
-                <td><b>{bear_range_low:,.0f}{unit_str} ~ {bear_range_high:,.0f}{unit_str}</b></td>
+                <td><b>{bear_range_low:,.0f}{unit_str} ~ {bear_range_high:,.0f}{unit_str}</b>
+                    <br><span style='font-size:12px; color:#9DAABC;'>현재가 − 하루 변동성 × 2.5~1.5</span></td>
                 <td>해당 없음 (하방)</td>
                 <td>해당 없음 — 이 시나리오는 하회하면 <b>성립</b>합니다
-                    (확인선 {bear_target:,.0f}{unit_str})</td>
+                    (확인선 {bear_target:,.0f}{unit_str}) · 거두는 조건은 정해 두지 않았습니다</td>
                 <td>중앙 판정의 청산 기준을 따릅니다 — {_stop_txt235}</td>
             </tr>
         </tbody>
     </table>
     """, unsafe_allow_html=True)
+        # 라운드 408 — 외부 검토(2026-10-01)가 짚은 두 사실을 표 바로 아래에: ① 세 가격대가 이어져 있지 않다(배수 0.75·1·1.5
+        #   사이의 빈 구간 · 배수는 종전 그대로) ② 상승 무효화선 = 실행 진입가의 식(둘 다 현재가 × (1 − 하루 변동성)) —
+        #   진입가까지 내려오면 이 표의 상승 시나리오는 무효다. 두 표는 다른 물음에 답한다. 무효화선은 손절선이 아니다.
+        _pz408 = (CORE or {}).get('pullback_zone')
+        # ⚠️ 첫 렌더에서 두 '~' 가 마크다운 취소선으로 묶여 범위가 '276,658280,737원' 으로 나갔다(R44·R295·R337 의 그 자리) —
+        #   막는 자리 하나(`_md_safe`)를 지난다.
+        st.caption(_md_safe(
+            f"세 가격대는 이어져 있지 않습니다 — {side_range_high:,.0f}~{bull_range_low:,.0f}{unit_str} 구간과 "
+            f"{bear_range_high:,.0f}~{side_range_low:,.0f}{unit_str} 구간은 어느 시나리오에도 들지 않습니다. "
+            f"상승 시나리오의 무효화선({bull_stop:,.0f}{unit_str})은 실행 진입가"
+            + (f"({float(_pz408):,.0f}{unit_str})" if _pz408 else '')
+            + "를 잡는 식과 같은 선이라, 진입가까지 내려오면 이 표의 상승 시나리오는 무효가 됩니다 — 이 표는 '지금 오름세가 "
+              "이어지나'를, 진입가는 '어디서 살 만한가'를 묻습니다. 무효화선은 손절선이 아닙니다(청산은 중앙 판정의 손절)."))
 
     _uk.spacer(28)
     # [Section 1-6 Spec] 목표가격 5종 세트 산출 근거 표
@@ -13620,7 +13651,7 @@ with tab_scen:
         </thead>
         <tbody>
             <tr>
-                <td><b>1. 시장조정 펀더멘털 적정가</b></td>
+                <td><b>1. 펀더멘털 적정가</b></td>
                 <td><b style='color:#4C8DFF;'>{fmt_num(four_scores.get('displayed_fair_value'), suffix='원', na='미산출 (신뢰도 미달)')}</b></td>
                 <td>{four_scores['target_fundamental_note']}</td>
             </tr>
@@ -13644,7 +13675,7 @@ with tab_scen:
                     실행 진입가 기준 {fmt_num((CORE or {}).get('new_target'), ',.0f', '원', na='미산출')}</td>
             </tr>
             <tr>
-                <td><b>4. 기술적 2차 목표가</b></td>
+                <td><b>4. 기술적 2차 목표가 <span style='color:#9DAABC;'>(현재가 기준)</span></b></td>
                 <td><b style='color:#4C8DFF;'>{fmt_num(four_scores.get('target_tech_2nd'), ',.0f', '원', na='산출 불가')}</b></td>
                 <td>{four_scores.get('target_tech_2nd_note', '')}</td>
             </tr>
@@ -13656,7 +13687,7 @@ with tab_scen:
                     {fmt_num((CORE or {}).get('new_stop'), ',.0f', '원', na='미산출')}</td>
             </tr>
             <tr>
-                <td><b>6. ATR / DeMARK 구조적 위험선</b></td>
+                <td><b>6. 변동성 위험선 <span style='color:#9DAABC;'>(손절 거리의 2배)</span></b></td>
                 <td><b style='color:#F2B84B;'>{fmt_num(four_scores.get('atr_risk_level'), ',.0f', '원', na='산출 불가')}</b></td>
                 <td>{four_scores.get('atr_risk_level_note', '')}</td>
             </tr>
@@ -13998,12 +14029,43 @@ with tab_demark:
 
 with tab_flow:
     show_tab_verdict('technical')
-    st.subheader(f"[{resolved_name}] - 기술적 캔들/이동평균선 & 수급 차트 점검")
-    
+    # 라운드 407 — 제목의 '캔들'·'수급'은 이 탭이 그리지 않는 것이었다(그림은 종가 선 · 수급은 연결 안 됨 · 외부 검토 두 편
+    #   2026-10-01). 그리는 것을 이름으로.
+    st.subheader(f"[{resolved_name}] - 종가·이동평균선 & 거래량 점검")
+
+    # 라운드 407 — 한 점수(눌림 지수)에 세 질문이 섞여 읽혔다: 추세 · 가격 위치 · 거래 강도. 넷(수급 포함)으로 갈라
+    #   지금 값을 그대로 적는다(엔진이 이미 잰 값 · 새 계산·문턱 없음). 어느 것도 판정이 아니다.
+    try:
+        _last407 = tech_df.iloc[-1]
+        _c407 = float(_last407['adj_close'])
+        _m20_407 = float(_last407['sma_20']) if pd.notna(_last407.get('sma_20')) else None
+        _slope407 = float(_last407['sma_20_slope']) * 100 if pd.notna(_last407.get('sma_20_slope')) else None
+        _vr407 = float(_last407['volume_ratio']) if pd.notna(_last407.get('volume_ratio')) else None
+    except Exception:                                          # noqa: BLE001
+        _c407 = _m20_407 = _slope407 = _vr407 = None
+    # 안착 점검은 한 번만 계산해 아래 조건 표와 같이 쓴다(§4)
+    _set237 = q_engine.settlement_report(tech_df)
+    _npass407 = sum(1 for c in (_set237.get('checks') or []) if c.get('state') == '충족')
+    _flow_cols407 = ['foreign_cum_5d', 'institution_cum_5d', 'retail_cum_5d']
+    _flow_ok407 = (all(c in tech_df.columns for c in _flow_cols407)
+                   and not tech_df.tail(60)[_flow_cols407].isna().all().all())
+    _uk.rows([
+        ('추세',
+         ((f"20일선 {'위' if _c407 >= _m20_407 else '아래'} · " if (_c407 and _m20_407) else "20일선 위치 확인 불가 · ")
+          + (f"20일선 기울기 {_slope407:+.2f}% · " if _slope407 is not None else '')
+          + f"안착 조건 {_npass407}/4"), ''),
+        ('가격 위치',
+         f"볼린저 밴드 내 {fmt_num(four_scores.get('bb_position_pct'), '.0f', '%')} "
+         f"({str(four_scores.get('bb_state') or '산출 불가')}) · RSI {fmt_num(four_scores.get('rsi_value'), '.0f')}", ''),
+        ('거래 강도',
+         (f"거래량 20일 평균의 {_vr407:.2f}배" if _vr407 is not None else "거래량 배수 확인 불가"), ''),
+        ('수급 (외국인·기관·개인)',
+         ("아래 차트" if _flow_ok407 else "이 화면에 연결되어 있지 않습니다 — 점수·판정에 쓰지 않습니다"), ''),
+    ], theme=_theme, title="지금 기술 상태 — 네 가지를 따로 봅니다 (판정 아님)")
+
     # 라운드 237 — 종전에는 '4개 조건 중 2개 충족 — 안착 대기' 한 줄뿐이라 **어느 두 개**인지
     #   알 수 없었다. 가격이 20일선 위인데 거래량이 모자란 것과, 가격이 아래인데 보조 조건만
-    #   맞은 것은 기다릴 것이 다르다. 조건별로 값과 상태를 그대로 낸다.
-    _set237 = q_engine.settlement_report(tech_df)
+    #   맞은 것은 기다릴 것이 다르다. 조건별로 값과 상태를 그대로 낸다. (`_set237` 은 위 상태판에서 한 번 계산했다)
     if _set237['settled'] is None:
         st.warning(f"**20일선 안착 점검**: {_set237['summary']}")
     elif _set237['settled']:
@@ -14015,7 +14077,10 @@ with tab_flow:
                 ('neg' if c['state'] == '미충족' else 'warn')))
               for c in _set237['checks']], theme=_theme,
              title="조건별 결과 (문턱은 종전 그대로 · 가격 유지가 필수 전제)")
-    st.caption("이 탭 위의 점수는 볼린저 위치와 RSI 둘의 평균입니다 — 수급(외국인·기관)·"
+    # 라운드 407 — '안착 조건 충족인데 왜 매수가 아니냐'에 답하는 한 줄. 이 점검을 읽는 곳은 이 화면 하나다(엔진의
+    #   `check_20sma_settlement` 는 부르는 곳이 회귀뿐 · 중앙 판정·점수·게이트가 안 읽는다 — 코드로 확인).
+    st.caption("중앙 판정 영향: **없음** — 20일선 안착 점검은 이 화면에만 쓰이고 오늘 살지 말지(맨 위 결론)에는 "
+               "들어가지 않습니다. 이 탭 위의 눌림 지수는 볼린저 위치와 RSI 둘의 평균입니다 — 수급(외국인·기관)·"
                "거래량·이 안착 결과는 그 점수에 들어가지 않습니다. 값이 클수록 최근 가격이 "
                "눌린 자리라는 뜻이고, 오를 확률이 아닙니다.")
     
@@ -14032,18 +14097,27 @@ with tab_flow:
         ax.grid(True, color='#1C2635', linestyle='--')
         
     # (1) 주가 및 5·20·60·120일 이동평균선
-    ax_price.plot(x_dates, recent_tech['adj_close'], label=f"{resolved_name} 수정종가", color='#F3F6FA', linewidth=2.5)
-    ax_price.plot(x_dates, recent_tech['sma_5'], label="5일선 (단기)", color='#4C8DFF', linestyle='-', linewidth=1.5)
-    ax_price.plot(x_dates, recent_tech['sma_20'], label="20일선 (중기)", color='#F2B84B', linestyle='-', linewidth=2.0)
-    ax_price.plot(x_dates, recent_tech['sma_60'], label="60일선 (수급선)", color='#4C8DFF', linestyle='--', linewidth=1.5)
-    ax_price.plot(x_dates, recent_tech['sma_120'], label="120일선 (장기)", color='#FF453A', linestyle=':', linewidth=1.5)
+    # 라운드 407 — 범례 셋이 계산보다 넓었다: ① '수정종가' — 엔진은 가격을 조정하지 않는다(`adj_close` 는 원시 종가와
+    #   글자까지 같다 · 라운드 364 실측) ② '60일선 (수급선)' — 이 탭은 투자자 수급을 받지 않는데 '수급'이라 불렀다
+    #   ③ '20일선 (중기)' 와 겹치는 괄호 이름. 그리는 것 그대로 부른다. 그리고 눌림 지수의 절반인 **볼린저 밴드**가
+    #   그림에 없었다 — 옅은 점선으로 더한다(엔진이 이미 계산한 bb_upper·bb_lower · 새 계산 없음).
+    ax_price.plot(x_dates, recent_tech['adj_close'], label=f"{resolved_name} 종가", color='#F3F6FA', linewidth=2.5)
+    ax_price.plot(x_dates, recent_tech['sma_5'], label="5일선", color='#4C8DFF', linestyle='-', linewidth=1.5)
+    ax_price.plot(x_dates, recent_tech['sma_20'], label="20일선", color='#F2B84B', linestyle='-', linewidth=2.0)
+    ax_price.plot(x_dates, recent_tech['sma_60'], label="60일선", color='#4C8DFF', linestyle='--', linewidth=1.5)
+    ax_price.plot(x_dates, recent_tech['sma_120'], label="120일선", color='#FF453A', linestyle=':', linewidth=1.5)
+    if 'bb_upper' in recent_tech.columns and 'bb_lower' in recent_tech.columns:
+        ax_price.plot(x_dates, recent_tech['bb_upper'], label="볼린저 상·하단 (20일 · 2σ)", color='#9DAABC',
+                      linestyle=':', linewidth=1.0, alpha=0.7)
+        ax_price.plot(x_dates, recent_tech['bb_lower'], color='#9DAABC', linestyle=':', linewidth=1.0, alpha=0.7)
     
     ax_price.set_title(f"[{resolved_name}] 이동평균선(5·20·60·120일) & 기술적 분석 차트", color='#F3F6FA', fontsize=13, fontweight='bold')
     ax_price.set_ylabel(f"주가 ({unit_str})", color='#9DAABC')
     ax_price.legend(facecolor='#161D2A', edgecolor='#1C2635', labelcolor='#F3F6FA', loc='upper left')
     
     # (2) RSI 14 모멘텀 지표
-    ax_rsi.plot(x_dates, recent_tech['rsi_14'], label="RSI 14", color='#4C8DFF', linewidth=1.8)
+    # 라운드 407 — 이 RSI 는 오른 폭·내린 폭의 **단순 14일 평균**으로 잰다(Wilder 평활이 아니다 · 증권사 값과 다를 수 있다).
+    ax_rsi.plot(x_dates, recent_tech['rsi_14'], label="RSI 14 (단순 평균 방식)", color='#4C8DFF', linewidth=1.8)
     ax_rsi.axhline(70, color='#ff453a', linestyle='--', alpha=0.7, label="과매수(70)")
     ax_rsi.axhline(30, color='#35C98B', linestyle='--', alpha=0.7, label="과매도(30)")
     ax_rsi.set_ylabel("RSI (14)", color='#9DAABC')
@@ -14060,9 +14134,6 @@ with tab_flow:
     plt.tight_layout()
     st.pyplot(fig_tech)
     
-    _uk.spacer(28)
-    st.markdown("최근 60영업일 3대 주체 (외국인 · 기관 · 개인) 누적 순매수 동향")
-
     recent_flow = tech_df.tail(60)
     flow_cols = ['foreign_cum_5d', 'institution_cum_5d', 'retail_cum_5d']
     flow_available = all(c in recent_flow.columns for c in flow_cols) and \
@@ -14070,10 +14141,14 @@ with tab_flow:
 
     if not flow_available:
         # 구버전은 sin/cos 파형 + 정규난수로 만든 곡선을 실제 수급인 것처럼 그렸다.
-        st.info("**투자자별 수급 데이터 미연동** — 외국인·기관·개인 순매매 시계열은 현재 연결되어 있지 않습니다. "
-                "임의 생성한 곡선을 표시하지 않기 위해 차트를 비워 둡니다. "
-                "(이 항목은 DeMARK 수급 확인 가점에서도 제외되어 점수에 반영되지 않습니다.)")
+        # 라운드 407 — 제목과 큰 안내 상자가 빈 자리를 차지했다(외부 검토 · 2026-10-01). 없다는 사실은 위 상태판과 이 한
+        #   줄로 말하고 빈 절은 만들지 않는다. 가짜 곡선을 안 그리는 원칙은 그대로다. 30종목 실측(2026-10-01): 수급 칸이
+        #   30/30 비어 DeMARK 의 수급 가점도 한 번도 안 붙었다.
+        st.caption("외국인·기관·개인 순매매 시계열은 이 화면에 연결되어 있지 않아 그리지 않습니다 — 임의 곡선을 만들지 "
+                   "않으며, 점수·판정(DeMARK 수급 가점 포함)에도 들어가지 않습니다.")
     else:
+        _uk.spacer(28)
+        st.markdown("최근 60영업일 3대 주체 (외국인 · 기관 · 개인) 누적 순매수 동향")
         fig_flow, ax_f = plt.subplots(figsize=(12, 4.5))
         fig_flow.patch.set_facecolor('#0B0F17')
         ax_f.set_facecolor('#161D2A')
