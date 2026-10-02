@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.10.02.1",
+  "model": "v2026.10.02.2",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.27.1",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.10.01.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.10.02.2",
+   "previous": "v2026.10.02.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "결론 문장 — 기다려도 안 풀리는 칸에 '조건이 갖춰지면 후보'를 붙이지 않는다 (verdict_core.central_headline · 판정·칸·점수 불변)",
+   "note": "2026-10-02 실측: 09-30 뒤 리포트 후보 15개 중 9개의 결론이 '지금은 사지 마세요 — 조건이 갖춰지면 후보'였는데 9개 전부 중앙 판정이 기다려도 안 풀린다(wait_curable=False · 추천 제외 8 · 표본외 성적 미달 1)고 한 종목이었다. 상세 배너·오른쪽 패널·가늠 AI 답 머리가 중앙 판정의 headline 을 읽는다. 엔진 문장은 engine_headline 으로 따로 싣는다.",
+   "created_at": "2026-10-02T14:04:01+00:00",
+   "effective_from": "2026-10-02"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",

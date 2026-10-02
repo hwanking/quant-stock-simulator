@@ -8603,6 +8603,9 @@ _ACTION_STYLE = {
 }
 _vc, _vshort = _ACTION_STYLE.get(verdict['action'], ("#9DAABC", "판단 보류"))
 _vi = _uk.dot(_vc, 14)
+# 라운드 417 — 결론 문장은 중앙 판정의 것이다(`verdict_core.central_headline` — 기다려도 안 풀리는 칸에 '조건이 갖춰지면
+#   후보'를 안 붙인다). 배너·오른쪽 패널·중복 비교가 이 하나를 읽는다. CORE 가 없으면 엔진 문장 그대로.
+_head417 = str((CORE or {}).get('headline') or verdict['headline'])
 _vscore = verdict['score']
 
 # 실행 가격 기준 — 종합 결론 배너 안에 함께 표시 (표시 위치는 이 배너 한 곳만)
@@ -9219,7 +9222,7 @@ except Exception:
 _banner_sub_html = (
     f"<p style='margin:8px 0 0 0; font-size:17px; font-weight:700; "
     f"color:#F3F6FA;'>{_banner_sub}</p>" if _banner_sub
-    and _banner_sub not in str(verdict['headline']) else "")
+    and _banner_sub not in str(_head417) else "")
 # 라운드 371 — 이 머리 문장은 **새로 사려는 사람**의 판정이고, 보유자의 판정(버틸 수 없는 가격 · 1차
 #   매도가 · 물타기 6조건)은 다른 물음이다. 사용자: *"관심종목에서는 팔라고 하고 밑에 조건이 갖춰지면
 #   후보라고 하는데 뭐가 어떻게 된거야?"* — 같은 종목에 두 이름표가 붙을 때는 그 이유가 같은 줄에
@@ -9323,7 +9326,7 @@ st.markdown(f"""
       <p style='margin:0; font-size:13px; color:#9DAABC; font-weight:700;'>
         {resolved_name} · 오늘의 판단</p>
       <p style='margin:4px 0 0 0; font-size:40px; font-weight:800; color:{_vc}; line-height:1.15;'>
-        {_vi} {verdict['headline']}</p>{_banner_sub_html}{_held_line_html}
+        {_vi} {_head417}</p>{_banner_sub_html}{_held_line_html}
     </div>
     <div style='text-align:right;'>
       <p style='margin:0; font-size:13px; color:#9DAABC;'>판단 점수</p>
@@ -9704,7 +9707,7 @@ st.markdown(f"""
      '1차 목표가'·'손절가'로 보유자 값을 이름표 없이 싣고 있었다. 화면 오른쪽에
      항상 붙어 있는 요약이라 배너와 다른 숫자가 나란히 보였다. 전부 CORE 로. -->
 <div class="qside">
-  <p class="act">{verdict['headline']}</p>
+  <p class="act">{_head417}</p>
   <table>
     <tr><td><a href="#nav-verdict">종합점수</a></td><td>{verdict['score']}점</td></tr>
     <tr><td><a href="#nav-top">현재가</a></td><td>{realtime_price:,.0f}{unit_str}</td></tr>

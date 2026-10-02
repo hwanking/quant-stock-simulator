@@ -185,6 +185,26 @@ ACTIONABLE_BUCKETS = ('오늘 매수 가능', '눌림목 매수 대기', '돌파
 #:   이것뿐일 때만 '기다렸다 사라'를 말할 수 있다. 손익비(진입가·1차)·비용 차감 기대값은 여기 없다 — 진입가
 #:   기준 비율이라 가격이 내려와도 셈이 그대로다.
 WAIT_CURABLE_CHECKS = ('진입 깊이 현실적', '보유기간 안 도달 가능', '과열·저유동성 아님')
+#: 라운드 417 — 엔진 결론 문장(`build_final_verdict` 의 headline)이 붙이는 '기다리면 후보' 약속 꼬리. 엔진은 미충족이
+#:   기다려서 풀리는지 모른다(`wait_curable` 은 여기서만 안다). 회귀가 엔진 리터럴에 이 꼬리가 그대로 있는지 대 본다.
+WAIT_PROMISE_TAIL = ' — 조건이 갖춰지면 후보'
+
+
+def central_headline(engine_headline, recommended, wait_curable):
+    """화면 결론 문장 — 엔진 문장에서 **지킬 수 없는 약속만** 뺀다 (라운드 417 · 한 곳).
+
+    2026-10-02 실측: 09-30 뒤 개장 전 리포트 후보 15개 중 9개의 결론이 *"지금은 사지 마세요 — 조건이 갖춰지면 후보"* 였는데
+    9개 **전부** 중앙 판정이 '기다려도 안 풀린다'(추천 제외 8 · 표본외 성적 미달 1 · `wait_curable=False`)고 한 종목이었다.
+    상세 화면 맨 위 배너(40px) · 오른쪽 고정 패널 · 가늠 AI 의 답 머리가 그 문장을 썼다 — 라운드 305(챗의 마지막 줄) ·
+    387(지시서) · 396(칸 이름)이 고친 *"끝나지 않는 대기에 대기라는 이름"* 이 가장 눈에 띄는 자리에 남아 있었다.
+    추천이 아니고 기다려도 안 풀리면 꼬리를 떼고 *"지금은 사지 마세요"* 만 남긴다(엔진이 이미 쓰는 문장 · 새 문장 없음).
+    추천이거나 기다리면 풀리는 칸이면 엔진 문장 그대로다. 판정·칸·점수 불변."""
+    h = str(engine_headline or '')
+    if WAIT_PROMISE_TAIL in h and not recommended and not wait_curable:
+        return h.replace(WAIT_PROMISE_TAIL, '')
+    return h
+
+
 #: 라운드 387 — 기다려도 풀리지 않는 미충족에 '대기' 이름을 주던 두 칸(더는 만들지 않는다)
 WAIT_BUCKETS_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
 #: 그 사유 문장의 머리 — 읽는 쪽(옛 스냅샷 재해석)이 같은 말을 쓴다(§4)
@@ -543,7 +563,10 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     return dict(
         # 결론
         action=str(vd.get('action') or ''),
-        headline=str(vd.get('headline') or ''),
+        # 라운드 417 — 결론 문장은 **중앙 판정이** 정한다(기다려도 안 풀리는 칸에 '조건이 갖춰지면 후보'를 안 붙인다).
+        #   엔진 문장은 그대로 따로 싣는다(기록·대조용).
+        headline=central_headline(vd.get('headline'), recommended, wait_curable),
+        engine_headline=str(vd.get('headline') or ''),
         recommended=recommended,
         bucket=bucket,
         actionable=actionable,

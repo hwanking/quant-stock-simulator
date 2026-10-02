@@ -4373,8 +4373,9 @@ check("화면 — 코스피·코스닥 상세 표 + 해석 없음 명시",
 # ② 배너 — 조건부 매수가 헤드라인에서 바로 보인다
 check("배너 쉬운 결론 병기 + 현재가 조건 관계",
       '_banner_sub' in _w72 and '조건 위' in _w72)
+# 라운드 417 — 배너의 결론 문장은 중앙 판정의 것(`_head417`)이 됐다. 비교도 같은 문장과 한다(성질 그대로).
 check("중복 문구 방지 (헤드라인과 같으면 생략)",
-      "not in str(verdict['headline'])" in _w72)
+      "not in str(_head417)" in _w72)
 
 
 section("73. 진입 갭 라운드 2.5 — 갭 표기 · 적정가 이하 구분 · 사전등록 채택")
@@ -32404,6 +32405,66 @@ _strs404 = [n.value for n in _ast404.walk(_wa404t)
             if isinstance(n, _ast404.Constant) and isinstance(n.value, str) and id(n) not in _doc404]
 check("알림 모듈에 '분할매수 검토'를 무조건 말하는 옛 꼬리가 남아 있지 않다 (문자열만 · 주석·독스트링 제외)",
       not any('분할매수 검토 구간에 들어왔습니다' in s for s in _strs404), scanned=len(_strs404))
+
+
+print("=" * 72)
+print("§405 결론 문장의 '조건이 갖춰지면 후보'는 기다리면 풀릴 때만 — 중앙 판정이 정하고 배너·패널·가늠 AI 가 읽는다 (라운드 417)")
+print("=" * 72)
+# 2026-10-02 실측: 09-30 뒤 리포트 후보 15개 중 9개의 결론이 '지금은 사지 마세요 — 조건이 갖춰지면 후보'였는데 9개 전부 중앙 판정이
+#   기다려도 안 풀린다(wait_curable=False)고 한 종목이었다. 라운드 305·387·396 이 다른 자리에서 고친 그 모양이 배너(40px)에 남아 있었다.
+import verdict_core as _vc405                                      # noqa: E402
+import gaeum_chat as _gc405                                        # noqa: E402
+_P405 = '지금은 사지 마세요' + _vc405.WAIT_PROMISE_TAIL
+check("central_headline — 추천 아님 + 기다려도 안 풀림이면 약속 꼬리를 뗀다 · 풀리면·추천이면·꼬리 없으면 그대로 · 없으면 빈 글자",
+      _vc405.central_headline(_P405, False, False) == '지금은 사지 마세요'
+      and _vc405.central_headline(_P405, False, True) == _P405
+      and _vc405.central_headline(_P405, True, False) == _P405
+      and _vc405.central_headline('지금은 관망', False, False) == '지금은 관망'
+      and _vc405.central_headline(None, False, False) == '')
+_q405 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("엔진 문장과의 계약 — 엔진 결론 문장이 그 꼬리를 글자 그대로 쓴다 (엔진이 바꾸면 이 절이 먼저 붉어진다)",
+      _q405.count(f'"{_P405}"') >= 3, str(_q405.count(f'"{_P405}"')))
+_v405 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+check("중앙 판정이 결론 문장을 그 함수로 내고 엔진 문장은 따로 싣는다",
+      "headline=central_headline(vd.get('headline'), recommended, wait_curable)," in _v405
+      and "engine_headline=str(vd.get('headline') or '')," in _v405
+      # 옛 대입이 없는가 — `engine_headline=…` 안의 부분 글자를 잡지 않게 앞 글자를 막는다(검사가 자기를 세지 않게 · R313)
+      and __import__('re').search(r"(?<![A-Za-z_])headline=str\(vd\.get\('headline'\) or ''\),", _v405) is None)
+# 실제 리포트 후보에 다시 적용 — 지킬 수 없는 약속이 남은 행 0
+import glob as _glob405                                            # noqa: E402
+_n405 = _bad405 = _had405 = 0
+for _f405 in sorted(_glob405.glob(_os.path.join(PROJ, '.portfolio', 'premarket_2*.json'))):
+    try:
+        with open(_f405, encoding='utf-8') as _fh405:
+            _d405 = __import__('json').load(_fh405)
+    except Exception:                                              # noqa: BLE001
+        continue
+    for _pk405 in _d405.get('picks') or []:
+        _c405 = _pk405.get('core') or {}
+        if 'wait_curable' not in _c405:
+            continue                                               # 라운드 387 전 판 — 기다림 여부를 모른다
+        _n405 += 1
+        _h405 = str(_c405.get('headline') or '')
+        _promise_bad = (_vc405.WAIT_PROMISE_TAIL in _h405 and not _c405.get('recommended')
+                        and not _c405.get('wait_curable'))
+        _had405 += int(_promise_bad)
+        _bad405 += int(_vc405.WAIT_PROMISE_TAIL in _vc405.central_headline(
+            _h405, _c405.get('recommended'), _c405.get('wait_curable'))
+            and not _c405.get('recommended') and not _c405.get('wait_curable'))
+if _n405:
+    check("리포트 후보에 다시 적용하면 '기다려도 안 풀리는데 후보'라 말하는 결론이 0 이다",
+          _bad405 == 0, f"고치기 전 {_had405} · 고친 뒤 {_bad405}", scanned=_n405)
+else:
+    skipped("리포트 후보 재적용", "wait_curable 이 실린 리포트 후보가 없다(.portfolio 없음)")
+_w405 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("상세 배너·오른쪽 패널·중복 비교가 중앙 판정의 결론(_head417)을 읽는다 — 엔진 문장을 직접 안 그린다",
+      "_head417 = str((CORE or {}).get('headline') or verdict['headline'])" in _w405
+      and "{_vi} {_head417}</p>" in _w405 and '<p class="act">{_head417}</p>' in _w405
+      and "{verdict['headline']}" not in _w405)
+_ctx405a = _gc405.build_context(name='x', ticker='T', price=1, core={'headline': '중앙'}, fs={}, verdict={'headline': '엔진'})
+_ctx405b = _gc405.build_context(name='x', ticker='T', price=1, core={}, fs={}, verdict={'headline': '엔진'})
+check("가늠 AI 의 결론도 중앙 판정 문장이 먼저 · 없으면 엔진 문장",
+      _ctx405a['headline'] == '중앙' and _ctx405b['headline'] == '엔진')
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

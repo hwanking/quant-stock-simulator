@@ -65,7 +65,8 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
             ret = None
     return dict(
         name=str(name or ''), ticker=str(ticker or ''), price=price,
-        headline=vd.get('headline') or '', score=vd.get('score'),
+        # 라운드 417 — 결론 문장은 중앙 판정의 것(기다려도 안 풀리는 칸에 '조건이 갖춰지면 후보'를 안 붙인다 · §4)
+        headline=core.get('headline') or vd.get('headline') or '', score=vd.get('score'),
         action=vd.get('action'), vetoes=list(vd.get('vetoes') or []),
         bucket=core.get('bucket'), actionable=core.get('actionable'),
         # 라운드 305 — 갈래마다 **언제 다시 보나**가 다르다. 사유는 중앙 판정이
