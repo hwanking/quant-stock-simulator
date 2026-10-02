@@ -8511,7 +8511,11 @@ try:
             'snap_fair': four_scores.get('displayed_fair_value'),
             'snap_fair_conf': four_scores.get('fair_value_confidence'),
             'snap_px': realtime_price,
-            'snap_at': datetime.date.today().isoformat(),
+            # 라운드 415 — 값은 분석 기준일(t_ref_str)로 계산하는데 날짜는 **달력 날짜**를 적고 있었다. 장중에 종목을
+            #   열면 어제 기준 값에 오늘 날짜가 찍혀, 저녁 자동 갱신(`watch_refresh.due_reason` — 기준일보다 앞선 행만
+            #   다시 잰다)이 그 행을 '이미 최신'으로 보고 건너뛴다. 채우기 버튼·자동 갱신과 같은 날짜를 쓴다
+            #   (라운드 373 이 보유 계획 날짜만 고친 그 자리 · 한 자리에 '오늘'이 둘이면 버그다 · R222·R306).
+            'snap_at': t_ref_str,
             'snap_engine': str(_VER_NOW.get('model') or ''),
             # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
             # 그대로 담는다 (§4).
@@ -11659,6 +11663,13 @@ if _ledger_df is not None:
             _n_bad_imp = _t232b['failure']
             _n_unres_imp = _t232b['unresolved']
             _n_hol_imp = int(_t232b.get('non_trading') or 0)
+            # 라운드 415 — 리포트는 있는데 동결 안 된 거래일(클라우드 추적이 09-14 뒤로 멈춘 그 자리) · 셈은 한 곳
+            try:
+                _gap415 = _ict232.freeze_gap_line(_ict232.freeze_gap(
+                    _ic, os.path.join(os.path.dirname(os.path.abspath(__file__)), '.portfolio',
+                                      'premarket_history.jsonl')))
+            except Exception:                                  # noqa: BLE001
+                _gap415 = ''
         finally:
             _ic.close()
         _n_dec_imp = _n_ok_imp + _n_bad_imp
@@ -11694,6 +11705,8 @@ if _ledger_df is not None:
                        + (f" 휴장일(주말·공휴일)을 기준일로 잡은 옛 케이스 {_n_hol_imp}건도 "
                           f"행으로 남기되 세지 않았습니다 — 대부분 다음 거래일의 같은 추천과 겹칩니다."
                           if _n_hol_imp else ""))
+            if _gap415:
+                st.caption(_gap415)
             # 라운드 275 — 전방 재평가(11-16)가 읽는 원장(전방 기록부 · 매 거래일 상위 60 박제)은 화면
             #   어디에도 없었고, 빠진 날은 문서(R253 "22거래일 중 16일")에만 있었다. 셈은
             #   forward_registry.date_coverage 한 곳(거래일 판정은 case_tracker 한 곳). 빠진 날은 다시
@@ -11714,8 +11727,11 @@ if _ledger_df is not None:
             except Exception as _x275:                              # noqa: BLE001
                 st.caption(f"**전방 판정 기록부**: 읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다.")
         with _pc2:
+            # 라운드 415 — 이 버튼이 이 PC 에서 추적을 돌리는 **유일한 길**이었다(아무도 안 눌러 18일이 비었다).
+            #   이제 평일 장 마감 뒤 자동 실행(scripts/nightly_local.py)이 같은 스크립트를 돈다 — 버튼은 '지금 당장'.
             if st.button("장 종료 후 지금 실행", key="btn_run_improvement",
-                         width='stretch'):
+                         width='stretch',
+                         help="평일 장 마감 뒤 이 PC 에서 자동으로 돕니다. 지금 당장 돌리려면 누르세요."):
                 import subprocess as _sp_imp
                 with st.spinner("일일 파이프라인 실행 중 (동결→판정→지표→이슈)..."):
                     # encoding 을 안 주면 윈도우 기본(cp949)으로 읽어

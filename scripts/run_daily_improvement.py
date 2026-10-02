@@ -56,12 +56,49 @@ def _operating_version(calib):
     return str(calib.get('rulebook_version') or 'v-unknown')
 
 
+def report_stamps(pm_dir=None):
+    """날짜별 개장 전 리포트 파일 → {(기준일, 생성 시각 19자): 엔진 버전} (라운드 415).
+
+    이력 행(premarket_history.jsonl)에는 버전 칸이 없고 **그날 리포트 파일**(premarket_YYYY-MM-DD*.json)에
+    `engine_version` 이 있다. 행의 `generated_at` 이 그 파일의 `generated_at` 과 같으면 그 파일이 그 추천을
+    만든 것이다(2026-10-02 실측: 09-13 뒤 이력 94행 전부 일치 · 그 기간 날짜마다 파일 하나). 못 읽는 파일은 건너뛴다."""
+    import glob as _glob
+    pm_dir = pm_dir or os.path.dirname(PM_HISTORY)
+    out = {}
+    for p in _glob.glob(os.path.join(pm_dir, 'premarket_2*.json')):
+        try:
+            with open(p, encoding='utf-8') as f:
+                d = json.load(f)
+        except Exception:                                      # noqa: BLE001
+            continue
+        if d.get('engine_version') and d.get('date') and d.get('generated_at'):
+            out[(str(d['date'])[:10], str(d['generated_at'])[:19])] = str(d['engine_version'])
+    return out
+
+
+def case_versions(row, stamps, now_versions):
+    """한 이력 행을 동결할 때 찍을 (모델 버전, 규칙집 버전, 출처) — 리포트를 만든 버전이 먼저다 (라운드 415).
+
+    종전엔 늘 **동결하는 날의** 버전을 찍었다. 클라우드가 리포트 다음 밤에 동결할 때는 거의 같았지만, 리포트가
+    이 PC 에만 있어 18일 뒤에 동결하면(2026-10-02) 18일 뒤 버전이 그 추천의 도장이 된다 — "이 판단이 어느
+    버전에서 나왔나"가 거짓이 된다(§3). 리포트 파일에서 찾으면 그 버전, 규칙집은 그 시각의 버전(`versioning.
+    version_at`)이고, 못 찾으면 종전대로 지금 버전에 출처 'freeze_time' 을 붙인다(지어내지 않는다)."""
+    gen = str((row or {}).get('generated_at') or '')[:19]
+    mv = (stamps or {}).get((str((row or {}).get('date'))[:10], gen))
+    if mv:
+        rv = V.version_at('rulebook', gen) or now_versions.get('rulebook')
+        return mv, rv, 'report'
+    return now_versions.get('model'), now_versions.get('rulebook'), 'freeze_time'
+
+
 def make_create_new_cases(conn, calib):
     def create_new_cases() -> int:
         _vs = V.snapshot()
         if not os.path.exists(PM_HISTORY):
             return 0
         added = 0
+        _stamps415 = report_stamps()
+        _src415 = {'report': 0, 'freeze_time': 0}
         ver = _operating_version(calib)
         # ⚠️ 라운드 222 — 여기가 **이력 전체를 매번 다시** 읽어 동결했다.
         #   case_id 에 모델 버전이 들어 있어, 버전이 바뀔 때마다 지난 추천이
@@ -105,13 +142,15 @@ def make_create_new_cases(conn, calib):
                     continue
                 decision = RECO_CLASS_TO_DECISION.get(
                     str(p.get('reco_class')), Decision.UNAVAILABLE)
+                # 라운드 415 — 도장은 **그 리포트를 만든 버전**이다(동결하는 날의 버전이 아니다)
+                _mv415, _rv415, _vsrc415 = case_versions(p, _stamps415, _vs)
                 try:
                     case = ct.create_prediction_case(
                         ticker=str(p['symbol']),
                         asset_type=str(p.get('asset_type') or 'STOCK'),
                         signal_date=date.fromisoformat(str(p['date'])),
-                        model_version=_vs['model'],
-                        rulebook_version=_vs['rulebook'],
+                        model_version=_mv415,
+                        rulebook_version=_rv415,
                         decision=decision,
                         total_score=float(p.get('score') or 0),
                         confidence_score=float(
@@ -130,16 +169,18 @@ def make_create_new_cases(conn, calib):
                         # 케이스마다 버전 도장을 찍는다 — 나중에 "이 판단이
                         # 어느 버전에서 나왔나"를 되짚을 수 있어야 한다.
                         # 이전 버전 케이스는 덮어쓰지 않는다.
-                        source_payload=V.stamp(p))
+                        source_payload=V.stamp(dict(p, version_source=_vsrc415)))
                     if ct.save_prediction_case(conn, case):
                         added += 1
+                        _src415[_vsrc415] += 1
                         existing.add((str(p['symbol']), _sig.isoformat()))
                 except ValueError:
                     continue
         conn.commit()
         print(f"신규 동결 {added}건 · 이미 동결된 추천 건너뜀 {skipped_existing}건 · "
               f"미래 기준일 건너뜀 {skipped_future}건 (R222) · "
-              f"휴장일 기준일 건너뜀 {skipped_non_trading}건 (R252)")
+              f"휴장일 기준일 건너뜀 {skipped_non_trading}건 (R252) · "
+              f"버전 도장 — 리포트에서 {_src415['report']} · 동결 시점 {_src415['freeze_time']} (R415)")
         return added
     return create_new_cases
 

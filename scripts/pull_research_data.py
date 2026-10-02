@@ -189,8 +189,57 @@ def data_members(path):
 #: 열쇠는 (종목코드 6자리, 기준일)이다 — 오염 점검이 이 파일의 중복을 세는 열쇠와 같다(R390 ·
 #: `ledger_view.scale_key` · 시장 접미사만 다른 같은 예측을 두 번 넣지 않는다).
 UNION_FILES = frozenset({'predictions.jsonl'})
+#: 줄 단위로 합치는 파일 (라운드 415) — 개장 전 리포트 이력은 **이 PC 의 앱만** 쓴다(클라우드는 옛 사본을 들고
+#: 다닌다 · 2026-10-02 실측: 이 PC 350줄 · 묶음 256줄 · 이 PC 에만 94줄 · 묶음에만 0). 종전 규칙(수정시각이 새 쪽이
+#: 통째로)은 지금은 이 PC 를 남기지만, 어느 쪽이든 고유 줄을 가진 날 진 쪽의 줄이 통째로 사라진다. 열쇠로 묶지 않고
+#: **줄 글자 그대로** 합친다 — 한 날짜·한 종목에 버전이 다른 행이 여럿 있을 수 있어(08월 리포트) 열쇠로 묶으면 지운다.
+LINE_UNION_FILES = frozenset({'premarket_history.jsonl'})
+#: 이 PC 가 원본인 DB (라운드 415) — 추적 케이스는 리포트가 있는 이 PC 에서 동결된다. 받은 DB 가 이 PC 에만 있는
+#: 케이스를 갖고 있지 않으면 **덮지 않는다**(덮으면 그 케이스가 사라지고, 다시 동결하면 그날의 도장이 바뀐다).
+LOCAL_AUTHORITY_DB = 'improvement.db'
 #: 마지막 extract 가 합친 파일의 셈 — main 이 찍는다(조용히 합치지 않는다 · §3).
 MERGED = {}
+
+
+def line_union(incoming, local_lines):
+    """받은 줄 + 이 PC 에만 있는 줄(글자 그대로) → (합친 줄, 셈). 순수 함수 · 멱등 (라운드 415)."""
+    inc = [ln for ln in (s.strip() for s in incoming) if ln]
+    seen = set(inc)
+    add = []
+    for ln in (s.strip() for s in local_lines):
+        if ln and ln not in seen:
+            seen.add(ln)
+            add.append(ln)
+    return inc + add, dict(incoming=len(inc), local_only=len(add), total=len(inc) + len(add))
+
+
+def db_local_only_cases(local_path, incoming_bytes):
+    """이 PC 의 개선 DB 에만 있는 추적 케이스 수 · 못 견주면 None (라운드 415). 아무것도 안 쓴다(임시 파일만)."""
+    import sqlite3
+    import tempfile
+    if not os.path.exists(local_path):
+        return 0
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(suffix='.db')
+        with os.fdopen(fd, 'wb') as f:
+            f.write(incoming_bytes)
+        c1, c2 = sqlite3.connect(local_path), sqlite3.connect(tmp)
+        try:
+            a = {r[0] for r in c1.execute('SELECT case_id FROM prediction_cases')}
+            b = {r[0] for r in c2.execute('SELECT case_id FROM prediction_cases')}
+        finally:
+            c1.close()
+            c2.close()
+        return len(a - b)
+    except Exception:                                          # noqa: BLE001
+        return None
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def union_merge(incoming, local_lines):
@@ -286,6 +335,31 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
                 MERGED[base] = cnt
                 wrote.append(base)
                 continue
+            if base in LINE_UNION_FILES and not norm.startswith('data/'):
+                # 라운드 415 — 줄 글자 그대로 합친다(어느 쪽의 고유 줄도 안 지운다)
+                dst = os.path.join(portfolio_dir, base)
+                with z.open(info) as src:
+                    incoming = src.read().decode('utf-8', errors='replace').splitlines()
+                local = []
+                if os.path.exists(dst):
+                    with open(dst, encoding='utf-8', errors='replace') as f:
+                        local = f.read().splitlines()
+                merged, cnt = line_union(incoming, local)
+                with open(dst, 'w', encoding='utf-8', newline='\n') as out:
+                    out.write('\n'.join(merged) + ('\n' if merged else ''))
+                cnt['msg'] = (f"받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,} (줄 글자 그대로)")
+                MERGED[base] = cnt
+                wrote.append(base)
+                continue
+            if base == LOCAL_AUTHORITY_DB and not norm.startswith('data/'):
+                # 라운드 415 — 이 PC 에만 있는 추적 케이스가 있거나 견주지 못하면 덮지 않는다
+                dst = os.path.join(portfolio_dir, base)
+                n = db_local_only_cases(dst, z.read(info))
+                if n is None or n > 0:
+                    MERGED[base] = dict(msg=('견주지 못해 이 PC 것을 남긴다' if n is None
+                                             else f'이 PC 에만 있는 추적 케이스 {n:,}건 — 덮지 않고 이 PC 것을 남긴다'))
+                    kept.append(base)
+                    continue
             if norm.startswith('data/'):
                 dst = os.path.join(data_dir, base)
                 with z.open(info) as src:
@@ -415,6 +489,20 @@ def main():
                 _m, cnt = union_merge(z.read(info).decode('utf-8', errors='replace').splitlines(), local)
                 print(f"  {base}: 받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,}"
                       f" (같은 열쇠 {cnt['local_dup']:,} · 못 읽은 로컬 줄 {cnt['local_unparsed']:,})")
+            elif base in LINE_UNION_FILES and not info.filename.replace('\\', '/').startswith('data/'):
+                # 라운드 415 — 줄 단위 합집합도 미리보기에서 센다
+                dst = os.path.join(P, base)
+                local = []
+                if os.path.exists(dst):
+                    with open(dst, encoding='utf-8', errors='replace') as f:
+                        local = f.read().splitlines()
+                _m, cnt = line_union(z.read(info).decode('utf-8', errors='replace').splitlines(), local)
+                print(f"  {base}: 받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,} (줄 그대로 합친다)")
+            elif base == LOCAL_AUTHORITY_DB and not info.filename.replace('\\', '/').startswith('data/'):
+                n = db_local_only_cases(os.path.join(P, base), z.read(info))
+                print(f"  {base}: " + ('견주지 못함 — 이 PC 것을 남긴다' if n is None else
+                                       (f'이 PC 에만 있는 추적 케이스 {n:,}건 — 이 PC 것을 남긴다' if n else
+                                        '이 PC 에만 있는 케이스 0 — 종전 규칙(수정시각)대로')))
 
     skip = set()
     if shrunk:
@@ -442,6 +530,9 @@ def main():
     wrote, kept, skipped = extract(zip_path, skip)
     print(f'\n덮어씀 {len(wrote)}개 · 로컬 유지 {len(kept) + len(skipped)}개')
     for base, cnt in MERGED.items():
+        if cnt.get('msg'):                                     # 라운드 415 — 줄 합집합 · 이 PC 가 원본인 DB
+            print(f"  {base}: {cnt['msg']}")
+            continue
         print(f"  합침 {base}: 받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,}"
               f" (같은 열쇠 {cnt['local_dup']:,} · 못 읽은 로컬 줄 {cnt['local_unparsed']:,})")
     _dw = [b for b in wrote if b in dnew]

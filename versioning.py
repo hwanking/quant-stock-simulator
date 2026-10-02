@@ -183,6 +183,41 @@ def history(limit: int = 50, axis: str = '') -> list:
     return h[:limit]
 
 
+def version_at(axis: str, when, history_rows=None):
+    """그 시각에 그 축이 **몇 버전이었나** — 못 구하면 None (라운드 415).
+
+    개장 전 리포트를 늦게 동결하면(예: 18일 뒤) 케이스에 **동결하는 날의** 버전이 찍혀 "이 판단이 어느 버전에서
+    나왔나"(R222 · 케이스마다 도장)가 거짓이 된다. 리포트에는 엔진(model) 버전만 적혀 있어 나머지 축은 원장
+    이력으로 되짚는다: 그 축의 릴리스 중 **만든 시각(created_at · UTC)이 `when` 이하인 가장 늦은 것**.
+    `when` 은 ISO 문자열이나 datetime — 시간대가 없으면 **이 PC 의 지역 시각**으로 읽는다(리포트의
+    generated_at 이 그렇게 찍힌다). 그 시각보다 앞선 릴리스가 없으면 None(첫 릴리스 전 · 지어내지 않는다).
+    """
+    try:
+        if isinstance(when, datetime):
+            w = when
+        else:
+            w = datetime.fromisoformat(str(when).strip().replace(' ', 'T'))
+        if w.tzinfo is None:
+            w = w.astimezone()                      # 지역 시각으로 읽고 시간대를 붙인다
+        w = w.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    rows = history_rows if history_rows is not None else (_load().get('history') or [])
+    best, best_t = None, None
+    for e in rows:
+        if e.get('axis') != axis or not e.get('version'):
+            continue
+        try:
+            t = datetime.fromisoformat(str(e.get('created_at')))
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if t <= w and (best_t is None or t > best_t):
+            best, best_t = str(e['version']), t
+    return best
+
+
 def releases_by_day() -> dict:
     """{'YYYY-MM-DD': [릴리스 …]} — **그날 실제로 발효된 것만.**
 

@@ -22,13 +22,15 @@ if ($Unregister) {
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Py = "C:\Python314\python.exe"
 if (-not (Test-Path $Py)) { $Py = "python" }
-$Script = Join-Path $Root "scripts\refresh_watchlist.py"
+# Round 415 - the task runs both steps a person used to press: the case tracker (run_daily_improvement.py,
+# the "after close, run now" button) and the watchlist re-measure (refresh_watchlist.py). nightly_local.py runs them in order.
+$Script = Join-Path $Root "scripts\nightly_local.py"
 $Action = New-ScheduledTaskAction -Execute $Py -Argument ('"' + $Script + '"') -WorkingDirectory $Root
 $Trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At $At
 $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit (New-TimeSpan -Hours 3) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $Name -Action $Action -Trigger $Trigger -Settings $Settings `
     -RunLevel Limited -Force `
-    -Description "Gaeum: re-measure watchlist snapshots after the regular session close (scripts/refresh_watchlist.py). Writes .portfolio/watch_refresh_log.jsonl." | Out-Null
+    -Description "Gaeum: after the regular session close - freeze/grade premarket picks (run_daily_improvement.py) then re-measure watchlist snapshots (refresh_watchlist.py), via scripts/nightly_local.py." | Out-Null
 $Info = Get-ScheduledTask -TaskName $Name | Get-ScheduledTaskInfo
 Write-Output ("registered: {0} - weekdays at {1} - next run {2} - last result {3}" -f $Name, $At, $Info.NextRunTime, $Info.LastTaskResult)

@@ -5126,7 +5126,9 @@ check("업데이트는 접힌 채로 시작한다", 'expanded=False' in _w84)
 
 _d84 = open(_os.path.join(PROJ, "scripts", "run_daily_improvement.py"),
             encoding='utf-8').read()
-check("케이스에 버전 도장을 찍는다", 'V.stamp(p)' in _d84)
+# 라운드 415 — 도장 인자가 `V.stamp(dict(p, version_source=…))` 로 넓어졌다(그 추천을 만든 버전의 출처를 같이 남긴다).
+#   지키려던 성질(케이스의 원 자료가 버전 도장을 지난다)은 그대로 본다 — 글자 `V.stamp(p)` 를 못 박지 않는다(R98b).
+check("케이스에 버전 도장을 찍는다", 'source_payload=V.stamp(' in _d84)
 check("이전 버전 케이스를 덮어쓰지 않는다고 명시",
       '이전 버전 케이스는 덮어쓰지 않는다' in _d84)
 
@@ -32204,8 +32206,11 @@ with _tf402.TemporaryDirectory() as _td402:
 # ── ⑥ 작업 스케줄러 등록 스크립트 · 백업 제외 ─────────────────────────────────────────────────────
 _ps402 = _read148(_os.path.join(PROJ, 'scripts', 'register_watch_refresh_task.ps1'))
 _at402 = _re402.search(r'\$At = "(\d{2}):(\d{2})"', _ps402)
+# 라운드 415 — 작업은 이제 두 단계를 차례로 도는 `nightly_local.py` 를 부르고, 그것이 refresh_watchlist.py 를 부른다.
 check("등록 스크립트 — 같은 스크립트를 · 평일만 · 놓친 시작은 켜지면 바로 · 시작 시각이 정규장 마감(MARKET_CLOSE) 뒤",
-      'refresh_watchlist.py' in _ps402 and 'StartWhenAvailable' in _ps402
+      'nightly_local.py' in _ps402
+      and 'refresh_watchlist.py' in _read148(_os.path.join(PROJ, 'scripts', 'nightly_local.py'))
+      and 'StartWhenAvailable' in _ps402
       and 'Monday, Tuesday, Wednesday, Thursday, Friday' in _ps402 and 'MultipleInstances IgnoreNew' in _ps402
       and _at402 is not None
       and (int(_at402.group(1)), int(_at402.group(2))) > (_be402.MARKET_CLOSE.hour, _be402.MARKET_CLOSE.minute),
@@ -32216,6 +32221,150 @@ check("자동 갱신 기록(어느 종목을 쟀는지)은 백업에 안 실린�
       and not any(_bk402.picked(n) for n in ('watch_refresh_log.jsonl', 'watch_refresh_run.txt', 'watch_refresh.lock'))
       and _bk402.picked('premarket_history.jsonl'),               # 고르는 함수 자체는 산다 (양방향)
       scanned=3)
+
+
+print("=" * 72)
+print("§403 개장 전 추천 추적이 13거래일 멈춰 있었다 — 리포트가 있는 이 PC 에서 돈다 · 늦게 동결해도 만든 버전으로 (라운드 415)")
+print("=" * 72)
+# 2026-10-02 실측: 개장 전 리포트는 이 PC 의 앱만 만드는데 클라우드에는 09-12 판이 마지막이라, 클라우드의 추적 루틴이
+#   09-11 기준일 뒤로 한 건도 동결하지 못했다(250건 · 리포트 13거래일치가 이 PC 에만). 이 PC 에서 추적을 돌리는 길은
+#   화면 버튼뿐이었다. 평일 저녁 작업이 같은 스크립트를 돌고, 되받기가 이 PC 의 추적 DB·리포트 이력을 덮지 않는다.
+import sqlite3 as _sq403                                           # noqa: E402
+import tempfile as _tf403                                          # noqa: E402
+import zipfile as _zf403                                           # noqa: E402
+import json as _json403                                            # noqa: E402
+import versioning as _v403                                         # noqa: E402
+import scripts.run_daily_improvement as _rdi403                    # noqa: E402
+import scripts.pull_research_data as _pull403                      # noqa: E402
+import scripts.nightly_local as _nl403                             # noqa: E402
+from improvement import case_tracker as _ct403                     # noqa: E402
+
+# ── ① 상세 화면 스탬프의 날짜 = 분석 기준일 (한 자리에 '오늘'이 둘이면 자동 갱신이 그 행을 건너뛴다) ──────
+_wa403 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i403 = _wa403.index("_snap141 = {")
+_j403 = _wa403.index("_cw141 = portfolio.normalize_code(target_ticker)", _i403)   # 끝 앵커는 시작 뒤에서 (R226)
+_blk403 = '\n'.join(ln for ln in _wa403[_i403:_j403].splitlines() if not ln.lstrip().startswith('#'))
+check("종목 상세 스탬프의 snap_at 이 분석 기준일(t_ref_str)이다 — 달력 날짜가 아니다 (채우기·자동 갱신과 같은 날짜)",
+      "'snap_at': t_ref_str," in _blk403 and 'date.today()' not in _blk403, f"{len(_blk403)}자", scanned=len(_blk403))
+
+# ── ② 그 시각의 버전 (versioning.version_at) ─────────────────────────────────────────────────────────
+_h403 = [dict(axis='rulebook', version='vA', created_at='2026-09-01T00:00:00+00:00'),
+         dict(axis='rulebook', version='vB', created_at='2026-09-20T03:00:00+00:00'),
+         dict(axis='model', version='vM', created_at='2026-09-10T00:00:00+00:00')]
+check("version_at — 그 시각 이하의 가장 늦은 릴리스 · 첫 릴리스 전은 None · 다른 축은 안 섞는다 · 못 읽는 시각은 None",
+      _v403.version_at('rulebook', '2026-09-15T00:00:00+00:00', _h403) == 'vA'
+      and _v403.version_at('rulebook', '2026-09-21T00:00:00+00:00', _h403) == 'vB'
+      and _v403.version_at('rulebook', '2026-08-01T00:00:00+00:00', _h403) is None
+      and _v403.version_at('model', '2026-09-15T00:00:00+00:00', _h403) == 'vM'
+      and _v403.version_at('rulebook', 'not-a-date', _h403) is None)
+
+# ── ③ 리포트에서 찾은 버전으로 도장 · 못 찾으면 동결 시점 + 출처 ─────────────────────────────────────────
+with _tf403.TemporaryDirectory() as _td403:
+    for _d, _g, _ev in (('2026-09-15', '2026-09-15 00:10:00', 'vR1'), ('2026-09-16', '2026-09-16 00:12:00', 'vR2')):
+        with open(_os.path.join(_td403, f'premarket_{_d}__{_ev}.json'), 'w', encoding='utf-8') as _f:
+            _json403.dump({'date': _d, 'generated_at': _g, 'engine_version': _ev, 'picks': []}, _f)
+    with open(_os.path.join(_td403, 'premarket_2026-09-17__bad.json'), 'w', encoding='utf-8') as _f:
+        _f.write('{깨짐')
+    _st403 = _rdi403.report_stamps(_td403)
+check("report_stamps — 날짜별 리포트 파일의 (기준일, 생성 시각) → 엔진 버전 · 못 읽는 파일은 건너뛴다",
+      _st403 == {('2026-09-15', '2026-09-15 00:10:00'): 'vR1', ('2026-09-16', '2026-09-16 00:12:00'): 'vR2'}, str(_st403))
+_now403 = {'model': 'vNOW', 'rulebook': 'rNOW'}
+_cv1 = _rdi403.case_versions({'date': '2026-09-15', 'generated_at': '2026-09-15 00:10:00.123'}, _st403, _now403)
+_cv2 = _rdi403.case_versions({'date': '2026-09-15', 'generated_at': '2026-09-15 09:99:99'}, _st403, _now403)
+check("case_versions — 리포트에서 찾으면 그 모델 버전 · 출처 'report' / 못 찾으면 지금 버전 · 출처 'freeze_time' (지어내지 않는다)",
+      _cv1[0] == 'vR1' and _cv1[2] == 'report' and _cv1[1] is not None
+      and _cv2 == ('vNOW', 'rNOW', 'freeze_time'), f"{_cv1} | {_cv2}")
+check("동결이 지금 버전을 직접 찍지 않는다 — case_versions 를 거친다 (model_version=_mv415)",
+      "model_version=_mv415," in _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
+      and "model_version=_vs['model']," not in _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py')))
+
+# ── ④ 동결 공백 — 리포트는 있는데 동결 안 된 거래일 ────────────────────────────────────────────────────
+with _tf403.TemporaryDirectory() as _td403b:
+    _hp403 = _os.path.join(_td403b, 'h.jsonl')
+    with open(_hp403, 'w', encoding='utf-8') as _f:
+        for _d in ('2026-09-11', '2026-09-12', '2026-09-14', '2026-09-15', '2099-01-01'):   # 09-12 는 토요일 · 2099 는 픽스처
+            _f.write(_json403.dumps({'date': _d, 'symbol': 'x'}) + '\n')
+    _c403 = _sq403.connect(':memory:')
+    _c403.execute('create table prediction_cases (signal_date text, status text)')
+    _c403.executemany('insert into prediction_cases values (?, ?)',
+                      [('2026-09-11', 'success'), ('2026-09-13', 'open'), ('2026-09-15', 'dup_version')])
+    _g403 = _ct403.freeze_gap(_c403, _hp403, today='2026-10-02')
+    _g403none = _ct403.freeze_gap(_c403, _os.path.join(_td403b, 'none.jsonl'), today='2026-10-02')
+check("freeze_gap — 거래일만 · 미래 픽스처 제외 · 복사본(dup_version)은 동결로 안 센다 · 마지막 동결 뒤의 리포트 거래일",
+      _g403 == {'last_report': '2026-09-15', 'last_frozen': '2026-09-11', 'pending': ['2026-09-14', '2026-09-15']},
+      str(_g403))
+check("리포트 이력을 못 읽으면 pending None — '없다'와 '못 읽었다'를 가른다 · 화면 줄은 밀린 날이 있을 때만",
+      _g403none['pending'] is None and _ct403.freeze_gap_line(_g403none) == ''
+      and _ct403.freeze_gap_line(dict(_g403, pending=[])) == ''
+      and '2거래일치' in _ct403.freeze_gap_line(_g403) and '2026-09-11' in _ct403.freeze_gap_line(_g403))
+check("화면 추적 줄이 공백 한 줄을 그 함수에서 읽는다 · 버튼은 자동 실행을 말한다",
+      "_ict232.freeze_gap_line(_ict232.freeze_gap(" in _wa403 and "if _gap415:" in _wa403
+      and "평일 장 마감 뒤 이 PC 에서 자동으로 돕니다" in _wa403)
+
+# ── ⑤ 되받기 — 줄 합집합 · 이 PC 가 원본인 DB ──────────────────────────────────────────────────────────
+_lu403, _lc403 = _pull403.line_union(['a', 'b', '', 'c'], ['b', 'x', 'x', 'y'])
+_lu403b, _lc403b = _pull403.line_union(_lu403, ['b', 'x'])
+check("line_union — 받은 줄 먼저 · 이 PC 의 고유 줄(글자 그대로) 덧붙임 · 같은 날짜 여러 행도 안 묶는다 · 멱등",
+      _lu403 == ['a', 'b', 'c', 'x', 'y'] and _lc403 == {'incoming': 3, 'local_only': 2, 'total': 5}
+      and _lu403b == _lu403
+      and len(_pull403.line_union(['{"date":"d","symbol":"1"}'], ['{"date":"d","symbol":"2"}'])[0]) == 2)
+with _tf403.TemporaryDirectory() as _td403c:
+    def _mkdb(path, ids):
+        _c = _sq403.connect(path)
+        _c.execute('create table prediction_cases (case_id text primary key)')
+        _c.executemany('insert into prediction_cases values (?)', [(i,) for i in ids])
+        _c.commit()
+        _c.close()
+        with open(path, 'rb') as _f:
+            return _f.read()
+    _loc403 = _os.path.join(_td403c, 'loc.db')
+    _mkdb(_loc403, ['a', 'b', 'c'])
+    _inc_more = _mkdb(_os.path.join(_td403c, 'inc1.db'), ['a', 'b'])
+    _inc_same = _mkdb(_os.path.join(_td403c, 'inc2.db'), ['a', 'b', 'c', 'd'])
+    _n1 = _pull403.db_local_only_cases(_loc403, _inc_more)
+    _n2 = _pull403.db_local_only_cases(_loc403, _inc_same)
+    _n3 = _pull403.db_local_only_cases(_loc403, b'not a database')
+    _n4 = _pull403.db_local_only_cases(_os.path.join(_td403c, 'none.db'), _inc_more)
+    check("db_local_only_cases — 이 PC 에만 있는 케이스 수 · 받은 쪽이 상위집합이면 0 · 못 견주면 None · 이 PC 에 없으면 0",
+          (_n1, _n2, _n3, _n4) == (1, 0, None, 0), str((_n1, _n2, _n3, _n4)))
+    # extract 통합 — 임시 폴더로 (사용자 자료 안 건드림)
+    _pdir = _os.path.join(_td403c, 'p')
+    _ddir = _os.path.join(_td403c, 'd')
+    _os.makedirs(_pdir)
+    _os.makedirs(_ddir)
+    _mkdb(_os.path.join(_pdir, 'improvement.db'), ['a', 'b', 'c'])
+    with open(_os.path.join(_pdir, 'premarket_history.jsonl'), 'w', encoding='utf-8') as _f:
+        _f.write('L1\nL2\nLOCAL\n')
+    _zp403 = _os.path.join(_td403c, 'z.zip')
+    with _zf403.ZipFile(_zp403, 'w') as _z:
+        _z.writestr('improvement.db', _inc_more)
+        _z.writestr('premarket_history.jsonl', 'L1\nL2\nCLOUD\n')
+    _w403, _k403, _s403 = _pull403.extract(_zp403, set(), portfolio_dir=_pdir, data_dir=_ddir)
+    _c403b = _sq403.connect(_os.path.join(_pdir, 'improvement.db'))
+    _ids403 = {r[0] for r in _c403b.execute('select case_id from prediction_cases')}
+    _c403b.close()
+    with open(_os.path.join(_pdir, 'premarket_history.jsonl'), encoding='utf-8') as _f:
+        _ph403 = _f.read().splitlines()
+    check("extract — 이 PC 에만 케이스가 있는 DB 는 덮지 않고(사유를 남긴다) · 리포트 이력은 두 쪽 고유 줄을 다 남긴다",
+          _ids403 == {'a', 'b', 'c'} and 'improvement.db' in _k403
+          and '이 PC 에만 있는 추적 케이스 1건' in str(_pull403.MERGED.get('improvement.db', {}).get('msg'))
+          and _ph403 == ['L1', 'L2', 'CLOUD', 'LOCAL'] and 'premarket_history.jsonl' in _w403,
+          f"{sorted(_ids403)} · {_ph403} · kept {_k403}")
+
+# ── ⑥ 이 PC 의 저녁 작업 — 두 단계 · 차례 · 쓰기 금지면 추적은 건너뛰고 관심종목은 계획만 ─────────────────
+_ps403 = _nl403.plan_steps(False)
+_pn403 = _nl403.plan_steps(True)
+check("plan_steps — 추적(run_daily_improvement) 먼저 · 관심종목(refresh_watchlist) 다음 · 쓰기 금지면 추적 건너뜀 · 관심종목 --plan",
+      [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _ps403] == ['run_daily_improvement.py', 'refresh_watchlist.py']
+      and all(s[3] is None for s in _ps403)
+      and _pn403[0][3] and _pn403[1][3] is None and _pn403[1][1][-1] == '--plan')
+_env403 = dict(_os.environ, GAEUM_NO_LOCAL_WRITE='1', PYTHONIOENCODING='utf-8')
+_r403 = __import__('subprocess').run([__import__('sys').executable, _os.path.join(PROJ, 'scripts', 'nightly_local.py'), '--plan'],
+                                     capture_output=True, text=True, encoding='utf-8', errors='replace',
+                                     env=_env403, cwd=PROJ, timeout=120)
+check("scripts/nightly_local.py --plan — 돌고(종료 0) 두 단계를 적고 아무것도 안 쓴다",
+      _r403.returncode == 0 and '추적 동결·채점' in _r403.stdout and '관심종목 재측정' in _r403.stdout,
+      (_r403.stdout + _r403.stderr)[-200:])
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
