@@ -32355,8 +32355,9 @@ with _tf403.TemporaryDirectory() as _td403c:
 # ── ⑥ 이 PC 의 저녁 작업 — 두 단계 · 차례 · 쓰기 금지면 추적은 건너뛰고 관심종목은 계획만 ─────────────────
 _ps403 = _nl403.plan_steps(False)
 _pn403 = _nl403.plan_steps(True)
+# 라운드 418 — 셋째 단계(PROOF 성적표)가 붙었다. 지키려던 성질(추적이 먼저 · 관심종목이 다음 · 쓰기 금지면 추적 건너뜀)만 본다(R98b).
 check("plan_steps — 추적(run_daily_improvement) 먼저 · 관심종목(refresh_watchlist) 다음 · 쓰기 금지면 추적 건너뜀 · 관심종목 --plan",
-      [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _ps403] == ['run_daily_improvement.py', 'refresh_watchlist.py']
+      [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _ps403][:2] == ['run_daily_improvement.py', 'refresh_watchlist.py']
       and all(s[3] is None for s in _ps403)
       and _pn403[0][3] and _pn403[1][3] is None and _pn403[1][1][-1] == '--plan')
 _env403 = dict(_os.environ, GAEUM_NO_LOCAL_WRITE='1', PYTHONIOENCODING='utf-8')
@@ -32465,6 +32466,107 @@ _ctx405a = _gc405.build_context(name='x', ticker='T', price=1, core={'headline':
 _ctx405b = _gc405.build_context(name='x', ticker='T', price=1, core={}, fs={}, verdict={'headline': '엔진'})
 check("가늠 AI 의 결론도 중앙 판정 문장이 먼저 · 없으면 엔진 문장",
       _ctx405a['headline'] == '중앙' and _ctx405b['headline'] == '엔진')
+
+
+print("=" * 72)
+print("§406 가늠 PROOF — 남긴 판정을 영수증으로 보이고 '사지 말라'고 한 판정까지 같은 채점기로 다시 채점 (라운드 418)")
+print("=" * 72)
+# 사용자(2026-10-02): "우리 사이트만의 특징이 있을까? … 없으면 있게 해야 하잖아 만들어줘." 가늠은 판정을 추가 전용으로 적고 있었는데
+#   (1,492건 · 전부 '사지 마세요'·'비중 축소') 채점은 매수 판정만 셌고 화면이 가리키던 '판정 성적표'는 걷어낸 패널이었다.
+import pandas as _pd406                                            # noqa: E402
+import tempfile as _tf406                                          # noqa: E402
+import proof as _pf406                                             # noqa: E402
+import prediction_log as _pl406                                    # noqa: E402
+_row406 = {'ticker': '000001.KS', 'date': '2026-09-01', 'price': 100.0, 'action': 'HOLD', 'target': 105.0, 'stop': 92.0,
+           'horizon_days': 20, 'recorded_at': '2026-09-01 22:00:00'}
+_id406 = _pf406.receipt_id(_row406)
+check("영수증 번호 — GNM-날짜-코드-해시6 · 같은 기록이면 같은 번호 · 처음 고정된 칸이 바뀌면 다른 번호 · 나중에 붙는 칸은 번호를 안 바꾼다",
+      _id406.startswith('GNM-20260901-000001-') and len(_id406.split('-')[-1]) == 6
+      and _pf406.receipt_id(dict(_row406)) == _id406
+      and _pf406.receipt_id(dict(_row406, price=101.0)) != _id406
+      and _pf406.receipt_id(dict(_row406, bucket='추천 제외', model='vX')) == _id406, _id406)
+
+
+def _bars406(highs_lows):
+    return _pd406.DataFrame([{'trade_date': f'2026-09-{i + 2:02d}', 'high': h, 'low': l, 'close': c}
+                             for i, (h, l, c) in enumerate(highs_lows)])
+
+
+_o_t = _pf406.outcome(_row406, _bars406([(103, 99, 101), (106, 100, 105)]), cost=0.41)
+_o_s = _pf406.outcome(_row406, _bars406([(101, 91, 93)]), cost=0.41)
+_o_x = _pf406.outcome(_row406, _bars406([(101, 99, 100)] * 20), cost=0.41)
+_o_p = _pf406.outcome(_row406, _bars406([(101, 99, 100)] * 3), cost=0.41)
+check("outcome — 목표 먼저 · 손절 먼저 · 20봉 만료(그날 종가) · 기간 중(수익 없음) · 비용은 정해진 판정에만 뺀다",
+      _o_t['status'] == 'target' and abs(_o_t['net_pct'] - (5.0 - 0.41)) < 1e-9
+      and _o_s['status'] == 'stop' and abs(_o_s['net_pct'] - (-8.0 - 0.41)) < 1e-9
+      and _o_x['status'] == 'expired' and abs(_o_x['net_pct'] - (0.0 - 0.41)) < 1e-9
+      and _o_p['status'] == 'pending' and _o_p['net_pct'] is None
+      and _pf406.outcome(_row406, None) is None,
+      f"{_o_t} | {_o_s} | {_o_x} | {_o_p}")
+check("bars_frame — 날짜 칸(trade_date)이 없으면 None (첫 칸을 날짜로 잘못 읽지 않게)",
+      _pf406.bars_frame(_pd406.DataFrame({'high': [1]})) is None and _pf406.bars_frame(_bars406([(1, 1, 1)])) is not None)
+_g406 = [(_row406, _o_t), (dict(_row406, date='2026-09-02'), _o_s), (dict(_row406, date='2026-09-03'), _o_x),
+         (dict(_row406, date='2026-09-04'), _o_p), (dict(_row406, action='BUY'), _o_t), (dict(_row406), None)]
+_t406 = _pf406.abstain_tally(_g406, cost=0.41)
+check("abstain_tally — 매수 판정은 빼고 · 정해진 판정만 평균 · 기간 중·일봉 없음은 따로 · 피한 손실/놓친 수익 합 · 두 선 거리",
+      _t406['rows'] == 5 and _t406['decided'] == 3 and _t406['pending'] == 1 and _t406['nobars'] == 1
+      and (_t406['target'], _t406['stop'], _t406['expired']) == (1, 1, 1)
+      and abs(_t406['mean_net'] - ((4.59 - 8.41 - 0.41) / 3)) < 1e-9 and abs(_t406['median_net'] - (-0.41)) < 1e-9
+      and abs(_t406['avoided'] - 8.82) < 1e-9 and abs(_t406['missed'] - 4.59) < 1e-9
+      and abs(_t406['target_dist'] - 5.0) < 1e-9 and abs(_t406['stop_dist'] - 8.0) < 1e-9 and _t406['dates'] == 3,
+      str({k: _t406[k] for k in ('rows', 'decided', 'mean_net', 'median_net', 'avoided', 'missed')}))
+_l406 = _pf406.abstain_line(_t406)
+_l406s = _pf406.abstain_line(dict(_t406, mean_net=-0.03, median_net=2.3))
+check("abstain_line — 판정 낱말('나았습니다') 없이 수만 · 평균과 중앙의 부호가 갈리면 갈린다고 + 두 선 거리 · 표본 없으면 '아직'",
+      '나았습니다' not in _l406 and '나았던 판정' in _l406 and '유의성은 재지 않았습니다' in _l406
+      and '부호가 갈립니다' in _l406s and '목표 +5.0%' in _l406s and '손절 −8.0%' in _l406s
+      and '부호가 갈립니다' not in _l406
+      and '아직' in _pf406.abstain_line({'decided': 0, 'pending': 3}), _l406s)
+_cases406 = [dict(ticker='000001.KS', signal_date='2026-09-01', status='success', realized_return=0.05),
+             dict(ticker='000002.KS', signal_date='2026-09-01', status='failure', realized_return=-0.08),
+             dict(ticker='000003.KS', signal_date='2026-09-01', status='open', realized_return=None)]
+_ck406 = {('000001', '2026-09-01'): [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': True}],
+          ('000002', '2026-09-01'): [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': False}],
+          ('000003', '2026-09-01'): [{'name': 'A', 'ok': False}]}
+_gl406 = {g['name']: g for g in _pf406.gate_ledger(_cases406, _ck406, cost=0.41)}
+check("gate_ledger — 결과 확정 케이스만 · 조건마다 막은/통과한 후보의 수와 비용 뺀 평균 · 기간 중은 안 센다",
+      _gl406['A']['blocked']['n'] == 2 and _gl406['A']['passed']['n'] == 0
+      and abs(_gl406['A']['blocked']['mean_net'] - ((5 - 0.41) + (-8 - 0.41)) / 2) < 1e-9
+      and _gl406['B']['blocked']['n'] == 1 and _gl406['B']['passed']['n'] == 1
+      and abs(_gl406['B']['passed']['mean_net'] - (5 - 0.41)) < 1e-9, str(_gl406))
+_h406 = _pf406.home_lines({'picks': [{'core': {'recommended': False}}] * 5, 'generated_at': '2026-10-02 00:29:27',
+                           'data_asof': '2026-10-01'}, {'abstain': _t406, 'made': '2026-10-02T23:58:00', 'ledger_rows': 6})
+_h406n = _pf406.home_lines(None, None)
+check("home_lines — 오늘 판정(신규 매수 수 · 후보 · 고정 시각) · 안 산 성적 · 어디서 보나 · 없으면 없다고",
+      '신규 매수 0종목 · 후보 5종목 · 2026-10-02 00:29 에 고정' in _h406[0] and '안 산 성적' in _h406[1]
+      and '판정 영수증' in _h406[2] and '아직 고정된' in _h406n[0] and '성적표가 아직 없습니다' in _h406n[1], str(_h406))
+with _tf406.TemporaryDirectory() as _td406:
+    _pp406 = _os.path.join(_td406, 'p.jsonl')
+    _ok406 = _pl406.record_prediction(dict(ticker='T.KS', date='2026-09-01', price=100, action='HOLD', score=50,
+                                           target=105, stop=92, bucket='추천 제외', recommended=False,
+                                           reason='사유', model='vM', rulebook='vR', extra='무시'), path=_pp406)
+    _rec406 = _pl406.load_predictions(_pp406)[0]
+    # 같은 종목·날짜 두 번째는 **임시 폴더가 살아 있는 동안** 부른다(밖에서 부르면 지워진 폴더를 새로 만들어 True 가 된다)
+    _again406 = _pl406.record_prediction(dict(ticker='T.KS', date='2026-09-01', price=1, action='HOLD', score=1),
+                                         path=_pp406)
+check("record_prediction — 중앙 판정 칸·버전을 넘긴 것만 적고(모르는 칸은 안 적는다) 같은 종목·날짜는 한 번",
+      _ok406 and _rec406.get('bucket') == '추천 제외' and _rec406.get('recommended') is False
+      and _rec406.get('model') == 'vM' and 'extra' not in _rec406 and _again406 is False)
+_w406 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면 셋 — 홈 카드(home_lines) · 종목 화면 영수증(같은 일봉으로 복기) · 모델 성적의 성적표·조건별 장부 · 옛 '판정 성적표' 안내 없음",
+      "_pf418h.home_lines(_pmr, _pf418h.load_scorecard())" in _w406
+      and "가늠 PROOF · 판정 영수증" in _w406 and "_pf418.outcome(_r, _bars418)" in _w406
+      and "가늠 PROOF 성적표" in _w406 and "'판정 성적표'에서" not in _w406)
+_sc406 = _pf406.load_scorecard(_os.path.join(PROJ, 'data', 'proof_scorecard.json'))
+_sctxt406 = _read148(_os.path.join(PROJ, 'data', 'proof_scorecard.json'))
+check("동봉 성적표(배포 앱용) — 수와 조건 이름만 · 종목코드 모양 0 · 같은 채점 규칙 문장",
+      bool(_sc406) and isinstance(_sc406.get('abstain'), dict) and 'decided' in _sc406['abstain']
+      and __import__('re').search(r'(?<!\d)\d{6}(?!\d)', _sctxt406) is None and '먼저 닿은 선' in str(_sc406.get('rule')),
+      f"{len(_sctxt406)}자", scanned=len(_sctxt406))
+_ns406 = __import__('scripts.nightly_local', fromlist=['plan_steps'])
+_steps406 = _ns406.plan_steps(True)
+check("이 PC 저녁 작업 — PROOF 성적표 단계가 있고 쓰기 금지면 --dry-run",
+      any(s[1][0].endswith('proof_scorecard.py') and s[1][-1] == '--dry-run' for s in _steps406))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -1,0 +1,282 @@
+{
+ "made": "2026-10-02T23:58:00",
+ "ledger_rows": 1493,
+ "tickers": 198,
+ "bars_ok": 198,
+ "bars_fail": 0,
+ "status": {
+  "expired": 53,
+  "target": 673,
+  "stop": 491,
+  "pending": 271,
+  "nobars": 5
+ },
+ "abstain": {
+  "rows": 1493,
+  "decided": 1217,
+  "pending": 271,
+  "nobars": 5,
+  "dates": 41,
+  "target": 673,
+  "stop": 491,
+  "expired": 53,
+  "mean_net": -0.02559002155685861,
+  "median_net": 2.3011170219889623,
+  "share_neg": 0.4371405094494659,
+  "avoided": 3762.5904793996597,
+  "missed": 3731.447423164963,
+  "balance": 31.143056234696814,
+  "target_dist": 5.654136585145908,
+  "stop_dist": 7.994960740056625,
+  "cost_pct": 0.41
+ },
+ "by_action": {
+  "HOLD": {
+   "rows": 1476,
+   "decided": 1203,
+   "pending": 268,
+   "nobars": 5,
+   "dates": 41,
+   "target": 667,
+   "stop": 483,
+   "expired": 53,
+   "mean_net": -0.0014804405114841564,
+   "median_net": 2.3211070888235588,
+   "share_neg": 0.43557772236076475,
+   "avoided": 3704.793305690923,
+   "missed": 3703.0123357556076,
+   "balance": 1.78096993531517,
+   "target_dist": 5.662532930271902,
+   "stop_dist": 8.005996847700711,
+   "cost_pct": 0.41
+  },
+  "REDUCE": {
+   "rows": 17,
+   "decided": 14,
+   "pending": 3,
+   "nobars": 0,
+   "dates": 12,
+   "target": 6,
+   "stop": 8,
+   "expired": 0,
+   "mean_net": -2.097291878527249,
+   "median_net": -4.965377310068415,
+   "share_neg": 0.5714285714285714,
+   "avoided": 57.79717370873678,
+   "missed": 28.43508740935529,
+   "balance": 29.362086299381488,
+   "target_dist": 4.932650643247931,
+   "stop_dist": 7.046643776068476,
+   "cost_pct": 0.41
+  }
+ },
+ "gates": [
+  {
+   "name": "비용 차감 기대값 양수",
+   "blocked": {
+    "n": 235,
+    "success": 128,
+    "failure": 94,
+    "unresolved": 13,
+    "mean_net": -0.1795586581187327
+   },
+   "passed": {
+    "n": 1,
+    "success": 0,
+    "failure": 1,
+    "unresolved": 0,
+    "mean_net": -17.428274616632358
+   }
+  },
+  {
+   "name": "강제 차단 없음",
+   "blocked": {
+    "n": 180,
+    "success": 92,
+    "failure": 76,
+    "unresolved": 12,
+    "mean_net": -0.46204990683768216
+   },
+   "passed": {
+    "n": 56,
+    "success": 36,
+    "failure": 19,
+    "unresolved": 1,
+    "mean_net": 0.4204361420758615
+   }
+  },
+  {
+   "name": "신뢰도·전략품질 기준",
+   "blocked": {
+    "n": 114,
+    "success": 62,
+    "failure": 47,
+    "unresolved": 5,
+    "mean_net": -0.20122609346809164
+   },
+   "passed": {
+    "n": 122,
+    "success": 66,
+    "failure": 48,
+    "unresolved": 8,
+    "mean_net": -0.30069495589485323
+   }
+  },
+  {
+   "name": "펀더멘털 밸류 검증",
+   "blocked": {
+    "n": 99,
+    "success": 60,
+    "failure": 38,
+    "unresolved": 1,
+    "mean_net": 0.3270852641830227
+   },
+   "passed": {
+    "n": 28,
+    "success": 13,
+    "failure": 15,
+    "unresolved": 0,
+    "mean_net": -2.115869073721247
+   }
+  },
+  {
+   "name": "과열·저유동성 아님",
+   "blocked": {
+    "n": 72,
+    "success": 38,
+    "failure": 34,
+    "unresolved": 0,
+    "mean_net": -1.0411809219531716
+   },
+   "passed": {
+    "n": 164,
+    "success": 90,
+    "failure": 61,
+    "unresolved": 13,
+    "mean_net": 0.09353943357374282
+   }
+  },
+  {
+   "name": "권장 매수가 산출",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 236,
+    "success": 128,
+    "failure": 95,
+    "unresolved": 13,
+    "mean_net": -0.25264643760395994
+   }
+  },
+  {
+   "name": "목표·손절 산출",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 236,
+    "success": 128,
+    "failure": 95,
+    "unresolved": 13,
+    "mean_net": -0.25264643760395994
+   }
+  },
+  {
+   "name": "보유기간 안 도달 가능",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 236,
+    "success": 128,
+    "failure": 95,
+    "unresolved": 13,
+    "mean_net": -0.25264643760395994
+   }
+  },
+  {
+   "name": "손익비 기준 이상",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 120,
+    "success": 60,
+    "failure": 48,
+    "unresolved": 12,
+    "mean_net": -0.5175812424357834
+   }
+  },
+  {
+   "name": "손익비(진입가·1차) 기준 이상",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 116,
+    "success": 68,
+    "failure": 47,
+    "unresolved": 1,
+    "mean_net": 0.021424050153098863
+   }
+  },
+  {
+   "name": "진입 깊이 현실적",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 236,
+    "success": 128,
+    "failure": 95,
+    "unresolved": 13,
+    "mean_net": -0.25264643760395994
+   }
+  },
+  {
+   "name": "표본외 검증 통과",
+   "blocked": {
+    "n": 0,
+    "success": 0,
+    "failure": 0,
+    "unresolved": 0,
+    "mean_net": null
+   },
+   "passed": {
+    "n": 236,
+    "success": 128,
+    "failure": 95,
+    "unresolved": 13,
+    "mean_net": -0.25264643760395994
+   }
+  }
+ ],
+ "tracker_decided": 246,
+ "rule": "같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · 운영 비용 0.41% 차감 · 판정 1건에 같은 금액 · 문턱 없음",
+ "seconds": 33.4
+}

@@ -38,6 +38,8 @@ TEXT_LOG_KEEP = 2000
 STEPS = (
     ('추적 동결·채점', 'scripts/run_daily_improvement.py', 30 * 60),
     ('관심종목 재측정', 'scripts/refresh_watchlist.py', 120 * 60),
+    # 라운드 418 — 가늠 PROOF 성적표(남긴 판정 전부를 같은 채점기로 · 실측 198종목 33초). 쓰기 금지면 --dry-run.
+    ('PROOF 성적표', 'scripts/proof_scorecard.py', 60 * 60),
 )
 
 
@@ -74,6 +76,8 @@ def plan_steps(no_write):
             skip = '쓰기 금지(GAEUM_NO_LOCAL_WRITE) — 개선 DB 를 쓰는 단계라 건너뛴다'
         if no_write and script.endswith('refresh_watchlist.py'):
             args.append('--plan')
+        if no_write and script.endswith('proof_scorecard.py'):
+            args.append('--dry-run')
         out.append((name, args, limit, skip))
     return out
 

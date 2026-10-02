@@ -68,6 +68,11 @@ def record_prediction(entry, path=PRED_FILE):
             'horizon_days': int(entry.get('horizon_days') or 20),
             'recorded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
+        # 라운드 418 — 판정 영수증(가늠 PROOF)에 실을 칸: 중앙 판정의 칸·추천 여부·사유 · 그때의 버전. 넘긴 것만 적는다
+        #   (없는 값을 지어내지 않는다 · 옛 기록에는 없다). 영수증 번호는 위의 처음 고정된 칸으로만 만든다.
+        for _k in ('bucket', 'recommended', 'reason', 'model', 'rulebook'):
+            if entry.get(_k) is not None and entry.get(_k) != '':
+                row[_k] = (bool(entry[_k]) if _k == 'recommended' else str(entry[_k])[:160])
         with open(path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
         return True

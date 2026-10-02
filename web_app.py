@@ -4948,6 +4948,25 @@ import premarket as _pm_view
 
 _pmr = st.session_state.get('premarket_report') or _pm_view.load_today_report()
 st.markdown('<div id="nav-premarket"></div>', unsafe_allow_html=True)
+# ── 가늠 PROOF (라운드 418) — 사용자: *"우리 사이트만의 특징이 있을까? … 없으면 있게 해야 하잖아."* 가늠의 씨앗(판정을 고정하고
+#   장중에 다시 안 잰다 · 억지로 추천하지 않는다 · 남긴 판정을 결과로 채점한다)을 한 카드로 묶는다. 줄은 `proof.home_lines`
+#   한 곳이 만들고(§4) 수는 성적표에서 읽는다 — 화면이 숫자를 만들지 않는다. 판정 낱말 없이 수만 적는다(§2 · §9).
+#   오늘 리포트가 없는 날(주말·장 전)에도 보인다 — '안 산 성적'은 오늘 리포트와 무관하고, 리포트가 없으면 카드가 그렇다고 적는다.
+try:
+    import proof as _pf418h
+    _lines418 = _pf418h.home_lines(_pmr, _pf418h.load_scorecard())
+    st.markdown(
+        # 테두리는 결론 카드 하나만 두른다(§78 · 애플 스펙) — 이 카드는 올린 면 + 왼쪽 강조선
+        f"<div style='background:{_TOK['surface']}; border-left:3px solid {_TOK['brand']}; border-radius:16px; "
+        f"padding:14px 18px; margin:10px 0 14px 0;'>"
+        f"<p style='margin:0; font-size:15px; font-weight:700; color:{_TOK['tx1']};'>가늠 PROOF — 맞은 종목만 보여 주지 않습니다</p>"
+        f"<p style='margin:4px 0 8px 0; font-size:13px; color:{_TOK['tx2']}; line-height:1.6;'>"
+        f"판정을 고쳐 쓰지 않는 기록으로 남기고, '사지 말라'고 한 판정까지 그 계획대로 샀다면 어땠을지 같은 규칙으로 다시 채점합니다.</p>"
+        + ''.join(f"<p style='margin:3px 0; font-size:13px; color:{_TOK['tx2']}; line-height:1.6;'>{_uk._esc(_l)}</p>"
+                  for _l in _lines418)
+        + "</div>", unsafe_allow_html=True)
+except Exception as _ex418h:                                   # noqa: BLE001
+    st.caption(f"가늠 PROOF 카드를 그리지 못했습니다 ({type(_ex418h).__name__}).")
 if _pmr:
     st.markdown("## 오늘의 추천 — 개장 전 확정 리포트")
     _pm_ver = str(_pmr.get('engine_version') or '')
@@ -11770,6 +11789,46 @@ if _ledger_df is not None:
             pass
     except Exception as _imp_err:
         st.caption(f"실전 추천 추적 파이프라인 미초기화: {_imp_err}")
+    # ── 가늠 PROOF 성적표 · 규칙 원장 (라운드 418) — 남긴 판정 전부를 같은 채점기로 채점한 수(이름 없음 · 산출물에서 읽기만) ──
+    #   '규칙 원장'은 개장 전 후보(추적 케이스)를 그날 조건 통과·미충족으로 갈라 '샀다면'의 비용 뺀 평균을 센다. 한 후보가
+    #   여러 조건에 걸리므로 겹친다 — 규칙의 효과를 가르는 시험이 아니라 **그 조건이 막은 것의 이후**를 적은 장부다(문턱 없음).
+    try:
+        import proof as _pf418m
+        _sc418 = _pf418m.load_scorecard()
+        with st.expander("가늠 PROOF 성적표 — 남긴 판정을 결과로 다시 채점 · 조건별 장부", expanded=False):
+            if not _sc418:
+                st.caption("성적표가 아직 없습니다 — 평일 장 마감 뒤 이 PC 작업(scripts/proof_scorecard.py)이 만듭니다.")
+            else:
+                st.caption(f"만든 때 {_pf418m.minute_of(_sc418.get('made'))} · 판정 원장 "
+                           f"{int(_sc418.get('ledger_rows') or 0):,}건 · 종목 {int(_sc418.get('tickers') or 0)} · "
+                           f"일봉 못 받음 {int(_sc418.get('bars_fail') or 0)} — " + _pf418m.RULE_LINE)
+                st.markdown(_md_safe(_pf418m.abstain_line(_sc418.get('abstain'))))
+                _ba418 = _sc418.get('by_action') or {}
+                if _ba418:
+                    st.dataframe(pd.DataFrame([{
+                        '엔진 판정': k, '결과 정해진 판정': v.get('decided'), '기간 중': v.get('pending'),
+                        '목표 먼저': v.get('target'), '손절 먼저': v.get('stop'), '기간 만료': v.get('expired'),
+                        '비용 뺀 평균': (f"{v['mean_net']:+.2f}%" if v.get('mean_net') is not None else '—'),
+                        '중앙': (f"{v['median_net']:+.2f}%" if v.get('median_net') is not None else '—'),
+                    } for k, v in _ba418.items()]), hide_index=True, width='stretch')
+                _gt418 = _sc418.get('gates') or []
+                if _gt418:
+                    _jn418 = max((g['blocked']['n'] + g['passed']['n']) for g in _gt418)
+                    st.markdown(f"**조건별 장부** — 개장 전 후보 결과 확정 {int(_sc418.get('tracker_decided') or 0):,}건 중 그날 "
+                                f"리포트의 조건 목록이 붙은 {_jn418:,}건을 조건 통과·미충족으로 갈라 '그 계획대로 샀다면'의 비용 뺀 "
+                                f"평균을 셉니다. 한 후보가 여러 조건에 걸려 겹치고 표본이 작습니다 — 조건이 맞았다·틀렸다는 판정이 "
+                                f"아닙니다.")
+                    st.dataframe(pd.DataFrame([{
+                        '조건': g['name'],
+                        '막은 후보': g['blocked']['n'],
+                        '막은 후보 · 비용 뺀 평균': (f"{g['blocked']['mean_net']:+.2f}%"
+                                                  if g['blocked']['mean_net'] is not None else '—'),
+                        '통과한 후보': g['passed']['n'],
+                        '통과한 후보 · 비용 뺀 평균': (f"{g['passed']['mean_net']:+.2f}%"
+                                                    if g['passed']['mean_net'] is not None else '—'),
+                    } for g in _gt418]), hide_index=True, width='stretch')
+    except Exception as _ex418m:                               # noqa: BLE001
+        st.caption(f"가늠 PROOF 성적표를 읽지 못했습니다 ({type(_ex418m).__name__}) — 미측정입니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
         _cf1, _cf2, _cf3, _cf4 = st.columns(4)
         with _cf1:
@@ -11902,12 +11961,70 @@ try:
             'score': verdict.get('score'),
             'target': _tp_rec, 'stop': _sl_rec,
             'horizon_days': 20,
+            # 라운드 418 — 판정 영수증에 실을 중앙 판정과 버전(넘긴 것만 적힌다)
+            'bucket': (CORE or {}).get('bucket'), 'recommended': (CORE or {}).get('recommended'),
+            'reason': (CORE or {}).get('exclude_reason'),
+            'model': _VER_NOW.get('model'), 'rulebook': _VER_NOW.get('rulebook'),
         })
-        if _recorded:
-            st.caption("오늘 판정을 기록했습니다 — 예측 기간이 지나면 사이드바 "
-                       "'판정 성적표'에서 실제 주가와 대조해 채점됩니다.")
 except Exception:
     pass
+
+# ── 가늠 PROOF · 판정 영수증 (라운드 418) ────────────────────────────────────
+#   사용자(2026-10-02): *"우리 사이트만의 특징이 있을까? … 없으면 있게 해야 하잖아."* 가늠은 종목을 열 때마다 그 판정을
+#   **추가 전용**으로 적고 있었는데(종목·날짜당 첫 판만 · 고쳐 쓰지 않는다) 그 결과를 아무도 볼 수 없었다 — 채점은 매수 판정만
+#   셌고 엔진의 판정은 거의 전부 '사지 마세요'였으며, 이 자리 캡션이 가리키던 '판정 성적표'는 이미 걷어낸 패널이었다.
+#   이제 그 기록을 **영수증**으로 보이고, 이 종목의 지난 판정을 같은 채점기로 복기한다(이 화면의 일봉으로 · 네트워크 0).
+try:
+    import proof as _pf418
+    import prediction_log as _plog418
+    _rows418 = [r for r in _plog418.load_predictions()
+                if str(r.get('ticker')) == str(target_ticker)]
+    _today418 = next((r for r in _rows418 if str(r.get('date')) == str(snap.get('t_ref'))), None)
+    _past418 = sorted([r for r in _rows418 if str(r.get('date')) < str(snap.get('t_ref'))],
+                      key=lambda r: str(r.get('date')), reverse=True)
+    _bars418 = _pf418.bars_frame(tech_df)
+    with st.expander("가늠 PROOF · 판정 영수증 — 오늘 판정을 남기고, 지난 판정을 결과로 다시 채점합니다",
+                     expanded=False):
+        st.caption("가늠은 종목을 열 때마다 그 판정을 고쳐 쓰지 않는 기록으로 남깁니다(같은 종목·같은 날은 처음 것만). "
+                   "판정이 '사지 마세요'여도 그 계획대로 샀다면 어떻게 됐는지를 같은 규칙으로 채점합니다 — "
+                   + _pf418.RULE_LINE)
+        if _today418:
+            _rid418 = _pf418.receipt_id(_today418)
+            _bk418 = _today418.get('bucket')
+            st.markdown(
+                f"**{_uk._esc(_rid418)}** · 기록 {_uk._esc(_pf418.minute_of(_today418.get('recorded_at')))}  \n"
+                f"판정 **{_uk._esc(_today418.get('action_label') or _today418.get('action') or '')}**"
+                + (f" · 중앙 판정 **{_uk._esc(_bk418)}**" if _bk418 else " · 중앙 판정 칸은 이 기록에 없습니다")
+                + f"  \n기록 가격 {float(_today418['price']):,.0f}원 · 채점 목표 "
+                  f"{(float(_today418['target']) if _today418.get('target') else 0):,.0f}원 · 채점 손절 "
+                  f"{(float(_today418['stop']) if _today418.get('stop') else 0):,.0f}원 · 기간 "
+                  f"{int(_today418.get('horizon_days') or 20)}거래일"
+                + (f"  \n모델 {_uk._esc(_today418.get('model'))} · 규칙집 {_uk._esc(_today418.get('rulebook'))}"
+                   if _today418.get('model') else ''),
+                unsafe_allow_html=False)
+        elif not ALLOW_LOCAL_STORE:
+            st.caption("이 화면은 기록을 남기지 않는 모드라(배포 앱 · 쓰기 금지) 오늘 영수증이 없습니다.")
+        else:
+            st.caption("오늘 판정 기록이 아직 없습니다 — 판정 값(가격·목표·손절)이 다 나와야 남깁니다.")
+        if _past418:
+            _tbl418 = []
+            for _r in _past418[:12]:
+                _oc = _pf418.outcome(_r, _bars418)
+                _tbl418.append({
+                    '기준일': str(_r.get('date')),
+                    '판정': str(_r.get('action_label') or _r.get('action') or ''),
+                    '결과': _pf418.STATUS_KO.get((_oc or {}).get('status'), '채점 못 함'),
+                    '비용 뺀 수익': (f"{_oc['net_pct']:+.2f}%" if (_oc or {}).get('net_pct') is not None else '—'),
+                    '영수증': _pf418.receipt_id(_r),
+                })
+            st.markdown("**이 종목의 지난 판정 복기**")
+            st.dataframe(pd.DataFrame(_tbl418), hide_index=True, width='stretch')
+            if len(_past418) > 12:
+                st.caption(f"최근 12건만 보입니다 — 전체 {len(_past418)}건.")
+        else:
+            st.caption("이 종목의 지난 판정 기록이 없습니다 — 다음에 열면 오늘 것이 복기됩니다.")
+except Exception as _ex418:                                    # noqa: BLE001
+    st.caption(f"판정 영수증을 읽지 못했습니다 ({type(_ex418).__name__}) — 미측정입니다.")
 
 _uk.spacer(28)
 
