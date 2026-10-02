@@ -26,6 +26,12 @@
     C:/Python314/python.exe scripts/pull_research_data.py
     C:/Python314/python.exe scripts/pull_research_data.py --apply
   줄어드는 것이 정당하면 `--allow-shrink` 를 함께 준다.
+
+■ 이 PC 저녁 작업의 첫 단계다 (라운드 420)
+  `scripts/nightly_local.py` 가 평일 17:00 에 `--apply` 로 부른다 — 사람이 며칠에 한 번 손으로 돌리던 사이 이 PC 화면이
+  클라우드보다 800~1,600행 뒤에서 말했다(R340·R360·R372·R410). 앱이 떠 있을 수 있는 시각이라 쓰기는 **임시 파일 →
+  통째로 바꿔 끼움**이고, 받은 zip 은 최근 `INBOX_KEEP` 개만 둔다. 배포 동봉본(`data/`)을 git 에 싣는 마지막 한 걸음은
+  여전히 사람(세션)이다(R261) — 밤 작업은 밖으로 아무것도 안 보낸다.
 """
 import fnmatch
 import io
@@ -284,6 +290,90 @@ def union_merge(incoming, local_lines):
                            local_unparsed=unparsed, total=len(inc) + len(add))
 
 
+#: 라운드 420 — 되받기가 이 PC 저녁 작업의 첫 단계가 됐다(평일 17:00 · 앱이 떠 있을 수 있는 시각). 종전엔 받은 내용을
+#: **제자리에** 덮어써서(240MB 원장을 1MB씩) 그 사이 앱이 읽으면 반쪽 파일을 봤다. 임시 파일에 다 쓴 뒤 통째로 바꿔
+#: 끼운다(관심종목 저장과 같은 모양 · 라운드 414). 다른 프로세스가 읽느라 잡고 있으면(Windows) 잠깐 기다려 다시 한다.
+_TMP_SUFFIX = '.pulltmp'
+#: 끝내 못 바꿔 끼워 제자리 복사로 물러선 파일 — main 이 찍는다(조용히 물러서지 않는다 · §3).
+REPLACE_FALLBACK = []
+
+
+def _replace_retry(tmp, dst, tries=20, wait=0.5):
+    """임시 파일을 제자리로 바꿔 끼운다 → 바꿔 끼웠으면 True. 끝내 못 하면 내용을 제자리에 복사하고(종전 동작)
+    False — 되받기를 통째로 실패시키지 않는다. 임시 파일은 어느 쪽이든 남기지 않는다.
+
+    2026-10-03 실측: 다른 프로세스가 읽느라 연 파일은 Windows 에서 바꿔 끼우기가 막힌다(PermissionError 5) — 3초 잡게
+    심으니 2.5초 기다려 바꿔 끼웠다. 기다림 상한 10초는 원장을 통째로 읽는 시간(약 6초 · 라운드 282)을 덮는 매달림
+    방지이지 판정 문턱이 아니다."""
+    import shutil
+    import time
+    try:
+        for _ in range(tries):
+            try:
+                os.replace(tmp, dst)
+                return True
+            except PermissionError:
+                time.sleep(wait)
+        shutil.copyfile(tmp, dst)
+        REPLACE_FALLBACK.append(os.path.basename(dst))
+        return False
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _write_lines_atomic(dst, lines):
+    tmp = dst + _TMP_SUFFIX
+    with open(tmp, 'w', encoding='utf-8', newline='\n') as out:
+        out.write('\n'.join(lines) + ('\n' if lines else ''))
+    return _replace_retry(tmp, dst)
+
+
+def _write_bytes_atomic(dst, body=None, src=None):
+    """body(바이트) 또는 src(열린 zip 항목 · 1MB 씩 흘려 쓴다)를 임시 파일에 다 쓴 뒤 바꿔 끼운다."""
+    tmp = dst + _TMP_SUFFIX
+    with open(tmp, 'wb') as out:
+        if body is not None:
+            out.write(body)
+        else:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+    return _replace_retry(tmp, dst)
+
+
+#: 받은 zip 을 몇 개 남기나 (라운드 420) — 판정 문턱이 아니라 집안일이다. 받을 때마다 약 160MB 가 `_incoming` 에
+#: 쌓였다(2026-10-03 실측 9개 · 1.3GB) — 밤마다 받으면 한 달에 3GB 남짓이다. 지운 zip 은 릴리스에서 다시 받을 수
+#: 있다. 셋은 주말을 넘겨 되돌아볼 여유다.
+INBOX_KEEP = 3
+
+
+def prune_incoming(inbox=None, keep=INBOX_KEEP):
+    """받은 zip(`research_data_*.zip`) 중 이름(날짜) 순 최근 keep 개만 남긴다 → (남긴 이름들, 지운 이름들).
+
+    다른 이름의 파일은 안 건드린다. 이름이 날짜를 담으므로 이름 순 = 시간 순이다(수정시각은 내려받은 시각이라
+    다시 받으면 옛 스냅샷이 새것처럼 보인다)."""
+    inbox = inbox or INBOX
+    if not os.path.isdir(inbox) or keep < 1:
+        return [], []
+    names = sorted(n for n in os.listdir(inbox)
+                   if fnmatch.fnmatch(n, 'research_data_*.zip') and os.path.isfile(os.path.join(inbox, n)))
+    drop = names[:-keep] if len(names) > keep else []
+    gone = []
+    for n in drop:
+        try:
+            os.remove(os.path.join(inbox, n))
+            gone.append(n)
+        except OSError:
+            pass
+    return [n for n in names if n not in gone], gone
+
+
 def pattern_of(base):
     """이 파일이 어느 감시 패턴에 속하나 (없으면 None)."""
     for pat in _guard.WATCH:
@@ -314,6 +404,7 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
     import datetime as _dt
     wrote, kept, skipped = [], [], []
     MERGED.clear()
+    REPLACE_FALLBACK.clear()
     with zipfile.ZipFile(path) as z:
         for info in z.infolist():
             if info.is_dir():
@@ -330,8 +421,7 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
                     with open(dst, encoding='utf-8', errors='replace') as f:
                         local = f.read().splitlines()
                 merged, cnt = union_merge(incoming, local)
-                with open(dst, 'w', encoding='utf-8', newline='\n') as out:
-                    out.write('\n'.join(merged) + ('\n' if merged else ''))
+                _write_lines_atomic(dst, merged)
                 MERGED[base] = cnt
                 wrote.append(base)
                 continue
@@ -345,8 +435,7 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
                     with open(dst, encoding='utf-8', errors='replace') as f:
                         local = f.read().splitlines()
                 merged, cnt = line_union(incoming, local)
-                with open(dst, 'w', encoding='utf-8', newline='\n') as out:
-                    out.write('\n'.join(merged) + ('\n' if merged else ''))
+                _write_lines_atomic(dst, merged)
                 cnt['msg'] = (f"받은 {cnt['incoming']:,} + 이 PC 에만 {cnt['local_only']:,} = {cnt['total']:,} (줄 글자 그대로)")
                 MERGED[base] = cnt
                 wrote.append(base)
@@ -368,8 +457,7 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
                     kept.append(base)      # 로컬이 더 큰 원장에서 만든 것 — 안 건드린다
                     continue
                 os.makedirs(data_dir, exist_ok=True)
-                with open(dst, 'wb') as out:
-                    out.write(body)
+                _write_bytes_atomic(dst, body=body)
                 wrote.append(base)
                 continue
             pat = pattern_of(base)
@@ -382,12 +470,8 @@ def extract(path, skip_patterns, portfolio_dir=P, data_dir=DATA_DIR):
                 if os.path.getmtime(dst) > zt:
                     kept.append(base)      # 로컬이 더 새 것 — 안 건드린다
                     continue
-            with z.open(info) as src, open(dst, 'wb') as out:
-                while True:
-                    chunk = src.read(1 << 20)
-                    if not chunk:
-                        break
-                    out.write(chunk)
+            with z.open(info) as src:
+                _write_bytes_atomic(dst, src=src)
             wrote.append(base)
     return wrote, kept, skipped
 
@@ -544,6 +628,12 @@ def main():
     if kept:
         print('  로컬이 더 새 것: ' + ', '.join(sorted(kept)[:6])
               + (' …' if len(kept) > 6 else ''))
+    # 라운드 420 — 임시 파일 → 바꿔 끼움. 다른 프로세스가 잡고 있어 끝내 못 바꿔 끼운 것은 제자리 복사로 물러섰다
+    print(f'  바꿔 끼움 {len(wrote) - len(REPLACE_FALLBACK)}개'
+          + (f' · 제자리 복사로 물러섬 {len(REPLACE_FALLBACK)}개 (다른 프로세스가 읽는 중이었다): '
+             + ', '.join(sorted(REPLACE_FALLBACK)[:6]) if REPLACE_FALLBACK else ''))
+    _kept420, _gone420 = prune_incoming()
+    print(f'  받은 zip 정리 — 남김 {len(_kept420)}개 · 지움 {len(_gone420)}개 (최근 {INBOX_KEEP}개만 둔다 · 릴리스에서 다시 받을 수 있다)')
     now = _guard.counts()
     print('■ 푼 뒤 실제 줄 수')
     for k in _guard.WATCH:
@@ -552,6 +642,11 @@ def main():
         print(f'  {k:30s} {b:>9,} → {a:>9,} ({a - b:+,})')
     print('\n※ 이 PC 에만 있는 것(subscore 등)이 클라우드에 없다면 백업이'
           ' 불완전한 것이다 — backup_research_data.py 로 다시 올려야 한다.')
+    # 라운드 420 — 저녁 작업 로그는 끝 몇 줄만 남기므로 마지막 줄이 요약이다
+    _g420 = 'virtual_graded.jsonl'
+    print(f"되받기 끝 · {pick['tag']} · 원장 {(before.get(_g420) or {}).get('lines', 0):,} → "
+          f"{(now.get(_g420) or {}).get('lines', 0):,} · 덮어씀 {len(wrote)} · 물러섬 {len(REPLACE_FALLBACK)} · "
+          f"zip 지움 {len(_gone420)}")
     return 0
 
 

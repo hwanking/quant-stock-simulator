@@ -28614,7 +28614,12 @@ if _os.path.exists(_ESA362):
     #   감사에서 전부 쟀고(못 읽음 0) 정상이었는데, 오늘 봉 이력이 원장 진입가와 **일정 비율**(1~1.5%)로 어긋났다 —
     #   자료원이 과거 봉을 고쳐 쓴 것이다(열어 본 결과 · docs/RESULT_R389). 세 종목의 행은 R389 의 행 목록으로
     #   운영 보정표·화면 통계에서 빠진다. 열어 보고 적은 뒤 상한을 옮긴다 — 결과를 보고 검사를 무르게 한 것이 아니다.
-    _OFFENDERS_MAX362 = 19
+    # 라운드 420(2026-10-03) — 또 제 일을 했다: 19 → **20**. 새 1종목(코스닥)은 원장 109행 **전부**가 오늘 봉 종가의
+    #   정확히 0.1배다(106행 0.1000 · 3행 0.1001 · 2015-07 ~ 2026-08 · 오늘 봉 2,988개). 한 종목 안에서 배율이 하나라
+    #   중간에 계단이 있는 R364 의 모양이 아니라, 자료원이 과거 이력을 통째로 10배로 고쳐 쓴 모양이다(액면병합 재작성으로
+    #   본다 — 기업행위 자료가 없어 측정은 아니다). 그 109행은 행 목록(offender_keys)과 채점 도장으로 통계에서 빠진다.
+    #   열어 본 뒤 옮긴다. 근거: docs/RESULT_R420_NIGHTLY_PULL.md
+    _OFFENDERS_MAX362 = 20
     check("그 산출물이 신선도 규약을 따른다 (ledger_rows · 라운드 259)",
           isinstance(_esa362.get('ledger_rows'), int)
           and _esa362['ledger_rows'] > 100000,
@@ -32356,10 +32361,14 @@ with _tf403.TemporaryDirectory() as _td403c:
 _ps403 = _nl403.plan_steps(False)
 _pn403 = _nl403.plan_steps(True)
 # 라운드 418 — 셋째 단계(PROOF 성적표)가 붙었다. 지키려던 성질(추적이 먼저 · 관심종목이 다음 · 쓰기 금지면 추적 건너뜀)만 본다(R98b).
+# 라운드 420 — 맨 앞에 되받기가 붙어 자리 번호([:2] · [0] · [1])가 밀렸다. 같은 성질을 이름으로 찾아 본다.
+_nm403 = [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _ps403]
+_it403 = _nm403.index('run_daily_improvement.py') if 'run_daily_improvement.py' in _nm403 else None
+_iw403 = _nm403.index('refresh_watchlist.py') if 'refresh_watchlist.py' in _nm403 else None
 check("plan_steps — 추적(run_daily_improvement) 먼저 · 관심종목(refresh_watchlist) 다음 · 쓰기 금지면 추적 건너뜀 · 관심종목 --plan",
-      [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _ps403][:2] == ['run_daily_improvement.py', 'refresh_watchlist.py']
+      _it403 is not None and _iw403 is not None and _it403 < _iw403
       and all(s[3] is None for s in _ps403)
-      and _pn403[0][3] and _pn403[1][3] is None and _pn403[1][1][-1] == '--plan')
+      and _pn403[_it403][3] and _pn403[_iw403][3] is None and _pn403[_iw403][1][-1] == '--plan', str(_nm403))
 _env403 = dict(_os.environ, GAEUM_NO_LOCAL_WRITE='1', PYTHONIOENCODING='utf-8')
 _r403 = __import__('subprocess').run([__import__('sys').executable, _os.path.join(PROJ, 'scripts', 'nightly_local.py'), '--plan'],
                                      capture_output=True, text=True, encoding='utf-8', errors='replace',
@@ -32610,6 +32619,127 @@ check("fair_zone_line — (다)면 '살 근거가 아닙니다' · 측정 날짜
       and _lv407.fair_zone_line({'regimes': {'BULL': {'verdict': '미측정'}}}) == '', _l407)
 check("관심종목 표 아래 캡션이 산출물을 읽어 그 줄을 낸다 (손으로 적은 수 없음)",
       "_lv419.fair_zone_line(_aio419.load_json(_lv419.FAIR_ZONE_FILE))" in _read148(_os.path.join(PROJ, 'web_app.py')))
+
+
+print("=" * 72)
+print("§408 클라우드 되받기가 이 PC 저녁 작업의 첫 단계다 — 바꿔 끼워 쓰고 받은 zip 은 쌓지 않는다 (라운드 420)")
+print("=" * 72)
+# 2026-10-03: 되받기를 사람이 며칠에 한 번 돌리는 사이 이 PC 는 클라우드보다 800~1,600행 뒤에서 말했다(R340·R360·R372·R410 ·
+#   오늘 +800). 밤 작업에 넣으려니 둘이 먼저 걸렸다 — 받은 zip(약 160MB)이 받을 때마다 쌓였고(9개 · 1.3GB), 원장을 제자리에
+#   1MB 씩 덮어써 그 사이 앱이 읽으면 반쪽 파일을 봤다. 쓰기는 임시 파일 → 바꿔 끼움 · zip 은 최근 셋만.
+import inspect as _insp408                                           # noqa: E402
+_steps408 = _nl403.plan_steps(False)
+_stepsn408 = _nl403.plan_steps(True)
+_nm408 = [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _steps408]
+check("저녁 작업 — 되받기가 맨 앞(--apply) · 그 뒤 추적 → 관심종목 → 성적표 차례",
+      _nm408[:1] == ['pull_research_data.py'] and _steps408[0][1][-1] == '--apply'
+      and [n for n in _nm408 if n in ('run_daily_improvement.py', 'refresh_watchlist.py', 'proof_scorecard.py')]
+      == ['run_daily_improvement.py', 'refresh_watchlist.py', 'proof_scorecard.py'], str(_nm408))
+check("쓰기 금지면 되받기는 건너뛴다(사유) · --apply 를 안 붙인다 · --plan 출력에 그 단계가 적힌다",
+      bool(_stepsn408[0][3]) and '쓰기 금지' in str(_stepsn408[0][3]) and '--apply' not in _stepsn408[0][1]
+      and '클라우드 되받기' in _r403.stdout, (_r403.stdout or '')[-200:])
+# 바꿔 끼우기 — 잡혀 있다가 풀리면 다시 해서 바꿔 끼우고, 끝내 잡혀 있으면 제자리 복사로 물러서며 그 사실을 남긴다
+with __import__('tempfile').TemporaryDirectory() as _td408:
+    _dst408 = _os.path.join(_td408, 'a.jsonl')
+    with open(_dst408, 'w', encoding='utf-8') as _f:
+        _f.write('OLD\n')
+    _real408 = _os.replace
+    _calls408 = {'n': 0}
+
+    def _flaky408(a, b):
+        _calls408['n'] += 1
+        if _calls408['n'] <= 2:
+            raise PermissionError('held')
+        return _real408(a, b)
+
+    def _stuck408(a, b):
+        raise PermissionError('held')
+
+    try:
+        _tmp408 = _dst408 + _pull403._TMP_SUFFIX
+        with open(_tmp408, 'w', encoding='utf-8') as _f:
+            _f.write('NEW1\n')
+        _pull403.REPLACE_FALLBACK.clear()
+        _os.replace = _flaky408
+        _ok408a = _pull403._replace_retry(_tmp408, _dst408, tries=4, wait=0)
+        _os.replace = _real408
+        _txt408a = open(_dst408, encoding='utf-8').read()
+        _left408a = _os.path.exists(_tmp408)
+        with open(_tmp408, 'w', encoding='utf-8') as _f:
+            _f.write('NEW2\n')
+        _os.replace = _stuck408
+        _ok408b = _pull403._replace_retry(_tmp408, _dst408, tries=3, wait=0)
+    finally:
+        _os.replace = _real408
+    _txt408b = open(_dst408, encoding='utf-8').read()
+    check("_replace_retry — 잠깐 잡혀 있으면 다시 해 바꿔 끼운다 · 끝내 잡혀 있으면 제자리 복사 + 물러섬 기록 · 임시 파일 안 남김",
+          _ok408a is True and _txt408a == 'NEW1\n' and not _left408a and _calls408['n'] == 3
+          and _ok408b is False and _txt408b == 'NEW2\n' and not _os.path.exists(_tmp408)
+          and _pull403.REPLACE_FALLBACK == ['a.jsonl'],
+          f"{_ok408a} {_ok408b} {_calls408} {_pull403.REPLACE_FALLBACK}")
+    _pull403.REPLACE_FALLBACK.clear()
+    # extract 통합 — 원장 패턴 · 합칠 파일 · data/ 산출물이 바꿔 끼워 써지고 임시 파일이 안 남는다
+    _p408 = _os.path.join(_td408, 'p')
+    _d408 = _os.path.join(_td408, 'd')
+    _os.makedirs(_p408)
+    _os.makedirs(_d408)
+    with open(_os.path.join(_p408, 'predictions.jsonl'), 'w', encoding='utf-8') as _f:
+        _f.write('{"ticker":"111111.KS","date":"2026-10-01"}\n')
+    _zp408 = _os.path.join(_td408, 'z.zip')
+    with _zf403.ZipFile(_zp408, 'w') as _z:
+        _z.writestr('virtual_graded.jsonl', '{"a":1}\n{"a":2}\n')
+        _z.writestr('predictions.jsonl', '{"ticker":"222222.KS","date":"2026-10-02"}\n')
+        _z.writestr('data/miss_study.json', '{"ledger_rows": 2}')
+    _w408, _k408, _s408 = _pull403.extract(_zp408, set(), portfolio_dir=_p408, data_dir=_d408)
+    _tmps408 = [n for dd in (_p408, _d408) for n in _os.listdir(dd) if n.endswith(_pull403._TMP_SUFFIX)]
+    _pl408 = open(_os.path.join(_p408, 'predictions.jsonl'), encoding='utf-8').read().splitlines()
+    check("extract — 원장·합칠 파일·data/ 산출물을 바꿔 끼워 쓴다 · 임시 파일 0 · 합집합은 두 쪽 열쇠를 다 남긴다",
+          not _tmps408 and sorted(_w408) == ['miss_study.json', 'predictions.jsonl', 'virtual_graded.jsonl']
+          and open(_os.path.join(_p408, 'virtual_graded.jsonl'), encoding='utf-8').read() == '{"a":1}\n{"a":2}\n'
+          and len(_pl408) == 2 and _pull403.REPLACE_FALLBACK == [],
+          f"{_w408} · tmp {_tmps408} · {_pl408}")
+    # 받은 zip 정리 — 이름(날짜) 순 최근 셋 · 다른 파일 안 건드림
+    _ib408 = _os.path.join(_td408, 'inbox')
+    _os.makedirs(_ib408)
+    for _nn in ('research_data_20260901.zip', 'research_data_20260902.zip', 'research_data_20260903.zip',
+                'research_data_20260904.zip', 'research_data_20260905.zip', 'note.txt', 'research_data_x.txt'):
+        open(_os.path.join(_ib408, _nn), 'w').close()
+    _kp408, _gn408 = _pull403.prune_incoming(_ib408, keep=3)
+    _kp408b, _gn408b = _pull403.prune_incoming(_ib408, keep=3)
+    check("prune_incoming — 최근 셋만 남기고 옛 둘을 지운다 · 다른 이름은 그대로 · 다시 돌리면 지울 것 0 · 폴더가 없으면 빈 셈",
+          _gn408 == ['research_data_20260901.zip', 'research_data_20260902.zip']
+          and _kp408 == ['research_data_20260903.zip', 'research_data_20260904.zip', 'research_data_20260905.zip']
+          and _gn408b == [] and {'note.txt', 'research_data_x.txt'} <= set(_os.listdir(_ib408))
+          and _pull403.prune_incoming(_os.path.join(_td408, 'none')) == ([], []),
+          f"{_kp408} · {_gn408}")
+_src408 = _insp408.getsource(_pull403.extract)
+_main408 = _insp408.getsource(_pull403.main)
+check("extract 안에 제자리 쓰기('w'·'wb' 로 dst 열기)가 없다 · zip 정리는 미리보기에서 안 돈다(--apply 뒤 · extract 뒤)",
+      "open(dst, 'w" not in _src408 and "open(dst,'w" not in _src408
+      and _main408.find('if not apply:') < _main408.find('extract(zip_path') < _main408.find('prune_incoming()'),
+      scanned=len(_src408))
+check("규칙 독스트링이 밤 작업의 경계를 적는다 — 들여오기만 한다 · git 에 싣는 것은 사람(R261)",
+      '밖으로 아무것도 안 보낸다' in (_pull403.__doc__ or '') and '사람' in (_nl403.__doc__ or '')
+      and '되받기' in (_nl403.__doc__ or ''))
+# PROOF 동봉본 — 라운드 418 은 "data/ 에 동봉한다"고 적었는데 저녁 작업은 .portfolio 에만 썼다(그날 손으로 한 번 복사한 판에 멈춤).
+import proof as _pf408                                               # noqa: E402
+_doc408 = _pf408.load_scorecard(_os.path.join(PROJ, 'data', 'proof_scorecard.json')) or {}
+with __import__('tempfile').TemporaryDirectory() as _td408s:
+    _sp408 = _os.path.join(_td408s, 'proof_scorecard.json')
+    _ok408s, _why408s = _pf408.ship_scorecard(_doc408, _sp408)
+    _bad408 = dict(_doc408, note='관심 005930', memo={'0040Y0': 1})   # 글자 값 하나 · 열쇠 하나 = 2개
+    _sp408b = _os.path.join(_td408s, 'b.json')
+    _no408s, _whyno408 = _pf408.ship_scorecard(_bad408, _sp408b)
+    _numok408 = _pf408.code_like_strings({'mean_net': 0.123456, 'rows': 257130, 'gate': '비용 차감 기대값 양수'})
+    check("ship_scorecard — 수와 조건 이름뿐이면 쓴다 · 글자에 종목코드 모양(숫자·문자 코드)이 있으면 안 쓴다 · 수는 코드로 안 본다",
+          _ok408s == _sp408 and _os.path.exists(_sp408) and _no408s is None and not _os.path.exists(_sp408b)
+          and '종목코드 모양 2개' in _whyno408 and _numok408 == [] and bool(_doc408),
+          f"{_why408s} · {_whyno408} · {_numok408}")
+_srcps408 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
+check("성적표 스크립트가 .portfolio 에 쓴 뒤 동봉본도 쓴다 (쓰기 금지·--dry-run 이면 둘 다 안 쓴다 — 같은 if write 안)",
+      0 < _srcps408.find('proof.save_scorecard(doc)') < _srcps408.find('proof.ship_scorecard(doc)')
+      and _srcps408.rfind('if write:', 0, _srcps408.find('proof.ship_scorecard(doc)')) > 0
+      and _pf408.SHIPPED_FILE.replace('\\', '/').endswith('data/proof_scorecard.json'))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -2,6 +2,7 @@
 """가늠 PROOF 성적표를 만든다 — 남긴 판정 전부를 같은 채점기로 채점하고 **수만** 담는다 (라운드 418).
 
     python scripts/proof_scorecard.py            # 채점하고 .portfolio/proof_scorecard.json 에 쓴다
+                                                 # · 배포용 data/ 동봉본도(종목코드 모양이 없을 때만 · 라운드 420)
     python scripts/proof_scorecard.py --dry-run  # 채점만 하고 안 쓴다
 
 규칙은 `proof` 모듈 머리에 고정돼 있다(같은 채점기 · 운영 비용 · 판정 1건에 같은 금액 · 문턱 없음).
@@ -109,6 +110,9 @@ def main(argv=None):
     if write:
         proof.save_scorecard(doc)
         print('썼다', proof.SCORECARD_FILE)
+        # 라운드 420 — 배포 앱이 읽는 동봉본(data/)도 같이 — 종목코드 모양이 있으면 쓰지 않는다(§9)
+        _sp420, _why420 = proof.ship_scorecard(doc)
+        print(_why420 + (f' · {_sp420}' if _sp420 else ''))
     print(f'{doc["seconds"]}초')
     return 0
 

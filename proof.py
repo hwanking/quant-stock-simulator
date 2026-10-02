@@ -265,6 +265,42 @@ def save_scorecard(doc, path=None):
     return p
 
 
+#: 라운드 420 — 배포 앱이 읽는 동봉본. 종전엔 라운드 418 때 **손으로 한 번 복사한 판**에 멈춰 있었다 — 저녁 작업은
+#: `.portfolio` 에만 써서 배포 화면의 PROOF 카드가 그날 수를 계속 말했을 것이다. git 에 싣는 것은 여전히 사람이다(R261).
+SHIPPED_FILE = os.path.join(BASE, 'data', 'proof_scorecard.json')
+
+
+def code_like_strings(doc):
+    """성적표의 열쇠·글자 값 중 종목코드 모양이 든 것 → 목록(앞 40자). 수는 안 본다 — 종목코드는 글자로만 담기고,
+    수를 글자로 읽으면 소수 자리 여섯이 우연히 코드처럼 보인다. 판별식은 `stock_code` 한 곳(§4 · R164)."""
+    import stock_code
+    bad = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if isinstance(k, str) and stock_code.find_codes(k):
+                    bad.append(k[:40])
+                walk(v)
+        elif isinstance(o, (list, tuple)):
+            for v in o:
+                walk(v)
+        elif isinstance(o, str) and stock_code.find_codes(o):
+            bad.append(o[:40])
+
+    walk(doc)
+    return bad
+
+
+def ship_scorecard(doc, path=None):
+    """배포용 동봉본을 쓴다 → (쓴 경로 또는 None, 한 줄 사유). 종목코드 모양이 하나라도 있으면 **쓰지 않는다**(§9 —
+    성적표는 수와 조건 이름만이라 동봉할 수 있는 것이고, 그 전제가 깨지면 동봉도 멈춘다)."""
+    bad = code_like_strings(doc)
+    if bad:
+        return None, f'종목코드 모양 {len(bad)}개가 들어 있어 동봉하지 않는다 (예: {bad[0]})'
+    return save_scorecard(doc, path or SHIPPED_FILE), '배포용 동봉본도 갱신했다'
+
+
 def now_iso():
     return datetime.now().isoformat(timespec='seconds')
 

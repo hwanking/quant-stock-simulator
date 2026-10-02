@@ -1,8 +1,17 @@
 # -*- coding: utf-8 -*-
-"""이 PC 의 평일 장 마감 뒤 작업 — 사람이 누르던 버튼 둘을 차례로 돈다 (라운드 414 → 415).
+"""이 PC 의 평일 장 마감 뒤 작업 — 사람이 누르거나 손으로 돌리던 일을 차례로 돈다 (라운드 414 → 415 → 418 → 420).
 
+  ⓪ 클라우드 되받기 — `scripts/pull_research_data.py --apply` (라운드 420 · 손으로 며칠에 한 번 돌리던 것)
   ① 추적 동결·채점 — `scripts/run_daily_improvement.py` (화면의 '장 종료 후 지금 실행' 버튼과 같은 스크립트)
   ② 관심종목 재측정 — `scripts/refresh_watchlist.py` (표의 '지금 재기'와 같은 함수 · 라운드 414)
+  ③ PROOF 성적표 — `scripts/proof_scorecard.py` (라운드 418)
+
+■ 왜 ⓪ 이 여기 있나 (라운드 420 · 2026-10-03)
+  클라우드가 평일마다 원장·전방 기록부·시점 재무를 쌓는데 이 PC 는 사람이 되받기를 돌린 날에만 따라갔다 —
+  돌릴 때마다 800~1,600행 뒤처져 있었고(R340 전방 기록부 420 vs 660 · R360 · R372 · R410 · 오늘 +800) 그동안 이 PC
+  화면의 '기록된 거래일'·모델 성적이 낡은 수를 말했다. 되받기는 들여오기만 한다(밖으로 보내는 것 없음) · 줄어들면
+  건너뛰고 · 이 PC 에만 있는 예측·리포트 이력·추적 케이스는 합치거나 남긴다(R392·R415). 배포 동봉본을 git 에 싣는
+  것은 여전히 사람이다(R261).
 
 ■ 왜 ① 이 여기 있나 (라운드 415 · 2026-10-02 실측)
   개장 전 리포트는 **이 PC 의 앱만** 만든다(클라우드에는 09-12 판이 마지막 — 라운드 281 이 손으로 올린 것).
@@ -14,7 +23,8 @@
     **그 자리에서** 남긴다(중간에 죽어도 말이 남는다 · 라운드 310). 한 단계가 실패해도 다음 단계는 돈다.
   · 산출물은 각 단계가 제 자리에 남긴다 — ① 은 개선 DB 의 실행 기록(화면 추적 줄의 '마지막 실행'), ② 는
     `watch_refresh_log.jsonl`(관심종목 절의 상태 줄). 켜져 있다가 아니라 산출물로 센다(라운드 412).
-  · `GAEUM_NO_LOCAL_WRITE` 면 ① 은 건너뛰고(개선 DB 를 쓴다) ② 는 계획만 센다 — 회귀·배포는 사용자 자료를 안 쓴다(§9).
+  · `GAEUM_NO_LOCAL_WRITE` 면 ⓪·① 은 건너뛰고(`.portfolio`·`data/`·개선 DB 를 쓴다) ② 는 계획만 센다 — 회귀·배포는
+    사용자 자료를 안 쓴다(§9).
   · `--plan` 은 무엇을 돌릴지만 적는다(네트워크 0 · 쓰기 0).
 """
 from __future__ import annotations
@@ -36,6 +46,8 @@ TEXT_LOG_KEEP = 2000
 
 #: (이름, 스크립트, 시간 상한 초). 상한은 문턱이 아니라 매달림 방지다 — 실측 ① 수십 초 · ② 51행 123초(2026-10-02).
 STEPS = (
+    # 라운드 420 — 맨 앞: 뒤 단계(성적표)와 화면이 어젯밤 클라우드가 쌓은 것을 보게. 실측 받기·풀기 약 2분(154MB).
+    ('클라우드 되받기', 'scripts/pull_research_data.py', 30 * 60),
     ('추적 동결·채점', 'scripts/run_daily_improvement.py', 30 * 60),
     ('관심종목 재측정', 'scripts/refresh_watchlist.py', 120 * 60),
     # 라운드 418 — 가늠 PROOF 성적표(남긴 판정 전부를 같은 채점기로 · 실측 198종목 33초). 쓰기 금지면 --dry-run.
@@ -72,6 +84,11 @@ def plan_steps(no_write):
     for name, script, limit in STEPS:
         args = [os.path.join(PROJ, script)]
         skip = None
+        if script.endswith('pull_research_data.py'):
+            if no_write:
+                skip = '쓰기 금지(GAEUM_NO_LOCAL_WRITE) — .portfolio·data 를 덮는 단계라 건너뛴다'
+            else:
+                args.append('--apply')
         if no_write and script.endswith('run_daily_improvement.py'):
             skip = '쓰기 금지(GAEUM_NO_LOCAL_WRITE) — 개선 DB 를 쓰는 단계라 건너뛴다'
         if no_write and script.endswith('refresh_watchlist.py'):

@@ -1,24 +1,24 @@
 {
- "made": "2026-10-01",
- "ledger_rows": 256330,
+ "made": "2026-10-03",
+ "ledger_rows": 257130,
  "basis": "개발 구간(train+valid) 매수권 58+ · 판정완료 · 블라인드 미포함 · 비용 0.41%p 차감(운영 왕복 비용) · 축척 어긋남·복사본 제외",
  "cost_pct": 0.41,
  "stat_excluded": {
-  "scale": 856,
+  "scale": 920,
   "dup": 1083
  },
  "scale_audit_read": true,
  "note": "표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)",
  "coverage": {
-  "rows_eligible": 96876,
+  "rows_eligible": 96816,
   "by_row": 44946,
-  "by_patch": 35418,
-  "by_ticker": 13684,
+  "by_patch": 35398,
+  "by_ticker": 13644,
   "miss_etf": 2665,
   "miss_ambiguous": 32,
   "miss_unknown": 96,
   "miss_bad_label": 35,
-  "covered": 94048,
+  "covered": 93988,
   "covered_pct": 97.1
  },
  "coverage_note": "업종 출처: 원장 행 → 하위점수 패치 → 같은 종목의 업종(라운드 218). 빠진 것은 ETF(구조상 업종 없음) · 업종이 두 가지로 기록된 종목(모르는 것을 고르지 않는다) · 한 번도 못 받은 종목이다. 업종이 아닌 라벨(비교표 라벨)이 적힌 행도 뺀다(라운드 220).",
@@ -265,9 +265,9 @@
   },
   "제약": {
    "n": 6346,
-   "hit": 60.3,
-   "wilson_low": 59.1,
-   "ev": -0.133,
+   "hit": 60.1,
+   "wilson_low": 58.9,
+   "ev": -0.146,
    "cost_pct": 0.41,
    "small": false
   },
@@ -400,10 +400,10 @@
    "small": false
   },
   "통신장비": {
-   "n": 1767,
-   "hit": 59.1,
-   "wilson_low": 56.8,
-   "ev": -0.254,
+   "n": 1707,
+   "hit": 59.8,
+   "wilson_low": 57.4,
+   "ev": -0.163,
    "cost_pct": 0.41,
    "small": false
   },
