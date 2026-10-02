@@ -102,7 +102,9 @@ def main():
                 cell[(rg, sp, grp)][d].append(net)
         except (TypeError, ValueError):
             pass
-    out = dict(prereg='docs/PREREG_R419_FAIR_ZONE_BY_REGIME.md', cost=COST, score_floor=SCORE_FLOOR,
+    import datetime as _dt
+    out = dict(prereg='docs/PREREG_R419_FAIR_ZONE_BY_REGIME.md', made=_dt.date.today().isoformat(),
+               cost=COST, score_floor=SCORE_FLOOR,
                date_floor=DATE_FLOOR, boot=B, seed=SEED, rows_total=n_total, rows_regime_none=n_none, regimes={})
     for rg in REGIMES:
         R = {'r0': {}, 'r1': {}, 'r2': {}, 'all_rows': {}}

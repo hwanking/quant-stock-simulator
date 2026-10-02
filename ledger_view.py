@@ -316,6 +316,42 @@ def reach_share(table, regime, zone, upside_pct):
     return round(100.0 * k / n, 1), n
 
 
+FAIR_ZONE_FILE = 'fair_zone_regime_r419.json'
+
+
+def fair_zone_line(doc):
+    """'적정가 여력은 살 근거가 아니다' 한 줄 — 사전등록 R419 의 산출물에서 읽는다(손으로 적은 수는 낡는다 · R285).
+
+    사용자(2026-10-03): *"적정가 다 좋다고 하지 말고 진짜 좋은 것만 시장 상황이랑 해서."* R419 가 원장 매수권에서 '적정가 아래'
+    구역을 국면별로 쟀다. 판정이 (다)일 때 화면이 그 사실을 같은 자리에 적는다(사전등록의 갈래 그대로). 산출물이 없거나 측정된
+    국면이 없으면 빈 글자(지어내지 않는다 · §3). 문턱 없음 — 수와 갈래만."""
+    regs = (doc or {}).get('regimes') or {}
+    meas = {k: v for k, v in regs.items() if v.get('verdict') not in (None, '미측정')}
+    if not meas:
+        return ''
+    ko = {'BULL': '상승장', 'SIDEWAYS': '옆걸음', 'BEAR': '하락장'}
+    sp_ko = (('train', '학습'), ('valid', '검증'), ('blind', '실전'))
+    parts = []
+    for rg, v in meas.items():
+        r1 = v.get('r1') or {}
+        means = ' · '.join(f"{nm} {float(r1[sp]['mean']):+.2f}%" for sp, nm in sp_ko if (r1.get(sp) or {}).get('mean') is not None)
+        r0 = v.get('r0') or {}
+        shares = [r0[sp]['rows'] / (r0[sp]['rows'] + r0[sp]['rest_rows']) * 100
+                  for sp, _nm in sp_ko if r0.get(sp) and (r0[sp]['rows'] + r0[sp]['rest_rows'])]
+        verdict = v.get('verdict')
+        tail = ('그 밖보다 낫지 않았습니다' if verdict == '다' else
+                '그 밖보다 나았지만 비용을 넘지는 못했습니다' if verdict == '나' else '비용을 넘었습니다')
+        parts.append(f"{ko.get(rg, rg)}에서 비용 {doc.get('cost')}% 뺀 평균 {means} — {tail}"
+                     + (f"(이 국면 매수권의 {min(shares):.0f}~{max(shares):.0f}% 가 '적정가 아래'로 나와 가르는 힘이 약합니다)"
+                        if shares else ''))
+    miss = [ko.get(k, k) for k, v in regs.items() if v.get('verdict') == '미측정']
+    lead = ("적정가가 현재가보다 높아도 그것만으로는 살 근거가 아닙니다"
+            if all(v.get('verdict') == '다' for v in meas.values()) else "적정가 아래 구역의 원장 성적")
+    return (f"{lead} — 원장 매수권({doc.get('score_floor')}점+)의 '적정가 아래' 구역은 " + ' / '.join(parts)
+            + (f". {'·'.join(miss)}은 날짜가 모자라 못 쟀습니다" if miss else '')
+            + f" ({doc.get('made') or '측정일 미상'} 측정 · 같은 날 판정은 함께 움직여 날짜로 묶어 셌습니다).")
+
+
 def reach_line(share, n, upside_pct, regime=None, zone=None, bars=HORIZON_BARS):
     """화면 한 줄 — 숫자를 판단으로 바꾸지 않는다. 예:
     '적정가까지 +38.2% · 같은 국면·구역 원장 1,204건 중 20봉 안에 그만큼 오른 비율 3.1%'"""

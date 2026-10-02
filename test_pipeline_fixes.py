@@ -32569,6 +32569,49 @@ check("이 PC 저녁 작업 — PROOF 성적표 단계가 있고 쓰기 금지�
       any(s[1][0].endswith('proof_scorecard.py') and s[1][-1] == '--dry-run' for s in _steps406))
 
 
+print("=" * 72)
+print("§407 적정가 아래 구역 × 국면 — 사전등록 R419 의 판정이 규칙대로 나왔고 화면이 산출물을 읽는다 (라운드 419)")
+print("=" * 72)
+# 사용자(2026-10-03): "적정가 다 좋다고 하지 말고 진짜 좋은 것만 시장 상황이랑 해서." 원장 매수권에서 '적정가 아래'는 상승장에서도
+#   비용을 못 넘었다(학습 −0.39% CI 0 제외 · 검증 −0.20% · 실전 −0.81% · 그 밖보다 낫지 않음) → (다). 옆걸음·하락장은 날짜 미달.
+import ledger_view as _lv407                                       # noqa: E402
+import artifact_io as _aio407                                      # noqa: E402
+_d407 = _aio407.load_json(_lv407.FAIR_ZONE_FILE)
+check("산출물이 있고 사전등록을 가리킨다 · 국면 셋 · 판정은 (가)(나)(다)(미측정) 중 하나",
+      bool(_d407) and _d407.get('prereg') == 'docs/PREREG_R419_FAIR_ZONE_BY_REGIME.md'
+      and set((_d407.get('regimes') or {})) == {'BULL', 'SIDEWAYS', 'BEAR'}
+      and all(v.get('verdict') in ('가', '나', '다', '미측정') for v in _d407['regimes'].values()),
+      str({k: v.get('verdict') for k, v in (_d407 or {}).get('regimes', {}).items()}))
+_ok407, _n407 = True, 0
+for _rg407, _v407 in ((_d407 or {}).get('regimes') or {}).items():
+    _n407 += 1
+    _dates407 = [(_v407.get('r0') or {}).get(sp, {}).get('dates', 0) for sp in ('valid', 'blind')]
+    _meas407 = all(d >= (_d407.get('date_floor') or 30) for d in _dates407)
+    if _meas407 != bool(_v407.get('measurable')):
+        _ok407 = False
+    if _meas407:
+        _r1 = all((_v407['r1'][sp]['lo'] or -1) > 0 for sp in ('train', 'valid', 'blind'))
+        _r2 = all((_v407['r2'][sp]['lo'] or -1) > 0 for sp in ('train', 'valid', 'blind'))
+        if _v407.get('verdict') != ('가' if (_r1 and _r2) else '나' if _r2 else '다'):
+            _ok407 = False
+    elif _v407.get('verdict') != '미측정':
+        _ok407 = False
+check("판정이 사전등록 규칙 그대로다 — 날짜 하한(valid·blind)으로 측정 여부 · R1·R2 의 CI 하한으로 갈래 (산출물에서 다시 셈)",
+      _ok407, scanned=_n407)
+# 심기 문서는 실제 산출물(사전등록 측정 결과)과 같은 모양이다 — 그 날짜는 '판정한 날'이라 prereg 표식을 같이 단다(§156)
+_planted407 = {'prereg': 'docs/PREREG_R419_FAIR_ZONE_BY_REGIME.md', 'cost': 0.41, 'score_floor': 58, 'made': '2026-10-03', 'regimes': {
+    'BULL': {'verdict': '다', 'r1': {sp: {'mean': -0.1} for sp in ('train', 'valid', 'blind')},
+             'r0': {sp: {'rows': 8, 'rest_rows': 2} for sp in ('train', 'valid', 'blind')}},
+    'BEAR': {'verdict': '미측정'}, 'SIDEWAYS': {'verdict': '미측정'}}}
+_l407 = _lv407.fair_zone_line(_planted407)
+check("fair_zone_line — (다)면 '살 근거가 아닙니다' · 측정 날짜 · 못 잰 국면을 적는다 · 산출물이 없으면 빈 글자",
+      '살 근거가 아닙니다' in _l407 and '2026-10-03 측정' in _l407 and '하락장' in _l407 and '옆걸음' in _l407
+      and '80~80%' in _l407 and _lv407.fair_zone_line(None) == ''
+      and _lv407.fair_zone_line({'regimes': {'BULL': {'verdict': '미측정'}}}) == '', _l407)
+check("관심종목 표 아래 캡션이 산출물을 읽어 그 줄을 낸다 (손으로 적은 수 없음)",
+      "_lv419.fair_zone_line(_aio419.load_json(_lv419.FAIR_ZONE_FILE))" in _read148(_os.path.join(PROJ, 'web_app.py')))
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
