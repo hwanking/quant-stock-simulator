@@ -2257,8 +2257,19 @@ if 'watchlist' not in st.session_state:
     if ALLOW_LOCAL_READ:                 # 라운드 200 — 읽기는 막지 않는다
         _wl, _ = portfolio.load_watchlist()
         st.session_state['watchlist'] = _wl
+        st.session_state['watchlist_mtime'] = portfolio.watchlist_mtime()
     else:
         st.session_state['watchlist'] = []
+elif ALLOW_LOCAL_READ:
+    # 라운드 414 — 밤에 혼자 도는 갱신(scripts/refresh_watchlist.py)이 파일을 바꿨으면 세션도 따라간다.
+    #   세션은 처음 열 때 한 번 읽고 그 뒤로는 제 복사본만 봤다 — 그대로면 다음 저장(_wl_write)이 옛 스냅샷으로
+    #   파일을 덮어 밤의 갱신이 사라진다. 파일의 수정시각이 세션이 읽은 때와 다르면 다시 읽는다(매입가·수량은
+    #   저장 때마다 파일에 먼저 가므로 잃을 것이 없다 · 앱 자신의 저장은 _wl_write 가 수정시각을 같이 적어 둔다).
+    _mt414 = portfolio.watchlist_mtime()
+    if _mt414 and _mt414 != st.session_state.get('watchlist_mtime'):
+        _wl, _ = portfolio.load_watchlist()
+        st.session_state['watchlist'] = _wl
+        st.session_state['watchlist_mtime'] = _mt414
 
 
 # ── 관심종목 담기·보기·지우기 (라운드 135) ───────────────────────────
@@ -2337,6 +2348,7 @@ def _wl_write(items, msg=''):
     if ALLOW_LOCAL_STORE:
         try:
             portfolio.save_watchlist(items)
+            st.session_state['watchlist_mtime'] = portfolio.watchlist_mtime()   # 라운드 414 — 제 저장은 다시 안 읽는다
         except Exception as _ex:                               # noqa: BLE001
             st.sidebar.warning(f"로컬 저장 실패: {_ex}")
             return
@@ -3051,23 +3063,11 @@ def _fair_reach_snap(fs):
     """적정가 도달 비율 한 줄 (라운드 224 · 사용자: "적정가는 있는데 너무 오래 기다려야
     한다"). 시간은 못 잰다(옛 원장 행에 적정가가 없다 · R215). 잴 수 있는 것: 같은
     국면·구역의 원장 케이스가 20봉 안에 적정가까지의 여력만큼 오른 **비율**.
-    문턱 없음 — 수와 n 만 낸다. 못 재면 '' (스냅샷 병합에서 떨어진다 · §3)."""
-    import ledger_view as _lv224
-    fs = fs or {}
-    try:
-        _fair = float(fs.get('displayed_fair_value') or 0)
-        _px = float(fs.get('current_price') or 0)
-    except (TypeError, ValueError):
-        return ''
-    if _fair <= 0 or _px <= 0:
-        return ''
-    _up = (_fair / _px - 1.0) * 100.0
-    _rg = str(((fs.get('regime_gate') or {}).get('cell') or '')).split('|')[0] or None
-    _zn = fs.get('entry_zone')
-    _r = _lv224.reach_share(_reach_table_224(), _rg, _zn, _up)
-    if not _r:
-        return ''
-    return _lv224.reach_line(_r[0], _r[1], _up, _rg, _zn)
+    문턱 없음 — 수와 n 만 낸다. 못 재면 '' (스냅샷 병합에서 떨어진다 · §3).
+    라운드 414 — 본문은 `watch_refresh.fair_reach_snap` 한 곳(밤에 혼자 도는 갱신과 같은 함수 · §4).
+    여기서는 화면의 도달 표만 넘긴다."""
+    import watch_refresh as _wr414
+    return _wr414.fair_reach_snap(fs, _reach_table_224())
 
 
 def light_quote(ticker):
@@ -6027,65 +6027,12 @@ def _wl_avg_down_snap(row, snapshot, core=None):
 
     *"관심종목 엔진판단에 가지고 있는 주식 물탈지 말지도 고민해주고."*
     새 문턱을 만들지 않는다 — `personalize_for_position` 이 **이미 채택한
-    6조건**(신규 진입 통과 · 비용후 기대수익 양수 · 손익비(현재가·2차) ·
-    중기 추세 · 비중 상한 · 표본 게이트)을 그대로 부른다 (§2-6). 정식 보유 화면과
-    **같은 함수·같은 비중 정의**(매입원가 기준 · :4709)다 (§4).
-    매입가·수량이 없으면 빈 dict — 지어내지 않는다 (§3).
+    6조건**을 그대로 부른다 (§2-6). 정식 보유 화면과 **같은 함수·같은 비중 정의**(매입원가 기준)다 (§4).
+    라운드 414 — 본문은 `watch_refresh.avg_down_snap` 한 곳이다(밤에 혼자 도는 갱신 스크립트와 **같은
+    함수**). 여기서는 비중 분모(관심종목 보유분)와 엔진만 넘긴다. 매입가·수량이 없으면 빈 dict (§3).
     """
-    try:
-        paid = float(row.get('paid') or 0)
-        qty = float(row.get('qty') or 0)
-    except (TypeError, ValueError):
-        return {}
-    if paid <= 0 or qty <= 0 or not snapshot:
-        return {}        # 안 산 종목 — 판정 대상이 아니다 (실패가 아니라 정상)
-    tot = 0.0
-    for w in _wl_items():
-        try:
-            tot += float(w.get('paid') or 0) * float(w.get('qty') or 0)
-        except (TypeError, ValueError):
-            pass
-    wpct = (paid * qty / tot * 100.0) if tot > 0 else None
-    try:
-        # 라운드 224 — 첫 조건은 중앙 판정이다. 호출부가 CORE 를 안 넘기면 None → 엔진이 '미판정'(보류)으로
-        #   찍는다 (§3). 라운드 387 — 읽는 값이 `actionable` 에서 `recommended` 로(신규 매수 추천 · 11조건 전부).
-        #   actionable 은 '눌림목 매수 대기'에서도 참이라, 엔진이 사지 말라는 자리에서 추가매수를 허락했다.
-        _ne224 = (core.get('recommended') if isinstance(core, dict) else None)
-        pv = q_engine.personalize_for_position(snapshot, paid, qty,
-                                               portfolio_weight_pct=wpct,
-                                               new_entry_ok=_ne224)
-    except Exception:                                          # noqa: BLE001
-        # 못 낸 것은 빈 dict 로 두되(§3 — 지어내지 않는다) **왜 못 냈는지는
-        # 서버 로그에 남긴다.** 조용히 {} 만 돌려주면 물타기 칸이 영영 비어도
-        # 아무도 모른다.
-        import sys as _sys214
-        import traceback as _tb214
-        print('[관심종목 물타기 판정 실패 — 칸을 비운다]\n'
-              + _tb214.format_exc(), file=_sys214.stderr)
-        return {}
-    _fails = [lbl for lbl, ok in (pv.get('averaging_down_checks') or []) if not ok]
-    return {
-        # ⚠️ 파일은 **글자 스키마**(portfolio.WATCH_SNAP_TXT)로만 남긴다 — bool·list
-        #   는 저장에서 떨어진다(실측: 세션엔 있고 파일엔 없었다). 세션과 파일이
-        #   같은 모양이 되도록 처음부터 글자로 찍는다 (§4). '불가'를 0 으로 두면
-        #   숫자 칸이 0 을 버려 사라지므로 글자다.
-        'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가'),
-        # ⚠️ 라운드 224 실측 — 실패가 없으면 ''(빈 글자)를 찍었는데, 스냅샷 병합은
-        #   None·'' 를 "못 낸 값"으로 보고 **건너뛴다**. 그래서 '가능'으로 바뀐 행이 옛
-        #   실패 목록('신규 진입 조건 통과 · …')을 그대로 안고 있었다(파일 16행 중 4행).
-        #   R223 의 "숫자 칸은 0 을 버린다"와 같은 모양 — 빈 글자도 값이다. '없음'으로
-        #   찍는다(watch_action 이 그 낱말을 빈 목록으로 읽는다).
-        'snap_avg_down_fail': ' · '.join(_fails) or '없음',
-        # 라운드 224 — 첫 조건이 무엇을 읽었는지 (중앙 판정 · 글자). 이 키가 없는 보유
-        #   행은 R224 이전 스탬프라 채우기 대상이다 (_wl_needs_fill).
-        # 라운드 387 — 첫 조건의 **출처가 바뀌었다**(actionable → recommended). 옛 스탬프('가능'/'불가')와
-        #   가르려고 글자를 바꾼다 — 읽는 쪽(watch_action)이 옛 '가능'을 추가매수 허락으로 쓰지 않는다.
-        'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님')),
-        'snap_holder_key': pv.get('holder_action_key'),
-        'snap_holder_title': pv.get('holder_action_title'),
-        'snap_weight_basis': ('관심종목 보유분 매입원가 기준'
-                              if wpct is not None else '비중 미확인'),
-    }
+    import watch_refresh as _wr414
+    return _wr414.avg_down_snap(row, snapshot, core, _wl_items(), q_engine)
 
 
 #: 한 번의 그리기 안에서만 산다 — 스크립트가 다시 돌면 비워진다 (낡지 않는다)
@@ -6548,7 +6495,7 @@ else:
                                f"title='{_uk._esc_attr(_wy240)}'>{_uk._esc(_wys240)}</span>")
                 # 라운드 396 — 옛 규칙으로 찍힌 '… 대기'(기다려도 안 풀리는 조건을 안 가림)는 다시 재야 가려진다.
                 #   '아직 안 잼' 칸과 **같은 링크**(`?measure=` · 채우기와 같은 코드 · R327)를 붙인다 — 새로 재는 것은
-                #   누른 사람이다(자동으로 재지 않는다 · R166).
+                #   누른 사람이거나 평일 장 마감 뒤 혼자 도는 갱신이다(라운드 414 · 링크는 지금 당장 재는 길).
                 if _act.get('remeasure'):
                     _jd229 += (f"<br><a href='?measure={_uk._esc_attr(_wcode)}' target='_self' "
                                f"title='{_uk._esc_attr(_wy240)}' "
@@ -6697,6 +6644,14 @@ else:
         st.caption(f"엔진 값 기준일 {_snapd[0]}"
                    + (f" ~ {_snapd[-1]}" if _snapd[-1] != _snapd[0] else '')
                    + " — 종목 이름을 눌러 분석을 열면 그날 값으로 채워집니다.")
+    # 라운드 414 — 밤에 혼자 도는 갱신이 **언제 무엇을 했는지**(산출물 기준 · 기록이 없으면 없다고 · 라운드 412).
+    #   사용자: *"'지금 다시 재기' 같은 거는 너가 주기적으로 바꿔줘야지."* 표의 '지금 재기' 링크는 **지금 당장**
+    #   재는 길로 그대로 남는다 — 둘 다 `watch_refresh` 의 같은 함수로 잰다(§4).
+    try:
+        import watch_refresh as _wr414s
+        st.caption(_wr414s.status_line(_wr414s.last_run(), t_ref_str))
+    except Exception:                                          # noqa: BLE001
+        pass
     # ── 빈 칸을 지금 채운다 (라운드 166) ─────────────────────────────
     # 사용자 지적: *"목표 매수가·1차목표·2차목표·적정가 없는 게 있어.
     # 이거 넣어줘야지."*
@@ -6705,47 +6660,19 @@ else:
     # 리포트에 오르지 않는 종목은 영원히 비어 있었다 — 화신·남화토건·
     # BGF리테일이 그랬다.
     #
-    # ⚠️ 자동으로 돌리지 않는다. 한 종목 정밀분석이 1~3분이라 화면을
+    # ⚠️ 화면을 열 때 자동으로 돌리지 않는다. 한 종목 정밀분석이 1~3분이라 화면을
     #   열 때마다 돌면 앱이 멈춘다(라운드 141 이 그래서 안 했다).
     #   **버튼으로 사용자가 시작하고, 얼마나 걸리는지 미리 적는다.**
+    #   라운드 414 — 대신 평일 장 마감 뒤 혼자 도는 스크립트(scripts/refresh_watchlist.py)가 **같은 함수**
+    #   (`watch_refresh`)로 잰다 — 사용자: "'지금 다시 재기' 같은 거는 너가 주기적으로 바꿔줘야지."
     # ⚠️ 라운드 169 — **보유자 기준값이 없는 종목**도 채울 대상이다.
     #   매입가를 적어 둔 종목은 hold_stop·hold_trim 이 있어야 판단이
     #   나온다. 없으면 화면이 '보유 기준 미산출'이라 적고, 이 버튼이
     #   그것을 채운다.
-    def _wl_needs_fill(w):
-        if not w.get('snap_at') or w.get('snap_buy') is None:
-            return '엔진 값'
-        if w.get('paid') and not (w.get('snap_hold_stop')
-                                  or w.get('snap_hold_trim')):
-            return '보유자 기준값'
-        # 라운드 214 보완 — 물타기 스탬프가 없는 **보유** 행도 채울 대상이다.
-        #   이 기준이 그 키를 몰라, R214 이전에 저장된 보유 16행은 종목을 하나씩
-        #   열기 전엔 영영 '물타기' 칸이 비어 있었다. 매입가·수량 **둘 다** 있을
-        #   때만 — 수량이 없으면 헬퍼가 {} 를 돌려주어 키가 안 생기고, 그러면
-        #   이 기준이 그 행을 매번 다시 채우자고 해 파이프라인만 헛돈다.
-        if (w.get('paid') and w.get('qty')
-                and 'snap_avg_down_ok' not in w):
-            return '물타기 판정'
-        # 라운드 224 — 물타기 첫 조건의 출처가 바뀌었다(TOP3 깃발 → 중앙 판정). 그 전에
-        #   찍힌 보유 행은 '불가'가 옛 게이트의 답이라 다시 채운다. 같은 규칙으로
-        #   매입가·수량 둘 다 있을 때만.
-        if (w.get('paid') and w.get('qty')
-                and 'snap_new_entry' not in w):
-            return '물타기 첫 조건'
-        # 라운드 387 — 첫 조건이 다시 바뀌었다(actionable → recommended). 옛 기준에서 **허락**('가능')이 찍힌
-        #   행만 다시 채운다 — 옛 '불가'는 새 기준에서도 불가다(추천은 실행 후보보다 좁다).
-        if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'
-                and w.get('snap_avg_down_ok') in (True, '가능')):
-            return '물타기 첫 조건'
-        # 라운드 241 — 판정 사유가 없는 **미보유** 행. R240 이 사유를 담게 했지만
-        #   이미 저장된 행에는 없어, 종목을 하나씩 열기 전엔 영영 안 나온다
-        #   (실측 2026-09-08: 31행 중 사유가 있는 행 **1**). 사유가 없을 때도
-        #   마커를 남기므로(ui_kit.WATCH_NO_WHY) 한 번 채우면 끝난다 — 빈 글자로
-        #   두면 이 기준이 매번 다시 채우자고 해 파이프라인만 헛돈다(R214 주석).
-        if (not w.get('paid') and w.get('snap_bucket')
-                and 'snap_why' not in w):
-            return '판정 사유'
-        return ''
+    # 라운드 414 — '값이 모자란 행' 판별(라운드 166·169·214·224·241·387 의 갈래)은 `watch_refresh.needs_fill`
+    #   한 곳이다 — 밤에 혼자 도는 갱신 스크립트가 같은 판별을 쓴다(§4). 이름은 그대로 둔다.
+    import watch_refresh as _wr414
+    _wl_needs_fill = _wr414.needs_fill
 
     # 라운드 322 — 채우는 **순서**. 종전엔 관심종목 파일 순서라, 새로 담아 **맨 끝**에 붙은 종목
     #   (한 번도 안 잰 것)이 한 번에 5개씩 채우는 차례에서 3번째 누름에야 닿았다(실측 15개 중
@@ -6798,70 +6725,29 @@ else:
         if _clicked166:
             _todo166 = _fill_missing[:_WL_FILL_MAX]
         if _mrow327 or _clicked166 or _rrow373:
-            import verdict_core as _vc166
-            import next_action as _na
             _bar166 = st.progress(0.0)
             _msg166 = st.empty()
             _done166, _fail166 = [], []
+            # 라운드 414 — 도달 표는 한 번만 만든다(원장을 한 번 읽는다) · 행마다 같은 표를 넘긴다
+            _rt414 = _reach_table_224()
             for _i166, _w166 in enumerate(_todo166):
                 _c166 = portfolio.normalize_code(_w166.get('code'))
                 _nm166 = str(_w166.get('name') or _c166)
                 _msg166.info(f"{_i166 + 1}/{len(_todo166)} · **{_nm166}** "
                              f"계산 중…")
                 try:
-                    _sym166 = (f"{_c166}.KQ"
-                               if str(_w166.get('market') or '') == 'KOSDAQ'
-                               else f"{_c166}.KS")
+                    _sym166 = _wr414.symbol_of(_w166)
                     _snp166, _ = get_shared_snapshot(_sym166, t_ref_str,
                                                      rho_cutoff)
-                    _fs166 = _snp166.get('four_scores') or {}
-                    # ⚠️ 라운드 169 — 여기가 `build(_snp166)` 이었다.
-                    #   `build()` 의 첫 인자는 **four_scores** 인데 스냅샷을
-                    #   통째로 넘겨서, 안에서 읽는 키가 전부 None 이 됐다.
-                    #   그래서 채운 종목이 죄다 bucket='데이터 부족' 이고
-                    #   보유자 값이 비었다 — **못 낸 게 아니라 잘못 물어본
-                    #   것**이다. 라운드 167 에서 겪은 것과 같은 모양
-                    #   (경로를 베끼면서 한 단계를 빠뜨렸다).
-                    #   화면(:5798)이 부르는 방식 그대로 맞춘다 (§4).
-                    _vd166 = _snp166.get('verdict')
-                    if _vd166 is None:
-                        _vd166 = q_engine.build_final_verdict(_snp166)
-                    _na166 = _na.build(_fs166, _snp166.get('tech_df'),
-                                       _fs166.get('current_price'), _vd166)
-                    _co166 = _vc166.build(
-                        _fs166, verdict=_vd166,
-                        price_axes=_fs166.get('price_axes'),
-                        next_action=_na166,
-                        realtime_price=_fs166.get('current_price'))
-                    _vals166 = {
-                        'snap_buy': (_co166.get('pullback_zone')
-                                     or (_co166.get('buy_zone') or [None])[0]),
-                        'snap_t1': _co166.get('new_target'),
-                        'snap_t2': _fs166.get('target_tech_2nd'),
-                        'snap_fair': _fs166.get('displayed_fair_value'),
-                        'snap_fair_conf': _fs166.get('fair_value_confidence'),
-                        'snap_px': _fs166.get('current_price'),
-                        'snap_at': t_ref_str,
-                        'snap_engine': str(_VER_NOW.get('model') or ''),
-                        'snap_bucket': _co166.get('bucket'),
-                        'snap_why': _co166.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
-                        # 업종 (라운드 214) — 포트폴리오 견해의 업종 비중 재료
-                        'snap_sector': (_snp166.get('val_eval') or {}).get('sector'),
-                        # 적정가 도달 비율 한 줄 (라운드 224 · 표시 전용 · 못 재면 '')
-                        'snap_fair_reach': _fair_reach_snap(_fs166),
-                    }
-                    # 물타기 판정 (라운드 214 → 224) — 매입가·수량이 있을 때만 찍힌다.
-                    #   첫 조건은 중앙 판정(_co166.actionable)이다.
-                    _vals166.update(_wl_avg_down_snap(_w166, _snp166, _co166))
-                    # 보유자 기준 (라운드 169 → 224) — 다른 키다 (§4). 보유 행은 잰 날에
-                    #   **고정**하고 창이 끝나거나 닿았을 때만 다시 잰다(사유는 로그로).
-                    _vals166.update(portfolio.hold_plan_update(
-                        _w166, _co166.get('hold_trim'), _co166.get('hold_stop'),
-                        _fs166.get('current_price'), t_ref_str,
-                        horizon_bars=int(_co166.get('horizon_days') or _lv217.HORIZON_BARS),
-                        held=bool(_w166.get('paid')),
+                    # 라운드 414 — 중앙 판정 → 값 묶음 → 물타기 6조건 → 보유 계획 갱신은 `watch_refresh` 한 곳이다
+                    #   (밤에 혼자 도는 갱신 스크립트와 **같은 함수** · §4). 라운드 169 의 교훈(`build()` 의 첫 인자는
+                    #   four_scores · 스냅샷을 통째로 넘기면 안에서 읽는 키가 전부 None)은 그 모듈의 `core_of` 가 지킨다.
+                    _co166 = _wr414.core_of(_snp166, q_engine)
+                    _vals166 = _wr414.snap_values(
+                        _w166, _snp166, _co166, t_ref_str, str(_VER_NOW.get('model') or ''),
+                        _wl_items(), q_engine, reach_table=_rt414,
                         # 라운드 373 — 사람이 '기준 다시 재기'를 누른 그 종목만 강제로 다시 잰다
-                        remeasure=bool(_rrow373) and _c166 == _rcode373))
+                        remeasure=bool(_rrow373) and _c166 == _rcode373)
                     _done166.append((_c166, _vals166))
                 except Exception as _ex166:                    # noqa: BLE001
                     # 실패를 통과로 적지 않는다 — 왜 못 냈는지 그대로 쓴다
@@ -6869,14 +6755,8 @@ else:
                                      f'{type(_ex166).__name__}: {_ex166}'[:90]))
                 _bar166.progress((_i166 + 1) / len(_todo166))
             _by166 = dict(_done166)
-            _out166 = []
-            for _w166 in _wl_items():
-                _c166 = portfolio.normalize_code(_w166.get('code'))
-                _n166 = dict(_w166)
-                for _k166, _v166 in (_by166.get(_c166) or {}).items():
-                    if _v166 not in (None, ''):
-                        _n166[_k166] = _v166
-                _out166.append(_n166)
+            # 못 낸 값(None·'')으로 옛 값을 지우지 않는다 — 병합도 같은 모듈 한 곳(R141 의 규칙)
+            _out166 = _wr414.merge_into(_wl_items(), _by166)
             if _by166:
                 _wl_write(_out166)
             _bar166.empty()

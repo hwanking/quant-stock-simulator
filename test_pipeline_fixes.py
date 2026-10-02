@@ -19861,16 +19861,21 @@ check("관심종목 표 구간 안에서 watch_action 은 사전 계산 한 번�
 # ── ③ 물타기 — 채택된 6조건 재사용 · 안 찍혔으면 None ─────────────────────
 # 라운드 224 — 시그니처에 `core`(중앙 판정)가 더해졌다. 첫 조건의 출처가 TOP3 깃발에서
 #   verdict_core.actionable 로 바뀌어서다(§241). 부르는 함수는 그대로다.
+# 라운드 414 — 본문이 `watch_refresh.avg_down_snap` 한 곳으로 옮겨졌다(밤에 혼자 도는 갱신 스크립트와 같은 함수).
+#   화면의 `_wl_avg_down_snap` 은 그것을 부르는 껍데기다 — 재려던 성질(같은 함수 · 같은 비중 정의)은 모듈에서 본다.
+_wr231 = _read148(_os.path.join(PROJ, 'watch_refresh.py'))
 check("스냅샷 찍는 함수가 personalize_for_position 을 부른다 (같은 함수 · §4)",
       'def _wl_avg_down_snap(row, snapshot, core=None):' in _w231
-      and 'q_engine.personalize_for_position(snapshot, paid, qty,' in _w231)
+      and '_wr414.avg_down_snap(row, snapshot, core, _wl_items(), q_engine)' in _w231
+      and 'q.personalize_for_position(snapshot, paid, qty,' in _wr231)
 check("스냅샷이 있는 두 자리(채우기 버튼 · 종목 상세) 모두 물타기·업종을 찍는다",
-      _w231.count('_wl_avg_down_snap(') == 3          # def 1 + 호출 2
-      and "'snap_sector': (_snp166.get('val_eval') or {}).get('sector')" in _w231
+      _w231.count('_wl_avg_down_snap(') == 2          # def(껍데기) 1 + 종목 상세 호출 1 · 채우기는 모듈 snap_values 안에서
+      and 'vals.update(avg_down_snap(row, snp, core, items, q))' in _wr231
+      and "'snap_sector': ((snp or {}).get('val_eval') or {}).get('sector')" in _wr231
       and "'snap_sector': val_eval.get('sector')" in _w231,
       str(_w231.count('_wl_avg_down_snap(')))
 check("비중 정의가 정식 보유 화면과 같다 (매입원가 기준)",
-      'wpct = (paid * qty / tot * 100.0) if tot > 0 else None' in _w231)
+      'wpct = (paid * qty / tot * 100.0) if tot > 0 else None' in _wr231)
 # §6 — 라운드 221 이 이 검사를 현실에 맞췄다. 종전엔 `_held` 안의 한 줄
 #   (`d['avg_down_ok'], d['avg_down_why'] = None, '아직 안 잼'`)을 글자로
 #   요구했는데, R221 이 판별을 모듈 함수 `avg_down_class` 로 빼며 그 줄이
@@ -19925,8 +19930,8 @@ check("표가 보유분에만 추가매수 줄을 그린다 — 가능할 때만
       and "_act.get('hold_tip')" in _w231)
 # 채우기 버튼의 기준이 새 스탬프를 안다 — 모르면 옛 보유 행은 열기 전엔 영영 빈다
 check("채우기 버튼이 물타기 스탬프 없는 보유 행(매입가·수량 있음)도 대상으로 삼는다",
-      "'snap_avg_down_ok' not in w" in _w231
-      and "w.get('paid') and w.get('qty')" in _w231)
+      "'snap_avg_down_ok' not in w" in _wr231                    # 라운드 414 — 판별은 watch_refresh.needs_fill 한 곳
+      and "w.get('paid') and w.get('qty')" in _wr231)
 
 # ── ③' 파일 스키마 — **세션엔 있고 파일엔 없던** 결함 (라운드 214 실측) ────
 #   화면이 '물타기 불가 · (업종)' 을 찍는데 파일에는 키가 없었다.
@@ -19938,8 +19943,8 @@ _SIX231 = ('snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
 check("관심종목 파일 스키마가 물타기·업종 키 여섯을 남긴다 (없으면 재시작에 사라진다)",
       all(k in _pf231.WATCH_SNAP_TXT for k in _SIX231), str(_pf231.WATCH_SNAP_TXT))
 check("스냅샷을 파일 스키마와 같은 모양(글자)으로 찍는다 (§4 — 두 모양 금지)",
-      "'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가')" in _w231
-      and "'snap_avg_down_fail': ' · '.join(_fails)" in _w231)
+      "'snap_avg_down_ok': ('가능' if pv.get('averaging_down_allowed') else '불가')" in _wr231
+      and "'snap_avg_down_fail': ' · '.join(_fails)" in _wr231)
 try:
     import tempfile as _tf231
     _tmp231 = _os.path.join(_tf231.gettempdir(), 'gaeum_wl_roundtrip_231.json')
@@ -20956,18 +20961,22 @@ if isinstance(_snap241, dict) and 'four_scores' in _snap241 and _pxn241:
 else:
     skipped("실행 증거 (personalize_for_position 세 값)", "§3 스냅샷이 없다")
 # ── ③ 화면 — 호출부 셋이 전부 중앙 판정을 넘긴다 · 두 정의 통일 ───────────
+# 라운드 414 — 채우기 버튼의 본문은 `watch_refresh.snap_values` 로 옮겨졌다(그 안에서 core 를 avg_down_snap 에 넘긴다).
 check("관심종목 채우기가 CORE 를 넘긴다",
-      "_wl_avg_down_snap(_w166, _snp166, _co166)" in _w231)
+      "_co166 = _wr414.core_of(_snp166, q_engine)" in _w231 and "_wr414.snap_values(" in _w231
+      and 'vals.update(avg_down_snap(row, snp, core, items, q))' in _read148(_os.path.join(PROJ, 'watch_refresh.py')))
 check("종목 상세 스탬프가 CORE 를 넘긴다", "_wl_avg_down_snap(_w141, snap, CORE)" in _w231)
 # 라운드 387 — 읽는 값이 actionable → recommended(신규 매수 추천). actionable 은 '눌림목 매수 대기'에서도
 #   참이라 엔진이 사지 말라는 자리에서 추가매수를 허락했다(리포트 후보 458 중 actionable 26 · 추천 0).
 check("포트폴리오 탭이 같은 함수(_core_of_snapshot)로 중앙 판정(신규 매수 추천)을 낸다",
       "new_entry_ok=_ne224p" in _w231
       and "_ne224p = _core_of_snapshot(s).get('recommended')" in _w231)
+# 라운드 414 — 도우미와 '값이 모자란 행' 판별은 `watch_refresh` 한 곳이다(화면은 부른다).
+_wr241 = _read148(_os.path.join(PROJ, 'watch_refresh.py'))
 check("스냅샷 도우미가 new_entry_ok 를 넘기고 출처를 글자로 찍는다 (snap_new_entry)",
-      "new_entry_ok=_ne224" in _w231 and "'snap_new_entry'" in _w231)
+      "new_entry_ok=_ne224" in _wr241 and "'snap_new_entry'" in _wr241)
 check("R224 이전 보유 행은 다시 채운다 (_wl_needs_fill · snap_new_entry 없음)",
-      "'snap_new_entry' not in w" in _w231)
+      "'snap_new_entry' not in w" in _wr241 and "_wl_needs_fill = _wr414.needs_fill" in _w231)
 check("포트폴리오 탭의 통과/미충족 표시가 빈 글자가 아니다",
       "f\"- {'통과' if ok else '미충족'} · {label}\"" in _w231
       and "f\"- {'' if ok else ''} {label}\"" not in _w231)
@@ -21013,7 +21022,7 @@ check("R224 이후 스탬프(snap_new_entry 있음)는 그 문구가 없다",
 #   실패가 없으면 ''(빈 글자)를 찍었고, 병합이 None·'' 를 "못 낸 값"으로 보고 건너뛰어서다
 #   (R223 의 0 과 같은 모양). 쓰는 쪽은 '없음', 읽는 쪽은 그 낱말을 빈 목록으로.
 check("실패 없음은 빈 글자가 아니라 '없음'으로 찍는다 (병합에서 떨어지지 않게)",
-      "' · '.join(_fails) or '없음'" in _w231 and _uk241.AVG_DOWN_NO_FAIL == '없음')
+      "' · '.join(_fails) or '없음'" in _wr241 and _uk241.AVG_DOWN_NO_FAIL == '없음')
 # 라운드 387 — 새 스탬프의 첫 조건 글자는 '추천'/'추천 아님'(출처가 신규 매수 추천으로 바뀌었다).
 _ok241 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_down_fail='없음',
                                   snap_new_entry='추천'), 10500)
@@ -21024,8 +21033,10 @@ _old387 = _uk241.watch_action(dict(_row241, snap_avg_down_ok='가능', snap_avg_
 check("옛 기준(actionable)으로 찍힌 허락은 추가매수 허락으로 쓰지 않는다 — '아직 안 잼' · 표는 '추가 매수 가능'이 아니다",
       _old387.get('avg_down_class') is None and _old387.get('kind') != '추가 매수 가능',
       f"{_old387.get('avg_down_class')} · {_old387.get('kind')}")
+# 라운드 414 — 채우기 쪽 병합은 `watch_refresh.merge_into` 한 곳(밤 스크립트도 그것으로 얹는다) · 종목 상세 쪽은 그대로.
 check("빈 글자는 병합에서 떨어진다 — 두 스탬프 자리의 병합 규칙이 그대로다 (바꾸지 않았다)",
-      _w231.count("if _v166 not in (None, ''):") == 1 and _w231.count("if _v141 not in (None, ''):") == 1)
+      _wr241.count("if v not in (None, ''):") == 1 and _w231.count("if _v141 not in (None, ''):") == 1
+      and "_wr414.merge_into(_wl_items(), _by166)" in _w231)
 # ── ④ 보유 계획 고정 — 기준일에 고정 · 20봉 창 · 닿거나 끝나면 사유 로그 ─────
 _td241 = '2026-09-04'
 _r1_241 = {'paid': 10000, 'snap_hold_trim': 11000, 'snap_hold_stop': 9000,
@@ -21052,10 +21063,12 @@ check("안 산 종목은 계획이 아니다 — 늘 새 값 · 로그 없음",
 check("로그는 최근 셋만 (파일이 자라지 않게)",
       _pf241.hold_plan_update(dict(_r1_241, snap_hold_log='a | b | c'), 11500, 9300,
                               11200, _td241)['snap_hold_log'].count(' | ') == 2)
+# 라운드 414 — 채우기 쪽 호출은 `watch_refresh.snap_values` 안으로 옮겨졌다. 두 자리 = 화면(종목 상세) 1 + 모듈 1.
 check("두 스탬프 자리가 hold_plan_update 를 부른다 (기준값을 직접 덮어쓰지 않는다)",
-      _w231.count('portfolio.hold_plan_update(') == 2
-      and "'snap_hold_trim': _co166.get('hold_trim')" not in _w231
-      and "'snap_hold_trim': CORE.get('hold_trim')" not in _w231)
+      _w231.count('portfolio.hold_plan_update(') + _wr241.count('portfolio.hold_plan_update(') == 2
+      and "'snap_hold_trim': core.get('hold_trim')" not in _wr241
+      and "'snap_hold_trim': CORE.get('hold_trim')" not in _w231,
+      f"화면 {_w231.count('portfolio.hold_plan_update(')} · 모듈 {_wr241.count('portfolio.hold_plan_update(')}")
 check("새 스냅샷 키 넷이 저장 화이트리스트에 있다 (R223 — 없으면 재시작에 사라진다)",
       all(k in _pf241.WATCH_SNAP_TXT
           for k in ('snap_hold_at', 'snap_hold_log', 'snap_fair_reach', 'snap_new_entry')))
@@ -22224,12 +22237,15 @@ import portfolio as _pf257
 # ① 사유를 담는다 — 저장 화이트리스트 · 채우는 자리 넷
 check("저장 화이트리스트에 snap_why 가 있다 (파일에 남아야 재시작에 안 사라진다)",
       'snap_why' in _pf257.WATCH_SNAP_TXT)
+# 라운드 414 — 채우기 버튼의 자리는 `watch_refresh.snap_values` 로 옮겨졌다(화면 3 + 모듈 1 = 넷 그대로).
+_wr257 = _read148(_os.path.join(PROJ, 'watch_refresh.py'))
 check("사유는 중앙 판정의 exclude_reason 이다 — 새로 만들지 않는다",
-      _w231.count("'snap_why': ") == 4
-      and _w231.count("exclude_reason") >= 4
+      _w231.count("'snap_why': ") + _wr257.count("'snap_why': ") == 4
+      and _w231.count("exclude_reason") >= 3
       and "'snap_why': CORE.get('exclude_reason')" in _w231
-      and "'snap_why': _co166.get('exclude_reason')" in _w231
-      and "'snap_why': _co142.get('exclude_reason')" in _w231)
+      and "'snap_why': core.get('exclude_reason')" in _wr257
+      and "'snap_why': _co142.get('exclude_reason')" in _w231,
+      f"화면 {_w231.count(chr(39) + 'snap_why' + chr(39) + ': ')} · 모듈 {_wr257.count(chr(39) + 'snap_why' + chr(39) + ': ')}")
 # 저장→읽기 왕복 (문자열 검사로는 못 잡는다 · R223)
 _row257 = {'code': '000000', 'name': '심기', 'snap_at': '2026-09-08',
            'snap_bucket': '추천 제외', 'snap_why': '거래비용 차감 후 기대값이 음수입니다'}
@@ -22310,9 +22326,12 @@ import portfolio as _pf258
 # ① 마커 — 쓰는 쪽과 읽는 쪽이 같은 낱말 (§4)
 check("사유 없음의 글자 표기가 한 곳에 있다",
       isinstance(_uk258.WATCH_NO_WHY, str) and _uk258.WATCH_NO_WHY.strip() != '')
+# 라운드 414 — 채우기 버튼의 자리는 `watch_refresh.snap_values` 로 옮겨졌다(화면 3 + 모듈 1 = 넷 그대로).
+_wr258 = _read148(_os.path.join(PROJ, 'watch_refresh.py'))
 check("채우는 자리 넷이 전부 마커를 남긴다 (빈 글자면 키가 안 생긴다)",
-      _w231.count("or _uk.WATCH_NO_WHY") == 4
-      and _w231.count("'snap_why': ") == 4)
+      _w231.count("or _uk.WATCH_NO_WHY") + _wr258.count("or _uk.WATCH_NO_WHY") == 4
+      and _w231.count("'snap_why': ") + _wr258.count("'snap_why': ") == 4,
+      f"화면 {_w231.count('or _uk.WATCH_NO_WHY')} · 모듈 {_wr258.count('or _uk.WATCH_NO_WHY')}")
 _kept258 = {k: v for k, v in {'snap_why': _uk258.WATCH_NO_WHY}.items()
             if k in _pf258.WATCH_SNAP_TXT and str(v or '').strip()}
 check("마커가 저장 화이트리스트를 통과한다 (저장→읽기 왕복)",
@@ -22358,11 +22377,13 @@ check("보유 행에는 안 붙이고 문장도 안 바뀐다",
       and '심기 사유' not in str(_hl258.get('why')))
 
 # ④ 채우기 대상 — 사유가 없는 미보유 행 · 배너가 그것을 따로 말한다
+# 라운드 414 — 채우기 기준(`needs_fill`)은 `watch_refresh` 한 곳이다(화면은 `_wl_needs_fill = _wr414.needs_fill` 로 부른다).
 check("채우기 기준이 판정 사유를 본다",
-      "and 'snap_why' not in w):" in _w231 and "return '판정 사유'" in _w231)
+      "and 'snap_why' not in w:" in _wr258 and "return '판정 사유'" in _wr258
+      and "_wl_needs_fill = _wr414.needs_fill" in _w231)
 check("채우기 기준이 무엇이 모자란지 글자로 말한다 (배너가 뭉뚱그리지 않게)",
-      "return '엔진 값'" in _w231 and "return '보유자 기준값'" in _w231
-      and "return '물타기 판정'" in _w231 and "return '물타기 첫 조건'" in _w231)
+      "FILL_ENGINE = '엔진 값'" in _wr258 and "return FILL_ENGINE" in _wr258 and "return '보유자 기준값'" in _wr258
+      and "return '물타기 판정'" in _wr258 and "return '물타기 첫 조건'" in _wr258)
 check("배너가 사유만 없는 행의 수를 따로 적는다",
       "_nwhy241 = sum(1 for w in _fill_missing" in _w231
       and "값은 다 있고 판정 사유만 " in _w231)
@@ -29946,10 +29967,13 @@ check("둘째 조건의 이름이 읽는 값(유사패턴 평균 − 0.30)과 �
       '유사패턴 평균 수익(비용 차감) 양수' in _names378 and '거래비용 차감 후 기대수익 양수' not in _names378
       and len(_names378) == 6 and _names378[0] == _uk378.AVG_DOWN_MARKET_GATE, str(_names378))
 _w378 = '\n'.join(_ln for _i, _ln in _la378.code_lines('web_app.py'))
+# 라운드 414 — 스냅샷 도우미의 본문은 `watch_refresh.avg_down_snap` 이다(화면의 `_wl_avg_down_snap` 은 껍데기).
+_wr378 = '\n'.join(_ln for _i, _ln in _la378.code_lines('watch_refresh.py'))
 check("호출부 셋이 첫 조건에 **신규 매수 추천**(recommended)을 넘긴다 — actionable 이 아니다",
       "_ne224p = _core_of_snapshot(s).get('recommended')" in _w378
-      and "_ne224 = (core.get('recommended') if isinstance(core, dict) else None)" in _w378
+      and "_ne224 = (core.get('recommended') if isinstance(core, dict) else None)" in _wr378
       and "new_entry_ok=CORE.get('recommended'))" in _w378
+      and "get('actionable')" not in _wr378.split('def avg_down_snap', 1)[1].split('def ', 1)[0]
       and "get('actionable')" not in _w378.split('def _wl_avg_down_snap', 1)[1].split('def ', 1)[0],
       scanned=3)
 check("종목 상세도 비중을 넘긴다(관심종목과 같은 정의) — 안 넘기면 이제 통과가 아니다",
@@ -30008,8 +30032,8 @@ check("옛 기준으로 찍힌 추가매수 허락은 쓰지 않는다('아직 �
       and '사기 전에' in str(_hb378.get('avg_down_short')),
       f"{_ha378['kind']}/{_ha378.get('avg_down_class')} · {_hb378.get('avg_down_short')}")
 check("옛 기준 허락이 찍힌 보유 행은 채우기 대상이다 (다시 재면 새 기준)",
-      "if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'" in _w378
-      and "'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님'))," in _w378)
+      "if (w.get('paid') and w.get('qty') and w.get('snap_new_entry') == '가능'" in _wr378    # 라운드 414 — 모듈 한 곳
+      and "'snap_new_entry': ('미판정' if _ne224 is None else ('추천' if _ne224 else '추천 아님'))," in _wr378)
 
 
 print("\n" + "=" * 72)
@@ -31986,6 +32010,212 @@ for _fn401 in ('ui_kit.py', 'trade_plan.py', 'gaeum_chat.py', 'web_app.py'):
                             == 'hold_add_blocked_line')
 check("네 소비자 전부가 한 곳(hold_add_blocked_line)을 부른다 — 문장을 각자 짓지 않는다 (§4 · R246)",
       all(v >= 1 for v in _calls401.values()), str(_calls401), scanned=len(_calls401))
+
+
+print("=" * 72)
+print("§402 관심종목 자동 갱신 — 재는 길 하나 · 평일 장 마감 뒤 혼자 도는 스크립트 · 세션은 파일을 따라간다 (라운드 414)")
+print("=" * 72)
+# 사용자(2026-10-02): "'지금 다시 재기' 같은 거는 너가 주기적으로 바꿔줘야지." 재는 본문(중앙 판정 → 값 묶음 → 물타기 6조건 →
+#   보유 계획 갱신)을 `watch_refresh` 한 곳으로 옮겼다 — 채우기 버튼 · '지금 재기' 링크 · 밤 스크립트가 같은 함수를 부른다(§4).
+#   값·판정·문턱·선 불변. 관심종목 52행의 엔진 값 기준일이 08-21~10-02 로 흩어져 있었다(오늘 값 1행).
+import json as _json402                                            # noqa: E402
+import os as _os402                                                # noqa: E402
+import re as _re402                                                # noqa: E402
+import subprocess as _sp402                                        # noqa: E402
+import sys as _sys402                                              # noqa: E402
+import tempfile as _tf402                                          # noqa: E402
+import watch_refresh as _wr402                                     # noqa: E402
+import portfolio as _pf402                                         # noqa: E402
+import ui_kit as _uk402                                            # noqa: E402
+import bitemporal_engine as _be402                                 # noqa: E402
+
+# ── ① 판별 — 채우기 버튼의 갈래 그대로(라운드 166~387) + 기준일 지남 ──────────────────────────────
+_rows402 = {
+    'never': {'code': '000001', 'name': 'a'},
+    'held_no_plan': {'code': '000002', 'name': 'b', 'paid': 100, 'qty': 1, 'snap_at': '2026-10-01', 'snap_buy': 90},
+    'held_no_avg': {'code': '000003', 'name': 'c', 'paid': 100, 'qty': 1, 'snap_at': '2026-10-01', 'snap_buy': 90,
+                    'snap_hold_stop': 80, 'snap_hold_trim': 120},
+    'held_old_first': dict(code='000004', name='d', paid=100, qty=1, snap_at='2026-10-01', snap_buy=90,
+                           snap_hold_stop=80, snap_hold_trim=120, snap_avg_down_ok='불가'),
+    'held_old_allow': dict(code='000005', name='e', paid=100, qty=1, snap_at='2026-10-01', snap_buy=90,
+                           snap_hold_stop=80, snap_hold_trim=120, snap_avg_down_ok='가능', snap_new_entry='가능'),
+    'watch_no_why': {'code': '000006', 'name': 'f', 'snap_at': '2026-10-01', 'snap_buy': 90, 'snap_bucket': '추천 제외'},
+    'fresh': {'code': '000007', 'name': 'g', 'snap_at': '2026-10-02', 'snap_buy': 90, 'snap_bucket': '추천 제외', 'snap_why': 'x'},
+    'stale': {'code': '000008', 'name': 'h', 'snap_at': '2026-09-04', 'snap_buy': 90, 'snap_bucket': '추천 제외', 'snap_why': 'x'},
+}
+_exp402 = {'never': '엔진 값', 'held_no_plan': '보유자 기준값', 'held_no_avg': '물타기 판정', 'held_old_first': '물타기 첫 조건',
+           'held_old_allow': '물타기 첫 조건', 'watch_no_why': '판정 사유', 'fresh': '', 'stale': ''}
+_got402 = {k: _wr402.needs_fill(v) for k, v in _rows402.items()}
+check("needs_fill — 채우기 버튼의 갈래 그대로 (모자란 값 여섯 · 다 있으면 '')", _got402 == _exp402, str(_got402),
+      scanned=len(_got402))
+check("due_reason — 값이 다 있어도 기준일이 앞서면 '기준일 지남' · 같으면 '' · 기준일을 모르면 날짜로 판정 안 함(§3)",
+      _wr402.due_reason(_rows402['stale'], '2026-10-02') == _wr402.DUE_STALE
+      and _wr402.due_reason(_rows402['fresh'], '2026-10-02') == ''
+      and _wr402.due_reason(_rows402['stale'], None) == ''
+      and _wr402.due_reason(_rows402['never'], None) == '엔진 값')
+_due402 = _wr402.due_rows(list(_rows402.values()), '2026-10-02')
+check("due_rows 차례 — 보유 행 먼저 · 그다음 한 번도 안 잰 행 · 나머지는 들어온 순서 · 최신 행은 빠진다 (라운드 322 의 차례)",
+      [w['name'] for w, _r in _due402] == ['b', 'c', 'd', 'e', 'a', 'f', 'h'], str([w['name'] for w, _r in _due402]))
+check("force 면 전부 · 사유 '강제'",
+      len(_wr402.due_rows(list(_rows402.values()), '2026-10-02', force=True)) == 8
+      and {r for _w, r in _wr402.due_rows(list(_rows402.values()), '2026-10-02', force=True)} == {'강제'})
+
+# ── ② 병합 — 못 낸 값으로 옛 값을 지우지 않는다 · 매입가·수량·다른 행은 그대로 ──────────────────
+_m402 = _wr402.merge_into([{'code': '000001', 'paid': 5, 'qty': 2, 'snap_buy': 1}, {'code': '000002', 'snap_buy': 7}],
+                          {'000001': {'snap_buy': 3, 'snap_t1': None, 'snap_why': '', 'snap_at': '2026-10-02'}})
+check("merge_into — 새 값은 얹고 None·'' 은 건너뛰고 매입가·수량·다른 행은 그대로",
+      _m402[0] == {'code': '000001', 'paid': 5, 'qty': 2, 'snap_buy': 3, 'snap_at': '2026-10-02'}
+      and _m402[1] == {'code': '000002', 'snap_buy': 7}, str(_m402))
+
+# ── ③ snap_values 를 가짜 스냅샷·가짜 엔진으로 **실행**한다 (존재는 실행이 아니다 · R195) ───────────
+
+
+class _Q402:
+    seen = None
+
+    def personalize_for_position(self, snapshot, paid, qty, portfolio_weight_pct=None, new_entry_ok=None):
+        self.seen = dict(paid=paid, qty=qty, w=portfolio_weight_pct, ne=new_entry_ok)
+        return {'averaging_down_allowed': False,
+                'averaging_down_checks': [('신규 진입 조건 통과', False), ('표본 게이트', True)],
+                'holder_action_key': 'K', 'holder_action_title': 'T'}
+
+
+_q402 = _Q402()
+_snp402 = {'four_scores': {'current_price': 95, 'target_tech_2nd': 130, 'displayed_fair_value': 110,
+                           'fair_value_confidence': 70},
+           'val_eval': {'sector': '시험업종'}}
+_core402 = {'pullback_zone': 90, 'new_target': 120, 'bucket': '표본외 성적 미달', 'exclude_reason': '', 'hold_trim': 125,
+            'hold_stop': 85, 'horizon_days': 20, 'recommended': False}
+_row402 = {'code': '000009', 'name': 'i', 'paid': 100, 'qty': 3}
+_items402 = [_row402, {'code': '000010', 'paid': 100, 'qty': 1}]
+_v402 = _wr402.snap_values(_row402, _snp402, _core402, '2026-10-02', 'v-test', _items402, _q402, reach_table=None)
+_keys402 = {'snap_buy', 'snap_t1', 'snap_t2', 'snap_fair', 'snap_fair_conf', 'snap_px', 'snap_at', 'snap_engine',
+            'snap_bucket', 'snap_why', 'snap_sector', 'snap_fair_reach', 'snap_avg_down_ok', 'snap_avg_down_fail',
+            'snap_new_entry', 'snap_holder_key', 'snap_holder_title', 'snap_weight_basis', 'snap_hold_trim',
+            'snap_hold_stop', 'snap_hold_at'}
+check("snap_values — 채우기 버튼이 적던 키 묶음 전부 · 기준일·모델 도장 · 사유 없으면 마커 · 물타기는 글자 · 보유 계획 처음 잼",
+      set(_v402) == _keys402 and _v402['snap_at'] == '2026-10-02' and _v402['snap_engine'] == 'v-test'
+      and _v402['snap_why'] == _uk402.WATCH_NO_WHY and _v402['snap_avg_down_ok'] == '불가'
+      and _v402['snap_avg_down_fail'] == '신규 진입 조건 통과' and _v402['snap_new_entry'] == '추천 아님'
+      and _v402['snap_hold_trim'] == 125 and _v402['snap_hold_stop'] == 85 and _v402['snap_hold_at'] == '2026-10-02'
+      and _v402['snap_fair_reach'] == '' and _v402['snap_sector'] == '시험업종' and _v402['snap_buy'] == 90,
+      str(sorted(set(_v402) ^ _keys402)) + ' '
+      + str({k: _v402.get(k) for k in ('snap_why', 'snap_avg_down_ok', 'snap_new_entry', 'snap_hold_at')}))
+check("비중 분모는 넘긴 목록의 보유분 매입원가 (300/400 = 75%) · 첫 조건은 core.recommended",
+      abs(float((_q402.seen or {}).get('w') or 0) - 75.0) < 1e-9 and (_q402.seen or {}).get('ne') is False)
+# 보유 계획 — 두 선 사이·창 안이면 밤 갱신(remeasure=False)이 선을 안 건드린다 · 손절선 아래도 그대로(라운드 373)
+_rowp402 = dict(_row402, snap_hold_trim=125, snap_hold_stop=85, snap_hold_at='2026-10-01')
+_corep402 = dict(_core402, hold_trim=140, hold_stop=70)
+_vp402 = _wr402.snap_values(_rowp402, _snp402, _corep402, '2026-10-02', 'v', _items402, _q402)
+_vb402 = _wr402.snap_values(_rowp402, dict(_snp402, four_scores=dict(_snp402['four_scores'], current_price=80)),
+                            _corep402, '2026-10-02', 'v', _items402, _q402)
+check("밤 갱신은 보유 계획을 스스로 안 바꾼다 — 두 선 사이면 선 그대로 · 손절선 아래면 '계획 유지' 꼬리만(라운드 373)",
+      'snap_hold_trim' not in _vp402 and 'snap_hold_stop' not in _vp402 and 'snap_hold_log' not in _vp402
+      and 'snap_hold_trim' not in _vb402 and _pf402.HOLD_LOG_KEEP_TAIL in str(_vb402.get('snap_hold_log')),
+      str(_vb402.get('snap_hold_log'))[:80])
+_vm402 = _wr402.snap_values(_rowp402, _snp402, _corep402, '2026-10-02', 'v', _items402, _q402, remeasure=True)
+check("사람이 누른 '기준 다시 재기'(remeasure=True)만 새 선으로",
+      _vm402.get('snap_hold_trim') == 140 and _vm402.get('snap_hold_stop') == 70
+      and _pf402.HOLD_LOG_MANUAL_HEAD in str(_vm402.get('snap_hold_log')))
+# refresh — 잴 것이 없으면 엔진을 안 만들고 바로 돌아온다 · 기준일을 못 구하면 재지 않는다(§3)
+_r0_402 = _wr402.refresh(items=[_rows402['fresh']], ref='2026-10-02', write=False)
+_orig_rd402 = _wr402.ref_day
+_wr402.ref_day = lambda now=None: None
+try:
+    _rn402 = _wr402.refresh(items=[_rows402['stale']], write=False)
+finally:
+    _wr402.ref_day = _orig_rd402
+check("refresh — 잴 행 0 이면 측정 0 · 오류 없음 · 기준일 None 이면 오류를 적고 아무것도 안 잰다",
+      _r0_402.get('due') == 0 and _r0_402.get('measured') == 0 and not _r0_402.get('error') and _r0_402.get('wrote') is False
+      and _rn402.get('error') and _rn402.get('measured') == 0, str({k: _rn402.get(k) for k in ('error', 'measured')}))
+
+# ── ④ 화면 — 채우기 버튼은 키 묶음을 직접 적지 않고 모듈을 부른다 · 세션은 파일을 따라간다 ─────────────
+_wa402 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i402 = _wa402.index("if _mrow327 or _clicked166 or _rrow373:")
+_j402 = _wa402.index("_wl_write(_out166)", _i402)                  # 끝 앵커는 시작 뒤에서 (R226)
+_blk402 = _wa402[_i402:_j402]
+check("채우기 버튼 블록이 모듈을 부른다 (core_of · snap_values · merge_into) · 키 묶음·보유 계획 갱신을 직접 적지 않는다",
+      '_wr414.core_of(' in _blk402 and '_wr414.snap_values(' in _blk402 and '_wr414.merge_into(' in _blk402
+      and "'snap_buy':" not in _blk402 and 'hold_plan_update(' not in _blk402,
+      f"{len(_blk402)}자", scanned=len(_blk402))
+check("두 도우미(물타기 · 적정가 도달)도 모듈을 부르는 껍데기다 · 모자란 행 판별도 모듈 것",
+      "_wr414.avg_down_snap(row, snapshot, core, _wl_items(), q_engine)" in _wa402
+      and "_wr414.fair_reach_snap(fs, _reach_table_224())" in _wa402
+      and "_wl_needs_fill = _wr414.needs_fill" in _wa402)
+check("세션이 파일보다 낡으면 다시 읽는다 — 수정시각을 세션에 적고 제 저장 뒤에도 적는다",
+      "st.session_state['watchlist_mtime'] = portfolio.watchlist_mtime()" in _wa402
+      and _wa402.count("portfolio.watchlist_mtime()") >= 3
+      and "_mt414 != st.session_state.get('watchlist_mtime')" in _wa402)
+check("화면이 자동 갱신의 산출물(기록)을 읽어 한 줄 적는다 · 상태 문장은 모듈 한 곳",
+      "_wr414s.status_line(_wr414s.last_run(), t_ref_str)" in _wa402)
+import scripts.lineage_audit as _la402                            # noqa: E402
+_code402 = _la402.code_lines('watch_refresh.py')
+check("모듈은 Streamlit 을 모른다 (밤에 혼자 돈다)",
+      not any('streamlit' in _ln for _i, _ln in _code402), scanned=len(_code402))
+
+# ── ⑤ 상태 문장 · 기록 · 잠금 · 스크립트 — 임시 파일로 실행 ───────────────────────────────────────
+with _tf402.TemporaryDirectory() as _td402:
+    _lg402 = _os402.path.join(_td402, 'log.jsonl')
+    check("기록이 없으면 '돈 적이 없다'고 말한다 (켜져 있다가 아니라 산출물로 · 라운드 412)",
+          _wr402.last_run(_lg402) is None and '한 번도' in _wr402.status_line(None))
+    _wr402._append_log({'at': '2026-10-02T17:05:00', 'ref_day': '2026-10-02', 'due': 51, 'measured': 50,
+                        'failed': [('1', 'x', 'e')]}, _lg402)
+    _wr402._append_log({'at': '2026-10-02T17:09:00', 'ref_day': '2026-10-02', 'due': 0, 'measured': 0, 'failed': []}, _lg402)
+    _l402 = _wr402.last_run(_lg402)
+    with open(_lg402, encoding='utf-8') as _f402:
+        _first402 = _json402.loads(_f402.read().splitlines()[0])
+    check("last_run 은 마지막 줄 · status_line 은 때·기준일·수·실패를 적고 다음 기준일엔 '아직 안 돌았다'",
+          _l402.get('at') == '2026-10-02T17:09:00' and '2026-10-02 17:09' in _wr402.status_line(_l402, '2026-10-02')
+          and '아직 안 돌았습니다' in _wr402.status_line(_l402, '2026-10-05')
+          and '아직 안 돌았습니다' not in _wr402.status_line(_l402, '2026-10-02')
+          and '51 중 50 갱신' in _wr402.status_line(_first402) and '실패 1' in _wr402.status_line(_first402),
+          _wr402.status_line(_first402))
+    _lk402 = _os402.path.join(_td402, 'x.lock')
+    _a1 = _wr402.acquire_lock(_lk402)
+    with open(_lk402, 'w', encoding='utf-8') as _f402:
+        _f402.write(f'{_os402.getppid()} other-live\n')          # 살아 있는 **다른** 프로세스(부모)의 잠금
+    _a2 = _wr402.acquire_lock(_lk402)
+    _wr402.release_lock(_lk402)
+    _a3 = _wr402.acquire_lock(_lk402)
+    with open(_lk402, 'w', encoding='utf-8') as _f402:
+        _f402.write('4000000001 stale\n')                        # 없는 pid — 죽은 실행의 잠금
+    _a4 = _wr402.acquire_lock(_lk402)
+    _wr402.release_lock(_lk402)
+    check("잠금 — 잡으면 True · 살아 있는 다른 프로세스가 쥐고 있으면 False · 풀면 다시 True · 죽은 pid 의 잠금은 걷어낸다",
+          (_a1, _a2, _a3, _a4) == (True, False, True, True), str((_a1, _a2, _a3, _a4)))
+    _wlf402 = _os402.path.join(_td402, 'wl.json')
+    _pf402.save_watchlist([{'code': '000001', 'name': '시험A', 'paid': 10, 'qty': 1, 'snap_at': '2026-09-04', 'snap_buy': 9,
+                            'snap_hold_stop': 8, 'snap_hold_trim': 12, 'snap_avg_down_ok': '불가',
+                            'snap_new_entry': '추천 아님'},
+                           {'code': '000002', 'name': '시험B'}], path=_wlf402)
+    check("portfolio.watchlist_mtime — 있으면 수정시각 · 없으면 None · 저장은 임시 파일을 남기지 않는다",
+          isinstance(_pf402.watchlist_mtime(_wlf402), float) and _pf402.watchlist_mtime(_wlf402 + '.none') is None
+          and not _os402.path.exists(_wlf402 + '.tmp'))
+    _mt402 = _os402.path.getmtime(_wlf402)
+    _env402 = dict(_os402.environ, GAEUM_NO_LOCAL_WRITE='1', PYTHONIOENCODING='utf-8')
+    _r402 = _sp402.run([_sys402.executable, _os402.path.join(PROJ, 'scripts', 'refresh_watchlist.py'), '--plan',
+                        '--file', _wlf402], capture_output=True, text=True, encoding='utf-8', errors='replace',
+                       env=_env402, cwd=PROJ, timeout=300)
+    check("scripts/refresh_watchlist.py --plan — 돌고(종료 0) 다시 잴 행 둘을 사유와 함께 적고 파일을 안 바꾼다 (네트워크 0)",
+          _r402.returncode == 0 and '다시 잴 행 2 / 2' in _r402.stdout and '엔진 값' in _r402.stdout
+          and _wr402.DUE_STALE in _r402.stdout and _os402.path.getmtime(_wlf402) == _mt402,
+          (_r402.stdout + _r402.stderr)[-300:])
+
+# ── ⑥ 작업 스케줄러 등록 스크립트 · 백업 제외 ─────────────────────────────────────────────────────
+_ps402 = _read148(_os.path.join(PROJ, 'scripts', 'register_watch_refresh_task.ps1'))
+_at402 = _re402.search(r'\$At = "(\d{2}):(\d{2})"', _ps402)
+check("등록 스크립트 — 같은 스크립트를 · 평일만 · 놓친 시작은 켜지면 바로 · 시작 시각이 정규장 마감(MARKET_CLOSE) 뒤",
+      'refresh_watchlist.py' in _ps402 and 'StartWhenAvailable' in _ps402
+      and 'Monday, Tuesday, Wednesday, Thursday, Friday' in _ps402 and 'MultipleInstances IgnoreNew' in _ps402
+      and _at402 is not None
+      and (int(_at402.group(1)), int(_at402.group(2))) > (_be402.MARKET_CLOSE.hour, _be402.MARKET_CLOSE.minute),
+      _at402.group(0) if _at402 else '시각 없음')
+import scripts.backup_research_data as _bk402                     # noqa: E402
+check("자동 갱신 기록(어느 종목을 쟀는지)은 백업에 안 실린다 — DENY 에 있고 고르는 함수가 셋 다 거른다 (값으로 · R195)",
+      'watch_refresh*' in _bk402.DENY
+      and not any(_bk402.picked(n) for n in ('watch_refresh_log.jsonl', 'watch_refresh_run.txt', 'watch_refresh.lock'))
+      and _bk402.picked('premarket_history.jsonl'),               # 고르는 함수 자체는 산다 (양방향)
+      scanned=3)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

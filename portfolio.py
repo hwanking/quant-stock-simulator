@@ -2585,8 +2585,25 @@ def save_watchlist(items, path=WATCHLIST_FILE):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     payload = {"saved_at": datetime.now().isoformat(timespec="seconds"),
                "items": clean}
+    # 라운드 414 — 임시 파일에 다 쓰고 한 번에 바꿔 끼운다. 밤에 혼자 도는 갱신(`watch_refresh`)과 앱이 같은
+    #   파일을 쓰므로 반쯤 쓰인 파일을 상대가 읽는 일이 없게 한다. 바꿔 끼우기가 막히면(상대가 그 순간 읽는 중)
+    #   짧게 다시 해 보고, 그래도 안 되면 종전처럼 바로 쓴다 — 저장을 포기하지 않는다.
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    for _ in range(5):
+        try:
+            os.replace(tmp, path)
+            return path
+        except PermissionError:
+            import time as _time
+            _time.sleep(0.05)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
     return path
 
 
@@ -2596,6 +2613,14 @@ def load_watchlist(path=WATCHLIST_FILE):
     with open(path, encoding="utf-8") as fh:
         payload = json.load(fh)
     return payload.get("items", []), payload.get("saved_at")
+
+
+def watchlist_mtime(path=WATCHLIST_FILE):
+    """관심종목 파일의 수정시각(초) · 없으면 None (라운드 414 — 세션이 파일보다 낡았는지 보는 한 곳)."""
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
 
 
 def delete_watchlist(path=WATCHLIST_FILE):
