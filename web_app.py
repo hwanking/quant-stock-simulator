@@ -8972,15 +8972,18 @@ if _watch_now:
     except Exception:
         _res = None
     if _res:
-        _wcol = '#35C98B' if _res['resolved'] else '#9DAABC'
+        # 라운드 416 — 초록은 '살 수 있다'로 읽힌다. 가격 조건이 풀려도 중앙 판정이 신규 매수를 허락할 때만 초록이고,
+        #   아니면 주의색이다(문장도 중앙 판정을 따른다 · watch_alerts.sentence).
+        _wcol = ('#35C98B' if (_res['resolved'] and CORE.get('recommended'))
+                 else '#F2B84B' if _res['resolved'] else '#9DAABC')
         _lines = ''.join(
             f"<li style='margin:3px 0; color:#35C98B;'>{_uk._esc(x)}</li>"
             for x in _res['met'])
         _lines += ''.join(
             f"<li style='margin:3px 0;'>{_uk._esc(x)}</li>"
             for x in (_res['unmet'] + _res.get('pending', [])))
-        _hdr = (_wa.sentence(_watch_now, _res) if _res['resolved']
-                else '등록한 관망 조건 — 아직 기다리는 중입니다')
+        _hdr = (_wa.sentence(_watch_now, _res, CORE) if _res['resolved']
+                else '등록한 가격 조건 — 아직 기다리는 중입니다')
         _watch_html = (
             f"<div style='margin-top:12px; background:#1C2635; "
             f"border-radius:12px; padding:12px 16px;'>"
@@ -9418,6 +9421,11 @@ if _NA.get('alert'):
                    if not _watch_now else
                    "이 종목은 알림 감시 중입니다. 조건은 이 화면을 열 때마다 "
                    "다시 잽니다.")
+        # 라운드 416 — 알림은 가격·과열·거래량만 본다. 조건이 풀려도 사는 것은 중앙 판정이 정한다 — 지금 판정을 같은
+        #   자리에 적는다(신규 매수 추천이 아니면). 2026-10-02 실측: 알림 조건이 붙는 리포트 후보 140개 중 추천 0.
+        if not CORE.get('recommended'):
+            st.caption(f"이 알림은 가격 조건만 봅니다. 지금 중앙 판정은 '{CORE.get('bucket') or '판정 없음'}'이라 "
+                       f"가격 조건이 풀려도 그것만으로 사지 않습니다 — 사도 되는지는 그날 다시 잰 중앙 판정이 정합니다.")
 
 # ═══ 아주 쉬운 결론 — 신규 매수자와 보유자를 절대 섞지 않는다 ═══════════════
 # 사용자 상태 선택기 (v2): 분석 화면 안에서 미보유/보유를 고른다.

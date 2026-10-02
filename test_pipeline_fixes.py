@@ -32367,6 +32367,45 @@ check("scripts/nightly_local.py --plan — 돌고(종료 0) 두 단계를 적고
       (_r403.stdout + _r403.stderr)[-200:])
 
 
+print("=" * 72)
+print("§404 알림이 풀려도 사는 것은 중앙 판정이 정한다 — 알림 문장·색이 판정을 따른다 (라운드 416)")
+print("=" * 72)
+# 2026-10-02 실측: 개장 전 리포트 후보 498개 중 알림 조건이 붙는 후보 140개, 그중 중앙 판정이 신규 매수를 허락한 것 0개.
+#   종전 알림 문장은 풀리면 늘 "1차 분할매수 검토 구간에 들어왔습니다" 였다 — 중앙 판정을 모르는 두 번째 판정자(R193·R246·R387).
+import watch_alerts as _wa404                                      # noqa: E402
+_it404 = dict(symbol='T', name='시험', kind='pullback', levels=[{'kind': 'support', 'level': 100.0}],
+              need_cooldown=False, need_volume_calm=False)
+_res404 = _wa404.check_one(_it404, price=100, low=99.8, high=101, close=100.2)
+_why404 = '손익비가 기준에 못 미칩니다. 기다려도 셈이 거의 그대로입니다.'
+_s_none = _wa404.sentence(_it404, _res404)
+_s_rec = _wa404.sentence(_it404, _res404, {'recommended': True, 'bucket': '오늘 매수 가능'})
+_s_no = _wa404.sentence(_it404, _res404, {'recommended': False, 'bucket': '추천 제외', 'exclude_reason': _why404})
+check("가격 조건이 풀린 시험 행이다 (전제)", _res404['resolved'] is True)
+check("중앙 판정을 못 받으면 사도 되는지 말하지 않는다 — '분할매수' 낱말이 없다 (지어낸 허락 금지 · R304)",
+      '사도 되는지는 말하지 않습니다' in _s_none and '분할매수' not in _s_none, _s_none)
+check("중앙 판정이 신규 매수 추천일 때만 '1차 분할매수 검토 구간'을 말한다",
+      '분할매수 검토 구간' in _s_rec and '분할매수' not in _s_no, _s_rec)
+check("추천이 아니면 그 칸 이름과 사유 첫 문장 · '이 알림만으로 사지 않습니다'",
+      "'추천 제외'" in _s_no and '사지 않습니다' in _s_no and '손익비가 기준에 못 미칩니다.' in _s_no
+      and '기다려도 셈이' not in _s_no, _s_no)
+check("안 풀렸으면 문장 없음 (종전 그대로)",
+      _wa404.sentence(_it404, dict(_res404, resolved=False), {'recommended': True}) is None)
+_wa404s = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 알림 문장에 중앙 판정(CORE)을 넘긴다 · 초록은 풀리고 **추천일 때만** · 등록 칸에 지금 판정 한 줄",
+      "_wa.sentence(_watch_now, _res, CORE)" in _wa404s
+      and "_res['resolved'] and CORE.get('recommended')" in _wa404s
+      and "이 알림은 가격 조건만 봅니다. 지금 중앙 판정은" in _wa404s)
+import ast as _ast404                                              # noqa: E402
+_wa404t = _ast404.parse(_read148(_os.path.join(PROJ, 'watch_alerts.py')))
+_doc404 = {id(fn.body[0].value) for fn in _ast404.walk(_wa404t)
+           if isinstance(fn, (_ast404.FunctionDef, _ast404.Module)) and fn.body
+           and isinstance(fn.body[0], _ast404.Expr) and isinstance(getattr(fn.body[0], 'value', None), _ast404.Constant)}
+_strs404 = [n.value for n in _ast404.walk(_wa404t)
+            if isinstance(n, _ast404.Constant) and isinstance(n.value, str) and id(n) not in _doc404]
+check("알림 모듈에 '분할매수 검토'를 무조건 말하는 옛 꼬리가 남아 있지 않다 (문자열만 · 주석·독스트링 제외)",
+      not any('분할매수 검토 구간에 들어왔습니다' in s for s in _strs404), scanned=len(_strs404))
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

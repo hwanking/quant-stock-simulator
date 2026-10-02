@@ -170,14 +170,34 @@ def check_one(item, price, low, high, close, bb_pos=None, wr=None,
             'resolved': resolved, 'why': why}
 
 
-def sentence(item, res):
-    """알림 문장 — 무엇이 풀렸고 이제 무엇을 하면 되는지."""
+def _first_sentence(text):
+    t = str(text or '').strip()
+    if not t:
+        return ''
+    i = t.find('다. ')
+    return t[:i + 2] if i > 0 else t
+
+
+def sentence(item, res, core=None):
+    """알림 문장 — 무엇이 풀렸고, **사도 되는지는 중앙 판정이 말한다** (라운드 416).
+
+    ⚠️ 종전 꼬리는 *"1차 분할매수 검토 구간에 들어왔습니다"* 였다. 이 모듈은 지지·돌파·과열·거래량만 재고 중앙 판정
+    (`verdict_core` · 신규 매수 추천 11조건)을 모른다 — 라운드 193·246·387 이 막은 '판정자가 둘'의 모양이다. 2026-10-02
+    실측: 개장 전 리포트 후보 498개 중 알림 조건이 붙는 후보 140개, 그중 중앙 판정이 신규 매수를 허락한 것 **0개**
+    (추천 제외 76 · 과열 해소 대기 39 · …). 그러니 알림이 풀리는 날 화면은 거의 언제나 '분할매수 검토'와 '추천 제외'를 같이
+    말했다. 꼬리는 `core`(지금 이 종목의 중앙 판정)를 따른다 — 허락이면 그 사실을, 아니면 그 칸과 사유 첫 문장을,
+    못 받았으면 **사도 되는지는 말하지 않는다**(§3 · 지어낸 허락이 가장 비싼 오답이다 · R304)."""
     nm = item.get('name') or item.get('symbol')
     if not res['resolved']:
         return None
-    head = f"{nm} — 이전 관망 조건이 해소됐습니다."
+    head = f"{nm} — 등록한 가격 조건이 풀렸습니다."
     body = ' · '.join(res['met'])
-    tail = ('1차 분할매수 검토 구간에 들어왔습니다.'
-            if item.get('kind') in ('pullback', 'observe')
-            else '돌파 후 지지가 확인됐습니다.')
+    if not isinstance(core, dict) or not core:
+        tail = '이 알림은 가격·과열·거래량만 봅니다 — 중앙 판정을 받지 못해 사도 되는지는 말하지 않습니다.'
+    elif core.get('recommended'):
+        tail = '중앙 판정도 지금 신규 매수 추천입니다 — 1차 분할매수 검토 구간입니다.'
+    else:
+        why = _first_sentence(core.get('exclude_reason'))
+        tail = (f"다만 중앙 판정은 '{core.get('bucket') or '판정 없음'}'입니다 — 이 알림만으로 사지 않습니다"
+                + (f" ({why})" if why else '') + '.')
     return f"{head} {body}. {tail}"
