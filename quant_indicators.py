@@ -2267,8 +2267,11 @@ class QuantIndicatorsEngine:
 
     @staticmethod
     def build_easy_advice(fs, verdict, curr_price, user_avg=None, user_qty=None,
-                          core=None, hold_levels=None, judge=None, label=None):
+                          core=None, hold_levels=None, judge=None, label=None, add_line=None):
         """
+        add_line — 라운드 413. 진입가 **아래**인데 추가매수를 안 하는 자리의 문장(`ui_kit.hold_add_blocked_line`)도
+                   화면이 넘긴다(judge 와 같은 이유 · 표·지시서·챗과 같은 말). `(현재가, 진입가, 물타기 가능 여부)` →
+                   문장 또는 None. 안 넘기면 종전 문장 그대로.
         judge · label — 보유자 갈래를 정하는 함수(`ui_kit.holder_kind`)와 이름표 함수(`ui_kit.hold_label`).
                       **화면이 넘긴다**(라운드 386). 엔진이 화면 모듈을 불러오면 판정 경로에 화면 모듈이 들어와
                       격리 검사(§182 · R192)가 깨진다 — 규칙의 자리는 그대로 한 곳(ui_kit)이고 여기는 받기만 한다.
@@ -2493,9 +2496,17 @@ class QuantIndicatorsEngine:
                                      f"아닙니다. 손절선 {w(_hs)}은 반드시 지키세요(기준선: {_basis}). "
                                      + odds)}
             elif _kind == '보유 유지':
+                # 라운드 413 — 진입가 아래인데 '가능'이 아니면 화면이 넘긴 한 곳의 문장을(어느 칸이 막는지 · 실측).
+                _blk413 = None
+                if add_line is not None:
+                    try:
+                        _blk413 = add_line(curr_price, _hb, _had)
+                    except Exception:                              # noqa: BLE001
+                        _blk413 = None
                 holder = {'emoji': '', 'line': f"{_label} · 손절선은 지키면서",
                           'detail': (_ret_txt + f"{_why}. {w(_ht)}에 닿으면 일부 매도, 손절선 "
-                                     f"{w(_hs)}에 닿으면 정리합니다(기준선: {_basis}). " + _no_avg_down)}
+                                     f"{w(_hs)}에 닿으면 정리합니다(기준선: {_basis}). "
+                                     + (_blk413 or _no_avg_down))}
             else:
                 holder = {'emoji': '', 'line': ('판단 보류 — 보유 기준값이 없습니다.'
                                                 if _kind == '보유 기준 미산출' else '판단 보류'),

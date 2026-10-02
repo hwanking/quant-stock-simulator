@@ -29833,7 +29833,9 @@ check("화면이 한 번 정한 보유 기준선(_HOLD_LV386)을 지시서와 �
       '_act386 = _uk.watch_action(_row386, realtime_price) or {}' in _wc377
       and 'market=_mkt_state, hold_core=_hold_core386)' in _wc377
       and 'core=CORE, hold_levels=_HOLD_LV386,' in _wc377
-      and 'judge=_uk.holder_kind, label=_uk.hold_label)' in _wc377
+      # 라운드 413 — 같은 호출에 add_line(킷 한 곳의 추가매수 문장)이 더해져 닫는 괄호가 뒤로 갔다. 잠그는 성질은
+      #   '판정자·이름표를 킷에서 넘긴다'이지 괄호 자리가 아니다(R98b).
+      and 'judge=_uk.holder_kind, label=_uk.hold_label' in _wc377
       and 'user_avg=None, user_qty=None, core=CORE)' in _wc377)
 _pm377 = '\n'.join(_ln for _i, _ln in _la377.code_lines('premarket.py'))
 check("개장 전 카드도 중앙 판정을 먼저 만들고 쉬운 결론에 넘긴다",
@@ -31899,6 +31901,91 @@ for _fn400 in ('why_pick.py', 'product_ops.py'):
             _reads400.append(f'{_fn400}:{_nd400.lineno}:{_nd400.args[0].value}')
 check("안 돌던 읽기 셋(가까운 지지선 · 20일 등락 선반영 · 월봉 10선 과열권 이슈)을 다시 읽지 않는다",
       not _reads400, str(_reads400), scanned=2)
+
+
+print("=" * 72)
+print("§401 진입가 아래인데 추가매수 안 함 — 두 사실을 한 문장에 · 네 소비자가 한 곳을 부른다 (라운드 413)")
+print("=" * 72)
+# 사용자(2026-10-02): "목표매수가 아래인데 추매 안 해? 이런 주식들 어떻게 결정해야 해?" 보유 행 셋이 전부 '보유 유지'에
+#   추가매수 안 함이고 막은 것은 각각 달랐다(표본외 성적 미달 · 옛 규칙 대기 · 조건 2개). 보이는 줄은 '두 선 사이'뿐이었다.
+import ui_kit as _uk401                                          # noqa: E402
+import trade_plan as _tp401                                      # noqa: E402
+import gaeum_chat as _gc401                                      # noqa: E402
+_why401 = '표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. 사례가 쌓인다고 풀리는 조건이 아닙니다 — 시험 문장.'
+_b401 = {'paid': 11000, 'qty': 10, 'snap_buy': 9800, 'snap_hold_stop': 9000, 'snap_hold_trim': 12000,
+         'snap_hold_at': '2026-09-25', 'snap_at': '2026-09-29', 'snap_new_entry': '불가',
+         'snap_bucket': '표본외 성적 미달', 'snap_avg_down_ok': '불가', 'snap_avg_down_fail': '신규 진입 조건 통과',
+         'snap_why': _why401}
+_n401 = {k: v for k, v in _b401.items() if k not in ('snap_avg_down_ok', 'snap_avg_down_fail')}
+_r401 = {
+    'mkt_below': _uk401.watch_action(_b401, 9500),
+    'mkt_above': _uk401.watch_action(_b401, 10500),
+    'pos_below': _uk401.watch_action(dict(_b401, snap_avg_down_fail='신규 진입 조건 통과 · 손익비(현재가·2차) 기준 통과'), 9500),
+    'hold_below': _uk401.watch_action(dict(_b401, snap_avg_down_fail=_uk401.AVG_DOWN_DATA_GATE), 9500),
+    'none_below': _uk401.watch_action(_n401, 9500),
+}
+check("판정은 그대로다 — 다섯 행 전부 '보유 유지' (문장만 더했다 · holder_kind 불변)",
+      all((_r401[k] or {}).get('kind') == '보유 유지' for k in _r401),
+      str({k: (_r401[k] or {}).get('kind') for k in _r401}), scanned=len(_r401))
+_l401 = {k: str((_r401[k] or {}).get('hold_add_line') or '') for k in _r401}
+check("진입가 아래 + 시장 게이트: 가격·판정·막은 칸 이름이 한 줄에 (표의 짧은 판)",
+      _l401['mkt_below'].startswith('진입가 9,800원 아래(-3.1%)') and '추가매수 안 함' in _l401['mkt_below']
+      and '표본외 성적 미달' in _l401['mkt_below'] and '새로 사도 되는 판정이 아닙니다' in _l401['mkt_below'],
+      _l401['mkt_below'])
+check("진입가 위면 줄이 없다 — 종전(§392)과 같다 (양방향)",
+      (_r401['mkt_above'] or {}).get('hold_add_line') is None)
+check("포지션 조건 미충족이면 어느 조건인지 · 데이터 게이트면 '판단 보류' · 안 쟀으면 '아직 안 잼'",
+      '미충족:' in _l401['pos_below'] and '손익비' in _l401['pos_below']
+      and '추가매수 판단 보류' in _l401['hold_below']
+      and '아직 안 잼' in _l401['none_below'] and '지금 재기' in _l401['none_below'],
+      f"{_l401['pos_below'][:60]} | {_l401['hold_below'][:40]} | {_l401['none_below'][:40]}")
+check("긴 판(툴팁)에만 라운드 224 실측이 붙고, 진입가 위에는 안 붙는다",
+      '2026-09-04 실측' in str(_r401['mkt_below'].get('hold_tip')) and '56,911' in str(_r401['mkt_below'].get('hold_tip'))
+      and '56,911' not in str(_r401['mkt_above'].get('hold_tip')))
+check("보이는 줄은 말줄임 없이 끝난다",
+      all(not v.endswith('…') for v in _l401.values()), scanned=len(_l401))
+# 수의 출처 — 문장의 수가 라운드 224 결과 문서의 표와 같다 (R344 — 글자를 잠근 검사는 틀린 수도 지킨다 · 출처와 댄다)
+_d401 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R224_AVG_DOWN.md'))
+check("'56,911쌍 · 2026-09-04' 는 라운드 224 문서의 표 그대로다 (세 구간 차이 +1.7 · +3.9 · −5.8 도 그 문서에)",
+      '56,911' in _d401 and '2026-09-04' in _d401 and '+1.7' in _d401 and '+3.9' in _d401 and '−5.8' in _d401
+      and '56,911' in _uk401.BELOW_ENTRY_FACT and '2026-09-04' in _uk401.BELOW_ENTRY_FACT)
+# 지시서 — 진입가 아래면 같은 문장 · 위면 조건을 바르게 ("매수구간까지 눌리면 본다"는 거짓이 되는 자리였다 · R387)
+_core401 = dict(current_price=9500, hold_stop=9000, hold_trim=12000, pullback_zone=9800, avg_down_ok=False,
+                bucket='표본외 성적 미달', exclude_reason=_why401)
+_hb401 = _tp401.for_holder(_core401, 11000, 10)
+_ha401 = _tp401.for_holder(dict(_core401, current_price=10500), 11000, 10)
+check("매매 지시서 보유 유지: 진입가 아래면 '새로 사도 되는 판정이 아닙니다(칸)' + 실측 · 위면 바른 조건 문장",
+      _hb401.get('kind') == '보유 유지' and '새로 사도 되는 판정이 아닙니다' in str(_hb401.get('add_note'))
+      and '표본외 성적 미달' in str(_hb401.get('add_note')) and '56,911' in str(_hb401.get('add_note'))
+      and '진입가 아래로 와도' in str(_ha401.get('add_note')),
+      str(_hb401.get('add_note'))[:100])
+import ast as _ast401                                              # noqa: E402
+# 살아 있는 `for_holder` 본문만 본다 — `_for_holder_legacy`(라운드 357 이 기록으로 남긴 옛 갈래 · 부르는 곳 0)에는
+#   옛 문장이 **일부러** 남아 있다. 파일 전체를 훑으면 그것을 결함으로 센다(첫 판이 그랬다 · R194).
+_tp_mod401 = _ast401.parse(_read148(_os.path.join(PROJ, 'trade_plan.py')))
+_tp_fn401 = next(n for n in _tp_mod401.body if isinstance(n, _ast401.FunctionDef) and n.name == 'for_holder')
+_tp_strs401 = [n.value for n in _ast401.walk(_tp_fn401)
+               if isinstance(n, _ast401.Constant) and isinstance(n.value, str)]
+check("살아 있는 지시서(for_holder)의 문자열에 옛 꼬리('매수구간까지 눌렸을 때만')가 없다 (주석·옛 갈래는 안 본다)",
+      not any('매수구간까지 눌렸을 때만' in s for s in _tp_strs401), scanned=len(_tp_strs401))
+# 가늠 AI — 같은 자리 같은 말
+_ctx401 = dict(price=9500, hold_trim=12000, hold_stop=9000, entry=9800, avg_down_ok=False,
+               bucket='표본외 성적 미달', bucket_why=_why401)
+_ans401 = _gc401._ans_holder(_ctx401, 11000)
+check("가늠 AI 보유 답도 같은 문장을 낸다 (진입가 아래 · 안 사는 이유 · 실측)",
+      '새로 사도 되는 판정이 아닙니다' in _ans401 and '표본외 성적 미달' in _ans401 and '56,911' in _ans401,
+      _ans401[-160:])
+check("'이미 갖고 계신 분께' 카드는 화면이 넘긴 같은 함수를 부른다 (엔진은 받기만 · 판정 경로 격리)",
+      'add_line=None' in _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+      and 'add_line(curr_price, _hb, _had)' in _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+      and 'hold_add_blocked_line(' in _read148(_os.path.join(PROJ, 'web_app.py')))
+_calls401 = {}
+for _fn401 in ('ui_kit.py', 'trade_plan.py', 'gaeum_chat.py', 'web_app.py'):
+    _calls401[_fn401] = sum(1 for n in _ast401.walk(_ast401.parse(_read148(_os.path.join(PROJ, _fn401))))
+                            if isinstance(n, _ast401.Call) and getattr(n.func, 'attr', getattr(n.func, 'id', None))
+                            == 'hold_add_blocked_line')
+check("네 소비자 전부가 한 곳(hold_add_blocked_line)을 부른다 — 문장을 각자 짓지 않는다 (§4 · R246)",
+      all(v >= 1 for v in _calls401.values()), str(_calls401), scanned=len(_calls401))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

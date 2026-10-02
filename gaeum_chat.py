@@ -282,7 +282,10 @@ def _ans_holder(ctx, avg):
     elif kind == '추가 매수 가능':
         out.append(f"추가 매수는 실행 기준({_w(e)} 이하)에서만.")
     else:
-        out.append('추가 매수는 지금 조건이 아닙니다.')
+        # 라운드 413 — 진입가 아래인데 안 사는 자리면 그 둘을 한 문장으로(킷 한 곳 · 표·지시서·카드와 같은 말).
+        _blk413 = _uk304.hold_add_blocked_line(px, e, _ad, fails=None, bucket=ctx.get('bucket'),
+                                               bucket_why=ctx.get('bucket_why'))
+        out.append(_blk413 or '추가 매수는 지금 조건이 아닙니다.')
     out.append('신규 매수 기준과 보유자 기준은 다른 값입니다 — 섞지 않습니다.')
     return '\n'.join(out)
 

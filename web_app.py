@@ -9614,7 +9614,10 @@ _easy = q_engine.build_easy_advice(
     user_avg=(user_entry_price if user_entry_price > 0 else None),
     user_qty=(user_quantity if user_quantity > 0 else None),
     core=CORE, hold_levels=_HOLD_LV386,                  # 라운드 386 — 지시서·표와 같은 판정자·같은 선
-    judge=_uk.holder_kind, label=_uk.hold_label)         #   규칙은 킷 한 곳 · 엔진은 받기만(판정 경로 격리)
+    judge=_uk.holder_kind, label=_uk.hold_label,         #   규칙은 킷 한 곳 · 엔진은 받기만(판정 경로 격리)
+    # 라운드 413 — 진입가 아래인데 추가매수를 안 하는 자리의 문장도 킷 한 곳(표·지시서·챗과 같은 말)
+    add_line=(lambda _px, _buy, _ok: _uk.hold_add_blocked_line(
+        _px, _buy, _ok, fails=None, bucket=CORE.get('bucket'), bucket_why=CORE.get('exclude_reason'))))
 _ec1, _ec2 = st.columns(2)
 with _ec1:
     _nb = _easy['new_buyer']

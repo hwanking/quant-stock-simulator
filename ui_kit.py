@@ -1960,6 +1960,68 @@ def avg_down_class(ok, fails):
     return '포지션미달', '추가매수 안 함', _why
 
 
+#: 라운드 413 — '진입가 아래'라는 사실 자체의 값어치. 라운드 224 가 쟀다(2026-09-04 · 25봉 간격 부분집합 · 매수권
+#:   58+ 쌍 56,911 · 직전 관측 대비 하락 중 vs 아님 · 날짜 군집 부트 2,000회): 적중 차이 train +1.7 · valid +3.9 ·
+#:   blind −5.8%p — **세 구간 모두 CI95 가 0 을 포함**하고 부호가 갈린다. '없다'가 아니라 '이 잣대로 못 봤다'(R113)라
+#:   그렇게 적는다. 수는 `docs/RESULT_R224_AVG_DOWN.md` 의 표 그대로이고 회귀가 문서와 대 본다(R344 — 수의 출처).
+BELOW_ENTRY_FACT = ('진입가 아래라는 사실만으로 판단이 좋아진다는 증거는 못 찾았습니다'
+                    '(2026-09-04 실측 · 매수권 56,911쌍 · 세 구간 모두 차이가 0 을 포함)')
+
+
+def hold_add_blocked_line(px, buy, avg_down_ok, fails=None, bucket=None, bucket_why=None, short=False):
+    """현재가가 진입가 **이하**인데 추가매수가 '가능'이 아닐 때 — 그 둘을 **한 문장**으로 잇는다. 아니면 None.
+
+    라운드 413 — 사용자: *"목표매수가 아래인데 추매 안 해? 이런 주식들 어떻게 결정해야 해?"* 표의 가격 칸은
+    진입가 아래를 보여 주는데, 보유 행의 보이는 줄은 '보유 유지 — 두 선 사이'뿐이고 추가매수를 왜 안 하는지는
+    툴팁에만 있었다(라운드 403 이 줄을 접은 자리). 가격 조건은 맞는데 안 산다는 말이 같은 줄에 없으면 사용자는
+    엔진이 가격을 못 본 줄 안다(R214·R322 의 *같은 종목에 두 이름표*). 보유 행 실측(2026-10-02 · 3행): 셋 다
+    '보유 유지'에 추가매수 안 함이고 막은 것은 각각 달랐다 — 표본외 성적 미달 · 옛 규칙의 거래량 대기 · 조건 2개
+    미충족. **판정·등급·문턱은 하나도 안 바꾼다** — 이미 찍힌 6조건 결과(`avg_down_class`)와 중앙 판정의 칸·사유
+    (`snap_bucket`·`snap_why` · R240)를 **읽어서 말로 옮길 뿐**이다(§4). 네 소비자(관심종목 행 · 매매 지시서 ·
+    '이미 갖고 계신 분께' 카드 · 가늠 AI)가 이 한 곳을 부른다(R246 — 고침이 판정자 한 명에게만 가지 않게).
+
+    `fails` 를 모르는 호출자(지시서·카드·챗)는 6조건 중 **어느 것**이 걸렸는지 모른다 — 그때는 중앙 판정의 칸
+    (`bucket`)만으로 말할 수 있는 것만 말한다: 첫 조건이 *신규 매수 추천*이므로 칸이 '오늘 매수 가능'이 아니면
+    그 조건은 **확실히** 미충족이다(다른 조건은 모른다고 적는다 · §3).
+    `short=True` 는 표 한 칸용(가격·판정·막은 칸 이름까지), 아니면 사유 문장과 라운드 224 의 실측까지 붙인다.
+    """
+    def _n(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    px, buy = _n(px), _n(buy)
+    if not (px and buy) or px > buy or avg_down_ok in (True, '가능'):
+        return None
+    _gap = (px / buy - 1.0) * 100.0
+    head = f"진입가 {buy:,.0f}원 아래({_gap:+.1f}%)"
+    bucket = str(bucket or '').strip()
+    _w = str(bucket_why or '').strip()
+    why1 = (_w.split('다. ')[0] + '다.') if '다. ' in _w else _w     # 첫 문장만 — 전체는 툴팁·상세에 있다
+    if avg_down_ok in (False, '불가'):
+        if fails is not None:
+            cls, _lab, ad_why = avg_down_class(False, list(fails))
+        else:
+            cls, ad_why = None, ''
+        if cls == '보류':
+            verb, reason = '추가매수 판단 보류', '표본·데이터 게이트를 못 넘어 판단하지 않았습니다'
+        elif cls == '포지션미달':
+            verb, reason = '추가매수 안 함', (ad_why or '조건 미충족')
+        elif cls == '시장게이트' or (cls is None and bucket and bucket != '오늘 매수 가능'):
+            verb = '추가매수 안 함'
+            reason = ('새로 사도 되는 판정이 아닙니다' + (f"({bucket})" if bucket else '')
+                      + ('' if short or not why1 else f": {why1}")
+                      + ('' if (short or fails is not None) else ' — 나머지 조건은 이 화면에서 못 받았습니다'))
+        else:
+            verb, reason = '추가매수 안 함', '추가매수 조건 미충족(어느 조건인지는 관심종목 행에서 봅니다)'
+        line = f"{head}지만 {verb} — {reason}"
+    else:
+        line = f"{head} · 추가매수 아직 안 잼 — 사기 전에 '지금 재기'로 6조건을 받으세요"
+    return line if short else f"{line} · {BELOW_ENTRY_FACT}"
+
+
 def holder_kind(px, hold_stop, hold_trim, buy=None, avg_down_ok=None):
     """보유자 행동 판정 — **이 저장소에서 유일한 자리**. `(kind, why)` 또는 `(None, 사유)`.
 
@@ -2278,6 +2340,11 @@ def watch_action(row, price=None, today=None):
         d['hold_line'] = _hl403
         d['hold_add_line'] = (f"추가매수는 {buy:,.0f}원 이하에서 ({_when_ad} · 사기 전 다시 재기)"
                               if (_ad_cls == '가능' and _k != '추가 매수 가능' and buy) else None)
+        # 라운드 413 — 진입가 **아래**인데 '가능'이 아니면 그 둘을 같은 줄에 적는다(한 곳 · hold_add_blocked_line).
+        #   진입가 위이거나 가능이면 종전 그대로(None 또는 위 줄) — §392 의 락이 그것을 지킨다.
+        if d['hold_add_line'] is None and _k == '보유 유지':
+            d['hold_add_line'] = hold_add_blocked_line(px, buy, _ad_ok, fails=_ad_fail, bucket=bucket,
+                                                       bucket_why=_raw241, short=True)
         if _rev378:
             d['hold_note'] = (f"옛 계획({str(_rev378.get('old_at') or '')[5:]}) 손절선으로 판단 · "
                               f"새 선은 '기준 다시 재기'")
@@ -2287,6 +2354,8 @@ def watch_action(row, price=None, today=None):
             d['hold_note'] = None
         _tip403 = [str(d.get('why') or '')]
         _tip403.append(f"추가매수: {_short}" + (f" — {d['avg_down_why']}" if d.get('avg_down_why') else ''))
+        if buy and px and px <= buy and _ad_cls != '가능':
+            _tip403.append(BELOW_ENTRY_FACT)                   # 라운드 413 — 긴 판은 툴팁에
         _tip403 += [f"기준 이력: {_x}" for _x in _log]
         d['hold_tip'] = '\n'.join(_x for _x in _tip403 if _x)
         return d
