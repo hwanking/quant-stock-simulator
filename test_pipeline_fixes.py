@@ -4998,14 +4998,21 @@ check("'70% 모델' 로 부르지 않겠다고 명시",
       '"70% 모델"이라고 부르지 않는다' in _mv83)
 
 _w83 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("화면 — 조건부 참고 카드가 하락 국면 + 과매도/하단에서만 뜬다",
-      "_bear_now = '하락' in str(four_scores.get('market_regime_label')" in _w83
-      and "_rsi_now < 35" in _w83 and "_bbp_now < 20" in _w83)
-check("화면 — 참고 카드가 유리한 수치와 불리한 수치를 같이 적는다",
-      '본 적 없는 종목 164건 기준 70.7%' in _w83
-      and '평균 −4.03%' in _w83)
+# 라운드 423 — 아래 셋은 카드의 **글자**(70.7% · −4.03% · `_rsi_now < 35`)를 잠그고 있었다. 2026-10-03 같은 스크립트를
+#   원장 257,130행에서 다시 돌리니 채택 없음이라, 카드는 수를 박지 않고 산출물(`bear_oversold.json`)을 읽어 말한다.
+#   지키려던 성질(하락 국면에서만 · 유리·불리를 같이 · 매수 신호 아님)을 그 함수와 산출물에서 본다 — 자세한 것은 §411.
+import ledger_view as _lv83                                          # noqa: E402
+_bo83 = _json64.load(open(_os.path.join(PROJ, 'data', 'bear_oversold.json'), encoding='utf-8'))
+check("화면 — 그 자리 카드는 하락 국면에서만 · 맞는 규칙은 산출물의 문턱(라운드 8 의 RSI 35 · 볼린저 20)으로 가른다",
+      "_bear_now = '하락' in str(four_scores.get('market_regime_label')" in _w83 and 'if _bear_now:' in _w83
+      and _bo83.get('thresholds', {}).get('rsi_lt') == 35 and _bo83.get('thresholds', {}).get('bb_pos_lt') == 20
+      and _lv83.bear_oversold_rules(30, 10, _bo83) == ['RSI 과매도', '볼린저 하단']
+      and _lv83.bear_oversold_rules(50, 10, _bo83) == ['볼린저 하단'] and _lv83.bear_oversold_rules(50, 50, _bo83) == [])
+_c83 = _lv83.bear_oversold_card(_bo83, ['RSI 과매도']) or ('', '')
+check("화면 — 카드가 홀드아웃 성적과 실전·비용을 같이 적는다(산출물에서)",
+      '본 적 없는' in _c83[1] and '실전 구간에서는' in _c83[1] and '비용' in _c83[1], _c83[0])
 check("화면 — 매수 신호가 아니라고 카드 안에서 밝힌다",
-      '매수 신호가 아니라' in _w83 and '점수는 이 규칙 때문에 바뀌지' in _w83)
+      '매수 근거가 아니며' in _c83[1] and '위의 결론과 점수는 이 규칙과 무관' in _c83[1])
 check("엔진 산식은 이번 라운드에서 건드리지 않았다 — 화면 전용",
       '_uk.card(' in _w83)
 
@@ -17808,11 +17815,17 @@ check("EV≤0 문구가 신규 매수를 권하지 않는다고 밝힌다",
       '신규 매수를 권하지 않습니다' in _q214)
 
 # ⑦ '기업·업황이 나빠서가 아니라'는 사실일 때만
-check("펀더멘털이 약하면 그것도 함께 제한 사유로 적는다",
-      '함께 신규 매수를 제한합니다' in _w214)
-check("그 문장이 기본 매력도·적정가 상태를 실제로 본다",
-      "stock_quality_score" in _w214.split('나빠서가 아니라')[0][-2500:]
-      or "_q61" in _w214)
+# 라운드 423 — 그 문장의 남은 꼬리(보류를 '진입가격이 기준보다 높아서'로 돌리는 말)도 사실이 아니어서, '종합' 한 줄은
+#   이제 원인을 중앙 판정의 미충족 조건 **이름**으로 적는다(펀더멘털이 막으면 '펀더멘털 밸류 검증'이 그 안에 나온다).
+#   지키던 성질 — 원인을 사실 확인 없이 단정하지 않는다 — 을 화면 문자열(AST · 주석 제외)과 출처로 본다.
+import ast as _ast214                                                # noqa: E402
+_wc214 = [_n.value for _n in _ast214.walk(_ast214.parse(_read148(_os.path.join(PROJ, 'web_app.py'))))
+          if isinstance(_n, _ast214.Constant) and isinstance(_n.value, str)]   # 원문을 파싱한다(code_lines 는 줄을 걷어낸다)
+check("펀더멘털이 약하면 그것도 함께 제한 사유로 적는다 — 원인은 중앙 판정의 미충족 조건 이름(펀더멘털 밸류 검증 포함)",
+      "CORE or {}).get('failed')" in _w214
+      and "('펀더멘털 밸류 검증', vb_code is None" in open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read())
+check("그 문장이 원인을 단정하지 않는다 — '나빠서가 아니라' · '기준보다 높아서' 가 화면 문자열에 없다",
+      not any(('나빠서가 아니라' in _s or '기준보다 높아서' in _s) for _s in _wc214), scanned=len(_wc214))
 
 # ⑧ 관심종목 — 입력 즉시 이동·반영 (라운드 184 요청)
 # 라운드 321 — 옛 격자의 `_wl_write(_wl_body)` 저장 길은 걷어냈다. 저장은 이제 목록 편집기의
@@ -32933,6 +32946,111 @@ check("손절 0.6배의 대가 표가 배포 묶음에 있다 (배포 앱이 '�
       and not _pf408.code_like_strings(_json.load(open(_os.path.join(PROJ, 'data', 'loss_control_r21.json'), encoding='utf-8'))))
 check("60점+ 표를 '실제 추천이 나가는 구간'이라 부르지 않는다 (실제 추천에는 점수 하한이 없다)",
       '실제 추천이 나가는 구간' not in _w410 and '점수 띠입니다' in _w410)
+
+
+print("=" * 72)
+print("§411 하락+과매도 카드는 오늘 원장으로 · 배당 순익은 세 항 · 진입 구역·종합·현금 비중은 사실만 (라운드 423)")
+print("=" * 72)
+# 라운드 8 의 '반등이 잦던 자리' 카드가 원장 7,947건 시절 수를 박고 있었다 — 같은 스크립트를 원장 257,130행에서 그대로
+#   돌리니 채택 없음. 카드는 산출물을 읽어 그 수가 뒷받침하는 말만 한다(라운드 395 의 '근거가 무너지면 표시에서 거둔다').
+#   곁들여 같은 화면의 판정자처럼 말하던 자리 넷(배당 · 진입 구역 배너 · '종합' 한 줄 · 현금 비중)을 사실로.
+import ast as _ast411                                                # noqa: E402
+_sys411 = __import__('sys')
+if _os.path.join(PROJ, 'scripts') not in _sys411.path:
+    _sys411.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import bear_oversold_r423 as _bo411                                  # noqa: E402
+import ledger_view as _lv411                                         # noqa: E402
+import verdict_core as _vc411                                        # noqa: E402
+
+
+def _rows411(n_tickers, rule_hit, base_hit, rule_ret, blind_rule_hit):
+    """약세 국면 심기 — 종목마다 규칙 행 1 · 비규칙 행 2. 홀드아웃은 티커 사전순 3의 배수(생성기 규칙 그대로)."""
+    out = []
+    for i in range(n_tickers):
+        t = f"T{i:04d}"
+        for j in range(3):
+            rule = (j == 0)
+            hit_p = rule_hit if rule else base_hit
+            out.append({'ticker': t, 'regime': 'BEAR', 'split': 'train', 'date': f"2020-01-{(i % 28) + 1:02d}",
+                        'success': ((i * 7 + j) % 100) < hit_p, 'return_pct': rule_ret if rule else 0.0,
+                        'rsi': 30 if rule else 50, 'bb_pos': 50})
+        out.append({'ticker': t, 'regime': 'BEAR', 'split': 'blind', 'date': '2026-02-02',
+                    'success': (i % 100) < blind_rule_hit, 'return_pct': 1.0, 'rsi': 30, 'bb_pos': 50})
+        out.append({'ticker': t, 'regime': 'BEAR', 'split': 'blind', 'date': '2026-02-03',
+                    'success': (i % 100) < base_hit, 'return_pct': 0.0, 'rsi': 50, 'bb_pos': 50})
+    return out
+
+
+_good411 = _bo411.measure(_rows411(900, 90, 50, 3.0, 95), 0.41)
+_bad411 = _bo411.measure(_rows411(900, 40, 60, -1.0, 10), 0.41)
+check("생성기 measure — 홀드아웃 150건+ · +5%p+ · 비용 뺀 평균 > 0 · 블라인드 lift > 0 이면 채택 · 낮으면 미달(심기 양방향)",
+      _good411['rules']['RSI 과매도']['adopted'] is True and _bad411['rules']['RSI 과매도']['adopted'] is False
+      and _bad411['rules']['RSI 과매도']['lift']['hold'] < 0 and _good411['holdout_tickers'] == 300,
+      str(_good411['rules']['RSI 과매도']['lift']))
+_src411 = _read148(_os.path.join(PROJ, 'scripts', 'bear_oversold_r423.py'))
+check("생성기 — 규칙·분할·기준은 regime_rule_r6 를 불러 쓴다 · 통계 행 · 미결 제외 · 운영 비용 · 옛 셈 그대로의 판정도 싣는다",
+      'r6.RULES' in _src411 and 'r6.MIN_HOLDOUT_N' in _src411 and 'r6.MIN_LIFT' in _src411
+      and 'lv.stat_rows(' in _src411 and "!= 'OPEN'" in _src411 and '_vc.COST_PCT' in _src411
+      and 'def replay_unchanged(' in _src411 and 'lambda' not in _src411.split('def measure')[1].split('def replay')[0])
+_doc411 = _json.load(open(_os.path.join(PROJ, 'data', 'bear_oversold.json'), encoding='utf-8'))
+check("산출물 — 오늘 셈으로도 옛 셈 그대로도 세 규칙 모두 채택 기준 미달(판정 · 바뀌면 사람이 다시 본다) · 종목코드 모양 0",
+      all(v['adopted'] is False for v in _doc411['rules'].values())
+      and all(v['hold_ok'] is False for v in _doc411['replay_unchanged'].values())
+      and _doc411.get('cost_pct') == _vc411.COST_PCT and _doc411.get('ledger_rows', 0) > _doc411['previous']['ledger_rows']
+      and not _pf408.code_like_strings(_doc411), f"{_doc411.get('made')} · 원장 {_doc411.get('ledger_rows')}")
+_cA411 = _lv411.bear_oversold_card({**_good411, 'made': 'm', 'graded_rows': 1, 'cost_pct': 0.41,
+                                    'previous': _doc411['previous']}, ['RSI 과매도'])
+_cB411 = _lv411.bear_oversold_card(_doc411, ['볼린저 하단', 'RSI 과매도'])
+check("카드 문장 — 채택이면 '높았던 자리' · 홀드아웃 lift ≤ 0 이면 '더 잦던 자리가 아니었다' + 옛 수와 재현 안 됨 · 둘째 규칙도 수로 · 못 읽으면 None",
+      '높았던 자리' in _cA411[0] and '재현되지 않았습니다' not in _cA411[1]
+      and '더 잦던 자리가 아니었습니다' in _cB411[0] and '재현되지 않았습니다' in _cB411[1]
+      and 'RSI 과매도 조건은' in _cB411[1] and _lv411.bear_oversold_card(None, ['RSI 과매도']) is None
+      and _lv411.bear_oversold_card(_doc411, []) is None, _cB411[0])
+
+
+def _consts411(path):
+    """화면으로 나갈 수 있는 문자열 조각 — 주석·독스트링 밖의 상수와 f-string 조각(주석에 옛 문장을 인용해도 안 걸린다)."""
+    tree = _ast411.parse(_read148(path))
+    out = []
+    for nd in _ast411.walk(tree):
+        if isinstance(nd, _ast411.Constant) and isinstance(nd.value, str):
+            out.append(nd.value)
+    return out
+
+
+_wc411 = _consts411(_os.path.join(PROJ, 'web_app.py'))
+_gone411 = ('과거엔 반등이 잦던', '본 적 없는 종목 164건 기준 70.7%', '현금 유지가 우선', '검증된 기준보다 높',
+            '보류를 권장', '지지선 안착 확인을 권장', '성장 기대가 가격을 지배하는 종목이라', '권장 현금 비중',
+            '강한 부정', '배당 + 퀀트 조건 동시 충족')
+_hits411 = [g for g in _gone411 if any(g in s for s in _wc411)]
+check("화면 문자열에서 옛 권고·단정이 사라졌다 (AST · 주석 제외)", not _hits411, str(_hits411), scanned=len(_wc411))
+_w411 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_bear411 = _w411.split('if _bear_now:')[1].split('# ── 가늠 AI')[0]
+check("하락+과매도 카드 — 산출물·킷 함수로 그리고 글자색은 테마 토큰(종전엔 다크 팔레트라 라이트에서 사라졌다)",
+      "load_json('bear_oversold.json')" in _bear411 and 'bear_oversold_card(' in _bear411
+      and "_TOK['tx1']" in _bear411 and '_uk.DARK[' not in _bear411)
+_div411 = _w411.split('# ── 배당 · 배당락 분석')[1].split('10대 표준 레포트')[0]
+check("배당 칸 — 순익은 배당 − 배당락 이론 하락 − 비용 · 사도 되는지는 중앙 판정 · 옛 따로 판정 없음",
+      '_cap_net = (_yld - float(_drop) - _cost)' in _div411 and "CORE.get('recommended')" in _div411
+      and '_net_edge' not in _div411 and '_quant_ok' not in _div411 and '배당소득세 별도' in _div411)
+_eng411 = _w411.split('# 종합 한 줄')[1].split('# 라운드 81b')[0]
+check("'종합' 한 줄 — 원인은 중앙 판정의 미충족 조건 이름 · 가격 거리는 막는 조건이 아니라고 같은 줄에",
+      "CORE or {}).get('failed')" in _eng411 and '막는 조건이 아닙니다' in _eng411 and '_gap61 > 3' not in _eng411)
+_qi411 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("시장 스캔 목록의 표본외 조건 설명 — 그 '40점'이 엔진 조건과 중앙 판정의 품질 하한과 같다",
+      "'검증 수행 + 전략 품질 40점 이상'을 한 조건으로" in _w411 and _vc411.MIN_QUALITY == 40
+      and '(not blind_test_not_completed) and (strategy_quality_score or 0) >= 40' in _qi411)
+_zone411 = _w411.split('_ZONE_WHO423 = ')[1].split('if four_scores.get(\'contradiction_detected\'')[0]
+check("진입 구역 배너 — 네 갈래 모두 '사도 되는지는 중앙 판정' · 안전마진 확보를 초록으로 칠하지 않는다 · 적정가 아래 두 구역에 R419 실측",
+      _zone411.count('_ZONE_WHO423') >= 4 and 'st.success(' not in _zone411
+      and _zone411.count('_fz423_tail') >= 3 and 'fair_zone_line(' in _zone411)
+check("현금 비중 — '규칙상'으로 부르고 손으로 정한 규칙이며 잰 적 없다고 같은 칸에(엔진 규칙은 그대로)",
+      '규칙상 현금 비중' in _w411 and '이 비중을 따랐을 때 성과가 나아지는지는 잰 적이 없습니다' in _w411
+      and 'if hhi > 0.50:' in _qi411)
+from improvement import issue_ops as _io411                          # noqa: E402
+_act411 = _io411.PLAYBOOK['usability|signal_rate']['action']
+check("이슈 계획 — 과매도 반등 규칙의 문구가 라운드 6 시점(15건 · 보류)이 아니라 오늘 재측정",
+      '2026-10-03' in _act411 and '못 미쳤습니다' in _act411 and '15건뿐이라' not in _act411)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

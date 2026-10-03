@@ -1,0 +1,193 @@
+{
+ "made": "2026-10-03",
+ "made_at": "2026-10-03T02:39:01+00:00",
+ "ledger_rows": 257130,
+ "stat_rows": 251924,
+ "excluded": {
+  "scale": 2707,
+  "dup": 2499
+ },
+ "open_excluded": 10201,
+ "graded_rows": 241723,
+ "cost_pct": 0.41,
+ "criteria": {
+  "min_holdout_n": 150,
+  "min_lift_pp": 5.0,
+  "net_gt": 0,
+  "blind_lift_gt": 0
+ },
+ "thresholds": {
+  "rsi_lt": 35,
+  "bb_pos_lt": 20,
+  "source": "scripts/regime_rule_r6.py RULES"
+ },
+ "previous": {
+  "ledger_rows": 7947,
+  "hold_n": 164,
+  "hold_hit": 70.7,
+  "hold_lift": 12.2,
+  "source": "docs/MODEL_VERSIONS.md 라운드 8"
+ },
+ "replay_unchanged": {
+  "RSI 과매도": {
+   "hold_n": 8058,
+   "hold_lift": 0.21,
+   "hold_ok": false
+  },
+  "볼린저 하단": {
+   "hold_n": 8946,
+   "hold_lift": -0.35,
+   "hold_ok": false
+  },
+  "과매도 또는 하단": {
+   "hold_n": 10982,
+   "hold_lift": -0.1,
+   "hold_ok": false
+  }
+ },
+ "bear_rows": 70978,
+ "tickers": 1479,
+ "holdout_tickers": 493,
+ "baseline": {
+  "dev": {
+   "n": 46721,
+   "hit": 57.87,
+   "wilson": 57.42,
+   "mean": 0.057,
+   "median": 2.1,
+   "net": -0.353,
+   "dates": 1036
+  },
+  "hold": {
+   "n": 24257,
+   "hit": 56.84,
+   "wilson": 56.22,
+   "mean": -0.083,
+   "median": 2.1,
+   "net": -0.493,
+   "dates": 977
+  },
+  "blind": {
+   "n": 4685,
+   "hit": 62.92,
+   "wilson": 61.53,
+   "mean": 1.008,
+   "median": 3.9,
+   "net": 0.598,
+   "dates": 20
+  }
+ },
+ "rules": {
+  "RSI 과매도": {
+   "dev": {
+    "n": 15305,
+    "hit": 56.65,
+    "wilson": 55.86,
+    "mean": -0.075,
+    "median": 2.1,
+    "net": -0.485,
+    "dates": 792
+   },
+   "hold": {
+    "n": 8042,
+    "hit": 55.91,
+    "wilson": 54.82,
+    "mean": -0.176,
+    "median": 2.1,
+    "net": -0.586,
+    "dates": 659
+   },
+   "blind": {
+    "n": 1480,
+    "hit": 57.77,
+    "wilson": 55.24,
+    "mean": 0.134,
+    "median": 3.82,
+    "net": -0.276,
+    "dates": 19
+   },
+   "lift": {
+    "dev": -1.22,
+    "hold": -0.93,
+    "blind": -5.15
+   },
+   "hold_ok": false,
+   "blind_ok": false,
+   "adopted": false
+  },
+  "볼린저 하단": {
+   "dev": {
+    "n": 17255,
+    "hit": 56.37,
+    "wilson": 55.63,
+    "mean": -0.101,
+    "median": 2.1,
+    "net": -0.511,
+    "dates": 773
+   },
+   "hold": {
+    "n": 8950,
+    "hit": 55.06,
+    "wilson": 54.03,
+    "mean": -0.227,
+    "median": 2.1,
+    "net": -0.637,
+    "dates": 657
+   },
+   "blind": {
+    "n": 1595,
+    "hit": 60.88,
+    "wilson": 58.46,
+    "mean": 0.754,
+    "median": 4.41,
+    "net": 0.344,
+    "dates": 19
+   },
+   "lift": {
+    "dev": -1.5,
+    "hold": -1.78,
+    "blind": -2.04
+   },
+   "hold_ok": false,
+   "blind_ok": false,
+   "adopted": false
+  },
+  "과매도 또는 하단": {
+   "dev": {
+    "n": 20949,
+    "hit": 56.66,
+    "wilson": 55.99,
+    "mean": -0.067,
+    "median": 2.1,
+    "net": -0.477,
+    "dates": 860
+   },
+   "hold": {
+    "n": 10973,
+    "hit": 55.61,
+    "wilson": 54.68,
+    "mean": -0.186,
+    "median": 2.1,
+    "net": -0.596,
+    "dates": 746
+   },
+   "blind": {
+    "n": 1940,
+    "hit": 59.54,
+    "wilson": 57.34,
+    "mean": 0.439,
+    "median": 4.1,
+    "net": 0.029,
+    "dates": 20
+   },
+   "lift": {
+    "dev": -1.21,
+    "hold": -1.23,
+    "blind": -3.38
+   },
+   "hold_ok": false,
+   "blind_ok": false,
+   "adopted": false
+  }
+ }
+}

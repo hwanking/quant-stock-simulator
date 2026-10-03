@@ -4791,7 +4791,9 @@ if st.session_state.get('show_screener', False):
                     st.warning(
                         "**현재 추천주 없음** — 정밀분석한 "
                         f"{len(scan_results)}개 중 필수조건을 모두 통과한 종목이 "
-                        "없습니다. 무리한 신규 매수보다 현금 유지가 우선입니다.")
+                        # 라운드 423 — 종전 꼬리 '무리한 신규 매수보다 현금 유지가 우선' 은 잰 적 없는 권고였다
+                        #   (라운드 422 가 홈 한 줄에서 걷어낸 것과 같은 모양) — 사실만 적는다.
+                        "없습니다. 문턱을 낮춰 후보를 만들지 않습니다.")
                 if block_counter:
                     top_blocks = block_counter.most_common(5)
                     st.markdown(
@@ -8784,8 +8786,12 @@ elif four_scores.get('fair_value_status') == 'OUT_OF_DOMAIN':
     # 성장 기대가 가격을 지배하는 종목 — 신뢰도 문제가 아니라 모델이 성립하지 않는다
     rec_buy_display = "산출 불가 (모델 범위 밖)"
     rec_buy_sub = "기준을 만들 수 없습니다 — 현재가 아래 지지선도 없습니다"
-    rec_buy_more = ("실적보다 성장 기대가 가격을 지배하는 종목이라 "
-                    "적정가 모델이 성립하지 않습니다. 값이 틀린 것이 "
+    # 라운드 423 — 종전 문장은 원인을 '성장 기대가 가격을 지배하는 종목이라'로 단정했다. 범위 밖 판정은
+    #   이익·장부가로 계산한 값과 지금 가격이 너무 멀다는 사실(괴리)로 나고, 그 안에는 적자 종목도 있다(라운드 327).
+    #   가격이 왜 그렇게 높은지는 이 엔진이 재지 않는다 — 판정이 난 사실만 적는다.
+    rec_buy_more = ("이익·장부가로 계산한 값과 지금 가격이 너무 멀어 적정가 모델의 "
+                    "적용 범위 밖으로 판정된 종목입니다(왜 그 가격인지는 이 엔진이 "
+                    "재지 않습니다). 값이 틀린 것이 "
                     "아니라 <b>낼 수 없다</b>는 뜻입니다 — 없는 값을 "
                     "지어내지 않습니다.")
 else:
@@ -10203,33 +10209,31 @@ except Exception as _cp_err:
 
 _uk.spacer(28)
 
-# ── 약세 국면 과매도 반등 — 조건부 참고 (라운드 8 채택) ────────────────────
-# 점수·게이트·산식은 건드리지 않는다. 이 조건에서 과거 적중률이 높았다는
-# 사실만 알려 주는 참고 표시다. 채택 근거는 종목 홀드아웃(본 적 없는 종목
-# 164건에서 70.7%)이며, 블라인드 하락장에서는 맞아도 비용 차감 후 손실이
-# 났다는 사실을 같은 자리에 함께 적는다 — 유리한 절반만 보여 주지 않는다.
+# ── 하락 국면 + 과매도/하단 — 그 자리의 값어치 (라운드 8 채택 → 라운드 423 재측정) ──
+# 점수·게이트·산식은 건드리지 않는다(표시 전용). 라운드 8 이 원장 7,947건으로 이 조건을 '반등이 잦던 자리'라는
+# 참고 카드로 채택했는데, 2026-10-03 같은 스크립트를 그대로 돌리니 원장 257,130행에서 **채택 없음**이었다.
+# 카드는 수를 글자로 박지 않고 산출물(`bear_oversold.json`)을 읽어 그 수가 뒷받침하는 말만 한다 — 문장 규칙과
+# 어느 규칙이 맞는지는 `ledger_view` 한 곳(종전엔 볼린저 조건으로 떠도 RSI 규칙의 수를 인용했다).
+# 글자색은 테마 토큰 — 종전엔 다크 팔레트를 박아 라이트 모드의 밝은 카드 위에서 글자가 사라졌다.
 _bear_now = '하락' in str(four_scores.get('market_regime_label') or '')
-_rsi_now = four_scores.get('rsi_value')
-_bbp_now = four_scores.get('bb_position_pct')
-if _bear_now and ((_rsi_now is not None and _rsi_now < 35)
-                  or (_bbp_now is not None and _bbp_now < 20)):
-    _cond = ('RSI 과매도' if (_rsi_now is not None and _rsi_now < 35)
-             else '볼린저 하단')
-    _uk.card(
-        f"<p style='margin:0 0 8px 0; font-size:15px; font-weight:600; "
-        f"color:{_uk.DARK['tx1']};'>하락 국면 + {_cond} — 과거엔 반등이 잦던 "
-        f"자리입니다</p>"
-        f"<p style='margin:0; font-size:13px; line-height:1.7; "
-        f"color:{_uk.DARK['tx2']};'>같은 조건의 과거 사례에서 "
-        f"<b>본 적 없는 종목 164건 기준 70.7%</b>가 20거래일 안에 목표에 "
-        f"닿았습니다 (하락 국면 평균 58.5%보다 12.2%p 높음).<br>"
-        f"다만 <b>실전(안 본 기간) 하락장 13건에서는 맞아도 비용 차감 후 "
-        f"평균 −4.03%</b>였습니다 — 맞는 비율은 높지만 이길 때 조금 벌고 질 때 "
-        f"크게 잃었다는 뜻입니다. 그래서 이 표시는 매수 신호가 아니라 "
-        f"<b>참고</b>이며, 위의 결론과 점수는 이 규칙 때문에 바뀌지 "
-        f"않습니다.</p>",
-        theme=_theme, accent=_uk.DARK['warn'])
-    _uk.spacer(24)
+if _bear_now:
+    try:
+        import artifact_io as _aio423
+        import ledger_view as _lv423
+        _bo423 = _aio423.load_json('bear_oversold.json')
+        _bor423 = _lv423.bear_oversold_rules(four_scores.get('rsi_value'),
+                                             four_scores.get('bb_position_pct'), _bo423)
+        _boc423 = _lv423.bear_oversold_card(_bo423, _bor423)
+    except Exception:                                          # noqa: BLE001
+        _boc423 = None
+    if _boc423:
+        _uk.card(
+            f"<p style='margin:0 0 8px 0; font-size:15px; font-weight:600; "
+            f"color:{_TOK['tx1']};'>{_uk._esc(_boc423[0])}</p>"
+            f"<p style='margin:0; font-size:13px; line-height:1.7; "
+            f"color:{_TOK['tx2']};'>{_boc423[1]}</p>",
+            theme=_theme, accent='warn')
+        _uk.spacer(24)
 
 # ── 가늠 AI — 무엇을 가늠했는지 사용자 말로 ────────────────────────────
 # 이름만 AI 처럼 보이지 않게, 실제로 잰 것을 전부 펼친다. 계산은 여기서 새로
@@ -10516,8 +10520,10 @@ try:
         '타이밍·기술', (CORE or {}).get('bucket') or '미분류',
         (f"현재가가 진입 기준보다 {_gap61:+.1f}%"
          if _gap61 is not None else '진입 기준 미산출'),
-        ('강한 부정' if _gap61 is not None and _gap61 > 3 else
-         '중립' if _gap61 is not None else '판단 불가')))
+        # 라운드 423 — 종전엔 3% 를 넘으면 '강한 부정'이었다. 진입 기준(눌림 진입가)은 현재가에서 변동성만큼 아래로
+        #   잡는 값이라 현재가는 늘 그보다 높고(2026-10-03 리포트 후보 478개 전부 · 중앙 +4.80%), 중앙 판정에는 '현재가가
+        #   진입가보다 높다'는 조건이 없다 — 손으로 고른 3% 로 판정 낱말을 붙이지 않는다.
+        ('참고(판정 조건 아님)' if _gap61 is not None else '판단 불가')))
     _fair61 = four_scores.get('displayed_fair_value')
     if _fair61 and realtime_price:
         _fg61 = (float(realtime_price) / float(_fair61) - 1) * 100
@@ -10608,29 +10614,20 @@ try:
                 theme=_theme, top=28)
     _uk.rows([(f"{a} · {b}", f"{c} — {d}") for a, b, c, d in _eng_rows],
              theme=_theme)
-    # 종합 한 줄 — 규칙 기반 (버킷·괴리로만 구성)
-    _bk61 = str((CORE or {}).get('bucket') or '')
-    if (_gap61 is not None and _gap61 > 3
-            and ('대기' in _bk61 or '제외' in _bk61)):
-        # ⚠️ 라운드 184 — 이 문장이 **사실 확인 없이** "기업·업황이 나빠서가
-        #   아니라"고 단정하고 있었다. 서진시스템은 기본 매력도 48점 ·
-        #   ROE −12.9% · 적정가 미산출인데도 그렇게 나갔다(사용자 지적).
-        #   기본 매력도가 게이트(60점)를 넘고 적정가도 있을 때만 그 말을
-        #   쓰고, 아니면 **둘 다**라고 말한다.
-        _q61 = four_scores.get('stock_quality_score')
-        _fv_ok61 = bool(four_scores.get('fair_value_usable'))
-        if (_q61 is not None and float(_q61) >= 60 and _fv_ok61):
-            st.caption(_md_safe(
-                '종합: 기업·업황이 나빠서가 아니라 **현재 진입가격이 검증된 '
-                '기준보다 높아서** 신규 매수가 보류된 상태입니다.'))
-        else:
-            _q_txt61 = (f'기본 매력도 {float(_q61):.0f}점'
-                        if _q61 is not None else '기본 매력도 미산출')
-            st.caption(_md_safe(
-                f'종합: **현재 진입가격이 검증된 기준보다 높고**, 펀더멘털 '
-                f'불확실성({_q_txt61}'
-                + ('' if _fv_ok61 else ' · 적정가 미산출')
-                + ')도 함께 신규 매수를 제한합니다.'))
+    # 종합 한 줄 — 중앙 판정의 미충족 조건을 그대로 센다 (라운드 423)
+    # ⚠️ 라운드 184 가 이 문장의 "기업·업황이 나빠서가 아니라" 단정을 기본 매력도·적정가로 가렸는데, 남은 꼬리 —
+    #   보류의 원인을 '현재 진입가격이 기준보다 높아서'로 돌리는 말 — 도 사실이 아니었다. 그 기준(눌림 진입가)은
+    #   현재가에서 변동성만큼 아래로 잡혀 현재가는 늘 그보다 높고(2026-10-03 리포트 후보 478개 전부), 중앙 판정에는
+    #   그런 조건이 없다. 실제로 막은 것은 +3% 를 넘은 434개 중 432개가 '비용 차감 기대값 양수'였다(라운드 316 의
+    #   그 벽) — 그리고 그 기대값은 가격이 내려와도 그대로다(라운드 387). 그래서 원인은 중앙 판정의 미충족 조건
+    #   이름으로 적고, 가격 거리는 원인이 아니라고 같은 줄에 적는다(문턱 없음 · 판정 불변).
+    _fail61 = [str(x) for x in ((CORE or {}).get('failed') or [])]
+    if _fail61 and not (CORE or {}).get('recommended'):
+        st.caption(_md_safe(
+            f"종합: 신규 매수를 막는 것은 중앙 판정의 미충족 조건 {len(_fail61)}개 — "
+            + ' · '.join(_fail61)
+            + " — 입니다. 현재가가 진입 기준보다 높다는 것은 막는 조건이 아닙니다"
+              "(진입 기준은 현재가에서 변동성만큼 아래로 잡는 값이라 지금 가격은 늘 그보다 높습니다)."))
     # 라운드 81b — 위 표의 업황 n 이 raw 라는 것을 한 번만 설명한다.
     # 표 안에 매번 문장을 넣으면 칸이 터지고, 안 적으면 235 가 독립 관측
     # 235 개로 읽힌다.
@@ -11097,11 +11094,25 @@ _bem_str = fmt_num(four_scores.get('buy_entry_max'), suffix='원')
 # 값**이 같은 이름을 쓰는 자리다(quant_indicators:3860 주석이 지목한 그
 # 결함). 게이트 라벨(R184)이 이미 쓰는 이름 '가치 기준선(적정가−안전마진)'
 # 으로 통일한다 — 새 이름이 아니다 (§2 재사용).
+# 라운드 423 — 이 배너는 구역을 말하는 자리인데 판정자처럼 말하고 있었다: '안전마진 확보'를 초록(성공)으로 칠하고,
+#   *"안전마진 확보 전까지 분할 진입은 보류를 권장"* · *"눌림목 또는 지지선 안착 확인을 권장"* 같은 권고를 붙였다.
+#   원장은 그 반대 쪽을 말한다 — '적정가 아래' 구역은 상승장에서도 비용을 못 넘었고(사전등록 R419 · 판정 (다)), 깊은
+#   할인이 얕은 할인보다 나았다는 근거도 없다(R215). 구역 낱말(게이트가 읽는 값)은 그대로 두고, 권고 꼬리를 빼고,
+#   사도 되는지는 중앙 판정이 정한다고 적으며, '적정가 아래' 두 구역에는 R419 의 실측 한 줄(산출물에서 읽음)을 붙인다.
+_ZONE_WHO423 = " 사도 되는지는 위 결론(중앙 판정)이 정합니다."
+try:
+    import artifact_io as _aio423z
+    import ledger_view as _lv423z
+    _fz423 = _lv423z.fair_zone_line(_aio423z.load_json(_lv423z.FAIR_ZONE_FILE))
+except Exception:                                              # noqa: BLE001
+    _fz423 = ''
+_fz423_tail = (" " + _fz423) if _fz423 else ''
 if _zone == "판정 불가":
     st.warning("**[진입 판정 불가]**: 적정가 신뢰도가 기준에 미달하여 가치 기준선(적정가−안전마진)을 산출하지 못했습니다. "
-               "현재가가 적정 진입구간 안인지 판단할 수 없으므로 신규 진입을 권하지 않습니다.")
+               "현재가가 가치 기준선 아래인지 판단할 수 없습니다." + _ZONE_WHO423)
 elif _zone == "안전마진 확보":
-    st.success(f"**[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 가치 기준선({_bem_str} · 적정가−안전마진) 이하입니다.")
+    st.info(_md_safe(f"**[안전마진 확보]**: 현재가({curr_price:,.0f}원)가 가치 기준선({_bem_str} · 적정가−안전마진) 이하입니다."
+                     + _ZONE_WHO423 + _fz423_tail))
 elif _zone == "적정가 이하 (안전마진 미확보)":
     # 라운드 238 — 배너는 '적정가 이하', 아래 상세는 '+0.1% (적정가 부근)' 이라 한 화면이
     #   두 말을 했다(사용자 지적). 배너의 낱말(게이트가 읽는 값)은 그대로 두고, **얼마나**
@@ -11120,19 +11131,18 @@ elif _zone == "적정가 이하 (안전마진 미확보)":
     _gap_txt382 = (f"적정가까지 상승여력은 {_gap238:+.1f}%입니다(적정가 ÷ 현재가 − 1 · {_band238}). "
                    if _gap238 is not None and _band238 else "")
     if _bem_raw382 is not None:
-        _base_txt382 = (f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다. "
-                        f"안전마진 확보 전까지 분할 진입은 보류를 권장합니다.")
+        _base_txt382 = f"가치 기준선({_bem_str} · 적정가−안전마진)보다는 높습니다."
     else:
         _bpc382 = [lb for lb, ok in ((snap.get('val_eval') or {}).get('buy_price_checks') or []) if not ok]
         _base_txt382 = ("가치 기준선(적정가−안전마진)은 산출하지 않았습니다"
                         + (f" — 미충족: {' · '.join(_bpc382)}" if _bpc382 else "")
                         + ". 그래서 안전마진이 확보됐는지는 판단하지 않고, 이 적정가를 매수 근거로 쓰지 않습니다.")
-    st.info(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래입니다. "
-            + _gap_txt382 + _base_txt382)
+    st.info(_md_safe(f"**[안전마진 미확보]**: 현재가({curr_price:,.0f}원)는 적정가 아래입니다. "
+                     + _gap_txt382 + _base_txt382 + _ZONE_WHO423 + _fz423_tail))
 elif _zone:
-    st.error(f"**[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
-             f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다. "
-             f"신규 추격매수보다 눌림목 또는 지지선 안착 확인을 권장합니다.")
+    st.warning(f"**[{_zone}]**: 현재가({curr_price:,.0f}원)가 적정가"
+               f"({fmt_num(four_scores.get('displayed_fair_value'), suffix='원')})를 초과했습니다."
+               + _ZONE_WHO423)
 
 if four_scores.get('contradiction_detected', False):
     reasons_str = " / ".join(four_scores.get('contradiction_reasons', []))
@@ -12356,6 +12366,16 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
                "이 종목을 살지 말지는 위 결론(중앙 판정의 조건)이 정하고, 두 묶음은 다른 답을 낼 수 있습니다.")
     if blocks:
         st.markdown("\n".join(f"- {_md_safe(str(b))}" for b in blocks))
+        # 라운드 423 — 이 목록의 표본외 조건은 '수행 + 전략 품질 40점 이상'을 **한 조건**으로 묶고, 중앙 판정은
+        #   그 둘을 '표본외 검증 통과'(수행했나)와 '신뢰도·전략품질 기준'(품질)으로 **나눠** 센다(2026-10-03 · 리포트 103개 ·
+        #   두 조건이 다 있는 후보 478개 중 품질을 읽을 수 있는 462개에서 220개가 '중앙 통과 · 스캔 미충족'으로 갈렸다 ·
+        #   반대 방향 0). 그래서 위 결론의 '표본외 검증 통과'에 체크가 있어도 여기선
+        #   미충족일 수 있다 — 막히는 것은 둘 다 같다(품질 미달은 중앙 판정에서도 다른 조건으로 막힌다). 조건 불변.
+        if any('표본외' in str(b) for b in blocks):
+            st.caption("이 목록의 표본외 조건은 '검증 수행 + 전략 품질 40점 이상'을 한 조건으로 묶은 것입니다. "
+                       "위 결론(중앙 판정)은 같은 내용을 '표본외 검증 통과'(수행했나)와 '신뢰도·전략품질 기준'"
+                       "(품질)으로 나눠 세므로, 그쪽 '표본외 검증 통과'에 체크가 있어도 여기서는 미충족일 수 "
+                       "있습니다 — 품질이 모자라면 두 쪽 모두에서 막힙니다.")
     else:
         st.markdown("전부 통과")
 
@@ -14362,7 +14382,10 @@ with tab_audit:
 
     if risk_budget.get('available'):
         _cash = risk_budget['recommended_cash_pct']
-        _ccol = "#ff453a" if _cash >= 40 else ("#F2B84B" if _cash >= 25 else "#35C98B")
+        # 라운드 423 — 이 비중은 엔진의 고정 규칙(집중도·변동성·상관·국면이 문턱을 넘을 때마다 정해진 만큼 더함)이고
+        #   문턱·가산폭은 손으로 정한 수다(엔진 계산부 · 동결 중이라 안 바꾼다). 종전엔 '권장'이라 부르고 25/40 으로
+        #   초록·노랑·빨강을 칠해 잰 판단처럼 보였다 — 이름을 '규칙상'으로, 색은 중립으로, 잰 적 없다고 같은 칸에.
+        _ccol = _TOK['tx1']
         _hrows = "".join(
             f"<tr><td style='padding:4px 8px;'>{h['name']}</td>"
             f"<td style='padding:4px 8px;text-align:right;'>{h['weight_pct']:.1f}%</td>"
@@ -14386,8 +14409,9 @@ with tab_audit:
             <p style='margin:2px 0;'>- 포트폴리오 연환산 변동성 <b>{risk_budget['portfolio_vol_annual_pct']:.1f}%</b>
                (개별 가중평균 {risk_budget['weighted_indiv_vol_pct']:.1f}% → 분산효과 <b>{risk_budget['diversification_benefit_pct']:.1f}%</b>)</p>
             <p style='margin:2px 0;'>- 과거 최대낙폭 <b style='color:#ff453a;'>{risk_budget['historical_mdd_pct']:.1f}%</b></p>
-            <p style='margin:8px 0 2px;'>- <b>권장 현금 비중</b>: <b style='color:{_ccol}; font-size:17px;'>{_cash:.0f}%</b></p>
+            <p style='margin:8px 0 2px;'>- <b>규칙상 현금 비중</b>: <b style='color:{_ccol}; font-size:17px;'>{_cash:.0f}%</b></p>
             <p style='font-size:13px; color:#9DAABC; margin:2px 0;'>사유: {' · '.join(risk_budget['cash_reasons'])}</p>
+            <p style='font-size:13px; color:#9DAABC; margin:2px 0;'>이 비중은 집중도·변동성·상관·시장 국면이 정해진 문턱을 넘을 때마다 정해진 만큼 더하는 고정 규칙으로 낸 값입니다 — 문턱과 가산폭은 손으로 정한 수이고, 이 비중을 따랐을 때 성과가 나아지는지는 잰 적이 없습니다.</p>
             <p style='font-size:12px; color:#9DAABC; margin-top:8px;'>{_uk._esc_md(risk_budget['note'])}</p>
         </div>
         """, unsafe_allow_html=True)
@@ -14396,7 +14420,7 @@ with tab_audit:
         <div style='background: #161D2A; border-radius: 14px; padding: 16px; margin-top: 12px;'>
             <h4 style='color: #9DAABC !important; margin-top:0;'>포트폴리오 위험예산 & 현금 비중 가이드 (Section 20-14 &amp; 20-15)</h4>
             <p style='margin: 4px 0; font-size:15px; color:#9DAABC;'><b>미산출</b> — {risk_budget['reason']}</p>
-            <p style='margin: 4px 0; font-size:13px; color:#4C8DFF;'>보유종목을 등록하면 비중·집중도·상관·변동성·권장 현금비중이 실제 일봉으로 계산됩니다.</p>
+            <p style='margin: 4px 0; font-size:13px; color:#4C8DFF;'>보유종목을 등록하면 비중·집중도·상관·변동성이 실제 일봉으로 계산되고, 규칙상 현금 비중(손으로 정한 고정 규칙)이 함께 나옵니다.</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -14408,45 +14432,42 @@ with tab_audit:
     else:
         _dte = _div['days_to_ex']
         _yld = _div['dividend_yield_pct'] or 0.0
-        # 배당락 임박 판단: 진입 가치는 '배당수익률 > 거래비용' 이고 퀀트 조건도 통과할 때만.
-        # 배당만 보고 들어가면 배당락 갭하락으로 세후 손실이 나는 경우가 많다.
+        # 라운드 423 — 종전엔 '배당수익률 − 비용' 을 순익이라 적었다. 같은 줄에 적은 배당락 이론 하락폭을 빼지
+        #   않은 셈이라, 배당만 노린 진입이 이론상 이득처럼 보였다(이론값으로는 배당만큼 갭하락해 순익 ≈ −비용).
+        #   그리고 초록 '분할 진입 검토 가능' 을 행동점수·진입구간으로 **따로** 골랐다 — 중앙 판정을 모르는 판정자
+        #   (라운드 416·417 의 그 모양). 이제 순익은 세 항을 다 빼고, 사도 되는지는 중앙 판정(CORE)이 말한다.
         _cost = q_engine.TOTAL_COST_PCT
-        _net_edge = _yld - _cost
-        _quant_ok = four_scores.get('final_action_score', 0) >= q_engine.TOP3_MIN_ACTION_SCORE
-        _entry_ok = four_scores.get('entry_zone') in (
-            "안전마진 확보", "적정가 이하 (안전마진 미확보)")
+        _drop = _div.get('expected_drop_pct')
+        _cap_net = (_yld - float(_drop) - _cost) if _drop is not None else None
+        _rec = bool(CORE.get('recommended'))
+        _bkt = str(CORE.get('bucket') or '판정 없음')
 
         if _dte is not None and 0 <= _dte <= 30:
-            if _net_edge > 0 and _quant_ok and _entry_ok:
-                _verdict, _vcol = ("배당 + 퀀트 조건 동시 충족 — 분할 진입 검토 가능", "#35C98B")
-            elif _net_edge <= 0:
-                _verdict, _vcol = (
-                    f"배당수익률 {_yld:.2f}%가 왕복 거래비용 {_cost:.2f}%를 넘지 못함 — "
-                    f"배당만 노린 진입은 손실", "#ff453a")
+            if _rec:
+                _verdict, _vcol = (f"중앙 판정이 매수 추천입니다 — 배당락 D-{_dte}. 배당은 그 판정에 더해지지 "
+                                   f"않습니다(배당락일에 배당만큼 내려가는 것이 이론값입니다).", _TOK['pos'])
             else:
-                _miss = []
-                if not _quant_ok:
-                    _miss.append(f"행동점수 {four_scores.get('final_action_score')} < {q_engine.TOP3_MIN_ACTION_SCORE}")
-                if not _entry_ok:
-                    _miss.append(f"진입구간 '{four_scores.get('entry_zone')}'")
-                _verdict, _vcol = ("배당은 매력적이나 퀀트 조건 미달 — " + " · ".join(_miss),
-                                   "#F2B84B")
+                _verdict, _vcol = (f"중앙 판정은 '{_bkt}'입니다 — 배당락이 가까워도 매수 근거가 되지 않습니다"
+                                   f"(배당만 노린 진입의 이론 순익은 위 줄과 같습니다).", _TOK['warn'])
         else:
-            _verdict, _vcol = (f"배당락까지 {_dte}일 — 아직 배당 전략 구간이 아닙니다 "
-                               f"(30일 이내부터 판정)", "#9DAABC")
+            _verdict, _vcol = (f"배당락까지 {_dte}일 — 배당락 30일 이내일 때 이 칸에 판정을 적습니다 "
+                               f"(사도 되는지는 중앙 판정이 정합니다)", _TOK['tx2'])
 
+        _cap_txt = (f"배당 {_yld:.2f}% − 배당락 이론 하락 {float(_drop):.2f}% − 왕복 거래비용 {_cost:.2f}% → "
+                    f"<b style='color:{_TOK['pos'] if _cap_net > 0 else _TOK['neg']};'>순 {_cap_net:+.2f}%p</b> "
+                    f"(이론값 · 배당소득세 별도)"
+                    if _cap_net is not None else "배당락 이론 하락폭을 못 받아 순익을 셈하지 않았습니다")
         st.markdown(f"""
-        <div style='background:#161D2A; border-radius:14px; padding:16px;'>
+        <div style='background:{_TOK['bg2']}; border-radius:14px; padding:16px; color:{_TOK['tx1']};'>
             <p style='margin:2px 0;'>- <b>주당배당금(DPS)</b>: <b>{fmt_num(_div.get('dps'), ',.0f', '원', na='미공시')}</b>
                · <b>배당수익률</b>: <b>{fmt_pct(_div.get('dividend_yield_pct'), digits=2)}</b>
                (현재가 {fmt_num(realtime_price, ',.0f', '원')} 기준)</p>
             <p style='margin:2px 0;'>- <b>추정 배당락일</b>: <b>{_div['estimated_ex_date']}</b>
                (D-{_dte}) · 추정 배당기준일 {_div['estimated_record_date']}</p>
-            <p style='margin:2px 0;'>- <b>배당락 이론 하락폭</b>: 약 <b>{fmt_pct(_div['expected_drop_pct'], digits=2)}</b>
-               · 왕복 거래비용 {_cost:.2f}% → <b style='color:{_TOK["pos"] if _net_edge > 0 else _TOK["neg"]};'>순 {_net_edge:+.2f}%p</b></p>
-            <hr style='border-color:#1C2635; margin:8px 0;'>
+            <p style='margin:2px 0;'>- <b>배당만 노린 진입</b>: {_cap_txt}</p>
+            <hr style='border-color:{_TOK['border']}; margin:8px 0;'>
             <p style='margin:2px 0; color:{_vcol};'><b>판정</b>: {_verdict}</p>
-            <p style='font-size:12px; color:#F2B84B; margin-top:8px;'>{_uk._esc_md(_div['note'])}</p>
+            <p style='font-size:12px; color:{_TOK['warn']}; margin-top:8px;'>{_uk._esc_md(_div['note'])}</p>
         </div>
         """, unsafe_allow_html=True)
 

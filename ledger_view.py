@@ -819,3 +819,70 @@ def consistency_violations(row, tol=CONSISTENCY_TOL):
     except (TypeError, ValueError, ZeroDivisionError):
         out.append('목표·손절 못 읽음')
     return tuple(out)
+
+
+# ── 하락 국면 + 과매도/하단 — 그 자리의 값어치 (라운드 423 · 표시 전용) ─────────────
+#   라운드 8 이 원장 7,947건으로 '조건부 참고'로 채택한 규칙이다. 2026-10-03 같은 스크립트를 한 글자도 안 고치고
+#   원장 257,130행에서 돌리니 채택 없음이었다(scripts/bear_oversold_r423.py 가 오늘 셈 규칙으로 다시 재어 산출물에
+#   싣는다). 카드는 이 함수로 **산출물이 뒷받침하는 말만** 한다 — 수를 글자로 박지 않는다(라운드 422 의 그 자리).
+BEAR_OVERSOLD_RULES = ('RSI 과매도', '볼린저 하단')     # 화면이 고르는 규칙 이름 — 산출물의 rules 열쇠와 같다
+
+
+def bear_oversold_rules(rsi, bb_pos, doc=None):
+    """지금 값이 맞는 규칙 이름들. 문턱은 산출물의 `thresholds`(= regime_rule_r6.RULES 의 수)에서 읽고, 못 읽으면 빈
+    목록이다 — 문턱을 여기서 다시 적지 않는다(§4). RSI 가 맞으면 RSI 규칙, 볼린저가 맞으면 볼린저 규칙, 둘 다면 둘 다."""
+    th = (doc or {}).get('thresholds') or {}
+    out = []
+    try:
+        if rsi is not None and th.get('rsi_lt') is not None and float(rsi) < float(th['rsi_lt']):
+            out.append(BEAR_OVERSOLD_RULES[0])
+        if bb_pos is not None and th.get('bb_pos_lt') is not None and float(bb_pos) < float(th['bb_pos_lt']):
+            out.append(BEAR_OVERSOLD_RULES[1])
+    except (TypeError, ValueError):
+        return []
+    return out
+
+
+def bear_oversold_card(doc, rules):
+    """산출물 + 맞는 규칙 이름 → (제목, 본문) 또는 None(못 읽음 · 규칙 없음 · 표본 없음 — 지어내지 않는다).
+
+    제목은 첫 규칙의 판정에서 고른다 — 채택 기준 충족이면 '높았던 자리', 홀드아웃 lift 가 0 이하면 '더 잦던 자리가
+    아니었다', 양수지만 미달이면 '기준에 못 미쳤다'. 문턱 없음(기준은 산출물의 criteria · 라운드 8 의 수).
+    **판정을 대신 내리지 않는다** — 어느 경우든 매수 근거가 아니라고 적는다(라운드 8 의 채택 범위도 그랬다)."""
+    if not doc or not rules:
+        return None
+    R = doc.get('rules') or {}
+    base = (doc.get('baseline') or {}).get('hold') or {}
+    first = R.get(rules[0]) or {}
+    h, b = first.get('hold') or {}, first.get('blind') or {}
+    lift = first.get('lift') or {}
+    if not h.get('n') or base.get('hit') is None or lift.get('hold') is None:
+        return None
+    cond = ' · '.join(rules)
+    if first.get('adopted'):
+        head = '같은 국면 평균보다 목표에 먼저 닿는 비율이 높았던 자리입니다'
+    elif lift['hold'] <= 0:
+        head = '반등이 더 잦던 자리가 아니었습니다'
+    else:
+        head = '같은 국면 평균보다 조금 높았지만 채택 기준에 못 미쳤습니다'
+    title = f'하락 국면 + {cond} — {head}'
+    s = [f"{doc.get('made', '?')} 원장(판정 완료 {int(doc.get('graded_rows') or 0):,}건)으로 다시 재니, 본 적 없는 "
+         f"종목에서 {rules[0]} 조건의 사례 {int(h['n']):,}건 중 <b>{h['hit']:.1f}%</b>가 20거래일 안에 목표에 먼저 "
+         f"닿았습니다 — 같은 하락 국면 평균 {base['hit']:.1f}%보다 <b>{lift['hold']:+.1f}%p</b>."]
+    if lift.get('blind') is not None and b.get('n'):
+        s.append(f"실전 구간에서는 {lift['blind']:+.1f}%p였습니다({int(b['n']):,}건이지만 날짜 {b.get('dates')}일이라 "
+                 f"약한 근거입니다).")
+    if h.get('net') is not None and doc.get('cost_pct') is not None:
+        s.append(f"운영 비용 {doc['cost_pct']}%를 빼면 평균 {h['net']:+.2f}%입니다.")
+    for name in rules[1:]:
+        o = R.get(name) or {}
+        oh, ol = o.get('hold') or {}, (o.get('lift') or {}).get('hold')
+        if oh.get('n') and ol is not None:
+            s.append(f"{name} 조건은 {int(oh['n']):,}건 {oh['hit']:.1f}%({ol:+.1f}%p)였습니다.")
+    prev = doc.get('previous') or {}
+    if not first.get('adopted') and prev.get('hold_hit') is not None:
+        s.append(f"원장이 {int(prev.get('ledger_rows') or 0):,}건이던 때에는 RSI 과매도 조건이 본 적 없는 종목 "
+                 f"{prev.get('hold_n')}건에서 {prev['hold_hit']}%({prev.get('hold_lift', 0):+.1f}%p)로 재여 참고 표시로 "
+                 f"채택했던 규칙입니다 — 표본이 커지자 그 우위가 재현되지 않았습니다.")
+    s.append('이 조건은 매수 근거가 아니며, 위의 결론과 점수는 이 규칙과 무관합니다.')
+    return title, ' '.join(s)
