@@ -1,0 +1,141 @@
+{
+ "generated_from": "virtual_graded.jsonl (매수권 58점+)",
+ "knee_min_pct": 60.0,
+ "shoulder_min_pct": 35.0,
+ "splits": {
+  "train": {
+   "n": 1455,
+   "steps": [
+    {
+     "target_pct": 2.0,
+     "reach_rate": 68.7,
+     "zone": "무릎"
+    },
+    {
+     "target_pct": 3.0,
+     "reach_rate": 54.2,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 4.0,
+     "reach_rate": 40.6,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 5.0,
+     "reach_rate": 30.9,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 7.0,
+     "reach_rate": 17.9,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 10.0,
+     "reach_rate": 7.8,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 15.0,
+     "reach_rate": 2.5,
+     "zone": "머리"
+    }
+   ]
+  },
+  "valid": {
+   "n": 530,
+   "steps": [
+    {
+     "target_pct": 2.0,
+     "reach_rate": 71.3,
+     "zone": "무릎"
+    },
+    {
+     "target_pct": 3.0,
+     "reach_rate": 57.7,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 4.0,
+     "reach_rate": 46.2,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 5.0,
+     "reach_rate": 35.3,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 7.0,
+     "reach_rate": 19.8,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 10.0,
+     "reach_rate": 8.7,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 15.0,
+     "reach_rate": 2.3,
+     "zone": "머리"
+    }
+   ]
+  },
+  "blind": {
+   "n": 280,
+   "steps": [
+    {
+     "target_pct": 2.0,
+     "reach_rate": 77.1,
+     "zone": "무릎"
+    },
+    {
+     "target_pct": 3.0,
+     "reach_rate": 69.6,
+     "zone": "무릎"
+    },
+    {
+     "target_pct": 4.0,
+     "reach_rate": 63.2,
+     "zone": "무릎"
+    },
+    {
+     "target_pct": 5.0,
+     "reach_rate": 54.3,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 7.0,
+     "reach_rate": 37.5,
+     "zone": "어깨"
+    },
+    {
+     "target_pct": 10.0,
+     "reach_rate": 24.3,
+     "zone": "머리"
+    },
+    {
+     "target_pct": 15.0,
+     "reach_rate": 11.1,
+     "zone": "머리"
+    }
+   ]
+  }
+ },
+ "recommended": {
+  "range_pct": [
+   3.0,
+   5.0
+  ],
+  "sweet_spot_pct": 3.0,
+  "reach_rate": 57.7,
+  "basis": "검증 구간 매수권 사례의 실제 최고 상승폭 분포"
+ },
+ "zone_note": {
+  "무릎": "자주 닿지만 한 번에 먹는 폭이 얇습니다.",
+  "어깨": "폭과 확률이 균형을 이루는 구간입니다.",
+  "머리": "가끔 크게 먹지만 대부분 못 닿습니다."
+ }
+}

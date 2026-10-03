@@ -71,7 +71,16 @@ def reach_clause(facts='__load__'):
     signs = {(v > 0) - (v < 0) for _, v in per}
     per_txt = ' · '.join(f'{ko} {v:+.2f}' for ko, v in per)
     tail = ('' if len(per) < 2 else ' — 구간마다 부호가 갈립니다' if len(signs) > 1 else ' — 세 구간 부호가 같습니다')
-    return (f"같은 규칙의 진입가 전체로는 {a['fill_rate']:.1f}%가 {int(d.get('max_bars') or 20)}봉 안에 닿았지만, "
+    # 라운드 422 — `line()` 은 측정일·신호 수를 적는데 이 짧은 문장만 뺐다. 2026-08-05 의 신호 5,389건(블라인드 280건)으로
+    #   잰 값이 오늘 수처럼 읽혔다. 산출물에 있으면 같은 괄호로 붙인다(없으면 안 붙인다 — 지어내지 않는다).
+    _bn = (d['splits'].get('blind') or {}).get('n')
+    basis = ', '.join(x for x in (
+        str(d['made']) if d.get('made') else '',
+        f"신호 {int(a['n']):,}건" if a.get('n') else '',
+        f"블라인드 {int(_bn):,}건" if _bn else '') if x)
+    return (f"같은 규칙의 진입가 전체로는"
+            + (f"({basis})" if basis else '')
+            + f" {a['fill_rate']:.1f}%가 {int(d.get('max_bars') or 20)}봉 안에 닿았지만, "
             f"닿은 뒤 왕복 비용 {d.get('cost_pct')}% 차감 평균은 {a['ret']:+.2f}%입니다"
             + _cost_gap(d.get('cost_pct'))
             + (f" ({per_txt}{tail})" if per_txt else '')

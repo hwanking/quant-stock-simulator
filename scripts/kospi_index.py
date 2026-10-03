@@ -96,12 +96,11 @@ def states_from(dates, closes):
     arr = np.array(closes, dtype=float)
     out = {}
     for i in range(65, len(arr)):
-        st = tp.market_state(arr[i], arr[i - 19:i + 1].mean(),
-                             arr[i - 59:i + 1].mean(),
-                             arr[i - 64:i - 4].mean())
+        # 라운드 422 — 분류만 쓰므로 순수 함수를 부른다(market_state 는 그 상태의 성적을 산출물에서 읽는다)
+        code = tp.market_state_code(arr[i], arr[i - 19:i + 1].mean(), arr[i - 59:i + 1].mean())
         k = _iso(dates[i])
         if k:
-            out[k] = st.get('code')
+            out[k] = code
     return out
 
 

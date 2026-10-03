@@ -34,6 +34,13 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 P = os.path.join(PROJ, '.portfolio')
 H, COST = 20, 0.36
+# 라운드 422 — 이 지도의 '시장 국면' 칸을 매매 지시서·포트폴리오 견해가 읽게 됐다. 화면에 비용이 둘이 되지 않게 운영 비용을
+#   쓰고(라운드 350 · 업종 성적은 라운드 391 이 먼저 옮겼다) 쓴 비용을 산출물에 적는다(`cost_pct`).
+try:
+    import verdict_core as _vc422                              # noqa: E402
+    COST = float(_vc422.COST_PCT)
+except Exception:                                              # noqa: BLE001
+    pass
 MIN_N = 60
 
 import trade_plan as tp                                       # noqa: E402
@@ -247,6 +254,7 @@ def main():
                        .isoformat(timespec='seconds'),
                        ledger_rows=_ledger_rows,
                        joined_n=len(rows),
+                       cost_pct=COST,          # 라운드 422 — 'ev' 를 뺀 비용(화면이 이름과 함께 적는다)
                        # 라운드 391 — 통계 행 규칙으로 뺀 수 · 업종 출처(행 → 패치)
                        stat_excluded=dict(scale=int(_cnt391.get('scale', 0)),
                                           dup=int(_cnt391.get('dup', 0))),

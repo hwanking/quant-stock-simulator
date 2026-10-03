@@ -24,24 +24,24 @@
 """
 from __future__ import annotations
 
-#: 라운드 52 실측 — 개발 구간 KOSPI 4상태 (진단용 · 점수에 넣지 않는다)
+#: KOSPI 4상태의 이름 (규칙은 `market_state_code` · 라운드 52 · 진단용 · 점수에 넣지 않는다).
+#: ⚠️ 라운드 422 — 여기에 라운드 52(2026-08 초 · 원장 약 5.5만 행)의 **수와 이야기**가 글자로 박혀 있었다. 오늘 원장으로
+#:   같은 규칙을 세니 *"반등 초기 — 개발 구간에서 가장 나빴던 구간"*(48.0%)은 60.2% 로 바뀌어 가장 낮은 칸은 약세가 됐고,
+#:   *"약세는 60일선 기울기에 따라 67.1% vs 53.8%"* 는 차이가 사라졌다. 병렬 조사 둘이 따로 짚었다. 이제 수는 매일 밤 같은
+#:   4상태로 세는 취약구간 지도(`weakness_map.json` · 통계 행 · 개발 구간 · 58점+)에서 읽고, 문장은 그 수로 판정해 **맞을 때만**
+#:   낸다(`state_say`). *"약세면 엔진이 점수 상한 55"* 는 **사실이다** — 국면 게이트(regime_policy)에는 없지만 시장 맥락 상한
+#:   (`market_context.CONTEXT_CAPS['domestic_bear']` · 상장 시장 지수가 20·60일선 둘 다 아래)이 건다. 한때 게이트만 보고
+#:   '없다'고 적을 뻔했다 — 손으로 적지 않고 그 상수를 읽어 약세일 때 적는다(`engine_cap_line`).
 MARKET_STATES = {
-    'ABOVE_BOTH': dict(
-        ko='20·60일선 모두 위', n=8007, days=412, hit=59.8, ev=-0.122,
-        say='시장 중기 추세가 살아 있습니다.'),
-    'REBOUND': dict(
-        ko='20일선 위·60일선 아래 (반등 초기)', n=1543, days=105,
-        hit=48.0, ev=-0.978,
-        say='개발 구간에서 **가장 나빴던 구간**입니다 — 가짜 반등이 잦습니다.'),
-    'PULLBACK': dict(
-        ko='20일선 아래·60일선 위 (조정)', n=2056, days=135,
-        hit=60.9, ev=+0.224,
-        say='개발 구간에서 **유일하게 비용후 기대값이 양수**였던 구간입니다.'),
-    'BEAR': dict(
-        ko='20·60일선 모두 아래 (약세)', n=4118, days=290,
-        hit=57.9, ev=-0.254,
-        say='엔진이 이 국면에서 신규 매수 점수에 상한 55를 겁니다.'),
+    'ABOVE_BOTH': dict(ko='20·60일선 모두 위'),
+    'REBOUND': dict(ko='20일선 위·60일선 아래 (반등 초기)'),
+    'PULLBACK': dict(ko='20일선 아래·60일선 위 (조정)'),
+    'BEAR': dict(ko='20·60일선 모두 아래 (약세)'),
 }
+#: 취약구간 지도의 '시장 국면' 칸 이름 — `scripts/weakness_map.ST_KO` 와 같은 이름(그 지도는 이 모듈의 4상태 규칙으로 센다).
+STATE_AXIS_KO = {'ABOVE_BOTH': '상승', 'REBOUND': '반등초기', 'PULLBACK': '조정', 'BEAR': '약세'}
+STATE_FILE = 'weakness_map.json'
+STATE_AXIS = '시장 국면'
 
 #: 라운드 36 — 목표 배수 재탐색 결과. 카드에 그대로 적는다.
 TARGET_CAVEAT = ('1차 목표는 손절거리의 0.7배로 잡는 현행 기하입니다. '
@@ -65,34 +65,111 @@ def _pct(a, b):
     return None if not (a and b) else (a / b - 1.0) * 100.0
 
 
-def market_state(kospi_px, ma20, ma60, ma60_prev=None):
-    """4상태 + 60일선 기울기. 못 재면 None (지어내지 않는다)."""
+def market_state_code(kospi_px, ma20, ma60):
+    """4상태 코드만 — 순수 함수(산출물을 안 읽는다). 못 재면 None. 지수 일봉을 날마다 분류하는 쪽(kospi_index)이 부른다."""
     px, m20, m60 = _f(kospi_px), _f(ma20), _f(ma60)
     if not (px and m20 and m60):
         return None
     if px > m20 and px > m60:
-        code = 'ABOVE_BOTH'
-    elif px > m20:
-        code = 'REBOUND'
-    elif px > m60:
-        code = 'PULLBACK'
-    else:
-        code = 'BEAR'
+        return 'ABOVE_BOTH'
+    if px > m20:
+        return 'REBOUND'
+    if px > m60:
+        return 'PULLBACK'
+    return 'BEAR'
+
+
+def state_cells(doc):
+    """취약구간 지도 산출물의 '시장 국면' 칸 → {코드: 칸}. 못 읽으면 {}."""
+    ax = ((doc or {}).get('axes') or {}).get(STATE_AXIS) or {}
+    out = {}
+    for code, ko in STATE_AXIS_KO.items():
+        c = ax.get(ko)
+        if isinstance(c, dict) and c.get('n') and c.get('hit') is not None:
+            out[code] = c
+    return out
+
+
+def state_say(code, cells, cost=None):
+    """그 상태에 대해 **수가 뒷받침하는 문장만** — 4상태가 다 있을 때 적중 최저·최고, 비용 뺀 기대값이 양수인 유일한 칸.
+    해당 없으면 ''(이야기를 지어내지 않는다 · 라운드 422). 문턱 없음 — 넷의 순위와 부호만 본다."""
+    if code not in cells or len(cells) < len(STATE_AXIS_KO):
+        return ''
+    hits = {k: float(v['hit']) for k, v in cells.items()}
+    parts = []
+    if hits[code] == min(hits.values()) and list(hits.values()).count(hits[code]) == 1:
+        parts.append('개발 구간 4상태 중 매수권 적중이 **가장 낮은** 구간입니다')
+    elif hits[code] == max(hits.values()) and list(hits.values()).count(hits[code]) == 1:
+        parts.append('개발 구간 4상태 중 매수권 적중이 **가장 높은** 구간입니다')
+    pos = [k for k, v in cells.items() if v.get('ev') is not None and float(v['ev']) > 0]
+    if pos == [code]:
+        c = f'비용 {float(cost):.2f}% 뺀' if cost is not None else '비용 뺀'
+        parts.append(f'4상태 중 **유일하게** {c} 기대값이 양수였던 구간입니다(블라인드로 확정하지 못했습니다)')
+    return ' · '.join(parts) + ('.' if parts else '')
+
+
+def engine_cap_line(code):
+    """그 상태에서 엔진이 실제로 거는 시장 상한 — 약세면 시장 맥락 상한값을 **모듈 상수에서 읽어** 적는다. 그 밖은 ''.
+
+    상한은 그 종목이 **상장된 시장의 지수**로 판정된다(코스닥 종목은 코스닥 지수). 이 카드의 4상태는 코스피라서 그 사실도 적는다."""
+    if code != 'BEAR':
+        return ''
+    try:
+        import market_context
+        cap = market_context.CONTEXT_CAPS.get('domestic_bear')
+    except Exception:                                          # noqa: BLE001
+        cap = None
+    if cap is None:
+        return ''
+    return (f"상장 시장 지수가 20·60일선 둘 다 아래면 엔진이 신규 매수 점수에 상한 {int(cap)}점을 겁니다"
+            f"(코스닥 종목은 코스닥 지수로 판정합니다).")
+
+
+def _state_doc():
+    try:
+        import artifact_io
+        return artifact_io.load_json(STATE_FILE)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def market_state(kospi_px, ma20, ma60, ma60_prev=None, doc=None):
+    """4상태 + 60일선 기울기 + 그 상태의 매수권 성적(산출물에서 · 날짜·원장 행과 함께). 못 재면 None (지어내지 않는다).
+
+    doc 을 안 주면 취약구간 지도 산출물을 읽는다(artifact_io · 배포 앱은 동봉본). 산출물이 없으면 이름과 기울기만 돌려준다."""
+    code = market_state_code(kospi_px, ma20, ma60)
+    if code is None:
+        return None
     out = dict(MARKET_STATES[code])
     out['code'] = code
-    mp = _f(ma60_prev)
-    if mp is not None:
+    m60, mp = _f(ma60), _f(ma60_prev)
+    if mp is not None and m60 is not None:
         out['slope'] = 'up' if m60 > mp else 'down'
         out['slope_ko'] = '상승' if m60 > mp else '하락'
-        # 같은 약세라도 60선이 오르는 중이면 실측이 크게 달랐다 (67.1 vs 53.8)
-        if code == 'BEAR':
-            out['slope_note'] = (
-                '같은 약세라도 60일선이 상승 중이면 개발 구간 적중 67.1%, '
-                '하락 중이면 53.8% 로 갈렸습니다 (개발 구간 실측).'
-                if out['slope'] == 'up' else
-                '60일선이 하락 중입니다 — 개발 구간 적중 53.8% · EV −0.679 로 '
-                '가장 나쁜 조합이었습니다 (개발 구간 실측).')
+    d = _state_doc() if doc is None else doc
+    cells = state_cells(d)
+    cost = (d or {}).get('cost_pct')
+    c = cells.get(code)
+    if c:
+        out.update(n=int(c['n']), ep=c.get('ep'), hit=float(c['hit']), ev=c.get('ev'),
+                   made=(d or {}).get('made'), ledger_rows=(d or {}).get('ledger_rows'), cost_pct=cost)
+    out['say'] = ' '.join(x for x in (state_say(code, cells, cost), engine_cap_line(code)) if x)
     return out
+
+
+def state_basis_line(m):
+    """그 상태 성적의 출처 한 줄 — 수·날짜·원장 행·비용을 산출물에서. 없으면 그 사실을 적는다(§3)."""
+    m = m or {}
+    if m.get('n') is None or m.get('hit') is None:
+        return '이 상태의 성적은 산출물을 못 읽어 적지 않습니다.'
+    ev = m.get('ev')
+    cost = m.get('cost_pct')
+    ev_txt = (f" · {'비용 ' + format(float(cost), '.2f') + '% 뺀' if cost is not None else '비용 뺀'} 기대값 {float(ev):+.3f}%"
+              if ev is not None else '')
+    return (f"개발 구간 매수권(58점+) n={int(m['n']):,}"
+            + (f" · 독립 사건 {int(m['ep']):,}" if m.get('ep') else '')
+            + f" · 적중 {float(m['hit']):.1f}%{ev_txt}"
+            + (f" ({m.get('made')} 측정 · 원장 {int(m.get('ledger_rows') or 0):,}행)" if m.get('made') else ''))
 
 
 # ───────────────────────────────────────────────────────────────────

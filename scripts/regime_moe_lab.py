@@ -81,7 +81,8 @@ def build_states():
         ma20 = arr[i - 19:i + 1].mean()
         ma60 = arr[i - 59:i + 1].mean()
         ma60p = arr[i - 64:i - 4].mean()
-        st = tp.market_state(px, ma20, ma60, ma60p)
+        # 라운드 422 — 분류만 쓰므로 순수 함수(market_state 는 이제 그 상태의 성적을 산출물에서 읽는다 · ma60p 는 안 쓴다)
+        st = {'code': tp.market_state_code(px, ma20, ma60)}
         ret = np.diff(arr[i - 20:i + 1]) / arr[i - 20:i]
         # 네이버 지수 날짜는 'YYYYMMDD' — 원장('YYYY-MM-DD')에 맞춘다
         d8 = dates[i][:10].replace('.', '-').replace('-', '')[:8]

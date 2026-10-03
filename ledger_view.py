@@ -316,6 +316,46 @@ def reach_share(table, regime, zone, upside_pct):
     return round(100.0 * k / n, 1), n
 
 
+def ledger_regime(price, sma20, sma60):
+    """원장(국면 표)이 쓰는 시장 국면 규칙 — 'BULL'·'BEAR'·'SIDEWAYS', 못 정하면 None (라운드 421 · 한 곳).
+
+    현재가 > 20일선 > 60일선 → 상승 · 현재가가 20일선과 60일선 **둘 다** 아래 → 하락 · 그 밖 → 옆걸음.
+    랩(`calibration_lab.regime_at`)이 원장 행마다 이 규칙으로 국면을 붙였고 화면의 국면 표가 그 행을 센다. 종전엔
+    화면의 '지금은 ○○ 국면' 카드가 **다른 규칙**(60일선 아래면 하락 · 20일선 위면 상승)을 써서, 같은 날을 표와 다른
+    줄로 가리킬 수 있었다(현재가가 20일선 위·60일선 아래면 카드는 하락, 표는 옆걸음). 새 숫자 없음 — 랩 규칙 그대로."""
+    try:
+        p, s20, s60 = float(price), float(sma20), float(sma60)
+    except (TypeError, ValueError):
+        return None
+    if not (p > 0 and s20 > 0 and s60 > 0):
+        return None
+    if p > s20 > s60:
+        return 'BULL'
+    if p < s20 and p < s60:
+        return 'BEAR'
+    return 'SIDEWAYS'
+
+
+def engine_live_regime(price, sma20, sma60):
+    """엔진의 실시간 국면 게이트(`quant_indicators.classify_market_regime` → `_RP_MAP`)가 쓰는 갈래를 같은 이름으로
+    옮긴다 — 화면이 두 규칙이 **갈리는 날**을 알아보게 하려는 것뿐이다(엔진은 이 함수를 안 부른다 · 판정 불변).
+
+    엔진: 현재가 ≥ 20일선 ≥ 60일선 → 강한 상승 · 현재가 ≥ 20일선 → 완만한 상승(둘 다 'BULL') · 둘 다 아래 → 하락 ·
+    그 밖 → 옆걸음. 원장 규칙과 갈리는 것은 '현재가 ≥ 20일선인데 20일선 < 60일선'(반등 초입)이다 — 엔진은 상승,
+    원장은 옆걸음. 회귀가 엔진 소스의 갈래 식과 이 함수를 같이 잠근다."""
+    try:
+        p, s20, s60 = float(price), float(sma20), float(sma60)
+    except (TypeError, ValueError):
+        return None
+    if not (p > 0 and s20 > 0 and s60 > 0):
+        return None
+    if p >= s20:
+        return 'BULL'
+    if p < s20 and p < s60:
+        return 'BEAR'
+    return 'SIDEWAYS'
+
+
 FAIR_ZONE_FILE = 'fair_zone_regime_r419.json'
 
 

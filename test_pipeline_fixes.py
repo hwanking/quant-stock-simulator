@@ -3956,9 +3956,11 @@ check("홈 카드 — 킷 컴포넌트로 렌더 (인라인 HTML 금지)",
 check("홈 카드 — 대표 지표가 매수권 기준 (전체 사례가 아님)",
       '60점+ 신호 실전 적중률' in _w63
       and '매수 신호 {_bzv.get' in _w63)
+# 라운드 421 — 캡션 문장이 trust_view.threshold_note 한 곳으로 옮겨 갔다(화면은 부르기만). 같은 성질을 그 함수에서 본다(R98b).
+_tv63 = open(_os.path.join(PROJ, "trust_view.py"), encoding='utf-8').read()
 check("홈 카드 — 전체 사례 적중률도 숨기지 않고 보조로 남긴다",
-      '점수와 무관하게 전체 사례를 다 센 적중률' in _w63)
-check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _w63)
+      '점수와 무관하게 전체 사례를 다 센 적중률' in _tv63 and '_tv421.threshold_note(' in _w63)
+check("홈 카드 — 보장하지 않는다 명시", '미래 수익을 보장' in _tv63)
 check("개장 전 한 줄 결론 — 리포트 없으면 만들어내지 않음",
       '_pm_today and _pm_today.get' in _w63)
 
@@ -5390,8 +5392,10 @@ check("새 지표를 만들지 않았다 (기존 vol20 사용)",
 _w89 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("화면 — 6칸 표 (지수 방향 × 종목 변동성)",
       '지수 방향 × 종목 변동성' in _w89)
+# 라운드 421 — 그 문장은 표와 같은 국면 규칙으로 trust_view.regime_now_line 이 만든다(화면은 부른다) — 같은 성질을 거기서 본다
 check("화면 — 지금이 어느 칸인지 알려준다",
-      '지금은 <b>{_now_ko}</b> 국면입니다' in _w89)
+      '_tv421.regime_now_line(' in _w89
+      and '지금은 <b>{ko}</b> 국면입니다' in open(_os.path.join(PROJ, 'trust_view.py'), encoding='utf-8').read())
 check("화면 — 모델이 좋아진 게 아니라 분류가 거칠었다고 설명",
       '모델이 갑자기 좋아진 게 아니라' in _w89)
 
@@ -5449,9 +5453,11 @@ if _os.path.exists(_us90):
           _u90.get('gate') is None)
 
 _w90 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
-check("화면 — 전날 미국장 경고 (보합이면 조심)",
-      '어젯밤 미국장이 보합이었습니다' in _w90
-      and '오늘은 특히 조심하세요' in _w90)
+# 라운드 421 — 종전엔 '보합'이면 늘 경고를 **글자로 박아** 띄웠다(2026-08 초 실전 142건의 주장). 오늘 원장(실전 7,346건 ·
+#   미결 제외)으로 다시 재니 보합은 학습·검증에서만 가장 낮고 실전에서는 실전 전체보다 높아 그 조언이 서지 않았다. 경고는 이제 **오늘 구간이 세
+#   구간 모두에서 가장 낮을 때만**(trust_view.us_overnight_card) — 지키려던 성질(근거가 있을 때 경고)을 본다.
+check("화면 — 전날 미국장 경고는 근거가 설 때만 (세 구간 모두 가장 낮을 때)",
+      '_tv421.us_overnight_card(' in _w90 and '_warn421' in _w90)
 check("화면 — 게이트가 아니라 경고임을 코드에 명시",
       '게이트로 막지는 않는다' in _w90)
 check("누수 방지 — 직전 미국 거래일만 쓴다",
@@ -5529,8 +5535,11 @@ check("국면 안내가 표의 행 이름과 일치 (차분한/거친 + 국면)"
       "<b>차분한 {_now_ko}</b>" in _w92 and "<b>거친 {_now_ko}</b>" in _w92)
 check("'~로 시작하는' 이라는 틀린 안내가 남아 있지 않다",
       "로 시작하는 두 줄" not in _w92)
+# 라운드 421 — 그 근거 문장이 표와 **다른 국면 규칙**을 쓰고 있었다(60일선 아래면 하락 · 20일선 위면 상승 — 코스피
+#   거래일의 20.4% 에서 표와 다른 줄을 가리켰다). 문장은 trust_view.regime_now_line 이 표와 같은 규칙으로 만든다.
 check("국면 판정 근거를 함께 적는다 — 하루 등락과 구분",
-      "_now_basis" in _w92 and "하루 등락이 아니라 60일 추세로 봅니다" in _w92)
+      "_tv421.regime_now_line(" in _w92
+      and "하루 등락이 아니라 이동평균 위치" in open(_os.path.join(PROJ, "trust_view.py"), encoding='utf-8').read())
 
 # ③ 가늠 AI 는 화면 위쪽과 같은 판정을 봐야 한다 (두 개의 진실 금지)
 check("가늠 AI 가 최종 판정(verdict)을 받는다",
@@ -5728,8 +5737,10 @@ check("타일 라벨에 점수 문턱이 박혀 있다 (60점+)",
       "'60점+ 신호 실전 적중률'" in _w93)
 check("국면 표 제목에 점수 문턱이 박혀 있다 (58점+)",
       '시장 국면별 성적 (58점+ 신호)' in _w93)
+# 라운드 421 — 그 이유 문장은 trust_view.threshold_note 가 산출물에서 만든다(종전 이유 '58점이라 더 크다'는 거짓이었다)
 check("두 표의 숫자가 다른 이유를 본문에서 밝힌다",
-      '아래 국면별 표는 **58점 이상**' in _w93)
+      '_tv421.threshold_note(' in _w93
+      and '아래 국면별 표는 **58점 이상**' in open(_os.path.join(PROJ, 'trust_view.py'), encoding='utf-8').read())
 
 # ⑦ 새 이슈가 원인·계획과 함께 등록돼 있는가
 _io93 = open(_os.path.join(PROJ, 'improvement', 'issue_ops.py'),
@@ -8492,14 +8503,20 @@ check("손실 구간에서 물타기를 막는 말이 남아 있다",
 check("평단이 없으면 아무것도 만들지 않는다",
       _tp120.for_holder(_c120, None).get('available') is False)
 
-# ③ 시장 4상태 — 라운드 52 실측을 그대로 싣는가
-_ms = _tp120.market_state(2600, 2650, 2500, 2480)
+# ③ 시장 4상태 — 라운드 422: 라운드 52 의 수·이야기를 박아 두던 것을 산출물(취약구간 지도)에서 읽고 문장은 수로 판정한다.
+#   지키려던 성질(조정 구간을 알아보고, 그 칸이 유일한 양수 기대값이면 그렇게 적는다)을 심은 산출물로 본다(R213 — 표류하는
+#   측정값을 잠그지 않는다).
+_doc120 = {'made': 'x', 'ledger_rows': 1, 'cost_pct': 0.41, 'axes': {'시장 국면': {
+    '상승': {'n': 10, 'hit': 59.9, 'ev': -0.2}, '반등초기': {'n': 10, 'hit': 60.2, 'ev': -0.1},
+    '조정': {'n': 10, 'hit': 64.8, 'ev': 0.3}, '약세': {'n': 10, 'hit': 57.8, 'ev': -0.4}}}}
+_ms = _tp120.market_state(2600, 2650, 2500, 2480, doc=_doc120)
 check("조정 구간을 알아본다", _ms and 'PULLBACK' == _ms.get('code'))
-check("조정 구간이 유일한 양수 EV 임을 적는다",
-      '유일하게 비용후 기대값이 양수' in str(_ms.get('say')))
-_ms2 = _tp120.market_state(2400, 2450, 2500, 2530)
+check("조정 구간이 유일한 양수 기대값이면 그렇게 적는다 (산출물의 수로 판정)",
+      '유일하게' in str(_ms.get('say')) and '기대값이 양수' in str(_ms.get('say')))
+_ms2 = _tp120.market_state(2400, 2450, 2500, 2530, doc=_doc120)
 check("60일선 기울기를 반영한다", _ms2 and _ms2.get('slope') == 'down')
-check("기울기 차이를 문장으로 낸다", '53.8%' in str(_ms2.get('slope_note')))
+check("기울기는 사실로만 적는다 — 기울기별 성적 문장(라운드 52 의 53.8% · 오늘 원장에서 서지 않음)을 만들지 않는다",
+      not _ms2.get('slope_note') and '53.8' not in str(_ms2))
 _bi120 = open(_os.path.join(PROJ, 'bitemporal_engine.py'),
               encoding='utf-8').read()
 check("엔진이 60일선 기울기를 낸다", '"sma60_prev"' in _bi120)
@@ -12341,8 +12358,13 @@ import regime_policy as _rp165                                   # noqa: E402
 import trade_plan as _tp165                                      # noqa: E402
 
 _sent165 = []
-for _st165 in _tp165.MARKET_STATES.values():
-    _sent165.append(_st165['say'])
+# 라운드 422 — MARKET_STATES 는 이제 이름만 든다. 엔진이 실제로 쓰는 문장은 state_say 가 수로 만든다(굵기 표기 포함).
+_cells165 = {'ABOVE_BOTH': {'n': 1, 'hit': 59.9, 'ev': -0.2}, 'REBOUND': {'n': 1, 'hit': 60.2, 'ev': -0.1},
+             'PULLBACK': {'n': 1, 'hit': 64.8, 'ev': 0.3}, 'BEAR': {'n': 1, 'hit': 57.8, 'ev': -0.4}}
+for _c165 in ('PULLBACK', 'BEAR', 'ABOVE_BOTH', 'REBOUND'):
+    _s165 = _tp165.state_say(_c165, _cells165, 0.41)
+    if _s165:
+        _sent165.append(_s165)
 _sent165.append(_rp165.NO_SAMPLE.get('why') or
                 '강한 제한이면 **신규 매수를 차단**합니다')
 _left165 = [s for s in _sent165 if '**' in _uk165._esc(s)]
@@ -22974,8 +22996,10 @@ check("레이더가 R249 의 한계를 적는다 — 통과가 아니라 미달�
 #    판정은 그대로다(매크로는 여전히 표시 전용) — 바뀐 것은 **이유**다.
 check("화면이 '아직 재지 않았습니다'를 더는 말하지 않는다 (쟀다)",
       '판정을 개선하는지는 아직 재지' not in _w231)
+# 라운드 422 — 그 문장이 '아홉 축을 방향 신호로 더할지는'으로 다듬어졌다(환율·변동성은 고정 감점으로 들어간다는 사실을
+#   같이 적느라). 지키려던 성질(근거를 표본 수와 날짜로)만 본다(R98b).
 check("화면이 잰 표본과 날짜를 적는다 — 근거는 숫자와 날짜로 (내부 번호 금지)",
-      '아홉 축 전부를 되돌려 본 판단 251,528건으로' in _w231
+      '아홉 축' in _w231 and '되돌려 본 판단 251,528건으로' in _w231
       and '2026-09-09' in _w231
       and '세 구간에서 ' in _w231)
 
@@ -24719,9 +24743,11 @@ check("심기 — 지금 블록의 '내일'·'오르' 는 오탐하지 않는다
       '내일' in _blk301 and '오르는' in _blk301 and not _fc301(_blk301))
 
 # ⑥ 경계를 화면이 **말한다** — 침묵하면 '재지 않았다' 로 읽힌다(R250)
-check("판이 스스로 경계를 적는다 — 앞일은 말하지 않고, 판정에 드는 것은 국면 게이트 한 줄",
+# 라운드 422 — '판정에 드는 것은 국면 게이트 한 줄뿐'은 넘친 말이었다(원달러·변동성지수·S&P·나스닥은 시장 국면 점수의
+#   고정 감점으로 들어간다 · market_context). 경계 문장이 그 감점까지 말하는지 본다.
+check("판이 스스로 경계를 적는다 — 앞일은 말하지 않고, 판정에 드는 것은 국면 게이트 줄과 고정 감점",
       '앞으로 어떻게 될지는 이 화면이 말하지 않습니다' in _blk301
-      and '국면 게이트 한 줄뿐입니다' in _blk301
+      and '국면 게이트 한 줄과' in _blk301 and '고정 감점' in _blk301
       and '이 판단에 들어가지 않습니다' in _blk301)
 check("판정 문장은 킷 한 곳이 만든다 — 화면이 국면을 다시 적지 않는다 (§4)",
       '_uk.regime_gate_line(' in _blk301)
@@ -32740,6 +32766,173 @@ check("성적표 스크립트가 .portfolio 에 쓴 뒤 동봉본도 쓴다 (쓰
       0 < _srcps408.find('proof.save_scorecard(doc)') < _srcps408.find('proof.ship_scorecard(doc)')
       and _srcps408.rfind('if write:', 0, _srcps408.find('proof.ship_scorecard(doc)')) > 0
       and _pf408.SHIPPED_FILE.replace('\\', '/').endswith('data/proof_scorecard.json'))
+
+
+print("=" * 72)
+print("§409 '이 판단, 얼마나 믿을 수 있나' — 수는 맞았고 설명이 틀렸다 · 국면 규칙은 표와 같게 · 미국장 경고는 근거가 설 때만 (라운드 421)")
+print("=" * 72)
+# 사용자(2026-10-03)가 그 칸을 붙여 확인을 청했다. 타일 수는 원장 재계산과 소수점까지 같았다(검증 60점+ 69.3%·1,259 ·
+#   실전 54.3%·1,367 · 매수 기회 16,548/251,924). 틀린 것: 국면 표가 '표본이 더 크다'(실제는 08월 초 고정 · 검증 530 ·
+#   실전 280) · '보합이면 조심'(오늘 원장에서 가장 나쁜 구간이 구간마다 다름) · '지금' 카드의 국면 규칙(표와 20.4% 날 갈림).
+import ledger_view as _lv409                                         # noqa: E402
+import trust_view as _tv409                                          # noqa: E402
+_lr409 = [(_lv409.ledger_regime(*x), _lv409.engine_live_regime(*x)) for x in
+          ((110, 105, 100), (95, 100, 105), (103, 100, 105), (99, 100, 98), (None, 100, 100), (0, 1, 1))]
+check("ledger_regime(원장 규칙) · engine_live_regime(엔진 게이트) — 반등 초입(현재가 ≥ 20일선 · 20일선 < 60일선)에서만 갈린다",
+      _lr409 == [('BULL', 'BULL'), ('BEAR', 'BEAR'), ('SIDEWAYS', 'BULL'), ('SIDEWAYS', 'SIDEWAYS'), (None, None), (None, None)],
+      str(_lr409))
+_lab409 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_qi409 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("랩은 원장 국면을 ledger_regime 한 곳으로 붙인다 (식을 다시 적지 않는다) · 엔진 게이트의 갈래 식은 helper 가 옮긴 그대로",
+      '_lv421r.ledger_regime(' in _lab409 and 'if p > s20 > s60:' not in _lab409
+      and 'if kp >= ks20 and ks20 >= ks60:' in _qi409 and 'elif kp >= ks20:' in _qi409
+      and 'elif kp < ks20 and kp < ks60:' in _qi409)
+_cal409 = {'ledger_rows': 257130, 'splits': {
+    'valid': {'hit_rate': 65.4, 'n': 16245}, 'blind': {'hit_rate': 58.1, 'n': 18645},
+    'buy_zone': {'valid': {'hit_rate': 69.3, 'n': 1259}, 'blind': {'hit_rate': 54.3, 'n': 1367}},
+    'ext_zone': {'valid': {'n': 6851}, 'blind': {'n': 5979}}}}
+_rb409 = {'buy_zone': {'valid': {'BULL': {'n': 328}, 'SIDEWAYS': {'n': 175}, 'BEAR': {'n': 27}},
+                       'blind': {'BULL': {'n': 136}, 'SIDEWAYS': {'n': 128}, 'BEAR': {'n': 16}}}}
+_tn409 = _tv409.threshold_note(_cal409, _rb409)
+_tn409b = _tv409.threshold_note(_cal409, None)
+check("threshold_note — 국면 표가 '고정 값(검증 530 · 실전 280건)'이라 다르다고 · 오늘 58점+ 수 · 실전 60점+ 가 전체보다 낮다 · 옛 '표본이 더 크고' 없음",
+      '고정 값' in _tn409 and '검증 530 · 실전 280건' in _tn409 and '검증 8,110 · 실전 7,346건' in _tn409
+      and '낮습니다' in _tn409 and '표본이 더 크고' not in _tn409 and '점수와 무관하게 전체 사례를 다 센 적중률' in _tn409
+      and '고정 값' not in _tn409b and '미래 수익을 보장' in _tn409b, _tn409)
+check("signal_sub — 천 단위 쉼표 · 분모가 통계 행이면 원장 행과의 차이(뺀 행)를 같이 · 못 읽으면 빈 글자",
+      _tv409.signal_sub({'buy_zone': 16548, 'total': 251924}, 257130)
+      == '16,548/251,924건 · 분모는 통계 행(원장 257,130행 중 진입가 축척 어긋남·복사본 5,206행 뺌)'
+      and _tv409.signal_sub({'buy_zone': 3, 'total': 10}) == '3/10건' and _tv409.signal_sub({}) == '')
+
+
+def _band409(h, n=100, ret=0.1, days=20):
+    return {'n': n, 'hit': h, 'ret': ret, 'days': days, 'ev': ret - 0.3}
+
+
+# 측정일은 손으로 박지 않는다(§156) — 다시 잰 실제 산출물의 날짜를 심기 문서에 옮긴다
+try:
+    _uo409 = _json.load(open(_os.path.join(PROJ, 'data', 'us_overnight.json'), encoding='utf-8'))
+except Exception:                                                    # noqa: BLE001
+    _uo409 = {}
+_made409 = str(_uo409.get('made') or '측정일 없음')
+_doc409 = {'made': _made409, 'ledger_rows': 257130, 'score_floor': 58, 'cost_pct': 0.3,
+           'baseline': {'blind': {'hit': 55.3, 'n': 6315}, 'valid': {'hit': 62.6}},
+           'bands': {'하락 (−2~−0.5%)': {'train': _band409(58.9), 'valid': _band409(74.6), 'blind': _band409(36.4)},
+                     '보합 (±0.5%)': {'train': _band409(55.8), 'valid': _band409(54.9), 'blind': _band409(57.6)},
+                     '상승 (+0.5~+2%)': {'train': _band409(60.3), 'valid': _band409(70.3), 'blind': _band409(67.4)}}}
+_l409, _w409 = _tv409.us_overnight_card(_doc409, '보합 (±0.5%)', 0.41)
+_doc409b = dict(_doc409, bands=dict(_doc409['bands'], **{'보합 (±0.5%)': {
+    'train': _band409(50.0), 'valid': _band409(40.0), 'blind': _band409(30.0)}}))
+_l409b, _w409b = _tv409.us_overnight_card(_doc409b, '보합 (±0.5%)', 0.41)
+_l409c, _w409c = _tv409.us_overnight_card({'bands': {'상승 (+0.5~+2%)': {'blind': {'n': 138, 'hit': 65.9, 'ev': 0.112}}}},
+                                          '상승 (+0.5~+2%)', 0.41)
+check("us_overnight_card — 가장 나쁜 구간이 구간마다 다르면 경고 안 함(사유를 적는다) · 세 구간 모두 가장 낮으면 경고 · "
+      "운영 비용으로 뺀다 · 옛 산출물은 '측정 당시 비용'",
+      _w409 is False and '같지 않아' in _l409 and '운영 비용 0.41% 뺀 평균 -0.31%' in _l409 and '날짜 20일' in _l409
+      and f'{_made409} 측정' in _l409 and _w409b is True and '같지 않아' not in _l409b
+      and _w409c is False and '측정 당시 비용' in _l409c, f"{_l409} || {_l409c}")
+_rk409 = {'BULL': '상승', 'SIDEWAYS': '옆걸음', 'BEAR': '하락'}
+_rn409 = _tv409.regime_now_line(110, 105, 100, _rk409)
+_rn409b = _tv409.regime_now_line(103, 100, 105, _rk409)
+check("regime_now_line — 표와 같은 규칙 · 엔진 게이트와 갈리는 날엔 그 사실을 적는다 · 못 정하면 (None, '')",
+      _rn409[0] == 'BULL' and '갈리는 날' not in _rn409[1] and '하루 등락이 아니라 이동평균 위치' in _rn409[1]
+      and _rn409b[0] == 'SIDEWAYS' and '갈리는 날' in _rn409b[1] and '<b>상승</b>' in _rn409b[1]
+      and _tv409.regime_now_line(None, 1, 1, _rk409) == (None, ''), _rn409b[1])
+check("frozen_basis — 산출물의 표본 수·기간에서 '고정 값' 문장 · 못 읽으면 빈 글자",
+      '검증 530' in _tv409.frozen_basis({'baseline': {'valid': {'n': 530}, 'blind': {'n': 280}},
+                                        'period': ['2013-11-12', '2026-07-01']})
+      and '2013-11-12~2026-07-01' in _tv409.frozen_basis({'baseline': {'valid': {'n': 530}},
+                                                          'period': ['2013-11-12', '2026-07-01']})
+      and _tv409.frozen_basis({}) == '')
+_w409s = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면이 다섯 문장을 trust_view 에서 읽는다 · 옛 문장(표본이 더 크고 · 보합 고정 경고 · 표와 다른 국면 규칙) 0",
+      all(s in _w409s for s in ('_tv421.threshold_note(', '_tv421.signal_sub(', '_tv421.us_overnight_card(',
+                                 '_tv421.regime_now_line(', '_tv421.frozen_basis('))
+      and '표본이 더 크고' not in _w409s and '오늘은 특히 조심하세요' not in _w409s
+      and "_ir['price'] < _ir['sma60']" not in _w409s)
+_dir409 = [n for n in ('us_overnight.json', 'regime_cell_days.json', 'engine_bakeoff.json', 'target_policy.json')
+           if f"'.portfolio', '{n}'" in _w409s]
+check("화면이 고정 산출물 넷을 .portfolio 에서 직접 열지 않는다(artifact_io · 배포 앱도 같은 답) · 동봉본이 있고 종목코드 모양 0",
+      not _dir409 and all(_os.path.exists(_os.path.join(PROJ, 'data', n)) for n in
+                          ('us_overnight.json', 'regime_cell_days.json', 'engine_bakeoff.json', 'target_policy.json'))
+      and all(not _pf408.code_like_strings(_json.load(open(_os.path.join(PROJ, 'data', n), encoding='utf-8')))
+              for n in ('us_overnight.json', 'regime_cell_days.json', 'engine_bakeoff.json', 'target_policy.json')),
+      str(_dir409))
+check("다시 잰 전날 미국장 산출물 — 측정일 · 원장 행 · 쓴 비용 · 셀마다 차감 전 평균과 날짜 수",
+      bool(_uo409.get('made')) and (_uo409.get('ledger_rows') or 0) > 200000 and _uo409.get('cost_pct') is not None
+      and all(('ret' in m and 'days' in m) for c in (_uo409.get('bands') or {}).values() for m in c.values() if m),
+      str({k: _uo409.get(k) for k in ('made', 'ledger_rows', 'cost_pct', 'coverage')}))
+
+
+print("=" * 72)
+print("§410 박힌 옛 수와 근거 없는 조언 — 시장 진단은 산출물에서 · 한 줄 결론은 사실만 · 환율 문장 · 닫힌 이슈 · 진입가 날짜 (라운드 422)")
+print("=" * 72)
+# 병렬 조사 셋(같은 개념 다른 계산 · 날짜 없는 고정 수 · 근거 없는 조언)이 찾은 것 중 직접 확인한 것만 고쳤다.
+import trade_plan as _tp410                                          # noqa: E402
+import market_context as _mc410                                      # noqa: E402
+_codes410 = [_tp410.market_state_code(*x) for x in ((110, 105, 100), (103, 100, 105), (99, 100, 98), (95, 100, 105), (None, 1, 1))]
+check("market_state_code — 4상태 순수 분류(산출물을 안 읽는다) · 못 재면 None",
+      _codes410 == ['ABOVE_BOTH', 'REBOUND', 'PULLBACK', 'BEAR', None], str(_codes410))
+_c410 = {'ABOVE_BOTH': {'n': 9, 'ep': 7, 'hit': 59.9, 'ev': -0.2}, 'REBOUND': {'n': 9, 'ep': 7, 'hit': 60.2, 'ev': -0.1},
+         'PULLBACK': {'n': 9, 'ep': 7, 'hit': 64.8, 'ev': 0.3}, 'BEAR': {'n': 9, 'ep': 7, 'hit': 57.8, 'ev': -0.4}}
+_tie410 = dict(_c410, REBOUND={'n': 9, 'hit': 57.8, 'ev': -0.1})
+check("state_say — 수가 뒷받침할 때만(최저·최고 유일 · 유일한 양수 기대값) · 동률·칸 모자람·없는 칸은 문장 없음",
+      '가장 낮은' in _tp410.state_say('BEAR', _c410) and '가장 높은' in _tp410.state_say('PULLBACK', _c410)
+      and '유일하게' in _tp410.state_say('PULLBACK', _c410, 0.41) and _tp410.state_say('REBOUND', _c410) == ''
+      and _tp410.state_say('BEAR', _tie410) == '' and _tp410.state_say('BEAR', {'BEAR': _c410['BEAR']}) == '')
+_doc410 = {'made': 'x', 'ledger_rows': 5, 'cost_pct': 0.41,
+           'axes': {'시장 국면': {_tp410.STATE_AXIS_KO[k]: v for k, v in _c410.items()}}}
+_m410 = _tp410.market_state(95, 100, 105, 106, doc=_doc410)
+_m410e = _tp410.market_state(103, 100, 105, 106, doc={})
+check("market_state — 수·날짜·원장 행·비용을 산출물에서 · 산출물이 없으면 수 없이 이름·기울기만 · 출처 줄이 그 사실을 적는다",
+      _m410['n'] == 9 and _m410['hit'] == 57.8 and _m410['cost_pct'] == 0.41 and _m410['slope'] == 'down'
+      and 'n' not in _m410e and _m410e['say'] == '' and '못 읽어' in _tp410.state_basis_line(_m410e)
+      and '비용 0.41% 뺀' in _tp410.state_basis_line(_m410), str(_m410))
+_cap410 = _mc410.CONTEXT_CAPS.get('domestic_bear')
+_mcs410 = _read148(_os.path.join(PROJ, 'market_context.py'))
+check("약세의 엔진 상한은 시장 맥락 상수에서 읽는다 — 그 상한이 실제로 BEAR_PANIC 에서 걸린다(소스) · 다른 상태는 문장 없음",
+      _cap410 is not None and f"상한 {int(_cap410)}점" in _tp410.engine_cap_line('BEAR')
+      and _tp410.engine_cap_line('PULLBACK') == ''
+      and "if dom['regime_code'] == 'BEAR_PANIC':" in _mcs410 and "caps['domestic_bear']" in _mcs410)
+_tps410 = _read148(_os.path.join(PROJ, 'trade_plan.py'))
+check("매매 지시서에 라운드 52 의 수가 박혀 있지 않다 (MARKET_STATES 는 이름만)",
+      all(set(v) == {'ko'} for v in _tp410.MARKET_STATES.values())
+      and all(x not in _tps410.split('MARKET_STATES = {')[1].split('}\n')[0] for x in ('8007', '48.0', '53.8', '67.1')))
+_ki410 = _read148(_os.path.join(PROJ, 'scripts', 'kospi_index.py'))
+_wm410 = _read148(_os.path.join(PROJ, 'scripts', 'weakness_map.py'))
+check("지수 일봉 분류는 순수 함수를 부른다 · 취약구간 지도는 운영 비용을 쓰고 그 비용을 산출물에 적는다",
+      'tp.market_state_code(' in _ki410 and 'tp.market_state(' not in _ki410
+      and 'cost_pct=COST' in _wm410 and '_vc422.COST_PCT' in _wm410)
+_card410 = _ukmod118.trade_plan_card(_tp120.build(_c120, _FS120, avg=25500, qty=100, market=_m410), name='테스트')
+check("지시서 카드의 시장 진단이 출처 줄을 그린다 (옛 '기준일 N일' 칸 없음)",
+      '독립 사건' in _card410 and '기준일 None' not in _card410 and '가장 낮은' in _card410)
+_w410 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("홈 한 줄 결론 — 후보가 없는 날 근거 없는 조언을 붙이지 않는다 · 사실과 막은 조건의 자리만",
+      '관망·눌림목 확인이 유리' not in _w410 and '오늘은 매수 후보가 없습니다 — 후보마다' in _w410)
+_gc410 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+_rb410 = _read148(_os.path.join(PROJ, 'analysis_rulebook_ko.txt'))
+check("환율 문장 — 유가·금·금리만 '안 들어간다' · 원달러·변동성은 고정 감점으로 들어간다고(그 사실이 규칙집·모듈에 있다)",
+      '위 유가·금·금리는 **이 판단에 들어가지 않습니다**' in _w410 and '유가·금·금리·환율은 **이 판단에' not in _w410
+      and "CONTEXT_CAPS.get('global_stress_high')" in _w410 and '유가·금·금리·환율 같은 시장 지표는' not in _gc410
+      and 'penalty_fx_spike' in _rb410 and 'global_stress_high' in _mc410.CONTEXT_CAPS)
+from improvement import issue_ops as _io410                          # noqa: E402
+_df410r = _io410._display_fields({'status': 'resolved', 'created_at': '2026-08-02T00:00:00', 'resolved_at': '2026-08-20T00:00:00'}, 0)
+_df410o = _io410._display_fields({'status': 'open', 'work_status': '', 'next_review': ''}, 0)
+check("닫힌 이슈의 원인 칸은 '당시 원인 (생성일~해결일)' · 열린 이슈는 '왜 생겼나' · 화면이 그 이름을 읽는다",
+      _df410r.get('cause_label') == '당시 원인 (2026-08-02~2026-08-20)' and _df410o.get('cause_label') == '왜 생겼나'
+      and "_tr.get('cause_label') or '왜 생겼나'" in _w410)
+import entry_facts as _ef410                                         # noqa: E402
+_eff410 = _ef410.load() or {}
+_rc410 = _ef410.reach_clause(_eff410)
+_rc410b = _ef410.reach_clause({k: v for k, v in _eff410.items() if k != 'made'})
+check("진입가 도달 문장에 측정일·신호 수·블라인드 수를 붙인다(산출물에서) · 측정일이 없으면 그 조각만 뺀다",
+      bool(_eff410) and f"({_eff410.get('made')}, 신호" in _rc410 and '블라인드' in _rc410.split('%가')[0]
+      and str(_eff410.get('made')) not in _rc410b and '닿았지만' in _rc410b, _rc410[:90])
+check("손절 0.6배의 대가 표가 배포 묶음에 있다 (배포 앱이 '셀 수 없다'만 말하지 않게) · 종목코드 모양 0",
+      _os.path.exists(_os.path.join(PROJ, 'data', 'loss_control_r21.json'))
+      and not _pf408.code_like_strings(_json.load(open(_os.path.join(PROJ, 'data', 'loss_control_r21.json'), encoding='utf-8'))))
+check("60점+ 표를 '실제 추천이 나가는 구간'이라 부르지 않는다 (실제 추천에는 점수 하한이 없다)",
+      '실제 추천이 나가는 구간' not in _w410 and '점수 띠입니다' in _w410)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

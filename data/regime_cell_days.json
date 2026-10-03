@@ -1,0 +1,70 @@
+{
+ "measured_at": "2026-08-17",
+ "ledger_buyzone_n": 82259,
+ "dated_n": 82259,
+ "score_floor": 58,
+ "vol_split": 0.03,
+ "note": "표시 전용. 점수·게이트·문턱에 쓰지 않는다. regime_breakdown.json(게이트용)은 건드리지 않았다.",
+ "cells": {
+  "BULL|calm": {
+   "valid": {
+    "n": 3577,
+    "days": 49
+   },
+   "blind": {
+    "n": 1213,
+    "days": 20
+   }
+  },
+  "BULL|rough": {
+   "valid": {
+    "n": 1561,
+    "days": 36
+   },
+   "blind": {
+    "n": 2079,
+    "days": 23
+   }
+  },
+  "SIDEWAYS|calm": {
+   "valid": {
+    "n": 938,
+    "days": 15
+   },
+   "blind": {
+    "n": 185,
+    "days": 12
+   }
+  },
+  "SIDEWAYS|rough": {
+   "valid": {
+    "n": 798,
+    "days": 17
+   },
+   "blind": {
+    "n": 874,
+    "days": 15
+   }
+  },
+  "BEAR|calm": {
+   "valid": {
+    "n": 14,
+    "days": 2
+   },
+   "blind": {
+    "n": 226,
+    "days": 8
+   }
+  },
+  "BEAR|rough": {
+   "valid": {
+    "n": 22,
+    "days": 4
+   },
+   "blind": {
+    "n": 877,
+    "days": 9
+   }
+  }
+ }
+}

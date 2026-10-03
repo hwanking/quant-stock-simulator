@@ -36,10 +36,15 @@ try:                       # 라운드 103 — 객체를 갈아끼우지 않는�
 except Exception:          # noqa: BLE001
     pass
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE not in sys.path:                 # 라운드 421 — 통계 행 규칙(ledger_view)을 저장소 뿌리에서 부른다
+    sys.path.insert(0, BASE)
 LEDGER = os.path.join(BASE, '.portfolio', 'virtual_graded.jsonl')
 CACHE = os.path.join(BASE, 'data', 'us_index_daily.json')
 OUT = os.path.join(BASE, '.portfolio', 'us_overnight.json')
 
+#: 라운드 16 의 비용(재현용 · 라운드 255 — 연구 스크립트의 비용 상수는 그 라운드의 것). 화면은 이 값으로 뺀 'ev' 를
+#: 안 쓰고 셀마다 실은 **차감 전 평균 'ret'** 에서 운영 비용(verdict_core.COST_PCT)을 뺀다 — 한 화면에 비용이 둘이 되지
+#: 않게(라운드 350·386). 산출물에 `cost_pct` 로 같이 적는다.
 COST = 0.30
 BUY = 58
 MIN_TRAIN_N = 300
@@ -50,10 +55,20 @@ BANDS = [(-99.0, -2.0, '급락 (−2%↓)'), (-2.0, -0.5, '하락 (−2~−0.5%)
          (2.0, 99.0, '급등 (+2%↑)')]
 
 
-def fetch_us(symbol='%5EGSPC'):
-    """야후에서 일봉 종가를 받아 {날짜: 등락률%} 로 만든다."""
-    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-           f"?interval=1d&range=10y")
+def fetch_us(symbol='%5EGSPC', rng='10y', since=None):
+    """야후에서 일봉 종가를 받아 {날짜: 등락률%} 로 만든다.
+
+    ⚠️ 라운드 421 — `range=max` 는 일봉이 아니다(2026-10-03 실측 168개 — 야후가 긴 범위를 성기게 돌려준다). 처음부터 받을
+    때는 `since`(YYYY-MM-DD)로 기간을 날짜로 준다(period1·period2 · 일봉 그대로)."""
+    if since:
+        import datetime as _dtp
+        p1 = int(_dtp.datetime.fromisoformat(since).replace(tzinfo=_dtp.timezone.utc).timestamp())
+        p2 = int(_dtp.datetime.now(_dtp.timezone.utc).timestamp())
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+               f"?interval=1d&period1={p1}&period2={p2}")
+    else:
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+               f"?interval=1d&range={rng}")
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(req, timeout=30) as r:
         j = json.load(r)
@@ -73,7 +88,24 @@ def fetch_us(symbol='%5EGSPC'):
     return out
 
 
-def load_us():
+def load_us(refresh=False):
+    """미국 지수 일봉 — 캐시가 있으면 캐시. `refresh` 면 원장 첫 해 앞(2010-01-01)부터 다시 받는다(라운드 421 — 캐시가
+    2016-08 ~ 2026-07-31 에 멈춰 원장의 2011~2016 행과 08월 행이 안 붙었다 · 매칭 93%). 받은 일봉이 1,000개도 안 되면
+    (성긴 자료) 캐시를 덮지 않고 멈춘다 — 한 번 그렇게 망쳤다."""
+    if refresh:
+        print('야후에서 미국 지수 일봉을 2010-01-01 부터 다시 받는 중…')
+        d = {'sp500': fetch_us('%5EGSPC', since='2010-01-01')}
+        if len(d['sp500']) < 1000:
+            raise SystemExit(f"S&P 일봉이 {len(d['sp500'])}개뿐이다 — 성긴 자료로 보고 캐시를 덮지 않는다")
+        try:
+            d['nasdaq'] = fetch_us('%5EIXIC', since='2010-01-01')
+        except Exception:
+            d['nasdaq'] = {}
+        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+        with open(CACHE, 'w', encoding='utf-8') as f:
+            json.dump(d, f)
+        print(f"  S&P {len(d['sp500'])}일 · 나스닥 {len(d.get('nasdaq') or {})}일 저장")
+        return d
     if os.path.exists(CACHE):
         try:
             with open(CACHE, encoding='utf-8') as f:
@@ -129,23 +161,35 @@ def ev(rows):
     hit = sum(1 for r in rows if r['success'])
     return {'n': n, 'hit': round(100.0 * hit / n, 1),
             'ev': round(sum(rets) / n - COST, 3),
+            # 라운드 421 — 차감 전 평균(화면이 운영 비용으로 뺀다) · 고유 날짜 수(시장 수준 축이라 표본은 날짜다 · R45)
+            'ret': round(sum(rets) / n, 3),
+            'days': len({str(r.get('date'))[:10] for r in rows}),
             'pf': round((g / p) if p > 0 else (99.0 if g else 0.0), 2)}
 
 
 def main():
-    us = load_us()['sp500']
-    rows = []
+    us = load_us(refresh='--refresh-us' in sys.argv)['sp500']
+    # 라운드 421 — 원장을 세는 다른 생성기와 같은 통계 행(축척 어긋남·복사본 제외 · ledger_view.stat_rows 한 곳 · R391)
+    import ledger_view as _lv421
+    _raw421 = []
     with open(LEDGER, encoding='utf-8') as f:
         for line in f:
             try:
-                r = json.loads(line)
+                _raw421.append(json.loads(line))
             except Exception:
                 continue
-            if r.get('success') is None or (r.get('score') or 0) < BUY:
-                continue
-            r['_us'] = prev_us(us, str(r.get('date') or ''))
-            r['_band'] = band_of(r['_us'])
-            rows.append(r)
+    _ledger_rows421 = len(_raw421)
+    _cnt421 = {}
+    rows = []
+    for r in _lv421.stat_rows(_raw421, _lv421.scale_mismatch_keys(), _cnt421):
+        # 라운드 421 — 미결(OPEN)은 뺀다. 원래 `success is None` 으로 뺐는데 지금 원장은 미결도 success=False 로 적어
+        #   (2026-10-03 실측 10,314행) 실패로 세어지고 있었다. 화면 타일·랩과 같은 규칙(판정 완료만)으로 맞춘다.
+        if r.get('outcome') == 'OPEN' or r.get('success') is None or (r.get('score') or 0) < BUY:
+            continue
+        r['_us'] = prev_us(us, str(r.get('date') or ''))
+        r['_band'] = band_of(r['_us'])
+        rows.append(r)
+    print(f"통계에서 뺀 행: 축척 어긋남 {_cnt421.get('scale', 0):,} · 복사본 {_cnt421.get('dup', 0):,}")
 
     matched = [r for r in rows if r['_band']]
     print(f"매수권 {len(rows):,}건 중 전날 미국장을 붙인 것 {len(matched):,}건 "
@@ -208,8 +252,11 @@ def main():
         print('     그래도 화면에는 참고 정보로 표시한다 (사용자가 직접 판단).')
     print('=' * 80)
 
+    import datetime as _dt421
     with open(OUT, 'w', encoding='utf-8') as f:
-        json.dump({'baseline': base, 'bands': band_stats,
+        json.dump({'made': _dt421.date.today().isoformat(), 'ledger_rows': _ledger_rows421,
+                   'score_floor': BUY, 'cost_pct': COST,
+                   'baseline': base, 'bands': band_stats,
                    'gate': (adopted[0][0] if adopted else None),
                    'coverage': round(100.0 * len(matched) / max(1, len(rows)), 1),
                    'criteria': ['검증 개선', '실전 개선',

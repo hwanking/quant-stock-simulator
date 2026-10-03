@@ -3047,7 +3047,13 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
     # ① 시장 진단
     mkt = ''
     if m:
-        note = m.get('slope_note') or ''
+        # 라운드 422 — 수·이야기가 라운드 52 고정본이었다(오늘 원장에서 둘이 거짓). 이제 trade_plan 이 산출물에서 읽은 수와
+        #   그 수가 뒷받침하는 문장만 그린다. 출처 줄은 trade_plan.state_basis_line 한 곳(§4).
+        try:
+            import trade_plan as _tp422
+            _basis422 = _tp422.state_basis_line(m)
+        except Exception:                                      # noqa: BLE001
+            _basis422 = '이 상태의 성적은 산출물을 못 읽어 적지 않습니다.'
         mkt = (f"<div style='background:{t['raised']}; border-radius:9px; "
                f"padding:9px 12px;'>"
                f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
@@ -3056,13 +3062,10 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                f"color:{t['tx1']};'><b>{_esc(m.get('ko'))}</b>"
                + (f" · 60일선 {_esc(m.get('slope_ko'))}"
                   if m.get('slope_ko') else '') + "</p>"
-               f"<p style='margin:3px 0 0 0; font-size:12px; "
-               f"color:{t['tx2']}; line-height:1.6;'>{_esc(m.get('say'))}"
-               + (f" {_esc(note)}" if note else '') + "</p>"
-               f"<p style='margin:3px 0 0 0; font-size:12px;"
-               f"color:{t['tx3']};'>개발 구간 실측 n={m.get('n'):,}"
-               f" · 기준일 {m.get('days')}일 · 적중 {m.get('hit')}%"
-               f" · 비용후 EV {m.get('ev'):+.3f}% — "
+               + (f"<p style='margin:3px 0 0 0; font-size:12px; "
+                  f"color:{t['tx2']}; line-height:1.6;'>{_esc(m.get('say'))}</p>" if m.get('say') else '')
+               + f"<p style='margin:3px 0 0 0; font-size:12px;"
+               f"color:{t['tx3']};'>{_esc(_basis422)} — "
                f"시장 상태는 하루 안에서 모든 종목에 같은 값이라 유효 표본이 "
                f"날짜입니다. 블라인드로 확정하지 못했습니다.</p></div>")
 

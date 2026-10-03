@@ -7201,9 +7201,11 @@ else:
             _rg_md = f"**시장 국면** — {_ms214['ko']}"
             if _ms214.get('slope_ko'):
                 _rg_md += f" · 60일선 {_ms214['slope_ko']}"
+            # 라운드 422 — 종전 수(n=8,007 · 적중 59.8% 등)는 라운드 52 고정본이었다. 이제 산출물(오늘 원장)의 수를 날짜와 함께
             if _ms214.get('hit') is not None and _ms214.get('n'):
                 _rg_md += (f" · 이 국면의 매수권 적중 {_ms214['hit']:.1f}% "
-                           f"(n={_ms214['n']:,} · 개발 구간 실측)")
+                           f"(n={_ms214['n']:,} · 개발 구간"
+                           + (f" · {_ms214['made']} 측정" if _ms214.get('made') else '') + ")")
             if _ms214.get('say'):
                 _rg_md += f"  \n{_ms214['say']}"
             st.markdown(_rg_md)
@@ -7400,12 +7402,14 @@ def _market_indices_cached():
 
 m_indices = _market_indices_cached()
 
+import trust_view as _tv421    # 라운드 421 — '이 판단, 얼마나 믿을 수 있나' 칸의 문장 한 곳
+
 if _home_cal.get('total_cases'):
     _sp = _home_cal.get('splits') or {}
     _bz = (_sp.get('buy_zone') or {})
     _v, _b, _bzb = _sp.get('valid') or {}, _sp.get('blind') or {}, _bz.get('blind') or {}
-    # 대표 지표는 '실제로 추천한 것' 기준 — 전체 사례에는 우리가 애초에
-    # 추천하지 않는 사례가 다 들어 있어 구독자가 받는 성적과 다르다.
+    # 대표 지표는 점수 60점 이상 띠 기준이다(라운드 422 정정 — 종전 주석은 이것을 '실제로 추천한 것'이라 불렀는데,
+    # 실제 추천은 중앙 판정의 조건으로 정해지고 점수 하한이 없다). 전체 사례도 캡션에 같이 적는다.
     _bzv, _bzb2 = _bz.get('valid') or {}, _bz.get('blind') or {}
     _sig = _home_cal.get('signal_frequency') or {}
     # UI 킷 타일 — 한 카드 안에서 헤어라인으로 나눈다 (테두리 없음)
@@ -7437,44 +7441,36 @@ if _home_cal.get('total_cases'):
                  if (_bzb2.get('n') or 0) < 30
                  else f"안 본 기간 {_bzb2.get('n', 0):,}건 중"),
          'tone': 'warn' if (_bzb2.get('n') or 0) < 30 else ''},
+        # 라운드 421 — 분모(통계 행)가 위 '되돌려 본 판단'(원장 행)과 왜 다른지 같은 줄에 적는다(같은 이름의 수가 둘)
         {'label': '매수 기회',
          'value': (f"{_sig['rate_pct']:.1f}%" if _sig.get('rate_pct') is not None
                    else "미산출"),
-         'sub': f"{_sig.get('buy_zone', 0)}/{_sig.get('total', 0):,}건"},
+         'sub': (_tv421.signal_sub(_sig, _home_cal.get('ledger_rows'))
+                 or f"{_sig.get('buy_zone', 0):,}/{_sig.get('total', 0):,}건")},
     ], theme=_theme)
-    _uk.note(
-        # 위 타일은 60점+, 아래 국면 표는 58점+ 다. 둘 다 '추천'이라고
-        # 부르면 사용자는 같은 집단으로 읽는다 — 문턱을 밝혀서 가른다.
-        f"위 두 적중률은 **점수 60점 이상**만 센 것입니다 — 가장 좁게 잡은 "
-        f"기준이라 표본이 작습니다. 아래 국면별 표는 **58점 이상**이라 "
-        f"표본이 더 크고, 그래서 두 표의 숫자는 서로 다릅니다. "
-        f"참고로 점수와 무관하게 전체 사례를 다 센 적중률은 연습 "
-        f"{_v.get('hit_rate', 0):.1f}% ({_v.get('n', 0):,}건) · 실전 "
-        f"{_b.get('hit_rate', 0):.1f}% ({_b.get('n', 0):,}건)입니다. "
-        f"미래 수익을 보장하지 않습니다.",
-        theme=_theme)
-
     # ── 국면별 성적 (라운드 7 실측) ────────────────────────────────────
     # 평균 한 줄은 사용자가 오늘 자기 상황에 적용할 수 없다. 적중률을
     # 지배하는 것은 점수가 아니라 시장 국면이라는 것이 실측으로 확인됐다
     # (docs/MODEL_VERSIONS.md 라운드 4~7). 그래서 나눠서 보여 준다.
     # 라운드 386 — 게이트(regime_policy)와 같은 파일을 같은 길로 읽는다. `.portfolio` 만 보면 배포 앱은
     #   이 표를 못 그리면서 게이트는 (종전엔) '표본 없음' 상한을 걸었다 — 이제 둘 다 동봉본을 읽는다.
+    # 라운드 421 — 캡션이 이 표의 크기를 말해야 해서 캡션보다 먼저 읽는다.
     try:
         import artifact_io as _aio386b
         _rb = _aio386b.load_json('regime_breakdown.json')
     except Exception:
         _rb = None
+    # 라운드 421 — 캡션은 trust_view 한 곳이 산출물에서 만든다. 종전 문장은 국면 표가 '58점 이상이라 더 크다'고 했는데
+    #   그 표는 2026-08 초 작은 원장으로 잰 고정 값이라 오히려 작았다(숫자가 다른 진짜 이유는 잰 시점).
+    _uk.note(_tv421.threshold_note(_home_cal, _rb), theme=_theme)
     # ── 전날 미국장 경고 (라운드 16) ────────────────────────────────
     # 사용자 직관("미장 영향 많이 받는다")은 맞았는데 방향이 반대였다.
     # 급락한 다음날이 아니라 **보합인 다음날**이 나쁘다 — 미국이 방향을
     # 정하지 못하면 한국은 방향 없이 흔들린다.
     # 게이트로 막지는 않는다(신호가 절반으로 줄어 사전등록 미달). 대신 알린다.
+    # 라운드 421 — `.portfolio` 를 직접 열어 배포 앱(빈 .portfolio)에서는 이 카드가 조용히 빠졌다. artifact_io 로 읽는다.
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               '.portfolio', 'us_overnight.json'),
-                  encoding='utf-8') as _uf:
-            _uo = json.load(_uf)
+        _uo = _aio386b.load_json('us_overnight.json')
     except Exception:
         _uo = None
     _sp_pct = None
@@ -7490,38 +7486,27 @@ if _home_cal.get('total_cases'):
                 '하락 (−2~−0.5%)' if _sp_pct < -0.5 else
                 '보합 (±0.5%)' if _sp_pct < 0.5 else
                 '상승 (+0.5~+2%)' if _sp_pct < 2 else '급등 (+2%↑)')
-        _bs = ((_uo.get('bands') or {}).get(_bko) or {})
-        _bbl = _bs.get('blind') or _bs.get('valid') or {}
+        # 라운드 421 — 종전엔 한 구간(보합)이면 늘 경고 문장을 고정으로 띄웠다(2026-08 초 실전 142건의 주장). 같은 생성기를
+        #   오늘 원장으로 다시 돌리니 가장 나쁜 구간이 학습·검증·실전에서 서로 달랐다. 경고는 이제 오늘 구간이 세 구간
+        #   모두에서 가장 낮을 때만(trust_view · 문턱 없음) · 수는 운영 비용으로 뺀다 · 건수와 날짜 수를 같이 적는다.
+        try:
+            import verdict_core as _vc421
+            _cost421 = float(_vc421.COST_PCT)
+        except Exception:                                      # noqa: BLE001
+            _cost421 = None
+        _line421, _warn421 = _tv421.us_overnight_card(_uo, _bko, _cost421)
         _uk.spacer(20)
-        if _bko == '보합 (±0.5%)':
-            _uk.card(
-                f"<p style='margin:0 0 8px 0; font-size:15px; font-weight:600; "
-                f"color:{_TOK['tx1']};'>어젯밤 미국장이 보합이었습니다 "
-                f"({_sp_pct:+.2f}%) — 오늘은 특히 조심하세요</p>"
-                f"<p style='margin:0; font-size:13px; line-height:1.7; "
-                f"color:{_TOK['tx2']};'>과거 실측에서 <b>전날 미국장이 보합인 "
-                f"날의 추천 성적이 가장 나빴습니다</b> — 실전 적중 "
-                f"{_bbl.get('hit', 0):.0f}% · 비용 차감 후 "
-                f"{_bbl.get('ev', 0):+.2f}% (n={_bbl.get('n', 0)}). "
-                f"미국이 방향을 정하지 못하면 한국은 방향 없이 흔들립니다. "
-                f"오늘 나오는 매수 결론은 평소보다 낮게 보시는 편이 안전합니다.</p>",
-                theme=_theme, accent='warn')
-        else:
-            _uk.card(
-                f"<p style='margin:0 0 6px 0; font-size:13px; "
-                f"color:{_TOK['tx3']};'>어젯밤 미국장</p>"
-                f"<p style='margin:0; font-size:15px; line-height:1.7; "
-                f"color:{_TOK['tx1']};'>S&amp;P 500 <b>{_sp_pct:+.2f}%</b> · "
-                f"{_bko}</p>"
-                + (f"<p style='margin:6px 0 0 0; font-size:13px; "
-                   f"color:{_TOK['tx2']};'>같은 구간의 과거 추천 성적: "
-                   f"적중 {_bbl.get('hit', 0):.0f}% · 비용 차감 후 "
-                   f"{_bbl.get('ev', 0):+.2f}% (n={_bbl.get('n', 0)})</p>"
-                   if _bbl.get('n') else
-                   f"<p style='margin:6px 0 0 0; font-size:13px; "
-                   f"color:{_TOK['tx3']};'>이 구간은 과거 표본이 적어 성적을 "
-                   f"말하지 않습니다.</p>"),
-                theme=_theme)
+        _uk.card(
+            f"<p style='margin:0 0 6px 0; font-size:13px; "
+            f"color:{_TOK['tx3']};'>어젯밤 미국장</p>"
+            f"<p style='margin:0; font-size:15px; line-height:1.7; "
+            f"color:{_TOK['tx1']};'>S&amp;P 500 <b>{_sp_pct:+.2f}%</b> · "
+            f"{_uk._esc(_bko)}"
+            + (" — 이 구간은 학습·검증·실전 세 구간 모두에서 매수권 성적이 가장 낮았습니다" if _warn421 else "")
+            + "</p>"
+            + (f"<p style='margin:6px 0 0 0; font-size:13px; line-height:1.7; "
+               f"color:{_TOK['tx2']};'>{_uk._esc(_line421)}</p>" if _line421 else ""),
+            theme=_theme, **({'accent': 'warn'} if _warn421 else {}))
 
     if _rb and _rb.get('cells6') and _rb.get('mode') == '6':
         # 국면을 변동성으로 쪼갠 6칸 (라운드 14). 같은 판단을 더 정확한
@@ -7555,40 +7540,23 @@ if _home_cal.get('total_cases'):
                 'warn' if _thin else ''))
         if _rows_rg:
             # 지금이 어느 칸인지 — 표만 보여 주면 사용자가 자기 상황을 못 찾는다
-            _now_basis = ''
+            # 라운드 421 — 종전엔 이 카드가 표와 **다른 국면 규칙**을 썼다(60일선 아래를 하락으로 · 20일선 위를 상승으로).
+            #   표(원장)는 '현재가 > 20일선 > 60일선 = 상승 · 둘 다 아래 = 하락'이라, 지수 일봉 2,941거래일 중 코스피 20.4%
+            #   의 날에 카드가 표와 다른 줄을 가리켰다. 이제 표와 같은 규칙 한 곳(ledger_view.ledger_regime)을 부르고,
+            #   엔진의 실시간 게이트와 갈리는 날엔 카드가 그 사실을 적는다(trust_view.regime_now_line).
+            _now_rg, _now_line = None, ''
             try:
                 _ir = bitemporal_engine.BitemporalEngine().get_index_regime('KOSPI')
-                _gi_mkt_label = ('하락' if (_ir.get('price') and _ir.get('sma60')
-                                          and _ir['price'] < _ir['sma60'])
-                                 else '상승' if (_ir.get('price') and _ir.get('sma20')
-                                               and _ir['price'] > _ir['sma20'])
-                                 else '옆걸음')
-                # 위 시장 타일은 **하루** 등락이고 국면은 **60일 추세**다.
-                # 근거를 안 적으면 '+17% 인데 하락 국면?' 으로 읽혀 화면이
-                # 앞뒤가 안 맞는 말을 하는 것처럼 보인다.
-                _pp, _s20, _s60 = (_ir.get('price'), _ir.get('sma20'),
-                                   _ir.get('sma60'))
-                if _pp and _s60:
-                    _ref, _refko = ((_s60, '60일 평균') if _gi_mkt_label == '하락'
-                                    else (_s20, '20일 평균') if _s20 else
-                                    (_s60, '60일 평균'))
-                    _gapp = (_pp / _ref - 1) * 100
-                    _now_basis = (
-                        f"코스피가 {_refko}보다 {abs(_gapp):.1f}% "
-                        f"{'아래' if _gapp < 0 else '위'}에 있습니다 — "
-                        f"하루 등락이 아니라 60일 추세로 봅니다. ")
+                if _ir.get('available'):
+                    _now_rg, _now_line = _tv421.regime_now_line(
+                        _ir.get('price'), _ir.get('sma20'), _ir.get('sma60'), _rb.get('regime_ko'))
             except Exception:
-                _gi_mkt_label = ''
-            _now_rg = ('BEAR' if '하락' in str(_gi_mkt_label)
-                       else 'BULL' if ('상승' in str(_gi_mkt_label)
-                                       or '과열' in str(_gi_mkt_label))
-                       else 'SIDEWAYS' if _gi_mkt_label else '')
+                _now_rg, _now_line = None, ''
             if _now_rg:
                 _now_ko = _rb['regime_ko'].get(_now_rg, '')
                 _uk.card(
                     f"<p style='margin:0; font-size:15px; line-height:1.7; "
-                    f"color:{_TOK['tx1']};'>지금은 <b>{_now_ko}</b> 국면입니다. "
-                    f"{_now_basis}"
+                    f"color:{_TOK['tx1']};'>{_now_line}"
                     # 표의 행 이름은 '차분한 하락'·'거친 하락' 처럼 국면이
                     # 뒤에 온다. '~로 시작하는' 은 표와 맞지 않는 안내였다.
                     f"아래 표에서 <b>차분한 {_now_ko}</b> · <b>거친 {_now_ko}</b> "
@@ -7598,11 +7566,16 @@ if _home_cal.get('total_cases'):
                 _uk.spacer(12)
             _uk.rows(_rows_rg, theme=_theme,
                      title='시장 국면별 성적 (58점+ 신호) — 지수 방향 × 종목 변동성')
+            # 라운드 421 — 아래 '격차가 줄었다'는 이 표를 잰 작은 표본의 수다. 바로 위 타일은 오늘 원장의 격차를 보여
+            #   주므로 어느 표본의 말인지 적는다(표본 수는 산출물에서 읽는다).
+            _fv421, _fb421 = _tv421.frozen_regime_n(_rb, 'valid'), _tv421.frozen_regime_n(_rb, 'blind')
             _uk.note(
                 f"국면을 지수 방향(상승·옆걸음·하락)만이 아니라 **종목 변동성**"
                 f"으로도 나눴습니다. 같은 '옆걸음'이라도 하루 2%씩 움직이는 장과 "
                 f"5%씩 흔들리는 장은 전혀 다른 시장인데, 그동안 한 칸에 묶여 "
-                f"있었습니다. 나누고 나니 연습과 실전의 차이가 "
+                f"있었습니다. "
+                + (f"이 표를 잰 표본(검증 {_fv421:,} · 실전 {_fb421:,}건)에서는 " if (_fv421 and _fb421) else "")
+                + f"나누고 나니 연습과 실전의 차이가 "
                 f"{_rb.get('gap3', 0):.0f}%p에서 {_rb.get('gap6', 0):.0f}%p로 "
                 f"줄었습니다 — 모델이 갑자기 좋아진 게 아니라, 그동안 서로 다른 "
                 f"시장을 비교하고 있었던 것입니다. 주황색은 표본 30건 미만이라 "
@@ -7621,13 +7594,9 @@ if _home_cal.get('total_cases'):
             # 표의 숫자는 **고치지 않는다.** 이 파일은 regime_policy 가
             # 점수·비중·손절 상한을 정하는 데 쓰고, R55·R57·R66 전방 표본이
             # 2026-08-09 부터 쌓이는 중이다. 지금 다시 재면 그 표본이 무효다.
-            _rgd = None
+            # 라운드 421 — `.portfolio` 를 직접 열어 배포 앱에서는 이 줄이 조용히 빠졌다. artifact_io 로 읽는다.
             try:
-                with open(os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        '.portfolio', 'regime_cell_days.json'),
-                        encoding='utf-8') as _rdf:
-                    _rgd = json.load(_rdf)
+                _rgd = _aio386b.load_json('regime_cell_days.json')
             except Exception:                                # noqa: BLE001
                 _rgd = None
             _rb_when = _rb.get('generated_at')
@@ -7654,7 +7623,8 @@ if _home_cal.get('total_cases'):
                         f"{min(m['n'] / m['days'] for _, m in _pairs):.0f}~"
                         f"{max(m['n'] / m['days'] for _, m in _pairs):.0f}배"
                         f"입니다 (가장 큰 칸: {_wk} {_wm['n']:,}건 = "
-                        f"**{_wm['days']}일**). 표의 n 을 독립 표본 수로 "
+                        f"**{_wm['days']}일** — 위 표보다 나중에 더 큰 원장으로 센 수라 "
+                        f"표의 n 과 다릅니다). 표의 n 을 독립 표본 수로 "
                         f"읽으면 근거를 실제보다 크게 봅니다. ")
             _uk.note(
                 _prov + _days_line
@@ -7820,10 +7790,13 @@ if _pm_today and _pm_today.get('picks'):
         _oneline = ("이 리포트에는 중앙 판정이 없습니다 (옛 엔진) — "
                     "[오늘의 추천](#nav-premarket)에서 다시 스캔하세요.")
     else:
+        # 라운드 422 — 후보가 0 인 날(사실상 매일)마다 '기다리며 눌림을 확인하는 쪽이 낫다'는 조언을 붙였는데 그 근거가
+        #   없었다(라운드 387 은 눌림을 기다려도 기대값이 안 바뀐다고 쟀다). 사실("없다")과 막은 조건이 어디 있는지만 적는다.
         _oneline = (f"오늘은 매수 후보가 {_buyable}종목 있습니다 — "
                     "[오늘의 추천](#nav-premarket)에서 조건을 확인하세요."
                     if _buyable else
-                    "오늘은 공격적 매수보다 관망·눌림목 확인이 유리합니다 — 매수 후보가 없습니다.")
+                    "오늘은 매수 후보가 없습니다 — 후보마다 무엇이 막았는지는 "
+                    "[오늘의 추천](#nav-premarket)에 있습니다.")
     st.info(f"**개장 전 한 줄 결론** · {_oneline}  \n"
             + " · ".join(f"{k} **{v}**" for k, v in _cls_cnt.items())
             + f"  ·  기준 데이터 {_pm_today.get('data_asof')} (전일 확정)")
@@ -7905,7 +7878,8 @@ if _issues_global or _open_tracked:
                     f"font-weight:600; color:{_TOK['tx1']};'>"
                     f"{_uk._esc_md(_tr['title'])}</p>"
                     f"<p style='margin:0; font-size:13px; color:{_TOK['tx2']}; "
-                    f"line-height:1.6;'><b>왜 생겼나</b> "
+                    # 라운드 422 — 닫힌 행은 '당시 원인 (생성일~해결일)' — 그때의 복사본이 지금 사실로 읽히지 않게(issue_ops 한 곳)
+                    f"line-height:1.6;'><b>{_uk._esc(_tr.get('cause_label') or '왜 생겼나')}</b> "
                     f"{_uk._esc_md(_tr.get('cause',''))}<br>"
                     f"<b>영향</b> {_uk._esc_md(_tr.get('user_impact',''))}<br>"
                     # 라운드 394 — 닫힌 과제의 조치 칸은 그때의 계획이다. '지금 하는 일'로 적으면 끝난 일을
@@ -8119,16 +8093,25 @@ if _macro248:
     #   화면이 정직하게 낼 수 있는 답은 **이미 채택된 국면 게이트**뿐이다.
     #   위 매크로는 그 판단에 안 들어간다 — 그 사실을 같은 자리에서 말한다.
     #   판정 문장은 킷 한 곳에서 만든다 (§4 · 종전엔 깎였을 때만 말했다).
+    # 라운드 422 — 종전 문장은 *유가·금·금리·환율은 이 판단에 들어가지 않는다* 였는데, 원달러 급등·변동성지수·S&P500·
+    #   나스닥 낙폭은 시장 맥락 모듈의 고정 감점으로 시장 국면 점수에 들어가고 경고가 둘 이상이면 점수 상한이 걸린다
+    #   (market_context · 규칙집 RULES_MARKET_CONTEXT). 들어가지 않는 것은 유가·금·금리다. 상한값은 모듈 상수에서 읽는다.
+    try:
+        import market_context as _mc422
+        _gcap422 = _mc422.CONTEXT_CAPS.get('global_stress_high')
+    except Exception:                                          # noqa: BLE001
+        _gcap422 = None
     st.info(_uk.regime_gate_line(four_scores.get('regime_gate'))
-            + "  \n위 유가·금·금리·환율은 **이 판단에 들어가지 않습니다** — "
-              "표시 전용입니다. 아홉 축 전부를 되돌려 본 판단 251,528건으로 "
-              "쟀고(2026-09-09), 어느 축도 학습·검증·블라인드 세 구간에서 "
-              "함께 성립하지 않아 판정에 넣지 않았습니다.")
+            + "  \n위 유가·금·금리는 **이 판단에 들어가지 않습니다** — 표시 전용입니다. "
+              "원달러 급등·변동성지수·S&P500·나스닥 낙폭은 따로, 규칙집의 고정 감점으로 시장 국면 점수에 들어가고"
+            + (f" 경고가 둘 이상이면 점수 상한 {int(_gcap422)}점이 걸립니다" if _gcap422 is not None else "")
+            + " — 그 감점이 판정을 낫게 하는지는 잰 적이 없습니다. 아홉 축을 방향 신호로 더할지는 "
+              "되돌려 본 판단 251,528건으로 쟀고(2026-09-09) 어느 축도 학습·검증·블라인드 세 구간에서 함께 성립하지 않아 넣지 않았습니다.")
     # '어떻게 될 것 같은지' 에 대한 답은 여기까지다 — 그 경계를 적는다(§3·§9).
     st.caption("**앞으로 어떻게 될지는 이 화면이 말하지 않습니다.** 위 방향들을 "
                "이어 붙여 내일을 설명하는 문장은 만들지 않습니다 — 그렇게 만든 "
                "이유는 잰 적이 없는 값입니다. 오늘 판단에 실제로 반영되는 것은 "
-               "바로 위의 국면 게이트 한 줄뿐입니다.")
+               "바로 위의 국면 게이트 한 줄과, 위에 적은 시장 국면 점수의 고정 감점뿐입니다.")
 elif _err248:
     st.caption(f"간밤·전일 시황 판을 그리지 못했습니다 — {_err248}")
 
@@ -10930,11 +10913,10 @@ _uk.note(
 # 단, 이 엔진들은 **채택되지 않았다** — 6개 전부 블라인드에서 현행보다
 # 나빴다. 그래서 판단에 반영하지 않고, '다른 원리는 뭐라고 하는지' 참고로만
 # 보여 준다. 신뢰도 칸에는 그 엔진의 실제 블라인드 성적을 적는다.
+# 라운드 421 — `.portfolio` 를 직접 열어 배포 앱에서는 이 칸이 조용히 빠졌다. artifact_io 로 읽는다.
 try:
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           '.portfolio', 'engine_bakeoff.json'),
-              encoding='utf-8') as _ef:
-        _bake = json.load(_ef)
+    import artifact_io as _aio421
+    _bake = _aio421.load_json('engine_bakeoff.json')
 except Exception:
     _bake = None
 if _bake and _bake.get('engines'):
@@ -11006,23 +10988,24 @@ if _bake and _bake.get('engines'):
     st.markdown(_uk.disclose('다른 원리는 뭐라고 하나 — 참고 (판단에는 반영하지 않습니다)',
                              _uk.rows_html(_rows_e, theme=_theme), color=_TOK['tx3']),
                 unsafe_allow_html=True)
+    # 라운드 421 — 이 비교는 08월 초 작은 원장으로 잰 고정 값이다. 그 사실을 산출물의 표본 수·기간으로 적는다.
     _uk.note(
         "이 엔진들은 채택되지 않았습니다. 6개 후보를 같은 데이터로 겨뤄 봤고 "
         "전부 실전(안 본 기간)에서 현행보다 나빴습니다 — 특히 눌림 되돌림은 "
         "연습에서 가장 좋았는데(67%) 실전에서 가장 나빴습니다(31%). "
         "연습에서 좋을수록 실전에서 더 무너진다는 뜻이라, 여기 보이는 판단이 "
-        "엇갈린다고 해서 현행 결론을 뒤집지 마세요. 상세: 모델 성적 화면.",
+        "엇갈린다고 해서 현행 결론을 뒤집지 마세요. 상세: 모델 성적 화면. "
+        + _tv421.frozen_basis(_bake, '이 비교'),
         theme=_theme)
 
 # ── 얼마나 먹을 것인가 — 무릎·어깨·머리 (라운드 9 실측) ────────────────
 # 사용자 요구: "확률로 몇 프로 정도 먹을건지 정해야 한다. 머리도 발도 아니고
 # 무릎에서." 목표를 높이면 폭은 커지지만 닿을 확률이 떨어진다 — 그 교환을
 # 숫자로 그어 준다.
+# 라운드 421 — `.portfolio` 를 직접 열어 배포 앱에서는 이 칸이 조용히 빠졌다. artifact_io 로 읽는다.
 try:
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           '.portfolio', 'target_policy.json'),
-              encoding='utf-8') as _tf:
-        _tp_pol = json.load(_tf)
+    import artifact_io as _aio421t
+    _tp_pol = _aio421t.load_json('target_policy.json')
 except Exception:
     _tp_pol = None
 if _tp_pol and (_tp_pol.get('splits') or {}).get('valid'):
@@ -11049,7 +11032,9 @@ if _tp_pol and (_tp_pol.get('splits') or {}).get('valid'):
            if isinstance(_rng382, (list, tuple)) and len(_rng382) == 2
            and all(isinstance(_x, (int, float)) for _x in _rng382) else "")
         + "이 표는 목표 폭마다 닿은 비율을 원장에서 센 것이고, **이 종목의 1차 목표를 이 표로 정하지는 "
-          "않습니다** — 1차 목표는 손절 거리·구조적 저항·변동성으로 따로 잡으므로 이 구간 밖일 수 있습니다.",
+          "않습니다** — 1차 목표는 손절 거리·구조적 저항·변동성으로 따로 잡으므로 이 구간 밖일 수 있습니다. "
+        # 라운드 421 — 08월 초 작은 원장으로 잰 고정 값이라는 사실(산출물의 표본 수에서)
+        + _tv421.frozen_basis(_tp_pol, '이 표'),
         theme=_theme)
 
 st.markdown("<div id='nav-basis'></div>", unsafe_allow_html=True)
@@ -11476,7 +11461,9 @@ if _perf_cal.get('total_cases'):
                 '비고': '표본 부족 — 확대 축적 중' if _s['n'] < 30 else '',
             })
         if _rows_bz:
-            st.markdown("**② 매수권(60점 이상) 신호만** — 실제 추천이 나가는 구간")
+            # 라운드 422 — 부제가 이 띠를 추천이 나오는 자리라고 불렀는데 실제 추천(중앙 판정 11조건)에는 점수 하한이 없다 —
+            #   개장 전 리포트 후보 503개 중 491개가 60점 미만이었고 추천은 0 이었다. 점수 띠라는 사실만 적는다.
+            st.markdown("**② 매수권(60점 이상) 신호만** — 점수 띠입니다(실제 추천은 중앙 판정의 조건으로 따로 정해집니다)")
             st.dataframe(pd.DataFrame(_rows_bz), width='stretch',
                          hide_index=True)
         # ── ②' 국면 × 구간 — '연습 vs 실전' 괴리의 정체 (라운드 216) ──────

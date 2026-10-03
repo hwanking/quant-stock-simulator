@@ -972,11 +972,10 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         if len(c) < 60:
             return None
         p, s20, s60 = float(c[-1]), float(c[-20:].mean()), float(c[-60:].mean())
-        if p > s20 > s60:
-            return 'BULL'
-        if p < s20 and p < s60:
-            return 'BEAR'
-        return 'SIDEWAYS'
+        # 라운드 421 — 규칙은 ledger_view 한 곳(화면의 '지금 국면' 카드가 같은 함수를 부른다 · 식을 두 번 적지 않는다).
+        #   지수 종가는 늘 양수라 None 은 안 나오지만, 나오면 종전 갈래의 마지막(옆걸음)으로 둔다.
+        import ledger_view as _lv421r
+        return _lv421r.ledger_regime(p, s20, s60) or 'SIDEWAYS'
 
     todo = []
     price_cache = {}
