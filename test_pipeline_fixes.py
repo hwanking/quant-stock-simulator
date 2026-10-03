@@ -21774,7 +21774,8 @@ check("표본 게이트 알림은 하나 — 옛 셋(표본 통제 · 예측 확
 check("알림이 지평별 수를 같이 말한다 (0건과 12건은 다른 지평) — R234: 표가 바로 아래에 있다",
       "_hz_line233 = _uk.horizon_counts_line(hz)" in _tab250
       and '기간별 자료량과 관찰 통계' in _w231
-      and "예측 보류 · 거래 회피를 권장합니다." in _tab250
+      # 라운드 426 — 꼬리 '거래 회피를 권장' 을 '매매 권고가 아니다 · 중앙 판정이 정한다' 로(예측 보류 ≠ 매매 권고)
+      and "이 보류는 예측을 내지 않는다는 뜻이지 매매 권고가 아닙니다 — 사도 되는지는 위 결론(중앙 판정)이 정합니다." in _tab250
       and "if sim_res.get('is_abstain') else" in _tab250)
 check("7단계 설명은 접힌다 — 내용은 그대로 (⑦ 표본 통제 줄 · 앙상블 없음 문구)",
       '_uk.disclose("이 예측이 하는 일 — 7단계 (설명)"' in _tab250
@@ -33100,6 +33101,24 @@ check("원장 정합 훑기 — 손익분기 비용은 운영 상수 · 적중 �
 _sw414 = _json.load(open(_os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json'), encoding='utf-8'))
 check("원장 정합 훑기 산출물의 비용이 운영 비용과 같다 (클라우드가 매일 다시 쓴다)",
       _sw414.get('cost_pct') == _vc414.COST_PCT, str(_sw414.get('cost_pct')))
+# 예측 보류(확률을 안 낸다)를 '거래 회피 권장'으로 바꿔 말하던 두 자리 · 관찰 점수 최고 지평을 '권장 보유'로 부르던 자리
+check("예측 보류는 매매 권고가 아니라고 적는다 — '거래 회피' 권고가 화면 문자열에 없다 · 회전율 줄은 '권장 보유'가 아니다",
+      not any('거래 회피를 권장' in _s or '거래 회피(Abstain)' in _s for _s in _wc414)
+      and sum('매매 권고가 아닙니다 — 사도 되는지는 위 결론(중앙 판정)이 정합니다' in _s for _s in _wc414) >= 2
+      and not any('(권장 보유 ' in _s for _s in _wc414) and any('관찰 점수가 가장 높은 기간 ' in _s for _s in _wc414),
+      scanned=len(_wc414))
+import gaeum_glossary as _gg414                                      # noqa: E402
+import ui_kit as _uk414                                              # noqa: E402
+_ev414 = next((_b for _k, _t, _b in _gg414.ENTRIES if '비용 차감 기대값' in _k), '')
+_vcs414 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+check("설명 사전 — 비용 차감 기대값을 중앙 판정의 식(점수대 적중률 p × 목표폭 + (1−p) × 손절폭 − 비용)으로 말한다",
+      "목표까지의 폭 × p + 손절까지의 폭 × (1 − p)" in _ev414 and '과거 비슷한 자리의 평균 수익에서' not in _ev414
+      and 'exp_ret = round(p * up + (1 - p) * dn - COST_PCT, 2)' in _vcs414 and "hit = _f(cb.get('hit_rate'))" in _vcs414)
+_hold414 = next((_b for _k, _t, _b in _gg414.ENTRIES if '일부 매도' in _k), '')
+_entry414 = next((_b for _k, _t, _b in _gg414.ENTRIES if '눌림목' in _k), '')
+check("설명 사전 — 보유 이름표는 화면과 같은 표에서 · 진입가에 닿는 것이 사도 된다는 뜻이 아니라고",
+      _uk414.HOLD_LABELS['정리 검토'] in _hold414 and _uk414.HOLD_LABELS['일부 정리'] in _hold414
+      and '사도 된다는 뜻은 아닙니다' in _entry414 and "아래로 내려오면 사는 걸 검토해도 된다" not in _entry414)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -12445,7 +12445,7 @@ else:
             <h4 style='margin-top:0;'>2. 백테스트 품질 평가 지표</h4>
             <p style='margin: 4px 0; font-size:15px;'>- <b>표본내 Sharpe</b> (유사패턴 분포 기준): <b>{fmt_num(sharpe_turnover['sharpe_ratio'], spec='.2f')}</b>
                <span style='font-size:12px; color:#9DAABC;'>— 표본외 Sharpe는 아래 Blind/OOS 섹션 참조</span></p>
-            <p style='margin: 4px 0; font-size:15px;'>- <b>연환산 회전율 (Turnover)</b>: <b>{fmt_num(sharpe_turnover['turnover_pct'], spec='.0f', suffix='%')}</b> (권장 보유 {fmt_num(sharpe_turnover['holding_days'], suffix='영업일')})</p>
+            <p style='margin: 4px 0; font-size:15px;'>- <b>연환산 회전율 (Turnover)</b>: <b>{fmt_num(sharpe_turnover['turnover_pct'], spec='.0f', suffix='%')}</b> (관찰 점수가 가장 높은 기간 {fmt_num(sharpe_turnover['holding_days'], suffix='영업일')} 기준 · 보유 권고가 아닙니다)</p>
             <p style='margin: 4px 0; font-size:13px; color:#9DAABC;'>- <b>Profit Factor</b>: <b>{fmt_num(sharpe_turnover['real_profit_factor'], spec='.2f')}</b> | <b>비용 차감 수익</b>: {fmt_pct(sharpe_turnover['net_excess_return'], digits=2)}</p>
         </div>
         """, unsafe_allow_html=True)
@@ -12554,7 +12554,10 @@ with tab_pred:
             f"비슷했던 과거 20일 사례가 기준에 못 미쳐 20일 상승확률·목표/손절 선도달 확률을 "
             f"표시하지 않습니다{_rule234}. 표본이 있는 기간의 값은 아래 표와 '다른 기간 살펴보기'에 "
             f"있습니다 — 과거 관찰값이며 미래 확률이 아닙니다."
-            + (" 이 구간은 예측 보류 · 거래 회피를 권장합니다." if sim_res.get('is_abstain') else ""))
+            # 라운드 426 — 종전 꼬리 '거래 회피를 권장' 은 예측 보류(확률을 안 낸다)를 매매 권고로 바꿔 말했다. 사도 되는지는
+            #   중앙 판정이 정한다(라운드 416·417 — 결론처럼 읽히는 문장을 내는 자리는 판정자다).
+            + (" 이 보류는 예측을 내지 않는다는 뜻이지 매매 권고가 아닙니다 — 사도 되는지는 위 결론(중앙 판정)이 정합니다."
+               if sim_res.get('is_abstain') else ""))
         # 라운드 348 — 왜 비는지를 모집단으로 잰 사실(사전등록 · 표시 전용 · 기준은 안 바꿨다).
         try:
             import json as _json348
@@ -12571,7 +12574,8 @@ with tab_pred:
                                      f"{_uk._esc(_ln348)}</p>"),
                         unsafe_allow_html=True)
     elif sim_res.get('is_abstain'):
-        st.warning(f"**퀀트 리스크 관리 알림**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이 감지되어 **`[예측 보류 / 거래 회피(Abstain)]`**를 권장합니다.")
+        st.warning(f"**예측 보류**: 현재 구간은 [{sim_res.get('abstain_reason')}] 조건이라 이 예측은 확률을 내지 않습니다. "
+                   "이 보류는 예측을 내지 않는다는 뜻이지 매매 권고가 아닙니다 — 사도 되는지는 위 결론(중앙 판정)이 정합니다.")
 
     st.markdown(_uk.disclose("이 예측이 하는 일 — 7단계 (설명)", f"""
     <div style='background: #161D2A; border-radius: 16px; padding: 20px; margin-bottom: 20px;'>
