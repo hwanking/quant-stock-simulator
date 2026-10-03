@@ -7811,6 +7811,13 @@ import product_ops as _pops
 _gi_calib = _load_calibration_meta()
 _gi_mkt = {'index_missing': (m_indices['kospi']['price'] == 'N/A'
                              or m_indices['kosdaq']['price'] == 'N/A')}
+# 라운드 426 — '약세 국면이면 최종 점수에 상한' 이슈는 국면을 넘겨야 뜬다(종전엔 안 넘겨 한 번도 못 떴다). 종목 판정이
+#   쓰는 같은 함수(`market_context.fetch_domestic_context` · 10분 캐시)로 시장별로 받는다 — 분류 규칙을 다시 적지 않는다.
+try:
+    import market_context as _mc426h
+    _gi_mkt['domestic'] = [_mc426h.fetch_domestic_context(engine_init, _mk426) for _mk426 in ('KOSPI', 'KOSDAQ')]
+except Exception:                                              # noqa: BLE001
+    pass
 _issues_global = _pops.build_global_issues(_gi_calib, _gi_mkt)
 # 배지 색도 토큰에서만 온다 — 라이트에서 자기 틴트 위 대비가 무너졌었다
 _SEV_BADGE = {'높음': (_TOK['neg'], '높음'), '중간': (_TOK['warn'], '중간'),
@@ -7956,7 +7963,11 @@ _uk.stat_tiles([
 ], theme=_theme)
 
 if m_indices['kospi']['price'] == 'N/A' or m_indices['kosdaq']['price'] == 'N/A':
-    st.warning("**KOSPI·KOSDAQ 데이터 미수신 알림**: 최신 지수 수치가 연동되지 않아 **`[시장 국면: 판정 보류]`** 상태가 적용되었으며, 매매 적합도 상한(59점) 게이트 통제가 활성화되었습니다.")
+    # 라운드 426 — 종전 문장은 '매매 적합도 상한(59점) 게이트 통제가 활성화'라 했는데 엔진에 그런 상한은 없다.
+    #   지수를 못 받으면 시장 국면이 판정 보류가 되고, 지수 쪽 제한(약세 상한 · 국면별 제한)은 오히려 빠진다.
+    st.warning("**KOSPI·KOSDAQ 데이터 미수신 알림**: 최신 지수 수치를 받지 못했습니다. 종목 분석에서도 지수를 못 받으면 "
+               "시장 국면은 **판정 보류**가 되고, 시장 국면 점수는 그 항목을 빼고 나머지로 셉니다 — 그동안 지수 국면에 "
+               "거는 상한과 국면별 제한은 걸리지 않습니다(못 받은 값을 지어내 채우지 않습니다).")
 
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 

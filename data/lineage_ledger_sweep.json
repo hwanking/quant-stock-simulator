@@ -1,29 +1,29 @@
 {
- "made": "2026-08-16",
- "n_checked": 184759,
+ "made": "2026-10-03",
+ "n_checked": 257130,
  "n_stop_violation": 0,
  "n_target_violation": 0,
  "n_degenerate": 0,
  "rr_min": 0.7,
  "rr_median": 0.7,
  "rr_max": 0.8,
- "target_pct_median": 3.149,
- "stop_pct_median": 4.498,
- "cost_pct": 0.36,
+ "target_pct_median": 3.187,
+ "stop_pct_median": 4.551,
+ "cost_pct": 0.41,
  "breakeven_hit_pre_cost": 58.82,
- "breakeven_hit_post_cost": 63.53,
+ "breakeven_hit_post_cost": 64.12,
  "buy_zone_hit": {
   "blind": {
-   "n": 5113,
-   "hit": 53.8
+   "n": 7346,
+   "hit": 57.09
   },
   "train": {
-   "n": 67093,
-   "hit": 59.41
+   "n": 88373,
+   "hit": 59.6
   },
   "valid": {
-   "n": 6544,
-   "hit": 68.87
+   "n": 8110,
+   "hit": 65.84
   }
  },
  "samples": {

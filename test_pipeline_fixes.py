@@ -33053,6 +33053,55 @@ check("이슈 계획 — 과매도 반등 규칙의 문구가 라운드 6 시점
       '2026-10-03' in _act411 and '못 미쳤습니다' in _act411 and '15건뿐이라' not in _act411)
 
 
+print("=" * 72)
+print("§414 지수 미수신은 상한을 걸지 않는다 · 약세 국면 이슈는 시장별로 실제로 뜬다 · 원장 훑기는 운영 비용과 통계 행 (라운드 426)")
+print("=" * 72)
+# 홈 이슈·경고·이슈 계획 셋이 '지수 미수신이면 매매 적합도 상한 59점'을 말했는데 엔진에 그런 상한은 없다 — 판정 보류면
+#   시장 국면 점수는 항목에서 빠지고, 지수 약세 상한과 국면별 제한은 오히려 빠진다. 그리고 '약세 국면이면 상한'
+#   이슈는 호출부가 국면을 안 넘겨 한 번도 못 떴다(라운드 394 가 짚었다).
+import product_ops as _po414                                         # noqa: E402
+import market_context as _mc414                                      # noqa: E402
+import regime_policy as _rp414                                       # noqa: E402
+_bear414 = {'available': True, 'market': 'KOSDAQ', 'regime_code': 'BEAR_PANIC',
+            'regime_label': '약세 (20일선·60일선 아래)', 'basis': 'KOSDAQ 800.00 vs 20일선 820.00·60일선 850.00 기준'}
+_bull414 = dict(_bear414, market='KOSPI', regime_code='BULL_STRONG', regime_label='강세 (지수 20일선·60일선 위)')
+_gi414 = _po414.build_global_issues({}, {'index_missing': False, 'domestic': [_bull414, _bear414, {'available': False}]})
+_mk414 = [i for i in _gi414 if i['type'] == '시장']
+_cap414 = _mc414.CONTEXT_CAPS.get('domestic_bear')
+check("약세 국면 이슈 — 시장별로 BEAR_PANIC 인 시장만 · 상한 수는 시장 맥락 표에서 · 강세·미수신 시장은 없음",
+      len(_mk414) == 1 and _mk414[0]['scope'] == 'KOSDAQ' and f"{int(_cap414)}점을 넘지 못합니다" in _mk414[0]['detail']
+      and 'KOSDAQ 800.00' in _mk414[0]['detail'], str(_mk414))
+_ix414 = [i for i in _po414.build_global_issues({}, {'index_missing': True}) if i['type'] == '데이터']
+_mcs414 = _read148(_os.path.join(PROJ, 'market_context.py'))
+_rps414 = _read148(_os.path.join(PROJ, 'regime_policy.py'))
+check("지수 미수신 이슈 — '상한 59점'을 말하지 않고, 지수 쪽 제한이 빠진다고 적는다(그 사실이 두 모듈에 있다)",
+      len(_ix414) == 1 and '59' not in _ix414[0]['detail'] and '걸리지 않습니다' in _ix414[0]['detail']
+      and "warns.append(f\"{market or '상장 시장 미확인'} 지수 국면 미수신" in _mcs414
+      and '국면을 판정하지 못해 국면별 제한을 걸지 않습니다' in _rps414
+      and _rp414.policy(None, 0.02).get('score_cap') is None)
+_w414 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_wc414 = [_n.value for _n in __import__('ast').walk(__import__('ast').parse(_w414))
+          if isinstance(_n, __import__('ast').Constant) and isinstance(_n.value, str)]
+check("홈 — 국면을 시장별로 같은 함수로 넘긴다 · 미수신 경고에 '상한(59점)'이 없다(AST · 주석 제외)",
+      "_gi_mkt['domestic'] = [_mc426h.fetch_domestic_context(engine_init, _mk426)" in _w414
+      and not any('상한(59점)' in _s for _s in _wc414) and any('국면별 제한은 걸리지 않습니다' in _s for _s in _wc414),
+      scanned=len(_wc414))
+from improvement import issue_ops as _io414                          # noqa: E402
+_pb414 = _io414.PLAYBOOK['data|index_missing']
+check("이슈 계획 — 지수 미수신의 영향·안전장치가 '상한 59점'이 아니라 엔진이 실제로 하는 일",
+      '59' not in _pb414['safeguard'] and '59' not in _pb414['user_impact']
+      and '덜 보수적' in _pb414['user_impact'])
+import scripts.lineage_audit as _la414                               # noqa: E402
+_las414 = _read148(_os.path.join(PROJ, 'scripts', 'lineage_audit.py'))
+_vc414 = __import__('verdict_core')
+check("원장 정합 훑기 — 손익분기 비용은 운영 상수 · 적중 셈은 통계 행(stat_rows) · 옛 0.36 상수 없음",
+      _la414.op_cost() == _vc414.COST_PCT and 'COST_PCT = 0.36' not in _las414
+      and '_lv426.stat_rows(' in _las414 and "cost_pct=op_cost()" in _las414)
+_sw414 = _json.load(open(_os.path.join(PROJ, 'data', 'lineage_ledger_sweep.json'), encoding='utf-8'))
+check("원장 정합 훑기 산출물의 비용이 운영 비용과 같다 (클라우드가 매일 다시 쓴다)",
+      _sw414.get('cost_pct') == _vc414.COST_PCT, str(_sw414.get('cost_pct')))
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

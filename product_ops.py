@@ -235,17 +235,34 @@ def build_global_issues(calib, market_ctx=None):
             "기회가 드문 대신 표본 축적이 느립니다 — 우연 적중 위험을 함께 점검합니다."))
 
     m = market_ctx or {}
-    if m.get('regime_label') and '약세' in str(m.get('regime_label')):
+    # 라운드 426 — 종전 갈래는 `m['regime_label']` 에 '약세'가 있으면 떴는데 **호출부가 국면을 넘긴 적이 없어** 한 번도
+    #   뜰 수 없었다(라운드 394 가 짚었다). 문장 자체는 참이다 — 상장 시장 지수가 20·60일선 아래(`BEAR_PANIC`)면 그 시장
+    #   종목에 시장 맥락 상한이 걸린다(`market_context.CONTEXT_CAPS['domestic_bear']`). 시장마다 따로 걸리므로
+    #   `market_context.fetch_domestic_context` 의 결과를 시장별로 받는다(`m['domestic']` · 분류 규칙을 여기서 다시
+    #   적지 않는다 · §4). 상한 수도 그 표에서 읽는다 — 못 읽으면 수 없이 적는다.
+    for d in (m.get('domestic') or []):
+        if not (d or {}).get('available') or d.get('regime_code') != 'BEAR_PANIC':
+            continue
+        try:
+            import market_context as _mc426
+            _cap426 = _mc426.CONTEXT_CAPS.get('domestic_bear')
+        except Exception:                                      # noqa: BLE001
+            _cap426 = None
+        _mk = str(d.get('market') or '국내')
         issues.append(_issue(
             '시장', '중간',
-            f"국내 시장 국면: {m['regime_label']}",
-            "약세 국면에서는 종목 점수가 좋아도 최종 점수에 상한이 걸립니다.",
-            scope=str(m.get('market', '국내'))))
+            f"{_mk} 국면: {d.get('regime_label')}",
+            (f"{_mk}에 상장된 종목은 종목 점수가 좋아도 최종 점수가 {int(_cap426)}점을 넘지 못합니다"
+             if _cap426 is not None else f"{_mk}에 상장된 종목은 최종 점수에 시장 맥락 상한이 걸립니다")
+            + f" — 지수가 20일선·60일선 아래일 때 거는 고정 상한입니다({d.get('basis') or '기준 미수신'}).",
+            scope=_mk))
+    # 라운드 426 — 종전 문장 '매매 적합도 상한(59점) 게이트가 활성화됐습니다'는 엔진에 없는 규칙이었다. 지수를 못 받으면
+    #   시장 국면이 판정 보류가 되고 지수 쪽 제한(약세 상한 · 국면별 제한)은 오히려 빠진다 — 그 사실을 적는다.
     if m.get('index_missing'):
         issues.append(_issue(
             '데이터', '높음', "지수 데이터 미수신 — 시장 국면 판정 보류",
-            "KOSPI·KOSDAQ 최신 지수가 연동되지 않아 매매 적합도 상한(59점) "
-            "게이트가 활성화됐습니다."))
+            "KOSPI·KOSDAQ 최신 지수를 받지 못했습니다. 종목 분석에서도 지수를 못 받으면 시장 국면 점수는 그 항목을 "
+            "빼고 나머지로 세고, 지수 국면에 거는 상한과 국면별 제한은 그동안 걸리지 않습니다."))
 
     issues.sort(key=lambda i: _SEV_ORDER.get(i['severity'], 9))
     return issues

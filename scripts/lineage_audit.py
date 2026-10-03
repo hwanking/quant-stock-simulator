@@ -117,8 +117,16 @@ CANDIDATES = ('regime_routing_r55', 'entry_engine_r57', 'breakout_flags_r64',
 OPS_FILES = ('quant_indicators.py', 'verdict_core.py', 'regime_policy.py',
              'next_action.py', 'price_axes.py')
 
-#: 왕복 비용 — 수수료 0.03 + 세금 0.20 + 슬리피지 0.18 (원장 연구와 동일)
-COST_PCT = 0.36
+#: 왕복 비용 — 운영 상수(`verdict_core.COST_PCT`)를 읽는다 (라운드 426). 종전엔 `0.36` 을 적어 두고 주석은
+#:   '수수료 0.03 + 세금 0.20 + 슬리피지 0.18' 이라 스스로 맞지 않았다(그 합은 0.41 · 라운드 350 이 운영 비용을 0.41 로
+#:   올렸다). 이 훑기는 매일 클라우드 로그에 *오늘 원장을 어느 손익분기선과 견줘 읽어야 하나* 를 찍는 감사라 연구
+#:   재현용 상수가 아니다(재현용 상수는 그 라운드의 스크립트에 둔다 · 라운드 255). 못 읽으면 None — 비용 후 선을 안 낸다.
+def op_cost():
+    try:
+        import verdict_core as _vc
+        return float(_vc.COST_PCT)
+    except Exception:                                          # noqa: BLE001
+        return None
 
 
 def read(name):
@@ -622,14 +630,28 @@ def ledger_sweep():
                 rr_vals.append((tg - px) / (px - st))
                 ups.append((tg / px - 1) * 100)
                 dns.append((1 - st / px) * 100)
-            # 매수권(58점+) 실적중 — 손익분기선과 견주려고 함께 센다
-            if (r.get('outcome') != 'OPEN'
-                    and float(r.get('score') or 0) >= 58.0):
-                sp = str(r.get('split') or '?')
-                cell = hit.setdefault(sp, [0, 0])
-                cell[1] += 1
-                if r.get('success'):
-                    cell[0] += 1
+
+    # 매수권(58점+) 실적중 — 손익분기선과 견주려고 센다. 위 정합 검사는 **기록된 값 전부**를 보지만 적중은 통계라
+    #   통계 행(`ledger_view.stat_rows` · 축척 어긋남·접미사 복사본 제외 · 라운드 390·391)만 센다 — 규칙을 여기서 다시
+    #   적지 않고 그 함수를 부른다(라운드 426). 미결은 종전대로 뺀다(원장은 미결에도 success=False 를 적는다).
+    import ledger_view as _lv426
+
+    def _lines426():
+        with open(path, encoding='utf-8') as _f426:
+            for _ln in _f426:
+                try:
+                    yield _j.loads(_ln)
+                except Exception:                              # noqa: BLE001
+                    continue
+    _ex426 = {}
+    for r in _lv426.stat_rows(_lines426(), keys=_lv426.scale_mismatch_keys(), counter=_ex426):
+        if (r.get('outcome') != 'OPEN'
+                and float(r.get('score') or 0) >= 58.0):
+            sp = str(r.get('split') or '?')
+            cell = hit.setdefault(sp, [0, 0])
+            cell[1] += 1
+            if r.get('success'):
+                cell[0] += 1
 
     print(f'\n■ 원장 정합 훑기 — 기록된 판단 {n:,}건 전부')
     print(f'  손절이 기준가 이상: {len(bad_stop):,}건')
@@ -654,24 +676,30 @@ def ledger_sweep():
         dns.sort()
         up_med, dn_med = ups[len(ups) // 2], dns[len(dns) // 2]
         be_pre = dn_med / (up_med + dn_med) * 100
-        be_post = (dn_med + COST_PCT) / (up_med + dn_med) * 100
+        _cost = op_cost()
+        be_post = ((dn_med + _cost) / (up_med + dn_med) * 100) if _cost is not None else None
         print(f'  기록된 폭 중앙값 — 목표 +{up_med:.2f}% · 손절 −{dn_med:.2f}%')
         print(f'  손익분기 적중률 — 비용 전 {be_pre:.1f}% · '
-              f'비용 후({COST_PCT}%) {be_post:.1f}%')
+              + (f'비용 후(운영 {_cost:g}%) {be_post:.1f}%' if be_post is not None
+                 else '비용 후 — 운영 비용을 못 읽어 셈하지 않는다'))
         print('    → 이 원장의 적중률은 이 선과 견줘 읽어야 한다. '
               '선 아래면 적중률이 높아 보여도 지는 구조다.')
-        print('  매수권(58점+) 실적중 vs 비용 후 손익분기:')
+        print(f"  매수권(58점+) 실적중 vs 비용 후 손익분기 (통계 행 · 뺀 축척 {_ex426.get('scale', 0):,} · "
+              f"복사본 {_ex426.get('dup', 0):,} · 미결 제외):")
         for sp in ('train', 'valid', 'blind'):
             k, tot = hit.get(sp, [0, 0])
             if not tot:
                 continue
             h = k / tot * 100
+            if be_post is None:
+                print(f'    {sp:6s} n {tot:>6,} · 적중 {h:5.2f}% · 견줄 선 없음')
+                continue
             gap = h - be_post
             print(f'    {sp:6s} n {tot:>6,} · 적중 {h:5.2f}% · '
                   f'{gap:+6.2f}%p {"위" if gap > 0 else "아래"}')
         hits = {sp: (round(v[0] / v[1] * 100, 2) if v[1] else None)
                 for sp, v in hit.items()}
-        above = [sp for sp, h in hits.items() if h is not None and h > be_post]
+        above = [sp for sp, h in hits.items() if h is not None and be_post is not None and h > be_post]
         print(f'    → 손익분기선 위인 구간: '
               f'{", ".join(above) if above else "없음"}')
     if not (bad_stop or bad_tgt or degen):
@@ -689,7 +717,7 @@ def ledger_sweep():
                      rr_max=(round(rr_vals[-1], 3) if rr_vals else None),
                      target_pct_median=(round(up_med, 3) if up_med else None),
                      stop_pct_median=(round(dn_med, 3) if dn_med else None),
-                     cost_pct=COST_PCT,
+                     cost_pct=op_cost(),
                      breakeven_hit_pre_cost=(round(be_pre, 2) if be_pre
                                              else None),
                      breakeven_hit_post_cost=(round(be_post, 2) if be_post
