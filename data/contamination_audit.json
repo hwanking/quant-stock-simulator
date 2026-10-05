@@ -1,16 +1,16 @@
 {
- "made": "2026-10-03",
- "made_at": "2026-10-03 07:14",
- "ledger_rows": 257130,
- "took_sec": 5.4,
+ "made": "2026-10-06",
+ "made_at": "2026-10-06 08:12",
+ "ledger_rows": 257530,
+ "took_sec": 5.0,
  "stores": {
   "ledger": {
-   "rows": 257130,
+   "rows": 257530,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
    "empty": 0,
-   "dup": 2499,
+   "dup": 2500,
    "bad_code": 0,
    "bad_price": 0,
    "level_order": 0,
@@ -19,12 +19,12 @@
    "parse_fail": 0
   },
   "virtual_predictions": {
-   "rows": 135633,
+   "rows": 136033,
    "future": 0,
    "holiday": 0,
    "fixture": 0,
    "empty": 0,
-   "dup": 287,
+   "dup": 288,
    "bad_code": 0,
    "parse_fail": 0
   },
@@ -70,48 +70,48 @@
    "parse_fail": 0
   },
   "tracker": {
-   "rows": 560,
+   "rows": 565,
    "future_unmarked": 0,
    "holiday_after_guard": 0
   }
  },
  "info": {
   "scale_stamp": {
-   "same": 254423,
+   "same": 254823,
    "off": 2707
   },
   "blind_share_by_band": {
    "40": {
-    "decided": 84041,
-    "blind": 7824,
-    "blind_pct": 9.3
+    "decided": 84165,
+    "blind": 7948,
+    "blind_pct": 9.4
    },
    "50": {
-    "decided": 22866,
-    "blind": 1341,
-    "blind_pct": 5.9
+    "decided": 22915,
+    "blind": 1390,
+    "blind_pct": 6.1
    },
    "55": {
-    "decided": 123273,
-    "blind": 8495,
-    "blind_pct": 6.9
+    "decided": 123392,
+    "blind": 8614,
+    "blind_pct": 7.0
    },
    "60": {
-    "decided": 15697,
-    "blind": 1314,
-    "blind_pct": 8.4
+    "decided": 15715,
+    "blind": 1332,
+    "blind_pct": 8.5
    },
    "65": {
-    "decided": 939,
-    "blind": 102,
-    "blind_pct": 10.9
+    "decided": 940,
+    "blind": 103,
+    "blind_pct": 11.0
    }
   },
   "legacy_holiday_cases": 50,
   "news_weekend_rows": 30,
   "premarket_holiday_reports": 18,
   "scale_audit": {
-   "made": "2026-10-03",
+   "made": "2026-10-06",
    "offenders": 20,
    "offender_key_rows": 2707,
    "small_offenders": 22,
@@ -127,9 +127,9 @@
  "hard_nonzero": [],
  "unmeasured": [],
  "legacy": {
-  "ledger.dup": 2499,
-  "virtual_predictions.dup": 287
+  "ledger.dup": 2500,
+  "virtual_predictions.dup": 288
  },
- "scanned_rows": 397105,
+ "scanned_rows": 397910,
  "note": "0 이어야 하는 수(hard)와 알림(info)을 가른다. 문턱이 없다 — 전부 항등식이다. 이름·코드·가격은 안 담는다(§9). 못 읽은 저장소는 0 으로 세지 않고 unmeasured 에 적는다(§3)."
 }

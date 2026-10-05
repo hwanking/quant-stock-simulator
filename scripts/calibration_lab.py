@@ -863,6 +863,26 @@ def load_universe(eng, top, existing, pinned=False):
     return add
 
 
+def dedupe_by_code(tickers):
+    """같은 종목코드(6자리)가 다른 시장 접미사로 두 번 든 목록에서 **처음 것만** 남긴다 — (남긴 것, 뺀 것) (라운드 428).
+
+    ⚠️ 라운드 390 은 완료 판정 열쇠에서 접미사를 뗐다(이미 만든 케이스를 다시 만들지 않는다). 그런데 **한 실행 안**에서는
+      두 변이가 둘 다 '아직 안 만든 것'이라 같은 (코드, 기준일)이 계획에 두 번 들어갔다. 원인은 계획 목록이었다 — 고정
+      목록 안에 같은 코드가 두 접미사로 한 번 있고(홀드아웃 안), 유니버스 덧붙이기가 **전체 티커 문자열**로 기존 목록을
+      빼서 고정 목록의 `.KS` 종목이 `.KQ` 로 다시 들어왔다. 2026-10-06 실측: 원장 중복 묶음 2,500 이 전부 이 25개 코드이고
+      (고정 목록 안 겹침 376 · 고정 목록 ↔ 덧붙인 변이 2,124), 10-03 → 10-06 스냅샷 사이에 새로 생긴 1묶음도 두 변이가 같은
+      실행에서 나란히 쓰였다. 순서는 그대로 두므로 고정 목록이 먼저다(위 주석의 '기존 종목이 먼저' 그대로)."""
+    seen, kept, dropped = set(), [], []
+    for t in tickers:
+        c = _lv_cost386.code6(t)
+        if c in seen:
+            dropped.append(t)
+            continue
+        seen.add(c)
+        kept.append(t)
+    return kept, dropped
+
+
 def virt_files():
     """원본 예측 파일 전부 — 본체 + 샤드.
 
@@ -988,6 +1008,10 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
         add = load_universe(eng, universe_top, set(pool),
                             pinned=bool(forward_from))
         pool += add
+    # 라운드 428 — 샤드로 가르기 **전에** 코드로 한 번 거른다. 가른 뒤에 거르면 두 변이가 다른 워커로 가서 서로를 못 본다.
+    pool, _dropped428 = dedupe_by_code(pool)
+    if _dropped428:
+        print(f'  같은 종목코드가 다른 접미사로 다시 든 {len(_dropped428):,}개를 뺐다 — 앞에 든 것을 쓴다 (라운드 428)')
     if shard:
         # 종목 단위로 가른다 — (종목,날짜) 단위로 가르면 같은 종목의 시세를
         # 워커마다 중복으로 받아 온다. 종목으로 가르면 시세 캐시가 산다.
@@ -1035,6 +1059,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
     import ledger_view as _lv
     done_by_tk = _lv.dates_by_ticker(done)
     near_dup = 0
+    planned = set()             # 라운드 428 — 이번 실행에 이미 계획한 (코드6, 기준일). 목록을 걸러도 한 번 더 막는다
     _open_by_stock = []         # [(그 종목 격자 끝, 그 종목의 가장 이른 열리는 기준일)] (R309·R379)
     newest_cand = None          # 이번에 만든 후보 중 가장 최신 기준일
     skipped = 0
@@ -1057,7 +1082,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
             for d in _cands:
                 if newest_cand is None or d > newest_cand:
                     newest_cand = d
-                if _lv.scale_key(tk, d) in done:          # 라운드 390 — 접미사를 뗀 열쇠로 묻는다
+                _key428 = _lv.scale_key(tk, d)
+                if _key428 in done or _key428 in planned:  # 라운드 390 — 접미사를 뗀 열쇠 · 428 — 이번 실행의 계획도
                     continue
                 if not forward_from and _lv.too_close(done_by_tk.get(_lv.code6(tk), ()), d):
                     near_dup += 1
@@ -1073,6 +1099,7 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
                     if _beyond_last and _ub and (_tk_open is None or _ub < _tk_open):
                         _tk_open = _ub
                     continue
+                planned.add(_key428)
                 todo.append((tk, d))
             if _tk_open and _cands:
                 # 라운드 379 — 종목마다 격자 끝과 같이 담아 두고, 루프가 끝난 뒤 시장 격자 끝에 선

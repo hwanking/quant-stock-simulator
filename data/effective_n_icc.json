@@ -1,10 +1,10 @@
 {
- "made": "2026-10-03",
- "ledger_rows": 257130,
- "stat_rows": 251924,
+ "made": "2026-10-06",
+ "ledger_rows": 257530,
+ "stat_rows": 252323,
  "stat_excluded": {
   "scale": 2707,
-  "dup": 2499
+  "dup": 2500
  },
  "scale_audit_read": true,
  "method": "ANOVA ICC + design effect",
@@ -12,78 +12,78 @@
  "sets": {
   "전체 원장": {
    "min2": {
-    "N": 251737,
-    "dates": 2562,
-    "n_bar": 98.3,
-    "icc": 0.1398,
+    "N": 252136,
+    "dates": 2563,
+    "n_bar": 98.4,
+    "icc": 0.1396,
     "design_effect": 14.6,
-    "n_eff": 17246.8,
+    "n_eff": 17272.7,
     "why": null
    },
    "min5": {
-    "N": 250487,
-    "dates": 2148,
-    "n_bar": 116.6,
-    "icc": 0.1335,
+    "N": 250886,
+    "dates": 2149,
+    "n_bar": 116.7,
+    "icc": 0.1333,
     "design_effect": 16.43,
-    "n_eff": 15244.2,
+    "n_eff": 15268.4,
     "why": null
    },
    "min10": {
-    "N": 246459,
-    "dates": 1575,
-    "n_bar": 156.5,
-    "icc": 0.1316,
+    "N": 246858,
+    "dates": 1576,
+    "n_bar": 156.6,
+    "icc": 0.1314,
     "design_effect": 21.45,
-    "n_eff": 11487.7,
+    "n_eff": 11508.1,
     "why": null
    }
   },
   "매수권(58+)": {
    "min2": {
-    "N": 107989,
-    "dates": 2237,
+    "N": 108124,
+    "dates": 2238,
     "n_bar": 48.3,
-    "icc": 0.1372,
-    "design_effect": 7.48,
-    "n_eff": 14428.7,
+    "icc": 0.1371,
+    "design_effect": 7.49,
+    "n_eff": 14443.8,
     "why": null
    },
    "min5": {
-    "N": 105756,
-    "dates": 1466,
-    "n_bar": 72.1,
-    "icc": 0.1173,
+    "N": 105891,
+    "dates": 1467,
+    "n_bar": 72.2,
+    "icc": 0.1172,
     "design_effect": 9.35,
-    "n_eff": 11315.7,
+    "n_eff": 11330.5,
     "why": null
    },
    "min10": {
-    "N": 101584,
-    "dates": 843,
+    "N": 101719,
+    "dates": 844,
     "n_bar": 120.5,
-    "icc": 0.1169,
-    "design_effect": 14.97,
-    "n_eff": 6788.0,
+    "icc": 0.1168,
+    "design_effect": 14.96,
+    "n_eff": 6800.6,
     "why": null
    }
   }
  },
  "sectors": {
   "반도체와반도체장비": {
-   "N": 11911,
-   "dates": 860,
-   "icc": 0.3029,
-   "design_effect": 4.89,
-   "n_eff": 2434.4,
+   "N": 11922,
+   "dates": 862,
+   "icc": 0.3026,
+   "design_effect": 4.88,
+   "n_eff": 2441.5,
    "report": true
   },
   "화학": {
-   "N": 5493,
-   "dates": 689,
-   "icc": 0.2557,
+   "N": 5499,
+   "dates": 690,
+   "icc": 0.2559,
    "design_effect": 2.78,
-   "n_eff": 1973.9,
+   "n_eff": 1975.7,
    "report": true
   },
   "방송과엔터테인먼트": {
@@ -103,19 +103,19 @@
    "report": false
   },
   "자동차부품": {
-   "N": 4965,
+   "N": 4971,
    "dates": 479,
-   "icc": 0.2004,
+   "icc": 0.2002,
    "design_effect": 2.88,
-   "n_eff": 1726.1,
+   "n_eff": 1727.5,
    "report": true
   },
   "섬유,의류,신발,호화품": {
-   "N": 2088,
-   "dates": 345,
-   "icc": 0.1978,
-   "design_effect": 2.0,
-   "n_eff": 1044.3,
+   "N": 2093,
+   "dates": 347,
+   "icc": 0.1976,
+   "design_effect": 1.99,
+   "n_eff": 1049.5,
    "report": true
   },
   "자동차": {
@@ -135,19 +135,19 @@
    "report": true
   },
   "게임엔터테인먼트": {
-   "N": 1919,
+   "N": 1920,
    "dates": 382,
    "icc": 0.1916,
    "design_effect": 1.77,
-   "n_eff": 1083.6,
+   "n_eff": 1083.9,
    "report": true
   },
   "철강": {
-   "N": 1743,
-   "dates": 316,
-   "icc": 0.3221,
+   "N": 1745,
+   "dates": 317,
+   "icc": 0.3217,
    "design_effect": 2.45,
-   "n_eff": 710.1,
+   "n_eff": 712.5,
    "report": true
   },
   "무선통신서비스": {
@@ -159,11 +159,11 @@
    "report": true
   },
   "식품": {
-   "N": 3260,
-   "dates": 439,
-   "icc": 0.179,
+   "N": 3265,
+   "dates": 441,
+   "icc": 0.1789,
    "design_effect": 2.15,
-   "n_eff": 1515.9,
+   "n_eff": 1521.6,
    "report": true
   },
   "우주항공과국방": {
@@ -175,19 +175,19 @@
    "report": true
   },
   "에너지장비및서비스": {
-   "N": 928,
-   "dates": 230,
-   "icc": 0.2416,
+   "N": 930,
+   "dates": 231,
+   "icc": 0.2411,
    "design_effect": 1.73,
-   "n_eff": 535.4,
+   "n_eff": 537.7,
    "report": true
   },
   "비철금속": {
-   "N": 1677,
-   "dates": 365,
-   "icc": 0.214,
-   "design_effect": 1.77,
-   "n_eff": 948.0,
+   "N": 1681,
+   "dates": 367,
+   "icc": 0.2134,
+   "design_effect": 1.76,
+   "n_eff": 953.0,
    "report": true
   },
   "해운사": {
@@ -199,11 +199,11 @@
    "report": true
   },
   "화장품": {
-   "N": 1703,
-   "dates": 346,
-   "icc": 0.2451,
-   "design_effect": 1.96,
-   "n_eff": 868.3,
+   "N": 1709,
+   "dates": 348,
+   "icc": 0.2441,
+   "design_effect": 1.95,
+   "n_eff": 874.4,
    "report": true
   },
   "건축자재": {
@@ -231,27 +231,27 @@
    "report": true
   },
   "기계": {
-   "N": 3156,
+   "N": 3157,
    "dates": 332,
    "icc": 0.2419,
    "design_effect": 3.06,
-   "n_eff": 1032.2,
+   "n_eff": 1032.1,
    "report": true
   },
   "IT서비스": {
-   "N": 2697,
-   "dates": 386,
-   "icc": 0.2348,
-   "design_effect": 2.41,
-   "n_eff": 1121.0,
+   "N": 2701,
+   "dates": 387,
+   "icc": 0.2346,
+   "design_effect": 2.4,
+   "n_eff": 1124.1,
    "report": true
   },
   "전자장비와기기": {
-   "N": 2910,
-   "dates": 383,
-   "icc": 0.1913,
+   "N": 2912,
+   "dates": 384,
+   "icc": 0.1911,
    "design_effect": 2.26,
-   "n_eff": 1286.2,
+   "n_eff": 1289.4,
    "report": true
   },
   "생물공학": {
@@ -263,19 +263,19 @@
    "report": true
   },
   "복합기업": {
-   "N": 1582,
-   "dates": 423,
-   "icc": 0.269,
+   "N": 1584,
+   "dates": 424,
+   "icc": 0.2688,
    "design_effect": 1.74,
-   "n_eff": 910.7,
+   "n_eff": 912.7,
    "report": true
   },
   "조선": {
-   "N": 1768,
+   "N": 1769,
    "dates": 334,
-   "icc": 0.3701,
+   "icc": 0.3703,
    "design_effect": 2.59,
-   "n_eff": 682.9,
+   "n_eff": 682.8,
    "report": true
   },
   "석유와가스": {
@@ -303,19 +303,19 @@
    "report": true
   },
   "건강관리장비와용품": {
-   "N": 3261,
-   "dates": 396,
-   "icc": 0.2018,
-   "design_effect": 2.46,
-   "n_eff": 1325.6,
+   "N": 3265,
+   "dates": 398,
+   "icc": 0.2016,
+   "design_effect": 2.45,
+   "n_eff": 1331.3,
    "report": true
   },
   "제약": {
-   "N": 6443,
-   "dates": 590,
-   "icc": 0.1996,
+   "N": 6456,
+   "dates": 592,
+   "icc": 0.1997,
    "design_effect": 2.98,
-   "n_eff": 2162.2,
+   "n_eff": 2168.1,
    "report": true
   },
   "항공화물운송과물류": {
@@ -359,19 +359,19 @@
    "report": true
   },
   "전기장비": {
-   "N": 2163,
-   "dates": 324,
-   "icc": 0.236,
-   "design_effect": 2.34,
-   "n_eff": 924.5,
+   "N": 2165,
+   "dates": 325,
+   "icc": 0.2357,
+   "design_effect": 2.33,
+   "n_eff": 927.4,
    "report": true
   },
   "건설": {
-   "N": 2979,
-   "dates": 368,
-   "icc": 0.2919,
+   "N": 2983,
+   "dates": 369,
+   "icc": 0.2921,
    "design_effect": 3.07,
-   "n_eff": 969.9,
+   "n_eff": 972.0,
    "report": true
   },
   "가정용기기와용품": {
@@ -423,11 +423,11 @@
    "report": true
   },
   "통신장비": {
-   "N": 1530,
-   "dates": 274,
-   "icc": 0.3618,
-   "design_effect": 2.66,
-   "n_eff": 575.5,
+   "N": 1535,
+   "dates": 276,
+   "icc": 0.361,
+   "design_effect": 2.65,
+   "n_eff": 580.0,
    "report": true
   },
   "증권": {
@@ -463,11 +463,11 @@
    "report": false
   },
   "가스유틸리티": {
-   "N": 634,
-   "dates": 175,
-   "icc": 0.2568,
+   "N": 636,
+   "dates": 176,
+   "icc": 0.2562,
    "design_effect": 1.67,
-   "n_eff": 378.8,
+   "n_eff": 380.9,
    "report": true
   },
   "가구": {

@@ -1,18 +1,18 @@
 {
- "made": "2026-10-03",
+ "made": "2026-10-06",
  "span": [
   "2011-01-14",
   "2026-08-27"
  ],
- "ledger_rows": 257130,
- "raw_cases": 257130,
- "unique_tickers": 1520,
- "unique_dates": 2749,
- "independent_episodes": 44872,
- "sector_cluster_effective_n": 48841,
- "sector_missing": 22362,
- "regime_effective_n": 3666,
- "forward_evaluated_n": 5553,
+ "ledger_rows": 257530,
+ "raw_cases": 257530,
+ "unique_tickers": 1521,
+ "unique_dates": 2750,
+ "independent_episodes": 44873,
+ "sector_cluster_effective_n": 48913,
+ "sector_missing": 22450,
+ "regime_effective_n": 3667,
+ "forward_evaluated_n": 5952,
  "forward_log_n": 1527,
  "high_conf_forward_n": 288,
  "forward_from": "2026-08-09",
@@ -38,18 +38,18 @@
   "2023": 26098,
   "2024": 27885,
   "2025": 27807,
-  "2026": 22774
+  "2026": 23173
  },
  "regime_counts": {
   "BEAR": 73320,
-  "SIDEWAYS": 90158,
+  "SIDEWAYS": 90557,
   "BULL": 88390,
   "None": 56
  },
- "stat_rows": 251924,
+ "stat_rows": 252323,
  "stat_excluded": {
   "scale": 2707,
-  "dup": 2499
+  "dup": 2500
  },
  "scale_audit_read": true,
  "stat_note": "①·ledger_rows 는 원장 행 전체, ②~⑧·연도·밀도·국면은 통계 행이다 — 진입가 축척이 어긋난 행(지어낸 승패)과 시장 접미사만 다른 복사본을 뺀다(원장 행은 안 지운다). 종목은 코드 6자리로 센다.",

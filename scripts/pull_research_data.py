@@ -68,21 +68,168 @@ def _utf8_stdout():
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
+#: gh 를 PATH 에서 못 찾을 때 볼 설치 경로 (라운드 428). 작업 스케줄러가 띄운 프로세스는 대화형 셸과 PATH 가 다를 수 있다.
+GH_FALLBACK_PATHS = (r'C:\Program Files\GitHub CLI\gh.exe', r'C:\Program Files (x86)\GitHub CLI\gh.exe')
+
+
+def _gh_exe():
+    """gh 실행 파일 — PATH 먼저, 없으면 설치 경로. 못 찾으면 None (지어내지 않는다)."""
+    import shutil
+    found = shutil.which('gh')
+    if found:
+        return found
+    for p in GH_FALLBACK_PATHS:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def gh_env(environ=None):
+    """gh 에 넘길 환경 — `APPDATA` 가 비면 사용자 폴더의 표준 위치(`AppData\\Roaming`, 실제로 있을 때만)로 채운다.
+
+    ⚠️ 라운드 428 — 2026-10-06 작업 스케줄러로 띄운 밤 작업에서 gh 가 *"gh auth login 을 실행하라"* 를 냈다(대화형 셸에서는
+      로그인돼 있다). 대화형 셸에서 환경 변수를 하나씩 빼 보니 **`APPDATA` 하나만** 빠져도 같은 증상이 나와 이 함수를 넣었는데,
+      **그 가설은 틀렸다** — 다음 예약 실행에서도 gh 는 똑같이 실패했고 메웠다는 표시가 안 붙었다(그 환경에도 `APPDATA` 는
+      있었다). 진짜 원인은 못 쟀다(키링에 못 닿는 것으로 추정할 뿐이다). 그래서 되받기는 **인증 없는 공개 HTTPS** 로 물러선다
+      (`candidates` · `http_download`). 이 함수는 해가 없어 남긴다 — 자격증명을 넣지 않고 **설정 폴더 위치**만 메운다(§9).
+      순수 함수(심어서 잴 수 있게 환경을 받는다) · (환경, 메운 것 설명 또는 '')."""
+    env = dict(os.environ if environ is None else environ)
+    if env.get('APPDATA'):
+        return env, ''
+    home = env.get('USERPROFILE') or (env.get('HOMEDRIVE', '') + env.get('HOMEPATH', ''))
+    cand = os.path.join(home, 'AppData', 'Roaming') if home else ''
+    if cand and os.path.isdir(cand):
+        env['APPDATA'] = cand
+        return env, f'APPDATA 가 비어 있어 {cand} 로 채웠다'
+    return env, 'APPDATA 가 비어 있고 사용자 폴더도 못 찾았다'
+
+
 def _gh(args):
-    r = subprocess.run(['gh'] + args, cwd=PROJ, capture_output=True,
+    """(종료 코드, 표준출력, 표준오류). 실행 파일을 못 찾으면 127 과 사유 — 예외로 죽지 않는다(라운드 428).
+    실패하면 표준오류 뒤에 환경 사실(APPDATA 를 메웠는지)을 붙인다 — 다음에 또 실패해도 왜인지 남게."""
+    exe = _gh_exe()
+    if not exe:
+        return 127, '', 'gh 실행 파일을 PATH 와 설치 경로에서 못 찾았다'
+    env, note = gh_env()
+    r = subprocess.run([exe] + args, cwd=PROJ, capture_output=True, env=env,
                        text=True, encoding='utf-8', errors='replace')
-    return r.returncode, r.stdout, r.stderr
+    err = r.stderr
+    if r.returncode != 0 and note:
+        err = (err or '').rstrip() + f' [{note}]'
+    return r.returncode, r.stdout, err
+
+
+def slug_from_git_config(path=None):
+    """`.git/config` 의 origin 주소에서 owner/name — 네트워크·인증·git 실행 파일이 필요 없다. 못 읽으면 None.
+
+    순수 함수에 가깝게: 파일 글자만 읽는다(심어서 잴 수 있게 경로를 받는다)."""
+    import re
+    p = path or os.path.join(PROJ, '.git', 'config')
+    try:
+        txt = open(p, encoding='utf-8', errors='replace').read()
+    except OSError:
+        return None
+    sect = re.search(r'\[remote "origin"\](.*?)(?:\n\[|\Z)', txt, flags=re.S)
+    if not sect:
+        return None
+    m = re.search(r'url\s*=\s*\S*?github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?\s*$', sect.group(1), flags=re.M)
+    return f'{m.group(1)}/{m.group(2)}' if m else None
 
 
 def repo_slug():
-    """owner/name — git 리모트에서 읽는다. 못 읽으면 지어내지 않는다."""
-    code, out, _ = _gh(['repo', 'view', '--json', 'nameWithOwner',
-                        '--jq', '.nameWithOwner'])
-    return out.strip() if code == 0 and out.strip() else None
+    """owner/name — 못 읽으면 지어내지 않는다(None).
+
+    ⚠️ 라운드 428 — 2026-10-05 밤 작업(작업 스케줄러)의 첫 실제 실행에서 이 함수가 None 을 돌려 되받기가 통째로 멈췄는데
+      gh 의 오류 출력을 버려 **왜인지 남지 않았다.** 대화형 셸에서는 같은 명령이 성공한다. 이제 ① 네트워크·인증이 필요 없는
+      `.git/config` 의 origin 주소를 먼저 읽고 ② 못 읽을 때만 gh 에 묻되 ③ gh 가 실패하면 그 사유를 그대로 찍는다(§3 · R310)."""
+    s = slug_from_git_config()
+    if s:
+        return s
+    code, out, err = _gh(['repo', 'view', '--json', 'nameWithOwner',
+                          '--jq', '.nameWithOwner'])
+    if code == 0 and out.strip():
+        return out.strip()
+    print(f'gh repo view 실패 (종료 {code}): {(err or "").strip()[:300] or "사유 출력 없음"}')
+    return None
+
+
+def rows_from_releases(releases):
+    """릴리스 목록(JSON) → (태그, 자산 갱신 시각, 자산 이름) — 아래 gh 의 jq 식과 **같은 규칙**(라운드 428 · 순수 함수).
+
+    `data-` 태그 · `research_data_` 자산이 하나 이상인 릴리스만 · 시각은 그 자산들의 최신 갱신 시각 · 이름은 가장 늦게
+    갱신된 자산. 최신이 마지막."""
+    rows = []
+    for rel in releases or []:
+        tag = str((rel or {}).get('tag_name') or '')
+        if not tag.startswith('data-'):
+            continue
+        assets = [a for a in (rel.get('assets') or []) if str(a.get('name') or '').startswith('research_data_')]
+        if not assets:
+            continue
+        last = sorted(assets, key=lambda a: str(a.get('updated_at') or ''))[-1]
+        rows.append({'tag': tag, 'at': max(str(a.get('updated_at') or '') for a in assets), 'name': last.get('name')})
+    rows.sort(key=lambda r: r['at'])
+    return rows
+
+
+#: 인증 없이 읽는 공개 API (라운드 428). 저장소가 공개일 때만 된다 — 비공개면 실패하고 그 사유를 찍는다(지어내지 않는다).
+API_ROOT = 'https://api.github.com'
+
+
+def _http_json(url):
+    import urllib.request
+    req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode('utf-8'))
+
+
+def http_candidates(slug):
+    """공개 릴리스 목록을 인증 없이 — (목록, 실패 사유 또는 '')."""
+    rels, page = [], 1
+    try:
+        while True:
+            got = _http_json(f'{API_ROOT}/repos/{slug}/releases?per_page=100&page={page}')
+            if not got:
+                break
+            rels.extend(got)
+            if len(got) < 100:
+                break
+            page += 1
+    except Exception as e:                                     # noqa: BLE001
+        return [], f'{type(e).__name__}: {e}'[:300]
+    return rows_from_releases(rels), ''
+
+
+def http_download(slug, tag, name, dst_dir):
+    """공개 내려받기 주소로 자산을 받는다 — 임시 이름으로 받고 다 받으면 바꿔 끼운다. (경로 또는 None, 사유)."""
+    import urllib.request
+    url = f'https://github.com/{slug}/releases/download/{tag}/{name}'
+    dst = os.path.join(dst_dir, name)
+    tmp = dst + '.part'
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull'})
+        with urllib.request.urlopen(req, timeout=600) as r, open(tmp, 'wb') as f:
+            while True:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                f.write(b)
+        os.replace(tmp, dst)
+        return dst, ''
+    except Exception as e:                                     # noqa: BLE001
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return None, f'{type(e).__name__}: {e}'[:300]
 
 
 def candidates(slug):
-    """(자산 갱신 시각, 태그, 자산 이름) 목록 — 최신이 마지막."""
+    """(자산 갱신 시각, 태그, 자산 이름) 목록 — 최신이 마지막.
+
+    ⚠️ 라운드 428 — 작업 스케줄러로 띄운 밤 작업에서 gh 가 *"gh auth login 을 실행하라"* 를 내 되받기가 통째로 멈췄다(대화형
+      셸에서는 로그인돼 있다 · 그 환경에서도 `APPDATA` 는 있었다 — 첫 가설은 증상만 재현했다). 저장소가 공개라 gh 가 실패하면
+      같은 목록을 인증 없는 HTTPS 로 읽는다(`rows_from_releases` 가 jq 식과 같은 규칙 · 두 길 다 실패하면 두 사유를 찍고 멈춘다)."""
     code, out, err = _gh([
         'api', f'repos/{slug}/releases', '--paginate', '--jq',
         '.[] | select(.tag_name|startswith("data-"))'
@@ -92,8 +239,12 @@ def candidates(slug):
         ' | {tag: $t, at: ([.[].updated_at]|max),'
         '    name: (sort_by(.updated_at)|last|.name)}'])
     if code != 0:
-        print('릴리스 목록을 못 읽었다 — 지어내지 않고 멈춘다.')
-        print((err or '').strip()[:300])
+        print(f'gh 로 릴리스 목록을 못 읽었다 (종료 {code}): {(err or "").strip()[:300] or "사유 출력 없음"}')
+        rows, why = http_candidates(slug)
+        if rows:
+            print(f'→ 인증 없는 공개 API 로 읽었다 · 후보 {len(rows)}개')
+            return rows
+        print(f'공개 API 로도 못 읽었다 — 지어내지 않고 멈춘다: {why or "후보 0개"}')
         return []
     rows = []
     for ln in out.splitlines():
@@ -515,9 +666,13 @@ def main():
     code, _, err = _gh(['release', 'download', pick['tag'],
                         '-p', pick['name'], '-D', INBOX, '--clobber'])
     if code != 0 or not os.path.exists(zip_path):
-        print('내려받기 실패 — 멈춘다.')
-        print((err or '').strip()[:300])
-        return 1
+        # 라운드 428 — gh 가 안 되면 공개 내려받기 주소로(인증 없음 · 임시 이름 → 바꿔 끼움 · 같은 INBOX · 같은 이름)
+        print(f'gh 로 못 받았다 (종료 {code}): {(err or "").strip()[:300] or "사유 출력 없음"}')
+        got, why = http_download(slug, pick['tag'], pick['name'], INBOX)
+        if not got or not os.path.exists(zip_path):
+            print(f'공개 주소로도 못 받았다 — 멈춘다: {why}')
+            return 1
+        print('→ 인증 없는 공개 주소로 받았다')
     mb = os.path.getsize(zip_path) / 1048576
     print(f'받음 {mb:,.1f}MB')
 

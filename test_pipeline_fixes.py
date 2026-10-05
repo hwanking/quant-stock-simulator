@@ -30316,7 +30316,8 @@ check("통계 행: 같은 (종목 6자리, 기준일)의 두 번째부터 빼고
 _lab381 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
 check("랩: 완료 열쇠가 코드 6자리 · 채점 봉으로 도장을 찍어 원장에 싣는다 · 통계는 stat_rows",
       "done.add(_lv_cost386.scale_key(r['ticker'], r['date']))" in _lab381
-      and "if _lv.scale_key(tk, d) in done:" in _lab381
+      # 라운드 428 — 같은 열쇠(scale_key)를 한 번 구해 완료 집합과 이번 실행의 계획 집합에 같이 묻는다(성질 그대로)
+      and "_key428 = _lv.scale_key(tk, d)" in _lab381 and "if _key428 in done or _key428 in planned:" in _lab381
       and "'scale_off': _lv_cost386.entry_scale_off(r.get('price'), _px390)" in _lab381
       and "'entry_scale_off': g.get('scale_off')," in _lab381
       and "done.add((r['ticker'], r['date']))" not in _lab381)
@@ -30331,8 +30332,9 @@ check("오염 점검 심기: 복사본·픽스처·미래·휴장일·빈 날짜
       (_d381['dup'], _d381['fixture'], _d381['future'], _d381['holiday'], _d381['empty'], _d381['bad_code'])
       == (1, 1, 1, 1, 1, 1), str(_d381))
 check("알려진 옛 오염은 늘 때만 실패 — 같으면 통과 · 하나 늘면 실패 · 목록 밖 칸은 0 이 아니면 실패",
-      _ca381.hard_nonzero({'ledger': {'dup': 2499}}) == []
-      and _ca381.hard_nonzero({'ledger': {'dup': 2500}}) != []
+      # 라운드 428 — 알려진 수를 글자로 박지 않는다(2,499 → 2,500 으로 옮기자 이 줄이 깨졌다 · R213) · 표에서 읽는다
+      _ca381.hard_nonzero({'ledger': {'dup': _ca381.LEGACY['ledger.dup']}}) == []
+      and _ca381.hard_nonzero({'ledger': {'dup': _ca381.LEGACY['ledger.dup'] + 1}}) != []
       and _ca381.hard_nonzero({'ledger': {'future': 1}}) != [])
 import artifact_io as _aio381                                     # noqa: E402
 _caj381 = _aio381.load_json('contamination_audit.json')
@@ -33120,6 +33122,94 @@ check("설명 사전 — 보유 이름표는 화면과 같은 표에서 · 진�
       _uk414.HOLD_LABELS['정리 검토'] in _hold414 and _uk414.HOLD_LABELS['일부 정리'] in _hold414
       and '사도 된다는 뜻은 아닙니다' in _entry414 and "아래로 내려오면 사는 걸 검토해도 된다" not in _entry414)
 
+
+print("=" * 72)
+print("§415 밤 되받기는 gh 가 안 되면 공개 HTTPS 로 · 계획 목록은 종목코드로 한 번 걸러 한 실행이 같은 케이스를 두 번 안 만든다 (라운드 428)")
+print("=" * 72)
+# 작업 스케줄러로 띄운 밤 작업에서 gh 가 '로그인 안 됨'을 내 되받기가 사흘째 멈췄다(APPDATA 가설은 틀렸다 · 원인 미측정).
+#   저장소가 공개라 같은 목록·같은 파일을 인증 없이 받는다 — 목록 규칙은 jq 식과 같은 순수 함수 하나.
+#   그리고 클라우드 오염 점검이 원장 중복 2,499 → 2,500 을 잡았다: 한 실행 안에서 같은 종목의 두 접미사가 둘 다 계획됐다.
+import scripts.pull_research_data as _pr415                         # noqa: E402
+_rels415 = [
+    {'tag_name': 'data-20261001', 'assets': [
+        {'name': 'research_data_a.zip', 'updated_at': '2026-10-01T10:00:00Z'},
+        {'name': 'research_data_b.zip', 'updated_at': '2026-10-01T12:00:00Z'},
+        {'name': 'other.zip', 'updated_at': '2026-10-09T00:00:00Z'}]},
+    {'tag_name': 'v1.0', 'assets': [{'name': 'research_data_x.zip', 'updated_at': '2026-11-01T00:00:00Z'}]},
+    {'tag_name': 'data-20260901', 'assets': [{'name': 'research_data_c.zip', 'updated_at': '2026-09-01T00:00:00Z'}]},
+    {'tag_name': 'data-empty', 'assets': [{'name': 'notes.txt', 'updated_at': '2026-12-01T00:00:00Z'}]},
+]
+check("공개 릴리스 목록 → 후보 — data- 태그 · research_data_ 자산이 있는 것만 · 시각은 그 자산들의 최신 · 이름은 가장 늦게 갱신된 것 · 최신이 끝",
+      _pr415.rows_from_releases(_rels415) == [
+          {'tag': 'data-20260901', 'at': '2026-09-01T00:00:00Z', 'name': 'research_data_c.zip'},
+          {'tag': 'data-20261001', 'at': '2026-10-01T12:00:00Z', 'name': 'research_data_b.zip'}]
+      and _pr415.rows_from_releases(None) == [] and _pr415.rows_from_releases([]) == [],
+      str(_pr415.rows_from_releases(_rels415)))
+_tmp415 = _os.path.join(PROJ, '_probe', '_t415')
+_os.makedirs(_os.path.join(_tmp415, 'home', 'AppData', 'Roaming'), exist_ok=True)
+_cfg415 = _os.path.join(_tmp415, 'config')
+open(_cfg415, 'w', encoding='utf-8').write(
+    '[core]\n\tbare = false\n[remote "upstream"]\n\turl = https://github.com/someone/else.git\n'
+    '[remote "origin"]\n\turl = https://github.com/own/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n')
+_s1415 = _pr415.slug_from_git_config(_cfg415)
+open(_cfg415, 'w', encoding='utf-8').write('[remote "origin"]\n\turl = git@github.com:own/repo2.git\n')
+_s2415 = _pr415.slug_from_git_config(_cfg415)
+open(_cfg415, 'w', encoding='utf-8').write('[remote "upstream"]\n\turl = https://github.com/someone/else.git\n')
+_s3415 = _pr415.slug_from_git_config(_cfg415)
+check("저장소 이름은 .git/config 의 origin 에서 — https · ssh 둘 다 · origin 이 없거나 파일이 없으면 None(다른 원격을 집지 않는다)",
+      (_s1415, _s2415, _s3415, _pr415.slug_from_git_config(_os.path.join(_tmp415, 'nope'))) == ('own/repo', 'own/repo2', None, None),
+      str((_s1415, _s2415, _s3415)))
+_e1415, _n1415 = _pr415.gh_env({'APPDATA': r'X:\a', 'USERPROFILE': r'X:\u'})
+_e2415, _n2415 = _pr415.gh_env({'USERPROFILE': _os.path.join(_tmp415, 'home')})
+_e3415, _n3415 = _pr415.gh_env({'USERPROFILE': _os.path.join(_tmp415, 'no_such_home')})
+check("gh 환경 — APPDATA 가 있으면 손대지 않고 · 비면 실제로 있는 사용자 폴더의 Roaming 으로만 · 없으면 안 지어내고 사유",
+      _e1415['APPDATA'] == r'X:\a' and _n1415 == ''
+      and _e2415.get('APPDATA') == _os.path.join(_tmp415, 'home', 'AppData', 'Roaming') and '채웠다' in _n2415
+      and 'APPDATA' not in _e3415 and '못 찾았다' in _n3415, str((_n1415, _n2415, _n3415)))
+_ghx415, _ghf415, _hc415 = _pr415._gh_exe, _pr415._gh, _pr415.http_candidates
+try:
+    _pr415._gh_exe = lambda: None
+    _r1415 = _pr415._gh(['api', 'x'])
+    _pr415._gh = lambda args: (1, '', 'To get started with GitHub CLI, please run:  gh auth login')
+    _pr415.http_candidates = lambda slug: ([{'tag': 'data-1', 'at': '2026-10-05T00:00:00Z', 'name': 'research_data_1.zip'}], '')
+    _r2415 = _pr415.candidates('own/repo')
+    _pr415.http_candidates = lambda slug: ([], 'URLError: 막힘')
+    _r3415 = _pr415.candidates('own/repo')
+finally:
+    _pr415._gh_exe, _pr415._gh, _pr415.http_candidates = _ghx415, _ghf415, _hc415
+check("gh 가 없으면 127 과 사유(예외로 안 죽는다) · gh 가 실패하면 공개 API 목록으로 · 둘 다 실패하면 빈 목록(지어내지 않는다)",
+      _r1415[0] == 127 and _r1415[2] and _r2415 == [{'tag': 'data-1', 'at': '2026-10-05T00:00:00Z', 'name': 'research_data_1.zip'}]
+      and _r3415 == [], str((_r1415, _r2415, _r3415)))
+_prs415 = _read148(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'))
+check("내려받기도 gh 가 실패하면 같은 INBOX · 같은 이름으로 공개 주소에서 받는다(임시 이름 → 바꿔 끼움)",
+      "got, why = http_download(slug, pick['tag'], pick['name'], INBOX)" in _prs415
+      and "os.replace(tmp, dst)" in _prs415 and "https://github.com/{slug}/releases/download/{tag}/{name}" in _prs415)
+import scripts.calibration_lab as _cl415                            # noqa: E402
+_k415, _d415 = _cl415.dedupe_by_code(['111111.KS', '222222.KQ', '111111.KQ', '333333', '222222.KS', '0040Y0.KS'])
+check("계획 목록 거르기 — 같은 6자리 코드는 처음 것만 · 차례 그대로 · 뺀 것을 돌려준다(문자 섞인 코드도 한 종목)",
+      _k415 == ['111111.KS', '222222.KQ', '333333', '0040Y0.KS'] and _d415 == ['111111.KQ', '222222.KS'], str((_k415, _d415)))
+_fixed415 = list(dict.fromkeys(_cl415.TICKERS + _cl415.HOLDOUT_TICKERS + _cl415.EXPANSION_TICKERS))
+_fk415, _fd415 = _cl415.dedupe_by_code(_fixed415)
+check("고정 목록 거르기 — 남긴 것의 코드가 전부 다르고 · 뺀 것만큼 줄었다 (뺀 수를 찍는다)",
+      len({__import__('ledger_view').code6(_t) for _t in _fk415}) == len(_fk415) == len(_fixed415) - len(_fd415),
+      f"고정 {len(_fixed415)} · 남김 {len(_fk415)} · 뺌 {len(_fd415)}", scanned=len(_fixed415))
+import io as _io415                                                  # noqa: E402
+import tokenize as _tk415                                            # noqa: E402
+_labsrc415 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+_code415 = ''.join(_t.string + (' ' if _t.type == _tk415.NAME else '') for _t in
+                   _tk415.generate_tokens(_io415.StringIO(_labsrc415).readline)
+                   if _t.type not in (_tk415.COMMENT, _tk415.NL, _tk415.NEWLINE, _tk415.INDENT, _tk415.DEDENT, _tk415.STRING))
+_ia415 = _code415.find('pool +=add')
+_ib415 = _code415.find('pool ,_dropped428 =dedupe_by_code (pool )')
+_ic415 = _code415.find('if shard :', max(_ia415, 0))      # 파일 앞쪽(인자 처리)에도 같은 글자가 있다 — 덧붙이기 뒤의 것
+_append415 = _code415.count('todo .append ((tk ,d ))')
+check("계획 단계 — 코드 거르기는 유니버스 덧붙이기 뒤 · 샤드 가르기 앞 · 한 실행의 계획 집합이 완료 집합과 같이 묻고 계획할 때 넣는다(주석·문자열 제외)",
+      0 <= _ia415 < _ib415 < _ic415 and _append415 == 1
+      and '_key428 in done or _key428 in planned' in _code415
+      and 'planned .add (_key428 )todo .append ((tk ,d ))' in _code415,
+      f"덧붙이기 {_ia415} · 거르기 {_ib415} · 샤드 {_ic415} · append {_append415}")
+import shutil as _sh415                                              # noqa: E402
+_sh415.rmtree(_tmp415, ignore_errors=True)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
