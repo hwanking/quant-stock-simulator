@@ -10410,10 +10410,20 @@ check("KST 시계로 보면 그날 종가로 확정된다",
 # 기록기가 뒤처짐을 **스스로 알린다**
 _fr141 = open(_os.path.join(PROJ, 'scripts', 'forward_recorder.py'),
               encoding='utf-8').read()
-check("기록기가 기준일 뒤처짐을 경고한다",
-      '기준일이 최근 거래일' in _fr141 and '시계가 KST 가 아닐 수 있다' in _fr141)
-check("기록기가 시계와 달력을 같이 찍는다",
-      '달력상 최근 거래일' in _fr141)
+# 라운드 437 — 종전 검사는 경고 **글자**를 잠갔고, 그 경고는 기준일을 '달력상 최근 거래일'(장이 열리기 전이어도 오늘)과 견줘
+#   자정 뒤에 도는 날마다 거짓 경보를 냈다(2026-10-06 01:59 KST 클라우드 · 10-05 대체공휴일 · 기준일 10-02 는 옳았다). 이제 심은
+#   시계로 **동작**을 본다 — 그 밤은 조용하고, UTC 시계(R86 의 사고)와 진짜 밀린 기준일은 경고한다.
+import scripts.forward_recorder as _frm141                      # noqa: E402
+_K141 = _dt141.timezone(_dt141.timedelta(hours=9))
+_n1_141 = _frm141.clock_notes('2026-10-02', _dt141.datetime(2026, 10, 6, 1, 59, tzinfo=_K141))[1]
+_n2_141 = _frm141.clock_notes('2026-08-12', _dt141.datetime(2026, 8, 13, 8, 0, tzinfo=_dt141.timezone.utc))[1]
+_n3_141 = _frm141.clock_notes('2026-10-02', _dt141.datetime(2026, 10, 6, 17, 0, tzinfo=_K141))[1]
+check("기록기가 기준일 뒤처짐을 경고한다 — 시계 오프셋을 직접 보고, 기준일은 마지막으로 장이 끝난 거래일과 견준다(심은 시계 셋)",
+      _n1_141 == [] and any('KST 가 아니다' in x for x in _n2_141)
+      and any('마지막으로 장이 끝난 거래일' in x for x in _n3_141) and 'clock_notes(t_ref)' in _fr141,
+      f'{_n1_141} · {len(_n2_141)} · {len(_n3_141)}')
+check("기록기가 시계와 판정일을 같이 찍는다",
+      '마지막으로 장이 끝난 거래일' in _frm141.clock_notes('2026-10-02', _dt141.datetime(2026, 10, 6, 1, 59, tzinfo=_K141))[0])
 
 
 # ══════════════════════════════════════════════════════════════════════

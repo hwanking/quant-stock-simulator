@@ -51,6 +51,38 @@ def _utf8_stdout():
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
+def clock_notes(t_ref, now=None):
+    """기록기가 기준일을 믿어도 되는지 — (머리 줄, [경고]) (라운드 437).
+
+    ⚠️ 라운드 86 이 넣은 경고는 기준일을 **'달력상 최근 거래일'** — 오늘이 거래일이면 장이 열리기 전이어도 오늘 — 과
+    견줬다. 예약 지연으로 기록기가 자정 뒤에 도는 날(2026-10-06 01:59 KST 실측)이면 기준일은 옳게 직전 거래일인데도
+    *"뒤처졌다 · 시계가 KST 가 아닐 수 있다 · TZ 를 확인한다"* 가 찍혔다 — 거짓 경보이고 원인을 엉뚱한 데(TZ)로 보낸다.
+    라운드 86 이 잡으려던 원인은 **시계의 UTC 오프셋**이므로 그것을 직접 보고(+09:00 이 아니면 경고), 기준일은 **마지막으로
+    정규장이 끝난 거래일**(`scripts.trading_day.anchor_day` · 라운드 283 의 판정일 · 같은 휴장일 표·마감 시각)과 견준다.
+    판정일을 못 구하면 견주지 않는다고 적는다(§3).
+    """
+    import datetime as _dt
+    now = now or _dt.datetime.now().astimezone()
+    if now.tzinfo is None:
+        now = now.astimezone()
+    off = now.utcoffset()
+    notes = []
+    if off != _dt.timedelta(hours=9):
+        notes.append(f'⚠ 시계가 KST 가 아니다 (UTC{now:%z}) — 엔진은 지역 시각을 KST 로 읽는다. 기준일이 하루 밀려 '
+                     f'어제 것을 다시 찍고 중복 방지에 걸려 아무것도 안 쌓일 수 있다 — TZ 를 확인한다.')
+    try:
+        from scripts.trading_day import anchor_day
+        anchor = anchor_day(now)
+    except Exception:                                          # noqa: BLE001
+        anchor = None
+    head = (f'  시계 {now:%Y-%m-%d %H:%M} (UTC{now:%z}) · 마지막으로 장이 끝난 거래일 {anchor}' if anchor else
+            f'  시계 {now:%Y-%m-%d %H:%M} (UTC{now:%z}) · 마지막으로 장이 끝난 거래일을 못 구해 기준일과 견주지 않는다')
+    if anchor and str(t_ref) != anchor:
+        notes.append(f'⚠ 기준일 {t_ref} 이 마지막으로 장이 끝난 거래일 {anchor} 과 다르다 — 이대로면 그날 것을 못 쌓거나 '
+                     f'이미 기록된 날을 다시 찍는다.')
+    return head, notes
+
+
 def main():
     top = DEFAULT_TOP
     if '--top' in sys.argv:
@@ -73,17 +105,11 @@ def main():
     #   그러면 매일 어제 날짜를 찍고 중복 방지에 걸려 **아무것도 안 쌓인다.**
     #   실제로 predictions.jsonl 이 171 에서 멈춰 있었다 — 축소가 아니라
     #   정체라 가드도 못 잡았다. 이제 눈에 보이게 적는다.
-    import datetime as _dt
-    _now = _dt.datetime.now()
-    _cal = be.KrxCalendar()
-    _latest = (_now.date() if _cal.is_trading_day(_now.date())
-               else _cal.previous_trading_day(_now.date()))
-    print(f'  시계 {_now:%Y-%m-%d %H:%M} · 달력상 최근 거래일 {_latest}')
-    if t_ref < _latest.strftime('%Y-%m-%d'):
-        print(f'  ⚠ 기준일이 최근 거래일({_latest})보다 뒤처졌다. '
-              f'시계가 KST 가 아닐 수 있다 (러너는 UTC). '
-              f'이대로면 어제 것을 다시 찍고 중복 방지에 걸려 '
-              f'아무것도 안 쌓인다 — TZ 를 확인한다.')
+    #   라운드 437 — 견주는 상대를 '달력상 최근 거래일'에서 '마지막으로 장이 끝난 거래일'로 · TZ 는 오프셋을 직접(`clock_notes`).
+    _head437, _notes437 = clock_notes(t_ref)
+    print(_head437)
+    for _n437 in _notes437:
+        print('  ' + _n437)
 
     # 이미 오늘 기록한 종목은 건너뛴다 (하루 여러 번 돌아도 안전)
     # ⚠️ 라운드 97 — 여기가 predictions.jsonl 만 보고 있었다. 전방 기록부를
