@@ -11,10 +11,16 @@
   지어내는 대신 **오늘부터 쌓는다.**
 
 ■ 무엇을 하나
-  ① record  : 오늘 시점 종목별 사건 태그를 append-only 로 박제
-               (기준가·거래량 배율까지 함께 — 나중 수익률 계산의 기준)
+  ① record  : 판정일(마지막으로 장이 끝난 거래일) 기준 종목별 사건 태그를 append-only 로 박제
+               + 기록 시각 · 그때 받은 PER·PBR (라운드 431)
   ② resolve : 20영업일이 지난 기록에 사후 경로를 채운다
-               (1/3/5/10/20일 수익률 · MFE · MAE)
+               (기준가 = 판정일 종가 · 1/3/5/10/20일 수익률 · MFE · MAE)
+
+■ 무엇을 안 남기나 — 나중에 되살릴 수 있는 것 (라운드 431 · 전수조사 #50)
+  R124 후보표(`docs/CANDIDATES_R124_EVENT_ENGINES.md`)는 사건마다 초과수익·거래량 반응·업종/시장 조정 수익·발표 전 20일 수익률·
+  당일 갭·그 시점 PER/PBR 을 적으라 했다. 그중 **가격에서 나오는 것은 전부** 날짜·종목·일봉·지수 일봉으로 연구할 때 다시 셀 수
+  있다 — 지금 적어 두면 같은 값의 두 번째 사본이 될 뿐이다(R282). **되살릴 수 없는 것은 그 시점의 밸류에이션**뿐이라 그것만
+  기록 때 받는다. ⚠️ 종전 이 독스트링은 record 가 *"기준가·거래량 배율까지 함께"* 남긴다고 적었는데 코드는 둘 다 안 남겼다.
 
 ■ 8/23 동결 준수
   점수·게이트·문턱을 바꾸지 않는다. 기록만 한다. 여기서 나온 것은
@@ -28,7 +34,7 @@ import json
 import os
 import sys
 import warnings
-from datetime import date
+from datetime import date, datetime
 
 warnings.filterwarnings('ignore')
 try:                       # 라운드 103 — 객체를 갈아끼우지 않는다
@@ -42,7 +48,47 @@ LOG = os.path.join(P, 'news_events.jsonl')
 H = 20
 
 
+def pit_valuation(integration):
+    """종목 통합 응답에서 PER·PBR 을 **받은 그대로** — 없거나 못 읽으면 None (라운드 431).
+
+    엔진의 `info_from_mobile_api` 는 못 받은 PER 을 0.0 으로 채운다(옛 파서와 같은 칸을 맞추느라) — 기록에서는 '없음'과
+    '0'을 가르기 위해 원래 칸을 직접 읽는다(§3). 수 파싱은 엔진의 `_api_num` 한 곳(§4). 순수 함수."""
+    ti = {}
+    for x in ((integration or {}).get('totalInfos') or []):
+        if isinstance(x, dict) and x.get('key') not in ti:
+            ti[x.get('key')] = x.get('value')
+    try:
+        from bitemporal_engine import _api_num
+    except Exception:                                          # noqa: BLE001
+        return None, None
+    return _api_num(ti.get('PER')), _api_num(ti.get('PBR'))
+
+
+def _fetch_pit(sym):
+    """기록 시점 PER·PBR — 한 번 묻는다(통합 응답 하나) · 못 받으면 (None, None). 네트워크가 흔들려도 기록을 막지 않는다."""
+    try:
+        import bitemporal_engine as be
+        code = str(sym).split('.')[0]
+        integ = be.fetch_json_with_retry(f"{be.NAVER_MOBILE_API}/stock/{code}/integration")
+        return pit_valuation(integ if isinstance(integ, dict) else None)
+    except Exception:                                          # noqa: BLE001
+        return None, None
+
+
 def record():
+    # ⚠️ 라운드 431 — 종전엔 `date.today()`(벽시계)였다. 클라우드 실행은 자주 자정을 넘기는데(라운드 283: 최근 12회 중 6회),
+    #   그러면 저녁에 받은 뉴스가 **다음 날** 날짜로 찍히고 resolve 는 그날 종가를 기준가로 써 **반응이 난 그 봉을 기준에
+    #   넣었다**(1일 수익률이 반응을 놓친다). 원장 145행 중 30행(21%)이 휴장일 날짜였다(2026-10-06 실측 · 그 행들은 resolve 가
+    #   전 거래일로 물러서 우연히 맞았다 · 평일에 찍힌 자정 뒤 행은 시각이 없어 가를 수 없다). 날짜는 판정일(마지막으로 장이
+    #   끝난 거래일 · trading_day 한 곳)이고, 못 구하면 기록하지 않는다(벽시계로 떨어지지 않는다 · §3).
+    try:
+        from scripts.trading_day import anchor_day
+        today = anchor_day()
+    except Exception:                                          # noqa: BLE001
+        today = None
+    if not today:
+        print('판정일(마지막으로 장이 끝난 거래일)을 못 구해 기록하지 않는다 — 벽시계 날짜로 대신하지 않는다.')
+        return 0
     import news_feed as nf
     from bitemporal_engine import STOCK_METRICS_DB, STOCK_NAME_MAP
 
@@ -52,7 +98,7 @@ def record():
         print(f'뉴스 미수신 — 기록하지 않는다 (출처 {len(report)}곳, '
               f'수신 {got}건). 미수신과 이슈 없음은 다른 말이다.')
         return 0
-    today = date.today().isoformat()
+    rec_at = datetime.now().astimezone().isoformat(timespec='seconds')
     seen = set()
     if os.path.exists(LOG):
         with open(LOG, encoding='utf-8') as f:
@@ -89,8 +135,12 @@ def record():
             s = nf.for_stock(nm, items=items)
             if not s.get('total'):
                 continue                    # 기사 없는 종목은 기록 안 함
+            _per431, _pbr431 = _fetch_pit(sym)
             out.write(json.dumps({
                 'ticker': sym, 'name': nm, 'date': today,
+                # 라운드 431 — 이 칸이 있는 행은 date 가 판정일이다(없는 옛 행은 벽시계 날짜라 자정 뒤 기록이 섞여 있다)
+                'recorded_at': rec_at,
+                'per_at_record': _per431, 'pbr_at_record': _pbr431,
                 'total': s['total'], 'fresh': s['fresh'],
                 'lagging': s['lagging'],
                 'events': s.get('event_types') or {},

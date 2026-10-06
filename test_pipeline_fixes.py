@@ -33367,6 +33367,42 @@ check("'판정 근거 상세'의 상한 줄은 전략 품질이 거는 상한이
       and "four_scores.get('sq_cap', 100)" not in _wa417
       and "if four_scores.get('cap_reasons') else '')" in _wa417)
 
+print("=" * 72)
+print("§418 뉴스 사건 기록기 — 날짜는 판정일 · 기록 시각 · 그때 받은 PER·PBR (못 받으면 None) (라운드 431)")
+print("=" * 72)
+import ast as _ast418                                                # noqa: E402
+import tempfile as _tf418                                            # noqa: E402
+import scripts.news_event_recorder as _ner418                        # noqa: E402
+check("기록 시점 PER·PBR — 받은 그대로 · 칸이 없거나 '-' 면 None(0 으로 채우지 않는다) · 응답이 없으면 (None, None)",
+      _ner418.pit_valuation({'totalInfos': [{'key': 'PER', 'value': '12.21배'}, {'key': 'PBR', 'value': '-'}]}) == (12.21, None)
+      and _ner418.pit_valuation(None) == (None, None) and _ner418.pit_valuation({}) == (None, None)
+      and _ner418.pit_valuation({'totalInfos': [{'key': 'PER', 'value': '-3.5배'}]}) == (-3.5, None))
+import scripts.trading_day as _td418                                 # noqa: E402
+import news_feed as _nf418                                           # noqa: E402
+_anc418, _fetch418, _log418 = _td418.anchor_day, _nf418.fetch, _ner418.LOG
+_called418 = []
+_tmp418 = _tf418.mkdtemp(prefix='r431_')
+try:
+    _td418.anchor_day = lambda now=None, max_back=30: None
+    _nf418.fetch = lambda *a, **k: _called418.append(1) or ([], [])
+    _ner418.LOG = _os.path.join(_tmp418, 'news_events.jsonl')
+    _ret418 = _ner418.record()
+finally:
+    _td418.anchor_day, _nf418.fetch, _ner418.LOG = _anc418, _fetch418, _log418
+check("판정일을 못 구하면 기록하지 않는다 — 뉴스도 안 받고(못 적을 것을 받지 않는다) 파일도 안 만든다 · 벽시계로 떨어지지 않는다",
+      _ret418 == 0 and not _called418 and not _os.path.exists(_os.path.join(_tmp418, 'news_events.jsonl')))
+_nsrc418 = _read148(_os.path.join(PROJ, 'scripts', 'news_event_recorder.py'))
+_rec418 = next(_n for _n in _ast418.walk(_ast418.parse(_nsrc418))
+               if isinstance(_n, _ast418.FunctionDef) and _n.name == 'record')
+_today_calls418 = [_n for _n in _ast418.walk(_rec418) if isinstance(_n, _ast418.Call)
+                   and isinstance(_n.func, _ast418.Attribute) and _n.func.attr == 'today']
+_keys418 = {_k.value for _n in _ast418.walk(_rec418) if isinstance(_n, _ast418.Dict)
+            for _k in _n.keys if isinstance(_k, _ast418.Constant)}
+check("record 의 날짜는 판정일(trading_day 한 곳) — 벽시계 today() 호출이 없다 · 행에 기록 시각과 그때의 PER·PBR 칸",
+      not _today_calls418 and 'anchor_day' in _ast418.unparse(_rec418)
+      and {'recorded_at', 'per_at_record', 'pbr_at_record', 'date'} <= _keys418,
+      f"today() {len(_today_calls418)} · 칸 {sorted(_keys418)[:12]}")
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
