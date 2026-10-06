@@ -30977,6 +30977,372 @@ check("관심종목 표가 그 행에 '아직 안 잼'과 같은 '지금 재기'
       _i387 > 0 and "?measure={_uk._esc_attr(_wcode)}" in _wa387[_i387:_i387 + 400])
 
 
+# ─── §388 시작 (라운드 398) ───
+print("\n" + "=" * 72)
+print("§388 11-16 전방 재평가 채점기 — 사전등록 글자 그대로 · 재평가일 전에는 판정하지 않는다 (라운드 398)")
+print("=" * 72)
+# 전방 기록부(fr-1)는 매일 쌓이는데 채점하는 코드가 저장소에 없었다 — forward_eval.py 는 날짜만 낸다. 판정 기준은
+#   사전등록 문서에만 있었고, 그날 손으로 짜면 결과를 보면서 짜게 된다. 결과가 없는 지금 짰다(scripts/forward_judge.py).
+#   여기서는 합성 행을 심어 ① 재평가일 관문이 양쪽으로 도는지 ② 채점이 원장 채점기 하나로 가는지 ③ R55·R57·R66 이
+#   통과·기각·미측정을 사전등록 문장대로 가르는지 ④ 채점기·지표 정의가 결과 전에 박제됐는지 본다.
+import ast as _ast388                                            # noqa: E402
+import datetime as _dt388                                        # noqa: E402
+import json as _json388                                          # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import forward_judge as _fj388                                   # noqa: E402
+import regime_moe_lab as _rm388                                  # noqa: E402
+import entry_engine_lab as _el388                                # noqa: E402
+import breakout_study as _bs388                                  # noqa: E402
+import prediction_log as _pl388                                  # noqa: E402
+import forward_eval as _fe388                                    # noqa: E402
+import scripts.model_freeze_guard as _fg388                      # noqa: E402
+
+# ① 재평가일 관문 — 전에는 자료를 부르지도 않고, 당일부터는 부른다 (양방향)
+_calls388 = []
+
+
+def _prov388(first, last):
+    _calls388.append((first, last))
+    return dict(registry=[], bars={}, ledger=[], states={}, routing={}, vmed=0.0092,
+                paths={}, anchors={}, flags={}, scale_keys=set())
+
+
+_pre388 = _fj388.run(today='2026-11-15', eval_date='2026-11-16', data=_prov388)
+check("재평가일 전날에는 판정하지 않는다 — '미측정'과 사유를 내고 자료 공급자를 부르지도 않는다",
+      _pre388['status'] == '미측정' and '재평가일 2026-11-16 전' in _pre388['reason'] and not _calls388,
+      f"{_pre388['status']} · 부름 {len(_calls388)} · {_pre388['reason'][:40]}")
+_on388 = _fj388.run(today='2026-11-16', eval_date='2026-11-16', data=_prov388)
+check("재평가일 당일에는 판정한다 — 자료를 한 번 부르고, 0행이면 각 판정은 '기각'이 아니라 '미측정'",
+      _on388['status'] == '판정함' and len(_calls388) == 1
+      and all(_on388['recon'][k]['status'] == '미측정' for k in ('r55', 'r57', 'r66'))
+      and _on388['live']['r55']['status'] == '미측정' and _on388['live']['base'] is None,
+      f"{_on388['status']} · 부름 {len(_calls388)}")
+check("재평가일 뒤에도 판정한다 · 재평가일을 못 읽으면 지어내지 않고 판정하지 않는다",
+      _fj388.judge_gate('2026-11-17', '2026-11-16')[0] is True
+      and _fj388.judge_gate('2026-12-01', '')[0] is False
+      and '지어내지' in _fj388.judge_gate('2026-12-01', '')[1])
+check("지금 박제 해시가 그대로다 — 채점기의 박제 대조가 §146 과 같은 답을 낸다", _fj388.pin_drift() == [],
+      str(_fj388.pin_drift()))
+_pd388, _pdc388 = _fj388.pin_drift, []
+_fj388.pin_drift = lambda: ['data/regime_routing_r55.json']
+try:
+    _drf388 = _fj388.run(today='2026-11-16', eval_date='2026-11-16', data=lambda a, b: _pdc388.append(1))
+finally:
+    _fj388.pin_drift = _pd388
+check("재평가일이어도 박제 파일이 바뀌었으면 판정하지 않는다 — 그때 정한 것을 그대로 잴 수 없다",
+      _drf388['status'] == '미측정' and '박제 파일이 바뀌었다' in _drf388['reason'] and not _pdc388,
+      _drf388['reason'][:60])
+from improvement.issue_ops import _today as _td388               # noqa: E402
+check("기본 관문은 지역 날짜 '오늘'과 박제 재평가일을 견준다 (오늘 날짜에 기대지 않는 검사)",
+      _fj388.judge_gate()[0] is (str(_td388()) >= str(_fe388.eval_date())),
+      f"오늘 {_td388()} · 재평가일 {_fe388.eval_date()}")
+# 앞당겨 보는 길이 없다 — main 은 인자를 읽지 않는다 · 전이면 종료 코드 2(미측정)
+_mn388 = next(n for n in _ast388.parse(_read148(_os.path.join(PROJ, 'scripts', 'forward_judge.py'))).body
+              if isinstance(n, _ast388.FunctionDef) and n.name == 'main')
+_argv388 = [n for n in _ast388.walk(_mn388) if isinstance(n, _ast388.Name) and n.id == 'argv'
+            and isinstance(n.ctx, _ast388.Load)]
+_fz388, _fzc388 = _fj388.feasibility, []
+_fj388.feasibility = lambda a, b: _fzc388.append((a, b))
+try:
+    _rc388 = _fj388.main(today='2026-11-15')
+finally:
+    _fj388.feasibility = _fz388
+check("재평가일을 앞당기는 옵션이 없다(main 이 인자를 안 읽는다) · 전이면 종료 코드 2 와 준비 상태만",
+      not _argv388 and _rc388 == 2 and len(_fzc388) == 1, f"argv 읽기 {len(_argv388)} · 코드 {_rc388}")
+
+# ② 기록 구간 — 규칙에서 유도 (§143 의 셈 · 사용자 결정 2026-09-28: 45번째(10-16)까지를 11-16 에 채점)
+_w388 = _fj388.record_window()
+check("기록 구간은 FORWARD_FROM 뒤 첫 거래일부터 45거래일 — 2026-08-10 ~ 2026-10-16 (§143 의 투영과 같다)",
+      _w388 == ('2026-08-10', _nth143('2026-08-10', 45)) == ('2026-08-10', '2026-10-16'), str(_w388))
+_pin388 = _json388.load(open(_os.path.join(PROJ, 'data', 'regime_routing_r55.json'), encoding='utf-8'))
+check("45·20 은 박제 파일의 규칙 문장과 forward_eval 한 곳에서 온다",
+      '45(기록) + 20(채점)' in _pin388['forward_eval']['rule'] and _fj388.RECORD_DAYS == 45
+      and _fj388.H == _fe388.HORIZON_DAYS == 20)
+
+# ③ 채점 — 원장 채점기 하나 · 세 칸 = price·hold_trim·hold_stop · 같은 봉은 손절 먼저
+_days388, _d388 = [], _dt388.date(2026, 8, 10)
+while len(_days388) < 40:
+    if _d388.weekday() < 5:
+        _days388.append(_d388.isoformat())
+    _d388 += _dt388.timedelta(days=1)
+
+
+def _bars388(over=None):
+    hi, lo, cl = [101.0] * 40, [99.0] * 40, [100.0] * 40
+    for i, (h, l) in (over or {}).items():
+        hi[i], lo[i] = h, l
+    return pd.DataFrame({'trade_date': _days388, 'high_raw': hi, 'low_raw': lo, 'close_raw': cl,
+                         'adj_close': cl, 'volume': [1000.0] * 40})
+
+
+def _reg388(tk, d, **kw):
+    r = dict(contract='fr-1', ticker=tk, date=d, price=100.0, score=60.0, hold_trim=105.0, hold_stop=95.0,
+             new_target=101.0, new_stop=90.0, horizon_days=20, model_sha='sha-a',
+             versions={'model': 'vA', 'rulebook': 'r1', 'scoring': 's1'})
+    r.update(kw)
+    return r
+
+
+_bA388 = _bars388({1: (102.0, 99.0), 3: (106.0, 99.0)})
+_bmap388 = {'AAA.KS': _bA388, 'BBB.KS': _bars388({2: (106.0, 94.0)}),
+            'CCC.KS': _bars388(), 'DDD.KS': _bars388()}
+_d0388 = _days388[0]
+_rows388 = [_reg388('AAA.KS', _d0388),
+            _reg388('BBB.KS', _d0388, versions={'model': 'vB', 'rulebook': 'r1', 'scoring': 's1'}),
+            _reg388('AAA.KS', _days388[30]),                       # 뒤 봉 9개 — 20봉 미경과
+            _reg388('ZZZ.KS', _d0388),                             # 시세 없음
+            _reg388('AAA.KS', _days388[1], hold_trim=None),        # 보유자 레벨 없음
+            _reg388('CCC.KS', _d0388),                             # 20봉 동안 안 닿음 → OPEN
+            _reg388('DDD.KS', _d0388, price=1000.0, hold_trim=1050.0, hold_stop=950.0)]   # 진입가 축척 어긋남
+_g388, _gw388 = _fj388.grade_registry(_rows388, _bmap388)
+_gm388 = {(r['ticker'], r['date']): r for r in _g388}
+_A388, _B388 = _gm388.get(('AAA.KS', _d0388)) or {}, _gm388.get(('BBB.KS', _d0388)) or {}
+_dA388 = _pl388.grade_prediction({'date': _d0388, 'price': 100.0, 'target': 105.0, 'stop': 95.0,
+                                  'horizon_days': 20}, _bA388)
+_nA388 = _pl388.grade_prediction({'date': _d0388, 'price': 100.0, 'target': 101.0, 'stop': 90.0,
+                                  'horizon_days': 20}, _bA388)
+check("기록부 행은 원장 채점기(grade_prediction)로 채점된다 — 진입 price · 목표 hold_trim · 손절 hold_stop (new_* 로 채점하면 1봉째라 갈린다)",
+      _A388.get('outcome') == 'TARGET' == _dA388['outcome'] and _A388.get('touched_bar') == 3 == _dA388['touched_bar']
+      and _A388.get('return_pct') == round(_dA388['return_pct'], 2) == 5.0 and _A388.get('success') is True
+      and _nA388['touched_bar'] == 1,
+      f"기록부 {_A388.get('outcome')}@{_A388.get('touched_bar')} · new_* 로는 {_nA388['outcome']}@{_nA388['touched_bar']}")
+check("같은 봉에서 목표·손절이 함께 닿으면 손절 먼저 (first_touch 의 보수 규칙 그대로)",
+      _B388.get('outcome') == 'STOP' and _B388.get('same_bar') is True and _B388.get('touched_bar') == 2,
+      str({k: _B388.get(k) for k in ('outcome', 'same_bar', 'touched_bar')}))
+check("못 채점한 행은 사유별로 센다 — 20봉 미경과 · 시세 미수신 · 보유자 레벨 없음 (채우지 않는다)",
+      dict(_gw388) == {'20봉 미경과': 1, '시세 미수신': 1, '보유자 레벨·가격 없음': 1}, str(dict(_gw388)))
+check("기록부 행에도 원장과 같은 진입가 축척 도장을 채점하는 봉으로 찍는다 (100 vs 1,000 → 어긋남)",
+      (_gm388.get(('DDD.KS', _d0388)) or {}).get('entry_scale_off') is True and _A388.get('entry_scale_off') is False)
+
+# ④ 모집단 — 랩(regime_moe_lab.main)의 거르기 그대로 + 원장의 통계 행 규칙(stat_rows)
+_pop388, _pw388 = _fj388.population(_g388, *_w388)
+check("모집단 = 구간 안 · 점수 ≥ 58 · OPEN 제외 · 진입가 축척 어긋남 제외 — 남는 것은 A·B 둘",
+      sorted(r['ticker'] for r in _pop388) == ['AAA.KS', 'BBB.KS']
+      and _pw388.get('OPEN(20봉 안 미도달 · 측정 제외)') == 1 and _pw388.get('진입가 축척 어긋남(통계 제외)') == 1,
+      f"{sorted(r['ticker'] for r in _pop388)} · {dict(_pw388)}")
+_pp388, _ppw388 = _fj388.population(
+    [dict(ticker='X.KS', date='2026-08-11', score=57.9, outcome='TARGET'),
+     dict(ticker='Y.KS', date='2026-10-19', score=60, outcome='TARGET'),      # R78 의 옛 투영 — 이제 구간 밖
+     dict(ticker='Z.KS', date='2026-08-11', score=58, outcome='TARGET'),
+     dict(ticker='Z.KQ', date='2026-08-11', score=58, outcome='TARGET')], *_w388)
+check("58점은 들고 57.9 는 뺀다 · 10-19 는 구간 밖 · 접미사만 다른 복사본은 한 번만 센다",
+      [r['ticker'] for r in _pp388] == ['Z.KS'] and _ppw388.get('같은 종목·날짜 복사본(통계 제외)') == 1,
+      f"{[r['ticker'] for r in _pp388]} · {dict(_ppw388)}")
+_bv388 = _fj388.by_version(_pop388)
+check("버전별로도 가른다 — 버전별의 합이 합계 · 도장 없는 행은 '(도장 없음)' (판정은 합계로 한다)",
+      set(_bv388) == {'vA', 'vB'} and sum(len(v) for v in _bv388.values()) == len(_pop388)
+      and '(도장 없음)' in _fj388.by_version([{'ticker': 'Q', 'date': '2026-08-11'}]), str(sorted(_bv388)))
+
+# ⑤ R55 — 문턱·지표는 실험 스크립트의 것 · 통과/기각/미측정을 사전등록 문장대로
+check("R55 의 매수권 문턱·비용·n 하한·프록시·지표는 regime_moe_lab 의 것 그대로다 (다시 적지 않는다)",
+      _fj388.metrics is _rm388.metrics and _fj388.PROXIES is _rm388.PROXIES
+      and _fj388.THR == _rm388.THR == 58.0 and _fj388.COST == _rm388.COST
+      and _fj388.MIN_ROUTED == _rm388.MIN_CELL_N == 200)
+_vm388 = float(_pin388['vol_median_train'])
+_ck388 = {_fj388.cell8(c, v, _vm388) for c in ('ABOVE_BOTH', 'BEAR', 'PULLBACK', 'REBOUND')
+          for v in (_vm388 * 2, _vm388 / 2)}
+check("칸 이름이 박제 routing 의 열쇠 8개와 글자까지 같고, 프록시 이름을 실험 스크립트가 전부 안다",
+      _ck388 == set(_pin388['routing']) and set(_pin388['routing'].values()) <= set(dict(_rm388.PROXIES)),
+      f"{sorted(_ck388 ^ set(_pin388['routing']))}")
+_mo388 = _fj388.months_prorated(*_w388)
+_st388 = {'2026-08-11': ('ABOVE_BOTH', _vm388 * 2), '2026-08-12': ('BEAR', _vm388 / 2)}
+
+
+def _r55rows388(n, flip=False, one_cell=False):
+    out = []
+    for i in range(n):
+        d = '2026-08-11' if (one_cell or i % 2 == 0) else '2026-08-12'
+        sel = (i // 2) % 2 == 0                      # 두 칸 모두 박제 routing 이 '돌파'(range_pos ≥ 80)
+        good = sel != flip
+        out.append(dict(ticker=f'{i:06d}.KS', date=d, score=60, m10_above=True, range_pos=(90 if sel else 10),
+                        bb_pos=50, demark_state='NONE', rsi=50, success=good,
+                        return_pct=(3.0 if good else -2.0), outcome=('TARGET' if good else 'STOP')))
+    return out
+
+
+_R388 = {k: _fj388.r55_judge(v, _st388, _pin388['routing'], _vm388, _mo388) for k, v in (
+    ('pass', _r55rows388(800)), ('flip', _r55rows388(800, flip=True)),
+    ('few', _r55rows388(300)), ('one', _r55rows388(800, one_cell=True)))}
+check("R55 — 라우팅이 기준선을 이기면 통과 · 지면 기각 (게이트 넷 · 같은 행 위의 비교)",
+      _R388['pass']['status'] == '통과' and all(_R388['pass']['gates'].values())
+      and _R388['flip']['status'] == '기각' and not _R388['flip']['gates']['EV>기준선 & EV>0'],
+      f"{_R388['pass']['status']} · {_R388['flip']['status']}")
+check("R55 — 라우팅 n < 200 이거나 국면 칸이 하나면 기각이 아니라 미측정 (§4c · R78 §2·§4 — 완화하지 않는다)",
+      _R388['few']['status'] == '미측정' and _R388['few']['n_routed'] == 150
+      and _R388['one']['status'] == '미측정' and len(_R388['one']['cells']) == 1,
+      f"{_R388['few']['why']} | {_R388['one']['why']}")
+_np388 = [{k: v for k, v in r.items() if k not in _fj388.PROXY_FIELDS} for r in _r55rows388(800)]
+_npr388 = _fj388.r55_judge(_np388, _st388, _pin388['routing'], _vm388, _mo388)
+check("R55 — 프록시 칸이 없는 행(fr-1 모양)은 미측정 · 빈 칸을 '선택 안 됨'으로 읽어 커버 0% 기각으로 만들지 않는다",
+      _npr388['status'] == '미측정' and _npr388.get('proxy_missing') == 800
+      and dict(_rm388.PROXIES)['돌파']({}) is False,
+      f"{_npr388['status']} · {_npr388['why'][:1]}")
+check("R55 — 국면(코스피 일봉)을 못 붙이면 미측정 (칸을 지어내지 않는다)",
+      _fj388.r55_judge(_r55rows388(800), {}, _pin388['routing'], _vm388, _mo388)['status'] == '미측정')
+# 국면은 랩의 build_states 를 그대로 부르는데 그 함수는 캐시를 먼저 읽는다(신선도 검사 없음 · 2026-10-01 캐시 끝 09-29).
+#   구간 끝에 못 닿으면 지수를 새로 받고 같은 함수로 다시 만든다 — 닿으면 받지 않는다 (양방향)
+_rf388 = []
+
+
+def _exit388():
+    raise SystemExit('지수 미수신')
+
+
+_s1388 = _fj388.states_through('2026-10-16', build=lambda: {'2026-09-29': ('BEAR', 0.01)},
+                               refresh=lambda: _rf388.append('stale'))
+_s2388 = _fj388.states_through('2026-10-16', build=lambda: {'2026-10-16': ('BEAR', 0.01)},
+                               refresh=lambda: _rf388.append('fresh'))
+_s3388 = _fj388.states_through('2026-10-16', build=_exit388, refresh=lambda: _rf388.append('none'))
+check("국면 캐시가 구간 끝에 못 닿으면 새로 받고 다시 만든다 · 닿으면 안 받는다 · 못 받으면 빈 채로(지어내지 않는다)",
+      _rf388 == ['stale', 'none'] and max(_s1388) == '2026-09-29' and '2026-10-16' in _s2388 and _s3388 == {},
+      str(_rf388))
+
+# ⑥ R57 — 챔피언(박제 '즉시') vs 기준선(현행눌림) · entry_engine_lab 의 후보·체결·집계 그대로
+
+
+def _path388(lows, closes):
+    bars = []
+    for i in range(20):
+        lo = lows[i] if i < len(lows) else 0.0
+        cl = closes[i] if i < len(closes) else closes[-1]
+        bars.append([f'd{i}', max(cl, 0) + 0.5, lo, cl, 1.0, 0.0])
+    return {'bars': bars, 'n_bars': 21}
+
+
+def _r57rows388(flip=False):
+    rows = []
+    for i in range(90):
+        dip = i % 2 == 0                               # 현행눌림(−2%)에 체결되는 행
+        a, b = (10.0, -6.0) if flip else (-8.0, 12.0)
+        p = (_path388([-0.5, -3.0], [-1.0, -2.5, a]) if dip else _path388([-0.5, -0.5], [1.0, 2.0, b]))
+        r = dict(ticker=f'{i:06d}.KS', date='2026-08-11', vol20=0.02, score=60, outcome='TARGET')
+        rows.append(_fj388.attach_path(r, p, {'atr14_pct': None}))
+    return rows
+
+
+_nm388 = [c[0] for c in _el388.candidates({'vol20': 0.02}, {})]
+_p57388 = _json388.load(open(_os.path.join(PROJ, 'data', 'entry_engine_r57.json'), encoding='utf-8'))
+check("R57 의 챔피언·기준선 이름이 실험 스크립트의 후보 이름이고, 챔피언은 박제 파일의 것이다",
+      _fj388.R57_CHAMP in _nm388 and _fj388.R57_BASE in _nm388
+      and str(_p57388['champion']).startswith(_fj388.R57_CHAMP), f"{_nm388} · {_p57388['champion']}")
+_q57p388 = _fj388.r57_judge(_r57rows388(), '§388 R57 통과 심기')
+_q57f388 = _fj388.r57_judge(_r57rows388(True), '§388 R57 기각 심기')
+check("R57 — 눌림에 체결되는 행이 나쁘면(역선택) 즉시가 통과 · 좋으면 기각 (게이트 넷 · 양방향)",
+      _q57p388['status'] == '통과' and all(_q57p388['gates'].values())
+      and _q57f388['status'] == '기각' and not _q57f388['gates']['정책EV > 기준선'],
+      f"{_q57p388['status']} · {_q57f388['status']}")
+check("R57 — 기준선을 못 세우면(vol20 없음) 기각이 아니라 미측정 · 박제 챔피언과 다르면 재지 않는다",
+      _fj388.r57_judge([dict(r, _cands=[c for c in r['_cands'] if c[0] != _fj388.R57_BASE])
+                        for r in _r57rows388()], '§388 R57 기준선 없음')['status'] == '미측정'
+      and _fj388.r57_judge(_r57rows388(), 'x', champion_pinned='ATR0.5눌림')['status'] == '미측정'
+      and _fj388.r57_judge(_r57rows388(), '§388 R57 박제 챔피언', champion_pinned=_p57388['champion'])['status'] == '통과')
+import forward_registry as _fr388                                # noqa: E402
+check("라이브 갈래가 R55 라우팅·R57 을 미측정으로 두는 근거가 참이다 — fr-1 규약에 프록시 다섯 칸·vol20 이 없다",
+      not (set(_fj388.PROXY_FIELDS) | {'vol20'}) & set(_fr388.FIELDS) and _fr388.CONTRACT == 'fr-1',
+      f"{_fr388.CONTRACT} · 겹침 {(set(_fj388.PROXY_FIELDS) | {'vol20'}) & set(_fr388.FIELDS)}")
+
+# ⑦ R66 — 정정된 거짓돌파 · 에피소드 하한 먼저 · 플래그는 breakout_study 한 곳의 식
+
+
+def _r66row388(i, br=True, good=True, cls=None, day='2026-08-11', tk=None):
+    cl = list(cls) if cls else [0.5] * 19 + [5.0 if good else -3.0]
+    bars = [[f'd{j}', max(c, 0) + 0.5, -0.5 if j else -2.0, c, 1.0, 0.0] for j, c in enumerate(cl)]
+    r = dict(ticker=tk or f'{i:06d}.KS', date=day, vol20=0.02, score=40, success=good,
+             outcome=('TARGET' if good else 'STOP'))
+    r = _fj388.attach_path(r, {'bars': bars, 'n_bars': 21})
+    r['_fl'] = {'b1': br, 'b2': False, 'break_line': (-1.0 if br else 5.0)}
+    return r
+
+
+_fbA = _r66row388(0, cls=[0.5, 0.2, -0.5, 0.1, 0.3] + [0.5] * 15)          # 장중 −2% 스침 · 종가는 선 위
+_fbB = _r66row388(1, cls=[0.5, 0.2, -1.5] + [0.5] * 17)                     # 3봉째 종가가 선 아래
+_fbC = _r66row388(2, cls=[0.5] * 5 + [-1.5] + [0.5] * 14)                   # 6봉째 — 5봉 밖
+check("R66 거짓돌파는 정정 정의 — 5봉 이내 **종가**가 돌파선 아래 (스침은 아니다 · 6봉째는 밖)",
+      _fj388.false_break(_fbA) is False and min(_fbA['_lo']) <= _fbA['_fl']['break_line']
+      and _fj388.false_break(_fbB) is True and _fj388.false_break(_fbC) is False)
+_ep388 = [dict(ticker='E.KS', date='2026-08-10'), dict(ticker='E.KS', date='2026-08-20'),
+          dict(ticker='E.KS', date='2026-09-25'), dict(ticker='F.KS', date='2026-08-10')]
+check("에피소드는 같은 종목 35일 묶음 (breakout_study 의 셈 · 10일 뒤는 같은 묶음 · 46일 뒤는 새 묶음)",
+      _fj388.episodes(_ep388) == 3 and _fj388.episodes(_ep388[:2]) == 1)
+
+
+def _r66set388(n_br, flip=False):
+    rows = [_r66row388(i, good=(i % 10 < 7), cls=(None if not flip else [0.5, -2.0] + [0.5] * 17
+                                                   + [5.0 if i % 10 < 7 else -3.0])) for i in range(n_br)]
+    rows += [_r66row388(10000 + i, br=False, good=(i % 2 == 0),
+                        cls=[0.5] * 19 + [1.0 if i % 2 == 0 else -3.0]) for i in range(320)]
+    return rows
+
+
+_q66p388 = _fj388.r66_judge(_r66set388(320))
+_q66f388 = _fj388.r66_judge(_r66set388(320, flip=True))
+_q66s388 = _fj388.r66_judge(_r66set388(200))
+check("R66 — 돌파 코호트가 비돌파를 이기고 거짓돌파가 적으면 통과 · 거짓돌파가 많으면 기각 (양방향)",
+      _q66p388['status'] == '통과' and all(_q66p388['gates'].values())
+      and _q66f388['status'] == '기각' and _q66f388['false_break'] == 100.0,
+      f"{_q66p388['status']} · {_q66f388['status']} · 거짓돌파 {_q66f388.get('false_break')}")
+check("R66 — 돌파 에피소드 < 300 이면 기각이 아니라 미측정 (R64 §5c — 먼저 확인)",
+      _q66s388['status'] == '미측정' and _q66s388['episodes'] == 200, str(_q66s388['why']))
+# 플래그 — 파일에 없는 전방 행은 breakout_study.flags_at 한 곳의 식으로 잰다(식을 두 곳에 적지 않는다)
+_fd388, _dd388 = [], _dt388.date(2025, 6, 2)
+while len(_fd388) < 300:
+    if _dd388.weekday() < 5:
+        _fd388.append(_dd388.isoformat())
+    _dd388 += _dt388.timedelta(days=1)
+_C388 = np.array([100.0 + 0.1 * i for i in range(300)])
+_V388 = np.array([1000.0] * 280 + [2000.0] + [1000.0] * 19)
+_fdf388 = pd.DataFrame({'trade_date': _fd388, 'adj_close': _C388, 'volume': _V388})
+_mf388, _mw388 = _fj388.compute_missing_flags(
+    [dict(ticker='G.KS', date=_fd388[280]), dict(ticker='G.KS', date=_fd388[200]),
+     dict(ticker='H.KS', date=_fd388[280]), dict(ticker='G.KS', date=_fd388[290])],
+    {('G.KS', _fd388[290]): {'b1': 'file'}},
+    lambda tk: _fdf388 if tk == 'G.KS' else None)
+check("없는 돌파 플래그는 flags_at 으로 잰다 — 값이 같은 식 · 앞 봉 245 미만·시세 없음은 사유로 · 파일에 있는 것은 안 다시 잰다",
+      _mf388.get(('G.KS', _fd388[280])) == {'ticker': 'G.KS', 'date': _fd388[280],
+                                             **_bs388.flags_at(_C388, _V388, 280)}
+      and ('G.KS', _fd388[290]) not in _mf388 and len(_mf388) == 1
+      and dict(_mw388) == {'신호일 봉 없음·앞 봉 245 미만': 1, '시세 미수신': 1}, str(dict(_mw388)))
+_bf388 = next(n for n in _ast388.parse(_read148(_os.path.join(PROJ, 'scripts', 'breakout_study.py'))).body
+              if isinstance(n, _ast388.FunctionDef) and n.name == 'build_flags')
+_calls_bf388 = [n for n in _ast388.walk(_bf388) if isinstance(n, _ast388.Call)
+                and getattr(n.func, 'id', None) == 'flags_at']
+_asg_bf388 = [t.id for n in _ast388.walk(_bf388) if isinstance(n, _ast388.Assign)
+              for t in n.targets if isinstance(t, _ast388.Name) and t.id in ('prev240', 'ma240', 'sd240')]
+check("breakout_study.build_flags 는 flags_at 을 부르고 식을 다시 적지 않는다 (식은 한 곳)",
+      len(_calls_bf388) == 1 and not _asg_bf388, f"부름 {len(_calls_bf388)} · 남은 식 {_asg_bf388}")
+
+# ⑧ 사전등록 문장 ↔ 채점기 상수 — 새로 고른 숫자가 없다 (문장에 있는 것만)
+_docs388 = {k: _read148(_os.path.join(PROJ, 'docs', f)) for k, f in (
+    ('R55', 'PREREG_R55_REGIME_MOE.md'), ('R57', 'PREREG_R57_ENTRY_ENGINE.md'),
+    ('R64', 'PREREG_R64_BREAKOUT_BYPASS.md'), ('R78', 'FORWARD_EVAL_DATE_R78.md'))}
+_need388 = [('R55', '1.0%p', _fj388.R55_HIT_TOL == 1.0), ('R55', '커버리지 ≥ 30%', _fj388.R55_COVER_MIN == 30),
+            ('R55', '월평균 ≥ 10건', _fj388.R55_MONTHLY_MIN == 10), ('R55', 'n < 200', _fj388.MIN_ROUTED == 200),
+            ('R55', '구간 길이에 비례 환산', True), ('R57', '체결률(20봉) ≥ 50%', _fj388.R57_FILL_MIN == 50),
+            ('R64', '에피소드 n ≥ 300', _fj388.R66_EP_MIN == 300), ('R64', '거짓돌파율 < 50%', _fj388.R66_FALSE_MAX == 50),
+            ('R64', '5봉 이내 종가가 돌파선 아래로 마감', _fj388.R66_FALSE_BARS == 5),
+            ('R64', '같은 종목 35일 묶음', _fj388.R66_EP_GAP_DAYS == 35),
+            ('R78', '라우팅 칸 n ≥ 200', True), ('R78', '45거래일', _fj388.RECORD_DAYS == 45)]
+_miss388 = [(k, s) for k, s, v in _need388 if s not in _docs388[k] or not v]
+check("채점기의 문턱은 전부 사전등록 문장에 있는 수다 (문장·값 둘 다)",
+      not _miss388, str(_miss388), scanned=len(_need388))
+
+# ⑨ 박제 — 채점기는 박제 목록 밖의 새 파일 · 쓰는 자리는 결과 하나 · 자동 실행이 못 바꾼다 · 해시가 결과 문서에
+_src388 = _ast388.parse(_read148(_os.path.join(PROJ, 'scripts', 'forward_judge.py')))
+_wopen388 = [n for n in _ast388.walk(_src388) if isinstance(n, _ast388.Call) and getattr(n.func, 'id', None) == 'open'
+             and any(isinstance(a, _ast388.Constant) and a.value in ('w', 'a') for a in n.args[1:])]
+check("채점기는 박제 파일을 쓰지 않는다 — 박제 목록 밖의 새 파일이고, 쓰는 open 은 결과 파일 하나다",
+      'scripts/forward_judge.py' not in _fg388.FORWARD_TARGETS and len(_wopen388) == 1
+      and getattr(_wopen388[0].args[0], 'id', None) == 'out', f"쓰기 open {len(_wopen388)}")
+check("자동 실행이 채점기를 못 바꾼다 (동결 자물쇠 ⓐ 목록)", 'scripts/forward_judge.py' in _fg388.NO_AUTO_CHANGE)
+_rdoc388 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R398_FORWARD_JUDGE.md'))
+_pins388 = ('scripts/forward_judge.py', 'scripts/regime_moe_lab.py', 'scripts/entry_engine_lab.py',
+            'scripts/breakout_study.py')
+_drift388 = [r for r in _pins388 if (_fg388.sha(r) or 'none')[:16] not in _rdoc388]
+check("채점기와 지표 정의 파일의 해시가 결과 문서에 적힌 값과 같다 — 결과를 본 뒤 조용히 못 고친다",
+      not _drift388, f"달라진 것 {_drift388} (고쳤으면 사유와 함께 문서의 해시를 간다)", scanned=len(_pins388))
+# ─── §388 끝 ───
+
+
 print("=" * 72)
 print("§389 제미나이 톤 — 대비는 네 면 모두에서 · 층 자리 · 글꼴 · 아이콘 · 상단 바 (라운드 399)")
 print("=" * 72)

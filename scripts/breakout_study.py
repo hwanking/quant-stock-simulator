@@ -45,6 +45,33 @@ def wilson_low(k, n, z=1.96):
     return (c - m) / d * 100.0
 
 
+def flags_at(C, V, j):
+    """신호일 j 의 돌파 조건 5종 + 돌파선(신호일 종가 대비 %). 신호일 **이전 봉만** 쓴다.
+
+    라운드 398 — `build_flags` 의 몸통을 **글자 그대로** 여기로 옮겼다(식 불변 · 출력 불변).
+    전방 재평가 채점기(`scripts/forward_judge.py`)가 플래그 파일에 없는 전방 행(원장에서 전부
+    'blind' 로 찍혀 아래 `build_flags` 가 건너뛴다)을 **같은 식으로** 재야 해서다 — 식을 두 곳에
+    적지 않는다(R192). 부르는 쪽이 `j >= 245` 를 보장한다."""
+    px = float(C[j])
+    prev240 = C[j - 240:j]           # 신호일 제외 (누출 금지)
+    ma240 = float(prev240.mean())
+    sd240 = float(prev240.std())
+    ma200 = float(C[j - 200:j].mean())
+    ma60 = float(C[j - 60:j].mean())
+    ma120 = float(C[j - 120:j].mean())
+    v20 = float(V[j - 20:j].mean())
+    return {
+        'b1': bool(px > float(prev240.max())),
+        'b2': bool(px > ma240 + 2 * sd240),
+        'b3': bool(px > ma200),
+        'b4': bool(v20 > 0 and V[j] >= v20 * 1.5),
+        'b5': bool(ma60 > ma120 > ma240),
+        'break_line': round(max(float(prev240.max()),
+                                ma240 + 2 * sd240) / px * 100
+                            - 100, 3),
+    }
+
+
 def build_flags(shard, shards):
     """종목별로 시세 1회 수신 → 신호일마다 돌파 조건 5종 판정."""
     by_tk = {}
@@ -110,25 +137,8 @@ def build_flags(shard, shards):
                 j = idx.get(d)
                 if j is None or j < 245:
                     continue
-                px = float(C[j])
-                prev240 = C[j - 240:j]           # 신호일 제외 (누출 금지)
-                ma240 = float(prev240.mean())
-                sd240 = float(prev240.std())
-                ma200 = float(C[j - 200:j].mean())
-                ma60 = float(C[j - 60:j].mean())
-                ma120 = float(C[j - 120:j].mean())
-                v20 = float(V[j - 20:j].mean())
-                out.write(json.dumps({
-                    'ticker': tk, 'date': d,
-                    'b1': bool(px > float(prev240.max())),
-                    'b2': bool(px > ma240 + 2 * sd240),
-                    'b3': bool(px > ma200),
-                    'b4': bool(v20 > 0 and V[j] >= v20 * 1.5),
-                    'b5': bool(ma60 > ma120 > ma240),
-                    'break_line': round(max(float(prev240.max()),
-                                            ma240 + 2 * sd240) / px * 100
-                                        - 100, 3),
-                }, ensure_ascii=False) + '\n')
+                out.write(json.dumps({'ticker': tk, 'date': d, **flags_at(C, V, j)},
+                                     ensure_ascii=False) + '\n')
                 wrote += 1
             out.flush()
             if (i + 1) % 20 == 0:
