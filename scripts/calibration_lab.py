@@ -1683,6 +1683,8 @@ def main(limit=200, universe_top=None, shard=None, forward_from=None):
 
     calib = {
         'generated_from': f"{len(rows)}건 가상 판정 · 판정 완료 {len(decided)}건",
+        # 라운드 429 — 이 표를 인용하는 자리(가늠 AI 의 엔진 답)가 언제 만든 표인지 같이 적게 한다(§2 · 날짜 없는 수는 낡는다)
+        'made': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
         'bands': bands_out,
         'lifts': lifts,
         'entry_candidates': entry_out,

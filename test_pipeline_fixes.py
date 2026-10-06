@@ -6797,9 +6797,13 @@ with open(_os.path.join(PROJ, 'data', 'update_history.json'),
           encoding='utf-8') as _f:
     _uh105 = _j105.load(_f)
 _uh_latest = str((_uh105.get('days') or [{}])[0].get('date') or '')
+# ⚠️ 라운드 429 — 종전엔 HEAD 자신의 날짜와 견줬다. 그런데 훅(.githooks/pre-commit)은 **지금 만드는 커밋 자신**과
+#   그것을 올리는 머지 커밋을 구조상 못 싣는다(아래 해시 검사의 허용치 2 가 정확히 그 둘이다). 그래서 **그날 첫 커밋**
+#   바로 뒤의 회귀는 매번 붉어졌다(2026-10-06 실측: 이력 10-03 vs 커밋 10-06 — 10-06 커밋은 그 하나뿐이었다).
+#   같은 규칙을 날짜에도 적용한다 — 이력이 담아야 하는 가장 늦은 커밋은 최근 둘을 건너뛴 그 다음 것이다.
 try:
     _git_latest = _sp105.run(
-        ['git', 'log', '-1', '--date=short', '--pretty=%ad'], cwd=PROJ,
+        ['git', 'log', '-1', '--skip=2', '--date=short', '--pretty=%ad'], cwd=PROJ,
         capture_output=True, text=True, encoding='utf-8',
         errors='replace').stdout.strip()
 except Exception:
@@ -6807,9 +6811,9 @@ except Exception:
 check("업데이트 날짜를 손으로 적지 않는다",
       'APP_UPDATED = _last_update_date()' in _w105
       and 'update_history.json' in _w105)
-check("업데이트 이력이 최신 커밋 **날짜**까지 반영돼 있다",
+check("업데이트 이력이 최신 커밋 **날짜**까지 반영돼 있다 (훅이 구조상 못 싣는 최근 둘 제외)",
       (not _git_latest) or _uh_latest >= _git_latest,
-      f'이력 {_uh_latest} vs 커밋 {_git_latest} — '
+      f'이력 {_uh_latest} vs 담아야 할 커밋 {_git_latest} — '
       f'scripts/gen_update_history.py 를 다시 돌려야 합니다')
 
 # ⚠️ 라운드 92 — 위 검사는 **날짜만** 본다. 그래서 같은 날 커밋이 아무리
@@ -33126,7 +33130,7 @@ check("설명 사전 — 보유 이름표는 화면과 같은 표에서 · 진�
 print("=" * 72)
 print("§415 밤 되받기는 gh 가 안 되면 공개 HTTPS 로 · 계획 목록은 종목코드로 한 번 걸러 한 실행이 같은 케이스를 두 번 안 만든다 (라운드 428)")
 print("=" * 72)
-# 작업 스케줄러로 띄운 밤 작업에서 gh 가 '로그인 안 됨'을 내 되받기가 사흘째 멈췄다(APPDATA 가설은 틀렸다 · 원인 미측정).
+# 작업 스케줄러로 띄운 밤 작업에서 gh 가 '로그인 안 됨'을 내 되받기가 첫 예약 실행(10-05)부터 멈췄다(APPDATA 가설은 틀렸다 · 원인 미측정).
 #   저장소가 공개라 같은 목록·같은 파일을 인증 없이 받는다 — 목록 규칙은 jq 식과 같은 순수 함수 하나.
 #   그리고 클라우드 오염 점검이 원장 중복 2,499 → 2,500 을 잡았다: 한 실행 안에서 같은 종목의 두 접미사가 둘 다 계획됐다.
 import scripts.pull_research_data as _pr415                         # noqa: E402
@@ -33210,6 +33214,49 @@ check("계획 단계 — 코드 거르기는 유니버스 덧붙이기 뒤 · �
       f"덧붙이기 {_ia415} · 거르기 {_ib415} · 샤드 {_ic415} · append {_append415}")
 import shutil as _sh415                                              # noqa: E402
 _sh415.rmtree(_tmp415, ignore_errors=True)
+
+print("=" * 72)
+print("§416 가늠 AI 의 매수권 성적은 화면과 같은 집계표에서 그 자리에서 센다 · 몇 행 원장의 값인지 적는다 (라운드 429)")
+print("=" * 72)
+# 엔진 답이 2026-09-09 에 손으로 한 번 쓴 파일(원장 251,528행)을 날짜 없이 오늘 값처럼 읽고 있었다.
+import ledger_view as _lv416                                          # noqa: E402
+_cal416 = {'ledger_rows': 123456, 'made': '2026-10-06 08:00', 'bands': [
+    {'lo': 55, 'hi': 59, 'n': 1000, 'hit_rate': 50.0, 'avg_return': -1.0},
+    {'lo': 60, 'hi': 64, 'n': 300, 'hit_rate': 60.0, 'avg_return': 0.2},
+    {'lo': 65, 'hi': 69, 'n': 100, 'hit_rate': 64.0, 'avg_return': 0.6},
+    {'lo': 70, 'hi': 100, 'n': 0, 'hit_rate': None, 'avg_return': None}]}
+_bz416 = _lv416.buyzone_summary(_cal416)
+check("매수권 합계 — 60점 이상 칸만 건수로 가중 · 빈 칸은 뺀다 · 몇 행 원장인지·만든 때를 같이 · 못 읽으면 None",
+      _bz416 == {'n': 400, 'hit_rate': 61.0, 'avg_return': 0.3, 'ledger_rows': 123456, 'made': '2026-10-06 08:00'}
+      and _lv416.buyzone_summary(None) is None and _lv416.buyzone_summary({'bands': []}) is None
+      and _lv416.BUYZONE_LO == 60, str(_bz416))
+_bmsrc416 = _read148(_os.path.join(PROJ, 'scripts', 'band_monotone_r195.py'))
+check("그 셈은 라운드 195 스크립트와 같은 규칙(60점 이상 · 건수 가중 · 비용 빼기 전 평균)",
+      "top = [b for b in bands if b['lo'] >= 60]" in _bmsrc416
+      and "ev = sum(b['n'] * b['avg_return'] for b in top) / n" in _bmsrc416)
+import gaeum_chat as _gc416                                           # noqa: E402
+_eng416 = _gc416.answer('이 시스템 성적이 어때?', {})
+import artifact_io as _aio416                                         # noqa: E402
+_live416 = _lv416.buyzone_summary(_aio416.load_json('calibration.json'))
+if _live416:
+    check("가늠 AI 엔진 답 — 집계표에서 지금 센 매수권 건수와 원장 행수를 적는다(옛 파일의 16,347건을 읽지 않는다)",
+          f"**{int(_live416['n']):,}건**" in _eng416
+          and (f"원장 {int(_live416['ledger_rows']):,}행" in _eng416 if _live416.get('ledger_rows') else True)
+          and '지금 센 값' in _eng416, _eng416[:300])
+else:
+    skipped("가늠 AI 엔진 답 — 집계표를 못 읽어 건수 대조를 못 한다")
+_gcs416 = _read148(_os.path.join(PROJ, 'gaeum_chat.py'))
+_gls416 = _read148(_os.path.join(PROJ, 'gaeum_llm.py'))
+import ast as _ast416                                                 # noqa: E402
+_consts416 = [_n.value for _f in (_gcs416, _gls416) for _n in _ast416.walk(_ast416.parse(_f))
+              if isinstance(_n, _ast416.Constant) and isinstance(_n.value, str)]
+check("엔진 답·외부 말풀이 둘 다 날짜 없는 옛 파일 이름을 코드에서 안 읽는다(AST · 주석 제외) · 같은 찾는 길과 같은 셈을 부른다",
+      not any(_s == 'buyzone_ev_r195.json' for _s in _consts416)
+      and "_lvz.buyzone_summary(_aio.load_json('calibration.json'))" in _gcs416
+      and "_lvz.buyzone_summary(_aio.load_json('calibration.json'))" in _gls416, scanned=len(_consts416))
+_labs416 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
+check("집계표가 만든 때를 싣는다 (다음 클라우드 실행부터 · 그 전엔 엔진 답이 날짜를 안 붙인다)",
+      "'made': datetime.datetime.now().strftime('%Y-%m-%d %H:%M')," in _labs416)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

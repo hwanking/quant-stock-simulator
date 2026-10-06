@@ -122,15 +122,21 @@ def _stock_facts(ctx):
 
 def _engine_facts(_ctx):
     """엔진 성적표 — 화면이 읽는 같은 산출물(표본 감사 · 매수권 성적 · 운영 비용)."""
-    base = os.path.dirname(os.path.abspath(__file__))
     out = {}
-    for rel, key in (('sample_audit.json', 'sample_audit'), ('buyzone_ev_r195.json', 'buy_zone_scorecard')):
-        try:
-            with io.open(os.path.join(base, 'data', rel), encoding='utf-8') as f:
-                d = json.load(f)
-            out[key] = {k: v for k, v in d.items() if isinstance(v, (str, int, float, bool)) or v is None}
-        except Exception:                                      # noqa: BLE001
-            out[key] = None
+    # 라운드 429 — 화면·엔진과 같은 찾는 길 · 매수권 성적은 집계표에서 그 자리에서 센다(날짜 없는 옛 파일을 안 읽는다)
+    try:
+        import artifact_io as _aio
+        import ledger_view as _lvz
+        sa = _aio.load_json('sample_audit.json')
+        out['sample_audit'] = ({k: v for k, v in sa.items() if isinstance(v, (str, int, float, bool)) or v is None}
+                               if isinstance(sa, dict) else None)
+        bz = _lvz.buyzone_summary(_aio.load_json('calibration.json'))
+        out['buy_zone_scorecard'] = (dict(bz, contract_cost_pct=_lvz.CALIB_COST_PCT,
+                                          net_after_contract_cost=round(bz['avg_return'] - _lvz.CALIB_COST_PCT, 5))
+                                     if bz else None)
+    except Exception:                                          # noqa: BLE001
+        out.setdefault('sample_audit', None)
+        out.setdefault('buy_zone_scorecard', None)
     try:
         from verdict_core import COST_PCT
         out['operating_round_trip_cost_pct'] = COST_PCT

@@ -567,19 +567,17 @@ def _ans_market(ctx):
 
 def _ans_engine(ctx):
     """엔진 성적 — 화면이 읽는 **같은 산출물**을 읽는다. 못 읽으면 못 읽었다고 적는다."""
-    import io as _io
-    import json as _json
-    import os as _os
-    base = _os.path.dirname(_os.path.abspath(__file__))
-
-    def _rd(rel):
-        try:
-            with _io.open(_os.path.join(base, 'data', rel), encoding='utf-8') as f:
-                return _json.load(f)
-        except Exception:                                      # noqa: BLE001
-            return None
-
-    sa, ev = _rd('sample_audit.json'), _rd('buyzone_ev_r195.json')
+    # 라운드 429 — 찾는 길은 화면·엔진과 같은 한 곳(`.portfolio` → `data` · 라운드 386). 종전엔 `data/` 만 읽었고,
+    #   매수권 성적은 2026-09-09 에 한 번 써 둔 파일(`buyzone_ev_r195.json` · 원장 251,528행)을 날짜 없이 읽었다.
+    #   이제 화면이 읽는 같은 집계표에서 그 자리에서 센다(`ledger_view.buyzone_summary` · 셈은 라운드 195 그대로).
+    try:
+        import artifact_io as _aio
+        import ledger_view as _lvz
+        sa = _aio.load_json('sample_audit.json')
+        bz = _lvz.buyzone_summary(_aio.load_json('calibration.json'))
+        _c = _lvz.CALIB_COST_PCT
+    except Exception:                                          # noqa: BLE001
+        sa, bz, _c = None, None, None
     out = []
     if sa and sa.get('ledger_rows'):
         span = sa.get('span') or []
@@ -592,18 +590,24 @@ def _ans_engine(ctx):
                        f"표본 크기로 읽으면 실제보다 커 보입니다.")
     else:
         out.append('쌓인 사례 수를 이 화면에서 못 읽었습니다 — 지어내지 않겠습니다.')
-    if ev and ev.get('n'):
+    if bz and _c is not None:
         try:
             from verdict_core import COST_PCT as _op
         except Exception:                                      # noqa: BLE001
             _op = None
-        out.append(f"매수권(60점+) **{int(ev['n']):,}건**에서 적중 **{float(ev['hit_rate']):.1f}%** · "
-                   f"평균 수익 **{float(ev['avg_return']):+.2f}%** 인데, 왕복 비용 "
-                   f"{float(ev['cost_pct']):.2f}% 를 빼면 **{float(ev['net']):+.3f}%** 입니다.")
-        out.append("즉 **비용을 넘는 우위가 없습니다.** 화면도 문서도 이 사실을 감추지 않습니다."
-                   + (f" (그 {float(ev['cost_pct']):.2f}% 는 이 계약이 쓰는 보수적인 값이고, "
-                      f"오늘 매수 판정이 쓰는 왕복 비용은 {float(_op):g}% 입니다 — 어느 비용으로 "
-                      f"뺀 값인지 같이 봐야 합니다.)" if _op else ''))
+        _avg = float(bz['avg_return'])
+        _src = (f"원장 {int(bz['ledger_rows']):,}행의 점수대 집계표" if bz.get('ledger_rows') else '원장 점수대 집계표')
+        _src += (f" · {bz['made']} 에 만든 표" if bz.get('made') else '')
+        out.append(f"매수권(60점+) **{int(bz['n']):,}건**에서 적중 **{float(bz['hit_rate']):.1f}%** · "
+                   f"평균 수익 **{_avg:+.2f}%** 인데, 왕복 비용 "
+                   f"{float(_c):.2f}% 를 빼면 **{_avg - float(_c):+.3f}%** 입니다 ({_src}에서 지금 센 값).")
+        _neg = (_avg - float(_c) < 0) and (_op is None or _avg - float(_op) < 0)
+        out.append(("즉 **비용을 넘는 우위가 없습니다.** 화면도 문서도 이 사실을 감추지 않습니다." if _neg else
+                    "비용을 뺀 값의 부호가 **어느 비용으로 빼느냐에 따라 갈립니다** — 그것만으로 우위가 있다고 "
+                    "읽지 않습니다.")
+                   + (f" (그 {float(_c):.2f}% 는 이 집계가 쓰는 보수적인 값이고, "
+                      f"오늘 매수 판정이 쓰는 왕복 비용은 {float(_op):g}% 입니다 — 그 비용으로 빼면 "
+                      f"**{_avg - float(_op):+.3f}%** · 어느 비용으로 뺀 값인지 같이 봐야 합니다.)" if _op else ''))
     else:
         out.append('매수권 성적을 이 화면에서 못 읽었습니다 — 지어내지 않겠습니다.')
     mv = (ctx.get('versions') or {}).get('model')
@@ -724,7 +728,7 @@ def _rule_answer(q, ctx):
     if intent == 'market':
         return _ans_market(ctx) + '\n\n' + _evidence(ctx, '', base='시장 국면')
     if intent == 'engine':
-        return _ans_engine(ctx) + '\n\n' + _evidence(ctx, '', base='표본 감사 · 매수권 성적 산출물')
+        return _ans_engine(ctx) + '\n\n' + _evidence(ctx, '', base='표본 감사 · 원장 점수대 집계표')
     if intent == 'portfolio':
         return _ans_portfolio(ctx) + '\n\n' + _evidence(ctx, '', base='이 대화가 받은 맥락')
     if intent == 'forecast':

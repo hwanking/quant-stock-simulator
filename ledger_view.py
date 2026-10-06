@@ -41,6 +41,33 @@ MIN_GAP_DAYS = SPACING_BARS * 7 // 5          # = 35
 #:   랩과 화면이 이 한 곳을 읽는다(§4).
 CALIB_COST_PCT = 0.55
 
+#: 라운드 429 — '매수권'의 점수 하한. 라운드 393 이 이름을 그 띠에 맞춘 그 60점이고 새 문턱이 아니다.
+BUYZONE_LO = 60
+
+
+def buyzone_summary(cal, lo=BUYZONE_LO):
+    """원장 집계표(calibration.json)의 점수대 칸에서 **매수권(60점+) 합계** — (건수, 적중률, 평균 수익, 몇 행 원장, 만든 때).
+
+    라운드 195 의 `scripts/band_monotone_r195.buyzone_ev` 와 **같은 셈**이다(60점 이상 칸을 건수로 가중 합산 · 평균 수익은
+    비용 빼기 전). 그 스크립트는 셈한 값을 `data/buyzone_ev_r195.json` 에 한 번 써 두고, 가늠 AI 의 엔진 답은 그 파일을
+    **날짜도 원장 행수도 없이** 오늘 값처럼 읽었다 — 마지막으로 쓴 것은 2026-09-09(원장 251,528행)이다(라운드 429).
+    집계표는 매일 다시 만들어지므로 그 자리에서 세면 늘 같은 원장의 값이다. 못 읽거나 칸이 비면 **None**(§3).
+    비용은 부르는 쪽이 뺀다 — 어느 비용으로 뺀 값인지 같이 적어야 하므로(§9)."""
+    if not isinstance(cal, dict):
+        return None
+    top = [b for b in (cal.get('bands') or [])
+           if isinstance(b, dict) and b.get('n') and b.get('avg_return') is not None
+           and b.get('hit_rate') is not None and (b.get('lo') or 0) >= lo]
+    n = sum(int(b['n']) for b in top)
+    if not n:
+        return None
+    return {'n': n,
+            'hit_rate': round(sum(b['n'] * b['hit_rate'] for b in top) / n, 3),
+            'avg_return': round(sum(b['n'] * b['avg_return'] for b in top) / n, 5),
+            'ledger_rows': cal.get('ledger_rows'),
+            'made': cal.get('made')}
+
+
 #: 라운드 389 — 원장 진입가가 그날 봉 종가와 어긋난 행의 목록을 담는 산출물(라운드 365 가 배선).
 SCALE_AUDIT_FILE = 'entry_scale_audit.json'
 
