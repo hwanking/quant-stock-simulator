@@ -26727,8 +26727,12 @@ print("-" * 72)
 #     *왜* 가 없었다.
 import ui_kit as _uk333                                                          # noqa: E402
 _vc333 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
+# 라운드 438 — 종전 검사는 소스 **글자**(return 줄의 모양)를 못 박았다(R98b). 그 문장이 상수(`OOS_FAIL_WHY`) 한 곳으로 가자
+#   깨졌다 — 지키려던 것은 '그 갈래의 사유가 킷의 판별 낱말로 시작한다'이므로 갈래를 **돌려서** 본다.
+import verdict_core as _vcm333                                                   # noqa: E402
 check("① 판별 낱말이 중앙 판정의 '표본외 성적 미달' 사유 문장 머리와 같다 (두 곳이 어긋나면 옛 가름이 조용히 죽는다)",
-      ("return '표본외 성적 미달', (\n            '" + _uk333.OOS_FAIL_WHY_HEAD) in _vc333)
+      _vcm333._bucket(['신뢰도·전략품질 기준'], {}, None, None, None)[1].startswith(_uk333.OOS_FAIL_WHY_HEAD)
+      and _vcm333.OOS_FAIL_WHY.startswith(_uk333.OOS_FAIL_WHY_HEAD))
 _row333 = dict(code='000001', name='x', snap_bucket='신뢰도·표본 확보 대기', snap_px=1000, snap_buy=900,
                snap_why='표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. 사례가 쌓인다고 풀리는 조건이 아닙니다.')
 _a333 = _uk333.watch_action(_row333)
@@ -31009,6 +31013,12 @@ for _p387 in sorted(_glob387.glob(_os.path.join(PROJ, '.portfolio', 'premarket_*
         _st387 = [str(_ch.get('name')) for _ch in (_c387.get('checks') or [])
                   if not _ch.get('ok') and _ch.get('name') in _vc387.NOT_CURED_BY_WAITING
                   and '산출' not in str(_ch.get('detail') or '')]
+        # 라운드 438 — 잰 품질이 미달인 것도 안 풀린다(build 와 같은 가름 · 저장된 설명의 '품질 N' 을 읽는다)
+        for _ch in (_c387.get('checks') or []):
+            _mq438 = _re.search(r'품질 (\d+)', str(_ch.get('detail') or ''))
+            if (not _ch.get('ok') and _ch.get('name') in _vc387.NOT_CURED_IF_MEASURED
+                    and _mq438 and int(_mq438.group(1)) < _vc387.MIN_QUALITY):
+                _st387.append(str(_ch.get('name')))
         _nb387, _ = _vc387._bucket(_fl387, _pk387.get('next_action') or {}, _c387.get('gap_pct'), None, None,
                                    depth=_c387.get('depth_sigma'), turnover=_c387.get('turnover'), vetoes=[],
                                    stuck=_st387)
@@ -34413,6 +34423,25 @@ _np424 = [n for n in _ast424.walk(_ast424.parse(_w424)) if isinstance(n, _ast424
 check("⑦ 추천 없음 문장을 빨간 오류 상자로 그리지 않는다 — 수집 실패와 같은 색이 아니다(그리는 자리 전부)",
       len(_np424) >= 2 and all(n.func.attr != 'error' for n in _np424), str([n.func.attr for n in _np424]),
       scanned=len(_np424))
+# 라운드 438 — 라운드 425 가 찾고 미룬 구멍: 국면·거래량·과열 '대기' 갈래가 '신뢰도·전략품질 기준'보다 앞이라, 잰 품질이 미달
+#   (기다려도 안 풀린다 · R292)이어도 '… 대기' 와 "기다리면 풀릴 수 있는 조건만 남았습니다" 를 받았다. 심어서 양방향 —
+#   같은 저유동성 입력에서 품질 30 은 '추천 제외'(그 사유), 품질 70 은 종전대로 '거래량 회복 대기'. 품질을 못 잰 것은 안 건드린다.
+import verdict_core as _vc438                                      # noqa: E402
+_fs438 = dict(current_price=10000, entry_pullback_price=9900, entry_stop_price=9500, entry_target_1st=10300,
+              entry_rr=1.2, target_tech_1st=10400, stop_loss_price=9600, analysis_confidence=70,
+              strategy_quality_score=30, final_action_score=60, vol_20=0.02, avg_turnover_20d=1e8,
+              horizon_days=20, blind_test_status=_vc438.OOS_DONE)
+_lo438 = _vc438.build(_fs438, verdict={'score': 60, 'action': 'HOLD', 'vetoes': []})
+_hi438 = _vc438.build(dict(_fs438, strategy_quality_score=70), verdict={'score': 60, 'action': 'HOLD', 'vetoes': []})
+_b438 = _vc438._bucket(['과열·저유동성 아님', '신뢰도·전략품질 기준'], {}, None, None, None, heat='심은 과열',
+                       stuck=['신뢰도·전략품질 기준'])
+check("⑧ '대기' 갈래보다 앞에서 — 잰 품질이 미달이면 '… 대기'가 아니라 '추천 제외'이고 그 사유(성적이 살아나야)를 적는다 · 품질이 넘으면 종전 그대로 '대기'",
+      _lo438['bucket'] == '추천 제외' and _vc438.OOS_FAIL_WHY in str(_lo438['exclude_reason'])
+      and _vc438.WAIT_ONLY_HEAD not in str(_lo438['exclude_reason']) and '신뢰도·전략품질 기준' in _lo438['failed']
+      and _hi438['bucket'] == '거래량 회복 대기' and str(_hi438['exclude_reason']).startswith(_vc438.WAIT_ONLY_HEAD)
+      and _b438[0] == '추천 제외' and _vc438.OOS_FAIL_WHY in _b438[1] and _vc438.WAIT_NOT_CURED_HEAD not in _b438[1]
+      and _lo438['recommended'] is False and _hi438['recommended'] is False,
+      f"{_lo438['bucket']} · {_hi438['bucket']} · {str(_lo438['exclude_reason'])[:80]}")
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

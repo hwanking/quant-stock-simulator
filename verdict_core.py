@@ -291,6 +291,15 @@ WAIT_NOT_CURED_HEAD = '진입가·목표·손절이 현재가를 따라 같은 �
 #: 라운드 396 — 기다려도 풀리지 않는 미충족(이름은 checks 리터럴 그대로). 라운드 387 이 잰 둘 — 진입가 기준 비율이라
 #:   가격이 움직이거나 과열·국면·표본이 풀려도 셈이 거의 그대로다(점수대 적중률도 40~64점이 58.9~59.9% 로 평평하다).
 NOT_CURED_BY_WAITING = ('손익비(진입가·1차) 기준 이상', '비용 차감 기대값 양수')
+#: 라운드 438 — **잰 품질이 미달**이면 이것도 기다려서 안 풀린다(라운드 292 의 '표본외 성적 미달' · 사례가 쌓인다고 풀리지
+#:   않는다). 라운드 425 가 찾고 미룬 구멍 — 국면·거래량·과열 '대기' 갈래가 이 조건보다 앞이라, 둘이 같이 걸리면 '… 대기' 와
+#:   "기다리면 풀릴 수 있는 조건만 남았습니다" 를 받았다(리포트 후보 488개 중 38개 · 전부 2026-09-16 이전). 품질을 못 잰 것
+#:   (표본외 미수행)은 여기 안 든다 — 그때는 '표본외 검증 통과'가 먼저 걸리고 기다리면 풀린다. `build` 가 잰 값으로만 넘긴다.
+NOT_CURED_IF_MEASURED = ('신뢰도·전략품질 기준',)
+#: 라운드 292 의 그 사유 문장 — '표본외 성적 미달' 갈래와 '… 대기' 를 막는 자리(라운드 438)가 같은 글자를 쓴다(§4).
+OOS_FAIL_WHY = ('표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. '
+                '사례가 쌓인다고 풀리는 조건이 아닙니다 — 이 종목에서 이 전략의 '
+                '표본외 성적이 살아나야 합니다.')
 #: 라운드 396 — 기다림의 이름을 준 칸의 사유 머리. 이 머리가 있어야 **기다리면 풀릴 수 있는 것만 남았다**는 뜻이다
 #:   (읽는 쪽이 이 머리로 새 규칙의 판정과 옛 스냅샷을 가른다 · 킷에 같은 글자 · 회귀가 잠근다).
 WAIT_ONLY_HEAD = '기다리면 풀릴 수 있는 조건만 남았습니다 — '
@@ -558,6 +567,9 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     #   못 넘은 것은 판단이 아니라 못 잰 것이다(§3) — 그걸 '안 풀린다'로 세면 못 잰 것이 기다림을 지운다(첫 회귀가 잡았다).
     _meas396 = {'손익비(진입가·1차) 기준 이상': rr is not None, '비용 차감 기대값 양수': exp_ret is not None}
     stuck = [n for n in failed if n in NOT_CURED_BY_WAITING and _meas396.get(n)]
+    # 라운드 438 — 잰 품질이 미달이면 그것도 기다려서 안 풀린다(신뢰도만 미달이면 안 넣는다 — 그쪽은 재 본 적이 없다).
+    stuck += [n for n in failed if n in NOT_CURED_IF_MEASURED
+              and quality is not None and quality < MIN_QUALITY]
 
     bucket, reason = _bucket(failed, na, gap, entry, sigma, fill_p,
                              depth_sigma, turnover=turnover,
@@ -806,8 +818,15 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
 
     def _not_cured(what):
         # what 은 조사까지 붙인 말이다('과열 해소를' · '거래 회복을') — 받침 유무로 조사가 갈린다
-        return '추천 제외', (f'{_unmet(_stuck)} — {WAIT_NOT_CURED_HEAD} {what} 기다려도 이 셈은 '
-                            f'거의 그대로입니다. 기다린다고 풀리는 조건이 아닙니다.')
+        # 라운드 438 — 막는 것이 무엇이냐에 따라 사유가 다르다: 손익비·기대값은 '같은 비율로 다시 잡혀' · 잰 품질은 '성적이
+        #   살아나야'. 둘 다 걸리면 둘 다 적는다 — 한 문장이 두 갈래를 덮지 않는다(R305).
+        tails = []
+        if any(n in NOT_CURED_BY_WAITING for n in _stuck):
+            tails.append(f'{WAIT_NOT_CURED_HEAD} {what} 기다려도 이 셈은 거의 그대로입니다.')
+        if any(n in NOT_CURED_IF_MEASURED for n in _stuck):
+            tails.append(OOS_FAIL_WHY)
+        return '추천 제외', (f'{_unmet(_stuck)} — ' + ' '.join(tails)
+                            + ' 기다린다고 풀리는 조건이 아닙니다.')
 
     if '권장 매수가 산출' in failed or '목표·손절 산출' in failed:
         return '데이터 부족', '실행 가격을 산출하지 못했습니다.'
@@ -879,10 +898,7 @@ def _bucket(failed, na, gap, entry, sigma, fill_p=None, depth=None,
         #   *"사례가 쌓인다고 풀리는 조건이 아닙니다"* 라고 적으면서 이름은 **확보
         #   대기**라 말해, 한 칸이 스스로 어긋났다. 기다릴 것이 없으므로 기다림이
         #   아닌 이름으로 부른다 — 사유 문장은 한 글자도 안 바꿨다.
-        return '표본외 성적 미달', (
-            '표본외 검증은 마쳤고, 그 성적이 기준에 못 미쳤습니다. '
-            '사례가 쌓인다고 풀리는 조건이 아닙니다 — 이 종목에서 이 전략의 '
-            '표본외 성적이 살아나야 합니다.')
+        return '표본외 성적 미달', OOS_FAIL_WHY     # 라운드 438 — 문장은 상수 한 곳
     # ⚠️ 라운드 387 — 여기까지 내려온 미충족은 **기다려서 풀리지 않는 것뿐**이다. 위 갈래가 가격·시간으로 풀릴 수
     #   있는 것(진입 깊이·도달 · 과열·저유동성)과 밸류·거부권·표본·신뢰도를 먼저 가져갔으므로 남는 것은 손익비
     #   (진입가·1차)와 비용 차감 기대값이다. 그런데 이 두 셈은 **가격이 내려와도 거의 그대로다** — 진입가는 늘

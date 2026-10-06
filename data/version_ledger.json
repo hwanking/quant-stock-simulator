@@ -1,6 +1,6 @@
 {
  "axes": {
-  "model": "v2026.10.06.4",
+  "model": "v2026.10.07.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.27.1",
   "schema": "v2026.09.09.1",
@@ -9,6 +9,19 @@
   "valuation": "v2026.10.01.1"
  },
  "history": [
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.10.07.1",
+   "previous": "v2026.10.06.4",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "국면·거래량·과열 '대기' 갈래가 잰 품질 미달(기다려도 안 풀림)보다 앞이라 '… 대기'와 '기다리면 풀릴 수 있는 조건만'을 받았다",
+   "note": "라운드 438 — verdict_core: 잰 전략 품질이 하한 미만이면 stuck 에 넣어(NOT_CURED_IF_MEASURED) '추천 제외'와 라운드 292 의 사유 · 그 사유 문장은 상수 OOS_FAIL_WHY 한 곳. 리포트 후보 488개 중 38개(전부 2026-09-16 이전)가 그 모양이었다. recommended·actionable·문턱·조건 불변.",
+   "created_at": "2026-10-06T16:57:42+00:00",
+   "effective_from": "2026-10-07"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
