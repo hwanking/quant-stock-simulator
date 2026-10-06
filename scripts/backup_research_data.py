@@ -105,7 +105,8 @@ INCLUDE = ('virtual_graded.jsonl',
            '*_policy.json',              # target · stop · rr
            'regime_*.json',              # regime_engine · regime_breakdown
            'sideways_study.json', 'engine_bakeoff.json',
-           'us_overnight.json', 'version_compare.json', 'llm_watch.json',
+           # 라운드 440 — 'version_compare.json' 은 뺐다: 2026-08-02 한 번 만든 뒤 읽는 곳이 없는 산출물이다(생성기 머리말 참고)
+           'us_overnight.json', 'llm_watch.json',
            # 개선 이슈 등록부 — 다시 못 만든다. sqlite 라 내용 검사가 못
            # 읽으므로 스키마를 직접 훑어 확인했다: 6개 테이블 전부 모델·
            # 이슈·파이프라인 자료이고 평단·수량·자격증명 열쇠가 없다.

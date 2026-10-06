@@ -34489,6 +34489,33 @@ check("④ 설명 사전의 '모델 적용 범위 밖' — 방향이 엔진과 �
       and '70% 넘게 높으면' not in _oodtxt425 and '70% 넘게 높으면' not in _read148(_os.path.join(PROJ, 'gaeum_glossary.py')).split('ENTRIES = (')[1],
       _oodtxt425[:90])
 
+print("=" * 72)
+print("§426 이슈 교본의 죽은 항목 — 열어 주는 규칙이 없는 열쇠는 유도해서 세고 늘지 않는다 · 안 읽히는 생성기 (라운드 440)")
+print("=" * 72)
+# 교본(PLAYBOOK)은 열린 이슈의 화면 문구를 내는 한 곳(R394)인데, 열쇠 열셋 중 일곱은 create_issue 로 여는 규칙도 등록부 행도 없어
+#   화면에 나갈 수 없는 죽은 글이었다(라운드 421·426 이 그중 둘의 문구를 고쳤다). 손 목록이 아니라 유도로 세고(스크립트 AST +
+#   등록부) 그 집합이 그대로인지 본다 — 새 교본 항목에 여는 규칙이 없으면 여기서 드러난다.
+import ast as _ast426                                                 # noqa: E402
+import improvement.issue_ops as _io426                                # noqa: E402
+_dead426, _scan426 = _io426.unreachable_playbook_keys()
+_can426, _ = _io426.creatable_keys()
+_EXPECT426 = ('data|index_missing', 'model|negative_edge', 'model|overfit_gap', 'model|regime_dependence',
+              'model|stop_width', 'model|us_overnight', 'model|validation_not_wired')
+check("① 교본에서 열어 주는 규칙이 없는 열쇠는 이 일곱이고(유도 · 늘거나 줄면 실패) · 일일 규칙의 셋은 열린다",
+      _scan426 >= 20 and tuple(_dead426) == _EXPECT426
+      and {'validation|high_conf_n', 'model|vb_gap', 'usability|signal_rate'} <= _can426,
+      f"죽은 열쇠 {_dead426} · 훑은 파일 {_scan426}", scanned=_scan426)
+_pb426 = _io426.PLAYBOOK['model|validation_not_wired']
+check("② 'validation_not_wired' 교본이 화면에 없는 문장('판단 화면에서 밝힙니다')과 안 읽히는 생성기('이번에 만들었습니다')를 했다고 적지 않는다",
+      '판단 화면에서 밝힙니다' not in _pb426['safeguard'] and '이번에 만들었습니다' not in _pb426['action']
+      and 'forward_judge' in _pb426['action'])
+_bk426 = _read148(_os.path.join(PROJ, 'scripts', 'backup_research_data.py'))
+_gv426 = _read148(_os.path.join(PROJ, 'scripts', 'gen_version_compare.py'))
+_bk_inc426 = [c.value for c in _ast426.walk(_ast426.parse(_bk426)) if isinstance(c, _ast426.Constant) and isinstance(c.value, str)]
+check("③ 읽는 곳 없는 version_compare.json 을 백업 목록(문자열 상수)에 싣지 않는다 · 옛 생성기 머리말이 '읽는 곳이 없다'와 낡은 규칙을 말한다",
+      'version_compare.json' not in _bk_inc426 and '읽는 곳이 없다' in _gv426[:2000] and 'forward_judge' in _gv426[:2000],
+      scanned=len(_bk_inc426))
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

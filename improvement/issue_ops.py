@@ -30,6 +30,10 @@ ST_LONGTERM = '장기 개선 과제'
 #: 자동 감지되는 이슈마다 조치 계획을 **미리** 적어 둔다.
 #  왜 미리 적을 수 있나: 이 이슈들은 우리가 원인을 이미 아는 것들이다.
 #  (모르는 문제에 대해 계획을 지어내지 않는다 — 그런 이슈는 '확인 중'으로 둔다)
+#  ⚠️ 라운드 440 — 이 표의 열쇠 중 **열어 주는 규칙(create_issue)도 등록부 행도 없는 것**은 화면에 나갈 수 없는 죽은 글이다
+#    (2026-10-07 실측 일곱: regime_dependence · overfit_gap · stop_width · validation_not_wired · negative_edge · us_overnight ·
+#    index_missing — `unreachable_playbook_keys()` 가 유도하고 회귀 §426 이 늘지 않는지 본다). 라운드 421·426 이 그중 둘의
+#    문구를 고쳤는데 그 글은 어디에도 안 나가고 있었다. 지우지 않는다 — 결정의 기록이다(R297) · 다만 거짓 주장은 고친다.
 PLAYBOOK = {
     'validation|high_conf_n': dict(
         # 라운드 394 — 종전 '(전체의 약 3%)' 는 날짜 없는 수라 낡았다(2026-09-30 실측 신호율 6.6%).
@@ -162,12 +166,18 @@ PLAYBOOK = {
         fixable_now=False,
         status=ST_LONGTERM,
         module='quant_indicators · scripts/validation_linkage_audit.py',
-        action="③ 버전별 비교는 이번에 만들었습니다(gen_version_compare.py). "
-               "①②는 국면별 엔진 성과가 먼저 검증돼야 합니다 — 국면별 "
-               "대결을 돌렸으나 채택 후보가 없었습니다. 근거 없이 "
+        # 라운드 440 — 종전 조치 *"③ 버전별 비교는 이번에 만들었습니다(gen_version_compare.py)"* 는 2026-08-02 에 한 번 돌린
+        #   생성기를 가리켰고 그 산출물은 읽는 곳이 없다(같은 원장을 다른 시점에 잰 것이라 비교가 성립하지 않는다 · R282).
+        #   버전별로 세는 것은 전방 기록부(행마다 버전 · R360)와 11-16 채점기(forward_judge · R398)다. 종전 안전조치의
+        #   *"'아직 연결되지 않은 것도 있습니다'라고 판단 화면에서 밝힙니다"* 는 화면 어디에도 없는 문장이었다.
+        action="③ 버전별 비교 — 전방 기록부가 행마다 모델·룰북 버전을 싣고 2026-11-16 "
+               "채점기(scripts/forward_judge.py)가 버전별로 셉니다. 2026-08-02 에 한 번 돌린 "
+               "옛 생성기(gen_version_compare.py)는 같은 원장을 다른 시점에 잰 것이라 비교가 "
+               "성립하지 않아 읽는 곳이 없습니다. ①②는 국면별 엔진 성과가 먼저 검증돼야 "
+               "합니다 — 국면별 대결을 돌렸으나 채택 후보가 없었습니다. 근거 없이 "
                "가중치를 손대면 그게 곧 과최적화입니다.",
-        safeguard="미연결 항목을 화면에 그대로 적었습니다 — '아직 연결되지 않은 "
-                  "것도 있습니다'라고 판단 화면에서 밝힙니다.",
+        safeguard="모델 검증의 항목별 값·가중치는 엔진이 내고 화면은 읽어서 적습니다"
+                  "(2026-09-09). 연결되지 않은 ①②를 연결된 것처럼 적지 않습니다.",
         target="국면별 엔진 성과가 블라인드에서 재현되면 ①② 연결",
         eta_days=45),
     'model|negative_edge': dict(
@@ -297,6 +307,55 @@ PLAYBOOK = {
         target="노출 여부 결정 · 노출 시 대가 표기 동반",
         eta_days=42),
 }
+
+
+def creatable_keys(base=None):
+    """등록부에 **실제로 열릴 수 있는** 이슈 열쇠 — ({열쇠}, 훑은 파일 수) (라운드 440).
+
+    두 출처의 합집합: ① 스크립트가 `create_issue(..., issue_key='…')` 로 부르는 리터럴(AST · 주석은 안 본다)
+    ② 지금 등록부에 있는 열쇠(접미사 `@…` 을 뗀 것 · 라운드 394 의 이력 열쇠). 교본(PLAYBOOK)의 항목 중 여기 없는
+    열쇠는 **열어 주는 규칙이 없어** 화면에 나갈 수 없는 죽은 글이다 — 손 목록으로 적지 않고 유도한다(R114).
+    못 읽는 쪽은 비운다(지어내지 않는다 · §3)."""
+    import ast
+    import glob
+    base = base or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    keys = set()
+    files = (glob.glob(os.path.join(base, 'scripts', '*.py'))
+             + glob.glob(os.path.join(base, 'improvement', '*.py')))
+    scanned = 0
+    for p in files:
+        try:
+            with open(p, encoding='utf-8') as f:
+                tree = ast.parse(f.read())
+        except Exception:                                      # noqa: BLE001
+            continue
+        scanned += 1
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call):
+                continue
+            fn = getattr(n.func, 'attr', None) or getattr(n.func, 'id', None)
+            if fn != 'create_issue':
+                continue
+            for kw in n.keywords:
+                if (kw.arg == 'issue_key' and isinstance(kw.value, ast.Constant)
+                        and isinstance(kw.value.value, str)):
+                    keys.add(kw.value.value)
+    db = os.path.join(base, '.portfolio', 'improvement.db')
+    if os.path.exists(db):
+        try:
+            con = sqlite3.connect(db)
+            for (k,) in con.execute("SELECT issue_key FROM improvement_issues"):
+                keys.add(str(k).split('@')[0])
+            con.close()
+        except Exception:                                      # noqa: BLE001
+            pass
+    return keys, scanned
+
+
+def unreachable_playbook_keys(base=None):
+    """교본에 있지만 열어 주는 규칙도 등록부 행도 없는 열쇠 — (정렬된 목록, 훑은 파일 수) (라운드 440)."""
+    keys, scanned = creatable_keys(base)
+    return sorted(k for k in PLAYBOOK if k not in keys), scanned
 
 
 def _today():
