@@ -69,6 +69,12 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
         headline=core.get('headline') or vd.get('headline') or '', score=vd.get('score'),
         action=vd.get('action'), vetoes=list(vd.get('vetoes') or []),
         bucket=core.get('bucket'), actionable=core.get('actionable'),
+        # 라운드 435 — '왜 막았어'·'지금 사도 돼'가 엔진 거부권(`vetoes`)과 가격 괴리로 이유를 댔다. 막는 것은
+        #   중앙 판정의 미충족 조건이고(리포트 후보 483개 중 481개가 '비용 차감 기대값 양수'), 그 목록이 챗까지 안 왔다.
+        #   허락도 `actionable`(눌림·돌파 **대기** 칸에서도 참)이 아니라 `recommended` 로 한다(라운드 387).
+        recommended=core.get('recommended'),
+        failed=[str(x) for x in (core.get('failed') or [])],
+        n_checks=len(core.get('checks') or []) or None,
         # 라운드 305 — 갈래마다 **언제 다시 보나**가 다르다. 사유는 중앙 판정이
         #   결론과 함께 내고 있었고(`exclude_reason` · R240) 챗이 안 읽었을 뿐이다.
         bucket_why=core.get('exclude_reason'),
@@ -89,6 +95,20 @@ def build_context(*, name, ticker, price, core, fs, verdict, blend=None,
         #   하나이고 여기서 다시 계산하지 않는다(§4).
         avg_down_ok=avg_down_ok,
     )
+
+
+def _blockers_line(ctx):
+    """중앙 판정의 미충족 조건을 **전부** 한 줄로(라운드 435). 못 받았으면 None — 이유를 지어내지 않는다(§3).
+
+    종전 답들은 엔진 거부권을 앞의 2~3개만 말없이 잘라 적거나(R301·R312·R314 의 모양) 거부권이 없으면
+    *"실행 조건(진입가·도달성·정합)이 충족되지 않았습니다"* 라고 **세지 않고** 적었다. 이름은 중앙 판정의 리터럴 그대로다.
+    """
+    fl = [str(x) for x in (ctx.get('failed') or []) if str(x).strip()]
+    if not fl:
+        return None
+    n = ctx.get('n_checks')
+    return (f"중앙 판정의 미충족 조건 {len(fl)}개" + (f"(조건 {n}개 중)" if n else '')
+            + ': ' + ' · '.join(fl))
 
 
 def _evidence(ctx, used, base='중앙 판정'):
@@ -147,10 +167,14 @@ def _ans_verdict(ctx):
                      + (f" · {ctx['bucket']}" if ctx.get('bucket') else ''))
     e, px = ctx.get('entry'), ctx.get('price')
     if e:
-        lines.append(f"현재가 {_w(px) or NA} · 1차 매수 검토 {_w(e)} 이하")
-    v = list(ctx.get('vetoes') or [])[:2]
-    if v:
-        lines.append('걸린 조건: ' + ' · '.join(str(x) for x in v))
+        # 라운드 435 — 종전 '1차 매수 검토 N원 이하'는 추천 제외 종목에도 붙는 매수 지시였다(라운드 425 가 '다음 조건'
+        #   목록에서 걷어낸 그 모양). 값은 같은 진입가 · 이름은 라운드 434 의 '진입 기준가'.
+        lines.append(f"현재가 {_w(px) or NA} · 진입 기준가 {_w(e)}")
+    # 라운드 435 — 종전엔 엔진 거부권 앞의 둘만 '걸린 조건'이라 적었다(몇 개 중인지 없이). 결론을 막는 것은 중앙 판정의
+    #   미충족 조건이다 — 전부, 몇 개인지 같이. 못 받았으면 줄을 안 만든다(§3).
+    _bl435 = None if ctx.get('recommended') else _blockers_line(ctx)
+    if _bl435:
+        lines.append(_bl435)
     lines.append('더 자세히 — "얼마에 사야 해?" · "왜 지금 매수를 막았어?" '
                  '· "비슷한 과거 사례는?"')
     return '\n'.join(lines)
@@ -163,30 +187,37 @@ def _ans_buy_now(ctx):
                 f"(실행 진입가) — 근거가 생길 때까지 관망입니다.")
     gap = (float(px) / float(e) - 1) * 100 if px and e else None
     lines = []
-    if ctx.get('actionable'):
-        lines.append('예 — 오늘 기준 실행 가능 후보입니다 (나눠서).')
-    elif gap is not None and gap > 1:
-        lines.append('지금은 추격매수하지 않는 쪽입니다.')
+    # ⚠️ 라운드 435 — 세 자리가 틀렸다(라운드 423 이 종목 화면 '종합' 줄에서 고친 그 모양 · 챗은 남아 있었다):
+    #   ① 허락이 `actionable` 이었다 — 그 값은 '눌림목·돌파 **대기**' 칸에서도 참이라(라운드 387) 오늘 못 사는 종목에
+    #      *"예 — 오늘 기준 실행 가능 후보입니다"* 가 나갈 수 있었다(리포트 후보 483개 중 09-30 전 26개). 허락은 `recommended`.
+    #   ② 현재가가 진입 기준보다 1% 넘게 높으면 *"추격매수하지 않는 쪽"* 이라 하고 그 괴리를 **이유**로 적었다. 진입 기준은
+    #      현재가에서 변동성만큼 아래로 잡는 값이라 현재가는 늘 그보다 높고(483개 전부 · 1% 초과도 483개) 중앙 판정에 그런
+    #      조건이 없다 — 막은 것은 미충족 조건이다(481개가 '비용 차감 기대값 양수'). 괴리는 사실로만 둔다.
+    #   ③ 엔진 거부권은 앞의 둘만 말없이 적었다 → 중앙 판정의 미충족 조건을 전부.
+    #   계층 확률은 막는 이유가 아니라 참고라 따로 적는다. 판정·값 불변.
+    if ctx.get('recommended'):
+        lines.append('예 — 오늘 기준 추천입니다 (나눠서).')
     else:
         lines.append(f"지금은 사지 않는 쪽입니다 — {ctx.get('bucket') or '조건 미충족'}.")
-    lines.append(f"현재가 {_w(px) or NA} · 1차 매수 검토 {_w(e)} 이하"
-                 + (f" (현재가가 기준보다 {gap:+.1f}%)" if gap is not None
-                    else ''))
+    lines.append(f"현재가 {_w(px) or NA} · 진입 기준가 {_w(e)}"
+                 + (f" (현재가가 기준보다 {gap:+.1f}% — 막는 조건이 아닙니다)"
+                    if gap is not None and not ctx.get('recommended') else
+                    f" (현재가가 기준보다 {gap:+.1f}%)" if gap is not None else ''))
     lines.append(f"1차 목표 {_w(ctx.get('new_target')) or NA} · "
                  f"손절 {_w(ctx.get('new_stop')) or NA}"
                  + (f" · 손익비(진입가·1차) {ctx['rr']}:1"
                     if ctx.get('rr') else ''))
-    why = []
-    if gap is not None and gap > 1:
-        why.append(f'현재가와 검증된 진입 기준의 괴리 {gap:+.1f}%')
-    for v in ctx.get('vetoes', [])[:2]:
-        why.append(str(v))
+    if not ctx.get('recommended'):
+        _bl435 = _blockers_line(ctx)
+        _vs435 = [str(v) for v in (ctx.get('vetoes') or [])]
+        lines.append(('막는 것 — ' + _bl435) if _bl435 else
+                     (f"막는 것 — 강제 차단 내역 {len(_vs435)}건: " + ' / '.join(_vs435)
+                      + ' (중앙 판정의 미충족 조건 목록은 받지 못했습니다)') if _vs435 else
+                     '막는 것 — 중앙 판정의 미충족 조건을 받지 못했습니다(이유를 지어내지 않습니다).')
     b = ctx.get('blend')
     if b:
-        why.append(f"같은 조건 계층 실측 약 {b['p'] * 100:.0f}% "
-                   f"({b['wilson_low'] * 100:.0f}~{b['wilson_high'] * 100:.0f}%)")
-    if why:
-        lines.append('이유: ' + ' / '.join(why))
+        lines.append(f"참고: 같은 조건 계층 실측 약 {b['p'] * 100:.0f}% "
+                     f"({b['wilson_low'] * 100:.0f}~{b['wilson_high'] * 100:.0f}%)")
     # ⚠️ 라운드 305 — 여기 **한 문장이 아홉 갈래를 덮고 있었다**:
     #   *"{진입가} 부근까지 눌린 뒤 지지가 확인되면 다시 후보가 됩니다."*
     #   전수로 재니 9갈래의 마지막 줄이 **글자까지 같았고**, 그중 대부분에서 거짓이다 —
@@ -198,7 +229,7 @@ def _ans_buy_now(ctx):
     #   → **갈래가 정하게** 한다. 사유는 중앙 판정이 결론과 함께 내고 있었고
     #     (`exclude_reason` · R240) 챗이 안 읽었을 뿐이다 — 새 문장을 짓지 않는다(§4).
     _b305 = str(ctx.get('bucket') or '')
-    if ctx.get('actionable'):
+    if ctx.get('recommended'):            # 라운드 435 — 허락과 같은 값(위 ①)
         pass                              # 지금 가능한 자리에 "눌리면 다시"는 모순이다
     elif _b305.startswith('돌파') and ctx.get('breakout'):
         lines.append(f"{_w(ctx['breakout'])} 회복이 확인되면 다시 후보가 됩니다 "
@@ -297,14 +328,21 @@ def _ans_holder(ctx, avg):
 def _ans_why_blocked(ctx):
     vs = ctx.get('vetoes') or []
     b = ctx.get('bucket')
-    if not vs and ctx.get('actionable'):
-        return '지금은 막혀 있지 않습니다 — 실행 가능 후보입니다.'
+    # ⚠️ 라운드 435 — 이 답이 '왜 막았어'에 **다른 것**을 답했다: ① 거부권이 없고 `actionable` 이면 *"막혀 있지 않습니다 —
+    #   실행 가능 후보"* — 그 값은 대기 칸에서도 참이다(라운드 387) ② 거부권은 앞의 셋만 말없이 ③ 거부권이 없으면 *"실행
+    #   조건(진입가·도달성·정합)이 충족되지 않았습니다"* — **세지 않고** 적은 귀속이다(리포트 후보 483개 중 거부권 없는 101개 ·
+    #   실제로 막은 것은 대개 '비용 차감 기대값 양수'). 결론을 막는 것은 중앙 판정의 미충족 조건이다 — 전부 · 사유는 중앙
+    #   판정이 결론과 함께 낸 것(`exclude_reason`) · 거부권은 '강제 차단' 한 조건의 내역으로 전부.
+    if ctx.get('recommended'):
+        return '지금은 막혀 있지 않습니다 — 중앙 판정의 조건을 모두 통과한 오늘의 추천입니다.'
     out = [f"현재 분류: {b or '미분류'}"]
+    _bl435 = _blockers_line(ctx)
+    out.append(_bl435 or '중앙 판정의 미충족 조건 목록을 받지 못했습니다 — 그 목록을 지어내지 않습니다.')
     if vs:
-        out.append('막는 조건: ' + ' / '.join(str(v) for v in vs[:3]))
-    else:
-        out.append('명시적 거부 조건은 없고, 실행 조건(진입가·도달성·정합)이 '
-                   '충족되지 않았습니다.')
+        out.append(f"강제 차단 내역 {len(vs)}건: " + ' / '.join(str(v) for v in vs))
+    _why435 = str(ctx.get('bucket_why') or '').strip()
+    if _why435:
+        out.append('사유: ' + _why435)
     return '\n'.join(out)
 
 
@@ -334,12 +372,16 @@ def _ans_news(ctx):
                 '없음은 다른 말이며, 판단에는 반영하지 않았습니다.')
     out = [f"관련 기사 {n['total']}건 (신선 {n.get('fresh', 0)} · "
            f"후행 {n.get('lagging', 0)})"]
-    if n.get('risk_words'):
-        out.append('위험 낱말: ' + ', '.join(n['risk_words'][:4]))
+    # 라운드 435 — 앞의 넷만 적고 몇 개를 뺐는지 안 적었다(R314) — 넘으면 '외 N'.
+    _rw435 = list(n.get('risk_words') or [])
+    if _rw435:
+        out.append('위험 낱말: ' + ', '.join(_rw435[:4])
+                   + (f' 외 {len(_rw435) - 4}개' if len(_rw435) > 4 else ''))
     ev = n.get('event_types') or {}
     if ev:
-        out.append('사건 유형: ' + ' · '.join(f'{k} {v}건'
-                                          for k, v in list(ev.items())[:4]))
+        _ev435 = list(ev.items())
+        out.append('사건 유형: ' + ' · '.join(f'{k} {v}건' for k, v in _ev435[:4])
+                   + (f' 외 {len(_ev435) - 4}유형' if len(_ev435) > 4 else ''))
     out.append('뉴스가 주가에 줄 영향의 크기·방향은 엔진이 예측하지 않습니다 '
                '— 위험 낱말은 감점 요인으로만, 사건 유형은 표시로만 씁니다.')
     return '\n'.join(out)

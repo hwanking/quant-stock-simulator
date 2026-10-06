@@ -113,7 +113,12 @@ class QuantReportGenerator:
         rr = fs.get('reward_risk_ratio')
         action = fs.get('final_action_title', '미판정')
         blocks = fs.get('top3_block_reasons') or []
-        block_str = " / ".join(blocks[:5]) if blocks else "없음 (전 조건 통과)"
+        # ⚠️ 라운드 435 — 종전엔 앞의 5개만 말없이 이어 붙이고 'TOP3 추천 미충족 조건'이라 불렀다. 이 목록은 시장 스캔의
+        #   필수조건(엔진 `gate_checks`)이지 순위도 매수 결론도 아니다(라운드 187 · 405) — 이름을 맞추고, 몇 개 중 몇 개인지와
+        #   전부를 적는다(라운드 301·312·314 · 말없이 자르지 않는다).
+        _ngc435 = len(fs.get('gate_checks') or [])
+        block_str = ((f"{_ngc435}개 중 " if _ngc435 else '') + f"{len(blocks)}개 미충족 — " + " / ".join(blocks)
+                     if blocks else "없음 (전 조건 통과)")
 
         report_md = f"""
 ### [{stock_name} ({symbol})] AI 퀀트 정밀 종합 분석 레포트
@@ -122,7 +127,7 @@ class QuantReportGenerator:
 
 #### 1. 종합 결단 시그널 및 밸류에이션 위치
 - **자산 구분**: `{unit_currency}` | **현재가**: **{curr_p_formatted}**
-- **최종 행동 판정**: **`[{action}]`** (최종 행동점수 {_num(fs.get('final_action_score'), na='미산출')}점)
+- **엔진 행동 제목**: **`[{action}]`** (최종 행동점수 {_num(fs.get('final_action_score'), na='미산출')}점) — 엔진이 붙인 제목이고, 살지 말지의 결론은 화면 맨 위 배너(중앙 판정)입니다
 - **밸류에이션 판정**: **`[{val_eval.get('upside_eval', '판단 보류')}]`** (현재가 대비 {_pct(val_eval.get('upside_pct'))})
 - **수급 동향 (5일 누적)**: 외국인 `{f5_str}` | 기관 `{i5_str}`
 
@@ -133,7 +138,7 @@ class QuantReportGenerator:
 - **부채비율**: `{_num(debt_ratio, ".1f", "%")}` | **Piotroski F-Score**: `{_num(fundamental_dict.get('piotroski_f_score'), ".0f", "/9")}`
 - **펀더멘털 적정가**:**`{_num(fair_disp, ",.0f", unit_str, na="산출 보류 (신뢰도 미달)")}`**
 - **적정가 신뢰도**: `{val_eval.get('fair_value_confidence', 0):.0f}점` — {val_eval.get('fair_value_status_note', '')}
-- **실행 진입가 (신규 매수자 · 오늘 쓰는 값)**: **`{_num(rec_buy, ",.0f", unit_str + " 이하", na="미산출")}`**
+- **실행 진입가 (신규 매수자 · 오늘 쓰는 값)**: **`{_num(rec_buy, ",.0f", unit_str, na="미산출")}`** — 눌림 진입가입니다. 닿아도 사도 되는지는 중앙 판정이 정합니다
 - **장기 가치 참고선 (적정가 − 안전마진)**: `{_num(value_floor, ",.0f", unit_str, na="미산출")}` — 오늘의 매수가가 아님
 - **예비 모델 범위**: `{val_eval.get('preliminary_range_str', '미산출')}`
 
@@ -170,7 +175,7 @@ class QuantReportGenerator:
 - **차단된 미래 데이터 수**: `{blocked_cnt}건` (available_date 통제)
 - **Shapley-DCLR 미래 누수율**: `{shapley}`
 - **적용된 점수 상한**: `{fs.get('gate_reason', '미상')}`
-- **TOP3 추천 미충족 조건**: `{block_str}`
+- **시장 스캔 목록 필수조건**: `{block_str}`
 - **규칙집 버전**: `{self.load_rulebook_version()}`
 """
         # [SR 11-7] 금지 표현 런타임 교정 + 면책 고지 부착.

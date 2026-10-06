@@ -97,7 +97,8 @@ def _market(macro):
     miss = list(m.get('missing') or [])
     if miss:
         out.append(dict(kind='idle',
-                        text=f"미수신: {', '.join(miss[:3])}"))
+                        text=f"미수신: {', '.join(miss[:3])}"
+                             + (f" 외 {len(miss) - 3}개" if len(miss) > 3 else '')))   # 라운드 435 — 말없이 자르지 않는다
     return out
 
 

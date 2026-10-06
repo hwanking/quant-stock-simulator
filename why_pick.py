@@ -213,7 +213,8 @@ def news_reason(nf, core, fs):
     if lag:
         parts.append(f'중복·후행 보도 {lag}건은 제외했습니다')
     if risk:
-        parts.append(f'확인이 필요한 낱말이 잡혔습니다 — {", ".join(risk[:3])}. '
+        parts.append(f'확인이 필요한 낱말이 잡혔습니다 — {", ".join(risk[:3])}'
+                     + (f' 외 {len(risk) - 3}개' if len(risk) > 3 else '') + '. '   # 라운드 435 — 말없이 자르지 않는다
                      f'룰북이 신규 매수를 차단합니다')
     elif priced is True:
         parts.append(f'다만 {why_priced}이라 재료가 이미 가격에 반영된 것으로 '

@@ -6955,8 +6955,10 @@ for _bk105 in ('오늘 매수 가능', '눌림목 매수 대기', '돌파 후 �
 check("실행 가능 칸은 3종", len(_vc105.ACTIONABLE_BUCKETS) == 3)
 check("'권장가 괴리 과다' 는 실행 가능이 아니다",
       '권장가 괴리 과다' not in _vc105.ACTIONABLE_BUCKETS)
-check("추천 없음 문구가 현금 유지를 말한다",
-      '현금을 유지하는 것이 우선입니다' in _vc105.NO_PICK_LINE)
+# 라운드 436 — 종전 검사는 *"현금을 유지하는 것이 우선입니다"*(잰 적 없는 권고)를 글자로 잠그고 있었다. 라운드 422·423 이
+#   다른 두 자리에서 걷어낸 모양이다. 지키려던 것은 '억지로 후보를 만들지 않는다'는 사실이라 그것을 본다.
+check("추천 없음 문구가 잰 적 없는 권고(현금 유지가 우선)를 하지 않고 문턱을 안 낮춘다는 사실을 말한다",
+      '현금' not in _vc105.NO_PICK_LINE and '문턱을 낮춰 후보를 만들지 않습니다' in _vc105.NO_PICK_LINE)
 check("추천 없음 문구가 '다음 거래일' 기준임을 밝힌다",
       '다음 거래일' in _vc105.NO_PICK_LINE)
 check("화면이 그 문구를 쓴다", '_vc_view.NO_PICK_LINE' in _w105)
@@ -10013,7 +10015,10 @@ for _q145, _must145, _never145 in (
         ('손절가는?', '216,000', None),        # 신규 손절
         ('언제 파는 게 좋아?', '277,411', None),
         ('사도 될까요?', '274,500', None),
-        ('왜 매수 신호가 안 떠?', '막는 조건', None),
+        # 라운드 435 — 낱말 '막는 조건' 대신 **심은 거부권이 답에 실리는지** 본다. 답은 이제 중앙 판정의 미충족 조건을
+        #   먼저 세고(이 맥락엔 그 목록이 없어 없다고 적는다) 거부권을 '강제 차단 내역 N건'으로 전부 싣는다 — 낱말을 못 박으면
+        #   문장을 고칠 때마다 깨진다(R98b).
+        ('왜 매수 신호가 안 떠?', '적정가 크게 초과', None),
         ('목표 매수가는?', '252,124', None),
         ('진입가?', '252,124', None),          # 이건 값 질문이다
         ('적중률 몇 프로야?', '확률', '252,124')):
@@ -34284,6 +34289,120 @@ _b423 = _gc423._ans_price_buy({'entry': 10000, 'buy_zone': (9900, 10100)})
 check("챗 — '이하'와 어긋나는 ±1% '매수구간'을 안 싣는다 · 닿아도 사도 되는지는 판정이 정한다(판정이 있으면 같은 줄에)",
       '매수구간' not in _a423 and '10,100' not in _a423 and '10,000원' in _a423 and '오늘 판정: 심기 결론' in _a423
       and '오늘 판정' not in _b423 and '판정이 정합니다' in _b423, _a423)
+
+print("=" * 72)
+print("§424 시장 스캔 목록의 문장이 결론처럼 · 챗이 다른 것을 막은 이유로 · 목록 앞만 잇기 (라운드 435)")
+print("=" * 72)
+# 결론(살지 말지)은 중앙 판정의 조건이 정한다(라운드 405). 엔진의 시장 스캔 필수조건 묶음이 그 이름을 쓰거나, 챗이 거부권·가격
+#   괴리를 '막은 이유'로 대면 판정자가 둘이 된다(R416·R417). 값·조건·문턱·판정 불변 — 이름과 문장만. 글자를 못 박지 않고 돌려 본다.
+import ast as _ast424                                                # noqa: E402
+import gaeum_chat as _gc424                                          # noqa: E402
+import scripts.silent_cut_audit as _sca424                           # noqa: E402
+_q424 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+_t424 = _ast424.parse(_q424)
+_qc424 = {c.value for c in _ast424.walk(_t424) if isinstance(c, _ast424.Constant) and isinstance(c.value, str)}
+_g424 = [n for n in _ast424.walk(_t424) if isinstance(n, _ast424.Call) and getattr(n.func, 'id', '') == '_bool_gate'
+         and n.args and isinstance(n.args[0], _ast424.Constant) and '표본외' in str(n.args[0].value)]
+_k424 = [c.value for n in _g424 for cmp in _ast424.walk(n.args[1]) if isinstance(cmp, _ast424.Compare)
+         for c in cmp.comparators if isinstance(c, _ast424.Constant)]
+check("① 시장 스캔 필수조건의 표본외 이름이 계산을 말한다 — '수행 · 전략 품질 N점 이상'의 N 이 조건의 수와 같다(옛 이름 없음)",
+      len(_g424) == 1 and len(_k424) == 1 and '수행' in _g424[0].args[0].value
+      and f"전략 품질 {_k424[0]}점 이상" in _g424[0].args[0].value and '표본외(Blind/OOS) 검증 통과' not in _qc424,
+      str([n.args[0].value for n in _g424]) + str(_k424))
+_if424 = [n for n in _ast424.walk(_t424) if isinstance(n, _ast424.If) and isinstance(n.test, _ast424.Name)
+          and n.test.id == 'contradiction_detected'
+          and any(isinstance(s, _ast424.Assign) and getattr(s.targets[0], 'id', '') == 'action_explain' for s in n.body)]
+
+
+def _ex424(elig, reasons):
+    _ns = dict(contradiction_detected=False, contradiction_reasons=[], eligible_for_top3=elig,
+               gate_checks=[{}] * 15, top3_block_reasons=list(reasons))
+    exec(compile(_ast424.Module(body=[_if424[0]], type_ignores=[]), '<ex424>', 'exec'), _ns)   # noqa: S102
+    return _ns['action_explain']
+
+
+_r424 = [f'심은 조건{i} 미달' for i in range(6)]
+_e1_424 = _ex424(True, []) if _if424 else ''
+_e2_424 = _ex424(False, _r424) if _if424 else ''
+_cut424 = [s for n in _if424 for s in _ast424.walk(n) if isinstance(s, _ast424.Subscript) and isinstance(s.slice, _ast424.Slice)]
+check("② 엔진 '최종 근거' 문장 — 어느 목록의 말인지 적고 '유효합니다'를 안 낸다 · 미충족은 몇 개 중 몇 개와 전부(말없이 자르지 않는다)",
+      len(_if424) == 1 and not _cut424 and '시장 스캔 목록' in _e1_424 and '중앙 판정' in _e1_424 and '유효' not in _e1_424
+      and '15개 중 6개' in _e2_424 and all(r in _e2_424 for r in _r424) and '권하지' not in _e2_424
+      and '분할 진입이 유효합니다.' not in ' '.join(_qc424), _e2_424[:90])
+_w424 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i0_424 = _w424.find('_core435 = CORE or {}')
+_blk424 = _w424[_i0_424:_w424.find('_scanp435 = ', _i0_424)] if _i0_424 >= 0 else ''
+
+
+def _box424(core):
+    _ns = {'CORE': core, 'four_scores': {}}
+    exec(_blk424, _ns)                                                # noqa: S102
+    return _ns['_concl435']
+
+
+_ck424 = [dict(name=f'c{i}', ok=(i > 1), detail='') for i in range(11)]
+_b1_424 = _box424(dict(recommended=False, checks=_ck424)) if _blk424 else ''
+check("③ 종목 화면 '최종 근거' — 중앙 판정의 조건을 세어 먼저(전부) · 엔진 문장은 시장 스캔 목록이라 이름 붙여 아래에",
+      '11개 중 통과 9개 · 미충족 2개' in _b1_424 and 'c0' in _b1_424 and 'c1' in _b1_424
+      and '모두 통과' in _box424(dict(recommended=True, checks=[dict(_ck424[5])]))
+      and '받지 못했습니다' in _box424({})
+      and _w424.count("four_scores.get('final_action_explain')") == 1 and '시장 스캔 목록(다른 묶음)' in _w424
+      and '_uk._esc(_concl435)' in _w424.split('최종 근거</h4>')[1][:200], _b1_424)
+
+
+def _ctx424(rec=False, act=False, bucket='추천 제외', vetoes=(), failed=('비용 차감 기대값 양수',)):
+    return _gc424.build_context(
+        name='시험전자', ticker='000001.KS', price=231000.0,
+        core=dict(bucket=bucket, actionable=act, recommended=rec, exclude_reason='심은 사유', pullback_zone=211023.0,
+                  new_target=236572.0, new_stop=174524.0, rr=0.7, failed=list(failed),
+                  checks=[dict(name=f'c{i}', ok=True, detail='') for i in range(11)]),
+        fs={}, verdict=dict(headline='지금은 사지 마세요', score=49, action='HOLD', vetoes=list(vetoes)))
+
+
+_wait424 = _ctx424(act=True, bucket='눌림목 매수 대기', failed=('보유기간 안 도달 가능',))
+_v4_424 = _ctx424(vetoes=('거부1', '거부2', '거부3', '거부4'),
+                  failed=('비용 차감 기대값 양수', '강제 차단 없음', '신뢰도·전략품질 기준', '펀더멘털 밸류 검증'))
+_all424 = [_gc424.answer(q, c) for q in ('어때?', '지금 사도 돼?', '왜 지금 매수를 막았어?')
+           for c in (_ctx424(), _wait424, _v4_424)]
+_why0_424 = _gc424.answer('왜 지금 매수를 막았어?', _ctx424())
+_buy_w424 = _gc424.answer('지금 사도 돼?', _wait424)
+check("④ 챗 — 허락은 추천일 때만(대기 칸의 actionable 로 '예'를 안 한다) · 막은 이유는 중앙 판정의 미충족 조건 전부 · 가격 괴리·세지 않은 귀속을 이유로 안 댄다",
+      '예 —' not in _buy_w424 and '막혀 있지 않습니다' not in _gc424.answer('왜 지금 매수를 막았어?', _wait424)
+      and '비용 차감 기대값 양수' in _why0_424 and '진입가·도달성·정합' not in _why0_424
+      and '거부4' in _gc424.answer('왜 지금 매수를 막았어?', _v4_424) and '4건' in _gc424.answer('왜 지금 매수를 막았어?', _v4_424)
+      and '미충족 조건 4개' in _gc424.answer('어때?', _v4_424)
+      and not any('추격매수' in a or '검증된 진입 기준의 괴리' in a or '1차 매수 검토' in a for a in _all424)
+      and '막는 조건이 아닙니다' in _gc424.answer('지금 사도 돼?', _ctx424())
+      and _gc424.answer('지금 사도 돼?', _ctx424(rec=True, act=True, bucket='오늘 매수 가능', failed=())).count('예 — 오늘 기준 추천') == 1
+      and '외 2개' in _gc424._ans_news({'news': {'total': 3, 'risk_words': list('abcdef')}}),
+      _why0_424.replace('\n', ' / ')[:120], scanned=len(_all424))
+_rg424 = _read148(_os.path.join(PROJ, 'report_generator.py'))
+_rt424 = _ast424.parse(_rg424)
+_rgc424 = ' '.join(c.value for c in _ast424.walk(_rt424) if isinstance(c, _ast424.Constant) and isinstance(c.value, str))
+_bs424 = [s for s in _ast424.walk(_rt424) if isinstance(s, _ast424.Assign)
+          and getattr(s.targets[0], 'id', '') in ('_ngc435', 'block_str')]
+_ns424 = {'fs': {'gate_checks': [{}] * 15}, 'blocks': [f'심은 사유{i}' for i in range(7)]}
+exec(compile(_ast424.Module(body=_bs424, type_ignores=[]), '<rg424>', 'exec'), _ns424)   # noqa: S102
+check("⑤ 10대 레포트 — 시장 스캔 목록이라 부르고 몇 개 중 몇 개와 전부 · 엔진 제목을 '최종 행동 판정'이라 부르지 않는다 · 진입가에 '이하'를 안 붙인다",
+      len(_bs424) == 2 and '15개 중 7개' in _ns424['block_str'] and '심은 사유6' in _ns424['block_str']
+      and '시장 스캔 목록 필수조건' in _rgc424 and 'TOP3 추천 미충족' not in _rgc424
+      and '엔진 행동 제목' in _rgc424 and '최종 행동 판정' not in _rgc424 and 'unit_str + " 이하"' not in _rg424,
+      _ns424['block_str'][:80])
+_j1_424 = _sca424.joins_in_source('x = " / ".join(a[:4])\n')
+_j2_424 = _sca424.joins_in_source('x = " / ".join(a[:4]) + f" 외 {len(a) - 4}개"\n')
+_jr424 = _sca424.scan_joins()
+check("⑥ 말없이 자르기의 세 번째 잣대 — 목록 앞 N개만 잇는 자리를 찾고(심기 양방향) 개수 말 없는 자리가 늘지 않는다(오늘 5 · 전부 예시 목록 · 사람이 봤다)",
+      len(_j1_424) == 1 and not _j1_424[0]['has_count'] and len(_j2_424) == 1 and _j2_424[0]['has_count']
+      and len(_jr424) >= 20 and sum(1 for x in _jr424 if not x['has_count']) <= 5,
+      str([(x['module'], x['line']) for x in _jr424 if not x['has_count']]), scanned=len(_jr424))
+# 라운드 436 — '추천 없음'은 고장이 아니라 판정 결과다. 같은 자리의 '후보 0개(수집 실패)'만 빨간 오류 상자이고 추천 없음은 경고 상자
+#   (라운드 37 — 데이터 미수신 ≠ 추천 없음). 그 상자를 부르는 호출의 이름을 AST 로 본다(글자 모양은 안 본다).
+_np424 = [n for n in _ast424.walk(_ast424.parse(_w424)) if isinstance(n, _ast424.Call)
+          and isinstance(n.func, _ast424.Attribute) and n.func.attr in ('error', 'warning', 'info')
+          and any(isinstance(s, _ast424.Attribute) and s.attr == 'NO_PICK_LINE' for a in n.args for s in _ast424.walk(a))]
+check("⑦ 추천 없음 문장을 빨간 오류 상자로 그리지 않는다 — 수집 실패와 같은 색이 아니다(그리는 자리 전부)",
+      len(_np424) >= 2 and all(n.func.attr != 'error' for n in _np424), str([n.func.attr for n in _np424]),
+      scanned=len(_np424))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

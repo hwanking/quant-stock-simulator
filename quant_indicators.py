@@ -4525,7 +4525,12 @@ class QuantIndicatorsEngine:
                         + ('' if fair_value_usable
                            else f" → 점수 상한 {(_pa_policy or {}).get('score_cap')}점"))),
             _bool_gate("데이터 모순 없음", not contradiction_detected),
-            _bool_gate("표본외(Blind/OOS) 검증 통과",
+            # ⚠️ 라운드 435 — 이름이 '검증 통과'였는데 이 조건은 **수행 + 전략 품질 40점 이상**을 한 조건으로 묶는다.
+            #   중앙 판정은 같은 내용을 '표본외 검증 통과'(수행했나)와 '신뢰도·전략품질 기준'(품질)으로 나눠 세므로,
+            #   같은 이름이 한 화면에서 다른 답을 냈다(라운드 423 · 리포트 후보 462개 중 220개가 '중앙 통과 · 스캔 미충족').
+            #   라운드 423 은 옆 세션과 버전 기록이 부딪혀 이름을 못 바꾸고 화면에 설명 한 줄을 붙였다. 이름을 계산에 맞춘다
+            #   (R237·R239·R359 — 이름이 계산과 다르면 사용자는 없는 사실을 읽는다). 조건·문턱 40 불변.
+            _bool_gate("표본외(Blind/OOS) 검증 수행 · 전략 품질 40점 이상",
                        (not blind_test_not_completed) and (strategy_quality_score or 0) >= 40,
                        f"품질 {strategy_quality_score:.0f}점" if strategy_quality_score is not None else "미수행"),
             _bool_gate(
@@ -4632,14 +4637,21 @@ class QuantIndicatorsEngine:
                                                    '재검토 필요')):
                 final_action_title = "신규 매수 차단 (국면)"
 
+        # ⚠️ 라운드 435 — 이 문장은 **시장 스캔 목록의 필수조건**(위 `gate_checks`)으로 갈리는데 종목 화면의 '최종 근거'
+        #   칸이 그대로 그려 두 가지를 말했다: ① 다 통과하면 *"분할 진입이 유효합니다"* — 매수 결론은 중앙 판정의 조건이
+        #   따로 정하므로(라운드 405 · 두 묶음은 다른 답을 낼 수 있다) 결론처럼 읽히는 두 번째 판정자였다(R416·R417 의
+        #   모양) ② 미충족이면 **앞의 4개만** 이어 붙이고 몇 개를 뺐는지 안 적었다(R301·R312·R314 의 *말없이 자르기* ·
+        #   두 잣대가 이 자리를 못 봤다 — 화면 호출 밖이고 `.get()` 값이 아니다). 어느 목록의 말인지 적고, 사실만,
+        #   전부 적는다. 갈래·조건·문턱 불변(통과 여부는 그대로 `eligible_for_top3`). 마지막 갈래(조건 확인 후 접근을 권장)는
+        #   `eligible_for_top3 == (미충족 0개)` 라 닿을 수 없어 미충족 갈래로 합쳤다.
         if contradiction_detected:
             action_explain = "데이터 모순이 감지되어 추천을 중단했습니다: " + " / ".join(contradiction_reasons)
         elif eligible_for_top3:
-            action_explain = "모든 필수조건을 통과했습니다. 권장 매수가 이하 구간에서 분할 진입이 유효합니다."
-        elif top3_block_reasons:
-            action_explain = "다음 조건이 미충족이라 신규 진입을 권하지 않습니다 — " + " / ".join(top3_block_reasons[:4])
+            action_explain = (f"시장 스캔 목록의 필수조건 {len(gate_checks)}개를 모두 통과했습니다 — "
+                              "살지 말지는 중앙 판정의 조건이 따로 정합니다.")
         else:
-            action_explain = "조건 확인 후 접근을 권장합니다."
+            action_explain = (f"시장 스캔 목록의 필수조건 {len(gate_checks)}개 중 {len(top3_block_reasons)}개 미충족 — "
+                              + " / ".join(top3_block_reasons))
 
         # [명세 §11] 확률 표시 제한 — 유효표본 10건 미만이면 어떤 확률도 문자열로도 내보내지 않는다
         if eff_sample_size < 10 or not probs_usable or win_rate is None:

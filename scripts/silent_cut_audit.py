@@ -129,6 +129,55 @@ def scan_engine_text():
     return out
 
 
+#: 라운드 435 — 세 번째 갈래의 '개수를 말하는 표현'(위 COUNTY 에 '개 중'을 더한 것)
+COUNTY_JOIN = re.compile(r'len\(|외 \{|나머지|더 있|\{len|개 중')
+
+
+def joins_in_source(src):
+    """`'구분자'.join(X[:N])` 꼴(목록의 **앞 N개만** 이어 붙이기) — [{'line','n','has_count','src'}].
+
+    ⚠️ 라운드 435 — 위 두 잣대(화면 호출 **안** · `.get()` 값)가 엔진 지역 목록 `top3_block_reasons[:4]` 를 못 봤다.
+    그 문장은 엔진 안에서 만들어져 칸에 실린 뒤 화면이 그렸고, 자르는 대상은 `.get()` 이 아니라 지역 이름이었다.
+    목록을 이어 붙이면서 앞만 남기는 모양 자체를 찾는다(앞뒤 4줄에 개수 말이 있는지 같이 · 판정은 사람이 한다).
+    """
+    lines = src.splitlines()
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    out = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'join' and isinstance(node.func.value, ast.Constant)
+                and isinstance(node.func.value.value, str) and node.args):
+            continue
+        cut = [s for s in ast.walk(node.args[0])
+               if isinstance(s, ast.Subscript) and isinstance(s.slice, ast.Slice)
+               and s.slice.lower is None and isinstance(s.slice.upper, ast.Constant)
+               and isinstance(s.slice.upper.value, int) and s.slice.upper.value >= 2]
+        if not cut:
+            continue
+        ln = node.lineno
+        chunk = '\n'.join(lines[max(0, ln - 5):min(len(lines), ln + 4)])
+        out.append({'line': ln, 'n': cut[0].slice.upper.value,
+                    'has_count': bool(COUNTY_JOIN.search(chunk)),
+                    'src': lines[ln - 1].strip()[:120] if ln else ''})
+    return out
+
+
+def scan_joins():
+    """화면 도달 모듈 전부에서 `joins_in_source` — [{'module', ...}]."""
+    import scripts.lineage_audit as la
+    out = []
+    for m in sorted(set(la.reachable_modules('web_app.py'))):
+        p = os.path.join(PROJ, m)
+        if not os.path.exists(p):
+            continue
+        for x in joins_in_source(io.open(p, encoding='utf-8', errors='replace').read()):
+            out.append(dict(x, module=m))
+    return out
+
+
 if __name__ == '__main__':
     # 라운드 394 — cp949 콘솔에서 목록의 em-dash 한 글자에 `UnicodeEncodeError` 로 **목록 중간에서 죽었다**
     #   (42곳 중 몇 곳을 찍고 멈춰 뒤쪽 자리를 못 봤다). 인코딩은 그대로 두고 못 찍는 글자만 바꾼다(라운드 271 의 자리).
@@ -150,3 +199,10 @@ if __name__ == '__main__':
     for x in e:
         print('  %-14s :%-6d [:%d] %s'
               % (x['module'], x['line'], x['n'], x['src']))
+    j = scan_joins()
+    print('')
+    print('목록 앞 N개만 이어 붙이는 자리 %d곳 · 옆에 개수 말 없음 %d곳 (예시 목록은 결함이 아니다 · 사람이 본다)'
+          % (len(j), sum(1 for x in j if not x['has_count'])))
+    for x in j:
+        if not x['has_count']:
+            print('  %-14s :%-6d [:%d] %s' % (x['module'], x['line'], x['n'], x['src']))

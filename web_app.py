@@ -5102,7 +5102,9 @@ if _pmr:
                 "**수집 단계에서 후보가 0개**였습니다. 사이드바에서 스캔을 "
                 "다시 실행해 주세요.")
         else:
-            st.error(f"**{_vc_view.NO_PICK_LINE}**")
+            # 라운드 436 — '추천 없음'은 고장이 아니라 판정 결과다. 바로 위 '후보 0개(수집 실패)'와 같은 빨간 오류 상자로
+            #   그리면 두 사실이 한 색이 된다(라운드 37 — 데이터 미수신 ≠ 추천 없음). 빈 스캔 배너(라운드 423)와 같은 경고 상자.
+            st.warning(f"**{_vc_view.NO_PICK_LINE}**")
 
     # ── 통과 못 한 종목 — 사유를 8분류로 명시 (사용자 사양 §2) ────────────
     if _picks_gated:                      # 라운드 228 — 낡음 가지가 없어졌다
@@ -11152,6 +11154,24 @@ _bt_tail298 = ('' if four_scores.get('blind_test_status') != '미수행'
 #   있을 때만 그쪽을 가리킨다(없는 목록을 가리키지 않는다). 못 받은 값을 100점으로 채우지 않는다(§3).
 _capnote430 = ('<p style="color:#9DAABC; margin:2px 0; font-size:13px;">다른 상한이 더 낮으면 그쪽이 최종 점수를 정합니다'
                ' — 위 \'상한 사유\' 목록의 가장 낮은 값입니다.</p>' if four_scores.get('cap_reasons') else '')
+# 라운드 435 — '최종 근거' 칸이 엔진의 **시장 스캔 목록** 문장(`final_action_explain` · 15개 필수조건)을 그대로 그렸다.
+#   그 묶음은 이 종목의 매수 결론을 정하지 않는다(라운드 405 — 결론은 중앙 판정의 조건 · 두 묶음은 다른 답을 낼 수
+#   있다). 이름이 '최종 근거'라 사용자는 그것을 결론의 근거로 읽었고, 다 통과하면 *"분할 진입이 유효합니다"* 라는
+#   두 번째 판정자가 됐다(R416·R417). 결론의 근거는 중앙 판정의 조건을 **세어** 먼저 적고(라운드 312 의 모양 · 자르지
+#   않는다 · 새 문장 없음), 엔진 문장은 어느 목록의 말인지 이름을 붙여 그 아래에 둔다. 판정·조건·문턱 불변.
+_core435 = CORE or {}
+_ck435 = list(_core435.get('checks') or [])
+_fl435 = [str(c.get('name')) for c in _ck435 if not c.get('ok')]
+if not _ck435:
+    _concl435 = '중앙 판정의 조건을 받지 못했습니다 — 결론의 근거를 세지 않습니다.'
+elif _core435.get('recommended'):
+    _concl435 = f"중앙 판정의 조건 {len(_ck435)}개를 모두 통과했습니다."
+else:
+    _concl435 = (f"중앙 판정의 조건 {len(_ck435)}개 중 통과 {len(_ck435) - len(_fl435)}개 · "
+                 f"미충족 {len(_fl435)}개 — " + ' · '.join(_fl435))
+_scan435 = str(four_scores.get('final_action_explain') or '').strip()
+_scanp435 = (f'<p style="color:#9DAABC; margin:8px 0 0 0; line-height:1.5; font-size:13px;">'
+             f'참고 · 시장 스캔 목록(다른 묶음): {_uk._esc(_scan435)}</p>' if _scan435 else '')
 
 st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; ">
@@ -11190,7 +11210,8 @@ st.markdown(f'''
 
 <div style="background:#1C2635; padding:16px; border-radius:8px; margin-top:16px;">
 <h4 style="color:#F3F6FA; margin:0 0 8px 0;">최종 근거</h4>
-<p style="color:#9DAABC; margin:0; line-height:1.5; font-size:15px;">{four_scores.get('final_action_explain', '')}</p>
+<p style="color:#9DAABC; margin:0; line-height:1.5; font-size:15px;">{_uk._esc(_concl435)}</p>
+{_scanp435}
 </div>
 </div>
 ''', unsafe_allow_html=True)
