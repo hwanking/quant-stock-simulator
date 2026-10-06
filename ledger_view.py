@@ -419,6 +419,35 @@ def fair_zone_line(doc):
             + f" ({doc.get('made') or '측정일 미상'} 측정 · 같은 날 판정은 함께 움직여 날짜로 묶어 셌습니다).")
 
 
+#: 라운드 168 의 가치 구역 전수 산출물 — 구역별 원장 행수와 매수권 행수(잰 날·원장 행수 포함)
+ZONE_CENSUS_FILE = 'value_zone_census_r168.json'
+
+
+def zone_block_line(doc, zone_head='적정가 크게 초과'):
+    """'이 구역에서 나온 매수권 신호가 몇 건이었나' 한 줄 — 산출물에서 읽는다(라운드 439).
+
+    ⚠️ 종목 화면이 *"과거 15,332건 중 0건"* 을 **글자로** 박고 있었다 — 라운드 63(2026-08-04 무렵 · 원장 약 1.5만 행)의 수이고
+    날짜가 없어 오늘의 수로 읽혔다(R242·R344 의 그 모양). 라운드 168 의 전수 산출물이 같은 사실을 구역 행수·매수권 행수·잰 날·
+    원장 행수와 함께 담고 있으므로 그것을 읽는다. 못 읽으면 None — 수를 지어내지 않는다(§3). 문턱 없음."""
+    d = doc or {}
+    zones = d.get('zones') or {}
+    buy = d.get('buy_only') or {}
+    key = next((k for k in zones if str(k).startswith(zone_head)), None)
+    if key is None or d.get('made') is None:
+        return None
+    try:
+        n_zone = int(zones.get(key) or 0)
+        n_buy = int(buy.get(key) or 0)      # 산출물은 그 구역에 매수권 행이 없으면 None 을 적는다 — 0 으로 읽는다
+    except (TypeError, ValueError):
+        return None
+    rows = d.get('ledger_rows')
+    score = d.get('buy_score')
+    return (f"이 자리('{zone_head}')의 원장 {n_zone:,}건 중 매수권"
+            + (f"({float(score):g}점+)" if score is not None else '')
+            + f" 신호는 <b>{n_buy:,}건</b>이었습니다 ({d.get('made')} 측정"
+            + (f" · 원장 {int(rows):,}행" if rows else '') + ")")
+
+
 def reach_line(share, n, upside_pct, regime=None, zone=None, bars=HORIZON_BARS):
     """화면 한 줄 — 숫자를 판단으로 바꾸지 않는다. 예:
     '적정가까지 +38.2% · 같은 국면·구역 원장 1,204건 중 20봉 안에 그만큼 오른 비율 3.1%'"""

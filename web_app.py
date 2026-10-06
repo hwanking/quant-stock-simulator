@@ -8761,6 +8761,17 @@ if rec_buy_val is not None:
                     f"규칙이 보는 선은 <b>안전마진선 "
                     f"{float(_floor_fv):,.0f}원</b>인데 이 값이 그보다 "
                     f"{_over_floor:+.1f}% 위입니다.")
+                # 라운드 439 — *"과거 15,332건 중 0건"* 은 라운드 63 의 수를 날짜 없이 박은 것이었다(원장 약 1.5만 행 시절).
+                #   라운드 168 의 전수 산출물에서 구역 행수·매수권 행수·잰 날을 읽어 적는다(ledger_view.zone_block_line · §4).
+                #   못 읽으면 수 없이 '엔진이 막는다'는 사실만.
+                try:
+                    import artifact_io as _aio439
+                    import ledger_view as _lv439
+                    _zb439 = _lv439.zone_block_line(_aio439.load_json(_lv439.ZONE_CENSUS_FILE))
+                except Exception:                              # noqa: BLE001
+                    _zb439 = None
+                _zb439_txt = ((_zb439 + ". ") if _zb439 else
+                              "이 자리('적정가 크게 초과')에서 나온 매수권 신호가 몇 건이었는지 이 화면에서 못 읽었습니다. ")
                 rec_buy_more = (
                     f"<b>세 값의 관계</b> — 적정가 <b>{_fair:,.0f}원</b> → "
                     f"안전마진선 <b>{float(_floor_fv):,.0f}원</b>(적정가에서 "
@@ -8774,8 +8785,7 @@ if rec_buy_val is not None:
                     f"내려온다<br>"
                     f"② 실적·업황이 좋아져 <b>적정가가 올라온다</b>"
                     f"<br><br>"
-                    f"<b>왜 막나</b> — 이 자리('적정가 크게 초과')에서 나온 "
-                    f"매수 신호는 과거 15,332건 중 <b>0건</b>이었습니다. "
+                    f"<b>왜 막나</b> — {_zb439_txt}"
                     f"엔진이 구간을 통째로 막고 있습니다. "
                     f"위 값은 <b>가격 조건만</b> 본 숫자라, 도달해도 "
                     f"매수 신호로 바뀌지 않습니다.")
@@ -12562,7 +12572,19 @@ with st.expander("[클릭] 4대 분리 점수별 주요 긍정 기여 및 제한
 # 🏢 [6대 영역 세부 프로필 (Section 18)]
 with st.expander("4대 분리 점수 세부 산출 근거 및 실시간 정량 기여도 펼쳐보기"):
     st.write("### 퀀트 점수 산출 로직 (전면 개편)\n")
-    st.write("- **원시 종합점수**: 종목 기본 매력도 35% + 현재 매매 적합도 45% + 리스크 안전성 20%\n")
+    # 라운드 439 — 아래 세 줄이 가중치를 **글자로** 적고 있었다(35/45/20 · 45/30/15/10 · 'DeMARK … 14%'). 오늘은 규칙집과
+    #   같지만 규칙집이 바뀌는 날 문장만 낡는다(R236·R252·R401 — 화면이 산식을 다시 적지 않는다). 엔진이 읽는 규칙집 표
+    #   (W_TOP·W_FINAL·W_TIMING)에서 그 자리에서 만든다 · 못 읽으면 수 없이 적는다(§3). 그리고 '14%' 항은 DeMARK 만이 아니라
+    #   **신호 합의도**(DeMARK·밴드·모멘텀 등 7개 신호 · `demark_confluence_score = signal_consensus_score`)이고 같은 값이 최종
+    #   원점수에도 한 번 더 들어간다 — 이름이 계산보다 좁았다(R297·R406).
+    def _wpct439(d, k):
+        v = (d or {}).get(k)
+        return f"{float(v) * 100:.0f}%" if v is not None else '미수신'
+    _wt439, _wf439, _wm439 = (getattr(q_engine, 'W_TOP', None) or {}), (getattr(q_engine, 'W_FINAL', None) or {}), (getattr(q_engine, 'W_TIMING', None) or {})
+    st.write(("- **원시 종합점수**: 종목 기본 매력도 " + _wpct439(_wt439, 'weight_stock_quality')
+              + " + 현재 매매 적합도 " + _wpct439(_wt439, 'weight_trading_timing')
+              + " + 리스크 안전성 " + _wpct439(_wt439, 'weight_risk_safety') + " (규칙집에서 읽은 값)\n")
+             if _wt439 else "- **원시 종합점수**: 기본 매력도·매매 적합도·리스크 안전성의 가중합 — 가중치는 규칙집을 못 읽어 적지 않습니다\n")
     st.write("- **신뢰도 조정**: 50 + (원시점수 - 50) × (분석 신뢰도/100)\n")
     # 라운드 252 — 종전 문장 "(표본외 검증이 미구현이라 모델검증 항목은 0점)" 은
     #   거짓이었다(구현돼 있고 매 종목 돈다). 항목 값·가중치는 엔진이 내고
@@ -12577,9 +12599,17 @@ with st.expander("4대 분리 점수 세부 산출 근거 및 실시간 정량 �
     else:
         st.write(f"- **분석 신뢰도**: **{four_scores.get('analysis_confidence', 0)}점** "
                  f"(항목별 값 미수신)\n")
-    st.write("- **최종 행동 원점수**: 신뢰도 조정점수 45% + 기회점수 30% + 실행가능성 15% + 신호 합의도 10%\n")
+    st.write(("- **최종 행동 원점수**: 신뢰도 조정점수 " + _wpct439(_wf439, 'weight_confidence_adjusted')
+              + " + 기회점수 " + _wpct439(_wf439, 'weight_opportunity')
+              + " + 실행가능성 " + _wpct439(_wf439, 'weight_execution')
+              + " + 신호 합의도 " + _wpct439(_wf439, 'weight_signal_consensus') + " (규칙집에서 읽은 값)\n")
+             if _wf439 else "- **최종 행동 원점수**: 신뢰도 조정점수·기회점수·실행가능성·신호 합의도의 가중합 — 가중치는 규칙집을 못 읽어 적지 않습니다\n")
     st.write("- **최종점수**: 위 원점수에 데이터·통계·전략품질·추격위험 게이트 상한을 적용한 값\n")
-    st.write("- *DeMARK 9-13 및 밴드/모멘텀 신호는 현재 매매 적합도에 14% 비중으로 반영됩니다.*\n")
+    st.write(("- *신호 합의도(DeMARK·밴드·모멘텀 등 신호들의 합의 · 100점 만점)는 현재 매매 적합도 안에서 "
+              + _wpct439(_wm439, 'weight_demark_confluence') + " 비중이고, 같은 값이 위 최종 행동 원점수에 "
+              + _wpct439(_wf439, 'weight_signal_consensus') + " 로 한 번 더 들어갑니다. DeMARK 신호 하나가 최종 점수에 주는 "
+              "몫은 그 두 길을 합쳐도 약 1점 안팎입니다(2026-09-15 실측).*\n")
+             if (_wm439 and _wf439) else "- *신호 합의도는 현재 매매 적합도와 최종 행동 원점수 두 곳에 들어갑니다 — 비중은 규칙집을 못 읽어 적지 않습니다.*\n")
     st.write(f"- **독립 가격 위치 ({price_pos['range_name']} - 52주 범위 {price_pos['range_pos_pct']}%)**: 52주 고저 범위({price_pos['low_52w']:,.0f}~{price_pos['high_52w']:,.0f}{unit_str}) 및 60일선 이격률({price_pos['disparity_60']:+.1f}%).\n")
 
 # 기업 분석(퀀터멘탈·프로필·PER 비교)은 전문가 옵션으로 격리한다 (브리프 v2 §7).

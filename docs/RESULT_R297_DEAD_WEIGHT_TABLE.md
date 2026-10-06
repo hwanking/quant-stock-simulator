@@ -96,3 +96,10 @@ demark_bullish_signal / demark_bearish_signal        ← 0 또는 1
   틀렸다. 정정은 빨리, 그리고 **왜 틀렸는지까지** 적는다.
 - **비용 순 관문(§2-7)은 장식이 아니다.** R0 하나가 이 라운드를 몇 시간짜리 측정에서
   몇 분짜리 확인으로 바꿨고, 없는 비교를 발표하는 것을 막았다.
+
+## 정정 (라운드 439 · 2026-10-07)
+
+위 *"DeMARK 의 진짜 경로는 하나다 … 신호 하나의 기여 상한 1.0점"* 은 **둘째 길을 빠뜨렸다** — `demark_confluence_score = signal_consensus_score`
+가 현재 매매 적합도 안에 14%(`RULES_TRADING_TIMING_WEIGHTS.weight_demark_confluence`)로 들어가고, 그것이 원시 종합 45% → 신뢰도 조정 →
+최종 원점수 45% 로 이어진다. 그 길의 몫은 신호 하나(합의도 10점)에 최대 약 0.3점이라 **결론(약 1점 안팎 · 13% 아님)은 그대로**다.
+원문은 둔다(라운드 260). `docs/RESULT_R439_UNDATED_NUMBERS_THREE.md`

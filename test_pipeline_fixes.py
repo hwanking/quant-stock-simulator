@@ -9369,8 +9369,13 @@ check("도달해도 신호가 아님을 본문이 말한다",
 check("무엇이 바뀌어야 후보가 되는지 알려준다",
       '언제 살 수 있게 되나' in _w132
       and '부근까지 더 ' in _w132 and '적정가가 올라온다' in _w132)
-check("실측 근거를 화면에 병기한다",
-      '과거 15,332건 중 ' in _w132 and '0건</b>이었습니다' in _w132)
+# 라운드 439 — 종전엔 '과거 15,332건 중 0건' 이라는 **글자**(라운드 63 의 수 · 날짜 없음)를 잠갔다. 이제 그 수는 라운드 168
+#   전수 산출물에서 그 자리에서 읽는다(ledger_view.zone_block_line) — 읽는 자리가 있는지와 옛 글자가 없는지를 본다.
+#   ⚠️ 옛 글자의 부재는 **문자열 상수**에서 본다 — 소스 전체로 보면 고친 이유를 적은 주석에 걸린다(R313·R314 · 첫 판이 그랬다).
+import ast as _ast132                                                # noqa: E402
+_wc132 = [c.value for c in _ast132.walk(_ast132.parse(_w132)) if isinstance(c, _ast132.Constant) and isinstance(c.value, str)]
+check("실측 근거를 화면에 병기한다 — 산출물에서 읽어(구역 행수·매수권 행수·잰 날) · 날짜 없는 옛 수는 없다",
+      'zone_block_line(' in _w132 and not any('15,332건' in s for s in _wc132), scanned=len(_wc132))
 check("차단되지 않는 경우의 종전 설명은 유지",
       '두 가격은 다른 질문에 답합니다' in _w132
       and '가치 매수' in _w132 and '타이밍 매수' in _w132)
@@ -9780,7 +9785,7 @@ for _bad136 in ('\ndetails > summary', '\ndetails[open] > summary',
 
 # ── 근거를 지우지 않았는가 — 여기가 이 절의 핵심이다 ────────────────
 for _need136, _why136 in (
-        ('15,332건', '차단 근거 실측치'),
+        ('zone_block_line', '차단 근거 실측치 (라운드 439 — 글자 대신 산출물에서 읽는다)'),
         ('라운드 63', '그 판정이 어디서 왔는지'),
         ('안전마진선', '언제 살 수 있게 되는지'),
         ('손익비', '위험 대비 보상'),
@@ -34442,6 +34447,47 @@ check("⑧ '대기' 갈래보다 앞에서 — 잰 품질이 미달이면 '… �
       and _b438[0] == '추천 제외' and _vc438.OOS_FAIL_WHY in _b438[1] and _vc438.WAIT_NOT_CURED_HEAD not in _b438[1]
       and _lo438['recommended'] is False and _hi438['recommended'] is False,
       f"{_lo438['bucket']} · {_hi438['bucket']} · {str(_lo438['exclude_reason'])[:80]}")
+
+print("=" * 72)
+print("§425 날짜 없는 수 셋 — '15,332건 중 0건' · 산식 가중치 글자 · 설명 사전의 뒤집힌 '70%' (라운드 439)")
+print("=" * 72)
+# 화면·챗 문자열 상수를 AST 로 훑어 날짜 없는 잰 수를 찾았다(후보 101 · 결함 셋). 값·판정·문턱 불변 — 글자만.
+import ast as _ast425                                                # noqa: E402
+import ledger_view as _lv425                                         # noqa: E402
+import gaeum_glossary as _gg425                                      # noqa: E402
+import quant_indicators as _qi425                                    # noqa: E402
+#   심은 문서의 잰 날은 실제 산출물의 것을 옮겨 쓴다(날짜를 박으면 §156 이 '판정일 선언 없음'으로 잡는다 — R421 의 그 자리).
+_real425 = __import__('artifact_io').load_json(_lv425.ZONE_CENSUS_FILE) or {}
+_made425 = str(_real425.get('made') or __import__('datetime').date.today().isoformat())
+_doc425 = {'made': _made425, 'ledger_rows': 184759, 'buy_score': 58.0,
+           'zones': {'적정가 크게 초과 (추격매수 위험)': 19536, '안전마진 확보': 86355},
+           'buy_only': {'적정가 크게 초과 (추격매수 위험)': None, '안전마진 확보': 60711}}
+_z425 = _lv425.zone_block_line(_doc425)
+_zr425 = _lv425.zone_block_line(_real425) if _real425 else None
+check("① 구역 차단 근거 — 산출물에서 구역 행수·매수권 행수(없으면 0)·잰 날·원장 행수를 읽고, 못 읽으면 None(수를 지어내지 않는다)",
+      _z425 is not None and '19,536건' in _z425 and '<b>0건</b>' in _z425 and f'{_made425} 측정' in _z425 and '184,759행' in _z425
+      and '58점+' in _z425 and _lv425.zone_block_line({}) is None and _lv425.zone_block_line(dict(_doc425, made=None)) is None
+      and (_zr425 is None or ('측정' in _zr425 and '건</b>이었습니다' in _zr425)),
+      str(_z425)[:100])
+_w425 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_wc425 = [c.value for c in _ast425.walk(_ast425.parse(_w425)) if isinstance(c, _ast425.Constant) and isinstance(c.value, str)]
+check("② 화면 문자열에 '15,332건' · '기본 매력도 35%' · '신뢰도 조정점수 45%' · '14% 비중' 이 글자로 없다 — 가중치는 규칙집 표(W_TOP·W_FINAL·W_TIMING)에서 그 자리에서",
+      not any(('15,332건' in s or '종목 기본 매력도 35%' in s or '신뢰도 조정점수 45%' in s or '14% 비중' in s) for s in _wc425)
+      and "_wpct439(_wt439, 'weight_stock_quality')" in _w425 and "_wpct439(_wf439, 'weight_signal_consensus')" in _w425
+      and "_wpct439(_wm439, 'weight_demark_confluence')" in _w425,
+      scanned=len(_wc425))
+_wt425 = _qi425.QuantIndicatorsEngine.W_TOP
+_wm425 = _qi425.QuantIndicatorsEngine.W_TIMING
+check("③ 그 표는 엔진이 실제로 읽는 규칙집 표다 — 원시 종합 세 가중치 합 1 · '신호 합의도' 항은 매매 적합도 표의 demark_confluence 와 같은 값(signal_consensus)",
+      abs(sum(float(_wt425.get(k, 0)) for k in ('weight_stock_quality', 'weight_trading_timing', 'weight_risk_safety')) - 1.0) < 1e-9
+      and _wm425.get('weight_demark_confluence') is not None
+      and 'demark_confluence_score = signal_consensus_score' in _read148(_os.path.join(PROJ, 'quant_indicators.py')))
+_ood425 = float(_qi425.QuantIndicatorsEngine.FV_CONF.get('out_of_domain_gap_pct'))
+_oodtxt425 = next((e[2] for e in _gg425.ENTRIES if e[1].startswith('적정가 산출 불가')), '')
+check("④ 설명 사전의 '모델 적용 범위 밖' — 방향이 엔진과 같다(모델값이 주가의 (100−문턱)% 아래) · 문턱은 규칙집에서 · 뒤집힌 옛 문장 없음",
+      _gg425._OOD_GAP == _ood425 and f"주가의 {100 - _ood425:g}% 아래" in _oodtxt425 and f"{_ood425:g}% 넘게 낮음" in _oodtxt425
+      and '70% 넘게 높으면' not in _oodtxt425 and '70% 넘게 높으면' not in _read148(_os.path.join(PROJ, 'gaeum_glossary.py')).split('ENTRIES = (')[1],
+      _oodtxt425[:90])
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
