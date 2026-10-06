@@ -7241,7 +7241,7 @@ else:
                     f"<p style='margin:0 0 3px 0; color:{_TOK['tx2']};'>"
                     f"<b style='color:{_TOK[_act224['tone']]};'>{_uk._esc(_nm224)}</b> · "
                     f"{_uk._esc(_act224['label'])} — {' · '.join(_uk._esc(w) for w in _bits)}"
-                    + (f"<br><span style='color:{_TOK['tx3']};'>이력: {_uk._esc(_log224[-1])}</span>"
+                    + (f"<br><span style='color:{_TOK['tx3']};'>이력: {_uk._esc(_uk.hold_log_last(_log224))}</span>"
                        if _log224 else '')
                     + "</p>")
             _det226.append(f"<p style='margin:6px 0 10px 0; color:{_TOK['tx3']};'>적정가의 "
@@ -12196,7 +12196,7 @@ if user_entry_price > 0 and user_quantity > 0:
                   else (_TOK['tx3'] if (_act224 or {}).get('avg_down_class') == '보류'
                         else _TOK['warn']))
     _log_html224 = (f"<p style='margin:0 0 10px 0; font-size:12px; color:{_TOK['tx3']};'>"
-                    f"이력: {_uk._esc(_log224[-1])}</p>" if _log224 else "")
+                    f"이력: {_uk._esc(_uk.hold_log_last(_log224))}</p>" if _log224 else "")
     # 라운드 373 — 손절선을 넘긴 계획은 그대로 두므로(사용자 결정 2026-09-28) 이 카드에도 다시 재는 길을
     #   둔다 — 표의 링크와 **같은 길**(`?remeasure=` · 채우기 단계가 잰다 · §4). 관심종목에 있는 행만.
     if ((((_act224 or {}).get('kind') == '정리 검토') or (_act224 or {}).get('hold_stop_revived'))

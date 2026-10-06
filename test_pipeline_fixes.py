@@ -33402,6 +33402,50 @@ check("record 의 날짜는 판정일(trading_day 한 곳) — 벽시계 today()
       not _today_calls418 and 'anchor_day' in _ast418.unparse(_rec418)
       and {'recorded_at', 'per_at_record', 'pbr_at_record', 'date'} <= _keys418,
       f"today() {len(_today_calls418)} · 칸 {sorted(_keys418)[:12]}")
+# 라운드 432 — 열린 이슈 카드의 '담당' 칸이 저장소에 없는 파일(quant_engine.py)을 적고 있었다. 계획표가 이름을 대는 .py 는
+#   전부 있어야 한다(유도 · 손 목록 아님 · 본 수를 찍는다).
+import re as _re418
+from improvement import issue_ops as _io418                         # noqa: E402
+_pyrefs418 = sorted({_m for _pb in _io418.PLAYBOOK.values() for _f in ('module', 'action', 'cause', 'root_cause', 'safeguard',
+                                                                         'user_impact', 'target')
+                     for _m in _re418.findall(r'[A-Za-z0-9_./]+\.py', str(_pb.get(_f) or ''))})
+_gone418 = [_m for _m in _pyrefs418 if not (_os.path.exists(_os.path.join(PROJ, _m))
+                                          or _os.path.exists(_os.path.join(PROJ, 'scripts', _os.path.basename(_m))))]
+check("이슈 계획표가 '담당'·조치로 이름을 대는 파일은 저장소에 있다 (없는 파일을 화면에 적지 않는다)",
+      _pyrefs418 and not _gone418, f"없는 파일 {_gone418}", scanned=len(_pyrefs418))
+
+print("=" * 72)
+print("§419 관심종목 저장이 엔진 칸을 자르지 않는다 · 못 읽는 이력 줄이 옛 손절선 규칙을 풀지 않는다 · 잘린 줄은 잘렸다고 (라운드 432)")
+print("=" * 72)
+import tempfile as _tf419                                            # noqa: E402
+import portfolio as _pf419                                           # noqa: E402
+import ui_kit as _uk419                                              # noqa: E402
+_d419 = _tf419.mkdtemp(prefix='r432_')
+_p419 = _os.path.join(_d419, 'watchlist.json')
+_long419 = ' | '.join(['2026-09-28 버틸 수 없는 가격 71,060원(2026-09-04 기준) 아래 (현재가 69,700 · -1.9%) → 정리 검토 · 기준 다시 잼'] * 3)
+_pf419.save_watchlist([{'code': '000000', 'name': '심기', 'snap_hold_log': _long419, 'memo': '가' * 200}], path=_p419)
+_back419, _ = _pf419.load_watchlist(path=_p419)
+check("저장 왕복 — 엔진이 쓰는 이력 칸은 길어도 그대로(" + str(len(_long419)) + "자) · 사람이 적는 메모만 종전 길이(120)",
+      _back419 and _back419[0].get('snap_hold_log') == _long419 and len(_back419[0].get('memo') or '') == 120,
+      str(len((_back419 or [{}])[0].get('snap_hold_log') or '')))
+_old419 = '2026-09-28 버틸 수 없는 가격 71,060원(2026-09-04 기준) 아래 (현재가 69,700 · -1.9%) → 정리 검토 · 기준 다시 잼'
+_cut419 = (_old419 + ' | 2026-10-02 버틸 수 없는 가격 71,060원(2')[:120]
+_rowA419 = {'snap_hold_stop': 67409.78, 'snap_hold_at': '2026-09-28', 'snap_hold_log': _cut419}
+_rowB419 = dict(_rowA419, snap_hold_at='2026-10-02')          # 그 뒤 계획이 바뀌었다(잰 날이 옮겨 갔다)
+_rowC419 = dict(_rowA419, snap_hold_log=_old419 + ' | 2026-10-02 버틸 수 없는 가격 71,060원(2026-09-04 기준) 아래 '
+                '(현재가 67,200 · -5.4%) ' + _pf419.HOLD_LOG_KEEP_TAIL)
+_eA419, _eB419, _eC419 = (_uk419.effective_hold_stop(_r) for _r in (_rowA419, _rowB419, _rowC419))
+check("옛 손절선 규칙 — 마지막 줄이 잘려 못 읽어도 잰 날의 옛 규칙 재측정을 찾아 옛 선(71,060)으로 · 잰 날이 옮겨 가면 되살리지 않는다 · 온전한 '계획 유지' 줄도 같다",
+      _eA419[0] == 71060.0 and _eB419 == (67409.78, None) and _eC419[0] == 71060.0,
+      str((_eA419[0], _eB419, _eC419[0])))
+check("잘린 이력 줄은 잘렸다고 적는다 — 못 읽는 줄 + 이력 칸이 정확히 예전 자르기 길이일 때만 · 온전한 줄은 그대로",
+      _uk419.hold_log_last(_cut419.split(' | ')).endswith('…(예전 저장에서 뒤가 잘린 기록)')
+      and _uk419.hold_log_last([_old419]) == _old419
+      and _uk419.hold_log_last(['못 읽는 짧은 줄']) == '못 읽는 짧은 줄' and _uk419.hold_log_last([]) == ''
+      and len(_cut419) == _uk419.LEGACY_TEXT_CAP)
+_wa419 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("화면의 이력 줄 두 자리가 같은 함수로 마지막 줄을 그린다 — 잘린 줄이 다음 종목 이름과 붙지 않게",
+      _wa419.count('_uk.hold_log_last(_log224)') == 2 and "_uk._esc(_log224[-1])" not in _wa419)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

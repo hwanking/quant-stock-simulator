@@ -242,7 +242,8 @@ PLAYBOOK = {
                     "수치가 점수 순서를 따르지 않는다는 점을 밝힙니다.",
         fixable_now=False,
         status=ST_CHECKING,
-        module='quant_engine.py 점수 산식 · scripts/does_score_work_r20.py',
+        # 라운드 432 — 종전 'quant_engine.py' 는 저장소에 없는 파일이었다(점수 산식은 quant_indicators.py) · 화면 '담당' 칸에 나간다
+        module='quant_indicators.py 점수 산식 · scripts/does_score_work_r20.py',
         # ⚠️ 라운드 394 — 종전 이 칸은 ①②③ 을 **앞으로 할 일**로 적고 있었는데 ①② 는 2026-08-16 에 했고
         #   결과는 음성이었다(그 결과는 등록부의 다른 칸에만 붙어 화면에는 안 나갔다). 이슈가 열려 있어
         #   화면에 그대로 나가므로 한 것과 남은 것을 가른다(§3 · 라운드 250).

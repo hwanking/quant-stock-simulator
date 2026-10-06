@@ -2580,7 +2580,13 @@ def save_watchlist(items, path=WATCHLIST_FILE):
         for k in WATCH_NOTE_TXT + WATCH_SNAP_TXT:
             v = str((it or {}).get(k) or '').strip()
             if v:
-                row[k] = v[:120]
+                # ⚠️ 라운드 432 — 종전엔 **모든** 글자 칸을 120자에서 말없이 잘랐다. 엔진이 쓰는 칸도 그랬고, 보유 이력
+                #   (`snap_hold_log` · 최근 셋을 ' | ' 로 이은 한 칸)은 셋째 줄이 붙는 순간 120자를 넘어 **가장 최근 줄이**
+                #   잘렸다(2026-10-06 실측 59행 중 3행 · 마지막 줄 '…71,060원(2'). 그 줄을 못 읽자 옛 손절선 규칙(R378 ·
+                #   `ui_kit.effective_hold_stop`)이 '계획 유지' 줄을 건너뛰지 못하고 낮춘 선으로 돌아가 **'매도'가 '보유 유지'로**
+                #   바뀌었다. 엔진이 쓰는 칸은 길이가 이미 정해져 있다(이력은 HOLD_LOG_KEEP 줄) — 자르지 않는다. 사람이 적는
+                #   메모만 종전 길이를 지킨다.
+                row[k] = v[:120] if k in WATCH_NOTE_TXT else v
         clean.append(row)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     payload = {"saved_at": datetime.now().isoformat(timespec="seconds"),

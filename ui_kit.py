@@ -1813,6 +1813,23 @@ def hold_log_parse(line):
     return None
 
 
+#: 라운드 432 — 예전 관심종목 저장이 글자 칸을 자르던 길이. 잘린 이력 줄을 **잘렸다고** 보이는 데만 쓴다(판정에 안 쓴다).
+LEGACY_TEXT_CAP = 120
+
+
+def hold_log_last(log):
+    """보유 이력의 마지막 줄 — 예전 저장에서 잘린 줄이면 그렇게 적는다(잘린 채 다음 글과 붙지 않게 · 라운드 432).
+
+    잘렸다고 보는 것은 **못 읽는 줄**이면서 이력 칸 전체가 정확히 예전 자르기 길이일 때뿐이다(그 밖은 받은 그대로)."""
+    log = [x for x in (log or []) if x]
+    if not log:
+        return ''
+    last = str(log[-1])
+    if hold_log_parse(last) is None and len(' | '.join(log)) == LEGACY_TEXT_CAP:
+        return last + ' …(예전 저장에서 뒤가 잘린 기록)'
+    return last
+
+
 def effective_hold_stop(row):
     """보유 판단에 쓸 **버틸 수 없는 가격** — (값, 되살린 이력 또는 None). 라운드 378 · 읽는 쪽만 · 파일 불변.
 
@@ -1839,7 +1856,10 @@ def effective_hold_stop(row):
     last = None
     for x in reversed(log):
         pp = hold_log_parse(x)
-        if pp and pp.get('kind') == 'stop_hold':
+        # 라운드 432 — 못 읽는 줄도 건너뛴다. 예전 저장이 이력을 120자에서 잘라 '계획 유지' 줄이 깨진 행이 있었고, 그 줄을
+        #   못 읽자 여기서 멈춰 낮춘 선으로 돌아갔다('매도' → '보유 유지'). 건너뛰어도 안전한 까닭: 계획이 바뀌었는지는 줄이
+        #   아니라 **잰 날(`snap_hold_at`)** 이 정한다 — 아래 조건이 그 날짜와 같은 날의 옛 규칙 재측정만 되살린다.
+        if pp is None or pp.get('kind') == 'stop_hold':
             continue
         last = pp
         break
