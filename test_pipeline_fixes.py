@@ -8968,8 +8968,11 @@ _lay125, _ = _cl125.layers_for(49, sector=None, regime_code='BEAR',
                                fs={'market': 'KOSPI', 'vol_20': 0.02,
                                    'range_position_pct': 40,
                                    'm10_disparity': 5.0})
+# 라운드 424 — 층 이름이 띠의 **화면 이름**('40~49점')을 쓴다(같은 화면의 집계표 점수대와 갈라 적으려고).
+#   검사는 글자 모양이 아니라 성질(49점이 든 계층 띠가 층 이름에 있다)을 본다 — 이름표는 한 곳(band_label)에서.
 check("49점 종목에 40-49 점수대 층이 나온다",
-      any('40-49' in r['label'] for r in _lay125))
+      any(_cl125.band_label('40-49') in r['label'] for r in _lay125)
+      and _cl125.band_label('40-49') == '40~49점')
 check("각 층에 n·적중·Wilson·EV 가 있다",
       all(all(k in r for k in ('n', 'hit', 'wilson', 'ev'))
           for r in _lay125))
@@ -20159,15 +20162,20 @@ check("하한을 내리지 않는다고 적었다", '하한을 내리지 않는�
 # ⚠️ 라운드 350 — 위와 같은 이유로 무관한 상수를 대리 증거에서 뺐다.
 check("값은 하나도 안 바꿨다", '**값은 하나도 안 바꿨다.**' in _pt233)
 # 화면 — 국면×구간 표 (표시 전용 · 원장에서 그 자리에서 셈 · 하한·Wilson 재사용)
+# 라운드 424 — 제목이 '같은 신호'였는데 ②는 60점+, 이 표는 58점+ 다. 띠를 제목에 적는다(R233).
 check("모델 성적에 국면×구간 표가 있다",
-      "**②' 같은 신호를 국면 × 구간으로**" in _w231)
+      "**②' 58점 이상 신호를 국면 × 구간으로**" in _w231 and "**②' 같은 신호를" not in _w231)
 check("표가 원장 로더(케이스 스터디와 같은 것)에서 센다 (§4)",
       '_ldf216 = _load_case_ledger()' in _w231)
 check("Wilson 하한을 regime_policy 의 것으로 재사용한다 (§2-6)",
       '_rp216.wilson_low(_h, _n)' in _w231)
 check("표본 하한이 옆 표와 같은 30 이다", 'if _n >= 30:' in _w231)
-check("괴리의 정체(국면 조성)와 '판정할 수 없다'를 화면 캡션이 말한다",
-      '국면 조성' in _w231 and '아직 판정할 수 없습니다' in _w231)
+# 라운드 424 — 종전 검사는 캡션이 *"괴리의 상당 부분이 국면 조성"* 이라 **단정**하는지를 봤다. 재 보니(블라인드의
+#   국면별 적중을 검증의 국면 구성으로 다시 섞기) 그 몫은 0.8%p · 같은 국면 안에 남는 몫 7.9%p 였다 — 단정을 걷고
+#   그 셈을 그 자리에서 낸다. 검사는 성질로 옮긴다: 캡션이 국면 구성의 몫을 **센다** · '판정할 수 없다'는 그대로.
+check("국면 구성이 괴리를 얼마나 설명하는지 캡션이 그 자리에서 센다 · '판정할 수 없다'를 말한다 (옛 단정 없음)",
+      '_std423 = sum(' in _w231 and '국면 구성으로 설명되는 몫은' in _w231
+      and '괴리의 상당 부분이 **국면 조성**' not in _w231 and '아직 판정할 수 없습니다' in _w231)
 check("표가 실패해도 화면이 죽지 않고 이유를 남긴다",
       '[모델 성적 국면×구간 표 실패' in _w231)
 # ⚠️ 실측: '40~49점 … 60~64점' 이 한 문장에 있으면 GFM 이 물결표 둘을 취소선
@@ -20978,7 +20986,17 @@ check("물타기 첫 조건이 중앙 판정(new_entry_ok)을 읽는다 — TOP3
       and 'eligible_for_top3' not in _blk241)
 check("호출부가 안 넘기면(None) 데이터 게이트가 같이 떨어져 '보류'다 (§3 · 미판정)",
       'new_entry_ok is not None' in _blk241)
-check("6조건은 그대로 6개다 (규칙 불변 · §238 과 같이)", _blk241.count('("') == 6)
+# 라운드 424 — 종전엔 `("` 글자를 셌다(R98b 의 '글자를 못 박은 검사'). 둘째 조건 이름이 비용을 담은 f-string
+#   (`(f"…`)이 되자 같은 6조건이 5로 세어졌다 — 글자가 아니라 **목록의 원소 수**를 AST 로 센다.
+import ast as _ast241
+_ac241 = [_n for _n in _ast241.walk(_ast241.parse(_qi241))
+          if isinstance(_n, _ast241.Assign) and any(isinstance(_t, _ast241.Name) and _t.id == 'add_checks'
+                                                    for _t in _n.targets)]
+check("6조건은 그대로 6개다 (규칙 불변 · §238 과 같이)",
+      len(_ac241) == 1 and isinstance(_ac241[0].value, _ast241.List)
+      and len(_ac241[0].value.elts) == 6
+      and all(isinstance(_e, _ast241.Tuple) and len(_e.elts) == 2 for _e in _ac241[0].value.elts),
+      str([len(_a.value.elts) for _a in _ac241 if isinstance(_a.value, _ast241.List)]), scanned=len(_ac241))
 check("ADD 등급도 같은 출처를 읽는다 (두 벌 금지 · §4)",
       "holder_action_score >= 68 and bool(new_entry_ok)" in _qi241
       and "fs.get('eligible_for_top3'):\n            key = 'ADD'" not in _qi241)
@@ -24520,7 +24538,11 @@ _src298 = _read148(_os.path.join(PROJ, 'web_app.py'))
 
 
 def _row298(sp, done, ok, score=60, date='2026-09-01'):
+    # 라운드 424 — 심기 행에 결과(`outcome`)를 같이 적는다. 이 함수는 이제 `success` 칸이 아니라 **판정 완료**
+    #   (목표·손절 중 하나에 닿은 것)만 센다 — 원장은 미결도 success=False 로 적어 진 것으로 세고 있었다. 종전
+    #   심기 행은 `outcome` 이 없어(원장에는 늘 있다) 원장의 모양이 아니었다.
     return {'split': sp, 'success': ok, 'score': score, 'date': date,
+            'outcome': 'TARGET' if ok else 'STOP',
             'demark_state': 'COMPLETE' if done else 'FORMING'}
 
 
@@ -24531,6 +24553,12 @@ _l298 = _lv298.demark_complete_lift(_p298)
 check("심기 ① 13 완성과 그 외를 상태값으로 가르고 적중 차이를 낸다",
       _l298 and _l298['train']['yes'][0] == 10 and _l298['train']['no'][0] == 10
       and abs(_l298['train']['diff'] - 10.0) < 1e-9, str(_l298)[:140], scanned=len(_p298))
+# 심기 ①' (라운드 424) 미결(OPEN · success=False)은 분모에 안 든다 — 진 것으로 세면 13 완성 쪽 적중이 60 → 30% 로 꺾인다
+_p298o = _p298 + [dict(_row298('train', True, False), outcome='OPEN')] * 10
+_l298o = _lv298.demark_complete_lift(_p298o)
+check("심기 ①' 결판 안 난 케이스(OPEN)는 적중의 분모에서 뺀다 (원장은 success=False 로 적는다)",
+      _l298o and _l298o['train']['yes'][0] == 10 and abs(_l298o['train']['diff'] - 10.0) < 1e-9,
+      str(_l298o)[:140], scanned=len(_p298o))
 # 심기 ② 매수권 밖(58 미만)은 안 센다 — 하한은 이미 쓰는 값
 _p298b = _p298 + [_row298('train', True, False, score=10)] * 50
 check("심기 ② 매수권 하한 아래 행은 안 센다 (새 문턱을 만들지 않고 58 을 재사용)",
@@ -29595,8 +29623,9 @@ check("R381 모형 입력은 받은 값에서 — 깃발도 그것으로 · 경�
       '_eps_synth = bool(_eps_model is not None and float(_eps_model) <= 0)' in _q373
       and "and (_have_bps or type_probs['B_CYCLICAL'] <= 0.4))" in _q373
       and 'bps * roe / 100.0 if (_have_bps and _have_roe) else None' in _q373)
+# 라운드 424 — 그 이름에 **어느 비용**인지(0.3% · `_PATH_YIELD_COST_PCT`)를 붙였다. 글자 대신 성질을 본다.
 check("R382 쉬운 설명이 다른 수를 '기대값'이라 부르지 않는다 (유사패턴 평균 수익 · 못 잰 값을 음수로 안 읽음)",
-      '유사패턴 평균 수익(비용 차감)' in _q373 and '비용 차감 후 기대값이 {' not in _q373)
+      '유사패턴 평균 수익(비용 {_pyc:g}% 차감)' in _q373 and '비용 차감 후 기대값이 {' not in _q373)
 _w373 = '\n'.join(_ln for _i, _ln in _la373.code_lines('web_app.py'))
 check("R382 안전마진 문장 — 가치 기준선이 없으면 견주지 않고 미충족 조건을 적는다 · '뿐' 안 씀",
       'if _bem_raw382 is not None:' in _w373 and "(snap.get('val_eval') or {}).get('buy_price_checks')" in _w373
@@ -30018,8 +30047,10 @@ check("전부 알고 전부 맞으면 통과 · 비중을 모르면 통과가 �
       f"{_all378} · {_wnone378} · {_m10none378}")
 _names378 = [l for l, _ in _eng378.personalize_for_position(_snap378, 10500.0, 10, portfolio_weight_pct=10.0,
                                                              new_entry_ok=True)['averaging_down_checks']]
+# 라운드 424 — 이름에 그 비용(엔진 상수 0.3)을 붙였다 — 상수에서 만든 이름과 같은지 본다(글자를 박지 않는다).
 check("둘째 조건의 이름이 읽는 값(유사패턴 평균 − 0.30)과 같다 — 중앙 판정의 '비용 차감 기대값'과 다른 수다 · 조건은 여섯 그대로",
-      '유사패턴 평균 수익(비용 차감) 양수' in _names378 and '거래비용 차감 후 기대수익 양수' not in _names378
+      f'유사패턴 평균 수익(비용 {qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT:g}% 차감) 양수' in _names378
+      and '거래비용 차감 후 기대수익 양수' not in _names378
       and len(_names378) == 6 and _names378[0] == _uk378.AVG_DOWN_MARKET_GATE, str(_names378))
 _w378 = '\n'.join(_ln for _i, _ln in _la378.code_lines('web_app.py'))
 # 라운드 414 — 스냅샷 도우미의 본문은 `watch_refresh.avg_down_snap` 이다(화면의 `_wl_avg_down_snap` 은 껍데기).
@@ -33812,6 +33843,369 @@ check("잘린 이력 줄은 잘렸다고 적는다 — 못 읽는 줄 + 이력 �
 _wa419 = _read148(_os.path.join(PROJ, 'web_app.py'))
 check("화면의 이력 줄 두 자리가 같은 함수로 마지막 줄을 그린다 — 잘린 줄이 다음 종목 이름과 붙지 않게",
       _wa419.count('_uk.hold_log_last(_log224)') == 2 and "_uk._esc(_log224[-1])" not in _wa419)
+
+print("=" * 72)
+print("§420 같은 이름의 수가 다른 분모·띠·비용 — 미결은 적중의 분모에서 · 점수대는 범위로 · '비용 차감'은 비용과 함께 (라운드 424)")
+print("=" * 72)
+# 읽기 전용 감사(2026-10-03)가 넷을 짚었고 직접 확인했다. ① 원장은 미결(OPEN)도 success=False 로 적는데 화면이 그 칸을
+#   그대로 세던 자리(모델 성적 ②' · 13 표식 값어치) — 판정 완료만 세게 고쳤다(ledger_view 한 곳). ② 고정 산출물 둘(국면 표 ·
+#   R159 전수 조사)은 다시 재지 않고 분모를 적었다. ③ '점수대'가 두 띠(집계표 5점 띠 · 계층 표 50~57 …) — 범위로 적는다.
+#   ④ '비용 차감'이 0.30·0.36·0.41·0.55 — 어느 비용인지 적는다. 값·문턱·판정·게이트 불변.
+import ledger_view as _lv420                                         # noqa: E402
+import case_layers as _cl420                                         # noqa: E402
+import trust_view as _tv420                                          # noqa: E402
+import gaeum_chat as _gc420                                          # noqa: E402
+import scripts.lineage_audit as _la420                               # noqa: E402
+# ── ① 판정 완료만 센다 — 규칙은 한 곳 ────────────────────────────────────
+_dh420 = [_lv420.decided_hit(x) for x in ({'outcome': 'TARGET', 'success': True}, {'outcome': 'STOP', 'success': False},
+                                          {'outcome': 'OPEN', 'success': False}, {'success': False}, None)]
+check("decided_hit — 목표 먼저 True · 손절 먼저 False · 미결(success=False 여도)·결과 없음은 None(분모에서 뺀다)",
+      _dh420 == [True, False, None, None, None] and _lv420.DECIDED_OUTCOMES == ('TARGET', 'STOP'), str(_dh420))
+_lab420 = '\n'.join(_ln for _i, _ln in _la420.code_lines(_os.path.join('scripts', 'calibration_lab.py')))
+check("집계 랩과 같은 분모다 — 랩의 판정 완료도 목표·손절 둘 · 원장은 미결을 success=False 로 적는다(그래서 이 규칙이 필요하다)",
+      "decided = [g for g in stat_graded if g['grade']['outcome'] in ('TARGET', 'STOP')]" in _lab420
+      and "'success': g['grade']['outcome'] == 'TARGET'," in _lab420)
+_lvb420 = '\n'.join(_ln for _i, _ln in _la420.code_lines('ledger_view.py'))
+check("13 표식 값어치가 success 칸이 아니라 판정 완료로 센다 · 문장이 분모를 말한다",
+      'ok = decided_hit(r)' in _lvb420 and "ok = r.get('success')" not in _lvb420
+      and '목표·손절 중 하나에 닿은 케이스만' in (_lv420.demark_lift_line(
+          {'train': {'yes': (9, 60.0, 9), 'no': (9, 50.0, 9), 'diff': 10.0}}) or ''))
+# 화면에 닿는 모듈 전부에서 원장 success 칸을 적중으로 세는 자리가 0 인가 (대상은 유도 · 판별은 산문 뺀 코드 줄)
+_mods420 = _la420.reachable_modules()
+_bad420 = []
+for _m420 in _mods420:
+    for _i420, _ln420 in _la420.code_lines(_m420):
+        if "['success'].astype(" in _ln420 or ".get('success')" in _ln420 or '.get("success")' in _ln420:
+            _bad420.append(f"{_m420}:{_i420}")
+check("화면에 닿는 모듈에서 원장 success 칸을 적중으로 세는 자리가 없다 (남은 것은 채점 여부 거르기 .notna() 와 추적 집계 칸뿐)",
+      not _bad420 and len(_mods420) >= 40, str(_bad420[:6]), scanned=len(_mods420))
+_w420 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("모델 성적 ②' — 판정 완료만 세고(같은 규칙 한 곳) · 제목이 띠(58점+)와 분모를 말한다 · 제목 위 캡션이 ①·②·②'·③ 의 분모를 적는다",
+      "_ldf216['outcome'].isin(_lv423.DECIDED_OUTCOMES)" in _w420
+      and "_h = float((_s['outcome'] == 'TARGET').mean() * 100.0)" in _w420
+      and '적중률은 ②와 같이 목표·손절 중 하나에 닿은 케이스만 셉니다' in _w420
+      and "이 칸의 적중률(①·②·②'·③)은 20봉 안에 목표·손절 중 하나에 닿은 케이스만 셉니다" in _w420)
+check("하락장 블라인드 '점수가 거꾸로 갑니다'는 두 수가 그럴 때만 붙는다 (종전엔 늘 붙였다)",
+      '" — 점수가 거꾸로 갑니다." if _loh423 > _hih423 else "."' in _w420)
+# 실제 원장 — 판정 완료 분모가 미결=실패 분모와 실제로 다르다(이 고침이 할 일이 있었다) · 값이 아니라 부등식을 잠근다(R213)
+try:
+    _n420 = [0, 0, 0, 0]       # 58점+ 블라인드 통계 행: 채점됨 · 그중 미결 · success 참 · 목표 먼저
+    with open(_os.path.join(PROJ, '.portfolio', 'virtual_graded.jsonl'), encoding='utf-8') as _f420:
+        def _rows420():
+            for _l in _f420:
+                try:
+                    yield _json.loads(_l)
+                except Exception:                                    # noqa: BLE001
+                    continue
+        for _r420 in _lv420.stat_rows(_rows420(), _lv420.scale_mismatch_keys()):
+            if _r420.get('split') != 'blind' or _r420.get('success') is None:
+                continue
+            try:
+                if float(_r420.get('score') or 0) < 58:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            _n420[0] += 1
+            _n420[1] += 1 if _r420.get('outcome') == 'OPEN' else 0
+            _n420[2] += 1 if _r420.get('success') else 0
+            _n420[3] += 1 if _lv420.decided_hit(_r420) else 0
+    _h_old420 = _n420[2] / _n420[0] * 100 if _n420[0] else None
+    _h_new420 = _n420[3] / (_n420[0] - _n420[1]) * 100 if (_n420[0] - _n420[1]) else None
+    check("원장 58점+ 블라인드 — 미결이 있고(그래서 고칠 것이 있었다) · 판정 완료 적중이 미결=실패 적중보다 높다(항등식의 방향)",
+          _n420[1] > 0 and _h_old420 is not None and _h_new420 is not None and _h_new420 > _h_old420
+          and _n420[2] == _n420[3],
+          f"채점 {_n420[0]:,} · 미결 {_n420[1]:,} · {_h_old420} → {_h_new420}", scanned=_n420[0])
+except FileNotFoundError:
+    skipped("원장 58점+ 블라인드 미결 셈", ".portfolio/virtual_graded.jsonl 없음")
+# ── ② 고정 산출물 둘 — 다시 재지 않고 분모를 적는다 · 문장과 생성기 소스를 묶는다 ───────────
+_rs14 = '\n'.join(_ln for _i, _ln in _la420.code_lines(_os.path.join('scripts', 'regime_split_r14.py')))
+check("고정 국면 표 — 생성기가 success 칸을 센다(그래서 '결판 안 난 것도 실패로 셈'이 참이다 · 생성기가 바뀌면 문장도 바꿔라)",
+      "hit = sum(1 for r in rows if r['success'])" in _rs14
+      and _tv420.FROZEN_REGIME_DENOM == '결판 안 난 케이스도 실패로 센 적중')
+check("고정 국면 표 — 표 제목(두 갈래)과 출처 문장이 분모를 말한다 · 타일 캡션도 같은 이름을 쓴다",
+      _w420.count('{_tv421.FROZEN_REGIME_DENOM}') == 2
+      and '20봉 안에 목표·손절 어느 쪽에도 안 닿은 케이스도 진 것으로** 센 값입니다' in _w420
+      and _tv420.FROZEN_REGIME_DENOM in _tv420.threshold_note({}, {'buy_zone': {'valid': {'BULL': {'n': 5}},
+                                                                                'blind': {'BULL': {'n': 5}}}})
+      and _tv420.FROZEN_REGIME_DENOM not in _tv420.threshold_note({}, None))
+_c159s = '\n'.join(_ln for _i, _ln in _la420.code_lines(_os.path.join('scripts', 'census_r159.py')))
+_c159d = _json.load(open(_os.path.join(PROJ, 'data', 'census_r159.json'), encoding='utf-8'))
+check("R159 전수 조사 — 산출물은 판정한 날 그대로(50.4 · 63.7) · 생성기가 success 칸을 센다 · 화면이 분모를 적고 같은 산출물의 비용 뺀 평균을 곁에 둔다",
+      "k = sum(1 for r in rs if r['success'])" in _c159s
+      and float(_c159d['breakeven']['blind_hit_pct']) == 50.4 and float(_c159d['breakeven']['need_hit_pct']) == 63.7
+      and (_c159d.get('by_split') or {}).get('blind', {}).get('ev_net') is not None and _c159d.get('cost_pct') is not None
+      and '결판 안 난 케이스도 진 것으로 센 값' in _w420 and "_c159_ev = ((_c159.get('by_split') or {})" in _w420)
+# ── ③ 점수대는 범위로 ────────────────────────────────────────────────────
+check("band_label — 계층 띠 열쇠를 화면 이름으로 · 65+ 는 '이상' · 못 읽으면 None",
+      [_cl420.band_label(b) for b in ('0-39', '50-57', '58-64', '65-100', 'x', None)]
+      == ['0~39점', '50~57점', '58~64점', '65점 이상', None, None])
+_bp420 = _cl420.blended_prob(57, regime_code='BEAR', fs={'market': 'KOSPI', 'vol_20': 0.02})
+_ly420, _ = _cl420.layers_for(57, regime_code='BEAR', fs={'market': 'KOSPI', 'vol_20': 0.02}, ticker='005930.KS')
+check("계층 보정 확률이 자기 점수대를 싣고(57점 → 50~57점) · 층 이름마다 그 범위가 있다(SELF 층 제외)",
+      _bp420 is not None and _bp420.get('band') == '50-57' and _bp420.get('band_label') == '50~57점'
+      and all('50~57점' in r['label'] for r in _ly420 if r.get('narrow') != 3)
+      and any(r.get('narrow') != 3 for r in _ly420), str([r['label'] for r in _ly420]))
+check("화면 — 확률 줄·캡션·배너·오른쪽 패널이 두 점수대를 범위로 적는다 · 띠가 다르면 다르다고",
+      "이 확률의 점수대는 {_bl423}" in _w420 and '과 띠 경계가 다릅니다' in _w420
+      and "점수대 {_blend59['band_label']} · " in _w420 and "{_cb_banner['lo']}~{_cb_banner['hi']}점" in _w420
+      and '{_sum_band}{_sum_rng423}' in _w420 and "점수대 {_uk._esc(_blend59.get('band_label'))}" in _w420)
+_ans420 = _gc420._ans_similar({'cb': {'lo': 55, 'hi': 59, 'n': 900, 'hit_rate': 58.0},
+                               'blend': {'p': 0.6, 'layers': 3, 'wilson_low': 0.55, 'wilson_high': 0.65,
+                                         'n_narrow': 1200, 'band_label': '50~57점'}})
+check("가늠 AI — 원실측은 집계표 띠(55~59점) · 계층 실측은 계층 띠(50~57점)를 적는다",
+      '같은 점수대 (55~59점) 원실측' in _ans420 and '점수대 50~57점×국면' in _ans420, _ans420[:160])
+# ── ④ '비용 차감'은 비용과 함께 ──────────────────────────────────────────
+_gcl420 = '\n'.join(_ln for _i, _ln in _la420.code_lines(_os.path.join('scripts', 'gen_case_layers.py')))
+_cj420 = _cl420._doc() or {}
+check("계층 실측 EV 의 비용 — 한 곳(0.36 그대로) · 생성기가 그것을 읽고 산출물에 싣는다 · 칸 없는 옛 산출물은 그 표의 basis 가 같은 수를 적는다",
+      _cl420.LAYER_COST_PCT == 0.36 and 'COST = _cl423.LAYER_COST_PCT' in _gcl420 and 'cost_pct=COST,' in _gcl420
+      and _cl420.layer_cost_pct({'cost_pct': 0.41}) == 0.41
+      and (isinstance(_cj420.get('cost_pct'), (int, float))
+           or f"비용 {_cl420.LAYER_COST_PCT:g}%p 차감" in str(_cj420.get('basis') or '')),
+      str(_cj420.get('basis'))[:80])
+check("계층 실측 표 — EV 가 없는 층(SELF)에서 죽지 않는다(그 층이 실제로 있다) · EV 옆에 비용과 표의 날짜 · 실패하면 사유를 남긴다",
+      any(r.get('ev') is None for r in _ly420)
+      and "(f\" · EV {r['ev']:+.2f}%\" if isinstance(r.get('ev'), (int, float)) else \"\")" in _w420
+      and "f\" EV 는 개발 구간(학습·검증)의 평균 수익에서 왕복 비용 {_lcost423:g}% 를 뺀 값입니다\"" in _w420
+      and '[계층 실측 표 실패 — 나머지는 계속 그린다]' in _w420)
+check("업종 성적 줄 — '비용후 평균'이 어느 비용인지(산출물 칸) · 칸이 없으면 비용을 붙이지 않는다",
+      "_spc423 = _sp.get('cost_pct')" in _w420 and 'f"왕복 비용 {float(_spc423):g}% 뺀 평균 "' in _w420)
+_e420 = q.build_easy_advice({'entry_pullback_price': 10000, 'buy_entry_max': 11000, 'entry_target_1st': 10800,
+                             'entry_stop_price': 9400, 'target_tech_1st': 10800, 'target_tech_2nd': 11500,
+                             'stop_loss_price': 9400, 'm10_disparity': 5.0, 'net_expected_return': -0.09},
+                            {'score': 62, 'action': 'HOLD', 'vetoes': []}, 10500)
+check("쉬운 설명의 '유사패턴 평균 수익' 이 그 비용(엔진 상수)을 적는다 — 실행해서 본다",
+      f"유사패턴 평균 수익(비용 {qi.QuantIndicatorsEngine._PATH_YIELD_COST_PCT:g}% 차감)이 -0.09%" in _e420['new_buyer']['detail'],
+      _e420['new_buyer']['detail'][:80])
+check("진입 후보 안내도 그 비용을 적는다 (같은 수 · 같은 상수)",
+      '유사패턴 평균 순수익(비용 "' in _w420 and '{q_engine._PATH_YIELD_COST_PCT:g}% 차감) 양수. "' in _w420)
+
+print("=" * 72)
+print("§421 '다음 조건' 목록 — 기다려도 안 풀리는 '추천 아님'에 매수 지시를 싣지 않는다 (라운드 425)")
+print("=" * 72)
+# 라운드 193·197·387 은 머리 문장이 지시하는 갈래(buy_now·pullback·breakout)만 막았다. 'observe' 갈래는 목록이 그대로
+#   지나가 *"…오늘의 매수 후보에서 뺐습니다"* 바로 아래에 *"…1차 분할매수를 검토하세요"* 가 나갔다(리포트 실측 30/216).
+import ast as _ast421                                                # noqa: E402
+import glob as _glob421                                              # noqa: E402
+import json as _json421                                              # noqa: E402
+import pandas as _pd421                                              # noqa: E402
+import next_action as _na421                                         # noqa: E402
+import verdict_core as _vc421                                        # noqa: E402
+import watch_alerts as _wa421                                        # noqa: E402
+
+# ① 지시 갈래의 이름은 next_action 이 실제로 쓰는 cond kind 리터럴이다(손 목록이 낡지 않게 소스에서 대 본다)
+_src421 = open(_os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read()
+_kinds421 = {_n.args[0].value for _n in _ast421.walk(_ast421.parse(_src421))
+             if isinstance(_n, _ast421.Call) and getattr(_n.func, 'id', None) == 'cond'
+             and _n.args and isinstance(_n.args[0], _ast421.Constant)}
+check("WAIT_COND_KINDS 는 next_action 이 실제로 내는 cond 갈래 안에 있고 매수 지시 둘(support·breakout)을 담는다",
+      set(_na421.WAIT_COND_KINDS) <= _kinds421 and {'support', 'breakout'} <= set(_na421.WAIT_COND_KINDS)
+      and not ({'veto', 'value', 'price', 'gap'} & set(_na421.WAIT_COND_KINDS)),
+      f"{sorted(_na421.WAIT_COND_KINDS)} ⊆ {sorted(_kinds421)}", scanned=len(_kinds421))
+
+# ② 실제로 돌려 본다 — 밸류 게이트(적정가 산출 불가)에 걸린 종목: next_action 이 지시를 붙이고 중앙 판정이 걷는다
+_t421 = _pd421.DataFrame({'close': [100.0] * 60, 'high': [101.0] * 40 + [110.0] * 20, 'low': [95.0] * 60,
+                          'volume': [1000] * 60, 'sma_20': [98.0] * 60, 'volume_ratio': [1.0] * 59 + [3.0]})
+_fs421 = dict(current_price=100.0, entry_pullback_price=98.0, entry_stop_price=94.0, entry_target_1st=101.0,
+              entry_rr=0.75, analysis_confidence=70, strategy_quality_score=60, final_action_score=62, vol_20=0.02,
+              avg_turnover_20d=5e9, horizon_days=20, blind_test_status=_vc421.OOS_DONE,
+              calibration_band={'hit_rate': 59.0, 'n': 5000}, displayed_fair_value=None,
+              fair_value_status='OUT_OF_DOMAIN', entry_zone='판정 불가')
+_vd421 = {'action': 'HOLD', 'vetoes': []}
+_n421 = _na421.build(_fs421, _t421, 100.0, _vd421)
+_c421 = _vc421.build(_fs421, verdict=_vd421, next_action=_n421)
+_nk421 = [str(c.get('kind')) for c in (_n421.get('conditions') or [])]
+_txt421 = ' / '.join(str(c.get('text')) for c in (_c421.get('next_conditions') or []))
+check("심기 확인 — next_action 은 밸류 게이트에 걸린 'observe' 에도 지지·돌파 지시를 붙인다(이 절이 재는 그 모양)",
+      _n421.get('kind') == 'observe' and {'support', 'breakout', 'volume'} <= set(_nk421)
+      and '분할매수' in ' '.join(str(c.get('text')) for c in _n421['conditions']), str(_nk421))
+check("중앙 판정은 그 목록에서 지시 갈래를 걷고 미충족 조건을 낸다 · 머리 문장·칸·판정은 그대로",
+      _c421['recommended'] is False and _c421['wait_curable'] is False and _c421['bucket'] == '추천 제외'
+      and not any(str(c.get('kind')) in _na421.WAIT_COND_KINDS for c in _c421['next_conditions'])
+      and '분할매수' not in _txt421 and '진입할 수' not in _txt421 and '사세요' not in _txt421
+      and '펀더멘털 밸류 검증 — 적정가 산출 불가' in _txt421
+      and _c421['next_headline'] == _n421['headline'] and _c421['next_kind'] == 'observe', _txt421[:160])
+check("사유(exclude_reason)는 목록에 **한 번만**, 그리고 **맨 앞** — 사유를 담은 미충족 줄(밸류)을 앞으로 옮긴다",
+      (_txt421 + _c421['next_headline']).count(str(_c421['exclude_reason'])) == 1
+      and str(_c421['exclude_reason']) in str(_c421['next_conditions'][0]['text'])
+      and _c421['next_conditions'][0]['text'].startswith('펀더멘털 밸류 검증'), str(_c421['next_conditions'][0]))
+# 카드는 목록의 앞 셋만 그린다 — 몇 개를 뺐는지 적는다(라운드 314 의 '말없이 자르는 자리')
+import ui_kit as _uk421                                              # noqa: E402
+_card421 = dict(state='neg', state_label='추천 제외', name='가', code='000001', asset_ko='주식', score=50,
+                price=100, rec_buy=None, rec_na='차단됨', say='설명', hit='적중')
+_h421a = _uk421.reco_card(dict(_card421, next_conditions=['A1', 'A2', 'A3', 'A4', 'A5']))
+_h421b = _uk421.reco_card(dict(_card421, next_conditions=['A1', 'A2', 'A3']))
+check("카드의 '다음 조건'은 셋을 넘으면 '외 N개'를 적는다 · 셋 이하면 안 적는다 (심기 양방향)",
+      'A3' in _h421a and 'A4' not in _h421a and '외 2개' in _h421a and '외 ' not in _h421b and 'A3' in _h421b)
+
+# ③ 반대 방향 — 추천이거나 기다리면 풀리는 미충족뿐이면 목록을 그대로 둔다 · 지시 갈래가 없는 목록(거부권)도 그대로
+_cn421 = [dict(kind='support', level=98.0, text='98원(20일선) 부근에서 … 1차 분할매수를 검토하세요'),
+          dict(kind='breakout', level=110.0, text='110원(최근 20일 고가)을 … 진입할 수 있습니다')]
+_ck421 = [dict(name='비용 차감 기대값 양수', ok=False, detail='-0.30%'), dict(name='강제 차단 없음', ok=True, detail='없음')]
+_g421r = _vc421.guard_next_conditions(_cn421, True, False, _ck421, reason='x')
+_g421w = _vc421.guard_next_conditions(_cn421, False, True, _ck421, reason='x')
+_vt421 = [dict(kind='veto', level=None, text='유사패턴 표본 6건 — 확률 판단 기준 미달')]
+_g421v = _vc421.guard_next_conditions(_vt421, False, False, _ck421, reason='y')
+check("추천(recommended) · 기다리면 풀림(wait_curable) · 지시 갈래 없는 목록은 글자까지 그대로 (심기 양방향)",
+      _g421r == _cn421 and _g421w == _cn421 and _g421v == _vt421, f"{len(_g421r)}·{len(_g421w)}·{_g421v}")
+_rs421 = '미충족: 비용 차감 기대값 양수 — 기다린다고 풀리는 조건이 아닙니다.'
+_g421b = _vc421.guard_next_conditions(_cn421 + [dict(kind='price', level=None, text='현재가 사실 한 줄')],
+                                      False, False, _ck421, reason=_rs421, headline='오늘의 매수 후보가 아닙니다.')
+check("막을 때 — 사유 → 미충족 줄 → 가격 사실 (라운드 197 의 막힌 칸 모양) · 지시 갈래 0 · 두 번 걸어도 같다",
+      [c['kind'] for c in _g421b] == ['reason', 'gate', 'price'] and _g421b[0]['text'] == _rs421
+      and _g421b[1]['text'] == '비용 차감 기대값 양수 — -0.30%'
+      and _vc421.guard_next_conditions(_g421b, False, False, _ck421, reason=_rs421) == _g421b,
+      str([c['kind'] for c in _g421b]))
+check("사유가 머리 문장에 이미 있으면 앞에 붙이지 않는다 · 바꿀 재료가 없으면 지시 갈래만 뺀다(빈 목록 대신)",
+      [c['kind'] for c in _vc421.guard_next_conditions(_cn421, False, False, _ck421, reason='막힘',
+                                                       headline='… — 막힘')] == ['gate']
+      and _vc421.guard_next_conditions(_cn421 + _vt421, False, False, [], reason='') == _vt421)
+
+# ④ 막힌 칸(라운드 197) 줄 모양은 그대로 — 같은 도우미를 지나도 글자가 안 바뀐다
+_c421p = _vc421.build(dict(_fs421, displayed_fair_value=120.0, fair_value_status='CALIBRATED', fair_overshoot_pct=-16.0),
+                      verdict=_vd421, next_action={'kind': 'pullback', 'headline': '98원 부근에서 지지 확인 후 사세요.',
+                                                   'conditions': _cn421 + [dict(kind='price', level=None, text='P')]})
+_fl421 = [c for c in _c421p['checks'] if not c['ok']]
+check("막힌 칸(pullback) — 미충족 줄은 `이름 — 설명` 그대로 · 가격 사실은 맨 뒤 · 사유는 머리에",
+      _c421p['next_kind'] == 'blocked'
+      and [c['text'] for c in _c421p['next_conditions']]
+      == [f"{c['name']} — {c['detail']}" if c['detail'] else c['name'] for c in _fl421] + ['P']
+      and str(_c421p['exclude_reason']) in _c421p['next_headline'], str(_c421p['next_conditions'])[:160])
+
+# ⑤ 저장된 리포트 core 를 읽는 쪽 — build 와 같은 가름(동결 파일은 안 고친다)
+_old421 = dict(next_conditions=_cn421, recommended=False, failed=['비용 차감 기대값 양수'], checks=_ck421,
+               bucket='눌림목 매수 대기', exclude_reason='눌림을 기다립니다.', next_headline='98원 부근에서 지지 확인 후 사세요.')
+_ro421 = _vc421.next_conditions_of(_old421)
+check("옛 core(wait_curable 없음)는 미충족에서 다시 세고 · 옛 '… 대기' 사유(끝나지 않는 기다림)는 앞에 되풀이하지 않는다",
+      [c['kind'] for c in _ro421] == ['gate'] and '기다립니다' not in str(_ro421)
+      and _vc421.next_conditions_of(dict(_old421, failed=['진입 깊이 현실적'])) == _cn421, str(_ro421))
+check("recommended 가 없는 core 는 판단하지 않고 그대로 · 목록이 없으면 None(옛 경로로)",
+      _vc421.next_conditions_of({'next_conditions': _cn421}) == _cn421
+      and _vc421.next_conditions_of({'recommended': False}) is None)
+check("'… 대기' 칸 이름은 BUCKETS 에서 유도한다(손 목록 아님)",
+      set(_vc421._WAIT_NAMED_BUCKETS) == {b for b in _vc421.BUCKETS if b.endswith('대기')}
+      and len(_vc421._WAIT_NAMED_BUCKETS) >= 6)
+# 읽는 쪽이 '머리 없는 대기 사유 = 옛 규칙'으로 가르는 근거 — 지금 _bucket 이 '… 대기'를 돌려줄 때 사유가 늘 머리로 시작한다
+_vsrc421 = open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read()
+_bk421 = next(_n for _n in _ast421.walk(_ast421.parse(_vsrc421))
+              if isinstance(_n, _ast421.FunctionDef) and _n.name == '_bucket')
+
+
+def _lhs421(e):
+    while isinstance(e, _ast421.BinOp):
+        e = e.left
+    return e
+
+
+_wr421 = [_r for _r in _ast421.walk(_bk421) if isinstance(_r, _ast421.Return)
+          and isinstance(_r.value, _ast421.Tuple) and len(_r.value.elts) == 2
+          and isinstance(_r.value.elts[0], _ast421.Constant) and str(_r.value.elts[0].value).endswith('대기')]
+_bad421 = [_r.lineno for _r in _wr421 if getattr(_lhs421(_r.value.elts[1]), 'id', None) != 'WAIT_ONLY_HEAD']
+check("_bucket 이 '… 대기'를 돌려주는 자리는 전부 사유가 WAIT_ONLY_HEAD 로 시작한다(머리 없는 대기 사유 = 옛 규칙)",
+      not _bad421, str(_bad421), scanned=len(_wr421))
+_seen421, _leak421 = 0, []
+for _p421 in sorted(_glob421.glob(_os.path.join(PROJ, '.portfolio', 'premarket_*.json'))):
+    try:
+        _d421 = _json421.load(open(_p421, encoding='utf-8'))
+    except Exception:                                                # noqa: BLE001
+        continue
+    for _pk421 in (_d421.get('picks') or []):
+        _co421 = _pk421.get('core') or {}
+        if _co421.get('next_conditions') is None or 'recommended' not in _co421:
+            continue
+        _seen421 += 1
+        _wc421 = _co421.get('wait_curable')
+        if _wc421 is None:
+            _wc421 = bool(_co421.get('failed')) and all(f in _vc421.WAIT_CURABLE_CHECKS for f in _co421['failed'])
+        if _co421.get('recommended') or _wc421:
+            continue
+        if any(str(c.get('kind')) in _na421.WAIT_COND_KINDS for c in _vc421.next_conditions_of(_co421)):
+            _leak421.append(_os.path.basename(_p421))
+check("저장된 개장 전 리포트 — 추천 아니고 기다려도 안 풀리는 후보를 같은 가름으로 읽으면 지시 갈래가 0",
+      not _leak421, str(_leak421[:5]), scanned=_seen421)
+_wfn421 = (open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+           .split('def _build_reco_card(', 1)[1].split('\ndef ', 1)[0])
+check("추천 카드가 저장된 core 의 목록을 그 가름으로 읽는다(상세는 build 가 이미 거른다)",
+      '_vc423.next_conditions_of(_core)' in _wfn421 and 'import verdict_core as _vc423' in _wfn421)
+_wsrc421 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_wd421 = [_m for _m in range(len(_wsrc421)) if _wsrc421.startswith('예상 대기 {', _m)]
+check("상세 '다음 조건' 칸의 '예상 대기 N거래일'은 추천이거나 기다려서 풀릴 때만 (같은 술어 · 중앙 판정)",
+      len(_wd421) == 1 and "CORE.get('wait_curable')" in _wsrc421[_wd421[0]:_wd421[0] + 220]
+      and "CORE.get('recommended')" in _wsrc421[_wd421[0]:_wd421[0] + 220], str(len(_wd421)))
+
+# ⑥ 거래량 문장 — 잰 적 없는 인과('지지를 신뢰')를 말하지 않는다 · 배수는 그대로 · 알림 쪽 사본과 같은 값
+_strs421 = {_n.value for _n in _ast421.walk(_ast421.parse(_src421))
+            if isinstance(_n, _ast421.Constant) and isinstance(_n.value, str)}
+_vol421 = [c['text'] for c in _n421['conditions'] if c.get('kind') == 'volume']
+check("거래량 줄이 '지지를 신뢰'를 말하지 않고 배수가 잰 적 없는 규칙이라 적는다 · 배수 1.5·1.2 불변",
+      not any('지지를 신뢰' in s for s in _strs421) and len(_vol421) == 1
+      and '잰 적이 없는 규칙' in _vol421[0] and '1.5' in _vol421[0] and '1.2' in _vol421[0]
+      and (_na421.VOL_HOT, _na421.VOL_CALM) == (1.5, 1.2), str(_vol421)[:120], scanned=len(_strs421))
+check("알림 감시의 거래량·과열 해소 문턱 사본이 next_action 과 같은 값이다(사본이 따로 움직이지 않게)",
+      (_wa421.VOL_CALM, _wa421.COOL_BB, _wa421.COOL_WR) == (_na421.VOL_CALM, _na421.COOL_BB, _na421.COOL_WR))
+
+
+print("=" * 72)
+print("§422 추천이 얼마나 자주 0 이었나 — 날짜마다 마지막 리포트 · 휴장일 제외 · 깊게 본 기록부 · 그 후보를 다 샀다면 (라운드 433)")
+print("=" * 72)
+# 사용자(2026-10-06): *"현재 추천주가 거의 없지 않았어? 괜찮은 거 맞아?"* 화면은 오늘 하루의 0 만 말했다. 셈은 proof 한 곳
+#   (reco_summary · candidate_outcome · reco_line)이 하고, 성적표가 싣고, 스캔 배너·홈 카드가 읽는다(§4). 판정 낱말 없음(§2·§9).
+import proof as _pf422                                               # noqa: E402
+_rep422 = [
+    {'date': '2026-10-05', 'generated_at': '2026-10-05T07:00', 'picks': [
+        {'symbol': '000001.KS', 'core': {'recommended': False, 'expected_return': -0.4,
+                                         'checks': [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': True}]}}]},
+    {'date': '2026-10-05', 'generated_at': '2026-10-05T08:00', 'picks': [          # 같은 날 늦은 판이 이긴다
+        {'symbol': '000002.KS', 'core': {'recommended': False, 'expected_return': 0.05,
+                                         'checks': [{'name': 'A', 'ok': True}, {'name': 'B', 'ok': False}]}},
+        {'symbol': '000003.KS'}]},                                                  # 중앙 판정 없는 옛 행
+    {'date': '2026-10-06', 'generated_at': '2026-10-06T08:00', 'picks': [
+        {'symbol': '000004.KQ', 'core': {'recommended': True, 'expected_return': 0.2, 'checks': [{'name': 'B', 'ok': True}]}}]},
+    {'date': '2026-10-04', 'generated_at': '2026-10-04T08:00', 'picks': [          # 휴장일 — 세지 않는다
+        {'symbol': '000005.KS', 'core': {'recommended': True, 'expected_return': 9.9, 'checks': [{'name': 'A', 'ok': True}]}}]},
+]
+_reg422 = [{'date': '2026-10-05', 'action': 'HOLD'}, {'date': '2026-10-05', 'action': 'ACCUMULATE'},
+           {'date': '2026-10-06', 'action': 'BUY'}, {'date': '2026-10-06', 'action': 'REDUCE'}]
+_r422 = _pf422.reco_summary(_rep422, _reg422, is_off_day=lambda d: d == '2026-10-04')
+check("추천 빈도 — 같은 날은 늦은 판 하나 · 휴장일은 따로 세고 빼며 · 중앙 판정 없는 행은 세지 않고 수만 적는다",
+      _r422 and _r422['days'] == 2 and _r422['off_days'] == 1 and _r422['candidates'] == 2 and _r422['no_core'] == 1
+      and _r422['recommended'] == 1 and _r422['reco_days'] == 1 and _r422['ev_pos'] == 2 and _r422['ev_max'] == 0.2
+      and _r422['top_block'] == 'B' and _r422['top_block_n'] == 1, str(_r422))
+check("깊게 본 기록부 — 엔진의 매수 쪽 판정(BUY·ACCUMULATE)만 센다 · 날짜 수 · 리포트가 없으면 None",
+      _r422['registry_rows'] == 4 and _r422['registry_days'] == 2 and _r422['registry_buy'] == 2
+      and _pf422.ENGINE_BUY_ACTIONS == ('BUY', 'ACCUMULATE') and _pf422.reco_summary([], _reg422) is None, str(_r422))
+_lat422, _off422 = _pf422.latest_by_date(_rep422, lambda d: d == '2026-10-04')
+_keys422 = _pf422.pick_keys(_lat422)
+_cases422 = [dict(ticker='000002.KS', signal_date='2026-10-05', status='success', realized_return=0.04),
+             dict(ticker='000004.KQ', signal_date='2026-10-06', status='failure', realized_return=-0.06),
+             dict(ticker='000001.KS', signal_date='2026-10-05', status='success', realized_return=0.5),   # 이른 판 후보 — 안 셈
+             dict(ticker='000004.KQ', signal_date='2026-10-06', status='pending', realized_return=None)]  # 결과 전 — 안 셈
+_co422 = _pf422.candidate_outcome(_cases422, _keys422, cost=0.41)
+_co422b = _pf422.candidate_outcome(_cases422, _keys422, cost=0.41)
+check("그 후보를 다 샀다면 — 추천 빈도와 같은 후보(날짜마다 마지막 판)만 · 결과가 정해진 것만 · 비용을 뺀다 · 같은 시드면 같은 구간",
+      _co422 and _co422['n'] == 2 and _co422['dates'] == 2 and abs(_co422['mean_net'] - (3.59 - 6.41) / 2) < 1e-9
+      and _co422['ci95'] == _co422b['ci95'] and _co422['ci95'][0] <= _co422['mean_net'] <= _co422['ci95'][1]
+      and set(_keys422) == {('000002', '2026-10-05'), ('000004', '2026-10-06')}, str(_co422))
+_ln422 = _pf422.reco_line({'reco': _r422, 'candidates': _co422})
+_split422 = _pf422.reco_line({'reco': _r422, 'candidates': dict(_co422, mean_net=-0.1, median_net=4.0)})
+check("한 줄 — 수만 적고 판정 낱말이 없다 · 0 을 포함하는지 말한다 · 평균과 중앙의 부호가 갈리면 갈린다고 · 셈이 없으면 None",
+      _ln422 and '후보 2개 중 신규 매수 추천 1개' in _ln422 and '엔진의 매수 쪽 판정 2건' in _ln422 and '0 을 포함' in _ln422
+      and not any(w in _ln422 for w in ('괜찮', '보수적', '자랑', '안전합', '좋은 시스템'))
+      and '부호가 갈립니다' in _split422 and '부호가 갈립니다' not in _ln422 and _pf422.reco_line({}) is None, _ln422)
+_ps422 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
+_wa422 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_i422 = _wa422.find('"**현재 추천주 없음** — 정밀분석한 "')
+check("배선 — 성적표가 셈을 싣고 두 셈이 같은 리포트 묶음을 읽으며 · 스캔 배너가 그 한 줄을 _md_safe 로 · 홈 카드도 같은 함수",
+      'proof.reco_summary(' in _ps422 and 'proof.candidate_outcome(tracker_cases(), proof.pick_keys(' in _ps422
+      and 'reco=reco, candidates=cands' in _ps422 and _i422 > 0
+      and 'st.caption(_md_safe(_rl433))' in _wa422[_i422:_i422 + 2000]
+      and _pf422.home_lines({}, {'reco': _r422, 'candidates': _co422})[1] == _ln422)
+_sc422 = _pf422.load_scorecard() or {}
+_rr422, _cc422 = _sc422.get('reco') or {}, _sc422.get('candidates') or {}
+check("실제 성적표 — 셈이 실려 있고 결과가 정해진 후보 수가 후보 수를 넘지 않는다 · 구간이 평균을 품는다 (값은 잠그지 않는다)",
+      _rr422.get('days', 0) > 0 and _cc422.get('n', 0) <= _rr422.get('candidates', -1)
+      and (not _cc422.get('ci95') or _cc422['ci95'][0] <= _cc422['mean_net'] <= _cc422['ci95'][1]),
+      str({k: _rr422.get(k) for k in ('days', 'candidates', 'recommended')}) + ' · ' + str(_cc422.get('n')))
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -3815,6 +3815,8 @@ def _build_reco_card(p, news_txt, conf_txt):
         hold_note = (_vchk + (' ' + hold_note if hold_note else ''))
 
     _cb = p.get('confidence_band') or {}
+    # 라운드 425 — 모듈 수준 `import verdict_core as _vcore` 는 이 함수보다 아래라 지역 임포트(스캔 목록이 지역 임포트하는 이유와 같다)
+    import verdict_core as _vc423
     return {
         'state': state, 'state_label': label,
         'name': p.get('name'), 'code': p.get('code'),
@@ -3851,8 +3853,10 @@ def _build_reco_card(p, news_txt, conf_txt):
         # 라운드 246 — 조건 목록도 중앙 판정에서 받는다. 막힌 카드에서
         #   next_action 의 buy_now 조건 한 줄만 남으면 **무엇을 기다리는지**
         #   말하지 못한다 (상세 화면이 라운드 197 에 같은 이유로 고쳤다).
+        # 라운드 425 — 동결 리포트의 core 는 고친 규칙 전에 만들어졌을 수 있다. 상세(`build`)와 **같은 가름**으로
+        #   읽는다 — 기다려도 안 풀리는 '추천 아님'에 '1차 분할매수를 검토하세요'를 싣지 않는다(리포트는 안 고친다).
         'next_conditions': [c['text'] for c in
-                            (_core.get('next_conditions')
+                            (_vc423.next_conditions_of(_core)
                              if _core.get('next_conditions') is not None
                              else (_n.get('conditions') or []))],
         # 왜 이 종목인가 (라운드 47) — 근거가 없으면 카드가 이 칸을 생략한다
@@ -4804,6 +4808,16 @@ if st.session_state.get('show_screener', False):
                         # 라운드 423 — 종전 꼬리 '무리한 신규 매수보다 현금 유지가 우선' 은 잰 적 없는 권고였다
                         #   (라운드 422 가 홈 한 줄에서 걷어낸 것과 같은 모양) — 사실만 적는다.
                         "없습니다. 문턱을 낮춰 후보를 만들지 않습니다.")
+                    # 라운드 433 — 사용자: *"현재 추천주가 거의 없지 않았어? 괜찮은 거 맞아?"* 이 줄은 오늘 하루의 0 만
+                    #   말했다. 얼마나 자주 0 이었는지 · 정밀분석을 넓혀도 0 인지 · 그 후보를 다 샀다면 어땠는지를 PROOF
+                    #   성적표(평일 장 마감 뒤 이 PC 작업)에서 읽는다 — 수는 `proof.reco_line` 한 곳이 만든다(§4).
+                    try:
+                        import proof as _pf433
+                        _rl433 = _pf433.reco_line(_pf433.load_scorecard())
+                        if _rl433:
+                            st.caption(_md_safe(_rl433))
+                    except Exception as _ex433:                # noqa: BLE001
+                        st.caption(f"추천 빈도 셈을 읽지 못했습니다 ({type(_ex433).__name__}).")
                 if block_counter:
                     top_blocks = block_counter.most_common(5)
                     st.markdown(
@@ -4852,7 +4866,9 @@ if st.session_state.get('show_screener', False):
                         _entry_badge = "진입후보 " if r.get('entry_candidate') else ""
                         if st.button(f"{_entry_badge}{r['name']}", key=f"btn_{r['symbol']}_{i}",
                                      width='stretch',
-                                     help=("진입 후보 — 적정가 이하 & 유사패턴 평균 순수익 양수. "
+                                     # 라운드 424 — 이 순수익은 유사패턴 평균에서 0.3% 를 뺀 값이다(엔진 상수) — 비용을 이름 옆에
+                                     help=(f"진입 후보 — 적정가 이하 & 유사패턴 평균 순수익(비용 "
+                                           f"{q_engine._PATH_YIELD_COST_PCT:g}% 차감) 양수. "
                                            "점수대별 실측 적중률은 종합 결론의 "
                                            "'가상 백테스트' 표기를 보세요."
                                            if r.get('entry_candidate') else None)):
@@ -7274,8 +7290,16 @@ else:
             _c159_when = (f"{str(_c159.get('made'))[:10]} 실측 · 당시 원장 "
                           f"{int(_c159.get('ledger_rows') or 0):,}건 전수")
             _c159_be = _c159.get('breakeven') or {}
-            _c159_verdict = (f"블라인드 적중 {float(_c159_be.get('blind_hit_pct')):.1f}% "
-                             f"vs 본전 {float(_c159_be.get('need_hit_pct')):.1f}%"
+            # 라운드 424 — 이 산출물의 '블라인드 적중'은 원장 `success` 칸을 센 값이라 **결판 안 난 케이스도 진 것으로**
+            #   들어가 있다(`scripts/census_r159.py` 의 stat · 원장은 미결도 False 로 적는다). 본전(목표/손절 비로 낸
+            #   값)은 결판 난 케이스를 가정하므로 둘을 그대로 견주면 차이가 실제보다 크다. 이 산출물은 판정한 날 그대로
+            #   잠겨 있어(R107 · 회귀) 다시 재지 않고 **분모를 적고**, 분모와 무관한 같은 산출물의 비용 뺀 평균을 곁에 둔다.
+            _c159_ev = ((_c159.get('by_split') or {}).get('blind') or {}).get('ev_net')
+            _c159_cost = _c159.get('cost_pct')
+            _c159_verdict = (f"블라인드 적중 {float(_c159_be.get('blind_hit_pct')):.1f}%(결판 안 난 케이스도 진 것으로 센 값 — "
+                             f"결판 난 것만 세면 더 높습니다) vs 본전 {float(_c159_be.get('need_hit_pct')):.1f}%"
+                             + (f" · 비용 {float(_c159_cost):g}% 뺀 평균 {float(_c159_ev):+.2f}%"
+                                if (_c159_ev is not None and _c159_cost is not None) else "")
                              if _c159_be.get('blind_hit_pct') is not None
                              and _c159_be.get('need_hit_pct') is not None
                              else "판정 수치는 산출물에 없음")
@@ -7576,8 +7600,9 @@ if _home_cal.get('total_cases'):
                     f"종목이 얼마나 흔들리느냐에 따라 성적이 다릅니다."
                     f"</p>", theme=_theme, accent='brand')
                 _uk.spacer(12)
+            # 라운드 424 — 이 표의 적중은 결판 안 난 케이스도 실패로 셌다(위 타일은 결판 난 것만) — 분모를 이름 옆에(R233).
             _uk.rows(_rows_rg, theme=_theme,
-                     title='시장 국면별 성적 (58점+ 신호) — 지수 방향 × 종목 변동성')
+                     title=f'시장 국면별 성적 (58점+ 신호) — 지수 방향 × 종목 변동성 · {_tv421.FROZEN_REGIME_DENOM}')
             # 라운드 421 — 아래 '격차가 줄었다'는 이 표를 잰 작은 표본의 수다. 바로 위 타일은 오늘 원장의 격차를 보여
             #   주므로 어느 표본의 말인지 적는다(표본 수는 산출물에서 읽는다).
             _fv421, _fb421 = _tv421.frozen_regime_n(_rb, 'valid'), _tv421.frozen_regime_n(_rb, 'blind')
@@ -7638,8 +7663,11 @@ if _home_cal.get('total_cases'):
                         f"**{_wm['days']}일** — 위 표보다 나중에 더 큰 원장으로 센 수라 "
                         f"표의 n 과 다릅니다). 표의 n 을 독립 표본 수로 "
                         f"읽으면 근거를 실제보다 크게 봅니다. ")
+            # 라운드 424 — 이 표의 적중률이 무엇을 셌는지(분모)를 적는다. 다시 재지 않는 이유는 바로 뒤 문장 그대로다.
             _uk.note(
                 _prov + _days_line
+                + f"이 표의 적중률은 **20봉 안에 목표·손절 어느 쪽에도 안 닿은 케이스도 진 것으로** 센 값입니다 — "
+                  f"위 타일과 모델 성적 표는 결판 난 것만 셉니다. "
                 + f"이 표는 국면 라우팅의 전방 재평가일 "
                   f"**{_fe.eval_date_ko()}** 까지 다시 재지 않습니다 — "
                   f"지금 다시 재면 2026-08-09 부터 쌓은 전방 표본이 "
@@ -7681,7 +7709,7 @@ if _home_cal.get('total_cases'):
         if _rows_rg:
             _uk.spacer(20)
             _uk.rows(_rows_rg, theme=_theme,
-                     title='시장 국면별 성적 (58점+ 신호) — 같은 모델도 장세에 따라 다릅니다')
+                     title=f'시장 국면별 성적 (58점+ 신호) — 같은 모델도 장세에 따라 다릅니다 · {_tv421.FROZEN_REGIME_DENOM}')
             _uk.note(
                 "주황색은 표본 30건 미만이라 성적으로 인정하지 않는 구간이며, "
                 "하나의 숫자 대신 **95% 신뢰구간**을 보여 드립니다. 예를 들어 "
@@ -9071,8 +9099,11 @@ if _na_head:
         + (f"<p style='margin:6px 0 0 0; font-size:12px; color:#9DAABC;'>"
            f"괴리 {_NA['gap_pct']:+.1f}% · [{_NA['gap_band']}] · "
            f"일 변동폭 {_NA['atr_pct']}%"
+           # 라운드 425 — '예상 대기 N거래일'은 매수가까지 기다리는 시간이다. 추천이 아니고 기다려도 안 풀리면
+           #   (목록이 지시 갈래를 걷은 바로 그 술어 · 중앙 판정) 기다림을 약속하지 않는다 — 거리·변동폭 사실은 남긴다.
            + (f" · 예상 대기 {_NA['wait_days']}거래일"
-              if _NA.get('wait_days') else '')
+              if _NA.get('wait_days') and (not CORE or CORE.get('recommended')
+                                          or CORE.get('wait_curable')) else '')
            + "</p>" if _NA.get('gap_band') else '')
         + "</div>")
 
@@ -9303,9 +9334,13 @@ if (_cb_banner.get('hit_rate') is not None
     #   아니라 **원장 전체에서 같은 점수대**였던 판단의 적중률이다(`calibration_band` · 모든 종목). 닮은 과거
     #   (자기유사 패턴)는 따로 있고 표본이 훨씬 작다 — 이름이 같으면 큰 표본의 수가 작은 표본의 말을 빌린다.
     #   Wilson 하한의 약어는 사용자가 모르는 말이라 뜻으로 적는다. 값 불변.
+    # 라운드 424 — 이 '점수대'는 집계표의 띠(55~59 처럼 5점)다. 계층 보정 확률의 점수대(50~57 …)와 다르므로 범위를 적는다.
     _prob_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC;'>"
-        f"같은 점수대 과거 판단이 맞은 비율 (원장 전 종목)</p>"
+        f"같은 점수대 과거 판단이 맞은 비율 (원장 전 종목)"
+        + (f" · {_cb_banner['lo']}~{_cb_banner['hi']}점"
+           if (_cb_banner.get('lo') is not None and _cb_banner.get('hi') is not None) else "")
+        + "</p>"
         f"<p style='margin:0; font-size:28px; font-weight:700; "
         f"color:#F3F6FA; line-height:1.1;'>{_cb_banner['hit_rate']:.0f}%"
         f"<span style='font-size:13px; color:#9DAABC;'> "
@@ -9653,11 +9688,19 @@ try:
 except Exception:                                              # noqa: BLE001
     _bltag405 = None
 if _blend59:
+    # 라운드 424 — 이 확률의 점수대는 **계층 표의 띠**(50~57 · 58~64 …)라 바로 앞 '이 점수대'(집계표 · 55~59 처럼 5점
+    #   띠)와 다를 수 있다. 같은 이름이 두 띠를 가리키므로 범위를 적고, 다르면 다르다고 적는다(R233).
+    _bl423 = _blend59.get('band_label')
+    _cbl423 = (f"{_cb['lo']}~{_cb['hi']}점" if (_cb and _cb.get('lo') is not None and _cb.get('hi') is not None)
+               else None)
     _bits_prob.append(
         f"계층 보정 확률 약 {_blend59['p'] * 100:.0f}% "
         f"[{_blend59['wilson_low'] * 100:.0f}~"
         f"{_blend59['wilson_high'] * 100:.0f}%]"
-        + (f" · {_bltag405}" if _bltag405 else ''))
+        + (f" · {_bltag405}" if _bltag405 else '')
+        + (f" · 이 확률의 점수대는 {_bl423}" + (f"(가상 백테스트의 점수대 {_cbl423}과 띠 경계가 다릅니다)"
+                                            if (_cbl423 and _cbl423 != _bl423) else '')
+           if _bl423 else ''))
 
 # ⚠️ 엔진 인스턴스 속성은 스냅샷이 캐시에서 오면 비어 있다 — 파일을 직접 읽는다
 _calib_all = _load_calibration_meta()
@@ -9717,6 +9760,9 @@ _sum_conf = four_scores.get('analysis_confidence')
 _sum_band = (f"{_cb['hit_rate']:.0f}% (n={_cb['n']})"
              if _cb and _cb.get('hit_rate') is not None and _cb.get('n', 0) >= 5
              else "표본 부족")
+# 라운드 424 — 패널의 두 줄('계층 보정 확률' · '이 점수대 원실측')이 서로 다른 띠의 점수대를 쓴다 — 범위를 적는다(R233).
+_sum_rng423 = (f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>점수대 {_cb['lo']}~{_cb['hi']}점</span>"
+               if (_cb and _cb.get('lo') is not None and _cb.get('hi') is not None) else '')
 st.markdown(f"""
 <style>
 .qside {{ position: fixed; right: 22px; top: 120px; width: 248px; z-index: 90;
@@ -9755,8 +9801,8 @@ st.markdown(f"""
     <tr><td><a href="#nav-basis">1차 목표 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_target'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td><a href="#nav-basis">손절 · 신규</a></td><td>{fmt_num((CORE or {}).get('new_stop'), ',.0f', unit_str, na='산출 불가')}</td></tr>
     <tr><td><a href="#nav-basis">분석 신뢰도</a></td><td>{fmt_num(_sum_conf, '.0f', '점', na='미산출')}</td></tr>
-    <tr><td><a href="#nav-perf">계층 보정 확률</a></td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}{(f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>{_uk._esc(_bltag405)}</span>" if _bltag405 else '')}</td></tr>
-    <tr><td><a href="#nav-perf">이 점수대 원실측</a></td><td>{_sum_band}</td></tr>
+    <tr><td><a href="#nav-perf">계층 보정 확률</a></td><td>{(f"약 {_blend59['p'] * 100:.0f}%" if _blend59 else '미산출')}{(f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>점수대 {_uk._esc(_blend59.get('band_label'))}</span>" if (_blend59 and _blend59.get('band_label')) else '')}{(f"<br><span style='font-size:12px; color:{_TOK['tx2']};'>{_uk._esc(_bltag405)}</span>" if _bltag405 else '')}</td></tr>
+    <tr><td><a href="#nav-perf">이 점수대 원실측</a></td><td>{_sum_band}{_sum_rng423}</td></tr>
   </table>
   <p style='margin:8px 0 0 0;'><a href='#nav-ask' class='gn-ask-open-link'
   style='font-size:12px;
@@ -10369,7 +10415,9 @@ if _blend59:
         f"계층 보정 목표 확률(채택된 보정 · 배너와 같은 값)은 **약 "
         f"{_blend59['p'] * 100:.0f}%** 입니다 — 위 세 칸과 **다른 추정치**"
         f"라 그 분할과 합산되지 않습니다 (근거 {_blend59['layers']}층 · "
-        f"최협층 n {_blend59['n_narrow']:,} · 구간 "
+        # 라운드 424 — 이 확률의 점수대는 계층 표의 띠다(가상 백테스트의 5점 띠와 다를 수 있다)
+        + (f"점수대 {_blend59['band_label']} · " if _blend59.get('band_label') else "")
+        + f"최협층 n {_blend59['n_narrow']:,} · 구간 "
         f"{_blend59['wilson_low'] * 100:.0f}~"
         f"{_blend59['wilson_high'] * 100:.0f}%)."))
 # ⚠️ 라운드 98 — 화면 아래쪽 '목표별 도달 확률' 표(+2%·+3%···)와 이 타일이
@@ -10415,12 +10463,22 @@ try:
     # L5(점수대 전체)는 화면 위 '이 점수대의 실제 성적'(calibration 출처)과
     # 같은 개념이라 다른 집계로 또 보여주면 §4 위반이다 — 좁은 층만 병기
     _lay58 = [r for r in _lay58 if r.get('narrow', 0) > 0]
+    # ⚠️ 라운드 424 — 이 표가 **한 번도 안 그려지고 있었다.** '이 종목 자체 과거 신호' 층(SELF · 라운드 61)은 EV 가
+    #   없어(None) `{None:+.2f}` 가 TypeError 를 냈고, 아래 `except: pass` 가 그것을 삼켜 표와 '이 종목 과거 신호
+    #   실체' 펼침이 통째로 빠졌다(전방 기록부 64종목 전부 SELF 가 있어 64/64 실패 · 2026-10-03 실측). EV 가 없는 층은
+    #   EV 칸 없이 그린다 — 값을 지어내지 않는다(§3). 그리고 EV 가 **어느 비용으로 뺀 값인지** 적는다(R255 · 0.36 은
+    #   이 표를 만든 생성기의 수 · `case_layers.layer_cost_pct` 한 곳).
+    _lcost423 = _cl58.layer_cost_pct()
+    # 집계 날짜(ISO 앞 10자 · 문장을 자르는 것이 아니다 — 화면 호출 밖에서 만든다)
+    _lmade423 = str((_cl58._doc() or {}).get('made') or '')[:10]
     if _lay58:
         _lrows58 = [(
             r['label'],
-            f"적중 {r['hit']}% (하한 {r['wilson']}) · EV {r['ev']:+.2f} · "
-            f"n {r['n']:,}",
-            ('pos' if r['ev'] > 0 else 'neg')) for r in _lay58]
+            f"적중 {r['hit']}% (하한 {r['wilson']})"
+            + (f" · EV {r['ev']:+.2f}%" if isinstance(r.get('ev'), (int, float)) else "")
+            + f" · n {r['n']:,}",
+            ('' if not isinstance(r.get('ev'), (int, float)) else 'pos' if r['ev'] > 0 else 'neg'))
+            for r in _lay58]
         _uk.rows(_lrows58, theme=_theme,
                  title='더 넓은 계층의 실측 — 같은 조건이었던 과거')
         st.caption(_md_safe(
@@ -10428,7 +10486,12 @@ try:
             "초근접 사례가 부족해도 판단 재료가 없는 것이 아니라, 좁은 "
             "버킷만 비어 있는 것입니다 — 좁은 층일수록 지금과 닮았고, "
             "넓은 층일수록 표본이 많습니다. 유사도 문턱을 낮춰 표본을 "
-            "채우는 방식은 쓰지 않습니다."))
+            "채우는 방식은 쓰지 않습니다."
+            # 라운드 424 — EV 의 비용과 표의 시점을 같은 줄에 적는다(같은 화면의 '비용 차감'이 0.30·0.41·0.55 로 갈라져 있다)
+            + f" EV 는 개발 구간(학습·검증)의 평균 수익에서 왕복 비용 {_lcost423:g}% 를 뺀 값입니다"
+            + (f"({_lmade423} 집계)" if _lmade423 else "")
+            + " — 판정의 '비용 차감 기대값'(운영 비용으로 뺀 다른 수)과 그대로 견주지 마세요."
+            + " 층 이름의 점수대는 이 계층 표의 띠(0~39 · 40~49 · 50~57 · 58~64 · 65점 이상)입니다."))
         if _note58:
             st.caption(_md_safe(f"· {_note58}"))
     # 이 종목 자체 과거 신호의 실체 (라운드 61) — "그 사례들이 뭔데?"에
@@ -10447,7 +10510,11 @@ try:
             st.caption("개발 구간 원장 실측 그대로 — 미래 신호의 보장이 "
                        "아니며, 표본이 작을수록 우연에 가깝습니다.")
 except Exception:                                              # noqa: BLE001
-    pass                          # 계층 표 하나 때문에 화면이 죽지 않는다
+    # 계층 표 하나 때문에 화면이 죽지 않는다 — 다만 **조용히** 빠지지 않게 사유를 남긴다(라운드 424 · 이 자리의
+    #   `pass` 가 SELF 층의 TypeError 를 두 달 가까이 삼켰다).
+    import sys as _sys423
+    import traceback as _tb423
+    print('[계층 실측 표 실패 — 나머지는 계속 그린다]\n' + _tb423.format_exc(), file=_sys423.stderr)
 _uk.spacer(12)
 
 _rows_g = [
@@ -11476,6 +11543,10 @@ if _perf_cal.get('total_cases'):
             st.markdown("**① 시간 분할 성과** — 검증·블라인드가 실력입니다")
             st.dataframe(pd.DataFrame(_rows_sp), width='stretch',
                          hide_index=True)
+            # 라운드 424 — 이 칸의 표들은 **판정 완료만** 센다(집계 랩의 `decided`). 원장은 결판 안 난 케이스도 '실패'
+            #   칸에 적어 두므로, 원장을 그대로 센 다른 수(예: 고정 국면 표)와 분모가 다르다 — 분모를 적는다(R233).
+            st.caption("이 칸의 적중률(①·②·②'·③)은 20봉 안에 목표·손절 중 하나에 닿은 케이스만 셉니다 — "
+                       "어느 쪽에도 안 닿고 기간이 끝난 케이스는 분모에서 뺍니다(진 것으로 세지 않습니다).")
             try:
                 import verdict_core as _vc386
                 if _calib_cost386 is None:
@@ -11512,15 +11583,28 @@ if _perf_cal.get('total_cases'):
         # 값은 원장(케이스 스터디와 같은 로더)에서 그 자리에서 센다 (§4).
         # 표본 하한 30 과 Wilson 하한은 옆 표 ②·③ 과 regime_policy 의 것을
         # 그대로 쓴다 — 새 숫자 없음 (§2-6).
+        # ⚠️ 라운드 424 — 셋을 고쳤다(값·문턱·판정 불변 · 표시 전용 그대로).
+        #   ① 적중을 `success` 칸으로 셌는데 원장은 미결(20봉 안에 어느 선에도 안 닿은 케이스)도 False 로 적어
+        #      **결판 안 난 것이 진 것으로** 들어갔다 — 바로 위 ②는 판정 완료만 센다. 실측(2026-10-03 · 통계 행):
+        #      58점+ 블라인드 52.05% → 57.09% · 검증 62.58% → 65.84%. 규칙은 `ledger_view.DECIDED_OUTCOMES` 한 곳.
+        #   ② 제목이 '같은 신호'였는데 ②는 60점+, 이 표는 58점+ 다(띠가 다르다 · R233 — 단위를 이름 옆에).
+        #   ③ 캡션이 *"괴리의 상당 부분이 국면 조성"* 이라 단정했는데, 블라인드의 국면별 적중을 검증의 국면 구성으로
+        #      다시 섞어 보니 설명되는 몫이 0.8%p · 같은 국면 안에 남는 몫이 7.9%p 였다(라운드 216 의 표에서도 같은
+        #      국면끼리 5.8·11.2%p 가 남아 있었다). 단정 대신 그 셈을 그 자리에서 낸다 — 문턱 없음 · 표의 하한 30 재사용.
         try:
             import regime_policy as _rp216
+            import ledger_view as _lv423
             _ldf216 = _load_case_ledger()
-            if _ldf216 is not None and {'score', 'regime', 'split', 'success'} <= set(_ldf216.columns):
+            if _ldf216 is not None and {'score', 'regime', 'split', 'success', 'outcome'} <= set(_ldf216.columns):
                 # 라운드 389 — 적중률은 진입가 축척이 어긋난 행(지어낸 승리·패배 · R364)을 빼고 센다.
                 #   목록은 ledger_view 한 곳(§4). 겹침 없는 비율(아래)은 원장 전체 행수 그대로다.
                 _ok389 = _scale_ok_mask389(_ldf216)
-                _bz216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce') >= 58)
-                                 & _ldf216['success'].notna() & _ok389]
+                # 라운드 424 — `_g216` 은 채점된 58점+ 전부(하락장 **날짜** 수를 종전 정의 그대로 센다 · 사전등록 R216 의
+                #   R1 이 그 수를 쓴다), `_bz216` 은 그중 판정 완료(적중의 분모).
+                _dec423 = _ldf216['outcome'].isin(_lv423.DECIDED_OUTCOMES)
+                _g216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce') >= 58)
+                                & _ldf216['success'].notna() & _ok389]
+                _bz216 = _g216[_dec423.reindex(_g216.index, fill_value=False)]
                 _rows216 = []
                 _cell216 = {}
                 for _rg216 in ('BULL', 'SIDEWAYS', 'BEAR', '전체'):
@@ -11532,7 +11616,7 @@ if _perf_cal.get('total_cases'):
                         _s = _sub[_sub['split'] == _sp216]
                         _n = int(len(_s))
                         if _n >= 30:
-                            _h = float(_s['success'].astype(bool).mean() * 100.0)
+                            _h = float((_s['outcome'] == 'TARGET').mean() * 100.0)
                             _row216[_lab216] = (f"{_h:.1f}% (n {_n:,} · 하한 "
                                                 f"{_rp216.wilson_low(_h, _n):.1f})")
                             _hv[_sp216] = _h
@@ -11542,22 +11626,49 @@ if _perf_cal.get('total_cases'):
                     _row216['검증−블라인드'] = (f"{_hv['valid'] - _hv['blind']:+.1f}%p"
                                            if ('valid' in _hv and 'blind' in _hv) else '—')
                     _rows216.append(_row216)
-                st.markdown("**②' 같은 신호를 국면 × 구간으로** — '연습 vs 실전' 괴리의 정체")
+                # 라운드 424 — 제목이 '같은 신호'라 했는데 ②는 60점+, 이 표는 58점+ 다. 띠와 분모를 이름 옆에 적는다(R233).
+                st.markdown("**②' 58점 이상 신호를 국면 × 구간으로** — 위 ②(60점 이상)보다 넓은 띠입니다 · "
+                            "적중률은 ②와 같이 목표·손절 중 하나에 닿은 케이스만 셉니다")
                 st.dataframe(pd.DataFrame(_rows216), width='stretch', hide_index=True)
                 # 하락장 블라인드에서 점수가 거꾸로 가는지 — 그 자리에서 센다
                 _bb216 = _bz216[(_bz216['regime'] == 'BEAR') & (_bz216['split'] == 'blind')]
                 _lo216 = _ldf216[(pd.to_numeric(_ldf216['score'], errors='coerce').between(40, 49))
                                  & (_ldf216['regime'] == 'BEAR') & (_ldf216['split'] == 'blind')
-                                 & _ldf216['success'].notna() & _ok389]
+                                 & _ldf216['success'].notna() & _ok389 & _dec423]
                 _hi216 = _bb216[pd.to_numeric(_bb216['score'], errors='coerce').between(60, 64)]
                 _inv216 = ''
                 if len(_lo216) >= 30 and len(_hi216) >= 30:
                     # ⚠️ '40~49' 처럼 물결표가 한 문장에 **둘** 있으면 GFM 이 취소선
                     #   짝으로 읽어 "4049점" 으로 그렸다(실측). 이스케이프한다.
-                    _inv216 = (f" 하락장 블라인드에서는 점수가 거꾸로 갑니다 — 40\\~49점 "
-                               f"{_lo216['success'].astype(bool).mean() * 100:.0f}%(n {len(_lo216):,}) · "
-                               f"60\\~64점 {_hi216['success'].astype(bool).mean() * 100:.0f}%(n {len(_hi216):,}).")
+                    # 라운드 424 — '거꾸로 갑니다'를 늘 붙였다(두 수의 순서와 무관하게) — 수가 그럴 때만 붙인다.
+                    _loh423 = float((_lo216['outcome'] == 'TARGET').mean() * 100)
+                    _hih423 = float((_hi216['outcome'] == 'TARGET').mean() * 100)
+                    _inv216 = (f" 하락장 블라인드에서 40\\~49점 {_loh423:.0f}%(n {len(_lo216):,}) · "
+                               f"60\\~64점 {_hih423:.0f}%(n {len(_hi216):,})"
+                               + (" — 점수가 거꾸로 갑니다." if _loh423 > _hih423 else "."))
                 _vb216 = _cell216.get(('BEAR', 'valid'), (0, None))[0]
+                # 라운드 424 — 국면 구성이 검증−블라인드 차이를 얼마나 설명하는가를 **그 자리에서** 센다. 블라인드의
+                #   국면별 적중을 검증 구간의 국면 구성(케이스 비중)으로 다시 섞는다(직접 표준화 · 문턱 없음). 블라인드
+                #   국면 칸이 셋 다 표의 하한(30)을 넘을 때만 낸다 — 못 세면 이 문장만 빠진다(§3).
+                _mix423 = ''
+                _RG423 = (('BULL', '상승'), ('SIDEWAYS', '옆걸음'), ('BEAR', '하락'))
+                _nv423 = sum(_cell216.get((_r, 'valid'), (0, None))[0] for _r, _k in _RG423)
+                _nb423 = sum(_cell216.get((_r, 'blind'), (0, None))[0] for _r, _k in _RG423)
+                _hva423 = _cell216.get(('전체', 'valid'), (0, None))[1]
+                _hba423 = _cell216.get(('전체', 'blind'), (0, None))[1]
+                if (_nv423 and _nb423 and _hva423 is not None and _hba423 is not None
+                        and all(_cell216.get((_r, 'blind'), (0, None))[0] >= 30 for _r, _k in _RG423)):
+                    _std423 = sum(_cell216[(_r, 'blind')][1] * _cell216.get((_r, 'valid'), (0, None))[0] / _nv423
+                                  for _r, _k in _RG423)
+                    _mix423 = (
+                        "국면 구성은 " + " · ".join(
+                            f"{_k} {_cell216.get((_r, 'valid'), (0, None))[0] / _nv423 * 100:.0f}"
+                            f"→{_cell216.get((_r, 'blind'), (0, None))[0] / _nb423 * 100:.0f}%"
+                            for _r, _k in _RG423)
+                        + "(검증→블라인드)로 블라인드에 하락장이 훨씬 많습니다. 그런데 블라인드의 국면별 적중을 "
+                        f"검증의 국면 구성으로 다시 섞어도 **{_std423:.1f}%** 라, 검증({_hva423:.1f}%)과의 차이 "
+                        f"{_hva423 - _hba423:+.1f}%p 중 국면 구성으로 설명되는 몫은 **{_std423 - _hba423:+.1f}%p** "
+                        f"이고 **{_hva423 - _std423:+.1f}%p** 는 같은 국면 안에서도 남습니다.")
                 # 하락장 **날짜** 수 — 그 자리에서 센다 (손 숫자는 낡는다 · §9).
                 # ⚠️ '에피소드'(BEAR→회복 전환)로 세지 않는다 — 원장의 regime 은
                 #   KOSPI/KOSDAQ 행마다 따로 판정돼 같은 날 다를 수 있어 "하루 한
@@ -11565,7 +11676,7 @@ if _perf_cal.get('total_cases'):
                 #   regime 으로 세는 날짜 수는 잘 정의된다 — 사전등록 R1 도 이 수를 쓴다.
                 _bdays216 = {}
                 for _sp216c in ('valid', 'blind'):
-                    _bd = _bz216[(_bz216['regime'] == 'BEAR') & (_bz216['split'] == _sp216c)]
+                    _bd = _g216[(_g216['regime'] == 'BEAR') & (_g216['split'] == _sp216c)]
                     _bdays216[_sp216c] = int(_bd['date'].astype(str).str[:10].nunique())
                 _eps_txt216 = (f"검증·블라인드에서 매수권 신호가 난 하락장 날짜가 각 "
                                f"{_bdays216['valid']}·{_bdays216['blind']}일뿐이라")
@@ -11581,11 +11692,12 @@ if _perf_cal.get('total_cases'):
                     print('[모델 성적 겹침 없는 비율 셈 실패 — 캡션은 수 없이 그린다]')
                     _tb217b.print_exc()
                     _spshare216 = "이번에 못 셌습니다(사유는 로그)"
+                # 라운드 424 — *"괴리의 상당 부분이 국면 조성"* 단정을 걷고 그 자리에서 센 몫(`_mix423`)을 낸다.
                 st.caption(
                     f"검증 구간의 하락장 매수권 케이스는 **{_vb216:,}건**뿐이라 '연습' 적중률은 "
-                    f"하락장을 거의 안 본 값입니다. 블라인드는 하락장 비중이 커서 낮게 나옵니다 — "
-                    f"괴리의 상당 부분이 **국면 조성**입니다.{_inv216} 엔진의 실패는 하락장에 "
-                    f"몰려 있고, 그 자리를 겨눈 연구(반등 확인 · 사전등록됨)는 {_eps_txt216} "
+                    f"하락장을 거의 안 본 값입니다. "
+                    + _mix423
+                    + f"{_inv216} 하락장을 겨눈 연구(반등 확인 · 사전등록됨)는 {_eps_txt216} "
                     f"**아직 판정할 수 없습니다** — 하한(30)을 내리지 않습니다. 이 표는 규칙을 "
                     f"바꾸지 않는 표시 전용입니다. 그리고 표의 n 은 **케이스 수**이지 독립 표본 "
                     f"수가 아닙니다 — 같은 종목의 기준일이 25봉보다 촘촘히 겹쳐 있어 "
@@ -13228,11 +13340,16 @@ with tab_val:
                 # 라운드 409 — 비용후 평균은 **수익률 평균**이라 단위가 % 다(%p 는 두 비율의 차이에 쓴다). 그리고 n 은
                 #   **행 수**다 — 같은 종목의 이웃 기준일이 결과 창 안에서 겹쳐 독립 사례 수보다 크다(라운드 217 ·
                 #   외부 검토 2026-10-01: *"11,591건을 독립 표본으로 읽으면 안 된다"*). 새로 센 수는 없다.
+                # 라운드 424 — '비용후 평균'이 어느 비용으로 뺀 값인지 적는다. 같은 행을 종목 판단 칸(업황 줄)은 라운드 391
+                #   부터 비용과 함께 적는데 여기만 이름이 없었다. 칸이 없는 옛 산출물이면 비용을 붙이지 않는다(§3).
+                _spc423 = _sp.get('cost_pct')
                 _sp_head = (f"표본 {_sp['n']}건뿐이라 판단 근거로 쓰기 이릅니다"
                             if _sp.get('small') else
                             f"적중 {_sp['hit']:.1f}% (Wilson 하한 "
-                            f"{_sp['wilson_low']:.1f}) · 비용후 평균 "
-                            f"{_sp['ev']:+.3f}%")
+                            f"{_sp['wilson_low']:.1f}) · "
+                            + (f"왕복 비용 {float(_spc423):g}% 뺀 평균 " if isinstance(_spc423, (int, float))
+                               else "비용후 평균 ")
+                            + f"{_sp['ev']:+.3f}%")
                 st.caption(_md_safe(
                     f"이 업종({_sp['sector']}) 매수권 신호의 과거 실측 — "
                     f"{_sp_head} · 행 {_sp['n']:,}건(같은 종목의 이웃 기준일이 겹쳐 독립 사례 수는 이보다 적습니다) · "

@@ -18,6 +18,33 @@ import os
 
 _CACHE = {'loaded': False, 'doc': None}
 
+#: 라운드 424 — 계층 실측 표(`data/case_layers.json`)의 'EV' 가 뺀 왕복 비용(%). 생성기(`scripts/gen_case_layers.py`)가
+#:   처음(2026-08-09 · 라운드 58)부터 0.36 으로 뺐고(git 이력 · 산출물 `basis` 가 같은 수를 적는다) 이름이 없었다 —
+#:   같은 화면의 '비용 차감'이 0.30(유사패턴 평균)·0.41(운영)·0.55(집계표)로 갈라져 있어 **어느 비용인지** 적는다(R255·R386).
+#:   수는 바꾸지 않는다(바꾸면 표의 EV 가 전부 움직인다). 생성기가 이 한 곳을 읽고 산출물에 `cost_pct` 로 싣는다 —
+#:   칸이 없는 옛 산출물은 그것을 만든 생성기의 이 상수로 읽는다(라운드 386 의 집계표와 같은 규칙).
+LAYER_COST_PCT = 0.36
+
+
+def layer_cost_pct(doc=None):
+    """계층 실측 표의 EV 가 뺀 비용(%) — 산출물의 `cost_pct` 칸, 없으면 그 표를 만든 생성기의 상수."""
+    d = doc if doc is not None else (_doc() or {})
+    c = (d or {}).get('cost_pct')
+    return float(c) if isinstance(c, (int, float)) else LAYER_COST_PCT
+
+
+def band_label(b):
+    """계층 점수대 열쇠('50-57') → 화면 이름('50~57점') (라운드 424).
+
+    한 화면에 '점수대'가 둘이다 — 집계표(calibration · 55~59 · 60~64 처럼 5점 띠)와 이 계층 표(0~39 · 40~49 ·
+    50~57 · 58~64 · 65+). 같은 57점이 한쪽에선 55~59점, 다른 쪽에선 50~57점에 든다. 어느 띠인지 **범위로** 적는다.
+    못 읽으면 None."""
+    try:
+        lo, hi = (int(x) for x in str(b).split('-'))
+    except (TypeError, ValueError):
+        return None
+    return f'{lo}점 이상' if hi >= 100 else f'{lo}~{hi}점'
+
 
 def _doc():
     # 라운드 402 — 깃발을 읽기 **전에** 올려 동시에 부른 두 번째 세션이 None 을 받았다. 한 곳이 읽는다.
@@ -72,7 +99,8 @@ def blended_prob(score, sector=None, regime_code=None, fs=None):
     12.1 vs 35.4%p. 유사사례 확률이 있는 행 부분집합에서도 우위.
 
     반환: {'p': 0~1, 'layers': 사용 층 수, 'n_narrow': 가장 좁은 층 n,
-           'wilson_low','wilson_high': 그 n 기준 구간, 'label': 근거 요약}
+           'wilson_low','wilson_high': 그 n 기준 구간, 'label': 근거 요약,
+           'band': 계층 점수대 열쇠('50-57'), 'band_label': 화면 이름('50~57점') — 라운드 424}
     없으면 None — L5 조차 없는 점수는 지어내지 않는다.
     """
     doc = _hier_doc()
@@ -120,7 +148,7 @@ def blended_prob(score, sector=None, regime_code=None, fs=None):
     w = z * _m.sqrt(max(0.0, p * (1 - p) / n_ + z * z / (4 * n_ * n_)))
     return dict(p=float(p), layers=used, n_narrow=n_narrow,
                 wilson_low=float((c - w) / d), wilson_high=float((c + w) / d),
-                label=label)
+                label=label, band=b, band_label=band_label(b))
 
 
 def baseline_note(art=None, table_made=None):
@@ -223,21 +251,24 @@ def layers_for(score, sector=None, regime_code=None, fs=None, ticker=None):
         return [], None
     fs = fs or {}
     rows = []
+    # 라운드 424 — 층 이름에 **이 표의** 점수대 범위를 적는다. 종전엔 '점수대 × …' 라고만 적어, 같은 화면의 집계표
+    #   점수대(55~59점 처럼 다른 띠)와 같은 것으로 읽혔다.
+    bl = band_label(b) or b
 
     v = (doc.get('L5') or {}).get(b)
     if v:
-        rows.append(dict(label=f'같은 점수대({b}점) 전체', narrow=0, **v))
+        rows.append(dict(label=f'같은 점수대({bl}) 전체', narrow=0, **v))
     if regime_code:
         v = (doc.get('L4') or {}).get(f'{b}|{regime_code}')
         if v:
             rows.append(dict(
-                label=f'점수대 × {_ST_KO.get(regime_code, regime_code)} 국면',
+                label=f'점수대 {bl} × {_ST_KO.get(regime_code, regime_code)} 국면',
                 narrow=1, **v))
         for pxy in _proxies_of(fs):
             v = (doc.get('L4b') or {}).get(f'{b}|{regime_code}|{pxy}')
             if v:
                 rows.append(dict(
-                    label=f'점수대 × 국면 × {pxy} 자리', narrow=2, **v))
+                    label=f'점수대 {bl} × 국면 × {pxy} 자리', narrow=2, **v))
     mkt = fs.get('market')
     vol = fs.get('vol_20')
     ter = doc.get('vol_terciles') or []
@@ -246,13 +277,13 @@ def layers_for(score, sector=None, regime_code=None, fs=None, ticker=None):
               else '중변동' if vol <= ter[1] else '고변동')
         v = (doc.get('L3') or {}).get(f'{b}|{mkt}|{vb}')
         if v:
-            rows.append(dict(label=f'점수대 × {mkt} × {vb} 종목',
+            rows.append(dict(label=f'점수대 {bl} × {mkt} × {vb} 종목',
                              narrow=1, **v))
     note = None
     if sector and regime_code:
         v = (doc.get('L2') or {}).get(f'{b}|{sector}|{regime_code}')
         if v:
-            rows.append(dict(label=f'점수대 × {sector} × 국면', narrow=2, **v))
+            rows.append(dict(label=f'점수대 {bl} × {sector} × 국면', narrow=2, **v))
         elif b not in ('58-64', '65-100'):
             note = ('업종별 실측은 매수권(58점 이상)만 축적돼 있어 이 '
                     '점수대에서는 아직 없습니다')

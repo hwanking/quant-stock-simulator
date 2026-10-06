@@ -39,9 +39,13 @@ except Exception:          # noqa: BLE001
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJ)
 P = os.path.join(PROJ, '.portfolio')
-COST = 0.36
 
+import case_layers as _cl423                                  # noqa: E402
 import trade_plan as tp                                       # noqa: E402
+
+# 라운드 424 — 수(0.36)는 그대로, 자리는 한 곳(`case_layers.LAYER_COST_PCT` · 화면이 같은 수를 EV 이름 옆에 읽는다).
+#   산출물에도 `cost_pct` 로 싣는다 — 다음에 다시 만들면 화면은 파일의 수를 읽는다.
+COST = _cl423.LAYER_COST_PCT
 
 BANDS = ((0, 40), (40, 50), (50, 58), (58, 65), (65, 101))
 
@@ -183,8 +187,9 @@ def main():
 
     doc = dict(
         made=_today(),
+        cost_pct=COST,
         basis='개발 구간(train+valid) · 판정완료 · 블라인드 제외 · '
-              '비용 0.36%p 차감 · 국면=코스피 4상태(R52 규칙 재사용)',
+              f'비용 {COST:g}%p 차감 · 국면=코스피 4상태(R52 규칙 재사용)',
         note='표시 전용 — 각 층은 그 계층의 실측이지 이 종목의 확률이 '
              '아니다. 확률 혼합(shrinkage)은 R59 사전등록 게이트 통과 '
              '전에는 하지 않는다. 업종 층은 매수권(58+)만 축적돼 있다. '

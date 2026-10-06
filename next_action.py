@@ -41,8 +41,17 @@ HOT_RSI = 75.0
 COOL_BB = 80.0
 COOL_WR = -20.0
 #: 거래량이 이보다 크면 '아직 안 가라앉음'
+#: ⚠️ 라운드 425 — 이 두 배수는 라운드 24(2026-08-04)가 정한 뒤 **원장으로 잰 적이 없다**(문서에도 근거가
+#:   없다 · R214 사전등록의 거래량 확인 돌파(1.5배)도 R1 미달로 미측정). 값은 안 바꾼다(§2 — 바꾸려면 재야 한다).
+#:   대신 화면 문장이 *"지지를 신뢰할 수 있다"* 고 잰 것처럼 말하지 않게 했다(아래 volume_cond).
 VOL_HOT = 1.5
 VOL_CALM = 1.2
+
+#: 라운드 425 — '이렇게 되면 사라 / 이것을 기다려라'를 말하는 조건 갈래(아래 build 의 cond kind 리터럴 그대로).
+#:   지지 확인 뒤 분할매수(support) · 돌파 뒤 진입(breakout) · 과열 해소(cooldown) · 거래량 안정(volume) ·
+#:   매수가까지 걸리는 시간(wait). 이 모듈은 게이트를 모르므로 **중앙 판정이** 이 갈래를 실을지 정한다
+#:   (`verdict_core.guard_next_conditions` · 기다려도 안 풀리는 '추천 아님'이면 싣지 않는다).
+WAIT_COND_KINDS = ('support', 'breakout', 'cooldown', 'volume', 'wait')
 
 
 def _f(x):
@@ -301,10 +310,14 @@ def build(four_scores, tech_df, price, verdict=None):
              if bits else "과열이 풀릴 때까지 기다리세요")
 
     def volume_cond():
+        # 라운드 425 — 종전 꼬리 *"…가라앉아야 지지를 신뢰할 수 있습니다"* 는 잰 적 없는 인과를 말했다(배수도
+        #   잰 적이 없다 · 위 VOL_HOT 주석). 라운드 24 문서가 적어 둔 문장(*"…가라앉아야 합니다"*)으로 되돌리고
+        #   그 배수가 측정값이 아니라는 사실을 같은 줄에 적는다(§3 · 이름이 계산보다 넓으면 없는 근거로 읽힌다).
         if vr and vr > VOL_HOT:
             cond('volume', None,
                  f"거래량이 20일 평균의 {vr:.1f}배입니다 — "
-                 f"{VOL_CALM}배 아래로 가라앉아야 지지를 신뢰할 수 있습니다")
+                 f"{VOL_CALM}배 아래로 가라앉아야 합니다"
+                 f"({VOL_HOT}·{VOL_CALM}배는 원장으로 잰 적이 없는 규칙입니다)")
 
     # ── 거부권이 있으면 조건이 아니라 차단이다 ──────────────────────
     vetoes = (verdict or {}).get('vetoes') or []

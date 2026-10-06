@@ -485,6 +485,24 @@ def touch_cdf(records, bars=HORIZON_BARS):
 #: 매수권 하한 — 이 저장소가 이미 쓰는 값(원장 요약·감시가 같은 58 을 쓴다). 새 숫자 아님.
 BUY_ZONE_SCORE = 58
 
+#: 판정 완료 = 20봉 안에 목표·손절 중 하나에 **먼저 닿은** 케이스 (라운드 424 · 한 곳 · §4).
+#:   원장은 미결(`outcome == 'OPEN'` · 어느 선에도 안 닿고 창이 끝난 케이스)도 `success=False` 로 적는다
+#:   (2026-08-01 부터 · 2026-10-03 실측 257,130행 중 10,314행). 그 칸을 그대로 세면 **진 것과 아직 결판 안 난
+#:   것이 한 분모에** 들어가 적중이 낮게 나온다 — 58점+ 블라인드(통계 행)에서 52.05% vs 57.09%. 집계 랩
+#:   (`calibration_lab` 의 `decided`)이 처음부터 쓰는 규칙이고 새 규칙이 아니다. 화면이 원장을 직접 셀 때 이것을 쓴다.
+DECIDED_OUTCOMES = ('TARGET', 'STOP')
+
+
+def decided_hit(row):
+    """적중 셈에 넣는 값 — True(목표 먼저) · False(손절 먼저) · None(미결·결과 없음 → **분모에서 뺀다**).
+
+    `success` 칸은 미결도 False 라 적중 셈에 쓰지 않는다(라운드 424). 결과(`outcome`)가 없는 행은 None —
+    진 것인지 결판 안 난 것인지 모르므로 세지 않는다(§3)."""
+    oc = (row or {}).get('outcome')
+    if oc not in DECIDED_OUTCOMES:
+        return None
+    return oc == 'TARGET'
+
 #: DeMARK 카운트다운 계산을 고친 날(라운드 386 · `quant_indicators.td_countdown`). 원장의 `demark_state`
 #: 는 그 행을 만든 날의 계산으로 찍혔으므로, 이 날 앞의 행과 뒤의 행은 13 의 정의가 다르다.
 DEMARK_DEF_CHANGED = '2026-09-29'
@@ -502,11 +520,15 @@ def demark_complete_lift(records, min_score=BUY_ZONE_SCORE):
 
     돌려주는 것: {split: {'yes': (n, 적중%, 날짜수), 'no': (...), 'diff': %p}} · 판정은 안 한다.
     분모가 0 인 칸은 담지 않는다(§3 — 비율을 만들지 않는다).
+
+    ⚠️ 라운드 424 — 종전엔 `success` 칸을 셌는데 원장은 미결도 False 로 적어 **결판 안 난 케이스가 진 것으로**
+      들어갔다(2026-10-03 실측: 학습 +1.2 → +0.8 · 검증 −9.1 → −8.2 · 실전 +15.2 → +15.4 %p · 부호는 그대로).
+      판정 완료만 센다 — 규칙은 `decided_hit` 한 곳(집계 랩과 같은 분모).
     """
     box = {}
     for r in records:
         sp = r.get('split')
-        ok = r.get('success')
+        ok = decided_hit(r)
         if sp not in ('train', 'valid', 'blind') or ok is None:
             continue
         try:
@@ -552,7 +574,7 @@ def demark_lift_line(lift):
     tail = ('세 구간의 방향이 서로 어긋나 근거로 쓰지 않습니다'
             if mixed else '방향은 같지만 이 표식만으로 판단하지 않습니다')
     return ('차트의 13 매수·매도 표식은 **판정에 들어가지 않습니다** — 원장에서 '
-            '매수권 안 13 완성과 그 외의 적중 차이를 재면 ' + ' · '.join(parts)
+            '매수권 안 13 완성과 그 외의 적중 차이(목표·손절 중 하나에 닿은 케이스만)를 재면 ' + ' · '.join(parts)
             + f'. {tail}. '
             # 라운드 386 — 카운트다운 계산을 고쳤다(셋업 9 가 이어지는 동안 매 봉 0 으로 돌아가던 결함). 원장 행
             #   대부분은 그 전 계산으로 찍힌 13 이라, 지금 차트의 13 과 **같은 정의가 아니다** — 말하지 않으면

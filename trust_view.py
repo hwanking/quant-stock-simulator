@@ -19,6 +19,13 @@ from __future__ import annotations
 
 SPLITS = (('train', '학습'), ('valid', '검증'), ('blind', '실전'))
 
+#: 라운드 424 — 고정 국면 표(`regime_breakdown.json` · 2026-08-03 · `scripts/regime_split_r14.py`)의 적중률이 무엇을 셌는가.
+#:   그 생성기는 원장의 `success` 칸을 세고, 원장은 2026-08-01 부터 **결판 안 난 케이스(미결)도 False 로** 적는다 —
+#:   그래서 그 표의 적중은 미결을 실패로 센 값이다. 위 타일·모델 성적 표(calibration)는 결판 난 것만 센다. 게이트
+#:   (regime_policy)가 그 표를 그대로 읽어 전방 재평가 전에는 다시 재지 않는다 — **분모를 이름 옆에 적는다**(R233).
+#:   이 문장이 사실인지는 회귀가 생성기 소스로 묶는다(생성기가 바뀌면 문장도 바꾸라고 실패한다 · R304 의 모양).
+FROZEN_REGIME_DENOM = '결판 안 난 케이스도 실패로 센 적중'
+
 
 def _n(d):
     try:
@@ -58,6 +65,10 @@ def threshold_note(cal, rb):
         tv, tb = today_58_n(cal, 'valid'), today_58_n(cal, 'blind')
         if tv and tb:
             t += f" — 오늘 원장의 58점 이상은 검증 {tv:,} · 실전 {tb:,}건입니다"
+        # 라운드 424 — 분모도 다르다. 위 타일은 결판 난 것만, 아래 표는 결판 안 난 것도 실패로 셌다(FROZEN_REGIME_DENOM).
+        #   '위 타일보다 낮다'는 모집단이 달라 늘 참이 아니다 — 참인 것은 '같은 케이스를 결판 난 것만 셀 때보다 낮다'다.
+        t += (f". 그리고 그 표는 {FROZEN_REGIME_DENOM}률이라, 같은 케이스를 결판 난 것만 세는 위 타일의 방식으로 "
+              f"셀 때보다 낮거나 같게 나옵니다")
         out.append(t + ".")
     if v.get('hit_rate') is not None and b.get('hit_rate') is not None:
         out.append(f"참고로 점수와 무관하게 전체 사례를 다 센 적중률은 연습 {float(v['hit_rate']):.1f}% ({_n(v):,}건) · 실전 "

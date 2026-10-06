@@ -64,6 +64,33 @@ def report_checks(pm_dir=None):
     return out
 
 
+def load_reports(pm_dir=None):
+    """날짜별 개장 전 리포트 원본 — `report_checks` 와 같은 파일들(같은 날 여러 판은 `proof.reco_summary` 가 늦은 판 하나로)."""
+    out = []
+    for f in glob.glob(os.path.join(pm_dir or os.path.join(PROJ, '.portfolio'), 'premarket_2*.json')):
+        try:
+            with open(f, encoding='utf-8') as fh:
+                out.append(json.load(fh))
+        except Exception:                                      # noqa: BLE001
+            continue
+    return out
+
+
+def load_registry(path=None):
+    """전방 기록부 — 매일 상위 60종목의 엔진 판정(라운드 433 · 정밀분석을 더 깊게 했을 때의 답). 못 읽은 줄은 건너뛴다."""
+    p = path or os.path.join(PROJ, '.portfolio', 'forward_registry.jsonl')
+    rows = []
+    if not os.path.exists(p):
+        return rows
+    with open(p, encoding='utf-8') as fh:
+        for ln in fh:
+            try:
+                rows.append(json.loads(ln))
+            except Exception:                                  # noqa: BLE001
+                continue
+    return rows
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true')
@@ -91,14 +118,22 @@ def main(argv=None):
         by_action[act] = proof.abstain_tally([(r, o) for r, o in graded if str(r.get('action')) == act])
     st = collections.Counter((o or {}).get('status', 'nobars') for _r, o in graded)
     gates = proof.gate_ledger(tracker_cases(), report_checks())
+    # 라운드 433 — "추천주가 거의 없지 않았어?" — 얼마나 자주 0 이었나 · 깊게 봐도 0 인가 · 그 후보를 다 샀다면
+    from improvement import case_tracker as _ct
+    _reports = load_reports()
+    reco = proof.reco_summary(_reports, load_registry(), is_off_day=_ct.is_non_trading_date)
+    # 같은 후보 — 날짜마다 마지막 리포트의 후보만 짝짓는다(추천 빈도와 같은 묶음 · `proof.latest_by_date` 한 곳)
+    _latest, _off = proof.latest_by_date(_reports, _ct.is_non_trading_date)
+    cands = proof.candidate_outcome(tracker_cases(), proof.pick_keys(_latest))
     doc = dict(made=proof.now_iso(), ledger_rows=len(rows), tickers=len(tickers),
                bars_ok=sum(1 for v in bars.values() if v is not None), bars_fail=len(fail),
-               status=dict(st), abstain=ab, by_action=by_action, gates=gates,
+               status=dict(st), abstain=ab, by_action=by_action, gates=gates, reco=reco, candidates=cands,
                tracker_decided=sum(1 for c in tracker_cases() if c['status'] in ('success', 'failure', 'unresolved')),
                rule=('같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · '
                      f"운영 비용 {ab.get('cost_pct')}% 차감 · 판정 1건에 같은 금액 · 문턱 없음"),
                seconds=round(time.time() - t0, 1))
     print(proof.abstain_line(ab))
+    print(proof.reco_line(doc) or '추천 빈도 — 셀 리포트가 없다')
     print('결과 갈래', dict(st), '· 일봉 실패', len(fail))
     for act, t in by_action.items():
         print(f'  {act}: 결정 {t["decided"]} · 평균 {t["mean_net"]} · 중앙 {t["median_net"]}')

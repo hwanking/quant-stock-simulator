@@ -27,9 +27,11 @@
 """
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import os
+import statistics
 from datetime import datetime
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -208,6 +210,147 @@ def gate_ledger(cases, picks_by_key, cost=None):
     return sorted(out, key=lambda r: (-r['blocked']['n'], r['name']))
 
 
+#: 라운드 433 — 엔진의 매수 쪽 판정 리터럴(`quant_indicators` 의 '사도 됩니다' · '분할매수 검토 가능'). 나머지는 관망·축소·매도다.
+ENGINE_BUY_ACTIONS = ('BUY', 'ACCUMULATE')
+
+
+def latest_by_date(reports, is_off_day=None):
+    """날짜마다 마지막 개장 전 리포트 하나(`generated_at` 이 늦은 판) · 휴장일 날짜는 따로 → ({날짜: 리포트}, [휴장일]).
+    추천 빈도와 '다 샀다면'이 **같은 후보**를 세게 하는 한 곳(라운드 433 · 첫 판은 둘이 다른 리포트 묶음을 읽었다)."""
+    by = {}
+    for d in reports or []:
+        k = str((d or {}).get('date') or '')[:10]
+        if not k:
+            continue
+        if k not in by or str(d.get('generated_at') or '') > str(by[k].get('generated_at') or ''):
+            by[k] = d
+    off = sorted(k for k in by if is_off_day and is_off_day(k))
+    return {k: by[k] for k in by if k not in off}, off
+
+
+def pick_keys(latest):
+    """{날짜: 리포트} → {(코드6, 날짜): core.checks} — 중앙 판정이 실린 후보만(`candidate_outcome` 의 짝 · §4)."""
+    out = {}
+    for k, d in (latest or {}).items():
+        for p in (d or {}).get('picks') or []:
+            ck = ((p or {}).get('core') or {}).get('checks')
+            if ck:
+                out[(code6(p.get('symbol') or p.get('code')), k)] = ck
+    return out
+
+
+def reco_summary(reports, registry_rows=(), is_off_day=None):
+    """'추천이 얼마나 자주 0 이었나' (라운드 433) — 수만 · 문턱 없음 · 셀 리포트가 없으면 None.
+
+    사용자(2026-10-06): *"현재 추천주가 거의 없지 않았어? 괜찮은 거 맞아?"* — 화면은 오늘 하루의 0 만 말했다.
+    reports: 개장 전 리포트(같은 날 여럿이면 `generated_at` 이 늦은 판 하나) · 후보마다 **중앙 판정**(`core`)을 센다.
+    registry_rows: 전방 기록부 — 매일 **상위 60종목**에 엔진 판정을 남긴다. 정밀분석을 5개보다 깊게 했을 때의 답이다(R264).
+    is_off_day(iso) → 참이면 휴장일 — 그날 리포트는 세지 않고 수만 따로 적는다(R252)."""
+    by, off = latest_by_date(reports, is_off_day)
+    days = sorted(by)
+    if not days:
+        return None
+    cand = no_core = reco = 0
+    reco_days, ev, fail = set(), [], collections.Counter()
+    for k in days:
+        for p in by[k].get('picks') or []:
+            c = (p or {}).get('core')
+            if not isinstance(c, dict):
+                no_core += 1                    # 중앙 판정을 싣기 전의 옛 리포트 — 세지 않고 수만 적는다(§3)
+                continue
+            cand += 1
+            if c.get('recommended'):
+                reco += 1
+                reco_days.add(k)
+            for x in c.get('checks') or []:
+                if x.get('ok') is False and x.get('name'):
+                    fail[str(x['name'])] += 1
+            v = c.get('expected_return')
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                ev.append(float(v))
+    reg = list(registry_rows or [])
+    top = fail.most_common(1)
+    return dict(days=len(days), first=days[0], last=days[-1], off_days=len(off),
+                candidates=cand, no_core=no_core, recommended=reco, reco_days=len(reco_days),
+                ev_n=len(ev), ev_pos=sum(1 for x in ev if x > 0),
+                ev_median=(statistics.median(ev) if ev else None), ev_max=(max(ev) if ev else None),
+                top_block=(top[0][0] if top else None), top_block_n=(top[0][1] if top else 0),
+                registry_rows=len(reg),
+                registry_days=len({str(r.get('date') or '')[:10] for r in reg if r.get('date')}),
+                registry_buy=sum(1 for r in reg if str(r.get('action') or '') in ENGINE_BUY_ACTIONS))
+
+
+def candidate_outcome(cases, picks_by_key, cost=None, boot=2000, seed=433):
+    """개장 전 후보를 그날 리포트 가격에 **다 샀다면** (라운드 433) — 추적 케이스 중 그날 리포트 후보였던 것 · 결과가 정해진
+    것만 · 비용 뺀 수익(%) · 판정 1건에 같은 금액. 짝짓기는 `gate_ledger` 와 같다(§4). 짝이 하나도 없으면 None.
+
+    평균에는 **날짜로 묶어 다시 뽑은 95% 구간**을 붙인다 — 같은 날 후보는 함께 움직이므로 건수가 아니라 날짜가 표본이다
+    (R217 · R45). 시드 고정이라 같은 자료면 같은 구간이다. 문턱은 없다 — 0 을 포함하는지만 말한다."""
+    c = _cost() if cost is None else cost
+    v, dates, st = [], set(), collections.Counter()
+    by_date = {}
+    for cs in cases or []:
+        if cs.get('status') not in ('success', 'failure', 'unresolved'):
+            continue
+        key = (code6(cs.get('ticker')), str(cs.get('signal_date'))[:10])
+        if not picks_by_key.get(key):
+            continue
+        try:
+            net = float(cs.get('realized_return')) * 100.0 - (c or 0.0)
+        except (TypeError, ValueError):
+            continue
+        v.append(net)
+        st[cs['status']] += 1
+        dates.add(key[1])
+        by_date.setdefault(key[1], []).append(net)
+    if not v:
+        return None
+    ci = None
+    if boot and len(by_date) >= 2:
+        import random
+        rng, ds, means = random.Random(seed), sorted(by_date), []
+        for _ in range(int(boot)):
+            xs = [x for d in (rng.choice(ds) for _ in ds) for x in by_date[d]]
+            means.append(sum(xs) / len(xs))
+        means.sort()
+        ci = [means[int(0.025 * len(means))], means[int(0.975 * len(means)) - 1]]
+    return dict(n=len(v), dates=len(dates), success=st['success'], failure=st['failure'],
+                unresolved=st['unresolved'], mean_net=sum(v) / len(v), median_net=statistics.median(v), cost_pct=c,
+                ci95=ci, boot=int(boot or 0), seed=seed)
+
+
+def reco_line(sc):
+    """'추천이 얼마나 자주 0 이었나' 한 줄 (라운드 433) — 수만 · '괜찮다'·'보수적이다' 같은 판정 낱말 없음(문턱이 없으므로) ·
+    못 읽은 조각은 뺀다(§3). 성적표에 `reco` 가 없으면 None — 부르는 쪽이 줄을 안 그린다."""
+    sc = sc or {}
+    r = sc.get('reco')
+    if not r:
+        return None
+    parts = [f"개장 전 리포트 {r['days']}거래일({r['first']}~{r['last']}) 후보 {r['candidates']:,}개 중 "
+             f"신규 매수 추천 {r['recommended']}개" + (f"(추천이 나온 날 {r['reco_days']}일)" if r['recommended'] else '')]
+    if r.get('ev_n'):
+        parts.append(f"비용 차감 기대값이 0 보다 큰 후보 {r['ev_pos']}개(중앙 {r['ev_median']:+.2f}% · "
+                     f"가장 높은 후보 {r['ev_max']:+.2f}%)")
+    if r.get('top_block'):
+        parts.append(f"가장 자주 못 넘은 조건 '{r['top_block']}' {r['top_block_n']:,}/{r['candidates']:,}")
+    if r.get('registry_rows'):
+        parts.append(f"정밀분석을 상위 60종목으로 넓혀 매일 기록한 전방 기록부 {r['registry_days']}거래일 "
+                     f"{r['registry_rows']:,}행에서도 엔진의 매수 쪽 판정 {r['registry_buy']}건")
+    co = sc.get('candidates')
+    if co:
+        m, md = float(co['mean_net']), float(co['median_net'])
+        ci = co.get('ci95')
+        parts.append(f"그 후보를 리포트 가격에 다 샀다면(결과가 정해진 {co['n']:,}건 · 날짜 {co['dates']}일) "
+                     f"비용 {co['cost_pct']}% 를 뺀 평균 {m:+.2f}%"
+                     + (f"(날짜로 묶어 다시 뽑은 95% 구간 [{ci[0]:+.2f}, {ci[1]:+.2f}] · "
+                        + ("0 을 포함" if ci[0] <= 0 <= ci[1] else "0 을 포함하지 않음") + ")"
+                        if ci else "")
+                     + f" · 중앙 {md:+.2f}%"
+                     # 부호가 갈리면 갈린다고만 적는다 — 평균 하나만 보면 틀린다(R149 · abstain_line 과 같은 규칙)
+                     + (" — 평균과 중앙의 부호가 갈립니다" if (m < 0 < md) or (md < 0 < m) else ''))
+    return "추천이 얼마나 자주 0 이었나 — " + " · ".join(parts) + "."
+
+
 def bars_frame(df):
     """채점기가 읽을 수 있는 일봉 표인가 — `trade_date` 칸이 있어야 한다(없으면 None · 첫 칸을 날짜로 잘못 읽지 않게)."""
     try:
@@ -246,6 +389,10 @@ def home_lines(report, scorecard):
     else:
         out.append("오늘 판정 — 아직 고정된 개장 전 리포트가 없습니다.")
     sc = scorecard or {}
+    # 라운드 433 — 오늘 하루의 0 만 말하면 "늘 0 이었나"에 답하지 못한다 · 성적표에 셈이 없으면 안 그린다(§3)
+    _rl = reco_line(sc)
+    if _rl:
+        out.append(_rl)
     if sc.get('abstain'):
         out.append(abstain_line(sc['abstain'])
                    + f" (성적표 {minute_of(sc.get('made'))} · 판정 원장 {int(sc.get('ledger_rows') or 0):,}건)")

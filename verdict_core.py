@@ -205,6 +205,85 @@ def central_headline(engine_headline, recommended, wait_curable):
     return h
 
 
+#: 라운드 425 — 기다림의 이름을 단 칸(옛 두 칸 포함). 손으로 적지 않고 BUCKETS 에서 유도한다.
+_WAIT_NAMED_BUCKETS = tuple(b for b in BUCKETS if b.endswith('대기'))
+
+
+def _gate_items(checks):
+    """미충족 조건을 '다음 조건' 줄로 — 라운드 197 이 막힌 칸에 쓰던 그 모양(`이름 — 설명`). checks 는 dict 꼴."""
+    out = []
+    for c in checks or []:
+        if c.get('ok'):
+            continue
+        n, d = str(c.get('name') or ''), c.get('detail')
+        if n:
+            out.append(dict(kind='gate', level=None, text=(f"{n} — {d}" if d else n)))
+    return out
+
+
+def guard_next_conditions(conds, recommended, wait_curable, checks, reason='', headline=''):
+    """'다음 조건' 목록 — 기다려도 안 풀리는 '추천 아님' 종목에 **매수 지시를 싣지 않는다** (라운드 425 · 한 곳).
+
+    라운드 193 · 197 · 387 은 next_action 의 **머리 문장**이 매수를 지시하는 갈래(buy_now · pullback · breakout)만
+    막았다. 'observe' 갈래는 그대로 지나가는데, next_action 은 밸류 게이트에 걸린 종목에도 *"…오늘의 매수 후보에서
+    뺐습니다"* 라고 적은 **바로 다음 줄에** *"X원(20일선) 부근에서 … 1차 분할매수를 검토하세요"* · *"…돌파한 뒤 다시
+    지지하면 진입할 수 있습니다"* 를 붙인다(게이트를 모르는 모듈이다). 2026-10-03 실측(개장 전 리포트 103개 중 중앙
+    판정이 실린 44개 · 후보 216): 추천 아닌 후보 **30개**의 조건 목록에 그 두 문장이 있었고 그중 **18개**가 지금
+    코드도 통과시키는 'observe' 갈래였다(18개 전부 밸류 게이트 — 적정가 산출 불가 17 · 적정가 초과 1).
+
+    규칙은 머리 문장과 **같은 술어**다(`recommended` · `wait_curable` — 둘이 다르면 머리와 목록이 다른 말을 한다).
+    추천이거나 남은 미충족이 기다려서 풀리는 것뿐이면 목록을 그대로 둔다. 아니면, 목록에 기다림·매수 지시 갈래
+    (`next_action.WAIT_COND_KINDS`)가 있을 때만 라운드 197 의 막힌 칸 모양으로 바꾼다 — 중앙 판정의 사유
+    (`exclude_reason` · 그 사유를 담은 미충족 줄이 있으면 그 줄을 맨 앞으로 · 머리에 이미 있으면 되풀이하지 않는다)
+    → 나머지 미충족 조건 줄(조건 순서) → 가격 사실.
+    새 문장은 짓지 않는다(사유·조건 이름·설명은 중앙 판정이 이미 낸 것). 판정·칸·문턱·점수 불변.
+    거부권 갈래(veto 줄만 있다)처럼 지시 갈래가 없는 목록은 건드리지 않는다 — 그 줄이 이미 막는 이유다.
+    checks 는 dict 꼴({name, ok, detail}). 같은 입력에 두 번 걸어도 같다(바꾼 목록에는 지시 갈래가 없다)."""
+    conds = [dict(c) for c in (conds or []) if isinstance(c, dict)]
+    if recommended or wait_curable:
+        return conds
+    _wk = tuple(_value_gate.WAIT_COND_KINDS)     # 없으면 조용히 통과시키지 않고 여기서 죽는다
+    if not any(str(c.get('kind')) in _wk for c in conds):
+        return conds
+    gates = _gate_items(checks)
+    r = str(reason or '').strip()
+    # 사유가 맨 앞에 온다 — 카드는 목록의 앞 셋만 그린다. 사유를 이미 담은 미충족 줄이 있으면(밸류 게이트는 사유 =
+    #   그 줄의 설명) **그 줄을** 앞으로 옮기고, 없으면 사유 한 줄을 앞에 둔다. 머리 문장에 이미 있으면 되풀이하지 않는다.
+    _own = next((g for g in gates if r and r in g['text']), None)
+    if _own is not None:
+        gates = [_own] + [g for g in gates if g is not _own]
+    lead = ([] if (not r or _own is not None or r in str(headline or ''))
+            else [dict(kind='reason', level=None, text=r)])
+    out = lead + gates + [c for c in conds if c.get('kind') == 'price']
+    # 바꿀 재료(사유·미충족)가 없으면 지시 갈래만 뺀다 — 매수 지시를 남기는 것보다 짧은 목록이 낫다(§3)
+    return out or [c for c in conds if str(c.get('kind')) not in _wk]
+
+
+def next_conditions_of(core):
+    """저장된 중앙 판정(개장 전 리포트의 core)에서 '다음 조건'을 읽을 때 — `build` 와 **같은 가름**을 적용한다
+    (라운드 425 · 라운드 327 의 방식: 이름·규칙을 바꾸면 저장된 곳까지 센다). 동결 리포트는 고쳐 쓰지 않는다.
+    `wait_curable` 이 없는 옛 core(라운드 387 전)는 같은 정의로 미충족에서 다시 센다. `recommended` 가 없으면
+    판단할 수 없어 목록을 그대로 돌려준다(§3). 목록 자체가 없으면 None(읽는 쪽이 옛 경로로 떨어진다)."""
+    c = core if isinstance(core, dict) else {}
+    conds = c.get('next_conditions')
+    if conds is None:
+        return None
+    if 'recommended' not in c:
+        return [dict(x) for x in conds if isinstance(x, dict)]
+    wc = c.get('wait_curable')
+    if wc is None:
+        failed = list(c.get('failed') or [])
+        wc = bool(failed) and all(f in WAIT_CURABLE_CHECKS for f in failed)
+    # 옛 규칙의 '… 대기' 사유(라운드 387 전 '눌림을 기다립니다' · 396 전 머리 없는 '과열 해소 대기')는 앞에 되풀이하지
+    #   않는다 — 그 사유가 바로 끝나지 않는 기다림이었다(킷의 옛 스냅샷 읽기와 같은 가름 · 미충족 줄은 그대로 낸다).
+    #   지금 규칙의 '대기' 사유는 늘 `WAIT_ONLY_HEAD` 로 시작한다. '대기' 칸 이름은 BUCKETS 에서 유도한다.
+    reason = str(c.get('exclude_reason') or '')
+    if str(c.get('bucket') or '') in _WAIT_NAMED_BUCKETS and WAIT_ONLY_HEAD not in reason:
+        reason = ''
+    return guard_next_conditions(conds, bool(c.get('recommended')), bool(wc), c.get('checks') or [],
+                                 reason=reason, headline=c.get('next_headline') or '')
+
+
 #: 라운드 387 — 기다려도 풀리지 않는 미충족에 '대기' 이름을 주던 두 칸(더는 만들지 않는다)
 WAIT_BUCKETS_RETIRED = ('눌림목 매수 대기', '돌파 후 매수 대기')
 #: 그 사유 문장의 머리 — 읽는 쪽(옛 스냅샷 재해석)이 같은 말을 쓴다(§4)
@@ -538,11 +617,16 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     _na_conds = list(na.get('conditions') or [])
     _instructs_buy = _na_kind in ('buy_now', 'pullback', 'breakout')
     wait_curable = bool(failed) and all(f in WAIT_CURABLE_CHECKS for f in failed)
+    _checks_d = [dict(name=n, ok=bool(o), detail=d) for n, o, d in checks]
     # buy_now('지금 분할매수할 수 있습니다')는 종전(R193)대로 추천일 때만 — 기다릴 것이 남은 자리에서 '지금'은 모순이다.
     if (bucket == '오늘 매수 가능' or not _instructs_buy
             or (wait_curable and _na_kind != 'buy_now')):
         next_kind, next_headline = _na_kind, _na_head
-        next_conditions = _na_conds
+        # ⚠️ 라운드 425 — 머리 문장이 지시가 아닌 갈래('observe')는 목록이 **그대로** 지나갔다. next_action 은 그 갈래
+        #   에도 '지지되면 1차 분할매수를 검토하세요' · '돌파한 뒤 다시 지지하면 진입할 수 있습니다'를 붙인다.
+        #   머리와 같은 술어로 목록도 거른다(한 곳 · `guard_next_conditions`).
+        next_conditions = guard_next_conditions(_na_conds, recommended, wait_curable, _checks_d,
+                                                reason=reason, headline=_na_head)
     else:
         next_kind = 'blocked'
         _tail = f' — {reason}' if reason else f' — {bucket}'
@@ -552,10 +636,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
             next_headline = ((f'{entry:,.0f}원까지 내려와도 오늘은 아직 '
                               f'못 삽니다') if entry
                              else '오늘은 아직 못 삽니다') + _tail
-        next_conditions = [
-            dict(kind='gate', level=None,
-                 text=(f"{n} — {d}" if d else str(n)))
-            for n, o, d in checks if not o]
+        next_conditions = _gate_items(_checks_d)     # 라운드 425 — 줄 모양은 한 곳(`_gate_items`) · 글자 그대로
         # 가격 사실은 **버리지 않는다** — 맨 뒤에 붙여 거리도 알려 준다
         next_conditions += [dict(c) for c in _na_conds
                             if c.get('kind') == 'price']
@@ -587,7 +668,7 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         #   문턱을 만들지 않게). next_action 의 채택 규칙(BANDS × ATR)이
         #   유일 출처이고 여기는 통로다. 없으면 None — 지어내지 않는다(§3).
         gap_band=na.get('gap_band'),
-        checks=[dict(name=n, ok=bool(o), detail=d) for n, o, d in checks],
+        checks=[dict(c) for c in _checks_d],
         failed=failed,
         # 신규 매수자 가격 (한 기준: 진입가)
         buy_zone=(None if entry is None

@@ -1,10 +1,10 @@
 {
  "made": "2026-10-06",
- "made_at": "2026-10-06 08:12",
+ "made_at": "2026-10-06 03:08",
  "ledger_rows": 257530,
  "min_rows": 20,
  "eps": 0.01,
- "took_sec": 261.2,
+ "took_sec": 110.5,
  "measured": 1422,
  "unread": 0,
  "unread_sample": [],

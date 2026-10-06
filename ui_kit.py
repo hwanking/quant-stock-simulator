@@ -2850,8 +2850,14 @@ def reco_card(p: dict, theme: str = 'dark') -> str:
     # 여기에 적는다. 조건이 없으면 이 상자를 아예 그리지 않는다.
     nextbox = ''
     if p.get('next_conditions'):
+        _nc = list(p['next_conditions'])
         _items = ''.join(f"<li style='margin:3px 0;'>{_esc(x)}</li>"
-                         for x in p['next_conditions'][:3])
+                         for x in _nc[:3])
+        # 라운드 425 — 앞 셋만 그리면서 몇 개를 뺐는지 안 적었다(라운드 314 의 '말없이 자르는 자리'). 막힌 칸의 목록은
+        #   미충족 조건이라 넷·다섯이 흔하다 — 남은 수와 전부 보는 자리를 적는다(맨 앞은 중앙 판정의 사유다).
+        if len(_nc) > 3:
+            _items += (f"<li style='margin:3px 0;'>외 {len(_nc) - 3}개 — "
+                       f"분석 보기에서 전부 봅니다</li>")
         nextbox = (
             f"<div style='background:{t['raised']}; border-radius:10px; "
             f"padding:9px 11px;'>"

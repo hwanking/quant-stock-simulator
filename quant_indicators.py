@@ -2404,18 +2404,22 @@ class QuantIndicatorsEngine:
                 #   0.41** 로 낸 다른 수다(verdict_core). 그래서 한 화면이 *"기대값 미산출"* 과 *"기대값
                 #   −0.25%"* 를 같이 적었다(외부 검토 · 2026-09-29). 수는 안 바꾸고 **이름을 계산에 맞춘다**
                 #   (R239·R359) — 그리고 못 잰 값(None)을 *"양수가 아니라"* 로 읽지 않는다(§3).
+                # 라운드 424 — '비용 차감'이 **어느 비용**인지 이름에 적는다. 이 값은 유사패턴 평균 − 0.3%(경로 수익 ·
+                #   `_PATH_YIELD_COST_PCT`)인데, 같은 화면의 지평별 표는 같은 이름의 수를 운영 비용(0.41)으로 빼고
+                #   집계표는 0.55 로 뺀다. 수·판정 불변 — 이름에 비용을 붙인다(R255·R386).
+                _pyc = QuantIndicatorsEngine._PATH_YIELD_COST_PCT
                 if _ney is not None and _ney > 0:
                     # 라운드 386 — 유사패턴 평균은 양수인데 **중앙 판정이 막은** 경우. 막은 사유는 중앙 판정의
                     #   것을 옮긴다(새로 짓지 않는다 · §4).
-                    _ney_why = ("유사패턴 평균 수익(비용 차감)은 "
+                    _ney_why = (f"유사패턴 평균 수익(비용 {_pyc:g}% 차감)은 "
                                 f"{_ney:+.2f}%지만 중앙 판정이 막았습니다 — "
                                 + str((core or {}).get('exclude_reason') or '매수 조건 미충족')
                                 + " 신규 매수를 권하지 않습니다. ")
                 elif _ney is not None:
-                    _ney_why = (f"유사패턴 평균 수익(비용 차감)이 {_ney:+.2f}%로 양수가 아니라 "
+                    _ney_why = (f"유사패턴 평균 수익(비용 {_pyc:g}% 차감)이 {_ney:+.2f}%로 양수가 아니라 "
                                 f"신규 매수를 권하지 않습니다. ")
                 else:
-                    _ney_why = ("유사패턴 평균 수익(비용 차감)은 표본이 모자라 산출하지 못했습니다 — "
+                    _ney_why = (f"유사패턴 평균 수익(비용 {_pyc:g}% 차감)은 표본이 모자라 산출하지 못했습니다 — "
                                 "매수를 권할 근거가 없어 신규 매수를 권하지 않습니다. ")
                 nb = {'emoji': '',
                       'line': f'{w(rec)}은 매수 권고가 아니라 관찰 기준 가격입니다.',
@@ -6038,7 +6042,8 @@ class QuantIndicatorsEngine:
         _m10_known = fs.get('m10_status') in ('위', '아래')
         add_checks = [
             ("신규 진입 조건 통과", bool(new_entry_ok)),
-            ("유사패턴 평균 수익(비용 차감) 양수", ey is not None and ey > 0),
+            # 라운드 424 — 어느 비용으로 뺀 값인지 이름에 적는다(유사패턴 평균 − 0.3% · 운영 0.41 과 다른 수)
+            (f"유사패턴 평균 수익(비용 {self._PATH_YIELD_COST_PCT:g}% 차감) 양수", ey is not None and ey > 0),
             ("손익비(현재가·2차) 기준 통과",
              rr is not None and rr >= self.GATES.get('min_reward_risk', 1.3)),
             ("중기 추세 유지", _m10_known and not m10_broken),

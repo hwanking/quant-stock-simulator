@@ -79,6 +79,11 @@ def stats(rows):
     n = len(rows)
     if not n:
         return None
+    # ⚠️ 라운드 424 — 이 적중은 원장 `success` 칸을 센다. 원장은 2026-08-01 부터 결판 안 난 케이스(미결 · OPEN)도
+    #   False 로 적으므로 **미결이 실패로** 들어간다(위 load 의 `success is None` 은 그것을 거르지 못한다). 이 생성기가
+    #   만든 `regime_breakdown.json`(2026-08-03)을 국면 게이트가 그대로 읽어 **고치지 않았다** — 셈을 바꾸면 다음에
+    #   다시 만들 때 게이트 값이 움직인다(전방 재평가 2026-11-16 의 일 · 사람이 정한다). 화면은 그 분모를 적는다
+    #   (`trust_view.FROZEN_REGIME_DENOM` · 회귀가 이 줄과 그 문장을 묶는다).
     hit = sum(1 for r in rows if r['success'])
     rets = [float(r['return_pct']) for r in rows]
     maes = [abs(float(r['mae_pct'])) for r in rows

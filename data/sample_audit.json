@@ -13,8 +13,8 @@
  "sector_missing": 22450,
  "regime_effective_n": 3667,
  "forward_evaluated_n": 5952,
- "forward_log_n": 1527,
- "high_conf_forward_n": 288,
+ "forward_log_n": 1495,
+ "high_conf_forward_n": 272,
  "forward_from": "2026-08-09",
  "episode_days": 35,
  "per_ticker": {

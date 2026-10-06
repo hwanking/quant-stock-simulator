@@ -346,11 +346,15 @@ def _ans_similar(ctx):
     cb = ctx.get('cb') or {}
     b = ctx.get('blend')
     out = []
+    # 라운드 424 — 두 '점수대'가 다른 띠다: 원실측은 집계표의 5점 띠(55~59 …), 계층 실측은 계층 표의 띠(50~57 …).
+    #   같은 이름이면 같은 묶음으로 읽히므로 범위를 적는다(R233 · 화면과 같은 이름 — 출처 `case_layers.band_label`).
+    _rng = (f" ({cb['lo']}~{cb['hi']}점)" if (cb.get('lo') is not None and cb.get('hi') is not None) else '')
     if cb.get('n'):
-        out.append(f"같은 점수대 원실측: {cb.get('hit_rate', 0):.0f}% "
+        out.append(f"같은 점수대{_rng} 원실측: {cb.get('hit_rate', 0):.0f}% "
                    f"(n={cb['n']:,}).")
     if b:
-        out.append(f"지금 조건(점수대×국면×자리 등 {b['layers']}층) 계층 실측: "
+        _bl = f" {b['band_label']}" if b.get('band_label') else ''
+        out.append(f"지금 조건(점수대{_bl}×국면×자리 등 {b['layers']}층) 계층 실측: "
                    f"약 {b['p'] * 100:.0f}% "
                    f"[{b['wilson_low'] * 100:.0f}~{b['wilson_high'] * 100:.0f}%] "
                    f"· 최협층 n {b['n_narrow']:,}.")
