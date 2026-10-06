@@ -4259,8 +4259,18 @@ if st.session_state.get('show_screener', False):
             from collections import Counter
             block_counter = Counter()
             for r in scan_results:
-                for reason in r.get('top3_block_reasons', []):
-                    block_counter[reason.split('(')[0].strip()] += 1
+                # 라운드 430 — 종전 열쇠는 사유 글의 '(' 앞이라 값이 든 사유는 종목마다 다른 열쇠였다: '최종 행동점수 49 < 68' 과
+                #   '… 59 < 68' 이 따로 세어져 한 조건이 여러 줄로 쪼개지고(덜 세고) 한 종목의 값이 묶음의 이름표가 됐다. 엔진이
+                #   같은 게이트를 이름과 함께 낸다(`gate_checks` · 막힌 사유 글은 그 실패한 게이트의 글이다) — 이름으로 센다.
+                _gc430 = (r.get('scores_obj') or {}).get('gate_checks') or []
+                _nm430 = [g.get('name') for g in _gc430
+                          if isinstance(g, dict) and not g.get('passed') and g.get('name')]
+                if _nm430:
+                    for _n430 in _nm430:
+                        block_counter[str(_n430)] += 1
+                else:                                   # 이름을 못 받은 옛 행 — 종전 열쇠
+                    for reason in r.get('top3_block_reasons', []):
+                        block_counter[reason.split('(')[0].strip()] += 1
 
             # 탐색 깊이를 있는 그대로 — 몇 개를 실제로 계산했나
             _att_res = st.session_state.get('attention_result') or {}
@@ -11056,6 +11066,11 @@ _bt_gap298 = four_scores.get('blind_test_gap') or {}
 _bt_why298 = str(_bt_gap298.get('reason') or '').strip()
 _bt_tail298 = ('' if four_scores.get('blind_test_status') != '미수행'
                else f" — {_uk._esc(_bt_why298 or '사유 미수신')}")
+# 라운드 430 — 종전 이름 '최종점수 상한 캡'은 전략 품질 하나가 거는 상한(sq_cap)이었다. 실제로 최종 점수를 누른 상한은 다른
+#   사유일 수 있다(2026-10-06 화면: 이 칸 85점 · 실제 59점 = 유사패턴 순수익 미산출). 이름을 계산에 맞추고, 상한 사유 목록이
+#   있을 때만 그쪽을 가리킨다(없는 목록을 가리키지 않는다). 못 받은 값을 100점으로 채우지 않는다(§3).
+_capnote430 = ('<p style="color:#9DAABC; margin:2px 0; font-size:13px;">다른 상한이 더 낮으면 그쪽이 최종 점수를 정합니다'
+               ' — 위 \'상한 사유\' 목록의 가장 낮은 값입니다.</p>' if four_scores.get('cap_reasons') else '')
 
 st.markdown(f'''
 <div style="background: {action_bg_color}; padding: 20px; border-radius: 12px; margin-bottom: 20px; ">
@@ -11070,7 +11085,8 @@ st.markdown(f'''
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 분석 신뢰도: {four_scores.get('analysis_confidence', 0)}점</p>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- 전략 품질: {fmt_num(four_scores.get('strategy_quality_score'), suffix='점', na='미검증')}</p>
     <p style="color:#9DAABC; margin:2px 0; font-size:15px;">- Blind Test: {four_scores.get('blind_test_status', '미수행')}{_bt_tail298}</p>
-    <p style="color:#F2B84B; margin:8px 0 2px 0; font-size:15px; font-weight:bold;">- 최종점수 상한 캡: {four_scores.get('sq_cap', 100)}점</p>
+    <p style="color:#F2B84B; margin:8px 0 2px 0; font-size:15px; font-weight:bold;">- 전략 품질이 거는 점수 상한: {fmt_num(four_scores.get('sq_cap'), suffix='점', na='미산출')}</p>
+    {_capnote430}
 </div>
 </div>
 
@@ -11767,10 +11783,16 @@ if _ledger_df is not None:
                 _miss_txt275 = (" · 빠진 날 " + ", ".join(m[5:] for m in _miss275[:12])
                                 + (f" 외 {len(_miss275) - 12}일" if len(_miss275) > 12 else "")
                                 if _miss275 else "")
+                # 라운드 430 — 판정일이 아직 비어 있으면 결손이 아니다(그날 밤 기록기가 적는다) · 따로 말한다
+                _pend275 = _cov275.get('pending') or []
+                _pend_txt275 = (f" · {', '.join(p[5:] for p in _pend275)} 은 아직 기록 전입니다(그날 판정은 장이 "
+                                f"끝난 뒤 기록기가 적습니다 — 다음 장이 끝나기 전까지는 빠진 날이 아닙니다)"
+                                if _pend275 else "")
                 st.caption(f"**전방 판정 기록부** (재평가일 {_fe.eval_date_ko()} 에 읽는 원장 · 매 거래일 "
                            f"상위 60 판정을 박제): {_cov275['rows']:,}행 · 기록된 거래일 "
                            f"{_cov275['recorded']}/{_cov275['trading_days']} "
-                           f"({_cov275['start']} ~ {_cov275['end']}){_miss_txt275}. "
+                           f"({_cov275['start']} ~ {_cov275['end']} · 마지막으로 장이 끝난 거래일까지)"
+                           f"{_miss_txt275}{_pend_txt275}. "
                            "빠진 날은 그날의 실시간 입력이라 다시 만들 수 없습니다 — 재평가 표본은 "
                            "기록된 날만큼입니다.")
             except Exception as _x275:                              # noqa: BLE001
@@ -14524,7 +14546,8 @@ st.markdown(f"""
             f"<td>{row['price_type']}</td>"
             f"<td><span style='color:{'#35C98B' if '정상' in row['status'] else ('#4C8DFF' if '간접' in row['status'] else '#9DAABC')};'>{row['status']}</span></td>"
             f"<td>{row['delay']}</td>"
-            f"<td><span style='color:{'#35C98B' if '일치' in row['diff'] else '#9DAABC'};'>{row['diff']}</span></td>"
+            # 라운드 430 — 종전 `'일치' in row['diff']` 는 '불일치'에도 참이라 어긋난 칸을 초록으로 칠했다 · 낱말의 머리로 본다
+            f"<td><span style='color:{'#35C98B' if str(row['diff']).startswith('일치') else '#9DAABC'};'>{row['diff']}</span></td>"
             "</tr>"
             "<tr>"
             f"<td colspan='8' style='padding:2px 12px 8px; color:#9DAABC; font-size:13px; border-top:none;'>"

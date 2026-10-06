@@ -293,7 +293,7 @@ def coverage(path=REG_FILE):
     }
 
 
-def date_coverage(path=REG_FILE, start=None, today=None):
+def date_coverage(path=REG_FILE, start=None, today=None, now=None):
     """전방 구간의 거래일 중 이 원장에 **기록된 날과 빠진 날** (라운드 275 · 상태표 #20).
 
     ■ 왜
@@ -301,9 +301,16 @@ def date_coverage(path=REG_FILE, start=None, today=None):
       없었다 — R253 이 "22거래일 중 16일을 잃었다"고 문서에만 적었다. 11-16 재평가가 읽는 표본의
       크기를 사용자가 화면에서 알아야 한다(§3 · 못 낸 것을 없는 것으로 말하지 않는다).
     ■ 셈
-      시작 = `forward_eval.FORWARD_FROM`(동결일 다음) · 끝 = 오늘(지역 날짜 · R222) · 거래일 판정은
-      `improvement.case_tracker.is_non_trading_date` 한 곳(R252). 새 숫자 없음.
-    반환: {'rows', 'dates', 'trading_days', 'recorded', 'missing': [...], 'start', 'end'}
+      시작 = `forward_eval.FORWARD_FROM`(동결일 다음) · 거래일 판정은 `improvement.case_tracker.is_non_trading_date`
+      한 곳(R252). 새 숫자 없음.
+      끝 = **판정일**(마지막으로 정규장이 끝난 거래일 · `scripts.trading_day.anchor_day` 한 곳 · R283). ⚠️ 라운드 430 —
+      종전엔 끝이 '오늘(지역 날짜)'이라 장중에 열면 아직 장이 안 끝난 오늘이, 장 마감 뒤엔 기록기가 돌기 전의 오늘이
+      '빠진 날 · 다시 만들 수 없습니다'에 들어갔다(2026-10-06 장중 화면: 기록 20/38 · 빠진 날에 10-06). 기록기는 실행
+      시각의 판정일을 적으므로 **판정일 자신은 아직 기록할 수 있다** — 다음 장이 끝나 판정일이 넘어가야 결손이다.
+      그래서 판정일이 비어 있으면 `pending` 에 따로 둔다(빠진 날에 안 넣는다).
+      `today` 를 주면 그날을 판정일로 본다(심기용). 판정일을 못 구하면 **오늘로 떨어지지 않고** 실패한다 —
+      부르는 쪽이 미측정으로 적는다(§3 · trading_day 의 규칙 그대로).
+    반환: {'rows', 'dates', 'trading_days', 'recorded', 'missing': [...], 'pending': [...], 'start', 'end'}
     """
     from datetime import date as _date, datetime as _dt, timedelta as _td
     from improvement.case_tracker import is_non_trading_date
@@ -311,16 +318,25 @@ def date_coverage(path=REG_FILE, start=None, today=None):
     rows = load(path)
     have = {str(r.get('date'))[:10] for r in rows if r.get('date')}
     s = _date.fromisoformat(str(start or _fe.FORWARD_FROM)[:10])
-    e = _date.fromisoformat(str(today)[:10]) if today else _dt.now().astimezone().date()
+    if today:
+        e = _date.fromisoformat(str(today)[:10])
+    else:
+        from scripts.trading_day import anchor_day
+        _a = anchor_day(now)
+        if not _a:
+            raise RuntimeError('판정일(마지막으로 장이 끝난 거래일)을 못 구했다 — 오늘로 대신하지 않는다')
+        e = _date.fromisoformat(_a)
     tdays, d = [], s
     while d <= e:
         iso = d.isoformat()
         if not is_non_trading_date(iso):
             tdays.append(iso)
         d += _td(days=1)
-    missing = [x for x in tdays if x not in have]
+    unrec = [x for x in tdays if x not in have]
+    pending = [x for x in unrec if x == e.isoformat()]          # 판정일 — 아직 기록할 수 있다
+    missing = [x for x in unrec if x != e.isoformat()]
     return {'rows': len(rows), 'dates': sorted(have), 'trading_days': len(tdays),
-            'recorded': len(tdays) - len(missing), 'missing': missing,
+            'recorded': len(tdays) - len(unrec), 'missing': missing, 'pending': pending,
             'start': s.isoformat(), 'end': e.isoformat()}
 
 

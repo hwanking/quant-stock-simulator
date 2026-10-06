@@ -24111,15 +24111,18 @@ with open(_p289, 'w', encoding='utf-8') as _f289:
     for _t289, _dd289 in (('000000.KS', '2026-09-07'), ('000001.KS', '2026-09-07'), ('000000.KS', '2026-09-10')):
         _f289.write('{"contract": "fr-1", "ticker": "%s", "date": "%s", "action": "HOLD"}\n' % (_t289, _dd289))
 _c289 = _fr289.date_coverage(_p289, start='2026-09-07', today='2026-09-11')
-check("심기 ① 09-07~09-11 거래일 5 중 기록 2(07 · 10) · 빠진 날 08 · 09 · 11 — 행 3",
+# 라운드 430 — 끝(today)은 판정일이다. 판정일(09-11)이 비어 있으면 결손이 아니라 '기록 전'(pending)이다 — 종전 기대값은
+#   그것을 빠진 날로 셌다(장중·기록기 전의 오늘을 '다시 만들 수 없다'고 말하던 그 결함을 이 줄이 잠그고 있었다).
+check("심기 ① 09-07~09-11 거래일 5 중 기록 2(07 · 10) · 빠진 날 08 · 09 · 판정일 11 은 기록 전 — 행 3",
       _c289['rows'] == 3 and _c289['trading_days'] == 5 and _c289['recorded'] == 2
-      and _c289['missing'] == ['2026-09-08', '2026-09-09', '2026-09-11'], str(_c289))
+      and _c289['missing'] == ['2026-09-08', '2026-09-09'] and _c289['pending'] == ['2026-09-11'], str(_c289))
 _c289b = _fr289.date_coverage(_p289, start='2026-09-05', today='2026-09-06')
 check("심기 ② 주말만 든 구간이면 거래일 0 · 빠진 날 0 (휴장일은 결손이 아니다 · R252 한 곳)",
       _c289b['trading_days'] == 0 and _c289b['missing'] == [], str(_c289b))
 _c289c = _fr289.date_coverage(_os.path.join(_d289, 'none.jsonl'), start='2026-09-10', today='2026-09-11')
-check("심기 ③ 파일이 없으면 행 0 · 거래일은 그대로 세고 전부 빠진 날 (지어내지 않는다)",
-      _c289c['rows'] == 0 and _c289c['recorded'] == 0 and _c289c['missing'] == ['2026-09-10', '2026-09-11'], str(_c289c))
+check("심기 ③ 파일이 없으면 행 0 · 거래일은 그대로 세고 판정일 앞은 빠진 날 · 판정일은 기록 전 (지어내지 않는다)",
+      _c289c['rows'] == 0 and _c289c['recorded'] == 0 and _c289c['missing'] == ['2026-09-10']
+      and _c289c['pending'] == ['2026-09-11'], str(_c289c))
 _wa289 = _read148(_os.path.join(PROJ, 'web_app.py'))
 check("화면이 전방 기록부 줄을 date_coverage 한 곳에서 읽고 '다시 만들 수 없다'를 말한다 (§3 · 못 읽으면 미측정)",
       "_fr275.date_coverage()" in _wa289 and "기록된 거래일 " in _wa289
@@ -33257,6 +33260,112 @@ check("엔진 답·외부 말풀이 둘 다 날짜 없는 옛 파일 이름을 �
 _labs416 = _read148(_os.path.join(PROJ, 'scripts', 'calibration_lab.py'))
 check("집계표가 만든 때를 싣는다 (다음 클라우드 실행부터 · 그 전엔 엔진 답이 날짜를 안 붙인다)",
       "'made': datetime.datetime.now().strftime('%Y-%m-%d %H:%M')," in _labs416)
+
+print("=" * 72)
+print("§417 시세 대조 낱말은 한 규칙 · 어긋난 칸을 초록으로 안 칠한다 · 전방 기록부의 '빠진 날'은 판정일 앞까지 · 되받기 길을 적는다 (라운드 430)")
+print("=" * 72)
+import io as _io417                                                  # noqa: E402
+import tokenize as _tk417                                            # noqa: E402
+import ast as _ast417                                                # noqa: E402
+import datetime as _dt417                                            # noqa: E402
+import bitemporal_engine as _be417                                   # noqa: E402
+
+
+def _code417(text):
+    """주석·문자열을 뗀 코드 토큰 — 고친 이유를 적은 주석이 '옛 글자 없음' 검사를 실패시키지 않게(R313·R314)."""
+    return ''.join(_t.string + (' ' if _t.type == _tk417.NAME else '') for _t in
+                   _tk417.generate_tokens(_io417.StringIO(text).readline)
+                   if _t.type not in (_tk417.COMMENT, _tk417.NL, _tk417.NEWLINE, _tk417.INDENT, _tk417.DEDENT,
+                                      _tk417.STRING))
+
+
+_lab417 = [_be417.cross_check_label(_b, _o) for _b, _o in
+           ((100, 100), (100, 100.1), (100, 100.3), (100, 100.5), (100, 101), (100, 102), (0, 1), (None, 5), (100, 'x'))]
+check("시세 대조 낱말 — 기존 띠(0.1·0.3·1.0%) 그대로 · 경계는 이하 · 못 읽으면 (None, None)",
+      [_w for _w, _p in _lab417] == ['일치', '일치', '경미한 차이', '재검증 요망', '재검증 요망',
+                                     '오류 (1.0% 이상 불일치)', None, None, None]
+      and _be417.CROSS_BANDS == ((0.1, '일치'), (0.3, '경미한 차이'), (1.0, '재검증 요망')), str(_lab417))
+_bes417 = _read148(_os.path.join(PROJ, 'bitemporal_engine.py'))
+_bec417 = _code417(_bes417)
+_bek417 = [_n.value for _n in _ast417.walk(_ast417.parse(_bes417))
+           if isinstance(_n, _ast417.Constant) and isinstance(_n.value, str)]
+check("출처 표와 교차검증 칸이 같은 함수로 부른다 — 옛 '글자가 같은가' 판정과 손으로 적은 띠 비교가 코드에 없다",
+      _bec417.count('cross_check_label (') >= 2
+      and 'diff_pct <=0.1 ' not in _bec417 and 'diff_pct <=0.3 ' not in _bec417
+      and not any(_s == '일치 (0원)' for _s in _bek417), scanned=len(_bek417))
+_wa417 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_waT417 = _ast417.parse(_wa417)
+
+
+def _is_row_diff417(n):
+    return (isinstance(n, _ast417.Subscript) and isinstance(n.value, _ast417.Name) and n.value.id == 'row'
+            and isinstance(n.slice, _ast417.Constant) and n.slice.value == 'diff')
+
+
+_bad417 = [_n for _n in _ast417.walk(_waT417)
+           if isinstance(_n, _ast417.Compare) and isinstance(_n.left, _ast417.Constant) and _n.left.value == '일치'
+           and any(isinstance(_o, _ast417.In) for _o in _n.ops) and any(_is_row_diff417(_c) for _c in _n.comparators)]
+_good417 = [_n for _n in _ast417.walk(_waT417)
+            if isinstance(_n, _ast417.Call) and isinstance(_n.func, _ast417.Attribute) and _n.func.attr == 'startswith'
+            and isinstance(_n.func.value, _ast417.Call) and _n.func.value.args and _is_row_diff417(_n.func.value.args[0])]
+check("출처 표의 초록은 낱말 머리로 본다 — '불일치'에도 참이던 `'일치' in row['diff']` 가 코드에 없다(AST · 주석 제외)",
+      not _bad417 and len(_good417) == 1, f"옛 모양 {len(_bad417)} · 새 모양 {len(_good417)}")
+import forward_registry as _fr417                                    # noqa: E402
+import tempfile as _tf417                                            # noqa: E402
+_d417 = _tf417.mkdtemp(prefix='r430_')
+_p417 = _os.path.join(_d417, 'forward_registry.jsonl')
+with open(_p417, 'w', encoding='utf-8') as _f417:
+    for _dd417 in ('2026-09-07', '2026-09-08', '2026-09-09'):
+        _f417.write('{"contract": "fr-1", "ticker": "000000.KS", "date": "%s", "action": "HOLD"}\n' % _dd417)
+# 기록 09-07(월)·08·09 · 09-10(목)은 비어 있다
+_cA417 = _fr417.date_coverage(_p417, start='2026-09-07', now=_dt417.datetime(2026, 9, 10, 10, 0))   # 목 장중
+_cB417 = _fr417.date_coverage(_p417, start='2026-09-07', now=_dt417.datetime(2026, 9, 10, 16, 0))   # 목 장 마감 뒤
+_cC417 = _fr417.date_coverage(_p417, start='2026-09-07', now=_dt417.datetime(2026, 9, 11, 16, 0))   # 금 장 마감 뒤
+_got417 = [(_c['end'], _c['missing'], _c['pending']) for _c in (_cA417, _cB417, _cC417)]
+check("전방 기록부 셈의 끝은 판정일 — 장중이면 전 거래일까지 · 장 마감 뒤 비어 있는 그날은 '기록 전' · 다음 장이 끝나야 빠진 날",
+      _got417 == [('2026-09-09', [], []),
+                  ('2026-09-10', [], ['2026-09-10']),
+                  ('2026-09-11', ['2026-09-10'], ['2026-09-11'])], str(_got417))
+import scripts.trading_day as _td417                                 # noqa: E402
+_anc417 = _td417.anchor_day
+try:
+    _td417.anchor_day = lambda now=None, max_back=30: None
+    try:
+        _fr417.date_coverage(_p417, start='2026-09-07')
+        _raised417 = False
+    except RuntimeError:
+        _raised417 = True
+finally:
+    _td417.anchor_day = _anc417
+check("판정일을 못 구하면 오늘로 떨어지지 않고 실패한다 — 화면은 그것을 '미측정'으로 적는다",
+      _raised417 and "읽지 못했습니다 ({type(_x275).__name__}) — 미측정입니다" in _wa417)
+check("화면 — 판정일이 비어 있으면 '아직 기록 전'을 따로 말한다 · 셈의 끝이 무엇인지 적는다",
+      "_cov275.get('pending')" in _wa417 and '마지막으로 장이 끝난 거래일까지' in _wa417)
+import scripts.pull_research_data as _pr417                          # noqa: E402
+_g417, _h417 = _pr417._gh, _pr417.http_candidates
+try:
+    _pr417.ROUTE.update(list=None, download=None)
+    _pr417._gh = lambda args: (1, '', 'gh auth login')
+    _pr417.http_candidates = lambda slug: ([{'tag': 'data-1', 'at': '2026-10-05T00:00:00Z', 'name': 'research_data_1.zip'}], '')
+    _pr417.candidates('own/repo')
+    _rt417 = dict(_pr417.ROUTE)
+finally:
+    _pr417._gh, _pr417.http_candidates = _g417, _h417
+    _pr417.ROUTE.update(list=None, download=None)
+_prs417 = _read148(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'))
+check("되받기가 목록·파일을 어느 길로 받았는지 기억하고 마지막 줄(저녁 작업 기록이 남기는 줄)에 적는다",
+      _rt417.get('list') == '공개 HTTPS' and "받은 길 목록 {ROUTE['list'] or '?'}·파일 {ROUTE['download'] or '?'}" in _prs417,
+      str(_rt417))
+_qis417 = _read148(_os.path.join(PROJ, 'quant_indicators.py'))
+check("'가장 많이 걸린 차단 조건'은 엔진의 게이트 이름으로 센다 — 막힌 사유 글이 그 실패한 게이트의 글이고, 이름과 같은 묶음에서 나온다",
+      "top3_block_reasons = [g['text'] for g in gate_checks if not g['passed']]" in _qis417
+      and "'gate_checks': gate_checks," in _qis417 and '"scores_obj": scores,' in _qis417
+      and "_gc430 = (r.get('scores_obj') or {}).get('gate_checks') or []" in _wa417
+      and "if isinstance(g, dict) and not g.get('passed') and g.get('name')]" in _wa417)
+check("'판정 근거 상세'의 상한 줄은 전략 품질이 거는 상한이라고 부른다 · 못 받으면 100점이 아니라 미산출 · 상한 사유가 있을 때만 그 목록을 가리킨다",
+      "전략 품질이 거는 점수 상한: {fmt_num(four_scores.get('sq_cap'), suffix='점', na='미산출')}" in _wa417
+      and "four_scores.get('sq_cap', 100)" not in _wa417
+      and "if four_scores.get('cap_reasons') else '')" in _wa417)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

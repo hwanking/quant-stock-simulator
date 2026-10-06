@@ -611,6 +611,28 @@ KrxCalendarMock = KrxCalendar
 MARKET_OPEN = datetime.time(9, 0)
 MARKET_CLOSE = datetime.time(15, 30)
 
+#: 라운드 430 — 두 시세 출처(네이버 기준 · 다음 대조)의 어긋남을 부르는 낱말 **한 곳**. 띠(0.1 · 0.3 · 1.0%)는 아래
+#:   `cross_validate` 가 쓰던 그 값 그대로이고 새로 고른 수가 아니다. 종전엔 같은 파일의 출처 표(`fetch_krx_price_with_matrix`)가
+#:   **글자가 같은가**로만 갈라 0.18% 차이를 '불일치 (−500원)'로 적었고, 같은 화면 아래 칸은 같은 비교를 이 띠로 '일치 ·
+#:   경미한 차이'라 적었다 — 한 비교에 판정자가 둘이었다(§4).
+CROSS_BANDS = ((0.1, '일치'), (0.3, '경미한 차이'), (1.0, '재검증 요망'))
+CROSS_OVER = '오류 (1.0% 이상 불일치)'
+
+
+def cross_check_label(base, other):
+    """(낱말, 오차율 %) — 기준가 대비 두 번째 출처의 어긋남. 둘 중 하나를 못 읽거나 기준가가 0 이하면 (None, None)."""
+    try:
+        b, o = float(base), float(other)
+    except (TypeError, ValueError):
+        return None, None
+    if b <= 0:
+        return None, None
+    pct = abs(b - o) / b * 100.0
+    for lim, word in CROSS_BANDS:
+        if pct <= lim:
+            return word, pct
+    return CROSS_OVER, pct
+
 
 def get_market_status(now_kst=None):
     now_kst = now_kst or datetime.datetime.now()
@@ -1463,7 +1485,8 @@ class BitemporalEngine:
         if daum_price is not None:
             diff = krx_base_price - daum_price
             daum_status = "정상 수신"
-            daum_diff_str = "일치 (0원)" if abs(diff) < 1e-6 else f"불일치 ({diff:+,.0f}원)"
+            _w430, _p430 = cross_check_label(krx_base_price, daum_price)
+            daum_diff_str = (f"{_w430} ({diff:+,.0f}원 · {_p430:.2f}%)" if _w430 else "대조 불가")
             daum_delay = f"{daum_ms}ms"
         else:
             daum_status = f"수신 실패 ({daum_err})"
@@ -2439,11 +2462,7 @@ class BitemporalEngine:
 
         # 두 출처가 모두 살아 있을 때만 오차율을 산출한다. 하나라도 없으면 '대조 불가'.
         if naver_price is not None and daum_price is not None and naver_price > 0:
-            diff_pct = abs(naver_price - daum_price) / naver_price * 100.0
-            if diff_pct <= 0.1:   cross_val = "일치"
-            elif diff_pct <= 0.3: cross_val = "경미한 차이"
-            elif diff_pct <= 1.0: cross_val = "재검증 요망"
-            else:                 cross_val = "오류 (1.0% 이상 불일치)"
+            cross_val, diff_pct = cross_check_label(naver_price, daum_price)   # 라운드 430 — 낱말은 한 곳
             comparable = True
         else:
             diff_pct = None

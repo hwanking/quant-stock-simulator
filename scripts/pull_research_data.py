@@ -224,6 +224,11 @@ def http_download(slug, tag, name, dst_dir):
         return None, f'{type(e).__name__}: {e}'[:300]
 
 
+#: 라운드 430 — 이번 실행이 목록·파일을 어느 길로 받았나('gh' · '공개 HTTPS'). 저녁 작업 기록은 끝 세 줄만 남겨서
+#:   라운드 428 은 예약 실행이 물러선 길로 받았다는 것을 **차례로 추론**해야 했다 — 마지막 줄에 싣는다.
+ROUTE = {'list': None, 'download': None}
+
+
 def candidates(slug):
     """(자산 갱신 시각, 태그, 자산 이름) 목록 — 최신이 마지막.
 
@@ -243,6 +248,7 @@ def candidates(slug):
         rows, why = http_candidates(slug)
         if rows:
             print(f'→ 인증 없는 공개 API 로 읽었다 · 후보 {len(rows)}개')
+            ROUTE['list'] = '공개 HTTPS'
             return rows
         print(f'공개 API 로도 못 읽었다 — 지어내지 않고 멈춘다: {why or "후보 0개"}')
         return []
@@ -256,6 +262,7 @@ def candidates(slug):
         except ValueError:
             continue
     rows.sort(key=lambda r: r['at'])
+    ROUTE['list'] = 'gh'
     return rows
 
 
@@ -665,6 +672,7 @@ def main():
     print(f'\n내려받는 중 → {zip_path}')
     code, _, err = _gh(['release', 'download', pick['tag'],
                         '-p', pick['name'], '-D', INBOX, '--clobber'])
+    ROUTE['download'] = 'gh'
     if code != 0 or not os.path.exists(zip_path):
         # 라운드 428 — gh 가 안 되면 공개 내려받기 주소로(인증 없음 · 임시 이름 → 바꿔 끼움 · 같은 INBOX · 같은 이름)
         print(f'gh 로 못 받았다 (종료 {code}): {(err or "").strip()[:300] or "사유 출력 없음"}')
@@ -673,6 +681,7 @@ def main():
             print(f'공개 주소로도 못 받았다 — 멈춘다: {why}')
             return 1
         print('→ 인증 없는 공개 주소로 받았다')
+        ROUTE['download'] = '공개 HTTPS'
     mb = os.path.getsize(zip_path) / 1048576
     print(f'받음 {mb:,.1f}MB')
 
@@ -801,7 +810,7 @@ def main():
     _g420 = 'virtual_graded.jsonl'
     print(f"되받기 끝 · {pick['tag']} · 원장 {(before.get(_g420) or {}).get('lines', 0):,} → "
           f"{(now.get(_g420) or {}).get('lines', 0):,} · 덮어씀 {len(wrote)} · 물러섬 {len(REPLACE_FALLBACK)} · "
-          f"zip 지움 {len(_gone420)}")
+          f"zip 지움 {len(_gone420)} · 받은 길 목록 {ROUTE['list'] or '?'}·파일 {ROUTE['download'] or '?'}")
     return 0
 
 
