@@ -1618,9 +1618,19 @@ def paste_image_box(key="paste_box"):
 # ── 미산출(None) 값 표기 헬퍼 ────────────────────────────────────────────────
 # 엔진은 표본·신뢰도가 부족하면 숫자 대신 None을 돌려준다.
 # 화면은 0으로 채우지 않고 '미산출'로 적는다. (모든 화면보다 먼저 정의되어야 한다)
+def _no_neg_zero(s):
+    """라운드 434 — 반올림해서 0 이 된 음수가 '-0'·'-0.0' 으로 나가지 않게(값은 그대로 · 글자만). 0 이 아니면 받은 그대로."""
+    if isinstance(s, str) and s.startswith('-'):
+        body = s[1:]
+        digits = ''.join(ch for ch in body if ch.isdigit())
+        if digits and set(digits) == {'0'}:
+            return body
+    return s
+
+
 def fmt_num(v, spec=",.0f", suffix="", na="미산출"):
     try:
-        return f"{v:{spec}}{suffix}" if v is not None else na
+        return (_no_neg_zero(f"{v:{spec}}") + suffix) if v is not None else na
     except (TypeError, ValueError):
         return na
 
@@ -1629,7 +1639,11 @@ def fmt_pct(v, digits=1, signed=True, na="미산출"):
     if v is None:
         return na
     try:
-        return f"{v:+.{digits}f}%" if signed else f"{v:.{digits}f}%"
+        s = f"{v:+.{digits}f}%" if signed else f"{v:.{digits}f}%"
+        # 라운드 434 — '-0.0%' 는 '0.0%' 로(부호 있는 서식이면 '+0.0%' 가 아니라 부호 없이 · 0 에 방향이 없다)
+        if s.lstrip('+-').rstrip('%').replace('.', '').strip('0') == '':
+            return s.lstrip('+-')
+        return s
     except (TypeError, ValueError):
         return na
 
@@ -14034,7 +14048,7 @@ with tab_demark:
             <div style="flex:1; min-width:250px;">
                 <b style="color:#0a84ff;">[보조 지표 — 같은 근거 점수에 더해집니다]</b><br>
                 Bollinger: {dm.get('bb_state', '산출 불가')} (밴드 내 {fmt_num(dm.get('bb_position_pct'), '.0f', '%')} · 폭 {fmt_num(dm.get('bb_width_pct'), '.1f', '%')}){'  ← 하단 재진입' if dm.get('bollinger_lower_reentry') else ('  ← 상단 재진입' if dm.get('bollinger_upper_reentry') else '')}<br>
-                Williams %R: {'-80 상향 회복 (매수형)' if dm.get('williams_r_buy_reversal') else '-20 하향 이탈 (매도형)' if dm.get('williams_r_sell_reversal') else f"{dm.get('williams_r_val', 0):.1f}"}<br>
+                Williams %R: {'-80 상향 회복 (매수형)' if dm.get('williams_r_buy_reversal') else '-20 하향 이탈 (매도형)' if dm.get('williams_r_sell_reversal') else fmt_num(dm.get('williams_r_val'), '.1f')}<br>
                 RSI: {fmt_num(dm.get('rsi_value'), '.0f')}{' (침체권 반등)' if dm.get('rsi_bullish_reversal') else (' (과열권 반락)' if dm.get('rsi_bearish_reversal') else '')}<br>
                 거래량: {'오른 날 20일 평균 1.2배 이상' if dm.get('vol_confirmed') else '평이함'}<br>
                 {_adx_line406}<br>

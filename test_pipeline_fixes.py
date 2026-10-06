@@ -508,10 +508,38 @@ cv2 = engine.verify_realtime_sources(SYMBOL)
 _market_open = be.get_market_status()['state'] == '장중'
 
 
+# ⚠️ 라운드 434 (2026-10-06) — 이 검사가 19:5x 에 '장 마감: 완전 동일' 로 붉어졌다(naver 272,000 두 번 동일 · daum
+#   272,000 → 272,500 · 다시 물어도 같은 갈림). 2026-09-14 부터 KRX **시간외 연속매매(16:00~20:00)** 가 생겨 '장 종료'
+#   에도 체결가가 **계속** 움직인다(라운드 325 가 화면에 적은 그 사실) — R299 의 '한 번 바뀌고 멈춘다'는 그 전의 단일가
+#   구간 이야기였다. 그 창 안이면 장중과 **같은 규칙**(실제 체결 변동 1% 이내)을 쓴다 — 새 문턱이 아니다. 창은 화면이 쓰는
+#   **한 곳**(`web_app._KRX_SESSIONS_325` · 거래소가 정한 시각)에서 AST 로 읽는다(새 시간창을 만들지 않는다 · 못 읽으면
+#   종전대로 '장 마감'으로 본다 — 무르게 떨어지지 않는다). 창 밖의 '장 마감' 허용 오차는 그대로 1e-12 다.
+def _after_hours_now():
+    import ast as _a8
+    import datetime as _dt8
+    try:
+        _src8 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+        for _n8 in _a8.parse(_src8).body:
+            if isinstance(_n8, _a8.Assign) and any(getattr(_t, 'id', '') == '_KRX_SESSIONS_325' for _t in _n8.targets):
+                _tab8 = eval(compile(_a8.Expression(_n8.value), '<krx_sessions>', 'eval'),   # noqa: S307
+                             {'datetime': _dt8})
+                if be.get_market_status().get('state') != '장 종료':
+                    return False
+                _am8 = _tab8['after_market']
+                return _am8[0] <= _dt8.datetime.now().time() < _am8[1]
+    except Exception:                                          # noqa: BLE001
+        return False
+    return False
+
+
+_after_hours = _after_hours_now()
+_market_live = _market_open or _after_hours
+
+
 def _close_enough(a, b):
     if a is None or b is None:
         return a is b
-    return abs(a - b) / max(abs(a), 1e-9) < (0.01 if _market_open else 1e-12)
+    return abs(a - b) / max(abs(a), 1e-9) < (0.01 if _market_live else 1e-12)
 
 
 _cvtxt = (f"naver {cv1['naver']['price']}→{cv2['naver']['price']}, "
@@ -531,7 +559,8 @@ _cv_same = (_close_enough(cv1['naver']['price'], cv2['naver']['price'])
 #   바뀌면 그것이 난수의 서명이므로 **실패**. 새 문턱·새 시간창을 만들지 않았다.
 #   그리고 우리 코드에 난수가 없다는 것은 **바로 아래 AST 검사**가 따로 잠근다.
 _CVNAME = ("교차검증 가격이 난수가 아님"
-           + (" (장중: 1% 이내 허용)" if _market_open else " (장 마감: 완전 동일)"))
+           + (" (장중: 1% 이내 허용)" if _market_open
+              else " (시간외 연속매매 중: 1% 이내 허용)" if _after_hours else " (장 마감: 완전 동일)"))
 if _cv_same:
     check(_CVNAME, True, _cvtxt)
 else:
@@ -2924,9 +2953,18 @@ check("DPS 직접 포맷 제거", "_div['dps']:" not in _w49)
 import importlib.util as _ilu49
 
 _spec49 = _ilu49.spec_from_file_location("_wa49", _os.path.join(PROJ, "web_app.py"))
+# ⚠️ 라운드 434 — 종전엔 몸통의 return 글자를 못 박았다(R98b 의 조립 락). '-0' 을 고치며 몸통이 바뀌자 깨졌다 —
+#   지키려던 것은 글자가 아니라 **None 을 문구로 돌려준다**는 성질이다. 함수를 AST 로 떼어 직접 부른다.
+import ast as _ast49                                                 # noqa: E402
+_fn49n = [n for n in _ast49.parse(_w49).body
+          if isinstance(n, _ast49.FunctionDef) and n.name in ('_no_neg_zero', 'fmt_num')]
+_ns49 = {}
+exec(compile(_ast49.Module(body=_fn49n, type_ignores=[]), '<fmt49>', 'exec'), _ns49)   # noqa: S102
+_fmt49 = _ns49.get('fmt_num')
 check("fmt 헬퍼 계약 — None → 문구",
-      "def fmt_num(v, spec=\",.0f\", suffix=\"\", na=\"미산출\")" in _w49
-      and "return f\"{v:{spec}}{suffix}\" if v is not None else na" in _w49)
+      "def fmt_num(v, spec=\",.0f\", suffix=\"\", na=\"미산출\")" in _w49 and callable(_fmt49)
+      and _fmt49(None) == '미산출' and _fmt49(None, na='없음') == '없음' and _fmt49(1234.0) == '1,234'
+      and _fmt49(3.5, '.1f', '%') == '3.5%')
 
 # ⑤ 실제 렌더 — 성격이 다른 종목 4종에서 예외 0건
 
@@ -25392,8 +25430,15 @@ print("-" * 72)
 #   이웃이 창 밖으로 밀려 드러났다. **창을 넓히지 않고** 그 검사에 커버리지를 적었다.
 _t311 = _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py'))
 # ① 문턱은 그대로다 — 무르게 하지 않았다는 것을 값으로 본다
-check("장 마감 허용 오차가 그대로 0 이다 (1e-12) · 장중만 1%",
-      "(0.01 if _market_open else 1e-12)" in _t311)
+# 라운드 434 — 시간외 연속매매(16:00~20:00 · 2026-09-14 시행)도 체결이 일어나는 시간이라 장중과 같은 1% 를 쓴다. 창은
+#   화면의 세션 표 한 곳에서 읽고(새 시간창 아님) 창 밖의 장 마감은 여전히 1e-12 다 — 무르게 하지 않았다는 것을 그대로 본다.
+#   ⚠️ 종전 락은 찾는 글자가 **이 검사 줄 자신에도** 있어 늘 참이었다(R313 의 '검사가 자기 자신을 세었다') — 이제
+#   그 코드가 **줄 머리에서 시작하는** 줄만 센다(검사 줄은 `check(` 로 시작하므로 안 걸린다).
+_ln311 = [x.strip() for x in _t311.splitlines()]
+check("장 마감 허용 오차가 그대로 0 이다 (1e-12) · 장중·시간외 연속매매만 1% (창은 화면 세션 표 한 곳에서 읽는다)",
+      sum(1 for x in _ln311 if x.startswith('return abs(a - b) / max(abs(a), 1e-9) < (0.01 if _market_live else 1e-12)')) == 1
+      and sum(1 for x in _ln311 if x.startswith('_market_live = _market_open or _after_hours')) == 1
+      and sum(1 for x in _ln311 if x.startswith('if isinstance(_n8, _a8.Assign)') and '_KRX_SESSIONS_325' in x) == 1)
 # ② 어긋남을 **통과로 위장하지 않는다** — 건너뜀으로 적는다(§6)
 check("두 호출이 갈리면 `skipped()` 로 적는다 — check(..., True) 로 넘기지 않는다",
       'skipped(_CVNAME,' in _t311 and 'check(_CVNAME, False,' in _t311)
@@ -34206,6 +34251,39 @@ check("실제 성적표 — 셈이 실려 있고 결과가 정해진 후보 수�
       _rr422.get('days', 0) > 0 and _cc422.get('n', 0) <= _rr422.get('candidates', -1)
       and (not _cc422.get('ci95') or _cc422['ci95'][0] <= _cc422['mean_net'] <= _cc422['ci95'][1]),
       str({k: _rr422.get(k) for k in ('days', 'candidates', 'recommended')}) + ' · ' + str(_cc422.get('n')))
+
+print("=" * 72)
+print("§423 국면 칸은 사람 말로 · 반올림한 −0 은 0 · W%R 결측은 미산출 · 챗의 ±1% '매수구간'을 걷는다 (라운드 434)")
+print("=" * 72)
+# 옆 세션(R425)이 같은 파일을 고치던 동안 미뤄 둔 셋(라운드 430 의 ④). 값·판정·문턱 불변 — 글자만.
+import ast as _ast423                                                # noqa: E402
+import ui_kit as _uk423                                              # noqa: E402
+import gaeum_chat as _gc423                                          # noqa: E402
+_l423a = _uk423.regime_gate_line({'cell': 'BULL|calm'})
+_l423b = _uk423.regime_gate_line({'cell': 'BULL|calm', 'cell_ko': '심기 칸'})
+_l423c = _uk423.regime_gate_line({'cell': 'x'})
+check("국면 칸 — 엔진의 사람 말(cell_ko)을 먼저 · 없으면 같은 규칙(regime_policy.cell_ko)으로 · 못 바꾸면 받은 그대로",
+      'BULL|calm' not in _l423a and '|' not in _l423a.split('**')[1] and '심기 칸' in _l423b and '**x**' in _l423c, _l423a)
+_w423 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_fns423 = [n for n in _ast423.parse(_w423).body
+           if isinstance(n, _ast423.FunctionDef) and n.name in ('_no_neg_zero', 'fmt_num', 'fmt_pct')]
+_ns423 = {}
+exec(compile(_ast423.Module(body=_fns423, type_ignores=[]), '<fmt423>', 'exec'), _ns423)   # noqa: S102
+_fn423, _fp423 = _ns423['fmt_num'], _ns423['fmt_pct']
+check("−0 — 반올림해서 0 이 된 음수는 '0' (값은 그대로 · 글자만) · 진짜 음수·양수·결측은 종전 그대로",
+      len(_fns423) == 3 and _fn423(-0.3, '.0f') == '0' and _fn423(-0.04, '.1f', '%') == '0.0%'
+      and _fn423(-1.6, '.0f') == '-2' and _fn423(-0.6, '.0f') == '-1' and _fn423(0.3, '.0f') == '0'
+      and _fn423(-1234.4) == '-1,234' and _fn423(None) == '미산출' and _fn423('x') == '미산출'
+      and _fp423(-0.04) == '0.0%' and _fp423(0.04) == '0.0%' and _fp423(-0.06) == '-0.1%' and _fp423(1.26) == '+1.3%'
+      and _fp423(None) == '미산출',
+      str([_fn423(-0.3, '.0f'), _fp423(-0.04), _fp423(-0.06)]))
+check("W%R — 못 받으면 0.0 을 그리지 않는다(같은 서식 함수 · 결측은 '미산출' · §3)",
+      "fmt_num(dm.get('williams_r_val'), '.1f')" in _w423 and "dm.get('williams_r_val', 0)" not in _w423)
+_a423 = _gc423._ans_price_buy({'entry': 10000, 'buy_zone': (9900, 10100), 'headline': '심기 결론'})
+_b423 = _gc423._ans_price_buy({'entry': 10000, 'buy_zone': (9900, 10100)})
+check("챗 — '이하'와 어긋나는 ±1% '매수구간'을 안 싣는다 · 닿아도 사도 되는지는 판정이 정한다(판정이 있으면 같은 줄에)",
+      '매수구간' not in _a423 and '10,100' not in _a423 and '10,000원' in _a423 and '오늘 판정: 심기 결론' in _a423
+      and '오늘 판정' not in _b423 and '판정이 정합니다' in _b423, _a423)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

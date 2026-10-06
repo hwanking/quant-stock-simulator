@@ -2492,7 +2492,16 @@ def regime_gate_line(rg):
         pass
     if g.get('block_new'):
         bits.append('신규 매수 차단')
-    head = f"지금 국면 칸 **{cell}**"
+    # 라운드 434 — 종전엔 엔진의 내부 열쇠('BULL|calm')를 그대로 그렸다. 엔진이 사람 말을 같이 낸다(`cell_ko`) — 그것을
+    #   먼저 읽고, 없으면 같은 규칙(`regime_policy.cell_ko`)으로 바꾸고, 그래도 못 바꾸면 받은 그대로 둔다(지어내지 않는다).
+    cell_txt = str(g.get('cell_ko') or '').strip()
+    if not cell_txt:
+        try:
+            import regime_policy as _rp434
+            cell_txt = _rp434.cell_ko(cell) or cell
+        except Exception:                                      # noqa: BLE001
+            cell_txt = cell
+    head = f"지금 국면 칸 **{cell_txt}**"
     if g.get('level'):
         head += f" ({g['level']})"
     return head + (' — ' + ' · '.join(bits) if bits
