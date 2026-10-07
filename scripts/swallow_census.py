@@ -23,6 +23,8 @@
     C:/Python314/python.exe scripts/swallow_census.py --all --modules ui_kit,portfolio,trade_plan
         # 가져오는 모듈도 심는다 — 바꾼 소스를 원본 경로 이름으로 컴파일해 sys.modules 에 먼저 넣어 두면
         # web_app 의 `import ui_kit` 이 그것을 받는다(`__file__` 은 원본 경로 · 라운드 441 의 '안 심은 곳')
+    C:/Python314/python.exe scripts/swallow_census.py --all --ticker 069500
+        # 다른 종목 화면으로(ETF · 코스닥 · 보유 종목) — 갈래가 다르면 걸리는 핸들러가 다르다
 """
 import ast
 import builtins
@@ -44,9 +46,12 @@ from scripts import lineage_audit as _la  # noqa: E402
 WEB = os.path.join(PROJ, 'web_app.py')
 ALL = '--all' in sys.argv
 MODULES = []
+TICKER = None                        # --ticker 005930 → 회귀 하네스(render_probe)와 같은 `selected_ticker` 세션 키
 for _i, _a in enumerate(sys.argv):
     if _a == '--modules' and _i + 1 < len(sys.argv):
         MODULES = [m.strip() for m in sys.argv[_i + 1].split(',') if m.strip()]
+    if _a == '--ticker' and _i + 1 < len(sys.argv):
+        TICKER = sys.argv[_i + 1].strip()
 
 
 def _is_pass_only(handler):
@@ -159,6 +164,9 @@ def main():
 
     from streamlit.testing.v1 import AppTest
     at = AppTest.from_string(code, default_timeout=900)
+    if TICKER:
+        at.session_state['selected_ticker'] = TICKER     # 다른 종목이면 다른 갈래의 핸들러가 걸린다 (라운드 441 의 '남은 것')
+        print(f'   종목 {TICKER} 화면으로 렌더')
     at.run()
     print('렌더 예외', len(at.exception), [str(e.value)[:160] for e in at.exception])
     texts = []
