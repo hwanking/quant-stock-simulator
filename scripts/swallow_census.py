@@ -20,6 +20,9 @@
 
     C:/Python314/python.exe scripts/swallow_census.py          # pass 뿐인 핸들러만
     C:/Python314/python.exe scripts/swallow_census.py --all    # 핸들러 전부 (몸통 유지 · 기록만 앞에)
+    C:/Python314/python.exe scripts/swallow_census.py --all --modules ui_kit,portfolio,trade_plan
+        # 가져오는 모듈도 심는다 — 바꾼 소스를 원본 경로 이름으로 컴파일해 sys.modules 에 먼저 넣어 두면
+        # web_app 의 `import ui_kit` 이 그것을 받는다(`__file__` 은 원본 경로 · 라운드 441 의 '안 심은 곳')
 """
 import ast
 import builtins
@@ -40,6 +43,10 @@ from scripts import lineage_audit as _la  # noqa: E402
 
 WEB = os.path.join(PROJ, 'web_app.py')
 ALL = '--all' in sys.argv
+MODULES = []
+for _i, _a in enumerate(sys.argv):
+    if _a == '--modules' and _i + 1 < len(sys.argv):
+        MODULES = [m.strip() for m in sys.argv[_i + 1].split(',') if m.strip()]
 
 
 def _is_pass_only(handler):
@@ -72,12 +79,16 @@ def static_census():
 
 
 class _Instr(ast.NodeTransformer):
-    def __init__(self):
+    """핸들러마다 (파일 · 원본 줄 · 예외 종류 · 메시지 · pass 뿐인가) 를 builtins 목록에 적게 바꾼다."""
+
+    def __init__(self, path):
         self.n = 0
+        self.path = path
+        self.tag = os.path.relpath(path, PROJ).replace('\\', '/')
 
     def visit_Name(self, node):
         if node.id == '__file__':
-            return ast.copy_location(ast.Constant(WEB), node)
+            return ast.copy_location(ast.Constant(self.path), node)
         return node
 
     def visit_ExceptHandler(self, node):
@@ -90,10 +101,40 @@ class _Instr(ast.NodeTransformer):
         nm = node.name or '_e_sw'
         node.name = nm
         rec = ast.parse(
-            f"__import__('builtins')._GAEUM_SWALLOW.append(({node.lineno}, type({nm}).__name__, str({nm})[:200], {int(_is_pass_only(node))}))"
+            f"__import__('builtins')._GAEUM_SWALLOW.append(({self.tag!r}, {node.lineno}, type({nm}).__name__, "
+            f"str({nm})[:200], {int(_is_pass_only(node))}))"
         ).body[0]
         node.body = [rec] if _is_pass_only(node) else [rec] + node.body
         return node
+
+
+def instrument(path):
+    """(바꾼 소스, 심은 수, 원본 줄 목록) — 원본은 안 건드린다."""
+    src = open(path, encoding='utf-8').read()
+    tree = ast.parse(src)
+    ins = _Instr(path)
+    tree = ins.visit(tree)
+    ast.fix_missing_locations(tree)
+    return ast.unparse(tree), ins.n, src.splitlines()
+
+
+def preload_modules(names):
+    """가져오는 모듈을 심은 채로 sys.modules 에 먼저 넣는다 — web_app 의 import 가 이것을 받는다."""
+    import types
+    out = {}
+    for name in names:
+        path = os.path.join(PROJ, *name.split('.')) + '.py'
+        if not os.path.exists(path):
+            print(f'   ⚠ 모듈 없음 {name} ({path})')
+            continue
+        code, n, lines = instrument(path)
+        mod = types.ModuleType(name)
+        mod.__file__ = path
+        sys.modules[name] = mod
+        exec(compile(code, path, 'exec'), mod.__dict__)
+        out[name] = (n, lines)
+        print(f'   심음 {name}: 핸들러 {n}개')
+    return out
 
 
 def main():
@@ -102,15 +143,19 @@ def main():
     for n_pass, n_all, name in rows[:15]:
         print(f'   {n_pass:4d} / {n_all:4d}  {name}')
 
-    src = open(WEB, encoding='utf-8').read()
-    tree = ast.parse(src)
     sw = []
     builtins._GAEUM_SWALLOW = sw
-    ins = _Instr()
-    tree = ins.visit(tree)
-    ast.fix_missing_locations(tree)
-    code = ast.unparse(tree)
-    print(f'② web_app.py 에 심은 자리 {ins.n}개 ({"전부" if ALL else "pass 뿐"}) · 사본 {len(code):,}자')
+    src_by = {}
+    n_total = 0
+    if MODULES:
+        print(f'②-0 가져오는 모듈 먼저 심기 — {len(MODULES)}개')
+        for name, (n, lines) in preload_modules(MODULES).items():
+            src_by[name.replace('.', '/') + '.py'] = lines
+            n_total += n
+    code, n_web, web_lines = instrument(WEB)
+    src_by['web_app.py'] = web_lines
+    n_total += n_web
+    print(f'② web_app.py 에 심은 자리 {n_web}개 ({"전부" if ALL else "pass 뿐"}) · 사본 {len(code):,}자 · 심은 자리 합 {n_total}개')
 
     from streamlit.testing.v1 import AppTest
     at = AppTest.from_string(code, default_timeout=900)
@@ -123,21 +168,21 @@ def main():
     flat = re.sub(r'<[^>]+>', ' ', '\n'.join(texts))
     print('렌더 글자 수', len(flat))
 
-    lines = src.splitlines()
-    by_line = {}
-    for ln, typ, msg, is_pass in sw:
-        by_line.setdefault(ln, []).append((typ, msg))
-    n_pass_fired = len({ln for ln, _, _, p in sw if p})
-    print(f'\n③ 실제로 걸린 자리 {len(by_line)}개 (그중 pass 뿐 {n_pass_fired}개) · 걸린 횟수 {len(sw)}회 · 심은 자리 {ins.n}개')
-    for ln in sorted(by_line):
-        hits = by_line[ln]
+    by_site = {}
+    for tag, ln, typ, msg, is_pass in sw:
+        by_site.setdefault((tag, ln), []).append((typ, msg))
+    n_pass_fired = len({(t, ln) for t, ln, _, _, p in sw if p})
+    print(f'\n③ 실제로 걸린 자리 {len(by_site)}개 (그중 pass 뿐 {n_pass_fired}개) · 걸린 횟수 {len(sw)}회 · 심은 자리 {n_total}개')
+    for tag, ln in sorted(by_site):
+        hits = by_site[(tag, ln)]
         typs = {}
         for typ, msg in hits:
             typs[(typ, msg)] = typs.get((typ, msg), 0) + 1
-        print(f'\n--- web_app.py:{ln}  ×{len(hits)}')
+        print(f'\n--- {tag}:{ln}  ×{len(hits)}')
         for (typ, msg), c in sorted(typs.items(), key=lambda kv: -kv[1])[:3]:
             print(f'    {typ}: {msg!r} ×{c}')
-        for i in range(max(0, ln - 9), ln):
+        lines = src_by.get(tag) or []
+        for i in range(max(0, ln - 9), min(ln, len(lines))):
             print(f'    {i + 1:5d}  {lines[i][:150]}')
     return 0
 
