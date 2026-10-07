@@ -112,6 +112,12 @@ def make_create_new_cases(conn, calib):
         #   (7벌). 건너뛴 수를 세어 찍는다 — 조용히 버리지 않는다(§3).
         existing = {(str(t), str(d)) for t, d in conn.execute(
             "SELECT ticker, signal_date FROM prediction_cases")}
+        # 라운드 442 — 기준일은 **자료 기준일**이다(`premarket.data_day_of` 한 곳). 옛 케이스는 벽시계 날짜로 동결됐고
+        #   scripts/rekey_tracker_basis.py 가 자료 기준일로 옮겼다(원래 날짜는 `orig_signal_date`). 옛 줄은 아래에서
+        #   **자료 기준일 · 그 줄의 날짜** 어느 쪽으로든 이미 있으면 '기존'이다 — 옮기지 않은 DB(클라우드 사본)에서도 같은
+        #   추천을 다시 동결하지 않는다. ⚠️ `orig_signal_date` 는 '기존' 열쇠에 넣지 않는다 — 넣으면 옮겨 간 옛 케이스의
+        #   옛 날짜가 그날 자료로 만든 새 추천을 막는다(오늘 아침 판 D(자료 D-1) → 저녁 판 D(자료 D)).
+        import premarket as _pm442
         today = date.today()
         skipped_existing = skipped_future = skipped_non_trading = 0
         with open(PM_HISTORY, encoding='utf-8') as f:
@@ -123,13 +129,15 @@ def make_create_new_cases(conn, calib):
                 if not p.get('symbol') or not p.get('price'):
                     continue
                 try:
-                    _sig = date.fromisoformat(str(p['date']))
+                    _raw = date.fromisoformat(str(p['date'])[:10])
+                    _sig = date.fromisoformat(_pm442.data_day_of(p) or _raw.isoformat())
                 except (TypeError, ValueError):
                     continue
                 if _sig > today:
                     skipped_future += 1          # 미래 기준일 — 있을 수 없다
                     continue
-                if (str(p['symbol']), _sig.isoformat()) in existing:
+                if ((str(p['symbol']), _sig.isoformat()) in existing
+                        or (str(p['symbol']), _raw.isoformat()) in existing):
                     skipped_existing += 1        # 이미 동결된 추천 — 버전이 바뀌어도 같은 추천
                     continue
                 # 라운드 252 — 휴장일 기준일도 있을 수 없다. 개장 전 리포트가 토·일에
@@ -137,7 +145,10 @@ def make_create_new_cases(conn, calib):
                 #   (같은 추천이 두 날짜). 행은 안 지우고 새로 안 만든다 — 세어 찍는다.
                 #   '이미 동결됨' 뒤에 둔다 — 이미 있는 것은 날짜가 어떻든 '기존'이다
                 #   (첫 판에 앞에 뒀다가 §239 의 심기가 걸렸다).
-                if ct.is_non_trading_date(_sig.isoformat()):
+                # 라운드 442 — 옛 줄(벽시계 날짜)이 휴장일이면 그대로 건너뛴다: 옮기지 않은 DB 에서는 같은 자료의
+                #   거래일 판이 다른 날짜로 이미 동결돼 있어 자료 기준일로 새로 만들면 복사본이 된다. 새 줄은 날짜가 곧 자료일.
+                if (_pm442.DAY_BASIS != p.get('day_basis') and ct.is_non_trading_date(_raw.isoformat())) \
+                        or ct.is_non_trading_date(_sig.isoformat()):
                     skipped_non_trading += 1
                     continue
                 decision = RECO_CLASS_TO_DECISION.get(
@@ -148,7 +159,7 @@ def make_create_new_cases(conn, calib):
                     case = ct.create_prediction_case(
                         ticker=str(p['symbol']),
                         asset_type=str(p.get('asset_type') or 'STOCK'),
-                        signal_date=date.fromisoformat(str(p['date'])),
+                        signal_date=_sig,                    # 라운드 442 — 자료 기준일
                         model_version=_mv415,
                         rulebook_version=_rv415,
                         decision=decision,
@@ -174,6 +185,7 @@ def make_create_new_cases(conn, calib):
                         added += 1
                         _src415[_vsrc415] += 1
                         existing.add((str(p['symbol']), _sig.isoformat()))
+                        existing.add((str(p['symbol']), _raw.isoformat()))
                 except ValueError:
                     continue
         conn.commit()

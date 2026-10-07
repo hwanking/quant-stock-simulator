@@ -60,7 +60,7 @@ def report_checks(pm_dir=None):
         for pk in d.get('picks') or []:
             ck = (pk.get('core') or {}).get('checks')
             if ck:
-                out.setdefault((proof.code6(pk.get('symbol') or pk.get('code')), str(d.get('date'))[:10]), ck)
+                out.setdefault((proof.code6(pk.get('symbol') or pk.get('code')), proof.report_day_of(d)), ck)   # R442 자료 기준일
     return out
 
 

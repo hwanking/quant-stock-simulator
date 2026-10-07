@@ -183,6 +183,14 @@ def initialize_database(db_path: str = DEFAULT_DB_PATH) -> None:
             conn.commit()
         except Exception:
             pass
+        # 라운드 442 — 기준일을 벽시계 날짜에서 자료 기준일로 옮긴 케이스의 **원래 기준일**. 지우지 않고 남긴다(§3 ·
+        #   R197) · 옮긴 적이 없으면 NULL. 옮기는 일은 scripts/rekey_tracker_basis.py 가 한 번 한다(멱등).
+        try:
+            conn.execute(
+                "ALTER TABLE prediction_cases ADD COLUMN orig_signal_date TEXT")
+            conn.commit()
+        except Exception:
+            pass
         _READY.add(os.path.abspath(db_path))
     finally:
         conn.close()

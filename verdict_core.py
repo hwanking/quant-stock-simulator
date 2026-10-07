@@ -190,6 +190,18 @@ WAIT_CURABLE_CHECKS = ('진입 깊이 현실적', '보유기간 안 도달 가�
 WAIT_PROMISE_TAIL = ' — 조건이 갖춰지면 후보'
 
 
+#: 라운드 443 — 조건 이름은 **통과 조건**으로 적혀 있어('강제 차단 없음' · '과열·저유동성 아님') 미충족을 그 이름으로 말하면
+#:   *"강제 차단 없음이 미충족"* 같은 말이 된다(외부 검토 · 라운드 382 가 '미충족'을 붙여 반쯤 고쳤다). 이름은 회귀·저장 스냅샷이
+#:   읽으므로 안 바꾸고(R327), **미충족일 때 사람에게 보이는 말**만 여기 한 곳에서 정한다.
+FAIL_LABELS = {'강제 차단 없음': '강제 차단 사유 있음', '과열·저유동성 아님': '과열 또는 저유동성에 걸림'}
+
+
+def fail_label(name):
+    """미충족 조건을 사람에게 말하는 이름 — 이름이 '…없음/…아님'인 조건은 뒤집어 말하고, 나머지는 '이름 미충족'."""
+    n = str(name or '')
+    return FAIL_LABELS.get(n) or f"'{n}' 미충족"
+
+
 def central_headline(engine_headline, recommended, wait_curable):
     """화면 결론 문장 — 엔진 문장에서 **지킬 수 없는 약속만** 뺀다 (라운드 417 · 한 곳).
 
@@ -555,8 +567,12 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         #   엔진이 **실제로 내는** 값을 읽는다. 모르면(키 없음) 통과로 세지 않는다(§3).
         ('표본외 검증 통과', fs.get('blind_test_status') == OOS_DONE,
          str(fs.get('blind_test_status') or '미수신')),
+        # 라운드 443 — 설명이 거부권 **수**만 적고('3건') 무엇이 막았는지는 안 적었다. 그리고 국면 게이트만 막은 경우엔 조건은
+        #   미충족인데 설명이 '없음'이었다(한 줄 안의 모순). 거부권 문장을 그대로 잇고(자르지 않는다 · R301·R312), 국면
+        #   게이트는 그렇다고 적는다. 판정 불리언·순서 불변.
         ('강제 차단 없음', not vetoes and not rg.get('block_new'),
-         f'{len(vetoes)}건' if vetoes else '없음'),
+         ((f'{len(vetoes)}건: ' + ' · '.join(str(v) for v in vetoes)) if vetoes
+          else ('지금 시장 국면의 게이트가 신규 매수를 막음' if rg.get('block_new') else '없음'))),
         # 라운드 185 — 밸류 게이트 (R183 블라인드 실측: 적정가 이하만 양수
         # +0.238% · 초과는 음수 · OUT_OF_DOMAIN 은 최악 −1.237%)
         ('펀더멘털 밸류 검증', vb_code is None, vb_detail),

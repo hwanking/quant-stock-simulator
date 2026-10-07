@@ -148,6 +148,9 @@ def build(four_scores: dict, sim_res: dict, verdict: dict,
                      or sim.get('horizon_days') or 20,
         'hold_label': sim.get('optimal_holding_period_str'),
         'sample_n': n,
+        # 라운드 443 — 이 수가 어느 지평의 유사패턴인가(엔진이 싣는다 · 없으면 None). 같은 카드의 '유사패턴 관찰기간 40거래일'
+        #   옆에 32건이 놓여 40일 사례로 읽혔다 — 32건은 20일 지평의 수다(외부 검토 2026-10-07).
+        'sample_h': sim.get('base_horizon'),
         'oos_hit': oos,
         'oos_n': (band or {}).get('n'),
         'ci_low': lo, 'ci_high': hi,
@@ -169,8 +172,9 @@ def sentence(g: dict) -> str:
         return (f'비슷한 과거 사례 {n:,}건을 찾았지만, 표본이 조건을 채우지 못해 '
                 '확률은 표시하지 않습니다.')
     hit = int(round(n * float(tp) / 100.0))
-    base = (f'과거 비슷한 사례 {n:,}건 중 {hit:,}건에서 목표 방향이 먼저 '
-            f'나타났습니다.')
+    _h = g.get('sample_h')
+    base = (f'과거 비슷한 사례 {n:,}건' + (f'({_h}거래일 패턴)' if _h else '')
+            + f' 중 {hit:,}건에서 목표 방향이 먼저 나타났습니다.')
     tail = f" 다만 신뢰도는 '{g.get('confidence')}'입니다 — {g.get('confidence_why')}"
     if oos is not None and g.get('oos_n'):
         # ⚠️ 라운드 184 — '안 본 사례'가 거짓이었다. 출처(calibration

@@ -75,7 +75,8 @@ def _last_update_date():
                   encoding='utf-8') as _f:
             return str(_j.load(_f)['days'][0]['date'])
     except Exception:
-        return datetime.date.today().isoformat()
+        # 라운드 442 — 종전엔 못 읽으면 **오늘 날짜**를 업데이트 날짜로 적었다(못 읽은 것을 '오늘 바뀌었다'로 · §3).
+        return '미상'
 
 
 APP_UPDATED = _last_update_date()
@@ -4231,7 +4232,11 @@ if st.session_state.get('show_screener', False):
                 _pmd228 = _pm228v.load_today_report() or {}
             except Exception:                                  # noqa: BLE001
                 _pmd228 = {}
-            _gen228 = str(_pmd228.get('generated_at') or '')[11:16]
+            # 라운드 442 — 리포트는 자료 기준일 하나에 한 번이라 금요일 저녁 판이 토요일·월요일 아침에도 결론이다. 시각만 적으면
+            #   어느 날 고정했는지 모른다 — 고정한 날이 달력의 오늘이 아니면 날짜를 붙인다.
+            _ga228 = str(_pmd228.get('generated_at') or '')
+            _gen228 = (_ga228[11:16] if _ga228[:10] == datetime.date.today().isoformat()
+                       else _ga228[5:16].replace('-', '/'))
             _drift228 = _pmd228.get('engine_drift') or {}
             st.markdown(
                 f"<div style='background:{_TOK['bg2']}; border-radius:14px; padding:14px 18px; "
@@ -5137,9 +5142,10 @@ if _pmr:
             #   그대로 넣으니 *"가장 많이 막은 조건은 강제 차단 없음"* — 차단이 없다는 것이 막았다는 말이
             #   됐다(외부 검토). 이름은 중앙 판정 그대로 두고 **미충족**이라고 적는다(이름을 바꾸면 회귀·
             #   저장 스냅샷이 읽는 낱말이 바뀐다 · R327).
+            # 라운드 443 — '강제 차단 없음 미충족'도 사람 말로는 거꾸로다 — 미충족의 이름은 중앙 판정 한 곳(fail_label)에서.
             st.caption(_md_safe(
                 f"오늘 후보 {_tot316}종목을 가장 많이 막은 조건은 "
-                f"**'{_top316[0]}' 미충족**입니다 ({_top316[1]}/{_tot316}종목). "
+                f"**{_vc_view.fail_label(_top316[0])}**입니다 ({_top316[1]}/{_tot316}종목). "
                 f"조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 "
                 f"아닙니다."))
         for _bk in _vc_view.BUCKETS:
@@ -5294,7 +5300,9 @@ if _pmr:
                             f"  <span style='font-size:12px; color:{_TOK['tx2']};'>"
                             f"{' / '.join(_b.get('reasons') or []) or '게이트 차단'}"
                             f"</span>", unsafe_allow_html=True)
-    with st.expander("지난 개장 전 추천의 실제 성과 (사후 검증)"):
+    # 라운드 443 — 이 칸이 세는 것은 **개장 전 리포트에 오른 후보 전부**다(하루 다섯 · 추천 여부와 무관). 이름이 '추천'이라
+    #   같은 화면의 *"43거래일 신규 매수 추천 0개"* 와 나란히 *"확정 229건"* 이 모순으로 읽혔다(외부 검토).
+    with st.expander("지난 개장 전 리포트 후보의 실제 성과 (사후 검증 · 추천 여부와 무관)"):
         # 라운드 232 — 여기가 prediction_log 로 이력 마지막 100행을 **다시 채점**하고 있었다
         #   (진입 = 리포트 가격 · 닿으면 즉시). 모델 성적의 추적 줄은 DB(진입 = 권장매수가 ·
         #   20봉 뒤)를 읽어 같은 페이지에서 다른 수를 냈다(실측 2026-09-07: 95건 목표 30 ·
@@ -5323,7 +5331,8 @@ if _pmr:
                            if _t232.get('non_trading') else ""))
             st.caption("채점은 원장과 같은 규칙입니다 — 진입은 리포트 가격, 먼저 닿은 선으로 "
                        "판정, 같은 봉이면 손절 먼저(보수), 닿으면 그 자리에서 확정. 모델 성적의 "
-                       "'실전 추천 추적' 줄과 같은 곳에서 읽습니다.")
+                       "'개장 전 후보 추적' 줄과 같은 곳에서 읽습니다. 리포트에 오른 후보 전부를 세며, 신규 매수 추천(중앙 판정의 "
+                       "조건 전부 통과)은 그중 일부입니다.")
             for _h in _hist['rows']:
                 st.caption(f"{_h['date']} {_h['name']} ({_h['reco_class']}) → "
                            f"{_h['outcome']} {_h['return_pct']:+.1f}%")
@@ -6903,7 +6912,13 @@ else:
         st.caption("아직 표시할 항목이 없습니다 — 관심종목에 담고 매입가·수량을 적으면 "
                    "여기서 봅니다.")
     else:
-        _today226 = datetime.date.today()
+        # 라운드 442 — 계획 창이 끝났는지는 보유 계획을 다시 재는 쪽(`portfolio.hold_plan_update`)과 **같은 날짜**로 센다.
+        #   그쪽은 분석 기준일(t_ref_str)을 받는데(R373) 여기는 벽시계 날짜라, 주말·휴장일·장 전에 열면 이 칸이 1~3일 먼저
+        #   '창이 끝난 계획'을 세고 표는 아직 그대로인 날이 생겼다(한 화면에 '오늘'이 둘).
+        try:
+            _today226 = datetime.date.fromisoformat(str(t_ref_str)[:10])
+        except (TypeError, ValueError, NameError):
+            _today226 = datetime.date.today()
         _days226 = _lv217.bars_to_days(_lv217.HORIZON_BARS)
         # ── ① 규모 — 전부 산수 (매입가 × 수량) ─────────────────────────
         if _pf_cost > 0:
@@ -7244,7 +7259,7 @@ else:
         # ── ⑤ 시장 국면 — 종목 상세와 같은 함수가 낸 라벨 (§4) ───────────
         _ms214 = _market_state_214()
         if _ms214 and _ms214.get('ko'):
-            _rg_md = f"**시장 국면** — {_ms214['ko']}"
+            _rg_md = f"**시장 국면 (코스피 · 이동평균 4상태)** — {_ms214['ko']}"   # 라운드 443 — 어느 지수·분류기인지
             if _ms214.get('slope_ko'):
                 _rg_md += f" · 60일선 {_ms214['slope_ko']}"
             # 라운드 422 — 종전 수(n=8,007 · 적중 59.8% 등)는 라운드 52 고정본이었다. 이제 산출물(오늘 원장)의 수를 날짜와 함께
@@ -7436,13 +7451,6 @@ _home_cal = _load_calibration_meta()
 #   도달 불가로 만들고 있었다. 거래대금을 못 받은 종목이 화면에 '0억원'으로
 #   나갔다 — 못 잰 것을 잰 것처럼 보이게 하는 자리다(§3). 억 단위 환산은
 #   한 곳에서 하고, None 은 None 으로 넘긴다.
-def _tn246(v):
-    """거래대금(원) → 억원. 못 받았으면 None — 0 으로 바꾸지 않는다."""
-    try:
-        return None if v is None else float(v) / 1e8
-    except (TypeError, ValueError):
-        return None
-
 
 # ⚠️ 라운드 248 — 이 호출에 **캐시가 없었다.** engine_init 은 모듈 수준이라
 #   rerun 마다 새로 만들어지고(라운드 216 이 q_engine 에서 당한 자리),
@@ -8170,7 +8178,8 @@ if _macro248:
         _gcap422 = _mc422.CONTEXT_CAPS.get('global_stress_high')
     except Exception:                                          # noqa: BLE001
         _gcap422 = None
-    st.info(_uk.regime_gate_line(four_scores.get('regime_gate'))
+    st.info(_uk.regime_gate_line(four_scores.get('regime_gate'),
+                                 idx=((four_scores.get('market_regime_ctx') or {}).get('index')))
             + "  \n위 유가·금·금리는 **이 판단에 들어가지 않습니다** — 표시 전용입니다. "
               "원달러 급등·변동성지수·S&P500·나스닥 낙폭은 따로, 규칙집의 고정 감점으로 시장 국면 점수에 들어가고"
             + (f" 경고가 둘 이상이면 점수 상한 {int(_gcap422)}점이 걸립니다" if _gcap422 is not None else "")
@@ -8377,7 +8386,7 @@ st.markdown(f"""
         <div style='text-align: right; color: #9DAABC; font-size: 13px;'>
             <p style='margin:0;'>시가 {open_p:,.0f} · 고가 <span style='color:#ff453a;'>{high_p:,.0f}</span> · 저가 <span style='color:#0a84ff;'>{low_p:,.0f}</span>{unit_str}</p>
             <p style='margin:8px 0 0 0;'>거래량 {volume_p:,.0f}주 (20일 평균 대비 {fmt_num(tech_df['volume_ratio'].iloc[-1] if 'volume_ratio' in tech_df.columns else None, '.2f', '배')})</p>
-            <p style='margin:8px 0 0 0;'>20일 평균 거래대금 {fmt_num(_tn246(four_scores.get('avg_turnover_20d')), ',.0f', '억원', na='미산출')}</p>
+            <p style='margin:8px 0 0 0;'>20일 평균 거래대금 {_uk.turnover_text(four_scores.get('avg_turnover_20d'))}</p>
         </div>
     </div>
     <hr style='border: 0; border-top: 1px solid #1C2635; margin: 16px 0 16px 0;'>
@@ -9157,9 +9166,14 @@ if _t1_sig is not None and realtime_price and CORE.get('hold_trim'):
 _hold_basis_html = ''
 _hb_trim, _hb_t1 = CORE.get('hold_trim'), CORE.get('new_target')
 _hb_entry = _core_entry or CORE.get('pullback_zone')
-if _hb_trim and _hb_t1 and _hb_entry and realtime_price:
-    _hb_moved = _hb_trim * _hb_entry / realtime_price
-    _hb_same = f"{_hb_moved:,.0f}" == f"{_hb_t1:,.0f}"
+# 라운드 443 — 보유자 값은 **엔진이 판정에 쓴 현재가**에서 잰 값이다. 종전엔 실시간 가격으로 나눠, 두 가격의 받은 시각이 다르면
+#   규칙이 같아도 안 맞았다. 기준가는 엔진의 가격으로 하고, 안 맞는 까닭은 엔진이 실은 규칙(`level_rules`)에서 읽는다(킷 한 곳).
+_hb_px = (four_scores.get('current_price') if isinstance(four_scores, dict) else None) or realtime_price
+if _hb_trim and _hb_t1 and _hb_entry and _hb_px:
+    _hb_moved, _hb_same, _hb_why443 = _uk.level_basis_note(
+        (four_scores or {}).get('level_rules'), _hb_trim, _hb_t1, _hb_entry, _hb_px,
+        new_stop=CORE.get('new_stop'), struct=(four_scores or {}).get('level_struct'))
+    _hb_moved = _hb_moved if _hb_moved is not None else _hb_trim * _hb_entry / _hb_px
     # 라운드 382 — 외부 검토가 이 줄을 *"개발자용 수식이 화면에 샌 것"* 이라 짚었다. 수식은 **맞다**(원 단위로
     #   같을 때만 적는다 · 라운드 279 가 사용자 물음 *"매도가가 각각 달라?"* 에 답하려고 넣었다). 뜻은 두고
     #   **곱셈 표기만** 뺀다 — 기준가 둘과 옮긴 값만 적는다. 그리고 안 맞을 때의 문장이 **재지 않은 원인**을
@@ -9167,13 +9181,12 @@ if _hb_trim and _hb_t1 and _hb_entry and realtime_price:
     #   하므로 두 가격의 받은 시각 차이도 원인일 수 있다. 가르지 않았다고 적는다(§3).
     _hold_basis_html = (
         f"<p style='margin:8px 0 0 0; font-size:12px; color:#9DAABC; line-height:1.6;'>"
-        f"위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다. 아래 지시서의 1차 목표·손절은 "
+        f"위 두 값은 <b>현재가 {_hb_px:,.0f}원</b>(엔진이 판정에 쓴 가격) 기준입니다. 아래 지시서의 1차 목표·손절은 "
         f"<b>진입가 {_hb_entry:,.0f}원</b> 기준이라 같은 규칙인데도 수가 다릅니다"
         + (f" — 기준가를 진입가로 옮기면 <b>{_hb_moved:,.0f}원</b>으로 지시서의 1차 목표와 같습니다."
            if _hb_same else
-           f" — 기준가를 진입가로 옮기면 {_hb_moved:,.0f}원이라 지시서의 1차 목표 "
-           f"{_hb_t1:,.0f}원과 원 단위로 맞지 않습니다(지지·저항선에 걸렸거나 두 가격을 받은 시각이 "
-           f"달라서일 수 있습니다 — 여기서는 가르지 않습니다).")
+           f" — 기준가를 진입가로 옮기면 {_hb_moved:,.0f}원인데 지시서의 1차 목표는 "
+           f"{_hb_t1:,.0f}원입니다: {_uk._esc(_hb_why443 or '')}.")
         + "</p>")
 
 # 라운드 225 — 위 두 값은 **오늘 현재가에서 다시 잰 값**이고, 관심종목의 보유 계획은
@@ -9586,6 +9599,12 @@ try:
     #   51~53(2026-08-08)부터 AttributeError 를 아래 try 가 삼켜 '시장 진단' 줄이 한 번도 안 나갔다(전 핸들러를
     #   심어 한 번 렌더하니 186자리 중 걸린 넷 가운데 이것만 결함이었다). 화면은 스냅샷만 읽는다(§4) — 엔진이
     #   판정에 쓴 맥락이 `four_scores['market_regime_ctx']` 로 실린다. 못 쓰면 사유를 적는다(§3).
+    # 라운드 443 — 이 카드의 4상태와 그 상태별 성적은 **코스피**로 센다(라운드 422 의 설계 · 취약구간 지도가 코스피 일봉으로
+    #   날마다 상태를 매긴다 · 포트폴리오 견해와 같은 함수 `_market_state_214` · §4). 라운드 441 이 이 줄을 살리며 엔진 맥락
+    #   (`market_regime_ctx` = **이 종목의 상장 시장** 지수)을 이어, 코스닥 종목에는 코스닥 상태에 코스피 상태의 성적이 붙었다
+    #   (외부 검토가 '한 화면에 국면이 셋'이라 짚은 자리의 하나). 그래서 상태·성적은 코스피로 되돌리고, 상장 시장이 코스피가
+    #   아니면 그 시장의 상태를 **이름을 붙여** 따로 한 줄 적는다(엔진 점수 상한은 그 지수로 건다 · engine_cap_line 문장).
+    #   과거 기준일(리플레이)이면 오늘 지수를 쓰지 않는다 — 엔진 맥락이 None 이면 그런 경우다(§3 · 사유를 적는다).
     _mkt_state, _mkt_na = None, None
     try:
         _kd = four_scores.get('market_regime_ctx') if isinstance(four_scores, dict) else None
@@ -9593,14 +9612,23 @@ try:
             _mkt_na = '이 스냅샷에는 지수 국면 맥락이 없습니다 (옛 분석 결과) — 다시 분석하면 실립니다'
         elif not _kd:
             _mkt_na = '분석 기준일이 과거이거나 상장 시장을 판별하지 못해 오늘 지수 국면을 쓰지 않았습니다'
-        elif not _kd.get('available'):
-            _mkt_na = f"지수 데이터 미수신 ({_kd.get('reason') or '사유 미기록'})"
         else:
-            _mkt_state = _tp.market_state(
-                _kd.get('price'), _kd.get('sma20'), _kd.get('sma60'),
-                _kd.get('sma60_prev'))
+            _mkt_state = _market_state_214()
             if _mkt_state is None:
-                _mkt_na = '지수 값은 받았으나 4상태를 가르지 못했습니다'
+                _mkt_na = '코스피 지수를 받지 못했거나 4상태를 가르지 못해 시장 진단을 내지 못했습니다'
+            else:
+                _mkt_state = dict(_mkt_state, index_ko='코스피')
+                _idx443 = str(_kd.get('index') or '').upper()
+                if _idx443 and _idx443 != 'KOSPI':
+                    _own_ko443 = {'KOSDAQ': '코스닥'}.get(_idx443, _idx443)
+                    _own443 = (_tp.market_state_code(_kd.get('price'), _kd.get('sma20'), _kd.get('sma60'))
+                               if _kd.get('available') else None)
+                    _mkt_state['own_line'] = (
+                        f"이 종목의 상장 시장({_own_ko443})은 지금 {_tp.MARKET_STATES[_own443]['ko']}입니다 — 위 상태와 성적은 "
+                        f"코스피 기준이고, 엔진의 시장 상한은 {_own_ko443} 지수로 겁니다." if _own443 else
+                        f"이 종목의 상장 시장({_own_ko443}) 지수는 "
+                        f"{'받지 못해' if not _kd.get('available') else '4상태를 가르지 못해'} 그 상태를 적지 않습니다 — "
+                        f"위 상태와 성적은 코스피 기준입니다.")
     except Exception as _mkt_exc:                            # noqa: BLE001
         _mkt_state, _mkt_na = None, f'시장 진단을 만들지 못했습니다 ({type(_mkt_exc).__name__})'
 
@@ -10568,7 +10596,8 @@ _rows_g = [
     #   값은 안 바꾼다 — 무엇을 재는지 이름으로 가른다.
     ('유사패턴 관찰기간',
      (f"{_g['hold_days']}거래일" if _g.get('hold_days') else _gai.NA)),
-    ('비슷했던 과거 사례',
+    # 라운드 443 — 위 줄(관찰기간 40거래일)과 이 줄의 수는 **다른 지평**이다. 이 수는 엔진의 기본 지평(20거래일) 유사패턴이다.
+    (('비슷했던 과거 사례 (' + str(_g['sample_h']) + '거래일 패턴)') if _g.get('sample_h') else '비슷했던 과거 사례',
      (f"{_g['sample_n']:,}건" if _g.get('sample_n') else '찾지 못함')),
     # ⚠️ 라운드 184 — 이 칸이 '안 본 사례'라고 적혀 있었는데 **거짓**이었다.
     #   출처(calibration.json bands)는 판정 완료 177,042건 **전체**
@@ -10597,8 +10626,13 @@ _uk.rows(_rows_g, theme=_theme, title='가늠한 값')
 try:
     _mh62 = ((sim_res or {}).get('horizons_data') or {}).get(20) or {}
     _mt62 = _mh62.get('matches') or []
+    # 라운드 443 — 엔진은 사례 목록을 **최근 12건**만 싣는다(표시용). 제목이 그 수를 사례 수라 적어, 확률에 쓴 32건과 같은 화면에서
+    #   '12건'으로 읽혔다(외부 검토 · 말없이 자른 자리 · R314 계열). 전체 수를 먼저 말한다.
+    _mc62 = _mh62.get('observed_match_count', _mh62.get('match_count'))
+    _cnt62 = (f"{_mc62}건 중 최근 {len(_mt62)}건" if isinstance(_mc62, int) and _mc62 > len(_mt62)
+              else f"{len(_mt62)}건")
     if _mt62:
-        with st.expander(f"이 종목의 유사사례 실체 — {len(_mt62)}건 "
+        with st.expander(f"이 종목의 유사사례 실체 — {_cnt62} "
                          f"(20일 패턴 · 유사도 {sim_res.get('rho_cutoff_applied', 0.8):.2f} 이상)"):
             import pandas as _pd62
             st.dataframe(_pd62.DataFrame([
@@ -11933,7 +11967,7 @@ if _ledger_df is not None:
                    if _lr else "아직 실행 이력 없음")
         _pc1, _pc2 = st.columns([3, 1])
         with _pc1:
-            st.caption(f"**실전 추천 추적 파이프라인**: 동결 케이스 "
+            st.caption(f"**개장 전 후보 추적**(리포트에 오른 후보 전부 · 추천 여부와 무관): 동결 케이스 "
                        f"{_n_all_imp}건 · 결과 확정 대기 {_n_open_imp}건 · "
                        f"마지막 실행 {_lr_txt}.{_tally_imp} 같은 봉에서 목표·손절이 함께 "
                        "닿으면 손절 먼저로 봅니다 — 원장과 같은 규칙 (성공으로 세지 않습니다). "
@@ -12003,7 +12037,7 @@ if _ledger_df is not None:
         except Exception:
             pass
     except Exception as _imp_err:
-        st.caption(f"실전 추천 추적 파이프라인 미초기화: {_imp_err}")
+        st.caption(f"개장 전 후보 추적 미초기화: {_imp_err}")
     # ── 가늠 PROOF 성적표 · 규칙 원장 (라운드 418) — 남긴 판정 전부를 같은 채점기로 채점한 수(이름 없음 · 산출물에서 읽기만) ──
     #   '규칙 원장'은 개장 전 후보(추적 케이스)를 그날 조건 통과·미충족으로 갈라 '샀다면'의 비용 뺀 평균을 센다. 한 후보가
     #   여러 조건에 걸리므로 겹친다 — 규칙의 효과를 가르는 시험이 아니라 **그 조건이 막은 것의 이후**를 적은 장부다(문턱 없음).
@@ -12041,7 +12075,14 @@ if _ledger_df is not None:
                         '통과한 후보': g['passed']['n'],
                         '통과한 후보 · 비용 뺀 평균': (f"{g['passed']['mean_net']:+.2f}%"
                                                     if g['passed']['mean_net'] is not None else '—'),
+                        # 라운드 444 — 이 조건 **하나만** 못 넘은 후보(이 조건이 없었다면 추천이 됐을 것) · 옛 성적표엔 칸이 없다
+                        '이 조건 하나만 막은 후보': (f"{int((g.get('only') or {}).get('n') or 0):,}" if g.get('only') else '—'),
+                        '그 후보 · 비용 뺀 평균': (f"{g['only']['mean_net']:+.2f}%"
+                                                if (g.get('only') or {}).get('mean_net') is not None else '—'),
                     } for g in _gt418]), hide_index=True, width='stretch')
+                    st.caption("'이 조건 하나만 막은 후보'는 다른 조건은 다 넘고 이 조건 하나에만 걸린 후보입니다 — 이 조건이 없었다면 "
+                               "추천이 됐을 후보이고, 그 평균이 이 조건이 무엇을 막았는지에 가장 가까운 셈입니다. 표본이 작아 "
+                               "조건을 풀자는 근거가 아닙니다.")
     except Exception as _ex418m:                               # noqa: BLE001
         st.caption(f"가늠 PROOF 성적표를 읽지 못했습니다 ({type(_ex418m).__name__}) — 미측정입니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):
@@ -12685,7 +12726,7 @@ else:
         <p style='margin:4px 0; font-size:15px;'>- <b>기업유형 분류</b>: {profile['enterprise_class']} &nbsp;|&nbsp; <code>{_mix}</code></p>
         <p style='margin:4px 0; font-size:15px;'>- <b>적용 평가모델</b>: {_applied}</p>
         <p style='margin:4px 0; font-size:15px; color:#9DAABC;'>- <b>유효성 미통과 모델</b>: {_excluded}</p>
-        <p style='margin:4px 0; font-size:15px;'>- <b>20일 평균 거래대금</b>: {fmt_num(_tn246(profile['metrics']['avg_turnover_20d']), ',.0f', '억원', na='미산출')}
+        <p style='margin:4px 0; font-size:15px;'>- <b>20일 평균 거래대금</b>: {_uk.turnover_text(profile['metrics']['avg_turnover_20d'])}
            &nbsp;|&nbsp; <b>유동성 점수</b>: {fmt_num(profile['metrics']['liquidity_score'], suffix='점')}
            &nbsp;|&nbsp; <b>미수신 입력</b>: {', '.join(profile['missing_inputs']) or '없음'}</p>
         <p style='margin:8px 0 0 0; font-size:13px; color:#F2B84B;'>{profile['qualitative_note']}</p>
@@ -14849,9 +14890,11 @@ if _uh_home and _uh_home.get('days'):
                         unsafe_allow_html=True)
                 _meta_u = []
                 if _dt_u.get('related'):
-                    _meta_u.append("관련 회귀 " + " ".join(_dt_u['related']))
+                    _meta_u.append("관련 회귀 " + " ".join(_dt_u['related'])
+                                   + (f" 외 {_dt_u['related_more']}개" if _dt_u.get('related_more') else ''))
                 if _dt_u.get('modules'):
-                    _meta_u.append("담당 모듈 " + " · ".join(_dt_u['modules']))
+                    _meta_u.append("담당 모듈 " + " · ".join(_dt_u['modules'])
+                                   + (f" 외 {_dt_u['modules_more']}개" if _dt_u.get('modules_more') else ''))
                 # 라운드 99 — 버전은 그날 실제로 발효된 것만 온다.
                 # 커밋이 있었다고 축이 움직인 것은 아니므로 빈 날은 그렇게 적는다.
                 _meta_u.append(

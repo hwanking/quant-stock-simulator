@@ -822,6 +822,9 @@ class QuantIndicatorsEngine:
         no_sample = [H for H in FORECAST_HORIZONS if H not in horizon_eligibility]
 
         multi_horizon_meta = {
+            # 라운드 443 — 최상위 칸(match_count · 확률 · 평균)은 아래 `h20` 의 값이다. 화면이 '유사패턴 관찰기간 40일' 옆에
+            #   '비슷했던 사례 32건'을 놓아 32건이 40일 사례로 읽혔다(외부 검토 · 40일 사례는 11건). 어느 지평의 수인지 싣는다.
+            'base_horizon': 20,
             'horizons_data': horizons_data,
             'horizon_consistency_score': horizon_consistency_score,
             'optimal_holding_period_days': best_h,
@@ -2063,11 +2066,15 @@ class QuantIndicatorsEngine:
                           or (_band.get('n') or 0) < 30
                           or float(_band['wilson_low']) < 50.0)
             if self.VETO_NET_MODE == 'strict' or _band_weak:
-                vetoes.append(f"거래비용 차감 후 기대수익 {net:+.2f}% (0 이하)")
+                # 라운드 443 — 이 문장의 이름이 *"거래비용 차감 후 기대수익"* 이었다. 읽는 값은 **유사패턴 평균 수익 − 운영
+                #   비용**인데, 같은 화면의 매매 지시서는 중앙 판정의 '비용 차감 기대값'(점수대 적중률 × 목표·손절 − 비용)을
+                #   적어 한 종목에 '기대수익'이 −2.21% 와 −0.23% 로 둘이었다(외부 검토 2026-10-07 · 같은 평균에 비용 0.30 을 뺀
+                #   −2.10% 까지 셋). 라운드 382·387 이 다른 자리에서 고친 그 이름이다 — 값·문턱·판정 불변, 이름만 계산에 맞춘다.
+                vetoes.append(f"유사패턴 평균 수익(비용 {self.TOTAL_COST_PCT:g}% 차감) {net:+.2f}% (0 이하)")
             else:
                 # 차단하지 않은 사실을 화면에 남긴다 (숨기지 않는다)
                 fs.setdefault('soft_conflict_notes', []).append(
-                    f"자기유사 기대수익은 {net:+.2f}%로 약하지만, 이 점수대의 "
+                    f"유사패턴 평균 수익(비용 {self.TOTAL_COST_PCT:g}% 차감)은 {net:+.2f}%로 약하지만, 이 점수대의 "
                     f"과거 실측(n={_band.get('n')}, 하한 "
                     f"{float(_band['wilson_low']):.0f}%)이 이를 상쇄해 "
                     "매수 차단까지는 하지 않았습니다.")
@@ -3781,11 +3788,19 @@ class QuantIndicatorsEngine:
         _t1_of_stop = float(_XL.get('target1_of_stop', 0.7))
         _t1_vol_floor = float(_XL.get('target1_vol_floor_mult', 0.8))
 
+        # 라운드 443 — 각 가격을 **어느 규칙이 정했는지** 함께 싣는다(값은 그대로). 외부 검토(2026-10-07)가 보유자 1차 매도가를
+        #   진입가 기준으로 옮긴 값(3,133)과 신규 1차 목표(3,047)가 왜 다른지 물었고, 화면은 *"여기서는 가르지 않습니다"* 라고
+        #   적고 있었다. 실제 원인은 두 손절이 **같은 DeMARK 지지선**(2,560)에 맞춰진 것이었다 — 지지선은 가격이라 기준가에
+        #   비례하지 않고, 1차 목표는 손절까지 거리의 배수다. 'vol'(변동성 배수) · 'tdst'(지지선) · 'stop_mult'(손절 거리 배수) ·
+        #   'struct'(구조적 저항에서 멈춤) · 'vol_floor'(변동성 바닥으로 올림) · 'fallback'(손절 거리 0).
+        _hold_stop_rule = _hold_t1_rule = _entry_stop_rule = _entry_t1_rule = None
         # 1) 손절: 변동성 2σ 바닥. TDST 지지가 0.5R~1.5R 구간에 있으면 그 지지선을 쓴다.
         base_risk = curr_price * max(_stop_floor, vol_20 * _stop_mult)
         stop_loss_price = float(curr_price - base_risk)
+        _hold_stop_rule = 'vol'
         if tdst_available and (curr_price - 1.5 * base_risk) <= tdst_support <= (curr_price - 0.5 * base_risk):
             stop_loss_price = float(tdst_support)
+            _hold_stop_rule = 'tdst'
         risk_abs = curr_price - stop_loss_price
 
         # 2) 2차 목표(구조): 가장 가까운 저항(TDST 저항 / 20일 고가 / 60일 고가) 중
@@ -3814,10 +3829,16 @@ class QuantIndicatorsEngine:
         #    내려가지 않는다. 2차 목표보다 위로 올라가지도 않는다.
         if risk_abs > 0:
             _t1_dist = min(_t1_of_stop * risk_abs, target_struct - curr_price)
+            _hold_t1_rule = ('struct' if (target_struct - curr_price) < _t1_of_stop * risk_abs else 'stop_mult')
+            if _t1_vol_floor * vol_20 * curr_price > _t1_dist:
+                _hold_t1_rule = 'vol_floor'
             _t1_dist = max(_t1_dist, _t1_vol_floor * vol_20 * curr_price)
             target_tech_1st = float(min(curr_price + _t1_dist, target_struct))
+            if curr_price + _t1_dist > target_struct:
+                _hold_t1_rule = 'struct'
         else:
             target_tech_1st = float(curr_price * 1.03)
+            _hold_t1_rule = 'fallback'
         target_tech_2nd = float(max(target_struct, target_tech_1st))
         atr_risk_level = float(curr_price - base_risk * 2.0)
 
@@ -3851,16 +3872,23 @@ class QuantIndicatorsEngine:
             _e = _entry_anchor
             _e_risk = _e * max(_stop_floor, vol_20 * _stop_mult)
             _e_stop = _e - _e_risk
+            _entry_stop_rule = 'vol'
             # 진입가 기준으로도 TDST 지지가 0.5R~1.5R 안이면 그 지지선을 쓴다
             if (tdst_available and tdst_support is not None
                     and (_e - 1.5 * _e_risk) <= tdst_support <= (_e - 0.5 * _e_risk)):
                 _e_stop = float(tdst_support)
+                _entry_stop_rule = 'tdst'
             _e_risk = _e - _e_stop
             if _e_risk > 0:
                 _e_t1 = _e + _t1_of_stop * _e_risk
+                _entry_t1_rule = 'stop_mult'
                 # 구조적 저항이 그보다 가까우면 그 저항까지만 (현행과 같은 규칙)
                 if target_struct > _e:
+                    if target_struct < _e_t1:
+                        _entry_t1_rule = 'struct'
                     _e_t1 = min(_e_t1, target_struct)
+                if _e + _t1_vol_floor * vol_20 * _e > _e_t1:
+                    _entry_t1_rule = 'vol_floor'
                 _e_t1 = max(_e_t1, _e + _t1_vol_floor * vol_20 * _e)
                 entry_stop_price = float(_e_stop)
                 entry_target_1st = float(_e_t1)
@@ -4731,6 +4759,11 @@ class QuantIndicatorsEngine:
             'entry_stop_price': entry_stop_price,
             'entry_target_1st': entry_target_1st,
             'entry_rr': entry_rr,
+            # 라운드 443 — 각 가격을 정한 규칙(값은 위 칸 그대로) · 구조적 저항 값. 화면이 두 기준가의 값이 왜 비례하지
+            #   않는지를 가를 때 읽는다(공식을 화면에서 다시 적지 않는다 · §4).
+            'level_rules': {'hold_stop': _hold_stop_rule, 'hold_t1': _hold_t1_rule,
+                            'entry_stop': _entry_stop_rule, 'entry_t1': _entry_t1_rule},
+            'level_struct': (float(target_struct) if target_struct is not None else None),
             # 실행 가능한 눌림 진입가 (라운드 25) — 카드·다음조건이 쓰는 값
             'entry_pullback_price': entry_pullback_price,
             # 라운드 344 — 수를 글자로 안 박는다. 적정가 3축과 **같은 함수**가 낸다(두 자리가 어긋나지 않게 · §4).

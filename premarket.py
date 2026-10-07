@@ -10,7 +10,7 @@
   · 뉴스는 보조 신호다: 위험 낱말은 감점(기존 컨텍스트 상한), '신선한 재료'
     (종목 뉴스 + 참고 낱말 + 시세 후행 보도 아님)는 표기만 하고 가점하지 않는다.
 
-저장: .portfolio/premarket_YYYY-MM-DD.json (당일 고정)
+저장: .portfolio/premarket_YYYY-MM-DD.json (자료 기준일 하나에 한 번 고정 · 라운드 442 — 날짜는 **자료 기준일**)
       .portfolio/premarket_history.jsonl (전체 이력 — 추가 전용)
 """
 from __future__ import annotations
@@ -39,6 +39,67 @@ def _pm_path(date_key, engine_version=None):
         safe = str(engine_version).replace(os.sep, '_').replace('/', '_')
         return os.path.join(PM_DIR, f"premarket_{date_key}__{safe}.json")
     return os.path.join(PM_DIR, f"premarket_{date_key}.json")
+
+
+#: 라운드 442 — 이 표시가 붙은 리포트·이력 줄은 `date` 가 곧 **자료 기준일**이다. 그 전의 줄은 벽시계 날짜였다.
+DAY_BASIS = 'data'
+
+
+def report_day(now=None):
+    """지금(또는 `now`) 열면 보여야 할 리포트의 기준일 — ISO 문자열 · 못 구하면 None (라운드 442).
+
+    ■ 왜 벽시계 날짜가 아닌가 (2026-10-07 실측)
+      리포트 열쇠가 `datetime.now()` 의 날짜였다. 내용은 스캔의 분석 기준일(마지막으로 장이 끝난 거래일)로 정해지는데,
+      열쇠는 연 날이라 **같은 자료가 날짜 여럿에 걸렸다** — 리포트 105개 중 68개가 '거래일 날짜 · 자료는 전 거래일'
+      (장 전·자정 넘어 연 날) · 24개가 휴장일 날짜였고 13개만 날짜 = 자료일이었다. 그래서 ① 휴장일·장 전에 열면 자료가
+      그대로인데도 2~3분짜리 스캔을 다시 돌려 파일을 하나 더 만들었고(라운드 228 이 막으려던 그 모양) ② 추적이 그 날짜를
+      기준일로 써 **리포트가 겨냥한 거래일을 채점에서 뺐으며**(진입은 전 거래일 종가 · 경로는 날짜 다음 봉부터) ③ 같은
+      추천이 저녁 판·다음 날 아침 판 두 기준일로 두 번 세어졌다(확정 32건). 원장(`calibration_lab`)·종목 판정 기록
+      (`prediction_log` 은 `snap['t_ref']`)·전방 기록부(판정일)는 모두 자료 기준일을 쓴다 — 리포트만 달랐다(§4).
+    ■ 규칙은 엔진이 분석 기준일을 정하는 그 함수(`bitemporal_engine.resolve_analysis_date`) — 여기서 다시 적지 않는다.
+    """
+    try:
+        from bitemporal_engine import resolve_analysis_date
+        d = resolve_analysis_date(now)
+        return d.isoformat() if hasattr(d, 'isoformat') else _iso_day(d)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _iso_day(v):
+    """'YYYY-MM-DD' 로 읽히면 그 글자 · 아니면 None."""
+    s = str(v or '')[:10]
+    try:
+        datetime.strptime(s, '%Y-%m-%d')
+    except ValueError:
+        return None
+    return s
+
+
+def data_day_of(row):
+    """그 리포트(또는 이력 한 줄)가 쓴 **자료의 기준일** · 못 정하면 None (라운드 442 · 한 곳).
+
+    · 라운드 442 뒤의 줄(`day_basis == 'data'`) → `date` 그대로
+    · 그 전의 줄 → 생성 시각(`generated_at`)에 엔진 규칙(`report_day`)을 대어 유도한다. 실측 2026-10-07: 리포트 105개 중
+      103개가 그 파일에 적힌 `data_asof` 와 같고, 다른 둘은 `data_asof` 가 날짜로 채워진 초기 판(2026-08-05 장 전)이다.
+      옛 이력 줄에는 `data_asof` 가 없어 유도가 유일한 길이기도 하다 — 리포트와 이력이 같은 규칙으로 묶이게 한다(§4).
+    · 생성 시각을 못 읽으면 `data_asof` · 그것도 없으면 None — 벽시계 날짜로 몰래 떨어지지 않는다(§3 · 부르는 쪽이 정한다).
+    """
+    if not isinstance(row, dict):
+        return None
+    if row.get('day_basis') == DAY_BASIS:
+        return _iso_day(row.get('date'))
+    g = str(row.get('generated_at') or '').strip().replace('T', ' ')[:19]
+    if g:
+        try:
+            at = datetime.fromisoformat(g)
+        except ValueError:
+            at = None
+        if at is not None:
+            d = report_day(at.replace(tzinfo=None))
+            if d:
+                return d
+    return _iso_day(row.get('data_asof'))
 
 
 def _same_day_files(date_key):
@@ -98,17 +159,25 @@ def load_today_report(date_key=None, engine_version=None):
        'rule_changed'(게이트·알고리즘·가중치·엔진 교체가 끼었는가)}.
       "장중 재계산 금지"가 이날의 규칙이다 — 새 규칙은 내일 리포트부터다.
     · 아무것도 없으면 None.
+
+    라운드 442 — `date_key` 는 **자료 기준일**이다(기본 `report_day()` · 휴장일·장 전·장중에 열어도 마지막으로 장이
+    끝난 거래일). 이름이 같아도 자료 기준일이 다른 옛 파일(장 전에 만들어 그날 날짜가 붙은 판)은 그날의 결론이
+    아니므로 돌려주지 않는다 — 내용이 정체다. 기준일을 못 구하면 None(어느 날의 결론인지 모르는 파일을 고르지 않는다).
     """
-    date_key = date_key or datetime.now().strftime('%Y-%m-%d')
+    date_key = date_key or report_day()
+    if not date_key:
+        return None
     ver = engine_version or _engine_version()
     p = _pm_path(date_key, ver)
     if os.path.exists(p):
         try:
             with open(p, encoding='utf-8') as f:
-                return json.load(f)
+                d = json.load(f)
         except Exception:
             return None
-    files = _same_day_files(date_key)
+        if data_day_of(d) == date_key:
+            return d
+    files = [t for t in _same_day_files(date_key) if data_day_of(t[2]) == date_key]
     if not files:
         return None
     _, _, latest = files[-1]
@@ -356,9 +425,18 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     스캔 결과(전일 확정 데이터 기반) → 개장 전 리포트. 이미 있으면 기존 것을 반환.
 
     scan_rows: run_screener_scan 이 만든 행 목록 (스냅샷 포함).
+
+    라운드 442 — `date_key` 는 **자료 기준일**이다. 기본은 그 스캔이 실제로 쓴 분석 기준일(첫 행 스냅샷의 `t_ref`)이고,
+    못 읽으면 `report_day()`(같은 규칙). 둘 다 못 구하면 리포트는 만들되 **파일로 고정하지 않는다** — 어느 날의 결론인지
+    모르는 파일은 다음 날 결론처럼 읽힌다(§3).
     """
-    date_key = date_key or datetime.now().strftime('%Y-%m-%d')
-    existing = load_today_report(date_key)
+    if not date_key:
+        try:
+            _t442 = (scan_rows[0].get('snapshot') or {}).get('t_ref') if scan_rows else None
+        except Exception:                                      # noqa: BLE001
+            _t442 = None
+        date_key = _iso_day(_t442) or report_day()
+    existing = load_today_report(date_key) if date_key else None
     # 라운드 228 — 같은 날 리포트가 있으면 엔진 버전이 달라도 **그것이 오늘 결론**이다
     #   (장중 재계산 금지 · 정체는 날짜). 종전에는 버전이 다르면 다시 만들어, 화면·문구
     #   배포마다 똑같은 파일이 하나씩 늘고 세션마다 재스캔이 돌았다. 드리프트는 화면이
@@ -386,7 +464,11 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
         'note': ("이 리포트는 생성 시각의 확정 데이터 기준이며, 오늘 장중에는 "
                  "다시 계산하지 않습니다 (사후 선택 방지)."),
         'picks': picks,
+        'day_basis': DAY_BASIS,             # 라운드 442 — `date` 는 자료 기준일
     }
+    if not date_key:
+        report['note'] += " 분석 기준일을 정하지 못해 파일로 고정하지 않았습니다."
+        return report, False
     try:
         os.makedirs(PM_DIR, exist_ok=True)
         # 날짜×엔진으로 저장한다. 같은 날 엔진을 고치면 새 파일이 생기고,
@@ -394,20 +476,22 @@ def build_report(q_engine, scan_rows, date_key=None, market_label=""):
         with open(_pm_path(date_key, report['engine_version']), 'w',
                   encoding='utf-8') as f:
             json.dump(report, f, ensure_ascii=False, indent=1)
-        # 이력에도 추가 (같은 날짜+종목은 중복 저장하지 않음)
+        # 이력에도 추가 (같은 자료 기준일+종목은 중복 저장하지 않음)
+        # 라운드 442 — 옛 줄의 `date` 는 벽시계 날짜라 같은 자료의 줄을 날짜로 견주면 못 알아본다(장 전 판과 저녁 판).
+        #   옛 줄도 `data_day_of` 로 자료 기준일을 구해 견준다 — 못 구하면 그 줄의 날짜 그대로.
         seen = set()
         if os.path.exists(PM_HISTORY):
             with open(PM_HISTORY, encoding='utf-8') as f:
                 for line in f:
                     try:
                         h = json.loads(line)
-                        seen.add((h.get('date'), h.get('symbol')))
+                        seen.add((data_day_of(h) or h.get('date'), h.get('symbol')))
                     except Exception:
                         continue
         with open(PM_HISTORY, 'a', encoding='utf-8') as f:
             for p in picks:
                 if (date_key, p['symbol']) not in seen:
-                    f.write(json.dumps({**p, 'date': date_key,
+                    f.write(json.dumps({**p, 'date': date_key, 'day_basis': DAY_BASIS,
                                         'generated_at': report['generated_at']},
                                        ensure_ascii=False) + "\n")
     except Exception:
@@ -427,6 +511,10 @@ def _history_names():
             except Exception:
                 continue
             out[(h.get('symbol'), h.get('date'))] = (h.get('name'), h.get('reco_class'))
+            # 라운드 442 — 추적 케이스의 기준일은 자료 기준일이다(옛 케이스도 옮겼다). 옛 줄은 그 날짜로도 찾게 한다.
+            _dd = data_day_of(h)
+            if _dd:
+                out.setdefault((h.get('symbol'), _dd), (h.get('name'), h.get('reco_class')))
     return out
 
 

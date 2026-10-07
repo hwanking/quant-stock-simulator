@@ -1401,6 +1401,22 @@ def _won(v, na='—'):
         return na
 
 
+def turnover_text(v, na='미산출'):
+    """거래대금(원) → 읽는 글자 (라운드 443 · 한 곳). 1억 이상은 억원, 그 아래는 **만원** — 종전엔 억원 반올림이라 3,167만원이
+    *'0억원'* 으로 나갔다(외부 검토 · 저유동성 게이트가 실제로 보는 값이다). 못 받았으면 `na` — 0 으로 바꾸지 않는다(§3)."""
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return na
+    if x != x or x < 0:                        # NaN · 음수는 거래대금이 아니다
+        return na
+    if x >= 1e9:
+        return f"{x / 1e8:,.0f}억원"
+    if x >= 1e8:
+        return f"{x / 1e8:,.1f}억원"
+    return f"{x / 1e4:,.0f}만원"
+
+
 def _price_row(icon, label, value, basis='', color=None, muted=False,
                big=False, theme='dark'):
     t = tokens(theme)
@@ -1870,6 +1886,47 @@ def effective_hold_stop(row):
     return cur, None
 
 
+def level_basis_note(rules, hold_trim, new_target, entry, basis_px, new_stop=None, struct=None):
+    """보유자 1차 매도가(현재가 기준)를 진입가 기준으로 옮긴 값이 신규 1차 목표와 맞는가 · 안 맞으면 왜인가 (라운드 443 · 한 곳).
+
+    두 값은 같은 규칙(손절 거리의 0.7배)을 다른 기준가에 건 것이라 보통은 비례한다(라운드 279). 안 맞는 까닭은 엔진이 각 가격을
+    **어느 규칙으로 정했는지**(`four_scores['level_rules']`)에서 읽는다 — 화면이 공식을 다시 적지 않는다(§4). 종전 문장은
+    *"지지·저항선에 걸렸거나 시각이 달라서일 수 있다 — 가르지 않는다"* 였는데, 실제로 확인한 종목은 둘 다 아니고 **두 손절이
+    같은 DeMARK 지지선**인 경우였다(지지선은 가격이라 기준가에 비례하지 않는다).
+    반환 (옮긴 값, 같은가, 까닭 문장 | None). 입력을 못 읽으면 (None, None, None)."""
+    try:
+        moved = float(hold_trim) * float(entry) / float(basis_px)
+        tgt = float(new_target)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None, None, None
+    if abs(moved - tgt) < 1.0:                       # 원 단위 반올림 차이는 같은 값이다
+        return moved, True, None
+    r = {k: v for k, v in (rules or {}).items() if v}
+    if not r:
+        return moved, False, ('이 판(옛 스냅샷)은 각 가격을 어느 규칙이 정했는지 싣지 않아 까닭을 가르지 못합니다')
+    parts = []
+    hs, es = r.get('hold_stop'), r.get('entry_stop')
+    if hs == 'tdst' and es == 'tdst':
+        _s = _won(new_stop, na='')
+        parts.append(f"두 손절이 같은 DeMARK 지지선{'(' + _s + ')' if _s else ''}에 맞춰져 기준가가 달라도 손절 가격이 같습니다 "
+                     f"— 1차 목표는 손절까지 거리의 배수라 기준가에 비례하지 않습니다")
+    elif 'tdst' in (hs, es):
+        parts.append(f"{'보유자' if hs == 'tdst' else '신규 매수자'} 손절만 DeMARK 지지선에 맞춰져 두 손절 거리가 기준가에 "
+                     f"비례하지 않습니다 — 1차 목표는 그 거리의 배수입니다")
+    for side, key in (('보유자 1차 매도가', 'hold_t1'), ('신규 1차 목표', 'entry_t1')):
+        v = r.get(key)
+        if v == 'struct':
+            _s = _won(struct, na='')
+            parts.append(f"{side}는 구조적 저항선{'(' + _s + ')' if _s else ''}에서 멈췄습니다")
+        elif v == 'vol_floor':
+            parts.append(f"{side}는 변동성 바닥(노이즈 안쪽으로는 안 잡음)으로 올렸습니다")
+        elif v == 'fallback':
+            parts.append(f"{side}는 손절 거리가 0 이라 대체 규칙으로 잡혔습니다")
+    if not parts:
+        parts.append('두 값을 정한 규칙은 같은데 맞지 않습니다 — 이 판의 기준가와 엔진이 판정에 쓴 가격이 다른지 봐야 합니다')
+    return moved, False, ' · '.join(parts)
+
+
 def hold_log_short(line, new_stop=None, new_trim=None, today=None, width=34, revived=False):
     """관심종목 표의 이력 한 줄 — 어느 선을 넘겨 다시 쟀고 새 선이 얼마인지. 못 읽는 문장은 종전대로 자른다."""
     p = hold_log_parse(line)
@@ -2095,6 +2152,25 @@ def holder_kind(px, hold_stop, hold_trim, buy=None, avg_down_ok=None):
                if (avg_down_ok and buy and px > buy) else ''))
 
 
+def _plan_day(today=None):
+    """보유 계획 창의 '오늘' — 넘겨받으면 그것 · 아니면 **분석 기준일**(엔진 규칙 `resolve_analysis_date`) · 못 구하면 달력 날짜.
+
+    라운드 442 — 계획을 다시 재는 쪽(`portfolio.hold_plan_update`)은 분석 기준일로 창을 센다(R373). 표·견해가 벽시계 날짜로
+    '창이 지났다'를 세면 주말·휴장일·장 전에 1~3일 먼저 지났다고 말하고, 다시 재는 쪽은 아직 아니라고 한다(한 화면에 '오늘'이 둘).
+    이력 줄의 '오늘' 낱말(`hold_log_short`)은 달력의 오늘을 뜻하므로 여기를 안 쓴다 — 토요일에 금요일 일을 '오늘'이라 하지 않는다."""
+    if today:
+        return today
+    import datetime as _dtp
+    try:
+        from bitemporal_engine import resolve_analysis_date
+        d = resolve_analysis_date()
+        if isinstance(d, _dtp.date):
+            return d
+    except Exception:                                          # noqa: BLE001
+        pass
+    return _dtp.date.today()
+
+
 def watch_action(row, price=None, today=None):
     """
     관심종목 한 줄의 판단. 반환:
@@ -2193,7 +2269,7 @@ def watch_action(row, price=None, today=None):
             try:
                 import datetime as _dt
                 import ledger_view as _lv
-                _td = today or _dt.date.today()
+                _td = _plan_day(today)                      # 라운드 442 — 분석 기준일 (계획을 다시 재는 쪽과 같은 날짜)
                 _age = (_td - _dt.date.fromisoformat(_at)).days
                 _days = _lv.bars_to_days(_lv.HORIZON_BARS)
                 if _age >= _days:
@@ -2290,7 +2366,7 @@ def watch_action(row, price=None, today=None):
             try:
                 import datetime as _dt2
                 import ledger_view as _lv2
-                _td2 = today or _dt2.date.today()
+                _td2 = _plan_day(today)                     # 라운드 442 — 위 줄과 같은 날짜
                 _age2 = (_td2 - _dt2.date.fromisoformat(_at)).days
                 _days2 = _lv2.bars_to_days(_lv2.HORIZON_BARS)
                 brief.append(f"계획 창 경과 · 다시 잼" if _age2 >= _days2
@@ -2461,7 +2537,7 @@ def watch_action(row, price=None, today=None):
                 why_line=_why241, why=(_why241 or bucket), remeasure=_unsorted396)
 
 
-def regime_gate_line(rg):
+def regime_gate_line(rg, idx=None):
     """국면 게이트가 **지금 실제로** 무엇을 걸고 있나 — 한 줄. 없으면 없다고 말한다.
 
     라운드 248 — 사용자 물음: *"이 방향이면 내일 방어적으로 세팅을 해야하는지."*
@@ -2501,7 +2577,11 @@ def regime_gate_line(rg):
             cell_txt = _rp434.cell_ko(cell) or cell
         except Exception:                                      # noqa: BLE001
             cell_txt = cell
-    head = f"지금 국면 칸 **{cell_txt}**"
+    # 라운드 443 — 어느 지수·분류기의 국면인지 적는다. 한 화면에 코스피 4상태(포트폴리오·지시서) · 원장 3상태(신뢰 카드) · 이 칸
+    #   (상장 시장 지수 방향 × 이 종목 변동성)이 같이 보여 *"그래서 지금 시장이 뭔데?"* 로 읽혔다(외부 검토 2026-10-07).
+    _ik = {'KOSPI': '코스피', 'KOSDAQ': '코스닥'}.get(str(idx or '').upper(), str(idx or '').strip())
+    head = (f"지금 국면 칸({_ik} 지수 방향 × 이 종목 변동성) **{cell_txt}**" if _ik
+            else f"지금 국면 칸 **{cell_txt}**")
     if g.get('level'):
         head += f" ({g['level']})"
     return head + (' — ' + ' · '.join(bits) if bits
@@ -3092,7 +3172,8 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
         mkt = (f"<div style='background:{t['raised']}; border-radius:9px; "
                f"padding:9px 12px;'>"
                f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
-               f"시장 진단</p>"
+               # 라운드 443 — 어느 지수의 상태인지 제목에 적는다(한 화면에 지수·분류기가 다른 국면이 셋이었다)
+               f"시장 진단{(' · ' + _esc(m.get('index_ko')) + ' 이동평균 4상태') if m.get('index_ko') else ''}</p>"
                f"<p style='margin:2px 0 0 0; font-size:13px; "
                f"color:{t['tx1']};'><b>{_esc(m.get('ko'))}</b>"
                + (f" · 60일선 {_esc(m.get('slope_ko'))}"
@@ -3102,7 +3183,10 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                + f"<p style='margin:3px 0 0 0; font-size:12px;"
                f"color:{t['tx3']};'>{_esc(_basis422)} — "
                f"시장 상태는 하루 안에서 모든 종목에 같은 값이라 유효 표본이 "
-               f"날짜입니다. 블라인드로 확정하지 못했습니다.</p></div>")
+               f"날짜입니다. 블라인드로 확정하지 못했습니다.</p>"
+               + (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx2']}; line-height:1.6;'>"
+                  f"{_esc(m.get('own_line'))}</p>" if m.get('own_line') else '')
+               + "</div>")
     elif p.get('market_na'):
         # 라운드 441 — 못 냈으면 사유와 함께 적는다(§3). 종전엔 이 절이 말없이 빠졌다.
         mkt = (f"<div style='background:{t['raised']}; border-radius:9px; "

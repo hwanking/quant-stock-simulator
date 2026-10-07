@@ -97,14 +97,18 @@ def outcome(row, bars_df, cost=None):
                 touched_bar=g.get('touched_bar'), bars_used=g.get('bars_used'))
 
 
-def abstain_tally(graded, cost=None):
+def abstain_tally(graded, cost=None, boot=2000, seed=418):
     """'안 산 성적' — graded: [(row, outcome dict|None)] → 수만 담은 dict (이름 없음).
 
-    판정이 매수가 아닌 것만 센다. 결과가 정해진 것(목표·손절·만료)만 r 을 더한다. 문턱 없음."""
+    판정이 매수가 아닌 것만 센다. 결과가 정해진 것(목표·손절·만료)만 r 을 더한다. 문턱 없음.
+    라운드 444 — 평균에 '다 샀다면'과 같은 **날짜로 묶은 95% 구간**(`cluster_ci`)과 **하위 5% 경계**(가장 나빴던 5% 가 그 아래)를
+    붙인다. 외부 검토(2026-10-07): *"평균 −0.11 · 중앙 +2.18 · 안 산 쪽이 나았던 44% — 소수의 큰 손실이 평균을 끌어내렸을
+    가능성"* 과 *"%p 단순 합산은 경제적 의미가 직관적이지 않다"*. 종전 줄은 *"유의성은 재지 않았습니다"* 로 끝났다."""
     c = _cost() if cost is None else cost
     n_rows = n_nobars = n_pending = 0
     st = {'target': 0, 'stop': 0, 'expired': 0}
     nets, dates, tgt_d, stp_d = [], set(), [], []
+    by_date = {}
     for row, oc in graded:
         if not is_abstain(row):
             continue
@@ -119,6 +123,7 @@ def abstain_tally(graded, cost=None):
         if oc.get('net_pct') is not None:
             nets.append(float(oc['net_pct']))
             dates.add(str(row.get('date'))[:10])
+            by_date.setdefault(str(row.get('date'))[:10], []).append(float(oc['net_pct']))
             try:                                               # 계획의 두 선까지 거리(기록 가격 대비 %) — 잰 값만
                 p = float(row['price'])
                 tgt_d.append((float(row['target']) / p - 1.0) * 100.0)
@@ -133,6 +138,9 @@ def abstain_tally(graded, cost=None):
     return dict(rows=n_rows, decided=n, pending=n_pending, nobars=n_nobars, dates=len(dates),
                 target=st['target'], stop=st['stop'], expired=st['expired'],
                 mean_net=(sum(nets) / n if n else None), median_net=med,
+                ci95=cluster_ci(by_date, boot, seed), boot=int(boot or 0), seed=seed,
+                # 하위 5% 경계 — 정렬한 값의 5% 자리(가까운 순위). 20건 미만이면 그 자리가 1건이 안 돼 경계가 곧 최솟값이라 안 낸다
+                p05_net=(srt[max(0, int(0.05 * n) - 1)] if n >= 20 else None),
                 share_neg=(sum(1 for x in nets if x < 0) / n if n else None),
                 avoided=avoided, missed=missed, balance=(avoided - missed) if n else None,
                 target_dist=(sum(tgt_d) / len(tgt_d) if tgt_d else None),
@@ -170,7 +178,21 @@ def abstain_line(t):
             + (f"(계획의 두 선까지 평균 거리: 목표 +{float(t['target_dist']):.1f}% · 손절 −{float(t['stop_dist']):.1f}%)"
                if split and t.get('target_dist') is not None and t.get('stop_dist') is not None else '')
             + f". 피한 손실 합 {float(t['avoided']):,.0f}%p · 놓친 수익 합 {float(t['missed']):,.0f}%p (판정 1건에 같은 금액). "
-            f"같은 날 판정은 함께 움직여 유의성은 재지 않았습니다.")
+            + _abstain_tail(t))
+
+
+def _abstain_tail(t):
+    """'안 산 성적' 끝 문장 (라운드 444) — 날짜로 묶은 평균의 95% 구간이 0 을 포함하는지 · 하위 5% 경계. 판정 낱말 없음.
+    구간을 못 냈으면(옛 성적표 · 날짜 2일 미만) 종전 문장 그대로."""
+    ci = t.get('ci95')
+    if not (isinstance(ci, (list, tuple)) and len(ci) == 2):
+        return "같은 날 판정은 함께 움직여 유의성은 재지 않았습니다."
+    lo, hi = float(ci[0]), float(ci[1])
+    s = (f"평균의 95% 구간은 날짜로 묶어 다시 뽑으면 [{lo:+.2f}%, {hi:+.2f}%]로 0 을 "
+         f"{'포함합니다' if lo <= 0 <= hi else '포함하지 않습니다'}")
+    if t.get('p05_net') is not None:
+        s += f" · 가장 나빴던 5% 는 {float(t['p05_net']):+.1f}% 아래였습니다"
+    return s + "."
 
 
 def gate_ledger(cases, picks_by_key, cost=None):
@@ -190,17 +212,22 @@ def gate_ledger(cases, picks_by_key, cost=None):
             net = float(cs.get('realized_return')) * 100.0 - (c or 0.0)
         except (TypeError, ValueError):
             continue
+        # 라운드 444 — 그 조건 **하나만** 미충족인 후보(나머지 조건은 다 통과) — 이 조건 하나가 없었다면 추천이 됐을 후보다.
+        #   외부 검토(2026-10-07)의 '깔때기' 물음(*"각 게이트의 incremental block"*)에 답하는 칸 · 문턱 없음 · 세기만 한다.
+        _fails = [str(ck.get('name') or '') for ck in checks if not ck.get('ok') and ck.get('name')]
         for ck in checks:
             nm = str(ck.get('name') or '')
             if not nm:
                 continue
             side = 'passed' if ck.get('ok') else 'blocked'
-            d = acc.setdefault(nm, {'blocked': [], 'passed': []})
+            d = acc.setdefault(nm, {'blocked': [], 'passed': [], 'only': []})
             d[side].append((cs['status'], net))
+            if side == 'blocked' and _fails == [nm]:
+                d['only'].append((cs['status'], net))
     out = []
     for nm, d in acc.items():
         row = {'name': nm}
-        for side in ('blocked', 'passed'):
+        for side in ('blocked', 'passed', 'only'):
             v = d[side]
             row[side] = dict(n=len(v), success=sum(1 for s, _ in v if s == 'success'),
                              failure=sum(1 for s, _ in v if s == 'failure'),
@@ -214,12 +241,24 @@ def gate_ledger(cases, picks_by_key, cost=None):
 ENGINE_BUY_ACTIONS = ('BUY', 'ACCUMULATE')
 
 
+def report_day_of(d):
+    """리포트의 날짜 — **자료 기준일**(라운드 442 · `premarket.data_day_of` 한 곳) · 못 정하면 그 리포트의 `date` 그대로.
+    종전엔 `date`(연 날)로 묶어, 저녁에 만든 판과 다음 날 아침에 만든 판(같은 자료)이 두 '날'로 세어졌다."""
+    try:
+        from premarket import data_day_of
+        k = data_day_of(d)
+    except Exception:                                          # noqa: BLE001
+        k = None
+    return str(k or (d or {}).get('date') or '')[:10]
+
+
 def latest_by_date(reports, is_off_day=None):
     """날짜마다 마지막 개장 전 리포트 하나(`generated_at` 이 늦은 판) · 휴장일 날짜는 따로 → ({날짜: 리포트}, [휴장일]).
-    추천 빈도와 '다 샀다면'이 **같은 후보**를 세게 하는 한 곳(라운드 433 · 첫 판은 둘이 다른 리포트 묶음을 읽었다)."""
+    추천 빈도와 '다 샀다면'이 **같은 후보**를 세게 하는 한 곳(라운드 433 · 첫 판은 둘이 다른 리포트 묶음을 읽었다).
+    날짜는 자료 기준일이다(라운드 442 · `report_day_of`)."""
     by = {}
     for d in reports or []:
-        k = str((d or {}).get('date') or '')[:10]
+        k = report_day_of(d)
         if not k:
             continue
         if k not in by or str(d.get('generated_at') or '') > str(by[k].get('generated_at') or ''):
@@ -280,6 +319,21 @@ def reco_summary(reports, registry_rows=(), is_off_day=None):
                 registry_buy=sum(1 for r in reg if str(r.get('action') or '') in ENGINE_BUY_ACTIONS))
 
 
+def cluster_ci(by_date, boot=2000, seed=433):
+    """평균의 95% 구간 — **날짜로 묶어 다시 뽑는다**(같은 날 판정은 함께 움직이므로 건수가 아니라 날짜가 표본 · R217·R45).
+    by_date: {날짜: [값 …]}. 날짜가 둘 미만이거나 boot 가 0 이면 None. 시드 고정 — 같은 자료면 같은 구간(한 곳 · 라운드 444).
+    라운드 433 의 '다 샀다면'이 쓰던 그 셈을 그대로 옮겼다(같은 시드·같은 순서라 값이 같다)."""
+    if not boot or len(by_date or {}) < 2:
+        return None
+    import random
+    rng, ds, means = random.Random(seed), sorted(by_date), []
+    for _ in range(int(boot)):
+        xs = [x for d in (rng.choice(ds) for _ in ds) for x in by_date[d]]
+        means.append(sum(xs) / len(xs))
+    means.sort()
+    return [means[int(0.025 * len(means))], means[int(0.975 * len(means)) - 1]]
+
+
 def candidate_outcome(cases, picks_by_key, cost=None, boot=2000, seed=433):
     """개장 전 후보를 그날 리포트 가격에 **다 샀다면** (라운드 433) — 추적 케이스 중 그날 리포트 후보였던 것 · 결과가 정해진
     것만 · 비용 뺀 수익(%) · 판정 1건에 같은 금액. 짝짓기는 `gate_ledger` 와 같다(§4). 짝이 하나도 없으면 None.
@@ -305,15 +359,7 @@ def candidate_outcome(cases, picks_by_key, cost=None, boot=2000, seed=433):
         by_date.setdefault(key[1], []).append(net)
     if not v:
         return None
-    ci = None
-    if boot and len(by_date) >= 2:
-        import random
-        rng, ds, means = random.Random(seed), sorted(by_date), []
-        for _ in range(int(boot)):
-            xs = [x for d in (rng.choice(ds) for _ in ds) for x in by_date[d]]
-            means.append(sum(xs) / len(xs))
-        means.sort()
-        ci = [means[int(0.025 * len(means))], means[int(0.975 * len(means)) - 1]]
+    ci = cluster_ci(by_date, boot, seed)
     return dict(n=len(v), dates=len(dates), success=st['success'], failure=st['failure'],
                 unresolved=st['unresolved'], mean_net=sum(v) / len(v), median_net=statistics.median(v), cost_pct=c,
                 ci95=ci, boot=int(boot or 0), seed=seed)

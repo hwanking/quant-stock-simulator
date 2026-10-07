@@ -136,11 +136,18 @@ def report_dates(history_path, today=None) -> list:
     if not history_path or not _os.path.exists(history_path):
         return None
     out = set()
+    # 라운드 442 — 기준일은 자료 기준일이다(동결이 그 날짜로 케이스를 만든다 · `premarket.data_day_of` 한 곳).
+    #   옛 줄의 `date` 는 벽시계 날짜라 그대로 견주면 동결된 날(자료일)과 안 맞아 밀린 날로 잘못 센다.
+    try:
+        from premarket import data_day_of as _day_of
+    except Exception:                                          # noqa: BLE001
+        _day_of = None
     try:
         with open(history_path, encoding='utf-8') as f:
             for line in f:
                 try:
-                    d = str(json.loads(line).get('date') or '')[:10]
+                    _row = json.loads(line)
+                    d = str(((_day_of(_row) if _day_of else None) or _row.get('date')) or '')[:10]
                 except Exception:                              # noqa: BLE001
                     continue
                 if len(d) == 10 and d <= today and not is_non_trading_date(d):

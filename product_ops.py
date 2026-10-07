@@ -108,9 +108,10 @@ def extract_update_detail(item):
             mods.append(mm.group(1))
     related = sorted({s for s in _re.findall(r'§\s*\d+', body)})
 
+    # 라운드 444 — 앞 4개·6개만 싣고 몇 개를 뺐는지는 안 실었다(화면이 '외 N'을 못 적었다 · 말없이 자른 자리 · R314).
     return {'problem': problem, 'why': why, 'user_effect': user_effect,
-            'tests': tests, 'modules': mods[:4],
-            'related': related[:6] or [], 'has_detail': bool(body)}
+            'tests': tests, 'modules': mods[:4], 'modules_more': max(0, len(mods) - 4),
+            'related': related[:6] or [], 'related_more': max(0, len(related) - 6), 'has_detail': bool(body)}
 
 
 def enrich_update_history(history):
@@ -146,9 +147,15 @@ def enrich_update_history(history):
 _SEV_ORDER = {'높음': 0, '중간': 1, '낮음': 2}
 
 
+def _clip444(s, n):
+    """n 자를 넘으면 n−1 자에서 자르고 '…' — 잘랐다는 표시를 남긴다(라운드 444 · 종전엔 말없이 잘랐다 · R301·R314·R384)."""
+    s = str(s)
+    return s if len(s) <= n else s[:n - 1] + '…'
+
+
 def _issue(kind, sev, title, detail, scope='전체'):
-    return {'type': kind, 'severity': sev, 'title': str(title)[:80],
-            'detail': str(detail)[:200], 'scope': scope,
+    return {'type': kind, 'severity': sev, 'title': _clip444(title, 80),
+            'detail': _clip444(detail, 200), 'scope': scope,
             'created': datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 

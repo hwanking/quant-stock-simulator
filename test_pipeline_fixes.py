@@ -3897,7 +3897,7 @@ check("시험 픽스처(2099-01-01)가 실제 이력 파일에 새로 들어가�
 # ③ 화면 — 리포트 섹션·테마 토글
 _w61 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 check("개장 전 리포트 섹션", "개장 전 확정 리포트" in _w61)
-check("사후 검증 패널 (숨김 금지)", "지난 개장 전 추천의 실제 성과" in _w61)
+check("사후 검증 패널 (숨김 금지)", "지난 개장 전 리포트 후보의 실제 성과" in _w61)   # R443 — 세는 것은 후보 전부
 # R232: 사후 검증이 DB 를 읽으면서 분모는 tally 의 decided(목표+손절)이고 미도달은 따로 뺀다고 적는다.
 check("적중률 분모 명시", "분모 {_t232['decided']}" in _w61 and "미도달 제외)" in _w61)
 check("라이트/다크 토글", "라이트 모드" in _w61 and "ui_theme" in _w61)
@@ -20130,10 +20130,13 @@ check("업종 성적은 sector_cycle.ledger_perf (표시 전용) 를 읽는다",
 check("점수를 만들지 않는다고 적어 뒀다 (§2 — 원장이 종목 단위라 못 잰다)",
       '여기서 **점수를 만들지 않는다.**' in _w231 and '원장은 **종목 단위**' in _w231)
 # ⚠️ `def _market_state_214():` 도 그 문자열을 품는다 — 정의 1 + 호출 2 = 3.
-check("국면은 한 함수 `_market_state_214` 를 견해·종목 상세가 함께 읽는다 (§4)",
+# 라운드 443 — 매매 지시서의 '시장 진단'도 같은 함수를 읽게 됐다(그 카드의 상태별 성적은 코스피로 센다 · 라운드 441 이 상장 시장
+#   지수를 이어 코스닥 종목에 코스닥 상태 + 코스피 성적이 붙었던 것을 되돌렸다). 정의 1 + 호출 3 = 4 · 지수는 여전히 한 번 받는다.
+check("국면은 한 함수 `_market_state_214` 를 견해·종목 상세·지시서가 함께 읽는다 (§4)",
       '_ms58 = _market_state_214()' in _w231
       and '_ms214 = _market_state_214()' in _w231
-      and _code_calls231(_w231, '_market_state_214()') == 3      # def 1 + 호출 2
+      and '_mkt_state = _market_state_214()' in _w231
+      and _code_calls231(_w231, '_market_state_214()') == 4      # def 1 + 호출 3
       and _code_calls231(_w231, 'engine_init.get_index_regime(') == 1,
       f"call {_code_calls231(_w231, '_market_state_214()')} · "
       f"fetch {_code_calls231(_w231, 'engine_init.get_index_regime(')}")
@@ -20854,7 +20857,9 @@ with open(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'), encoding='
     _src239 = _f239.read()
 check("동결이 (종목,기준일) 로 이미 있는 추천을 건너뛴다 (버전은 도장이지 정체가 아니다)",
       "existing = {(str(t), str(d)) for t, d in conn.execute(" in _src239
-      and "if (str(p['symbol']), _sig.isoformat()) in existing:" in _src239)
+      # 라운드 442 — 기준일이 자료 기준일이 되며 옛 줄은 그 줄의 날짜로도 견준다(조건이 두 줄이 됐다). 열쇠는 그대로다 —
+      #   동작은 아래 심기 ①② 와 §428 ⑥ 이 값으로 잰다.
+      and "(str(p['symbol']), _sig.isoformat()) in existing" in _src239)
 check("미래 기준일은 동결하지 않는다 (있을 수 없는 값 · 픽스처 유입 차단)",
       "if _sig > today:" in _src239 and "skipped_future += 1" in _src239)
 check("건너뛴 수를 세어 찍는다 (조용히 버리지 않는다 · §3)",
@@ -21558,8 +21563,10 @@ _orig_dir245 = _pm245.PM_DIR
 try:
     _pm245.PM_DIR = _dir245
     _dk245 = '2099-02-02'
+    # 라운드 442 — 날짜가 자료 기준일인 판(표시 day_basis)으로 심는다. 표시 없는 옛 판이면 생성 시각(장 전 05:00)에서 자료일을
+    #   유도해 전 거래일의 판이 되고, 그날 결론으로 안 돌아온다 — 그게 이번에 고친 동작이다(§428).
     _rep245 = {'date': _dk245, 'generated_at': f'{_dk245} 05:00:00', 'engine_version': 'v2099.02.02.1',
-               'frozen': True, 'picks': [{'symbol': '000000.KS', 'name': 'x'}]}
+               'frozen': True, 'day_basis': 'data', 'picks': [{'symbol': '000000.KS', 'name': 'x'}]}
     with open(_pm245._pm_path(_dk245, 'v2099.02.02.1'), 'w', encoding='utf-8') as _f245:
         _json245.dump(_rep245, _f245, ensure_ascii=False)
     _got245 = _pm245.load_today_report(_dk245, engine_version='v2099.02.02.9')
@@ -22805,11 +22812,14 @@ check("화면이 미수신을 '0.00 0.00%' 가 아니라 사유로 그린다",
       and "_rz = str((m_indices.get('unavailable') or {}).get(key) or '')" in _w231)
 
 # ③ 미수신은 0 이 아니다
-check("억원 환산 도우미가 None 을 0 으로 바꾸지 않는다",
-      "def _tn246(v):" in _w231
-      and "return None if v is None else float(v) / 1e8" in _w231)
+# 라운드 443 — 환산 도우미가 킷 한 곳(`ui_kit.turnover_text`)으로 갔다(1억 미만은 만원 · '0억원' 금지). 지키는 성질은 그대로 —
+#   못 받은 값은 0 이 아니라 '미산출'이다. 글자 대신 값으로 본다.
+import ui_kit as _uk262t
+check("거래대금 도우미가 None 을 0 으로 바꾸지 않는다 · 1억 미만을 '0억원'으로 안 적는다",
+      _uk262t.turnover_text(None) == '미산출' and _uk262t.turnover_text(31674969.5) == '3,167만원'
+      and _uk262t.turnover_text(1.7e9) == '17억원' and _uk262t.turnover_text(2.5e8) == '2.5억원')
 check("거래대금 두 자리가 그 도우미를 쓴다 — (v or 0) / 1e8 이 없다",
-      _w231.count("_tn246(") >= 3
+      _w231.count("_uk.turnover_text(") >= 2
       and "avg_turnover_20d') or 0) / 1e8" not in _w231
       and "avg_turnover_20d'] or 0)/1e8" not in _w231)
 
@@ -22982,7 +22992,8 @@ check("묶음은 판단이 아니라 분류다 — 코드가 그렇게 적는다
 # ④ '내일 방어적으로?' — 이미 채택된 국면 게이트로만 답한다
 check("판정 문장이 킷 한 곳에서 나온다 (§4)",
       callable(getattr(_uk264, 'regime_gate_line', None))
-      and "_uk.regime_gate_line(four_scores.get('regime_gate'))" in _w231)
+      # 라운드 443 — 상장 시장 지수 이름을 함께 넘긴다(어느 지수의 국면인지) — 호출 머리만 본다
+      and "_uk.regime_gate_line(four_scores.get('regime_gate')," in _w231)
 check("안 깎였을 때도 말한다 — 침묵하면 '재지 않았다'로 읽힌다",
       '추가 제한 없음' in _uk264.regime_gate_line({'cell': 'BULL|저변동',
                                                 'level': '정상'}))
@@ -24315,10 +24326,12 @@ check("보유자 카드 캡션이 카드 자신의 이름('팔 가격 1차')으�
       "팔 가격 1차까지 <b>{_up:+.1f}%</b>" in _wa292 and "1차 목표까지 <b>{_up:+.1f}%</b>" not in _wa292)
 check("보유자 카드가 두 기준가(현재가 · 진입가)를 이름으로 적고, 옮겨서 맞는지를 그 자리에서 보인다 (§3 · 안 맞으면 맞다고 안 적는다)",
       '_hold_basis_html' in _wa292
-      and '위 두 값은 <b>현재가 {realtime_price:,.0f}원</b> 기준입니다' in _wa292
-      # 라운드 382 — 곱셈 표기는 뺐다(뜻은 그대로 · 원 단위로 같을 때만 '같다') · 안 맞을 때 원인을 단정하지 않는다
+      # 라운드 443 — 기준가는 엔진이 판정에 쓴 가격 · 안 맞을 때의 까닭은 엔진이 실은 규칙에서 읽는다(종전엔 '가르지 않습니다').
+      #   까닭 문장 자체는 §429 가 킷 함수를 심어서 잰다.
+      and '위 두 값은 <b>현재가 {_hb_px:,.0f}원</b>(엔진이 판정에 쓴 가격) 기준입니다' in _wa292
+      # 라운드 382 — 곱셈 표기는 뺐다(뜻은 그대로 · 원 단위로 같을 때만 '같다')
       and '기준가를 진입가로 옮기면 <b>{_hb_moved:,.0f}원</b>으로 지시서의 1차 목표와 같습니다' in _wa292
-      and '여기서는 가르지 않습니다' in _wa292 and '_hb_same = ' in _wa292
+      and '_uk.level_basis_note(' in _wa292 and '여기서는 가르지 않습니다' not in _wa292
       and '{_hold_reach_html}{_hold_basis_html}{_hold_plan_html}' in _wa292)
 check("지시서의 1차 목표·손절은 '진입가 기준', 2차 목표는 '구조적 저항 · 진입가 대비' 라 적는다 (이미 채택된 낱말)",
       "+ '진입가 기준')" in _uk292 and "+ '구조적 저항 · 진입가 대비')" in _uk292
@@ -29753,8 +29766,13 @@ check("R382 '살 가격' 은 중앙 판정이 추천을 통과시켰을 때만 �
 check("R382 받은 적자 EPS 를 '미수신' 으로 안 적는다 · PER 은 '적자 — 산출 안 함'",
       "eps_val = _metric(stock_info.get('eps'), _lf.get('eps'))\n" in _w373 + '\n'
       and "na=_per_na382" in _w373)
-check("R382 통과 조건 이름을 차단으로 읽지 않게 '미충족' 을 붙인다",
-      "' 미충족**입니다 ({_top316[1]}/{_tot316}종목)" in _w373)
+# 라운드 443 — '미충족' 을 붙이는 일이 중앙 판정 한 곳(fail_label)으로 갔다. 이름이 '…없음·…아님'인 조건은 뒤집어 말한다
+#   ('강제 차단 없음 미충족' → '강제 차단 사유 있음'). 글자 대신 값으로 본다.
+import verdict_core as _vc382f
+check("R382 통과 조건 이름을 차단으로 읽지 않게 — 미충족의 이름은 fail_label 한 곳 (뒤집힌 이름은 뒤집어 말한다)",
+      "_vc_view.fail_label(_top316[0])" in _w373
+      and _vc382f.fail_label('강제 차단 없음') == '강제 차단 사유 있음'
+      and _vc382f.fail_label('비용 차감 기대값 양수') == "'비용 차감 기대값 양수' 미충족")
 check("R382 업종 막대가 분모(분석한 몫·빠진 몫)를 같은 기준으로 적는다",
       '계좌 전체의 분산도로 읽지 마세요' in _w373 and "_cost382['etf'] += _cst" in _w373)
 check("R382 판단 없는 행도 칩으로 센다 — 제목의 수와 칩의 합이 맞는다 (보유·미보유 둘 다)",
@@ -33091,7 +33109,9 @@ check("abstain_tally — 매수 판정은 빼고 · 정해진 판정만 평균 �
 _l406 = _pf406.abstain_line(_t406)
 _l406s = _pf406.abstain_line(dict(_t406, mean_net=-0.03, median_net=2.3))
 check("abstain_line — 판정 낱말('나았습니다') 없이 수만 · 평균과 중앙의 부호가 갈리면 갈린다고 + 두 선 거리 · 표본 없으면 '아직'",
-      '나았습니다' not in _l406 and '나았던 판정' in _l406 and '유의성은 재지 않았습니다' in _l406
+      # 라운드 444 — 날짜 둘 이상이면 날짜로 묶은 95% 구간을 적는다(없으면 종전 문장)
+      '나았습니다' not in _l406 and '나았던 판정' in _l406 and '95% 구간은 날짜로 묶어' in _l406
+      and '유의성은 재지 않았습니다' in _pf406.abstain_line(dict(_t406, ci95=None))
       and '부호가 갈립니다' in _l406s and '목표 +5.0%' in _l406s and '손절 −8.0%' in _l406s
       and '부호가 갈립니다' not in _l406
       and '아직' in _pf406.abstain_line({'decided': 0, 'pending': 3}), _l406s)
@@ -34269,17 +34289,19 @@ print("=" * 72)
 # 사용자(2026-10-06): *"현재 추천주가 거의 없지 않았어? 괜찮은 거 맞아?"* 화면은 오늘 하루의 0 만 말했다. 셈은 proof 한 곳
 #   (reco_summary · candidate_outcome · reco_line)이 하고, 성적표가 싣고, 스캔 배너·홈 카드가 읽는다(§4). 판정 낱말 없음(§2·§9).
 import proof as _pf422                                               # noqa: E402
+# 라운드 442 — 리포트 날짜가 자료 기준일이 됐다. 이 픽스처는 '날짜 = 자료일'인 리포트를 그리므로 표시(day_basis)를 단다 —
+#   표시가 없으면 옛 판으로 보고 생성 시각(장 전 08:00)에서 자료일을 유도해 넷이 한 날(10-02)로 묶인다.
 _rep422 = [
-    {'date': '2026-10-05', 'generated_at': '2026-10-05T07:00', 'picks': [
+    {'date': '2026-10-05', 'day_basis': 'data', 'generated_at': '2026-10-05T07:00', 'picks': [
         {'symbol': '000001.KS', 'core': {'recommended': False, 'expected_return': -0.4,
                                          'checks': [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': True}]}}]},
-    {'date': '2026-10-05', 'generated_at': '2026-10-05T08:00', 'picks': [          # 같은 날 늦은 판이 이긴다
+    {'date': '2026-10-05', 'day_basis': 'data', 'generated_at': '2026-10-05T08:00', 'picks': [          # 같은 날 늦은 판이 이긴다
         {'symbol': '000002.KS', 'core': {'recommended': False, 'expected_return': 0.05,
                                          'checks': [{'name': 'A', 'ok': True}, {'name': 'B', 'ok': False}]}},
         {'symbol': '000003.KS'}]},                                                  # 중앙 판정 없는 옛 행
-    {'date': '2026-10-06', 'generated_at': '2026-10-06T08:00', 'picks': [
+    {'date': '2026-10-06', 'day_basis': 'data', 'generated_at': '2026-10-06T08:00', 'picks': [
         {'symbol': '000004.KQ', 'core': {'recommended': True, 'expected_return': 0.2, 'checks': [{'name': 'B', 'ok': True}]}}]},
-    {'date': '2026-10-04', 'generated_at': '2026-10-04T08:00', 'picks': [          # 휴장일 — 세지 않는다
+    {'date': '2026-10-04', 'day_basis': 'data', 'generated_at': '2026-10-04T08:00', 'picks': [          # 휴장일 — 세지 않는다
         {'symbol': '000005.KS', 'core': {'recommended': True, 'expected_return': 9.9, 'checks': [{'name': 'A', 'ok': True}]}}]},
 ]
 _reg422 = [{'date': '2026-10-05', 'action': 'HOLD'}, {'date': '2026-10-05', 'action': 'ACCUMULATE'},
@@ -34607,6 +34629,413 @@ check("④ build 는 market 이 있으면 market_na 를 버린다 — 사유는 
 _sc427 = open(_os.path.join(PROJ, 'scripts', 'swallow_census.py'), encoding='utf-8').read()
 compile(_sc427, 'swallow_census.py', 'exec')
 check("⑤ 삼킴 조사 도구가 컴파일되고 쓰기 금지 모드로 돈다", "GAEUM_NO_LOCAL_WRITE" in _sc427 and "'--all'" in _sc427)
+
+print()
+print("§428 개장 전 리포트의 정체는 자료 기준일 — 연 날로 묶어 장 전 판이 겨냥한 거래일을 채점에서 빼고 같은 추천을 두 번 셌다 (라운드 442)")
+print("-" * 72)
+# 2026-10-07 실측: 리포트 105개 중 68개가 '거래일 날짜 · 자료는 전 거래일'(장 전·자정 넘어 연 날) · 24개가 휴장일 날짜 · 13개만
+#   날짜 = 자료일. 추적은 그 날짜를 기준일로 써 채점을 날짜 다음 봉부터 돌렸고(진입은 전 거래일 종가 — 리포트가 겨냥한 날이
+#   빠진다), 같은 자료의 저녁 판·다음 날 아침 판이 두 기준일로 동결돼 확정 32건이 두 번 세어졌다. 원장·종목 판정 기록·전방
+#   기록부는 자료 기준일을 쓴다(§4). 규칙은 엔진의 분석 기준일 규칙 하나 · 옛 줄은 생성 시각에서 유도 · 옛 케이스는 한 번 옮긴다.
+import datetime as _dt428
+import inspect as _insp428
+import io as _io428
+import json as _json428
+import sqlite3 as _sq428
+import tempfile as _tf428
+import pandas as _pd428
+import premarket as _pm428
+import proof as _pf428
+import scripts.rekey_tracker_basis as _rk428
+import scripts.run_daily_improvement as _rdi428
+from improvement import case_tracker as _ct428, database as _db428
+from improvement.schemas import Decision as _Dec428
+# ① 리포트 날짜 규칙 = 엔진이 분석 기준일을 정하는 규칙
+_rd428 = {s: _pm428.report_day(_dt428.datetime.strptime(s, '%Y-%m-%d %H:%M')) for s in (
+    '2026-10-07 08:00', '2026-10-07 16:00', '2026-10-08 00:03', '2026-10-10 11:00')}
+check("① 리포트 날짜 = 마지막으로 장이 끝난 거래일 (장 전 → 전 거래일 · 마감 뒤 → 그날 · 자정 넘김 → 전날 · 휴장일 → 직전 거래일)",
+      _rd428 == {'2026-10-07 08:00': '2026-10-06', '2026-10-07 16:00': '2026-10-07',
+                 '2026-10-08 00:03': '2026-10-07', '2026-10-10 11:00': '2026-10-08'}, str(_rd428))
+check("① 규칙을 다시 적지 않는다 — 엔진의 resolve_analysis_date 를 부른다",
+      'resolve_analysis_date(now)' in _insp428.getsource(_pm428.report_day))
+# ② 자료 기준일 — 한 곳
+check("② 자료 기준일 — 새 줄은 date · 옛 줄은 생성 시각에서 유도(T 구분 · 초 없음도) · 못 읽으면 data_asof · 그것도 없으면 None",
+      _pm428.data_day_of({'date': '2026-10-07', 'day_basis': 'data', 'generated_at': '2026-10-08 00:01:00'}) == '2026-10-07'
+      and _pm428.data_day_of({'date': '2026-10-07', 'generated_at': '2026-10-07 00:03:01', 'data_asof': '2026-10-06'}) == '2026-10-06'
+      and _pm428.data_day_of({'date': '2026-10-07', 'generated_at': '2026-10-07T16:10'}) == '2026-10-07'
+      and _pm428.data_day_of({'date': '2026-10-07', 'generated_at': '깨짐', 'data_asof': '2026-10-02'}) == '2026-10-02'
+      and _pm428.data_day_of({'date': '2026-10-07'}) is None and _pm428.data_day_of(None) is None)
+_td428 = _tf428.mkdtemp(prefix='gaeum_r442_')
+_pmdir428, _pmhist428, _pick_fn428 = _pm428.PM_DIR, _pm428.PM_HISTORY, _pm428.pick_from_scan_row
+try:
+    _pm428.PM_DIR = _td428
+    _pm428.PM_HISTORY = _os.path.join(_td428, 'premarket_history.jsonl')
+    # ③ 이름이 같아도 내용이 정체다
+    with open(_pm428._pm_path('2026-10-07', 'vOLD'), 'w', encoding='utf-8') as _f428:
+        _json428.dump({'date': '2026-10-07', 'generated_at': '2026-10-07 00:03:01', 'data_asof': '2026-10-06',
+                       'engine_version': 'vOLD', 'picks': [{'symbol': '000001.KS'}]}, _f428)
+    check("③ 이름이 같아도 자료 기준일이 다른 옛 판(자정 넘어 만든 판)은 그날 결론이 아니다",
+          _pm428.load_today_report('2026-10-07', engine_version='vOLD') is None
+          and _pm428.load_today_report('2026-10-07', engine_version='vNEW') is None)
+    # ④ build_report — 스캔의 t_ref 로 저장 · 이력 줄에 표시 · 같은 자료면 다시 안 만든다 · 이력 중복은 자료 기준일로 견준다
+    with open(_pm428.PM_HISTORY, 'w', encoding='utf-8') as _f428:
+        _f428.write(_json428.dumps({'date': '2026-10-07', 'symbol': '000001.KS',
+                                    'generated_at': '2026-10-07 00:03:01'}) + '\n')
+    _pm428.pick_from_scan_row = lambda _q, r: {'symbol': r['symbol'], 'name': 'x', 'price': 100.0}
+    _rows428 = [{'symbol': '000001.KS', 'snapshot': {'t_ref': '2026-10-06'}},
+                {'symbol': '000002.KS', 'snapshot': {'t_ref': '2026-10-06'}}]
+    _r1_428, _n1_428 = _pm428.build_report(None, _rows428)
+    _r2_428, _n2_428 = _pm428.build_report(None, _rows428)
+    _hl428 = [_json428.loads(_l) for _l in open(_pm428.PM_HISTORY, encoding='utf-8')]
+    check("④ 리포트 날짜는 스캔이 쓴 자료 기준일 · 표시가 붙고 그 이름으로 저장 · 같은 자료면 다시 안 만든다",
+          _n1_428 and _r1_428['date'] == '2026-10-06' and _r1_428.get('day_basis') == 'data'
+          and _os.path.exists(_pm428._pm_path('2026-10-06', _r1_428['engine_version']))
+          and _n2_428 is False and _r2_428.get('generated_at') == _r1_428.get('generated_at'))
+    check("④ 이력 — 옛 줄(자정 넘어 만든 판 · 자료 10-06)과 같은 추천은 다시 안 적고 새 추천만 표시와 함께 적는다",
+          len(_hl428) == 2 and _hl428[1].get('symbol') == '000002.KS' and _hl428[1].get('day_basis') == 'data'
+          and _hl428[1].get('date') == '2026-10-06', str(_hl428))
+    _rep_fn428 = _pm428.report_day
+    _pm428.report_day = lambda now=None: None
+    try:
+        _r3_428, _n3_428 = _pm428.build_report(None, [{'symbol': '000003.KS', 'snapshot': {}}])
+    finally:
+        _pm428.report_day = _rep_fn428
+    check("④ 기준일을 못 정하면 리포트는 만들되 파일로 고정하지 않는다 (어느 날의 결론인지 모르는 파일을 안 만든다)",
+          _n3_428 is False and _r3_428.get('date') is None and '고정하지 않았습니다' in str(_r3_428.get('note')))
+finally:
+    _pm428.PM_DIR, _pm428.PM_HISTORY, _pm428.pick_from_scan_row = _pmdir428, _pmhist428, _pick_fn428
+# ⑤ 옛 케이스 옮기기 — 임시 DB 에 심는다 (사용자 DB 는 안 건드린다)
+_hp428 = _os.path.join(_td428, 'h_cases.jsonl')
+
+
+def _hline428(d, sym, gen, **kw):
+    return _json428.dumps(dict({'date': d, 'symbol': sym, 'generated_at': gen, 'price': 100.0, 'target': 105.0,
+                                'stop': 95.0, 'horizon_days': 20, 'reco_class': '조건부로 사도 되는 종목'}, **kw))
+
+
+with open(_hp428, 'w', encoding='utf-8') as _f428:
+    _f428.write('\n'.join([
+        _hline428('2026-09-15', 'AAA.KS', '2026-09-15 20:00:00'),            # 저녁 판 — 자료 09-15 (이미 맞다)
+        _hline428('2026-09-16', 'AAA.KS', '2026-09-16 08:00:00'),            # 다음 날 아침 판 — 같은 자료 (쌍둥이)
+        _hline428('2026-09-17', 'BBB.KS', '2026-09-17 00:30:00'),            # 자정 넘김 — 자료 09-16
+        _hline428('2026-09-19', 'CCC.KS', '2026-09-19 10:00:00'),            # 토요일 — 자료 09-18
+        _hline428('2026-09-18', 'DDD.KS', '2026-09-18 20:00:00', day_basis='data'),   # 새 규칙 줄 — 아직 동결 전
+    ]) + '\n')
+_dbp428 = _os.path.join(_td428, 'imp.db')
+_db428.initialize_database(_dbp428)
+_c428 = _db428.get_connection(_dbp428)
+
+
+def _case428(tk, d, st):
+    _cs = _ct428.create_prediction_case(
+        ticker=tk, asset_type='STOCK', signal_date=_dt428.date.fromisoformat(d), model_version='vT',
+        rulebook_version='vT', decision=_Dec428.CONDITIONAL_BUY, total_score=58, confidence_score=60,
+        reference_price=100.0, entry_price=None, target_price=105.0, stop_price=95.0, holding_days=20,
+        market_regime='t', strategy_type='t', source_payload={'tk': tk, 'd': d})
+    _ct428.save_prediction_case(_c428, _cs)
+    if st != 'open':
+        _c428.execute("UPDATE prediction_cases SET status=?, realized_return=0.0 WHERE case_id=?", (st, _cs.case_id))
+    return _cs.case_id
+
+
+_ida428 = _case428('AAA.KS', '2026-09-15', 'success')
+_idb428 = _case428('AAA.KS', '2026-09-16', 'success')
+_idc428 = _case428('BBB.KS', '2026-09-17', 'failure')     # 옛 창(09-18 부터)에선 손절 — 09-17 의 목표 도달을 못 봤다
+_idd428 = _case428('CCC.KS', '2026-09-19', 'open')
+_c428.commit()
+
+
+class _Eng428:
+    def fetch_daily_bars(self, tk):
+        return _pd428.DataFrame({'trade_date': ['2026-09-16', '2026-09-17', '2026-09-18'],
+                                 'high': [100.0, 106.0, 99.0], 'low': [99.0, 99.5, 94.0], 'close': [100.0, 104.0, 95.0]})
+
+
+_act428, _cnt428 = _rk428.plan(_c428, _rk428.history_index(_hp428))
+_kind428 = {a['case_id']: (a['kind'], a['new']) for a in _act428}
+check("⑤ 옮길 것 — 아침 판 쌍둥이는 복사본 · 자정 넘긴 판은 전날로 · 휴장일 판은 직전 거래일로 · 이미 맞는 것은 그대로",
+      _kind428 == {_idb428: ('dup', '2026-09-15'), _idc428: ('rekey', '2026-09-16'), _idd428: ('rekey', '2026-09-18')},
+      str(_kind428))
+_done428 = _rk428.apply(_c428, _act428, _Eng428())
+_rx428 = {r['case_id']: dict(r) for r in _c428.execute("SELECT * FROM prediction_cases")}
+check("⑤ 같은 채점기로 다시 — 창이 하루 앞당겨져 리포트가 겨냥한 날(09-17)의 목표 도달이 잡힌다 · 원래 날짜를 남긴다",
+      _rx428[_idc428]['signal_date'] == '2026-09-16' and _rx428[_idc428]['status'] == 'success'
+      and _rx428[_idc428]['orig_signal_date'] == '2026-09-17', str(_rx428[_idc428]))
+check("⑤ 쌍둥이는 지우지 않고 복사본으로 표시 · 원본 case_id 를 사유에 · open 은 옮기기만",
+      _rx428[_idb428]['status'] == 'dup_version' and _ida428 in str(_rx428[_idb428]['result_reason'])
+      and _rx428[_idd428]['status'] == 'open' and _rx428[_idd428]['signal_date'] == '2026-09-18'
+      and len(_rx428) == 4, str(dict(_done428)))
+_act428b, _ = _rk428.plan(_c428, _rk428.history_index(_hp428))
+check("⑤ 두 번 돌려도 같다 (멱등)", _act428b == [], str(len(_act428b)))
+_t428 = _ct428.tally(_c428)
+check("⑤ 집계 — 복사본은 빠지고 휴장일 기준일은 0",
+      _t428['excluded'] == 1 and _t428['non_trading'] == 0 and _t428['success'] == 2 and _t428['open'] == 1, str(_t428))
+# ⑥ 동결 — 옮긴 뒤엔 옛 줄은 '기존' · 새 줄만 그 날짜로
+_rdi_hist428 = _rdi428.PM_HISTORY
+_rdi428.PM_HISTORY = _hp428
+_buf428, _so428 = _io428.StringIO(), sys.stdout
+try:
+    sys.stdout = _buf428
+    _add428 = _rdi428.make_create_new_cases(_c428, {})()
+except Exception as _e428:                                     # noqa: BLE001
+    _add428 = f'ERR {type(_e428).__name__}: {_e428}'
+finally:
+    sys.stdout = _so428
+    _rdi428.PM_HISTORY = _rdi_hist428
+_new428 = [tuple(r) for r in _c428.execute("SELECT ticker, signal_date FROM prediction_cases WHERE ticker='DDD.KS'")]
+check("⑥ 동결 — 옮긴 옛 케이스의 옛 줄 넷은 '기존' · 새 줄(자료 기준일)만 그 날짜로 동결된다",
+      _add428 == 1 and _new428 == [('DDD.KS', '2026-09-18')] and '이미 동결된 추천 건너뜀 4건' in _buf428.getvalue(),
+      _buf428.getvalue().strip()[-200:])
+# ⑦ 동결 공백 · PROOF 도 같은 날짜
+check("⑦ 동결 공백의 리포트 날짜도 자료 기준일 — 옛 줄의 연 날로 세면 동결된 날과 안 맞는다",
+      _ct428.report_dates(_hp428, today='2026-10-07') == ['2026-09-15', '2026-09-16', '2026-09-18'],
+      str(_ct428.report_dates(_hp428, today='2026-10-07')))
+_lat428, _ = _pf428.latest_by_date([
+    {'date': '2026-09-15', 'generated_at': '2026-09-15 20:00:00', 'picks': [{'symbol': 'A'}]},
+    {'date': '2026-09-16', 'generated_at': '2026-09-16 08:00:00', 'picks': [{'symbol': 'B'}]},
+    {'date': '2026-09-16', 'day_basis': 'data', 'generated_at': '2026-09-16 20:00:00', 'picks': [{'symbol': 'C'}]}])
+check("⑦ PROOF 의 날짜도 자료 기준일 — 저녁 판과 다음 날 아침 판(같은 자료)은 한 날이다",
+      sorted(_lat428) == ['2026-09-15', '2026-09-16'] and _lat428['2026-09-15']['picks'][0]['symbol'] == 'B'
+      and _lat428['2026-09-16']['picks'][0]['symbol'] == 'C', str({k: v['picks'] for k, v in _lat428.items()}))
+_c428.close()
+import shutil as _sh428
+_sh428.rmtree(_td428, ignore_errors=True)
+# ⑧ 리포트 열쇠에 벽시계 날짜를 안 쓴다
+_src_pm428 = open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read()
+check("⑧ 리포트 열쇠를 벽시계 날짜로 채우는 줄이 없다 (date_key 기본값은 report_day · 스캔의 t_ref)",
+      "date_key or datetime.now()" not in _src_pm428 and "date_key = date_key or report_day()" in _src_pm428)
+# ⑨ 실제 추적 DB — 옮기기를 돌렸는가 (읽기 전용 사본에서 계획만 본다)
+_real428 = _os.path.join(PROJ, '.portfolio', 'improvement.db')
+_realh428 = _os.path.join(PROJ, '.portfolio', 'premarket_history.jsonl')
+if _os.path.exists(_real428) and _os.path.exists(_realh428):
+    _src428 = _sq428.connect(f'file:{_real428}?mode=ro', uri=True)
+    _mem428 = _sq428.connect(':memory:')
+    _src428.backup(_mem428)
+    _src428.close()
+    _rk428.ensure_column(_mem428)
+    _ar428, _cr428 = _rk428.plan(_mem428, _rk428.history_index(_realh428))
+    _mem428.close()
+    check("⑨ 실제 추적 DB — 옮길 케이스가 남아 있지 않다 (옛 백업으로 되돌리면 이 줄이 먼저 붉어진다)",
+          not _ar428, f"남은 할 일 {len(_ar428)} · {dict(_cr428)}")
+else:
+    skipped("실제 추적 DB 옮기기 확인", "추적 DB 나 리포트 이력이 없다 (사용자 자료 · 새 환경)")
+# ⑩ 같은 모양의 둘째 자리 — 엔진의 리플레이 판정이 벽시계와 분석 기준일의 차이(5일 초과)를 본다. 긴 연휴에는 실시간 운영도
+#   그 차이가 6일 이상이 되어 실시간 시세·지수 국면·뉴스가 꺼진 판정이 나간다(실측: 2025 추석 · 2026-02-19 장 전).
+#   휴장일 표가 있는 남은 날에는 한 번도 안 생겨(이득 상한 0 · 동결 중인 계산부) 고치지 않았다 — 대신 새 해의 휴장일을
+#   넣는 날 그 연휴가 이 규칙을 밟으면 여기가 먼저 붉어진다. 규칙이 바뀌면(분석 기준일과 견주게 되면) 이 시험의 전제가 없다.
+import bitemporal_engine as _be428
+_q428 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+if "is_replay = (_dt.datetime.now() - _tref_dt).days > 5" in _q428:
+    _now428 = _dt428.datetime.now()
+    _d428 = _now428.date()
+    _end428 = _dt428.date(max(_be428.KRX_HOLIDAY_YEARS), 12, 31)
+    _hits428, _pts428 = [], 0
+    while _d428 <= _end428:
+        for _hm428 in ((8, 0), (23, 59)):
+            _at428 = _dt428.datetime.combine(_d428, _dt428.time(*_hm428))
+            if _at428 < _now428:
+                continue
+            _pts428 += 1
+            _tr428 = _be428.resolve_analysis_date(_at428)
+            if (_at428 - _dt428.datetime.combine(_tr428, _dt428.time(0, 0))).days > 5:
+                _hits428.append((_at428.strftime('%Y-%m-%d %H:%M'), _tr428.isoformat()))
+        _d428 += _dt428.timedelta(days=1)
+    check("⑩ 휴장일 표가 있는 남은 날에 실시간 운영이 리플레이로 판정되는 시각이 없다 (긴 연휴 · 벽시계 − 분석 기준일 > 5일)",
+          not _hits428, str(_hits428[:4]), scanned=_pts428)
+
+    def _gap428(s):
+        _a = _dt428.datetime.strptime(s, '%Y-%m-%d %H:%M')
+        return (_a - _dt428.datetime.combine(_be428.resolve_analysis_date(_a), _dt428.time(0, 0))).days > 5
+    check("⑩ 심기 — 같은 셈이 실제로 밟았던 날(2026-02-19 장 전 · 설 연휴 뒤)은 잡고 보통 날(2026-10-07 장 전)은 안 잡는다",
+          _gap428('2026-02-19 08:00') is True and _gap428('2026-10-07 08:00') is False)
+else:
+    skipped("⑩ 실시간이 리플레이로 판정되는 연휴", "엔진의 리플레이 규칙이 바뀌었다 — 이 시험의 전제(벽시계 − 기준일 > 5일)가 없다")
+# ⑪ 같은 조사에서 나온 화면 두 자리 — 포트폴리오 견해의 계획 창 경과는 분석 기준일로(보유 계획을 다시 재는 쪽과 같은 날짜) ·
+#   업데이트 날짜를 못 읽으면 오늘 날짜가 아니라 '미상'
+import ast as _ast428
+_wsrc428 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+_fn428 = next(n for n in _ast428.walk(_ast428.parse(_wsrc428))
+              if isinstance(n, _ast428.FunctionDef) and n.name == '_last_update_date')
+_calls428 = {_ast428.unparse(c.func) for c in _ast428.walk(_fn428) if isinstance(c, _ast428.Call)}
+_consts428 = {c.value for c in _ast428.walk(_fn428) if isinstance(c, _ast428.Constant) and isinstance(c.value, str)}
+check("⑪ 업데이트 날짜를 못 읽으면 '미상' — 오늘 날짜로 채우지 않는다 (함수 안에 today() 호출 0)",
+      '미상' in _consts428 and not any(x.endswith('today') for x in _calls428), str(sorted(_calls428)))
+check("⑪ 포트폴리오 견해의 '계획 창이 끝났나'는 분석 기준일로 센다 (보유 계획을 다시 재는 쪽과 같은 날짜 · R373)",
+      "_today226 = datetime.date.fromisoformat(str(t_ref_str)[:10])" in _wsrc428)
+# ⑫ 관심종목 표의 계획 창도 같은 날짜 — 분석 기준일을 심어서 잰다(벽시계와 무관하게 정해지는 값)
+import ui_kit as _uk428
+_rad428 = _be428.resolve_analysis_date
+_row428 = {'paid': 100, 'snap_px': 100, 'snap_hold_stop': 90, 'snap_hold_trim': 110,
+           'snap_hold_at': '2026-01-05', 'snap_bucket': '보유 유지'}
+try:
+    _be428.resolve_analysis_date = lambda *a, **k: _dt428.date(2026, 1, 10)
+    _wa428 = _uk428.watch_action(_row428, 100) or {}
+finally:
+    _be428.resolve_analysis_date = _rad428
+_why428 = ' '.join(str(x) for x in (_wa428.get('hold_why') or []))
+_brf428 = ' '.join(str(x) for x in (_wa428.get('hold_brief') or []))
+check("⑫ 관심종목 표의 계획 창도 분석 기준일로 — 기준일 01-10 이면 01-05 에 잰 계획은 5일째(벽시계로는 이미 지났다)",
+      '중 5일째' in _why428 and '5/28일' in _brf428 and '지났습니다' not in _why428, f"{_why428[-80:]} | {_brf428}")
+check("⑫ 넘겨받은 날짜가 있으면 그것을 쓴다 · 이력 줄의 '오늘' 낱말은 달력 날짜 그대로(토요일에 금요일 일을 '오늘'이라 하지 않는다)",
+      _uk428._plan_day(_dt428.date(2026, 2, 3)) == _dt428.date(2026, 2, 3)
+      and '_td371 = today or _dt371.date.today()' in open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read())
+# ⑬ 사이드바의 '고정' 시각 — 오늘 고정한 판이 아니면 날짜를 붙인다(금요일 저녁 판이 주말·월요일 아침에도 결론이다)
+check("⑬ 개장 전 결론 안내가 고정 시각에 날짜를 붙인다 — 고정한 날이 달력의 오늘이 아니면",
+      "else _ga228[5:16].replace('-', '/'))" in _wsrc428 and "_ga228[:10] == datetime.date.today().isoformat()" in _wsrc428)
+
+print()
+print("§429 외부 검토의 정합성 지적을 코드로 가렸다 — 이름이 계산과 다르던 기대수익 · 가르지 않던 두 목표 · 산업용 도매의 소비재 업황 (라운드 443)")
+print("-" * 72)
+# 2026-10-07 외부 검토 15항목 중 코드로 확인해 참인 것만 고쳤다(값·판정·문턱 불변 · 업황은 표시 전용). 실측 한 종목(코드만 · 문서):
+#   유사패턴 평균 −1.80% → 거부권 −2.21%(−0.41) · 조건 −2.10%(−0.30) · 중앙 기대값 −0.23% / 두 손절 = DeMARK 지지선 2,560 →
+#   신규 1차 3,047 vs 옮긴 값 3,133 / 최상위 유사사례 32건은 20일 지평(40일은 11건) · 표는 최근 12건만 / 거래대금 3,167만원이 '0억원'.
+import ast as _ast429
+import gaeum_ai as _gai429
+import sector_cycle as _sc429
+import ui_kit as _uk429
+import verdict_core as _vc429
+_q429 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_w429 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+
+
+def _strs429(src):
+    """문자열 상수(f-string 조각 포함) — 주석은 안 본다(R313·R314 · 검사가 설명 주석에 걸리지 않게)."""
+    out = []
+    for n in _ast429.walk(_ast429.parse(src)):
+        if isinstance(n, _ast429.Constant) and isinstance(n.value, str):
+            out.append(n.value)
+    return out
+
+
+_qs429 = _strs429(_q429)
+check("① 거부권 문장의 이름이 계산에 맞다 — '유사패턴 평균 수익(비용 … 차감)' · 옛 이름 '거래비용 차감 후 기대수익'이 문자열에 없다",
+      any('유사패턴 평균 수익(비용 ' in s for s in _qs429)
+      and not any('거래비용 차감 후 기대수익' in s for s in _qs429), scanned=len(_qs429))
+check("② 엔진이 각 가격을 정한 규칙과 기본 지평을 싣는다 (값은 그대로 · 출력 칸만)",
+      "'level_rules': {'hold_stop': _hold_stop_rule" in _q429 and "'level_struct':" in _q429
+      and "_hold_stop_rule = 'tdst'" in _q429 and "_entry_stop_rule = 'tdst'" in _q429
+      and "'base_horizon': 20," in _q429 and "h20 = horizons_data[20]" in _q429)
+_lb_tdst = _uk429.level_basis_note({'hold_stop': 'tdst', 'entry_stop': 'tdst', 'hold_t1': 'stop_mult', 'entry_t1': 'stop_mult'},
+                                   3291.0, 3046.8, 2846.35, 2990.0, new_stop=2560.0, struct=3500.0)
+_lb_same = _uk429.level_basis_note({'hold_stop': 'vol', 'entry_stop': 'vol'}, 3291.0, 3132.7, 2846.35, 2990.0)
+_lb_struct = _uk429.level_basis_note({'hold_stop': 'vol', 'entry_stop': 'vol', 'hold_t1': 'stop_mult', 'entry_t1': 'struct'},
+                                     3291.0, 3100.0, 2846.35, 2990.0, struct=3100.0)
+_lb_old = _uk429.level_basis_note({}, 3291.0, 3046.8, 2846.35, 2990.0)
+check("③ 두 목표가 안 맞는 까닭을 엔진의 규칙으로 말한다 — 같은 지지선 · 구조적 저항 · 옛 판은 못 가린다고 · 같으면 까닭 없음",
+      _lb_tdst[1] is False and '같은 DeMARK 지지선(2,560원)' in (_lb_tdst[2] or '') and round(_lb_tdst[0]) == 3133
+      and _lb_same[1] is True and _lb_same[2] is None
+      and '구조적 저항선(3,100원)' in (_lb_struct[2] or '') and '옛 스냅샷' in (_lb_old[2] or '')
+      and _uk429.level_basis_note({}, None, 1, 1, 1) == (None, None, None),
+      f"{_lb_tdst} | {_lb_struct[2]}")
+check("③ 화면이 그 함수를 엔진이 판정에 쓴 가격으로 부르고 '가르지 않습니다'를 안 적는다",
+      "_uk.level_basis_note(" in _w429 and "four_scores.get('current_price')" in _w429
+      and '여기서는 가르지 않습니다' not in _w429)
+# §120 의 판정 픽스처와 같은 값 — 이 절이 앞 절 이름에 기대지 않게 따로 둔다(사전 점검이 혼자 돌린다)
+_FS429 = dict(entry_pullback_price=24800.0, current_price=25800.0, entry_target_1st=27300.0, entry_stop_price=24000.0,
+              entry_rr=1.3, target_tech_2nd=28500.0, analysis_confidence=72, strategy_quality_score=61,
+              vol_20=0.025, avg_turnover_20d=1e9, target_tech_1st=27500.0, stop_loss_price=24200.0,
+              calibration_band=dict(lo=58, hi=64, hit_rate=59.0, n=1200, wilson_low=56.0),
+              range_position_pct=52.0, bb_position_pct=44.0, williams_r_value=-55.0, rsi_value=48.0,
+              blind_test_status='수행완료')
+_vd429 = _vc429.build(_FS429, {'vetoes': ['심은 거부 사유 하나', '심은 거부 사유 둘']})
+_ck429 = {c['name']: c for c in (_vd429.get('checks') or [])}
+_fsr429 = dict(_FS429, regime_gate={'block_new': True})
+_ckr429 = {c['name']: c for c in (_vc429.build(_fsr429, {}).get('checks') or [])}
+check("④ '강제 차단 없음' 설명이 거부권 문장을 그대로 잇고, 국면 게이트만 막으면 '없음' 대신 그 사실을 적는다",
+      _ck429.get('강제 차단 없음', {}).get('ok') is False
+      and '심은 거부 사유 하나' in str(_ck429['강제 차단 없음'].get('detail'))
+      and '심은 거부 사유 둘' in str(_ck429['강제 차단 없음'].get('detail'))
+      and _ckr429.get('강제 차단 없음', {}).get('ok') is False
+      and '국면의 게이트' in str(_ckr429['강제 차단 없음'].get('detail')),
+      f"{_ck429.get('강제 차단 없음')} | {_ckr429.get('강제 차단 없음')}")
+check("⑤ 추적의 이름이 세는 것을 말한다 — 리포트 후보 전부(추천 여부와 무관) · 옛 이름 없음",
+      '**개장 전 후보 추적**(리포트에 오른 후보 전부 · 추천 여부와 무관)' in _w429
+      and '지난 개장 전 리포트 후보의 실제 성과' in _w429 and '실전 추천 추적 파이프라인' not in _w429)
+_g429 = dict(sample_n=32, tp_first=25.0, sample_h=20, confidence='낮음', confidence_why='x')
+check("⑥ 유사사례 수에 지평을 붙인다 — 카드 문장 · 칸 이름 · 실체 표는 '전체 중 최근 N건'",
+      '과거 비슷한 사례 32건(20거래일 패턴) 중 8건' in _gai429.sentence(_g429)
+      and '(20거래일 패턴)' not in _gai429.sentence(dict(_g429, sample_h=None))
+      and "'비슷했던 과거 사례 (' + str(_g['sample_h']) + '거래일 패턴)'" in _w429
+      and '건 중 최근 {len(_mt62)}건' in _w429)
+check("⑦ 업황 매핑 — 산업용 도매는 미연동 · 생활용품·음식료 도매는 소비재 · 교습이 걸린다(끼어든 따옴표 제거)",
+      _sc429.group_of('기타 전문 도매업') is None and _sc429.group_of('상품 종합 도매업') is None
+      and _sc429.group_of('산업용 농·축산물 및 동·식물 도매업') is None
+      and _sc429.group_of('건축자재, 철물 및 난방장치 도매업') is None
+      and _sc429.group_of('생활용품 도매업') == 'CONSUM' and _sc429.group_of('음·식료품 및 담배 도매업') == 'CONSUM'
+      and _sc429.group_of('일반 교습 학원') == 'CONSUM' and _sc429.group_of('1차 비철금속 제조업') == 'STEEL')
+_un429 = _sc429.for_stock('000000', industry='기타 전문 도매업')
+# ⑧ 국면 표시 셋 — 어느 지수·분류기인지 이름에 · 지시서의 4상태와 그 성적은 코스피(R422 의 설계 · 포트폴리오 견해와 같은 함수)
+import trade_plan as _tp429
+_m429 = dict(_tp429.market_state(100.0, 90.0, 80.0, 79.0, doc={}), index_ko='코스피',
+             own_line='이 종목의 상장 시장(코스닥)은 지금 심은 상태입니다')
+_h429 = _uk429.trade_plan_card(_tp429.build(_vd429, _FS429, market=_m429), name='가')
+check("⑧ 지시서 시장 진단 — 제목에 '코스피 이동평균 4상태' · 상장 시장이 다르면 그 상태를 따로 한 줄",
+      '시장 진단 · 코스피 이동평균 4상태' in _h429 and '이 종목의 상장 시장(코스닥)은 지금 심은 상태' in _h429)
+check("⑧ 지시서 상태는 포트폴리오 견해와 같은 코스피 함수에서 · 엔진 맥락(상장 시장)은 따로 한 줄과 과거 기준일 판정에만",
+      "_mkt_state = _market_state_214()" in _w429 and "index_ko='코스피'" in _w429 and "_mkt_state['own_line']" in _w429
+      and '**시장 국면 (코스피 · 이동평균 4상태)**' in _w429)
+check("⑧ 국면 게이트 줄이 상장 시장 지수를 이름에 적는다 · 지수를 모르면 종전 문장",
+      '코스닥 지수 방향 × 이 종목 변동성' in _uk429.regime_gate_line({'cell': 'BULL|rough', 'cell_ko': '거친 상승'}, idx='KOSDAQ')
+      and _uk429.regime_gate_line({'cell': 'BULL|rough', 'cell_ko': '거친 상승'}).startswith('지금 국면 칸 **거친 상승**')
+      and "idx=((four_scores.get('market_regime_ctx') or {}).get('index'))" in _w429)
+check("⑦ 미연동 문장이 거래소 업종표(KSIC) 이름이라고 밝힌다 (화면의 다른 업종명과 다를 수 있다)",
+      _un429.get('available') is False and '거래소 업종표(KSIC)' in str(_un429.get('why'))
+      and '다를 수 있습니다' in str(_un429.get('why')), str(_un429.get('why')))
+
+print()
+print("§430 PROOF 의 '안 산 성적'에 날짜로 묶은 구간 · 조건 하나만 막은 후보 · 말없이 자르던 목록 둘 (라운드 444)")
+print("-" * 72)
+import inspect as _insp430
+import proof as _pf430
+import product_ops as _po430
+# ① 구간 셈은 한 곳 — '다 샀다면'(라운드 433)이 쓰던 그 셈을 옮겼다(같은 시드면 같은 구간)
+_bd430 = {'2026-09-01': [1.0, -2.0], '2026-09-02': [3.0], '2026-09-03': [-1.0, 0.5]}
+_ci430a, _ci430b = _pf430.cluster_ci(_bd430, 500, 7), _pf430.cluster_ci(_bd430, 500, 7)
+check("① cluster_ci — 같은 시드면 같은 구간 · 낮은 끝 ≤ 높은 끝 · 날짜 2일 미만·boot 0 이면 None",
+      _ci430a == _ci430b and _ci430a[0] <= _ci430a[1]
+      and _pf430.cluster_ci({'d': [1.0]}, 500, 7) is None and _pf430.cluster_ci(_bd430, 0, 7) is None)
+check("① '다 샀다면'이 그 함수를 부른다 (구간 셈이 두 벌이 아니다)",
+      'ci = cluster_ci(by_date, boot, seed)' in _insp430.getsource(_pf430.candidate_outcome)
+      and 'random.Random(seed)' not in _insp430.getsource(_pf430.candidate_outcome))
+# ② 안 산 성적 — 날짜로 묶은 구간 · 하위 5% 경계(20건 이상일 때만)
+_rows430 = []
+for _i430 in range(25):
+    _r430 = {'action': 'HOLD', 'date': f'2026-09-{(_i430 % 5) + 1:02d}', 'price': 100.0, 'target': 105.0, 'stop': 92.0}
+    _rows430.append((_r430, {'status': 'target' if _i430 % 2 else 'stop', 'net_pct': (5.0 - 0.41) if _i430 % 2 else (-8.0 - 0.41 - _i430)}))
+_t430 = _pf430.abstain_tally(_rows430, cost=0.41)
+_t430s = _pf430.abstain_tally(_rows430[:10], cost=0.41)
+check("② abstain_tally — 날짜로 묶은 95% 구간 · 하위 5% 경계는 정렬한 5% 자리 · 20건 미만이면 경계를 안 낸다",
+      isinstance(_t430.get('ci95'), list) and len(_t430['ci95']) == 2
+      and _t430['p05_net'] == sorted(x['net_pct'] for _, x in _rows430)[0]
+      and _t430s.get('p05_net') is None and _t430['boot'] == 2000, str({k: _t430.get(k) for k in ('ci95', 'p05_net')}))
+_l430 = _pf430.abstain_line(_t430)
+check("② abstain_line — 구간이 0 을 포함하는지와 하위 5% 를 판정 낱말 없이 적는다 · 구간이 없으면 종전 문장",
+      '95% 구간은 날짜로 묶어 다시 뽑으면' in _l430 and ('0 을 포함합니다' in _l430 or '0 을 포함하지 않습니다' in _l430)
+      and '가장 나빴던 5% 는' in _l430 and '나았습니다' not in _l430
+      and '유의성은 재지 않았습니다' in _pf430.abstain_line(dict(_t430, ci95=None)), _l430[-160:])
+# ③ 조건 하나만 막은 후보 — 그 조건만 미충족인 후보(나머지는 다 통과)
+_cs430 = [dict(ticker='000001.KS', signal_date='2026-09-01', status='success', realized_return=0.05),
+          dict(ticker='000002.KS', signal_date='2026-09-01', status='failure', realized_return=-0.08)]
+_ck430 = {('000001', '2026-09-01'): [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': True}],
+          ('000002', '2026-09-01'): [{'name': 'A', 'ok': False}, {'name': 'B', 'ok': False}]}
+_gl430 = {g['name']: g for g in _pf430.gate_ledger(_cs430, _ck430, cost=0.41)}
+check("③ gate_ledger — '하나만 막은 후보'는 그 조건만 미충족인 후보 · 두 조건에 걸린 후보는 어느 쪽에도 안 든다",
+      _gl430['A']['only']['n'] == 1 and abs(_gl430['A']['only']['mean_net'] - (5 - 0.41)) < 1e-9
+      and _gl430['B']['only']['n'] == 0 and _gl430['A']['blocked']['n'] == 2, str(_gl430))
+_w430 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("③ 조건별 장부 표에 그 칸과 읽는 법 한 줄 · 옛 성적표(칸 없음)는 '—'",
+      "'이 조건 하나만 막은 후보':" in _w430
+      and '이 조건이 없었다면' in _w430 and "if g.get('only') else '—'" in _w430)
+# ④ 말없이 자르던 목록 둘 — 이슈 제목·설명은 '…' · 업데이트 내역의 모듈·관련 회귀는 '외 N'
+_is430 = _po430._issue('추천', '중간', 'x' * 90, 'y' * 300)
+check("④ 이슈 제목·설명을 자르면 '…' 를 남긴다 · 짧으면 그대로",
+      len(_is430['title']) == 80 and _is430['title'].endswith('…') and len(_is430['detail']) == 200
+      and _is430['detail'].endswith('…') and _po430._issue('a', '낮음', '짧다', '짧다')['detail'] == '짧다')
+_ud430 = _po430.extract_update_detail({'subject': 's', 'body': ' '.join(f'm{i}.py' for i in range(7))})
+check("④ 업데이트 내역 — 앞 4개 모듈과 뺀 수를 같이 싣고 화면이 '외 N개'",
+      len(_ud430['modules']) == 4 and _ud430['modules_more'] == 3 and _ud430['related_more'] == 0
+      and """(f" 외 {_dt_u['modules_more']}개" if _dt_u.get('modules_more') else '')""" in _w430)
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

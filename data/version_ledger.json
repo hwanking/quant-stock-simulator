@@ -1,14 +1,40 @@
 {
  "axes": {
-  "model": "v2026.10.07.2",
+  "model": "v2026.10.08.1",
   "scoring": "v2026.08.05.1",
   "rulebook": "v2026.09.27.1",
   "schema": "v2026.09.09.1",
   "news": "v2026.08.26.1",
-  "sector": "v2026.10.01.3",
+  "sector": "v2026.10.08.1",
   "valuation": "v2026.10.01.1"
  },
  "history": [
+  {
+   "axis": "sector",
+   "axis_ko": "섹터 사이클",
+   "version": "v2026.10.08.1",
+   "previous": "v2026.10.01.3",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "거래소 업종표의 산업용 도매(기타 전문 도매업 · 상품 종합 도매업 · 산업용 농·축산물 · 건축자재·철물)가 '도매' 한 낱말로 소비재·유통 대용지표에 묶였다 — 맞는 그룹이 없으면 미연동 · 교습 패턴의 끼어든 따옴표",
+   "note": "라운드 443 — sector_cycle._RULES: 산업용 도매 61종목(업종표 09-11 판)을 미연동으로 · '\"교습' → '교습'(6항목). 업황은 표시 전용(apply_to_fair_value 0)이라 적정가·판정 불변. 11-16 업황 축 재실행 전에, 결과를 보기 전에 고친다.",
+   "created_at": "2026-10-07T15:03:24+00:00",
+   "effective_from": "2026-10-08"
+  },
+  {
+   "axis": "model",
+   "axis_ko": "모델",
+   "version": "v2026.10.08.1",
+   "previous": "v2026.10.07.2",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "외부 검토의 정합성 지적 — 거부권의 '거래비용 차감 후 기대수익'은 유사패턴 평균 − 운영 비용이라 이름을 계산에 맞추고, 각 가격을 정한 규칙·기본 지평을 출력에 싣는다",
+   "note": "라운드 443 — quant_indicators: 거부권 문장 이름을 '유사패턴 평균 수익(비용 0.41% 차감)'으로 · 'level_rules'(보유·신규 손절/1차를 정한 규칙: vol·tdst·stop_mult·struct·vol_floor·fallback) · 'level_struct' · 유사패턴 결과에 'base_horizon'(20). verdict_core: '강제 차단 없음' 설명에 거부권 문장을 그대로 잇고 국면 게이트만 막은 경우 '없음' 대신 그 사실 · 미충족의 사람 말 fail_label. 점수·게이트·판정·문턱·가격 값 불변.",
+   "created_at": "2026-10-07T15:03:24+00:00",
+   "effective_from": "2026-10-08"
+  },
   {
    "axis": "model",
    "axis_ko": "모델",
