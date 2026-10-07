@@ -3103,6 +3103,14 @@ def trade_plan_card(p: dict, name: str = '', theme: str = 'dark') -> str:
                f"color:{t['tx3']};'>{_esc(_basis422)} — "
                f"시장 상태는 하루 안에서 모든 종목에 같은 값이라 유효 표본이 "
                f"날짜입니다. 블라인드로 확정하지 못했습니다.</p></div>")
+    elif p.get('market_na'):
+        # 라운드 441 — 못 냈으면 사유와 함께 적는다(§3). 종전엔 이 절이 말없이 빠졌다.
+        mkt = (f"<div style='background:{t['raised']}; border-radius:9px; "
+               f"padding:9px 12px;'>"
+               f"<p style='margin:0; font-size:12px; color:{t['tx3']};'>"
+               f"시장 진단 미산출</p>"
+               f"<p style='margin:2px 0 0 0; font-size:12px; color:{t['tx2']}; line-height:1.6;'>"
+               f"{_esc(p.get('market_na'))}</p></div>")
 
     # ② 신규 매수 지시
     buy = ''

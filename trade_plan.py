@@ -427,16 +427,20 @@ POST_ENTRY_CAVEAT = (
     '채택하지 않았습니다. 절반 정리·기간 경과 축소의 수치는 측정하지 못했습니다.')
 
 
-def build(core, fs=None, avg=None, qty=None, market=None, hold_core=None):
+def build(core, fs=None, avg=None, qty=None, market=None, hold_core=None, market_na=None):
     """카드 하나에 실을 전체 지시서.
 
     hold_core — 보유자 판정에 쓸 중앙 판정(라운드 386). 관심종목의 **보유 계획**이 있으면 화면이 그 기준선
       (계획의 손절선·1차 매도가·진입가·물타기 판정)을 얹은 사본을 넘긴다 — 같은 화면의 보유 카드가 *"관리
       기준은 계획 값"* 이라 적는데 지시서만 오늘 다시 잰 값으로 판정하면 두 칸이 다른 답을 낸다(R225·R371).
       안 넘기면 종전 그대로 `core`.
+    market_na — 시장 진단을 못 낸 **사유**(라운드 441 · `market` 이 None 일 때만 뜻이 있다). 카드가 '시장 진단
+      미산출 — 사유' 로 적는다(§3). 종전엔 못 내면 그 절이 말없이 빠졌고, 실제로 2026-08-08 부터 한 번도
+      안 나갔다(화면이 엔진 객체의 없는 속성을 읽었다).
     """
     return dict(
         market=market,
+        market_na=(None if market else market_na),
         buyer=for_buyer(core, fs),
         holder=for_holder(hold_core or core, avg, qty),
         post_entry=POST_ENTRY,

@@ -2662,11 +2662,13 @@ _WL_COMMIT_JS = """
 
 
 def _wl_commit_js():
-    """저장 누름 전에 고치는 중인 칸을 확정하는 스크립트를 부모 문서에 심는다(높이 0 · 한 번만 · 라운드 390).
+    """저장 누름 전에 고치는 중인 칸을 확정하는 스크립트를 부모 문서에 심는다(높이 1px · 한 번만 · 라운드 390).
     못 심으면 조용히 넘어간다 — 그때도 저장할 내용 줄과 수량 경고가 무엇이 저장되는지 보인다."""
     try:
-        import streamlit.components.v1 as _cjs390
-        _cjs390.html(_WL_COMMIT_JS, height=0)
+        # 라운드 441 — 옛 `components.v1.html` 은 제거 예고 API 다(§92 ⑧ 의 정책 · 설치본 1.60 이 경고를 찍는다 · 배포
+        #   requirements 는 위가 열려 있어 재빌드 때 사라질 수 있다). 차트와 같은 `st.iframe` 으로. 높이 0 은 st.iframe
+        #   이 거부하므로(validate_height · 0 이하는 예외 → 이 try 가 삼켜 스크립트가 조용히 안 붙는다) 1px.
+        st.iframe(_WL_COMMIT_JS, height=1)
     except Exception:                                          # noqa: BLE001
         pass
 
@@ -9579,14 +9581,28 @@ else:
 try:
     import trade_plan as _tp
 
-    _mkt_state = None
+    # 라운드 441 — 종전엔 `q_engine.market_regime_ctx` 를 읽었다. 그 `q_engine` 은 모듈 수준의 새 인스턴스이고
+    #   파이프라인은 `get_shared_snapshot` 의 지역 인스턴스가 돌리므로 그 속성은 **한 번도** 없었다 — 라운드
+    #   51~53(2026-08-08)부터 AttributeError 를 아래 try 가 삼켜 '시장 진단' 줄이 한 번도 안 나갔다(전 핸들러를
+    #   심어 한 번 렌더하니 186자리 중 걸린 넷 가운데 이것만 결함이었다). 화면은 스냅샷만 읽는다(§4) — 엔진이
+    #   판정에 쓴 맥락이 `four_scores['market_regime_ctx']` 로 실린다. 못 쓰면 사유를 적는다(§3).
+    _mkt_state, _mkt_na = None, None
     try:
-        _kd = (q_engine.market_regime_ctx or {})
-        _mkt_state = _tp.market_state(
-            _kd.get('price'), _kd.get('sma20'), _kd.get('sma60'),
-            _kd.get('sma60_prev'))
-    except Exception:                                        # noqa: BLE001
-        _mkt_state = None
+        _kd = four_scores.get('market_regime_ctx') if isinstance(four_scores, dict) else None
+        if 'market_regime_ctx' not in (four_scores or {}):
+            _mkt_na = '이 스냅샷에는 지수 국면 맥락이 없습니다 (옛 분석 결과) — 다시 분석하면 실립니다'
+        elif not _kd:
+            _mkt_na = '분석 기준일이 과거이거나 상장 시장을 판별하지 못해 오늘 지수 국면을 쓰지 않았습니다'
+        elif not _kd.get('available'):
+            _mkt_na = f"지수 데이터 미수신 ({_kd.get('reason') or '사유 미기록'})"
+        else:
+            _mkt_state = _tp.market_state(
+                _kd.get('price'), _kd.get('sma20'), _kd.get('sma60'),
+                _kd.get('sma60_prev'))
+            if _mkt_state is None:
+                _mkt_na = '지수 값은 받았으나 4상태를 가르지 못했습니다'
+    except Exception as _mkt_exc:                            # noqa: BLE001
+        _mkt_state, _mkt_na = None, f'시장 진단을 만들지 못했습니다 ({type(_mkt_exc).__name__})'
 
     # 라운드 386 — 보유자 칸은 보유 계획의 기준선으로 판정한다(있을 때 · 위 _HOLD_LV386 · 같은 화면의
     #   보유 카드와 같은 선). 신규 매수자 칸은 그대로 CORE.
@@ -9598,6 +9614,7 @@ try:
     _plan = _tp.build(CORE, four_scores,
                       avg=(user_entry_price if user_entry_price > 0 else None),
                       qty=(user_quantity if user_quantity > 0 else None),
+                      market_na=_mkt_na,                     # 라운드 441 — 시장 진단을 못 낸 사유 (카드가 적는다 · §3)
                       market=_mkt_state, hold_core=_hold_core386)
     st.markdown(_uk.trade_plan_card(_plan, name=resolved_name, theme=_theme),
                 unsafe_allow_html=True)
@@ -9938,7 +9955,8 @@ body.gn-ask-ready.gn-ask-open.gn-ask-mini [data-testid="stBottom"] {{
 # 있으면 더더욱 아무 일도 안 일어난 것처럼 보였다.
 #
 # st.markdown 은 <script> 를 지우므로 여기서 직접 JS 를 넣을 수 없다.
-# 높이 0 짜리 components.html 을 하나 두고, 그 안에서 부모 문서의 버튼에
+# 높이 1px 짜리 st.iframe 을 하나 두고(라운드 441 — 옛 components.html 은 제거 예고
+# API · 0 은 st.iframe 이 거부한다), 그 안에서 부모 문서의 버튼에
 # 클릭 처리기를 붙인다. 버튼 자체는 부모에 그대로 둬야 화면 위에 뜬다
 # (iframe 안의 fixed 는 부모를 덮지 못한다).
 #
@@ -9946,8 +9964,7 @@ body.gn-ask-ready.gn-ask-open.gn-ask-mini [data-testid="stBottom"] {{
 #          ② 입력칸에 커서를 넣는다 — 누르자마자 바로 타이핑되게
 #          ③ 잠깐 테두리를 밝혀 "여기다" 를 눈으로 보이게
 try:
-    import streamlit.components.v1 as _fabjs
-    _fabjs.html(
+    st.iframe(
         """
 <script>
 (function () {
@@ -10054,7 +10071,7 @@ try:
   });
 })();
 </script>
-        """, height=0)
+        """, height=1)
 except Exception:                                          # noqa: BLE001
     # 스크립트를 못 붙여도 앵커(href)는 그대로 남아 있다 — 기능이 줄 뿐
     # 버튼이 사라지지는 않는다.

@@ -4943,6 +4943,12 @@ class QuantIndicatorsEngine:
             'liquidity_score': int(liquidity_score),
             'market_regime_code': regime_code,
             'market_regime_label': regime_label,
+            # 라운드 441 — 판정에 쓴 지수 국면 맥락(price·sma20·sma60·sma60_prev·index·available·reason)을 스냅샷에
+            #   그대로 싣는다. 종목 상세의 매매 지시서가 이것을 엔진 **객체**(`q_engine.market_regime_ctx`)에서
+            #   읽었는데, 화면의 그 객체는 파이프라인을 한 번도 안 돈 모듈 수준 인스턴스라 2026-08-08 부터
+            #   늘 AttributeError 였고 try 가 삼켜 '시장 진단' 줄이 한 번도 안 나갔다(§4 — 화면은 스냅샷만 읽는다).
+            #   리플레이·시장 미판별이면 None 그대로(엔진이 안 쓴 값을 지어내지 않는다 · §3). 값·판정 불변.
+            'market_regime_ctx': (dict(regime_ctx) if isinstance(regime_ctx, dict) else None),
             # 목표가·손절가 모두 미도달한 비중 (구버전은 20.0 고정)
             'non_reach': (round(max(0.0, 100.0 - float(sim_res.get('tp_first_prob') or 0.0)
                                     - float(sim_res.get('sl_first_prob') or 0.0)), 1)

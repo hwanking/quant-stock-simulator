@@ -5680,9 +5680,52 @@ for _node92 in _ast92.walk(_ast92.parse(_w92)):
 check("모든 ui_kit 호출이 theme 을 넘긴다", not _miss92, ' '.join(_miss92),
       scanned=_seen92)
 
-# ⑧ 제거 기한이 지난 API — 스트림릿을 올리는 순간 화면이 사라진다
-check("st.components.v1.html 을 쓰지 않는다 (2026-06-01 제거 기한 경과)",
-      'st.components.v1.html(' not in _w92)
+# ⑧ 제거 예고 API — 스트림릿을 올리는 순간 화면이 사라진다.
+#   라운드 441 — 종전 검사는 `st.components.v1.html(` **글자**만 봐서(R98b) 별칭 호출
+#   (`import streamlit.components.v1 as _x` 뒤 `_x.html(…)`) 두 곳을 못 봤다 — 저장 확정 스크립트(R390)와
+#   가늠 AI 버튼 스크립트(R324)가 그 길로 남아 있었고 설치본 1.60 이 렌더마다 제거 예고를 찍었다. 별칭을
+#   AST 로 유도해 `.html(` 호출 0 을 잠그고 심어서 양방향으로 본다. `declare_component` 는 다른 API 라 세지 않는다.
+def _html_calls92(src):
+    """`streamlit.components.v1` 의 `.html(` 호출 줄 — 별칭·직접 체인 둘 다 (반환: (호출 줄 목록, 별칭 수))."""
+    t = _ast92.parse(src)
+    alias = set()
+    for n in _ast92.walk(t):
+        if isinstance(n, _ast92.Import):
+            for a in n.names:
+                if a.name == 'streamlit.components.v1':
+                    alias.add(a.asname or 'streamlit.components.v1')
+        elif isinstance(n, _ast92.ImportFrom) and n.module in ('streamlit.components', 'streamlit.components.v1'):
+            for a in n.names:
+                if a.name in ('v1', 'html'):
+                    alias.add(a.asname or a.name)
+    hits = []
+    for n in _ast92.walk(t):
+        if not isinstance(n, _ast92.Call):
+            continue
+        f = n.func
+        if isinstance(f, _ast92.Attribute) and f.attr == 'html':
+            base = _ast92.unparse(f.value)
+            if base in alias or base.endswith('components.v1'):
+                hits.append(n.lineno)
+        elif isinstance(f, _ast92.Name) and f.id in alias and f.id == 'html':
+            hits.append(n.lineno)
+    return hits, len(alias)
+
+
+_hits92, _nalias92 = _html_calls92(_w92)
+_iframe92 = sum(1 for _n in _ast92.walk(_ast92.parse(_w92))
+                if isinstance(_n, _ast92.Call) and isinstance(_n.func, _ast92.Attribute)
+                and _n.func.attr == 'iframe' and _ast92.unparse(_n.func.value) == 'st')
+check("components.v1.html 호출이 없다 — 별칭 포함 (AST · 라운드 441)", not _hits92,
+      f'호출 줄 {_hits92} · 별칭 {_nalias92}', scanned=_nalias92 + _iframe92)
+check("st.iframe 으로 옮긴 자리가 셋 이상이다 (차트 · 저장 확정 스크립트 · 가늠 AI 버튼 스크립트)",
+      _iframe92 >= 3, str(_iframe92))
+_pl92 = ("import streamlit.components.v1 as _z\n_z.html('x', height=0)\n"
+         "import streamlit.components.v1\nstreamlit.components.v1.html('y')\n"
+         "from streamlit.components.v1 import html\nhtml('z')\n")
+check("심기 — 별칭·직접 체인·from-import 세 모양 다 잡는다 (양방향)",
+      len(_html_calls92(_pl92)[0]) == 3 and _html_calls92("import streamlit as st\nst.iframe('x', height=1)\n")[0] == [],
+      str(_html_calls92(_pl92)))
 
 # ⑨ 하위 프로세스 출력은 UTF-8 로 읽는다 — 한글 로그에서 죽지 않게
 _subp92 = [ln for ln in _w92.split('\n')
@@ -34515,6 +34558,55 @@ _bk_inc426 = [c.value for c in _ast426.walk(_ast426.parse(_bk426)) if isinstance
 check("③ 읽는 곳 없는 version_compare.json 을 백업 목록(문자열 상수)에 싣지 않는다 · 옛 생성기 머리말이 '읽는 곳이 없다'와 낡은 규칙을 말한다",
       'version_compare.json' not in _bk_inc426 and '읽는 곳이 없다' in _gv426[:2000] and 'forward_judge' in _gv426[:2000],
       scanned=len(_bk_inc426))
+
+print("§427 지시서의 '시장 진단'은 스냅샷에서 읽는다 — 엔진 객체의 없는 속성을 읽어 두 달 동안 한 번도 안 나갔다 · 못 내면 사유를 적는다 (라운드 441)")
+# 라운드 441 — 전 except 핸들러 186자리를 심어 한 번 렌더하니(scripts/swallow_census.py --all) 걸린 넷 중 하나가
+#   `q_engine.market_regime_ctx` 의 AttributeError 였다. 화면의 `q_engine` 은 모듈 수준의 새 인스턴스이고 파이프라인은
+#   `get_shared_snapshot` 의 지역 인스턴스가 돌리므로 그 속성은 **한 번도** 없었다 — 2026-08-08(라운드 51~53)부터
+#   try 가 삼켜 지시서의 '시장 진단' 절이 안 나갔고, 라운드 422 는 그 문장을 화면에서 본 적 없이 고쳤다(§410 은
+#   함수만 쟀다). 고침: 엔진이 판정에 쓴 맥락을 스냅샷 키로 싣고(§4) 화면은 그것만 읽으며, 못 내면 사유를 적는다(§3).
+#   글자가 아니라 구조로 잠근다(R98b).
+import ast as _ast427
+_qi427 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_wa427 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+# ① 엔진 출력 — 'market_regime_code' 를 담은 dict 리터럴이 'market_regime_ctx' 도 담는다
+_dicts427 = [n for n in _ast427.walk(_ast427.parse(_qi427)) if isinstance(n, _ast427.Dict)
+             and any(isinstance(k, _ast427.Constant) and k.value == 'market_regime_code' for k in n.keys)]
+check("① 엔진 출력 dict 가 판정에 쓴 지수 국면 맥락('market_regime_ctx')을 싣는다 (구조)",
+      len(_dicts427) >= 1 and all(any(isinstance(k, _ast427.Constant) and k.value == 'market_regime_ctx'
+                                     for k in d.keys) for d in _dicts427),
+      f'dict {len(_dicts427)}개', scanned=len(_dicts427))
+# ② 화면 — 엔진 객체의 그 속성을 읽는 자리 0 · 스냅샷(four_scores)에서 읽는 자리 1 이상
+_tw427 = _ast427.parse(_wa427)
+_attr427 = [n.lineno for n in _ast427.walk(_tw427)
+            if isinstance(n, _ast427.Attribute) and n.attr == 'market_regime_ctx']
+_get427 = [n.lineno for n in _ast427.walk(_tw427)
+           if isinstance(n, _ast427.Call) and isinstance(n.func, _ast427.Attribute) and n.func.attr == 'get'
+           and n.args and isinstance(n.args[0], _ast427.Constant) and n.args[0].value == 'market_regime_ctx'
+           and _ast427.unparse(n.func.value) == 'four_scores']
+check("② 화면이 엔진 객체의 market_regime_ctx 속성을 읽는 자리 0 · 스냅샷에서 읽는 자리 1 이상 (AST)",
+      not _attr427 and len(_get427) >= 1, f'속성 {_attr427} · 스냅샷 {_get427}',
+      scanned=len(_attr427) + len(_get427))
+# ③ 카드 — 심기 양방향: 맥락이 있으면 '시장 진단' 절 · 없으면 '시장 진단 미산출' 과 사유가 같은 절에
+import trade_plan as _tp427
+import ui_kit as _uk427
+_m427 = _tp427.market_state(100.0, 90.0, 80.0, 79.0, doc={})
+check("③ 심은 지수 값(현재가 > 20일선 > 60일선)으로 4상태가 선다", isinstance(_m427, dict) and bool(_m427.get('ko')),
+      str(_m427)[:120])
+_pl_ok427 = _tp427.build(_c120, _FS120, market=_m427, market_na='이 사유는 안 나가야 한다')
+_pl_na427 = _tp427.build(_c120, _FS120, market=None, market_na='지수 데이터 미수신 (심은 사유)')
+_h_ok427 = _uk427.trade_plan_card(_pl_ok427, name='가')
+_h_na427 = _uk427.trade_plan_card(_pl_na427, name='가')
+check("③ 맥락이 있으면 카드에 '시장 진단' 절이 있고 미산출 줄·버린 사유는 없다",
+      '시장 진단' in _h_ok427 and '시장 진단 미산출' not in _h_ok427 and '안 나가야' not in _h_ok427)
+check("③ 맥락이 없으면 '시장 진단 미산출' 과 심은 사유가 카드에 있다 (종전엔 절이 말없이 빠졌다)",
+      '시장 진단 미산출' in _h_na427 and '심은 사유' in _h_na427)
+check("④ build 는 market 이 있으면 market_na 를 버린다 — 사유는 못 냈을 때만",
+      _pl_ok427.get('market_na') is None and bool(_pl_na427.get('market_na')))
+# ⑤ 조사 도구 — 존재는 실행이 아니다(R195): 적어도 컴파일되고 두 모드를 안다
+_sc427 = open(_os.path.join(PROJ, 'scripts', 'swallow_census.py'), encoding='utf-8').read()
+compile(_sc427, 'swallow_census.py', 'exec')
+check("⑤ 삼킴 조사 도구가 컴파일되고 쓰기 금지 모드로 돈다", "GAEUM_NO_LOCAL_WRITE" in _sc427 and "'--all'" in _sc427)
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
