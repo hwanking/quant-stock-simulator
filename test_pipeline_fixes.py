@@ -36432,6 +36432,263 @@ check("⑥ 저녁 작업의 워커 단계는 그대로 주문 없이(--once --no
 check("⑦ 보호 매도 경고가 등록 길(register_swing_worker_task.ps1)을 가리킨다", 'register_swing_worker_task.ps1' in _sv438)
 
 
+print()
+print("§439 실전 주문 계약 닫기 — 꺼짐이 보호를 끄지 않는다 · 계획은 모드와 무관 · 되돌려 받기 2단계 · 진입가는 중앙 판정 그대로 · 계약 전부가 plan_id (라운드 453)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   외부 검토(2026-10-08)의 P0 다섯 + P1 — 코드에서 **참인 것만** 고쳤다. ① 모드 OFF 가 바퀴 머리에서 돌아가 관리 중 종목의 손절까지
+#   멈추던 것 → 계획·보호는 모드와 무관 ② 되돌려 받기가 취소 확인 전에 RELEASED 를 적던 것 → 2단계 ③ 진입가를 buy_zone(±1% 반올림)의
+#   가운데에서 되살리던 것 → 중앙 판정의 entry_price 그대로(옛 리포트만 물러선다) ④ 호가 보정이 모델 가격을 덮던 것 → 둘 다 저장
+#   ⑤ plan_id 에 대기·보유·비용·규칙집이 없던 것 ⑥ 손절 판정 가격이 잔고 칸 하나뿐이던 것 → 시세 끝점으로 물러섬 ⑦ 화면 문장이 실제
+#   구현(목표 = 증권사 지정가)과 반대였던 것 ⑧ 작업 스케줄러 상태를 직접 읽는다 ⑨ '순수익' → 추정 비용후 ⑩ 스윙 탭 갈림이 첫 네트워크
+#   호출 앞. §432 의 가짜 증권사·장부·바퀴 도우미를 그대로 쓴다(네트워크 0 · 사용자 파일 0).
+import ast as _ast439
+import json as _js439
+import sqlite3 as _sq439
+import swing_executor as _sx439
+import swing_ledger as _sl439
+import swing_engine as _se439
+import swing_ops as _ops439
+import swing_view as _sv439
+
+# ① 꺼짐 + 자동 관리 중 종목 — 손절 매도는 그대로 낸다 · 새 매수 0 · 계획은 남는다 · 심박에 '보호만'
+_c439 = _db432(mode='OFF')
+_fb439 = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=100)})
+_sx432.adopt(_c439, '000555', 5, 6000, 4000, by_user=True)
+_o439 = _cyc432(_c439, _fb439)
+_hb439 = _sl439.last_heartbeat(_c439)
+check("① 꺼짐 + 관리 중 종목 → 손절선 아래면 시장가 매도 1건 · 새 매수 0(자격 있는 계획이 있어도) · 계획 +1 · 보호만 · 심박 '보호만'",
+      [p for p in _fb439.placed if p[0] == 'sell'] == [('sell', '000555', 5, None, '01')]
+      and not any(p[0] == 'buy' for p in _fb439.placed) and _o439['plans_new'] == 1 and _o439['protect_only'] is True
+      and any('OFF 모드' in b for b in _o439['blocked']) and '보호만' in (_hb439['detail'] or ''),
+      str((_fb439.placed, _o439['blocked'], _hb439)))
+# ② 꺼짐 + 관리 중 종목 없음 → 증권사를 안 부르고 계획만 남긴다 · 심박 'off' 에 계획 수
+_c439b, _fb439b = _db432(mode='OFF'), _FakeBroker432()
+_o439b = _cyc432(_c439b, _fb439b)
+_hb439b = _sl439.last_heartbeat(_c439b)
+check("② 꺼짐 + 관리 중 종목 없음 → 주문 0 · 계획 +1(모드와 무관) · 심박 'off' 에 '계획 +1'",
+      _fb439b.placed == [] and _o439b['plans_new'] == 1 and len(_sl439.plans(_c439b)) == 1
+      and _hb439b['status'] == 'off' and '계획 +1' in (_hb439b['detail'] or ''), str(_hb439b))
+check("③ wants_broker — 꺼짐+관리 중+연결 정보 있음 → 연결 · 꺼짐+없음 → 안 함 · 실전(관문 통과) → 연결 · 꺼짐+관리 중+정보 없음 → 안 함",
+      _sx439.wants_broker(_c439, 'OFF', _CFG432, _sl439.settings(_c439)) is True
+      and _sx439.wants_broker(_c439b, 'OFF', _CFG432, _sl439.settings(_c439b)) is False
+      and _sx439.wants_broker(_db432(), 'LIVE', _CFG432, _sl439.settings(_db432())) is True
+      and _sx439.wants_broker(_c439, 'OFF', dict(_CFG432, missing=['KIS_APP_KEY']), _sl439.settings(_c439)) is False)
+# ④ 되돌려 받기 2단계 — 목표 지정가가 걸려 있으면 요청 → 취소(실패하면 다시) → 확인 뒤 RELEASED · 그 사이 손절선 아래여도 새 보호 주문 없음
+_c439r = _db432()
+_fb439r = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=5000)})
+_sx432.adopt(_c439r, '000555', 5, 6000, 4000, by_user=True)
+_cyc432(_c439r, _fb439r, rep={})                           # 1차 목표 지정가 매도(5주)가 걸린다
+_tgt439 = [o for o in _fb439r.orders if o['side'] == 'sell']
+_ev439 = _sx439.release(_c439r, '000555')
+_p439_0 = _sl439.positions(_c439r)['000555']
+_in439 = ('000555' in _sl439.managed_open(_c439r), '000555' in _sl439.releasing(_c439r))     # 요청 직후의 소속
+_fb439r.fail_cancel = 1
+_fb439r.hold['000555']['price'] = 100                      # 확인 중에 손절선 아래로 — 그래도 새 보호 주문은 안 낸다(사용자가 되돌려 받는 중)
+_cyc432(_c439r, _fb439r, rep={}, now=_now432(mm=5))        # 취소 실패 → 다음 바퀴에 다시
+_p439_1 = _sl439.positions(_c439r)['000555']
+_cyc432(_c439r, _fb439r, rep={}, now=_now432(mm=10))       # 취소 성공(증권사가 취소 표시)
+_p439_2 = _sl439.positions(_c439r)['000555']
+_cyc432(_c439r, _fb439r, rep={}, now=_now432(mm=15))       # 내역으로 CANCELLED 확인 → RELEASED
+_p439_3 = _sl439.positions(_c439r)['000555']
+_sells439 = [p for p in _fb439r.placed if p[0] == 'sell']
+check("④ 되돌려 받기 — 열린 목표 매도가 있으면 RELEASE_REQUESTED(관리 목록에서 빠짐 · 확인 중 목록에 듦) · 취소 실패해도 다음 바퀴에 다시 · "
+      "취소가 내역으로 확인된 뒤에야 RELEASED · 그 사이 손절선 아래여도 새 매도 주문 0",
+      len(_tgt439) == 1 and _ev439 == 'RELEASE_REQUESTED' and _p439_0.get('releasing') is True and _p439_0.get('managed') is True
+      and _p439_1.get('releasing') is True and _p439_2.get('releasing') is True
+      and _p439_3.get('last_event') == 'RELEASED' and _p439_3.get('managed') is False
+      and _p439_3.get('ownership') == 'READ_ONLY_EXISTING' and _fb439r.cancels.count(_tgt439[0]['odno']) >= 2
+      and len(_sells439) == 1,
+      str((_ev439, _p439_1, _p439_2, _p439_3, _fb439r.cancels, _sells439)))
+check("④ 확인 전 포지션은 관리 목록(managed_open)에서 빠지고 확인 중 목록(releasing)에 든다 · 확인 뒤 둘 다에서 빠진다",
+      _in439 == (False, True) and _p439_3.get('releasing') is False
+      and '000555' not in _sl439.managed_open(_c439r) and '000555' not in _sl439.releasing(_c439r), str((_in439, _p439_3)))
+# ⑤ 열린 매도가 없으면 바로 RELEASED · ⑥ 확인 중에 목표 매도가 체결되면 SOLD·CLOSED 로 끝난다(RELEASED 를 덧붙이지 않는다)
+_c439n = _db432()
+_sx432.adopt(_c439n, '000777', 3, 6000, 4000, by_user=True)
+_ev439n = _sx439.release(_c439n, '000777')
+_c439f = _db432()
+_fb439f = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=5000)})
+_sx432.adopt(_c439f, '000555', 5, 6000, 4000, by_user=True)
+_cyc432(_c439f, _fb439f, rep={})
+_sx439.release(_c439f, '000555')
+_fb439f.fill([o for o in _fb439f.orders if o['side'] == 'sell'][0]['odno'], 5, 6000)     # 취소 전에 목표에 체결됐다
+_cyc432(_c439f, _fb439f, rep={}, now=_now432(mm=5))
+_p439f = _sl439.positions(_c439f)['000555']
+check("⑤ 열린 매도 주문이 없으면 바로 RELEASED · ⑥ 확인 중 목표 매도가 체결되면 SOLD → CLOSED(수량 0 · 관리 끝 · RELEASED 는 안 덧붙임)",
+      _ev439n == 'RELEASED' and _sl439.positions(_c439n)['000777'].get('last_event') == 'RELEASED'
+      and _p439f.get('last_event') == 'CLOSED' and _p439f.get('qty') == 0 and not _p439f.get('managed')
+      and not _p439f.get('releasing'), str((_ev439n, _p439f)))
+# ⑦ 진입가 — 중앙 판정의 entry_price 그대로(호가 단위로 내림) · 모델 가격 보존 · 출처 · 옛 리포트(칸 없음)만 구간 가운데로 물러선다
+_core439 = dict(recommended=True, bucket='오늘 매수 가능', entry_price=10003.2, buy_zone=(9903, 10103), new_target=11007.7,
+                new_stop=9500.0, horizon_days=20, checks=[])
+_pl439 = _se439.plan_from_pick(dict(symbol='000001.KS', name='a', asset_type='stock', core=_core439), '2026-10-07', 'v',
+                               '2026-10-07', 20, cost_pct=0.41, rulebook_version='rb1')
+_pl439o = _se439.plan_from_pick(dict(symbol='000001.KS', name='a', asset_type='stock',
+                                     core={k: v for k, v in _core439.items() if k != 'entry_price'}),
+                                '2026-10-07', 'v', '2026-10-07', 20)
+check("⑦ entry_price 가 있으면 그 값 그대로(10,003.2 → 주문 10,000 · 모델 10,003.2 · 출처 central) · 목표도 모델 11,007.7 → 주문 11,000 · "
+      "칸이 없는 옛 리포트만 구간 가운데(10,003.0 · 출처 buy_zone_mid)",
+      _pl439['entry'] == 10000 and _pl439['entry_model'] == 10003.2 and _pl439['entry_source'] == 'central'
+      and _pl439['target'] == 11000 and _pl439['target_model'] == 11007.7 and _pl439['live_ok']
+      and _pl439o['entry'] == 10000 and _pl439o['entry_model'] == 10003.0 and _pl439o['entry_source'] == 'buy_zone_mid',
+      str((_pl439['entry'], _pl439['entry_model'], _pl439['entry_source'], _pl439o['entry_model'], _pl439o['entry_source'])))
+_raised439 = False
+try:
+    _se439.entry_of({'buy_zone': ('n/a', 'n/a')})
+except ValueError:
+    _raised439 = True
+check("⑦ entry_of — 값이 수가 아닌 구간('n/a')은 그대로 예외(그 후보는 건너뛴다 · 지어내지 않는다) · 둘 다 없으면 (None, None)",
+      _se439.entry_of({}) == (None, None) and _raised439)
+# 중앙 판정이 entry_price 를 **그 변수 그대로** 싣고 buy_zone 도 같은 변수에서 만든다(AST · 글자 아님)
+_vc439 = _ast439.parse(open(_os.path.join(PROJ, 'verdict_core.py'), encoding='utf-8').read())
+_kw439 = {}
+for _n439 in _ast439.walk(_vc439):
+    if isinstance(_n439, _ast439.FunctionDef) and _n439.name == 'build':
+        for _m439 in _ast439.walk(_n439):
+            if isinstance(_m439, _ast439.Return) and isinstance(_m439.value, _ast439.Call):
+                for _k439 in _m439.value.keywords:
+                    if _k439.arg in ('entry_price', 'buy_zone'):
+                        _kw439[_k439.arg] = _k439.value
+check("⑦ verdict_core.build() 의 반환이 entry_price=entry(이름 그대로)를 싣고 buy_zone 식도 같은 이름 entry 로 만든다(AST)",
+      isinstance(_kw439.get('entry_price'), _ast439.Name) and _kw439['entry_price'].id == 'entry'
+      and any(isinstance(x, _ast439.Name) and x.id == 'entry' for x in _ast439.walk(_kw439.get('buy_zone') or _ast439.Pass())),
+      str({k: type(v).__name__ for k, v in _kw439.items()}))
+# ⑧ plan_id 는 계약 전부의 해시 — 대기·보유·비용·규칙집 중 하나만 달라도 다른 계획 · 같으면 같은 id
+_pid439 = lambda **k: _se439.plan_id('000001', '2026-10-07', 10000, 11000, 9500, 'v', **dict(dict(wait_bars=20, horizon=20, cost_pct=0.41, rulebook_version='rb1'), **k))   # noqa: E731
+check("⑧ plan_id — 같은 계약은 같은 id · 대기 기간 · 보유 기간 · 비용 · 규칙집 버전 중 하나만 달라도 다른 id",
+      _pid439() == _pid439() and len({_pid439(), _pid439(wait_bars=19), _pid439(horizon=21), _pid439(cost_pct=0.36),
+                                       _pid439(rulebook_version='rb2')}) == 5
+      and _pl439['plan_id'] != _pl439o['plan_id'])
+# ⑨ 옛 장부(열 없음)를 열면 열을 더한다(있는 행 불변 · 멱등) · 새 열이 저장·조회된다
+_old439 = _sq439.connect(':memory:')
+_old439.row_factory = _sq439.Row
+_old439.execute('CREATE TABLE plans (plan_id TEXT PRIMARY KEY, created_ts TEXT, data_day TEXT, code TEXT, name TEXT, spec TEXT, '
+                'entry REAL, target REAL, stop REAL, horizon INTEGER, wait_bars INTEGER, live_ok INTEGER, block_reason TEXT, '
+                'verdict TEXT, engine_version TEXT, receipt_id TEXT)')
+_old439.execute("INSERT INTO plans (plan_id, data_day, code, spec, entry) VALUES ('OLD', '2026-10-01', '000001', 'SWING_V1', 1)")
+_sl439._migrate(_old439); _sl439._migrate(_old439)
+_cols439 = {r[1] for r in _old439.execute('PRAGMA table_info(plans)')}
+_c439m = _sl439.connect(':memory:')
+_sl439.add_plan(_c439m, _pl439)
+_row439 = _sl439.plan(_c439m, _pl439['plan_id'])
+check("⑨ 옛 장부에 열 다섯을 더한다(두 번 해도 같다 · 옛 행 그대로) · 새 계획은 모델 가격·출처·규칙집·비용이 저장·조회된다",
+      {'entry_model', 'target_model', 'entry_source', 'rulebook_version', 'cost_pct'} <= _cols439
+      and _old439.execute("SELECT entry, entry_model FROM plans WHERE plan_id='OLD'").fetchone()[:] == (1.0, None)
+      and _row439['entry_model'] == 10003.2 and _row439['target_model'] == 11007.7 and _row439['entry_source'] == 'central'
+      and _row439['rulebook_version'] == 'rb1' and _row439['cost_pct'] == 0.41, str(dict(_row439) if _row439 else None))
+_old439.close(); _c439m.close()
+# ⑩ 손절 판정 가격 — 잔고의 현재가 칸이 비면 시세 끝점으로 물러선다 · 둘 다 없으면 판정 안 하고 경고
+_c439q = _db432()
+_fb439q = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=None)})
+_sx432.adopt(_c439q, '000555', 5, 6000, 4000, by_user=True)
+_o439q = _cyc432(_c439q, _fb439q, rep={}, quote=lambda code: 100.0)
+_c439z = _db432()
+_fb439z = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=None)})
+_sx432.adopt(_c439z, '000555', 5, 6000, 4000, by_user=True)
+_o439z = _cyc432(_c439z, _fb439z, rep={}, quote=lambda code: None)
+check("⑩ 잔고 현재가가 비면 시세 끝점의 현재가(100)로 손절을 판정해 판다(메모에 적는다) · 둘 다 없으면 안 팔고 경고를 남긴다",
+      [p for p in _fb439q.placed if p[0] == 'sell' and p[4] == '01'] == [('sell', '000555', 5, None, '01')]
+      and any('시세 끝점' in n for n in _o439q['notes']) and not any(p[0] == 'sell' for p in _fb439z.placed)
+      and any('손절을 판정하지 못했다' in a for a in _o439z['alerts']), str((_o439q['notes'], _o439z['alerts'])))
+# ⑪ 작업 스케줄러 상태 — 응답을 심어서(셸 없음): 없음 · 있음(1999 날짜는 '돈 적 없음') · 못 읽음 · 한 줄 문장
+_ok439 = _ops439.parse('{"State":"Ready","NextRunTime":"10/09/2026 08:50:00","LastRunTime":"11/30/1999 00:00:00",'
+                       '"LastTaskResult":267011,"NumberOfMissedRuns":0}')
+_ab439 = _ops439.parse('ABSENT')
+_err439 = _ops439.scheduled_task(runner=lambda n: (None, 'boom'))
+_fine439 = _ops439.scheduled_task(runner=lambda n: ('{"State":"Running","NextRunTime":"","LastRunTime":"10/08/2026 08:50:00",'
+                                                   '"LastTaskResult":267009,"NumberOfMissedRuns":2}', None))
+check("⑪ 작업 상태 — 등록됨(Ready · 다음 실행 · 1999 날짜는 '돈 적 없음' · 결과 코드 이름) · 없음 · 못 읽음은 ok=False 와 사유 · 셸 없이",
+      _ok439 and _ok439['installed'] and _ok439['state'] == 'Ready' and _ok439['last_run'] is None
+      and _ok439['last_result_ko'] == '아직 돈 적 없음' and _ab439 and _ab439['installed'] is False
+      and _err439['ok'] is False and 'boom' in _err439['reason'] and _fine439['ok'] and _fine439['missed'] == 2
+      and _fine439['last_result_ko'] == '실행 중', str((_ok439, _err439, _fine439)))
+check("⑪ 한 줄 문장 — 없으면 등록 길 · 있으면 상태·다음 실행·마지막 결과 · 못 읽으면 사유 · 셋 다 PC 절전 경고는 등록된 때만",
+      '등록돼 있지 않습니다' in _ops439.task_line(dict(_ab439, ok=True)) and 'register_swing_worker_task.ps1' in _ops439.task_line(dict(_ab439, ok=True))
+      and '다음 실행 10/09/2026 08:50:00' in _ops439.task_line(dict(_ok439, ok=True)) and '절전' in _ops439.task_line(dict(_ok439, ok=True))
+      and 'boom' in _ops439.task_line(_err439) and '놓친 실행 2회' in _ops439.task_line(_fine439))
+# ⑫ 화면 문장 — 실제 구현 그대로(목표 = 증권사 하루짜리 지정가 · 손절·기간 만료 = 워커 시장가) · 옛 문장 없음 · 꺼짐이 보호를 안 끈다
+_fl439 = _sv439.facts_lines()
+check("⑫ '먼저 알아 두실 것'이 목표는 증권사 지정가 · 손절·기간 만료는 워커 시장가 · 꺼짐에서도 보호 계속을 적고, 옛 문장('미리 걸어 두는 주문이 아니라')은 없다",
+      any('하루짜리 지정가 매도로 걸어 둡니다' in ln and '시장가' in ln and '보호 매도도 멈춥니다' in ln and "'꺼짐'" in ln for ln in _fl439)
+      and not any('미리 걸어 두는 주문이 아니라' in ln for ln in _fl439) and '우위가 없습니다' in _fl439[0])
+check("⑫ 모드 선택지 — 기본은 꺼짐·실전 둘 · 모의투자 자격증명이거나 그 모드면 모의투자도 · 기록만 모드면 그것도(있는 상태를 숨기지 않는다) · "
+      "모드 한 마디 — 실전은 주문 방식 · 꺼짐+보호 2 는 '보호만 2종목'",
+      _sv439.mode_options('OFF', {}) == ['OFF', 'LIVE'] and _sv439.mode_options('PAPER', {}) == ['OFF', 'PAPER', 'LIVE']
+      and _sv439.mode_options('OFF', {'env': 'demo'}) == ['OFF', 'PAPER', 'LIVE'] and 'SHADOW' in _sv439.mode_options('SHADOW', {})
+      and _sv439.mode_label('LIVE', {'order_approval': 'auto'}) == '실전 · 완전 자동' and _sv439.mode_label('OFF', {}, 2) == '꺼짐 · 보호만 2종목'
+      and _sv439.mode_label('OFF', {}, 0) == '꺼짐' and _sv439.conn_label({'missing': ['x']}, None) == '정보 없음'
+      and _sv439.conn_label(_CFG432, None) == '정보 있음 · 연결 확인 전'
+      and _sv439.conn_label(_CFG432, dict(env='real', ts='2026-10-08T13:10:02+09:00')) == '실계좌 · 동기화 2026-10-08 13:10')
+check("⑫ 연결 요약에 앱 키 조각이 없다('등록됨'만) · 계좌는 가린 모양",
+      '앱 키·시크릿 등록됨' in _bk432.config_summary(_cf2) and 'ABC' not in _bk432.config_summary(_cf2)
+      and '12345678' not in _bk432.config_summary(_cf2))
+# ⑬ 영수증 이름 · 긴급정지 토글 한 곳 · 스윙 탭 갈림이 첫 네트워크 호출 앞 · 화면·워커에 주문 호출 없음은 §432 ⑰ 그대로
+_svs439 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_sps439 = open(_os.path.join(PROJ, 'swing_proof.py'), encoding='utf-8').read()
+_w439 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("⑬ 영수증 — '순수익' 칸이 없고 '실제 체결가 수익률(비용 전)'·'추정 비용후 수익률' 둘 · 요약 줄도 '추정 비용후' · 긴급정지 토글(sw_kill)은 한 곳",
+      "'추정 비용후 수익률'" in _svs439 and "'실제 체결가 수익률(비용 전)'" in _svs439 and "'순수익(비용 뺀)'" not in _svs439
+      and '추정 비용후' in _sps439 and _svs439.count("key='sw_kill'") == 1
+      and '추정 비용후 수익률 평균' in _sp433.summary_line(_sp433.summary(list(_rs433.values())), 0.41))
+_i_sw439 = _w439.index('_swv446.render(')
+check("⑬ 스윙 탭 갈림이 시총 1위 조회·종목 해석·실시간 수신·실시간 띠보다 **앞**에 있다(관제실은 그것들을 안 기다린다) · 그 뒤 st.stop()",
+      _i_sw439 < _w439.index('engine_init.fetch_realtime_market_cap_no1_stock()')
+      and _i_sw439 < _w439.index('engine_init.resolve_symbol(final_query)') and _i_sw439 < _w439.index('_render_ticker([dict(kind=')
+      and _w439.index("st.session_state['watchlist'] = _wl") < _i_sw439
+      and 'ALLOW_LOCAL_READ = not is_remote_exposed()' in _w439 and _w439.index('ALLOW_LOCAL_READ = not is_remote_exposed()') < _i_sw439)
+# ⑭ 화면(자식 렌더 · §200) — 꺼짐 + 넘긴 종목 1 · 작업 없음(심은 응답) · 예외 0 · 상태 띠 · 접힌 사실 칸 · 긴급정지 토글 · 해제 2단계 문장
+_vdb439 = _os.path.join(PROJ, '_probe', '_r453_view.db')
+if _os.path.exists(_vdb439):
+    _os.remove(_vdb439)
+_cv439 = _sl439.connect(_vdb439)
+_sl439.set_setting(_cv439, 'mode', 'OFF', by='test')
+_sl439.position_event(_cv439, '000555', 'USER_ADOPTED', 'ADOPTED', plan_id='ADOPT-000555', qty=5, price=5000, target=6000, stop=4000,
+                      trade_day='2026-10-07', detail='test')
+_sl439.add_plan(_cv439, dict(_pl439, data_day='2026-10-07'))
+_cv439.close()
+_src439 = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    f"_L.connect.__defaults__ = ({_vdb439!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child439 = _os.path.join(PROJ, '_probe', '_r453_view_child.py')
+open(_child439, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src439!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
+    "           cap=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander],\n"
+    "           metric={m.label: m.value for m in at.metric}, toggle=[str(t.label) for t in at.toggle],\n"
+    "           radio={str(r.label): list(r.options) for r in at.radio})\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _env439 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+    _rc439 = __import__('subprocess').run([sys.executable, _child439], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300, env=_env439)
+    _jr439 = (_rc439.stdout or '').rsplit('@@R@@', 1)
+    _o439v = __import__('json').loads(_jr439[1]) if len(_jr439) == 2 else {}
+    _cap439 = _o439v.get('cap') or ''
+    check("⑭ 화면 — 예외 0 · 운용 모드 '꺼짐 · 보호만 1종목' · 연결 '정보 없음' 또는 시각 · 작업 '등록돼 있지 않습니다' · 긴급정지 토글 · "
+          "'먼저 알아 두실 것 — 자세히' 접힘 · 되돌려 받기 2단계 문장 · 모드 라디오는 꺼짐·실전 둘",
+          _o439v.get('exc') == 0 and (_o439v.get('metric') or {}).get('운용 모드') == '꺼짐 · 보호만 1종목'
+          and '등록돼 있지 않습니다' in _cap439 and '긴급정지' in (_o439v.get('toggle') or [])
+          and '먼저 알아 두실 것 — 자세히' in (_o439v.get('exp') or []) and '취소가 확인된 뒤에야 해제됩니다' in _cap439
+          and (_o439v.get('radio') or {}).get('운용 모드') == ['꺼짐', '실전'] and '우위가 없습니다' in _cap439,   # AppTest 는 표시 글자를 돌려준다
+          str(_o439v.get('first') or {k: _o439v.get(k) for k in ('metric', 'toggle', 'exp', 'radio')} or (_rc439.stderr or '')[-300:]))
+finally:
+    for _f439 in (_vdb439, _child439):
+        if _os.path.exists(_f439):
+            _os.remove(_f439)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

@@ -7,7 +7,7 @@
 
 표 — 전부 덧붙이기만 한다(지금 상태는 마지막 사건으로 읽는다):
   settings_events   설정 사건 (모드 · 위험 한도 · 긴급정지 · 실전 잠금 해제) — 마지막 값이 지금 값
-  plans             그날 계획(바뀌지 않는다 · plan_id 가 정체)
+  plans             그날 계획(바뀌지 않는다 · plan_id 가 정체 · 모델 가격과 주문 가격을 둘 다 든다 · 라운드 453)
   intents           주문 의도(계획 · 방향 · 거래일마다 하나) — 같은 계획·방향·거래일에 두 번 못 만든다
   order_events      주문 상태 사건(PLANNED → … → FILLED/CANCELLED/REJECTED/UNKNOWN/EXPIRED)
   position_events   포지션 사건(소유: 읽기 전용 기존 · 자동매매가 산 것 · 사용자가 넘긴 것)
@@ -48,7 +48,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings_events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, key TEXT, value TEXT, by TEXT);
 CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, created_ts TEXT, data_day TEXT, code TEXT, name TEXT,
     spec TEXT, entry REAL, target REAL, stop REAL, horizon INTEGER, wait_bars INTEGER, live_ok INTEGER,
-    block_reason TEXT, verdict TEXT, engine_version TEXT, receipt_id TEXT);
+    block_reason TEXT, verdict TEXT, engine_version TEXT, receipt_id TEXT,
+    entry_model REAL, target_model REAL, entry_source TEXT, rulebook_version TEXT, cost_pct REAL);
 CREATE TABLE IF NOT EXISTS intents (intent_id TEXT PRIMARY KEY, plan_id TEXT, side TEXT, code TEXT, qty INTEGER,
     price REAL, ord_dvsn TEXT, mode TEXT, trade_day TEXT, created_ts TEXT, reason TEXT, planned_loss REAL);
 CREATE UNIQUE INDEX IF NOT EXISTS intents_once ON intents (plan_id, side, trade_day, reason);
@@ -89,8 +90,22 @@ def connect(path=PATH, readonly=False):
     c = sqlite3.connect(path, timeout=10)
     c.row_factory = sqlite3.Row
     c.executescript(SCHEMA)
+    _migrate(c)
     c.commit()
     return c
+
+
+#: 라운드 453 — 계획에 더한 열. 모델(중앙 판정) 가격과 호가 단위로 맞춘 주문 가격을 **둘 다** 남긴다(한쪽이 다른 쪽을 덮지
+#: 않는다) · 진입가의 출처 · 계약에 든 규칙집 버전과 비용. 옛 장부에는 열이 없으므로 여기서 더한다(있는 행 불변 · 멱등).
+PLAN_COLUMNS_453 = (('entry_model', 'REAL'), ('target_model', 'REAL'), ('entry_source', 'TEXT'),
+                    ('rulebook_version', 'TEXT'), ('cost_pct', 'REAL'))
+
+
+def _migrate(c):
+    have = {r[1] for r in c.execute('PRAGMA table_info(plans)')}
+    for name, typ in PLAN_COLUMNS_453:
+        if name not in have:
+            c.execute(f'ALTER TABLE plans ADD COLUMN {name} {typ}')
 
 
 # ── 설정 ────────────────────────────────────────────────────────────────
@@ -121,10 +136,12 @@ def add_plan(c, p):
     """계획을 남긴다 — 같은 plan_id 가 있으면 아무것도 안 바꾼다(바뀌지 않는 영수증). 새로 남겼으면 True."""
     cur = c.execute(
         'INSERT OR IGNORE INTO plans (plan_id, created_ts, data_day, code, name, spec, entry, target, stop, horizon, '
-        'wait_bars, live_ok, block_reason, verdict, engine_version, receipt_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'wait_bars, live_ok, block_reason, verdict, engine_version, receipt_id, entry_model, target_model, entry_source, '
+        'rulebook_version, cost_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         (p['plan_id'], now_ts(), p['data_day'], p['code'], p.get('name'), p['spec'], p.get('entry'), p.get('target'),
          p.get('stop'), p.get('horizon'), p.get('wait_bars'), int(bool(p.get('live_ok'))), p.get('block_reason'),
-         json.dumps(p.get('verdict') or {}, ensure_ascii=False), p.get('engine_version'), p.get('receipt_id')))
+         json.dumps(p.get('verdict') or {}, ensure_ascii=False), p.get('engine_version'), p.get('receipt_id'),
+         p.get('entry_model'), p.get('target_model'), p.get('entry_source'), p.get('rulebook_version'), p.get('cost_pct')))
     c.commit()
     return cur.rowcount == 1
 
@@ -239,43 +256,59 @@ def position_event(c, code, ownership, event, plan_id=None, qty=None, price=None
 
 #: 포지션 사건 — SEEN(계좌에서 처음 본 기존 보유 · 관리 안 함) · OPENED(자동매매 매수 체결 · 관리 시작) ·
 #: FILL_ADD(같은 계획의 추가 체결) · ADOPTED(사용자가 넘김 · 관리 시작) · SOLD(매도 체결 · 수량 줄임) ·
-#: CLOSED(다 팔림 · 관리 끝) · RELEASED(사용자가 되돌려 받음 · 관리 끝, 기존 보유로)
-POSITION_EVENTS = ('SEEN', 'OPENED', 'FILL_ADD', 'ADOPTED', 'SOLD', 'CLOSED', 'RELEASED')
+#: CLOSED(다 팔림 · 관리 끝) · RELEASE_REQUESTED(사용자가 되돌려 받기를 눌렀다 · 열린 매도 주문이 있어 취소 확인 전 ·
+#: 새 보호 주문은 안 낸다 · 라운드 453) · RELEASED(되돌려 받음 확인 · 관리 끝, 기존 보유로)
+POSITION_EVENTS = ('SEEN', 'OPENED', 'FILL_ADD', 'ADOPTED', 'SOLD', 'CLOSED', 'RELEASE_REQUESTED', 'RELEASED')
 
 
 def positions(c):
-    """종목마다 지금 상태 {code: dict(ownership, managed, qty, entry_price, target, stop, plan_id, opened_day, last_event)}.
+    """종목마다 지금 상태 {code: dict(ownership, managed, releasing, qty, entry_price, target, stop, plan_id, opened_day, last_event)}.
 
-    `managed` 가 참인 것만 자동 매도 대상이다. 기존 보유(SEEN)는 사용자가 넘기기(ADOPTED) 전에는 managed 가 안 된다."""
+    `managed` 가 참인 것만 자동 매도 대상이다. 기존 보유(SEEN)는 사용자가 넘기기(ADOPTED) 전에는 managed 가 안 된다.
+    `releasing` 이 참이면(되돌려 받기 요청 · 취소 확인 전) 관리 수량은 계좌에 맞추되 **새 보호 주문은 안 낸다**(라운드 453)."""
     out = {}
     for r in c.execute('SELECT * FROM position_events ORDER BY id'):
         d = dict(r)
         ev = d['event']
-        cur = dict(out.get(d['code']) or dict(ownership=d['ownership'], managed=False, qty=0))
+        cur = dict(out.get(d['code']) or dict(ownership=d['ownership'], managed=False, releasing=False, qty=0))
         if ev == 'SEEN':
             if not cur.get('managed'):
                 cur.update(ownership='READ_ONLY_EXISTING', qty=int(d.get('qty') or 0))
         elif ev in ('OPENED', 'ADOPTED'):
-            cur.update(ownership=d['ownership'], managed=True, qty=int(d.get('qty') or 0), entry_price=d.get('price'),
-                       target=d.get('target'), stop=d.get('stop'), plan_id=d.get('plan_id'),
+            cur.update(ownership=d['ownership'], managed=True, releasing=False, qty=int(d.get('qty') or 0),
+                       entry_price=d.get('price'), target=d.get('target'), stop=d.get('stop'), plan_id=d.get('plan_id'),
                        opened_day=d.get('trade_day'))
         elif ev == 'FILL_ADD':
             cur['qty'] = int(cur.get('qty') or 0) + int(d.get('qty') or 0)
         elif ev == 'SOLD':
             cur['qty'] = max(0, int(cur.get('qty') or 0) - int(d.get('qty') or 0))
         elif ev == 'CLOSED':
-            cur.update(managed=False, qty=0, closed_day=d.get('trade_day'))
+            cur.update(managed=False, releasing=False, qty=0, closed_day=d.get('trade_day'))
+        elif ev == 'RELEASE_REQUESTED':
+            cur['releasing'] = True
         elif ev == 'RELEASED':
-            cur.update(ownership='READ_ONLY_EXISTING', managed=False)
+            cur.update(ownership='READ_ONLY_EXISTING', managed=False, releasing=False)
         cur['last_event'] = ev
         out[d['code']] = cur
     return out
 
 
 def managed_open(c):
-    """자동 매도가 허락된 열린 포지션 — 읽기 전용 기존 보유는 절대 안 든다."""
+    """자동 매도가 허락된 열린 포지션 — 읽기 전용 기존 보유는 절대 안 들고, 되돌려 받기 요청 중(취소 확인 전)인 것도 안 든다
+    (새 보호 주문을 내지 않는다 · 그 종목의 열린 매도는 워커가 취소를 확인할 때까지 바퀴마다 다시 요청한다)."""
     return {k: v for k, v in positions(c).items()
-            if v.get('managed') and v.get('ownership') in AUTO_SELL_OWNERSHIP and int(v.get('qty') or 0) > 0}
+            if v.get('managed') and not v.get('releasing') and v.get('ownership') in AUTO_SELL_OWNERSHIP
+            and int(v.get('qty') or 0) > 0}
+
+
+def releasing(c):
+    """되돌려 받기 요청 중(열린 매도 주문의 취소 확인 전)인 포지션 {code: dict} — 라운드 453."""
+    return {k: v for k, v in positions(c).items() if v.get('managed') and v.get('releasing')}
+
+
+def protect_needed(c):
+    """워커가 증권사를 불러야 하는 보유가 있나 — 관리 중(보호 매도) 또는 해제 확인 중(열린 매도 취소). 모드와 무관하다(라운드 453)."""
+    return bool(managed_open(c) or releasing(c))
 
 
 # ── 계좌·모의·심박 ──────────────────────────────────────────────────────

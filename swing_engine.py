@@ -3,11 +3,16 @@
 스윙 계획 SWING_V1 (라운드 446) — **새 판단을 만들지 않는다.** 그날 고정된 개장 전 리포트의 중앙 판정을 그대로 옮긴다.
 
 ■ 계약 — 화면이 신규 매수자에게 말하는 그 계획
-  진입   중앙 판정의 진입가(매수 검토 구간의 가운데 · 호가 단위로 **내림** — 계획보다 비싸게 사지 않는다) · 지정가
+  진입   중앙 판정의 진입가 **그대로**(`core['entry_price']` · 라운드 453 — 종전엔 매수 검토 구간(±1%)의 가운데에서 되살렸다 ·
+         옛 리포트에 그 칸이 없으면 그 길로 물러서고 `entry_source` 에 적는다) · 호가 단위로 **내림**(계획보다 비싸게 사지 않는다)
+         · 지정가. 모델 가격(`entry_model`)과 주문 가격(`entry`)을 둘 다 남긴다 — 호가 보정이 중앙 계획을 덮지 않는다
   대기   진입가에 닿기를 최대 `wait_bars` 거래일 기다린다 — 그 수는 라운드 32 진입 연구 산출물(`data/entry_fill_facts.json`
          의 `max_bars`)에서 읽는다(새 숫자 아님). 못 읽으면 실주문 계획을 안 만든다(§3)
-  청산   1차 목표(호가 단위로 내림 · 지정가) 또는 손절(닿으면 시장가) · 둘 다 안 닿으면 체결 다음 날부터 `horizon` 거래일
+  청산   1차 목표(호가 단위로 내림 · **그날 하루짜리 지정가 매도를 증권사에 걸어 둔다** · 실행부가 매일 다시 낸다) 또는 손절(워커가
+         장중 가격을 보고 닿으면 **시장가**) · 둘 다 안 닿으면 체결 다음 날부터 `horizon` 거래일(워커가 시장가)
   같은 봉 목표·손절 모두 닿음 → 손절 먼저(채점기 `prediction_log.first_touch` 의 규칙 그대로)
+  정체   `plan_id` 는 계약 전부의 해시다(라운드 453) — 종목 · 자료 기준일 · 진입·목표·손절 · 대기·보유 거래일 · 비용 · 규칙집
+         버전 · 엔진 버전. 어느 하나가 달라지면 다른 계획이다(같은 id 가 다른 계약을 가리키지 않는다)
   추가매수·물타기·분할·추적 손절 없음 · 추격 없음(진입가를 벗어나면 안 산다)
   지금 가격(실주문) · 그날 시가(모의)가 이미 손절선 이하면 안 산다 — 라운드 32 연구의 계약에는 없던 한 줄이다(그 가격에 사면
   바로 손절이라 비용만 낸다 · 2026-10-08 독립 검토). 그래서 이 계약의 모의 결과는 그 연구의 수와 조금 다를 수 있다.
@@ -65,23 +70,32 @@ def _f(v):
 
 
 def entry_of(core):
-    """중앙 판정의 진입가 — 매수 검토 구간(진입가 ±1%)의 가운데. 구간이 없으면 None."""
-    bz = (core or {}).get('buy_zone')
+    """중앙 판정의 진입가 → (가격, 출처). 라운드 453 — 중앙 판정이 내는 `entry_price` 를 **그대로** 읽는다('central').
+    그 칸이 없는 옛 리포트에서만 매수 검토 구간(진입가 ±1% · 반올림된 두 수)의 가운데로 물러선다('buy_zone_mid' · 원 단위에서
+    어긋날 수 있다). 둘 다 없으면 (None, None). 구간 값이 수가 아니면 그대로 예외다(그 후보는 건너뛴다 · 지어내지 않는다)."""
+    core = core or {}
+    ep = core.get('entry_price')
+    if ep is not None and str(ep) != '':
+        return float(ep), 'central'
+    bz = core.get('buy_zone')
     if not bz or len(bz) != 2 or bz[0] is None or bz[1] is None:
-        return None
-    return (float(bz[0]) + float(bz[1])) / 2.0
+        return None, None
+    return (float(bz[0]) + float(bz[1])) / 2.0, 'buy_zone_mid'
 
 
-def plan_id(code, data_day, entry, target, stop, engine_version):
-    body = json.dumps([SPEC, code, data_day, entry, target, stop, engine_version], ensure_ascii=False)
+def plan_id(code, data_day, entry, target, stop, engine_version, wait_bars=None, horizon=None, cost_pct=None,
+            rulebook_version=None):
+    """계약 전부의 해시(라운드 453) — 가격 셋만이 아니라 대기·보유 거래일 · 비용 · 규칙집 버전도 정체에 든다."""
+    body = json.dumps([SPEC, code, data_day, entry, target, stop, wait_bars, horizon, cost_pct, rulebook_version,
+                       engine_version], ensure_ascii=False)
     return 'SW1-' + str(data_day).replace('-', '') + '-' + code + '-' + hashlib.sha1(body.encode('utf-8')).hexdigest()[:6].upper()
 
 
-def plan_from_pick(pick, data_day, engine_version, today_day, wbars):
+def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=None, rulebook_version=None):
     """리포트 후보 하나 → 계획 dict. 실주문 자격이 없으면 live_ok=False 와 사유(맨 앞의 것 하나)."""
     core = (pick or {}).get('core') or {}
     code = code6(pick.get('symbol') or pick.get('code'))
-    e_raw = entry_of(core)
+    e_raw, e_src = entry_of(core)
     entry = broker_kis.round_to_tick(e_raw, 'buy') if e_raw else None
     t_raw = _f(core.get('new_target'))
     target = broker_kis.round_to_tick(t_raw, 'sell') if t_raw else None
@@ -102,9 +116,15 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars):
         why.append('중앙 판정이 정합 문제를 적었습니다')
     if wbars is None:
         why.append('진입 대기 기간을 연구 산출물에서 못 읽었습니다')
-    return dict(plan_id=plan_id(code, data_day, entry, target, stop, engine_version), data_day=str(data_day),
+    hz = int(horizon) if horizon else None
+    return dict(plan_id=plan_id(code, data_day, entry, target, stop, engine_version, wait_bars=wbars, horizon=hz,
+                                cost_pct=cost_pct, rulebook_version=rulebook_version),
+                data_day=str(data_day),
                 code=code, name=pick.get('name'), spec=SPEC, entry=entry, target=target, stop=stop,
-                horizon=int(horizon) if horizon else None, wait_bars=wbars, live_ok=not why,
+                # 라운드 453 — 모델(중앙 판정) 가격은 따로 남긴다. 호가 단위 보정이 중앙 계획을 덮지 않는다(PROOF 가 둘의 차이를 적는다)
+                entry_model=e_raw, target_model=t_raw, entry_source=e_src,
+                rulebook_version=rulebook_version, cost_pct=cost_pct,
+                horizon=hz, wait_bars=wbars, live_ok=not why,
                 block_reason=(why[0] if why else None),
                 verdict=dict(recommended=core.get('recommended'), bucket=core.get('bucket'),
                              exclude_reason=core.get('exclude_reason'), headline=core.get('headline'),
@@ -117,8 +137,24 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars):
                 engine_version=engine_version)
 
 
-def plans_from_report(report, today_day):
-    """그날 리포트 → 계획 목록. 리포트가 없으면 빈 목록(지어내지 않는다)."""
+def rulebook_version_of(report):
+    """리포트가 만들어진 시각의 규칙집 버전 — 리포트에 적혀 있으면 그것, 아니면 버전 원장을 되짚는다(`versioning.version_at` ·
+    라운드 415 의 길). 못 구하면 None(지어내지 않는다 · 그러면 plan_id 에 None 이 든다)."""
+    rb = (report or {}).get('rulebook_version')
+    if rb:
+        return str(rb)
+    when = (report or {}).get('generated_at')
+    if not when:
+        return None
+    try:
+        import versioning
+        return versioning.version_at('rulebook', when)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def plans_from_report(report, today_day, cost_pct=None):
+    """그날 리포트 → 계획 목록. 리포트가 없으면 빈 목록(지어내지 않는다). cost_pct 는 운영 왕복 비용(계약의 일부 · plan_id 에 든다)."""
     if not report:
         return []
     try:
@@ -127,10 +163,12 @@ def plans_from_report(report, today_day):
     except Exception:                                          # noqa: BLE001
         dday = report.get('date')
     wb = wait_bars()
+    rb = rulebook_version_of(report)
     out = []
     for p in (report.get('picks') or []):
         try:
-            out.append(plan_from_pick(p, dday, report.get('engine_version'), today_day, wb))
+            out.append(plan_from_pick(p, dday, report.get('engine_version'), today_day, wb, cost_pct=cost_pct,
+                                      rulebook_version=rb))
         except Exception:                                      # noqa: BLE001 — 후보 하나가 이상해도 다른 계획·보호 매도를 막지 않는다
             continue
     return out

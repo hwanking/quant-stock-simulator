@@ -147,8 +147,9 @@ def config_summary(cfg):
         return '연결 정보 없음'
     if cfg.get('missing'):
         return '연결 정보가 모자랍니다: ' + ', '.join(cfg['missing'])
+    # 라운드 453 — 앱 키는 가린 조각조차 보이지 않는다(외부 검토 #14 · 등록됐다는 사실이면 된다). 계좌는 가린 모양으로.
     return (f"{'모의투자' if cfg['env'] == 'demo' else '실전'} · 계좌 {mask(cfg['cano'])}-{cfg['prdt']} · "
-            f"앱 키 {mask(cfg['app_key'], 3)}")
+            f"앱 키·시크릿 등록됨")
 
 
 def _urllib_transport(method, url, headers, params=None, body=None, timeout=10):

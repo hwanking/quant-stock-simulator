@@ -702,6 +702,9 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         checks=[dict(c) for c in _checks_d],
         failed=failed,
         # 신규 매수자 가격 (한 기준: 진입가)
+        # 라운드 453 — 진입가 **그 수**를 그대로 싣는다. 자동매매가 종전엔 아래 buy_zone(±1% · 반올림된 두 수)의 가운데에서
+        #   진입가를 되살렸다 — 한 가격·한 판정·한 계획이면 되살리는 길이 없어야 한다(외부 검토 2026-10-08 P0-4). 값 불변.
+        entry_price=entry,
         buy_zone=(None if entry is None
                   else (round(entry * 0.99), round(entry * 1.01))),
         pullback_zone=_f(fs.get('entry_pullback_price')),

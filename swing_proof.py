@@ -143,7 +143,8 @@ def summary(rs):
 def summary_line(s, cost_pct):
     if not s:
         return None
-    parts = [f"닫힌 거래 {s['n']}건 — 비용 {cost_pct}% 를 뺀 평균 {s['mean']:+.2f}% · 중앙 {s['median']:+.2f}%"
+    # 라운드 453 — 실제 수수료·세금을 증권사에서 읽지 않으므로 이 수는 '추정 비용후'다(순수익이라 부르지 않는다)
+    parts = [f"닫힌 거래 {s['n']}건 — 운영 비용 {cost_pct}%(가정)를 뺀 추정 비용후 수익률 평균 {s['mean']:+.2f}% · 중앙 {s['median']:+.2f}%"
              + (' — 평균과 중앙의 부호가 갈립니다' if (s['mean'] < 0 < s['median']) or (s['median'] < 0 < s['mean']) else ''),
              '청산 ' + ' · '.join(f"{EXIT_KO.get(k, k)} {n}" for k, n in sorted(s['by_reason'].items()))]
     if s.get('slip_entry_mean') is not None:

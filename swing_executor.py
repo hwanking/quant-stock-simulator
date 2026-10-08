@@ -2,9 +2,12 @@
 """
 스윙 자동매매 한 바퀴 (라운드 446) — 워커가 부른다. **주문을 내는 길은 여기 하나다.**
 
-모드
-  OFF     아무것도 안 한다(심박만)
-  SHADOW  계획을 남기고 일봉으로 모의 결과만 낸다 — 증권사에 아무것도 안 보낸다
+모드 (라운드 453 — **판단과 보호는 모드와 무관하다**: 그날 계획·일봉 모의는 어느 모드에서나 남기고, 자동 관리 중인 종목의
+보호(손절·기간 만료 시장가 · 1차 목표 지정가)는 어느 모드에서나 계속한다. 모드가 정하는 것은 **신규 매수를 내느냐**뿐이다.
+종전엔 OFF 가 바퀴 머리에서 바로 돌아가 관리 중 종목의 손절까지 멈췄다 — 외부 검토 2026-10-08 · "꺼짐"이 보호를 끄면 안 된다.)
+  OFF     신규 매수 없음 · 계획·모의는 남긴다 · 관리 중 종목이 있으면 증권사를 불러 보호만 한다('보호만'). 보호까지 멈추려면
+          화면 ④에서 되돌려 받는다(열린 매도 주문의 취소가 확인된 뒤 해제된다 — 2단계)
+  SHADOW  OFF 와 같다(이름만 남아 있다 · 화면은 기본으로 보이지 않는다)
   PAPER   한국투자 **모의투자** 서버로 실제 주문 흐름을 돈다(자격증명이 demo 여야 한다)
   LIVE    실계좌 주문 — 기본 잠김. 사용자가 직접 잠금을 풀고(문장 입력) · 위험 한도 여섯을 다 정하고 · 자격증명이 real 이고 ·
           긴급정지가 꺼져 있어야 한다. 하나라도 아니면 신규 매수를 안 낸다
@@ -14,13 +17,15 @@
   trade_day   주문을 내는 날 = 지금의 **한국 시각** 날짜(PC 시간대와 무관 · KST 로 바꿔 본다)
 
 ■ 한 바퀴의 차례 (보호가 맨 앞이다)
-  ① 계획·모의(실패해도 다음으로 · 보호 매도를 막지 않는다)
-  ② 주문 내역으로 맞추기(실패하면 신규 매수만 막고 보호 매도는 계속)
+  ① 계획·모의(모드와 무관 · 실패해도 다음으로 · 보호 매도를 막지 않는다)
+  ② 주문 내역으로 맞추기(실패하면 신규 매수만 막고 보호 매도는 계속) → 되돌려 받기 요청 중인 종목에 열린 매도가 안 남았으면 해제 확인
   ③ 잔고(못 읽으면 아무것도 안 한다 — 무엇을 팔지 모른다)
   ④ 관리 수량을 계좌에 맞춘다(밖에서 판 것은 관리에서 내린다 · 다시 산 것을 봇이 팔지 않게)
-  ⑤ 취소 다시 하기(긴급정지 · 되돌려 받은 종목 · 손절선 아래로 내려간 대기 매수) — 취소가 확인될 때까지 바퀴마다
-  ⑥ 보호 매도(손절·기간 만료) — **매도 가능 수량**만큼 시장가로. 목표 매도가 주식을 잡고 있으면 먼저 취소하고 다음 바퀴에 판다
-  ⑦ 신규 매수(모든 관문 · 지금 가격이 손절선 이하면 안 산다 · 대기 매수도 한도에 센다)
+  ⑤ 취소 다시 하기(긴급정지 · 되돌려 받기 요청 중인 종목의 열린 매도 · 손절선 아래로 내려간 대기 매수) — 취소가 확인될 때까지 바퀴마다
+  ⑥ 보호 매도(손절·기간 만료) — **매도 가능 수량**만큼 시장가로. 목표 매도가 주식을 잡고 있으면 먼저 취소하고 다음 바퀴에 판다.
+     1차 목표는 **그날 하루짜리 지정가 매도**를 증권사에 걸어 둔다(매일 다시). 손절 판정 가격은 잔고 조회의 현재가이고, 그 칸이 비면
+     시세 끝점의 현재가로 물러선다(둘 다 같은 '현재가'다 · 라운드 453)
+  ⑦ 신규 매수(모든 관문 · 지금 가격이 손절선 이하면 안 산다 · 대기 매수도 한도에 센다 · OFF·SHADOW 에서는 관문이 막는다)
 
 ■ 주문을 다시 보내지 않는다 (매수)
   네트워크 오류·시간초과는 `UNKNOWN`. 내역에서 찾을 때 PC 시계를 쓰지 않는다 — 보내기 직전 이미 있던 같은 종목·방향의
@@ -137,6 +142,22 @@ def broker_gate(mode, cfg, st):
     if mode == 'LIVE' and (st or {}).get('live_unlock') != LIVE_UNLOCK_PHRASE:
         out.append('실전 잠금이 풀리지 않았습니다')
     return out
+
+
+def protect_gate(cfg):
+    """보호만 하는 바퀴(OFF·SHADOW 인데 관리 중·해제 확인 중인 종목이 있다)가 증권사를 부를 수 있나 → 막는 사유 목록.
+    모드 조건이 없다 — 연결 정보만 본다(관리 중인 종목은 그 자격증명으로 산 것이다 · 라운드 453)."""
+    if not cfg or cfg.get('missing') or cfg.get('problems'):
+        return ['한국투자 연결 정보가 없거나 잘못됐습니다 — ' + broker_kis.config_summary(cfg)]
+    return []
+
+
+def wants_broker(c, mode, cfg, st):
+    """이 바퀴가 증권사 연결을 만들어야 하나 — 주문 모드(PAPER·LIVE · 관문 통과)이거나, 어느 모드든 보호할 보유가 있고 연결 정보가 있을 때.
+    워커가 연결을 만들기 전에 부른다(라운드 453 · 종전엔 주문 모드에서만 만들어 OFF 의 보호가 서지 못했다)."""
+    if mode in MODE_ENV and not broker_gate(mode, cfg, st):
+        return True
+    return L.protect_needed(c) and not protect_gate(cfg)
 
 
 def buy_gate(mode, cfg, st):
@@ -318,7 +339,7 @@ def _cancel(c, broker, it, why, out):
 def refresh_plans(c, report, anchor_day, bars_fn, cost_pct):
     """그날 리포트 → 계획(바뀌지 않는 영수증) · 끝나지 않은 계획마다 일봉으로 모의 → (새 계획 수, 모의 갱신 수, 메모)."""
     pn, sn, notes = 0, 0, []
-    for p in swing_engine.plans_from_report(report, anchor_day):
+    for p in swing_engine.plans_from_report(report, anchor_day, cost_pct=cost_pct):
         pn += int(L.add_plan(c, p))
     if bars_fn is None:
         return pn, sn, notes
@@ -348,29 +369,38 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
     st = L.settings(c)
     mode = st.get('mode') if st.get('mode') in L.MODES else 'OFF'
     out = dict(mode=mode, anchor_day=anchor_day, trade_day=trade_day, plans_new=0, shadow_updates=0, orders=[],
-               exits=[], blocked=[], notes=[], alerts=[])
-    if mode == 'OFF':
-        L.heartbeat(c, mode, 'off', '꺼짐 — 아무것도 안 했다')
-        return out
-    # ① 계획·모의 — 실패해도 보호 매도를 막지 않는다
+               exits=[], blocked=[], notes=[], alerts=[], protect_only=False)
+    # ① 계획·모의 — **모드와 무관하게** 남긴다(라운드 453 · 판단 기록은 운용과 분리) · 실패해도 보호 매도를 막지 않는다
     try:
         pn, sn, notes = refresh_plans(c, report, anchor_day, bars_fn if do_shadow else None, cost_pct)
         out.update(plans_new=pn, shadow_updates=sn)
         out['notes'] += notes
     except Exception as e:                                     # noqa: BLE001
         out['alerts'].append(f'계획을 못 만들었다 — {type(e).__name__}: {e} (보호 매도는 계속)')
-    if mode == 'SHADOW':
-        _beat(c, mode, out, f"계획 +{out['plans_new']} · 모의 갱신 {out['shadow_updates']} · 주문 안 함")
-        return out
-    bg = broker_gate(mode, cfg, st)
+    protect = L.protect_needed(c)
+    if mode not in MODE_ENV:
+        # OFF·SHADOW — 주문 모드가 아니다. 보호할 보유가 없으면 여기서 끝(심박만). 있으면 **보호만** 하는 바퀴로 계속 간다
+        if not protect:
+            L.heartbeat(c, mode, 'off', f"{'꺼짐' if mode == 'OFF' else '기록만'} — 계획 +{out['plans_new']} · "
+                                        f"모의 갱신 {out['shadow_updates']} · 주문 없음 · 관리 중인 종목 없음")
+            return out
+        out['protect_only'] = True
+        bg = protect_gate(cfg)
+    else:
+        bg = broker_gate(mode, cfg, st)
     if bg or broker is None:
         out['blocked'] += bg or ['증권사 연결이 없습니다']
-        L.heartbeat(c, mode, 'blocked', ' · '.join(out['blocked']))
+        if protect:
+            out['alerts'].append('보호할 보유가 있는데 증권사를 못 불렀다 — ' + ' · '.join(out['blocked']))
+            _beat(c, mode, out, '보호 못 함')
+        else:
+            L.heartbeat(c, mode, 'blocked', ' · '.join(out['blocked']))
         return out
     # ② 내역 맞추기 — 실패하면 신규 매수만 막는다
     orders = None
     try:
         orders = reconcile(c, broker, now, out['notes'].append)
+        _finish_releases(c, out)
     except broker_kis.BrokerError as e:
         out['alerts'].append(f'주문 내역을 못 읽었다 — {e} · 신규 매수는 막고 보호 매도는 계속')
     # ③ 잔고 — 못 읽으면 무엇을 팔지 모른다
@@ -387,23 +417,39 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         sync_positions(c, held, trade_day, out['notes'].append)
     except Exception as e:                                     # noqa: BLE001
         out['alerts'].append(f'계좌 맞추기 실패 — {type(e).__name__}: {e}')
+    tag = '보호만 · ' if out['protect_only'] else ''
     if not allow_orders:
-        _beat(c, mode, out, '주문 없이 돌았다(저녁 작업) · 내역·계좌만 맞춤')
+        _beat(c, mode, out, tag + '주문 없이 돌았다(저녁 작업) · 내역·계좌만 맞춤')
         return out
     if not session_open(now):
-        _beat(c, mode, out, '장 시간이 아니라 주문하지 않았다 · 내역·계좌만 맞춤')
+        _beat(c, mode, out, tag + '장 시간이 아니라 주문하지 않았다 · 내역·계좌만 맞춤')
         return out
     # ⑤ 취소 다시 하기
     _cancels(c, broker, st, quote_fn, out)
-    # ⑥ 보호 매도 — 긴급정지와 무관
-    _exits(c, broker, held, trade_day, mode, out)
-    # ⑦ 신규 매수 — 내역을 맞췄을 때만
-    if orders is None:
+    # ⑥ 보호 매도 — 긴급정지·모드와 무관
+    _exits(c, broker, held, trade_day, mode, out, quote_fn)
+    # ⑦ 신규 매수 — 내역을 맞췄을 때만 · 주문 모드일 때만(OFF·SHADOW 는 관문이 막는다)
+    if out['protect_only']:
+        out['blocked'].append(f'{mode} 모드 — 신규 매수 없음(관리 중 종목의 보호만)')
+    elif orders is None:
         out['blocked'].append('주문 내역을 못 맞춰 신규 매수를 안 냈다')
     else:
         _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn)
-    _beat(c, mode, out, f"주문 {len(out['orders'])} · 청산 {len(out['exits'])} · 막힘 {len(out['blocked'])}")
+    _beat(c, mode, out, tag + f"주문 {len(out['orders'])} · 청산 {len(out['exits'])} · 막힘 {len(out['blocked'])}")
     return out
+
+
+def _finish_releases(c, out):
+    """되돌려 받기 요청 중인 종목 — 그 종목에 열린 매도 주문이 하나도 안 남았으면(내역으로 맞춘 뒤) 해제를 확인해 RELEASED 로.
+    남아 있으면 ⑤ 가 취소를 (다시) 요청하고 다음 바퀴가 다시 본다. 취소 확인 전에는 RELEASED 를 적지 않는다(라운드 453)."""
+    for code, pos in L.releasing(c).items():
+        open_sells = [it for it in L.intents_with_state(c, OPEN_STATES) if it['code'] == code and it['side'] == 'sell']
+        if open_sells:
+            out['notes'].append(f'{code} 되돌려 받기 확인 대기 — 열린 매도 주문 {len(open_sells)}건의 취소를 기다린다')
+            continue
+        L.position_event(c, code, pos.get('ownership') or 'USER_ADOPTED', 'RELEASED', plan_id=pos.get('plan_id'),
+                         trade_day=now_kst().date().isoformat(), detail='열린 매도 주문이 없음을 확인 — 되돌려 받음')
+        out['notes'].append(f'{code} 되돌려 받기 확인 — 자동 관리 끝')
 
 
 def _beat(c, mode, out, summary):
@@ -440,20 +486,38 @@ def _cancels(c, broker, st, quote_fn, out):
             _cancel(c, broker, it, why, out)
 
 
-def _exits(c, broker, held, trade_day, mode, out):
+def _exits(c, broker, held, trade_day, mode, out, quote_fn=None):
     every = L.intents_with_state(c)
     for code, pos in L.managed_open(c).items():
         try:
-            _exit_one(c, broker, held, trade_day, mode, out, code, pos, every)
+            _exit_one(c, broker, held, trade_day, mode, out, code, pos, every, quote_fn)
         except Exception as e:                                 # noqa: BLE001 — 한 종목의 실패가 다른 종목의 손절을 막지 않는다
             out['alerts'].append(f'{code} 보호 매도 처리 실패 — {type(e).__name__}: {e}')
 
 
-def _exit_one(c, broker, held, trade_day, mode, out, code, pos, every):
+def _trigger_price(acct, code, quote_fn, out):
+    """손절 판정에 쓰는 가격 — 잔고 조회의 현재가(한국투자 `prpr`). 그 칸이 비었으면 시세 끝점의 현재가로 물러선다(둘 다
+    '지금 가격'이다 · 라운드 453 외부 검토 P1-3). 둘 다 없으면 None — 그 바퀴는 손절을 판정하지 않고 그 사실을 적는다(§3)."""
+    px = acct.get('price')
+    if px is not None:
+        return px
+    if quote_fn is not None:
+        try:
+            q = quote_fn(code)
+        except Exception:                                      # noqa: BLE001
+            q = None
+        if q is not None:
+            out['notes'].append(f'{code} 잔고의 현재가 칸이 비어 시세 끝점의 현재가 {q:,.0f} 로 손절을 판정했다')
+            return q
+    out['alerts'].append(f'{code} 지금 가격을 어디서도 못 읽어 이 바퀴는 손절을 판정하지 못했다')
+    return None
+
+
+def _exit_one(c, broker, held, trade_day, mode, out, code, pos, every, quote_fn=None):
     acct = held.get(code)
     if not acct:
         return                  # 계좌 맞추기가 처리한다
-    px = acct.get('price')
+    px = _trigger_price(acct, code, quote_fn, out)
     held_qty = min(int(pos.get('qty') or 0), int(acct.get('qty') or 0))
     sellable = int(acct.get('sellable_qty') if acct.get('sellable_qty') is not None else acct.get('qty') or 0)
     if held_qty <= 0 or px is None:
@@ -600,8 +664,17 @@ def adopt(c, code, qty, target, stop, by_user=False):
 
 
 def release(c, code):
-    """자동 관리에서 되돌려 받는다. 열린 매도 주문은 워커의 다음 장중 바퀴가 취소한다(관리 밖 종목의 매도는 취소가 확인될 때까지
-    바퀴마다 다시 요청한다) — 그 사이 체결될 수 있다는 것을 화면이 같이 적는다."""
+    """자동 관리에서 되돌려 받는다 — **2단계**(라운드 453). 그 종목에 열린 매도 주문(1차 목표 지정가 등)이 있으면
+    RELEASE_REQUESTED 로 적고 워커가 취소를 요청·확인한 뒤에야 RELEASED 가 된다(그 사이 새 보호 주문은 안 낸다 · 취소 확인
+    전에 RELEASED 를 적지 않는다). 열린 매도가 없으면 바로 RELEASED. → 적은 사건 이름."""
     pos = L.positions(c).get(code) or {}
-    L.position_event(c, code, pos.get('ownership') or 'USER_ADOPTED', 'RELEASED', plan_id=pos.get('plan_id'),
-                     trade_day=now_kst().date().isoformat(), detail='사용자가 되돌려 받음')
+    open_sells = [it for it in L.intents_with_state(c, OPEN_STATES) if it['code'] == code and it['side'] == 'sell']
+    own = pos.get('ownership') or 'USER_ADOPTED'
+    day = now_kst().date().isoformat()
+    if open_sells:
+        if not pos.get('releasing'):
+            L.position_event(c, code, own, 'RELEASE_REQUESTED', plan_id=pos.get('plan_id'), trade_day=day,
+                             detail=f'사용자가 되돌려 받기 요청 — 열린 매도 주문 {len(open_sells)}건 취소 확인 뒤 해제')
+        return 'RELEASE_REQUESTED'
+    L.position_event(c, code, own, 'RELEASED', plan_id=pos.get('plan_id'), trade_day=day, detail='사용자가 되돌려 받음')
+    return 'RELEASED'

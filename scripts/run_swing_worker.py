@@ -14,7 +14,8 @@
 않고 다음 간격에 다시 해 본다 — 저녁 작업이 잠깐 잡고 있다고 그날 보호가 사라지지 않게(2026-10-08 독립 검토).
 
 ⚠️ 작업 스케줄러 등록은 `scripts/register_swing_worker_task.ps1` 한 번(라운드 452 — 라운드 414·415 의 저녁 작업과 같은 모양 ·
-Claude 예약 작업이 아니다). 설정 화면의 모드가 꺼짐·기록만이면 증권사에 아무것도 안 보낸다 — 그래서 등록돼 있어도 켜기 전엔 아무 일도 없다.
+Claude 예약 작업이 아니다). 설정 화면의 모드가 꺼짐이면 **새 매수**는 없다 — 다만 자동 관리 중인 종목이 있으면 그 보호(손절·기간
+만료·목표 지정가)는 모드와 무관하게 계속한다(라운드 453). 그래서 등록돼 있어도 관리 중 종목이 없고 모드가 꺼짐이면 아무 일도 없다.
 자격증명은 저장소 밖(환경변수 또는 ~/.gaeum/kis.env)에서만 읽는다. 쓰기 금지(GAEUM_NO_LOCAL_WRITE=1)면 장부를 안 열고 끝난다.
 """
 import argparse
@@ -123,7 +124,8 @@ def one_cycle(do_shadow, allow_orders=True):
         st = L.settings(c)
         cfg = broker_kis.load_config()
         broker = None
-        if st.get('mode') in X.MODE_ENV and not X.broker_gate(st['mode'], cfg, st):
+        # 라운드 453 — 주문 모드(관문 통과)이거나, 어느 모드든 보호할 보유가 있고 연결 정보가 있으면 연결을 만든다(꺼짐이 보호를 끄지 않는다)
+        if X.wants_broker(c, L.mode_of(c), cfg, st):
             broker = broker_kis.KisBroker(cfg)
         anchor = premarket.report_day()
         report = premarket.load_today_report(anchor) if anchor else None

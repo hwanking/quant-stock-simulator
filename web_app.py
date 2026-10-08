@@ -1962,6 +1962,85 @@ for _gi376, _g376 in enumerate(_NAV_SUB):
     with st.sidebar.expander(_g376['title'], expanded=(_gi376 == 0)):
         st.markdown(_uk.nav_list(_g376['items'], theme=_theme), unsafe_allow_html=True)
 
+# 라운드 453 — 아래 두 정의와 세션 적재는 원래 종목 확정 뒤(아코디언 아래)에 있었다. 스윙 탭 갈림이 쓰므로 여기로 올렸다
+#   (설명 주석은 옛 자리에 그대로). 읽기와 쓰기를 다른 이름으로 가르는 까닭은 그 주석(라운드 165·200).
+ALLOW_LOCAL_READ = not is_remote_exposed()
+ALLOW_LOCAL_STORE = ALLOW_LOCAL_READ and not NO_LOCAL_WRITE
+
+if 'positions' not in st.session_state:
+    if ALLOW_LOCAL_READ:
+        _loaded, _saved_at = portfolio.load_positions()
+        st.session_state['positions'] = _loaded
+        st.session_state['positions_saved_at'] = _saved_at
+    else:
+        st.session_state['positions'] = []          # 방문자별로 비어서 시작
+        st.session_state['positions_saved_at'] = None
+
+if 'watchlist' not in st.session_state:
+    if ALLOW_LOCAL_READ:                 # 라운드 200 — 읽기는 막지 않는다
+        _wl, _ = portfolio.load_watchlist()
+        st.session_state['watchlist'] = _wl
+        st.session_state['watchlist_mtime'] = portfolio.watchlist_mtime()
+    else:
+        st.session_state['watchlist'] = []
+elif ALLOW_LOCAL_READ:
+    # 라운드 414 — 밤에 혼자 도는 갱신(scripts/refresh_watchlist.py)이 파일을 바꿨으면 세션도 따라간다.
+    #   세션은 처음 열 때 한 번 읽고 그 뒤로는 제 복사본만 봤다 — 그대로면 다음 저장(_wl_write)이 옛 스냅샷으로
+    #   파일을 덮어 밤의 갱신이 사라진다. 파일의 수정시각이 세션이 읽은 때와 다르면 다시 읽는다(매입가·수량은
+    #   저장 때마다 파일에 먼저 가므로 잃을 것이 없다 · 앱 자신의 저장은 _wl_write 가 수정시각을 같이 적어 둔다).
+    _mt414 = portfolio.watchlist_mtime()
+    if _mt414 and _mt414 != st.session_state.get('watchlist_mtime'):
+        _wl, _ = portfolio.load_watchlist()
+        st.session_state['watchlist'] = _wl
+        st.session_state['watchlist_mtime'] = _mt414
+
+
+
+# ── 맨 위 탭 갈림 (라운드 446 → 453) — '스윙 자동매매' 탭이면 여기서 그 칸만 그리고 끝낸다 ──────────────
+# 라운드 453 — 이 갈림은 **첫 네트워크 호출(시총 1위 조회) 앞**에 있다. 종전엔 종목 해석·실시간 수신·실시간 띠·사이드바 전체를
+#   다 그린 뒤 갈라 관제실이 분석 화면만큼 느렸다(외부 검토 P1-6). 사이드바는 로고·전역 묶음까지만 그려진다.
+# 이 칸은 **관제실**이다 — 주문은 따로 도는 워커(scripts/run_swing_worker.py)만 낸다(§432 ⑰ 이 이 파일에 주문 호출이 없는지
+#   본다). 판정은 새로 안 만든다 — 그날 개장 전 리포트의 중앙 판정을 그대로 옮긴다(swing_engine). 원격 접속에서는 못 바꾼다.
+#   넘기기에 쓰는 손절선·1차 매도가는 관심종목 표와 **같은 함수**(effective_hold_stop · snap_hold_trim)에서 읽는다(§4).
+def _swing_hold_levels446(code):
+    # 라운드 453 — 갈림이 앞으로 와서 `_wl_items()` 는 아직 정의 전이다. 같은 세션 관심종목(바로 위에서 적재)을 읽는다.
+    _row = next((w for w in (st.session_state.get('watchlist') or []) if portfolio.normalize_code(w.get('code')) == code), None)
+    if not _row or not _row.get('snap_hold_at'):
+        return None
+    try:
+        _s, _t = float(_uk.effective_hold_stop(_row)[0]), float(_row.get('snap_hold_trim'))
+    except (TypeError, ValueError):
+        return None
+    return (_s, _t) if _s < _t else None
+
+
+def _swing_resolve_market449(code):
+    """계좌 보유를 앱 보유종목으로 가져올 때의 시장 판별 — 종목코드 반영 버튼과 같은 길(resolve_symbol → 단일 진입점
+    market_of · 접미사를 여기서 다시 읽지 않는다 · 라운드 159). 못 읽으면 None(§3)."""
+    try:
+        _t, _n = engine_init.resolve_symbol(code)
+        return _market_of(_t)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+if st.session_state.get('top_view') == _TOP_VIEWS[1]:
+    _SB_PICK.caption('스윙 자동매매 관제실 — 분석 화면(종목 찾기)은 맨 위 탭에서 \'가늠 분석\'을 고르세요.')
+    st.header("스윙 자동매매")
+    try:
+        import premarket as _pm446
+        import swing_view as _swv446
+        _anc446 = _pm446.report_day()
+        _swv446.render(st, _uk, allow_read=ALLOW_LOCAL_READ, allow_write=ALLOW_LOCAL_STORE,
+                       hold_levels=_swing_hold_levels446,
+                       report=(_pm446.load_today_report(_anc446) if _anc446 else None),
+                       anchor_day=_anc446, md_safe=_md_safe, resolve_market=_swing_resolve_market449)
+    except Exception as _e446:
+        # 라운드 441 — 삼킨 예외는 칸이 조용히 빠지는 자리다. 못 그렸으면 그렇다고 사유와 함께 적는다(§3).
+        st.caption(f"스윙 자동매매 칸을 그리지 못했습니다 — {type(_e446).__name__}: {_e446}")
+    st.stop()
+
+
 default_stock_no1 = engine_init.fetch_realtime_market_cap_no1_stock()
 
 # ── 좌측 설정 아코디언 (1~4단계) ─────────────────────────────────────────
@@ -2264,37 +2343,8 @@ if _uk.acc_row(_SB_STEPS[0], _sb_open, _sb_busy):
 #     (라운드 199 의 '보유 연동' 수정을 값으로 확인하려다 드러났다.)
 #     → 읽기와 쓰기를 **다른 이름**으로 가른다. 원격 노출은 종전대로
 #       둘 다 막는다(§9 — 공용 파일이 방문자끼리 새면 안 된다).
-ALLOW_LOCAL_READ = not is_remote_exposed()
-ALLOW_LOCAL_STORE = ALLOW_LOCAL_READ and not NO_LOCAL_WRITE
-
-if 'positions' not in st.session_state:
-    if ALLOW_LOCAL_READ:
-        _loaded, _saved_at = portfolio.load_positions()
-        st.session_state['positions'] = _loaded
-        st.session_state['positions_saved_at'] = _saved_at
-    else:
-        st.session_state['positions'] = []          # 방문자별로 비어서 시작
-        st.session_state['positions_saved_at'] = None
-
-if 'watchlist' not in st.session_state:
-    if ALLOW_LOCAL_READ:                 # 라운드 200 — 읽기는 막지 않는다
-        _wl, _ = portfolio.load_watchlist()
-        st.session_state['watchlist'] = _wl
-        st.session_state['watchlist_mtime'] = portfolio.watchlist_mtime()
-    else:
-        st.session_state['watchlist'] = []
-elif ALLOW_LOCAL_READ:
-    # 라운드 414 — 밤에 혼자 도는 갱신(scripts/refresh_watchlist.py)이 파일을 바꿨으면 세션도 따라간다.
-    #   세션은 처음 열 때 한 번 읽고 그 뒤로는 제 복사본만 봤다 — 그대로면 다음 저장(_wl_write)이 옛 스냅샷으로
-    #   파일을 덮어 밤의 갱신이 사라진다. 파일의 수정시각이 세션이 읽은 때와 다르면 다시 읽는다(매입가·수량은
-    #   저장 때마다 파일에 먼저 가므로 잃을 것이 없다 · 앱 자신의 저장은 _wl_write 가 수정시각을 같이 적어 둔다).
-    _mt414 = portfolio.watchlist_mtime()
-    if _mt414 and _mt414 != st.session_state.get('watchlist_mtime'):
-        _wl, _ = portfolio.load_watchlist()
-        st.session_state['watchlist'] = _wl
-        st.session_state['watchlist_mtime'] = _mt414
-
-
+#  라운드 453 — 두 정의와 세션의 보유·관심종목 적재는 **위로 올라갔다**(스윙 탭 갈림이 첫 네트워크 호출 앞으로
+#     가면서 그 갈림이 이 둘을 쓴다 · 시총 1위 조회 바로 앞). 이 주석은 그 자리의 설명으로 남긴다.
 # ── 관심종목 담기·보기·지우기 (라운드 135) ───────────────────────────
 # 종전에는 **'이 목록을 통째로 저장'** 하나뿐이었다. 한 종목을 담을 수도,
 # 하나만 뺄 수도 없었고, 그 버튼은 기존 목록을 **덮어썼다.**
@@ -3561,46 +3611,6 @@ if _theme_is_light != (_theme == 'light'):
     st.session_state['ui_theme'] = 'light' if _theme_is_light else 'dark'
     st.rerun()
 
-
-# ── 맨 위 탭 갈림 (라운드 446) — '스윙 자동매매' 탭이면 여기서 그 칸만 그리고 끝낸다 ──────────────
-# 이 칸은 **관제실**이다 — 주문은 따로 도는 워커(scripts/run_swing_worker.py)만 낸다(§432 ⑰ 이 이 파일에 주문 호출이 없는지
-#   본다). 판정은 새로 안 만든다 — 그날 개장 전 리포트의 중앙 판정을 그대로 옮긴다(swing_engine). 원격 접속에서는 못 바꾼다.
-#   넘기기에 쓰는 손절선·1차 매도가는 관심종목 표와 **같은 함수**(effective_hold_stop · snap_hold_trim)에서 읽는다(§4).
-def _swing_hold_levels446(code):
-    _row = next((w for w in _wl_items() if portfolio.normalize_code(w.get('code')) == code), None)
-    if not _row or not _row.get('snap_hold_at'):
-        return None
-    try:
-        _s, _t = float(_uk.effective_hold_stop(_row)[0]), float(_row.get('snap_hold_trim'))
-    except (TypeError, ValueError):
-        return None
-    return (_s, _t) if _s < _t else None
-
-
-def _swing_resolve_market449(code):
-    """계좌 보유를 앱 보유종목으로 가져올 때의 시장 판별 — 종목코드 반영 버튼과 같은 길(resolve_symbol → 단일 진입점
-    market_of · 접미사를 여기서 다시 읽지 않는다 · 라운드 159). 못 읽으면 None(§3)."""
-    try:
-        _t, _n = engine_init.resolve_symbol(code)
-        return _market_of(_t)
-    except Exception:                                          # noqa: BLE001
-        return None
-
-
-if st.session_state.get('top_view') == _TOP_VIEWS[1]:
-    st.header("스윙 자동매매")
-    try:
-        import premarket as _pm446
-        import swing_view as _swv446
-        _anc446 = _pm446.report_day()
-        _swv446.render(st, _uk, allow_read=ALLOW_LOCAL_READ, allow_write=ALLOW_LOCAL_STORE,
-                       hold_levels=_swing_hold_levels446,
-                       report=(_pm446.load_today_report(_anc446) if _anc446 else None),
-                       anchor_day=_anc446, md_safe=_md_safe, resolve_market=_swing_resolve_market449)
-    except Exception as _e446:
-        # 라운드 441 — 삼킨 예외는 칸이 조용히 빠지는 자리다. 못 그렸으면 그렇다고 사유와 함께 적는다(§3).
-        st.caption(f"스윙 자동매매 칸을 그리지 못했습니다 — {type(_e446).__name__}: {_e446}")
-    st.stop()
 
 # --- 관심종목 스캔 실행 (위젯은 위에서 이미 그렸고, 여기서 t_ref·rho 를 써서 돌린다) ---
 # 파라미터가 바뀌면 이전 스캔 결과는 더 이상 같은 스냅샷이 아니므로 폐기한다
