@@ -258,7 +258,8 @@ def protection_line(hb, now, managed_n, mode=None):
            else '지금 자동 관리 중인 종목은 없습니다(살 계획이 있어도 사지 않습니다)')
     last = f"마지막 기록 {_ts(hb['ts'])}" if hb and hb.get('ts') else '기록이 한 번도 없습니다'
     return (f"장이 열려 있는데 오늘 장 시작({op.strftime('%H:%M')}) 뒤 워커 기록이 없습니다 — {who} · {last}. "
-            "워커 창을 켜세요: python scripts/run_swing_worker.py --loop 60")
+            "워커 창을 켜세요: python scripts/run_swing_worker.py --loop 60 (평일 아침마다 혼자 돌게 하려면 "
+            "scripts/register_swing_worker_task.ps1 을 한 번 돌립니다)")
 
 
 def shadow_summary(c):
@@ -534,8 +535,9 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
             "실제로 닿아 본 적이 없어서, 첫 연결이 곧 첫 시험입니다. 모의투자 자격증명으로 모의투자 모드를 먼저 돌려 볼 수도 "
             "있습니다(건너뛰어도 실전은 켜집니다).\n"
             "4. 실전: 실전 자격증명 · 위험 한도 여섯 · 잠금 해제 문장 · 긴급정지 꺼짐이 모두 맞아야 켜집니다. 처음에는 거래당 "
-            "최대 손실을 작게 두기를 권합니다. 장중에 워커 창 하나를 켜 둡니다 — "
-            "`python scripts/run_swing_worker.py --loop 60`. '③ 주문·체결 이력'에서 계획 · 접수 · 체결 · 손절·목표가 계약대로 "
+            "최대 손실을 작게 두기를 권합니다. 워커는 평일 아침 Windows 작업(`gaeum-swing-worker` · "
+            "`scripts/register_swing_worker_task.ps1` 로 한 번 등록)이 정규장 마감까지 돌리고, 직접 켜려면 "
+            "`python scripts/run_swing_worker.py --loop 60` 입니다. '③ 주문·체결 이력'에서 계획 · 접수 · 체결 · 손절·목표가 계약대로 "
             "움직이는지 봅니다.\n"
             "5. 되돌리기: 모드를 '꺼짐'으로 두고 워커 창을 닫으면 새 주문은 나가지 않습니다. 이미 낸 주문은 증권사 앱에서 취소합니다."))
 

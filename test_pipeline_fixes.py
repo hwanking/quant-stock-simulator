@@ -36348,6 +36348,90 @@ finally:
             _os.remove(_f437)
 
 
+print()
+print("§438 워커가 평일 장중에 혼자 돈다 — --session 은 정규장 마감까지 돌고 마감 뒤 한 바퀴 더 · 휴장일엔 안 돈다 · Windows 작업 (라운드 452)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   라운드 414 의 규칙(주기적인 일은 사람이 아니라 내 몫 — 재는 길 한 곳 · Windows 작업 · 산출물 기록)을 워커에 적용했다. ① 장 시간은
+#   엔진 한 곳에서(평일 09:00~15:30 · 수능일 10:00~16:30 · 휴장일 None) ② --session 은 마감 전엔 돌고 마감을 지나면 **한 바퀴 더**(체결
+#   내역 맞춤) 돌고 끝난다 ③ 휴장일엔 바퀴 0 ④ --once 는 --session 과 무관 · --loop 없는 --session 은 종료 2 ⑤ 등록 스크립트가 그 인자로
+#   그 이름의 작업을 건다 ⑥ 저녁 작업은 그대로 --once --no-orders ⑦ 화면 경고가 등록 길을 가리킨다. 시계·sleep·바퀴는 끼워 넣고 잠금·실행
+#   기록은 _probe 아래로 돌린다(네트워크 0 · 사용자 파일 쓰기 0 · 장부는 **있는지만** 본다).
+import datetime as _dt438
+import importlib.util as _ilu438
+_spec438 = _ilu438.spec_from_file_location('run_swing_worker_438', _os.path.join(PROJ, 'scripts', 'run_swing_worker.py'))
+_rw438 = _ilu438.module_from_spec(_spec438)
+_spec438.loader.exec_module(_rw438)
+_KST438 = _dt438.timezone(_dt438.timedelta(hours=9))
+_w1 = _rw438.session_window(_dt438.datetime(2026, 10, 8, 10, 30, tzinfo=_KST438))
+_w2 = _rw438.session_window(_dt438.datetime(2026, 11, 19, 10, 30, tzinfo=_KST438))
+_w3 = _rw438.session_window(_dt438.datetime(2026, 10, 9, 10, 30, tzinfo=_KST438))
+check("① 장 시간은 엔진 한 곳에서 — 평일 09:00~15:30 · 수능일(2026-11-19) 10:00~16:30 · 휴장일(10-09 한글날) None",
+      _w1 is not None and (_w1[0].hour, _w1[0].minute, _w1[1].hour, _w1[1].minute) == (9, 0, 15, 30)
+      and _w2 is not None and (_w2[0].hour, _w2[0].minute, _w2[1].hour, _w2[1].minute) == (10, 0, 16, 30) and _w3 is None,
+      f'{_w1} {_w2} {_w3}')
+# ②③④ 끼워 넣은 시계로 — 머리 08:55 · 바퀴 09:00 · 09:01 · 15:29 · 15:31(마감 뒤) → 바퀴 4 · 그중 넷째가 마감 뒤 한 바퀴 · sleep 3 · 끝
+_ticks438 = iter([_dt438.datetime(2026, 10, 8, h, m, tzinfo=_KST438)
+                  for h, m in ((8, 55), (9, 0), (9, 1), (15, 29), (15, 31), (15, 32), (15, 33), (15, 34))])
+_calls438, _sleeps438 = [], []
+_tick_last438 = [None]
+
+
+def _clock438():
+    try:
+        _tick_last438[0] = next(_ticks438)
+    except StopIteration:
+        pass
+    return _tick_last438[0]
+
+
+def _cycle438(do_shadow, allow_orders=True):
+    _calls438.append((do_shadow, allow_orders))
+    return dict(mode='LIVE', anchor_day='2026-10-07', plans_new=0, shadow_updates=0, orders=[], exits=[], blocked=[], notes=[], alerts=[])
+
+
+_lock438, _runlog438 = _rw438.LOCK, _rw438.RUNLOG
+_rw438.LOCK = _os.path.join(PROJ, '_probe', '_r452_worker.lock')
+_rw438.RUNLOG = _os.path.join(PROJ, '_probe', '_r452_worker_run.txt')
+_env438 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)       # 워커는 쓰기 금지면 바로 끝난다 — 이 시험은 잠금·기록을 _probe 로 돌렸다
+_had_db438 = _os.path.exists(__import__('swing_ledger').PATH)
+try:
+    if not _had_db438:
+        skipped("②③④ --session 바퀴", "이 PC 에 스윙 장부가 없다 — 워커는 장부가 없으면 할 일이 없다고 끝난다(모드를 정한 적이 없음)")
+    else:
+        _rc438 = _rw438.main(['--session', '--loop', '60'], clock=_clock438, sleeper=_sleeps438.append, cycle=_cycle438)
+        check("② --session 은 마감 전엔 돌고, 마감을 지나면 한 바퀴 더(체결 내역 맞춤) 돌고 끝난다 — 바퀴 4 · sleep 3 · 첫 바퀴만 모의(일봉)",
+              _rc438 == 0 and len(_calls438) == 4 and _sleeps438 == [60, 60, 60]
+              and [c[0] for c in _calls438] == [True, False, False, False] and all(c[1] for c in _calls438),
+              f'rc={_rc438} calls={_calls438} sleeps={_sleeps438}')
+        _calls438.clear(); _sleeps438.clear()
+        _rc438h = _rw438.main(['--session', '--loop', '60'], clock=lambda: _dt438.datetime(2026, 10, 9, 8, 55, tzinfo=_KST438),
+                              sleeper=_sleeps438.append, cycle=_cycle438)
+        check("③ 휴장일(한글날)엔 바퀴 0 · sleep 0 · 종료 0", _rc438h == 0 and _calls438 == [] and _sleeps438 == [])
+        _calls438.clear()
+        _rc438o = _rw438.main(['--once', '--session', '--loop', '60'], clock=lambda: _dt438.datetime(2026, 10, 8, 10, 0, tzinfo=_KST438),
+                              sleeper=_sleeps438.append, cycle=_cycle438)
+        _rc438n = _rw438.main(['--session'], clock=_clock438, sleeper=_sleeps438.append, cycle=_cycle438)
+        check("④ --once 가 있으면 --session 과 무관하게 한 바퀴 · --session 에 --loop 가 없으면 종료 2(아무것도 안 한다)",
+              _rc438o == 0 and len(_calls438) == 1 and _rc438n == 2 and len(_calls438) == 1, f'{_rc438o} {_rc438n} {_calls438}')
+finally:
+    _rw438.LOCK, _rw438.RUNLOG = _lock438, _runlog438
+    if _env438 is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _env438
+    for _f438 in (_os.path.join(PROJ, '_probe', '_r452_worker.lock'), _os.path.join(PROJ, '_probe', '_r452_worker_run.txt')):
+        if _os.path.exists(_f438):
+            _os.remove(_f438)
+# ⑤⑥⑦ 글자 — 등록 스크립트 · 저녁 작업 · 화면 경고
+_ps438 = open(_os.path.join(PROJ, 'scripts', 'register_swing_worker_task.ps1'), encoding='utf-8').read()
+_nl438 = open(_os.path.join(PROJ, 'scripts', 'nightly_local.py'), encoding='utf-8').read()
+_sv438 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+check("⑤ 등록 스크립트가 'gaeum-swing-worker' 작업에 --session --loop 60 을 걸고 평일만 · 놓치면 켜질 때(StartWhenAvailable) · 해제 길이 있다",
+      '"gaeum-swing-worker"' in _ps438 and '--session --loop 60' in _ps438 and 'Monday, Tuesday, Wednesday, Thursday, Friday' in _ps438
+      and '-StartWhenAvailable' in _ps438 and '-Unregister' in _ps438 and 'Saturday' not in _ps438)
+check("⑥ 저녁 작업의 워커 단계는 그대로 주문 없이(--once --no-orders)", "'--once', '--no-orders'" in _nl438 or '--once --no-orders' in _nl438)
+check("⑦ 보호 매도 경고가 등록 길(register_swing_worker_task.ps1)을 가리킨다", 'register_swing_worker_task.ps1' in _sv438)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

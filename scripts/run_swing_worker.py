@@ -5,12 +5,16 @@
     python scripts/run_swing_worker.py --once                한 바퀴
     python scripts/run_swing_worker.py --loop 60             60초마다(끌 때까지) — 장중에 켜 둔다
     python scripts/run_swing_worker.py --once --no-orders    주문 없이 계획·모의·내역·계좌만 맞춘다(저녁 작업)
+    python scripts/run_swing_worker.py --session --loop 60   오늘 정규장 마감까지 60초마다 돌고, 마감 뒤 한 바퀴(체결 내역 맞춤) 더
+                                                             돌고 끝난다 — 작업 스케줄러가 평일 아침에 부른다(라운드 452 ·
+                                                             scripts/register_swing_worker_task.ps1). 휴장일이면 아무것도 안 하고 끝난다.
 
 화면(Streamlit)이 주문 반복을 돌리면 새로고침·세션 종료·rerun 에 끊긴다 — 그래서 따로 돈다. 같은 장부(`.portfolio/swing.db`)를
 화면과 같이 읽고 쓴다. 두 워커가 동시에 돌지 않게 잠금 파일을 **원자적으로** 만든다(O_EXCL). 반복 모드는 잠금이 잡혀 있으면 꺼지지
 않고 다음 간격에 다시 해 본다 — 저녁 작업이 잠깐 잡고 있다고 그날 보호가 사라지지 않게(2026-10-08 독립 검토).
 
-⚠️ 이 스크립트를 작업 스케줄러에 거는 것은 **사람이 한다**. 설정 화면의 모드가 꺼짐·기록만이면 증권사에 아무것도 안 보낸다.
+⚠️ 작업 스케줄러 등록은 `scripts/register_swing_worker_task.ps1` 한 번(라운드 452 — 라운드 414·415 의 저녁 작업과 같은 모양 ·
+Claude 예약 작업이 아니다). 설정 화면의 모드가 꺼짐·기록만이면 증권사에 아무것도 안 보낸다 — 그래서 등록돼 있어도 켜기 전엔 아무 일도 없다.
 자격증명은 저장소 밖(환경변수 또는 ~/.gaeum/kis.env)에서만 읽는다. 쓰기 금지(GAEUM_NO_LOCAL_WRITE=1)면 장부를 안 열고 끝난다.
 """
 import argparse
@@ -130,6 +134,18 @@ def one_cycle(do_shadow, allow_orders=True):
         c.close()
 
 
+def session_window(now):
+    """오늘 정규장 (시작, 마감) 시각 — 엔진 한 곳(`bitemporal_engine.session_times` · 수능일 10:00~16:30 포함 · 라운드 448).
+    휴장일이면 None. 시각은 한국 시각으로 견준다."""
+    import swing_executor as X
+    n = X.kst(now)
+    if not X.is_trading_day(n.date().isoformat()):
+        return None
+    op, cl = X._session_times(n.date())
+    return (n.replace(hour=op.hour, minute=op.minute, second=0, microsecond=0),
+            n.replace(hour=cl.hour, minute=cl.minute, second=0, microsecond=0))
+
+
 def _log(line):
     print(line)
     try:
@@ -139,14 +155,23 @@ def _log(line):
         pass
 
 
-def main(argv=None):
+def main(argv=None, clock=None, sleeper=None, cycle=None):
+    """clock() · sleeper(초) · cycle(do_shadow, allow_orders) 는 시험이 끼워 넣는다(기본은 실제 시계·sleep·one_cycle)."""
     _utf8()
+    clock = clock or (lambda: _dt.datetime.now().astimezone())
+    sleeper = sleeper or time.sleep
+    cycle = cycle or one_cycle
     ap = argparse.ArgumentParser()
     ap.add_argument('--once', action='store_true')
     ap.add_argument('--loop', type=int, default=0, help='초 간격(0 이면 한 바퀴)')
     ap.add_argument('--no-orders', action='store_true',
                     help='주문을 내지 않는다 — 계획·모의·체결 내역·계좌 맞춤만(저녁 작업이 쓴다)')
+    ap.add_argument('--session', action='store_true',
+                    help='오늘 정규장 마감까지 --loop 간격으로 돌고, 마감 뒤 한 바퀴(체결 내역 맞춤) 더 돌고 끝난다 — 작업 스케줄러용')
     a = ap.parse_args(argv)
+    if a.session and a.loop <= 0:
+        print('--session 에는 --loop 초 간격이 필요하다')
+        return 2
     if os.environ.get('GAEUM_NO_LOCAL_WRITE') == '1':
         print('쓰기 금지 — 장부를 열지 않고 끝낸다')
         return 0
@@ -156,17 +181,27 @@ def main(argv=None):
         print('장부가 없다 — 스윙 칸에서 모드를 정한 적이 없어 할 일이 없다(꺼짐)')
         return 0
     loop = a.loop > 0 and not a.once
+    end = None
+    if a.session and loop:
+        n0 = clock()
+        win = session_window(n0)
+        if win is None:
+            _log(f'[{n0:%m-%d %H:%M:%S}] 휴장일 — 워커를 안 돌린다')
+            return 0
+        end = win[1]
+        _log(f'[{n0:%m-%d %H:%M:%S}] 정규장 {win[0]:%H:%M}~{win[1]:%H:%M} — 마감까지 {a.loop}초마다 돌고 마감 뒤 한 바퀴 더')
     last_shadow_day = None
     while True:
-        now = _dt.datetime.now().astimezone()
-        if not acquire_lock():
+        now = clock()
+        past_close = end is not None and now >= end
+        if not acquire_lock(LOCK):
             _log(f'[{now:%m-%d %H:%M:%S}] 다른 워커가 돌고 있다 — 이번 바퀴는 건너뛴다'
                  + (f' · {a.loop}초 뒤 다시' if loop else ''))
         else:
             try:
                 # 기록만 모의(일봉 받기)는 하루 한 번이면 된다 — 장중 매 바퀴 일봉을 받지 않는다
                 do_shadow = last_shadow_day != now.date().isoformat()
-                out = one_cycle(do_shadow, allow_orders=not a.no_orders)
+                out = cycle(do_shadow, allow_orders=not a.no_orders)
                 if do_shadow:
                     last_shadow_day = now.date().isoformat()
                 _log(f"[{now:%m-%d %H:%M:%S}] {out['mode']} · 판정일 {out.get('anchor_day')} · 계획 +{out['plans_new']} · "
@@ -177,10 +212,13 @@ def main(argv=None):
             except Exception as e:                             # noqa: BLE001 — 한 바퀴가 죽어도 다음 바퀴는 돈다
                 _log(f'[{now:%m-%d %H:%M:%S}] 바퀴 실패 — {type(e).__name__}: {e}')
             finally:
-                release_lock()
+                release_lock(LOCK)
         if not loop:
             break
-        time.sleep(a.loop)
+        if past_close:
+            _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 한 바퀴를 돌았다 — 끝')
+            break
+        sleeper(a.loop)
     return 0
 
 
