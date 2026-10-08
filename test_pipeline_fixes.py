@@ -35943,6 +35943,62 @@ check("⑥ 화면 ⑥ 칸이 영수증·요약을 모듈에서 읽기만 한다(
       and 'proof_scorecard' not in open(_os.path.join(PROJ, 'swing_proof.py'), encoding='utf-8').read())
 
 
+print()
+print("§434 수능일 정규장 10:00~16:30 — 장 시간 표는 엔진 한 곳 · 장 상태·분석 기준일·판정일·자동매매가 같이 읽는다 (라운드 448)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   한국거래소는 수능 당일 정규장을 한 시간 늦춘다(10:00~16:30 · 보도 두 건으로 확인 · 2027학년도 수능 = 2026-11-19 · 실전 평가 구간 안).
+#   종전엔 15:30 상수 하나였다: 그날 15:30~16:30 에 ① 엔진이 '장 종료'로 읽어 분석 기준일이 그날로 넘어가고(장중 값으로 확정 종가)
+#   ② 꼬리 검사의 판정일이 한 시간 일찍 넘어가고 ③ 자동매매가 보호 매도를 쉰다(2026-10-08 독립 검토). 표는 엔진 한 곳이고 셋이
+#   그것을 부른다(§4). 평일은 한 글자도 안 바뀐다(양방향).
+import datetime as _dt434
+import bitemporal_engine as _be434
+import swing_executor as _sx434
+from scripts import trading_day as _td434
+
+_SUNEUNG434 = _dt434.date(2026, 11, 19)
+check("① 표 — 2026-11-19 는 10:00~16:30 · 다른 날은 09:00~15:30 · 못 읽는 날짜는 기본값",
+      _be434.session_times(_SUNEUNG434) == (_dt434.time(10, 0), _dt434.time(16, 30))
+      and _be434.session_times('2026-11-19') == (_dt434.time(10, 0), _dt434.time(16, 30))
+      and _be434.session_times(_dt434.date(2026, 11, 18)) == (_be434.MARKET_OPEN, _be434.MARKET_CLOSE)
+      and _be434.session_times('n/a') == (_be434.MARKET_OPEN, _be434.MARKET_CLOSE)
+      and _be434.KRX_SPECIAL_SESSIONS and all(isinstance(k, _dt434.date) for k in _be434.KRX_SPECIAL_SESSIONS))
+check("① 그 날짜는 거래일이다(휴장일 표와 어긋나지 않는다) · 목요일",
+      _be434.KrxCalendar().is_trading_day(_SUNEUNG434) and _SUNEUNG434.weekday() == 3)
+# ② 엔진 장 상태 — 그날 09:30 은 장 시작 전 · 16:00 은 장중 · 16:31 은 장 종료 / 전날은 종전 그대로
+_st = lambda y, m, d, hh, mm: _be434.get_market_status(_dt434.datetime(y, m, d, hh, mm))   # noqa: E731
+check("② 장 상태 — 수능일 09:30 '장 시작 전' · 16:00 '장중'(마감 안 됨) · 16:31 '장 종료' / 전날 16:00 은 '장 종료'(불변)",
+      _st(2026, 11, 19, 9, 30)['state'] == '장 시작 전' and _st(2026, 11, 19, 16, 0)['state'] == '장중'
+      and not _st(2026, 11, 19, 16, 0)['regular_market_closed'] and _st(2026, 11, 19, 16, 31)['state'] == '장 종료'
+      and _st(2026, 11, 18, 16, 0)['state'] == '장 종료' and _st(2026, 11, 18, 15, 30)['state'] == '장중')
+check("② 분석 기준일 — 수능일 16:00 은 아직 전 거래일(11-18) · 16:31 은 그날(11-19) / 전날 16:00 은 그날(불변)",
+      _be434.resolve_analysis_date(_dt434.datetime(2026, 11, 19, 16, 0)) == _dt434.date(2026, 11, 18)
+      and _be434.resolve_analysis_date(_dt434.datetime(2026, 11, 19, 16, 31)) == _SUNEUNG434
+      and _be434.resolve_analysis_date(_dt434.datetime(2026, 11, 18, 16, 0)) == _dt434.date(2026, 11, 18))
+# ③ 꼬리 검사의 판정일 — 그날 16:00 엔 아직 전 거래일 · 마감 시각도 16:30
+_K434 = _dt434.timezone(_dt434.timedelta(hours=9))
+check("③ 판정일 — 수능일 16:00 은 11-18 · 16:31 은 11-19 · session_end 는 16:30 / 평일 15:31 은 그날(불변)",
+      _td434.anchor_day(_dt434.datetime(2026, 11, 19, 16, 0, tzinfo=_K434)) == '2026-11-18'
+      and _td434.anchor_day(_dt434.datetime(2026, 11, 19, 16, 31, tzinfo=_K434)) == '2026-11-19'
+      and _td434.session_end('2026-11-19').time() == _dt434.time(16, 30)
+      and _td434.anchor_day(_dt434.datetime(2026, 11, 18, 15, 31, tzinfo=_K434)) == '2026-11-18'
+      and _td434.session_end('2026-11-18').time() == _be434.MARKET_CLOSE)
+# ④ 자동매매 — 그날 09:30 은 장 밖(안 산다) · 16:00 은 장 안(보호 매도가 돈다) / 평일 16:00 은 장 밖(불변)
+check("④ 자동매매 장 시간 — 수능일 09:30 밖 · 16:00 안 · 16:30 밖 / 평일 16:00 밖 · 10:00 안",
+      not _sx434.session_open(_dt434.datetime(2026, 11, 19, 9, 30, tzinfo=_K434))
+      and _sx434.session_open(_dt434.datetime(2026, 11, 19, 16, 0, tzinfo=_K434))
+      and not _sx434.session_open(_dt434.datetime(2026, 11, 19, 16, 30, tzinfo=_K434))
+      and not _sx434.session_open(_dt434.datetime(2026, 11, 18, 16, 0, tzinfo=_K434))
+      and _sx434.session_open(_dt434.datetime(2026, 11, 18, 10, 0, tzinfo=_K434)))
+# ⑤ 규칙은 한 곳 — 세 소비자가 엔진의 표를 부르고 10:00·16:30 을 다시 적지 않는다
+_td_src434 = open(_os.path.join(PROJ, 'scripts', 'trading_day.py'), encoding='utf-8').read()
+_sx_src434 = open(_os.path.join(PROJ, 'swing_executor.py'), encoding='utf-8').read()
+check("⑤ trading_day · swing_executor 가 session_times 를 부르고 특별 시각(16, 30)을 다시 적지 않는다 · 표는 엔진에 하나",
+      'session_times(' in _td_src434 and 'session_times(' in _sx_src434
+      and '16, 30' not in _td_src434 and '16, 30' not in _sx_src434
+      and open(_os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8').read().count('KRX_SPECIAL_SESSIONS = {') == 1)
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

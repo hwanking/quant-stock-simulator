@@ -64,16 +64,16 @@ def is_trading_day(day):
     return not is_non_trading_date(str(day)[:10])
 
 
-def _session_times():
-    from bitemporal_engine import MARKET_CLOSE, MARKET_OPEN
-    return MARKET_OPEN, MARKET_CLOSE
+def _session_times(day=None):
+    """그날의 (정규장 시작, 마감) — 엔진 한 곳(`bitemporal_engine.session_times` · 수능일 10:00~16:30 포함 · 라운드 448)."""
+    from bitemporal_engine import session_times
+    return session_times(day)
 
 
 def session_open(now):
-    """KRX 정규장 안인가 — 시각은 엔진의 상수 한 곳(09:00·15:30)을 부르고 **한국 시각**으로 견준다.
-    ⚠️ 거래소가 시간을 바꾸는 날(수능일 등)의 달력은 없다 — 그날 15:30 뒤에는 보호 매도도 쉰다(문서에 적었다)."""
+    """KRX 정규장 안인가 — 시각은 엔진의 표 한 곳(평일 09:00·15:30 · 수능일 10:00·16:30)을 부르고 **한국 시각**으로 견준다."""
     n = kst(now)
-    op, cl = _session_times()
+    op, cl = _session_times(n.date())
     return is_trading_day(n.date().isoformat()) and op <= n.time() < cl
 
 

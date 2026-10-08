@@ -610,6 +610,22 @@ KrxCalendarMock = KrxCalendar
 # 정규장 09:00~15:30 KST
 MARKET_OPEN = datetime.time(9, 0)
 MARKET_CLOSE = datetime.time(15, 30)
+#: 라운드 448 — 거래소가 정규장 시간을 바꾸는 날. 대학수학능력시험일에는 유가증권·코스닥 정규장이 10:00~16:30 으로 한 시간
+#:   늦춰진다(한국거래소 · 2023-11-16 등 매해 같은 조치 · 2026-10-08 보도 두 건으로 확인 · 2027학년도 수능 = 2026-11-19).
+#:   15:30~16:30 에 장 상태를 '장 종료'로 읽으면 분석 기준일이 그날로 넘어가 **장중 값으로 확정 종가를 만들고**, 자동매매는
+#:   그 한 시간 보호 매도를 쉰다(2026-10-08 독립 검토). 새 숫자가 아니라 거래소 공지의 시각이다 · 달력 사실은 여기 한 곳.
+KRX_SPECIAL_SESSIONS = {
+    datetime.date(2026, 11, 19): (datetime.time(10, 0), datetime.time(16, 30)),
+}
+
+
+def session_times(day):
+    """그 거래일의 (정규장 시작, 마감) — 특별 거래일이면 그 시각, 아니면 09:00·15:30. 날짜를 못 읽으면 기본값."""
+    try:
+        d = day if isinstance(day, datetime.date) else datetime.date.fromisoformat(str(day)[:10])
+    except (TypeError, ValueError):
+        return MARKET_OPEN, MARKET_CLOSE
+    return KRX_SPECIAL_SESSIONS.get(d, (MARKET_OPEN, MARKET_CLOSE))
 
 #: 라운드 430 — 두 시세 출처(네이버 기준 · 다음 대조)의 어긋남을 부르는 낱말 **한 곳**. 띠(0.1 · 0.3 · 1.0%)는 아래
 #:   `cross_validate` 가 쓰던 그 값 그대로이고 새로 고른 수가 아니다. 종전엔 같은 파일의 출처 표(`fetch_krx_price_with_matrix`)가
@@ -639,17 +655,18 @@ def get_market_status(now_kst=None):
     cal = KrxCalendar()
     is_td = cal.is_trading_day(now_kst.date())
     t = now_kst.time()
+    m_open, m_close = session_times(now_kst.date())     # 라운드 448 — 특별 거래일(수능일)은 10:00~16:30
     if not is_td:
         state = "휴장일"
-    elif t < MARKET_OPEN:
+    elif t < m_open:
         state = "장 시작 전"
-    elif t <= MARKET_CLOSE:
+    elif t <= m_close:
         state = "장중"
     else:
         state = "장 종료"
     return {
         "is_trading_day": is_td,
-        "regular_market_closed": (not is_td) or (t > MARKET_CLOSE),
+        "regular_market_closed": (not is_td) or (t > m_close),
         "state": state,
         "holiday_data_available": cal.holiday_data_available(now_kst.date()),
     }

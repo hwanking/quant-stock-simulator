@@ -44,12 +44,12 @@ MAX_BACK_DAYS = 30
 def anchor_day(now=None, max_back=MAX_BACK_DAYS):
     """마지막으로 정규장이 끝난 거래일 (ISO 문자열) · 못 구하면 None."""
     try:
-        from bitemporal_engine import MARKET_CLOSE
+        from bitemporal_engine import MARKET_CLOSE, session_times     # noqa: F401 — 마감 시각은 엔진 한 곳 · 특별 거래일도 거기서
     except Exception:                                          # noqa: BLE001
         return None
     now = now or datetime.now().astimezone()
     d = now.date()
-    if now.time() <= MARKET_CLOSE:      # 오늘 장은 아직 안 끝났다
+    if now.time() <= session_times(d)[1]:      # 오늘 장은 아직 안 끝났다 (라운드 448 — 수능일은 16:30)
         d -= timedelta(days=1)
     for _ in range(max_back):
         if not is_non_trading_date(d.isoformat()):
@@ -70,7 +70,7 @@ def session_end(day):
       **`session_end(D) 이후`** 라는 창이다. 마감 시각은 여기서도 다시 안 적는다.
     """
     try:
-        from bitemporal_engine import MARKET_CLOSE
+        from bitemporal_engine import MARKET_CLOSE, session_times     # noqa: F401
     except Exception:                                          # noqa: BLE001
         return None
     try:
@@ -78,7 +78,7 @@ def session_end(day):
         d = _date.fromisoformat(str(day))
     except (TypeError, ValueError):
         return None
-    return datetime.combine(d, MARKET_CLOSE).astimezone()
+    return datetime.combine(d, session_times(d)[1]).astimezone()
 
 
 def wall_date():
