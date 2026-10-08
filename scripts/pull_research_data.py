@@ -352,7 +352,13 @@ def data_members(path):
 #: (라운드 247 도 같은 파일을 손으로 합쳤다). 축소 가드도 못 막는다 — 받은 쪽이 더 길면 '늘었다'로 본다.
 #: 열쇠는 (종목코드 6자리, 기준일)이다 — 오염 점검이 이 파일의 중복을 세는 열쇠와 같다(R390 ·
 #: `ledger_view.scale_key` · 시장 접미사만 다른 같은 예측을 두 번 넣지 않는다).
-UNION_FILES = frozenset({'predictions.jsonl'})
+#: 라운드 445 — 시점 기록 넷을 더했다. 2026-10-07 클라우드 실행이 축적을 다 끝내고 **업로드에서 GitHub API 의 HTTP 500**
+#: 으로 죽어 그날의 전방 판정·그림자·시점 재무·잔여 호가가 릴리스에 안 실렸다. 판정일이 아직 10-07 인 이튿날 장 전에
+#: 이 PC 에서 같은 기록기를 돌려 되살렸는데(라운드 280 의 길), 그 행들은 **이 PC 에만** 있다. 통째로 덮으면 다음 되받기가
+#: 줄 수가 같아지는 날(클라우드가 다음 거래일 60줄을 더한 날) 그 하루를 조용히 지운다 — 축소 가드는 줄 수만 본다.
+#: 넷 다 (종목, 날짜)가 정체이고 기록기가 같은 열쇠로 멱등이다(`fin_pit.append_rows` · 전방 기록부의 오늘 이미 기록됨).
+UNION_FILES = frozenset({'predictions.jsonl', 'forward_registry.jsonl', 'forward_shadow.jsonl',
+                         'fin_pit.jsonl', 'book_pit.jsonl'})
 #: 줄 단위로 합치는 파일 (라운드 415) — 개장 전 리포트 이력은 **이 PC 의 앱만** 쓴다(클라우드는 옛 사본을 들고
 #: 다닌다 · 2026-10-02 실측: 이 PC 350줄 · 묶음 256줄 · 이 PC 에만 94줄 · 묶음에만 0). 종전 규칙(수정시각이 새 쪽이
 #: 통째로)은 지금은 이 PC 를 남기지만, 어느 쪽이든 고유 줄을 가진 날 진 쪽의 줄이 통째로 사라진다. 열쇠로 묶지 않고
@@ -422,7 +428,11 @@ def union_merge(incoming, local_lines):
             return None
         if not isinstance(r, dict):
             return None
-        return _lv392.scale_key(r.get('ticker'), r.get('date'))
+        # 라운드 445 — 시점 보관·그림자는 종목을 'code'(6자리)로 적는다. 날짜가 없거나 종목이 없으면 열쇠가 없다(못 읽은 줄과 같이 센다).
+        _tk = r.get('ticker') or r.get('code')
+        if not _tk or not r.get('date'):
+            return None
+        return _lv392.scale_key(_tk, r.get('date'))
 
     inc = [ln for ln in (s.strip() for s in incoming) if ln]
     have = {k for k in (_key(ln) for ln in inc) if k is not None}

@@ -35036,6 +35036,193 @@ check("④ 업데이트 내역 — 앞 4개 모듈과 뺀 수를 같이 싣고 �
       len(_ud430['modules']) == 4 and _ud430['modules_more'] == 3 and _ud430['related_more'] == 0
       and """(f" 외 {_dt_u['modules_more']}개" if _dt_u.get('modules_more') else '')""" in _w430)
 
+print()
+print("§431 업로드가 남의 서버 오류 한 번에 그날 축적을 잃었다 — 다시 하고 · 못 올리면 실행 산출물로 · 이 PC 에만 있는 시점 기록은 합친다 (라운드 445)")
+print("-" * 72)
+# ── 무엇이 있었나 ────────────────────────────────────────────────────────
+#   2026-10-07 클라우드 실행이 축적·검사를 다 통과하고 '새 스냅샷 올리기'에서 GitHub API 의 HTTP 500 을 받았다.
+#   `create || upload` 의 뒤쪽은 릴리스가 없으니 'release not found' — 그날 원장 +400 · 전방 판정 60 · 시점 보관이
+#   한꺼번에 사라졌다(R71c·R247·R253·R280 에 이어 다섯째 · 이번엔 예산도 순서도 아니고 남의 서버 한 번).
+#   판정일이 아직 10-07 인 이튿날 장 전에 이 PC 에서 같은 기록기로 되살렸는데(R280 의 길), 그 행은 이 PC 에만 있어
+#   통째로 덮는 되받기가 줄 수가 같아지는 날 조용히 지운다(축소 가드는 줄 수만 본다).
+#   ⚠️ 이 시뮬레이션의 첫 판이 진짜 gh 로 새서 **실제 릴리스를 만들었다**(Git Bash 의 PATH 는 콜론으로 갈라 `C:/…`
+#   항목이 깨진다 · 1분 안에 찾아 지웠다). 그래서 막힌 채로 시작한다 — 첫 줄에서 가짜가 잡혔는지 보고 아니면 99 ·
+#   토큰을 지우고 설정 폴더를 비우고 저장소를 없는 이름으로 · 임시 폴더는 _probe/ 아래. 그 막힘부터 심어서 본다.
+import shutil as _sh431
+import subprocess as _sp431
+import tempfile as _tf431
+import scripts.pull_research_data as _pr431                        # noqa: E402
+try:
+    import yaml as _y431
+    _wf431 = _y431.safe_load(open(_os.path.join(PROJ, '.github', 'workflows', 'daily_accumulate.yml'), encoding='utf-8'))
+except Exception as _e431:                                          # noqa: BLE001
+    _wf431 = None
+    skipped("§431 워크플로 단계 검사", f'YAML 을 못 읽었다 — {type(_e431).__name__}: {_e431}')
+_GH431 = r'''#!/usr/bin/env bash
+echo "gh $*" >> "$FAKE_STATE/calls"
+case "$1 $2" in
+  "release view") [ -f "$FAKE_STATE/created" ] && exit 0 || exit 1 ;;
+  "release create")
+    n=$(cat "$FAKE_STATE/creates" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE_STATE/creates"
+    case "$FAKE_MODE" in
+      flaky) if [ "$n" -eq 1 ]; then echo "HTTP 500" >&2; exit 1; fi; touch "$FAKE_STATE/created"; exit 0 ;;
+      ghost) touch "$FAKE_STATE/created"; if [ "$n" -eq 1 ]; then echo "HTTP 500" >&2; exit 1; fi; exit 0 ;;
+      *) echo "HTTP 500" >&2; exit 1 ;;
+    esac ;;
+  "release upload")
+    if [ "$FAKE_MODE" = down ]; then echo "HTTP 500" >&2; exit 1; fi
+    [ -f "$FAKE_STATE/created" ] && exit 0 || { echo "release not found" >&2; exit 1; } ;;
+esac
+exit 2
+'''
+_SL431 = '#!/usr/bin/env bash\necho "sleep $*" >> "$FAKE_STATE/calls"\nexit 0\n'
+_OLD431 = ('STAMP=$(date -u +%Y%m%d)\nZ="$AUDITED_ZIP"\n'
+           'gh release create "data-$STAMP" "$Z" --title t --notes n || gh release upload "data-$STAMP" "$Z" --clobber\n')
+_GUARD431 = ('export PATH="$FAKE_BIN:$PATH"\n'
+             '[ "$(command -v gh)" = "$FAKE_BIN/gh" ] || { echo "FAKE_NOT_RESOLVED"; exit 99; }\n'
+             '[ "$(command -v sleep)" = "$FAKE_BIN/sleep" ] || { echo "FAKE_NOT_RESOLVED"; exit 99; }\n')
+
+
+def _bash431():
+    for _c in (r'C:\Program Files\Git\bin\bash.exe', r'C:\Program Files\Git\usr\bin\bash.exe'):
+        if _os.path.exists(_c):
+            return _c
+    _w = _sh431.which('bash')
+    return _w if _w and 'system32' not in _w.lower() else None
+
+
+def _px431(p):
+    p = p.replace('\\', '/')
+    return ('/' + p[0].lower() + p[2:]) if len(p) > 1 and p[1] == ':' else p
+
+
+#: 내려받기 단계용 가짜 — `gh api`(목록)와 `gh release download` 만 흉내 낸다
+_GHR431 = r'''#!/usr/bin/env bash
+echo "gh $*" >> "$FAKE_STATE/calls"
+if [ "$1" = api ]; then
+  n=$(cat "$FAKE_STATE/lists" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE_STATE/lists"
+  case "$FAKE_MODE" in
+    listfail) echo "HTTP 500" >&2; exit 1 ;;
+    listflaky) if [ "$n" -eq 1 ]; then echo "HTTP 500" >&2; exit 1; fi ;;
+    empty) exit 0 ;;
+  esac
+  printf '2026-10-06T16:28:16Z\tdata-20261006\n'; exit 0
+fi
+if [ "$1 $2" = "release download" ]; then
+  [ "$FAKE_MODE" = dlfail ] && { echo "HTTP 500" >&2; exit 1; } || exit 0
+fi
+exit 2
+'''
+#: 라운드 445 전의 목록 읽기 (`|| true`) — 같은 가짜로 돌려 결함이 재현되는지 본다
+_OLDR431 = ('mkdir -p .portfolio\n'
+            'gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq x > /tmp/snaps.tsv || true\n'
+            'TAG=$(sort /tmp/snaps.tsv | tail -1 | cut -f2)\n'
+            'if [ -n "$TAG" ]; then gh release download "$TAG" -D . --clobber; else echo "이전 스냅샷 없음 — 빈 원장으로 시작"; fi\n')
+
+
+def _sim431(script, mode, fake=True, gh_body=None):
+    """업로드 스크립트를 가짜 gh·sleep 으로 돌린다 → (종료 코드, 가짜가 받은 호출 목록). 진짜로 새지 않게 막혀 있다."""
+    _pd = _os.path.join(PROJ, '_probe')
+    _os.makedirs(_pd, exist_ok=True)
+    _d = _tf431.mkdtemp(prefix='_r445_sim_', dir=_pd)
+    try:
+        _fk, _st, _cf = (_os.path.join(_d, x) for x in ('bin', 'state', 'ghcfg'))
+        for _x in (_fk, _st, _cf):
+            _os.makedirs(_x)
+        if fake:
+            for _n, _b in (('gh', gh_body or _GH431), ('sleep', _SL431)):
+                with open(_os.path.join(_fk, _n), 'w', encoding='utf-8', newline='\n') as _f:
+                    _f.write(_b)
+        _z = _os.path.join(_d, 'research_data_test.zip')
+        open(_z, 'wb').write(b'PK')
+        _sp = _os.path.join(_d, 'step.sh')
+        with open(_sp, 'w', encoding='utf-8', newline='\n') as _f:
+            # 내려받기 단계의 /tmp 를 임시 폴더 안으로(시험이 셸의 /tmp 를 안 건드리게)
+            _f.write(_GUARD431 + script.replace('/tmp/snaps.tsv', '$FAKE_STATE/snaps.tsv'))
+        _env = {k: v for k, v in _os.environ.items() if k not in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN')}
+        _env.update(FAKE_STATE=_px431(_st), FAKE_MODE=mode, FAKE_BIN=_px431(_fk), AUDITED_ZIP=_px431(_z),
+                    GH_CONFIG_DIR=_cf, GH_REPO='invalid.invalid/none', GITHUB_REPOSITORY='invalid.invalid/none',
+                    GIT_DIR=_os.path.join(_d, 'nogit'))
+        _r = _sp431.run([_bash431(), '-e', _px431(_sp)], capture_output=True, text=True, env=_env, cwd=_d,
+                        encoding='utf-8', errors='replace', timeout=60)
+        _cp = _os.path.join(_st, 'calls')
+        _calls = open(_cp, encoding='utf-8').read().splitlines() if _os.path.exists(_cp) else []
+        return _r.returncode, _calls, _r.stdout.strip()
+    finally:
+        _sh431.rmtree(_d, ignore_errors=True)
+
+
+if _wf431 is not None:
+    _st431 = _wf431['jobs']['accumulate']['steps']
+    _nm431 = [s.get('name') for s in _st431]
+    _iu431 = _nm431.index('새 스냅샷 올리기')
+    _up431, _af431 = _st431[_iu431], _st431[_iu431 + 1]
+    check("② 업로드 단계에 id 가 있고, 바로 다음 단계가 **그 단계가 실패했을 때만** 검사된 zip 을 실행 산출물로 남긴다",
+          _up431.get('id') == 'upload' and 'upload-artifact' in str(_af431.get('uses'))
+          and "steps.upload.outcome == 'failure'" in str(_af431.get('if'))
+          and 'AUDITED_ZIP' in str((_af431.get('with') or {}).get('path')), str(_af431)[:200])
+    check("② 업로드 단계는 여전히 §9 감사가 연 그 zip 만 올린다 (다시 만들지 않는다 · R281)",
+          'Z="$AUDITED_ZIP"' in _up431['run']
+          and not any(_ln.strip().startswith(('zip ', 'python -m zipfile', '7z ')) for _ln in _up431['run'].splitlines()))
+    if _bash431() is None:
+        skipped("§431 ① 업로드 단계 시뮬레이션", 'Git Bash 를 못 찾았다 — 가짜 gh 로 돌릴 셸이 없다')
+    else:
+        _new431 = _up431['run']
+        _rc0, _c0, _o0 = _sim431(_new431, 'flaky', fake=False)
+        check("① 막힘(심기) — 가짜가 안 잡히면 첫 줄에서 99 로 멈추고 아무 gh 도 부르지 않는다 (진짜 릴리스로 새지 않는다)",
+              _rc0 == 99 and len(_c0) == 0, f'rc={_rc0} calls={_c0}')
+        _rco, _co, _oo = _sim431(_OLD431, 'flaky')
+        _rcn, _cn, _on = _sim431(_new431, 'flaky')
+        check("① 2026-10-07 의 모양(첫 만들기 500 · 릴리스 안 생김) — 옛 `create || upload` 는 실패 · 새 단계는 다시 만들어 성공",
+              _rco != 0 and _rcn == 0 and sum(c.startswith('gh release create') for c in _cn) == 2, f'옛 {_rco} {_co} · 새 {_rcn} {_cn}')
+        _rcg, _cg, _og = _sim431(_new431, 'ghost')
+        check("① 500 인데 릴리스는 생긴 경우 — 다시 만들지 않고 있는지 먼저 보고 올린다",
+              _rcg == 0 and any(c.startswith('gh release upload') for c in _cg)
+              and sum(c.startswith('gh release create') for c in _cg) == 1, str(_cg))
+        _rcd, _cd, _od = _sim431(_new431, 'down')
+        check("① 끝내 실패하면 실패로 끝난다(성공으로 꾸미지 않는다) · 만들기 세 번 · 마지막 뒤엔 기다리지 않는다",
+              _rcd != 0 and sum(c.startswith('gh release create') for c in _cd) == 3
+              and sum(c.startswith('sleep') for c in _cd) == 2 and not _cd[-1].startswith('sleep'), str(_cd))
+        # ④ 첫머리 내려받기 — 목록을 못 읽은 것을 '스냅샷 없음'으로 읽지 않는다
+        _rs431 = _st431[_nm431.index('지난 원장 내려받기 (없으면 새로 시작)')]['run']
+        _rcR0, _cR0, _oR0 = _sim431(_OLDR431, 'listfail', gh_body=_GHR431)
+        _rcR1, _cR1, _oR1 = _sim431(_rs431, 'listfail', gh_body=_GHR431)
+        check("④ 목록 읽기가 계속 실패하면 — 옛 단계는 '빈 원장으로 시작'(성공) · 새 단계는 세 번 읽고 멈춘다(빈 원장으로 안 간다)",
+              _rcR0 == 0 and '빈 원장으로 시작' in _oR0
+              and _rcR1 != 0 and '빈 원장으로 시작' not in _oR1.replace('빈 원장으로 시작하지 않는다', '')
+              and sum(c.startswith('gh api') for c in _cR1) == 3,
+              f"옛 {_rcR0} {_oR0[-60:]!r} · 새 {_rcR1} 목록 {sum(c.startswith('gh api') for c in _cR1)}회 {_oR1[-90:]!r}")
+        _rcR2, _cR2, _oR2 = _sim431(_rs431, 'listflaky', gh_body=_GHR431)
+        check("④ 한 번 실패하고 다음에 읽히면 — 그 스냅샷을 받아 이어간다",
+              _rcR2 == 0 and any(c.startswith('gh release download data-20261006') for c in _cR2), str(_cR2))
+        _rcR3, _cR3, _oR3 = _sim431(_rs431, 'empty', gh_body=_GHR431)
+        check("④ 목록을 **읽었는데** 후보가 없을 때만 빈 원장으로 시작한다 (처음 도는 저장소)",
+              _rcR3 == 0 and '이전 스냅샷 없음' in _oR3 and not any('download' in c for c in _cR3), _oR3[-120:])
+        _rcR4, _cR4, _oR4 = _sim431(_rs431, 'dlfail', gh_body=_GHR431)
+        check("④ 스냅샷 내려받기가 끝내 실패해도 빈 원장으로 가지 않고 멈춘다",
+              _rcR4 != 0 and sum('release download' in c for c in _cR4) == 3, str(_cR4))
+# ③ 되받기 — 이 PC 에만 있는 시점 기록은 열쇠로 합친다
+check("③ 합집합 파일에 시점 기록 넷(전방 기록부 · 그림자 · 시점 재무 · 잔여 호가)이 든다 (예측 원장은 그대로)",
+      {'predictions.jsonl', 'forward_registry.jsonl', 'forward_shadow.jsonl', 'fin_pit.jsonl', 'book_pit.jsonl'}
+      <= set(_pr431.UNION_FILES))
+import json as _js431
+_inc431 = [_js431.dumps(dict(ticker='005930.KS', date=d, v='cloud')) for d in ('2026-10-06', '2026-10-08')]
+_loc431 = [_js431.dumps(dict(ticker='005930.KS', date=d, v='local')) for d in ('2026-10-06', '2026-10-07')]
+_m431, _c431 = _pr431.union_merge(_inc431, _loc431)
+check("③ 줄 수가 같은 날(받은 2 · 이 PC 2) — 이 PC 에만 있는 날(10-07)이 남고 같은 열쇠는 받은 쪽을 쓴다",
+      len(_m431) == 3 and _c431['local_only'] == 1 and _c431['local_dup'] == 1
+      and any('2026-10-07' in ln for ln in _m431) and sum('"local"' in ln for ln in _m431) == 1, str(_c431))
+_incc431 = [_js431.dumps(dict(code='005930', date='2026-10-06', x=1))]
+_locc431 = [_js431.dumps(dict(code='005930', date='2026-10-06', x=1)),
+            _js431.dumps(dict(code='005930', date='2026-10-07', x=2)),
+            _js431.dumps(dict(code='005930', x=3)), _js431.dumps(dict(code='005930', x=4))]
+_mc431, _cc431 = _pr431.union_merge(_incc431, _locc431)
+check("③ 'code' 로 적는 시점 보관도 같은 열쇠 · 날짜 없는 줄은 하나로 뭉치지 않고 못 읽은 줄로 남는다",
+      _cc431['local_only'] == 1 and _cc431['local_dup'] == 1 and _cc431['local_unparsed'] == 2 and len(_mc431) == 4,
+      str(_cc431))
+check("③ 멱등 — 합친 결과를 받은 쪽으로 다시 넣어도 늘지 않는다",
+      len(_pr431.union_merge(_m431, _loc431)[0]) == len(_m431))
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
