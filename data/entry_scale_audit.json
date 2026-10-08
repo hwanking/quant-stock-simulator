@@ -1,16 +1,16 @@
 {
- "made": "2026-10-06",
- "made_at": "2026-10-06 03:08",
- "ledger_rows": 257530,
+ "made": "2026-10-07",
+ "made_at": "2026-10-07 01:25",
+ "ledger_rows": 257930,
  "min_rows": 20,
  "eps": 0.01,
- "took_sec": 110.5,
+ "took_sec": 202.5,
  "measured": 1422,
  "unread": 0,
  "unread_sample": [],
  "clean": 1402,
  "offenders": 20,
- "offender_rows": 3005,
+ "offender_rows": 3010,
  "offender_codes": [
   "051980.KQ",
   "042940.KQ",
@@ -21,11 +21,11 @@
   "046070.KQ",
   "441800.KS",
   "052710.KQ",
-  "220100.KQ",
   "000880.KS",
   "001290.KS",
   "183300.KQ",
   "385560.KS",
+  "220100.KQ",
   "036800.KQ",
   "441680.KS",
   "441640.KS",
@@ -2830,7 +2830,7 @@
  "tickers": 1549,
  "small_measured": 127,
  "small_unread": 0,
- "small_rows": 1538,
+ "small_rows": 1572,
  "small_offenders": 22,
  "small_offender_codes": [
   "472150.KS",
@@ -2905,20 +2905,20 @@
    "pinned_pct": 98.7
   },
   "002780.KS": {
-   "n": 298,
-   "matched": 298,
+   "n": 299,
+   "matched": 299,
    "median_mult": 10.0,
    "off": 292,
-   "off_pct": 98.0,
-   "pinned_pct": 98.3
+   "off_pct": 97.7,
+   "pinned_pct": 98.0
   },
   "290650.KQ": {
-   "n": 201,
-   "matched": 201,
+   "n": 202,
+   "matched": 202,
    "median_mult": 0.9685,
    "off": 197,
-   "off_pct": 98.0,
-   "pinned_pct": 37.8
+   "off_pct": 97.5,
+   "pinned_pct": 37.6
   },
   "046070.KQ": {
    "n": 76,
@@ -2943,14 +2943,6 @@
    "off": 108,
    "off_pct": 96.4,
    "pinned_pct": 89.3
-  },
-  "220100.KQ": {
-   "n": 101,
-   "matched": 101,
-   "median_mult": 0.8333,
-   "off": 97,
-   "off_pct": 96.0,
-   "pinned_pct": 96.0
   },
   "000880.KS": {
    "n": 113,
@@ -2984,6 +2976,14 @@
    "off_pct": 95.2,
    "pinned_pct": 35.7
   },
+  "220100.KQ": {
+   "n": 102,
+   "matched": 102,
+   "median_mult": 0.8333,
+   "off": 97,
+   "off_pct": 95.1,
+   "pinned_pct": 95.1
+  },
   "036800.KQ": {
    "n": 114,
    "matched": 114,
@@ -3001,20 +3001,20 @@
    "pinned_pct": 16.7
   },
   "441640.KS": {
-   "n": 31,
-   "matched": 31,
+   "n": 32,
+   "matched": 32,
    "median_mult": 0.9846,
    "off": 27,
-   "off_pct": 87.1,
-   "pinned_pct": 9.7
+   "off_pct": 84.4,
+   "pinned_pct": 9.4
   },
   "458760.KS": {
-   "n": 24,
-   "matched": 24,
+   "n": 25,
+   "matched": 25,
    "median_mult": 0.9835,
    "off": 20,
-   "off_pct": 83.3,
-   "pinned_pct": 8.3
+   "off_pct": 80.0,
+   "pinned_pct": 8.0
   },
   "340570.KQ": {
    "n": 140,
