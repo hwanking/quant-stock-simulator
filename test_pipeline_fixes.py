@@ -26396,20 +26396,25 @@ print("-" * 72)
 #   *"이 조건을 풀어야 한다"* 로 읽히지 않게 스스로 말한다 — R223 이 업종 적중에서
 #   겪은 자리(숫자만 보여 주면 그게 판단이 된다).
 _w327 = _read148(_os.path.join(PROJ, 'web_app.py'))
-check("오늘 후보를 **조건별로 세는** 줄이 있다 (종목별 나열만으로는 무엇이 막는지 모른다)",
-      '_cnt316, _tot316 = {}, 0' in _w327
+# 라운드 450 — 세는 규칙이 `ui_kit.top_blocker` 한 곳으로 올라갔다(스윙 칸의 '실주문 자격 0' 줄이 같은 것을 부른다 · §4).
+#   종전 락은 인라인 변수 글자(`_cnt316, _tot316 = {}, 0`)를 못 박아 그 이동에 깨졌다(R98b) — 성질로 옮긴다: 그 한 곳을
+#   **부르고** 분모·사유가 같은 문장에 있다. 규칙 자체(수가 같으면 이름 순 · 기록 없는 후보는 분모에서 뺀다)는 §436 ② 가 값으로 잰다.
+check("오늘 후보를 **조건별로 세는** 줄이 있다 (종목별 나열만으로는 무엇이 막는지 모른다) — 세는 규칙은 ui_kit.top_blocker 한 곳",
+      '_uk.top_blocker(' in _w327
       and '가장 많이 막은 조건은' in _w327)
 check("수는 **분모와 함께** 낸다 (N/M종목 · 분모 없는 수를 안 적는다 · §3)",
       '({_top316[1]}/{_tot316}종목)' in _w327)
-check("후보가 없으면 그 줄을 안 만든다 (0종목 중 0 같은 말을 안 한다)",
-      'if _tot316 and _cnt316:' in _w327)
+import ui_kit as _uk327
+check("후보가 없으면 그 줄을 안 만든다 (0종목 중 0 같은 말을 안 한다) — top_blocker 가 None 을 내고 화면은 그때만 줄을 만든다",
+      'if _top316:' in _w327 and _uk327.top_blocker([]) is None and _uk327.top_blocker([[], None]) is None
+      and _uk327.top_blocker([['a']]) == ('a', 1, 1))
 check("그 줄이 **판단으로 읽히지 않게** 스스로 말한다 (R223 의 그 자리)",
       '어느 조건을 풀어야 한다는 뜻이 ' in _w327 and '아닙니다' in _w327)
 check("이어 붙인 문장이 `_md_safe` 를 지난다 (§308)",
       'st.caption(_md_safe(\n                f"오늘 후보 {_tot316}종목을' in _w327)
 # 조건 목록은 여전히 중앙 판정이 만든다 — 화면은 **세기만** 한다 (§4)
 check("화면이 조건을 다시 적지 않는다 — `core.checks` 를 읽어서 센다",
-      "_ck316 = (_g316.get('core') or {}).get('checks') or []" in _w327)
+      "(_g316.get('core') or {}).get('checks')" in _w327)
 
 print("\n" + "=" * 72)
 print("§328 R319 — 죽은 칸 16개를 전부 눈으로 봤다 · 살아 있는 × 1.03 은 도달 불가였다 (2026-09-16)")
@@ -36070,6 +36075,157 @@ check("⑥ 실전 전환 거부 경고가 미달 항목 이름과 채우는 자�
       "'실전으로 바꾸지 않았습니다 — 미달 ' + ' · '.join(_miss)" in _sv435 and '다시 고르세요' in _sv435
       and [n for n, ok, w in __import__('swing_executor').live_readiness({}, {}) if not ok]
       == ['한국투자 실전 자격증명', '위험 한도 여섯', '실전 잠금 해제'])
+
+
+print()
+print("§436 스윙 칸 — 오늘 상태 · 중앙 판정 조건 전부 · 수량 미리보기 · 자격 0 인 날의 가장 많이 막은 조건 · 계좌↔앱 보유 대조 · 보호 매도 사실 (라운드 450)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   외부 검토가 짚은 자리 중 새 문턱 없이 **이미 있는 값**으로 되는 것만: ① 계획이 중앙 판정의 조건 기록(checks)을 같이 든다(R312·R316 과
+#   같은 규칙 · 없으면 None) ② '가장 많이 막은 조건' 셈은 `ui_kit.top_blocker` 한 곳 — 추천 절(R316)과 스윙 칸이 같은 것을 부른다(§4)
+#   ③ 계좌↔앱 보유 대조는 사실만(덮어쓰지 않는다) ④ 수량 미리보기는 워커와 같은 함수(`swing_risk.size`) ⑤ 오늘 상태는 계약의 대기
+#   창(연구 산출물)으로 ⑥ 보호 매도는 워커가 내므로 장이 열려 있는데 오늘 장 시작 뒤 기록이 없으면 그 사실을 적는다(문턱 없음 — 기준은
+#   장 시작 시각 한 곳) ⑦ 화면(자식 프로세스 렌더). 네트워크 0 · 사용자 파일 쓰기 0.
+import swing_engine as _se436
+import swing_view as _sv436
+import swing_ledger as _sl436
+import swing_risk as _sr436
+import ui_kit as _uk436
+import portfolio as _pf436
+
+# ① 계획이 조건 기록을 든다 — checks 에서만 센다 · 없으면 None
+_pick436 = dict(symbol='000001.KS', name='a', asset_type='stock',
+                core=dict(recommended=False, bucket='추천 제외', exclude_reason='x', headline='h', buy_zone=[9900, 10100],
+                          new_target=11000.0, new_stop=9500.0, horizon_days=20, expected_return=-0.31, wait_curable=False,
+                          current_price=10500.0,
+                          checks=[dict(name='권장 매수가 산출', ok=True), dict(name='비용 차감 기대값 양수', ok=False),
+                                  dict(name='펀더멘털 밸류 검증', ok=False)]))
+_pl436 = _se436.plan_from_pick(_pick436, '2026-10-07', 'v', '2026-10-07', 20)
+_v436 = _pl436['verdict']
+check("① 계획의 verdict 가 checks 수 · 미충족 이름 전부 · 비용 차감 기대값 · 기다려 풀리는지 · 현재가를 든다 (R312·R316 과 같은 규칙)",
+      _v436.get('checks_n') == 3 and _v436.get('failed') == ['비용 차감 기대값 양수', '펀더멘털 밸류 검증']
+      and _v436.get('expected_return') == -0.31 and _v436.get('wait_curable') is False and _v436.get('current_price') == 10500.0,
+      str(_v436))
+_pl436b = _se436.plan_from_pick(dict(_pick436, core=dict(_pick436['core'], checks=None)), '2026-10-07', 'v', '2026-10-07', 20)
+check("① 조건 기록이 없으면 None — 0 이나 빈 목록으로 채우지 않는다(§3)",
+      _pl436b['verdict'].get('checks_n') is None and _pl436b['verdict'].get('failed') is None)
+# ② 세는 규칙 한 곳 — 추천 절이 그것을 부르고 인라인 셈은 사라졌다
+check("② top_blocker — 수가 같으면 이름 순 · 조건 기록 없는 후보(None)는 분모에서 뺌 · 미충족 0 이면 None",
+      _uk436.top_blocker([['a', 'b'], ['b'], None, []]) == ('b', 2, 3) and _uk436.top_blocker([]) is None
+      and _uk436.top_blocker([[], []]) is None and _uk436.top_blocker([['z'], ['a']]) == ('a', 1, 2))
+_w436 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("② 추천 절(R316)이 ui_kit.top_blocker 를 부르고 인라인 셈(_cnt316)은 없다",
+      '_uk.top_blocker(' in _w436 and '_cnt316' not in _w436)
+# ③ 계좌↔앱 보유 대조 — 사실만 · 여섯 모양
+_acct436 = [dict(code='000001', name='a', qty=10, avg_price=1000.0), dict(code='000002', name='b', qty=0, avg_price=5.0),
+            dict(code='000003', name='c', qty=5, avg_price=2001.0), dict(code='000005', name='e', qty=3, avg_price=500.0),
+            dict(code='000006', name='f', qty=1, avg_price=7.0)]
+_app436 = [_pf436.PortfolioPosition(ticker='000001.KS', stock_name='a', market='KOSPI', quantity=10.0, average_buy_price=1000.004),
+           _pf436.PortfolioPosition(ticker='000003.KQ', stock_name='c', market='KOSDAQ', quantity=5.0, average_buy_price=2000.0),
+           _pf436.PortfolioPosition(ticker='000004.KS', stock_name='d', market='KOSPI', quantity=1.0, average_buy_price=10.0),
+           _pf436.PortfolioPosition(ticker='000005.KS', stock_name='e', market='KOSPI', quantity=2.0, average_buy_price=500.0)]
+_d436 = {r['code']: r['status'] for r in _sv436.holdings_diff(_acct436, _app436)}
+check("③ holdings_diff — 같음 · 평단 다름 · 수량 다름 · 앱에만 · 계좌에만 · 수량 0 인 계좌 행은 뺌 (덮어쓰기 없음 · 순수 함수)",
+      _d436 == {'000001': '같음', '000003': '평단 다름', '000004': '앱에만(계좌에 없음 — 팔았거나 다른 계좌)',
+                '000005': '수량 다름', '000006': '계좌에만(앱 보유종목에 없음)'}, str(_d436))
+# ④⑤ 계획 표 — 수량 미리보기는 워커와 같은 함수 · 오늘 상태는 계약의 대기 창 · 옛 칸 이름은 없다
+_c436 = _sl436.connect(':memory:')
+_lim436 = dict(risk_per_trade_krw='100000', max_position_pct='10', max_total_exposure_pct='50', min_cash_pct='10',
+               max_open_positions='3', max_daily_new_orders='2')
+_sl436.add_plan(_c436, dict(plan_id='P-ok', data_day='2026-10-07', code='000001', name='a', spec='SWING_V1', entry=10000, target=11000,
+                            stop=9500, horizon=20, wait_bars=20, live_ok=True, verdict=dict(failed=[], checks_n=11)))
+_sl436.add_plan(_c436, dict(plan_id='P-no', data_day='2026-10-07', code='000002', name='b', spec='SWING_V1', entry=5000, target=5500,
+                            stop=4800, horizon=20, wait_bars=20, live_ok=False, block_reason='추천 아님',
+                            verdict=dict(failed=['비용 차감 기대값 양수'], checks_n=11)))
+_acc436 = dict(ts='2026-10-08T09:00:00+09:00', cash=10_000_000.0, total_eval=10_000_000.0, stock_eval=0.0)
+_day436, _rows436 = _sv436.plan_rows(_c436, today_day='2026-10-08', account=_acc436, limits=_lim436, cost_pct=0.41)
+_r436 = {r['종목']: r for r in _rows436}
+_sz436 = _sr436.size(10000, 9500, _acc436, _lim436, 0.41)
+check("④ 수량 미리보기 = swing_risk.size 와 같은 수(정한 제한까지) · 손절 시 손실 · 매수 뒤 주식 비중 · 자격 없는 계획은 '—'",
+      _sz436['qty'] == 100 and _r436['a (000001)']['수량 미리보기'].startswith('100주') and '종목당 비중' in _r436['a (000001)']['수량 미리보기']
+      and _r436['a (000001)']['손절 시 손실(손절가 체결 가정)'].startswith(f"{_sz436['planned_loss']:,.0f}원")
+      and '매수 뒤 주식 비중 10.0%' in _r436['a (000001)']['손절 시 손실(손절가 체결 가정)']
+      and _r436['b (000002)']['수량 미리보기'] == '—', str(_r436))
+check("④ 계좌·한도가 없으면 미리보기 '—' (지어내지 않는다) · 중앙 판정 조건은 통과 수와 미충족 전부(fail_label) · 옛 칸 이름 없음",
+      _sv436.plan_rows(_c436, today_day='2026-10-08')[1][0]['수량 미리보기'] == '—'
+      and _r436['a (000001)']['중앙 판정 조건'] == '11/11 통과 · 미충족 없음'
+      and _r436['b (000002)']['중앙 판정 조건'] == "10/11 통과 · 미충족: '비용 차감 기대값 양수' 미충족"
+      and '기록만 모의' not in _rows436[0] and '연구 모의(일봉)' in _rows436[0])
+check("⑤ 오늘 상태 — 판정일 다음 거래일은 '진입 대기 1/20' · 자격 없음은 '실주문 없음' · 보유 중 · 대기 기간 지남",
+      _r436['a (000001)']['오늘 상태'].startswith('진입 대기 1/20거래일째') and _r436['b (000002)']['오늘 상태'] == '실주문 없음'
+      and _sv436.plan_status(dict(live_ok=True, data_day='2026-10-07', wait_bars=20), '2026-10-08', held=True) == '보유 중(자동 관리)'
+      and _sv436.plan_status(dict(live_ok=True, data_day='2026-10-07', wait_bars=20), '2026-10-07') == '판정일 — 다음 거래일부터 지정가 주문'
+      and _sv436.plan_status(dict(live_ok=True, data_day='2026-08-01', wait_bars=20), '2026-10-08').startswith('대기 기간(20거래일) 지남'))
+# 자격 0 인 날 — 가장 많이 막은 조건(한 곳) · 하나라도 자격이 있으면 줄 없음
+_z436 = _sv436.zero_day_line(_c436, '2026-10-07')
+_c436z = _sl436.connect(':memory:')
+for _i, _f in enumerate((['x', 'y'], ['y'], None)):
+    _sl436.add_plan(_c436z, dict(plan_id=f'Z{_i}', data_day='2026-10-07', code=f'00000{_i}', name='z', spec='SWING_V1', entry=1, target=2,
+                                 stop=0.5, horizon=20, wait_bars=20, live_ok=False, verdict=(dict(failed=_f, checks_n=11) if _f is not None else {})))
+_zl436 = _sv436.zero_day_line(_c436z, '2026-10-07')
+check("⑤ 자격 0 인 날 — '후보 3개 중 실주문 자격 0 · 가장 많이 막은 조건 y (2/2개 · 조건 기록 기준)' · 자격이 하나라도 있으면 None",
+      _z436 is None and _zl436 is not None and '후보 3개 중 실주문 자격 0' in _zl436 and "'y' 미충족" in _zl436 and '(2/2개' in _zl436
+      and '풀어야 한다는 뜻이 아닙니다' in _zl436, str(_zl436))
+_c436.close(); _c436z.close()
+# ⑥ 보호 매도 사실 — 장 안 · 오늘 장 시작 뒤 기록 없음 → 줄 · 기록이 장 시작 뒤면 None · 장 밖이면 None (2026-10-08 목 · 거래일)
+import datetime as _dt436
+_KST436 = _dt436.timezone(_dt436.timedelta(hours=9))
+_now436 = _dt436.datetime(2026, 10, 8, 10, 30, tzinfo=_KST436)
+_pl_stale = _sv436.protection_line(dict(ts='2026-10-08T08:00:00+09:00', status='ok'), _now436, 2)
+_pl_fresh = _sv436.protection_line(dict(ts='2026-10-08T10:05:00+09:00', status='ok'), _now436, 2)
+_pl_none = _sv436.protection_line(None, _now436, 0, mode='SHADOW')
+_pl_closed = _sv436.protection_line(None, _dt436.datetime(2026, 10, 8, 16, 0, tzinfo=_KST436), 2)
+_pl_off0 = _sv436.protection_line(None, _now436, 0, mode='OFF')
+_pl_off2 = _sv436.protection_line(None, _now436, 2, mode='OFF')
+check("⑥ protection_line — 장 안·장 시작 전 기록이면 '2종목의 손절·1차 목표 매도가 서 있다'(09:00 기준) · 장 시작 뒤 기록이면 None · "
+      "기록 없음은 '한 번도 없다' · 장 밖이면 None · 꺼짐+관리 0 이면 None · 꺼짐+관리 2 면 적는다 (문턱 없음 · 기준은 장 시작 시각 한 곳)",
+      _pl_stale is not None and '2종목' in _pl_stale and '09:00' in _pl_stale and _pl_fresh is None
+      and _pl_none is not None and '한 번도 없습니다' in _pl_none and _pl_closed is None
+      and _pl_off0 is None and _pl_off2 is not None and '2종목' in _pl_off2, str(_pl_stale))
+check("⑥ '먼저 알아 두실 것'이 보호 매도가 워커 관리임을 적는다", any('보호 매도도 멈춥니다' in ln for ln in _sv436.facts_lines()))
+# ⑦ 화면 — 자식 프로세스 렌더(§200 · 부모는 AppTest 를 안 부른다): 제목 '오늘의 스윙 계획' · 자격 0 줄 · 미리보기 없음 사유 · 예외 0
+_vdb436 = _os.path.join(PROJ, '_probe', '_r450_view.db')
+if _os.path.exists(_vdb436):
+    _os.remove(_vdb436)
+_cv436 = _sl436.connect(_vdb436)
+for _i, _f in enumerate((['x', 'y'], ['y'])):
+    _sl436.add_plan(_cv436, dict(plan_id=f'V{_i}', data_day='2026-10-07', code=f'00000{_i}', name='v', spec='SWING_V1', entry=1000, target=1100,
+                                 stop=950, horizon=20, wait_bars=20, live_ok=False, block_reason='추천 아님', verdict=dict(failed=_f, checks_n=11)))
+_cv436.close()
+_src436 = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    f"_L.connect.__defaults__ = ({_vdb436!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child436 = _os.path.join(PROJ, '_probe', '_r450_view_child.py')
+open(_child436, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src436!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
+    "           cap=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander])\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _rc436 = __import__('subprocess').run([sys.executable, _child436], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300)
+    _jr436 = (_rc436.stdout or '').rsplit('@@R@@', 1)
+    _o436 = __import__('json').loads(_jr436[1]) if len(_jr436) == 2 else {}
+    check("⑦ 화면 — 예외 0 · '② 오늘의 스윙 계획' · 자격 0 줄(가장 많이 막은 조건 y · 2/2개) · '수량 미리보기 없음' 사유 · 보호 매도 사실",
+          _o436.get('exc') == 0 and any(x.startswith('② 오늘의 스윙 계획') for x in (_o436.get('exp') or []))
+          and '실주문 자격 0' in (_o436.get('cap') or '') and "'y' 미충족" in (_o436.get('cap') or '')
+          and '수량 미리보기 없음' in (_o436.get('cap') or '') and '보호 매도도 멈춥니다' in (_o436.get('cap') or ''),
+          str(_o436.get('first') or _o436.get('exp') or (_rc436.stderr or '')[-300:]))
+finally:
+    for _f436 in (_vdb436, _child436):
+        if _os.path.exists(_f436):
+            _os.remove(_f436)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

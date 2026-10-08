@@ -107,7 +107,13 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars):
                 horizon=int(horizon) if horizon else None, wait_bars=wbars, live_ok=not why,
                 block_reason=(why[0] if why else None),
                 verdict=dict(recommended=core.get('recommended'), bucket=core.get('bucket'),
-                             exclude_reason=core.get('exclude_reason'), headline=core.get('headline')),
+                             exclude_reason=core.get('exclude_reason'), headline=core.get('headline'),
+                             # 라운드 450 — 조건 통과·미충족은 중앙 판정의 `checks` 에서만 센다(R312·R316 과 같은 규칙 · 없으면 None)
+                             checks_n=(len(core['checks']) if isinstance(core.get('checks'), list) else None),
+                             failed=([str(ck.get('name')) for ck in core['checks'] if isinstance(ck, dict) and not ck.get('ok')]
+                                     if isinstance(core.get('checks'), list) else None),
+                             expected_return=_f(core.get('expected_return')), wait_curable=core.get('wait_curable'),
+                             current_price=_f(core.get('current_price'))),
                 engine_version=engine_version)
 
 

@@ -3351,3 +3351,22 @@ def attention_row(a: dict, theme: str = 'dark') -> str:
            f"line-height:1.6;'>{_esc(a['reason'])}</p>"
            if a.get('reason') else '')
         + warn + "</div></div>")
+
+
+def top_blocker(failed_lists):
+    """후보마다 '미충족 조건 이름 목록' → (가장 많이 막은 조건 이름, 그 수, 센 후보 수) 또는 None (라운드 450).
+
+    라운드 316 이 추천 절에 인라인으로 두었던 셈을 한 곳으로 — 같은 규칙(수가 같으면 이름 순)을 스윙 칸의 '오늘 실주문
+    자격 0' 줄이 같이 부른다(§4). 조건 기록이 없는 후보(None)는 분모에서 빼고, 미충족이 하나도 없으면 None.
+    세어 본 것이지 *"그 조건을 풀어야 한다"* 가 아니다(R223 — 숫자만 보여 주면 그게 판단이 된다)."""
+    cnt, tot = {}, 0
+    for fl in failed_lists or []:
+        if fl is None:
+            continue
+        tot += 1
+        for n in fl:
+            cnt[n] = cnt.get(n, 0) + 1
+    if not tot or not cnt:
+        return None
+    name, k = sorted(cnt.items(), key=lambda x: (-x[1], x[0]))[0]
+    return name, k, tot

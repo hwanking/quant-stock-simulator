@@ -7,6 +7,8 @@
 받고 · '연결 확인'(잔고 읽기만)과 '계획·모의 갱신'(증권사 안 부름)을 부른다. 원격 접속(터널·배포)에서는 아무것도 못 바꾼다 —
 남의 브라우저가 이 PC 의 주문 설정을 바꾸면 안 된다(§9). 판정·계획 값은 장부에서 **읽기만** 한다(§4).
 """
+import datetime as _dt
+import json as _json
 import os as _os_mod
 
 import broker_kis
@@ -18,6 +20,7 @@ def _os_exists(p):
     return _os_mod.path.exists(p)
 import swing_ledger as L
 import swing_risk
+import swing_engine as _se
 
 MODE_KO = {'OFF': '꺼짐', 'SHADOW': '기록만', 'PAPER': '모의투자', 'LIVE': '실전'}
 MODE_HELP = {
@@ -71,6 +74,8 @@ def facts_lines():
     except Exception:                                          # noqa: BLE001
         pass
     out.append('그래서 실전 모드를 켜도 추천이 없는 날에는 아무것도 사지 않습니다.')
+    out.append('손절·1차 목표 매도는 증권사에 미리 걸어 두는 주문이 아니라 워커가 장중에 가격을 보고 그때 냅니다 — 워커가 멈추면 '
+               '보호 매도도 멈춥니다(장이 열려 있는데 오늘 워커 기록이 없으면 이 칸 맨 위에 경고가 뜹니다).')
     try:
         import entry_facts
         out.append('이 칸이 실행하는 계획(진입가 지정가 · 1차 목표 · 손절 · 기간)의 지금까지 실측 — ' + entry_facts.line())
@@ -79,24 +84,176 @@ def facts_lines():
     return out
 
 
-def plan_rows(c):
-    """가장 최근 판정일의 계획 + 모의 결과 — 표 한 줄씩."""
+def plan_status(p, today_day, held=False):
+    """오늘 이 계획이 어디에 있나 — 사실만(판정 낱말 없음 · 라운드 450). 대기 창은 계약의 진입 대기 거래일(연구 산출물)이다."""
+    if held:
+        return '보유 중(자동 관리)'
+    if not p.get('live_ok'):
+        return '실주문 없음'
+    if not today_day or not p.get('data_day'):
+        return '—'
+    wb = p.get('wait_bars')
+    try:
+        waited = X.trading_days_between(p['data_day'], today_day)
+    except (TypeError, ValueError):
+        return '—'
+    if waited < 1:
+        return '판정일 — 다음 거래일부터 지정가 주문'
+    if not wb:
+        return f'{waited}거래일 지남 · 대기 기간을 못 읽어 사지 않습니다'
+    if waited <= int(wb):
+        return f'진입 대기 {waited}/{int(wb)}거래일째 — 지정가가 닿으면 체결'
+    return f'대기 기간({int(wb)}거래일) 지남 — 더 안 삽니다'
+
+
+def _verdict_of(p):
+    v = p.get('verdict')
+    if isinstance(v, dict):
+        return v
+    try:
+        return _json.loads(v) if v else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def size_preview(p, account, limits, cost_pct):
+    """계획 한 줄의 수량 미리보기 — 워커와 **같은 함수**(`swing_risk.size`)로 마지막으로 읽은 계좌와 지금 한도에서 센다(§4).
+    자격이 없거나 계좌·한도가 없으면 None. 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 센다 — 이것은 미리보기다."""
+    if not p.get('live_ok') or not account or not limits:
+        return None
+    sz = swing_risk.size(p.get('entry'), p.get('stop'), account, limits, cost_pct)
+    q = int(sz.get('qty') or 0)
+    after = None
+    try:
+        eq, stock = account.get('total_eval'), account.get('stock_eval')
+        if q and eq and stock is not None:
+            after = (float(stock) + q * float(p['entry'])) / float(eq) * 100.0
+    except (TypeError, ValueError, ZeroDivisionError):
+        after = None
+    return dict(qty=q, amount=(q * float(p['entry']) if q else 0.0), planned_loss=(sz.get('planned_loss') if q else None),
+                binding=sz.get('binding'), reason=sz.get('reason') or '', exposure_after_pct=after)
+
+
+def _fail_label():
+    try:
+        from verdict_core import fail_label
+        return fail_label
+    except Exception:                                          # noqa: BLE001
+        return lambda n: f"'{n}' 미충족"
+
+
+def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=()):
+    """가장 최근 판정일의 계획 + 모의 결과 — 표 한 줄씩. 라운드 450: 오늘 상태 · 중앙 판정 조건(통과 수와 미충족 전부) · 수량 미리보기."""
     ps = L.plans(c)
     if not ps:
         return None, []
     day = ps[0]['data_day']
     sh = L.shadow_latest(c)
+    fl = _fail_label()
     rows = []
     for p in [x for x in ps if x['data_day'] == day]:
         s = sh.get(p['plan_id']) or {}
         res = SHADOW_KO.get(s.get('status'), '아직 안 굴림')
         if s.get('status') == 'closed':
             res += f" · {EXIT_KO.get(s.get('exit_status'), s.get('exit_status'))} {_pct(s.get('net_pct'))}(비용 뺀)"
+        v = _verdict_of(p)
+        failed, n_ck = v.get('failed'), v.get('checks_n')
+        if isinstance(failed, list) and n_ck:
+            cond = (f'{int(n_ck) - len(failed)}/{int(n_ck)} 통과'
+                    + ((' · 미충족: ' + ' · '.join(fl(x) for x in failed)) if failed else ' · 미충족 없음'))
+        else:
+            cond = '— (이 계획에는 조건 기록이 없습니다)'
+        sz = size_preview(p, account, limits, cost_pct)
+        if sz is None:
+            qty_txt, loss_txt = '—', '—'
+        elif sz['qty'] < 1:
+            qty_txt, loss_txt = f"0주 — {sz['reason']}", '—'
+        else:
+            qty_txt = f"{sz['qty']}주 · {_won(sz['amount'])} (정한 제한: {sz['binding']})"
+            loss_txt = _won(sz['planned_loss']) + (f" · 매수 뒤 주식 비중 {sz['exposure_after_pct']:.1f}%"
+                                                  if sz['exposure_after_pct'] is not None else '')
         rows.append({'종목': f"{p.get('name') or ''} ({p['code']})", '실주문 자격': '예' if p['live_ok'] else '아니오',
+                     '오늘 상태': plan_status(p, today_day, held=p['code'] in (held or ())),
+                     '중앙 판정 조건': cond,
                      '진입가(지정가)': _won(p['entry']), '1차 목표': _won(p['target']), '손절': _won(p['stop']),
                      '대기·보유(거래일)': f"{p.get('wait_bars') or '—'} · {p.get('horizon') or '—'}",
-                     '막은 사유': p.get('block_reason') or '—', '기록만 모의': res})
+                     '수량 미리보기': qty_txt, '손절 시 손실(손절가 체결 가정)': loss_txt,
+                     '막은 사유': p.get('block_reason') or '—', '연구 모의(일봉)': res})
     return day, rows
+
+
+def zero_day_line(c, day):
+    """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None."""
+    ps = [p for p in L.plans(c) if p['data_day'] == day] if day else []
+    if not ps or any(p.get('live_ok') for p in ps):
+        return None
+    import ui_kit as _uk
+    top = _uk.top_blocker([_verdict_of(p).get('failed') for p in ps])
+    head = f'오늘 후보 {len(ps)}개 중 실주문 자격 0 — '
+    if not top:
+        return head + '조건 기록이 있는 계획이 없어 어느 조건이 막았는지 세지 못했습니다(막은 사유는 표의 칸).'
+    fl = _fail_label()
+    return (head + f'가장 많이 막은 조건은 {fl(top[0])}입니다 ({top[1]}/{top[2]}개 · 조건 기록이 있는 계획 기준). '
+            '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
+
+
+def holdings_diff(acct_positions, app_positions):
+    """한국투자 잔고 보유 vs 앱 보유종목(.portfolio/positions.json) — 종목코드로 맞춰 사실만 적는다(라운드 450 · 덮어쓰지 않는다).
+    평단은 원 단위 소수 둘째 자리까지 같으면 같다고 본다(표시 정밀도이지 판정 문턱이 아니다). 수량 0 인 계좌 행은 뺀다."""
+    a = {}
+    for p in acct_positions or []:
+        if p.get('qty') and p.get('code'):
+            a[_se.code6(p['code'])] = p
+    b = {}
+    for q in app_positions or []:
+        code = _se.code6(getattr(q, 'ticker', None))
+        if code:
+            b[code] = q
+    rows = []
+    for code in sorted(set(a) | set(b)):
+        pa, pb = a.get(code), b.get(code)
+        qa = int(pa['qty']) if pa else None
+        qb = getattr(pb, 'quantity', None) if pb else None
+        aa = pa.get('avg_price') if pa else None
+        ab = getattr(pb, 'average_buy_price', None) if pb else None
+        if pa and pb:
+            same_q = qb is not None and float(qb) == float(qa)
+            same_a = aa is not None and ab is not None and round(float(aa), 2) == round(float(ab), 2)
+            status = '같음' if (same_q and same_a) else ' · '.join(
+                s for s, bad in (('수량 다름', not same_q), ('평단 다름', not same_a)) if bad)
+        elif pa:
+            status = '계좌에만(앱 보유종목에 없음)'
+        else:
+            status = '앱에만(계좌에 없음 — 팔았거나 다른 계좌)'
+        rows.append(dict(code=code, name=((pa or {}).get('name') or getattr(pb, 'stock_name', None) or ''),
+                         acct_qty=qa, app_qty=qb, acct_avg=aa, app_avg=ab, status=status))
+    return rows
+
+
+def protection_line(hb, now, managed_n, mode=None):
+    """보호 매도는 워커가 낸다 — 장이 열려 있는데 **오늘 장 시작 뒤** 워커 기록이 없으면 그 사실을 적는다(라운드 450).
+    문턱 없음 — 기준은 그날 장 시작 시각 한 곳(`bitemporal_engine.session_times`). 장 밖이거나 기록이 장 시작 뒤면 None.
+    모드가 '꺼짐'이고 관리 중인 종목도 없으면 워커가 안 도는 것이 설계라 None(관리 중인 종목이 있으면 모드와 무관하게 적는다)."""
+    if not managed_n and (mode or 'OFF') == 'OFF':
+        return None
+    if not X.session_open(now):
+        return None
+    n = X.kst(now)
+    op, _cl = X._session_times(n.date())
+    start = n.replace(hour=op.hour, minute=op.minute, second=0, microsecond=0)
+    ts = None
+    if hb and hb.get('ts'):
+        try:
+            ts = X.kst(_dt.datetime.fromisoformat(str(hb['ts'])))
+        except ValueError:
+            ts = None
+    if ts is not None and ts >= start:
+        return None
+    who = (f'자동 관리 중 {managed_n}종목의 손절·1차 목표 매도가 서 있습니다' if managed_n
+           else '지금 자동 관리 중인 종목은 없습니다(살 계획이 있어도 사지 않습니다)')
+    last = f"마지막 기록 {_ts(hb['ts'])}" if hb and hb.get('ts') else '기록이 한 번도 없습니다'
+    return (f"장이 열려 있는데 오늘 장 시작({op.strftime('%H:%M')}) 뒤 워커 기록이 없습니다 — {who} · {last}. "
+            "워커 창을 켜세요: python scripts/run_swing_worker.py --loop 60")
 
 
 def shadow_summary(c):
@@ -157,6 +314,9 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     # 워커가 보호(손절·취소·계좌 맞추기)에 문제를 적었으면 조용히 'ok' 로 덮지 않고 그대로 띄운다
     if hb and hb.get('status') in ('warn', 'broker_fail', 'blocked'):
         st.warning(md(f"워커 마지막 바퀴({_ts(hb['ts'])}) — {hb.get('detail') or hb['status']}"))
+    _pl450 = protection_line(hb, X.now_kst(), len(managed), mode=mode)
+    if _pl450:
+        st.warning(md(_pl450))
 
     # ① 계좌
     acct = L.last_account(c)
@@ -174,6 +334,25 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                     for p in acct['positions']]
             if rows:
                 st.dataframe(rows, hide_index=True, width='stretch')
+            # 라운드 450 — 앱 보유종목과 견주기(사실만 · 덮어쓰지 않는다 · 옮기는 것은 아래 버튼)
+            try:
+                import portfolio as _pf450
+                _app450, _ = _pf450.load_positions()
+            except Exception:                                  # noqa: BLE001
+                _app450 = None
+            if _app450 is None:
+                st.caption('앱 보유종목 파일을 읽지 못해 견주지 못했습니다.')
+            else:
+                _diff450 = holdings_diff(acct['positions'], _app450)
+                _same450 = sum(1 for r in _diff450 if r['status'] == '같음')
+                st.caption(f"앱 보유종목(.portfolio/positions.json)과 견줌 — {len(_diff450)}종목 중 같음 {_same450} · "
+                           f"다름·한쪽에만 {len(_diff450) - _same450}. 이 표는 아무것도 덮어쓰지 않습니다.")
+                if _diff450:
+                    st.dataframe([{'종목': f"{r['name']} ({r['code']})",
+                                   '계좌 수량': r['acct_qty'] if r['acct_qty'] is not None else '—',
+                                   '앱 수량': (f"{r['app_qty']:g}" if r['app_qty'] is not None else '—'),
+                                   '계좌 평단': _won(r['acct_avg']), '앱 평단': _won(r['app_avg']), '상태': r['status']}
+                                  for r in _diff450], hide_index=True, width='stretch')
             # 라운드 449 — 계좌 보유를 앱의 '내 보유종목'으로 가져온다(CSV 가져오기와 같은 함수 · 이 PC 에만 저장 · 되돌리기 한 번)
             if allow_write and acct['positions']:
                 st.caption('아래 버튼은 이 계좌의 보유를 앱의 \'내 보유종목\'(.portfolio/positions.json · 이 PC 에만)으로 옮깁니다. 지금 보유종목은 '
@@ -208,16 +387,29 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                 for _w in st.session_state.get('sw_sync_warns') or []:
                     st.caption(md(_w))
 
-    # ② 오늘의 계획
-    day, rows = plan_rows(c)
-    with st.expander('② 스윙 계획과 기록만 모의', expanded=True):
+    # ② 오늘의 계획 (라운드 450 — 오늘 상태 · 조건 전부 · 수량 미리보기 · 자격 0 인 날의 가장 많이 막은 조건)
+    try:
+        from verdict_core import COST_PCT as _cost450
+    except Exception:                                          # noqa: BLE001
+        _cost450 = None
+    day, rows = plan_rows(c, today_day=anchor_day, account=acct, limits=(stt.get('limits') or None), cost_pct=_cost450,
+                          held=set(managed))
+    with st.expander('② 오늘의 스윙 계획', expanded=True):
         if not rows:
             st.caption('아직 계획이 없습니다 — 모드를 \'기록만\' 이상으로 두고 \'계획·모의 갱신\'을 누르거나 워커가 돌면 그날 개장 전 '
                        '리포트에서 만들어집니다.')
         else:
             st.caption(f'판정일 {day} 의 개장 전 후보 — 실주문 자격은 중앙 판정이 추천(조건 11개 전부 통과)일 때만 \'예\'입니다. '
-                       '자격이 없는 후보도 같은 계약으로 모의 결과를 남깁니다(사지 않은 경우의 성적).')
+                       '자격이 없는 후보도 같은 계약으로 일봉 모의 결과를 남깁니다(사지 않은 경우의 성적 · 증권사와 무관한 연구 값).')
+            _zl450 = zero_day_line(c, day)
+            if _zl450:
+                st.caption(md(_zl450))
             st.dataframe(rows, hide_index=True, width='stretch')
+            if acct and (stt.get('limits') or None):
+                st.caption(f"수량 미리보기는 마지막으로 읽은 계좌({_ts(acct['ts'])} · 예수금 {_won(acct['cash'])})와 지금 위험 한도로 "
+                           "워커와 같은 함수로 센 것입니다 — 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 셉니다.")
+            else:
+                st.caption('수량 미리보기 없음 — 계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다(⑥ 설정).')
         ss = shadow_summary(c)
         if ss:
             st.caption(md(f"끝난 모의 {ss['n']}건 — 목표 {ss['target']} · 손절 {ss['stop']} · 기간 만료 "

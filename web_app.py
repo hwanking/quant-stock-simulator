@@ -5176,17 +5176,12 @@ if _pmr:
         #   센다"* — 을 추천 게이트에 한다. 자료는 이미 있다(`core.checks`).
         #   ⚠️ 이 수는 **세어 본 것**이지 *"이 조건을 풀어야 한다"* 가 아니다 —
         #   R223 이 업종 적중에서 겪은 그 자리(숫자만 보여 주면 그게 판단이 된다).
-        _cnt316, _tot316 = {}, 0
-        for _g316 in _picks_gated:
-            _ck316 = (_g316.get('core') or {}).get('checks') or []
-            if not _ck316:
-                continue
-            _tot316 += 1
-            for _c316 in _ck316:
-                if not _c316.get('ok'):
-                    _cnt316[_c316['name']] = _cnt316.get(_c316['name'], 0) + 1
-        if _tot316 and _cnt316:
-            _top316 = sorted(_cnt316.items(), key=lambda x: (-x[1], x[0]))[0]
+        # 라운드 450 — 세는 규칙은 `ui_kit.top_blocker` 한 곳(스윙 칸의 '오늘 실주문 자격 0' 줄이 같은 것을 부른다 · §4)
+        _top316 = _uk.top_blocker([[_c316['name'] for _c316 in _ck316 if not _c316.get('ok')]
+                                   for _ck316 in (((_g316.get('core') or {}).get('checks') or []) for _g316 in _picks_gated)
+                                   if _ck316])
+        if _top316:
+            _tot316 = _top316[2]
             # 라운드 382 — 조건 이름은 **통과 조건**으로 적혀 있다('강제 차단 없음' · '과열·저유동성 아님').
             #   그대로 넣으니 *"가장 많이 막은 조건은 강제 차단 없음"* — 차단이 없다는 것이 막았다는 말이
             #   됐다(외부 검토). 이름은 중앙 판정 그대로 두고 **미충족**이라고 적는다(이름을 바꾸면 회귀·
