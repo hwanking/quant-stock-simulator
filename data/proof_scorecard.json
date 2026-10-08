@@ -1,67 +1,67 @@
 {
- "made": "2026-10-08T00:55:24",
- "ledger_rows": 1684,
+ "made": "2026-10-08T17:03:20",
+ "ledger_rows": 1744,
  "tickers": 211,
  "bars_ok": 211,
  "bars_fail": 0,
  "status": {
-  "expired": 60,
-  "target": 802,
-  "stop": 603,
-  "pending": 213,
-  "nobars": 6
+  "expired": 64,
+  "target": 815,
+  "stop": 722,
+  "pending": 142,
+  "nobars": 1
  },
  "abstain": {
-  "rows": 1684,
-  "decided": 1465,
-  "pending": 213,
-  "nobars": 6,
-  "dates": 43,
-  "target": 802,
-  "stop": 603,
-  "expired": 60,
-  "mean_net": -0.10845740837392523,
-  "median_net": 2.1836690495582447,
+  "rows": 1744,
+  "decided": 1601,
+  "pending": 142,
+  "nobars": 1,
+  "dates": 44,
+  "target": 815,
+  "stop": 722,
+  "expired": 64,
+  "mean_net": -0.521649063502467,
+  "median_net": 1.6899999999999908,
   "ci95": [
-   -0.9121894612629442,
-   0.7242516217002564
+   -1.2810107461017444,
+   0.2943699825863378
   ],
   "boot": 2000,
   "seed": 418,
-  "p05_net": -10.15140697764988,
-  "share_neg": 0.442320819112628,
-  "avoided": 4434.917689626858,
-  "missed": 4276.027586359058,
-  "balance": 158.89010326780044,
-  "target_dist": 5.421644962661415,
-  "stop_dist": 7.676276727829022,
+  "p05_net": -10.09152866242038,
+  "share_neg": 0.48094940662086194,
+  "avoided": 5157.658970117857,
+  "missed": 4322.498819450408,
+  "balance": 835.1601506674497,
+  "target_dist": 5.296963611607862,
+  "stop_dist": 7.50401593314346,
   "cost_pct": 0.41
  },
  "by_action": {
   "HOLD": {
-   "rows": 1667,
-   "decided": 1448,
-   "pending": 213,
-   "nobars": 6,
-   "dates": 43,
-   "target": 794,
-   "stop": 594,
-   "expired": 60,
-   "mean_net": -0.09307766161318545,
-   "median_net": 2.1883701862206775,
+   "rows": 1727,
+   "decided": 1584,
+   "pending": 142,
+   "nobars": 1,
+   "dates": 44,
+   "target": 807,
+   "stop": 713,
+   "expired": 64,
+   "mean_net": -0.5120243064492055,
+   "median_net": 1.6899999999999908,
    "ci95": [
-    -0.8905934026764772,
-    0.7326735729745771
+    -1.2718003979838604,
+    0.30393660419437213
    ],
    "boot": 2000,
    "seed": 418,
-   "p05_net": -10.15140697764988,
-   "share_neg": 0.44129834254143646,
-   "avoided": 4371.885448775304,
-   "missed": 4237.108994759412,
-   "balance": 134.77645401589234,
-   "target_dist": 5.427466650623784,
-   "stop_dist": 7.683784159622067,
+   "p05_net": -10.09152866242038,
+   "share_neg": 0.48042929292929293,
+   "avoided": 5094.626729266303,
+   "missed": 4283.580227850762,
+   "balance": 811.0465014155416,
+   "target_dist": 5.300947337113923,
+   "stop_dist": 7.509030028930503,
    "cost_pct": 0.41
   },
   "REDUCE": {
@@ -95,11 +95,11 @@
   {
    "name": "비용 차감 기대값 양수",
    "blocked": {
-    "n": 215,
-    "success": 125,
-    "failure": 77,
+    "n": 229,
+    "success": 131,
+    "failure": 85,
     "unresolved": 13,
-    "mean_net": 0.25932124903273807
+    "mean_net": 0.1108914778222248
    },
    "passed": {
     "n": 1,
@@ -119,18 +119,18 @@
   {
    "name": "강제 차단 없음",
    "blocked": {
-    "n": 165,
-    "success": 92,
-    "failure": 62,
+    "n": 178,
+    "success": 97,
+    "failure": 70,
     "unresolved": 11,
-    "mean_net": -0.04704837601688118
+    "mean_net": -0.24104394964905823
    },
    "passed": {
-    "n": 51,
-    "success": 33,
+    "n": 52,
+    "success": 34,
     "failure": 16,
     "unresolved": 2,
-    "mean_net": 0.9037014895723866
+    "mean_net": 0.9783018623497978
    },
    "only": {
     "n": 0,
@@ -143,18 +143,18 @@
   {
    "name": "신뢰도·전략품질 기준",
    "blocked": {
-    "n": 106,
-    "success": 62,
-    "failure": 39,
+    "n": 114,
+    "success": 65,
+    "failure": 44,
     "unresolved": 5,
-    "mean_net": 0.1661158141099648
+    "mean_net": -0.07987121827911672
    },
    "passed": {
-    "n": 110,
-    "success": 63,
-    "failure": 39,
+    "n": 116,
+    "success": 66,
+    "failure": 42,
     "unresolved": 8,
-    "mean_net": 0.18834106936136413
+    "mean_net": 0.14716545421100366
    },
    "only": {
     "n": 1,
@@ -167,18 +167,18 @@
   {
    "name": "펀더멘털 밸류 검증",
    "blocked": {
-    "n": 96,
-    "success": 65,
-    "failure": 29,
+    "n": 109,
+    "success": 70,
+    "failure": 37,
     "unresolved": 2,
-    "mean_net": 1.152349000526603
+    "mean_net": 0.6999537983772379
    },
    "passed": {
-    "n": 27,
-    "success": 14,
+    "n": 28,
+    "success": 15,
     "failure": 13,
     "unresolved": 0,
-    "mean_net": -1.1668010293488076
+    "mean_net": -0.9833217102047155
    },
    "only": {
     "n": 0,
@@ -191,18 +191,18 @@
   {
    "name": "과열·저유동성 아님",
    "blocked": {
-    "n": 69,
-    "success": 39,
-    "failure": 30,
+    "n": 77,
+    "success": 42,
+    "failure": 35,
     "unresolved": 0,
-    "mean_net": -0.5580210416898178
+    "mean_net": -0.8654660094700833
    },
    "passed": {
-    "n": 147,
-    "success": 86,
-    "failure": 48,
+    "n": 153,
+    "success": 89,
+    "failure": 51,
     "unresolved": 13,
-    "mean_net": 0.5226479306258759
+    "mean_net": 0.4876258596983892
    },
    "only": {
     "n": 0,
@@ -222,11 +222,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 216,
-    "success": 125,
-    "failure": 78,
+    "n": 230,
+    "success": 131,
+    "failure": 86,
     "unresolved": 13,
-    "mean_net": 0.17743423113614037
+    "mean_net": 0.034634233933291826
    },
    "only": {
     "n": 0,
@@ -246,11 +246,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 216,
-    "success": 125,
-    "failure": 78,
+    "n": 230,
+    "success": 131,
+    "failure": 86,
     "unresolved": 13,
-    "mean_net": 0.17743423113614037
+    "mean_net": 0.034634233933291826
    },
    "only": {
     "n": 0,
@@ -270,11 +270,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 216,
-    "success": 125,
-    "failure": 78,
+    "n": 230,
+    "success": 131,
+    "failure": 86,
     "unresolved": 13,
-    "mean_net": 0.17743423113614037
+    "mean_net": 0.034634233933291826
    },
    "only": {
     "n": 0,
@@ -318,11 +318,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 112,
-    "success": 73,
-    "failure": 37,
+    "n": 126,
+    "success": 79,
+    "failure": 45,
     "unresolved": 2,
-    "mean_net": 0.8494341576128385
+    "mean_net": 0.5141008375546723
    },
    "only": {
     "n": 0,
@@ -342,11 +342,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 216,
-    "success": 125,
-    "failure": 78,
+    "n": 230,
+    "success": 131,
+    "failure": 86,
     "unresolved": 13,
-    "mean_net": 0.17743423113614037
+    "mean_net": 0.034634233933291826
    },
    "only": {
     "n": 0,
@@ -366,11 +366,11 @@
     "mean_net": null
    },
    "passed": {
-    "n": 216,
-    "success": 125,
-    "failure": 78,
+    "n": 230,
+    "success": 131,
+    "failure": 86,
     "unresolved": 13,
-    "mean_net": 0.17743423113614037
+    "mean_net": 0.034634233933291826
    },
    "only": {
     "n": 0,
@@ -382,41 +382,41 @@
   }
  ],
  "reco": {
-  "days": 44,
+  "days": 45,
   "first": "2026-07-31",
-  "last": "2026-10-07",
+  "last": "2026-10-08",
   "off_days": 0,
-  "candidates": 207,
+  "candidates": 212,
   "no_core": 10,
   "recommended": 0,
   "reco_days": 0,
-  "ev_n": 207,
+  "ev_n": 212,
   "ev_pos": 2,
   "ev_median": -0.3,
   "ev_max": 0.03,
   "top_block": "비용 차감 기대값 양수",
-  "top_block_n": 205,
-  "registry_rows": 1260,
-  "registry_days": 21,
+  "top_block_n": 210,
+  "registry_rows": 1320,
+  "registry_days": 22,
   "registry_buy": 0
  },
  "candidates": {
-  "n": 186,
-  "dates": 40,
-  "success": 109,
-  "failure": 67,
+  "n": 200,
+  "dates": 42,
+  "success": 115,
+  "failure": 75,
   "unresolved": 10,
-  "mean_net": 0.16126469177398367,
-  "median_net": 4.119799563183568,
+  "mean_net": -0.0018234372539412081,
+  "median_net": 4.0275175350704675,
   "cost_pct": 0.41,
   "ci95": [
-   -0.987889729943982,
-   1.3252435751618024
+   -1.1003276027033773,
+   1.1068234717476757
   ],
   "boot": 2000,
   "seed": 433
  },
- "tracker_decided": 229,
+ "tracker_decided": 243,
  "rule": "같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · 운영 비용 0.41% 차감 · 판정 1건에 같은 금액 · 문턱 없음",
- "seconds": 36.3
+ "seconds": 34.0
 }
