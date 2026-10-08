@@ -5,6 +5,7 @@
   ① 추적 동결·채점 — `scripts/run_daily_improvement.py` (화면의 '장 종료 후 지금 실행' 버튼과 같은 스크립트)
   ② 관심종목 재측정 — `scripts/refresh_watchlist.py` (표의 '지금 재기'와 같은 함수 · 라운드 414)
   ③ PROOF 성적표 — `scripts/proof_scorecard.py` (라운드 418)
+  ④ 스윙 자동매매 한 바퀴 — `scripts/run_swing_worker.py --once --no-orders` (라운드 446 · 주문 없음 · 계획·모의·내역 맞춤)
 
 ■ 왜 ⓪ 이 여기 있나 (라운드 420 · 2026-10-03)
   클라우드가 평일마다 원장·전방 기록부·시점 재무를 쌓는데 이 PC 는 사람이 되받기를 돌린 날에만 따라갔다 —
@@ -52,6 +53,11 @@ STEPS = (
     ('관심종목 재측정', 'scripts/refresh_watchlist.py', 120 * 60),
     # 라운드 418 — 가늠 PROOF 성적표(남긴 판정 전부를 같은 채점기로 · 실측 198종목 33초). 쓰기 금지면 --dry-run.
     ('PROOF 성적표', 'scripts/proof_scorecard.py', 60 * 60),
+    # 라운드 446 — 스윙 자동매매 워커 한 바퀴. '기록만'이면 그날 계획과 일봉 모의 결과가 매일 저절로 쌓인다(사람이 '계획·모의
+    #   갱신'을 누르게 두지 않는다 · 라운드 414). 실전·모의투자 모드여도 **주문은 안 낸다**(`--no-orders` · 이 작업은 '놓치면
+    #   켜질 때' 돌아 장중일 수 있다) — 체결 내역만 맞춘다. 주문은 사용자가 켜 둔 워커 창만 낸다. 모드를 정한 적이 없으면(장부
+    #   없음) 파일도 안 만들고 끝난다. 쓰기 금지면 워커가 스스로 멈춘다.
+    ('스윙 자동매매 한 바퀴', 'scripts/run_swing_worker.py', 30 * 60),
 )
 
 
@@ -95,6 +101,9 @@ def plan_steps(no_write):
             args.append('--plan')
         if no_write and script.endswith('proof_scorecard.py'):
             args.append('--dry-run')
+        if script.endswith('run_swing_worker.py'):
+            # 이 작업은 '놓치면 켜질 때' 돈다(장중일 수 있다) — 여기서는 주문을 내지 않는다(계획·모의·내역 맞춤만)
+            args += ['--once', '--no-orders']
         out.append((name, args, limit, skip))
     return out
 

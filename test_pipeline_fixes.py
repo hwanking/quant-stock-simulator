@@ -35224,6 +35224,656 @@ check("③ 멱등 — 합친 결과를 받은 쪽으로 다시 넣어도 늘지 
       len(_pr431.union_merge(_m431, _loc431)[0]) == len(_m431))
 
 
+print()
+print("§432 스윙 자동매매 — 가짜 증권사로만 잰다 · 기존 보유는 안 판다 · 주문을 다시 보내지 않는다 · 실전은 잠겨 있다 (라운드 446)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자 요청: 한국투자증권 계좌로 스윙 자동매매 탭. 이 절은 **네트워크를 하나도 안 쓴다** — 증권사는 가짜(_FakeBroker432)고,
+#   어댑터 시험은 운송을 바꿔 끼운다(토큰은 _probe/ 아래 임시 폴더). 실계좌·모의투자 서버는 이 절이 절대 안 부른다.
+#   잠그는 것: ① 공식 명세에서 옮긴 TR·주소 ② 자격증명은 저장소 안 파일을 안 읽는다 ③ 기본값 없는 위험 한도 ④ 상태 전이
+#   ⑤ 같은 주문 두 번 금지 ⑥ 시간초과 → UNKNOWN → 내역으로 맞춤(다시 안 보냄) ⑦ 일부 체결·만료 ⑧ 거절 ⑨ 기존 보유는 안 팖
+#   ⑩ 넘긴 종목만 손절 ⑪ 긴급정지(매수만 막고 보호 매도는 계속) ⑫ 실전 잠금 ⑬ 오래된 리포트 ⑭ 장 시간 밖 ⑮ 재시작 맞추기
+#   ⑯ 호가 단위 ⑰ 화면은 주문하지 않는다(주문 함수를 안 부른다 · AST)
+import ast as _ast432
+import datetime as _dt432
+import json as _js432
+import shutil as _sh432
+import tempfile as _tf432
+import broker_kis as _bk432
+import swing_engine as _se432
+import swing_executor as _sx432
+import swing_ledger as _sl432
+import swing_risk as _sr432
+
+_KST432 = _dt432.timezone(_dt432.timedelta(hours=9))
+
+
+class _FakeBroker432:
+    """가짜 한국투자 — 네트워크 없음. 한국투자처럼: 매도 가능 = 보유 − 열린 매도의 남은 수량 · 그것을 넘는 매도는 거절.
+    체결은 시험이 fill(odno, 누적 수량) 으로 일으킨다(보유가 바뀐다). 내역 조회 실패 · 취소 실패 · 시간초과 · 내역에 늦게
+    보이기 · 증권사 시계(주문 시각)를 심을 수 있다."""
+
+    def __init__(self, holdings=None, cash=10_000_000, total=20_000_000, stock=10_000_000):
+        self.env = 'real'
+        self.hold = {k: dict(v) for k, v in (holdings or {}).items()}     # code → dict(qty, avg, price)
+        self.cash, self.total, self.stock = cash, total, stock
+        self.orders, self.placed, self.cancels = [], [], []
+        self.mode = 'ack'          # ack · reject · timeout_reached · timeout_lost
+        self.day = '20261007'
+        self.time = None           # 증권사 주문 시각(없으면 지금) — 시계 어긋남을 심는다
+        self.fail_hist = 0         # 내역 조회를 이만큼 실패
+        self.fail_cancel = 0       # 취소를 이만큼 실패
+        self.hide = set()          # 내역에 아직 안 보이는 주문번호
+
+    def _open_sell(self, code):
+        return sum(o['ord_qty'] - o['filled_qty'] for o in self.orders
+                   if o['code'] == code and o['side'] == 'sell' and not o['cancelled'] and o['date'] == self.day)
+
+    def get_balance(self):
+        pos = [dict(code=k, name='x', qty=v['qty'], sellable_qty=max(0, v['qty'] - self._open_sell(k)),
+                    avg_price=v.get('avg', 1.0), price=v.get('price')) for k, v in self.hold.items() if v['qty'] > 0]
+        return dict(positions=pos, cash=self.cash, total_eval=self.total, stock_eval=self.stock, net_asset=self.total)
+
+    def get_orderable(self, code, price):
+        return dict(cash=self.cash, amt=self.cash, qty=int(self.cash // price))
+
+    def place_order(self, side, code, qty, price=None, ord_dvsn='00'):
+        self.placed.append((side, code, qty, price, ord_dvsn))
+        if self.mode == 'reject':
+            raise _bk432.BrokerError('거절 — 주문가능금액 부족')
+        if side == 'sell':
+            h = self.hold.get(code) or {}
+            if qty > h.get('qty', 0) - self._open_sell(code):
+                raise _bk432.BrokerError('거절 — 주문가능수량 초과')
+        odno = f'{len(self.placed):010d}'
+        t = self.time or _dt432.datetime.now().strftime('%H%M%S')
+        if self.mode != 'timeout_lost':
+            self.orders.append(dict(date=self.day, orgno='91252', odno=odno, orig_odno='', side=side, code=code,
+                                    ord_qty=qty, ord_price=float(price or 0), time=t, filled_qty=0, avg_fill=None,
+                                    remain_qty=qty, rejected_qty=0, cancelled=False, cancel_qty=0))
+        if self.mode in ('timeout_reached', 'timeout_lost'):
+            raise _bk432.TransportError('ReadTimeout')
+        return dict(odno=odno, orgno='91252', time=t)
+
+    def fill(self, odno, q, px=None):
+        o = next(x for x in self.orders if x['odno'] == odno)
+        d = q - o['filled_qty']
+        o['filled_qty'] = q
+        o['avg_fill'] = px or o['ord_price'] or (self.hold.get(o['code']) or {}).get('price')
+        h = self.hold.setdefault(o['code'], dict(qty=0, avg=o['avg_fill'], price=o['avg_fill']))
+        h['qty'] += d if o['side'] == 'buy' else -d
+
+    def get_daily_orders(self, start, end):
+        if self.fail_hist:
+            self.fail_hist -= 1
+            raise _bk432.BrokerError('HTTP 500 EGW00201 — 초당 거래건수 초과')
+        return [dict(o) for o in self.orders if o['odno'] not in self.hide]
+
+    def cancel_order(self, orgno, odno, qty=0, all_qty=True):
+        self.cancels.append(odno)
+        if self.fail_cancel:
+            self.fail_cancel -= 1
+            raise _bk432.BrokerError('HTTP 500 EGW00201 — 초당 거래건수 초과')
+        for o in self.orders:
+            if o['odno'] == odno and o['filled_qty'] < o['ord_qty']:
+                o['cancelled'] = True
+        return dict(odno=odno, orgno=orgno)
+
+
+def _report432(rec=True, day='2026-10-06', entry=10000, target=11000, stop=9500, code='000001.KS', asset='stock'):
+    import premarket as _pm432
+    return dict(date=day, day_basis=_pm432.DAY_BASIS, engine_version='vtest', picks=[dict(
+        symbol=code, asset_type=asset, name='시험종목',
+        core=dict(recommended=rec, bucket='오늘 매수 가능' if rec else '추천 제외', exclude_reason=None if rec else '시험 사유',
+                  buy_zone=(round(entry * 0.99), round(entry * 1.01)), new_target=target, new_stop=stop, horizon_days=20))])
+
+
+_LIM432 = dict(risk_per_trade_krw=100000, max_position_pct=20, max_total_exposure_pct=90, min_cash_pct=5,
+               max_open_positions=5, max_daily_new_orders=3)
+_CFG432 = dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[])
+
+
+def _db432(mode='LIVE', unlock=True, limits=True, kill=False):
+    c = _sl432.connect(':memory:')
+    _sl432.set_setting(c, 'mode', mode, by='test')
+    if unlock:
+        _sl432.set_setting(c, 'live_unlock', _sx432.LIVE_UNLOCK_PHRASE, by='test')
+    if limits:
+        _sl432.set_setting(c, 'limits', _LIM432, by='test')
+    if kill:
+        _sl432.set_setting(c, 'kill_switch', True, by='test')
+    return c
+
+
+def _now432(y=2026, m=10, d=7, hh=10, mm=0):
+    return _dt432.datetime(y, m, d, hh, mm, tzinfo=_KST432)
+
+
+# ① 명세 — 공식 샘플에서 옮긴 값 (지어내지 않았다 · 바뀌면 사람이 다시 확인한다)
+check("① 주문 TR 은 지금 공식 샘플의 것 — 매수 TTTC0012U · 매도 TTTC0011U · 모의 VTTC… (옛 0802U·0801U 아님)",
+      _bk432.TR['buy'] == {'real': 'TTTC0012U', 'demo': 'VTTC0012U'}
+      and _bk432.TR['sell'] == {'real': 'TTTC0011U', 'demo': 'VTTC0011U'}
+      and _bk432.TR['balance']['real'] == 'TTTC8434R' and _bk432.TR['cancel']['real'] == 'TTTC0013U'
+      and _bk432.BASE_URL['demo'].startswith('https://openapivts.') and _bk432.EXCHANGE == 'KRX')
+# ② 자격증명 — 환경변수 · 저장소 밖 파일만 · 저장소 안 파일은 읽지 않는다 · 값은 가린다
+_cf0 = _bk432.load_config(environ={}, path=None)
+_tmp432 = _tf432.mkdtemp(prefix='_r446_', dir=_os.path.join(PROJ, '_probe'))
+try:
+    _in_repo432 = _os.path.join(_tmp432, 'kis.env')
+    open(_in_repo432, 'w', encoding='utf-8').write('KIS_ENV=demo\nKIS_APP_KEY=planted\n')
+    _cf1 = _bk432.load_config(environ={}, path=_in_repo432)
+    check("② 자격증명이 없으면 빈 칸을 이름으로 적고 연결을 안 만든다 · 저장소 안 파일은 읽지 않고 그렇다고 적는다",
+          set(_cf0['missing']) >= {'KIS_APP_KEY', 'KIS_APP_SECRET', 'KIS_ACCOUNT_NO'}
+          and _cf1.get('app_key') is None and any('저장소 안' in p for p in _cf1['problems']), str(_cf1['problems']))
+    _cf2 = _bk432.load_config(environ={'KIS_ENV': 'demo', 'KIS_APP_KEY': 'ABCDEFGH', 'KIS_APP_SECRET': 'S' * 20,
+                                       'KIS_ACCOUNT_NO': '1234567801'}, path=None)
+    check("② 10자리 계좌번호는 8+2 로 가르고, 요약은 키·계좌를 가린다(원문이 안 나온다)",
+          _cf2['cano'] == '12345678' and _cf2['prdt'] == '01' and not _cf2['missing']
+          and 'ABCDEFGH' not in _bk432.config_summary(_cf2) and '12345678' not in _bk432.config_summary(_cf2))
+    _raised432 = False
+    try:
+        _bk432.KisBroker(_cf0)
+    except _bk432.BrokerError:
+        _raised432 = True
+    check("② 연결 정보가 모자라면 어댑터를 만들지 않는다", _raised432)
+    # 운송을 바꿔 끼운 어댑터 — 토큰은 _probe 아래 · 헤더·TR·응답 칸·오류 갈래
+    _calls432 = []
+
+    def _tr432(method, url, headers, params=None, body=None, timeout=10):
+        _calls432.append((method, url, dict(headers), params, body))
+        if url.endswith('/oauth2/tokenP'):
+            return 200, {}, {'access_token': 'TOK', 'access_token_token_expired': '2099-01-01 00:00:00'}
+        if 'inquire-balance' in url:
+            return 200, {'tr_cont': 'D'}, {'rt_cd': '0', 'output1': [
+                {'pdno': '000001', 'prdt_name': 'x', 'hldg_qty': '3', 'ord_psbl_qty': '3', 'pchs_avg_pric': '1000.0',
+                 'prpr': '1100', 'evlu_amt': '3300', 'evlu_pfls_amt': '300', 'evlu_pfls_rt': '10.0'},
+                {'pdno': '000002', 'hldg_qty': '0'}],
+                'output2': [{'dnca_tot_amt': '5000', 'tot_evlu_amt': '8300', 'nass_amt': '8300', 'scts_evlu_amt': '3300',
+                             'prvs_rcdl_excc_amt': '5000'}]}
+        if 'order-cash' in url and body and body.get('PDNO') == '999999':
+            raise _bk432.TransportError('ReadTimeout')
+        if 'order-cash' in url and body and body.get('PDNO') == '888888':
+            return 200, {}, {'rt_cd': '1', 'msg_cd': 'APBK0919', 'msg1': '주문가능금액 부족'}
+        if 'order-cash' in url:
+            return 200, {}, {'rt_cd': '0', 'output': {'KRX_FWDG_ORD_ORGNO': '91252', 'ODNO': '0000117057', 'ORD_TMD': '121052'}}
+        return 404, {}, {}
+    _br432 = _bk432.KisBroker(_cf2, transport=_tr432, token_dir=_tmp432, sleep=lambda s: None)
+    _bal432 = _br432.get_balance()
+    _od432 = _br432.place_order('buy', '000001', 3, 10050)
+    _hdr432 = [h for m, u, h, p, b in _calls432 if 'order-cash' in u][0]
+    _bdy432 = [b for m, u, h, p, b in _calls432 if 'order-cash' in u][0]
+    check("② 어댑터 — 잔고는 수량 있는 행만 · 요약 칸을 읽는다 · 주문은 모의 TR·지정가·KRX·주문번호를 돌려준다",
+          len(_bal432['positions']) == 1 and _bal432['cash'] == 5000 and _bal432['total_eval'] == 8300
+          and _hdr432['tr_id'] == 'VTTC0012U' and _hdr432['authorization'] == 'Bearer TOK'
+          and _bdy432['ORD_DVSN'] == '00' and _bdy432['ORD_UNPR'] == '10050' and _bdy432['EXCG_ID_DVSN_CD'] == 'KRX'
+          and _od432['odno'] == '0000117057', str(_bdy432))
+    _e1 = _e2 = None
+    try:
+        _br432.place_order('buy', '999999', 1, 1000)
+    except _bk432.TransportError as e:
+        _e1 = e
+    try:
+        _br432.place_order('buy', '888888', 1, 1000)
+    except _bk432.TransportError:
+        _e2 = 'transport'
+    except _bk432.BrokerError as e:
+        _e2 = e
+    check("② 시간초과는 TransportError(들어갔는지 모름) · 증권사 거절은 BrokerError(안 들어감) — 둘을 섞지 않는다",
+          isinstance(_e1, _bk432.TransportError) and isinstance(_e2, _bk432.BrokerError)
+          and not isinstance(_e2, _bk432.TransportError))
+    # 독립 검토(2026-10-08)가 짚은 갈래 — 게이트웨이 5xx 에 응답 코드가 없으면 '모름' · 매수가능은 시장가(01)로 묻는다 ·
+    #   쪽 상한을 넘으면 말없이 자르지 않고 실패한다
+    _psbl432 = []
+
+    def _tr2_432(method, url, headers, params=None, body=None, timeout=10):
+        if url.endswith('/oauth2/tokenP'):
+            return 200, {}, {'access_token': 'TOK', 'access_token_token_expired': '2099-01-01 00:00:00'}
+        if 'order-cash' in url:
+            return 502, {}, {'_raw': 'Bad Gateway'}
+        if 'inquire-psbl-order' in url:
+            _psbl432.append(params)
+            return 200, {}, {'rt_cd': '0', 'output': {'ord_psbl_cash': '100', 'nrcvb_buy_amt': '90', 'nrcvb_buy_qty': '9'}}
+        if 'inquire-daily-ccld' in url:
+            return 200, {'tr_cont': 'M'}, {'rt_cd': '0', 'output1': [], 'ctx_area_fk100': 'x', 'ctx_area_nk100': 'y'}
+        return 404, {}, {}
+    _br2_432 = _bk432.KisBroker(_cf2, transport=_tr2_432, token_dir=_tmp432, sleep=lambda s: None)
+    _e3 = _e4 = None
+    try:
+        _br2_432.place_order('buy', '000001', 1, 1000)
+    except _bk432.TransportError as e:
+        _e3 = e
+    _orb432 = _br2_432.get_orderable('000001', 1000)
+    try:
+        _br2_432.get_daily_orders('20261007', '20261007')
+    except _bk432.BrokerError as e:
+        _e4 = e
+    check("② 독립 검토 반영 — 주문 POST 가 5xx·응답 코드 없음이면 '모름'(거절 아님) · 매수가능은 ORD_DVSN 01 · 미수 없는 칸 · "
+          "내역이 쪽 상한을 넘으면 실패(말없이 자르지 않는다)",
+          isinstance(_e3, _bk432.TransportError) and _orb432['qty'] == 9 and _orb432['amt'] == 90
+          and _psbl432 and _psbl432[-1]['ORD_DVSN'] == '01'
+          and isinstance(_e4, _bk432.BrokerError) and not isinstance(_e4, _bk432.TransportError), str((_e3, _e4)))
+    check("② 주문번호는 앞자리 0 을 떼고 견준다 · 취소·정정 행(원 주문번호를 가리킴)은 새 주문의 짝이 아니다",
+          _sx432._odno('0000117057') == _sx432._odno('117057') and _sx432._is_child({'orig_odno': '0000117057'})
+          and not _sx432._is_child({'orig_odno': '0000000000'}) and not _sx432._is_child({}))
+    _tok_files432 = [f for f in _os.listdir(_tmp432) if f.startswith('kis_token_')]
+    # 시험 폴더는 _probe/ 아래 = 저장소 안이다 — 토큰 파일은 저장소 안에 **안 쓴다**(커밋될 수 있는 자리 · §9)
+    check("② 토큰은 한 연결 안에서 한 번만 받는다 · 저장소 안 폴더에는 토큰 파일을 쓰지 않는다",
+          sum(1 for m, u, *_ in _calls432 if u.endswith('/oauth2/tokenP')) == 1 and len(_tok_files432) == 0
+          and 'TOK' not in ''.join(open(_os.path.join(_tmp432, f), encoding='utf-8').read() for f in _os.listdir(_tmp432)
+                                   if f.endswith('.json')), str(_tok_files432))
+finally:
+    _sh432.rmtree(_tmp432, ignore_errors=True)
+# ③ 위험 한도 — 기본값이 없다 · 가장 작은 제한 · 한 칸이라도 모르면 수량 0
+_v0, _m0, _p0 = _sr432.validate({})
+_sz432 = _sr432.size(10000, 9500, dict(total_eval=20_000_000, stock_eval=10_000_000, cash=10_000_000), _LIM432, 0.41)
+check("③ 한도를 안 정하면 여섯이 다 빠졌다고 적는다(기본값 없음) · 정하면 네 제한 중 가장 작은 수량과 그 이름",
+      len(_m0) == 6 and _sz432['qty'] == min(_sz432['caps'].values()) and _sz432['binding'] in _sz432['caps']
+      and abs(_sz432['per_share_risk'] - (500 + 10000 * 0.0041)) < 1e-9, str(_sz432))
+check("③ 계좌 칸을 못 읽으면 수량을 안 낸다 · 최소 현금 + 최대 주식 비중이 100 을 넘으면 문제로 적는다",
+      _sr432.size(10000, 9500, dict(total_eval=None, stock_eval=1, cash=1), _LIM432, 0.41)['qty'] == 0
+      and _sr432.validate(dict(_LIM432, min_cash_pct=20, max_total_exposure_pct=90))[2])
+# ④ 상태 전이 — 허락 안 된 전이 · 끝난 주문 다시 바꾸기를 장부가 거부한다
+_c432 = _db432()
+_sl432.add_intent(_c432, dict(intent_id='T1', plan_id='P', side='buy', code='000001', qty=1, price=1, ord_dvsn='00',
+                              mode='LIVE', trade_day='2026-10-07'))
+_bad432 = []
+for _st in ('FILLED', 'BROKER_ACK'):
+    try:
+        _sl432.order_event(_c432, 'T1', _st)
+        _bad432.append(_st)
+    except _sl432.LedgerError:
+        pass
+_sl432.order_event(_c432, 'T1', 'REJECTED')
+try:
+    _sl432.order_event(_c432, 'T1', 'PLANNED')
+    _bad432.append('after-terminal')
+except _sl432.LedgerError:
+    pass
+check("④ 장부가 건너뛴 전이(계획 → 체결)와 끝난 주문의 재전이를 거부한다", _bad432 == [], str(_bad432))
+# ⑤ 같은 주문 두 번 금지 — 같은 계획·방향·거래일·이유
+_dup432 = False
+try:
+    _sl432.add_intent(_c432, dict(intent_id='T2', plan_id='P', side='buy', code='000001', qty=1, price=1, ord_dvsn='00',
+                                  mode='LIVE', trade_day='2026-10-07'))
+except _sl432.LedgerError:
+    _dup432 = True
+check("⑤ 같은 계획·방향·거래일의 주문 의도는 장부가 두 번 못 만든다", _dup432)
+# ⑥~ 한 바퀴 — 실주문 자격 있는 계획 · 가짜 증권사는 한국투자처럼(매도 가능 = 보유 − 열린 매도 · 넘는 매도 거절)
+#   독립 검토(2026-10-08)가 재현한 결함 아홉을 하나씩 심는다 — 고치기 전 판은 각 시나리오에서 실패했다(_probe/r446_old_vs_new.py)
+_rep432 = _report432()
+_Q432 = (lambda code: 10100.0)
+
+
+def _cyc432(c, fb, rep=None, now=None, quote=_Q432, **kw):
+    return _sx432.run_cycle(c, broker=fb, cfg=_CFG432, report=_rep432 if rep is None else rep, anchor_day='2026-10-06',
+                            now=now or _now432(), cost_pct=0.41, do_shadow=False, quote_fn=quote, **kw)
+
+
+def _states432(c):
+    return [i['state'] for i in _sl432.intents_with_state(c)]
+
+
+def _db_lim432(**lim):
+    c = _db432(limits=False)
+    _sl432.set_setting(c, 'limits', dict(_LIM432, **lim), by='test')
+    return c
+
+
+_c, _fb = _db432(), _FakeBroker432()
+_o1 = _cyc432(_c, _fb)
+_o2 = _cyc432(_c, _fb, now=_now432(mm=5))
+check("⑥ 실주문 자격 있는 계획 → 진입가 지정가 매수 한 건 · 같은 날 다음 바퀴는 다시 안 산다",
+      len(_fb.placed) == 1 and _fb.placed[0][0] == 'buy' and _fb.placed[0][3] == _bk432.round_to_tick(10000, 'buy')
+      and _fb.placed[0][4] == '00' and _o2['orders'] == [], str(_fb.placed))
+# 시간초과 — 들어갔는데 응답이 끊긴 경우 · 증권사 시계가 PC 보다 이른 경우(검토 2번: 시각 비교로 못 찾아 '거절'로 단정했다)
+for _lab432, _tm432 in (('시계 같음', None), ('증권사 시계가 이름', '000001')):
+    _c, _fb = _db432(), _FakeBroker432()
+    _fb.mode, _fb.time = 'timeout_reached', _tm432
+    _cyc432(_c, _fb)
+    _s1 = _states432(_c)
+    _fb.mode = 'ack'
+    _cyc432(_c, _fb, now=_now432(mm=5))
+    _its = _sl432.intents_with_state(_c)
+    check(f"⑦ 시간초과 → UNKNOWN · 다음 바퀴에 내역에서 찾아 접수로 맞추고 다시 보내지 않는다 ({_lab432} · PC 시계를 안 쓴다)",
+          _s1 == ['UNKNOWN'] and len(_fb.placed) == 1 and _states432(_c) == ['BROKER_ACK'] and _its[0]['odno'],
+          str([(i['state'], i['odno']) for i in _its]))
+# 시간초과 — 실제로 안 들어간 경우: 그날은 '거절'로 단정하지 않고 다시 안 보낸다 · 다음 거래일에 만료로 적고 그때 다시 낼 수 있다
+_c, _fb = _db432(), _FakeBroker432()
+_fb.mode = 'timeout_lost'
+for _mm in (0, 5, 10):
+    _cyc432(_c, _fb, now=_now432(mm=_mm))
+_same432 = _states432(_c)
+_fb.mode, _fb.day = 'ack', '20261008'
+_cyc432(_c, _fb, now=_now432(d=8))
+check("⑦ 내역에 없는 주문은 그날 UNKNOWN 으로 두고 다시 안 보낸다(주문 1번) · 다음 거래일에 만료 → 대기 기간 안이라 그날 다시 낸다",
+      _same432 == ['UNKNOWN'] and _states432(_c) == ['EXPIRED', 'BROKER_ACK'] and len(_fb.placed) == 2, str(_states432(_c)))
+# 일부 체결 · 마감 뒤 늦게 알려진 체결(검토 3번: 15:30 에 만료로 끝내 늦은 체결을 버렸다)
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_q = _fb.placed[0][2]
+_od = _fb.orders[0]['odno']
+_fb.fill(_od, _q // 2)
+_cyc432(_c, _fb, now=_now432(hh=15, mm=40))
+_mid432 = (_states432(_c), (_sl432.positions(_c).get('000001') or {}).get('qty'))
+_fb.fill(_od, _q)
+_cyc432(_c, _fb, now=_now432(hh=16, mm=10))
+_pos = _sl432.positions(_c).get('000001') or {}
+check("⑧ 일부 체결 → 그 수량으로 관리 시작 · 장 마감 뒤에도 그날 주문은 만료로 끝내지 않는다 · 늦게 알려진 체결까지 받는다",
+      _mid432 == (['PARTIAL'], _q // 2) and _states432(_c) == ['FILLED'] and _pos.get('qty') == _q
+      and _pos.get('managed') and _pos.get('stop') == 9500, str((_mid432, _states432(_c), _pos.get('qty'))))
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_fb.day = '20261008'
+_cyc432(_c, _fb, now=_now432(d=8, hh=8))
+check("⑧ 체결 없는 당일 주문은 다음 날 만료로 적는다", _states432(_c) == ['EXPIRED'], str(_states432(_c)))
+_c, _fb = _db432(), _FakeBroker432()
+_fb.mode = 'reject'
+_cyc432(_c, _fb)
+check("⑧ 증권사 거절 → REJECTED · 사유를 남긴다", _states432(_c) == ['REJECTED']
+      and '부족' in (_sl432.intents_with_state(_c)[0]['detail'] or ''))
+# ⑨ 기존 보유는 손절선 아래여도 안 판다 · ⑩ 넘긴 종목은 판다
+_c = _db432(limits=False)
+_fb = _FakeBroker432(holdings={'000777': dict(qty=10, avg=5000, price=100)})
+_cyc432(_c, _fb, rep={})
+_sold_before = [p for p in _fb.placed if p[0] == 'sell']
+_sx432.adopt(_c, '000777', 10, 6000, 4000, by_user=True)
+_cyc432(_c, _fb, rep={}, now=_now432(mm=5))
+_sold_after = [p for p in _fb.placed if p[0] == 'sell']
+_adopt_auto = False
+try:
+    _sx432.adopt(_c, '000778', 1, 6000, 4000)
+except _sl432.LedgerError:
+    _adopt_auto = True
+check("⑨ 계좌의 기존 보유는 넘기기 전엔 절대 안 판다(위험 한도가 없어도 관리 매도는 돈다 — 그래도 0건)",
+      _sold_before == [] and (_sl432.positions(_c).get('000777') or {}).get('ownership') == 'USER_ADOPTED')
+check("⑩ 사용자가 넘긴 종목은 손절선 아래면 시장가로 판다 · 넘기기는 사용자 행동으로만(by_user)",
+      len(_sold_after) == 1 and _sold_after[0][4] == '01' and _sold_after[0][2] == 10 and _adopt_auto, str(_sold_after))
+# ⑩' 목표 매도가 주식을 잡은 채 손절선 아래 + 취소가 한 번 실패(검토 1번: 실패한 취소를 다시 안 해 그날 손절이 꺼졌다)
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_q = _fb.placed[0][2]
+_fb.fill(_fb.orders[0]['odno'], _q)
+_fb.hold['000001']['price'] = 10100
+_cyc432(_c, _fb, now=_now432(mm=5))                       # 체결 → 관리 시작 → 1차 목표 지정가 매도(전량이 잡힌다)
+_tgt432 = [o for o in _fb.orders if o['side'] == 'sell']
+_fb.hold['000001']['price'] = 9000
+_fb.fail_cancel = 1
+for _mm in (10, 15, 20):
+    _cyc432(_c, _fb, now=_now432(mm=_mm))
+_stops432 = [p for p in _fb.placed if p[0] == 'sell' and p[4] == '01']
+_rej432 = [i for i in _sl432.intents_with_state(_c) if i['side'] == 'sell' and i['state'] == 'REJECTED']
+check("⑩' 목표 매도가 잡고 있고 취소가 한 번 실패해도 — 취소를 다음 바퀴에 다시 하고, 풀린 뒤 보유 전량을 시장가로 판다 · 거절 0",
+      len(_tgt432) == 1 and _tgt432[0]['ord_price'] == 11000 and _fb.cancels.count(_tgt432[0]['odno']) >= 2
+      and _stops432 == [('sell', '000001', _q, None, '01')] and not _rej432,
+      str((_stops432, _fb.cancels, [(i['reason'], i['state']) for i in _sl432.intents_with_state(_c) if i['side'] == 'sell'])))
+# ⑪ 긴급정지 — 새 매수 안 냄 · 열린 매수 취소(실패하면 다음 바퀴에 다시) · 넘긴 종목의 손절 매도는 그대로
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_buy_od = _fb.orders[0]['odno']
+_sl432.set_setting(_c, 'kill_switch', True)
+_fb.hold['000555'] = dict(qty=5, avg=5000, price=100)
+_sx432.adopt(_c, '000555', 5, 6000, 4000, by_user=True)
+_fb.fail_cancel = 1
+_o = _cyc432(_c, _fb, rep=_report432(code='000002.KS'), now=_now432(mm=10))
+_cyc432(_c, _fb, rep=_report432(code='000002.KS'), now=_now432(mm=15))
+check("⑪ 긴급정지 — 새 매수 0 · 열린 매수 취소를 실패해도 다음 바퀴에 다시 해 취소된다 · 넘긴 종목의 손절 매도는 그대로 낸다",
+      _o['orders'] == [] and _fb.cancels.count(_buy_od) >= 2 and _fb.orders[0]['cancelled']
+      and any(p[0] == 'sell' and p[1] == '000555' for p in _fb.placed) and any('긴급정지' in b for b in _o['blocked']),
+      str((_fb.cancels, _o['blocked'])))
+# 검토 4번 — 밖에서 판 수량을 관리에서 내린다 · 사용자가 나중에 다시 산 주식은 봇이 안 판다
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_q = _fb.placed[0][2]
+_fb.fill(_fb.orders[0]['odno'], _q)
+_fb.hold['000001']['price'] = 10100
+_cyc432(_c, _fb, now=_now432(mm=5))                       # 관리 시작 · 목표 매도
+for _o4 in _fb.orders:
+    if _o4['side'] == 'sell':
+        _o4['cancelled'] = True                           # 사용자가 증권사 앱에서 목표 매도를 취소하고
+_fb.hold['000001']['qty'] = 0                             # 직접 다 팔았다
+_cyc432(_c, _fb, now=_now432(mm=10))
+_after_sell432 = _sl432.positions(_c).get('000001') or {}
+_fb.day = '20261008'
+_fb.hold['000001'] = dict(qty=_q, avg=9100, price=9000)    # 이틀 뒤 사용자 돈으로 다시 샀고 가격은 손절선 아래
+_n_sells432 = len([p for p in _fb.placed if p[0] == 'sell'])
+_cyc432(_c, _fb, now=_now432(d=8))
+check("④' 밖에서 판 수량은 관리에서 내리고(관리 끝) · 사용자가 다시 산 같은 종목은 기존 보유로 보아 손절선 아래여도 안 판다",
+      not _after_sell432.get('managed') and _after_sell432.get('last_event') == 'CLOSED'
+      and len([p for p in _fb.placed if p[0] == 'sell']) == _n_sells432
+      and (_sl432.positions(_c).get('000001') or {}).get('ownership') == 'READ_ONLY_EXISTING',
+      str((_after_sell432, _sl432.positions(_c).get('000001'))))
+# 검토 5번 — 대기 매수도 한도에 센다(동시 보유 수 · 주식 비중)
+_c, _fb = _db_lim432(max_open_positions=1), _FakeBroker432()
+_rep3 = _report432()
+_rep3['picks'] = [dict(_rep3['picks'][0], symbol=f'00000{k}.KS') for k in (1, 2, 3)]
+_cyc432(_c, _fb, rep=_rep3)
+_cyc432(_c, _fb, rep=_rep3, now=_now432(mm=5))
+# 주식 비중 15%(300만원)·하루 주문 5건 — 종목마다 따로 재면 184주 × 4 = 736만원(옛 판) · 대기 매수를 세면 300만원 안
+_c2, _fb2 = _db_lim432(max_total_exposure_pct=15, max_daily_new_orders=5), _FakeBroker432(stock=0)
+_rep4 = _report432()
+_rep4['picks'] = [dict(_rep4['picks'][0], symbol=f'00000{k}.KS') for k in (1, 2, 3, 4)]
+_cyc432(_c2, _fb2, rep=_rep4)
+_notional432 = sum(q * p for s, cd, q, p, d in _fb2.placed if s == 'buy')
+check("⑤' 대기 매수도 동시 보유 수에 센다(최대 1 → 두 바퀴에 걸쳐 매수 1건) · 한 바퀴 안에서도 주식 비중 한도를 넘지 않는다",
+      len([p for p in _fb.placed if p[0] == 'buy']) == 1 and 0 < _notional432 <= 20_000_000 * 0.15 + 1,
+      str((_fb.placed, _fb2.placed, _notional432)))
+# 검토 6번 — 체결 반영과 상태 기록 사이에 멈춰도(데이터베이스 잠김 등) 두 번 세지 않는다(한 묶음 커밋)
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb)
+_q = _fb.placed[0][2]
+_fb.fill(_fb.orders[0]['odno'], _q)
+_orig_oe432 = _sl432.order_event
+_boom432 = {'n': 0}
+
+
+def _oe_boom432(*a, **k):
+    if k.get('commit') is False and _boom432['n'] == 0:
+        _boom432['n'] += 1
+        raise __import__('sqlite3').OperationalError('database is locked')
+    return _orig_oe432(*a, **k)
+
+
+_sl432.order_event = _oe_boom432
+try:
+    _o6 = _cyc432(_c, _fb, now=_now432(mm=5))
+finally:
+    _sl432.order_event = _orig_oe432
+_cyc432(_c, _fb, now=_now432(mm=10))
+_opened432 = [r for r in _c.execute("SELECT * FROM position_events WHERE code='000001' AND event IN ('OPENED','FILL_ADD')")]
+check("⑥' 체결 반영 도중 멈춰도 그 묶음은 통째로 안 남고 다음 바퀴가 한 번만 반영한다(수량 = 체결 · 관리 시작 1번)",
+      _boom432['n'] == 1 and len(_opened432) == 1 and (_sl432.positions(_c).get('000001') or {}).get('qty') == _q
+      and _states432(_c)[0] == 'FILLED', str((_boom432, len(_opened432), _sl432.positions(_c).get('000001'))))
+# 검토 7번 — 주문 내역 조회가 실패해도 손절은 나간다(신규 매수만 막는다) · 화면이 경고를 띄운다
+_c = _db432()
+_fb = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=100)})
+_sx432.adopt(_c, '000555', 5, 6000, 4000, by_user=True)
+_fb.fail_hist = 1
+_o7 = _cyc432(_c, _fb)
+_hb432 = _sl432.last_heartbeat(_c)
+check("⑦' 내역 조회가 실패해도 넘긴 종목의 손절 매도는 낸다 · 신규 매수는 막는다 · 심박이 'warn' 과 사유를 남긴다",
+      any(p[0] == 'sell' and p[1] == '000555' for p in _fb.placed) and not any(p[0] == 'buy' for p in _fb.placed)
+      and _hb432['status'] == 'warn' and '내역' in (_hb432['detail'] or ''), str((_fb.placed, _hb432)))
+# 목표 매도가 잡고 있던 넘긴 종목이 손절선 아래 — 취소를 보낸 그 바퀴에 잔고를 다시 읽어 판다(한 바퀴 늦지 않게)
+_c = _db432()
+_fb = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=5000)})
+_sx432.adopt(_c, '000555', 5, 6000, 4000, by_user=True)
+_cyc432(_c, _fb, rep={})                                   # 1차 목표 지정가 매도가 5주를 잡는다
+_fb.hold['000555']['price'] = 100
+_cyc432(_c, _fb, rep={}, now=_now432(mm=5))
+check("⑦'' 손절 때 목표 매도를 취소하면 그 바퀴에 잔고를 다시 읽어 바로 판다(5주 시장가)",
+      [p for p in _fb.placed if p[4] == '01'] == [('sell', '000555', 5, None, '01')], str(_fb.placed))
+# 검토 8번 — 지금 가격이 손절선 이하면 사지 않는다 · 대기 매수 중 손절선 아래로 내려가면 취소한다
+_c, _fb = _db432(), _FakeBroker432()
+_o8 = _cyc432(_c, _fb, quote=lambda code: 9400.0)
+_none8 = list(_fb.placed)
+_cyc432(_c, _fb, now=_now432(mm=5))
+_cyc432(_c, _fb, now=_now432(mm=10), quote=lambda code: 9400.0)
+check("⑧' 지금 가격이 손절선 이하면 안 산다 · 대기 매수 중에 손절선 아래로 내려가면 그 매수를 취소한다 · 가격을 못 읽으면 안 산다",
+      _none8 == [] and any('손절선' in b for b in _o8['blocked']) and len(_fb.placed) == 1
+      and _fb.orders[0]['cancelled']
+      and _cyc432(_db432(), _FakeBroker432(), quote=lambda code: None)['orders'] == [], str((_fb.cancels, _o8['blocked'])))
+# 검토 9번 — 계획 만들기가 죽어도 보호 매도는 돈다
+_c = _db432()
+_fb = _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=100)})
+_sx432.adopt(_c, '000555', 5, 6000, 4000, by_user=True)
+_orig_pf432 = _se432.plans_from_report
+_se432.plans_from_report = lambda *a, **k: (_ for _ in ()).throw(ValueError('계획 심기 실패'))
+try:
+    _o9 = _cyc432(_c, _fb)
+finally:
+    _se432.plans_from_report = _orig_pf432
+check("⑨' 계획 만들기가 실패해도 손절 매도는 낸다 · 경고로 남긴다",
+      any(p[0] == 'sell' and p[1] == '000555' for p in _fb.placed) and any('계획' in a for a in _o9['alerts']),
+      str(_o9['alerts']))
+# 시간대 — PC 가 KST 가 아니어도 한국 시각으로 장 시간을 본다
+_UTC432 = _dt432.timezone.utc
+check("⑭'' 장 시간은 한국 시각으로 — UTC 01:00(=10:00 KST)은 장중 · UTC 10:00(=19:00 KST)은 장 밖",
+      _sx432.session_open(_dt432.datetime(2026, 10, 7, 1, 0, tzinfo=_UTC432))
+      and not _sx432.session_open(_dt432.datetime(2026, 10, 7, 10, 0, tzinfo=_UTC432)))
+# ⑫ 실전 잠금 — 문장을 안 넣으면 실전 주문 0 · 자격증명이 모의면 실전 안 됨
+_c, _fb = _db432(unlock=False), _FakeBroker432()
+_o = _cyc432(_c, _fb)
+_c2 = _db432(mode='PAPER')
+_o2 = _cyc432(_c2, _FakeBroker432())
+check("⑫ 실전 잠금이 안 풀리면 주문 0 · 모의투자 모드에 실전 자격증명이면 주문 0(모드와 자격증명이 같아야 한다)",
+      _fb.placed == [] and any('잠금' in b for b in _o['blocked']) and _o2['orders'] == []
+      and any('자격증명' in b for b in _o2['blocked']), str((_o['blocked'], _o2['blocked'])))
+check("⑫ 실전 준비 항목 넷을 낱낱이 판정한다(화면이 그린다)",
+      [n for n, ok, w in _sx432.live_readiness(_CFG432, {})] == ['한국투자 실전 자격증명', '위험 한도 여섯', '실전 잠금 해제', '긴급정지 꺼짐']
+      and [ok for n, ok, w in _sx432.live_readiness(_CFG432, {})] == [True, False, False, True])
+# ⑬ 오래된 리포트 · 추천 아님 · 주식 아님 — 실주문 자격 없음(사유) · 기록만 모의는 남는다
+_pl_old = _se432.plans_from_report(_report432(day='2026-10-02'), '2026-10-06')[0]
+_pl_rec = _se432.plans_from_report(_report432(rec=False), '2026-10-06')[0]
+_pl_etf = _se432.plans_from_report(_report432(asset='etf'), '2026-10-06')[0]
+_pl_ok = _se432.plans_from_report(_report432(), '2026-10-06')[0]
+_bad_rep432 = _report432()
+_bad_rep432['picks'] = [dict(_bad_rep432['picks'][0], core=dict(_bad_rep432['picks'][0]['core'], buy_zone=('n/a', 'n/a'))),
+                        _report432()['picks'][0]]
+check("⑬ 오래된 리포트·추천 아님·주식 아님은 실주문 자격이 없고 첫 사유를 적는다 · 정상 계획은 자격 있음 · 이상한 후보 하나가 나머지를 막지 않는다",
+      not _pl_old['live_ok'] and '다릅니다' in _pl_old['block_reason'] and not _pl_rec['live_ok']
+      and '시험 사유' in _pl_rec['block_reason'] and not _pl_etf['live_ok'] and _pl_ok['live_ok']
+      and _pl_ok['entry'] == _bk432.round_to_tick(10000, 'buy') and _pl_ok['wait_bars']
+      and len(_se432.plans_from_report(_bad_rep432, '2026-10-06')) == 1, str(_pl_old['block_reason']))
+check("⑬ 같은 계획은 한 번만 남는다(영수증은 안 바뀐다)",
+      (lambda cc: (_sl432.add_plan(cc, _pl_ok), _sl432.add_plan(cc, _pl_ok)))(_db432()) == (True, False))
+# ⑭ 장 시간 밖 · 휴장일 — 주문하지 않는다(내역만 맞춤)
+_c, _fb = _db432(), _FakeBroker432()
+_cyc432(_c, _fb, now=_now432(hh=8))
+_cyc432(_c, _fb, now=_now432(d=9, hh=10))
+check("⑭ 장 시작 전·휴장일(2026-10-09 한글날)에는 주문 0", _fb.placed == [], str(_fb.placed))
+# ⑭' 저녁 작업은 주문을 내지 않는다 — '놓치면 켜질 때' 돌아 장중일 수 있다(실전 · 장중 · 자격 있는 계획이어도 주문 0)
+_c, _fb = _db432(), _FakeBroker432()
+_on432 = _cyc432(_c, _fb, allow_orders=False)
+import scripts.nightly_local as _nl432                               # noqa: E402
+_sw432 = [s for s in _nl432.plan_steps(False) if s[1][0].replace('\\', '/').endswith('run_swing_worker.py')]
+check("⑭' 주문 없이 도는 바퀴(allow_orders=False)는 장중·실전·자격 있는 계획이어도 주문 0 · 저녁 작업은 그 길(--no-orders)로 부른다",
+      _fb.placed == [] and _on432['plans_new'] == 1 and len(_sw432) == 1
+      and _sw432[0][1][1:] == ['--once', '--no-orders'], str((_fb.placed, _sw432)))
+# ⑮ 재시작 맞추기 — 보내는 중에 멈춘(SUBMITTING) 의도를 내역으로 체결까지
+_c, _fb = _db432(), _FakeBroker432()
+_sl432.add_plan(_c, _pl_ok)
+_sl432.add_intent(_c, dict(intent_id='R1', plan_id=_pl_ok['plan_id'], side='buy', code='000001', qty=3, price=_pl_ok['entry'],
+                           ord_dvsn='00', mode='LIVE', trade_day='2026-10-07', reason='entry'), pre_odnos=[])
+_sl432.order_event(_c, 'R1', 'RISK_APPROVED')
+_sl432.order_event(_c, 'R1', 'SUBMITTING')
+_fb.orders.append(dict(date='20261007', orgno='91252', odno='0000000042', orig_odno='', side='buy', code='000001', ord_qty=3,
+                       ord_price=float(_pl_ok['entry']), time='000000', filled_qty=3, avg_fill=float(_pl_ok['entry']),
+                       remain_qty=0, rejected_qty=0, cancelled=False, cancel_qty=0))
+_sx432.reconcile(_c, _fb, _now432(), lambda m: None)
+_r1 = _sl432.intents_with_state(_c)[0]
+check("⑮ 다시 켜서 맞추기 — 보내는 중에 멈춘 주문을 내역에서 찾아 체결로 · 포지션을 연다 · 주문은 안 보낸다",
+      _r1['state'] == 'FILLED' and _r1['odno'] == '0000000042' and (_sl432.positions(_c).get('000001') or {}).get('qty') == 3
+      and _fb.placed == [], str(_r1))
+# ⑯ 호가 단위
+check("⑯ 호가 단위(2023-01 개편) — 경계마다 내림 · 매수는 계획보다 비싸게 안 산다",
+      [_bk432.tick_size(p) for p in (1999, 2000, 4999, 5000, 19999, 20000, 49999, 50000, 199999, 200000, 499999, 500000)]
+      == [1, 5, 5, 10, 10, 50, 50, 100, 100, 500, 500, 1000]
+      and _bk432.round_to_tick(10003, 'buy') == 10000 and _bk432.round_to_tick(20049, 'buy') == 20000
+      and _bk432.round_to_tick(1999.7, 'buy') == 1999)
+# ⑰ 화면은 주문하지 않는다 — swing_view 와 web_app 에 주문·취소 호출이 없다(AST)
+_ord_calls432 = []
+for _f432 in ('swing_view.py', 'web_app.py'):
+    _t432 = _ast432.parse(open(_os.path.join(PROJ, _f432), encoding='utf-8').read())
+    for _n432 in _ast432.walk(_t432):
+        if isinstance(_n432, _ast432.Call) and isinstance(_n432.func, _ast432.Attribute) \
+                and _n432.func.attr in ('place_order', 'cancel_order', 'run_cycle', 'submit'):
+            _ord_calls432.append((_f432, _n432.lineno, _n432.func.attr))
+check("⑰ 화면 모듈에서 주문·취소·한 바퀴 호출 0 — 주문은 워커만 낸다", _ord_calls432 == [], str(_ord_calls432),
+      scanned=2)
+# ⑱ 개인 자료 — 장부는 .portfolio 안(gitignored) · 백업이 고르지 않는다
+check("⑱ 장부는 .portfolio/swing.db 다(커밋·업로드 밖)",
+      _os.path.relpath(_sl432.PATH, PROJ).replace('\\', '/') == '.portfolio/swing.db')
+import scripts.backup_research_data as _bkr432                       # noqa: E402
+import fnmatch as _fn432
+check("⑱ 백업이 장부·워커 기록을 고르지 않는다(DENY) — 계좌 잔고·주문은 이 PC 에만",
+      all(any(_fn432.fnmatch(n, d) for d in _bkr432.DENY) for n in ('swing.db', 'swing_worker_run.txt', 'swing_worker.lock')))
+_ro432 = _os.path.join(PROJ, '_probe', '_r446_ro_absent.db')
+check("⑱ 쓰기가 꺼진 화면은 장부가 없으면 만들지 않는다(읽기 전용 · 파일 0) — 검사가 사용자 자료를 안 바꾼다",
+      _sl432.connect(_ro432, readonly=True) is None and not _os.path.exists(_ro432))
+# ⑲ 화면 본문 — _probe 아래 임시 장부에 심은 자료로 그린다(사용자 장부·증권사 안 건드림)
+_vdb432 = _os.path.join(PROJ, '_probe', '_r446_view_test.db')
+if _os.path.exists(_vdb432):
+    _os.remove(_vdb432)
+_vc432 = _sl432.connect(_vdb432)
+_sl432.set_setting(_vc432, 'mode', 'SHADOW', by='test')
+_sl432.add_plan(_vc432, dict(_pl_rec, data_day='2026-10-07'))
+_sl432.add_plan(_vc432, dict(_pl_ok, data_day='2026-10-07', plan_id='SW1-VIEW-OK'))
+_sl432.account_snapshot(_vc432, 'demo', dict(cash=1, total_eval=3, net_asset=3, stock_eval=2,
+                                              positions=[dict(code='000777', name='x', qty=3, avg_price=1, price=1)]))
+_vc432.close()
+
+
+# 절을 떼어 돌리는 사전 점검에서도 서게 앱 코드를 문자열로 넘긴다(from_function 은 소스 파일이 있어야 한다)
+_swing_app_src432 = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    f"_L.connect.__defaults__ = ({_vdb432!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+# 렌더는 자식 프로세스에서 — 부모는 AppTest 를 불러오지 않는다(라운드 163 · §200 이 잠근다). 결과만 JSON 으로 받는다.
+_child432 = _os.path.join(PROJ, '_probe', '_r446_view_child.py')
+open(_child432, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"      # 자식의 표준출력은 cp949 일 수 있다 — 한글 칸 이름이 깨진다(라운드 271)
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_swing_app_src432!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
+    "           cap=' '.join(str(e.value) for e in at.caption), md=' '.join(str(e.value) for e in at.markdown),\n"
+    "           metric={m.label: m.value for m in at.metric})\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _rc432 = __import__('subprocess').run([sys.executable, _child432], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300)
+    _jr432 = (_rc432.stdout or '').rsplit('@@R@@', 1)
+    _v432 = __import__('json').loads(_jr432[1]) if len(_jr432) == 2 else {}
+    check("⑲ 화면 본문이 예외 없이 그려진다 · 우위 없음 사실을 먼저 적고 · 계획 둘 중 실주문 자격 1 · 기본값 없는 한도를 말한다",
+          _v432.get('exc') == 0 and '우위가 없습니다' in (_v432.get('cap') or '')
+          and (_v432.get('metric') or {}).get('오늘 계획 · 실주문 자격') == '2 · 1'
+          and '기본값이 없습니다' in (_v432.get('md') or ''),
+          str(_v432.get('first') or _v432.get('metric') or (_rc432.stderr or '')[-200:]))
+finally:
+    for _f432 in (_vdb432, _child432):
+        if _os.path.exists(_f432):
+            _os.remove(_f432)
+# ⑳ 맨 위 탭 — 사용자 요청 "윗쪽에 탭으로 따로". 고르면 사이드바까지만 그리고 그 칸에서 멈춘다(무거운 분석·스캔을 건너뛴다).
+#    무거운 쪽만 세우는 세션 열쇠(scan_key)가 안 생기는지로 잰다 · 본문에 같은 칸이 한 벌 더 있지 않다(§4)
+_w432 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("⑳ 스윙 칸은 맨 위 탭 한 곳에서만 그린다 — 본문 앵커·메뉴 항목 없음 · 그리는 호출 1곳 · 그 뒤 st.stop()",
+      'nav-swing' not in _w432 and _w432.count('_swv446.render(') == 1
+      and _w432.index('st.stop()', _w432.index('_swv446.render(')) - _w432.index('_swv446.render(') < 900
+      and "_TOP_VIEWS = ('가늠 분석', '스윙 자동매매')" in _w432)
+_rt432 = _render(state_json=_js432.dumps({'top_view': '스윙 자동매매'}, ensure_ascii=False), want_key=['scan_key'],
+                 want_val=['top_view'])
+check("⑳ 탭 '스윙 자동매매' 렌더 — 예외 0 · 무거운 분석 열쇠(scan_key)가 안 생긴다 · 탭 선택이 그대로",
+      _render_ok(_rt432) and (_rt432.get('keys') or {}).get('scan_key') is False
+      and (_rt432.get('vals') or {}).get('top_view') == '스윙 자동매매', str(_rt432)[:300])
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

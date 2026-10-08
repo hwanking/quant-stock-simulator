@@ -598,6 +598,14 @@ st.markdown(f"""
 <div id="nav-top"></div>
 """, unsafe_allow_html=True)
 
+# ── 맨 위 탭 (라운드 446) ────────────────────────────────────────────────
+# 사용자 요청: *"스윙 자동매매를 윗쪽에 탭으로 하나 따로 빼줘."* 탭을 고르면 사이드바까지만 그리고 그 칸만 그린 뒤 끝낸다 —
+#   무거운 분석·스캔을 건너뛰므로 빠르다(아래 '맨 위 탭 갈림'). 같은 칸을 본문에 한 벌 더 두지 않는다(§4).
+_TOP_VIEWS = ('가늠 분석', '스윙 자동매매')
+if st.session_state.get('top_view') not in _TOP_VIEWS:
+    st.session_state['top_view'] = _TOP_VIEWS[0]
+st.segmented_control('화면', _TOP_VIEWS, key='top_view', label_visibility='collapsed')
+
 _NAV_SLOT = st.empty()          # 종목이 확정된 뒤 채운다 (자리는 지금 잡는다)
 
 # ── 실시간 띠 (라운드 48) ──────────────────────────────────────────────
@@ -3552,6 +3560,37 @@ with _fc2_376:
 if _theme_is_light != (_theme == 'light'):
     st.session_state['ui_theme'] = 'light' if _theme_is_light else 'dark'
     st.rerun()
+
+
+# ── 맨 위 탭 갈림 (라운드 446) — '스윙 자동매매' 탭이면 여기서 그 칸만 그리고 끝낸다 ──────────────
+# 이 칸은 **관제실**이다 — 주문은 따로 도는 워커(scripts/run_swing_worker.py)만 낸다(§432 ⑰ 이 이 파일에 주문 호출이 없는지
+#   본다). 판정은 새로 안 만든다 — 그날 개장 전 리포트의 중앙 판정을 그대로 옮긴다(swing_engine). 원격 접속에서는 못 바꾼다.
+#   넘기기에 쓰는 손절선·1차 매도가는 관심종목 표와 **같은 함수**(effective_hold_stop · snap_hold_trim)에서 읽는다(§4).
+def _swing_hold_levels446(code):
+    _row = next((w for w in _wl_items() if portfolio.normalize_code(w.get('code')) == code), None)
+    if not _row or not _row.get('snap_hold_at'):
+        return None
+    try:
+        _s, _t = float(_uk.effective_hold_stop(_row)[0]), float(_row.get('snap_hold_trim'))
+    except (TypeError, ValueError):
+        return None
+    return (_s, _t) if _s < _t else None
+
+
+if st.session_state.get('top_view') == _TOP_VIEWS[1]:
+    st.header("스윙 자동매매")
+    try:
+        import premarket as _pm446
+        import swing_view as _swv446
+        _anc446 = _pm446.report_day()
+        _swv446.render(st, _uk, allow_read=ALLOW_LOCAL_READ, allow_write=ALLOW_LOCAL_STORE,
+                       hold_levels=_swing_hold_levels446,
+                       report=(_pm446.load_today_report(_anc446) if _anc446 else None),
+                       anchor_day=_anc446, md_safe=_md_safe)
+    except Exception as _e446:
+        # 라운드 441 — 삼킨 예외는 칸이 조용히 빠지는 자리다. 못 그렸으면 그렇다고 사유와 함께 적는다(§3).
+        st.caption(f"스윙 자동매매 칸을 그리지 못했습니다 — {type(_e446).__name__}: {_e446}")
+    st.stop()
 
 # --- 관심종목 스캔 실행 (위젯은 위에서 이미 그렸고, 여기서 t_ref·rho 를 써서 돌린다) ---
 # 파라미터가 바뀌면 이전 스캔 결과는 더 이상 같은 스냅샷이 아니므로 폐기한다
