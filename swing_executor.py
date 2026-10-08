@@ -40,6 +40,21 @@ import swing_risk
 #: 실전 잠금을 풀 때 사용자가 그대로 입력해야 하는 문장(손가락이 미끄러져 켜지지 않게)
 LIVE_UNLOCK_PHRASE = '실계좌 자동주문을 켭니다'
 MODE_ENV = {'PAPER': 'demo', 'LIVE': 'real'}
+#: 실전 주문 방식 (라운드 451) — 'approve' 는 화면 ② 에서 승인한 계획만 산다(기본 · 안전한 쪽) · 'auto' 는 실주문 자격이 있는 계획을
+#: 워커가 그대로 산다. 모의투자·기록만 모드에는 적용되지 않고, 보호 매도(손절·1차 목표)는 어느 쪽이든 승인 없이 낸다.
+APPROVAL_MODES = ('approve', 'auto')
+
+
+def approval_of(st):
+    """실전 주문 방식 — 'approve'(기본) 또는 'auto'. 모르는 값·빈 값은 승인형으로 읽는다(실수로 나가면 안 되는 쪽은 실전이다)."""
+    v = (st or {}).get('order_approval')
+    return v if v in APPROVAL_MODES else 'approve'
+
+
+def approved_plans(st):
+    """화면에서 승인한 계획 id 집합 — 설정 'approved_plans'(목록). 실행부는 **읽기만** 한다(쓰는 자리는 화면 ② 뿐 · §437 이 잠근다)."""
+    v = (st or {}).get('approved_plans') or []
+    return {str(x) for x in v} if isinstance(v, (list, tuple, set)) else set()
 OPEN_STATES = ('SUBMITTING', 'UNKNOWN', 'BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')
 PROTECTIVE = ('stop', 'expiry')
 #: 보호 매도가 같은 날 **거절**된 횟수의 상한 — 넘으면 사람에게 알린다. 운영 값이지 판정 문턱이 아니다
@@ -509,6 +524,8 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
     open_count = len(L.managed_open(c)) + len({it['code'] for it in pending} - set(L.managed_open(c)))
     pending_amt = sum((int(it['qty']) - int(it.get('filled_qty') or 0)) * float(it['price'] or 0) for it in pending)
     pos_now = L.positions(c)
+    approved = approved_plans(st)
+    need_approval = (mode == 'LIVE' and approval_of(st) == 'approve')
     for p in L.plans(c):
         if not p.get('live_ok'):
             continue
@@ -520,6 +537,9 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
             continue     # 이미 갖고 있거나 주문 중(확인 중인 주문 포함) — 겹쳐 사지 않는다
         if any(it['plan_id'] == p['plan_id'] and it['side'] == 'buy' and int(it.get('filled_qty') or 0) > 0 for it in every):
             continue     # 이 계획은 이미 (일부라도) 샀다
+        if need_approval and p['plan_id'] not in approved:
+            out['blocked'].append(f"{code} — 승인 전이라 사지 않는다(실전 승인형 · 화면 ②에서 이 계획을 승인해야 삽니다)")
+            continue
         cg = swing_risk.count_gates(limits, open_count, today_new)
         if cg:
             out['blocked'] += cg

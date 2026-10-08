@@ -35341,6 +35341,9 @@ _CFG432 = dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='0
 def _db432(mode='LIVE', unlock=True, limits=True, kill=False):
     c = _sl432.connect(':memory:')
     _sl432.set_setting(c, 'mode', mode, by='test')
+    # 라운드 451 — 실전 주문 방식의 기본이 '계획마다 승인'이 되어, 이 절의 바퀴 시나리오(승인 없이 사는 모양)는 '완전 자동'으로 돈다.
+    #   승인형(기본값 · 승인 전엔 안 삼 · 승인 뒤 삼)은 §437 이 따로 잰다.
+    _sl432.set_setting(c, 'order_approval', 'auto', by='test')
     if unlock:
         _sl432.set_setting(c, 'live_unlock', _sx432.LIVE_UNLOCK_PHRASE, by='test')
     if limits:
@@ -36226,6 +36229,123 @@ finally:
     for _f436 in (_vdb436, _child436):
         if _os.path.exists(_f436):
             _os.remove(_f436)
+
+
+print()
+print("§437 실전 승인형 — 계획마다 승인해야 사고, 완전 자동은 따로 켠다 · 보호 매도는 승인과 무관 (라운드 451)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   ① 기본은 승인형(빈 값·모르는 값도) ② 실전·승인형·승인 전 → 매수 0 · 사유 '승인 전' · 넘긴 종목의 손절 매도는 그대로 ③ 승인 → 다음
+#   바퀴에 매수 ④ 완전 자동 → 승인 없이 매수 ⑤ 모의투자는 승인과 무관 ⑥ 승인을 적는 자리는 화면뿐(실행부·워커는 읽기만) ⑦ 표의 오늘 상태에
+#   승인 전/승인됨 ⑧ 화면(자식 렌더 · 승인 버튼과 주문 방식 라디오). §432 의 가짜 증권사·장부·바퀴 도우미를 그대로 쓴다(네트워크 0).
+import swing_executor as _sx437
+import swing_ledger as _sl437
+import swing_view as _sv437
+
+check("① 승인 방식 기본값은 '계획마다 승인' — 빈 값·모르는 값도 승인형(안전한 쪽) · 'auto' 만 완전 자동 · 승인 목록은 문자열 집합",
+      _sx437.approval_of({}) == 'approve' and _sx437.approval_of({'order_approval': 'junk'}) == 'approve'
+      and _sx437.approval_of({'order_approval': 'auto'}) == 'auto' and _sx437.approved_plans({'approved_plans': ['a', 1]}) == {'a', '1'}
+      and _sx437.approved_plans({'approved_plans': 'x'}) == set())
+# ② 실전 · 승인형(기본) · 승인 전 — 매수 0 · 사유 · 넘긴 종목의 손절 매도는 그대로
+_c437, _fb437 = _db432(), _FakeBroker432(holdings={'000777': dict(qty=10, avg=5000, price=100)})
+_sl437.set_setting(_c437, 'order_approval', 'approve', by='test')      # §432 도우미는 '완전 자동'을 심으므로 여기서 승인형으로 되돌린다
+_sx432.adopt(_c437, '000777', 10, 6000, 4000, by_user=True)
+_o437 = _cyc432(_c437, _fb437)
+_buys437 = [p for p in _fb437.placed if p[0] == 'buy']
+_sells437 = [p for p in _fb437.placed if p[0] == 'sell']
+check("② 실전 · 승인형(기본) · 승인 전 계획 → 매수 주문 0 · 막힌 사유에 '승인 전' · 넘긴 종목의 손절 매도는 그대로 1건(시장가)",
+      _buys437 == [] and any('승인 전' in b for b in _o437['blocked']) and len(_sells437) == 1
+      and _sells437[0][1] == '000777' and _sells437[0][4] == '01', str(_o437['blocked'])[:200])
+# ③ 승인 → 다음 바퀴에 매수 · 같은 계획을 또 안 산다
+_pid437 = [p['plan_id'] for p in _sl437.plans(_c437) if p['live_ok']]
+_sl437.set_setting(_c437, 'approved_plans', _pid437, by='test')
+_o437b = _cyc432(_c437, _fb437, now=_now432(mm=5))
+_o437c = _cyc432(_c437, _fb437, now=_now432(mm=10))
+_buys437b = [p for p in _fb437.placed if p[0] == 'buy']
+check("③ 화면에서 승인(approved_plans 에 plan_id) → 다음 바퀴에 진입가 지정가 매수 1건 · 그다음 바퀴는 또 안 산다",
+      len(_pid437) == 1 and len(_buys437b) == 1 and _buys437b[0][1] == '000001' and _buys437b[0][3] == 10000
+      and len(_o437b['orders']) == 1 and len(_o437c['orders']) == 0, str(_fb437.placed))
+# ④ 완전 자동 — 승인 없이 산다(실주문 자격 · 한도 · 긴급정지는 그대로)
+_c437a, _fb437a = _db432(), _FakeBroker432()
+_sl437.set_setting(_c437a, 'order_approval', 'auto', by='test')
+_o437a = _cyc432(_c437a, _fb437a)
+_c437k, _fb437k = _db432(kill=True), _FakeBroker432()
+_sl437.set_setting(_c437k, 'order_approval', 'auto', by='test')
+_o437k = _cyc432(_c437k, _fb437k)
+check("④ '완전 자동'이면 승인 없이 산다 · 그래도 긴급정지는 그대로 막는다",
+      len([p for p in _fb437a.placed if p[0] == 'buy']) == 1 and [p for p in _fb437k.placed if p[0] == 'buy'] == []
+      and any('긴급정지' in b for b in _o437k['blocked']), str(_o437a['blocked'])[:200])
+# ⑤ 모의투자는 승인과 무관(승인은 실계좌에만)
+_c437p, _fb437p = _db432(mode='PAPER'), _FakeBroker432()
+_fb437p.env = 'demo'
+_o437p = _sx432.run_cycle(_c437p, broker=_fb437p, cfg=dict(_CFG432, env='demo'), report=_rep432, anchor_day='2026-10-06',
+                          now=_now432(), cost_pct=0.41, do_shadow=False, quote_fn=_Q432)
+check("⑤ 모의투자 모드는 승인형 설정과 무관하게 산다(승인은 실계좌 주문에만 건다)",
+      len([p for p in _fb437p.placed if p[0] == 'buy']) == 1, str(_o437p['blocked'])[:200])
+# ⑥ 승인을 적는 자리는 화면뿐 — 실행부·워커는 읽기만
+_src437 = {n: open(_os.path.join(PROJ, n), encoding='utf-8').read() for n in ('swing_executor.py', 'scripts/run_swing_worker.py', 'swing_view.py')}
+check("⑥ approved_plans 를 쓰는(set_setting) 자리는 swing_view 뿐 · 실행부·워커는 읽기만 · 기본값 'approve' 가 실행부 한 곳에",
+      _src437['swing_view.py'].count("set_setting(c, 'approved_plans'") == 2
+      and "set_setting(c, 'approved_plans'" not in _src437['swing_executor.py']
+      and 'approved_plans' not in _src437['scripts/run_swing_worker.py']
+      and _src437['swing_executor.py'].count("else 'approve'") == 1)
+# ⑦ 표의 오늘 상태 — 승인형이면 접두
+_c437r = _sl437.connect(':memory:')
+_sl437.add_plan(_c437r, dict(plan_id='A1', data_day='2026-10-07', code='000001', name='a', spec='SWING_V1', entry=10000, target=11000,
+                             stop=9500, horizon=20, wait_bars=20, live_ok=True, verdict={}))
+_r437_0 = _sv437.plan_rows(_c437r, today_day='2026-10-08', approval_on=True, approved=set())[1][0]['오늘 상태']
+_r437_1 = _sv437.plan_rows(_c437r, today_day='2026-10-08', approval_on=True, approved={'A1'})[1][0]['오늘 상태']
+_r437_2 = _sv437.plan_rows(_c437r, today_day='2026-10-08')[1][0]['오늘 상태']
+_r437_h = _sv437.plan_rows(_c437r, today_day='2026-10-08', approval_on=True, approved=set(), held={'000001'})[1][0]['오늘 상태']
+check("⑦ 표의 오늘 상태 — 승인형이면 '승인 전 — 사지 않습니다 · …' / '승인됨 · …' · 승인형이 아니면 접두 없음 · 보유 중이면 접두 없음",
+      _r437_0.startswith('승인 전 — 사지 않습니다 · 진입 대기') and _r437_1.startswith('승인됨 · 진입 대기')
+      and _r437_2.startswith('진입 대기') and _r437_h == '보유 중(자동 관리)', f'{_r437_0} | {_r437_1} | {_r437_2}')
+_c437r.close()
+# ⑧ 화면 — 실전·승인형·자격 있는 계획 하나: 승인 버튼 · 주문 방식 라디오 · '승인 전' 상태 · 예외 0 (자식 프로세스 렌더 · §200)
+_vdb437 = _os.path.join(PROJ, '_probe', '_r451_view.db')
+if _os.path.exists(_vdb437):
+    _os.remove(_vdb437)
+_cv437 = _sl437.connect(_vdb437)
+_sl437.set_setting(_cv437, 'mode', 'LIVE', by='test')
+_sl437.set_setting(_cv437, 'live_unlock', _sx437.LIVE_UNLOCK_PHRASE, by='test')
+_sl437.set_setting(_cv437, 'limits', _LIM432, by='test')
+_sl437.add_plan(_cv437, dict(plan_id='V1', data_day='2026-10-07', code='000001', name='v', spec='SWING_V1', entry=10000, target=11000,
+                             stop=9500, horizon=20, wait_bars=20, live_ok=True, verdict=dict(failed=[], checks_n=11)))
+_cv437.close()
+_src437v = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    f"_L.connect.__defaults__ = ({_vdb437!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child437 = _os.path.join(PROJ, '_probe', '_r451_view_child.py')
+open(_child437, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src437v!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
+    "           cap=' '.join(str(e.value) for e in at.caption), btn=[str(b.label) for b in at.button],\n"
+    "           radio=[str(r.label) for r in at.radio])\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _rc437 = __import__('subprocess').run([sys.executable, _child437], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300)
+    _jr437 = (_rc437.stdout or '').rsplit('@@R@@', 1)
+    _o437v = __import__('json').loads(_jr437[1]) if len(_jr437) == 2 else {}
+    check("⑧ 화면 — 예외 0 · '이 계획 승인' 버튼 · '실전 주문 방식' 라디오 · 승인 전 설명 줄 · 승인 전 상태",
+          _o437v.get('exc') == 0 and '이 계획 승인' in (_o437v.get('btn') or []) and '실전 주문 방식' in (_o437v.get('radio') or [])
+          and '승인한 계획만 워커가' in (_o437v.get('cap') or '') and '승인 전' in (_o437v.get('cap') or ''),
+          str(_o437v.get('first') or _o437v.get('btn') or (_rc437.stderr or '')[-300:]))
+finally:
+    for _f437 in (_vdb437, _child437):
+        if _os.path.exists(_f437):
+            _os.remove(_f437)
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

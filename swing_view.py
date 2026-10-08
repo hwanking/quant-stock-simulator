@@ -27,8 +27,9 @@ MODE_HELP = {
     'OFF': '아무것도 안 합니다.',
     'SHADOW': '그날 계획을 남기고 일봉으로 모의 결과만 냅니다. 증권사에 아무것도 보내지 않습니다.',
     'PAPER': '한국투자 모의투자 서버로 실제 주문 흐름을 돕니다(모의투자 자격증명이 필요합니다).',
-    'LIVE': '실계좌에 주문합니다. 아래 네 가지가 모두 통과해야 켜집니다.',
+    'LIVE': "실계좌에 주문합니다. 아래 네 가지가 모두 통과해야 켜집니다. 주문 방식이 '계획마다 승인'(기본)이면 ② 에서 승인한 계획만 삽니다.",
 }
+APPROVAL_KO = {'approve': '계획마다 승인', 'auto': '완전 자동'}
 STATE_KO = {'PLANNED': '계획', 'RISK_APPROVED': '한도 통과', 'SUBMITTING': '보내는 중', 'BROKER_ACK': '접수',
             'PARTIAL': '일부 체결', 'FILLED': '체결', 'CANCEL_REQUESTED': '취소 요청', 'CANCELLED': '취소',
             'REJECTED': '거절', 'UNKNOWN': '확인 중(다시 보내지 않음)', 'EXPIRED': '만료(당일 주문)'}
@@ -142,7 +143,7 @@ def _fail_label():
         return lambda n: f"'{n}' 미충족"
 
 
-def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=()):
+def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=(), approval_on=False, approved=None):
     """가장 최근 판정일의 계획 + 모의 결과 — 표 한 줄씩. 라운드 450: 오늘 상태 · 중앙 판정 조건(통과 수와 미충족 전부) · 수량 미리보기."""
     ps = L.plans(c)
     if not ps:
@@ -172,8 +173,12 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
             qty_txt = f"{sz['qty']}주 · {_won(sz['amount'])} (정한 제한: {sz['binding']})"
             loss_txt = _won(sz['planned_loss']) + (f" · 매수 뒤 주식 비중 {sz['exposure_after_pct']:.1f}%"
                                                   if sz['exposure_after_pct'] is not None else '')
+        status = plan_status(p, today_day, held=p['code'] in (held or ()))
+        if approval_on and p['live_ok'] and p['code'] not in (held or ()):
+            # 라운드 451 — 실전 승인형이면 승인 여부가 오늘 상태 앞에 온다(승인 전이면 워커가 사지 않는다)
+            status = ('승인됨 · ' if p['plan_id'] in (approved or set()) else '승인 전 — 사지 않습니다 · ') + status
         rows.append({'종목': f"{p.get('name') or ''} ({p['code']})", '실주문 자격': '예' if p['live_ok'] else '아니오',
-                     '오늘 상태': plan_status(p, today_day, held=p['code'] in (held or ())),
+                     '오늘 상태': status,
                      '중앙 판정 조건': cond,
                      '진입가(지정가)': _won(p['entry']), '1차 목표': _won(p['target']), '손절': _won(p['stop']),
                      '대기·보유(거래일)': f"{p.get('wait_bars') or '—'} · {p.get('horizon') or '—'}",
@@ -392,8 +397,10 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
         from verdict_core import COST_PCT as _cost450
     except Exception:                                          # noqa: BLE001
         _cost450 = None
+    _appr451 = (mode == 'LIVE' and X.approval_of(stt) == 'approve')
+    _apset451 = X.approved_plans(stt)
     day, rows = plan_rows(c, today_day=anchor_day, account=acct, limits=(stt.get('limits') or None), cost_pct=_cost450,
-                          held=set(managed))
+                          held=set(managed), approval_on=_appr451, approved=_apset451)
     with st.expander('② 오늘의 스윙 계획', expanded=True):
         if not rows:
             st.caption('아직 계획이 없습니다 — 모드를 \'기록만\' 이상으로 두고 \'계획·모의 갱신\'을 누르거나 워커가 돌면 그날 개장 전 '
@@ -410,6 +417,25 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                            "워커와 같은 함수로 센 것입니다 — 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 셉니다.")
             else:
                 st.caption('수량 미리보기 없음 — 계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다(⑥ 설정).')
+            # 라운드 451 — 실전 승인형: 승인은 계획(진입가·손절·목표가 박힌 영수증)에 붙는다. 쓰는 자리는 여기뿐이다.
+            if _appr451:
+                _live451 = [p for p in L.plans(c) if p['data_day'] == day and p.get('live_ok') and p['code'] not in managed]
+                if _live451:
+                    st.caption('실전 주문 방식이 \'계획마다 승인\'입니다 — 아래에서 승인한 계획만 워커가 그 계획의 대기 창 안에서 진입가 지정가 '
+                               '매수를 냅니다. 승인해도 중앙 판정·위험 한도·긴급정지는 그대로 적용되고, 보호 매도는 승인과 무관합니다.')
+                if allow_write:
+                    for _p451 in _live451:
+                        _pid451 = _p451['plan_id']
+                        _ca451, _cb451 = st.columns([4, 1])
+                        _ca451.caption(f"{_p451.get('name') or ''} ({_p451['code']}) · 진입 {_won(_p451['entry'])} · 손절 {_won(_p451['stop'])} · "
+                                       f"1차 목표 {_won(_p451['target'])} · {'승인됨' if _pid451 in _apset451 else '승인 전'}")
+                        if _pid451 in _apset451:
+                            if _cb451.button('승인 취소', key=f'sw_unappr_{_pid451}'):
+                                L.set_setting(c, 'approved_plans', sorted(_apset451 - {_pid451}))
+                                st.rerun()
+                        elif _cb451.button('이 계획 승인', key=f'sw_appr_{_pid451}'):
+                            L.set_setting(c, 'approved_plans', sorted(_apset451 | {_pid451}))
+                            st.rerun()
         ss = shadow_summary(c)
         if ss:
             st.caption(md(f"끝난 모의 {ss['n']}건 — 목표 {ss['target']} · 손절 {ss['stop']} · 기간 만료 "
@@ -540,6 +566,18 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
         elif st.button(f"'{MODE_KO[new_mode]}' 로 바꾸기", key='sw_mode_go'):
             L.set_setting(c, 'mode', new_mode)
             st.rerun()
+    st.markdown('**실전 주문 방식**')
+    _ap451 = X.approval_of(stt)
+    st.caption("'계획마다 승인'(기본)은 ② 에서 승인한 계획만 삽니다 · '완전 자동'은 실주문 자격이 있는 계획을 워커가 그대로 삽니다. "
+               "모의투자·기록만 모드에는 적용되지 않고, 보호 매도(손절·1차 목표)는 어느 쪽이든 승인 없이 냅니다.")
+    if allow_write:
+        _ap_new451 = st.radio('실전 주문 방식', list(X.APPROVAL_MODES), index=list(X.APPROVAL_MODES).index(_ap451),
+                              format_func=lambda v: APPROVAL_KO[v], horizontal=True, key='sw_approval')
+        if _ap_new451 != _ap451:
+            L.set_setting(c, 'order_approval', _ap_new451)
+            st.rerun()
+    else:
+        st.caption('지금: ' + APPROVAL_KO[_ap451])
     st.markdown('**실전 잠금**')
     if stt.get('live_unlock') == X.LIVE_UNLOCK_PHRASE:
         st.caption('풀려 있습니다.')
