@@ -7,9 +7,15 @@
 받고 · '연결 확인'(잔고 읽기만)과 '계획·모의 갱신'(증권사 안 부름)을 부른다. 원격 접속(터널·배포)에서는 아무것도 못 바꾼다 —
 남의 브라우저가 이 PC 의 주문 설정을 바꾸면 안 된다(§9). 판정·계획 값은 장부에서 **읽기만** 한다(§4).
 """
+import os as _os_mod
+
 import broker_kis
 import swing_executor as X
 import swing_proof as _sp
+
+
+def _os_exists(p):
+    return _os_mod.path.exists(p)
 import swing_ledger as L
 import swing_risk
 
@@ -105,8 +111,10 @@ def shadow_summary(c):
                 stop=sum(1 for s in done if s.get('exit_status') == 'stop'))
 
 
-def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, anchor_day=None, md_safe=None):
-    """칸 전체. hold_levels(code) → (손절선, 1차 매도가) 또는 None — 관심종목 표와 같은 함수로 화면이 만든다."""
+def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, anchor_day=None, md_safe=None,
+           resolve_market=None):
+    """칸 전체. hold_levels(code) → (손절선, 1차 매도가) 또는 None — 관심종목 표와 같은 함수로 화면이 만든다.
+    resolve_market(code) → 'KOSPI'·'KOSDAQ'·None — 계좌 보유를 앱 보유종목으로 가져올 때 시장 접미사를 정한다(CSV 가져오기와 같은 길)."""
     md = md_safe or (lambda s: s)
     st.caption('가늠이 판단하고 · 한국투자증권이 실행하고 · 결과는 같은 채점 규칙으로 남깁니다. 이 칸은 관제실이고, '
                '주문은 따로 도는 워커만 냅니다. 분석 화면으로 돌아가려면 맨 위 탭에서 \'가늠 분석\'을 고르세요.')
@@ -126,12 +134,12 @@ def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, an
         st.caption('아직 장부가 없습니다 — 쓰기가 꺼진 화면이라 만들지 않았습니다(이 PC 에서 직접 연 화면에서 모드를 정하면 생깁니다).')
         return
     try:
-        _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md)
+        _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market)
     finally:
         c.close()
 
 
-def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md):
+def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market=None):
     stt = L.settings(c)
     mode = L.mode_of(c)
     cfg = broker_kis.load_config()
@@ -166,6 +174,39 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md):
                     for p in acct['positions']]
             if rows:
                 st.dataframe(rows, hide_index=True, width='stretch')
+            # 라운드 449 — 계좌 보유를 앱의 '내 보유종목'으로 가져온다(CSV 가져오기와 같은 함수 · 이 PC 에만 저장 · 되돌리기 한 번)
+            if allow_write and acct['positions']:
+                st.caption('아래 버튼은 이 계좌의 보유를 앱의 \'내 보유종목\'(.portfolio/positions.json · 이 PC 에만)으로 옮깁니다. 지금 보유종목은 '
+                           '덮이고, 바로 아래 \'되돌리기\'로 한 번 되돌릴 수 있습니다. 관심종목 표의 매입가·수량은 건드리지 않습니다.')
+                ca, cb = st.columns(2)
+                if ca.button('계좌 보유를 앱 보유종목으로 가져오기', key='sw_sync_pos'):
+                    import portfolio as _pf
+                    _rows = broker_kis.balance_to_rows(acct)
+                    _pos, _warns = _pf.rows_to_positions(_rows, source_type='kis_sync', resolve_market=resolve_market)
+                    st.session_state['sw_pos_before'] = list(st.session_state.get('positions') or [])
+                    st.session_state['positions'] = _pos
+                    try:
+                        _pf.save_positions(_pos)
+                        import datetime as _dt
+                        st.session_state['positions_saved_at'] = _dt.datetime.now().isoformat(timespec='seconds')
+                        st.session_state['sw_flash'] = f'{len(_pos)}종목을 앱 보유종목으로 가져와 저장했습니다' + \
+                            (f' · 제외 {len(_warns)}건(사유는 아래)' if _warns else '')
+                        st.session_state['sw_sync_warns'] = _warns
+                    except Exception as e:                     # noqa: BLE001
+                        st.session_state['sw_flash'] = f'{len(_pos)}종목을 가져왔지만 저장은 실패했습니다 — {type(e).__name__}: {e}'
+                    st.rerun()
+                if 'sw_pos_before' in st.session_state and cb.button('되돌리기(가져오기 전으로)', key='sw_sync_undo'):
+                    import portfolio as _pf
+                    _prev = st.session_state.pop('sw_pos_before')
+                    st.session_state['positions'] = _prev
+                    try:
+                        _pf.save_positions(_prev)
+                        st.session_state['sw_flash'] = f'가져오기 전 보유종목 {len(_prev)}종목으로 되돌렸습니다'
+                    except Exception as e:                     # noqa: BLE001
+                        st.session_state['sw_flash'] = f'되돌렸지만 저장은 실패했습니다 — {type(e).__name__}: {e}'
+                    st.rerun()
+                for _w in st.session_state.get('sw_sync_warns') or []:
+                    st.caption(md(_w))
 
     # ② 오늘의 계획
     day, rows = plan_rows(c)
@@ -295,7 +336,13 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
         if new_mode in X.MODE_ENV:
             blocks = [b for b in X.broker_gate(new_mode, cfg, stt) if '잠금' not in b]
         if new_mode == 'LIVE' and not all(ok for _n, ok, _w in rd):
-            st.warning('실전 조건이 다 통과하지 않아 실전으로 바꾸지 않았습니다.')
+            _miss = [n for n, ok, _w in rd if not ok]
+            st.warning(md('실전으로 바꾸지 않았습니다 — 미달 ' + ' · '.join(_miss) + '. '
+                          + ('연결 정보는 아래 \'한국투자 연결 정보\'에 넣고, ' if '한국투자 실전 자격증명' in _miss else '')
+                          + ('위험 한도는 아래 \'위험 한도\' 여섯 칸을 채워 저장하고, ' if '위험 한도 여섯' in _miss else '')
+                          + ('잠금은 아래 \'실전 잠금\'에 문장을 입력해 풀고, ' if '실전 잠금 해제' in _miss else '')
+                          + ('긴급정지는 아래 토글을 끄고, ' if '긴급정지 꺼짐' in _miss else '')
+                          + '다시 고르세요.'))
         elif blocks:
             st.warning('이 모드로 바꾸지 않았습니다 — ' + ' · '.join(blocks))
         elif st.button(f"'{MODE_KO[new_mode]}' 로 바꾸기", key='sw_mode_go'):
@@ -336,6 +383,39 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
                 if missing or problems:
                     st.warning('저장했지만 아직 주문이 막힙니다 — ' + ', '.join(missing + problems))
                 st.rerun()
+    # 라운드 449 — 연결 정보는 사용자가 **여기서 직접** 넣는다(가려진 칸). 저장은 저장소 밖 ~/.gaeum/kis.env 에만 · 값은 화면·로그에
+    #   되비치지 않는다(요약은 가린 글자). 환경변수로 이미 넣었으면 그쪽이 먼저다(파일은 빈 칸만 채운다).
+    st.markdown('**한국투자 연결 정보**')
+    _src = (cfg or {}).get('source') or {}
+    st.caption(md('지금: ' + broker_kis.config_summary(cfg)
+                  + (' · 출처 ' + ', '.join(f"{k.replace('KIS_', '')}={'환경변수' if v == 'env' else '파일'}" for k, v in _src.items())
+                     if _src else '')
+                  + f' · 파일 자리 {broker_kis.SECRET_FILE}(저장소 밖 · 커밋·백업 안 됨)'))
+    if allow_write:
+        with st.form('sw_cred'):
+            _env_pick = st.selectbox('계좌 종류', ['real', 'demo'], format_func=lambda v: '실전' if v == 'real' else '모의투자',
+                                     key='sw_cred_env')
+            _k = st.text_input('앱 키 (APP Key)', type='password', key='sw_cred_key')
+            _s = st.text_input('앱 시크릿 (APP Secret)', type='password', key='sw_cred_secret')
+            _a = st.text_input('계좌번호 (10자리 또는 8자리-2자리)', type='password', key='sw_cred_acct')
+            if st.form_submit_button('연결 정보 저장 (이 PC 의 저장소 밖 파일에만)'):
+                try:
+                    _acct = str(_a or '').replace('-', '').strip()
+                    _cfg2 = broker_kis.save_config({'KIS_ENV': _env_pick, 'KIS_APP_KEY': _k, 'KIS_APP_SECRET': _s,
+                                                    'KIS_ACCOUNT_NO': _acct[:8] if len(_acct) == 10 else _acct,
+                                                    'KIS_ACCOUNT_PRODUCT_CODE': _acct[8:] if len(_acct) == 10 else ''})
+                    st.session_state['sw_flash'] = '연결 정보를 저장했습니다 — ' + broker_kis.config_summary(_cfg2) + \
+                        ((' · ' + ' · '.join(_cfg2['problems'])) if _cfg2.get('problems') else '') + \
+                        " · 이제 '연결 확인'을 누르세요(앱을 다시 띄우지 않아도 됩니다)"
+                except broker_kis.BrokerError as e:
+                    st.session_state['sw_flash'] = f'저장하지 않았습니다 — {e}'
+                for _kk in ('sw_cred_key', 'sw_cred_secret', 'sw_cred_acct'):
+                    st.session_state.pop(_kk, None)          # 입력값을 세션에 남기지 않는다
+                st.rerun()
+        if _os_exists(broker_kis.SECRET_FILE) and st.button('저장된 연결 정보 지우기', key='sw_cred_del'):
+            broker_kis.delete_config()
+            st.session_state['sw_flash'] = '저장된 연결 정보 파일을 지웠습니다(환경변수는 사용자가 지웁니다)'
+            st.rerun()
     st.markdown('**연결 확인 · 계획 갱신**')
     st.caption("'연결 확인'은 토큰을 받고 잔고를 한 번 읽습니다(주문은 안 합니다). '계획·모의 갱신'은 증권사를 부르지 않고 그날 "
                "리포트에서 계획을 남기고 일봉으로 모의 결과를 냅니다.")

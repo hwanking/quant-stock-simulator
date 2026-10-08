@@ -35999,6 +35999,79 @@ check("⑤ trading_day · swing_executor 가 session_times 를 부르고 특별 
       and open(_os.path.join(PROJ, 'bitemporal_engine.py'), encoding='utf-8').read().count('KRX_SPECIAL_SESSIONS = {') == 1)
 
 
+print()
+print("§435 한국투자 계좌 연동 — 자격증명은 사용자가 가려진 칸에 직접 · 저장소 밖에만 · 계좌 보유를 앱 보유종목으로 (라운드 449)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "한국투자계좌 연동해줘." 키를 대신 넣는 것은 안 되므로(§9 · 실계좌 자격증명은 소유자가) 넣는 길을 앱 안에 두었다:
+#   ① 저장은 저장소 안을 거부하고 밖에만 · 값은 돌려주지도 찍지도 않는다(요약은 가린 글자) ② 10자리 계좌번호는 8+2 로 ③ 잔고 →
+#   보유종목 행은 CSV 가져오기와 같은 함수가 먹는다(수량 0 제외 · 평단 없는 행은 사유와 함께 제외) ④ 화면의 세 입력은 가려진 칸이고
+#   입력값을 세션에 남기지 않으며 cfg 의 원문을 그리지 않는다 ⑤ web_app 이 시장 판별을 넘긴다. 네트워크 0 · 사용자 파일 0.
+import tempfile as _tf435
+import broker_kis as _bk435
+import portfolio as _pf435
+
+_vals435 = {'KIS_ENV': 'real', 'KIS_APP_KEY': 'PLANTEDKEY12345', 'KIS_APP_SECRET': 'PLANTEDSECRET', 'KIS_ACCOUNT_NO': '1234567801'}
+_ref435 = False
+try:
+    _bk435.save_config(_vals435, path=_os.path.join(PROJ, '_probe', '_r449_kis.env'))
+except _bk435.BrokerError:
+    _ref435 = True
+check("① 저장소 안 경로에는 자격증명을 쓰지 않는다(거부) · 파일도 안 생긴다",
+      _ref435 and not _os.path.exists(_os.path.join(PROJ, '_probe', '_r449_kis.env')))
+_d435 = _tf435.mkdtemp(prefix='gaeum_r449_')            # 저장소 밖(시스템 임시 폴더) — 끝에 지운다
+try:
+    _p435 = _os.path.join(_d435, 'kis.env')
+    _cfg435 = _bk435.save_config(_vals435, path=_p435)
+    _txt435 = open(_p435, encoding='utf-8').read()
+    _sum435 = _bk435.config_summary(_cfg435)
+    check("② 저장소 밖에 쓰고 읽어 돌려준다 — 10자리 계좌는 8+2 · 빠진 칸 0 · 요약은 키·계좌를 가린다(원문이 없다) · 임시 파일 안 남음",
+          _cfg435['env'] == 'real' and _cfg435['cano'] == '12345678' and _cfg435['prdt'] == '01' and not _cfg435['missing']
+          and 'KIS_APP_KEY=PLANTEDKEY12345' in _txt435 and 'PLANTEDKEY12345' not in _sum435 and '12345678' not in _sum435
+          and 'PLANTEDSECRET' not in _sum435 and not _os.path.exists(_p435 + '.tmp'), _sum435)
+    _bad435 = 0
+    for _v in (dict(_vals435, KIS_ENV='live'), dict(_vals435, KIS_APP_KEY=''), dict(_vals435, KIS_ACCOUNT_NO='')):
+        try:
+            _bk435.save_config(_v, path=_os.path.join(_d435, 'x.env'))
+        except _bk435.BrokerError:
+            _bad435 += 1
+    check("② 종류가 demo/real 이 아니거나 키·시크릿·계좌가 비면 저장하지 않는다",
+          _bad435 == 3 and not _os.path.exists(_os.path.join(_d435, 'x.env')))
+    check("② 지우기 → 파일 없음 · 다시 읽으면 빈 칸", _bk435.delete_config(_p435) and not _os.path.exists(_p435)
+          and _bk435.load_config(environ={}, path=_p435)['missing'])
+finally:
+    import shutil as _sh435
+    _sh435.rmtree(_d435, ignore_errors=True)
+# ③ 잔고 → 앱 보유종목
+_bal435 = dict(positions=[dict(code='000001', name='a', qty=10, avg_price=1000.0, price=1100.0),
+                          dict(code='000002', name='b', qty=0, avg_price=5.0, price=5.0),
+                          dict(code='000003', name='c', qty=3, avg_price=None, price=9.0)])
+_rows435 = _bk435.balance_to_rows(_bal435)
+_pos435, _w435 = _pf435.rows_to_positions(_rows435, source_type='kis_sync',
+                                          resolve_market=lambda code: 'KOSDAQ' if code == '000001' else None)
+check("③ 수량 0 은 빼고, 평단 없는 행은 같은 함수가 사유와 함께 제외하며, 남은 것은 시장 접미사·수량·평단·출처가 맞다",
+      [r['종목코드'] for r in _rows435] == ['000001', '000003'] and len(_pos435) == 1
+      and _pos435[0].ticker == '000001.KQ' and _pos435[0].quantity == 10.0 and _pos435[0].average_buy_price == 1000.0
+      and _pos435[0].source_type == 'kis_sync' and len(_w435) == 1 and '평균 매수가' in _w435[0], str(_w435))
+# ④ 화면 — 가려진 칸 셋 · 입력값을 세션에서 지운다 · cfg 원문을 그리지 않는다 · 가져오기·되돌리기 · ⑤ web_app 이 시장 판별을 넘긴다
+import ast as _ast435
+_sv435 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_pw435 = [n for n in _ast435.walk(_ast435.parse(_sv435)) if isinstance(n, _ast435.Call)
+          and getattr(n.func, 'attr', '') == 'text_input'
+          and any(k.arg == 'type' and getattr(k.value, 'value', None) == 'password' for k in n.keywords)]
+check("④ 앱 키·시크릿·계좌번호 입력 셋은 가려진 칸(type='password') · 제출 뒤 세션에서 지운다 · 저장소 밖 자리를 적는다",
+      len(_pw435) == 3 and "st.session_state.pop(_kk, None)" in _sv435 and 'broker_kis.SECRET_FILE' in _sv435
+      and "cfg['app_key']" not in _sv435 and "cfg['app_secret']" not in _sv435 and "cfg['cano']" not in _sv435)
+check("④ 계좌 보유 가져오기는 CSV 와 같은 함수(rows_to_positions)로 · 되돌리기 한 번 · ⑤ web_app 이 resolve_market 을 넘긴다",
+      '_pf.rows_to_positions(_rows' in _sv435 and "'sw_pos_before'" in _sv435 and 'balance_to_rows(acct)' in _sv435
+      and 'resolve_market=_swing_resolve_market449' in open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read())
+# ⑥ 실전으로 못 바꿀 때 경고가 **어느 항목이 미달인지** 적는다 — 사용자가 "다 통과하지 않아"만 보고 막혔다(2026-10-08)
+check("⑥ 실전 전환 거부 경고가 미달 항목 이름과 채우는 자리를 같이 적는다",
+      "'실전으로 바꾸지 않았습니다 — 미달 ' + ' · '.join(_miss)" in _sv435 and '다시 고르세요' in _sv435
+      and [n for n, ok, w in __import__('swing_executor').live_readiness({}, {}) if not ok]
+      == ['한국투자 실전 자격증명', '위험 한도 여섯', '실전 잠금 해제'])
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

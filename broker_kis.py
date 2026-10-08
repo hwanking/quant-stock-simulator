@@ -417,3 +417,52 @@ def round_to_tick(price, side):
     # 경계: 내린 값이 아래 구간이면 그 구간의 단위로 다시 맞춘다
     t2 = tick_size(v)
     return int(v // t2 * t2) if t2 != t else v
+
+
+# ── 자격증명 저장 (라운드 449) — 사용자가 화면의 가려진 칸에 직접 넣고, 저장소 밖 파일에만 쓴다 ──────────────────────
+def save_config(values, path=SECRET_FILE):
+    """{KIS_ENV, KIS_APP_KEY, KIS_APP_SECRET, KIS_ACCOUNT_NO[, KIS_ACCOUNT_PRODUCT_CODE]} → 저장소 밖 파일(KEY=VALUE) → 읽어 돌려준 cfg.
+
+    저장소 안 경로는 **거부**한다(커밋될 수 있는 자리에 키를 두지 않는다 · §9). 값은 돌려주지도 찍지도 않는다 — 부르는 쪽은
+    `config_summary`(가린 요약)만 보인다. 10자리 계좌번호는 `load_config` 가 8+2 로 가른다. 임시 파일에 쓰고 바꿔 끼운다.
+    파일 권한은 따로 손대지 않는다 — 사용자 프로필 폴더(~/.gaeum)는 Windows 가 이미 그 사용자·관리자에게만 열어 둔다. 첫 판은
+    `icacls` 로 더 좁히려 했는데 사용자 이름과 컴퓨터 이름이 같은 PC 에서 대상이 엉뚱하게 풀려 **사용자 자신이 못 읽는** 파일이
+    됐다(§435 가 PermissionError 로 잡았다). 자기 자신을 잠그는 장치는 없는 편이 낫다."""
+    if _inside_repo(path):
+        raise BrokerError('자격증명 파일을 저장소 안에 두지 않습니다 — 저장소 밖(~/.gaeum/kis.env)에만 씁니다')
+    vals = {k: str((values or {}).get(k) or '').strip() for k in CONFIG_KEYS}
+    env = vals['KIS_ENV'].lower()
+    if env not in ENVS:
+        raise BrokerError("KIS_ENV 는 demo 또는 real 이어야 합니다")
+    vals['KIS_ENV'] = env
+    if not (vals['KIS_APP_KEY'] and vals['KIS_APP_SECRET'] and vals['KIS_ACCOUNT_NO']):
+        raise BrokerError('앱 키 · 앱 시크릿 · 계좌번호가 모두 있어야 합니다')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + '.tmp'
+    with io.open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('# 가늠 한국투자 자격증명 — 이 파일은 저장소 밖에 있고 커밋·백업되지 않는다\n')
+        for k in CONFIG_KEYS:
+            if vals[k]:
+                f.write(f'{k}={vals[k]}\n')
+    os.replace(tmp, path)
+    return load_config(environ={}, path=path)
+
+
+def delete_config(path=SECRET_FILE):
+    """저장소 밖 자격증명 파일을 지운다 → 지웠으면 True. 환경변수는 못 지운다(사용자가 한다)."""
+    if os.path.exists(path):
+        os.remove(path)
+        return True
+    return False
+
+
+def balance_to_rows(bal):
+    """한국투자 잔고 → 앱의 보유종목 미리보기 행(`portfolio.rows_to_positions` 가 읽는 한글 열 이름). 수량 0 은 뺀다.
+    평단이 없으면 행을 그대로 두고(rows_to_positions 가 사유와 함께 제외한다) 지어내지 않는다."""
+    out = []
+    for p in (bal or {}).get('positions') or []:
+        if not p.get('qty'):
+            continue
+        out.append({'종목코드': str(p.get('code') or ''), '종목명': p.get('name') or '', '보유수량': p.get('qty'),
+                    '평균매수가': p.get('avg_price')})
+    return out

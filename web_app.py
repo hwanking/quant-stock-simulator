@@ -3577,6 +3577,16 @@ def _swing_hold_levels446(code):
     return (_s, _t) if _s < _t else None
 
 
+def _swing_resolve_market449(code):
+    """계좌 보유를 앱 보유종목으로 가져올 때의 시장 판별 — 종목코드 반영 버튼과 같은 길(resolve_symbol → 단일 진입점
+    market_of · 접미사를 여기서 다시 읽지 않는다 · 라운드 159). 못 읽으면 None(§3)."""
+    try:
+        _t, _n = engine_init.resolve_symbol(code)
+        return _market_of(_t)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 if st.session_state.get('top_view') == _TOP_VIEWS[1]:
     st.header("스윙 자동매매")
     try:
@@ -3586,7 +3596,7 @@ if st.session_state.get('top_view') == _TOP_VIEWS[1]:
         _swv446.render(st, _uk, allow_read=ALLOW_LOCAL_READ, allow_write=ALLOW_LOCAL_STORE,
                        hold_levels=_swing_hold_levels446,
                        report=(_pm446.load_today_report(_anc446) if _anc446 else None),
-                       anchor_day=_anc446, md_safe=_md_safe)
+                       anchor_day=_anc446, md_safe=_md_safe, resolve_market=_swing_resolve_market449)
     except Exception as _e446:
         # 라운드 441 — 삼킨 예외는 칸이 조용히 빠지는 자리다. 못 그렸으면 그렇다고 사유와 함께 적는다(§3).
         st.caption(f"스윙 자동매매 칸을 그리지 못했습니다 — {type(_e446).__name__}: {_e446}")
