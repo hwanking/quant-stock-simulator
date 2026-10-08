@@ -9,6 +9,7 @@
 """
 import broker_kis
 import swing_executor as X
+import swing_proof as _sp
 import swing_ledger as L
 import swing_risk
 
@@ -230,8 +231,36 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md):
                             except L.LedgerError as e:
                                 st.warning(str(e))
 
-    # ⑤ 설정
-    with st.expander('⑤ 설정 — 모드 · 위험 한도 · 긴급정지 · 연결 확인', expanded=False):
+    # ⑤ 결과 영수증 — 계획 vs 실제 (라운드 447 · 장부에서 읽기만 · 종목·수량은 이 PC 화면에서만)
+    try:
+        from verdict_core import COST_PCT as _cost447
+    except Exception:                                          # noqa: BLE001
+        _cost447 = None
+    _rcpts = _sp.receipts(c, _cost447)
+    _closed = [r for r in _rcpts if r.get('closed_day')]
+    with st.expander(f'⑤ 결과 영수증 — 계획 vs 실제 체결 ({len(_closed)}건 닫힘 · {sum(1 for r in _rcpts if r.get("open"))}건 보유 중)',
+                     expanded=False):
+        st.caption('자동매매가 열고 닫은 보유마다 계획 진입가와 실제 평균 체결가, 청산 사유와 계획 청산가 대비 실제 청산가, '
+                   f'운영 왕복 비용 {_cost447 if _cost447 is not None else "미상"}% 를 뺀 순수익을 적습니다. 실제 수수료·세금은 증권사에서 읽지 않습니다. '
+                   '같은 계획을 일봉으로 굴린 모의 결과(기록만 모드와 같은 채점기)도 옆에 둡니다. 좋고 나쁨은 말하지 않습니다.')
+        _ln447 = _sp.summary_line(_sp.summary(_rcpts), _cost447)
+        if _ln447:
+            st.caption(md(_ln447))
+        if _rcpts:
+            st.dataframe([{'영수증': r['receipt_id'], '종목': r['code'], '산 날': r.get('opened_day') or '—',
+                           '닫은 날': r.get('closed_day') or ('보유 중' if r.get('open') else '—'), '수량': r['qty'],
+                           '계획 진입가': _won(r['entry_plan']), '실제 진입가': _won(r['entry_fill']),
+                           '진입 슬리피지': _pct(r['slip_entry_pct']),
+                           '청산 사유': _sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—'),
+                           '계획 청산가': _won(r['exit_plan']), '실제 청산가': _won(r['exit_fill']),
+                           '청산 슬리피지': _pct(r['slip_exit_pct']), '순수익(비용 뺀)': _pct(r['net_pct']),
+                           '모의(같은 계획)': _pct(r['shadow_net_pct']), '메모': ' · '.join(r['notes'])}
+                          for r in reversed(_rcpts)], hide_index=True, width='stretch')
+        else:
+            st.caption('아직 자동매매가 열고 닫은 보유가 없습니다.')
+
+    # ⑥ 설정
+    with st.expander('⑥ 설정 — 모드 · 위험 한도 · 긴급정지 · 연결 확인', expanded=False):
         if not allow_write:
             st.caption('쓰기가 꺼진 화면이라 설정을 바꿀 수 없습니다.')
         _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md)

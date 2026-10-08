@@ -35874,6 +35874,75 @@ check("⑳ 탭 '스윙 자동매매' 렌더 — 예외 0 · 무거운 분석 열
       and (_rt432.get('vals') or {}).get('top_view') == '스윙 자동매매', str(_rt432)[:300])
 
 
+print()
+print("§433 스윙 결과 영수증 — 계획 vs 실제 체결을 장부에서 읽어 적는다 · 새 값 없음 · 판정 낱말 없음 (라운드 447)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   가늠 PROOF 의 마지막 고리: 자동매매가 열고 닫은 보유 한 번마다 계획 진입가 vs 실제 평균 체결가(슬리피지) · 청산 사유 · 계획
+#   청산가 vs 실제 청산가 · 비용 뺀 순수익 · 같은 계획의 모의 결과와의 차이. 전부 장부의 사건에서 셈한다(§4) — 못 셈한 칸은 None
+#   과 사유(§3). 산출물을 data/ 에 싣지 않는다(종목·수량은 개인 자료 · §9).
+import swing_ledger as _sl433
+import swing_proof as _sp433
+
+_c433 = _sl433.connect(':memory:')
+_sl433.add_plan(_c433, dict(plan_id='P1', data_day='2026-10-06', code='000001', name='a', spec='SWING_V1', entry=10000,
+                            target=11000, stop=9500, horizon=20, wait_bars=20, live_ok=True))
+_sl433.shadow_outcome(_c433, 'P1', dict(status='closed', fill_day='2026-10-07', fill_price=10000, exit_status='target',
+                                        return_pct=10.0, net_pct=10.0 - 0.41))
+# 보유 ① — 두 번에 나눠 체결(10,000 × 100 · 10,050 × 84) · 목표 지정가 11,000 에 전량 청산
+_sl433.position_event(_c433, '000001', 'SWING_OPENED', 'OPENED', plan_id='P1', qty=100, price=10000, target=11000, stop=9500,
+                      trade_day='2026-10-07')
+_sl433.position_event(_c433, '000001', 'SWING_OPENED', 'FILL_ADD', plan_id='P1', qty=84, price=10050, trade_day='2026-10-07')
+_sl433.position_event(_c433, '000001', 'SWING_OPENED', 'SOLD', plan_id='P1', qty=184, price=11000, trade_day='2026-10-13',
+                      detail='target')
+_sl433.position_event(_c433, '000001', 'SWING_OPENED', 'CLOSED', plan_id='P1', trade_day='2026-10-13', detail='target')
+# 보유 ② — 넘긴 종목(계획 없음) · 손절선 4,000 아래 시장가 3,900 에 청산
+_sl433.position_event(_c433, '000555', 'USER_ADOPTED', 'ADOPTED', plan_id='ADOPT-000555', qty=5, price=5000, target=6000,
+                      stop=4000, trade_day='2026-10-07')
+_sl433.position_event(_c433, '000555', 'USER_ADOPTED', 'SOLD', plan_id='ADOPT-000555', qty=5, price=3900, trade_day='2026-10-08',
+                      detail='stop')
+_sl433.position_event(_c433, '000555', 'USER_ADOPTED', 'CLOSED', plan_id='ADOPT-000555', trade_day='2026-10-08', detail='stop')
+# 보유 ③ — 밖에서 팔림(청산가 모름) · 보유 ④ — 아직 열려 있음
+_sl433.position_event(_c433, '000777', 'SWING_OPENED', 'OPENED', plan_id='P7', qty=10, price=2000, target=2200, stop=1900,
+                      trade_day='2026-10-07')
+_sl433.position_event(_c433, '000777', 'SWING_OPENED', 'SOLD', plan_id='P7', qty=10, price=None, trade_day='2026-10-08',
+                      detail='계좌와 맞춤 — 밖에서 줄어든 수량')
+_sl433.position_event(_c433, '000777', 'SWING_OPENED', 'CLOSED', plan_id='P7', trade_day='2026-10-08', detail='계좌에 없음')
+_sl433.position_event(_c433, '000888', 'SWING_OPENED', 'OPENED', plan_id='P8', qty=3, price=50000, target=55000, stop=47000,
+                      trade_day='2026-10-08')
+_rs433 = {r['code']: r for r in _sp433.receipts(_c433, 0.41)}
+_r1 = _rs433['000001']
+_e1 = (10000 * 100 + 10050 * 84) / 184
+# 보유 거래일: 10-08 · 10-10 · 10-13 = 3 (10-09 한글날 · 주말 제외) — 첫 판은 4 라 적었다(시험이 달력을 안 봤다 · 코드가 맞았다)
+check("① 나눠 체결한 매수는 가중 평균 · 진입 슬리피지는 계획 대비 · 청산은 목표 지정가 그대로(슬리피지 0) · 순수익 = 총수익 − 비용 · 보유 3거래일",
+      abs(_r1['entry_fill'] - _e1) < 1e-9 and abs(_r1['slip_entry_pct'] - (_e1 / 10000 - 1) * 100) < 1e-9
+      and _r1['exit_reason'] == 'target' and _r1['exit_plan'] == 11000 and _r1['slip_exit_pct'] == 0.0
+      and abs(_r1['net_pct'] - ((11000 / _e1 - 1) * 100 - 0.41)) < 1e-9 and _r1['days_held'] == 3
+      and _r1['closed_day'] == '2026-10-13' and _r1['receipt_id'].startswith('SWR-20261013-000001-'), str(_r1))
+check("① 같은 계획의 모의 결과(목표 +9.59%)를 옆에 둔다",
+      _r1['shadow_exit'] == 'target' and abs(_r1['shadow_net_pct'] - 9.59) < 1e-9)
+_r2 = _rs433['000555']
+check("② 넘긴 종목은 계획이 없어 진입 슬리피지 None · 손절 체결가는 손절선 대비 −2.5% · 비용 뺀 −22.41%",
+      _r2['entry_plan'] is None and _r2['slip_entry_pct'] is None and _r2['exit_reason'] == 'stop' and _r2['exit_plan'] == 4000
+      and abs(_r2['slip_exit_pct'] - (-2.5)) < 1e-9 and abs(_r2['net_pct'] - ((3900 / 5000 - 1) * 100 - 0.41)) < 1e-9, str(_r2))
+_r3, _r4 = _rs433['000777'], _rs433['000888']
+check("③ 밖에서 팔린 보유는 청산가·순수익 None 과 사유 · ④ 열린 보유는 영수증이 열려 있다고 적는다",
+      _r3['exit_reason'] == 'manual' and _r3['exit_fill'] is None and _r3['net_pct'] is None
+      and any('청산가를 모른다' in n for n in _r3['notes']) and _r4['open'] is True and _r4['closed_day'] is None, str((_r3, _r4)))
+_s433 = _sp433.summary(list(_rs433.values()))
+_ln433 = _sp433.summary_line(_s433, 0.41)
+check("⑤ 요약은 닫히고 순수익이 있는 둘만 센다 · 사유별 수 · 모의와의 차이 1건 · 표본 작음 문장 · 판정 낱말 없음",
+      _s433['n'] == 2 and _s433['by_reason'] == {'target': 1, 'stop': 1} and _s433['n_shadow'] == 1
+      and '표본이 작아' in _ln433 and '닫힌 거래 2건' in _ln433 and not any(w in _ln433 for w in ('나았', '좋', '나쁩')),
+      _ln433)
+check("⑤ 영수증이 없으면 요약 None · 줄 None", _sp433.summary([]) is None and _sp433.summary_line(None, 0.41) is None)
+_c433.close()
+_sv433 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+check("⑥ 화면 ⑥ 칸이 영수증·요약을 모듈에서 읽기만 한다(§4) · data/ 에 싣는 코드 없음",
+      '_sp.receipts(' in _sv433 and '_sp.summary_line(' in _sv433 and "data/" not in _sv433
+      and 'proof_scorecard' not in open(_os.path.join(PROJ, 'swing_proof.py'), encoding='utf-8').read())
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
