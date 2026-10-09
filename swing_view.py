@@ -168,12 +168,12 @@ def account_read(cfg, c=None, now=None):
     return bal, None
 
 
-def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope='overview', managed=()):
+def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope='overview', managed=(), outer_live=False):
     """계좌 판 — `st.fragment(run_every=…)` 로 **이 판만** 다시 그린다(자동 갱신이 켜졌을 때 · 꺼지면 run_every 없음).
     조각 안에서는 바깥의 장부 연결을 쓸 수 없으므로(조각만 돌 때 바깥 연결은 이미 닫혀 있다) 제 연결을 연다.
     scope — 'overview'(관제실: 타일·한눈에·구성·범위) · 'holdings'(포지션: 보유 표·참고 비교·최근 주문) · 라운드 455 의 갈래."""
     pref_on, every = acct_refresh_pref(st.session_state, stt)
-    auto_on = pref_on and allow_write
+    auto_on = pref_on and allow_write and not outer_live         # 라운드 465 — 바깥이 다시 그리면 그 바퀴에 같이 읽는다(타이머 하나)
 
     @st.fragment(run_every=(f'{every}s' if auto_on else None))
     def _panel():
@@ -189,8 +189,10 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, sc
     _ok454 = bool(cfg) and not cfg.get('missing') and not cfg.get('problems')
     h1.caption(('연결 정보 등록됨 · ' + broker_kis.config_summary(cfg)) if _ok454 else '연결 정보 없음 — 시스템 → 설정에서 넣으세요')
     _auto_prev, _every_prev = acct_refresh_pref(st.session_state, stt)
-    _auto = h2.toggle('자동 갱신(잔고 읽기)', value=_auto_prev, key='sw_acct_auto_tgl', disabled=not (allow_write and _ok454),
-                      help='켜면 고른 간격마다 한국투자 잔고를 다시 읽습니다(주문은 안 합니다). 이 화면을 닫으면 멈추고, 켠 상태는 이 PC 에 남습니다.')
+    _auto = h2.toggle('자동 갱신(화면 · 잔고)', value=_auto_prev, key='sw_acct_auto_tgl', disabled=not (allow_write and _ok454),
+                      help='켜면 고른 간격마다 이 화면 전체(지휘 띠 · 워커 · 계획 · 주문 · 계좌)를 다시 그리고 한국투자 잔고를 다시 '
+                           '읽습니다(주문은 안 합니다). 입력 칸이 있는 \'시스템\' 갈래는 쓰는 도중에 지워지지 않게 빼고, 이 화면을 닫으면 '
+                           '멈추며, 켠 상태는 이 PC 에 남습니다.')
     _every = h3.selectbox('간격(초)', list(ACCT_EVERY_CHOICES), index=list(ACCT_EVERY_CHOICES).index(_every_prev),
                           key='sw_acct_every_sel', disabled=not allow_write)
     _now_btn = h4.button('지금 새로고침(잔고 읽기)', key='sw_acct_now', disabled=not (allow_write and _ok454))
@@ -520,6 +522,14 @@ def shadow_summary(c):
 #: 운영 방법은 '시스템' 갈래로 간다 — 관제실에는 돈·위험·오늘 엔진·포지션·실행 상태만.
 NAV = ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF', '시스템')
 NAV_KEY = 'sw_nav'
+#: 라운드 465 — 자동 갱신이 켜져 있으면 이 갈래들은 **본문 전체**(지휘 띠 · 워커 · 계획 · 주문 · 계좌)를 그 간격으로 다시 그린다.
+#:   '시스템'은 뺀다 — 설정·연결 정보 입력 칸이 있어 쓰는 도중에 다시 그리면 안 된다(입력 위젯이 있는 갈래는 그 하나뿐 · 회귀가 센다).
+LIVE_VIEWS = ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF')
+
+
+def live_refresh(auto_on, view):
+    """이 갈래를 자동 갱신으로 다시 그리나 — 자동 갱신이 켜져 있고(쓰기 가능한 화면) 입력 칸이 없는 갈래일 때만."""
+    return bool(auto_on) and (view or NAV[0]) in LIVE_VIEWS
 
 
 def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, anchor_day=None, md_safe=None,
@@ -545,9 +555,27 @@ def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, an
         st.caption('아직 장부가 없습니다 — 쓰기가 꺼진 화면이라 만들지 않았습니다(이 PC 에서 직접 연 화면에서 모드를 정하면 생깁니다).')
         return
     try:
-        _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market, facts=_facts)
+        _pref465, _every465 = acct_refresh_pref(st.session_state, L.settings(c))
     finally:
         c.close()
+    # 라운드 465 — 사용자: "15초마다 자동 갱신 해줘". 종전엔 계좌 칸 하나만 다시 그려 지휘 띠·워커·주문 사건은 화면을 다시 열어야 바뀌었다.
+    #   본문 전체를 조각 하나로 감싸 켜져 있으면 그 간격으로 다시 그린다(앱 전체는 안 돈다 · 사이드바·분석 화면은 그대로).
+    _live465 = live_refresh(_pref465 and allow_write, st.session_state.get(NAV_KEY))
+
+    @st.fragment(run_every=(f'{_every465}s' if _live465 else None))
+    def _body465():
+        try:                                                   # 조각만 다시 돌 때 바깥 연결은 이미 닫혀 있다(라운드 454) — 제 연결을 연다
+            c2 = L.connect(readonly=not allow_write)
+        except Exception as e:                                 # noqa: BLE001
+            st.warning(f'장부를 못 열었습니다 — {type(e).__name__}: {e}')
+            return
+        if c2 is None:
+            return
+        try:
+            _render_body(st, uk, c2, allow_write, hold_levels, report, anchor_day, md, resolve_market, facts=_facts, live=_live465)
+        finally:
+            c2.close()
+    _body465()
 
 
 def bar_items(ctx):
@@ -597,7 +625,7 @@ def _summary_now(ctx):
     return _acc454.summarize(bal) if bal else None
 
 
-def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market=None, facts=None):
+def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market=None, facts=None, live=False):
     stt = L.settings(c)
     mode = L.mode_of(c)
     cfg = broker_kis.load_config()
@@ -624,11 +652,14 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
     _ar458 = acct_refresh_pref(st.session_state, stt)
     ctx['auto_refresh'] = (_ar458[0] and allow_write, _ar458[1])
+    ctx['live_refresh'] = bool(live)                           # 라운드 465 — 본문 전체가 그 간격으로 다시 그려지는 중인가
     # ── 지휘 띠(R456) — 짧은 값 · 긴급정지 토글은 한 곳(sw_kill) · 갈래 고르기
     st.markdown(_viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
     nc, kc = st.columns([5, 1.2])
     with nc:
         pick = st.radio('갈래', list(NAV), horizontal=True, key=NAV_KEY, label_visibility='collapsed')
+    if live_refresh(ctx['auto_refresh'][0], pick) != bool(live):
+        st.rerun()                                             # 라운드 465 — '시스템'으로 가거나 돌아오면 조각을 다시 정의한다(run_every)
     with kc:
         if allow_write:
             ks = st.toggle('긴급정지', value=bool(stt.get('kill_switch')), key='sw_kill',
@@ -679,7 +710,7 @@ def _view_center(st, uk, c, ctx, md):
     sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['today'],
                              protection_warn=bool(ctx['pl']), ledger_ok=True)
     st.markdown(_viz.health_strip(sh, theme=theme, title='시스템 상태 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업'), unsafe_allow_html=True)
-    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']))
+    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']), outer_live=ctx.get('live_refresh', False))
     s = _summary_now(ctx)
     pts = _dash.equity_points(_dash.daily_last(L.account_history(c, limit=20000)))
     its_today = [it for it in ctx['intents'] if it.get('trade_day') == str(ctx['today'])]
@@ -737,6 +768,14 @@ def _view_plans(st, uk, c, ctx, md):
     _zl450 = zero_day_line(c, day)
     if _zl450:
         st.caption(md(_zl450))
+        try:                                                   # 라운드 464 — '목표를 넓히면?' 잰 값 한 줄(산출물에서 · 못 읽으면 빠진다)
+            import artifact_io as _aio464
+            import ledger_view as _lv464
+            _tw464 = _lv464.target_widen_line(_aio464.load_json('target_multiple_r160.json'))
+        except Exception:                                      # noqa: BLE001
+            _tw464 = None
+        if _tw464:
+            st.caption(md(_tw464))
     st.dataframe(rows, hide_index=True, width='stretch')
     acct = ctx['acct']
     if acct and (ctx['stt'].get('limits') or None):
@@ -843,7 +882,7 @@ def _view_positions(st, uk, c, ctx, md):
                             st.rerun()
                         except L.LedgerError as e:
                             st.warning(str(e))
-    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='holdings', managed=set(ctx['managed']))
+    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='holdings', managed=set(ctx['managed']), outer_live=ctx.get('live_refresh', False))
     with st.expander('앱 보유종목과 견주기 · 가져오기', expanded=False):
         if not acct:
             st.caption('아직 계좌를 읽은 적이 없습니다 — 위 \'지금 새로고침\'이나 시스템 → 설정의 \'연결 확인\'을 누르면 채워집니다.')

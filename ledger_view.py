@@ -964,3 +964,31 @@ def bear_oversold_card(doc, rules):
                  f"채택했던 규칙입니다 — 표본이 커지자 그 우위가 재현되지 않았습니다.")
     s.append('이 조건은 매수 근거가 아니며, 위의 결론과 점수는 이 규칙과 무관합니다.')
     return title, ' '.join(s)
+
+
+def target_widen_line(doc, mult=1.5):
+    """'목표를 넓히면 추천이 나오지 않나' 에 대한 한 줄(라운드 464) — 라운드 160 산출물(`data/target_multiple_r160.json` · 일봉 경로
+    재생 · 측정 전 커밋한 사전등록)에서 **읽는다.** 건수·날짜·비용도 산출물에서(손으로 적은 수는 낡는다) · 블라인드 재현은 산출물의
+    판정 문턱(`criteria.z_crit`)으로 가른다(새 문턱 없음) · 못 읽으면 None.
+
+    이 물음이 네 번 왔다(라운드 433·450·453·464). 확률을 그대로 두고 목표만 넓히면 기대값 식(p × 목표폭 + (1 − p) × 손절폭 − 비용)의
+    p 가 지금 목표로 잰 값이라 지어낸 양수가 된다 — 그래서 그 목표로 **다시 잰** 값을 같은 줄에 둔다. 규칙을 바꾸자는 말도 막자는 말도
+    아니다(판정 낱말 없음)."""
+    try:
+        base, crit, tests = doc['baseline'], doc['criteria'], doc['tests']
+        t = tests[f'{float(mult):.1f}']
+        zc = float(crit['z_crit'])
+        repro = [k for k, v in sorted(tests.items(), key=lambda kv: float(kv[0]))
+                 if float(((v or {}).get('blind') or {}).get('sign_z') or 0) >= zc]
+        days = int((t.get('blind') or {}).get('days'))
+        line = (f"목표를 넓히면 추천이 나오나 — 원장 개발 구간 매수권 {int(base['cases']):,}건({doc.get('made')} 측정 · 비용 {crit['cost_pct']}%)에서 "
+                f"1차 목표를 손절폭의 {float(mult):g}배로 넓히면 목표 도달 {base['hit_pct']}% → {t['hit_pct']}% · "
+                f"비용 뺀 평균 {float(base['ev_mean']):+.2f}% → {float(t['ev_mean']):+.2f}%"
+                + (' (여전히 음수)' if float(t['ev_mean']) < 0 else '')
+                + f" · 중앙 {float(base['ev_median']):+.2f}% → {float(t['ev_median']):+.2f}%"
+                + f" · 블라인드(날짜 {days})에서 재현된 배수 {', '.join(k + '배' for k in repro) or '없음'}. "
+                "확률을 그대로 두고 목표만 넓히면 기대값이 지어낸 양수가 됩니다 — 넓히려면 그 목표로 다시 잰 확률을 써야 하고, "
+                "규칙은 바꾸지 않았습니다.")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    return line

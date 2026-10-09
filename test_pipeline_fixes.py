@@ -36875,10 +36875,11 @@ for _fn440 in [n for n in _ast440.walk(_svt440) if isinstance(n, _ast440.Functio
             if isinstance(_m440.func.value, _ast440.Name) and _m440.func.value.id == '_dash':
                 _dash_calls440.add(_m440.func.attr)
 # 라운드 455 — 자산 구성은 swing_account.composition 대신 swing_dash.allocation(현금 · 자동매매 관리 · 직접 보유)이 재료다 → 도넛
-check("⑪ swing_view — 자동 갱신 기본값 False · get_balance 는 account_read 와 _settings 에서 한 번씩(둘뿐) · run_every 조각은 _acct_panel454 · "
+check("⑪ swing_view — 자동 갱신 기본값 False · get_balance 는 account_read 와 _settings 에서 한 번씩(둘뿐) · run_every 조각은 계좌 칸(_acct_panel454)과 본문(render · 라운드 465) 둘 · "
       "판이 swing_account 의 summarize·glance_lines·scope_chips·limit_checks·table_rows·should_snapshot 과 swing_dash 의 allocation 을 부른다",
       _sv440.ACCT_AUTO_DEFAULT is False and _gb440 == {'account_read': 1, '_settings': 1}
-      and _frag440[:1] == ['_acct_panel454'] and set(_frag440) <= {'_acct_panel454', '_panel'}
+      # 라운드 465 — 자동 갱신이 화면 전체가 되며 본문 조각(render 안 _body465)이 run_every 를 건다. 계좌 칸은 바깥이 그릴 때 제 타이머를 안 건다(§448)
+      and set(_frag440) == {'_acct_panel454', '_panel', 'render', '_body465'} and _frag440.count('render') == 1
       # 라운드 457 — 스냅샷을 남길지는 should_snapshot 이 정한다(안에서 changed 를 부른다 · 가격만 바뀌면 저장 간격마다)
       and {'summarize', 'glance_lines', 'scope_chips', 'limit_checks', 'table_rows', 'should_snapshot'} <= _acc_calls440
       and 'allocation' in _dash_calls440,
@@ -36953,7 +36954,7 @@ try:
           _o440v.get('exc') == 0 and _o440p.get('exc') == 0 and _o440s.get('exc') == 0
           and '총자산(증권사 총평가)' in _md440 and '71,000원' in _md440 and '거래소 평균 매수금액' in _cap440
           and '자산 구성' in _md440 and '평가 범위' in _md440
-          and (_o440v.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False and any('지금 새로고침' in b for b in _o440v.get('btn') or [])
+          and (_o440v.get('toggle') or {}).get('자동 갱신(화면 · 잔고)') is False and any('지금 새로고침' in b for b in _o440v.get('btn') or [])
           and '참고 한도 이내' not in (_o440p.get('cap') or '') and '참고로' in (_o440p.get('cap') or '')
           and any('최근 30일' in b for b in _o440p.get('btn') or [])
           and '지금 진행 중인가' in (_o440s.get('md') or '') and (_o440s.get('md') or '').count('등록 안 됨') >= 2,
@@ -37267,9 +37268,9 @@ try:
     _on442, _off442 = _out442.get('on') or {}, _out442.get('off') or {}
     check("⑧ 화면 — 설정 켬: 예외 0 · 토글 켜짐 · 잔고를 읽으러 갔다('잔고를 읽지 못했습니다 — RuntimeError: broker called') · '15초마다 켜짐' 아님(못 읽음) 대신 "
           "경고 · 설정 없음: 토글 꺼짐 · 읽으러 가지 않았다(경고 없음) · 둘 다 시작 카드가 관제실 맨 위",
-          _on442.get('exc') == 0 and (_on442.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is True
+          _on442.get('exc') == 0 and (_on442.get('toggle') or {}).get('자동 갱신(화면 · 잔고)') is True
           and 'RuntimeError: broker called' in (_on442.get('warn') or '')
-          and _off442.get('exc') == 0 and (_off442.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False
+          and _off442.get('exc') == 0 and (_off442.get('toggle') or {}).get('자동 갱신(화면 · 잔고)') is False
           and 'broker called' not in (_off442.get('warn') or '')
           and '자동매매 언제 시작하나' in (_on442.get('md') or '') and '남은 일' in (_off442.get('md') or '')
           and (_on442.get('md') or '').index('자동매매 언제 시작하나') < (_on442.get('md') or '').index('시스템 상태 — 워커'),
@@ -37856,6 +37857,171 @@ finally:
         if _os.path.exists(_f446):
             try:
                 _os.remove(_f446)
+            except OSError:
+                pass
+
+
+print()
+print("§447 '목표를 넓히면 추천이 나오나' — 잰 값을 산출물에서 읽어 한 줄로 · 같은 확률에 목표만 넓히면 지어낸 양수 (라운드 464)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   붙여 준 지시문이 '1차 목표를 1.5R 로 강제 + 기대값 +0.5% 초과만'을 요구했다(이 물음이 네 번째). 받지 않았고, 화면이 잰 값으로 답한다.
+#   ① 문장은 라운드 160 산출물에서 읽는다(건수·날짜·비용·도달률·평균·중앙) ② 블라인드 재현은 산출물의 판정 문턱으로 가른다(1.0배만)
+#   ③ 못 읽으면 None ④ 화면 문구에 내부 번호 없음 ⑤ '오늘 계획' 갈래가 자격 0 줄 아래에 그것을 부른다 ⑥ 함정의 산수 — 같은 p 에
+#   목표만 1.5R 이면 기대값이 크게 양수 · 그 목표로 잰 p 를 넣으면 음수(기대값 식은 중앙 판정과 같은 모양을 심는다).
+import json as _js447
+import re as _re447
+import artifact_io as _aio447
+import ledger_view as _lv447
+_doc447 = _aio447.load_json('target_multiple_r160.json')
+_ln447 = _lv447.target_widen_line(_doc447) if _doc447 else None
+if _doc447 is None:
+    check("① 라운드 160 산출물을 읽는다(배포 묶음 data/ 에 있다)", False, 'target_multiple_r160.json 못 읽음')
+else:
+    _b447, _t447 = _doc447['baseline'], _doc447['tests']['1.5']
+    check("① 문장은 산출물에서 — 건수·측정일·비용·도달률·평균·중앙이 산출물 값 그대로 · 평균이 음수면 '(여전히 음수)'",
+          _ln447 is not None and f"{int(_b447['cases']):,}건" in _ln447 and str(_doc447.get('made')) in _ln447
+          and f"{_b447['hit_pct']}% → {_t447['hit_pct']}%" in _ln447
+          and f"{float(_b447['ev_mean']):+.2f}% → {float(_t447['ev_mean']):+.2f}%" in _ln447
+          and f"{float(_b447['ev_median']):+.2f}% → {float(_t447['ev_median']):+.2f}%" in _ln447
+          and ((' (여전히 음수)' in _ln447) == (float(_t447['ev_mean']) < 0)), str(_ln447))
+    _zc447 = float(_doc447['criteria']['z_crit'])
+    _rep447 = [k for k, v in _doc447['tests'].items() if float((v.get('blind') or {}).get('sign_z') or 0) >= _zc447]
+    check("② 블라인드 재현은 산출물의 판정 문턱(z_crit)으로 가른다 — 재현된 배수만 이름이 나온다",
+          all((k + '배') in _ln447 for k in _rep447)
+          and all((k + '배') not in _ln447.split('재현된 배수')[1] for k in _doc447['tests'] if k not in _rep447),
+          f'{_rep447} | {_ln447}')
+    check("④ 화면 문장에 내부 번호(라운드·R160 같은)가 없다", not _re447.search(r'라운드|\bR\d{2,}', _ln447 or ''), str(_ln447))
+check("③ 못 읽으면 None — 빈 문서 · 칸 빠짐 · 배수 없음",
+      _lv447.target_widen_line({}) is None and _lv447.target_widen_line(None) is None
+      and (_doc447 is None or _lv447.target_widen_line(_doc447, mult=9.9) is None))
+_svs447 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_i447 = _svs447.find('_zl450 = zero_day_line(c, day)')
+check("⑤ '오늘 계획' 갈래 — 자격 0 줄 아래에서 산출물을 읽어 그 한 줄을 그린다(못 읽으면 빠진다)",
+      _i447 > 0 and "target_widen_line(_aio464.load_json('target_multiple_r160.json'))" in _svs447[_i447:_i447 + 1200]
+      and 'st.caption(md(_tw464))' in _svs447[_i447:_i447 + 1200])
+
+
+# ⑥ 함정의 산수 — 중앙 판정의 기대값 식 모양(p × 목표폭 + (1 − p) × 손절폭 − 비용)을 심는다
+def _ev447(p, up, dn, cost=0.41):
+    return p * up + (1 - p) * dn - cost
+
+
+_r447 = 5.0                                                  # 손절폭 5% 인 가상의 후보
+_now447 = _ev447(0.59, 0.7 * _r447, -_r447)                  # 지금 목표(0.7배) · 그 목표로 잰 p
+_naive447 = _ev447(0.59, 1.5 * _r447, -_r447)                # 목표만 1.5배 · p 그대로 — 지시문대로 고치면 생기는 값
+_meas447 = _ev447(0.377, 1.5 * _r447, -_r447)                # 같은 1.5배 · 그 목표로 잰 도달률
+check("⑥ 같은 확률에 목표만 1.5배로 넓히면 기대값이 크게 양수(+0.5% 를 넘는다) — 그 목표로 잰 도달률을 넣으면 음수",
+      _now447 < 0 and _naive447 > 0.5 and _meas447 < 0, f'{_now447:+.2f} {_naive447:+.2f} {_meas447:+.2f}')
+
+
+print()
+print("§448 자동 갱신은 화면 전체 — 켜져 있으면 스윙 탭 본문을 그 간격으로 다시 그린다 · 입력 칸이 있는 '시스템'은 뺀다 · 잔고는 한 바퀴에 한 번 (라운드 465)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "15초마다 자동 갱신 해줘." 종전엔 계좌 칸 조각만 다시 돌아 지휘 띠·워커·계획·주문 사건은 화면을 다시 열어야 바뀌었다.
+#   ① 다시 그리는 갈래 판정(켜짐 · 쓰기 가능 · 입력 칸 없는 갈래) ② 입력 위젯(글자·폼·수·편집기)이 있는 갈래는 갱신 목록 밖 —
+#   손 목록이 아니라 뷰 함수의 AST 로 유도해 대 본다 ③ 본문 조각이 run_every 를 그 판정으로 걸고 제 장부 연결을 연다 ④ 갈래가 바뀌어
+#   판정이 달라지면 앱을 한 번 다시(조각 재정의) ⑤ 계좌 칸은 바깥이 다시 그리면 제 타이머를 안 건다(잔고를 두 번 읽지 않게)
+#   ⑥ 자식 렌더 — 켜진 채 '시스템'으로 가도 예외 0 · 시스템 갈래가 그려진다 · 토글 이름이 동작에 맞다.
+import ast as _ast448
+import swing_view as _sv448
+check("① 다시 그리는 갈래 — 켜짐이면 관제실·오늘 계획·포지션·주문·체결·성과 · '시스템'은 아님 · 꺼짐이면 어디도 아님 · 갈래를 모르면 관제실",
+      all(_sv448.live_refresh(True, v) for v in ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF'))
+      and not _sv448.live_refresh(True, '시스템') and not any(_sv448.live_refresh(False, v) for v in _sv448.NAV)
+      and _sv448.live_refresh(True, None) is True)
+_src448 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_tree448 = _ast448.parse(_src448)
+_fn448 = {n.name: n for n in _tree448.body if isinstance(n, _ast448.FunctionDef)}
+_TYPING448 = {'text_input', 'number_input', 'text_area', 'form', 'data_editor', 'date_input', 'chat_input'}
+
+
+def _typing448(fn, seen, depth=0):
+    hit = 0
+    for n in _ast448.walk(fn):
+        if isinstance(n, _ast448.Call) and isinstance(n.func, _ast448.Attribute) and n.func.attr in _TYPING448:
+            hit += 1
+        if depth < 2 and isinstance(n, _ast448.Call) and isinstance(n.func, _ast448.Name) and n.func.id in _fn448 and n.func.id not in seen:
+            seen.add(n.func.id)
+            hit += _typing448(_fn448[n.func.id], seen, depth + 1)
+    return hit
+
+
+_VIEWFN448 = {'관제실': '_view_center', '오늘 계획': '_view_plans', '포지션': '_view_positions', '주문·체결': '_view_orders',
+              '성과·PROOF': '_view_proof', '시스템': '_view_system'}
+_typed448 = {v: _typing448(_fn448[f], set()) for v, f in _VIEWFN448.items() if f in _fn448}
+check("② 입력 위젯(글자·폼·수·편집기)이 있는 갈래는 갱신 목록 밖이고, 없는 갈래는 전부 안 — 뷰 함수와 그 도우미의 AST 로 유도해 대 본다",
+      set(_typed448) == set(_sv448.NAV) and all((_typed448[v] > 0) == (v not in _sv448.LIVE_VIEWS) for v in _typed448),
+      str(_typed448), scanned=len(_typed448))
+_rd448 = _ast448.get_source_segment(_src448, _fn448['render']) or ''
+_rb448 = _ast448.get_source_segment(_src448, _fn448['_render_body']) or ''
+check("③ 본문 조각 — run_every 를 갱신 판정으로 걸고(꺼지면 None) · 조각 안에서 제 장부 연결을 열고 닫는다",
+      "@st.fragment(run_every=(f'{_every465}s' if _live465 else None))" in _rd448
+      and 'c2 = L.connect(readonly=not allow_write)' in _rd448 and 'c2.close()' in _rd448 and '_body465()' in _rd448
+      and '_live465 = live_refresh(' in _rd448)
+check("④ 갈래가 바뀌어 갱신 여부가 달라지면 앱을 한 번 다시 돈다(조각을 다시 정의해야 run_every 가 바뀐다)",
+      "if live_refresh(ctx['auto_refresh'][0], pick) != bool(live):" in _rb448 and 'st.rerun()' in _rb448.split('live_refresh(ctx')[1][:200])
+_ap448 = _ast448.get_source_segment(_src448, _fn448['_acct_panel454']) or ''
+check("⑤ 계좌 칸은 바깥이 다시 그리는 중이면 제 타이머를 안 건다 · 부르는 두 자리가 바깥 상태를 넘긴다",
+      'and not outer_live' in _ap448 and _src448.count("outer_live=ctx.get('live_refresh', False)") == 2)
+# ⑥ 자식 렌더 — 자동 갱신 켬 · 관제실 → '시스템'으로 갈래 바꿈 → 예외 0 · 시스템 갈래가 그려진다 · 토글 이름
+_vdb448 = _os.path.join(PROJ, '_probe', '_r465_view.db')
+_child448 = _os.path.join(PROJ, '_probe', '_r465_view_child.py')
+_vst448 = _os.path.join(PROJ, '_probe', '_r465_view_state.json')
+try:
+    if _os.path.exists(_vdb448):
+        _os.remove(_vdb448)
+    import swing_ledger as _sl448
+    _cv448 = _sl448.connect(_vdb448)
+    _sl448.set_setting(_cv448, 'mode', 'OFF', by='test')
+    _sl448.set_setting(_cv448, 'acct_refresh', {'on': True, 'every': 15}, by='test')
+    _cv448.close()
+    _csrc448 = (
+        "import sys\n"
+        f"sys.path.insert(0, {PROJ!r})\n"
+        "import streamlit as st\n"
+        "import broker_kis as _B\n"
+        "import swing_ledger as _L\n"
+        "import swing_notify as _N\n"
+        "import swing_view as _V\n"
+        "import ui_kit as _uk\n"
+        "class _NoBroker:\n"
+        "    def __init__(self, *a, **k):\n"
+        "        raise RuntimeError('broker called')\n"
+        "_B.KisBroker = _NoBroker\n"
+        "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+        f"_L.connect.__defaults__ = ({_vdb448!r}, False)\n"
+        f"_N.STATE_PATH = {_vst448!r}\n"
+        "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+        "          anchor_day='2026-10-07')\n")
+    open(_child448, 'w', encoding='utf-8').write(
+        "import json, sys\n"
+        "sys.stdout.reconfigure(encoding='utf-8')\n"
+        "from streamlit.testing.v1 import AppTest\n"
+        f"at = AppTest.from_string({_csrc448!r}, default_timeout=120)\n"
+        "at.run()\n"
+        "first = dict(exc=len(at.exception), md=' '.join(str(e.value) for e in at.markdown)[:20000],\n"
+        "             toggle={str(t.label): bool(t.value) for t in at.toggle})\n"
+        "at.radio(key='sw_nav').set_value('시스템')\n"
+        "at.run()\n"
+        "out = dict(first=first, exc=len(at.exception), err=str(at.exception[:1])[:400], cap=' '.join(str(e.value) for e in at.caption),\n"
+        "           nav=str(at.radio(key='sw_nav').value))\n"
+        "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+    _rc448 = __import__('subprocess').run([sys.executable, _child448], cwd=PROJ, capture_output=True, text=True, encoding='utf-8',
+                                          errors='replace', timeout=300, env=dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT'))
+    _jr448 = (_rc448.stdout or '').rsplit('@@R@@', 1)
+    _o448 = __import__('json').loads(_jr448[1]) if len(_jr448) == 2 else {'err': (_rc448.stderr or '')[-600:]}
+    _f448 = _o448.get('first') or {}
+    check("⑥ 자식 렌더 — 켬 · 관제실: 예외 0 · 시작 카드 · 토글 '자동 갱신(화면 · 잔고)' 켜짐 → '시스템'으로: 예외 0 · 시스템 갈래가 그려진다",
+          _f448.get('exc') == 0 and '자동매매 언제 시작하나' in (_f448.get('md') or '')
+          and (_f448.get('toggle') or {}).get('자동 갱신(화면 · 잔고)') is True
+          and _o448.get('exc') == 0 and _o448.get('nav') == '시스템' and '이 PC 알림' in (_o448.get('cap') or ''),
+          str({k: _o448.get(k) for k in ('exc', 'err', 'nav')})[:700] + ' ' + str({k: _f448.get(k) for k in ('exc', 'toggle')})[:300])
+finally:
+    for _p448 in (_vdb448, _child448, _vst448):
+        if _os.path.exists(_p448):
+            try:
+                _os.remove(_p448)
             except OSError:
                 pass
 
