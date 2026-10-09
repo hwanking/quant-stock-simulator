@@ -63,6 +63,9 @@ NO_AUTO_CHANGE = (
     #   고치면 "결과를 보고 채점 규칙을 바꿨는가"를 가를 수 없다. 사람이 사유와 함께 고친다
     #   (고치면 docs/RESULT_R398_FORWARD_JUDGE.md 의 해시도 같이 간다 · 회귀 §388).
     'scripts/forward_judge.py',
+    # ⚠️ 라운드 470 — 같은 날 잴 두 약속(R346 청산 후보 전방 · R404 그림자 R0)의 채점기. 같은 이유로 사람이 사유와 함께
+    #   고친다(고치면 docs/PREREG_R470_FORWARD_GRADERS.md 의 해시도 같이 간다 · 회귀 §451).
+    'scripts/forward_judge_r470.py',
 )
 
 #: ⓑ 11/16 에 평가할 대상 — 그날까지 한 글자도 안 바뀌어야 한다

@@ -5320,8 +5320,11 @@ check("상태와 엔진 버전은 한 함수가 함께 만들고 상단 바가 �
       '_STATUS_TOP' in _w86 and '_AX_KO' in _w86 and 'class="here"' in _w86
       and 'def _version_meta_html():' in _w86
       and '_st399, _chips399 = _version_meta_html()' in _w86)
+# 라운드 469 — 축 짧은 이름 표가 버전 칸과 한 곳(`version_panel.AXIS_SHORT`)으로 갔다. 성질(축 목록은 versioning 이
+#   정하고 화면은 그것을 돈다)은 그대로라, 이름 표는 간 자리에서 보고 화면이 그 표를 읽는지 본다.
 check("버전 칩 축 목록을 화면이 손으로 나열하지 않는다",
-      'for _a in _ver.AXES' in _w86 and "'valuation': '적정가'" in _w86)
+      'for _a in _ver.AXES' in _w86 and '_AX_KO_NAMES = _vp469.AXIS_SHORT' in _w86
+      and "'valuation': '적정가'" in open(_os.path.join(PROJ, 'version_panel.py'), encoding='utf-8').read())
 
 _u86 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
 check("상태바 컴포넌트 존재", 'def status_bar(' in _u86)
@@ -5950,13 +5953,19 @@ if len(_bad95) >= 3:
 #   축을 화면에 손으로 나열해 둔 탓에 축이 7개로 늘었는데 5개만 그렸다.
 _w95 = open(_os.path.join(PROJ, "web_app.py"), encoding='utf-8').read()
 _u95 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
+# 라운드 469 — 축 짧은 이름 표가 버전 칸과 한 곳(`version_panel.AXIS_SHORT`)으로 갔다 — 이름은 간 자리에서 본다.
+_vp95 = open(_os.path.join(PROJ, 'version_panel.py'), encoding='utf-8').read()
 check("상단 바에 엔진 버전 축을 빠짐없이 보여 준다",
-      'for _a in _ver.AXES' in _w95 and "'news': '뉴스'" in _w95
-      and "'sector': '업황'" in _w95)
+      'for _a in _ver.AXES' in _w95 and '_AX_KO_NAMES = _vp469.AXIS_SHORT' in _w95
+      and "'news': '뉴스'" in _vp95 and "'sector': '업황'" in _vp95)
 # 라운드 399 — 칩 링크에 두 줄 배치용 클래스를 더했다('qvers qchips'). 옛 검사는 class 글자 전체를 요구했다 —
 #   재려던 것은 "그 클래스의 링크가 업데이트 이력으로 가는가"다.
+# 라운드 469 — 칩은 이제 각 축의 칸(#ver-축 · 업데이트 절 바로 위)으로 가고, 업데이트 이력으로 가는 길은 바로 옆의
+#   '업데이트' 링크 하나다(칩 묶음은 링크가 아니다 — 링크 안에 링크를 못 둔다). 두 길이 다 있는지 본다.
 check("엔진 버전 칩이 업데이트 이력으로 간다",
-      "<a href='#nav-updates' class='qvers" in _w95)
+      "<a href='#nav-updates' class='qvers qupd'" in _w95
+      and "<a href='#{_uk._esc_attr(_vp469.anchor_id(_ax))}' class='qverc'" in _w95
+      and _w95.index('_render_axis_panels469()\n') < _w95.index("<div id='nav-updates'></div>"))
 import inspect as _insp95                                        # noqa: E402
 import ui_kit as _uk95                                           # noqa: E402
 # 라운드 120d — 이 검사가 `_esc(version_href)` 라는 **소스 문자열**을 요구하고
@@ -10702,13 +10711,8 @@ check("버전 칩에 근거 설명이 붙는다",
       and '그 축이 마지막으로 바뀐 시점' in _w109)
 # 축별 버전이 실제로 그 축의 파일 변경과 맞는가 (뒤처지면 실패)
 import subprocess as _sp109
-_AXF109 = {'model': ['quant_indicators.py', 'verdict_core.py',
-                     'price_axes.py', 'regime_policy.py'],
-           'rulebook': ['analysis_rulebook_ko.txt'],
-           'news': ['market_context.py'],
-           # 라운드 44 신설 — 적정가와 섹터를 model 축에서 떼어 냈다
-           'valuation': ['price_axes.py'],
-           'sector': ['sector_cycle.py']}
+# 라운드 469 — 표를 versioning.AXIS_FILES 한 곳으로 올렸다(버전 칸이 같은 표로 '어느 파일이 바뀌면 오르나'를 말한다)
+_AXF109 = dict(_ver101.AXIS_FILES)
 for _ax109, _files109 in _AXF109.items():
     _v109 = _ver101.current(_ax109)
     _vd109 = _v109[1:11].replace('.', '-') if _v109.startswith('v') else ''
@@ -17834,8 +17838,10 @@ check("그 이슈들이 다음 점검 시점을 들고 있다",
 # 라운드 262 — 종전엔 "`model|vb_gap` 이 원장에 열려 있지 않다"까지 잠갔다. 그것은 살아 있는
 #   등록부의 상태라 일일 규칙이(매수권 괴리로) 다시 열면 회귀가 데이터로 깨진다(R213 · 표류하는
 #   값을 잠그지 않는다). 화면 불변식만 남긴다 — model 축을 그 이슈에 손으로 걸지 않는다.
+# 라운드 469 — 축↔이슈 연결이 버전 칸 모듈(version_panel.AXIS_ISSUE) 한 곳으로 옮겨 갔다 · 그 자리도 본다.
+_vp182 = _read148(_os.path.join(PROJ, 'version_panel.py')) or ''
 check("화면이 model 축을 vb_gap 이슈에 손으로 걸어 두지 않는다 (열림·닫힘은 일일 규칙이 정한다 · R222·R262)",
-      "'model': 'model|vb_gap'" not in _w182)
+      "'model': 'model|vb_gap'" not in _w182 and "'model': 'model|vb_gap'" not in _vp182)
 check("모델 축의 '다음에 보는 시점'은 전방 재평가일에서 읽는다 (forward_eval · 한 곳 · 손으로 안 적는다)",
       "_fed182 = _fe182.eval_date()" in _w182 and "_ax_plan['model'] = (" in _w182
       and "'2026-11-16'" not in _w182.split('_AX_ISSUE')[-1][:2500])
@@ -23571,9 +23577,12 @@ print("-" * 72)
 #      (국면 게이트 · 전방 재평가 대상). 문장을 등록부에서 읽어 만든다.
 #   ③ 일정 문서 둘이 09-04 뒤 안 갱신됐다. ④ 09-15 결정 재료(라운드 21 · 0.6배)를 사전등록
 #      그대로 다시 쟀다 — 기각 그대로(어느 배수도 세 구간 미달).
+# 라운드 469 — 연결 표는 버전 칸 모듈 한 곳(version_panel.AXIS_ISSUE)에 있고 web_app 은 그것을 읽는다(§4) — 새 자리를 본다.
+_vp272 = _read148(_os.path.join(PROJ, 'version_panel.py')) or ''
 check("버전 칩이 룰북 축의 열린 이슈(손절 조이기 노출 결정)를 잇는다",
-      "'rulebook': 'usability|loss_control_tradeoff'" in _w231
-      and "'scoring': 'model|score_not_separating'" in _w231)
+      "'rulebook': 'usability|loss_control_tradeoff'" in _vp272
+      and "'scoring': 'model|score_not_separating'" in _vp272
+      and '_AX_ISSUE = _vp469.AXIS_ISSUE' in _w231)
 check("'국면별 엔진 제한 … 미구현' 문장이 사라졌다 (구현돼 있다)",
       '국면별 엔진 제한과 전략별 가중치' not in _w231
       and '⑤ 국면별 제한은 국면 게이트로 적용됩니다' in _w231)
@@ -31630,7 +31639,12 @@ check("타일 값 단의 문턱이 전부 같은 비율(13%)에서 나오고 단
 _mob389 = _css388['dark'][_css388['dark'].find('@media (max-width: 768px)'):]
 check("휴대폰·태블릿에서 상단 바는 붙어 따라오지 않고 칩 줄은 한 줄 가로 밀기다 (셀렉터가 이기는 구체성)",
       '.qnav { position: static !important; }' in _mob389
-      and '.qnav a.qvers.qchips { white-space: nowrap !important; overflow-x: auto !important;' in _mob389,
+      # 라운드 469 — 칩 묶음이 링크(a)에서 span 으로 바뀌어 두 셀렉터가 같이 `a` 를 뗐다 — 구체성 관계는 그대로다
+      #   (모바일 `.qnav .qvers.qchips` 0,3,0 > web_app `.qnav .qvers` 0,2,0). 관계를 값으로 본다.
+      and '.qnav .qvers.qchips { white-space: nowrap !important; overflow-x: auto !important;' in _mob389
+      and '.qnav .qvers {{ padding: 2px 4px !important; font-size: 12px !important;' in (_w389q := open(
+          _os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read())
+      and '.qnav a.qvers.qchips' not in _mob389 and "<span class='qvers qchips'>" in _w389q,
       _mob389[:120])
 
 
@@ -38024,6 +38038,330 @@ finally:
                 _os.remove(_p448)
             except OSError:
                 pass
+
+
+print()
+print("§449 과거 원장으로 '비용을 넘는 조건' 찾기 — 사전등록 갈래를 산출물의 수로 다시 유도해 판정과 대 본다 (라운드 467)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "예전 데이터로 회귀해서 가정해서 다시 스터디를 해서 그 부분을 개선하는게 좋잖아." 학습 구간 OLS 하나가 고른 행이
+#   검증·블라인드에서 비용(0.41)을 넘었는지 쟀다 → (다). 값은 잠그지 않는다(손으로 다시 돌리면 바뀐다 · R213) — 잠그는 것은
+#   ① 산출물이 사전등록의 설정(비용·시드·지도 칸 52)을 쓴다 ② 재현 통과 ③ 판정을 사전등록 갈래로 **다시 유도**하면 산출물의
+#   판정과 같다 ④ 판정에 train 을 안 쓴다 ⑤ 사전등록이 측정 스크립트보다 먼저 커밋됐다 ⑥ 레이더·결과 문서가 그 판정을 말한다.
+import json as _j449
+import subprocess as _sp449
+_art449 = _os.path.join(PROJ, 'data', 'conditional_ev_r467.json')
+_d449 = _j449.load(open(_art449, encoding='utf-8')) if _os.path.exists(_art449) else {}
+check("① 산출물이 사전등록의 설정을 쓴다 — 비용 0.41 · 시드 467 · 부트 2,000 · 날짜 하한 30 · 지도 칸 52(정의 = 사전등록)",
+      _d449.get('cost_pct') == 0.41 and _d449.get('seed') == 467 and _d449.get('boot') == 2000 and _d449.get('date_floor') == 30
+      and _d449.get('map_cells_defined') == _d449.get('map_cells_prereg') == 52
+      and _d449.get('prereg') == 'docs/PREREG_R467_CONDITIONAL_EV.md', str({k: _d449.get(k) for k in ('cost_pct', 'seed', 'map_cells_defined')}))
+_rp449 = _d449.get('repro') or {}
+check("② 재현 통과 — 원장 행수 = 집계표 행수 · 점수대 7띠 평균 수익 차이가 모두 0.01%p 안",
+      _rp449.get('ok') is True and _rp449.get('ledger_rows') == _rp449.get('calibration_rows')
+      and len(_rp449.get('bands') or []) == 7
+      and all(b.get('diff') is not None and abs(b['diff']) <= 0.01 for b in _rp449.get('bands') or []),
+      scanned=len(_rp449.get('bands') or []))
+
+
+def _rederive449(d):
+    """사전등록 갈래 — valid·blind 중 고른 행이 없으면 (다) · 날짜 30 미만이면 미측정 · 둘 다 CI 하한 > 0 이면 (가) ·
+    valid 만 통과하고 blind 평균 > 0 이면 (나) · 그 밖 (다)."""
+    sel = d.get('selection') or {}
+    v, b = sel.get('valid') or {}, sel.get('blind') or {}
+    if not v.get('selected') or not b.get('selected'):
+        return '(다)'
+    vc, bc = v.get('chosen') or {}, b.get('chosen') or {}
+    if (vc.get('dates') or 0) < 30 or (bc.get('dates') or 0) < 30:
+        return '미측정'
+    vo, bo = vc['ci95'][0] > 0, bc['ci95'][0] > 0
+    if vo and bo:
+        return '(가)'
+    if vo and bc['mean'] > 0:
+        return '(나)'
+    return '(다)'
+
+
+_re449 = _rederive449(_d449) if _d449 else None
+check("③ 판정을 산출물의 수로 사전등록 갈래 그대로 다시 유도하면 산출물의 판정과 같다",
+      _re449 is not None and str(_d449.get('verdict', '')).startswith(_re449), f'{_re449} · {_d449.get("verdict")}')
+check("④ 판정(R1)은 valid·blind 만 본다 — 맞춘 구간(train)은 적기만 한다",
+      set((_d449.get('R1') or {}).keys()) == {'valid', 'blind'})
+
+
+def _first_add449(path):
+    try:
+        out = _sp449.run(['git', 'log', '--format=%ct', '--diff-filter=A', '--', path], cwd=PROJ,
+                         capture_output=True, text=True, timeout=30).stdout.split()
+        return int(out[-1]) if out else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+_tp449 = _first_add449('docs/PREREG_R467_CONDITIONAL_EV.md')
+_ts449 = _first_add449('scripts/conditional_ev_r467.py')
+check("⑤ 사전등록이 측정 스크립트보다 먼저 커밋됐다 (스크립트가 아직 안 올라갔으면 사전등록만 있으면 된다)",
+      _tp449 is not None and (_ts449 is None or _tp449 < _ts449), f'prereg {_tp449} · script {_ts449}')
+_rad449 = _j449.load(open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8'))
+_row449 = next((r for r in _rad449.get('rows') or [] if '(R467)' in str(r.get('name'))), {})
+import re as _rx449
+_st449 = str(_row449.get('status'))
+check("⑥ 레이더 줄이 측정 결과를 말한다 — '측정 전' 아님 · 다시 유도한 판정 갈래 · 상태 칸에 날짜 없음",
+      bool(_row449) and '측정 전' not in _st449 and bool(_re449) and _re449 in _st449
+      and not _rx449.search(r'20\d\d-\d\d-\d\d', _st449), _st449)
+_doc449 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R467_CONDITIONAL_EV.md')) or ''
+check("⑦ 결과 문서가 판정과 블라인드 수를 적고 규칙을 안 바꿨다고 말한다",
+      '(다) 현행 유지' in _doc449 and '−0.91%' in _doc449 and '3603b34' in _doc449 and '규칙·문턱·판정·화면 불변' in _doc449)
+# 라운드 468 — 독립 검토자가 R467 문서의 넘친 말 하나를 짚었다: '고른 − 안 고른 +1.45' 를 *"모형이 상대적으로 나은 쪽은 가른다"* 로
+#   읽었는데 날짜 몫/날짜 안 몫으로 가르면 +1.14 가 날짜(시기) 몫이고 같은 날 안의 몫은 +0.33 → 블라인드 −0.01 이다.
+check("⑧ R467 문서가 고른 행의 평균을 날짜 몫과 날짜 안 몫으로 가르고, 처음의 넘친 말을 정정했다고 적는다",
+      '날짜 안 몫' in _doc449 and '+1.14' in _doc449 and '넘친 말이었다' in _doc449
+      and '모형이 **상대적으로 나은 쪽**은 가른다' not in _doc449)
+_d468 = _read148(_os.path.join(PROJ, 'docs', 'RESULT_R468_VERIFY_AND_PATHS.md')) or ''
+check("⑨ R468 검증 문서 — 독립 재계산 일치 · 오염 표 · 비용 0 에서도 블라인드 음수 · 개선 길과 오염 방어 표준",
+      '독립 재계산이 산출물과 소수점까지 같다' in _d468 and '과거 케이스에 오늘의 재무' in _d468
+      and '비용 0' in _d468 and '판정은 전방 구간에서' in _d468 and '덩어리 부트스트랩' in _d468)
+
+
+print()
+print("§450 버전 칩을 축마다 누르면 그 축의 업데이트 이력과 다음에 할 일이 펼쳐진다 — 다음 할 일은 손으로 안 적는다 (라운드 469)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "각각 항목마다 클릭하면 업데이트 히스토리가 나오고 어떤거 할건지에 대해서 나올 수 있게 해줘야지."
+#   ① 축 목록은 versioning.AXES 한 곳 · 짧은 이름·이슈 연결도 version_panel 한 곳(web_app 은 읽는다) ② 칩마다 그 축 칸으로 가는
+#   링크(앵커는 한 함수) · 묶음은 링크가 아니다(링크 안에 링크를 못 둔다) ③ 다음 할 일은 세 출처만(열린 이슈 · 레이더 열린 줄 ·
+#   재평가일) — 심어서 양방향 ④ 지난 점검일은 'N일 지남' ⑤ 레이더의 열린 줄은 축 꼬리표가 있고 기각된 줄은 열려 있지 않다
+#   ⑥ 실제 재료로 그리면 칸 일곱 · 축마다 이력 수 = 원장의 그 축 줄 수 ⑦ 담당 파일 표는 versioning 한 곳(§109 가 읽는다).
+import version_panel as _vp450
+import versioning as _vv450
+import ui_kit as _uk450
+import re as _re450
+check("① 짧은 이름 표가 versioning.AXES 와 같은 축을 덮는다 · 앵커는 한 함수(ver-축)",
+      set(_vp450.AXIS_SHORT) == set(_vv450.AXES) and _vp450.anchor_id('model') == 'ver-model')
+_w450 = _read148(_os.path.join(PROJ, 'web_app.py')) or ''
+check("② 칩마다 그 축 칸으로 가는 링크 · 묶음은 span(링크 안에 링크 금지) · 이름·이슈 표는 version_panel 에서 읽는다",
+      "<a href='#{_uk._esc_attr(_vp469.anchor_id(_ax))}' class='qverc'" in _w450
+      and "<span class='qvers qchips'>{_chips399}</span>" in _w450
+      and "<a href='#nav-updates' class='qvers qchips'" not in _w450
+      and '_AX_KO_NAMES = _vp469.AXIS_SHORT' in _w450 and '_AX_ISSUE = _vp469.AXIS_ISSUE' in _w450
+      and '_render_axis_panels469()' in _w450 and '_vp469b.OPEN_JS' in _w450)
+# ③ 심기 — 세 출처만 · 닫힌 줄·다른 축·열리지 않은 이슈는 안 나온다
+import datetime as _dt450
+_iss450 = {'model|score_not_separating': {'title': '심은 과제', 'next_review': '2026-10-20'}}
+_rad450 = [{'name': '열린 줄', 'status': '전방검증 대기', 'axis': 'scoring', 'open': True, 'status_needs_eval_date': True},
+           {'name': '닫힌 줄', 'status': '기각', 'axis': 'scoring'},
+           {'name': '다른 축', 'status': '기록 중', 'axis': 'model', 'open': True}]
+_pl450 = _vp450.axis_plans('scoring', _iss450, _rad450, '2026-11-16', today=_dt450.date(2026, 10, 9))
+check("③ 다음 할 일은 열린 이슈 + 그 축의 열린 레이더 줄뿐 · 재평가일을 기다리는 줄엔 그 날짜 · 닫힌 줄·다른 축은 안 나온다",
+      [p['what'] for p in _pl450] == ['심은 과제', '열린 줄'] and _pl450[1]['when'] == '2026-11-16'
+      and _pl450[0]['when'] == '2026-10-20', str(_pl450))
+check("③' 아무 출처도 없으면 빈 목록 — 칸은 '잡힌 다음 일이 없다'고 적는다(지어내지 않는다)",
+      _vp450.axis_plans('schema', {}, _rad450, '2026-11-16') == []
+      and '이 축에 잡힌 다음 일이 없습니다' in _vp450.panel_html('schema', 'v0', [], [], _uk450._esc, _uk450.DARK))
+_od450 = _vp450.axis_plans('scoring', {'model|score_not_separating': {'title': 't', 'next_review': '2026-09-30'}}, [], None,
+                           today=_dt450.date(2026, 10, 9))
+check("④ 지난 점검일은 앞으로의 일처럼 적지 않는다 — '점검 예정일 … · N일 지남' (오늘이면 안 붙인다)",
+      _od450[0]['when'] == '점검 예정일 2026-09-30 · 9일 지남'
+      and _vp450.overdue_days('2026-10-09', _dt450.date(2026, 10, 9)) is None, str(_od450))
+import json as _j450
+_rd450 = _j450.load(open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8')).get('rows') or []
+_open450 = [r for r in _rd450 if r.get('open')]
+check("⑤ 레이더의 열린 줄은 전부 축 꼬리표가 있고(versioning.AXES 안) 기각·현행 유지로 끝난 줄은 열려 있지 않다",
+      bool(_open450) and all(r.get('axis') in _vv450.AXES for r in _open450)
+      and not any(str(r.get('status')).startswith('기각') or '(다) 현행 유지' in str(r.get('status')) for r in _open450),
+      f'열린 줄 {len(_open450)}', scanned=len(_rd450))
+_inp450 = _vp450.load_inputs()
+_html450 = _vp450.section_html(_uk450._esc, _uk450.DARK, inputs=_inp450)
+_ids450 = _re450.findall(r"id='(ver-[a-z]+)'", _html450)
+_led450 = _inp450[0] or {}
+check("⑥ 실제 재료로 그리면 칸이 축마다 하나(일곱) · 칸 머리의 업데이트 수 = 원장의 그 축 줄 수",
+      _ids450 == [_vp450.anchor_id(a) for a in _vv450.AXES]
+      and all(f"업데이트 {len(_vp450.axis_history(_led450, a))}건" in _html450 for a in _vv450.AXES),
+      f'칸 {len(_ids450)}', scanned=len(_vv450.AXES))
+check("⑦ 축 ↔ 담당 파일 표는 versioning 한 곳(회귀 §109 와 버전 칸이 같은 표를 읽는다)",
+      isinstance(getattr(_vv450, 'AXIS_FILES', None), dict) and set(_vv450.AXIS_FILES) <= set(_vv450.AXES)
+      and '_AXF109 = dict(_ver101.AXIS_FILES)' in _read148(_os.path.join(PROJ, 'test_pipeline_fixes.py')))
+
+
+# ─── §451 시작 (라운드 470) ───
+print("=" * 72)
+print("§451 11-16 에 잴 두 약속의 채점기 — R346 청산 후보 전방 · R404 그림자 R0 · 결과 전에 짠다 (라운드 470)")
+print("=" * 72)
+# 라운드 468 이 찾은 빈자리 — R346(*"11-16 전방 자료로 같은 기준을 다시 댄다"*)과 R404(*"R0 — 판정이 얼마나 다른가 ·
+#   11-16 에 잰다"*)는 약속만 있고 계산하는 코드가 없었다. 그날 손으로 짜면 결과를 보며 짠다(라운드 398 이 막은 그 오염).
+#   합성 행을 심어 ① 관문이 양쪽으로 도는지 ② 원 스크립트와 같은 채점·부트스트랩인지 ③ 갈래가 원문대로 갈리는지
+#   ④ 결과 전에 박제됐는지 본다. 실제 기록부·그림자 줄은 읽지 않는다.
+import ast as _ast451                                            # noqa: E402
+import datetime as _dt451                                        # noqa: E402
+import pandas as _pa451                                          # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import forward_judge_r470 as _fj451                              # noqa: E402
+import ledger_view as _lv451                                     # noqa: E402
+import prediction_log as _pl451                                  # noqa: E402
+import scripts.model_freeze_guard as _fg451                      # noqa: E402
+
+_src451 = _read148(_os.path.join(PROJ, 'scripts', 'forward_judge_r470.py'))
+_tree451 = _ast451.parse(_src451)
+
+# ① 관문 — 재평가일 전이면 자료 공급자를 부르지 않고, 당일이면 한 번 부른다(양방향)
+_calls451 = []
+
+
+def _prov451(first, last):
+    _calls451.append((first, last))
+    return dict(registry=[], bars={}, bars_failed=[], shadow=[])
+
+
+_pre451 = _fj451.run(today='2026-11-15', eval_date='2026-11-16', data=_prov451)
+check("재평가일 전날에는 판정하지 않는다 — '미측정'과 사유만 내고 자료를 읽지 않는다",
+      _pre451['status'] == '미측정' and '재평가일 2026-11-16 전' in _pre451['reason'] and not _calls451,
+      f"{_pre451['status']} · 부름 {len(_calls451)}")
+_on451 = _fj451.run(today='2026-11-16', eval_date='2026-11-16', data=_prov451)
+check("재평가일 당일에는 자료를 한 번 부르고, 0행이면 R346 은 '기각'이 아니라 '미측정' · R404 는 기록 하한 미달 '(다)'",
+      _on451['status'] == '판정함' and len(_calls451) == 1 and _on451['r346']['status'] == '미측정'
+      and _on451['r404']['status'] == '미측정' and '(다)' in _on451['r404']['verdict'],
+      f"{_on451['status']} · 부름 {len(_calls451)}")
+_pdsave451, _pdc451 = _fj451.FJ.pin_drift, []
+_fj451.FJ.pin_drift = lambda: ['data/regime_routing_r55.json']
+try:
+    _drf451 = _fj451.run(today='2026-11-16', eval_date='2026-11-16', data=lambda a, b: _pdc451.append(1))
+finally:
+    _fj451.FJ.pin_drift = _pdsave451
+check("박제 파일이 바뀌었으면 재평가일에도 판정하지 않는다 — 자료도 안 읽는다",
+      _drf451['status'] == '미측정' and '박제' in _drf451['reason'] and not _pdc451, str(_drf451.get('reason'))[:60])
+_mn451 = next(n for n in _tree451.body if isinstance(n, _ast451.FunctionDef) and n.name == 'main')
+check("앞당기는 옵션이 없다 — main 이 인자를 읽지 않는다",
+      not [n for n in _ast451.walk(_mn451) if isinstance(n, _ast451.Name) and n.id == 'argv'
+           and isinstance(n.ctx, _ast451.Load)])
+_own451 = {n.name for n in _tree451.body if isinstance(n, _ast451.FunctionDef)}
+check("관문·박제 대조·기록 구간은 라운드 398 의 것을 부른다 — 다시 적지 않는다",
+      _fj451.FJ.__file__.replace('\\', '/').endswith('scripts/forward_judge.py')
+      and not (_own451 & {'judge_gate', 'pin_drift', 'record_window', 'in_window'}), str(sorted(_own451)))
+
+# ② R346 — 같은 채점 함수 · 목표만 비움 · 매수권 하한 · 35일 · 통계 행
+_bd451 = _pa451.bdate_range('2026-08-03', periods=80)
+
+
+def _bars451(path):
+    return _pa451.DataFrame({'trade_date': [d.strftime('%Y-%m-%d') for d in _bd451],
+                             'high': list(path), 'low': list(path), 'close': list(path)})
+
+
+_path451 = [100.0] * 6 + [104.0] + [100.0] * 3 + [90.0] + [100.0] * 69     # 다음 봉부터: 목표 먼저 · 목표 없으면 손절
+_reg451 = [dict(ticker='000003.KS', date=_bd451[5].strftime('%Y-%m-%d'), score=60, price=100.0, hold_trim=103.0, hold_stop=95.0),
+           dict(ticker='000003.KQ', date=_bd451[12].strftime('%Y-%m-%d'), score=60, price=100.0, hold_trim=103.0, hold_stop=95.0),
+           dict(ticker='000003.KS', date=_bd451[10].strftime('%Y-%m-%d'), score=60, price=100.0, hold_trim=103.0, hold_stop=95.0),
+           dict(ticker='000004.KS', date=_bd451[5].strftime('%Y-%m-%d'), score=57, price=100.0, hold_trim=103.0, hold_stop=95.0)]
+_g451, _why451 = _fj451.r346_rows(_reg451, {'000003.KS': _bars451(_path451), '000003.KQ': _bars451(_path451)},
+                                   '2026-08-01', '2026-10-31')
+check("R346 — 현행은 목표 먼저(+3%) · 목표만 비운 후보는 같은 경로에서 손절(−5%) — 같은 채점 함수",
+      len(_g451) == 1 and _g451[0]['b_out'] == 'TARGET' and abs(_g451[0]['b_ret'] - 3.0) < 1e-9
+      and _g451[0]['c_out'] == 'STOP' and abs(_g451[0]['c_ret'] + 5.0) < 1e-9, str(_g451))
+check("R346 — 매수권 하한 아래는 안 세고 · 접미사만 다른 같은 종목은 35일 간격에 걸리고 · 진입가가 그날 종가와 다르면 통계에서 뺀다",
+      all(x['ticker'] != '000004.KS' for x in _g451) and _why451.get('같은 종목 35일 안(간격 규칙)') == 1
+      and _why451.get('진입가 축척 어긋남(통계 제외)') == 1, str(dict(_why451)))
+check("R346 이 기대는 규칙의 값 — 매수권 58 · 간격 35일 · 같은 봉은 손절 먼저 (그 파일들은 자주 고쳐져 해시 대신 값으로)",
+      _lv451.BUY_ZONE_SCORE == 58 and _lv451.MIN_GAP_DAYS == 35
+      and _pl451.first_touch([(110.0, 90.0, 100.0)], 105.0, 95.0)[0] == 'STOP'
+      and _pl451.first_touch([(110.0, 99.0, 100.0)], None, 95.0)[0] == 'OPEN')
+_rand451 = [n for n in _ast451.walk(_tree451) if isinstance(n, _ast451.Attribute) and n.attr == 'Random'
+            and getattr(n.value, 'id', None) == 'random']
+check("부트스트랩은 R346 원 스크립트와 같은 방식 — random.Random(346) · numpy 난수 없음",
+      len(_rand451) == 1 and 'np.random' not in _src451 and _fj451.R346_SEED == 346 and _fj451.R346_BOOT == 2000
+      and 'random.Random(SEED)' in _read148(_os.path.join(PROJ, 'scripts', 'exit_rule_r346.py')))
+
+
+def _rows451(nd, fn):
+    out = []
+    for i in range(nd):
+        d = (_dt451.date(2026, 8, 10) + _dt451.timedelta(days=i)).isoformat()
+        for k, b in ((0, 1.0), (1, -2.0)):
+            out.append(dict(ticker=f'00000{k}.KS', date=d, b_ret=b, c_ret=b + fn(i, k), b_out='TARGET', c_out='OPEN'))
+    return out
+
+
+_j29 = _fj451.r346_judge(_rows451(29, lambda i, k: 0.5))
+_jok = _fj451.r346_judge(_rows451(30, lambda i, k: 0.5))
+_jneg = _fj451.r346_judge(_rows451(30, lambda i, k: -0.5))
+_jmed = _fj451.r346_judge(_rows451(30, lambda i, k: 3.0 if (i % 5 == 0 and k == 0) else -0.01))
+_jci = _fj451.r346_judge(_rows451(30, lambda i, k: 5.0 if i % 2 == 0 else -4.9))
+check("R346 갈래가 원문대로 — 날짜 29 미측정 · 전부 + 확인 · 전부 − 기각 · 평균 + 중앙 − 기각(R2) · 평균 + CI 0 포함 후보 유지",
+      _j29['status'] == '미측정' and _j29['dates'] == 29
+      and '확인 —' in _jok['verdict'] and _jok['R1'] and _jok['R2']
+      and '기각' in _jneg['verdict']
+      and _jmed['diff_mean'] > 0 and not _jmed['R2'] and '기각' in _jmed['verdict']
+      and _jci['diff_mean'] > 0 and not _jci['R1'] and _jci['R2'] and '못 세움' in _jci['verdict'],
+      f"{_j29['verdict']} | {_jok['verdict']} | {_jneg['verdict']} | {_jmed['verdict']} | {_jci['verdict']}")
+
+# ③ R404 R0 — 줄의 diff 칸을 그대로 센다 · 기록 하한 절반
+
+
+class _Cal451:
+    def is_trading_day(self, d):
+        return d.weekday() < 5
+
+
+def _sh451(date, diff, fo=100.0, fs=100.0, eo=-0.3, es=-0.3, spec='sh-1'):
+    return dict(spec=spec, date=date, diff=diff, op=dict(fair=fo, expected_return=eo), sh=dict(fair=fs, expected_return=es))
+
+
+_td451 = [d.isoformat() for d in (_dt451.date(2026, 10, 1) + _dt451.timedelta(days=i) for i in range(46))
+          if d.weekday() < 5 and d.isoformat() < '2026-11-16']
+_base451 = [_sh451(t, ['fair_conf']) for t in _td451]
+_ra451 = _fj451.r404_r0(_base451, '2026-11-16', cal=_Cal451())
+_rb451 = _fj451.r404_r0(_base451 + [_sh451(_td451[0], ['bucket', 'score'], fs=110.0, es=0.2)], '2026-11-16', cal=_Cal451())
+_rc451 = _fj451.r404_r0(_base451[: len(_td451) // 3], '2026-11-16', cal=_Cal451())
+_rd451 = _fj451.r404_r0(_base451 + [_sh451(_td451[0], ['bucket'], spec='sh-0'), _sh451('2026-11-16', ['bucket'])],
+                        '2026-11-16', cal=_Cal451())
+check("R404 R0 갈래가 원문대로 — 판정 칸이 안 바뀌면 (가) · 하나라도 바뀌면 (나) · 기록이 절반 미만이면 (다) 미측정",
+      _ra451['R0a'] == 0 and '(가)' in _ra451['verdict'] and _rb451['R0a'] == 1 and '(나)' in _rb451['verdict']
+      and _rc451['status'] == '미측정' and '(다)' in _rc451['verdict'],
+      f"{_ra451.get('verdict')} | {_rb451.get('verdict')} | {_rc451.get('verdict')}")
+check("R404 R0b·R0c — 적정가 상대 변화 중앙(%) · 점수가 다른 줄 · 기대값 부호가 다른 줄",
+      _rb451['R0b_fair_rel_median'] == 10.0 and _rb451['R0c_score'] == 1 and _rb451['R0c_ev_sign'] == 1, str(_rb451))
+check("R404 — 다른 규약 줄과 재평가일 당일 줄은 안 센다(구간은 10-01 ~ 재평가일 전날)",
+      _rd451['rows'] == len(_base451) and _rd451['R0a'] == 0 and _fj451.R404_FROM == '2026-10-01', str(_rd451))
+
+# ④ 박제 — 결과 전에 · 자동 실행이 못 바꾼다 · 파일을 쓰지 않는다 · 해시가 사전등록에
+_opens451 = [n for n in _ast451.walk(_tree451) if isinstance(n, _ast451.Call)
+             and (getattr(n.func, 'id', None) == 'open' or getattr(n.func, 'attr', None) == 'open')]
+_wopen451 = [n for n in _opens451
+             if any(isinstance(a, _ast451.Constant) and a.value in ('w', 'a') for a in n.args[1:])]
+check("채점기는 아무 파일도 쓰지 않는다 — 결과는 표준출력에만(본 open 호출 수를 밝힌다)", not _wopen451,
+      f"쓰기 open {len(_wopen451)} / open {len(_opens451)}", scanned=len(_opens451))
+check("자동 실행이 채점기를 못 바꾼다 (동결 자물쇠 ⓐ 목록) · 박제 대상(ⓑ)은 아니다",
+      'scripts/forward_judge_r470.py' in _fg451.NO_AUTO_CHANGE
+      and 'scripts/forward_judge_r470.py' not in _fg451.FORWARD_TARGETS)
+_pre470 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R470_FORWARD_GRADERS.md'))
+_h470 = (_fg451.sha('scripts/forward_judge_r470.py') or 'none')[:16]
+check("채점기의 해시가 사전등록 문서에 적힌 값과 같다 — 결과를 본 뒤 조용히 못 고친다", _h470 in _pre470,
+      f"지금 {_h470} (고쳤으면 사유와 함께 문서의 해시를 간다)")
+_need451 = ('고유 기준일 ≥ 30', '시드 346', '중앙값 ≥ 0', '절반 미만', 'R0a = 0행', '목표만 비움', '35일 간격')
+check("채점기의 기준은 전부 사전등록 문장에 있다", all(t in _pre470 for t in _need451),
+      str([t for t in _need451 if t not in _pre470]), scanned=len(_need451))
+
+# ⑤ 곁들여 — 라운드 469 의 버전 칸이 §288 감사에 붉어졌다: 이력 줄은 버전 원장 문장 그대로라(업데이트 카드와 같은 역사 산문)
+#   "…'판정 불가'로 적고 있었다" 가 오늘 화면의 못 낸 값처럼 세어졌다. 칸 일곱이 한 덩어리라 덩어리째 빼면 '다음에 할 일'
+#   줄까지 눈이 먼다 — 'vp-hist' 표식 줄만 걷고 그 수를 센다. 양방향으로 심는다.
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import unavailable_audit as _ua451                               # noqa: E402
+import version_panel as _vp451                                   # noqa: E402
+import ui_kit as _uk451                                          # noqa: E402
+_led451, _iss451, _rows451, _ed451 = _vp451.load_inputs()
+_nh451 = sum(len(_vp451.axis_history(_led451, _a)) for _a in _vp451.AXIS_SHORT)
+_txt451 = _ua451.clean_render_text([_vp451.section_html(_uk451._esc, _uk451.DARK)])
+check("버전 칸의 이력 줄은 전부 걷히고(버전 원장 줄 수와 같다) 남은 칸에 사유 없는 핵심 낱말이 0 이다",
+      _ua451.clean_render_text.hist_items == _nh451 > 0
+      and _ua451.core_summary(_ua451.audit_text(_txt451))[2] == 0,
+      f"이력 {_nh451} · 걷음 {_ua451.clean_render_text.hist_items}", scanned=_nh451)
+_p1_451 = _vp451.panel_html('model', 'v1', [{'effective_from': '2026-01-01', 'version': 'v1', 'kind': 'ui',
+                                             'reason': '진입 위치를 판정 불가로 적었다'}], [], _uk451._esc, _uk451.DARK)
+_p2_451 = _vp451.panel_html('model', 'v1', [], [{'what': '판정 불가 종목을 다시 본다', 'state': '열림', 'src': '시험'}],
+                            _uk451._esc, _uk451.DARK)
+check("심기 — 이력 줄의 사유 없는 낱말은 걷히고, '다음에 할 일' 줄의 것은 여전히 잡힌다(덩어리째 눈멀지 않는다)",
+      _ua451.core_summary(_ua451.audit_text(_ua451.clean_render_text([_p1_451])))[0] == 0
+      and _ua451.core_summary(_ua451.audit_text(_ua451.clean_render_text([_p2_451])))[2] == 1)
+# ─── §451 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

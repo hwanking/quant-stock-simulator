@@ -39,6 +39,16 @@ AXIS_KO = {
     'valuation': '적정가 엔진', 'sector': '섹터 사이클',
 }
 
+#: 축 ↔ 담당 파일 — 그 파일이 바뀌면 그 축 버전이 뒤처지지 않았는지 회귀(§109)가 본다. 종전엔 회귀 안에만 있었다 —
+#:   라운드 469 에서 버전 칸(`version_panel`)이 *"이 축은 어느 파일이 바뀌면 오르나"* 를 말하려고 여기로 올렸다(한 곳 · §4).
+#:   산식·스키마는 담당 파일 표가 없다(손으로 올린다).
+AXIS_FILES = {'model': ['quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py'],
+              'rulebook': ['analysis_rulebook_ko.txt'],
+              'news': ['market_context.py'],
+              # 라운드 44 신설 — 적정가와 섹터를 model 축에서 떼어 냈다
+              'valuation': ['price_axes.py'],
+              'sector': ['sector_cycle.py']}
+
 BUMP_PATCH = 'patch'
 BUMP_DATE = 'date'
 BUMP_MAJOR = 'major'

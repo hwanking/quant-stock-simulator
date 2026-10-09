@@ -1368,9 +1368,9 @@ def gemini_css(theme: str = 'dark') -> str:
         .qnav {{ position: static !important; }}
         /* 셀렉터를 한 단계 더 구체적으로 — web_app 의 `.qnav a.qvers {{ white-space: normal !important }}`(0,2,1)가
            첫 판의 `.qnav .qchips`(0,2,0)를 이겨 칩이 여전히 여러 줄로 꺾였다(브라우저 실측 · 129px) */
-        .qnav a.qvers.qchips {{ white-space: nowrap !important; overflow-x: auto !important;
+        .qnav .qvers.qchips {{ white-space: nowrap !important; overflow-x: auto !important;
             scrollbar-width: none; -webkit-overflow-scrolling: touch; }}
-        .qnav a.qvers.qchips::-webkit-scrollbar {{ display: none; }}
+        .qnav .qvers.qchips::-webkit-scrollbar {{ display: none; }}
     }}
 
     /* 제미나이 서명 — 큰 굵은 글자에만 (GEMINI_GRADIENT 주석) */

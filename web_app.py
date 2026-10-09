@@ -586,10 +586,15 @@ st.markdown(f"""
   margin: 0 8px; flex: 0 0 auto; }}
 /* 엔진 버전 칩 묶음 — 위 `.qnav a` 의 패딩·글자색을 물려받으면 안 된다.
    버전은 읽는 값이지 누르는 메뉴가 아니므로 조용해야 한다. */
-.qnav a.qvers {{ padding: 2px 4px !important; font-size: 12px !important;
+.qnav .qvers {{ padding: 2px 4px !important; font-size: 12px !important;
   font-weight: 400 !important; white-space: normal !important;
   border-radius: 7px; }}
 .qnav a.qvers:hover {{ background: {_TOK['hover']}; }}
+/* 라운드 469 — 칩마다 누르면 그 축의 이력·다음 할 일 칸으로 간다(묶음은 span · 칩이 링크) */
+.qnav a.qverc {{ padding: 2px 4px !important; border-radius: 7px !important; font-size: 12px !important;
+  font-weight: 400 !important; }}
+.qnav a.qverc:hover {{ background: {_TOK['hover']}; }}
+[id^="ver-"] {{ scroll-margin-top: 68px; }}
 .qnav .here {{ margin-left: auto; font-size: 12px; color: {_TOK['tx3']};
   padding-left: 12px; white-space: nowrap; }}
 .qnav .here b {{ color: {_TOK['tx1']}; font-weight: 600; }}
@@ -665,8 +670,7 @@ def _render_toolbar(here_html: str = '') -> None:
         _st399, _chips399 = '', ''         # 못 그리면 비운다 — 앱을 죽이지 않는다
     _NAV_SLOT.markdown(
         f'<div class="qnav">{_st399}'
-        f"<a href='#nav-updates' class='qvers qchips' title='누르면 업데이트 이력으로 갑니다 · 버전은 앱 출시일이 "
-        f"아니라 그 축이 마지막으로 바뀐 시점입니다'>{_chips399}</a>"
+        f"<span class='qvers qchips'>{_chips399}</span>"
         f"<a href='#nav-updates' class='qvers qupd' title='누르면 업데이트 이력으로 갑니다'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>업데이트</span> "
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']};'>{APP_UPDATED}</span></a>"
@@ -686,9 +690,8 @@ def _version_meta_html():
     # 라운드 44 — 적정가·섹터를 model 축에서 떼어 냈다. 축을 여기 손으로
     # 나열하면 versioning.AXES 가 늘어도 화면이 안 따라온다(실제로 안 따라왔다).
     # 이름만 여기서 주고, **목록은 versioning 이 정한다.**
-    _AX_KO_NAMES = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북',
-                    'schema': '스키마', 'news': '뉴스',
-                    'valuation': '적정가', 'sector': '업황'}
+    import version_panel as _vp469
+    _AX_KO_NAMES = _vp469.AXIS_SHORT          # 라운드 469 — 짧은 이름은 버전 칸과 한 곳
     _AX_KO = {_a: _AX_KO_NAMES.get(_a, _ver.AXIS_KO.get(_a, _a))
               for _a in _ver.AXES}
     # 라운드 39 — 버전이 낮다고 낡은 게 아니다. 버전은 **그 축이 마지막으로
@@ -713,8 +716,7 @@ def _version_meta_html():
     #     전방 재평가일이고, 그 날짜는 `forward_eval`(R78 · 한 곳)에서만 읽는다.
     #   라운드 257 — 룰북 축도 잇는다: 손절 조이기 노출 결정(재검토 2026-09-15)이
     #     열린 이슈로 있는데 칩이 말하지 않았다. 날짜는 여전히 이슈에서 읽는다.
-    _AX_ISSUE = {'scoring': 'model|score_not_separating',
-                 'rulebook': 'usability|loss_control_tradeoff'}
+    _AX_ISSUE = _vp469.AXIS_ISSUE             # 라운드 469 — 버전 칸과 한 곳
     _ax_plan = {}
     try:
         from improvement import issue_ops as _iop182
@@ -752,16 +754,16 @@ def _version_meta_html():
         pass
 
     _chips = ''.join(
-        f"<span style='display:inline-flex; align-items:baseline; gap:4px; "
-        f"margin-right:8px; white-space:nowrap;' "
-        f"title='{_uk._esc_attr(_ko)} 축은 "
+        f"<a href='#{_uk._esc_attr(_vp469.anchor_id(_ax))}' class='qverc' style='display:inline-flex; align-items:baseline; gap:4px; "
+        f"margin-right:6px; white-space:nowrap;' "
+        f"title='누르면 이 축의 업데이트 이력과 다음에 할 일이 펼쳐집니다 · {_uk._esc_attr(_ko)} 축은 "
         f"{_uk._esc_attr(_VER_NOW.get(_ax, '—'))} 이후 바뀌지 않았습니다. "
         f"버전은 앱 출시일이 아니라 그 축이 마지막으로 바뀐 시점입니다."
         f"{_uk._esc_attr(_ax_plan.get(_ax, ''))}'>"
         f"<span style='font-size:12px; color:{_TOK['tx3']};'>{_ko}</span>"
         f"<span style='font-size:12px; font-weight:700; color:{_TOK['tx2']}; "
         f"font-variant-numeric:tabular-nums;'>{_VER_NOW.get(_ax, '—')}</span>"
-        f"</span>"
+        f"</a>"
         for _ax, _ko in _AX_KO.items())
 
     _st_txt, _st_tone, _st_more = _STATUS_TOP
@@ -14858,6 +14860,23 @@ st.markdown(f"""
 #   메뉴 순서를 본문 위치로 바꾸면 거기서 뒤집혔다 (라운드 125 측정).
 #   블록이 자기 안에서 데이터를 다 만들고 밖에서 쓰는 곳이 없어
 #   통째로 옮길 수 있었다.
+# ── 라운드 469 — 엔진 축별 칸: 상단 버전 칩을 누르면 그 축의 업데이트 이력과 다음에 할 일이 펼쳐진다 ─────────────────
+#   사용자(2026-10-09): "각각 항목마다 클릭하면 업데이트 히스토리가 나오고 어떤거 할건지에 대해서 나올 수 있게 해줘야지."
+#   칸은 `version_panel` 이 만들고(이력 = 버전 원장 · 다음 할 일 = 열린 이슈·연구 레이더 열린 줄·재평가일 — 손으로 안 적는다)
+#   여기는 그리기만 한다(§4). 칩 링크(#ver-축)를 누르면 작은 스크립트가 그 칸을 펼친다 — 스크립트가 죽어도 칸은 거기 있고
+#   눌러서 열 수 있다(`ui_kit.disclose` 는 스크립트 없이 여는 표준 요소다). 이력 파일을 못 읽어도 이 칸은 그린다(가드 밖).
+def _render_axis_panels469():
+    try:
+        import version_panel as _vp469b
+        _uk.spacer(12)
+        st.markdown(_vp469b.section_html(_uk._esc, _TOK), unsafe_allow_html=True)
+        st.iframe(_vp469b.OPEN_JS, height=1)        # 높이 0 은 거부된다(라운드 441)
+    except Exception as _e469:                                 # noqa: BLE001
+        st.caption(f"엔진 축별 칸을 그리지 못했습니다 ({type(_e469).__name__}) — 위 버전 칩의 값은 그대로입니다.")
+
+
+_render_axis_panels469()
+
 # ── 최근 업데이트 (v4) — 제품형 릴리스 노트: 요약 5건 + 전체 보기·필터 ────────
 _uh_home = _load_update_history()
 if _uh_home and _uh_home.get('days'):

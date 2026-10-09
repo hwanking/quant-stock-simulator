@@ -46,6 +46,10 @@ HISTORY_MARKERS = ('>변경 전 문제</span><br>', '>변경 이유</span><br>',
 #: 같은 줄 **앞쪽**의 사유 — "미산출 — 보유 구성 미입력 — 팩터 노출도 산출 불가" 처럼 사유가 먼저
 #: 오는 문장. ':'·'(' 는 앞에서는 라벨 구분자일 뿐이라(예: "진입 위치: 판정 불가") 세지 않는다.
 _REASON_HEAD = re.compile(r'(—|때문)')
+#: 라운드 470 — 버전 칸(version_panel)의 '업데이트 이력' 줄. 버전 원장 문장을 그대로 그린다(업데이트 카드와 같은 역사
+#: 산문 — "…'판정 불가'로 적고 있었다" 는 지난 결함의 기록이지 오늘 화면이 못 낸 값이 아니다). 칸 일곱이 한 덩어리라
+#: 덩어리째 빼면 '다음에 할 일' 줄까지 눈이 먼다 — 표식이 붙은 **줄만** 걷고 그 수를 센다. 그 줄 안에 div 가 없다.
+VERSION_HISTORY_ITEM = re.compile(r"<div class='vp-hist'[^>]*>.*?</div>", re.S)
 
 
 def clean_render_text(parts, skip_history=True):
@@ -61,6 +65,9 @@ def clean_render_text(parts, skip_history=True):
         kept.append(s)
     clean_render_text.skipped = skipped
     txt = '\n'.join(kept)
+    clean_render_text.hist_items = len(VERSION_HISTORY_ITEM.findall(txt)) if skip_history else 0
+    if skip_history:
+        txt = VERSION_HISTORY_ITEM.sub(' ', txt)
     txt = re.sub(r'<[^>]+>', ' ', txt)
     txt = re.sub(r'/\*.*?\*/', ' ', txt, flags=re.S)
     txt = re.sub(r'\{[^{}]*:[^{}]*\}', ' ', txt)
