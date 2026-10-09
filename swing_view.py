@@ -15,6 +15,7 @@ import broker_kis
 import swing_executor as X
 import swing_ops as _ops
 import swing_proof as _sp
+import swing_account as _acc454
 
 
 def _os_exists(p):
@@ -117,6 +118,163 @@ def facts_lines():
     except Exception:                                          # noqa: BLE001
         pass
     return out
+
+
+#: 라운드 454 — 계좌 자동 갱신의 기본값. **꺼짐**이다 — 켜야 증권사를 부른다(회귀의 자식 렌더가 이 PC 의 실계좌 연결 정보로
+#: 한국투자를 부르지 않게 · 켜는 것은 사람). 간격은 초 단위 선택지에서 고른다(새 문턱이 아니라 갱신 주기다).
+ACCT_AUTO_DEFAULT = False
+ACCT_EVERY_DEFAULT = 15
+ACCT_EVERY_CHOICES = (15, 30, 60)
+
+
+def account_read(cfg, c=None):
+    """한국투자 잔고를 **한 번** 읽는다(주문 없음) → (잔고 dict, None) 또는 (None, 사유). 장부 연결 `c` 가 있고 값이 바뀌었으면
+    스냅샷을 남긴다(같은 값은 15초마다 쌓지 않는다 · swing_account.changed). 화면·워커 밖에서 증권사를 부르는 자리는 여기와
+    ⑥ '연결 확인' 둘뿐이다."""
+    try:
+        br = broker_kis.KisBroker(cfg)
+        bal = br.get_balance()
+    except Exception as e:                                     # noqa: BLE001 — BrokerError · TransportError · 설정 문제
+        return None, f'{type(e).__name__}: {e}'
+    if c is not None:
+        try:
+            if _acc454.changed(L.last_account(c), bal):
+                L.account_snapshot(c, br.env, bal)
+        except Exception:                                      # noqa: BLE001 — 읽기 전용 장부면 스냅샷은 못 남긴다(화면 값은 그대로)
+            pass
+    return bal, None
+
+
+def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
+    """① 계좌 판 — `st.fragment(run_every=…)` 로 **이 판만** 다시 그린다(자동 갱신이 켜졌을 때 · 꺼지면 run_every 없음).
+    조각 안에서는 바깥의 장부 연결을 쓸 수 없으므로(조각만 돌 때 바깥 연결은 이미 닫혀 있다) 제 연결을 연다."""
+    auto_on = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)) and allow_write
+    every = int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT))
+
+    @st.fragment(run_every=(f'{every}s' if auto_on else None))
+    def _panel():
+        _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme)
+    _panel()
+
+
+def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
+    import datetime as _dtm
+    st.markdown('**① 내 한국투자 계좌** — 읽기 전용 · 이 PC 화면에만')
+    # 머리 줄: 연결 · 자동 갱신 토글·간격 · 지금 새로고침 — 전부 이 조각 안(누르면 이 판만 다시 돈다)
+    h1, h2, h3, h4 = st.columns([2, 1.3, 1, 1.4])
+    _ok454 = bool(cfg) and not cfg.get('missing') and not cfg.get('problems')
+    h1.caption(('연결 정보 등록됨 · ' + broker_kis.config_summary(cfg)) if _ok454 else '연결 정보 없음 — ⑥에서 넣으세요')
+    _auto_prev = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT))
+    _auto = h2.toggle('자동 갱신(잔고 읽기)', value=_auto_prev, key='sw_acct_auto_tgl', disabled=not (allow_write and _ok454),
+                      help='켜면 고른 간격마다 한국투자 잔고를 다시 읽습니다(주문은 안 합니다). 이 화면을 닫으면 멈춥니다.')
+    _every_prev = int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT))
+    _every = h3.selectbox('간격(초)', list(ACCT_EVERY_CHOICES), index=list(ACCT_EVERY_CHOICES).index(_every_prev)
+                          if _every_prev in ACCT_EVERY_CHOICES else 0, key='sw_acct_every_sel', disabled=not allow_write)
+    _now_btn = h4.button('지금 새로고침(잔고 읽기)', key='sw_acct_now', disabled=not (allow_write and _ok454))
+    if _auto != _auto_prev or int(_every) != _every_prev:
+        st.session_state['sw_acct_auto'] = bool(_auto)
+        st.session_state['sw_acct_every'] = int(_every)
+        st.rerun()                                             # run_every 는 조각을 다시 정의해야 바뀐다(앱 전체 한 번)
+    c = None
+    try:
+        c = L.connect(readonly=not allow_write)
+    except Exception:                                          # noqa: BLE001
+        c = None
+    try:
+        live = st.session_state.get('sw_acct_live')
+        if allow_write and _ok454 and (_now_btn or (_auto and st.session_state.get('sw_acct_auto'))):
+            with st.spinner('잔고 읽는 중 …'):
+                bal, err = account_read(cfg, c)
+            if err:
+                st.warning(md(f'잔고를 읽지 못했습니다 — {err}' + (' · 마지막으로 읽은 값을 보입니다' if (live or (c and L.last_account(c))) else '')))
+            else:
+                live = dict(bal=bal, ts=_dtm.datetime.now().isoformat(timespec='seconds'))
+                st.session_state['sw_acct_live'] = live
+        snap = L.last_account(c) if c is not None else None
+        if live:
+            bal, qts = live['bal'], live['ts'][:19].replace('T', ' ')
+            src = f"{qts} 에 이 화면에서 읽음"
+            env_ko = '실전' if cfg.get('env') == 'real' else '모의투자'
+        elif snap:
+            bal, qts = snap, _ts(snap['ts'])
+            src = f"{qts} 장부 스냅샷(마지막으로 읽은 것)"
+            env_ko = '실전' if snap.get('env') == 'real' else '모의투자'
+        else:
+            st.caption('아직 계좌를 읽은 적이 없습니다 — \'지금 새로고침\'이나 ⑥의 \'연결 확인\'을 누르면 채워집니다(주문은 안 합니다).')
+            return
+        st.caption(f"{env_ko} · 자료 시각 {src}" + (f" · 자동 갱신 {st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)}초마다"
+                                              if st.session_state.get('sw_acct_auto') else ' · 자동 갱신 꺼짐'))
+        s = _acc454.summarize(bal)
+        pn = s['pnl_sum']
+        tone = ('up' if (pn or 0) > 0 else ('down' if (pn or 0) < 0 else ''))     # 손익 색은 한국 관행(이익 빨강 · 손실 파랑 · §5)
+        uk.stat_tiles([
+            dict(label='총자산(증권사 총평가)', value=_won(s['total']),
+                 sub=('증권사 요약값' if s['total_src'] == 'broker' else ('예수금 + 보유 평가 합' if s['total_src'] else '총평가를 못 받았습니다'))),
+            dict(label='보유 매수금액', value=_won(s['buy_sum']), sub=f"거래소 평균 매수가 × 수량 · {s['n_pnl']}종목"),
+            dict(label='보유 평가손익', value=(f"{pn:+,.0f}원" if pn is not None else '—'), tone=tone, sub='매도 전 · 수수료·세금 제외'),
+            dict(label='보유 수익률', value=(f"{s['ret_total']:+.2f}%" if s['ret_total'] is not None else '—'), tone=tone,
+                 sub='평가손익 ÷ 매수금액'),
+            dict(label='예수금', value=_won(s['cash']), sub='증권사 예수금 총액'),
+            dict(label='D+2 정산 예정 예수금', value=_won(s['cash_d2']),
+                 sub=('주문 가능 금액은 종목별로 따로 읽습니다' if s['cash_d2'] is not None else '이 잔고에는 없는 칸입니다')),
+        ], theme=theme)
+        for ln in _acc454.glance_lines(s):
+            st.caption(md(ln))
+        if s['n']:
+            l1, l2 = st.columns([1.3, 1])
+            with l1:
+                uk.bar_list(_acc454.composition(s), theme=theme, title='자산 구성(총자산 대비 · 현금 포함)', max_rows=8)
+            with l2:
+                uk.chip_row(_acc454.scope_chips(s), theme=theme, title='평가 범위 — 열린 보유의 지금 상태(매매 승률이 아닙니다)')
+                st.caption(f"최신 가격 확인 {s['priced']}/{s['n']} · 손익 계산 가능 {s['n_pnl']}/{s['n']}"
+                           + (f" · 가격 없음 {', '.join(s['unpriced_codes'])}" if s['unpriced_codes'] else '')
+                           + (f" · 상위 1종목 비중 {s['top1']:.2f}%" if s['top1'] is not None else '')
+                           + (f" · 상위 2종목 비중 {s['top2']:.2f}%" if s['top2'] is not None else '')
+                           + (f" · 현금 비중 {s['cash_w']:.2f}%" if s['cash_w'] is not None else ''))
+        lc = _acc454.limit_checks(s, stt.get('limits') or None)
+        if lc:
+            st.caption('⑥에 적은 위험 한도와 지금 계좌를 **참고로** 견준 것입니다 — 직접 산 보유를 자동매매 한도로 판정하는 것이 아니고, '
+                       '규칙 위반 판정도 매매 지시도 아닙니다.')
+            st.dataframe([{'항목': r['name'], '설정 한도': f"{r['setting']:g}{r['unit']}",
+                           '지금 계좌': (f"{r['current']:.2f}{r['unit']}" if isinstance(r['current'], float) else
+                                     (f"{r['current']}{r['unit']}" if r['current'] is not None else '—')), '비교': r['status']}
+                          for r in lc], hide_index=True, width='stretch')
+        else:
+            st.caption('⑥의 위험 한도가 비어 있어 참고 비교는 없습니다.')
+        if s['rows']:
+            pos = L.positions(c) if c is not None else {}
+
+            def _own(code):
+                p = pos.get(code) or {}
+                return OWN_KO.get(p.get('ownership')) if p.get('managed') else OWN_KO.get(p.get('ownership'), '기존 보유(자동 매도 안 함)')
+            st.dataframe(_acc454.table_rows(s, ownership_label=_own, quote_ts=qts), hide_index=True, width='stretch')
+            st.caption('평가는 증권사가 보낸 현재가 기준이고 체결을 보장하지 않습니다 · 평균 매수가는 거래소(증권사) 기준 · 수수료·세금 전 · '
+                       '\'매도 가능\'은 걸려 있는 매도 주문을 뺀 수량입니다.')
+        # 최근 30일 주문·체결 — 읽기 전용 · 누를 때만 증권사를 부른다 · 승률·성과를 셈하지 않는다(그 셈은 ⑤ 영수증이 같은 채점기로 한다)
+        if allow_write and _ok454 and st.button('최근 30일 주문·체결 내역 읽기(증권사 · 읽기 전용)', key='sw_acct_orders'):
+            try:
+                br = broker_kis.KisBroker(cfg)
+                _end = _dtm.date.today()
+                _rows = br.get_daily_orders((_end - _dtm.timedelta(days=30)).strftime('%Y%m%d'), _end.strftime('%Y%m%d'))
+                st.session_state['sw_acct_orders'] = dict(rows=_rows, ts=_dtm.datetime.now().isoformat(timespec='seconds'))
+            except Exception as e:                             # noqa: BLE001
+                st.session_state['sw_acct_orders'] = dict(rows=None, err=f'{type(e).__name__}: {e}')
+        _od = st.session_state.get('sw_acct_orders')
+        if _od:
+            if _od.get('rows') is None:
+                st.caption(md(f"주문·체결 내역을 읽지 못했습니다 — {_od.get('err')}"))
+            else:
+                _r = _od['rows']
+                st.caption(f"최근 30일 주문 {len(_r)}건 — 매수 {sum(1 for x in _r if x.get('side') == 'buy')} · "
+                           f"매도 {sum(1 for x in _r if x.get('side') == 'sell')} · {_od['ts'][11:19]} 읽음. 성과는 셈하지 않습니다(⑤ 영수증이 같은 채점기로 셉니다).")
+                if _r:
+                    st.dataframe([{'날짜': x.get('date'), '종목': x.get('code'), '방향': '매수' if x.get('side') == 'buy' else '매도',
+                                   '주문 수량': x.get('ord_qty'), '체결 수량': x.get('filled_qty'), '주문가': _won(x.get('ord_price')),
+                                   '평균 체결가': _won(x.get('avg_fill')), '취소': '예' if x.get('cancelled') else ''}
+                                  for x in _r[-100:]], hide_index=True, width='stretch')
+    finally:
+        if c is not None:
+            c.close()
 
 
 def plan_status(p, today_day, held=False):
@@ -389,21 +547,25 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     if _pl450:
         st.warning(md(_pl450))
 
-    # ① 계좌
-    with st.expander('① 한국투자 계좌 (마지막으로 읽은 것)', expanded=False):
+    # ── 지금 진행 중인가 (라운드 454) — 사용자: "지금 진행중인지 아닌지도 표시해주면 좋겠어". 워커(잠금 파일의 주인이 살아 있나) ·
+    #   예약 작업 둘 · 저녁 작업 · 이 화면의 계좌 자동 갱신을 한 자리에서 사실로 적는다. 규칙은 swing_ops.progress 한 곳(§4).
+    _theme454 = st.session_state.get('ui_theme', 'dark')
+    _auto454 = dict(on=bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)),
+                    every=int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)),
+                    last=((st.session_state.get('sw_acct_live') or {}).get('ts') or '')[11:19] or None)
+    _prog454 = _ops.progress(tasks={_ops.TASK_NAME: _task453, _ops.WATCH_TASK: _ops.scheduled_task(_ops.WATCH_TASK)}, auto=_auto454)
+    uk.rows([(p['label'], (('실행 중 · ' if p['running'] else ('확인 불가 · ' if p['running'] is None else '')) + p['text']),
+              ('pos' if p['running'] else ('warn' if p['running'] is None else ''))) for p in _prog454],
+            theme=_theme454, title='지금 진행 중인가 — 워커 · 예약 작업 · 저녁 작업 · 자동 갱신')
+
+    # ① 계좌 (라운드 454 — 사용자가 붙인 다른 워크스페이스의 계좌 화면 모양을 **우리 자료로 되는 것만** 옮겼다: 자동 갱신 · 타일 여섯 ·
+    #   한눈에 · 자산 구성 · 평가 범위 · 위험 한도와 참고 비교 · 보유 표 · 최근 주문. 수는 swing_account 한 곳이 세고 화면은 그린다(§4) ·
+    #   판정 낱말 없음(§9) · 자동 갱신은 기본 꺼짐(켜야 증권사를 부른다 · 회귀의 자식 렌더가 실계좌를 부르지 않게).
+    _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, _theme454)
+    with st.expander('① 한국투자 계좌 — 앱 보유종목과 견주기 · 가져오기', expanded=False):
         if not acct:
-            st.caption('아직 계좌를 읽은 적이 없습니다 — 아래 설정의 \'연결 확인\'을 누르거나, 모의투자·실전 모드에서 워커가 돌면 채워집니다.')
+            st.caption('아직 계좌를 읽은 적이 없습니다 — 위 \'지금 새로고침\'이나 아래 설정의 \'연결 확인\'을 누르면 채워집니다.')
         else:
-            pos = L.positions(c)
-            st.caption(f"{_ts(acct['ts'])} · {'모의투자' if acct['env'] == 'demo' else '실전'} · "
-                       f"예수금 {_won(acct['cash'])} · 총평가 {_won(acct['total_eval'])} · 주식 평가 {_won(acct['stock_eval'])}")
-            rows = [{'종목': f"{p.get('name') or ''} ({p['code']})", '수량': p['qty'], '평단': _won(p.get('avg_price')),
-                     '현재가': _won(p.get('price')), '평가손익률': _pct(p.get('pnl_pct')),
-                     '관리': OWN_KO.get((pos.get(p['code']) or {}).get('ownership'), '기존 보유(자동 매도 안 함)')
-                     if not (pos.get(p['code']) or {}).get('managed') else OWN_KO.get(pos[p['code']]['ownership'])}
-                    for p in acct['positions']]
-            if rows:
-                st.dataframe(rows, hide_index=True, width='stretch')
             # 라운드 450 — 앱 보유종목과 견주기(사실만 · 덮어쓰지 않는다 · 옮기는 것은 아래 버튼)
             try:
                 import portfolio as _pf450

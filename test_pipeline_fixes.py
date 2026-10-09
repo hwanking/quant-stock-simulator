@@ -36689,6 +36689,221 @@ finally:
             _os.remove(_f439)
 
 
+print("§440 내 계좌 판 · 지금 진행 중인가 — 잔고 셈은 한 곳 · 판정 낱말 없음 · 자동 갱신은 기본 꺼짐 · 워커·예약 작업·저녁 작업 상태를 사실로 (라운드 454)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "지금 진행중인지 아닌지도 표시해주면 좋겠어 · 내가 보내준 계좌정보처럼 우리거에 맞게 꾸며줘". 계좌 판의 수는
+#   swing_account 한 곳이 세고(§4) 화면은 그린다. 판정 낱말이 없다(§9 · 추천·건강 점수 없음) · 못 셈하면 None(§3) · 자동 갱신은
+#   기본 꺼짐(켜야 증권사를 부른다). 진행 상태는 swing_ops.progress 한 곳 — 워커(잠금 파일 주인) · 예약 작업 둘 · 저녁 작업 ·
+#   자동 갱신. 전부 네트워크 0 · 사용자 파일 0(임시 파일 · 심은 응답).
+import ast as _ast440
+import os as _os440
+import tempfile as _tf440
+import sqlite3 as _sq440
+import swing_account as _acc440
+import swing_ledger as _sl440
+import swing_ops as _ops440
+import swing_view as _sv440
+
+_bal440 = dict(positions=[dict(code='000001', name='가', qty=10, sellable_qty=8, avg_price=1000.0, price=1200.0, eval_amt=12000.0,
+                               pnl=2000.0, pnl_pct=20.0),
+                          dict(code='000002', name='나', qty=5, sellable_qty=5, avg_price=2000.0, price=1800.0),
+                          dict(code='000003', name='다', qty=3, sellable_qty=3, avg_price=500.0, price=None)],
+               cash=50000.0, cash_d2=48000.0, total_eval=71000.0, stock_eval=21000.0)
+_s440 = _acc440.summarize(_bal440)
+check("① summarize — 보유 3 · 가격 있는 것 2 · 손익 셈 2 · 매수금액 20,000 · 평가손익 +1,000 · 수익률 +5.00% · 수익 1 · 손실 1 · "
+      "비중(총자산 71,000 대비) 16.90 / 12.68 · 현금 70.42 · 주식 29.58 · 상위1 16.90 · 상위2 29.58 · 가격 없는 종목 목록 · 총평가 출처 broker",
+      _s440['n'] == 3 and _s440['priced'] == 2 and _s440['n_pnl'] == 2 and _s440['buy_sum'] == 20000.0 and _s440['pnl_sum'] == 1000.0
+      and abs(_s440['ret_total'] - 5.0) < 1e-9 and (_s440['winners'], _s440['losers'], _s440['flat']) == (1, 1, 0)
+      and [w['code'] for w in _s440['weights']] == ['000001', '000002'] and abs(_s440['weights'][0]['pct'] - 12000 / 710) < 1e-9
+      and abs(_s440['cash_w'] - 50000 / 710) < 1e-9 and abs(_s440['stock_w'] - 21000 / 710) < 1e-9
+      and abs(_s440['top2'] - 21000 / 710) < 1e-9 and _s440['unpriced_codes'] == ['000003'] and _s440['total_src'] == 'broker'
+      and _s440['cash_d2'] == 48000.0, str({k: v for k, v in _s440.items() if k != 'rows'}))
+_s440b = _acc440.summarize(dict(_bal440, total_eval=None))
+_s440n = _acc440.summarize(dict(positions=_bal440['positions'], cash=None))
+check("① 총평가가 없으면 예수금 + 보유 평가 합(출처 cash+eval) · 예수금도 없으면 총자산·비중·상위 비중 전부 None(지어내지 않는다) · 빈 잔고는 0 과 None",
+      _s440b['total'] == 71000.0 and _s440b['total_src'] == 'cash+eval' and _s440n['total'] is None and _s440n['weights'] == []
+      and _s440n['top1'] is None and _s440n['cash_w'] is None and _acc440.summarize({})['n'] == 0 and _acc440.summarize({})['buy_sum'] is None)
+_gl440 = _acc440.glance_lines(_s440)
+check("② 한눈에 문장 — 셋 · 손익 문장(2종목 · 20,000원 대비 1,000원 평가이익 · +5.00% · 매도 전) · 현금 비중 · 가장 큰 종목 · 추천 낱말 없음",
+      len(_gl440) == 3 and '2종목' in _gl440[0] and '20,000원' in _gl440[0] and '1,000원 평가이익' in _gl440[0] and '+5.00%' in _gl440[0]
+      and '매도 전' in _gl440[0] and '70.42%' in _gl440[1] and '가 (000001)' in _gl440[2] and '16.90%' in _gl440[2]
+      and not any(w in ln for ln in _gl440 for w in ('사세요', '파세요', '추천', '매수하', '매도하')), str(_gl440))
+check("② 한눈에 — 손익을 못 셈하면 그렇다고(가격·평단 없음) · 빈 잔고는 문장 0",
+      _acc440.glance_lines(_acc440.summarize(dict(positions=[dict(code='1', qty=1)], cash=10)))[0].startswith('보유 1종목 — ')
+      and _acc440.glance_lines(_acc440.summarize({})) == [])
+_cp440 = _acc440.composition(_s440)
+check("③ 자산 구성 — 종목 둘 + 현금(예수금) · 합 100 · 평가 범위 칩 (수익 1 · 손실 1 · 본전 0)",
+      [x['label'] for x in _cp440] == ['가 (000001)', '나 (000002)', '현금(예수금)'] and abs(sum(x['pct'] for x in _cp440) - 100.0) < 1e-9
+      and [(x['label'], x['count']) for x in _acc440.scope_chips(_s440)] == [('수익 중', 1), ('손실 중', 1), ('본전', 0)])
+_lc440 = _acc440.limit_checks(_s440, _LIM432)
+#   조인 한도는 swing_risk.validate 가 정한다(최소 현금 + 최대 주식 비중 ≤ 100) — 조이는 쪽도 그 규칙 안에서(20 + 80)
+_lc440t = _acc440.limit_checks(_s440, dict(_LIM432, max_position_pct=10, max_total_exposure_pct=20, min_cash_pct=80))
+_lc440n = _acc440.limit_checks(_s440n, _LIM432)
+check("④ 위험 한도 참고 비교 — 넷(종목 수 · 주식 비중 · 최대 단일 비중 · 최소 현금) 전부 '참고 한도 이내' · 한도를 조이면 주식·단일 비중·현금이 '밖' · "
+      "값이 없으면 '비교 불가' · 한도가 비거나 서로 안 맞으면 빈 목록 · 판정 낱말('위반'·'위험')은 없다",
+      [r['status'] for r in _lc440] == ['참고 한도 이내'] * 4 and [r['status'] for r in _lc440t] == ['참고 한도 이내', '참고 한도 밖', '참고 한도 밖', '참고 한도 밖']
+      and _acc440.limit_checks(_s440, dict(_LIM432, min_cash_pct=80)) == []
+      and [r['status'] for r in _lc440n][2:] == ['비교 불가(값 없음)'] * 2 and _acc440.limit_checks(_s440, {}) == []
+      and _acc440.limit_checks(_s440, None) == [] and not any(w in r['status'] for r in _lc440 + _lc440t for w in ('위반', '위험')),
+      str((_lc440, _lc440t, _lc440n)))
+_tr440 = _acc440.table_rows(_s440, ownership_label=lambda code: 'x' if code == '000001' else '—', quote_ts='T')
+check("⑤ 보유 표 — 세 줄 · 비중 · 수량/매도 가능 '10 / 8' · 평가손익/수익률 '+2,000원 / +20.00%' · 가격 없는 종목은 '—' · 시세 시각 · 관리",
+      len(_tr440) == 3 and _tr440[0]['자산 비중'] == '16.90%' and _tr440[0]['수량 / 매도 가능'] == '10 / 8'
+      and _tr440[0]['평가손익 / 수익률'] == '+2,000원 / +20.00%' and _tr440[1]['평가손익 / 수익률'] == '-1,000원 / -10.00%'
+      and _tr440[2]['현재가'] == '—' and _tr440[2]['자산 비중'] == '—' and _tr440[0]['시세 시각'] == 'T' and _tr440[0]['관리'] == 'x', str(_tr440))
+_bal440c = dict(_bal440, positions=[dict(p) for p in _bal440['positions']])
+_bal440c['positions'][0]['price'] = 1201.0
+check("⑥ changed — 같은 잔고는 False(15초마다 같은 값을 쌓지 않는다) · 현재가 하나가 바뀌면 True · 이전이 없으면 True",
+      _acc440.changed(_bal440, dict(_bal440)) is False and _acc440.changed(_bal440, _bal440c) is True and _acc440.changed(None, _bal440) is True)
+# ⑦ 워커 상태 — 잠금 파일의 주인이 살아 있나(판별은 끼워 넣는다 · 실제 PID 를 안 본다)
+_td440 = _tf440.mkdtemp(prefix='r454_')
+_lk440 = _os440.path.join(_td440, 'swing_worker.lock')
+open(_lk440, 'w', encoding='utf-8').write('424242 2026-10-09T09:01:02')
+_w440a = _ops440.worker_status(_lk440, pid_alive=lambda pid: True)
+_w440d = _ops440.worker_status(_lk440, pid_alive=lambda pid: False)
+_w440u = _ops440.worker_status(_lk440, pid_alive=lambda pid: None)
+_w440n = _ops440.worker_status(_os440.path.join(_td440, 'none.lock'))
+check("⑦ 워커 — 주인이 살아 있으면 실행 중(PID · 시작 시각) · 죽었으면 '안 돎'(잠금 남음) · 확인 불가면 None · 잠금 파일 없으면 '도는 워커 없음'",
+      _w440a['running'] is True and _w440a['pid'] == 424242 and '09:01' in _w440a['note'] and _w440d['running'] is False and '안 돎' in _w440d['note']
+      and _w440u['running'] is None and _w440n['running'] is False and '잠금 파일 없음' in _w440n['note'], str((_w440a, _w440d, _w440u, _w440n)))
+# ⑧ 저녁 작업 — 기록의 시작·끝 줄(실제 문장 그대로 · scripts/nightly_local.py 의 _log)
+_nl440 = _os440.path.join(_td440, 'nightly.txt')
+open(_nl440, 'w', encoding='utf-8').write('[10-08 17:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 4\n[10-08 17:03:20] 끝 · 가장 나쁜 종료 코드 0\n'
+                                          '[10-09 17:00:00] 이 PC 장 마감 뒤 작업 시작 · 단계 4\n')
+_ns440 = _ops440.nightly_status(_nl440)
+open(_nl440, 'a', encoding='utf-8').write('[10-09 17:02:00] 끝 · 가장 나쁜 종료 코드 2\n')
+_ns440b = _ops440.nightly_status(_nl440)
+_nlsrc440 = _read148(_os.path.join(PROJ, 'scripts', 'nightly_local.py'))
+check("⑧ 저녁 작업 — 시작 뒤 끝 줄이 없으면 '도는 중'(시작 시각) · 끝나면 마지막 끝 시각과 종료 코드 · 기록 없으면 그렇다고 · 찾는 두 문장이 실제 기록기 소스에 있다",
+      _ns440['running'] is True and _ns440['last_start'] == '10-09 17:00:00' and _ns440['last_end'] is None
+      and _ns440b['running'] is False and _ns440b['last_end'] == '10-09 17:02:00' and _ns440b['worst'] == 2
+      and _ops440.nightly_status(_os440.path.join(_td440, 'no.txt'))['note'] == '기록 없음'
+      and '장 마감 뒤 작업 시작' in _nlsrc440 and '끝 · 가장 나쁜 종료 코드' in _nlsrc440, str((_ns440, _ns440b)))
+# ⑨ 진행 줄 — 끼워 넣은 재료로(셸 없음) · 라벨 다섯 · 도는 것은 running=True · 못 읽으면 None 과 사유
+_tasks440 = {_ops440.TASK_NAME: dict(ok=True, installed=True, state='Running', next_run='', last_run='10/09/2026 08:50:00', last_result_ko='실행 중'),
+             _ops440.WATCH_TASK: dict(ok=False, reason='작업 상태를 못 읽었다 — boom')}
+_pg440 = _ops440.progress(worker=_w440a, tasks=_tasks440, nightly=_ns440b, auto=dict(on=True, every=15, last='07:00:00'))
+_pg440b = _ops440.progress(worker=_w440n, tasks={_ops440.TASK_NAME: dict(ok=True, installed=False), _ops440.WATCH_TASK: dict(ok=True, installed=True, state='Ready', next_run='10/10/2026 17:00:00')},
+                           nightly=_ns440, auto=dict(on=False, every=15, last=None))
+check("⑨ 진행 줄 — 워커·예약 작업 둘·저녁 작업·자동 갱신 다섯 · 도는 작업은 '지금 도는 중' · 못 읽은 작업은 None 과 사유 · 등록 안 됨 · 대기(Ready)+다음 실행 · "
+      "저녁 작업 '도는 중' · 자동 갱신 켜짐(15초마다 · 마지막 갱신)/꺼짐",
+      [p['label'] for p in _pg440][0].startswith('워커') and len(_pg440) == 5 and _pg440[0]['running'] is True
+      and _pg440[1]['running'] is True and '지금 도는 중' in _pg440[1]['text'] and _pg440[2]['running'] is None and 'boom' in _pg440[2]['text']
+      and _pg440[3]['running'] is False and '종료 코드 2' in _pg440[3]['text'] and _pg440[4]['running'] is True and '15초마다' in _pg440[4]['text']
+      and '07:00:00' in _pg440[4]['text'] and _pg440b[1]['text'] == '등록 안 됨' and '대기(Ready)' in _pg440b[2]['text'] and '10/10/2026' in _pg440b[2]['text']
+      and _pg440b[3]['running'] is True and '도는 중' in _pg440b[3]['text'] and _pg440b[4]['running'] is False and _pg440b[4]['text'] == '꺼짐',
+      str((_pg440, _pg440b)))
+# ⑩ 장부 — 스냅샷이 D+2 정산 예정 예수금을 남긴다 · 옛 장부(열 없음)를 열면 열을 더한다(멱등)
+_c440 = _sl440.connect(':memory:')
+_sl440.account_snapshot(_c440, 'real', _bal440)
+_la440 = _sl440.last_account(_c440)
+_old440 = _sq440.connect(':memory:')
+_old440.row_factory = _sq440.Row
+_old440.execute('CREATE TABLE plans (plan_id TEXT PRIMARY KEY, created_ts TEXT, data_day TEXT, code TEXT, name TEXT, spec TEXT, '
+                'entry REAL, target REAL, stop REAL, horizon INTEGER, wait_bars INTEGER, live_ok INTEGER, block_reason TEXT, '
+                'verdict TEXT, engine_version TEXT, receipt_id TEXT)')
+_old440.execute('CREATE TABLE account_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, env TEXT, cash REAL, total_eval REAL, '
+                'net_asset REAL, stock_eval REAL, positions TEXT)')
+_old440.execute("INSERT INTO account_snapshots (ts, env, cash) VALUES ('t', 'real', 1)")
+_sl440._migrate(_old440); _sl440._migrate(_old440)
+check("⑩ 스냅샷에 cash_d2 가 남고 last_account 가 돌려준다 · 옛 장부의 account_snapshots 에 cash_d2 열을 더한다(두 번 해도 같다 · 옛 행 None)",
+      _la440['cash_d2'] == 48000.0 and _la440['cash'] == 50000.0 and len(_la440['positions']) == 3
+      and 'cash_d2' in {r[1] for r in _old440.execute('PRAGMA table_info(account_snapshots)')}
+      and _old440.execute('SELECT cash, cash_d2 FROM account_snapshots').fetchone()[:] == (1.0, None), str(dict(_la440)))
+_c440.close(); _old440.close()
+# ⑪ 화면 구조(AST) — 자동 갱신 기본값은 False · 증권사 잔고를 부르는 자리는 account_read 와 ⑥ 연결 확인 둘뿐 · 조각(run_every) 안에서 그린다 ·
+#    화면은 swing_account 를 부르고 합·비중을 제 손으로 다시 세지 않는다
+_svt440 = _ast440.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
+_gb440, _frag440, _acc_calls440 = {}, [], set()
+for _fn440 in [n for n in _ast440.walk(_svt440) if isinstance(n, _ast440.FunctionDef)]:
+    for _m440 in _ast440.walk(_fn440):
+        if isinstance(_m440, _ast440.Call) and isinstance(_m440.func, _ast440.Attribute):
+            if _m440.func.attr == 'get_balance':
+                _gb440.setdefault(_fn440.name, 0)
+                _gb440[_fn440.name] += 1
+            if _m440.func.attr == 'fragment' and any(k.arg == 'run_every' for k in _m440.keywords):
+                _frag440.append(_fn440.name)
+            if isinstance(_m440.func.value, _ast440.Name) and _m440.func.value.id == '_acc454':
+                _acc_calls440.add(_m440.func.attr)
+check("⑪ swing_view — 자동 갱신 기본값 False · get_balance 는 account_read 와 _settings 에서 한 번씩(둘뿐) · run_every 조각은 _acct_panel454 · "
+      "판이 swing_account 의 summarize·glance_lines·composition·scope_chips·limit_checks·table_rows 를 부른다",
+      _sv440.ACCT_AUTO_DEFAULT is False and _gb440 == {'account_read': 1, '_settings': 1}
+      and _frag440[:1] == ['_acct_panel454'] and set(_frag440) <= {'_acct_panel454', '_panel'}
+      and {'summarize', 'glance_lines', 'composition', 'scope_chips', 'limit_checks', 'table_rows', 'changed'} <= _acc_calls440,
+      str((_gb440, _frag440, sorted(_acc_calls440))))
+#   독스트링은 화면에 안 나간다(거기엔 "추천이 아니다" 같은 설명이 있다) — 모듈·함수 머리의 첫 문자열은 빼고 센다
+_at440 = _ast440.parse(_read148(_os.path.join(PROJ, 'swing_account.py')))
+_doc440 = set()
+for _nd440 in [_at440] + [n for n in _ast440.walk(_at440) if isinstance(n, (_ast440.FunctionDef, _ast440.ClassDef))]:
+    if _nd440.body and isinstance(_nd440.body[0], _ast440.Expr) and isinstance(_nd440.body[0].value, _ast440.Constant):
+        _doc440.add(id(_nd440.body[0].value))
+_strs440 = [s.value for s in _ast440.walk(_at440) if isinstance(s, _ast440.Constant) and isinstance(s.value, str) and id(s) not in _doc440]
+check("⑪ 화면 문자열에 판정 낱말이 없다 — swing_account 의 문자열 상수(AST · 독스트링 제외)에 '추천'·'사세요'·'파세요'·'위반'·'건강' 없음 · 실제 문자열 수를 찍는다",
+      not any(w in s for s in _strs440 for w in ('추천', '사세요', '파세요', '위반', '건강')),
+      str([s for s in _strs440 if any(w in s for w in ('추천', '사세요', '파세요', '위반', '건강'))]), scanned=len(_strs440))
+# ⑫ 자식 렌더(§200) — 스냅샷이 든 임시 장부 · 작업 없음(심은 응답) · 증권사 생성자를 막아 두고(부르면 예외) → 예외 0 · 타일 · 한눈에 ·
+#    자산 구성 · 진행 줄 · 자동 갱신 토글은 꺼짐
+_vdb440 = _os.path.join(PROJ, '_probe', '_r454_view.db')
+if _os.path.exists(_vdb440):
+    _os.remove(_vdb440)
+_cv440 = _sl440.connect(_vdb440)
+_sl440.set_setting(_cv440, 'mode', 'OFF', by='test')
+_sl440.set_setting(_cv440, 'limits', _LIM432, by='test')
+_sl440.account_snapshot(_cv440, 'real', _bal440)
+_cv440.close()
+_src440 = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import broker_kis as _B\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    "class _NoBroker:\n"
+    "    def __init__(self, *a, **k):\n"
+    "        raise RuntimeError('broker called')\n"
+    "_B.KisBroker = _NoBroker\n"
+    "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+    f"_L.connect.__defaults__ = ({_vdb440!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child440 = _os.path.join(PROJ, '_probe', '_r454_view_child.py')
+open(_child440, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src440!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:600],\n"
+    "           cap=' | '.join(str(e.value)[:200] for e in at.caption), md=' | '.join(str(e.value)[:6000] for e in at.markdown),\n"
+    "           toggle={str(t.label): bool(t.value) for t in at.toggle}, btn=[str(b.label) for b in at.button])\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _env440 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+    _rc440 = __import__('subprocess').run([sys.executable, _child440], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300, env=_env440)
+    _jr440 = (_rc440.stdout or '').rsplit('@@R@@', 1)
+    _o440v = __import__('json').loads(_jr440[1]) if len(_jr440) == 2 else {}
+    _md440 = _o440v.get('md') or ''
+    _cap440 = _o440v.get('cap') or ''
+    check("⑫ 화면 — 예외 0(증권사를 한 번도 안 불렀다) · 타일 '총자산(증권사 총평가)' · '71,000원' · 한눈에 문장 · 자산 구성 · 평가 범위 칩 · 참고 비교 · "
+          "'지금 진행 중인가' 줄 · 작업 둘 '등록 안 됨' · 자동 갱신 토글 꺼짐 · 새로고침·주문 내역 버튼",
+          _o440v.get('exc') == 0 and '총자산(증권사 총평가)' in _md440 and '71,000원' in _md440 and '거래소 평균 매수금액' in _cap440
+          and '자산 구성' in _md440 and '평가 범위' in _md440 and '참고 한도 이내' not in _cap440 and '참고로' in _cap440
+          and '지금 진행 중인가' in _md440 and _md440.count('등록 안 됨') >= 2
+          and (_o440v.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False
+          and any('지금 새로고침' in b for b in _o440v.get('btn') or []) and any('최근 30일' in b for b in _o440v.get('btn') or []),
+          str(_o440v)[:1500] + ' STDERR: ' + (_rc440.stderr or '')[-600:])
+finally:
+    for _f440 in (_vdb440, _child440):
+        if _os.path.exists(_f440):
+            try:
+                _os.remove(_f440)
+            except OSError:
+                pass
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

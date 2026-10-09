@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS order_events (id INTEGER PRIMARY KEY AUTOINCREMENT, i
 CREATE TABLE IF NOT EXISTS position_events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, code TEXT, ownership TEXT,
     plan_id TEXT, event TEXT, qty INTEGER, price REAL, target REAL, stop REAL, trade_day TEXT, detail TEXT);
 CREATE TABLE IF NOT EXISTS account_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, env TEXT, cash REAL,
-    total_eval REAL, net_asset REAL, stock_eval REAL, positions TEXT);
+    total_eval REAL, net_asset REAL, stock_eval REAL, positions TEXT, cash_d2 REAL);
 CREATE TABLE IF NOT EXISTS shadow_outcomes (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id TEXT, ts TEXT, status TEXT,
     fill_day TEXT, fill_price REAL, exit_status TEXT, return_pct REAL, net_pct REAL, detail TEXT);
 CREATE TABLE IF NOT EXISTS heartbeats (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, mode TEXT, status TEXT, detail TEXT);
@@ -101,11 +101,20 @@ PLAN_COLUMNS_453 = (('entry_model', 'REAL'), ('target_model', 'REAL'), ('entry_s
                     ('rulebook_version', 'TEXT'), ('cost_pct', 'REAL'))
 
 
+#: 라운드 454 — 계좌 스냅샷에 더한 열: D+2 정산 예정 예수금(한국투자 잔고 요약 prvs_rcdl_excc_amt). 옛 장부에는 열이 없으므로
+#: 여기서 더한다(있는 행 불변 · 멱등 · 표가 아예 없는 옛 시험 장부는 건너뛴다).
+ACCOUNT_COLUMNS_454 = (('cash_d2', 'REAL'),)
+
+
 def _migrate(c):
     have = {r[1] for r in c.execute('PRAGMA table_info(plans)')}
     for name, typ in PLAN_COLUMNS_453:
         if name not in have:
             c.execute(f'ALTER TABLE plans ADD COLUMN {name} {typ}')
+    have2 = {r[1] for r in c.execute('PRAGMA table_info(account_snapshots)')}
+    for name, typ in ACCOUNT_COLUMNS_454:
+        if have2 and name not in have2:
+            c.execute(f'ALTER TABLE account_snapshots ADD COLUMN {name} {typ}')
 
 
 # ── 설정 ────────────────────────────────────────────────────────────────
@@ -313,9 +322,10 @@ def protect_needed(c):
 
 # ── 계좌·모의·심박 ──────────────────────────────────────────────────────
 def account_snapshot(c, env, bal):
-    c.execute('INSERT INTO account_snapshots (ts, env, cash, total_eval, net_asset, stock_eval, positions) '
-              'VALUES (?,?,?,?,?,?,?)', (now_ts(), env, bal.get('cash'), bal.get('total_eval'), bal.get('net_asset'),
-                                         bal.get('stock_eval'), json.dumps(bal.get('positions') or [], ensure_ascii=False)))
+    c.execute('INSERT INTO account_snapshots (ts, env, cash, total_eval, net_asset, stock_eval, positions, cash_d2) '
+              'VALUES (?,?,?,?,?,?,?,?)', (now_ts(), env, bal.get('cash'), bal.get('total_eval'), bal.get('net_asset'),
+                                           bal.get('stock_eval'), json.dumps(bal.get('positions') or [], ensure_ascii=False),
+                                           bal.get('cash_d2')))
     c.commit()
 
 

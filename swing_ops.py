@@ -14,6 +14,7 @@ import os
 import subprocess
 import time
 
+PROJ = os.path.dirname(os.path.abspath(__file__))
 TASK_NAME = 'gaeum-swing-worker'
 #: Windows 작업 스케줄러의 마지막 결과 코드 — 자주 보는 것만 이름을 붙인다(그 밖은 16진수 그대로). 공식 값(SCHED_S_*).
 RESULT_KO = {0: '정상 종료', 0x41301: '실행 중', 0x41303: '아직 돈 적 없음', 0x41306: '사용자가 멈춤',
@@ -100,3 +101,92 @@ def task_line(info):
     if info.get('missed'):
         parts.append(f"놓친 실행 {info['missed']}회")
     return ' · '.join(parts) + '. PC 가 꺼져 있거나 잠들어 있으면 이 작업도 돌지 않습니다(정규장 동안 절전을 끄세요).'
+
+
+# ── 지금 진행 중인가 (라운드 454) — 사용자: "지금 진행중인지 아닌지도 표시해주면 좋겠어" ───────────────────────────
+#   관제실이 '등록됐다'·'마지막 기록' 만 적으면 **지금 돌고 있는지**는 안 보인다. 워커(잠금 파일의 주인이 살아 있나) · 예약 작업
+#   둘(작업 스케줄러 상태) · 저녁 작업(기록의 시작·끝 줄) · 계좌 자동 갱신(화면 세션)을 한 자리에서 사실로 적는다.
+LOCK_PATH = os.path.join(PROJ, '.portfolio', 'swing_worker.lock')
+NIGHTLY_LOG = os.path.join(PROJ, '.portfolio', 'nightly_local_run.txt')
+WATCH_TASK = 'gaeum-watch-refresh'
+
+
+def _pid_alive_default(pid):
+    try:
+        from scripts.run_swing_worker import _pid_alive      # 워커와 같은 판별(한 곳)
+        return _pid_alive(pid)
+    except Exception:                                      # noqa: BLE001
+        return None
+
+
+def worker_status(lock_path=None, pid_alive=None):
+    """워커가 지금 도는가 — 잠금 파일(`pid 시각`)의 주인이 살아 있나 → dict(running, pid, since, note)."""
+    path = lock_path or LOCK_PATH
+    if not os.path.exists(path):
+        return dict(running=False, pid=None, since=None, note='지금 도는 워커 없음(잠금 파일 없음)')
+    try:
+        with open(path, encoding='utf-8') as f:
+            parts = f.read().split()
+        pid = int(parts[0]) if parts else 0
+        since = parts[1] if len(parts) > 1 else None
+    except (OSError, ValueError):
+        return dict(running=None, pid=None, since=None, note='잠금 파일을 읽지 못했다')
+    alive = (pid_alive or _pid_alive_default)(pid)
+    if alive is None:
+        return dict(running=None, pid=pid, since=since, note='프로세스가 살아 있는지 확인하지 못했다')
+    if alive:
+        return dict(running=True, pid=pid, since=since, note=f'실행 중 · PID {pid}' + (f' · {since[11:16]} 부터' if since and len(since) >= 16 else ''))
+    return dict(running=False, pid=pid, since=since, note=f'지금 안 돎 — 잠금은 남았지만 PID {pid} 가 없다(비정상 종료 · 다음 워커가 치운다)')
+
+
+def nightly_status(log_path=None, tail=400):
+    """저녁 작업 기록 → dict(running, last_start, last_end, worst). 시작 줄 뒤에 끝 줄이 없으면 '도는 중'으로 본다."""
+    path = log_path or NIGHTLY_LOG
+    if not os.path.exists(path):
+        return dict(running=False, last_start=None, last_end=None, worst=None, note='기록 없음')
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            lines = f.read().splitlines()[-tail:]
+    except OSError:
+        return dict(running=None, last_start=None, last_end=None, worst=None, note='기록을 읽지 못했다')
+    start = end = worst = None
+    for ln in lines:
+        if '장 마감 뒤 작업 시작' in ln:
+            start, end, worst = ln[1:15], None, None
+        elif '끝 · 가장 나쁜 종료 코드' in ln:
+            end = ln[1:15]
+            try:
+                worst = int(ln.rsplit('코드', 1)[1].strip())
+            except (ValueError, IndexError):
+                worst = None
+    running = bool(start) and end is None
+    return dict(running=running, last_start=start, last_end=end, worst=worst,
+                note=('도는 중' if running else ('마지막 실행 끝' if end else '기록 없음')))
+
+
+def progress(now=None, worker=None, tasks=None, nightly=None, auto=None):
+    """'지금 진행 중' 줄들 → [dict(label, running, text)] · 끼워 넣을 수 있다(시험)."""
+    w = worker or worker_status()
+    t_sw = (tasks or {}).get(TASK_NAME) if tasks else scheduled_task(TASK_NAME)
+    t_wr = (tasks or {}).get(WATCH_TASK) if tasks else scheduled_task(WATCH_TASK)
+    n = nightly or nightly_status()
+    out = [dict(label='워커(장중 주문·보호)', running=w.get('running'), text=w.get('note') or '')]
+    for name, t in ((TASK_NAME, t_sw), (WATCH_TASK, t_wr)):
+        if not t or not t.get('ok'):
+            out.append(dict(label=f'예약 작업 {name}', running=None, text=(t or {}).get('reason') or '상태를 못 읽었다'))
+        elif not t.get('installed'):
+            out.append(dict(label=f'예약 작업 {name}', running=False, text='등록 안 됨'))
+        else:
+            st_ = str(t.get('state') or '')
+            out.append(dict(label=f'예약 작업 {name}', running=(st_ == 'Running'),
+                            text=('지금 도는 중' if st_ == 'Running' else f'대기({st_})')
+                            + (f" · 다음 실행 {t['next_run']}" if t.get('next_run') else '')
+                            + (f" · 마지막 {t['last_run']} {t.get('last_result_ko') or ''}" if t.get('last_run') else ' · 아직 돈 적 없음')))
+    out.append(dict(label='저녁 작업(되받기·추적·재측정·성적표)', running=n.get('running'),
+                    text=(f"도는 중 · {n['last_start']} 시작" if n.get('running') else
+                          (f"마지막 {n['last_end']} 끝 · 종료 코드 {n['worst']}" if n.get('last_end') else n.get('note') or '기록 없음'))))
+    if auto is not None:
+        out.append(dict(label='계좌 자동 갱신(이 화면)', running=bool(auto.get('on')),
+                        text=(f"켜짐 · {auto.get('every')}초마다" if auto.get('on') else '꺼짐')
+                        + (f" · 마지막 갱신 {auto['last']}" if auto.get('last') else '')))
+    return out
