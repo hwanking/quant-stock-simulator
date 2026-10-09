@@ -415,6 +415,11 @@ def pick_from_scan_row(q_engine, r):
         'news_risk': int(nf.get('risk_count', 0) or 0),
         'news_fresh': int(nf.get('fresh_watch_count', 0) or 0),
         'news_lagging': int(nf.get('lagging_count', 0) or 0),
+        # 라운드 473 — 뉴스를 **받기는 했는가**(엔진 `news_flags.feed_available` · 라운드 42 가 '받지 못한 것과 악재가
+        #   없는 것은 다르다'며 만든 칸). 위 세 칸은 못 받은 날도 0 이라 '위험 낱말 없음'과 '피드 못 받음'이 같은 0 이었다 —
+        #   확정 추적 케이스 243건이 그 둘을 가를 수 없었다(§3). 이력 줄은 후보를 통째로 옮기므로 이 칸도 같이 남는다.
+        #   맥락이 아예 없으면 None(모른다 · 받았다고도 못 받았다고도 안 적는다).
+        'news_feed_ok': (bool(nf['feed_available']) if 'feed_available' in nf else None),
         'confidence_band': ({'lo': cb.get('lo'), 'hi': cb.get('hi'),
                              'hit_rate': cb.get('hit_rate'), 'n': cb.get('n')}
                             if cb else None),

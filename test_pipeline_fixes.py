@@ -38655,6 +38655,83 @@ check("⑥ jobs_now 가 가져오는 모듈에 셸·네트워크가 없다(subpr
 # ─── §454 끝 ───
 
 
+# ══════════════════════════════════════════════════════════════════════
+# §455 — 뉴스 축: 하한은 두 갈래 각각에 · '못 받음'은 '없음'이 아니다 · 결과를 읽지 않고 센다 (라운드 473)
+#
+#   일정 문서가 *"확정 30건 · 거래일 30 이면 사전등록"* 이라 적은 조건은 전체로는 이미 찼다(2026-10-10 · 확정 243 · 거래일
+#   44). 그런데 비교를 정하는 것은 작은 갈래이고(위험 낱말이 있던 추천 · 거래일 21), 리포트 후보는 피드를 못 받은 날도
+#   '위험 낱말 0'으로 적어 '없던 쪽'을 가를 수 없었다(§3). 후보가 피드 상태를 싣고(앞으로의 줄), 셈은 결과를 안 읽는다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§455 뉴스 축 — 두 갈래 각각의 거래일 · 피드 못 받음 ≠ 위험 낱말 0 · 결과를 안 읽는 셈 (라운드 473)")
+print("=" * 72)
+import ast as _ast455                                            # noqa: E402
+import premarket as _pm455                                       # noqa: E402
+from scripts import news_axis_ready as _nar455                   # noqa: E402
+
+
+class _Eng455:
+    pass
+
+
+def _row455(nf):
+    _s = {'four_scores': {'asset_type': 'STOCK'}}
+    if nf is not None:
+        _s['market_context'] = {'news_flags': nf}
+    return {'symbol': '000001.KS', 'name': '시험', 'snapshot': _s, 'final_score': 50, 'base_price': 1000}
+
+
+_pk455 = [(_pm455.pick_from_scan_row(_Eng455(), _row455(nf)) or {}).get('news_feed_ok', 'X')
+          for nf in ({'feed_available': False, 'risk_count': 0}, {'feed_available': True, 'risk_count': 2}, None)]
+check("① 리포트 후보가 피드 상태를 싣는다 — 못 받음 False · 받음 True · 맥락 없음 None(모른다)",
+      _pk455 == [False, True, None], str(_pk455))
+# ② 이력 줄은 후보를 통째로 옮긴다 — 그래서 후보에 더한 칸이 추적 쪽까지 간다
+_src455 = _read148(_os.path.join(PROJ, 'premarket.py'))
+_br455 = next(n for n in _ast455.parse(_src455).body if isinstance(n, _ast455.FunctionDef) and n.name == 'build_report')
+_spread455 = [d for d in _ast455.walk(_br455) if isinstance(d, _ast455.Dict) and None in d.keys
+              and any(getattr(v, 'id', '') == 'p' for k, v in zip(d.keys, d.values) if k is None)]
+check("② 개장 전 이력 줄은 후보 사전을 통째로 펼쳐 쓴다({**p, …}) — 후보의 새 칸이 이력에도 남는다",
+      len(_spread455) == 1, f"펼침 {len(_spread455)}")
+# ③ 갈래 — 못 받음은 '없음'이 아니고, 피드 상태를 모르는 0 은 '없음'에 안 넣는다 · 위험 낱말이 있으면 받은 것이다
+_G455 = _nar455.group_of
+check("③ 갈래 — 못 받음 · 받음+0 = 없음 · 모름+0 = 모름 · 모름+있음 = 있음 · 칸 없음 None",
+      _G455({'news_feed_ok': False, 'news_risk': 0}) == _nar455.NOFEED
+      and _G455({'news_feed_ok': True, 'news_risk': 0}) == _nar455.CLEAN
+      and _G455({'news_risk': 0}) == _nar455.UNKNOWN
+      and _G455({'news_risk': 3}) == _nar455.RISK
+      and _G455({}) is None and _G455(None) is None)
+# ④ 하한은 두 비교 갈래 **각각**의 거래일(작은 쪽) · 하한은 라운드 84 의 30
+_mk455 = lambda n, g: [(f"2026-01-{i + 1:02d}" if i < 28 else f"2026-02-{i - 27:02d}", g) for i in range(n)]
+_r30 = _nar455.count(_mk455(30, {'news_feed_ok': True, 'news_risk': 1}) + _mk455(30, {'news_feed_ok': True, 'news_risk': 0}))
+_r29 = _nar455.count(_mk455(29, {'news_feed_ok': True, 'news_risk': 1}) + _mk455(40, {'news_feed_ok': True, 'news_risk': 0}))
+_rmix = _nar455.count(_mk455(40, {'news_feed_ok': True, 'news_risk': 1}) + _mk455(40, {'news_risk': 0}))
+check("④ 하한 30 은 두 갈래 각각 — 30·30 열림 · 29·40 닫힘 · 피드 모르는 0 은 '없음' 갈래로 안 세어 닫힘",
+      _nar455.DATE_FLOOR == 30 and _r30[2] is True and _r29[2] is False and _r29[1] == 29
+      and _rmix[2] is False and _rmix[1] == 0, f"{_r30[1:]} · {_r29[1:]} · {_rmix[1:]}")
+# ⑤ 결과 창 — 거래일로 세고, 판정일을 모르면 닫혔다고 안 한다
+_wk455 = lambda d: __import__('datetime').date.fromisoformat(d).weekday() >= 5
+check("⑤ 결과 창 — 거래일 20개가 판정일까지 지나야 닫힘(주말 빼고 셈) · 판정일 모르면 False",
+      _nar455.window_closed('2026-09-01', 20, '2026-09-29', _wk455) is True
+      and _nar455.window_closed('2026-09-01', 20, '2026-09-28', _wk455) is False
+      and _nar455.window_closed('2026-09-01', 20, None, _wk455) is False)
+# ⑥ 결과를 읽지 않는다 — 셈 스크립트가 결과 칸을 가져오지 않는다(사전등록 전에 결과를 보면 §2)
+_nsrc455 = _read148(_os.path.join(PROJ, 'scripts', 'news_axis_ready.py'))
+_strs455 = [n.value for n in _ast455.walk(_ast455.parse(_nsrc455)) if isinstance(n, _ast455.Constant) and isinstance(n.value, str)]
+_sql455 = [s for s in _strs455 if 'SELECT' in s.upper()]
+_outc455 = ('realized_return', 'exit_price', 'max_runup', 'max_drawdown', 'result_reason', 'success_pct')
+check("⑥ 셈 스크립트의 질의는 종목·기준일·상태만 · 결과 칸 이름이 문자열 상수에 없다(본 상수 수를 밝힌다)",
+      _sql455 == ['SELECT ticker, signal_date, status FROM prediction_cases']
+      and not [s for s in _strs455 if any(o in s for o in _outc455)], str(_sql455), scanned=len(_strs455))
+# ⑦ 레이더 줄 — 전체 조건이 아니라 작은 갈래를 말하고 날짜를 안 적는다
+_rad455 = _json.load(open(_os.path.join(PROJ, 'data', 'research_radar.json'), encoding='utf-8'))
+_rows455 = _rad455 if isinstance(_rad455, list) else (_rad455.get('items') or _rad455.get('rows'))
+_nr455 = [r for r in _rows455 if str(r.get('name', '')).startswith('뉴스 위험 낱말·신선도 실측')]
+check("⑦ 레이더의 뉴스 줄 — '작은 쪽'과 '피드 못 받음'을 말하고 날짜를 안 적는다",
+      len(_nr455) == 1 and '작은 쪽' in _nr455[0]['status'] and '피드 못 받음' in _nr455[0]['status']
+      and not __import__('re').search(r'20\d\d-\d\d-\d\d', _nr455[0]['status']), str(_nr455[:1])[:200])
+# ─── §455 끝 ───
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은
