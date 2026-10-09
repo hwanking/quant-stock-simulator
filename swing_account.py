@@ -138,6 +138,38 @@ def table_rows(s, ownership_label=None, quote_ts=None):
     return out
 
 
+#: 라운드 457 — 15초 자동 갱신에서 **가격만** 바뀐 잔고를 장부에 남기는 간격(초). 저장 주기이지 판정 문턱이 아니다 — 15초마다
+#: 남기면 보유가 있는 날 장중에만 하루 1,500행이 넘게 쌓인다. 보유·현금이 바뀌면 이 간격과 무관하게 바로 남긴다.
+SNAPSHOT_PRICE_EVERY_SEC = 600
+
+
+def _structure_key(b):
+    return (tuple(sorted((str(p.get('code')), int(_f(p.get('qty')) or 0), _f(p.get('avg_price'))) for p in (b.get('positions') or []))),
+            _f(b.get('cash')), _f(b.get('cash_d2')))
+
+
+def should_snapshot(prev_snap, bal, now=None, every_sec=SNAPSHOT_PRICE_EVERY_SEC):
+    """장부에 스냅샷을 남길지 — 이전이 없거나 · 보유(종목·수량·평단)·현금이 바뀌었거나 · 가격·평가만 바뀌었는데 마지막 스냅샷이
+    every_sec 보다 오래됐으면 True. 값이 하나도 안 바뀌면 False. 마지막 시각을 못 읽으면 바뀐 것만 보고 남긴다(덜 남기는 쪽으로 틀리지 않게)."""
+    import datetime as _dt
+    if not prev_snap:
+        return True
+    if _structure_key(prev_snap) != _structure_key(bal):
+        return True
+    if not changed(prev_snap, bal):
+        return False
+    try:
+        t0 = _dt.datetime.fromisoformat(str(prev_snap.get('ts')))
+        n = now or _dt.datetime.now().astimezone()
+        if t0.tzinfo is None:
+            t0 = t0.astimezone()
+        if n.tzinfo is None:
+            n = n.astimezone()
+        return (n - t0).total_seconds() >= every_sec
+    except (TypeError, ValueError):
+        return True
+
+
 def changed(prev_bal, bal):
     """장부 스냅샷을 다시 적을지 — 보유(종목·수량·현재가·평단)나 예수금·총평가가 바뀌었을 때만(15초마다 같은 값을 쌓지 않는다)."""
     if not prev_bal:

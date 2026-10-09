@@ -36865,10 +36865,11 @@ for _fn440 in [n for n in _ast440.walk(_svt440) if isinstance(n, _ast440.Functio
                 _dash_calls440.add(_m440.func.attr)
 # 라운드 455 — 자산 구성은 swing_account.composition 대신 swing_dash.allocation(현금 · 자동매매 관리 · 직접 보유)이 재료다 → 도넛
 check("⑪ swing_view — 자동 갱신 기본값 False · get_balance 는 account_read 와 _settings 에서 한 번씩(둘뿐) · run_every 조각은 _acct_panel454 · "
-      "판이 swing_account 의 summarize·glance_lines·scope_chips·limit_checks·table_rows·changed 와 swing_dash 의 allocation 을 부른다",
+      "판이 swing_account 의 summarize·glance_lines·scope_chips·limit_checks·table_rows·should_snapshot 과 swing_dash 의 allocation 을 부른다",
       _sv440.ACCT_AUTO_DEFAULT is False and _gb440 == {'account_read': 1, '_settings': 1}
       and _frag440[:1] == ['_acct_panel454'] and set(_frag440) <= {'_acct_panel454', '_panel'}
-      and {'summarize', 'glance_lines', 'scope_chips', 'limit_checks', 'table_rows', 'changed'} <= _acc_calls440
+      # 라운드 457 — 스냅샷을 남길지는 should_snapshot 이 정한다(안에서 changed 를 부른다 · 가격만 바뀌면 저장 간격마다)
+      and {'summarize', 'glance_lines', 'scope_chips', 'limit_checks', 'table_rows', 'should_snapshot'} <= _acc_calls440
       and 'allocation' in _dash_calls440,
       str((_gb440, _frag440, sorted(_acc_calls440), sorted(_dash_calls440))))
 #   독스트링은 화면에 안 나간다(거기엔 "추천이 아니다" 같은 설명이 있다) — 모듈·함수 머리의 첫 문자열은 빼고 센다
@@ -37111,6 +37112,164 @@ check("⑩ 레이더 표·차이 — 축 12줄 × (경쟁사 5 + 가늠) · 차�
       len(_cr441.matrix(_rd441)) == 12 and all(len(r) == 7 for r in _cr441.matrix(_rd441))
       and all(it['decision'] in ('BUILD', 'CONSIDER') for it in _cr441.gaps(_rd441)) and set(_cr441.DECISIONS) == {'BUILD', 'CONSIDER', 'WATCH', 'SKIP'}
       and all(v['state'] in _cr441.STATES for v in _rd441['ganeum'].values()))
+
+
+print("§442 자동매매 언제 시작하나 · 계좌 15초 갱신 — 시작 시점은 설정·준비·작업·달력에서 유도 · 첫 매수 날짜는 말하지 않는다 · 갱신 설정은 이 PC 장부에 남는다 (라운드 457)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자: "자동매매 언제 시작할지 딱 써놔야지 · 계좌 15초마다 갱신해주고". 시작 카드는 swing_dash.start_status 한 곳이 실전 준비 넷
+#   (live_readiness) · 운용 모드 · 워커 예약 작업 · 거래일 달력(휴장일 표 · 엔진의 장 시각 · 수능일 포함)에서 유도한다. 실제 첫 매수의
+#   **날짜**는 말하지 않는다(추천이 언제 나올지 모른다 · §3). 15초 갱신은 장부 설정 'acct_refresh' 에 남고(다시 띄워도 켜짐), 기본값은
+#   여전히 꺼짐이라 회귀의 임시 장부는 실계좌를 부르지 않는다. 가격만 바뀐 잔고는 저장 간격(600초)마다만 장부에 남긴다.
+import ast as _ast442
+import datetime as _dt442
+import swing_dash as _dh442
+import swing_viz as _vz442
+import swing_view as _sv442
+import swing_account as _ac442
+import swing_ledger as _sl442
+_K442 = _dt442.timezone(_dt442.timedelta(hours=9))
+
+
+def _n442(s):
+    return _dt442.datetime.fromisoformat(s).replace(tzinfo=_K442)
+
+
+# ① 다음 장 시작 — 휴장 금요일(한글날) → 월요일 · 장 전 → 그날 · 장중 → 그날(skip 이면 다음 날) · 장 뒤 → 다음 날 · 수능일은 10:00
+check("① next_session_start — 10-09(한글날) 10:30 → 10-12 09:00 · 10-12 08:00 → 10-12 · 10-12 10:00(skip) → 10-13 · 10-12 16:00 → 10-13 · "
+      "수능일 2026-11-19 08:00 → 11-19 10:00(엔진의 특별 장 시각 한 곳)",
+      _dh442.next_session_start(_n442('2026-10-09T10:30:00')) == (_dt442.date(2026, 10, 12), _dt442.time(9, 0))
+      and _dh442.next_session_start(_n442('2026-10-12T08:00:00')) == (_dt442.date(2026, 10, 12), _dt442.time(9, 0))
+      and _dh442.next_session_start(_n442('2026-10-12T10:00:00'), skip_today=True) == (_dt442.date(2026, 10, 13), _dt442.time(9, 0))
+      and _dh442.next_session_start(_n442('2026-10-12T16:00:00')) == (_dt442.date(2026, 10, 13), _dt442.time(9, 0))
+      and _dh442.next_session_start(_n442('2026-11-19T08:00:00')) == (_dt442.date(2026, 11, 19), _dt442.time(10, 0)),
+      str([_dh442.next_session_start(_n442(x)) for x in ('2026-10-09T10:30:00', '2026-11-19T08:00:00')]))
+# ② 시작 상태 — 꺼짐·한도 없음·잠금 안 풀림 → 남은 일 3 · 가장 빨리 월요일 · 첫 매수는 날짜 없이 조건만 · 승인형 문장
+_task_ok442 = dict(ok=True, installed=True, next_run='10/12/2026 08:50:00')
+_s_off = _dh442.start_status('OFF', {}, _CFG432, task=_task_ok442, worker=dict(running=False), now=_n442('2026-10-09T10:30:00'))
+check("② 꺼짐 — '아직 시작하지 않았습니다 — 남은 일 3개' · 미달은 위험 한도 여섯·실전 잠금 해제·운용 모드 실전 · 시작 '가장 빨리 다음 장 2026-10-12(월) 09:00' · "
+      "첫 매수는 '추천'의 다음 거래일 · 승인 문장 · '미리 말할 수 없습니다' · 조건 6개 중 3 통과",
+      _s_off['live'] is False and _s_off['headline'] == '자동매매는 아직 시작하지 않았습니다 — 남은 일 3개'
+      and _s_off['missing'] == ['위험 한도 여섯', '실전 잠금 해제', '운용 모드 실전'] and '2026-10-12(월) 09:00' in _s_off['start']
+      and "'추천'" in _s_off['first_buy'] and '다음 거래일부터' in _s_off['first_buy'] and '승인해야 삽니다' in _s_off['first_buy']
+      and '미리 말할 수 없습니다' in _s_off['first_buy'] and (_s_off['n_ok'], _s_off['n_items']) == (3, 6), str(_s_off))
+_stt_live442 = dict(limits=_LIM432, live_unlock=_sx432.LIVE_UNLOCK_PHRASE, order_approval='auto')
+_s_l1 = _dh442.start_status('LIVE', _stt_live442, _CFG432, task=_task_ok442, worker=dict(running=True), now=_n442('2026-10-12T10:00:00'))
+_s_l2 = _dh442.start_status('LIVE', _stt_live442, _CFG432, task=_task_ok442, worker=dict(running=False), now=_n442('2026-10-12T10:00:00'))
+_s_l3 = _dh442.start_status('LIVE', _stt_live442, _CFG432, task=_task_ok442, worker=dict(running=False), now=_n442('2026-10-09T10:30:00'))
+_s_nt = _dh442.start_status('LIVE', _stt_live442, _CFG432, task=dict(ok=True, installed=False), worker=None, now=_n442('2026-10-09T10:30:00'))
+check("② 실전 다 갖춤 — 장중·워커 돎 → '지금 — … 다음 바퀴' · 장중·워커 없음 → 직접 켜는 명령과 다음 장 2026-10-13(화) · 휴장일 → '다음 장 2026-10-12(월) 09:00' · "
+      "완전 자동이면 승인 문장 없음 · 워커 예약 작업이 없으면 그것이 남은 일",
+      _s_l1['live'] and _s_l1['headline'] == '실전 자동매매가 켜져 있습니다' and _s_l1['start'].startswith('지금 — 워커가 돌고 있어')
+      and 'run_swing_worker.py --session --loop 60' in _s_l2['start'] and '2026-10-13(화) 09:00' in _s_l2['start']
+      and '다음 장 2026-10-12(월) 09:00' in _s_l3['start'] and '승인해야' not in _s_l1['first_buy']
+      and _s_nt['live'] is False and _s_nt['missing'] == ['워커 예약 작업'], str((_s_l1['start'], _s_l2['start'], _s_l3['start'], _s_nt['missing'])))
+# ③ 시작 카드 그림 — 머리 · 시작 · 첫 매수 · 조건 여섯(통과는 찬 점 · 미달은 조치 필요 점) · 추천 빈도 한 줄 · 판정 낱말 없음
+_card442 = _vz442.start_card(_s_off, reco_line='추천이 얼마나 자주 0 이었나 — 시험 문장')
+check("③ 시작 카드 — '자동매매 언제 시작하나' · 머리 · '시작' · 조건 여섯 줄(미달 셋 · 통과 셋) · 추천 빈도 한 줄 · 비면 문장 · '사세요'·'위반' 없음",
+      '자동매매 언제 시작하나' in _card442 and '남은 일 3개' in _card442 and '<b>시작</b>' in _card442
+      and _card442.count("aria-label='조치 필요'") == 3 and _card442.count("aria-label='정상'") == 3 and '시험 문장' in _card442
+      and '셈하지 못했습니다' in _vz442.start_card(None) and '사세요' not in _card442 and '위반' not in _card442)
+# ④ 15초 갱신 설정의 우선순위 — 세션(방금 바꾼 값) → 장부 설정 → 기본(꺼짐 · 15초) · 모르는 간격은 15
+check("④ acct_refresh_pref — 빈 세션·설정 없음 → (꺼짐, 15) · 장부 설정 켬/30 → (켬, 30) · 세션이 끄면 끔 · 세션 간격이 이김 · 모르는 간격 45 → 15 · 기본값 상수는 그대로 꺼짐",
+      _sv442.acct_refresh_pref({}, {}) == (False, 15) and _sv442.acct_refresh_pref({}, {'acct_refresh': {'on': True, 'every': 30}}) == (True, 30)
+      and _sv442.acct_refresh_pref({'sw_acct_auto': False}, {'acct_refresh': {'on': True, 'every': 30}}) == (False, 30)
+      and _sv442.acct_refresh_pref({'sw_acct_every': 60}, {'acct_refresh': {'on': True, 'every': 30}}) == (True, 60)
+      and _sv442.acct_refresh_pref({}, {'acct_refresh': {'on': True, 'every': 45}}) == (True, 15)
+      and _sv442.acct_refresh_pref({}, {'acct_refresh': 'x'}) == (False, 15) and _sv442.ACCT_AUTO_DEFAULT is False)
+# ⑤ 스냅샷 저장 간격 — 보유·현금이 바뀌면 바로 · 가격만 바뀌면 600초마다 · 같으면 안 남김 · 시각을 못 읽으면 남긴다
+_b0 = dict(positions=[dict(code='000001', qty=10, avg_price=1000.0, price=1200.0)], cash=5000.0, cash_d2=5000.0, total_eval=17000.0,
+           stock_eval=12000.0)
+_p0 = dict(_b0, ts='2026-10-12T10:00:00+09:00')
+_b_px = dict(_b0, positions=[dict(code='000001', qty=10, avg_price=1000.0, price=1210.0)], total_eval=17100.0, stock_eval=12100.0)
+_b_qty = dict(_b0, positions=[dict(code='000001', qty=11, avg_price=1000.0, price=1200.0)])
+check("⑤ should_snapshot — 이전 없음 → 남김 · 같은 값 → 안 남김 · 가격만 바뀜 5분 뒤 → 안 남김 · 10분 뒤 → 남김 · 수량 바뀜(1분 뒤) → 남김 · "
+      "현금 바뀜 → 남김 · 이전 시각을 못 읽으면 남김 · 저장 간격 상수 600",
+      _ac442.should_snapshot(None, _b0) is True and _ac442.should_snapshot(_p0, dict(_b0), now=_n442('2026-10-12T10:05:00')) is False
+      and _ac442.should_snapshot(_p0, _b_px, now=_n442('2026-10-12T10:05:00')) is False
+      and _ac442.should_snapshot(_p0, _b_px, now=_n442('2026-10-12T10:10:00')) is True
+      and _ac442.should_snapshot(_p0, _b_qty, now=_n442('2026-10-12T10:01:00')) is True
+      and _ac442.should_snapshot(_p0, dict(_b0, cash=4000.0), now=_n442('2026-10-12T10:01:00')) is True
+      and _ac442.should_snapshot(dict(_p0, ts='x'), _b_px) is True and _ac442.SNAPSHOT_PRICE_EVERY_SEC == 600)
+# ⑥ 자산 곡선 — 하루 마지막 스냅샷 한 점씩
+_h442 = [dict(ts='2026-10-08T13:10:00', total_eval=1), dict(ts='2026-10-09T09:30:00', total_eval=2), dict(ts='2026-10-09T15:00:00', total_eval=3)]
+check("⑥ daily_last — 같은 날은 마지막 한 개 · 날짜 순 · 빈 이력은 빈 목록",
+      [r['total_eval'] for r in _dh442.daily_last(_h442)] == [1, 3] and _dh442.daily_last([]) == [])
+# ⑦ 화면 구조(AST) — 토글·간격을 바꾸면 장부 설정(ACCT_REFRESH_KEY)에 남긴다 · 읽기 조건은 그 값(세션에만 기대지 않는다) · 관제실이 시작 카드를 맨 먼저 그린다
+_svt442 = _ast442.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
+_fns442 = {n.name: n for n in _ast442.walk(_svt442) if isinstance(n, _ast442.FunctionDef)}
+_sets442 = [m for m in _ast442.walk(_fns442['_acct_panel_body454']) if isinstance(m, _ast442.Call) and isinstance(m.func, _ast442.Attribute)
+            and m.func.attr == 'set_setting' and len(m.args) >= 2 and isinstance(m.args[1], _ast442.Name) and m.args[1].id == 'ACCT_REFRESH_KEY']
+_first_md442 = next((m for m in _ast442.walk(_fns442['_view_center']) if isinstance(m, _ast442.Call) and isinstance(m.func, _ast442.Attribute)
+                     and m.func.attr == 'markdown'), None)
+check("⑦ 토글·간격 바뀜 → 장부 설정에 남긴다(set_setting(…, ACCT_REFRESH_KEY, …) 한 곳) · 관제실의 첫 그림은 start_card · 지휘 띠 sub 에 '시작 조건 n/6'",
+      len(_sets442) == 1 and _first_md442 is not None and 'start_card' in _ast442.dump(_first_md442)
+      and '시작 조건 3/6' in _sv442.bar_items(dict(cfg=_CFG432, acct=None, mode='OFF', stt={}, managed={}, releasing={}, worker={}, task={},
+                                                   hb=None, plans_today=[], today='2026-10-09', start=_s_off))[1]['sub'],
+      str(len(_sets442)))
+# ⑧ 자식 렌더 — 장부 설정이 켜져 있으면 화면이 잔고를 읽으러 간다(증권사 생성자를 막아 두어 그 시도가 '잔고를 읽지 못했습니다'로 보인다 ·
+#    네트워크 0) · 설정이 없으면 읽으러 가지 않는다 · 시작 카드가 관제실 맨 위
+_vdb442 = _os.path.join(PROJ, '_probe', '_r457_view.db')
+_child442 = _os.path.join(PROJ, '_probe', '_r457_view_child.py')
+_out442 = {}
+try:
+    for _tag442, _pref442 in (('on', {'on': True, 'every': 15}), ('off', None)):
+        if _os.path.exists(_vdb442):
+            _os.remove(_vdb442)
+        _cv442 = _sl442.connect(_vdb442)
+        _sl442.set_setting(_cv442, 'mode', 'OFF', by='test')
+        _sl442.account_snapshot(_cv442, 'real', dict(positions=[], cash=1000.0, total_eval=1000.0, stock_eval=0.0))
+        if _pref442:
+            _sl442.set_setting(_cv442, 'acct_refresh', _pref442, by='test')
+        _cv442.close()
+        _src442 = (
+            "import sys\n"
+            f"sys.path.insert(0, {PROJ!r})\n"
+            "import streamlit as st\n"
+            "import broker_kis as _B\n"
+            "import swing_ledger as _L\n"
+            "import swing_view as _V\n"
+            "import ui_kit as _uk\n"
+            "class _NoBroker:\n"
+            "    def __init__(self, *a, **k):\n"
+            "        raise RuntimeError('broker called')\n"
+            "_B.KisBroker = _NoBroker\n"
+            "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+            f"_L.connect.__defaults__ = ({_vdb442!r}, False)\n"
+            "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+            "          anchor_day='2026-10-07')\n")
+        open(_child442, 'w', encoding='utf-8').write(
+            "import json, sys\n"
+            "sys.stdout.reconfigure(encoding='utf-8')\n"
+            "from streamlit.testing.v1 import AppTest\n"
+            f"at = AppTest.from_string({_src442!r}, default_timeout=120)\n"
+            "at.run()\n"
+            "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:400], warn=' | '.join(str(w.value) for w in at.warning),\n"
+            "           md=' '.join(str(e.value) for e in at.markdown)[:20000], cap=' '.join(str(e.value) for e in at.caption),\n"
+            "           toggle={str(t.label): bool(t.value) for t in at.toggle})\n"
+            "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+        _env442 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+        _rc442 = __import__('subprocess').run([sys.executable, _child442], cwd=PROJ, capture_output=True, text=True,
+                                              encoding='utf-8', errors='replace', timeout=300, env=_env442)
+        _jr442 = (_rc442.stdout or '').rsplit('@@R@@', 1)
+        _out442[_tag442] = __import__('json').loads(_jr442[1]) if len(_jr442) == 2 else {'err': (_rc442.stderr or '')[-500:]}
+    _on442, _off442 = _out442.get('on') or {}, _out442.get('off') or {}
+    check("⑧ 화면 — 설정 켬: 예외 0 · 토글 켜짐 · 잔고를 읽으러 갔다('잔고를 읽지 못했습니다 — RuntimeError: broker called') · '15초마다 켜짐' 아님(못 읽음) 대신 "
+          "경고 · 설정 없음: 토글 꺼짐 · 읽으러 가지 않았다(경고 없음) · 둘 다 시작 카드가 관제실 맨 위",
+          _on442.get('exc') == 0 and (_on442.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is True
+          and 'RuntimeError: broker called' in (_on442.get('warn') or '')
+          and _off442.get('exc') == 0 and (_off442.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False
+          and 'broker called' not in (_off442.get('warn') or '')
+          and '자동매매 언제 시작하나' in (_on442.get('md') or '') and '남은 일' in (_off442.get('md') or '')
+          and (_on442.get('md') or '').index('자동매매 언제 시작하나') < (_on442.get('md') or '').index('시스템 상태 — 워커'),
+          str({k: (v.get('first'), v.get('warn'), v.get('toggle'), v.get('err')) for k, v in _out442.items()})[:1500])
+finally:
+    for _f442 in (_vdb442, _child442):
+        if _os.path.exists(_f442):
+            try:
+                _os.remove(_f442)
+            except OSError:
+                pass
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

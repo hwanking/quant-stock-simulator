@@ -132,12 +132,27 @@ def facts_lines():
 ACCT_AUTO_DEFAULT = False
 ACCT_EVERY_DEFAULT = 15
 ACCT_EVERY_CHOICES = (15, 30, 60)
+#: 라운드 457 — 사용자가 켠 자동 갱신은 이 PC 장부의 설정 'acct_refresh'({'on','every'})에 남는다(앱을 다시 띄워도 켜져 있게).
+#: 기본값(꺼짐)은 그대로다 — 회귀의 임시 장부에는 이 설정이 없어 자식 렌더가 실계좌를 부르지 않는다.
+ACCT_REFRESH_KEY = 'acct_refresh'
 
 
-def account_read(cfg, c=None):
-    """한국투자 잔고를 **한 번** 읽는다(주문 없음) → (잔고 dict, None) 또는 (None, 사유). 장부 연결 `c` 가 있고 값이 바뀌었으면
-    스냅샷을 남긴다(같은 값은 15초마다 쌓지 않는다 · swing_account.changed). 화면·워커 밖에서 증권사를 부르는 자리는 여기와
-    시스템 → 설정의 '연결 확인' 둘뿐이다."""
+def acct_refresh_pref(session, stt):
+    """계좌 자동 갱신 → (켜짐, 간격초). 이 화면에서 방금 바꾼 값(세션) → 이 PC 장부 설정(acct_refresh) → 기본(꺼짐 · 15초) 순."""
+    v = (stt or {}).get(ACCT_REFRESH_KEY)
+    v = v if isinstance(v, dict) else {}
+    on = bool(session['sw_acct_auto']) if 'sw_acct_auto' in session else bool(v.get('on', ACCT_AUTO_DEFAULT))
+    try:
+        every = int(session['sw_acct_every']) if 'sw_acct_every' in session else int(v.get('every') or ACCT_EVERY_DEFAULT)
+    except (TypeError, ValueError):
+        every = ACCT_EVERY_DEFAULT
+    return on, (every if every in ACCT_EVERY_CHOICES else ACCT_EVERY_DEFAULT)
+
+
+def account_read(cfg, c=None, now=None):
+    """한국투자 잔고를 **한 번** 읽는다(주문 없음) → (잔고 dict, None) 또는 (None, 사유). 장부 연결 `c` 가 있으면 스냅샷을 남길지
+    `swing_account.should_snapshot` 이 정한다(보유·현금이 바뀌면 바로 · 가격만 바뀌면 저장 간격마다 — 15초마다 쌓지 않는다 · 라운드 457).
+    화면·워커 밖에서 증권사를 부르는 자리는 여기와 시스템 → 설정의 '연결 확인' 둘뿐이다."""
     try:
         br = broker_kis.KisBroker(cfg)
         bal = br.get_balance()
@@ -145,7 +160,7 @@ def account_read(cfg, c=None):
         return None, f'{type(e).__name__}: {e}'
     if c is not None:
         try:
-            if _acc454.changed(L.last_account(c), bal):
+            if _acc454.should_snapshot(L.last_account(c), bal, now=now):
                 L.account_snapshot(c, br.env, bal)
         except Exception:                                      # noqa: BLE001 — 읽기 전용 장부면 스냅샷은 못 남긴다(화면 값은 그대로)
             pass
@@ -156,8 +171,8 @@ def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope='
     """계좌 판 — `st.fragment(run_every=…)` 로 **이 판만** 다시 그린다(자동 갱신이 켜졌을 때 · 꺼지면 run_every 없음).
     조각 안에서는 바깥의 장부 연결을 쓸 수 없으므로(조각만 돌 때 바깥 연결은 이미 닫혀 있다) 제 연결을 연다.
     scope — 'overview'(관제실: 타일·한눈에·구성·범위) · 'holdings'(포지션: 보유 표·참고 비교·최근 주문) · 라운드 455 의 갈래."""
-    auto_on = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)) and allow_write
-    every = int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT))
+    pref_on, every = acct_refresh_pref(st.session_state, stt)
+    auto_on = pref_on and allow_write
 
     @st.fragment(run_every=(f'{every}s' if auto_on else None))
     def _panel():
@@ -172,16 +187,22 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, sc
     h1, h2, h3, h4 = st.columns([2, 1.3, 1, 1.4])
     _ok454 = bool(cfg) and not cfg.get('missing') and not cfg.get('problems')
     h1.caption(('연결 정보 등록됨 · ' + broker_kis.config_summary(cfg)) if _ok454 else '연결 정보 없음 — 시스템 → 설정에서 넣으세요')
-    _auto_prev = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT))
+    _auto_prev, _every_prev = acct_refresh_pref(st.session_state, stt)
     _auto = h2.toggle('자동 갱신(잔고 읽기)', value=_auto_prev, key='sw_acct_auto_tgl', disabled=not (allow_write and _ok454),
-                      help='켜면 고른 간격마다 한국투자 잔고를 다시 읽습니다(주문은 안 합니다). 이 화면을 닫으면 멈춥니다.')
-    _every_prev = int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT))
-    _every = h3.selectbox('간격(초)', list(ACCT_EVERY_CHOICES), index=list(ACCT_EVERY_CHOICES).index(_every_prev)
-                          if _every_prev in ACCT_EVERY_CHOICES else 0, key='sw_acct_every_sel', disabled=not allow_write)
+                      help='켜면 고른 간격마다 한국투자 잔고를 다시 읽습니다(주문은 안 합니다). 이 화면을 닫으면 멈추고, 켠 상태는 이 PC 에 남습니다.')
+    _every = h3.selectbox('간격(초)', list(ACCT_EVERY_CHOICES), index=list(ACCT_EVERY_CHOICES).index(_every_prev),
+                          key='sw_acct_every_sel', disabled=not allow_write)
     _now_btn = h4.button('지금 새로고침(잔고 읽기)', key='sw_acct_now', disabled=not (allow_write and _ok454))
     if _auto != _auto_prev or int(_every) != _every_prev:
         st.session_state['sw_acct_auto'] = bool(_auto)
         st.session_state['sw_acct_every'] = int(_every)
+        if allow_write:                                        # 라운드 457 — 이 PC 장부에 남긴다(다시 띄워도 그대로)
+            try:
+                _cp = L.connect()
+                L.set_setting(_cp, ACCT_REFRESH_KEY, {'on': bool(_auto), 'every': int(_every)})
+                _cp.close()
+            except Exception:                                  # noqa: BLE001 — 못 남겨도 이 세션에서는 켜진다
+                pass
         st.rerun()                                             # run_every 는 조각을 다시 정의해야 바뀐다(앱 전체 한 번)
     c = None
     try:
@@ -190,7 +211,7 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, sc
         c = None
     try:
         live = st.session_state.get('sw_acct_live')
-        if allow_write and _ok454 and (_now_btn or (_auto and st.session_state.get('sw_acct_auto'))):
+        if allow_write and _ok454 and (_now_btn or _auto):
             with st.spinner('잔고 읽는 중 …'):
                 bal, err = account_read(cfg, c)
             if err:
@@ -210,8 +231,8 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, sc
         else:
             st.caption('아직 계좌를 읽은 적이 없습니다 — \'지금 새로고침\'이나 시스템 → 설정의 \'연결 확인\'을 누르면 채워집니다(주문은 안 합니다).')
             return
-        st.caption(f"{env_ko} · 자료 시각 {src}" + (f" · 자동 갱신 {st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)}초마다"
-                                              if st.session_state.get('sw_acct_auto') else ' · 자동 갱신 꺼짐'))
+        st.caption(f"{env_ko} · 자료 시각 {src}" + (f" · 자동 갱신 {_every_prev}초마다 켜짐(이 화면이 열려 있는 동안)"
+                                              if (_auto and allow_write) else ' · 자동 갱신 꺼짐'))
         s = _acc454.summarize(bal)
         if scope == 'overview':
             pn = s['pnl_sum']
@@ -555,8 +576,10 @@ def bar_items(ctx):
     else:
         wv, wt = '확인 불가', 'warn'
     live_n = sum(1 for p in ctx['plans_today'] if p.get('live_ok'))
+    ss = ctx.get('start') or {}
+    start_sub = (f"시작 조건 {ss['n_ok']}/{ss['n_items']} · " if ss.get('n_items') else '') + mode_label(mode, stt, n_prot)
     return [dict(label='한국투자', value=cv, tone=ct, sub=conn),
-            dict(label='신규 매수', value=('켜짐' if buy_on else '꺼짐'), tone=('pos' if buy_on else ''), sub=mode_label(mode, stt, n_prot)),
+            dict(label='신규 매수', value=('켜짐' if buy_on else '꺼짐'), tone=('pos' if buy_on else ''), sub=start_sub),
             dict(label='보호 매도', value=(f'{n_prot}종목' if n_prot else '없음'), tone=('warn' if (n_prot and ctx.get('pl')) else ''),
                  sub=('워커가 손절·목표를 관리' if n_prot else '자동 관리 중인 종목 없음')),
             dict(label='워커', value=wv, tone=wt, sub=(f"마지막 기록 {_ts(hb['ts'])}" if hb else '기록 없음')),
@@ -592,6 +615,8 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                live=st.session_state.get('sw_acct_live'), allow_write=allow_write, hold_levels=hold_levels, report=report,
                resolve_market=resolve_market, cost=_cost, intents=L.intents_with_state(c),
                approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
+    # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
+    ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
     # ── 지휘 띠(R456) — 짧은 값 · 긴급정지 토글은 한 곳(sw_kill) · 갈래 고르기
     st.markdown(_viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
     nc, kc = st.columns([5, 1.2])
@@ -637,17 +662,24 @@ def _uk_esc(s):
 def _view_center(st, uk, c, ctx, md):
     """관제실 — 열자마자 돈 · 위험 · 오늘 엔진 · 포지션 · 실행 상태가 보이게(외부 검토 §2). 전부 장부·잔고·운영 상태의 사실이다."""
     theme = ctx['theme']
+    # 라운드 457 — 사용자: "자동매매 언제 시작할지 딱 써놔야지". 관제실 맨 위 — 지금 상태 · 언제부터 · 실제 첫 매수의 조건 · 남은 일
+    try:
+        import proof as _pf457
+        _rl457 = _pf457.reco_line(_pf457.load_scorecard())
+    except Exception:                                          # noqa: BLE001 — 못 읽으면 그 한 줄만 빠진다
+        _rl457 = None
+    st.markdown(_viz.start_card(ctx['start'], theme=theme, reco_line=_rl457), unsafe_allow_html=True)
     sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['today'],
                              protection_warn=bool(ctx['pl']), ledger_ok=True)
     st.markdown(_viz.health_strip(sh, theme=theme, title='시스템 상태 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업'), unsafe_allow_html=True)
     _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']))
     s = _summary_now(ctx)
-    pts = _dash.equity_points(L.account_history(c))
+    pts = _dash.equity_points(_dash.daily_last(L.account_history(c, limit=20000)))
     its_today = [it for it in ctx['intents'] if it.get('trade_day') == str(ctx['today'])]
     n_new = sum(1 for it in its_today if it.get('side') == 'buy')
     a, b = st.columns([1.6, 1])
     with a:
-        _title(st, '자산 곡선 — 증권사 총평가·예수금(계좌를 읽을 때마다 한 점 · 수익률로 바꾸지 않는다)', theme)
+        _title(st, '자산 곡선 — 증권사 총평가·예수금(하루 마지막으로 읽은 값 한 점 · 수익률로 바꾸지 않는다)', theme)
         st.markdown(_viz.equity_curve(pts, theme=theme), unsafe_allow_html=True)
     with b:
         st.markdown(_viz.risk_bars(_dash.risk_usage(s or {}, ctx['stt'].get('limits'), managed_n=len(ctx['managed']), new_orders_today=n_new,
@@ -959,8 +991,8 @@ def _view_proof(st, uk, c, ctx, md):
 def _view_system(st, uk, c, ctx, md):
     """시스템 — 지금 진행 중인가 · 작업 스케줄러 · 설정(모드·한도·연결 정보·연결 확인·계획 갱신) · 먼저 알아 두실 것 · 운영 방법 · 제품 벤치마크."""
     theme = ctx['theme']
-    _auto454 = dict(on=bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)),
-                    every=int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)),
+    _on457, _every457 = acct_refresh_pref(st.session_state, ctx['stt'])
+    _auto454 = dict(on=(_on457 and ctx['allow_write']), every=_every457,
                     last=((st.session_state.get('sw_acct_live') or {}).get('ts') or '')[11:19] or None)
     _prog454 = _ops.progress(worker=ctx['worker'], tasks={_ops.TASK_NAME: ctx['task'], _ops.WATCH_TASK: _ops.scheduled_task(_ops.WATCH_TASK)},
                              nightly=ctx['nightly'], auto=_auto454)

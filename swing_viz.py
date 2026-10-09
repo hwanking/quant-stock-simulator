@@ -310,6 +310,28 @@ def waterfall(steps, theme='dark', width=560, height=170):
     return f"<svg width='100%' viewBox='0 0 {width} {height}' preserveAspectRatio='none' style='display:block; overflow:visible;'>{''.join(out)}</svg>"
 
 
+def start_card(ss, theme='dark', reco_line=None):
+    """자동매매 언제 시작하나(라운드 457) — `swing_dash.start_status` 의 결과를 그린다. 머리 한 줄 · 시작 · 실제 첫 매수 · 조건 목록
+    (통과 = 찬 점 · 미달 = 조치 필요 점) · 추천 빈도 한 줄(있으면). 날짜는 유도한 것만 · 판정 낱말 없음."""
+    t = _t(theme)
+    if not ss:
+        return f"<p style='margin:0; font-size:13px; color:{t['tx3']};'>시작 상태를 셈하지 못했습니다.</p>"
+    acc = t['pos'] if ss.get('live') else t['warn']
+    items = ''.join(
+        f"<div style='display:flex; align-items:flex-start; gap:8px; padding:5px 0; border-top:1px solid {t['line']};'>"
+        f"<span style='padding-top:3px;'>{state_mark('OK' if it['ok'] else 'ERROR', t)}</span>"
+        f"<span style='font-size:13px; color:{t['tx1']}; min-width:140px;'>{_e(it['label'])}</span>"
+        f"<span style='font-size:12px; color:{t['tx3']}; line-height:1.45;'>{_e('통과' if it['ok'] else '미달')} · {_e(it['why'])}</span></div>"
+        for it in ss.get('items') or [])
+    reco = (f"<p style='margin:8px 0 0 0; font-size:12px; color:{t['tx3']}; line-height:1.5;'>{_e(reco_line)}</p>" if reco_line else '')
+    return (f"<div style='background:{t['card']}; border-radius:18px; padding:16px 18px; border-left:3px solid {acc};'>"
+            f"<p style='margin:0; font-size:12px; color:{t['tx2']}; font-weight:500;'>자동매매 언제 시작하나</p>"
+            f"<p style='margin:4px 0 0 0; font-size:17px; font-weight:600; color:{t['tx1']};'>{_e(ss.get('headline'))}</p>"
+            f"<p style='margin:8px 0 0 0; font-size:13px; color:{t['tx1']}; line-height:1.55;'><b>시작</b> · {_e(ss.get('start'))}</p>"
+            f"<p style='margin:4px 0 8px 0; font-size:13px; color:{t['tx2']}; line-height:1.55;'>{_e(ss.get('first_buy'))}</p>"
+            f"{items}{reco}</div>")
+
+
 def kv_card(title, rows, theme='dark', accent=''):
     """작은 사실 카드 — rows: [(label, value, tone(선택))]. 관제실의 '실행 상태' · 'PROOF' · '최근 사건' 칸."""
     t = _t(theme)

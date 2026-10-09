@@ -5,8 +5,84 @@
 여기 수는 전부 이미 있는 자료에서 센 것이다(§3): 자산 곡선은 계좌 스냅샷 · 자산 구성은 잔고 + 장부 소유 · 위험 한도 사용은 ⑥의 한도 ·
 오늘 깔때기는 계획·승인·주문 · 실행 상태는 주문 사건 · 시스템 상태는 워커 잠금·작업 스케줄러·저녁 작업 기록. 못 세는 칸은 None.
 """
+import datetime as _dt
+
 import swing_executor as X
 import swing_ledger as L
+
+WEEK_KO = '월화수목금토일'
+
+
+def next_session_start(now, skip_today=False, max_days=20):
+    """now(한국 시각) 이후 가장 가까운 정규장 시작 → (날짜, 시작 시각) · 장중이면 오늘. skip_today 면 내일부터. 못 구하면 (None, None).
+    거래일은 장부의 달력 한 곳(`swing_executor.is_trading_day` → 휴장일 표) · 시각은 엔진 한 곳(`session_times` · 수능일 포함)."""
+    n = X.kst(now)
+    for i in range(1 if skip_today else 0, max_days):
+        d = n.date() + _dt.timedelta(days=i)
+        if not X.is_trading_day(d.isoformat()):
+            continue
+        op, cl = X._session_times(d)
+        if i == 0 and n.time() >= cl:
+            continue
+        return d, op
+    return None, None
+
+
+def _when(d, op):
+    return f"{d.isoformat()}({WEEK_KO[d.weekday()]}) {op.strftime('%H:%M')}" if d else None
+
+
+def start_status(mode, stt, cfg, task=None, worker=None, now=None):
+    """자동매매 언제 시작하나 (라운드 457) — 장부 설정 · 실전 준비 넷(`live_readiness`) · 운용 모드 · 워커 예약 작업 · 거래일 달력에서
+    **유도**한다. 실제 첫 매수 날짜는 말하지 않는다 — 중앙 판정이 추천을 언제 낼지는 아무도 모른다(§3). 판정 낱말 없음.
+    → dict(live, headline, start, first_buy, items=[{label, ok, why}], n_ok, n_items, missing)"""
+    now = now or X.now_kst()
+    items = [dict(label=n, ok=bool(ok), why=str(w)) for n, ok, w in X.live_readiness(cfg, stt)]
+    mko = {'OFF': '꺼짐', 'SHADOW': '기록만', 'PAPER': '모의투자', 'LIVE': '실전'}.get(mode, mode)
+    items.append(dict(label='운용 모드 실전', ok=(mode == 'LIVE'),
+                      why=('실전' if mode == 'LIVE' else f'지금 {mko} — 시스템 → 설정에서 실전으로 바꿉니다(위 넷이 다 통과해야 바뀝니다)')))
+    task_ok = bool(task and task.get('ok') and task.get('installed'))
+    items.append(dict(label='워커 예약 작업', ok=task_ok,
+                      why=(f"등록됨 · 다음 실행 {task.get('next_run') or '—'}" if task_ok else
+                           ((task or {}).get('reason') or '등록 안 됨 — scripts/register_swing_worker_task.ps1 을 한 번 돌립니다'))))
+    missing = [i for i in items if not i['ok']]
+    in_sess = X.session_open(now)
+    w_run = (worker or {}).get('running') is True
+    nxt = _when(*next_session_start(now))
+    nxt_after = _when(*next_session_start(now, skip_today=True))
+    live = not missing
+    if live:
+        headline = '실전 자동매매가 켜져 있습니다'
+        if in_sess and w_run:
+            start = '지금 — 워커가 돌고 있어 다음 바퀴(1분 안)부터 실주문 자격이 있는 계획을 냅니다'
+        elif in_sess:
+            start = (f'지금은 장중인데 워커가 돌고 있지 않습니다 — 직접 켜면 지금부터(python scripts/run_swing_worker.py --session --loop 60), '
+                     f'아니면 다음 장 {nxt_after}')
+        else:
+            start = f'다음 장 {nxt} — 그 전에 워커 예약 작업이 돌고 장이 열리면 주문합니다'
+    else:
+        headline = f'자동매매는 아직 시작하지 않았습니다 — 남은 일 {len(missing)}개'
+        if in_sess and w_run:
+            start = '남은 일을 채우면 지금(워커가 돌고 있어 다음 바퀴 · 1분 안)부터'
+        elif in_sess:
+            start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt_after}부터(오늘은 워커가 안 돌고 있습니다 · 직접 켜면 오늘부터)'
+        else:
+            start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt}부터' if nxt else '다음 장 날짜를 구하지 못했습니다(휴장일 표 밖)'
+    first = ("실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"
+             + (" · 주문 방식이 '계획마다 승인'이라 그 계획을 '오늘 계획'에서 승인해야 삽니다" if X.approval_of(stt) == 'approve' else '')
+             + '. 그 날짜는 미리 말할 수 없습니다 — 추천이 언제 나올지는 아무도 모릅니다.')
+    return dict(live=live, headline=headline, start=start, first_buy=first, items=items, n_ok=len(items) - len(missing),
+                n_items=len(items), missing=[i['label'] for i in missing], next_session=nxt)
+
+
+def daily_last(history):
+    """계좌 스냅샷 이력 → 하루 마지막 스냅샷 한 개씩(오래된 날부터) — 자산 곡선이 15초 갱신의 장중 흔들림에 묻히지 않게(라운드 457)."""
+    by = {}
+    for r in history or []:
+        k = str(r.get('ts') or '')[:10]
+        if k:
+            by[k] = r                                          # 오래된 것부터 들어오므로 마지막이 남는다
+    return [by[k] for k in sorted(by)]
 
 #: 깔때기 단계 이름 — 수는 부르는 쪽이 센다. '승인' 단계는 실전 승인형일 때만 뜻이 있다(아니면 자격 = 승인).
 FUNNEL_STAGES = ('후보', '실주문 자격', '승인', '주문 냄', '체결')
