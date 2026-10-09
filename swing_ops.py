@@ -22,7 +22,23 @@ RESULT_KO = {0: '정상 종료', 0x41301: '실행 중', 0x41303: '아직 돈 적
 _CACHE = {}
 _PS = ("$t = Get-ScheduledTask -TaskName '{name}' -ErrorAction SilentlyContinue; if ($t) {{ $i = $t | Get-ScheduledTaskInfo; "
        "[pscustomobject]@{{ State = [string]$t.State; NextRunTime = [string]$i.NextRunTime; LastRunTime = [string]$i.LastRunTime; "
-       "LastTaskResult = $i.LastTaskResult; NumberOfMissedRuns = $i.NumberOfMissedRuns }} | ConvertTo-Json -Compress }} else {{ 'ABSENT' }}")
+       "LastTaskResult = $i.LastTaskResult; NumberOfMissedRuns = $i.NumberOfMissedRuns; "
+       "Repeat = [string]$t.Triggers[0].Repetition.Interval }} | ConvertTo-Json -Compress }} else {{ 'ABSENT' }}")
+
+
+def iso_minutes(text):
+    """작업 스케줄러의 반복 간격(ISO 8601 기간 · 'PT10M' · 'PT1H' · 'P1D') → 분. 빈 글자 → 0(반복 없음) · 못 읽으면 None."""
+    import re
+    t = (text or '').strip() if isinstance(text, str) else None
+    if t is None:
+        return None
+    if t == '':
+        return 0
+    m = re.fullmatch(r'P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?', t)
+    if not m or not any(m.groups()):
+        return None
+    d, h, mi, sec = (int(g) if g else 0 for g in m.groups())
+    return d * 1440 + h * 60 + mi + (sec // 60)
 
 
 def _run_powershell(name, timeout=15):
@@ -40,10 +56,13 @@ def _run_powershell(name, timeout=15):
 
 
 def parse(text):
-    """PowerShell 응답 글자 → dict(installed, state, next_run, last_run, last_result, last_result_ko, missed) · 못 읽으면 None."""
+    """PowerShell 응답 글자 → dict(installed, state, next_run, last_run, last_result, last_result_ko, missed, repeat_min) · 못 읽으면 None.
+
+    repeat_min(라운드 462): 장중 반복 간격(분) · 0 = 반복 없음 · None = 응답에 그 칸이 없다(옛 응답 · 모른다 — '없음'이라 적지 않는다)."""
     s = (text or '').strip()
     if s == 'ABSENT':
-        return dict(installed=False, state=None, next_run=None, last_run=None, last_result=None, last_result_ko=None, missed=None)
+        return dict(installed=False, state=None, next_run=None, last_run=None, last_result=None, last_result_ko=None, missed=None,
+                    repeat_min=None)
     try:
         d = json.loads(s)
     except (TypeError, ValueError):
@@ -58,8 +77,9 @@ def parse(text):
     last = str(d.get('LastRunTime') or '')
     if last.startswith('11/30/1999') or last.startswith('1999-11-30'):
         last = None                                            # 작업 스케줄러가 '돈 적 없음'을 이 날짜로 적는다
+    rep = iso_minutes(d.get('Repeat')) if 'Repeat' in d else None
     return dict(installed=True, state=d.get('State'), next_run=(d.get('NextRunTime') or None), last_run=last,
-                last_result=code, last_result_ko=ko, missed=d.get('NumberOfMissedRuns'))
+                last_result=code, last_result_ko=ko, missed=d.get('NumberOfMissedRuns'), repeat_min=rep)
 
 
 def scheduled_task(name=TASK_NAME, runner=None, ttl=60, now=None):
@@ -100,6 +120,12 @@ def task_line(info):
         parts.append(f"마지막 결과 {info['last_result_ko']}")
     if info.get('missed'):
         parts.append(f"놓친 실행 {info['missed']}회")
+    rep = info.get('repeat_min')
+    if rep:                                                    # 라운드 462 — 장중에 죽어도 다시 뜨는가
+        parts.append(f"장중 {rep}분마다 다시 부름(돌고 있으면 건너뜀 — 워커가 죽어도 {rep}분 안에 다시 뜸)")
+    elif rep == 0:
+        parts.append("장중 다시 부르기 없음 — 워커가 장중에 죽으면 다음 평일 아침까지 다시 안 뜸"
+                     "(scripts/register_swing_worker_task.ps1 을 다시 돌리면 붙는다)")
     return ' · '.join(parts) + '. PC 가 꺼져 있거나 잠들어 있으면 이 작업도 돌지 않습니다(정규장 동안 절전을 끄세요).'
 
 

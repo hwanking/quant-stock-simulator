@@ -36410,9 +36410,13 @@ def _cycle438(do_shadow, allow_orders=True):
     return dict(mode='LIVE', anchor_day='2026-10-07', plans_new=0, shadow_updates=0, orders=[], exits=[], blocked=[], notes=[], alerts=[])
 
 
-_lock438, _runlog438 = _rw438.LOCK, _rw438.RUNLOG
+_lock438, _runlog438, _done438 = _rw438.LOCK, _rw438.RUNLOG, _rw438.DONE
 _rw438.LOCK = _os.path.join(PROJ, '_probe', '_r452_worker.lock')
 _rw438.RUNLOG = _os.path.join(PROJ, '_probe', '_r452_worker_run.txt')
+_rw438.DONE = _os.path.join(PROJ, '_probe', '_r452_worker_done.json')   # 라운드 462 — 끝낸 날 표시도 사용자 파일 밖으로
+for _f438 in (_rw438.DONE,):
+    if _os.path.exists(_f438):
+        _os.remove(_f438)
 _env438 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)       # 워커는 쓰기 금지면 바로 끝난다 — 이 시험은 잠금·기록을 _probe 로 돌렸다
 _had_db438 = _os.path.exists(__import__('swing_ledger').PATH)
 try:
@@ -36435,10 +36439,11 @@ try:
         check("④ --once 가 있으면 --session 과 무관하게 한 바퀴 · --session 에 --loop 가 없으면 종료 2(아무것도 안 한다)",
               _rc438o == 0 and len(_calls438) == 1 and _rc438n == 2 and len(_calls438) == 1, f'{_rc438o} {_rc438n} {_calls438}')
 finally:
-    _rw438.LOCK, _rw438.RUNLOG = _lock438, _runlog438
+    _rw438.LOCK, _rw438.RUNLOG, _rw438.DONE = _lock438, _runlog438, _done438
     if _env438 is not None:
         _os.environ['GAEUM_NO_LOCAL_WRITE'] = _env438
-    for _f438 in (_os.path.join(PROJ, '_probe', '_r452_worker.lock'), _os.path.join(PROJ, '_probe', '_r452_worker_run.txt')):
+    for _f438 in (_os.path.join(PROJ, '_probe', '_r452_worker.lock'), _os.path.join(PROJ, '_probe', '_r452_worker_run.txt'),
+                  _os.path.join(PROJ, '_probe', '_r452_worker_done.json')):
         if _os.path.exists(_f438):
             _os.remove(_f438)
 # ⑤⑥⑦ 글자 — 등록 스크립트 · 저녁 작업 · 화면 경고
@@ -37442,6 +37447,158 @@ _bks444 = open(_os.path.join(PROJ, 'broker_kis.py'), encoding='utf-8').read()
 check("④ 만료 코드는 ('EGW00123',) 하나(공식 샘플 근거가 소스 주석에) · _forget_token 은 저장소 안 token_dir 이면 파일을 안 지운다",
       _bk444.TOKEN_EXPIRED_CODES == ('EGW00123',) and 'current_price_samle.py' in _bks444
       and 'if not _inside_repo(self.token_dir):' in _bks444.split('def _forget_token', 1)[1].split('def _call', 1)[0])
+
+
+print()
+print("§445 워커가 장중에 죽어도 다시 뜬다 — 작업 스케줄러가 장중 반복으로 다시 부르고 · 마감 뒤 바퀴까지 성공한 날만 끝냈다고 적는다 (라운드 462)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   경쟁사 레이더의 '상시 실행·복구' 빈칸 — 종전에는 워커가 장중에 죽으면 다음 실행이 다음 평일 아침이라 그날 남은 시간 동안 관리 중
+#   종목의 손절 매도를 낼 주인이 없었다. ① 끝낸 날 표시는 왕복되고 못 읽으면 '안 끝냄'(다시 돈다) ② 마감 뒤 바퀴가 성공하면 그날을
+#   적는다 ③ 같은 날 다시 불리면 바퀴 0 ④ 마감 뒤 바퀴가 실패하면 안 적는다 ⑤ 다른 워커가 잡고 있어 못 돌았으면 안 적는다
+#   ⑥ 반복 간격(ISO 8601) 읽기 ⑦ 작업 상태 한 줄이 반복이 있나·없나·모르나를 가른다 ⑧ 등록 스크립트가 반복을 건다 ⑨ 레이더가
+#   그 사실을 적는다. 시계·sleep·바퀴는 끼워 넣고 잠금·실행 기록·표시는 _probe 아래로 돌린다(네트워크 0 · 사용자 파일 쓰기 0).
+import datetime as _dt445
+import importlib.util as _ilu445
+import json as _js445
+import swing_ops as _ops445
+_spec445 = _ilu445.spec_from_file_location('run_swing_worker_445', _os.path.join(PROJ, 'scripts', 'run_swing_worker.py'))
+_rw445 = _ilu445.module_from_spec(_spec445)
+_spec445.loader.exec_module(_rw445)
+_KST445 = _dt445.timezone(_dt445.timedelta(hours=9))
+_paths445 = dict(LOCK=_os.path.join(PROJ, '_probe', '_r462_worker.lock'), RUNLOG=_os.path.join(PROJ, '_probe', '_r462_worker_run.txt'),
+                 DONE=_os.path.join(PROJ, '_probe', '_r462_worker_done.json'))
+_orig445 = {k: getattr(_rw445, k) for k in _paths445}
+for _k445, _v445 in _paths445.items():
+    setattr(_rw445, _k445, _v445)
+    if _os.path.exists(_v445):
+        _os.remove(_v445)
+_env445 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+
+
+def _ticks445(*hm, day=(2026, 10, 12)):
+    it = iter([_dt445.datetime(*day, h, m, tzinfo=_KST445) for h, m in hm])
+    last = [None]
+
+    def clock():
+        try:
+            last[0] = next(it)
+        except StopIteration:
+            pass
+        return last[0]
+    return clock
+
+
+_calls445 = []
+
+
+def _cycle_ok445(do_shadow, allow_orders=True):
+    _calls445.append(do_shadow)
+    return dict(mode='OFF', anchor_day='2026-10-12', plans_new=0, shadow_updates=0, orders=[], exits=[], blocked=[], notes=[], alerts=[])
+
+
+def _runlog445():
+    try:
+        return open(_paths445['RUNLOG'], encoding='utf-8').read()
+    except OSError:
+        return ''
+
+
+try:
+    # ① 표시 왕복 · 다른 날 · 없는 파일 · 깨진 파일
+    _d445 = _os.path.join(PROJ, '_probe', '_r462_mark_probe.json')
+    _r1a = _rw445.session_done('2026-10-12', path=_d445 + '.none')
+    _rw445.mark_session_done('2026-10-12', _dt445.datetime(2026, 10, 12, 15, 31, tzinfo=_KST445), path=_d445)
+    _r1b = _rw445.session_done('2026-10-12', path=_d445)
+    _r1c = _rw445.session_done('2026-10-13', path=_d445)
+    with open(_d445, 'w', encoding='utf-8') as _f445:
+        _f445.write('{깨짐')
+    _r1d = _rw445.session_done('2026-10-12', path=_d445)
+    _os.remove(_d445)
+    check("① 끝낸 날 표시 — 적은 날은 참 · 다른 날·없는 파일·깨진 파일은 거짓(못 읽으면 다시 돈다)",
+          (_r1a, _r1b, _r1c, _r1d) == (False, True, False, False), f'{(_r1a, _r1b, _r1c, _r1d)}')
+    _had_db445 = _os.path.exists(__import__('swing_ledger').PATH)
+    if not _had_db445:
+        skipped("②~⑤ --session 표시", "이 PC 에 스윙 장부가 없다 — 워커는 장부가 없으면 할 일이 없다고 끝난다")
+    else:
+        # ② 정상 하루 — 머리 08:55 · 바퀴 09:00 · 15:31(마감 뒤) → 바퀴 2 · 그날을 적는다
+        _rc2 = _rw445.main(['--session', '--loop', '60'], clock=_ticks445((8, 55), (9, 0), (15, 31)), sleeper=lambda s: None,
+                           cycle=_cycle_ok445)
+        _done2 = _js445.load(open(_paths445['DONE'], encoding='utf-8'))
+        check("② 마감 뒤 바퀴까지 성공한 날 → 바퀴 2 · 그날(2026-10-12)을 끝냈다고 적는다",
+              _rc2 == 0 and len(_calls445) == 2 and _done2.get('day') == '2026-10-12' and '끝냈다고 적었다' in _runlog445(),
+              f'rc={_rc2} calls={_calls445} done={_done2}')
+        # ③ 같은 날 작업 스케줄러가 다시 부름(15:40) → 바퀴 0
+        _calls445.clear()
+        _rc3 = _rw445.main(['--session', '--loop', '60'], clock=_ticks445((15, 40)), sleeper=lambda s: None, cycle=_cycle_ok445)
+        check("③ 같은 날 다시 불리면 바퀴 0 · 종료 0 · '이미 끝냈다'를 남긴다",
+              _rc3 == 0 and _calls445 == [] and '이미 끝냈다' in _runlog445(), f'rc={_rc3} calls={_calls445}')
+        # ③' 장중에 다시 불림(죽은 뒤 · 표시 없음) → 정상으로 돈다
+        _calls445.clear()
+        _rc3b = _rw445.main(['--session', '--loop', '60'], clock=_ticks445((11, 20), (11, 21), (15, 31), day=(2026, 10, 13)),
+                            sleeper=lambda s: None, cycle=_cycle_ok445)
+        _done3b = _js445.load(open(_paths445['DONE'], encoding='utf-8'))
+        check("③' 장중에 다시 불리면(그날 표시 없음) 마감까지 돌고 그날을 적는다 — 죽은 워커의 빈자리를 다음 반복이 메운다",
+              _rc3b == 0 and len(_calls445) == 2 and _done3b.get('day') == '2026-10-13', f'rc={_rc3b} calls={_calls445} done={_done3b}')
+        # ④ 마감 뒤 바퀴가 실패 → 안 적는다
+        _n4 = [0]
+
+        def _cycle_fail_last445(do_shadow, allow_orders=True):
+            _n4[0] += 1
+            if _n4[0] >= 2:
+                raise RuntimeError('심은 실패')
+            return _cycle_ok445(do_shadow, allow_orders)
+        _rc4 = _rw445.main(['--session', '--loop', '60'], clock=_ticks445((9, 0), (9, 1), (15, 31), day=(2026, 10, 14)),
+                           sleeper=lambda s: None, cycle=_cycle_fail_last445)
+        check("④ 마감 뒤 바퀴가 실패하면 그날을 적지 않는다(다시 불리면 한 번 더 맞춘다)",
+              _rc4 == 0 and not _rw445.session_done('2026-10-14') and '끝냈다고 적지 않는다' in _runlog445(),
+              f'rc={_rc4} n={_n4} done={_js445.load(open(_paths445["DONE"], encoding="utf-8"))}')
+        # ⑤ 다른 워커가 잠금을 쥐고 있어 마감 뒤 바퀴를 못 돌았다 → 안 적는다(살아 있는 pid = 이 프로세스)
+        with open(_paths445['LOCK'], 'w', encoding='utf-8') as _f445:
+            _f445.write(f'{_os.getpid()} 2026-10-15T15:30:00')
+        _calls445.clear()
+        _rc5 = _rw445.main(['--session', '--loop', '60'], clock=_ticks445((15, 31), day=(2026, 10, 15)), sleeper=lambda s: None,
+                           cycle=_cycle_ok445)
+        check("⑤ 다른 워커가 잡고 있어 못 돌았으면 그날을 적지 않는다 · 바퀴 0",
+              _rc5 == 0 and _calls445 == [] and not _rw445.session_done('2026-10-15'), f'rc={_rc5} calls={_calls445}')
+finally:
+    for _k445, _v445 in _orig445.items():
+        setattr(_rw445, _k445, _v445)
+    if _env445 is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _env445
+    for _v445 in list(_paths445.values()) + [_paths445['DONE'] + '.tmp']:
+        if _os.path.exists(_v445):
+            _os.remove(_v445)
+# ⑥ 반복 간격 읽기
+_iso445 = [_ops445.iso_minutes(x) for x in ('PT10M', 'PT1H', 'PT1H30M', 'P1D', '', 'garbage', None, 'P')]
+check("⑥ 반복 간격(ISO 8601) — PT10M 10 · PT1H 60 · PT1H30M 90 · P1D 1440 · 빈 글자 0(반복 없음) · 못 읽으면 None",
+      _iso445 == [10, 60, 90, 1440, 0, None, None, None], f'{_iso445}')
+# ⑦ 작업 상태 한 줄 — 반복 있음 · 없음 · 모름(옛 응답)
+_base445 = '{"State":"Ready","NextRunTime":"10/12/2026 08:50:00","LastRunTime":"10/09/2026 08:50:00","LastTaskResult":0,"NumberOfMissedRuns":0'
+_p10 = _ops445.parse(_base445 + ',"Repeat":"PT10M"}')
+_p0 = _ops445.parse(_base445 + ',"Repeat":""}')
+_pn = _ops445.parse(_base445 + '}')
+_l10, _l0, _ln = (_ops445.task_line(dict(x, ok=True)) for x in (_p10, _p0, _pn))
+check("⑦ 작업 상태 한 줄 — 반복 10분이면 '10분 안에 다시 뜸' · 반복 없음이면 '다음 평일 아침' · 응답에 칸이 없으면 둘 다 말하지 않는다",
+      _p10['repeat_min'] == 10 and _p0['repeat_min'] == 0 and _pn['repeat_min'] is None
+      and '10분 안에 다시 뜸' in _l10 and '다음 평일 아침' in _l0 and '다시 뜸' not in _ln and '다음 평일 아침' not in _ln
+      and 'ABSENT' not in _l10 and _ops445.parse('ABSENT')['repeat_min'] is None, f'{_l10} | {_l0} | {_ln}')
+check("⑦' 작업 상태 읽기가 반복 간격 칸을 묻는다(Triggers[0].Repetition.Interval)", 'Repetition.Interval' in _ops445._PS)
+# ⑧ 등록 스크립트
+_ps445 = open(_os.path.join(PROJ, 'scripts', 'register_swing_worker_task.ps1'), encoding='utf-8').read()
+check("⑧ 등록 스크립트가 장중 반복을 건다 — 기본 10분 · 8시간(08:50 → 16:50 · 수능일 마감 16:30 포함) · 돌고 있으면 새로 안 띄움(IgnoreNew) · 0 이면 반복 없음",
+      '[int]$EveryMinutes = 10' in _ps445 and '[int]$ForHours = 8' in _ps445 and '-RepetitionInterval' in _ps445
+      and '$Trigger.Repetition' in _ps445 and 'IgnoreNew' in _ps445 and 'if ($EveryMinutes -gt 0)' in _ps445
+      and '--session --loop 60' in _ps445)
+check("⑧' 등록 시각이 오늘 반복 창을 지났으면 시작점을 다음 날로 — 지난 반복 칸이 '놓친 실행'으로 세어지지 않게(휴장일 저녁 47회)",
+      '$WindowEnd' in _ps445 and '$AtToday.AddDays(1)' in _ps445 and '-At $StartAt' in _ps445 and '-Once -At $StartAt' in _ps445)
+# ⑨ 레이더
+_cr445 = _js445.load(open(_os.path.join(PROJ, 'data', 'competitor_radar.json'), encoding='utf-8'))
+_up445 = [it for it in _cr445.get('items') or [] if it.get('dimension') == 'uptime_recovery']
+check("⑨ 경쟁사 레이더가 그 사실을 적는다 — 가늠 칸에 장중 반복 · 차이는 'PC 에 묶임'으로 좁혀졌고 상태는 그대로 '부분'(꺼진 PC 는 못 돈다)",
+      '10분' in (_cr445['ganeum']['uptime_recovery'].get('note') or '') and _cr445['ganeum']['uptime_recovery'].get('state') == '부분'
+      and bool(_up445) and all('10분' in (it.get('gap') or '') and it.get('ganeum_state') == '부분' for it in _up445),
+      f"{_cr445['ganeum']['uptime_recovery']} · {[it.get('gap') for it in _up445]}")
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

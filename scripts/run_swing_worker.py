@@ -17,10 +17,18 @@
 Claude 예약 작업이 아니다). 설정 화면의 모드가 꺼짐이면 **새 매수**는 없다 — 다만 자동 관리 중인 종목이 있으면 그 보호(손절·기간
 만료·목표 지정가)는 모드와 무관하게 계속한다(라운드 453). 그래서 등록돼 있어도 관리 중 종목이 없고 모드가 꺼짐이면 아무 일도 없다.
 자격증명은 저장소 밖(환경변수 또는 ~/.gaeum/kis.env)에서만 읽는다. 쓰기 금지(GAEUM_NO_LOCAL_WRITE=1)면 장부를 안 열고 끝난다.
+
+라운드 462 — **장중에 죽어도 다시 뜬다.** 종전에는 워커 프로세스가 장중에 죽으면(전원·절전 복귀 실패·강제 종료) 다음 실행이
+작업 스케줄러의 다음 평일 아침이라, 그날 남은 시간 동안 관리 중 종목의 손절 매도를 낼 주인이 없었다(경쟁사 레이더의 '상시 실행·복구'
+빈칸). 이제 등록 스크립트가 장중에 작업을 일정 간격으로 다시 부르고(돌고 있으면 작업 스케줄러가 새로 띄우지 않는다), 워커는 마감 뒤
+바퀴까지 **성공한** 날을 `.portfolio/swing_worker_session.json` 에 적어 그 뒤에 불리면 바로 끝난다. 마감 뒤 바퀴가 실패했거나 다른 워커가
+잡고 있었으면 적지 않는다 — 다시 불리면 한 번 더 맞춘다(한 바퀴 더 도는 쪽이 보호를 놓치는 쪽보다 낫다). 다시 떠도 주문은 다시 보내지
+않는다(라운드 446 — UNKNOWN 은 체결 내역으로 맞춘다).
 """
 import argparse
 import datetime as _dt
 import io
+import json
 import os
 import sys
 import time
@@ -31,6 +39,8 @@ if PROJ not in sys.path:
 
 LOCK = os.path.join(PROJ, '.portfolio', 'swing_worker.lock')
 RUNLOG = os.path.join(PROJ, '.portfolio', 'swing_worker_run.txt')
+#: 마감 뒤 바퀴까지 끝낸 날(라운드 462) — 작업 스케줄러가 장중에 다시 불러도 그날은 다시 안 돈다
+DONE = os.path.join(PROJ, '.portfolio', 'swing_worker_session.json')
 
 
 def _utf8():
@@ -91,6 +101,27 @@ def release_lock(path=LOCK):
             os.remove(path)
     except (OSError, ValueError):
         pass
+
+
+def session_done(day, path=None):
+    """그날(`day` · 'YYYY-MM-DD') 세션을 마감 뒤 바퀴까지 끝냈다고 적혀 있나. 못 읽으면 False — 다시 돈다(라운드 462).
+    경로는 부를 때 모듈의 `DONE` 을 읽는다(시험이 바꿔 끼운다 · 기본 인자에 묶지 않는다)."""
+    try:
+        with io.open(path or DONE, encoding='utf-8') as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(d, dict) and d.get('day') == day
+
+
+def mark_session_done(day, now, path=None):
+    """그날 세션을 끝냈다고 적는다(임시 파일 → 바꿔 끼움). 실패는 OSError 로 올린다 — 부르는 쪽이 사유를 남긴다."""
+    p = path or DONE
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + '.tmp'
+    with io.open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(dict(day=day, ended=now.isoformat(timespec='seconds')), f, ensure_ascii=False)
+    os.replace(tmp, p)
 
 
 def _bars_fn():
@@ -211,6 +242,7 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
         return 0
     loop = a.loop > 0 and not a.once
     end = None
+    day = None
     if a.session and loop:
         n0 = clock()
         win = session_window(n0)
@@ -218,12 +250,18 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
             _log(f'[{n0:%m-%d %H:%M:%S}] 휴장일 — 워커를 안 돌린다')
             return 0
         end = win[1]
+        day = win[0].date().isoformat()                         # 한국 시각의 그날(session_window 가 KST 로 만든다)
+        if session_done(day):                                   # 라운드 462 — 작업 스케줄러가 장중 반복으로 다시 불렀다
+            _log(f'[{n0:%m-%d %H:%M:%S}] {day} 세션은 마감 뒤 바퀴까지 이미 끝냈다 — 다시 안 돈다')
+            return 0
         _log(f'[{n0:%m-%d %H:%M:%S}] 정규장 {win[0]:%H:%M}~{win[1]:%H:%M} — 마감까지 {a.loop}초마다 돌고 마감 뒤 한 바퀴 더')
     last_shadow_day = None
+    last_ok = False                                             # 이번 바퀴가 끝까지 돌았나(라운드 462 — 끝낸 날 표시의 조건)
     while True:
         now = clock()
         past_close = end is not None and now >= end
         if not acquire_lock(LOCK):
+            last_ok = False
             _log(f'[{now:%m-%d %H:%M:%S}] 다른 워커가 돌고 있다 — 이번 바퀴는 건너뛴다'
                  + (f' · {a.loop}초 뒤 다시' if loop else ''))
         else:
@@ -238,7 +276,9 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
                      f"막힘 {len(out['blocked'])} · 경고 {len(out.get('alerts') or [])}")
                 for n in (out.get('alerts') or []) + out['notes'] + out['blocked']:
                     _log('   ' + n)
+                last_ok = True
             except Exception as e:                             # noqa: BLE001 — 한 바퀴가 죽어도 다음 바퀴는 돈다
+                last_ok = False
                 _log(f'[{now:%m-%d %H:%M:%S}] 바퀴 실패 — {type(e).__name__}: {e}')
             finally:
                 release_lock(LOCK)
@@ -250,7 +290,16 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
                     _log(f'[{now:%m-%d %H:%M:%S}] 계좌 스냅샷 실패 — {type(e).__name__}: {e}')
             break
         if past_close:
-            _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 한 바퀴를 돌았다 — 끝')
+            if last_ok:
+                try:
+                    mark_session_done(day, now)
+                    _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 한 바퀴를 돌았다 — 끝 · {day} 세션을 끝냈다고 적었다(다시 불려도 안 돈다)')
+                except OSError as e:
+                    _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 한 바퀴를 돌았다 — 끝 · 끝냈다는 표시를 못 적었다({type(e).__name__}: {e})'
+                         ' — 다시 불리면 한 번 더 맞춘다')
+            else:
+                _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 바퀴가 끝까지 돌지 못했다(실패 또는 다른 워커가 잡고 있음) — 끝냈다고 적지 않는다'
+                     ' · 작업 스케줄러가 다시 부르면 한 번 더 맞춘다')
             break
         sleeper(a.loop)
     return 0
