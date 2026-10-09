@@ -35776,7 +35776,8 @@ import scripts.nightly_local as _nl432                               # noqa: E40
 _sw432 = [s for s in _nl432.plan_steps(False) if s[1][0].replace('\\', '/').endswith('run_swing_worker.py')]
 check("⑭' 주문 없이 도는 바퀴(allow_orders=False)는 장중·실전·자격 있는 계획이어도 주문 0 · 저녁 작업은 그 길(--no-orders)로 부른다",
       _fb.placed == [] and _on432['plans_new'] == 1 and len(_sw432) == 1
-      and _sw432[0][1][1:] == ['--once', '--no-orders'], str((_fb.placed, _sw432)))
+      # 라운드 458 — 저녁 작업은 그 뒤에 잔고 한 번(--snapshot · 주문 없음 · 자산 곡선의 하루 한 점)을 더 읽는다
+      and _sw432[0][1][1:3] == ['--once', '--no-orders'] and '--snapshot' in _sw432[0][1], str((_fb.placed, _sw432)))
 # ⑮ 재시작 맞추기 — 보내는 중에 멈춘(SUBMITTING) 의도를 내역으로 체결까지
 _c, _fb = _db432(), _FakeBroker432()
 _sl432.add_plan(_c, _pl_ok)
@@ -37270,6 +37271,92 @@ finally:
                 _os.remove(_f442)
             except OSError:
                 pass
+
+
+print("§443 계좌 스냅샷은 한 규칙 — 화면 15초·워커 60초·저녁 작업 모두 should_snapshot · 새 날 첫 값은 남긴다 · 저녁 작업이 하루 한 점 · 지휘 띠는 낡은 시각 대신 갱신 사실 (라운드 458)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   ① 실행부가 워커 바퀴(60초)마다 계좌 스냅샷을 무조건 쌓았다 — 실전이면 장중 하루 390행(보유 JSON 까지). 화면 15초 갱신과 같은 규칙
+#   한 곳(should_snapshot)으로. ② 화면을 안 연 날은 자산 곡선에 점이 없었다 — 저녁 작업이 잔고를 한 번 읽는다(--snapshot · 주문 없음 ·
+#   연결 정보가 없으면 증권사를 안 부른다). 새 날 첫 값은 같은 값이어도 남긴다(하루 한 점). ③ 지휘 띠의 '동기화' 시각은 조각 밖이라 15초
+#   갱신을 못 따라갔다 — 자동 갱신이 켜져 있으면 시각 대신 그 사실을 적는다. 네트워크 0 · 사용자 파일 0.
+import datetime as _dt443
+import importlib.util as _ilu443
+import swing_account as _ac443
+import swing_ledger as _sl443
+import swing_view as _sv443
+_K443 = _dt443.timezone(_dt443.timedelta(hours=9))
+_b443 = dict(positions=[dict(code='000001', qty=10, avg_price=1000.0, price=1200.0)], cash=5000.0, cash_d2=5000.0, total_eval=17000.0,
+             stock_eval=12000.0)
+_p443 = dict(_b443, ts='2026-10-12T15:50:00+09:00')
+# ① 새 날 규칙 — 같은 값이어도 다음 날이면 남긴다 · 같은 날 같은 값은 안 남긴다 · 시각을 못 읽으면 남긴다
+check("① should_snapshot — 같은 값 · 같은 날(15:55) → 안 남김 · 같은 값 · 다음 날(10-13 17:00) → 남김(하루 한 점) · 자정 넘김(00:01) → 남김",
+      _ac443.should_snapshot(_p443, dict(_b443), now=_dt443.datetime(2026, 10, 12, 15, 55, tzinfo=_K443)) is False
+      and _ac443.should_snapshot(_p443, dict(_b443), now=_dt443.datetime(2026, 10, 13, 17, 0, tzinfo=_K443)) is True
+      and _ac443.should_snapshot(_p443, dict(_b443), now=_dt443.datetime(2026, 10, 13, 0, 1, tzinfo=_K443)) is True)
+# ② 실행부 — 같은 바퀴를 두 번 돌려도(같은 날 · 같은 잔고) 스냅샷은 하나 · 보유가 바뀌면 하나 더
+_c443, _fb443 = _db432(mode='OFF'), _FakeBroker432(holdings={'000555': dict(qty=5, avg=5000, price=5000)})
+_sx432.adopt(_c443, '000555', 5, 6000, 4000, by_user=True)              # 꺼짐이어도 보호 바퀴가 증권사를 부른다(라운드 453)
+_now443 = _dt443.datetime.now(_K443).replace(hour=10, minute=0, second=0, microsecond=0)
+
+
+def _n_snap443(c):
+    return c.execute('SELECT COUNT(*) FROM account_snapshots').fetchone()[0]
+_cyc432(_c443, _fb443, rep={}, now=_now443)
+_n1 = _n_snap443(_c443)
+_cyc432(_c443, _fb443, rep={}, now=_now443 + _dt443.timedelta(minutes=1))
+_n2 = _n_snap443(_c443)
+_fb443.hold['000555']['qty'] = 4                                       # 밖에서 1주 팔았다(구조 변화)
+_cyc432(_c443, _fb443, rep={}, now=_now443 + _dt443.timedelta(minutes=2))
+_n3 = _n_snap443(_c443)
+_xs443 = open(_os.path.join(PROJ, 'swing_executor.py'), encoding='utf-8').read()
+check("② 실행부 — 같은 날 같은 잔고로 두 바퀴 → 스냅샷 1 · 보유 수량이 바뀌면 2 · 무조건 쌓던 줄(L.account_snapshot(c, broker.env, bal) 맨줄)이 should_snapshot 뒤로",
+      (_n1, _n2, _n3) == (1, 1, 2) and 'should_snapshot(L.last_account(c), bal, now=now)' in _xs443, str((_n1, _n2, _n3)))
+# ③ 저녁 작업의 하루 한 점 — 끼워 넣은 가짜 증권사로(네트워크 0): 연결 정보 없으면 증권사를 안 부른다 · 처음엔 남긴다 · 같은 날 다시는 안 남긴다 ·
+#    잔고를 못 읽으면 사유(예외를 안 던진다) · 저녁 작업 단계가 --snapshot 을 넘긴다
+_spec443 = _ilu443.spec_from_file_location('_rw443', _os.path.join(PROJ, 'scripts', 'run_swing_worker.py'))
+_rw443 = _ilu443.module_from_spec(_spec443)
+_spec443.loader.exec_module(_rw443)
+_mem443 = _sl443.connect(':memory:')
+
+
+class _NoClose443:
+    def __init__(self, c):
+        self._c = c
+
+    def __getattr__(self, k):
+        return getattr(self._c, k)
+
+    def close(self):
+        pass
+_called443 = []
+
+
+class _BrokerFail443:
+    def __init__(self, cfg):
+        _called443.append('fail')
+        raise RuntimeError('boom')
+_r_none = _rw443.account_snapshot_once(loader=lambda: dict(missing=['KIS_APP_KEY']), broker_cls=lambda cfg: _called443.append('x'),
+                                       connect=lambda: _NoClose443(_mem443))
+_r1 = _rw443.account_snapshot_once(loader=lambda: _CFG432, broker_cls=lambda cfg: _FakeBroker432(), connect=lambda: _NoClose443(_mem443),
+                                   now=_dt443.datetime.now().astimezone())
+_r2 = _rw443.account_snapshot_once(loader=lambda: _CFG432, broker_cls=lambda cfg: _FakeBroker432(), connect=lambda: _NoClose443(_mem443),
+                                   now=_dt443.datetime.now().astimezone())
+_r3 = _rw443.account_snapshot_once(loader=lambda: _CFG432, broker_cls=_BrokerFail443, connect=lambda: _NoClose443(_mem443))
+_nl443 = __import__('scripts.nightly_local', fromlist=['plan_steps'])
+_swst443 = [s for s in _nl443.plan_steps(False) if s[1][0].replace('\\', '/').endswith('run_swing_worker.py')]
+check("③ 저녁 작업 하루 한 점 — 연결 정보 없음 → '건너뜀'(증권사 안 부름) · 처음 → '남겼다' · 같은 날 다시 → '안 남겼다' · 못 읽음 → 사유 · 단계가 --snapshot 을 넘긴다",
+      '건너뜀' in _r_none and 'x' not in _called443 and '남겼다' in _r1 and '안 남겼다' in _r2
+      and _mem443.execute('SELECT COUNT(*) FROM account_snapshots').fetchone()[0] == 1 and 'RuntimeError: boom' in _r3
+      and len(_swst443) == 1 and '--snapshot' in _swst443[0][1], str((_r_none, _r1, _r2, _r3, _swst443)))
+_mem443.close()
+# ④ 지휘 띠 — 자동 갱신이 켜져 있으면 '한국투자' 아래 글자가 낡은 시각 대신 '자동 갱신 15초 · 시각은 아래 계좌 칸' · 꺼져 있으면 종전 '동기화 …'
+_ctx443 = dict(cfg=_CFG432, acct=dict(env='real', ts='2026-10-09T09:30:06+09:00'), mode='OFF', stt={}, managed={}, releasing={}, worker={},
+               task={}, hb=None, plans_today=[], today='2026-10-09', start={})
+check("④ 지휘 띠 — 자동 갱신 켬 → '자동 갱신 15초 · 시각은 아래 계좌 칸' · 끔 → '실계좌 · 동기화 2026-10-09 09:30' · 연결 정보 없으면 켜져 있어도 '정보 없음'",
+      _sv443.bar_items(dict(_ctx443, auto_refresh=(True, 15)))[0]['sub'] == '자동 갱신 15초 · 시각은 아래 계좌 칸'
+      and _sv443.bar_items(dict(_ctx443, auto_refresh=(False, 15)))[0]['sub'] == '실계좌 · 동기화 2026-10-09 09:30'
+      and _sv443.bar_items(dict(_ctx443, cfg={'missing': ['x']}, auto_refresh=(True, 15)))[0]['sub'] == '정보 없음')
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

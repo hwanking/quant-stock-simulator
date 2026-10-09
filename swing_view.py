@@ -576,6 +576,10 @@ def bar_items(ctx):
     else:
         wv, wt = '확인 불가', 'warn'
     live_n = sum(1 for p in ctx['plans_today'] if p.get('live_ok'))
+    # 라운드 458 — 15초 자동 갱신이 켜져 있으면 이 띠의 시각은 화면 전체가 다시 그려질 때만 바뀐다(조각 밖) → 시각 대신 갱신 사실을 적는다
+    _ar = ctx.get('auto_refresh')
+    if _ar and _ar[0] and cv == '정상':
+        conn = f"자동 갱신 {_ar[1]}초 · 시각은 아래 계좌 칸"
     ss = ctx.get('start') or {}
     start_sub = (f"시작 조건 {ss['n_ok']}/{ss['n_items']} · " if ss.get('n_items') else '') + mode_label(mode, stt, n_prot)
     return [dict(label='한국투자', value=cv, tone=ct, sub=conn),
@@ -617,6 +621,8 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
     # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
     ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
+    _ar458 = acct_refresh_pref(st.session_state, stt)
+    ctx['auto_refresh'] = (_ar458[0] and allow_write, _ar458[1])
     # ── 지휘 띠(R456) — 짧은 값 · 긴급정지 토글은 한 곳(sw_kill) · 갈래 고르기
     st.markdown(_viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
     nc, kc = st.columns([5, 1.2])

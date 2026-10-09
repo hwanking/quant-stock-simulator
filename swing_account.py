@@ -149,15 +149,12 @@ def _structure_key(b):
 
 
 def should_snapshot(prev_snap, bal, now=None, every_sec=SNAPSHOT_PRICE_EVERY_SEC):
-    """장부에 스냅샷을 남길지 — 이전이 없거나 · 보유(종목·수량·평단)·현금이 바뀌었거나 · 가격·평가만 바뀌었는데 마지막 스냅샷이
-    every_sec 보다 오래됐으면 True. 값이 하나도 안 바뀌면 False. 마지막 시각을 못 읽으면 바뀐 것만 보고 남긴다(덜 남기는 쪽으로 틀리지 않게)."""
+    """장부에 스냅샷을 남길지 — 이전이 없거나 · 마지막 스냅샷이 **다른 날**이거나(자산 곡선의 하루 한 점 · 라운드 458) · 보유(종목·
+    수량·평단)·현금이 바뀌었거나 · 가격·평가만 바뀌었는데 마지막 스냅샷이 every_sec 보다 오래됐으면 True. 같은 날 값이 하나도 안 바뀌면
+    False. 마지막 시각을 못 읽으면 남긴다(덜 남기는 쪽으로 틀리지 않게)."""
     import datetime as _dt
     if not prev_snap:
         return True
-    if _structure_key(prev_snap) != _structure_key(bal):
-        return True
-    if not changed(prev_snap, bal):
-        return False
     try:
         t0 = _dt.datetime.fromisoformat(str(prev_snap.get('ts')))
         n = now or _dt.datetime.now().astimezone()
@@ -165,9 +162,15 @@ def should_snapshot(prev_snap, bal, now=None, every_sec=SNAPSHOT_PRICE_EVERY_SEC
             t0 = t0.astimezone()
         if n.tzinfo is None:
             n = n.astimezone()
-        return (n - t0).total_seconds() >= every_sec
     except (TypeError, ValueError):
         return True
+    if t0.astimezone(n.tzinfo).date() != n.date():
+        return True
+    if _structure_key(prev_snap) != _structure_key(bal):
+        return True
+    if not changed(prev_snap, bal):
+        return False
+    return (n - t0).total_seconds() >= every_sec
 
 
 def changed(prev_bal, bal):

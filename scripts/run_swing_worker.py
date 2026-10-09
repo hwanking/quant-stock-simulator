@@ -136,6 +136,31 @@ def one_cycle(do_shadow, allow_orders=True):
         c.close()
 
 
+def account_snapshot_once(now=None, loader=None, broker_cls=None, connect=None):
+    """잔고를 **한 번** 읽어 장부에 남긴다(주문 없음 · 라운드 458) — 저녁 작업이 부른다(`--snapshot`). 화면을 안 연 날에도 자산 곡선에 그날
+    점이 생기게. 남길지는 화면·워커와 같은 규칙(`swing_account.should_snapshot` · 새 날이면 남긴다). 연결 정보가 없으면 증권사를 안 부른다.
+    → 한 줄 문장(로그). 실패는 사유와 함께 돌려준다(예외를 던지지 않는다 — 저녁 작업의 다른 단계를 막지 않게)."""
+    import broker_kis
+    import swing_account as A
+    import swing_ledger as L
+    cfg = (loader or broker_kis.load_config)()
+    if not cfg or cfg.get('missing') or cfg.get('problems'):
+        return '계좌 스냅샷 — 연결 정보가 없어 건너뜀(증권사를 안 불렀다)'
+    try:
+        br = (broker_cls or broker_kis.KisBroker)(cfg)
+        bal = br.get_balance()
+    except Exception as e:                                     # noqa: BLE001
+        return f'계좌 스냅샷 — 잔고를 못 읽었다: {type(e).__name__}: {e}'
+    c = (connect or L.connect)()
+    try:
+        if A.should_snapshot(L.last_account(c), bal, now=now):
+            L.account_snapshot(c, br.env, bal)
+            return f"계좌 스냅샷 — 남겼다(보유 {len(bal.get('positions') or [])}종목)"
+        return '계좌 스냅샷 — 오늘 같은 값이 이미 있어 안 남겼다'
+    finally:
+        c.close()
+
+
 def session_window(now):
     """오늘 정규장 (시작, 마감) 시각 — 엔진 한 곳(`bitemporal_engine.session_times` · 수능일 10:00~16:30 포함 · 라운드 448).
     휴장일이면 None. 시각은 한국 시각으로 견준다."""
@@ -170,6 +195,8 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
                     help='주문을 내지 않는다 — 계획·모의·체결 내역·계좌 맞춤만(저녁 작업이 쓴다)')
     ap.add_argument('--session', action='store_true',
                     help='오늘 정규장 마감까지 --loop 간격으로 돌고, 마감 뒤 한 바퀴(체결 내역 맞춤) 더 돌고 끝난다 — 작업 스케줄러용')
+    ap.add_argument('--snapshot', action='store_true',
+                    help='바퀴 뒤에 잔고를 한 번 읽어 장부에 남긴다(주문 없음 · 자산 곡선의 하루 한 점 · 저녁 작업이 쓴다)')
     a = ap.parse_args(argv)
     if a.session and a.loop <= 0:
         print('--session 에는 --loop 초 간격이 필요하다')
@@ -216,6 +243,11 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
             finally:
                 release_lock(LOCK)
         if not loop:
+            if a.snapshot:                                     # 라운드 458 — 한 바퀴 뒤 잔고 한 번(주문 없음)
+                try:
+                    _log(f'[{now:%m-%d %H:%M:%S}] ' + account_snapshot_once())
+                except Exception as e:                         # noqa: BLE001
+                    _log(f'[{now:%m-%d %H:%M:%S}] 계좌 스냅샷 실패 — {type(e).__name__}: {e}')
             break
         if past_close:
             _log(f'[{now:%m-%d %H:%M:%S}] 마감 뒤 한 바퀴를 돌았다 — 끝')

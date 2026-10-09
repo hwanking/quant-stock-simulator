@@ -410,7 +410,15 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         out['alerts'].append(f'계좌를 못 읽었다 — {e}')
         L.heartbeat(c, mode, 'broker_fail', ' · '.join(out['alerts']))
         return out
-    L.account_snapshot(c, broker.env, bal)
+    # 라운드 458 — 바퀴(60초)마다 무조건 남기면 실전에서 장중 하루 390행이 쌓인다(보유 JSON 까지). 화면 15초 갱신과 같은 규칙 한 곳
+    #   (`swing_account.should_snapshot` · 새 날 첫 값 · 보유·현금이 바뀌면 바로 · 가격만 바뀌면 저장 간격마다). 이 바퀴의 판단은 방금 읽은
+    #   `bal` 을 쓰므로 스냅샷을 덜 남겨도 주문·보호에는 닿지 않는다. 못 남기면 메모만(바퀴는 계속).
+    try:
+        import swing_account as _sa458
+        if _sa458.should_snapshot(L.last_account(c), bal, now=now):
+            L.account_snapshot(c, broker.env, bal)
+    except Exception as e:                                     # noqa: BLE001
+        out['notes'].append(f'계좌 스냅샷을 못 남겼다 — {type(e).__name__}: {e}')
     held = {p['code']: p for p in bal['positions']}
     # ④ 관리 수량을 계좌에 맞춤
     try:

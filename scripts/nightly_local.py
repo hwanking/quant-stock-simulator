@@ -103,7 +103,7 @@ def plan_steps(no_write):
             args.append('--dry-run')
         if script.endswith('run_swing_worker.py'):
             # 이 작업은 '놓치면 켜질 때' 돈다(장중일 수 있다) — 여기서는 주문을 내지 않는다(계획·모의·내역 맞춤만)
-            args += ['--once', '--no-orders']
+            args += ['--once', '--no-orders', '--snapshot']   # 라운드 458 — 자산 곡선의 하루 한 점(잔고 읽기만)
         out.append((name, args, limit, skip))
     return out
 
