@@ -37465,6 +37465,7 @@ import swing_ops as _ops445
 _spec445 = _ilu445.spec_from_file_location('run_swing_worker_445', _os.path.join(PROJ, 'scripts', 'run_swing_worker.py'))
 _rw445 = _ilu445.module_from_spec(_spec445)
 _spec445.loader.exec_module(_rw445)
+_rw445.notify_failure = lambda *a, **k: None   # 라운드 463 — 심은 실패가 사용자 화면의 알림으로 새지 않게
 _KST445 = _dt445.timezone(_dt445.timedelta(hours=9))
 _paths445 = dict(LOCK=_os.path.join(PROJ, '_probe', '_r462_worker.lock'), RUNLOG=_os.path.join(PROJ, '_probe', '_r462_worker_run.txt'),
                  DONE=_os.path.join(PROJ, '_probe', '_r462_worker_done.json'))
@@ -37599,6 +37600,264 @@ check("⑨ 경쟁사 레이더가 그 사실을 적는다 — 가늠 칸에 장�
       '10분' in (_cr445['ganeum']['uptime_recovery'].get('note') or '') and _cr445['ganeum']['uptime_recovery'].get('state') == '부분'
       and bool(_up445) and all('10분' in (it.get('gap') or '') and it.get('ganeum_state') == '부분' for it in _up445),
       f"{_cr445['ganeum']['uptime_recovery']} · {[it.get('gap') for it in _up445]}")
+
+
+print()
+print("§446 이 PC 알림 — 장부의 새 사건과 바퀴 경고를 Windows 알림으로만 · 밖으로 안 보냄 · 기본 꺼짐 · 실패해도 바퀴는 그대로 (라운드 463)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   경쟁사 레이더의 '알림·외부 전달' 차이를 §9 안에서 메운다. ① 알리는 사건과 안 알리는 사건(목표 지정가는 날마다 다시 걸리므로 접수·만료 안 알림)
+#   ② 여럿이면 하나로 묶고 '외 N건' ③ 꺼져 있으면 안 띄우고 커서만 앞으로 · 켠 뒤 새 사건만 · 같은 날 같은 문장 한 번 · 처음 켤 때 옛 사건 안 쏟음 ·
+#   실패도 기록하고 되풀이 안 함 · 쓰기 금지면 아무것도 안 함 ④ 바퀴 실패 알림(켜졌을 때만 · 같은 날 한 번) ⑤ 화면 한 줄 ⑥ 네트워크를 안 쓴다
+#   ⑦ 워커가 바퀴 뒤·실패에 부른다 · 시험은 실패 알림을 바꿔 끼운다 ⑧ 상태 파일은 백업 거부 ⑨ Windows 알림 경로(띄우지 않는 시험)
+#   ⑩ 화면(자식 렌더) — 시스템 갈래에 상태 줄과 켜기 토글. 장부는 메모리·임시 파일 · 실제 알림은 안 띄운다(가짜 보내기).
+import ast as _ast446
+import datetime as _dt446
+import importlib.util as _ilu446
+import json as _js446
+import swing_ledger as _sl446
+import swing_notify as _nt446
+_KST446 = _dt446.timezone(_dt446.timedelta(hours=9))
+_T0_446 = _dt446.datetime(2026, 10, 12, 9, 30, tzinfo=_KST446)
+_row446 = dict(code='005930', name='시험종목', side='buy', reason='entry', qty=10, price=70000.0, filled_qty=10, avg_fill=69900.0, detail=None)
+_m446 = {
+    'filled': _nt446.message_for_order(dict(_row446, state='FILLED')),
+    'partial': _nt446.message_for_order(dict(_row446, state='PARTIAL', filled_qty=4)),
+    'rej': _nt446.message_for_order(dict(_row446, state='REJECTED', detail='주문가능금액을 초과했습니다 ' * 10)),
+    'unk': _nt446.message_for_order(dict(_row446, state='UNKNOWN')),
+    'ack_buy': _nt446.message_for_order(dict(_row446, state='BROKER_ACK')),
+    'ack_target': _nt446.message_for_order(dict(_row446, state='BROKER_ACK', side='sell', reason='target')),
+    'ack_stop': _nt446.message_for_order(dict(_row446, state='BROKER_ACK', side='sell', reason='stop#2', price=None)),
+    'exp_buy': _nt446.message_for_order(dict(_row446, state='EXPIRED')),
+    'exp_target': _nt446.message_for_order(dict(_row446, state='EXPIRED', side='sell', reason='target')),
+    'cancel': _nt446.message_for_order(dict(_row446, state='CANCELLED')),
+    'closed': _nt446.message_for_position(dict(code='005930', name='시험종목', event='CLOSED', detail='stop')),
+    'opened': _nt446.message_for_position(dict(code='005930', name='시험종목', event='OPENED', detail=None)),
+}
+check("① 알리는 사건 — 체결(이름·수량·평균가) · 일부 체결(n/총) · 거절(사유 80자에서 '…') · 응답 없음 · 매수 접수(지정가) · 손절 매도 접수(시장가 · '#2' 떼고) · "
+      "매수 만료 · 관리 끝(손절 매도) / 안 알리는 사건 — 목표 매도 접수·만료 · 취소 · 관리 시작",
+      _m446['filled'] == '체결 — 시험종목(005930) 진입 매수 10주 · 평균 69,900원'
+      and _m446['partial'] == '일부 체결 — 시험종목(005930) 진입 매수 4/10주 · 평균 69,900원'
+      and _m446['rej'].startswith('거절 — 시험종목(005930) 진입 매수 · 주문가능금액') and _m446['rej'].endswith('…')
+      and '다시 보내지 않고' in _m446['unk'] and _m446['ack_buy'] == '주문 접수 — 시험종목(005930) 진입 매수 10주 · 지정가 70,000원'
+      and _m446['ack_stop'] == '주문 접수 — 시험종목(005930) 손절 매도 10주 · 시장가' and _m446['exp_buy'].startswith('매수 주문 만료')
+      and _m446['closed'] == '관리 끝 — 시험종목(005930) (손절 매도)'
+      and _m446['ack_target'] is None and _m446['exp_target'] is None and _m446['cancel'] is None and _m446['opened'] is None,
+      str(_m446)[:600])
+_t1_446, _b1_446 = _nt446.compose(['체결 — A'])
+_t5_446, _b5_446 = _nt446.compose([f'체결 — {i}' for i in range(5)])
+check("② 한 건이면 제목이 그 사건 · 다섯이면 '사건 5건'에 세 줄 + '외 2건' (말없이 자르지 않는다)",
+      _t1_446 == '가늠 자동매매 — 체결' and _t5_446 == '가늠 자동매매 — 사건 5건'
+      and _b5_446.count('\n') == 3 and '외 2건' in _b5_446, f'{_t5_446} | {_b5_446!r}')
+# ③ after_cycle — 메모리 장부 · 임시 상태 파일 · 가짜 보내기
+_sp446 = _os.path.join(PROJ, '_probe', '_r463_notify_state.json')
+_sent446 = []
+
+
+def _send446(title, body):
+    _sent446.append((title, body))
+    return True, None
+
+
+def _intent446(c, iid, side='buy', reason='entry', code='005930'):
+    _sl446.add_intent(c, dict(intent_id=iid, plan_id='P1', side=side, code=code, qty=10, price=70000.0, ord_dvsn='00',
+                              mode='LIVE', trade_day='2026-10-12', reason=reason))
+    _sl446.order_event(c, iid, 'RISK_APPROVED')
+    _sl446.order_event(c, iid, 'SUBMITTING')
+
+
+_env446 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+try:
+    if _os.path.exists(_sp446):
+        _os.remove(_sp446)
+    _c446 = _sl446.connect(':memory:')
+    _intent446(_c446, 'I1')
+    _sl446.order_event(_c446, 'I1', 'BROKER_ACK', odno='1')
+    _off446 = _nt446.after_cycle(_c446, dict(alerts=['경고 하나']), now=_T0_446, send=_send446, state_path=_sp446)
+    _st_off446 = _nt446.load_state(_sp446)
+    _ids_off446 = _nt446.max_ids(_c446)
+    _sl446.set_setting(_c446, _nt446.NOTIFY_KEY, {'on': True}, by='test')
+    _sl446.order_event(_c446, 'I1', 'FILLED', odno='1', filled_qty=10, avg_fill=69900.0)
+    _on1_446 = _nt446.after_cycle(_c446, dict(alerts=[]), now=_T0_446, send=_send446, state_path=_sp446)
+    _sent_after_on446 = list(_sent446)
+    _on2_446 = _nt446.after_cycle(_c446, dict(alerts=[]), now=_T0_446, send=_send446, state_path=_sp446)
+    _a1_446 = _nt446.after_cycle(_c446, dict(alerts=['계좌를 못 읽었다 — 시험']), now=_T0_446, send=_send446, state_path=_sp446)
+    _a2_446 = _nt446.after_cycle(_c446, dict(alerts=['계좌를 못 읽었다 — 시험']), now=_T0_446, send=_send446, state_path=_sp446)
+    _a3_446 = _nt446.after_cycle(_c446, dict(alerts=['계좌를 못 읽었다 — 시험']), now=_T0_446 + _dt446.timedelta(days=1),
+                                 send=_send446, state_path=_sp446)
+    check("③ 꺼짐 — 안 띄우고(경고도) 커서만 앞으로 · 켠 뒤 새 체결 한 건만(켜기 전 접수는 안 쏟음) · 같은 바퀴 다시 → 없음 · 경고는 같은 날 한 번 · 다음 날 다시",
+          _off446 is None and _st_off446.get('order_id') == _ids_off446[0] and len(_sent_after_on446) == 1
+          and _sent_after_on446[0][0] == '가늠 자동매매 — 체결' and '진입 매수 10주' in _sent_after_on446[0][1]
+          and _on1_446 == '알림 1건 띄움' and _on2_446 is None and _a1_446 == '알림 1건 띄움' and _a2_446 is None
+          and _a3_446 == '알림 1건 띄움' and len(_sent446) == 3,
+          f'{_off446} {_st_off446} {_on1_446} {_on2_446} {_a1_446} {_a2_446} {_a3_446} {_sent446}')
+    # ③' 상태 파일이 없을 때 켜져 있으면 옛 사건을 쏟지 않는다 · 실패는 사유를 남기고 되풀이 안 함 · 쓰기 금지면 아무것도 안 함
+    _os.remove(_sp446)
+    _sent446.clear()
+    _first446 = _nt446.after_cycle(_c446, dict(alerts=[]), now=_T0_446, send=_send446, state_path=_sp446)
+    _fail446 = _nt446.after_cycle(_c446, dict(alerts=['실패 시험']), now=_T0_446, send=lambda t, b: (False, '심은 실패'),
+                                  state_path=_sp446)
+    _fail2_446 = _nt446.after_cycle(_c446, dict(alerts=['실패 시험']), now=_T0_446, send=_send446, state_path=_sp446)
+    _st_fail446 = _nt446.load_state(_sp446)
+    _os.environ['GAEUM_NO_LOCAL_WRITE'] = '1'
+    _mt446 = _os.path.getmtime(_sp446)
+    _nw446 = _nt446.after_cycle(_c446, dict(alerts=['쓰기 금지 시험']), now=_T0_446, send=_send446, state_path=_sp446)
+    _nwf446 = _nt446.failure('쓰기 금지 시험', now=_T0_446, send=_send446, state_path=_sp446, connect=lambda: _c446)
+    _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+    check("③' 상태 파일 없이 켜져 있으면 옛 사건을 안 쏟는다 · 알림 실패는 '못 띄웠다'와 사유를 남기고 같은 문장을 되풀이하지 않는다 · 쓰기 금지면 안 띄우고 안 적는다",
+          _first446 is None and _sent446 == [] and _fail446 == '알림 1건을 못 띄웠다 — 심은 실패' and _fail2_446 is None
+          and _st_fail446.get('last_error') == '심은 실패' and _nw446 is None and _nwf446 is None and _os.path.getmtime(_sp446) == _mt446,
+          f'{_first446} {_fail446} {_fail2_446} {_st_fail446.get("last_error")} {_nw446} {_nwf446}')
+    # ④ 바퀴 실패 — 켜졌을 때만 · 같은 날 한 번 · 장부는 읽기만(연결을 닫는다)
+    _cf446 = _sl446.connect(':memory:')
+    _sl446.set_setting(_cf446, _nt446.NOTIFY_KEY, {'on': True}, by='test')
+    _cf_off446 = _sl446.connect(':memory:')
+
+    class _NoClose446:
+        def __init__(self, c):
+            self._c = c
+
+        def __getattr__(self, k):
+            return getattr(self._c, k)
+
+        def close(self):
+            pass
+    _sent446.clear()
+    _os.remove(_sp446)
+    _f1_446 = _nt446.failure('워커 바퀴 실패 — RuntimeError: 시험', now=_T0_446, send=_send446, state_path=_sp446,
+                             connect=lambda: _NoClose446(_cf446))
+    _f2_446 = _nt446.failure('워커 바퀴 실패 — RuntimeError: 시험', now=_T0_446, send=_send446, state_path=_sp446,
+                             connect=lambda: _NoClose446(_cf446))
+    _f3_446 = _nt446.failure('워커 바퀴 실패 — RuntimeError: 시험', now=_T0_446, send=_send446, state_path=_sp446,
+                             connect=lambda: _NoClose446(_cf_off446))
+    _f4_446 = _nt446.failure('x', now=_T0_446, send=_send446, state_path=_sp446, connect=lambda: None)
+    check("④ 바퀴 실패 알림 — 켜졌을 때 한 번 · 같은 날 다시 → 없음 · 꺼진 장부 → 없음 · 장부가 없으면 → 없음",
+          _f1_446 == '알림 1건 띄움' and _f2_446 is None and _f3_446 is None and _f4_446 is None and len(_sent446) == 1
+          and _sent446[0][1].startswith('경고 — 워커 바퀴 실패'), f'{_f1_446} {_f2_446} {_f3_446} {_f4_446} {_sent446}')
+    # ⑤ 화면 한 줄
+    _s_off446 = _nt446.status_line({}, {})
+    _s_on446 = _nt446.status_line({_nt446.NOTIFY_KEY: {'on': True}}, dict(last_ts='2026-10-12T09:30:00+09:00', last_count=2))
+    _s_err446 = _nt446.status_line({_nt446.NOTIFY_KEY: {'on': True}}, dict(last_error='심은 실패'))
+    check("⑤ 화면 한 줄 — 꺼짐이면 무엇을 띄우는지와 '밖으로 보내지 않습니다' · 켜짐이면 마지막으로 띄운 때(건수) · 실패면 그 사유",
+          '꺼짐' in _s_off446 and '밖으로 보내지 않습니다' in _s_off446 and '마지막으로 띄운 때 10-12 09:30 (2건)' in _s_on446
+          and '아직 띄운 알림 없음' in _s_err446 and '마지막 알림 실패 — 심은 실패' in _s_err446, f'{_s_off446} | {_s_on446} | {_s_err446}')
+finally:
+    if _env446 is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _env446
+    else:
+        _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+    for _f446 in (_sp446, _sp446 + '.tmp'):
+        if _os.path.exists(_f446):
+            _os.remove(_f446)
+# ⑥ 네트워크를 안 쓴다 — 가져오는 모듈
+_tree446 = _ast446.parse(open(_os.path.join(PROJ, 'swing_notify.py'), encoding='utf-8').read())
+_imps446 = set()
+for _n446 in _ast446.walk(_tree446):
+    if isinstance(_n446, _ast446.Import):
+        _imps446 |= {a.name.split('.')[0] for a in _n446.names}
+    elif isinstance(_n446, _ast446.ImportFrom) and _n446.module:
+        _imps446.add(_n446.module.split('.')[0])
+check("⑥ 알림 모듈은 네트워크를 안 쓴다 — 가져오는 모듈에 urllib·requests·http·socket·smtplib·broker_kis 가 없다",
+      bool(_imps446) and not (_imps446 & {'urllib', 'requests', 'http', 'socket', 'smtplib', 'broker_kis', 'httpx', 'aiohttp'}),
+      str(sorted(_imps446)), scanned=len(_imps446))
+# ⑦ 워커 배선 — 바퀴 뒤 after_cycle · 실패에 notify_failure(모듈 전역에서 찾는다 → 바꿔 끼울 수 있다)
+_rws446 = open(_os.path.join(PROJ, 'scripts', 'run_swing_worker.py'), encoding='utf-8').read()
+_spec446 = _ilu446.spec_from_file_location('run_swing_worker_446', _os.path.join(PROJ, 'scripts', 'run_swing_worker.py'))
+_rw446 = _ilu446.module_from_spec(_spec446)
+_spec446.loader.exec_module(_rw446)
+_calls446 = []
+_orig446 = {k: getattr(_rw446, k) for k in ('LOCK', 'RUNLOG', 'DONE', 'notify_failure')}
+_rw446.LOCK = _os.path.join(PROJ, '_probe', '_r463_worker.lock')
+_rw446.RUNLOG = _os.path.join(PROJ, '_probe', '_r463_worker_run.txt')
+_rw446.DONE = _os.path.join(PROJ, '_probe', '_r463_worker_done.json')
+_rw446.notify_failure = lambda text, now=None: _calls446.append(text)
+_env446b = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+try:
+    if _os.path.exists(__import__('swing_ledger').PATH):
+        def _boom446(do_shadow, allow_orders=True):
+            raise RuntimeError('심은 실패')
+        _rw446.main(['--once'], clock=lambda: _T0_446, sleeper=lambda s: None, cycle=_boom446)
+        check("⑦ 워커 — 바퀴가 죽으면 실패 알림을 부른다(모듈 전역 · 시험이 바꿔 끼운다) · one_cycle 이 바퀴 뒤 after_cycle 을 부르고 실패를 바퀴에서 삼킨다",
+              _calls446 == ['워커 바퀴 실패 — RuntimeError: 심은 실패'] and 'swing_notify.after_cycle(c, out)' in _rws446
+              and "notify_failure(f'워커 바퀴 실패" in _rws446 and "'알림 처리 실패 — " in _rws446, str(_calls446))
+    else:
+        skipped("⑦ 워커 실패 알림", "이 PC 에 스윙 장부가 없다 — 워커는 장부가 없으면 할 일이 없다고 끝난다")
+finally:
+    for _k446, _v446 in _orig446.items():
+        setattr(_rw446, _k446, _v446)
+    if _env446b is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _env446b
+    for _f446 in ('_r463_worker.lock', '_r463_worker_run.txt', '_r463_worker_done.json'):
+        _p446 = _os.path.join(PROJ, '_probe', _f446)
+        if _os.path.exists(_p446):
+            _os.remove(_p446)
+# ⑧ 백업 거부
+import fnmatch as _fn446
+_bk446 = __import__('importlib').import_module('scripts.backup_research_data')
+check("⑧ 알림 상태 파일(종목 이름이 든 개인 자료)은 백업 거부 목록에 걸린다",
+      any(_fn446.fnmatch('swing_notify_state.json', d) for d in _bk446.DENY) and not _bk446.picked('swing_notify_state.json'))
+# ⑨ Windows 알림 경로 — 띄우지 않는 시험(알림 객체까지 만든다)
+if _os.name == 'nt':
+    _dry446 = _nt446.toast('가늠 시험', '띄우지 않는 시험 <특수> & "따옴표"', dry=True)
+    check("⑨ Windows 알림 경로 — 띄우지 않는 시험이 통과한다(특수문자 이스케이프 포함 · 실제 알림은 안 띄운다)", _dry446 == (True, None), str(_dry446))
+else:
+    skipped("⑨ Windows 알림 경로", "Windows 가 아니다")
+# ⑩ 화면 — 시스템 갈래의 상태 줄 · 켜기 토글(자식 렌더 · 임시 장부 · 증권사 생성자 막음)
+_vdb446 = _os.path.join(PROJ, '_probe', '_r463_view.db')
+_child446 = _os.path.join(PROJ, '_probe', '_r463_view_child.py')
+_vst446 = _os.path.join(PROJ, '_probe', '_r463_view_state.json')
+try:
+    if _os.path.exists(_vdb446):
+        _os.remove(_vdb446)
+    _cv446 = _sl446.connect(_vdb446)
+    _sl446.set_setting(_cv446, 'mode', 'OFF', by='test')
+    _sl446.set_setting(_cv446, _nt446.NOTIFY_KEY, {'on': True}, by='test')
+    _cv446.close()
+    _src446 = (
+        "import sys\n"
+        f"sys.path.insert(0, {PROJ!r})\n"
+        "import streamlit as st\n"
+        "import broker_kis as _B\n"
+        "import swing_ledger as _L\n"
+        "import swing_notify as _N\n"
+        "import swing_view as _V\n"
+        "import ui_kit as _uk\n"
+        "class _NoBroker:\n"
+        "    def __init__(self, *a, **k):\n"
+        "        raise RuntimeError('broker called')\n"
+        "_B.KisBroker = _NoBroker\n"
+        "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+        f"_L.connect.__defaults__ = ({_vdb446!r}, False)\n"
+        f"_N.STATE_PATH = {_vst446!r}\n"
+        "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+        "          anchor_day='2026-10-07')\n")
+    open(_child446, 'w', encoding='utf-8').write(
+        "import json, sys\n"
+        "sys.stdout.reconfigure(encoding='utf-8')\n"
+        "from streamlit.testing.v1 import AppTest\n"
+        f"at = AppTest.from_string({_src446!r}, default_timeout=120)\n"
+        "at.run()\n"
+        "at.radio(key='sw_nav').set_value('시스템')\n"
+        "at.run()\n"
+        "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:400], cap=' '.join(str(e.value) for e in at.caption),\n"
+        "           toggle={str(t.label): bool(t.value) for t in at.toggle}, buttons=[str(b.label) for b in at.button])\n"
+        "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+    _rc446 = __import__('subprocess').run([sys.executable, _child446], cwd=PROJ, capture_output=True, text=True, encoding='utf-8',
+                                          errors='replace', timeout=300, env=dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT'))
+    _jr446 = (_rc446.stdout or '').rsplit('@@R@@', 1)
+    _o446 = _js446.loads(_jr446[1]) if len(_jr446) == 2 else {'err': (_rc446.stderr or '')[-600:]}
+    check("⑩ 화면 — 시스템 갈래: 예외 0 · '이 PC 알림 — 켜짐 · 아직 띄운 알림 없음' 줄 · 켜기 토글 켜짐 · 알림 시험 버튼",
+          _o446.get('exc') == 0 and '이 PC 알림 — 켜짐 · 아직 띄운 알림 없음' in (_o446.get('cap') or '')
+          and (_o446.get('toggle') or {}).get('이 PC 알림 켜기') is True
+          and any('알림 시험' in b for b in (_o446.get('buttons') or [])),
+          str({k: _o446.get(k) for k in ('exc', 'first', 'toggle', 'err')})[:900])
+finally:
+    for _f446 in (_vdb446, _child446, _vst446):
+        if _os.path.exists(_f446):
+            try:
+                _os.remove(_f446)
+            except OSError:
+                pass
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -14,6 +14,7 @@ import os as _os_mod
 import broker_kis
 import swing_executor as X
 import swing_ops as _ops
+import swing_notify as _nt
 import swing_proof as _sp
 import swing_account as _acc454
 import swing_viz as _viz
@@ -1006,9 +1007,10 @@ def _view_system(st, uk, c, ctx, md):
               ('pos' if p['running'] else ('warn' if p['running'] is None else ''))) for p in _prog454],
             theme=theme, title='지금 진행 중인가 — 워커 · 예약 작업 · 저녁 작업 · 자동 갱신')
     st.caption(md(_ops.task_line(ctx['task'])))
+    st.caption(md(_nt.status_line(ctx['stt'])))               # 라운드 463 — 이 PC 알림(켜짐·꺼짐 · 마지막으로 띄운 때)
     st.caption(md(f"연결 정보: {broker_kis.config_summary(ctx['cfg'])}" + (' · ' + ' · '.join(ctx['cfg']['problems']) if ctx['cfg'].get('problems') else '')
                   + f" · 자동 관리 중 {len(ctx['managed'])}종목" + (f" · 되돌려 받기 확인 중 {len(ctx['releasing'])}종목" if ctx['releasing'] else '')))
-    with st.expander('설정 — 모드 · 주문 방식 · 실전 잠금 · 위험 한도 · 연결 정보 · 연결 확인 · 계획 갱신', expanded=False):
+    with st.expander('설정 — 모드 · 주문 방식 · 실전 잠금 · 위험 한도 · 연결 정보 · 연결 확인 · 계획 갱신 · 이 PC 알림', expanded=False):
         if not ctx['allow_write']:
             st.caption('쓰기가 꺼진 화면이라 설정을 바꿀 수 없습니다.')
         _settings(st, c, ctx['stt'], ctx['mode'], ctx['cfg'], ctx['allow_write'], ctx['report'], ctx['today'], md)
@@ -1163,3 +1165,22 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
         st.session_state['sw_flash'] = (f'새 계획 {pn}건 · 일봉 재채점 갱신 {sn}건 (주문 없음)'
                                         + (f" · {len(notes)}건 못 굴림" if notes else ''))
         st.rerun()
+    # 라운드 463 — 이 PC 알림. 밖으로 보내지 않는다(메일·메신저·웹훅 없음 · 계좌 자료가 나가지 않게). 기본 꺼짐.
+    st.markdown('**이 PC 알림 (Windows)**')
+    st.caption('자동매매의 체결 · 일부 체결 · 거절 · 응답 없음 · 매수 주문 접수 · 보호 매도(손절·기간 만료) 접수 · 관리 끝과 워커 경고를 '
+               '이 PC 의 Windows 알림으로 띄웁니다. 메일·메신저·웹훅으로는 보내지 않습니다(계좌 자료가 밖으로 나가지 않게). '
+               '1차 목표 지정가 매도는 날마다 다시 걸리므로 접수는 안 알리고 체결·거절만 알립니다. 같은 날 같은 문장은 한 번만 뜨고, '
+               '워커가 도는 동안 이 PC 에 로그인해 있어야 보입니다.')
+    _on463 = _nt.notify_on(stt)
+    if allow_write:
+        _new463 = st.toggle('이 PC 알림 켜기', value=_on463, key='sw_notify')
+        if bool(_new463) != _on463:
+            L.set_setting(c, _nt.NOTIFY_KEY, {'on': bool(_new463)})
+            st.rerun()
+        if st.button('알림 시험 — 지금 한 번 띄웁니다', key='sw_notify_test'):
+            _ok463, _why463 = _nt.toast('가늠 알림 시험', '자동매매 알림이 이 PC 에 이렇게 뜹니다 — 밖으로 보내지 않습니다')
+            st.session_state['sw_flash'] = ('알림을 띄웠습니다 — 화면 오른쪽 아래(알림 센터)를 보세요' if _ok463
+                                            else f'알림을 못 띄웠습니다 — {_why463}')
+            st.rerun()
+    else:
+        st.caption('지금: ' + ('켜짐' if _on463 else '꺼짐'))

@@ -141,7 +141,7 @@
   },
   "alerts_notifications": {
    "state": "부분",
-   "note": "화면 안 조건 알림(중앙 판정을 따름) — 메일·메신저·웹훅 전달 없음(계좌 자료가 밖으로 나가는 문제 · §9)"
+   "note": "화면 안 조건 알림(중앙 판정을 따름) · 이 PC 의 Windows 알림(자동매매 체결·거절·응답 없음·보호 매도 접수·관리 끝·워커 경고 · 켜야 뜸 · 2026-10-09) — 메일·메신저·웹훅 전달 없음(계좌 자료가 밖으로 나가는 문제 · §9)"
   },
   "uptime_recovery": {
    "state": "부분",
@@ -209,7 +209,7 @@
    "current_state": "보유",
    "changed": false,
    "ganeum_state": "부분",
-   "gap": "체결·오류 사건을 밖으로 보내는 길이 없다",
+   "gap": "체결·오류 사건을 밖으로 보내는 길이 없다 — 이 PC 안의 Windows 알림은 있다(2026-10-09)",
    "decision": "CONSIDER",
    "reason": "체결·거절·UNKNOWN 을 메일로 보내는 것은 유용하지만 계좌 자료가 밖으로 나간다(§9) — 종목·수량 없이 사건 종류만 보내는 설계를 먼저 적어야 한다"
   },
@@ -237,7 +237,7 @@
    "current_state": "보유",
    "changed": false,
    "ganeum_state": "부분",
-   "gap": "가늠 알림은 화면 안에서만 보인다",
+   "gap": "가늠 알림은 이 PC 안(화면 · Windows 알림 센터)에서만 보인다 — 웹훅 없음",
    "decision": "CONSIDER",
    "reason": "웹훅은 사건을 밖으로 보내는 표준 — 보낼 내용에서 종목·수량·계좌를 뺀 형태로만 검토"
   },
@@ -363,7 +363,7 @@
    "current_state": "보유",
    "changed": false,
    "ganeum_state": "부분",
-   "gap": "가늠 알림은 밖으로 안 나간다",
+   "gap": "가늠 알림은 밖으로 안 나간다 — 이 PC 의 Windows 알림까지만(2026-10-09)",
    "decision": "CONSIDER",
    "reason": "위 QuantConnect·TradingView 와 같은 축 — 한 번에 설계"
   },

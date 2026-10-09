@@ -160,11 +160,30 @@ def one_cycle(do_shadow, allow_orders=True):
             broker = broker_kis.KisBroker(cfg)
         anchor = premarket.report_day()
         report = premarket.load_today_report(anchor) if anchor else None
-        return X.run_cycle(c, broker=broker, cfg=cfg, report=report, anchor_day=anchor,
-                           bars_fn=_bars_fn() if do_shadow else None, cost_pct=COST_PCT, do_shadow=do_shadow,
-                           allow_orders=allow_orders, quote_fn=quote)
+        out = X.run_cycle(c, broker=broker, cfg=cfg, report=report, anchor_day=anchor,
+                          bars_fn=_bars_fn() if do_shadow else None, cost_pct=COST_PCT, do_shadow=do_shadow,
+                          allow_orders=allow_orders, quote_fn=quote)
+        # 라운드 463 — 이 PC 알림(켜져 있을 때만 · 장부의 새 사건과 이 바퀴의 경고). 실패해도 바퀴는 그대로다.
+        try:
+            import swing_notify
+            line = swing_notify.after_cycle(c, out)
+            if line:
+                out.setdefault('notes', []).append(line)
+        except Exception as e:                                 # noqa: BLE001
+            out.setdefault('notes', []).append(f'알림 처리 실패 — {type(e).__name__}: {e}')
+        return out
     finally:
         c.close()
+
+
+def notify_failure(text, now=None):
+    """워커 바퀴 실패를 이 PC 알림으로(켜져 있을 때만 · 같은 날 같은 문장 한 번 · 라운드 463). 실패해도 워커는 그대로.
+    부를 때 모듈 전역에서 찾는다 — 시험이 바꿔 끼운다(심은 실패가 사용자 화면에 뜨지 않게)."""
+    try:
+        import swing_notify
+        return swing_notify.failure(text, now=now)
+    except Exception:                                          # noqa: BLE001
+        return None
 
 
 def account_snapshot_once(now=None, loader=None, broker_cls=None, connect=None):
@@ -280,6 +299,7 @@ def main(argv=None, clock=None, sleeper=None, cycle=None):
             except Exception as e:                             # noqa: BLE001 — 한 바퀴가 죽어도 다음 바퀴는 돈다
                 last_ok = False
                 _log(f'[{now:%m-%d %H:%M:%S}] 바퀴 실패 — {type(e).__name__}: {e}')
+                notify_failure(f'워커 바퀴 실패 — {type(e).__name__}: {e}', now=now)
             finally:
                 release_lock(LOCK)
         if not loop:
