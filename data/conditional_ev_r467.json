@@ -1,0 +1,2036 @@
+{
+ "made": "2026-10-09",
+ "prereg": "docs/PREREG_R467_CONDITIONAL_EV.md",
+ "seed": 467,
+ "boot": 2000,
+ "cost_pct": 0.41,
+ "date_floor": 30,
+ "stat_excluded": {
+  "scale": 2788,
+  "dup": 2500
+ },
+ "scale_keys_read": true,
+ "repro": {
+  "ledger_rows": 258330,
+  "calibration_rows": 258330,
+  "calibration_made": "2026-10-09 02:16",
+  "bands": [
+   {
+    "band": "0-39",
+    "mine": -0.4536,
+    "calibration": -0.4542787095277203,
+    "diff": 0.00068
+   },
+   {
+    "band": "40-49",
+    "mine": 0.09978,
+    "calibration": 0.09977231316029823,
+    "diff": 1e-05
+   },
+   {
+    "band": "50-54",
+    "mine": 0.09569,
+    "calibration": 0.09571014111878245,
+    "diff": -2e-05
+   },
+   {
+    "band": "55-59",
+    "mine": 0.12134,
+    "calibration": 0.12133916517000706,
+    "diff": -0.0
+   },
+   {
+    "band": "60-64",
+    "mine": 0.17499,
+    "calibration": 0.17500734196351675,
+    "diff": -2e-05
+   },
+   {
+    "band": "65-69",
+    "mine": 0.20491,
+    "calibration": 0.20470855255713757,
+    "diff": 0.0002
+   },
+   {
+    "band": "70-100",
+    "mine": -0.41905,
+    "calibration": -0.4199371234729121,
+    "diff": 0.00089
+   }
+  ],
+  "tol": 0.01,
+  "ok": true
+ },
+ "counts": {
+  "stat_rows": 253042,
+  "dropped": {
+   "no_regime": 56
+  },
+  "analysed": 252986,
+  "spaced": 119718,
+  "by_split": {
+   "train": 103068,
+   "valid": 8262,
+   "blind": 8388
+  }
+ },
+ "model": {
+  "columns": 36,
+  "rank": 35,
+  "reference": {
+   "band": "55-59",
+   "regime": "SIDEWAYS",
+   "market": "KOSPI",
+   "asset_type": "STOCK",
+   "m10_above": "False",
+   "demark_state": "NONE",
+   "entry_zone": "안전마진 확보",
+   "action_title": "신규 매수 보류"
+  },
+  "coef": {
+   "절편": 0.0865,
+   "band=40-49": 0.1236,
+   "band=50-54": 0.1421,
+   "band=60-64": 0.0789,
+   "band=65-69": -0.0775,
+   "band=0-39": -1.2295,
+   "band=70-100": -4.0691,
+   "regime=BEAR": -0.5433,
+   "regime=BULL": -0.3947,
+   "market=KOSDAQ": 0.0352,
+   "asset_type=ETF": 0.2542,
+   "asset_type=ETF_LEV": 0.0911,
+   "asset_type=ETF_INV": -0.2046,
+   "m10_above=True": -0.3075,
+   "demark_state=FORMING": -0.0118,
+   "demark_state=SETUP_DONE": 0.488,
+   "demark_state=COMPLETE": 0.2271,
+   "entry_zone=판정 불가": -0.1629,
+   "entry_zone=적정가 크게 초과 (추격매수 위험)": -0.2536,
+   "entry_zone=적정가 이하 (안전마진 미확보)": 0.0338,
+   "entry_zone=적정가 초과 (추격매수 경고)": -0.0193,
+   "entry_zone=적정가 소폭 초과": -0.2708,
+   "action_title=조건 확인·관망": 0.0145,
+   "action_title=비중축소 검토": -0.0606,
+   "action_title=제한적 진입": 2.6294,
+   "rsi(표준화)": 0.0081,
+   "bb_pos(표준화)": 0.1123,
+   "bb_pos(빈 값)": -0.1434,
+   "range_pos(표준화)": 0.0621,
+   "vol20(표준화)": 0.1323,
+   "vol20(빈 값)": -0.157,
+   "net_expected(표준화)": -0.0372,
+   "net_expected(빈 값)": -0.0352,
+   "eff_sample(표준화)": 0.0365,
+   "win_rate(표준화)": 0.0093,
+   "win_rate(빈 값)": -0.0352
+  }
+ },
+ "selection": {
+  "train": {
+   "n": 103068,
+   "selected": 18651,
+   "selected_share": 18.1,
+   "unseen": {},
+   "pred_mean": -0.3324,
+   "pred_max": 30.3856,
+   "all": {
+    "n": 103068,
+    "dates": 2334,
+    "mean": -0.3324,
+    "ci95": [
+     -0.5265,
+     -0.1369
+    ],
+    "se": 0.0997,
+    "z": -3.333
+   },
+   "chosen": {
+    "n": 18651,
+    "dates": 1072,
+    "mean": 0.2186,
+    "ci95": [
+     -0.1178,
+     0.5671
+    ],
+    "se": 0.1822,
+    "z": 1.2
+   },
+   "chosen_median": 1.76,
+   "chosen_pos_pct": 61.3,
+   "chosen_p05": -9.42,
+   "diff": {
+    "diff": 0.6727,
+    "ci95": [
+     0.3414,
+     1.0408
+    ],
+    "boots": 2000
+   }
+  },
+  "valid": {
+   "n": 8262,
+   "selected": 1025,
+   "selected_share": 12.41,
+   "unseen": {
+    "action_title": 1
+   },
+   "pred_mean": -0.3217,
+   "pred_max": 1.0136,
+   "all": {
+    "n": 8262,
+    "dates": 81,
+    "mean": 0.1919,
+    "ci95": [
+     -0.3242,
+     0.6788
+    ],
+    "se": 0.2598,
+    "z": 0.738
+   },
+   "chosen": {
+    "n": 1025,
+    "dates": 34,
+    "mean": 1.4631,
+    "ci95": [
+     0.7599,
+     1.863
+    ],
+    "se": 0.3102,
+    "z": 4.717
+   },
+   "chosen_median": 2.48,
+   "chosen_pos_pct": 73.4,
+   "chosen_p05": -10.04,
+   "diff": {
+    "diff": 1.4513,
+    "ci95": [
+     0.8183,
+     1.9611
+    ],
+    "boots": 2000
+   }
+  },
+  "blind": {
+   "n": 8388,
+   "selected": 2038,
+   "selected_share": 24.3,
+   "unseen": {},
+   "pred_mean": -0.2213,
+   "pred_max": 2.0982,
+   "all": {
+    "n": 8388,
+    "dates": 56,
+    "mean": -0.6163,
+    "ci95": [
+     -2.0721,
+     0.7872
+    ],
+    "se": 0.7459,
+    "z": -0.826
+   },
+   "chosen": {
+    "n": 2038,
+    "dates": 37,
+    "mean": -0.909,
+    "ci95": [
+     -2.3643,
+     0.6022
+    ],
+    "se": 0.7538,
+    "z": -1.206
+   },
+   "chosen_median": 1.69,
+   "chosen_pos_pct": 51.8,
+   "chosen_p05": -17.61,
+   "diff": {
+    "diff": -0.3866,
+    "ci95": [
+     -2.4463,
+     1.4255
+    ],
+    "boots": 2000
+   }
+  }
+ },
+ "R0": {
+  "dates": {
+   "valid": 34,
+   "blind": 37
+  },
+  "floor": 30,
+  "ok": true
+ },
+ "R1": {
+  "valid": true,
+  "blind": false
+ },
+ "verdict": "(다) 현행 유지",
+ "map_cells_defined": 52,
+ "map_cells_prereg": 52,
+ "map_z": 3.31,
+ "map": [
+  {
+   "var": "band",
+   "level": "0-39",
+   "train": {
+    "n": 37,
+    "dates": 33,
+    "mean": -1.7722,
+    "ci95": [
+     -3.2009,
+     -0.4216
+    ],
+    "se": 0.7103,
+    "z": -2.495
+   },
+   "valid": {
+    "n": 2,
+    "dates": 1,
+    "mean": -3.41,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 2,
+    "dates": 2,
+    "mean": 3.22,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "40-49",
+   "train": {
+    "n": 32788,
+    "dates": 1791,
+    "mean": -0.3464,
+    "ci95": [
+     -0.5929,
+     -0.1009
+    ],
+    "se": 0.1272,
+    "z": -2.723
+   },
+   "valid": {
+    "n": 1934,
+    "dates": 45,
+    "mean": -0.0064,
+    "ci95": [
+     -0.6581,
+     0.6535
+    ],
+    "se": 0.3358,
+    "z": -0.019
+   },
+   "blind": {
+    "n": 2923,
+    "dates": 36,
+    "mean": 0.0013,
+    "ci95": [
+     -1.7108,
+     1.6938
+    ],
+    "se": 0.8616,
+    "z": 0.002
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "50-54",
+   "train": {
+    "n": 10567,
+    "dates": 1059,
+    "mean": -0.3085,
+    "ci95": [
+     -0.5154,
+     -0.1108
+    ],
+    "se": 0.106,
+    "z": -2.91
+   },
+   "valid": {
+    "n": 763,
+    "dates": 33,
+    "mean": 0.3594,
+    "ci95": [
+     -0.1564,
+     0.7276
+    ],
+    "se": 0.2241,
+    "z": 1.604
+   },
+   "blind": {
+    "n": 612,
+    "dates": 32,
+    "mean": -1.3199,
+    "ci95": [
+     -2.496,
+     0.006
+    ],
+    "se": 0.6271,
+    "z": -2.105
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "55-59",
+   "train": {
+    "n": 51828,
+    "dates": 2065,
+    "mean": -0.3459,
+    "ci95": [
+     -0.5348,
+     -0.1565
+    ],
+    "se": 0.095,
+    "z": -3.643
+   },
+   "valid": {
+    "n": 4851,
+    "dates": 63,
+    "mean": 0.1729,
+    "ci95": [
+     -0.4012,
+     0.6956
+    ],
+    "se": 0.2793,
+    "z": 0.619
+   },
+   "blind": {
+    "n": 4011,
+    "dates": 49,
+    "mean": -0.7742,
+    "ci95": [
+     -2.1529,
+     0.6573
+    ],
+    "se": 0.7328,
+    "z": -1.056
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "60-64",
+   "train": {
+    "n": 7566,
+    "dates": 924,
+    "mean": -0.2043,
+    "ci95": [
+     -0.4828,
+     0.0791
+    ],
+    "se": 0.1439,
+    "z": -1.419
+   },
+   "valid": {
+    "n": 691,
+    "dates": 31,
+    "mean": 0.7358,
+    "ci95": [
+     0.012,
+     1.4939
+    ],
+    "se": 0.3826,
+    "z": 1.923
+   },
+   "blind": {
+    "n": 813,
+    "dates": 31,
+    "mean": -1.4658,
+    "ci95": [
+     -4.6674,
+     0.9914
+    ],
+    "se": 1.5298,
+    "z": -0.958
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "65-69",
+   "train": {
+    "n": 279,
+    "dates": 171,
+    "mean": -0.3396,
+    "ci95": [
+     -1.1199,
+     0.4477
+    ],
+    "se": 0.4011,
+    "z": -0.847
+   },
+   "valid": {
+    "n": 21,
+    "dates": 11,
+    "mean": -0.8157,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 27,
+    "dates": 16,
+    "mean": -2.7844,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "band",
+   "level": "70-100",
+   "train": {
+    "n": 3,
+    "dates": 3,
+    "mean": -1.9067,
+    "status": "미측정"
+   },
+   "valid": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "regime",
+   "level": "BEAR",
+   "train": {
+    "n": 32761,
+    "dates": 971,
+    "mean": -0.5865,
+    "ci95": [
+     -0.989,
+     -0.1818
+    ],
+    "se": 0.2051,
+    "z": -2.86
+   },
+   "valid": {
+    "n": 10,
+    "dates": 4,
+    "mean": 4.061,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 2200,
+    "dates": 15,
+    "mean": 0.0957,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "regime",
+   "level": "BULL",
+   "train": {
+    "n": 32716,
+    "dates": 970,
+    "mean": -0.4485,
+    "ci95": [
+     -0.6697,
+     -0.2214
+    ],
+    "se": 0.1133,
+    "z": -3.96
+   },
+   "valid": {
+    "n": 6495,
+    "dates": 60,
+    "mean": -0.1651,
+    "ci95": [
+     -0.6625,
+     0.2634
+    ],
+    "se": 0.2375,
+    "z": -0.695
+   },
+   "blind": {
+    "n": 3835,
+    "dates": 31,
+    "mean": -1.0807,
+    "ci95": [
+     -2.734,
+     0.6993
+    ],
+    "se": 0.8835,
+    "z": -1.223
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "regime",
+   "level": "SIDEWAYS",
+   "train": {
+    "n": 37591,
+    "dates": 1095,
+    "mean": -0.0098,
+    "ci95": [
+     -0.2716,
+     0.256
+    ],
+    "se": 0.1355,
+    "z": -0.072
+   },
+   "valid": {
+    "n": 1757,
+    "dates": 22,
+    "mean": 1.4893,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 2353,
+    "dates": 25,
+    "mean": -0.5251,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "market",
+   "level": "KOSDAQ",
+   "train": {
+    "n": 42421,
+    "dates": 2039,
+    "mean": -0.2779,
+    "ci95": [
+     -0.5265,
+     -0.0387
+    ],
+    "se": 0.1238,
+    "z": -2.245
+   },
+   "valid": {
+    "n": 3340,
+    "dates": 70,
+    "mean": 0.3951,
+    "ci95": [
+     -0.301,
+     1.1448
+    ],
+    "se": 0.3684,
+    "z": 1.073
+   },
+   "blind": {
+    "n": 3443,
+    "dates": 45,
+    "mean": -0.987,
+    "ci95": [
+     -2.8219,
+     0.9146
+    ],
+    "se": 0.9557,
+    "z": -1.033
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "market",
+   "level": "KOSPI",
+   "train": {
+    "n": 60647,
+    "dates": 2086,
+    "mean": -0.3705,
+    "ci95": [
+     -0.5427,
+     -0.2015
+    ],
+    "se": 0.0862,
+    "z": -4.297
+   },
+   "valid": {
+    "n": 4922,
+    "dates": 49,
+    "mean": 0.0539,
+    "ci95": [
+     -0.4345,
+     0.4619
+    ],
+    "se": 0.2251,
+    "z": 0.239
+   },
+   "blind": {
+    "n": 4945,
+    "dates": 46,
+    "mean": -0.3582,
+    "ci95": [
+     -1.5995,
+     0.9635
+    ],
+    "se": 0.6677,
+    "z": -0.537
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "asset_type",
+   "level": "ETF",
+   "train": {
+    "n": 9731,
+    "dates": 252,
+    "mean": -0.2598,
+    "ci95": [
+     -0.5716,
+     0.0255
+    ],
+    "se": 0.1484,
+    "z": -1.751
+   },
+   "valid": {
+    "n": 1441,
+    "dates": 18,
+    "mean": 0.6807,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 1557,
+    "dates": 27,
+    "mean": -1.2592,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "asset_type",
+   "level": "ETF_INV",
+   "train": {
+    "n": 391,
+    "dates": 180,
+    "mean": -0.6708,
+    "ci95": [
+     -1.0696,
+     -0.2928
+    ],
+    "se": 0.2022,
+    "z": -3.317
+   },
+   "valid": {
+    "n": 30,
+    "dates": 12,
+    "mean": -2.2197,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 28,
+    "dates": 11,
+    "mean": -0.4971,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "asset_type",
+   "level": "ETF_LEV",
+   "train": {
+    "n": 608,
+    "dates": 167,
+    "mean": -0.3265,
+    "ci95": [
+     -0.9307,
+     0.3272
+    ],
+    "se": 0.3281,
+    "z": -0.995
+   },
+   "valid": {
+    "n": 72,
+    "dates": 12,
+    "mean": 3.4712,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 75,
+    "dates": 14,
+    "mean": -2.89,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "asset_type",
+   "level": "STOCK",
+   "train": {
+    "n": 92338,
+    "dates": 2334,
+    "mean": -0.3386,
+    "ci95": [
+     -0.5316,
+     -0.1446
+    ],
+    "se": 0.0981,
+    "z": -3.45
+   },
+   "valid": {
+    "n": 6719,
+    "dates": 81,
+    "mean": 0.0626,
+    "ci95": [
+     -0.5279,
+     0.6559
+    ],
+    "se": 0.31,
+    "z": 0.202
+   },
+   "blind": {
+    "n": 6728,
+    "dates": 56,
+    "mean": -0.4427,
+    "ci95": [
+     -2.0038,
+     1.0115
+    ],
+    "se": 0.7869,
+    "z": -0.563
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "m10_above",
+   "level": "False",
+   "train": {
+    "n": 56363,
+    "dates": 2076,
+    "mean": -0.2726,
+    "ci95": [
+     -0.5242,
+     -0.0229
+    ],
+    "se": 0.1265,
+    "z": -2.156
+   },
+   "valid": {
+    "n": 2322,
+    "dates": 64,
+    "mean": 0.0672,
+    "ci95": [
+     -0.6493,
+     0.6894
+    ],
+    "se": 0.3452,
+    "z": 0.195
+   },
+   "blind": {
+    "n": 3622,
+    "dates": 43,
+    "mean": -0.2723,
+    "ci95": [
+     -1.9666,
+     1.304
+    ],
+    "se": 0.8629,
+    "z": -0.316
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "m10_above",
+   "level": "True",
+   "train": {
+    "n": 46705,
+    "dates": 1943,
+    "mean": -0.4045,
+    "ci95": [
+     -0.5869,
+     -0.2165
+    ],
+    "se": 0.0942,
+    "z": -4.295
+   },
+   "valid": {
+    "n": 5940,
+    "dates": 60,
+    "mean": 0.2406,
+    "ci95": [
+     -0.3021,
+     0.7842
+    ],
+    "se": 0.2721,
+    "z": 0.884
+   },
+   "blind": {
+    "n": 4766,
+    "dates": 49,
+    "mean": -0.8778,
+    "ci95": [
+     -2.5595,
+     0.7441
+    ],
+    "se": 0.8394,
+    "z": -1.046
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "demark_state",
+   "level": "COMPLETE",
+   "train": {
+    "n": 850,
+    "dates": 301,
+    "mean": -0.2253,
+    "ci95": [
+     -0.6686,
+     0.2176
+    ],
+    "se": 0.2261,
+    "z": -0.997
+   },
+   "valid": {
+    "n": 48,
+    "dates": 17,
+    "mean": 1.2104,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 82,
+    "dates": 19,
+    "mean": 2.4432,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "demark_state",
+   "level": "FORMING",
+   "train": {
+    "n": 46771,
+    "dates": 1948,
+    "mean": -0.4419,
+    "ci95": [
+     -0.6882,
+     -0.1774
+    ],
+    "se": 0.1328,
+    "z": -3.328
+   },
+   "valid": {
+    "n": 3257,
+    "dates": 50,
+    "mean": 0.2513,
+    "ci95": [
+     -0.4001,
+     0.8806
+    ],
+    "se": 0.332,
+    "z": 0.757
+   },
+   "blind": {
+    "n": 3899,
+    "dates": 41,
+    "mean": -0.5392,
+    "ci95": [
+     -2.3589,
+     1.2871
+    ],
+    "se": 0.9461,
+    "z": -0.57
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "demark_state",
+   "level": "NONE",
+   "train": {
+    "n": 50456,
+    "dates": 1994,
+    "mean": -0.2634,
+    "ci95": [
+     -0.4469,
+     -0.087
+    ],
+    "se": 0.0911,
+    "z": -2.892
+   },
+   "valid": {
+    "n": 4397,
+    "dates": 63,
+    "mean": 0.1135,
+    "ci95": [
+     -0.4447,
+     0.558
+    ],
+    "se": 0.2524,
+    "z": 0.45
+   },
+   "blind": {
+    "n": 4041,
+    "dates": 49,
+    "mean": -0.7871,
+    "ci95": [
+     -2.3597,
+     0.838
+    ],
+    "se": 0.8129,
+    "z": -0.968
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "demark_state",
+   "level": "SETUP_DONE",
+   "train": {
+    "n": 4991,
+    "dates": 753,
+    "mean": -0.0208,
+    "ci95": [
+     -0.3766,
+     0.3379
+    ],
+    "se": 0.1808,
+    "z": -0.115
+   },
+   "valid": {
+    "n": 560,
+    "dates": 28,
+    "mean": 0.3739,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 366,
+    "dates": 20,
+    "mean": -0.2377,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "안전마진 확보",
+   "train": {
+    "n": 55527,
+    "dates": 2072,
+    "mean": -0.2852,
+    "ci95": [
+     -0.5349,
+     -0.0621
+    ],
+    "se": 0.1192,
+    "z": -2.392
+   },
+   "valid": {
+    "n": 3799,
+    "dates": 56,
+    "mean": 0.0415,
+    "ci95": [
+     -0.66,
+     0.7599
+    ],
+    "se": 0.3623,
+    "z": 0.115
+   },
+   "blind": {
+    "n": 3468,
+    "dates": 51,
+    "mean": -0.5958,
+    "ci95": [
+     -2.671,
+     1.4609
+    ],
+    "se": 1.0662,
+    "z": -0.559
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "적정가 소폭 초과",
+   "train": {
+    "n": 1040,
+    "dates": 373,
+    "mean": -0.559,
+    "ci95": [
+     -0.9048,
+     -0.2217
+    ],
+    "se": 0.1768,
+    "z": -3.161
+   },
+   "valid": {
+    "n": 83,
+    "dates": 22,
+    "mean": -0.2493,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 127,
+    "dates": 24,
+    "mean": -0.0433,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "적정가 이하 (안전마진 미확보)",
+   "train": {
+    "n": 4389,
+    "dates": 755,
+    "mean": -0.263,
+    "ci95": [
+     -0.4771,
+     -0.0446
+    ],
+    "se": 0.1086,
+    "z": -2.422
+   },
+   "valid": {
+    "n": 345,
+    "dates": 25,
+    "mean": -0.4764,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 474,
+    "dates": 33,
+    "mean": -0.1355,
+    "ci95": [
+     -1.2965,
+     1.191
+    ],
+    "se": 0.6463,
+    "z": -0.21
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "적정가 초과 (추격매수 경고)",
+   "train": {
+    "n": 1783,
+    "dates": 466,
+    "mean": -0.3054,
+    "ci95": [
+     -0.5839,
+     -0.052
+    ],
+    "se": 0.1363,
+    "z": -2.24
+   },
+   "valid": {
+    "n": 146,
+    "dates": 23,
+    "mean": -0.2177,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 167,
+    "dates": 29,
+    "mean": 0.7393,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "적정가 크게 초과 (추격매수 위험)",
+   "train": {
+    "n": 11069,
+    "dates": 1092,
+    "mean": -0.477,
+    "ci95": [
+     -0.6748,
+     -0.2893
+    ],
+    "se": 0.0984,
+    "z": -4.849
+   },
+   "valid": {
+    "n": 1036,
+    "dates": 26,
+    "mean": -0.0086,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 1160,
+    "dates": 29,
+    "mean": 0.5153,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "entry_zone",
+   "level": "판정 불가",
+   "train": {
+    "n": 29260,
+    "dates": 1605,
+    "mean": -0.3711,
+    "ci95": [
+     -0.5874,
+     -0.1582
+    ],
+    "se": 0.1085,
+    "z": -3.42
+   },
+   "valid": {
+    "n": 2853,
+    "dates": 50,
+    "mean": 0.5794,
+    "ci95": [
+     -0.0715,
+     1.073
+    ],
+    "se": 0.2901,
+    "z": 1.997
+   },
+   "blind": {
+    "n": 2992,
+    "dates": 38,
+    "mean": -1.2549,
+    "ci95": [
+     -2.632,
+     0.1857
+    ],
+    "se": 0.727,
+    "z": -1.726
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "거래 회피",
+   "train": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "valid": {
+    "n": 1,
+    "dates": 1,
+    "mean": -3.41,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "분할매수 검토",
+   "train": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "valid": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "비중축소 검토",
+   "train": {
+    "n": 4084,
+    "dates": 684,
+    "mean": -0.4193,
+    "ci95": [
+     -0.7184,
+     -0.1076
+    ],
+    "se": 0.1569,
+    "z": -2.672
+   },
+   "valid": {
+    "n": 169,
+    "dates": 26,
+    "mean": -0.4254,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 292,
+    "dates": 28,
+    "mean": -0.8491,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "신규 매수 보류",
+   "train": {
+    "n": 51474,
+    "dates": 2100,
+    "mean": -0.348,
+    "ci95": [
+     -0.5449,
+     -0.1428
+    ],
+    "se": 0.1029,
+    "z": -3.383
+   },
+   "valid": {
+    "n": 3691,
+    "dates": 66,
+    "mean": 0.1715,
+    "ci95": [
+     -0.4266,
+     0.6981
+    ],
+    "se": 0.2868,
+    "z": 0.598
+   },
+   "blind": {
+    "n": 4182,
+    "dates": 49,
+    "mean": -0.2809,
+    "ci95": [
+     -1.7416,
+     1.2143
+    ],
+    "se": 0.7512,
+    "z": -0.374
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "제한적 진입",
+   "train": {
+    "n": 13,
+    "dates": 11,
+    "mean": 1.0792,
+    "status": "미측정"
+   },
+   "valid": {
+    "n": 0,
+    "dates": 0,
+    "mean": null,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 1,
+    "dates": 1,
+    "mean": 2.18,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "action_title",
+   "level": "조건 확인·관망",
+   "train": {
+    "n": 47497,
+    "dates": 1989,
+    "mean": -0.3083,
+    "ci95": [
+     -0.5058,
+     -0.11
+    ],
+    "se": 0.1021,
+    "z": -3.021
+   },
+   "valid": {
+    "n": 4401,
+    "dates": 51,
+    "mean": 0.2334,
+    "ci95": [
+     -0.2779,
+     0.8026
+    ],
+    "se": 0.2701,
+    "z": 0.864
+   },
+   "blind": {
+    "n": 3913,
+    "dates": 44,
+    "mean": -0.9581,
+    "ci95": [
+     -2.7042,
+     0.6237
+    ],
+    "se": 0.8677,
+    "z": -1.104
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "rsi",
+   "level": "중앙값 이하 (≤ 49.84)",
+   "train": {
+    "n": 51534,
+    "dates": 2031,
+    "mean": -0.4034,
+    "ci95": [
+     -0.6543,
+     -0.1543
+    ],
+    "se": 0.1287,
+    "z": -3.134
+   },
+   "valid": {
+    "n": 3903,
+    "dates": 65,
+    "mean": 0.1886,
+    "ci95": [
+     -0.5243,
+     0.8884
+    ],
+    "se": 0.372,
+    "z": 0.507
+   },
+   "blind": {
+    "n": 4143,
+    "dates": 45,
+    "mean": -0.708,
+    "ci95": [
+     -2.8067,
+     1.6435
+    ],
+    "se": 1.1469,
+    "z": -0.617
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "rsi",
+   "level": "중앙값 초과 (> 49.84)",
+   "train": {
+    "n": 51534,
+    "dates": 1950,
+    "mean": -0.2614,
+    "ci95": [
+     -0.4427,
+     -0.0787
+    ],
+    "se": 0.0956,
+    "z": -2.734
+   },
+   "valid": {
+    "n": 4359,
+    "dates": 51,
+    "mean": 0.1948,
+    "ci95": [
+     -0.2942,
+     0.6351
+    ],
+    "se": 0.2388,
+    "z": 0.816
+   },
+   "blind": {
+    "n": 4245,
+    "dates": 45,
+    "mean": -0.5268,
+    "ci95": [
+     -1.7538,
+     0.5017
+    ],
+    "se": 0.5614,
+    "z": -0.938
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "bb_pos",
+   "level": "중앙값 이하 (≤ 48.99)",
+   "train": {
+    "n": 51512,
+    "dates": 2011,
+    "mean": -0.4102,
+    "ci95": [
+     -0.6692,
+     -0.1441
+    ],
+    "se": 0.133,
+    "z": -3.084
+   },
+   "valid": {
+    "n": 3723,
+    "dates": 52,
+    "mean": 0.1559,
+    "ci95": [
+     -0.6769,
+     0.8988
+    ],
+    "se": 0.3936,
+    "z": 0.396
+   },
+   "blind": {
+    "n": 3972,
+    "dates": 41,
+    "mean": -0.3566,
+    "ci95": [
+     -2.6429,
+     1.7451
+    ],
+    "se": 1.1403,
+    "z": -0.313
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "bb_pos",
+   "level": "중앙값 초과 (> 48.99)",
+   "train": {
+    "n": 51512,
+    "dates": 1963,
+    "mean": -0.2543,
+    "ci95": [
+     -0.4311,
+     -0.0751
+    ],
+    "se": 0.0922,
+    "z": -2.758
+   },
+   "valid": {
+    "n": 4519,
+    "dates": 63,
+    "mean": 0.2255,
+    "ci95": [
+     -0.2419,
+     0.6553
+    ],
+    "se": 0.2296,
+    "z": 0.982
+   },
+   "blind": {
+    "n": 4403,
+    "dates": 47,
+    "mean": -0.8478,
+    "ci95": [
+     -2.1892,
+     0.391
+    ],
+    "se": 0.6632,
+    "z": -1.278
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "bb_pos",
+   "level": "빈 값",
+   "train": {
+    "n": 44,
+    "dates": 35,
+    "mean": -0.6248,
+    "ci95": [
+     -0.9193,
+     -0.3707
+    ],
+    "se": 0.1402,
+    "z": -4.456
+   },
+   "valid": {
+    "n": 20,
+    "dates": 14,
+    "mean": -0.71,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 13,
+    "dates": 10,
+    "mean": -1.5454,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "range_pos",
+   "level": "중앙값 이하 (≤ 39.6)",
+   "train": {
+    "n": 51654,
+    "dates": 2006,
+    "mean": -0.2843,
+    "ci95": [
+     -0.5355,
+     -0.0286
+    ],
+    "se": 0.1273,
+    "z": -2.233
+   },
+   "valid": {
+    "n": 2086,
+    "dates": 47,
+    "mean": 0.0589,
+    "ci95": [
+     -0.6219,
+     0.6721
+    ],
+    "se": 0.3309,
+    "z": 0.178
+   },
+   "blind": {
+    "n": 3461,
+    "dates": 39,
+    "mean": -0.1803,
+    "ci95": [
+     -2.0331,
+     1.5849
+    ],
+    "se": 0.9415,
+    "z": -0.192
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "range_pos",
+   "level": "중앙값 초과 (> 39.6)",
+   "train": {
+    "n": 51414,
+    "dates": 1980,
+    "mean": -0.3807,
+    "ci95": [
+     -0.5584,
+     -0.2041
+    ],
+    "se": 0.0917,
+    "z": -4.152
+   },
+   "valid": {
+    "n": 6176,
+    "dates": 71,
+    "mean": 0.2367,
+    "ci95": [
+     -0.2884,
+     0.7777
+    ],
+    "se": 0.2668,
+    "z": 0.887
+   },
+   "blind": {
+    "n": 4927,
+    "dates": 50,
+    "mean": -0.9226,
+    "ci95": [
+     -2.5204,
+     0.621
+    ],
+    "se": 0.8089,
+    "z": -1.141
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "vol20",
+   "level": "중앙값 이하 (≤ 0.02139)",
+   "train": {
+    "n": 51479,
+    "dates": 1902,
+    "mean": -0.5069,
+    "ci95": [
+     -0.6585,
+     -0.3579
+    ],
+    "se": 0.0755,
+    "z": -6.714
+   },
+   "valid": {
+    "n": 4189,
+    "dates": 42,
+    "mean": -0.1101,
+    "ci95": [
+     -0.505,
+     0.2262
+    ],
+    "se": 0.1864,
+    "z": -0.591
+   },
+   "blind": {
+    "n": 1780,
+    "dates": 39,
+    "mean": -0.5878,
+    "ci95": [
+     -1.1634,
+     -0.0635
+    ],
+    "se": 0.2843,
+    "z": -2.067
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "vol20",
+   "level": "중앙값 초과 (> 0.02139)",
+   "train": {
+    "n": 51479,
+    "dates": 2124,
+    "mean": -0.1572,
+    "ci95": [
+     -0.4481,
+     0.1199
+    ],
+    "se": 0.144,
+    "z": -1.092
+   },
+   "valid": {
+    "n": 4035,
+    "dates": 62,
+    "mean": 0.5118,
+    "ci95": [
+     -0.2248,
+     1.2853
+    ],
+    "se": 0.3916,
+    "z": 1.307
+   },
+   "blind": {
+    "n": 6592,
+    "dates": 52,
+    "mean": -0.6222,
+    "ci95": [
+     -2.3985,
+     1.1489
+    ],
+    "se": 0.9144,
+    "z": -0.68
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "vol20",
+   "level": "빈 값",
+   "train": {
+    "n": 110,
+    "dates": 93,
+    "mean": -0.6203,
+    "ci95": [
+     -0.7888,
+     -0.4591
+    ],
+    "se": 0.0842,
+    "z": -7.366
+   },
+   "valid": {
+    "n": 38,
+    "dates": 28,
+    "mean": -0.4889,
+    "status": "미측정"
+   },
+   "blind": {
+    "n": 16,
+    "dates": 12,
+    "mean": -1.3475,
+    "status": "미측정"
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "net_expected",
+   "level": "중앙값 이하 (≤ 0.3)",
+   "train": {
+    "n": 31142,
+    "dates": 1793,
+    "mean": -0.2765,
+    "ci95": [
+     -0.485,
+     -0.0872
+    ],
+    "se": 0.1007,
+    "z": -2.746
+   },
+   "valid": {
+    "n": 2663,
+    "dates": 52,
+    "mean": 0.1362,
+    "ci95": [
+     -0.4455,
+     0.7173
+    ],
+    "se": 0.2989,
+    "z": 0.456
+   },
+   "blind": {
+    "n": 2715,
+    "dates": 41,
+    "mean": -0.2929,
+    "ci95": [
+     -1.6462,
+     1.0568
+    ],
+    "se": 0.6903,
+    "z": -0.424
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "net_expected",
+   "level": "중앙값 초과 (> 0.3)",
+   "train": {
+    "n": 30683,
+    "dates": 1729,
+    "mean": -0.3075,
+    "ci95": [
+     -0.5281,
+     -0.0858
+    ],
+    "se": 0.1124,
+    "z": -2.736
+   },
+   "valid": {
+    "n": 2869,
+    "dates": 36,
+    "mean": 0.3072,
+    "ci95": [
+     -0.2851,
+     0.8781
+    ],
+    "se": 0.2939,
+    "z": 1.045
+   },
+   "blind": {
+    "n": 3270,
+    "dates": 38,
+    "mean": -0.6828,
+    "ci95": [
+     -2.5287,
+     1.0273
+    ],
+    "se": 0.9284,
+    "z": -0.735
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "net_expected",
+   "level": "빈 값",
+   "train": {
+    "n": 41243,
+    "dates": 1911,
+    "mean": -0.3931,
+    "ci95": [
+     -0.6138,
+     -0.1857
+    ],
+    "se": 0.1145,
+    "z": -3.434
+   },
+   "valid": {
+    "n": 2730,
+    "dates": 60,
+    "mean": 0.1249,
+    "ci95": [
+     -0.4173,
+     0.6117
+    ],
+    "se": 0.2614,
+    "z": 0.478
+   },
+   "blind": {
+    "n": 2403,
+    "dates": 46,
+    "mean": -0.8913,
+    "ci95": [
+     -2.3873,
+     0.7205
+    ],
+    "se": 0.8254,
+    "z": -1.08
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "eff_sample",
+   "level": "중앙값 이하 (≤ 58.38)",
+   "train": {
+    "n": 51534,
+    "dates": 1797,
+    "mean": -0.4012,
+    "ci95": [
+     -0.6154,
+     -0.1792
+    ],
+    "se": 0.1121,
+    "z": -3.579
+   },
+   "valid": {
+    "n": 1986,
+    "dates": 38,
+    "mean": 0.6395,
+    "ci95": [
+     0.0988,
+     1.0729
+    ],
+    "se": 0.2505,
+    "z": 2.553
+   },
+   "blind": {
+    "n": 2073,
+    "dates": 37,
+    "mean": -0.9655,
+    "ci95": [
+     -2.5473,
+     0.7975
+    ],
+    "se": 0.8624,
+    "z": -1.12
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "eff_sample",
+   "level": "중앙값 초과 (> 58.38)",
+   "train": {
+    "n": 51534,
+    "dates": 1315,
+    "mean": -0.2635,
+    "ci95": [
+     -0.5187,
+     -0.0045
+    ],
+    "se": 0.131,
+    "z": -2.011
+   },
+   "valid": {
+    "n": 6276,
+    "dates": 71,
+    "mean": 0.0502,
+    "ci95": [
+     -0.5154,
+     0.6189
+    ],
+    "se": 0.292,
+    "z": 0.172
+   },
+   "blind": {
+    "n": 6315,
+    "dates": 52,
+    "mean": -0.5017,
+    "ci95": [
+     -1.9104,
+     1.0339
+    ],
+    "se": 0.7709,
+    "z": -0.651
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "win_rate",
+   "level": "중앙값 이하 (≤ 50)",
+   "train": {
+    "n": 36866,
+    "dates": 1912,
+    "mean": -0.2829,
+    "ci95": [
+     -0.4907,
+     -0.0708
+    ],
+    "se": 0.1052,
+    "z": -2.69
+   },
+   "valid": {
+    "n": 3173,
+    "dates": 53,
+    "mean": 0.0879,
+    "ci95": [
+     -0.549,
+     0.774
+    ],
+    "se": 0.3385,
+    "z": 0.26
+   },
+   "blind": {
+    "n": 3358,
+    "dates": 44,
+    "mean": -0.4821,
+    "ci95": [
+     -1.9903,
+     1.0043
+    ],
+    "se": 0.7721,
+    "z": -0.624
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "win_rate",
+   "level": "중앙값 초과 (> 50)",
+   "train": {
+    "n": 24959,
+    "dates": 1534,
+    "mean": -0.3051,
+    "ci95": [
+     -0.507,
+     -0.0911
+    ],
+    "se": 0.1081,
+    "z": -2.821
+   },
+   "valid": {
+    "n": 2359,
+    "dates": 33,
+    "mean": 0.4093,
+    "ci95": [
+     -0.0614,
+     0.8658
+    ],
+    "se": 0.2329,
+    "z": 1.757
+   },
+   "blind": {
+    "n": 2627,
+    "dates": 33,
+    "mean": -0.5364,
+    "ci95": [
+     -2.301,
+     1.1682
+    ],
+    "se": 0.9147,
+    "z": -0.586
+   },
+   "all_three_bonferroni": false
+  },
+  {
+   "var": "win_rate",
+   "level": "빈 값",
+   "train": {
+    "n": 41243,
+    "dates": 1911,
+    "mean": -0.3931,
+    "ci95": [
+     -0.6148,
+     -0.1808
+    ],
+    "se": 0.113,
+    "z": -3.48
+   },
+   "valid": {
+    "n": 2730,
+    "dates": 60,
+    "mean": 0.1249,
+    "ci95": [
+     -0.4051,
+     0.6149
+    ],
+    "se": 0.2572,
+    "z": 0.485
+   },
+   "blind": {
+    "n": 2403,
+    "dates": 46,
+    "mean": -0.8913,
+    "ci95": [
+     -2.4747,
+     0.7895
+    ],
+    "se": 0.8168,
+    "z": -1.091
+   },
+   "all_three_bonferroni": false
+  }
+ ],
+ "map_passing": []
+}
