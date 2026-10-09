@@ -36769,17 +36769,22 @@ check("⑦ 워커 — 주인이 살아 있으면 실행 중(PID · 시작 시각
       and _w440u['running'] is None and _w440n['running'] is False and '잠금 파일 없음' in _w440n['note'], str((_w440a, _w440d, _w440u, _w440n)))
 # ⑧ 저녁 작업 — 기록의 시작·끝 줄(실제 문장 그대로 · scripts/nightly_local.py 의 _log)
 _nl440 = _os440.path.join(_td440, 'nightly.txt')
-open(_nl440, 'w', encoding='utf-8').write('[10-08 17:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 4\n[10-08 17:03:20] 끝 · 가장 나쁜 종료 코드 0\n'
+open(_nl440, 'w', encoding='utf-8').write('[10-08 17:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 4\n'
+                                          '[10-08 17:00:19]   클라우드 되받기 — 종료 0 · 18초 · 되받기 끝 · data-20261006 · 원장 1 → 2\n'
+                                          '[10-08 17:03:20] 끝 · 가장 나쁜 종료 코드 0\n'
                                           '[10-09 17:00:00] 이 PC 장 마감 뒤 작업 시작 · 단계 4\n')
 _ns440 = _ops440.nightly_status(_nl440)
-open(_nl440, 'a', encoding='utf-8').write('[10-09 17:02:00] 끝 · 가장 나쁜 종료 코드 2\n')
+open(_nl440, 'a', encoding='utf-8').write('[10-09 17:00:30]   클라우드 되받기 — 종료 0 · 18초 · 되받기 끝 · data-20261008 · 원장 2 → 3\n'
+                                          '[10-09 17:02:00] 끝 · 가장 나쁜 종료 코드 2\n')
 _ns440b = _ops440.nightly_status(_nl440)
 _nlsrc440 = _read148(_os.path.join(PROJ, 'scripts', 'nightly_local.py'))
-check("⑧ 저녁 작업 — 시작 뒤 끝 줄이 없으면 '도는 중'(시작 시각) · 끝나면 마지막 끝 시각과 종료 코드 · 기록 없으면 그렇다고 · 찾는 두 문장이 실제 기록기 소스에 있다",
-      _ns440['running'] is True and _ns440['last_start'] == '10-09 17:00:00' and _ns440['last_end'] is None
-      and _ns440b['running'] is False and _ns440b['last_end'] == '10-09 17:02:00' and _ns440b['worst'] == 2
+_plsrc440 = _read148(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'))
+check("⑧ 저녁 작업 — 시작 뒤 끝 줄이 없으면 '도는 중'(시작 시각 · 아직 안 되받음) · 끝나면 마지막 끝 시각과 종료 코드와 그 실행이 되받은 스냅샷 이름 · "
+      "기록 없으면 그렇다고 · 찾는 세 문장이 실제 기록기·되받기 소스에 있다",
+      _ns440['running'] is True and _ns440['last_start'] == '10-09 17:00:00' and _ns440['last_end'] is None and _ns440['pulled'] is None
+      and _ns440b['running'] is False and _ns440b['last_end'] == '10-09 17:02:00' and _ns440b['worst'] == 2 and _ns440b['pulled'] == 'data-20261008'
       and _ops440.nightly_status(_os440.path.join(_td440, 'no.txt'))['note'] == '기록 없음'
-      and '장 마감 뒤 작업 시작' in _nlsrc440 and '끝 · 가장 나쁜 종료 코드' in _nlsrc440, str((_ns440, _ns440b)))
+      and '장 마감 뒤 작업 시작' in _nlsrc440 and '끝 · 가장 나쁜 종료 코드' in _nlsrc440 and '되받기 끝 · ' in _plsrc440, str((_ns440, _ns440b)))
 # ⑨ 진행 줄 — 끼워 넣은 재료로(셸 없음) · 라벨 다섯 · 도는 것은 running=True · 못 읽으면 None 과 사유
 _tasks440 = {_ops440.TASK_NAME: dict(ok=True, installed=True, state='Running', next_run='', last_run='10/09/2026 08:50:00', last_result_ko='실행 중'),
              _ops440.WATCH_TASK: dict(ok=False, reason='작업 상태를 못 읽었다 — boom')}
@@ -36792,8 +36797,16 @@ check("⑨ 진행 줄 — 워커·예약 작업 둘·저녁 작업·자동 갱�
       and _pg440[1]['running'] is True and '지금 도는 중' in _pg440[1]['text'] and _pg440[2]['running'] is None and 'boom' in _pg440[2]['text']
       and _pg440[3]['running'] is False and '종료 코드 2' in _pg440[3]['text'] and _pg440[4]['running'] is True and '15초마다' in _pg440[4]['text']
       and '07:00:00' in _pg440[4]['text'] and _pg440b[1]['text'] == '등록 안 됨' and '대기(Ready)' in _pg440b[2]['text'] and '10/10/2026' in _pg440b[2]['text']
-      and _pg440b[3]['running'] is True and '도는 중' in _pg440b[3]['text'] and _pg440b[4]['running'] is False and _pg440b[4]['text'] == '꺼짐',
+      and _pg440b[3]['running'] is True and '도는 중' in _pg440b[3]['text'] and _pg440b[4]['running'] is False and _pg440b[4]['text'] == '꺼짐'
+      and '되받은 클라우드 스냅샷 data-20261008' in _pg440[3]['text'] and '되받은' not in _pg440b[3]['text'],
       str((_pg440, _pg440b)))
+# ⑨' 상태 띠 '한국투자 연결' — 이 화면이 방금 읽은 시각이 장부 스냅샷보다 새로우면 그것을(한 화면에 '동기화'가 둘이 되지 않게) · 옛 호출(두 인자)은 그대로
+check("⑨' conn_label — 화면 읽음이 더 새로우면 '읽음 … (이 화면)' · 스냅샷이 더 새로우면 종전 '동기화' · 스냅샷 없이 읽음만 있어도 읽음 · 두 인자 호출 불변",
+      _sv440.conn_label(_CFG432, dict(env='real', ts='2026-10-08T13:10:02+09:00'), live_ts='2026-10-09T08:17:37') == '실계좌 · 읽음 2026-10-09 08:17 (이 화면)'
+      and _sv440.conn_label(_CFG432, dict(env='real', ts='2026-10-09T09:00:00+09:00'), live_ts='2026-10-09T08:17:37') == '실계좌 · 동기화 2026-10-09 09:00'
+      and _sv440.conn_label(_CFG432, None, live_ts='2026-10-09T08:17:37') == '실계좌 · 읽음 2026-10-09 08:17 (이 화면)'
+      and _sv440.conn_label(_CFG432, dict(env='real', ts='2026-10-08T13:10:02+09:00')) == '실계좌 · 동기화 2026-10-08 13:10'
+      and _sv440.conn_label({'missing': ['x']}, None, live_ts='2026-10-09T08:17:37') == '정보 없음')
 # ⑩ 장부 — 스냅샷이 D+2 정산 예정 예수금을 남긴다 · 옛 장부(열 없음)를 열면 열을 더한다(멱등)
 _c440 = _sl440.connect(':memory:')
 _sl440.account_snapshot(_c440, 'real', _bal440)

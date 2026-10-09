@@ -149,18 +149,21 @@ def nightly_status(log_path=None, tail=400):
             lines = f.read().splitlines()[-tail:]
     except OSError:
         return dict(running=None, last_start=None, last_end=None, worst=None, note='기록을 읽지 못했다')
-    start = end = worst = None
+    start = end = worst = pulled = None
     for ln in lines:
         if '장 마감 뒤 작업 시작' in ln:
-            start, end, worst = ln[1:15], None, None
+            start, end, worst, pulled = ln[1:15], None, None, None
         elif '끝 · 가장 나쁜 종료 코드' in ln:
             end = ln[1:15]
             try:
                 worst = int(ln.rsplit('코드', 1)[1].strip())
             except (ValueError, IndexError):
                 worst = None
+        elif '되받기 끝 · data-' in ln:                       # 그 실행이 되받은 클라우드 스냅샷(릴리스 이름 · 라운드 420 의 첫 단계)
+            i = ln.index('data-')
+            pulled = ln[i:i + 13]
     running = bool(start) and end is None
-    return dict(running=running, last_start=start, last_end=end, worst=worst,
+    return dict(running=running, last_start=start, last_end=end, worst=worst, pulled=pulled,
                 note=('도는 중' if running else ('마지막 실행 끝' if end else '기록 없음')))
 
 
@@ -184,7 +187,8 @@ def progress(now=None, worker=None, tasks=None, nightly=None, auto=None):
                             + (f" · 마지막 {t['last_run']} {t.get('last_result_ko') or ''}" if t.get('last_run') else ' · 아직 돈 적 없음')))
     out.append(dict(label='저녁 작업(되받기·추적·재측정·성적표)', running=n.get('running'),
                     text=(f"도는 중 · {n['last_start']} 시작" if n.get('running') else
-                          (f"마지막 {n['last_end']} 끝 · 종료 코드 {n['worst']}" if n.get('last_end') else n.get('note') or '기록 없음'))))
+                          (f"마지막 {n['last_end']} 끝 · 종료 코드 {n['worst']}" if n.get('last_end') else n.get('note') or '기록 없음'))
+                    + (f" · 되받은 클라우드 스냅샷 {n['pulled']}" if n.get('pulled') else '')))
     if auto is not None:
         out.append(dict(label='계좌 자동 갱신(이 화면)', running=bool(auto.get('on')),
                         text=(f"켜짐 · {auto.get('every')}초마다" if auto.get('on') else '꺼짐')

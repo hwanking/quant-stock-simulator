@@ -54,10 +54,14 @@ def mode_label(mode, stt, protect_n=0):
     return base + (f' · 보호만 {protect_n}종목' if protect_n and mode not in X.MODE_ENV else '')
 
 
-def conn_label(cfg, acct):
-    """한국투자 연결 한 마디 — 사실만: 정보 없음 · 정보 있음(연결 확인 전) · 마지막으로 잔고를 읽은 시각(그것이 '정상'의 증거다)."""
+def conn_label(cfg, acct, live_ts=None):
+    """한국투자 연결 한 마디 — 사실만: 정보 없음 · 정보 있음(연결 확인 전) · 마지막으로 잔고를 읽은 시각(그것이 '정상'의 증거다).
+    `live_ts` 는 이 화면의 계좌 판이 방금 읽은 시각(라운드 454 · 같은 값이면 장부 스냅샷을 안 쌓으므로 장부보다 새로울 수 있다) —
+    더 새로우면 그것을 적는다(한 화면에 '동기화' 시각이 둘이 되지 않게 · §4)."""
     if not cfg or cfg.get('missing') or cfg.get('problems'):
         return '정보 없음'
+    if live_ts and (not acct or str(live_ts) > str(acct.get('ts') or '')):
+        return f"{'실계좌' if cfg.get('env') == 'real' else '모의투자'} · 읽음 {_ts(live_ts)} (이 화면)"
     if not acct:
         return '정보 있음 · 연결 확인 전'
     return f"{'실계좌' if acct.get('env') == 'real' else '모의투자'} · 동기화 {_ts(acct.get('ts'))}"
@@ -523,7 +527,7 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     # 라운드 453 — 상태 띠: 연결(마지막 동기화 시각) · 모드(실전이면 주문 방식 · 꺼짐이면 보호만) · 워커 · 긴급정지 토글(한 곳 ·
     #   ⑥에서 올라왔다) · 오늘 계획. 작업 스케줄러 상태는 직접 읽어 한 줄(등록하라고만 적지 않는다).
     cols = st.columns(5)
-    cols[0].metric('한국투자 연결', conn_label(cfg, acct))
+    cols[0].metric('한국투자 연결', conn_label(cfg, acct, live_ts=(st.session_state.get('sw_acct_live') or {}).get('ts')))
     cols[1].metric('운용 모드', mode_label(mode, stt, len(managed) + len(releasing)))
     cols[2].metric('워커 마지막 기록', (_ts(hb['ts']) + f" · {hb['status']}") if hb else '기록 없음')
     with cols[3]:
