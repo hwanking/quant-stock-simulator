@@ -1,24 +1,24 @@
 {
- "made": "2026-10-07",
- "ledger_rows": 257930,
+ "made": "2026-10-09",
+ "ledger_rows": 258330,
  "basis": "개발 구간(train+valid) 매수권 58+ · 판정완료 · 블라인드 미포함 · 비용 0.41%p 차감(운영 왕복 비용) · 축척 어긋남·복사본 제외",
  "cost_pct": 0.41,
  "stat_excluded": {
-  "scale": 920,
+  "scale": 968,
   "dup": 1083
  },
  "scale_audit_read": true,
  "note": "표시 전용 — 점수·게이트에 사용하지 않는다 (라운드 44 결정 유지)",
  "coverage": {
-  "rows_eligible": 96816,
+  "rows_eligible": 96769,
   "by_row": 44946,
-  "by_patch": 35398,
-  "by_ticker": 13644,
+  "by_patch": 35369,
+  "by_ticker": 13626,
   "miss_etf": 2665,
   "miss_ambiguous": 32,
   "miss_unknown": 96,
   "miss_bad_label": 35,
-  "covered": 93988,
+  "covered": 93941,
   "covered_pct": 97.1
  },
  "coverage_note": "업종 출처: 원장 행 → 하위점수 패치 → 같은 종목의 업종(라운드 218). 빠진 것은 ETF(구조상 업종 없음) · 업종이 두 가지로 기록된 종목(모르는 것을 고르지 않는다) · 한 번도 못 받은 종목이다. 업종이 아닌 라벨(비교표 라벨)이 적힌 행도 뺀다(라운드 220).",
@@ -256,10 +256,10 @@
    "small": false
   },
   "건강관리장비와용품": {
-   "n": 3339,
+   "n": 3292,
    "hit": 58.5,
    "wilson_low": 56.8,
-   "ev": -0.332,
+   "ev": -0.303,
    "cost_pct": 0.41,
    "small": false
   },
