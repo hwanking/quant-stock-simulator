@@ -37359,6 +37359,86 @@ check("④ 지휘 띠 — 자동 갱신 켬 → '자동 갱신 15초 · 시각�
       and _sv443.bar_items(dict(_ctx443, cfg={'missing': ['x']}, auto_refresh=(True, 15)))[0]['sub'] == '정보 없음')
 
 
+print("§444 토큰 만료(EGW00123)를 받으면 토큰을 잊는다 — 조회는 새 토큰으로 한 번만 다시 · 주문·취소는 다시 보내지 않는다 (라운드 459)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   토큰은 저장소 밖 파일에 하루치를 두고 다시 쓴다(발급 횟수 제한 · 라운드 446). 그런데 증권사가 먼저 무효로 하거나 시계가 어긋나면
+#   만료된 토큰을 하루 끝까지 다시 써서 15초 갱신·워커의 모든 호출이 실패했다. 공식 샘플(open-trading-api · legacy/rest/
+#   current_price_samle.py)은 msg_cd == 'EGW00123' 이면 토큰을 다시 받고 같은 조회를 한 번 더 부른다 — 그 코드만 적는다(§3).
+#   주문·취소는 다시 보내지 않는다(같은 바퀴의 앞선 조회가 이미 새 토큰을 받는다 · 다시 보내는 판단은 상태기계). 네트워크 0.
+import broker_kis as _bk444
+_cf444 = dict(env='real', app_key='KEY444', app_secret='S', cano='12345678', prdt='01', missing=[], problems=[])
+_calls444, _state444 = [], {'expired_once': True}
+
+
+def _tr444(method, url, headers, params=None, body=None, timeout=10):
+    _calls444.append((url.rsplit('/', 1)[-1], headers.get('authorization')))
+    if url.endswith('/oauth2/tokenP'):
+        return 200, {}, {'access_token': 'NEW', 'access_token_token_expired': '2099-01-01 00:00:00'}
+    if headers.get('authorization') == 'Bearer OLD' and _state444['expired_once']:
+        return 500, {}, {'rt_cd': '1', 'msg_cd': 'EGW00123', 'msg1': '기간이 만료된 token 입니다.'}
+    if 'inquire-balance' in url:
+        return 200, {'tr_cont': 'D'}, {'rt_cd': '0', 'output1': [], 'output2': [{'dnca_tot_amt': '5000', 'tot_evlu_amt': '5000',
+                                                                                  'nass_amt': '5000', 'scts_evlu_amt': '0'}]}
+    if 'order-cash' in url:
+        return 200, {}, {'rt_cd': '0', 'output': {'KRX_FWDG_ORD_ORGNO': '91252', 'ODNO': '1', 'ORD_TMD': '090000'}}
+    return 404, {}, {}
+
+
+# ① 조회 — 낡은 토큰(OLD)으로 만료 응답 → 잊고 → 새 토큰 발급 → 같은 조회 한 번 더 → 성공 · 호출 순서가 그대로
+_br444 = _bk444.KisBroker(_cf444, transport=_tr444, token_dir=_os.path.join(PROJ, '_probe'), sleep=lambda s: None)
+_br444._token = 'OLD'                                                 # 파일에서 읽은 낡은 토큰을 심는다(저장소 안 token_dir 이라 파일은 안 쓴다)
+_bal444 = _br444.get_balance()
+check("① 조회 — 만료(EGW00123) → 토큰 잊음 → 새 토큰 발급 → 같은 잔고 조회 한 번 더 → 성공(예수금 5000) · 호출은 잔고(OLD) → 토큰 → 잔고(NEW) 셋",
+      _bal444['cash'] == 5000 and [c[0] for c in _calls444] == ['inquire-balance', 'tokenP', 'inquire-balance']
+      and _calls444[0][1] == 'Bearer OLD' and _calls444[2][1] == 'Bearer NEW' and _br444._token == 'NEW', str(_calls444))
+# ② 같은 조회가 또 만료면 한 번만 다시 — 끝없이 돌지 않는다(두 번째 만료는 BrokerError)
+_calls444.clear()
+
+
+def _tr444b(method, url, headers, params=None, body=None, timeout=10):
+    _calls444.append((url.rsplit('/', 1)[-1], headers.get('authorization')))
+    if url.endswith('/oauth2/tokenP'):
+        return 200, {}, {'access_token': 'NEW', 'access_token_token_expired': '2099-01-01 00:00:00'}
+    return 500, {}, {'rt_cd': '1', 'msg_cd': 'EGW00123', 'msg1': '기간이 만료된 token 입니다.'}
+_br444b = _bk444.KisBroker(_cf444, transport=_tr444b, token_dir=_os.path.join(PROJ, '_probe'), sleep=lambda s: None)
+_br444b._token = 'OLD'
+_e444b = None
+try:
+    _br444b.get_balance()
+except _bk444.BrokerError as e:
+    _e444b = e
+check("② 다시 불러도 만료면 한 번만 — 잔고 두 번 · 토큰 두 번 이하 · BrokerError '토큰 만료(EGW00123)' (끝없이 돌지 않는다)",
+      _e444b is not None and '토큰 만료(EGW00123)' in str(_e444b) and sum(1 for c in _calls444 if c[0] == 'inquire-balance') == 2,
+      str((_e444b, _calls444)))
+# ③ 주문 — 만료 응답이면 다시 보내지 않는다(주문 호출 1번 · '다시 보내지 않았습니다') · 토큰은 잊어서 다음 호출은 새 토큰
+_calls444.clear()
+_br444c = _bk444.KisBroker(_cf444, transport=_tr444, token_dir=_os.path.join(PROJ, '_probe'), sleep=lambda s: None)
+_br444c._token = 'OLD'
+_e444c = None
+try:
+    _br444c.place_order('buy', '000001', 1, 1000)
+except _bk444.BrokerError as e:
+    _e444c = e
+_n_ord444 = sum(1 for c in _calls444 if c[0] == 'order-cash')
+_after444 = _br444c.get_balance()
+check("③ 주문 — 만료면 BrokerError('주문·취소는 다시 보내지 않았습니다') · 주문 호출 1번뿐 · 토큰은 잊었다 → 다음 조회는 새 토큰으로 성공 · 거절이지 '모름'(TransportError)이 아니다",
+      _e444c is not None and not isinstance(_e444c, _bk444.TransportError) and '다시 보내지 않았습니다' in str(_e444c)
+      and _n_ord444 == 1 and _after444['cash'] == 5000 and _calls444[-1][1] == 'Bearer NEW', str((_e444c, _calls444)))
+# ⑤ '연결 확인'은 잔고를 한 번만 읽는다 — health_check 가 읽은 잔고를 돌려주고 화면이 그것을 장부에 남긴다
+_calls444.clear()
+_br444d = _bk444.KisBroker(_cf444, transport=_tr444, token_dir=_os.path.join(PROJ, '_probe'), sleep=lambda s: None)
+_hc444 = _br444d.health_check()
+check("⑤ health_check — ok · 읽은 잔고(balance)를 같이 돌려준다 · 잔고 조회는 1번 · 화면은 hc['balance'] 를 남긴다(두 번 안 읽는다)",
+      _hc444['ok'] and (_hc444.get('balance') or {}).get('cash') == 5000 and sum(1 for c in _calls444 if c[0] == 'inquire-balance') == 1
+      and "hc.get('balance') or br.get_balance()" in open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read(), str(_calls444))
+# ④ 근거 — 코드 목록은 공식 샘플에서 확인한 하나뿐(지어낸 코드 없음) · 파일 토큰은 저장소 밖일 때만 지운다
+_bks444 = open(_os.path.join(PROJ, 'broker_kis.py'), encoding='utf-8').read()
+check("④ 만료 코드는 ('EGW00123',) 하나(공식 샘플 근거가 소스 주석에) · _forget_token 은 저장소 안 token_dir 이면 파일을 안 지운다",
+      _bk444.TOKEN_EXPIRED_CODES == ('EGW00123',) and 'current_price_samle.py' in _bks444
+      and 'if not _inside_repo(self.token_dir):' in _bks444.split('def _forget_token', 1)[1].split('def _call', 1)[0])
+
+
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
 #   적어 뒀다). 요약 블록 바로 앞으로 옮겨 하한을 전체 실행 수에 맞춘다. 절 안의 이름은

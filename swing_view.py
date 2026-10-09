@@ -1146,7 +1146,7 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
             br = broker_kis.KisBroker(cfg)
             hc = br.health_check()
             if hc['ok']:
-                L.account_snapshot(c, br.env, br.get_balance())
+                L.account_snapshot(c, br.env, hc.get('balance') or br.get_balance())   # 라운드 459 — 확인에서 읽은 잔고를 그대로(두 번 안 읽는다)
                 st.success(hc['message'])
             else:
                 st.warning(hc['message'])

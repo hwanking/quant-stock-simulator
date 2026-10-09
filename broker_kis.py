@@ -32,6 +32,9 @@ BASE_URL = {'real': 'https://openapi.koreainvestment.com:9443',
 #: 지역 변수라 안 먹는다 · 2026-10-08 독립 검토) 그것도 쪽 넘김 사이에만 쓴다. 공식 README 는 '초당 거래건수 초과(EGW00201)'와
 #: '모의투자는 호출 제한이 낮다'만 적는다 — 그래서 실전 0.1 · 모의 0.5 로 넉넉히 둔다.
 SLEEP = {'real': 0.1, 'demo': 0.5}
+#: 라운드 459 — 토큰 만료 응답 코드. 공식 샘플(koreainvestment/open-trading-api · legacy/rest/current_price_samle.py)이 이 코드를 받으면
+#: 토큰을 다시 받고 같은 조회를 한 번 더 부른다. 공식 근거를 확인한 코드만 적는다(다른 코드는 지어내지 않는다 · §3).
+TOKEN_EXPIRED_CODES = ('EGW00123',)
 #: 쪽 넘김 상한 — 넘으면 **실패**로 멈춘다(말없이 자른 목록으로 체결을 맞추면 들어간 주문을 '없다'로 읽는다)
 MAX_PAGES = 20
 TR = {
@@ -248,7 +251,18 @@ class KisBroker:
         return t
 
     # ── 호출 하나 ────────────────────────────────────────────────────────
-    def _call(self, method, key, tr_id, params=None, body=None, tr_cont=''):
+    def _forget_token(self):
+        """토큰을 잊는다 — 메모리와 저장소 밖 파일 둘 다(라운드 459). 다음 호출이 새로 받는다."""
+        self._token = None
+        p = self._token_path()
+        if not _inside_repo(self.token_dir):
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
+
+    def _call(self, method, key, tr_id, params=None, body=None, tr_cont='', _retried=False):
         gap = SLEEP[self.env] - (self.clock() - self._last)
         if gap > 0:
             self.sleep(gap)
@@ -262,6 +276,15 @@ class KisBroker:
         finally:
             self._last = self.clock()
         doc = doc or {}
+        # 라운드 459 — 토큰 만료(증권사가 먼저 무효로 했다 · 시계가 어긋났다): 파일의 토큰을 하루 끝까지 다시 쓰면 그동안 모든 호출이 실패한다.
+        #   잊고 · 조회는 새 토큰으로 한 번만 다시 · 주문·취소는 다시 보내지 않는다(게이트웨이가 코드를 붙여 거절했으니 들어간 주문은 없다 —
+        #   다시 보내는 판단은 실행부의 상태기계가 한다 · 같은 바퀴의 앞선 조회가 이미 새 토큰을 받아 둔다).
+        if str(doc.get('msg_cd') or '') in TOKEN_EXPIRED_CODES:
+            self._forget_token()
+            if key not in ('order', 'cancel', 'token') and not _retried:
+                return self._call(method, key, tr_id, params=params, body=body, tr_cont=tr_cont, _retried=True)
+            raise BrokerError(f"토큰 만료({doc.get('msg_cd')}) — 토큰을 잊었고 다음 호출에서 새로 받습니다"
+                              + (' · 주문·취소는 다시 보내지 않았습니다' if key in ('order', 'cancel') else ''))
         has_code = doc.get('rt_cd') is not None or doc.get('msg_cd') is not None
         # ⚠️ 주문·취소에서 200 이 아닌데 한국투자의 응답 코드도 없으면(게이트웨이 502·504 등) **들어갔는지 모른다** —
         #   거절로 적으면 들어간 주문을 '없다'로 읽는다(2026-10-08 독립 검토). 모름으로 올리고 체결 내역으로 맞춘다.
@@ -363,7 +386,8 @@ class KisBroker:
         try:
             b = self.get_balance()
             return dict(ok=True, env=self.env, account=f"{mask(self.cfg['cano'])}-{self.cfg['prdt']}",
-                        positions=len(b['positions']), message='연결 정상 — 잔고를 읽었습니다(주문은 안 했습니다)')
+                        positions=len(b['positions']), message='연결 정상 — 잔고를 읽었습니다(주문은 안 했습니다)',
+                        balance=b)                     # 라운드 459 — 화면이 같은 잔고를 한 번 더 읽지 않게
         except BrokerError as e:
             return dict(ok=False, env=self.env, account=f"{mask(self.cfg['cano'])}-{self.cfg['prdt']}",
                         positions=None, message=f'{type(e).__name__}: {e}')
