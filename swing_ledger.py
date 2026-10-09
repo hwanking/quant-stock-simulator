@@ -329,6 +329,14 @@ def account_snapshot(c, env, bal):
     c.commit()
 
 
+def account_history(c, limit=500):
+    """계좌 스냅샷 이력(오래된 것부터) — 자산 곡선용(라운드 455). 보유 JSON 은 안 푼다(가볍게). 없으면 []."""
+    rows = [dict(r) for r in c.execute('SELECT id, ts, env, cash, total_eval, net_asset, stock_eval, cash_d2 FROM account_snapshots '
+                                       'ORDER BY id DESC LIMIT ?', (int(limit),))]
+    rows.reverse()
+    return rows
+
+
 def last_account(c):
     r = c.execute('SELECT * FROM account_snapshots ORDER BY id DESC LIMIT 1').fetchone()
     if not r:
@@ -360,6 +368,11 @@ def shadow_latest(c):
 def heartbeat(c, mode, status, detail=''):
     c.execute('INSERT INTO heartbeats (ts, mode, status, detail) VALUES (?,?,?,?)', (now_ts(), mode, status, detail))
     c.commit()
+
+
+def heartbeats_recent(c, n=5):
+    """최근 심박 n개(최근순) — 관제실 '최근 사건' 칸(라운드 455)."""
+    return [dict(r) for r in c.execute('SELECT ts, mode, status, detail FROM heartbeats ORDER BY id DESC LIMIT ?', (int(n),))]
 
 
 def last_heartbeat(c):

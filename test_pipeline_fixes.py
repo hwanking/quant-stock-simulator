@@ -35850,20 +35850,23 @@ open(_child432, 'w', encoding='utf-8').write(
     "from streamlit.testing.v1 import AppTest\n"
     f"at = AppTest.from_string({_swing_app_src432!r}, default_timeout=120)\n"
     "at.run()\n"
+    # 라운드 455 — 지휘 띠는 HTML(값 '2' · sub '실주문 자격 1') 이고 위험 한도 설명은 '시스템' 갈래에 있다 → 갈래를 바꿔 한 번 더 그린다
+    "md0 = ' '.join(str(e.value) for e in at.markdown)\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
+    "at.run()\n"
     "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
-    "           cap=' '.join(str(e.value) for e in at.caption), md=' '.join(str(e.value) for e in at.markdown),\n"
-    "           metric={m.label: m.value for m in at.metric})\n"
+    "           cap=' '.join(str(e.value) for e in at.caption), md=md0, md_sys=' '.join(str(e.value) for e in at.markdown))\n"
     "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
 try:
     _rc432 = __import__('subprocess').run([sys.executable, _child432], cwd=PROJ, capture_output=True, text=True,
                                           encoding='utf-8', errors='replace', timeout=300)
     _jr432 = (_rc432.stdout or '').rsplit('@@R@@', 1)
     _v432 = __import__('json').loads(_jr432[1]) if len(_jr432) == 2 else {}
-    check("⑲ 화면 본문이 예외 없이 그려진다 · 우위 없음 사실을 먼저 적고 · 계획 둘 중 실주문 자격 1 · 기본값 없는 한도를 말한다",
+    check("⑲ 화면 본문이 예외 없이 그려진다 · 우위 없음 사실을 먼저 적고 · 지휘 띠가 계획 둘 중 실주문 자격 1 을 적고 · 시스템 갈래가 기본값 없는 한도를 말한다",
           _v432.get('exc') == 0 and '우위가 없습니다' in (_v432.get('cap') or '')
-          and (_v432.get('metric') or {}).get('오늘 계획 · 실주문 자격') == '2 · 1'
-          and '기본값이 없습니다' in (_v432.get('md') or ''),
-          str(_v432.get('first') or _v432.get('metric') or (_rc432.stderr or '')[-200:]))
+          and '실주문 자격 1 · 판정일 2026-10-07' in (_v432.get('md') or '')
+          and '기본값이 없습니다' in (_v432.get('md_sys') or ''),
+          str(_v432.get('first') or (_v432.get('md') or '')[:600] or (_rc432.stderr or '')[-200:]))
 finally:
     for _f432 in (_vdb432, _child432):
         if _os.path.exists(_f432):
@@ -36211,19 +36214,25 @@ open(_child436, 'w', encoding='utf-8').write(
     "sys.stdout.reconfigure(encoding='utf-8')\n"
     "from streamlit.testing.v1 import AppTest\n"
     f"at = AppTest.from_string({_src436!r}, default_timeout=120)\n"
+    # 라운드 455 — 계획 표는 '오늘 계획' 갈래, 보호 매도 사실은 '시스템' 갈래(접힌 칸)에 있다 → 갈래를 바꿔 가며 그린다
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "cap1 = ' '.join(str(e.value) for e in at.caption)\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
     "at.run()\n"
     "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
-    "           cap=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander])\n"
+    "           cap=cap1, cap_sys=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander])\n"
     "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
 try:
     _rc436 = __import__('subprocess').run([sys.executable, _child436], cwd=PROJ, capture_output=True, text=True,
                                           encoding='utf-8', errors='replace', timeout=300)
     _jr436 = (_rc436.stdout or '').rsplit('@@R@@', 1)
     _o436 = __import__('json').loads(_jr436[1]) if len(_jr436) == 2 else {}
-    check("⑦ 화면 — 예외 0 · '② 오늘의 스윙 계획' · 자격 0 줄(가장 많이 막은 조건 y · 2/2개) · '수량 미리보기 없음' 사유 · 보호 매도 사실",
-          _o436.get('exc') == 0 and any(x.startswith('② 오늘의 스윙 계획') for x in (_o436.get('exp') or []))
-          and '실주문 자격 0' in (_o436.get('cap') or '') and "'y' 미충족" in (_o436.get('cap') or '')
-          and '수량 미리보기 없음' in (_o436.get('cap') or '') and '보호 매도도 멈춥니다' in (_o436.get('cap') or ''),
+    check("⑦ 화면 — 예외 0 · '오늘 계획' 갈래에 자격 0 줄(가장 많이 막은 조건 y · 2/2개) · '수량 미리보기 없음' 사유 · 시스템 갈래에 보호 매도 사실",
+          _o436.get('exc') == 0 and '실주문 자격 0' in (_o436.get('cap') or '') and "'y' 미충족" in (_o436.get('cap') or '')
+          and '수량 미리보기 없음' in (_o436.get('cap') or '') and '보호 매도도 멈춥니다' in (_o436.get('cap_sys') or '')
+          and '먼저 알아 두실 것 — 자세히' in (_o436.get('exp') or []),
           str(_o436.get('first') or _o436.get('exp') or (_rc436.stderr or '')[-300:]))
 finally:
     for _f436 in (_vdb436, _child436):
@@ -36328,9 +36337,14 @@ open(_child437, 'w', encoding='utf-8').write(
     "sys.stdout.reconfigure(encoding='utf-8')\n"
     "from streamlit.testing.v1 import AppTest\n"
     f"at = AppTest.from_string({_src437v!r}, default_timeout=120)\n"
+    # 라운드 455 — 승인 버튼은 '오늘 계획' 갈래, 주문 방식 라디오는 '시스템' 갈래 → 둘을 차례로 그린다
     "at.run()\n"
-    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
-    "           cap=' '.join(str(e.value) for e in at.caption), btn=[str(b.label) for b in at.button],\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "cap1 = ' '.join(str(e.value) for e in at.caption); btn1 = [str(b.label) for b in at.button]\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300], cap=cap1, btn=btn1,\n"
     "           radio=[str(r.label) for r in at.radio])\n"
     "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
 try:
@@ -36338,7 +36352,7 @@ try:
                                           encoding='utf-8', errors='replace', timeout=300)
     _jr437 = (_rc437.stdout or '').rsplit('@@R@@', 1)
     _o437v = __import__('json').loads(_jr437[1]) if len(_jr437) == 2 else {}
-    check("⑧ 화면 — 예외 0 · '이 계획 승인' 버튼 · '실전 주문 방식' 라디오 · 승인 전 설명 줄 · 승인 전 상태",
+    check("⑧ 화면 — 예외 0 · '오늘 계획' 갈래에 '이 계획 승인' 버튼·승인 전 설명 줄·승인 전 상태 · '시스템' 갈래에 '실전 주문 방식' 라디오",
           _o437v.get('exc') == 0 and '이 계획 승인' in (_o437v.get('btn') or []) and '실전 주문 방식' in (_o437v.get('radio') or [])
           and '승인한 계획만 워커가' in (_o437v.get('cap') or '') and '승인 전' in (_o437v.get('cap') or ''),
           str(_o437v.get('first') or _o437v.get('btn') or (_rc437.stderr or '')[-300:]))
@@ -36663,10 +36677,16 @@ open(_child439, 'w', encoding='utf-8').write(
     "sys.stdout.reconfigure(encoding='utf-8')\n"
     "from streamlit.testing.v1 import AppTest\n"
     f"at = AppTest.from_string({_src439!r}, default_timeout=120)\n"
+    # 라운드 455 — 상태는 지휘 띠(HTML · 짧은 값 · 모드 한 마디는 sub) · 2단계 문장은 '포지션' 갈래 · 접힌 사실 칸·작업 줄·모드 라디오는 '시스템' 갈래
     "at.run()\n"
-    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300],\n"
-    "           cap=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander],\n"
-    "           metric={m.label: m.value for m in at.metric}, toggle=[str(t.label) for t in at.toggle],\n"
+    "md0 = ' '.join(str(e.value) for e in at.markdown); tog0 = [str(t.label) for t in at.toggle]; cap0 = ' '.join(str(e.value) for e in at.caption)\n"
+    "at.radio(key='sw_nav').set_value('포지션')\n"
+    "at.run()\n"
+    "cap_pos = ' '.join(str(e.value) for e in at.caption)\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
+    "at.run()\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300], md=md0, toggle=tog0, cap=cap0, cap_pos=cap_pos,\n"
+    "           cap_sys=' '.join(str(e.value) for e in at.caption), exp=[str(e.label) for e in at.expander],\n"
     "           radio={str(r.label): list(r.options) for r in at.radio})\n"
     "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
 try:
@@ -36676,13 +36696,15 @@ try:
     _jr439 = (_rc439.stdout or '').rsplit('@@R@@', 1)
     _o439v = __import__('json').loads(_jr439[1]) if len(_jr439) == 2 else {}
     _cap439 = _o439v.get('cap') or ''
-    check("⑭ 화면 — 예외 0 · 운용 모드 '꺼짐 · 보호만 1종목' · 연결 '정보 없음' 또는 시각 · 작업 '등록돼 있지 않습니다' · 긴급정지 토글 · "
-          "'먼저 알아 두실 것 — 자세히' 접힘 · 되돌려 받기 2단계 문장 · 모드 라디오는 꺼짐·실전 둘",
-          _o439v.get('exc') == 0 and (_o439v.get('metric') or {}).get('운용 모드') == '꺼짐 · 보호만 1종목'
-          and '등록돼 있지 않습니다' in _cap439 and '긴급정지' in (_o439v.get('toggle') or [])
-          and '먼저 알아 두실 것 — 자세히' in (_o439v.get('exp') or []) and '취소가 확인된 뒤에야 해제됩니다' in _cap439
-          and (_o439v.get('radio') or {}).get('운용 모드') == ['꺼짐', '실전'] and '우위가 없습니다' in _cap439,   # AppTest 는 표시 글자를 돌려준다
-          str(_o439v.get('first') or {k: _o439v.get(k) for k in ('metric', 'toggle', 'exp', 'radio')} or (_rc439.stderr or '')[-300:]))
+    check("⑭ 화면 — 예외 0 · 지휘 띠에 '꺼짐 · 보호만 1종목'(sub)과 보호 매도 '1종목' · 긴급정지 토글 · 우위 없음 한 줄 · 포지션 갈래에 되돌려 받기 2단계 문장 · "
+          "시스템 갈래에 작업 '등록돼 있지 않습니다' · '먼저 알아 두실 것 — 자세히' 접힘 · 모드 라디오는 꺼짐·실전 둘",
+          _o439v.get('exc') == 0 and '꺼짐 · 보호만 1종목' in (_o439v.get('md') or '') and '1종목' in (_o439v.get('md') or '')
+          and '긴급정지' in (_o439v.get('toggle') or []) and '우위가 없습니다' in _cap439
+          and '취소가 확인된 뒤에야 해제됩니다' in (_o439v.get('cap_pos') or '')
+          and '등록돼 있지 않습니다' in (_o439v.get('cap_sys') or '') and '먼저 알아 두실 것 — 자세히' in (_o439v.get('exp') or [])
+          and (_o439v.get('radio') or {}).get('운용 모드') == ['꺼짐', '실전'],   # AppTest 는 표시 글자를 돌려준다
+          str(_o439v.get('first') or {k: (_o439v.get(k) if k != 'md' else (_o439v.get(k) or '')[:400]) for k in ('md', 'toggle', 'exp', 'radio')}
+              or (_rc439.stderr or '')[-300:]))
 finally:
     for _f439 in (_vdb439, _child439):
         if _os.path.exists(_f439):
@@ -36828,7 +36850,7 @@ _c440.close(); _old440.close()
 # ⑪ 화면 구조(AST) — 자동 갱신 기본값은 False · 증권사 잔고를 부르는 자리는 account_read 와 ⑥ 연결 확인 둘뿐 · 조각(run_every) 안에서 그린다 ·
 #    화면은 swing_account 를 부르고 합·비중을 제 손으로 다시 세지 않는다
 _svt440 = _ast440.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
-_gb440, _frag440, _acc_calls440 = {}, [], set()
+_gb440, _frag440, _acc_calls440, _dash_calls440 = {}, [], set(), set()
 for _fn440 in [n for n in _ast440.walk(_svt440) if isinstance(n, _ast440.FunctionDef)]:
     for _m440 in _ast440.walk(_fn440):
         if isinstance(_m440, _ast440.Call) and isinstance(_m440.func, _ast440.Attribute):
@@ -36839,12 +36861,16 @@ for _fn440 in [n for n in _ast440.walk(_svt440) if isinstance(n, _ast440.Functio
                 _frag440.append(_fn440.name)
             if isinstance(_m440.func.value, _ast440.Name) and _m440.func.value.id == '_acc454':
                 _acc_calls440.add(_m440.func.attr)
+            if isinstance(_m440.func.value, _ast440.Name) and _m440.func.value.id == '_dash':
+                _dash_calls440.add(_m440.func.attr)
+# 라운드 455 — 자산 구성은 swing_account.composition 대신 swing_dash.allocation(현금 · 자동매매 관리 · 직접 보유)이 재료다 → 도넛
 check("⑪ swing_view — 자동 갱신 기본값 False · get_balance 는 account_read 와 _settings 에서 한 번씩(둘뿐) · run_every 조각은 _acct_panel454 · "
-      "판이 swing_account 의 summarize·glance_lines·composition·scope_chips·limit_checks·table_rows 를 부른다",
+      "판이 swing_account 의 summarize·glance_lines·scope_chips·limit_checks·table_rows·changed 와 swing_dash 의 allocation 을 부른다",
       _sv440.ACCT_AUTO_DEFAULT is False and _gb440 == {'account_read': 1, '_settings': 1}
       and _frag440[:1] == ['_acct_panel454'] and set(_frag440) <= {'_acct_panel454', '_panel'}
-      and {'summarize', 'glance_lines', 'composition', 'scope_chips', 'limit_checks', 'table_rows', 'changed'} <= _acc_calls440,
-      str((_gb440, _frag440, sorted(_acc_calls440))))
+      and {'summarize', 'glance_lines', 'scope_chips', 'limit_checks', 'table_rows', 'changed'} <= _acc_calls440
+      and 'allocation' in _dash_calls440,
+      str((_gb440, _frag440, sorted(_acc_calls440), sorted(_dash_calls440))))
 #   독스트링은 화면에 안 나간다(거기엔 "추천이 아니다" 같은 설명이 있다) — 모듈·함수 머리의 첫 문자열은 빼고 센다
 _at440 = _ast440.parse(_read148(_os.path.join(PROJ, 'swing_account.py')))
 _doc440 = set()
@@ -36887,27 +36913,39 @@ open(_child440, 'w', encoding='utf-8').write(
     "sys.stdout.reconfigure(encoding='utf-8')\n"
     "from streamlit.testing.v1 import AppTest\n"
     f"at = AppTest.from_string({_src440!r}, default_timeout=120)\n"
+    # 라운드 455 — 관제실(타일·한눈에·구성·범위) → 포지션(보유 표·참고 비교·최근 주문) → 시스템(지금 진행 중인가) 세 갈래를 차례로 그린다
     "at.run()\n"
-    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:600],\n"
-    "           cap=' | '.join(str(e.value)[:200] for e in at.caption), md=' | '.join(str(e.value)[:6000] for e in at.markdown),\n"
-    "           toggle={str(t.label): bool(t.value) for t in at.toggle}, btn=[str(b.label) for b in at.button])\n"
+    "def grab():\n"
+    "    return dict(exc=len(at.exception), first=str(at.exception[:1])[:600], cap=' | '.join(str(e.value)[:200] for e in at.caption),\n"
+    "                md=' | '.join(str(e.value)[:6000] for e in at.markdown), toggle={str(t.label): bool(t.value) for t in at.toggle},\n"
+    "                btn=[str(b.label) for b in at.button])\n"
+    "out = {'center': grab()}\n"
+    "at.radio(key='sw_nav').set_value('포지션')\n"
+    "at.run()\n"
+    "out['pos'] = grab()\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
+    "at.run()\n"
+    "out['sys'] = grab()\n"
     "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
 try:
     _env440 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
     _rc440 = __import__('subprocess').run([sys.executable, _child440], cwd=PROJ, capture_output=True, text=True,
                                           encoding='utf-8', errors='replace', timeout=300, env=_env440)
     _jr440 = (_rc440.stdout or '').rsplit('@@R@@', 1)
-    _o440v = __import__('json').loads(_jr440[1]) if len(_jr440) == 2 else {}
+    _o440all = __import__('json').loads(_jr440[1]) if len(_jr440) == 2 else {}
+    _o440v, _o440p, _o440s = (_o440all.get(k) or {} for k in ('center', 'pos', 'sys'))
     _md440 = _o440v.get('md') or ''
     _cap440 = _o440v.get('cap') or ''
-    check("⑫ 화면 — 예외 0(증권사를 한 번도 안 불렀다) · 타일 '총자산(증권사 총평가)' · '71,000원' · 한눈에 문장 · 자산 구성 · 평가 범위 칩 · 참고 비교 · "
-          "'지금 진행 중인가' 줄 · 작업 둘 '등록 안 됨' · 자동 갱신 토글 꺼짐 · 새로고침·주문 내역 버튼",
-          _o440v.get('exc') == 0 and '총자산(증권사 총평가)' in _md440 and '71,000원' in _md440 and '거래소 평균 매수금액' in _cap440
-          and '자산 구성' in _md440 and '평가 범위' in _md440 and '참고 한도 이내' not in _cap440 and '참고로' in _cap440
-          and '지금 진행 중인가' in _md440 and _md440.count('등록 안 됨') >= 2
-          and (_o440v.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False
-          and any('지금 새로고침' in b for b in _o440v.get('btn') or []) and any('최근 30일' in b for b in _o440v.get('btn') or []),
-          str(_o440v)[:1500] + ' STDERR: ' + (_rc440.stderr or '')[-600:])
+    check("⑫ 화면 — 예외 0(증권사를 한 번도 안 불렀다) · 관제실: 타일 '총자산(증권사 총평가)' · '71,000원' · 한눈에 문장 · 자산 구성 · 평가 범위 칩 · 자동 갱신 "
+          "토글 꺼짐 · 새로고침 버튼 · 포지션: 참고 비교 · 주문 내역 버튼 · 시스템: '지금 진행 중인가' 줄 · 작업 둘 '등록 안 됨'",
+          _o440v.get('exc') == 0 and _o440p.get('exc') == 0 and _o440s.get('exc') == 0
+          and '총자산(증권사 총평가)' in _md440 and '71,000원' in _md440 and '거래소 평균 매수금액' in _cap440
+          and '자산 구성' in _md440 and '평가 범위' in _md440
+          and (_o440v.get('toggle') or {}).get('자동 갱신(잔고 읽기)') is False and any('지금 새로고침' in b for b in _o440v.get('btn') or [])
+          and '참고 한도 이내' not in (_o440p.get('cap') or '') and '참고로' in (_o440p.get('cap') or '')
+          and any('최근 30일' in b for b in _o440p.get('btn') or [])
+          and '지금 진행 중인가' in (_o440s.get('md') or '') and (_o440s.get('md') or '').count('등록 안 됨') >= 2,
+          str({k: (v.get('first'), (v.get('md') or '')[:300], v.get('btn')) for k, v in _o440all.items()})[:1800] + ' STDERR: ' + (_rc440.stderr or '')[-600:])
 finally:
     for _f440 in (_vdb440, _child440):
         if _os.path.exists(_f440):
@@ -36915,6 +36953,164 @@ finally:
                 _os.remove(_f440)
             except OSError:
                 pass
+
+
+print("§441 스윙 관제실 재설계 — 갈래 여섯 · 지휘 띠 · 그림(자산 곡선·도넛·한도 막대·깔때기·가격선·타임라인·폭포)은 순수 함수 · 없는 값은 빈 상태 문장 · 경쟁사 레이더는 점수 없음 (라운드 455·456)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   외부 검토 둘(2026-10-09)의 제안 중 받은 것: 정보구조(갈래) · 짧은 값의 지휘 띠 · 시각화 여덟 · 포지션 카드 · 주문 생애 · 영수증 폭포 ·
+#   시스템 상태 다섯 · 경쟁사 레이더. 받지 않은 것: 우위 없음 문구 삭제(§9) · 이모지 신호등(§5) · 1:2:6 타임라인(라운드 357) ·
+#   지어낸 제품 점수(§2·§3). 그림은 전부 HTML/SVG 문자열(새 의존성 0) · 글자 12px 이상(§77) · 이모지 0 · 판정 낱말 0.
+import ast as _ast441
+import json as _js441
+import re as _re441
+import swing_viz as _vz441
+import swing_dash as _dh441
+import swing_account as _ac441
+import competitor_radar as _cr441
+import swing_view as _sv441
+import ui_kit as _uk441
+
+_LIM441 = dict(risk_per_trade_krw=100000, max_position_pct=20, max_total_exposure_pct=90, min_cash_pct=5, max_open_positions=5,
+               max_daily_new_orders=3)
+_bal441 = dict(positions=[dict(code='000001', name='가', qty=10, sellable_qty=8, avg_price=1000.0, price=1200.0, eval_amt=12000.0, pnl=2000.0),
+                          dict(code='000002', name='나', qty=5, sellable_qty=5, avg_price=2000.0, price=1800.0)],
+               cash=50000.0, cash_d2=48000.0, total_eval=71000.0, stock_eval=21000.0)
+_s441 = _ac441.summarize(_bal441)
+# ① 자산 곡선 — 0점·1점은 평평한 선 + '이력 없음' 문장(숨기지 않는다) · 3점은 선 셋(총자산·예수금·자동매매)과 범례 · 축 글자 12px
+_e0 = _vz441.equity_curve([])
+_e1 = _vz441.equity_curve([dict(ts='2026-10-08T13:10', total=2000000, cash=2000000)])
+_e3 = _vz441.equity_curve([dict(ts='2026-10-08T13:10', total=2000000, cash=2000000, managed=0),
+                           dict(ts='2026-10-09T09:30', total=2010000, cash=1500000, managed=500000),
+                           dict(ts='2026-10-10T09:30', total=1990000, cash=1500000, managed=480000)])
+check("① 자산 곡선 — 비면 '실전 거래 이력 없음 · 스냅샷 0개' · 한 점이면 점선 평선 + '스냅샷 1개' · 세 점이면 path 셋·범례 셋·날짜 처음/끝",
+      '실전 거래 이력 없음' in _e0 and '스냅샷 0개' in _e0 and '<path' not in _e0
+      and 'stroke-dasharray' in _e1 and '스냅샷 1개' in _e1 and '<path' not in _e1
+      and _e3.count('<path') == 3 and '총자산' in _e3 and '예수금' in _e3 and '자동매매 평가' in _e3 and '2026-10-08' in _e3 and '2026-10-10' in _e3
+      and '스냅샷 3개' in _e3, str((_e0[:200], _e1[:200])))
+# ② 도넛 — 조각 셋·범례·합 100 · 비면 문장 · 합이 100 을 넘는 조각은 안 그린다(범례엔 남는다)
+_d1 = _vz441.donut(_dh441.allocation(_s441, {'000001'}), title='자산 구성')
+_al441 = _dh441.allocation(_s441, {'000001'})
+_d_over = _vz441.donut([dict(label='a', pct=80), dict(label='b', pct=30)])
+check("② 도넛 — 현금·자동매매 관리·직접 보유 세 조각(합 100) · 범례 셋 · 비면 '그릴 값이 없습니다' · 합을 넘는 조각은 arc 하나만",
+      [p['label'] for p in _al441] == ['현금(예수금)', '자동매매 관리 보유', '직접 보유(자동 매도 안 함)'] and abs(sum(p['pct'] for p in _al441) - 100.0) < 1e-9
+      and _d1.count("stroke-dasharray=") == 3 and '그릴 값이 없습니다' in _vz441.donut([]) and _d_over.count('stroke-dasharray=') == 1
+      and _dh441.allocation(dict(_s441, total=None), set()) == [], str(_al441))
+# ③ 위험 한도 막대 — 한도 넷 + 계획 손실 합(한도 없음) · 한도가 비면 문장 · 넘은 막대는 경고색이지 판정 낱말이 아니다
+_rb = _dh441.risk_usage(_s441, _LIM441, managed_n=1, new_orders_today=1, planned_loss_sum=2000.0)
+_rb_html = _vz441.risk_bars(_rb, title='x')
+_rb_over = _vz441.risk_bars([dict(label='a', used=12, limit=10, unit='개')])
+check("③ 한도 막대 — 항목 다섯(계획 손실 합은 한도 없음 · 거래당 최대손실을 옆에) · 비면 '비어 있어' 문장 · 넘으면 경고색 · '위반' 낱말 없음",
+      [r['label'] for r in _rb][:4] == ['동시 보유 종목(자동관리)', '주식 평가 비중(계좌 전체)', '오늘 신규 주문', '최대 단일 종목 비중']
+      and _rb[4]['limit'] is None and '거래당 최대손실 100,000원' in _rb[4]['text'] and '한도 없음' in _rb_html
+      and _dh441.risk_usage(_s441, {}, 0, 0) == [] and '비어 있어' in _vz441.risk_bars([])
+      and _uk441.DARK['warn'] in _rb_over and '위반' not in _rb_html + _rb_over, str(_rb))
+# ④ 깔때기 — 후보 → 자격 → 승인 → 주문 → 체결 · 승인형이면 승인 집합 · 아니면 자격 = 승인 · n=None 은 '—'
+_fn_a = _dh441.funnel_today([dict(live_ok=1, plan_id='a'), dict(live_ok=1, plan_id='b'), dict(live_ok=0, plan_id='c')], approved={'a'}, approval_on=True,
+                            intents_today=[dict(side='buy', state='FILLED'), dict(side='buy', state='BROKER_ACK'), dict(side='sell', state='FILLED')])
+_fn_b = _dh441.funnel_today([dict(live_ok=1, plan_id='a')], approval_on=False)
+check("④ 깔때기 — 후보 3 · 자격 2 · 승인 1(계획마다 승인) · 매수 의도 2 · 체결 1 · 승인형이 아니면 승인 = 자격 · 빈 수는 '—' · 화살표는 글자",
+      [s['n'] for s in _fn_a] == [3, 2, 1, 2, 1] and [s['n'] for s in _fn_b] == [1, 1, 1, 0, 0] and '승인 불필요' in _fn_b[2]['sub']
+      and '—' in _vz441.funnel([dict(label='x', n=None)]) and '→' in _vz441.funnel(_fn_a) and _vz441.funnel(_fn_a).count('→') == 4)
+# ⑤ 가격선·타임라인·폭포 — 값이 없으면 문장 · 폭포의 단계 합 = 추정 비용후(gross − cost) · 손익 색은 up/down 토큰
+_rbar = _vz441.range_bar(9500, 10000, 10300, 11000)
+_wf = _dh441.receipt_waterfall(dict(gross_pct=6.04, net_pct=5.63, cost_pct=0.41, entry_plan=10000, exit_plan=10600))
+_wf_html = _vz441.waterfall(_wf)
+check("⑤ 가격선 — 손절·진입·목표·현재 네 표식 · 빈 값이면 문장 · 타임라인 비면 문장 · 폭포 — 계획가 기준 +6.00 · 체결 차이 합 +0.04 · 비용 −0.41 → 합 5.63 · 색 토큰",
+      '손절 9,500' in _rbar and '목표 11,000' in _rbar and '진입 10,000' in _rbar and '현재 10,300' in _rbar
+      and '그릴 수 없습니다' in _vz441.range_bar(None, 1, 1, 1) and '아직 사건이 없습니다' in _vz441.timeline([])
+      and [s['label'] for s in _wf] == ['계획가 기준', '체결 차이 합', '비용 가정'] and abs(sum(s['delta'] for s in _wf) - 5.63) < 1e-9
+      and '추정 비용후' in _wf_html and _uk441.DARK['up'] in _wf_html and _uk441.DARK['down'] in _wf_html
+      and _dh441.receipt_waterfall(dict(gross_pct=None, net_pct=None)) is None and '그릴 값이 없습니다' in _vz441.waterfall([]), str(_wf))
+# ⑥ 시스템 상태 다섯 — 규칙은 swing_dash.system_health 한 곳 · 여섯 상태 낱말 밖은 UNKNOWN 으로 그린다
+_sh_a = _dh441.system_health(dict(running=True, note='PID 1'), dict(ok=True, installed=True), dict(running=True, last_start='10-09 17:00:00'),
+                             dict(env='real', missing=[], problems=[]), dict(ts='2026-10-09T09:30:06'), [1], today='2026-10-09')
+_sh_b = _dh441.system_health(dict(running=False), dict(ok=True, installed=False), dict(last_end='10-08 17:03:20', worst=2),
+                             dict(missing=['x']), None, [], today='2026-10-09', protection_warn=False, ledger_ok=False)
+_sh_c = _dh441.system_health(dict(running=False), dict(ok=False, reason='boom'), dict(note='기록 없음'),
+                             dict(env='real', missing=[], problems=[]), dict(ts='2026-10-01T09:30:06'), [], today='2026-10-09', protection_warn=True)
+check("⑥ 시스템 상태 — (a) 워커 RUNNING · 연결 OK(오늘 읽음 · '정상' — 연결·장부는 도는 것이 아니라 열린 것) · 계획 RUNNING · 장부 OK · 저녁 RUNNING · "
+      "(b) 워커 DEGRADED(등록 안 됨) · 연결 ERROR · 계획 IDLE · 장부 ERROR · 저녁 DEGRADED(코드 2) · (c) 워커 ERROR(장중 기록 없음) · 연결 IDLE(전에 읽음) · 저녁 UNKNOWN",
+      [x['state'] for x in _sh_a] == ['RUNNING', 'OK', 'RUNNING', 'OK', 'RUNNING'] and [x['state'] for x in _sh_b] == ['DEGRADED', 'ERROR', 'IDLE', 'ERROR', 'DEGRADED']
+      and [x['state'] for x in _sh_c][0] == 'ERROR' and _sh_c[1]['state'] == 'IDLE' and _sh_c[4]['state'] == 'UNKNOWN'
+      and [x['label'] for x in _sh_a] == ['워커', '한국투자 연결', '계획 생성', '장부', '저녁 작업'], str((_sh_a, _sh_b, _sh_c)))
+_hs = _vz441.health_strip([dict(label='워커', state='RUNNING'), dict(label='x', state='WEIRD', text='t')])
+check("⑥ 상태 띠 — 모르는 상태는 '확인 불가'로 그린다(숨기지 않는다) · 다섯 낱말 전부 이모지 없음 · 지휘 띠 값 짧게",
+      '실행 중' in _hs and '확인 불가' in _hs and not emoji_hits(_hs)       # 판별식은 이 파일 한 곳(_EMOJI_RE · 라운드 192) — 베끼지 않는다
+      and all(_vz441.STATE_KO[s] for s in _vz441.STATES) and '정상' in _vz441.command_bar([dict(label='a', value='정상', sub='b')]))
+# ⑦ 포지션 카드·주문 생애·최근 사건 재료
+_pc = _dh441.position_card('000001', dict(entry_price=1000, stop=950, target=1100, qty=10, ownership='SWING_OPENED', opened_day='2026-10-02'),
+                           acct_row=dict(name='가', price=1200), target_intent=dict(state='BROKER_ACK'), hb=dict(ts='2026-10-09T09:00:00'), horizon=20, today='2026-10-09')
+_tl = _dh441.order_timeline([dict(ts='2026-10-09T09:02:01', state='PLANNED'), dict(ts='2026-10-09T09:05:02', state='FILLED', filled_qty=10, avg_fill=10010),
+                             dict(ts='2026-10-09T09:06:02', state='UNKNOWN', detail='응답 없음')])
+check("⑦ 포지션 카드 — 평가 +20% · 손절까지 −20.83% · 목표까지 −8.33% · 계획 손실 500 · 보유 거래일(휴장일 뺌) · 목표 주문 상태 · 심박 · 주문 생애 — 계획→체결(수량·가격)→확인 중(경고색)",
+      abs(_pc['gross_pct'] - 20.0) < 1e-9 and abs(_pc['dist_stop_pct'] + 20.8333) < 1e-3 and abs(_pc['dist_target_pct'] + 8.3333) < 1e-3
+      and _pc['planned_loss'] == 500.0 and _pc['held_days'] is not None and _pc['target_order_state'] == 'BROKER_ACK'
+      and [e['label'] for e in _tl] == ['계획', '체결', '확인 중'] and '체결 10 @ 10,010' in _tl[1]['detail'] and _tl[2]['tone'] == 'warn'
+      and _sv441.position_card_html(_pc, 'dark').count('<svg') >= 1 and '현재가 기준' in _sv441.position_card_html(_pc, 'dark'), str((_pc, _tl)))
+# ⑧ 정보구조(AST) — NAV 여섯 · 갈래 라디오 한 곳(키 sw_nav) · _settings 는 _view_system 에서만 · 접힌 사실 칸도 _view_system 에서만 · render 가 _facts[0] 을 늘 적는다
+_svt441 = _ast441.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
+_fn441 = {n.name: n for n in _ast441.walk(_svt441) if isinstance(n, _ast441.FunctionDef)}
+
+
+def _calls441(fn, name):
+    return sum(1 for m in _ast441.walk(fn) if isinstance(m, _ast441.Call) and ((isinstance(m.func, _ast441.Name) and m.func.id == name)
+                                                                               or (isinstance(m.func, _ast441.Attribute) and m.func.attr == name)))
+
+
+def _strs441(fn):
+    return [s.value for s in _ast441.walk(fn) if isinstance(s, _ast441.Constant) and isinstance(s.value, str)]
+_nav_radio441 = [n for n, fn in _fn441.items() for m in _ast441.walk(fn) if isinstance(m, _ast441.Call) and isinstance(m.func, _ast441.Attribute)
+                 and m.func.attr == 'radio' and any(k.arg == 'key' and isinstance(k.value, _ast441.Name) and k.value.id == 'NAV_KEY' for k in m.keywords)]
+_render_src441 = _ast441.get_source_segment(_read148(_os.path.join(PROJ, 'swing_view.py')), _fn441['render']) or ''
+check("⑧ 정보구조 — NAV 여섯(관제실 … 시스템) · 갈래 라디오는 _render_body 한 곳 · _settings 호출은 _view_system 에서만(관제실엔 설정 없음) · "
+      "'먼저 알아 두실 것 — 자세히' 접힘은 _view_system 에서만 · render 가 _facts[0](우위 없음 한 줄)을 늘 적는다",
+      _sv441.NAV == ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF', '시스템') and _nav_radio441 == ['_render_body']
+      and [n for n, fn in _fn441.items() if _calls441(fn, '_settings')] == ['_view_system']
+      and [n for n, fn in _fn441.items() if any('먼저 알아 두실 것 — 자세히' in s for s in _strs441(fn))] == ['_view_system']
+      and '_facts[0]' in _render_src441 and '우위가 없습니다' in _sv441.facts_lines()[0], str(_nav_radio441))
+# ⑨ 그림 모듈의 문자열(독스트링 제외)에 판정 낱말 없음 · 글자 12px 미만 없음(소스의 font-size 전부)
+_vzt441 = _ast441.parse(_read148(_os.path.join(PROJ, 'swing_viz.py')))
+_doc441 = set()
+for _nd441 in [_vzt441] + [n for n in _ast441.walk(_vzt441) if isinstance(n, (_ast441.FunctionDef, _ast441.ClassDef))]:
+    if _nd441.body and isinstance(_nd441.body[0], _ast441.Expr) and isinstance(_nd441.body[0].value, _ast441.Constant):
+        _doc441.add(id(_nd441.body[0].value))
+_vstr441 = [s.value for s in _ast441.walk(_vzt441) if isinstance(s, _ast441.Constant) and isinstance(s.value, str) and id(s) not in _doc441]
+_fs441 = [int(m) for s in _vstr441 for m in _re441.findall(r'font-size:(\d+)px', s)]
+check("⑨ swing_viz 문자열 — '추천'·'사세요'·'파세요'·'위반'·'건강' 없음 · font-size 전부 12px 이상 · 이모지 없음",
+      not any(w in s for s in _vstr441 for w in ('추천', '사세요', '파세요', '위반', '건강')) and _fs441 and min(_fs441) >= 12
+      and not any(emoji_hits(s) for s in _vstr441), str((min(_fs441) if _fs441 else None, len(_vstr441))),
+      scanned=len(_vstr441))
+# ⑩ 경쟁사 레이더 — 파일이 규칙을 지킨다 · 문서는 JSON 에서 만든 것과 같다 · 점수 칸 없음 · 심은 위반을 validate 가 잡는다 · 계산부는 이 모듈을 모른다
+_rd441 = _cr441.load()
+_probs441 = _cr441.validate(_rd441)
+_md_file441 = _read148(_cr441.DOC).replace('\r\n', '\n')
+
+
+def _has_score441(o):
+    if isinstance(o, dict):
+        return any('score' in str(k).lower() or 'rating' in str(k).lower() or _has_score441(v) for k, v in o.items())
+    if isinstance(o, list):
+        return any(_has_score441(v) for v in o)
+    return False
+_bad441 = _js441.loads(_js441.dumps(_rd441))
+_bad441['items'][0] = dict(_bad441['items'][0], decision='MAYBE', source_url='https://example.com/x', checked_at='2099-01-01', score=5)
+_pr_bad441 = _cr441.validate(_bad441)
+check("⑩ 레이더 — 규칙 위반 0 · 항목 20개 이상 · 경쟁사 5 · 축 12 · 문서 = render_md(JSON) · 점수 칸 없음 · 심은 위반(결정 낱말·비공식 도메인·미래 날짜·점수 칸)을 validate 가 넷 다 잡는다",
+      _probs441 == [] and len(_rd441['items']) >= 20 and len(_rd441['competitors']) == 5 and len(_rd441['dimensions']) == 12
+      and _md_file441 == _cr441.render_md(_rd441) and not _has_score441(_rd441)
+      and sum(1 for p in _pr_bad441 if '결정 낱말' in p) == 1 and sum(1 for p in _pr_bad441 if '공식 도메인' in p) == 1
+      and sum(1 for p in _pr_bad441 if '미래' in p) == 1 and sum(1 for p in _pr_bad441 if '점수 칸' in p) == 1,
+      str((_probs441, _pr_bad441, len(_md_file441), len(_cr441.render_md(_rd441)))))
+_engine441 = ('quant_indicators.py', 'verdict_core.py', 'price_axes.py', 'regime_policy.py', 'market_context.py', 'sector_cycle.py',
+              'bitemporal_engine.py', 'swing_executor.py', 'swing_engine.py', 'swing_risk.py', 'swing_ledger.py')
+_leak441 = [f for f in _engine441 if 'competitor_radar' in _read148(_os.path.join(PROJ, f))]
+check("⑩ 레이더는 계산부·실행부·장부 어디서도 읽히지 않는다(경쟁사 변화가 산식·문턱·주문을 못 바꾼다) — 열한 파일에 이름 없음",
+      _leak441 == [], str(_leak441), scanned=len(_engine441))
+check("⑩ 레이더 표·차이 — 축 12줄 × (경쟁사 5 + 가늠) · 차이는 BUILD·CONSIDER 만 · 결정 낱말은 넷 · 가늠 상태 낱말은 넷 안",
+      len(_cr441.matrix(_rd441)) == 12 and all(len(r) == 7 for r in _cr441.matrix(_rd441))
+      and all(it['decision'] in ('BUILD', 'CONSIDER') for it in _cr441.gaps(_rd441)) and set(_cr441.DECISIONS) == {'BUILD', 'CONSIDER', 'WATCH', 'SKIP'}
+      and all(v['state'] in _cr441.STATES for v in _rd441['ganeum'].values()))
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

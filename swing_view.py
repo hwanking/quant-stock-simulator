@@ -16,6 +16,9 @@ import swing_executor as X
 import swing_ops as _ops
 import swing_proof as _sp
 import swing_account as _acc454
+import swing_viz as _viz
+import swing_dash as _dash
+import competitor_radar as _cr
 
 
 def _os_exists(p):
@@ -27,10 +30,10 @@ import swing_engine as _se
 MODE_KO = {'OFF': '꺼짐', 'SHADOW': '기록만', 'PAPER': '모의투자', 'LIVE': '실전'}
 MODE_HELP = {
     'OFF': ('새 매수를 내지 않습니다. 그날 계획과 일봉 재채점은 모드와 무관하게 매일 남깁니다. 자동 관리 중인 종목이 있으면 그 보호'
-            '(손절·기간 만료 시장가 · 1차 목표 지정가)는 꺼짐에서도 계속합니다 — 보호까지 멈추려면 ④에서 되돌려 받으세요.'),
+            "(손절·기간 만료 시장가 · 1차 목표 지정가)는 꺼짐에서도 계속합니다 — 보호까지 멈추려면 '포지션' 갈래에서 되돌려 받으세요."),
     'SHADOW': "'꺼짐'과 같습니다(옛 이름 · 기본으로 보이지 않습니다).",
     'PAPER': '한국투자 모의투자 서버로 실제 주문 흐름을 돕니다(모의투자 자격증명이 필요합니다).',
-    'LIVE': "실계좌에 주문합니다. 아래 네 가지가 모두 통과해야 켜집니다. 주문 방식이 '계획마다 승인'(기본)이면 ② 에서 승인한 계획만 삽니다.",
+    'LIVE': "실계좌에 주문합니다. 아래 네 가지가 모두 통과해야 켜집니다. 주문 방식이 '계획마다 승인'(기본)이면 '오늘 계획' 갈래에서 승인한 계획만 삽니다.",
 }
 APPROVAL_KO = {'approve': '계획마다 승인', 'auto': '완전 자동'}
 
@@ -115,7 +118,7 @@ def facts_lines():
     out.append('1차 목표 매도는 워커가 매일 장중에 한국투자에 그날 하루짜리 지정가 매도로 걸어 둡니다. 손절·기간 만료 매도는 워커가 '
                '장중에 가격을 보고 조건이 맞으면 그때 시장가로 냅니다 — 워커가 멈추면 손절·기간 만료 보호 매도도 멈춥니다(이미 걸어 둔 '
                '목표 지정가 주문은 증권사에 그날까지 남아 있을 수 있습니다). 장이 열려 있는데 오늘 워커 기록이 없으면 이 칸 맨 위에 경고가 '
-               "뜹니다. 모드를 '꺼짐'으로 두어도 자동 관리 중인 종목의 보호는 계속합니다 — 멈추려면 ④에서 되돌려 받으세요.")
+               "뜹니다. 모드를 '꺼짐'으로 두어도 자동 관리 중인 종목의 보호는 계속합니다 — 멈추려면 '포지션' 갈래에서 되돌려 받으세요.")
     try:
         import entry_facts
         out.append('이 칸이 실행하는 계획(진입가 지정가 · 1차 목표 · 손절 · 기간)의 지금까지 실측 — ' + entry_facts.line())
@@ -134,7 +137,7 @@ ACCT_EVERY_CHOICES = (15, 30, 60)
 def account_read(cfg, c=None):
     """한국투자 잔고를 **한 번** 읽는다(주문 없음) → (잔고 dict, None) 또는 (None, 사유). 장부 연결 `c` 가 있고 값이 바뀌었으면
     스냅샷을 남긴다(같은 값은 15초마다 쌓지 않는다 · swing_account.changed). 화면·워커 밖에서 증권사를 부르는 자리는 여기와
-    ⑥ '연결 확인' 둘뿐이다."""
+    시스템 → 설정의 '연결 확인' 둘뿐이다."""
     try:
         br = broker_kis.KisBroker(cfg)
         bal = br.get_balance()
@@ -149,25 +152,26 @@ def account_read(cfg, c=None):
     return bal, None
 
 
-def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
-    """① 계좌 판 — `st.fragment(run_every=…)` 로 **이 판만** 다시 그린다(자동 갱신이 켜졌을 때 · 꺼지면 run_every 없음).
-    조각 안에서는 바깥의 장부 연결을 쓸 수 없으므로(조각만 돌 때 바깥 연결은 이미 닫혀 있다) 제 연결을 연다."""
+def _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope='overview', managed=()):
+    """계좌 판 — `st.fragment(run_every=…)` 로 **이 판만** 다시 그린다(자동 갱신이 켜졌을 때 · 꺼지면 run_every 없음).
+    조각 안에서는 바깥의 장부 연결을 쓸 수 없으므로(조각만 돌 때 바깥 연결은 이미 닫혀 있다) 제 연결을 연다.
+    scope — 'overview'(관제실: 타일·한눈에·구성·범위) · 'holdings'(포지션: 보유 표·참고 비교·최근 주문) · 라운드 455 의 갈래."""
     auto_on = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)) and allow_write
     every = int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT))
 
     @st.fragment(run_every=(f'{every}s' if auto_on else None))
     def _panel():
-        _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme)
+        _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope=scope, managed=managed)
     _panel()
 
 
-def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
+def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, scope='overview', managed=()):
     import datetime as _dtm
-    st.markdown('**① 내 한국투자 계좌** — 읽기 전용 · 이 PC 화면에만')
+    st.markdown('**내 한국투자 계좌** — 읽기 전용 · 이 PC 화면에만' if scope == 'overview' else '**보유 종목(증권사 잔고)** — 읽기 전용')
     # 머리 줄: 연결 · 자동 갱신 토글·간격 · 지금 새로고침 — 전부 이 조각 안(누르면 이 판만 다시 돈다)
     h1, h2, h3, h4 = st.columns([2, 1.3, 1, 1.4])
     _ok454 = bool(cfg) and not cfg.get('missing') and not cfg.get('problems')
-    h1.caption(('연결 정보 등록됨 · ' + broker_kis.config_summary(cfg)) if _ok454 else '연결 정보 없음 — ⑥에서 넣으세요')
+    h1.caption(('연결 정보 등록됨 · ' + broker_kis.config_summary(cfg)) if _ok454 else '연결 정보 없음 — 시스템 → 설정에서 넣으세요')
     _auto_prev = bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT))
     _auto = h2.toggle('자동 갱신(잔고 읽기)', value=_auto_prev, key='sw_acct_auto_tgl', disabled=not (allow_write and _ok454),
                       help='켜면 고른 간격마다 한국투자 잔고를 다시 읽습니다(주문은 안 합니다). 이 화면을 닫으면 멈춥니다.')
@@ -204,47 +208,44 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
             src = f"{qts} 장부 스냅샷(마지막으로 읽은 것)"
             env_ko = '실전' if snap.get('env') == 'real' else '모의투자'
         else:
-            st.caption('아직 계좌를 읽은 적이 없습니다 — \'지금 새로고침\'이나 ⑥의 \'연결 확인\'을 누르면 채워집니다(주문은 안 합니다).')
+            st.caption('아직 계좌를 읽은 적이 없습니다 — \'지금 새로고침\'이나 시스템 → 설정의 \'연결 확인\'을 누르면 채워집니다(주문은 안 합니다).')
             return
         st.caption(f"{env_ko} · 자료 시각 {src}" + (f" · 자동 갱신 {st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)}초마다"
                                               if st.session_state.get('sw_acct_auto') else ' · 자동 갱신 꺼짐'))
         s = _acc454.summarize(bal)
-        pn = s['pnl_sum']
-        tone = ('up' if (pn or 0) > 0 else ('down' if (pn or 0) < 0 else ''))     # 손익 색은 한국 관행(이익 빨강 · 손실 파랑 · §5)
-        uk.stat_tiles([
-            dict(label='총자산(증권사 총평가)', value=_won(s['total']),
-                 sub=('증권사 요약값' if s['total_src'] == 'broker' else ('예수금 + 보유 평가 합' if s['total_src'] else '총평가를 못 받았습니다'))),
-            dict(label='보유 매수금액', value=_won(s['buy_sum']), sub=f"거래소 평균 매수가 × 수량 · {s['n_pnl']}종목"),
-            dict(label='보유 평가손익', value=(f"{pn:+,.0f}원" if pn is not None else '—'), tone=tone, sub='매도 전 · 수수료·세금 제외'),
-            dict(label='보유 수익률', value=(f"{s['ret_total']:+.2f}%" if s['ret_total'] is not None else '—'), tone=tone,
-                 sub='평가손익 ÷ 매수금액'),
-            dict(label='예수금', value=_won(s['cash']), sub='증권사 예수금 총액'),
-            dict(label='D+2 정산 예정 예수금', value=_won(s['cash_d2']),
-                 sub=('주문 가능 금액은 종목별로 따로 읽습니다' if s['cash_d2'] is not None else '이 잔고에는 없는 칸입니다')),
-        ], theme=theme)
-        for ln in _acc454.glance_lines(s):
-            st.caption(md(ln))
-        if s['n']:
-            l1, l2 = st.columns([1.3, 1])
+        if scope == 'overview':
+            pn = s['pnl_sum']
+            tone = ('up' if (pn or 0) > 0 else ('down' if (pn or 0) < 0 else ''))     # 손익 색은 한국 관행(이익 빨강 · 손실 파랑 · §5)
+            uk.stat_tiles([
+                dict(label='총자산(증권사 총평가)', value=_won(s['total']),
+                     sub=('증권사 요약값' if s['total_src'] == 'broker' else ('예수금 + 보유 평가 합' if s['total_src'] else '총평가를 못 받았습니다'))),
+                dict(label='보유 매수금액', value=_won(s['buy_sum']), sub=f"거래소 평균 매수가 × 수량 · {s['n_pnl']}종목"),
+                dict(label='보유 평가손익', value=(f"{pn:+,.0f}원" if pn is not None else '—'), tone=tone, sub='매도 전 · 수수료·세금 제외'),
+                dict(label='보유 수익률', value=(f"{s['ret_total']:+.2f}%" if s['ret_total'] is not None else '—'), tone=tone,
+                     sub='평가손익 ÷ 매수금액'),
+                dict(label='예수금', value=_won(s['cash']), sub='증권사 예수금 총액'),
+                dict(label='D+2 정산 예정 예수금', value=_won(s['cash_d2']),
+                     sub=('주문 가능 금액은 종목별로 따로 읽습니다' if s['cash_d2'] is not None else '이 잔고에는 없는 칸입니다')),
+            ], theme=theme)
+            for ln in _acc454.glance_lines(s):
+                st.caption(md(ln))
+            l1, l2 = st.columns([1, 1])
             with l1:
-                uk.bar_list(_acc454.composition(s), theme=theme, title='자산 구성(총자산 대비 · 현금 포함)', max_rows=8)
+                st.markdown(_viz.donut(_dash.allocation(s, set(managed or ())), theme=theme, title='자산 구성 — 현금 · 자동매매 관리 · 직접 보유'),
+                            unsafe_allow_html=True)
             with l2:
-                uk.chip_row(_acc454.scope_chips(s), theme=theme, title='평가 범위 — 열린 보유의 지금 상태(매매 승률이 아닙니다)')
-                st.caption(f"최신 가격 확인 {s['priced']}/{s['n']} · 손익 계산 가능 {s['n_pnl']}/{s['n']}"
-                           + (f" · 가격 없음 {', '.join(s['unpriced_codes'])}" if s['unpriced_codes'] else '')
-                           + (f" · 상위 1종목 비중 {s['top1']:.2f}%" if s['top1'] is not None else '')
-                           + (f" · 상위 2종목 비중 {s['top2']:.2f}%" if s['top2'] is not None else '')
-                           + (f" · 현금 비중 {s['cash_w']:.2f}%" if s['cash_w'] is not None else ''))
+                if s['n']:
+                    uk.chip_row(_acc454.scope_chips(s), theme=theme, title='평가 범위 — 열린 보유의 지금 상태(매매 승률이 아닙니다)')
+                    st.caption(f"최신 가격 확인 {s['priced']}/{s['n']} · 손익 계산 가능 {s['n_pnl']}/{s['n']}"
+                               + (f" · 가격 없음 {', '.join(s['unpriced_codes'])}" if s['unpriced_codes'] else '')
+                               + (f" · 상위 1종목 비중 {s['top1']:.2f}%" if s['top1'] is not None else '')
+                               + (f" · 상위 2종목 비중 {s['top2']:.2f}%" if s['top2'] is not None else '')
+                               + (f" · 현금 비중 {s['cash_w']:.2f}%" if s['cash_w'] is not None else ''))
+                else:
+                    st.caption('보유 종목이 없습니다 — 계좌는 전부 현금입니다.')
+            return
+        # ── holdings (포지션 갈래)
         lc = _acc454.limit_checks(s, stt.get('limits') or None)
-        if lc:
-            st.caption('⑥에 적은 위험 한도와 지금 계좌를 **참고로** 견준 것입니다 — 직접 산 보유를 자동매매 한도로 판정하는 것이 아니고, '
-                       '규칙 위반 판정도 매매 지시도 아닙니다.')
-            st.dataframe([{'항목': r['name'], '설정 한도': f"{r['setting']:g}{r['unit']}",
-                           '지금 계좌': (f"{r['current']:.2f}{r['unit']}" if isinstance(r['current'], float) else
-                                     (f"{r['current']}{r['unit']}" if r['current'] is not None else '—')), '비교': r['status']}
-                          for r in lc], hide_index=True, width='stretch')
-        else:
-            st.caption('⑥의 위험 한도가 비어 있어 참고 비교는 없습니다.')
         if s['rows']:
             pos = L.positions(c) if c is not None else {}
 
@@ -254,7 +255,16 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
             st.dataframe(_acc454.table_rows(s, ownership_label=_own, quote_ts=qts), hide_index=True, width='stretch')
             st.caption('평가는 증권사가 보낸 현재가 기준이고 체결을 보장하지 않습니다 · 평균 매수가는 거래소(증권사) 기준 · 수수료·세금 전 · '
                        '\'매도 가능\'은 걸려 있는 매도 주문을 뺀 수량입니다.')
-        # 최근 30일 주문·체결 — 읽기 전용 · 누를 때만 증권사를 부른다 · 승률·성과를 셈하지 않는다(그 셈은 ⑤ 영수증이 같은 채점기로 한다)
+        else:
+            st.caption('증권사 잔고에 보유 종목이 없습니다.')
+        if lc:
+            st.caption('시스템 → 설정의 위험 한도와 지금 계좌를 **참고로** 견준 것입니다 — 직접 산 보유를 자동매매 한도로 판정하는 것이 아니고, '
+                       '규칙 위반 판정도 매매 지시도 아닙니다.')
+            st.dataframe([{'항목': r['name'], '설정 한도': f"{r['setting']:g}{r['unit']}",
+                           '지금 계좌': (f"{r['current']:.2f}{r['unit']}" if isinstance(r['current'], float) else
+                                     (f"{r['current']}{r['unit']}" if r['current'] is not None else '—')), '비교': r['status']}
+                          for r in lc], hide_index=True, width='stretch')
+        # 최근 30일 주문·체결 — 읽기 전용 · 누를 때만 증권사를 부른다 · 승률·성과를 셈하지 않는다(그 셈은 영수증이 같은 채점기로 한다)
         if allow_write and _ok454 and st.button('최근 30일 주문·체결 내역 읽기(증권사 · 읽기 전용)', key='sw_acct_orders'):
             try:
                 br = broker_kis.KisBroker(cfg)
@@ -270,7 +280,7 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme):
             else:
                 _r = _od['rows']
                 st.caption(f"최근 30일 주문 {len(_r)}건 — 매수 {sum(1 for x in _r if x.get('side') == 'buy')} · "
-                           f"매도 {sum(1 for x in _r if x.get('side') == 'sell')} · {_od['ts'][11:19]} 읽음. 성과는 셈하지 않습니다(⑤ 영수증이 같은 채점기로 셉니다).")
+                           f"매도 {sum(1 for x in _r if x.get('side') == 'sell')} · {_od['ts'][11:19]} 읽음. 성과는 셈하지 않습니다(영수증이 같은 채점기로 셉니다).")
                 if _r:
                     st.dataframe([{'날짜': x.get('date'), '종목': x.get('code'), '방향': '매수' if x.get('side') == 'buy' else '매도',
                                    '주문 수량': x.get('ord_qty'), '체결 수량': x.get('filled_qty'), '주문가': _won(x.get('ord_price')),
@@ -484,20 +494,23 @@ def shadow_summary(c):
                 stop=sum(1 for s in done if s.get('exit_status') == 'stop'))
 
 
+#: 라운드 455 — 스윙 칸의 갈래(정보구조). 세로로 쌓인 접힌 칸 여섯 대신 **한 번에 한 갈래**만 그린다(외부 검토 R455). 설정·연결 정보·
+#: 운영 방법은 '시스템' 갈래로 간다 — 관제실에는 돈·위험·오늘 엔진·포지션·실행 상태만.
+NAV = ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF', '시스템')
+NAV_KEY = 'sw_nav'
+
+
 def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, anchor_day=None, md_safe=None,
            resolve_market=None):
     """칸 전체. hold_levels(code) → (손절선, 1차 매도가) 또는 None — 관심종목 표와 같은 함수로 화면이 만든다.
     resolve_market(code) → 'KOSPI'·'KOSDAQ'·None — 계좌 보유를 앱 보유종목으로 가져올 때 시장 접미사를 정한다(CSV 가져오기와 같은 길)."""
     md = md_safe or (lambda s: s)
-    # 라운드 453 — 관제실 머리는 짧게: 한 줄 안내 + 우위 없음 한 줄(면책은 접지 않는다 · 라운드 226) · 나머지 사실은 접힌 칸에.
-    #   외부 검토가 요구한 '우위 없음 문구 삭제'는 받지 않았다(§9) — 접은 것이지 지운 것이 아니다.
-    st.caption('가늠이 판단하고 · 한국투자증권이 실행하고 · 결과는 같은 채점 규칙으로 남깁니다. 이 칸은 관제실이고, '
-               '주문은 따로 도는 워커만 냅니다. 분석 화면으로 돌아가려면 맨 위 탭에서 \'가늠 분석\'을 고르세요.')
+    # 라운드 455 — 머리는 두 줄: 한 줄 안내 + 우위 없음 한 줄. 외부 검토 둘이 모두 *"변명성 텍스트 삭제"* 를 요구했지만 받지 않았다(§9 ·
+    #   면책 한 줄은 접지 않는다 · 라운드 226·453). 나머지 사실은 '시스템' 갈래의 접힌 칸으로 갔다 — 지운 것이 아니다.
+    st.caption('가늠이 판단하고 · 한국투자증권이 실행하고 · 결과는 같은 채점 규칙으로 남깁니다. 이 칸은 관제실이고 주문은 따로 도는 워커만 냅니다. '
+               '분석 화면은 맨 위 탭 \'가늠 분석\'.')
     _facts = facts_lines()
     st.caption(md(_facts[0]))
-    with st.expander('먼저 알아 두실 것 — 자세히', expanded=False):
-        for ln in _facts[1:]:
-            st.caption(md(ln))
     if not allow_read:
         st.info('이 칸은 이 PC 에서 직접 연 화면에서만 씁니다. 원격으로 연 화면에서는 주문 설정을 보거나 바꿀 수 없습니다.')
         return
@@ -510,12 +523,53 @@ def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, an
         st.caption('아직 장부가 없습니다 — 쓰기가 꺼진 화면이라 만들지 않았습니다(이 PC 에서 직접 연 화면에서 모드를 정하면 생깁니다).')
         return
     try:
-        _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market)
+        _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market, facts=_facts)
     finally:
         c.close()
 
 
-def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market=None):
+def bar_items(ctx):
+    """지휘 띠 재료 — 값은 **짧게**(정상 · 꺼짐 · 3), 세부는 sub(외부 검토 R456 · 긴 글자를 값으로 넣지 않는다). 판정 낱말 없음."""
+    conn = conn_label(ctx['cfg'], ctx['acct'], live_ts=(ctx.get('live') or {}).get('ts'))
+    if conn == '정보 없음':
+        cv, ct = '정보 없음', 'neg'
+    elif conn.startswith('정보 있음'):
+        cv, ct = '확인 전', 'warn'
+    else:
+        cv, ct = '정상', 'pos'
+    mode, stt = ctx['mode'], ctx['stt']
+    kill = bool(stt.get('kill_switch'))
+    buy_on = mode in X.MODE_ENV and not kill
+    n_prot = len(ctx['managed']) + len(ctx['releasing'])
+    w, task, hb = ctx.get('worker') or {}, ctx.get('task') or {}, ctx.get('hb')
+    if w.get('running') is True:
+        wv, wt = '실행 중', 'pos'
+    elif w.get('running') is None:
+        wv, wt = '확인 불가', 'warn'
+    elif ctx.get('pl'):
+        wv, wt = '안 돎', 'neg'
+    elif task.get('ok') and task.get('installed'):
+        wv, wt = '예약됨', ''
+    elif task.get('ok'):
+        wv, wt = '예약 안 됨', 'warn'
+    else:
+        wv, wt = '확인 불가', 'warn'
+    live_n = sum(1 for p in ctx['plans_today'] if p.get('live_ok'))
+    return [dict(label='한국투자', value=cv, tone=ct, sub=conn),
+            dict(label='신규 매수', value=('켜짐' if buy_on else '꺼짐'), tone=('pos' if buy_on else ''), sub=mode_label(mode, stt, n_prot)),
+            dict(label='보호 매도', value=(f'{n_prot}종목' if n_prot else '없음'), tone=('warn' if (n_prot and ctx.get('pl')) else ''),
+                 sub=('워커가 손절·목표를 관리' if n_prot else '자동 관리 중인 종목 없음')),
+            dict(label='워커', value=wv, tone=wt, sub=(f"마지막 기록 {_ts(hb['ts'])}" if hb else '기록 없음')),
+            dict(label='긴급정지', value=('켜짐' if kill else '꺼짐'), tone=('neg' if kill else ''), sub='토글은 오른쪽'),
+            dict(label='오늘 계획', value=str(len(ctx['plans_today'])), sub=f"실주문 자격 {live_n} · 판정일 {ctx.get('today') or '—'}")]
+
+
+def _summary_now(ctx):
+    bal = (ctx.get('live') or {}).get('bal') or ctx.get('acct')
+    return _acc454.summarize(bal) if bal else None
+
+
+def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, resolve_market=None, facts=None):
     stt = L.settings(c)
     mode = L.mode_of(c)
     cfg = broker_kis.load_config()
@@ -524,13 +578,26 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     plans_today = [p for p in L.plans(c) if p['data_day'] == str(anchor_day)] if anchor_day else []
     managed = L.managed_open(c)
     releasing = L.releasing(c)
-    # 라운드 453 — 상태 띠: 연결(마지막 동기화 시각) · 모드(실전이면 주문 방식 · 꺼짐이면 보호만) · 워커 · 긴급정지 토글(한 곳 ·
-    #   ⑥에서 올라왔다) · 오늘 계획. 작업 스케줄러 상태는 직접 읽어 한 줄(등록하라고만 적지 않는다).
-    cols = st.columns(5)
-    cols[0].metric('한국투자 연결', conn_label(cfg, acct, live_ts=(st.session_state.get('sw_acct_live') or {}).get('ts')))
-    cols[1].metric('운용 모드', mode_label(mode, stt, len(managed) + len(releasing)))
-    cols[2].metric('워커 마지막 기록', (_ts(hb['ts']) + f" · {hb['status']}") if hb else '기록 없음')
-    with cols[3]:
+    theme = st.session_state.get('ui_theme', 'dark')
+    task = _ops.scheduled_task()
+    worker = _ops.worker_status()
+    nightly = _ops.nightly_status()
+    pl = protection_line(hb, X.now_kst(), len(managed) + len(releasing), mode=mode, task=task)
+    try:
+        from verdict_core import COST_PCT as _cost
+    except Exception:                                          # noqa: BLE001
+        _cost = None
+    ctx = dict(stt=stt, mode=mode, cfg=cfg, hb=hb, acct=acct, plans_today=plans_today, managed=managed, releasing=releasing,
+               theme=theme, task=task, worker=worker, nightly=nightly, pl=pl, today=anchor_day,
+               live=st.session_state.get('sw_acct_live'), allow_write=allow_write, hold_levels=hold_levels, report=report,
+               resolve_market=resolve_market, cost=_cost, intents=L.intents_with_state(c),
+               approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
+    # ── 지휘 띠(R456) — 짧은 값 · 긴급정지 토글은 한 곳(sw_kill) · 갈래 고르기
+    st.markdown(_viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
+    nc, kc = st.columns([5, 1.2])
+    with nc:
+        pick = st.radio('갈래', list(NAV), horizontal=True, key=NAV_KEY, label_visibility='collapsed')
+    with kc:
         if allow_write:
             ks = st.toggle('긴급정지', value=bool(stt.get('kill_switch')), key='sw_kill',
                            help='켜면 새 매수를 안 내고 열린 매수 주문을 취소합니다. 자동 관리 중인 종목의 손절·목표 매도는 계속합니다.')
@@ -538,37 +605,209 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                 L.set_setting(c, 'kill_switch', bool(ks))
                 st.rerun()
         else:
-            st.metric('긴급정지', '켜짐' if stt.get('kill_switch') else '꺼짐')
-    cols[4].metric('오늘 계획 · 실주문 자격', f"{len(plans_today)} · {sum(1 for p in plans_today if p['live_ok'])}")
-    st.caption(md(f"연결 정보: {broker_kis.config_summary(cfg)}" + (' · ' + ' · '.join(cfg['problems']) if cfg.get('problems') else '')
-                  + f" · 자동 관리 중 {len(managed)}종목" + (f" · 되돌려 받기 확인 중 {len(releasing)}종목" if releasing else '')))
-    _task453 = _ops.scheduled_task()
-    st.caption(md(_ops.task_line(_task453)))
+            st.caption('긴급정지 ' + ('켜짐' if stt.get('kill_switch') else '꺼짐'))
     # 워커가 보호(손절·취소·계좌 맞추기)에 문제를 적었으면 조용히 'ok' 로 덮지 않고 그대로 띄운다
     if hb and hb.get('status') in ('warn', 'broker_fail', 'blocked'):
         st.warning(md(f"워커 마지막 바퀴({_ts(hb['ts'])}) — {hb.get('detail') or hb['status']}"))
-    _pl450 = protection_line(hb, X.now_kst(), len(managed) + len(releasing), mode=mode, task=_task453)
-    if _pl450:
-        st.warning(md(_pl450))
+    if pl:
+        st.warning(md(pl))
+    if st.session_state.get('sw_flash'):
+        st.success(st.session_state.pop('sw_flash'))
+    view = {'관제실': _view_center, '오늘 계획': _view_plans, '포지션': _view_positions, '주문·체결': _view_orders,
+            '성과·PROOF': _view_proof, '시스템': _view_system}.get(pick, _view_center)
+    view(st, uk, c, ctx, md)
 
-    # ── 지금 진행 중인가 (라운드 454) — 사용자: "지금 진행중인지 아닌지도 표시해주면 좋겠어". 워커(잠금 파일의 주인이 살아 있나) ·
-    #   예약 작업 둘 · 저녁 작업 · 이 화면의 계좌 자동 갱신을 한 자리에서 사실로 적는다. 규칙은 swing_ops.progress 한 곳(§4).
-    _theme454 = st.session_state.get('ui_theme', 'dark')
-    _auto454 = dict(on=bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)),
-                    every=int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)),
-                    last=((st.session_state.get('sw_acct_live') or {}).get('ts') or '')[11:19] or None)
-    _prog454 = _ops.progress(tasks={_ops.TASK_NAME: _task453, _ops.WATCH_TASK: _ops.scheduled_task(_ops.WATCH_TASK)}, auto=_auto454)
-    uk.rows([(p['label'], (('실행 중 · ' if p['running'] else ('확인 불가 · ' if p['running'] is None else '')) + p['text']),
-              ('pos' if p['running'] else ('warn' if p['running'] is None else ''))) for p in _prog454],
-            theme=_theme454, title='지금 진행 중인가 — 워커 · 예약 작업 · 저녁 작업 · 자동 갱신')
 
-    # ① 계좌 (라운드 454 — 사용자가 붙인 다른 워크스페이스의 계좌 화면 모양을 **우리 자료로 되는 것만** 옮겼다: 자동 갱신 · 타일 여섯 ·
-    #   한눈에 · 자산 구성 · 평가 범위 · 위험 한도와 참고 비교 · 보유 표 · 최근 주문. 수는 swing_account 한 곳이 세고 화면은 그린다(§4) ·
-    #   판정 낱말 없음(§9) · 자동 갱신은 기본 꺼짐(켜야 증권사를 부른다 · 회귀의 자식 렌더가 실계좌를 부르지 않게).
-    _acct_panel454(st, uk, allow_write, cfg, stt, anchor_day, md, _theme454)
-    with st.expander('① 한국투자 계좌 — 앱 보유종목과 견주기 · 가져오기', expanded=False):
+def _title(st, text, theme):
+    t = _uk_tokens(theme)
+    st.markdown(f"<p style='margin:14px 0 6px 2px; font-size:13px; color:{t['tx2']}; font-weight:500;'>{_uk_esc(text)}</p>",
+                unsafe_allow_html=True)
+
+
+def _uk_tokens(theme):
+    import ui_kit as _uk
+    return _uk.tokens(theme)
+
+
+def _uk_esc(s):
+    import ui_kit as _uk
+    return _uk._esc(s)
+
+
+def _view_center(st, uk, c, ctx, md):
+    """관제실 — 열자마자 돈 · 위험 · 오늘 엔진 · 포지션 · 실행 상태가 보이게(외부 검토 §2). 전부 장부·잔고·운영 상태의 사실이다."""
+    theme = ctx['theme']
+    sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['today'],
+                             protection_warn=bool(ctx['pl']), ledger_ok=True)
+    st.markdown(_viz.health_strip(sh, theme=theme, title='시스템 상태 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업'), unsafe_allow_html=True)
+    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']))
+    s = _summary_now(ctx)
+    pts = _dash.equity_points(L.account_history(c))
+    its_today = [it for it in ctx['intents'] if it.get('trade_day') == str(ctx['today'])]
+    n_new = sum(1 for it in its_today if it.get('side') == 'buy')
+    a, b = st.columns([1.6, 1])
+    with a:
+        _title(st, '자산 곡선 — 증권사 총평가·예수금(계좌를 읽을 때마다 한 점 · 수익률로 바꾸지 않는다)', theme)
+        st.markdown(_viz.equity_curve(pts, theme=theme), unsafe_allow_html=True)
+    with b:
+        st.markdown(_viz.risk_bars(_dash.risk_usage(s or {}, ctx['stt'].get('limits'), managed_n=len(ctx['managed']), new_orders_today=n_new,
+                                                    planned_loss_sum=_dash.planned_loss_sum(ctx['managed'])),
+                                   theme=theme, title='위험 한도 사용 — 설정 한도 대비(참고 · 직접 보유 포함)'), unsafe_allow_html=True)
+    st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
+                                               managed_codes=set(ctx['managed'])),
+                            theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"), unsafe_allow_html=True)
+    zl = zero_day_line(c, str(ctx['today'])) if ctx['today'] else None
+    if zl:
+        st.caption(md(zl))
+    elif not ctx['plans_today']:
+        st.caption('오늘 계획이 아직 없습니다 — 워커 · 저녁 작업 · 시스템의 \'계획 갱신\'이 그날 개장 전 리포트에서 만듭니다.')
+    eh = _dash.execution_health(ctx['intents'])
+    rc = _sp.receipts(c, ctx['cost'])
+    c1, c2 = st.columns(2)
+    with c1:
+        rows = [(f"{code} · {OWN_KO.get(p.get('ownership'), '')}", f"수량 {p.get('qty')} · 손절 {_won(p.get('stop'))} · 목표 {_won(p.get('target'))}")
+                for code, p in list(ctx['managed'].items())[:5]] or [('지금', '자동 관리 중인 종목 없음')]
+        st.markdown(_viz.kv_card('자동 관리 포지션', rows, theme=theme), unsafe_allow_html=True)
+        st.markdown(_viz.kv_card('PROOF — 계획 vs 실제',
+                                 [('닫힌 거래 영수증', str(sum(1 for r in rc if r.get('closed_day')))),
+                                  ('보유 중(영수증 열림)', str(sum(1 for r in rc if r.get('open')))),
+                                  ('오늘 후보 중 실주문 자격', f"{sum(1 for p in ctx['plans_today'] if p.get('live_ok'))}/{len(ctx['plans_today'])}")],
+                                 theme=theme), unsafe_allow_html=True)
+    with c2:
+        st.markdown(_viz.kv_card('실행 상태(주문 사건)',
+                                 [('주문 전체', str(eh['total'])), ('증권사 접수', str(eh['ack'])), ('체결', str(eh['filled'])),
+                                  ('일부 체결', str(eh['partial']), 'warn' if eh['partial'] else None),
+                                  ('확인 중(UNKNOWN)', str(eh['unknown']), 'warn' if eh['unknown'] else None),
+                                  ('거절', str(eh['rejected']), 'neg' if eh['rejected'] else None)], theme=theme), unsafe_allow_html=True)
+        st.markdown(_viz.kv_card('최근 사건', [(ts, txt) for ts, txt in _dash.recent_events(L.heartbeats_recent(c, 3), ctx['nightly'], ctx['acct'],
+                                                                                        ctx['task'])] or [('—', '기록 없음')],
+                                 theme=theme), unsafe_allow_html=True)
+
+
+def _view_plans(st, uk, c, ctx, md):
+    """오늘 계획 — 라운드 450·451 의 표·승인 그대로(갈래로 옮겼을 뿐)."""
+    day, rows = plan_rows(c, today_day=ctx['today'], account=ctx['acct'], limits=(ctx['stt'].get('limits') or None), cost_pct=ctx['cost'],
+                          held=set(ctx['managed']), approval_on=ctx['approval_on'], approved=ctx['approved'])
+    if not rows:
+        st.caption('아직 계획이 없습니다 — 워커가 돌거나(저녁 작업 포함) 시스템의 \'계획 갱신\'을 누르면 그날 개장 전 리포트에서 만들어집니다. '
+                   '운용 모드와 무관하게 남깁니다.')
+        return
+    st.caption(f'판정일 {day} 의 개장 전 후보 — 실주문 자격은 중앙 판정이 조건 11개를 전부 통과했을 때만 \'예\'입니다. '
+               '자격이 없는 후보도 같은 계약을 일봉으로 되돌려 채점한 결과(연구 모의 · 증권사와 무관한 원장 기준 값)를 남깁니다. '
+               '진입가·1차 목표는 호가 단위로 맞춘 주문 가격이고, 중앙 판정 값과 다르면 괄호에 같이 적습니다.')
+    _zl450 = zero_day_line(c, day)
+    if _zl450:
+        st.caption(md(_zl450))
+    st.dataframe(rows, hide_index=True, width='stretch')
+    acct = ctx['acct']
+    if acct and (ctx['stt'].get('limits') or None):
+        st.caption(f"수량 미리보기는 마지막으로 읽은 계좌({_ts(acct['ts'])} · 예수금 {_won(acct['cash'])})와 지금 위험 한도로 "
+                   "워커와 같은 함수로 센 것입니다 — 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 셉니다.")
+    else:
+        st.caption('수량 미리보기 없음 — 계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다(시스템 → 설정).')
+    # 라운드 451 — 실전 승인형: 승인은 계획(진입가·손절·목표가 박힌 영수증)에 붙는다. 쓰는 자리는 여기뿐이다.
+    if ctx['approval_on']:
+        _live451 = [p for p in L.plans(c) if p['data_day'] == day and p.get('live_ok') and p['code'] not in ctx['managed']]
+        if _live451:
+            st.caption('실전 주문 방식이 \'계획마다 승인\'입니다 — 아래에서 승인한 계획만 워커가 그 계획의 대기 창 안에서 진입가 지정가 '
+                       '매수를 냅니다. 승인해도 중앙 판정·위험 한도·긴급정지는 그대로 적용되고, 보호 매도는 승인과 무관합니다.')
+        if ctx['allow_write']:
+            _apset451 = ctx['approved']
+            for _p451 in _live451:
+                _pid451 = _p451['plan_id']
+                _ca451, _cb451 = st.columns([4, 1])
+                _ca451.caption(f"{_p451.get('name') or ''} ({_p451['code']}) · 진입 {_won(_p451['entry'])} · 손절 {_won(_p451['stop'])} · "
+                               f"1차 목표 {_won(_p451['target'])} · {'승인됨' if _pid451 in _apset451 else '승인 전'}")
+                if _pid451 in _apset451:
+                    if _cb451.button('승인 취소', key=f'sw_unappr_{_pid451}'):
+                        L.set_setting(c, 'approved_plans', sorted(_apset451 - {_pid451}))
+                        st.rerun()
+                elif _cb451.button('이 계획 승인', key=f'sw_appr_{_pid451}'):
+                    L.set_setting(c, 'approved_plans', sorted(_apset451 | {_pid451}))
+                    st.rerun()
+    ss = shadow_summary(c)
+    if ss:
+        st.caption(md(f"끝난 모의 {ss['n']}건 — 목표 {ss['target']} · 손절 {ss['stop']} · 기간 만료 "
+                      f"{ss['n'] - ss['target'] - ss['stop']} · 비용 뺀 평균 {ss['mean']:+.2f}% · 중앙 {ss['median']:+.2f}%"
+                      + (' — 표본이 작아 무엇을 가를 수 있는 수가 아닙니다' if ss['n'] < 30 else '')))
+
+
+def position_card_html(pc, theme):
+    """포지션 카드 — 머리 + 가격선 + 사실 줄(외부 검토 R458). 판정 낱말 없음 · 값 없으면 '—'."""
+    t = _uk_tokens(theme)
+    name = f"{pc.get('name') or ''} {pc['code']}".strip()
+    own = OWN_KO.get(pc.get('ownership'), pc.get('ownership') or '')
+    head = (f"<div style='display:flex; justify-content:space-between; gap:12px; align-items:baseline; flex-wrap:wrap;'>"
+            f"<span style='font-size:16px; font-weight:600; color:{t['tx1']};'>{_uk_esc(name)}</span>"
+            f"<span style='font-size:12px; color:{t['tx3']};'>{_uk_esc(own)}{' · 해제 확인 중' if pc.get('releasing') else ''} · 수량 {pc.get('qty')}</span></div>")
+    g = pc.get('gross_pct')
+    gcol = t['up'] if (g or 0) > 0 else (t['down'] if (g or 0) < 0 else t['tx1'])
+    big = (f"<p style='margin:4px 0 0 0; font-size:20px; font-weight:600; color:{gcol}; font-variant-numeric:tabular-nums;'>"
+           f"{(f'{g:+.2f}%' if g is not None else '—')} <span style='font-size:12px; color:{t['tx3']}; font-weight:400;'>현재가 기준 · "
+           f"{(f'{pc['held_days']}/{pc['horizon']} 거래일' if pc.get('held_days') is not None and pc.get('horizon') else '보유 거래일 —')}</span></p>")
+    bar = _viz.range_bar(pc.get('stop'), pc.get('entry'), pc.get('current'), pc.get('target'), theme=theme)
+    tgt = pc.get('target_order_state')
+    rows = [('손절까지', f"{pc['dist_stop_pct']:+.2f}%" if pc.get('dist_stop_pct') is not None else '—'),
+            ('목표까지', f"{pc['dist_target_pct']:+.2f}%" if pc.get('dist_target_pct') is not None else '—'),
+            ('계획 손실(손절가 체결 가정)', f"{-pc['planned_loss']:,.0f}원" if pc.get('planned_loss') is not None else '—'),
+            ('목표 지정가 주문(증권사)', STATE_KO.get(tgt, tgt) if tgt else '없음 — 워커가 장중에 건다'),
+            ('손절 보호(워커 시장가)', (f"마지막 기록 {_ts(pc['heartbeat_ts'])}" if pc.get('heartbeat_ts') else '기록 없음'))]
+    body = ''.join(f"<div style='display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-top:1px solid {t['line']};'>"
+                   f"<span style='font-size:13px; color:{t['tx2']};'>{_uk_esc(k)}</span>"
+                   f"<span style='font-size:13px; color:{t['tx1']}; font-variant-numeric:tabular-nums;'>{_uk_esc(v)}</span></div>" for k, v in rows)
+    return (f"<div style='background:{t['card']}; border-radius:18px; padding:16px 18px; margin-bottom:10px;'>{head}{big}"
+            f"<div style='margin:8px 0;'>{bar}</div>{body}</div>")
+
+
+def _view_positions(st, uk, c, ctx, md):
+    """포지션 — 자동 관리 카드(가격선) · 넘기기·되돌려 받기 · 증권사 보유 표 · 앱 보유종목과 견주기·가져오기."""
+    theme = ctx['theme']
+    acct = ctx['acct']
+    rows_by_code = {str(p.get('code')): p for p in ((acct or {}).get('positions') or [])}
+    its = ctx['intents']
+    allp = list(ctx['managed'].items()) + list(ctx['releasing'].items())
+    if not allp:
+        st.caption('자동 관리 중인 종목이 없습니다 — 자동매매가 산 종목이나 아래에서 넘긴 기존 보유가 여기에 카드로 보입니다.')
+    for code, p in allp:
+        tgt = next((it for it in reversed(its) if it.get('code') == code and it.get('side') == 'sell' and X._base(it.get('reason')) == 'target'
+                    and it.get('state') in ('BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')), None)
+        plan = L.plan(c, p.get('plan_id')) or {}
+        pc = _dash.position_card(code, p, rows_by_code.get(code), target_intent=tgt, hb=ctx['hb'], horizon=plan.get('horizon'), today=ctx['today'])
+        st.markdown(position_card_html(pc, theme), unsafe_allow_html=True)
+        if p.get('ownership') == 'USER_ADOPTED' and ctx['allow_write'] and not p.get('releasing') and st.button('되돌려 받기', key=f'sw_rel_{code}'):
+            _ev453 = X.release(c, code)
+            st.session_state['sw_flash'] = (f'{code} 되돌려 받았습니다(열린 매도 주문 없음)' if _ev453 == 'RELEASED' else
+                                            f'{code} 되돌려 받기 요청 — 걸려 있는 매도 주문의 취소를 워커가 확인하면 해제됩니다')
+            st.rerun()
+    st.caption('자동 매도는 자동매매가 산 종목과 직접 넘긴 종목만 합니다. 계좌의 기존 보유는 넘기기 전에는 절대 팔지 않습니다. '
+               '넘긴 종목은 관심종목 표의 손절선·1차 매도가에 닿을 때만 팔고(기간 만료로는 안 팝니다), 손절선 가격에 그대로 '
+               '팔린다는 보장은 없습니다(더 아래에서 팔릴 수 있습니다). 되돌려 받기는 두 단계입니다 — 걸려 있는 1차 목표 매도를 '
+               '워커가 취소하고 그 취소가 확인된 뒤에야 해제됩니다(확인 전엔 \'확인 중\'으로 보이고 새 보호 주문은 내지 않습니다). '
+               '증권사 앱에서 직접 판 수량은 워커가 계좌에 맞춰 관리에서 내립니다.')
+    hold_levels = ctx['hold_levels']
+    if acct and ctx['allow_write'] and hold_levels:
+        cand = [p for p in acct['positions'] if not (L.positions(c).get(p['code']) or {}).get('managed')]
+        if cand:
+            pick = st.selectbox('넘길 기존 보유', [f"{p.get('name') or ''} ({p['code']})" for p in cand], index=None,
+                                placeholder='고르세요', key='sw_adopt_pick')
+            if pick:
+                p = cand[[f"{x.get('name') or ''} ({x['code']})" for x in cand].index(pick)]
+                lv = hold_levels(p['code'])
+                if not lv:
+                    st.caption('이 종목은 관심종목 표에 손절선·1차 매도가가 없어 넘길 수 없습니다 — 관심종목에 담고 잰 뒤 넘기세요.')
+                else:
+                    st.caption(f"넘기면 손절 {_won(lv[0])} 아래에서 시장가로 · 1차 목표 {_won(lv[1])} 에 지정가로 팝니다 (수량 {p['qty']}).")
+                    ok = st.checkbox('이 종목을 자동 관리로 넘기는 데 동의합니다', key='sw_adopt_ok')
+                    if ok and st.button('자동 관리로 넘기기', key='sw_adopt_go'):
+                        try:
+                            X.adopt(c, p['code'], p['qty'], lv[1], lv[0], by_user=True)
+                            st.rerun()
+                        except L.LedgerError as e:
+                            st.warning(str(e))
+    _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='holdings', managed=set(ctx['managed']))
+    with st.expander('앱 보유종목과 견주기 · 가져오기', expanded=False):
         if not acct:
-            st.caption('아직 계좌를 읽은 적이 없습니다 — 위 \'지금 새로고침\'이나 아래 설정의 \'연결 확인\'을 누르면 채워집니다.')
+            st.caption('아직 계좌를 읽은 적이 없습니다 — 위 \'지금 새로고침\'이나 시스템 → 설정의 \'연결 확인\'을 누르면 채워집니다.')
         else:
             # 라운드 450 — 앱 보유종목과 견주기(사실만 · 덮어쓰지 않는다 · 옮기는 것은 아래 버튼)
             try:
@@ -590,14 +829,14 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                                    '계좌 평단': _won(r['acct_avg']), '앱 평단': _won(r['app_avg']), '상태': r['status']}
                                   for r in _diff450], hide_index=True, width='stretch')
             # 라운드 449 — 계좌 보유를 앱의 '내 보유종목'으로 가져온다(CSV 가져오기와 같은 함수 · 이 PC 에만 저장 · 되돌리기 한 번)
-            if allow_write and acct['positions']:
+            if ctx['allow_write'] and acct['positions']:
                 st.caption('아래 버튼은 이 계좌의 보유를 앱의 \'내 보유종목\'(.portfolio/positions.json · 이 PC 에만)으로 옮깁니다. 지금 보유종목은 '
                            '덮이고, 바로 아래 \'되돌리기\'로 한 번 되돌릴 수 있습니다. 관심종목 표의 매입가·수량은 건드리지 않습니다.')
                 ca, cb = st.columns(2)
                 if ca.button('계좌 보유를 앱 보유종목으로 가져오기', key='sw_sync_pos'):
                     import portfolio as _pf
                     _rows = broker_kis.balance_to_rows(acct)
-                    _pos, _warns = _pf.rows_to_positions(_rows, source_type='kis_sync', resolve_market=resolve_market)
+                    _pos, _warns = _pf.rows_to_positions(_rows, source_type='kis_sync', resolve_market=ctx['resolve_market'])
                     st.session_state['sw_pos_before'] = list(st.session_state.get('positions') or [])
                     st.session_state['positions'] = _pos
                     try:
@@ -623,166 +862,139 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                 for _w in st.session_state.get('sw_sync_warns') or []:
                     st.caption(md(_w))
 
-    # ② 오늘의 계획 (라운드 450 — 오늘 상태 · 조건 전부 · 수량 미리보기 · 자격 0 인 날의 가장 많이 막은 조건)
+
+def _view_orders(st, uk, c, ctx, md):
+    """주문·체결 — 실행 상태 수 · 최근 주문의 생애 타임라인(계획 → 한도 통과 → 접수 → 체결/취소/거절/확인 중) · 전체 표."""
+    theme = ctx['theme']
+    its = ctx['intents']
+    eh = _dash.execution_health(its)
+    st.markdown(_viz.kv_card('실행 상태(주문 사건)',
+                             [('주문 전체', str(eh['total'])), ('증권사 접수', str(eh['ack'])), ('체결', str(eh['filled'])),
+                              ('일부 체결', str(eh['partial']), 'warn' if eh['partial'] else None),
+                              ('확인 중(UNKNOWN · 다시 보내지 않음)', str(eh['unknown']), 'warn' if eh['unknown'] else None),
+                              ('거절', str(eh['rejected']), 'neg' if eh['rejected'] else None), ('취소', str(eh['cancelled']))], theme=theme),
+                unsafe_allow_html=True)
+    if not its:
+        st.caption('아직 주문이 없습니다.')
+        return
+    _title(st, '최근 주문의 생애(최근 5건 · 시간순)', theme)
+    for it in list(reversed(its))[:5]:
+        head = (f"{it['trade_day']} · {it['code']} · {'매수' if it['side'] == 'buy' else '매도'} · "
+                f"{ {'entry': '진입', 'target': '1차 목표', 'stop': '손절', 'expiry': '기간 만료'}.get(X._base(it.get('reason')), it.get('reason')) } · "
+                f"수량 {it['qty']} · {_won(it['price']) if it['price'] else '시장가'} · 지금 {STATE_KO.get(it['state'], it['state'])}")
+        st.markdown(_viz.timeline(_dash.order_timeline(L.events_of(c, it['intent_id'])), theme=theme, title=head), unsafe_allow_html=True)
+    st.dataframe([{'날짜': it['trade_day'], '종목': it['code'], '방향': '매수' if it['side'] == 'buy' else '매도',
+                   '이유': {'entry': '진입', 'target': '1차 목표', 'stop': '손절', 'expiry': '기간 만료'}.get(X._base(it.get('reason')), it.get('reason')),
+                   '수량': it['qty'], '가격': _won(it['price']) if it['price'] else '시장가',
+                   '상태': STATE_KO.get(it['state'], it['state']), '체결': it.get('filled_qty') or 0,
+                   '모드': MODE_KO.get(it['mode'], it['mode']), '메모': (it.get('detail') or '')}
+                  for it in reversed(its[-200:])], hide_index=True, width='stretch')
+
+
+def execution_quality(its, rc, min_n=30):
+    """실행 품질 — 주문 수 · 체결률 · 부분 체결률 · 거절률 · 확인 중 비율 · 평균 슬리피지. 주문이 min_n 미만이면 **비율을 내지 않고** 수만(§3)."""
+    eh = _dash.execution_health(its)
+    sm = _sp.summary(rc)
+    out = dict(n=eh['total'], counts=eh, rates=None, slip_entry=(sm or {}).get('slip_entry_mean'), slip_exit=(sm or {}).get('slip_exit_mean'),
+               n_closed=(sm or {}).get('n', 0))
+    if eh['total'] >= min_n:
+        n = float(eh['total'])
+        out['rates'] = dict(filled=eh['filled'] / n * 100.0, partial=eh['partial'] / n * 100.0, rejected=eh['rejected'] / n * 100.0,
+                            unknown=eh['unknown'] / n * 100.0)
+    return out
+
+
+def _view_proof(st, uk, c, ctx, md):
+    """성과·PROOF — 영수증 폭포(계획 vs 실제) · 요약 · 실행 품질. '순수익'이라 부르지 않는다(실제 수수료·세금 미수신 · 라운드 453)."""
+    theme = ctx['theme']
+    rc = _sp.receipts(c, ctx['cost'])
+    closed = [r for r in rc if r.get('closed_day')]
+    st.caption('자동매매가 열고 닫은 보유마다 계획 진입가와 실제 평균 체결가, 청산 사유와 계획 청산가 대비 실제 청산가를 적습니다. '
+               f"수익률은 세 겹입니다 — 실제 체결가 수익률(비용 전) · 운영 왕복 비용 {ctx['cost'] if ctx['cost'] is not None else '미상'}%(가정) · "
+               '추정 비용후 수익률(앞의 둘의 차). 실제 수수료·세금은 증권사에서 읽지 않으므로 \'실제 순수익\'이 아닙니다. '
+               '같은 계획을 일봉으로 되돌려 채점한 결과(원장 기준)도 옆에 둡니다. 좋고 나쁨은 말하지 않습니다.')
+    _ln447 = _sp.summary_line(_sp.summary(rc), ctx['cost'])
+    if _ln447:
+        st.caption(md(_ln447))
+    if not rc:
+        st.caption('아직 자동매매가 열고 닫은 보유가 없습니다 — 첫 거래가 닫히면 여기 계획 vs 실제 폭포가 생깁니다.')
+    for r in list(reversed(closed))[:5]:
+        _title(st, f"{r['receipt_id']} · {r['code']} · {r.get('opened_day')} → {r.get('closed_day')} · "
+                   f"{_sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—')} · 원장 기준 재채점 {_pct(r.get('shadow_net_pct'))}", theme)
+        st.markdown(_viz.waterfall(_dash.receipt_waterfall(r), theme=theme), unsafe_allow_html=True)
+        st.caption(f"계획 진입 {_won(r['entry_plan'])} → 실제 {_won(r['entry_fill'])}({_pct(r['slip_entry_pct'])}) · 계획 청산 {_won(r['exit_plan'])} → "
+                   f"실제 {_won(r['exit_fill'])}({_pct(r['slip_exit_pct'])}) · 실제 체결가 수익률 {_pct(r['gross_pct'])} · 추정 비용후 {_pct(r['net_pct'])}")
+    if rc:
+        st.dataframe([{'영수증': r['receipt_id'], '종목': r['code'], '산 날': r.get('opened_day') or '—',
+                       '닫은 날': r.get('closed_day') or ('보유 중' if r.get('open') else '—'), '수량': r['qty'],
+                       '계획 진입가': _won(r['entry_plan']), '실제 진입가': _won(r['entry_fill']),
+                       '진입 슬리피지': _pct(r['slip_entry_pct']),
+                       '청산 사유': _sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—'),
+                       '계획 청산가': _won(r['exit_plan']), '실제 청산가': _won(r['exit_fill']),
+                       '청산 슬리피지': _pct(r['slip_exit_pct']),
+                       '실제 체결가 수익률(비용 전)': _pct(r['gross_pct']), '추정 비용후 수익률': _pct(r['net_pct']),
+                       '원장 기준 재채점(같은 계획)': _pct(r['shadow_net_pct']), '메모': ' · '.join(r['notes'])}
+                      for r in reversed(rc)], hide_index=True, width='stretch')
+    eq = execution_quality(ctx['intents'], rc)
+    rows = [('주문 수', str(eq['n'])), ('닫힌 거래', str(eq['n_closed']))]
+    if eq['rates']:
+        rows += [('체결률', f"{eq['rates']['filled']:.1f}%"), ('부분 체결률', f"{eq['rates']['partial']:.1f}%"),
+                 ('거절률', f"{eq['rates']['rejected']:.1f}%"), ('확인 중 비율', f"{eq['rates']['unknown']:.1f}%")]
+    else:
+        rows.append(('비율', f"주문 30건 미만이라 내지 않습니다(지금 {eq['n']}건)"))
+    if eq['slip_entry'] is not None:
+        rows.append(('평균 진입 슬리피지', f"{eq['slip_entry']:+.2f}%"))
+    if eq['slip_exit'] is not None:
+        rows.append(('평균 청산 슬리피지', f"{eq['slip_exit']:+.2f}%"))
+    st.markdown(_viz.kv_card('실행 품질 — 전략이 틀렸는지 실행이 나빴는지 가르는 재료', rows, theme=theme), unsafe_allow_html=True)
     try:
-        from verdict_core import COST_PCT as _cost450
+        import proof
+        rl = proof.reco_line(proof.load_scorecard())
     except Exception:                                          # noqa: BLE001
-        _cost450 = None
-    _appr451 = (mode == 'LIVE' and X.approval_of(stt) == 'approve')
-    _apset451 = X.approved_plans(stt)
-    day, rows = plan_rows(c, today_day=anchor_day, account=acct, limits=(stt.get('limits') or None), cost_pct=_cost450,
-                          held=set(managed), approval_on=_appr451, approved=_apset451)
-    with st.expander('② 오늘의 스윙 계획', expanded=True):
-        if not rows:
-            st.caption('아직 계획이 없습니다 — 워커가 돌거나(저녁 작업 포함) 아래 ⑥의 \'계획 갱신\'을 누르면 그날 개장 전 리포트에서 '
-                       '만들어집니다. 운용 모드와 무관하게 남깁니다.')
-        else:
-            st.caption(f'판정일 {day} 의 개장 전 후보 — 실주문 자격은 중앙 판정이 추천(조건 11개 전부 통과)일 때만 \'예\'입니다. '
-                       '자격이 없는 후보도 같은 계약을 일봉으로 되돌려 채점한 결과(연구 모의 · 증권사와 무관한 원장 기준 값)를 남깁니다. '
-                       '진입가·1차 목표는 호가 단위로 맞춘 주문 가격이고, 중앙 판정 값과 다르면 괄호에 같이 적습니다.')
-            _zl450 = zero_day_line(c, day)
-            if _zl450:
-                st.caption(md(_zl450))
-            st.dataframe(rows, hide_index=True, width='stretch')
-            if acct and (stt.get('limits') or None):
-                st.caption(f"수량 미리보기는 마지막으로 읽은 계좌({_ts(acct['ts'])} · 예수금 {_won(acct['cash'])})와 지금 위험 한도로 "
-                           "워커와 같은 함수로 센 것입니다 — 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 셉니다.")
-            else:
-                st.caption('수량 미리보기 없음 — 계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다(⑥ 설정).')
-            # 라운드 451 — 실전 승인형: 승인은 계획(진입가·손절·목표가 박힌 영수증)에 붙는다. 쓰는 자리는 여기뿐이다.
-            if _appr451:
-                _live451 = [p for p in L.plans(c) if p['data_day'] == day and p.get('live_ok') and p['code'] not in managed]
-                if _live451:
-                    st.caption('실전 주문 방식이 \'계획마다 승인\'입니다 — 아래에서 승인한 계획만 워커가 그 계획의 대기 창 안에서 진입가 지정가 '
-                               '매수를 냅니다. 승인해도 중앙 판정·위험 한도·긴급정지는 그대로 적용되고, 보호 매도는 승인과 무관합니다.')
-                if allow_write:
-                    for _p451 in _live451:
-                        _pid451 = _p451['plan_id']
-                        _ca451, _cb451 = st.columns([4, 1])
-                        _ca451.caption(f"{_p451.get('name') or ''} ({_p451['code']}) · 진입 {_won(_p451['entry'])} · 손절 {_won(_p451['stop'])} · "
-                                       f"1차 목표 {_won(_p451['target'])} · {'승인됨' if _pid451 in _apset451 else '승인 전'}")
-                        if _pid451 in _apset451:
-                            if _cb451.button('승인 취소', key=f'sw_unappr_{_pid451}'):
-                                L.set_setting(c, 'approved_plans', sorted(_apset451 - {_pid451}))
-                                st.rerun()
-                        elif _cb451.button('이 계획 승인', key=f'sw_appr_{_pid451}'):
-                            L.set_setting(c, 'approved_plans', sorted(_apset451 | {_pid451}))
-                            st.rerun()
-        ss = shadow_summary(c)
-        if ss:
-            st.caption(md(f"끝난 모의 {ss['n']}건 — 목표 {ss['target']} · 손절 {ss['stop']} · 기간 만료 "
-                          f"{ss['n'] - ss['target'] - ss['stop']} · 비용 뺀 평균 {ss['mean']:+.2f}% · 중앙 {ss['median']:+.2f}%"
-                          + (' — 표본이 작아 무엇을 가를 수 있는 수가 아닙니다' if ss['n'] < 30 else '')))
+        rl = None
+    if rl:
+        st.caption(md('안 산 판단도 같은 채점기로 셉니다(가늠 PROOF · 홈 카드와 같은 산출물) — ' + rl))
 
-    # ③ 주문·체결 이력
-    its = L.intents_with_state(c)
-    with st.expander(f'③ 주문·체결 이력 ({len(its)}건)', expanded=False):
-        if not its:
-            st.caption('아직 주문이 없습니다.')
-        else:
-            st.dataframe([{'날짜': it['trade_day'], '종목': it['code'], '방향': '매수' if it['side'] == 'buy' else '매도',
-                           '이유': {'entry': '진입', 'target': '1차 목표', 'stop': '손절', 'expiry': '기간 만료'}.get(
-                               X._base(it.get('reason')), it.get('reason')),
-                           '수량': it['qty'], '가격': _won(it['price']) if it['price'] else '시장가',
-                           '상태': STATE_KO.get(it['state'], it['state']), '체결': it.get('filled_qty') or 0,
-                           '모드': MODE_KO.get(it['mode'], it['mode']), '메모': (it.get('detail') or '')}
-                          for it in reversed(its[-200:])], hide_index=True, width='stretch')
 
-    # ④ 자동 관리
-    with st.expander(f'④ 자동 관리 중 {len(managed)}종목 · 기존 보유 넘기기'
-                     + (f' · 되돌려 받기 확인 중 {len(releasing)}' if releasing else ''), expanded=False):
-        st.caption('자동 매도는 자동매매가 산 종목과 직접 넘긴 종목만 합니다. 계좌의 기존 보유는 넘기기 전에는 절대 팔지 않습니다. '
-                   '넘긴 종목은 관심종목 표의 손절선·1차 매도가에 닿을 때만 팔고(기간 만료로는 안 팝니다), 손절선 가격에 그대로 '
-                   '팔린다는 보장은 없습니다(더 아래에서 팔릴 수 있습니다). 되돌려 받기는 두 단계입니다 — 걸려 있는 1차 목표 매도를 '
-                   '워커가 취소하고 그 취소가 확인된 뒤에야 해제됩니다(확인 전엔 \'확인 중\'으로 보이고 새 보호 주문은 내지 않습니다). '
-                   '증권사 앱에서 직접 판 수량은 워커가 계좌에 맞춰 관리에서 내립니다.')
-        for code, p in managed.items():
-            a, b = st.columns([4, 1])
-            a.caption(f"{code} · {OWN_KO.get(p['ownership'])} · 수량 {p.get('qty')} · 손절 {_won(p.get('stop'))} · "
-                      f"1차 목표 {_won(p.get('target'))}" + (f" · 체결일 {p.get('opened_day')}" if p.get('opened_day') else ''))
-            if p['ownership'] == 'USER_ADOPTED' and allow_write and b.button('되돌려 받기', key=f'sw_rel_{code}'):
-                _ev453 = X.release(c, code)
-                st.session_state['sw_flash'] = (f'{code} 되돌려 받았습니다(열린 매도 주문 없음)' if _ev453 == 'RELEASED' else
-                                                f'{code} 되돌려 받기 요청 — 걸려 있는 매도 주문의 취소를 워커가 확인하면 해제됩니다')
-                st.rerun()
-        for code, p in releasing.items():
-            st.caption(f"{code} · 자동 관리 해제 중 — 열린 매도 주문의 취소를 워커가 확인하면 해제됩니다(그때까지 새 보호 주문은 내지 않습니다 · "
-                       f"수량 {p.get('qty')})")
-        if acct and allow_write and hold_levels:
-            cand = [p for p in acct['positions'] if not (L.positions(c).get(p['code']) or {}).get('managed')]
-            if cand:
-                pick = st.selectbox('넘길 기존 보유', [f"{p.get('name') or ''} ({p['code']})" for p in cand], index=None,
-                                    placeholder='고르세요', key='sw_adopt_pick')
-                if pick:
-                    p = cand[[f"{x.get('name') or ''} ({x['code']})" for x in cand].index(pick)]
-                    lv = hold_levels(p['code'])
-                    if not lv:
-                        st.caption('이 종목은 관심종목 표에 손절선·1차 매도가가 없어 넘길 수 없습니다 — 관심종목에 담고 잰 뒤 넘기세요.')
-                    else:
-                        st.caption(f"넘기면 손절 {_won(lv[0])} 아래에서 시장가로 · 1차 목표 {_won(lv[1])} 에 지정가로 팝니다 "
-                                   f"(수량 {p['qty']}).")
-                        ok = st.checkbox('이 종목을 자동 관리로 넘기는 데 동의합니다', key='sw_adopt_ok')
-                        if ok and st.button('자동 관리로 넘기기', key='sw_adopt_go'):
-                            try:
-                                X.adopt(c, p['code'], p['qty'], lv[1], lv[0], by_user=True)
-                                st.rerun()
-                            except L.LedgerError as e:
-                                st.warning(str(e))
-
-    # ⑤ 결과 영수증 — 계획 vs 실제 (라운드 447 · 장부에서 읽기만 · 종목·수량은 이 PC 화면에서만)
-    try:
-        from verdict_core import COST_PCT as _cost447
-    except Exception:                                          # noqa: BLE001
-        _cost447 = None
-    _rcpts = _sp.receipts(c, _cost447)
-    _closed = [r for r in _rcpts if r.get('closed_day')]
-    with st.expander(f'⑤ 결과 영수증 — 계획 vs 실제 체결 ({len(_closed)}건 닫힘 · {sum(1 for r in _rcpts if r.get("open"))}건 보유 중)',
-                     expanded=False):
-        # 라운드 453 — '순수익'이라 부르지 않는다(외부 검토 P1-5): 실제 수수료·세금을 증권사에서 읽지 않으므로 그 수는 **추정**이다.
-        #   세 줄로 가른다 — 실제 체결가 수익률(비용 전) · 운영 비용 가정 · 추정 비용후 수익률.
-        st.caption('자동매매가 열고 닫은 보유마다 계획 진입가와 실제 평균 체결가, 청산 사유와 계획 청산가 대비 실제 청산가를 적습니다. '
-                   f"수익률은 세 겹입니다 — 실제 체결가 수익률(비용 전) · 운영 왕복 비용 {_cost447 if _cost447 is not None else '미상'}%(가정) · "
-                   '추정 비용후 수익률(앞의 둘의 차). 실제 수수료·세금은 증권사에서 읽지 않으므로 \'실제 순수익\'이 아닙니다. '
-                   '같은 계획을 일봉으로 되돌려 채점한 결과(원장 기준)도 옆에 둡니다. 좋고 나쁨은 말하지 않습니다.')
-        _ln447 = _sp.summary_line(_sp.summary(_rcpts), _cost447)
-        if _ln447:
-            st.caption(md(_ln447))
-        if _rcpts:
-            st.dataframe([{'영수증': r['receipt_id'], '종목': r['code'], '산 날': r.get('opened_day') or '—',
-                           '닫은 날': r.get('closed_day') or ('보유 중' if r.get('open') else '—'), '수량': r['qty'],
-                           '계획 진입가': _won(r['entry_plan']), '실제 진입가': _won(r['entry_fill']),
-                           '진입 슬리피지': _pct(r['slip_entry_pct']),
-                           '청산 사유': _sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—'),
-                           '계획 청산가': _won(r['exit_plan']), '실제 청산가': _won(r['exit_fill']),
-                           '청산 슬리피지': _pct(r['slip_exit_pct']),
-                           '실제 체결가 수익률(비용 전)': _pct(r['gross_pct']), '추정 비용후 수익률': _pct(r['net_pct']),
-                           '원장 기준 재채점(같은 계획)': _pct(r['shadow_net_pct']), '메모': ' · '.join(r['notes'])}
-                          for r in reversed(_rcpts)], hide_index=True, width='stretch')
-        else:
-            st.caption('아직 자동매매가 열고 닫은 보유가 없습니다.')
-
-    # ⑥ 설정
-    with st.expander('⑥ 설정 — 모드 · 위험 한도 · 긴급정지 · 연결 확인', expanded=False):
-        if not allow_write:
+def _view_system(st, uk, c, ctx, md):
+    """시스템 — 지금 진행 중인가 · 작업 스케줄러 · 설정(모드·한도·연결 정보·연결 확인·계획 갱신) · 먼저 알아 두실 것 · 운영 방법 · 제품 벤치마크."""
+    theme = ctx['theme']
+    _auto454 = dict(on=bool(st.session_state.get('sw_acct_auto', ACCT_AUTO_DEFAULT)),
+                    every=int(st.session_state.get('sw_acct_every', ACCT_EVERY_DEFAULT)),
+                    last=((st.session_state.get('sw_acct_live') or {}).get('ts') or '')[11:19] or None)
+    _prog454 = _ops.progress(worker=ctx['worker'], tasks={_ops.TASK_NAME: ctx['task'], _ops.WATCH_TASK: _ops.scheduled_task(_ops.WATCH_TASK)},
+                             nightly=ctx['nightly'], auto=_auto454)
+    uk.rows([(p['label'], (('실행 중 · ' if p['running'] else ('확인 불가 · ' if p['running'] is None else '')) + p['text']),
+              ('pos' if p['running'] else ('warn' if p['running'] is None else ''))) for p in _prog454],
+            theme=theme, title='지금 진행 중인가 — 워커 · 예약 작업 · 저녁 작업 · 자동 갱신')
+    st.caption(md(_ops.task_line(ctx['task'])))
+    st.caption(md(f"연결 정보: {broker_kis.config_summary(ctx['cfg'])}" + (' · ' + ' · '.join(ctx['cfg']['problems']) if ctx['cfg'].get('problems') else '')
+                  + f" · 자동 관리 중 {len(ctx['managed'])}종목" + (f" · 되돌려 받기 확인 중 {len(ctx['releasing'])}종목" if ctx['releasing'] else '')))
+    with st.expander('설정 — 모드 · 주문 방식 · 실전 잠금 · 위험 한도 · 연결 정보 · 연결 확인 · 계획 갱신', expanded=False):
+        if not ctx['allow_write']:
             st.caption('쓰기가 꺼진 화면이라 설정을 바꿀 수 없습니다.')
-        _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md)
-
+        _settings(st, c, ctx['stt'], ctx['mode'], ctx['cfg'], ctx['allow_write'], ctx['report'], ctx['today'], md)
+    with st.expander('먼저 알아 두실 것 — 자세히', expanded=False):
+        for ln in (ctx.get('facts') or [])[1:]:
+            st.caption(md(ln))
     with st.expander('운영 방법 — 자격증명 · 연결 확인 · 워커', expanded=False):
         st.markdown(md(
             "1. 한국투자 API 포탈에서 앱 키를 받습니다. **채팅·코드·저장소에 붙이지 마세요.** 이미 어딘가에 붙였다면 재발급하세요.\n"
-            "2. ⑥의 '한국투자 연결 정보' 가려진 칸에 직접 넣습니다(저장은 저장소 밖 `~/.gaeum/kis.env` 에만). 환경변수로 넣어도 됩니다 — "
+            "2. 위 설정의 '한국투자 연결 정보' 가려진 칸에 직접 넣습니다(저장은 저장소 밖 `~/.gaeum/kis.env` 에만). 환경변수로 넣어도 됩니다 — "
             "`KIS_ENV`(demo 또는 real) · `KIS_APP_KEY` · `KIS_APP_SECRET` · `KIS_ACCOUNT_NO`(계좌 앞 8자리) · "
             "`KIS_ACCOUNT_PRODUCT_CODE`(뒤 2자리). 환경변수는 앱을 다시 띄워야 읽힙니다.\n"
-            "3. ⑥의 **'연결 확인'** 을 누릅니다(잔고만 읽고 주문은 안 합니다). 위 상태 띠의 '한국투자 연결'에 마지막으로 잔고를 읽은 "
+            "3. 설정의 **'연결 확인'** 을 누릅니다(잔고만 읽고 주문은 안 합니다). 관제실 지휘 띠의 '한국투자'가 정상이고 마지막으로 잔고를 읽은 "
             "시각이 보이면 그것이 연결이 정상이라는 증거입니다.\n"
             "4. 실전: 실전 자격증명 · 위험 한도 여섯 · 잠금 해제 문장 · 긴급정지 꺼짐이 모두 맞아야 켜집니다. 처음에는 거래당 "
             "최대 손실을 작게 두고 주문 방식은 '계획마다 승인'으로 두기를 권합니다. 워커는 평일 아침 Windows 작업(`gaeum-swing-worker` · "
-            "`scripts/register_swing_worker_task.ps1` 로 한 번 등록 · 등록됐는지는 위 상태 띠가 직접 읽어 보입니다)이 정규장 마감까지 "
+            "`scripts/register_swing_worker_task.ps1` 로 한 번 등록 · 등록됐는지는 위 줄과 관제실 상태 띠가 직접 읽어 보입니다)이 정규장 마감까지 "
             "돌리고, 직접 켜려면 `python scripts/run_swing_worker.py --loop 60` 입니다. PC 가 꺼져 있거나 잠들면 워커도 없습니다 — "
-            "정규장 동안 절전을 끄세요. '③ 주문·체결 이력'에서 계획 · 접수 · 체결 · 손절·목표가 계약대로 움직이는지 봅니다.\n"
+            "정규장 동안 절전을 끄세요. '주문·체결' 갈래에서 계획 · 접수 · 체결 · 손절·목표가 계약대로 움직이는지 봅니다.\n"
             "5. 멈추기: 모드를 '꺼짐'으로 두면 새 매수가 멈춥니다. 자동 관리 중인 종목의 손절·목표 보호는 꺼짐에서도 계속되고, 그것까지 "
-            "멈추려면 ④에서 '되돌려 받기'를 누릅니다(걸려 있는 목표 매도의 취소가 확인된 뒤 해제됩니다). 긴급정지는 새 매수를 막고 열린 "
+            "멈추려면 '포지션' 갈래에서 '되돌려 받기'를 누릅니다(걸려 있는 목표 매도의 취소가 확인된 뒤 해제됩니다). 긴급정지는 새 매수를 막고 열린 "
             "매수를 취소할 뿐 보호 매도는 그대로입니다."))
+    with st.expander('제품 벤치마크 — 경쟁 서비스와 가늠(내부 우선순위용 · 점수 없음)', expanded=False):
+        _cr.render(st, uk, theme=theme, md=md)
 
 
 def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
@@ -813,7 +1025,7 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
             st.rerun()
     st.markdown('**실전 주문 방식**')
     _ap451 = X.approval_of(stt)
-    st.caption("'계획마다 승인'(기본)은 ② 에서 승인한 계획만 삽니다 · '완전 자동'은 실주문 자격이 있는 계획을 워커가 그대로 삽니다. "
+    st.caption("'계획마다 승인'(기본)은 '오늘 계획' 갈래에서 승인한 계획만 삽니다 · '완전 자동'은 실주문 자격이 있는 계획을 워커가 그대로 삽니다. "
                "모의투자·기록만 모드에는 적용되지 않고, 보호 매도(손절·1차 목표)는 어느 쪽이든 승인 없이 냅니다.")
     if allow_write:
         _ap_new451 = st.radio('실전 주문 방식', list(X.APPROVAL_MODES), index=list(X.APPROVAL_MODES).index(_ap451),
@@ -837,7 +1049,7 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
             L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)
             st.rerun()
     # 긴급정지 토글은 라운드 453 부터 맨 위 상태 띠에 있다(한 곳) — 여기서는 설명만.
-    st.caption('긴급정지 토글은 이 칸 맨 위 상태 띠에 있습니다 — 켜면 새 매수를 안 내고 열린 매수 주문을 취소합니다. 관리 중인 종목의 '
+    st.caption('긴급정지 토글은 관제실 지휘 띠 오른쪽에 있습니다 — 켜면 새 매수를 안 내고 열린 매수 주문을 취소합니다. 관리 중인 종목의 '
                '손절·목표 매도는 계속합니다.')
     st.markdown('**위험 한도** — 직접 정합니다(기본값이 없습니다 · 비워 두면 모의투자·실전 주문이 막힙니다)')
     lim = dict(stt.get('limits') or {})
