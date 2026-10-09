@@ -120,6 +120,19 @@ def _same_day_files(date_key):
     return out
 
 
+def generated_at(date_key, engine_version=None):
+    """그 자료 기준일 리포트의 생성 시각 — 라운드 472(자동매매 계획이 '언제 판정됐나'를 적으려고 · 읽기만).
+    엔진 버전이 같은 파일 먼저 · 없으면 그날 가장 최근 파일. 자료 기준일이 다른 옛 파일은 안 고른다(라운드 442).
+    못 찾으면 None(지어내지 않는다)."""
+    if not date_key:
+        return None
+    files = [t for t in _same_day_files(date_key) if t[0] and data_day_of(t[2]) == date_key]
+    if not files:
+        return None
+    same = [t for t in files if engine_version and str(t[2].get('engine_version')) == str(engine_version)]
+    return (same or files)[-1][0]
+
+
 def _kinds_since(frozen_with, current):
     """모델 축에서 `frozen_with` 뒤에 나온 변경 종류들 — 원장을 못 읽으면 None."""
     try:

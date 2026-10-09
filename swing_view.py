@@ -427,19 +427,110 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
     return day, rows
 
 
+#: 중앙 판정의 조건 이름 — 글자가 엔진 리터럴(`verdict_core` 의 checks)과 같아야 한다(회귀 §453 이 대 본다).
+EV_CHECK = '비용 차감 기대값 양수'
+
+
+def _hm(ts):
+    """'2026-10-08 15:32:51' · '2026-10-09T17:01:21+09:00' → '2026-10-08 15:32'. 못 읽으면 None."""
+    s = str(ts or '').replace('T', ' ')
+    return s[:16] if len(s) >= 16 and s[4] == '-' and s[13] == ':' else None
+
+
+def judged_at(p):
+    """계획이 선 판정의 시각 — 계획에 실린 개장 전 리포트 생성 시각(라운드 472 부터 싣는다). 옛 계획은 그 판정일의 리포트
+    파일에서 읽는다(엔진 버전이 같은 것 먼저 · `premarket.generated_at`). 못 찾으면 None(지어내지 않는다 · §3)."""
+    ts = _verdict_of(p).get('report_ts')
+    if ts:
+        return str(ts)
+    try:
+        import premarket
+        return premarket.generated_at(p.get('data_day'), p.get('engine_version'))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def when_line(ps):
+    """'언제 막았나' 한 줄 — 판정(개장 전 리포트 생성) 시각과 장부에 계획으로 적힌 시각. 둘 다 못 읽으면 None.
+    한 판정일의 계획이 여러 시각이면 처음~끝으로 적는다."""
+    def _span(vals):
+        vs = sorted({v for v in vals if v})
+        return None if not vs else (vs[0] if len(vs) == 1 else f'{vs[0]} ~ {vs[-1]}')
+    j = _span(_hm(judged_at(p)) for p in ps)
+    w = _span(_hm(p.get('created_ts')) for p in ps)
+    if not (j or w):
+        return None
+    bits = []
+    if j:
+        bits.append(f'판정 {j} (개장 전 리포트가 만들어진 시각 · 그 판정일 장 마감 자료)')
+    if w:
+        bits.append(f'자동매매 장부에 계획으로 적힌 시각 {w}')
+    return '언제 막았나 — ' + ' · '.join(bits) + '.'
+
+
+def ev_shortfall(p):
+    """계획 하나의 '비용 차감 기대값'이 0 까지 얼마나 모자란가 — 중앙 판정의 식 그대로(라운드 472 · 새 문턱 없음).
+    EV = p·up + (1 − p)·dn − 비용 (up·dn = 모델 진입가에서 1차 목표·손절까지의 폭 %). 0 이 되는 확률 p_need = (비용 − dn)/(up − dn),
+    지금 확률 p_now 는 기대값에서 되짚는다(기대값이 소수 둘째 자리로 반올림돼 있어 0.1%p 안팎 어긋날 수 있다). 비용은 계획의
+    계약 비용(그 판정이 쓴 비용과 같다고 본다 · 다르면 p_now 만 그만큼 어긋나고 모자란 폭 gap = −EV/(up − dn) 은 비용과 무관하다).
+    재료가 하나라도 없거나 가격 정합이 깨졌으면 None."""
+    v = _verdict_of(p)
+    try:
+        ev = float(v.get('expected_return'))
+        e = float(p.get('entry_model') or p.get('entry'))
+        t = float(p.get('target_model') or p.get('target'))
+        s = float(p.get('stop'))
+        cost = float(p.get('cost_pct'))
+    except (TypeError, ValueError):
+        return None
+    if not (0 < s < e < t):
+        return None
+    up, dn = (t / e - 1.0) * 100.0, (s / e - 1.0) * 100.0
+    slope = up - dn
+    return dict(ev=ev, cost=cost, up=up, dn=dn, p_now=(ev + cost - dn) / slope * 100.0,
+                p_need=(cost - dn) / slope * 100.0, gap=-ev / slope * 100.0)
+
+
+def ev_gap_line(ps):
+    """'비용 차감 기대값 양수'에 걸린 계획들이 0 까지 얼마나 모자란가 — 가장 가까운 후보의 기대값 · 필요한 확률 · 지금 확률.
+    판정 낱말 없음 · 그 조건에 걸린 계획이 없거나 셀 수 없으면 None. 사용자: *"'비용 차감 기대값 양수' 미충족 개선 해줘"* —
+    고칠 수 있는 것은 이 칸의 **설명**이다. 문턱(0)을 내리거나 비용을 낮춰 적으면 그것이 §2·§9 다."""
+    rows = [ev_shortfall(p) for p in ps if EV_CHECK in (_verdict_of(p).get('failed') or [])]
+    rows = [g for g in rows if g and g['ev'] <= 0]
+    if not rows:
+        return None
+    best = max(rows, key=lambda g: g['ev'])
+    gaps = [g['gap'] for g in rows]
+    rng = f' · {len(rows)}개 범위 {min(gaps):.1f}~{max(gaps):.1f}%p' if len(rows) > 1 else ''
+    try:
+        import forward_eval as _fe
+        ed = _fe.eval_date()
+    except Exception:                                          # noqa: BLE001
+        ed = None
+    fwd = f'{ed} 전방 재평가' if ed else '전방 재평가'
+    return (f"'{EV_CHECK}'는 기준을 낮춰 풀 조건이 아닙니다 — 가장 가까운 후보도 왕복 비용 {best['cost']:.2f}%를 뺀 기대값이 "
+            f"{best['ev']:+.2f}%입니다. 0을 넘으려면 1차 목표가 손절보다 먼저 닿을 확률이 {best['p_need']:.1f}%여야 하는데, 그 점수대의 "
+            f"원장 실측은 {best['p_now']:.1f}%입니다({best['gap']:.1f}%p 모자람{rng} · 지금 확률은 기대값에서 되짚은 값). "
+            f"이 확률이 바뀔 수 있는 길은 새 재료(시점 재무·잔여 호가 축적)와 {fwd}이고, 둘 다 결과를 약속하지 않습니다.")
+
+
 def zero_day_line(c, day):
-    """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None."""
+    """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
+    라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
+    오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다."""
     ps = [p for p in L.plans(c) if p['data_day'] == day] if day else []
     if not ps or any(p.get('live_ok') for p in ps):
         return None
     import ui_kit as _uk
     top = _uk.top_blocker([_verdict_of(p).get('failed') for p in ps])
-    head = f'오늘 후보 {len(ps)}개 중 실주문 자격 0 — '
+    head = f'판정일 {day} 후보 {len(ps)}개 중 실주문 자격 0 — '
     if not top:
-        return head + '조건 기록이 있는 계획이 없어 어느 조건이 막았는지 세지 못했습니다(막은 사유는 표의 칸).'
-    fl = _fail_label()
-    return (head + f'가장 많이 막은 조건은 {fl(top[0])}입니다 ({top[1]}/{top[2]}개 · 조건 기록이 있는 계획 기준). '
-            '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
+        first = head + '조건 기록이 있는 계획이 없어 어느 조건이 막았는지 세지 못했습니다(막은 사유는 표의 칸).'
+    else:
+        fl = _fail_label()
+        first = (head + f'가장 많이 막은 조건은 {fl(top[0])}입니다 ({top[1]}/{top[2]}개 · 조건 기록이 있는 계획 기준). '
+                 '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
+    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps)) if x)
 
 
 def holdings_diff(acct_positions, app_positions):

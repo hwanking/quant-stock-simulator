@@ -5547,7 +5547,10 @@ _UK91 = {'bg', 'card', 'raised', 'line', 'tx1', 'tx2', 'tx3', 'brand',
          'up', 'down', 'pos', 'warn', 'neg',
          # 라운드 399 — 제미나이 톤의 선택 알약(면·글자)과 브랜드로 채운 버튼 위 글자. 두 테마 모두 정의돼 있고
          #   §389 가 대비를 값으로 잠근다.
-         'sel_bg', 'sel_tx', 'on_brand'}
+         'sel_bg', 'sel_tx', 'on_brand',
+         # 라운드 471 — 가늠 톤의 선택 줄 테두리(sel_line)와 버튼·입력 테두리(ctl_line). 두 테마 모두 정의돼 있고
+         #   §452 ⑤ 가 다크 값을 가늠 코인 토큰과 대 본다.
+         'sel_line', 'ctl_line'}
 # ⚠️ ui_kit 에는 t(팔레트) 말고 it/step(항목 dict)도 있다. 팔레트만 봐야
 #    하므로 `t['...']` 중 앞이 식별자가 아닌 것만 센다 (it['key'] 제외).
 _u91 = open(_os.path.join(PROJ, "ui_kit.py"), encoding='utf-8').read()
@@ -29530,8 +29533,10 @@ check("이 종목 목차는 검색 바로 아래 자리에, 종목이 확정된 
       and '_SB_TOC.markdown(_uk.nav_toc(f"이 종목 · {resolved_name}", _NAV_LOCAL' in _wa369)
 check("목차는 스크롤해도 붙어 있다 — sticky 를 감싼 칸에 건다(목차 div 자신은 칸과 높이가 같아 안 걸렸다)",
       'div:has(> .st-key-sb_toc)' in _wa369 and 'position: sticky; top: 60px;' in _wa369)
+# 라운드 471 — 묶음 셋을 sb_nav 칸(가늠 톤의 번호 줄 메뉴)에 담았다. 지키던 성질(접는 묶음 · 첫 묶음만 펼침)은 그대로다
 check("전역 메뉴는 접는 묶음 셋이고 첫 묶음만 펼친다",
-      "with st.sidebar.expander(_g376['title'], expanded=(_gi376 == 0)):" in _wa369)
+      "with _SB_NAV471.expander(_g376['title'], expanded=(_gi376 == 0)):" in _wa369
+      and "_SB_NAV471 = st.sidebar.container(key='sb_nav')" in _wa369)
 import ast as _ast369
 _navsub369 = None
 for _n369 in _ast369.walk(_ast369.parse(_wa369)):
@@ -31530,7 +31535,7 @@ check("채점기와 지표 정의 파일의 해시가 결과 문서에 적힌 �
 
 
 print("=" * 72)
-print("§389 제미나이 톤 — 대비는 네 면 모두에서 · 층 자리 · 글꼴 · 아이콘 · 상단 바 (라운드 399)")
+print("§389 톤 층 — 대비는 네 면 모두에서 · 층 자리 · 글꼴 · 아이콘 · 상단 바 (라운드 399 · 라운드 471 가늠 톤)")
 print("=" * 72)
 # 사용자(2026-10-01): *"제미나이 사이트 스타일로 전체로 바꿔줄래?"* · *"글자 크기 작은 것 · 안 보이는 것"* ·
 #   *"요기에 예전처럼 엔진정보 넣자."* 색을 새로 골랐으므로 **값으로** 잰다 — 눈대중 색은 한 면에서만 맞는다.
@@ -31564,37 +31569,30 @@ for _th388 in ('dark', 'light'):
             _bad388.append((_th388, _a388, _b388, round(_ratio388(_t388[_a388], _t388[_b388]), 2)))
 check("글자 3단·의미색이 본문·카드·올린 면·사이드바 네 면 모두에서 4.5:1 이상 · 선택 알약·채운 버튼 글자도 (두 테마)",
       not _bad388, str(_bad388)[:300], scanned=_n388)
-# 서명 그라디언트 세 점 — 큰 글자 기준 3:1 (그래서 큰 글자에만 쓴다)
-_stops388 = _re388.findall(r'#[0-9A-Fa-f]{6}', _uk388.GEMINI_GRADIENT)
-_gbad388 = [(_c, _f) for _th in ('dark', 'light')
-            for _f in (_uk388.tokens(_th)['bg'], _SURF388[_th]) for _c in _stops388
-            if _ratio388(_c, _f) < 3.0]
-check("서명 그라디언트 세 점이 두 테마 본문·사이드바에서 큰 글자 기준(3:1) 이상",
-      len(_stops388) == 3 and not _gbad388, str(_gbad388), scanned=len(_stops388) * 4)
-# 그라디언트 글자는 큰 글자에만 — gm-grad 를 쓰는 자리의 글자 크기가 28px 이상이거나 h1 안이다
+# 라운드 471 — 가늠 톤(가늠 코인 · OrbitMusic 과 한 계열)은 그라디언트 글자를 쓰지 않는다(두 앱 모두 대제목·워드마크가
+#   단색 굵게). 종전 두 검사(서명 그라디언트 세 점의 대비 · gm-grad 는 큰 글자에만)는 재려던 것(작은 글자에 3:1 짜리
+#   그라디언트가 안 쓰인다)이 **그라디언트가 없으면 저절로** 서므로, 없는지를 본다 — 되살리면 이 검사가 먼저 붉어진다.
 _wa388 = _read148(_os.path.join(PROJ, 'web_app.py'))
 _uks388 = _read148(_os.path.join(PROJ, 'ui_kit.py'))
-_gm388 = [m.start() for m in _re388.finditer(r"class='gm-grad'", _wa388 + '\n' + _uks388)]
-_gsmall388 = []
-for _p388 in _gm388:
-    _ctx388 = (_wa388 + '\n' + _uks388)[max(0, _p388 - 400):_p388 + 300]
-    _sz388 = [int(x) for x in _re388.findall(r'font-size:\s*(\d+)px', _ctx388[400:])]
-    if not ('<h1' in _ctx388 or (_sz388 and _sz388[0] >= 28)):
-        _gsmall388.append(_ctx388[400:460])
-check("그라디언트 글자(gm-grad)는 대제목(h1)이나 28px 이상 글자에만 쓴다",
-      _gm388 and not _gsmall388, str(_gsmall388)[:200], scanned=len(_gm388))
+check("그라디언트 글자를 쓰지 않는다 — 킷에 서명 그라디언트 상수가 없고 화면·킷 소스에 gm-grad 표식이 0 (라운드 471)",
+      not hasattr(_uk388, 'GEMINI_GRADIENT') and 'gm-grad' not in _wa388 and 'gm-grad' not in _uks388
+      and 'background-clip:text' not in _uks388.replace(' ', ''),
+      f"상수 {hasattr(_uk388, 'GEMINI_GRADIENT')} · 화면 {_wa388.count('gm-grad')} · 킷 {_uks388.count('gm-grad')}")
 # 층 자리 — 전역 층들(킷 전역 · 라이트 오버라이드) **뒤**에 한 번
-_ig388 = _wa388.find('_uk.gemini_css(_theme)')
+_ig388 = _wa388.find('_uk.tone_css(_theme)')          # 라운드 471 — 제미나이 층이 가늠 톤 층(tone_css)이 됐다
 _iglob388 = _wa388.find('_uk.global_css(_theme)')
 _ilight388 = _wa388.find("\nif _theme == 'light':")
-check("제미나이 층을 한 번만 주입하고 전역 층(킷 전역 · 라이트 오버라이드) 뒤에 둔다",
-      _wa388.count('_uk.gemini_css(') == 1 and 0 < _iglob388 < _ilight388 < _ig388,
-      f"주입 {_wa388.count('_uk.gemini_css(')}회 · 자리 {_iglob388}/{_ilight388}/{_ig388}")
-# 글꼴 — Google Sans Flex 먼저, 한글 대체 글꼴이 뒤에 · 아이콘 글꼴·코드는 덮지 않는다
-_css388 = {_th: _uk388.gemini_css(_th) for _th in ('dark', 'light')}
-check("글꼴 목록이 Google Sans Flex 로 시작하고 한글 글꼴(Noto Sans KR · 맑은 고딕)로 내려간다 · 받는 주소가 층 안에",
-      _uk388.FONT_STACK.startswith('"Google Sans Flex"') and '"Noto Sans KR"' in _uk388.FONT_STACK
-      and '"Malgun Gothic"' in _uk388.FONT_STACK and _uk388.FONT_IMPORT in _css388['dark'])
+check("톤 층을 한 번만 주입하고 전역 층(킷 전역 · 라이트 오버라이드) 뒤에 둔다 · 옛 제미나이 층 이름은 0",
+      _wa388.count('_uk.tone_css(') == 1 and 0 < _iglob388 < _ilight388 < _ig388
+      and 'gemini_css' not in _wa388 and not hasattr(_uk388, 'gemini_css'),
+      f"주입 {_wa388.count('_uk.tone_css(')}회 · 자리 {_iglob388}/{_ilight388}/{_ig388}")
+# 글꼴 — 라운드 471 부터 Pretendard(가늠 코인 · OrbitMusic 과 같은 글꼴) 먼저, 맑은 고딕·애플 고딕으로 내려간다 ·
+#   아이콘 글꼴·코드는 덮지 않는다(그 성질은 아래 검사가 그대로 본다)
+_css388 = {_th: _uk388.tone_css(_th) for _th in ('dark', 'light')}
+check("글꼴 목록이 Pretendard 로 시작하고 한글 글꼴(맑은 고딕 · 애플 고딕)로 내려간다 · 받는 주소가 층 안에",
+      _uk388.FONT_STACK.startswith('"Pretendard Variable"') and '"Malgun Gothic"' in _uk388.FONT_STACK
+      and '"Apple SD Gothic Neo"' in _uk388.FONT_STACK and _uk388.FONT_IMPORT in _css388['dark']
+      and 'pretendard' in _uk388.FONT_IMPORT)
 _frule388 = next((ln for ln in _css388['dark'].splitlines() if 'font-family:' in ln or '.stApp *:not(' in ln), '')
 check("글꼴 규칙이 아이콘(stIconMaterial · translate=no · 인라인 Material · role=img)과 코드를 빼고 건다",
       all(_x in _css388['dark'] for _x in ('[data-testid="stIconMaterial"]', '[translate="no"]',
@@ -31610,7 +31608,7 @@ check("관심종목 표의 칸 여백을 그 표(table.wl)에만 건다 · 판�
       '.stApp table.wl td, .stApp table.wl th {{ padding:10px 6px !important; }}' in _wa388
       and 'table td.jd {{ white-space:normal' in _wa388 and 'table td.nm {{ white-space:normal' in _wa388
       and "<table class='wl'" in _wa388)
-# 글자 크기 — 두 전역 층(킷 전역 · 제미나이)이 적는 크기가 타입 스케일 안이고, **연속값(clamp·vw·cqw)으로
+# 글자 크기 — 두 전역 층(킷 전역 · 톤 층)이 적는 크기가 타입 스케일 안이고, **연속값(clamp·vw·cqw)으로
 #   글자 크기를 정하지 않는다**. 첫 판의 타일 값 clamp(20px, 13cqw, 28px) 가 22.62px 을 냈다(브라우저 실측 ·
 #   §77 의 소스 정규식은 'font-size:clamp(' 를 숫자로 안 읽어 못 봤다). 스케일은 §77 한 곳 — 그래서 이 검사가 절 끝이다.
 _lay388 = {_th: _uk388.global_css(_th) + _css388[_th] for _th in ('dark', 'light')}
@@ -38362,6 +38360,299 @@ check("심기 — 이력 줄의 사유 없는 낱말은 걷히고, '다음에 �
       _ua451.core_summary(_ua451.audit_text(_ua451.clean_render_text([_p1_451])))[0] == 0
       and _ua451.core_summary(_ua451.audit_text(_ua451.clean_render_text([_p2_451])))[2] == 1)
 # ─── §451 끝 ───
+
+
+# ─── §452 시작 (라운드 471) ───
+print("=" * 72)
+print("§452 가늠 톤 — 사이드바 284px · 번호 줄 · 같은 계열의 마크 · 본문 48px (라운드 471)")
+print("=" * 72)
+# 사용자(2026-10-09): *"너 사이트 아이콘 글 들 위치가 뭔가 이상해 … 가늠코인 메인페이지 위치처럼 다 정리해줘 … OrbitMusic
+#   이랑 비교해서 … 사이드바도 가늠코인처럼."* 같은 주인의 두 앱(가늠 코인 :8765 · OrbitMusic :5173)을 브라우저로 재서
+#   뼈대를 옮겼다. 값·판정은 안 건드린다 — 여기서는 옮긴 뼈대가 **소스에 그대로 있는지**와 **이름 머리가 줄마다 같은 x 에
+#   서는 구조**(번호 칸 고정 폭)를 본다. 대비는 §389 가 네 면에서 잰다.
+import ast as _ast452                                            # noqa: E402
+import re as _re452                                              # noqa: E402
+import ui_kit as _uk452                                          # noqa: E402
+
+_tone452 = {_th: _uk452.tone_css(_th) for _th in ('dark', 'light')}
+_wa452 = _read148(_os.path.join(PROJ, 'web_app.py'))
+# ① 사이드바 — 284px 고정 · 오른쪽 1px 선 · 안쪽 17px (가늠 코인 --side 284px · padding 29px 17px)
+check("사이드바는 284px 고정 폭(최소·최대 같음) · 오른쪽 1px 선 · 안쪽 17px",
+      all('width: 284px !important; min-width: 284px !important; max-width: 284px !important;' in _c
+          and 'border-right: 1px solid' in _c and 'padding: 0 17px 29px 17px !important;' in _c
+          for _c in _tone452.values()))
+# ② 메뉴 줄 — 번호 칸 고정 폭이라 이름 머리가 줄마다 같은 x 에 선다(종전 아이콘은 그림마다 폭이 달랐다)
+_items452 = [{'key': 'a', 'label': '추천', 'href': '#a'}, {'key': 'b', 'label': '관심종목', 'href': '#b'},
+             {'key': 'c', 'label': '모델 성적', 'href': '#c', 'code': 'SC'}]
+_nl452 = _uk452.nav_list(_items452, active='b', theme='dark', start=4)
+_codes452 = _re452.findall(r"class='qnav-code' style='flex:0 0 22px;[^']*'>([^<]+)<", _nl452)
+check("메뉴 줄 — 번호는 start 부터 이어 세고(04 · 05) 표식이 있으면 그것을 쓴다(SC) · 번호 칸은 줄마다 22px 고정",
+      _codes452 == ['04', '05', 'SC'] and _nl452.count('min-height:46px') == 3
+      and _nl452.count('border-radius:8px') == 3 and '<svg' not in _nl452, str(_codes452))
+_t452 = _uk452.tokens('dark')
+check("메뉴 줄 — 지금 위치는 선택 면 · 선택 선 · 선택 글자(가늠 코인 aria-current 와 같은 짝) · 나머지는 투명 선",
+      _nl452.count(f"background:{_t452['sel_bg']}; border:1px solid {_t452['sel_line']};") == 1
+      and _nl452.count('border:1px solid transparent;') == 2)
+# ③ 화면 — 묶음 셋을 sb_nav 칸에 담고 번호를 묶음을 건너 이어 센다
+check("화면 — 전역 메뉴 묶음을 sb_nav 칸에 담고 번호를 묶음을 건너 이어 센다(start 누적)",
+      "_SB_NAV471 = st.sidebar.container(key='sb_nav')" in _wa452
+      and 'start=_nav_no471' in _wa452 and "_nav_no471 += len(_g376['items'])" in _wa452
+      and all('.st-key-sb_nav [data-testid="stExpander"]' in _c for _c in _tone452.values()))
+# ④ 로고 — 가늠 코인과 같은 계열의 마크(둥근 사각 rx 14 · G 호 · 조준 눈금 · 가운데 점) · 단색 워드마크 · 영문 한 줄
+_lg452 = _uk452.logo('dark', size=46, sub='GANEUM QUANT')
+check("로고 — 둥근 사각(rx 14) · G 호 · 조준 눈금 · 가운데 점 · 색은 토큰 · 워드마크 단색 · 영문 한 줄은 브랜드색",
+      "rx='14'" in _lg452 and "d='M33 16a12 12 0 1 0 1 15v-7H24'" in _lg452 and "d='M24 6v3M6 24h3M24 39v3'" in _lg452
+      and f"fill='{_t452['sel_bg']}'" in _lg452 and f"stroke='{_t452['brand']}'" in _lg452
+      and 'gradient' not in _lg452.lower() and 'GANEUM QUANT' in _lg452
+      and "class='gm-brandrow'" in _wa452 and "sub='GANEUM QUANT'" in _wa452)
+# ⑤ 다크 팔레트 = 가늠 코인 토큰 그대로(같은 계열이라는 주장의 근거 · 바꾸면 이 줄이 붉어진다)
+_coin452 = dict(bg='#101518', card='#181F24', raised='#202A30', line='#34434B', tx1='#F1F5F4',
+                tx2='#C9D5D8', tx3='#A8BBC2', brand='#77DCC3', up='#FF9AA6', down='#8CC2FF',
+                warn='#EDCC91', neg='#FFACB4', sel_bg='#16342F', sel_line='#376B60', on_brand='#102B24',
+                ctl_line='#647C88')
+check("다크 팔레트가 가늠 코인 토큰 그대로다(바탕 · 면 · 선 · 글자 3단 · 강조 · 수익/손실 · 경고 · 선택 면/선)",
+      all(_t452.get(_k) == _v for _k, _v in _coin452.items()),
+      str({_k: _t452.get(_k) for _k, _v in _coin452.items() if _t452.get(_k) != _v}), scanned=len(_coin452))
+# ⑥ 반경·선 — 패널 13px + 1px 선(안쪽 그림자 — 인라인 테두리·상단 띠를 안 덮는다) · 접는 칸 12 · 버튼 9 · 입력 8 · 칩 6
+_d452 = _tone452['dark']
+check("반경·선 — 패널 13px + 안쪽 1px 선 · 접는 칸 12px + 1px 선 · 버튼 9px + 조작선 · 입력 8px · 버전 칩 6px",
+      'border-radius: 13px !important; box-shadow: inset 0 0 0 1px' in _d452
+      and 'border: 1px solid' in _d452 and 'border-radius: 12px !important; }' in _d452
+      and _d452.count('border-radius: 9px !important;') >= 2 and 'border-radius: 8px !important;' in _d452
+      and "border-radius: 6px !important; padding: 3px 9px !important;" in _d452
+      and f"border: 1px solid {_t452['ctl_line']} !important;" in _d452)
+# ⑦ 본문 좌우 48px(가늠 코인 main 0 48px) — 휴대폰 구간(≤768px)은 16px. ⚠️ 종전 이 줄은 '킷 전역의 16px 그대로'라 적었는데
+#   그 킷 규칙은 같은 층의 뒤에 오는 무조건 규칙(2.5rem)에 져 죽어 있었다(375px 실측 40px · 라운드 471 마무리) — 톤 층(마지막)에 둔다
+check("본문 좌우 48px 은 769px 이상에서만 · 휴대폰 구간(≤768px)은 톤 층이 16px 로 둔다(뒤에 오는 층이라 이긴다)",
+      '@media (min-width: 769px) {' in _d452
+      and '.stMainBlockContainer { padding-left: 48px !important; padding-right: 48px !important; }' in _d452
+      and _d452.index('@media (min-width: 769px)') < _d452.index('padding-left: 48px')
+      and '@media (max-width: 768px) {' in _d452
+      and '.stMainBlockContainer { padding-left: 16px !important; padding-right: 16px !important; }' in _d452
+      and _d452.index('@media (max-width: 768px)') < _d452.index('padding-left: 16px'))
+# ⑧ 사이드 메뉴에 아이콘을 다시 넣지 않는다 — 번호 칸이 이름 머리를 맞추는 장치다(그림 폭이 다르면 다시 들쭉날쭉해진다)
+_fn452 = next(n for n in _ast452.parse(_read148(_os.path.join(PROJ, 'ui_kit.py'))).body
+              if isinstance(n, _ast452.FunctionDef) and n.name == 'nav_list')
+_calls452 = [c for c in _ast452.walk(_fn452) if isinstance(c, _ast452.Call)]
+check("nav_list 는 아이콘을 그리지 않는다(_icon 호출 0 · 본 호출 수를 밝힌다) · 번호 칸을 그린다",
+      not [c for c in _calls452 if getattr(c.func, 'id', '') == '_icon']
+      and 'qnav-code' in _ast452.get_source_segment(_read148(_os.path.join(PROJ, 'ui_kit.py')), _fn452),
+      f"호출 {len(_calls452)}", scanned=len(_calls452))
+# ⑨ 맨 위 화면 전환 — Streamlit 이 자기 크롬을 config.toml 의 다크로 칠해 라이트에서 고르지 않은 칸이 어두운 면 + 어두운 글자
+#   (1.01:1 · 브라우저 실측)였다. 두 테마 모두 면·선·글자가 토큰 · 고른 칸은 선택 짝(메뉴 줄의 지금 위치와 같다)
+check("⑨ 맨 위 화면 전환 칸 — 면·선·글자가 토큰 · 고른 칸은 선택 면/선/글자(두 테마)",
+      all(f"[data-testid=\"stButtonGroup\"] button {{\n        background: {_uk452.tokens(_th)['card']} !important;" in _c
+          and f"button[aria-checked=\"true\"] {{\n        background: {_uk452.tokens(_th)['sel_bg']} !important; "
+              f"border-color: {_uk452.tokens(_th)['sel_line']} !important; }}" in _c
+          and f"button[aria-checked=\"true\"] * {{ color: {_uk452.tokens(_th)['sel_tx']} !important; }}" in _c
+          for _th, _c in _tone452.items()))
+# ⑩ 대화 얼굴 아이콘 — 라이트 글자 규칙(_G)이 특정도에서 on_brand 를 이겨 2.85:1 이었다 → _G 가 그 자손을 뺀다
+check("⑩ 라이트 글자 규칙이 대화 얼굴(브랜드 면) 자손을 건드리지 않는다(아이콘은 톤 층의 on_brand)",
+      ':not([data-testid="stChatMessageAvatarAssistant"] *)' in _wa452
+      and all(f"[data-testid=\"stChatMessageAvatarAssistant\"] * {{ color: {_uk452.tokens(_th)['on_brand']} !important; }}" in _c
+              for _th, _c in _tone452.items()))
+# ⑪ 사이드바 스크롤 칸 자리는 오른쪽에만 — Streamlit 기본 'stable both-edges' 가 왼쪽에도 10px 을 비워 메뉴 줄이 x 27 이었다(실측)
+check("⑪ 사이드바 스크롤 칸 자리(scrollbar-gutter)는 오른쪽에만 — 메뉴 줄이 가늠 코인처럼 17px 에서 시작",
+      all('scrollbar-gutter: stable !important;' in _c and 'scrollbar-gutter: stable both-edges' not in _c
+          for _c in _tone452.values()))
+# ─── §452 끝 ───
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §453 — '자격 0' 줄이 언제 막았는지와 0 까지의 거리를 말한다 (라운드 472)
+#
+#   사용자(2026-10-09): *"또 막고 있는데 언제 막았는지 시간도 써주고 / '비용 차감 기대값 양수' 미충족 개선 해줘 제발."*
+#   그 조건은 문턱(0)이 가장 약한 조건이고 식은 EV = p·up + (1 − p)·dn − 비용 이다(verdict_core). 고칠 수 있는 것은
+#   **문턱이 아니라 설명**이다 — 0 이 되려면 확률이 얼마여야 하고 지금은 얼마인지를 같은 식으로 적는다(새 문턱 없음 · §2).
+#   언제는 '판정 시각(개장 전 리포트 생성)'과 '장부에 계획으로 적힌 시각' 둘이고, 머리는 '오늘'이 아니라 판정일이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§453 자동매매 '자격 0' 줄 — 언제 막았나 · 기대값이 0 까지 얼마나 모자란가 (라운드 472)")
+print("=" * 72)
+import ast as _ast453                                            # noqa: E402
+import json as _json453                                          # noqa: E402
+import shutil as _sh453                                          # noqa: E402
+import tempfile as _tf453                                        # noqa: E402
+import premarket as _pm453                                       # noqa: E402
+import swing_engine as _se453                                    # noqa: E402
+import swing_ledger as _sl453                                    # noqa: E402
+import swing_view as _sv453                                      # noqa: E402
+
+# ① 식 — 손으로 고른 p 로 기대값을 만들어 넣고 되짚는다(심기 · 양방향: 0 이 되는 확률에서 식이 정말 0 이다)
+_up453, _dn453, _cost453, _p453 = 4.8, -6.86, 0.41, 0.5985
+_ev453 = round(_p453 * _up453 + (1 - _p453) * _dn453 - _cost453, 2)
+_pl453 = dict(entry_model=100.0, target_model=100.0 * (1 + _up453 / 100), stop=100.0 * (1 + _dn453 / 100), cost_pct=_cost453,
+              verdict=dict(expected_return=_ev453, failed=[_sv453.EV_CHECK]))
+_g453 = _sv453.ev_shortfall(_pl453)
+_pn453 = (_g453 or {}).get('p_need', 0) / 100.0
+check("① 0 까지의 거리 — 기대값에서 되짚은 확률이 심은 확률과 0.1%p 안 · 필요 확률에서 식이 0 · 모자란 폭 = 필요 − 지금",
+      _g453 is not None and abs(_g453['p_now'] - _p453 * 100) < 0.1
+      and abs(_pn453 * _up453 + (1 - _pn453) * _dn453 - _cost453) < 1e-9
+      and abs(_g453['gap'] - (_g453['p_need'] - _g453['p_now'])) < 1e-9 and _ev453 < 0, str(_g453))
+# ② 못 셈하면 None — 기대값 없음 · 비용 없음 · 가격 정합 깨짐(손절 ≥ 진입)
+check("② 재료가 없거나 정합이 깨지면 None(지어내지 않는다)",
+      _sv453.ev_shortfall(dict(_pl453, verdict={})) is None
+      and _sv453.ev_shortfall(dict(_pl453, cost_pct=None)) is None
+      and _sv453.ev_shortfall(dict(_pl453, stop=101.0)) is None)
+# ③ 그 조건에 걸린 계획만 · 가장 가까운 후보 · 범위 · 0 을 넘은 값엔 안 붙음
+_pl453b = dict(_pl453, verdict=dict(expected_return=-0.60, failed=[_sv453.EV_CHECK, '다른 조건']))
+_l453 = _sv453.ev_gap_line([_pl453, _pl453b])
+check("③ 거리 줄 — 가장 가까운 후보의 기대값·필요 확률·지금 확률 · 두 개면 범위 · 비용을 적는다",
+      _l453 is not None and f'{_ev453:+.2f}%' in _l453 and f"{_g453['p_need']:.1f}%" in _l453
+      and f"{_g453['p_now']:.1f}%" in _l453 and '2개 범위' in _l453 and '0.41%' in _l453
+      and '기준을 낮춰 풀 조건이 아닙니다' in _l453 and '결과를 약속하지 않습니다' in _l453, str(_l453))
+check("③' 그 조건에 안 걸렸거나 기대값이 0 이상이면 거리 줄이 없다",
+      _sv453.ev_gap_line([dict(_pl453, verdict=dict(expected_return=-0.3, failed=['다른 조건']))]) is None
+      and _sv453.ev_gap_line([dict(_pl453, verdict=dict(expected_return=0.1, failed=[_sv453.EV_CHECK]))]) is None
+      and _sv453.ev_gap_line([]) is None)
+# ④ 조건 이름이 엔진 리터럴과 같다(글자가 갈리면 이 줄은 영영 안 나온다 · 중앙 판정 소스의 문자열 상수에서 찾는다)
+_vc453 = _ast453.parse(_read148(_os.path.join(PROJ, 'verdict_core.py')))
+_consts453 = [n.value for n in _ast453.walk(_vc453) if isinstance(n, _ast453.Constant) and isinstance(n.value, str)]
+check("④ EV_CHECK 글자가 중앙 판정의 조건 이름 리터럴과 같다(본 문자열 상수 수를 밝힌다)",
+      _sv453.EV_CHECK in _consts453, f"상수 {len(_consts453)}", scanned=len(_consts453))
+# ⑤ 언제 — 계획에 실린 리포트 시각 · 장부 시각 · 둘 다 없으면 None
+_w453 = _sv453.when_line([dict(verdict=dict(report_ts='2026-10-08 15:32:51'), created_ts='2026-10-09T17:01:21+09:00'),
+                          dict(verdict=dict(report_ts='2026-10-08 15:32:51'), created_ts='2026-10-09T17:05:00+09:00')])
+check("⑤ 언제 — 판정 시각(분까지) · 장부 시각은 처음~끝 · 둘 다 못 읽으면 None",
+      _w453 is not None and '판정 2026-10-08 15:32' in _w453 and '2026-10-09 17:01 ~ 2026-10-09 17:05' in _w453
+      and _sv453.when_line([dict(verdict={}, created_ts=None, data_day=None)]) is None, str(_w453))
+# ⑥ 옛 계획은 그 판정일 리포트 파일에서 — 엔진 버전이 같은 파일 먼저 · 자료 기준일이 다른 파일은 안 고른다
+_td453 = _tf453.mkdtemp()
+_old_pm453 = _pm453.PM_DIR
+try:
+    _pm453.PM_DIR = _td453
+    for _fn, _body in (('premarket_2026-10-08__vA.json', dict(generated_at='2026-10-08 15:32:51', engine_version='vA', date='2026-10-08', day_basis='data')),
+                       ('premarket_2026-10-08__vB.json', dict(generated_at='2026-10-08 19:00:00', engine_version='vB', date='2026-10-08', day_basis='data')),
+                       ('premarket_2026-10-09__vB.json', dict(generated_at='2026-10-09 07:00:00', engine_version='vB', date='2026-10-09', day_basis='data'))):
+        with open(_os.path.join(_td453, _fn), 'w', encoding='utf-8') as _f453:
+            _json453.dump(_body, _f453)
+    _ga453 = (_pm453.generated_at('2026-10-08', 'vA'), _pm453.generated_at('2026-10-08', 'vZ'),
+              _pm453.generated_at('2026-10-07', 'vA'), _pm453.generated_at(None))
+    _ja453 = _sv453.judged_at(dict(verdict={}, data_day='2026-10-08', engine_version='vA'))
+finally:
+    _pm453.PM_DIR = _old_pm453
+    _sh453.rmtree(_td453, ignore_errors=True)
+check("⑥ 옛 계획 — 같은 엔진 버전 파일의 시각 · 없으면 그날 가장 최근 · 없는 날·빈 날은 None",
+      _ga453 == ('2026-10-08 15:32:51', '2026-10-08 19:00:00', None, None) and _ja453 == '2026-10-08 15:32:51',
+      f"{_ga453} · {_ja453}")
+# ⑦ 계획에 리포트 시각을 싣고 plan_id 는 그대로(같은 판정을 다시 읽어도 같은 계획)
+_pick453 = dict(symbol='000001.KS', name='시험', asset_type='stock',
+                core=dict(entry_price=10000, new_target=10480, new_stop=9314, horizon_days=20, recommended=False,
+                          checks=[dict(name=_sv453.EV_CHECK, ok=False)], expected_return=-0.29))
+_pa453 = _se453.plan_from_pick(_pick453, '2026-10-08', 'vA', '2026-10-08', 20, cost_pct=0.41, report_ts='2026-10-08 15:32:51')
+_pb453 = _se453.plan_from_pick(_pick453, '2026-10-08', 'vA', '2026-10-08', 20, cost_pct=0.41)
+check("⑦ 계획 — 판정 기록에 리포트 시각을 싣고(없으면 None) plan_id 는 리포트 시각과 무관하다",
+      _pa453['verdict'].get('report_ts') == '2026-10-08 15:32:51' and _pb453['verdict'].get('report_ts') is None
+      and _pa453['plan_id'] == _pb453['plan_id'])
+# ⑧ 한 줄로 — 머리는 '판정일' · 막은 조건 · 언제 · 거리를 줄을 바꿔 잇는다(자격 하나라도 있으면 None 그대로)
+_c453 = _sl453.connect(':memory:')
+_sl453.add_plan(_c453, dict(_pa453, live_ok=False))
+_z453 = _sv453.zero_day_line(_c453, '2026-10-08')
+_c453.close()
+check("⑧ 자격 0 줄 — '판정일 … 후보 1개 중 실주문 자격 0' · 막은 조건 · 언제 막았나 · 0 까지의 거리(마크다운 줄바꿈)",
+      _z453 is not None and _z453.startswith('판정일 2026-10-08 후보 1개 중 실주문 자격 0')
+      and "'비용 차감 기대값 양수' 미충족" in _z453 and '언제 막았나 — 판정 2026-10-08 15:32' in _z453
+      and '기준을 낮춰 풀 조건이 아닙니다' in _z453 and _z453.count('  \n') == 2, str(_z453)[:200])
+# ─── §453 끝 ───
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §454 — 작업 중 카드: 도는 동안만 · 막대는 끝난 단계 수로만 (라운드 472)
+#
+#   사용자(2026-10-09 · OrbitMusic 의 작업 카드를 붙여): *"작업을 하면 이렇게 나타내면 좋을 것 같애."* 카드가 거짓을 말하는
+#   자리는 둘이다 — 막대(지어낸 퍼센트)와 '도는 중'(끊긴 작업을 도는 중이라 함). 막대는 실행 기록의 끝난 단계 수 / 전체 단계일
+#   때만 그리고, 기록이 그 단계의 시간 상한보다 오래 안 바뀌었으면 도는 중이라 하지 않는다. 읽는 것은 기록 꼬리와 잠금 파일뿐이다.
+# ══════════════════════════════════════════════════════════════════════
+print("\n" + "=" * 72)
+print("§454 작업 중 카드 — 도는 동안만 · 막대는 끝난 단계 수로만 (라운드 472)")
+print("=" * 72)
+import ast as _ast454                                            # noqa: E402
+import re as _re454                                              # noqa: E402
+import shutil as _sh454                                         # noqa: E402
+import tempfile as _tf454                                        # noqa: E402
+import jobs_now as _jn454                                        # noqa: E402
+import ui_kit as _uk454                                          # noqa: E402
+
+# ① 단계 표는 저녁 작업 스크립트의 STEPS 를 소스에서 읽는다(가져오지 않는다) — 이름·상한이 그 표와 같다
+_steps454 = _jn454.nightly_steps()
+_src454 = _read148(_os.path.join(PROJ, 'scripts', 'nightly_local.py'))
+_tree454 = _ast454.parse(_src454)
+_stepsnode454 = next(n for n in _tree454.body if isinstance(n, _ast454.Assign)
+                     and any(getattr(t, 'id', '') == 'STEPS' for t in n.targets))
+_names454 = [e.elts[0].value for e in _stepsnode454.value.elts]
+check("① 단계 표 — 저녁 작업 스크립트의 STEPS 이름 그대로 · 상한은 초(곱셈까지 읽는다)",
+      _steps454 is not None and [n for n, _ in _steps454] == _names454 and all(isinstance(s, (int, float)) and s > 0 for _, s in _steps454),
+      str(_steps454), scanned=len(_names454))
+# ② 심은 기록 — 도는 중(2/5 끝 → 셋째 단계) · 끝난 실행은 None · 시작 줄 없음 None · 파일 없음 None · 상한 넘게 그대로면 끊김
+_td454 = _tf454.mkdtemp()
+try:
+    _p454 = _os.path.join(_td454, 'log.txt')
+    _run454 = ('[10-08 17:03:20] 끝 · 가장 나쁜 종료 코드 0\n'
+               '[10-09 17:00:07] 이 PC 장 마감 뒤 작업 시작 · 단계 5\n'
+               '[10-09 17:00:44]   클라우드 되받기 — 종료 0 · 37초\n'
+               '[10-09 17:00:47]   추적 동결·채점 — 종료 0 · 3초\n')
+    with open(_p454, 'w', encoding='utf-8') as _f454:
+        _f454.write(_run454)
+    _j454 = _jn454.nightly_job(log_path=_p454, now=1000.0, mtime=1000.0)
+    _cut454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + 7200 + 1, mtime=1000.0)
+    _ok454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + 7200, mtime=1000.0)
+    with open(_p454, 'a', encoding='utf-8') as _f454:
+        _f454.write('[10-09 17:01:22] 끝 · 가장 나쁜 종료 코드 0\n')
+    _end454 = _jn454.nightly_job(log_path=_p454, now=1000.0, mtime=1000.0)
+    with open(_p454, 'w', encoding='utf-8') as _f454:
+        _f454.write('[10-09 17:01:22] 끝 · 가장 나쁜 종료 코드 0\n')
+    _nost454 = _jn454.nightly_job(log_path=_p454, now=1000.0, mtime=1000.0)
+    _nofile454 = _jn454.nightly_job(log_path=_os.path.join(_td454, '없음.txt'))
+finally:
+    _sh454.rmtree(_td454, ignore_errors=True)
+check("② 도는 중 — 끝난 단계 2 / 전체 5 · 지금 단계는 단계 표의 셋째 · '3/5단계'",
+      bool(_j454) and _j454.get('kind') == 'nightly' and _j454['done'] == 2 and _j454['total'] == 5
+      and _j454['step'] == _names454[2] and _j454['sub'].startswith('3/5단계'), str(_j454))
+check("②' 끝난 실행·시작 줄 없음·파일 없음은 None · 그 단계 상한을 넘게 기록이 그대로면 '끊김'(도는 중이라 하지 않는다) · 상한까지는 도는 중",
+      _end454 is None and _nost454 is None and _nofile454 is None
+      and isinstance(_cut454, dict) and _cut454.get('kind') == 'note' and '끊긴 것으로 본다' in _cut454['note']
+      and isinstance(_ok454, dict) and _ok454.get('kind') == 'nightly', f"{_cut454} · {_ok454}")
+# ③ 워커 — 살아 있으면 막대 없는 작업 · 안 돌면 None · 모르면 사유(카드에 안 뜬다)
+_w454 = _jn454.worker_job(dict(running=True, since='2026-10-12T08:50:01'))
+check("③ 워커 — 살아 있으면 진행률 없는 작업(done·total None · '08:50 부터') · 안 돌면 None · 모르면 note",
+      _w454 and _w454['done'] is None and _w454['total'] is None and '08:50 부터' in _w454['sub']
+      and _jn454.worker_job(dict(running=False)) is None
+      and _jn454.worker_job(dict(running=None, note='모름')) == dict(kind='note', note='모름'))
+_jobs454, _notes454 = _jn454.running_jobs(nightly=_j454, worker=_w454)
+_jobs454b, _notes454b = _jn454.running_jobs(nightly=dict(kind='note', note='끊김'), worker=None)
+check("③' 목록 — 저녁 작업이 머리 · note 는 작업이 아니라 사유로",
+      [j['kind'] for j in _jobs454] == ['nightly', 'worker'] and not _notes454 and _jobs454b == [] and _notes454b == ['끊김'])
+# ④ 카드 — 없으면 '' · 막대는 단계가 있을 때만(값 = 끝난/전체) · 나머지는 +N(이름은 툴팁) · 글자 크기는 스케일 · 색은 토큰
+_c454 = _uk454.job_card(_jobs454, theme='dark')
+_c454w = _uk454.job_card([_w454], theme='light')
+_t454 = _uk454.tokens('dark')
+_sizes454 = {int(x) for x in _re454.findall(r'font-size:(\d+)px', _c454)}
+check("④ 카드 — 작업 없으면 '' · 막대 aria 2/5 · 폭 40% · '+1' 과 툴팁 · 글자 12·13px(스케일) · 바탕·고리·막대가 토큰 색",
+      _uk454.job_card([], 'dark') == '' and _uk454.job_card(None) == ''
+      and "aria-valuenow='2'" in _c454 and "aria-valuemax='5'" in _c454 and 'width:40%' in _c454
+      and '>+1</span>' in _c454 and '같이 도는 작업 — 스윙 워커' in _c454
+      and _sizes454 and _sizes454 <= TYPE_SCALE and min(_sizes454) >= 12
+      and f"background:{_t454['card']}" in _c454 and f"border-top-color:{_t454['brand']}" in _c454, str(_sizes454))
+check("④' 진행률 없는 작업(워커)에는 막대를 그리지 않는다 · 움직임을 줄인 설정이면 고리가 멈춘다 · 이모지 없음",
+      'gm-job-bar' not in _c454w and 'progressbar' not in _c454w and 'prefers-reduced-motion' in _c454
+      and not emoji_hits(_c454) and not emoji_hits(_c454w), str(emoji_hits(_c454) + emoji_hits(_c454w)))
+# ⑤ 화면 — 상단 바 자리 바로 뒤 · 15초 조각 · jobs_now 를 읽는다
+_wa454 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_fn454 = next((n for n in _ast454.parse(_wa454).body if isinstance(n, _ast454.FunctionDef) and n.name == '_job_card472'), None)
+_deco454 = [_ast454.unparse(d) for d in (_fn454.decorator_list if _fn454 else [])]
+check("⑤ 화면 — 상단 바 자리 뒤에 15초 조각 하나(이 조각만 다시 돈다) · running_jobs 를 읽어 job_card 로 그린다",
+      _fn454 is not None and _deco454 == ['st.fragment(run_every=15)']
+      and 'running_jobs()' in _ast454.unparse(_fn454) and 'job_card(' in _ast454.unparse(_fn454)
+      and _wa454.index('_NAV_SLOT = st.empty()') < _wa454.index('def _job_card472') < _wa454.index('_TICKER_SLOT = st.empty()'),
+      str(_deco454))
+# ⑥ 가볍다 — jobs_now 는 셸·네트워크를 부르지 않는다(가져오는 모듈을 본다 · 화면이 15초마다 부른다)
+_imps454 = sorted({(a.name if isinstance(n, _ast454.Import) else (n.module or '')).split('.')[0]
+                   for n in _ast454.walk(_ast454.parse(_read148(_os.path.join(PROJ, 'jobs_now.py'))))
+                   if isinstance(n, (_ast454.Import, _ast454.ImportFrom))
+                   for a in (n.names if isinstance(n, _ast454.Import) else [n])})
+check("⑥ jobs_now 가 가져오는 모듈에 셸·네트워크가 없다(subprocess·requests·urllib·socket · 본 모듈 수를 밝힌다)",
+      not set(_imps454) & {'subprocess', 'requests', 'urllib', 'socket', 'http'}, str(_imps454), scanned=len(_imps454))
+# ─── §454 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

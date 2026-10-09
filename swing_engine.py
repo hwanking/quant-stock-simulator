@@ -91,8 +91,10 @@ def plan_id(code, data_day, entry, target, stop, engine_version, wait_bars=None,
     return 'SW1-' + str(data_day).replace('-', '') + '-' + code + '-' + hashlib.sha1(body.encode('utf-8')).hexdigest()[:6].upper()
 
 
-def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=None, rulebook_version=None):
-    """리포트 후보 하나 → 계획 dict. 실주문 자격이 없으면 live_ok=False 와 사유(맨 앞의 것 하나)."""
+def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=None, rulebook_version=None, report_ts=None):
+    """리포트 후보 하나 → 계획 dict. 실주문 자격이 없으면 live_ok=False 와 사유(맨 앞의 것 하나).
+    라운드 472 — `report_ts`(그 판정을 낸 개장 전 리포트의 생성 시각)를 판정 기록에 싣는다. 화면이 '언제 막았나'를 적는다.
+    plan_id 에는 안 든다(같은 판정을 다시 읽어도 같은 계획이다)."""
     core = (pick or {}).get('core') or {}
     code = code6(pick.get('symbol') or pick.get('code'))
     e_raw, e_src = entry_of(core)
@@ -133,7 +135,8 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=No
                              failed=([str(ck.get('name')) for ck in core['checks'] if isinstance(ck, dict) and not ck.get('ok')]
                                      if isinstance(core.get('checks'), list) else None),
                              expected_return=_f(core.get('expected_return')), wait_curable=core.get('wait_curable'),
-                             current_price=_f(core.get('current_price'))),
+                             current_price=_f(core.get('current_price')),
+                             report_ts=(str(report_ts) if report_ts else None)),
                 engine_version=engine_version)
 
 
@@ -168,7 +171,7 @@ def plans_from_report(report, today_day, cost_pct=None):
     for p in (report.get('picks') or []):
         try:
             out.append(plan_from_pick(p, dday, report.get('engine_version'), today_day, wb, cost_pct=cost_pct,
-                                      rulebook_version=rb))
+                                      rulebook_version=rb, report_ts=report.get('generated_at')))
         except Exception:                                      # noqa: BLE001 — 후보 하나가 이상해도 다른 계획·보호 매도를 막지 않는다
             continue
     return out

@@ -613,6 +613,25 @@ st.segmented_control('화면', _TOP_VIEWS, key='top_view', label_visibility='col
 
 _NAV_SLOT = st.empty()          # 종목이 확정된 뒤 채운다 (자리는 지금 잡는다)
 
+
+# ── 작업 중 카드 (라운드 472) ─────────────────────────────────────────────
+# 사용자(2026-10-09 · OrbitMusic 의 작업 카드를 붙여): *"작업을 하면 이렇게 나타내면 좋을 것 같애."* 이 PC 에서 저녁 작업이나
+#   스윙 워커가 도는 동안만 상단 바 아래에 뜬다. 읽는 것은 실행 기록 꼬리와 잠금 파일뿐이라(셸·네트워크 없음) 이 조각만 15초마다
+#   다시 돈다 — 앱 전체를 다시 돌리지 않는다(라운드 329). 진행 막대는 끝난 단계 수 / 전체 단계(`jobs_now`)일 때만.
+@st.fragment(run_every=15)
+def _job_card472():
+    try:
+        import jobs_now as _jn472
+        _jobs472, _notes472 = _jn472.running_jobs()
+        _html472 = _uk.job_card(_jobs472, theme=_theme, notes=_notes472)
+        if _html472:
+            st.markdown(_html472, unsafe_allow_html=True)
+    except Exception as _e472:                                 # noqa: BLE001 — 카드 하나 때문에 앱이 죽지 않는다
+        print(f'[작업 카드] 못 그렸다 — {type(_e472).__name__}: {_e472}')
+
+
+_job_card472()
+
 # ── 실시간 띠 (라운드 48) ──────────────────────────────────────────────
 # 사용자 요청: *"업데이트 상황 알려주는 창... 뭐 진행중이다, 핫이슈가 뭐다,
 # 실시간으로 사이트나 뉴스 같은 거 맨 위에 계속 움직이게."*
@@ -982,7 +1001,9 @@ if _theme == 'light':
     # 부모의 밝은 색을 상속받아야 하기 때문 ③ 버튼·알림·코드칩은 별도 규칙.
     _G = (':not([style*="color"]):not(div[style*="background"] *)'
           ':not(table[style*="background"] *):not(.cross-val-matrix *)'
-          ':not([data-testid="stAlert"] *):not(button *):not(code):not(kbd)')
+          ':not([data-testid="stAlert"] *):not(button *):not(code):not(kbd)'
+          # 라운드 471 마무리 — 대화 얼굴(브랜드 면) 안의 아이콘이 이 규칙에 어두워져 2.85:1 이었다(톤 층의 on_brand 가 특정도에서 졌다)
+          ':not([data-testid="stChatMessageAvatarAssistant"] *)')
     st.markdown(f"""
     <style>
         .stApp {{ background-color: {_TOK['bg1']} !important; }}
@@ -1590,13 +1611,13 @@ if _theme == 'light':
     </style>
     """, unsafe_allow_html=True)
 
-# ── 제미나이 톤 — 전역 층들 뒤에 한 번 (라운드 399) ───────────────────────────
+# ── 톤 층 — 전역 층들 뒤에 한 번 (라운드 399 제미나이 → 라운드 471 가늠 톤) ─────────────
 # 사용자: "제미나이 사이트 스타일로 전체로 바꿔줄래? 사이트 다시 단장하고 싶어졌어." 위의 전역 층들(킷 전역 ·
 # 애플 정돈 · 옛 다크 규칙 · 라이트 오버라이드)을 하나씩 고치지 않고 층 하나로 덮는다 — 그래서 **그 넷 뒤**여야
 # 한다(앞에 두면 뒤 층이 이긴다 · 회귀가 자리를 잠근다). ⚠️ '맨 뒤'는 아니다 — 아래에 좁은 자리(사이드바 버튼 ·
-# 표 · 카드) 블록이 8개 더 오고, 그중 사이드바 버튼 블록은 특이도로 이 층을 이겨서 gemini_css 가 그 자리만 한
+# 표 · 카드) 블록이 8개 더 오고, 그중 사이드바 버튼 블록은 특이도로 이 층을 이겨서 tone_css 가 그 자리만 한
 # 단계 더 구체적으로 적는다. 글꼴·모서리·채움·선택 표시만 바꾸고 값·판정은 불변.
-st.markdown(f"<style>{_uk.gemini_css(_theme)}</style>", unsafe_allow_html=True)
+st.markdown(f"<style>{_uk.tone_css(_theme)}</style>", unsafe_allow_html=True)
 
 # ── 브라우저 클립보드 붙여넣기 컴포넌트 ──────────────────────────────────────
 # 사용자 브라우저의 paste 이벤트로 이미지를 받는다. 서버 클립보드를 읽는 방식과 달리
@@ -1924,10 +1945,11 @@ st.sidebar.markdown(
     unsafe_allow_html=True)
 
 st.sidebar.markdown(
-    # 라운드 399 — 제미나이 톤 로고(반짝임 마크 · 그라디언트 워드마크) + 한 줄. 이 줄은 CSS(`ui_kit.gemini_css`)가
+    # 라운드 399 — 제미나이 톤 로고(반짝임 마크 · 그라디언트 워드마크) + 한 줄. 이 줄은 CSS(`ui_kit.tone_css`)가
     #   사이드바 머리줄(접기 버튼 줄)로 끌어올린다 — 종전엔 머리줄 60px 과 빈 style 칸 둘 아래에 있어 위가 비어 보였다.
-    f"<div style='padding:0 0 12px 0;'>"
-    f"{_uk.logo(_theme, size=36, sub='되돌려 재 보고 판단하는 퀀트', href='?home=1', title='첫 화면으로 (검색어·스캔 결과 초기화)')}"
+    # 라운드 471 — 가늠 코인 브랜드 줄(46px 마크 · 단색 워드마크 · 영문 한 줄 · 아래 1px 구분선 `gm-brandrow`).
+    f"<div class='gm-brandrow'>"
+    f"{_uk.logo(_theme, size=46, sub='GANEUM QUANT', href='?home=1', title='첫 화면으로 (검색어·스캔 결과 초기화)')}"
     f"</div>",
     unsafe_allow_html=True)
 
@@ -1960,9 +1982,14 @@ st.sidebar.markdown(
 # 라운드 376 — 전역 메뉴는 **접는 묶음 셋**이다(오늘의 시장 · 내 자산 · 검증과 이력). 종전엔 상단 목록 다섯과
 #   번호 묶음 다섯이 전부 펼쳐져 있어(항목 23줄) 설정 아코디언이 화면 아래로 밀렸다. 첫 묶음만 펼쳐 둔다.
 #   묶음을 열고 닫는 것은 브라우저 안의 일이라 **앱을 다시 돌리지 않는다**(링크는 앵커 이동뿐).
+# 라운드 471 — 묶음 셋을 `sb_nav` 칸에 담아 톤 층이 **묶음 이름표 + 번호 줄**(가늠 코인 사이드 메뉴)로 그린다.
+#   번호는 묶음을 건너 이어 센다(01~) — 동작(첫 묶음만 펼침 · 앵커 이동)은 그대로다.
+_SB_NAV471 = st.sidebar.container(key='sb_nav')
+_nav_no471 = 1
 for _gi376, _g376 in enumerate(_NAV_SUB):
-    with st.sidebar.expander(_g376['title'], expanded=(_gi376 == 0)):
-        st.markdown(_uk.nav_list(_g376['items'], theme=_theme), unsafe_allow_html=True)
+    with _SB_NAV471.expander(_g376['title'], expanded=(_gi376 == 0)):
+        st.markdown(_uk.nav_list(_g376['items'], theme=_theme, start=_nav_no471), unsafe_allow_html=True)
+    _nav_no471 += len(_g376['items'])
 
 # 라운드 453 — 아래 두 정의와 세션 적재는 원래 종목 확정 뒤(아코디언 아래)에 있었다. 스윙 탭 갈림이 쓰므로 여기로 올렸다
 #   (설명 주석은 옛 자리에 그대로). 읽기와 쓰기를 다른 이름으로 가르는 까닭은 그 주석(라운드 165·200).
@@ -4189,10 +4216,8 @@ st.markdown(
     f"letter-spacing:0.04em; color:{_TOK['tx3']};'>오늘의 판단</p>"
     f"<h1 style='font-size:40px; font-weight:700; letter-spacing:-0.026em; "
     f"line-height:1.15; margin:0 0 10px 0; color:{_TOK['tx1']};'>"
-    # 라운드 399 — 제미나이 인사말처럼 대제목(40px 굵게)에만 서명 그라디언트. 큰 글자라 3:1 기준을 넘는다.
-    f"<span class='gm-grad' style='background:{_uk.GEMINI_GRADIENT}; "
-    f"-webkit-background-clip:text; background-clip:text; "
-    f"-webkit-text-fill-color:transparent;'>{_uk._esc(resolved_name)}</span>"
+    # 라운드 471 — 가늠 톤은 그라디언트 글자를 쓰지 않는다(가늠 코인 · OrbitMusic 대제목은 단색 굵게).
+    f"<span>{_uk._esc(resolved_name)}</span>"
     f"<span style='color:{_TOK['tx3']}; "
     f"font-size:20px; font-weight:500; letter-spacing:-0.01em; "
     f"margin-left:10px;'>{_uk._esc(target_ticker)}</span></h1>"

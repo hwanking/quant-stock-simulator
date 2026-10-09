@@ -28,8 +28,10 @@ maxUploadSize = 20
 #    4.5 를 넘기려고 명도를 조정한 값" 이다 — 그 보정을 버리면 안 된다.
 #    라운드 399 — 제미나이 톤으로 팔레트를 바꿨다(ui_kit.DARK). 네 값 모두 팔레트와 같은 값이어야 한다
 #    (bg · brand · card · tx1) — 회귀가 값으로 대조한다(§81). 안 맞추면 첫 그림에 옛 색이 번쩍인다.
+#    라운드 471 — 가늠 톤(가늠 코인과 같은 계열)으로 팔레트를 바꾸고 이 파일을 안 옮겨, 맨 위 화면 전환의 고른 칸이 옛
+#    제미나이 파랑이었다(브라우저 실측). 지금 팔레트 값으로.
 base = "dark"
-primaryColor = "#A8C7FA"
-backgroundColor = "#131314"
-secondaryBackgroundColor = "#1E1F20"
-textColor = "#E3E3E3"
+primaryColor = "#77DCC3"
+backgroundColor = "#101518"
+secondaryBackgroundColor = "#181F24"
+textColor = "#F1F5F4"

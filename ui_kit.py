@@ -21,46 +21,43 @@ from typing import Iterable, Optional, Sequence
 
 import streamlit as st
 
-# ── 표면 3단계 (테두리 없음 — 이 대비만으로 층이 보인다) ──────────────────
-# 라운드 399 (2026-10-01 · 사용자: "제미나이 사이트 스타일로 전체로 바꿔줄래?") — 제미나이(Material 3)
-#   톤으로 바꿨다. 다크는 본문 #131314 · 사이드바·카드 #1E1F20 · 올린 면 #282A2C, 라이트는 흰 본문 ·
-#   옅은 청회색 면(#F0F4F9). 의미 관례는 그대로다 — 오르면 빨강 · 내리면 파랑(§5).
-#   값은 눈대중이 아니라 계산으로 골랐다(_probe/r399_palette.py): 글자 3단·의미색 전부가 본문·카드·
-#   올린 면·사이드바 **네 면 모두에서 4.5:1 이상**이다 —
-#     다크  tx1 11.2~14.5 · tx2 8.5~10.9 · tx3 6.1~7.8 · 의미색 최저 6.0
-#     라이트 tx1 14.2~16.5 · tx2 8.1~9.4 · tx3 5.3~6.1 · 의미색 최저 5.0
-#   배경↔카드 명도비 다크 1.125 · 라이트 1.104 (§78 의 1.10 이상).
-#   sel_bg/sel_tx 는 선택된 알약(사이드바 항목·탭)의 면과 글자(7.2 · 12.6), on_brand 는 브랜드로 채운
-#   버튼 위 글자(7.5 · 6.4)다.
-DARK = dict(bg='#131314', card='#1E1F20', raised='#282A2C',
-            line='#3C4043', tx1='#E3E3E3', tx2='#C4C7C5', tx3='#A2A9B0',
-            brand='#A8C7FA', up='#F28B82', down='#8AB4F8',
-            pos='#6DD58C', warn='#FDD663', neg='#FF8A80',
-            sel_bg='#004A77', sel_tx='#C2E7FF', on_brand='#062E6F')
-#: 사이드바 면 — 제미나이처럼 본문보다 한 단계 밝고 카드와 같은 면
-DARK_NAV = '#1E1F20'
-LIGHT_NAV = '#F0F4F9'
-LIGHT = dict(bg='#FFFFFF', card='#F0F4F9', raised='#E9EEF6',
-             line='#DDE3EA', tx1='#1F1F1F', tx2='#444746', tx3='#5E6267',
-             brand='#0B57D0', up='#C5221F', down='#0B57D0',
-             pos='#146C2E', warn='#8A5300', neg='#B3261E',
-             sel_bg='#D3E3FD', sel_tx='#041E49', on_brand='#FFFFFF')
+# ── 표면 3단계 ────────────────────────────────────────────────────────────
+# 라운드 471 (2026-10-09 · 사용자: "가늠코인 메인페이지 위치처럼 다 정리해줘 · OrbitMusic 이랑 비교해서 · 사이드바도
+#   가늠코인처럼") — 같은 주인의 두 앱과 한 계열로 바꿨다. 다크는 가늠 코인(:8765)의 토큰 **그대로**(바탕 #101518 ·
+#   면 #181F24 · 올린 면 #202A30 · 선 #34434B · 강조 청록 #77DCC3 · 수익 #FF9AA6 · 손실 #8CC2FF), 라이트는 같은 계열로
+#   짠 짝(흰 바탕 · 옅은 청록회색 면 · 짙은 청록 강조). 의미 관례는 그대로다 — 오르면 빨강 · 내리면 파랑(§5).
+#   값은 계산으로 확인했다(_probe/r471_palette.py): 글자 3단·의미색 전부가 본문·카드·올린 면·사이드바 **네 면
+#   모두에서 4.5:1 이상** —
+#     다크  tx1 13.3~16.7 · tx2 9.8~12.3 · tx3 7.4~9.2 · 의미색 최저 7.3
+#     라이트 tx1 15.2~18.4 · tx2 8.6~10.4 · tx3 5.5~6.6 · 의미색 최저 4.8
+#   배경↔카드 명도비 다크 1.103 · 라이트 1.121 (§78 의 1.10 이상).
+#   sel_bg/sel_tx/sel_line 은 선택된 항목(사이드 메뉴·탭)의 면·글자·선(8.2 · 8.4), on_brand 는 브랜드로 채운
+#   버튼 위 글자(9.2 · 6.4), ctl_line 은 보조 버튼 테두리(가늠 코인 control-line)다.
+DARK = dict(bg='#101518', card='#181F24', raised='#202A30',
+            line='#34434B', tx1='#F1F5F4', tx2='#C9D5D8', tx3='#A8BBC2',
+            brand='#77DCC3', up='#FF9AA6', down='#8CC2FF',
+            pos='#77DCC3', warn='#EDCC91', neg='#FFACB4',
+            sel_bg='#16342F', sel_tx='#77DCC3', on_brand='#102B24',
+            sel_line='#376B60', ctl_line='#647C88')
+#: 사이드바 면 — 가늠 코인처럼 본문과 같은 바탕에 오른쪽 1px 선으로 가른다
+DARK_NAV = '#101518'
+LIGHT_NAV = '#FFFFFF'
+LIGHT = dict(bg='#FFFFFF', card='#EEF3F2', raised='#E3EBEA',
+             line='#CFDAD8', tx1='#101518', tx2='#33424A', tx3='#4F5F66',
+             brand='#0D6B58', up='#C5221F', down='#1556C0',
+             pos='#0D6B58', warn='#7A5410', neg='#B3261E',
+             sel_bg='#D5EEE7', sel_tx='#0A4A3D', on_brand='#FFFFFF',
+             sel_line='#8CC7B8', ctl_line='#8FA3AB')
 # tx3 는 보조 설명 전용이며 4.5 미만으로 내려가면 안 된다 (작은 12px 글자가 많다).
-# (라운드 399 전 값 — 다크 bg #0A0B0F · card #16181F · brand #488AF7 / 라이트 bg #EFF1F6 · card #FFFFFF —
+# (라운드 399 의 제미나이 값 — 다크 bg #131314 · card #1E1F20 · brand #A8C7FA / 라이트 card #F0F4F9 · brand #0B57D0 —
 #  은 git 이력에 있다.)
 
-#: 제미나이 서명 그라디언트 — **큰 굵은 글자(로고·본문 대제목)에만** 쓴다(`.gm-grad`). 라이트 바탕에서
-#  세 점이 3.1~3.7:1 이라 큰 글자 기준(3:1)은 넘지만 작은 글자 기준(4.5)은 못 넘는다(r399_palette2.py).
-GEMINI_GRADIENT = 'linear-gradient(74deg, #4285F4 0%, #9B72CB 45%, #D96570 100%)'
-
-#: 글꼴 — Google Sans Flex(Google Fonts 공개 · 라틴·숫자)를 먼저, 한글은 Google Sans 에 없어 Noto Sans KR ·
-#  Pretendard · 애플 · 맑은 고딕 순으로 내려간다. 받지 못해도 다음 글꼴로 내려갈 뿐 화면은 안 깨진다.
-FONT_STACK = ('"Google Sans Flex", "Google Sans", "Google Sans Text", "Noto Sans KR", '
-              '"Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont, '
-              '"Apple SD Gothic Neo", "Segoe UI", Roboto, "Malgun Gothic", sans-serif')
-FONT_IMPORT = ("@import url('https://fonts.googleapis.com/css2?"
-               "family=Google+Sans+Flex:wght@400;500;600;700"
-               "&family=Noto+Sans+KR:wght@400;500;700&display=swap');")
+#: 글꼴 — Pretendard(가늠 코인 · OrbitMusic 과 같은 글꼴 · OFL)를 jsDelivr 에서 받는다(가변 굵기 · 한글 부분 집합을
+#  필요할 때만 받는다). 받지 못해도 맑은 고딕 · 애플 고딕으로 내려갈 뿐 화면은 안 깨진다(라운드 471).
+FONT_STACK = ('"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, '
+              '"Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", Roboto, "Noto Sans KR", sans-serif')
+FONT_IMPORT = ("@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/"
+               "dist/web/variable/pretendardvariable-dynamic-subset.min.css');")
 
 
 def tokens(theme: str = 'dark') -> dict:
@@ -131,9 +128,9 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '',
     가늠 로고 — 마크 하나와 워드마크.
 
     '가늠'은 가늠쇠에서 온 말이다. 가늠쇠는 총열 끝의 작은 표적 조준점이다.
-    라운드 399 부터 마크는 제미나이식 네 갈래 반짝임이고, 네 끝이 조준선 방향,
-    가운데 구멍이 가늠쇠 구멍이다(종전: 원 안의 십자와 마침표 — git 이력에 있다).
-    `sub` 를 주면 워드마크 아래 한 줄을 13px 로 적는다.
+    라운드 471 부터 마크는 가늠 코인과 같은 계열(둥근 사각 · G 호 · 조준 눈금 · 가운데 점)이다
+    (라운드 399 의 반짝임 · 그 전의 원 안 십자는 git 이력에 있다).
+    `sub` 를 주면 워드마크 아래 영문 한 줄을 13px 로 적는다.
 
     ■ `href` (라운드 122)
       web_app 1529행에 "제목 자체를 홈 버튼으로 쓴다"고 **주석으로만**
@@ -143,32 +140,24 @@ def logo(theme: str = 'dark', size: int = 28, sub: str = '',
       결정을 주석이 아니라 **코드**로 옮긴다.
     """
     t = tokens(theme)
-    # 라운드 399 (2026-10-01 · 사용자: "가늠의 로고도 다시 만들어줘 … 제미나이 스타일로") — 새 로고.
-    #   마크: 제미나이식 **네 갈래 반짝임**을 서명 그라디언트(파랑→보라→산호)로 채우고 **가운데를 뚫었다**.
-    #   네 끝은 가늠쇠의 조준선 방향(상하좌우)이고 가운데 구멍이 가늠쇠 구멍이다 — 뜻(재 보고 겨눈다)은 그대로다.
-    #   워드마크는 고정 크기(타입 스케일 안 · 종전 f-string 이 23px 을 만들어 스케일 밖이었다) · 굵기 500 ·
-    #   같은 그라디언트. 큰 글자라 그라디언트 대비 3:1 기준을 넘는다(GEMINI_GRADIENT 주석).
-    #   그라디언트 id 는 페이지에 로고가 여럿이어도 같은 정의라 겹쳐도 같은 모양이다.
-    #   `size` 는 마크 크기다(워드마크 크기는 아래 `word` 가 정한다).
+    # 라운드 471 (2026-10-09 · 사용자: "가늠코인처럼") — 가늠 코인(같은 주인의 앱)의 마크와 같은 계열로 바꿨다:
+    #   둥근 사각(반경 14/48) 위에 G 자 호 · 조준 눈금 셋 · 가운데 점. 'G' 는 가늠의 머리글자이고 눈금과 점이
+    #   가늠쇠다 — 뜻(재 보고 겨눈다)은 그대로다. 색은 토큰(브랜드 · 선택 면/선 · 글자 1단)에서 온다.
+    #   워드마크는 단색 22px · 700(타입 스케일 안) · 아래 한 줄은 영문 대문자 13px · 자간 넓게(가늠 코인의
+    #   'GANEUM COIN' 줄). `sub` 를 주면 그 글자를 쓴다. 종전 반짝임·그라디언트는 git 이력에 있다.
     mark = (
-        f"<svg width='{size}' height='{size}' viewBox='0 0 24 24' "
+        f"<svg width='{size}' height='{size}' viewBox='0 0 48 48' fill='none' "
         f"style='flex:0 0 auto;' aria-hidden='true'>"
-        f"<defs><linearGradient id='gaeumGrad' x1='3' y1='21' x2='21' y2='3' "
-        f"gradientUnits='userSpaceOnUse'>"
-        f"<stop offset='0' stop-color='#4285F4'/><stop offset='0.5' stop-color='#9B72CB'/>"
-        f"<stop offset='1' stop-color='#D96570'/></linearGradient></defs>"
-        f"<path fill='url(#gaeumGrad)' fill-rule='evenodd' "
-        f"d='M12 1.5C12.7 7.3 16.7 11.3 22.5 12C16.7 12.7 12.7 16.7 12 22.5"
-        f"C11.3 16.7 7.3 12.7 1.5 12C7.3 11.3 11.3 7.3 12 1.5Z"
-        f"M13.6 12a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0Z'/></svg>")
-    # 라운드 399 덤 — 사용자: *"사이즈 더 크게 해줘야지."* 워드마크 22 → 28px · 한 줄 12 → 13px
-    #   (둘 다 타입 스케일 안). 마크 크기는 부르는 쪽이 `size` 로 준다.
-    word = (f"<span class='gm-grad' style='display:block; font-size:28px; font-weight:500; "
-            f"background:{GEMINI_GRADIENT}; -webkit-background-clip:text; background-clip:text; "
-            f"-webkit-text-fill-color:transparent; color:{t['tx1']}; "
-            f"letter-spacing:-0.01em; line-height:1.1;'>가늠</span>")
-    subhtml = (f"<span style='display:block; margin-top:3px; font-size:13px; color:{t['tx3']}; "
-               f"font-weight:400; letter-spacing:0; line-height:1.3; white-space:nowrap;'>"
+        f"<rect x='1' y='1' width='46' height='46' rx='14' fill='{t['sel_bg']}' stroke='{t['sel_line']}'/>"
+        f"<path d='M33 16a12 12 0 1 0 1 15v-7H24' stroke='{t['brand']}' stroke-width='3' "
+        f"stroke-linecap='round' stroke-linejoin='round'/>"
+        f"<path d='M24 6v3M6 24h3M24 39v3' stroke='{t['brand']}' stroke-opacity='.55' stroke-width='2' "
+        f"stroke-linecap='round'/>"
+        f"<circle cx='24' cy='24' r='2.5' fill='{t['tx1']}'/></svg>")
+    word = (f"<span style='display:block; font-size:22px; font-weight:700; color:{t['tx1']}; "
+            f"letter-spacing:-0.04em; line-height:1.15;'>가늠</span>")
+    subhtml = (f"<span style='display:block; margin-top:4px; font-size:13px; color:{t['brand']}; "
+               f"font-weight:650; letter-spacing:0.14em; line-height:1.2; white-space:nowrap;'>"
                f"{_esc(sub)}</span>" if sub else '')
     inner = f"{mark}<span style='display:block;'>{word}{subhtml}</span>"
     box = "display:flex; align-items:center; gap:12px;"
@@ -319,26 +308,31 @@ def nav_links(items, theme='dark'):
 
 
 def nav_list(items: Sequence[dict], active: str = '',
-             theme: str = 'dark') -> str:
+             theme: str = 'dark', start: int = 1) -> str:
     """
-    좌측 1차 탭 — 아이콘 + 라벨. 현재 위치는 면으로 표시한다(선이 아니라).
+    좌측 메뉴 항목 — **번호 칸 + 이름**(라운드 471 · 가늠 코인 사이드 메뉴와 같은 줄).
 
-    items: [{'key','label','icon','href'}]
+    줄 높이 46px · 안쪽 10/12px · 반경 8px · 1px 선(평소 투명) — 번호 칸은 22px 고정이라 이름의 왼쪽 끝이
+    줄마다 같은 x 에 선다(종전 아이콘은 그림마다 폭이 달라 이름 머리가 들쭉날쭉했다 · 사용자: "아이콘 글들
+    위치가 이상해"). 번호는 묶음을 건너 이어 센다(`start`). 현재 위치는 선택 면 · 선 · 글자로(가늠 코인).
+    items: [{'key','label','href', 'code'(선택 · 번호 대신 쓸 짧은 표식)}]
     """
     t = tokens(theme)
     out = []
-    for it in items:
+    for i, it in enumerate(items):
         on = (it['key'] == active)
-        # 라운드 399 — 선택 표시는 제미나이처럼 옅은 파랑 알약(sel_bg · sel_tx · 대비 7.2 / 12.6)
         col = t['sel_tx'] if on else t['tx2']
-        bg = (f"background:{t['sel_bg']};" if on else '')
+        code = it.get('code') or f"{start + i:02d}"
+        face = (f"background:{t['sel_bg']}; border:1px solid {t['sel_line']};" if on
+                else "border:1px solid transparent;")
         out.append(
             f"<a href='{_esc_attr(it.get('href') or '#')}' class='qnav-item' "
-            f"style='display:flex; align-items:center; gap:11px; "
-            f"padding:9px 14px; border-radius:999px; {bg} "
-            f"text-decoration:none; margin-bottom:2px;'>"
-            f"{_icon(it.get('icon', 'doc'), col)}"
-            f"<span style='font-size:15px; font-weight:{600 if on else 500}; "
+            f"style='display:flex; align-items:center; gap:12px; min-height:46px; box-sizing:border-box; "
+            f"padding:10px 12px; margin:4px 0; border-radius:8px; {face} text-decoration:none;'>"
+            f"<span class='qnav-code' style='flex:0 0 22px; font-size:12px; font-weight:650; "
+            f"color:{t['sel_tx'] if on else t['tx3']}; font-variant-numeric:tabular-nums; "
+            f"letter-spacing:0.02em;'>{_esc(code)}</span>"
+            f"<span style='font-size:15px; font-weight:{600 if on else 500}; letter-spacing:-0.02em; "
             f"color:{col}; white-space:nowrap;'>{_esc(it['label'])}</span></a>")
     return ''.join(out)
 
@@ -1142,45 +1136,39 @@ def global_css(theme: str = 'dark') -> str:
     """
 
 
-def gemini_css(theme: str = 'dark') -> str:
-    """제미나이 톤의 층 — web_app 이 **전역 CSS 층들 뒤에 한 번** 주입한다 (라운드 399).
+def tone_css(theme: str = 'dark') -> str:
+    """가늠 톤의 층 — web_app 이 **전역 CSS 층들 뒤에 한 번** 주입한다 (라운드 471 · 종전 라운드 399 의 제미나이 층).
 
-    사용자: *"제미나이 사이트 스타일로 전체로 바꿔줄래? 사이트 다시 단장하고 싶어졌어."*
-    앞 층들(애플 정돈 · 옛 다크 규칙 · 라이트 오버라이드)을 하나씩 고치지 않고 **위에 얹는다** — 층마다
-    손대면 한 곳이 빠진다(§4). 색은 전부 토큰에서 온다(새 hex 는 서명 그라디언트뿐 · GEMINI_GRADIENT).
-    **값·배치·판정은 안 건드린다** — 바꾸는 것은 글꼴 · 모서리 · 채움 · 선택 표시 · 그림자뿐이다.
+    사용자(2026-10-09): *"너 사이트 아이콘 글 들 위치가 뭔가 이상해 … 가늠코인 메인페이지 위치처럼 다 정리해줘 … OrbitMusic
+    이랑 비교해서 다시한번 점검 … 사이드바도 가늠코인처럼."* 같은 주인의 두 앱(가늠 코인 :8765 · OrbitMusic :5173)을
+    브라우저로 재서 뼈대를 옮겼다 — 사이드바 284px 고정(OrbitMusic 264) · 항목 46px 줄에 번호 칸 · 패널 반경 13px 에
+    1px 선 · 버튼 9px · 칩 6px · 글꼴 Pretendard · 본문 좌우 48px. 앞 층들(애플 정돈 · 옛 다크 규칙 · 라이트 오버라이드)을
+    하나씩 고치지 않고 **위에 얹는다** — 층마다 손대면 한 곳이 빠진다(§4). 색은 전부 토큰에서 온다(DARK·LIGHT).
+    **값·판정은 안 건드린다** — 바꾸는 것은 글꼴 · 모서리 · 선 · 채움 · 간격 · 선택 표시뿐이다.
     """
     t = tokens(theme)
     nav = DARK_NAV if theme == 'dark' else LIGHT_NAV
     return f"""
     {FONT_IMPORT}
     /* 글꼴 — `.stApp` 에만 걸면 Streamlit 이 마크다운·캡션·버튼·라벨마다 박는 "Source Sans" 가 이긴다
-       (브라우저 실측 2026-10-01: 본문·캡션·제목·버튼·라벨 전부 Source Sans 였다 — 종전의 애플 글꼴 목록도
-       같은 이유로 한 번도 안 닿았다). 모든 요소에 걸되 **아이콘 글꼴과 코드는 뺀다**(Material Symbols 를
-       덮으면 아이콘 대신 'keyboard_arrow_down' 같은 글자가 나온다). */
-    /*    주의 — 라벨 속 `:material/이름:` 아이콘은 testid 없이 `<span role="img" translate="no" style="font-family:
-          Material Symbols …">` 로 그려진다 — 첫 판이 그것을 덮어 사이드바에 'search'·'tune' 같은 글자가 나왔다
-          (브라우저 실측). translate="no" 와 인라인 Material 글꼴도 뺀다. */
+       (브라우저 실측 2026-10-01). 모든 요소에 걸되 **아이콘 글꼴과 코드는 뺀다**(Material Symbols 를 덮으면 아이콘
+       대신 'keyboard_arrow_down' 같은 글자가 나온다). 라벨 속 `:material/이름:` 아이콘은 testid 없이
+       `<span role="img" translate="no" style="font-family: Material Symbols …">` 로 그려진다 — 그것도 뺀다. */
     .stApp, .stApp *:not([data-testid="stIconMaterial"]):not([class*="material"]):not([translate="no"]):not([style*="Material Symbols"]):not([role="img"]):not(code):not(code *):not(pre):not(pre *):not(kbd) {{
         font-family: {FONT_STACK} !important; }}
-    /* Streamlit 머리줄(60px)은 투명 · 누름은 그 안의 메뉴 버튼만 — 불투명이면 본문 맨 위 상단 바(엔진 정보)를 덮어
-       빈 줄로 보였다(사용자 화면 · 2026-10-01). 상단 바가 그 자리를 쓴다. */
+    /* Streamlit 머리줄(60px)은 투명 · 누름은 그 안의 메뉴 버튼만 — 불투명이면 본문 맨 위 상단 바를 덮어 빈 줄로 보였다 */
     .stApp [data-testid="stHeader"] {{ background: transparent !important; pointer-events: none; }}
     .stApp [data-testid="stHeader"] [data-testid="stToolbar"], .stApp [data-testid="stHeader"] button,
     .stApp [data-testid="stHeader"] a {{ pointer-events: auto; }}
-    /* 한글 줄바꿈 — 낱말 가운데서 끊지 않는다('고치/기' · '부/족' 처럼 끊겼다 · 브라우저 실측). 너무 긴
-       한 낱말만 넘칠 때 끊는다(break-word 는 칸 최소 폭 계산을 안 바꾼다 — anywhere 는 표 칸을 한 글자로 좁힌다) */
+    /* 한글 줄바꿈 — 낱말 가운데서 끊지 않는다. 너무 긴 한 낱말만 넘칠 때 끊는다 */
     .stApp {{ word-break: keep-all; overflow-wrap: break-word; }}
-    /* 본문 16px — 제미나이 본문 크기(타입 스케일 안). 크기를 직접 적은 글자·사이드바(13)는 아래 규칙대로 */
+    /* 본문 16px · 줄높이 1.7 (가늠 코인 본문 16px · 1.75 · OrbitMusic 17px) */
     .stApp .stMarkdown p, .stApp .stMarkdown li,
     .stApp [data-testid="stMarkdownContainer"] p, .stApp [data-testid="stMarkdownContainer"] li {{
-        font-size: 16px; line-height: 1.65; }}
+        font-size: 16px; line-height: 1.7; }}
 
-    /* ── 읽기 정돈 (사용자: "배치가 따닥따닥 · 글자 크기 작은 것 · 안 보이는 것 — 전문가가 만든 걸로") ──────────
-       브라우저 실측(2026-10-01 · 1440px · 글자 요소 2,662개): 12px 651(24%) · 13px 1,007(38%) · 16px 760 — 글자의
-       62% 가 13px 이하였다. 흐린 글자 20곳은 전부 Streamlit 캡션(156개)이 불투명도 60% 로 그려져 4.37:1 이었다. */
-    /* ① 제목 안 span — Streamlit 은 제목 글자를 span 으로 감싸는데 옛 층의 전역 `span {{ font-size:16px }}` 가
-          그 span 을 눌러 **40px 대제목이 16px** 로 나오고 있었다. 크기를 적지 않은 span 은 제목 크기를 따른다. */
+    /* ── 읽기 정돈 (라운드 399 그대로) ── */
+    /* ① 제목 안 span — 크기를 적지 않은 span 은 제목 크기를 따른다(전역 span 16px 이 40px 대제목을 누르던 것) */
     .stApp :is(h1, h2, h3, h4, h5, h6) span:not([style*="font-size"]) {{ font-size: inherit !important; }}
     /* ② 바닥 13px — 12px 로 적힌 글자는 13px 로(스케일 안의 다음 단) */
     .stApp [style*="font-size:12px"], .stApp [style*="font-size: 12px"] {{ font-size: 13px !important; }}
@@ -1188,86 +1176,120 @@ def gemini_css(theme: str = 'dark') -> str:
     .stMain p[style*="font-size:13px"], .stMain p[style*="font-size: 13px"],
     .stMain li[style*="font-size:13px"], .stMain li[style*="font-size: 13px"] {{
         font-size: 15px !important; line-height: 1.6 !important; }}
-    /* ④ 캡션 — 불투명도 60% 를 걷고 글자 3단(모든 면에서 6:1 이상)으로 · 본문에서는 15px */
+    /* ④ 캡션 — 불투명도 60% 를 걷고 글자 3단으로 · 본문에서는 15px */
     .stApp [data-testid="stCaptionContainer"] {{ opacity: 1 !important; }}
     .stApp [data-testid="stCaptionContainer"] p {{ color: {t['tx3']} !important; }}
     .stMain [data-testid="stCaptionContainer"] p {{ font-size: 15px !important; line-height: 1.6 !important; }}
-    /* ⑤ 지표 값이 말줄임으로 잘렸다(예: '35,488,337원' — 실측 3곳) — 줄을 넘기되 자르지 않는다 */
+    /* ⑤ 지표 값이 말줄임으로 잘리지 않게 */
     .stApp [data-testid="stMetricValue"], .stApp [data-testid="stMetricValue"] * {{
         font-size: 28px !important; overflow: visible !important; text-overflow: clip !important;
-        white-space: normal !important; line-height: 1.2 !important; }}
-    .stApp [data-testid="stMetricLabel"] p {{ font-size: 15px !important; color: {t['tx2']} !important; }}
-    /* ⑥ 사이드바 버튼 글자가 두 줄로 꺾였다('최근 목록 비 / 우기') — 한 줄로, 여백을 조금 줄여서 */
+        white-space: normal !important; line-height: 1.2 !important; font-weight: 700 !important;
+        letter-spacing: -0.02em !important; }}
+    .stApp [data-testid="stMetricLabel"] p {{ font-size: 15px !important; color: {t['tx3']} !important; }}
+    /* ⑥ 사이드바 버튼 글자를 한 줄로 */
     section[data-testid="stSidebar"] .stButton > button {{ padding: 6px 14px !important; }}
     section[data-testid="stSidebar"] .stButton > button p {{ white-space: nowrap !important; }}
 
-    /* 사이드바 머리 — 로고를 접기 버튼 줄로 끌어올린다(사용자: "사이드바 오른쪽 위에 너무 비워져 있어").
-       종전엔 머리줄 60px(빈 로고 자리 + 오른쪽 접기 버튼) 아래 빈 style 칸 둘(각 16px 간격)을 지나 108px 에서야
-       로고가 시작했다. ① style 만 든 칸은 숨긴다(숨겨도 규칙은 먹는다) ② 로고 줄을 머리줄 위로 올리고
-       머리줄보다 위에 그린다 — 머리줄은 R122 대로 sticky · 불투명 그대로라 접기 버튼이 스크롤에도 남는다. */
+    /* 빈 style 칸 숨김(라운드 399 그대로) — style 만 든 칸이 각각 16px 간격을 먹었다. 숨겨도 규칙은 먹는다 */
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(style):not(:has(:is(p, a, span, img, svg, button, input, textarea, iframe, label, table, h1, h2, h3, h4))) {{
         display: none !important; }}
-    /* 본문도 같다 — style 만 든 칸 115개(실측)가 각각 16px 간격을 먹어 같은 종류의 줄 사이 틈이 16·40px 으로
-       들쭉날쭉했다(예: '추천 제외' 와 다음 접는 칸). 숨겨도 규칙은 먹는다. 보이는 것이 하나라도 있으면 안 숨긴다. */
     .stMain [data-testid="stElementContainer"]:has(style):not(:has(:is(p, a, span, img, svg, button, input, textarea, iframe, label, table, h1, h2, h3, h4, canvas, video))) {{
         display: none !important; }}
-    /* 아무것도 안 그린 열 줄(st.columns 가 비었을 때 · 높이 0)도 간격 16px 을 먹었다 — 같은 조건으로 숨긴다 */
     .stMain div:has(> [data-testid="stHorizontalBlock"]):not(:has(:is(p, a, span, img, svg, button, input, textarea, iframe, label, table, h1, h2, h3, h4, canvas, video))) {{
         display: none !important; }}
-    /* 접는 칸의 아래 여백 12px 이 줄 간격(16px)에 더해져 28px 이 됐다 — 간격은 줄 간격 하나로 */
     .stApp [data-testid="stExpander"] {{ margin-bottom: 0 !important; }}
+
+    /* ── 사이드바 (가늠 코인: 284px 고정 · 본문과 같은 바탕 · 오른쪽 1px 선 · 안쪽 29/17px) ─────────────────── */
+    section[data-testid="stSidebar"] {{
+        width: 284px !important; min-width: 284px !important; max-width: 284px !important;
+        background-color: {nav} !important; border-right: 1px solid {t['line']} !important; }}
+    /* 바깥 칸(stSidebarContent)에 좌우 10px 이 하나 더 있어 메뉴 줄이 x 37 에서 시작했다(브라우저 실측 · 가늠 코인 17) —
+       바깥 여백을 걷고 안쪽 17px 하나만 둔다. 그래도 x 27 이었다 — 그 칸의 스크롤 칸 자리(scrollbar-gutter)가
+       'stable both-edges' 라 **왼쪽에도** 10px 을 비워 뒀다(실측 clientWidth 263 / offsetWidth 283). 오른쪽에만 둔다 */
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+        padding-left: 0 !important; padding-right: 0 !important; scrollbar-gutter: stable !important; }}
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+        padding: 0 17px 29px 17px !important; }}
     section[data-testid="stSidebar"] div[data-testid="stSidebarHeader"] {{
         background: {nav} !important; }}
+    /* 로고 줄을 머리줄(접기 버튼 줄)로 끌어올린다(라운드 399) — 누르는 것은 로고뿐. 라운드 471 — 사용자: *"가늠 위치가
+       살짝 밑으로 내려왔으면 좋겠어 오르빗처럼"*. -64px 이면 마크 윗변이 사이드바 위에서 14px 로 맨 위에 붙었다(실측) —
+       -48px 로 줄여 약 30px(가늠 코인 마크 33 · OrbitMusic 워드마크 21 사이)에 둔다 */
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.gm-logo) {{
-        position: relative; z-index: 75; margin-top: -64px; pointer-events: none; }}
-    /* 줄 전체가 머리줄 위에 있으므로 오른쪽 접기 버튼을 가리지 않게 — 누르는 것은 로고뿐이다 */
+        position: relative; z-index: 75; margin-top: -48px; pointer-events: none; }}
     section[data-testid="stSidebar"] .gm-logo {{
         pointer-events: auto; display: inline-flex !important; width: fit-content; }}
+    /* 로고 아래 구분선 — 가늠 코인처럼 브랜드 줄과 메뉴를 가른다 */
+    section[data-testid="stSidebar"] .gm-brandrow {{
+        padding: 2px 6px 18px 6px; border-bottom: 1px solid {t['line']}; margin-bottom: 4px; }}
     section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {{
-        background: {t['raised']} !important; border-radius: 999px !important; }}
+        background: {t['raised']} !important; border-radius: 8px !important; }}
+    /* 전역 메뉴 묶음 — 접는 칸을 **묶음 이름표**로(가늠 코인의 '연구와 학습' 줄: 14px · 보조색 · 안쪽 13px).
+       칸 테두리·면은 걷고 항목만 남긴다. 묶음을 열고 닫는 동작은 그대로다(라운드 376). */
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpander"],
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpander"] details {{
+        background: transparent !important; border: none !important; box-shadow: none !important; }}
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpander"] summary {{
+        padding: 6px 13px !important; min-height: 0 !important; border-radius: 8px !important; }}
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpander"] summary p {{
+        font-size: 15px !important; font-weight: 500 !important; color: {t['tx3']} !important; }}
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpander"] summary:hover {{
+        background: transparent !important; }}
+    section[data-testid="stSidebar"] .st-key-sb_nav [data-testid="stExpanderDetails"] {{
+        padding: 0 0 6px 0 !important; }}
+    /* 항목 줄 — 번호 칸 + 이름(nav_list 가 그린다) · 마우스를 올리면 올린 면 */
+    a.qnav-item:hover {{ background: {t['raised']} !important; }}
+    a.qnav-item:hover span {{ color: {t['tx1']} !important; }}
 
-    /* 제목 — 옛 다크 층이 박은 흰색(#ffffff) 대신 글자 1단 · 제미나이는 굵기를 덜 쓴다 */
+    /* 제목 — 굵게(가늠 코인 700 · OrbitMusic 750) · 큰 제목은 자간을 좁힌다 */
     .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {{
-        color: {t['tx1']} !important; font-weight: 500 !important; }}
+        color: {t['tx1']} !important; font-weight: 700 !important; }}
+    .stApp h1 {{ letter-spacing: -0.03em !important; }}
+    .stApp h2, .stApp h3 {{ letter-spacing: -0.015em !important; }}
     .stApp [data-testid="stMetricValue"] {{ color: {t['tx1']} !important; }}
 
-    /* 표면 — 납작하게(그림자·들뜸 없음) · 모서리를 넉넉히 */
+    /* 표면 — 납작하게 · 반경 13px · 1px 선(안쪽 그림자로 — 인라인 테두리·상단 띠를 덮지 않는다) */
     .stApp div[style*="border-radius:14px"], .stApp div[style*="border-radius:16px"],
     .stApp div[style*="border-radius:18px"], .stApp div[style*="border-radius:20px"] {{
-        border-radius: 20px !important; box-shadow: none !important; }}
+        border-radius: 13px !important; box-shadow: inset 0 0 0 1px {t['line']} !important; }}
     .stApp div[style*="border-radius:14px"]:hover {{ transform: none !important; }}
 
-    /* 접는 칸 */
+    /* 접는 칸 — 카드 면 · 1px 선 · 반경 12px */
     .stApp [data-testid="stExpander"] {{
-        background: {t['card']} !important; border: none !important;
-        border-radius: 20px !important; }}
+        background: {t['card']} !important; border: 1px solid {t['line']} !important;
+        border-radius: 12px !important; }}
+    .stApp [data-testid="stExpander"] details {{ border: none !important; }}
     .stApp [data-testid="stExpander"] summary {{
-        font-weight: 500 !important; border-radius: 20px !important; }}
+        font-weight: 600 !important; border-radius: 12px !important; }}
     .stApp [data-testid="stExpander"] summary:hover {{ background: {t['raised']} !important; }}
 
-    /* 알림 — 테두리 대신 의미색을 옅게 섞은 면 */
+    /* 알림 — 의미색을 옅게 섞은 면 + 같은 계열의 1px 선 · 반경 10px */
     .stApp [data-testid="stAlert"] {{
-        background: color-mix(in srgb, {t['brand']} 10%, {t['card']}) !important;
-        border: none !important; border-radius: 16px !important; }}
+        background: color-mix(in srgb, {t['brand']} 9%, {t['card']}) !important;
+        border: 1px solid color-mix(in srgb, {t['brand']} 35%, {t['line']}) !important;
+        border-radius: 10px !important; }}
     .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentSuccess"]) {{
-        background: color-mix(in srgb, {t['pos']} 10%, {t['card']}) !important; }}
+        background: color-mix(in srgb, {t['pos']} 9%, {t['card']}) !important;
+        border-color: color-mix(in srgb, {t['pos']} 35%, {t['line']}) !important; }}
     .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentWarning"]) {{
-        background: color-mix(in srgb, {t['warn']} 12%, {t['card']}) !important; }}
+        background: color-mix(in srgb, {t['warn']} 10%, {t['card']}) !important;
+        border-color: color-mix(in srgb, {t['warn']} 40%, {t['line']}) !important; }}
     .stApp [data-testid="stAlert"]:has([data-testid="stAlertContentError"]) {{
-        background: color-mix(in srgb, {t['neg']} 10%, {t['card']}) !important; }}
+        background: color-mix(in srgb, {t['neg']} 9%, {t['card']}) !important;
+        border-color: color-mix(in srgb, {t['neg']} 35%, {t['line']}) !important; }}
 
-    /* 버튼 — 보조는 채운 알약, 주요는 브랜드 채움(글자 on_brand · 7.5 / 6.4) */
+    /* 버튼 — 보조는 올린 면 + 1px 조작선 · 반경 9px · 600(가늠 코인 secondary) · 주요는 브랜드 채움 */
     .stApp .stButton > button, .stApp [data-testid="stDownloadButton"] button,
     .stApp [data-testid="stFormSubmitButton"] button {{
-        border-radius: 999px !important; border: none !important;
-        background: {t['raised']} !important; font-weight: 500 !important;
+        border-radius: 9px !important; border: 1px solid {t['ctl_line']} !important;
+        background: {t['raised']} !important; font-weight: 600 !important;
         box-shadow: none !important; }}
     .stApp .stButton > button, .stApp .stButton > button * {{ color: {t['tx1']} !important; }}
     .stApp .stButton > button:hover {{
         background: color-mix(in srgb, {t['tx1']} 8%, {t['raised']}) !important; }}
     .stApp .stButton > button:hover * {{ color: {t['tx1']} !important; }}
     .stApp button[data-testid="stBaseButton-primary"], .stApp button[kind="primary"] {{
-        background: {t['brand']} !important; border: none !important; }}
+        background: {t['brand']} !important; border: 1px solid {t['brand']} !important; }}
     .stApp button[data-testid="stBaseButton-primary"],
     .stApp button[data-testid="stBaseButton-primary"] *,
     .stApp button[kind="primary"], .stApp button[kind="primary"] * {{
@@ -1275,107 +1297,115 @@ def gemini_css(theme: str = 'dark') -> str:
     .stApp button[data-testid="stBaseButton-primary"]:hover,
     .stApp button[kind="primary"]:hover {{
         background: color-mix(in srgb, {t['brand']} 88%, {t['tx1']}) !important; }}
-    /* 위의 '보조 버튼 hover → tx1' 규칙(0,3,1)이 주요 버튼 글자(0,2,1)를 이기면 다크에서 밝은 파랑 위
-       밝은 글자가 된다 — 주요 버튼의 hover 글자를 같은 무게로 한 번 더 적는다 */
+    /* 보조 버튼 hover 글자(0,3,1)가 주요 버튼 글자(0,2,1)를 이기지 않게 같은 무게로 한 번 더 */
     .stApp button[data-testid="stBaseButton-primary"]:hover *,
     .stApp button[kind="primary"]:hover * {{ color: {t['on_brand']} !important; }}
 
-    /* 입력 — 채운 면 · 둥근 모서리 · 초점만 브랜드 */
+    /* 입력 — 카드 면 · 1px 선 · 반경 8px · 초점만 브랜드 */
     .stApp [data-baseweb="input"], .stApp [data-baseweb="textarea"],
     .stApp [data-baseweb="select"] > div {{
-        background: {t['raised']} !important; border-radius: 12px !important;
-        border-color: transparent !important; }}
+        background: {t['card']} !important; border-radius: 8px !important;
+        border: 1px solid {t['line']} !important; }}
     .stApp [data-baseweb="input"]:focus-within,
     .stApp [data-baseweb="textarea"]:focus-within {{ border-color: {t['brand']} !important; }}
     [data-testid="stSidebar"] input[aria-label*="종목명"] {{
         background-color: {t['card']} !important; color: {t['tx1']} !important;
-        border: 1px solid {t['brand']} !important; box-shadow: none !important;
-        border-radius: 999px !important; padding: 12px 18px !important; }}
+        border: 1px solid {t['line']} !important; box-shadow: none !important;
+        border-radius: 8px !important; padding: 10px 12px !important;
+        font-size: 15px !important; font-weight: 500 !important; }}
     [data-testid="stSidebar"] input[aria-label*="종목명"]::placeholder {{
-        color: {t['tx3']} !important; }}
+        color: {t['tx3']} !important; font-weight: 450 !important; }}
     [data-testid="stSidebar"] input[aria-label*="종목명"]:focus {{
-        box-shadow: 0 0 0 3px color-mix(in srgb, {t['brand']} 35%, transparent) !important; }}
+        border-color: {t['brand']} !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, {t['brand']} 30%, transparent) !important; }}
     [data-testid="stSidebar"] [data-baseweb="select"] * {{ color: {t['tx1']} !important; }}
     .stApp [data-testid="stChatInput"] {{
-        background: {t['card']} !important; border-radius: 28px !important;
+        background: {t['card']} !important; border-radius: 12px !important;
         border: 1px solid {t['line']} !important; }}
-    /* 대화 얼굴 — Streamlit 기본은 주황(#FF8700 · 팔레트 밖)인데 옛 층이 아이콘을 밝은 글자색으로 칠해 다크에서
-       대비 1.88 이었다(브라우저 실측 · 이 화면의 유일한 미달). 브랜드 면 + on_brand(7.5 · 6.4) / 올린 면 + tx1 */
+    /* 대화 얼굴 — 기본 주황(팔레트 밖) 대신 브랜드 면 + on_brand / 올린 면 + tx1 */
     .stApp [data-testid="stChatMessageAvatarAssistant"] {{ background: {t['brand']} !important; }}
     .stApp [data-testid="stChatMessageAvatarAssistant"] * {{ color: {t['on_brand']} !important; }}
     .stApp [data-testid="stChatMessageAvatarUser"] {{ background: {t['raised']} !important; }}
     .stApp [data-testid="stChatMessageAvatarUser"] * {{ color: {t['tx1']} !important; }}
+    /* 맨 위 화면 전환(가늠 분석 · 스윙 자동매매) — Streamlit 은 자기 크롬을 config.toml 의 다크(base=dark)로 칠해, 라이트에서
+       고르지 않은 칸이 어두운 면 + 어두운 글자(1.01:1 · 브라우저 실측)였다. 면·선·글자를 토큰으로 · 고른 칸은 메뉴 줄의
+       지금 위치와 같은 짝(선택 면 · 선택 선 · 선택 글자) */
+    .stApp [data-testid="stButtonGroup"] button {{
+        background: {t['card']} !important; border-color: {t['line']} !important; }}
+    .stApp [data-testid="stButtonGroup"] button * {{ color: {t['tx1']} !important; }}
+    .stApp [data-testid="stButtonGroup"] button[aria-checked="true"] {{
+        background: {t['sel_bg']} !important; border-color: {t['sel_line']} !important; }}
+    .stApp [data-testid="stButtonGroup"] button[aria-checked="true"] * {{ color: {t['sel_tx']} !important; }}
 
-    /* 탭 — 알약 · 선택은 옅은 파랑 면(sel_bg · sel_tx) */
+    /* 탭 — 반경 8px 상자 · 선택은 브랜드 옅은 면 + 브랜드 선(가늠 코인의 선택 항목과 같은 짝) */
     .stApp .stTabs [data-baseweb="tab-list"] {{
-        background: transparent !important; gap: 8px !important; padding: 0 !important; }}
+        background: transparent !important; gap: 6px !important; padding: 0 !important; }}
     .stApp .stTabs [data-baseweb="tab"] {{
-        border-radius: 999px !important; padding: 0 16px !important; height: 38px !important;
+        border-radius: 8px !important; padding: 0 14px !important; height: 38px !important;
         background: {t['card']} !important; color: {t['tx2']} !important;
-        font-weight: 500 !important; }}
+        border: 1px solid {t['line']} !important; font-weight: 600 !important; }}
     .stApp .stTabs [aria-selected="true"] {{
-        background: {t['sel_bg']} !important; color: {t['sel_tx']} !important; }}
+        background: {t['sel_bg']} !important; color: {t['sel_tx']} !important;
+        border-color: {t['sel_line']} !important; }}
     .stApp .stTabs [aria-selected="true"] * {{ color: {t['sel_tx']} !important; }}
     .stApp .stTabs [data-baseweb="tab-highlight"],
     .stApp .stTabs [data-baseweb="tab-border"] {{ display: none !important; }}
 
-    /* 사이드바 — 경계선 없이 면으로만 · 항목은 알약 */
-    [data-testid="stSidebar"] {{ background-color: {nav} !important; border-right: none !important; }}
-    /* 사이드바 버튼 — web_app 의 사이드바 블록('사이드바 버튼 CSS 는 이 한 곳')이 (0,2,3)으로 위 버튼 규칙을
-       이기므로 한 단계 더 구체적으로 적는다. 아코디언 줄과 홈 버튼은 **빼고**(투명 · 선택 알약은 acc_css) */
+    /* 사이드바 버튼 — web_app 의 사이드바 블록이 (0,2,3)으로 위 버튼 규칙을 이기므로 한 단계 더 구체적으로.
+       아코디언 줄과 홈 버튼은 **빼고**(투명 · 선택 알약은 acc_css) */
     .stApp section[data-testid="stSidebar"] div[data-testid="stButton"] > button:not([data-testid="stBaseButton-primary"]):not([class*="st-key-_acc_"] *):not(.st-key-btn_home *) {{
         background: {t['raised']} !important; color: {t['tx1']} !important;
-        border: none !important; border-radius: 999px !important; }}
+        border: 1px solid {t['ctl_line']} !important; border-radius: 9px !important; }}
     .stApp section[data-testid="stSidebar"] div[data-testid="stButton"] > button:not([data-testid="stBaseButton-primary"]):not([class*="st-key-_acc_"] *):not(.st-key-btn_home *):hover {{
         background: color-mix(in srgb, {t['tx1']} 8%, {t['raised']}) !important; }}
     .stApp section[data-testid="stSidebar"] div[data-testid="stButton"] > button:not([data-testid="stBaseButton-primary"]):not([class*="st-key-_acc_"] *):not(.st-key-btn_home *) * {{
         color: {t['tx1']} !important; }}
     .stApp section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] {{
-        background: {t['brand']} !important; border: none !important; border-radius: 999px !important; }}
+        background: {t['brand']} !important; border: 1px solid {t['brand']} !important; border-radius: 9px !important; }}
     .stApp section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"],
     .stApp section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] * {{
         color: {t['on_brand']} !important; }}
     .stApp section[data-testid="stSidebar"] .st-key-btn_home button:hover {{
         background: {t['raised']} !important; color: {t['tx1']} !important; }}
-    a.qnav-item:hover, a.qnav-sub:hover {{ background: {t['raised']} !important; }}
 
-    /* 상단 바 — 엔진 상태·버전·업데이트·보는 중(라운드 399 · 사용자: "요기에 예전처럼 엔진정보 넣자").
-       바탕은 본문과 같은 면(붙어서 따라올 때 아래 글자가 비치지 않게). 오른쪽 여백은 16px 뿐이다 — 이 앱의
-       머리줄에는 오른쪽 메뉴 버튼이 없다(브라우저 실측 · 자식 0개). 종전 120px 은 줄만 더 꺾었다. */
-    .qnav {{ background: {t['bg']} !important; padding: 10px 16px 10px 4px !important;
-        row-gap: 6px !important; border-radius: 0 !important; }}
-    /* 배포 환경(Streamlit Cloud)은 머리줄 오른쪽 도구 줄(stToolbar)에 아이콘을 그릴 수 있다 — 이 PC 에서는 못 잰다
-       (여기서는 도구 줄이 아예 없다). 그 줄에 누를 것이 **실제로 있을 때만** 오른쪽을 비워 첫 줄 오른쪽 글자('보는
-       중')가 그 아래 깔리지 않게 한다. 주의 — 첫 판은 '머리줄 안의 버튼'으로 걸었는데 사이드바를 접으면 펼침 버튼이
-       머리줄 **왼쪽**에 들어와 조건이 켜졌다 — 도구 줄로 좁혀도 같았다(펼침 버튼이 도구 줄 **안**의 `<button
-       data-testid="stExpandSidebarButton">` 다 · 브라우저 실측). 그 버튼만 빼고 센다 */
+    /* 본문 — 좌우 48px(가늠 코인 main 0 48px · OrbitMusic 34px) · 위 여백은 상단 바가 쓴다 */
+    @media (min-width: 769px) {{
+        .stMainBlockContainer {{ padding-left: 48px !important; padding-right: 48px !important; }}
+    }}
+    /* 휴대폰 구간(≤768px) — 좌우 16px. 킷 전역에도 같은 뜻의 규칙(12px 16px)이 있지만 같은 층의 **뒤에 오는** 무조건 규칙
+       (padding-left 2.5rem !important)에 져서 375px 화면에서 40px 이었다(브라우저 실측 · 그 규칙은 죽어 있었다). 마지막에 오는
+       이 층에 둔다. 위·아래 여백은 안 건드린다(아래 여백은 대화 입력바 자리) */
+    @media (max-width: 768px) {{
+        .stMainBlockContainer {{ padding-left: 16px !important; padding-right: 16px !important; }}
+    }}
+
+    /* 상단 바 — 가늠 코인 topbar 처럼 본문과 같은 바탕에 **아래 1px 선** · 둥근 상자가 아니다.
+       첫 줄: 상태·판단 수(왼쪽) · 업데이트·보는 중(오른쪽), 둘째 줄: 엔진 축 버전 칩 7개 */
+    .qnav {{ background: {t['bg']} !important; padding: 12px 0 12px 0 !important;
+        row-gap: 8px !important; border-radius: 0 !important;
+        border-bottom: 1px solid {t['line']} !important; }}
+    /* 배포 환경의 머리줄 오른쪽 도구 줄에 누를 것이 **실제로 있을 때만** 오른쪽을 비운다(펼침 버튼은 빼고 센다) */
     .stApp:has([data-testid="stToolbar"] :is(button, a):not([data-testid="stExpandSidebarButton"])) .qnav {{
         padding-right: 160px !important; }}
-    /* 사이드바를 접으면 펼침 버튼(x 18~46 · 실측)이 첫 줄 글자 머리(x 44)를 덮는다 — 그때만 왼쪽을 비운다 */
+    /* 사이드바를 접으면 펼침 버튼이 첫 줄 글자 머리를 덮는다 — 그때만 왼쪽을 비운다 */
     .stApp:has([data-testid="stExpandSidebarButton"]) .qnav {{ padding-left: 24px !important; }}
-    .qnav a {{ border-radius: 999px !important; }}
-    /* 두 줄로 정돈 — 첫 줄: 상태·판단 수(왼쪽) · 업데이트·보는 중(오른쪽), 둘째 줄: 엔진 축 버전 칩 7개.
-       종전엔 칩 덩어리(926px)가 줄 가운데서 꺾여 네 줄(119px)이 됐다(브라우저 실측) */
+    .qnav a {{ border-radius: 6px !important; }}
     .qnav .qchips {{ order: 2; flex-basis: 100%; }}
     .qnav .qupd {{ margin-left: auto; }}
-    /* '보는 중' — 옛 층이 클래스로 12px 을 적어 인라인만 보는 13px 바닥 규칙을 빠져나갔다(브라우저 실측).
-       둘째 줄 칩의 글자는 인라인 12px 이라 바닥 규칙이 이미 13px 로 올린다(측정한 화면에 12px 글자 0) */
+    /* 버전 칩 — 가늠 코인 배지(높이 32 · 6px · 1px 선 · 올린 면) */
+    .qnav a.qverc {{ background: {t['card']} !important; border: 1px solid {t['line']} !important;
+        border-radius: 6px !important; padding: 3px 9px !important; }}
+    .qnav a.qverc:hover {{ border-color: {t['sel_line']} !important; background: {t['raised']} !important; }}
     .qnav .here {{ margin-left: 12px !important; font-size: 13px !important; }}
-    /* 휴대폰·태블릿(킷 전역의 모바일 구간 768px 그대로) — 상단 바가 sticky 라 칩 일곱이 여러 줄로 꺾인 채 **206px(375px
-       화면 높이의 25%)** 를 늘 덮었다(브라우저 실측). 칩 줄은 한 줄로 가로로 밀고, 바는 붙어 따라오지 않게 한다 — 엔진
-       정보는 맨 위에서 한 번 보면 되는 참고 정보다('보는 중'은 이 구간에서 이미 숨는다). */
+    /* 휴대폰·태블릿(킷 전역의 모바일 구간 768px 그대로) — 바는 붙어 따라오지 않고 칩 줄은 한 줄 가로 밀기(라운드 399) */
     @media (max-width: 768px) {{
         .qnav {{ position: static !important; }}
-        /* 셀렉터를 한 단계 더 구체적으로 — web_app 의 `.qnav a.qvers {{ white-space: normal !important }}`(0,2,1)가
-           첫 판의 `.qnav .qchips`(0,2,0)를 이겨 칩이 여전히 여러 줄로 꺾였다(브라우저 실측 · 129px) */
+        /* 셀렉터를 한 단계 더 구체적으로 — web_app 의 `.qnav .qvers {{ white-space: normal !important }}`(0,2,0)보다 */
         .qnav .qvers.qchips {{ white-space: nowrap !important; overflow-x: auto !important;
             scrollbar-width: none; -webkit-overflow-scrolling: touch; }}
         .qnav .qvers.qchips::-webkit-scrollbar {{ display: none; }}
+        section[data-testid="stSidebar"] {{ width: 284px !important; }}
     }}
-
-    /* 제미나이 서명 — 큰 굵은 글자에만 (GEMINI_GRADIENT 주석) */
-    .gm-grad {{ background: {GEMINI_GRADIENT}; -webkit-background-clip: text;
-        background-clip: text; -webkit-text-fill-color: transparent; }}
     """
 
 
@@ -3370,3 +3400,48 @@ def top_blocker(failed_lists):
         return None
     name, k = sorted(cnt.items(), key=lambda x: (-x[1], x[0]))[0]
     return name, k, tot
+
+
+def job_card(jobs, theme: str = 'dark', notes=None) -> str:
+    """상단 바의 '작업 중' 카드 (라운드 472 · OrbitMusic 의 작업 카드를 옮겼다) — 첫 작업 + 나머지 수(+N · 이름은 툴팁).
+
+    사용자(2026-10-09): *"작업을 하면 이렇게 나타내면 좋을 것 같애."* 도는 작업이 없으면 '' 를 돌려준다(빈 카드를 그리지 않는다).
+    진행 막대는 **끝난 단계 수 / 전체 단계**가 있을 때만 — 장이 끝날 때까지 도는 워커처럼 진행률이 없는 작업에는 막대를
+    그리지 않는다(지어낸 퍼센트 · §3). 도는 표시는 회전 고리 하나(움직임을 줄인 설정이면 멈춘다). 아이콘·이모지 없음(§5)."""
+    jobs = [j for j in (jobs or []) if isinstance(j, dict) and j.get('title')]
+    if not jobs:
+        return ''
+    t = tokens(theme)
+    j = jobs[0]
+    bar = ''
+    try:
+        done, total = j.get('done'), j.get('total')
+        if total and done is not None and int(total) > 0:
+            pct = max(0.0, min(100.0, 100.0 * int(done) / int(total)))
+            bar = (f"<div class='gm-job-bar' role='progressbar' aria-valuemin='0' aria-valuemax='{int(total)}' "
+                   f"aria-valuenow='{int(done)}' style='height:4px; margin-top:7px; border-radius:2px; overflow:hidden; "
+                   f"background:{t['raised']};'><div style='width:{pct:.0f}%; height:100%; border-radius:2px; "
+                   f"background:{t['brand']};'></div></div>")
+    except (TypeError, ValueError):
+        bar = ''
+    more = ''
+    if len(jobs) > 1:
+        tip = ' · '.join(str(x.get('title')) for x in jobs[1:])
+        more = (f"<span class='gm-job-more' title='{_esc_attr('같이 도는 작업 — ' + tip)}' style='flex:0 0 auto; font-size:12px; "
+                f"font-weight:650; color:{t['sel_tx']}; background:{t['sel_bg']}; border-radius:6px; padding:2px 8px;'>"
+                f"+{len(jobs) - 1}</span>")
+    notes_txt = ' · '.join(str(n) for n in (notes or []))
+    return ("<style>@keyframes gmjobspin { to { transform: rotate(360deg); } } "
+            "@media (prefers-reduced-motion: reduce) { .gm-job-spin { animation: none !important; } }</style>"
+            f"<div class='gm-job' role='status' aria-live='polite' title='{_esc_attr(notes_txt)}' "
+            f"style='display:flex; align-items:center; gap:12px; "
+            f"max-width:440px; margin:0 0 12px auto; padding:10px 14px; border-radius:13px; background:{t['card']}; "
+            f"box-shadow: inset 0 0 0 1px {t['line']};'>"
+            f"<span class='gm-job-spin' aria-hidden='true' style='flex:0 0 16px; width:16px; height:16px; box-sizing:border-box; "
+            f"border-radius:50%; border:2px solid {t['line']}; border-top-color:{t['brand']}; "
+            f"animation: gmjobspin .9s linear infinite;'></span>"
+            "<div style='flex:1 1 auto; min-width:0;'>"
+            f"<div style='font-size:13px; font-weight:650; color:{t['tx1']}; white-space:nowrap; overflow:hidden; "
+            f"text-overflow:ellipsis;'>{_esc(j['title'])}</div>"
+            f"<div style='font-size:12px; margin-top:2px; color:{t['tx3']};'>{_esc(j.get('sub') or '')}</div>"
+            f"{bar}</div>{more}</div>")
