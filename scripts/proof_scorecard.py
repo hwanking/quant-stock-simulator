@@ -138,10 +138,21 @@ def main(argv=None):
     pairing = dict(rule='추적 케이스를 만든 판(이력의 첫 줄 · 같은 생성 시각의 리포트)', history_keys=_n_first,
                    matched_keys=len(_cores), decided=len(_dec),
                    decided_paired=sum(1 for c in _dec if (proof.code6(c['ticker']), c['signal_date']) in _ck))
+    # 라운드 477 — 사전등록 R475(이 조건이 막은 후보를 앞으로의 자료로 판정)의 진행 — 채점기의 구간 셈을 그대로 부른다(결과를 안 읽는다 ·
+    #   센 날 / 하한). 화면이 '앞으로의 자료로 판정 중'을 같은 줄에 적게. 못 부르면 None(§3).
+    try:
+        import gate_forward_r475 as _gf
+        _gend, _gcnt = _gf.window_end(_cores, is_off=_ct.is_non_trading_date)
+        gate_forward = dict(gate=_gf.GATE, start=_gf.FROM, floor=_gf.DATE_FLOOR, counted=_gcnt, end=_gend,
+                            closes_on=(_gf.nth_trading_day(_gend, _gf.H, _ct.is_non_trading_date) if _gend else None),
+                            prereg='docs/PREREG_R475_EV_GATE_FORWARD.md')
+    except Exception as _ex477:                                # noqa: BLE001
+        print(f'R475 진행 셈 못 함 — {type(_ex477).__name__}')
+        gate_forward = None
     doc = dict(made=proof.now_iso(), ledger_rows=len(rows), tickers=len(tickers),
                bars_ok=sum(1 for v in bars.values() if v is not None), bars_fail=len(fail),
                status=dict(st), abstain=ab, by_action=by_action, gates=gates, reco=reco, candidates=cands,
-               ev_order=evo, pairing=pairing,
+               ev_order=evo, pairing=pairing, gate_forward=gate_forward,
                tracker_decided=sum(1 for c in tracker_cases() if c['status'] in ('success', 'failure', 'unresolved')),
                rule=('같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · '
                      f"운영 비용 {ab.get('cost_pct')}% 차감 · 판정 1건에 같은 금액 · 문턱 없음"),

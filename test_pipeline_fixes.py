@@ -39038,6 +39038,133 @@ check("⑨ 사전등록 R475 — 채점기 해시가 문서와 같다(고치면 
       and (_gf457.FROM, _gf457.DATE_FLOOR, _gf457.H, _gf457.COST, _gf457.SEED) == ('2026-10-12', 30, 20, 0.41, 475),
       str([t for t in _need457 if t not in _pre457]), scanned=len(_need457))
 # ─── §457 끝 ───
+# ─── §458 시작 (라운드 476·477) ───
+print("=" * 72)
+print("§458 '이 PC 에서 연 화면인가'는 연결 주소로도 본다 · 서버는 127.0.0.1 에만 · R475 진행 한 마디 · 관제실은 짧게 (라운드 476·477)")
+print("=" * 72)
+# 라운드 476 — 사용자: "보안에는 신경써주고". 앱이 '이 PC 에서 연 화면인가'를 Host **헤더** 하나로 정했는데 그 값은 접속하는 쪽이 적는다.
+#   서버는 모든 주소에서 받고 있었다(2026-10-10 로그: Network URL 192.168.x.x:8512) — 같은 망의 기기가 `Host: localhost` 로 꾸며
+#   웹소켓을 열면 비밀번호 없이 보유·자동매매 칸이 열리는 구조였다. 두 겹으로 막는다: ① 실행 설정이 서버를 127.0.0.1 에만 연다
+#   ② 판정이 연결의 실제 상대 주소(`st.context.ip_address` · 이 PC 면 None)를 같이 본다(uvicorn 은 X-Forwarded-For 를 루프백에서 온
+#   연결일 때만 믿는다 — 다른 기기는 이 값을 못 꾸민다).
+# 라운드 477 — 사전등록 R475 의 진행(센 날 / 하한 · 결과를 안 읽는 셈)을 '막지 않았다면' 줄에 · 관제실의 '자격 0' 줄은 짧게.
+import ast as _ast458                                            # noqa: E402
+import subprocess as _sp458                                      # noqa: E402
+import proof as _pf458                                           # noqa: E402
+import swing_ledger as _sl458                                    # noqa: E402
+import swing_view as _sv458                                      # noqa: E402
+
+_src458 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_fns458 = {n.name: n for n in _ast458.parse(_src458).body
+           if isinstance(n, _ast458.FunctionDef) and n.name in ('is_remote_exposed', 'is_local_session')}
+
+
+class _Ctx458:
+    def __init__(self, host, ip):
+        self.headers = {'host': host} if host is not None else {}
+        self.ip_address = ip
+
+
+class _CtxNoIp458:                                               # 옛 판정(헤더만)을 흉내 — ip_address 칸이 없다
+    def __init__(self, host):
+        self.headers = {'host': host}
+
+
+class _St458:
+    context = None
+
+
+_ns458 = {'os': _os, 'sys': sys, 'st': _St458}
+exec(compile(_ast458.Module(body=[_fns458['is_remote_exposed'], _fns458['is_local_session']], type_ignores=[]),
+             'web_app_r476', 'exec'), _ns458)
+
+
+def _rem458(ctx):
+    _St458.context = ctx
+    return _ns458['is_remote_exposed']()
+
+
+def _loc458(ctx):
+    _St458.context = ctx
+    return _ns458['is_local_session']()
+
+
+from unittest.mock import MagicMock as _MM458                    # noqa: E402
+_cases458 = [(_Ctx458('localhost:8512', None), False), (_Ctx458('127.0.0.1:8512', None), False),
+             (_Ctx458(None, None), False),                                   # 헤더도 주소도 없다
+             # 회귀의 AppTest 는 주소 자리에 가짜 객체(MagicMock · 참으로 읽힌다)를 넣는다 — 첫 판이 그것을 '다른 기기'로 읽어
+             #   렌더 검사 셋이 보유를 못 읽었다(평단 없음 · 표현 0곳). 문자열 주소일 때만 바깥이다.
+             (_Ctx458(None, _MM458()), False),
+             (_Ctx458('localhost:8512', '192.168.0.7'), True),              # 헤더를 꾸민 다른 기기(지어낸 주소)
+             (_Ctx458('192.168.0.10:8512', '192.168.0.7'), True),
+             (_Ctx458('x.streamlit.app', None), True)]
+_got458 = [(_rem458(c), want) for c, want in _cases458]
+check("① 외부 판정 — 이 PC(헤더 localhost · 주소 없음)는 안, 헤더를 localhost 로 꾸며도 연결 주소가 다른 기기면 바깥 · 클라우드 바깥",
+      len(_fns458) == 2 and all(g == w for g, w in _got458), str(_got458), scanned=len(_cases458))
+check("①' 심기(양방향) — 연결 주소 칸이 없으면(옛 판정 · 헤더만) 꾸민 헤더가 통과한다 → 둘째 겹이 그것을 막는 자리다",
+      _rem458(_CtxNoIp458('localhost:8512')) is False and _rem458(_Ctx458('localhost:8512', '10.0.0.3')) is True)
+check("①'' 클립보드 판정도 같은 둘째 겹 — 연결 주소가 다른 기기면 로컬이 아니다(이 PC 에서 연 화면만)",
+      _loc458(_Ctx458('localhost', '10.0.0.3')) is False
+      and _loc458(_Ctx458('localhost', None)) is (sys.platform in ('win32', 'darwin')))
+
+# ② 첫 겹 — 서버를 127.0.0.1 에만 연다: 저장소의 실행 명령(README · CLAUDE.md · .bat/.ps1/.cmd)과 이 PC 의 실행 설정
+_tracked458 = _sp458.run(['git', 'ls-files'], capture_output=True, text=True, encoding='utf-8', cwd=PROJ).stdout.splitlines()
+_targets458 = [f for f in _tracked458 if f in ('README.md', 'CLAUDE.md') or f.lower().endswith(('.bat', '.ps1', '.cmd'))]
+_lines458, _bad458 = 0, []
+for _f458 in _targets458:
+    for _ln458 in _read148(_os.path.join(PROJ, _f458)).splitlines():
+        if 'streamlit run web_app.py' in _ln458:
+            _lines458 += 1
+            if '--server.address 127.0.0.1' not in _ln458:
+                _bad458.append(f'{_f458}: {_ln458.strip()[:80]}')
+check("② 저장소의 앱 실행 명령은 전부 --server.address 127.0.0.1 (README · CLAUDE.md · 실행 파일 · 본 줄 수를 밝힌다)",
+      _lines458 >= 3 and not _bad458, str(_bad458), scanned=_lines458)
+_lj458 = _os.path.join(PROJ, '.claude', 'launch.json')
+if _os.path.exists(_lj458):                                      # 이 PC 에만 있는 설정(git 밖) — 있으면 같은 규칙
+    _cfg458 = [c for c in _json.load(open(_lj458, encoding='utf-8')).get('configurations') or []
+               if 'streamlit' in ' '.join(c.get('runtimeArgs') or [])]
+    _badc458 = [c.get('name') for c in _cfg458
+                if '--server.address' not in (c.get('runtimeArgs') or [])
+                or (c['runtimeArgs'] + [''])[c['runtimeArgs'].index('--server.address') + 1] != '127.0.0.1']
+    check("②' 이 PC 의 실행 설정(.claude/launch.json)도 streamlit 을 띄우는 것은 전부 127.0.0.1",
+          not _badc458, str(_badc458), scanned=len(_cfg458))
+
+# ③ R477 — '막지 않았다면' 줄에 사전등록 R475 의 진행(센 날 / 하한 · 구간 끝 · 판정할 수 있는 날) · 다른 조건이면 안 붙는다
+_EV458 = _sv458.EV_CHECK
+_g458 = dict(name=_EV458, blocked=dict(n=10, dates=5, mean_net=0.1, median_net=1.0, ci95=[-1.0, 1.2]),
+             only=dict(n=0, mean_net=None), passed=dict(n=0, mean_net=None))
+_gf0458 = dict(gate=_EV458, start='2026-10-12', floor=30, counted=3, end=None, closes_on=None)
+_gf1458 = dict(_gf0458, counted=30, end='2026-11-20', closes_on='2026-12-18')
+_l0458 = _pf458.gate_line(dict(gates=[_g458], gate_forward=_gf0458), _EV458)
+_l1458 = _pf458.gate_line(dict(gates=[_g458], gate_forward=_gf1458), _EV458)
+check("③ 진행 한 마디 — '앞으로의 자료로' · 3/30일 · 끝이 정해지면 구간 끝과 판정할 날 · 다른 조건·진행 없음이면 빈 글자",
+      '앞으로의 자료로' in _l0458 and '3/30일' in _l0458 and '구간 끝' not in _l0458
+      and '30/30일' in _l1458 and '구간 끝 2026-11-20' in _l1458 and '2026-12-18 장 마감 뒤에 판정' in _l1458
+      and _pf458.forward_clause(_gf0458, '다른 조건') == '' and _pf458.forward_clause(None, _EV458) == ''
+      and '앞으로의 자료로' not in _pf458.gate_line(dict(gates=[_g458]), _EV458), _l1458[-200:])
+_ps458 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
+_sc458 = _pf458.load_scorecard() or {}
+_gfr458 = _sc458.get('gate_forward') or {}
+check("③' 배선 — 성적표가 채점기의 구간 셈(window_end)을 그대로 불러 싣는다 · 실제 성적표에 센 날과 하한(값은 잠그지 않는다)",
+      'gate_forward=gate_forward' in _ps458 and '_gf.window_end(_cores' in _ps458
+      and _gfr458.get('gate') == _EV458 and int(_gfr458.get('floor') or 0) == 30 and int(_gfr458.get('counted', -1)) >= 0,
+      str(_gfr458))
+
+# ④ R477 — 관제실은 짧게: 막은 조건 · 언제 · 나머지가 어디 있는지(같은 함수 · 줄을 덜 그릴 뿐) · '오늘 계획'은 전부
+_c458 = _sl458.connect(':memory:')
+_sl458.add_plan(_c458, dict(plan_id='R477A', data_day='2026-10-08', code='000001', name='z', spec='SWING_V1', entry=10000,
+                            target=10480, stop=9314, horizon=20, wait_bars=20, live_ok=False,
+                            verdict=dict(failed=[_EV458], checks_n=11, expected_return=-0.29)))
+_zb458 = _sv458.zero_day_line(_c458, '2026-10-08', scorecard=dict(gates=[_g458]), brief=True)
+_zf458 = _sv458.zero_day_line(_c458, '2026-10-08', scorecard=dict(gates=[_g458]))
+_c458.close()
+_svsrc458 = _read148(_os.path.join(PROJ, 'swing_view.py'))
+check("④ 관제실 판 — 첫 줄 · 언제 · '오늘 계획' 갈래로 보낸다(거리·기록 줄 없음) · 오늘 계획 판은 기록 줄까지 · 관제실이 brief 로 부른다",
+      _zb458 and _zb458.endswith(_sv458.ZERO_DAY_MORE) and '막지 않았다면' not in _zb458
+      and _zf458 and '막지 않았다면' in _zf458 and _zb458.split('  \n')[0] == _zf458.split('  \n')[0]
+      and "zero_day_line(c, str(ctx['today']), brief=True)" in _svsrc458
+      and '_zl450 = zero_day_line(c, day)' in _svsrc458, str(_zb458)[-160:])
+# ─── §458 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -558,10 +558,24 @@ def gate_line(sc, name):
             s += (" — 문턱을 낮추면 기대값이 높은 순으로 더 사게 되는데, 그 순서가 실제 결과를 가르지 못했으므로 더 사는 후보는 "
                   "이 조건에 걸린 후보 전체와 구별되지 않습니다")
         s += "."
+    s += forward_clause(sc.get('gate_forward'), name)
     made = minute_of(sc.get('made'))
     s += (" (" + (f"성적표 {made} · " if made else '') + "리포트 가격에 바로 산 계획이라 자동매매 계약의 진입가 대기와는 "
           "진입이 다릅니다 — 같은 계약의 결과는 모의 결과로 쌓입니다.)")
     return s
+
+
+def forward_clause(gf, name):
+    """사전등록 R475 의 진행 한 마디 (라운드 477) — 이 조건이 막은 후보를 **앞으로의 자료로** 판정하는 중이다 · 센 날 / 하한 ·
+    구간 끝과 판정할 수 있는 날(달력 셈 · 결과를 안 읽는다). 성적표에 진행이 없거나 다른 조건이면 ''(§3 · 줄을 지어내지 않는다)."""
+    gf = gf or {}
+    if gf.get('gate') != name or gf.get('counted') is None or not gf.get('floor'):
+        return ''
+    s = (f" 지난 자료는 이미 봤으므로 '보수적인가'의 판정은 앞으로의 자료로 합니다 — 사전등록대로 {gf.get('start')} 부터 이 조건에 "
+         f"걸린 후보가 있는 날을 세어 {int(gf['counted'])}/{int(gf['floor'])}일")
+    if gf.get('end'):
+        s += f" · 구간 끝 {gf['end']} · {gf.get('closes_on') or '그 뒤 20거래일'} 장 마감 뒤에 판정합니다"
+    return s + "."
 
 
 def reco_line(sc):

@@ -24,6 +24,7 @@ echo [1/2] Checking python environment: %PYBIN%
 echo [2/2] Launching Streamlit Web Server (http://localhost:8501)...
 echo.
 
-"%PYBIN%" -m streamlit run web_app.py --server.port 8501 --server.headless false
+rem 2026-10-10 - 이 PC(127.0.0.1)에서만 연다. 종전엔 같은 망 전체에서 접속을 받았다(보유·자동매매 칸 보호).
+"%PYBIN%" -m streamlit run web_app.py --server.port 8501 --server.address 127.0.0.1 --server.headless false
 
 pause

@@ -100,6 +100,12 @@ def is_remote_exposed():
 
     판정 근거를 여러 개 쓴다. 하나라도 '외부'를 가리키면 외부로 본다 —
     인증은 **막는 쪽으로 틀려야** 안전하기 때문이다.
+
+    ⚠️ 라운드 476 — 종전엔 근거가 Host **헤더** 하나였다. 그 값은 접속하는 쪽이 적는다 — 같은 망의 기기가
+      `Host: localhost` 로 꾸며 웹소켓을 열면 '이 PC'로 읽혀 비밀번호 없이 보유·자동매매 칸이 열렸다(서버가 모든
+      주소에서 받고 있었다 · 2026-10-10 로그의 Network URL). 그래서 **연결의 실제 상대 주소**(웹소켓 소켓에서 읽는
+      `st.context.ip_address` — 이 PC 에서 연 접속이면 None, 다른 기기면 그 주소)를 같이 본다. 실행 설정은 서버를
+      127.0.0.1 에만 연다(첫 겹 · 이 함수는 둘째 겹).
     """
     # Streamlit Community Cloud 는 앱을 /mount/src 아래에 마운트한다
     try:
@@ -107,6 +113,14 @@ def is_remote_exposed():
             return True
     except Exception:
         pass
+    # 연결의 상대 주소 — 이 PC(루프백)가 아니면 헤더가 무엇이든 외부다. 실제 서버는 주소 **문자열** 또는 None 을 준다 —
+    #   회귀의 AppTest 는 그 자리에 가짜 객체(MagicMock)를 넣으므로 문자열일 때만 본다(아니면 아래 헤더 판정 그대로).
+    try:
+        peer = st.context.ip_address
+    except Exception:
+        peer = None
+    if isinstance(peer, str) and peer.strip():
+        return True
     try:
         host = str(st.context.headers.get("host") or "").split(":")[0].lower()
     except Exception:
@@ -132,6 +146,13 @@ def is_local_session():
     """
     if sys.platform not in ("win32", "darwin"):
         return False
+    # 라운드 476 — 연결의 실제 상대 주소가 이 PC 가 아니면 헤더와 무관하게 로컬이 아니다(is_remote_exposed 와 같은 둘째 겹)
+    try:
+        _peer = st.context.ip_address
+        if isinstance(_peer, str) and _peer.strip():   # 문자열 주소만(AppTest 의 가짜 객체는 아래 헤더 판정으로)
+            return False
+    except Exception:
+        pass
     try:
         host = str(st.context.headers.get("host") or "")
     except Exception:

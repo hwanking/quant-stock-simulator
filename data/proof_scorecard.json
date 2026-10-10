@@ -1,5 +1,5 @@
 {
- "made": "2026-10-10T12:45:52",
+ "made": "2026-10-10T13:30:42",
  "ledger_rows": 1803,
  "tickers": 211,
  "bars_ok": 211,
@@ -615,7 +615,16 @@
   "decided": 243,
   "decided_paired": 224
  },
+ "gate_forward": {
+  "gate": "비용 차감 기대값 양수",
+  "start": "2026-10-12",
+  "floor": 30,
+  "counted": 0,
+  "end": null,
+  "closes_on": null,
+  "prereg": "docs/PREREG_R475_EV_GATE_FORWARD.md"
+ },
  "tracker_decided": 243,
  "rule": "같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · 운영 비용 0.41% 차감 · 판정 1건에 같은 금액 · 문턱 없음",
- "seconds": 25.3
+ "seconds": 36.3
 }

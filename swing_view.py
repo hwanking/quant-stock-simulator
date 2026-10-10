@@ -528,7 +528,11 @@ def blocked_record_line(ps, scorecard=None):
         return None
 
 
-def zero_day_line(c, day, scorecard=None):
+#: 라운드 477 — 관제실의 짧은 판 꼬리. 관제실은 한눈에 보는 자리라(라운드 455) 막은 조건 · 언제만 적고 나머지는 이 갈래로 보낸다.
+ZERO_DAY_MORE = "0 까지 얼마나 모자란지 · 이 조건이 막은 후보의 기록은 '오늘 계획' 갈래에 있습니다."
+
+
+def zero_day_line(c, day, scorecard=None, brief=False):
     """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
     라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
     오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다.
@@ -545,6 +549,8 @@ def zero_day_line(c, day, scorecard=None):
         fl = _fail_label()
         first = (head + f'가장 많이 막은 조건은 {fl(top[0])}입니다 ({top[1]}/{top[2]}개 · 조건 기록이 있는 계획 기준). '
                  '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
+    if brief:                    # 라운드 477 — 관제실: 막은 조건 · 언제 · 나머지가 어디 있는지(같은 함수 · 줄을 덜 그릴 뿐)
+        return '  \n'.join(x for x in (first, when_line(ps), ZERO_DAY_MORE) if x)
     return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, scorecard)) if x)
 
 
@@ -832,7 +838,7 @@ def _view_center(st, uk, c, ctx, md):
     st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
                                                managed_codes=set(ctx['managed'])),
                             theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"), unsafe_allow_html=True)
-    zl = zero_day_line(c, str(ctx['today'])) if ctx['today'] else None
+    zl = zero_day_line(c, str(ctx['today']), brief=True) if ctx['today'] else None
     if zl:
         st.caption(md(zl))
     elif not ctx['plans_today']:

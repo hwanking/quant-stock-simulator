@@ -12,8 +12,11 @@
 
 ```bash
 pip install -r requirements.txt
-streamlit run web_app.py
+streamlit run web_app.py --server.address 127.0.0.1
 ```
+
+`--server.address 127.0.0.1` 은 이 PC 에서만 열게 한다 — 빼면 같은 망의 다른 기기도 접속할 수 있다(그때는
+`app_password` 비밀번호 잠금이 걸리고, 없으면 화면을 열지 않는다).
 
 스크린샷 인식(OCR)을 쓰려면 로컬에서만 추가로 설치합니다.
 
