@@ -39438,6 +39438,74 @@ _src462 = _read148(_os.path.join(PROJ, 'scripts', 'band_population_r481.py'))
 check("③ 측정 스크립트는 읽기만 — 통계 행(stat_rows)과 판정 완료(decided_hit)로 세고 파일을 쓰지 않는다",
       'LV.stat_rows(raw' in _src462 and 'LV.decided_hit' in _src462 and "open(" not in _src462.replace("open('.portfolio/calibration.json'", ''))
 # ─── §462 끝 ───
+# ─── §463 시작 (라운드 482) ───
+print("=" * 72)
+print("§463 비용 쪽의 다른 길 둘 — 계약의 주문 방식에 맞춘 비용 · 국내 주식형 ETF · 운영 비용은 그대로 (라운드 482)")
+print("=" * 72)
+# 라운드 482 — 사용자: "개선해줄 방법 다르게 찾아줘서 개선해줘". 지금까지의 길은 전부 확률 쪽이었다. 비용 0.41 = 수수료 0.03 + 증권거래세
+#   0.20 + 체결 손해 0.18 이고 뒤의 둘이 모든 자산·주문에 같다고 본 값이다. ① 자동매매 계약은 진입·1차 목표를 지정가로 내므로 시장가는
+#   손절·만료(원장 58점+ 42.6%)뿐 → 약 0.27% · 지난 후보 212 중 0 넘은 것 2 → 14 · 판정일 10-08 다섯은 그래도 0 아래 ② 국내 주식형 ETF 는
+#   증권거래세가 없다(0.21%) — 과거 원장에서 학습 −0.29 · 검증 +1.51 · 블라인드 −0.51%(일관된 이득 없음). 비용은 안 바꿨다(0.18 이 잰 적
+#   없는 가정 · 실제 체결이 쌓이면 사람이 정한다).
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import cost_paths_r482 as _cp463                                 # noqa: E402
+import proof as _pf463                                           # noqa: E402
+import swing_ledger as _sl463                                    # noqa: E402
+import swing_view as _sv463                                      # noqa: E402
+
+_rows463 = ([dict(split='train', score=60, outcome='STOP')] * 40 + [dict(split='train', score=60, outcome='TARGET')] * 50
+            + [dict(split='blind', score=59, outcome='OPEN')] * 10 + [dict(split='train', score=40, outcome='STOP')] * 500
+            + [dict(split='train', score=60, outcome=None)] * 7)
+_cc463, _pm463, _by463 = _cp463.contract_cost(_rows463)
+check("① 계약 비용 = 0.03 + 0.20 + 0.09 × P(손절·만료) — 58점+ 결과 있는 행만(40점 500건·결과 없는 7건은 안 든다) · 없으면 None",
+      abs(_pm463 - 0.5) < 1e-12 and abs(_cc463 - (0.03 + 0.20 + 0.09 * 0.5)) < 1e-12 and abs(_by463['blind'] - 1.0) < 1e-12
+      and _cp463.contract_cost([]) == (None, None, {}) and (_cp463.FEE, _cp463.TAX, _cp463.SLIP_ROUND) == (0.03, 0.20, 0.18),
+      f"{_cc463} · {_pm463} · {_by463}")
+check("①' 비용은 기대값에 선형 — 운영 비용으로 0 을 넘은 수 · 계약 비용으로 넘은 수",
+      _cp463.candidates_shift([-0.3, -0.1, 0.05], 0.14) == dict(n=3, pass_ops=1, pass_contract=2))
+_dom463 = _cp463.domestic_equity_codes()
+check("①'' 국내 주식형 ETF 코드는 분류표(R170)에서 유도 — 비어 있지 않다 · 분류표를 못 읽으면 빈 집합(지어내지 않는다)",
+      len(_dom463) > 0 and _cp463.domestic_equity_codes(_os.path.join(PROJ, '_없는_파일.json')) == set(), str(len(_dom463)))
+
+def _art463(ok=True):
+    return dict(contract=dict(ops_cost=0.41, contract_cost=0.268, p_market_exit=0.426, slip_round=0.18,
+                              candidates=dict(n=212, pass_ops=2, pass_contract=14, days=45)) if ok else {},
+                etf_domestic_equity=dict(cost=0.21, all_58={'train': dict(mean_net=-0.29), 'valid': dict(mean_net=1.51),
+                                                             'blind': dict(mean_net=-0.51)}))
+
+
+_l463 = _pf463.cost_paths_line(_art463(), [-0.41, -0.24])
+_l2463 = _pf463.cost_paths_line(_art463(), [-0.41, -0.10])
+check("② '비용 가정' 한 줄 — 둘 다 시장가 가정 · 약 0.27% · 오늘 후보 범위(0 아래면 그 말) · 2 → 14 · ETF 세 구간 · 비용은 안 바꿨다",
+      _l463 and _l463.startswith('비용 가정') and '약 0.27%' in _l463 and '42.6%' in _l463 and '-0.27 ~ -0.10%' in _l463
+      and '모두 0 아래' in _l463 and '2개 → 14개' in _l463 and '학습 -0.29%' in _l463 and '실전 구간 -0.51%' in _l463
+      and '비용은 바꾸지 않았습니다' in _l463 and '그중 1개가 0 을 넘습니다' in _l2463
+      and _pf463.cost_paths_line(_art463(ok=False), [-0.3]) is None and _pf463.cost_paths_line(None) is None
+      and not any(w in _l463 for w in ('보수적', '괜찮', '안전합')), _l463)
+
+import artifact_io as _aio463                                    # noqa: E402
+_doc463 = _aio463.load_json(_pf463.COST_PATHS_FILE) or {}
+_c463 = _doc463.get('contract') or {}
+check("③ 실제 산출물 — 계약 비용이 구조적 범위 안(수수료+세금 ≤ 비용 ≤ 수수료+세금+한 다리) · ETF 갈래가 실림 · 종목코드 모양 0",
+      _c463.get('contract_cost') is not None and 0.23 - 1e-9 <= float(_c463['contract_cost']) <= 0.32 + 1e-9
+      and (_doc463.get('etf_domestic_equity') or {}).get('cost') == 0.21 and not _pf463.code_like_strings(_doc463)
+      and '판정 아님' in str(_doc463.get('note')), str(_c463.get('contract_cost')))
+
+_cx463 = _sl463.connect(':memory:')
+_sl463.add_plan(_cx463, dict(plan_id='R482A', data_day='2026-10-08', code='000001', name='z', spec='SWING_V1', entry=10000,
+                             target=10480, stop=9314, horizon=20, wait_bars=20, live_ok=False,
+                             verdict=dict(failed=['비용 차감 기대값 양수'], checks_n=11, expected_return=-0.24)))
+_zf463 = _sv463.zero_day_line(_cx463, '2026-10-08', scorecard={'reco': None}, costs=_art463())
+_zb463 = _sv463.zero_day_line(_cx463, '2026-10-08', scorecard={'reco': None}, brief=True, costs=_art463())
+_z0463 = _sv463.zero_day_line(_cx463, '2026-10-08', scorecard={})
+_cx463.close()
+check("④ '오늘 계획' 판에 '비용 가정' 줄(오늘 후보 기대값은 계획의 판정 기록에서) · 관제실 판엔 없고 안내가 그 자리를 가리킨다 · 넘긴 것 없으면 없음",
+      _zf463 and '비용 가정 —' in _zf463 and '-0.10 ~ -0.10%' in _zf463 and _zb463 and '비용 가정 —' not in _zb463
+      and '비용 가정' in _sv463.ZERO_DAY_MORE and '비용 가정 —' not in (_z0463 or ''), str(_zf463)[:300])
+_src463 = _read148(_os.path.join(PROJ, 'scripts', 'cost_paths_r482.py'))
+check("⑤ 운영 비용은 손으로 안 적는다 — 측정 스크립트가 verdict_core.COST_PCT 를 읽고, 계약 비용 항목은 규칙집 값(새 숫자 아님)",
+      'float(verdict_core.COST_PCT)' in _src463 and 'FEE, TAX, SLIP_ROUND = 0.03, 0.20, 0.18' in _src463)
+# ─── §463 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

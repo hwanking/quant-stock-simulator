@@ -571,6 +571,45 @@ def gate_line(sc, name):
     return s
 
 
+#: 라운드 482 — 비용 쪽의 다른 길 둘(계약의 주문 방식 · 국내 주식형 ETF)을 잰 산출물(`scripts/cost_paths_r482.py`)
+COST_PATHS_FILE = 'cost_paths_r482.json'
+
+
+def cost_paths_line(art, today_evs=None):
+    """'비용 가정' 한 줄 (라운드 482) — 0.41% 의 체결 손해가 '둘 다 시장가' 가정이라는 사실 · 계약(지정가 진입·목표)에 맞추면 몇 % 인지 ·
+    그 비용이면 오늘 후보와 지난 후보가 어떻게 되는지 · 증권거래세가 없는 국내 주식형 ETF 의 과거 결과. 비용은 안 바꿨다고 같은 줄에.
+    사용자: *"개선해줄 방법 다르게 찾아줘서 개선해줘"*. 판정 낱말 없음 · 산출물이 없으면 None(§3)."""
+    a = art or {}
+    c = a.get('contract') or {}
+    cc, ops, pm = c.get('contract_cost'), c.get('ops_cost'), c.get('p_market_exit')
+    if cc is None or ops is None or pm is None:
+        return None
+    shift = float(ops) - float(cc)
+    s = (f"비용 가정 — {ops}% 안의 체결 손해 {c.get('slip_round')}% 는 사고팔 때 둘 다 시장가로 낸다고 본 값입니다. 자동매매 계약은 "
+         f"진입·1차 목표를 지정가로 내므로 시장가는 손절·만료로 나갈 때(원장 58점+ 의 {float(pm) * 100:.1f}%)뿐이고, 그렇게 다시 셈하면 "
+         f"왕복 비용은 약 {float(cc):.2f}% 입니다.")
+    v = sorted(float(x) for x in (today_evs or []) if isinstance(x, (int, float)) and not isinstance(x, bool))
+    if v:
+        k = sum(1 for x in v if x + shift > 0)
+        s += (f" 그 비용이면 오늘 후보 {len(v)}개의 기대값은 {v[0] + shift:+.2f} ~ {v[-1] + shift:+.2f}% "
+              + ("로 모두 0 아래입니다." if k == 0 else f"이고 그중 {k}개가 0 을 넘습니다."))
+    cand = c.get('candidates') or {}
+    if cand.get('n'):
+        s += (f" 지난 {cand.get('days')}거래일 후보 {int(cand['n']):,}개 중 기대값이 0 을 넘었을 것은 {cand.get('pass_ops')}개 → "
+              f"{cand.get('pass_contract')}개입니다.")
+    e = a.get('etf_domestic_equity') or {}
+    al = e.get('all_58') or {}
+    if all((al.get(sp) or {}).get('mean_net') is not None for sp, _ in _SPLIT_KO_COST):
+        s += (f" 증권거래세가 없는 국내 주식형 ETF(왕복 {e.get('cost')}%)도 과거 원장 58점+ 에서 일관된 이득이 없었습니다("
+              + ' · '.join(f"{ko} {float(al[sp]['mean_net']):+.2f}%" for sp, ko in _SPLIT_KO_COST) + ").")
+    s += (f" 체결 손해 {c.get('slip_round')}% 자체가 실제 체결로 잰 적 없는 가정이라 비용은 바꾸지 않았습니다 — 실제 체결이 쌓이면 "
+          "사람이 정합니다.")
+    return s
+
+
+_SPLIT_KO_COST = (('train', '학습'), ('valid', '검증'), ('blind', '실전 구간'))
+
+
 #: 라운드 480 — 과거 시뮬레이션 산출물(`scripts/ev_gate_past_sim_r480.py`)과 구간의 화면 이름
 PAST_SIM_FILE = 'ev_gate_past_sim_r480.json'
 _SPLIT_KO = (('train', '학습'), ('valid', '검증'), ('blind', '실전 구간'))

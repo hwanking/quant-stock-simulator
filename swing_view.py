@@ -556,6 +556,30 @@ def past_sim_record_line(ps, scorecard=None, sim=None):
         return None
 
 
+def cost_paths_record_line(ps, scorecard=None, art=None):
+    """'비용 가정' — 막힌 계획이 있을 때 계약에 맞춘 비용과 그 비용이면 오늘 후보가 어떻게 되는지(라운드 482 · 문장은 `proof.cost_paths_line`).
+    오늘 후보의 기대값은 계획에 박힌 판정 기록에서 읽는다. 산출물을 못 읽으면 None."""
+    sc = _ev_scorecard(ps, scorecard)
+    if sc is None:
+        return None
+    if art is None and scorecard is None:
+        art = _load_artifact('COST_PATHS_FILE')
+    try:
+        import proof as _pf
+        return _pf.cost_paths_line(art, [_verdict_of(p).get('expected_return') for p in ps])
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _load_artifact(attr):
+    try:
+        import artifact_io as _aio
+        import proof as _pf
+        return _aio.load_json(getattr(_pf, attr))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def _load_past_sim():
     try:
         import artifact_io as _aio
@@ -581,11 +605,11 @@ def roadmap_record_line(ps, scorecard=None):
 #: 라운드 477 — 관제실의 짧은 판 꼬리. 관제실은 한눈에 보는 자리라(라운드 455) 막은 조건 · 언제만 적고 나머지는 이 갈래로 보낸다.
 #:   라운드 479 — 첫 판 *"0 까지 얼마나 모자란지 · 이 조건이 막은 후보의 기록은 …"* 이 끊긴 문장처럼 읽혔다(사용자가 그대로 붙여
 #:   보냈다). 무엇이 어디 있는지를 한 문장으로.
-ZERO_DAY_MORE = ("자세한 내용 — 기대값이 0 까지 얼마나 모자란지, 이 조건이 막은 후보가 실제로 어떻게 됐는지, 지금까지 몇 번 추천했는지"
+ZERO_DAY_MORE = ("자세한 내용 — 기대값이 0 까지 얼마나 모자란지와 그 비용 가정, 이 조건이 막은 후보가 실제로 어떻게 됐는지, 지금까지 몇 번 추천했는지"
                  "(과거 원장 시뮬레이션 포함), 이 조건을 다시 볼 길 — 은 '오늘 계획' 갈래에 있습니다.")
 
 
-def zero_day_line(c, day, scorecard=None, brief=False, sim=None):
+def zero_day_line(c, day, scorecard=None, brief=False, sim=None, costs=None):
     """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
     라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
     오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다.
@@ -607,8 +631,11 @@ def zero_day_line(c, day, scorecard=None, brief=False, sim=None):
     sc = _ev_scorecard(ps, scorecard)        # 라운드 478 — 성적표는 한 번만 읽는다(두 줄이 같은 것을 쓴다)
     if sim is None and scorecard is None and sc is not None:   # 라운드 480 — 과거 시뮬레이션 산출물도 화면일 때만 한 번
         sim = _load_past_sim()
-    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, sc),
-                                   past_sim_record_line(ps, sc, sim), roadmap_record_line(ps, sc)) if x)
+    if costs is None and scorecard is None and sc is not None:  # 라운드 482 — 비용 쪽 산출물도
+        costs = _load_artifact('COST_PATHS_FILE')
+    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), cost_paths_record_line(ps, sc, costs),
+                                   blocked_record_line(ps, sc), past_sim_record_line(ps, sc, sim),
+                                   roadmap_record_line(ps, sc)) if x)
 
 
 def holdings_diff(acct_positions, app_positions):
