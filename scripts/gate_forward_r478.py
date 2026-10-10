@@ -22,6 +22,9 @@
   · 판정: 날짜로 묶은 95% 구간(`proof.cluster_ci` · BOOT · SEED) — 아래 끝 > 0 → (가) · 위 끝 < 0 → (다) · 그 밖 → (나).
   · 채점 규칙의 지문: 모의 채점 함수 둘(`swing_engine.shadow_grade` · `prediction_log.grade_prediction`)의 소스 지문을 등록에 박는다 —
     결과를 본 뒤 채점 규칙이 바뀌면 판정 전에 드러난다(`grader_fingerprint`).
+  · 라운드 483 정정(2026-10-11 · 결과 전 · 표본 구간 시작 하루 전) — 모의가 계획을 그 판정을 낸 리포트를 **본 순간 이미 열린 장**의
+    봉으로 체결시키지 않게 했다(`prediction_log.grade_after_day` · 장중에 만든 리포트의 계획이 그날 아침 저가로 '체결'되던 자리).
+    지문이 그 규칙과 생성 시각을 읽는 함수까지 덮는다(넷). 사전등록에 사유와 새 지문을 적었다.
 """
 from __future__ import annotations
 
@@ -86,11 +89,13 @@ def window_end(plans, start=FROM, floor=DATE_FLOOR, is_off=None):
 
 
 def grader_fingerprint():
-    """모의 채점 함수 둘의 소스 지문(줄바꿈·주석과 무관 — AST 를 다시 쓴 글자의 sha256 앞 16자)."""
+    """모의 채점 함수의 소스 지문(줄바꿈·주석과 무관 — AST 를 다시 쓴 글자의 sha256 앞 16자). 라운드 483 — 대기 창의 시작을 정하는
+    두 함수(`swing_engine.report_ts_of` · `prediction_log.grade_after_day`)까지 넷."""
     import prediction_log
     import swing_engine
     h = hashlib.sha256()
-    for fn in (swing_engine.shadow_grade, prediction_log.grade_prediction):
+    for fn in (swing_engine.shadow_grade, swing_engine.report_ts_of, prediction_log.grade_prediction,
+               prediction_log.grade_after_day):
         h.update(ast.unparse(ast.parse(inspect.getsource(fn))).encode('utf-8'))
     return h.hexdigest()[:16]
 

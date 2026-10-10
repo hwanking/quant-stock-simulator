@@ -77,7 +77,9 @@ def outcome(row, bars_df, cost=None):
     if bars_df is None:
         return None
     try:
-        g = plog.grade_prediction(row, bars_df)
+        # 라운드 483 — 판정 원장 줄은 기록 시각(`recorded_at`)에 본 가격이다. 장중에 연 종목이면 그 장의 봉을 빼고 잰다
+        #   (`prediction_log.grade_after_day` 한 곳 · 종전엔 그 가격을 보기 전의 고가·저가까지 채점했다 · 1,803줄 중 34줄).
+        g = plog.grade_seen(row, bars_df, (row or {}).get('recorded_at'))
     except Exception:                                          # noqa: BLE001
         return None
     if not g:

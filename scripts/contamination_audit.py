@@ -15,10 +15,13 @@
     · 원장: 가격 0 이하 · 손절 < 진입 < 목표 어긋남 · 행 안 불변식(`ledger_view.consistency_violations`)
       · 구간 표시가 날짜와 어긋남(경계는 `calibration_lab` 의 상수를 읽는다)               (R368 · R217)
     · 전방 기록부: 버전 칸이 빈 행                                                          (R360)
+    · 전방 기록부: 그 가격을 **본 순간 이미 정규장이 열린** 행(`seen_in_session` · R483) — 11-16 전방 판정기(R398 · R470)는
+      박제돼 있어 이 행을 그날 봉 전체(가격을 보기 전의 고가·저가 포함)로 채점한다. 기록기는 장 마감 뒤에 돌므로 0 이어야 한다
     · 추적 DB: 미래 기준일인데 픽스처 표시가 없는 케이스 · 동결 가드(R252) 뒤에 들어온 휴장일 케이스 (R222 · R252)
   알림용 (info · 실패 아님 — 알려진 것·구조):
     · 진입가 축척 도장 셈(채점 자리 · R390) · 축척 감사의 어긋난 행(R365) · 점수대별 블라인드 비중(R389)
     · 추적 DB 의 옛 휴장일 케이스(갈래에서 빠짐 · R389) · 주말 뉴스(사건 날짜라 정상) · 휴장일 개장 전 리포트(옛 것)
+    · 장중에 본 가격으로 동결된 추적 케이스 · 장중에 기록한 판정 원장 줄(R483 — 채점은 그 장의 봉을 뺀다 · 셈만)
 
 ■ 안 하는 것
   · 고치지 않는다 — 세고 적는다(원장·DB 행은 안 지운다 · R197). 고침은 사람이 결과를 보고 한다
@@ -57,6 +60,18 @@ def _utf8():
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:                                          # noqa: BLE001
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+
+def seen_in_session(rows, dkey, skey):
+    """가격을 **본 순간 이미 정규장이 열린 거래일**이 자료일보다 뒤인 행 수 — 순수 함수(심어서 잰다 · 라운드 483).
+    규칙은 채점기 한 곳(`prediction_log.grade_after_day`)을 부른다. 본 시각이 없는 행은 안 센다(경계 = 자료일)."""
+    import prediction_log as plog
+    n = 0
+    for r in rows:
+        d = str(r.get(dkey) or '')[:10]
+        if d and plog.grade_after_day(d, r.get(skey)) != d:
+            n += 1
+    return n
 
 
 def _is_holiday(day):
@@ -200,7 +215,8 @@ HARD = {
     'ledger': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code', 'bad_price',
                'level_order', 'invariant', 'split_mismatch'),
     'virtual_predictions': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code'),
-    'forward_registry': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code', 'empty_versions'),
+    'forward_registry': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code', 'empty_versions',
+                         'seen_in_session'),
     'predictions': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code'),
     'fin_pit': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup'),
     'book_pit': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup'),
@@ -270,8 +286,10 @@ def run(today=None):
         unmeasured.append('ledger: 파일 없음')
     _simple('virtual_predictions', 'virtual_predictions.jsonl', 'date', 'ticker')
     _simple('forward_registry', 'forward_registry.jsonl', 'date', 'ticker',
-            extra=lambda rows: {'empty_versions': sum(1 for r in rows if not r.get('versions'))})
-    _simple('predictions', 'predictions.jsonl', 'date', 'ticker')
+            extra=lambda rows: {'empty_versions': sum(1 for r in rows if not r.get('versions')),
+                                'seen_in_session': seen_in_session(rows, 'date', 'signal_timestamp')})
+    _simple('predictions', 'predictions.jsonl', 'date', 'ticker',
+            extra=lambda rows: {'seen_in_session': seen_in_session(rows, 'date', 'recorded_at')})
     _simple('fin_pit', 'fin_pit.jsonl', 'date', 'code')
     _simple('book_pit', 'book_pit.jsonl', 'date', 'code')
     db = os.path.join(P, 'improvement.db')
@@ -284,6 +302,26 @@ def run(today=None):
             unmeasured.append(f'tracker: {type(e).__name__}')
     else:
         unmeasured.append('tracker: DB 없음')
+    # 라운드 483 — 장중에 본 가격으로 동결된 추적 케이스(알림 · 채점은 그 장의 봉을 뺀다). 본 시각은 동결 규칙 한 곳에서.
+    try:
+        sys.path.insert(0, os.path.join(PROJ, 'scripts'))
+        import run_daily_improvement as _rdi483
+        import prediction_log as _pl483
+        _seen483 = _rdi483.freeze_seen_at()
+        if not os.path.exists(db):
+            raise FileNotFoundError('improvement.db')     # 연결만 열어도 빈 파일을 만든다(R331) — 먼저 본다
+        _con483 = sqlite3.connect(db)
+        try:
+            _cs483 = _con483.execute("SELECT ticker, signal_date, reference_price FROM prediction_cases "
+                                     "WHERE status NOT IN ('dup_version', 'void_fixture')").fetchall()
+        finally:
+            _con483.close()
+        info['tracker_seen_in_session'] = sum(
+            1 for t, d, px in _cs483
+            if _pl483.grade_after_day(d, _seen483.get((str(t), str(d)[:10], float(px or 0)))) != str(d)[:10])
+    except Exception as e:                                     # noqa: BLE001
+        info['tracker_seen_in_session'] = None
+        unmeasured.append(f'tracker_seen_in_session: {type(e).__name__}')
     ne = os.path.join(P, 'news_events.jsonl')
     if os.path.exists(ne):
         gen, _ = _jsonl(ne)

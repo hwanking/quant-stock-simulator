@@ -18,10 +18,17 @@
   · 결과: 추적 케이스(같은 채점기 · 리포트 가격 진입 · 20봉)의 실현 수익 − COST. 구간 끝 뒤 20거래일이 지나고 그 안의
     케이스가 전부 정해져야 판정한다.
   · 판정: 날짜로 묶은 95% 구간(BOOT · SEED) — 아래 끝 > 0 → (가) · 위 끝 < 0 → (다) · 그 밖 → (나).
+  · 라운드 483 정정(2026-10-11 · 결과 전 · 표본 구간 시작 하루 전) — 추적 케이스의 채점이 그 가격을 **본 순간 이미 열린 장**의 봉을
+    뺀다(`prediction_log.grade_after_day` · 장중에 만든 리포트의 가격은 그날 장중 값인데 종전엔 그날 봉 전체 — 그 가격을 보기 전의
+    아침 고가·저가까지 — 로 채점했다 · 지난 자료 255건 중 32건). 이 등록은 채점 규칙의 지문을 박지 않았었다 — 추적 채점 함수들의
+    소스 지문(`grader_fingerprint`)을 사전등록에 적고 회귀가 대 본다(R478 과 같은 자물쇠).
 """
 from __future__ import annotations
 
+import ast
 import datetime as _dt
+import hashlib
+import inspect
 import os
 import sys
 
@@ -143,6 +150,21 @@ def judge(cases, cores, today, is_off, start=FROM, floor=DATE_FLOOR):
                 ev_order=evo)
 
 
+def grader_fingerprint():
+    """추적 케이스 채점 함수의 소스 지문(줄바꿈·주석과 무관 — AST 를 다시 쓴 글자의 sha256 앞 16자 · 라운드 483).
+    일일 루틴의 채점(`make_resolve_open_cases`) · 동결한 줄을 본 시각(`freeze_seen_at`) · 채점기(`grade_prediction` · `grade_seen` ·
+    `grade_after_day`) · 결과 → 케이스(`resolution_from_grade`). 결과를 본 뒤 이 중 하나가 바뀌면 판정 전에 드러난다."""
+    sys.path.insert(0, os.path.join(PROJ, 'scripts'))
+    import prediction_log
+    import run_daily_improvement as rdi
+    from improvement.performance import resolution_from_grade
+    h = hashlib.sha256()
+    for fn in (rdi.make_resolve_open_cases, rdi.freeze_seen_at, prediction_log.grade_prediction, prediction_log.grade_seen,
+               prediction_log.grade_after_day, resolution_from_grade):
+        h.update(ast.unparse(ast.parse(inspect.getsource(fn))).encode('utf-8'))
+    return h.hexdigest()[:16]
+
+
 def main(argv=None):
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -155,6 +177,7 @@ def main(argv=None):
     cores, _n = proof.origin_cores(ps.load_history(), ps.load_reports())
     r = judge(ps.tracker_cases(), cores, _dt.date.today().isoformat(), ct.is_non_trading_date)
     print(f"R475 — '{GATE}'가 막은 후보 (전방 · {FROM} 부터): {r['verdict']} — {r['why']}")
+    print(f"  채점 규칙 지문 {grader_fingerprint()}")
     for k in ('window', 'closes_on', 'n', 'dates', 'mean_net', 'ci95', 'missing', 'only', 'ev_order'):
         if k in r:
             print(f"  {k}: {r[k]}")

@@ -91,6 +91,32 @@ def case_versions(row, stamps, now_versions):
     return now_versions.get('model'), now_versions.get('rulebook'), 'freeze_time'
 
 
+def freeze_seen_at(history_path=None):
+    """동결한 이력 줄을 **본 시각** — {(종목, 자료 기준일, 가격): 그 줄의 생성 시각} (라운드 483).
+
+    추적 케이스의 진입가는 그 케이스를 동결한 이력 줄의 가격이고, 그 가격은 줄의 `generated_at` 에 본 값이다. 채점은
+    `prediction_log.grade_seen` 이 그 시각에 이미 열린 장의 봉을 빼고 한다(장중에 만든 리포트 · 2026-10-11 실측 255건 중 32건).
+    열쇠에 가격까지 넣는다 — 동결은 휴장일 날짜의 옛 줄을 건너뛰고 다음 줄을 동결하므로 '첫 줄'과 '동결한 줄'이 다를 수 있는데,
+    가격이 그 줄을 가린다(같은 자료일 · 같은 종가면 어느 줄이든 경계가 같다). 같은 열쇠는 첫 줄(이력은 추가 전용 · 시간 순).
+    파일이 없으면 빈 dict — 그러면 채점은 자료일 다음 봉부터(종전 동작)."""
+    import premarket as _pm483
+    path = history_path or PM_HISTORY
+    out = {}
+    if not os.path.exists(path):
+        return out
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            try:
+                p = json.loads(line)
+                if not p.get('symbol') or not p.get('price'):
+                    continue
+                day = _pm483.data_day_of(p) or str(p.get('date') or '')[:10]
+                out.setdefault((str(p['symbol']), day, float(p['price'])), p.get('generated_at'))
+            except Exception:                                  # noqa: BLE001 — 못 읽는 줄은 건너뛴다(그 케이스는 종전 동작)
+                continue
+    return out
+
+
 def make_create_new_cases(conn, calib):
     def create_new_cases() -> int:
         _vs = V.snapshot()
@@ -213,6 +239,7 @@ def make_resolve_open_cases(conn):
         import prediction_log as plog
         resolved = 0
         cache = {}
+        seen = freeze_seen_at()          # 라운드 483 — 동결한 줄을 본 시각
         today = datetime.now().strftime('%Y-%m-%d')
         for r in rows:
             if r['signal_date'] >= today:
@@ -240,10 +267,12 @@ def make_resolve_open_cases(conn):
             #   기준가(리포트 가격) · 먼저 닿은 선 · 같은 봉이면 손절 먼저(보수) · 원시가 ·
             #   MDD 는 청산 봉까지. 닿음은 뒤 봉과 무관하게 최종이므로 그 자리에서 확정하고,
             #   안 닿았으면 보유기간이 다 지나야 '미도달'로 확정한다(그 전엔 open).
-            g = plog.grade_prediction(
+            #   라운드 483 — 그 가격을 본 순간 이미 열린 장의 봉은 빼고 잰다(장중에 만든 리포트 · `grade_seen` 한 곳).
+            g = plog.grade_seen(
                 {'date': r['signal_date'], 'price': float(r['reference_price']),
                  'target': float(r['target_price']), 'stop': float(r['stop_price']),
-                 'horizon_days': int(r['holding_days'])}, df)
+                 'horizon_days': int(r['holding_days'])}, df,
+                seen.get((str(r['ticker']), str(r['signal_date']), float(r['reference_price']))))
             if not g:
                 continue
             if g['outcome'] == 'OPEN' and not g['matured']:

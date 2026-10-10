@@ -205,6 +205,53 @@ def grade_prediction(row, prices_df):
     }
 
 
+def grade_after_day(day, seen_at):
+    """채점의 경계 — 이 날의 **다음** 봉부터 채점한다 · 'YYYY-MM-DD' (라운드 483 · 규칙은 여기 한 곳).
+
+    기록한 가격을 **본 순간 이미 정규장이 열린 거래일**의 봉은 채점에 쓰지 않는다. 보통은 그날이 자료 기준일(`day`)이라 바뀌는 것이
+    없다 — 장 전·휴장일에 본 가격은 전 거래일 종가이고, 장 마감 뒤에 본 가격은 그날 종가다. 바뀌는 것은 자료일 다음 거래일 T 의
+    **정규장 중**에 본 가격이다(장중에 연 앱이 만든 개장 전 리포트 · 장중에 연 종목의 판정 기록). 그 가격은 T 의 장중 값인데 종전엔
+    T 봉 전체 — 그 가격을 보기 **전**의 고가·저가까지 — 로 채점했다. 그 봉을 빼고 T 다음 봉부터 잰다.
+
+    ■ 실측 (2026-10-11) — 추적 케이스 255건 중 32건의 진입가가 자료일 종가가 아니라 다음 거래일 장중 값이었다(장중에 만든 리포트 ·
+      종가 대비 +0.05~+24.4% · 32건 모두 그날 봉의 고가·저가 사이) · 판정 원장 1,803줄 중 34줄. 그 봉을 빼고 다시 채점하면 추적 6건 ·
+      판정 원장 3건의 결과 갈래가 바뀐다(양쪽 방향 — 그 봉의 아침 저가가 손절을, 아침 고가가 목표를 미리 채운 것).
+    ■ 그날의 나머지 경로(가격을 본 뒤 마감까지)도 버린다 — 봉 하나 안에서 무엇이 먼저였는지 모른다(자동매매 모의가 체결한 날의 봉을
+      청산 판정에 안 쓰는 것과 같은 규칙 · `swing_engine.shadow_grade`).
+    ■ 본 시각을 못 읽으면 `day` 그대로(종전 동작 — 그 가격을 자료일 종가로 본다). 부르는 쪽이 본 시각을 넘길 때만 움직인다 —
+      원장(`calibration_lab`)의 가상 판정은 자료일 종가로 만든 것이라 넘기지 않는다.
+    ■ 장 시각·휴장일은 엔진 한 곳(`bitemporal_engine.session_times` · `KrxCalendar`)에서 읽는다(수능일 10:00 포함 · 다시 안 적는다).
+    """
+    d = str(day or '')[:10]
+    try:
+        dd = datetime.strptime(d, '%Y-%m-%d').date()
+    except ValueError:
+        return d
+    g = str(seen_at or '').strip().replace('T', ' ')[:19]
+    try:
+        at = datetime.fromisoformat(g)
+    except ValueError:
+        return d
+    try:
+        from bitemporal_engine import KrxCalendar, session_times
+        cal = KrxCalendar()
+        t = at.date()
+        last = t if (cal.is_trading_day(t) and at.time() >= session_times(t)[0]) else cal.previous_trading_day(t)
+    except Exception:                                          # noqa: BLE001 — 달력을 못 읽으면 종전 동작(지어내지 않는다)
+        return d
+    return last.isoformat() if last > dd else d
+
+
+def grade_seen(row, prices_df, seen_at):
+    """`grade_prediction` 과 같다 — 다만 `grade_after_day(row['date'], seen_at)` **다음** 봉부터 채점한다(라운드 483).
+    판정 원장 줄은 `recorded_at` · 추적 케이스는 동결한 이력 줄의 `generated_at` · 자동매매 계획은 판정을 낸 리포트의 생성 시각을
+    넘긴다. 결과에 `graded_after`(경계)를 싣는다. 경계가 자료일 그대로면 `grade_prediction(row)` 와 글자까지 같은 결과다."""
+    d = str((row or {}).get('date') or '')[:10]
+    b = grade_after_day(d, seen_at)
+    g = grade_prediction(row if b == d else dict(row, date=b), prices_df)
+    return dict(g, graded_after=b) if g is not None else None
+
+
 def summarize(graded):
     """
     채점 결과 집계. 반환: {'n', 'n_entry', 'hit', 'miss', 'open',
@@ -265,7 +312,8 @@ def evaluate_all(engine, path=PRED_FILE, max_rows=200):
                 cache[tk] = pdf
             except Exception:
                 cache[tk] = None
-        g = grade_prediction(row, cache.get(tk))
+        # 라운드 483 — 장중에 기록한 가격은 그 장의 봉을 빼고 잰다(`grade_after_day` 한 곳)
+        g = grade_seen(row, cache.get(tk), row.get('recorded_at'))
         graded.append({'row': row, 'grade': g})
     return graded, summarize(graded)
 

@@ -21815,8 +21815,11 @@ check("performance.py 는 first_touch 를 들여와 쓰고 선도달 루프를 �
 
 # ③ 일일 루틴 — 원장과 같은 채점기 · 진입 = 기준가 · 닿으면 즉시
 _rt249 = _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))
-check("루틴이 grade_prediction 으로 채점하고 진입은 reference_price 다",
-      "g = plog.grade_prediction(" in _rt249 and "'price': float(r['reference_price'])" in _rt249
+# 라운드 483 — 루틴은 `grade_seen`(같은 `grade_prediction` 을 부르되 가격을 본 장의 봉을 뺀다)으로 채점한다. 성질은 같다 —
+#   원장과 같은 채점기 · 진입 = 기준가. grade_seen 이 grade_prediction 을 그대로 부르는지는 §464 가 심어서 본다.
+check("루틴이 grade_prediction(→ grade_seen) 으로 채점하고 진입은 reference_price 다",
+      ("g = plog.grade_prediction(" in _rt249 or "g = plog.grade_seen(" in _rt249)
+      and "'price': float(r['reference_price'])" in _rt249
       and "resolution_from_grade(g," in _rt249 and "resolve_long_case(" not in _rt249
       and "import resolve_long_case" not in _rt249
       and "r['entry_price'] or r['reference_price']" not in _rt249)
@@ -39506,6 +39509,137 @@ _src463 = _read148(_os.path.join(PROJ, 'scripts', 'cost_paths_r482.py'))
 check("⑤ 운영 비용은 손으로 안 적는다 — 측정 스크립트가 verdict_core.COST_PCT 를 읽고, 계약 비용 항목은 규칙집 값(새 숫자 아님)",
       'float(verdict_core.COST_PCT)' in _src463 and 'FEE, TAX, SLIP_ROUND = 0.03, 0.20, 0.18' in _src463)
 # ─── §463 끝 ───
+# ─── §464 시작 (라운드 483) ───
+print("=" * 72)
+print("§464 가격을 본 순간 이미 열린 장의 봉은 채점하지 않는다 — 장중에 만든 리포트 · 장중에 기록한 판정 (라운드 483)")
+print("=" * 72)
+# 라운드 483 — 사용자: "못다한 작업 찾아서 계속 · 오염 안 되게". 개장 전 리포트는 이 PC 의 앱을 열 때 만들어지는데, 자료일 D 다음
+#   거래일 T 의 장중에 처음 열면 리포트 가격은 T 의 장중 값이다. 추적 채점은 D 다음 봉(= T 봉 전체 · 그 가격을 보기 전의 아침 고가·
+#   저가 포함)부터 돌았다 — 추적 255건 중 32건(종가 대비 +0.05~+24.4% · 전부 T 봉 안) · 판정 원장 1,803줄 중 34줄. 규칙은
+#   `prediction_log.grade_after_day` 한 곳이고, 추적·판정 원장·자동매매 모의·오염 점검이 그것을 부른다. 지난 32건은 다시 셌다(6건 갈래
+#   바뀜 · 성공률 61.1% 그대로). 전방 판정 둘(R475 · R478)은 표본 구간 시작 하루 전에 결과 전 정정 · 지문을 넓혔다.
+import json as _json464                                          # noqa: E402
+import sqlite3 as _sq464                                         # noqa: E402
+import tempfile as _tmp464                                       # noqa: E402
+import pandas as _pd464                                          # noqa: E402
+import prediction_log as _pl464                                  # noqa: E402
+import swing_engine as _se464                                    # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import run_daily_improvement as _rdi464                          # noqa: E402
+import regrade_seen_boundary_r483 as _rg464                      # noqa: E402
+import contamination_audit as _ca464                             # noqa: E402
+import gate_forward_r475 as _g475_464                            # noqa: E402
+import gate_forward_r478 as _g478_464                            # noqa: E402
+
+_ga464 = _pl464.grade_after_day
+_cases464 = [
+    ('2026-10-08', '2026-10-12 08:30:00', '2026-10-08'),     # 장 전 — 전 거래일 종가
+    ('2026-10-08', '2026-10-10 12:00:00', '2026-10-08'),     # 휴장일
+    ('2026-10-08', '2026-10-08 16:00:00', '2026-10-08'),     # 그날 마감 뒤
+    ('2026-10-08', '2026-10-12 10:00:00', '2026-10-12'),     # 다음 거래일 장중 → 그 장의 봉을 뺀다
+    ('2026-10-08', '2026-10-12 09:00:00', '2026-10-12'),     # 정규장 시작 그 시각
+    ('2026-10-08', '2026-10-12T14:10:27+09:00', '2026-10-12'),  # ISO · 시간대 표기
+    ('2026-10-07', '2026-10-08 20:00:00', '2026-10-08'),     # 자료일보다 뒤 거래일의 마감 뒤 — 그날 봉도 이미 지났다
+    ('2026-11-18', '2026-11-19 09:30:00', '2026-11-18'),     # 수능일 — 정규장 10:00 전
+    ('2026-11-18', '2026-11-19 10:30:00', '2026-11-19'),     # 수능일 — 정규장 중
+    ('2026-10-08', None, '2026-10-08'),                      # 본 시각 없음 → 종전 동작
+    ('2026-10-08', '모름', '2026-10-08'),
+]
+_bad464 = [(d, s, e, _ga464(d, s)) for d, s, e in _cases464 if _ga464(d, s) != e]
+check("① 경계 — 장 전·휴장일·그날 마감 뒤는 자료일 그대로 · 다음 거래일 정규장 중(시작 시각 포함)이면 그날 · 수능일은 10:00 · 본 시각 없으면 종전",
+      not _bad464, str(_bad464), scanned=len(_cases464))
+
+
+def _df464(rows):
+    return _pd464.DataFrame([{'trade_date': d, 'open': o, 'high': h, 'low': l, 'close': c} for d, o, h, l, c in rows])
+
+
+# T 봉: 아침 저가가 손절을 · 고가가 목표를 둘 다 친다(같은 봉 → 손절 먼저) · 다음 봉은 목표만
+_bars464 = _df464([('2026-10-08', 100, 101, 99, 100), ('2026-10-12', 100, 106, 90, 101), ('2026-10-13', 101, 106, 99, 105)]
+                  + [(f'2026-10-{14 + i:02d}', 105, 105, 104, 104) for i in range(25)])
+_row464 = {'date': '2026-10-08', 'price': 100.0, 'target': 105.0, 'stop': 95.0, 'horizon_days': 20}
+_gp464 = _pl464.grade_prediction(_row464, _bars464)
+_gs_in464 = _pl464.grade_seen(_row464, _bars464, '2026-10-12 10:00:00')
+_gs_pre464 = _pl464.grade_seen(_row464, _bars464, '2026-10-12 08:00:00')
+check("② grade_seen — 장중에 본 가격은 그 봉을 빼고(손절 먼저 → 목표) · 장 전에 본 가격은 grade_prediction 과 글자까지 같다(경계 칸만 더)",
+      _gp464['outcome'] == 'STOP' and _gs_in464['outcome'] == 'TARGET' and _gs_in464['graded_after'] == '2026-10-12'
+      and {k: v for k, v in _gs_pre464.items() if k != 'graded_after'} == _gp464 and _gs_pre464['graded_after'] == '2026-10-08'
+      and _pl464.grade_seen(_row464, None, None) is None,
+      f"{_gp464['outcome']} · {_gs_in464['outcome']} · {_gs_pre464['outcome']}")
+
+# ③ 자동매매 모의 — 계획이 생기기 전의 아침 저가로 '체결'되지 않는다(판정 기록이 장부의 글자든 dict 든)
+_plan464 = dict(plan_id='X', data_day='2026-10-08', entry=95.0, target=105.0, stop=90.5, horizon=20, wait_bars=20,
+                verdict=_json464.dumps({'report_ts': '2026-10-12 10:00:00'}))
+_sh_in464 = _se464.shadow_grade(_plan464, _bars464, 0.41)
+_sh_old464 = _se464.shadow_grade(dict(_plan464, verdict={}), _bars464, 0.41)
+check("③ shadow_grade — 장중 리포트의 계획은 그날 봉으로 체결 안 됨(대기 창은 다음 봉부터) · 생성 시각 없는 옛 계획은 종전대로 · report_ts_of 는 글자·dict 둘 다",
+      _sh_old464.get('fill_day') == '2026-10-12' and _sh_in464.get('fill_day') != '2026-10-12'
+      and _se464.report_ts_of(_plan464) == '2026-10-12 10:00:00'
+      and _se464.report_ts_of(dict(verdict={'report_ts': 'A'})) == 'A' and _se464.report_ts_of({}) is None
+      and _se464.report_ts_of(dict(verdict='깨진 글자')) is None,
+      f"{_sh_old464.get('fill_day')} · {_sh_in464.get('status')} {_sh_in464.get('fill_day')}")
+
+# ④ 동결한 줄을 본 시각 — 열쇠에 가격까지(같은 자료일의 다른 판을 가린다) · 같은 열쇠는 첫 줄 · 파일 없으면 빈 dict
+_hp464 = _os.path.join(_tmp464.gettempdir(), 'r483_history_test.jsonl')
+with open(_hp464, 'w', encoding='utf-8') as _f464:
+    for _r464 in ({'symbol': 'A.KS', 'date': '2026-10-08', 'day_basis': 'data', 'price': 100.0, 'generated_at': '2026-10-08 20:00:00'},
+                  {'symbol': 'A.KS', 'date': '2026-10-08', 'day_basis': 'data', 'price': 100.0, 'generated_at': '2026-10-09 07:00:00'},
+                  {'symbol': 'A.KS', 'date': '2026-10-08', 'day_basis': 'data', 'price': 103.0, 'generated_at': '2026-10-12 10:00:00'},
+                  {'symbol': '', 'date': '2026-10-08', 'price': 1.0}):
+        _f464.write(_json464.dumps(_r464, ensure_ascii=False) + '\n')
+_fs464 = _rdi464.freeze_seen_at(_hp464)
+_os.remove(_hp464)
+check("④ freeze_seen_at — (종목, 자료일, 가격) 열쇠 · 같은 열쇠는 첫 줄 · 가격이 다른 판을 가린다 · 종목 없는 줄은 건너뜀 · 파일 없으면 {}",
+      _fs464.get(('A.KS', '2026-10-08', 100.0)) == '2026-10-08 20:00:00'
+      and _fs464.get(('A.KS', '2026-10-08', 103.0)) == '2026-10-12 10:00:00' and len(_fs464) == 2
+      and _rdi464.freeze_seen_at(_os.path.join(PROJ, '_없는_이력.jsonl')) == {}, str(_fs464))
+
+# ⑤ 부르는 자리 — 규칙을 다시 적지 않는다(장 시각을 읽는 곳은 채점기 한 곳) · 넷이 같은 길로 부른다
+_src464 = {f: _read148(_os.path.join(PROJ, *f.split('/'))) for f in
+           ('scripts/run_daily_improvement.py', 'proof.py', 'swing_engine.py', 'prediction_log.py', 'scripts/contamination_audit.py')}
+check("⑤ 추적 채점은 grade_seen 에 동결 줄의 본 시각을 · 영수증·안 산 성적은 recorded_at 을 · 모의는 grade_after_day(report_ts_of) · 판정 원장 채점(evaluate_all)도 · 장 시각은 채점기에서만 읽는다",
+      'plog.grade_seen(' in _src464['scripts/run_daily_improvement.py'] and 'seen.get((str(r[\'ticker\'])' in _src464['scripts/run_daily_improvement.py']
+      and "plog.grade_seen(row, bars_df, (row or {}).get('recorded_at'))" in _src464['proof.py']
+      and "plog.grade_after_day(plan['data_day'], report_ts_of(plan))" in _src464['swing_engine.py']
+      and "grade_seen(row, cache.get(tk), row.get('recorded_at'))" in _src464['prediction_log.py']
+      and all('session_times' not in _src464[f] for f in ('scripts/run_daily_improvement.py', 'proof.py', 'swing_engine.py',
+                                                          'scripts/contamination_audit.py')),
+      scanned=len(_src464))
+
+# ⑥ 지난 케이스 다시 세기 — 경계가 같으면 안 봄 · 이미 고친 것(R483) · open · 뺀 상태는 안 봄 · 확정이면서 경계가 다르면 대상
+_rows464 = [dict(case_id='a', ticker='A.KS', signal_date='2026-10-08', reference_price=100.0, status='success', result_reason='x'),
+            dict(case_id='b', ticker='A.KS', signal_date='2026-10-08', reference_price=103.0, status='success', result_reason='x'),
+            dict(case_id='c', ticker='A.KS', signal_date='2026-10-08', reference_price=103.0, status='failure',
+                 result_reason='… · R483 가격을 본 장(2026-10-12)의 봉을 빼고 재환산'),
+            dict(case_id='d', ticker='A.KS', signal_date='2026-10-08', reference_price=103.0, status='open', result_reason=None),
+            dict(case_id='e', ticker='A.KS', signal_date='2026-10-08', reference_price=103.0, status='dup_version', result_reason=None)]
+_seen464 = {('A.KS', '2026-10-08', 100.0): '2026-10-08 20:00:00', ('A.KS', '2026-10-08', 103.0): '2026-10-12 10:00:00'}
+_acts464, _cnt464 = _rg464.plan_actions(_rows464, _seen464)
+check("⑥ regrade_seen_boundary_r483.plan_actions — 대상은 '확정 · 경계 다름 · 아직 안 고침' 하나뿐(멱등 · open 은 일일 루틴 몫)",
+      [a[0] for a in _acts464] == ['b'] and _acts464[0][1] == '2026-10-12' and _cnt464.get('이미 고침') == 1
+      and _cnt464.get('경계 = 기준일(그대로)') == 1, str(dict(_cnt464)))
+
+# ⑦ 오염 점검 — 전방 기록부의 '장중에 본 가격' 행은 0 이어야 한다(박제된 전방 판정기가 경계 없이 채점) · 판정 원장·추적은 셈만
+check("⑦ 오염 점검 seen_in_session — 순수 함수(본 시각 없는 줄은 안 셈) · 전방 기록부는 hard · 판정 원장은 hard 아님",
+      _ca464.seen_in_session([{'date': '2026-10-08', 's': '2026-10-12 10:00:00'}, {'date': '2026-10-08', 's': '2026-10-12 07:00:00'},
+                              {'date': '2026-10-08'}], 'date', 's') == 1
+      and 'seen_in_session' in _ca464.HARD['forward_registry'] and 'seen_in_session' not in _ca464.HARD['predictions']
+      and _ca464.hard_nonzero({'forward_registry': {'seen_in_session': 1}}) == ['forward_registry.seen_in_session=1'])
+
+# ⑧ 두 전방 판정의 결과 전 정정 — 사유 절 · 지금 해시와 지문이 문서에 있다 · R475 도 채점 규칙 지문을 박는다
+_p475_464 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R475_EV_GATE_FORWARD.md'))
+_p478_464 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R478_EV_GATE_CONTRACT_FORWARD.md'))
+import scripts.model_freeze_guard as _mfg464                     # noqa: E402
+_need464 = [(_p475_464, '라운드 483 정정'), (_p475_464, (_mfg464.sha('scripts/gate_forward_r475.py') or '')[:16]),
+            (_p475_464, _g475_464.grader_fingerprint()), (_p475_464, '결과는 아직 하나도 없다'),
+            (_p478_464, '라운드 483 정정'), (_p478_464, (_mfg464.sha('scripts/gate_forward_r478.py') or '')[:16]),
+            (_p478_464, _g478_464.grader_fingerprint()), (_p478_464, '결과는 아직 하나도 없다')]
+check("⑧ 사전등록 R475·R478 — '라운드 483 정정' 절 · 지금 채점기 해시 · 지금 채점 규칙 지문(R475 는 새로 박음) · 결과 전",
+      all(bool(t) and t in doc for doc, t in _need464)
+      and (_g475_464.FROM, _g475_464.DATE_FLOOR, _g475_464.COST) == ('2026-10-12', 30, 0.41)
+      and (_g478_464.FROM, _g478_464.DATE_FLOOR, _g478_464.COST) == ('2026-10-12', 30, 0.41),
+      str([t for doc, t in _need464 if not t or t not in doc]), scanned=len(_need464))
+# ─── §464 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

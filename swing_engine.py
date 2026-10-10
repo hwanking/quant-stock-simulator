@@ -196,6 +196,18 @@ def _rows(df):
     return out
 
 
+def report_ts_of(plan):
+    """그 계획의 판정을 낸 개장 전 리포트의 생성 시각(라운드 472 가 판정 기록에 싣는다) · 판정 기록이 글자(장부)든 dict 든 · 없으면 None."""
+    v = (plan or {}).get('verdict')
+    if isinstance(v, str):
+        try:
+            v = json.loads(v or '{}')
+        except ValueError:
+            v = {}
+    ts = (v or {}).get('report_ts') if isinstance(v, dict) else None
+    return str(ts) if ts else None
+
+
 def shadow_grade(plan, bars_df, cost_pct):
     """계획 하나를 그 계약대로 일봉에서 굴린다 → dict(status, fill_day, fill_price, exit_status, return_pct, net_pct, detail).
 
@@ -203,7 +215,11 @@ def shadow_grade(plan, bars_df, cost_pct):
     체결가: 그날 시가가 진입가 아래면 시가(지정가 주문은 더 싸게 체결된다) · 아니면 진입가. 체결한 날의 봉은 청산 판정에
     안 쓴다(같은 봉 안에서 무엇이 먼저였는지 모른다) — 다음 날부터 채점기(`prediction_log.grade_prediction`)를 그대로 부른다."""
     import prediction_log as plog
-    rows = [r for r in _rows(bars_df) if r[0] > str(plan['data_day'])]
+    # 라운드 483 — 판정을 낸 리포트를 **본 순간 이미 열린 장**의 봉은 대기 창에 안 쓴다(`prediction_log.grade_after_day` 한 곳).
+    #   장중에 만든 리포트의 계획을 그날 봉 전체로 체결시키면 계획이 생기기 전의 저가로 '체결'된다. 보통(장 전·휴장일·마감 뒤
+    #   리포트)은 자료일 그대로다. 생성 시각을 못 읽으면(라운드 472 전의 계획) 자료일 그대로(종전 동작).
+    start = plog.grade_after_day(plan['data_day'], report_ts_of(plan))
+    rows = [r for r in _rows(bars_df) if r[0] > str(start)]
     wb = plan.get('wait_bars')
     if not plan.get('entry') or not wb:
         return dict(status='invalid', detail='진입가 또는 대기 기간이 없습니다')
