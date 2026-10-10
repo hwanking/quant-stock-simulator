@@ -39417,6 +39417,27 @@ check("⑤ PROOF 칸도 같은 함수 — past_sim_line 을 성적표의 추천 
       "_pf418m.past_sim_line(_aio480.load_json(_pf418m.PAST_SIM_FILE), _sc418.get('reco'))" in _wa461
       and 'st.caption(_md_safe(_ps480))' in _wa461)
 # ─── §461 끝 ───
+# ─── §462 시작 (라운드 481) ───
+print("=" * 72)
+print("§462 기대값 조건의 확률에 ETF 가 섞여 있었다 — 쟀고 기록했다 · 운영 표는 그대로 (라운드 481 · 상태표 #80)")
+print("=" * 72)
+# 라운드 481 — 운영 점수대 표는 원장 판정 완료 행 전부(ETF 계열 8.2% 포함)로 세는데 개장 전 후보는 스캐너가 고르고 스캐너는 ETF 를 뺀다.
+#   55~59점 운영 59.85% vs 주식만 59.65% — 주식 후보의 확률이 0.2~0.3%p 높게 잡혔다(고치면 더 엄해짐 · 오늘 바뀌는 판정 0).
+#   운영 표는 안 바꿨다(모델 변경 · 전방 재평가 동안) — 상태표 #80 을 '부분'으로 · 레이더에 줄.
+_cen462 = _read148(_os.path.join(PROJ, 'docs', 'CENSUS_R252_STATUS.md'))
+_row462 = [_l for _l in _cen462.splitlines() if _l.startswith('| 80 |')]
+check("① 상태표 #80 — '부분' · 근거에 R481 과 잰 수(운영 59.85 · 주식만 59.65) · 더 엄해지는 쪽 · 교체는 사람",
+      len(_row462) == 1 and '| 부분 |' in _row462[0] and 'R481' in _row462[0] and '59.85%' in _row462[0]
+      and '59.65%' in _row462[0] and '더 엄해지는' in _row462[0] and '사람이 정한다' in _row462[0], str(_row462)[:200])
+_rad462 = _json.loads(_read148(_os.path.join(PROJ, 'data', 'research_radar.json')) or '{}')
+_line462 = [r for r in _rad462.get('rows') or [] if '(R481)' in str(r.get('name'))]
+check("② 레이더 — 모델 축의 열린 줄(교체는 사람의 결정 · 버전 칩 '다음에 할 일'에 뜬다)",
+      len(_line462) == 1 and _line462[0].get('axis') == 'model' and _line462[0].get('open') is True
+      and '사람의 결정' in str(_line462[0].get('status')))
+_src462 = _read148(_os.path.join(PROJ, 'scripts', 'band_population_r481.py'))
+check("③ 측정 스크립트는 읽기만 — 통계 행(stat_rows)과 판정 완료(decided_hit)로 세고 파일을 쓰지 않는다",
+      'LV.stat_rows(raw' in _src462 and 'LV.decided_hit' in _src462 and "open(" not in _src462.replace("open('.portfolio/calibration.json'", ''))
+# ─── §462 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
