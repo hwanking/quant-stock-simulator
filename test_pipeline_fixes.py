@@ -38730,6 +38730,130 @@ check("⑦ 레이더의 뉴스 줄 — '작은 쪽'과 '피드 못 받음'을 �
       len(_nr455) == 1 and '작은 쪽' in _nr455[0]['status'] and '피드 못 받음' in _nr455[0]['status']
       and not __import__('re').search(r'20\d\d-\d\d-\d\d', _nr455[0]['status']), str(_nr455[:1])[:200])
 # ─── §455 끝 ───
+# ─── §456 시작 (라운드 474) ───
+print("=" * 72)
+print("§456 R346 전방 구간은 결과를 안 읽고 정한다 · 국면 칸은 구간별 날짜 수와 같이 (라운드 474)")
+print("=" * 72)
+# 라운드 474 — 사용자: "개선 좀 하자"(자격 0 · 비용 차감 기대값). ① 기대값 게이트를 국면별로 볼 근거가 있나 쟀다 — 화면이
+#   '4상태 중 유일하게 양수'라 적던 조정 칸(개발 구간 +0.33%)은 학습 288일 +0.15% · 검증 16일 +2.02% 였다(합친 수가 짧은
+#   구간에 끌려 올라갔다) → 화면이 구간별 날짜 수와 같이 적게 했다. ② 가장 강한 후보(R346)의 11-16 전방 판정이 결과와
+#   무관하게 '미측정'이 되는 구조였다(라운드 398 의 45거래일 구간 안 매수권 날 13 · 하한 30) → 구간 끝을 결과를 안 읽고
+#   정하는 규칙으로 정정했다(기준·하한·갈래 불변 · 사전등록 R470 의 '라운드 474 정정' 절 · 해시를 사유와 함께 갈았다).
+import ast as _ast456                                            # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import forward_judge_r470 as _fj456                              # noqa: E402
+import trade_plan as _tp456                                      # noqa: E402
+
+_src456 = _read148(_os.path.join(PROJ, 'scripts', 'forward_judge_r470.py'))
+_tree456 = _ast456.parse(_src456)
+# ① 결과를 안 읽는다 — 구간 끝을 정하는 두 함수에 결과·봉 칸 이름이 없다(문자열 상수·이름 둘 다)
+_fns456 = [n for n in _tree456.body if isinstance(n, _ast456.FunctionDef) and n.name in ('r346_window_end', '_r346_decision_ok')]
+_bad456 = ('return_pct', 'outcome', 'b_ret', 'c_ret', 'b_out', 'c_out', 'bars', 'success', 'close', 'high', 'low')
+_tok456 = set()
+for _f456 in _fns456:
+    for _n456 in _ast456.walk(_f456):
+        if isinstance(_n456, _ast456.Constant) and isinstance(_n456.value, str):
+            _tok456.add(_n456.value)
+        elif isinstance(_n456, _ast456.Name):
+            _tok456.add(_n456.id)
+_hit456 = sorted(t for t in _tok456 if t in _bad456)
+check("① R346 구간 끝은 결정 시점 칸만 읽는다 — 결과·봉 칸 이름이 두 함수에 없다(본 이름 수를 밝힌다)",
+      len(_fns456) == 2 and not _hit456, str(_hit456), scanned=len(_tok456))
+
+# ② 갈래 — 라운드 398 구간 안에서 하한을 채우면 그 끝 그대로 · 모자라면 하한에 닿는 날 · 끝내 못 닿으면 None
+import datetime as _dt456                                        # noqa: E402
+
+
+def _wd456(start, n):
+    out, d = [], _dt456.date.fromisoformat(start)
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d += _dt456.timedelta(days=1)
+    return out
+
+
+def _rg456(dates, tick0=0, score=60):
+    return [dict(ticker=f'{tick0 + i:06d}.KS', date=d, score=score, price=100.0, hold_trim=103.0, hold_stop=95.0)
+            for i, d in enumerate(dates)]
+
+
+_in30 = _wd456('2026-08-10', 30)                                  # 전부 398 구간(~10-16) 안
+_mix456 = _wd456('2026-09-15', 20) + _wd456('2026-10-19', 15)     # 안 20 + 뒤 15 → 30번째는 뒤의 10번째
+_w30 = _fj456.r346_window_end(_rg456(_in30), '2026-08-10', '2026-10-16')
+_wmx = _fj456.r346_window_end(_rg456(_mix456), '2026-08-10', '2026-10-16')
+_w20 = _fj456.r346_window_end(_rg456(_mix456[:20]), '2026-08-10', '2026-10-16')
+check("② 갈래 — 398 구간 안에서 하한(30)을 채우면 그 끝(10-16) 그대로 · 모자라면 30번째 날 · 20일뿐이면 (None, 20)",
+      _w30 == ('2026-10-16', 30) and _wmx == (_mix456[29], 30) and _mix456[29] > '2026-10-16' and _w20 == (None, 20),
+      f"{_w30} · {_wmx} · {_w20}")
+# ③ 같은 종목 35일 간격 — 같은 종목만 매일 나오면 35일에 한 날만 센다 · 매수권 아래·레벨 없음은 안 센다
+_same456 = [dict(r, ticker='000777.KS') for r in _rg456(_wd456('2026-08-10', 40))]
+_low456 = _rg456(_in30, score=57) + [dict(r, hold_stop=None) for r in _rg456(_in30, tick0=500)]
+_ws456 = _fj456.r346_window_end(_same456, '2026-08-10', '2026-10-16')
+check("③ 같은 종목만 매일 나오면 35일 간격으로 센다 · 매수권(58) 아래·보유자 레벨 없는 행은 안 센다",
+      _ws456[0] is None and 1 < _ws456[1] < 5 and _fj456.r346_window_end(_low456, '2026-08-10', '2026-10-16') == (None, 0),
+      f"{_ws456}")
+# ④ 결과 칸을 심어도 끝이 안 바뀐다(양방향 — 좋은 결과·나쁜 결과)
+_jg456 = [dict(r, return_pct=9.9, outcome='TARGET') for r in _rg456(_mix456)]
+_jb456 = [dict(r, return_pct=-9.9, outcome='STOP') for r in _rg456(_mix456)]
+check("④ 결과 칸을 좋게·나쁘게 심어도 구간 끝이 같다",
+      _fj456.r346_window_end(_jg456, '2026-08-10', '2026-10-16')
+      == _fj456.r346_window_end(_jb456, '2026-08-10', '2026-10-16') == _wmx)
+
+
+# ⑤ 채점 시점 — 끝의 20봉이 닫히기 전에는 채점 함수를 안 부른다 · 닫힌 뒤엔 (first, 끝)으로 부른다
+class _Cal456:
+    def is_trading_day(self, d):
+        return d.weekday() < 5
+
+
+_calls456 = []
+_rsave456 = _fj456.r346_rows
+_fj456.r346_rows = lambda reg, bars, first, last: (_calls456.append((first, last)) or ([], {}))
+try:
+    _dd456 = dict(registry=_rg456(_mix456), bars={}, bars_failed=[])
+    _close456 = _fj456.FJ.nth_trading_day(_mix456[29], _fj456.FJ.H + 1, _Cal456())
+    _pre456 = _fj456.r346_run(_dd456, '2026-08-10', '2026-10-16', today='2026-11-16', cal=_Cal456())
+    _none456 = _fj456.r346_run(dict(registry=_rg456(_mix456[:20]), bars={}), '2026-08-10', '2026-10-16',
+                               today='2027-01-01', cal=_Cal456())
+    _n_pre456 = len(_calls456)
+    _aft456 = _fj456.r346_run(_dd456, '2026-08-10', '2026-10-16', today=_close456, cal=_Cal456())
+finally:
+    _fj456.r346_rows = _rsave456
+check("⑤ 끝의 20봉이 닫히기 전엔 채점 안 함('닫힌다' 사유) · 하한 못 닿으면 '하한' 사유 · 닫힌 날엔 (first, 끝)으로 채점",
+      _pre456['status'] == '미측정' and '닫힌다' in _pre456['verdict'] and _pre456['closes_on'] == _close456
+      and _none456['status'] == '미측정' and '하한' in _none456['verdict'] and _n_pre456 == 0
+      and _calls456 == [('2026-08-10', _mix456[29])] and _aft456.get('window') == ['2026-08-10', _mix456[29]],
+      f"{_pre456.get('verdict')} | {_none456.get('verdict')} | 부름 {_calls456}")
+# ⑥ run 은 자료 공급자를 끝 없이(first, None) 부른다 — 끝은 기록부를 받은 뒤 정한다
+_pcalls456 = []
+_run456 = _fj456.run(today='2026-11-16', eval_date='2026-11-16',
+                     data=lambda a, b: (_pcalls456.append((a, b)) or dict(registry=[], bars={}, bars_failed=[], shadow=[])))
+check("⑥ run 은 자료 공급자를 (첫 기록일, None) 으로 한 번 부르고, 0행이면 R346 은 '미측정'",
+      len(_pcalls456) == 1 and _pcalls456[0][1] is None and _run456['r346']['status'] == '미측정', str(_pcalls456))
+# ⑦ 사전등록에 정정 절 — 사유·결과 전·기준 불변을 적는다
+_pre474 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R470_FORWARD_GRADERS.md'))
+_need456 = ('라운드 474 정정', '결과 전', '13', '하한 30', '한 글자도 안 바꿨다')
+check("⑦ 사전등록 R470 에 '라운드 474 정정' 절 — 사유(13 < 하한 30) · 결과 전 · 기준 불변",
+      all(t in _pre474 for t in _need456), str([t for t in _need456 if t not in _pre474]), scanned=len(_need456))
+
+# ⑧ 국면 칸 — 취약구간 지도가 구간별(학습·검증) 날짜 수를 싣고, 화면 출처 줄이 그것을 같이 적는다
+_wm456 = _json.load(open(_os.path.join(PROJ, 'data', 'weakness_map.json'), encoding='utf-8'))
+_sp456 = ((_wm456.get('axes_split') or {}).get('시장 국면') or {})
+_ok_sp456 = bool(_sp456) and all(isinstance(v, dict) and v and all(int(c.get('dates') or 0) > 0 for c in v.values())
+                                 for v in _sp456.values())
+_m456 = dict(n=100, ep=80, hit=60.0, ev=0.3, cost_pct=0.41,     # 측정일 칸은 안 심는다(§156 — 박힌 날짜 금지)
+             split={'train': dict(dates=288, ev=0.146), 'valid': dict(dates=16, ev=2.018)})
+_line456 = _tp456.state_basis_line(_m456)
+_line0_456 = _tp456.state_basis_line(dict(_m456, split={}))
+check("⑧ 지도가 '시장 국면' 칸을 구간별 날짜 수와 함께 싣고, 출처 줄이 '학습 288일 +0.15% · 검증 16일 +2.02%'를 적는다 · 없으면 종전 줄",
+      _ok_sp456 and '학습 288일 +0.15%' in _line456 and '검증 16일 +2.02%' in _line456
+      and '구간별' not in _line0_456 and _line456.startswith(_line0_456),
+      f"{_line456[-90:]} · 지도 칸 {list(_sp456)}")
+check("⑧' 구간별 수는 지도에서 읽는다 — state_split 이 없는 칸·못 읽은 문서에 빈 dict",
+      _tp456.state_split(_wm456, 'PULLBACK') and _tp456.state_split({}, 'PULLBACK') == {}
+      and _tp456.state_split(None, 'BEAR') == {})
+# ─── §456 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -239,6 +239,27 @@ def main():
                 weak.append((ax, k, c['ev'], c['n']))
         print()
 
+    # ── 라운드 474 — '시장 국면' 칸을 학습·검증으로 갈라 **날짜 수**와 같이 싣는다(판정·문턱 없음) ──────────────────────
+    #   위 칸은 개발 구간(학습+검증)을 합친 수다. 시장 수준 축은 날짜가 표본인데(R45) 합친 수만 내면 짧은 검증 구간이 칸
+    #   하나를 끌어올린 것이 안 보인다 — 2026-10-10 실측 '조정' 비용 뺀 +0.33% 는 학습 288일 +0.15% · 검증 16일 +2.02% 였고,
+    #   매매 지시서가 그 칸을 *"4상태 중 유일하게 양수"* 로 적고 있었다. 화면이 두 구간을 날짜 수와 함께 같이 적게 한다.
+    split_cells = {}
+    for k_ko in out.get('시장 국면', {}):
+        per = {}
+        for sp in ('train', 'valid'):
+            sub = [r for r in rows if ST_KO.get(r['_st']) == k_ko and r.get('split') == sp]
+            if sub:
+                c = cell(sub)
+                per[sp] = dict(n=c['n'], dates=len({str(r['date'])[:10] for r in sub}), hit=c['hit'], ev=c['ev'])
+        if per:
+            split_cells[k_ko] = per
+    if split_cells:
+        print('■ 시장 국면 — 구간별 (날짜 수)')
+        for k_ko, per in split_cells.items():
+            print('  ' + k_ko + ' · ' + ' · '.join(f"{sp} {v['dates']}일 n {v['n']:,} EV {v['ev']:+.3f}"
+                                                   for sp, v in per.items()))
+        print()
+
     print(f'■ 가장 약한 칸 ({_FE} 이후 연구 우선순위 후보)')
     for ax, k, ev, n in sorted(weak, key=lambda x: x[2])[:8]:
         print(f'  {ax:10s} {k:16s} EV {ev:+.3f} (n {n:,})')
@@ -263,6 +284,7 @@ def main():
                        index_source=idx_src, index_last=idx_last,
                        regime_missing_n=no_state,
                        base=base, axes=out,
+                       axes_split={'시장 국면': split_cells},   # 라운드 474 — 구간별 · 날짜 수
                        min_n=MIN_N,
                        note='관측 전용 — 점수·게이트를 바꾸지 않는다. '
                             f'{_FE} 이후 연구 순서를 정하는 근거로만 쓴다.',

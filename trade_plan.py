@@ -90,6 +90,18 @@ def state_cells(doc):
     return out
 
 
+def state_split(doc, code):
+    """그 상태 칸의 학습·검증 구간별 수(날짜 수 포함) — 취약구간 지도의 `axes_split` (라운드 474). 못 읽으면 {}."""
+    ko = STATE_AXIS_KO.get(code)
+    per = ((((doc or {}).get('axes_split') or {}).get(STATE_AXIS) or {}).get(ko)) or {}
+    out = {}
+    for sp in ('train', 'valid'):
+        v = per.get(sp)
+        if isinstance(v, dict) and v.get('dates') and v.get('ev') is not None:
+            out[sp] = v
+    return out
+
+
 def state_say(code, cells, cost=None):
     """그 상태에 대해 **수가 뒷받침하는 문장만** — 4상태가 다 있을 때 적중 최저·최고, 비용 뺀 기대값이 양수인 유일한 칸.
     해당 없으면 ''(이야기를 지어내지 않는다 · 라운드 422). 문턱 없음 — 넷의 순위와 부호만 본다."""
@@ -152,7 +164,8 @@ def market_state(kospi_px, ma20, ma60, ma60_prev=None, doc=None):
     c = cells.get(code)
     if c:
         out.update(n=int(c['n']), ep=c.get('ep'), hit=float(c['hit']), ev=c.get('ev'),
-                   made=(d or {}).get('made'), ledger_rows=(d or {}).get('ledger_rows'), cost_pct=cost)
+                   made=(d or {}).get('made'), ledger_rows=(d or {}).get('ledger_rows'), cost_pct=cost,
+                   split=state_split(d, code))
     out['say'] = ' '.join(x for x in (state_say(code, cells, cost), engine_cap_line(code)) if x)
     return out
 
@@ -169,7 +182,23 @@ def state_basis_line(m):
     return (f"개발 구간 매수권(58점+) n={int(m['n']):,}"
             + (f" · 독립 사건 {int(m['ep']):,}" if m.get('ep') else '')
             + f" · 적중 {float(m['hit']):.1f}%{ev_txt}"
-            + (f" ({m.get('made')} 측정 · 원장 {int(m.get('ledger_rows') or 0):,}행)" if m.get('made') else ''))
+            + (f" ({m.get('made')} 측정 · 원장 {int(m.get('ledger_rows') or 0):,}행)" if m.get('made') else '')
+            + state_split_clause(m.get('split')))
+
+
+def state_split_clause(split):
+    """라운드 474 — 개발 구간을 학습·검증으로 가른 한 마디(날짜 수와 같이). 국면은 시장 수준 축이라 표본이 날짜다(R45) —
+    합친 수만 내면 짧은 구간이 칸을 끌어올린 것이 안 보인다. 판정 낱말·문턱 없음. 못 읽으면 ''."""
+    split = split or {}
+    parts = []
+    for sp, ko in (('train', '학습'), ('valid', '검증')):
+        v = split.get(sp)
+        if v and v.get('dates') and v.get('ev') is not None:
+            parts.append(f"{ko} {int(v['dates']):,}일 {float(v['ev']):+.2f}%")
+    if not parts:
+        return ''
+    return (' — 구간별: ' + ' · '.join(parts)
+            + ' (국면은 날짜가 표본입니다 — 날짜 수가 적은 쪽의 값은 그 며칠의 시장이 정합니다)')
 
 
 # ───────────────────────────────────────────────────────────────────
