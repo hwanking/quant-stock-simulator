@@ -39328,6 +39328,95 @@ check("④ 관제실 꼬리는 한 문장 — 무엇이 '오늘 계획' 갈래�
       _sv460.ZERO_DAY_MORE.startswith('자세한 내용') and "'오늘 계획' 갈래에 있습니다" in _sv460.ZERO_DAY_MORE
       and all(t in _sv460.ZERO_DAY_MORE for t in ('모자란지', '실제로 어떻게 됐는지', '다시 볼 길')), _sv460.ZERO_DAY_MORE)
 # ─── §460 끝 ───
+# ─── §461 시작 (라운드 480) ───
+print("=" * 72)
+print("§461 '몇 번 추천했나' — 실전 추천 수와 과거 원장 시뮬레이션(오염 넷을 걷은 판) · 판정에 안 쓴다 (라운드 480)")
+print("=" * 72)
+# 라운드 480 — 사용자: "몇번 추천해줘봤어? 이걸로 시뮬레이션 할 수 있잖아 예전걸로 가지고 · 오염 안 되게". 같은 물음의 첫 판(R208 ·
+#   2026-09-02)에는 오염이 넷 들어 있었다 — ① 진입가가 어긋난 행·접미사 복사본을 안 뺐다 ② 같은 종목 35일 안 겹침을 그대로 셌다
+#   ③ 운영 확률(세 구간 전부로 센 점수대 적중률)로 과거 검증·블라인드를 갈랐다(그 구간의 답을 미리 본 것) ④ 비용이 옛 0.36.
+#   걷으니 통과 건수가 835 → 204 이고, R208 방식에서 블라인드 차가 0 을 제외하던 것(−2.75 [−4.96, −0.03])이 사라졌다(−1.28 [−7.59, +3.28]).
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import ev_gate_past_sim_r480 as _ps461                           # noqa: E402
+import proof as _pf461                                           # noqa: E402
+import swing_ledger as _sl461                                    # noqa: E402
+import swing_view as _sv461                                      # noqa: E402
+
+# ① 오염 걷기 — 35일 간격 · 학습 구간 확률 · 게이트 식 · 결과 칸 거르기
+_sp461 = _ps461.spaced([dict(ticker='000001.KS', date='2026-01-01'), dict(ticker='000001.KQ', date='2026-01-20'),
+                        dict(ticker='000001.KS', date='2026-02-10'), dict(ticker='000002.KS', date='2026-01-20')])
+check("① 35일 간격 — 같은 종목(접미사 무관)은 앞 케이스에서 35일이 지나야 센다 · 다른 종목은 따로",
+      [(r['ticker'], r['date']) for r in _sp461] == [('000001.KS', '2026-01-01'), ('000002.KS', '2026-01-20'),
+                                                       ('000001.KS', '2026-02-10')], str(_sp461))
+_bp_rows461 = ([dict(split='train', score=57, outcome='TARGET')] * 60 + [dict(split='train', score=57, outcome='STOP')] * 40
+               + [dict(split='blind', score=57, outcome='TARGET')] * 500 + [dict(split='train', score=57, outcome='OPEN')] * 50
+               + [dict(split='train', score=62, outcome='TARGET')] * 10)
+_bp461 = _ps461.band_p(_bp_rows461, [(55, 59), (60, 64)], 'train')
+check("①' 점수대 확률은 학습 구간의 판정 완료 행만 — 블라인드 500건·미결 50건은 안 든다 · 30건 미만 띠는 None",
+      abs(_bp461[(55, 59)] - 0.6) < 1e-12 and _bp461[(60, 64)] is None, str(_bp461))
+check("①'' 게이트 식 = p×목표폭 + (1−p)×손절폭 − 비용 · 정합(손절 < 진입 < 목표)이 깨지면 None",
+      abs(_ps461.gate_ev(dict(price=100, target=105, stop=93), 0.6, 0.41) - (0.6 * 5 - 0.4 * 7 - 0.41)) < 1e-9
+      and _ps461.gate_ev(dict(price=100, target=95, stop=93), 0.6, 0.41) is None
+      and _ps461.gate_ev(dict(price=100, target=105, stop=93), None, 0.41) is None)
+_sm_rows461 = [dict(split='blind', date='2026-09-01', score=60, price=100, target=150, stop=95, outcome='TARGET', return_pct=10.0),
+               dict(split='blind', date='2026-09-02', score=60, price=100, target=101, stop=95, outcome='STOP', return_pct=-5.0),
+               dict(split='blind', date='2026-09-03', score=60, price=100, target=150, stop=95, outcome=None, return_pct=3.0)]
+_sm461 = _ps461.summarize(_sm_rows461, {(60, 64): 0.6}, 0.41, boot=0)
+check("①''' 요약 — 통과(기대값>0)·막힘을 가르고 비용을 뺀다 · 결과가 없는 행은 안 센다",
+      _sm461['blind']['pass']['n'] == 1 and abs(_sm461['blind']['pass']['mean_net'] - 9.59) < 1e-9
+      and _sm461['blind']['block']['n'] == 1 and abs(_sm461['blind']['block']['mean_net'] + 5.41) < 1e-9, str(_sm461['blind']))
+_src461 = _read148(_os.path.join(PROJ, 'scripts', 'ev_gate_past_sim_r480.py'))
+check("①'''' 배선 — 통계 행(stat_rows · 축척 감사 목록) → 58점+ → 35일 간격 · 확률은 학습 구간 · 비용은 운영 상수",
+      'LV.stat_rows(raw, keys=LV.scale_mismatch_keys()' in _src461 and 'sp_rows = spaced(pool)' in _src461
+      and "band_p(stat, edges, 'train')" in _src461 and 'float(verdict_core.COST_PCT)' in _src461)
+
+# ② 실제 산출물 — 두 판(깨끗한 판 · R208 방식)이 실리고 측정이라고 적는다 · 행 수 사슬 · 종목코드 없음(동봉 가능)
+import artifact_io as _aio461                                    # noqa: E402
+_doc461 = _aio461.load_json(_pf461.PAST_SIM_FILE) or {}
+check("② 산출물 — 깨끗한 판·R208 방식 · '판정 아님' · 간격 ≤ 58점+ ≤ 통계 행 ≤ 원장 · 종목코드 모양 0(값은 잠그지 않는다)",
+      _doc461.get('clean') and _doc461.get('as_r208') and '판정 아님' in str(_doc461.get('note'))
+      and 0 < int(_doc461.get('spaced_58') or 0) <= int(_doc461.get('pool_58') or 0) <= int(_doc461.get('stat_rows') or 0)
+      <= int(_doc461.get('ledger_rows') or 0) and not _pf461.code_like_strings(_doc461),
+      str({k: _doc461.get(k) for k in ('ledger_rows', 'stat_rows', 'pool_58', 'spaced_58')}))
+
+# ③ 한 줄 — 실전 추천 수 · 과거 통과 수와 결과 · 0 을 포함하는지만 · 판정에 안 쓴다 · 자리 낱말 없음
+def _sim461(dci_blind):
+    def side(n, m, ci=None):
+        return dict(n=n, dates=n, mean_net=m, median_net=m, ci95=ci)
+    return dict(made='2026-10-10T12:00:00', ledger_rows=258330, spaced_58=1000, cost_pct=0.41,
+                clean={'train': dict(**{'pass': side(14, 0.5), 'block': side(900, -0.3)}, diff=0.8, diff_ci=[-1.0, 2.0]),
+                       'valid': dict(**{'pass': side(1, -5.0), 'block': side(40, 0.3)}, diff=-5.3, diff_ci=None),
+                       'blind': dict(**{'pass': side(5, -2.0, [-6.0, 2.0]), 'block': side(40, -1.0)}, diff=-1.0, diff_ci=dci_blind)})
+
+
+_reco461 = dict(days=45, candidates=212, recommended=0, registry_rows=1380, registry_buy=0)
+_l461 = _pf461.past_sim_line(_sim461([-3.0, 1.0]), _reco461)
+_l2461 = _pf461.past_sim_line(_sim461([-4.0, -0.5]), None)
+check("③ 한 줄 — 실전 0개 · 기록부 0건 · 과거 1,000건 중 20건(2.0%) · 구간별 · 0 을 포함 · 구분되지 않음 · 판정에 안 씀 · '위의' 없음",
+      _l461 and _l461.startswith('몇 번 추천했나') and '추천 0개' in _l461 and '매수 쪽 판정 0건' in _l461
+      and '1,000건 중 20건(2.0%)' in _l461 and '실전 구간 5건 -2.00%' in _l461 and '0 을 포함' in _l461
+      and '구분되지 않습니다' in _l461 and '판정에 쓰지 않습니다' in _l461 and '위의' not in _l461
+      and not any(w in _l461 for w in ('보수적', '괜찮', '안전합'))
+      and '0 을 포함하지 않는 구간: 실전 구간(통과 쪽이 못함)' in _l2461 and '실전에서는' not in _l2461
+      and _pf461.past_sim_line({}, _reco461) is None, _l461)
+
+# ④ 자동매매 칸 — '오늘 계획' 판에 그 줄(넘긴 산출물) · 관제실 판엔 없음 · 넘긴 것이 없으면 시험은 파일을 안 읽는다
+_c461 = _sl461.connect(':memory:')
+_sl461.add_plan(_c461, dict(plan_id='R480A', data_day='2026-10-08', code='000001', name='z', spec='SWING_V1', entry=10000,
+                            target=10480, stop=9314, horizon=20, wait_bars=20, live_ok=False,
+                            verdict=dict(failed=['비용 차감 기대값 양수'], checks_n=11, expected_return=-0.29)))
+_zf461 = _sv461.zero_day_line(_c461, '2026-10-08', scorecard=dict(reco=_reco461), sim=_sim461([-3.0, 1.0]))
+_zb461 = _sv461.zero_day_line(_c461, '2026-10-08', scorecard=dict(reco=_reco461), brief=True, sim=_sim461([-3.0, 1.0]))
+_z0461 = _sv461.zero_day_line(_c461, '2026-10-08', scorecard={})
+_c461.close()
+check("④ '오늘 계획' 판에 '몇 번 추천했나' · 관제실 판엔 없고 안내 문장이 그 자리를 가리킨다 · 성적표·산출물을 안 넘기면 그 줄 없음",
+      _zf461 and '몇 번 추천했나' in _zf461 and _zb461 and '몇 번 추천했나 —' not in _zb461
+      and '몇 번 추천했는지' in _sv461.ZERO_DAY_MORE and '몇 번 추천했나' not in (_z0461 or ''), str(_zf461)[-160:])
+_wa461 = _read148(_os.path.join(PROJ, 'web_app.py'))
+check("⑤ PROOF 칸도 같은 함수 — past_sim_line 을 성적표의 추천 셈과 산출물로 부르고 _md_safe 로 그린다",
+      "_pf418m.past_sim_line(_aio480.load_json(_pf418m.PAST_SIM_FILE), _sc418.get('reco'))" in _wa461
+      and 'st.caption(_md_safe(_ps480))' in _wa461)
+# ─── §461 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

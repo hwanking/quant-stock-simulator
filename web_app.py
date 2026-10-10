@@ -12189,6 +12189,14 @@ if _ledger_df is not None:
                     _gl475 = _pf418m.gate_line(_sc418, _gt418[0]['name'])
                     if _gl475:
                         st.caption(_md_safe(_gl475))
+                    # 라운드 480 — '몇 번 추천했나' — 실전 추천 수와 과거 원장 시뮬레이션(오염을 걷은 판) · 문장은 proof 한 곳
+                    try:
+                        import artifact_io as _aio480
+                        _ps480 = _pf418m.past_sim_line(_aio480.load_json(_pf418m.PAST_SIM_FILE), _sc418.get('reco'))
+                    except Exception:                          # noqa: BLE001
+                        _ps480 = None
+                    if _ps480:
+                        st.caption(_md_safe(_ps480))
     except Exception as _ex418m:                               # noqa: BLE001
         st.caption(f"가늠 PROOF 성적표를 읽지 못했습니다 ({type(_ex418m).__name__}) — 미측정입니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):

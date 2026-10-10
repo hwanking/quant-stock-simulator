@@ -571,6 +571,53 @@ def gate_line(sc, name):
     return s
 
 
+#: 라운드 480 — 과거 시뮬레이션 산출물(`scripts/ev_gate_past_sim_r480.py`)과 구간의 화면 이름
+PAST_SIM_FILE = 'ev_gate_past_sim_r480.json'
+_SPLIT_KO = (('train', '학습'), ('valid', '검증'), ('blind', '실전 구간'))
+
+
+def past_sim_line(sim, reco=None):
+    """'몇 번 추천했나' 한 줄 (라운드 480) — 실전(개장 전 리포트 · 상위 60종목 기록부)의 추천 수와, 과거 원장에 이 조건을 대 본
+    시뮬레이션(오염 행·같은 종목 35일 안 겹침을 빼고 · 확률은 학습 구간에서만)의 통과 수와 결과. 판정 낱말 없음 — 0 을 포함하는지만.
+    사용자: *"몇번 추천해줘봤어? 이걸로 시뮬레이션 할 수 있잖아 예전걸로 가지고"*. 과거 원장은 이미 봤으므로 판정에 안 쓴다고 같은
+    줄에 적는다. 산출물이 없으면 None(§3)."""
+    sim = sim or {}
+    c = sim.get('clean') or {}
+    if not c or not sim.get('spaced_58'):
+        return None
+    parts = []
+    r = reco or {}
+    if r.get('days'):
+        s = (f"실전에서는 개장 전 리포트 {int(r['days'])}거래일 후보 {int(r['candidates']):,}개 중 신규 매수 추천 "
+             f"{int(r['recommended'])}개")
+        if r.get('registry_rows'):
+            s += f" · 매일 상위 60종목을 기록한 {int(r['registry_rows']):,}행에서도 엔진의 매수 쪽 판정 {int(r['registry_buy'])}건"
+        parts.append(s + ".")
+    tot = sum(int(((c.get(sp) or {}).get('pass') or {}).get('n') or 0) for sp, _ in _SPLIT_KO)
+    base = int(sim['spaced_58'])
+    seg = []
+    for sp, ko in _SPLIT_KO:
+        p = (c.get(sp) or {}).get('pass') or {}
+        if p.get('n'):
+            seg.append(f"{ko} {int(p['n']):,}건 {float(p['mean_net']):+.2f}%")
+    bl = ((c.get('blind') or {}).get('pass') or {}).get('ci95')
+    made = minute_of(sim.get('made'))[:10]
+    s = (f"과거 원장({made} 측정 · {int(sim.get('ledger_rows') or 0):,}행 · 진입가가 어긋난 행과 같은 종목 35일 안의 겹침을 빼고 · "
+         f"확률은 학습 구간에서만 잼)에 이 조건을 대 보면 매수권 {base:,}건 중 {tot:,}건({tot / base * 100:.1f}%)이 통과했을 것이고, "
+         f"비용 {sim.get('cost_pct')}% 를 뺀 평균은 " + ' · '.join(seg)
+         + (f"(실전 구간 95% 구간 {_ci_text(bl)})" if bl else ''))
+    dcis = [(ko, (c.get(sp) or {}).get('diff_ci'), (c.get(sp) or {}).get('diff')) for sp, ko in _SPLIT_KO]
+    known = [(ko, ci, d) for ko, ci, d in dcis if ci]
+    if known and all(float(ci[0]) <= 0 <= float(ci[1]) for _, ci, _ in known):
+        s += " — 통과했을 쪽과 막힌 쪽은 어느 구간에서도 구분되지 않습니다"
+    elif known:
+        s += " — 통과 − 막힘 차의 구간이 0 을 포함하지 않는 구간: " + ' · '.join(
+            f"{ko}({'통과 쪽이 나음' if float(d) > 0 else '통과 쪽이 못함'})" for ko, ci, d in known
+            if not (float(ci[0]) <= 0 <= float(ci[1])))
+    parts.append(s + ". 과거 원장은 이미 여러 번 봤으므로 판정에 쓰지 않습니다 — 판정은 결과 전에 기준을 적어 둔 전방 판정이 합니다.")
+    return "몇 번 추천했나 — " + ' '.join(parts)
+
+
 #: 라운드 478 — 성적표 `forward_tests` 의 열쇠 → 화면 이름(라운드 번호는 화면에 안 쓴다 · R227)
 FORWARD_TEST_NAMES = {
     'contract': '자동매매 계약 그대로(진입가 지정가 · 최대 20거래일 대기 · 안 닿으면 거래 없음) 막힌 계획이 있는 날',

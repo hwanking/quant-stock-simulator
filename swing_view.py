@@ -541,6 +541,30 @@ def _ev_scorecard(ps, scorecard=None):
         return None
 
 
+def past_sim_record_line(ps, scorecard=None, sim=None):
+    """'몇 번 추천했나' — 실전 추천 수(성적표)와 과거 원장 시뮬레이션(산출물)을 한 줄로(라운드 480 · 문장은 `proof.past_sim_line` 한 곳).
+    막힌 계획이 없거나 산출물을 못 읽으면 None."""
+    sc = _ev_scorecard(ps, scorecard)
+    if sc is None:
+        return None
+    if sim is None and scorecard is None:      # 넘겨받은 것이 없을 때만(화면) 산출물을 읽는다 — 시험은 넘긴 것만 쓴다
+        sim = _load_past_sim()
+    try:
+        import proof as _pf
+        return _pf.past_sim_line(sim, (sc or {}).get('reco'))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _load_past_sim():
+    try:
+        import artifact_io as _aio
+        import proof as _pf
+        return _aio.load_json(_pf.PAST_SIM_FILE)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def roadmap_record_line(ps, scorecard=None):
     """'이 조건을 다시 볼 길' — 미리 정한 전방 판정들의 진행(라운드 478 · 문장은 `proof.roadmap_line` 한 곳). 막힌 계획이 없거나
     성적표에 진행이 없으면 None."""
@@ -557,11 +581,11 @@ def roadmap_record_line(ps, scorecard=None):
 #: 라운드 477 — 관제실의 짧은 판 꼬리. 관제실은 한눈에 보는 자리라(라운드 455) 막은 조건 · 언제만 적고 나머지는 이 갈래로 보낸다.
 #:   라운드 479 — 첫 판 *"0 까지 얼마나 모자란지 · 이 조건이 막은 후보의 기록은 …"* 이 끊긴 문장처럼 읽혔다(사용자가 그대로 붙여
 #:   보냈다). 무엇이 어디 있는지를 한 문장으로.
-ZERO_DAY_MORE = ("자세한 내용 — 기대값이 0 까지 얼마나 모자란지, 이 조건이 막은 후보가 실제로 어떻게 됐는지, 이 조건을 다시 볼 길 — 은 "
-                 "'오늘 계획' 갈래에 있습니다.")
+ZERO_DAY_MORE = ("자세한 내용 — 기대값이 0 까지 얼마나 모자란지, 이 조건이 막은 후보가 실제로 어떻게 됐는지, 지금까지 몇 번 추천했는지"
+                 "(과거 원장 시뮬레이션 포함), 이 조건을 다시 볼 길 — 은 '오늘 계획' 갈래에 있습니다.")
 
 
-def zero_day_line(c, day, scorecard=None, brief=False):
+def zero_day_line(c, day, scorecard=None, brief=False, sim=None):
     """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
     라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
     오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다.
@@ -581,8 +605,10 @@ def zero_day_line(c, day, scorecard=None, brief=False):
     if brief:                    # 라운드 477 — 관제실: 막은 조건 · 언제 · 나머지가 어디 있는지(같은 함수 · 줄을 덜 그릴 뿐)
         return '  \n'.join(x for x in (first, when_line(ps), ZERO_DAY_MORE) if x)
     sc = _ev_scorecard(ps, scorecard)        # 라운드 478 — 성적표는 한 번만 읽는다(두 줄이 같은 것을 쓴다)
+    if sim is None and scorecard is None and sc is not None:   # 라운드 480 — 과거 시뮬레이션 산출물도 화면일 때만 한 번
+        sim = _load_past_sim()
     return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, sc),
-                                   roadmap_record_line(ps, sc)) if x)
+                                   past_sim_record_line(ps, sc, sim), roadmap_record_line(ps, sc)) if x)
 
 
 def holdings_diff(acct_positions, app_positions):
