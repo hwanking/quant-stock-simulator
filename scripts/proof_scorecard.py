@@ -149,10 +149,30 @@ def main(argv=None):
     except Exception as _ex477:                                # noqa: BLE001
         print(f'R475 진행 셈 못 함 — {type(_ex477).__name__}')
         gate_forward = None
+    # 라운드 478 — 이 조건을 다시 볼 수 있는 다른 미리 정한 전방 판정들의 진행 — 각 채점기의 구간 셈을 그대로 부른다(결과를 안
+    #   읽는다 · 센 날 / 하한). ① 자동매매 계약 그대로(사전등록 R478 · 장부를 읽기 전용으로) ② 1차 목표 없이 손절만(R346 · 전방 기록부).
+    forward_tests = []
+    try:
+        import gate_forward_r478 as _g8
+        _pl8, _sh8 = _g8.load_ledger()
+        _e8, _n8 = _g8.window_end(_pl8, is_off=_ct.is_non_trading_date)
+        forward_tests.append(dict(key='contract', start=_g8.FROM, floor=_g8.DATE_FLOOR, counted=_n8, end=_e8,
+                                  prereg='docs/PREREG_R478_EV_GATE_CONTRACT_FORWARD.md'))
+    except Exception as _ex478:                                # noqa: BLE001
+        print(f'R478 진행 셈 못 함 — {type(_ex478).__name__}')
+    try:
+        import forward_judge_r470 as _j70
+        import forward_registry as _fr70
+        _f70, _l70 = _j70.FJ.record_window()
+        _e70, _n70 = _j70.r346_window_end(_fr70.load(), _f70, _l70)
+        forward_tests.append(dict(key='exit_rule', start=_f70, floor=_j70.R346_DATE_FLOOR, counted=_n70, end=_e70,
+                                  prereg='docs/PREREG_R470_FORWARD_GRADERS.md'))
+    except Exception as _ex346:                                # noqa: BLE001
+        print(f'R346 진행 셈 못 함 — {type(_ex346).__name__}')
     doc = dict(made=proof.now_iso(), ledger_rows=len(rows), tickers=len(tickers),
                bars_ok=sum(1 for v in bars.values() if v is not None), bars_fail=len(fail),
                status=dict(st), abstain=ab, by_action=by_action, gates=gates, reco=reco, candidates=cands,
-               ev_order=evo, pairing=pairing, gate_forward=gate_forward,
+               ev_order=evo, pairing=pairing, gate_forward=gate_forward, forward_tests=forward_tests,
                tracker_decided=sum(1 for c in tracker_cases() if c['status'] in ('success', 'failure', 'unresolved')),
                rule=('같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · '
                      f"운영 비용 {ab.get('cost_pct')}% 차감 · 판정 1건에 같은 금액 · 문턱 없음"),

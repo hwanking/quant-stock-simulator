@@ -565,6 +565,32 @@ def gate_line(sc, name):
     return s
 
 
+#: 라운드 478 — 성적표 `forward_tests` 의 열쇠 → 화면 이름(라운드 번호는 화면에 안 쓴다 · R227)
+FORWARD_TEST_NAMES = {
+    'contract': '자동매매 계약 그대로(진입가 지정가 · 최대 20거래일 대기 · 안 닿으면 거래 없음) 막힌 계획이 있는 날',
+    'exit_rule': '1차 목표 없이 손절만 지키는 청산 규칙 후보의 센 날',
+}
+
+
+def roadmap_line(sc):
+    """'이 조건을 다시 볼 길' 한 줄 (라운드 478) — 미리 정한 전방 판정들의 진행(센 날 / 하한 · 결과를 안 읽는 셈)만 적는다.
+    사용자: *"정말 개선 안해?"* — 기준을 낮추는 대신 바꿀 수 있는 길이 무엇이고 어디까지 왔는지를 같은 칸에. 판정 낱말 없음 ·
+    진행이 하나도 없으면 None(§3)."""
+    parts = []
+    for t in (sc or {}).get('forward_tests') or []:
+        nm = FORWARD_TEST_NAMES.get(t.get('key'))
+        if not nm or t.get('counted') is None or not t.get('floor'):
+            continue
+        s = f"{nm} {int(t['counted'])}/{int(t['floor'])}일"
+        if t.get('end'):
+            s += f"(구간 끝 {t['end']})"
+        parts.append(s)
+    if not parts:
+        return None
+    return ("이 조건을 다시 볼 길은 기준을 낮추는 것이 아니라 결과를 보기 전에 기준을 적어 둔 전방 판정입니다 — "
+            + " · ".join(parts) + ". 어느 쪽이 통과해도 규칙을 바꿀지는 사람이 정합니다.")
+
+
 def forward_clause(gf, name):
     """사전등록 R475 의 진행 한 마디 (라운드 477) — 이 조건이 막은 후보를 **앞으로의 자료로** 판정하는 중이다 · 센 날 / 하한 ·
     구간 끝과 판정할 수 있는 날(달력 셈 · 결과를 안 읽는다). 성적표에 진행이 없거나 다른 조건이면 ''(§3 · 줄을 지어내지 않는다)."""

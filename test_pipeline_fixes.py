@@ -39165,6 +39165,130 @@ check("④ 관제실 판 — 첫 줄 · 언제 · '오늘 계획' 갈래로 보�
       and "zero_day_line(c, str(ctx['today']), brief=True)" in _svsrc458
       and '_zl450 = zero_day_line(c, day)' in _svsrc458, str(_zb458)[-160:])
 # ─── §458 끝 ───
+# ─── §459 시작 (라운드 478) ───
+print("=" * 72)
+print("§459 막힌 자동매매 계획을 계약 그대로 판정한다 — 결과 전 등록 · 구간 끝은 결과를 안 읽고 · 채점 규칙 지문 (라운드 478)")
+print("=" * 72)
+# 라운드 478 — 사용자: "정말 개선 안해? … 오염 안 되게 개선하고". 기준을 낮추는 것은 개선이 아니다(막힌 후보는 비용 뒤 0 근처 · R475).
+#   바꿀 수 있는 정직한 길은 '막힌 계획을 샀다면 벌었나'를 결과 전에 정한 기준으로 재는 것 — 자동매매 계약 그대로(지정가 진입 ·
+#   최대 20거래일 대기 · 안 닿으면 거래 없음 = 0)의 모의 결과로. 닫힌 모의 결과 0건일 때 등록했다. 화면은 미리 정한 전방 판정들의 진행을 적는다.
+import ast as _ast459                                            # noqa: E402
+import proof as _pf459                                           # noqa: E402
+import swing_ledger as _sl459                                    # noqa: E402
+import swing_view as _sv459                                      # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import gate_forward_r478 as _g459                                # noqa: E402
+import scripts.model_freeze_guard as _mfg459                     # noqa: E402
+
+_EV459 = '비용 차감 기대값 양수'
+# ① 구간 끝은 결과를 안 읽는다 — 네 함수에 결과·봉·체결 칸 이름이 없다
+_tree459 = _ast459.parse(_read148(_os.path.join(PROJ, 'scripts', 'gate_forward_r478.py')))
+_fns459 = [n for n in _tree459.body if isinstance(n, _ast459.FunctionDef)
+           and n.name in ('_verdict', 'gate_blocked', 'window_dates', 'window_end')]
+_bad459 = ('return_pct', 'net_pct', 'exit_status', 'status', 'fill_day', 'fill_price', 'shadows', 'bars', 'close')
+_tok459 = set()
+for _f459 in _fns459:
+    for _n459 in _ast459.walk(_f459):
+        if isinstance(_n459, _ast459.Constant) and isinstance(_n459.value, str):
+            _tok459.add(_n459.value)
+        elif isinstance(_n459, (_ast459.Name, _ast459.Attribute, _ast459.arg)):
+            _tok459.add(getattr(_n459, 'id', None) or getattr(_n459, 'attr', None) or getattr(_n459, 'arg', None))
+_hit459 = sorted(t for t in _tok459 if t in _bad459)
+check("① 계약 판정의 구간 끝은 계획 날짜·판정 기록만 읽는다 — 네 함수에 결과·봉·체결 칸 이름이 없다(본 이름 수를 밝힌다)",
+      len(_fns459) == 4 and not _hit459, str(_hit459), scanned=len(_tok459))
+
+# ② 구간 끝 — 시작 전·다른 조건·휴장일은 안 센다 · 30번째 날
+import datetime as _dt459                                        # noqa: E402
+
+
+def _wd459(start, n):
+    out, d = [], _dt459.date.fromisoformat(start)
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d += _dt459.timedelta(days=1)
+    return out
+
+
+_days459 = _wd459('2026-10-12', 31)
+_plans459 = [dict(plan_id=f'P{i}', data_day=d, verdict={'failed': [_EV459]}) for i, d in enumerate(_days459)]
+_plans459 += [dict(plan_id='OLD', data_day='2026-10-08', verdict={'failed': [_EV459]}),             # 시작 전
+              dict(plan_id='OTH', data_day=_days459[0], verdict='{"failed": ["다른 조건"]}')]      # 다른 조건(글자 기록)
+_off459 = (lambda d: False)
+_end459, _cnt459 = _g459.window_end(_plans459, is_off=_off459)
+check("② 구간 끝 — 30번째 날 · 시작 전·다른 조건은 안 셈 · 휴장일로 표시된 날은 안 셈 · 하한 못 닿으면 None",
+      _end459 == _days459[29] and _cnt459 == 30 and _days459[0] not in _g459.window_dates(_plans459, is_off=lambda d: d == _days459[0])
+      and _g459.window_end(_plans459[:20], is_off=_off459) == (None, 20), f"{_end459} · {_cnt459}")
+
+# ③ 갈래 — 계획 1건의 값(닫힘 = 수익 − 0.41 · 안 닿음 = 0 · invalid 는 뺌) · 날짜로 묶은 구간
+def _sh459(fn):
+    return {p['plan_id']: fn(i) for i, p in enumerate(_plans459[:31])}
+
+
+_j_ga459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='closed', return_pct=3.0 + 0.1 * (i % 5))), _off459)
+_j_da459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='closed', return_pct=-3.0 - 0.1 * (i % 5))), _off459)
+_j_na459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='closed', return_pct=(5.0 if i % 2 else -5.0))), _off459)
+_j_nf459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='no_fill') if i % 2 else dict(status='closed', return_pct=2.41)),
+                       _off459)
+_j_un459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='waiting') if i == 3 else dict(status='closed', return_pct=1.0)),
+                       _off459)
+_j_iv459 = _g459.judge(_plans459, _sh459(lambda i: dict(status='invalid') if i == 0 else dict(status='closed', return_pct=1.0)),
+                       _off459)
+_j_fl459 = _g459.judge(_plans459[:20], {}, _off459)
+check("③ 갈래 — 다 벌면 (가) · 다 잃으면 (다) · 반반 (나) · 끝나지 않은 계획이 있으면 미측정 · 하한 미달 미측정",
+      _j_ga459['verdict'] == '(가)' and _j_da459['verdict'] == '(다)' and _j_na459['verdict'] == '(나)'
+      and _j_un459['verdict'] == '미측정' and '끝나지 않았다' in _j_un459['why']
+      and _j_fl459['verdict'] == '미측정' and '하한 30' in _j_fl459['why'],
+      f"{_j_ga459['verdict']} {_j_da459['verdict']} {_j_na459['verdict']} · {_j_un459['why']}")
+check("③' 계획 1건의 값 — 안 닿은 계획은 0(평균에 든다) · 체결은 수익 − 0.41 · invalid 는 빼고 센다 · 31번째 날은 구간 밖",
+      _j_nf459['n'] == 30 and abs(_j_nf459['mean_net'] - (15 * 2.0) / 30) < 1e-9 and _j_nf459['filled']['n'] == 15
+      and abs(_j_nf459['filled']['rate'] - 0.5) < 1e-9 and _j_iv459['invalid'] == 1 and _j_iv459['n'] == 29
+      and _j_ga459['window'] == ['2026-10-12', _days459[29]], f"{_j_nf459.get('mean_net')} · {_j_iv459.get('n')}")
+
+# ④ 사전등록 — 채점기 해시 · 채점 규칙 지문 · 고정한 수 · 동결 자물쇠 ⓐ
+_pre459 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R478_EV_GATE_CONTRACT_FORWARD.md'))
+_h459 = (_mfg459.sha('scripts/gate_forward_r478.py') or '')[:16]
+_fp459 = _g459.grader_fingerprint()
+_need459 = ('결과 전', '닫힌 결과는 0건', '2026-10-12', '0.41%', '시드 478', '(가)', '(나)', '(다)', '사람이 정한다', _h459, _fp459)
+check("④ 사전등록 R478 — 채점기 해시와 채점 규칙 지문이 문서와 같다(바뀌면 사유와 함께 같이 간다) · 고정한 수 · 동결 자물쇠 ⓐ",
+      bool(_h459) and bool(_fp459) and all(t in _pre459 for t in _need459)
+      and 'scripts/gate_forward_r478.py' in _mfg459.NO_AUTO_CHANGE
+      and (_g459.FROM, _g459.DATE_FLOOR, _g459.COST, _g459.SEED) == ('2026-10-12', 30, 0.41, 478),
+      str([t for t in _need459 if t not in _pre459]), scanned=len(_need459))
+
+# ⑤ 화면 한 줄 — 미리 정한 전방 판정들의 진행(라운드 번호 없음 · 판정 낱말 없음) · 진행이 없으면 None
+_ft459 = [dict(key='contract', start='2026-10-12', floor=30, counted=4, end=None),
+          dict(key='exit_rule', start='2026-08-10', floor=30, counted=30, end='2026-11-03'),
+          dict(key='모르는 열쇠', floor=30, counted=1)]
+_rl459 = _pf459.roadmap_line(dict(forward_tests=_ft459))
+check("⑤ '이 조건을 다시 볼 길' — 계약 그대로 4/30일 · 청산 규칙 후보 30/30일(구간 끝) · 사람이 정한다 · 모르는 열쇠는 뺀다 · 없으면 None",
+      _rl459 and '4/30일' in _rl459 and '30/30일(구간 끝 2026-11-03)' in _rl459 and '사람이 정합니다' in _rl459
+      and '모르는' not in _rl459 and not _re.search(r'R\d{3}|라운드', _rl459)
+      and _pf459.roadmap_line({}) is None and _pf459.roadmap_line(dict(forward_tests=[])) is None, _rl459)
+
+# ⑥ 자동매매 칸 — '오늘 계획' 판에 그 줄 · 관제실(짧은 판)에는 없음 · 성적표가 비면 없음
+_c459 = _sl459.connect(':memory:')
+_sl459.add_plan(_c459, dict(plan_id='R478A', data_day='2026-10-08', code='000001', name='z', spec='SWING_V1', entry=10000,
+                            target=10480, stop=9314, horizon=20, wait_bars=20, live_ok=False,
+                            verdict=dict(failed=[_EV459], checks_n=11, expected_return=-0.29)))
+_scz459 = dict(forward_tests=_ft459[:2])
+_zf459 = _sv459.zero_day_line(_c459, '2026-10-08', scorecard=_scz459)
+_zb459 = _sv459.zero_day_line(_c459, '2026-10-08', scorecard=_scz459, brief=True)
+_z0459 = _sv459.zero_day_line(_c459, '2026-10-08', scorecard={})
+_c459.close()
+check("⑥ '오늘 계획' 판에 진행 줄 · 관제실 판엔 없음 · 빈 성적표면 없음 · 막힌 계획이 없으면 None(같은 성적표를 한 번 읽는다)",
+      _zf459 and _rl459.split(' — ')[0] in _zf459 and _zb459 and '다시 볼 길' not in _zb459 and '다시 볼 길' not in (_z0459 or '')
+      and _sv459.roadmap_record_line([dict(verdict=dict(failed=['다른 조건']))], _scz459) is None, str(_zf459)[-200:])
+
+# ⑦ 배선 — 성적표가 두 채점기의 구간 셈을 그대로 불러 싣는다(결과 안 읽음 · 장부는 읽기 전용) · 실제 성적표에 두 열쇠
+_ps459 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
+_sc459 = _pf459.load_scorecard() or {}
+_keys459 = {t.get('key') for t in (_sc459.get('forward_tests') or [])}
+check("⑦ 배선 — forward_tests 를 싣고 계약 판정·청산 규칙 후보의 구간 셈을 부른다 · 장부를 읽기 전용으로 연다 · 실제 성적표에 두 열쇠",
+      'forward_tests=forward_tests' in _ps459 and '_g8.window_end(_pl8' in _ps459 and '_j70.r346_window_end(' in _ps459
+      and "mode=ro" in _read148(_os.path.join(PROJ, 'scripts', 'gate_forward_r478.py'))
+      and {'contract', 'exit_rule'} <= _keys459, str(_keys459))
+# ─── §459 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

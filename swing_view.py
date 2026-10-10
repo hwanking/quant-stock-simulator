@@ -518,12 +518,38 @@ def blocked_record_line(ps, scorecard=None):
     """'비용 차감 기대값 양수'에 걸린 계획이 있으면 — 그 조건이 지금까지 막은 개장 전 후보가 실제로 어떻게 됐나(라운드 475).
     사용자: *"이거 너무 보수적 아니야?"* 문장은 `proof.gate_line` 한 곳이 성적표에서 만든다(§4 · 이 칸은 읽기만). 성적표를 못 읽거나
     그 조건이 성적표에 없으면 None(§3) — 줄을 안 그린다."""
-    if not any(EV_CHECK in (_verdict_of(p).get('failed') or []) for p in ps):
+    sc = _ev_scorecard(ps, scorecard)
+    if sc is None:
         return None
     try:
         import proof as _pf
-        sc = scorecard if scorecard is not None else _pf.load_scorecard()
         return _pf.gate_line(sc, EV_CHECK)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _ev_scorecard(ps, scorecard=None):
+    """그 조건에 막힌 계획이 있을 때만 성적표 — 넘겨받았으면 그것, 아니면 한 번 읽는다. 없거나 못 읽으면 None."""
+    if not any(EV_CHECK in (_verdict_of(p).get('failed') or []) for p in ps):
+        return None
+    if scorecard is not None:
+        return scorecard
+    try:
+        import proof as _pf
+        return _pf.load_scorecard()
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def roadmap_record_line(ps, scorecard=None):
+    """'이 조건을 다시 볼 길' — 미리 정한 전방 판정들의 진행(라운드 478 · 문장은 `proof.roadmap_line` 한 곳). 막힌 계획이 없거나
+    성적표에 진행이 없으면 None."""
+    sc = _ev_scorecard(ps, scorecard)
+    if sc is None:
+        return None
+    try:
+        import proof as _pf
+        return _pf.roadmap_line(sc)
     except Exception:                                          # noqa: BLE001
         return None
 
@@ -551,7 +577,9 @@ def zero_day_line(c, day, scorecard=None, brief=False):
                  '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
     if brief:                    # 라운드 477 — 관제실: 막은 조건 · 언제 · 나머지가 어디 있는지(같은 함수 · 줄을 덜 그릴 뿐)
         return '  \n'.join(x for x in (first, when_line(ps), ZERO_DAY_MORE) if x)
-    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, scorecard)) if x)
+    sc = _ev_scorecard(ps, scorecard)        # 라운드 478 — 성적표는 한 번만 읽는다(두 줄이 같은 것을 쓴다)
+    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, sc),
+                                   roadmap_record_line(ps, sc)) if x)
 
 
 def holdings_diff(acct_positions, app_positions):

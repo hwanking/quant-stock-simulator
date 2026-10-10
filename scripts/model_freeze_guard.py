@@ -69,6 +69,9 @@ NO_AUTO_CHANGE = (
     # ⚠️ 라운드 475 — '비용 차감 기대값 양수'가 막은 후보의 전방 판정 채점기. 표본 구간이 시작하기 전에 짰다 — 같은 이유로 사람이
     #   사유와 함께 고친다(고치면 docs/PREREG_R475_EV_GATE_FORWARD.md 의 해시도 같이 간다 · 회귀 §457).
     'scripts/gate_forward_r475.py',
+    # ⚠️ 라운드 478 — 같은 물음을 자동매매 계약 그대로 재는 채점기. 닫힌 모의 결과가 0건일 때 짰다 — 같은 이유로 사람이 사유와 함께
+    #   고친다(고치면 docs/PREREG_R478_EV_GATE_CONTRACT_FORWARD.md 의 해시도 같이 간다 · 회귀 §459).
+    'scripts/gate_forward_r478.py',
 )
 
 #: ⓑ 11/16 에 평가할 대상 — 그날까지 한 글자도 안 바뀌어야 한다
