@@ -383,7 +383,12 @@ def origin_cores(history, reports):
     ⚠️ 종전엔 결과를 세는 셈 둘이 서로 다른 판을 읽었다 — 조건별 장부는 파일 이름 순 첫 파일(`report_checks` · 운영체제의 파일
     순서에 기댄다), '다 샀다면'은 날짜마다 마지막 판(`latest_by_date`). 같은 자료일에 판이 둘 이상인 날이 45일 중 22일이라
     '이 조건 하나만 막은 후보'가 판에 따라 +3.45% · −2.44% 로 부호까지 갈렸다(정확한 짝은 +2.39%). 추천 빈도(`reco_summary`)는
-    결과가 아니라 리포트 내용을 세므로 마지막 판 그대로다."""
+    결과가 아니라 리포트 내용을 세므로 마지막 판 그대로다.
+
+    라운드 479 — 그 첫 줄 **자신이** 그때의 중앙 판정(`core` · 조건 목록 포함)을 싣는다(이력 375줄 중 349줄). 그러면 리포트 파일을
+    거칠 이유가 없다 — 파일이 나중에 덮어써지면 짝이 사라져 등록한 표본에서 후보가 조용히 빠진다(결과와 무관한 탈락이지만 탈락이다).
+    그래서 **이력 줄의 core 먼저**, 그 줄에 없을 때만(중앙 판정을 싣기 전의 옛 줄) 같은 생성 시각의 리포트 파일. 실측 2026-10-10: 둘 다
+    있는 242키에서 core 가 통째로 같다(242/242) · 이력 쪽이 덮어써진 파일 때문에 빠졌던 2키를 더 살린다(242 → 244)."""
     by_gen = {}
     for d in reports or []:
         day = report_day_of(d)
@@ -408,10 +413,11 @@ def origin_cores(history, reports):
                 day = None
         day = str(day or p.get('date') or '')[:10]
         if day:
-            first.setdefault((code6(p['symbol']), day), str(p.get('generated_at') or '')[:19])
+            hcore = p.get('core') if isinstance(p.get('core'), dict) else None
+            first.setdefault((code6(p['symbol']), day), (str(p.get('generated_at') or '')[:19], hcore))
     out = {}
-    for (c, day), gen in first.items():
-        core = by_gen.get((c, day, gen))
+    for (c, day), (gen, hcore) in first.items():
+        core = hcore if hcore is not None else by_gen.get((c, day, gen))
         if core is not None:
             out[(c, day)] = core
     return out, len(first)

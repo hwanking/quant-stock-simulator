@@ -39277,7 +39277,9 @@ _zb459 = _sv459.zero_day_line(_c459, '2026-10-08', scorecard=_scz459, brief=True
 _z0459 = _sv459.zero_day_line(_c459, '2026-10-08', scorecard={})
 _c459.close()
 check("⑥ '오늘 계획' 판에 진행 줄 · 관제실 판엔 없음 · 빈 성적표면 없음 · 막힌 계획이 없으면 None(같은 성적표를 한 번 읽는다)",
-      _zf459 and _rl459.split(' — ')[0] in _zf459 and _zb459 and '다시 볼 길' not in _zb459 and '다시 볼 길' not in (_z0459 or '')
+      # 라운드 479 — 관제실 꼬리 문장이 '다시 볼 길'이라는 낱말로 '오늘 계획'을 가리키게 되어, 낱말이 아니라 진행 줄의 머리로 본다
+      _zf459 and _rl459.split(' — ')[0] in _zf459 and _zb459 and _rl459.split(' — ')[0] not in _zb459
+      and _rl459.split(' — ')[0] not in (_z0459 or '')
       and _sv459.roadmap_record_line([dict(verdict=dict(failed=['다른 조건']))], _scz459) is None, str(_zf459)[-200:])
 
 # ⑦ 배선 — 성적표가 두 채점기의 구간 셈을 그대로 불러 싣는다(결과 안 읽음 · 장부는 읽기 전용) · 실제 성적표에 두 열쇠
@@ -39289,6 +39291,43 @@ check("⑦ 배선 — forward_tests 를 싣고 계약 판정·청산 규칙 후�
       and "mode=ro" in _read148(_os.path.join(PROJ, 'scripts', 'gate_forward_r478.py'))
       and {'contract', 'exit_rule'} <= _keys459, str(_keys459))
 # ─── §459 끝 ───
+# ─── §460 시작 (라운드 479) ───
+print("=" * 72)
+print("§460 추적 케이스의 짝은 그 케이스를 만든 이력 줄 자신의 판정 — 리포트가 덮어써져도 표본에서 안 빠진다 (라운드 479)")
+print("=" * 72)
+# 라운드 479 — 사용자: "오염 안 되게 개선하고". 라운드 475 의 짝(`origin_cores`)이 리포트 **파일**을 거쳐 판정을 찾았는데, 이력 첫 줄 자신이
+#   그때의 판정(core · 조건 목록)을 싣고 있었다(375줄 중 349줄). 파일이 덮어써지면 짝이 사라져 사전등록 R475 의 표본에서 후보가 조용히 빠진다.
+#   이력 줄의 판정 먼저 · 없을 때만 리포트 파일. 실측: 둘 다 있는 242키에서 판정이 통째로 같다 · 덮어써진 파일로 빠졌던 2키를 살린다.
+import proof as _pf460                                           # noqa: E402
+import swing_view as _sv460                                      # noqa: E402
+
+_coreH460 = dict(checks=[dict(name='X', ok=False)], expected_return=-0.31)       # 이력 줄에 실린 판정
+_coreR460 = dict(checks=[dict(name='X', ok=False)], expected_return=-0.31)       # 같은 생성 시각 리포트의 판정(보통 같다)
+_h460 = [dict(symbol='000001.KS', price=100, date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00',
+              core=_coreH460),                                                 # 리포트 파일은 덮어써져 이 시각 판이 없다
+         dict(symbol='000002.KS', price=200, date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00'),  # 옛 줄
+         dict(symbol='000001.KS', price=101, date='2026-10-05', day_basis='data', generated_at='2026-10-06T08:00:00',
+              core=dict(checks=[], expected_return=9.9))]                      # 둘째 줄 — 안 쓴다
+_rep460 = [dict(date='2026-10-05', day_basis='data', generated_at='2026-10-06T08:00:00',
+                picks=[dict(symbol='000001.KS', core=dict(checks=[], expected_return=9.9))]),       # 덮어쓴 판
+           dict(date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00',
+                picks=[dict(symbol='000002.KS', core=_coreR460)])]
+_oc460, _nf460 = _pf460.origin_cores(_h460, _rep460)
+check("① 이력 첫 줄에 판정이 있으면 그것 — 리포트가 덮어써져도 짝이 남는다 · 둘째 줄·덮어쓴 판은 안 쓴다 · 옛 줄은 같은 시각 리포트로",
+      _nf460 == 2 and _oc460.get(('000001', '2026-10-05')) is _coreH460 and _oc460.get(('000002', '2026-10-05')) is _coreR460,
+      str(_oc460))
+_sc460 = _pf460.load_scorecard() or {}
+_pr460 = _sc460.get('pairing') or {}
+check("② 실제 성적표 — 짝 규칙이 '이력 첫 줄에 실린 판정'을 말하고 짝이 맞은 키가 이력 키를 넘지 않는다(값은 잠그지 않는다)",
+      '이력 첫 줄에 실린 판정' in str(_pr460.get('rule')) and 0 < int(_pr460.get('matched_keys') or 0) <= int(_pr460.get('history_keys') or 0),
+      str(_pr460))
+_p475_460 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R475_EV_GATE_FORWARD.md'))
+check("③ 사전등록 R475 에 '라운드 479 정정' 절 — 결과 전 · 이유(덮어쓰기로 조용히 빠짐) · 242/242 · 기준·채점기 불변",
+      all(t in _p475_460 for t in ('라운드 479 정정', '결과 전', '덮어써', '242/242', '한 글자도 안 바꿨다')), scanned=5)
+check("④ 관제실 꼬리는 한 문장 — 무엇이 '오늘 계획' 갈래에 있는지(0 까지의 거리 · 막은 후보의 결과 · 다시 볼 길)",
+      _sv460.ZERO_DAY_MORE.startswith('자세한 내용') and "'오늘 계획' 갈래에 있습니다" in _sv460.ZERO_DAY_MORE
+      and all(t in _sv460.ZERO_DAY_MORE for t in ('모자란지', '실제로 어떻게 됐는지', '다시 볼 길')), _sv460.ZERO_DAY_MORE)
+# ─── §460 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

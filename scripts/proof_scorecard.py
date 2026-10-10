@@ -135,7 +135,7 @@ def main(argv=None):
     # 라운드 475 — "너무 보수적 아니야?" — 그날 기대값이 높았던 후보가 실제로 더 벌었나(문턱을 낮추면 무엇을 사나)
     evo = proof.ev_order(_cases, proof.ev_map(_cores))
     _dec = [c for c in _cases if c['status'] in ('success', 'failure', 'unresolved')]
-    pairing = dict(rule='추적 케이스를 만든 판(이력의 첫 줄 · 같은 생성 시각의 리포트)', history_keys=_n_first,
+    pairing = dict(rule='추적 케이스를 만든 판(이력 첫 줄에 실린 판정 · 없으면 같은 생성 시각의 리포트)', history_keys=_n_first,
                    matched_keys=len(_cores), decided=len(_dec),
                    decided_paired=sum(1 for c in _dec if (proof.code6(c['ticker']), c['signal_date']) in _ck))
     # 라운드 477 — 사전등록 R475(이 조건이 막은 후보를 앞으로의 자료로 판정)의 진행 — 채점기의 구간 셈을 그대로 부른다(결과를 안 읽는다 ·
