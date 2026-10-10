@@ -197,8 +197,8 @@ def state_split_clause(split):
             parts.append(f"{ko} {int(v['dates']):,}일 {float(v['ev']):+.2f}%")
     if not parts:
         return ''
-    return (' — 구간별: ' + ' · '.join(parts)
-            + ' (국면은 날짜가 표본입니다 — 날짜 수가 적은 쪽의 값은 그 며칠의 시장이 정합니다)')
+    # 왜 날짜 수인지는 카드가 바로 뒤에 적는다("유효 표본이 날짜입니다" · ui_kit) — 여기서 되풀이하지 않는다.
+    return ' — 구간별: ' + ' · '.join(parts)
 
 
 # ───────────────────────────────────────────────────────────────────
