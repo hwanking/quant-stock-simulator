@@ -48,24 +48,12 @@ def tracker_cases(db_path=None):
             if s not in ct.EXCLUDED_STATUSES and not ct.is_non_trading_date(str(d)[:10])]
 
 
-def report_checks(pm_dir=None):
-    """날짜별 개장 전 리포트의 후보 → {(코드6, 날짜): core.checks}."""
-    out = {}
-    for f in glob.glob(os.path.join(pm_dir or os.path.join(PROJ, '.portfolio'), 'premarket_2*.json')):
-        try:
-            with open(f, encoding='utf-8') as fh:
-                d = json.load(fh)
-        except Exception:                                      # noqa: BLE001
-            continue
-        for pk in d.get('picks') or []:
-            ck = (pk.get('core') or {}).get('checks')
-            if ck:
-                out.setdefault((proof.code6(pk.get('symbol') or pk.get('code')), proof.report_day_of(d)), ck)   # R442 자료 기준일
-    return out
+# 라운드 475 — 종전 `report_checks`(파일 이름 순 첫 파일의 조건 목록 · `setdefault`)는 걷었다. 운영체제가 돌려주는 파일 순서에
+#   기댔고 추적 케이스를 만든 판과 다를 수 있었다 — 짝은 `proof.origin_cores` 한 곳이 정한다.
 
 
 def load_reports(pm_dir=None):
-    """날짜별 개장 전 리포트 원본 — `report_checks` 와 같은 파일들(같은 날 여러 판은 `proof.reco_summary` 가 늦은 판 하나로)."""
+    """날짜별 개장 전 리포트 원본(같은 날 여러 판은 `proof.reco_summary` 가 늦은 판 하나로 · 결과 짝은 `proof.origin_cores`)."""
     out = []
     for f in glob.glob(os.path.join(pm_dir or os.path.join(PROJ, '.portfolio'), 'premarket_2*.json')):
         try:
@@ -74,6 +62,21 @@ def load_reports(pm_dir=None):
         except Exception:                                      # noqa: BLE001
             continue
     return out
+
+
+def load_history(path=None):
+    """개장 전 리포트 이력(추가 전용 · 시간 순) — 추적 동결이 읽는 그 파일(라운드 475 · `proof.origin_cores` 의 재료). 못 읽은 줄은 건너뛴다."""
+    p = path or os.path.join(PROJ, '.portfolio', 'premarket_history.jsonl')
+    rows = []
+    if not os.path.exists(p):
+        return rows
+    with open(p, encoding='utf-8') as fh:
+        for ln in fh:
+            try:
+                rows.append(json.loads(ln))
+            except Exception:                                  # noqa: BLE001
+                continue
+    return rows
 
 
 def load_registry(path=None):
@@ -117,23 +120,36 @@ def main(argv=None):
     for act in sorted({str(r.get('action')) for r in rows}):
         by_action[act] = proof.abstain_tally([(r, o) for r, o in graded if str(r.get('action')) == act])
     st = collections.Counter((o or {}).get('status', 'nobars') for _r, o in graded)
-    gates = proof.gate_ledger(tracker_cases(), report_checks())
     # 라운드 433 — "추천주가 거의 없지 않았어?" — 얼마나 자주 0 이었나 · 깊게 봐도 0 인가 · 그 후보를 다 샀다면
     from improvement import case_tracker as _ct
     _reports = load_reports()
     reco = proof.reco_summary(_reports, load_registry(), is_off_day=_ct.is_non_trading_date)
-    # 같은 후보 — 날짜마다 마지막 리포트의 후보만 짝짓는다(추천 빈도와 같은 묶음 · `proof.latest_by_date` 한 곳)
-    _latest, _off = proof.latest_by_date(_reports, _ct.is_non_trading_date)
-    cands = proof.candidate_outcome(tracker_cases(), proof.pick_keys(_latest))
+    # 라운드 475 — 결과를 세는 셈 셋(조건별 장부 · 다 샀다면 · 기대값 순서)은 **그 케이스를 만든 판**과 짝짓는다(`proof.origin_cores`
+    #   한 곳). 종전엔 장부가 파일 이름 순 첫 파일, '다 샀다면'이 날짜마다 마지막 판을 읽어 '하나만 막은 후보'가 판에 따라 부호까지
+    #   갈렸다. 추천 빈도는 리포트 내용을 세므로 마지막 판 그대로다.
+    _cases = tracker_cases()
+    _cores, _n_first = proof.origin_cores(load_history(), _reports)
+    _ck = proof.checks_map(_cores)
+    gates = proof.gate_ledger(_cases, _ck)
+    cands = proof.candidate_outcome(_cases, _ck)
+    # 라운드 475 — "너무 보수적 아니야?" — 그날 기대값이 높았던 후보가 실제로 더 벌었나(문턱을 낮추면 무엇을 사나)
+    evo = proof.ev_order(_cases, proof.ev_map(_cores))
+    _dec = [c for c in _cases if c['status'] in ('success', 'failure', 'unresolved')]
+    pairing = dict(rule='추적 케이스를 만든 판(이력의 첫 줄 · 같은 생성 시각의 리포트)', history_keys=_n_first,
+                   matched_keys=len(_cores), decided=len(_dec),
+                   decided_paired=sum(1 for c in _dec if (proof.code6(c['ticker']), c['signal_date']) in _ck))
     doc = dict(made=proof.now_iso(), ledger_rows=len(rows), tickers=len(tickers),
                bars_ok=sum(1 for v in bars.values() if v is not None), bars_fail=len(fail),
                status=dict(st), abstain=ab, by_action=by_action, gates=gates, reco=reco, candidates=cands,
+               ev_order=evo, pairing=pairing,
                tracker_decided=sum(1 for c in tracker_cases() if c['status'] in ('success', 'failure', 'unresolved')),
                rule=('같은 채점기(기록 가격 진입 · 먼저 닿은 선 · 같은 봉이면 손절 먼저 · 20봉 만료면 그날 종가) · '
                      f"운영 비용 {ab.get('cost_pct')}% 차감 · 판정 1건에 같은 금액 · 문턱 없음"),
                seconds=round(time.time() - t0, 1))
     print(proof.abstain_line(ab))
     print(proof.reco_line(doc) or '추천 빈도 — 셀 리포트가 없다')
+    if gates:
+        print(proof.gate_line(doc, gates[0]['name']) or f"'{gates[0]['name']}' — 막은 후보 없음")
     print('결과 갈래', dict(st), '· 일봉 실패', len(fail))
     for act, t in by_action.items():
         print(f'  {act}: 결정 {t["decided"]} · 평균 {t["mean_net"]} · 중앙 {t["median_net"]}')

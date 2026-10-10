@@ -514,10 +514,25 @@ def ev_gap_line(ps):
             f"이 확률이 바뀔 수 있는 길은 새 재료(시점 재무·잔여 호가 축적)와 {fwd}이고, 둘 다 결과를 약속하지 않습니다.")
 
 
-def zero_day_line(c, day):
+def blocked_record_line(ps, scorecard=None):
+    """'비용 차감 기대값 양수'에 걸린 계획이 있으면 — 그 조건이 지금까지 막은 개장 전 후보가 실제로 어떻게 됐나(라운드 475).
+    사용자: *"이거 너무 보수적 아니야?"* 문장은 `proof.gate_line` 한 곳이 성적표에서 만든다(§4 · 이 칸은 읽기만). 성적표를 못 읽거나
+    그 조건이 성적표에 없으면 None(§3) — 줄을 안 그린다."""
+    if not any(EV_CHECK in (_verdict_of(p).get('failed') or []) for p in ps):
+        return None
+    try:
+        import proof as _pf
+        sc = scorecard if scorecard is not None else _pf.load_scorecard()
+        return _pf.gate_line(sc, EV_CHECK)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def zero_day_line(c, day, scorecard=None):
     """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
     라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
-    오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다."""
+    오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다.
+    라운드 475 — 그리고 그 조건이 막은 후보가 실제로 어떻게 됐나(`blocked_record_line` · 성적표에서 읽는다)."""
     ps = [p for p in L.plans(c) if p['data_day'] == day] if day else []
     if not ps or any(p.get('live_ok') for p in ps):
         return None
@@ -530,7 +545,7 @@ def zero_day_line(c, day):
         fl = _fail_label()
         first = (head + f'가장 많이 막은 조건은 {fl(top[0])}입니다 ({top[1]}/{top[2]}개 · 조건 기록이 있는 계획 기준). '
                  '조건별로 세어 본 것이고, 어느 조건을 풀어야 한다는 뜻이 아닙니다.')
-    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps)) if x)
+    return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), blocked_record_line(ps, scorecard)) if x)
 
 
 def holdings_diff(acct_positions, app_positions):

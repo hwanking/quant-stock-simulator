@@ -12164,6 +12164,10 @@ if _ledger_df is not None:
                     st.caption("'이 조건 하나만 막은 후보'는 다른 조건은 다 넘고 이 조건 하나에만 걸린 후보입니다 — 이 조건이 없었다면 "
                                "추천이 됐을 후보이고, 그 평균이 이 조건이 무엇을 막았는지에 가장 가까운 셈입니다. 표본이 작아 "
                                "조건을 풀자는 근거가 아닙니다.")
+                    # 라운드 475 — 가장 많이 막은 조건이 실제로 무엇을 막았나(날짜 수·날짜로 묶은 구간 · 기대값 순서) · 문장은 proof 한 곳
+                    _gl475 = _pf418m.gate_line(_sc418, _gt418[0]['name'])
+                    if _gl475:
+                        st.caption(_md_safe(_gl475))
     except Exception as _ex418m:                               # noqa: BLE001
         st.caption(f"가늠 PROOF 성적표를 읽지 못했습니다 ({type(_ex418m).__name__}) — 미측정입니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):

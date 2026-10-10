@@ -34357,15 +34357,20 @@ check("한 줄 — 수만 적고 판정 낱말이 없다 · 0 을 포함하는�
 _ps422 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
 _wa422 = _read148(_os.path.join(PROJ, 'web_app.py'))
 _i422 = _wa422.find('"**현재 추천주 없음** — 정밀분석한 "')
-check("배선 — 성적표가 셈을 싣고 두 셈이 같은 리포트 묶음을 읽으며 · 스캔 배너가 그 한 줄을 _md_safe 로 · 홈 카드도 같은 함수",
-      'proof.reco_summary(' in _ps422 and 'proof.candidate_outcome(tracker_cases(), proof.pick_keys(' in _ps422
+# 라운드 475 — '다 샀다면'의 짝이 날짜마다 마지막 판(`pick_keys`)에서 **그 케이스를 만든 판**(`origin_cores`)으로 갔다 — 조건별 장부와
+#   같은 짝(`_ck`)을 읽는지로 본다(종전 글자 'candidate_outcome(tracker_cases(), proof.pick_keys(' 는 그 결정을 못 박은 조립 락이었다).
+check("배선 — 성적표가 셈을 싣고 결과를 세는 셈(장부·다 샀다면)이 같은 짝을 읽으며 · 스캔 배너가 그 한 줄을 _md_safe 로 · 홈 카드도 같은 함수",
+      'proof.reco_summary(' in _ps422 and 'proof.candidate_outcome(_cases, _ck)' in _ps422
+      and 'proof.gate_ledger(_cases, _ck)' in _ps422
       and 'reco=reco, candidates=cands' in _ps422 and _i422 > 0
       and 'st.caption(_md_safe(_rl433))' in _wa422[_i422:_i422 + 2000]
       and _pf422.home_lines({}, {'reco': _r422, 'candidates': _co422})[1] == _ln422)
 _sc422 = _pf422.load_scorecard() or {}
 _rr422, _cc422 = _sc422.get('reco') or {}, _sc422.get('candidates') or {}
-check("실제 성적표 — 셈이 실려 있고 결과가 정해진 후보 수가 후보 수를 넘지 않는다 · 구간이 평균을 품는다 (값은 잠그지 않는다)",
-      _rr422.get('days', 0) > 0 and _cc422.get('n', 0) <= _rr422.get('candidates', -1)
+# 라운드 475 — 짝이 '케이스를 만든 판'이라 결과가 정해진 수는 마지막 판의 후보 수가 아니라 **짝이 맞은 (종목, 자료일) 수**를 못 넘는다.
+_pr422 = _sc422.get('pairing') or {}
+check("실제 성적표 — 셈이 실려 있고 결과가 정해진 후보 수가 짝이 맞은 후보 수를 넘지 않는다 · 구간이 평균을 품는다 (값은 잠그지 않는다)",
+      _rr422.get('days', 0) > 0 and _cc422.get('n', 0) <= _pr422.get('matched_keys', -1)
       and (not _cc422.get('ci95') or _cc422['ci95'][0] <= _cc422['mean_net'] <= _cc422['ci95'][1]),
       str({k: _rr422.get(k) for k in ('days', 'candidates', 'recommended')}) + ' · ' + str(_cc422.get('n')))
 
@@ -38547,7 +38552,8 @@ check("⑦ 계획 — 판정 기록에 리포트 시각을 싣고(없으면 None
 # ⑧ 한 줄로 — 머리는 '판정일' · 막은 조건 · 언제 · 거리를 줄을 바꿔 잇는다(자격 하나라도 있으면 None 그대로)
 _c453 = _sl453.connect(':memory:')
 _sl453.add_plan(_c453, dict(_pa453, live_ok=False))
-_z453 = _sv453.zero_day_line(_c453, '2026-10-08')
+# 라운드 475 — 넷째 줄(막은 후보의 기록)은 성적표에서 읽는다 · 이 절은 세 줄만 보므로 빈 성적표를 넘긴다(넷째는 §457 이 본다)
+_z453 = _sv453.zero_day_line(_c453, '2026-10-08', scorecard={})
 _c453.close()
 check("⑧ 자격 0 줄 — '판정일 … 후보 1개 중 실주문 자격 0' · 막은 조건 · 언제 막았나 · 0 까지의 거리(마크다운 줄바꿈)",
       _z453 is not None and _z453.startswith('판정일 2026-10-08 후보 1개 중 실주문 자격 0')
@@ -38854,6 +38860,184 @@ check("⑧' 구간별 수는 지도에서 읽는다 — state_split 이 없는 �
       _tp456.state_split(_wm456, 'PULLBACK') and _tp456.state_split({}, 'PULLBACK') == {}
       and _tp456.state_split(None, 'BEAR') == {})
 # ─── §456 끝 ───
+# ─── §457 시작 (라운드 475) ───
+print("=" * 72)
+print("§457 '너무 보수적 아니야?' — 막은 후보의 기록을 한 짝으로 세고, 앞으로의 자료로 판정한다 (라운드 475)")
+print("=" * 72)
+# 라운드 475 — 사용자: "이거 너무 보수적 아니야?"(자동매매 '자격 0' 줄). 문턱은 0 보다 크기만 하면 되는 가장 약한 것이라
+#   물음의 실체는 '막은 후보가 실제로 벌었나'다. ① 성적표의 조건별 장부가 칸마다 날짜 수·날짜로 묶은 구간을 싣고 ② 결과를 세는
+#   셈 셋(장부 · 다 샀다면 · 기대값 순서)이 **그 케이스를 만든 판**과 짝짓는다(종전엔 장부가 파일 이름 순 첫 파일, '다 샀다면'이
+#   날짜마다 마지막 판을 읽어 '이 조건 하나만 막은 후보'가 판에 따라 +3.45% · −2.44% 로 부호까지 갈렸다) ③ 자동매매 칸과 PROOF 칸이
+#   같은 문장(`proof.gate_line`)을 읽고 ④ 판정은 앞으로의 자료로만 — 사전등록 R475 · 채점기는 표본 구간이 시작하기 전에 짰다.
+import ast as _ast457                                            # noqa: E402
+import proof as _pf457                                           # noqa: E402
+import swing_ledger as _sl457                                    # noqa: E402
+import swing_view as _sv457                                      # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import gate_forward_r475 as _gf457                               # noqa: E402
+
+_EV457 = '비용 차감 기대값 양수'
+# ① 장부 칸 — 날짜 수 · 중앙 · 날짜로 묶은 구간(날짜가 하나뿐이면 구간 없음) · 종전 칸은 그대로
+_ck457 = {('000001', '2026-09-01'): [dict(name='A', ok=False)], ('000002', '2026-09-02'): [dict(name='A', ok=False)],
+          ('000003', '2026-09-03'): [dict(name='A', ok=False), dict(name='B', ok=False)],
+          ('000004', '2026-09-03'): [dict(name='A', ok=True)]}
+_cs457 = [dict(ticker='000001.KS', signal_date='2026-09-01', status='success', realized_return=0.05),
+          dict(ticker='000002.KS', signal_date='2026-09-02', status='failure', realized_return=-0.07),
+          dict(ticker='000003.KQ', signal_date='2026-09-03', status='success', realized_return=0.04),
+          dict(ticker='000004.KS', signal_date='2026-09-03', status='unresolved', realized_return=0.01)]
+_gl457 = {g['name']: g for g in _pf457.gate_ledger(_cs457, _ck457, cost=0.41)}
+_ga457 = _gl457['A']
+check("① 장부 칸 — 막은 3건 · 날짜 3 · 구간이 평균을 품는다 · 하나만 막은 2건(날짜 2) · 통과 1건은 날짜 1이라 구간 없음 · 중앙",
+      _ga457['blocked']['n'] == 3 and _ga457['blocked']['dates'] == 3
+      and _ga457['blocked']['ci95'][0] <= _ga457['blocked']['mean_net'] <= _ga457['blocked']['ci95'][1]
+      and _ga457['only']['n'] == 2 and _ga457['only']['dates'] == 2
+      and _ga457['passed']['n'] == 1 and _ga457['passed']['ci95'] is None
+      and abs(_ga457['blocked']['median_net'] - (4 - 0.41)) < 1e-9, str(_ga457))
+
+# ② 짝 — 이력의 (종목, 자료일) **첫 줄**이 케이스를 만든다 · 같은 생성 시각의 리포트가 짝 · 덮어써진 판(생성 시각 다름)은 짝 없음
+_h457 = [dict(symbol='000001.KS', price=100, date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00'),
+         dict(symbol='000002.KS', price=200, date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00'),
+         dict(symbol='000003.KS', price=300, date='2026-10-05', day_basis='data', generated_at='2026-10-05T09:00:00'),
+         dict(symbol='000001.KS', price=101, date='2026-10-05', day_basis='data', generated_at='2026-10-06T08:00:00')]
+_coreA457 = dict(checks=[dict(name='X', ok=False)], expected_return=-0.2)
+_coreC457 = dict(checks=[dict(name='X', ok=True)], expected_return=0.1)
+_rep457 = [dict(date='2026-10-05', day_basis='data', generated_at='2026-10-05T17:00:00',
+                picks=[dict(symbol='000001.KS', core=_coreA457), dict(symbol='000002.KS', core=dict(expected_return='?'))]),
+           dict(date='2026-10-05', day_basis='data', generated_at='2026-10-06T08:00:00',
+                picks=[dict(symbol='000001.KS', core=_coreC457), dict(symbol='000003.KS', core=_coreC457)])]
+_oc457, _nf457 = _pf457.origin_cores(_h457, _rep457)
+check("② 짝 — 첫 줄의 판(17:00)이 이긴다 · 다음 날 아침 판의 같은 종목은 안 쓴다 · 첫 줄 생성 시각의 판이 없으면 짝 없음 · 이력 키 3",
+      _nf457 == 3 and _oc457.get(('000001', '2026-10-05')) is _coreA457 and ('000003', '2026-10-05') not in _oc457
+      and set(_oc457) == {('000001', '2026-10-05'), ('000002', '2026-10-05')}, str(_oc457))
+check("②' checks_map 은 조건 목록이 있는 것만 · ev_map 은 수인 것만",
+      list(_pf457.checks_map(_oc457)) == [('000001', '2026-10-05')]
+      and _pf457.ev_map(_oc457) == {('000001', '2026-10-05'): -0.2})
+
+# ③ 기대값 순서 — 중앙값 위·아래 반 · 순위 상관 · 같은 날짜 뽑기 안의 차이 구간 · 짝 4건 미만이면 None · boot 0 이면 구간 없음
+_evk457, _cse457 = {}, []
+for _i457, (_d457, _e457, _r457) in enumerate((('2026-09-01', -0.1, 0.06), ('2026-09-01', -0.5, -0.05), ('2026-09-02', -0.2, 0.05),
+                                              ('2026-09-02', -0.6, -0.06), ('2026-09-03', -0.3, 0.04), ('2026-09-03', -0.7, -0.07))):
+    _evk457[(f'{_i457:06d}', _d457)] = _e457
+    _cse457.append(dict(ticker=f'{_i457:06d}.KS', signal_date=_d457, status='success', realized_return=_r457))
+_eo457 = _pf457.ev_order(_cse457, _evk457, cost=0.41)
+_eo0457 = _pf457.ev_order(_cse457, _evk457, cost=0.41, boot=0)
+check("③ 기대값 순서 — 위 반(3건) 평균 > 아래 반 · 순위 상관 +1 · 차이 구간이 차이를 품는다 · boot 0 이면 구간 없음 · 3건이면 None",
+      _eo457['hi']['n'] == 3 and _eo457['lo']['n'] == 3 and _eo457['hi']['mean_net'] > _eo457['lo']['mean_net']
+      and abs(_eo457['rank_corr'] - 1.0) < 1e-9 and _eo457['diff_ci'][0] <= _eo457['diff'] <= _eo457['diff_ci'][1]
+      and _eo0457['diff_ci'] is None and _eo0457['hi']['ci95'] is None
+      and _pf457.ev_order(_cse457[:3], _evk457) is None, str({k: _eo457[k] for k in ('diff', 'diff_ci', 'rank_corr')}))
+
+# ④ 한 줄 — 판정 낱말 없음 · 0 을 포함하는지만 · 기대값 순서가 못 가르면 그 결과를 적고 가르면 안 적는다 · 없으면 None
+_g457 = dict(name=_EV457, blocked=dict(n=223, dates=42, mean_net=0.05, median_net=3.97, ci95=[-0.88, 0.99]),
+             only=dict(n=12, dates=9, mean_net=2.39, ci95=[-2.76, 6.39]), passed=dict(n=1, dates=1, mean_net=-17.4, ci95=None))
+_eoS457 = dict(hi=dict(mean_net=0.26), lo=dict(mean_net=-0.31), diff_ci=[-1.19, 2.27], rank_corr=-0.0)
+_sc457 = dict(gates=[_g457], ev_order=_eoS457, candidates=dict(cost_pct=0.41))
+_ln457 = _pf457.gate_line(_sc457, _EV457)
+_ln2457 = _pf457.gate_line(dict(_sc457, ev_order=dict(_eoS457, diff_ci=[0.2, 1.5])), _EV457)
+check("④ 한 줄 — '막지 않았다면' · 223건 날짜 42 · 0 을 포함 · 하나에만 걸린 12건 · 순서가 못 가르면 그 말 · 성적표 시각 없으면 안 적음",
+      _ln457 and _ln457.startswith('막지 않았다면') and '223건(날짜 42일)' in _ln457 and '0 을 포함' in _ln457
+      and '하나에만 걸린 12건(날짜 9일)' in _ln457 and '가르지 못했으므로' in _ln457 and '성적표' not in _ln457
+      and '진입가 대기와는 진입이 다릅니다' in _ln457 and '가르지 못했으므로' not in _ln2457
+      and '0 을 포함하지 않음' in _ln2457, _ln457)
+check("④' 판정 낱말이 없다 · 그 조건이 없거나 막은 후보가 0 이면 None",
+      not any(w in _ln457 for w in ('보수적', '괜찮', '너무', '안전합', '풀어야'))
+      and _pf457.gate_line({}, _EV457) is None and _pf457.gate_line(_sc457, '없는 조건') is None
+      and _pf457.gate_line(dict(gates=[dict(_g457, blocked=dict(n=0, mean_net=None))]), _EV457) is None)
+
+# ⑤ 자동매매 칸 — 그 조건에 걸린 계획이 있을 때만 넷째 줄 · 성적표가 비면 줄 없음
+_c457 = _sl457.connect(':memory:')
+_sl457.add_plan(_c457, dict(plan_id='R475A', data_day='2026-10-08', code='000001', name='z', spec='SWING_V1', entry=10000, target=10480,
+                            stop=9314, horizon=20, wait_bars=20, live_ok=False, verdict=dict(failed=[_EV457], checks_n=11)))
+_z457 = _sv457.zero_day_line(_c457, '2026-10-08', scorecard=_sc457)
+_z0457 = _sv457.zero_day_line(_c457, '2026-10-08', scorecard={})
+_c457.close()
+check("⑤ 자격 0 줄의 넷째 줄 — 그 조건이 막은 후보의 기록(성적표 · 같은 함수) · 빈 성적표면 그 줄만 빠진다 · 다른 조건이면 None",
+      _z457 and _ln457 in _z457 and _z0457 and _ln457 not in _z0457
+      and _sv457.blocked_record_line([dict(verdict=dict(failed=['다른 조건']))], _sc457) is None
+      and _sv457.blocked_record_line([dict(verdict=dict(failed=[_EV457]))], _sc457) == _ln457, str(_z457)[-160:])
+
+# ⑥ 배선 — 성적표가 한 짝(_ck)으로 장부·다 샀다면을 세고 · PROOF 칸이 같은 함수를 _md_safe 로 · 옛 첫-파일 짝(report_checks) 없음
+_ps457 = _read148(_os.path.join(PROJ, 'scripts', 'proof_scorecard.py'))
+_wa457 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_tree_ps457 = _ast457.parse(_ps457)
+_defs_ps457 = {n.name for n in _tree_ps457.body if isinstance(n, _ast457.FunctionDef)}
+check("⑥ 배선 — origin_cores 한 짝으로 장부·다 샀다면·기대값 순서 · 짝 셈(pairing)을 싣고 · PROOF 칸이 gate_line 을 _md_safe 로",
+      'proof.origin_cores(load_history(), _reports)' in _ps457 and 'proof.gate_ledger(_cases, _ck)' in _ps457
+      and 'proof.candidate_outcome(_cases, _ck)' in _ps457 and 'proof.ev_order(_cases, proof.ev_map(_cores))' in _ps457
+      and 'pairing=pairing' in _ps457 and 'report_checks' not in _defs_ps457 and 'load_history' in _defs_ps457
+      and 'st.caption(_md_safe(_gl475))' in _wa457 and '_pf418m.gate_line(_sc418, _gt418[0][\'name\'])' in _wa457)
+
+# ⑦ 전방 채점기 — 구간 끝은 결과를 안 읽고 정한다(세 함수에 결과·봉 칸 이름이 없다)
+_srcg457 = _read148(_os.path.join(PROJ, 'scripts', 'gate_forward_r475.py'))
+_treeg457 = _ast457.parse(_srcg457)
+_fns457 = [n for n in _treeg457.body if isinstance(n, _ast457.FunctionDef) and n.name in ('gate_failed', 'window_dates', 'window_end')]
+_bad457 = ('realized_return', 'status', 'success', 'failure', 'outcome', 'return_pct', 'bars', 'close', 'net')
+_tok457 = set()
+for _f457 in _fns457:
+    for _n457 in _ast457.walk(_f457):
+        if isinstance(_n457, _ast457.Constant) and isinstance(_n457.value, str):
+            _tok457.add(_n457.value)
+        elif isinstance(_n457, (_ast457.Name, _ast457.Attribute)):
+            _tok457.add(getattr(_n457, 'id', None) or getattr(_n457, 'attr', None))
+_hit457 = sorted(t for t in _tok457 if t in _bad457)
+check("⑦ R475 구간 끝은 리포트·이력만 읽는다 — 세 함수에 결과·봉 칸 이름이 없다(본 이름 수를 밝힌다)",
+      len(_fns457) == 3 and not _hit457, str(_hit457), scanned=len(_tok457))
+
+# ⑧ 전방 채점기 갈래 — 하한 미달 · 닫히기 전 · 기간 중 · (가)(나)(다) · 휴장일·시작 전 날짜는 안 센다
+import datetime as _dt457                                        # noqa: E402
+
+
+def _wd457(start, n):
+    out, d = [], _dt457.date.fromisoformat(start)
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d += _dt457.timedelta(days=1)
+    return out
+
+
+_off457 = (lambda d: False)
+_days457 = _wd457('2026-10-12', 31)
+_cores457 = {(f'{i:06d}', d): dict(checks=[dict(name=_EV457, ok=False)], expected_return=-0.3 - 0.01 * (i % 3))
+             for i, d in enumerate(_days457)}
+_cores457[('999999', '2026-10-09')] = dict(checks=[dict(name=_EV457, ok=False)])        # 시작 전 — 안 센다
+_cores457[('888888', '2026-10-13')] = dict(checks=[dict(name=_EV457, ok=True)])          # 통과 — 안 센다
+
+
+def _cases457(ret, status='success'):
+    return [dict(ticker=f'{i:06d}.KS', signal_date=d, status=status, realized_return=ret(i)) for i, d in enumerate(_days457)]
+
+
+_end457, _cnt457 = _gf457.window_end(_cores457, is_off=_off457)
+_late457 = _gf457.nth_trading_day(_days457[29], _gf457.H, _off457)
+_j_floor457 = _gf457.judge([], dict(list(_cores457.items())[:20]), '2027-06-01', _off457)
+_j_pre457 = _gf457.judge(_cases457(lambda i: 0.05), _cores457, _late457, _off457)
+_j_pend457 = _gf457.judge(_cases457(lambda i: 0.05, 'open'), _cores457, '2027-06-01', _off457)
+_j_ga457 = _gf457.judge(_cases457(lambda i: 0.03 + 0.001 * (i % 5)), _cores457, '2027-06-01', _off457)
+_j_da457 = _gf457.judge(_cases457(lambda i: -0.03 - 0.001 * (i % 5)), _cores457, '2027-06-01', _off457)
+_j_na457 = _gf457.judge(_cases457(lambda i: 0.05 if i % 2 else -0.05), _cores457, '2027-06-01', _off457)
+_offd457 = _gf457.window_dates(_cores457, is_off=lambda d: d == _days457[0])
+check("⑧ 구간 끝 — 30번째 날(시작 전·통과 행은 안 셈) · 하한 미달 '하한' · 닫히기 전 '닫힌다' · 기간 중 '기간 중' · 휴장일 안 셈",
+      _end457 == _days457[29] and _cnt457 == 30 and _j_floor457['verdict'] == '미측정' and '하한 30' in _j_floor457['why']
+      and _j_pre457['verdict'] == '미측정' and '닫힌다' in _j_pre457['why']
+      and _j_pend457['verdict'] == '미측정' and '기간 중' in _j_pend457['why'] and _days457[0] not in _offd457,
+      f"{_end457} · {_j_floor457['why']} · {_j_pre457['why']} · {_j_pend457['why']}")
+check("⑧' 갈래 — 다 벌면 (가) · 다 잃으면 (다) · 반반이면 (나) · 표본은 구간 끝까지 30일(31번째 날은 안 셈)",
+      _j_ga457['verdict'] == '(가)' and _j_da457['verdict'] == '(다)' and _j_na457['verdict'] == '(나)'
+      and _j_ga457['dates'] == 30 and _j_ga457['n'] == 30 and _j_ga457['window'] == ['2026-10-12', _days457[29]],
+      f"{_j_ga457['verdict']} {_j_da457['verdict']} {_j_na457['verdict']} · {_j_ga457.get('ci95')}")
+
+# ⑨ 사전등록 — 해시 · 결과 전 · 고정한 수 · 동결 자물쇠 ⓐ
+import scripts.model_freeze_guard as _mfg457                     # noqa: E402
+_pre457 = _read148(_os.path.join(PROJ, 'docs', 'PREREG_R475_EV_GATE_FORWARD.md'))
+_h457s = (_mfg457.sha('scripts/gate_forward_r475.py') or '')[:16]
+_need457 = ('결과 전', '2026-10-12', '하한', '0.41%', '시드 475', '(가)', '(나)', '(다)', '사람이 정한다', _h457s)
+check("⑨ 사전등록 R475 — 채점기 해시가 문서와 같다(고치면 사유와 함께 같이 간다) · 고정한 수와 갈래 · 동결 자물쇠 ⓐ",
+      bool(_h457s) and all(t in _pre457 for t in _need457)
+      and 'scripts/gate_forward_r475.py' in _mfg457.NO_AUTO_CHANGE
+      and (_gf457.FROM, _gf457.DATE_FLOOR, _gf457.H, _gf457.COST, _gf457.SEED) == ('2026-10-12', 30, 20, 0.41, 475),
+      str([t for t in _need457 if t not in _pre457]), scanned=len(_need457))
+# ─── §457 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
