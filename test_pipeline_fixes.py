@@ -40468,6 +40468,28 @@ check("⑥ 시스템 갈래의 '저녁 작업' 줄 끝에 그 실행의 리포�
       and '리포트 가격 = 자료일' in _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
       and '종가 대조 못 함' in _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py')),
       f'{_ns1_472} · {_ns2_472} · {_pgn472}')
+# ⑦ 사용자: "실주문 자격 또 0 이야 이제 시작 안해?" — 화면이 다음 계획이 언제 오는지를 안 말했다. 저녁 작업의 다음 실행 · 그 실행의
+#    자료일(리포트 날짜 규칙) · 매수 시작일(판정일 다음 거래일 · 달력)에서 유도한다(심어서 잰다 · 날짜를 지어내지 않는다)
+_tk472 = dict(ok=True, installed=True, state='Ready', next_run='10/12/2026 21:00:00')
+_nj472 = _dh472.next_judgement(_tk472, '2026-10-08', report_day_fn=lambda run: '2026-10-12')
+_njh472 = _dh472.next_judgement(dict(_tk472, next_run='10/09/2026 21:00:00'), '2026-10-08', report_day_fn=lambda run: '2026-10-08')
+_njf472 = _dh472.next_judgement(dict(_tk472, next_run='10/16/2026 21:00:00'), '2026-10-15', report_day_fn=lambda run: '2026-10-16')
+_nl472 = _dh472.next_judgement_line(_nj472, '2026-10-08', 0)
+check("⑦ 다음 판정 — 저녁 작업 10-12 21:00 → 자료일 10-12 · 매수 10-13(화)부터 · 휴장일 밤(자료일이 지금 판정일과 같음)은 새 계획 없음 · "
+      "금요일 판정은 다음 월요일 · 작업 상태를 못 읽거나 시각을 못 읽으면 None · 문장은 '추천이 있을 때만'을 같이 말한다",
+      _nj472['new'] and str(_nj472['buy_day']) == '2026-10-13' and _nj472['data_day'] == '2026-10-12'
+      and _njh472['new'] is False and '새 계획이 생기지 않습니다' in _dh472.next_judgement_line(_njh472, '2026-10-08', 0)
+      and str(_njf472['buy_day']) == '2026-10-19'
+      and _dh472.next_judgement(dict(ok=False), '2026-10-08') is None
+      and _dh472.next_judgement(dict(_tk472, next_run='모름'), '2026-10-08', report_day_fn=lambda r: '2026-10-12') is None
+      and '2026-10-13(화) 장부터' in _nl472 and "'추천'이 있을 때만" in _nl472 and '실주문 자격은 0개' in _nl472,
+      f'{_nj472} · {_njh472} · {_njf472} · {_nl472}')
+# ⑧ 미리보기 줄은 실제 사유만 — 종전 문장은 '계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다'로 두 갈래를 덮었다(문자열 상수 · 주석 제외)
+_sv472c = [n.value for n in _ast472.walk(_sv472) if isinstance(n, _ast472.Constant) and isinstance(n.value, str)]
+check("⑧ 수량 미리보기 없음 — '…없거나 위험 한도' 로 두 사유를 덮는 문장이 화면 문자열에 없다 · 두 사유를 따로 적는 문장이 있다(AST)",
+      not any('없거나 위험 한도' in s for s in _sv472c) and any('계좌를 아직 읽은 적이 없습니다' in s for s in _sv472c)
+      and any('위험 한도가 비어 있습니다' in s for s in _sv472c), str([s for s in _sv472c if '미리보기' in s])[:200],
+      scanned=len(_sv472c))
 # ─── §472 끝 ───
 
 

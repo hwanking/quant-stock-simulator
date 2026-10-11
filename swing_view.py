@@ -840,7 +840,10 @@ def bar_items(ctx):
                  sub=('워커가 손절·목표를 관리' if n_prot else '자동 관리 중인 종목 없음')),
             dict(label='워커', value=wv, tone=wt, sub=(f"마지막 기록 {_ts(hb['ts'])}" if hb else '기록 없음')),
             dict(label='긴급정지', value=('켜짐' if kill else '꺼짐'), tone=('neg' if kill else ''), sub='토글은 오른쪽'),
-            dict(label='오늘 계획', value=str(len(ctx['plans_today'])), sub=f"실주문 자격 {live_n} · 판정일 {ctx.get('today') or '—'}")]
+            dict(label='오늘 계획', value=str(len(ctx['plans_today'])),
+                 sub=f"실주문 자격 {live_n} · 판정일 {ctx.get('today') or '—'}"
+                 + (f" · 다음 판정 {ctx['next_j']['run'].strftime('%m-%d %H:%M')}"            # 라운드 492 — 다음 계획이 언제 오나
+                    if (ctx.get('next_j') or {}).get('new') else ''))]
 
 
 def _summary_now(ctx):
@@ -877,6 +880,11 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
     # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
     ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
+    # 라운드 492 — 다음 계획이 언제 오나(저녁 작업의 다음 실행 · 그 실행의 자료일 · 매수 시작일) — 못 읽으면 None
+    try:
+        ctx['next_j'] = _dash.next_judgement(_ops.scheduled_task(_ops.WATCH_TASK), anchor_day)
+    except Exception:                                          # noqa: BLE001 — 못 정하면 그 한 줄만 빠진다(§3)
+        ctx['next_j'] = None
     _ar458 = acct_refresh_pref(st.session_state, stt)
     ctx['auto_refresh'] = (_ar458[0] and allow_write, _ar458[1])
     ctx['live_refresh'] = bool(live)                           # 라운드 465 — 본문 전체가 그 간격으로 다시 그려지는 중인가
@@ -993,6 +1001,10 @@ def _view_plans(st, uk, c, ctx, md):
     st.caption(f'판정일 {day} 의 개장 전 후보 — 실주문 자격은 중앙 판정이 조건 11개를 전부 통과했을 때만 \'예\'입니다. '
                '자격이 없는 후보도 같은 계약을 일봉으로 되돌려 채점한 결과(연구 모의 · 증권사와 무관한 원장 기준 값)를 남깁니다. '
                '진입가·1차 목표는 호가 단위로 맞춘 주문 가격이고, 중앙 판정 값과 다르면 괄호에 같이 적습니다.')
+    # 라운드 492 — 사용자: "실주문 자격 또 0 이야 이제 시작 안해?" 지금 표는 지난 판정일의 계획이다 — 다음 계획이 언제 오는지를 먼저 말한다
+    _nj492 = _dash.next_judgement_line(ctx.get('next_j'), day, sum(1 for r in rows if r.get('실주문 자격') == '예'))
+    if _nj492:
+        st.caption(md(_nj492))
     _zl450 = zero_day_line(c, day)
     if _zl450:
         st.caption(md(_zl450))
@@ -1010,7 +1022,11 @@ def _view_plans(st, uk, c, ctx, md):
         st.caption(f"수량 미리보기는 마지막으로 읽은 계좌({_ts(acct['ts'])} · 예수금 {_won(acct['cash'])})와 지금 위험 한도로 "
                    "워커와 같은 함수로 센 것입니다 — 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 셉니다.")
     else:
-        st.caption('수량 미리보기 없음 — 계좌를 읽은 적이 없거나 위험 한도가 비어 있습니다(시스템 → 설정).')
+        # 라운드 492 — 종전 문장은 두 사유를 '…거나'로 덮었다(계좌는 읽었는데 한도만 빈 날에도 '읽은 적이 없거나'). 실제 사유만 적는다.
+        _why492 = ([] if acct else ['계좌를 아직 읽은 적이 없습니다']) + \
+                  ([] if (ctx['stt'].get('limits') or None) else ['위험 한도가 비어 있습니다'])
+        st.caption('수량 미리보기 없음 — ' + ' · '.join(_why492)
+                   + (f"(계좌는 {_ts(acct['ts'])} 에 읽었습니다)" if acct else '') + ' — 시스템 → 설정.')
     # 라운드 451 — 실전 승인형: 승인은 계획(진입가·손절·목표가 박힌 영수증)에 붙는다. 쓰는 자리는 여기뿐이다.
     if ctx['approval_on']:
         _live451 = [p for p in L.plans(c) if p['data_day'] == day and p.get('live_ok') and p['code'] not in ctx['managed']]

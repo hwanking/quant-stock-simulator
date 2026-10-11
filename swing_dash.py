@@ -28,6 +28,65 @@ def next_session_start(now, skip_today=False, max_days=20):
     return None, None
 
 
+def parse_task_time(text):
+    """작업 스케줄러가 돌려준 다음 실행 시각 글자('10/12/2026 21:00:00' · ISO 도) → datetime 또는 None(못 읽으면 지어내지 않는다)."""
+    t = (text or '').strip() if isinstance(text, str) else ''
+    for fmt in ('%m/%d/%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%m/%d/%Y %I:%M:%S %p'):
+        try:
+            return _dt.datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def next_judgement(nightly_task, anchor_day, report_day_fn=None):
+    """다음 판정이 언제 나오고 그 계획의 매수는 언제부터인가 (라운드 492) → dict(run, data_day, new, buy_day) 또는 None.
+
+    사용자가 '오늘 계획 · 실주문 자격 0'을 보고 *"이제 시작 안 해?"* 라 물었다 — 화면은 지금 계획(판정일)만 말하고 **다음 계획이
+    언제 오는지**를 안 말했다. 규칙은 이미 있다: 저녁 작업이 그날 봉이 확정된 뒤 그 자료일의 개장 전 리포트를 만들고(라운드 484·486)
+    같은 작업의 스윙 단계가 그 리포트로 계획을 남기며, 실행부는 판정일 **다음 거래일**부터 산다(`swing_executor._entries` · waited ≥ 1).
+    그래서 여기서는 새로 정하지 않고 **유도**만 한다 — 다음 실행 시각은 작업 스케줄러에서, 그 실행이 만들 자료일은 리포트 날짜 규칙
+    (`premarket.report_day`)에서, 매수 시작일은 거래일 달력에서. 다음 실행을 못 읽으면 None(§3) · 그 실행의 자료일이 지금 판정일과
+    같으면(휴장일 밤) new=False — 그 밤엔 새 계획이 없다."""
+    run = parse_task_time((nightly_task or {}).get('next_run')) if (nightly_task or {}).get('ok') else None
+    if run is None:
+        return None
+    if report_day_fn is None:
+        import premarket
+        report_day_fn = premarket.report_day
+    try:
+        dd = report_day_fn(run)
+    except Exception:                                          # noqa: BLE001 — 못 정하면 주장하지 않는다
+        dd = None
+    if not dd:
+        return dict(run=run, data_day=None, new=False, buy_day=None)
+    dd = str(dd)[:10]
+    new = not anchor_day or dd > str(anchor_day)[:10]
+    buy = None
+    if new:
+        d = _dt.date.fromisoformat(dd)
+        for _i in range(1, 20):
+            d += _dt.timedelta(days=1)
+            if X.is_trading_day(d.isoformat()):
+                buy = d
+                break
+    return dict(run=run, data_day=dd, new=new, buy_day=buy)
+
+
+def next_judgement_line(nj, anchor_day, live_n):
+    """`next_judgement` → 한 문장(판정 낱말 없음 · 수는 넘겨받은 것만). 못 읽었으면 None."""
+    if not nj:
+        return None
+    run = nj['run'].strftime('%m-%d %H:%M')
+    if not nj.get('new'):
+        return (f"다음 저녁 작업({run})은 새 판정일이 아닙니다(휴장일 밤 — 그 실행의 자료일이 지금 판정일 {anchor_day} 와 같다) — "
+                "그 밤엔 새 계획이 생기지 않습니다.")
+    b = nj.get('buy_day')
+    return (f"다음 계획 — 저녁 작업({run} · 그날 봉이 확정된 뒤)이 자료일 {nj['data_day']} 판정으로 만들고, 그 계획의 매수는 "
+            + (f"{b.isoformat()}({WEEK_KO[b.weekday()]}) 장부터입니다" if b else '그다음 거래일 장부터입니다')
+            + f" — 그 판정에 '추천'이 있을 때만. 지금 보이는 계획은 판정일 {anchor_day} 의 것이고 실주문 자격은 {live_n}개입니다.")
+
+
 def _when(d, op):
     return f"{d.isoformat()}({WEEK_KO[d.weekday()]}) {op.strftime('%H:%M')}" if d else None
 
