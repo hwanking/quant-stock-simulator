@@ -39927,6 +39927,16 @@ _at467 = _re467.search(r'\$At = "(\d{2}):(\d{2})"', _ps467)
 check("⑤ 저녁 작업(리포트·재측정·추적) 기본 시각이 애프터마켓 끝(20:00) 뒤 — 봉이 확정된 뒤에 읽는다",
       _at467 is not None and _dt467.time(int(_at467.group(1)), int(_at467.group(2))) > _be467.KRX_AFTER_MARKET[1],
       _at467.group(0) if _at467 else '시각 없음')
+# ⑥ 클라우드 전방 기록기 경보(라운드 487) — 그날 봉이 확정 전(17:00 · 애프터마켓 중)에 돌면 적고, 21:00 · 자정 뒤 · UTC 시계는 이 경보를 안 낸다
+import scripts.forward_recorder as _fr467                         # noqa: E402
+_K467 = _dt467.timezone(_dt467.timedelta(hours=9))
+_n17 = _fr467.clock_notes('2026-10-12', _dt467.datetime(2026, 10, 12, 17, 0, tzinfo=_K467))[1]
+_n21 = _fr467.clock_notes('2026-10-12', _dt467.datetime(2026, 10, 12, 21, 0, tzinfo=_K467))[1]
+_n01 = _fr467.clock_notes('2026-10-12', _dt467.datetime(2026, 10, 13, 1, 30, tzinfo=_K467))[1]
+check("⑥ 전방 기록기 — 17:00(애프터마켓 중)엔 '확정 전' 경보 · 21:00 · 다음 날 01:30 엔 없음 (기록은 막지 않는다)",
+      any('확정 전' in x and '애프터마켓 20:00 끝 전' in x for x in _n17)
+      and not any('확정 전' in x for x in _n21) and not any('확정 전' in x for x in _n01),
+      f'{_n17} · {_n21} · {_n01}')
 # ─── §467 끝 ───
 
 

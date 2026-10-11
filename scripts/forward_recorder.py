@@ -80,6 +80,22 @@ def clock_notes(t_ref, now=None):
     if anchor and str(t_ref) != anchor:
         notes.append(f'⚠ 기준일 {t_ref} 이 마지막으로 장이 끝난 거래일 {anchor} 과 다르다 — 이대로면 그날 것을 못 쌓거나 '
                      f'이미 기록된 날을 다시 찍는다.')
+    # 라운드 487 — 그날 봉이 아직 움직이는 시각이면 적는다. 2026-09-14 부터 우리가 받는 종가·일봉 종가는 KRX 애프터마켓
+    #   (16:00~20:00) 마지막 체결이다(라운드 486 · 10-08 봉 60/60). 예약 지연으로 지금은 23:30 KST 뒤에 돌지만 지연이 3시간
+    #   밑으로 줄면 17:00~20:00 의 미완성 봉으로 기록한다 — 크론은 안 옮긴다(긴 지연 726분이 다음 장에 걸린다 · 라운드 283).
+    #   판정은 엔진 `bar_final` 한 곳 · 시계가 KST 일 때만(아니면 위 경고가 먼저다) · 기록은 막지 않는다(그날은 다시 못 만든다).
+    if off == _dt.timedelta(hours=9):
+        try:
+            import bitemporal_engine as _be
+            local = now.replace(tzinfo=None)
+            if not _be.bar_final(local):
+                end = _be.after_market_end(local.date())
+                st = _be.get_market_status(local).get('state')
+                why = '정규장 중' if st == '장중' else (f'애프터마켓 {end:%H:%M} 끝 전' if end else '장 마감 직후')
+                notes.append(f'⚠ 그날 봉이 아직 확정 전이다({local:%H:%M} · {why}) — 이 기록은 아직 움직이는 종가로 잰 것이다. '
+                             f'2026-09-14 부터 종가는 애프터마켓 마감가다.')
+        except Exception:                                      # noqa: BLE001
+            pass
     return head, notes
 
 
