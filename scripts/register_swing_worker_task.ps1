@@ -30,8 +30,12 @@ if ($Unregister) {
     exit 0
 }
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$Py = "C:\Python314\python.exe"
-if (-not (Test-Path $Py)) { $Py = "python" }
+# Round 485 - pythonw.exe: no console window. The user saw windows flashing; a task launched as python.exe opens a console
+#   (the worker for the whole session plus every repetition, the nightly for minutes). The scripts write their own logs
+#   under .portfolio (*_run.txt) and start their child steps as python.exe with CREATE_NO_WINDOW (noconsole.py).
+$Py = "C:\Python314\pythonw.exe"
+if (-not (Test-Path $Py)) { $Py = "C:\Python314\python.exe" }
+if (-not (Test-Path $Py)) { $Py = "pythonw" }
 $Script = Join-Path $Root "scripts\run_swing_worker.py"
 $Action = New-ScheduledTaskAction -Execute $Py -Argument ('"' + $Script + '" --session --loop 60') -WorkingDirectory $Root
 # Start boundary: today if today's window (At .. At + ForHours) has not ended yet, otherwise tomorrow - registering after the

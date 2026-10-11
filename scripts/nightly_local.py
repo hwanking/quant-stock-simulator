@@ -2,6 +2,7 @@
 """이 PC 의 평일 장 마감 뒤 작업 — 사람이 누르거나 손으로 돌리던 일을 차례로 돈다 (라운드 414 → 415 → 418 → 420).
 
   ⓪ 클라우드 되받기 — `scripts/pull_research_data.py --apply` (라운드 420 · 손으로 며칠에 한 번 돌리던 것)
+  ⓪' 개장 전 리포트 — `scripts/build_premarket_report.py` (라운드 484 · 화면의 첫 스캔과 같은 함수 · 장 마감 뒤 · 있으면 안 만든다)
   ① 추적 동결·채점 — `scripts/run_daily_improvement.py` (화면의 '장 종료 후 지금 실행' 버튼과 같은 스크립트)
   ② 관심종목 재측정 — `scripts/refresh_watchlist.py` (표의 '지금 재기'와 같은 함수 · 라운드 414)
   ③ PROOF 성적표 — `scripts/proof_scorecard.py` (라운드 418)
@@ -13,6 +14,11 @@
   화면의 '기록된 거래일'·모델 성적이 낡은 수를 말했다. 되받기는 들여오기만 한다(밖으로 보내는 것 없음) · 줄어들면
   건너뛰고 · 이 PC 에만 있는 예측·리포트 이력·추적 케이스는 합치거나 남긴다(R392·R415). 배포 동봉본을 git 에 싣는
   것은 여전히 사람이다(R261).
+
+■ 왜 ⓪' 이 여기 있나 (라운드 484 · 2026-10-11)
+  리포트가 **앱을 열 때만** 만들어져, 언제 만들어지는지가 사람이 언제 앱을 여는지에 묶였다 — 장중에 만든 리포트 9개(가격이 장중 값 ·
+  라운드 483) · 장 마감 2분 뒤 리포트(가격이 확정 종가 아님) · 앱을 안 연 날은 리포트가 없어 추적·전방 판정·자동매매 계획 표본이 빠진다.
+  추적 동결(①)과 자동매매 계획(④)이 그날 리포트를 읽으므로 그 **앞**에 둔다. 장중에는 안 만든다(놓치면 켜질 때 돈 날).
 
 ■ 왜 ① 이 여기 있나 (라운드 415 · 2026-10-02 실측)
   개장 전 리포트는 **이 PC 의 앱만** 만든다(클라우드에는 09-12 판이 마지막 — 라운드 281 이 손으로 올린 것).
@@ -42,6 +48,10 @@ try:
 except Exception:                                              # noqa: BLE001
     pass
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJ not in sys.path:
+    sys.path.insert(0, PROJ)
+import noconsole                                               # noqa: E402 · 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게
+noconsole.install()
 TEXT_LOG = os.path.join(PROJ, '.portfolio', 'nightly_local_run.txt')
 TEXT_LOG_KEEP = 2000
 
@@ -49,6 +59,8 @@ TEXT_LOG_KEEP = 2000
 STEPS = (
     # 라운드 420 — 맨 앞: 뒤 단계(성적표)와 화면이 어젯밤 클라우드가 쌓은 것을 보게. 실측 받기·풀기 약 2분(154MB).
     ('클라우드 되받기', 'scripts/pull_research_data.py', 30 * 60),
+    # 라운드 484 — 개장 전 리포트(스캔 상위 5 · 화면 실측 2~3분). 추적 동결·자동매매 계획이 읽으므로 그 앞.
+    ('개장 전 리포트', 'scripts/build_premarket_report.py', 20 * 60),
     ('추적 동결·채점', 'scripts/run_daily_improvement.py', 30 * 60),
     ('관심종목 재측정', 'scripts/refresh_watchlist.py', 120 * 60),
     # 라운드 418 — 가늠 PROOF 성적표(남긴 판정 전부를 같은 채점기로 · 실측 198종목 33초). 쓰기 금지면 --dry-run.
@@ -125,7 +137,8 @@ def main(argv=None):
         t0 = time.time()
         env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')
         try:
-            r = subprocess.run([sys.executable] + args, cwd=PROJ, capture_output=True, text=True,
+            # 라운드 485 — 작업 스케줄러는 창 없는 pythonw 로 띄운다 · 자식은 출력을 파이프로 받는 python.exe 로(창은 noconsole 이 막는다)
+            r = subprocess.run([noconsole.console_python()] + args, cwd=PROJ, capture_output=True, text=True,
                                encoding='utf-8', errors='replace', timeout=limit, env=env)
             tail = [ln for ln in (r.stdout or '').splitlines() if ln.strip()][-3:]
             err = [ln for ln in (r.stderr or '').splitlines() if ln.strip()][-2:]

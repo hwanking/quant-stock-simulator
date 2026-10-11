@@ -26,6 +26,10 @@ import sys
 from datetime import datetime
 
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJ not in sys.path:
+    sys.path.insert(0, PROJ)
+import noconsole                                               # noqa: E402 · 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게
+noconsole.install()
 sys.path.insert(0, PROJ)
 os.chdir(PROJ)
 

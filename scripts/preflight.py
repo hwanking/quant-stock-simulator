@@ -32,6 +32,10 @@ try:
 except Exception:                                              # noqa: BLE001
     pass
 PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJ not in sys.path:
+    sys.path.insert(0, PROJ)
+import noconsole                                               # noqa: E402 · 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게
+noconsole.install()
 TEST = os.path.join(PROJ, 'test_pipeline_fixes.py')
 #: 이 저장소가 자주 걸리는 소스 잠금 절 — 리터럴·머리글·경로를 잠근다
 STICKY = ['§104', '§105', '§184', '§201', '§204', '§231']

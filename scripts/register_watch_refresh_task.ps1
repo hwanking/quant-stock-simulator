@@ -20,8 +20,12 @@ if ($Unregister) {
     exit 0
 }
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$Py = "C:\Python314\python.exe"
-if (-not (Test-Path $Py)) { $Py = "python" }
+# Round 485 - pythonw.exe: no console window. The user saw windows flashing; a task launched as python.exe opens a console
+#   (the worker for the whole session plus every repetition, the nightly for minutes). The scripts write their own logs
+#   under .portfolio (*_run.txt) and start their child steps as python.exe with CREATE_NO_WINDOW (noconsole.py).
+$Py = "C:\Python314\pythonw.exe"
+if (-not (Test-Path $Py)) { $Py = "C:\Python314\python.exe" }
+if (-not (Test-Path $Py)) { $Py = "pythonw" }
 # Round 415 - the task runs both steps a person used to press: the case tracker (run_daily_improvement.py,
 # the "after close, run now" button) and the watchlist re-measure (refresh_watchlist.py). nightly_local.py runs them in order.
 $Script = Join-Path $Root "scripts\nightly_local.py"

@@ -31,6 +31,11 @@ def _pick_korean_font():
 matplotlib.rcParams['font.family'] = _pick_korean_font()
 matplotlib.rcParams['axes.unicode_minus'] = False
 
+# 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게 — 이 앱 서버는 콘솔 없이 뜨기도 한다(미리보기)
+#   · 스윙 칸이 작업 스케줄러 상태를 PowerShell 로 읽는다(15초 자동 갱신)
+import noconsole                                               # noqa: E402
+noconsole.install()
+
 # 모듈 핫 리로딩
 import bitemporal_engine
 import quant_indicators
@@ -4078,85 +4083,28 @@ def run_market_scan():
     watch = [w['code'] for w in (st.session_state.get('watchlist') or [])]
     watch += [p.ticker.split('.')[0] for p in (st.session_state.get('positions') or [])
               if p.ticker.split('.')[0] not in watch]
-    # ── 전 종목 경량 스캔 ────────────────────────────────────────────
-    # 순위 페이지 2종에서만 출발하면 거래가 한산한 종목은 애초에 후보가
-    # 되지 못한다. 유니버스에는 이미 시총·거래대금이 실려 있으므로
-    # **추가 요청 없이** 전 종목을 한 번 훑을 수 있다. 여기서 거르는 건
-    # 데이터가 없거나 유동성이 없어 어차피 못 사는 종목뿐이다.
-    #
-    # ⚠️ 라운드 37 — 이 블록은 관심종목 탐색 **앞**에 와야 한다.
-    # 종전에는 뒤에 있었고, 순위 페이지가 비면 그 전에 return 해 버려서
-    # 경량 스캔이 **실행조차 안 된 채** 화면에 '0개'로 찍혔다. 사용자는
-    # "전 종목을 훑었는데 하나도 없구나"로 읽는다 — 사실이 아니었다.
-    _progress("종목 코드·시장 구분 확인 중", step=1)
-    universe = engine_init.get_screener_universe(full_market=True)
-    by_code = {u['symbol'].split('.')[0]: u for u in universe}
-
-    _MIN_TRADE_VALUE = 5e8          # 당일 거래대금 5억원
-    # ⚠️ 라운드 37 — **못 잰 것으로 거르지 않는다.**
-    # 유니버스가 거래대금을 안 실어 오는 시간대(장 시작 전 등)에는
-    # today_trade_value 가 전 종목 None 이고 liquidity_confirmed 도 전부
-    # False 다. 종전 코드는 이걸 '유동성 없음'으로 세어 2,997종목을 전부
-    # 탈락시켰고, 화면은 "유동성·데이터 조건 통과 0개"라고 말했다.
-    # 실제로는 유동성이 없는 게 아니라 **거래대금을 수집하지 못한 것**이다.
-    # 그래서 수신율을 먼저 보고, 거의 안 왔으면 그 필터를 끈다.
-    _tv_seen = sum(1 for u in universe if (u.get('today_trade_value') or 0) > 0)
-    _tv_usable = _tv_seen >= max(20, len(universe) * 0.05)
-    _lite = {'total': len(universe), 'no_price': 0, 'no_liquidity': 0,
-             'thin': 0, 'passed': 0, 'tv_seen': _tv_seen,
-             'tv_usable': _tv_usable}
-    _lite_pass, _lite_rows = set(), []
-    for u in universe:
-        if not u.get('base_price'):
-            _lite['no_price'] += 1
-            continue
-        if _tv_usable:
-            if not u.get('liquidity_confirmed'):
-                _lite['no_liquidity'] += 1
-                continue
-            if (u.get('today_trade_value') or 0) < _MIN_TRADE_VALUE:
-                _lite['thin'] += 1
-                continue
-        _lite_pass.add(u['symbol'].split('.')[0])
-        _lite_rows.append(u)
-    _lite['passed'] = len(_lite_pass)
-    st.session_state['scan_lite'] = _lite
-
-    # 순위 페이지가 죽으면 경량 스캔 통과 종목을 거래대금 순으로 대신 쓴다
-    _progress("거래대금·상승률 순위에서 관심종목 추리는 중", step=2)
-    att = market_attention.find_attention_candidates(
-        attention_strategy, top_n=scan_depth, progress=_progress,
-        watchlist=watch, fallback_pool=_lite_rows)
-    st.session_state['attention_result'] = att
-    if att.get('unavailable') or not att['rows']:
+    # 라운드 484 — 스캔 몸통(경량 스캔 → 관심종목 발굴 → 정밀 분석 → 관심점수 붙이기)은 `market_scan.run` **한 곳**이다.
+    #   이 PC 의 저녁 작업이 장 마감 뒤 같은 함수로 개장 전 리포트를 만든다(`scripts/build_premarket_report.py` · §4 —
+    #   스캔 길이 둘이면 한쪽만 고치는 일이 생긴다). 여기는 화면에 기대는 것만 한다 — 진행 막대 · 스피너 · 세션 상태.
+    import market_scan as _ms484
+    _r484 = _ms484.run(
+        q_engine, engine_init, t_ref_str, attention_strategy=attention_strategy, scan_depth=scan_depth,
+        rho_cutoff=rho_cutoff, watch=watch, progress=_progress,
+        # 막대는 지우지 않는다 — 가장 오래 걸리는 단계에서 화면이 비면 사용자는 멈춘 것으로 읽는다 (라운드 122).
+        deep_ctx=lambda _n: st.spinner(f"관심종목 {_n}개 정밀 분석 중... (4/4단계)"))
+    st.session_state['scan_lite'] = _r484['lite']
+    st.session_state['attention_result'] = _r484['attention_result']
+    if _r484['kind'] == 'empty':
         _scan_done()
         _bar.empty()
         st.session_state['scan_results'] = []
-        st.session_state['scan_universe_total'] = att.get('pool_size', 0)
+        st.session_state['scan_universe_total'] = _r484.get('universe_total', 0)
         # 라운드 383 — 끝까지 가지 못한 것을 '완료'로 적지 않게 **결과를 돌려준다**(아래 호출부가 적는다).
-        return {'kind': 'empty',
-                'reason': str(att.get('unavailable') or '관심종목 후보가 0개입니다')}
-
-    # 2단계 — 후보에 시장 구분을 붙여 기존 정밀 파이프라인에 넘긴다
-
-    target, unmapped = [], []
-    for r in att['rows']:
-        u = by_code.get(r['code'])
-        if not u:
-            unmapped.append(f"{r['name']}({r['code']})")
-            continue
-        target.append({**u, 'attention': r['attention'],
-                       'selection_reason': r.get('selection_reason'),
-                       'attention_components': r['components']})
+        return {'kind': 'empty', 'reason': _r484.get('reason')}
+    unmapped = _r484['unmapped']
     st.session_state['attention_unmapped'] = unmapped
-    st.session_state['scan_universe_total'] = att['pool_size']
-
-    # 막대는 지우지 않는다 — 가장 오래 걸리는 단계에서 화면이 비면
-    # 사용자는 멈춘 것으로 읽는다 (라운드 122).
-    _progress(f"관심종목 {len(target)}개를 하나씩 정밀 분석하는 중", step=4)
-    with st.spinner(f"관심종목 {len(target)}개 정밀 분석 중... (4/4단계)"):
-        st.session_state['scan_results'] = q_engine.run_screener_scan(
-            target, t_ref_str, b_engine=engine_init, rho_cutoff=rho_cutoff)
+    st.session_state['scan_universe_total'] = _r484['universe_total']
+    st.session_state['scan_results'] = _r484['results']
     # ⚠️ 라운드 216 — 실패 사유가 **rerun 을 못 넘고 있었다.** 라운드 37 이 조용히
     #   사라지던 종목을 `q_engine.last_scan_failures` 에 남기게 했는데, `q_engine`
     #   은 모듈 수준에서 **매 rerun 새로 만들어진다**(:1631). 스캔이 끝나면 이
@@ -4164,22 +4112,12 @@ def run_market_scan():
     #   목록**을 읽었다. 결과(scan_results)는 세션에 남고 사유만 증발해 화면이
     #   "완료 4 · 제외 0" 이면서 그 종목은 '정밀분석 결과 없음'이라 적었다 —
     #   사용자의 "5개(1개 실패)" 가 이것이다(실측: 상위 5 → 완료 4 · 누락 1).
-    #   결과와 **같은 곳**(세션)에 사유도 남긴다 (§4).
-    st.session_state['scan_failures'] = list(
-        getattr(q_engine, 'last_scan_failures', None) or [])
+    #   결과와 **같은 곳**(세션)에 사유도 남긴다 (§4 · 라운드 484 — 스캔이 결과와 사유를 같이 돌려준다).
+    st.session_state['scan_failures'] = list(_r484['failures'])
     # 다음번에 '얼마나 기다리면 되는지' 말할 수 있게 실제 소요를 남긴다.
     st.session_state['scan_last_secs'] = time.time() - _st['t0']
     _scan_done()
     _bar.empty()
-
-    # 관심점수를 결과 행에 붙인다 (순위에는 동점 보조기준으로만 쓴다 — §12)
-    _att_by_symbol = {t['symbol']: t for t in target}
-    for row in (st.session_state.get('scan_results') or []):
-        src = _att_by_symbol.get(row.get('symbol'))
-        if src:
-            row['attention'] = src['attention']
-            row['selection_reason'] = src['selection_reason']
-            row['attention_components'] = src['attention_components']
     # 라운드 383 — 끝까지 갔다. 빠진 후보를 **사유 갈래로** 센다 — 채택된 유동성 하한은 실패가 아니다
     #   (라운드 216 이 "1개 실패"의 정체를 그것으로 밝혔다). 코드를 못 찾은 후보(미매핑)는 분석 실패로 센다.
     _kinds383 = [_uk.scan_failure_kind(_f.get('reason'))
@@ -5082,13 +5020,9 @@ if st.session_state.get('show_screener', False):
 
             # ── 📋 개장 전 확정 리포트 — 스캔 결과를 당일 파일로 고정 ──────────
             import premarket as _pm
-            _pm_mkt = ""
-            try:
-                _pm_fs0 = (scan_results[0].get('snapshot') or {}).get('four_scores') or {}
-                _pm_mkt = str(_pm_fs0.get('context_regime_label') or
-                              _pm_fs0.get('market_regime_label') or '')
-            except Exception:
-                _pm_mkt = ""
+            import market_scan as _ms484r
+            # 라운드 484 — 국면 이름 셈도 한 곳(저녁 작업이 같은 함수로 리포트를 만든다)
+            _pm_mkt = _ms484r.market_label_of(scan_results)
             _pm_report, _pm_new = _pm.build_report(q_engine, scan_results,
                                                    market_label=_pm_mkt)
             if _pm_new:

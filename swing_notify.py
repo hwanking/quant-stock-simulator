@@ -24,6 +24,10 @@ import json
 import os
 import subprocess
 
+# 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게
+import noconsole                                               # noqa: E402
+noconsole.install()
+
 import swing_ledger as L
 
 PROJ = os.path.dirname(os.path.abspath(__file__))

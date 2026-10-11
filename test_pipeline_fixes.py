@@ -25,6 +25,9 @@ import quant_indicators as qi
 from report_generator import QuantReportGenerator
 
 PROJ = _os.path.dirname(_os.path.abspath(__file__))
+# 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게 — 배경 실행엔 콘솔이 없어 자식마다 창이 떴다 꺼졌다
+import noconsole                                               # noqa: E402
+noconsole.install()
 FAILURES = []
 
 #: 검사가 **사용자 자료를 건드렸는지** 나중에 확인하려고 지금 찍어 둔다
@@ -6195,11 +6198,13 @@ check("버튼 라벨에 기호를 쓰지 않는다",
       not _re.search(r"st\.button\('[^']*[✓✔×✕]", _w98))
 
 # ③ 전 종목 경량 스캔 — 순위 페이지에서만 출발하지 않는다
+# 라운드 484 — 스캔 몸통은 `market_scan.run` 한 곳으로 갔다(화면과 저녁 작업이 같이 부른다). 성질은 그대로 · 간 자리에서 본다.
+_ms98 = open(_os.path.join(PROJ, 'market_scan.py'), encoding='utf-8').read()
 check("전 종목 경량 스캔이 존재한다",
-      '_lite = {' in _w98 and '_MIN_TRADE_VALUE' in _w98)
+      '_lite = {' in _ms98 and '_MIN_TRADE_VALUE' in _ms98 and '_ms484.run(' in _w98)
 check("경량 스캔이 제외 사유를 나눠 센다",
-      all(k in _w98 for k in ("'no_price'", "'no_liquidity'", "'thin'",
-                              "'passed'")))
+      all(k in _ms98 for k in ("'no_price'", "'no_liquidity'", "'thin'",
+                               "'passed'")))
 check("경량 스캔 결과를 세션에 남긴다", "st.session_state['scan_lite']" in _w98)
 check("퍼널이 4단계로 표시된다",
       all(s in _w98 for s in ('1단계 <b>전 종목 경량 스캔</b>', '2단계 후보 풀',
@@ -7289,12 +7294,13 @@ check("겹침 사고를 코드에 기록했다",
 #   시간대(장 전)에 liquidity_confirmed 가 전 종목 False 라, 경량 스캔이
 #   2,997종목을 전부 탈락시키고 화면은 "유동성 조건 통과 0개"라고 말했다.
 #   유동성이 없는 게 아니라 **거래대금을 수집하지 못한 것**이다.
-check("거래대금 수신율을 먼저 본다", '_tv_usable' in _w107
-      and '_tv_seen' in _w107)
+_ms107 = open(_os.path.join(PROJ, 'market_scan.py'), encoding='utf-8').read()   # 라운드 484 — 스캔 몸통이 간 자리
+check("거래대금 수신율을 먼저 본다", '_tv_usable' in _ms107
+      and '_tv_seen' in _ms107)
 check("미수신이면 유동성 필터를 끈다",
-      'if _tv_usable:' in _w107 and 'no_liquidity' in _w107)
+      'if _tv_usable:' in _ms107 and 'no_liquidity' in _ms107)
 check("못 잰 것으로 거르지 않는다고 코드에 남긴다",
-      '못 잰 것으로 거르지 않는다' in _w107)
+      '못 잰 것으로 거르지 않는다' in _ms107)
 check("화면이 미수신 사실을 밝힌다",
       '거래대금 미수신 — 유동성 필터를 적용하지' in _w107)
 
@@ -7305,10 +7311,10 @@ import market_attention as _MA107
 check("탐색 함수가 대체 후보를 받는다",
       'fallback_pool' in _ins107.signature(
           _MA107.find_attention_candidates).parameters)
-check("호출부가 경량 스캔 결과를 넘긴다", 'fallback_pool=_lite_rows' in _w107)
+check("호출부가 경량 스캔 결과를 넘긴다", 'fallback_pool=_lite_rows' in _ms107)
 check("경량 스캔이 탐색보다 먼저 온다",
-      0 < _w107.find("_lite['passed'] = len(_lite_pass)")
-      < _w107.find('market_attention.find_attention_candidates'))
+      0 < _ms107.find("_lite['passed'] = len(_lite_pass)")
+      < _ms107.find('market_attention.find_attention_candidates'))
 check("거래대금 미수신이면 시총으로 정렬",
       "'시가총액 대체'" in _ma107 and '_tv_ok' in _ma107)
 check("대체 사용 사실을 출처에 남긴다", '순위 페이지 미수신' in _ma107)
@@ -20313,7 +20319,10 @@ check("캡션 구간에 이스케이프 안 된 물결표 짝이 없다",
 check("스캔 직후 실패 사유를 세션에 남긴다 (결과와 같은 곳 · §4)",
       "st.session_state['scan_failures'] = list(" in _w231
       and _w231.find("st.session_state['scan_failures'] = list(")
-      > _w231.find("st.session_state['scan_results'] = q_engine.run_screener_scan("))
+      > _w231.find("st.session_state['scan_results'] = _r484['results']") > 0
+      # 라운드 484 — 스캔 몸통(market_scan.run)이 결과와 엔진의 실패 사유를 **같이** 돌려준다
+      and "out['failures'] = list(getattr(q_engine, 'last_scan_failures', None) or [])"
+      in open(_os.path.join(PROJ, 'market_scan.py'), encoding='utf-8').read())
 check("요약이 실패 사유를 세션에서 읽는다 (새 엔진의 빈 속성이 아니라)",
       "scan_failures = list(st.session_state.get('scan_failures')" in _w231)
 check("하락장 표본 수를 손으로 적지 않고 원장에서 **날짜**로 센다 (§9 · 잘 정의된 단위)",
@@ -38596,15 +38605,18 @@ check("① 단계 표 — 저녁 작업 스크립트의 STEPS 이름 그대로 �
 _td454 = _tf454.mkdtemp()
 try:
     _p454 = _os.path.join(_td454, 'log.txt')
+    # 라운드 485 — 심는 기록과 상한을 **단계 표에서** 만든다. 종전엔 옛 차례의 두 단계 이름과 셋째 단계 상한(7200초)을 글자로
+    #   박아, 라운드 484 가 단계를 하나 끼워 넣자(셋째가 상한 30분인 단계로 바뀜) 판정은 맞는데 검사가 붉어졌다(R98b 계열).
+    _lim454 = int(dict(_steps454)[_names454[2]])
     _run454 = ('[10-08 17:03:20] 끝 · 가장 나쁜 종료 코드 0\n'
-               '[10-09 17:00:07] 이 PC 장 마감 뒤 작업 시작 · 단계 5\n'
-               '[10-09 17:00:44]   클라우드 되받기 — 종료 0 · 37초\n'
-               '[10-09 17:00:47]   추적 동결·채점 — 종료 0 · 3초\n')
+               f'[10-09 17:00:07] 이 PC 장 마감 뒤 작업 시작 · 단계 {len(_names454)}\n'
+               f'[10-09 17:00:44]   {_names454[0]} — 종료 0 · 37초\n'
+               f'[10-09 17:00:47]   {_names454[1]} — 종료 0 · 3초\n')
     with open(_p454, 'w', encoding='utf-8') as _f454:
         _f454.write(_run454)
     _j454 = _jn454.nightly_job(log_path=_p454, now=1000.0, mtime=1000.0)
-    _cut454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + 7200 + 1, mtime=1000.0)
-    _ok454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + 7200, mtime=1000.0)
+    _cut454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + _lim454 + 1, mtime=1000.0)
+    _ok454 = _jn454.nightly_job(log_path=_p454, now=1000.0 + _lim454, mtime=1000.0)
     with open(_p454, 'a', encoding='utf-8') as _f454:
         _f454.write('[10-09 17:01:22] 끝 · 가장 나쁜 종료 코드 0\n')
     _end454 = _jn454.nightly_job(log_path=_p454, now=1000.0, mtime=1000.0)
@@ -38614,9 +38626,9 @@ try:
     _nofile454 = _jn454.nightly_job(log_path=_os.path.join(_td454, '없음.txt'))
 finally:
     _sh454.rmtree(_td454, ignore_errors=True)
-check("② 도는 중 — 끝난 단계 2 / 전체 5 · 지금 단계는 단계 표의 셋째 · '3/5단계'",
-      bool(_j454) and _j454.get('kind') == 'nightly' and _j454['done'] == 2 and _j454['total'] == 5
-      and _j454['step'] == _names454[2] and _j454['sub'].startswith('3/5단계'), str(_j454))
+check(f"② 도는 중 — 끝난 단계 2 / 전체 {len(_names454)} · 지금 단계는 단계 표의 셋째 · '3/{len(_names454)}단계'",
+      bool(_j454) and _j454.get('kind') == 'nightly' and _j454['done'] == 2 and _j454['total'] == len(_names454)
+      and _j454['step'] == _names454[2] and _j454['sub'].startswith(f'3/{len(_names454)}단계'), str(_j454))
 check("②' 끝난 실행·시작 줄 없음·파일 없음은 None · 그 단계 상한을 넘게 기록이 그대로면 '끊김'(도는 중이라 하지 않는다) · 상한까지는 도는 중",
       _end454 is None and _nost454 is None and _nofile454 is None
       and isinstance(_cut454, dict) and _cut454.get('kind') == 'note' and '끊긴 것으로 본다' in _cut454['note']
@@ -39640,6 +39652,181 @@ check("⑧ 사전등록 R475·R478 — '라운드 483 정정' 절 · 지금 채�
       and (_g478_464.FROM, _g478_464.DATE_FLOOR, _g478_464.COST) == ('2026-10-12', 30, 0.41),
       str([t for doc, t in _need464 if not t or t not in doc]), scanned=len(_need464))
 # ─── §464 끝 ───
+# ─── §465 시작 (라운드 484) ───
+print("=" * 72)
+print("§465 시장 스캔 몸통은 한 곳 — 화면과 저녁 작업이 같은 함수 · 개장 전 리포트는 장 마감 뒤 저녁 작업이 만든다 (라운드 484)")
+print("=" * 72)
+# 라운드 484 — 개장 전 리포트가 앱을 열 때만 만들어져, 리포트가 언제 만들어지는지가 사람이 언제 앱을 여는지에 묶였다(장중 리포트 9개 ·
+#   장 마감 2분 뒤 리포트 · 안 연 날은 추적·전방 판정·자동매매 계획 표본이 빠진다). 스캔 몸통을 `market_scan.run` 으로 떼고(화면은 진행
+#   막대·스피너·세션 상태만) 저녁 작업의 새 단계(`scripts/build_premarket_report.py`)가 장 마감 뒤 같은 함수로 리포트를 만든다.
+import ast as _ast465                                            # noqa: E402
+import contextlib as _ctx465                                     # noqa: E402
+import datetime as _dt465                                        # noqa: E402
+import market_scan as _ms465                                     # noqa: E402
+import market_attention as _ma465                                # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import build_premarket_report as _bpr465                         # noqa: E402
+import jobs_now as _jn465                                        # noqa: E402
+
+# ① 스캔 길은 하나 — 모듈은 streamlit 을 안 가져온다 · 화면의 스캔 함수는 그 모듈을 부르고 유니버스·정밀 분석을 직접 안 부른다
+_mssrc465 = _read148(_os.path.join(PROJ, 'market_scan.py'))
+_imp465 = {(_n.module or '') if isinstance(_n, _ast465.ImportFrom) else _a.name
+           for _n in _ast465.walk(_ast465.parse(_mssrc465)) if isinstance(_n, (_ast465.Import, _ast465.ImportFrom))
+           for _a in _n.names}
+_w465 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_fn465 = next((_n for _n in _ast465.parse(_w465).body if isinstance(_n, _ast465.FunctionDef) and _n.name == 'run_market_scan'), None)
+_fsrc465 = _ast465.get_source_segment(_w465, _fn465) if _fn465 else ''
+_bsrc465 = _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
+check("① 스캔 몸통은 market_scan 한 곳 — streamlit 안 가져옴 · 화면 스캔 함수는 그것을 부르고 유니버스·정밀 분석을 직접 안 부른다 · 저녁 작업도 같은 함수",
+      not any(str(m).startswith('streamlit') for m in _imp465) and _fn465 is not None
+      and '_ms484.run(' in _fsrc465 and 'get_screener_universe' not in _fsrc465 and 'run_screener_scan' not in _fsrc465
+      and 'market_scan.run(' in _bsrc465 and 'premarket.build_report(' in _bsrc465
+      and '_ms484r.market_label_of(scan_results)' in _w465 and 'market_scan.market_label_of(' in _bsrc465,
+      str(sorted(_imp465)))
+
+
+# ② 몸통을 심어서 돌린다 — 경량 스캔 셈 · 후보 없음 · 코드 못 찾음 · 관심점수 붙이기 · 실패 사유를 결과와 같이 · 진행·스피너 콜백
+class _B465:
+    def get_screener_universe(self, full_market=True):
+        return ([{'symbol': f'{i:06d}.KS', 'base_price': 1000, 'liquidity_confirmed': True, 'today_trade_value': 6e8}
+                 for i in range(1, 30)]
+                + [{'symbol': '900001.KS', 'base_price': None}, {'symbol': '900002.KS', 'base_price': 1000,
+                                                                 'liquidity_confirmed': True, 'today_trade_value': 1e8}])
+
+
+class _Q465:
+    last_scan_failures = [{'symbol': '000002.KS', 'reason': '20일 평균 거래대금 1.0억원 < 20억원'}]
+
+    def run_screener_scan(self, target, t_ref, b_engine=None, rho_cutoff=0.8):
+        self.seen = (len(target), t_ref, rho_cutoff)
+        return [{'symbol': t['symbol']} for t in target if t['symbol'] != '000002.KS']
+
+
+_att_rows465 = [{'code': '000001', 'name': 'a', 'attention': 9.0, 'components': {'x': 1}, 'selection_reason': 'r'},
+                {'code': '000002', 'name': 'b', 'attention': 8.0, 'components': {}},
+                {'code': '999999', 'name': 'c', 'attention': 7.0, 'components': {}}]
+_orig_fac465 = _ma465.find_attention_candidates
+_steps465, _deep465 = [], []
+try:
+    _ma465.find_attention_candidates = lambda *a, **k: {'rows': _att_rows465, 'pool_size': 31}
+    _q465 = _Q465()
+    _r465 = _ms465.run(_q465, _B465(), '2026-10-08', progress=lambda m, step=None: _steps465.append(step),
+                       deep_ctx=lambda n: (_deep465.append(n), _ctx465.nullcontext())[1])
+    _ma465.find_attention_candidates = lambda *a, **k: {'rows': [], 'unavailable': '순위 페이지 미수신', 'pool_size': 0}
+    _e465 = _ms465.run(_Q465(), _B465(), '2026-10-08')
+finally:
+    _ma465.find_attention_candidates = _orig_fac465
+check("② run — 경량 스캔(가격 없음·얇음을 나눠 셈) · 미매핑 · 정밀 분석 인자 · 관심점수 붙임 · 실패 사유를 결과와 같이 · 진행 1·2·4 · 스피너 n · 후보 없으면 empty 와 사유",
+      _r465['kind'] == 'ok' and _r465['lite']['no_price'] == 1 and _r465['lite']['thin'] == 1 and _r465['lite']['passed'] == 29
+      and _r465['unmapped'] == ['c(999999)'] and _q465.seen == (2, '2026-10-08', 0.80) and len(_r465['results']) == 1
+      and _r465['results'][0]['attention'] == 9.0 and _r465['results'][0]['selection_reason'] == 'r'
+      and _r465['failures'] == _Q465.last_scan_failures and _r465['universe_total'] == 31
+      and [s for s in _steps465 if s] == [1, 2, 4] and _deep465 == [2]
+      and _e465['kind'] == 'empty' and _e465['reason'] == '순위 페이지 미수신' and _e465['results'] == [],
+      str({k: _r465.get(k) for k in ('kind', 'unmapped', 'universe_total')}))
+check("②' 저녁 작업의 스캔 인자는 화면 기본값과 같다(종합 이슈 · 상위 5 · rho 0.80) · 거래대금 하한은 옮긴 값 그대로",
+      (_ms465.DEFAULT_STRATEGY, _ms465.DEFAULT_DEPTH, _ms465.DEFAULT_RHO, _ms465.MIN_TRADE_VALUE) == ('composite', 5, 0.80, 5e8)
+      and "('attention_strategy', 'composite'), ('scan_depth', 5)" in _w465 and "('t_ref_date', _resolved_date), ('rho_cutoff', 0.80)" in _w465)
+
+# ③ 만들지 — 정규장 중은 안 만든다(라운드 483) · 장 전·마감 뒤·휴장일은 만든다 · 있으면 안 만든다 · 쓰기 금지면 안 한다
+_no465 = lambda d: False                                         # noqa: E731
+_cases465 = [(_dt465.datetime(2026, 10, 12, 10, 0), _no465, False, False, '정규장 중'),
+             (_dt465.datetime(2026, 10, 12, 8, 0), _no465, False, True, '2026-10-08'),
+             (_dt465.datetime(2026, 10, 12, 17, 0), _no465, False, True, '2026-10-12'),
+             (_dt465.datetime(2026, 10, 10, 12, 0), _no465, False, True, '2026-10-08'),
+             (_dt465.datetime(2026, 10, 12, 17, 0), (lambda d: True), False, False, '이미 있다'),
+             (_dt465.datetime(2026, 10, 12, 17, 0), _no465, True, False, '쓰기 금지'),
+             (_dt465.datetime(2026, 11, 19, 9, 30), _no465, False, True, '2026-11-18'),        # 수능일 10:00 전
+             (_dt465.datetime(2026, 11, 19, 16, 0), _no465, False, False, '정규장 중')]        # 수능일 16:30 전
+_bad465 = []
+for _now465, _has465, _nw465, _ok465, _txt465 in _cases465:
+    _g465 = _bpr465.decide(_now465, _has465, no_write=_nw465)
+    if _g465[0] is not _ok465 or _txt465 not in str(_g465[1]):
+        _bad465.append((str(_now465), _g465))
+check("③ decide — 정규장 중(수능일 10:00~16:30 포함)은 안 만든다 · 장 전·마감 뒤·휴장일은 그 자료일 · 있으면 · 쓰기 금지면 안 만든다",
+      not _bad465, str(_bad465), scanned=len(_cases465))
+
+# ④ 저녁 작업 차례 — 되받기 뒤 · 추적 동결과 자동매매 계획 앞(둘 다 그날 리포트를 읽는다) · 작업 카드가 같은 표를 읽는다
+#   (nightly_local 을 가져오지 않는다 — 가져오면 표준출력 설정이 이 프로세스에 번진다 · 작업 카드처럼 소스의 표를 AST 로 읽는다)
+_jsteps465 = _jn465.nightly_steps() or []
+_names465 = [n for n, _l in _jsteps465]
+check("④ 저녁 작업 — '개장 전 리포트'가 되받기 뒤 · 추적 동결·자동매매 계획 앞 · 상한 있음 · 작업 카드가 같은 표(그 단계의 상한)를 읽는다",
+      '개장 전 리포트' in _names465
+      and _names465.index('클라우드 되받기') < _names465.index('개장 전 리포트') < _names465.index('추적 동결·채점')
+      and _names465.index('개장 전 리포트') < _names465.index('스윙 자동매매 한 바퀴')
+      and dict((n, l) for n, l in _jsteps465).get('개장 전 리포트') == 20 * 60,
+      str(_names465))
+# ─── §465 끝 ───
+# ─── §466 시작 (라운드 485) ───
+print("=" * 72)
+print("§466 외부 프로그램은 창 없이 — 자식 프로세스는 CREATE_NO_WINDOW · 작업 스케줄러는 pythonw (라운드 485)")
+print("=" * 72)
+# 라운드 485 — 사용자: *"화면에 창이 떴다가 꺼졌다가 하는데 너 때문이야? 안되게 해줘 · 모든 외부 프로그램 실행을 창 없이."*
+#   콘솔 없는 프로세스(배경 회귀 · 미리보기로 띄운 앱 서버 · 작업 스케줄러 작업)가 git·PowerShell·python 을 띄우면 자식마다 새
+#   콘솔 창이 떴다 꺼졌다. `noconsole.install()` 이 subprocess 기본값에 CREATE_NO_WINDOW 를 붙이고, 자식을 띄우는 모든 파일이
+#   import 직후 그것을 부른다. 작업 스케줄러 두 작업은 창 없는 pythonw.exe 로 띄운다.
+import ast as _ast466                                            # noqa: E402
+import subprocess as _sp466                                      # noqa: E402
+import noconsole as _nc466                                       # noqa: E402
+
+# ① 자식 프로세스를 띄우는 파일은 전부 모듈 수준에서 noconsole.install() 을 부른다 — 대상은 손으로 안 적는다(subprocess 를 가져오는 파일)
+_skip466 = {'.git', '_probe', '.claude', '__pycache__', '.portfolio', 'node_modules', 'data', 'docs'}
+_seen466, _miss466 = 0, []
+for _root466, _dirs466, _files466 in _os.walk(PROJ):
+    _dirs466[:] = [d for d in _dirs466 if d not in _skip466]
+    for _fn466 in _files466:
+        if not _fn466.endswith('.py') or _fn466 == 'noconsole.py':
+            continue
+        _p466 = _os.path.join(_root466, _fn466)
+        try:
+            _t466 = _ast466.parse(open(_p466, encoding='utf-8').read())
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        _imp466 = any((isinstance(_n, _ast466.Import) and any(a.name == 'subprocess' for a in _n.names))
+                      or (isinstance(_n, _ast466.ImportFrom) and _n.module == 'subprocess')
+                      for _n in _ast466.walk(_t466))
+        if not _imp466:
+            continue
+        _seen466 += 1
+        _top466 = any(isinstance(_n, _ast466.Expr) and isinstance(_n.value, _ast466.Call)
+                      and isinstance(_n.value.func, _ast466.Attribute) and _n.value.func.attr == 'install'
+                      and isinstance(_n.value.func.value, _ast466.Name) and _n.value.func.value.id == 'noconsole'
+                      for _n in _t466.body)
+        if not _top466:
+            _miss466.append(_os.path.relpath(_p466, PROJ))
+check("① subprocess 를 가져오는 파일은 전부 모듈 수준에서 noconsole.install() 을 부른다 (새 파일이 빠뜨리면 실패)",
+      not _miss466, str(_miss466), scanned=_seen466)
+
+# ② 깃발 — Windows 면 CREATE_NO_WINDOW 를 붙이고 · 호출이 콘솔 깃발(새 콘솔·분리·창 없음)을 줬으면 그대로 · 멱등
+_nt466 = _os.name == 'nt'
+check("② flags — 기본이면 CREATE_NO_WINDOW · 새 콘솔(0x10)·분리(0x8)를 준 호출은 그대로 · install 은 두 번째부터 False · 설치 표식",
+      (not _nt466) or (_nc466.flags(0) == 0x08000000 and _nc466.flags(0x10) == 0x10 and _nc466.flags(0x8) == 0x8
+                       and _nc466.flags(0x200) == 0x200 | 0x08000000 and _nc466.install() is False
+                       and getattr(_sp466.Popen, '_gaeum_noconsole', False) is True),
+      f'nt={_nt466}')
+
+# ③ 실제로 — 설치 뒤 띄운 자식에게 콘솔 창이 없다(자식이 GetConsoleWindow() 를 보고 · 0 이면 창 없음)
+if _nt466:
+    import tempfile as _tf466                                    # noqa: E402
+    with _tf466.TemporaryDirectory() as _td466:
+        _c466 = _os.path.join(_td466, 'child.py')
+        with open(_c466, 'w', encoding='utf-8') as _f466:
+            _f466.write('import ctypes\nprint(int(ctypes.windll.kernel32.GetConsoleWindow() or 0))\n')
+        _r466 = _sp466.run([sys.executable, _c466], capture_output=True, text=True, timeout=60)
+    check("③ 설치 뒤 띄운 python 자식은 콘솔 창이 없다 (GetConsoleWindow = 0)",
+          _r466.returncode == 0 and _r466.stdout.strip() == '0', _r466.stdout.strip() or _r466.stderr[-200:])
+
+# ④ 작업 스케줄러 두 작업은 창 없는 pythonw.exe 로 · 저녁 작업의 자식은 출력을 파이프로 받는 python.exe 로
+_psw466 = open(_os.path.join(PROJ, 'scripts', 'register_watch_refresh_task.ps1'), encoding='utf-8').read()
+_pss466 = open(_os.path.join(PROJ, 'scripts', 'register_swing_worker_task.ps1'), encoding='utf-8').read()
+_nl466 = open(_os.path.join(PROJ, 'scripts', 'nightly_local.py'), encoding='utf-8').read()
+check("④ 등록 스크립트 둘 다 pythonw.exe 를 먼저 · 저녁 작업은 자식을 console_python() 으로 · pythonw → 같은 자리 python.exe",
+      all('$Py = "C:\\Python314\\pythonw.exe"' in _s for _s in (_psw466, _pss466))
+      and 'subprocess.run([noconsole.console_python()] + args' in _nl466 and 'subprocess.run([sys.executable] + args' not in _nl466
+      and _nc466.console_python(r'C:\Python314\pythonw.exe').lower().endswith('python.exe')
+      and not _nc466.console_python(r'C:\Python314\pythonw.exe').lower().endswith('pythonw.exe')
+      and _nc466.console_python(r'C:\x\python.exe') == r'C:\x\python.exe')
+# ─── §466 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
