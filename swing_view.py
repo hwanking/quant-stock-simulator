@@ -868,6 +868,10 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
         _cost = None
     ctx = dict(stt=stt, mode=mode, cfg=cfg, hb=hb, acct=acct, plans_today=plans_today, managed=managed, releasing=releasing,
                theme=theme, task=task, worker=worker, nightly=nightly, pl=pl, today=anchor_day,
+               # 라운드 491 — `today` 는 **판정일**(그날 계획을 낸 리포트의 자료일)이다. 실행부는 주문·체결에 한국 시각의 그날 날짜
+               #   (`swing_executor.run_cycle` 의 trade_day)를 붙인다. 실주문 날 장중엔 판정일이 전 거래일이라, 종전처럼 판정일로 '오늘
+               #   주문'을 세면 그날 낸 주문·체결이 0 으로 보였다(15:30 뒤에야 잡힘). 오늘 주문·연결 상태·보유 일수는 이것으로 센다.
+               trade_day=X.now_kst().date().isoformat(),
                live=st.session_state.get('sw_acct_live'), allow_write=allow_write, hold_levels=hold_levels, report=report,
                resolve_market=resolve_market, cost=_cost, intents=L.intents_with_state(c),
                approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
@@ -930,13 +934,13 @@ def _view_center(st, uk, c, ctx, md):
     except Exception:                                          # noqa: BLE001 — 못 읽으면 그 한 줄만 빠진다
         _rl457 = None
     st.markdown(_viz.start_card(ctx['start'], theme=theme, reco_line=_rl457), unsafe_allow_html=True)
-    sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['today'],
+    sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['trade_day'],
                              protection_warn=bool(ctx['pl']), ledger_ok=True)
     st.markdown(_viz.health_strip(sh, theme=theme, title='시스템 상태 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업'), unsafe_allow_html=True)
     _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']), outer_live=ctx.get('live_refresh', False))
     s = _summary_now(ctx)
     pts = _dash.equity_points(_dash.daily_last(L.account_history(c, limit=20000)))
-    its_today = [it for it in ctx['intents'] if it.get('trade_day') == str(ctx['today'])]
+    its_today = [it for it in ctx['intents'] if it.get('trade_day') == str(ctx['trade_day'])]   # 라운드 491 — 실행부와 같은 '오늘'
     n_new = sum(1 for it in its_today if it.get('side') == 'buy')
     a, b = st.columns([1.6, 1])
     with a:
@@ -1073,7 +1077,7 @@ def _view_positions(st, uk, c, ctx, md):
         tgt = next((it for it in reversed(its) if it.get('code') == code and it.get('side') == 'sell' and X._base(it.get('reason')) == 'target'
                     and it.get('state') in ('BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')), None)
         plan = L.plan(c, p.get('plan_id')) or {}
-        pc = _dash.position_card(code, p, rows_by_code.get(code), target_intent=tgt, hb=ctx['hb'], horizon=plan.get('horizon'), today=ctx['today'])
+        pc = _dash.position_card(code, p, rows_by_code.get(code), target_intent=tgt, hb=ctx['hb'], horizon=plan.get('horizon'), today=ctx['trade_day'])
         st.markdown(position_card_html(pc, theme), unsafe_allow_html=True)
         if p.get('ownership') == 'USER_ADOPTED' and ctx['allow_write'] and not p.get('releasing') and st.button('되돌려 받기', key=f'sw_rel_{code}'):
             _ev453 = X.release(c, code)

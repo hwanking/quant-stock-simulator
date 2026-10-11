@@ -40321,6 +40321,27 @@ _sh471 = _dh471.system_health(dict(running=False), dict(ok=True, installed=True)
 _pl471 = next(x for x in _sh471 if x['label'] == '계획 생성')
 check("③ 상태 띠 '계획 생성' — 계획이 있으면 OK(정상)와 '판정일 2026-10-08 계획 2' · '실행 중'이라 적지 않는다",
       _pl471['state'] == 'OK' and _pl471['text'] == '판정일 2026-10-08 계획 2', str(_pl471))
+# ④ 관제실의 '오늘 주문'·연결 상태·보유 일수는 실행부와 같은 거래일(한국 시각의 그날)로 센다 — 판정일로 세면 실주문 날 장중에 그날 주문이
+#    0 으로 보였다. 주문 의도의 날짜(`trade_day`)와 견주는 비교는 전부 `trade_day` 를, 상태 띠·보유 카드의 today 인자는 `trade_day` 를 받는다(AST).
+_sv471 = _ast471.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
+_cmp471, _bad471b = 0, []
+for _n in _ast471.walk(_sv471):
+    if isinstance(_n, _ast471.Compare) and isinstance(_n.left, _ast471.Call) and isinstance(_n.left.func, _ast471.Attribute) \
+            and _n.left.func.attr == 'get' and _n.left.args and isinstance(_n.left.args[0], _ast471.Constant) \
+            and _n.left.args[0].value == 'trade_day':
+        _cmp471 += 1
+        if 'trade_day' not in _ast471.unparse(_n.comparators[0]):
+            _bad471b.append(_ast471.unparse(_n))
+_kw471 = [(_ast471.unparse(k.value)) for _n in _ast471.walk(_sv471) if isinstance(_n, _ast471.Call) and isinstance(_n.func, _ast471.Attribute)
+          and _n.func.attr in ('system_health', 'position_card') for k in _n.keywords if k.arg == 'today']
+_ex471 = _ast471.parse(_read148(_os.path.join(PROJ, 'swing_executor.py')))
+_td471 = [_ast471.unparse(_n.value) for _n in _ast471.walk(_ex471) if isinstance(_n, _ast471.Assign)
+          and any(isinstance(t, _ast471.Name) and t.id == 'trade_day' for t in _n.targets)]
+check("④ 관제실의 '오늘 주문'·연결 상태·보유 일수 = 실행부의 거래일(한국 시각의 그날) — 판정일로 세지 않는다(AST)",
+      _cmp471 >= 1 and not _bad471b and _kw471 and all('trade_day' in v for v in _kw471)
+      and "trade_day=X.now_kst().date().isoformat()" in _read148(_os.path.join(PROJ, 'swing_view.py'))
+      and 'now.date().isoformat()' in _td471,
+      f'비교 {_cmp471} · 어긋남 {_bad471b} · today 인자 {_kw471} · 실행부 {_td471}', scanned=_cmp471 + len(_kw471))
 # ─── §471 끝 ───
 
 
