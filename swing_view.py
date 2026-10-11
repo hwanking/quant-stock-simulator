@@ -1044,6 +1044,14 @@ def held_codes(ctx):
     return out
 
 
+def _live_px(code):
+    """고르는 칸의 지금 가격 — 워커와 같은 함수(`swing_engine.naver_price`)를 부른다. 실패하면 None(그 사실을 적는다 · 라운드 497)."""
+    try:
+        return _se.naver_price(code)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def _pick_entry_dicts(entries):
     return [dict(plan_id=e['plan_id'], code=e.get('code'), mode=e.get('mode'), ts=e.get('ts')) for e in entries]
 
@@ -1099,6 +1107,8 @@ def _human_pick_section(st, c, ctx, md, day):
         ca.caption(md(f"고름({MODE_KO.get(e.get('mode'), e.get('mode') or '—')} · {_hm(e.get('ts')) or '시각 모름'}) · "
                       f"{p.get('name') or ''} ({p['code']}) · 판정일 {p['data_day']} · 진입 {_won(p['entry'])} · 손절 {_won(p['stop'])} · "
                       f"1차 목표 {_won(p['target'])} · {f['short']} · {state}"))
+        if alive and not hb:                                   # 라운드 497 — 지금 가격과 진입가 지정가 사이(사실 · 워커와 같은 가격 함수)
+            ca.caption(md(_se.price_gap_line(p, _live_px(p['code']))))
         if ctx['allow_write'] and cb.button('고르기 취소', key=f"sw_hp_off_{p['plan_id']}"):
             _cur = X.human_pick_entries(L.settings(c))         # 누르는 순간의 설정에서 뺀다(다른 탭이 적은 것을 되돌리지 않게)
             L.set_setting(c, 'human_picks', _pick_entry_dicts([x for x in _cur if x['plan_id'] != p['plan_id']]), by='ui')
@@ -1133,6 +1143,8 @@ def _human_pick_section(st, c, ctx, md, day):
     if before_final(p) is True:
         st.caption(md(f"이 판정은 판정일 {p['data_day']} 봉이 확정되기 전({_hm(judged_at(p)) or '—'})에 만들어졌습니다 — 진입·손절·목표의 "
                       '기준 가격이 그날 확정 종가와 다를 수 있습니다.'))
+    # 라운드 497 — 고르기 전에 지금 가격이 진입가 지정가에서 얼마나 떨어져 있는지(지정가라 위면 내려와야 체결 · 대기 창 안에 안 닿으면 안 산다)
+    st.caption(md(_se.price_gap_line(p, _live_px(p['code']))))
     _br494 = blocked_record_line([p])
     if _br494:
         st.caption(md(_br494))

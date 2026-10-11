@@ -137,11 +137,10 @@ def _bars_fn():
 
 
 def quote(code):
-    """지금 가격 — 네이버 종목 기본 정보의 현재가(엔진이 쓰는 같은 끝점). 못 읽으면 None(그러면 그 종목은 안 산다)."""
-    import bitemporal_engine as be
-    from broker_kis import _num
-    d = be.fetch_json_with_retry(f'{be.NAVER_MOBILE_API}/stock/{code}/basic', timeout=6, retries=1) or {}
-    return _num(d.get('closePrice'))
+    """지금 가격 — 네이버 종목 기본 정보의 현재가(엔진이 쓰는 같은 끝점). 못 읽으면 None(그러면 그 종목은 안 산다).
+    라운드 497 — 몸통은 `swing_engine.naver_price` 한 곳으로 옮겼다(화면의 고르는 칸도 같은 것을 부른다 · 동작 불변)."""
+    import swing_engine
+    return swing_engine.naver_price(code)
 
 
 def one_cycle(do_shadow, allow_orders=True):

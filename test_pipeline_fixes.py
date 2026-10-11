@@ -41031,6 +41031,39 @@ check("③ 파일을 못 읽으면 종전대로 지운다 · 이 절이 바꿔 �
       _res475.get('C') is False and _bk475._inside_repo is _orig_inside475 and not _os.path.exists(_dir475), str(_res475.get('C')))
 # ─── §475 끝 ───
 
+# ─── §476 시작 (라운드 497) ───
+print()
+print("§476 고르는 칸의 '지금 가격 vs 진입가 지정가' — 사실만 · 워커와 같은 가격 함수 한 곳 (라운드 497)")
+print("-" * 72)
+# 2026-10-12 07:30 점검: 판정일 10-08 계획 다섯 전부 지금 가격이 진입가 지정가보다 1.0~4.6% 위였다 — 골라도 그 가격까지 내려와야 체결된다.
+# 화면이 그것을 안 적으면 "골랐는데 왜 안 사?" 로 읽힌다. 문장은 swing_engine.price_gap_line 한 곳 · 가격은 워커와 같은 naver_price 한 곳(§4).
+import swing_engine as _se476
+_ast476 = __import__('ast')
+_p476 = dict(entry=10000, stop=9500, target=11000, wait_bars=20)
+_l_up = _se476.price_gap_line(_p476, 10330)
+_l_dn = _se476.price_gap_line(_p476, 9900)
+_l_st = _se476.price_gap_line(_p476, 9500)
+_l_na = _se476.price_gap_line(_p476, None)
+check("① 진입가 위(+3.3%) → '그 가격까지 내려와야 체결 · 대기 20거래일 안에 안 닿으면 사지 않고 끝' · 진입가 이하 → '바로 체결될 수 있습니다' · "
+      "손절선 이하(같음 포함) → '워커가 사지 않습니다' · 가격 못 받음 → 그 사실만(수 없음)",
+      '+3.3% 위' in _l_up and '내려와야 체결' in _l_up and '대기 20거래일' in _l_up
+      and '바로 체결될 수 있습니다' in _l_dn and '-1.0%' in _l_dn
+      and '사지 않습니다(손절선 확인)' in _l_st and '못 받았습니다' in _l_na and '원' not in _l_na.split('—')[0],
+      f'{_l_up} | {_l_dn} | {_l_st} | {_l_na}')
+_bad476 = [w for w in ('사세요', '추천', '좋', '나쁘', '유리', '불리', '기회') if any(w in x for x in (_l_up, _l_dn, _l_st, _l_na))]
+check("② 문장에 판정·권유 낱말이 없다(사실만 · 고르는 것은 사람)", not _bad476, str(_bad476), scanned=4)
+_files476 = {n: open(_os.path.join(PROJ, n), encoding='utf-8').read()
+             for n in ('swing_engine.py', 'swing_view.py', 'swing_executor.py', 'swing_dash.py', 'scripts/run_swing_worker.py')}
+_fetch476 = {n: s.count("/stock/{code}/basic'") for n, s in _files476.items()}
+_wq476 = next(n for n in _ast476.parse(_files476['scripts/run_swing_worker.py']).body
+              if isinstance(n, _ast476.FunctionDef) and n.name == 'quote')
+check("③ 현재가를 받는 자리는 swing_engine.naver_price 한 곳 — 워커의 quote 는 그것을 부르고 · 화면도 그것을 부른다(_live_px)",
+      _fetch476['swing_engine.py'] == 1 and sum(_fetch476.values()) == 1
+      and 'swing_engine.naver_price(code)' in _ast476.unparse(_wq476)
+      and '_se.naver_price(code)' in _files476['swing_view.py'],
+      str(_fetch476), scanned=len(_files476))
+# ─── §476 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

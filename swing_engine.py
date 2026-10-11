@@ -159,6 +159,35 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=No
                 engine_version=engine_version)
 
 
+def naver_price(code):
+    """지금 가격 — 네이버 종목 기본 정보의 현재가(엔진이 쓰는 같은 끝점 · 장이 열리기 전엔 직전 거래일 종가). 못 읽으면 None.
+    라운드 497 — 워커(`scripts/run_swing_worker.quote` · 손절선 확인 · 대기 매수 취소)와 화면(고르는 칸의 '진입가 대비')이 **이 한 곳**을
+    부른다(§4 · 종전엔 워커 안에만 있었다 · 몸통은 글자 그대로 옮겼다)."""
+    import bitemporal_engine as be
+    d = be.fetch_json_with_retry(f'{be.NAVER_MOBILE_API}/stock/{code}/basic', timeout=6, retries=1) or {}
+    return broker_kis._num(d.get('closePrice'))
+
+
+def price_gap_line(plan, px):
+    """지금 가격과 그 계획의 진입가 지정가 사이를 **사실로** 한 줄(라운드 497 · 판정 낱말 없음 · 새 문턱 없음).
+    고르기는 진입가 **지정가** 매수라 지금 가격이 진입가보다 위면 그 가격까지 내려와야 체결되고, 대기 거래일 안에 안 닿으면 사지 않고
+    끝난다 — 화면이 그것을 안 적으면 *"골랐는데 왜 안 사?"* 로 읽힌다. 지금 가격이 손절선 이하면 워커가 사지 않는다(손절선 확인 ·
+    실행부 `_entries` 와 같은 비교). 가격을 못 받으면 그 사실만."""
+    entry, stop = _f((plan or {}).get('entry')), _f((plan or {}).get('stop'))
+    wb = (plan or {}).get('wait_bars')
+    if not px or not entry:
+        return '지금 가격을 못 받았습니다 — 진입가에 닿았는지는 워커가 주문 때 다시 봅니다.'
+    gap = (float(px) / entry - 1) * 100
+    head = f'지금 가격 {float(px):,.0f}원(네이버 현재가 · 장 전엔 직전 거래일 종가)'
+    if stop and float(px) <= stop:
+        return f'{head} — 손절선 {stop:,.0f}원 이하라 워커가 이 계획을 사지 않습니다(손절선 확인).'
+    if float(px) > entry:
+        return (f'{head} — 진입가 {entry:,.0f}원보다 {gap:+.1f}% 위입니다. 진입가 지정가 매수라 그 가격까지 내려와야 체결되고, '
+                f"대기 {wb if wb else '—'}거래일 안에 안 닿으면 사지 않고 끝납니다.")
+    return (f'{head} — 진입가 {entry:,.0f}원 이하({gap:+.1f}%)라 주문이 나가면 바로 체결될 수 있습니다(지정가보다 비싸게 사지는 '
+            '않습니다).')
+
+
 def verdict_of(plan):
     """계획의 판정 기록 — 장부엔 글자(JSON)로, 갓 만든 계획엔 dict 로 있다. 못 읽으면 {}."""
     v = (plan or {}).get('verdict')
