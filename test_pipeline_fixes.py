@@ -37111,9 +37111,9 @@ _sh_b = _dh441.system_health(dict(running=False), dict(ok=True, installed=False)
                              dict(missing=['x']), None, [], today='2026-10-09', protection_warn=False, ledger_ok=False)
 _sh_c = _dh441.system_health(dict(running=False), dict(ok=False, reason='boom'), dict(note='기록 없음'),
                              dict(env='real', missing=[], problems=[]), dict(ts='2026-10-01T09:30:06'), [], today='2026-10-09', protection_warn=True)
-check("⑥ 시스템 상태 — (a) 워커 RUNNING · 연결 OK(오늘 읽음 · '정상' — 연결·장부는 도는 것이 아니라 열린 것) · 계획 RUNNING · 장부 OK · 저녁 RUNNING · "
+check("⑥ 시스템 상태 — (a) 워커 RUNNING · 연결 OK(오늘 읽음 · '정상' — 연결·장부는 도는 것이 아니라 열린 것) · 계획 OK(라운드 491 — 계획은 남은 것) · 장부 OK · 저녁 RUNNING · "
       "(b) 워커 DEGRADED(등록 안 됨) · 연결 ERROR · 계획 IDLE · 장부 ERROR · 저녁 DEGRADED(코드 2) · (c) 워커 ERROR(장중 기록 없음) · 연결 IDLE(전에 읽음) · 저녁 UNKNOWN",
-      [x['state'] for x in _sh_a] == ['RUNNING', 'OK', 'RUNNING', 'OK', 'RUNNING'] and [x['state'] for x in _sh_b] == ['DEGRADED', 'ERROR', 'IDLE', 'ERROR', 'DEGRADED']
+      [x['state'] for x in _sh_a] == ['RUNNING', 'OK', 'OK', 'OK', 'RUNNING'] and [x['state'] for x in _sh_b] == ['DEGRADED', 'ERROR', 'IDLE', 'ERROR', 'DEGRADED']
       and [x['state'] for x in _sh_c][0] == 'ERROR' and _sh_c[1]['state'] == 'IDLE' and _sh_c[4]['state'] == 'UNKNOWN'
       and [x['label'] for x in _sh_a] == ['워커', '한국투자 연결', '계획 생성', '장부', '저녁 작업'], str((_sh_a, _sh_b, _sh_c)))
 _hs = _vz441.health_strip([dict(label='워커', state='RUNNING'), dict(label='x', state='WEIRD', text='t')])
@@ -40249,6 +40249,79 @@ check("⑥ R475·R478 지문 목록이 채점 함수가 부르는 함수(predict
       not _m475 and not _m478 and ('prediction_log', 'first_touch') in _plant470 and len(_l475) >= 9 and len(_l478) >= 8,
       f'R475 밖 {_m475} · R478 밖 {_m478} · 심기 {_plant470}', scanned=len(_l475) + len(_l478))
 # ─── §470 끝 ───
+# ─── §471 시작 (라운드 491) ───
+print("=" * 72)
+print("§471 주문 경로 점검(주문 안 냄) · 깔때기 승인 문구 · 상태 띠 '계획 생성' (라운드 491)")
+print("=" * 72)
+# 라운드 491 — 사용자: "정말 실주문할 수 있을거 같애? 처음으로." '연결 확인'은 잔고 하나만 읽었다. 실주문 때 워커가 부르는 조회 셋
+#   (잔고 · 주문·체결 내역 · 매수가능)을 주문 없이 실제로 불러 보는 점검을 `broker_kis.KisBroker.order_path_check` 한 곳에 두고,
+#   매수·취소는 보내야만 확인된다고 적는다. 2026-10-11 실제 계좌로 한 번 돌려 조회 셋 통과(주문 0).
+import ast as _ast471                                            # noqa: E402
+import datetime as _dt471                                       # noqa: E402
+import tempfile as _tf471                                       # noqa: E402
+import broker_kis as _bk471                                      # noqa: E402
+import swing_dash as _dh471                                      # noqa: E402
+_cf471 = _bk471.load_config(environ={'KIS_ENV': 'demo', 'KIS_APP_KEY': 'ABCDEFGH', 'KIS_APP_SECRET': 'S' * 20,
+                                  'KIS_ACCOUNT_NO': '1234567801'}, path=None)
+_calls471 = []
+
+
+def _tr471(method, url, headers, params=None, body=None, timeout=10):
+    _calls471.append(url)
+    if url.endswith('/oauth2/tokenP'):
+        return 200, {}, {'access_token': 'TOK', 'access_token_token_expired': '2099-01-01 00:00:00'}
+    if 'inquire-balance' in url:
+        return 200, {'tr_cont': 'D'}, {'rt_cd': '0', 'output1': [], 'output2': [{'dnca_tot_amt': '5000', 'tot_evlu_amt': '5000'}]}
+    if 'inquire-daily-ccld' in url:
+        return 200, {'tr_cont': 'D'}, {'rt_cd': '0', 'output1': []}
+    if 'inquire-psbl-order' in url:
+        return 200, {}, {'rt_cd': '0', 'output': {'ord_psbl_cash': '5000', 'nrcvb_buy_amt': '5000', 'nrcvb_buy_qty': '4'}}
+    return 404, {}, {}
+
+
+with _tf471.TemporaryDirectory() as _td471:
+    _br471 = _bk471.KisBroker(_cf471, transport=_tr471, token_dir=_td471, sleep=lambda s: None)
+    _r471 = _br471.order_path_check('000001', 1200, today=_dt471.date(2026, 10, 12))
+    _r471b = _br471.order_path_check(None, None, today=_dt471.date(2026, 10, 12))
+_ok471 = [r['ok'] for r in _r471]
+check("① 주문 경로 점검 — 조회 셋은 실제로 부르고 통과 · 매수·취소는 부르지 않고 '안 부름' · 주문 끝점 호출 0",
+      [r['step'] for r in _r471] == list(_bk471.KisBroker.PATH_STEPS) and _ok471 == [True, True, True, None]
+      and not any(('order-cash' in u or 'order-rvsecncl' in u) for u in _calls471)
+      and '첫 실주문' in _r471[3]['detail'], str(_r471))
+check("① 물어볼 종목·가격이 없으면 매수가능 조회는 부르지 않는다(지어내지 않는다)",
+      _r471b[2]['ok'] is None and _r471b[0]['ok'] is True, str(_r471b[2]))
+
+
+def _bad471(method, url, headers, params=None, body=None, timeout=10):
+    if url.endswith('/oauth2/tokenP'):
+        return 200, {}, {'access_token': 'TOK', 'access_token_token_expired': '2099-01-01 00:00:00'}
+    return 500, {}, {'rt_cd': '1', 'msg1': '서버 오류'}
+
+
+with _tf471.TemporaryDirectory() as _td471b:
+    _r471c = _bk471.KisBroker(_cf471, transport=_bad471, token_dir=_td471b, sleep=lambda s: None).order_path_check('000001', 1200)
+check("① 잔고에서 실패하면 그 사유를 적고 뒤 조회는 부르지 않는다",
+      _r471c[0]['ok'] is False and _r471c[1]['ok'] is None and _r471c[2]['ok'] is None and _r471c[3]['ok'] is None, str(_r471c))
+_src471 = _ast471.parse(_read148(_os.path.join(PROJ, 'broker_kis.py')))
+_fn471 = next(n for n in _ast471.walk(_src471) if isinstance(n, _ast471.FunctionDef) and n.name == 'order_path_check')
+_called471 = {n.func.attr for n in _ast471.walk(_fn471) if isinstance(n, _ast471.Call) and isinstance(n.func, _ast471.Attribute)}
+check("① 점검 함수는 주문·취소 함수를 부르지 않는다(AST)", not ({'place_order', 'cancel_order'} & _called471), str(sorted(_called471)))
+
+# ② 깔때기 — 주문 방식이 승인형이면 실전이 아니어도 '승인 불필요'라 적지 않는다(시작 카드와 한 화면의 두 말이었다)
+_f471 = _dh471.funnel_today([dict(live_ok=1, plan_id='a'), dict(live_ok=1, plan_id='b')], approved={'a'}, approval_on=False,
+                            approval_mode='approve')
+_f471b = _dh471.funnel_today([dict(live_ok=1, plan_id='a')], approval_on=False, approval_mode='auto')
+check("② 깔때기 — 승인형이면 실전이 아니어도 승인한 수와 '실전으로 켜면 계획마다 승인' · 완전 자동이면 종전대로 '승인 불필요'",
+      _f471[2]['n'] == 1 and '실전으로 켜면 계획마다 승인' in _f471[2]['sub'] and '승인 불필요' not in _f471[2]['sub']
+      and '승인 불필요' in _f471b[2]['sub'], str((_f471[2], _f471b[2])))
+# ③ 상태 띠 — 계획이 있으면 '실행 중'이 아니라 '정상' · 판정일을 같이 적는다
+_sh471 = _dh471.system_health(dict(running=False), dict(ok=True, installed=True), dict(last_end='10-11 16:26:05', worst=0),
+                              dict(env='real', missing=[], problems=[]), dict(ts='2026-10-11T20:22:29'),
+                              [dict(data_day='2026-10-08'), dict(data_day='2026-10-08')], today='2026-10-11')
+_pl471 = next(x for x in _sh471 if x['label'] == '계획 생성')
+check("③ 상태 띠 '계획 생성' — 계획이 있으면 OK(정상)와 '판정일 2026-10-08 계획 2' · '실행 중'이라 적지 않는다",
+      _pl471['state'] == 'OK' and _pl471['text'] == '판정일 2026-10-08 계획 2', str(_pl471))
+# ─── §471 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

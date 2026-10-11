@@ -153,7 +153,7 @@ def acct_refresh_pref(session, stt):
 def account_read(cfg, c=None, now=None):
     """한국투자 잔고를 **한 번** 읽는다(주문 없음) → (잔고 dict, None) 또는 (None, 사유). 장부 연결 `c` 가 있으면 스냅샷을 남길지
     `swing_account.should_snapshot` 이 정한다(보유·현금이 바뀌면 바로 · 가격만 바뀌면 저장 간격마다 — 15초마다 쌓지 않는다 · 라운드 457).
-    화면·워커 밖에서 증권사를 부르는 자리는 여기와 시스템 → 설정의 '연결 확인' 둘뿐이다."""
+    화면·워커 밖에서 증권사를 부르는 자리는 여기와 시스템 → 설정의 '연결 확인' · '주문 경로 점검'(라운드 491 · 조회만) 셋뿐이다."""
     try:
         br = broker_kis.KisBroker(cfg)
         bal = br.get_balance()
@@ -947,7 +947,7 @@ def _view_center(st, uk, c, ctx, md):
                                                     planned_loss_sum=_dash.planned_loss_sum(ctx['managed'])),
                                    theme=theme, title='위험 한도 사용 — 설정 한도 대비(참고 · 직접 보유 포함)'), unsafe_allow_html=True)
     st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
-                                               managed_codes=set(ctx['managed'])),
+                                               managed_codes=set(ctx['managed']), approval_mode=X.approval_of(ctx['stt'])),
                             theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"), unsafe_allow_html=True)
     zl = zero_day_line(c, str(ctx['today']), brief=True) if ctx['today'] else None
     if zl:
@@ -1414,6 +1414,20 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
                 st.success(hc['message'])
             else:
                 st.warning(hc['message'])
+        except broker_kis.BrokerError as e:
+            st.warning(str(e))
+    # 라운드 491 — 주문 경로 점검(주문은 안 낸다). 실주문 때 워커가 부르는 조회 셋(잔고 · 주문·체결 내역 · 매수가능)을 실제로 불러
+    #   응답을 읽는지 본다. 매수·취소는 보내야만 확인되므로 그렇다고 적는다. 물어볼 종목·가격은 가장 최근 계획의 진입가(없으면 묻지 않는다).
+    st.caption("'주문 경로 점검'은 주문을 내지 않고, 실주문 때 워커가 부르는 조회 셋(잔고 · 주문·체결 내역 · 매수가능)을 실제로 불러 봅니다. "
+               "매수·취소 주문 자체는 보내야만 확인되므로 첫 실주문이 그 둘의 첫 시험입니다.")
+    if allow_write and a.button('주문 경로 점검 (주문 안 냄)', key='sw_path_check'):
+        try:
+            _ps491 = [p for p in L.plans(c) if p.get('entry')]
+            _p491 = _ps491[-1] if _ps491 else {}
+            _res491 = broker_kis.KisBroker(cfg).order_path_check(_p491.get('code'), _p491.get('entry'))
+            for _r491 in _res491:
+                _ln491 = f"{_r491['step']} — {_r491['detail']}"
+                (st.success if _r491['ok'] is True else st.warning if _r491['ok'] is False else st.info)(_ln491)
         except broker_kis.BrokerError as e:
             st.warning(str(e))
     if st.session_state.get('sw_flash'):

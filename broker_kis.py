@@ -392,6 +392,49 @@ class KisBroker:
             return dict(ok=False, env=self.env, account=f"{mask(self.cfg['cano'])}-{self.cfg['prdt']}",
                         positions=None, message=f'{type(e).__name__}: {e}')
 
+    #: 주문 경로 점검의 단계 이름 — 워커가 실주문 때 부르는 증권사 호출 여섯(라운드 491). 넷은 조회라 주문 없이 부를 수 있고,
+    #:   둘(매수 · 취소)은 실제로 보내야만 확인된다.
+    PATH_STEPS = ('토큰·잔고 조회', '주문·체결 내역 조회', '매수가능 조회', '주문 넣기·취소')
+
+    def order_path_check(self, code, price, today=None, days=30):
+        """주문 경로 점검 — **주문은 안 낸다**(라운드 491). → [dict(step, ok, detail)] · ok 는 True(불러서 읽었다) · False(실패 ·
+        사유) · None(부르지 않았다 · 사유). 금액·계좌번호는 안 싣는다.
+
+        '연결 확인'은 잔고 하나만 읽는다. 실주문 한 번에 워커는 잔고(TTTC8434R) · 주문·체결 내역(TTTC0081R · 들어간 주문을 맞춘다) ·
+        매수가능(TTTC8908R · 수량을 정한다) · 매수(TTTC0012U) · 취소(TTTC0013U)를 부른다. 앞의 셋은 조회라 여기서 **실제로** 불러
+        응답 칸을 읽는지 본다. 매수·취소는 보내야만 확인되므로 부르지 않고 그렇다고 적는다 — 첫 실주문이 그 둘의 첫 시험이다.
+        앞 단계가 실패하면 뒤 단계는 안 부른다(같은 토큰·계좌로 도는 호출이다)."""
+        import datetime as _dt491
+        out = []
+
+        def _add(step, ok, detail):
+            out.append(dict(step=step, ok=ok, detail=detail))
+
+        try:
+            b = self.get_balance()
+            _add(self.PATH_STEPS[0], True, f"토큰을 받고 잔고를 읽었다 · 보유 {len(b['positions'])}종목 · {b['pages']}쪽")
+        except BrokerError as e:
+            _add(self.PATH_STEPS[0], False, f'{type(e).__name__}: {e}')
+            for s in self.PATH_STEPS[1:3]:
+                _add(s, None, '앞 단계가 실패해 부르지 않았다')
+        else:
+            end = today or _dt491.date.today()
+            try:
+                rows = self.get_daily_orders((end - _dt491.timedelta(days=int(days))).strftime('%Y%m%d'), end.strftime('%Y%m%d'))
+                _add(self.PATH_STEPS[1], True, f'최근 {int(days)}일 주문 {len(rows)}건을 읽었다(체결 맞춤에 쓰는 조회)')
+            except BrokerError as e:
+                _add(self.PATH_STEPS[1], False, f'{type(e).__name__}: {e}')
+            if not (code and price and float(price) > 0):
+                _add(self.PATH_STEPS[2], None, '물어볼 종목·가격이 없어 부르지 않았다(계획이 있으면 그 진입가로 묻는다)')
+            else:
+                try:
+                    o = self.get_orderable(code, price)
+                    _add(self.PATH_STEPS[2], True, '주문 가능 금액·수량 칸을 읽었다' + (' (지금 살 수 있는 수량 0)' if not o.get('qty') else ''))
+                except BrokerError as e:
+                    _add(self.PATH_STEPS[2], False, f'{type(e).__name__}: {e}')
+        _add(self.PATH_STEPS[3], None, '실제로 보내야만 확인된다(TTTC0012U 매수 · TTTC0013U 취소) — 부르지 않았다. 첫 실주문이 이 둘의 첫 시험이다')
+        return out
+
     # ── 주문 ─────────────────────────────────────────────────────────────
     def place_order(self, side, code, qty, price=None, ord_dvsn=ORD_LIMIT):
         """현금 주문 하나 → dict(odno, orgno, time). 거절이면 BrokerError · 오류·시간초과면 TransportError(다시 보내지 않는다)."""

@@ -144,13 +144,20 @@ def risk_usage(summary, limits, managed_n=0, new_orders_today=0, planned_loss_su
     return items
 
 
-def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None):
-    """오늘 깔때기 — 후보 → 실주문 자격 → 승인 → 주문 냄 → 체결. 전부 장부의 수(지어내지 않는다)."""
+def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None, approval_mode=None):
+    """오늘 깔때기 — 후보 → 실주문 자격 → 승인 → 주문 냄 → 체결. 전부 장부의 수(지어내지 않는다).
+
+    라운드 491 — 실전이 아니면 `approval_on` 이 거짓이라 승인 칸이 '승인 불필요(자격 = 승인)'였는데, 같은 화면의 시작 카드는 주문 방식이
+    '계획마다 승인'이라 승인해야 산다고 적었다(한 화면의 두 말). 주문 방식(`approval_mode`)이 승인형이면 실전이 아니어도 승인한 수를
+    세고 '실전에서 계획마다 승인'이라 적는다."""
     ps = list(plans_today or [])
     live = [p for p in ps if p.get('live_ok')]
     if approval_on:
         appr = [p for p in live if p.get('plan_id') in (approved or set())]
         appr_sub = '계획마다 승인'
+    elif approval_mode == 'approve':
+        appr = [p for p in live if p.get('plan_id') in (approved or set())]
+        appr_sub = '실전으로 켜면 계획마다 승인 · 지금은 주문 안 냄'
     else:
         appr, appr_sub = live, '승인 불필요(자격 = 승인)'
     its = [it for it in (intents_today or []) if it.get('side') == 'buy']
@@ -211,7 +218,11 @@ def system_health(worker, task, nightly, cfg, acct, plans_today, today=None, pro
         else:
             out.append(dict(label='한국투자 연결', state='IDLE', text=f'마지막 읽음 {ts[:10]}'))
     n = len(plans_today or [])
-    out.append(dict(label='계획 생성', state=('RUNNING' if n else 'IDLE'), text=(f'오늘 계획 {n}' if n else '오늘 계획 없음')))
+    # 라운드 491 — 계획이 **있으면** '실행 중'이라 적었다(아무것도 안 도는 일요일 저녁에도). 계획은 도는 것이 아니라 남은 것이다 —
+    #   연결·장부를 '정상'으로 고친 라운드 455 의 그 자리 · 판정일을 같이 적는다(그 계획은 '오늘' 판정이 아닐 수 있다).
+    _pd491 = next((str(p.get('data_day'))[:10] for p in (plans_today or []) if isinstance(p, dict) and p.get('data_day')), None)
+    out.append(dict(label='계획 생성', state=('OK' if n else 'IDLE'),
+                    text=((f'판정일 {_pd491} 계획 {n}' if _pd491 else f'계획 {n}') if n else '오늘 계획 없음')))
     out.append(dict(label='장부', state=('OK' if ledger_ok else 'ERROR'), text=('열림' if ledger_ok else '못 열음')))
     nn = nightly or {}
     if nn.get('running'):
