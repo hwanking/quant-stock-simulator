@@ -179,10 +179,10 @@ def nightly_status(log_path=None, tail=400):
             lines = f.read().splitlines()[-tail:]
     except OSError:
         return dict(running=None, last_start=None, last_end=None, worst=None, note='기록을 읽지 못했다')
-    start = end = worst = pulled = None
+    start = end = worst = pulled = close_chk = None
     for ln in lines:
         if '장 마감 뒤 작업 시작' in ln:
-            start, end, worst, pulled = ln[1:15], None, None, None
+            start, end, worst, pulled, close_chk = ln[1:15], None, None, None, None
         elif '끝 · 가장 나쁜 종료 코드' in ln:
             end = ln[1:15]
             try:
@@ -192,8 +192,15 @@ def nightly_status(log_path=None, tail=400):
         elif '되받기 끝 · data-' in ln:                       # 그 실행이 되받은 클라우드 스냅샷(릴리스 이름 · 라운드 420 의 첫 단계)
             i = ln.index('data-')
             pulled = ln[i:i + 13]
+        # 라운드 492 — 개장 전 리포트 단계가 남긴 '리포트 가격 = 그 자료일 확정 일봉 종가 n/m'(또는 대조 못 함)을 옮겨 적는다.
+        #   기록 파일에만 있으면 아무도 안 본다(라운드 414 · 산출물 기록과 화면 한 줄). 새로 세지 않는다 — 그 줄 그대로.
+        for mk in ('리포트 가격 = 자료일', '종가 대조 못 함'):
+            if mk in ln:
+                s = ln[ln.index(mk):].split(' | ')[0].strip()
+                close_chk = s if len(s) <= 140 else s[:140] + '…(전체는 저녁 작업 기록)'
+                break
     running = bool(start) and end is None
-    return dict(running=running, last_start=start, last_end=end, worst=worst, pulled=pulled,
+    return dict(running=running, last_start=start, last_end=end, worst=worst, pulled=pulled, close_chk=close_chk,
                 note=('도는 중' if running else ('마지막 실행 끝' if end else '기록 없음')))
 
 
@@ -218,7 +225,8 @@ def progress(now=None, worker=None, tasks=None, nightly=None, auto=None):
     out.append(dict(label='저녁 작업(되받기·추적·재측정·성적표)', running=n.get('running'),
                     text=(f"도는 중 · {n['last_start']} 시작" if n.get('running') else
                           (f"마지막 {n['last_end']} 끝 · 종료 코드 {n['worst']}" if n.get('last_end') else n.get('note') or '기록 없음'))
-                    + (f" · 되받은 클라우드 스냅샷 {n['pulled']}" if n.get('pulled') else '')))
+                    + (f" · 되받은 클라우드 스냅샷 {n['pulled']}" if n.get('pulled') else '')
+                    + (f" · {n['close_chk']}" if n.get('close_chk') else '')))
     if auto is not None:
         out.append(dict(label='계좌 자동 갱신(이 화면)', running=bool(auto.get('on')),
                         text=(f"켜짐 · {auto.get('every')}초마다" if auto.get('on') else '꺼짐')

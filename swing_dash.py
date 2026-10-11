@@ -187,12 +187,16 @@ def execution_health(intents):
                 rejected=by.get('REJECTED', 0), ack=by.get('BROKER_ACK', 0), filled=by.get('FILLED', 0), cancelled=by.get('CANCELLED', 0))
 
 
-def system_health(worker, task, nightly, cfg, acct, plans_today, today=None, protection_warn=False, ledger_ok=True):
+def system_health(worker, task, nightly, cfg, acct, plans_today, today=None, protection_warn=False, ledger_ok=True, live_ts=None):
     """다섯 상태 띠 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업. 규칙은 여기 한 곳(문턱 없음 · 사실의 분류):
     워커: 잠금 주인 살아 있음 → RUNNING · 장중인데 오늘 기록 없음 → ERROR · 예약 작업 Ready → SCHEDULED · 등록 안 됨 → DEGRADED · 못 읽음 → UNKNOWN
     연결: 정보 없음 → ERROR · 연결 확인 전 → DEGRADED · 오늘 읽음 → OK(정상) · 전에 읽음 → IDLE
-    계획: 오늘 계획 있음 → RUNNING · 없음 → IDLE(사유) · 장부: 열림 → OK(정상) / ERROR
-    저녁 작업: 도는 중 → RUNNING · 마지막 종료 코드 0 → SCHEDULED · 0 아님 → DEGRADED · 기록 없음 → UNKNOWN"""
+    계획: 오늘 계획 있음 → OK(정상 · 판정일과 함께) · 없음 → IDLE · 장부: 열림 → OK(정상) / ERROR
+    저녁 작업: 도는 중 → RUNNING · 마지막 종료 코드 0 → SCHEDULED · 0 아님 → DEGRADED · 기록 없음 → UNKNOWN
+
+    `live_ts` — 이 화면의 계좌 칸이 방금 잔고를 읽은 시각(라운드 492). 장부 스냅샷은 값이 같으면 다시 안 쌓으므로(라운드 457·458)
+    화면이 15초마다 읽어도 장부의 시각은 그날 첫 값(예: 01:03)에 머문다 — 상태 띠가 그것만 보면 바로 아래 계좌 칸의 '방금 읽음'과
+    한 화면에서 다른 말을 했다(라운드 454 가 지휘 띠에서 고친 그 모양 · `swing_view.conn_label`). 둘 중 새로운 쪽을 적는다."""
     out = []
     w = worker or {}
     if w.get('running') is True:
@@ -209,12 +213,15 @@ def system_health(worker, task, nightly, cfg, acct, plans_today, today=None, pro
         out.append(dict(label='워커', state='UNKNOWN', text=(task or {}).get('reason') or '작업 상태를 못 읽음'))
     if not cfg or cfg.get('missing') or cfg.get('problems'):
         out.append(dict(label='한국투자 연결', state='ERROR', text='연결 정보 없음'))
-    elif not acct:
+    elif not acct and not live_ts:
         out.append(dict(label='한국투자 연결', state='DEGRADED', text='연결 확인 전'))
     else:
-        ts = str(acct.get('ts') or '')
+        ts = str((acct or {}).get('ts') or '')
+        here = bool(live_ts) and str(live_ts) > ts           # 같은 ISO 앞부분(YYYY-MM-DDTHH:MM:SS)이라 글자 순서 = 시각 순서
+        if here:
+            ts = str(live_ts)
         if today and ts[:10] == str(today):
-            out.append(dict(label='한국투자 연결', state='OK', text=f'오늘 {ts[11:16]} 읽음'))
+            out.append(dict(label='한국투자 연결', state='OK', text=f"오늘 {ts[11:16]} 읽음" + (' (이 화면)' if here else '')))
         else:
             out.append(dict(label='한국투자 연결', state='IDLE', text=f'마지막 읽음 {ts[:10]}'))
     n = len(plans_today or [])

@@ -123,11 +123,50 @@ def instrument(path):
     return ast.unparse(tree), ins.n, src.splitlines()
 
 
+def dep_order(names):
+    """미리 심을 모듈을 **의존 순서**로 — 가져오는 쪽보다 가져와지는 쪽이 먼저(라운드 492).
+
+    종전엔 받은 순서대로 심었다. 그러면 앞에서 심은 모듈이 `import 뒤의것` 을 실행하는 순간 **심기 전 원본**이 그 이름에
+    묶이고, 뒤에서 심은 사본은 sys.modules 에만 있어 앞 모듈은 끝까지 원본을 부른다 — 그 원본의 핸들러는 기록되지 않고
+    (걸린 0 이 '안 걸렸다'가 아니라 '안 심었다'), 조사 쪽에서 그 모듈에 건 바꿔치기(증권사 차단 · 장부 사본)도 안 닿는다.
+    라운드 492 의 스윙 탭 조사가 swing_view 를 맨 앞에 두어 그렇게 됐다. 모듈 안의 모든 import(함수 안 포함)를 AST 로 읽어
+    이 목록 안의 의존만 본다 · 순환이면 받은 순서를 따른다 · 목록 밖 모듈은 심지 않는다(원본 그대로)."""
+    names = list(dict.fromkeys(names))
+    inset = set(names)
+    deps = {}
+    for name in names:
+        path = os.path.join(PROJ, *name.split('.')) + '.py'
+        d = set()
+        try:
+            tree = ast.parse(open(path, encoding='utf-8').read())
+        except Exception:                                      # noqa: BLE001 — 없거나 못 읽으면 의존 없음으로(아래 preload 가 사유를 찍는다)
+            tree = None
+        for node in (ast.walk(tree) if tree is not None else ()):
+            if isinstance(node, ast.Import):
+                d.update(a.name for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                d.add(node.module)
+                d.update(f'{node.module}.{a.name}' for a in node.names)
+        deps[name] = (d & inset) - {name}
+    out, done = [], set()
+    while len(out) < len(names):
+        ready = [n for n in names if n not in done and deps[n] <= done]
+        if not ready:                                          # 순환 — 남은 것 중 받은 순서의 첫 것
+            ready = [next(n for n in names if n not in done)]
+        out.append(ready[0])
+        done.add(ready[0])
+    return out
+
+
 def preload_modules(names):
-    """가져오는 모듈을 심은 채로 sys.modules 에 먼저 넣는다 — web_app 의 import 가 이것을 받는다."""
+    """가져오는 모듈을 심은 채로 sys.modules 에 먼저 넣는다 — web_app 의 import 가 이것을 받는다.
+    순서는 `dep_order` 가 정한다(가져와지는 쪽이 먼저 · 라운드 492)."""
     import types
     out = {}
-    for name in names:
+    order = dep_order(names)
+    if order != list(dict.fromkeys(names)):
+        print(f"   심는 순서(의존 순서) {' → '.join(order)}")
+    for name in order:
         path = os.path.join(PROJ, *name.split('.')) + '.py'
         if not os.path.exists(path):
             print(f'   ⚠ 모듈 없음 {name} ({path})')

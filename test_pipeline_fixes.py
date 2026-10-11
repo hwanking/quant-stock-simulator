@@ -40343,6 +40343,132 @@ check("④ 관제실의 '오늘 주문'·연결 상태·보유 일수 = 실행�
       and 'now.date().isoformat()' in _td471,
       f'비교 {_cmp471} · 어긋남 {_bad471b} · today 인자 {_kw471} · 실행부 {_td471}', scanned=_cmp471 + len(_kw471))
 # ─── §471 끝 ───
+# ─── §472 시작 (라운드 492) ───
+print("=" * 72)
+print("§472 상태 띠의 '읽음'은 계좌 칸과 같은 시각 · 저녁 작업이 리포트 가격을 확정 종가와 대 본다 · 조사 도구는 의존 순서로 심는다 (라운드 492)")
+print("=" * 72)
+# 라운드 492 — 사용자: "실행해주고 오염없는지 전방위로 확인해주고 오류도 수정하고 못다한 작업 찾아서." 화면을 띄워 보니 상태 띠는
+#   '한국투자 연결 · 오늘 01:03 읽음', 바로 아래 계좌 칸은 '22:55:06 에 이 화면에서 읽음' — 장부 스냅샷은 값이 같으면 다시 안 쌓으므로
+#   (라운드 457·458) 그날 첫 값에 머문다. 라운드 454 가 지휘 띠(conn_label)에서 고친 그 모양이 상태 띠에 남아 있었다.
+import ast as _ast472                                            # noqa: E402
+import pandas as _pd472                                          # noqa: E402
+import swing_dash as _dh472                                      # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import build_premarket_report as _bpr472                         # noqa: E402
+# 조사 도구는 가져오는 순간 쓰기 금지 환경변수를 켜고 작업 폴더를 옮긴다(그것이 스크립트로 돌 때의 전제다) — 이 회귀의 뒤 절이
+#   그 변수를 물려받지 않게 둘 다 되돌린다.
+_nw472, _cwd472 = _os.environ.get('GAEUM_NO_LOCAL_WRITE'), _os.getcwd()
+from scripts import swallow_census as _sc472                     # noqa: E402
+if _nw472 is None:
+    _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+else:
+    _os.environ['GAEUM_NO_LOCAL_WRITE'] = _nw472
+_os.chdir(_cwd472)
+_cf472 = {'env': 'real', 'missing': [], 'problems': []}
+_acct472 = {'ts': '2026-10-11T01:03:27+09:00'}
+_args472 = (dict(running=False), dict(ok=True, installed=True), dict(last_end='10-11 16:26:05', worst=0), _cf472)
+_c_live = next(x for x in _dh472.system_health(*_args472, _acct472, [], today='2026-10-11', live_ts='2026-10-11T22:55:06')
+               if x['label'] == '한국투자 연결')
+_c_old = next(x for x in _dh472.system_health(*_args472, _acct472, [], today='2026-10-11', live_ts='2026-10-10T23:00:00')
+              if x['label'] == '한국투자 연결')
+_c_none = next(x for x in _dh472.system_health(*_args472, _acct472, [], today='2026-10-11') if x['label'] == '한국투자 연결')
+_c_only = next(x for x in _dh472.system_health(*_args472, None, [], today='2026-10-11', live_ts='2026-10-11T09:01:00')
+               if x['label'] == '한국투자 연결')
+_c_neither = next(x for x in _dh472.system_health(*_args472, None, [], today='2026-10-11') if x['label'] == '한국투자 연결')
+check("① 상태 띠 '한국투자 연결' — 이 화면이 방금 읽은 시각이 더 새로우면 그것(이 화면) · 더 오래되면 장부 · 없으면 종전대로 · 스냅샷 없이 화면만 읽었어도 '정상'",
+      _c_live['state'] == 'OK' and _c_live['text'] == '오늘 22:55 읽음 (이 화면)'
+      and _c_old['text'] == '오늘 01:03 읽음' and _c_none['text'] == '오늘 01:03 읽음'
+      and _c_only['state'] == 'OK' and '09:01' in _c_only['text'] and _c_neither['state'] == 'DEGRADED',
+      f'{_c_live} · {_c_old} · {_c_none} · {_c_only} · {_c_neither}')
+_sv472 = _ast472.parse(_read148(_os.path.join(PROJ, 'swing_view.py')))
+_kw472 = [_ast472.unparse(k.value) for _n in _ast472.walk(_sv472) if isinstance(_n, _ast472.Call)
+          and isinstance(_n.func, _ast472.Attribute) and _n.func.attr == 'system_health' for k in _n.keywords if k.arg == 'live_ts']
+check("② 관제실이 상태 띠에 계좌 칸이 읽은 시각(ctx 의 live)을 넘긴다 — 지휘 띠(conn_label)와 같은 두 시각(AST)",
+      len(_kw472) == 1 and "ctx.get('live')" in _kw472[0] and "'ts'" in _kw472[0], str(_kw472), scanned=len(_kw472))
+
+
+# ③ 저녁 작업의 리포트 가격 대조 — 라운드 486 이 '첫 증거는 다음 평일 21:00' 이라 미뤄 둔 확인을 매일 한다(심어서 잰다)
+def _bars472(close_by_day):
+    return lambda sym: _pd472.DataFrame([{'trade_date': d, 'close_raw': c} for d, c in close_by_day.get(sym, {}).items()])
+
+
+def _boom472(sym):
+    raise ConnectionError('막힘')
+
+
+_rep472 = {'date': '2026-10-12', 'data_asof': '2026-10-12',
+           'picks': [{'symbol': '000001.KS', 'code': '000001', 'price': 1000.0},
+                     {'symbol': '000002.KS', 'code': '000002', 'price': 2050.0},
+                     {'symbol': '000003.KS', 'code': '000003', 'price': 3000.0},
+                     {'symbol': '000004.KS', 'code': '000004'}, 7]}
+_ck472 = _bpr472.close_check(_rep472, _bars472({'000001.KS': {'2026-10-09': 990.0, '2026-10-12': 1000.0},
+                                                '000002.KS': {'2026-10-12': 2000.0},
+                                                '000003.KS': {'2026-10-09': 3000.0}}))
+_ln472 = _bpr472.close_line(_ck472)
+_ck472b = _bpr472.close_check(_rep472, _boom472)
+check("③ 리포트 가격 대조 — 같은 날 봉 종가와 원 단위로 같으면 같음 · 다르면 두 값 · 그날 봉 없음·가격 없음·칸 모양 다름·일봉 못 받음은 '못 잼'(같다·다르다로 안 셈) · 문턱 없음",
+      _ck472['day'] == '2026-10-12' and _ck472['checked'] == 2 and _ck472['same'] == 1
+      and _ck472['diff'] == [('0002', 2050.0, 2000.0)] and len(_ck472['unmeasured']) == 3
+      and '1/2' in _ln472 and '2,050≠2,000' in _ln472 and '못 잼 3' in _ln472 and '000002' not in _ln472
+      and _ck472b['checked'] == 0 and len(_ck472b['unmeasured']) == 5 and '일봉 못 받음' in _bpr472.close_line(_ck472b),
+      f'{_ck472} · {_ln472}')
+
+
+class _B472:
+    def fetch_realtime_market_cap_no1_stock(self):
+        return '대표'
+
+    def resolve_symbol(self, q):
+        return '000001.KS', q
+
+    def verify_realtime_sources(self, sym):
+        return {'naver': {'price': 1000.0}, 'daum': {'price': 1000.0}, 'comparable': True, 'diff_pct': 0.0}
+
+    def fetch_daily_bars(self, sym):
+        return _pd472.DataFrame([{'trade_date': '2026-10-12', 'close_raw': 1000.0}])
+
+
+_mk472 = _bpr472.make_report(None, _B472(), '2026-10-12',
+                             scan=lambda q, b, day: {'kind': 'ok', 'results': [{'symbol': 'x'}], 'failures': []},
+                             build=lambda q, rows, market_label='': ({'date': '2026-10-12', 'data_asof': '2026-10-12',
+                                                                      'picks': [{'symbol': '000001.KS', 'code': '000001', 'price': 1000.0}]}, True))
+_ex472 = _bpr472.existing_close_line(__import__('datetime').datetime(2026, 10, 12, 10, 0))   # 정규장 중 — 대 볼 종가가 움직인다
+check("④ 저녁 작업 make_report 의 한 줄 끝에 대조가 붙는다(종료 코드 불변) · 이미 있던 리포트 대조는 정규장 중이면 안 한다(None · 네트워크 0)",
+      _mk472[0] == 0 and _mk472[1].endswith('리포트 가격 = 자료일 2026-10-12 확정 일봉 종가 1/1') and _ex472 is None,
+      f'{_mk472} · {_ex472}')
+_ord472 = _sc472.dep_order(['swing_view', 'swing_dash', 'broker_kis', 'swing_ledger', 'swing_executor'])
+check("⑤ 삼킨 예외 조사 도구는 미리 심을 모듈을 의존 순서로 — 가져오는 쪽(swing_view)이 가져와지는 쪽(broker_kis·swing_ledger·swing_executor·swing_dash)보다 뒤 · 빠짐·겹침 없음",
+      sorted(_ord472) == sorted(['swing_view', 'swing_dash', 'broker_kis', 'swing_ledger', 'swing_executor'])
+      and _ord472[-1] == 'swing_view' and _ord472.index('broker_kis') < _ord472.index('swing_executor')
+      and _ord472.index('swing_ledger') < _ord472.index('swing_executor'), str(_ord472))
+# ⑥ 그 대조가 기록 파일에만 있으면 아무도 안 본다 — 시스템 갈래의 '저녁 작업' 줄이 같은 기록을 읽어 옮겨 적는다(새 셈 없음) ·
+#    다음 실행이 시작되면 지난 실행의 대조는 안 끌고 온다(그 실행에 없으면 안 적는다)
+import swing_ops as _so472                                       # noqa: E402
+_lg472 = _os.path.join(PROJ, '_probe', '_r492_nightly_log.txt')
+_ln1_472 = ('[10-12 21:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 6\n'
+            '[10-12 21:02:10]   개장 전 리포트 — 종료 0 · 130초 · 시세 교차검증 통과 — x | 만듦 — 자료일 2026-10-12 · 후보 5 | '
+            '리포트 가격 = 자료일 2026-10-12 확정 일봉 종가 5/5\n'
+            '[10-12 21:05:00] 끝 · 가장 나쁜 종료 코드 0\n')
+try:
+    open(_lg472, 'w', encoding='utf-8').write(_ln1_472)
+    _ns1_472 = _so472.nightly_status(log_path=_lg472)
+    open(_lg472, 'a', encoding='utf-8').write('[10-13 21:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 6\n'
+                                              '[10-13 21:05:00] 끝 · 가장 나쁜 종료 코드 0\n')
+    _ns2_472 = _so472.nightly_status(log_path=_lg472)
+finally:
+    if _os.path.exists(_lg472):
+        _os.remove(_lg472)
+_t472 = {_so472.TASK_NAME: dict(ok=True, installed=True, state='Ready'), _so472.WATCH_TASK: dict(ok=True, installed=True, state='Ready')}
+_pg472 = _so472.progress(worker=dict(running=False, note=''), tasks=_t472, nightly=_ns1_472)
+_pgn472 = next((x['text'] for x in _pg472 if x['label'].startswith('저녁 작업')), '')
+check("⑥ 시스템 갈래의 '저녁 작업' 줄 끝에 그 실행의 리포트 가격 대조 한 줄(기록 그대로) · 다음 실행에 없으면 안 끌고 온다",
+      _ns1_472.get('close_chk') == '리포트 가격 = 자료일 2026-10-12 확정 일봉 종가 5/5'
+      and _ns2_472.get('close_chk') is None and _pgn472.endswith('리포트 가격 = 자료일 2026-10-12 확정 일봉 종가 5/5')
+      # 읽는 쪽이 찾는 두 문장이 실제로 그 줄을 쓰는 소스에 있다(라운드 454 ⑧ 의 그 모양 — 쓰는 쪽 문장이 바뀌면 여기서 붉어진다)
+      and '리포트 가격 = 자료일' in _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
+      and '종가 대조 못 함' in _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py')),
+      f'{_ns1_472} · {_ns2_472} · {_pgn472}')
+# ─── §472 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

@@ -935,7 +935,8 @@ def _view_center(st, uk, c, ctx, md):
         _rl457 = None
     st.markdown(_viz.start_card(ctx['start'], theme=theme, reco_line=_rl457), unsafe_allow_html=True)
     sh = _dash.system_health(ctx['worker'], ctx['task'], ctx['nightly'], ctx['cfg'], ctx['acct'], ctx['plans_today'], today=ctx['trade_day'],
-                             protection_warn=bool(ctx['pl']), ledger_ok=True)
+                             protection_warn=bool(ctx['pl']), ledger_ok=True,
+                             live_ts=(ctx.get('live') or {}).get('ts'))   # 라운드 492 — 지휘 띠(conn_label)와 같은 두 시각 중 새로운 쪽
     st.markdown(_viz.health_strip(sh, theme=theme, title='시스템 상태 — 워커 · 한국투자 연결 · 계획 생성 · 장부 · 저녁 작업'), unsafe_allow_html=True)
     _acct_panel454(st, uk, ctx['allow_write'], ctx['cfg'], ctx['stt'], ctx['today'], md, theme, scope='overview', managed=set(ctx['managed']), outer_live=ctx.get('live_refresh', False))
     s = _summary_now(ctx)

@@ -1,8 +1,8 @@
 {
  "made": "2026-10-11",
- "made_at": "2026-10-11 19:08",
+ "made_at": "2026-10-11 22:48",
  "ledger_rows": 258730,
- "took_sec": 6.0,
+ "took_sec": 16.4,
  "stores": {
   "ledger": {
    "rows": 258730,

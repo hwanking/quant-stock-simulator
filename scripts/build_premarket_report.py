@@ -84,6 +84,57 @@ def feed_gate(b):
     return True, f'시세 교차검증 통과 — {desc}'
 
 
+def close_check(rep, fetch):
+    """리포트 후보 가격 = 그 자료일의 **확정 일봉 종가**인가 → dict(day, checked, same, diff, unmeasured) (라운드 492).
+
+    라운드 486 이 *"첫 증거는 다음 평일 21:00 실행이다 — 리포트 가격이 그날 일봉 종가(애프터마켓 마감가)와 같은지 그 밤에
+    대 본다"* 고 미뤄 둔 확인을 사람이 아니라 저녁 작업이 매일 한다(라운드 414 — 주기적인 일은 사람 몫이 아니다). 판정·리포트는
+    안 바꾸고 **적기만** 한다. 문턱 없음 — 원 단위로 같은지(반올림 차 0.5원 미만)만 본다. 다르면 그 리포트의 가격이 확정 종가가
+    아닌 값으로 고정됐다는 뜻이다(장중·애프터마켓 중 고정 · 자료원이 종가 뜻을 바꿈 · 라운드 483·486).
+    `fetch(symbol)` → 일봉 프레임(trade_date · close_raw) · 못 받거나 그날 봉이 없으면 그 후보는 '못 잼'으로 센다(§3)."""
+    day = str((rep or {}).get('data_asof') or (rep or {}).get('date') or '')[:10]
+    out = dict(day=day, checked=0, same=0, diff=[], unmeasured=[])
+    for p in (rep or {}).get('picks') or []:
+        if not isinstance(p, dict):
+            out['unmeasured'].append(('?', '후보 칸 모양이 다름'))
+            continue
+        sym = p.get('symbol') or p.get('code')
+        tail = str(p.get('code') or sym or '?')[-4:]
+        try:
+            price = float(p.get('price'))
+        except (TypeError, ValueError):
+            out['unmeasured'].append((tail, '리포트 가격 없음'))
+            continue
+        try:
+            df = fetch(sym)
+            row = df[df['trade_date'].astype(str).str[:10] == day]
+            close = float(row['close_raw'].iloc[-1]) if len(row) else None
+        except Exception as ex:                                # noqa: BLE001 — 못 받은 것은 '못 잼'으로(같다·다르다로 안 센다)
+            out['unmeasured'].append((tail, f'일봉 못 받음 {type(ex).__name__}'))
+            continue
+        if close is None:
+            out['unmeasured'].append((tail, f'{day} 봉 없음'))
+            continue
+        out['checked'] += 1
+        if abs(price - close) < 0.5:
+            out['same'] += 1
+        else:
+            out['diff'].append((tail, price, close))
+    return out
+
+
+def close_line(chk):
+    """`close_check` 결과 → 저녁 작업 기록 한 줄(종목은 코드 끝 네 자리만)."""
+    s = f"리포트 가격 = 자료일 {chk['day']} 확정 일봉 종가 {chk['same']}/{chk['checked']}"
+    if chk['diff']:
+        s += ' · 다름 ' + ', '.join(f"…{t} {p:,.0f}≠{c:,.0f}" for t, p, c in chk['diff'][:5]) + (
+            f" 외 {len(chk['diff']) - 5}" if len(chk['diff']) > 5 else '')
+    if chk['unmeasured']:
+        s += f" · 못 잼 {len(chk['unmeasured'])}(" + ', '.join(f'…{t} {w}' for t, w in chk['unmeasured'][:3]) + (
+            f" 외 {len(chk['unmeasured']) - 3}" if len(chk['unmeasured']) > 3 else '') + ')'
+    return s
+
+
 def make_report(q, b, day, scan=None, build=None):
     """관문 → 스캔 → 리포트 → (종료 코드, 한 줄). 화면과 같은 차례 — 관문을 못 지나면 스캔도 고정도 안 한다(라운드 486)."""
     import market_scan
@@ -102,9 +153,30 @@ def make_report(q, b, day, scan=None, build=None):
         return 1, f"실패 — 관심종목 후보를 못 받았다: {r.get('reason')} · 리포트를 안 만들었다"
     rep, new = build(q, r['results'], market_label=market_scan.market_label_of(r['results']))
     picks = len((rep or {}).get('picks') or [])
+    # 라운드 492 — 고정한 가격이 그 자료일의 확정 일봉 종가와 같은지 그 자리에서 대 본다(적기만 · 판정·종료 코드 불변)
+    chk = close_check(rep, lambda s: b.fetch_daily_bars(s))
     return 0, (f"{gate_line} | {'만듦' if new else '이미 있음'} — 자료일 {(rep or {}).get('date')} · 후보 {picks} · "
                f"정밀 분석 {len(r['results'])} · 빠진 후보 {len(r.get('failures') or [])} · "
-               f"코드 못 찾음 {len(r.get('unmapped') or [])} · 생성 {(rep or {}).get('generated_at')} · {time.time() - t0:.0f}초")
+               f"코드 못 찾음 {len(r.get('unmapped') or [])} · 생성 {(rep or {}).get('generated_at')} · {time.time() - t0:.0f}초"
+               f" | {close_line(chk)}")
+
+
+def existing_close_line(now):
+    """리포트가 이미 있으면(화면이 먼저 만든 날) 그 리포트의 가격도 확정 종가와 대 본다 → 한 줄 또는 None (라운드 492).
+    봉이 확정된 뒤에만 잰다(정규장 중 · 애프터마켓 중이면 None — 대 볼 종가가 아직 움직인다). 쓰기 0 · 판정 불변."""
+    try:
+        import bitemporal_engine as be
+        import premarket
+        if be.get_market_status(now).get('state') == '장중' or premarket.report_fix_blocker(now):
+            return None
+        day = premarket.report_day(now)
+        rep = premarket.load_today_report(day) if day else None
+        if not rep:
+            return None
+        b = be.BitemporalEngine()
+        return '이미 있던 리포트 — ' + close_line(close_check(rep, lambda s: b.fetch_daily_bars(s)))
+    except Exception as ex:                                    # noqa: BLE001 — 대조는 기록일 뿐 · 못 하면 사유를 적는다
+        return f'이미 있던 리포트의 종가 대조 못 함 — {type(ex).__name__}: {str(ex)[:160]}'
 
 
 def main(argv=None):
@@ -117,6 +189,10 @@ def main(argv=None):
                      no_write=bool(os.environ.get('GAEUM_NO_LOCAL_WRITE')))
     if not ok:
         print(f'건너뜀 — {why}')
+        if not a.plan:
+            ex_line = existing_close_line(now)
+            if ex_line:
+                print(ex_line)
         return 0
     day = why
     if a.plan:
