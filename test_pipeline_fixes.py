@@ -24832,10 +24832,15 @@ _k300 = _w300.index("교차검증 불가", _i300)          # 막는 자리
 _b300 = _w300.index("_cv_show_287 = st.session_state.get", _i300)   # 그리는 자리
 check("막는 것이 그리는 것보다 **앞**이다 — 두 출처가 어긋나면 스캔은 위에서 멈춘다 (R247)",
       _i300 < _k300 < _b300, f'호출 {_i300} · 중단 {_k300} · 그리기 {_b300}')
-check("중단 조건은 그대로다 — 미수신이면 중단, 오차 1.0% 초과면 중단 (문턱 불변 · §2)",
-      "if not cv_data.get('comparable'):" in _w300
-      and "elif cv_data['diff_pct'] > 1.0:" in _w300
-      and '스캔을 중단합니다' in _w300)
+# 라운드 486 — 중단 판정을 `market_scan.price_feed_gate` 한 곳으로 옮겼다(저녁 작업도 같은 관문). 글자 대신 성질을 본다(R98b).
+import market_scan as _ms300                                     # noqa: E402
+check("중단 조건은 그대로다 — 미수신이면 중단, 오차 1.0% 초과면 중단 (문턱 불변 · §2 · 판정은 한 곳)",
+      "_gate486 = _ms486.price_feed_gate(cv_data)" in _w300 and "if _gate486 == 'na':" in _w300
+      and "elif _gate486 == 'diff':" in _w300 and '스캔을 중단합니다' in _w300
+      and _ms300.xcheck_tol_pct() == 1.0
+      and _ms300.price_feed_gate({'comparable': False}) == 'na'
+      and _ms300.price_feed_gate({'comparable': True, 'diff_pct': 1.0}) is None
+      and _ms300.price_feed_gate({'comparable': True, 'diff_pct': 1.01}) == 'diff')
 check("카드는 그 자리에서 안 그리고 담아 둔다 — 맨 아래에서 꺼내 그린다",
       _j300 > _i300 and "st.session_state['cv_panel_287'] = _cv_panel_287" in _w300
       and '_cv_panel_287.append(' in _w300)
@@ -26793,12 +26798,15 @@ _mk332 = {'is_trading_day': True, 'state': '장 종료'}
 _at332 = lambda h, m: _f332(_mk332, now=_dt332.datetime(2026, 9, 16, h, m))       # noqa: E731
 check("R325 심기 — 17:00 시간외 거래 중 · 15:50 종가매매 · 20:30 · 휴장일 · 장중은 빈 문장",
       '시간외 거래 중' in _at332(17, 0) and '종가매매' in _at332(15, 50)
-      and _at332(20, 30) == '' and _at332(15, 35) == ''
+      and '20:00 시간외 마감가' in _at332(20, 30) and _at332(15, 35) == ''
       and _f332({'is_trading_day': False, 'state': '휴장일'}, now=_dt332.datetime(2026, 9, 16, 17, 0)) == ''
       and _f332({'is_trading_day': True, 'state': '장중'}, now=_dt332.datetime(2026, 9, 16, 10, 0)) == '',
       f"{_at332(17, 0)} / {_at332(15, 50)}")
-check("R325 문장이 가격 기준(15:30 정규장 종가)을 같이 말한다 · 사이드바와 종목 머리 두 자리가 같은 함수",
-      '15:30 정규장 종가' in _at332(17, 0) and _w332.count("_session_note_325(_mkt)") >= 4)
+# 라운드 486 정정 — 종전 문장 *"화면 가격·판정은 15:30 정규장 종가 기준"* 은 거짓이었다(네이버 종가·일봉 종가는 애프터마켓
+#   마지막 체결 · 10-08 봉 60/60). 시간외 중엔 가격이 움직이고 종가는 20:00 마감가로 확정된다고 적는다.
+check("R325·R486 문장이 가격 기준을 같이 말한다 — 시간외 중엔 시간외 체결을 따라 움직이고 종가는 20:00 마감가 · 사이드바와 종목 머리 두 자리가 같은 함수",
+      '시간외 체결을 따라' in _at332(17, 0) and '20:00 시간외 마감가' in _at332(17, 0)
+      and '정규장 종가 기준' not in _at332(17, 0) and _w332.count("_session_note_325(_mkt)") >= 4)
 check("R326 금액으로 본 보유 — 손댈 수 있는 순 → 금액 큰 순 · 추천은 아직 안 한다고 적는다",
       "return (_rank326.get(_kd, len(_rank326)), -(t[3] or 0))" in _w332
       and "'비중(평가금액)': v / _pf_val * 100.0" in _w332
@@ -38648,9 +38656,12 @@ _c454 = _uk454.job_card(_jobs454, theme='dark')
 _c454w = _uk454.job_card([_w454], theme='light')
 _t454 = _uk454.tokens('dark')
 _sizes454 = {int(x) for x in _re454.findall(r'font-size:(\d+)px', _c454)}
-check("④ 카드 — 작업 없으면 '' · 막대 aria 2/5 · 폭 40% · '+1' 과 툴팁 · 글자 12·13px(스케일) · 바탕·고리·막대가 토큰 색",
+# 라운드 486 — 심은 기록의 전체 단계가 단계 표에서 온다(②) · 막대의 최댓값·폭도 같은 수에서 유도한다(종전 2/5 · 40% 글자 ·
+#   라운드 485 가 ② 만 고치고 이 줄을 '드라이런 탓'으로 잘못 넘겼다 — 전체 회귀에서 같은 실패가 나와 원인이 드러났다).
+_tot454 = len(_names454)
+check(f"④ 카드 — 작업 없으면 '' · 막대 aria 2/{_tot454} · 폭 {100 * 2 / _tot454:.0f}% · '+1' 과 툴팁 · 글자 12·13px(스케일) · 바탕·고리·막대가 토큰 색",
       _uk454.job_card([], 'dark') == '' and _uk454.job_card(None) == ''
-      and "aria-valuenow='2'" in _c454 and "aria-valuemax='5'" in _c454 and 'width:40%' in _c454
+      and "aria-valuenow='2'" in _c454 and f"aria-valuemax='{_tot454}'" in _c454 and f'width:{100 * 2 / _tot454:.0f}%' in _c454
       and '>+1</span>' in _c454 and '같이 도는 작업 — 스윙 워커' in _c454
       and _sizes454 and _sizes454 <= TYPE_SCALE and min(_sizes454) >= 12
       and f"background:{_t454['card']}" in _c454 and f"border-top-color:{_t454['brand']}" in _c454, str(_sizes454))
@@ -39680,7 +39691,8 @@ _bsrc465 = _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
 check("① 스캔 몸통은 market_scan 한 곳 — streamlit 안 가져옴 · 화면 스캔 함수는 그것을 부르고 유니버스·정밀 분석을 직접 안 부른다 · 저녁 작업도 같은 함수",
       not any(str(m).startswith('streamlit') for m in _imp465) and _fn465 is not None
       and '_ms484.run(' in _fsrc465 and 'get_screener_universe' not in _fsrc465 and 'run_screener_scan' not in _fsrc465
-      and 'market_scan.run(' in _bsrc465 and 'premarket.build_report(' in _bsrc465
+      # 라운드 486 — 저녁 작업은 make_report 가 두 함수를 넘겨받는 꼴(`scan or market_scan.run`) · 호출 글자 대신 같은 함수를 쓰는지
+      and 'scan = scan or market_scan.run' in _bsrc465 and 'build = build or premarket.build_report' in _bsrc465
       and '_ms484r.market_label_of(scan_results)' in _w465 and 'market_scan.market_label_of(' in _bsrc465,
       str(sorted(_imp465)))
 
@@ -39732,9 +39744,10 @@ check("②' 저녁 작업의 스캔 인자는 화면 기본값과 같다(종합 
 _no465 = lambda d: False                                         # noqa: E731
 _cases465 = [(_dt465.datetime(2026, 10, 12, 10, 0), _no465, False, False, '정규장 중'),
              (_dt465.datetime(2026, 10, 12, 8, 0), _no465, False, True, '2026-10-08'),
-             (_dt465.datetime(2026, 10, 12, 17, 0), _no465, False, True, '2026-10-12'),
+             (_dt465.datetime(2026, 10, 12, 17, 0), _no465, False, False, '애프터마켓'),       # 라운드 486
+             (_dt465.datetime(2026, 10, 12, 21, 0), _no465, False, True, '2026-10-12'),
              (_dt465.datetime(2026, 10, 10, 12, 0), _no465, False, True, '2026-10-08'),
-             (_dt465.datetime(2026, 10, 12, 17, 0), (lambda d: True), False, False, '이미 있다'),
+             (_dt465.datetime(2026, 10, 12, 21, 0), (lambda d: True), False, False, '이미 있다'),
              (_dt465.datetime(2026, 10, 12, 17, 0), _no465, True, False, '쓰기 금지'),
              (_dt465.datetime(2026, 11, 19, 9, 30), _no465, False, True, '2026-11-18'),        # 수능일 10:00 전
              (_dt465.datetime(2026, 11, 19, 16, 0), _no465, False, False, '정규장 중')]        # 수능일 16:30 전
@@ -39743,7 +39756,7 @@ for _now465, _has465, _nw465, _ok465, _txt465 in _cases465:
     _g465 = _bpr465.decide(_now465, _has465, no_write=_nw465)
     if _g465[0] is not _ok465 or _txt465 not in str(_g465[1]):
         _bad465.append((str(_now465), _g465))
-check("③ decide — 정규장 중(수능일 10:00~16:30 포함)은 안 만든다 · 장 전·마감 뒤·휴장일은 그 자료일 · 있으면 · 쓰기 금지면 안 만든다",
+check("③ decide — 정규장 중(수능일 10:00~16:30 포함)·애프터마켓 중(라운드 486)은 안 만든다 · 장 전·애프터마켓 끝난 뒤·휴장일은 그 자료일 · 있으면 · 쓰기 금지면 안 만든다",
       not _bad465, str(_bad465), scanned=len(_cases465))
 
 # ④ 저녁 작업 차례 — 되받기 뒤 · 추적 동결과 자동매매 계획 앞(둘 다 그날 리포트를 읽는다) · 작업 카드가 같은 표를 읽는다
@@ -39827,6 +39840,94 @@ check("④ 등록 스크립트 둘 다 pythonw.exe 를 먼저 · 저녁 작업�
       and not _nc466.console_python(r'C:\Python314\pythonw.exe').lower().endswith('pythonw.exe')
       and _nc466.console_python(r'C:\x\python.exe') == r'C:\x\python.exe')
 # ─── §466 끝 ───
+# ─── §467 시작 (라운드 486) ───
+print("=" * 72)
+print("§467 그날 봉은 애프터마켓이 끝나야 확정 — 리포트 고정은 그 뒤 · 저녁 작업도 화면과 같은 시세 관문 (라운드 486)")
+print("=" * 72)
+# 라운드 486 — 2026-09-14 부터 KRX 애프터마켓(16:00~20:00)이 생겼고 우리가 받는 네이버 종가·일봉 종가가 그 체결을 따라간다
+#   (2026-10-11 실측: 10-08 봉 상위 60종목 60/60 종가 = 애프터마켓 마지막 체결 · 정규장 종가와 같은 것은 4/60). 라운드 484 의
+#   17:00 저녁 작업은 미완성 봉으로 리포트를 만들 자리였고, 라운드 325 의 화면 문장('15:30 정규장 종가 기준')은 거짓이었다.
+import datetime as _dt467                                        # noqa: E402
+import re as _re467                                              # noqa: E402
+import bitemporal_engine as _be467                               # noqa: E402
+import premarket as _pm467                                       # noqa: E402
+import market_scan as _ms467                                     # noqa: E402
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import build_premarket_report as _bpr467                         # noqa: E402
+
+# ① 그날 봉이 확정됐나 — 장 전·휴장일·애프터마켓 끝 뒤는 확정 · 정규장 중·애프터마켓 중은 미확정 · 시행 전은 정규장 마감 뒤 확정
+_D467 = _dt467.datetime
+_cases467 = [(_D467(2026, 10, 12, 8, 0), True), (_D467(2026, 10, 12, 10, 0), False), (_D467(2026, 10, 12, 15, 31), False),
+             (_D467(2026, 10, 12, 17, 0), False), (_D467(2026, 10, 12, 19, 59), False), (_D467(2026, 10, 12, 20, 0), True),
+             (_D467(2026, 10, 11, 17, 0), True), (_D467(2026, 9, 11, 17, 0), True), (_D467(2026, 9, 11, 15, 30), False),
+             (_D467(2026, 11, 19, 20, 30), False), (_D467(2026, 11, 19, 21, 0), True)]
+_bad467 = [(str(n), _be467.bar_final(n)) for n, w in _cases467 if _be467.bar_final(n) is not w]
+check("① bar_final — 장 전·휴장일·애프터마켓(20:00) 끝 뒤는 확정 · 정규장·애프터마켓 중은 미확정 · 시행(09-14) 전은 15:30 뒤 확정 · 수능일은 21:00(추정)",
+      not _bad467 and _be467.after_market_end('2026-10-12') == _dt467.time(20, 0)
+      and _be467.after_market_end('2026-09-11') is None and _be467.after_market_end('2026-11-19') == _dt467.time(21, 0)
+      and _be467.KRX_AFTER_MARKET_FROM == _dt467.date(2026, 9, 14),
+      str(_bad467), scanned=len(_cases467))
+
+# ② 리포트 고정 사유는 한 곳 — 애프터마켓 중이면 사유(시각 포함) · 그 밖(장 전·장중·끝난 뒤·휴장일)은 None · 화면과 저녁 작업이 같이 부른다
+_blk467 = _pm467.report_fix_blocker(_D467(2026, 10, 12, 17, 0))
+_w467 = _read148(_os.path.join(PROJ, 'web_app.py'))
+_bsrc467 = _read148(_os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
+check("② report_fix_blocker — 17:00 엔 '20:00 전' 사유 · 21:00·10:00·휴장일은 None · 화면은 그 사유가 있으면 build_report 를 안 부른다 · 저녁 작업도 같은 함수",
+      bool(_blk467) and '20:00' in _blk467
+      and all(_pm467.report_fix_blocker(n) is None for n in (_D467(2026, 10, 12, 21, 0), _D467(2026, 10, 12, 10, 0), _D467(2026, 10, 11, 17, 0)))
+      and '_pm_block486 = _pm.report_fix_blocker()' in _w467
+      and _w467.index('_pm_block486 = _pm.report_fix_blocker()') < _w467.index('_pm_report, _pm_new = _pm.build_report(')
+      and 'premarket.report_fix_blocker(now)' in _bsrc467, str(_blk467))
+
+# ③ 저녁 작업도 화면과 같은 시세 관문 — 관문을 못 지나면 스캔도 고정도 안 한다(심어서 잰다)
+class _B467:
+    def __init__(self, nv, dm):
+        self.nv, self.dm = nv, dm
+
+    def fetch_realtime_market_cap_no1_stock(self):
+        return '대표'
+
+    def resolve_symbol(self, q):
+        return '000001.KS', q
+
+    def verify_realtime_sources(self, sym):
+        ok = self.nv is not None and self.dm is not None
+        d = abs(self.dm - self.nv) / self.nv * 100 if ok else None
+        return {'naver': {'price': self.nv}, 'daum': {'price': self.dm}, 'comparable': ok, 'diff_pct': d}
+
+
+_calls467 = []
+_scan467 = lambda q, b, day: (_calls467.append('scan'), {'kind': 'ok', 'results': [{'symbol': 'x'}], 'failures': []})[1]   # noqa: E731
+_build467 = lambda q, rows, market_label='': (_calls467.append('build'), ({'date': '2026-10-12', 'picks': [1]}, True))[1]  # noqa: E731
+_r_ok467 = _bpr467.make_report(None, _B467(1000.0, 1001.0), '2026-10-12', scan=_scan467, build=_build467)
+_n_ok467 = list(_calls467)
+_calls467.clear()
+_r_diff467 = _bpr467.make_report(None, _B467(1000.0, 1020.0), '2026-10-12', scan=_scan467, build=_build467)
+_r_na467 = _bpr467.make_report(None, _B467(1000.0, None), '2026-10-12', scan=_scan467, build=_build467)
+check("③ 저녁 작업 make_report — 관문 통과면 스캔 → 고정(종료 0) · 오차 2%·미수신이면 스캔도 고정도 안 하고 종료 1 · 사유에 두 출처 값",
+      _r_ok467[0] == 0 and _n_ok467 == ['scan', 'build'] and '시세 교차검증 통과' in _r_ok467[1]
+      and _r_diff467[0] == 1 and '시세 교차검증 실패' in _r_diff467[1] and _r_na467[0] == 1 and '불가' in _r_na467[1]
+      and _calls467 == [] and '1,020원' in _r_diff467[1],
+      f'{_r_ok467} · {_r_diff467[1][:120]} · {_calls467}')
+
+# ④ 화면 문장 — '정규장 종가 기준'이라는 거짓을 안 적는다 · 화면 시간외 표와 엔진의 애프터마켓 시각이 같다 · 설명 사전도
+_tab467 = _w467[_w467.index('_KRX_SESSIONS_325 = {'):_w467.index('def _session_note_325(')]
+_am467 = _re467.search(r"'after_market': \(datetime\.time\((\d+), (\d+)\), datetime\.time\((\d+), (\d+)\)\)", _tab467)
+_gtxt467 = _read148(_os.path.join(PROJ, 'gaeum_glossary.py'))
+check("④ 화면·설명 사전이 '가격·판정은 15:30 정규장 종가 기준'이라 적지 않는다 · 화면 시간외 표의 애프터마켓 = 엔진 KRX_AFTER_MARKET",
+      '화면 가격·판정은 15:30 정규장 종가 기준' not in _w467
+      and '15:30 정규장 종가 기준이라 시간외 체결가와' not in _gtxt467 and '20:00 마감가' in _gtxt467
+      and _am467 is not None
+      and (_dt467.time(int(_am467.group(1)), int(_am467.group(2))), _dt467.time(int(_am467.group(3)), int(_am467.group(4))))
+      == _be467.KRX_AFTER_MARKET, str(_am467.groups() if _am467 else None))
+
+# ⑤ 저녁 작업 시각은 애프터마켓이 끝난 뒤 — 등록 스크립트의 기본 시각 > 엔진의 애프터마켓 끝
+_ps467 = open(_os.path.join(PROJ, 'scripts', 'register_watch_refresh_task.ps1'), encoding='utf-8').read()
+_at467 = _re467.search(r'\$At = "(\d{2}):(\d{2})"', _ps467)
+check("⑤ 저녁 작업(리포트·재측정·추적) 기본 시각이 애프터마켓 끝(20:00) 뒤 — 봉이 확정된 뒤에 읽는다",
+      _at467 is not None and _dt467.time(int(_at467.group(1)), int(_at467.group(2))) > _be467.KRX_AFTER_MARKET[1],
+      _at467.group(0) if _at467 else '시각 없음')
+# ─── §467 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

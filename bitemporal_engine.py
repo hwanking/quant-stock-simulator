@@ -627,6 +627,50 @@ def session_times(day):
         return MARKET_OPEN, MARKET_CLOSE
     return KRX_SPECIAL_SESSIONS.get(d, (MARKET_OPEN, MARKET_CLOSE))
 
+
+#: 라운드 486 — KRX 애프터마켓(시간외 연속매매) 16:00~20:00 · 2026-09-14 시행(라운드 325 조사 · 보도). 이 창에서도 체결이 계속되고
+#:   우리가 받는 네이버 종가(`basic.closePrice` · `marketSessionType: afterMarket`)와 **일봉 종가가 그 체결을 따라간다** —
+#:   2026-10-11 실측: 10-08 일봉 종가가 엔진이 매일 보는 상위 60종목 **60/60** 에서 애프터마켓 마지막 체결(다음 `tradePrice`)과
+#:   같고, 다음의 정규장 종가 칸(`regularTradePrice`)과는 **4/60** 만 같았다(한 대형주: 정규장 종가 262,000 · 일봉 종가 263,000 ·
+#:   시가·고가·저가는 정규장 값 그대로). 그래서 그날 봉은 **애프터마켓이 끝나야** 더 안 바뀐다. 거래소가 정한 시각이다(새 숫자 아님).
+KRX_AFTER_MARKET = (datetime.time(16, 0), datetime.time(20, 0))
+KRX_AFTER_MARKET_FROM = datetime.date(2026, 9, 14)
+
+
+def after_market_end(day):
+    """그 거래일 애프터마켓이 끝나는 시각 · 시행 전 날짜·못 읽는 날짜는 None.
+
+    특별 거래일(수능일)은 정규장 마감이 늦춰진 만큼 늦춘다 — **거래소 공지로 확인하지 않은 추정**이다(라운드 448 이 확인한
+    것은 정규장 10:00~16:30 뿐). 늦게 잡는 쪽이 안전하다 — 확정 전에 고정하는 것보다 한 시간 더 기다리는 편이 낫다."""
+    try:
+        d = day if isinstance(day, datetime.date) else datetime.date.fromisoformat(str(day)[:10])
+    except (TypeError, ValueError):
+        return None
+    if d < KRX_AFTER_MARKET_FROM:
+        return None
+    end = datetime.datetime.combine(d, KRX_AFTER_MARKET[1])
+    shift = datetime.datetime.combine(d, session_times(d)[1]) - datetime.datetime.combine(d, MARKET_CLOSE)
+    if shift > datetime.timedelta(0):
+        end += shift
+    return end.time()
+
+
+def bar_final(now_kst=None):
+    """**그날 일봉이 더 안 바뀌는가** — 휴장일 · 정규장 시작 전 · 정규장(애프터마켓이 있는 날은 애프터마켓)이 끝난 뒤면 True.
+
+    정규장 중과 '정규장 마감 ~ 애프터마켓 끝' 사이는 False — 그때 받는 종가는 아직 움직이는 값이다(라운드 486). 그 자료일의
+    확정 값으로 무언가를 고정하는 일(개장 전 리포트)은 이것이 True 일 때만 한다."""
+    now_kst = now_kst or datetime.datetime.now()
+    d = now_kst.date()
+    if not KrxCalendar().is_trading_day(d):
+        return True
+    o, c = session_times(d)
+    t = now_kst.time()
+    if t < o:
+        return True
+    end = after_market_end(d)
+    return t >= end if end is not None else t > c
+
 #: 라운드 430 — 두 시세 출처(네이버 기준 · 다음 대조)의 어긋남을 부르는 낱말 **한 곳**. 띠(0.1 · 0.3 · 1.0%)는 아래
 #:   `cross_validate` 가 쓰던 그 값 그대로이고 새로 고른 수가 아니다. 종전엔 같은 파일의 출처 표(`fetch_krx_price_with_matrix`)가
 #:   **글자가 같은가**로만 갈라 0.18% 차이를 '불일치 (−500원)'로 적었고, 같은 화면 아래 칸은 같은 비교를 이 띠로 '일치 ·

@@ -129,3 +129,21 @@ def market_label_of(results):
         return str(fs0.get('context_regime_label') or fs0.get('market_regime_label') or '')
     except Exception:                                          # noqa: BLE001
         return ''
+
+
+def xcheck_tol_pct():
+    """시세 교차검증 허용 오차(%) — 스캐너의 종목별 관문과 **같은 값**(규칙집 `RULES_DATA_INTEGRITY.price_cross_tolerance_pct`)."""
+    from quant_indicators import QuantIndicatorsEngine
+    return float(QuantIndicatorsEngine.PRICE_CROSS_TOL_PCT)
+
+
+def price_feed_gate(cv, tol=None):
+    """화면·저녁 작업의 시세 관문 — `verify_realtime_sources` 결과 → None(통과) · 'na'(한 곳 이상 미수신) · 'diff'(오차 > 허용).
+
+    라운드 287 이 *'보여 주는 칸이자 게이트'* 라 적은 그 관문의 판정을 한 곳에 둔다(라운드 486). 종전엔 화면에만 있고 글자
+    `> 1.0` 이었다 — 저녁 작업(라운드 484)은 이 관문 없이 리포트를 만들었다. 같은 1.0 을 스캐너는 규칙집에서 읽는다(값 불변)."""
+    cv = cv or {}
+    if not cv.get('comparable') or cv.get('diff_pct') is None:
+        return 'na'
+    tol = xcheck_tol_pct() if tol is None else float(tol)
+    return 'diff' if float(cv['diff_pct']) > tol else None

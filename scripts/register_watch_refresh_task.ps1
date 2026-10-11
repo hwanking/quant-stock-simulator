@@ -1,7 +1,7 @@
 # Round 414 - register the nightly watchlist refresh in Windows Task Scheduler (this PC, current user).
 #
 #   .\scripts\register_watch_refresh_task.ps1              # register (or update) the task
-#   .\scripts\register_watch_refresh_task.ps1 -At 17:00    # another start time (must be after the 15:30 regular close)
+#   .\scripts\register_watch_refresh_task.ps1 -At 21:00    # another start time (must be after the 20:00 after-market close)
 #   .\scripts\register_watch_refresh_task.ps1 -Unregister  # remove it
 #
 # Why a Windows task and not a Claude scheduled task: the Claude ones never did any work unattended
@@ -11,7 +11,11 @@
 # decides whether anything is due (holiday -> nothing) and re-reads the file before each save.
 param(
     [switch]$Unregister,
-    [string]$At = "17:00"
+    # Round 486 - 21:00, not 17:00: since 2026-09-14 the KRX after-market (16:00-20:00) keeps trading and the day's close / daily bar we
+    #   receive follows it (10-08 bars: 60/60 closes = after-market last trade). At 17:00 the bar was still moving; the report, watchlist
+    #   re-measure and tracker would read an unfinished bar. 21:00 = after the 20:00 after-market close plus margin (a quote record was
+    #   seen updated at 20:34). Operating choice, not a measured threshold; the report step also checks premarket.report_fix_blocker.
+    [string]$At = "21:00"
 )
 $Name = "gaeum-watch-refresh"
 if ($Unregister) {

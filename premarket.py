@@ -438,6 +438,26 @@ def pick_from_scan_row(q_engine, r):
     }
 
 
+def report_fix_blocker(now=None):
+    """지금 개장 전 리포트를 **고정하면 안 되는** 사유 · 없으면 None. 화면과 저녁 작업이 같이 부른다(라운드 486 · §4).
+
+    정규장 마감 뒤 애프터마켓(16:00~20:00)이 끝나기 전에는 그날 종가·일봉이 아직 움직인다 — 2026-09-14 부터 네이버 종가가
+    애프터마켓 체결을 따라가기 때문이다(엔진 `bar_final`). 그때 고정하면 그날 리포트가 **미완성 봉**으로 굳고, 같은 자료일의
+    리포트는 다시 안 만드므로(라운드 228) 애프터마켓이 끝난 뒤 저녁 작업이 만들 자리를 먼저 차지한다. 정규장 중 고정은 여기서
+    막지 않는다 — 그때의 리포트는 전 거래일 자료일이고 채점 경계(라운드 483)가 다룬다."""
+    try:
+        import bitemporal_engine as _be
+        now = now or datetime.now()
+        st = _be.get_market_status(now)
+        if st.get('state') == '장 종료' and not _be.bar_final(now):
+            end = _be.after_market_end(now.date())
+            return (f"애프터마켓이 {end.strftime('%H:%M') if end else '끝나기'} 전이라 오늘 종가·일봉이 아직 움직입니다 — "
+                    "개장 전 리포트는 그 뒤에 고정합니다(2026-09-14 부터 종가가 애프터마켓 체결을 따라갑니다)")
+    except Exception:                                          # noqa: BLE001
+        return None
+    return None
+
+
 def build_report(q_engine, scan_rows, date_key=None, market_label=""):
     """
     스캔 결과(전일 확정 데이터 기반) → 개장 전 리포트. 이미 있으면 기존 것을 반환.

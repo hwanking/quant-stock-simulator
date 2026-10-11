@@ -3534,6 +3534,10 @@ if _uk.acc_row(_SB_STEPS[2], _sb_open, _sb_busy):
 #   일치 · 시간외 가격은 `overMarketPriceInfo` 로 따로 온다). 그래서 **값·판정·채점은 안 바뀐다.**
 #   바뀐 것은 *지금 장이 열려 있는가* 의 말뿐이다 — 16:00~20:00 에도 거래가 되는데 화면은 '장 종료'
 #   라고만 적었다. 시각은 거래소가 정한 사실이라 한 곳에 두고 날짜와 함께 적는다(손으로 고른 문턱 아님).
+#   ⚠️ 라운드 486 정정(2026-10-11) — 위 *"현재가는 15:30 정규장 종가다"* 는 **거짓이었다.** 8종목 대조는 네이버 일봉 종가와
+#   네이버 현재가를 견준 것이라 같은 출처끼리였고, 둘 다 **애프터마켓 마지막 체결**이었다(10-08 봉: 상위 60종목 60/60 이
+#   다음 `tradePrice` 와 같고 다음 `regularTradePrice`(정규장 종가)와는 4/60). 문장을 사실대로 고쳤다 · 애프터마켓 끝 시각은
+#   엔진 `bitemporal_engine.KRX_AFTER_MARKET` 과 같아야 한다(회귀가 대 본다).
 _KRX_SESSIONS_325 = {                 # 2026-09-14 시행 (KRX) · 출처와 날짜는 결과 문서에
     'close_trade': (datetime.time(15, 40), datetime.time(16, 0)),    # 장 종료 후 종가매매
     'after_market': (datetime.time(16, 0), datetime.time(20, 0)),    # 시간외 연속매매
@@ -3548,10 +3552,12 @@ def _session_note_325(mkt, now=None):
         _t = (now or datetime.datetime.now()).time()
         _ct, _am = _KRX_SESSIONS_325['close_trade'], _KRX_SESSIONS_325['after_market']
         if _am[0] <= _t < _am[1]:
-            return ("KRX 시간외 거래 중(16:00~20:00) — 화면 가격·판정은 15:30 정규장 종가 기준이고 "
-                    "시간외 체결가는 다를 수 있습니다")
+            return ("KRX 시간외 거래 중(16:00~20:00) — 화면 가격은 시간외 체결을 따라 움직이고, 오늘 종가·일봉은 "
+                    "20:00 시간외 마감가로 확정됩니다(15:30 정규장 종가와 다를 수 있습니다)")
         if _ct[0] <= _t < _ct[1]:
             return "장 종료 후 종가매매 중(15:40~16:00) — 화면 가격은 15:30 정규장 종가입니다"
+        if _t >= _am[1]:
+            return "오늘 종가는 20:00 시간외 마감가입니다 — 15:30 정규장 종가와 다를 수 있습니다"
         return ''
     except Exception:                                          # noqa: BLE001
         return ''
@@ -4236,11 +4242,16 @@ if st.session_state.get('show_screener', False):
         """)
         st.session_state['cv_panel_287'] = _cv_panel_287
 
-    if not cv_data.get('comparable'):
+    # 라운드 486 — 막는 판정은 한 곳(`market_scan.price_feed_gate`) · 저녁 작업이 리포트를 만들 때도 같은 관문을 지난다.
+    #   허용 오차는 스캐너의 종목별 관문과 같은 규칙집 값이다(종전 이 자리의 글자 1.0 과 같은 값 · 문턱 불변).
+    import market_scan as _ms486
+    _gate486 = _ms486.price_feed_gate(cv_data)
+    if _gate486 == 'na':
         st.error("**실시간 시세 교차검증 불가**: 네이버·다음 중 최소 한 곳에서 현재가를 수신하지 못했습니다. "
                  "단일 출처만으로는 시세 무결성을 보증할 수 없어 스캔을 중단합니다.")
-    elif cv_data['diff_pct'] > 1.0:
-        st.error(f"**실시간 시세 교차검증 실패**: 출처 간 현재가 오차가 {cv_diff_str}로 1.0%를 초과하여 스캔을 중단합니다.")
+    elif _gate486 == 'diff':
+        st.error(f"**실시간 시세 교차검증 실패**: 출처 간 현재가 오차가 {cv_diff_str}로 "
+                 f"{_ms486.xcheck_tol_pct():.1f}%를 초과하여 스캔을 중단합니다.")
     else:
         st.markdown("<br>", unsafe_allow_html=True)
         # ⚠️ 라운드 187 — 제목이 **'오늘의 AI 퀀트 최적 종목 TOP 3'** 이었다.
@@ -5023,11 +5034,18 @@ if st.session_state.get('show_screener', False):
             import market_scan as _ms484r
             # 라운드 484 — 국면 이름 셈도 한 곳(저녁 작업이 같은 함수로 리포트를 만든다)
             _pm_mkt = _ms484r.market_label_of(scan_results)
-            _pm_report, _pm_new = _pm.build_report(q_engine, scan_results,
-                                                   market_label=_pm_mkt)
-            if _pm_new:
-                st.toast("오늘의 개장 전 리포트를 고정 저장했습니다")
-            st.session_state['premarket_report'] = _pm_report
+            # 라운드 486 — 애프터마켓(16:00~20:00)이 끝나기 전엔 고정하지 않는다. 그날 종가·일봉이 아직 움직이고(2026-09-14 부터
+            #   네이버 종가가 애프터마켓 체결을 따라간다), 같은 자료일은 다시 안 만들므로(라운드 228) 먼저 고정하면 저녁 작업의 확정
+            #   리포트 자리를 미완성 봉이 차지한다. 사유는 저녁 작업과 같은 한 곳(`premarket.report_fix_blocker`).
+            _pm_block486 = _pm.report_fix_blocker()
+            if _pm_block486:
+                st.caption(_pm_block486)
+            else:
+                _pm_report, _pm_new = _pm.build_report(q_engine, scan_results,
+                                                       market_label=_pm_mkt)
+                if _pm_new:
+                    st.toast("오늘의 개장 전 리포트를 고정 저장했습니다")
+                st.session_state['premarket_report'] = _pm_report
 
     _uk.spacer(28)
 
