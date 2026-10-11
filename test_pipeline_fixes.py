@@ -40951,6 +40951,86 @@ check("④ 화면은 심박을 묶을 만큼 읽는다(`heartbeats_recent(c, _da
       str(_calls474), scanned=len(_calls474))
 # ─── §474 끝 ───
 
+# ─── §475 시작 (라운드 496) ───
+print()
+print("§475 만료된 토큰을 잊을 때 — 파일에 다른 프로세스가 이미 새로 받아 둔 토큰이면 지우지 않고 그것으로 다시 부른다 (라운드 496)")
+print("-" * 72)
+# 2026-10-12 부터 화면(15초 갱신)과 워커가 같은 토큰 파일을 함께 쓴다. 한쪽이 새 토큰을 받아 파일에 적은 뒤 다른 쪽이 낡은 토큰으로 만료 응답을
+# 받으면 종전엔 그 새 토큰 파일까지 지웠다 — 다시 발급해야 하고 한국투자는 발급을 1분에 한 번으로 묶는다. 이제 만료 응답을 받은 그 토큰이
+# 파일의 것일 때만 지운다. 네트워크 0 · 파일은 _probe 아래 임시 폴더(저장소 안이라 평소엔 안 쓰므로 이 절에서만 _inside_repo 를 바꿔 끼운다).
+import broker_kis as _bk475
+import shutil as _sh475
+_dir475 = _os.path.join(PROJ, '_probe', '_r496_tok')
+_cf475 = dict(env='real', app_key='KEY475', app_secret='S', cano='12345678', prdt='01', missing=[], problems=[])
+_orig_inside475 = _bk475._inside_repo
+_res475 = {}
+
+
+def _write475(br, tok):
+    with open(br._token_path(), 'w', encoding='utf-8') as f:
+        __import__('json').dump({'access_token': tok, 'expires_ts': br.clock() + 86400}, f)
+
+
+def _read475(br):
+    try:
+        with open(br._token_path(), encoding='utf-8') as f:
+            return __import__('json').load(f).get('access_token')
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _mk475(on_old):
+    calls = []
+
+    def tr(method, url, headers, params=None, body=None, timeout=10):
+        calls.append((url.rsplit('/', 1)[-1], headers.get('authorization')))
+        if url.endswith('/oauth2/tokenP'):
+            return 200, {}, {'access_token': 'NEW', 'access_token_token_expired': '2099-01-01 00:00:00'}
+        if headers.get('authorization') == 'Bearer OLD':
+            on_old()
+            return 500, {}, {'rt_cd': '1', 'msg_cd': 'EGW00123', 'msg1': '기간이 만료된 token 입니다.'}
+        return 200, {'tr_cont': 'D'}, {'rt_cd': '0', 'output1': [], 'output2': [{'dnca_tot_amt': '5000', 'tot_evlu_amt': '5000',
+                                                                                  'nass_amt': '5000', 'scts_evlu_amt': '0'}]}
+    return tr, calls
+
+
+try:
+    _bk475._inside_repo = lambda p: False
+    _sh475.rmtree(_dir475, ignore_errors=True)
+    _os.makedirs(_dir475, exist_ok=True)
+    # ① 다른 프로세스가 그 사이 새 토큰(OTHER)을 파일에 적었다 → 지우지 않고 그것으로 다시 · 새 발급 0
+    _brA = None
+    _trA, _cA = _mk475(lambda: _write475(_brA, 'OTHER'))
+    _brA = _bk475.KisBroker(_cf475, transport=_trA, token_dir=_dir475, sleep=lambda s: None)
+    _write475(_brA, 'OLD')
+    _balA = _brA.get_balance()
+    _res475['A'] = ([c[0] for c in _cA], [c[1] for c in _cA], _read475(_brA), _balA.get('cash'))
+    # ② 파일이 그 낡은 토큰 그대로 → 종전대로 지우고 새로 받아 다시(파일엔 새 토큰)
+    _sh475.rmtree(_dir475, ignore_errors=True)
+    _os.makedirs(_dir475, exist_ok=True)
+    _trB, _cB = _mk475(lambda: None)
+    _brB = _bk475.KisBroker(_cf475, transport=_trB, token_dir=_dir475, sleep=lambda s: None)
+    _write475(_brB, 'OLD')
+    _balB = _brB.get_balance()
+    _res475['B'] = ([c[0] for c in _cB], [c[1] for c in _cB], _read475(_brB), _balB.get('cash'))
+    # ③ 파일을 못 읽는다(깨짐) → 종전대로 지운다(모르는 것으로 낡은 토큰을 붙잡지 않는다)
+    _brC = _bk475.KisBroker(_cf475, transport=_trB, token_dir=_dir475, sleep=lambda s: None)
+    with open(_brC._token_path(), 'w', encoding='utf-8') as _f475:
+        _f475.write('{깨짐')
+    _brC._forget_token(used='OLD')
+    _res475['C'] = _os.path.exists(_brC._token_path())
+finally:
+    _bk475._inside_repo = _orig_inside475
+    _sh475.rmtree(_dir475, ignore_errors=True)
+check("① 다른 프로세스가 새 토큰을 파일에 적은 뒤 낡은 토큰으로 만료 응답 → 파일을 안 지우고 그 새 토큰으로 다시 · 새 발급(tokenP) 0 · 성공",
+      _res475.get('A') == (['inquire-balance', 'inquire-balance'], ['Bearer OLD', 'Bearer OTHER'], 'OTHER', 5000), str(_res475.get('A')))
+check("② 파일이 그 낡은 토큰 그대로면 종전대로 — 지우고 새로 받아 다시(잔고 OLD → 토큰 → 잔고 NEW) · 파일엔 새 토큰",
+      _res475.get('B') == (['inquire-balance', 'tokenP', 'inquire-balance'], ['Bearer OLD', None, 'Bearer NEW'], 'NEW', 5000),
+      str(_res475.get('B')))
+check("③ 파일을 못 읽으면 종전대로 지운다 · 이 절이 바꿔 끼운 _inside_repo 는 되돌렸다",
+      _res475.get('C') is False and _bk475._inside_repo is _orig_inside475 and not _os.path.exists(_dir475), str(_res475.get('C')))
+# ─── §475 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

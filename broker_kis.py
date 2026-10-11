@@ -251,13 +251,26 @@ class KisBroker:
         return t
 
     # ── 호출 하나 ────────────────────────────────────────────────────────
-    def _forget_token(self):
-        """토큰을 잊는다 — 메모리와 저장소 밖 파일 둘 다(라운드 459). 다음 호출이 새로 받는다."""
+    def _forget_token(self, used=None):
+        """토큰을 잊는다 — 메모리와 저장소 밖 파일 둘 다(라운드 459). 다음 호출이 새로 받는다.
+
+        라운드 496 — `used`(만료 응답을 받은 그 토큰)를 주면 파일의 토큰이 **그것과 같을 때만** 파일을 지운다. 화면(15초 갱신)과 워커가
+        같은 파일을 함께 쓰는데, 한쪽이 이미 새 토큰을 받아 파일에 적어 둔 뒤 다른 쪽이 낡은 토큰으로 만료 응답을 받으면 종전엔 그 새
+        토큰 파일까지 지웠다 — 그러면 다시 발급해야 하고 한국투자는 발급을 1분에 한 번으로 묶는다(그 분 안의 두 번째는 거절). 파일을 못
+        읽으면 종전대로 지운다(모르는 것으로 낡은 토큰을 붙잡지 않는다)."""
         self._token = None
         p = self._token_path()
         if not _inside_repo(self.token_dir):
             try:
                 if os.path.exists(p):
+                    if used is not None:
+                        try:
+                            with io.open(p, encoding='utf-8') as f:
+                                cur = json.load(f).get('access_token')
+                        except Exception:                      # noqa: BLE001 — 못 읽으면 지운다(종전대로)
+                            cur = used
+                        if cur and cur != used:
+                            return
                     os.remove(p)
             except OSError:
                 pass
@@ -267,8 +280,9 @@ class KisBroker:
         if gap > 0:
             self.sleep(gap)
         # 공식 `_base_headers` 와 같은 머리(Accept · charset)를 같이 보낸다
+        tok = self.token()
         headers = {'Content-Type': 'application/json', 'Accept': 'text/plain', 'charset': 'UTF-8',
-                   'authorization': f'Bearer {self.token()}',
+                   'authorization': f'Bearer {tok}',
                    'appkey': self.cfg['app_key'], 'appsecret': self.cfg['app_secret'],
                    'tr_id': tr_id, 'custtype': 'P', 'tr_cont': tr_cont}
         try:
@@ -280,7 +294,7 @@ class KisBroker:
         #   잊고 · 조회는 새 토큰으로 한 번만 다시 · 주문·취소는 다시 보내지 않는다(게이트웨이가 코드를 붙여 거절했으니 들어간 주문은 없다 —
         #   다시 보내는 판단은 실행부의 상태기계가 한다 · 같은 바퀴의 앞선 조회가 이미 새 토큰을 받아 둔다).
         if str(doc.get('msg_cd') or '') in TOKEN_EXPIRED_CODES:
-            self._forget_token()
+            self._forget_token(used=tok)                      # 라운드 496 — 이 토큰이 파일의 것일 때만 파일을 지운다
             if key not in ('order', 'cancel', 'token') and not _retried:
                 return self._call(method, key, tr_id, params=params, body=body, tr_cont=tr_cont, _retried=True)
             raise BrokerError(f"토큰 만료({doc.get('msg_cd')}) — 토큰을 잊었고 다음 호출에서 새로 받습니다"
