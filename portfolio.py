@@ -2306,11 +2306,14 @@ WATCH_SNAP_NUM = ('snap_buy', 'snap_t1', 'snap_t2', 'snap_fair',
 #:   *"적정가는 현재가보다 높은데 추천 제외라고 하니깐."* 사유는 이미
 #:   판정이 내고 있었고(verdict_core 가 bucket 과 함께 돌려준다) 담지를
 #:   않았다. 새로 만드는 값이 아니다 — 있는 것을 옮겨 적는다.
+#: 라운드 488 — `snap_seen` 은 그 값을 **잰 시각**(지역 벽시계 '연-월-일 시:분')이다. `snap_at` 은 분석 기준일(날짜)뿐이라
+#:   17:00 에 잰 값과 21:00 에 잰 값이 같은 날짜로 찍혔다 — 2026-09-14 부터 그날 봉은 20:00 애프터마켓이 끝나야 확정되므로
+#:   (라운드 486) 저녁 갱신이 둘을 가르려면 시각이 있어야 한다(`watch_refresh.stamped_before_final`).
 WATCH_SNAP_TXT = ('snap_at', 'snap_engine', 'snap_bucket', 'snap_why',
                   'snap_sector', 'snap_avg_down_ok', 'snap_avg_down_fail',
                   'snap_holder_key', 'snap_holder_title', 'snap_weight_basis',
                   'snap_hold_at', 'snap_hold_log', 'snap_fair_reach',
-                  'snap_new_entry')
+                  'snap_new_entry', 'snap_seen')
 #: ⚠️ 라운드 169 — `plan`('내 계획')을 **걷어냈다.**
 #:   라운드 164 에서 사용자 요청으로 넣었는데, 라운드 166 이 엔진 판단
 #:   칸을 붙이자 *"내 계획은 지워버리고 엔진 판단부터 제대로"* 로 요청이

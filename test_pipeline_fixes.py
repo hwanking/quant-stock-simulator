@@ -32724,7 +32724,8 @@ _v402 = _wr402.snap_values(_row402, _snp402, _core402, '2026-10-02', 'v-test', _
 _keys402 = {'snap_buy', 'snap_t1', 'snap_t2', 'snap_fair', 'snap_fair_conf', 'snap_px', 'snap_at', 'snap_engine',
             'snap_bucket', 'snap_why', 'snap_sector', 'snap_fair_reach', 'snap_avg_down_ok', 'snap_avg_down_fail',
             'snap_new_entry', 'snap_holder_key', 'snap_holder_title', 'snap_weight_basis', 'snap_hold_trim',
-            'snap_hold_stop', 'snap_hold_at'}
+            'snap_hold_stop', 'snap_hold_at',
+            'snap_seen'}          # 라운드 488 — 잰 시각(봉 확정 전 값을 저녁 갱신이 가르게 · §468)
 check("snap_values — 채우기 버튼이 적던 키 묶음 전부 · 기준일·모델 도장 · 사유 없으면 마커 · 물타기는 글자 · 보유 계획 처음 잼",
       set(_v402) == _keys402 and _v402['snap_at'] == '2026-10-02' and _v402['snap_engine'] == 'v-test'
       and _v402['snap_why'] == _uk402.WATCH_NO_WHY and _v402['snap_avg_down_ok'] == '불가'
@@ -39938,6 +39939,69 @@ check("⑥ 전방 기록기 — 17:00(애프터마켓 중)엔 '확정 전' 경�
       and not any('확정 전' in x for x in _n21) and not any('확정 전' in x for x in _n01),
       f'{_n17} · {_n21} · {_n01}')
 # ─── §467 끝 ───
+# ─── §468 시작 (라운드 488) ───
+print("=" * 72)
+print("§468 관심종목 스탬프에 잰 시각 — 그날 봉이 확정되기 전에 잰 값은 저녁 갱신이 다시 잰다 (라운드 488)")
+print("=" * 72)
+# 라운드 488 — 분석 기준일은 15:30 뒤면 그날로 넘어가는데 그날 봉은 20:00 애프터마켓이 끝나야 확정된다(라운드 486). 스탬프는
+#   기준일(날짜)만 담아 17:00 에 연 종목이 기준일 그날로 찍히고, 21:00 저녁 갱신(`due_reason` — 기준일이 앞선 행만)이 그 행을
+#   '이미 최신'으로 건너뛰었다 — 라운드 415 가 장중에 연 행에서 고친 그 모양이 애프터마켓 창에 다시 생겼다. 잰 시각을 남기고
+#   판정은 엔진 `bar_final` 한 곳이 한다. 못 읽는 시각(옛 행)은 '덜 됐다'로 치지 않는다(종전 동작 · §3).
+import ast as _ast468                                            # noqa: E402
+import datetime as _dt468                                        # noqa: E402
+import tempfile as _tf468                                        # noqa: E402
+import watch_refresh as _wr468                                   # noqa: E402
+import portfolio as _pf468                                       # noqa: E402
+
+# ① 봉 확정 전에 잰 값인가 — 같은 날 애프터마켓 끝 전이면 True · 끝난 뒤 · 다른 날 · 시행(09-14) 전 마감 뒤 · 못 읽음은 False
+_cases468 = [(('2026-10-12', '2026-10-12 17:00'), True), (('2026-10-12', '2026-10-12 19:59'), True),
+             (('2026-10-12', '2026-10-12 20:00'), False), (('2026-10-12', '2026-10-12 21:00'), False),
+             (('2026-10-12', '2026-10-13 09:30'), False), (('2026-09-11', '2026-09-11 17:00'), False),
+             (('2026-11-19', '2026-11-19 20:30'), True), (('2026-10-12', None), False), (('2026-10-12', '모름'), False),
+             ((None, '2026-10-12 17:00'), False)]
+_bad468 = [(a, _wr468.stamped_before_final(*a)) for a, w in _cases468 if _wr468.stamped_before_final(*a) is not w]
+check("① stamped_before_final — 같은 날 애프터마켓(20:00) 끝 전이면 True · 끝난 뒤·다른 날·09-14 전 마감 뒤·시각 없음은 False",
+      not _bad468, str(_bad468), scanned=len(_cases468))
+
+# ② 저녁 갱신의 사유 — 17:00 에 잰 같은 기준일 행은 '봉 확정 전 값' · 21:00 에 잰 행·시각 없는 옛 행은 '' · 기준일이 앞서면 그대로 '기준일 지남'
+_base468 = {'code': '000011', 'name': 'x', 'snap_at': '2026-10-12', 'snap_buy': 90, 'snap_bucket': '추천 제외', 'snap_why': 'w'}
+_r17 = _wr468.due_reason(dict(_base468, snap_seen='2026-10-12 17:00'), '2026-10-12')
+_r21 = _wr468.due_reason(dict(_base468, snap_seen='2026-10-12 21:00'), '2026-10-12')
+_rold = _wr468.due_reason(dict(_base468), '2026-10-12')
+_rst = _wr468.due_reason(dict(_base468, snap_at='2026-10-08', snap_seen='2026-10-08 17:00'), '2026-10-12')
+_due468 = _wr468.due_rows([dict(_base468, snap_seen='2026-10-12 17:00')], '2026-10-12')
+check("② due_reason — 17:00 에 잰 같은 기준일 행은 '봉 확정 전 값' · 21:00 행과 시각 없는 옛 행은 '' · 기준일이 앞서면 '기준일 지남' · due_rows 가 고른다",
+      _r17 == _wr468.DUE_UNFINAL and _r21 == '' and _rold == '' and _rst == _wr468.DUE_STALE
+      and len(_due468) == 1 and _due468[0][1] == _wr468.DUE_UNFINAL, str((_r17, _r21, _rold, _rst, _due468)))
+
+# ③ 저장 화이트리스트에 있어야 파일에 남는다(라운드 223 — 여기 없는 키는 저장에서 조용히 떨어진다) · 저장→읽기 왕복으로 잰다
+with _tf468.TemporaryDirectory() as _td468:
+    _p468 = _os.path.join(_td468, 'wl.json')
+    _pf468.save_watchlist([dict(_base468, snap_seen='2026-10-12 17:00')], path=_p468)
+    _back468, _ = _pf468.load_watchlist(_p468)
+check("③ snap_seen 이 저장 화이트리스트에 있고 저장→읽기 왕복에서 살아남는다",
+      'snap_seen' in _pf468.WATCH_SNAP_TXT and len(_back468) == 1 and _back468[0].get('snap_seen') == '2026-10-12 17:00',
+      str(_back468[:1]))
+
+# ④ 스탬프를 찍는 dict 는 전부 잰 시각을 같이 찍는다 — 'snap_at' 키가 있는 dict 리터럴을 AST 로 찾아 'snap_seen' 이 있는지
+#    (자리를 손으로 적지 않는다 · 새 스탬프 자리가 생기면 그것도 본다)
+_stamp468 = []
+for _fn468 in ('web_app.py', 'watch_refresh.py'):
+    _tree468 = _ast468.parse(_read148(_os.path.join(PROJ, _fn468)))
+    for _nd468 in _ast468.walk(_tree468):
+        if isinstance(_nd468, _ast468.Dict):
+            _ks468 = {k.value for k in _nd468.keys if isinstance(k, _ast468.Constant) and isinstance(k.value, str)}
+            if 'snap_at' in _ks468:
+                _stamp468.append((_fn468, _nd468.lineno, 'snap_seen' in _ks468))
+_miss468 = [(f, ln) for f, ln, ok in _stamp468 if not ok]
+check("④ 'snap_at' 을 찍는 dict 리터럴(web_app · watch_refresh)은 전부 'snap_seen' 도 찍는다",
+      len(_stamp468) >= 3 and not _miss468, f'{len(_stamp468)}곳 · 빠짐 {_miss468}', scanned=len(_stamp468))
+
+# ⑤ 잰 시각 글자 모양 하나 — 찍는 쪽(seen_now)과 읽는 쪽(stamped_before_final)이 같은 모양을 쓴다
+_sn468 = _wr468.seen_now(_dt468.datetime(2026, 10, 12, 17, 5))
+check("⑤ seen_now 는 '연-월-일 시:분' 이고 stamped_before_final 이 그것을 읽는다",
+      _sn468 == '2026-10-12 17:05' and _wr468.stamped_before_final('2026-10-12', _sn468) is True, _sn468)
+# ─── §468 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

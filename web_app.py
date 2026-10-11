@@ -7864,6 +7864,9 @@ if _pm_today and _pm_today.get('picks'):
                             'fair_value_confidence'),
                         'snap_px': _pk142.get('price'),
                         'snap_at': _asof142, 'snap_engine': _eng142,
+                        # 라운드 488 — 언제 잰 값인가: 리포트가 만들어진 시각(애프터마켓이 끝나기 전에 만든 옛 리포트면
+                        #   저녁 갱신이 다시 잰다 · `watch_refresh.stamped_before_final`)
+                        'snap_seen': (str(_pm_today.get('generated_at') or '').replace('T', ' ')[:16] or None),
                         'snap_bucket': _co142.get('bucket'),   # 라운드 166
                         'snap_why': _co142.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
                         # 보유자 기준 (라운드 169) — 다른 키다 (§4)
@@ -8648,6 +8651,7 @@ CORE = _vcore.build(four_scores, verdict=verdict,
 #   기준이 다르므로 관심종목 화면이 열 이름에 그것을 적는다.
 try:
     if _wl_has(target_ticker):
+        import watch_refresh as _wr488
         _snap141 = {
             'snap_buy': (CORE.get('pullback_zone')
                          or (CORE.get('buy_zone') or [None])[0]),
@@ -8661,6 +8665,9 @@ try:
             #   다시 잰다)이 그 행을 '이미 최신'으로 보고 건너뛴다. 채우기 버튼·자동 갱신과 같은 날짜를 쓴다
             #   (라운드 373 이 보유 계획 날짜만 고친 그 자리 · 한 자리에 '오늘'이 둘이면 버그다 · R222·R306).
             'snap_at': t_ref_str,
+            # 라운드 488 — 잰 시각. 분석 기준일은 15:30 뒤면 그날로 넘어가는데 그날 봉은 20:00 애프터마켓이 끝나야
+            #   확정된다(라운드 486). 17:00 에 연 종목이 21:00 저녁 갱신에서 '이미 최신'으로 빠지지 않게 시각을 남긴다.
+            'snap_seen': _wr488.seen_now(),
             'snap_engine': str(_VER_NOW.get('model') or ''),
             # 엔진의 판단 (라운드 166) — 화면이 새로 만들지 않고 CORE 것을
             # 그대로 담는다 (§4).

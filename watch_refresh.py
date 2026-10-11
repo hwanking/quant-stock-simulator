@@ -49,6 +49,12 @@ LOG_KEEP = 60
 #: 채우기 사유 낱말 — 화면 캡션과 정렬이 이 글자를 읽는다 (라운드 322 의 차례: 보유 → 한 번도 안 잰 것 → 나머지)
 FILL_ENGINE = '엔진 값'
 DUE_STALE = '기준일 지남'
+#: 라운드 488 — 같은 기준일이어도 그날 봉이 **확정되기 전**(정규장 마감 ~ 애프터마켓 끝)에 잰 값. 2026-09-14 부터 그날
+#:   종가·일봉이 20:00 까지 움직이는데(라운드 486) 분석 기준일은 15:30 뒤면 그날로 넘어가, 17:00 에 연 종목은 기준일이
+#:   그날로 찍히고 21:00 갱신이 '이미 최신'으로 보고 건너뛰었다(라운드 415 가 장중에 연 행에서 고친 그 모양).
+DUE_UNFINAL = '봉 확정 전 값'
+#: 잰 시각 칸의 글자 모양 — 지역 벽시계(KST) '연-월-일 시:분'
+SEEN_FMT = '%Y-%m-%d %H:%M'
 
 
 def no_local_write():
@@ -84,11 +90,40 @@ def needs_fill(w):
     return ''
 
 
+def seen_now(now=None):
+    """잰 시각 칸에 적을 글자 — 지역 벽시계(이 PC 는 KST)."""
+    return (now or _dt.datetime.now()).strftime(SEEN_FMT)
+
+
+def stamped_before_final(snap_at, snap_seen):
+    """그 스탬프가 **기준일 봉이 확정되기 전에** 잰 값인가 → True/False (라운드 488).
+
+    잰 시각이 기준일과 같은 날이고 그 시각에 엔진의 `bar_final` 이 False(정규장 중 · 애프터마켓 끝 전)면 True.
+    잰 시각을 못 읽거나(옛 행에는 칸이 없다) 다른 날이면 False — **모르는 것을 '덜 됐다'로 치지 않는다**(§3 · 종전 동작 그대로).
+    판정은 엔진 한 곳(`bitemporal_engine.bar_final`)이 하고 여기서 시각을 다시 적지 않는다(§4)."""
+    at = str(snap_at or '')[:10]
+    s = str(snap_seen or '').strip()
+    if not at or not s:
+        return False
+    try:
+        seen = _dt.datetime.strptime(s[:16], SEEN_FMT)
+    except ValueError:
+        return False
+    if seen.date().isoformat() != at:
+        return False
+    try:
+        import bitemporal_engine as _be
+        return not _be.bar_final(seen)
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
 def due_reason(w, ref_day):
     """이 행을 지금 다시 재야 하나 → 사유 낱말, 아니면 ''.
 
     모자란 값(`needs_fill`)이 먼저다. 값이 다 있어도 엔진 값 기준일(`snap_at`)이 `ref_day` 보다 앞서면
-    `DUE_STALE`. `ref_day` 가 None 이면 날짜로는 판정하지 않는다(§3)."""
+    `DUE_STALE`. `ref_day` 가 None 이면 날짜로는 판정하지 않는다(§3).
+    라운드 488 — 기준일이 같아도 그날 봉이 확정되기 전에 잰 값이면 `DUE_UNFINAL`(`stamped_before_final`)."""
     r = needs_fill(w)
     if r:
         return r
@@ -96,6 +131,8 @@ def due_reason(w, ref_day):
     rd = str(ref_day or '')[:10]
     if rd and at and at < rd:
         return DUE_STALE
+    if rd and at and at == rd and stamped_before_final(at, (w or {}).get('snap_seen')):
+        return DUE_UNFINAL
     return ''
 
 
@@ -244,11 +281,12 @@ def reach_table_from_ledger():
         return None
 
 
-def snap_values(row, snp, core, t_ref_str, model_ver, items, q, reach_table=None, remeasure=False):
+def snap_values(row, snp, core, t_ref_str, model_ver, items, q, reach_table=None, remeasure=False, seen=None):
     """한 행의 스냅샷 값 묶음 — 채우기 버튼이 적던 그대로 (라운드 166 → 413). 쓸 키만 돌려준다.
 
     신규 매수자 값(`snap_buy`·`snap_t1`)과 보유자 값(`snap_hold_*`)은 **다른 키**다(§4). 보유자 값은
-    `portfolio.hold_plan_update` 가 고정할지 다시 잴지 정한다 — 여기서 직접 덮어쓰지 않는다."""
+    `portfolio.hold_plan_update` 가 고정할지 다시 잴지 정한다 — 여기서 직접 덮어쓰지 않는다.
+    `seen` — 잰 시각 글자(라운드 488 · 없으면 지금)."""
     import ui_kit as _uk
     fs = (snp or {}).get('four_scores') or {}
     core = core or {}
@@ -260,6 +298,7 @@ def snap_values(row, snp, core, t_ref_str, model_ver, items, q, reach_table=None
         'snap_fair_conf': fs.get('fair_value_confidence'),
         'snap_px': fs.get('current_price'),
         'snap_at': t_ref_str,
+        'snap_seen': str(seen or seen_now()),                   # 라운드 488 — 언제 잰 값인가(봉 확정 전인지 가른다)
         'snap_engine': str(model_ver or ''),
         'snap_bucket': core.get('bucket'),
         'snap_why': core.get('exclude_reason') or _uk.WATCH_NO_WHY,   # 라운드 240 → 241
