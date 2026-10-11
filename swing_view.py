@@ -1002,8 +1002,8 @@ def _view_center(st, uk, c, ctx, md):
                                   ('일부 체결', str(eh['partial']), 'warn' if eh['partial'] else None),
                                   ('확인 중(UNKNOWN)', str(eh['unknown']), 'warn' if eh['unknown'] else None),
                                   ('거절', str(eh['rejected']), 'neg' if eh['rejected'] else None)], theme=theme), unsafe_allow_html=True)
-        st.markdown(_viz.kv_card('최근 사건', [(ts, txt) for ts, txt in _dash.recent_events(L.heartbeats_recent(c, 3), ctx['nightly'], ctx['acct'],
-                                                                                        ctx['task'])] or [('—', '기록 없음')],
+        st.markdown(_viz.kv_card('최근 사건', [(ts, txt) for ts, txt in _dash.recent_events(L.heartbeats_recent(c, _dash.BEAT_WINDOW), ctx['nightly'], ctx['acct'],
+                                                                                        ctx['task'], window=_dash.BEAT_WINDOW)] or [('—', '기록 없음')],
                                  theme=theme), unsafe_allow_html=True)
 
 

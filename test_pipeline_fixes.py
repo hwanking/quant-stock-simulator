@@ -40911,6 +40911,46 @@ finally:
             _os.remove(_f473)
 # ─── §473 끝 ───
 
+# ─── §474 시작 (라운드 495) ───
+print()
+print("§474 '최근 사건' — 장중 1분마다 쌓이는 같은 심박을 한 줄로 묶는다(횟수 · 처음 시각) · 다른 기록을 밀어내지 않는다 (라운드 495)")
+print("-" * 72)
+# 2026-10-12 는 예약 워커가 정규장 내내 처음 도는 거래일이다 — 1분마다 '워커 ok · 꺼짐 — …' 한 줄을 남겨 '최근 사건' 칸이 읽던 심박 세 줄이
+# 전부 같은 줄이 될 자리였다(저녁 작업의 '계획 +5' 같은 줄이 밀려난다). 지우지 않고 묶는다 · 창 끝까지 이어지면 'N번 이상'(본 것만 센다).
+import swing_dash as _sd474
+_ast474 = __import__('ast')
+_hb474 = ([dict(ts=f'2026-10-12T15:{29 - i:02d}:00+09:00', status='ok', detail='꺼짐 — 주문 없음') for i in range(30)]
+          + [dict(ts=f'2026-10-12T14:{59 - i:02d}:00+09:00', status='ok', detail='꺼짐 — 주문 없음') for i in range(60)]
+          + [dict(ts='2026-10-09T17:01:00+09:00', status='ok', detail='꺼짐 — 계획 +5'),
+             dict(ts='2026-10-08T17:03:00+09:00', status='warn', detail='보호 확인 실패'),
+             dict(ts=None, status='ok', detail='시각 없음')])
+_cb474 = _sd474.collapse_beats(_hb474)
+_ev474 = _sd474.recent_events(_hb474, None, None, None)
+check("① 이어진 같은 기록 90줄 → 한 묶음(90번 · 처음 14:00) · 다른 기록은 따로(계획 +5 · 경고) · 시각 없는 줄은 건너뜀 · 최근순 그대로",
+      [(b['n'], b['detail']) for b in _cb474] == [(90, '꺼짐 — 주문 없음'), (1, '꺼짐 — 계획 +5'), (1, '보호 확인 실패')]
+      and _cb474[0]['first'].startswith('2026-10-12T14:00') and _cb474[0]['ts'].startswith('2026-10-12T15:29'),
+      str(_cb474)[:400])
+check("② '최근 사건' 줄 — 묶음은 '(같은 기록 90번 · 14:00부터)' · 다른 날 기록이 밀려나지 않는다(묶음 셋이 다 보인다)",
+      len(_ev474) == 3 and '(같은 기록 90번 · 14:00부터)' in _ev474[0][1] and '계획 +5' in _ev474[1][1] and '보호 확인 실패' in _ev474[2][1],
+      str(_ev474))
+_win474 = [dict(ts=f'2026-10-12T{9 + i // 60:02d}:{i % 60:02d}:00+09:00', status='ok', detail='같음') for i in range(50)][::-1]
+_ev474b = _sd474.recent_events(_win474, None, None, None, window=50)
+_ev474c = _sd474.recent_events([dict(ts='2026-10-12T09:00:00+09:00', status='ok', detail='a'),
+                                dict(ts='2026-10-09T17:00:00+09:00', status='ok', detail='a')], None, None, None)
+check("③ 읽은 창 끝까지 같은 기록이면 'N번 이상'(본 것만 센다) · 날이 다른 묶음은 처음 시각에 날짜를 같이 적는다 · 한 줄이면 횟수를 안 붙인다",
+      '(같은 기록 50번 이상 · 09:00부터)' in _ev474b[0][1]
+      and '(같은 기록 2번 · 10-09 17:00부터)' in _ev474c[0][1]
+      and '같은 기록' not in _sd474.recent_events(_hb474[:1], None, None, None)[0][1],
+      f'{_ev474b} · {_ev474c}')
+_src474 = _ast474.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_calls474 = [_ast474.unparse(n) for n in _ast474.walk(_src474) if isinstance(n, _ast474.Call)
+             and getattr(n.func, 'attr', None) == 'heartbeats_recent']
+check("④ 화면은 심박을 묶을 만큼 읽는다(`heartbeats_recent(c, _dash.BEAT_WINDOW)` · 같은 창을 recent_events 에 넘긴다) · 판정 문턱이 아니라 읽는 창",
+      _calls474 == ['L.heartbeats_recent(c, _dash.BEAT_WINDOW)'] and _sd474.BEAT_WINDOW >= 390
+      and 'window=_dash.BEAT_WINDOW' in open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read(),
+      str(_calls474), scanned=len(_calls474))
+# ─── §474 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

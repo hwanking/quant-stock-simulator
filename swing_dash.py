@@ -373,12 +373,44 @@ def receipt_waterfall(r):
     return steps
 
 
-def recent_events(heartbeats=None, nightly=None, acct=None, task=None, limit=6):
-    """최근 사건 몇 줄 — 워커 심박 · 계좌 동기화 · 저녁 작업 끝 · 예약 작업 마지막 실행. 시각 있는 것만, 최근순."""
+#: '최근 사건' 칸이 읽는 심박 수(라운드 495) — 장중 워커는 1분마다 한 줄을 남긴다. 이어진 같은 기록을 한 줄로 묶으려면 몇 줄을 봐야
+#: 하는지의 창이지 판정 문턱이 아니다. 창 끝까지 같은 기록이면 횟수를 'N번 이상'으로 적는다(본 것만 센다 · §3).
+BEAT_WINDOW = 400
+
+
+def collapse_beats(heartbeats, window=None):
+    """최근순 심박 → 이어진 같은 기록(상태 · 내용)을 한 묶음으로 (라운드 495). → [dict(ts=마지막 · first=처음 · n · status · detail ·
+    more=창 끝까지 이어졌나)]. 장중 워커가 1분마다 같은 줄을 남기면 '최근 사건' 칸 세 줄이 전부 그 줄이 되어 저녁 작업의 계획 줄 같은
+    다른 기록을 밀어냈다 — 지우지 않고 묶는다. 시각 없는 줄은 건너뛴다."""
+    out = []
+    rows = [hb for hb in (heartbeats or []) if isinstance(hb, dict) and hb.get('ts')]
+    for hb in rows:
+        key = (hb.get('status'), hb.get('detail'))
+        if out and (out[-1]['status'], out[-1]['detail']) == key:
+            out[-1]['first'] = str(hb['ts'])
+            out[-1]['n'] += 1
+        else:
+            out.append(dict(ts=str(hb['ts']), first=str(hb['ts']), n=1, status=hb.get('status'), detail=hb.get('detail'), more=False))
+    if out and window and len(rows) >= window:
+        out[-1]['more'] = True
+    return out
+
+
+def _beat_line(b):
+    txt = f"워커 {b.get('status') or ''}" + (f" · {b.get('detail')}" if b.get('detail') else '')
+    if b['n'] > 1:
+        f, t = str(b['first']), str(b['ts'])
+        when = f[11:16] if f[:10] == t[:10] else f[5:16].replace('T', ' ')
+        txt += f" (같은 기록 {b['n']}번{' 이상' if b.get('more') else ''} · {when}부터)"
+    return txt
+
+
+def recent_events(heartbeats=None, nightly=None, acct=None, task=None, limit=6, beats=3, window=None):
+    """최근 사건 몇 줄 — 워커 심박 · 계좌 동기화 · 저녁 작업 끝 · 예약 작업 마지막 실행. 시각 있는 것만, 최근순.
+    라운드 495 — 심박은 이어진 같은 기록을 한 줄로 묶어(`collapse_beats`) 그 묶음 `beats` 개까지 싣는다."""
     ev = []
-    for hb in heartbeats or []:
-        if hb.get('ts'):
-            ev.append((str(hb['ts']), f"워커 {hb.get('status') or ''}" + (f" · {hb.get('detail')}" if hb.get('detail') else '')))
+    for b in collapse_beats(heartbeats, window=window)[:beats]:
+        ev.append((b['ts'], _beat_line(b)))
     if acct and acct.get('ts'):
         ev.append((str(acct['ts']), '계좌 동기화(잔고 스냅샷)'))
     if nightly and nightly.get('last_end'):
