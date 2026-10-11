@@ -219,7 +219,10 @@ def shadow_grade(plan, bars_df, cost_pct):
     #   장중에 만든 리포트의 계획을 그날 봉 전체로 체결시키면 계획이 생기기 전의 저가로 '체결'된다. 보통(장 전·휴장일·마감 뒤
     #   리포트)은 자료일 그대로다. 생성 시각을 못 읽으면(라운드 472 전의 계획) 자료일 그대로(종전 동작).
     start = plog.grade_after_day(plan['data_day'], report_ts_of(plan))
-    rows = [r for r in _rows(bars_df) if r[0] > str(start)]
+    # 라운드 490 — 아직 확정되지 않은 오늘 봉(정규장·애프터마켓 중)은 대기 창에도 안 쓴다(`prediction_log.unfinal_day` 한 곳). 그 봉의
+    #   오전 값으로 '대기 창 끝 · 안 닿음'을 닫으면 오후에 닿아도 다시 안 잰다(닫힌 모의 결과는 굳는다 · `refresh_plans`).
+    _uf = plog.unfinal_day()
+    rows = [r for r in _rows(bars_df) if r[0] > str(start) and r[0] != _uf]
     wb = plan.get('wait_bars')
     if not plan.get('entry') or not wb:
         return dict(status='invalid', detail='진입가 또는 대기 기간이 없습니다')

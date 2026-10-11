@@ -10,7 +10,7 @@
 
 ■ 무엇을 보나 — 이 저장소에서 실제로 났던 오염의 모양만
   반드시 0 (hard · 하나라도 있으면 실패 — 단 `LEGACY` 에 적힌 알려진 옛 오염은 **늘 때만** 실패):
-    · 미래 날짜 · 휴장일 날짜(원장·예측·전방 기록부·판정 원장·시점 재무·잔여 호가) · 픽스처 날짜(2099/1970)
+    · 미래 날짜 · 휴장일 날짜(원장·예측·전방 기록부·그림자 기록·판정 원장·시점 재무·잔여 호가) · 픽스처 날짜(2099/1970)
       · 빈 날짜 · (종목, 날짜) 중복 · 종목코드 모양 아님                                    (R222 · R252 · R375)
     · 원장: 가격 0 이하 · 손절 < 진입 < 목표 어긋남 · 행 안 불변식(`ledger_view.consistency_violations`)
       · 구간 표시가 날짜와 어긋남(경계는 `calibration_lab` 의 상수를 읽는다)               (R368 · R217)
@@ -189,6 +189,44 @@ def scale_judges(stamp_off, stamp_same, audit_keys):
             'audit_only_stamped_same': len(audit_keys & stamp_same)}
 
 
+#: 그림자 기록의 운영 판(op)과 같은 날 전방 기록부 행이 같아야 하는 칸 — (그림자 op 칸, 기록부 칸). 라운드 404 의 비교(운영 vs 교정)는
+#:   그림자의 운영 판이 기록부 판과 같다는 전제 위에 선다. 두 기록이 갈리면 11-16 의 비교 자체가 어긋난다.
+SHADOW_PAIR_FIELDS = (('action', 'action'), ('score', 'score'), ('new_entry', 'new_entry'), ('new_stop', 'new_stop'),
+                      ('new_target', 'new_target'), ('rr', 'new_rr'))
+
+
+def shadow_pairs(rows, registry_path):
+    """그림자 행 ↔ 같은 (날짜, 종목코드 6자리) 전방 기록부 행 (라운드 490) → {'no_pair', 'op_mismatch'} · 기록부를 못 읽으면 둘 다 None.
+
+    no_pair — 기록부에 짝이 없는 그림자 행 · op_mismatch — 짝은 있는데 운영 판의 칸(`SHADOW_PAIR_FIELDS`)이 하나라도 다른 행.
+    수는 상대 1e-6 안이면 같다(저장 반올림 차이로 오탐하지 않는다)."""
+    if not os.path.exists(registry_path):
+        return {'no_pair': None, 'op_mismatch': None}
+    gen, _bad = _jsonl(registry_path)
+    reg = {}
+    for r in gen():
+        reg[(str(r.get('date') or '')[:10], str(r.get('ticker') or '').split('.')[0])] = r
+    no_pair = mism = 0
+    for s in rows:
+        f = reg.get((str(s.get('date') or '')[:10], str(s.get('code') or '').split('.')[0]))
+        if f is None:
+            no_pair += 1
+            continue
+        op = s.get('op') or {}
+        for a_k, b_k in SHADOW_PAIR_FIELDS:
+            if a_k not in op or b_k not in f:
+                continue
+            a, b = op.get(a_k), f.get(b_k)
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
+                same = abs(float(a) - float(b)) <= 1e-6 * max(1.0, abs(float(b)))
+            else:
+                same = a == b
+            if not same:
+                mism += 1
+                break
+    return {'no_pair': no_pair, 'op_mismatch': mism}
+
+
 def tracker_checks(db_path, today):
     """추적 DB — 미래 기준일인데 픽스처 표시가 없는 것 · 동결 가드 뒤에 들어온 휴장일 케이스(hard) · 옛 휴장일(info)."""
     con = sqlite3.connect(db_path)
@@ -219,6 +257,9 @@ HARD = {
                          'seen_in_session'),
     'predictions': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code'),
     'fin_pit': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup'),
+    # 라운드 490 — 11-16 의 R404 비교(운영 vs 교정)가 읽는 그림자 기록. 종전엔 이 점검 밖이었다.
+    'forward_shadow': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup', 'bad_code', 'empty_versions',
+                       'seen_in_session', 'no_pair', 'op_mismatch'),
     'book_pit': ('parse_fail', 'future', 'holiday', 'fixture', 'empty', 'dup'),
     'tracker': ('future_unmarked', 'holiday_after_guard'),
 }
@@ -290,6 +331,12 @@ def run(today=None):
                                 'seen_in_session': seen_in_session(rows, 'date', 'signal_timestamp')})
     _simple('predictions', 'predictions.jsonl', 'date', 'ticker',
             extra=lambda rows: {'seen_in_session': seen_in_session(rows, 'date', 'recorded_at')})
+    _simple('forward_shadow', 'forward_shadow.jsonl', 'date', 'code',
+            extra=lambda rows: dict(empty_versions=sum(1 for r in rows if not r.get('versions')),
+                                    seen_in_session=seen_in_session(rows, 'date', 'recorded_at'),
+                                    **shadow_pairs(rows, os.path.join(P, 'forward_registry.jsonl'))))
+    if isinstance(stores.get('forward_shadow'), dict) and stores['forward_shadow'].get('no_pair') is None:
+        unmeasured.append('forward_shadow.no_pair·op_mismatch: 전방 기록부를 못 읽음')
     _simple('fin_pit', 'fin_pit.jsonl', 'date', 'code')
     _simple('book_pit', 'book_pit.jsonl', 'date', 'code')
     db = os.path.join(P, 'improvement.db')

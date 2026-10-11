@@ -14453,7 +14453,14 @@ with tab_demark:
         ax_rsi.set_ylim(0, 100)
     ax_rsi.set_ylabel('RSI 14', color='#9DAABC')
 
-    plt.tight_layout()
+    # 라운드 490 — 서버 로그에 그림마다 'not compatible with tight_layout' 경고가 찍혔다. 원인은 격자에 직접 준 패널 간격
+    #   (`hspace=0.15` · 일부러 고정한 값)이다 — tight_layout 은 바깥 여백만 맞추고 그 간격은 못 바꿔 경고한다(같은 모양을 따로 만들어
+    #   하나씩 빼 가며 잼: hspace 를 빼면 경고가 사라진다). 그림은 이미 그 상태로 그려지고 있었으므로 그림은 그대로 두고 그 경고 하나만
+    #   거른다. 그리고 '지금 그림'(plt) 대신 이 그림을 직접 가리킨다.
+    import warnings as _w490
+    with _w490.catch_warnings():
+        _w490.filterwarnings('ignore', message='This figure includes Axes that are not compatible with tight_layout')
+        fig_dm.tight_layout()
     st.pyplot(fig_dm)
     # 라운드 406 — 과거 표식이 무엇인지 그림 바로 아래에 적는다(외부 검토 · 지난 13 표식이 지금 타점으로 읽혔다).
     #   나이로 흐리게 하는 규칙(몇 봉 이상 숨김 등)은 **안 만들었다** — 그 봉 수가 손으로 고른 수다(§2). 날짜를 적고

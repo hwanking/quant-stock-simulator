@@ -100,8 +100,32 @@ def load_predictions(path=PRED_FILE):
     return out
 
 
-def _bars_after(prices_df, start_date, days):
-    """기록일 다음 거래일부터 days 거래일까지의 (고가, 저가, 종가) 목록."""
+def unfinal_day(now=None):
+    """지금(한국 시각) **아직 확정되지 않은 봉의 날짜** 'YYYY-MM-DD' · 그런 봉이 없으면 None (라운드 490 · 규칙은 여기 한 곳).
+
+    2026-09-14 부터 그날 일봉은 애프터마켓(16:00~20:00)이 끝나야 더 안 바뀐다(라운드 486 · 엔진 `bar_final`). 정규장 중이나
+    애프터마켓 중에 받은 일봉의 마지막 봉은 **움직이는 중**이다. 그 봉으로 채점하면 ① '같은 봉이면 손절 먼저'를 저녁에 손절까지 닿을
+    봉의 오전 값으로 판정하고 ② 대기 창 마지막 날을 오전 값으로 '안 닿음'이라 닫고 ③ 만료 종가를 장중 값으로 적는다 — 추적 케이스와
+    자동매매 모의 결과는 한 번 닫히면 다시 안 잰다(굳는다). 그래서 채점은 확정된 봉만 쓴다(그 봉은 다음 채점 때 들어온다).
+    시각은 **한국 시각**으로 잰다(클라우드 시계는 UTC 다 · 라운드 283) — 시간대 없는 `now` 는 한국 시각으로 본다. 엔진을 못 부르면
+    None(종전 동작 · 지어내지 않는다)."""
+    try:
+        from datetime import timezone
+        import bitemporal_engine as _be
+        kst = timezone(timedelta(hours=9))
+        if now is None:
+            n = datetime.now(kst).replace(tzinfo=None)
+        elif getattr(now, 'tzinfo', None) is not None:
+            n = now.astimezone(kst).replace(tzinfo=None)
+        else:
+            n = now
+        return None if _be.bar_final(n) else n.date().isoformat()
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _bars_after(prices_df, start_date, days, now=None):
+    """기록일 다음 거래일부터 days 거래일까지의 (고가, 저가, 종가) 목록. 아직 확정되지 않은 봉(`unfinal_day`)은 안 쓴다(라운드 490)."""
     if prices_df is None or len(prices_df) == 0:
         return []
     df = prices_df
@@ -121,7 +145,11 @@ def _bars_after(prices_df, start_date, days):
     if not (c_hi and c_lo and c_cl):
         return []
     try:
-        mask = df[col_date].astype(str) > str(start_date)
+        _dates = df[col_date].astype(str)
+        mask = _dates > str(start_date)
+        _uf = unfinal_day(now)
+        if _uf:
+            mask = mask & (_dates.str[:10] != _uf)           # 라운드 490 — 움직이는 중인 오늘 봉은 채점에 안 쓴다
         sub = df[mask].head(int(days))
     except Exception:
         return []

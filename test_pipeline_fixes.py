@@ -40110,6 +40110,145 @@ with _tf469.TemporaryDirectory() as _td469:
 check("⑤ 되받기 동률 — 같은 원장·둘 다 시간대 있는 made_at 이고 로컬이 나중이면 남긴다 · zip 이 나중·같음·시간대 없음·칸 없음은 종전대로 씀 · 원장 증감 규칙 그대로",
       not _badp469, str(_badp469), scanned=len(_pairs469))
 # ─── §469 끝 ───
+# ─── §470 시작 (라운드 490) ───
+print("=" * 72)
+print("§470 채점·모의·지수 캐시는 확정된 봉만 쓴다 · 그림자 기록도 매일 점검 · 지문은 부르는 함수까지 (라운드 490)")
+print("=" * 72)
+# 라운드 490 — 정규장·애프터마켓 중에 받은 일봉의 마지막 봉은 움직이는 값인데(라운드 486), 채점은 받은 봉을 전부 썼다. 추적 케이스와
+#   자동매매 모의 결과는 한 번 닫히면 다시 안 재므로(굳는다) 그 봉으로 닫은 결과가 남는다. 지난 확정 242건은 다시 채점해도 전부 같았다
+#   (오염은 없었다) — 길만 막는다. 규칙은 `prediction_log.unfinal_day` 한 곳(한국 시각 · 클라우드 시계는 UTC).
+import ast as _ast470                                            # noqa: E402
+import datetime as _dt470                                        # noqa: E402
+import tempfile as _tf470                                        # noqa: E402
+import pandas as _pd470                                          # noqa: E402
+import prediction_log as _pl470                                  # noqa: E402
+import swing_engine as _se470                                    # noqa: E402
+import scripts.kospi_index as _ki470                             # noqa: E402
+import scripts.contamination_audit as _ca470                     # noqa: E402
+
+# ① 확정 전 봉의 날짜 — 정규장·애프터마켓 중이면 오늘 · 20:00 뒤·장 전·휴장일은 None · 시간대 있는 시각은 한국 시각으로 바꿔 본다
+_U = _dt470.timezone.utc
+_cases470 = [(_dt470.datetime(2026, 10, 12, 11, 0), '2026-10-12'), (_dt470.datetime(2026, 10, 12, 17, 0), '2026-10-12'),
+             (_dt470.datetime(2026, 10, 12, 20, 0), None), (_dt470.datetime(2026, 10, 12, 8, 0), None),
+             (_dt470.datetime(2026, 10, 11, 12, 0), None), (_dt470.datetime(2026, 10, 12, 8, 0, tzinfo=_U), '2026-10-12'),
+             (_dt470.datetime(2026, 10, 12, 12, 0, tzinfo=_U), None), (_dt470.datetime(2026, 11, 19, 20, 30), '2026-11-19')]
+_bad470 = [(str(n), _pl470.unfinal_day(n)) for n, w in _cases470 if _pl470.unfinal_day(n) != w]
+check("① unfinal_day — 정규장·애프터마켓 중엔 오늘 · 20:00 뒤·장 전·휴장일은 None · UTC 시계는 한국 시각으로 · 수능일 20:30 은 아직 확정 전",
+      not _bad470, str(_bad470), scanned=len(_cases470))
+
+# ② 채점기의 봉 자르기 — 장중엔 오늘 봉을 빼고, 확정 뒤엔 넣는다 · 오늘 봉이 없으면 종전과 같다
+_df470 = _pd470.DataFrame({'trade_date': ['2026-10-07', '2026-10-08', '2026-10-12'], 'high_raw': [105.0, 101.0, 112.0],
+                           'low_raw': [99.0, 98.0, 90.0], 'close_raw': [100.0, 100.0, 95.0]})
+_b11 = _pl470._bars_after(_df470, '2026-10-06', 20, now=_dt470.datetime(2026, 10, 12, 11, 0))
+_b21 = _pl470._bars_after(_df470, '2026-10-06', 20, now=_dt470.datetime(2026, 10, 12, 21, 0))
+_bsun = _pl470._bars_after(_df470.iloc[:2], '2026-10-06', 20, now=_dt470.datetime(2026, 10, 12, 11, 0))
+check("② _bars_after — 장중 11:00 엔 오늘 봉을 빼고(2봉) · 21:00 엔 넣고(3봉) · 오늘 봉이 없으면 그대로(2봉)",
+      len(_b11) == 2 and len(_b21) == 3 and _bsun == _b11, f'{len(_b11)} · {len(_b21)} · {len(_bsun)}')
+
+# ③ 자동매매 모의 — 대기 창 마지막 날이 확정 전 봉이면 '안 닿음(no_fill)'으로 닫지 않는다(닫힌 결과는 다시 안 잰다 · 굳는다)
+_plan470 = dict(data_day='2026-10-07', entry=95.0, stop=80.0, target=110.0, horizon=20, wait_bars=2, verdict={})
+_old_uf470 = _pl470.unfinal_day
+try:
+    _pl470.unfinal_day = lambda now=None: '2026-10-12'      # 장중이라고 심는다
+    _s11 = _se470.shadow_grade(_plan470, _df470, 0.41)
+    _pl470.unfinal_day = lambda now=None: None              # 확정 뒤
+    _s21 = _se470.shadow_grade(_plan470, _df470, 0.41)
+finally:
+    _pl470.unfinal_day = _old_uf470
+check("③ shadow_grade — 장중엔 대기 창 마지막 날(확정 전)을 안 세어 'waiting' · 확정 뒤엔 그날 저가가 진입가에 닿아 체결",
+      _s11.get('status') == 'waiting' and _s21.get('status') in ('open', 'closed') and _s21.get('fill_day') == '2026-10-12',
+      f"{_s11.get('status')} · {_s21.get('status')} {_s21.get('fill_day')}")
+
+# ④ 지수 캐시 — 받은 일봉의 마지막 봉이 확정 전이면 빼고 준다(그대로 캐시에 쓰면 재현용 읽기가 그날 국면을 장중 값으로 굳힌다)
+_dts470 = [f'2026{m:02d}{d:02d}' for m in (7, 8, 9) for d in range(1, 29)][:80] + ['20261012']
+_fetch470 = lambda name, count=None: (_dts470, [100.0 + i for i in range(len(_dts470))])   # noqa: E731
+try:
+    _pl470.unfinal_day = lambda now=None: '2026-10-12'
+    _k11 = _ki470._fetch(3000, _fetch470)
+    _pl470.unfinal_day = lambda now=None: None
+    _k21 = _ki470._fetch(3000, _fetch470)
+finally:
+    _pl470.unfinal_day = _old_uf470
+check("④ kospi_index._fetch — 확정 전이면 마지막 봉을 빼고 출처에 적는다 · 확정 뒤면 그대로",
+      _k11 and _k11[0][-1] == _dts470[-2] and '확정 전' in _k11[2] and _k21 and _k21[0][-1] == '20261012',
+      f"{_k11[0][-1] if _k11 else None} {_k11[2] if _k11 else ''} · {_k21[0][-1] if _k21 else None}")
+
+# ⑤ 오염 점검에 그림자 기록 — 짝 맞춤을 심어서 양방향(같으면 0 · 칸 하나 다르면 불일치 · 짝 없으면 no_pair · 기록부를 못 읽으면 None)
+with _tf470.TemporaryDirectory() as _td470:
+    _rp470 = _os.path.join(_td470, 'fr.jsonl')
+    with open(_rp470, 'w', encoding='utf-8') as _f470:
+        _f470.write(_json.dumps(dict(date='2026-10-08', ticker='000001.KS', action='HOLD', score=55, new_entry=90.0,
+                                     new_stop=80.0, new_target=110.0, new_rr=1.2)) + '\n')
+    _ok470 = dict(date='2026-10-08', code='000001', op=dict(action='HOLD', score=55, new_entry=90.0, new_stop=80.0,
+                                                           new_target=110.0, rr=1.2))
+    _p0 = _ca470.shadow_pairs([_ok470], _rp470)
+    _p1 = _ca470.shadow_pairs([dict(_ok470, op=dict(_ok470['op'], score=56))], _rp470)
+    _p2 = _ca470.shadow_pairs([dict(_ok470, code='000002')], _rp470)
+    _p3 = _ca470.shadow_pairs([_ok470], _os.path.join(_td470, '없음.jsonl'))
+check("⑤ shadow_pairs — 같으면 0/0 · 점수 하나 다르면 불일치 1 · 짝 없으면 no_pair 1 · 기록부 없으면 None (심기 양방향)",
+      _p0 == {'no_pair': 0, 'op_mismatch': 0} and _p1 == {'no_pair': 0, 'op_mismatch': 1}
+      and _p2 == {'no_pair': 1, 'op_mismatch': 0} and _p3 == {'no_pair': None, 'op_mismatch': None}, str((_p0, _p1, _p2, _p3)))
+check("⑤' 그림자 기록이 오염 점검의 '반드시 0' 저장소다(날짜·중복·장중 기록·버전·짝·운영 판)",
+      set(('dup', 'holiday', 'seen_in_session', 'empty_versions', 'no_pair', 'op_mismatch')) <= set(_ca470.HARD.get('forward_shadow') or ()),
+      str(_ca470.HARD.get('forward_shadow')))
+
+# ⑥ 지문은 채점 함수가 **부르는** 함수까지 덮는다 — 사전등록 R475·R478 의 지문 목록을 AST 로 읽고, 거기 든 함수가 prediction_log ·
+#    swing_engine 안에서 부르는 함수를 따라가(닫힘) 목록 밖이 없는지 본다. 손으로 적은 목록은 낡는다(라운드 490 이 `_bars_after` ·
+#    `first_touch` · `_rows` 의 빠짐을 찾았다).
+_MODS470 = {'prediction_log': _read148(_os.path.join(PROJ, 'prediction_log.py')),
+            'swing_engine': _read148(_os.path.join(PROJ, 'swing_engine.py')),
+            'run_daily_improvement': _read148(_os.path.join(PROJ, 'scripts', 'run_daily_improvement.py'))}
+_ALIAS470 = {'plog': 'prediction_log', 'prediction_log': 'prediction_log', 'swing_engine': 'swing_engine',
+             'rdi': 'run_daily_improvement'}
+_FUNCS470 = {}
+for _m470, _s470 in _MODS470.items():
+    for _n470 in _ast470.parse(_s470).body:
+        if isinstance(_n470, _ast470.FunctionDef):
+            _FUNCS470[(_m470, _n470.name)] = _n470
+
+
+def _callees470(mod, fn):
+    out = set()
+    for _c in _ast470.walk(_FUNCS470[(mod, fn)]):
+        if not isinstance(_c, _ast470.Call):
+            continue
+        f = _c.func
+        if isinstance(f, _ast470.Name) and (mod, f.id) in _FUNCS470:
+            out.add((mod, f.id))
+        elif isinstance(f, _ast470.Attribute) and isinstance(f.value, _ast470.Name) and f.value.id in _ALIAS470:
+            k = (_ALIAS470[f.value.id], f.attr)
+            if k in _FUNCS470 and k[0] in ('prediction_log', 'swing_engine'):
+                out.add(k)
+    return out
+
+
+def _fp_list470(path):
+    tree = _ast470.parse(_read148(path))
+    fn = next(n for n in _ast470.walk(tree) if isinstance(n, _ast470.FunctionDef) and n.name == 'grader_fingerprint')
+    loop = next(n for n in _ast470.walk(fn) if isinstance(n, _ast470.For))
+    return {(_ALIAS470.get(e.value.id, e.value.id), e.attr) if isinstance(e, _ast470.Attribute) else ('?', e.id)
+            for e in loop.iter.elts}
+
+
+def _missing470(listed):
+    seen, todo = set(), [k for k in listed if k in _FUNCS470]
+    while todo:
+        k = todo.pop()
+        if k in seen:
+            continue
+        seen.add(k)
+        todo.extend(_callees470(*k) - seen)
+    return sorted(k for k in seen if k not in listed and k[0] in ('prediction_log', 'swing_engine'))
+
+
+_l475 = _fp_list470(_os.path.join(PROJ, 'scripts', 'gate_forward_r475.py'))
+_l478 = _fp_list470(_os.path.join(PROJ, 'scripts', 'gate_forward_r478.py'))
+_m475, _m478 = _missing470(_l475), _missing470(_l478)
+_plant470 = _missing470(_l478 - {('prediction_log', 'first_touch')})
+check("⑥ R475·R478 지문 목록이 채점 함수가 부르는 함수(prediction_log · swing_engine)를 다 덮는다 · 심기: first_touch 를 빼면 잡힌다",
+      not _m475 and not _m478 and ('prediction_log', 'first_touch') in _plant470 and len(_l475) >= 9 and len(_l478) >= 8,
+      f'R475 밖 {_m475} · R478 밖 {_m478} · 심기 {_plant470}', scanned=len(_l475) + len(_l478))
+# ─── §470 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

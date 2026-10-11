@@ -159,8 +159,12 @@ def grader_fingerprint():
     import run_daily_improvement as rdi
     from improvement.performance import resolution_from_grade
     h = hashlib.sha256()
+    # 라운드 490 — 채점기가 **부르는** 함수까지: 봉 자르기(`_bars_after`) · 확정 전 봉 규칙(`unfinal_day`) · 먼저 닿은 쪽(`first_touch`).
+    #   종전 여섯은 `grade_prediction` 이 부르는 둘을 안 덮어, 거기를 고치면 지문이 안 바뀐 채 채점이 바뀌었다(결과 전 정정 · 사전등록에
+    #   적었다). 빠짐은 회귀 §470 이 AST 로 부르는 함수를 따라가 잡는다.
     for fn in (rdi.make_resolve_open_cases, rdi.freeze_seen_at, prediction_log.grade_prediction, prediction_log.grade_seen,
-               prediction_log.grade_after_day, resolution_from_grade):
+               prediction_log.grade_after_day, resolution_from_grade, prediction_log._bars_after, prediction_log.unfinal_day,
+               prediction_log.first_touch):
         h.update(ast.unparse(ast.parse(inspect.getsource(fn))).encode('utf-8'))
     return h.hexdigest()[:16]
 

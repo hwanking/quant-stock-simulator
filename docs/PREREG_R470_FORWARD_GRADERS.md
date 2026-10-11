@@ -96,3 +96,8 @@
 
 채점이 기대는 규칙의 값 — 매수권 하한 58(`ledger_view.BUY_ZONE_SCORE`) · 간격 35일(`ledger_view.MIN_GAP_DAYS`) · 같은 봉은 손절 먼저
 (`prediction_log.first_touch`) — 은 회귀 §451 이 값으로 잠근다(그 파일들은 다른 이유로 자주 고쳐져 해시로 잠그면 헛경보가 난다).
+
+> **라운드 490 정정 (2026-10-11 · 결과 전 — 재평가일 전이라 아무도 결과를 안 봤다)** — 채점기 `prediction_log.grade_prediction` 은
+> 이제 **확정되지 않은 오늘 봉**(정규장·애프터마켓 중에 받은 마지막 봉)을 안 쓴다(`prediction_log.unfinal_day` · 한국 시각). 재평가일에
+> 판정기를 장중에 돌려도 그날의 움직이는 봉이 채점에 안 들어간다. 확정된 봉만 있을 때는 결과가 글자까지 같다 — 해시로 잠근 판정기
+> 파일들은 바뀌지 않았다. 근거: `docs/RESULT_R490_ONLY_FINAL_BARS_ARE_GRADED.md`

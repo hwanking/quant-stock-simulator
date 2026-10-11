@@ -63,6 +63,16 @@ def _fetch(count, fetcher=None):
     dates, closes = [str(x) for x in r[0]], [float(x) for x in r[1]]
     if len(dates) != len(closes) or len(closes) < 65:
         return None
+    # 라운드 490 — 정규장·애프터마켓 중에 받으면 마지막 봉은 오늘의 **움직이는 값**이다. 그대로 캐시에 쓰면 재현용 읽기
+    #   (prefer_cache=True · 11-16 국면 판정기가 부르는 길)가 그날의 국면을 장중 값으로 굳힌다. 확정 전 봉은 뺀다(규칙은
+    #   `prediction_log.unfinal_day` 한 곳 · 한국 시각 · 다음 수신 때 확정 값으로 들어온다).
+    try:
+        import prediction_log as _pl490
+        _uf = _pl490.unfinal_day()
+    except Exception:                                          # noqa: BLE001
+        _uf = None
+    if _uf and _iso(dates[-1]) == _uf:
+        return dates[:-1], closes[:-1], '실시간 수신 · 오늘 봉은 확정 전이라 뺌'
     return dates, closes, '실시간 수신'
 
 

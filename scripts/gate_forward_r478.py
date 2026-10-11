@@ -94,8 +94,11 @@ def grader_fingerprint():
     import prediction_log
     import swing_engine
     h = hashlib.sha256()
+    # 라운드 490 — 모의·채점이 **부르는** 함수까지: 일봉 읽기(`_rows`) · 봉 자르기(`_bars_after`) · 확정 전 봉 규칙(`unfinal_day`) ·
+    #   먼저 닿은 쪽(`first_touch`) — 여덟(결과 전 정정 · 사전등록에 적었다). 빠짐은 회귀 §470 이 AST 로 잡는다.
     for fn in (swing_engine.shadow_grade, swing_engine.report_ts_of, prediction_log.grade_prediction,
-               prediction_log.grade_after_day):
+               prediction_log.grade_after_day, prediction_log._bars_after, prediction_log.unfinal_day,
+               prediction_log.first_touch, swing_engine._rows):
         h.update(ast.unparse(ast.parse(inspect.getsource(fn))).encode('utf-8'))
     return h.hexdigest()[:16]
 
