@@ -23,6 +23,11 @@
 
 ■ 실주문 자격 (LIVE·PAPER) — 중앙 판정이 **추천**(조건 11개 전부 통과)이고 주식이고 가격 셋이 정합이고 리포트가 오늘
   판정일의 것일 때만. 나머지는 '기록만'(SHADOW)으로 모의 결과만 남는다 — 무엇이 막았는지 사유와 함께.
+
+■ 사람이 고른 계획 (라운드 494) — 사람이 넘을 수 있는 막힘은 '추천 아님' **하나뿐**이다. 화면 '오늘 계획'에서 사람이 직접
+  고르면 실행부가 같은 계약(진입가 지정가 · 손절 · 1차 목표 · 대기·보유 거래일)으로 산다. 나머지 막힘(판정일 · 자산 종류 · 가격 셋의
+  유무와 정합 · 중앙 판정의 정합 문제 · 대기 기간)은 계약이 서지 않거나 실행이 안전하지 않다는 뜻이라 사람이 골라도 못 넘는다 —
+  그 목록을 판정 기록(`verdict['hard_blockers']`)에 싣는다. 엔진 판정은 바뀌지 않는다(그 계획은 여전히 '추천 아님'이다).
 """
 import hashlib
 import json
@@ -32,6 +37,12 @@ import broker_kis
 
 SPEC = 'SWING_V1'
 PROJ = os.path.dirname(os.path.abspath(__file__))
+#: 라운드 494 — 중앙 판정이 추천하지 않았다는 막힘의 머리(사람이 고르면 넘을 수 있는 **유일한** 막힘 · 아래 `plan_from_pick` 이 쓴다)
+REC_BLOCK_HEAD = '추천 아님 — '
+#: 라운드 494 — 사람이 넘을 수 없는 막힘을 적는 칸(`hard_blockers`)이 생기기 전에 만든 계획. 그 계획의 다른 막힘(자산 종류 · 중앙 판정의
+#: 정합 문제)은 장부의 다른 칸으로 되살릴 수 없으므로 고르지 못한다(모르는 것을 '없다'로 읽지 않는다 · §3)
+OLD_PLAN_NO_PICK = ('사람이 고를 수 있는지 적는 칸이 생기기 전에 만든 계획이고 그 판정일 리포트로도 다시 확인되지 않아 다른 막힘을 '
+                    '확인할 수 없습니다 — 다음 판정의 계획부터 고를 수 있습니다')
 
 
 def code6(sym):
@@ -107,8 +118,13 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=No
     if str(data_day) != str(today_day):
         why.append(f'리포트 판정일 {data_day} 가 오늘 판정일 {today_day} 와 다릅니다')
     if core.get('recommended') is not True:
-        why.append('추천 아님 — ' + str(core.get('exclude_reason') or core.get('bucket') or '중앙 판정이 막았습니다'))
-    if str(pick.get('asset_type') or 'stock') != 'stock':
+        why.append(REC_BLOCK_HEAD + str(core.get('exclude_reason') or core.get('bucket') or '중앙 판정이 막았습니다'))
+    # ⚠️ 라운드 494 — 리포트는 엔진의 자산 종류를 **대문자**('STOCK' · 'ETF' · 'ETF_LEV' · 'ETF_INV' · `premarket.py` 의 후보 칸)로
+    #   적는데 여기는 소문자 'stock' 과 견줬다. 그래서 실제 리포트에서 만든 계획은 **전부** '주식이 아닙니다'를 받아 실주문 자격이
+    #   없었다(라운드 446 부터 · 2026-10-12 이 PC 의 개장 전 리포트 파일 후보 줄 523 중 'STOCK' 522 · 'ETF' 1). 시험의 가짜 리포트가
+    #   소문자를 써서 초록이었다. 막힘 사유는 맨 앞
+    #   하나만 보여 '추천 아님'에 가려졌다 — 사람이 고른 계획의 막힘 목록을 다시 세우다 드러났다. 대소문자를 맞춰 견준다.
+    if str(pick.get('asset_type') or 'STOCK').upper() != 'STOCK':
         why.append('주식이 아닙니다(이 버전은 주식만 · ETF 호가 단위를 확인하지 않았습니다)')
     if not (entry and target and stop and horizon):
         why.append('진입가·목표·손절·기간 중 비어 있는 것이 있습니다')
@@ -118,6 +134,8 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=No
         why.append('중앙 판정이 정합 문제를 적었습니다')
     if wbars is None:
         why.append('진입 대기 기간을 연구 산출물에서 못 읽었습니다')
+    # 라운드 494 — 사람이 골라도 못 넘는 막힘('추천 아님' 밖의 전부). 판정 기록에 싣는다 — plan_id 에는 안 든다(같은 계약이다)
+    hard = [w for w in why if not w.startswith(REC_BLOCK_HEAD)]
     hz = int(horizon) if horizon else None
     return dict(plan_id=plan_id(code, data_day, entry, target, stop, engine_version, wait_bars=wbars, horizon=hz,
                                 cost_pct=cost_pct, rulebook_version=rulebook_version),
@@ -136,8 +154,73 @@ def plan_from_pick(pick, data_day, engine_version, today_day, wbars, cost_pct=No
                                      if isinstance(core.get('checks'), list) else None),
                              expected_return=_f(core.get('expected_return')), wait_curable=core.get('wait_curable'),
                              current_price=_f(core.get('current_price')),
-                             report_ts=(str(report_ts) if report_ts else None)),
+                             report_ts=(str(report_ts) if report_ts else None),
+                             hard_blockers=hard),
                 engine_version=engine_version)
+
+
+def verdict_of(plan):
+    """계획의 판정 기록 — 장부엔 글자(JSON)로, 갓 만든 계획엔 dict 로 있다. 못 읽으면 {}."""
+    v = (plan or {}).get('verdict')
+    if isinstance(v, dict):
+        return v
+    try:
+        v = json.loads(v) if v else {}
+    except (TypeError, ValueError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def hard_from_report(plan, report):
+    """옛 계획(`hard_blockers` 칸 없음)의 막힘 목록을 **그 판정일 리포트의 같은 후보**로 다시 세운다(라운드 494).
+    같은 함수(`plan_from_pick`)에 그 계획의 대기·비용·규칙집 값을 그대로 넣어 다시 만든 계획의 plan_id 가 장부의 것과 **같을 때만**
+    (계약 전부의 해시 — 같은 리포트의 같은 후보라는 뜻) 그 막힘 목록을 돌려준다. 리포트가 없거나 · 자료일이 다르거나 · 후보가 없거나 ·
+    plan_id 가 다르면 None(모르는 것을 '없다'로 읽지 않는다 · §3). 판정일 확인은 하지 않는다(그건 고르는 자리·실행부가 따로 본다)."""
+    if not plan or not report:
+        return None
+    try:
+        import premarket
+        dday = premarket.data_day_of(report) or report.get('date')
+    except Exception:                                          # noqa: BLE001
+        dday = report.get('date')
+    if str(dday) != str(plan.get('data_day')):
+        return None
+    for pk in report.get('picks') or []:
+        if code6((pk or {}).get('symbol') or (pk or {}).get('code')) != str(plan.get('code')):
+            continue
+        try:
+            q = plan_from_pick(pk, dday, report.get('engine_version'), dday, plan.get('wait_bars'), cost_pct=plan.get('cost_pct'),
+                               rulebook_version=plan.get('rulebook_version'), report_ts=report.get('generated_at'))
+        except Exception:                                      # noqa: BLE001
+            return None
+        if q.get('plan_id') != plan.get('plan_id'):
+            return None
+        return list(q['verdict']['hard_blockers'])
+    return None
+
+
+def pick_blockers(plan, report=None):
+    """사람이 골라도 넘을 수 없는 막힘 목록(라운드 494) — 빈 목록이면 사람이 고를 수 있다.
+
+    ① 판정 기록의 `hard_blockers`(계획을 만들 때 '추천 아님' 밖의 막힘을 전부 적은 것). 그 칸이 없는 옛 계획은 그 판정일 리포트로
+       다시 세운 것(`hard_from_report` · 같은 plan_id 일 때만)을 쓰고, 그것도 안 되면 확인할 수 없으므로 막힘으로 본다(`OLD_PLAN_NO_PICK`).
+    ② 그 기록이 비어도 장부의 가격 칸을 한 번 더 본다 — 진입가·목표·손절·보유 기간·대기 기간이 다 있고 손절 < 진입 < 목표여야 한다
+       (같은 규칙 · 장부 값이 이상하면 산 뒤에 지킬 선이 없다)."""
+    hb = verdict_of(plan).get('hard_blockers')
+    if not isinstance(hb, list):
+        hb = hard_from_report(plan, report)
+    if not isinstance(hb, list):
+        return [OLD_PLAN_NO_PICK]
+    out = [str(x) for x in hb if str(x)]
+    if out:
+        return out
+    p = plan or {}
+    e, t, s = _f(p.get('entry')), _f(p.get('target')), _f(p.get('stop'))
+    if not (e and t and s and p.get('horizon') and p.get('wait_bars')):
+        return ['진입가·목표·손절·보유 기간·대기 기간 중 비어 있는 것이 있습니다']
+    if not (s < e < t):
+        return [f'가격 정합이 깨졌습니다(손절 {s:,.0f} · 진입 {e:,.0f} · 목표 {t:,.0f})']
+    return []
 
 
 def rulebook_version_of(report):

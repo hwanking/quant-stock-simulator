@@ -315,11 +315,12 @@ def _acct_panel_body454(st, uk, allow_write, cfg, stt, anchor_day, md, theme, sc
             c.close()
 
 
-def plan_status(p, today_day, held=False):
-    """오늘 이 계획이 어디에 있나 — 사실만(판정 낱말 없음 · 라운드 450). 대기 창은 계약의 진입 대기 거래일(연구 산출물)이다."""
+def plan_status(p, today_day, held=False, picked=False):
+    """오늘 이 계획이 어디에 있나 — 사실만(판정 낱말 없음 · 라운드 450). 대기 창은 계약의 진입 대기 거래일(연구 산출물)이다.
+    `picked` — 사람이 고른 계획(라운드 494 · 실주문 자격은 없지만 같은 계약으로 산다)."""
     if held:
         return '보유 중(자동 관리)'
-    if not p.get('live_ok'):
+    if not p.get('live_ok') and not picked:
         return '실주문 없음'
     if not today_day or not p.get('data_day'):
         return '—'
@@ -347,10 +348,11 @@ def _verdict_of(p):
         return {}
 
 
-def size_preview(p, account, limits, cost_pct):
+def size_preview(p, account, limits, cost_pct, picked=False):
     """계획 한 줄의 수량 미리보기 — 워커와 **같은 함수**(`swing_risk.size`)로 마지막으로 읽은 계좌와 지금 한도에서 센다(§4).
-    자격이 없거나 계좌·한도가 없으면 None. 워커는 주문 때 잔고·주문 가능 금액·대기 주문을 다시 읽어 센다 — 이것은 미리보기다."""
-    if not p.get('live_ok') or not account or not limits:
+    자격이 없거나(사람이 고른 계획은 센다 · 라운드 494) 계좌·한도가 없으면 None. 워커는 주문 때 잔고·주문 가능 금액·대기 주문을
+    다시 읽어 센다 — 이것은 미리보기다."""
+    if not (p.get('live_ok') or picked) or not account or not limits:
         return None
     sz = swing_risk.size(p.get('entry'), p.get('stop'), account, limits, cost_pct)
     q = int(sz.get('qty') or 0)
@@ -373,8 +375,11 @@ def _fail_label():
         return lambda n: f"'{n}' 미충족"
 
 
-def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=(), approval_on=False, approved=None):
-    """가장 최근 판정일의 계획 + 모의 결과 — 표 한 줄씩. 라운드 450: 오늘 상태 · 중앙 판정 조건(통과 수와 미충족 전부) · 수량 미리보기."""
+def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=(), approval_on=False, approved=None, picks=None,
+              report=None):
+    """가장 최근 판정일의 계획 + 모의 결과 — 표 한 줄씩. 라운드 450: 오늘 상태 · 중앙 판정 조건(통과 수와 미충족 전부) · 수량 미리보기.
+    라운드 494 — `picks`(사람이 고른 계획 id): 자격 칸이 '아니오 · 사람이 고름' · 오늘 상태 앞에 '사람이 고름 · '(고르기로 못 넘는
+    막힘이 있으면 그 사유) · 수량 미리보기를 센다."""
     ps = L.plans(c)
     if not ps:
         return None, []
@@ -394,7 +399,9 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
                     + ((' · 미충족: ' + ' · '.join(fl(x) for x in failed)) if failed else ' · 미충족 없음'))
         else:
             cond = '— (이 계획에는 조건 기록이 없습니다)'
-        sz = size_preview(p, account, limits, cost_pct)
+        picked = (not p['live_ok']) and p['plan_id'] in (picks or set())
+        hb = _se.pick_blockers(p, report) if picked else []
+        sz = size_preview(p, account, limits, cost_pct, picked=(picked and not hb))
         if sz is None:
             qty_txt, loss_txt = '—', '—'
         elif sz['qty'] < 1:
@@ -403,10 +410,12 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
             qty_txt = f"{sz['qty']}주 · {_won(sz['amount'])} (정한 제한: {sz['binding']})"
             loss_txt = _won(sz['planned_loss']) + (f" · 매수 뒤 주식 비중 {sz['exposure_after_pct']:.1f}%"
                                                   if sz['exposure_after_pct'] is not None else '')
-        status = plan_status(p, today_day, held=p['code'] in (held or ()))
+        status = plan_status(p, today_day, held=p['code'] in (held or ()), picked=(picked and not hb))
         if approval_on and p['live_ok'] and p['code'] not in (held or ()):
             # 라운드 451 — 실전 승인형이면 승인 여부가 오늘 상태 앞에 온다(승인 전이면 워커가 사지 않는다)
             status = ('승인됨 · ' if p['plan_id'] in (approved or set()) else '승인 전 — 사지 않습니다 · ') + status
+        if picked and p['code'] not in (held or ()):
+            status = (f'사람이 고름 — 그래도 사지 않습니다: {hb[0]}' if hb else '사람이 고름 · ' + status)
         # 라운드 453 — 모델(중앙 판정) 가격과 호가 단위로 맞춘 주문 가격이 다르면 둘 다 적는다(한쪽이 다른 쪽을 덮지 않는다)
         def _px(order, model):
             s = _won(order)
@@ -416,7 +425,8 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
             except (TypeError, ValueError):
                 pass
             return s
-        rows.append({'종목': f"{p.get('name') or ''} ({p['code']})", '실주문 자격': '예' if p['live_ok'] else '아니오',
+        rows.append({'종목': f"{p.get('name') or ''} ({p['code']})",
+                     '실주문 자격': '예' if p['live_ok'] else ('아니오 · 사람이 고름' if picked else '아니오'),
                      '오늘 상태': status,
                      '중앙 판정 조건': cond,
                      '진입가(지정가)': _px(p['entry'], p.get('entry_model')), '1차 목표': _px(p['target'], p.get('target_model')),
@@ -828,6 +838,9 @@ def bar_items(ctx):
     else:
         wv, wt = '확인 불가', 'warn'
     live_n = sum(1 for p in ctx['plans_today'] if p.get('live_ok'))
+    # 라운드 494 — 사람이 고른 계획(고르기로 못 넘는 막힘 없음)은 자격 수와 따로 적는다
+    pick_n = sum(1 for p in ctx['plans_today'] if not p.get('live_ok') and p.get('plan_id') in (ctx.get('picks') or set())
+                 and not _se.pick_blockers(p, ctx.get('report')))
     # 라운드 458 — 15초 자동 갱신이 켜져 있으면 이 띠의 시각은 화면 전체가 다시 그려질 때만 바뀐다(조각 밖) → 시각 대신 갱신 사실을 적는다
     _ar = ctx.get('auto_refresh')
     if _ar and _ar[0] and cv == '정상':
@@ -841,7 +854,7 @@ def bar_items(ctx):
             dict(label='워커', value=wv, tone=wt, sub=(f"마지막 기록 {_ts(hb['ts'])}" if hb else '기록 없음')),
             dict(label='긴급정지', value=('켜짐' if kill else '꺼짐'), tone=('neg' if kill else ''), sub='토글은 오른쪽'),
             dict(label='오늘 계획', value=str(len(ctx['plans_today'])),
-                 sub=f"실주문 자격 {live_n} · 판정일 {ctx.get('today') or '—'}"
+                 sub=f"실주문 자격 {live_n}" + (f" · 사람이 고름 {pick_n}" if pick_n else '') + f" · 판정일 {ctx.get('today') or '—'}"
                  + (f" · 다음 판정 {ctx['next_j']['run'].strftime('%m-%d %H:%M')}"            # 라운드 492 — 다음 계획이 언제 오나
                     if (ctx.get('next_j') or {}).get('new') else ''))]
 
@@ -877,7 +890,10 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                trade_day=X.now_kst().date().isoformat(),
                live=st.session_state.get('sw_acct_live'), allow_write=allow_write, hold_levels=hold_levels, report=report,
                resolve_market=resolve_market, cost=_cost, intents=L.intents_with_state(c),
-               approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [])
+               approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [],
+               mode_ts=L.setting_ts(c, 'mode'),
+               # 라운드 494 — 지금 살아 있는 고르기(고른 그 모드 · 모드를 마지막으로 바꾼 뒤 · `swing_executor.pick_alive`) · 읽기만
+               picks=X.human_picks(stt, mode=mode, mode_ts=L.setting_ts(c, 'mode')))
     # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
     ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
     # 라운드 492 — 다음 계획이 언제 오나(저녁 작업의 다음 실행 · 그 실행의 자료일 · 매수 시작일) — 못 읽으면 None
@@ -960,7 +976,8 @@ def _view_center(st, uk, c, ctx, md):
                                                     planned_loss_sum=_dash.planned_loss_sum(ctx['managed'])),
                                    theme=theme, title='위험 한도 사용 — 설정 한도 대비(참고 · 직접 보유 포함)'), unsafe_allow_html=True)
     st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
-                                               managed_codes=set(ctx['managed']), approval_mode=X.approval_of(ctx['stt'])),
+                                               managed_codes=set(ctx['managed']), approval_mode=X.approval_of(ctx['stt']),
+                                               picks=ctx.get('picks'), report=ctx.get('report')),
                             theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"), unsafe_allow_html=True)
     zl = zero_day_line(c, str(ctx['today']), brief=True) if ctx['today'] else None
     if zl:
@@ -990,10 +1007,175 @@ def _view_center(st, uk, c, ctx, md):
                                  theme=theme), unsafe_allow_html=True)
 
 
+#: 라운드 494 — 사람이 고른 계획 매수의 확인 문장(체크칸). 엔진이 추천하지 않았다는 것과 그 계획의 수를 같은 줄에 적는다
+PICK_ACK = '엔진은 이 계획을 추천하지 않았습니다({facts}). 이 계획대로 사는 것은 제 결정입니다.'
+
+
+def pick_facts(p):
+    """사람이 고르기 전에 볼 사실 — 판정 기록 그대로(새로 셈하지 않는다 · 판정 낱말 없음).
+    → dict(ev_txt, cond_txt, failed, short) · 조건 기록이 없으면 그 칸은 '기록 없음'."""
+    v = _verdict_of(p)
+    ev = v.get('expected_return')
+    try:
+        ev_txt = f'{float(ev):+.2f}%'
+    except (TypeError, ValueError):
+        ev_txt = '산출 불가'
+    failed, n_ck = v.get('failed'), v.get('checks_n')
+    fl = _fail_label()
+    if isinstance(failed, list) and n_ck:
+        cond_txt = f'조건 {int(n_ck) - len(failed)}/{int(n_ck)} 통과'
+        failed_txt = ' · '.join(fl(x) for x in failed) or '없음'
+    else:
+        cond_txt, failed_txt = '조건 기록 없음', '기록 없음'
+    return dict(ev_txt=ev_txt, cond_txt=cond_txt, failed_txt=failed_txt,
+                short=f'비용 차감 기대값 {ev_txt} · {cond_txt}')
+
+
+def held_codes(ctx):
+    """계좌에 있는 종목코드 — 이 화면이 방금 읽은 잔고가 있으면 그것, 아니면 장부의 마지막 계좌 스냅샷. 못 읽으면 빈 집합(라운드 494)."""
+    bal = (ctx.get('live') or {}).get('bal') or ctx.get('acct') or {}
+    out = set()
+    for r in (bal.get('positions') or []):
+        try:
+            if isinstance(r, dict) and r.get('code') and int(float(r.get('qty') or 0)) > 0:
+                out.add(str(r['code']))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _pick_entry_dicts(entries):
+    return [dict(plan_id=e['plan_id'], code=e.get('code'), mode=e.get('mode'), ts=e.get('ts')) for e in entries]
+
+
+def _human_pick_section(st, c, ctx, md, day):
+    """사람이 고른 계획 매수 (라운드 494). 사용자: *"진짜 한번 매매는 해야 할 거 아냐 … 사람이 고른 계획 매수"*.
+
+    엔진 판정은 그대로다(그 계획은 여전히 '추천 아님'). 사람이 그 판정일의 계획 하나를 직접 고르면 실행부가 같은 계약으로 산다.
+    이 칸은 **어느 계획도 미리 고르지 않고 권하지 않는다** — 차례는 표 그대로이고 고르는 칸의 기본값은 비어 있다. 고르기를 적는
+    자리는 여기뿐이다(실행부·워커는 읽기만 · §473). 고를 수 있는 것은 **지금 판정일**의 계획뿐이다(지난 판정의 계획은 고르지 않는다).
+    적대적 검토(2026-10-12)를 받아: 고르기는 **고른 그 모드**에서만 살아 있고 모드를 바꾸면 죽는다(`swing_executor.pick_alive`) ·
+    주문 모드(모의투자·실전)일 때만 고른다 · 누르는 순간 장부의 설정을 새로 읽는다(다른 탭이 푼 고르기를 되살리지 않게) · 한 종목에는
+    고르기 하나(새로 고르면 같은 종목의 옛 고르기를 바꾼다) · 계좌에 이미 있는 종목은 고르는 목록에서 뺀다(워커는 겹쳐 사지 않는다)."""
+    mode, mode_ts = ctx['mode'], ctx.get('mode_ts')
+    entries = X.human_pick_entries(ctx['stt'])
+    by_id = {e['plan_id']: e for e in entries}
+    plans = L.plans(c)
+
+    def _in_window(p):
+        """그 계획이 아직 살 수 있는 창 안인가(판정일 다음 거래일부터 대기 거래일까지) — 못 세면 보인다(숨기지 않는다)."""
+        try:
+            return X.trading_days_between(p['data_day'], ctx.get('trade_day') or p['data_day']) <= int(p.get('wait_bars') or 0)
+        except (TypeError, ValueError):
+            return True
+    # 적힌 고르기는 그 계획의 대기 창이 끝날 때까지 보이고 끌 수 있어야 한다(살아 있든 아니든 · 오늘 판정일 것만이 아니다)
+    chosen = [p for p in plans if p['plan_id'] in by_id and not p.get('live_ok') and _in_window(p)]
+    held = held_codes(ctx)
+    cand_all = [p for p in plans if p['data_day'] == day and not p.get('live_ok') and p['code'] not in ctx['managed']
+                and p['plan_id'] not in by_id]
+    cand = [p for p in cand_all if p['code'] not in held]
+    if not chosen and not cand_all:
+        return
+    _title(st, '사람이 고른 계획 매수 — 엔진이 추천하지 않은 계획을 직접 골라 같은 계약으로 삽니다', ctx['theme'])
+    st.caption("엔진 판정은 바뀌지 않습니다 — 고른 계획은 여전히 '추천 아님'이고, 그 매수는 주문 기록과 영수증에 '사람이 고른 매수'로 "
+               '따로 적혀 엔진의 성적과 섞이지 않습니다. 고르면 그 계획의 계약 그대로(진입가 지정가 · 손절 · 1차 목표 · 대기·보유 거래일) '
+               '판정일 다음 거래일부터 삽니다. 고르기가 그 계획의 승인을 겸하고, 위험 한도 · 긴급정지 · 손절선 확인 · 수량 계산은 그대로입니다. '
+               '고르기는 고른 그 운용 모드에서만 살아 있고, 모드를 바꾸면 사라집니다(다시 고릅니다). 고르기를 취소하거나 모드를 꺼짐으로 '
+               '바꾸면 워커가 걸려 있는 매수 주문을 취소합니다 — 그 전에 일부 체결된 수량은 남아 손절·목표 관리를 받습니다. '
+               '이 칸은 어느 계획도 권하지 않습니다 — 차례는 위 표 그대로이고 고르는 칸은 비어 있습니다.')
+    for p in chosen:
+        e = by_id[p['plan_id']]
+        hb = _se.pick_blockers(p, ctx.get('report'))
+        f = pick_facts(p)
+        alive = X.pick_alive(e, mode, mode_ts)
+        if not alive:
+            state = (f"살아 있지 않음 — {MODE_KO.get(e.get('mode'), e.get('mode') or '모르는 모드')}에서 고른 것이거나 그 뒤 모드가 바뀌어 "
+                     '지금은 사지 않습니다(다시 고르세요)')
+        elif hb:
+            state = f'그래도 사지 않습니다: {hb[0]}'
+        else:
+            state = plan_status(p, ctx.get('trade_day'), held=p['code'] in ctx['managed'], picked=True)
+        ca, cb = st.columns([4, 1])
+        ca.caption(md(f"고름({MODE_KO.get(e.get('mode'), e.get('mode') or '—')} · {_hm(e.get('ts')) or '시각 모름'}) · "
+                      f"{p.get('name') or ''} ({p['code']}) · 판정일 {p['data_day']} · 진입 {_won(p['entry'])} · 손절 {_won(p['stop'])} · "
+                      f"1차 목표 {_won(p['target'])} · {f['short']} · {state}"))
+        if ctx['allow_write'] and cb.button('고르기 취소', key=f"sw_hp_off_{p['plan_id']}"):
+            _cur = X.human_pick_entries(L.settings(c))         # 누르는 순간의 설정에서 뺀다(다른 탭이 적은 것을 되돌리지 않게)
+            L.set_setting(c, 'human_picks', _pick_entry_dicts([x for x in _cur if x['plan_id'] != p['plan_id']]), by='ui')
+            st.rerun()
+    if not cand_all:
+        return
+    if str(day) != str(ctx.get('today') or ''):
+        st.caption(f"위 계획은 판정일 {day} 의 것이고 지금 판정일은 {ctx.get('today') or '—'} 입니다 — 지난 판정의 계획은 고르지 않습니다.")
+        return
+    if mode not in X.MODE_ENV:
+        st.caption(f"지금 운용 모드가 {MODE_KO.get(mode, mode)}이라 고를 수 없습니다 — 고르기는 고른 그 모드(모의투자·실전)에서만 살아 "
+                   '있어, 모드를 먼저 정한 뒤 고릅니다(시스템 → 설정).')
+        return
+    if not ctx['allow_write']:
+        st.caption('이 화면에서는 고를 수 없습니다(이 PC 에서 연 화면에서만 고릅니다).')
+        return
+    if len(cand) < len(cand_all):
+        st.caption(f"계좌에 이미 있는 종목 {len(cand_all) - len(cand)}개는 고르는 목록에서 뺐습니다 — 워커는 이미 가진 종목을 겹쳐 사지 않습니다.")
+    if not cand:
+        return
+    labels = {p['plan_id']: f"{p.get('name') or ''} ({p['code']}) · 진입 {_won(p['entry'])} · {pick_facts(p)['short']}" for p in cand}
+    sel = st.selectbox('고를 계획', [p['plan_id'] for p in cand], index=None, format_func=lambda pid: labels.get(pid, pid),
+                       placeholder='고르지 않음', key='sw_hp_sel')
+    if not sel:
+        return
+    p = next(x for x in cand if x['plan_id'] == sel)
+    hb = _se.pick_blockers(p, ctx.get('report'))
+    f = pick_facts(p)
+    st.caption(md(f"{p.get('name') or ''} ({p['code']}) — 진입 {_won(p['entry'])}(지정가) · 손절 {_won(p['stop'])} · 1차 목표 {_won(p['target'])} · "
+                  f"대기 {p.get('wait_bars') or '—'}거래일 · 보유 {p.get('horizon') or '—'}거래일 · {f['short']} · 미충족: {f['failed_txt']}"))
+    # 그 판정이 그날 봉이 확정되기 전에 만들어졌으면 그 사실(가격이 확정 종가와 다를 수 있다 · 막지는 않는다)
+    if before_final(p) is True:
+        st.caption(md(f"이 판정은 판정일 {p['data_day']} 봉이 확정되기 전({_hm(judged_at(p)) or '—'})에 만들어졌습니다 — 진입·손절·목표의 "
+                      '기준 가격이 그날 확정 종가와 다를 수 있습니다.'))
+    _br494 = blocked_record_line([p])
+    if _br494:
+        st.caption(md(_br494))
+    # 고르기 전에 몇 주를 사게 되는지 — 워커와 같은 함수(`swing_risk.size`)로 마지막으로 읽은 계좌와 지금 한도에서 센 미리보기(§4)
+    _lim494 = ctx['stt'].get('limits') or None
+    _sz494 = size_preview(p, ctx['acct'], _lim494, ctx['cost'], picked=True) if not hb else None
+    if hb:
+        pass
+    elif not _lim494:
+        st.caption('수량 미리보기 없음 — 위험 한도가 비어 있습니다(비어 있으면 워커도 사지 않습니다 · 시스템 → 설정).')
+    elif not ctx['acct']:
+        st.caption('수량 미리보기 없음 — 계좌를 아직 읽은 적이 없습니다(시스템 → 연결 확인).')
+    elif _sz494 and _sz494['qty'] >= 1:
+        st.caption(md(f"수량 미리보기 — {_sz494['qty']}주 · {_won(_sz494['amount'])} · 정한 제한 {_sz494['binding']} · "
+                      f"손절 시 손실 약 {_won(_sz494['planned_loss'])}(손절가 체결 가정) — 워커는 주문 때 잔고·주문 가능 금액을 다시 읽어 셉니다."))
+    elif _sz494:
+        st.caption(md(f"수량 미리보기 0주 — {_sz494['reason']} · 이대로면 골라도 사지 않습니다."))
+    if hb:
+        st.caption(md(f'이 계획은 고를 수 없습니다 — {hb[0]}'))
+        return
+    ack = st.checkbox(PICK_ACK.format(facts=f['short']), value=False, key=f"sw_hp_ack_{sel}")
+    if st.button('이 계획 고르기', key=f'sw_hp_on_{sel}', disabled=not ack):
+        # 누른 순간 다시 본다 — 판정일이 그새 넘어갔거나(지난 판정) · 고르기로 못 넘는 막힘이 생겼거나 · 그새 모드가 바뀌었으면 적지 않는다.
+        #   적는 값은 장부의 지금 설정에서 만든다(다른 탭이 푼 고르기를 되살리지 않게) · 같은 종목의 옛 고르기는 바꾼다(한 종목 하나)
+        _now_mode = L.mode_of(c)
+        if not ack or str(p['data_day']) != str(ctx.get('today') or '') or _se.pick_blockers(p, ctx.get('report')):
+            st.warning('고르지 않았습니다 — 그새 판정일이 넘어갔거나 고를 수 없는 막힘이 생겼습니다. 화면을 다시 확인하세요.')
+        elif _now_mode != mode:
+            st.warning('고르지 않았습니다 — 그새 운용 모드가 바뀌었습니다. 화면을 다시 확인하세요.')
+        else:
+            _cur = [x for x in X.human_pick_entries(L.settings(c)) if x.get('code') != p['code'] and x['plan_id'] != sel]
+            _cur.append(dict(plan_id=sel, code=p['code'], mode=mode, ts=L.now_ts()))
+            L.set_setting(c, 'human_picks', _pick_entry_dicts(_cur), by='ui')
+            st.session_state['sw_flash'] = (f"골랐습니다 — {p.get('name') or ''} ({p['code']}) · {MODE_KO.get(mode, mode)} 모드 · 판정일 다음 "
+                                            f"거래일부터 진입가 {_won(p['entry'])} 지정가로 삽니다(한도·긴급정지는 그대로 · 모드를 바꾸면 이 고르기는 사라집니다)")
+            st.rerun()
+
+
 def _view_plans(st, uk, c, ctx, md):
     """오늘 계획 — 라운드 450·451 의 표·승인 그대로(갈래로 옮겼을 뿐)."""
     day, rows = plan_rows(c, today_day=ctx['today'], account=ctx['acct'], limits=(ctx['stt'].get('limits') or None), cost_pct=ctx['cost'],
-                          held=set(ctx['managed']), approval_on=ctx['approval_on'], approved=ctx['approved'])
+                          held=set(ctx['managed']), approval_on=ctx['approval_on'], approved=ctx['approved'], picks=ctx.get('picks'),
+                          report=ctx.get('report'))
     if not rows:
         st.caption('아직 계획이 없습니다 — 워커가 돌거나(저녁 작업 포함) 시스템의 \'계획 갱신\'을 누르면 그날 개장 전 리포트에서 만들어집니다. '
                    '운용 모드와 무관하게 남깁니다.')
@@ -1040,13 +1222,15 @@ def _view_plans(st, uk, c, ctx, md):
                 _ca451, _cb451 = st.columns([4, 1])
                 _ca451.caption(f"{_p451.get('name') or ''} ({_p451['code']}) · 진입 {_won(_p451['entry'])} · 손절 {_won(_p451['stop'])} · "
                                f"1차 목표 {_won(_p451['target'])} · {'승인됨' if _pid451 in _apset451 else '승인 전'}")
+                # 라운드 494 — 누르는 순간 장부의 설정을 새로 읽어 적는다(다른 탭이 푼 승인을 되살리지 않게 · 적대적 검토)
                 if _pid451 in _apset451:
                     if _cb451.button('승인 취소', key=f'sw_unappr_{_pid451}'):
-                        L.set_setting(c, 'approved_plans', sorted(_apset451 - {_pid451}))
+                        L.set_setting(c, 'approved_plans', sorted(X.approved_plans(L.settings(c)) - {_pid451}))
                         st.rerun()
                 elif _cb451.button('이 계획 승인', key=f'sw_appr_{_pid451}'):
-                    L.set_setting(c, 'approved_plans', sorted(_apset451 | {_pid451}))
+                    L.set_setting(c, 'approved_plans', sorted(X.approved_plans(L.settings(c)) | {_pid451}))
                     st.rerun()
+    _human_pick_section(st, c, ctx, md, day)
     ss = shadow_summary(c)
     if ss:
         st.caption(md(f"끝난 모의 {ss['n']}건 — 목표 {ss['target']} · 손절 {ss['stop']} · 기간 만료 "
@@ -1242,12 +1426,16 @@ def _view_proof(st, uk, c, ctx, md):
         st.caption('아직 자동매매가 열고 닫은 보유가 없습니다 — 첫 거래가 닫히면 여기 계획 vs 실제 폭포가 생깁니다.')
     for r in list(reversed(closed))[:5]:
         _title(st, f"{r['receipt_id']} · {r['code']} · {r.get('opened_day')} → {r.get('closed_day')} · "
-                   f"{_sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—')} · 원장 기준 재채점 {_pct(r.get('shadow_net_pct'))}", theme)
+                   f"{_sp.EXIT_KO.get(r.get('exit_reason'), r.get('exit_reason') or '—')} · 원장 기준 재채점 {_pct(r.get('shadow_net_pct'))}"
+                   + (f' · {X.HUMAN_PICK_TAG}(엔진 추천 아님)' if r.get('picked_by') == 'human' else ''), theme)
         st.markdown(_viz.waterfall(_dash.receipt_waterfall(r), theme=theme), unsafe_allow_html=True)
         st.caption(f"계획 진입 {_won(r['entry_plan'])} → 실제 {_won(r['entry_fill'])}({_pct(r['slip_entry_pct'])}) · 계획 청산 {_won(r['exit_plan'])} → "
                    f"실제 {_won(r['exit_fill'])}({_pct(r['slip_exit_pct'])}) · 실제 체결가 수익률 {_pct(r['gross_pct'])} · 추정 비용후 {_pct(r['net_pct'])}")
     if rc:
-        st.dataframe([{'영수증': r['receipt_id'], '종목': r['code'], '산 날': r.get('opened_day') or '—',
+        st.dataframe([{'영수증': r['receipt_id'], '종목': r['code'],
+                       # 라운드 494 — 엔진 추천 계획인가 사람이 고른 계획인가(넘겨받은 보유는 계획이 없다)
+                       '누가 고름': {'engine': '엔진 추천', 'human': X.HUMAN_PICK_TAG}.get(r.get('picked_by'), '—'),
+                       '산 날': r.get('opened_day') or '—',
                        '닫은 날': r.get('closed_day') or ('보유 중' if r.get('open') else '—'), '수량': r['qty'],
                        '계획 진입가': _won(r['entry_plan']), '실제 진입가': _won(r['entry_fill']),
                        '진입 슬리피지': _pct(r['slip_entry_pct']),

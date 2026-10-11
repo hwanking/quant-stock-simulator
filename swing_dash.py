@@ -84,7 +84,8 @@ def next_judgement_line(nj, anchor_day, live_n):
     b = nj.get('buy_day')
     return (f"다음 계획 — 저녁 작업({run} · 그날 봉이 확정된 뒤)이 자료일 {nj['data_day']} 판정으로 만들고, 그 계획의 매수는 "
             + (f"{b.isoformat()}({WEEK_KO[b.weekday()]}) 장부터입니다" if b else '그다음 거래일 장부터입니다')
-            + f" — 그 판정에 '추천'이 있을 때만. 지금 보이는 계획은 판정일 {anchor_day} 의 것이고 실주문 자격은 {live_n}개입니다.")
+            + f" — 그 판정에 '추천'이 있을 때만(또는 '오늘 계획'에서 사람이 그 계획을 직접 고를 때). "
+              f"지금 보이는 계획은 판정일 {anchor_day} 의 것이고 실주문 자격은 {live_n}개입니다.")
 
 
 def _when(d, op):
@@ -129,7 +130,10 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None):
             start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt}부터' if nxt else '다음 장 날짜를 구하지 못했습니다(휴장일 표 밖)'
     first = ("실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"
              + (" · 주문 방식이 '계획마다 승인'이라 그 계획을 '오늘 계획'에서 승인해야 삽니다" if X.approval_of(stt) == 'approve' else '')
-             + '. 그 날짜는 미리 말할 수 없습니다 — 추천이 언제 나올지는 아무도 모릅니다.')
+             + '. 그 날짜는 미리 말할 수 없습니다 — 추천이 언제 나올지는 아무도 모릅니다.'
+             # 라운드 494 — 사람이 고른 계획 매수: 엔진 판정은 그대로, 고르는 것은 사람이다(이 카드는 아무 계획도 권하지 않는다)
+             + " 엔진이 추천하지 않은 계획도 '오늘 계획'에서 사람이 직접 고르면 같은 계약(진입가 지정가 · 손절 · 1차 목표)으로 "
+               '판정일 다음 거래일부터 삽니다 — 그 매수는 엔진 추천이 아니라 사람의 결정으로 적힙니다.')
     return dict(live=live, headline=headline, start=start, first_buy=first, items=items, n_ok=len(items) - len(missing),
                 n_items=len(items), missing=[i['label'] for i in missing], next_session=nxt)
 
@@ -203,7 +207,8 @@ def risk_usage(summary, limits, managed_n=0, new_orders_today=0, planned_loss_su
     return items
 
 
-def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None, approval_mode=None):
+def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None, approval_mode=None,
+                 picks=None, report=None):
     """오늘 깔때기 — 후보 → 실주문 자격 → 승인 → 주문 냄 → 체결. 전부 장부의 수(지어내지 않는다).
 
     라운드 491 — 실전이 아니면 `approval_on` 이 거짓이라 승인 칸이 '승인 불필요(자격 = 승인)'였는데, 같은 화면의 시작 카드는 주문 방식이
@@ -219,9 +224,16 @@ def funnel_today(plans_today, approved=None, approval_on=False, intents_today=No
         appr_sub = '실전으로 켜면 계획마다 승인 · 지금은 주문 안 냄'
     else:
         appr, appr_sub = live, '승인 불필요(자격 = 승인)'
+    # 라운드 494 — 사람이 고른 계획(실주문 자격 없음 · 고르기로 넘을 수 없는 막힘 없음)은 자격 칸에 따로 세고, 고르기가 승인을 겸한다
+    import swing_engine as _se494
+    hp = [p for p in ps if not p.get('live_ok') and p.get('plan_id') in (picks or set()) and not _se494.pick_blockers(p, report)]
+    elig_sub = '중앙 판정 조건 전부 통과' + (f' {len(live)} · 사람이 고름 {len(hp)}' if hp else '')
+    if hp:
+        appr = list(appr) + hp
+        appr_sub += f' · 사람이 고른 {len(hp)} 포함(고르기 = 승인)'
     its = [it for it in (intents_today or []) if it.get('side') == 'buy']
     filled = [it for it in its if it.get('state') in ('FILLED', 'PARTIAL')]
-    return [dict(label='후보', n=len(ps), sub='개장 전 리포트'), dict(label='실주문 자격', n=len(live), sub='중앙 판정 조건 전부 통과'),
+    return [dict(label='후보', n=len(ps), sub='개장 전 리포트'), dict(label='실주문 자격', n=len(live) + len(hp), sub=elig_sub),
             dict(label='승인', n=len(appr), sub=appr_sub), dict(label='주문 냄', n=len(its), sub='오늘 매수 의도'),
             dict(label='체결', n=len(filled), sub='부분 체결 포함')]
 

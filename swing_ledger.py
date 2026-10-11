@@ -140,6 +140,22 @@ def mode_of(c):
     return m if m in MODES else 'OFF'
 
 
+def setting_ts(c, key):
+    """그 설정이 마지막으로 적힌 시각(라운드 494 — 사람이 고른 계획은 모드를 마지막으로 바꾼 뒤에 고른 것만 산다). 없으면 None."""
+    r = c.execute('SELECT ts FROM settings_events WHERE key=? ORDER BY id DESC LIMIT 1', (key,)).fetchone()
+    return r['ts'] if r else None
+
+
+def last_closed_days(c):
+    """종목마다 자동 관리 포지션이 마지막으로 다 팔려 끝난 거래일 {code: 'YYYY-MM-DD'} (라운드 494 — 판정일 뒤에 이미 사고 판 종목을
+    그 판정으로 다시 사지 않게)."""
+    out = {}
+    for r in c.execute("SELECT code, trade_day FROM position_events WHERE event='CLOSED' ORDER BY id"):
+        if r['trade_day']:
+            out[r['code']] = max(str(r['trade_day']), out.get(r['code'], ''))
+    return out
+
+
 # ── 계획 ────────────────────────────────────────────────────────────────
 def add_plan(c, p):
     """계획을 남긴다 — 같은 plan_id 가 있으면 아무것도 안 바꾼다(바뀌지 않는 영수증). 새로 남겼으면 True."""

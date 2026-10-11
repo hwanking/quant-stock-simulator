@@ -102,7 +102,7 @@ def max_ids(c):
 
 def order_rows(c, after_id, upto_id):
     q = ('SELECT oe.id AS id, oe.state AS state, oe.filled_qty AS filled_qty, oe.avg_fill AS avg_fill, oe.detail AS detail, '
-         'i.code AS code, i.side AS side, i.reason AS reason, i.qty AS qty, i.price AS price, p.name AS name '
+         'i.code AS code, i.side AS side, i.reason AS reason, i.qty AS qty, i.price AS price, p.name AS name, p.live_ok AS live_ok '
          'FROM order_events oe JOIN intents i ON i.intent_id = oe.intent_id LEFT JOIN plans p ON p.plan_id = i.plan_id '
          'WHERE oe.id > ? AND oe.id <= ? ORDER BY oe.id')
     return [dict(r) for r in c.execute(q, (int(after_id), int(upto_id)))]
@@ -123,6 +123,8 @@ def message_for_order(r):
     """주문 사건 한 줄 → 알릴 문장 또는 None(알리지 않는 사건)."""
     st, side, reason = r.get('state'), r.get('side'), _base(r.get('reason'))
     what = REASON_KO.get(reason, '매수' if side == 'buy' else '매도')
+    if side == 'buy' and r.get('live_ok') is not None and not r.get('live_ok'):
+        what += '(사람이 고른 계획 · 엔진 추천 아님)'     # 라운드 494 — 실주문 자격 없는 계획의 매수는 사람이 고른 것이다
     who = _who(r)
     avg = f" · 평균 {float(r['avg_fill']):,.0f}원" if r.get('avg_fill') else ''
     if st == 'FILLED':

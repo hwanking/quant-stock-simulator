@@ -35399,7 +35399,9 @@ class _FakeBroker432:
         return dict(odno=odno, orgno=orgno)
 
 
-def _report432(rec=True, day='2026-10-06', entry=10000, target=11000, stop=9500, code='000001.KS', asset='stock'):
+# 라운드 494 — 자산 종류 기본값을 실제 리포트 모양(대문자 'STOCK' · premarket.py 의 후보 칸)으로. 종전 소문자 'stock' 이라 swing_engine 의
+#   소문자 비교 결함(실제 리포트의 계획이 전부 '주식이 아닙니다')이 이 절에서 안 보였다 — 가짜가 진짜처럼 굴어야 시험이 뜻이 있다.
+def _report432(rec=True, day='2026-10-06', entry=10000, target=11000, stop=9500, code='000001.KS', asset='STOCK'):
     import premarket as _pm432
     return dict(date=day, day_basis=_pm432.DAY_BASIS, engine_version='vtest', picks=[dict(
         symbol=code, asset_type=asset, name='시험종목',
@@ -40491,6 +40493,423 @@ check("⑧ 수량 미리보기 없음 — '…없거나 위험 한도' 로 두 �
       and any('위험 한도가 비어 있습니다' in s for s in _sv472c), str([s for s in _sv472c if '미리보기' in s])[:200],
       scanned=len(_sv472c))
 # ─── §472 끝 ───
+
+
+# ─── §473 시작 (라운드 494) ───
+print()
+print("§473 사람이 고른 계획 매수 — 넘는 것은 '추천 아님' 하나 · 고르기가 승인을 겸한다 · 모드·한도·긴급정지·손절선은 그대로 · 엔진 성적과 섞지 않는다 (라운드 494)")
+print("-" * 72)
+# ── 무엇을 잠그나 ────────────────────────────────────────────────────────
+#   사용자(2026-10-12): *"조건 11개 중 통과 9개 · 미충족 2개가 크리티컬해? 진짜 한번 매매는 해야 할 거 아냐"* → 고른 길: *"사람이 고른
+#   계획 매수"*. 엔진 판정은 바꾸지 않는다(그 계획은 여전히 '추천 아님'). 사람이 그 계획 하나를 직접 고르면 실행부가 같은 계약으로 산다.
+#   ① 계획 기록 — '추천 아님' 밖의 막힘(자산 종류 · 가격 정합 · 판정일 · 대기 기간)은 hard_blockers 로 싣고 사람이 못 넘는다 · 옛 계획은
+#      그 칸이 없어 못 고른다(모르는 것을 '없다'로 읽지 않는다) ② 실전 승인형 · 고르지 않은 비추천 계획 → 매수 0 · 고르면 승인 없이 1건 ·
+#      주문 사건에 '사람이 고른 매수(엔진 추천 아님 · 기대값)' ③ 고르기는 관문을 못 넘는다(긴급정지 · 꺼짐 모드 · 한도 없음 · 손절선 아래)
+#   ④ 고르기로 못 넘는 막힘(ETF · 옛 계획) → 매수 0 · 사유 ⑤ 고르기를 풀면 열린 매수 취소 · 실전 승인형에서 승인을 풀어도 같다 · 완전
+#      자동이면 승인 해제로 취소하지 않는다 ⑥ 영수증·알림이 '사람이 고름'을 엔진 추천과 갈라 적는다 ⑦ 고르기를 적는 자리는 화면뿐(AST)
+#   ⑧ 표·깔때기 ⑨ 화면(자식 렌더 · 증권사 생성자 막음) — 고르는 칸의 기본값은 비어 있고 확인 체크 전엔 단추가 꺼져 있으며 누르면 장부에
+#      그 계획 하나만 적힌다. §432 의 가짜 증권사·장부·바퀴 도우미를 그대로 쓴다(네트워크 0).
+import ast as _ast473
+import swing_dash as _sd473
+import swing_engine as _se473
+import swing_executor as _sx473
+import swing_ledger as _sl473
+import swing_notify as _sn473
+import swing_proof as _sp473
+import swing_view as _sv473
+
+_wb473 = _se473.wait_bars()
+_pk_nr473 = dict(symbol='000001.KS', asset_type='STOCK', name='n', core=dict(           # 실제 리포트 모양(대문자 'STOCK')
+    recommended=False, bucket='추천 제외', exclude_reason='시험 사유', entry_price=10000, new_target=11000, new_stop=9500,
+    horizon_days=20, expected_return=-0.31, checks=[dict(name='비용 차감 기대값 양수', ok=False)] + [dict(name=f'c{i}', ok=True) for i in range(10)]))
+_pl_nr473 = _se473.plan_from_pick(_pk_nr473, '2026-10-06', 'vtest', '2026-10-06', _wb473)
+_pl_etf473 = _se473.plan_from_pick(dict(_pk_nr473, asset_type='ETF'), '2026-10-06', 'vtest', '2026-10-06', _wb473)
+_pl_rec473 = _se473.plan_from_pick(dict(_pk_nr473, core=dict(_pk_nr473['core'], recommended=True)), '2026-10-06', 'vtest', '2026-10-06', _wb473)
+_pl_bad473 = _se473.plan_from_pick(dict(_pk_nr473, core=dict(_pk_nr473['core'], new_stop=10500)), '2026-10-06', 'vtest', '2026-10-06', _wb473)
+_pl_old473 = dict(_pl_nr473, verdict={k: v for k, v in _pl_nr473['verdict'].items() if k != 'hard_blockers'})
+_c473m = _sl473.connect(':memory:')
+_sl473.add_plan(_c473m, _pl_nr473)
+_pl_led473 = _sl473.plan(_c473m, _pl_nr473['plan_id'])
+_c473m.close()
+check("① 계획 기록 — 비추천 주식은 막힘이 '추천 아님' 하나라 고를 수 있다(장부에서 다시 읽어도) · ETF·가격 정합 깨짐은 hard_blockers 로 "
+      "못 고른다 · 추천 계획은 막힘 없음 · 그 칸이 없는 옛 계획은 못 고른다 · 판정 기록은 plan_id 에 안 든다",
+      _wb473 is not None and not _pl_nr473['live_ok'] and _pl_nr473['verdict']['hard_blockers'] == []
+      and _se473.pick_blockers(_pl_nr473) == [] and _se473.pick_blockers(_pl_led473) == []
+      and any('주식이 아닙니다' in x for x in _se473.pick_blockers(_pl_etf473))
+      and any('정합' in x for x in _se473.pick_blockers(_pl_bad473))
+      and _pl_rec473['live_ok'] and _se473.pick_blockers(_pl_rec473) == []
+      and _se473.pick_blockers(_pl_old473) == [_se473.OLD_PLAN_NO_PICK]
+      and _pl_old473['plan_id'] == _pl_nr473['plan_id'] and _pl_nr473['block_reason'].startswith(_se473.REC_BLOCK_HEAD),
+      f"{_pl_nr473['verdict'].get('hard_blockers')} · {_se473.pick_blockers(_pl_etf473)} · {_se473.pick_blockers(_pl_bad473)}")
+
+# ①' 자산 종류 — 리포트는 엔진 값을 대문자로 적는다(premarket.py 의 후보 칸 기본값 'STOCK' · 엔진 STOCK/ETF/ETF_LEV/ETF_INV). 종전 비교가
+#    소문자 'stock' 이라 실제 리포트의 계획이 **전부** '주식이 아닙니다'였다(시험의 가짜 리포트는 소문자라 초록이었다). 리포트를 쓰는 쪽의
+#    기본값 글자를 AST 로 읽어 그 값이 막히지 않는지 본다(쓰는 쪽 글자가 바뀌면 여기서 붉어진다 · 라운드 454 ⑧ 의 모양)
+_pm_default473 = None
+for _n473 in _ast473.walk(_ast473.parse(open(_os.path.join(PROJ, 'premarket.py'), encoding='utf-8').read())):
+    if (isinstance(_n473, _ast473.Call) and getattr(_n473.func, 'attr', None) == 'get' and len(_n473.args) == 2
+            and isinstance(_n473.args[0], _ast473.Constant) and _n473.args[0].value == 'asset_type'
+            and isinstance(_n473.args[1], _ast473.Constant)):
+        _pm_default473 = _n473.args[1].value
+
+
+def _asset_blocked473(at):
+    _pk = dict(_pk_nr473, asset_type=at, core=dict(_pk_nr473['core'], recommended=True))
+    return not _se473.plan_from_pick(_pk, '2026-10-06', 'vtest', '2026-10-06', _wb473)['live_ok']
+
+
+check("①' 자산 종류는 대소문자와 무관하게 견준다 — 리포트 기본값(premarket.py 의 'STOCK')·'stock'·빈 값은 주식 · ETF·ETF_LEV·ETF_INV 는 막힘 · "
+      "추천 + 'STOCK' 이면 실주문 자격이 선다",
+      _pm_default473 == 'STOCK' and not _asset_blocked473(_pm_default473) and not _asset_blocked473('stock')
+      and not _asset_blocked473(None) and all(_asset_blocked473(x) for x in ('ETF', 'ETF_LEV', 'ETF_INV', 'etf')),
+      str(_pm_default473))
+# ①'' 옛 계획(칸 없음) — 그 판정일 리포트의 같은 후보로 다시 세워 plan_id 가 같을 때만 그 막힘 목록 · 다른 날 리포트 · 다른 엔진 버전 ·
+#     후보 없음이면 못 고른다
+import premarket as _pm473
+_rep_old473 = dict(date='2026-10-06', day_basis=_pm473.DAY_BASIS, engine_version='vtest', picks=[_pk_nr473])
+check("①'' 옛 계획 — 같은 날 리포트의 같은 후보로 다시 세운 plan_id 가 같으면 막힘 없음 · 다른 날 · 다른 엔진 버전 · 후보 없음 · "
+      "다시 세운 막힘이 있으면(ETF) 못 고른다",
+      _se473.pick_blockers(_pl_old473, _rep_old473) == []
+      and _se473.pick_blockers(_pl_old473, dict(_rep_old473, date='2026-10-07')) == [_se473.OLD_PLAN_NO_PICK]
+      and _se473.pick_blockers(_pl_old473, dict(_rep_old473, engine_version='vother')) == [_se473.OLD_PLAN_NO_PICK]
+      and _se473.pick_blockers(_pl_old473, dict(_rep_old473, picks=[])) == [_se473.OLD_PLAN_NO_PICK]
+      and any('주식이 아닙니다' in x for x in _se473.pick_blockers(
+          dict(_pl_old473), dict(_rep_old473, picks=[dict(_pk_nr473, asset_type='ETF')]))),
+      str(_se473.pick_blockers(_pl_old473, _rep_old473)))
+
+
+def _db473(approval='approve', **kw):
+    c = _db432(**kw)
+    _sl473.set_setting(c, 'order_approval', approval, by='test')
+    return c
+
+
+def _nr_pid473(c):
+    _sx432.refresh_plans(c, _report432(rec=False), '2026-10-06', None, 0.41)
+    return [p['plan_id'] for p in _sl473.plans(c) if not p['live_ok']][0]
+
+
+def _pick473(c, pids, mode='LIVE', ts=None):
+    """고르기를 화면과 같은 모양(한 건 = plan_id · code · mode · ts)으로 장부에 심는다(쓰는 자리는 화면뿐이라 시험은 직접 적는다)."""
+    pids = [pids] if isinstance(pids, str) else list(pids)
+    _sl473.set_setting(c, 'human_picks', [dict(plan_id=x, code=(_sl473.plan(c, x) or {}).get('code'), mode=mode,
+                                               ts=ts or _sl473.now_ts()) for x in pids], by='test')
+
+
+# ② 실전 · 승인형 · 비추천 계획 — 안 고르면 매수 0 · 고르면 승인 없이 진입가 지정가 1건 · 주문 사건에 사람이 고른 매수 · 다음 바퀴엔 또 안 산다
+_c473, _fb473 = _db473(), _FakeBroker432()
+_rep_nr473 = _report432(rec=False)
+_o473a = _cyc432(_c473, _fb473, rep=_rep_nr473)
+_pid473 = [p['plan_id'] for p in _sl473.plans(_c473) if not p['live_ok']][0]
+_pick473(_c473, _pid473)
+_o473b = _cyc432(_c473, _fb473, rep=_rep_nr473, now=_now432(mm=5))
+_o473c = _cyc432(_c473, _fb473, rep=_rep_nr473, now=_now432(mm=10))
+_buys473 = [p for p in _fb473.placed if p[0] == 'buy']
+_ev473 = [e for it in _sl473.intents_with_state(_c473) for e in _sl473.events_of(_c473, it['intent_id']) if e['state'] == 'RISK_APPROVED']
+check("② 실전·승인형 — 안 고른 비추천 계획은 매수 0 · 고르면 승인 없이 진입가 10,000 지정가 1건 · 다음 바퀴엔 또 안 산다 · "
+      "주문 사건에 '사람이 고른 매수(엔진 추천 아님 · 비용 차감 기대값 …)'",
+      len(_o473a['orders']) == 0 and len(_buys473) == 1
+      and _buys473[0][1] == '000001' and _buys473[0][3] == 10000 and _buys473[0][4] == '00'
+      and len(_o473b['orders']) == 1 and len(_o473c['orders']) == 0
+      and len(_ev473) == 1 and _ev473[0]['detail'].startswith(_sx473.HUMAN_PICK_TAG + '(엔진 추천 아님 · 비용 차감 기대값'),
+      f"{_o473a['blocked']} · {_fb473.placed} · {[e['detail'] for e in _ev473]}")
+# ③ 고르기는 관문을 못 넘는다 — 긴급정지 · 꺼짐 모드 · 위험 한도 없음 · 지금 가격이 손절선 이하
+_res473 = {}
+for _nm473, _kw473, _q473 in (('kill', dict(kill=True), _Q432), ('off', dict(mode='OFF'), _Q432), ('nolim', dict(limits=False), _Q432),
+                              ('stop', {}, (lambda code: 9400.0))):
+    _cg473, _fg473 = _db473(**_kw473), _FakeBroker432()
+    _pick473(_cg473, _nr_pid473(_cg473))
+    _og473 = _cyc432(_cg473, _fg473, rep=_rep_nr473, quote=_q473)
+    _res473[_nm473] = ([p for p in _fg473.placed if p[0] == 'buy'], ' · '.join(_og473['blocked']))
+check("③ 고른 계획도 관문은 그대로 — 긴급정지 · 꺼짐 모드 · 위험 한도 없음 · 지금 가격이 손절선 이하면 매수 0(사유가 남는다)",
+      all(not v[0] for v in _res473.values()) and '긴급정지' in _res473['kill'][1] and '위험 한도' in _res473['nolim'][1]
+      and '손절선' in _res473['stop'][1], str({k: v[1][:80] for k, v in _res473.items()}))
+# ④ 고르기로 못 넘는 막힘 — ETF 계획 · 옛 계획(hard_blockers 칸 없음)
+_ce473, _fe473 = _db473(), _FakeBroker432()
+_sx432.refresh_plans(_ce473, _report432(rec=False, asset='etf'), '2026-10-06', None, 0.41)
+_pick473(_ce473, [p['plan_id'] for p in _sl473.plans(_ce473)])
+_oe473 = _cyc432(_ce473, _fe473, rep=_report432(rec=False, asset='etf'))
+_co473, _fo473 = _db473(), _FakeBroker432()
+_sl473.add_plan(_co473, dict(_pl_old473, data_day='2026-10-06'))
+_pick473(_co473, _pl_old473['plan_id'])
+_oo473 = _sx432.run_cycle(_co473, broker=_fo473, cfg=_CFG432, report=None, anchor_day='2026-10-06', now=_now432(), cost_pct=0.41,
+                          do_shadow=False, quote_fn=_Q432)
+_co473b, _fo473b = _db473(), _FakeBroker432()
+_sl473.add_plan(_co473b, dict(_pl_old473, data_day='2026-10-06'))
+_pick473(_co473b, _pl_old473['plan_id'])
+_oo473b = _sx432.run_cycle(_co473b, broker=_fo473b, cfg=_CFG432, report=_rep_old473, anchor_day='2026-10-06', now=_now432(), cost_pct=0.41,
+                           do_shadow=False, quote_fn=_Q432)
+check("④' 같은 옛 계획도 그 판정일 리포트를 같이 넘기면(워커는 그날 리포트를 넘긴다) 다시 확인되어 1건 산다",
+      len([p for p in _fo473b.placed if p[0] == 'buy']) == 1, str(_oo473b['blocked']))
+check("④ 고르기로 못 넘는 막힘 — ETF 계획 · 옛 계획(칸 없음)은 골라도 매수 0 · 사유에 '고르기로 넘을 수 없는 막힘'과 그 첫 사유",
+      not [p for p in _fe473.placed if p[0] == 'buy'] and not [p for p in _fo473.placed if p[0] == 'buy']
+      and any('고르기로 넘을 수 없는 막힘' in b and '주식이 아닙니다' in b for b in _oe473['blocked'])
+      and any(_se473.OLD_PLAN_NO_PICK in b for b in _oo473['blocked']), f"{_oe473['blocked']} · {_oo473['blocked']}")
+# ⑤ 고르기를 풀면 그 계획의 열린 매수를 취소한다 · 실전 승인형에서 승인을 풀어도 같다 · 완전 자동이면 승인 해제로 취소하지 않는다
+_sl473.set_setting(_c473, 'human_picks', [], by='test')
+_o473d = _cyc432(_c473, _fb473, rep=_rep_nr473, now=_now432(mm=15))
+_st473d = [i['state'] for i in _sl473.intents_with_state(_c473) if i['side'] == 'buy']
+_ca473, _fa473 = _db473(), _FakeBroker432()
+_cyc432(_ca473, _fa473)
+_lp473 = [p['plan_id'] for p in _sl473.plans(_ca473) if p['live_ok']]
+_sl473.set_setting(_ca473, 'approved_plans', _lp473, by='test')
+_cyc432(_ca473, _fa473, now=_now432(mm=5))
+_sl473.set_setting(_ca473, 'approved_plans', [], by='test')
+_cyc432(_ca473, _fa473, now=_now432(mm=10))
+_cu473, _fu473 = _db473(approval='auto'), _FakeBroker432()
+_cyc432(_cu473, _fu473)
+_sl473.set_setting(_cu473, 'approved_plans', [], by='test')
+_cyc432(_cu473, _fu473, now=_now432(mm=5))
+check("⑤ 고르기를 풀면 열린 매수 취소(사유 '사람이 고르기를 취소') · 실전 승인형에서 승인을 풀어도 취소 · 완전 자동이면 취소 안 함",
+      len(_fb473.cancels) == 1 and _st473d == ['CANCEL_REQUESTED'] and len(_fa473.cancels) == 1 and _fu473.cancels == []
+      and _sx473.unchosen_buy(dict(plan_id='q', live_ok=0), {}, 'LIVE') == '사람이 고르기를 취소한 계획 — 열린 매수 취소'
+      and _sx473.unchosen_buy(dict(plan_id='q', live_ok=0), {'human_picks': [dict(plan_id='q', mode='LIVE', ts='2099-01-01')]}, 'LIVE') is None
+      and _sx473.unchosen_buy(dict(plan_id='q', live_ok=1), {'order_approval': 'approve',
+                                                              'human_picks': [dict(plan_id='q', mode='LIVE', ts='2099-01-01')]}, 'LIVE') is None
+      and _sx473.unchosen_buy(dict(plan_id='q', live_ok=1), {}, 'PAPER') is None and _sx473.unchosen_buy(None, {}, 'LIVE') is None,
+      f"{_fb473.cancels} · {_st473d} · {_fa473.cancels} · {_fu473.cancels}")
+# ⑥ 영수증·알림 — 사람이 고른 매수는 엔진 추천과 갈라 적는다(이 수는 엔진의 성적이 아니다)
+_cr473, _fr473 = _db473(), _FakeBroker432()
+_pick473(_cr473, _nr_pid473(_cr473))
+_cyc432(_cr473, _fr473, rep=_rep_nr473)
+_odno473 = [o['odno'] for o in _fr473.orders if o['side'] == 'buy'][0]
+_fr473.fill(_odno473, [p for p in _fr473.placed if p[0] == 'buy'][0][2])
+_cyc432(_cr473, _fr473, rep=_rep_nr473, now=_now432(mm=5))
+_rc473 = _sp473.receipts(_cr473, 0.41)
+_sm473 = _sp473.summary([dict(closed_day='d', net_pct=1.0, picked_by='human', exit_reason='target'),
+                         dict(closed_day='d', net_pct=-1.0, picked_by='engine', exit_reason='stop')])
+_msg_h473 = _sn473.message_for_order(dict(state='BROKER_ACK', side='buy', reason='entry', code='000001', qty=3, price=10000, live_ok=0))
+_msg_e473 = _sn473.message_for_order(dict(state='BROKER_ACK', side='buy', reason='entry', code='000001', qty=3, price=10000, live_ok=1))
+_msg_n473 = _sn473.message_for_order(dict(state='BROKER_ACK', side='buy', reason='entry', code='000001', qty=3, price=10000))
+check("⑥ 영수증 picked_by='human' · 요약이 사람이 고른 매수를 따로 세고 '엔진의 성적이 아닙니다' · 알림은 실주문 자격 없는 계획의 매수에만 "
+      "'사람이 고른 계획'(계획을 못 읽으면 안 붙인다)",
+      len(_rc473) == 1 and _rc473[0]['picked_by'] == 'human' and _sm473['n_human'] == 1 and _sm473['human_mean'] == 1.0
+      and '엔진의 성적이 아닙니다' in _sp473.summary_line(_sm473, 0.41)
+      and '사람이 고른 계획' in _msg_h473 and '사람이 고른' not in _msg_e473 and '사람이 고른' not in _msg_n473,
+      f"{_rc473} · {_msg_h473}")
+# ⑩ 적대적 검토 ① — 고르기는 고른 그 모드에서만 · 모드를 마지막으로 바꾼 뒤에 고른 것만 산다 · 옛 모양(글자만)은 버린다.
+#    꺼짐에서 고르고 실전으로 바꾸면 사던 길 · 모의투자에서 고르고 실전으로 바꾸면 실계좌로 사던 길 · 실전→꺼짐→실전에서 되살아나던 길
+_res10_473 = {}
+for _nm10, _m10, _ts10 in (('꺼짐에서 고름', 'OFF', None), ('모의투자에서 고름', 'PAPER', None),
+                           ('모드 바꾸기 전에 고름', 'LIVE', '2000-01-01T00:00:00+09:00'), ('옛 모양(글자)', None, None)):
+    _c10, _f10 = _db473(), _FakeBroker432()
+    _pid10 = _nr_pid473(_c10)
+    if _m10 is None:
+        _sl473.set_setting(_c10, 'human_picks', [_pid10], by='test')
+    else:
+        _pick473(_c10, _pid10, mode=_m10, ts=_ts10)
+    _cyc432(_c10, _f10, rep=_rep_nr473)
+    _res10_473[_nm10] = [x for x in _f10.placed if x[0] == 'buy']
+check("⑩ 고르기는 고른 그 모드에서만 · 모드를 바꾼 뒤엔 죽는다 — 꺼짐에서 고름·모의투자에서 고름·모드 바꾸기 전에 고름·옛 모양 → 실전에서 매수 0 · "
+      "pick_alive 의 경계(시각 같음은 산다 · 앞이면 죽는다 · 시각 없음은 모드 시각이 없어도 죽는다 · 꺼짐 모드엔 없다) · 모르는 모양은 버린다",
+      all(not v for v in _res10_473.values())
+      and _sx473.pick_alive(dict(plan_id='a', mode='LIVE', ts='2026-10-12T08:00:00+09:00'), 'LIVE', '2026-10-12T08:00:00+09:00')
+      and not _sx473.pick_alive(dict(plan_id='a', mode='LIVE', ts='2026-10-12T07:59:59+09:00'), 'LIVE', '2026-10-12T08:00:00+09:00')
+      and not _sx473.pick_alive(dict(plan_id='a', mode='LIVE', ts=None), 'LIVE', '2026-10-12T08:00:00+09:00')
+      and not _sx473.pick_alive(dict(plan_id='a', mode='LIVE', ts=None), 'LIVE', None)
+      and not _sx473.pick_alive(dict(plan_id='a', mode='OFF', ts='2099-01-01'), 'OFF', None)
+      and _sx473.human_pick_entries({'human_picks': ['x', 1, {'plan_id': 'y', 'mode': 'LIVE'}]})
+      == [dict(plan_id='y', code=None, mode='LIVE', ts=None)] and _sx473.human_pick_entries({'human_picks': 'z'}) == [],
+      str({k: len(v) for k, v in _res10_473.items()}))
+# ⑪ 적대적 검토 ② — 열린 매수가 있으면 새 매수를 내지 않는 바퀴도 증권사를 불러 취소한다(꺼짐 · 실전 잠금이 다시 걸림). 종전엔 꺼짐이면
+#    보호할 보유가 없을 때 바퀴가 바로 끝나 걸린 매수가 체결돼 손절 관리 없이 남을 수 있었다
+_c11, _f11 = _db473(), _FakeBroker432()
+_pick473(_c11, _nr_pid473(_c11))
+_cyc432(_c11, _f11, rep=_rep_nr473)
+_wants11 = _sx473.wants_broker(_c11, 'OFF', _CFG432, _sl473.settings(_c11))
+_sl473.set_setting(_c11, 'mode', 'OFF', by='test')
+_o11 = _cyc432(_c11, _f11, rep=_rep_nr473, now=_now432(mm=5))
+_c11b, _f11b = _db473(), _FakeBroker432()
+_pick473(_c11b, _nr_pid473(_c11b))
+_cyc432(_c11b, _f11b, rep=_rep_nr473)
+_sl473.set_setting(_c11b, 'live_unlock', None, by='test')
+_o11b = _cyc432(_c11b, _f11b, rep=_rep_nr473, now=_now432(mm=5))
+_c11c, _f11c = _db473(mode='OFF'), _FakeBroker432()
+_o11c = _cyc432(_c11c, _f11c, rep=_rep_nr473)
+check("⑪ 열린 매수가 있으면 꺼짐에서도 증권사를 불러(wants_broker) 그 매수를 취소 · 실전 잠금이 다시 걸려도 '보호만' 바퀴로 취소 · 새 매수 0 · "
+      "열린 매수도 보유도 없으면 꺼짐 바퀴는 종전대로 증권사를 안 부른다",
+      _wants11 is True and len(_f11.cancels) == 1 and _o11['protect_only'] and len(_f11b.cancels) == 1 and _o11b['protect_only']
+      and len([x for x in _f11.placed if x[0] == 'buy']) == 1 and len([x for x in _f11b.placed if x[0] == 'buy']) == 1
+      and _f11c.placed == [] and _f11c.cancels == [] and not _o11c['protect_only'],
+      f"{_f11.cancels} · {_o11['blocked'][:2]} · {_f11b.cancels} · {_o11b['blocked'][:2]}")
+# ⑫ 적대적 검토 ③ — 판정일 뒤에 자동매매가 이미 사고 다 판 종목은 그 판정으로 다시 사지 않는다(같은 종목의 다른 계획이 손절 직후 다시 사던
+#    길 · 엔진 추천 계획에도 같이 건다) · 판정일 전에 끝난 거래는 막지 않는다
+_c12, _f12 = _db473(approval='auto'), _FakeBroker432()
+_sl473.position_event(_c12, '000001', 'SWING_OPENED', 'OPENED', plan_id='OLDP', qty=1, price=10000, target=11000, stop=9500,
+                      trade_day='2026-10-06')
+_sl473.position_event(_c12, '000001', 'SWING_OPENED', 'CLOSED', plan_id='OLDP', trade_day='2026-10-06', detail='stop')
+_o12 = _cyc432(_c12, _f12)
+_c12b, _f12b = _db473(approval='auto'), _FakeBroker432()
+_sl473.position_event(_c12b, '000001', 'SWING_OPENED', 'OPENED', plan_id='OLDP', qty=1, price=10000, target=11000, stop=9500,
+                      trade_day='2026-10-02')
+_sl473.position_event(_c12b, '000001', 'SWING_OPENED', 'CLOSED', plan_id='OLDP', trade_day='2026-10-05', detail='stop')
+_o12b = _cyc432(_c12b, _f12b)
+check("⑫ 판정일(10-06) 당일·뒤에 사고 판 종목은 그 판정의 계획으로 다시 안 산다(사유가 남는다) · 판정일 전(10-05)에 끝난 거래는 막지 않는다",
+      not [x for x in _f12.placed if x[0] == 'buy'] and any('이미 사고 팔아' in b for b in _o12['blocked'])
+      and len([x for x in _f12b.placed if x[0] == 'buy']) == 1 and _sl473.last_closed_days(_c12) == {'000001': '2026-10-06'},
+      f"{_o12['blocked'][:2]} · {_f12b.placed}")
+# ⑬ 적대적 검토 ⑤ — 다른 증권사 환경(모의투자↔실전)의 열린 의도는 이 연결로 맞추지도 취소하지도 않는다 · 지난 거래일 것은 만료로 적는다 ·
+#    주문번호만으로 짝짓지 않는다(종목·방향도 같아야)
+_c13, _f13 = _db473(), _FakeBroker432()
+for _iid13, _day13 in (('PAPER1', '2026-10-07'), ('PAPER2', '2026-10-06')):
+    _sl473.add_intent(_c13, dict(intent_id=_iid13, plan_id='P' + _iid13, side='buy', code='000001', qty=1, price=10000, ord_dvsn='00',
+                                 mode='PAPER', trade_day=_day13))
+    for _st13 in ('RISK_APPROVED', 'SUBMITTING'):
+        _sl473.order_event(_c13, _iid13, _st13)
+    _sl473.order_event(_c13, _iid13, 'BROKER_ACK', odno=('000000000' + _iid13[-1]), orgno='91252')
+_f13.orders.append(dict(date='20261007', orgno='91252', odno='0000000001', orig_odno='', side='buy', code='000002', ord_qty=1,
+                        ord_price=10000.0, time='100000', filled_qty=0, avg_fill=None, remain_qty=1, rejected_qty=0, cancelled=False,
+                        cancel_qty=0))
+_sl473.set_setting(_c13, 'kill_switch', True, by='test')
+_cyc432(_c13, _f13, rep=_rep_nr473)
+_st13 = {i['intent_id']: i['state'] for i in _sl473.intents_with_state(_c13)}
+_m13 = _sx473._match(dict(odno='0000000001', code='000001', side='buy', trade_day='2026-10-07', qty=1, ord_dvsn='00', price=10000),
+                     _f13.orders, set(), set())
+check("⑬ 실전 연결에서 모의투자 의도는 긴급정지여도 취소 안 함(실계좌의 같은 번호 주문을 안 건드린다) · 지난 거래일 모의투자 의도는 만료 · "
+      "주문번호가 같아도 종목이 다르면 짝이 아니다",
+      _f13.cancels == [] and not _f13.orders[0]['cancelled'] and _st13.get('PAPER1') == 'BROKER_ACK' and _st13.get('PAPER2') == 'EXPIRED'
+      and _m13 is None and _sx473.env_ok(dict(mode='OFF'), _f13) and not _sx473.env_ok(dict(mode='PAPER'), _f13),
+      f"{_f13.cancels} · {_st13}")
+# ⑭ 적대적 검토 ④ — 고르기·승인을 적는 값은 누르는 순간 장부의 설정에서 만든다(다른 탭이 푼 것을 되살리지 않게 · AST 로 본다)
+_ast14 = _ast473.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_fn14 = next(n for n in _ast14.body if isinstance(n, _ast473.FunctionDef) and n.name == '_human_pick_section')
+_src14 = _ast473.unparse(_fn14)
+_vp14 = next(n for n in _ast14.body if isinstance(n, _ast473.FunctionDef) and n.name == '_view_plans')
+_appr14 = [_ast473.unparse(n) for n in _ast473.walk(_vp14) if isinstance(n, _ast473.Call)
+           and getattr(n.func, 'attr', None) == 'set_setting' and len(n.args) >= 3
+           and isinstance(n.args[1], _ast473.Constant) and n.args[1].value == 'approved_plans']
+check("⑭ 고르기를 적는 두 자리가 누르는 순간의 설정(human_pick_entries(L.settings(c)))에서 값을 만든다 · 승인 두 자리도 L.settings(c) 에서 · "
+      "꺼짐 모드에서는 고르지 않는다는 문장 · 같은 종목의 옛 고르기를 바꾼다",
+      _src14.count('X.human_pick_entries(L.settings(c))') == 2 and len(_appr14) == 2
+      and all('L.settings(c)' in a for a in _appr14) and '이라 고를 수 없습니다' in _src14
+      and "x.get('code') != p['code']" in _src14, str(_appr14))
+# ⑦ 고르기를 적는 자리는 화면뿐 — 저장소의 .py 에서 set_setting(c, 'human_picks', …) 호출을 AST 로 센다(시험 파일·_probe 제외)
+_wr473, _scan473 = {}, 0
+for _root473, _dirs473, _files473 in _os.walk(PROJ):
+    _dirs473[:] = [d for d in _dirs473 if d not in ('_probe', '.git', '.claude', '__pycache__', 'node_modules', '.venv', 'venv')]
+    for _fn473 in _files473:
+        if not _fn473.endswith('.py') or _fn473 == 'test_pipeline_fixes.py':
+            continue
+        _p473 = _os.path.join(_root473, _fn473)
+        try:
+            _tr473 = _ast473.parse(open(_p473, encoding='utf-8').read())
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        _scan473 += 1
+        for _n473 in _ast473.walk(_tr473):
+            if (isinstance(_n473, _ast473.Call) and getattr(_n473.func, 'attr', getattr(_n473.func, 'id', None)) == 'set_setting'
+                    and len(_n473.args) >= 2 and isinstance(_n473.args[1], _ast473.Constant) and _n473.args[1].value == 'human_picks'):
+                _rel473 = _os.path.relpath(_p473, PROJ).replace('\\', '/')
+                _wr473[_rel473] = _wr473.get(_rel473, 0) + 1
+check("⑦ 고르기(human_picks)를 장부에 적는 호출은 swing_view 의 두 자리(고르기 · 고르기 취소)뿐 — 실행부·워커·다른 모듈은 읽기만",
+      _wr473 == {'swing_view.py': 2}, str(_wr473), scanned=_scan473)
+# ⑧ 표·깔때기 — 고른 계획은 자격 칸 '아니오 · 사람이 고름' · 오늘 상태 앞에 '사람이 고름 · ' · 수량 미리보기를 센다 · 옛 계획은 그래도 안 산다고
+_ct473 = _sl473.connect(':memory:')
+_pa473 = dict(_pl_nr473, data_day='2026-10-07')
+_sl473.add_plan(_ct473, _pa473)
+_sl473.add_plan(_ct473, dict(_pl_old473, plan_id='OLD1', code='000002', data_day='2026-10-07'))
+_acct473 = dict(total_eval=20_000_000, stock_eval=10_000_000, cash=10_000_000)
+_rows473 = {r['종목'].split('(')[-1].rstrip(')'): r for r in _sv473.plan_rows(
+    _ct473, today_day='2026-10-08', account=_acct473, limits=_LIM432, cost_pct=0.41, picks={_pa473['plan_id'], 'OLD1'})[1]}
+_rows473n = {r['종목'].split('(')[-1].rstrip(')'): r for r in _sv473.plan_rows(
+    _ct473, today_day='2026-10-08', account=_acct473, limits=_LIM432, cost_pct=0.41)[1]}
+_ct473.close()
+_fn473 = _sd473.funnel_today([dict(_pa473, live_ok=0), dict(_pl_old473, plan_id='OLD1', live_ok=0), dict(plan_id='L', live_ok=1)],
+                             picks={_pa473['plan_id'], 'OLD1'}, approval_mode='approve')
+check("⑧ 표 — 고른 계획: 자격 '아니오 · 사람이 고름' · 오늘 상태 '사람이 고름 · 진입 대기' · 수량 미리보기 있음 · 옛 계획은 '그래도 사지 "
+      "않습니다' · 안 고르면 종전 그대로('실주문 없음') · 깔때기 자격 칸에 사람이 고른 1(옛 계획은 안 셈)",
+      _rows473['000001']['실주문 자격'] == '아니오 · 사람이 고름' and _rows473['000001']['오늘 상태'].startswith('사람이 고름 · 진입 대기')
+      and _rows473['000001']['수량 미리보기'].endswith(')') and '주' in _rows473['000001']['수량 미리보기']
+      and _rows473['000002']['오늘 상태'].startswith('사람이 고름 — 그래도 사지 않습니다')
+      and _rows473n['000001']['오늘 상태'] == '실주문 없음' and _rows473n['000001']['실주문 자격'] == '아니오'
+      and _fn473[1]['n'] == 2 and '사람이 고름 1' in _fn473[1]['sub'] and '사람이 고른 1' in _fn473[2]['sub'],
+      f"{_rows473} · {_fn473}")
+# ⑨ 화면 — 실전 · 판정일 계획 둘(고를 수 있는 것 · 옛 것): 고르는 칸의 기본값은 비어 있다 · 옛 것은 '고를 수 없습니다' · 확인 체크 전엔
+#    단추가 꺼져 있다 · 체크하고 누르면 장부에 그 계획 하나만 적힌다(자식 프로세스 렌더 · 증권사 생성자를 막는다 · 임시 장부)
+_vdb473 = _os.path.join(PROJ, '_probe', '_r494_view.db')
+if _os.path.exists(_vdb473):
+    _os.remove(_vdb473)
+_cv473 = _sl473.connect(_vdb473)
+_sl473.set_setting(_cv473, 'mode', 'LIVE', by='test')
+_sl473.set_setting(_cv473, 'live_unlock', _sx473.LIVE_UNLOCK_PHRASE, by='test')
+_sl473.set_setting(_cv473, 'limits', _LIM432, by='test')
+_pv473 = dict(_pl_nr473, plan_id='H1', data_day='2026-10-07')
+_sl473.add_plan(_cv473, _pv473)
+_sl473.add_plan(_cv473, dict(_pl_old473, plan_id='O1', code='000002', data_day='2026-10-07'))
+_cv473.close()
+_src473v = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import broker_kis as _B\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    "class _NoBroker:\n"
+    "    def __init__(self, *a, **k):\n"
+    "        raise RuntimeError('broker called')\n"
+    "_B.KisBroker = _NoBroker\n"
+    "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+    "if _V.broker_kis.KisBroker is not _NoBroker:\n"
+    "    raise SystemExit(99)\n"
+    f"_L.connect.__defaults__ = ({_vdb473!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child473 = _os.path.join(PROJ, '_probe', '_r494_view_child.py')
+open(_child473, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src473v!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "sel = at.selectbox(key='sw_hp_sel')\n"
+    "out = dict(exc0=len(at.exception), default=sel.value, opts=list(sel.options),\n"
+    "           cap0=' | '.join(str(e.value) for e in at.caption))\n"
+    "at.selectbox(key='sw_hp_sel').set_value('O1')\n"
+    "at.run()\n"
+    "out['cap_old'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "out['btn_old'] = [str(b.key) for b in at.button]\n"
+    "at.selectbox(key='sw_hp_sel').set_value('H1')\n"
+    "at.run()\n"
+    "out['disabled_before'] = bool(at.button(key='sw_hp_on_H1').disabled)\n"
+    "at.checkbox(key='sw_hp_ack_H1').check()\n"
+    "at.run()\n"
+    "out['disabled_after'] = bool(at.button(key='sw_hp_on_H1').disabled)\n"
+    "at.button(key='sw_hp_on_H1').click()\n"
+    "at.run()\n"
+    "out['exc'] = len(at.exception)\n"
+    "out['first'] = str(at.exception[:1])[:600]\n"
+    "out['cap_after'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _env473 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+    _rc473v = __import__('subprocess').run([sys.executable, _child473], cwd=PROJ, capture_output=True, text=True,
+                                           encoding='utf-8', errors='replace', timeout=300, env=_env473)
+    _jr473 = (_rc473v.stdout or '').rsplit('@@R@@', 1)
+    _o473 = __import__('json').loads(_jr473[1]) if len(_jr473) == 2 else {}
+    _cv473b = _sl473.connect(_vdb473)
+    _set473 = _sl473.settings(_cv473b)
+    _cv473b.close()
+    check("⑨ 화면 — 예외 0 · 고르는 칸 기본값 없음(후보 H1·O1 · 권하지 않는다) · 옛 계획은 '고를 수 없습니다' · 확인 체크 전엔 단추 꺼짐 · "
+          "체크 뒤 누르면 장부의 human_picks 가 ['H1'] 하나 · 증권사 생성자 막힘 확인(99 아님)",
+          _rc473v.returncode == 0 and _o473.get('exc0') == 0 and _o473.get('exc') == 0 and _o473.get('default') is None
+          # AppTest 의 options 는 값이 아니라 format_func 뒤의 표시 글자다(라운드 453 의 라디오와 같은 모양) — 두 계획의 표시를 본다
+          and len(_o473.get('opts') or []) == 2 and any('(000001)' in o for o in _o473['opts'])
+          and any('(000002)' in o for o in _o473['opts']) and '고를 수 없습니다' in (_o473.get('cap_old') or '')
+          and 'sw_hp_on_O1' not in (_o473.get('btn_old') or []) and _o473.get('disabled_before') is True
+          and _o473.get('disabled_after') is False
+          and [e.get('plan_id') for e in (_set473.get('human_picks') or [])] == ['H1']
+          and (_set473.get('human_picks') or [{}])[0].get('mode') == 'LIVE'
+          and '이 칸은 어느 계획도 권하지 않습니다' in (_o473.get('cap0') or ''),
+          str({k: (str(v)[-260:]) for k, v in _o473.items() if not str(k).startswith('cap')}) + f' · picks {_set473.get("human_picks")}'
+          + ' · ' + (_rc473v.stderr or '')[-300:] + f' · rc {_rc473v.returncode}')
+finally:
+    for _f473 in (_vdb473, _child473):
+        if _os.path.exists(_f473):
+            _os.remove(_f473)
+# ─── §473 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

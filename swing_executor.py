@@ -26,6 +26,9 @@
      1차 목표는 **그날 하루짜리 지정가 매도**를 증권사에 걸어 둔다(매일 다시). 손절 판정 가격은 잔고 조회의 현재가이고, 그 칸이 비면
      시세 끝점의 현재가로 물러선다(둘 다 같은 '현재가'다 · 라운드 453)
   ⑦ 신규 매수(모든 관문 · 지금 가격이 손절선 이하면 안 산다 · 대기 매수도 한도에 센다 · OFF·SHADOW 에서는 관문이 막는다)
+     라운드 494 — 실주문 자격(중앙 판정 추천)이 없는 계획도 **사람이 화면 '오늘 계획'에서 고르면**(설정 'human_picks') 같은 계약으로
+     산다. 고르기는 그 계획의 승인을 겸한다. 넘는 것은 '추천 아님' 하나뿐이고(`swing_engine.pick_blockers`) 모드·연결·실전 잠금·
+     위험 한도·긴급정지·손절선 확인·수량 계산은 그대로다. 고르기를 취소하면 그 계획의 열린 매수를 취소한다(⑤).
 
 ■ 주문을 다시 보내지 않는다 (매수)
   네트워크 오류·시간초과는 `UNKNOWN`. 내역에서 찾을 때 PC 시계를 쓰지 않는다 — 보내기 직전 이미 있던 같은 종목·방향의
@@ -60,6 +63,56 @@ def approved_plans(st):
     """화면에서 승인한 계획 id 집합 — 설정 'approved_plans'(목록). 실행부는 **읽기만** 한다(쓰는 자리는 화면 ② 뿐 · §437 이 잠근다)."""
     v = (st or {}).get('approved_plans') or []
     return {str(x) for x in v} if isinstance(v, (list, tuple, set)) else set()
+
+
+#: 라운드 494 — 사람이 고른 계획 매수의 이름(주문 사건 · 영수증에 붙어 엔진 추천과 섞이지 않게)
+HUMAN_PICK_TAG = '사람이 고른 매수'
+
+
+def human_pick_entries(st):
+    """화면 '오늘 계획'에서 사람이 고른 계획 — 설정 'human_picks'(목록 · 한 건 = dict(plan_id, code, mode, ts)). 실행부는 **읽기만**
+    한다(쓰는 자리는 화면뿐 · §473 이 잠근다). 모르는 모양(글자만 있는 옛 모양 포함)은 버린다 — 고른 모드·시각을 모르면 살리지 않는다."""
+    v = (st or {}).get('human_picks') or []
+    if not isinstance(v, (list, tuple)):
+        return []
+    out = []
+    for x in v:
+        if isinstance(x, dict) and x.get('plan_id'):
+            out.append(dict(plan_id=str(x['plan_id']), code=(str(x['code']) if x.get('code') else None),
+                            mode=x.get('mode'), ts=(str(x['ts']) if x.get('ts') else None)))
+    return out
+
+
+def pick_alive(e, mode, mode_ts=None):
+    """고르기 한 건이 지금 살아 있나 (라운드 494 · 적대적 검토) — 지금 모드가 주문 모드(모의투자·실전)이고 · **고른 그 모드**이고 ·
+    모드를 마지막으로 바꾼 **뒤에** 고른 것. 꺼짐에서 고른 것이 나중에 실전으로 바꾸면 사는 일 · 모의투자에서 고른 것이 실전 계좌로
+    사는 일 · 실전→꺼짐→실전에서 옛 고르기가 되살아나는 일을 막는다. 시각을 모르면 살리지 않는다."""
+    if not e or mode not in MODE_ENV or e.get('mode') != mode or not e.get('ts'):
+        return False
+    if mode_ts and str(e['ts']) < str(mode_ts):
+        return False
+    return True
+
+
+def human_picks(st, mode=None, mode_ts=None):
+    """사람이 고른 계획 id 집합. mode 를 주면 **지금 살아 있는** 것만(`pick_alive`) · 안 주면 적힌 것 전부(화면의 목록용)."""
+    es = human_pick_entries(st)
+    if mode is None:
+        return {e['plan_id'] for e in es}
+    return {e['plan_id'] for e in es if pick_alive(e, mode, mode_ts)}
+
+
+def human_pick_label(plan):
+    """주문 사건에 붙는 한 마디 — 엔진 추천이 아니라는 것과 그 계획의 기대값(판정 기록 그대로 · 못 읽으면 '산출 불가')."""
+    v = swing_engine.verdict_of(plan)
+    ev = v.get('expected_return')
+    try:
+        ev_txt = f'{float(ev):+.2f}%'
+    except (TypeError, ValueError):
+        ev_txt = '산출 불가'
+    n_ck, failed = v.get('checks_n'), v.get('failed')
+    cond = (f' · 조건 {int(n_ck) - len(failed)}/{int(n_ck)} 통과' if isinstance(failed, list) and n_ck else '')
+    return f'{HUMAN_PICK_TAG}(엔진 추천 아님 · 비용 차감 기대값 {ev_txt}{cond})'
 OPEN_STATES = ('SUBMITTING', 'UNKNOWN', 'BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')
 PROTECTIVE = ('stop', 'expiry')
 #: 보호 매도가 같은 날 **거절**된 횟수의 상한 — 넘으면 사람에게 알린다. 운영 값이지 판정 문턱이 아니다
@@ -157,7 +210,7 @@ def wants_broker(c, mode, cfg, st):
     워커가 연결을 만들기 전에 부른다(라운드 453 · 종전엔 주문 모드에서만 만들어 OFF 의 보호가 서지 못했다)."""
     if mode in MODE_ENV and not broker_gate(mode, cfg, st):
         return True
-    return L.protect_needed(c) and not protect_gate(cfg)
+    return attend_needed(c) and not protect_gate(cfg)
 
 
 def buy_gate(mode, cfg, st):
@@ -213,7 +266,8 @@ def _match(it, orders, claimed, pre):
     주문이 아니고, 다른 의도가 차지하지 않은 원 주문 행이 **하나일 때만**. PC 시계는 안 쓴다."""
     if it.get('odno'):
         for o in orders:
-            if _odno(o['odno']) == _odno(it['odno']):
+            # 라운드 494 — 번호만으로 짝짓지 않는다(다른 환경·다른 주문의 같은 번호를 잡지 않게 · 종목·방향도 같아야 한다)
+            if _odno(o['odno']) == _odno(it['odno']) and o.get('code') == it['code'] and o.get('side') == it['side']:
                 return o
         return None
     day = str(it['trade_day']).replace('-', '')
@@ -230,7 +284,20 @@ def reconcile(c, broker, now, note):
     의도 하나의 체결 반영(포지션 사건)과 상태 기록은 **한 묶음**으로 커밋한다 — 중간에 멈추면 둘 다 안 남아 다음 바퀴가 처음부터
     다시 맞춘다(두 번 세지 않는다). 지난 거래일의 주문만 만료로 적는다(마감 직후 늦게 알려지는 체결을 버리지 않게)."""
     today = kst(now).date().isoformat()
-    live = L.intents_with_state(c, OPEN_STATES)
+    every_open = L.intents_with_state(c, OPEN_STATES)
+    # 라운드 494 — 다른 증권사 환경(모의투자↔실전)의 열린 의도는 이 연결의 내역으로 맞추지 않는다(번호가 다른 계좌의 주문을 가리킨다).
+    #   지난 거래일 것은 이 연결로 확인할 수 없으니 만료로 적는다(그 계좌의 체결은 그 환경으로 다시 연결해야 보인다)
+    live = []
+    for it in every_open:
+        if env_ok(it, broker):
+            live.append(it)
+        elif str(it['trade_day']) < today:
+            try:
+                L.order_event(c, it['intent_id'], 'EXPIRED',
+                              detail=f"다른 증권사 환경({it.get('mode')})의 지난 주문 — 지금 연결({getattr(broker, 'env', None)})로는 "
+                                     '확인할 수 없어 만료로 본다')
+            except L.LedgerError as e:
+                note(f"{it['code']} 다른 환경 주문 만료 기록 실패 — {e}")
     days = sorted({str(it['trade_day']) for it in live} | {today})
     orders = broker.get_daily_orders(days[0].replace('-', ''), today.replace('-', ''))
     if not live:
@@ -377,9 +444,11 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         out['notes'] += notes
     except Exception as e:                                     # noqa: BLE001
         out['alerts'].append(f'계획을 못 만들었다 — {type(e).__name__}: {e} (보호 매도는 계속)')
-    protect = L.protect_needed(c)
+    # 라운드 494 — 열린 매수가 있어도 증권사를 부른다(꺼짐·잠금이면 그 매수를 취소해야 한다 · 종전엔 보호할 보유만 봐서 바퀴가 여기서 끝나
+    #   고르기를 풀어도 걸린 매수가 체결돼 손절 관리 없이 남을 수 있었다 · 적대적 검토)
+    protect = attend_needed(c)
     if mode not in MODE_ENV:
-        # OFF·SHADOW — 주문 모드가 아니다. 보호할 보유가 없으면 여기서 끝(심박만). 있으면 **보호만** 하는 바퀴로 계속 간다
+        # OFF·SHADOW — 주문 모드가 아니다. 보호할 보유·열린 매수가 없으면 여기서 끝(심박만). 있으면 **보호만** 하는 바퀴로 계속 간다
         if not protect:
             L.heartbeat(c, mode, 'off', f"{'꺼짐' if mode == 'OFF' else '기록만'} — 계획 +{out['plans_new']} · "
                                         f"모의 갱신 {out['shadow_updates']} · 주문 없음 · 관리 중인 종목 없음")
@@ -388,10 +457,16 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         bg = protect_gate(cfg)
     else:
         bg = broker_gate(mode, cfg, st)
+        if bg and protect and not protect_gate(cfg) and (cfg or {}).get('env') == MODE_ENV[mode]:
+            # 라운드 494 — 주문 모드인데 관문이 닫혔다(실전 잠금 등 · 연결 정보는 그 모드의 것). 새 매수는 막고 **보호만**(열린 매수 취소 ·
+            #   손절·목표) 한다. 연결 정보가 다른 환경의 것이면(모의투자↔실전) 여기로 오지 않는다 — 그 연결로는 이 모드의 주문을 못 다룬다
+            out['blocked'] += bg
+            out['protect_only'] = True
+            bg = []
     if bg or broker is None:
         out['blocked'] += bg or ['증권사 연결이 없습니다']
         if protect:
-            out['alerts'].append('보호할 보유가 있는데 증권사를 못 불렀다 — ' + ' · '.join(out['blocked']))
+            out['alerts'].append('보호할 보유 또는 열린 매수가 있는데 증권사를 못 불렀다 — ' + ' · '.join(out['blocked']))
             _beat(c, mode, out, '보호 못 함')
         else:
             L.heartbeat(c, mode, 'blocked', ' · '.join(out['blocked']))
@@ -433,16 +508,16 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         _beat(c, mode, out, tag + '장 시간이 아니라 주문하지 않았다 · 내역·계좌만 맞춤')
         return out
     # ⑤ 취소 다시 하기
-    _cancels(c, broker, st, quote_fn, out)
+    _cancels(c, broker, st, quote_fn, out, mode=mode, no_buys=out['protect_only'], mode_ts=L.setting_ts(c, 'mode'))
     # ⑥ 보호 매도 — 긴급정지·모드와 무관
     _exits(c, broker, held, trade_day, mode, out, quote_fn)
     # ⑦ 신규 매수 — 내역을 맞췄을 때만 · 주문 모드일 때만(OFF·SHADOW 는 관문이 막는다)
     if out['protect_only']:
-        out['blocked'].append(f'{mode} 모드 — 신규 매수 없음(관리 중 종목의 보호만)')
+        out['blocked'].append(f'{mode} 모드 — 신규 매수 없음(관리 중 종목의 보호 · 열린 매수 취소만)')
     elif orders is None:
         out['blocked'].append('주문 내역을 못 맞춰 신규 매수를 안 냈다')
     else:
-        _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn)
+        _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=report)
     _beat(c, mode, out, tag + f"주문 {len(out['orders'])} · 청산 {len(out['exits'])} · 막힘 {len(out['blocked'])}")
     return out
 
@@ -468,16 +543,55 @@ def _beat(c, mode, out, summary):
         L.heartbeat(c, mode, 'ok', summary)
 
 
-def _cancels(c, broker, st, quote_fn, out):
-    """취소가 확인될 때까지 바퀴마다 — ⓐ 긴급정지면 열린 매수 ⓑ 관리 밖 종목의 열린 매도(되돌려 받은 종목) ⓒ 지금 가격이 손절선
-    이하로 내려간 대기 매수(그 가격에 사면 바로 손절이다)."""
+def unchosen_buy(plan, st, mode, mode_ts=None):
+    """열린 매수의 계획을 이제 아무도 고르지 않았나 (라운드 494) → 취소 사유 또는 None.
+    사람이 고른 계획(실주문 자격 없음)은 고르기가 풀렸을 때(살아 있는 고르기만 · `pick_alive`) · 실전 승인형의 자격 계획은 승인이
+    풀렸을 때(사람이 골랐으면 그대로). 계획을 못 읽으면 None — 모르는 것으로 취소하지 않는다(취소 사유는 ⓐ·ⓒ 가 따로 본다)."""
+    if not plan:
+        return None
+    pid = plan.get('plan_id')
+    picked = pid in human_picks(st, mode=mode, mode_ts=mode_ts)
+    if not plan.get('live_ok'):
+        return None if picked else '사람이 고르기를 취소한 계획 — 열린 매수 취소'
+    if mode == 'LIVE' and approval_of(st) == 'approve' and pid not in approved_plans(st) and not picked:
+        return '승인을 취소한 계획 — 열린 매수 취소'
+    return None
+
+
+def env_ok(it, broker):
+    """이 의도를 지금 연결한 증권사 환경에서 맞추고·취소해도 되나 (라운드 494 · 적대적 검토) — 모의투자 주문을 실전 연결로(또는 그
+    반대로) 맞추거나 취소하면 주문번호가 다른 계좌의 엉뚱한 주문을 가리킬 수 있다. 의도의 모드가 주문 모드가 아니면(꺼짐 바퀴의
+    보호 매도 등) 그 바퀴의 연결 정보로 낸 것이라 막지 않는다."""
+    env = MODE_ENV.get(it.get('mode'))
+    return env is None or env == getattr(broker, 'env', None)
+
+
+def open_buys(c):
+    """열린 매수 의도(접수·일부 체결·확인 중·취소 요청 중) — 새 매수를 내지 않는 바퀴도 이것이 있으면 증권사를 불러 취소한다(라운드 494)."""
+    return [it for it in L.intents_with_state(c, OPEN_STATES) if it['side'] == 'buy']
+
+
+def attend_needed(c):
+    """워커가 증권사를 불러야 하나 — 보호할 보유(관리 중 · 해제 확인 중) 또는 열린 매수(라운드 494 · 꺼짐·잠금이면 취소해야 한다)."""
+    return bool(L.protect_needed(c) or open_buys(c))
+
+
+def _cancels(c, broker, st, quote_fn, out, mode=None, no_buys=False, mode_ts=None):
+    """취소가 확인될 때까지 바퀴마다 — ⓐ 긴급정지면 열린 매수 ⓐ' 새 매수를 내지 않는 바퀴(모드 꺼짐·기록만 · 실전 잠금 등 관문이
+    닫힘)면 열린 매수(라운드 494 — 종전엔 이 바퀴가 아예 안 돌아 고르기를 풀어도 걸린 매수가 체결돼 손절 관리 없이 남을 수 있었다)
+    ⓑ 관리 밖 종목의 열린 매도(되돌려 받은 종목) ⓒ 지금 가격이 손절선 이하로 내려간 대기 매수(그 가격에 사면 바로 손절이다)
+    ⓓ 고르기·승인이 풀린 계획의 열린 매수(라운드 494 · `unchosen_buy`). 다른 증권사 환경(모의투자↔실전)의 의도는 건드리지 않는다."""
     managed = set(L.managed_open(c))
     for it in L.intents_with_state(c, ('BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')):
-        if not it.get('odno'):
+        if not it.get('odno') or not env_ok(it, broker):
             continue
         why = None
         if it['side'] == 'buy' and st.get('kill_switch'):
             why = '긴급정지 — 열린 매수 취소'
+        elif it['side'] == 'buy' and no_buys:
+            why = '새 매수를 내지 않는 바퀴(모드 꺼짐·기록만 · 실전 잠금 등) — 열린 매수 취소'
+        elif it['side'] == 'buy' and unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts):
+            why = unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts)
         elif it['side'] == 'sell' and it['code'] not in managed:
             why = '관리에서 빠진 종목 — 열린 매도 취소'
         elif it['side'] == 'buy' and quote_fn is not None:
@@ -582,7 +696,7 @@ def _exit_one(c, broker, held, trade_day, mode, out, code, pos, every, quote_fn=
         out['exits'].append((code, 'target', submit(c, broker, iid, 'sell', code, qty, pos['target'], broker_kis.ORD_LIMIT)))
 
 
-def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn):
+def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=None):
     gate = buy_gate(mode, cfg, st)
     if gate:
         out['blocked'] += gate
@@ -598,8 +712,13 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
     pos_now = L.positions(c)
     approved = approved_plans(st)
     need_approval = (mode == 'LIVE' and approval_of(st) == 'approve')
+    # 라운드 494 — 살아 있는 고르기만(지금 모드에서 · 모드를 마지막으로 바꾼 뒤에 고른 것 · `pick_alive`)
+    picks = human_picks(st, mode=mode, mode_ts=L.setting_ts(c, 'mode'))
+    last_closed = L.last_closed_days(c)
     for p in L.plans(c):
-        if not p.get('live_ok'):
+        # 라운드 494 — 실주문 자격이 없으면 사람이 고른 계획일 때만 본다(넘는 것은 '추천 아님' 하나 · 아래에서 확인)
+        human = (not p.get('live_ok')) and p['plan_id'] in picks
+        if not p.get('live_ok') and not human:
             continue
         waited = trading_days_between(p['data_day'], trade_day)
         if waited < 1 or waited > int(p.get('wait_bars') or 0):
@@ -609,7 +728,18 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
             continue     # 이미 갖고 있거나 주문 중(확인 중인 주문 포함) — 겹쳐 사지 않는다
         if any(it['plan_id'] == p['plan_id'] and it['side'] == 'buy' and int(it.get('filled_qty') or 0) > 0 for it in every):
             continue     # 이 계획은 이미 (일부라도) 샀다
-        if need_approval and p['plan_id'] not in approved:
+        if last_closed.get(code) and str(last_closed[code]) >= str(p['data_day']):
+            # 라운드 494 — 이 판정일 뒤에 자동매매가 이 종목을 이미 사고 다 팔았다(손절·목표·만료). 그 판정은 그 거래 전의 것이라 다시 사지
+            #   않는다(같은 종목의 다른 계획이 손절 직후 다시 사던 길 · 적대적 검토 · 엔진 추천 계획에도 같이 건다)
+            out['blocked'].append(f"{code} — 판정일 {p['data_day']} 뒤({last_closed[code]})에 자동매매가 이미 사고 팔아 그 판정으로 다시 사지 않는다")
+            continue
+        if human:
+            hb = swing_engine.pick_blockers(p, report)      # 옛 계획은 그 판정일 리포트로 다시 확인(같은 plan_id 일 때만)
+            if hb:
+                out['blocked'].append(f"{code} — 사람이 고른 계획이지만 고르기로 넘을 수 없는 막힘이 있어 사지 않는다: {hb[0]}")
+                continue
+        elif need_approval and p['plan_id'] not in approved:
+            # 사람이 고른 계획은 고르기가 승인을 겸한다(위 갈래) — 여기는 실주문 자격 계획의 승인
             out['blocked'].append(f"{code} — 승인 전이라 사지 않는다(실전 승인형 · 화면 ②에서 이 계획을 승인해야 삽니다)")
             continue
         cg = swing_risk.count_gates(limits, open_count, today_new)
@@ -650,8 +780,9 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
                          pre_odnos=_pre_odnos_for(orders, code, 'buy', trade_day))
         except L.LedgerError:
             continue     # 오늘 이 계획의 매수는 이미 냈다
-        L.order_event(c, iid, 'RISK_APPROVED', detail=f"수량 {sz['qty']} · 정한 제한 {sz['binding']} · "
-                                                        f"손절 시 손실 약 {sz['planned_loss']:,.0f}원(손절가 체결 가정)")
+        L.order_event(c, iid, 'RISK_APPROVED', detail=(human_pick_label(p) + ' · ' if human else '')
+                      + f"수량 {sz['qty']} · 정한 제한 {sz['binding']} · "
+                        f"손절 시 손실 약 {sz['planned_loss']:,.0f}원(손절가 체결 가정)")
         out['orders'].append((code, sz['qty'], submit(c, broker, iid, 'buy', code, sz['qty'], p['entry'],
                                                       broker_kis.ORD_LIMIT)))
         today_new += 1

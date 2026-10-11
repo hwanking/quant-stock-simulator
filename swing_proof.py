@@ -106,7 +106,15 @@ def receipt(c, ep, cost_pct):
         notes.append('청산가를 모른다(밖에서 팔렸거나 체결가를 못 받았다)')
     if ep.get('closed') and sold_q != qty:
         notes.append(f'판 수량 {sold_q} ≠ 산 수량 {qty}')
-    return dict(receipt_id=rid, code=ep['code'], plan_id=ep.get('plan_id'), ownership=ep['ownership'],
+    # 라운드 494 — 누가 고른 매수인가: 실주문 자격(중앙 판정 추천)이 있던 계획 · 사람이 고른 계획 · 계획 없음(넘겨받은 보유).
+    #   엔진의 성적과 사람이 고른 매수의 성적이 한 줄에 섞이지 않게(요약이 따로 센다)
+    if not plan:
+        picked_by = None
+    elif plan.get('live_ok'):
+        picked_by = 'engine'
+    else:
+        picked_by = 'human'
+    return dict(receipt_id=rid, code=ep['code'], plan_id=ep.get('plan_id'), ownership=ep['ownership'], picked_by=picked_by,
                 opened_day=ep.get('opened_day'), closed_day=ep.get('end_day') if ep.get('closed') else None,
                 open=not ep.get('closed') and ep.get('end_event') != 'RELEASED', qty=qty,
                 entry_plan=entry_plan, entry_fill=entry_fill,
@@ -135,9 +143,11 @@ def summary(rs):
     se = [r['slip_entry_pct'] for r in done if r.get('slip_entry_pct') is not None]
     sx = [r['slip_exit_pct'] for r in done if r.get('slip_exit_pct') is not None]
     pair = [(r['net_pct'], r['shadow_net_pct']) for r in done if r.get('shadow_net_pct') is not None]
+    hum = [r['net_pct'] for r in done if r.get('picked_by') == 'human']
     return dict(n=len(v), mean=sum(v) / len(v), median=statistics.median(v), by_reason=by,
                 slip_entry_mean=(sum(se) / len(se) if se else None), slip_exit_mean=(sum(sx) / len(sx) if sx else None),
-                n_shadow=len(pair), vs_shadow_mean=((sum(a - b for a, b in pair) / len(pair)) if pair else None))
+                n_shadow=len(pair), vs_shadow_mean=((sum(a - b for a, b in pair) / len(pair)) if pair else None),
+                n_human=len(hum), human_mean=((sum(hum) / len(hum)) if hum else None))
 
 
 def summary_line(s, cost_pct):
@@ -153,6 +163,10 @@ def summary_line(s, cost_pct):
         parts.append(f"청산 체결가는 계획 가격보다 평균 {s['slip_exit_mean']:+.2f}%")
     if s.get('n_shadow'):
         parts.append(f"같은 계획을 일봉으로 굴린 모의와 견주면 실제가 평균 {s['vs_shadow_mean']:+.2f}%p ({s['n_shadow']}건)")
+    if s.get('n_human'):
+        # 라운드 494 — 사람이 고른 매수(엔진 추천 아님)는 따로 적는다 — 이 수는 엔진의 성적이 아니다
+        parts.append(f"그중 사람이 고른 매수(엔진 추천 아님) {s['n_human']}건 — 추정 비용후 평균 {s['human_mean']:+.2f}% · "
+                     '이 건들은 엔진의 성적이 아닙니다')
     if s['n'] < 30:
         parts.append('표본이 작아 무엇을 가를 수 있는 수가 아닙니다')
     return ' · '.join(parts) + '.'
