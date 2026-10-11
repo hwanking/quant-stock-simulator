@@ -450,9 +450,33 @@ def judged_at(p):
         return None
 
 
+def before_final(p):
+    """계획이 선 판정(개장 전 리포트)이 **그 판정일 봉이 확정되기 전에** 만들어졌나 → True / False · 못 가르면 None (라운드 489).
+
+    2026-09-14 부터 그날 종가는 애프터마켓(16:00~20:00)이 끝나야 더 안 바뀐다(라운드 486). 그 전에 만든 리포트(예: 15:32)를
+    '장 마감 자료'라 부르면 확정 값처럼 읽힌다. 판정은 관심종목 스탬프와 같은 함수(`watch_refresh.stamped_before_final` → 엔진
+    `bar_final`)가 하고 시각을 여기서 다시 적지 않는다(§4). 판정일·판정 시각 중 하나라도 못 읽으면 None — 아무 주장도 안 한다(§3)."""
+    day = str(p.get('data_day') or '')[:10]
+    j = _hm(judged_at(p))
+    if len(day) != 10 or not j:
+        return None
+    try:
+        import watch_refresh as _wr489
+        return bool(_wr489.stamped_before_final(day, j))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+#: '언제 막았나' 의 판정 시각 괄호 — 봉 확정 여부로 가른다(라운드 489 · 종전엔 늘 '그 판정일 장 마감 자료').
+JUDGED_BEFORE_FINAL = '개장 전 리포트가 만들어진 시각 · 그 판정일 봉이 확정되기 전(애프터마켓 끝 전)의 값 — 지금 저녁 작업은 확정 뒤에 만든다'
+JUDGED_AFTER_FINAL = '개장 전 리포트가 만들어진 시각 · 그 판정일 봉이 확정된 뒤 자료'
+JUDGED_MIXED = '개장 전 리포트가 만들어진 시각 · 일부는 그 판정일 봉이 확정되기 전의 값'
+JUDGED_UNKNOWN = '개장 전 리포트가 만들어진 시각'
+
+
 def when_line(ps):
     """'언제 막았나' 한 줄 — 판정(개장 전 리포트 생성) 시각과 장부에 계획으로 적힌 시각. 둘 다 못 읽으면 None.
-    한 판정일의 계획이 여러 시각이면 처음~끝으로 적는다."""
+    한 판정일의 계획이 여러 시각이면 처음~끝으로 적는다. 판정 시각 괄호는 그 판정이 봉 확정 전이었는지로 가른다(`before_final`)."""
     def _span(vals):
         vs = sorted({v for v in vals if v})
         return None if not vs else (vs[0] if len(vs) == 1 else f'{vs[0]} ~ {vs[-1]}')
@@ -462,7 +486,10 @@ def when_line(ps):
         return None
     bits = []
     if j:
-        bits.append(f'판정 {j} (개장 전 리포트가 만들어진 시각 · 그 판정일 장 마감 자료)')
+        flags = {before_final(p) for p in ps}
+        note = (JUDGED_BEFORE_FINAL if flags == {True} else JUDGED_AFTER_FINAL if flags == {False}
+                else JUDGED_MIXED if True in flags else JUDGED_UNKNOWN)
+        bits.append(f'판정 {j} ({note})')
     if w:
         bits.append(f'자동매매 장부에 계획으로 적힌 시각 {w}')
     return '언제 막았나 — ' + ' · '.join(bits) + '.'

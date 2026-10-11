@@ -28810,11 +28810,32 @@ _pin362 = sorted(tk for tk, (a, b) in _by362.items()
 print(f"   1봉째 90% 초과 종목 {len(_pin362)}개 (상한 {_PINNED_MAX362})"
       f" · 원인 잣대로는 {_CAUSE_N362}개였다 (이 검사가 못 보는 것 "
       f"{_CAUSE_N362 - _PINNED_MAX362}개)")
-check("채점이 1봉에 박힌 종목이 늘지 않았다 (값이 아니라 증가를 잠근다 · §324)",
-      len(_pin362) <= _PINNED_MAX362,
-      f"{len(_pin362)}개 > 상한 {_PINNED_MAX362} — 새로 오염된 종목이 있다 "
-      f"(진입가 ÷ 그날 봉 이 1 인지 본다 · R364)",
+# 라운드 489(2026-10-11) — 9 → 10 으로 붉어졌는데 새 오염이 아니었다. 새로 박힌 1종목은 라운드 461 이 원인 감사에서 이미
+#   잡은 종목(자료원이 과거 봉을 정확히 5배로 고쳐 씀 · 원장 81행)이고, 클라우드가 매 실행 채점을 다시 돌려(R197·R364 정정 ②) 5배가
+#   된 봉에 대고 81행 전부가 1봉째에 박힌 판이 이번 동봉본(258,730행)에 실렸다(옛 동봉본 22/81). 그 행들은 채점 도장(R390)으로 통계에서
+#   빠진다. 박힌 10종목은 **전부** 원인 감사(본 목록 ∪ 20행 미만 목록 · 라운드 365·391)가 이미 아는 종목이다. 원인 감사가 배선된 뒤로
+#   이 증상 검사가 지킬 것은 '수가 늘지 않는다'가 아니라 **원인 감사가 모르는 박힘이 없다**이다 — 아는 종목이 다시 채점돼 박히는 것은
+#   새 오염이 아니고, 모르는 박힘은 수가 9 안이어도 걸린다(문턱 없음). 산출물을 못 읽으면 종전 수 상한으로 물러선다.
+_esa362p = _os.path.join(PROJ, 'data', 'entry_scale_audit.json')
+_cause362 = None
+if _os.path.exists(_esa362p):
+    try:
+        with open(_esa362p, encoding='utf-8') as _f362c:
+            _d362c = _json.load(_f362c)
+        _cause362 = set(_d362c.get('offender_codes') or []) | set(_d362c.get('small_offender_codes') or [])
+    except Exception:                                    # noqa: BLE001
+        _cause362 = None
+_unexpl362 = sorted(t for t in _pin362 if _cause362 is not None and t not in _cause362)
+check("채점이 1봉에 박힌 종목은 전부 원인 감사가 이미 안다 (설명 안 된 박힘 0 · 산출물이 없으면 종전 수 상한)",
+      (not _unexpl362) if _cause362 is not None else len(_pin362) <= _PINNED_MAX362,
+      (f"박힘 {len(_pin362)}개 중 원인 감사 밖 {len(_unexpl362)}개 — 새로 오염된 종목이 있다 "
+       f"(진입가 ÷ 그날 봉 이 1 인지 본다 · R364)") if _cause362 is not None else
+      f"원인 감사 산출물 없음 · {len(_pin362)}개 (상한 {_PINNED_MAX362})",
       scanned=len(_pct362))
+if _cause362 is not None:                                # 심기 — 원인 감사 밖의 박힘을 실제로 잡는가(0건 주장의 양방향 · R194)
+    _pl362 = sorted(t for t in (_pin362 + ['999999.KS']) if t not in _cause362)
+    check("심기 — 원인 감사 밖 박힘(가짜 종목 하나)을 잡고, 원인 감사가 아는 종목은 안 잡는다",
+          _pl362 == ['999999.KS'] and all(t in _cause362 for t in _pin362), str(_pl362))
 # 두 방향이 다 있는지 — 한 방향만 보면 거울상을 놓친다(R363 이 그랬다)
 _dir362 = _c362.Counter()
 for _tk362 in _pin362:
@@ -28862,6 +28883,16 @@ if _os.path.exists(_ESA362):
     #   고쳐 쓴 모양(액면병합 소급으로 본다 · 측정은 아니다)이고, 그 81행은 행 목록(offender_keys)으로 통계에서 빠진다.
     #   열어 본 뒤 옮긴다. 근거: docs/RESULT_R461_SCALE_CAP_21.md
     _OFFENDERS_MAX362 = 21
+    # 라운드 489(2026-10-11) — 네 번째: 21 → 23 인데 **새 오염이 아니었다**. 새 2종목은 어제 판의 '20행 미만' 목록
+    #   (small_offender_codes · 라운드 391 — 배율 0.94~0.99 계단)에 이미 있었고, 10-09 클라우드 판(원장 258,730행)에서
+    #   행이 20 에 닿아 종목 단위 목록으로 **넘어왔다**(배율 0.985 · 0.976 · 어긋난 행 15 · 16 · 작은 목록 22 → 20 · 행 목록 합
+    #   2,788 그대로). 작은 목록에 20종목이 더 있어 원장이 자랄 때마다 또 넘어온다 — 그때마다 '새 오염'으로 울리면 경보가 소음이
+    #   된다. 이 검사가 지키려던 것은 **새로 어긋난 종목**이므로 두 목록의 합집합이 늘지 않는지를 잠근다(어제 21+22 = 오늘 23+20 =
+    #   **43**). 넘어온 종목은 안 걸리고 진짜 새 종목(R389·R420·R461 의 모양)은 그대로 걸린다. 결과를 보고 무르게 한 것이 아니다 —
+    #   합집합은 같고, 열어 본 뒤 옮긴다. 근거: docs/RESULT_R489_TOMORROW_AND_THE_UNFINAL_LABEL.md
+    _OFFENDERS_MAX362 = 23
+    _UNION_MAX362 = 43
+    _union362 = set(_esa362.get('offender_codes') or []) | set(_esa362.get('small_offender_codes') or [])
     check("그 산출물이 신선도 규약을 따른다 (ledger_rows · 라운드 259)",
           isinstance(_esa362.get('ledger_rows'), int)
           and _esa362['ledger_rows'] > 100000,
@@ -28875,11 +28906,11 @@ if _os.path.exists(_ESA362):
     print(f"   어긋난 행이 0개인 종목 {_esa362.get('clean')} · "
           f"하나라도 어긋난 종목 {_esa362.get('offenders')} "
           f"(상한 {_OFFENDERS_MAX362}) · 행 {_esa362.get('offender_rows')}")
-    check("진입가가 그날 봉과 어긋난 종목이 늘지 않았다 (원인 잣대 · 문턱 없음)",
-          (_esa362.get('offenders') or 0) <= _OFFENDERS_MAX362,
-          f"{_esa362.get('offenders')}개 > 상한 {_OFFENDERS_MAX362} — "
-          f"새로 어긋난 종목이 있다 (라운드 365 의 감사를 열어 본다)",
-          scanned=_esa362.get('measured') or 0)
+    check("진입가가 그날 봉과 어긋난 종목이 늘지 않았다 (원인 잣대 · 문턱 없음 · 본 목록 ∪ 20행 미만 목록)",
+          len(_union362) <= _UNION_MAX362 and (_esa362.get('offenders') or 0) == len(_esa362.get('offender_codes') or []),
+          f"합집합 {len(_union362)}개 (본 {_esa362.get('offenders')} · 작은 {len(_esa362.get('small_offender_codes') or [])}) "
+          f"> 상한 {_UNION_MAX362} — 새로 어긋난 종목이 있다 (라운드 365 의 감사를 열어 본다)",
+          scanned=(_esa362.get('measured') or 0) + (_esa362.get('small_measured') or 0))
     # 증상 잣대가 몇 개를 놓치는지 산출물이 **스스로** 적는가 — 초록불을
     # '오염 없음'으로 읽지 않게 하는 것이 이 절의 요점이다
     check("산출물이 증상 잣대의 맹점을 수로 적는다 (1봉째 잣대가 놓치는 종목 수)",
@@ -40002,6 +40033,83 @@ _sn468 = _wr468.seen_now(_dt468.datetime(2026, 10, 12, 17, 5))
 check("⑤ seen_now 는 '연-월-일 시:분' 이고 stamped_before_final 이 그것을 읽는다",
       _sn468 == '2026-10-12 17:05' and _wr468.stamped_before_final('2026-10-12', _sn468) is True, _sn468)
 # ─── §468 끝 ───
+# ─── §469 시작 (라운드 489) ───
+print("=" * 72)
+print("§469 '언제 막았나' 의 판정 시각 — 봉 확정 전에 만든 판정을 '장 마감 자료'라 부르지 않는다 (라운드 489)")
+print("=" * 72)
+# 라운드 489 — 자동매매 '오늘 계획' 의 '언제 막았나' 줄이 판정 시각 옆에 늘 '그 판정일 장 마감 자료' 를 적었다. 10-08 판정은
+#   15:32(정규장 마감 2분 뒤)에 만든 리포트였고 그날 봉은 20:00 애프터마켓이 끝나야 확정된다(라운드 486) — 확정 값처럼 읽혔다.
+#   판정은 관심종목 스탬프와 같은 함수(`watch_refresh.stamped_before_final` → 엔진 `bar_final`)가 하고, 못 가르면 주장하지 않는다.
+import ast as _ast469                                            # noqa: E402
+import swing_view as _sv469                                      # noqa: E402
+
+def _pl469(day, ts):
+    return dict(data_day=day, verdict=dict(report_ts=ts), created_ts='2026-10-09T17:01:21+09:00')
+
+_cases469 = [(_pl469('2026-10-08', '2026-10-08 15:32:51'), True),    # 정규장 마감 2분 뒤 · 애프터마켓 중
+             (_pl469('2026-10-12', '2026-10-12 21:00:10'), False),   # 애프터마켓 끝 뒤(저녁 작업)
+             (_pl469('2026-10-08', '2026-10-09 07:30:00'), False),   # 다음 날 아침 — 그날 봉은 이미 확정
+             (_pl469('2026-09-11', '2026-09-11 15:40:00'), False),   # 애프터마켓 시행(09-14) 전 — 15:30 마감 뒤면 확정
+             (_pl469('2026-11-19', '2026-11-19 20:30:00'), True),    # 수능일 — 애프터마켓이 한 시간 늦게 끝난다
+             (_pl469(None, '2026-10-08 15:32:51'), None),             # 판정일을 모르면 가르지 않는다
+             (dict(data_day='2026-10-08', verdict=dict(report_ts='모름')), None)]
+_bad469 = [(c['data_day'], c['verdict']['report_ts'], _sv469.before_final(c)) for c, w in _cases469 if _sv469.before_final(c) is not w]
+check("① before_final — 판정일 그날 애프터마켓 끝 전에 만든 판정은 True · 끝난 뒤·다음 날·09-14 전 마감 뒤는 False · 못 읽으면 None",
+      not _bad469, str(_bad469), scanned=len(_cases469))
+_wb469 = _sv469.when_line([_pl469('2026-10-08', '2026-10-08 15:32:51')])
+_wa469 = _sv469.when_line([_pl469('2026-10-12', '2026-10-12 21:00:10')])
+_wm469 = _sv469.when_line([_pl469('2026-10-08', '2026-10-08 15:32:51'), _pl469('2026-10-08', '2026-10-09 07:30:00')])
+_wu469 = _sv469.when_line([_pl469(None, '2026-10-08 15:32:51')])
+check("② when_line — 확정 전 판정은 그렇다고 · 확정 뒤는 그렇다고 · 섞이면 '일부는' · 모르면 시각만(주장 없음)",
+      _wb469 and f'({_sv469.JUDGED_BEFORE_FINAL})' in _wb469 and _wa469 and f'({_sv469.JUDGED_AFTER_FINAL})' in _wa469
+      and _wm469 and f'({_sv469.JUDGED_MIXED})' in _wm469 and _wu469 and f'({_sv469.JUDGED_UNKNOWN})' in _wu469
+      and '판정 2026-10-08 15:32' in _wb469, str((_wb469, _wa469, _wm469, _wu469)))
+# ③ 옛 문장('그 판정일 장 마감 자료')이 화면 문자열에 없다 — 문자열 상수만 본다(주석·이 검사의 글자는 안 걸린다 · R313·R314)
+_c469 = [n.value for n in _ast469.walk(_ast469.parse(_read148(_os.path.join(PROJ, 'swing_view.py'))))
+         if isinstance(n, _ast469.Constant) and isinstance(n.value, str)]
+check("③ swing_view 의 문자열 상수에 '그 판정일 장 마감 자료' 가 없다(본 상수 수를 밝힌다)",
+      not any('그 판정일 장 마감 자료' in v for v in _c469), f'상수 {len(_c469)}', scanned=len(_c469))
+# ④ 판정을 다시 적지 않는다 — before_final 본문이 관심종목 스탬프의 함수를 부르고 시각 리터럴을 안 적는다(§4)
+_fn469 = next(n for n in _ast469.walk(_ast469.parse(_read148(_os.path.join(PROJ, 'swing_view.py'))))
+              if isinstance(n, _ast469.FunctionDef) and n.name == 'before_final')
+_calls469 = {n.func.attr for n in _ast469.walk(_fn469) if isinstance(n, _ast469.Call) and isinstance(n.func, _ast469.Attribute)}
+_doc469 = _fn469.body[0].value if (_fn469.body and isinstance(_fn469.body[0], _ast469.Expr)) else None   # 독스트링은 설명이다 — 세지 않는다
+_times469 = [n.value for n in _ast469.walk(_fn469) if isinstance(n, _ast469.Constant) and isinstance(n.value, str)
+             and n is not _doc469 and _re.search(r'\b(15|16|20|21):\d\d\b', n.value)]
+check("④ before_final 은 stamped_before_final 을 부르고 장 시각을 다시 적지 않는다",
+      'stamped_before_final' in _calls469 and not _times469, f'{sorted(_calls469)} · {_times469}')
+# ⑤ 되받기 동률 — 같은 원장이면 더 나중에 만든 판을 남긴다. 저녁 작업 시험에서 클라우드 10-09 판(라운드 474 커밋 전에 만든 것)이
+#    이 PC 의 지도를 덮어 axes_split 칸이 빠졌다(ledger_rows 같음 → 종전 규칙은 늘 썼다). 시간대 있는 made_at 이 둘 다 있을 때만 견준다.
+import tempfile as _tf469                                        # noqa: E402
+import scripts.pull_research_data as _pr469                      # noqa: E402
+
+def _doc469(rows, made_at=None):
+    d = dict(ledger_rows=rows)
+    if made_at is not None:
+        d['made_at'] = made_at
+    return _json.dumps(d)
+
+_pairs469 = [  # (로컬, zip) → 써도 되나
+    ((_doc469(100, '2026-10-11T07:40:00+00:00'), _doc469(100, '2026-10-09T16:52:46+00:00')), False),  # 같은 원장 · 로컬이 나중 → 남김
+    ((_doc469(100, '2026-10-09T16:52:46+00:00'), _doc469(100, '2026-10-11T07:40:00+00:00')), True),   # zip 이 나중 → 씀
+    ((_doc469(100, '2026-10-09T16:52:46+00:00'), _doc469(100, '2026-10-09T16:52:46+00:00')), True),   # 같은 시각 → 씀(종전)
+    ((_doc469(100, '2026-10-11 16:40'), _doc469(100, '2026-10-10 01:51')), True),                     # 시간대 없음 → 견주지 않음(종전)
+    ((_doc469(100), _doc469(100)), True),                                                               # 칸 없음 → 종전
+    ((_doc469(100, '2026-10-11T07:40:00+00:00'), _doc469(101, '2026-10-09T16:52:46+00:00')), True),   # 원장이 늘면 씀
+    ((_doc469(101, '2026-10-09T16:52:46+00:00'), _doc469(100, '2026-10-11T07:40:00+00:00')), False),  # 원장이 줄면 안 씀(라운드 261)
+]
+_badp469 = []
+with _tf469.TemporaryDirectory() as _td469:
+    _lp469 = _os.path.join(_td469, 'x.json')
+    for (_loc, _zip), _want in _pairs469:
+        with open(_lp469, 'w', encoding='utf-8') as _f469:
+            _f469.write(_loc)
+        _got469 = _pr469.data_newer(_zip, _lp469)
+        if _got469 is not _want:
+            _badp469.append((_loc, _zip, _got469))
+check("⑤ 되받기 동률 — 같은 원장·둘 다 시간대 있는 made_at 이고 로컬이 나중이면 남긴다 · zip 이 나중·같음·시간대 없음·칸 없음은 종전대로 씀 · 원장 증감 규칙 그대로",
+      not _badp469, str(_badp469), scanned=len(_pairs469))
+# ─── §469 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

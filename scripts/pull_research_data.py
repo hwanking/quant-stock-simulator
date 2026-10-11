@@ -323,22 +323,45 @@ def _ledger_rows_of(text):
         return None
 
 
+def _made_at_of(text):
+    """산출물 본문의 `made_at` → 시간대가 붙은 datetime · 없거나 시간대가 없으면 None (라운드 489).
+
+    시간대 없는 시각('2026-10-10 01:51')은 어느 시계로 찍었는지 몰라 견주지 않는다 — 모르는 것으로 순서를 정하지 않는다(§3)."""
+    try:
+        import datetime as _dt489
+        v = json.loads(text).get('made_at')
+        d = _dt489.datetime.fromisoformat(str(v)) if v else None
+        return d if (d is not None and d.tzinfo is not None) else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def data_newer(zip_text, local_path):
     """zip 의 관측 산출물을 로컬 위에 써도 되나 (라운드 261).
 
     `data/` 산출물은 줄 수로 비교할 수 없다 — **어느 원장에서 만들었나**(ledger_rows ·
     R259 규약)로 견준다. zip 쪽이 로컬 이상의 원장이면 쓴다. 로컬이 없거나 옛 규약이면
     쓴다. zip 쪽이 옛 규약이면 안 쓴다 — 규약 있는 로컬을 옛것으로 되돌리지 않는다.
+
+    라운드 489 — **같은 원장**(동률)이면 종전엔 늘 썼다. 그런데 클라우드는 실행을 만든 시점의 코드로 산출물을 만들어, 이 PC 가
+    같은 원장에서 **더 새 코드로 다시 만든 판**(라운드 474 의 `axes_split`)을 저녁 되받기가 하루 늦은 판으로 되돌렸다. 동률에서
+    둘 다 시간대가 붙은 `made_at` 이 있고 로컬이 더 나중이면 로컬을 남긴다. 그 밖(칸 없음 · 시간대 없음 · zip 이 같거나 나중)은
+    종전대로 쓴다.
     """
     if not os.path.exists(local_path):
         return True
     with open(local_path, encoding='utf-8', errors='replace') as f:
-        lr = _ledger_rows_of(f.read())
+        local_text = f.read()
+    lr = _ledger_rows_of(local_text)
     if lr is None:
         return True
     zr = _ledger_rows_of(zip_text)
     if zr is None:
         return False
+    if zr == lr:
+        lm, zm = _made_at_of(local_text), _made_at_of(zip_text)
+        if lm is not None and zm is not None and lm > zm:
+            return False
     return zr >= lr
 
 
