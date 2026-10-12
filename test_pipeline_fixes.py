@@ -41113,6 +41113,72 @@ check("② 설명 사전 '거래 시간 · 시간외' 가 '주식의 종가'라 
       and _w478.count('_ETF_CLOSE_499') == 3)
 # ─── §478 끝 ───
 
+# ─── §479 시작 (라운드 500) ───
+print()
+print("§479 공개 주소 되받기 — 서버 쪽 일시 오류(5xx·연결·시간 초과)면 쉬었다 다시 · 4xx 는 바로 멈춤 · 반쪽 파일 없음 (라운드 500)")
+print("-" * 72)
+# 2026-10-12 21:00 저녁 작업이 GitHub 504 한 번에 되받기를 멈췄다(다른 단계는 다 돌았다). 네트워크 0 — 여는 함수와 쉬기를 바꿔 끼운다.
+import urllib.error as _ue479
+import io as _io479
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import pull_research_data as _pr479
+_dir479 = _os.path.join(PROJ, '_probe', '_r500_dl')
+_os.makedirs(_dir479, exist_ok=True)
+
+
+class _Resp479(_io479.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()
+
+
+def _mk479(plan):
+    calls = []
+
+    def op(req, timeout=None):
+        calls.append(req.full_url)
+        what = plan[min(len(calls) - 1, len(plan) - 1)]
+        if what == 'ok':
+            return _Resp479(b'ZIPBYTES')
+        raise _ue479.HTTPError(req.full_url, what, f'HTTP {what}', {}, None)
+    return op, calls
+
+
+_slept479 = []
+try:
+    _opA, _cA479 = _mk479([504, 504, 'ok'])
+    _gA479, _wA479 = _pr479.http_download('o/r', 'data-1', 'a.zip', _dir479, urlopen=_opA, sleep=_slept479.append)
+    _okA479 = _gA479 and open(_gA479, 'rb').read() == b'ZIPBYTES'
+    _slA479 = list(_slept479)
+    _slept479.clear()
+    _opB, _cB479 = _mk479([404])
+    _gB479, _wB479 = _pr479.http_download('o/r', 'data-1', 'b.zip', _dir479, urlopen=_opB, sleep=_slept479.append)
+    _slB479 = list(_slept479)
+    _slept479.clear()
+    _opC, _cC479 = _mk479([504])
+    _gC479, _wC479 = _pr479.http_download('o/r', 'data-1', 'c.zip', _dir479, urlopen=_opC, sleep=_slept479.append)
+    _leftC479 = [f for f in _os.listdir(_dir479) if f.startswith('c.zip')]
+finally:
+    __import__('shutil').rmtree(_dir479, ignore_errors=True)
+check("① 504 두 번 뒤 성공 → 받음 · 쉰 간격 RETRY_WAITS(5 · 20) · 사유 칸에 '2번 일시 오류 뒤 받음' (몇 번 해 봤는지 남는다)",
+      bool(_okA479) and len(_cA479) == 3 and _slA479 == list(_pr479.RETRY_WAITS) and _wA479.startswith('2번 일시 오류 뒤 받음'),
+      f'{_gA479} · {_slA479} · {_wA479}')
+check("② 404(없는 자산) → 다시 안 한다(호출 1 · 쉼 0) · None 과 사유",
+      _gB479 is None and len(_cB479) == 1 and _slB479 == [] and '404' in _wB479, f'{_cB479} · {_wB479}')
+check("③ 끝까지 504 → 세 번(처음 + 두 번 더) 뒤 None · 사유 셋을 다 적는다 · 반쪽 파일(.part)을 안 남긴다",
+      _gC479 is None and len(_cC479) == len(_pr479.RETRY_WAITS) + 1 and _wC479.count('HTTP Error 504') == 3 and not _leftC479,
+      f'{len(_cC479)} · {_wC479} · {_leftC479}')
+_ast479 = __import__('ast')
+_tree479 = _ast479.parse(open(_os.path.join(PROJ, 'scripts', 'pull_research_data.py'), encoding='utf-8').read())
+_hj479 = next((_ast479.unparse(n) for n in _tree479.body if isinstance(n, _ast479.FunctionDef) and n.name == '_http_json'), '')
+check("④ 목록 읽기(_http_json)도 같은 재시도를 쓴다 · 다시 볼 만한 실패의 판정은 5xx·연결·시간 초과만",
+      _pr479._transient(_ue479.HTTPError('u', 503, 'x', {}, None)) and not _pr479._transient(_ue479.HTTPError('u', 403, 'x', {}, None))
+      and _pr479._transient(_ue479.URLError('down')) and not _pr479._transient(ValueError('x'))
+      and '_retrying(once' in _hj479, _hj479[-200:])
+# ─── §479 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

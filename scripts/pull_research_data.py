@@ -180,11 +180,48 @@ def rows_from_releases(releases):
 API_ROOT = 'https://api.github.com'
 
 
-def _http_json(url):
+#: 라운드 500 — 공개 주소가 **서버 쪽 일시 오류**(5xx · 연결 끊김 · 시간 초과)를 내면 이만큼 쉬고 다시 해 본다(최대 세 번).
+#: 2026-10-12 21:00 저녁 작업이 GitHub 의 504(Gateway Time-out) **한 번**에 되받기를 멈췄다 — 같은 날 다른 단계는 다 돌았다.
+#: 4xx(없는 자산 · 권한)는 다시 해도 같으므로 바로 멈춘다. 쉬는 시간은 판정 문턱이 아니라 재시도 간격이다(라운드 445 업로드 재시도와
+#: 같은 모양). 시험이 쉬기·여는 함수를 바꿔 끼운다.
+RETRY_WAITS = (5, 20)
+
+
+def _transient(e):
+    """다시 해 볼 만한 실패인가 — HTTP 5xx · 연결 실패 · 시간 초과. 4xx 와 그 밖은 아니다."""
+    import socket
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        return 500 <= int(getattr(e, 'code', 0) or 0) < 600
+    return isinstance(e, (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError))
+
+
+def _retrying(fn, sleep=None):
+    """fn() 을 일시 오류면 RETRY_WAITS 만큼 쉬며 다시 → (값, 실패 사유 목록). 끝내 실패하면 마지막 예외를 그대로 던진다
+    (사유 목록은 예외의 `tries` 칸에 싣는다 · 몇 번 해 봤는지 기록에 남긴다)."""
+    import time
+    sleep = sleep or time.sleep
+    errs = []
+    for i in range(len(RETRY_WAITS) + 1):
+        try:
+            return fn(), errs
+        except Exception as e:                                 # noqa: BLE001
+            errs.append(f'{type(e).__name__}: {e}'[:120])
+            if i >= len(RETRY_WAITS) or not _transient(e):
+                e.tries = list(errs)
+                raise
+            sleep(RETRY_WAITS[i])
+
+
+def _http_json(url, urlopen=None, sleep=None):
     import urllib.request
-    req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull', 'Accept': 'application/vnd.github+json'})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode('utf-8'))
+    opener = urlopen or urllib.request.urlopen
+
+    def once():
+        req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull', 'Accept': 'application/vnd.github+json'})
+        with opener(req, timeout=60) as r:
+            return json.loads(r.read().decode('utf-8'))
+    return _retrying(once, sleep=sleep)[0]
 
 
 def http_candidates(slug):
@@ -204,28 +241,37 @@ def http_candidates(slug):
     return rows_from_releases(rels), ''
 
 
-def http_download(slug, tag, name, dst_dir):
-    """공개 내려받기 주소로 자산을 받는다 — 임시 이름으로 받고 다 받으면 바꿔 끼운다. (경로 또는 None, 사유)."""
+def http_download(slug, tag, name, dst_dir, urlopen=None, sleep=None):
+    """공개 내려받기 주소로 자산을 받는다 — 임시 이름으로 받고 다 받으면 바꿔 끼운다. (경로 또는 None, 사유).
+    라운드 500 — 일시 오류면 다시 해 본다(`_retrying`) · 받았지만 앞서 실패가 있었으면 사유 칸에 그 사실을 적는다."""
     import urllib.request
     url = f'https://github.com/{slug}/releases/download/{tag}/{name}'
     dst = os.path.join(dst_dir, name)
     tmp = dst + '.part'
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull'})
-        with urllib.request.urlopen(req, timeout=600) as r, open(tmp, 'wb') as f:
-            while True:
-                b = r.read(1 << 20)
-                if not b:
-                    break
-                f.write(b)
-        os.replace(tmp, dst)
-        return dst, ''
-    except Exception as e:                                     # noqa: BLE001
+    opener = urlopen or urllib.request.urlopen
+
+    def once():
         try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        return None, f'{type(e).__name__}: {e}'[:300]
+            req = urllib.request.Request(url, headers={'User-Agent': 'gaeum-pull'})
+            with opener(req, timeout=600) as r, open(tmp, 'wb') as f:
+                while True:
+                    b = r.read(1 << 20)
+                    if not b:
+                        break
+                    f.write(b)
+            os.replace(tmp, dst)
+            return dst
+        except Exception:                                      # noqa: BLE001 — 반쪽 파일을 남기지 않는다
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+    try:
+        got, errs = _retrying(once, sleep=sleep)
+    except Exception as e:                                     # noqa: BLE001
+        return None, ' · '.join(getattr(e, 'tries', None) or [f'{type(e).__name__}: {e}'])[:400]
+    return got, (f"{len(errs)}번 일시 오류 뒤 받음 — {' · '.join(errs)}"[:400] if errs else '')
 
 
 #: 라운드 430 — 이번 실행이 목록·파일을 어느 길로 받았나('gh' · '공개 HTTPS'). 저녁 작업 기록은 끝 세 줄만 남겨서
@@ -717,7 +763,7 @@ def main():
         if not got or not os.path.exists(zip_path):
             print(f'공개 주소로도 못 받았다 — 멈춘다: {why}')
             return 1
-        print('→ 인증 없는 공개 주소로 받았다')
+        print('→ 인증 없는 공개 주소로 받았다' + (f' ({why})' if why else ''))
         ROUTE['download'] = '공개 HTTPS'
     mb = os.path.getsize(zip_path) / 1048576
     print(f'받음 {mb:,.1f}MB')
