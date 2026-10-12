@@ -403,11 +403,25 @@ def _cancel(c, broker, it, why, out):
 
 
 # ── 계획과 기록만 모의 (증권사 안 부름) ─────────────────────────────────
-def refresh_plans(c, report, anchor_day, bars_fn, cost_pct):
-    """그날 리포트 → 계획(바뀌지 않는 영수증) · 끝나지 않은 계획마다 일봉으로 모의 → (새 계획 수, 모의 갱신 수, 메모)."""
+def refresh_plans(c, report, anchor_day, bars_fn, cost_pct, extra=None):
+    """그날 리포트 → 계획(바뀌지 않는 영수증) · 끝나지 않은 계획마다 일봉으로 모의 → (새 계획 수, 모의 갱신 수, 메모).
+
+    라운드 507 — `extra` 는 리포트와 **같은 모양**의 문서 목록이다(관심종목 추천 · `swing_watch`). 계획은 리포트와 같은 함수
+    (`plans_from_report`)가 만들고 판정 기록에 출처(`source`)를 남긴다(plan_id 에는 안 든다 · 엔진 성적·리포트 계획과 가른다).
+    리포트에 이미 있는 종목은 건너뛴다(같은 종목 계획이 두 출처로 둘이 되지 않게 · 실행부도 같은 종목은 한 번만 산다)."""
     pn, sn, notes = 0, 0, []
     for p in swing_engine.plans_from_report(report, anchor_day, cost_pct=cost_pct):
         pn += int(L.add_plan(c, p))
+    rep_codes = {swing_engine.code6((pk or {}).get('symbol') or (pk or {}).get('code'))
+                 for pk in ((report or {}).get('picks') or [])}
+    for doc in extra or []:
+        if not doc:
+            continue
+        for p in swing_engine.plans_from_report(doc, anchor_day, cost_pct=cost_pct):
+            if p['code'] in rep_codes:
+                continue
+            p['verdict']['source'] = str(doc.get('source') or 'extra')
+            pn += int(L.add_plan(c, p))
     if bars_fn is None:
         return pn, sn, notes
     latest = L.shadow_latest(c)
@@ -428,7 +442,7 @@ def refresh_plans(c, report, anchor_day, bars_fn, cost_pct):
 
 # ── 한 바퀴 ─────────────────────────────────────────────────────────────
 def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=None, bars_fn=None, cost_pct=None,
-              do_shadow=True, allow_orders=True, quote_fn=None):
+              do_shadow=True, allow_orders=True, quote_fn=None, extra_reports=None):
     """워커 한 바퀴 → 요약 dict. allow_orders=False 면 계획·모의·내역·계좌 맞춤까지만 하고 주문(취소 포함)은 안 낸다
     (저녁 작업 · '놓치면 켜질 때' 돌아 장중일 수 있다). quote_fn(code) → 지금 가격 또는 None — 신규 매수 직전에 손절선과 견준다."""
     now = kst(now or now_kst())
@@ -439,7 +453,8 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
                exits=[], blocked=[], notes=[], alerts=[], protect_only=False)
     # ① 계획·모의 — **모드와 무관하게** 남긴다(라운드 453 · 판단 기록은 운용과 분리) · 실패해도 보호 매도를 막지 않는다
     try:
-        pn, sn, notes = refresh_plans(c, report, anchor_day, bars_fn if do_shadow else None, cost_pct)
+        pn, sn, notes = refresh_plans(c, report, anchor_day, bars_fn if do_shadow else None, cost_pct,
+                                      extra=extra_reports)        # 라운드 507 — 관심종목 추천(리포트와 같은 모양의 문서)
         out.update(plans_new=pn, shadow_updates=sn)
         out['notes'] += notes
     except Exception as e:                                     # noqa: BLE001
@@ -517,7 +532,8 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
     elif orders is None:
         out['blocked'].append('주문 내역을 못 맞춰 신규 매수를 안 냈다')
     else:
-        _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=report)
+        _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=report,
+                 fresh=fresh_verdicts(report, extra_reports))
     _beat(c, mode, out, tag + f"주문 {len(out['orders'])} · 청산 {len(out['exits'])} · 막힘 {len(out['blocked'])}")
     return out
 
@@ -696,7 +712,37 @@ def _exit_one(c, broker, held, trade_day, mode, out, code, pos, every, quote_fn=
         out['exits'].append((code, 'target', submit(c, broker, iid, 'sell', code, qty, pos['target'], broker_kis.ORD_LIMIT)))
 
 
-def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=None):
+def fresh_verdicts(report, extra=None):
+    """그날 리포트·문서가 잰 종목의 추천 여부 → {코드: (판정일, 추천?)} (라운드 507 · '최신 판정이 이긴다').
+
+    리포트는 후보마다 중앙 판정을 싣고(`core['recommended']`) 관심종목 문서는 잰 종목 전부의 추천 여부(`verdicts`)를 싣는다.
+    같은 종목이 둘 다에 있으면 추천이 아니라는 쪽이 이긴다(막는 쪽 · 실수로 사는 것보다 안 사는 것이 싸다). 못 읽으면 빈 dict."""
+    out = {}
+
+    def put(code, day, rec):
+        if not code or not day:
+            return
+        prev = out.get(code)
+        if prev is None or str(day) > str(prev[0]) or (str(day) == str(prev[0]) and rec is not True):
+            out[code] = (str(day), rec is True)
+
+    try:
+        import premarket
+        for doc in [report] + list(extra or []):
+            if not doc:
+                continue
+            day = premarket.data_day_of(doc) or doc.get('date')
+            for pk in doc.get('picks') or []:
+                put(swing_engine.code6((pk or {}).get('symbol') or (pk or {}).get('code')), day,
+                    ((pk or {}).get('core') or {}).get('recommended'))
+            for code, rec in (doc.get('verdicts') or {}).items():
+                put(str(code), day, rec)
+    except Exception:                                          # noqa: BLE001 — 못 읽으면 이 규칙만 빠진다(다른 막힘은 그대로)
+        return {}
+    return out
+
+
+def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=None, fresh=None):
     gate = buy_gate(mode, cfg, st)
     if gate:
         out['blocked'] += gate
@@ -715,11 +761,28 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
     # 라운드 494 — 살아 있는 고르기만(지금 모드에서 · 모드를 마지막으로 바꾼 뒤에 고른 것 · `pick_alive`)
     picks = human_picks(st, mode=mode, mode_ts=L.setting_ts(c, 'mode'))
     last_closed = L.last_closed_days(c)
+    # 라운드 507 — 최신 판정이 이긴다(2026-10-13 독립 검토). 실주문 자격 계획은 같은 종목의 **가장 새 판정일** 것만 보고, 그 뒤에
+    #   잰 판정(그날 리포트·관심종목 문서)이 추천이 아니면 옛 계획으로는 사지 않는다 — 종전엔 한 번 추천된 계획이 대기 기간(20거래일)
+    #   내내 오늘 판정과 무관하게 샀다(관심종목은 매일 다시 재므로 흔해진다). 막기만 하는 규칙이다(사는 쪽으로는 아무것도 안 연다).
+    #   사람이 고른 계획(추천 아님을 사람이 넘긴 것)에는 걸지 않는다.
+    fresh = fresh or {}
+    newest = {}
+    for _p507 in L.plans(c):
+        if _p507.get('live_ok'):
+            newest[_p507['code']] = max(newest.get(_p507['code'], ''), str(_p507['data_day']))
     for p in L.plans(c):
         # 라운드 494 — 실주문 자격이 없으면 사람이 고른 계획일 때만 본다(넘는 것은 '추천 아님' 하나 · 아래에서 확인)
         human = (not p.get('live_ok')) and p['plan_id'] in picks
         if not p.get('live_ok') and not human:
             continue
+        if not human:
+            _fv = fresh.get(p['code'])
+            if str(p['data_day']) < newest.get(p['code'], ''):
+                continue     # 같은 종목의 더 새 판정 계획이 있다 — 그 계획이 대신한다
+            if _fv and _fv[0] > str(p['data_day']) and _fv[1] is not True:
+                out['blocked'].append(f"{p['code']} — 최신 판정({_fv[0]})이 추천이 아니라 판정일 {p['data_day']} 계획으로는 "
+                                      '사지 않는다(최신 판정이 이긴다)')
+                continue
         waited = trading_days_between(p['data_day'], trade_day)
         if waited < 1 or waited > int(p.get('wait_bars') or 0):
             continue     # 판정일 다음 거래일부터 · 대기 기간이 지나면 안 산다(추격 없음)

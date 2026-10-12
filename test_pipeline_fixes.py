@@ -41655,6 +41655,161 @@ check("⑤ 실측 함수는 새 규칙을 안 만든다 — 엔진의 _detect_ma
       '_detect_market(code)' in _mmf_code486 and '.KS' not in _mmf_code486 and '.KQ' not in _mmf_code486
       and 'parse_market_badge' not in _mmf_code486 and 'daum' not in _mmf_code486.lower())
 # ─── §486 끝 ───
+print("§487 관심종목 추천도 스윙 계획이 된다 — 리포트와 같은 함수로 · 추천만 · 리포트에 있는 종목은 리포트가 이긴다 (라운드 507)")
+print("-" * 72)
+# 2026-10-13 · 판정일 10-12 계획 5개(시장 스캔 상위 5)가 전부 '추천 아님'이라 실주문 0 이었고, 엔진이 낸 추천은 관심종목 한 종목이었다.
+# 사용자가 *"관심종목 추천도 계획에 넣기"* 를 골랐다. 새 판단 없음 — 같은 정밀 분석·조립 함수 · 같은 계획 함수 · 같은 실주문 자격.
+import swing_watch as _sw487
+import premarket as _pm487
+_rep487 = _report432(rec=False, code='000001.KS')                     # 리포트: 추천 아님 한 종목
+_a487 = _report432(rec=True, code='000002.KS')['picks'][0]            # 관심종목: 추천
+_b487 = _report432(rec=True, code='000001.KS')['picks'][0]            # 관심종목: 추천인데 리포트에 이미 있음
+_c487 = _report432(rec=False, code='000003.KS')['picks'][0]           # 관심종목: 추천 아님
+_d487 = dict(_report432(rec=True, code='000004.KS')['picks'][0])
+_d487['core'] = dict(_d487['core'], recommended='True')               # 참 같은 글자 — 추천으로 안 받는다(§3)
+_doc487 = _sw487.doc_from([_a487, _b487, _c487, _d487], '2026-10-06', engine_version='vtest',
+                          generated_at='2026-10-06 21:00:00', day_basis=_pm487.DAY_BASIS, report_codes=['000001'])
+check("① 문서는 추천(`recommended is True`)만 담고 리포트에 이미 있는 종목은 빼며 뺀 수를 적는다 · 모양이 리포트와 같다(같은 계획 함수가 읽는다)",
+      [p['symbol'] for p in _doc487['picks']] == ['000002.KS']
+      and _doc487['counts'] == dict(picks=4, not_recommended=2, in_report=1, kept=1)
+      and _doc487['source'] == 'watchlist' and _pm487.data_day_of(_doc487) == '2026-10-06',
+      str(_doc487['counts']))
+_tmp487 = _os.path.join(PROJ, '_probe', '_r507_watch_t.json')
+try:
+    open(_tmp487, 'w', encoding='utf-8').write(__import__('json').dumps(dict(_doc487, picks=_doc487['picks'] + [_c487]),
+                                                                         ensure_ascii=False))
+    _l_ok487 = _sw487.load('2026-10-06', path=_tmp487)
+    _l_day487 = _sw487.load('2026-10-07', path=_tmp487)
+    open(_tmp487, 'w', encoding='utf-8').write(__import__('json').dumps(dict(_doc487, source='report'), ensure_ascii=False))
+    _l_src487 = _sw487.load('2026-10-06', path=_tmp487)
+finally:
+    if _os.path.exists(_tmp487):
+        _os.remove(_tmp487)
+_old_nw487 = _os.environ.get('GAEUM_NO_LOCAL_WRITE')
+_os.environ['GAEUM_NO_LOCAL_WRITE'] = '1'
+try:
+    _saved487 = _sw487.save(_doc487)
+finally:
+    if _old_nw487 is None:
+        _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+    else:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw487
+check("② 읽기는 그 판정일·출처가 맞을 때만 · 파일에 추천 아닌 후보가 섞여도 읽은 뒤 추천만 남긴다 · 쓰기 금지면 안 쓴다 · 자리는 백업 거부(swing*)",
+      _l_ok487 is not None and [p['symbol'] for p in _l_ok487['picks']] == ['000002.KS']
+      and _l_day487 is None and _l_src487 is None and _saved487 is None
+      and __import__('fnmatch').fnmatch(_os.path.basename(_sw487.path_of('2026-10-06')), 'swing*')
+      and _sw487.path_of('20261006') is None)
+# ③ 한 바퀴 — 실전·완전 자동 · 리포트(추천 아님) + 관심종목 문서(추천) → 관심종목 계획만 산다 · 리포트 종목은 리포트 계획 하나뿐
+_c487 = _db432()
+_fb487 = _FakeBroker432()
+_o487 = _cyc432(_c487, _fb487, rep=_rep487, extra_reports=[_doc487])
+_pl487 = {p['code']: p for p in _sl432.plans(_c487)}
+_v487 = _se432.verdict_of(_pl487.get('000002'))
+_buys487 = [x for x in _fb487.placed if x[0] == 'buy']
+check("③ 관심종목 추천 계획: 실주문 자격 · 판정 기록에 출처 'watchlist' · 리포트와 같은 계약(진입 지정가) · 그 종목만 산다 · "
+      "리포트 종목(000001)은 리포트 계획 하나뿐이고 자격 없음 · 출처 칸은 plan_id 에 안 든다",
+      set(_pl487) == {'000001', '000002'} and _pl487['000002']['live_ok'] == 1 and _v487.get('source') == 'watchlist'
+      and _pl487['000001']['live_ok'] == 0 and 'source' not in _se432.verdict_of(_pl487['000001'])
+      and len(_buys487) == 1 and _buys487[0][1] == '000002' and float(_buys487[0][3]) == 10000.0
+      and _buys487[0][4] == _bk432.ORD_LIMIT
+      and _pl487['000002']['plan_id'] == _se432.plans_from_report(_doc487, '2026-10-06', cost_pct=0.41)[0]['plan_id'],
+      f"{sorted(_pl487)} · {_buys487} · {_v487.get('source')}")
+_c487b = _db432()
+_fb487b = _FakeBroker432()
+_cyc432(_c487b, _fb487b, rep=_rep487)
+check("④ 문서를 안 넘기면 종전과 같다 — 리포트 계획만 · 주문 0",
+      [p['code'] for p in _sl432.plans(_c487b)] == ['000001'] and not [x for x in _fb487b.placed if x[0] == 'buy'])
+import importlib.util as _ilu487
+_spec487 = _ilu487.spec_from_file_location('_gf478_487', _os.path.join(PROJ, 'scripts', 'gate_forward_r478.py'))
+_gf487 = _ilu487.module_from_spec(_spec487)
+_spec487.loader.exec_module(_gf487)
+check("⑤ 사전등록 R478 의 모집단('비용 차감 기대값 양수'에 막힌 계획)에 관심종목 추천 계획이 안 든다 — 추천은 미충족 조건이 없다",
+      not _gf487.gate_blocked(_pl487['000002']) and _gf487.window_dates([_pl487['000002']]) == [])
+_ast487 = __import__('ast')
+_wk487 = open(_os.path.join(PROJ, 'scripts', 'run_swing_worker.py'), encoding='utf-8').read()
+_oc487 = _ast487.unparse(next(n for n in _ast487.parse(_wk487).body if getattr(n, 'name', None) == 'one_cycle'))
+_svs487 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_ns487 = {}
+exec(compile(_ast487.Module(body=[n for n in _ast487.parse(open(_os.path.join(PROJ, 'scripts', 'nightly_local.py'),
+                                                                encoding='utf-8').read()).body
+                                  if isinstance(n, _ast487.Assign) and any(getattr(t, 'id', '') == 'STEPS' for t in n.targets)],
+                            type_ignores=[]), 'nightly_steps', 'exec'), _ns487)
+_steps487 = [s for _n, s, _l in _ns487.get('STEPS', ())]
+_i487 = {s: i for i, s in enumerate(_steps487)}
+check("⑥ 워커가 그 판정일 문서를 읽어 넘기고 · 화면 '계획 갱신'도 같은 출처를 넘기며 · 저녁 작업은 리포트 뒤·워커 앞에서 문서를 만든다",
+      'swing_watch.load(anchor)' in _oc487 and 'extra_reports=[watch] if watch else None' in _oc487
+      and 'swing_watch.load(anchor_day)' in _svs487 and 'extra=[_w507] if _w507 else None' in _svs487
+      and _i487.get('scripts/build_premarket_report.py', 99) < _i487.get('scripts/build_watch_picks.py', -1)
+      < _i487.get('scripts/run_swing_worker.py', -1), str(_steps487))
+_bw487 = open(_os.path.join(PROJ, 'scripts', 'build_watch_picks.py'), encoding='utf-8').read()
+_bm487 = _ast487.unparse(next(n for n in _ast487.parse(_bw487).body if getattr(n, 'name', None) == 'main'))
+_dec487 = [i for i in range(len(_bm487)) if _bm487.startswith('BPR.decide(', i)]
+check("⑦ 문서를 만드는 길은 리포트와 같다 — 만들지는 리포트의 `decide` 그대로(정규장 중·봉 확정 전·쓰기 금지면 안 만든다 · --force 는 "
+      "'이미 있음'만 넘는다) · 시세 관문 `feed_gate` 가 분석보다 앞 · 정밀 분석 run_screener_scan · 조립 pick_from_scan_row · "
+      "그 판정일 리포트로 겹침을 뺀다 · 저장 직전에 같은 판단을 한 번 더",
+      len(_dec487) == 2 and _dec487[0] < _bm487.find('BPR.feed_gate(b)') < _bm487.find('run_screener_scan(')
+      < _dec487[1] < _bm487.find('swing_watch.save(doc)')
+      and 'premarket.pick_from_scan_row(q, r)' in _bm487
+      and 'premarket.load_today_report(anchor)' in _bm487 and 'report_codes=rep_codes' in _bm487
+      and 'not a.force' in _bm487 and 'lambda d: False' in _bm487, str(_dec487))
+# ⑦' 그 `decide` 가 정규장 중엔 막는다 — 심어서(문서 길은 그 함수를 그대로 부른다)
+_spec487b = _ilu487.spec_from_file_location('_bpr487', _os.path.join(PROJ, 'scripts', 'build_premarket_report.py'))
+_bpr487 = _ilu487.module_from_spec(_spec487b)
+_spec487b.loader.exec_module(_bpr487)
+_dt487 = __import__('datetime')
+_ok_mid487, _why_mid487 = _bpr487.decide(_dt487.datetime(2026, 10, 13, 10, 0), lambda d: False)
+_ok_eve487, _day_eve487 = _bpr487.decide(_dt487.datetime(2026, 10, 13, 21, 30), lambda d: False)
+check("⑦' 정규장 중(10:00)엔 안 만들고 봉 확정 뒤(21:30)엔 그날 판정일로 만든다 — 문서 길이 부르는 바로 그 함수",
+      _ok_mid487 is False and '정규장' in str(_why_mid487) and _ok_eve487 is True and _day_eve487 == '2026-10-13',
+      f'{_why_mid487} · {_day_eve487}')
+# ⑨ 최신 판정이 이긴다 — 같은 종목의 더 새 판정 계획이 있으면 옛 계획으로는 안 산다(새 계획 하나만)
+_c487d = _db432()
+_r1_487 = _report432(rec=True, day='2026-10-05', code='000005.KS', entry=10000, target=11000, stop=9500)
+_r2_487 = _report432(rec=True, day='2026-10-06', code='000005.KS', entry=9900, target=10900, stop=9400)
+_sx432.refresh_plans(_c487d, _r1_487, '2026-10-05', None, 0.41)
+_sx432.refresh_plans(_c487d, _r2_487, '2026-10-06', None, 0.41)
+_fb487d = _FakeBroker432()
+_cyc432(_c487d, _fb487d, rep=_r2_487)
+_ints487d = [i for i in _sl432.intents_with_state(_c487d) if i['side'] == 'buy']
+_pd487 = {p['plan_id']: p['data_day'] for p in _sl432.plans(_c487d)}
+check("⑨ 같은 종목에 실주문 자격 계획이 둘(10-05 · 10-06)이면 더 새 판정의 계획으로만 산다 — 옛 계획이 손절선이 낮다고 대신 사지 않는다",
+      len(_ints487d) == 1 and _pd487.get(_ints487d[0]['plan_id']) == '2026-10-06' and len(_pd487) == 2,
+      f'{[(i["plan_id"], i["price"]) for i in _ints487d]}')
+# ⑩ 최신 판정이 추천이 아니면(그날 리포트 · 관심종목 문서의 verdicts) 옛 계획으로는 안 산다 · 막힘에 사유
+_c487e = _db432()
+_sx432.refresh_plans(_c487e, _report432(rec=True, day='2026-10-05', code='000006.KS'), '2026-10-05', None, 0.41)
+_wd487 = _sw487.doc_from([_report432(rec=False, code='000006.KS')['picks'][0]], '2026-10-06', engine_version='vtest',
+                         generated_at='2026-10-06 21:00:00', day_basis=_pm487.DAY_BASIS)
+_fb487e = _FakeBroker432()
+_oe487 = _cyc432(_c487e, _fb487e, rep=_report432(rec=False, day='2026-10-06', code='000009.KS'), extra_reports=[_wd487])
+_c487f = _db432()
+_sx432.refresh_plans(_c487f, _report432(rec=True, day='2026-10-05', code='000006.KS'), '2026-10-05', None, 0.41)
+_fb487f = _FakeBroker432()
+_cyc432(_c487f, _fb487f, rep=_report432(rec=False, day='2026-10-06', code='000009.KS'))
+check("⑩ 어제 추천 계획이라도 오늘 잰 판정(관심종목 문서 verdicts)이 추천이 아니면 그 계획으로는 안 사고 막힘에 사유를 적는다 · "
+      "오늘 판정이 그 종목을 안 쟀으면 종전 계약대로 산다(대기 기간 안) · 문서는 잰 종목 전부의 추천 여부를 싣는다",
+      not [x for x in _fb487e.placed if x[0] == 'buy']
+      and any('최신 판정' in b and '000006' in b for b in _oe487['blocked'])
+      and [x[1] for x in _fb487f.placed if x[0] == 'buy'] == ['000006']
+      and _wd487['verdicts'] == {'000006': False}
+      and _sx432.fresh_verdicts(_rep487, [_doc487]).get('000001') == ('2026-10-06', False),
+      f"{_oe487['blocked']} · {_fb487f.placed}")
+_wk487b = _ast487.unparse(next(n for n in _ast487.parse(_wk487).body if getattr(n, 'name', None) == 'one_cycle'))
+_try487 = [n for n in _ast487.walk(_ast487.parse(_wk487b)) if isinstance(n, _ast487.Try)
+           and any('swing_watch.load' in _ast487.unparse(b) for b in n.body)
+           and any('watch = None' in _ast487.unparse(h) for h in n.handlers)]
+check("⑪ 워커가 관심종목 문서를 읽다 실패해도 바퀴(보호 매도)는 돈다 — 읽기가 바로 그 try 안이고 실패하면 None",
+      len(_try487) == 1, str(len(_try487)))
+_c487c = _db432()
+_cyc432(_c487c, _FakeBroker432(), rep=_rep487, extra_reports=[_doc487])
+import swing_view as _sv487
+_day487, _rows487 = _sv487.plan_rows(_c487c, today_day='2026-10-07')
+_wr487 = [r for r in _rows487 if r['종목'].endswith('(000002)')]
+check("⑧ 화면 '오늘 계획' 표가 관심종목에서 온 계획을 '관심종목 추천 · ' 으로 적는다(리포트 계획은 안 붙는다)",
+      len(_wr487) == 1 and _wr487[0]['오늘 상태'].startswith('관심종목 추천 · ')
+      and not any(r['오늘 상태'].startswith('관심종목 추천') for r in _rows487 if r['종목'].endswith('(000001)')),
+      str([r['오늘 상태'] for r in _rows487]))
+# ─── §487 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

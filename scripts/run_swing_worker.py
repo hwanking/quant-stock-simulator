@@ -159,9 +159,17 @@ def one_cycle(do_shadow, allow_orders=True):
             broker = broker_kis.KisBroker(cfg)
         anchor = premarket.report_day()
         report = premarket.load_today_report(anchor) if anchor else None
+        # 라운드 507 — 관심종목 추천(그 판정일 문서 · `scripts/build_watch_picks.py` 가 만든다 · 없으면 리포트만). 읽다 실패해도
+        #   바퀴(보호 매도)를 멈추지 않는다 — 그 문서만 빠진다(2026-10-13 독립 검토)
+        try:
+            import swing_watch
+            watch = swing_watch.load(anchor) if anchor else None
+        except Exception as e:                                 # noqa: BLE001
+            watch = None
+            _log(f'관심종목 추천 문서를 못 읽었다 — {type(e).__name__}: {e} · 리포트 계획만 본다')
         out = X.run_cycle(c, broker=broker, cfg=cfg, report=report, anchor_day=anchor,
                           bars_fn=_bars_fn() if do_shadow else None, cost_pct=COST_PCT, do_shadow=do_shadow,
-                          allow_orders=allow_orders, quote_fn=quote)
+                          allow_orders=allow_orders, quote_fn=quote, extra_reports=[watch] if watch else None)
         # 라운드 463 — 이 PC 알림(켜져 있을 때만 · 장부의 새 사건과 이 바퀴의 경고). 실패해도 바퀴는 그대로다.
         try:
             import swing_notify

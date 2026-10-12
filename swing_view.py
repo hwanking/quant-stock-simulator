@@ -416,6 +416,9 @@ def plan_rows(c, today_day=None, account=None, limits=None, cost_pct=None, held=
             status = ('승인됨 · ' if p['plan_id'] in (approved or set()) else '승인 전 — 사지 않습니다 · ') + status
         if picked and p['code'] not in (held or ()):
             status = (f'사람이 고름 — 그래도 사지 않습니다: {hb[0]}' if hb else '사람이 고름 · ' + status)
+        if v.get('source') == 'watchlist':
+            # 라운드 507 — 관심종목에서 온 추천 계획(시장 스캔 상위 5 밖 · 같은 계약 · 같은 실주문 자격)
+            status = '관심종목 추천 · ' + status
         # 라운드 453 — 모델(중앙 판정) 가격과 호가 단위로 맞춘 주문 가격이 다르면 둘 다 적는다(한쪽이 다른 쪽을 덮지 않는다)
         def _px(order, model):
             s = _won(order)
@@ -1752,7 +1755,10 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
         import bitemporal_engine as be
         eng = be.BitemporalEngine()
         # 화면에서는 주문하지 않는다 — 워커와 같은 함수로 계획과 일봉 재채점만(증권사 안 부름 · 모드와 무관 · 라운드 453)
-        pn, sn, notes = X.refresh_plans(c, report, anchor_day, lambda code: eng.fetch_daily_bars(f'{code}.KS'), COST_PCT)
+        import swing_watch
+        _w507 = swing_watch.load(anchor_day) if anchor_day else None      # 라운드 507 — 워커와 같은 출처(관심종목 추천)
+        pn, sn, notes = X.refresh_plans(c, report, anchor_day, lambda code: eng.fetch_daily_bars(f'{code}.KS'), COST_PCT,
+                                        extra=[_w507] if _w507 else None)
         st.session_state['sw_flash'] = (f'새 계획 {pn}건 · 일봉 재채점 갱신 {sn}건 (주문 없음)'
                                         + (f" · {len(notes)}건 못 굴림" if notes else ''))
         st.rerun()
