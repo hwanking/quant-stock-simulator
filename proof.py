@@ -659,6 +659,56 @@ def past_sim_line(sim, reco=None):
     return "몇 번 추천했나 — " + ' '.join(parts)
 
 
+#: 라운드 504 — '비용 차감 기대값' 하나에 막힌 자리를 과거 원장으로 센 산출물(`scripts/ev_only_blocked_r504.py`)
+ONLY_BLOCKED_FILE = 'ev_only_blocked_r504.json'
+
+
+def only_blocked_line(art):
+    """'그 조건 하나 때문에 못 산 자리' 한 줄 (라운드 504) — 과거 원장에서 다시 만들 수 있는 다른 조건을 다 넘고 '비용 차감 기대값'
+    하나에만 걸린 자리가 몇 번 나왔고 그때 샀다면 어땠나, 그리고 막힌 자리 안에서 기대값이 0 에 가까운 절반(문턱을 낮추면 먼저 사게
+    될 자리)이 실제로 0 을 넘었나.
+
+    사용자(2026-10-13): *"비용 차감 기대값 양수 빼고 샀을 타이밍 나온 주식들 있을 거 아냐 — 예전 데이터로 몇 개 나왔는지, 들어갔으면
+    벌었는지."* 앞으로의 자료(개장 전 후보)는 조건 11개를 다 싣지만 결과가 닫힌 것이 13건뿐이라, 2011 년부터의 원장에서 다시 만들 수
+    있는 조건만 다시 만들어 셌다. 판정 낱말 없음 — 0 을 포함하는지만. 다시 못 만든 조건과 오염(좋게 보이는 쪽)을 같은 줄에 적는다.
+    산출물이 없거나 세 구간 중 하나라도 비면 None(§3)."""
+    a = art or {}
+    sp = a.get('splits') or {}
+    rows = [(ko, (sp.get(s) or {}).get('ev_only_blocked') or {}, (sp.get(s) or {}).get('blocked_ev_halves') or {})
+            for s, ko in _SPLIT_KO]
+    if not all(r.get('n') and r.get('mean_net') is not None for _, r, _h in rows):
+        return None
+    made = minute_of(a.get('made'))[:10]
+    s = (f"그 조건 하나 때문에 못 산 자리 — 과거 원장({made} 측정 · {int(a.get('ledger_rows') or 0):,}행 · 진입가가 어긋난 행과 같은 "
+         "종목 35일 안의 겹침을 빼고)에서 다시 만들 수 있는 다른 조건을 다 넘고 이 조건 하나에만 걸린 자리는 "
+         + ' · '.join(f"{ko} {int(r['n']):,}건" for ko, r, _h in rows)
+         + f"이었습니다. 그 자리에서 원장 진입가에 바로 샀다면 비용 {a.get('cost_pct')}% 를 뺀 평균은 "
+         + ' · '.join(f"{ko} {float(r['mean_net']):+.2f}%" for ko, r, _h in rows))
+    cis = [r.get('ci95') for _, r, _h in rows]
+    if all(cis):
+        if all(float(c[0]) <= 0 <= float(c[1]) for c in cis):
+            s += '(날짜로 묶은 95% 구간이 세 구간 모두 0 을 포함)'
+        else:
+            s += '(날짜로 묶은 95% 구간 ' + ' · '.join(f"{ko} {_ci_text(r['ci95'])}" for ko, r, _h in rows) + ')'
+    if all(r.get('median_net') is not None for _, r, _h in rows):
+        s += ' · 중앙 ' + ' · '.join(f"{float(r['median_net']):+.2f}%" for _, r, _h in rows)
+    if all(r.get('hit') is not None and r.get('need_p_median') is not None for _, r, _h in rows):
+        s += (' · 목표에 먼저 닿은 비율 ' + ' · '.join(f"{float(r['hit']):.1f}%" for _, r, _h in rows)
+              + '(비용 뒤 0 이 되려면 필요한 비율의 중앙 '
+              + ' · '.join(f"{float(r['need_p_median']):.1f}%" for _, r, _h in rows) + ')')
+    s += '입니다.'
+    nz = [(ko, h.get('near_zero') or {}) for ko, _r, h in rows]
+    if all(n.get('mean_net') is not None for _, n in nz):
+        up = all(float(n['mean_net']) > 0 and n.get('ci95') and float(n['ci95'][0]) > 0 for _, n in nz)
+        s += (' 막힌 자리 중 기대값이 0 에 가까운 절반(문턱을 낮추면 먼저 사게 될 자리)은 '
+              + ' · '.join(f"{ko} {float(n['mean_net']):+.2f}%" for ko, n in nz))
+        s += (' 로 세 구간 모두 0 을 넘었습니다 — 문턱을 바꾸는 일은 결과 전에 기준을 적는 새 판정 거리입니다.' if up else
+              ' 로 세 구간에서 0 을 넘었다고 말할 수 없습니다 — 문턱을 낮춰 더 샀어도 비용 뒤 이득이 났다는 근거가 없습니다.')
+    s += (' 다시 못 만든 조건(유사패턴 평균 수익 거부권 · 데이터 정합성 거부권 · W%R · 거래대금)이 있어 실제 판정보다 많은 자리가 '
+          '들어갔고, 과거 케이스의 재무가 오늘 값이라 좋게 보일 수 있는 쪽입니다. 과거 원장은 이미 여러 번 봤으므로 판정에 쓰지 '
+          '않습니다 — 판정은 결과 전에 기준을 적어 둔 전방 판정이 합니다.')
+    return s
+
 #: 라운드 478 — 성적표 `forward_tests` 의 열쇠 → 화면 이름(라운드 번호는 화면에 안 쓴다 · R227)
 FORWARD_TEST_NAMES = {
     'contract': '자동매매 계약 그대로(진입가 지정가 · 최대 20거래일 대기 · 안 닿으면 거래 없음) 막힌 계획이 있는 날',

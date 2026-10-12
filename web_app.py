@@ -12166,6 +12166,13 @@ if _ledger_df is not None:
                         _ps480 = None
                     if _ps480:
                         st.caption(_md_safe(_ps480))
+                    # 라운드 504 — 그 조건 하나 때문에 못 산 자리(과거 원장 · 다시 만들 수 있는 조건만) · 문장은 proof 한 곳
+                    try:
+                        _ob504 = _pf418m.only_blocked_line(_aio480.load_json(_pf418m.ONLY_BLOCKED_FILE))
+                    except Exception:                          # noqa: BLE001
+                        _ob504 = None
+                    if _ob504:
+                        st.caption(_md_safe(_ob504))
     except Exception as _ex418m:                               # noqa: BLE001
         st.caption(f"가늠 PROOF 성적표를 읽지 못했습니다 ({type(_ex418m).__name__}) — 미측정입니다.")
     with st.expander("원장 필터·사례 보기 (펼쳐보기)", expanded=False):

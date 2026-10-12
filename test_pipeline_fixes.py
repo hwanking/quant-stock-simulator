@@ -41364,6 +41364,96 @@ check("⑦ 감사 스크립트가 리포트의 후보마다 같은 함수로 센
       and _nl483.STEPS[-1][1] == 'scripts/verdict_consistency_audit.py', str(_ar483))
 # ─── §483 끝 ───
 
+# ─── §484 시작 (라운드 504) ───
+print()
+print("§484 '비용 차감 기대값' 하나에 막힌 자리 — 과거 원장으로 다시 만든 조건 · 필요 비율 · 화면 한 줄 · 운영 함수 그대로 (라운드 504)")
+print("-" * 72)
+# 사용자(2026-10-13): "비용 차감 기대값 양수 빼고 샀을 타이밍 나온 주식들 — 예전 데이터로 몇 개 나왔는지, 들어갔으면 벌었는지."
+# 측정이지 판정이 아니다 — 게이트·문턱·비용 불변. 잠그는 것은 셈의 규칙(운영 함수를 부르는지 · 다시 못 만든 것을 적는지)과 문장이다.
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import ev_only_blocked_r504 as _ob484
+import proof as _pf484
+import regime_policy as _rp484
+_base484 = dict(price=100.0, target=102.1, stop=97.0, q_confidence=60, q_strategy_quality=50, bb_pos=50, rsi=50,
+                entry_zone='적정가 이하 (안전마진 미확보)', win_rate=0.6, regime='BULL', vol20=0.02)
+if _rp484._load() is None:
+    skipped("① 다시 만든 조건 심기", "국면 성적 파일(regime_breakdown.json)을 못 읽음 — 국면 게이트를 다시 만들 수 없다")
+else:
+    _cases484 = [
+        (dict(), lambda c: all(v is True for v in c.values())),
+        (dict(entry_zone='판정 불가'), lambda c: c['⑪ 밸류 검증'] is None),
+        (dict(entry_zone='적정가 소폭 초과'), lambda c: c['⑪ 밸류 검증'] is False),
+        (dict(entry_zone='적정가 초과 (추격매수 경고)'), lambda c: c['⑪ 밸류 검증'] is False),
+        (dict(entry_zone='적정가 크게 초과 (추격매수 위험)'), lambda c: c['⑪ 밸류 검증'] is False
+         and c['⑩ 강제 차단 없음(재구성)'] is False),
+        (dict(win_rate=None), lambda c: c['⑩ 강제 차단 없음(재구성)'] is False),
+        (dict(q_confidence=48), lambda c: c['⑩ 강제 차단 없음(재구성)'] is False and c['⑦ 신뢰도·전략품질'] is True),
+        (dict(q_confidence=44), lambda c: c['⑦ 신뢰도·전략품질'] is False),
+        (dict(q_strategy_quality=None), lambda c: c['⑦ 신뢰도·전략품질'] is False),
+        (dict(bb_pos=99, rsi=80), lambda c: c['⑧ 과열 아님'] is False),
+        (dict(bb_pos=99), lambda c: c['⑧ 과열 아님'] is True),
+        (dict(target=101.0), lambda c: c['⑤ 손익비'] is False),
+        (dict(stop=101.0), lambda c: c['①~④ 가격 세 칸'] is False),
+    ]
+    _res484 = [(kw, ok(_ob484.rebuilt_checks(dict(_base484, **kw)))) for kw, ok in _cases484]
+    check("① 다시 만든 조건 심기 — 운영 함수·상수 그대로: '초과' 셋은 밸류 미달(첫 판이 이름만 넘겨 '소폭 초과'·'초과'를 통과로 셌다) · "
+          "'판정 불가'는 모름 · 유사패턴 표본 미달·신뢰도 50 미만은 거부권 · 과열은 둘 다 켜져야 · 손익비·가격 순서",
+          all(ok for _kw, ok in _res484), str([kw for kw, ok in _res484 if not ok]), scanned=len(_cases484))
+_np484 = _ob484.need_p(dict(price=100.0, target=102.1, stop=97.0), 0.41)
+check("② 필요 비율 — 중앙 판정의 식(p × 목표폭 + (1 − p) × 손절폭 − 비용 = 0)을 p 로 푼 값 · 가격 순서가 깨지면 None",
+      _np484 is not None and abs(_np484 - (0.41 + 3.0) / (2.1 + 3.0) * 100.0) < 1e-9
+      and _ob484.need_p(dict(price=100.0, target=99.0, stop=97.0), 0.41) is None, f'{_np484}')
+
+
+def _art484(blind_near_lo):
+    def cell(n, m, ci, near_ci):
+        return dict(ev_only_blocked=dict(n=n, dates=30, hit=60.0, need_p_median=63.0, mean_net=m, median_net=1.7, ci95=ci),
+                    blocked_ev_halves=dict(median_ev=-0.3, near_zero=dict(n=n // 2, mean_net=0.4, ci95=near_ci),
+                                           far=dict(n=n // 2, mean_net=-0.4, ci95=[-1.0, 0.2])))
+    return dict(made='2026-10-13T00:30:00', ledger_rows=258730, cost_pct=0.41,
+                splits=dict(train=cell(15857, -0.26, [-0.54, 0.02], [0.1, 0.7]),
+                            valid=cell(1342, 0.20, [-0.58, 1.13], [0.1, 1.2]),
+                            blind=cell(1545, -0.19, [-2.45, 2.0], [blind_near_lo, 2.4])))
+
+
+_l1484 = _pf484.only_blocked_line(_art484(-3.0))
+_l2484 = _pf484.only_blocked_line(_art484(0.05))
+check("③ 화면 한 줄 — 몇 건 · 비용 뺀 평균 · 0 포함 · 필요 비율 · 0 에 가까운 절반 · 다시 못 만든 조건 · 판정에 안 씀 · "
+      "0 에 가까운 절반이 세 구간 모두 0 위일 때만 '새 판정 거리' 갈래(양방향) · 판정 낱말 없음 · 산출물이 비면 None",
+      bool(_l1484) and '15,857건' in _l1484 and '-0.26%' in _l1484
+      and '세 구간 모두 0 을 포함' in _l1484 and '필요한 비율의 중앙' in _l1484
+      and '근거가 없습니다' in _l1484 and '다시 못 만든 조건' in _l1484 and '판정에 쓰지' in _l1484
+      and bool(_l2484) and '새 판정 거리' in _l2484 and '근거가 없습니다' not in _l2484
+      and not any(w in (_l1484 + _l2484) for w in ('풀어야', '좋은 조건', '나쁜 조건', '보수적'))
+      and _pf484.only_blocked_line({}) is None and _pf484.only_blocked_line(None) is None
+      and _pf484.only_blocked_line(dict(_art484(-3.0), splits={'train': {}, 'valid': {}, 'blind': {}})) is None,
+      (_l1484 or '')[:240])
+import artifact_io as _aio484
+import re as _re484
+_real484 = _aio484.load_json(_pf484.ONLY_BLOCKED_FILE)
+_raw484 = open(_os.path.join(PROJ, 'data', _pf484.ONLY_BLOCKED_FILE), encoding='utf-8').read()
+check("④ 실어 나르는 산출물 — data/ 에 있고 세 구간이 다 차 화면 문장이 선다 · 종목 칸·코드 모양이 없다(합계만 · §9)",
+      isinstance(_real484, dict) and set((_real484.get('splits') or {})) >= {'train', 'valid', 'blind'}
+      and bool(_pf484.only_blocked_line(_real484))
+      and '"ticker"' not in _raw484 and not _re484.search(r'\b\d{6}\.K[SQ]\b', _raw484),
+      (_pf484.only_blocked_line(_real484) or '')[:160])
+import ast as _ast484
+_src484 = open(_os.path.join(PROJ, 'scripts', 'ev_only_blocked_r504.py'), encoding='utf-8').read()
+_attrs484 = {n.attr for n in _ast484.walk(_ast484.parse(_src484)) if isinstance(n, _ast484.Attribute)}
+check("⑤ 셈은 운영 함수·상수를 부른다(베끼지 않는다 · R192) — 과열·밸류·국면 게이트·문턱·비용 · 학습 구간 확률 · 통계 행",
+      {'heat_state', 'value_block', 'policy', 'MIN_RR', 'MIN_CONF', 'MIN_QUALITY', 'COST_PCT', 'band_p', 'stat_rows',
+       'scale_mismatch_keys', 'decided_hit', 'cluster_ci'} <= _attrs484,
+      str(sorted({'heat_state', 'value_block', 'policy', 'band_p', 'stat_rows'} - _attrs484)))
+_sv484 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+_zd484 = _sv484[_sv484.index('def zero_day_line('):]
+_zd484 = _zd484[:_zd484.index('\ndef ', 1)]
+_wa484 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("⑥ 두 자리에 같은 함수 — 자동매매 '오늘 계획'의 자격 0 줄과 PROOF 칸 · 화면은 _md_safe 로 그린다",
+      'only_blocked_record_line(ps, sc, only)' in _zd484
+      and '_pf418m.only_blocked_line(_aio480.load_json(_pf418m.ONLY_BLOCKED_FILE))' in _wa484
+      and 'st.caption(_md_safe(_ob504))' in _wa484)
+# ─── §484 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

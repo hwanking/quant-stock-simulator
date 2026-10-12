@@ -593,6 +593,20 @@ def past_sim_record_line(ps, scorecard=None, sim=None):
         return None
 
 
+def only_blocked_record_line(ps, scorecard=None, art=None):
+    """'그 조건 하나 때문에 못 산 자리' — 막힌 계획이 있을 때 과거 원장의 셈(라운드 504 · 문장은 `proof.only_blocked_line` 한 곳).
+    산출물을 못 읽으면 None — 줄을 안 그린다."""
+    sc = _ev_scorecard(ps, scorecard)
+    if sc is None:
+        return None
+    if art is None and scorecard is None:      # 넘겨받은 것이 없을 때만(화면) 산출물을 읽는다 — 시험은 넘긴 것만 쓴다
+        art = _load_artifact('ONLY_BLOCKED_FILE')
+    try:
+        import proof as _pf
+        return _pf.only_blocked_line(art)
+    except Exception:                                          # noqa: BLE001
+        return None
+
 def cost_paths_record_line(ps, scorecard=None, art=None):
     """'비용 가정' — 막힌 계획이 있을 때 계약에 맞춘 비용과 그 비용이면 오늘 후보가 어떻게 되는지(라운드 482 · 문장은 `proof.cost_paths_line`).
     오늘 후보의 기대값은 계획에 박힌 판정 기록에서 읽는다. 산출물을 못 읽으면 None."""
@@ -646,7 +660,7 @@ ZERO_DAY_MORE = ("자세한 내용 — 기대값이 0 까지 얼마나 모자란
                  "(과거 원장 시뮬레이션 포함), 이 조건을 다시 볼 길 — 은 '오늘 계획' 갈래에 있습니다.")
 
 
-def zero_day_line(c, day, scorecard=None, brief=False, sim=None, costs=None):
+def zero_day_line(c, day, scorecard=None, brief=False, sim=None, costs=None, only=None):
     """그날 계획에 실주문 자격이 하나도 없을 때 — 가장 많이 막은 조건 한 줄(규칙은 `ui_kit.top_blocker` 한 곳 · 수만). 아니면 None.
     라운드 472 — 사용자: *"또 막고 있는데 언제 막았는지 시간도 써주고"*. 머리는 '오늘'이 아니라 **판정일**(휴장일·장 전에 열면
     오늘과 다르다)이고, 언제 막았나(`when_line`)와 기대값이 0 까지 얼마나 모자란가(`ev_gap_line`)를 줄을 바꿔 잇는다.
@@ -670,8 +684,11 @@ def zero_day_line(c, day, scorecard=None, brief=False, sim=None, costs=None):
         sim = _load_past_sim()
     if costs is None and scorecard is None and sc is not None:  # 라운드 482 — 비용 쪽 산출물도
         costs = _load_artifact('COST_PATHS_FILE')
+    if only is None and scorecard is None and sc is not None:   # 라운드 504 — 그 조건 하나에 막힌 자리(과거 원장)도
+        only = _load_artifact('ONLY_BLOCKED_FILE')
     return '  \n'.join(x for x in (first, when_line(ps), ev_gap_line(ps), cost_paths_record_line(ps, sc, costs),
-                                   blocked_record_line(ps, sc), past_sim_record_line(ps, sc, sim),
+                                   blocked_record_line(ps, sc), only_blocked_record_line(ps, sc, only),
+                                   past_sim_record_line(ps, sc, sim),
                                    roadmap_record_line(ps, sc)) if x)
 
 
