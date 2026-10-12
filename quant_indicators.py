@@ -203,6 +203,74 @@ class QuantSnapshot(dict):
                 m['calc_version'], m['model_version'], m['rulebook_version'])
 
 
+def measure_market_first(symbol, b_engine):
+    """종목의 상장 시장을 **묻기 전에 실측**해 둔다 (라운드 506) → 실측한 시장 · 안 물었거나 못 읽으면 None.
+
+    `bitemporal_engine.market_of` 는 '이번 실행에서 실측한 값'(MARKET_BY_CODE)을 접미사보다 앞세우는데, 그 실측은 파이프라인 안의
+    실시간 수신이 채운다 — 그런데 `run_full_pipeline` 은 그보다 **먼저** 시장을 물었다. 그래서 새 프로세스에서 접미사가 틀린 종목
+    (관심종목 행에 시장 칸이 없으면 `watch_refresh.symbol_of` 가 '.KS' 로 만든다)은 **코스닥 종목도 코스피 국면**으로 판정됐다 —
+    같은 종목이 화면(실시간 수신 뒤라 코스닥 · 국면 게이트 '주의' 상한 62)과 저녁 재측정(코스피 · 상한 없음 64)에서 다른 판정을
+    받았다(2026-10-12 · §4 · 관심종목 시장 칸 빈 행 실측은 결과 문서).
+
+    실측은 엔진의 단일 함수(`_detect_market`)를 그대로 부른다(새 규칙 없음 · R159). 이미 실측했거나 숫자 6자리 코드가 아니면
+    묻지 않는다(`market_of` 가 그 조건에서만 실측 값을 찾는다 · 헛 요청 없음). 못 읽으면 None — 종전대로 접미사를 따른다(§3).
+
+    ⚠️ 이 실측은 **덧붙인 요청**이라 실패가 비싸면 안 된다 — 수신이 죽은 날엔 한 종목에 재시도 셋(약 20초)이 들고, 클라우드 전방
+    기록기는 60종목을 예산 없이 맨 앞에서 돈다(2026-09-11 에 예산 밖 단계가 업로드를 밀어낸 그 자리). 그래서 실패를 기억한다
+    (2026-09-15 의 캐시) — ① 못 읽은 종목은 그 프로세스에서 다시 안 묻는다 ② **연속** `PREMEASURE_TRIP_AFTER` 번 못 읽으면 수신이
+    죽은 것으로 보고 그 프로세스의 나머지는 안 묻는다(종전대로 접미사 · 한 줄 남긴다) · 하나라도 읽히면 연속 수를 0 으로.
+    ⚠️ 첫 판은 **한 번**의 실패로 껐다 — 회귀 첫머리가 없는 코드(999999)로 파이프라인을 돌리자 그 뒤 전 과정에서 실측이 꺼졌다
+    (2026-10-13 전체 회귀가 잡았다). 상장폐지·없는 코드 하나가 관심종목 재측정 전체를 옛 판정으로 되돌릴 자리였다.
+    꺼져도 최악은 이 고침 전과 같다(접미사를 따른다) — 더 나빠지지 않는다."""
+    import bitemporal_engine as _be
+    st = _premeasure_state()
+    if st['down']:
+        return None
+    try:
+        code = _be.stock_code.normalize(symbol)
+    except Exception:                                          # noqa: BLE001
+        return None
+    if not code or not code.isdigit():
+        return None
+    if code in _be.MARKET_BY_CODE:
+        return _be.MARKET_BY_CODE[code]
+    if code in st['failed_codes']:
+        return None
+    try:
+        m, src = b_engine._detect_market(code)
+    except Exception as exc:                                   # noqa: BLE001
+        m, src = None, f'{type(exc).__name__}: {exc}'
+    if m in ('KOSPI', 'KOSDAQ'):
+        st['fails'] = 0
+        return m
+    st['failed_codes'].add(code)
+    st['fails'] += 1
+    if st['fails'] >= PREMEASURE_TRIP_AFTER:
+        st['down'] = str(src)
+    try:
+        print(f'[시장 실측] {code} 못 읽음: {src}.'
+              + (f' 연속 {st["fails"]}번 — 이번 실행의 나머지는 접미사를 따른다' if st['down'] else ' 이 종목은 접미사를 따른다'),
+              flush=True)
+    except Exception:                                          # noqa: BLE001 — 로그 한 줄이 분석을 죽이지 않는다(2026-09-11)
+        pass
+    return None
+
+
+#: 라운드 506 — 시장 미리 재기의 실패 기억(프로세스 안 · 비우면 처음부터). `_premeasure_state` 가 칸을 채운다.
+_MARKET_PREMEASURE = {}
+#: 연속 이 수만큼 못 읽으면 그 프로세스의 나머지는 안 묻는다 — 매달림 방지(수신이 죽은 날 종목마다 약 20초)이지 판정 문턱이 아니다.
+#: 1 이면 종목 하나의 실패가 전체를 끈다(첫 판의 결함) · 2 는 '같은 일이 바로 또 났다'의 가장 작은 수다.
+PREMEASURE_TRIP_AFTER = 2
+
+
+def _premeasure_state():
+    st = _MARKET_PREMEASURE
+    st.setdefault('down', None)
+    st.setdefault('fails', 0)
+    st.setdefault('failed_codes', set())
+    return st
+
+
 class QuantIndicatorsEngine:
     """
     AntiGravity AI Quant Engine (v20) - 3대 점수 완전 분리 (종목매력도/매매적합도/분석신뢰도), 가격위치 디커플링 및 최종 매수/매도/관망 2D 판정 엔진.
@@ -5737,6 +5805,8 @@ class QuantIndicatorsEngine:
         #    시장은 엔진이 **실측**한 값을 단일 진입점에서 받는다.
         #    못 읽었으면 국면을 고르지 않는다 — 없는 값을 지어내지 않는다(§3).
         import bitemporal_engine as _be_mkt
+        if not is_replay:
+            measure_market_first(symbol, b_engine)       # 라운드 506 — 시장을 묻기 전에 실측한다(아래 함수의 독스트링)
         _mkt = _be_mkt.market_of(symbol)
         if is_replay or _mkt is None:
             self.market_regime_ctx = None      # 오늘 지수 국면은 과거 판정에 못 쓴다

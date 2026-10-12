@@ -41556,6 +41556,105 @@ check("④ 사용자처럼 — 문장을 치고 Enter 없이 바로 누른다: �
       and ((_os.path.getmtime(_REAL485) if _os.path.exists(_REAL485) else None) == _rm485),
       f'{_a485} | {_b485} | {_u485}', scanned=3)
 # ─── §485 끝 ───
+print("§486 파이프라인은 시장을 묻기 전에 실측한다 — 접미사가 틀린 코스닥 종목이 코스피 국면으로 판정되지 않는다 (라운드 506)")
+print("-" * 72)
+# 2026-10-12 · 관심종목 행에 시장 칸이 비어 있으면 저녁 재측정이 '.KS' 로 묻고, run_full_pipeline 이 실시간 수신(시장을 실측해
+# 채우는 자리)보다 **먼저** market_of 를 불러 코스닥 종목에 코스피 국면을 걸었다 — 화면(코스닥 · '주의' 상한 62)과 재측정(코스피 · 64)이
+# 같은 종목에 다른 점수를 냈다(§4). 실측은 엔진의 단일 함수 `_detect_market` 를 그대로 부른다 — 새 규칙 없음.
+import bitemporal_engine as _be486
+import quant_indicators as _qi486
+_MB486 = dict(_be486.MARKET_BY_CODE)
+_FJ486 = _be486.fetch_json_with_retry
+_calls486 = []
+
+
+def _fake_fetch486(url, *a, **k):
+    _calls486.append(url)
+    return {'market': 'KOSDAQ'}
+
+
+# 실패 기억은 프로세스 안의 상태다 — 앞 절이 이미 채웠을 수 있다(전체 회귀 첫머리가 없는 코드로 파이프라인을 돌린다). 비우고 재고 되돌린다.
+_st0_486 = {k: (set(v) if isinstance(v, set) else v) for k, v in _qi486._MARKET_PREMEASURE.items()}
+try:
+    _qi486._MARKET_PREMEASURE.clear()
+    _be486.fetch_json_with_retry = _fake_fetch486
+    _eng486 = object.__new__(_be486.BitemporalEngine)      # 생성자 안 돌림 — 네트워크·적재 없음
+    _be486.MARKET_BY_CODE.pop('999486', None)
+    _before486 = _be486.market_of('999486.KS')
+    _m486 = _qi486.measure_market_first('999486.KS', _eng486)
+    _after486 = _be486.market_of('999486.KS')
+    check("① 접미사가 '.KS' 인데 실측이 코스닥이면 — 묻기 전(코스피) → 실측 뒤 market_of 가 코스닥 · 실측은 엔진의 _detect_market 한 번",
+          _before486 == 'KOSPI' and _m486 == 'KOSDAQ' and _after486 == 'KOSDAQ' and len(_calls486) == 1,
+          f'{_before486} → {_m486} → {_after486} · 요청 {len(_calls486)}', scanned=1)
+    _n486 = len(_calls486)
+    _again486 = _qi486.measure_market_first('999486.KQ', _eng486)
+    _etf486 = _qi486.measure_market_first('0040Y0.KS', _eng486)
+    _bad486 = _qi486.measure_market_first('', _eng486)
+    check("② 이미 실측한 종목은 다시 안 묻는다 · 숫자 6자리가 아닌 코드(market_of 가 실측 값을 안 찾는 자리)·빈 값은 안 묻고 None",
+          _again486 == 'KOSDAQ' and _etf486 is None and _bad486 is None and len(_calls486) == _n486,
+          f'{_again486} · {_etf486} · {_bad486} · 추가 요청 {len(_calls486) - _n486}')
+    _calls2_486 = []
+
+    def _empty486(*a, **k):
+        _calls2_486.append('empty')
+        return {}
+
+    def _raise486(*a, **k):
+        _calls2_486.append('raise')
+        raise TimeoutError('심은 실패(§486)')
+
+    for _c486 in ('999487', '999488', '999489', '999490', '999491'):
+        _be486.MARKET_BY_CODE.pop(_c486, None)
+    _qi486._MARKET_PREMEASURE.clear()
+    _be486.fetch_json_with_retry = _empty486
+    _none486 = _qi486.measure_market_first('999487.KS', _eng486)             # 실패 1 — 아직 안 끈다
+    _down1_486 = bool(_qi486._premeasure_state()['down'])
+    _rep486 = _qi486.measure_market_first('999487.KS', _eng486)              # 같은 종목 — 다시 안 묻는다
+    _n_after_rep486 = len(_calls2_486)
+    _be486.fetch_json_with_retry = _fake_fetch486
+    _ok486 = _qi486.measure_market_first('999490.KS', _eng486)               # 하나라도 읽히면 연속 수가 0 으로
+    _fails_after_ok486 = _qi486._premeasure_state()['fails']
+    _be486.fetch_json_with_retry = _raise486
+    _exc486 = _qi486.measure_market_first('999488.KQ', _eng486)              # 실패 1(연속) — 수신 예외
+    _down2_486 = bool(_qi486._premeasure_state()['down'])
+    _exc2_486 = _qi486.measure_market_first('999491.KQ', _eng486)            # 실패 2(연속) — 이제 끈다
+    _down3_486 = bool(_qi486._premeasure_state()['down'])
+    _be486.fetch_json_with_retry = _fake_fetch486
+    _n_before_skip486 = len(_calls486)
+    _skip486 = _qi486.measure_market_first('999489.KS', _eng486)             # 꺼진 뒤 — 읽힐 종목이어도 안 묻는다
+    check("③ 못 읽으면 None 이고 지어내지 않는다(market_of 는 종전대로 접미사) · 못 읽은 종목은 다시 안 묻는다 · 종목 하나의 실패로는 "
+          "안 끈다(없는 코드·상장폐지 하나가 전체를 옛 판정으로 되돌리지 않게) · 하나라도 읽히면 연속 수가 0 · 연속 두 번이면 그 "
+          "프로세스의 나머지는 안 묻는다(수신이 죽은 날 종목마다 재시도를 치르지 않는다)",
+          _none486 is None and _rep486 is None and _n_after_rep486 == 1 and not _down1_486
+          and _ok486 == 'KOSDAQ' and _fails_after_ok486 == 0
+          and _exc486 is None and not _down2_486 and _exc2_486 is None and _down3_486
+          and _skip486 is None and len(_calls486) == _n_before_skip486
+          and _be486.market_of('999487.KS') == 'KOSPI' and _be486.market_of('999488.KQ') == 'KOSDAQ'
+          and _qi486.PREMEASURE_TRIP_AFTER == 2,
+          f'요청 {_calls2_486} · 꺼짐 {_down1_486}/{_down2_486}/{_down3_486} · 성공 뒤 연속 {_fails_after_ok486}')
+finally:
+    _be486.fetch_json_with_retry = _FJ486
+    _qi486._MARKET_PREMEASURE.clear()
+    _qi486._MARKET_PREMEASURE.update(_st0_486)
+    _be486.MARKET_BY_CODE.clear()
+    _be486.MARKET_BY_CODE.update(_MB486)
+_qsrc486 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+_t486 = __import__('ast').parse(_qsrc486)
+_cls486 = next(n for n in _t486.body if getattr(n, 'name', None) == 'QuantIndicatorsEngine')
+_rfp486 = __import__('ast').unparse(next(n for n in _cls486.body if getattr(n, 'name', None) == 'run_full_pipeline'))
+_i_meas486 = _rfp486.find('measure_market_first(symbol, b_engine)')
+_i_ask486 = _rfp486.find('_mkt = _be_mkt.market_of(symbol)')
+check("④ run_full_pipeline 이 market_of(symbol) 보다 **앞에서** 실측한다 · 리플레이(과거 기준일)에는 안 묻는다 · 그 사이 다른 market_of 호출 없음",
+      0 <= _i_meas486 < _i_ask486
+      and __import__('re').search(r'if not is_replay:\n\s+measure_market_first\(symbol, b_engine\)', _rfp486) is not None
+      and 'market_of(' not in _rfp486[_i_meas486 + 10:_i_ask486],
+      f'실측 {_i_meas486} · 묻기 {_i_ask486}')
+_mmf486 = __import__('ast').unparse(next(n for n in _t486.body if getattr(n, 'name', None) == 'measure_market_first'))
+_mmf_code486 = '\n'.join(__import__('ast').unparse(_s486) for _s486 in __import__('ast').parse(_mmf486).body[0].body[1:])   # 독스트링 뺀 몸통
+check("⑤ 실측 함수는 새 규칙을 안 만든다 — 엔진의 _detect_market 을 부르고 접미사·시장 이름을 스스로 정하지 않는다(KOSPI/KOSDAQ 는 결과 검사뿐)",
+      '_detect_market(code)' in _mmf_code486 and '.KS' not in _mmf_code486 and '.KQ' not in _mmf_code486
+      and 'parse_market_badge' not in _mmf_code486 and 'daum' not in _mmf_code486.lower())
+# ─── §486 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
