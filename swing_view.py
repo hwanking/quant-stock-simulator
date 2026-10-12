@@ -1562,6 +1562,19 @@ def live_start_missing(cfg, stt):
     return miss
 
 
+def phrase_ok(ph):
+    """입력한 잠금 문장이 맞나 (라운드 505) — 띄어쓰기 개수·앞뒤 빈칸만 너그럽게 본다(같은 낱말 · 같은 차례). 글자가 하나라도 다르면 아니다.
+    잠금 문장의 뜻은 '실계좌 주문을 켜는 것을 알고 누른다'는 확인이라, 빈칸 개수가 다르다고 그 확인이 달라지지 않는다."""
+    return bool(ph) and ' '.join(str(ph).split()) == ' '.join(X.LIVE_UNLOCK_PHRASE.split())
+
+
+def phrase_why(ph):
+    """문장이 안 맞을 때 화면에 적을 이유 (라운드 505) — 입력이 비었는지, 무엇을 입력했고 무엇이 필요한지."""
+    if not ph or not str(ph).strip():
+        return f"문장을 입력하지 않았습니다 — 입력할 문장: '{X.LIVE_UNLOCK_PHRASE}'"
+    return f"입력한 문장이 다릅니다 — 입력: '{str(ph).strip()}' · 필요: '{X.LIVE_UNLOCK_PHRASE}'"
+
+
 def _live_start(st, c, stt, cfg, md):
     """설정 맨 위 '실전 시작' 한 칸(라운드 501) — 사용자: *"실제 시작도 3개 누르게 하지 맙시다."* 종전엔 잠금 문장(아래)과 운용 모드
     (위)를 따로 바꿔야 했고 화면 차례도 거꾸로였다. 문장을 한 번 입력하고 버튼 하나를 누르면 잠금을 풀고 모드를 '실전'으로 같이 바꾼다.
@@ -1574,12 +1587,17 @@ def _live_start(st, c, stt, cfg, md):
     st.caption(md(f"준비됐습니다(실전 자격증명 · 위험 한도 · 긴급정지 꺼짐). 아래 문장을 그대로 입력하고 '실전 시작'을 누르면 잠금을 풀고 "
                   f"운용 모드를 '실전'으로 바꿉니다. 주문 방식은 지금 '{APPROVAL_KO[X.approval_of(stt)]}' 입니다 — '계획마다 승인'이면 "
                   "'오늘 계획'에서 고르거나 승인한 계획만 삽니다."))
-    ph = st.text_input(f'입력할 문장: {X.LIVE_UNLOCK_PHRASE}', key='sw_live_start_ph')
-    ready = bool(ph) and ph.strip() == X.LIVE_UNLOCK_PHRASE
-    if st.button('실전 시작', key='sw_live_start', disabled=not ready, type='primary'):
+    # 라운드 505 — 사용자: *"실전 시작 안 눌리는데?"* 종전엔 버튼이 `disabled=not ready` 였다. 입력 칸의 글자는 Enter 를 누르거나 칸 밖을
+    #   눌러야 앱에 닿으므로, 문장을 치고 바로 버튼을 누르면 **아직 회색인 버튼**을 누른 것이 되어 아무 일도 안 일어났다(문장이 한 글자
+    #   달라도 이유 없이 회색이었다). 폼으로 묶어 누르는 순간 입력한 글자가 같이 가고, 버튼은 늘 눌리며, 안 켜면 그 이유를 적는다.
+    #   Enter 로는 켜지지 않는다(enter_to_submit=False) — 실계좌 주문을 켜는 것은 버튼을 눌러서만. 조건·관문은 그대로다.
+    with st.form('sw_live_start_form', clear_on_submit=False, enter_to_submit=False, border=False):
+        ph = st.text_input(f'입력할 문장: {X.LIVE_UNLOCK_PHRASE}', key='sw_live_start_ph')
+        go = st.form_submit_button('실전 시작', type='primary')
+    if go:
         miss2 = live_start_missing(cfg, L.settings(c))         # 누르는 순간 다시 본다(그새 다른 탭이 바꿨을 수 있다)
-        if not ready or miss2:
-            st.warning(md('켜지 않았습니다 — ' + (' · '.join(miss2) if miss2 else '문장이 다릅니다')))
+        if not phrase_ok(ph) or miss2:
+            st.warning(md('켜지 않았습니다 — ' + (' · '.join(miss2) if miss2 else phrase_why(ph))))
         else:
             L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)
             L.set_setting(c, 'mode', 'LIVE')
@@ -1637,10 +1655,16 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
                 L.set_setting(c, 'mode', 'OFF')
             st.rerun()
     elif allow_write:
-        ph = st.text_input(f"풀려면 다음 문장을 그대로 입력하세요: {X.LIVE_UNLOCK_PHRASE}", key='sw_unlock')
-        if ph and ph.strip() == X.LIVE_UNLOCK_PHRASE and st.button('잠금 풀기', key='sw_unlock_go'):
-            L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)
-            st.rerun()
+        # 라운드 505 — 위 '실전 시작'과 같은 자리: 종전엔 문장이 앱에 닿기(Enter) 전엔 버튼이 아예 없었다. 폼으로 묶는다.
+        with st.form('sw_unlock_form', clear_on_submit=False, enter_to_submit=False, border=False):
+            ph = st.text_input(f"풀려면 다음 문장을 그대로 입력하세요: {X.LIVE_UNLOCK_PHRASE}", key='sw_unlock')
+            go_u = st.form_submit_button('잠금 풀기')
+        if go_u:
+            if phrase_ok(ph):
+                L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)
+                st.rerun()
+            else:
+                st.warning(md('풀지 않았습니다 — ' + phrase_why(ph)))
     # 긴급정지 토글은 라운드 453 부터 맨 위 상태 띠에 있다(한 곳) — 여기서는 설명만.
     st.caption('긴급정지 토글은 관제실 지휘 띠 오른쪽에 있습니다 — 켜면 새 매수를 안 내고 열린 매수 주문을 취소합니다. 관리 중인 종목의 '
                '손절·목표 매도는 계속합니다.')

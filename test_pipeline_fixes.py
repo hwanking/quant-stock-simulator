@@ -41205,9 +41205,11 @@ _ls480 = next(n for n in _t480.body if isinstance(n, _ast480.FunctionDef) and n.
 _src_ls480 = _ast480.unparse(_ls480)
 _sets480 = [_ast480.unparse(n) for n in _ast480.walk(_ls480) if isinstance(n, _ast480.Call) and getattr(n.func, 'attr', None) == 'set_setting']
 _stg480 = _ast480.unparse(next(n for n in _t480.body if isinstance(n, _ast480.FunctionDef) and n.name == '_settings'))
-check("② 버튼 — 문장이 같을 때만 눌린다 · 누르는 순간 장부 설정을 다시 읽어(live_start_missing(cfg, L.settings(c))) 다시 본다 · "
+# 라운드 505 — 종전 첫 조건 `"disabled=not ready" in …` 은 바로 그 결함(Enter 전엔 회색이라 안 눌림 · 사용자 "실전 시작 안 눌리는데?")을
+#   못 박고 있었다. 지키려던 성질(문장이 같을 때만 켠다)은 이제 누른 뒤 phrase_ok 가 정한다 — §485 가 사용자처럼 눌러 잰다.
+check("② 버튼 — 문장이 같을 때만 켠다(누른 뒤 phrase_ok) · 누르는 순간 장부 설정을 다시 읽어(live_start_missing(cfg, L.settings(c))) 다시 본다 · "
       "잠금을 먼저 풀고 모드를 '실전'으로(두 번만 적는다) · 설정 화면은 실전이 아닐 때만 이 칸을 그린다",
-      "disabled=not ready" in _src_ls480 and 'live_start_missing(cfg, L.settings(c))' in _src_ls480
+      'phrase_ok(ph)' in _src_ls480 and 'live_start_missing(cfg, L.settings(c))' in _src_ls480
       and _sets480 == ["L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)", "L.set_setting(c, 'mode', 'LIVE')"]
       and "if allow_write and mode != 'LIVE':" in _stg480 and '_live_start(st, c, stt, cfg, md)' in _stg480,
       str(_sets480))
@@ -41453,6 +41455,107 @@ check("⑥ 두 자리에 같은 함수 — 자동매매 '오늘 계획'의 자�
       and '_pf418m.only_blocked_line(_aio480.load_json(_pf418m.ONLY_BLOCKED_FILE))' in _wa484
       and 'st.caption(_md_safe(_ob504))' in _wa484)
 # ─── §484 끝 ───
+
+# ─── §485 시작 (라운드 505) ───
+print()
+print("§485 '실전 시작'·'잠금 풀기'는 문장을 치고 Enter 없이 바로 눌러도 된다 — 폼으로 입력이 같이 가고 버튼은 늘 눌리며 안 켜면 이유 (라운드 505)")
+print("-" * 72)
+# 2026-10-13 01:00 사용자: "실전 시작 안 눌리는데?" — 버튼이 `disabled=not ready` 였고 입력 칸의 글자는 Enter·칸 밖 클릭 때에야 앱에 닿는다.
+# 문장을 치고 바로 누르면 아직 회색인 버튼이었다(한 글자 달라도 이유 없이 회색). 조건·관문·문장은 그대로 — 바뀐 것은 누르는 길과 이유 문장이다.
+import swing_view as _sv485
+import swing_ledger as _sl485
+_P485 = __import__('swing_executor').LIVE_UNLOCK_PHRASE
+check("① phrase_ok — 같은 낱말·같은 차례면 띄어쓰기 개수·앞뒤 빈칸은 너그럽게 · 글자가 하나라도 다르면 아니다 · 비면 아니다",
+      _sv485.phrase_ok(_P485) and _sv485.phrase_ok('  ' + _P485.replace(' ', '  ') + ' ')
+      and not _sv485.phrase_ok(_P485 + '.') and not _sv485.phrase_ok('') and not _sv485.phrase_ok(None)
+      and not _sv485.phrase_ok(_P485.replace(' ', '')))
+check("② phrase_why — 빈 입력과 다른 입력을 가른다 · 다르면 입력한 것과 필요한 것을 같이 적는다",
+      '입력하지 않았습니다' in _sv485.phrase_why('') and '입력한 문장이 다릅니다' in _sv485.phrase_why('abc')
+      and "'abc'" in _sv485.phrase_why('abc') and _P485 in _sv485.phrase_why('abc'))
+_t485 = __import__('ast').parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_ls485 = __import__('ast').unparse(next(n for n in _t485.body if getattr(n, 'name', None) == '_live_start'))
+_stg485 = __import__('ast').unparse(next(n for n in _t485.body if getattr(n, 'name', None) == '_settings'))
+check("③ 두 버튼 다 폼 안 · Enter 로는 안 켠다(enter_to_submit=False) · 버튼에 disabled 가 없다 · 판정은 phrase_ok 한 곳 · "
+      "누르는 순간 장부 설정을 다시 읽는다",
+      "st.form('sw_live_start_form'" in _ls485 and "st.form('sw_unlock_form'" in _stg485
+      and _ls485.count('enter_to_submit=False') == 1 and _stg485.count('enter_to_submit=False') == 1
+      and "st.form_submit_button('실전 시작'" in _ls485 and "st.form_submit_button('잠금 풀기')" in _stg485
+      and 'disabled=' not in _ls485 and 'phrase_ok(ph)' in _ls485 and 'phrase_ok(ph)' in _stg485
+      and 'live_start_missing(cfg, L.settings(c))' in _ls485)
+# ④ 사용자처럼 누른다 — 임시 장부 · 증권사 차단 · 실전 자격증명 모양만 심는다(이 PC 의 연결 정보를 안 읽는다) · 실제 장부는 불변
+_REAL485 = _os.path.join(PROJ, '.portfolio', 'swing.db')
+_rm485 = _os.path.getmtime(_REAL485) if _os.path.exists(_REAL485) else None
+_LIM485 = {'risk_per_trade_krw': '30000', 'max_position_pct': '25', 'max_total_exposure_pct': '90', 'min_cash_pct': '10',
+           'max_open_positions': '5', 'max_daily_new_orders': '5'}
+
+
+def _press485(typed, which):
+    db = _os.path.join(PROJ, '_probe', f'_r505_{which}_t.db')
+    if _os.path.exists(db):
+        _os.remove(db)
+    c = _sl485.connect(db)
+    _sl485.set_setting(c, 'limits', _LIM485, by='test')
+    c.close()
+    app = ("import sys\n"
+           f"sys.path.insert(0, {PROJ!r})\n"
+           "import streamlit as st\n"
+           "import broker_kis as _B\n"
+           "def _blk(self, *a, **k):\n"
+           "    raise RuntimeError('증권사 차단(§485)')\n"
+           "_B.KisBroker.__init__ = _blk\n"
+           "_B.load_config = lambda *a, **k: dict(env='real', app_key='K485', app_secret='S', cano='12345678', prdt='01',\n"
+           "                                      missing=[], problems=[])\n"
+           "import swing_ledger as _L\n"
+           "import swing_view as _V\n"
+           "import ui_kit as _uk\n"
+           f"_L.connect.__defaults__ = ({db!r}, False)\n"
+           "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+           "          anchor_day='2026-10-12')\n")
+    key, label = ('sw_live_start_ph', '실전 시작') if which == 'start' else ('sw_unlock', '잠금 풀기')
+    child = _os.path.join(PROJ, '_probe', f'_r505_child_{which}_t.py')
+    open(child, 'w', encoding='utf-8').write(
+        "import json, sys\n"
+        "sys.stdout.reconfigure(encoding='utf-8')\n"
+        "from streamlit.testing.v1 import AppTest\n"
+        f"at = AppTest.from_string({app!r}, default_timeout=120)\n"
+        "at.run()\n"
+        "at.radio(key='sw_nav').set_value('시스템')\n"
+        "at.run()\n"
+        f"at.text_input(key={key!r}).input({typed!r})\n"
+        f"btn = [b for b in at.button if b.label == {label!r}]\n"
+        "dis = [bool(getattr(b, 'disabled', False)) for b in btn]\n"
+        "if btn:\n"
+        "    btn[0].click()\n"
+        "    at.run()\n"
+        "sys.stdout.write('@@R@@' + json.dumps(dict(n=len(btn), dis=dis, exc=len(at.exception),\n"
+        "                 warn=[str(w.value) for w in at.warning]), ensure_ascii=False))\n")
+    try:
+        rc = __import__('subprocess').run([sys.executable, child], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300)
+        parts = (rc.stdout or '').rsplit('@@R@@', 1)
+        out = __import__('json').loads(parts[1]) if len(parts) == 2 else {'err': (rc.stderr or '')[-300:]}
+        c = _sl485.connect(db)
+        out['mode'], out['unlock'] = _sl485.settings(c).get('mode'), _sl485.settings(c).get('live_unlock')
+        c.close()
+        return out
+    finally:
+        for f in (db, child):
+            if _os.path.exists(f):
+                _os.remove(f)
+
+
+_a485 = _press485(_P485, 'start')
+_b485 = _press485(_P485 + '.', 'start')
+_u485 = _press485(_P485, 'unlock')
+check("④ 사용자처럼 — 문장을 치고 Enter 없이 바로 누른다: 누르는 순간 버튼이 눌리는 상태(회색 아님)이고 잠금이 풀리며 모드가 '실전' · "
+      "한 글자 다르면 안 켜고 이유 · '잠금 풀기'도 같다 · 예외 0 · 실제 장부 불변",
+      _a485.get('n') == 1 and _a485.get('dis') == [False] and _a485.get('exc') == 0
+      and _a485.get('mode') == 'LIVE' and _a485.get('unlock') == _P485
+      and _b485.get('mode') is None and any('입력한 문장이 다릅니다' in w for w in _b485.get('warn') or [])
+      and _u485.get('dis') == [False] and _u485.get('unlock') == _P485 and _u485.get('mode') is None
+      and ((_os.path.getmtime(_REAL485) if _os.path.exists(_REAL485) else None) == _rm485),
+      f'{_a485} | {_b485} | {_u485}', scanned=3)
+# ─── §485 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
