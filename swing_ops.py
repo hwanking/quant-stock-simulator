@@ -22,7 +22,13 @@ PROJ = os.path.dirname(os.path.abspath(__file__))
 TASK_NAME = 'gaeum-swing-worker'
 #: Windows 작업 스케줄러의 마지막 결과 코드 — 자주 보는 것만 이름을 붙인다(그 밖은 16진수 그대로). 공식 값(SCHED_S_*).
 RESULT_KO = {0: '정상 종료', 0x41301: '실행 중', 0x41303: '아직 돈 적 없음', 0x41306: '사용자가 멈춤',
-             0x41325: '실행 대기', 0x800710E0: 'PC 가 꺼져 있어 못 돌았음(절전·종료)'}
+             0x41325: '실행 대기', 0x800710E0: '작업 스케줄러가 새 실행을 거절함(이미 돌고 있었거나 작업 조건이 안 맞음)'}
+#: 라운드 498 — 0x800710E0 은 ERROR_REQUEST_REFUSED('요청이 거절됨')다. 종전엔 'PC 가 꺼져 있어 못 돌았음(절전·종료)'이라 적었는데
+#: 거짓이었다 — '이미 돌고 있으면 새로 띄우지 않음(IgnoreNew)' 정책에서 반복 트리거가 도는 중에 울리면 이 코드가 남는다. 라운드 462 의
+#: 장중 10분 반복이 정확히 그 경우다(2026-10-12 09:00 · 상태 Running · 워커는 1분마다 돌고 있었다). PC 가 꺼져 있던 실행은 '놓친 실행'
+#: 수(NumberOfMissedRuns)로 따로 센다. 상태가 Running 이면 그 거절은 장중 반복의 정상 동작이라 그렇게 적는다(`parse`).
+REFUSED = 0x800710E0
+REFUSED_RUNNING_KO = '이미 돌고 있어 새로 띄우지 않음(장중 반복 · 정상)'
 _CACHE = {}
 _PS = ("$t = Get-ScheduledTask -TaskName '{name}' -ErrorAction SilentlyContinue; if ($t) {{ $i = $t | Get-ScheduledTaskInfo; "
        "[pscustomobject]@{{ State = [string]$t.State; NextRunTime = [string]$i.NextRunTime; LastRunTime = [string]$i.LastRunTime; "
@@ -78,6 +84,8 @@ def parse(text):
     except (TypeError, ValueError):
         code = None
     ko = (RESULT_KO.get(code) if code is not None else None) or (f'결과 코드 0x{code:X}' if code is not None else None)
+    if code == REFUSED and str(d.get('State') or '') == 'Running':     # 라운드 498 — 도는 중의 거절은 장중 반복의 정상 동작
+        ko = REFUSED_RUNNING_KO
     last = str(d.get('LastRunTime') or '')
     if last.startswith('11/30/1999') or last.startswith('1999-11-30'):
         last = None                                            # 작업 스케줄러가 '돈 적 없음'을 이 날짜로 적는다

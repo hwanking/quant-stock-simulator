@@ -39615,6 +39615,11 @@ def _df464(rows):
 _bars464 = _df464([('2026-10-08', 100, 101, 99, 100), ('2026-10-12', 100, 106, 90, 101), ('2026-10-13', 101, 106, 99, 105)]
                   + [(f'2026-10-{14 + i:02d}', 105, 105, 104, 104) for i in range(25)])
 _row464 = {'date': '2026-10-08', 'price': 100.0, 'target': 105.0, 'stop': 95.0, 'horizon_days': 20}
+# ⚠️ 라운드 498 — 이 픽스처의 봉 날짜(2026-10-12 · 10-13 …)가 실제 '오늘'이 되는 날 09:00~20:00 에는 확정 전 봉 가드(라운드 490 ·
+#   `unfinal_day` — 벽시계를 읽는다)가 그 봉을 빼서 ②③ 이 실패했다(2026-10-12 16:38 전체 회귀 · 코드 결함 아님 · 시간대에 묶인 검사).
+#   그 가드는 §470 이 시계를 심어 따로 잰다 — 여기서는 그 가드만 끄고 '본 시각' 경계만 잰다(②③ 뒤에 되돌린다).
+_uf_orig464 = _pl464.unfinal_day
+_pl464.unfinal_day = lambda now=None: None
 _gp464 = _pl464.grade_prediction(_row464, _bars464)
 _gs_in464 = _pl464.grade_seen(_row464, _bars464, '2026-10-12 10:00:00')
 _gs_pre464 = _pl464.grade_seen(_row464, _bars464, '2026-10-12 08:00:00')
@@ -39629,6 +39634,7 @@ _plan464 = dict(plan_id='X', data_day='2026-10-08', entry=95.0, target=105.0, st
                 verdict=_json464.dumps({'report_ts': '2026-10-12 10:00:00'}))
 _sh_in464 = _se464.shadow_grade(_plan464, _bars464, 0.41)
 _sh_old464 = _se464.shadow_grade(dict(_plan464, verdict={}), _bars464, 0.41)
+_pl464.unfinal_day = _uf_orig464                     # 라운드 498 — 되돌린다(아래 절들은 진짜 가드를 쓴다)
 check("③ shadow_grade — 장중 리포트의 계획은 그날 봉으로 체결 안 됨(대기 창은 다음 봉부터) · 생성 시각 없는 옛 계획은 종전대로 · report_ts_of 는 글자·dict 둘 다",
       _sh_old464.get('fill_day') == '2026-10-12' and _sh_in464.get('fill_day') != '2026-10-12'
       and _se464.report_ts_of(_plan464) == '2026-10-12 10:00:00'
@@ -40945,8 +40951,8 @@ check("③ 읽은 창 끝까지 같은 기록이면 'N번 이상'(본 것만 센
 _src474 = _ast474.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
 _calls474 = [_ast474.unparse(n) for n in _ast474.walk(_src474) if isinstance(n, _ast474.Call)
              and getattr(n.func, 'attr', None) == 'heartbeats_recent']
-check("④ 화면은 심박을 묶을 만큼 읽는다(`heartbeats_recent(c, _dash.BEAT_WINDOW)` · 같은 창을 recent_events 에 넘긴다) · 판정 문턱이 아니라 읽는 창",
-      _calls474 == ['L.heartbeats_recent(c, _dash.BEAT_WINDOW)'] and _sd474.BEAT_WINDOW >= 390
+check("④ 화면은 심박을 묶을 만큼 읽는다(`heartbeats_recent(c, _dash.BEAT_WINDOW)` · 같은 창을 recent_events 에 넘긴다) · 판정 문턱이 아니라 읽는 창 · 한 세션(2026-10-12 실측 심박 400줄)보다 넓다",
+      _calls474 == ['L.heartbeats_recent(c, _dash.BEAT_WINDOW)'] and _sd474.BEAT_WINDOW >= 800
       and 'window=_dash.BEAT_WINDOW' in open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read(),
       str(_calls474), scanned=len(_calls474))
 # ─── §474 끝 ───
@@ -41063,6 +41069,32 @@ check("③ 현재가를 받는 자리는 swing_engine.naver_price 한 곳 — �
       and '_se.naver_price(code)' in _files476['swing_view.py'],
       str(_fetch476), scanned=len(_files476))
 # ─── §476 끝 ───
+
+# ─── §477 시작 (라운드 498) ───
+print()
+print("§477 작업 스케줄러 결과 0x800710E0 은 '요청 거절'이지 'PC 꺼짐'이 아니다 — 도는 중이면 장중 반복의 정상 동작 (라운드 498)")
+print("-" * 72)
+# 2026-10-12 09:00 — 예약 워커가 처음 장중 내내 돈 날, 10분 반복 트리거가 워커가 도는 중에 울려(IgnoreNew) 결과 0x800710E0 이 남았고
+# 화면은 '마지막 결과 PC 가 꺼져 있어 못 돌았음(절전·종료)' 이라 적었다 — 워커는 1분마다 돌고 있었다. 꺼져 있던 실행은 '놓친 실행' 수가 센다.
+import swing_ops as _ops477
+_ast477 = __import__('ast')
+_json477 = __import__('json')
+_run477 = _ops477.parse(_json477.dumps(dict(State='Running', LastTaskResult=2147946720, LastRunTime='10/12/2026 09:00:00',
+                                             NextRunTime='10/12/2026 09:10:00', NumberOfMissedRuns=0, Repeat='PT10M')))
+_rdy477 = _ops477.parse(_json477.dumps(dict(State='Ready', LastTaskResult=2147946720, LastRunTime='10/12/2026 09:00:00',
+                                             NextRunTime='10/13/2026 08:50:00', NumberOfMissedRuns=0, Repeat='PT10M')))
+check("① 상태 Running + 0x800710E0 → '이미 돌고 있어 새로 띄우지 않음(장중 반복 · 정상)' · 상태가 Running 이 아니면 '새 실행을 거절함(…)' · "
+      "화면 한 줄에도 그대로 · 'PC 가 꺼져' 는 어디에도 없다",
+      _run477['last_result_ko'] == _ops477.REFUSED_RUNNING_KO and '정상' in _run477['last_result_ko']
+      and '거절' in _rdy477['last_result_ko'] and 'PC' not in _rdy477['last_result_ko']
+      and _ops477.REFUSED_RUNNING_KO in _ops477.task_line(dict(_run477, ok=True)),
+      f"{_run477.get('last_result_ko')} | {_rdy477.get('last_result_ko')}")
+_strs477 = [n.value for n in _ast477.walk(_ast477.parse(open(_os.path.join(PROJ, 'swing_ops.py'), encoding='utf-8').read()))
+            if isinstance(n, _ast477.Constant) and isinstance(n.value, str)]
+check("② swing_ops 의 문자열 상수에 'PC 가 꺼져 있어 못 돌았음' 이 없다(옛 오역 · 주석은 안 본다) · 결과 표에 그 코드가 남아 있다",
+      not [x for x in _strs477 if '꺼져 있어 못 돌았음' in x] and 0x800710E0 in _ops477.RESULT_KO,
+      str([x for x in _strs477 if '꺼져' in x][:3]), scanned=len(_strs477))
+# ─── §477 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
