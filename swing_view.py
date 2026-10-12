@@ -1520,7 +1520,60 @@ def _view_system(st, uk, c, ctx, md):
         _cr.render(st, uk, theme=theme, md=md)
 
 
+def lim_text(v):
+    """저장된 위험 한도 값 → 입력 칸 글자 (라운드 501). ⚠️ 종전 `f'{cur:g}'` 는 숫자에만 되는데 이 화면의 '위험 한도 저장' 이 **글자**로
+    저장한다(text_input 그대로) — 한도를 한 번 저장하면 다음 그리기에서 ValueError 로 설정 화면이 통째로 죽었다(2026-10-12 밤 사용자 화면 ·
+    그 전엔 아무도 한도를 저장한 적이 없어 안 보였다). 글자든 숫자든 받고, 정수면 지수 표기 없이(30000 → '30000' · 1e6 → '1000000'),
+    못 읽으면 받은 글자 그대로(지어내지 않는다 · 검증은 `swing_risk.validate` 가 한다)."""
+    if v is None:
+        return ''
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return str(int(f)) if f.is_integer() else f'{f:g}'
+
+
+def live_start_missing(cfg, stt):
+    """'실전 시작' 한 번에 켜기 전에 아직 안 된 것(라운드 501) → 이름 목록 · 빈 목록이면 문장 한 번으로 켤 수 있다.
+
+    잠금은 그 자리에서 입력하는 문장으로 풀므로 빼고 본다 — 나머지(실전 자격증명 · 위험 한도 여섯 · 긴급정지 꺼짐 · 증권사 관문의
+    다른 막힘)는 그대로다(`live_readiness` · `broker_gate` 를 같은 설정에 잠금만 채워 부른다 · 새 규칙 없음)."""
+    st2 = dict(stt or {}, live_unlock=X.LIVE_UNLOCK_PHRASE)
+    miss = [n for n, ok, _w in X.live_readiness(cfg, st2) if not ok]
+    miss += [b for b in X.broker_gate('LIVE', cfg, st2) if '잠금' not in b and b not in miss]
+    return miss
+
+
+def _live_start(st, c, stt, cfg, md):
+    """설정 맨 위 '실전 시작' 한 칸(라운드 501) — 사용자: *"실제 시작도 3개 누르게 하지 맙시다."* 종전엔 잠금 문장(아래)과 운용 모드
+    (위)를 따로 바꿔야 했고 화면 차례도 거꾸로였다. 문장을 한 번 입력하고 버튼 하나를 누르면 잠금을 풀고 모드를 '실전'으로 같이 바꾼다.
+    누르는 사람은 사용자이고, 문장·조건 넷·증권사 관문은 그대로다 — 누르는 순간 장부의 설정을 다시 읽어 다시 본다."""
+    miss = live_start_missing(cfg, stt)
+    st.markdown('**실전 시작 — 한 번에**')
+    if miss:
+        st.caption(md('실전을 켜기 전에 채울 것: ' + ' · '.join(miss) + ' — 아래 칸에서 채우면 여기서 문장 한 번으로 켭니다.'))
+        return
+    st.caption(md(f"준비됐습니다(실전 자격증명 · 위험 한도 · 긴급정지 꺼짐). 아래 문장을 그대로 입력하고 '실전 시작'을 누르면 잠금을 풀고 "
+                  f"운용 모드를 '실전'으로 바꿉니다. 주문 방식은 지금 '{APPROVAL_KO[X.approval_of(stt)]}' 입니다 — '계획마다 승인'이면 "
+                  "'오늘 계획'에서 고르거나 승인한 계획만 삽니다."))
+    ph = st.text_input(f'입력할 문장: {X.LIVE_UNLOCK_PHRASE}', key='sw_live_start_ph')
+    ready = bool(ph) and ph.strip() == X.LIVE_UNLOCK_PHRASE
+    if st.button('실전 시작', key='sw_live_start', disabled=not ready, type='primary'):
+        miss2 = live_start_missing(cfg, L.settings(c))         # 누르는 순간 다시 본다(그새 다른 탭이 바꿨을 수 있다)
+        if not ready or miss2:
+            st.warning(md('켜지 않았습니다 — ' + (' · '.join(miss2) if miss2 else '문장이 다릅니다')))
+        else:
+            L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)
+            L.set_setting(c, 'mode', 'LIVE')
+            st.session_state['sw_flash'] = ("실전을 시작했습니다 — 잠금 풀림 · 운용 모드 '실전'. 워커가 다음 바퀴(1분 안)부터 읽습니다. "
+                                            "멈추려면 모드를 '꺼짐'으로 바꾸거나 긴급정지를 켭니다.")
+            st.rerun()
+
+
 def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
+    if allow_write and mode != 'LIVE':
+        _live_start(st, c, stt, cfg, md)                       # 라운드 501 — 맨 위에 한 번에 켜는 칸
     modes = mode_options(mode, cfg)          # 라운드 453 — 기본은 꺼짐·실전 둘(모의투자 자격증명이거나 그 모드일 때만 더 보인다)
     new_mode = st.radio('운용 모드', modes, index=modes.index(mode), format_func=lambda m: MODE_KO[m], horizontal=True,
                         key='sw_mode', disabled=not allow_write)
@@ -1581,7 +1634,7 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
             vals = {}
             for k, label, unit in swing_risk.LIMITS:
                 cur = lim.get(k)
-                vals[k] = st.text_input(f'{label} ({unit})', value='' if cur is None else f'{cur:g}', key=f'sw_lim_{k}')
+                vals[k] = st.text_input(f'{label} ({unit})', value=lim_text(cur), key=f'sw_lim_{k}')
             if st.form_submit_button('위험 한도 저장'):
                 newlim = {k: (v.strip() or None) for k, v in vals.items()}
                 _v, missing, problems = swing_risk.validate(newlim)

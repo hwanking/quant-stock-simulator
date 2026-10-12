@@ -41179,6 +41179,99 @@ check("④ 목록 읽기(_http_json)도 같은 재시도를 쓴다 · 다시 볼
       and '_retrying(once' in _hj479, _hj479[-200:])
 # ─── §479 끝 ───
 
+# ─── §480 시작 (라운드 501) ───
+print()
+print("§480 실전 시작 — 문장 한 번 + 버튼 하나로 잠금 풀기와 모드 '실전'을 같이 · 조건(자격증명·한도·긴급정지·관문)은 그대로 (라운드 501)")
+print("-" * 72)
+# 사용자: *"실제 시작도 3개 누르게 하지 맙시다."* 누르는 것은 사용자다 — 이 칸은 두 동작을 하나로 묶을 뿐 조건을 하나도 빼지 않는다.
+import swing_view as _sv480
+_ast480 = __import__('ast')
+_cf480 = dict(env='real', app_key='KEY480', app_secret='S', cano='12345678', prdt='01', missing=[], problems=[])
+_lim480 = {'risk_per_trade_krw': '30000', 'max_position_pct': '25', 'max_total_exposure_pct': '90', 'min_cash_pct': '10',
+           'max_open_positions': '5', 'max_daily_new_orders': '5'}
+_ok480 = _sv480.live_start_missing(_cf480, {'limits': _lim480})
+_nolim480 = _sv480.live_start_missing(_cf480, {})
+_kill480 = _sv480.live_start_missing(_cf480, {'limits': _lim480, 'kill_switch': True})
+_demo480 = _sv480.live_start_missing(dict(_cf480, env='demo'), {'limits': _lim480})
+check("① 준비 셈 — 자격증명(실전)·한도·긴급정지 꺼짐이면 빈 목록(잠금은 그 자리 문장으로 푼다) · 한도 없음 · 긴급정지 켜짐 · 모의투자 자격증명은 "
+      "각각 그 이름이 남는다(조건을 하나도 안 뺀다)",
+      _ok480 == [] and '위험 한도 여섯' in _nolim480 and '긴급정지 꺼짐' in _kill480
+      and '한국투자 실전 자격증명' in _demo480 and not any('잠금' in x for x in _ok480 + _nolim480 + _kill480),
+      f'{_ok480} | {_nolim480} | {_kill480} | {_demo480}')
+_t480 = _ast480.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_ls480 = next(n for n in _t480.body if isinstance(n, _ast480.FunctionDef) and n.name == '_live_start')
+_src_ls480 = _ast480.unparse(_ls480)
+_sets480 = [_ast480.unparse(n) for n in _ast480.walk(_ls480) if isinstance(n, _ast480.Call) and getattr(n.func, 'attr', None) == 'set_setting']
+_stg480 = _ast480.unparse(next(n for n in _t480.body if isinstance(n, _ast480.FunctionDef) and n.name == '_settings'))
+check("② 버튼 — 문장이 같을 때만 눌린다 · 누르는 순간 장부 설정을 다시 읽어(live_start_missing(cfg, L.settings(c))) 다시 본다 · "
+      "잠금을 먼저 풀고 모드를 '실전'으로(두 번만 적는다) · 설정 화면은 실전이 아닐 때만 이 칸을 그린다",
+      "disabled=not ready" in _src_ls480 and 'live_start_missing(cfg, L.settings(c))' in _src_ls480
+      and _sets480 == ["L.set_setting(c, 'live_unlock', X.LIVE_UNLOCK_PHRASE)", "L.set_setting(c, 'mode', 'LIVE')"]
+      and "if allow_write and mode != 'LIVE':" in _stg480 and '_live_start(st, c, stt, cfg, md)' in _stg480,
+      str(_sets480))
+# ─── §480 끝 ───
+
+# ─── §481 시작 (라운드 501) ───
+print()
+print("§481 위험 한도가 글자로 저장돼 있어도 설정 화면이 그려진다 — 종전 f'{cur:g}' 가 ValueError 로 설정 화면을 죽였다 (라운드 501)")
+print("-" * 72)
+# 2026-10-12 밤 사용자 화면: 'ValueError: Unknown format code g for object of type str'. 이 화면의 '위험 한도 저장' 은 text_input 그대로
+# **글자**를 저장하는데 입력 칸이 그 값을 숫자 서식으로 그렸다 — 한도를 한 번 저장하면 다음 그리기에서 죽는다(그 전엔 아무도 저장한 적이 없었다).
+# 그리기 검사는 숫자로 심은 장부만 썼다(§432 ⑲) — 화면 자신이 저장하는 모양(글자)으로 심어 실제로 그린다. 증권사 생성자는 막는다.
+import swing_view as _sv481
+check("① lim_text — 글자·숫자 둘 다 · 정수는 지수 표기 없이(30000 · 1e6 → '1000000') · 소수는 그대로 · None 은 빈 칸 · 못 읽으면 받은 글자",
+      _sv481.lim_text('30000') == '30000' and _sv481.lim_text(30000.0) == '30000' and _sv481.lim_text(1e6) == '1000000'
+      and _sv481.lim_text('2.5') == '2.5' and _sv481.lim_text(None) == '' and _sv481.lim_text('abc') == 'abc')
+_vdb481 = _os.path.join(PROJ, '_probe', '_r501_view_test.db')
+if _os.path.exists(_vdb481):
+    _os.remove(_vdb481)
+import swing_ledger as _sl481
+_vc481 = _sl481.connect(_vdb481)
+_sl481.set_setting(_vc481, 'limits', {'risk_per_trade_krw': '30000', 'max_position_pct': '25', 'max_total_exposure_pct': '90',
+                                      'min_cash_pct': '10', 'max_open_positions': '5', 'max_daily_new_orders': '5'}, by='test')
+_vc481.close()
+_app481 = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import broker_kis as _B\n"
+    "def _blk(self, *a, **k):\n"
+    "    raise RuntimeError('증권사 차단(§481)')\n"
+    "_B.KisBroker.__init__ = _blk\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    f"_L.connect.__defaults__ = ({_vdb481!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-12')\n")
+_child481 = _os.path.join(PROJ, '_probe', '_r501_view_child.py')
+open(_child481, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_app481!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('시스템')\n"
+    "at.run()\n"
+    "vals = {e.label: e.value for e in at.text_input}\n"
+    "out = dict(exc=len(at.exception), first=str(at.exception[:1])[:300], vals=vals,\n"
+    "           md=' '.join(str(e.value) for e in at.markdown))\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _rc481 = __import__('subprocess').run([sys.executable, _child481], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300)
+    _jr481 = (_rc481.stdout or '').rsplit('@@R@@', 1)
+    _v481 = __import__('json').loads(_jr481[1]) if len(_jr481) == 2 else {}
+    check("② 글자로 저장된 한도로 '시스템' 갈래를 실제로 그린다 — 예외 0 · 입력 칸이 '30000'·'25'… 를 보인다 · '실전 시작 — 한 번에' 칸이 그려진다",
+          _v481.get('exc') == 0 and (_v481.get('vals') or {}).get('거래당 최대 손실 (원)') == '30000'
+          and (_v481.get('vals') or {}).get('최대 동시 보유 종목 (개)') == '5' and '실전 시작 — 한 번에' in (_v481.get('md') or ''),
+          str(_v481.get('first') or _v481.get('vals') or (_rc481.stderr or '')[-300:]))
+finally:
+    for _f481 in (_vdb481, _child481):
+        if _os.path.exists(_f481):
+            _os.remove(_f481)
+# ─── §481 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
