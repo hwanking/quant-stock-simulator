@@ -92,15 +92,23 @@ def _when(d, op):
     return f"{d.isoformat()}({WEEK_KO[d.weekday()]}) {op.strftime('%H:%M')}" if d else None
 
 
+#: 라운드 502 — 실전을 켜는 자리(라운드 501 의 한 칸). 시작 카드의 남은 일이 이 이름을 그대로 쓴다(화면의 제목과 같은 글자).
+START_HERE = "시스템 → 설정 맨 위 '실전 시작 — 한 번에'"
+
+
 def start_status(mode, stt, cfg, task=None, worker=None, now=None):
     """자동매매 언제 시작하나 (라운드 457) — 장부 설정 · 실전 준비 넷(`live_readiness`) · 운용 모드 · 워커 예약 작업 · 거래일 달력에서
     **유도**한다. 실제 첫 매수 날짜는 말하지 않는다 — 중앙 판정이 추천을 언제 낼지는 아무도 모른다(§3). 판정 낱말 없음.
     → dict(live, headline, start, first_buy, items=[{label, ok, why}], n_ok, n_items, missing)"""
     now = now or X.now_kst()
     items = [dict(label=n, ok=bool(ok), why=str(w)) for n, ok, w in X.live_readiness(cfg, stt)]
+    # 라운드 502 — 잠금과 모드는 라운드 501 의 한 칸에서 같이 켠다 — 남은 일이 그 자리를 가리킨다(조건·판정 불변)
+    for it in items:
+        if it['label'] == '실전 잠금 해제' and not it['ok']:
+            it['why'] = START_HERE + ' — 문장 한 번으로 운용 모드와 같이 풀립니다'
     mko = {'OFF': '꺼짐', 'SHADOW': '기록만', 'PAPER': '모의투자', 'LIVE': '실전'}.get(mode, mode)
     items.append(dict(label='운용 모드 실전', ok=(mode == 'LIVE'),
-                      why=('실전' if mode == 'LIVE' else f'지금 {mko} — 시스템 → 설정에서 실전으로 바꿉니다(위 넷이 다 통과해야 바뀝니다)')))
+                      why=('실전' if mode == 'LIVE' else f'지금 {mko} — {START_HERE}에서 잠금과 같이 켭니다(위 넷이 다 통과해야 켜집니다)')))
     task_ok = bool(task and task.get('ok') and task.get('installed'))
     items.append(dict(label='워커 예약 작업', ok=task_ok,
                       why=(f"등록됨 · 다음 실행 {task.get('next_run') or '—'}" if task_ok else

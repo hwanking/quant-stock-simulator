@@ -8760,6 +8760,10 @@ _ACTION_STYLE = {
     'NO_TRADE':   ("#ff453a", "매수 안 함"),
 }
 _vc, _vshort = _ACTION_STYLE.get(verdict['action'], ("#9DAABC", "판단 보류"))
+# 라운드 503 — 색과 짧은 이름이 엔진 행동(62점 → HOLD → 주황 '관망')을 따라, 중앙 판정이 추천한 종목에 '관망'이 붙었다. 추천이면
+#   중앙 판정을 따른다(결론 문장과 같은 출처 · §4). 추천이 아니면 종전대로.
+if (CORE or {}).get('recommended') is True:
+    _vc, _vshort = _ACTION_STYLE['BUY'][0], '추천'
 _vi = _uk.dot(_vc, 14)
 # 라운드 417 — 결론 문장은 중앙 판정의 것이다(`verdict_core.central_headline` — 기다려도 안 풀리는 칸에 '조건이 갖춰지면
 #   후보'를 안 붙인다). 배너·오른쪽 패널·중복 비교가 이 하나를 읽는다. CORE 가 없으면 엔진 문장 그대로.

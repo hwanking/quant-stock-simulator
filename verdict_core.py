@@ -202,7 +202,11 @@ def fail_label(name):
     return FAIL_LABELS.get(n) or f"'{n}' 미충족"
 
 
-def central_headline(engine_headline, recommended, wait_curable):
+#: 라운드 503 — 추천일 때 결론 문장으로 쓰는 '다음 조건' 갈래(사는 지시가 있는 것만 · next_action 의 갈래 이름)
+REC_HEAD_KINDS = ('buy_now', 'pullback', 'breakout')
+
+
+def central_headline(engine_headline, recommended, wait_curable, rec_headline=None, rec_kind=None):
     """화면 결론 문장 — 엔진 문장에서 **지킬 수 없는 약속만** 뺀다 (라운드 417 · 한 곳).
 
     2026-10-02 실측: 09-30 뒤 개장 전 리포트 후보 15개 중 9개의 결론이 *"지금은 사지 마세요 — 조건이 갖춰지면 후보"* 였는데
@@ -212,9 +216,59 @@ def central_headline(engine_headline, recommended, wait_curable):
     추천이 아니고 기다려도 안 풀리면 꼬리를 떼고 *"지금은 사지 마세요"* 만 남긴다(엔진이 이미 쓰는 문장 · 새 문장 없음).
     추천이거나 기다리면 풀리는 칸이면 엔진 문장 그대로다. 판정·칸·점수 불변."""
     h = str(engine_headline or '')
+    # ⚠️ 라운드 503 — **추천일 때** 엔진 문장을 그대로 냈다. 엔진 문장은 점수 띠(62점 → '관망')로 정해져 *"지금은 사지 마세요
+    #   — 조건이 갖춰지면 후보"* 인데, 중앙 판정은 조건 11개를 전부 통과(추천 · '오늘 매수 가능')라 같은 화면이 반대 말을 했다
+    #   (2026-10-12 밤 사용자 화면 · 108개 리포트 528 후보 중 추천 0 이라 이 갈래는 그날 처음 밟혔다). 추천이면 중앙 판정의
+    #   '언제 사나' 문장(next_headline · 사는 지시가 있는 갈래만)을 결론으로 쓴다 — 새 문장 없음.
+    if recommended and rec_headline and rec_kind in REC_HEAD_KINDS:
+        return str(rec_headline)
     if WAIT_PROMISE_TAIL in h and not recommended and not wait_curable:
         return h.replace(WAIT_PROMISE_TAIL, '')
     return h
+
+
+#: 라운드 503 — 사는 지시로 읽히는 낱말(결론·'다음 조건' 머리). '사지 마세요'는 지시가 아니므로 먼저 지우고 본다.
+BUY_INSTRUCTION_WORDS = ('분할매수할 수 있습니다', '사세요', '매수하세요', '진입할 수 있습니다')
+
+
+def consistency_problems(core):
+    """중앙 판정 한 건(build() 의 결과 · 리포트 후보의 core)이 **스스로 모순되는 곳** 목록 (라운드 503 · 빈 목록이 정상).
+
+    2026-10-12 밤 첫 '추천'(108개 리포트 528 후보 중 처음)이 나오자 같은 화면이 *"지금은 사지 마세요"*(엔진 점수 문장) ·
+    주황 '관망' · 관심종목의 '매수 가능' 을 같이 말했다 — 추천 갈래를 아무도 밟은 적이 없어 안 보였다(R417 은 추천이 **아닌** 갈래만
+    고쳤다). 그 모양들을 한 곳에서 센다: 이 함수를 개장 전 리포트 전수 감사(`scripts/verdict_consistency_audit.py` · 저녁 작업)와
+    회귀(§483)가 같이 부른다. 판정을 바꾸지 않는다 — 읽고 센다. 칸이 없으면(옛 리포트) 그 검사는 건너뛴다(§3)."""
+    out = []
+    if not isinstance(core, dict):
+        return ['중앙 판정이 dict 가 아님']
+    rec = core.get('recommended')
+    checks = core.get('checks') if isinstance(core.get('checks'), list) else None
+    if checks is not None and rec is not None:
+        nfail = sum(1 for c in checks if isinstance(c, dict) and not c.get('ok'))
+        if bool(rec) != (nfail == 0):
+            out.append(f"추천 {bool(rec)} 인데 미충족 조건 {nfail}개")
+    bucket = core.get('bucket')
+    if bucket is not None and rec is not None and (bucket == '오늘 매수 가능') != bool(rec):
+        out.append(f"칸 '{bucket}' 과 추천 {bool(rec)} 이 어긋남")
+    head = str(core.get('headline') or '')
+    nhead = str(core.get('next_headline') or '')
+    if rec is True and ('사지 마세요' in head or WAIT_PROMISE_TAIL in head):
+        out.append(f"추천인데 결론 문장이 사지 말라고 함: {head[:40]}")
+    if rec is False and core.get('wait_curable') is False:
+        for label, txt in (('결론', head), ('다음 조건', nhead)):
+            t = txt.replace('사지 마세요', '')
+            if any(w in t for w in BUY_INSTRUCTION_WORDS):
+                out.append(f"추천 아님·기다려도 안 풀림인데 {label} 문장이 사라고 함: {txt[:40]}")
+        if WAIT_PROMISE_TAIL in head:
+            out.append("추천 아님·기다려도 안 풀림인데 '조건이 갖춰지면 후보' 약속")
+    ev = core.get('expected_return')
+    if checks is not None and ev is not None:
+        ck = next((c for c in checks if isinstance(c, dict) and c.get('name') == '비용 차감 기대값 양수'), None)
+        if ck is not None and bool(ck.get('ok')) != (float(ev) > 0):
+            out.append(f"기대값 {ev} 와 '비용 차감 기대값 양수' 판정 {bool(ck.get('ok'))} 이 어긋남")
+    if core.get('band_mismatch') is True:
+        out.append('점수대 적중률의 띠가 최종 점수를 안 품음(방어선이 걸려 기대값을 안 셈)')
+    return out
 
 
 #: 라운드 425 — 기다림의 이름을 단 칸(옛 두 칸 포함). 손으로 적지 않고 BUCKETS 에서 유도한다.
@@ -487,6 +541,15 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
     # 기대수익 — 지어내지 않는다. 목표·손절과 과거 적중률이 다 있을 때만.
     cb = fs.get('calibration_band') or {}
     hit = _f(cb.get('hit_rate'))
+    # ⚠️ 라운드 503 — 점수대 적중률의 띠가 **최종 점수**를 품는지 본다. 엔진이 띠를 상한 **앞**의 점수로 골라, 뒤의 상한(뉴스 ·
+    #   적정가 · 국면)이 점수를 다른 띠로 내리면 기대값이 그 점수가 속하지 않는 띠의 적중률로 셈해졌다(사용자 화면: 62점에
+    #   '65~69점' 적중률). 원장의 띠는 최종 점수로 묶였다 — 안 맞으면 그 적중률을 **쓰지 않는다**(기대값 산출 불가 · §3 ·
+    #   엔진 고침 뒤엔 안 걸려야 하는 방어선 · 걸리면 `band_mismatch` 로 드러난다).
+    _sc503 = _f(fs.get('final_action_score'))
+    band_mismatch = bool(hit is not None and _sc503 is not None and cb.get('lo') is not None and cb.get('hi') is not None
+                         and not (float(cb['lo']) <= _sc503 <= float(cb['hi'])))
+    if band_mismatch:
+        hit = None
     exp_ret = None
     if 'B3' in (corrections or ()):
         # 라운드 404 · 그림자 B3 — 운영 식의 p 는 **현재가에 산** 채점의 적중률인데, 목표·손절은 **눌림 진입가**에서
@@ -677,10 +740,11 @@ def build(four_scores, verdict=None, price_axes=None, next_action=None,
         action=str(vd.get('action') or ''),
         # 라운드 417 — 결론 문장은 **중앙 판정이** 정한다(기다려도 안 풀리는 칸에 '조건이 갖춰지면 후보'를 안 붙인다).
         #   엔진 문장은 그대로 따로 싣는다(기록·대조용).
-        headline=central_headline(vd.get('headline'), recommended, wait_curable),
+        headline=central_headline(vd.get('headline'), recommended, wait_curable, rec_headline=next_headline, rec_kind=next_kind),
         engine_headline=str(vd.get('headline') or ''),
         recommended=recommended,
         bucket=bucket,
+        band_mismatch=band_mismatch,                  # 라운드 503 — 위 방어선이 걸렸나(걸리면 오염 감사가 센다)
         actionable=actionable,
         # 라운드 186 — 진입가의 **이름**도 여기서 정한다 (사용자 R184 분석 P1).
         #   추천 조건을 전부 통과했을 때만 '권장 매수가'다. 아니면 그 값은

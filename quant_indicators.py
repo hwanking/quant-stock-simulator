@@ -4721,6 +4721,19 @@ class QuantIndicatorsEngine:
                                        max(10.0 * _pos_scale,
                                            _pos_raw * _pos_scale))), 0)
 
+        # ⚠️ 라운드 503 — 점수대 적중률(calibration_band)은 **최종 점수**의 띠에서 읽는다. 종전엔 위(점수대 적중률 상한 자리)에서
+        #   그때의 점수로 띠를 고른 뒤, 그 아래 상한들(뉴스 위험 · 적정가 · 국면)이 점수를 다른 띠로 내려도 그 띠를 그대로 내보냈다 —
+        #   중앙 판정의 '비용 차감 기대값'이 그 종목이 속하지 않는 띠의 적중률로 셈해졌다(2026-10-12 밤 사용자 화면: 62점에 '65~69점'
+        #   적중률). 집계표의 띠는 원장의 **최종 점수**로 묶였으므로(calibration_lab) 같은 점수로 찾는다. 위의 '상한 59점' 판단은
+        #   그 자리의 규칙 그대로 둔다(문턱·띠·적중률 값 불변 · 바뀌는 것은 어느 띠를 읽느냐 하나).
+        _calib_band_final = calib_band
+        try:
+            if getattr(self, '_calibration', None):
+                _calib_band_final = next((_b for _b in self._calibration.get('bands', [])
+                                          if _b['lo'] <= final_action_score <= _b['hi']), None)
+        except Exception:                                      # noqa: BLE001 — 못 고르면 띠 없음(기대값 산출 불가 · §3)
+            _calib_band_final = None
+
         _fs_out = {
             # ETF·ETN 은 적정가를 산출하지 않는다 (None). float(None) 로 죽지 않게 한다.
             'target_fundamental': (float(target_fundamental)
@@ -4938,7 +4951,7 @@ class QuantIndicatorsEngine:
             'rel_mom_detail': rel_mom,
             'track_record': track,
             # 가상 백테스트 캘리브레이션 — 이 점수대의 과거 리플레이 적중률
-            'calibration_band': calib_band,
+            'calibration_band': _calib_band_final,
 
             'tdst_support_str': ("N/A" if not tdst_available
                                  else ("지지 유지" if curr_price >= tdst_support else "이탈")),

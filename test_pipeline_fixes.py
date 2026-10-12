@@ -33092,7 +33092,9 @@ check("엔진 문장과의 계약 — 엔진 결론 문장이 그 꼬리를 글�
       _q405.count(f'"{_P405}"') >= 3, str(_q405.count(f'"{_P405}"')))
 _v405 = _read148(_os.path.join(PROJ, 'verdict_core.py'))
 check("중앙 판정이 결론 문장을 그 함수로 내고 엔진 문장은 따로 싣는다",
-      "headline=central_headline(vd.get('headline'), recommended, wait_curable)," in _v405
+      # 라운드 503 — 추천일 때 '언제 사나' 문장을 넘기는 인자 둘(rec_headline · rec_kind)이 뒤에 붙었다. 이 줄은 호출 **전체**
+      #   글자를 못 박아 그 추가에 깨졌다(R98b 계열) — 지키려던 성질(결론 문장이 엔진 문장·추천·기다림 셋을 그 함수에 넘긴다)로 옮긴다.
+      __import__('re').search(r"headline=central_headline\(vd\.get\('headline'\), recommended, wait_curable[,)]", _v405) is not None
       and "engine_headline=str(vd.get('headline') or '')," in _v405
       # 옛 대입이 없는가 — `engine_headline=…` 안의 부분 글자를 잡지 않게 앞 글자를 막는다(검사가 자기를 세지 않게 · R313)
       and __import__('re').search(r"(?<![A-Za-z_])headline=str\(vd\.get\('headline'\) or ''\),", _v405) is None)
@@ -41271,6 +41273,96 @@ finally:
         if _os.path.exists(_f481):
             _os.remove(_f481)
 # ─── §481 끝 ───
+
+# ─── §482 시작 (라운드 502) ───
+print()
+print("§482 시작 카드의 남은 일(잠금 · 모드)이 '실전 시작 — 한 번에' 칸을 가리킨다 · 그 이름이 화면 제목과 같은 글자 (라운드 502)")
+print("-" * 72)
+import swing_dash as _sd482
+_cf482 = dict(env='real', app_key='KEY482', app_secret='S', cano='12345678', prdt='01', missing=[], problems=[])
+_lim482 = {'risk_per_trade_krw': '30000', 'max_position_pct': '25', 'max_total_exposure_pct': '90', 'min_cash_pct': '10',
+           'max_open_positions': '5', 'max_daily_new_orders': '5'}
+_ss482 = _sd482.start_status('OFF', {'limits': _lim482}, _cf482, task=dict(ok=True, installed=True, next_run='x'))
+_why482 = {i['label']: i['why'] for i in _ss482['items']}
+_view482 = open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+check("① 한도·자격증명이 됐고 잠금·모드만 남으면 — 남은 일 둘 · 둘 다 START_HERE 를 가리킨다 · 그 이름의 칸 제목이 화면에 그대로 있다",
+      _ss482['missing'] == ['실전 잠금 해제', '운용 모드 실전'] and _sd482.START_HERE in _why482['실전 잠금 해제']
+      and _sd482.START_HERE in _why482['운용 모드 실전'] and "'**실전 시작 — 한 번에**'" in _view482
+      and "'실전 시작 — 한 번에'" in _sd482.START_HERE, str(_why482))
+# ─── §482 끝 ───
+
+# ─── §483 시작 (라운드 503) ───
+print()
+print("§483 첫 '추천'에서 드러난 판정자 셋 + 점수대 적중률 오염 — 결론·색·칸이 중앙 판정을 따르고, 띠는 최종 점수에서, 모순은 매일 센다 (라운드 503)")
+print("-" * 72)
+# 2026-10-12 밤 사용자 화면: 관심종목 '매수 가능' · 종목 화면 배너 '지금은 사지 마세요 — 조건이 갖춰지면 후보' · 주황 '관망' · 62점에 '65~69점'
+# 적중률. 108개 리포트 528 후보 중 추천 0 이라 추천 갈래는 그날 처음 밟혔다. 판정·문턱 불변 — 바뀐 것은 어느 문장·색·띠를 읽느냐.
+import verdict_core as _vc483
+import ui_kit as _uk483
+_vd483 = {'action': 'HOLD', 'headline': '지금은 사지 마세요 — 조건이 갖춰지면 후보', 'vetoes': []}
+_na483 = {'kind': 'pullback', 'headline': '98원 이하에서 분할매수할 수 있습니다.', 'conditions': []}
+_c483 = _vc483.build(dict(_FS116, final_action_score=55), _vd483, None, _na483, 100.0)
+check("① 추천이면 결론 문장 = 중앙 판정의 '언제 사나' 문장(엔진의 '사지 마세요' 아님) · 엔진 문장은 따로 남는다 · 모순 0",
+      _c483['recommended'] is True and _c483['headline'] == _na483['headline']
+      and _c483['engine_headline'] == _vd483['headline'] and _vc483.consistency_problems(_c483) == [],
+      f"{_c483['recommended']} · {_c483['headline']} · {_vc483.consistency_problems(_c483)}")
+_old483 = dict(_c483, headline=_vc483.central_headline(_vd483['headline'], True, False))
+check("② 옛 동작(추천인데 엔진 문장 그대로)을 심으면 감사가 잡는다 · 추천이 아닌 갈래의 종전 동작(꼬리 떼기)은 그대로",
+      any('사지 말라고' in x for x in _vc483.consistency_problems(_old483))
+      and _vc483.central_headline(_vd483['headline'], False, False) == '지금은 사지 마세요',
+      str(_vc483.consistency_problems(_old483)))
+_cbad483 = _vc483.build(dict(_FS116, final_action_score=62, calibration_band=dict(lo=65, hi=69, hit_rate=70.0, n=904, wilson_low=67.0)),
+                        _vd483, None, _na483, 100.0)
+_cok483 = _vc483.build(dict(_FS116, final_action_score=67, calibration_band=dict(lo=65, hi=69, hit_rate=70.0, n=904, wilson_low=67.0)),
+                       _vd483, None, _na483, 100.0)
+check("③ 방어선 — 띠(65~69)가 최종 점수(62)를 안 품으면 그 적중률을 안 쓴다(기대값 산출 불가 · 추천 아님 · band_mismatch · 감사가 센다) · 품으면 종전대로",
+      _cbad483['band_mismatch'] is True and _cbad483['expected_return'] is None and _cbad483['recommended'] is False
+      and any('점수대' in x for x in _vc483.consistency_problems(_cbad483))
+      and _cok483['band_mismatch'] is False and _cok483['expected_return'] is not None,
+      f"{_cbad483['band_mismatch']} {_cbad483['expected_return']} {_cbad483['recommended']} · {_cok483['band_mismatch']} {_cok483['expected_return']}")
+_planted483 = [
+    ({'recommended': True, 'checks': [{'name': 'a', 'ok': False}]}, '미충족 조건 1개'),
+    ({'recommended': False, 'bucket': '오늘 매수 가능'}, '어긋남'),
+    ({'recommended': False, 'wait_curable': False, 'headline': '지금은 사지 마세요',
+      'next_headline': '1,000원 이하에서 분할매수할 수 있습니다.'}, '사라고 함'),
+    ({'recommended': False, 'wait_curable': False, 'headline': '지금은 사지 마세요 — 조건이 갖춰지면 후보'}, '약속'),
+    ({'recommended': True, 'expected_return': -0.3, 'checks': [{'name': '비용 차감 기대값 양수', 'ok': True}]}, '어긋남'),
+]
+_clean483 = {'recommended': False, 'wait_curable': False, 'bucket': '추천 제외', 'headline': '지금은 사지 마세요',
+             'next_headline': '98원까지 내려와도 오늘은 아직 못 삽니다 — 추천 제외', 'expected_return': -0.3,
+             'checks': [{'name': '비용 차감 기대값 양수', 'ok': False}]}
+check("④ 모순 다섯 모양을 심으면 각각 잡는다 · 맞는 판정(추천 제외 · 사지 말라)은 0 — 양방향",
+      all(any(w in x for x in _vc483.consistency_problems(c)) for c, w in _planted483)
+      and _vc483.consistency_problems(_clean483) == [],
+      str([_vc483.consistency_problems(c) for c, _w in _planted483]), scanned=len(_planted483) + 1)
+_qi483 = open(_os.path.join(PROJ, 'quant_indicators.py'), encoding='utf-8').read()
+check("⑤ 엔진 — 내보내는 calibration_band 는 모든 상한(국면 게이트) 뒤에 최종 점수로 다시 고른 띠 · 위의 '상한 59점' 판단 자리는 그대로",
+      "'calibration_band': _calib_band_final," in _qi483
+      and _qi483.index('regime_gate = None') < _qi483.index('_calib_band_final = calib_band') < _qi483.index('_fs_out = {')
+      and "if _b['lo'] <= final_action_score <= _b['hi']:" in _qi483)
+_wa483 = _uk483.watch_action({'snap_bucket': '오늘 매수 가능', 'snap_buy': 13626.0}, 15240.0)
+_wb483 = _uk483.watch_action({'snap_bucket': '오늘 매수 가능', 'snap_buy': 13626.0}, 13000.0)
+_web483 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("⑥ 관심종목 칸 — 추천인데 지금 값이 목표 매수가 위면 이름에 그 가격('13,626원 이하 매수') · 이하면 '지금 매수 가능' · kind 불변 · "
+      "배너 색·짧은 이름은 추천이면 중앙 판정('추천')",
+      _wa483['kind'] == '매수 가능' and _wa483['label'] == '13,626원 이하 매수'
+      and _wb483['label'] == '지금 매수 가능'
+      and "if (CORE or {}).get('recommended') is True:\n    _vc, _vshort = _ACTION_STYLE['BUY'][0], '추천'" in _web483.replace('\r\n', '\n'),
+      f"{_wa483} · {_wb483}")
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import verdict_consistency_audit as _vca483
+import nightly_local as _nl483
+_rp483 = _os.path.join(PROJ, '_probe', '_r503_report.json')
+open(_rp483, 'w', encoding='utf-8').write(__import__('json').dumps(
+    {'picks': [{'symbol': '000001.KS', 'core': _old483}, {'symbol': '000002.KS', 'core': _c483}]}, ensure_ascii=False))
+try:
+    _ar483 = _vca483.audit_report(_rp483)
+finally:
+    _os.remove(_rp483)
+check("⑦ 감사 스크립트가 리포트의 후보마다 같은 함수로 센다(심은 모순 1 · 맞는 것 0) · 저녁 작업의 마지막 단계로 매일 돈다",
+      _ar483[0] == 2 and len(_ar483[1]) == 1 and _ar483[1][0][0] == '…01'
+      and _nl483.STEPS[-1][1] == 'scripts/verdict_consistency_audit.py', str(_ar483))
+# ─── §483 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

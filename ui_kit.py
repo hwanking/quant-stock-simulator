@@ -2515,7 +2515,9 @@ def watch_action(row, price=None, today=None):
             return dict(kind='매수 가능', label='지금 매수 가능', tone='pos',
                         held=False, why_line=None,
                         why=f'목표 매수가({buy:,.0f}원) 이하입니다')
-        return dict(kind='매수 가능', label='매수 가능', tone='pos',
+        # 라운드 503 — 이름이 '매수 가능' 뿐이라 지금 값에 사라는 말로 읽혔다(사용자: *"매수야 뭘 해야하는거야?"*). 조건(목표 매수가
+        #   이하로 내려와야)은 툴팁에만 있었다 — 그 가격을 이름에 적는다. kind 는 그대로(차례·색·저장 불변).
+        return dict(kind='매수 가능', label=(f'{buy:,.0f}원 이하 매수' if buy else '매수 가능'), tone='pos',
                     held=False, why_line=None,
                     why=(f'다만 목표 매수가 {buy:,.0f}원 이하로 내려와야 '
                          f'합니다' if buy else '엔진이 매수 가능으로 봅니다'))
