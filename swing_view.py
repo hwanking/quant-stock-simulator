@@ -831,6 +831,17 @@ def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, an
     _body465()
 
 
+# 라운드 508 — 사용자: "각 박스 부분마다 겹치는 부분이 있으니깐 개선해주고". Streamlit 은 마크다운 칸 바닥에 −1rem(−16px)을 걸어
+#   마지막 문단(p)의 바닥 여백을 지운다. 이 칸의 그림은 전부 HTML 덩어리라 마지막 자식이 div 이고 지울 여백이 없어, 덩어리마다 16px 이
+#   다음 칸으로 넘쳐 상자끼리 맞붙었다(실측 2026-10-13 · 관제실 HTML 덩어리 12개 전부 정확히 16px · 다음 칸과의 틈 1px). 마지막 자식이
+#   div·details 인 칸만 0 으로 — 글 문단의 간격은 그대로 · 본문(stMain)만 · 이 칸이 그려질 때만 들어간다(지휘 띠와 같은 덩어리).
+SPACING_CSS = ("<style>"
+               "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> div:last-child),"
+               "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> details:last-child)"
+               "{margin-bottom:0 !important;}"
+               "</style>")
+
+
 def bar_items(ctx):
     """지휘 띠 재료 — 값은 **짧게**(정상 · 꺼짐 · 3), 세부는 sub(외부 검토 R456 · 긴 글자를 값으로 넣지 않는다). 판정 낱말 없음."""
     conn = conn_label(ctx['cfg'], ctx['acct'], live_ts=(ctx.get('live') or {}).get('ts'))
@@ -925,7 +936,7 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
     ctx['auto_refresh'] = (_ar458[0] and allow_write, _ar458[1])
     ctx['live_refresh'] = bool(live)                           # 라운드 465 — 본문 전체가 그 간격으로 다시 그려지는 중인가
     # ── 지휘 띠(R456) — 짧은 값 · 긴급정지 토글은 한 곳(sw_kill) · 갈래 고르기
-    st.markdown(_viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
+    st.markdown(SPACING_CSS + _viz.command_bar(bar_items(ctx), theme=theme), unsafe_allow_html=True)
     nc, kc = st.columns([5, 1.2])
     with nc:
         pick = st.radio('갈래', list(NAV), horizontal=True, key=NAV_KEY, label_visibility='collapsed')
@@ -1003,7 +1014,7 @@ def _view_center(st, uk, c, ctx, md):
     if zl:
         st.caption(md(zl))
     elif not ctx['plans_today']:
-        st.caption('오늘 계획이 아직 없습니다 — 워커 · 저녁 작업 · 시스템의 \'계획 갱신\'이 그날 개장 전 리포트에서 만듭니다.')
+        st.caption('오늘 계획이 아직 없습니다 — 워커 · 저녁 작업 · 시스템의 \'계획 갱신\'이 그날 개장 전 리포트(와 관심종목 추천)에서 만듭니다.')
     eh = _dash.execution_health(ctx['intents'])
     rc = _sp.receipts(c, ctx['cost'])
     c1, c2 = st.columns(2)
@@ -1209,7 +1220,7 @@ def _view_plans(st, uk, c, ctx, md):
                           held=set(ctx['managed']), approval_on=ctx['approval_on'], approved=ctx['approved'], picks=ctx.get('picks'),
                           report=ctx.get('report'))
     if not rows:
-        st.caption('아직 계획이 없습니다 — 워커가 돌거나(저녁 작업 포함) 시스템의 \'계획 갱신\'을 누르면 그날 개장 전 리포트에서 만들어집니다. '
+        st.caption('아직 계획이 없습니다 — 워커가 돌거나(저녁 작업 포함) 시스템의 \'계획 갱신\'을 누르면 그날 개장 전 리포트(와 관심종목 추천)에서 만들어집니다. '
                    '운용 모드와 무관하게 남깁니다.')
         return
     st.caption(f'판정일 {day} 의 개장 전 후보 — 실주문 자격은 중앙 판정이 조건 11개를 전부 통과했을 때만 \'예\'입니다. '

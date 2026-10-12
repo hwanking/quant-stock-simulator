@@ -241,9 +241,65 @@ def funnel_today(plans_today, approved=None, approval_on=False, intents_today=No
         appr_sub += f' · 사람이 고른 {len(hp)} 포함(고르기 = 승인)'
     its = [it for it in (intents_today or []) if it.get('side') == 'buy']
     filled = [it for it in its if it.get('state') in ('FILLED', 'PARTIAL')]
-    return [dict(label='후보', n=len(ps), sub='개장 전 리포트'), dict(label='실주문 자격', n=len(live) + len(hp), sub=elig_sub),
-            dict(label='승인', n=len(appr), sub=appr_sub), dict(label='주문 냄', n=len(its), sub='오늘 매수 의도'),
-            dict(label='체결', n=len(filled), sub='부분 체결 포함')]
+    # 라운드 508 — 사용자: "후보 · 실주문 · 승인 · 주문 냄 클릭하면 뭔 종목인지 나와야 하는 거 아닌가?" 칸마다 그 단계의 종목을 싣는다
+    #   (장부의 계획·주문 그대로 · 새 값 없음). 그리고 라운드 507 뒤로 후보는 개장 전 리포트만이 아니다 — 출처를 세어 적는다.
+    n_watch = sum(1 for p in ps if _se494.verdict_of(p).get('source') == 'watchlist')
+    cand_sub = (f'개장 전 리포트 {len(ps) - n_watch} · 관심종목 추천 {n_watch}' if n_watch else '개장 전 리포트')
+    names = {str(p.get('code')): plan_label(p) for p in ps if p.get('code')}
+    hp_ids = {p.get('plan_id') for p in hp}
+    # 실주문 자격이 있는 후보를 먼저(안정 정렬 · 나머지 차례는 장부 그대로) — 누른 사람이 찾는 줄이 맨 위에 오게
+    return [dict(label='후보', n=len(ps), sub=cand_sub, items=[candidate_item(p) for p in sorted(ps, key=lambda p: not p.get('live_ok'))]),
+            dict(label='실주문 자격', n=len(live) + len(hp), sub=elig_sub,
+                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids) for p in list(live) + hp]),
+            dict(label='승인', n=len(appr), sub=appr_sub,
+                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids) for p in appr]),
+            dict(label='주문 냄', n=len(its), sub='오늘 매수 의도', items=[intent_item(it, names) for it in its]),
+            dict(label='체결', n=len(filled), sub='부분 체결 포함', items=[intent_item(it, names) for it in filled])]
+
+
+FUNNEL_WHY_CUT = 44          # 후보 칸의 막힌 사유를 이 글자에서 줄인다(칸 폭 · 판정 문턱 아님) — 전체는 '오늘 계획' 갈래의 표
+
+
+def plan_label(p):
+    """계획 한 줄의 이름표 — '이름 (코드)' · 이름이 없으면 코드 · 둘 다 없으면 계획 번호 · 그것도 없으면 '—' (라운드 508)."""
+    nm, cd = str((p or {}).get('name') or '').strip(), str((p or {}).get('code') or '').strip()
+    if nm and cd:
+        return f'{nm} ({cd})'
+    return nm or cd or str((p or {}).get('plan_id') or '—')
+
+
+def candidate_item(p):
+    """후보 칸의 한 줄 — 이름표 · 출처(개장 전 리포트 / 관심종목 추천) · 실주문 자격 또는 막힌 사유(길면 '…' · 전체는 '오늘 계획')."""
+    import swing_engine as _se
+    src = '관심종목 추천' if _se.verdict_of(p).get('source') == 'watchlist' else '개장 전 리포트'
+    if p.get('live_ok'):
+        why = '실주문 자격 있음'
+    else:
+        why = str(p.get('block_reason') or '실주문 자격 없음')
+        if len(why) > FUNNEL_WHY_CUT:
+            why = why[:FUNNEL_WHY_CUT] + '…'
+    return f'{plan_label(p)} · {src} · {why}'
+
+
+def plan_price_item(p, picked=False):
+    """자격·승인 칸의 한 줄 — 이름표 · 진입 지정가 · 1차 목표 · 손절(장부의 계획 값 그대로 · 없는 값은 안 적는다)."""
+    parts = []
+    for k, nm in (('entry', '진입 지정가'), ('target', '1차 목표'), ('stop', '손절')):
+        v = _f((p or {}).get(k))
+        if v is not None:
+            parts.append(f'{nm} {v:,.0f}원')
+    return plan_label(p) + (' · 사람이 고름' if picked else '') + (' · ' + ' · '.join(parts) if parts else '')
+
+
+def intent_item(it, names=None):
+    """주문 칸의 한 줄 — 이름표(계획에서) · 수량 · 지정가 · 지금 상태(관제실 사건 낱말과 같은 표)."""
+    code = str((it or {}).get('code') or '')
+    lab = (names or {}).get(code) or code or '—'
+    px = _f((it or {}).get('price'))
+    q = (it or {}).get('qty')
+    st_ = (it or {}).get('state')
+    return (f'{lab}' + (f' · {q}주' if q else '') + (f' · {px:,.0f}원' if px else ' · 시장가')
+            + (f' · {_EV_KO.get(st_, st_)}' if st_ else ''))
 
 
 def planned_loss_sum(managed):
@@ -316,7 +372,10 @@ def system_health(worker, task, nightly, cfg, acct, plans_today, today=None, pro
     elif nn.get('last_end') and nn.get('worst') == 0:
         out.append(dict(label='저녁 작업', state='SCHEDULED', text=f"마지막 {nn['last_end']} 정상"))
     elif nn.get('last_end'):
-        out.append(dict(label='저녁 작업', state='DEGRADED', text=f"마지막 종료 코드 {nn.get('worst')}"))
+        # 라운드 508 — '종료 코드 1' 만으로는 무엇이 실패했는지 모른다. 실패한 단계를 이름으로(`swing_ops.nightly_status` 가 싣는 한 줄 ·
+        #   여기는 읽기만 · 단계 줄을 못 읽었으면 종전 문장)
+        out.append(dict(label='저녁 작업', state='DEGRADED',
+                        text=f"마지막 종료 코드 {nn.get('worst')}" + (f" · {nn['failed']}" if nn.get('failed') else '')))
     else:
         out.append(dict(label='저녁 작업', state='UNKNOWN', text=nn.get('note') or '기록 없음'))
     return out

@@ -177,8 +177,48 @@ def worker_status(lock_path=None, pid_alive=None):
     return dict(running=False, pid=pid, since=since, note=f'지금 안 돎 — 잠금은 남았지만 PID {pid} 가 없다(비정상 종료 · 다음 워커가 치운다)')
 
 
+def step_of(line):
+    """저녁 작업 기록의 단계 줄 하나 → (단계 이름, 결과) · 단계 줄이 아니면 None (라운드 508).
+
+    결과: 종료 코드(int) · 'timeout'(시간 상한) · 'error'(못 돌렸다) · 'skip'(계획만·건너뜀). 줄 모양은 `scripts/nightly_local.py`
+    의 `_log` 네 갈래 그대로 — '[MM-DD HH:MM:SS]   이름 — 종료 N · …' · '… — 시간 상한 …' · '… — 못 돌렸다 …' · '… — 사유 · …'."""
+    s = str(line or '')
+    if not (s.startswith('[') and '] ' in s):
+        return None
+    body = s.split('] ', 1)[1]
+    if not body.startswith('  ') or ' — ' not in body:
+        return None
+    name, rest = body.strip().split(' — ', 1)
+    if rest.startswith('종료 '):
+        try:
+            return name, int(rest[3:].split(' ', 1)[0])
+        except ValueError:
+            return name, 'error'
+    if rest.startswith('시간 상한'):
+        return name, 'timeout'
+    if rest.startswith('못 돌렸다'):
+        return name, 'error'
+    return name, 'skip'
+
+
+def failed_line(n):
+    """단계 결과 → '실패 단계: 이름(종료 1) · 나머지 N단계 정상' · 실패가 없거나 단계 줄을 못 읽으면 None (라운드 508)."""
+    steps = (n or {}).get('steps') or []
+    if not steps:
+        return None
+    bad = [(nm, r) for nm, r in steps if r not in (0, 'skip')]
+    if not bad:
+        return None
+    ko = {'timeout': '시간 상한 넘김', 'error': '못 돌림'}
+    ok_n = sum(1 for _nm, r in steps if r == 0)
+    return ('실패 단계: ' + ' · '.join(f"{nm}({ko.get(r, f'종료 {r}')})" for nm, r in bad)
+            + f' · 나머지 {ok_n}단계 정상')
+
+
 def nightly_status(log_path=None, tail=400):
-    """저녁 작업 기록 → dict(running, last_start, last_end, worst). 시작 줄 뒤에 끝 줄이 없으면 '도는 중'으로 본다."""
+    """저녁 작업 기록 → dict(running, last_start, last_end, worst, steps, failed). 시작 줄 뒤에 끝 줄이 없으면 '도는 중'으로 본다.
+    라운드 508 — '종료 코드 1' 만으로는 무엇이 실패했는지 모른다(2026-10-12 21:00 은 여섯 단계 중 되받기 하나만 실패했다).
+    `steps` 는 그 실행의 단계별 결과 [(이름, 결과)] · `failed` 는 끝난 실행의 실패 단계 한 줄(없으면 None)."""
     path = log_path or NIGHTLY_LOG
     if not os.path.exists(path):
         return dict(running=False, last_start=None, last_end=None, worst=None, note='기록 없음')
@@ -188,10 +228,17 @@ def nightly_status(log_path=None, tail=400):
     except OSError:
         return dict(running=None, last_start=None, last_end=None, worst=None, note='기록을 읽지 못했다')
     start = end = worst = pulled = close_chk = None
+    steps = []
     for ln in lines:
         if '장 마감 뒤 작업 시작' in ln:
             start, end, worst, pulled, close_chk = ln[1:15], None, None, None, None
-        elif '끝 · 가장 나쁜 종료 코드' in ln:
+            steps = []
+            continue
+        _st508 = step_of(ln)
+        if _st508 and start:
+            steps.append(_st508)
+        # 단계 줄이어도 아래 줄들은 따로 본다 — 되받기 단계 줄이 곧 '되받기 끝 · data-…' 를 싣는다(라운드 508 첫 판이 elif 로 이어 그 이름을 놓쳤다)
+        if '끝 · 가장 나쁜 종료 코드' in ln:
             end = ln[1:15]
             try:
                 worst = int(ln.rsplit('코드', 1)[1].strip())
@@ -208,8 +255,10 @@ def nightly_status(log_path=None, tail=400):
                 close_chk = s if len(s) <= 140 else s[:140] + '…(전체는 저녁 작업 기록)'
                 break
     running = bool(start) and end is None
-    return dict(running=running, last_start=start, last_end=end, worst=worst, pulled=pulled, close_chk=close_chk,
-                note=('도는 중' if running else ('마지막 실행 끝' if end else '기록 없음')))
+    out = dict(running=running, last_start=start, last_end=end, worst=worst, pulled=pulled, close_chk=close_chk,
+               steps=steps, note=('도는 중' if running else ('마지막 실행 끝' if end else '기록 없음')))
+    out['failed'] = None if running else failed_line(out)      # 화면 두 자리(상태 띠 · 진행 줄)가 이 칸을 읽기만 한다(§4)
+    return out
 
 
 def progress(now=None, worker=None, tasks=None, nightly=None, auto=None):
@@ -233,6 +282,7 @@ def progress(now=None, worker=None, tasks=None, nightly=None, auto=None):
     out.append(dict(label='저녁 작업(되받기·추적·재측정·성적표)', running=n.get('running'),
                     text=(f"도는 중 · {n['last_start']} 시작" if n.get('running') else
                           (f"마지막 {n['last_end']} 끝 · 종료 코드 {n['worst']}" if n.get('last_end') else n.get('note') or '기록 없음'))
+                    + (f" · {n['failed']}" if n.get('failed') else '')
                     + (f" · 되받은 클라우드 스냅샷 {n['pulled']}" if n.get('pulled') else '')
                     + (f" · {n['close_chk']}" if n.get('close_chk') else '')))
     if auto is not None:

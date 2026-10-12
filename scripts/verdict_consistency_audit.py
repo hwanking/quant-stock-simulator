@@ -8,6 +8,8 @@
 판별은 `verdict_core.consistency_problems` **한 곳**(회귀 §483 과 같은 것)이고, 이 스크립트는 읽고 센다 — 판정을 바꾸지 않는다.
 저녁 작업의 마지막 단계(`scripts/nightly_local.py`)가 매일 부른다: 그날 만든 리포트(최신)가 모순이면 그날 기록에 남는다.
 지난 리포트의 모순은 그 판을 만든 날의 코드가 낸 것이라(예: 라운드 417 전의 '조건이 갖춰지면 후보') 셈만 하고 실패로 치지 않는다.
+라운드 508 — 관심종목 추천 문서(라운드 507 · `swing_watch` · 리포트와 같은 모양 · 실주문 자격 계획이 나온다)의 최신 판도 같은
+함수로 엄격하게 센다. 문서가 없으면 그 줄은 '미측정'이다.
 종목 이름은 찍지 않는다(코드 끝 두 자리만).
 """
 import argparse
@@ -33,6 +35,12 @@ def report_files(pm_dir=None):
     import premarket
     return sorted(glob.glob(os.path.join(pm_dir or premarket.PM_DIR, 'premarket_*.json')),
                   key=lambda p: os.path.getmtime(p))
+
+
+def watch_files(watch_dir=None):
+    """관심종목 추천 문서(라운드 507) — 이름이 판정일(YYYYMMDD)이라 이름 순 = 판정일 순."""
+    import swing_watch
+    return sorted(glob.glob(os.path.join(watch_dir or swing_watch.DIR, swing_watch.PREFIX + '*.json')))
 
 
 def audit_report(path):
@@ -61,9 +69,10 @@ def main(argv=None):
     ap.add_argument('--all', action='store_true', help='지난 리포트까지 모순을 실패로 친다')
     a = ap.parse_args(argv)
     files = report_files()
+    bad_w = _audit_watch()
     if not files:
         print('개장 전 리포트가 없다 — 감사할 것 없음(미측정)')
-        return 0
+        return 1 if bad_w else 0
     tot_n, tot_p, kinds = 0, 0, Counter()
     for p in files[:-1]:
         n, probs = audit_report(p)
@@ -76,8 +85,21 @@ def main(argv=None):
     print(f'최신 리포트 {os.path.basename(files[-1])} · 후보 {n_last} · 모순 {len(probs_last)}')
     for c, pr in probs_last[:10]:
         print(f'  {c} · {pr}')
-    bad = bool(probs_last) or (a.all and tot_p > 0)
+    bad = bool(probs_last) or (a.all and tot_p > 0) or bad_w
     return 1 if bad else 0
+
+
+def _audit_watch():
+    """관심종목 추천 문서의 최신 판 → 모순이 있으면 True(엄격 · 실주문 자격 계획이 여기서 나온다). 없으면 '미측정'을 찍고 False."""
+    wf = watch_files()
+    if not wf:
+        print('관심종목 추천 문서가 없다 — 감사할 것 없음(미측정)')
+        return False
+    n, probs = audit_report(wf[-1])
+    print(f'관심종목 추천 문서 {os.path.basename(wf[-1])} · 후보 {n} · 모순 {len(probs)}')
+    for c, pr in probs[:10]:
+        print(f'  {c} · {pr}')
+    return bool(probs)
 
 
 if __name__ == '__main__':

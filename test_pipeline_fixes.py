@@ -41810,6 +41810,198 @@ check("⑧ 화면 '오늘 계획' 표가 관심종목에서 온 계획을 '관�
       and not any(r['오늘 상태'].startswith('관심종목 추천') for r in _rows487 if r['종목'].endswith('(000001)')),
       str([r['오늘 상태'] for r in _rows487]))
 # ─── §487 끝 ───
+# ══════════════════════════════════════════════════════════════════════
+# §488 — 저녁 작업이 '종료 코드 1' 만 적었다 · 어느 단계가 실패했는지 한 줄로 (라운드 508 · 2026-10-13)
+#   2026-10-12 21:00 실행은 여섯 단계 중 클라우드 되받기 하나만 실패했는데(gh 미로그인 + GitHub 504) 상태 띠·진행 줄은
+#   '마지막 종료 코드 1' 만 적었다 — 리포트·추적·재측정·성적표·자동매매 계획이 다 돌았는지 화면에서 알 수 없었다.
+#   단계 줄을 읽는 규칙은 `swing_ops.step_of` 한 곳 · 실패 한 줄은 `swing_ops.nightly_status` 가 싣고 화면 두 자리는 읽기만(§4).
+# ══════════════════════════════════════════════════════════════════════
+print("§488 저녁 작업 실패 단계를 이름으로 — 상태 띠·진행 줄이 '종료 코드 1' 대신 어느 단계인지 (라운드 508)")
+import importlib as _il488
+import os as _os488
+import tempfile as _tf488
+import swing_ops as _so488
+import swing_dash as _sd488
+_so488 = _il488.reload(_so488)
+_sd488 = _il488.reload(_sd488)
+_L488 = [
+    '[10-12 21:00:00] 이 PC 장 마감 뒤 작업 시작 · 단계 6',
+    '[10-12 21:00:13]   클라우드 되받기 — 종료 1 · 13초 · 공개 주소로도 못 받았다 — 멈춘다: HTTPError: HTTP Error 504',
+    '[10-12 21:02:07]   개장 전 리포트 — 종료 0 · 115초 · 만듦 — 자료일 2026-10-12 · 후보 5',
+    '[10-12 21:02:10]   추적 동결·채점 — 종료 0 · 3초 · 신규 동결 5건',
+    '[10-12 21:05:13]   관심종목 재측정 — 종료 0 · 182초 · 끝',
+    '[10-12 21:05:42]   PROOF 성적표 — 종료 0 · 30초 · 썼다',
+    '[10-12 21:05:45]   스윙 자동매매 한 바퀴 — 종료 0 · 3초 · 계획 +5',
+    '[10-12 21:05:45] 끝 · 가장 나쁜 종료 코드 1',
+]
+check("① 단계 줄 갈래 넷을 읽는다 — 종료 코드 · 시간 상한 · 못 돌렸다 · 계획만(건너뜀) · 단계 줄이 아니면 None",
+      _so488.step_of(_L488[1]) == ('클라우드 되받기', 1)
+      and _so488.step_of(_L488[2]) == ('개장 전 리포트', 0)
+      and _so488.step_of('[10-12 21:30:00]   관심종목 재측정 — 시간 상한 30분을 넘겨 멈췄다') == ('관심종목 재측정', 'timeout')
+      and _so488.step_of('[10-12 21:30:00]   PROOF 성적표 — 못 돌렸다 OSError: x') == ('PROOF 성적표', 'error')
+      and _so488.step_of('[10-12 21:30:00]   PROOF 성적표 — 계획 · scripts/x.py') == ('PROOF 성적표', 'skip')
+      and _so488.step_of(_L488[0]) is None and _so488.step_of(_L488[-1]) is None and _so488.step_of('') is None,
+      str([_so488.step_of(x) for x in _L488]))
+
+
+_tmp488 = _tf488.mkdtemp(prefix='r508_', dir=_os488.path.join(PROJ, '_probe'))
+
+
+def _ns488(lines):
+    _d = _tf488.mkdtemp(dir=_tmp488)
+    _p = _os488.path.join(_d, 'nightly.txt')
+    with open(_p, 'w', encoding='utf-8') as _f:
+        _f.write('\n'.join(lines) + '\n')
+    return _so488.nightly_status(log_path=_p)
+
+
+_n488 = _ns488(_L488)
+check("② 2026-10-12 모양 — 실패 단계는 되받기 하나 · 나머지 다섯은 정상이라고 적는다",
+      _n488['failed'] == '실패 단계: 클라우드 되받기(종료 1) · 나머지 5단계 정상' and _n488['worst'] == 1
+      and len(_n488['steps']) == 6, str(_n488.get('failed')))
+_ok488 = _ns488([x.replace('종료 1 ·', '종료 0 ·').replace('코드 1', '코드 0') for x in _L488])
+_run488 = _ns488(_L488[:4])
+_two488 = _ns488(_L488 + [_L488[0].replace('21:00:00', '22:00:00'),
+                          '[10-12 22:00:05]   클라우드 되받기 — 종료 0 · 5초 · 끝',
+                          '[10-12 22:30:05]   개장 전 리포트 — 시간 상한 30분을 넘겨 멈췄다',
+                          '[10-12 22:30:06] 끝 · 가장 나쁜 종료 코드 -1'])
+check("③ 실패가 없으면 None · 도는 중이면 None(끝나지 않은 실행을 실패라 안 적는다) · 단계는 마지막 실행 것만 센다",
+      _ok488['failed'] is None and _run488['running'] is True and _run488['failed'] is None
+      and _two488['failed'] == '실패 단계: 개장 전 리포트(시간 상한 넘김) · 나머지 1단계 정상',
+      f"{_ok488.get('failed')} · {_run488.get('failed')} · {_two488.get('failed')}")
+_pr488 = _so488.progress(worker={'running': False, 'note': 'x'}, tasks={_so488.TASK_NAME: {'ok': True, 'installed': False},
+                                                                       _so488.WATCH_TASK: {'ok': True, 'installed': False}},
+                         nightly=_n488)
+_eve488 = [r for r in _pr488 if r['label'].startswith('저녁 작업')]
+check("④ 진행 줄이 실패 단계를 같은 줄에 적는다",
+      len(_eve488) == 1 and '실패 단계: 클라우드 되받기(종료 1)' in _eve488[0]['text'], str(_eve488))
+_sh488 = _sd488.system_health({'running': False}, None, _n488, None, None, [])
+_sh488b = _sd488.system_health({'running': False}, None, {k: v for k, v in _n488.items() if k != 'failed'}, None, None, [])
+_e488 = [r for r in _sh488 if r['label'] == '저녁 작업']
+_e488b = [r for r in _sh488b if r['label'] == '저녁 작업']
+check("⑤ 상태 띠 '저녁 작업'이 실패 단계를 이름으로(DEGRADED 그대로) · 그 칸이 없는 옛 dict 면 종전 문장",
+      _e488 and _e488[0]['state'] == 'DEGRADED' and '실패 단계: 클라우드 되받기(종료 1)' in _e488[0]['text']
+      and _e488b and _e488b[0]['text'] == '마지막 종료 코드 1', f"{_e488} · {_e488b}")
+import ast as _ast488
+_dsrc488 = open(_os488.path.join(PROJ, 'swing_dash.py'), encoding='utf-8').read()
+_imp488 = {(n.module if isinstance(n, _ast488.ImportFrom) else a.name)
+           for n in _ast488.walk(_ast488.parse(_dsrc488)) if isinstance(n, (_ast488.Import, _ast488.ImportFrom))
+           for a in n.names}
+check("⑥ 상태 띠는 읽기만 한다 — swing_dash 가 swing_ops(셸·프로세스 조회)를 가져오지 않는다",
+      'swing_ops' not in _imp488 and 'subprocess' not in _imp488, str(sorted(x for x in _imp488 if x)))
+_nsrc488 = open(_os488.path.join(PROJ, 'scripts', 'nightly_local.py'), encoding='utf-8').read()
+check("⑦ 읽는 규칙과 쓰는 줄이 같은 모양 — 저녁 작업이 단계 줄을 '이름 — 종료 N' · '시간 상한' · '못 돌렸다' 로 쓴다",
+      "{name} — 종료 {r.returncode}" in _nsrc488 and "{name} — 시간 상한" in _nsrc488 and "{name} — 못 돌렸다" in _nsrc488,
+      'nightly_local._log 의 단계 줄 모양이 바뀌었다 — swing_ops.step_of 를 같이 고친다')
+import json as _js488
+import sys as _sys488
+_sys488.path.insert(0, _os488.path.join(PROJ, 'scripts'))
+import verdict_consistency_audit as _vca488
+_vca488 = _il488.reload(_vca488)
+_wd488 = _tf488.mkdtemp(dir=_tmp488)
+for _nm488, _pk488 in (('swing_watch_picks_20261009.json', [{'code': '000001', 'core': {'recommended': True, 'bucket': '오늘 매수 가능',
+                                                                                      'checks': [{'ok': True}]}}]),
+                       ('swing_watch_picks_20261012.json', [{'code': '000002', 'core': {'recommended': True, 'bucket': '오늘 매수 가능',
+                                                                                      'checks': [{'ok': False}]}},
+                                                            {'code': '000003', 'core': {'recommended': True, 'bucket': '오늘 매수 가능',
+                                                                                      'checks': [{'ok': True}]}}])):
+    with open(_os488.path.join(_wd488, _nm488), 'w', encoding='utf-8') as _f488:
+        _js488.dump({'source': 'watchlist', 'picks': _pk488}, _f488, ensure_ascii=False)
+_wf488 = _vca488.watch_files(_wd488)
+_aw488 = _vca488.audit_report(_wf488[-1]) if _wf488 else (0, [])
+_vsrc488 = open(_os488.path.join(PROJ, 'scripts', 'verdict_consistency_audit.py'), encoding='utf-8').read()
+check("⑧ 저녁 작업의 일관성 감사가 관심종목 추천 문서의 최신 판(판정일 순 마지막)도 같은 함수로 센다 — 심은 모순 1 · 맞는 것 0",
+      [_os488.path.basename(x) for x in _wf488] == ['swing_watch_picks_20261009.json', 'swing_watch_picks_20261012.json']
+      and _aw488[0] == 2 and len(_aw488[1]) == 1 and _aw488[1][0][0] == '…02'
+      and 'bad_w = _audit_watch()' in _vsrc488 and 'or bad_w' in _vsrc488,
+      str(_aw488))
+import shutil as _shu488
+_shu488.rmtree(_tmp488, ignore_errors=True)
+# 관제실 깔때기 — 칸을 누르면 그 단계의 종목(사용자: "클릭하면 뭔 종목인지 나와야 하는 거 아닌가?")
+import swing_viz as _vz488
+_vz488 = _il488.reload(_vz488)
+_ps488 = [dict(plan_id='a', code='000001', name='가', live_ok=1, entry=10000.0, target=11000.0, stop=9000.0,
+               verdict={'source': 'watchlist'}),
+          dict(plan_id='b', code='000002', name='나', live_ok=0, entry=5000.0, target=5500.0, stop=4500.0,
+               block_reason='추천 아님 — ' + '가' * 80, verdict='{}')]
+_fn488 = _sd488.funnel_today(_ps488, approval_on=False, approval_mode='auto',
+                             intents_today=[dict(side='buy', code='000001', qty=3, price=10000.0, state='BROKER_ACK'),
+                                            dict(side='sell', code='000009', qty=1, price=1.0, state='FILLED')])
+check("⑨ 깔때기 칸마다 그 단계의 종목 — 후보(출처·자격/막힌 사유 '…') · 자격·승인(계획 가격) · 주문(수량·지정가·상태) · 체결 없음은 빈 목록 · "
+      "후보 칸 이름이 출처를 센다(라운드 507 뒤 관심종목 추천도 후보다)",
+      _fn488[0]['sub'] == '개장 전 리포트 1 · 관심종목 추천 1'
+      and _fn488[0]['items'][0] == '가 (000001) · 관심종목 추천 · 실주문 자격 있음'
+      and _fn488[0]['items'][1].startswith('나 (000002) · 개장 전 리포트 · 추천 아님 — ') and _fn488[0]['items'][1].endswith('…')
+      and _fn488[1]['items'] == ['가 (000001) · 진입 지정가 10,000원 · 1차 목표 11,000원 · 손절 9,000원']
+      and _fn488[2]['items'] == _fn488[1]['items']
+      and _fn488[3]['items'] == ['가 (000001) · 3주 · 10,000원 · 증권사 접수'] and _fn488[4]['items'] == []
+      and [s['n'] for s in _fn488] == [2, 1, 1, 1, 0], str(_fn488))
+_h488 = _vz488.funnel(_fn488, title='오늘의 엔진')
+_h488b = _vz488.funnel([dict(label='x', n=1, sub='y')], title='t')
+check("⑩ 그림 — 종목이 실린 칸은 누르면 펼쳐지는 <details>(스크립트 없음) · 빈 칸은 '해당 종목 없음' · 제목 옆에 누르라는 한 줄 · "
+      "종목이 안 실린 옛 호출은 종전 그대로(펼침 없음 · 안내 없음) · 화살표 넷 그대로",
+      _h488.count('<details') == 5 and '해당 종목 없음' in _h488 and '가 (000001)' in _h488 and '칸을 누르면' in _h488
+      and '<script' not in _h488 and _vz488.funnel(_fn488).count('→') == 4
+      and '<details' not in _h488b and '칸을 누르면' not in _h488b, _h488[:300])
+_h488c = _vz488.funnel([dict(label='x', n=1, items=['<b>위험</b>'])])
+check("⑪ 종목 줄은 이스케이프를 지난다 — 이름에 든 태그가 화면 태그가 되지 않는다",
+      '&lt;b&gt;' in _h488c and '<b>위험' not in _h488c, _h488c)
+# 상자끼리 맞붙던 것(사용자: "각 박스 부분마다 겹치는 부분") — Streamlit 의 마크다운 칸 −1rem 을 마지막 자식이 div·details 인 칸에서만
+# 0 으로 · 본문만 · 지휘 띠와 같은 덩어리로 그려진다(이 칸이 그려질 때만) · 그 덩어리를 그리는 줄이 하나
+import swing_view as _sv488
+_sv488 = _il488.reload(_sv488)
+_svsrc488 = open(_os488.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read()
+check("⑫ 상자 간격 — 마지막 자식이 div·details 인 본문 마크다운 칸만 바닥 여백 0(글 문단은 그대로) · 지휘 띠 덩어리에 붙어 그려진다",
+      "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> div:last-child)" in _sv488.SPACING_CSS
+      and ':has(> details:last-child)' in _sv488.SPACING_CSS and 'margin-bottom:0' in _sv488.SPACING_CSS
+      and ':has(> p' not in _sv488.SPACING_CSS and _sv488.SPACING_CSS.startswith('<style>')
+      and _svsrc488.count('st.markdown(SPACING_CSS + _viz.command_bar(') == 1, _sv488.SPACING_CSS)
+_fn488o = _sd488.funnel_today(list(reversed(_ps488)), approval_on=False, approval_mode='auto')
+check("⑬ 후보 칸은 실주문 자격이 있는 계획을 먼저 적는다(안정 정렬 · 장부 차례가 뒤집혀 들어와도)",
+      _fn488o[0]['items'][0].startswith('가 (000001)') and _fn488o[0]['items'][1].startswith('나 (000002)'), str(_fn488o[0]['items']))
+# ⑭ 첫 판은 단계 줄을 elif 로 이어 '되받기 끝 · data-…' 를 실은 단계 줄에서 스냅샷 이름을 놓쳤다(§440 ⑧ 이 잡았다)
+_d14 = _tf488.mkdtemp(prefix='r508n_', dir=_os488.path.join(PROJ, '_probe'))
+_p14 = _os488.path.join(_d14, 'nightly.txt')
+open(_p14, 'w', encoding='utf-8').write('[10-12 21:00:01] 이 PC 장 마감 뒤 작업 시작 · 단계 2\n'
+                                        '[10-12 21:00:30]   클라우드 되받기 — 종료 0 · 29초 · 되받기 끝 · data-20261012 · 원장 1 → 2\n'
+                                        '[10-12 21:02:10]   개장 전 리포트 — 종료 1 · 100초 · x\n'
+                                        '[10-12 21:05:00] 끝 · 가장 나쁜 종료 코드 1\n')
+_n14 = _so488.nightly_status(log_path=_p14)
+check("⑭ 되받기 단계 줄이 곧 스냅샷 이름을 싣는다 — 단계로도 세고 이름도 읽는다 · 실패 단계는 다른 단계 이름으로",
+      _n14['pulled'] == 'data-20261012' and _n14['steps'] == [('클라우드 되받기', 0), ('개장 전 리포트', 1)]
+      and _n14['failed'] == '실패 단계: 개장 전 리포트(종료 1) · 나머지 1단계 정상' and _n14['worst'] == 1, str(_n14))
+# ⑮ 알림 상태 바꿔 끼우기가 Windows 에서 잠깐 막혀도(PermissionError) 상태를 남긴다 — 다시 해 보고, 끝내 막히면 바로 쓴다
+import swing_notify as _nt488
+_nt488 = _il488.reload(_nt488)
+_sp15 = _os488.path.join(_d14, 'state.json')
+_orig15 = _nt488._replace
+_cnt15 = {'n': 0}
+
+
+def _flaky15(a, b):
+    _cnt15['n'] += 1
+    if _cnt15['n'] <= 2:
+        raise PermissionError(5, '심은 막힘')
+    _orig15(a, b)
+
+
+def _deny15(a, b):
+    raise PermissionError(5, '심은 막힘')
+
+
+try:
+    _nt488._replace = _flaky15
+    _nt488.save_state({'a': 1}, _sp15)
+    _ok15a = _nt488.load_state(_sp15) == {'a': 1} and _cnt15['n'] == 3 and not _os488.path.exists(_sp15 + '.tmp')
+    _nt488._replace = _deny15
+    _nt488.save_state({'b': 2}, _sp15)
+    _ok15b = _nt488.load_state(_sp15) == {'b': 2} and not _os488.path.exists(_sp15 + '.tmp')
+finally:
+    _nt488._replace = _orig15
+check("⑮ 알림 상태 저장 — 바꿔 끼우기가 두 번 막혀도 세 번째에 남고, 끝내 막히면 바로 써서 남긴다(임시 파일 안 남김)",
+      _ok15a and _ok15b, str(_cnt15))
+_shu488.rmtree(_d14, ignore_errors=True)
+# ─── §488 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

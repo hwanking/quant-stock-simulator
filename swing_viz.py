@@ -210,20 +210,35 @@ def risk_bars(items, theme='dark', title=''):
 
 
 def funnel(stages, theme='dark', title=''):
-    """오늘 후보 깔때기 — [{'label','n','sub'(선택)}]. 수는 부르는 쪽이 센 것 그대로(판정 아님). 화살표는 글자(이모지 아님)."""
+    """오늘 후보 깔때기 — [{'label','n','sub'(선택),'items'(선택)}]. 수는 부르는 쪽이 센 것 그대로(판정 아님). 화살표는 글자(이모지 아님).
+
+    라운드 508 — `items`(그 단계의 종목 줄)가 있으면 칸이 `<details>` 가 되어 누르면 그 아래로 펼쳐진다(스크립트 없음 · 정화기가
+    지우지 않는 요소 · 비면 '해당 종목 없음'). 없으면 종전 그대로의 칸."""
     t = _t(theme)
     cells = []
+    any_items = False
     for i, s in enumerate(stages or []):
         n = s.get('n')
-        cells.append((f"<span style='font-size:16px; color:{t['tx3']}; padding:0 4px;'>→</span>" if i else '')
-                     + f"<div style='flex:1 1 0; min-width:96px; background:{t['card']}; border-radius:14px; padding:10px 12px; text-align:center;'>"
-                     f"<p style='margin:0; font-size:12px; color:{t['tx2']};'>{_e(s.get('label'))}</p>"
-                     f"<p style='margin:4px 0 0 0; font-size:20px; font-weight:600; color:{t['tx1']}; font-variant-numeric:tabular-nums;'>"
-                     f"{_e('—' if n is None else f'{int(n):,}')}</p>"
-                     + (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx3']};'>{_e(s.get('sub'))}</p>" if s.get('sub') else '')
-                     + "</div>")
-    head = (f"<p style='margin:0 0 6px 2px; font-size:13px; color:{t['tx2']}; font-weight:500;'>{_e(title)}</p>" if title else '')
-    return head + "<div style='display:flex; align-items:center; gap:4px; flex-wrap:wrap;'>" + ''.join(cells) + "</div>"
+        face = (f"<p style='margin:0; font-size:12px; color:{t['tx2']};'>{_e(s.get('label'))}</p>"
+                f"<p style='margin:4px 0 0 0; font-size:20px; font-weight:600; color:{t['tx1']}; font-variant-numeric:tabular-nums;'>"
+                f"{_e('—' if n is None else f'{int(n):,}')}</p>"
+                + (f"<p style='margin:3px 0 0 0; font-size:12px; color:{t['tx3']};'>{_e(s.get('sub'))}</p>" if s.get('sub') else ''))
+        box = f"flex:1 1 0; min-width:96px; background:{t['card']}; border-radius:14px; padding:10px 12px; text-align:center;"
+        arrow = (f"<span style='font-size:16px; color:{t['tx3']}; padding:22px 4px 0 4px;'>→</span>" if i else '')
+        items = s.get('items')
+        if isinstance(items, list):
+            any_items = True
+            body = (''.join(f"<p style='margin:4px 0 0 0; font-size:12px; color:{t['tx2']}; text-align:left; line-height:1.45;'>{_e(x)}</p>"
+                            for x in items)
+                    or f"<p style='margin:4px 0 0 0; font-size:12px; color:{t['tx3']};'>해당 종목 없음</p>")
+            cells.append(arrow + f"<details style='{box}'><summary style='cursor:pointer; list-style:none;'>{face}</summary>"
+                         f"<div style='margin-top:6px; padding-top:4px; border-top:1px solid {t['line']};'>{body}</div></details>")
+        else:
+            cells.append(arrow + f"<div style='{box}'>{face}</div>")
+    head = (f"<p style='margin:0 0 6px 2px; font-size:13px; color:{t['tx2']}; font-weight:500;'>{_e(title)}"
+            + (f" <span style='font-weight:400; color:{t['tx3']};'>· 칸을 누르면 그 단계의 종목이 펼쳐집니다</span>" if any_items else '')
+            + "</p>" if title else '')
+    return head + "<div style='display:flex; align-items:flex-start; gap:4px; flex-wrap:wrap;'>" + ''.join(cells) + "</div>"
 
 
 def range_bar(stop, entry, current, target, theme='dark', width=560):
