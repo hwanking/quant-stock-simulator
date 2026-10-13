@@ -315,6 +315,39 @@ def px_clause(px, entry=None, stop=None, live=False, to='진입가', buyable=Tru
     return head
 
 
+GAP_REACH_SHOW = 5          # 한 줄에 이름을 적는 계획 수(칸 폭 · 판정 문턱 아님) — 나머지는 '외 N개'
+
+
+def gap_reach_line(plans, prices, reach=''):
+    """실주문 자격 계획 중 지금 가격이 진입가 지정가보다 **위**인 것 — 사실 한 줄(라운드 523 · 판정 낱말 없음 · 새 문턱 없음).
+
+    2026-10-13 첫 실주문이 지정가 13,620원(판정 때 가격보다 10.6% 아래 · 그 종목의 일변동성 1배)이라 장 마감까지 체결 0 이었다.
+    사용자: *"괴리가 큰데 이거 못 사는 거 아냐? 내일도 계속 사는 거야?"* 화면은 거리(라운드 509·514)만 적고 두 물음에는 답하지
+    않았다. ① 지정가라 그 가격까지 내려와야 체결된다 ② 다음 거래일엔 그날 밤 다시 잰 판정을 따른다 — 실행부 `_entries` 그대로:
+    같은 종목의 더 새 판정 계획이 있으면 그것이 대신하고(다시 추천이면 새 진입가) · 더 새 판정이 추천이 아니면 이 계획으로 안 사고 ·
+    다시 안 잰 종목이면 이 계획으로 대기 기간 안에서 거래일마다 다시 주문한다(체결된 수량이 있으면 그 계획은 다시 안 산다)
+    ③ 같은 규칙의 진입가가 얼마나 닿았고 닿은 뒤 어땠는지는 `entry_facts.reach_clause` 한 곳(부르는 쪽이 넘긴다 · 못 읽으면 '').
+    가격을 못 받은 계획은 세지 않는다(위인지 모른다 · §3). 없으면 None."""
+    above = []
+    for p in plans or []:
+        if not (p or {}).get('live_ok'):
+            continue
+        px, e = _f((prices or {}).get(p.get('code'))), _f(p.get('entry'))
+        if px and e and px > e:
+            above.append((p, (e / px - 1) * 100))
+    if not above:
+        return None
+    shown = ' · '.join(f'{plan_label(p)} 진입가까지 {g:+.1f}%' for p, g in above[:GAP_REACH_SHOW])
+    more = f' 외 {len(above) - GAP_REACH_SHOW}개' if len(above) > GAP_REACH_SHOW else ''
+    wbs = sorted({int(p.get('wait_bars')) for p, _ in above if str(p.get('wait_bars') or '').isdigit()})
+    wb = f'{wbs[0]}거래일' if len(wbs) == 1 else '정해진 대기 거래일'
+    s = (f'실주문 자격 계획 {len(above)}개는 지금 가격이 진입가 지정가보다 위입니다({shown}{more}) — 지정가 매수라 그 가격까지 '
+         '내려와야 체결되고, 지정가보다 비싸게 사지는 않습니다. 다음 거래일엔 그날 밤 다시 잰 판정을 따릅니다: 다시 추천이면 그 판정의 '
+         '새 계획(새 진입가)이 대신하고, 추천이 아니면 이 계획으로는 사지 않으며, 다시 재지 않은 종목이면 이 계획으로 판정일 다음 '
+         f'거래일부터 {wb} 안에서 거래일마다 다시 주문합니다.')
+    return s + (f' {reach}.' if reach else '')
+
+
 def candidate_item(p, px=None, live=False):
     """후보 칸의 한 줄 — 이름표 · 출처(개장 전 리포트 / 관심종목 추천) · 실주문 자격 또는 막힌 사유(길면 '…' · 전체는 '오늘 계획').
     라운드 514 — `live` 면 이름표 바로 뒤에 현재가와 진입가까지의 거리(`px_clause`)."""

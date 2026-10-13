@@ -42969,6 +42969,44 @@ check("⑧ 구조 — 읽기 둘(_load_token · _forget_token)이 같은 함수(
       str((sorted(_calls502('_load_token')), 'safe_replace' in _top502)))
 # ─── §502 끝 ───
 
+# ══════════════════════════════════════════════════════════════════════
+# §503 — 깔때기 아래: 지정가가 지금 가격보다 아래인 실주문 자격 계획 → 내려와야 체결 · 다음 거래일 · 도달 실측 (라운드 523 · 2026-10-13)
+#   첫 실주문이 지정가(판정 때 가격의 −10.6%)라 체결 0 이었고 사용자가 "못 사는 거 아냐? 내일도 사는 거야?"를 물었다. 문장은
+#   swing_dash.gap_reach_line 한 곳 · 다음 거래일 설명은 실행부 _entries 를 그대로 옮긴 것이라 ③ 이 그 갈래들이 있는지 같이 본다.
+# ══════════════════════════════════════════════════════════════════════
+print("§503 지정가가 지금 가격보다 아래인 자격 계획 — 내려와야 체결 · 다음 거래일 · 도달 실측 (라운드 523)")
+import ast as _ast503
+import swing_dash as _sd503
+_pl503 = [dict(code='000001', name='가', live_ok=True, entry=13620, wait_bars=20),
+          dict(code='000002', name='나', live_ok=False, entry=9000, wait_bars=20),
+          dict(code='000003', name='다', live_ok=True, entry=5000, wait_bars=20),
+          dict(code='000004', name='라', live_ok=True, entry=7000, wait_bars=20)]
+_l1_503 = _sd503.gap_reach_line(_pl503, {'000001': 14710, '000002': 10000, '000003': 4900}, reach='같은 규칙 실측 문장')
+_l0_503 = _sd503.gap_reach_line(_pl503, {'000003': 4900})
+_many503 = [dict(code=f'00010{i}', name=f'n{i}', live_ok=True, entry=100, wait_bars=20) for i in range(7)]
+_l7_503 = _sd503.gap_reach_line(_many503, {f'00010{i}': 110 for i in range(7)})
+check("① 자격 계획 중 지금 가격이 진입가보다 위인 것만 센다(자격 없는 계획 · 가격을 못 받은 계획 · 진입가 이하는 안 셈) · 거리는 진입가까지 · 대기 거래일 · "
+      "실측 문장은 넘긴 그대로 붙인다 · 없으면 None",
+      _l1_503 is not None and '실주문 자격 계획 1개' in _l1_503 and '가 (000001) 진입가까지 -7.4%' in _l1_503 and '000002' not in _l1_503
+      and '000004' not in _l1_503 and '20거래일 안에서' in _l1_503 and _l1_503.endswith('같은 규칙 실측 문장.') and _l0_503 is None, str(_l1_503))
+check("② 다섯 개를 넘으면 이름은 다섯까지 · 나머지는 '외 N개'(말없이 자르지 않는다) · 실측 문장을 못 받으면 안 붙인다",
+      _l7_503 is not None and '실주문 자격 계획 7개' in _l7_503 and '외 2개' in _l7_503 and _l7_503.count('진입가까지') == 5
+      and _l7_503.endswith('다시 주문합니다.'), str(_l7_503))
+# ③ 다음 거래일 설명은 실행부 갈래를 옮긴 것 — 갈래가 바뀌면 이 문장도 바꿔야 하므로 여기서 먼저 걸린다
+_ex503 = open(_os.path.join(PROJ, 'swing_executor.py'), encoding='utf-8').read()
+_ent503 = [n for n in _ast503.parse(_ex503).body if isinstance(n, _ast503.FunctionDef) and n.name == '_entries']
+_seg503 = _ast503.get_source_segment(_ex503, _ent503[0]) if _ent503 else ''
+check("③ 문장이 옮긴 실행부 갈래가 그대로다 — 더 새 판정 계획이 대신 · 더 새 판정이 추천이 아니면 안 삼 · 대기 기간 안에서만 · 체결된 계획은 다시 안 삼",
+      "str(p['data_day']) < newest.get(p['code'], '')" in _seg503 and '_fv[1] is not True' in _seg503
+      and "waited > int(p.get('wait_bars') or 0)" in _seg503 and "int(it.get('filled_qty') or 0) > 0" in _seg503, scanned=len(_ent503))
+_sv503 = _ast503.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_calls503 = [n for n in _ast503.walk(_sv503) if isinstance(n, _ast503.Call) and _ast503.unparse(n.func) == '_dash.gap_reach_line']
+check("④ 관제실이 그 한 줄을 깔때기와 같은 가격(_px514)으로 부르고 실측 문장은 entry_facts.reach_clause 한 곳에서",
+      len(_calls503) == 1 and '_px514' in _ast503.unparse(_calls503[0])
+      and any(isinstance(n, _ast503.Call) and _ast503.unparse(n.func) == '_ef523.reach_clause' for n in _ast503.walk(_sv503)),
+      str([_ast503.unparse(c) for c in _calls503]))
+# ─── §503 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

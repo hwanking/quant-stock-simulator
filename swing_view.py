@@ -1014,6 +1014,16 @@ def _view_center(st, uk, c, ctx, md):
                                                picks=ctx.get('picks'), report=ctx.get('report'), prices=_px514),
                             theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"
                             + (f" · 현재가는 네이버 {_at514} 기준(장 전엔 직전 거래일 종가)" if _at514 else '')), unsafe_allow_html=True)
+    # 라운드 523 — 지정가가 지금 가격보다 아래인 자격 계획: 내려와야 체결 · 다음 거래일 · 같은 규칙의 도달 실측(사용자: "괴리가 큰데
+    #   못 사는 거 아냐? 내일도 사는 거야?") · 가격은 깔때기와 같은 값(_px514) · 실측 문장은 entry_facts 한 곳
+    try:
+        import entry_facts as _ef523
+        _reach523 = _ef523.reach_clause()
+    except Exception:                                          # noqa: BLE001 — 못 읽으면 그 조각만 빠진다
+        _reach523 = ''
+    _gr523 = _dash.gap_reach_line(ctx['plans_today'], _px514, reach=_reach523)
+    if _gr523:
+        st.caption(md(_gr523))
     zl = zero_day_line(c, str(ctx['today']), brief=True) if ctx['today'] else None
     if zl:
         st.caption(md(zl))
