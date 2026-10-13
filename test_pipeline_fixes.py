@@ -42169,6 +42169,33 @@ check("④ 시작 카드 — 바퀴 사이면 '지금 — 워커가 돌고 있�
 _sh491.rmtree(_d491, ignore_errors=True)
 # ─── §491 끝 ───
 
+# ══════════════════════════════════════════════════════════════════════
+# §492 — 마크다운 칸 16px 넘침을 앱 전체에서 (라운드 512 · 2026-10-13)
+#   라운드 508 이 스윙 탭에서만 고쳤다. 분석 화면을 재니 마크다운 칸 422개 중 254개가 16px 넘쳤고 226개가 다음 칸과 맞붙어 있었다
+#   (247개가 마지막 자식 div). 규칙을 전역 층 한 곳에 두고 스윙 탭은 그것을 읽는다.
+# ══════════════════════════════════════════════════════════════════════
+print("§492 마크다운 칸 16px 넘침 — 전역 층 한 곳 · 스윙 탭은 읽기만 (라운드 512)")
+import ast as _ast492
+import importlib as _il492
+import ui_kit as _uk492
+import swing_view as _sv492
+_uk492 = _il492.reload(_uk492)
+_sv492 = _il492.reload(_sv492)
+_R492 = _uk492.MD_BLOCK_GAP_RULE
+check("① 규칙 — 본문(stMain)의 마크다운 칸 중 마지막 자식이 div·details 인 것만 바닥 여백 0 · 글 문단(p)은 안 건드린다",
+      _R492.count("[data-testid='stMain'] [data-testid='stMarkdownContainer']") == 2 and ':has(> div:last-child)' in _R492
+      and ':has(> details:last-child)' in _R492 and 'margin-bottom:0 !important' in _R492 and '> p' not in _R492, _R492)
+check("② 전역 층(tone_css)이 두 테마 모두 그 규칙을 싣는다 — 분석 화면·스윙 탭이 같이 받는다",
+      _R492 in _uk492.tone_css('dark') and _R492 in _uk492.tone_css('light'))
+_lit492 = 0
+for _f492 in ('ui_kit.py', 'swing_view.py', 'web_app.py'):
+    for _n492 in _ast492.walk(_ast492.parse(open(_os.path.join(PROJ, _f492), encoding='utf-8').read())):
+        if isinstance(_n492, _ast492.Constant) and isinstance(_n492.value, str) and ':has(> div:last-child)' in _n492.value:
+            _lit492 += 1
+check("③ 규칙 글자는 저장소에 한 곳(ui_kit) — 스윙 탭의 SPACING_CSS 는 그것을 읽는다(같은 규칙 두 벌 없음 · §4)",
+      _lit492 == 1 and _R492 in _sv492.SPACING_CSS and _sv492.SPACING_CSS == '<style>' + _R492 + '</style>', f'리터럴 {_lit492}곳')
+# ─── §492 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

@@ -1136,6 +1136,17 @@ def global_css(theme: str = 'dark') -> str:
     """
 
 
+#: 마크다운 칸의 바닥 여백 — Streamlit 은 마크다운 칸 바닥에 −1rem(−16px)을 걸어 마지막 문단(p)의 바닥 여백을 지운다. 마지막 자식이
+#:   div·details 인 HTML 덩어리는 지울 여백이 없어 16px 이 다음 칸으로 넘쳐 상자끼리 맞붙는다. 라운드 508 이 스윙 탭에서 고쳤고(12/12),
+#:   라운드 512 가 분석 화면을 재니(2026-10-13 · 쓰기 막은 앱 · 다 그린 뒤) 마크다운 칸 422개 중 **254개가 16px 넘쳤고 226개가 다음 칸과
+#:   4px 안으로 맞붙어** 있었다(그중 247개가 마지막 자식 div · 나머지 7개는 margin:0 을 직접 준 문단이라 이 규칙 밖). 이 규칙을 넣으면
+#:   넘침 254 → 7 · 맞붙음 226 → 5 · 페이지 높이 +0.35%. 맞붙어 있던 222쌍 중 일부러 이어 붙인 한 장(같은 바탕 · 맞닿는 모서리가 각진)은
+#:   0쌍이었다. 본문(stMain)만 · 글 문단 간격은 그대로(p 는 안 건드린다). 전역 층 한 곳에 두고 스윙 탭은 이것을 읽는다(§4).
+MD_BLOCK_GAP_RULE = ("[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> div:last-child),"
+                     "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> details:last-child)"
+                     "{margin-bottom:0 !important;}")
+
+
 def tone_css(theme: str = 'dark') -> str:
     """가늠 톤의 층 — web_app 이 **전역 CSS 층들 뒤에 한 번** 주입한다 (라운드 471 · 종전 라운드 399 의 제미나이 층).
 
@@ -1162,6 +1173,8 @@ def tone_css(theme: str = 'dark') -> str:
     .stApp [data-testid="stHeader"] a {{ pointer-events: auto; }}
     /* 한글 줄바꿈 — 낱말 가운데서 끊지 않는다. 너무 긴 한 낱말만 넘칠 때 끊는다 */
     .stApp {{ word-break: keep-all; overflow-wrap: break-word; }}
+    /* 마크다운 HTML 덩어리가 다음 칸으로 16px 넘쳐 맞붙던 것(라운드 508·512 · 규칙과 실측은 MD_BLOCK_GAP_RULE) */
+    {MD_BLOCK_GAP_RULE}
     /* 본문 16px · 줄높이 1.7 (가늠 코인 본문 16px · 1.75 · OrbitMusic 17px) */
     .stApp .stMarkdown p, .stApp .stMarkdown li,
     .stApp [data-testid="stMarkdownContainer"] p, .stApp [data-testid="stMarkdownContainer"] li {{

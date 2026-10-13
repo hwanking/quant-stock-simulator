@@ -835,11 +835,10 @@ def render(st, uk, *, allow_read, allow_write, hold_levels=None, report=None, an
 #   마지막 문단(p)의 바닥 여백을 지운다. 이 칸의 그림은 전부 HTML 덩어리라 마지막 자식이 div 이고 지울 여백이 없어, 덩어리마다 16px 이
 #   다음 칸으로 넘쳐 상자끼리 맞붙었다(실측 2026-10-13 · 관제실 HTML 덩어리 12개 전부 정확히 16px · 다음 칸과의 틈 1px). 마지막 자식이
 #   div·details 인 칸만 0 으로 — 글 문단의 간격은 그대로 · 본문(stMain)만 · 이 칸이 그려질 때만 들어간다(지휘 띠와 같은 덩어리).
-SPACING_CSS = ("<style>"
-               "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> div:last-child),"
-               "[data-testid='stMain'] [data-testid='stMarkdownContainer']:has(> details:last-child)"
-               "{margin-bottom:0 !important;}"
-               "</style>")
+#   라운드 512 — 분석 화면도 같은 모양이라(254/422) 규칙을 전역 층(`ui_kit.tone_css`) 한 곳으로 옮겼다. 이 탭은 그 층 뒤에 그려져
+#   이미 받지만, 탭만 따로 그리는 시험·화면을 위해 같은 규칙을 **읽어** 그대로 둔다(글자를 다시 적지 않는다 · §4).
+from ui_kit import MD_BLOCK_GAP_RULE as _MD_GAP512  # noqa: E402
+SPACING_CSS = "<style>" + _MD_GAP512 + "</style>"
 
 
 def bar_items(ctx):
