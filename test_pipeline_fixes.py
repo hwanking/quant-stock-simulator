@@ -42392,7 +42392,8 @@ try:
     _cm496.day_bars.fetched_set = lambda root=None: set()
     _rc_plan496 = _cm496.main(['--codes', '005930', '--days', '1', '--end', '2026-10-13'])
     _cm496.in_session = lambda now=None: True
-    _rc_sess496 = _cm496.main(['--codes', '005930', '--days', '1', '--end', '2026-10-13', '--apply'])
+    # 라운드 521 — 끝 날짜를 지난 날로: 그날이 오늘이면 20:00 전엔 확정 전이라 받을 것이 0 이 되어 장중 거절까지 가지 않는다(벽시계 의존)
+    _rc_sess496 = _cm496.main(['--codes', '005930', '--days', '1', '--end', '2026-10-12', '--apply'])
 finally:
     _bkm496.KisBroker = _orig_kb496
     _cm496.in_session, _cm496.day_bars.fetched_set = _orig_in496, _orig_fs496
@@ -42676,6 +42677,78 @@ for _m500 in _mods500:
             _copies500.append((_os.path.basename(_m500), _d500.name))
 check("④ 바꿔 끼우기 재시도를 따로 베낀 함수 0 — 대처는 safe_replace 한 곳", not _copies500, str(_copies500), scanned=len(_mods500))
 # ─── §500 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §501 — 분봉: 그날 기준 목록(전방 기록부의 그날 상위 60) · 저녁 작업이 매일 이어 받는다 (라운드 521 · 2026-10-13)
+#   한국투자는 분봉을 약 1년만 둔다(라운드 520 실측) — 그날 안 받은 날은 1년 뒤 영영 못 받는다. 대상은 이미 채택된 규칙(그날 전방
+#   기록기가 본 상위 60 · 그날 기준이라 선택 편향 없음). 저녁 작업은 --nightly 라 장중·연결 정보 없음이면 0 으로 끝난다.
+# ══════════════════════════════════════════════════════════════════════
+print("§501 분봉 그날 기준 목록 · 저녁 작업 단계 · 장중·연결 없음은 실패로 안 센다 (라운드 521)")
+import contextlib as _cl501
+import importlib as _il501
+import io as _io501
+import tempfile as _tf501
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import collect_minute_bars as _cm501
+_cm501 = _il501.reload(_cm501)
+_reg501 = _os.path.join(PROJ, '_probe', 'r521_registry_test.jsonl')
+open(_reg501, 'w', encoding='utf-8').write('\n'.join([
+    '{"as_of": "2026-10-07", "code": "111111.KS"}', '{"as_of": "2026-10-07", "code": "222222.KQ"}',
+    '{"as_of": "2026-10-07", "code": "111111.KS"}', '깨진 줄', '{"as_of": "2026-10-08", "ticker": "333333.KS"}',
+    '{"as_of": "2026-10-12", "code": "111111.KS"}']) + '\n')
+try:
+    _by501 = _cm501.forward_codes_by_day(_reg501)
+    check("① 전방 기록부 → 날마다 그날 종목(차례 그대로 · 중복 없이 · 접미사 떼고 · 깨진 줄은 건너뜀) — 손으로 고르지 않는다",
+          _by501 == {'2026-10-07': ['111111', '222222'], '2026-10-08': ['333333'], '2026-10-12': ['111111']}, str(_by501))
+    _orig_fs501, _orig_in501 = _cm501.day_bars.fetched_set, _cm501.in_session
+    import broker_kis as _bk501
+    _orig_kb501 = _bk501.KisBroker
+
+    class _Boom501:
+        def __init__(self, *a, **k):
+            raise RuntimeError('증권사 차단(§501)')
+
+    _buf501 = _io501.StringIO()
+    _old_nw501 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+    try:
+        _bk501.KisBroker = _Boom501
+        _cm501.day_bars.fetched_set = lambda root=None: {('222222', '2026-10-07')}
+        with _cl501.redirect_stdout(_buf501):
+            _rp501 = _cm501.main(['--universe', 'forward-pit', '--registry', _reg501, '--end', '2026-10-08'])
+        _cm501.in_session = lambda now=None: True
+        _cm501.day_bars.fetched_set = lambda root=None: set()
+        with _cl501.redirect_stdout(_io501.StringIO()):
+            _rn501 = _cm501.main(['--universe', 'forward-pit', '--registry', _reg501, '--end', '2026-10-08', '--apply', '--nightly'])
+            _rh501 = _cm501.main(['--universe', 'forward-pit', '--registry', _reg501, '--end', '2026-10-08', '--apply'])
+            _re501 = _cm501.main(['--universe', 'forward-pit', '--registry', _os.path.join(PROJ, '_probe', '없는_기록부.jsonl'),
+                                   '--nightly'])
+    finally:
+        _bk501.KisBroker = _orig_kb501
+        _cm501.day_bars.fetched_set, _cm501.in_session = _orig_fs501, _orig_in501
+        if _old_nw501 is not None:
+            _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw501
+    _out501 = _buf501.getvalue()
+    check("② 그날 기준 — 끝 날짜까지의 기록일만(10-12 는 빼고) · 날마다 그날 종목만 짝지어 3건 중 이미 받은 1건을 건너뛴다",
+          _rp501 == 0 and '종목 3 · 거래일 2(2026-10-07~2026-10-08)' in _out501 and '받을 (종목, 날짜) 2' in _out501
+          and '이미 받음 1' in _out501, _out501[-300:])
+    check("③ 저녁 작업(--nightly) — 장중이면 받지 않고 0 · 손으로 돌리면 3(거절) · 기록부를 못 읽으면 0(실패로 안 센다) · 증권사는 안 불렀다",
+          _rn501 == 0 and _rh501 == 3 and _re501 == 0, str((_rn501, _rh501, _re501)))
+finally:
+    try:
+        _os.remove(_reg501)
+    except OSError:
+        pass
+_nl501 = __import__('scripts.nightly_local', fromlist=['plan_steps'])
+_nl501 = _il501.reload(_nl501)
+_sw501 = [s[1][0].replace('\\', '/').rsplit('/', 1)[-1] for s in _nl501.plan_steps(False)]
+_mw501 = [s for s in _nl501.plan_steps(False) if s[1][0].replace('\\', '/').endswith('collect_minute_bars.py')]
+_mn501 = [s for s in _nl501.plan_steps(True) if s[1][0].replace('\\', '/').endswith('collect_minute_bars.py')]
+check("④ 저녁 작업 — 분봉 단계가 워커 뒤 · 감사 앞(감사는 여전히 맨 끝) · --universe forward-pit --nightly --apply · 쓰기 금지면 --apply 없음(계획만)",
+      'collect_minute_bars.py' in _sw501 and _sw501.index('run_swing_worker.py') < _sw501.index('collect_minute_bars.py')
+      < _sw501.index('verdict_consistency_audit.py') == len(_sw501) - 1
+      and len(_mw501) == 1 and _mw501[0][1][1:] == ['--universe', 'forward-pit', '--nightly', '--apply'] and _mw501[0][3] is None
+      and len(_mn501) == 1 and '--apply' not in _mn501[0][1], str((_sw501, _mw501 and _mw501[0][1][1:])))
+# ─── §501 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

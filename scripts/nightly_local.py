@@ -7,6 +7,7 @@
   ② 관심종목 재측정 — `scripts/refresh_watchlist.py` (표의 '지금 재기'와 같은 함수 · 라운드 414)
   ③ PROOF 성적표 — `scripts/proof_scorecard.py` (라운드 418)
   ④ 스윙 자동매매 한 바퀴 — `scripts/run_swing_worker.py --once --no-orders` (라운드 446 · 주문 없음 · 계획·모의·내역 맞춤)
+  ⑤ 분봉 이어 받기 — `scripts/collect_minute_bars.py --universe forward-pit --nightly --apply` (라운드 521 · 조회만 · 그날 상위 60)
 
 ■ 왜 ⓪ 이 여기 있나 (라운드 420 · 2026-10-03)
   클라우드가 평일마다 원장·전방 기록부·시점 재무를 쌓는데 이 PC 는 사람이 되받기를 돌린 날에만 따라갔다 —
@@ -72,6 +73,10 @@ STEPS = (
     #   켜질 때' 돌아 장중일 수 있다) — 체결 내역만 맞춘다. 주문은 사용자가 켜 둔 워커 창만 낸다. 모드를 정한 적이 없으면(장부
     #   없음) 파일도 안 만들고 끝난다. 쓰기 금지면 워커가 스스로 멈춘다.
     ('스윙 자동매매 한 바퀴', 'scripts/run_swing_worker.py', 30 * 60),
+    # 라운드 521 — GANEUM DAY 연구용 분봉. 한국투자는 약 1년만 둬서 그날 안 받은 날은 1년 뒤 영영 못 받는다. 대상은 그날 전방 기록기가
+    #   본 상위 60(이미 채택된 규칙 · 그날 기준) · 조회만 · 이어 받기. 실측 건당 0.77초(2026-10-13 시험 300건) → 하루 60건 약 46초 · 상한은 밀린 날을 몰아 받을 때의
+    #   매달림 방지(받은 만큼은 남고 다음 밤이 이어 받는다). 워커 뒤(같은 앱 키) · 감사 앞.
+    ('분봉 이어 받기', 'scripts/collect_minute_bars.py', 30 * 60),
     # 라운드 503 — 그날 리포트의 중앙 판정이 스스로 모순되는가(추천인데 '사지 마세요' · 칸과 추천 어긋남 · 점수대 띠 오염 …)를 센다.
     #   읽기만 한다. 최신 리포트에 모순이 있으면 종료 1 로 그날 기록에 남는다(지난 리포트는 셈만). 판별은 verdict_core 한 곳.
     ('판정 일관성 감사', 'scripts/verdict_consistency_audit.py', 5 * 60),
@@ -118,6 +123,9 @@ def plan_steps(no_write):
             args.append('--plan')
         if no_write and script.endswith('proof_scorecard.py'):
             args.append('--dry-run')
+        if script.endswith('collect_minute_bars.py'):
+            # 라운드 521 — 쓰기 금지면 계획만(--apply 없이 · 네트워크 0)
+            args += ['--universe', 'forward-pit', '--nightly'] + ([] if no_write else ['--apply'])
         if script.endswith('run_swing_worker.py'):
             # 이 작업은 '놓치면 켜질 때' 돈다(장중일 수 있다) — 여기서는 주문을 내지 않는다(계획·모의·내역 맞춤만)
             args += ['--once', '--no-orders', '--snapshot']   # 라운드 458 — 자산 곡선의 하루 한 점(잔고 읽기만)
