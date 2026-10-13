@@ -18,19 +18,32 @@ import time
 FALLBACK = []
 
 
-def replace_retry(tmp, dst, tries=5, wait=0.05, replace=None):
+class ReplaceRefused(PermissionError):
+    """`fallback=False` 로 불렀는데 바꿔 끼우기가 끝내 막혔다 — 제자리는 옛 파일 그대로(라운드 525). PermissionError 의 하위라
+    종전처럼 PermissionError 로 받는 쪽도 그대로 받는다."""
+
+
+def replace_retry(tmp, dst, tries=5, wait=0.05, replace=None, fallback=True):
     """tmp → dst. 바꿔 끼웠으면 True · 끝내 막혀 복사로 물러섰으면 False. 다른 오류는 그대로 올린다.
 
     `replace` 는 시험이 막힘을 심는 자리다 — 주지 않으면 **부르는 순간의** `os.replace` 를 쓴다(시험이 os.replace 를 바꿔
-    심어도 닿게 · 정의 때 묶지 않는다)."""
+    심어도 닿게 · 정의 때 묶지 않는다).
+
+    라운드 525 — `fallback=False` 면 복사로 물러서지 않고 마지막 PermissionError 를 그대로 올린다(제자리는 옛 파일 그대로).
+    복사는 제자리를 **먼저 비우고** 쓰므로 그 사이에 읽으면 빈 파일이고, 쓰다 끊기면 옛 내용까지 사라진다 — 잃으면 안 되는
+    파일(증권사 연결 정보)은 '저장 실패 · 옛 파일 그대로'가 '반쯤 쓴 파일'보다 낫다."""
     try:
+        last = None
         for i in range(max(1, int(tries))):
             try:
                 (replace or os.replace)(tmp, dst)
                 return True
-            except PermissionError:
+            except PermissionError as e:
+                last = e
                 if i + 1 < tries:
                     time.sleep(wait)
+        if not fallback:
+            raise ReplaceRefused(*(last.args if last is not None else (5, '바꿔 끼우기가 끝내 막혔다'))) from last
         shutil.copyfile(tmp, dst)
         FALLBACK.append(os.path.basename(dst))
         return False

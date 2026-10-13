@@ -42643,6 +42643,7 @@ with _tf500.TemporaryDirectory(dir=_os.path.join(PROJ, '_probe')) as _td500:
 # ③ 일곱 자리 — 함수 본문에 os.replace 도 except PermissionError 도 없고 safe_replace.replace_retry 를 부른다(대처가 한 곳)
 _sites500 = [('portfolio.py', 'save_watchlist'), ('swing_notify.py', 'save_state'), ('scripts/pull_research_data.py', '_replace_retry'),
              ('broker_kis.py', 'KisBroker.token'),   # 라운드 522 — 토큰 파일도 임시 파일 → 바꿔 끼우기(클래스.메서드)
+             ('broker_kis.py', 'save_config'),       # 라운드 525 — 연결 정보 파일 저장도
              ('proof.py', 'save_scorecard'), ('swing_watch.py', 'save'), ('watch_alerts.py', 'save'),
              ('scripts/run_swing_worker.py', 'mark_session_done')]
 _bad500 = []
@@ -43086,6 +43087,168 @@ check("⑦ 주문·체결 갈래 — 생애 머리가 그날 장 끝(session_end
       bool(_vo504) and '_dash.session_ended_for' in _vos504 and 'X.OPEN_STATES' in _vos504 and '장부 상태' in _vos504
       and '다음 거래일 워커의 첫 바퀴' in _vos504, str(len(_vos504)), scanned=len(_vo504))
 # ─── §504 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §505 — 연결 정보 파일(kis.env): 저장은 바꿔 끼우기 한 곳 · 읽기는 '있는데 못 열면' 짧게 다시 · 분봉 조회 경로를 표로 (라운드 525 · 2026-10-13)
+#   라운드 522 검토가 남긴 자리 — 사용자가 연결 정보를 저장하는 그 순간 워커가 읽으면 Windows 에선 바꿔 끼우는 순간 열기가 실패해 그 바퀴가
+#   '연결 정보를 못 읽었다'로 증권사 없이 돌았다. 그리고 라운드 516 이 장중이라 미룬 분봉 조회 경로를 broker_kis 의 표로 옮겼다.
+# ══════════════════════════════════════════════════════════════════════
+print("§505 kis.env 저장·읽기 · 분봉 조회 경로 (라운드 525)")
+import ast as _ast505
+import glob as _gl505
+import io as _io505
+import shutil as _sh505
+import tempfile as _tf505
+import broker_kis as _bk505          # 다시 불러오지 않는다 — 다른 절이 쥔 예외 클래스가 갈린다
+import day_feed as _df505
+
+
+class _Shim505:
+    """broker_kis 가 쓰는 io 대신 — 읽기 열기를 심은 횟수만큼 실패시키고 · 임시 파일 쓰기를 실패시킬 수 있다."""
+
+    def __init__(self, deny_reads=0, fail_tmp=False):
+        self.deny_reads, self.fail_tmp = deny_reads, fail_tmp
+
+    def open(self, path, mode='r', *a, **k):
+        if 'w' in mode and self.fail_tmp and str(path).endswith('.tmp'):
+            f = _io505.open(path, mode, *a, **k)
+            f.write('KIS_ENV=re')                              # 반쪽만 쓰고
+            f.close()
+            raise OSError(28, '심은 디스크 가득(§505)')
+        if 'w' not in mode and self.deny_reads > 0:
+            self.deny_reads -= 1
+            raise PermissionError(13, '심은 열기 실패(바꿔 끼우는 순간 · §505)')
+        return _io505.open(path, mode, *a, **k)
+
+
+# ① 분봉 조회 경로는 broker_kis 의 표에 있다 — day_feed 의 등록은 표를 덮지 않는다
+# 독립 검토(2026-10-14) — 종전 판은 앞 절(§496·§499)의 day_feed.fetch_day 가 같은 모듈 객체에 ensure_path 로 등록해 표에서 지워도 통과했다.
+#   소스의 PATHS 사전 글자를 AST 로 읽는다(실행 중 등록과 무관하게).
+_paths505 = {}
+for _n505 in _ast505.parse(open(_os.path.join(PROJ, 'broker_kis.py'), encoding='utf-8').read()).body:
+    if (isinstance(_n505, _ast505.Assign) and len(_n505.targets) == 1 and isinstance(_n505.targets[0], _ast505.Name)
+            and _n505.targets[0].id == 'PATHS' and isinstance(_n505.value, _ast505.Dict)):
+        _paths505 = {_ast505.literal_eval(k): _ast505.literal_eval(v) for k, v in zip(_n505.value.keys, _n505.value.values)}
+check("① 분봉 조회 경로가 broker_kis.py 소스의 PATHS 표에 있다(공식 샘플 경로 · 실행 중 등록이 아니라 글자로) · day_feed 의 경로가 그것과 같다",
+      _paths505.get('minute_day') == '/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice'
+      and _df505.PATH_KEY == 'minute_day' and _df505.PATH == _paths505['minute_day'], str(_paths505.get('minute_day')), scanned=len(_paths505))
+_d505 = _tf505.mkdtemp(prefix='gaeum_r525_')                  # 저장소 밖(시스템 임시 폴더) — 끝에 지운다
+_orig_io505 = _bk505.io
+_r505 = {}
+try:
+    _p505 = _os.path.join(_d505, 'kis.env')
+    with open(_p505, 'w', encoding='utf-8') as _f:
+        _f.write('KIS_ENV=real\nKIS_APP_KEY=PLANTEDKEY\n')
+    # ② 있는데 두 번 못 열면 짧게 다시 — 값을 읽는다 · 기다림 두 번
+    _sl505 = []
+    _bk505.io = _Shim505(deny_reads=2)
+    _r505['B'] = (_bk505._read_env_file(_p505, sleep=_sl505.append), len(_sl505))
+    # ③ 끝내 못 열면 종전대로 예외(재시도 다섯 · 기다림 넷) · load_config 는 그것을 문제로 적는다 · 없는 파일은 기다림 없이 빈 dict
+    _sl505c = []
+    _bk505.io = _Shim505(deny_reads=99)
+    try:
+        _bk505._read_env_file(_p505, sleep=_sl505c.append)
+        _r505['C'] = ('예외 없음', len(_sl505c))
+    except PermissionError:
+        _r505['C'] = ('PermissionError', len(_sl505c))
+    _bk505.io = _Shim505(deny_reads=99)
+    _r505['C2'] = _bk505.load_config(environ={}, path=_p505).get('problems')
+    _bk505.io = _orig_io505
+    _sl505m = []
+    _r505['M'] = (_bk505._read_env_file(_os.path.join(_d505, 'none.env'), sleep=_sl505m.append), len(_sl505m))
+    # ④ 저장 — 바꿔 끼우기 · 임시 파일 안 남김 · 쓰다 실패하면 옛 파일 그대로 · 임시 파일(키가 든) 안 남김
+    _vals505 = {'KIS_ENV': 'real', 'KIS_APP_KEY': 'PLANTEDKEY2', 'KIS_APP_SECRET': 'PLANTEDSECRET', 'KIS_ACCOUNT_NO': '1234567801'}
+    _cfg505 = _bk505.save_config(_vals505, path=_p505)
+    _r505['D'] = (_cfg505.get('env'), _cfg505.get('app_key') == 'PLANTEDKEY2', _gl505.glob(_os.path.join(_d505, '*.tmp')))
+    _before505 = open(_p505, encoding='utf-8').read()
+    _bk505.io = _Shim505(fail_tmp=True)
+    try:
+        _bk505.save_config(dict(_vals505, KIS_APP_KEY='OTHERKEY'), path=_p505)
+        _r505['E'] = ('예외 없음',)
+    except OSError:
+        _bk505.io = _orig_io505
+        _r505['E'] = ('OSError', open(_p505, encoding='utf-8').read() == _before505, _gl505.glob(_os.path.join(_d505, '*.tmp')))
+finally:
+    _bk505.io = _orig_io505
+    _sh505.rmtree(_d505, ignore_errors=True)
+check("② 연결 정보 파일이 있는데 열기가 두 번 실패하면 짧게 다시 읽어 값을 쓴다 · 기다림 두 번",
+      _r505.get('B') == ({'KIS_ENV': 'real', 'KIS_APP_KEY': 'PLANTEDKEY'}, 2), str(_r505.get('B')))
+check("③ 끝내 못 열면 종전대로 예외(기다림 넷 = 재시도 다섯) · load_config 는 '자격증명 파일을 못 읽었습니다' 로 적는다 · 없는 파일은 한 번 더 보고(기다림 하나) 빈 dict",
+      _r505.get('C') == ('PermissionError', _bk505.ENV_READ_TRIES - 1) and any('자격증명 파일을 못 읽었습니다' in p for p in (_r505.get('C2') or []))
+      and _r505.get('M') == ({}, 1), str((_r505.get('C'), _r505.get('C2'), _r505.get('M'))))
+check("④ 저장은 바꿔 끼우기로 끝나고 임시 파일을 남기지 않는다 · 임시 파일을 쓰다 실패하면 옛 파일 그대로 · 키가 든 임시 파일 0",
+      _r505.get('D') == ('real', True, []) and _r505.get('E') == ('OSError', True, []), str((_r505.get('D'), _r505.get('E'))))
+# ⑤ 저장은 safe_replace 한 곳으로 바꿔 끼운다 — os.replace 를 직접 부르지 않는다 · 임시 이름에 프로세스·스레드(AST)
+_bks505 = open(_os.path.join(PROJ, 'broker_kis.py'), encoding='utf-8').read()
+_sc505 = [n for n in _ast505.parse(_bks505).body if isinstance(n, _ast505.FunctionDef) and n.name == 'save_config']
+_scs505 = _ast505.unparse(_sc505[0]) if _sc505 else ''
+check("⑤ save_config 는 safe_replace.replace_retry 로 바꿔 끼우고 os.replace 를 직접 부르지 않는다 · 임시 이름에 os.getpid · threading.get_ident",
+      bool(_sc505) and 'safe_replace.replace_retry(' in _scs505 and 'os.replace(' not in _scs505
+      and 'os.getpid()' in _scs505 and 'threading.get_ident()' in _scs505, str(len(_scs505)), scanned=len(_sc505))
+# ⑥~⑧ 독립 검토(2026-10-14) — 복사로 물러서지 않는다 · 끊긴 저장의 임시 파일 · 이름이 잠깐 안 보인 순간
+import safe_replace as _sr505
+_d505b = _tf505.mkdtemp(prefix='gaeum_r525b_')
+_orig_rr505 = _sr505.replace_retry
+_r505b = {}
+try:
+    _p505b = _os.path.join(_d505b, 'kis.env')
+    _bk505.save_config(_vals505, path=_p505b)
+    _old505b = open(_p505b, encoding='utf-8').read()
+    _blk505 = []
+
+    def _deny505(src, dst):
+        _blk505.append(1)
+        raise PermissionError(5, '심은 막힘(읽는 쪽이 열고 있다 · §505)')
+
+    _sr505.replace_retry = lambda tmp, dst, **k: _orig_rr505(tmp, dst, **dict(k, replace=_deny505))
+    try:
+        _bk505.save_config(dict(_vals505, KIS_APP_KEY='NEWKEY'), path=_p505b)
+        _r505b['F'] = ('예외 없음',)
+    except _bk505.BrokerError as _e505:
+        _r505b['F'] = ('BrokerError', open(_p505b, encoding='utf-8').read() == _old505b, len(_blk505),
+                       _gl505.glob(_os.path.join(_d505b, '*.tmp')), '그대로' in str(_e505))
+    finally:
+        _sr505.replace_retry = _orig_rr505
+    # safe_replace 자체 — fallback=False 면 올리고 임시 파일 안 남김 · 기본은 종전대로 복사로 물러섬
+    _t505 = _os.path.join(_d505b, 'x.tmp')
+    _dst505 = _os.path.join(_d505b, 'x.dat')
+    open(_dst505, 'w', encoding='utf-8').write('OLD')
+    open(_t505, 'w', encoding='utf-8').write('NEW')
+    try:
+        _sr505.replace_retry(_t505, _dst505, tries=2, wait=0, replace=_deny505, fallback=False)
+        _r505b['G'] = ('예외 없음',)
+    except _sr505.ReplaceRefused as _e505g:
+        _r505b['G'] = ('ReplaceRefused', open(_dst505, encoding='utf-8').read(), _os.path.exists(_t505),
+                       isinstance(_e505g, PermissionError))
+    open(_t505, 'w', encoding='utf-8').write('NEW')
+    _r505b['G2'] = (_sr505.replace_retry(_t505, _dst505, tries=2, wait=0, replace=_deny505), open(_dst505, encoding='utf-8').read())
+    # 끊긴 저장이 남긴 임시 파일 — 저장 시작은 오래된 것만 · 지우기는 전부(옛 이름 포함)
+    _st_old505 = _p505b + '.111.222.tmp'
+    _st_new505 = _p505b + '.333.444.tmp'
+    _st_leg505 = _p505b + '.tmp'
+    for _q505 in (_st_old505, _st_new505, _st_leg505):
+        open(_q505, 'w', encoding='utf-8').write('KIS_APP_KEY=LEFTOVER')
+    _os.utime(_st_old505, (1, 1))
+    _os.utime(_st_leg505, (1, 1))
+    _bk505.save_config(_vals505, path=_p505b)
+    _r505b['H'] = sorted(_os.path.basename(x) for x in _gl505.glob(_os.path.join(_d505b, 'kis.env*.tmp')))
+    _r505b['H2'] = (_bk505.delete_config(_p505b), _gl505.glob(_os.path.join(_d505b, 'kis.env*')))
+    # 이름이 잠깐 안 보였다가 돌아오는 순간 — 한 번 더 보면 값을 읽는다
+    _p505c = _os.path.join(_d505b, 'late.env')
+    _r505b['I'] = _bk505._read_env_file(_p505c, sleep=lambda s: open(_p505c, 'w', encoding='utf-8').write('KIS_ENV=real\n'))
+finally:
+    _sr505.replace_retry = _orig_rr505
+    _sh505.rmtree(_d505b, ignore_errors=True)
+check("⑥ 연결 정보 저장은 복사로 물러서지 않는다 — 바꿔 끼우기가 다섯 번 막히면 BrokerError(화면이 받는 예외) · 옛 파일 그대로 · 키 든 임시 파일 0 · "
+      "문장이 '그대로'를 말한다", _r505b.get('F') == ('BrokerError', True, 5, [], True), str(_r505b.get('F')))
+check("⑦ safe_replace — fallback=False 면 ReplaceRefused(PermissionError 의 하위)를 올리고 제자리는 옛 내용 · 임시 파일 안 남김 · "
+      "기본은 종전대로 복사로 물러선다(False)",
+      _r505b.get('G') == ('ReplaceRefused', 'OLD', False, True) and _r505b.get('G2') == (False, 'NEW'), str((_r505b.get('G'), _r505b.get('G2'))))
+check("⑧ 끊긴 저장이 남긴 키 든 임시 파일 — 저장 시작은 60초 넘은 것만 치우고(지금 쓰는 중일 수 있는 것은 둔다) · 지우기는 전부 · 이름이 잠깐 안 보였다가 "
+      "돌아오면 한 번 더 보고 읽는다",
+      _r505b.get('H') == ['kis.env.333.444.tmp'] and _r505b.get('H2') == (True, []) and _r505b.get('I') == {'KIS_ENV': 'real'},
+      str((_r505b.get('H'), _r505b.get('H2'), _r505b.get('I'))))
+# ─── §505 끝 ───
 
 # ══════════════════════════════════════════════════════════════════════
 # §506 — 학습용 1종목 추첨: 좋고 나쁨과 무관한 해시로 한 계획을 고를 칸에 넣기만 한다 (라운드 526 · 2026-10-13)

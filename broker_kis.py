@@ -55,6 +55,9 @@ PATHS = {
     'order': '/uapi/domestic-stock/v1/trading/order-cash',
     'cancel': '/uapi/domestic-stock/v1/trading/order-rvsecncl',
     'ccld': '/uapi/domestic-stock/v1/trading/inquire-daily-ccld',
+    # 라운드 525 — 일별 분봉 조회(조회만 · `day_feed` 가 쓴다). 라운드 516 은 이 파일을 장중에 안 고치려고 그 모듈이 프로세스 안에서
+    #   등록했다 — 장 마감 뒤 표로 옮겼다(공식 샘플 `inquire_time_dailychartprice` 의 경로 · 주문 경로가 아니다).
+    'minute_day': '/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice',
 }
 ORD_LIMIT = '00'      # 지정가
 ORD_MARKET = '01'     # 시장가
@@ -91,18 +94,43 @@ def _inside_repo(path):
         return False
 
 
-def _read_env_file(path):
-    out = {}
-    if not path or not os.path.exists(path):
-        return out
-    with io.open(path, encoding='utf-8') as f:
-        for ln in f:
-            ln = ln.strip()
-            if not ln or ln.startswith('#') or '=' not in ln:
-                continue
-            k, v = ln.split('=', 1)
-            out[k.strip()] = v.strip().strip('"').strip("'")
-    return out
+#: 라운드 525 — 연결 정보 파일 읽기 재시도(라운드 522 토큰 파일과 같은 모양 · 운영 선택이지 잰 문턱이 아니다). 저장은 바꿔 끼우기라
+#:   반쪽 파일은 없지만 Windows 에선 바꿔 끼우는 그 순간 열기가 실패한다 — 사용자가 연결 정보를 저장하는 순간 워커가 읽으면 그 바퀴가
+#:   '연결 정보를 못 읽었다'로 증권사 없이 돌았다(그 바퀴의 손절 판정). 있는데 못 열면 짧게 다시 · 끝내 못 열면 종전대로 예외(부르는 쪽이 문제로 적는다).
+ENV_READ_TRIES = 5
+ENV_READ_WAIT = 0.02
+#: 끊긴 저장이 남긴 임시 파일(키가 든)을 저장 시작에 치울 때 — 이보다 오래된 것만(지금 다른 저장이 쓰는 중인 것은 안 건드린다 · 운영 값)
+STALE_TMP_SEC = 60
+
+
+def _read_env_file(path, tries=None, wait=None, sleep=time.sleep):
+    tries = ENV_READ_TRIES if tries is None else tries
+    wait = ENV_READ_WAIT if wait is None else wait
+    for k in range(max(1, tries)):
+        out = {}
+        if not path:
+            return out
+        if not os.path.exists(path):
+            # 독립 검토(2026-10-14) — 바꿔 끼우는 순간 이름이 잠깐(약 20ms) 안 보인 관측이 있었다 · 한 번 더 본다(정말 없으면 그만큼만 늦다)
+            if k == 0 and tries > 1:
+                sleep(wait)
+                if os.path.exists(path):
+                    continue
+            return out
+        try:
+            with io.open(path, encoding='utf-8') as f:
+                for ln in f:
+                    ln = ln.strip()
+                    if not ln or ln.startswith('#') or '=' not in ln:
+                        continue
+                    kk, v = ln.split('=', 1)
+                    out[kk.strip()] = v.strip().strip('"').strip("'")
+            return out
+        except OSError:
+            if k >= max(1, tries) - 1:
+                raise
+            sleep(wait)
+    return {}
 
 
 def load_config(environ=None, path=SECRET_FILE):
@@ -572,18 +600,51 @@ def save_config(values, path=SECRET_FILE):
     if not (vals['KIS_APP_KEY'] and vals['KIS_APP_SECRET'] and vals['KIS_ACCOUNT_NO']):
         raise BrokerError('앱 키 · 앱 시크릿 · 계좌번호가 모두 있어야 합니다')
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + '.tmp'
-    with io.open(tmp, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('# 가늠 한국투자 자격증명 — 이 파일은 저장소 밖에 있고 커밋·백업되지 않는다\n')
-        for k in CONFIG_KEYS:
-            if vals[k]:
-                f.write(f'{k}={vals[k]}\n')
-    os.replace(tmp, path)
+    _remove_tmps(path, older_than=STALE_TMP_SEC)               # 끊긴 저장이 남긴 키 든 임시 파일(독립 검토 2026-10-14)
+    # 라운드 525 — 바꿔 끼우기는 한 곳(`safe_replace` · 읽는 쪽이 막 열고 있으면 짧게 다시 · 라운드 519·522) · 임시 이름에 프로세스·스레드 ·
+    #   쓰다 실패하면 임시 파일(키가 든)을 남기지 않는다 · **복사로 물러서지 않는다**(fallback=False — 복사는 제자리를 먼저 비우므로 그 순간
+    #   읽은 워커가 빈 연결 정보를 보고, 쓰다 끊기면 키가 통째로 사라진다 · 독립 검토가 재현했다) — 끝내 막히면 옛 파일 그대로 두고 거절한다
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    try:
+        with io.open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('# 가늠 한국투자 자격증명 — 이 파일은 저장소 밖에 있고 커밋·백업되지 않는다\n')
+            for k in CONFIG_KEYS:
+                if vals[k]:
+                    f.write(f'{k}={vals[k]}\n')
+        try:
+            safe_replace.replace_retry(tmp, path, tries=5, wait=0.05, fallback=False)
+        except safe_replace.ReplaceRefused:
+            raise BrokerError('다른 프로그램이 연결 정보 파일을 잡고 있어 바꿔 끼우지 못했습니다 — 저장된 연결 정보는 그대로입니다 · '
+                              '잠시 뒤 다시 저장하세요') from None
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     return load_config(environ={}, path=path)
 
 
+def _remove_tmps(path, older_than=None, clock=time.time):
+    """그 자격증명 파일의 임시 파일(`<path>.<pid>.<thread>.tmp` · 옛 이름 `<path>.tmp`)을 지운다 → 지운 수. older_than(초)을 주면 그보다
+    오래된 것만. 못 지운 것은 건너뛴다."""
+    import glob
+    n = 0
+    for p in set(glob.glob(glob.escape(path) + '.*.tmp') + glob.glob(glob.escape(path) + '.tmp')):
+        try:
+            if older_than is not None and clock() - os.path.getmtime(p) < older_than:
+                continue
+            os.remove(p)
+            n += 1
+        except OSError:
+            continue
+    return n
+
+
 def delete_config(path=SECRET_FILE):
-    """저장소 밖 자격증명 파일을 지운다 → 지웠으면 True. 환경변수는 못 지운다(사용자가 한다)."""
+    """저장소 밖 자격증명 파일을 지운다 → 지웠으면 True. 환경변수는 못 지운다(사용자가 한다).
+    라운드 525 — 끊긴 저장이 남긴 임시 파일(키가 든)도 같이 지운다(독립 검토 2026-10-14: '지우기' 뒤에도 키 사본이 남았다)."""
+    _remove_tmps(path)
     if os.path.exists(path):
         os.remove(path)
         return True
