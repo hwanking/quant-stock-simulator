@@ -86,6 +86,28 @@ def existing_keys(code, root=None):
     return keys
 
 
+def existing_keys_day(code, day, root=None):
+    """그 하루의 (날짜, 시각) 열쇠만 — 라운드 527. 1년치를 날 먼저 받는 백필은 종목 열쇠를 다 들고 다니면 수천만 개가 메모리에 남는다
+    (599종목 × 약 250일 × 약 381봉). 그 날에 이미 적힌 봉이 있을 수 있을 때(`touched_set`)만 이것으로 읽는다. 줄을 먼저 글자로 걸러
+    JSON 은 그 날 줄만 푼다."""
+    p = path_for(code, root)
+    keys = set()
+    if not os.path.exists(p):
+        return keys
+    tag = f'"day": "{day}"'
+    with io.open(p, encoding='utf-8') as f:
+        for ln in f:
+            if tag not in ln:
+                continue
+            try:
+                d = json.loads(ln)
+                if d.get('day') == day:
+                    keys.add((d['day'], d['t']))
+            except (ValueError, KeyError, TypeError):
+                continue
+    return keys
+
+
 def append_bars(code, bars, root=None, keys=None):
     """분봉을 덧붙인다 — 이미 있는 (날짜, 시각) 은 건너뛴다(멱등). → (더한 수, 건너뛴 수).
 
@@ -131,6 +153,24 @@ def fetched_set(root=None):
                 d = json.loads(ln)
                 if d.get('complete') or d.get('none'):
                     out.add((d['code'], d['day']))
+            except (ValueError, KeyError, TypeError):
+                continue
+    return out
+
+
+def touched_set(root=None):
+    """받아 온 기록에 **한 줄이라도** 있는 (종목, 날짜) — 라운드 527. 완료든 실패든 '덧붙이기 직전' 표시든, 기록이 있으면 그 날 봉이 이미
+    적혀 있을 수 있다(그 날 열쇠를 읽어 중복을 막는다). 기록이 없는 날은 봉도 없다 — 백필은 덧붙이기 **직전**에 표시를 먼저 남기므로
+    덧붙이고 기록 전에 끊겨도 다음 실행이 그 날을 읽는다."""
+    out = set()
+    p = fetched_path(root)
+    if not os.path.exists(p):
+        return out
+    with io.open(p, encoding='utf-8') as f:
+        for ln in f:
+            try:
+                d = json.loads(ln)
+                out.add((d['code'], d['day']))
             except (ValueError, KeyError, TypeError):
                 continue
     return out

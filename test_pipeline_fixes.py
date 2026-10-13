@@ -42522,8 +42522,11 @@ finally:
     if _old_nw499 is not None:
         _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw499
 _cm499 = open(_os.path.join(PROJ, 'scripts', 'collect_minute_bars.py'), encoding='utf-8').read()
+# 라운드 527 — 백필은 그 날 열쇠만 읽는 갈래(existing_keys_day · §507)가 생겨 넘기는 이름이 `keys` 하나로 모였다. 성질은 같다:
+#   종목 열쇠를 읽는 자리는 한 곳이고 그것은 종목마다 한 번(keys_by_code 에 담는다) · append_bars 는 들고 다니는 집합을 받는다.
 check("② 수집 스크립트는 종목마다 파일을 한 번만 읽고(existing_keys 한 자리) 그 집합을 append_bars 에 넘긴다",
-      _cm499.count('day_bars.existing_keys(') == 1 and 'keys=keys_by_code[code]' in _cm499)
+      _cm499.count('day_bars.existing_keys(') == 1 and 'keys_by_code[code] = day_bars.existing_keys(code)' in _cm499
+      and 'keys = keys_by_code[code]' in _cm499 and 'append_bars(code, bars, keys=keys)' in _cm499)
 # ③~⑤ 라운드 520 둘째 — 실측(2026-10-13 · 두 종목 × 9개 날짜): 새해 첫 거래일은 10:00 개장 · 거래 드문 종목은 09:00 정각 봉이 없을 수
 #   있다 · 보관은 약 1년 · 그날 분봉은 마감 직후엔 15:30 봉이 아직 없다. 완료 = 09:00 봉 또는 한 쪽에 120개보다 적게 옴(그 앞에 그날 봉 없음).
 import ast as _ast499
@@ -42578,9 +42581,10 @@ import collect_minute_bars as _cm499
 _cm499 = _il499.reload(_cm499)
 _kp499, _sk499 = _cm499.split_unfinal([('1', '2026-10-12'), ('1', '2026-10-13'), ('2', '2026-10-13')], '2026-10-13')
 _kn499, _sn499 = _cm499.split_unfinal([('1', '2026-10-12')], None)
+# 라운드 527 — 본문이 main(기록 연결) → _main(계획) 으로 갈렸다 · 둘을 함께 본다(검사가 재려던 것은 '수집 경로가 부르나'다)
 _main499 = [n for n in _ast499.walk(_ast499.parse(open(_os.path.join(PROJ, 'scripts', 'collect_minute_bars.py'), encoding='utf-8').read()))
-            if isinstance(n, _ast499.FunctionDef) and n.name == 'main'][0]
-_calls_m499 = {_ast499.unparse(n.func) for n in _ast499.walk(_main499) if isinstance(n, _ast499.Call)}
+            if isinstance(n, _ast499.FunctionDef) and n.name in ('main', '_main')]
+_calls_m499 = {_ast499.unparse(n.func) for _m499 in _main499 for n in _ast499.walk(_m499) if isinstance(n, _ast499.Call)}
 check("⑤ 확정 전인 날(애프터마켓 20:00 전 · 판정은 prediction_log.unfinal_day 한 곳)은 받지 않고 다음 실행에 넘긴다",
       _kp499 == [('1', '2026-10-12')] and len(_sk499) == 2 and _kn499 == [('1', '2026-10-12')] and _sn499 == []
       and 'split_unfinal' in _calls_m499 and 'prediction_log.unfinal_day' in _calls_m499, str((_kp499, _sk499, sorted(_calls_m499)[:8])))
@@ -43006,6 +43010,407 @@ check("④ 관제실이 그 한 줄을 깔때기와 같은 가격(_px514)으로 
       and any(isinstance(n, _ast503.Call) and _ast503.unparse(n.func) == '_ef523.reach_clause' for n in _ast503.walk(_sv503)),
       str([_ast503.unparse(c) for c in _calls503]))
 # ─── §503 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §504 — 관제실 저녁 화면: 깔때기 주문 칸은 판정일 계획의 매수일 · 장이 끝난 주문을 '지금 접수'라 안 적음 · 최근 사건 차례 (라운드 524 · 2026-10-13)
+#   첫 실주문 날 22:34 실제 장부로 그렸더니 ① 깔때기가 '실주문 자격 0 → 주문 냄 1'(계획은 내일 살 판정일 10-13 · 주문은 오늘 낸 10-12 판정의
+#   것) ② 시작 카드가 그날 체결 0 으로 끝난 주문을 '지금 증권사 접수' ③ 최근 사건의 저녁 작업 끝 줄이 '2000-' 연도로 늘 맨 뒤.
+# ══════════════════════════════════════════════════════════════════════
+print("§504 관제실 저녁 화면 — 깔때기 매수일 · 장이 끝난 주문 · 최근 사건 차례 (라운드 524)")
+import ast as _ast504
+import datetime as _dt504
+import importlib as _il504
+import swing_dash as _sd504
+_sd504 = _il504.reload(_sd504)
+_K504 = _dt504.timezone(_dt504.timedelta(hours=9))
+_n504 = (lambda s: _dt504.datetime.fromisoformat(s).replace(tzinfo=_K504))
+# ① 판정일 → 그 계획이 처음 사는 거래일(판정일 다음 거래일 · 휴장일 건너뜀) · next_judgement 도 그것을 부른다
+_sv504d = _ast504.parse(open(_os.path.join(PROJ, 'swing_dash.py'), encoding='utf-8').read())
+_nj504 = [n for n in _sv504d.body if isinstance(n, _ast504.FunctionDef) and n.name == 'next_judgement']
+check("① 판정일 다음 거래일 — 10-13 → 10-14 · 10-08(목) → 10-12(한글날·주말 건너뜀) · 없으면 None · next_judgement 의 매수일도 같은 함수",
+      _sd504.exec_day_of('2026-10-13') == '2026-10-14' and _sd504.exec_day_of('2026-10-08') == '2026-10-12'
+      and _sd504.exec_day_of(None) is None and _sd504.exec_day_of('x') is None
+      and bool(_nj504) and any(isinstance(n, _ast504.Call) and _ast504.unparse(n.func) == 'exec_day_of' for n in _ast504.walk(_nj504[0])),
+      str((_sd504.exec_day_of('2026-10-13'), _sd504.exec_day_of('2026-10-08'))))
+# ② 깔때기 주문 칸 — 저녁(판정일 = 오늘)엔 오늘 낸 주문이 앞 판정의 것이라 안 세고 따로 돌려준다 · 장중(판정일 = 전 거래일)엔 종전과 같은 날
+_it504 = [dict(trade_day='2026-10-13', side='buy', code='000001', state='BROKER_ACK', qty=1, price=13620.0)]
+_ev504 = _sd504.funnel_intents(_it504, '2026-10-13', '2026-10-13')
+_dy504 = _sd504.funnel_intents(_it504, '2026-10-12', '2026-10-13')
+_fn504 = _sd504.funnel_today([dict(live_ok=0, plan_id='p')], intents_today=_ev504[0], approval_mode='auto', exec_day=_ev504[1])
+check("② 저녁: 깔때기 주문 0 · 매수일 2026-10-14 · 오늘 낸 앞 판정 주문 1(지우지 않고 따로) · 장중: 주문 1 · 다른 판정 0 · "
+      "'주문 냄' 칸 부제가 그 매수일",
+      _ev504[0] == [] and _ev504[1] == '2026-10-14' and len(_ev504[2]) == 1 and len(_dy504[0]) == 1 and _dy504[2] == []
+      and _fn504[3]['n'] == 0 and _fn504[3]['sub'] == '매수일 10-14 매수 의도'
+      and _sd504.funnel_today([dict(live_ok=0)], approval_mode='auto')[3]['sub'] == '오늘 매수 의도',
+      str((_ev504, _dy504[1:], _fn504[3]['sub'])))
+# ③ 그날 정규장이 끝났나 — 마감 시각은 엔진의 표 한 곳(평일 15:30)
+check("③ 정규장 끝 — 오늘 15:29 아님 · 15:30 끝 · 지난 날 끝 · 앞날 아님 · 날짜 없으면 None",
+      _sd504.session_ended_for('2026-10-13', _n504('2026-10-13T15:29:00')) is False
+      and _sd504.session_ended_for('2026-10-13', _n504('2026-10-13T15:30:00')) is True
+      and _sd504.session_ended_for('2026-10-12', _n504('2026-10-13T09:00:00')) is True
+      and _sd504.session_ended_for('2026-10-14', _n504('2026-10-13T09:00:00')) is False
+      and _sd504.session_ended_for(None, _n504('2026-10-13T09:00:00')) is None)
+# ④ 시작 카드 — 그날 장이 끝난 열린 주문은 '장부 상태'와 다음 거래일 첫 바퀴가 할 일 · 장중엔 '지금' · 체결된 주문은 '지금 체결'
+_cfg504 = dict(env='real', app_key='K', app_secret='S', cano='1', prdt='01', missing=[], problems=[])
+_lb504 = [dict(_it504[0], mode='LIVE', filled_qty=0, created_ts='2026-10-13T09:00:12+09:00')]
+_sN504 = _sd504.start_status('LIVE', {}, _cfg504, task=dict(ok=True, installed=True), worker=None, now=_n504('2026-10-13T22:40:00'), live_buys=_lb504)
+_sD504 = _sd504.start_status('LIVE', {}, _cfg504, task=dict(ok=True, installed=True), worker=None, now=_n504('2026-10-13T10:00:00'), live_buys=_lb504)
+_sF504 = _sd504.start_status('LIVE', {}, _cfg504, task=dict(ok=True, installed=True), worker=None, now=_n504('2026-10-13T22:40:00'),
+                             live_buys=[dict(_lb504[0], state='FILLED', filled_qty=1)])
+check("④ 시작 카드 — 밤: '장부 상태 증권사 접수' · 다음 거래일로 안 넘어감 · 다음 거래일 첫 바퀴가 맞춤 · 장중: '지금 증권사 접수' · 체결이면 '지금 체결'",
+      '장부 상태 증권사 접수' in _sN504['first_buy'] and '다음 거래일로 넘어가지 않습니다' in _sN504['first_buy']
+      and '다음 거래일 워커의 첫 바퀴' in _sN504['first_buy'] and '지금 증권사 접수' not in _sN504['first_buy']
+      and '지금 증권사 접수' in _sD504['first_buy'] and '체결은 진입가 지정가에 닿을 때입니다' in _sD504['first_buy']
+      and '지금 체결' in _sF504['first_buy'] and '장부 상태' not in _sF504['first_buy'], _sN504['first_buy'][:200])
+# ⑤ 최근 사건 — 저녁 작업 끝 줄(연도 없음)이 제 시각 자리에 · 12월 기록을 1월에 읽으면 한 해 전으로
+_ev504b = _sd504.recent_events([dict(ts='2026-10-13T15:30:00+09:00', status='ok', detail='a')], dict(last_end='10-13 21:05:37', worst=0),
+                               dict(ts='2026-10-13T01:04:00+09:00'), None, now=_n504('2026-10-13T22:40:00'))
+_ev504c = _sd504.recent_events([dict(ts='2027-01-02T09:00:00+09:00', status='ok', detail='a')], dict(last_end='12-30 21:00:00', worst=0),
+                               None, None, now=_n504('2027-01-02T10:00:00'))
+check("⑤ 최근 사건 — 21:05 저녁 작업 끝이 15:30 워커·01:04 계좌보다 위 · 1월에 읽은 12-30 기록은 1월 워커 아래",
+      [t for _ts, t in _ev504b][0].startswith('저녁 작업 끝') and [t for _ts, t in _ev504b][-1].startswith('계좌 동기화')
+      and [t for _ts, t in _ev504c][0].startswith('워커') and [t for _ts, t in _ev504c][-1].startswith('저녁 작업 끝'), str((_ev504b, _ev504c)))
+# ⑥ 관제실 — 깔때기 주문 칸은 funnel_intents 를 거친 목록과 그 매수일로 부른다(AST)
+_sv504 = _ast504.parse(open(_os.path.join(PROJ, 'swing_view.py'), encoding='utf-8').read())
+_fc504 = [n for n in _ast504.walk(_sv504) if isinstance(n, _ast504.Call) and _ast504.unparse(n.func) == '_dash.funnel_today']
+_kw504 = {k.arg: _ast504.unparse(k.value) for k in (_fc504[0].keywords if _fc504 else [])}
+check("⑥ 관제실 깔때기 — intents_today 는 funnel_intents 의 목록 · exec_day 를 넘긴다 · funnel_intents 를 판정일·거래일로 부른다(AST)",
+      len(_fc504) == 1 and _kw504.get('intents_today') == '_its524' and _kw504.get('exec_day') == '_xd524'
+      and any(isinstance(n, _ast504.Call) and _ast504.unparse(n.func) == '_dash.funnel_intents'
+              and "ctx['today']" in _ast504.unparse(n) and "ctx['trade_day']" in _ast504.unparse(n) for n in _ast504.walk(_sv504)),
+      str(_kw504), scanned=len(_fc504))
+# ⑦ 주문·체결 갈래의 생애 머리도 같은 규칙 — 그날 장이 끝난 열린 주문은 '장부 상태'(AST: 그 함수가 session_ended_for 를 부르고 '지금'만 쓰지 않는다)
+_vo504 = [n for n in _sv504.body if isinstance(n, _ast504.FunctionDef) and n.name == '_view_orders']
+_vos504 = _ast504.unparse(_vo504[0]) if _vo504 else ''
+check("⑦ 주문·체결 갈래 — 생애 머리가 그날 장 끝(session_ended_for)을 보고 '장부 상태'와 다음 거래일 첫 바퀴를 적는다",
+      bool(_vo504) and '_dash.session_ended_for' in _vos504 and 'X.OPEN_STATES' in _vos504 and '장부 상태' in _vos504
+      and '다음 거래일 워커의 첫 바퀴' in _vos504, str(len(_vos504)), scanned=len(_vo504))
+# ─── §504 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §506 — 학습용 1종목 추첨: 좋고 나쁨과 무관한 해시로 한 계획을 고를 칸에 넣기만 한다 (라운드 526 · 2026-10-13)
+#   사용자: "후보 1개나 무조건 내줘 … 실제로 매매하면서 얻는 게 있을 거잖아." 엔진 추천 0 · 후보 사이의 좋고 나쁨은 잰 근거가 없다. 추첨은
+#   고를 수 있고 한 주 이상 살 수 있는 계획만 · 판정일과 계획 번호의 sha256 · 같은 판정일엔 늘 같은 계획 · 적는 것은 종전 그대로 사람이 한다.
+# ══════════════════════════════════════════════════════════════════════
+print("§506 학습용 1종목 추첨 — 넣기만 · 적는 것은 사람 (라운드 526)")
+import hashlib as _hl506
+import importlib as _il506
+import json as _js506
+import swing_dash as _sd506
+_sd506 = _il506.reload(_sd506)
+_c506 = [dict(plan_id='P3', code='000003'), dict(plan_id='P1', code='000001'), dict(plan_id='P2', code='000002'), dict(plan_id='P0', code='000004')]
+_q506 = {'P1': 4, 'P2': 1, 'P3': 0, 'P0': None}
+_a506 = _sd506.learning_draw(_c506, '2026-10-13', lambda p: _q506[p['plan_id']])
+_b506 = _sd506.learning_draw(list(reversed(_c506)), '2026-10-13', lambda p: _q506[p['plan_id']])
+_ids506 = sorted(['P1', 'P2'])
+_exp506 = _ids506[int(_hl506.sha256(('2026-10-13|' + ','.join(_ids506)).encode('utf-8')).hexdigest(), 16) % 2]
+_n506 = _sd506.learning_draw(_c506, '2026-10-13', lambda p: 0)
+check("① 추첨 — 한 주 이상 살 수 있는 계획만(0주·못 셈은 빼고) · 판정일과 계획 번호의 sha256 그대로 · 넣는 차례와 무관하게 같은 계획 · "
+      "뽑을 것이 없으면 None 과 사유",
+      _a506[0] is not None and _a506[0]['plan_id'] == _exp506 and _a506[1] == 2 and _b506[0]['plan_id'] == _exp506
+      and _n506[0] is None and _n506[1] == 0 and '한 주 이상' in _n506[2], str((_a506, _exp506, _n506)))
+# ② 화면 — 추첨을 누르면 고를 칸에 그 계획이 들어가고(기본값은 여전히 비어 있다) · 장부의 human_picks 는 비어 있다(적지 않는다) · 규칙 문장
+_vdb506 = _os.path.join(PROJ, '_probe', '_r526_view.db')
+if _os.path.exists(_vdb506):
+    _os.remove(_vdb506)
+_cv506 = _sl473.connect(_vdb506)
+_sl473.set_setting(_cv506, 'mode', 'LIVE', by='test')
+_sl473.set_setting(_cv506, 'live_unlock', _sx473.LIVE_UNLOCK_PHRASE, by='test')
+_sl473.set_setting(_cv506, 'limits', _LIM432, by='test')
+_sl473.account_snapshot(_cv506, 'real', dict(cash=10_000_000, total_eval=20_000_000, net_asset=20_000_000, stock_eval=10_000_000, positions=[]))
+_pv506a = dict(_pl_nr473, plan_id='H1', data_day='2026-10-07')
+_pv506b = dict(_pl_nr473, plan_id='H2', code='000003', data_day='2026-10-07')
+_sl473.add_plan(_cv506, _pv506a)
+_sl473.add_plan(_cv506, _pv506b)
+_cv506.close()
+_src506v = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import broker_kis as _B\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    "class _NoBroker:\n"
+    "    def __init__(self, *a, **k):\n"
+    "        raise RuntimeError('broker called')\n"
+    "_B.KisBroker = _NoBroker\n"
+    "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+    "if _V.broker_kis.KisBroker is not _NoBroker:\n"
+    "    raise SystemExit(99)\n"
+    f"_L.connect.__defaults__ = ({_vdb506!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child506 = _os.path.join(PROJ, '_probe', '_r526_view_child.py')
+open(_child506, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src506v!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "out = dict(default=at.selectbox(key='sw_hp_sel').value)\n"
+    "at.button(key='sw_hp_draw').click()\n"
+    "at.run()\n"
+    "out['exc'] = len(at.exception)\n"
+    "out['first'] = str(at.exception[:1])[:600]\n"
+    "out['drawn'] = at.selectbox(key='sw_hp_sel').value\n"
+    "out['cap'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+try:
+    _env506 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+    _rc506 = __import__('subprocess').run([sys.executable, _child506], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300, env=_env506)
+    _jr506 = (_rc506.stdout or '').rsplit('@@R@@', 1)
+    _o506 = _js506.loads(_jr506[1]) if len(_jr506) == 2 else {}
+    _cv506b = _sl473.connect(_vdb506)
+    _set506 = _sl473.settings(_cv506b)
+    _cv506b.close()
+    _ids506v = sorted(['H1', 'H2'])
+    _exp506v = _ids506v[int(_hl506.sha256(('2026-10-07|' + ','.join(_ids506v)).encode('utf-8')).hexdigest(), 16) % 2]
+    check("② 화면 — 누르기 전 고를 칸은 비어 있다 · 추첨을 누르면 그 판정일 해시의 계획이 고를 칸에 들어간다 · 예외 0 · 장부의 고르기는 "
+          "여전히 비어 있다(추첨은 적지 않는다) · '좋은 종목을 고르는 규칙이 아닙니다' 문장 · 증권사 생성자 막힘 확인(99 아님)",
+          _rc506.returncode == 0 and _o506.get('default') is None and _o506.get('exc') == 0 and _o506.get('drawn') == _exp506v
+          and not (_set506.get('human_picks') or []) and '좋은 종목을 고르는 규칙이 아닙니다' in (_o506.get('cap') or ''),
+          str({k: str(v)[-240:] for k, v in _o506.items() if k != 'cap'}) + f' · 기대 {_exp506v} · picks {_set506.get("human_picks")} · '
+          + (_rc506.stderr or '')[-300:] + f' · rc {_rc506.returncode}')
+finally:
+    for _f506 in (_vdb506, _child506):
+        if _os.path.exists(_f506):
+            _os.remove(_f506)
+# ③ 적는 자리는 그대로 둘 — 추첨은 장부에 쓰지 않는다(§473 ⑦ 이 전체를 본다 · 여기선 learning_draw 가 장부 모듈을 안 부르는지)
+_ld506 = [n for n in _ast504.parse(open(_os.path.join(PROJ, 'swing_dash.py'), encoding='utf-8').read()).body
+          if isinstance(n, _ast504.FunctionDef) and n.name == 'learning_draw']
+check("③ learning_draw 는 장부·설정을 부르지 않는다(넣기만 · 적는 것은 화면의 종전 두 자리)",
+      bool(_ld506) and 'L.' not in _ast504.unparse(_ld506[0]) and 'set_setting' not in _ast504.unparse(_ld506[0]),
+      scanned=len(_ld506))
+# ─── §506 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §507 — 분봉 백필: 고정 목록 · 오래된 날부터 · 멈출 자리 · 잠금 · 그 날 열쇠만 (라운드 527 · 2026-10-13)
+#   사용자 결정: "분봉 받아줘". 연구 원장 랩의 고정 목록(599종목)을 한국투자가 두는 만큼(약 1년) 받는다 — 수십 시간이라
+#   워커가 도는 장 시간 · 저녁 작업 · 디스크 부족에 스스로 멈추고 다음 실행이 이어 받는다. 가짜 증권사 · 임시 폴더 ·
+#   실제 분봉 원장·토큰·연결 정보는 안 건드린다(day_bars.ROOT 를 바꿔 끼운다 · 연결 정보 읽기도 바꿔 끼운다).
+# ══════════════════════════════════════════════════════════════════════
+print("§507 분봉 백필 — 고정 목록 · 오래된 날부터 · 멈출 자리 · 잠금 · 그 날 열쇠만 (라운드 527)")
+import contextlib as _cl507
+import datetime as _dt507
+import importlib as _il507
+import io as _io507
+import json as _js507
+import shutil as _sh507
+import subprocess as _sp507
+import tempfile as _tf507
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import day_bars as _db507
+import collect_minute_bars as _cm507
+_db507 = _il507.reload(_db507)
+_cm507 = _il507.reload(_cm507)
+_td507 = _tf507.mkdtemp(prefix='r527_', dir=_os.path.join(PROJ, '_probe'))
+_orig_root507 = _db507.ROOT
+try:
+    # ① 고정 목록
+    _real507 = _cm507.pool_codes()
+    _lab507 = _os.path.join(_td507, 'lab.py')
+    open(_lab507, 'w', encoding='utf-8').write('TICKERS = ["111111.KS", "222222.KQ"]\nHOLDOUT_TICKERS = ["222222.KS", "333333.KS"]\n'
+                                                'EXPANSION_TICKERS = ["111111.KQ", "444444.KS"]\n')
+    _lab507b = _os.path.join(_td507, 'lab_b.py')
+    open(_lab507b, 'w', encoding='utf-8').write('TICKERS = ["111111.KS"]\nHOLDOUT_TICKERS = []\n')
+    _p507, _pb507 = _cm507.pool_codes(_lab507), _cm507.pool_codes(_lab507b)
+    check("① 고정 목록 — 랩의 세 목록 차례 그대로 · 같은 코드는 앞에 든 것(랩의 dedupe_by_code 규칙) · 셋 중 하나라도 못 읽으면 [] · "
+          "실제 랩 목록은 중복 없이 6자리 · 첫 종목은 랩의 첫 종목",
+          _p507 == ['111111', '222222', '333333', '444444'] and _pb507 == []
+          and len(_real507) > 500 and len(set(_real507)) == len(_real507) and _real507[0] == '005930'
+          and all(len(c) == 6 for c in _real507), str((_p507, _pb507, len(_real507), _real507[:2])))
+
+    # ② 멈출 자리 — 시각·휴장·저녁 작업·디스크를 심는다
+    _K507 = _dt507.timezone(_dt507.timedelta(hours=9))
+
+    def _bb507(d, hh, mm, trading=True, close=_dt507.time(15, 30), nightly=False, free=100.0):
+        y, mo, dd = (int(x) for x in d.split('-'))
+        return _cm507.backfill_block(_dt507.datetime(y, mo, dd, hh, mm, tzinfo=_K507), nightly=nightly, free_gb=free,
+                                     trading=trading, close=close)
+
+    _w507 = '2026-10-14'                                       # 수요일
+    _s507 = '2026-10-17'                                       # 토요일
+    _cases507 = dict(
+        a=_bb507(_w507, 8, 39) is None, b='장 시간' in str(_bb507(_w507, 8, 40)), c='장 시간' in str(_bb507(_w507, 15, 59)),
+        d=_bb507(_w507, 16, 0) is None, e='장 시간' in str(_bb507(_w507, 16, 45, close=_dt507.time(16, 30))),
+        f=_bb507(_w507, 17, 0, close=_dt507.time(16, 30)) is None, g=_bb507(_w507, 10, 0, trading=False) is None,
+        h='저녁 작업 직전' in str(_bb507(_w507, 20, 50)), i=_bb507(_w507, 20, 49) is None, j=_bb507(_w507, 21, 0) is None,
+        k=_bb507(_s507, 20, 55, trading=False) is None, l='저녁 작업이 도는 중' in str(_bb507(_w507, 23, 0, nightly=True)),
+        m='디스크' in str(_bb507(_w507, 23, 0, free=10.0)), n=_bb507(_s507, 12, 0, trading=False) is None,
+        o='장 시간' in str(_cm507.backfill_block(_dt507.datetime(2026, 10, 14, 10, 0, tzinfo=_K507), nightly=False, free_gb=100.0)))
+    check("② 멈출 자리 — 거래일 08:40~마감 뒤 30분(수능일이면 16:30 뒤 30분) · 평일 20:50~21:00 · 저녁 작업이 도는 중 · 디스크 20GB 아래 · "
+          "휴장일 낮·주말 저녁은 돈다 · 장 시각·휴장일을 안 넣으면 엔진·달력 한 곳에서 읽는다",
+          all(_cases507.values()), str({k: v for k, v in _cases507.items() if not v}))
+
+    # ③ 저녁 작업이 도는가 — 끝 줄 없고 3시간 안 · 연도 넘김 · 못 읽으면 None
+    _now507 = _dt507.datetime(2026, 10, 14, 23, 0, tzinfo=_K507)
+    _nr507 = (_cm507.nightly_running(_now507, dict(running=True, last_start='10-14 21:00:01')),
+              _cm507.nightly_running(_now507, dict(running=True, last_start='10-14 19:00:00')),
+              _cm507.nightly_running(_now507, dict(running=False, last_start='10-14 21:00:01')),
+              _cm507.nightly_running(_now507, dict(running=None)),
+              _cm507.nightly_running(_dt507.datetime(2026, 1, 1, 0, 30, tzinfo=_K507), dict(running=True, last_start='12-31 23:50:00')),
+              _cm507.nightly_running(_now507, dict(running=True, last_start='xx')))
+    check("③ 저녁 작업 — 끝 줄이 없고 시작이 3시간(작업 스케줄러가 끊는 시간) 안이면 도는 중 · 그보다 오래면 끊긴 것 · 연도 넘김 · "
+          "기록을 못 읽으면 None · 시작 시각을 못 읽으면 도는 중으로(비켜 가는 쪽)",
+          _nr507 == (True, False, False, None, True, True), str(_nr507))
+
+    # ④ 잠금 — 산 주인이면 못 잡고 · 죽은 주인이면 치우고 잡고 · 남의 잠금은 안 푼다
+    _lr507 = _os.path.join(_td507, 'lock')
+    _me507 = _os.getpid()
+    _a1 = _cm507.lock_acquire(_lr507, pid=_me507)
+    _a2 = _cm507.lock_acquire(_lr507, pid=_me507 + 7)            # 다른 프로세스 행세 — 주인(나)은 살아 있다
+    _cm507.lock_release(_lr507, pid=_me507 + 7)                  # 남의 잠금은 안 푼다
+    _held507 = _os.path.exists(_os.path.join(_lr507, _cm507.LOCK_NAME))
+    _cm507.lock_release(_lr507, pid=_me507)
+    _gone507 = not _os.path.exists(_os.path.join(_lr507, _cm507.LOCK_NAME))
+    _pp507 = _sp507.Popen([sys.executable, '--version'], stdout=_sp507.DEVNULL, stderr=_sp507.DEVNULL)
+    _pp507.wait()
+    open(_os.path.join(_lr507, _cm507.LOCK_NAME), 'w', encoding='utf-8').write(str(_pp507.pid))
+    _a3 = _cm507.lock_acquire(_lr507, pid=_me507)
+    _cm507.lock_release(_lr507, pid=_me507)
+    open(_os.path.join(_lr507, _cm507.LOCK_NAME), 'w', encoding='utf-8').write('')
+    _a4 = _cm507.lock_acquire(_lr507, pid=_me507)                 # 막 생긴 빈 파일 — 남이 pid 를 아직 안 적은 순간일 수 있다
+    _os.remove(_os.path.join(_lr507, _cm507.LOCK_NAME))
+    check("④ 잠금 — 산 주인이면 못 잡고(주인 pid 를 돌려준다) · 남의 잠금은 안 풀고 · 죽은 주인의 잠금은 치우고 잡고 · 막 생긴 빈 잠금은 못 잡은 것으로",
+          _a1 == (True, _me507) and _a2 == (False, _me507) and _held507 and _gone507 and _a3 == (True, _me507)
+          and _a4 == (False, None), str((_a1, _a2, _held507, _gone507, _a3, _a4)))
+
+    # ⑤ 그 날 열쇠만 · 기록이 있는 날
+    _br507 = _os.path.join(_td507, 'bars5')
+    _os.makedirs(_br507)
+    with open(_os.path.join(_br507, '111111.jsonl'), 'w', encoding='utf-8') as _f507:
+        for _d507, _t507 in (('2026-10-08', '09:00'), ('2026-10-08', '09:01'), ('2026-10-12', '09:00')):
+            _f507.write(_js507.dumps(dict(code='111111', day=_d507, t=_t507, o=1, h=1, l=1, c=1, v=1, schema='db-1'),
+                                     ensure_ascii=False) + '\n')
+        _f507.write('깨진 줄\n')
+    with open(_os.path.join(_br507, '_fetched.jsonl'), 'w', encoding='utf-8') as _f507:
+        for _r507 in (dict(code='111111', day='2026-10-08', complete=True), dict(code='222222', day='2026-10-08', complete=False, err='x'),
+                      dict(code='333333', day='2026-10-12', pending=True)):
+            _f507.write(_js507.dumps(_r507, ensure_ascii=False) + '\n')
+        _f507.write('깨진 줄\n')
+    _k507 = _db507.existing_keys_day('111111', '2026-10-08', _br507)
+    _tch507 = _db507.touched_set(_br507)
+    check("⑤ 그 날 열쇠만 읽는다(종목 열쇠를 다 들고 다니지 않는다) · 기록에 한 줄이라도 있는 날(완료·실패·덧붙이기 직전 표시)을 센다",
+          _k507 == {('2026-10-08', '09:00'), ('2026-10-08', '09:01')}
+          and _tch507 == {('111111', '2026-10-08'), ('222222', '2026-10-08'), ('333333', '2026-10-12')}, str((_k507, _tch507)))
+
+    # ⑥ 실제 루프 — 가짜 증권사 · 임시 원장
+    import broker_kis as _bk507
+    _orig507 = (_bk507.KisBroker, _bk507.load_config, _cm507.in_session, _cm507.backfill_block, _cm507.MAX_CONSEC_ERR)
+    _calls507 = []
+    _mode507 = {'raise': False}
+
+    def _row507(d, hms):
+        return dict(stck_bsop_date=d.replace('-', ''), stck_cntg_hour=hms, stck_oprc='100', stck_hgpr='101', stck_lwpr='99',
+                    stck_prpr='100', cntg_vol='10', acml_tr_pbmn='1000')
+
+    class _FakeBr507:
+        def __init__(self, cfg, *a, **k):
+            pass
+
+        def _call(self, method, key, tr, params=None, **k):
+            _calls507.append((params['FID_INPUT_ISCD'], params['FID_INPUT_DATE_1']))
+            if _mode507['raise']:
+                raise RuntimeError('가짜 실패(§507)')
+            if params['FID_INPUT_ISCD'] == '111111' and params['FID_INPUT_DATE_1'] == '20261008':
+                return {'output2': [_row507('2026-10-08', '090200'), _row507('2026-10-08', '090100'), _row507('2026-10-08', '090000')]}, {}
+            return {'output2': []}, {}
+
+    _bars6 = _os.path.join(_td507, 'bars6')
+    _old_nw507 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+    _stdout0 = sys.stdout
+    _bbn507 = {'n': 0, 'stop_at': 10 ** 9}
+
+    def _bb_fake507(now, **k):
+        _bbn507['n'] += 1
+        return '심은 멈춤(§507)' if _bbn507['n'] >= _bbn507['stop_at'] else None
+
+    try:
+        _db507.ROOT = _bars6
+        _bk507.KisBroker, _bk507.load_config = _FakeBr507, (lambda *a, **k: {})
+        _cm507.in_session = lambda now=None: False
+        _cm507.backfill_block = _bb_fake507
+        _argA507 = ['--codes', '111111,222222', '--days', '2', '--end', '2026-10-12', '--backfill', '--apply']
+        _bufA = _io507.StringIO()
+        with _cl507.redirect_stdout(_bufA):
+            _rA = _cm507.main(_argA507)
+        _restored507 = sys.stdout is _stdout0
+        _callsA = list(_calls507)
+        _logA = open(_os.path.join(_bars6, _cm507.BACKFILL_LOG), encoding='utf-8').read()
+        _barsA = open(_os.path.join(_bars6, '111111.jsonl'), encoding='utf-8').read().splitlines()
+        _fetA = [_js507.loads(x) for x in open(_os.path.join(_bars6, '_fetched.jsonl'), encoding='utf-8').read().splitlines()]
+        _lockA = _os.path.exists(_os.path.join(_bars6, _cm507.LOCK_NAME))
+        _calls507.clear()
+        with _cl507.redirect_stdout(_io507.StringIO()):
+            _rB = _cm507.main(_argA507)                            # 다시 — 이어 받기로 받을 것이 없다
+        _callsB = list(_calls507)
+        # 중간 멈춤 — 처음(시작 전)과 첫 바퀴는 통과 · 둘째 바퀴에서 멈춘다
+        _calls507.clear()
+        _bbn507.update(n=0, stop_at=3)
+        _bufC = _io507.StringIO()
+        with _cl507.redirect_stdout(_bufC):
+            _rC = _cm507.main(['--codes', '333333,444444', '--days', '2', '--end', '2026-10-12', '--backfill', '--apply'])
+        _callsC = list(_calls507)
+        _lockC = _os.path.exists(_os.path.join(_bars6, _cm507.LOCK_NAME))
+        # 연속 실패
+        _calls507.clear()
+        _bbn507.update(n=0, stop_at=10 ** 9)
+        _cm507.MAX_CONSEC_ERR = 2
+        _mode507['raise'] = True
+        _bufD = _io507.StringIO()
+        with _cl507.redirect_stdout(_bufD):
+            _rD = _cm507.main(['--codes', '555555,666666', '--days', '2', '--end', '2026-10-12', '--backfill', '--apply'])
+        _callsD = list(_calls507)
+        _mode507['raise'] = False
+        _fsD = _db507.fetched_set()
+        # 산 다른 주인이 잠금을 쥐고 있다 — 백필·저녁 작업은 0 · 손으로 돌리면 4 · 증권사는 안 부른다
+        open(_os.path.join(_bars6, _cm507.LOCK_NAME), 'w', encoding='utf-8').write(str(_os.getppid()))
+        _calls507.clear()
+        with _cl507.redirect_stdout(_io507.StringIO()):
+            _rE1 = _cm507.main(['--codes', '777777', '--days', '1', '--end', '2026-10-12', '--backfill', '--apply'])
+            _rE2 = _cm507.main(['--codes', '777777', '--days', '1', '--end', '2026-10-12', '--nightly', '--apply'])
+            _rE3 = _cm507.main(['--codes', '777777', '--days', '1', '--end', '2026-10-12', '--apply'])
+        _callsE = list(_calls507)
+        _os.remove(_os.path.join(_bars6, _cm507.LOCK_NAME))
+        # 고정 목록의 계획(네트워크 없음)
+        _orig_fs507 = _cm507.day_bars.fetched_set
+        _cm507.day_bars.fetched_set = lambda root=None: set()
+        _bufP = _io507.StringIO()
+        with _cl507.redirect_stdout(_bufP):
+            _rP = _cm507.main(['--universe', 'pool', '--days', '3', '--end', '2026-10-12'])
+        _cm507.day_bars.fetched_set = _orig_fs507
+    finally:
+        _db507.ROOT = _orig_root507
+        _bk507.KisBroker, _bk507.load_config, _cm507.in_session, _cm507.backfill_block, _cm507.MAX_CONSEC_ERR = _orig507
+        sys.stdout = _stdout0
+        if _old_nw507 is not None:
+            _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw507
+    _pend507 = [r for r in _fetA if r.get('pending')]
+    check("⑥ 실제 루프 — 날 먼저 · 오래된 날부터(10-08 두 종목 → 10-12 두 종목) · 받은 봉 3개 · 덧붙이기 직전 표시가 완료 기록보다 앞 · "
+          "기록 파일에 시작 줄 · 잠금은 풀고 · 표준출력은 되돌린다 · 다시 돌리면 받을 것 없음(호출 0)",
+          _rA == 0 and _callsA == [('111111', '20261008'), ('222222', '20261008'), ('111111', '20261012'), ('222222', '20261012')]
+          and len(_barsA) == 3 and len(_pend507) == 1 and _fetA.index(_pend507[0]) < next(
+              k for k, r in enumerate(_fetA) if r.get('code') == '111111' and r.get('complete'))
+          and '백필 시작' in _logA and not _lockA and _restored507 and _rB == 0 and _callsB == [],
+          str((_rA, _callsA, len(_barsA), len(_pend507), _lockA, _restored507, _rB, _callsB, _logA[-200:])))
+    check("⑦ 중간에 멈춘다 — 멈출 자리가 생기면 받은 만큼 남기고 0 · '[멈춤]' 과 남은 수 · 잠금은 푼다",
+          _rC == 0 and _callsC == [('333333', '20261008')] and '[멈춤] 심은 멈춤' in _bufC.getvalue() and not _lockC,
+          str((_rC, _callsC, _bufC.getvalue()[-300:], _lockC)))
+    check("⑧ 연속 실패가 이어지면 멈춘다(남은 쌍을 실패로 훑지 않는다) · 실패한 쌍은 완료로 안 적혀 다음 실행이 다시 받는다",
+          _rD == 1 and len(_callsD) == 2 and '연속 실패 2건' in _bufD.getvalue()
+          and not any(c in ('555555', '666666') for c, _ in _fsD), str((_rD, _callsD, _bufD.getvalue()[-300:])))
+    check("⑨ 산 다른 주인이 잠금을 쥐면 — 백필·저녁 작업은 0(실패로 안 센다) · 손으로 돌리면 4 · 증권사 호출 0(같은 종목 파일에 둘이 덧붙이지 않게)",
+          (_rE1, _rE2, _rE3) == (0, 0, 4) and _callsE == [], str((_rE1, _rE2, _rE3, _callsE)))
+    check("⑩ 고정 목록의 계획 — 종목 수·거래일 3·받을 쌍 = 종목 × 3 (네트워크 없음)",
+          _rP == 0 and f'종목 {len(_real507)} · 거래일 3' in _bufP.getvalue()
+          and f'받을 (종목, 날짜) {len(_real507) * 3}' in _bufP.getvalue(), _bufP.getvalue()[-300:])
+finally:
+    _sh507.rmtree(_td507, ignore_errors=True)
+# ─── §507 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

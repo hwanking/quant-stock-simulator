@@ -6,6 +6,7 @@
 오늘 깔때기는 계획·승인·주문 · 실행 상태는 주문 사건 · 시스템 상태는 워커 잠금·작업 스케줄러·저녁 작업 기록. 못 세는 칸은 None.
 """
 import datetime as _dt
+import hashlib as _hl
 
 import swing_executor as X
 import swing_ledger as L
@@ -39,6 +40,38 @@ def parse_task_time(text):
     return None
 
 
+def exec_day_of(judgment_day, max_days=20):
+    """판정일 → 그 판정의 계획이 처음 사는 거래일(ISO) — 판정일 **다음 거래일**(실행부 `_entries` 의 waited ≥ 1 · 라운드 524).
+    거래일은 장부의 달력 한 곳(`swing_executor.is_trading_day`). 못 구하면 None(지어내지 않는다)."""
+    if not judgment_day:
+        return None
+    try:
+        d = _dt.date.fromisoformat(str(judgment_day)[:10])
+    except ValueError:
+        return None
+    for _i in range(1, max_days):
+        d += _dt.timedelta(days=1)
+        if X.is_trading_day(d.isoformat()):
+            return d.isoformat()
+    return None
+
+
+def session_ended_for(day, now):
+    """그 거래일의 정규장이 끝났나 (라운드 524) — 지난 날이면 참 · 오늘이면 마감 시각(엔진의 장 시각 한 곳 · 수능일 포함)이 지났나 ·
+    앞날이면 거짓. 날짜가 없으면 None(모른다)."""
+    d = str(day or '')[:10]
+    if len(d) != 10:
+        return None
+    n = X.kst(now)
+    today = n.date().isoformat()
+    if d < today:
+        return True
+    if d > today:
+        return False
+    _op, cl = X._session_times(n.date())
+    return n.time() >= cl
+
+
 def next_judgement(nightly_task, anchor_day, report_day_fn=None):
     """다음 판정이 언제 나오고 그 계획의 매수는 언제부터인가 (라운드 492) → dict(run, data_day, new, buy_day) 또는 None.
 
@@ -64,12 +97,8 @@ def next_judgement(nightly_task, anchor_day, report_day_fn=None):
     new = not anchor_day or dd > str(anchor_day)[:10]
     buy = None
     if new:
-        d = _dt.date.fromisoformat(dd)
-        for _i in range(1, 20):
-            d += _dt.timedelta(days=1)
-            if X.is_trading_day(d.isoformat()):
-                buy = d
-                break
+        _xd = exec_day_of(dd)                                  # 라운드 524 — 판정일 다음 거래일은 한 곳에서
+        buy = _dt.date.fromisoformat(_xd) if _xd else None
     return dict(run=run, data_day=dd, new=new, buy_day=buy)
 
 
@@ -147,9 +176,18 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None, live_buys=Non
         f0 = lb[0]
         fq = sum(int(it.get('filled_qty') or 0) for it in lb)
         ts0 = str(f0.get('created_ts') or '')
+        st0 = f0.get('state')
+        w0 = _EV_KO.get(st0, st0 or '—')
+        # 라운드 524 — 2026-10-13 22:34 관제실이 그날 체결 0 으로 끝난 첫 실주문을 '지금 증권사 접수'라 적었다. 실행부는 마감 직후 늦게
+        #   알려지는 체결을 버리지 않으려고 그날 주문을 그날엔 만료로 적지 않는다(`reconcile` · 지난 거래일만 만료) — 장부 상태는 맞고
+        #   '지금'이 틀렸다. 그날 정규장이 끝났으면 장부 상태라고 적고 다음 거래일 첫 바퀴가 무엇을 하는지(실행부 그대로)를 같은 줄에.
+        ended0 = st0 in X.OPEN_STATES and session_ended_for(f0.get('trade_day'), now) is True
         fact = (f"실주문은 이미 나갔습니다 — 실전 매수 주문 {len(lb)}건 · 처음 {ts0[:10]} {ts0[11:19]} "
-                f"({f0.get('code') or '—'} · {_f(f0.get('price')) or 0:,.0f}원 지정가 · 지금 {_EV_KO.get(f0.get('state'), f0.get('state') or '—')}) · "
-                + (f"체결 합계 {fq}주. " if fq else "아직 체결 0주 — 체결은 진입가 지정가에 닿을 때입니다. "))
+                f"({f0.get('code') or '—'} · {_f(f0.get('price')) or 0:,.0f}원 지정가 · {'장부 상태' if ended0 else '지금'} {w0}) · "
+                + (f"체결 합계 {fq}주. " if fq else
+                   ("아직 체결 0주 — 그날 정규장이 끝났고 그날 주문이라 다음 거래일로 넘어가지 않습니다 · 다음 거래일 워커의 첫 바퀴가 그날 "
+                    "내역으로 맞춰 체결이 있었으면 체결로, 없으면 만료로 적습니다. " if ended0 else
+                    "아직 체결 0주 — 체결은 진입가 지정가에 닿을 때입니다. ")))
     else:
         fact = ''
     first = (fact + "실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"
@@ -232,7 +270,7 @@ def risk_usage(summary, limits, managed_n=0, new_orders_today=0, planned_loss_su
 
 
 def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None, approval_mode=None,
-                 picks=None, report=None, prices=None):
+                 picks=None, report=None, prices=None, exec_day=None):
     """오늘 깔때기 — 후보 → 실주문 자격 → 승인 → 주문 냄 → 체결. 전부 장부의 수(지어내지 않는다).
 
     라운드 491 — 실전이 아니면 `approval_on` 이 거짓이라 승인 칸이 '승인 불필요(자격 = 승인)'였는데, 같은 화면의 시작 카드는 주문 방식이
@@ -277,7 +315,7 @@ def funnel_today(plans_today, approved=None, approval_on=False, intents_today=No
                         for p in list(live) + hp]),
             dict(label='승인', n=len(appr), sub=appr_sub,
                  items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids, px=_px514(p.get('code')), live=_lv514) for p in appr]),
-            dict(label='주문 냄', n=len(its), sub='오늘 매수 의도',
+            dict(label='주문 냄', n=len(its), sub=(f'매수일 {str(exec_day)[5:10]} 매수 의도' if exec_day else '오늘 매수 의도'),
                  items=[intent_item(it, names, px=_px514(it.get('code')), live=_lv514) for it in its]),
             dict(label='체결', n=len(filled), sub='부분 체결 포함',
                  items=[intent_item(it, names, px=_px514(it.get('code')), live=_lv514) for it in filled])]
@@ -313,6 +351,37 @@ def px_clause(px, entry=None, stop=None, live=False, to='진입가', buyable=Tru
     if e:
         return f'{head} · {to} 이하' + (' — 지정가 매수가 체결될 수 있음' if buyable else '')
     return head
+
+
+def learning_draw(cands, day, qty_of):
+    """학습용 1종목 추첨 (라운드 526) → (계획 또는 None, 뽑을 수 있던 수, 못 뽑은 사유).
+
+    사용자: *"후보 1개나 무조건 내줘 … 실제로 매매하면서 얻는 게 있을 거잖아."* 엔진 추천은 0 이고, 다섯 후보 중 어느 것이 낫다고 말할
+    근거가 없다 — 같은 날 종목을 점수로 세운 짝비교(라운드 49·110)도, 비용 차감 기대값의 순서(라운드 475)도 결과를 못 갈랐다. 그래서
+    '가장 좋은 것'을 고르는 규칙은 지어낸 것이 되고(§2), 대신 **좋고 나쁨과 무관한** 추첨을 둔다: 고를 수 있고 수량 미리보기가 한 주
+    이상인 계획만 · 판정일과 그 계획 번호들로 정해진 해시(sha256) 한 번 — 같은 판정일엔 몇 번 눌러도 같은 계획이다(마음에 드는 종목이
+    나올 때까지 다시 뽑는 길을 막는다 · 그것은 고르는 것이다). 이 함수는 고르지 않는다 — 부르는 화면이 고를 칸에 넣기만 하고, 적는 것은
+    종전 그대로 사람이 확인 체크와 단추로 한다(§473). `qty_of(p)` 가 None 이면(미리보기를 못 셈) 그 계획은 뽑지 않는다(§3)."""
+    elig = []
+    for p in cands or []:
+        try:
+            q = qty_of(p)
+        except Exception:                                      # noqa: BLE001 — 못 세면 뽑지 않는다
+            q = None
+        if q is not None and int(q) >= 1 and p.get('plan_id'):
+            elig.append(p)
+    if not elig:
+        return None, 0, '고를 수 있고 한 주 이상 살 수 있는 계획이 없습니다(수량 미리보기 0주이거나 못 셈)'
+    ids = sorted(str(p['plan_id']) for p in elig)
+    h = int(_hl.sha256((str(day)[:10] + '|' + ','.join(ids)).encode('utf-8')).hexdigest(), 16)
+    pid = ids[h % len(ids)]
+    return next(p for p in elig if str(p['plan_id']) == pid), len(elig), ''
+
+
+#: 추첨이 무엇인지 — 화면 문장(규칙 한 곳)
+LEARNING_DRAW_RULE = ('추첨은 좋은 종목을 고르는 규칙이 아닙니다 — 같은 날 종목을 점수·기대값으로 세워도 결과를 못 갈랐기 때문에 '
+                      '좋고 나쁨과 무관하게 뽑습니다(판정일과 계획 번호로 정해진 해시 · 같은 판정일엔 늘 같은 계획). '
+                      '고를 칸에 넣기만 하고, 사는 것은 아래에서 확인 체크와 고르기를 직접 눌러야 정해집니다.')
 
 
 GAP_REACH_SHOW = 5          # 한 줄에 이름을 적는 계획 수(칸 폭 · 판정 문턱 아님) — 나머지는 '외 N개'
@@ -586,7 +655,22 @@ def _beat_line(b):
     return txt
 
 
-def recent_events(heartbeats=None, nightly=None, acct=None, task=None, limit=6, beats=3, window=None):
+def funnel_intents(intents, judgment_day, trade_day):
+    """깔때기의 주문·체결 칸이 셀 주문 (라운드 524) → (주문 목록, 매수일, 오늘 낸 다른 판정의 매수 주문 목록).
+
+    깔때기의 계획 칸은 판정일 J 의 계획인데 주문 칸은 달력 '오늘'의 주문을 셌다(라운드 491). 장중엔 J 가 전 거래일이라 둘이 같은 날을
+    가리키지만, 그날 봉이 확정돼 J 가 오늘로 넘어간 저녁엔 계획 칸은 내일 살 계획을, 주문 칸은 오늘 낸(어제 판정의) 주문을 세어
+    *'실주문 자격 0 → 주문 냄 1'* 이 한 줄에 섰다(2026-10-13 22:34 실측). 주문 칸은 J 의 계획이 사는 날(`exec_day_of(J)`)의 주문을 센다 —
+    장중엔 종전과 같은 날이다. 오늘 낸 다른 판정의 매수 주문은 따로 돌려줘 화면이 한 줄로 가리킨다(지우지 않는다)."""
+    xd = exec_day_of(judgment_day)
+    its = [it for it in (intents or []) if xd and str(it.get('trade_day') or '')[:10] == xd]
+    ids = {id(it) for it in its}
+    other = [it for it in (intents or []) if it.get('side') == 'buy' and id(it) not in ids
+             and str(it.get('trade_day') or '')[:10] == str(trade_day or '')[:10]]
+    return its, xd, other
+
+
+def recent_events(heartbeats=None, nightly=None, acct=None, task=None, limit=6, beats=3, window=None, now=None):
     """최근 사건 몇 줄 — 워커 심박 · 계좌 동기화 · 저녁 작업 끝 · 예약 작업 마지막 실행. 시각 있는 것만, 최근순.
     라운드 495 — 심박은 이어진 같은 기록을 한 줄로 묶어(`collapse_beats`) 그 묶음 `beats` 개까지 싣는다."""
     ev = []
@@ -595,7 +679,16 @@ def recent_events(heartbeats=None, nightly=None, acct=None, task=None, limit=6, 
     if acct and acct.get('ts'):
         ev.append((str(acct['ts']), '계좌 동기화(잔고 스냅샷)'))
     if nightly and nightly.get('last_end'):
-        ev.append((f"2000-{nightly['last_end']}" if len(nightly['last_end']) == 14 else nightly['last_end'],
-                   f"저녁 작업 끝 · 종료 코드 {nightly.get('worst')}"))
+        # 라운드 524 — 기록 줄은 'MM-DD HH:MM:SS'(연도 없음)인데 종전엔 '2000-' 을 붙여 늘 맨 뒤로 갔다(10-13 21:05 끝 줄이 01:04 계좌
+        #   동기화 아래). 지금의 연도를 붙이되 앞날이 되면 한 해 전으로(12월 기록을 1월에 읽는 자리) · 시각 구분은 다른 줄과 같은 'T'.
+        le = str(nightly['last_end'])
+        if len(le) == 14:
+            nk = X.kst(now or X.now_kst())
+            key = f"{nk.year}-{le[:5]}T{le[6:]}"
+            if key > nk.strftime('%Y-%m-%dT%H:%M:%S'):
+                key = f"{nk.year - 1}-{le[:5]}T{le[6:]}"
+        else:
+            key = le
+        ev.append((key, f"저녁 작업 끝 · 종료 코드 {nightly.get('worst')}"))
     ev.sort(key=lambda x: x[0], reverse=True)
     return [(ts[5:16].replace('T', ' ') if len(ts) >= 16 else ts, txt) for ts, txt in ev[:limit]]

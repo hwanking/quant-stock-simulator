@@ -1007,13 +1007,20 @@ def _view_center(st, uk, c, ctx, md):
                                                     planned_loss_sum=_dash.planned_loss_sum(ctx['managed'])),
                                    theme=theme, title='위험 한도 사용 — 설정 한도 대비(참고 · 직접 보유 포함)'), unsafe_allow_html=True)
     # 라운드 514 — 줄마다 현재가(사용자: "현재가가 얼마고 하면서 나와야 하는 거 아닌가") · 가격은 여기서 받고 깔때기 함수는 네트워크를 안 탄다
-    _codes514 = [p.get('code') for p in ctx['plans_today']] + [it.get('code') for it in its_today]
+    # 라운드 524 — 깔때기의 주문·체결 칸은 판정일 계획이 사는 날의 주문(저녁엔 계획은 내일 것 · 오늘 주문은 어제 판정의 것이라 섞였다)
+    _its524, _xd524, _oth524 = _dash.funnel_intents(ctx['intents'], ctx['today'], ctx['trade_day'])
+    _codes514 = [p.get('code') for p in ctx['plans_today']] + [it.get('code') for it in _its524]
     _px514, _at514 = _px_now514(_codes514) if _codes514 else ({}, None)
-    st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
+    st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=_its524,
                                                managed_codes=set(ctx['managed']), approval_mode=X.approval_of(ctx['stt']),
-                                               picks=ctx.get('picks'), report=ctx.get('report'), prices=_px514),
-                            theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"
+                                               picks=ctx.get('picks'), report=ctx.get('report'), prices=_px514, exec_day=_xd524),
+                            theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'}"
+                            + (f" · 그 계획의 매수일 {_xd524}" if _xd524 else '') + " · 후보 → 실주문 자격 → 승인 → 주문 → 체결"
                             + (f" · 현재가는 네이버 {_at514} 기준(장 전엔 직전 거래일 종가)" if _at514 else '')), unsafe_allow_html=True)
+    if _oth524:
+        st.caption(md(f"오늘({ctx['trade_day']}) 낸 매수 주문 {len(_oth524)}건은 앞 판정일 계획의 주문이라 위 깔때기에 넣지 않았습니다 — "
+                      f"위 깔때기는 판정일 {ctx['today']} 계획이 사는 {_xd524 or '다음 거래일'} 의 주문을 셉니다. 그 주문은 맨 위 시작 카드와 "
+                      "'주문·체결' 갈래에 있습니다."))
     # 라운드 523 — 지정가가 지금 가격보다 아래인 자격 계획: 내려와야 체결 · 다음 거래일 · 같은 규칙의 도달 실측(사용자: "괴리가 큰데
     #   못 사는 거 아냐? 내일도 사는 거야?") · 가격은 깔때기와 같은 값(_px514) · 실측 문장은 entry_facts 한 곳
     try:
@@ -1198,6 +1205,26 @@ def _human_pick_section(st, c, ctx, md, day):
     if not cand:
         return
     labels = {p['plan_id']: f"{p.get('name') or ''} ({p['code']}) · 진입 {_won(p['entry'])} · {pick_facts(p)['short']}" for p in cand}
+    # 라운드 526 — 학습용 1종목 추첨(사용자: "후보 1개나 무조건 내줘 · 실제로 매매하면서 얻는 게 있을 거잖아"). 좋고 나쁨과 무관한 해시로
+    #   한 계획을 뽑아 아래 고를 칸에 **넣기만** 한다 — 적는 것은 종전 그대로 확인 체크 + '이 계획 고르기'(적는 자리 불변 · §473).
+    #   수량 미리보기가 한 주 이상인 계획만 뽑는다(워커와 같은 함수 · 못 세면 안 뽑는다).
+    _lim526 = ctx['stt'].get('limits') or None
+
+    def _qty526(p):
+        if not (_lim526 and ctx['acct']) or _se.pick_blockers(p, ctx.get('report')):
+            return None
+        return (size_preview(p, ctx['acct'], _lim526, ctx['cost'], picked=True) or {}).get('qty')
+    if st.button('학습용 1종목 추첨 — 고를 칸에 넣기만 합니다(사는 것은 아래에서 직접 고릅니다)', key='sw_hp_draw'):
+        _pk526, _n526, _why526 = _dash.learning_draw(cand, day, _qty526)
+        if _pk526:
+            st.session_state['sw_hp_sel'] = _pk526['plan_id']
+            st.session_state['sw_hp_draw_note'] = (f"추첨 — 고를 수 있고 한 주 이상 살 수 있는 계획 {_n526}개 중 "
+                                                   f"{_pk526.get('name') or ''} ({_pk526['code']}) 을(를) 고를 칸에 넣었습니다. ")
+            st.rerun()
+        else:
+            st.warning(f'추첨하지 못했습니다 — {_why526}')
+    if st.session_state.get('sw_hp_draw_note') and st.session_state.get('sw_hp_sel') in {p['plan_id'] for p in cand}:
+        st.caption(md(st.session_state['sw_hp_draw_note'] + _dash.LEARNING_DRAW_RULE))
     sel = st.selectbox('고를 계획', [p['plan_id'] for p in cand], index=None, format_func=lambda pid: labels.get(pid, pid),
                        placeholder='고르지 않음', key='sw_hp_sel')
     if not sel:
@@ -1464,10 +1491,15 @@ def _view_orders(st, uk, c, ctx, md):
         st.caption('아직 주문이 없습니다.')
         return
     _title(st, '최근 주문의 생애(최근 5건 · 시간순)', theme)
+    _now524 = X.now_kst()
     for it in list(reversed(its))[:5]:
+        # 라운드 524 — 그날 정규장이 끝난 열린 주문을 '지금 접수'라 적지 않는다(실행부는 그날 주문을 다음 거래일 첫 바퀴에 맞춘다)
+        _end524 = it['state'] in X.OPEN_STATES and _dash.session_ended_for(it.get('trade_day'), _now524) is True
         head = (f"{it['trade_day']} · {it['code']} · {'매수' if it['side'] == 'buy' else '매도'} · "
                 f"{ {'entry': '진입', 'target': '1차 목표', 'stop': '손절', 'expiry': '기간 만료'}.get(X._base(it.get('reason')), it.get('reason')) } · "
-                f"수량 {it['qty']} · {_won(it['price']) if it['price'] else '시장가'} · 지금 {STATE_KO.get(it['state'], it['state'])}")
+                f"수량 {it['qty']} · {_won(it['price']) if it['price'] else '시장가'} · "
+                + (f"장부 상태 {STATE_KO.get(it['state'], it['state'])} · 그날 장 끝남 — 다음 거래일 워커의 첫 바퀴가 그날 내역으로 맞춤"
+                   if _end524 else f"지금 {STATE_KO.get(it['state'], it['state'])}"))
         st.markdown(_viz.timeline(_dash.order_timeline(L.events_of(c, it['intent_id'])), theme=theme, title=head), unsafe_allow_html=True)
     st.dataframe([{'날짜': it['trade_day'], '종목': it['code'], '방향': '매수' if it['side'] == 'buy' else '매도',
                    '이유': {'entry': '진입', 'target': '1차 목표', 'stop': '손절', 'expiry': '기간 만료'}.get(X._base(it.get('reason')), it.get('reason')),
