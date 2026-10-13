@@ -1199,9 +1199,12 @@ def tone_css(theme: str = 'dark') -> str:
         white-space: normal !important; line-height: 1.2 !important; font-weight: 700 !important;
         letter-spacing: -0.02em !important; }}
     .stApp [data-testid="stMetricLabel"] p {{ font-size: 15px !important; color: {t['tx3']} !important; }}
-    /* ⑥ 사이드바 버튼 글자를 한 줄로 */
-    section[data-testid="stSidebar"] .stButton > button {{ padding: 6px 14px !important; }}
-    section[data-testid="stSidebar"] .stButton > button p {{ white-space: nowrap !important; }}
+    /* ⑥ 사이드바 버튼 — 들어가면 한 줄, 안 들어가면 **상자 안에서** 줄을 바꾼다(라운드 515). 종전엔 nowrap 이라 긴 글자가 버튼
+       밖으로 나갔다 — 2026-10-13 실측(쓰기 막은 앱 · 사이드바 펼침): '최근 목록 비우기' 7px · 관심종목 이름 버튼 62개 중 43개(최대
+       237px) · '빼기' 62개. 줄임표(…)로 자르지 않는다 — 이름 버튼은 종목으로 가는 길이라 이름 전체가 보여야 한다(R301·R314). */
+    section[data-testid="stSidebar"] .stButton > button {{ padding: 6px 10px !important; height: auto !important; }}
+    section[data-testid="stSidebar"] .stButton > button p {{
+        white-space: normal !important; overflow-wrap: anywhere !important; line-height: 1.35 !important; }}
 
     /* 빈 style 칸 숨김(라운드 399 그대로) — style 만 든 칸이 각각 16px 간격을 먹었다. 숨겨도 규칙은 먹는다 */
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(style):not(:has(:is(p, a, span, img, svg, button, input, textarea, iframe, label, table, h1, h2, h3, h4))) {{
@@ -1214,8 +1217,15 @@ def tone_css(theme: str = 'dark') -> str:
 
     /* ── 사이드바 (가늠 코인: 284px 고정 · 본문과 같은 바탕 · 오른쪽 1px 선 · 안쪽 29/17px) ─────────────────── */
     section[data-testid="stSidebar"] {{
-        width: 284px !important; min-width: 284px !important; max-width: 284px !important;
         background-color: {nav} !important; border-right: 1px solid {t['line']} !important; }}
+    /* 폭 고정은 **펼친 상태에만**(라운드 515). 종전엔 항상 284px(최소·최대 포함)라 사이드바를 접어도(aria-expanded=false) 그 자리를
+       차지해 본문이 왼쪽으로 안 당겨졌다 — 2026-10-13 실측(1706px): 접어도 사이드바 284 · 본문 시작 284. 접으면 0 → 본문 시작 0 ·
+       내용 폭 1,412 → 1,600px · 다시 펼치면 284 · 가로 스크롤 없음. */
+    section[data-testid="stSidebar"][aria-expanded="true"] {{
+        width: 284px !important; min-width: 284px !important; max-width: 284px !important; }}
+    section[data-testid="stSidebar"][aria-expanded="false"] {{
+        width: 0 !important; min-width: 0 !important; max-width: 0 !important; border-right: none !important;
+        overflow: hidden !important; }}
     /* 바깥 칸(stSidebarContent)에 좌우 10px 이 하나 더 있어 메뉴 줄이 x 37 에서 시작했다(브라우저 실측 · 가늠 코인 17) —
        바깥 여백을 걷고 안쪽 17px 하나만 둔다. 그래도 x 27 이었다 — 그 칸의 스크롤 칸 자리(scrollbar-gutter)가
        'stable both-edges' 라 **왼쪽에도** 10px 을 비워 뒀다(실측 clientWidth 263 / offsetWidth 283). 오른쪽에만 둔다 */
@@ -1417,7 +1427,7 @@ def tone_css(theme: str = 'dark') -> str:
         .qnav .qvers.qchips {{ white-space: nowrap !important; overflow-x: auto !important;
             scrollbar-width: none; -webkit-overflow-scrolling: touch; }}
         .qnav .qvers.qchips::-webkit-scrollbar {{ display: none; }}
-        section[data-testid="stSidebar"] {{ width: 284px !important; }}
+        section[data-testid="stSidebar"][aria-expanded="true"] {{ width: 284px !important; }}
     }}
     """
 

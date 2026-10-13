@@ -125,8 +125,17 @@ if (require.main === module) {
   try {
     const store = run(p);
     const done = Object.prototype.hasOwnProperty.call(store, '__dbg');
+    // 라운드 518 — '--ma' 를 주면 차트의 이동평균 함수(maOf)가 낸 값을 같이 내보낸다(회귀가 엔진 값과 대 본다)
+    let ma = null;
+    if (done && process.argv.includes('--ma') && store.__dbg && typeof store.__dbg.maOf === 'function') {
+      ma = {};
+      for (const [tf, n] of [['D', 5], ['D', 10], ['D', 20], ['D', 60], ['W', 10], ['M', 10]]) {
+        const s = store.__dbg.maOf(tf, n);
+        ma[tf + n] = { n: s.length, last: s.length ? s[s.length - 1] : null };
+      }
+    }
     console.log(JSON.stringify({ ok: true, reached_end: done,
-                                 assigned: Object.keys(store).slice(0, 8) }));
+                                 assigned: Object.keys(store).slice(0, 8), ma }));
     process.exit(done ? 0 : 3);
   } catch (e) {
     console.log(JSON.stringify({ ok: false,

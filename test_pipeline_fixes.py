@@ -41953,7 +41953,7 @@ check("⑨ 깔때기 칸마다 그 단계의 종목 — 후보(출처·자격/�
       and _fn488[0]['items'][1].startswith('나 (000002) · 개장 전 리포트 · 추천 아님 — ') and _fn488[0]['items'][1].endswith('…')
       and _fn488[1]['items'] == ['가 (000001) · 진입 지정가 10,000원 · 1차 목표 11,000원 · 손절 9,000원']
       and _fn488[2]['items'] == _fn488[1]['items']
-      and _fn488[3]['items'] == ['가 (000001) · 3주 · 10,000원 · 증권사 접수'] and _fn488[4]['items'] == []
+      and _fn488[3]['items'] == ['가 (000001) · 3주 · 10,000원 지정가 · 증권사 접수'] and _fn488[4]['items'] == []  # 라운드 514 — '지정가' 낱말
       and [s['n'] for s in _fn488] == [2, 1, 1, 1, 0], str(_fn488))
 _h488 = _vz488.funnel(_fn488, title='오늘의 엔진')
 _h488b = _vz488.funnel([dict(label='x', n=1, sub='y')], title='t')
@@ -42207,6 +42207,285 @@ check("① 개·건은 정수('1개 / 5개 (20%)' · '1건 / 5건') · 비율은
       '1개 / 5개 (20%)' in _h493 and '1건 / 5건 (20%)' in _h493 and '23.4% / 90% (26%)' in _h493
       and '1.0개' not in _h493 and '1.0건' not in _h493, _h493[:400])
 # ─── §493 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §494 — 깔때기 줄에 현재가 (라운드 514 · 2026-10-13 장중)
+#   사용자: "너무 간단하게만 나오지 않아? 현재가가 얼마고 하면서 나와야 하는 거 아닌가." 화면이 워커와 같은 함수로 현재가를 받아
+#   (15초 캐시 · 실패도 기억) 줄마다 '현재가 · 진입가/지정가까지' · 체결 뒤엔 평균 체결가 대비 평가. 깔때기 함수는 네트워크를 안 탄다.
+#   첫 판은 주문 줄의 현재가가 지정가였다 — 옛 줄이 같은 이름(px)을 지정가로 덮었다(실제 장부로 대 보고 잡았다).
+# ══════════════════════════════════════════════════════════════════════
+print("§494 깔때기 줄에 현재가 — 진입가·지정가까지 · 체결 뒤 평가 (라운드 514)")
+import importlib as _il494
+import swing_dash as _sd494
+import swing_view as _sv494
+_sd494 = _il494.reload(_sd494)
+_sv494 = _il494.reload(_sv494)
+_P494 = [dict(plan_id='a', code='000001', name='가', live_ok=1, entry=13620.0, target=15640.0, stop=10739.0,
+              verdict={'source': 'watchlist', 'current_price': 15240.0}),
+         dict(plan_id='b', code='000002', name='나', live_ok=0, entry=5000.0, target=5500.0, stop=4500.0, block_reason='추천 아님 — x',
+              verdict='{}')]
+_I494 = [dict(side='buy', code='000001', qty=10, price=13620.0, state='BROKER_ACK', filled_qty=0, avg_fill=None)]
+_F494 = _sd494.funnel_today(_P494, approval_mode='auto', intents_today=_I494, prices={'000001': 14360.0, '000002': 4900.0})
+check("① 줄마다 현재가 — 자격·승인: '현재가 · 진입가까지' 를 이름 바로 뒤에 · 판정 때 가격은 '(그때 …)' · 주문: 현재가 · 지정가까지(주문 지정가를 "
+      "현재가로 적지 않는다) · 살 계획이 아닌 후보는 진입가 이하여도 '체결될 수 있음' 없음",
+      _F494[1]['items'] == ['가 (000001) · 현재가 14,360원 · 진입가까지 -5.2% · 진입 지정가 13,620원 · 1차 목표 15,640원 · 손절 10,739원 · '
+                            '판정 때 가격 15,240원(그때 -10.6%)']
+      and _F494[3]['items'] == ['가 (000001) · 10주 · 13,620원 지정가 · 증권사 접수 · 현재가 14,360원 · 지정가까지 -5.2%']
+      and '나 (000002) · 현재가 4,900원 · 진입가 이하 · 개장 전 리포트' in _F494[0]['items'][1] and '체결될 수 있음' not in _F494[0]['items'][1],
+      str(_F494))
+_fill494 = _sd494.intent_item(dict(side='buy', code='000001', qty=10, price=13620.0, state='FILLED', filled_qty=10, avg_fill=13600.0),
+                              {'000001': '가 (000001)'}, px=14280.0, live=True)
+_stop494 = _sd494.plan_price_item(_P494[0], px=10500.0, live=True)
+_none494 = _sd494.plan_price_item(_P494[0], px=None, live=True)
+check("② 체결 뒤엔 체결 수량·평균 체결가와 평균 대비 평가(비용 제외 · 매도 전) · 손절선 이하면 '워커가 사지 않음' · 못 받으면 '현재가 못 받음'",
+      '체결 10주 · 평균 13,600원 · 현재가 14,280원 · 평균 체결가 대비 +5.0%(비용 제외 · 매도 전)' in _fill494
+      and '손절선 10,739원 이하 — 워커가 사지 않음' in _stop494 and '현재가 못 받음' in _none494, _fill494 + ' | ' + _stop494)
+_n494 = {'n': 0}
+
+
+def _fake494(code):
+    _n494['n'] += 1
+    return None if code == '000009' else 1000.0
+
+
+_sv494._PX514.clear()
+_a494, _t494 = _sv494._px_now514(['000001', '000009', '000001'], now=1000.0, fetch=_fake494)
+_b494, _ = _sv494._px_now514(['000001', '000009'], now=1010.0, fetch=_fake494)
+_c494, _ = _sv494._px_now514(['000001'], now=1020.0, fetch=_fake494)
+_sv494._PX514.clear()
+check("③ 현재가 캐시 — 같은 종목은 한 번만 · 15초 안엔 다시 안 묻는다(실패도 기억) · 15초가 지나면 다시 · 못 받은 것은 None",
+      _a494 == {'000001': 1000.0, '000009': None} and _b494 == _a494 and _n494['n'] == 3 and _c494 == {'000001': 1000.0}, str(_n494))
+check("④ 깔때기 함수는 가격을 안 받으면 종전 줄 그대로(네트워크 없음) — 현재가 조각은 화면이 가격을 줄 때만",
+      '현재가' not in ' '.join(sum((s['items'] for s in _sd494.funnel_today(_P494, approval_mode='auto', intents_today=_I494)), [])))
+# ─── §494 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §495 — 사이드바를 접으면 본문이 넓어진다 · 버튼 글자는 상자 안에 (라운드 515 · 2026-10-13)
+#   사용자: "사이드바 없애기 누르면 오른쪽 창이 왼쪽으로 당겨지면서 더 넓게 되어야 하는 거 아닌가?" · "글 박스 안에 들어가야지 전수 조사".
+#   폭 고정(284px · 최소·최대)이 접힌 상태에도 걸려 있었고, 사이드바 버튼 글자는 nowrap 이라 상자 밖으로 나갔다. 브라우저 전수조사
+#   (scripts/text_overflow_census.js) — 실제 넘침은 사이드바 버튼 셋뿐이었다(닫힌 펼침 칸·잘라 숨기는 칸은 그리지 않는 내용이라 뺐다).
+# ══════════════════════════════════════════════════════════════════════
+print("§495 사이드바 접기 → 본문 넓어짐 · 사이드바 버튼 글자는 상자 안 (라운드 515)")
+import importlib as _il495
+import ui_kit as _uk495
+_uk495 = _il495.reload(_uk495)
+_css495 = _uk495.tone_css('dark')
+_cssL495 = _uk495.tone_css('light')
+check("① 폭 고정(284px)은 펼친 상태에만 · 접힌 상태는 폭 0(본문이 왼쪽으로 당겨진다) · 상태 없는 폭 고정 규칙은 없다(두 테마)",
+      all("section[data-testid=\"stSidebar\"][aria-expanded=\"true\"] {" in c and "section[data-testid=\"stSidebar\"][aria-expanded=\"false\"] {" in c
+          and 'min-width: 0 !important' in c and 'min-width: 284px' in c for c in (_css495, _cssL495))
+      and not __import__('re').search(r'section\[data-testid="stSidebar"\]\s*\{[^}]*width:\s*284px', _css495), 'tone_css')
+check("② 사이드바 버튼 글자 — nowrap 없음 · 안 들어가면 상자 안에서 줄바꿈(overflow-wrap) · 버튼 높이는 글자를 따라간다 · 줄임표로 자르지 않는다",
+      'stSidebar"] .stButton > button p {{ white-space: nowrap' not in open(_os.path.join(PROJ, 'ui_kit.py'), encoding='utf-8').read()
+      and 'white-space: normal !important; overflow-wrap: anywhere' in _css495 and 'height: auto !important' in _css495
+      and 'text-overflow' not in _css495.split('⑥ 사이드바 버튼')[1][:600], '⑥')
+_w495 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
+check("③ 좁던 두 칸을 넓혔다 — '최근 목록 비우기' [1, 2] · 관심종목 이름·빼기 줄 [2, 1](접는 칸 안 197px · '빼기' 필요 49.6px)",
+      '_rc1, _rc2 = _SB_PICK.columns([1, 2])' in _w495 and '_c1, _c2 = st.columns([2, 1])' in _w495
+      and '_SB_PICK.columns([1, 1])' not in _w495)
+_cen495 = open(_os.path.join(PROJ, 'scripts', 'text_overflow_census.js'), encoding='utf-8').read()
+check("④ 전수조사 도구가 저장소에 있다 — 닫힌 펼침 칸·잘라 숨기는 칸·스크롤 칸 안의 글자는 '넘침'으로 안 센다(오탐 셋을 판별식에)",
+      'details' in _cen495 and '!p.open' in _cen495 and 'hidden' in _cen495 and 'scroll' in _cen495 and 'boxes' in _cen495)
+# ─── §495 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §496 — GANEUM DAY 분봉 연구 원장 · 한국투자 일별 분봉 조회 · 수집 스크립트 (라운드 516 · 2026-10-13)
+#   사용자가 단타 제안을 검토하고 고른 길: '분봉 수집부터'. 네이버 분봉은 7거래일 · 시가·고가·저가 없음 — 한국투자 일별 분봉
+#   (FHKST03010230 · 최대 1년 · 120건씩)을 조회만 한다. 받은 값만 · 모양 깨진 봉은 사유와 함께 버린다 · 주문 경로 없음 · 장중엔 안 받는다.
+# ══════════════════════════════════════════════════════════════════════
+print("§496 GANEUM DAY 분봉 연구 원장 — 받은 값만 · 넘겨 받기 · 중복 막기 · 주문 없음 · 장중 거절 (라운드 516)")
+import ast as _ast496
+import importlib as _il496
+import tempfile as _tf496
+import shutil as _sh496
+import day_bars as _db496
+import day_feed as _df496
+_db496 = _il496.reload(_db496)
+_df496 = _il496.reload(_df496)
+
+
+def _row496(d, t, o, h, l, c, v):
+    return dict(stck_bsop_date=d, stck_cntg_hour=t, stck_oprc=str(o), stck_hgpr=str(h), stck_lwpr=str(l), stck_prpr=str(c),
+                cntg_vol=str(v), acml_tr_pbmn='1000')
+
+
+_b496, _w496 = _db496.parse_kis_rows([_row496('20261013', '090000', 100, 101, 99, 100.5, 10),
+                                      _row496('20261013', '090100', 100, 99, 101, 100, 5),
+                                      dict(stck_bsop_date='20261013', stck_cntg_hour='090200', stck_oprc='', stck_hgpr='1',
+                                           stck_lwpr='1', stck_prpr='1', cntg_vol='1'),
+                                      _row496('2026101', '090300', 1, 1, 1, 1, 1), 'x'], '005930')
+check("① 분봉 읽기 — 성한 봉만(날짜 2026-10-13 · 시각 09:00) · 고가<저가 봉·빈 가격·날짜 모양 틀림·행 모양 아님은 사유별로 세고 버린다(값을 메우지 않는다)",
+      len(_b496) == 1 and _b496[0]['day'] == '2026-10-13' and _b496[0]['t'] == '09:00' and _b496[0]['h'] == 101.0
+      and sum(_w496.values()) == 4 and any('봉 모양' in k for k in _w496) and any('비었음' in k for k in _w496), str(_w496))
+_root496 = _tf496.mkdtemp(prefix='r516_', dir=_os.path.join(PROJ, '_probe'))
+_a1 = _db496.append_bars('005930', _b496, root=_root496)
+_a2 = _db496.append_bars('005930', _b496, root=_root496)
+_os.environ['GAEUM_NO_LOCAL_WRITE'] = '1'
+try:
+    _a3 = _db496.append_bars('000660', _b496, root=_root496)
+finally:
+    _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+check("② 원장 덧붙이기 — 처음 1개 더함 · 두 번째는 같은 (날짜, 시각)이라 0개(멱등) · 쓰기 금지면 안 쓴다",
+      _a1 == (1, 0) and _a2 == (0, 1) and _a3 == (0, 1) and not _os.path.exists(_db496.path_for('000660', _root496)), str((_a1, _a2, _a3)))
+
+
+class _FakeBK496:
+    """가짜 증권사 — 마감부터 120봉씩 거꾸로 준다(실제 응답 칸 이름 그대로). 다른 날 봉 하나를 섞는다."""
+    PATHS = {}
+
+    def __init__(self, empty_from=None):
+        self.calls = []
+        self.empty_from = empty_from
+
+    def _call(self, method, key, tr_id, params=None, **kw):
+        self.calls.append(dict(key=key, tr=tr_id, hour=params['FID_INPUT_HOUR_1'], date=params['FID_INPUT_DATE_1']))
+        if self.empty_from is not None and len(self.calls) >= self.empty_from:
+            return {'output2': []}, {}
+        import datetime as _d
+        end = _d.datetime(2000, 1, 1, int(params['FID_INPUT_HOUR_1'][:2]), int(params['FID_INPUT_HOUR_1'][2:4]))
+        start = _d.datetime(2000, 1, 1, 9, 0)
+        rows = []
+        t = end
+        while t >= start and len(rows) < 120:
+            rows.append(_row496(params['FID_INPUT_DATE_1'], t.strftime('%H%M%S'), 100, 101, 99, 100, 1))
+            t -= _d.timedelta(minutes=1)
+        rows.append(_row496('20261008', '153000', 100, 101, 99, 100, 1))
+        return {'output2': rows}, {}
+
+
+_bk496 = _FakeBK496()
+_fbars496, _finfo496 = _df496.fetch_day(_bk496, '005930', '2026-10-13', until='153000')
+_bk496b = _FakeBK496(empty_from=2)
+_gbars496, _ginfo496 = _df496.fetch_day(_bk496b, '005930', '2026-10-13', until='153000')
+check("③ 거꾸로 넘겨 받기 — 120봉씩 4번에 09:00~15:30 391봉 · 완료(첫 봉 닿음) · 다른 날 봉은 빼고 센다 · 다음 요청은 가장 이른 봉 1분 전 · "
+      "중간에 빈 응답이면 완료로 적지 않는다(다음 실행이 다시 받는다)",
+      len(_fbars496) == 391 and _finfo496['calls'] == 4 and _finfo496['complete'] is True and _finfo496['other_day'] == 4
+      and [c['hour'] for c in _bk496.calls] == ['153000', '133000', '113000', '093000'] and _bk496.calls[0]['tr'] == 'FHKST03010230'
+      and _bk496.calls[0]['date'] == '20261013' and _fbars496[0]['t'] == '09:00' and _fbars496[-1]['t'] == '15:30'
+      and _ginfo496['complete'] is False and _ginfo496['stop'] == '빈 응답' and len(_gbars496) == 120, str((_finfo496, _ginfo496)))
+_noorder496 = []
+for _f496 in ('day_bars.py', 'day_feed.py', 'scripts/collect_minute_bars.py'):
+    for _n496 in _ast496.walk(_ast496.parse(open(_os.path.join(PROJ, _f496), encoding='utf-8').read())):
+        if isinstance(_n496, _ast496.Call) and isinstance(_n496.func, _ast496.Attribute) and _n496.func.attr in (
+                'order', 'cancel', 'submit', 'buy', 'sell', 'place_order', 'cancel_order'):
+            _noorder496.append((_f496, _n496.func.attr))
+        if isinstance(_n496, _ast496.Constant) and isinstance(_n496.value, str) and _n496.value in ('order', 'cancel'):
+            _noorder496.append((_f496, _n496.value))
+check("④ 주문 경로 없음 — 분봉 원장·조회·수집 세 파일에 주문·취소 호출도 그 열쇠 글자도 없다(조회 TR 하나만)",
+      not _noorder496, str(_noorder496), scanned=3)
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import collect_minute_bars as _cm496
+_cm496 = _il496.reload(_cm496)
+_days496 = _cm496.trading_days_back('2026-10-13', 3)
+_orig_in496, _orig_fs496 = _cm496.in_session, _cm496.day_bars.fetched_set
+import broker_kis as _bkm496
+_orig_kb496 = _bkm496.KisBroker
+
+
+class _Boom496:
+    def __init__(self, *a, **k):
+        raise RuntimeError('증권사 차단(§496)')
+
+
+try:
+    _bkm496.KisBroker = _Boom496
+    _cm496.day_bars.fetched_set = lambda root=None: set()
+    _rc_plan496 = _cm496.main(['--codes', '005930', '--days', '1', '--end', '2026-10-13'])
+    _cm496.in_session = lambda now=None: True
+    _rc_sess496 = _cm496.main(['--codes', '005930', '--days', '1', '--end', '2026-10-13', '--apply'])
+finally:
+    _bkm496.KisBroker = _orig_kb496
+    _cm496.in_session, _cm496.day_bars.fetched_set = _orig_in496, _orig_fs496
+check("⑤ 수집 스크립트 — 거래일은 휴장일(한글날·주말)을 건너뛴다 · --apply 없으면 계획만(증권사를 안 부른다) · 정규장 중이면 --apply 여도 거절(3)",
+      _days496 == ['2026-10-08', '2026-10-12', '2026-10-13'] and _rc_plan496 == 0 and _rc_sess496 == 3,
+      str((_days496, _rc_plan496, _rc_sess496)))
+_sh496.rmtree(_root496, ignore_errors=True)
+# ─── §496 끝 ───
+
+# ── §497 — 시작 카드가 첫 실매수 주문 뒤에도 '미리 말할 수 없습니다'만 적었다 (라운드 517 · 2026-10-13) ──────────────
+print("§497 시작 카드 — 실전 매수 주문이 있으면 그 사실을 먼저 · 주문과 체결을 가른다 (라운드 517)")
+import importlib as _il497
+import swing_dash as _sd497
+_sd497 = _il497.reload(_sd497)
+_cfg497 = dict(env='real', app_key='K', app_secret='S', cano='1', prdt='01', missing=[], problems=[])
+_lb497 = [dict(side='buy', mode='LIVE', code='000001', price=13620.0, state='BROKER_ACK', filled_qty=0,
+               created_ts='2026-10-13T09:00:12+09:00'),
+          dict(side='buy', mode='PAPER', code='000002', price=1.0, state='FILLED', filled_qty=5, created_ts='2026-10-12T09:00:00+09:00')]
+_s497 = _sd497.start_status('LIVE', {}, _cfg497, task=dict(ok=True, installed=True), worker=None, live_buys=_lb497)
+_s497f = _sd497.start_status('LIVE', {}, _cfg497, task=dict(ok=True, installed=True), worker=None,
+                             live_buys=[dict(_lb497[0], state='FILLED', filled_qty=10)])
+_s497n = _sd497.start_status('LIVE', {}, _cfg497, task=dict(ok=True, installed=True), worker=None)
+check("① 실전 매수 주문이 있으면 카드가 그 사실을 먼저 — 건수·처음 시각·지정가·지금 상태 · 체결 전이면 '아직 체결 0주' · "
+      "모의투자 주문은 안 센다 · 주문이 없으면 종전 문장 그대로",
+      _s497['first_buy'].startswith('실주문은 이미 나갔습니다 — 실전 매수 주문 1건 · 처음 2026-10-13 09:00:12 (000001 · 13,620원 지정가 · 지금 증권사 접수)')
+      and '아직 체결 0주' in _s497['first_buy'] and '체결 합계 10주' in _s497f['first_buy']
+      and _s497n['first_buy'].startswith("실제 첫 매수: 중앙 판정이 '추천'"), _s497['first_buy'][:160])
+# ─── §497 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §498 — 종합 차트 이동평균: 일·주·월 봉마다 · 기본 5·10·20·60·120 · 기간은 사용자가 (라운드 518 · 2026-10-13)
+#   사용자: "일봉 주봉 월봉에 10일선 넣어 주고 내가 기간별로 해서 할 수 있게 해줘." 종전엔 일봉 MA(5·20·60·120)만 tech_df 값으로
+#   싣고 주봉·월봉에선 꺼 버렸다. 이제 지금 보이는 봉의 종가로 차트가 단순평균을 낸다 — 일봉 값은 엔진 sma_N 과 같아야 한다.
+# ══════════════════════════════════════════════════════════════════════
+print("§498 종합 차트 이동평균 — 일·주·월 봉마다 · 기간 편집 · 일봉 값 = 엔진 (라운드 518)")
+import importlib as _il498
+import json as _js498
+import pandas as _pd498
+import math as _m498
+import shutil as _sh498
+import subprocess as _sp498
+import tempfile as _tf498
+import chart_pro as _cp498
+_cp498 = _il498.reload(_cp498)
+_n498 = 640
+_dates498 = _pd498.bdate_range('2024-01-02', periods=_n498)
+_cl498 = [10000 + 300 * _m498.sin(i / 17.0) + 7 * i + (i % 5) * 13 for i in range(_n498)]
+_df498 = _pd498.DataFrame({'trade_date': _dates498, 'adj_close': _cl498, 'open': [c - 20 for c in _cl498],
+                       'high': [c + 50 for c in _cl498], 'low': [c - 60 for c in _cl498], 'volume': [1000 + i for i in range(_n498)]})
+for _k498 in (5, 20, 60):
+    _df498[f'sma_{_k498}'] = _df498['adj_close'].rolling(_k498).mean()        # 엔진과 같은 식(quant_indicators · adj_close rolling)
+_h498 = _cp498.build_chart_html(_df498, {}, name='시험')
+check("① 기간 편집 칸 — 기본 5·10·20·60·120 · 이 브라우저에 남는다 · 적용·기본값 · 일봉 고정 선(D.mas.ma20 등)은 안 싣는다(한 길)",
+      'id="maEdit"' in _h498 and 'const MA_DEFAULT = [5, 10, 20, 60, 120];' in _h498 and "'qchart_ma_v1'" in _h498
+      and 'maApply' in _h498 and 'maReset' in _h498 and 'D.mas.ma20' not in _h498 and '"ma20"' not in _h498)
+_js_src498 = open(_os.path.join(PROJ, 'chart_pro.py'), encoding='utf-8').read()
+_settf498 = _js_src498[_js_src498.index('function setTf('):_js_src498.index('document.querySelectorAll(\'.tfbtn\')')]
+check("② 봉을 바꾸면 이동평균은 끄지 않고 그 봉으로 다시 계산 · 다른 일봉 지표는 종전대로 끈다 · 월봉엔 엔진의 '월봉 10선'(일봉 200일)과 다를 수 있다는 말",
+      'refreshMAs(agg.candles)' in _settf498 and "!String(inp.dataset.id).startsWith('mas')" in _settf498
+      and '지표는 일봉으로 계산한 값이라 함께 껐습니다' in _settf498 and '일봉 200일 이동평균으로 잽니다' in _settf498)
+_node498 = _sh498.which('node')
+if not _node498:
+    skipped("③ 차트 이동평균 값 = pandas(엔진과 같은 rolling) · 일·주·월", 'node 없음 — 차트 코드를 실행할 수 없다')
+else:
+    _fd498, _tmp498 = _tf498.mkstemp(suffix='.html', dir=_os.path.join(PROJ, '_probe'))
+    _os.close(_fd498)
+    try:
+        open(_tmp498, 'w', encoding='utf-8').write(_h498)
+        _r498 = _sp498.run([_node498, _os.path.join(PROJ, 'scripts', 'chart_js_smoke.js'), _tmp498, '--ma'], capture_output=True,
+                           text=True, encoding='utf-8', errors='replace', timeout=180)
+    finally:
+        _os.remove(_tmp498)
+    try:
+        _o498 = _js498.loads((_r498.stdout or '').strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        _o498 = {}
+    _ma498 = _o498.get('ma') or {}
+    _s498 = _df498.set_index('trade_date')['adj_close']
+    _exp498 = {'D5': _s498.rolling(5).mean(), 'D10': _s498.rolling(10).mean(), 'D20': _s498.rolling(20).mean(),
+               'D60': _s498.rolling(60).mean(),
+               'W10': _s498.groupby(_s498.index - _pd498.to_timedelta(_s498.index.weekday, unit='D')).last().rolling(10).mean(),
+               'M10': _s498.groupby(_s498.index.to_period('M')).last().rolling(10).mean()}
+    _bad498 = []
+    for _k498, _e498 in _exp498.items():
+        _e498 = _e498.dropna()
+        _g498 = _ma498.get(_k498) or {}
+        if _g498.get('n') != len(_e498) or abs(((_g498.get('last') or {}).get('value') or 0) - float(_e498.iloc[-1])) > 1e-3:
+            _bad498.append((_k498, _g498, round(float(_e498.iloc[-1]), 4), len(_e498)))
+    check("③ 차트 이동평균 값(node 로 실제 실행) = pandas · 일봉 5·10·20·60 · 주봉 10(10주) · 월봉 10(10개월) · 일봉 20 = 엔진 sma_20",
+          _r498.returncode == 0 and _o498.get('reached_end') is True and not _bad498
+          and abs(((_ma498.get('D20') or {}).get('last') or {}).get('value', 0) - float(_df498['sma_20'].iloc[-1])) < 1e-3,
+          str(_bad498)[:300], scanned=len(_exp498))
+# ─── §498 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

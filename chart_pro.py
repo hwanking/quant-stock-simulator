@@ -6,7 +6,11 @@
   · 라이브러리 JS는 vendor/ 에 통째로 내장한다 — 시세·종목 데이터가 외부로
     나가지 않고(전부 iframe 안에 인라인), 오프라인·클라우드 어디서든 뜬다.
   · 지표는 이미 검증된 tech_df 값을 그대로 쓴다(차트가 따로 계산해 어긋나는
-    것을 막는다). 여기서 새로 계산하는 것은 MA120·EMA20·MACD·스토캐스틱·OBV 뿐.
+    것을 막는다). 여기서 새로 계산하는 것은 EMA20·MACD·스토캐스틱·OBV 뿐.
+  · 이동평균선만 예외다(라운드 518) — 사용자: *"일봉 주봉 월봉에 10일선 넣어 주고 기간별로 할 수 있게."*
+    주봉·월봉의 이동평균은 일봉 값으로 대신할 수 없으므로(주봉 10선 = 10주) 차트가 **지금 보이는 봉의 종가**로
+    단순평균을 낸다. 일봉에서는 엔진의 이동평균(tech_df `sma_N` · 같은 종가 · 같은 단순평균)과 같은 값이다
+    — 회귀 §498 이 node 로 차트 코드를 실제로 돌려 엔진 값과 대 본다.
   · 실행 가격선(손절/목표/추천매수/TDST)은 four_scores 의 값 — 화면 배너와
     같은 숫자다.
   · 지표 선택창: 사용자가 원하는 지표만 골라 켠다. 선택은 브라우저
@@ -107,17 +111,10 @@ def build_chart_html(tech_df, four_scores, name='', unit_str='원',
                        'color': (_UP if c >= o else _DN) + '66'})
 
     # ── 오버레이 지표 ─────────────────────────────────────
+    # 라운드 518 — 단순 이동평균(5·20·60·120)은 차트가 지금 보이는 봉의 종가로 계산한다(템플릿의 smaOf · 기간은 사용자가 고른다).
+    #   여기서 일봉 값만 따로 실으면 같은 선이 두 길로 나온다(§4) — 실지 않는다.
     mas = {}
-    for col, key in (('sma_5', 'ma5'), ('sma_20', 'ma20'), ('sma_60', 'ma60')):
-        if col in df.columns:
-            mas[key] = _series(times, [_f(x) for x in df[col]])
-
     cl = [c if c is not None else 0.0 for c in closes]
-    ma120 = []
-    for i in range(len(cl)):
-        w = [c for c in closes[max(0, i - 119):i + 1] if c is not None]
-        ma120.append(sum(w) / len(w) if len(w) >= 120 else None)
-    mas['ma120'] = _series(times, ma120)
     _e20 = _ema(cl, 20)
     mas['ema20'] = _series(times, ([None] * 19 + _e20[19:])
                            if len(_e20) > 19 else [])
@@ -295,6 +292,14 @@ __LIB__
   #indPanel h5 { margin: 8px 0 5px 0; color: var(--tx); font-size: 12px;
     letter-spacing: .04em; }
   #indPanel h5:first-child { margin-top: 0; }
+  /* 이동평균 기간 칸 (라운드 518) */
+  #maEdit { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 6px 0 2px 0; }
+  #maEdit .malbl { color: var(--tx); font-size: 12px; margin-right: 2px; }
+  #maInputs input { width: 52px; background: transparent; color: var(--tx); border: 1px solid var(--bd);
+    border-left-width: 3px; border-radius: 6px; padding: 2px 4px; font-size: 12px; }
+  #maEdit button { border:1px solid var(--bd); background:transparent; color:var(--tx); border-radius:6px;
+    padding: 2px 8px; cursor:pointer; font-size: 12px; }
+  #maNote, #maMsg { font-size: 12px; color: var(--lg); margin: 2px 0 4px 0; line-height: 1.5; }
   .indGrid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 4px 12px; }
   .indGrid label { display:flex; align-items:center; gap:5px; cursor:pointer;
     color: var(--lg); font-size: 13px; white-space:nowrap;
@@ -332,6 +337,11 @@ __LIB__
       <div id="indPanel">
         <h5>가격 오버레이</h5>
         <div class="indGrid" id="gOverlay"></div>
+        <div id="maEdit"><span class="malbl">이동평균 기간</span><span id="maInputs"></span>
+          <button id="maApply">적용</button><button id="maReset">기본값</button></div>
+        <div id="maMsg"></div>
+        <div id="maNote">기간은 지금 보이는 봉 단위입니다 — 일봉 10 = 10일 · 주봉 10 = 10주 · 월봉 10 = 10개월(종가 단순평균).
+          고른 기간은 이 브라우저에 남습니다.</div>
         <h5>보조 패널</h5>
         <div class="indGrid" id="gPane"></div>
         <h5>신호·가격선</h5>
@@ -404,10 +414,6 @@ function line(ch, data, col, w, style) {
 
 // 오버레이 지표 정의 — 지표 선택창의 '가격 오버레이' 그룹
 const overlayDefs = [
-  { id:'ma5',   label:'MA 5',    col:'#ff9f0a', mk:() => line(chMain, D.mas.ma5||[],   '#ff9f0a', 1) },
-  { id:'ma20',  label:'MA 20',   col:'#32ade6', mk:() => line(chMain, D.mas.ma20||[],  '#32ade6', 2) },
-  { id:'ma60',  label:'MA 60',   col:'#30d158', mk:() => line(chMain, D.mas.ma60||[],  '#30d158', 1) },
-  { id:'ma120', label:'MA 120',  col:'#bf5af2', mk:() => line(chMain, D.mas.ma120||[], '#bf5af2', 1) },
   { id:'ema20', label:'EMA 20',  col:'#64d2ff', mk:() => line(chMain, D.mas.ema20||[], '#64d2ff', 1, 2) },
   { id:'bb',    label:'볼린저밴드', col:'#bf5af2', mk:() => [
       line(chMain, D.bbU, '#bf5af299', 1, 1), line(chMain, D.bbL, '#bf5af299', 1, 1)] },
@@ -440,7 +446,7 @@ const sigDefs = [
 ];
 
 // 기본 켜짐 + localStorage 복원
-const DEFAULT_ON = ['ma5','ma20','ma60','ma120','bb','vol','rsi','macd','demark','plines'];
+const DEFAULT_ON = ['bb','vol','rsi','macd','demark','plines'];      // 이동평균 칸(mas0~4)은 아래에서 따로 — 기본 켜짐
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem('qchart_ind_v1')); } catch (e) {}
 const isOn = id => Array.isArray(saved) ? saved.includes(id) : DEFAULT_ON.includes(id);
@@ -493,6 +499,75 @@ function remember(s) {
   return s;
 }
 
+
+// ── 이동평균선 (라운드 518) ─────────────────────────────────────
+//   사용자: "일봉 주봉 월봉에 10일선 넣어 주고, 내가 기간별로 해서 할 수 있게."
+//   지금 보이는 봉(일·주·월)의 **종가로** 단순평균을 낸다 — 일봉 10 = 10일 · 주봉 10 = 10주 · 월봉 10 = 10개월.
+//   일봉에서는 엔진의 이동평균(tech_df sma_N)과 같은 값이다(회귀 §498 이 node 로 대 본다).
+//   봉을 바꿀 때마다 그 봉으로 다시 계산하므로 SNAP(일봉 지표의 원본 보관)에 넣지 않는다.
+const MA_DEFAULT = [5, 10, 20, 60, 120];
+const MA_COLORS = ['#ff9f0a', '#ffd60a', '#32ade6', '#30d158', '#bf5af2'];
+const MA_KEY = 'qchart_ma_v1';
+const MA_MIN = 2, MA_MAX = 400;
+function maValid(v) {
+  return Array.isArray(v) && v.length === MA_DEFAULT.length
+    && v.every(x => Number.isInteger(x) && x >= MA_MIN && x <= MA_MAX);
+}
+function maLoad() {
+  try { const v = JSON.parse(localStorage.getItem(MA_KEY)); if (maValid(v)) return v; } catch (e) {}
+  return MA_DEFAULT.slice();
+}
+let MA_P = maLoad();
+function smaOf(candles, n) {
+  const out = []; const q = []; let sum = 0;
+  for (const c of candles || []) {
+    q.push(c.close); sum += c.close;
+    if (q.length > n) sum -= q.shift();
+    if (q.length === n) out.push({ time: c.time, value: Math.round(sum / n * 10000) / 10000 });
+  }
+  return out;
+}
+const maSeries = MA_DEFAULT.map((_, i) => chMain.addLineSeries({ color: MA_COLORS[i],
+  lineWidth: i === 2 ? 2 : 1, priceLineVisible: false, lastValueVisible: false }));
+let maCandles = D.candles;
+function refreshMAs(candles) {
+  if (candles) maCandles = candles;
+  maSeries.forEach((s, i) => { try { s.setData(smaOf(maCandles, MA_P[i])); } catch (e) { /* 무시 */ } });
+  MA_P.forEach((n, i) => { const t = document.getElementById('maLbl' + i); if (t) t.textContent = 'MA ' + n; });
+}
+// 이동평균 칸의 켜짐 — 예전 선택(ma5·ma20…)만 남은 브라우저에서도 처음엔 켜서 보여 준다
+const maSavedNew = Array.isArray(saved) && saved.some(x => String(x).startsWith('mas'));
+MA_DEFAULT.forEach((_, i) => {
+  const id = 'mas' + i;
+  live[id] = maSeries[i];
+  const on = maSavedNew ? saved.includes(id) : true;
+  setSeriesVisible(maSeries[i], on);
+  addCheck('gOverlay', { id, col: MA_COLORS[i], label: '<span id="maLbl' + i + '">MA ' + MA_P[i] + '</span>' }, on,
+           v => setSeriesVisible(maSeries[i], v));
+});
+refreshMAs(D.candles);
+const maIn = document.getElementById('maInputs');
+function maDrawInputs() {
+  if (!maIn) return;
+  maIn.innerHTML = MA_P.map((n, i) => '<input type="number" min="' + MA_MIN + '" max="' + MA_MAX + '" step="1" value="'
+    + n + '" data-i="' + i + '" style="border-left-color:' + MA_COLORS[i] + '">').join('');
+}
+maDrawInputs();
+function maSet(v) {
+  MA_P = v;
+  try { localStorage.setItem(MA_KEY, JSON.stringify(v)); } catch (e) {}
+  maDrawInputs(); refreshMAs();
+}
+const maApplyBtn = document.getElementById('maApply');
+const maResetBtn = document.getElementById('maReset');
+const maMsg = document.getElementById('maMsg');
+if (maApplyBtn) maApplyBtn.onclick = e => {
+  e.stopPropagation();
+  const v = [...maIn.querySelectorAll('input')].map(x => parseInt(x.value, 10));
+  if (maValid(v)) { maSet(v); if (maMsg) maMsg.textContent = ''; }
+  else if (maMsg) maMsg.textContent = '기간은 ' + MA_MIN + '~' + MA_MAX + ' 사이의 정수로 다섯 칸 모두 넣습니다';
+};
+if (maResetBtn) maResetBtn.onclick = e => { e.stopPropagation(); maSet(MA_DEFAULT.slice()); if (maMsg) maMsg.textContent = ''; };
 
 for (const d of overlayDefs) {
   live[d.id] = remember(d.mk());
@@ -641,6 +716,7 @@ function setTf(tf) {
     try { s.setData(tf === 'D' ? orig : []); } catch (e) { /* 무시 */ }
   });
   if (vseries && vseries.setData) vseries.setData(agg.volume);
+  refreshMAs(agg.candles);           // 라운드 518 — 이동평균은 그 봉의 종가로 다시 계산한다(끄지 않는다)
   // 지표는 **일봉으로 계산된 값**이다. 주봉·월봉 캔들 위에 그대로 얹으면
   // 다른 잣대를 겹쳐 읽게 된다 — 그래서 끈다 (라운드 190 의 교훈).
   const note = document.getElementById('tfnote');
@@ -648,14 +724,16 @@ function setTf(tf) {
     note.textContent = '';
   } else {
     document.querySelectorAll('#gOverlay input, #gPane input').forEach(inp => {
-      if (inp.checked && inp.dataset.id !== 'vol') {
+      if (inp.checked && inp.dataset.id !== 'vol' && !String(inp.dataset.id).startsWith('mas')) {
         inp.checked = false; inp.dispatchEvent(new Event('change'));
       }
     });
     note.textContent = TF_LABEL[tf] + '은 일봉을 묶어 만든 값입니다'
       + ' (시가=첫 봉·고가=최고·저가=최저·종가=마지막 봉·거래량=합).'
-      + ' 지표는 일봉으로 계산한 값이라 함께 껐습니다 —'
-      + ' 다른 잣대를 겹쳐 읽지 않기 위해서입니다.';
+      + ' 이동평균선은 이 봉의 종가로 다시 계산했습니다(' + (tf === 'W' ? '주봉 10 = 10주' : '월봉 10 = 10개월') + ').'
+      + ' 다른 지표는 일봉으로 계산한 값이라 함께 껐습니다 —'
+      + ' 다른 잣대를 겹쳐 읽지 않기 위해서입니다.'
+      + (tf === 'M' ? " 엔진 판정의 '월봉 10선'은 일봉 200일 이동평균으로 잽니다 — 이 차트의 월봉 10선(10개월 종가 평균)과 다를 수 있습니다." : '');
   }
   // [주의] 지표를 끄면 패널이 접히고 `relayout()` 이 resize 를 쏜다.
   //   라이브러리는 그 리사이즈를 **다음 프레임에** 처리하면서 방금 넣은
@@ -677,7 +755,7 @@ document.querySelectorAll('.tfbtn').forEach(b => {
   };
 });
 
-window.__dbg = { charts, sCandle, mainH };
+window.__dbg = { charts, sCandle, mainH, maOf: (tf, n) => smaOf(aggregate(tf).candles, n) };
 window.addEventListener('resize', () => {
   const w = document.getElementById('wrap').clientWidth;
   charts.forEach((c, i) => c.applyOptions({ width: w,

@@ -96,7 +96,7 @@ def _when(d, op):
 START_HERE = "시스템 → 설정 맨 위 '실전 시작 — 한 번에'"
 
 
-def start_status(mode, stt, cfg, task=None, worker=None, now=None):
+def start_status(mode, stt, cfg, task=None, worker=None, now=None, live_buys=None):
     """자동매매 언제 시작하나 (라운드 457) — 장부 설정 · 실전 준비 넷(`live_readiness`) · 운용 모드 · 워커 예약 작업 · 거래일 달력에서
     **유도**한다. 실제 첫 매수 날짜는 말하지 않는다 — 중앙 판정이 추천을 언제 낼지는 아무도 모른다(§3). 판정 낱말 없음.
     → dict(live, headline, start, first_buy, items=[{label, ok, why}], n_ok, n_items, missing)"""
@@ -139,7 +139,20 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None):
             start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt_after}부터(오늘은 워커가 안 돌고 있습니다{_wnote} · 직접 켜면 오늘부터)'
         else:
             start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt}부터' if nxt else '다음 장 날짜를 구하지 못했습니다(휴장일 표 밖)'
-    first = ("실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"
+    # 라운드 517 — 첫 실매수 주문이 나간 뒤에도 카드가 '그 날짜는 미리 말할 수 없습니다'만 적었다(2026-10-13 09:00:12 첫 실주문).
+    #   장부의 실전 매수 주문(`live_buys` · 실행부가 적은 그대로)을 사실로 먼저 적는다 — 주문이 나간 것과 체결(실제 매수)은 다르다.
+    lb = sorted([it for it in (live_buys or []) if it.get('side') == 'buy' and it.get('mode') == 'LIVE'],
+                key=lambda it: str(it.get('created_ts') or ''))
+    if lb:
+        f0 = lb[0]
+        fq = sum(int(it.get('filled_qty') or 0) for it in lb)
+        ts0 = str(f0.get('created_ts') or '')
+        fact = (f"실주문은 이미 나갔습니다 — 실전 매수 주문 {len(lb)}건 · 처음 {ts0[:10]} {ts0[11:19]} "
+                f"({f0.get('code') or '—'} · {_f(f0.get('price')) or 0:,.0f}원 지정가 · 지금 {_EV_KO.get(f0.get('state'), f0.get('state') or '—')}) · "
+                + (f"체결 합계 {fq}주. " if fq else "아직 체결 0주 — 체결은 진입가 지정가에 닿을 때입니다. "))
+    else:
+        fact = ''
+    first = (fact + "실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"
              + (" · 주문 방식이 '계획마다 승인'이라 그 계획을 '오늘 계획'에서 승인해야 삽니다" if X.approval_of(stt) == 'approve' else '')
              + '. 그 날짜는 미리 말할 수 없습니다 — 추천이 언제 나올지는 아무도 모릅니다.'
              # 라운드 494 — 사람이 고른 계획 매수: 엔진 판정은 그대로, 고르는 것은 사람이다(이 카드는 아무 계획도 권하지 않는다)
@@ -219,13 +232,19 @@ def risk_usage(summary, limits, managed_n=0, new_orders_today=0, planned_loss_su
 
 
 def funnel_today(plans_today, approved=None, approval_on=False, intents_today=None, managed_codes=None, approval_mode=None,
-                 picks=None, report=None):
+                 picks=None, report=None, prices=None):
     """오늘 깔때기 — 후보 → 실주문 자격 → 승인 → 주문 냄 → 체결. 전부 장부의 수(지어내지 않는다).
 
     라운드 491 — 실전이 아니면 `approval_on` 이 거짓이라 승인 칸이 '승인 불필요(자격 = 승인)'였는데, 같은 화면의 시작 카드는 주문 방식이
     '계획마다 승인'이라 승인해야 산다고 적었다(한 화면의 두 말). 주문 방식(`approval_mode`)이 승인형이면 실전이 아니어도 승인한 수를
-    세고 '실전에서 계획마다 승인'이라 적는다."""
+    세고 '실전에서 계획마다 승인'이라 적는다.
+
+    라운드 514 — `prices`({코드: 현재가 또는 None})를 주면 줄마다 현재가와 그 가격에서 진입가·지정가까지의 거리를 적는다(사용자:
+    *"너무 간단하게만 나오지 않아? 현재가가 얼마고 하면서 나와야 하는 거 아닌가"*). 가격은 부르는 쪽(화면)이 받는다 — 이 함수는
+    네트워크를 안 탄다. 안 주면(None) 종전 줄 그대로."""
     ps = list(plans_today or [])
+    _lv514 = prices is not None
+    _px514 = (lambda code: (prices or {}).get(str(code or '')))
     live = [p for p in ps if p.get('live_ok')]
     if approval_on:
         appr = [p for p in live if p.get('plan_id') in (approved or set())]
@@ -251,13 +270,17 @@ def funnel_today(plans_today, approved=None, approval_on=False, intents_today=No
     names = {str(p.get('code')): plan_label(p) for p in ps if p.get('code')}
     hp_ids = {p.get('plan_id') for p in hp}
     # 실주문 자격이 있는 후보를 먼저(안정 정렬 · 나머지 차례는 장부 그대로) — 누른 사람이 찾는 줄이 맨 위에 오게
-    return [dict(label='후보', n=len(ps), sub=cand_sub, items=[candidate_item(p) for p in sorted(ps, key=lambda p: not p.get('live_ok'))]),
+    return [dict(label='후보', n=len(ps), sub=cand_sub,
+                 items=[candidate_item(p, px=_px514(p.get('code')), live=_lv514) for p in sorted(ps, key=lambda p: not p.get('live_ok'))]),
             dict(label='실주문 자격', n=len(live) + len(hp), sub=elig_sub,
-                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids) for p in list(live) + hp]),
+                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids, px=_px514(p.get('code')), live=_lv514)
+                        for p in list(live) + hp]),
             dict(label='승인', n=len(appr), sub=appr_sub,
-                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids) for p in appr]),
-            dict(label='주문 냄', n=len(its), sub='오늘 매수 의도', items=[intent_item(it, names) for it in its]),
-            dict(label='체결', n=len(filled), sub='부분 체결 포함', items=[intent_item(it, names) for it in filled])]
+                 items=[plan_price_item(p, picked=p.get('plan_id') in hp_ids, px=_px514(p.get('code')), live=_lv514) for p in appr]),
+            dict(label='주문 냄', n=len(its), sub='오늘 매수 의도',
+                 items=[intent_item(it, names, px=_px514(it.get('code')), live=_lv514) for it in its]),
+            dict(label='체결', n=len(filled), sub='부분 체결 포함',
+                 items=[intent_item(it, names, px=_px514(it.get('code')), live=_lv514) for it in filled])]
 
 
 FUNNEL_WHY_CUT = 44          # 후보 칸의 막힌 사유를 이 글자에서 줄인다(칸 폭 · 판정 문턱 아님) — 전체는 '오늘 계획' 갈래의 표
@@ -271,8 +294,30 @@ def plan_label(p):
     return nm or cd or str((p or {}).get('plan_id') or '—')
 
 
-def candidate_item(p):
-    """후보 칸의 한 줄 — 이름표 · 출처(개장 전 리포트 / 관심종목 추천) · 실주문 자격 또는 막힌 사유(길면 '…' · 전체는 '오늘 계획')."""
+def px_clause(px, entry=None, stop=None, live=False, to='진입가', buyable=True):
+    """현재가 한 조각(라운드 514) — 지금 가격과 그 가격에서 `to`(진입가·지정가)까지의 거리. 판정 낱말 없음 · 새 문턱 없음.
+    손절선 이하면 워커가 사지 않는다는 사실(실행부 `_entries` 의 손절선 확인과 같은 비교). `live` 가 거짓이면 ''(종전 줄 그대로) ·
+    가격을 못 받았으면 그 사실. `buyable` 이 거짓(추천 아님 · 고르지 않은 후보)이면 진입가 이하여도 '체결될 수 있음'을 안 붙인다 —
+    그 계획은 워커가 사지 않는다."""
+    if not live:
+        return ''
+    px = _f(px)
+    if not px:
+        return '현재가 못 받음'
+    head = f'현재가 {px:,.0f}원'
+    e, s = _f(entry), _f(stop)
+    if s and px <= s:
+        return f'{head} · 손절선 {s:,.0f}원 이하 — 워커가 사지 않음'
+    if e and px > e:
+        return f'{head} · {to}까지 {(e / px - 1) * 100:+.1f}%'
+    if e:
+        return f'{head} · {to} 이하' + (' — 지정가 매수가 체결될 수 있음' if buyable else '')
+    return head
+
+
+def candidate_item(p, px=None, live=False):
+    """후보 칸의 한 줄 — 이름표 · 출처(개장 전 리포트 / 관심종목 추천) · 실주문 자격 또는 막힌 사유(길면 '…' · 전체는 '오늘 계획').
+    라운드 514 — `live` 면 이름표 바로 뒤에 현재가와 진입가까지의 거리(`px_clause`)."""
     import swing_engine as _se
     src = '관심종목 추천' if _se.verdict_of(p).get('source') == 'watchlist' else '개장 전 리포트'
     if p.get('live_ok'):
@@ -281,10 +326,11 @@ def candidate_item(p):
         why = str(p.get('block_reason') or '실주문 자격 없음')
         if len(why) > FUNNEL_WHY_CUT:
             why = why[:FUNNEL_WHY_CUT] + '…'
-    return f'{plan_label(p)} · {src} · {why}'
+    pc = px_clause(px, p.get('entry'), None, live, buyable=bool(p.get('live_ok')))
+    return f'{plan_label(p)}' + (f' · {pc}' if pc else '') + f' · {src} · {why}'
 
 
-def plan_price_item(p, picked=False):
+def plan_price_item(p, picked=False, px=None, live=False):
     """자격·승인 칸의 한 줄 — 이름표 · 진입 지정가 · 1차 목표 · 손절(장부의 계획 값 그대로 · 없는 값은 안 적는다).
 
     라운드 509 — 판정 때 가격(계획의 판정 기록 `current_price`)과 진입가까지의 거리도 적는다. 진입가는 지정가라 그 가격까지
@@ -298,19 +344,41 @@ def plan_price_item(p, picked=False):
             parts.append(f'{nm} {v:,.0f}원')
     cp, e = _f(_se.verdict_of(p).get('current_price')), _f((p or {}).get('entry'))
     if cp and e:
-        parts.append(f'판정 때 가격 {cp:,.0f}원 · ' + (f'진입가까지 {(e / cp - 1) * 100:+.1f}%' if cp > e else '진입가 이하'))
+        if live:            # 라운드 514 — 현재가 쪽이 '진입가까지'를 이미 말한다 · 한 줄에 같은 이름의 수가 둘이면 단위를 옆에(R233)
+            parts.append(f'판정 때 가격 {cp:,.0f}원(그때 ' + (f'{(e / cp - 1) * 100:+.1f}%)' if cp > e else '진입가 이하)'))
+        else:
+            parts.append(f'판정 때 가격 {cp:,.0f}원 · ' + (f'진입가까지 {(e / cp - 1) * 100:+.1f}%' if cp > e else '진입가 이하'))
+    # 라운드 514 — 현재가를 이름표 바로 뒤에(가장 먼저 읽히게) · 손절선 이하면 워커가 사지 않는다는 사실까지
+    pc = px_clause(px, (p or {}).get('entry'), (p or {}).get('stop'), live)
+    if pc:
+        parts.insert(0, pc)
     return plan_label(p) + (' · 사람이 고름' if picked else '') + (' · ' + ' · '.join(parts) if parts else '')
 
 
-def intent_item(it, names=None):
-    """주문 칸의 한 줄 — 이름표(계획에서) · 수량 · 지정가 · 지금 상태(관제실 사건 낱말과 같은 표)."""
+def intent_item(it, names=None, px=None, live=False):
+    """주문 칸의 한 줄 — 이름표(계획에서) · 수량 · 지정가 · 지금 상태(관제실 사건 낱말과 같은 표).
+
+    라운드 514 — 체결이 있으면 체결 수량·평균 체결가(장부의 맞춘 값 그대로) · `live` 면 현재가와 지정가까지의 거리, 체결된 뒤엔
+    평균 체결가 대비 지금 평가(비용 제외 · 매도 전)."""
     code = str((it or {}).get('code') or '')
     lab = (names or {}).get(code) or code or '—'
-    px = _f((it or {}).get('price'))
     q = (it or {}).get('qty')
     st_ = (it or {}).get('state')
-    return (f'{lab}' + (f' · {q}주' if q else '') + (f' · {px:,.0f}원' if px else ' · 시장가')
-            + (f' · {_EV_KO.get(st_, st_)}' if st_ else ''))
+    lim = _f((it or {}).get('price'))
+    out = (f'{lab}' + (f' · {q}주' if q else '') + (f' · {lim:,.0f}원 지정가' if lim else ' · 시장가')
+           + (f' · {_EV_KO.get(st_, st_)}' if st_ else ''))
+    fq, avg = int((it or {}).get('filled_qty') or 0), _f((it or {}).get('avg_fill'))
+    if fq > 0:
+        out += f' · 체결 {fq}주' + (f' · 평균 {avg:,.0f}원' if avg else '')
+    if live:
+        now = _f(px)
+        if fq > 0 and avg and now:
+            out += f' · 현재가 {now:,.0f}원 · 평균 체결가 대비 {(now / avg - 1) * 100:+.1f}%(비용 제외 · 매도 전)'
+        elif (it or {}).get('side') == 'sell':
+            out += ' · ' + (f'현재가 {now:,.0f}원' + (f' · 지정가까지 {(lim / now - 1) * 100:+.1f}%' if lim else '') if now else '현재가 못 받음')
+        else:
+            out += ' · ' + px_clause(now, lim, None, True, to='지정가')
+    return out
 
 
 def planned_loss_sum(managed):

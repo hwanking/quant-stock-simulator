@@ -2225,7 +2225,8 @@ if _recent_items:
         st.session_state['recent_nonce'] = _recent_nonce + 1
         st.session_state['pending_search'] = _recent_pick
         st.rerun()
-    _rc1, _rc2 = _SB_PICK.columns([1, 1])
+    # 라운드 515 — 반쪽 칸(112px)에서 '최근 목록 비우기'가 버튼 밖으로 7px 나갔다 → 오른쪽 칸을 넓힌다(한 줄에 들어간다)
+    _rc1, _rc2 = _SB_PICK.columns([1, 2])
     if _rc2.button("최근 목록 비우기", width='stretch', key='recent_clear'):
         st.session_state['recent_stocks'] = []
         try:
@@ -3043,7 +3044,9 @@ with st.sidebar.expander(
         st.caption("이름을 누르면 그 종목을 봅니다 · '빼기'로 하나씩 "
                    "지웁니다.")
         for _w in _wl_now:
-            _c1, _c2 = st.columns([3, 1])
+            # 라운드 515 — [3,1] 에선 '빼기' 칸이 41px 라 글자가 밖으로 나갔다. 이 줄은 접는 칸 안이라 쓸 폭이 197px 뿐이다(실측) —
+            #   '빼기' 한 줄에 필요한 폭 49.6px(글자 27.6 + 여백 20 + 테두리 2) · [5,2] 는 48px 라 '빼/기' 로 갈렸다 → [2,1](약 60px)
+            _c1, _c2 = st.columns([2, 1])
             with _c1:
                 if st.button(f"{_w.get('name')} · {_w.get('code')}",
                              width='stretch',

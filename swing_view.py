@@ -925,7 +925,8 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                # 라운드 494 — 지금 살아 있는 고르기(고른 그 모드 · 모드를 마지막으로 바꾼 뒤 · `swing_executor.pick_alive`) · 읽기만
                picks=X.human_picks(stt, mode=mode, mode_ts=L.setting_ts(c, 'mode')))
     # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
-    ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst())
+    ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst(),
+                                      live_buys=[it for it in ctx['intents'] if it.get('side') == 'buy'])     # 라운드 517 — 실주문 사실을 먼저
     # 라운드 492 — 다음 계획이 언제 오나(저녁 작업의 다음 실행 · 그 실행의 자료일 · 매수 시작일) — 못 읽으면 None
     try:
         ctx['next_j'] = _dash.next_judgement(_ops.scheduled_task(_ops.WATCH_TASK), anchor_day)
@@ -1005,10 +1006,14 @@ def _view_center(st, uk, c, ctx, md):
         st.markdown(_viz.risk_bars(_dash.risk_usage(s or {}, ctx['stt'].get('limits'), managed_n=len(ctx['managed']), new_orders_today=n_new,
                                                     planned_loss_sum=_dash.planned_loss_sum(ctx['managed'])),
                                    theme=theme, title='위험 한도 사용 — 설정 한도 대비(참고 · 직접 보유 포함)'), unsafe_allow_html=True)
+    # 라운드 514 — 줄마다 현재가(사용자: "현재가가 얼마고 하면서 나와야 하는 거 아닌가") · 가격은 여기서 받고 깔때기 함수는 네트워크를 안 탄다
+    _codes514 = [p.get('code') for p in ctx['plans_today']] + [it.get('code') for it in its_today]
+    _px514, _at514 = _px_now514(_codes514) if _codes514 else ({}, None)
     st.markdown(_viz.funnel(_dash.funnel_today(ctx['plans_today'], approved=ctx['approved'], approval_on=ctx['approval_on'], intents_today=its_today,
                                                managed_codes=set(ctx['managed']), approval_mode=X.approval_of(ctx['stt']),
-                                               picks=ctx.get('picks'), report=ctx.get('report')),
-                            theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"), unsafe_allow_html=True)
+                                               picks=ctx.get('picks'), report=ctx.get('report'), prices=_px514),
+                            theme=theme, title=f"오늘의 엔진 — 판정일 {ctx['today'] or '—'} · 후보 → 실주문 자격 → 승인 → 주문 → 체결"
+                            + (f" · 현재가는 네이버 {_at514} 기준(장 전엔 직전 거래일 종가)" if _at514 else '')), unsafe_allow_html=True)
     zl = zero_day_line(c, str(ctx['today']), brief=True) if ctx['today'] else None
     if zl:
         st.caption(md(zl))
@@ -1072,6 +1077,29 @@ def held_codes(ctx):
         except (TypeError, ValueError):
             continue
     return out
+
+
+#: 라운드 514 — 깔때기 줄의 현재가. 화면이 15초마다 다시 그려지므로 같은 종목을 15초 안에 다시 묻지 않는다(실패도 기억 · R303).
+#:   받는 함수는 워커·고르는 칸과 같은 `swing_engine.naver_price`(§4). 여러 종목은 나란히 받는다(한 종목이 느려도 화면이 덜 멈추게).
+_PX514 = {}
+PX_TTL = 15           # 초 — 화면 자동 갱신 간격과 같은 값(새 판정 문턱 아님)
+PX_MAX = 12           # 한 번에 받는 종목 수 상한 — 넘으면 앞 12개만 받고 나머지는 '현재가 못 받음'(그 사실을 줄이 말한다)
+
+
+def _px_now514(codes, now=None, fetch=None):
+    """{코드: 현재가 또는 None}, 받은 시각(HH:MM:SS) — 15초 캐시 · 나란히 받기 · 실패는 None."""
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+    fetch = fetch or _live_px
+    t = now if now is not None else _time.time()
+    want = [str(c) for c in dict.fromkeys(str(c or '') for c in codes or []) if c][:PX_MAX]
+    need = [c for c in want if c not in _PX514 or t - _PX514[c][0] > PX_TTL]
+    if need:
+        with ThreadPoolExecutor(max_workers=min(6, len(need))) as ex:
+            for c, v in zip(need, ex.map(fetch, need)):
+                _PX514[c] = (t, v)
+    at = max((_PX514[c][0] for c in want if c in _PX514), default=None)
+    return {c: _PX514[c][1] for c in want if c in _PX514}, (_dt.datetime.fromtimestamp(at).strftime('%H:%M:%S') if at else None)
 
 
 def _live_px(code):
