@@ -10,6 +10,11 @@ TR `FHKST03010230` · 한 번에 최대 120건 · 서버 보관 최대 1년. 인
   다음 장외 라운드에 broker_kis 의 표로 옮길 수 있다.
 ■ 하루를 거꾸로 넘겨 받는다: 마감 시각부터 120건씩 · 다음 요청은 받은 가장 이른 봉의 1분 전 · 09:00 봉에 닿으면 그날 완료.
   닿지 못하면(빈 응답 · 호출 상한) **완료로 적지 않는다** — 다음 실행이 다시 받는다(중복은 원장 열쇠가 막는다).
+■ 라운드 520 — 실측(2026-10-13 · 두 종목 × 9개 날짜): 이 조회는 **그 날짜의 봉만** 준다(다른 날 봉 0) · 보관은 약 1년(250거래일 전은
+  오고 260거래일 전은 빈다) · 새해 첫 거래일(2026-01-02)은 **10:00 개장**이라 09:00 봉이 없고 · 거래가 드문 종목은 09:00 정각 봉이
+  없을 수 있다. 그래서 '완료'를 09:00 봉 하나로만 재면 그 날들은 영영 미완료라 실행마다 다시 받는다. **한 쪽에 그날 봉이 120개보다
+  적게 오면** 그 앞에는 그날 봉이 없다는 뜻이므로 그것도 완료다(쪽 크기 120 은 공식 설명의 상한이지 고른 수가 아니다). 꽉 찬 쪽 뒤의
+  빈 응답은 여전히 미완료(일시적인 빈 응답과 못 가른다). 처음부터 봉이 0 이면 `none` — 보관 밖이거나 그날 거래가 없다는 **답**이다.
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ PATH = '/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice'
 TR = 'FHKST03010230'
 SESSION_FIRST = '09:00'          # 정규장 첫 봉(엔진의 장 시작과 같은 시각 · 수능일은 부르는 쪽이 날짜로 판단한다)
 MAX_CALLS_PER_DAY = 6            # 하루 약 381봉 ÷ 120 = 4 — 여유 둘(무한 반복 방지 상한 · 판정 문턱 아님)
+PAGE = 120                       # 한 번에 오는 최대 행 수(공식 설명) — 이보다 적게 오면 그 앞에 그날 봉이 없다(라운드 520)
 
 
 def ensure_path(bk_module=None):
@@ -67,8 +73,13 @@ def fetch_day(broker, code, day, until='153000', max_calls=MAX_CALLS_PER_DAY, fi
         if earliest <= first:
             stop = '첫 봉 닿음'
             break
+        if len(mine) < PAGE:
+            stop = f'그날 첫 거래까지(마지막 쪽 {len(mine)}개 < {PAGE})'
+            break
         hour = _minus_one_minute(earliest)
     else:
         stop = '호출 상한'
     out = sorted(got.values(), key=lambda b: b['t'])
-    return out, dict(calls=calls, raw=raw, other_day=other, rejects=rejects, complete=(stop == '첫 봉 닿음'), stop=stop)
+    done = stop == '첫 봉 닿음' or str(stop).startswith('그날 첫 거래까지')
+    return out, dict(calls=calls, raw=raw, other_day=other, rejects=rejects, complete=done, stop=stop,
+                     none=(not got and stop == '빈 응답'))

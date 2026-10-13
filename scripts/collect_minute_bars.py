@@ -67,6 +67,16 @@ def forward_codes(path=None):
     return codes
 
 
+def split_unfinal(todo, unfinal):
+    """(종목, 날짜) 목록 → (받을 것, 확정 전이라 건너뛸 것). 라운드 520 — 2026-10-13 15:3x 에 받은 그날 분봉은 15:19 까지였다(마감
+    동시호가 15:30 봉이 아직 없었다) · 그런데 09:00 봉에 닿아 '완료'로 적혀 빠진 채 굳을 자리였다. 확정 판정은 한 곳
+    (`prediction_log.unfinal_day` · 애프터마켓 20:00 뒤 확정 · 라운드 490)을 쓴다 — 새 시각을 고르지 않는다."""
+    if not unfinal:
+        return list(todo), []
+    keep = [(c, d) for c, d in todo if d != unfinal]
+    return keep, [(c, d) for c, d in todo if d == unfinal]
+
+
 def in_session(now=None):
     import swing_executor as X
     return X.session_open(now or X.now_kst())
@@ -102,6 +112,10 @@ def main(argv=None):
     days = trading_days_back(end, a.days)
     done = day_bars.fetched_set()
     todo = [(c, d) for c in codes for d in days if (c, d) not in done]
+    import prediction_log
+    todo, unfin = split_unfinal(todo, prediction_log.unfinal_day())
+    if unfin:
+        print(f'[건너뜀] {unfin[0][1]} — 그날 봉이 아직 확정 전이다(애프터마켓 20:00 뒤) · {len(unfin)}건은 다음 실행이 받는다')
     print(f'[계획] 종목 {len(codes)} · 거래일 {len(days)}({days[0]}~{days[-1]}) · 받을 (종목, 날짜) {len(todo)} · 이미 완료 '
           f'{len(codes) * len(days) - len(todo)} · 예상 호출 약 {len(todo) * 4}회(하루 약 381봉 ÷ 120)')
     if not a.apply:
@@ -117,7 +131,8 @@ def main(argv=None):
     cfg = broker_kis.load_config()
     br = broker_kis.KisBroker(cfg)
     t0 = time.time()
-    tot = dict(ok=0, partial=0, err=0, bars=0, added=0, calls=0)
+    tot = dict(ok=0, partial=0, err=0, bars=0, added=0, calls=0, none=0)
+    keys_by_code = {}                                         # 라운드 520 — 종목 파일은 한 번만 읽고 열쇠를 들고 다닌다
     for i, (code, day) in enumerate(todo, 1):
         try:
             bars, info = day_feed.fetch_day(br, code, day)
@@ -127,18 +142,22 @@ def main(argv=None):
                                       at=_dt.datetime.now().astimezone().isoformat(timespec='seconds')))
             print(f'  {code} {day} 실패 — {type(e).__name__}: {str(e)[:120]}')
             continue
-        added, dup = day_bars.append_bars(code, bars)
+        if code not in keys_by_code:
+            keys_by_code[code] = day_bars.existing_keys(code)
+        added, dup = day_bars.append_bars(code, bars, keys=keys_by_code[code])
         n, first, last = day_bars.day_summary(bars)
         tot['calls'] += info['calls']
         tot['bars'] += n
         tot['added'] += added
-        tot['ok' if info['complete'] else 'partial'] += 1
+        tot['ok' if info['complete'] else ('none' if info.get('none') else 'partial')] += 1
         day_bars.log_fetched(dict(code=code, day=day, n=n, first=first, last=last, calls=info['calls'], complete=info['complete'],
-                                  stop=info['stop'], raw=info['raw'], other_day=info['other_day'], rejects=info['rejects'],
+                                  stop=info['stop'], none=bool(info.get('none')), raw=info['raw'], other_day=info['other_day'],
+                                  rejects=info['rejects'],
                                   added=added, dup=dup, at=_dt.datetime.now().astimezone().isoformat(timespec='seconds')))
         if i % 20 == 0 or i == len(todo):
             print(f'  {i}/{len(todo)} · 봉 {tot["bars"]:,} · 더함 {tot["added"]:,} · 호출 {tot["calls"]:,} · {time.time() - t0:.0f}초')
-    print(f'[끝] 완료 {tot["ok"]} · 덜 받음 {tot["partial"]} · 실패 {tot["err"]} · 봉 {tot["bars"]:,} · 더함 {tot["added"]:,} · '
+    print(f'[끝] 완료 {tot["ok"]} · 봉 없음(답) {tot["none"]} · 덜 받음 {tot["partial"]} · 실패 {tot["err"]} · 봉 {tot["bars"]:,} · '
+          f'더함 {tot["added"]:,} · '
           f'호출 {tot["calls"]:,} · {time.time() - t0:.0f}초')
     return 0 if tot['err'] == 0 else 1
 

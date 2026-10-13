@@ -839,7 +839,8 @@ def save_scorecard(doc, path=None):
     tmp = p + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, p)
+    import safe_replace                                        # 라운드 519 — 앱이 읽는 순간이면 짧게 다시 · 막히면 복사
+    safe_replace.replace_retry(tmp, p)
     return p
 
 

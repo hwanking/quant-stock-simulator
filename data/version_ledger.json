@@ -7,14 +7,40 @@
   "news": "v2026.08.26.1",
   "sector": "v2026.10.08.1",
   "valuation": "v2026.10.01.1",
-  "execution": "v2026.10.13.0",
+  "execution": "v2026.10.13.1",
   "data": "v2026.10.11.0",
   "entry": "v2026.10.13.0",
   "probability": "v2026.10.06.0",
   "ledger": "v2026.10.11.0",
-  "proof": "v2026.10.13.0"
+  "proof": "v2026.10.13.1"
  },
  "history": [
+  {
+   "axis": "proof",
+   "axis_ko": "판단 평가·성적표",
+   "version": "v2026.10.13.1",
+   "previous": "v2026.10.13.0",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "라운드 519 — 파일 바꿔 끼우기(os.replace)가 다른 프로세스의 읽기에 잠깐 막히면 짧게 다시 하고 끝내 막히면 같은 내용을 제자리에 복사한다(safe_replace 한 곳) · proof.py",
+   "note": "판정·점수·문턱·주문 규칙 불변 · 쓰기 경로의 막힘 대처만",
+   "created_at": "2026-10-13T07:30:24+00:00",
+   "effective_from": "2026-10-13"
+  },
+  {
+   "axis": "execution",
+   "axis_ko": "자동매매 실행",
+   "version": "v2026.10.13.1",
+   "previous": "v2026.10.13.0",
+   "kind": "bugfix",
+   "kind_ko": "버그 수정",
+   "bump": "patch",
+   "reason": "라운드 519 — 파일 바꿔 끼우기(os.replace)가 다른 프로세스의 읽기에 잠깐 막히면 짧게 다시 하고 끝내 막히면 같은 내용을 제자리에 복사한다(safe_replace 한 곳) · scripts/run_swing_worker.py",
+   "note": "판정·점수·문턱·주문 규칙 불변 · 쓰기 경로의 막힘 대처만",
+   "created_at": "2026-10-13T07:30:24+00:00",
+   "effective_from": "2026-10-13"
+  },
   {
    "axis": "proof",
    "axis_ko": "판단 평가·성적표",

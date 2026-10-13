@@ -121,7 +121,8 @@ def mark_session_done(day, now, path=None):
     tmp = p + '.tmp'
     with io.open(tmp, 'w', encoding='utf-8') as f:
         json.dump(dict(day=day, ended=now.isoformat(timespec='seconds')), f, ensure_ascii=False)
-    os.replace(tmp, p)
+    import safe_replace                                        # 라운드 519 — 화면이 읽는 순간이면 짧게 다시 · 막히면 복사
+    safe_replace.replace_retry(tmp, p)
 
 
 def _bars_fn():

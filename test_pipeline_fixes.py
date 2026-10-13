@@ -42487,6 +42487,196 @@ else:
           str(_bad498)[:300], scanned=len(_exp498))
 # ─── §498 끝 ───
 
+# ══════════════════════════════════════════════════════════════════════
+# §499 — 분봉 원장 덧붙이기: 종목 파일은 한 번만 읽고 열쇠를 들고 다닌다 (라운드 520 · 2026-10-13)
+#   종전 append_bars 는 날마다 그 종목 파일을 통째로 다시 읽었다(1년치면 종목당 약 250번 × 최대 9만 줄). keys 를 주면 그 집합으로
+#   거르고 더한 열쇠를 그 집합에 넣는다 — 주지 않으면 종전대로 파일에서. 결과(파일에 남는 줄)는 두 길이 같아야 한다.
+# ══════════════════════════════════════════════════════════════════════
+print("§499 분봉 원장 — 열쇠 집합을 들고 다녀도 파일 결과는 같다 · 수집 스크립트는 종목마다 한 번만 읽는다 (라운드 520)")
+import importlib as _il499
+import tempfile as _tf499
+import day_bars as _db499
+_db499 = _il499.reload(_db499)
+_b499 = lambda d, t: dict(code='111111', day=d, t=t, o=10.0, h=11.0, l=9.0, c=10.0, v=1.0, cum_amt=None)
+_old_nw499 = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+try:
+    with _tf499.TemporaryDirectory(dir=_os.path.join(PROJ, '_probe')) as _td499:
+        _ra499, _rb499 = _os.path.join(_td499, 'a'), _os.path.join(_td499, 'b')
+        _days499 = [[_b499('2026-10-01', '09:00'), _b499('2026-10-01', '09:01'), _b499('2026-10-01', '09:01')],
+                    [_b499('2026-10-02', '09:00'), _b499('2026-10-01', '09:00')],
+                    [_b499('2026-10-02', '09:00'), _b499('2026-10-02', '09:01')]]
+        _ka499 = []
+        for _bs499 in _days499:
+            _ka499.append(_db499.append_bars('111111', _bs499, root=_ra499))
+        _keys499 = _db499.existing_keys('111111', root=_rb499)
+        _kb499 = []
+        for _bs499 in _days499:
+            _kb499.append(_db499.append_bars('111111', _bs499, root=_rb499, keys=_keys499))
+        _fa499 = open(_db499.path_for('111111', _ra499), encoding='utf-8').read()
+        _fb499 = open(_db499.path_for('111111', _rb499), encoding='utf-8').read()
+        check("① 열쇠 집합을 들고 다녀도 파일에 남는 줄이 종전 길과 같다 · 같은 묶음 안의 같은 열쇠도 한 번만 · 더한 열쇠가 집합에 들어간다",
+              _fa499 == _fb499 and _ka499 == _kb499 == [(2, 1), (1, 1), (1, 1)] and len(_keys499) == 4
+              and _fa499.count(chr(10)) == 4, f'{_ka499} {_kb499} {len(_keys499)}')
+finally:
+    if _old_nw499 is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw499
+_cm499 = open(_os.path.join(PROJ, 'scripts', 'collect_minute_bars.py'), encoding='utf-8').read()
+check("② 수집 스크립트는 종목마다 파일을 한 번만 읽고(existing_keys 한 자리) 그 집합을 append_bars 에 넘긴다",
+      _cm499.count('day_bars.existing_keys(') == 1 and 'keys=keys_by_code[code]' in _cm499)
+# ③~⑤ 라운드 520 둘째 — 실측(2026-10-13 · 두 종목 × 9개 날짜): 새해 첫 거래일은 10:00 개장 · 거래 드문 종목은 09:00 정각 봉이 없을 수
+#   있다 · 보관은 약 1년 · 그날 분봉은 마감 직후엔 15:30 봉이 아직 없다. 완료 = 09:00 봉 또는 한 쪽에 120개보다 적게 옴(그 앞에 그날 봉 없음).
+import ast as _ast499
+import datetime as _dt499
+import day_feed as _df499
+_df499 = _il499.reload(_df499)
+
+
+class _FakeBK499:
+    """가짜 증권사 — 그날 봉이 start 부터 15:30 까지(분마다) · 요청 시각 이전 120개 · 그 날짜 봉만(실측대로)."""
+    PATHS = {}
+
+    def __init__(self, start=None):
+        self.start, self.calls = start, 0
+
+    def _call(self, method, key, tr_id, params=None, **kw):
+        self.calls += 1
+        if self.start is None:
+            return {'output2': []}, {}
+        h = params['FID_INPUT_HOUR_1']
+        t = _dt499.datetime(2000, 1, 1, int(h[:2]), int(h[2:4]))
+        rows = []
+        while t >= self.start and len(rows) < 120:
+            rows.append(dict(stck_bsop_date=params['FID_INPUT_DATE_1'], stck_cntg_hour=t.strftime('%H%M%S'), stck_oprc='100',
+                             stck_hgpr='101', stck_lwpr='99', stck_prpr='100', cntg_vol='1', acml_tr_pbmn='1'))
+            t -= _dt499.timedelta(minutes=1)
+        return {'output2': rows}, {}
+
+
+_k10 = _FakeBK499(_dt499.datetime(2000, 1, 1, 10, 0))
+_b10, _i10 = _df499.fetch_day(_k10, '005930', '2026-01-02')
+_k0 = _FakeBK499(None)
+_b0, _i0 = _df499.fetch_day(_k0, '005930', '2025-09-15')
+check("③ 10:00 개장일 — 120·120·91 개로 받아 마지막 쪽이 짧으면(그 앞에 그날 봉이 없다) 완료 · 09:00 봉을 기다리며 다시 받지 않는다 · "
+      "처음부터 봉 0 이면 '없다'는 답(none) · 완료는 아니다",
+      len(_b10) == 331 and _i10['complete'] is True and _i10['calls'] == 3 and '91개' in str(_i10['stop'])
+      and _b0 == [] and _i0['none'] is True and _i0['complete'] is False and _i0['calls'] == 1, str((_i10, _i0)))
+_old_nw499b = _os.environ.pop('GAEUM_NO_LOCAL_WRITE', None)
+try:
+    with _tf499.TemporaryDirectory(dir=_os.path.join(PROJ, '_probe')) as _td499b:
+        _db499.log_fetched(dict(code='111111', day='2025-09-15', complete=False, none=True), root=_td499b)
+        _db499.log_fetched(dict(code='111111', day='2026-01-02', complete=True), root=_td499b)
+        _db499.log_fetched(dict(code='111111', day='2026-01-05', complete=False, none=False, err='x'), root=_td499b)
+        _fs499 = _db499.fetched_set(root=_td499b)
+finally:
+    if _old_nw499b is not None:
+        _os.environ['GAEUM_NO_LOCAL_WRITE'] = _old_nw499b
+check("④ 이어 받기 — 완료한 날과 '없다'는 답을 받은 날은 다시 안 묻고 · 실패·덜 받은 날만 다시 묻는다",
+      _fs499 == {('111111', '2025-09-15'), ('111111', '2026-01-02')}, str(_fs499))
+sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+import collect_minute_bars as _cm499
+_cm499 = _il499.reload(_cm499)
+_kp499, _sk499 = _cm499.split_unfinal([('1', '2026-10-12'), ('1', '2026-10-13'), ('2', '2026-10-13')], '2026-10-13')
+_kn499, _sn499 = _cm499.split_unfinal([('1', '2026-10-12')], None)
+_main499 = [n for n in _ast499.walk(_ast499.parse(open(_os.path.join(PROJ, 'scripts', 'collect_minute_bars.py'), encoding='utf-8').read()))
+            if isinstance(n, _ast499.FunctionDef) and n.name == 'main'][0]
+_calls_m499 = {_ast499.unparse(n.func) for n in _ast499.walk(_main499) if isinstance(n, _ast499.Call)}
+check("⑤ 확정 전인 날(애프터마켓 20:00 전 · 판정은 prediction_log.unfinal_day 한 곳)은 받지 않고 다음 실행에 넘긴다",
+      _kp499 == [('1', '2026-10-12')] and len(_sk499) == 2 and _kn499 == [('1', '2026-10-12')] and _sn499 == []
+      and 'split_unfinal' in _calls_m499 and 'prediction_log.unfinal_day' in _calls_m499, str((_kp499, _sk499, sorted(_calls_m499)[:8])))
+# ─── §499 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §500 — 바꿔 끼우기 한 곳: safe_replace (라운드 519 · 2026-10-13)
+#   Windows 에서 다른 프로세스가 읽느라 연 파일은 os.replace 로 못 바꿔 끼운다(PermissionError 5). 같은 대처(짧게 다시 · 막히면
+#   복사)가 세 벌 따로 있었고 앱이 읽는 동안 저녁 작업·워커가 쓰는 넷은 대처가 없었다. 한 곳으로 모으고 일곱 자리가 부른다.
+# ══════════════════════════════════════════════════════════════════════
+print("§500 바꿔 끼우기 한 곳 — 짧게 다시 · 막히면 복사 · 임시 파일 안 남김 · 일곱 자리가 부른다 (라운드 519)")
+import ast as _ast500
+import importlib as _il500
+import tempfile as _tf500
+import safe_replace as _sr500
+_sr500 = _il500.reload(_sr500)
+with _tf500.TemporaryDirectory(dir=_os.path.join(PROJ, '_probe')) as _td500:
+    _dst500 = _os.path.join(_td500, 'x.json')
+    open(_dst500, 'w', encoding='utf-8').write('OLD')
+    _real500 = _os.replace
+    _n500 = {'n': 0}
+
+    def _flaky500(a, b):
+        _n500['n'] += 1
+        if _n500['n'] <= 2:
+            raise PermissionError(5, '심은 막힘')
+        return _real500(a, b)
+
+    def _stuck500(a, b):
+        raise PermissionError(5, '심은 막힘')
+
+    _tmp500 = _dst500 + '.tmp'
+    open(_tmp500, 'w', encoding='utf-8').write('NEW1')
+    _ok500a = _sr500.replace_retry(_tmp500, _dst500, tries=4, wait=0, replace=_flaky500)
+    _t500a = open(_dst500, encoding='utf-8').read()
+    _left500a = _os.path.exists(_tmp500)
+    open(_tmp500, 'w', encoding='utf-8').write('NEW2')
+    del _sr500.FALLBACK[:]
+    _ok500b = _sr500.replace_retry(_tmp500, _dst500, tries=3, wait=0, replace=_stuck500)
+    _t500b = open(_dst500, encoding='utf-8').read()
+    check("① 잠깐 막히면 다시 해 바꿔 끼운다(심은 막힘 둘 뒤에) · 끝내 막히면 같은 내용을 제자리에 복사 + 물러섬 기록 · 임시 파일은 어느 쪽이든 안 남김",
+          _ok500a is True and _t500a == 'NEW1' and not _left500a and _n500['n'] >= 3   # 심은 막힘 둘 뒤 · 진짜 os.replace 도 방금 만든 파일에서 한 번 막힐 수 있다(2026-10-13 실측 4번)
+          and _ok500b is False and _t500b == 'NEW2' and not _os.path.exists(_tmp500) and _sr500.FALLBACK == ['x.json'],
+          f"{_ok500a} {_ok500b} {_n500} {_sr500.FALLBACK}")
+    # 기본값은 부르는 순간의 os.replace — 정의 때 묶었으면 시험이 os.replace 를 바꿔 심어도 안 닿는다(§408 이 그렇게 심는다)
+    open(_tmp500, 'w', encoding='utf-8').write('NEW3')
+    del _sr500.FALLBACK[:]
+    try:
+        _os.replace = _stuck500
+        _ok500c = _sr500.replace_retry(_tmp500, _dst500, tries=2, wait=0)
+    finally:
+        _os.replace = _real500
+    check("② 바꿔 끼우는 함수를 안 주면 부르는 순간의 os.replace 를 쓴다(정의 때 묶지 않는다)",
+          _ok500c is False and open(_dst500, encoding='utf-8').read() == 'NEW3' and _sr500.FALLBACK == ['x.json'], str(_ok500c))
+    del _sr500.FALLBACK[:]
+# ③ 일곱 자리 — 함수 본문에 os.replace 도 except PermissionError 도 없고 safe_replace.replace_retry 를 부른다(대처가 한 곳)
+_sites500 = [('portfolio.py', 'save_watchlist'), ('swing_notify.py', 'save_state'), ('scripts/pull_research_data.py', '_replace_retry'),
+             ('proof.py', 'save_scorecard'), ('swing_watch.py', 'save'), ('watch_alerts.py', 'save'),
+             ('scripts/run_swing_worker.py', 'mark_session_done')]
+_bad500 = []
+_seen500 = 0
+for _f500, _fn500 in _sites500:
+    _tree500 = _ast500.parse(open(_os.path.join(PROJ, _f500), encoding='utf-8').read())
+    _defs500 = [n for n in _tree500.body if isinstance(n, _ast500.FunctionDef) and n.name == _fn500]
+    if len(_defs500) != 1:
+        _bad500.append((_f500, _fn500, '정의 못 찾음'))
+        continue
+    _seen500 += 1
+    _calls500 = [_ast500.unparse(n.func) for n in _ast500.walk(_defs500[0]) if isinstance(n, _ast500.Call)]
+    _hand500 = [n for n in _ast500.walk(_defs500[0]) if isinstance(n, _ast500.ExceptHandler) and n.type is not None
+                and 'PermissionError' in _ast500.unparse(n.type)]
+    if 'os.replace' in _calls500 or _hand500 or 'safe_replace.replace_retry' not in _calls500:
+        _bad500.append((_f500, _fn500, _calls500.count('os.replace'), len(_hand500)))
+check("③ 일곱 자리가 safe_replace.replace_retry 를 부르고 제 손으로 os.replace·PermissionError 를 다루지 않는다",
+      not _bad500 and _seen500 == len(_sites500), str(_bad500), scanned=_seen500)
+# ④ safe_replace 를 따로 베낀 자리가 새로 생기지 않는다 — 화면·작업이 닿는 모듈에서 'except PermissionError' 를 품은 함수 중
+#   os.replace 도 부르는 것은 safe_replace 자신뿐이어야 한다(다른 이유의 PermissionError 처리는 그대로 둔다)
+import scripts.lineage_audit as _la500
+_mods500 = sorted(set(_la500.reachable_modules()) | set(_la500.reachable_modules('scripts/nightly_local.py'))
+            | set(_la500.reachable_modules('scripts/run_swing_worker.py')) | {s[0] for s in _sites500})
+_copies500 = []
+for _m500 in _mods500:
+    try:
+        _t500 = _ast500.parse(open(_os.path.join(PROJ, _m500), encoding='utf-8').read())
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        continue
+    for _d500 in _ast500.walk(_t500):
+        if not isinstance(_d500, (_ast500.FunctionDef, _ast500.AsyncFunctionDef)):
+            continue
+        _cs500 = {_ast500.unparse(n.func) for n in _ast500.walk(_d500) if isinstance(n, _ast500.Call)}
+        _hs500 = [n for n in _ast500.walk(_d500) if isinstance(n, _ast500.ExceptHandler) and n.type is not None
+                  and 'PermissionError' in _ast500.unparse(n.type)]
+        if 'os.replace' in _cs500 and _hs500 and _os.path.basename(_m500) != 'safe_replace.py':
+            _copies500.append((_os.path.basename(_m500), _d500.name))
+check("④ 바꿔 끼우기 재시도를 따로 베낀 함수 0 — 대처는 safe_replace 한 곳", not _copies500, str(_copies500), scanned=len(_mods500))
+# ─── §500 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

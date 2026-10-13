@@ -86,17 +86,29 @@ def existing_keys(code, root=None):
     return keys
 
 
-def append_bars(code, bars, root=None):
-    """분봉을 덧붙인다 — 이미 있는 (날짜, 시각) 은 건너뛴다(멱등). → (더한 수, 건너뛴 수)."""
+def append_bars(code, bars, root=None, keys=None):
+    """분봉을 덧붙인다 — 이미 있는 (날짜, 시각) 은 건너뛴다(멱등). → (더한 수, 건너뛴 수).
+
+    라운드 520 — `keys` 를 주면 파일을 다시 읽지 않고 그 집합으로 거르고, 더한 열쇠를 **그 집합에 넣는다.** 종전엔 날마다 종목 파일을
+    통째로 다시 읽어 1년치를 받으면 종목당 약 250번 × 최대 9만 줄을 읽었다. 같은 실행 안에서 이 함수만 그 파일에 쓰므로 들고 다니는
+    집합이 파일과 같다. 주지 않으면 종전대로 파일에서 읽는다."""
     if os.environ.get('GAEUM_NO_LOCAL_WRITE') == '1':
         return 0, len(bars or [])
-    keys = existing_keys(code, root)
-    new = [b for b in bars or [] if (b['day'], b['t']) not in keys]
+    if keys is None:
+        keys = existing_keys(code, root)
+    new, seen = [], set()
+    for b in bars or []:
+        k = (b['day'], b['t'])
+        if k in keys or k in seen:
+            continue
+        seen.add(k)
+        new.append(b)
     if new:
         os.makedirs(root or ROOT, exist_ok=True)
         with io.open(path_for(code, root), 'a', encoding='utf-8') as f:
             for b in new:
                 f.write(json.dumps(dict(b, schema=SCHEMA), ensure_ascii=False) + '\n')
+        keys.update(seen)
     return len(new), len(bars or []) - len(new)
 
 
@@ -105,7 +117,10 @@ def fetched_path(root=None):
 
 
 def fetched_set(root=None):
-    """받아 온 (종목, 날짜) — 이어 받기에서 건너뛴다. 못 읽은 줄은 건너뛴다."""
+    """받아 온 (종목, 날짜) — 이어 받기에서 건너뛴다. 못 읽은 줄은 건너뛴다.
+
+    라운드 520 — 처음부터 봉이 0 이었던 날(`none` · 보관 밖이거나 그날 거래 없음)도 **답**으로 친다. 안 그러면 실행마다 다시 묻는다
+    ('없다'는 답도 기록해야 수렴한다)."""
     out = set()
     p = fetched_path(root)
     if not os.path.exists(p):
@@ -114,7 +129,7 @@ def fetched_set(root=None):
         for ln in f:
             try:
                 d = json.loads(ln)
-                if d.get('complete'):
+                if d.get('complete') or d.get('none'):
                     out.add((d['code'], d['day']))
             except (ValueError, KeyError, TypeError):
                 continue

@@ -95,18 +95,9 @@ def save_state(state, path=None):
     # 라운드 508 — 바꿔 끼우기가 Windows 에서 잠깐 막힐 수 있다(방금 만든 파일을 다른 프로세스가 여는 순간 · PermissionError 5 ·
     #   2026-10-13 전체 회귀가 이 줄에서 죽었다). portfolio.save_watchlist 와 같은 모양 — 짧게 다시 해 보고, 그래도 안 되면 바로 쓴다
     #   (상태를 못 남기면 다음 바퀴가 같은 사건을 다시 알린다 · 저장을 포기하지 않는다).
-    for _ in range(5):
-        try:
-            _replace(tmp, p)
-            return
-        except PermissionError:
-            time.sleep(0.05)
-    with io.open(p, 'w', encoding='utf-8') as f:
-        json.dump(state, f, ensure_ascii=False)
-    try:
-        os.remove(tmp)
-    except OSError:
-        pass
+    #   라운드 519 — 대처는 `safe_replace` 한 곳(횟수·간격 그대로 · 물러설 때 같은 내용을 복사).
+    import safe_replace
+    safe_replace.replace_retry(tmp, p, tries=5, wait=0.05, replace=_replace)
 
 
 def _replace(src, dst):

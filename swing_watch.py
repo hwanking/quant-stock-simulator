@@ -92,7 +92,8 @@ def save(doc):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    import safe_replace                                        # 라운드 519 — 화면(15초 갱신)이 읽는 순간이면 짧게 다시 · 막히면 복사
+    safe_replace.replace_retry(tmp, path)
     return path
 
 

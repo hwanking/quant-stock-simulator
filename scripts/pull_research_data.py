@@ -546,24 +546,11 @@ def _replace_retry(tmp, dst, tries=20, wait=0.5):
     2026-10-03 실측: 다른 프로세스가 읽느라 연 파일은 Windows 에서 바꿔 끼우기가 막힌다(PermissionError 5) — 3초 잡게
     심으니 2.5초 기다려 바꿔 끼웠다. 기다림 상한 10초는 원장을 통째로 읽는 시간(약 6초 · 라운드 282)을 덮는 매달림
     방지이지 판정 문턱이 아니다."""
-    import shutil
-    import time
-    try:
-        for _ in range(tries):
-            try:
-                os.replace(tmp, dst)
-                return True
-            except PermissionError:
-                time.sleep(wait)
-        shutil.copyfile(tmp, dst)
+    import safe_replace                                        # 라운드 519 — 대처는 한 곳(횟수·간격은 여기서 정한다)
+    ok = safe_replace.replace_retry(tmp, dst, tries=tries, wait=wait)
+    if not ok:
         REPLACE_FALLBACK.append(os.path.basename(dst))
-        return False
-    finally:
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+    return ok
 
 
 def _write_lines_atomic(dst, lines):
