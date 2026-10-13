@@ -42196,6 +42196,18 @@ check("③ 규칙 글자는 저장소에 한 곳(ui_kit) — 스윙 탭의 SPACI
       _lit492 == 1 and _R492 in _sv492.SPACING_CSS and _sv492.SPACING_CSS == '<style>' + _R492 + '</style>', f'리터럴 {_lit492}곳')
 # ─── §492 끝 ───
 
+# ── §493 — 위험 한도 막대의 개수에 소수가 붙었다 (라운드 513 · 2026-10-13) ─────────────────────────────
+print("§493 위험 한도 막대 — 개수는 정수 · 소수는 비율에만 (라운드 513)")
+import importlib as _il493
+import swing_viz as _vz493
+_vz493 = _il493.reload(_vz493)
+_h493 = _vz493.risk_bars([dict(label='a', used=1, limit=5, unit='개'), dict(label='b', used=1, limit=5, unit='건'),
+                          dict(label='c', used=23.44, limit=90, unit='%'), dict(label='d', used=29370.2, limit=None, unit='원')])
+check("① 개·건은 정수('1개 / 5개 (20%)' · '1건 / 5건') · 비율은 소수 한 자리('23.4% / 90%') · 소수 붙은 개수('1.0개') 없음",
+      '1개 / 5개 (20%)' in _h493 and '1건 / 5건 (20%)' in _h493 and '23.4% / 90% (26%)' in _h493
+      and '1.0개' not in _h493 and '1.0건' not in _h493, _h493[:400])
+# ─── §493 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게

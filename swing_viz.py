@@ -195,7 +195,10 @@ def risk_bars(items, theme='dark', title=''):
         else:
             ratio = float(used) / float(limit)
             bar = max(0.0, min(100.0, ratio * 100.0))
-            txt = f"{float(used):,.{0 if unit == '원' else 1}f}{unit} / {float(limit):,.{0 if unit == '원' else 0}f}{unit} ({ratio * 100:.0f}%)"
+            # 라운드 513 — 종전엔 '원' 이 아니면 소수 한 자리라 개수가 '0.0개 / 5개'·'1.0건 / 5건' 으로 찍혔다(2026-10-13 관제실).
+            #   소수는 비율(%)에만 — 개·건·원은 정수다
+            _dp513 = 1 if unit == '%' else 0
+            txt = f"{float(used):,.{_dp513}f}{unit} / {float(limit):,.0f}{unit} ({ratio * 100:.0f}%)"
             col = t['warn'] if ratio > 1.0 else t['brand']
         rows.append(f"<div style='display:grid; grid-template-columns:minmax(110px,1.2fr) 3fr minmax(150px,1.5fr); align-items:center; gap:10px; padding:5px 0;'>"
                     f"<span style='font-size:13px; color:{t['tx1']};'>{_e(it.get('label'))}</span>"
