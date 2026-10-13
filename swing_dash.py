@@ -282,12 +282,20 @@ def candidate_item(p):
 
 
 def plan_price_item(p, picked=False):
-    """자격·승인 칸의 한 줄 — 이름표 · 진입 지정가 · 1차 목표 · 손절(장부의 계획 값 그대로 · 없는 값은 안 적는다)."""
+    """자격·승인 칸의 한 줄 — 이름표 · 진입 지정가 · 1차 목표 · 손절(장부의 계획 값 그대로 · 없는 값은 안 적는다).
+
+    라운드 509 — 판정 때 가격(계획의 판정 기록 `current_price`)과 진입가까지의 거리도 적는다. 진입가는 지정가라 그 가격까지
+    내려와야 체결되는데, 칸이 진입가만 적어 *"현재가랑 차이가 많이 나는데"* 를 화면이 먼저 말하지 않았다. 판정 기록에 가격이
+    없으면 안 적는다(§3 · 지금 가격을 새로 받지 않는다 — 이 칸은 15초마다 다시 그려진다)."""
+    import swing_engine as _se
     parts = []
     for k, nm in (('entry', '진입 지정가'), ('target', '1차 목표'), ('stop', '손절')):
         v = _f((p or {}).get(k))
         if v is not None:
             parts.append(f'{nm} {v:,.0f}원')
+    cp, e = _f(_se.verdict_of(p).get('current_price')), _f((p or {}).get('entry'))
+    if cp and e:
+        parts.append(f'판정 때 가격 {cp:,.0f}원 · ' + (f'진입가까지 {(e / cp - 1) * 100:+.1f}%' if cp > e else '진입가 이하'))
     return plan_label(p) + (' · 사람이 고름' if picked else '') + (' · ' + ' · '.join(parts) if parts else '')
 
 

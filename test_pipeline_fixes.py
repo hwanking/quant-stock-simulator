@@ -42003,6 +42003,55 @@ check("⑮ 알림 상태 저장 — 바꿔 끼우기가 두 번 막혀도 세 �
 _shu488.rmtree(_d14, ignore_errors=True)
 # ─── §488 끝 ───
 
+# ══════════════════════════════════════════════════════════════════════
+# §489 — '거의 닿았습니다'가 거리를 숨겼다 · 깔때기 계획 줄에 판정 때 가격 (라운드 509 · 2026-10-13)
+#   사용자: "진입 지정가 13,620원 … 진입 지정가랑 현재가랑 차이가 많이 나는데." 판정 때 가격 15,240원에서 −10.6% 인데
+#   다음 조건 칸은 "권장 구간에 거의 닿았습니다" 라 적었다 — '근접' 띠는 하루 고저폭으로 넓힌 기준(이 종목 12.5%)이라
+#   −10.6% 도 근접이다. 띠·문턱은 그대로 두고 거리와 그 기준을 사실로 적는다. 깔때기의 자격·승인 줄은 진입가만 적어
+#   지금 가격과의 거리를 화면이 먼저 말하지 않았다 — 계획의 판정 기록에 있는 가격(current_price)을 같이 적는다.
+# ══════════════════════════════════════════════════════════════════════
+print("§489 진입가까지의 거리를 숨기지 않는다 — 다음 조건 문장 · 깔때기 계획 줄 (라운드 509)")
+import ast as _ast489
+import importlib as _il489
+import pandas as _pd489
+import next_action as _na489
+import swing_dash as _sd489
+_na489 = _il489.reload(_na489)
+_sd489 = _il489.reload(_sd489)
+
+
+def _df489(tr, px):
+    return _pd489.DataFrame({'tr': [tr] * 30, 'high': [px * 1.02] * 30, 'low': [px * 0.98] * 30,
+                             'close': [px] * 30, 'sma_20': [px] * 30})
+
+
+_a489 = _na489.build({'entry_pullback_price': 13625.6}, _df489(0.1243 * 15240, 15240), 15240)
+_t489 = (_a489.get('conditions') or [{}])[0].get('text', '')
+check("① 변동폭이 큰 종목의 '근접' — 거리(10.6% 아래)와 넓힌 기준(하루 고저폭 12.4% · 기준 12.5%)을 적고 '거의 닿았습니다'를 안 쓴다",
+      _a489['kind'] == 'buy_now' and _a489['gap_band'] == '즉시·근접' and '13,626원은 10.6% 아래' in _t489
+      and '그 가격까지 내려와야 삽니다' in _t489 and '12.4%' in _t489 and '12.5%' in _t489 and '거의 닿았' not in _t489, _t489)
+_b489 = _na489.build({'entry_pullback_price': 13625.6}, _df489(0.0, 14000), 14000)
+_tb489 = (_b489.get('conditions') or [{}])[0].get('text', '')
+check("② 고저폭을 못 재면(0) 기준 5.0% 만 적는다 — 없는 변동폭을 지어 적지 않는다",
+      _b489['kind'] == 'buy_now' and '2.7% 아래' in _tb489 and '기준 5.0% 안' in _tb489 and '고저폭' not in _tb489, _tb489)
+_c489 = _na489.build({'entry_pullback_price': 13625.6}, _df489(0.1243 * 13000, 13000), 13000)
+_tc489 = (_c489.get('conditions') or [{}])[0].get('text', '')
+check("③ 현재가가 권장가 이하면 종전 문장 그대로 — '권장 구간에 들어와 있습니다'",
+      _tc489 == '현재가 13,000원은 권장 구간에 들어와 있습니다', _tc489)
+_na_src489 = open(_os.path.join(PROJ, 'next_action.py'), encoding='utf-8').read()
+check("④ 소스에 '거의 닿았습니다' 문장이 다시 생기지 않는다(문자열 상수만 본다)",
+      not any('거의 닿았' in str(n.value) for n in _ast489.walk(_ast489.parse(_na_src489))
+              if isinstance(n, _ast489.Constant) and isinstance(n.value, str)), 'next_action')
+_p489 = dict(plan_id='a', code='000001', name='가', live_ok=1, entry=13620.0, target=15640.0, stop=10739.0,
+             verdict={'source': 'watchlist', 'current_price': 15240.0})
+_q489 = dict(_p489, verdict='{"current_price": 13000.0}')
+_r489 = dict(_p489, verdict={'source': 'watchlist'})
+check("⑤ 깔때기 자격·승인 줄 — 판정 때 가격과 진입가까지의 거리(판정 기록 그대로) · 진입가 이하면 그 사실 · 가격이 없으면 안 적는다",
+      _sd489.plan_price_item(_p489) == '가 (000001) · 진입 지정가 13,620원 · 1차 목표 15,640원 · 손절 10,739원 · 판정 때 가격 15,240원 · 진입가까지 -10.6%'
+      and _sd489.plan_price_item(_q489).endswith('판정 때 가격 13,000원 · 진입가 이하')
+      and '판정 때 가격' not in _sd489.plan_price_item(_r489), _sd489.plan_price_item(_p489))
+# ─── §489 끝 ───
+
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
 #   문서의 하한을 견주므로 중간에 있으면 하한을 그 시점 수(2,796) 아래로 묶었다(§6 이 그렇게
