@@ -11,6 +11,7 @@
 """
 import json
 import os
+import re
 import subprocess
 
 # 라운드 485 — 자식 프로세스(git·PowerShell·python)가 콘솔 창을 띄우지 않게
@@ -157,10 +158,74 @@ def _pid_alive_default(pid):
         return None
 
 
-def worker_status(lock_path=None, pid_alive=None):
-    """워커가 지금 도는가 — 잠금 파일(`pid 시각`)의 주인이 살아 있나 → dict(running, pid, since, note)."""
+#: 장중 세션의 실행 기록 — 워커(`scripts/run_swing_worker.py` 의 RUNLOG)가 세션 시작 줄 · 바퀴마다 한 줄 · 마감 뒤 끝 줄을 남긴다
+RUNLOG_NAME = 'swing_worker_run.txt'
+#: 마지막 바퀴 줄이 바퀴 간격의 이 배수보다 오래되면 끊긴 것으로 본다 — 화면 표시 규칙이지 판정 문턱이 아니다(바퀴 하나가 늦어도
+#:   '안 돎'이라 하지 않을 여유 · 작업 스케줄러는 10분마다 다시 부른다)
+SESSION_STALE_LOOPS = 3
+_RE_SESS = re.compile(r'^\[(\d\d-\d\d) (\d\d:\d\d:\d\d)\] 정규장 .*마감까지 (\d+)초마다')
+_RE_LINE = re.compile(r'^\[(\d\d-\d\d) (\d\d:\d\d:\d\d)\] ')
+
+
+def session_status(now=None, runlog=None):
+    """작업 스케줄러가 띄운 **장중 세션** 워커가 지금 도는가 — 실행 기록으로 본다(라운드 511). 오늘 세션 시작 줄이 없으면 None.
+
+    워커는 잠금을 **바퀴가 도는 1~2초 동안만** 잡고 풀기 때문에(`run_swing_worker.main`), 잠금 파일만 보면 60초 중 58초는
+    '지금 도는 워커 없음'이었다 — 2026-10-13 첫 실매수 날 관제실 시작 카드가 장중에 *"워커가 돌고 있지 않습니다 — 직접 켜면
+    지금부터(python …)"* 라고 적었다(워커는 1분마다 돌고 있었다 · 그 말대로 하나 더 켜면 워커가 둘이 된다). 오늘 세션 시작 줄 뒤에
+    마감 뒤 끝 줄이 없고 마지막 바퀴 줄이 바퀴 간격 × SESSION_STALE_LOOPS 안이면 '실행 중(바퀴 사이)'. 끝 줄이 있으면 '오늘 세션 끝',
+    줄이 그보다 오래 멈췄으면 끊긴 것으로 본다. 기록은 연도를 안 적으므로 월-일로 오늘을 고른다. 못 읽으면 None(잠금 판정 그대로)."""
+    import datetime as _dt
+    now = now or _dt.datetime.now().astimezone()
+    path = runlog or os.path.join(os.path.dirname(LOCK_PATH), RUNLOG_NAME)
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            lines = f.read().splitlines()[-1500:]
+    except OSError:
+        return None
+    md = now.strftime('%m-%d')
+    start_i, loop, start_t = None, None, None
+    for i in range(len(lines) - 1, -1, -1):
+        m = _RE_SESS.match(lines[i])
+        if m and m.group(1) == md:
+            start_i, start_t, loop = i, m.group(2), int(m.group(3))
+            break
+    if start_i is None or not loop:
+        return None
+    since = f'{now.year:04d}-{md}T{start_t}'
+    last_t = None
+    for ln in lines[start_i + 1:]:
+        if '마감 뒤 한 바퀴를 돌았다' in ln or '마감 뒤 바퀴가 끝까지 돌지 못했다' in ln:
+            m = _RE_LINE.match(ln)
+            return dict(running=False, pid=None, since=since,
+                        note=f"오늘 장중 세션 끝 · {start_t[:5]}~{(m.group(2)[:5] if m else '—')}")
+        m = _RE_LINE.match(ln)
+        if m and m.group(1) == md:
+            last_t = m.group(2)
+    ref = last_t or start_t
+    try:
+        hh, mm, ss = (int(x) for x in ref.split(':'))
+        t_last = now.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+    except ValueError:
+        return None
+    age = (now - t_last).total_seconds()
+    if age <= loop * SESSION_STALE_LOOPS:
+        return dict(running=True, pid=None, since=since,
+                    note=f'실행 중 · 장중 세션 {start_t[:5]} 부터 {loop}초마다 · 마지막 바퀴 {ref} (바퀴 사이 — 잠금은 바퀴가 도는 동안만 잡는다)')
+    return dict(running=False, pid=None, since=since,
+                note=f'장중 세션 기록이 {int(age // 60)}분째 멈췄다(마지막 바퀴 {ref}) — 끊긴 것으로 본다 · 작업 스케줄러가 장중 10분마다 다시 부른다')
+
+
+def worker_status(lock_path=None, pid_alive=None, runlog=None, now=None):
+    """워커가 지금 도는가 — 잠금 파일(`pid 시각`)의 주인이 살아 있나 → dict(running, pid, since, note).
+
+    라운드 511 — 잠금이 없으면(바퀴 사이) 장중 세션의 실행 기록을 본다(`session_status`). 실행 기록은 잠금 파일과 같은 폴더의 것을
+    읽는다 — 시험이 임시 잠금 경로를 주면 임시 폴더를 본다(실제 기록을 섞지 않는다)."""
     path = lock_path or LOCK_PATH
     if not os.path.exists(path):
+        s = session_status(now=now, runlog=runlog or os.path.join(os.path.dirname(path), RUNLOG_NAME))
+        if s is not None:
+            return s
         return dict(running=False, pid=None, since=None, note='지금 도는 워커 없음(잠금 파일 없음)')
     try:
         with open(path, encoding='utf-8') as f:

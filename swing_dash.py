@@ -116,6 +116,9 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None):
     missing = [i for i in items if not i['ok']]
     in_sess = X.session_open(now)
     w_run = (worker or {}).get('running') is True
+    # 라운드 511 — '안 돈다'고 적을 때는 왜 그렇게 보는지(워커 상태 문장)를 같은 줄에 — 사용자가 하나를 더 켜기 전에 사실을 본다
+    _wnote = str((worker or {}).get('note') or '').strip()
+    _wnote = f' ({_wnote})' if _wnote else ''
     nxt = _when(*next_session_start(now))
     nxt_after = _when(*next_session_start(now, skip_today=True))
     live = not missing
@@ -124,7 +127,7 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None):
         if in_sess and w_run:
             start = '지금 — 워커가 돌고 있어 다음 바퀴(1분 안)부터 실주문 자격이 있는 계획을 냅니다'
         elif in_sess:
-            start = (f'지금은 장중인데 워커가 돌고 있지 않습니다 — 직접 켜면 지금부터(python scripts/run_swing_worker.py --session --loop 60), '
+            start = (f'지금은 장중인데 워커가 돌고 있지 않습니다{_wnote} — 직접 켜면 지금부터(python scripts/run_swing_worker.py --session --loop 60), '
                      f'아니면 다음 장 {nxt_after}')
         else:
             start = f'다음 장 {nxt} — 그 전에 워커 예약 작업이 돌고 장이 열리면 주문합니다'
@@ -133,7 +136,7 @@ def start_status(mode, stt, cfg, task=None, worker=None, now=None):
         if in_sess and w_run:
             start = '남은 일을 채우면 지금(워커가 돌고 있어 다음 바퀴 · 1분 안)부터'
         elif in_sess:
-            start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt_after}부터(오늘은 워커가 안 돌고 있습니다 · 직접 켜면 오늘부터)'
+            start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt_after}부터(오늘은 워커가 안 돌고 있습니다{_wnote} · 직접 켜면 오늘부터)'
         else:
             start = f'남은 일을 채우면 가장 빨리 다음 장 {nxt}부터' if nxt else '다음 장 날짜를 구하지 못했습니다(휴장일 표 밖)'
     first = ("실제 첫 매수: 중앙 판정이 '추천'(조건 11개 전부 통과)을 낸 판정일의 다음 거래일부터, 그 계획의 진입가 지정가가 닿을 때입니다"

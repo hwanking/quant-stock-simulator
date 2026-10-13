@@ -38686,7 +38686,9 @@ check("③ 워커 — 살아 있으면 진행률 없는 작업(done·total None 
       and _jn454.worker_job(dict(running=False)) is None
       and _jn454.worker_job(dict(running=None, note='모름')) == dict(kind='note', note='모름'))
 _jobs454, _notes454 = _jn454.running_jobs(nightly=_j454, worker=_w454)
-_jobs454b, _notes454b = _jn454.running_jobs(nightly=dict(kind='note', note='끊김'), worker=None)
+# 라운드 511 — 종전엔 worker=None 을 넘겼는데 None 은 '실제 워커 상태를 읽어라'다. 워커 '실행 중' 판정이 바퀴 사이도 세게 되자
+#   장중엔 진짜 세션이 잡혀 이 검사만 붉어졌다(실제 환경에 기댄 검사 · R165). '워커 없음'을 넘긴다(False 는 목록에서 빠진다).
+_jobs454b, _notes454b = _jn454.running_jobs(nightly=dict(kind='note', note='끊김'), worker=False)  # 라운드 511
 check("③' 목록 — 저녁 작업이 머리 · note 는 작업이 아니라 사유로",
       [j['kind'] for j in _jobs454] == ['nightly', 'worker'] and not _notes454 and _jobs454b == [] and _notes454b == ['끊김'])
 # ④ 카드 — 없으면 '' · 막대는 단계가 있을 때만(값 = 끝난/전체) · 나머지는 +N(이름은 툴팁) · 글자 크기는 스케일 · 색은 토큰
@@ -42113,6 +42115,59 @@ _snap490 = _v490.snapshot()
 check("⑥ 버전 도장(케이스·리포트에 붙는 것)이 새 축을 싣고 기본값('v2026.08.02.0')으로 비어 있지 않다",
       all(_snap490.get(a) and _snap490[a] != 'v2026.08.02.0' for a in _NEW490), str({a: _snap490.get(a) for a in _NEW490}))
 # ─── §490 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §491 — 장중 세션 워커가 바퀴 사이에 '안 돎'으로 보였다 (라운드 511 · 2026-10-13 첫 실매수 날)
+#   워커는 잠금을 바퀴가 도는 1~2초 동안만 잡는다. 화면은 잠금 파일만 봐서 60초 중 58초는 '지금 도는 워커 없음'이었고, 시작 카드가
+#   장중에 "워커가 돌고 있지 않습니다 — 직접 켜면 지금부터(python …)" 라 적었다 — 그 말대로 하나 더 켜면 워커가 둘이 된다.
+#   잠금이 없으면 장중 세션의 실행 기록(시작 줄 · 바퀴 줄 · 마감 뒤 끝 줄)으로 바퀴 사이를 가린다.
+# ══════════════════════════════════════════════════════════════════════
+print("§491 장중 세션 워커의 바퀴 사이를 '안 돎'으로 적지 않는다 — 실행 기록으로 가린다 (라운드 511)")
+import datetime as _dt491
+import importlib as _il491
+import tempfile as _tf491
+import shutil as _sh491
+import swing_ops as _so491
+import swing_dash as _sd491
+_so491 = _il491.reload(_so491)
+_sd491 = _il491.reload(_sd491)
+_d491 = _tf491.mkdtemp(prefix='r511_', dir=_os.path.join(PROJ, '_probe'))
+_rl491 = _os.path.join(_d491, 'swing_worker_run.txt')
+_lk491 = _os.path.join(_d491, 'swing_worker.lock')
+_now491 = _dt491.datetime(2026, 10, 13, 9, 23, 30, tzinfo=_dt491.timezone(_dt491.timedelta(hours=9)))
+_base491 = ('[10-12 08:50:00] 정규장 09:00~15:30 — 마감까지 60초마다 돌고 마감 뒤 한 바퀴 더\n'
+            '[10-12 15:31:00] 마감 뒤 한 바퀴를 돌았다 — 끝 · 2026-10-12 세션을 끝냈다고 적었다(다시 불려도 안 돈다)\n'
+            '[10-13 08:50:00] 정규장 09:00~15:30 — 마감까지 60초마다 돌고 마감 뒤 한 바퀴 더\n'
+            '[10-13 09:22:27] LIVE · 판정일 2026-10-12 · 계획 +0 · 모의 0 · 주문 0 · 청산 0 · 막힘 0 · 경고 0\n'
+            '   어떤 메모 줄\n')
+open(_rl491, 'w', encoding='utf-8').write(_base491)
+_a491 = _so491.worker_status(_lk491, now=_now491)
+_b491 = _so491.worker_status(_lk491, now=_now491 + _dt491.timedelta(minutes=10))
+open(_rl491, 'a', encoding='utf-8').write('[10-13 15:31:12] 마감 뒤 한 바퀴를 돌았다 — 끝 · 2026-10-13 세션을 끝냈다고 적었다\n')
+_c491 = _so491.worker_status(_lk491, now=_now491.replace(hour=15, minute=40))
+_e491 = _so491.worker_status(_lk491, now=_now491 + _dt491.timedelta(days=1))
+check("① 잠금이 없어도 오늘 세션 시작 줄 뒤 마지막 바퀴가 간격×3 안이면 '실행 중(바퀴 사이)' · 10분 멈추면 끊긴 것 · 끝 줄이 있으면 '오늘 세션 끝' · "
+      "다른 날 시작 줄만 있으면 종전 문장(잠금 파일 없음) — 어제 끝난 세션을 오늘로 읽지 않는다",
+      _a491['running'] is True and '바퀴 사이' in _a491['note'] and '09:22:27' in _a491['note'] and _a491['since'] == '2026-10-13T08:50:00'
+      and _b491['running'] is False and '끊긴 것' in _b491['note']
+      and _c491['running'] is False and '세션 끝' in _c491['note'] and '15:31' in _c491['note']
+      and _e491['running'] is False and '잠금 파일 없음' in _e491['note'], str((_a491, _b491, _c491, _e491)))
+open(_lk491, 'w', encoding='utf-8').write('424242 2026-10-13T09:23:00')
+_f491 = _so491.worker_status(_lk491, pid_alive=lambda pid: True, now=_now491)
+check("② 잠금이 있으면 종전 판정 그대로(바퀴가 도는 중 · PID) — 실행 기록은 잠금이 없을 때만 본다",
+      _f491['running'] is True and _f491['pid'] == 424242, str(_f491))
+_g491 = _so491.worker_status(_os.path.join(_tf491.mkdtemp(prefix='r511b_', dir=_os.path.join(PROJ, '_probe')), 'swing_worker.lock'), now=_now491)
+check("③ 시험이 준 임시 잠금 경로는 그 폴더의 기록만 본다 — 실제 워커 기록을 섞지 않는다(그 폴더에 기록이 없으면 종전 문장)",
+      _g491['running'] is False and '잠금 파일 없음' in _g491['note'], str(_g491))
+_cfg491 = dict(env='real', app_key='K', app_secret='S', cano='1', prdt='01', missing=[], problems=[])
+_task491 = dict(ok=True, installed=True, next_run='—', state='Running')
+_ss491 = _sd491.start_status('LIVE', {}, _cfg491, task=_task491, worker=_a491, now=_now491)
+_ss491b = _sd491.start_status('LIVE', {}, _cfg491, task=_task491, worker=_b491, now=_now491)
+check("④ 시작 카드 — 바퀴 사이면 '지금 — 워커가 돌고 있어' · 정말 멈췄으면 '돌고 있지 않습니다' 옆에 그렇게 보는 사유(워커 상태 문장)",
+      '워커가 돌고 있어' in _ss491['start'] and '워커가 돌고 있어' not in _ss491b['start'] and '끊긴 것' in _ss491b['start'],
+      _ss491['start'] + ' | ' + _ss491b['start'])
+_sh491.rmtree(_d491, ignore_errors=True)
+# ─── §491 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
