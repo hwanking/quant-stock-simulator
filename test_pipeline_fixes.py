@@ -42638,13 +42638,19 @@ with _tf500.TemporaryDirectory(dir=_os.path.join(PROJ, '_probe')) as _td500:
     del _sr500.FALLBACK[:]
 # ③ 일곱 자리 — 함수 본문에 os.replace 도 except PermissionError 도 없고 safe_replace.replace_retry 를 부른다(대처가 한 곳)
 _sites500 = [('portfolio.py', 'save_watchlist'), ('swing_notify.py', 'save_state'), ('scripts/pull_research_data.py', '_replace_retry'),
+             ('broker_kis.py', 'KisBroker.token'),   # 라운드 522 — 토큰 파일도 임시 파일 → 바꿔 끼우기(클래스.메서드)
              ('proof.py', 'save_scorecard'), ('swing_watch.py', 'save'), ('watch_alerts.py', 'save'),
              ('scripts/run_swing_worker.py', 'mark_session_done')]
 _bad500 = []
 _seen500 = 0
 for _f500, _fn500 in _sites500:
     _tree500 = _ast500.parse(open(_os.path.join(PROJ, _f500), encoding='utf-8').read())
-    _defs500 = [n for n in _tree500.body if isinstance(n, _ast500.FunctionDef) and n.name == _fn500]
+    if '.' in _fn500:   # 라운드 522 — '클래스.메서드' 도 찾는다
+        _cls500x, _meth500x = _fn500.split('.', 1)
+        _defs500 = [m for c in _tree500.body if isinstance(c, _ast500.ClassDef) and c.name == _cls500x
+                    for m in c.body if isinstance(m, _ast500.FunctionDef) and m.name == _meth500x]
+    else:
+        _defs500 = [n for n in _tree500.body if isinstance(n, _ast500.FunctionDef) and n.name == _fn500]
     if len(_defs500) != 1:
         _bad500.append((_f500, _fn500, '정의 못 찾음'))
         continue
@@ -42654,7 +42660,7 @@ for _f500, _fn500 in _sites500:
                 and 'PermissionError' in _ast500.unparse(n.type)]
     if 'os.replace' in _calls500 or _hand500 or 'safe_replace.replace_retry' not in _calls500:
         _bad500.append((_f500, _fn500, _calls500.count('os.replace'), len(_hand500)))
-check("③ 일곱 자리가 safe_replace.replace_retry 를 부르고 제 손으로 os.replace·PermissionError 를 다루지 않는다",
+check(f"③ {len(_sites500)}자리가 safe_replace.replace_retry 를 부르고 제 손으로 os.replace·PermissionError 를 다루지 않는다",
       not _bad500 and _seen500 == len(_sites500), str(_bad500), scanned=_seen500)
 # ④ safe_replace 를 따로 베낀 자리가 새로 생기지 않는다 — 화면·작업이 닿는 모듈에서 'except PermissionError' 를 품은 함수 중
 #   os.replace 도 부르는 것은 safe_replace 자신뿐이어야 한다(다른 이유의 PermissionError 처리는 그대로 둔다)
@@ -42749,6 +42755,219 @@ check("④ 저녁 작업 — 분봉 단계가 워커 뒤 · 감사 앞(감사는
       and len(_mw501) == 1 and _mw501[0][1][1:] == ['--universe', 'forward-pit', '--nightly', '--apply'] and _mw501[0][3] is None
       and len(_mn501) == 1 and '--apply' not in _mn501[0][1], str((_sw501, _mw501 and _mw501[0][1][1:])))
 # ─── §501 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §502 — 토큰 파일: 쓰기는 임시 파일 → 바꿔 끼우기 · 읽기는 "있는데 못 읽으면" 짧게 다시 · 발급 거절이면 한 번 다시 읽기 (라운드 522 · 2026-10-13)
+#   화면(15초)·워커·저녁 작업이 같은 파일을 읽는다. 종전 제자리 쓰기는 쓰는 순간 빈 파일을 보였고, 그러면 읽은 쪽이 새로 발급하러 가
+#   1분 1회 제한에 걸린다. 가짜 transport · 저장소 밖으로 본 임시 폴더(_inside_repo 를 바꿔 끼운다) · 실제 토큰은 안 건드린다.
+#   경합은 결정적으로 심는다 — 주입한 sleep 이 "그 순간" 파일을 쓰게 하거나, broker_kis 가 쓰는 io 를 바꿔 끼워 열기 실패·디스크 가득을 낸다.
+#   (독립 검토 반영 · 2026-10-13: ① 은 제자리 쓰기로 되돌려도 통과하던 판이라 쓰기 모드로 연 경로를 적어 잰다 · 열기 실패 갈래 · 발급 거절
+#    뒤 다시 읽기 · 쓰다 실패한 임시 파일 · 개수 대신 구조)
+# ══════════════════════════════════════════════════════════════════════
+print("§502 토큰 파일 바꿔 끼우기 · 읽는 쪽 짧게 다시 · 발급 거절이면 한 번 다시 읽기 (라운드 522)")
+import ast as _ast502
+import broker_kis as _bk502
+import io as _iom502
+import json as _js502
+import shutil as _sh502
+_dir502 = _os.path.join(PROJ, '_probe', '_r522_tok')
+_cf502 = dict(app_key='K522', app_secret='S522', account='00000000-01', env='real')
+_orig_inside502 = _bk502._inside_repo
+_orig_io502 = _bk502.io
+_res502 = {}
+
+
+def _tr502_mk(token_status=200):
+    calls = []
+
+    def tr(method, url, headers, params=None, body=None, timeout=10):
+        calls.append(url.rsplit('/', 1)[-1])
+        if url.endswith('/oauth2/tokenP'):
+            if token_status != 200:
+                return token_status, {}, {'error_description': '심은 거절(§502)'}
+            return 200, {}, {'access_token': 'NEW', 'access_token_token_expired': '2099-01-01 00:00:00'}
+        return 200, {}, {'rt_cd': '0'}
+    return tr, calls
+
+
+def _put502(p, s):
+    with open(p, 'w', encoding='utf-8') as f:
+        f.write(s)
+
+
+class _HalfFile502:
+    """첫 조각만 쓰고 디스크가 가득 찬 척한다."""
+
+    def __init__(self, f):
+        self.f, self.n = f, 0
+
+    def write(self, s):
+        self.n += 1
+        if self.n > 1:
+            raise OSError(28, '심은 디스크 가득(§502)')
+        return self.f.write(s)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.f.close()
+        return False
+
+
+class _IoShim502:
+    """broker_kis 가 쓰는 io 대신 — 쓰기 모드로 연 경로를 적고 · 심은 실패(읽기 열기 실패 · 임시 파일 쓰다 디스크 가득)를 낸다."""
+
+    def __init__(self, deny_reads=0, fail_tmp_write=False):
+        self.writes, self.deny_reads, self.fail_tmp_write = [], deny_reads, fail_tmp_write
+
+    def open(self, path, mode='r', *a, **k):
+        if 'w' in mode:
+            self.writes.append(str(path))
+            if self.fail_tmp_write and str(path).endswith('.tmp'):
+                return _HalfFile502(_iom502.open(path, mode, *a, **k))
+        elif self.deny_reads > 0:
+            self.deny_reads -= 1
+            raise PermissionError(13, '심은 열기 실패(바꿔 끼우는 순간 · §502)')
+        return _iom502.open(path, mode, *a, **k)
+
+
+def _tmps502():
+    return sorted(x for x in _os.listdir(_dir502) if x.endswith('.tmp'))
+
+
+try:
+    _bk502._inside_repo = lambda p: False
+    _sh502.rmtree(_dir502, ignore_errors=True)
+    _os.makedirs(_dir502, exist_ok=True)
+    # ① 발급 → 임시 파일에 쓰고 바꿔 끼운다(토큰 파일 자체는 쓰기 모드로 안 연다) · 파일엔 새 토큰 · 임시 파일 0
+    _shA = _IoShim502()
+    _bk502.io = _shA
+    _trA, _cA = _tr502_mk()
+    _brA = _bk502.KisBroker(_cf502, transport=_trA, token_dir=_dir502, sleep=lambda s: None)
+    _tA = _brA.token()
+    _bk502.io = _orig_io502
+    _pA = _brA._token_path()
+    _res502['A'] = (_tA, _cA[:], _js502.load(open(_pA, encoding='utf-8')).get('access_token'), _tmps502(),
+                    _pA in _shA.writes, sum(1 for w in _shA.writes if w.endswith('.tmp')))
+    # ② 파일이 있는데 빈 파일(다른 프로세스가 쓰는 중) → 짧게 다시 읽으면 그 사이 적힌 토큰을 쓴다 · 새 발급 0
+    _trB, _cB = _tr502_mk()
+    _slB = []
+    _brB = None
+
+    def _sleepB(s):
+        _slB.append(s)
+        _put502(_brB._token_path(), _js502.dumps({'access_token': 'OTHER', 'expires_ts': 4.0e9}))
+
+    _brB = _bk502.KisBroker(_cf502, transport=_trB, token_dir=_dir502, sleep=_sleepB)
+    _put502(_brB._token_path(), '')
+    _res502['B'] = (_brB.token(), _cB[:], len(_slB))
+    # ②' 바꿔 끼우는 순간의 열기 실패(PermissionError) 두 번 → 세 번째에 읽는다 · 새 발급 0
+    _put502(_brB._token_path(), _js502.dumps({'access_token': 'OTHER', 'expires_ts': 4.0e9}))
+    _bk502.io = _IoShim502(deny_reads=2)
+    _slB2 = []
+    _trB2, _cB2 = _tr502_mk()
+    _brB2 = _bk502.KisBroker(_cf502, transport=_trB2, token_dir=_dir502, sleep=_slB2.append)
+    _res502['B2'] = (_brB2.token(), _cB2[:], len(_slB2))
+    _bk502.io = _orig_io502
+    # ③ 만료 응답을 받은 쪽이 잊을 때 — 파일이 그 순간 빈 파일이어도 다시 읽어 새 토큰(OTHER)이면 지우지 않는다
+    _slC = []
+    _brC = None
+
+    def _sleepC(s):
+        _slC.append(s)
+        _put502(_brC._token_path(), _js502.dumps({'access_token': 'OTHER', 'expires_ts': 4.0e9}))
+
+    _trC, _cC = _tr502_mk()
+    _brC = _bk502.KisBroker(_cf502, transport=_trC, token_dir=_dir502, sleep=_sleepC)
+    _put502(_brC._token_path(), '')
+    _brC._forget_token(used='OLD')
+    _res502['C'] = (_os.path.exists(_brC._token_path()), len(_slC))
+    # ④ 끝내 못 읽으면(깨진 채 그대로) — 읽기는 None(새로 받는다) · 잊기는 지운다(종전대로) · 다시 읽기는 정해진 횟수까지만
+    _slD = []
+    _trD, _cD = _tr502_mk()
+    _brD = _bk502.KisBroker(_cf502, transport=_trD, token_dir=_dir502, sleep=_slD.append)
+    _put502(_brD._token_path(), '{깨짐')
+    _ldD = _brD._load_token()
+    _nD = len(_slD)
+    _brD._forget_token(used='OLD')
+    _res502['D'] = (_ldD, _nD, _os.path.exists(_brD._token_path()), len(_slD))
+    # ⑤ 파일이 없으면 기다리지 않는다(바로 새로 받을 일)
+    _slE = []
+    _trE, _cE = _tr502_mk()
+    _brE = _bk502.KisBroker(_cf502, transport=_trE, token_dir=_dir502, sleep=_slE.append)
+    _res502['E'] = (_brE._load_token(), len(_slE))
+    # ⑥ 발급이 거절됐는데 그 사이 다른 프로세스가 받아 적었다 → 한 번 기다려 다시 읽고 그 토큰을 쓴다 · 아무도 안 적었으면 종전대로 실패
+    _slF = []
+    _brF = None
+
+    def _sleepF(s):
+        _slF.append(s)
+        _put502(_brF._token_path(), _js502.dumps({'access_token': 'OTHER', 'expires_ts': 4.0e9}))
+
+    _trF, _cF = _tr502_mk(token_status=403)
+    _brF = _bk502.KisBroker(_cf502, transport=_trF, token_dir=_dir502, sleep=_sleepF)
+    try:
+        _tF = _brF.token()
+    except _bk502.BrokerError as _e502f:      # 옛 판(다시 읽기 없음)은 여기서 바로 실패한다 — 회귀를 멈추지 않고 검사 실패로 센다
+        _tF = f'실패: {_e502f}'[:60]
+    if _os.path.exists(_brF._token_path()):
+        _os.remove(_brF._token_path())
+    _slF2 = []
+    _trF2, _cF2 = _tr502_mk(token_status=403)
+    _brF2 = _bk502.KisBroker(_cf502, transport=_trF2, token_dir=_dir502, sleep=_slF2.append)
+    try:
+        _brF2.token()
+        _eF2 = None
+    except _bk502.BrokerError as _e502:
+        _eF2 = str(_e502)
+    _res502['F'] = (_tF, _cF[:], _slF[:], _cF2[:], _slF2[:], bool(_eF2 and '토큰을 못 받았습니다' in _eF2 and '403' in _eF2))
+    # ⑦ 임시 파일을 쓰다 디스크가 가득 찼다 → 이번 호출은 그 토큰을 쓰고 · 토큰 파일은 안 생기고 · 토큰 조각이 든 임시 파일도 안 남는다
+    _shG = _IoShim502(fail_tmp_write=True)
+    _bk502.io = _shG
+    _trG, _cG = _tr502_mk()
+    _brG = _bk502.KisBroker(_cf502, transport=_trG, token_dir=_dir502, sleep=lambda s: None)
+    _tG = _brG.token()
+    _bk502.io = _orig_io502
+    _res502['G'] = (_tG, _os.path.exists(_brG._token_path()), _tmps502(), sum(1 for w in _shG.writes if w.endswith('.tmp')))
+finally:
+    _bk502.io = _orig_io502
+    _bk502._inside_repo = _orig_inside502
+    _sh502.rmtree(_dir502, ignore_errors=True)
+check("① 발급한 토큰은 임시 파일에 써서 바꿔 끼운다 — 토큰 파일 자체를 쓰기 모드로 연 적 0 · 임시 파일 1번 · 파일엔 새 토큰 · 남은 임시 파일 0",
+      _res502.get('A') == ('NEW', ['tokenP'], 'NEW', [], False, 1), str(_res502.get('A')))
+check("② 파일이 있는데 빈 파일(쓰는 중) → 짧게 다시 읽어 그 사이 적힌 토큰을 쓴다 · 새 발급(tokenP) 0 · 한 번만 기다렸다",
+      _res502.get('B') == ('OTHER', [], 1), str(_res502.get('B')))
+check("②' 바꿔 끼우는 순간의 열기 실패(PermissionError) 두 번 → 세 번째에 읽는다 · 새 발급 0 · 두 번 기다렸다",
+      _res502.get('B2') == ('OTHER', [], 2), str(_res502.get('B2')))
+check("③ 잊기도 같은 함수로 읽는다 — 그 순간 빈 파일이어도 다시 읽어 새 토큰이면 지우지 않는다(라운드 496 의 자리)",
+      _res502.get('C') == (True, 1), str(_res502.get('C')))
+_nmax502 = _bk502.KisBroker.TOKEN_READ_TRIES - 1
+check("④ 끝내 못 읽으면 읽기는 None · 잊기는 지운다(종전대로) · 기다림은 정해진 횟수(읽기 한 번에 TOKEN_READ_TRIES-1)까지만",
+      _res502.get('D') == (None, _nmax502, False, 2 * _nmax502), str(_res502.get('D')))
+check("⑤ 파일이 없으면 기다리지 않는다", _res502.get('E') == (None, 0), str(_res502.get('E')))
+_rw502 = _bk502.KisBroker.TOKEN_REREAD_WAIT
+check("⑥ 발급이 거절되면 한 번 기다려 파일을 다시 읽는다 — 그 사이 적힌 토큰이면 그것을 쓰고(발급 1번) · 아무도 안 적었으면 종전대로 실패(사유에 HTTP 코드)",
+      _res502.get('F') == ('OTHER', ['tokenP'], [_rw502], ['tokenP'], [_rw502], True), str(_res502.get('F')))
+check("⑦ 임시 파일을 쓰다 디스크가 가득 차도 이번 호출은 토큰을 쓴다 · 토큰 파일 안 생김 · 토큰 조각이 든 임시 파일 0",
+      _res502.get('G') == ('NEW', False, [], 1), str(_res502.get('G')))
+_tree502 = _ast502.parse(open(_os.path.join(PROJ, 'broker_kis.py'), encoding='utf-8').read())
+_cls502 = [c for c in _tree502.body if isinstance(c, _ast502.ClassDef) and c.name == 'KisBroker'][0]
+_meth502 = {m.name: m for m in _cls502.body if isinstance(m, _ast502.FunctionDef)}
+
+
+def _calls502(fn):
+    return {_ast502.unparse(n.func) for n in _ast502.walk(_meth502[fn]) if isinstance(n, _ast502.Call)}
+
+
+_top502 = {a.name for n in _tree502.body if isinstance(n, _ast502.Import) for a in n.names}
+check("⑧ 구조 — 읽기 둘(_load_token · _forget_token)이 같은 함수(_read_token_file)를 부른다 · 쓰기는 safe_replace 한 곳 · 그 import 는 모듈 맨 위"
+      "(못 가져오면 조용히 저장을 건너뛰지 않는다) · 이 절이 바꿔 끼운 io·_inside_repo 는 되돌렸고 임시 폴더도 지웠다",
+      'self._read_token_file' in _calls502('_load_token') and 'self._read_token_file' in _calls502('_forget_token')
+      and 'safe_replace.replace_retry' in _calls502('token') and 'safe_replace' in _top502
+      and _bk502.io is _orig_io502 and _bk502._inside_repo is _orig_inside502 and not _os.path.exists(_dir502),
+      str((sorted(_calls502('_load_token')), 'safe_replace' in _top502)))
+# ─── §502 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

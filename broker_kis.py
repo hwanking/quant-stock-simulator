@@ -23,7 +23,10 @@ import hashlib
 import io
 import json
 import os
+import threading
 import time
+
+import safe_replace   # 라운드 522 — 토큰 파일 바꿔 끼우기(한 곳). 맨 위에서: 못 가져오면 조용히 저장을 건너뛰지 않고 바로 드러나게
 
 ENVS = ('demo', 'real')
 BASE_URL = {'real': 'https://openapi.koreainvestment.com:9443',
@@ -206,16 +209,45 @@ class KisBroker:
         self._last = 0.0
 
     # ── 토큰 ─────────────────────────────────────────────────────────────
+    # 라운드 522 — 화면(15초 갱신)·워커·저녁 작업이 같은 토큰 파일을 같이 읽는다. 종전엔 제자리로 다시 써서(열기 = 0바이트로 자름) 쓰는
+    #   순간 읽은 쪽이 빈 파일을 보고 '토큰 없음'으로 새로 발급하러 갔다(한국투자는 발급을 1분에 한 번으로 묶는다 → 그 바퀴 실패 ·
+    #   워커라면 그 바퀴의 손절 판정). 탐침(가짜 파일 · 쉬지 않고 쓰고 읽기 · 2026-10-13): 종전 쓰기는 읽기 1,718번 중 빈 파일 874번 ·
+    #   읽는 쪽이 다시 읽어도 94번 중 7번 '없음' 결론. 임시 파일 → 바꿔 끼우기만으로는 Windows 에서 바꿔 끼우는 순간 열기 실패 3,141번 ·
+    #   복사로 물러선 332번에 빈 파일 314번이 남았다 — 그래서 **둘 다**: 쓰기는 바꿔 끼우기 · 읽기는 '있는데 못 읽으면' 짧게 다시.
+    #   둘을 같이 하면 다시 읽기 1,024,821번 중 '없음' 결론 0. 횟수·간격은 운영 선택이지 잰 문턱이 아니다(그 창을 넘기는 짧은 시간).
+    TOKEN_READ_TRIES = 5
+    TOKEN_READ_WAIT = 0.02
+    #   발급이 거절되면(1분 1회) 다른 프로세스가 방금 받아 적었을 수 있다 — 이만큼 기다려 파일을 한 번 다시 읽는다(운영 선택 · 그 프로세스가
+    #   응답을 받아 파일에 적는 시간 · 실패 경로에만 든다).
+    TOKEN_REREAD_WAIT = 1.0
+
     def _token_path(self):
         h = hashlib.sha256((self.cfg['app_key'] or '').encode('utf-8')).hexdigest()[:10]
         return os.path.join(self.token_dir, f'kis_token_{self.env}_{h}.json')
 
+    def _read_token_file(self, p):
+        """토큰 파일 → ('missing', None) · ('ok', dict) · ('unreadable', None) (라운드 522).
+
+        없으면 바로 'missing'(새로 받을 일). 있는데 못 읽으면(바꿔 끼우는 순간의 열기 실패 · 빈 파일 · 깨진 json) 짧게 다시 읽는다 —
+        다른 프로세스가 막 새 토큰을 적는 중일 수 있다. 끝내 못 읽으면 'unreadable'(부르는 쪽이 종전대로 다룬다)."""
+        for k in range(self.TOKEN_READ_TRIES):
+            if not os.path.exists(p):
+                return 'missing', None
+            try:
+                with io.open(p, encoding='utf-8') as f:
+                    d = json.load(f)
+                if isinstance(d, dict):
+                    return 'ok', d
+            except (OSError, ValueError):
+                pass
+            if k < self.TOKEN_READ_TRIES - 1:
+                self.sleep(self.TOKEN_READ_WAIT)
+        return 'unreadable', None
+
     def _load_token(self):
-        p = self._token_path()
         try:
-            with io.open(p, encoding='utf-8') as f:
-                d = json.load(f)
-            if float(d.get('expires_ts') or 0) - 600 > self.clock():
+            st, d = self._read_token_file(self._token_path())
+            if st == 'ok' and float(d.get('expires_ts') or 0) - 600 > self.clock():
                 return d.get('access_token')
         except Exception:                                      # noqa: BLE001
             return None
@@ -234,6 +266,13 @@ class KisBroker:
                                            'appsecret': self.cfg['app_secret']})
         t = (doc or {}).get('access_token')
         if st != 200 or not t:
+            # 라운드 522 — 거절돼도 바로 실패하지 않고 파일을 한 번 다시 읽는다(둘이 같이 만료 직전을 넘었거나, 한쪽이 지운 뒤 다른 쪽이
+            #   막 새로 받은 자리). 있으면 그것을 쓴다 · 없으면 종전대로 실패(지어 쓰지 않는다).
+            self.sleep(self.TOKEN_REREAD_WAIT)
+            t2 = self._load_token()
+            if t2:
+                self._token = t2
+                return t2
             raise BrokerError(f"토큰을 못 받았습니다 (HTTP {st}) — {str((doc or {}).get('error_description') or (doc or {}).get('msg1') or '')[:120]}")
         exp = (doc or {}).get('access_token_token_expired')
         try:
@@ -243,8 +282,20 @@ class KisBroker:
         if not _inside_repo(self.token_dir):
             try:
                 os.makedirs(self.token_dir, exist_ok=True)
-                with io.open(self._token_path(), 'w', encoding='utf-8') as f:
-                    json.dump({'access_token': t, 'expires_ts': exp_ts}, f)
+                # 라운드 522 — 임시 파일 → 바꿔 끼우기(읽는 쪽이 빈 파일을 안 보게). 이름에 프로세스·스레드를 넣는다(화면은 세션을 스레드로
+                #   돌린다 — 둘이 같이 발급해도 남의 반쪽 임시 파일을 바꿔 끼우지 않는다).
+                p = self._token_path()
+                tmp = f'{p}.{os.getpid()}.{threading.get_ident()}.tmp'
+                try:
+                    with io.open(tmp, 'w', encoding='utf-8') as f:
+                        json.dump({'access_token': t, 'expires_ts': exp_ts}, f)
+                    safe_replace.replace_retry(tmp, p, tries=5, wait=0.05)
+                finally:
+                    if os.path.exists(tmp):                    # 쓰다 실패해 바꿔 끼우기까지 못 갔으면 토큰 조각을 남기지 않는다
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
             except Exception:                                  # noqa: BLE001 — 못 남겨도 이번 호출은 쓴다
                 pass
         self._token = t
@@ -264,11 +315,12 @@ class KisBroker:
             try:
                 if os.path.exists(p):
                     if used is not None:
-                        try:
-                            with io.open(p, encoding='utf-8') as f:
-                                cur = json.load(f).get('access_token')
-                        except Exception:                      # noqa: BLE001 — 못 읽으면 지운다(종전대로)
-                            cur = used
+                        # 라운드 522 — 읽기도 같은 함수로: 다른 프로세스가 막 새 토큰을 바꿔 끼우는 순간이면 짧게 다시 읽는다.
+                        #   종전엔 그 순간의 열기 실패를 '못 읽음'으로 보고 방금 적힌 새 토큰까지 지웠다(라운드 496 의 그 자리).
+                        st, d = self._read_token_file(p)
+                        if st == 'missing':
+                            return
+                        cur = (d or {}).get('access_token') if st == 'ok' else used   # 끝내 못 읽으면 지운다(종전대로)
                         if cur and cur != used:
                             return
                     os.remove(p)
