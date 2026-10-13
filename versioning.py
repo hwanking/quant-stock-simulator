@@ -31,12 +31,21 @@ LEDGER = os.path.join(BASE, 'data', 'version_ledger.json')
 #: 라운드 44에서 `valuation`·`sector` 를 더했다. 그전에는 적정가 산식이
 #: 바뀌어도 `model` 하나가 움직여서, 점수 게이트가 바뀐 건지 밸류에이션이
 #: 바뀐 건지 이력만 봐서는 갈라낼 수 없었다.
+#:
+#: 라운드 510 — 여섯 축을 더했다(실행 · 데이터 · 진입 · 확률 · 원장 · 성적표). 사용자: *"가늠코인은 엔진이 많은데 너 엔진은
+#: 이 정도면 충분해? 업데이트 안 해도 되고? 맨날 번호가 똑같은 거 계속이고."* 세어 보니 지난 30일 가장 많이 바뀐 갈래들 —
+#: **실주문을 내는 자동매매 실행부**(커밋 21) · 원장·채점(29) · 시세 수집(11) · 진입 계획(11) · 성적표(12) · 계층 확률(4) — 이
+#: 어느 축에도 속하지 않아 **바뀌어도 버전이 안 움직였다.** 번호가 그대로인 칩은 '안 바뀐 것'이 맞는데, 바뀐 엔진은 칩이 없었다.
+#: 첫 버전 날짜는 그 축 담당 파일의 마지막 변경일(git)이다 — 버전은 축을 만든 날이 아니라 그 축이 마지막으로 바뀐 시점이다(§7).
 AXES = ('model', 'scoring', 'rulebook', 'schema', 'news',
-        'valuation', 'sector')
+        'valuation', 'sector',
+        'execution', 'data', 'entry', 'probability', 'ledger', 'proof')
 AXIS_KO = {
     'model': '모델', 'scoring': '점수 산식', 'rulebook': '룰북',
     'schema': '데이터 스키마', 'news': '뉴스 분석',
     'valuation': '적정가 엔진', 'sector': '섹터 사이클',
+    'execution': '자동매매 실행', 'data': '시세·데이터 수집', 'entry': '진입 계획',
+    'probability': '확률 모델', 'ledger': '원장·채점', 'proof': '판단 평가·성적표',
 }
 
 #: 축 ↔ 담당 파일 — 그 파일이 바뀌면 그 축 버전이 뒤처지지 않았는지 회귀(§109)가 본다. 종전엔 회귀 안에만 있었다 —
@@ -47,7 +56,15 @@ AXIS_FILES = {'model': ['quant_indicators.py', 'verdict_core.py', 'price_axes.py
               'news': ['market_context.py'],
               # 라운드 44 신설 — 적정가와 섹터를 model 축에서 떼어 냈다
               'valuation': ['price_axes.py'],
-              'sector': ['sector_cycle.py']}
+              'sector': ['sector_cycle.py'],
+              # 라운드 510 신설 — 실주문을 내는 길(실행부·증권사·위험 한도·장부·워커). 화면(swing_view·dash·viz)은 넣지 않는다
+              'execution': ['swing_executor.py', 'swing_engine.py', 'swing_risk.py', 'swing_ledger.py', 'broker_kis.py',
+                            'scripts/run_swing_worker.py'],
+              'data': ['bitemporal_engine.py'],
+              'entry': ['next_action.py', 'trade_plan.py', 'entry_facts.py'],
+              'probability': ['case_layers.py'],
+              'ledger': ['ledger_view.py', 'prediction_log.py', 'scripts/calibration_lab.py'],
+              'proof': ['proof.py']}
 
 BUMP_PATCH = 'patch'
 BUMP_DATE = 'date'
@@ -63,12 +80,15 @@ CHANGE_KINDS = {
     'gate': BUMP_DATE,
     'algorithm': BUMP_DATE,
     'engine_swap': BUMP_MAJOR,
+    # 라운드 510 — 축을 새로 만들 때의 첫 줄. 버전 날짜는 담당 파일의 마지막 변경일이다(`register_axis`).
+    'axis_new': BUMP_DATE,
 }
 KIND_KO = {
     'ui': '화면 수정', 'copy': '문구 수정', 'data_fix': '데이터 오류 수정',
     'bugfix': '버그 수정', 'weight': '점수 가중치 변경',
     'gate': '게이트 변경', 'algorithm': '알고리즘 변경',
     'engine_swap': '엔진 전면 교체',
+    'axis_new': '축 신설',
 }
 
 _RE_VER = re.compile(r'^v(\d{4})\.(\d{2})\.(\d{2})(?:\.(\d+))?$')

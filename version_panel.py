@@ -17,7 +17,10 @@ import versioning as _ver
 
 #: 칩에 쓰는 짧은 이름 — 종전엔 web_app 안에 있었다(라운드 44 · 목록은 versioning.AXES 가 정한다).
 AXIS_SHORT = {'model': '모델', 'scoring': '산식', 'rulebook': '룰북', 'schema': '스키마', 'news': '뉴스',
-              'valuation': '적정가', 'sector': '업황'}
+              'valuation': '적정가', 'sector': '업황',
+              # 라운드 510 신설 여섯
+              'execution': '실행', 'data': '데이터', 'entry': '진입', 'probability': '확률', 'ledger': '원장',
+              'proof': '성적표'}
 
 #: 축에 걸린 열린 이슈의 열쇠 — 종전엔 web_app 의 칩 툴팁 안에 있었다(라운드 182·257). 한 곳에 둔다(§4).
 #:   ⚠️ 모델 축은 일부러 안 건다 — `model|vb_gap` 은 일일 규칙이 열고 닫는 이슈라 손으로 걸지 않는다(라운드 222·262 의 결정 ·
@@ -146,7 +149,7 @@ def load_inputs():
 
 
 def section_html(esc, tok: dict, inputs=None) -> str:
-    """일곱 축의 칸 전부 — 머리 한 줄 + 축마다 접힌 칸. 축 목록은 versioning.AXES 가 정한다(손으로 나열하지 않는다)."""
+    """모든 축의 칸 — 머리 한 줄 + 축마다 접힌 칸. 축 목록은 versioning.AXES 가 정한다(손으로 나열하지 않는다)."""
     led, issues, rows, ed = inputs if inputs is not None else load_inputs()
     cur = (led or {}).get('axes') or {}
     tx3 = tok.get('tx3', '#9DAABC')

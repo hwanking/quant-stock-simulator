@@ -1380,7 +1380,7 @@ def tone_css(theme: str = 'dark') -> str:
     }}
 
     /* 상단 바 — 가늠 코인 topbar 처럼 본문과 같은 바탕에 **아래 1px 선** · 둥근 상자가 아니다.
-       첫 줄: 상태·판단 수(왼쪽) · 업데이트·보는 중(오른쪽), 둘째 줄: 엔진 축 버전 칩 7개 */
+       첫 줄: 상태·판단 수(왼쪽) · 업데이트·보는 중(오른쪽), 둘째 줄: 엔진 축 버전 칩(축 수는 versioning.AXES · 라운드 510 에 13개 — 넓은 화면은 줄을 넘겨 감싸고 좁은 화면은 가로 밀기) */
     .qnav {{ background: {t['bg']} !important; padding: 12px 0 12px 0 !important;
         row-gap: 8px !important; border-radius: 0 !important;
         border-bottom: 1px solid {t['line']} !important; }}

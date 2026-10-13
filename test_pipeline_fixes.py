@@ -7996,7 +7996,9 @@ check("연동됐으면 게이트 사유를 말한다",
 check("연동돼도 조정은 0 이다", _cb114b.get('adj_pct') == 0.0)
 
 # 버전 축 — 적정가·섹터가 독립 축으로 분리됐는가
-check("버전 축이 7개다", len(_ver101.AXES) == 7, str(_ver101.AXES))
+# 라운드 510 — 종전엔 개수(7)를 못 박았다(R98b 의 모양). 축은 늘 수 있다 — 잠그는 것은 성질: 축마다 원장에 버전이 있다.
+check("버전 축이 7개 이상이고 축마다 버전 원장에 현재 버전이 있다",
+      len(_ver101.AXES) >= 7 and all(a in (_ver101._load().get('axes') or {}) for a in _ver101.AXES), str(_ver101.AXES))
 for _a114 in ('valuation', 'sector'):
     check(f"'{_a114}' 축이 있다", _a114 in _ver101.AXES)
     check(f"'{_a114}' 버전이 등록돼 있다",
@@ -41484,7 +41486,22 @@ check("③ 두 버튼 다 폼 안 · Enter 로는 안 켠다(enter_to_submit=Fal
       and 'live_start_missing(cfg, L.settings(c))' in _ls485)
 # ④ 사용자처럼 누른다 — 임시 장부 · 증권사 차단 · 실전 자격증명 모양만 심는다(이 PC 의 연결 정보를 안 읽는다) · 실제 장부는 불변
 _REAL485 = _os.path.join(PROJ, '.portfolio', 'swing.db')
-_rm485 = _os.path.getmtime(_REAL485) if _os.path.exists(_REAL485) else None
+
+
+# 라운드 510 — 종전엔 실제 장부의 **파일 수정 시각**으로 '불변'을 봤다. 장중엔 예약 워커가 1분마다 심박을 적어 수정 시각이 늘
+#   바뀌므로 09:00~15:30 에 돌면 이 검사만 붉어졌다(장 전에 돈 전체 회귀는 통과 · 시간대에 묶인 검사 · R306). 이 시험이 쓸 수
+#   있는 것은 설정(모드·잠금·한도)뿐이라 **설정 기록의 지문**(행 수 · 마지막 번호)을 읽기 전용으로 견준다 — 워커는 설정을 안 쓴다.
+def _setfp485():
+    if not _os.path.exists(_REAL485):
+        return None
+    _c = __import__('sqlite3').connect('file:' + _REAL485 + '?mode=ro', uri=True)
+    try:
+        return tuple(_c.execute('SELECT COUNT(*), MAX(rowid) FROM settings_events').fetchone())
+    finally:
+        _c.close()
+
+
+_rm485 = _setfp485()
 _LIM485 = {'risk_per_trade_krw': '30000', 'max_position_pct': '25', 'max_total_exposure_pct': '90', 'min_cash_pct': '10',
            'max_open_positions': '5', 'max_daily_new_orders': '5'}
 
@@ -41553,7 +41570,7 @@ check("④ 사용자처럼 — 문장을 치고 Enter 없이 바로 누른다: �
       and _a485.get('mode') == 'LIVE' and _a485.get('unlock') == _P485
       and _b485.get('mode') is None and any('입력한 문장이 다릅니다' in w for w in _b485.get('warn') or [])
       and _u485.get('dis') == [False] and _u485.get('unlock') == _P485 and _u485.get('mode') is None
-      and ((_os.path.getmtime(_REAL485) if _os.path.exists(_REAL485) else None) == _rm485),
+      and _setfp485() == _rm485,
       f'{_a485} | {_b485} | {_u485}', scanned=3)
 # ─── §485 끝 ───
 print("§486 파이프라인은 시장을 묻기 전에 실측한다 — 접미사가 틀린 코스닥 종목이 코스피 국면으로 판정되지 않는다 (라운드 506)")
@@ -42051,6 +42068,51 @@ check("⑤ 깔때기 자격·승인 줄 — 판정 때 가격과 진입가까지
       and _sd489.plan_price_item(_q489).endswith('판정 때 가격 13,000원 · 진입가 이하')
       and '판정 때 가격' not in _sd489.plan_price_item(_r489), _sd489.plan_price_item(_p489))
 # ─── §489 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §490 — 버전 축이 없던 엔진 여섯 갈래에 축 (라운드 510 · 2026-10-13)
+#   사용자: "가늠코인은 엔진이 많은데 너 엔진은 이 정도면 충분해? 업데이트 안 해도 되고? 맨날 번호가 똑같은 거 계속이고."
+#   지난 30일 가장 많이 바뀐 갈래(실주문 실행부 · 원장·채점 · 시세 수집 · 진입 계획 · 성적표 · 계층 확률)가 어느 축에도 속하지
+#   않아 바뀌어도 버전이 안 움직였다. 축을 붙이고 첫 버전 날짜를 담당 파일의 마지막 변경일로 — 그 뒤로는 §109 가 뒤처짐을 잡는다.
+# ══════════════════════════════════════════════════════════════════════
+print("§490 버전 축이 없던 엔진에 축 — 실행·데이터·진입·확률·원장·성적표 (라운드 510)")
+import importlib as _il490
+import subprocess as _sp490
+import versioning as _v490
+import version_panel as _vp490
+_v490 = _il490.reload(_v490)
+_vp490 = _il490.reload(_vp490)
+_NEW490 = ('execution', 'data', 'entry', 'probability', 'ledger', 'proof')
+check("① 새 축 여섯이 축 목록·이름·짧은 이름·담당 파일 표에 다 있다(한 곳 · 빠진 표가 없게)",
+      all(a in _v490.AXES and a in _v490.AXIS_KO and a in _vp490.AXIS_SHORT and _v490.AXIS_FILES.get(a) for a in _NEW490),
+      str([a for a in _NEW490 if not _v490.AXIS_FILES.get(a)]))
+_miss490 = [f for fs in _v490.AXIS_FILES.values() for f in fs if not _os.path.exists(_os.path.join(PROJ, f))]
+check("② 담당 파일 표의 파일이 전부 있다 — §109 는 없는 파일을 건너뛰므로, 이름이 바뀌면 그 축이 조용히 감시 밖이 된다",
+      not _miss490, str(_miss490), scanned=sum(len(fs) for fs in _v490.AXIS_FILES.values()))
+check("③ 실행 축이 실주문 길을 덮는다 — 실행부 · 증권사 연결 · 워커 · 위험 한도 · 장부",
+      all(f in _v490.AXIS_FILES['execution'] for f in ('swing_executor.py', 'broker_kis.py', 'scripts/run_swing_worker.py',
+                                                        'swing_risk.py', 'swing_ledger.py')))
+_led490 = _v490._load()
+_new_rows490 = [h for h in (_led490.get('history') or []) if h.get('kind') == 'axis_new']
+_ok490 = True
+_bad490 = []
+for _a490 in _NEW490:
+    _rs490 = [h for h in _new_rows490 if h.get('axis') == _a490]
+    _last490 = max(_sp490.run(['git', 'log', '-1', '--date=short', '--pretty=%ad', '--', _f490], cwd=PROJ, capture_output=True,
+                              text=True, encoding='utf-8', errors='replace').stdout.strip() for _f490 in _v490.AXIS_FILES[_a490])
+    _first490 = (_rs490[0].get('effective_from') if _rs490 else None)
+    # 축 신설 줄은 하나 · 그 날짜는 그때의 담당 파일 마지막 변경일 이하(그 뒤 변경은 새 릴리스가 따로 올린다 · §109)
+    if len(_rs490) != 1 or not _first490 or _first490 > _last490 or not _rs490[0].get('reason'):
+        _ok490 = False
+        _bad490.append((_a490, len(_rs490), _first490, _last490))
+check("④ 새 축마다 버전 원장에 '축 신설' 줄이 하나 · 사유가 있고 · 첫 날짜가 담당 파일 변경일을 앞지르지 않는다(지어낸 날짜 없음)",
+      _ok490, str(_bad490), scanned=len(_NEW490))
+check("⑤ '축 신설'은 등록된 변경 종류다 — 날짜 자리(그 축이 바뀐 날)를 쓴다 · 사람이 즉흥으로 고른 종류가 아니다",
+      _v490.CHANGE_KINDS.get('axis_new') == _v490.BUMP_DATE and _v490.KIND_KO.get('axis_new') == '축 신설')
+_snap490 = _v490.snapshot()
+check("⑥ 버전 도장(케이스·리포트에 붙는 것)이 새 축을 싣고 기본값('v2026.08.02.0')으로 비어 있지 않다",
+      all(_snap490.get(a) and _snap490[a] != 'v2026.08.02.0' for a in _NEW490), str({a: _snap490.get(a) for a in _NEW490}))
+# ─── §490 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와
