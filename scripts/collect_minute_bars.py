@@ -112,12 +112,13 @@ def main(argv=None):
     days = trading_days_back(end, a.days)
     done = day_bars.fetched_set()
     todo = [(c, d) for c in codes for d in days if (c, d) not in done]
+    already = len(codes) * len(days) - len(todo)                 # 이어 받기로 건너뛰는 것(완료·'없다'는 답) — 확정 전 건너뜀과 따로 센다
     import prediction_log
     todo, unfin = split_unfinal(todo, prediction_log.unfinal_day())
     if unfin:
         print(f'[건너뜀] {unfin[0][1]} — 그날 봉이 아직 확정 전이다(애프터마켓 20:00 뒤) · {len(unfin)}건은 다음 실행이 받는다')
-    print(f'[계획] 종목 {len(codes)} · 거래일 {len(days)}({days[0]}~{days[-1]}) · 받을 (종목, 날짜) {len(todo)} · 이미 완료 '
-          f'{len(codes) * len(days) - len(todo)} · 예상 호출 약 {len(todo) * 4}회(하루 약 381봉 ÷ 120)')
+    print(f'[계획] 종목 {len(codes)} · 거래일 {len(days)}({days[0]}~{days[-1]}) · 받을 (종목, 날짜) {len(todo)} · 이미 받음 '
+          f'{already} · 확정 전 건너뜀 {len(unfin)} · 예상 호출 약 {len(todo) * 4}회(하루 약 381봉 ÷ 120)')
     if not a.apply:
         print('[계획만] --apply 를 주면 실제로 받는다')
         return 0
