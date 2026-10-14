@@ -102,9 +102,10 @@ def human_picks(st, mode=None, mode_ts=None):
     return {e['plan_id'] for e in es if pick_alive(e, mode, mode_ts)}
 
 
-def human_pick_label(plan, auto=False):
+def human_pick_label(plan, auto=False, rule=None):
     """주문 사건에 붙는 한 마디 — 엔진 추천이 아니라는 것과 그 계획의 기대값(판정 기록 그대로 · 못 읽으면 '산출 불가').
-    라운드 529 — `auto` 면 사람이 켠 매일 자동 추첨으로 산 것이라고 같은 괄호 안에(이름 머리는 같다 — 영수증·성적은 '사람이 고름'으로 센다)."""
+    라운드 529 — `auto` 면 사람이 켠 매일 자동 추첨으로 산 것이라고 같은 괄호 안에(이름 머리는 같다 — 영수증·성적은 '사람이 고름'으로 센다).
+    라운드 531 — 그 추첨의 규칙이 '기대값 높은 순'이면 그것도 같은 괄호 안에(기본 추첨은 종전 글자 그대로)."""
     v = swing_engine.verdict_of(plan)
     ev = v.get('expected_return')
     try:
@@ -113,7 +114,8 @@ def human_pick_label(plan, auto=False):
         ev_txt = '산출 불가'
     n_ck, failed = v.get('checks_n'), v.get('failed')
     cond = (f' · 조건 {int(n_ck) - len(failed)}/{int(n_ck)} 통과' if isinstance(failed, list) and n_ck else '')
-    return f'{HUMAN_PICK_TAG}({AUTO_DRAW_TAG + " · " if auto else ""}엔진 추천 아님 · 비용 차감 기대값 {ev_txt}{cond})'
+    tag = (AUTO_DRAW_TAG + (' · ' + AUTO_DRAW_RULE_KO['ev'] if rule == 'ev' else '') + ' · ') if auto else ''
+    return f'{HUMAN_PICK_TAG}({tag}엔진 추천 아님 · 비용 차감 기대값 {ev_txt}{cond})'
 
 
 # ── 라운드 529 — 매일 학습용 1종목 자동 추첨 (사람이 켜는 스위치) ─────────────────────────────────────────────────
@@ -126,6 +128,18 @@ AUTO_DRAW_PICKS_KEY = 'auto_draw_picks'     # {판정일: dict(plan_id|None, cod
 AUTO_DRAW_TAG = '자동 학습 추첨'
 #: 남기는 판정일 수 — 장부 설정이 끝없이 커지지 않게(운영 값 · 판정 문턱 아님)
 AUTO_DRAW_KEEP = 40
+#: 라운드 531 — 한 종목을 고르는 규칙 둘(사람이 켤 때 고른다 · 스위치 설정 dict 의 `rule`). 'hash' = 좋고 나쁨과 무관한 추첨(라운드 526 ·
+#:   기본) · 'ev' = 판정 기록의 비용 차감 기대값이 가장 높은 계획(사용자: "기대값 높은 순 옵션 추가해줘" · 그 순서가 결과를 가른다는
+#:   근거는 아직 없다 — 화면이 실측을 옆에 적는다). 모르는 값·없는 값은 'hash' 로 읽는다(라운드 529 의 스위치는 rule 칸이 없었다).
+AUTO_DRAW_RULES = ('hash', 'ev')
+AUTO_DRAW_RULE_KO = {'hash': '추첨(좋고 나쁨과 무관)', 'ev': '기대값 높은 순'}
+
+
+def auto_draw_rule(st):
+    """스위치에 적힌 고르는 규칙 — 'hash'(기본) 또는 'ev'."""
+    v = (st or {}).get(AUTO_DRAW_KEY)
+    r = v.get('rule') if isinstance(v, dict) else None
+    return r if r in AUTO_DRAW_RULES else 'hash'
 
 
 def auto_draw_alive(st, mode, mode_ts=None):
@@ -203,18 +217,21 @@ def record_auto_draw(c, mode, mode_ts, day, report, acct, limits, cost_pct, held
             return None
         return int(swing_risk.size(p.get('entry'), p.get('stop'), acct, limits, cost_pct).get('qty') or 0)
 
-    pk, n, why = swing_engine.learning_draw(cand, day, qty_of)
+    # 라운드 531 — 고르는 규칙은 스위치에 적힌 것(사람이 켤 때 고른다) · 그날 이미 뽑힌 기록은 위에서 끝났으므로 규칙을 바꿔도 그날 종목은
+    #   안 바뀐다(다음 판정일부터)
+    rule = auto_draw_rule(st)
+    pk, n, why = (swing_engine.ev_pick if rule == 'ev' else swing_engine.learning_draw)(cand, day, qty_of)
     if not cand:
         # 재검토(2026-10-14) — 대상이 빠진 까닭을 센 그대로 적는다(종전 판은 '수량 미리보기 0주'라는 틀린 사유를 적었다 · §3)
         why = (f'뽑을 계획이 없습니다 — 그 판정일 계획 {len(day_plans)}개 중 실주문 자격(완전 자동이 산다) {len(day_plans) - len(nonrec)}개 · '
                f'계좌·관리 중 종목 {sum(1 for p in nonrec if p["code"] in managed or p["code"] in held)}개 · '
                f'매수 주문이 열린 종목 {sum(1 for p in nonrec if p["code"] in busy)}개 · '
                f'사람이 고른 계획·종목 {sum(1 for p in nonrec if p["plan_id"] in picked or p["code"] in picked_codes)}개')
-    rec = dict(plan_id=(pk or {}).get('plan_id'), code=(pk or {}).get('code'), n=n, why=why or '', ts=L.now_ts())
+    rec = dict(plan_id=(pk or {}).get('plan_id'), code=(pk or {}).get('code'), n=n, why=why or '', ts=L.now_ts(), rule=rule)
     # 재검토(2026-10-14) — 못 뽑은 기록은 **확정이 아니다**: 까닭이 지나가는 것(전날 안 닿은 주문이 밤엔 아직 열림 · 리포트가 늦게 고정됨)일
     #   수 있어 다음 바퀴가 다시 뽑아 본다(못 뽑은 기록으로는 아무것도 사지 않으니 두 번 사는 길이 없다). 같은 결과면 다시 적지 않는다
     #   (설정은 사건 기록이라 바퀴마다 적으면 하루 수백 줄이 쌓인다).
-    if ex and not rec['plan_id'] and (ex.get('n'), ex.get('why')) == (rec['n'], rec['why']):
+    if ex and not rec['plan_id'] and (ex.get('n'), ex.get('why'), ex.get('rule') or 'hash') == (rec['n'], rec['why'], rule):
         return None
     allp = dict(st.get(AUTO_DRAW_PICKS_KEY) or {}) if isinstance(st.get(AUTO_DRAW_PICKS_KEY), dict) else {}
     allp[str(day)[:10]] = rec
@@ -971,7 +988,8 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
                          pre_odnos=_pre_odnos_for(orders, code, 'buy', trade_day))
         except L.LedgerError:
             continue     # 오늘 이 계획의 매수는 이미 냈다
-        L.order_event(c, iid, 'RISK_APPROVED', detail=(human_pick_label(p, auto=(p['plan_id'] == auto_pid and p['plan_id'] not in hum_only))
+        L.order_event(c, iid, 'RISK_APPROVED', detail=(human_pick_label(p, auto=(p['plan_id'] == auto_pid and p['plan_id'] not in hum_only),
+                                                                        rule=(auto_draw_record(st, anchor_day) or {}).get('rule'))
                                                        + ' · ' if human else '')
                       + f"수량 {sz['qty']} · 정한 제한 {sz['binding']} · "
                         f"손절 시 손실 약 {sz['planned_loss']:,.0f}원(손절가 체결 가정)")

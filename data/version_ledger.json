@@ -7,14 +7,40 @@
   "news": "v2026.08.26.1",
   "sector": "v2026.10.08.1",
   "valuation": "v2026.10.01.1",
-  "execution": "v2026.10.14.2",
+  "execution": "v2026.10.14.3",
   "data": "v2026.10.11.0",
   "entry": "v2026.10.13.0",
   "probability": "v2026.10.06.0",
   "ledger": "v2026.10.11.0",
-  "proof": "v2026.10.13.1"
+  "proof": "v2026.10.14.1"
  },
  "history": [
+  {
+   "axis": "proof",
+   "axis_ko": "판단 평가·성적표",
+   "version": "v2026.10.14.1",
+   "previous": "v2026.10.13.1",
+   "kind": "ui",
+   "kind_ko": "화면 수정",
+   "bump": "patch",
+   "reason": "라운드 531 — '기대값 높은 순' 선택지 옆에 그 순서의 실측 한 줄(proof.ev_rank_line)",
+   "note": "성적표 ev_order(앞으로의 자료) · 라운드 504 산출물(지난 11년 세 구간) · 0 포함·방향만 · 판정 낱말 없음 · 값 불변",
+   "created_at": "2026-10-14T14:37:29+00:00",
+   "effective_from": "2026-10-14"
+  },
+  {
+   "axis": "execution",
+   "axis_ko": "자동매매 실행",
+   "version": "v2026.10.14.3",
+   "previous": "v2026.10.14.2",
+   "kind": "gate",
+   "kind_ko": "게이트 변경",
+   "bump": "date",
+   "reason": "라운드 531 — 매일 학습용 1종목 자동 추첨에 고르는 규칙 '기대값 높은 순'을 더했다(사용자 요청 · 기본은 종전 추첨)",
+   "note": "swing_engine.ev_pick(대상은 learning_draw 와 같다 · 기대값을 못 읽은 계획은 고르지 않는다 · 동점은 같은 해시) · 실행부 record_auto_draw 가 스위치의 rule 로 고르고 기록에 rule 을 남긴다 · 주문 사건에 규칙 이름 · 그날 이미 고른 종목은 규칙을 바꿔도 안 바뀐다 · 엔진 판정·문턱·한도 불변",
+   "created_at": "2026-10-14T14:37:29+00:00",
+   "effective_from": "2026-10-14"
+  },
   {
    "axis": "execution",
    "axis_ko": "자동매매 실행",

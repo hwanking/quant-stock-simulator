@@ -363,6 +363,43 @@ LEARNING_DRAW_RULE = ('추첨은 좋은 종목을 고르는 규칙이 아닙니�
                       '고를 칸에 넣기만 하고, 사는 것은 아래에서 확인 체크와 고르기를 직접 눌러야 정해집니다.')
 
 
+def ev_rule_risk_line(plans):
+    """'기대값 높은 순'이 실제로 무엇을 먼저 고르나 — 그 판정일 계획에서 기대값 순서와 손절 거리 순서를 대 본다 (라운드 531 · 사실만).
+
+    독립 검토(2026-10-14) — 중앙 판정의 기대값은 p × 목표폭 + (1 − p) × 손절폭 − 비용이고 p 는 점수대의 적중률이라 같은 점수대에서는
+    같다. 그러면 목표폭·손절폭이 같은 비율로 커질 때 p 가 손익분기보다 높으면 **손절 거리가 큰(크게 움직이는) 계획일수록 기대값이 높게
+    나온다** — 실제 장부 계획 4판정일 중 3일에서 기대값 1위가 손절 거리 1위였다. 선택지 이름('기대값 높은 순')만으로는 그것이 안 보여
+    그 판정일 계획으로 센 사실을 옆에 적는다. 셀 계획이 둘 미만이면 None(§3)."""
+    rows = []
+    for p in plans or []:
+        try:
+            v = swing_engine_verdict(p).get('expected_return')
+            e, s = float(p.get('entry')), float(p.get('stop'))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and e > s > 0:
+            rows.append((float(v), (e - s) / e * 100.0, str(p.get('plan_id'))))
+    if len(rows) < 2:
+        return None
+    top = max(rows, key=lambda r: (r[0], r[1]))
+    dists = sorted((r[1] for r in rows), reverse=True)
+    rank = dists.index(top[1]) + 1
+    others = [r[1] for r in rows if r is not top]
+    s = (f"이 판정일 계획 {len(rows)}개에서 기대값이 가장 높은 계획의 손절 거리는 진입가의 {top[1]:.1f}%로 {len(rows)}개 중 "
+         + ('가장 큽니다' if rank == 1 else f'{rank}번째입니다') + f"(다른 계획 {min(others):.1f}~{max(others):.1f}%).")
+    if rank == 1:
+        s += (" 같은 점수대에서는 확률이 같아 목표폭·손절폭이 클수록 기대값이 크게 나옵니다 — 이 규칙은 크게 움직이는 계획을 먼저 고르는 "
+              "쪽으로 기웁니다. 손절에 닿을 때의 금액 손실은 위험 한도가 수량을 줄여 같게 맞추지만, 손절선 아래로 갭이 나는 날의 추가 "
+              "손실은 크게 움직이는 종목일수록 커질 수 있습니다.")
+    return s
+
+
+def swing_engine_verdict(plan):
+    """계획의 판정 기록(dict) — 실행부와 같은 읽기(`swing_engine.verdict_of`)."""
+    import swing_engine as _se
+    return _se.verdict_of(plan)
+
+
 def auto_draw_turn_on_line(day, has_day):
     """매일 자동 추첨이 **꺼져 있을 때** — 켜는 법과, 지금 켜면 언제 뽑고 언제부터 사나(라운드 530 · 사실만 · 새 숫자 없음).
 

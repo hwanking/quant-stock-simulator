@@ -780,6 +780,63 @@ NAV_KEY = 'sw_nav'
 LIVE_VIEWS = ('관제실', '오늘 계획', '포지션', '주문·체결', '성과·PROOF')
 
 
+def _canon(v):
+    return _json.dumps(v, sort_keys=True, ensure_ascii=False, default=str)
+
+
+LOST_CLICK_NOTE = ('이 화면의 마지막 누름은 적지 않았습니다 — 다른 화면에서 같은 설정이 먼저 바뀌었습니다. 위의 지금 값을 확인하고 '
+                   '필요하면 다시 누르세요.')
+
+
+def ledger_key(st, base, ledger_value, shown):
+    """장부 값을 보여 주고 바꾸는 위젯의 열쇠 (라운드 531) — **장부 값이 바뀌면 열쇠도 바뀌고, 같은 이름의 옛 열쇠 상태는 지운다.**
+
+    Streamlit(1.60)은 열쇠 있는 위젯의 값을 열쇠로 붙잡아 다음 실행에서 `value=`·`index=` 를 다시 읽지 않는다. 그래서 화면이 둘 열려
+    있으면(크롬 + 앱 안 창 등) 다른 화면이 장부를 바꾼 뒤에도 이 화면의 위젯은 옛 값을 들고 있었고, 종전 코드는 '위젯 ≠ 장부'를 사용자가
+    바꾼 것으로 보고 **옛 값을 다시 적었다** — 15초 자동 갱신마다. 독립 검토(2026-10-14)가 두 화면으로 재현했다: 긴급정지가 갱신마다
+    뒤집히고 · 실전 주문 방식이 '계획마다 승인'에서 '완전 자동'으로 되돌아가고 · 다른 화면에서 끈 자동 추첨이 되살아났다.
+
+    고침 ① 열쇠에 장부 값 — 장부가 바뀌면 새 위젯이 장부 값(`shown`)으로 다시 선다. ② **옛 열쇠 상태를 지운다** — 2차 검토(2026-10-15)가
+    운영과 같은 실행 모양(조각 실행 · 전체 실행 끝의 `st.stop()` · 세션 내내 하나인 PagesManager)으로 재현했다: `st.stop()` 으로 끝난 실행은
+    안 그린 위젯을 정리하지 않아 옛 열쇠가 사용자의 마지막 값을 들고 남고, 다른 화면이 장부를 그 값으로 되돌리면 그 열쇠가 다시 쓰여 낡은 값을
+    또 적었다(①만으로는 AppTest 에서만 통했다). ③ 지운 옛 열쇠에 **이 화면 사용자가 바꾼 값**이 있었는데(그 열쇠가 섰을 때의 값과 다름) 그
+    값이 장부에 안 들어갔으면(지금 보여 줄 값과 다름) 적지 않았다는 사실을 알린다(`sw_flash_warn` · 조용히 사라진 누름 · 2차 검토의 작은 것)."""
+    import hashlib as _hl
+    k = f"{base}__{_hl.sha1(_canon(ledger_value).encode('utf-8')).hexdigest()[:10]}"
+    ss = st.session_state
+    built = ss.get('_ledger_key_shown') if isinstance(ss.get('_ledger_key_shown'), dict) else {}
+    lost = False
+    for z in [z for z in list(ss.keys()) if str(z).startswith(base + '__') and z != k]:
+        try:
+            old = ss[z]
+            if z in built and _canon(old) != _canon(built[z]) and _canon(old) != _canon(shown):
+                lost = True
+        except Exception:                                      # noqa: BLE001 — 못 읽은 옛 상태는 지우기만 한다
+            pass
+        try:
+            del ss[z]
+        except Exception:                                      # noqa: BLE001
+            pass
+        built.pop(z, None)
+    built[k] = shown
+    ss['_ledger_key_shown'] = built
+    if lost:
+        ss['sw_flash_warn'] = LOST_CLICK_NOTE
+    return k
+
+
+def write_if_unchanged(c, key, seen, new, by='ui'):
+    """그린 뒤 다른 화면이 같은 칸을 바꾸지 않았을 때만 적는다 → 적었으면 True (라운드 531 · 비교 후 쓰기). 장부를 **지금** 다시 읽어
+    그린 때의 값(`seen`)과 같은지 본다 — 다르면 다른 화면이 먼저 바꾼 것이라 덮지 않는다(부르는 쪽이 그 사실을 적고 다시 그린다)."""
+    if _canon(L.settings(c).get(key)) != _canon(seen):
+        return False
+    L.set_setting(c, key, new, by=by)
+    return True
+
+
+STALE_NOTE = '적지 않았습니다 — 다른 화면에서 같은 설정이 먼저 바뀌었습니다. 지금 값을 다시 확인하세요.'
+
+
 def live_refresh(auto_on, view):
     """이 갈래를 자동 갱신으로 다시 그리나 — 자동 갱신이 켜져 있고(쓰기 가능한 화면) 입력 칸이 없는 갈래일 때만."""
     return bool(auto_on) and (view or NAV[0]) in LIVE_VIEWS
@@ -944,10 +1001,13 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
         st.rerun()                                             # 라운드 465 — '시스템'으로 가거나 돌아오면 조각을 다시 정의한다(run_every)
     with kc:
         if allow_write:
-            ks = st.toggle('긴급정지', value=bool(stt.get('kill_switch')), key='sw_kill',
+            # 라운드 531 — 열쇠에 장부 값(다른 화면이 바꾸면 새 위젯) · 적기 전에 장부를 다시 읽는다(낡은 화면이 갱신마다 되돌리던 결함)
+            _kv = stt.get('kill_switch')
+            ks = st.toggle('긴급정지', value=bool(_kv), key=ledger_key(st, 'sw_kill', _kv, bool(_kv)),
                            help='켜면 새 매수를 안 내고 열린 매수 주문을 취소합니다. 자동 관리 중인 종목의 손절·목표 매도는 계속합니다.')
-            if ks != bool(stt.get('kill_switch')):
-                L.set_setting(c, 'kill_switch', bool(ks))
+            if ks != bool(_kv):
+                if not write_if_unchanged(c, 'kill_switch', _kv, bool(ks)):
+                    st.session_state['sw_flash_warn'] = '긴급정지를 ' + STALE_NOTE
                 st.rerun()
         else:
             st.caption('긴급정지 ' + ('켜짐' if stt.get('kill_switch') else '꺼짐'))
@@ -956,6 +1016,8 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
         st.warning(md(f"워커 마지막 바퀴({_ts(hb['ts'])}) — {hb.get('detail') or hb['status']}"))
     if pl:
         st.warning(md(pl))
+    if st.session_state.get('sw_flash_warn'):                 # 라운드 531 — 적지 않았다는 알림은 경고 상자로(종전 초록 상자 · 2차 검토)
+        st.warning(st.session_state.pop('sw_flash_warn'))
     if st.session_state.get('sw_flash'):
         st.success(st.session_state.pop('sw_flash'))
     view = {'관제실': _view_center, '오늘 계획': _view_plans, '포지션': _view_positions, '주문·체결': _view_orders,
@@ -1289,8 +1351,29 @@ def _human_pick_section(st, c, ctx, md, day):
 
 
 #: 라운드 529 — 자동 추첨을 켤 때 사람이 체크하는 문장(고르기의 확인 체크와 같은 자리)
-AUTO_ACK = ('엔진이 추천하지 않은 계획을 판정일마다 한 종목씩(좋고 나쁨과 무관한 추첨) 같은 계약으로 자동으로 사는 것은 제 결정입니다 — '
+#: 라운드 531 — 고르는 규칙이 둘이 되어 '좋고 나쁨과 무관한 추첨'을 문장에서 뺐다(규칙은 바로 위에서 고른 것)
+AUTO_ACK = ('엔진이 추천하지 않은 계획을 판정일마다 한 종목씩(위에서 고른 규칙으로) 같은 계약으로 자동으로 사는 것은 제 결정입니다 — '
             '계획마다 승인을 받지 않고, 엔진 성적과 섞이지 않으며, 위험 한도·긴급정지·손절선 확인은 그대로입니다')
+
+
+def ev_rank_record_line(scorecard=None, art=None):
+    """'기대값 높은 순' 선택지 옆의 실측 한 줄(라운드 531 · 문장은 `proof.ev_rank_line` 한 곳) — 성적표와 라운드 504 산출물을 읽는다.
+    넘겨받은 것이 없으면 화면이 읽는다. 둘 다 못 읽으면 None — 줄을 안 그린다(§3)."""
+    try:
+        import proof as _pf
+    except Exception:                                          # noqa: BLE001
+        return None
+    if scorecard is None:
+        try:
+            scorecard = _pf.load_scorecard()
+        except Exception:                                      # noqa: BLE001
+            scorecard = None
+    if art is None:
+        art = _load_artifact('ONLY_BLOCKED_FILE')
+    try:
+        return _pf.ev_rank_line(scorecard, art)
+    except Exception:                                          # noqa: BLE001
+        return None
 
 
 def _auto_draw_section(st, c, ctx, md):
@@ -1302,11 +1385,11 @@ def _auto_draw_section(st, c, ctx, md):
     stt = ctx['stt']
     v = stt.get(X.AUTO_DRAW_KEY) if isinstance(stt.get(X.AUTO_DRAW_KEY), dict) else {}
     alive = X.auto_draw_alive(stt, mode, mode_ts)
-    _title(st, '매일 학습용 1종목 자동 추첨 — 켜 두면 판정일마다 한 종목을 추첨해 같은 계약으로 삽니다', ctx['theme'])
-    st.caption('켜 두면 워커가 판정일마다(보통 저녁 작업 21:00 · 그날 계획을 만든 뒤) 위 \'학습용 1종목 추첨\'과 같은 규칙으로 한 번 뽑아 적고, '
+    _title(st, '매일 학습용 1종목 자동 추첨 — 켜 두면 판정일마다 한 종목을 골라 같은 계약으로 삽니다', ctx['theme'])
+    st.caption('켜 두면 워커가 판정일마다(보통 저녁 작업 21:00 · 그날 계획을 만든 뒤) 켤 때 고른 규칙(추첨 또는 기대값 높은 순)으로 한 번 골라 적고, '
                '그 계획을 사람이 고른 계획과 같은 길로 삽니다 — 진입가 지정가 · 손절 · 1차 목표 · 대기·보유 거래일 그대로, 위험 한도·긴급정지·'
                '손절선 확인·수량 계산 그대로. 한 번 적은 추첨은 그날 바뀌지 않고, 새 판정일의 추첨이 오면 지난 것은 더 사지 않습니다(열린 학습 '
-               '매수는 많아야 하나). 엔진 판정은 바뀌지 않습니다 — 주문 기록에는 \'사람이 고른 매수(자동 학습 추첨 · 엔진 추천 아님)\'로, 영수증·'
+               '매수는 많아야 하나). 엔진 판정은 바뀌지 않습니다 — 주문 기록에는 \'사람이 고른 매수(자동 학습 추첨 · [기대값 높은 순 ·] 엔진 추천 아님)\'로, 영수증·'
                '성적에는 \'사람이 고름\'으로 엔진 추천과 따로 셉니다. 실전 주문 방식이 \'계획마다 승인\'이어도 이 학습 매수는 계획마다 승인을 '
                '받지 않습니다(켤 때의 확인이 그 승인을 겸합니다). '
                '끄거나 운용 모드를 바꾸면 워커가 걸려 있는 그 매수 주문을 취소합니다(일부 체결된 수량은 남아 손절·목표 관리를 받습니다). '
@@ -1314,16 +1397,21 @@ def _auto_draw_section(st, c, ctx, md):
     day = ctx.get('today')
     has_day = bool(day) and any(str(p['data_day']) == str(day)[:10] for p in L.plans(c))
     rec = X.auto_draw_record(stt, day) if has_day else None
+    rule_now = X.auto_draw_rule(stt)
     if alive:
-        head = f"켜짐 — {MODE_KO.get(mode, mode)} · {_hm(v.get('ts')) or '시각 모름'} 켬"
+        head = f"켜짐 — {MODE_KO.get(mode, mode)} · {X.AUTO_DRAW_RULE_KO[rule_now]} · {_hm(v.get('ts')) or '시각 모름'} 켬"
         if not has_day:
             st.caption(md(f"{head} · 판정일 {day} 의 계획이 아직 없습니다 — 저녁 작업이 그날 계획을 만든 뒤 한 번 뽑습니다(지난 판정일의 추첨은 "
                           '더 사지 않습니다)'))
         elif rec and rec.get('plan_id'):
             p = L.plan(c, rec['plan_id']) or {}
-            st.caption(md(f"{head} · 판정일 {day} 추첨: {p.get('name') or ''} ({rec.get('code') or p.get('code') or '—'}) · "
+            # 라운드 531 — 그날 종목을 고른 규칙은 그 기록의 것(스위치의 지금 규칙과 다를 수 있다) · 'n' 의 뜻도 규칙마다 다르다
+            _rr = rec.get('rule') if rec.get('rule') in X.AUTO_DRAW_RULES else 'hash'
+            _nn = (f"기대값을 읽은 계획 {rec.get('n')}개 중 가장 높은 것" if _rr == 'ev' else f"뽑을 수 있던 계획 {rec.get('n')}개")
+            st.caption(md(f"{head} · 판정일 {day} 고른 종목({X.AUTO_DRAW_RULE_KO[_rr]}): {p.get('name') or ''} "
+                          f"({rec.get('code') or p.get('code') or '—'}) · "
                           f"진입 {_won(p.get('entry'))} 지정가 · 손절 {_won(p.get('stop'))} · 1차 목표 {_won(p.get('target'))} · "
-                          f"뽑을 수 있던 계획 {rec.get('n')}개 · {_hm(rec.get('ts')) or ''} 뽑음"))
+                          f"{_nn} · {_hm(rec.get('ts')) or ''} 고름"))
             if p.get('code'):
                 st.caption(md(_se.price_gap_line(p, _live_px(p['code']))))
         elif rec:
@@ -1338,9 +1426,29 @@ def _auto_draw_section(st, c, ctx, md):
     if not ctx['allow_write']:
         st.caption('이 화면에서는 켜고 끌 수 없습니다(이 PC 에서 연 화면에서만).')
         return
+    rule_fmt = (lambda r: X.AUTO_DRAW_RULE_KO.get(r, r))
     if alive:
+        # 라운드 531 — 켜 둔 채 규칙만 바꿀 수 있다(끄면 걸린 학습 매수가 취소되므로) · 이미 고른 판정일은 그대로 · 다음 판정일부터
+        #   독립 검토(2026-10-14) — 종전 판은 열쇠가 고정이라 화면이 둘이면 낡은 화면이 '위젯 ≠ 장부'를 보고 갱신마다 옛 규칙을 다시
+        #   적었고(규칙이 갱신마다 뒤집힘) 그 다시 그리기가 같은 실행의 '끄기'·'고르기 취소' 누름을 삼켰으며, 다른 화면에서 끈 스위치를
+        #   켜진 채로 되살렸다. 열쇠에 장부 값을 넣고(바뀌면 새 위젯) · 적기 전에 장부를 다시 읽어 그린 때와 같을 때만 적는다.
+        _raw_ad = stt.get(X.AUTO_DRAW_KEY)
+        new_rule = st.radio('고르는 규칙', list(X.AUTO_DRAW_RULES), index=list(X.AUTO_DRAW_RULES).index(rule_now), format_func=rule_fmt,
+                            horizontal=True, key=ledger_key(st, 'sw_ad_rule_on', _raw_ad, rule_now))
+        if new_rule == 'ev':
+            for _rl in (ev_rank_record_line(), _dash.ev_rule_risk_line([p for p in L.plans(c) if str(p['data_day']) == str(day)[:10]])):
+                if _rl:
+                    st.caption(md(_rl))
+        if new_rule != rule_now and new_rule in X.AUTO_DRAW_RULES:
+            if write_if_unchanged(c, X.AUTO_DRAW_KEY, _raw_ad,
+                                  dict(on=True, mode=v.get('mode'), ts=v.get('ts'), rule=new_rule)):
+                st.session_state['sw_flash'] = (f"고르는 규칙을 '{rule_fmt(new_rule)}'(으)로 바꿨습니다 — 이미 고른 판정일은 그대로이고 "
+                                                '다음 판정일부터 이 규칙으로 고릅니다')
+            else:
+                st.session_state['sw_flash_warn'] = '고르는 규칙을 ' + STALE_NOTE
+            st.rerun()
         if st.button('자동 추첨 끄기', key='sw_ad_off'):
-            L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=False, mode=mode, ts=L.now_ts()), by='ui')
+            L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=False, mode=mode, ts=L.now_ts(), rule=rule_now), by='ui')
             st.session_state['sw_flash'] = '자동 학습 추첨을 껐습니다 — 걸려 있는 학습 매수 주문은 워커의 다음 바퀴가 취소합니다'
             st.rerun()
         return
@@ -1351,16 +1459,23 @@ def _auto_draw_section(st, c, ctx, md):
     _on530 = _dash.auto_draw_turn_on_line(day, has_day)
     if _on530:
         st.caption(md(_on530))
+    # 라운드 531 — 고르는 규칙(기본은 추첨) · '기대값 높은 순'을 고르면 그 순서의 실측을 바로 아래에 적는다
+    rule = st.radio('고르는 규칙', list(X.AUTO_DRAW_RULES), index=list(X.AUTO_DRAW_RULES).index(rule_now), format_func=rule_fmt,
+                    horizontal=True, key='sw_ad_rule')
+    if rule == 'ev':
+        for _rl in (ev_rank_record_line(), _dash.ev_rule_risk_line([p for p in L.plans(c) if str(p['data_day']) == str(day)[:10]])):
+            if _rl:
+                st.caption(md(_rl))
     ack = st.checkbox(AUTO_ACK, value=False, key='sw_ad_ack')
     if st.button('매일 자동 추첨 켜기', key='sw_ad_on', disabled=not ack):
-        if not ack:
+        if not ack or rule not in X.AUTO_DRAW_RULES:
             return
         if L.mode_of(c) != mode:
             st.warning('켜지 않았습니다 — 그새 운용 모드가 바뀌었습니다. 화면을 다시 확인하세요.')
             return
-        L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=True, mode=mode, ts=L.now_ts()), by='ui')
-        st.session_state['sw_flash'] = (f"자동 학습 추첨을 켰습니다 — {MODE_KO.get(mode, mode)} 모드 · 판정일마다 한 종목을 뽑아 같은 계약으로 삽니다"
-                                        '(모드를 바꾸면 꺼집니다)')
+        L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=True, mode=mode, ts=L.now_ts(), rule=rule), by='ui')
+        st.session_state['sw_flash'] = (f"자동 학습 추첨을 켰습니다 — {MODE_KO.get(mode, mode)} 모드 · 규칙 '{rule_fmt(rule)}' · 판정일마다 한 "
+                                        '종목을 골라 같은 계약으로 삽니다(모드를 바꾸면 꺼집니다)')
         st.rerun()
 
 
@@ -1780,8 +1895,10 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
     if allow_write and mode != 'LIVE':
         _live_start(st, c, stt, cfg, md)                       # 라운드 501 — 맨 위에 한 번에 켜는 칸
     modes = mode_options(mode, cfg)          # 라운드 453 — 기본은 꺼짐·실전 둘(모의투자 자격증명이거나 그 모드일 때만 더 보인다)
+    # 라운드 531 — 이 라디오는 단추로만 적지만(아래 '… 로 바꾸기') 열쇠가 고정이라 다른 화면이 모드를 바꾼 뒤에도 옛 모드를 보여 주고 그
+    #   모드로 '바꾸기' 단추를 냈다(2차 검토 · 실전인데 '꺼짐'으로 보임). 장부 값 열쇠로(옛 열쇠 상태는 지운다).
     new_mode = st.radio('운용 모드', modes, index=modes.index(mode), format_func=lambda m: MODE_KO[m], horizontal=True,
-                        key='sw_mode', disabled=not allow_write)
+                        key=ledger_key(st, 'sw_mode', stt.get('mode'), mode), disabled=not allow_write)
     st.caption(MODE_HELP[new_mode])
     rd = X.live_readiness(cfg, stt)
     if new_mode == 'LIVE':
@@ -1809,10 +1926,14 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
     st.caption("'계획마다 승인'(기본)은 '오늘 계획' 갈래에서 승인한 계획만 삽니다 · '완전 자동'은 실주문 자격이 있는 계획을 워커가 그대로 삽니다. "
                "모의투자·기록만 모드에는 적용되지 않고, 보호 매도(손절·1차 목표)는 어느 쪽이든 승인 없이 냅니다.")
     if allow_write:
+        # 라운드 531 — 열쇠에 장부 값 · 비교 후 쓰기(낡은 화면이 '계획마다 승인'을 '완전 자동'으로 되돌리던 결함 · 독립 검토 재현)
+        _ap_raw451 = stt.get('order_approval')
         _ap_new451 = st.radio('실전 주문 방식', list(X.APPROVAL_MODES), index=list(X.APPROVAL_MODES).index(_ap451),
-                              format_func=lambda v: APPROVAL_KO[v], horizontal=True, key='sw_approval')
+                              format_func=lambda v: APPROVAL_KO[v], horizontal=True,
+                              key=ledger_key(st, 'sw_approval', _ap_raw451, _ap451))
         if _ap_new451 != _ap451:
-            L.set_setting(c, 'order_approval', _ap_new451)
+            if not write_if_unchanged(c, 'order_approval', _ap_raw451, _ap_new451):
+                st.session_state['sw_flash_warn'] = '실전 주문 방식을 ' + STALE_NOTE
             st.rerun()
     else:
         st.caption('지금: ' + APPROVAL_KO[_ap451])
@@ -1915,6 +2036,8 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
                 (st.success if _r491['ok'] is True else st.warning if _r491['ok'] is False else st.info)(_ln491)
         except broker_kis.BrokerError as e:
             st.warning(str(e))
+    if st.session_state.get('sw_flash_warn'):                 # 라운드 531 — 적지 않았다는 알림은 경고 상자로
+        st.warning(st.session_state.pop('sw_flash_warn'))
     if st.session_state.get('sw_flash'):
         st.success(st.session_state.pop('sw_flash'))
     if allow_write and b.button('계획 갱신 (증권사 안 부름)', key='sw_refresh'):
@@ -1937,9 +2060,11 @@ def _settings(st, c, stt, mode, cfg, allow_write, report, anchor_day, md):
                '워커가 도는 동안 이 PC 에 로그인해 있어야 보입니다.')
     _on463 = _nt.notify_on(stt)
     if allow_write:
-        _new463 = st.toggle('이 PC 알림 켜기', value=_on463, key='sw_notify')
+        _nraw463 = stt.get(_nt.NOTIFY_KEY)                   # 라운드 531 — 열쇠에 장부 값 · 비교 후 쓰기(긴급정지와 같은 고침)
+        _new463 = st.toggle('이 PC 알림 켜기', value=_on463, key=ledger_key(st, 'sw_notify', _nraw463, bool(_on463)))
         if bool(_new463) != _on463:
-            L.set_setting(c, _nt.NOTIFY_KEY, {'on': bool(_new463)})
+            if not write_if_unchanged(c, _nt.NOTIFY_KEY, _nraw463, {'on': bool(_new463)}):
+                st.session_state['sw_flash_warn'] = '알림 설정을 ' + STALE_NOTE
             st.rerun()
         if st.button('알림 시험 — 지금 한 번 띄웁니다', key='sw_notify_test'):
             _ok463, _why463 = _nt.toast('가늠 알림 시험', '자동매매 알림이 이 PC 에 이렇게 뜹니다 — 밖으로 보내지 않습니다')

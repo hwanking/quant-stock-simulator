@@ -36734,7 +36734,8 @@ _sps439 = open(_os.path.join(PROJ, 'swing_proof.py'), encoding='utf-8').read()
 _w439 = open(_os.path.join(PROJ, 'web_app.py'), encoding='utf-8').read()
 check("⑬ 영수증 — '순수익' 칸이 없고 '실제 체결가 수익률(비용 전)'·'추정 비용후 수익률' 둘 · 요약 줄도 '추정 비용후' · 긴급정지 토글(sw_kill)은 한 곳",
       "'추정 비용후 수익률'" in _svs439 and "'실제 체결가 수익률(비용 전)'" in _svs439 and "'순수익(비용 뺀)'" not in _svs439
-      and '추정 비용후' in _sps439 and _svs439.count("key='sw_kill'") == 1
+      # 라운드 531 — 열쇠가 장부 값을 담게 바뀌었다(ledger_key · 두 화면의 되돌리기 결함) — 토글이 한 곳인지는 그 모양으로 센다
+      and '추정 비용후' in _sps439 and _svs439.count("ledger_key(st, 'sw_kill'") == 1
       and '추정 비용후 수익률 평균' in _sp433.summary_line(_sp433.summary(list(_rs433.values())), 0.41))
 _i_sw439 = _w439.index('_swv446.render(')
 check("⑬ 스윙 탭 갈림이 시총 1위 조회·종목 해석·실시간 수신·실시간 띠보다 **앞**에 있다(관제실은 그것들을 안 기다린다) · 그 뒤 st.stop()",
@@ -43826,7 +43827,9 @@ _w509 = []
 _files509 = []
 for _dp9, _dn9, _fn9s in _os.walk(PROJ):
     _dn9[:] = [d for d in _dn9 if d not in ('.git', '.claude', '_probe', '__pycache__', '.portfolio', 'venv', '.venv', 'node_modules')]
-    _files509 += [_os.path.join(_dp9, f) for f in _fn9s if f.endswith('.py') and f != 'test_pipeline_fixes.py']
+    # 라운드 531 — 화면 둘 시험대(scripts/two_tab_harness_r531.py)는 고정물을 만들려고 **임시 장부**에 스위치를 적는다 — 운영의 적는 자리가 아니라
+    #   이름으로 하나만 뺀다(무엇을 왜 뺐는지 적는다 · 손 목록이 늘면 이 줄을 다시 본다)
+    _files509 += [_os.path.join(_dp9, f) for f in _fn9s if f.endswith('.py') and f not in ('test_pipeline_fixes.py', 'two_tab_harness_r531.py')]
 for _f9 in sorted(_files509):
     try:
         _t9 = _ast509.parse(open(_f9, encoding='utf-8').read())
@@ -43834,7 +43837,9 @@ for _f9 in sorted(_files509):
         continue
     for _fn9 in [n for n in _ast509.walk(_t9) if isinstance(n, (_ast509.FunctionDef, _ast509.AsyncFunctionDef))]:
         for _n9 in _ast509.walk(_fn9):
-            if (isinstance(_n9, _ast509.Call) and getattr(_n9.func, 'attr', None) == 'set_setting' and len(_n9.args) >= 2):
+            # 라운드 531 — 비교 후 쓰기(`write_if_unchanged` · 맨 이름으로 부른다)도 적는 자리다 — 안 세면 검사가 못 보는 적는 길이 생긴다
+            if (isinstance(_n9, _ast509.Call) and len(_n9.args) >= 2
+                    and (getattr(_n9.func, 'attr', None) or getattr(_n9.func, 'id', None)) in ('set_setting', 'write_if_unchanged')):
                 _k9 = _n9.args[1]
                 _kn9 = (_k9.value if isinstance(_k9, _ast509.Constant)
                         else (getattr(_k9, 'attr', None) or getattr(_k9, 'id', None)))      # X.AUTO_DRAW_KEY · 맨 이름 AUTO_DRAW_PICKS_KEY
@@ -43842,8 +43847,10 @@ for _f9 in sorted(_files509):
                     _w509.append((_os.path.basename(_f9), _fn9.name, _kn9))
 _sw509 = sorted({(f, fn) for f, fn, k in _w509 if k in ('auto_draw', 'AUTO_DRAW_KEY')})
 _pw509 = sorted({(f, fn) for f, fn, k in _w509 if k in ('auto_draw_picks', 'AUTO_DRAW_PICKS_KEY')})
-check("⑧ 적는 자리 — 스위치는 화면의 _auto_draw_section 하나(켜기·끄기 두 호출 · 글자 키 0) · 추첨 기록은 실행부의 record_auto_draw 하나",
-      _sw509 == [('swing_view.py', '_auto_draw_section')] and sum(1 for f, fn, k in _w509 if k == 'AUTO_DRAW_KEY') == 2
+# 라운드 531 — 켠 채 고르는 규칙만 바꾸는 호출 하나가 더해져 셋이다(켜기 · 끄기 · 규칙 바꾸기 — 셋 다 그 화면 함수 안)
+check("⑧ 적는 자리 — 스위치는 화면의 _auto_draw_section 하나(켜기·끄기·규칙 바꾸기 세 호출 · 글자 키 0) · 추첨 기록은 실행부의 "
+      "record_auto_draw 하나",
+      _sw509 == [('swing_view.py', '_auto_draw_section')] and sum(1 for f, fn, k in _w509 if k == 'AUTO_DRAW_KEY') == 3
       and _pw509 == [('swing_executor.py', 'record_auto_draw')] and not [x for x in _w509 if x[2] in ('auto_draw', 'auto_draw_picks')],
       str(_w509), scanned=len(_files509))
 # ⑨ 화면 — 기본은 꺼짐 · 확인 체크 전엔 켜기 단추가 꺼져 있고 · 켜면 장부에 지금 모드로 적히고 '켜짐 … 추첨 전'
@@ -43955,6 +43962,343 @@ check("④ 화면 — 꺼져 있을 때 그 줄이 확인 칸 위에 나오고(�
       and '켜려면 아래 확인 칸을 체크한 뒤' not in _o509v.get('cap1', ''),
       str({k: (v[:300] if isinstance(v, str) else v) for k, v in _o509v.items() if k in ('cap0', 'cap1', 'exc')}))
 # ─── §510 끝 ───
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §511 — 학습용 1종목의 고르는 규칙 둘: 추첨(기본) · 기대값 높은 순 (라운드 531)
+#
+#   사용자(2026-10-14): "기대값 높은 순 옵션 추가해줘." 규칙은 스위치 설정 dict 의 rule(켜는 화면 한 곳이 적는다) · 고르는 함수는
+#   swing_engine.ev_pick(대상은 learning_draw 와 같다 · 기대값을 못 읽은 계획은 고르지 않는다 · 동점은 같은 해시) · 그날 이미 뽑힌
+#   종목은 규칙을 바꿔도 안 바뀐다 · 주문 사건이 규칙을 적는다 · 화면이 그 순서의 실측을 선택지 옆에 적는다(proof.ev_rank_line 한 곳).
+# ══════════════════════════════════════════════════════════════════════
+print("§511 학습용 1종목 — 고르는 규칙 둘(추첨 · 기대값 높은 순) · 그날 종목은 안 바뀐다 · 실측을 옆에 (라운드 531)")
+import importlib as _il511
+import json as _js511
+import proof as _pf511
+import swing_engine as _se511
+import swing_executor as _sx511
+_pf511 = _il511.reload(_pf511)
+
+
+def _p511(pid, ev, code='000001'):
+    return dict(plan_id=pid, code=code, verdict=_js511.dumps(dict(expected_return=ev)))
+
+
+_c511 = [_p511('A', -0.30), _p511('B', -0.10), _p511('C', None), _p511('D', -0.10), _p511('E', 0.50)]
+_q511 = (lambda p: 0 if p['plan_id'] == 'E' else 1)          # E 는 수량 0주 — 기대값이 가장 높아도 못 고른다
+_ev511 = _se511.ev_pick(_c511, '2026-10-14', _q511)
+_tie511 = _se511.learning_draw([_c511[1], _c511[3]], '2026-10-14', lambda p: 1)[0]
+check("① ev_pick — 수량 0주(E)·기대값 못 읽음(C)은 빼고 · 남은 것 중 가장 높은 기대값(B·D 동점 −0.10)에서 learning_draw 의 해시로 "
+      "하나 · 센 수는 기대값을 읽은 계획 수(3) · 대상 없음 · 기대값 전부 못 읽음은 사유와 None",
+      _ev511[0] is _tie511 and _ev511[0]['plan_id'] in ('B', 'D') and _ev511[1] == 3 and _ev511[2] == ''
+      and _se511.ev_pick([], '2026-10-14', _q511)[0] is None
+      and _se511.ev_pick([_p511('X', None)], '2026-10-14', lambda p: 1)[0] is None
+      and '기대값을 못 읽었습니다' in _se511.ev_pick([_p511('X', None)], '2026-10-14', lambda p: 1)[2]
+      and _se511.ev_pick([_p511('Y', float('nan'))], '2026-10-14', lambda p: 1)[0] is None,
+      str(_ev511))
+check("② 규칙 읽기 — 없음·모르는 값은 추첨('hash') · 'ev' 는 기대값 높은 순 · 이름표 둘",
+      (_sx511.auto_draw_rule({}), _sx511.auto_draw_rule({'auto_draw': dict(on=True)}),
+       _sx511.auto_draw_rule({'auto_draw': dict(on=True, rule='ev')}), _sx511.auto_draw_rule({'auto_draw': dict(on=True, rule='zz')}),
+       _sx511.auto_draw_rule({'auto_draw': 'on'})) == ('hash', 'hash', 'ev', 'hash', 'hash')
+      and _sx511.AUTO_DRAW_RULE_KO == {'hash': '추첨(좋고 나쁨과 무관)', 'ev': '기대값 높은 순'})
+
+
+def _rep511(day='2026-10-06', evs=(('000001', -0.40), ('000002', -0.05), ('000003', -0.25))):
+    _r = _report432(rec=False, day=day)
+    _b = _r['picks'][0]
+    _r['picks'] = [dict(_b, symbol=f'{_c}.KS', asset_type='STOCK',
+                        core=dict(_b['core'], recommended=False, bucket='추천 제외', exclude_reason='시험 사유', expected_return=_e))
+                   for _c, _e in evs]
+    return _r
+
+
+# ③ 'ev' 로 켜면 그 판정일 계획 중 기대값이 가장 높은 것을 적고 사며 · 주문 사건이 규칙을 적는다 · 그날 규칙을 바꿔도 종목은 그대로.
+#    독립 검토(2026-10-14) — 첫 판은 추첨과 기대값이 **같은 종목**을 골라 실행부가 규칙을 무시해도 통과했다. 그래서 먼저 추첨이 고르는
+#    종목(H)을 재고, 기대값 1위를 **다른 종목**(T)에 준다 — 두 규칙이 서로 다른 종목을 골라야 통과한다(plan_id 는 기대값과 무관하다).
+_c511h, _f511h = _db473(), _FakeBroker432()
+_sl473.set_setting(_c511h, 'auto_draw', dict(on=True, mode='LIVE', ts=_sl473.now_ts(), rule='hash'), by='test')
+_cyc432(_c511h, _f511h, rep=_rep511())
+_H511 = (_sx511.auto_draw_record(_sl473.settings(_c511h), '2026-10-06') or {}).get('code')
+_T511 = next((c for c in ('000001', '000002', '000003') if c != _H511), None)
+_oth511 = [c for c in ('000001', '000002', '000003') if c != _T511]
+_evmap511 = {_T511: -0.05, _oth511[0]: -0.40, _oth511[1]: -0.25}
+_evs511 = tuple((c, _evmap511[c]) for c in ('000001', '000002', '000003'))
+_rp511 = _rep511(evs=_evs511)
+_c511g, _f511g = _db473(), _FakeBroker432()
+_sl473.set_setting(_c511g, 'auto_draw', dict(on=True, mode='LIVE', ts=_sl473.now_ts(), rule='hash'), by='test')
+_cyc432(_c511g, _f511g, rep=_rp511)
+_H511b = (_sx511.auto_draw_record(_sl473.settings(_c511g), '2026-10-06') or {}).get('code')
+_c511d, _f511d = _db473(), _FakeBroker432()
+_sl473.set_setting(_c511d, 'auto_draw', dict(on=True, mode='LIVE', ts=_sl473.now_ts(), rule='ev'), by='test')
+_cyc432(_c511d, _f511d, rep=_rp511)
+_r511 = _sx511.auto_draw_record(_sl473.settings(_c511d), '2026-10-06')
+_b511 = [p for p in _f511d.placed if p[0] == 'buy']
+_e511 = [e['detail'] for it in _sl473.intents_with_state(_c511d) for e in _sl473.events_of(_c511d, it['intent_id'])
+         if e['state'] == 'RISK_APPROVED']
+_sl473.set_setting(_c511d, 'auto_draw', dict(on=True, mode='LIVE', ts=_sl473.settings(_c511d)['auto_draw']['ts'], rule='hash'), by='test')
+_cyc432(_c511d, _f511d, rep=_rp511, now=_now432(mm=5))
+_r511b = _sx511.auto_draw_record(_sl473.settings(_c511d), '2026-10-06')
+check("③ 두 규칙이 서로 다른 종목을 고른다 — 추첨은 같은 리포트에서 H(기대값과 무관 · 기대값을 바꿔도 같은 H) · '기대값 높은 순'은 기대값 "
+      "1위(−0.05%)를 준 다른 종목 T 를 적고(rule='ev') 1건 산다 · 주문 사건 '사람이 고른 매수(자동 학습 추첨 · 기대값 높은 순 · 엔진 추천 "
+      "아님 · 비용 차감 기대값 −0.05% …)' · 그날 규칙을 추첨으로 바꿔도 적힌 종목은 그대로이고 다시 안 산다",
+      _H511 and _T511 and _T511 != _H511 and _H511b == _H511
+      and (_r511 or {}).get('code') == _T511 and (_r511 or {}).get('rule') == 'ev' and (_r511 or {}).get('n') == 3
+      and len(_b511) == 1 and _b511[0][1] == _T511
+      and len(_e511) == 1 and _e511[0].startswith(_sx511.HUMAN_PICK_TAG + '(' + _sx511.AUTO_DRAW_TAG + ' · 기대값 높은 순 · 엔진 추천 아님')
+      and '-0.05%' in _e511[0]
+      and _r511b == _r511 and len([p for p in _f511d.placed if p[0] == 'buy']) == 1,
+      str((_H511, _T511, _H511b, _r511, _b511, _e511, _r511b)))
+check("④ 추첨 규칙(기본)의 주문 사건은 종전 글자 그대로 — 규칙 이름이 안 붙는다(라운드 529 의 이름표)",
+      _sx511.human_pick_label(dict(verdict=dict(expected_return=-0.2)), auto=True, rule='hash').startswith(
+          _sx511.HUMAN_PICK_TAG + '(' + _sx511.AUTO_DRAW_TAG + ' · 엔진 추천 아님')
+      and _sx511.human_pick_label(dict(verdict=dict(expected_return=-0.2)), auto=True, rule=None).startswith(
+          _sx511.HUMAN_PICK_TAG + '(' + _sx511.AUTO_DRAW_TAG + ' · 엔진 추천 아님')
+      and '기대값 높은 순' not in _sx511.human_pick_label(dict(verdict=dict(expected_return=-0.2)), auto=False, rule='ev'))
+# ⑤ 실측 한 줄 — 두 자료 · 0 포함이면 '구별되지 않습니다' · 세 구간 방향 · 마지막 문장은 수가 정한다 · 둘 다 없으면 None
+_sc511 = dict(ev_order=dict(n=244, cost_pct=0.41, hi=dict(mean_net=0.11), lo=dict(mean_net=-0.36), diff_ci=[-1.28, 2.17], rank_corr=-0.01))
+_art511 = dict(cost_pct=0.41, splits={k: dict(blocked_ev_halves=dict(near_zero=dict(mean_net=a), far=dict(mean_net=b)))
+                                      for k, a, b in (('train', -0.12, -0.39), ('valid', 0.58, -0.18), ('blind', -0.25, -0.13))})
+_l511 = _pf511.ev_rank_line(_sc511, _art511)
+_art511u = dict(cost_pct=0.41, splits={k: dict(blocked_ev_halves=dict(near_zero=dict(mean_net=1.0), far=dict(mean_net=0.0)))
+                                       for k in ('train', 'valid', 'blind')})
+_l511u = _pf511.ev_rank_line(dict(ev_order=dict(n=10, cost_pct=0.41, hi=dict(mean_net=1.0), lo=dict(mean_net=0.0), diff_ci=[0.2, 1.8])),
+                             _art511u)
+check("⑤ 실측 한 줄 — 앞으로의 자료(위 +0.11 · 아래 −0.36 · 구간 0 포함 → '구별되지 않습니다') · 지난 11년 세 구간(방향이 같지 않다) · "
+      "마지막 문장은 '근거는 아직 없습니다' · 두 자료가 다 위 절반이면 문장이 바뀐다 · 둘 다 못 읽으면 None · 판정은 '추천 아님'이라고 같은 줄에",
+      isinstance(_l511, str) and '+0.11%' in _l511 and '-0.36%' in _l511 and '구별되지 않습니다' in _l511
+      and '방향이 같지 않습니다' in _l511 and '근거는 아직 없습니다' in _l511 and "'추천 아님'" in _l511
+      and isinstance(_l511u, str) and '차이 구간이 0 위이고' in _l511u and '근거는 아직 없습니다' not in _l511u
+      and _pf511.ev_rank_line(None, None) is None and _pf511.ev_rank_line({}, {}) is None, str(_l511))
+# ⑥ 화면 — 꺼져 있을 때 규칙 선택지 둘(기본 추첨) · '기대값 높은 순'을 고르고 켜면 장부에 rule='ev' · 켜진 줄에 규칙 이름 · 켠 채 규칙을
+#    바꾸면 ts 는 그대로 두고 rule 만 바뀐다(켜기 시각이 모드 변경 뒤라는 규칙이 안 깨진다)
+_vdb511 = _os.path.join(PROJ, '_probe', '_r531_view.db')
+if _os.path.exists(_vdb511):
+    _os.remove(_vdb511)
+_cv511 = _sl473.connect(_vdb511)
+_sl473.set_setting(_cv511, 'mode', 'LIVE', by='test')
+_sl473.set_setting(_cv511, 'live_unlock', _sx473.LIVE_UNLOCK_PHRASE, by='test')
+_sl473.set_setting(_cv511, 'limits', _LIM432, by='test')
+_sl473.account_snapshot(_cv511, 'real', dict(cash=10_000_000, total_eval=20_000_000, net_asset=20_000_000, stock_eval=10_000_000, positions=[]))
+_sl473.add_plan(_cv511, dict(_pl_nr473, plan_id='A1', data_day='2026-10-07'))
+_cv511.close()
+_src511v = _src509v.replace(repr(_vdb509), repr(_vdb511))
+_child511 = _os.path.join(PROJ, '_probe', '_r531_view_child.py')
+open(_child511, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src511v!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "r = at.radio(key='sw_ad_rule')\n"
+    "out = dict(opts=list(r.options), val=r.value)\n"
+    "r.set_value('ev')\n"
+    "at.run()\n"
+    "out['cap_ev'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "at.checkbox(key='sw_ad_ack').check()\n"
+    "at.run()\n"
+    "at.button(key='sw_ad_on').click()\n"
+    "at.run()\n"
+    "out['cap_on'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "rr = [x for x in at.radio if x.label == '고르는 규칙']\n"
+    "out['on_val'] = rr[0].value if rr else None\n"
+    "if rr:\n"
+    "    rr[0].set_value('hash')\n"
+    "at.run()\n"
+    "out['exc'] = len(at.exception)\n"
+    "out['first'] = str(at.exception[:1])[:600]\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+_o511v, _ev511s = {}, []
+try:
+    _rc511 = __import__('subprocess').run([sys.executable, _child511], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300,
+                                          env=dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT'))
+    _jr511 = (_rc511.stdout or '').rsplit('@@R@@', 1)
+    _o511v = _js511.loads(_jr511[1]) if len(_jr511) == 2 else {'stderr': (_rc511.stderr or '')[-800:]}
+    _cv511b = _sl473.connect(_vdb511)
+    _ev511s = [_js511.loads(r['value']) for r in _cv511b.execute("SELECT value FROM settings_events WHERE key='auto_draw' ORDER BY id")]
+    _cv511b.close()
+finally:
+    for _p11 in (_vdb511, _child511):
+        try:
+            _os.remove(_p11)
+        except OSError:
+            pass
+check("⑥ 화면 — 규칙 선택지 둘(기본 추첨) · '기대값 높은 순'을 고르면 그 실측 줄이 나오고 · 켜면 장부에 rule='ev' · 켜진 줄에 '기대값 높은 순' · "
+      "켠 채 추첨으로 바꾸면 rule 만 바뀌고 켜기 시각(ts)은 그대로 · 예외 0",
+      _o511v.get('opts') == ['추첨(좋고 나쁨과 무관)', '기대값 높은 순'] and _o511v.get('val') == 'hash'
+      and "'기대값 높은 순'을 고르면" in _o511v.get('cap_ev', '')
+      and len(_ev511s) == 2 and _ev511s[0].get('rule') == 'ev' and _ev511s[0].get('on') is True
+      and '켜짐 — 실전 · 기대값 높은 순' in _o511v.get('cap_on', '') and _o511v.get('on_val') == 'ev'
+      and _ev511s[1].get('rule') == 'hash' and _ev511s[1].get('on') is True and _ev511s[1].get('ts') == _ev511s[0].get('ts')
+      and _o511v.get('exc') == 0,
+      str({k: (v[:300] if isinstance(v, str) else v) for k, v in _o511v.items()}) + ' · ' + str(_ev511s))
+# ⑦ 화면 둘(독립 검토가 재현한 결함) — 한 장부에 AppTest 둘. A 가 바꾼 설정을 B 가 입력 없이 다시 그려도 **되돌려 적지 않는다**:
+#    긴급정지(켬) · 실전 주문 방식(완전 자동) · 자동 추첨 규칙(기대값 높은 순) · 자동 추첨 끄기. 종전 판은 B 가 갱신마다 옛 값을 다시 적었다.
+_vdb511b = _os.path.join(PROJ, '_probe', '_r531_two.db')
+if _os.path.exists(_vdb511b):
+    _os.remove(_vdb511b)
+_cv511t = _sl473.connect(_vdb511b)
+_sl473.set_setting(_cv511t, 'mode', 'LIVE', by='test')
+_sl473.set_setting(_cv511t, 'live_unlock', _sx473.LIVE_UNLOCK_PHRASE, by='test')
+_sl473.set_setting(_cv511t, 'limits', _LIM432, by='test')
+_sl473.account_snapshot(_cv511t, 'real', dict(cash=10_000_000, total_eval=20_000_000, net_asset=20_000_000, stock_eval=10_000_000, positions=[]))
+_sl473.add_plan(_cv511t, dict(_pl_nr473, plan_id='A1', data_day='2026-10-07'))
+_tm509.sleep(1.1)
+_sl473.set_setting(_cv511t, 'auto_draw', dict(on=True, mode='LIVE', ts=_sl473.now_ts(), rule='hash'), by='test')
+_cv511t.close()
+_src511t = _src509v.replace(repr(_vdb509), repr(_vdb511b))
+_child511t = _os.path.join(PROJ, '_probe', '_r531_two_child.py')
+open(_child511t, 'w', encoding='utf-8').write(
+    "import json, sys, sqlite3\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"DB = {_vdb511b!r}\n"
+    "def ev(key):\n"
+    "    c = sqlite3.connect(DB)\n"
+    "    r = [json.loads(x[0]) for x in c.execute('SELECT value FROM settings_events WHERE key=? ORDER BY id', (key,))]\n"
+    "    c.close()\n"
+    "    return r\n"
+    f"A = AppTest.from_string({_src511t!r}, default_timeout=120)\n"
+    f"B = AppTest.from_string({_src511t!r}, default_timeout=120)\n"
+    "A.run(); B.run()\n"
+    "out = {}\n"
+    "[t for t in A.toggle if t.label == '긴급정지'][0].set_value(True); A.run()\n"
+    "B.run(); B.run(); A.run()\n"
+    "out['kill'] = ev('kill_switch')\n"
+    "for X in (A, B):\n"
+    "    X.radio(key='sw_nav').set_value('오늘 계획'); X.run()\n"
+    "[x for x in A.radio if x.label == '고르는 규칙'][0].set_value('ev'); A.run()\n"
+    "B.run(); B.run(); A.run()\n"
+    "out['rule'] = [d.get('rule') for d in ev('auto_draw')]\n"
+    "A.button(key='sw_ad_off').click(); A.run()\n"
+    "B.run(); B.run()\n"
+    "out['after_off'] = [d.get('on') for d in ev('auto_draw')]\n"
+    "for X in (A, B):\n"
+    "    X.radio(key='sw_nav').set_value('시스템'); X.run()\n"
+    "[x for x in A.radio if x.label == '실전 주문 방식'][0].set_value('auto'); A.run()\n"
+    "B.run(); B.run(); A.run()\n"
+    "out['approval'] = ev('order_approval')\n"
+    "out['exc'] = len(A.exception) + len(B.exception)\n"
+    "out['first'] = str((A.exception or B.exception)[:1])[:600]\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+_o511t = {}
+try:
+    _rc511t = __import__('subprocess').run([sys.executable, _child511t], cwd=PROJ, capture_output=True, text=True,
+                                           encoding='utf-8', errors='replace', timeout=600,
+                                           env=dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT'))
+    _jr511t = (_rc511t.stdout or '').rsplit('@@R@@', 1)
+    _o511t = _js511.loads(_jr511t[1]) if len(_jr511t) == 2 else {'stderr': (_rc511t.stderr or '')[-800:]}
+finally:
+    for _p11 in (_vdb511b, _child511t):
+        try:
+            _os.remove(_p11)
+        except OSError:
+            pass
+check("⑦ 화면 둘 — A 가 바꾼 설정을 B 가 입력 없이 두 번 다시 그려도 되돌려 적지 않는다: 긴급정지 사건 [켬] 하나 · 자동 추첨 규칙 "
+      "[추첨, 기대값 높은 순] 둘 · A 의 '끄기' 뒤 B 가 다시 그려도 꺼진 그대로(마지막 사건 on=False) · 실전 주문 방식 [완전 자동] 하나 · 예외 0",
+      _o511t.get('kill') == [True] and _o511t.get('rule') == ['hash', 'ev']
+      and (_o511t.get('after_off') or [None])[-1] is False and len(_o511t.get('after_off') or []) == 3
+      and _o511t.get('approval') == ['auto'] and _o511t.get('exc') == 0,
+      str({k: (v[:300] if isinstance(v, str) else v) for k, v in _o511t.items()}))
+# ⑦b 운영과 같은 실행 모양(조각 실행 · 전체 실행 끝 st.stop() · 세션 내내 하나인 PagesManager)으로 화면 둘 — 2차 독립 검토(2026-10-15)가
+#    ⑦ 이 못 보는 결함을 이 모양에서 재현했다(1차 고침은 AppTest 에서만 통했다). 시험대는 scripts/two_tab_harness_r531.py 한 곳.
+#    **양방향**: 고친 코드에서는 되돌리기가 없고 · 돌연변이(옛 열쇠 상태를 안 지우는 1차 고침)에서는 되돌리기가 다시 나야 한다.
+_h511 = {}
+for _sc511, _mu511 in (('kill_race', '0'), ('kill_race', '1'), ('rule_race', '0'), ('rule_race', '1'), ('approval_race', '0'),
+                       ('approval_race', '1'), ('lost_click', '0'), ('single', '0')):
+    try:
+        _rh511 = __import__('subprocess').run([sys.executable, _os.path.join(PROJ, 'scripts', 'two_tab_harness_r531.py'), _sc511, _mu511],
+                                              cwd=PROJ, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600)
+        _jh511 = (_rh511.stdout or '').rsplit('@@R@@', 1)
+        _h511[(_sc511, _mu511)] = _js511.loads(_jh511[1]) if len(_jh511) == 2 else {'stderr': (_rh511.stderr or '')[-600:]}
+    except Exception as _e511:                                  # noqa: BLE001
+        _h511[(_sc511, _mu511)] = {'crash': f'{type(_e511).__name__}: {_e511}'}
+_g511 = lambda s, m: _h511.get((s, m)) or {}                    # noqa: E731
+check("⑦b 운영 모양 화면 둘 — 고친 코드: 긴급정지 [켬,끔,켬]에서 멈춤(6번 갱신 뒤에도) · 자동 추첨 규칙 [추첨,기대값,추첨]에서 멈춤 · 실전 주문 "
+      "방식은 B 가 고른 '계획마다 승인' 그대로 · 늦게 누른 낡은 화면의 누름은 안 적고 경고 상자로 알린다 · 한 탭은 누름 하나에 사건 하나 · 예외 0",
+      _g511('kill_race', '0').get('kill') == [True, False, True] and _g511('kill_race', '0').get('A_shows') is True
+      and _g511('rule_race', '0').get('rules') == ['hash', 'ev', 'hash']
+      and _g511('approval_race', '0').get('approval') == ['approve', 'auto', 'approve']
+      and _g511('approval_race', '0').get('A_shows') == 'approve'
+      and _g511('lost_click', '0').get('kill') == [True, False] and _g511('lost_click', '0').get('A_shows') is False
+      and any('마지막 누름은 적지 않았습니다' in w for w in _g511('lost_click', '0').get('A_warn') or [])
+      and _g511('single', '0').get('kill') == [True, False, True] and _g511('single', '0').get('approval') == ['auto', 'approve']
+      and _g511('single', '0').get('rule') == ['hash', 'ev', 'hash']
+      and all(_g511(s, '0').get('exc') == 0 for s in ('kill_race', 'rule_race', 'approval_race', 'lost_click', 'single')),
+      str({k: {kk: (vv[:200] if isinstance(vv, str) else vv) for kk, vv in v.items()} for k, v in _h511.items() if k[1] == '0'}))
+check("⑦b 돌연변이(옛 열쇠 상태를 안 지우는 1차 고침) — 같은 시험대에서 되돌리기가 **다시 난다**(시험이 그 결함을 잡는다는 증거): 긴급정지 "
+      "사건 4개 넘게 · 규칙 3개 넘게 · 실전 주문 방식이 '완전 자동'으로 되돌아감",
+      len(_g511('kill_race', '1').get('kill') or []) > 4 and len(_g511('rule_race', '1').get('rules') or []) > 3
+      and (_g511('approval_race', '1').get('approval') or [None])[-1] == 'auto',
+      str({k: v for k, v in _h511.items() if k[1] == '1'}))
+# ⑧ '기대값 높은 순'이 실제로 무엇을 먼저 고르나 — 그 판정일 계획의 기대값 1위가 손절 거리 1위면 그렇다고 적고 · 아니면 몇 번째인지만
+_pr511 = [dict(plan_id=f'P{i}', entry=10000.0, stop=10000.0 * (1 - d / 100.0), verdict=_js511.dumps(dict(expected_return=e)))
+          for i, (e, d) in enumerate(((-0.24, 9.37), (-0.29, 6.78), (-0.31, 5.55), (-0.33, 4.54)))]
+_rk511 = _sd510.ev_rule_risk_line(_pr511)
+_rk511b = _sd510.ev_rule_risk_line([dict(_pr511[0], verdict=_js511.dumps(dict(expected_return=-0.40)))] + _pr511[1:])
+check("⑧ 기대값 1위 = 손절 거리 1위(9.4% · 다른 계획 4.5~6.8%)면 '가장 큽니다'와 '크게 움직이는 계획을 먼저 고르는 쪽으로 기웁니다' · 1위가 바뀌면 "
+      "몇 번째인지만 · 셀 계획이 둘 미만이면 None",
+      isinstance(_rk511, str) and '9.4%' in _rk511 and '가장 큽니다' in _rk511 and '4.5~6.8%' in _rk511
+      and '크게 움직이는 계획을 먼저 고르는' in _rk511
+      and isinstance(_rk511b, str) and '2번째' in _rk511b and '먼저 고르는' not in _rk511b
+      and _sd510.ev_rule_risk_line(_pr511[:1]) is None and _sd510.ev_rule_risk_line([]) is None, str((_rk511, _rk511b)))
+# ─── §511 끝 ───
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §512 — 분봉 스터디 셋(R532 결과 · R533·R534 사전등록): 블라인드를 안 읽고 · 등록한 수가 스크립트에 그대로 (라운드 532~534)
+#
+#   사전등록은 결과 전에 커밋했다. 이 절은 값이 아니라 약속을 잠근다 — ① `--blind` 없이는 2026-05-01 부터의 분봉을 버린다
+#   ② 비용 벽·다중검정 문턱이 문서와 스크립트에서 같다 ③ R532 산출물이 블라인드를 안 읽은 판이고 판정 셋이 등록한 갈래 중 하나다.
+# ══════════════════════════════════════════════════════════════════════
+print("§512 분봉 스터디 — 블라인드 안 읽음 · 등록한 비용 벽·문턱이 스크립트에 그대로 · R532 판정 (라운드 532~534)")
+import importlib.util as _ilu512
+import io as _io512
+import json as _js512
+
+
+def _load512(name):
+    _sp = _ilu512.spec_from_file_location(name, _os.path.join(PROJ, 'scripts', name + '.py'))
+    _m = _ilu512.module_from_spec(_sp)
+    sys.path.insert(0, _os.path.join(PROJ, 'scripts'))
+    _sp.loader.exec_module(_m)
+    return _m
+
+
+_m532 = _load512('minute_study_r532')
+_m533 = _load512('minute_study_r533')
+_m534 = _load512('exit_fill_r534')
+_tmp512 = _os.path.join(PROJ, '_probe', '_r512_blind.jsonl')
+with _io512.open(_tmp512, 'w', encoding='utf-8') as _f512:
+    for _d512 in ('2026-04-30', '2026-05-01', '2026-06-02'):
+        _f512.write(_js512.dumps(dict(code='990099', day=_d512, t='09:00', o=1.0, h=1.0, l=1.0, c=1.0, v=1.0, cum_amt=1.0)) + '\n')
+try:
+    _rd512 = _m532.read_code(_tmp512, False)
+    _rd512b = _m532.read_code(_tmp512, True)
+finally:
+    _os.remove(_tmp512)
+check("① 블라인드 — --blind 없이는 2026-05-01 부터의 줄을 버린다(버린 수를 센다) · 켜면 읽는다",
+      sorted(_rd512[0]) == ['2026-04-30'] and _rd512[2] == 2 and sorted(_rd512b[0]) == ['2026-04-30', '2026-05-01', '2026-06-02'],
+      str((sorted(_rd512[0]), _rd512[2])))
+_doc532 = open(_os.path.join(PROJ, 'docs', 'PREREG_R532_MINUTE_FIRST.md'), encoding='utf-8').read()
+_doc533 = open(_os.path.join(PROJ, 'docs', 'PREREG_R533_ETF_INTRADAY.md'), encoding='utf-8').read()
+check("② 등록한 수가 스크립트에 그대로 — R532 벽 0.23 · z 2.40 · 블라인드 2026-05-01 · R533 벽 0.03 · z 2.25 · R533·R534 는 R532 의 함수를 "
+      "부른다(베끼지 않는다)",
+      _m532.COST_WALL == 0.23 and '**0.23%**' in _doc532 and _m532.Z_BONF == 2.40 and '**2.40**' in _doc532
+      and _m532.BLIND_FROM == '2026-05-01' and '2026-05-01' in _doc532
+      and _m533.COST_WALL == 0.03 and '**0.03%**' in _doc533 and _m533.Z_BONF == 2.25 and '**2.25**' in _doc533
+      and _m533.M is not None and _m533.M.read_code.__name__ == 'read_code' and _m534.M.day_features.__name__ == 'day_features')
+_art512 = _js512.load(_io512.open(_os.path.join(PROJ, 'data', 'minute_study_r532.json'), encoding='utf-8'))
+_vd512 = {q: (_art512.get('results') or {}).get(q, {}).get('verdict') for q in ('Q1', 'Q2', 'Q3')}
+check("③ R532 산출물 — 블라인드를 안 읽은 판(blind_read=False · 블라인드 날짜 0) · 판정 셋이 등록한 갈래(R0 접음·(가)·(나)·(다)) 중 하나 · "
+      "결과 문서가 그 판정을 적는다",
+      _art512.get('blind_read') is False and all(x.get('blind', {}).get('n_dates', 0) == 0
+                                                for x in [(_art512['results'][q].get('wall') or {}) for q in ('Q1', 'Q2', 'Q3')])
+      and all(isinstance(v, str) and v.startswith(('R0 접음', '(가)', '(나)', '(다)')) for v in _vd512.values())
+      and '(다) 접음' in open(_os.path.join(PROJ, 'docs', 'RESULT_R532_INTRADAY_COST_WALL.md'), encoding='utf-8').read(), str(_vd512))
+# ─── §512 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

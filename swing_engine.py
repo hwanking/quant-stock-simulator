@@ -244,9 +244,10 @@ def learning_draw(cands, day, qty_of):
     for p in cands or []:
         try:
             q = qty_of(p)
+            q = int(q) if q is not None else None              # 라운드 531 — NaN 등은 여기서(독립 검토 · 동작은 같다)
         except Exception:                                      # noqa: BLE001 — 못 세면 뽑지 않는다
             q = None
-        if q is not None and int(q) >= 1 and p.get('plan_id'):
+        if q is not None and q >= 1 and p.get('plan_id'):
             elig.append(p)
     if not elig:
         return None, 0, '고를 수 있고 한 주 이상 살 수 있는 계획이 없습니다(수량 미리보기 0주이거나 못 셈)'
@@ -254,6 +255,40 @@ def learning_draw(cands, day, qty_of):
     h = int(hashlib.sha256((str(day)[:10] + '|' + ','.join(ids)).encode('utf-8')).hexdigest(), 16)
     pid = ids[h % len(ids)]
     return next(p for p in elig if str(p['plan_id']) == pid), len(elig), ''
+
+
+def ev_pick(cands, day, qty_of):
+    """학습용 1종목 — **기대값 높은 순** (라운드 531 · 사용자가 고른 규칙) → (계획 또는 None, 고를 수 있던 수, 못 고른 사유).
+
+    사용자(2026-10-14): *"기대값 높은 순 옵션 추가해줘."* 대상은 `learning_draw` 와 같다(고를 수 있고 수량 미리보기 한 주 이상). 그중
+    판정 기록의 비용 차감 기대값(`verdict_of(p)['expected_return']`)이 가장 높은 계획 하나 — 같은 값이 여럿이면 그 동점들 사이에서
+    `learning_draw` 의 해시(같은 판정일엔 늘 같은 계획). 기대값을 못 읽은 계획은 고르지 않는다(0 으로 채우지 않는다 · §3).
+    이 순서가 실제 결과를 가른다는 근거는 아직 없다(라운드 475 · 504 — 세 구간에서 방향이 같지 않았다). 화면이 그 실측을 이 선택지
+    옆에 적는다. 엔진 판정은 안 바뀐다 — 어느 규칙이든 '추천 아님' 계획 중 하나를 사람이 켠 스위치로 사는 것이다."""
+    elig = []
+    for p in cands or []:
+        try:
+            q = qty_of(p)
+            q = int(q) if q is not None else None              # NaN 등은 여기서 ValueError — 못 세면 고르지 않는다(독립 검토)
+        except Exception:                                      # noqa: BLE001 — 못 세면 고르지 않는다
+            q = None
+        if q is not None and q >= 1 and p.get('plan_id'):
+            elig.append(p)
+    if not elig:
+        return None, 0, '고를 수 있고 한 주 이상 살 수 있는 계획이 없습니다(수량 미리보기 0주이거나 못 셈)'
+    scored = []
+    for p in elig:
+        v = verdict_of(p).get('expected_return')
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(float(v)) != float('inf'):
+            scored.append((float(v), p))
+    if not scored:
+        # 독립 검토(2026-10-14) — 사유에 계획 수를 넣으면 수량 미리보기가 0↔1 로 오갈 때 사유가 바뀌어 '같은 결과면 다시 안 적는다'를 넘고
+        #   바퀴마다 설정 사건이 쌓인다 — 사유는 늘 같은 글자로
+        return None, 0, '고를 수 있는 계획 모두 비용 차감 기대값을 못 읽었습니다(지어 채우지 않는다)'
+    top = max(v for v, _p in scored)
+    tied = [p for v, p in scored if v == top]
+    pick = tied[0] if len(tied) == 1 else learning_draw(tied, day, lambda _p: 1)[0]
+    return pick, len(scored), ''
 
 
 def pick_blockers(plan, report=None):

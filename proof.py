@@ -573,6 +573,49 @@ def gate_line(sc, name):
     return s
 
 
+def ev_rank_line(sc, art=None):
+    """'기대값 높은 순'으로 한 종목을 고르면 — 그 순서가 실제로 결과를 갈랐나 (라운드 531 · 판정 낱말 없음 · 새 숫자 없음).
+
+    사용자(2026-10-14): *"기대값 높은 순 옵션 추가해줘."* 그 선택지 옆에 이미 잰 두 가지를 그대로 적는다 — ① 앞으로의 자료: 개장 전 후보를
+    그날 기대값으로 반으로 나눠 같은 계획으로 채점한 위·아래 절반(성적표 `ev_order` · 라운드 475) ② 지난 11년 원장: 기대값 조건 하나에만
+    막힌 자리를 기대값이 0 에 가까운 절반과 먼 절반으로 나눈 세 구간 평균(라운드 504 산출물). 0 을 포함하는지 · 세 구간 방향이 같은지만
+    말한다. 둘 다 못 읽으면 None(§3) — 부르는 쪽이 줄을 안 그린다."""
+    parts = []
+    fwd_up = past_up = False
+    eo = (sc or {}).get('ev_order') or {}
+    hi, lo = eo.get('hi') or {}, eo.get('lo') or {}
+    if hi.get('mean_net') is not None and lo.get('mean_net') is not None:
+        dc = eo.get('diff_ci')
+        fwd_up = bool(dc) and float(dc[0]) > 0
+        inner = [x for x in ((f"차이의 날짜 묶음 95% 구간 {_ci_text(dc)}" if dc else ''),
+                             (f"순위 상관 {float(eo['rank_corr']):+.2f}" if eo.get('rank_corr') is not None else '')) if x]
+        s = (f"지난 개장 전 후보 {int(eo.get('n') or 0):,}건을 그날 기대값으로 반으로 나눠 같은 계획으로 채점하면 위 절반 "
+             f"{float(hi['mean_net']):+.2f}% · 아래 절반 {float(lo['mean_net']):+.2f}%"
+             + (f"(비용 {eo.get('cost_pct')}% 뺀 평균" + (' · ' + ' · '.join(inner) if inner else '') + ')'))
+        if dc and float(dc[0]) <= 0 <= float(dc[1]):
+            s += ' — 차이가 0 과 구별되지 않습니다'
+        parts.append(s)
+    sp = (art or {}).get('splits') or {}
+    halves = [(ko, ((sp.get(k) or {}).get('blocked_ev_halves') or {})) for k, ko in _SPLIT_KO]
+    if all((h.get('near_zero') or {}).get('mean_net') is not None and (h.get('far') or {}).get('mean_net') is not None
+           for _ko, h in halves):
+        diffs = [float(h['near_zero']['mean_net']) - float(h['far']['mean_net']) for _ko, h in halves]
+        same = all(x > 0 for x in diffs) or all(x < 0 for x in diffs)
+        past_up = all(x > 0 for x in diffs)
+        parts.append('지난 11년 원장에서 이 조건 하나에만 막힌 자리를 기대값이 높은 절반 · 낮은 절반으로 나누면 '
+                     + ' · '.join(f"{ko} {float(h['near_zero']['mean_net']):+.2f}% · {float(h['far']['mean_net']):+.2f}%"
+                                  for ko, h in halves)
+                     + (f"(비용 {art.get('cost_pct')}% 뺀 평균)" if art.get('cost_pct') is not None else '')
+                     + (' — 세 구간에서 방향이 같습니다' if same else ' — 세 구간에서 방향이 같지 않습니다'))
+    if not parts:
+        return None
+    # 독립 검토(2026-10-14) — 두 자료의 잣대가 다르다(앞으로의 자료는 구간 · 지난 11년은 점추정 셋) — 각각 무엇이 위였는지만 적는다
+    tail = ("앞으로의 자료는 차이 구간이 0 위이고 지난 11년은 세 구간 점추정이 모두 높은 절반 쪽입니다 — 그래도 한 종목의 결과는 "
+            "그 평균과 다를 수 있습니다" if (fwd_up and past_up) else
+            "이 순서로 고른 한 종목이 무작위 추첨보다 낫다는 근거는 아직 없습니다")
+    return "'기대값 높은 순'을 고르면 — " + ' · '.join(parts) + f". {tail}(엔진 판정은 두 규칙 모두 '추천 아님'입니다)."
+
+
 #: 라운드 482 — 비용 쪽의 다른 길 둘(계약의 주문 방식 · 국내 주식형 ETF)을 잰 산출물(`scripts/cost_paths_r482.py`)
 COST_PATHS_FILE = 'cost_paths_r482.json'
 
