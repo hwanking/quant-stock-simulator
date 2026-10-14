@@ -1347,6 +1347,10 @@ def _auto_draw_section(st, c, ctx, md):
     if mode not in X.MODE_ENV:
         st.caption(f"지금 운용 모드가 {MODE_KO.get(mode, mode)}이라 켤 수 없습니다 — 켠 그 모드(모의투자·실전)에서만 살아 있습니다(시스템 → 설정).")
         return
+    # 라운드 530 — 켜는 법 · 켜졌는지 아는 법 · 지금 켜면 언제 뽑고 언제부터 사나(저녁 작업 뒤에 켜도 다음 거래일에 산다)
+    _on530 = _dash.auto_draw_turn_on_line(day, has_day)
+    if _on530:
+        st.caption(md(_on530))
     ack = st.checkbox(AUTO_ACK, value=False, key='sw_ad_ack')
     if st.button('매일 자동 추첨 켜기', key='sw_ad_on', disabled=not ack):
         if not ack:
