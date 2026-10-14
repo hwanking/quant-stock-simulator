@@ -12,6 +12,8 @@
     것이다(PC 꺼짐 등 · 새 숫자 없음 · 상한은 그 스크립트의 것).
   · 스윙 워커 — 잠금 파일의 주인 프로세스가 살아 있나(`swing_ops.worker_status` · 라운드 454 와 같은 판별). 진행률은 없다(장이
     끝날 때까지 도는 작업이라 막대를 그리면 지어낸 것이다).
+  · 분봉 백필(라운드 529) — 수집 잠금의 주인이 살아 있고 백필 기록의 마지막 시작 줄의 pid 와 같으면(`backfill_job`). 막대는 이번
+    실행의 받은 쌍 / 받을 쌍(기록의 진행 줄).
 
 못 읽은 것은 '안 돈다'로 바꾸지 않는다 — 그 작업은 목록에서 빠지고(카드에 안 뜬다) 사유는 `notes` 에 남는다(§3).
 """
@@ -117,10 +119,85 @@ def worker_job(status=None):
                 sub='정규장 마감 뒤 한 바퀴 더 돌고 끝' + (f' · {since[11:16]} 부터' if len(since) >= 16 else ''))
 
 
-def running_jobs(nightly=None, worker=None):
-    """(도는 작업 목록, 못 읽은 사유 목록). 저녁 작업을 먼저 — 진행 막대가 있는 쪽이 카드의 머리다."""
+#: 라운드 529 — 분봉 백필(라운드 527 · 이 PC 의 작업 gaeum-minute-backfill)도 며칠을 도는데 화면 어디에도 안 보였다(기록 파일에만).
+BACKFILL_LOG = os.environ.get('GAEUM_JOBS_BACKFILL_LOG') or os.path.join(PROJ, '.portfolio', 'day_bars', '_backfill_run.txt')
+BACKFILL_LOCK = os.path.join(PROJ, '.portfolio', 'day_bars', '_collect.lock')
+BACKFILL_START = '] 백필 시작 · pid '
+BACKFILL_PLAN = '받을 (종목, 날짜) '
+
+
+def _pid_alive_default(pid):
+    try:
+        from scripts.run_swing_worker import _pid_alive      # 워커와 같은 판별(한 곳)
+        return _pid_alive(pid)
+    except Exception:                                      # noqa: BLE001
+        return None
+
+
+def backfill_job(log_path=None, lock_path=None, alive=None, tail=5000):
+    """분봉 백필이 지금 도는가 — 잠금 주인이 살아 있고 그 주인이 기록의 **마지막** '백필 시작' 줄의 pid 이며 그 뒤에 끝·멈춤 줄이 없으면
+    dict · 안 돌면 None · 못 읽으면 note. 같은 잠금을 저녁 작업의 분봉 단계도 잡는다 — pid 가 다르면 백필이 아니다(저녁 작업 카드가 보인다).
+
+    진행 막대는 **이번 실행**의 '받은 쌍 / 받을 쌍'(기록의 진행 줄과 계획 줄 · 지어낸 값이 아니다). 진행 줄은 200쌍마다라 막대도 그만큼씩
+    움직인다. 한 실행이 밤새 수백 줄을 적으므로(15만 쌍 ÷ 200 = 약 770줄 + 실패 줄) 읽는 꼬리는 넉넉히 — 첫 판은 200줄이라 밤새 돈
+    실행의 시작 줄이 꼬리 밖으로 밀려 **도는 중인데 안 뜬다**가 났다(실제 기록으로 처음 그려 보고 잡았다)."""
+    lp = lock_path or BACKFILL_LOCK
+    if not os.path.exists(lp):
+        return None
+    try:
+        with open(lp, encoding='utf-8') as f:
+            owner = int((f.read().strip() or '0'))
+        with open(log_path or BACKFILL_LOG, encoding='utf-8', errors='replace') as f:
+            lines = f.read().splitlines()[-tail:]
+    except (OSError, ValueError) as e:
+        return dict(kind='note', note=f'분봉 백필 기록·잠금을 못 읽었다 — {type(e).__name__}')
+    start_i = None
+    for i, ln in enumerate(lines):
+        if BACKFILL_START in ln:
+            start_i = i
+    if start_i is None:
+        return None
+    try:
+        pid = int(lines[start_i].split(BACKFILL_START, 1)[1].split()[0])
+    except (IndexError, ValueError):
+        return dict(kind='note', note='분봉 백필 시작 줄에서 pid 를 못 읽었다')
+    if not owner or owner != pid:
+        return None
+    ok = (alive or _pid_alive_default)(pid)
+    if ok is None:
+        return dict(kind='note', note='분봉 백필 프로세스가 살아 있는지 모른다')
+    if not ok:
+        return None
+    after = lines[start_i + 1:]
+    if any(ln.startswith('[끝]') or ln.startswith('[멈춤]') or ln.startswith('[계획만]') for ln in after):
+        return None
+    total = done = None
+    day = ''
+    for ln in after:
+        if BACKFILL_PLAN in ln:
+            try:
+                total = int(ln.split(BACKFILL_PLAN, 1)[1].split()[0].replace(',', ''))
+            except (IndexError, ValueError):
+                total = None
+        elif ln.startswith('[') and '] ' in ln and '/' in ln.split('] ', 1)[1].split(' · ')[0]:
+            head = ln.split('] ', 1)[1].split(' · ')
+            try:
+                done = int(head[0].split('/')[0].replace(',', ''))
+                day = head[1] if len(head) > 1 else ''
+            except (IndexError, ValueError):
+                pass
+    since = lines[start_i][1:15]
+    sub = (f'{done or 0:,}/{total:,}쌍' if total else '계획 세는 중') + (f' · {day} 받는 중' if day else '') + \
+          f' · {since[:11]} 시작 · 조회만 · 장 시간·저녁 작업엔 스스로 멈춤'
+    return dict(kind='backfill', title='분봉 백필 — 연구용 1년치 받기', done=((done or 0) if total else None), total=total,
+                sub=sub, since=since)
+
+
+def running_jobs(nightly=None, worker=None, backfill=None):
+    """(도는 작업 목록, 못 읽은 사유 목록). 저녁 작업을 먼저 — 진행 막대가 있는 쪽이 카드의 머리다. 분봉 백필은 맨 뒤(라운드 529)."""
     jobs, notes = [], []
-    for j in ((nightly_job() if nightly is None else nightly), (worker_job() if worker is None else worker)):
+    for j in ((nightly_job() if nightly is None else nightly), (worker_job() if worker is None else worker),
+              (backfill_job() if backfill is None else backfill)):
         if not j:
             continue
         if j.get('kind') == 'note':

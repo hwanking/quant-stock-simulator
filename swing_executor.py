@@ -102,8 +102,9 @@ def human_picks(st, mode=None, mode_ts=None):
     return {e['plan_id'] for e in es if pick_alive(e, mode, mode_ts)}
 
 
-def human_pick_label(plan):
-    """주문 사건에 붙는 한 마디 — 엔진 추천이 아니라는 것과 그 계획의 기대값(판정 기록 그대로 · 못 읽으면 '산출 불가')."""
+def human_pick_label(plan, auto=False):
+    """주문 사건에 붙는 한 마디 — 엔진 추천이 아니라는 것과 그 계획의 기대값(판정 기록 그대로 · 못 읽으면 '산출 불가').
+    라운드 529 — `auto` 면 사람이 켠 매일 자동 추첨으로 산 것이라고 같은 괄호 안에(이름 머리는 같다 — 영수증·성적은 '사람이 고름'으로 센다)."""
     v = swing_engine.verdict_of(plan)
     ev = v.get('expected_return')
     try:
@@ -112,7 +113,115 @@ def human_pick_label(plan):
         ev_txt = '산출 불가'
     n_ck, failed = v.get('checks_n'), v.get('failed')
     cond = (f' · 조건 {int(n_ck) - len(failed)}/{int(n_ck)} 통과' if isinstance(failed, list) and n_ck else '')
-    return f'{HUMAN_PICK_TAG}(엔진 추천 아님 · 비용 차감 기대값 {ev_txt}{cond})'
+    return f'{HUMAN_PICK_TAG}({AUTO_DRAW_TAG + " · " if auto else ""}엔진 추천 아님 · 비용 차감 기대값 {ev_txt}{cond})'
+
+
+# ── 라운드 529 — 매일 학습용 1종목 자동 추첨 (사람이 켜는 스위치) ─────────────────────────────────────────────────
+#   사용자(2026-10-14): *"매일 자동으로 한 종목 넣는 스위치 만들어줘."* 라운드 526 의 추첨(좋고 나쁨과 무관한 해시 · 같은 판정일엔 늘 같은
+#   계획)을 사람이 켠 동안 판정일마다 한 번 실행부가 돌려 **적어 두고**, 그 계획을 사람이 고른 계획과 같은 길로 산다(넘는 것은 '추천 아님'
+#   하나 · 모드·연결·실전 잠금·위험 한도·긴급정지·손절선 확인·수량 계산은 그대로). 스위치(`AUTO_DRAW_KEY`)를 적는 자리는 화면의 켜기·끄기
+#   하나뿐이고(§509), 추첨 기록(`AUTO_DRAW_PICKS_KEY`)을 적는 자리는 `record_auto_draw` 하나뿐이다. 엔진 판정은 바뀌지 않는다.
+AUTO_DRAW_KEY = 'auto_draw'                 # dict(on, mode, ts) — 켠 그 모드에서만 · 모드를 마지막으로 바꾼 뒤 켠 것만 살아 있다
+AUTO_DRAW_PICKS_KEY = 'auto_draw_picks'     # {판정일: dict(plan_id|None, code, n, why, ts)}
+AUTO_DRAW_TAG = '자동 학습 추첨'
+#: 남기는 판정일 수 — 장부 설정이 끝없이 커지지 않게(운영 값 · 판정 문턱 아님)
+AUTO_DRAW_KEEP = 40
+
+
+def auto_draw_alive(st, mode, mode_ts=None):
+    """자동 추첨 스위치가 지금 살아 있나 — 켜져 있고 · 켠 그 모드(모의투자·실전)가 지금 모드이고 · 모드를 마지막으로 바꾼 뒤에 켠 것
+    (고르기와 같은 규칙 `pick_alive` · 꺼짐에서 켠 것이 나중에 실전으로 바꾸면 사는 일을 막는다)."""
+    v = (st or {}).get(AUTO_DRAW_KEY)
+    if not isinstance(v, dict) or not v.get('on'):
+        return False
+    return pick_alive(dict(mode=v.get('mode'), ts=v.get('ts')), mode, mode_ts)
+
+
+def auto_draw_record(st, day):
+    """그 판정일의 자동 추첨 기록(dict) 또는 None."""
+    v = (st or {}).get(AUTO_DRAW_PICKS_KEY)
+    if not isinstance(v, dict) or not day:
+        return None
+    r = v.get(str(day)[:10])
+    return r if isinstance(r, dict) else None
+
+
+def latest_plan_day(c):
+    """장부에 있는 가장 새 판정일(계획의 자료일) 또는 None."""
+    days = [str(p['data_day']) for p in L.plans(c) if p.get('data_day')]
+    return max(days) if days else None
+
+
+def active_auto_pick(c, st, mode, mode_ts=None, anchor_day=None):
+    """지금 살아 있는 자동 추첨 계획 id — 스위치가 살아 있고 · **지금 판정일**(anchor_day)이 장부의 가장 새 판정일이고 · 그 판정일의 추첨이
+    적혀 있으면 그 계획. 지난 판정일의 추첨으로 물러서지 않는다 — 물러서면 그 판정일 계획이 늦게 생긴 날(저녁 작업이 안 돈 날 · 장중에
+    리포트를 고정한 날) 지난 추첨과 새 추첨을 같은 날 둘 다 산다(독립 검토 2026-10-14 · 재현). 그래서 열린 학습 매수는 많아야 하나다."""
+    if not anchor_day or not auto_draw_alive(st, mode, mode_ts):
+        return None
+    # 재검토(2026-10-14) — 종전 판은 '장부의 가장 새 판정일 = 지금 판정일'도 요구했는데, 그러면 미래 날짜 계획 하나가 기능을 영영 끈다.
+    #   지금 판정일의 기록만 읽으면 지난 추첨으로 물러설 길이 이미 없다.
+    return (auto_draw_record(st, str(anchor_day)[:10]) or {}).get('plan_id') or None
+
+
+def active_picks(c, st, mode, mode_ts=None, anchor_day=None):
+    """사람이 고른 계획 + 살아 있는 자동 추첨 계획 — 실행부(사기 · 취소)와 화면이 같은 것을 읽는다(§4)."""
+    out = set(human_picks(st, mode=mode, mode_ts=mode_ts))
+    a = active_auto_pick(c, st, mode, mode_ts, anchor_day)
+    return out | {a} if a else out
+
+
+def record_auto_draw(c, mode, mode_ts, day, report, acct, limits, cost_pct, held=()):
+    """스위치가 살아 있고 그 판정일의 추첨이 아직 없으면 **한 번** 뽑아 적는다 → 새로 적은 기록 또는 None.
+
+    한 번 적으면 다시 뽑지 않는다 — 그날 현금·보유가 바뀌어도 종목이 바뀌지 않게(바뀌면 같은 날 두 종목을 산다). 대상은 화면의 고르는
+    목록과 같다: 그 판정일의 실주문 자격 없는 계획(자격이 있는 것은 완전 자동이 이미 산다) · 관리 중·계좌에 있는 종목 제외 · 고르기로 못
+    넘는 막힘 없음(`swing_engine.pick_blockers`) · 수량 미리보기 한 주 이상(워커와 같은 `swing_risk.size`). 뽑는 규칙은 화면 단추와 같은
+    함수(`swing_engine.learning_draw`). 못 뽑으면 그 사유를 센 그대로 적고, 다음 바퀴가 다시 뽑아 본다(뽑힌 기록만 확정 · 아래). 장부의 설정은
+    **지금** 읽는다.
+
+    독립 검토(2026-10-14 · 재현) — ① 그 판정일 계획이 **아직 없으면 적지 않는다.** 워커는 마감 직후(15:30:18) 한 바퀴를 더 도는데 그때
+    판정일은 이미 오늘이고 오늘 리포트는 봉 확정(20:00) 전이라 없다 — 종전 판은 거기서 '뽑을 계획 없음'을 영구히 적어 저녁 작업이 그날을
+    영영 안 뽑았다(켜면 한 번 사고 조용히 멈춘다). ② 사람이 직접 고른 계획(과 그 종목) · 이미 매수 주문이 열린 종목은 빼고 뽑는다(같은 날
+    학습 매수가 둘이 되거나 · 막힐 종목을 뽑아 그날을 버리지 않게)."""
+    st = L.settings(c)
+    ex = auto_draw_record(st, day)
+    if not day or not auto_draw_alive(st, mode, mode_ts) or (ex and ex.get('plan_id')):
+        return None                 # 뽑힌 기록은 그날 다시 뽑지 않는다(현금이 바뀌어도 종목이 바뀌지 않게)
+    day_plans = [p for p in L.plans(c) if str(p['data_day']) == str(day)[:10]]
+    if not day_plans:
+        return None
+    picked = human_picks(st, mode=mode, mode_ts=mode_ts)
+    picked_codes = {(L.plan(c, x) or {}).get('code') for x in picked}
+    busy = {it['code'] for it in L.intents_with_state(c, OPEN_STATES)}
+    managed, held = set(L.managed_open(c)), set(held or ())
+    nonrec = [p for p in day_plans if not p.get('live_ok')]
+    cand = [p for p in nonrec if p['code'] not in managed and p['code'] not in held
+            and p['code'] not in busy and p['plan_id'] not in picked and p['code'] not in picked_codes]
+
+    def qty_of(p):
+        if not (limits and acct) or swing_engine.pick_blockers(p, report):
+            return None
+        return int(swing_risk.size(p.get('entry'), p.get('stop'), acct, limits, cost_pct).get('qty') or 0)
+
+    pk, n, why = swing_engine.learning_draw(cand, day, qty_of)
+    if not cand:
+        # 재검토(2026-10-14) — 대상이 빠진 까닭을 센 그대로 적는다(종전 판은 '수량 미리보기 0주'라는 틀린 사유를 적었다 · §3)
+        why = (f'뽑을 계획이 없습니다 — 그 판정일 계획 {len(day_plans)}개 중 실주문 자격(완전 자동이 산다) {len(day_plans) - len(nonrec)}개 · '
+               f'계좌·관리 중 종목 {sum(1 for p in nonrec if p["code"] in managed or p["code"] in held)}개 · '
+               f'매수 주문이 열린 종목 {sum(1 for p in nonrec if p["code"] in busy)}개 · '
+               f'사람이 고른 계획·종목 {sum(1 for p in nonrec if p["plan_id"] in picked or p["code"] in picked_codes)}개')
+    rec = dict(plan_id=(pk or {}).get('plan_id'), code=(pk or {}).get('code'), n=n, why=why or '', ts=L.now_ts())
+    # 재검토(2026-10-14) — 못 뽑은 기록은 **확정이 아니다**: 까닭이 지나가는 것(전날 안 닿은 주문이 밤엔 아직 열림 · 리포트가 늦게 고정됨)일
+    #   수 있어 다음 바퀴가 다시 뽑아 본다(못 뽑은 기록으로는 아무것도 사지 않으니 두 번 사는 길이 없다). 같은 결과면 다시 적지 않는다
+    #   (설정은 사건 기록이라 바퀴마다 적으면 하루 수백 줄이 쌓인다).
+    if ex and not rec['plan_id'] and (ex.get('n'), ex.get('why')) == (rec['n'], rec['why']):
+        return None
+    allp = dict(st.get(AUTO_DRAW_PICKS_KEY) or {}) if isinstance(st.get(AUTO_DRAW_PICKS_KEY), dict) else {}
+    allp[str(day)[:10]] = rec
+    L.set_setting(c, AUTO_DRAW_PICKS_KEY, dict(sorted(allp.items())[-AUTO_DRAW_KEEP:]), by='worker')
+    return rec
+
+
 OPEN_STATES = ('SUBMITTING', 'UNKNOWN', 'BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')
 PROTECTIVE = ('stop', 'expiry')
 #: 보호 매도가 같은 날 **거절**된 횟수의 상한 — 넘으면 사람에게 알린다. 운영 값이지 판정 문턱이 아니다
@@ -515,6 +624,18 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         sync_positions(c, held, trade_day, out['notes'].append)
     except Exception as e:                                     # noqa: BLE001
         out['alerts'].append(f'계좌 맞추기 실패 — {type(e).__name__}: {e}')
+    # 라운드 529 — 매일 학습용 1종목 자동 추첨: 스위치가 살아 있고 그 판정일의 추첨이 아직 없으면 한 번 뽑아 적는다(저녁 작업의 바퀴가 보통
+    #   먼저 적는다 · 장중 바퀴는 적힌 것을 읽기만). 보호만 하는 바퀴(신규 매수 없음)에서는 뽑지 않는다. 실패해도 바퀴(보호 매도)는 계속.
+    if not out['protect_only']:
+        try:
+            _rec529 = record_auto_draw(c, mode, L.setting_ts(c, 'mode'), anchor_day, report, bal, st.get('limits') or None,
+                                       cost_pct, held)
+            if _rec529:
+                st = L.settings(c)          # 방금 적은 추첨을 이 바퀴의 취소·매수가 읽게(설정은 바퀴 머리에 한 번 읽었다 · 장중 시험이 잡았다)
+                out['notes'].append(f"자동 학습 추첨(판정일 {anchor_day}) — " + (
+                    f"{_rec529['code']} · 대상 {_rec529['n']}개" if _rec529.get('plan_id') else f"못 뽑음 · {_rec529.get('why')}"))
+        except Exception as e:                                 # noqa: BLE001
+            out['notes'].append(f'자동 학습 추첨을 못 했다 — {type(e).__name__}: {e}')
     tag = '보호만 · ' if out['protect_only'] else ''
     if not allow_orders:
         _beat(c, mode, out, tag + '주문 없이 돌았다(저녁 작업) · 내역·계좌만 맞춤')
@@ -523,7 +644,8 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         _beat(c, mode, out, tag + '장 시간이 아니라 주문하지 않았다 · 내역·계좌만 맞춤')
         return out
     # ⑤ 취소 다시 하기
-    _cancels(c, broker, st, quote_fn, out, mode=mode, no_buys=out['protect_only'], mode_ts=L.setting_ts(c, 'mode'))
+    _cancels(c, broker, st, quote_fn, out, mode=mode, no_buys=out['protect_only'], mode_ts=L.setting_ts(c, 'mode'),
+             anchor_day=anchor_day)
     # ⑥ 보호 매도 — 긴급정지·모드와 무관
     _exits(c, broker, held, trade_day, mode, out, quote_fn)
     # ⑦ 신규 매수 — 내역을 맞췄을 때만 · 주문 모드일 때만(OFF·SHADOW 는 관문이 막는다)
@@ -533,7 +655,7 @@ def run_cycle(c, *, broker=None, cfg=None, report=None, anchor_day=None, now=Non
         out['blocked'].append('주문 내역을 못 맞춰 신규 매수를 안 냈다')
     else:
         _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=report,
-                 fresh=fresh_verdicts(report, extra_reports))
+                 fresh=fresh_verdicts(report, extra_reports), anchor_day=anchor_day)
     _beat(c, mode, out, tag + f"주문 {len(out['orders'])} · 청산 {len(out['exits'])} · 막힘 {len(out['blocked'])}")
     return out
 
@@ -559,14 +681,15 @@ def _beat(c, mode, out, summary):
         L.heartbeat(c, mode, 'ok', summary)
 
 
-def unchosen_buy(plan, st, mode, mode_ts=None):
+def unchosen_buy(plan, st, mode, mode_ts=None, auto_pid=None):
     """열린 매수의 계획을 이제 아무도 고르지 않았나 (라운드 494) → 취소 사유 또는 None.
     사람이 고른 계획(실주문 자격 없음)은 고르기가 풀렸을 때(살아 있는 고르기만 · `pick_alive`) · 실전 승인형의 자격 계획은 승인이
     풀렸을 때(사람이 골랐으면 그대로). 계획을 못 읽으면 None — 모르는 것으로 취소하지 않는다(취소 사유는 ⓐ·ⓒ 가 따로 본다)."""
     if not plan:
         return None
     pid = plan.get('plan_id')
-    picked = pid in human_picks(st, mode=mode, mode_ts=mode_ts)
+    # 라운드 529 — 살아 있는 자동 추첨 계획도 고른 것으로 본다(스위치를 끄거나 새 판정일의 추첨이 대신하면 그 열린 매수를 취소한다)
+    picked = pid in human_picks(st, mode=mode, mode_ts=mode_ts) or (auto_pid is not None and pid == auto_pid)
     if not plan.get('live_ok'):
         return None if picked else '사람이 고르기를 취소한 계획 — 열린 매수 취소'
     if mode == 'LIVE' and approval_of(st) == 'approve' and pid not in approved_plans(st) and not picked:
@@ -592,12 +715,13 @@ def attend_needed(c):
     return bool(L.protect_needed(c) or open_buys(c))
 
 
-def _cancels(c, broker, st, quote_fn, out, mode=None, no_buys=False, mode_ts=None):
+def _cancels(c, broker, st, quote_fn, out, mode=None, no_buys=False, mode_ts=None, anchor_day=None):
     """취소가 확인될 때까지 바퀴마다 — ⓐ 긴급정지면 열린 매수 ⓐ' 새 매수를 내지 않는 바퀴(모드 꺼짐·기록만 · 실전 잠금 등 관문이
     닫힘)면 열린 매수(라운드 494 — 종전엔 이 바퀴가 아예 안 돌아 고르기를 풀어도 걸린 매수가 체결돼 손절 관리 없이 남을 수 있었다)
     ⓑ 관리 밖 종목의 열린 매도(되돌려 받은 종목) ⓒ 지금 가격이 손절선 이하로 내려간 대기 매수(그 가격에 사면 바로 손절이다)
     ⓓ 고르기·승인이 풀린 계획의 열린 매수(라운드 494 · `unchosen_buy`). 다른 증권사 환경(모의투자↔실전)의 의도는 건드리지 않는다."""
     managed = set(L.managed_open(c))
+    auto_pid = active_auto_pick(c, st, mode, mode_ts, anchor_day)          # 라운드 529
     for it in L.intents_with_state(c, ('BROKER_ACK', 'PARTIAL', 'CANCEL_REQUESTED')):
         if not it.get('odno') or not env_ok(it, broker):
             continue
@@ -606,8 +730,8 @@ def _cancels(c, broker, st, quote_fn, out, mode=None, no_buys=False, mode_ts=Non
             why = '긴급정지 — 열린 매수 취소'
         elif it['side'] == 'buy' and no_buys:
             why = '새 매수를 내지 않는 바퀴(모드 꺼짐·기록만 · 실전 잠금 등) — 열린 매수 취소'
-        elif it['side'] == 'buy' and unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts):
-            why = unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts)
+        elif it['side'] == 'buy' and unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts, auto_pid=auto_pid):
+            why = unchosen_buy(L.plan(c, it['plan_id']), st, mode, mode_ts, auto_pid=auto_pid)
         elif it['side'] == 'sell' and it['code'] not in managed:
             why = '관리에서 빠진 종목 — 열린 매도 취소'
         elif it['side'] == 'buy' and quote_fn is not None:
@@ -742,7 +866,8 @@ def fresh_verdicts(report, extra=None):
     return out
 
 
-def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=None, fresh=None):
+def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orders, quote_fn, report=None, fresh=None,
+             anchor_day=None):
     gate = buy_gate(mode, cfg, st)
     if gate:
         out['blocked'] += gate
@@ -759,7 +884,10 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
     approved = approved_plans(st)
     need_approval = (mode == 'LIVE' and approval_of(st) == 'approve')
     # 라운드 494 — 살아 있는 고르기만(지금 모드에서 · 모드를 마지막으로 바꾼 뒤에 고른 것 · `pick_alive`)
-    picks = human_picks(st, mode=mode, mode_ts=L.setting_ts(c, 'mode'))
+    hum_only = human_picks(st, mode=mode, mode_ts=L.setting_ts(c, 'mode'))
+    # 라운드 529 — 살아 있는 자동 추첨(가장 새 판정일의 것 하나)도 사람이 고른 계획과 같은 길로 산다
+    auto_pid = active_auto_pick(c, st, mode, L.setting_ts(c, 'mode'), anchor_day)
+    picks = hum_only | ({auto_pid} if auto_pid else set())
     last_closed = L.last_closed_days(c)
     # 라운드 507 — 최신 판정이 이긴다(2026-10-13 독립 검토). 실주문 자격 계획은 같은 종목의 **가장 새 판정일** 것만 보고, 그 뒤에
     #   잰 판정(그날 리포트·관심종목 문서)이 추천이 아니면 옛 계획으로는 사지 않는다 — 종전엔 한 번 추천된 계획이 대기 기간(20거래일)
@@ -843,7 +971,8 @@ def _entries(c, broker, cfg, st, bal, held, trade_day, mode, cost_pct, out, orde
                          pre_odnos=_pre_odnos_for(orders, code, 'buy', trade_day))
         except L.LedgerError:
             continue     # 오늘 이 계획의 매수는 이미 냈다
-        L.order_event(c, iid, 'RISK_APPROVED', detail=(human_pick_label(p) + ' · ' if human else '')
+        L.order_event(c, iid, 'RISK_APPROVED', detail=(human_pick_label(p, auto=(p['plan_id'] == auto_pid and p['plan_id'] not in hum_only))
+                                                       + ' · ' if human else '')
                       + f"수량 {sz['qty']} · 정한 제한 {sz['binding']} · "
                         f"손절 시 손실 약 {sz['planned_loss']:,.0f}원(손절가 체결 가정)")
         out['orders'].append((code, sz['qty'], submit(c, broker, iid, 'buy', code, sz['qty'], p['entry'],

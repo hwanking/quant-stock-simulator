@@ -29438,7 +29438,8 @@ check("보유 계획의 '잰 날'은 상세·채우기 두 자리 다 분석 기
 import ast as _ast367
 import io as _io367
 def _strs367(path):
-    _t = _ast367.parse(_io367.open(path, encoding='utf-8').read())
+    # 라운드 529 — 상대 경로였다: 회귀를 저장소 밖 작업 폴더에서 띄우면(셸의 cd 가 남은 채) FileNotFoundError 로 회귀가 통째로 멈췄다
+    _t = _ast367.parse(_io367.open(_os.path.join(PROJ, path), encoding='utf-8').read())
     return [n.value for n in _ast367.walk(_t) if isinstance(n, _ast367.Constant) and isinstance(n.value, str)]
 _s367 = _strs367('web_app.py') + _strs367('gaeum_glossary.py')
 #   ⚠️ 첫 판의 옛 패턴 '닿거나 20봉 창이 끝나면 다시' 는 **새 문장**('1차 매도가에 닿거나 20봉 창이 …')도 잡았다 —
@@ -38689,10 +38690,11 @@ check("③ 워커 — 살아 있으면 진행률 없는 작업(done·total None 
       _w454 and _w454['done'] is None and _w454['total'] is None and '08:50 부터' in _w454['sub']
       and _jn454.worker_job(dict(running=False)) is None
       and _jn454.worker_job(dict(running=None, note='모름')) == dict(kind='note', note='모름'))
-_jobs454, _notes454 = _jn454.running_jobs(nightly=_j454, worker=_w454)
+# 라운드 529 — 분봉 백필이 세 번째 작업이 됐다. None 은 '실제 상태를 읽어라'라서 이 PC 에서 백필이 돌면 목록에 끼어든다 — False 를 넘긴다.
+_jobs454, _notes454 = _jn454.running_jobs(nightly=_j454, worker=_w454, backfill=False)
 # 라운드 511 — 종전엔 worker=None 을 넘겼는데 None 은 '실제 워커 상태를 읽어라'다. 워커 '실행 중' 판정이 바퀴 사이도 세게 되자
 #   장중엔 진짜 세션이 잡혀 이 검사만 붉어졌다(실제 환경에 기댄 검사 · R165). '워커 없음'을 넘긴다(False 는 목록에서 빠진다).
-_jobs454b, _notes454b = _jn454.running_jobs(nightly=dict(kind='note', note='끊김'), worker=False)  # 라운드 511
+_jobs454b, _notes454b = _jn454.running_jobs(nightly=dict(kind='note', note='끊김'), worker=False, backfill=False)  # 라운드 511
 check("③' 목록 — 저녁 작업이 머리 · note 는 작업이 아니라 사유로",
       [j['kind'] for j in _jobs454] == ['nightly', 'worker'] and not _notes454 and _jobs454b == [] and _notes454b == ['끊김'])
 # ④ 카드 — 없으면 '' · 막대는 단계가 있을 때만(값 = 끝난/전체) · 나머지는 +N(이름은 툴팁) · 글자 크기는 스케일 · 색은 토큰
@@ -43347,7 +43349,8 @@ finally:
         if _os.path.exists(_f506):
             _os.remove(_f506)
 # ③ 적는 자리는 그대로 둘 — 추첨은 장부에 쓰지 않는다(§473 ⑦ 이 전체를 본다 · 여기선 learning_draw 가 장부 모듈을 안 부르는지)
-_ld506 = [n for n in _ast504.parse(open(_os.path.join(PROJ, 'swing_dash.py'), encoding='utf-8').read()).body
+# 라운드 529 — 추첨 함수가 실행부 쪽 한 곳(swing_engine)으로 옮겨졌다(매일 자동 추첨이 같이 부른다 · 화면은 같은 함수를 내보낸다)
+_ld506 = [n for n in _ast504.parse(open(_os.path.join(PROJ, 'swing_engine.py'), encoding='utf-8').read()).body
           if isinstance(n, _ast504.FunctionDef) and n.name == 'learning_draw']
 check("③ learning_draw 는 장부·설정을 부르지 않는다(넣기만 · 적는 것은 화면의 종전 두 자리)",
       bool(_ld506) and 'L.' not in _ast504.unparse(_ld506[0]) and 'set_setting' not in _ast504.unparse(_ld506[0]),
@@ -43578,6 +43581,344 @@ try:
 finally:
     _sh507.rmtree(_td507, ignore_errors=True)
 # ─── §507 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §508 — 작업 카드에 분봉 백필 (라운드 529 · 2026-10-14)
+#   라운드 527 의 백필은 며칠을 도는데 화면 어디에도 안 보였다(기록 파일에만). 작업 카드(라운드 472)가 세 번째로 읽는다 — 수집 잠금의
+#   주인이 살아 있고 그 pid 가 백필 기록의 마지막 시작 줄의 pid 일 때만(저녁 작업의 분봉 단계도 같은 잠금을 잡는다). 막대는 이번 실행의
+#   받은 쌍 / 받을 쌍. 첫 판은 꼬리 200줄만 읽어 밤새 돈 실행의 시작 줄이 밀려 '도는 중인데 안 뜬다'가 났다 — 심어서 잠근다.
+# ══════════════════════════════════════════════════════════════════════
+print("§508 작업 카드 — 분봉 백필이 도는 동안 뜬다 · 잠금 주인 = 마지막 시작 줄 pid · 막대는 받은/받을 쌍 (라운드 529)")
+import importlib as _il508
+import shutil as _sh508
+import tempfile as _tf508
+import jobs_now as _jn508
+import ui_kit as _uk508
+_jn508 = _il508.reload(_jn508)
+_td508 = _tf508.mkdtemp(prefix='r529_', dir=_os.path.join(PROJ, '_probe'))
+try:
+    _lk508 = _os.path.join(_td508, '_collect.lock')
+    _lg508 = _os.path.join(_td508, '_backfill_run.txt')
+
+    def _plant508(pid, lines):
+        open(_lk508, 'w', encoding='utf-8').write(str(pid))
+        open(_lg508, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+
+    _head508 = ['[10-13 20:00:00] 백필 시작 · pid 111 · 인자 --universe pool', '[계획] 종목 1 · 받을 (종목, 날짜) 10 · 이미 받음 0',
+                '[10-13 20:05:00] 10/10 · 2025-10-01 · 봉 1', '[끝] 완료 10',
+                '[10-13 23:39:06] 백필 시작 · pid 4242 · 인자 --universe pool --days 260 --backfill --apply',
+                '[계획] 종목 599 · 거래일 260(2025-09-15~2026-10-13) · 받을 (종목, 날짜) 154295 · 이미 받음 1445']
+    _prog508 = [f'[10-14 0{(k // 100) % 9}:{k % 60:02d}:00] {200 * (k + 1)}/154295 · 2025-12-{(k % 28) + 1:02d} · 봉 1 · 더함 1'
+                for k in range(300)] + ['  000001 2026-01-08 실패 — TransportError: 끊김']
+    _alive508 = lambda p: True
+    _plant508(4242, _head508 + _prog508)
+    _a508 = _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=_alive508)
+    _plant508(9999, _head508 + _prog508)                                    # 같은 잠금을 다른 프로세스(저녁 작업의 분봉 단계)가 쥐었다
+    _b508 = _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=_alive508)
+    _plant508(4242, _head508 + _prog508 + ['[멈춤] 장 시간(워커 08:40~마감 뒤 30분 · 같은 앱 키) — 받은 만큼 남는다'])
+    _c508 = _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=_alive508)
+    _plant508(4242, _head508 + _prog508)
+    _d508 = (_jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=lambda p: False),
+             _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=lambda p: None))
+    _os.remove(_lk508)
+    _e508 = _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=_alive508)
+    _plant508(4242, _head508)                                               # 계획 줄만 · 진행 줄 전
+    _f508 = _jn508.backfill_job(log_path=_lg508, lock_path=_lk508, alive=_alive508)
+    _g508 = _jn508.running_jobs(nightly=False, worker=False, backfill=_a508)
+finally:
+    _sh508.rmtree(_td508, ignore_errors=True)
+check("① 도는 중 — 잠금 주인이 마지막 시작 줄 pid 이고 끝·멈춤 줄이 없으면 작업 · 막대는 이번 실행의 받은/받을 쌍(60,000/154,295) · "
+      "지금 받는 날 · 시작 날짜·시각 · 진행 줄이 300줄 넘게 쌓여도(밤새 돈 실행) 시작 줄을 찾는다",
+      bool(_a508) and _a508.get('kind') == 'backfill' and _a508.get('done') == 60000 and _a508.get('total') == 154295
+      and '60,000/154,295쌍' in _a508.get('sub', '') and '2025-12-' in _a508.get('sub', '') and '10-13 23:39 시작' in _a508.get('sub', ''),
+      str(_a508))
+check("② 안 뜨는 갈래 — 잠금 주인이 다른 pid(저녁 작업의 분봉 단계) · 멈춤 줄 뒤 · 주인이 죽었다 · 잠금 없음 → None · 살았는지 모르면 사유(note)",
+      _b508 is None and _c508 is None and _d508[0] is None and (_d508[1] or {}).get('kind') == 'note' and _e508 is None,
+      str((_b508, _c508, _d508, _e508)))
+check("③ 진행 줄 전(계획 줄만)이면 0/154,295 · 목록에선 맨 뒤 작업으로 · 카드가 막대를 그린다",
+      bool(_f508) and _f508.get('done') == 0 and _f508.get('total') == 154295
+      and [j['kind'] for j in _g508[0]] == ['backfill'] and _g508[1] == []
+      and 'progressbar' in _uk508.job_card(_g508[0], theme='dark'), str((_f508, _g508)))
+# ─── §508 끝 ───
+
+# ══════════════════════════════════════════════════════════════════════
+# §509 — 매일 학습용 1종목 자동 추첨 스위치 (라운드 529 · 2026-10-14)
+#   사용자: "매일 자동으로 한 종목 넣는 스위치 만들어줘." 사람이 켠 동안 판정일마다 한 번 라운드 526 의 추첨(좋고 나쁨과 무관한 해시)을
+#   실행부가 돌려 **적어 두고** 그 계획을 사람이 고른 계획과 같은 길로 산다. 넘는 것은 '추천 아님' 하나 · 관문·한도·긴급정지·손절선 그대로 ·
+#   한 번 적은 추첨은 그날 안 바뀐다 · 가장 새 판정일의 것만 산다 · 켠 그 모드에서만 · 끄면 열린 매수 취소 · 스위치를 적는 자리는 화면 하나 ·
+#   추첨 기록을 적는 자리는 record_auto_draw 하나. §432·§473 의 가짜 증권사·장부·바퀴 도우미를 그대로 쓴다(네트워크 0).
+# ══════════════════════════════════════════════════════════════════════
+print("§509 매일 학습용 1종목 자동 추첨 — 사람이 켠 동안 판정일마다 한 번 뽑아 적고 고른 계획과 같은 길로 산다 (라운드 529)")
+import ast as _ast509
+import glob as _gl509
+import hashlib as _hl509
+import importlib as _il509
+import json as _js509
+import time as _tm509
+import swing_dash as _sd509
+import swing_engine as _se509
+import swing_executor as _sx509
+_sd509 = _il509.reload(_sd509)
+# ① 추첨 규칙은 한 곳
+_ld509 = [n for n in _ast509.parse(open(_os.path.join(PROJ, 'swing_engine.py'), encoding='utf-8').read()).body
+          if isinstance(n, _ast509.FunctionDef) and n.name == 'learning_draw']
+_ldd509 = [n for n in _ast509.parse(open(_os.path.join(PROJ, 'swing_dash.py'), encoding='utf-8').read()).body
+           if isinstance(n, _ast509.FunctionDef) and n.name == 'learning_draw']
+check("① 추첨 규칙은 한 곳 — swing_engine.learning_draw(실행부의 매일 추첨도 부른다) · 화면(swing_dash)은 같은 함수를 내보낸다(정의 0)",
+      len(_ld509) == 1 and not _ldd509 and _sd509.learning_draw is _se509.learning_draw, scanned=len(_ld509) + 1)
+# ② 스위치가 살아 있는 규칙 — 켠 그 모드 · 모드를 마지막으로 바꾼 뒤 켠 것 · 꺼짐·기록만 모드에선 죽는다
+_on509 = {'auto_draw': dict(on=True, mode='LIVE', ts='2026-10-07T10:00:00+09:00')}
+_al509 = (_sx509.auto_draw_alive(_on509, 'LIVE', '2026-10-07T09:00:00+09:00'),
+          _sx509.auto_draw_alive(_on509, 'PAPER', '2026-10-07T09:00:00+09:00'),
+          _sx509.auto_draw_alive(_on509, 'LIVE', '2026-10-07T11:00:00+09:00'),
+          _sx509.auto_draw_alive({'auto_draw': dict(on=False, mode='LIVE', ts='2026-10-07T10:00:00+09:00')}, 'LIVE', None),
+          _sx509.auto_draw_alive({}, 'LIVE', None),
+          _sx509.auto_draw_alive(_on509, 'OFF', None),
+          _sx509.auto_draw_alive({'auto_draw': dict(on=True, mode='LIVE')}, 'LIVE', None),
+          _sx509.auto_draw_alive({'auto_draw': 'on'}, 'LIVE', None))
+check("② 스위치 — 켠 그 모드(실전)에서 모드를 바꾼 뒤 켠 것만 살아 있다 · 다른 모드 · 켠 뒤 모드가 바뀜 · 꺼짐 · 없음 · 꺼짐 모드 · "
+      "켠 시각 모름 · 모르는 모양은 죽은 것", _al509 == (True, False, False, False, False, False, False, False), str(_al509))
+
+
+def _rep509(day='2026-10-06', codes=('000001', '000002', '000003'), rec=(), etf=()):
+    _r = _report432(rec=False, day=day)
+    _b = _r['picks'][0]
+    _r['picks'] = [dict(_b, symbol=f'{_c}.KS', asset_type=('ETF' if _c in etf else 'STOCK'),
+                        core=dict(_b['core'], recommended=(_c in rec), bucket=('오늘 매수 가능' if _c in rec else '추천 제외'),
+                                  exclude_reason=(None if _c in rec else '시험 사유'))) for _c in codes]
+    return _r
+
+
+def _on_switch509(c, mode='LIVE'):
+    _sl473.set_setting(c, 'auto_draw', dict(on=True, mode=mode, ts=_sl473.now_ts()), by='test')
+
+
+# ③ 켜기 전 0 · 켜면 그 판정일에 한 번 뽑아 적고 그 계획을 산다(실전 승인형이어도 · 사람이 고른 계획과 같은 길) · 다음 바퀴엔 또 안 산다 ·
+#   현금이 바뀌어도 그날 추첨은 그대로
+_c509, _f509 = _db473(), _FakeBroker432()
+_rp509 = _rep509()
+_o509a = _cyc432(_c509, _f509, rep=_rp509)
+_r509a = _sx509.auto_draw_record(_sl473.settings(_c509), '2026-10-06')
+_on_switch509(_c509)
+_o509b = _cyc432(_c509, _f509, rep=_rp509, now=_now432(mm=5))
+_r509b = _sx509.auto_draw_record(_sl473.settings(_c509), '2026-10-06')
+_ids509 = sorted(p['plan_id'] for p in _sl473.plans(_c509) if p['data_day'] == '2026-10-06' and not p['live_ok'])
+_exp509 = _ids509[int(_hl509.sha256(('2026-10-06|' + ','.join(_ids509)).encode('utf-8')).hexdigest(), 16) % len(_ids509)]
+_code509 = (_sl473.plan(_c509, _exp509) or {}).get('code')
+_buys509 = [p for p in _f509.placed if p[0] == 'buy']
+_ev509 = [e['detail'] for it in _sl473.intents_with_state(_c509) for e in _sl473.events_of(_c509, it['intent_id'])
+          if e['state'] == 'RISK_APPROVED']
+_f509.cash = 1
+_o509c = _cyc432(_c509, _f509, rep=_rp509, now=_now432(mm=10))
+_r509c = _sx509.auto_draw_record(_sl473.settings(_c509), '2026-10-06')
+check("③ 켜기 전엔 매수 0·기록 없음 · 켜면 그 판정일 계획 셋 중 판정일과 계획 번호의 sha256 이 고른 하나를 적고 그것을 진입가 지정가로 1건 산다"
+      "(실전 승인형인데 승인 없이 — 고른 계획과 같은 길) · 주문 사건 '사람이 고른 매수(자동 학습 추첨 · 엔진 추천 아님 …)' · 다음 바퀴엔 "
+      "또 안 사고 · 현금이 바뀌어도 그날 추첨은 그대로",
+      not _o509a['orders'] and _r509a is None and (_r509b or {}).get('plan_id') == _exp509 and (_r509b or {}).get('n') == 3
+      and len(_buys509) == 1 and _buys509[0][1] == _code509 and _buys509[0][3] == 10000 and _buys509[0][4] == '00'
+      and len(_ev509) == 1 and _ev509[0].startswith(_sx509.HUMAN_PICK_TAG + '(' + _sx509.AUTO_DRAW_TAG + ' · 엔진 추천 아님')
+      and not _o509c['orders'] and _r509c == _r509b,
+      f"{_o509a['blocked']} · {_r509b} · {_exp509} · {_f509.placed} · {_ev509}")
+# ④ 끄면 그 열린 매수를 취소한다(살아 있는 고르기가 아니게 된 계획)
+_sl473.set_setting(_c509, 'auto_draw', dict(on=False, mode='LIVE', ts=_sl473.now_ts()), by='test')
+_o509d = _cyc432(_c509, _f509, rep=_rp509, now=_now432(mm=15))
+_st509d = [i['state'] for i in _sl473.intents_with_state(_c509) if i['side'] == 'buy']
+check("④ 스위치를 끄면 워커가 그 학습 매수의 열린 주문을 취소한다 · 그 계획을 다시 사지 않는다",
+      len(_f509.cancels) == 1 and _st509d and _st509d[0] != 'BROKER_ACK' and not _o509d['orders'],
+      f"{_f509.cancels} · {_st509d} · {_o509d['notes'][-3:]}")
+# ⑤ 켠 뒤 모드를 바꾸면 죽는다(실전→꺼짐→실전에서 옛 스위치가 되살아나지 않는다)
+_c509m, _f509m = _db473(), _FakeBroker432()
+_on_switch509(_c509m)
+_tm509.sleep(1.1)
+_sl473.set_setting(_c509m, 'mode', 'OFF', by='test')
+_sl473.set_setting(_c509m, 'mode', 'LIVE', by='test')
+_o509m = _cyc432(_c509m, _f509m, rep=_rp509)
+check("⑤ 켠 뒤 운용 모드가 바뀌면(실전→꺼짐→실전) 스위치는 죽은 것 — 추첨도 매수도 없다",
+      not [p for p in _f509m.placed if p[0] == 'buy'] and _sx509.auto_draw_record(_sl473.settings(_c509m), '2026-10-06') is None,
+      str(_o509m['blocked']))
+# ⑥ 새 판정일의 계획이 오면 지난 추첨은 더 사지 않고 · 새 판정일에 한 번 뽑는다
+_c509n, _f509n = _db473(), _FakeBroker432()
+_on_switch509(_c509n)
+_cyc432(_c509n, _f509n, rep=_rp509)
+_mts509n = _sl473.setting_ts(_c509n, 'mode')
+_ap509a = _sx509.active_auto_pick(_c509n, _sl473.settings(_c509n), 'LIVE', _mts509n, '2026-10-06')
+_sx432.refresh_plans(_c509n, _rep509(day='2026-10-07'), '2026-10-07', None, 0.41)
+_ap509b = _sx509.active_auto_pick(_c509n, _sl473.settings(_c509n), 'LIVE', _mts509n, '2026-10-07')   # 지금 판정일 기록 없음 → 지난 것으로 안 물러섬
+_r509n = _sx509.record_auto_draw(_c509n, 'LIVE', _mts509n, '2026-10-07', _rep509(day='2026-10-07'), _f509n.get_balance(), _LIM432, 0.41)
+_r509n2 = _sx509.record_auto_draw(_c509n, 'LIVE', _mts509n, '2026-10-07', _rep509(day='2026-10-07'), _f509n.get_balance(), _LIM432, 0.41)
+_ap509c = _sx509.active_auto_pick(_c509n, _sl473.settings(_c509n), 'LIVE', _mts509n, '2026-10-07')
+check("⑥ 지금 판정일의 추첨만 산다 — 새 판정일 계획이 오면 그 추첨이 적히기 전까진 아무것도 안 사고 · 지난 판정일 추첨으로 물러서지 않는다 · "
+      "새 판정일에 한 번 뽑아 적고(두 번째는 다시 안 뽑는다) 그것이 살아 있는 추첨이 된다",
+      _ap509a is not None and _ap509b is None and _r509n and _r509n2 is None and _ap509c == _r509n['plan_id']
+      and (_sl473.plan(_c509n, _ap509c) or {}).get('data_day') == '2026-10-07', str((_ap509a, _ap509b, _r509n, _ap509c)))
+# ⑬ 못 뽑은 기록은 확정이 아니다(재검토) — 까닭을 센 그대로 적고 · 같은 결과면 다시 안 적고 · 까닭이 지나가면 다음 바퀴가 뽑는다 · 미래 날짜
+#    계획 하나가 지금 판정일의 추첨을 끄지 않는다
+_c509r, _f509r = _db473(), _FakeBroker432()
+_on_switch509(_c509r)
+_sx432.refresh_plans(_c509r, _rp509, '2026-10-06', None, 0.41)
+_mts509r = _sl473.setting_ts(_c509r, 'mode')
+_hd509r = {'000001', '000002', '000003'}
+_r509r1 = _sx509.record_auto_draw(_c509r, 'LIVE', _mts509r, '2026-10-06', _rp509, _f509r.get_balance(), _LIM432, 0.41, held=_hd509r)
+_r509r2 = _sx509.record_auto_draw(_c509r, 'LIVE', _mts509r, '2026-10-06', _rp509, _f509r.get_balance(), _LIM432, 0.41, held=_hd509r)
+_ap509r0 = _sx509.active_auto_pick(_c509r, _sl473.settings(_c509r), 'LIVE', _mts509r, '2026-10-06')
+_r509r3 = _sx509.record_auto_draw(_c509r, 'LIVE', _mts509r, '2026-10-06', _rp509, _f509r.get_balance(), _LIM432, 0.41)
+_sl473.add_plan(_c509r, dict(_pl_nr473, plan_id='FUT9', code='000009', data_day='2099-01-01'))
+_ap509r = _sx509.active_auto_pick(_c509r, _sl473.settings(_c509r), 'LIVE', _mts509r, '2026-10-06')
+check("⑬ 못 뽑은 기록은 확정이 아니다 — 계좌에 다 있으면 '계좌·관리 중 종목 3개'(센 그대로 · '수량 미리보기' 아님)로 적고 그 기록으로는 안 사며 · "
+      "같은 결과면 다시 안 적고 · 까닭이 지나가면 다시 뽑아 적는다 · 미래 날짜 계획이 있어도 지금 판정일의 추첨은 살아 있다",
+      (_r509r1 or {}).get('plan_id') is None and '계좌·관리 중 종목 3개' in (_r509r1 or {}).get('why', '')
+      and '수량 미리보기' not in (_r509r1 or {}).get('why', '') and _r509r2 is None and _ap509r0 is None
+      and (_r509r3 or {}).get('plan_id') and _ap509r == (_r509r3 or {}).get('plan_id'), str((_r509r1, _r509r2, _r509r3, _ap509r)))
+# ⑩ 장 마감 직후 바퀴(15:30:18 · 판정일은 이미 오늘 · 오늘 리포트 없음)는 그날 추첨을 적지 않는다 → 저녁 작업(21:00 · 주문 없음)이 계획을 만들고
+#    뽑는다 → 다음 날 아침 그것을 산다 (독립 검토가 재현한 결함: 종전 판은 15:30 바퀴가 '계획 없음'을 영구히 적어 켜면 한 번 사고 멈췄다)
+_c509t, _f509t = _db473(), _FakeBroker432()
+_on_switch509(_c509t)
+_sx432.run_cycle(_c509t, broker=_f509t, cfg=_CFG432, report=_rp509, anchor_day='2026-10-06', now=_now432(), cost_pct=0.41,
+                 do_shadow=False, quote_fn=_Q432)
+_sx432.run_cycle(_c509t, broker=_f509t, cfg=_CFG432, report=None, anchor_day='2026-10-07', now=_now432(hh=15, mm=30), cost_pct=0.41,
+                 do_shadow=False, quote_fn=_Q432)
+_r509t1 = _sx509.auto_draw_record(_sl473.settings(_c509t), '2026-10-07')
+_sx432.run_cycle(_c509t, broker=_f509t, cfg=_CFG432, report=_rep509(day='2026-10-07'), anchor_day='2026-10-07', now=_now432(hh=21),
+                 cost_pct=0.41, do_shadow=False, quote_fn=_Q432, allow_orders=False)
+_r509t2 = _sx509.auto_draw_record(_sl473.settings(_c509t), '2026-10-07')
+_n_before509 = len([p for p in _f509t.placed if p[0] == 'buy'])
+_sx432.run_cycle(_c509t, broker=_f509t, cfg=_CFG432, report=_rep509(day='2026-10-07'), anchor_day='2026-10-07', now=_now432(d=8, hh=9, mm=5),
+                 cost_pct=0.41, do_shadow=False, quote_fn=_Q432)
+_new509t = [p for p in _f509t.placed if p[0] == 'buy'][_n_before509:]
+check("⑩ 마감 직후 바퀴(판정일은 오늘 · 그날 계획 없음)는 그날 추첨을 적지 않고 · 저녁 작업(주문 없음)이 계획을 만든 뒤 한 번 뽑아 적고 · "
+      "다음 날 아침 그 계획 하나를 산다(켜면 한 번 사고 멈추던 결함)",
+      _r509t1 is None and (_r509t2 or {}).get('plan_id') and len(_new509t) == 1
+      and _new509t[0][1] == (_r509t2 or {}).get('code'), str((_r509t1, _r509t2, _new509t)))
+# ⑪ 그 판정일 계획이 아직 없는 아침(저녁 작업이 안 돈 날) — 지난 판정일 추첨을 다시 사지 않는다
+_c509s, _f509s = _db473(), _FakeBroker432()
+_on_switch509(_c509s)
+_cyc432(_c509s, _f509s, rep=_rp509)
+_nb509s = len([p for p in _f509s.placed if p[0] == 'buy'])
+_sx432.run_cycle(_c509s, broker=_f509s, cfg=_CFG432, report=None, anchor_day='2026-10-07', now=_now432(d=8, hh=9, mm=5), cost_pct=0.41,
+                 do_shadow=False, quote_fn=_Q432)
+check("⑪ 그 판정일 계획이 아직 없는 아침 — 지난 판정일 추첨으로 물러서지 않아 다시 사지 않는다 · 그날 추첨도 안 적는다",
+      _nb509s == 1 and len([p for p in _f509s.placed if p[0] == 'buy']) == 1
+      and _sx509.auto_draw_record(_sl473.settings(_c509s), '2026-10-07') is None, str(_f509s.placed))
+# ⑫ 긴급정지면 켜져 있어도 안 산다 · 사람이 직접 고른 계획(과 그 종목)은 추첨에서 빠진다(같은 날 둘 다 사도 같은 계획을 두 번은 아니다)
+_c509k, _f509k = _db473(kill=True), _FakeBroker432()
+_on_switch509(_c509k)
+_o509k = _cyc432(_c509k, _f509k, rep=_rp509)
+_c509h, _f509h = _db473(), _FakeBroker432()
+_sx432.refresh_plans(_c509h, _rp509, '2026-10-06', None, 0.41)
+_nr509h = sorted(p['plan_id'] for p in _sl473.plans(_c509h) if not p['live_ok'])
+_pick473(_c509h, _nr509h[:2])
+_on_switch509(_c509h)
+_cyc432(_c509h, _f509h, rep=_rp509)
+_r509h = _sx509.auto_draw_record(_sl473.settings(_c509h), '2026-10-06')
+check("⑫ 긴급정지면 스위치가 켜져 있어도 매수 0(사유 '긴급정지') · 사람이 직접 고른 두 계획은 추첨에서 빠지고 남은 하나를 뽑는다(n=1)",
+      not [p for p in _f509k.placed if p[0] == 'buy'] and any('긴급정지' in b for b in _o509k['blocked'])
+      and (_r509h or {}).get('plan_id') == _nr509h[2] and (_r509h or {}).get('n') == 1, str((_o509k['blocked'], _r509h, _nr509h)))
+# ⑦ 뽑는 대상 — 실주문 자격 계획(완전 자동이 이미 산다) · 계좌에 있는 종목 · 고르기로 못 넘는 막힘(ETF)은 빠진다
+_c509p, _f509p = _db473(approval='auto'), _FakeBroker432(holdings={'000002': dict(qty=1, avg=10000.0, price=10100.0)})
+_on_switch509(_c509p)
+_rp509p = _rep509(codes=('000001', '000002', '000003', '000004'), rec=('000001',), etf=('000004',))
+_cyc432(_c509p, _f509p, rep=_rp509p)
+_r509p = _sx509.auto_draw_record(_sl473.settings(_c509p), '2026-10-06')
+check("⑦ 뽑는 대상 — 실주문 자격 계획 · 계좌에 이미 있는 종목 · ETF(고르기로 못 넘는 막힘)는 빼고 남은 하나(000003)만 뽑는다",
+      (_r509p or {}).get('code') == '000003' and (_r509p or {}).get('n') == 1, str(_r509p))
+# ⑧ 적는 자리 — 스위치는 화면의 _auto_draw_section 하나(켜기·끄기 두 호출) · 추첨 기록은 실행부의 record_auto_draw 하나
+_w509 = []
+_files509 = []
+for _dp9, _dn9, _fn9s in _os.walk(PROJ):
+    _dn9[:] = [d for d in _dn9 if d not in ('.git', '.claude', '_probe', '__pycache__', '.portfolio', 'venv', '.venv', 'node_modules')]
+    _files509 += [_os.path.join(_dp9, f) for f in _fn9s if f.endswith('.py') and f != 'test_pipeline_fixes.py']
+for _f9 in sorted(_files509):
+    try:
+        _t9 = _ast509.parse(open(_f9, encoding='utf-8').read())
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        continue
+    for _fn9 in [n for n in _ast509.walk(_t9) if isinstance(n, (_ast509.FunctionDef, _ast509.AsyncFunctionDef))]:
+        for _n9 in _ast509.walk(_fn9):
+            if (isinstance(_n9, _ast509.Call) and getattr(_n9.func, 'attr', None) == 'set_setting' and len(_n9.args) >= 2):
+                _k9 = _n9.args[1]
+                _kn9 = (_k9.value if isinstance(_k9, _ast509.Constant)
+                        else (getattr(_k9, 'attr', None) or getattr(_k9, 'id', None)))      # X.AUTO_DRAW_KEY · 맨 이름 AUTO_DRAW_PICKS_KEY
+                if _kn9 in ('auto_draw', 'auto_draw_picks', 'AUTO_DRAW_KEY', 'AUTO_DRAW_PICKS_KEY'):
+                    _w509.append((_os.path.basename(_f9), _fn9.name, _kn9))
+_sw509 = sorted({(f, fn) for f, fn, k in _w509 if k in ('auto_draw', 'AUTO_DRAW_KEY')})
+_pw509 = sorted({(f, fn) for f, fn, k in _w509 if k in ('auto_draw_picks', 'AUTO_DRAW_PICKS_KEY')})
+check("⑧ 적는 자리 — 스위치는 화면의 _auto_draw_section 하나(켜기·끄기 두 호출 · 글자 키 0) · 추첨 기록은 실행부의 record_auto_draw 하나",
+      _sw509 == [('swing_view.py', '_auto_draw_section')] and sum(1 for f, fn, k in _w509 if k == 'AUTO_DRAW_KEY') == 2
+      and _pw509 == [('swing_executor.py', 'record_auto_draw')] and not [x for x in _w509 if x[2] in ('auto_draw', 'auto_draw_picks')],
+      str(_w509), scanned=len(_files509))
+# ⑨ 화면 — 기본은 꺼짐 · 확인 체크 전엔 켜기 단추가 꺼져 있고 · 켜면 장부에 지금 모드로 적히고 '켜짐 … 추첨 전'
+_vdb509 = _os.path.join(PROJ, '_probe', '_r529_view.db')
+if _os.path.exists(_vdb509):
+    _os.remove(_vdb509)
+_cv509 = _sl473.connect(_vdb509)
+_sl473.set_setting(_cv509, 'mode', 'LIVE', by='test')
+_sl473.set_setting(_cv509, 'live_unlock', _sx473.LIVE_UNLOCK_PHRASE, by='test')
+_sl473.set_setting(_cv509, 'limits', _LIM432, by='test')
+_sl473.account_snapshot(_cv509, 'real', dict(cash=10_000_000, total_eval=20_000_000, net_asset=20_000_000, stock_eval=10_000_000, positions=[]))
+_sl473.add_plan(_cv509, dict(_pl_nr473, plan_id='A1', data_day='2026-10-07'))
+_cv509.close()
+_src509v = (
+    "import sys\n"
+    f"sys.path.insert(0, {PROJ!r})\n"
+    "import streamlit as st\n"
+    "import broker_kis as _B\n"
+    "import swing_ledger as _L\n"
+    "import swing_view as _V\n"
+    "import ui_kit as _uk\n"
+    "class _NoBroker:\n"
+    "    def __init__(self, *a, **k):\n"
+    "        raise RuntimeError('broker called')\n"
+    "_B.KisBroker = _NoBroker\n"
+    "_B.load_config = lambda: dict(env='real', app_key='k', app_secret='s', cano='12345678', prdt='01', missing=[], problems=[], source={})\n"
+    "if _V.broker_kis.KisBroker is not _NoBroker:\n"
+    "    raise SystemExit(99)\n"
+    f"_L.connect.__defaults__ = ({_vdb509!r}, False)\n"
+    "_V.render(st, _uk, allow_read=True, allow_write=True, hold_levels=lambda code: (1.0, 2.0), report=None,\n"
+    "          anchor_day='2026-10-07')\n")
+_child509 = _os.path.join(PROJ, '_probe', '_r529_view_child.py')
+open(_child509, 'w', encoding='utf-8').write(
+    "import json, sys\n"
+    "sys.stdout.reconfigure(encoding='utf-8')\n"
+    "from streamlit.testing.v1 import AppTest\n"
+    f"at = AppTest.from_string({_src509v!r}, default_timeout=120)\n"
+    "at.run()\n"
+    "at.radio(key='sw_nav').set_value('오늘 계획')\n"
+    "at.run()\n"
+    "out = dict(cap0=' | '.join(str(e.value) for e in at.caption), off_disabled=at.button(key='sw_ad_on').disabled,\n"
+    "           draw_before=any(getattr(b, 'key', None) == 'sw_hp_draw' for b in at.button))\n"
+    "at.checkbox(key='sw_ad_ack').check()\n"
+    "at.run()\n"
+    "at.button(key='sw_ad_on').click()\n"
+    "at.run()\n"
+    "out['exc'] = len(at.exception)\n"
+    "out['first'] = str(at.exception[:1])[:600]\n"
+    "out['cap1'] = ' | '.join(str(e.value) for e in at.caption)\n"
+    "out['draw_after'] = any(getattr(b, 'key', None) == 'sw_hp_draw' for b in at.button)\n"
+    "sys.stdout.write('@@R@@' + json.dumps(out, ensure_ascii=False))\n")
+_o509v = {}
+try:
+    _env509 = dict(_os.environ, GAEUM_SWING_TASK_JSON='ABSENT')
+    _rc509 = __import__('subprocess').run([sys.executable, _child509], cwd=PROJ, capture_output=True, text=True,
+                                          encoding='utf-8', errors='replace', timeout=300, env=_env509)
+    _jr509 = (_rc509.stdout or '').rsplit('@@R@@', 1)
+    _o509v = _js509.loads(_jr509[1]) if len(_jr509) == 2 else {'stderr': (_rc509.stderr or '')[-800:]}
+    _cv509b = _sl473.connect(_vdb509)
+    _set509 = _sl473.settings(_cv509b).get('auto_draw')
+    _cv509b.close()
+finally:
+    for _p9 in (_vdb509, _child509):
+        try:
+            _os.remove(_p9)
+        except OSError:
+            pass
+check("⑨ 화면 — 기본은 꺼짐 · 확인 체크 전엔 '매일 자동 추첨 켜기'가 꺼져 있고 · 켜면 장부에 지금 모드(실전)로 적히고 '켜짐 … 추첨 전' · "
+      "켜기 전엔 '학습용 1종목 추첨' 단추가 있고 켠 뒤엔 숨는다(같은 날 학습 매수 둘 방지) · 증권사 생성자 막힘 · 예외 0",
+      '꺼짐 — 자동으로 사는 학습 매수 없음' in _o509v.get('cap0', '') and _o509v.get('off_disabled') is True
+      and _o509v.get('exc') == 0 and isinstance(_set509, dict) and _set509.get('on') is True and _set509.get('mode') == 'LIVE'
+      and '켜짐 — 실전' in _o509v.get('cap1', '') and '추첨 전' in _o509v.get('cap1', '')
+      and _o509v.get('draw_before') is True and _o509v.get('draw_after') is False and '단추는 숨겼습니다' in _o509v.get('cap1', ''),
+      str({k: (v[:300] if isinstance(v, str) else v) for k, v in _o509v.items()}))
+# ─── §509 끝 ───
 
 
 # ── 라운드 266 — 이 절은 원래 §157 뒤(중간)에 있었다. "자기가 도는 시점까지의 실행 수"와

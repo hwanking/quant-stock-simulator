@@ -353,29 +353,8 @@ def px_clause(px, entry=None, stop=None, live=False, to='진입가', buyable=Tru
     return head
 
 
-def learning_draw(cands, day, qty_of):
-    """학습용 1종목 추첨 (라운드 526) → (계획 또는 None, 뽑을 수 있던 수, 못 뽑은 사유).
-
-    사용자: *"후보 1개나 무조건 내줘 … 실제로 매매하면서 얻는 게 있을 거잖아."* 엔진 추천은 0 이고, 다섯 후보 중 어느 것이 낫다고 말할
-    근거가 없다 — 같은 날 종목을 점수로 세운 짝비교(라운드 49·110)도, 비용 차감 기대값의 순서(라운드 475)도 결과를 못 갈랐다. 그래서
-    '가장 좋은 것'을 고르는 규칙은 지어낸 것이 되고(§2), 대신 **좋고 나쁨과 무관한** 추첨을 둔다: 고를 수 있고 수량 미리보기가 한 주
-    이상인 계획만 · 판정일과 그 계획 번호들로 정해진 해시(sha256) 한 번 — 같은 판정일엔 몇 번 눌러도 같은 계획이다(마음에 드는 종목이
-    나올 때까지 다시 뽑는 길을 막는다 · 그것은 고르는 것이다). 이 함수는 고르지 않는다 — 부르는 화면이 고를 칸에 넣기만 하고, 적는 것은
-    종전 그대로 사람이 확인 체크와 단추로 한다(§473). `qty_of(p)` 가 None 이면(미리보기를 못 셈) 그 계획은 뽑지 않는다(§3)."""
-    elig = []
-    for p in cands or []:
-        try:
-            q = qty_of(p)
-        except Exception:                                      # noqa: BLE001 — 못 세면 뽑지 않는다
-            q = None
-        if q is not None and int(q) >= 1 and p.get('plan_id'):
-            elig.append(p)
-    if not elig:
-        return None, 0, '고를 수 있고 한 주 이상 살 수 있는 계획이 없습니다(수량 미리보기 0주이거나 못 셈)'
-    ids = sorted(str(p['plan_id']) for p in elig)
-    h = int(_hl.sha256((str(day)[:10] + '|' + ','.join(ids)).encode('utf-8')).hexdigest(), 16)
-    pid = ids[h % len(ids)]
-    return next(p for p in elig if str(p['plan_id']) == pid), len(elig), ''
+# 라운드 529 — 추첨 규칙은 매일 자동 추첨(실행부)도 쓴다 — 한 곳(`swing_engine.learning_draw`)으로 옮겼다(화면은 같은 함수 · §4)
+from swing_engine import learning_draw  # noqa: E402,F401
 
 
 #: 추첨이 무엇인지 — 화면 문장(규칙 한 곳)

@@ -923,7 +923,7 @@ def _render_body(st, uk, c, allow_write, hold_levels, report, anchor_day, md, re
                approval_on=(mode == 'LIVE' and X.approval_of(stt) == 'approve'), approved=X.approved_plans(stt), facts=facts or [],
                mode_ts=L.setting_ts(c, 'mode'),
                # 라운드 494 — 지금 살아 있는 고르기(고른 그 모드 · 모드를 마지막으로 바꾼 뒤 · `swing_executor.pick_alive`) · 읽기만
-               picks=X.human_picks(stt, mode=mode, mode_ts=L.setting_ts(c, 'mode')))
+               picks=X.active_picks(c, stt, mode, L.setting_ts(c, 'mode'), anchor_day))   # 라운드 529 — 자동 추첨 계획도(실행부와 같은 함수)
     # 라운드 457 — 자동매매 언제 시작하나: 장부 설정 · 실전 준비 넷 · 작업 스케줄러 · 거래일 달력에서 **유도**한다(날짜를 지어내지 않는다)
     ctx['start'] = _dash.start_status(mode, stt, cfg, task=task, worker=worker, now=X.now_kst(),
                                       live_buys=[it for it in ctx['intents'] if it.get('side') == 'buy'])     # 라운드 517 — 실주문 사실을 먼저
@@ -1214,7 +1214,17 @@ def _human_pick_section(st, c, ctx, md, day):
         if not (_lim526 and ctx['acct']) or _se.pick_blockers(p, ctx.get('report')):
             return None
         return (size_preview(p, ctx['acct'], _lim526, ctx['cost'], picked=True) or {}).get('qty')
-    if st.button('학습용 1종목 추첨 — 고를 칸에 넣기만 합니다(사는 것은 아래에서 직접 고릅니다)', key='sw_hp_draw'):
+    if X.auto_draw_alive(ctx['stt'], mode, mode_ts):
+        # 라운드 529 — 매일 자동 추첨이 켜져 있으면 이 단추는 숨긴다: 단추는 이미 적힌 자동 추첨과 다른 계획을 내밀 수 있고(대상이 다르다)
+        #   그것을 고르면 같은 날 학습 매수가 둘이 된다(독립 검토 2026-10-14). 직접 고르는 것은 그대로 된다. 켜기 전에 단추로 넣어 둔 제안도
+        #   지운다(재검토 — 고를 칸에 남아 있으면 같은 날 둘이 된다).
+        if st.session_state.pop('sw_hp_draw_note', None):
+            st.session_state['sw_hp_sel'] = None
+        _ap529 = X.auto_draw_record(ctx['stt'], day) or {}
+        st.caption("매일 자동 추첨이 켜져 있어 '학습용 1종목 추첨' 단추는 숨겼습니다 — 그 판정일의 추첨은 위 '매일 학습용 1종목 자동 추첨' 칸에 "
+                   '있습니다' + (f" (이미 잡힌 자동 추첨: {_ap529.get('code')})" if _ap529.get('plan_id') else '')
+                   + '. 여기서 다른 계획을 직접 고르면 그날 학습 매수가 둘이 됩니다(고르는 것은 그대로 됩니다).')
+    elif st.button('학습용 1종목 추첨 — 고를 칸에 넣기만 합니다(사는 것은 아래에서 직접 고릅니다)', key='sw_hp_draw'):
         _pk526, _n526, _why526 = _dash.learning_draw(cand, day, _qty526)
         if _pk526:
             st.session_state['sw_hp_sel'] = _pk526['plan_id']
@@ -1278,6 +1288,78 @@ def _human_pick_section(st, c, ctx, md, day):
             st.rerun()
 
 
+#: 라운드 529 — 자동 추첨을 켤 때 사람이 체크하는 문장(고르기의 확인 체크와 같은 자리)
+AUTO_ACK = ('엔진이 추천하지 않은 계획을 판정일마다 한 종목씩(좋고 나쁨과 무관한 추첨) 같은 계약으로 자동으로 사는 것은 제 결정입니다 — '
+            '계획마다 승인을 받지 않고, 엔진 성적과 섞이지 않으며, 위험 한도·긴급정지·손절선 확인은 그대로입니다')
+
+
+def _auto_draw_section(st, c, ctx, md):
+    """매일 학습용 1종목 자동 추첨 (라운드 529). 사용자: *"매일 자동으로 한 종목 넣는 스위치 만들어줘."*
+
+    켜고 끄는 자리는 여기 하나다(실행부·워커는 읽기만 · 추첨 기록은 실행부의 `record_auto_draw` 하나가 적는다 · §509). 켤 때 확인 체크를
+    받고 · 누르는 순간 모드를 다시 읽고 · 켠 그 모드에서만 살아 있다(모드를 바꾸면 꺼진 것과 같다 · 고르기와 같은 규칙)."""
+    mode, mode_ts = ctx['mode'], ctx.get('mode_ts')
+    stt = ctx['stt']
+    v = stt.get(X.AUTO_DRAW_KEY) if isinstance(stt.get(X.AUTO_DRAW_KEY), dict) else {}
+    alive = X.auto_draw_alive(stt, mode, mode_ts)
+    _title(st, '매일 학습용 1종목 자동 추첨 — 켜 두면 판정일마다 한 종목을 추첨해 같은 계약으로 삽니다', ctx['theme'])
+    st.caption('켜 두면 워커가 판정일마다(보통 저녁 작업 21:00 · 그날 계획을 만든 뒤) 위 \'학습용 1종목 추첨\'과 같은 규칙으로 한 번 뽑아 적고, '
+               '그 계획을 사람이 고른 계획과 같은 길로 삽니다 — 진입가 지정가 · 손절 · 1차 목표 · 대기·보유 거래일 그대로, 위험 한도·긴급정지·'
+               '손절선 확인·수량 계산 그대로. 한 번 적은 추첨은 그날 바뀌지 않고, 새 판정일의 추첨이 오면 지난 것은 더 사지 않습니다(열린 학습 '
+               '매수는 많아야 하나). 엔진 판정은 바뀌지 않습니다 — 주문 기록에는 \'사람이 고른 매수(자동 학습 추첨 · 엔진 추천 아님)\'로, 영수증·'
+               '성적에는 \'사람이 고름\'으로 엔진 추천과 따로 셉니다. 실전 주문 방식이 \'계획마다 승인\'이어도 이 학습 매수는 계획마다 승인을 '
+               '받지 않습니다(켤 때의 확인이 그 승인을 겸합니다). '
+               '끄거나 운용 모드를 바꾸면 워커가 걸려 있는 그 매수 주문을 취소합니다(일부 체결된 수량은 남아 손절·목표 관리를 받습니다). '
+               + _dash.LEARNING_DRAW_RULE.split(' — ')[0] + '.')
+    day = ctx.get('today')
+    has_day = bool(day) and any(str(p['data_day']) == str(day)[:10] for p in L.plans(c))
+    rec = X.auto_draw_record(stt, day) if has_day else None
+    if alive:
+        head = f"켜짐 — {MODE_KO.get(mode, mode)} · {_hm(v.get('ts')) or '시각 모름'} 켬"
+        if not has_day:
+            st.caption(md(f"{head} · 판정일 {day} 의 계획이 아직 없습니다 — 저녁 작업이 그날 계획을 만든 뒤 한 번 뽑습니다(지난 판정일의 추첨은 "
+                          '더 사지 않습니다)'))
+        elif rec and rec.get('plan_id'):
+            p = L.plan(c, rec['plan_id']) or {}
+            st.caption(md(f"{head} · 판정일 {day} 추첨: {p.get('name') or ''} ({rec.get('code') or p.get('code') or '—'}) · "
+                          f"진입 {_won(p.get('entry'))} 지정가 · 손절 {_won(p.get('stop'))} · 1차 목표 {_won(p.get('target'))} · "
+                          f"뽑을 수 있던 계획 {rec.get('n')}개 · {_hm(rec.get('ts')) or ''} 뽑음"))
+            if p.get('code'):
+                st.caption(md(_se.price_gap_line(p, _live_px(p['code']))))
+        elif rec:
+            st.caption(md(f"{head} · 판정일 {day} 아직 못 뽑음 — {rec.get('why') or '사유 없음'} (워커가 바퀴마다 다시 뽑아 봅니다 · 뽑기 전엔 사지 않습니다)"))
+        else:
+            st.caption(md(f"{head} · 판정일 {day or '—'} 추첨 전 — 워커의 다음 바퀴(장중 1분마다 · 저녁 작업)가 한 번 뽑아 적습니다"))
+    elif v.get('on'):
+        st.caption(f"켜져 있었지만 지금은 살아 있지 않습니다 — {MODE_KO.get(v.get('mode'), v.get('mode') or '모르는 모드')}에서 켠 것이거나 그 뒤 "
+                   '운용 모드가 바뀌었습니다(사지 않습니다 · 다시 켭니다).')
+    else:
+        st.caption('꺼짐 — 자동으로 사는 학습 매수 없음.')
+    if not ctx['allow_write']:
+        st.caption('이 화면에서는 켜고 끌 수 없습니다(이 PC 에서 연 화면에서만).')
+        return
+    if alive:
+        if st.button('자동 추첨 끄기', key='sw_ad_off'):
+            L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=False, mode=mode, ts=L.now_ts()), by='ui')
+            st.session_state['sw_flash'] = '자동 학습 추첨을 껐습니다 — 걸려 있는 학습 매수 주문은 워커의 다음 바퀴가 취소합니다'
+            st.rerun()
+        return
+    if mode not in X.MODE_ENV:
+        st.caption(f"지금 운용 모드가 {MODE_KO.get(mode, mode)}이라 켤 수 없습니다 — 켠 그 모드(모의투자·실전)에서만 살아 있습니다(시스템 → 설정).")
+        return
+    ack = st.checkbox(AUTO_ACK, value=False, key='sw_ad_ack')
+    if st.button('매일 자동 추첨 켜기', key='sw_ad_on', disabled=not ack):
+        if not ack:
+            return
+        if L.mode_of(c) != mode:
+            st.warning('켜지 않았습니다 — 그새 운용 모드가 바뀌었습니다. 화면을 다시 확인하세요.')
+            return
+        L.set_setting(c, X.AUTO_DRAW_KEY, dict(on=True, mode=mode, ts=L.now_ts()), by='ui')
+        st.session_state['sw_flash'] = (f"자동 학습 추첨을 켰습니다 — {MODE_KO.get(mode, mode)} 모드 · 판정일마다 한 종목을 뽑아 같은 계약으로 삽니다"
+                                        '(모드를 바꾸면 꺼집니다)')
+        st.rerun()
+
+
 def _view_plans(st, uk, c, ctx, md):
     """오늘 계획 — 라운드 450·451 의 표·승인 그대로(갈래로 옮겼을 뿐)."""
     day, rows = plan_rows(c, today_day=ctx['today'], account=ctx['acct'], limits=(ctx['stt'].get('limits') or None), cost_pct=ctx['cost'],
@@ -1337,6 +1419,7 @@ def _view_plans(st, uk, c, ctx, md):
                 elif _cb451.button('이 계획 승인', key=f'sw_appr_{_pid451}'):
                     L.set_setting(c, 'approved_plans', sorted(X.approved_plans(L.settings(c)) | {_pid451}))
                     st.rerun()
+    _auto_draw_section(st, c, ctx, md)
     _human_pick_section(st, c, ctx, md, day)
     ss = shadow_summary(c)
     if ss:
