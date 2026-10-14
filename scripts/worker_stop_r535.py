@@ -129,7 +129,10 @@ def main(argv=None):
         for x in xs:
             by_day[x['date']].append(x['w_ret'] - x['led_ret'])
         dv = {d: statistics.mean(v) for d, v in by_day.items()}
-        ci = M.boot_ci(dv, sorted(dv))
+        # 사전등록은 '기준일로 묶는다'(날짜 하나가 한 덩어리). 첫 실행은 R532 의 20거래일 덩어리를 그대로 불러 — 기준일이 매일이 아니라 듬성해
+        #   (학습 50 · 검증 15~21) 덩어리 하나가 거의 전부를 덮어 구간이 0 폭으로 무너졌다(검증 [0.122, 0.122]). 등록대로 덩어리 1 로 고쳤다
+        #   (판정 없는 측정이라 기준 변경이 아니다 · 점추정은 그대로).
+        ci = M.boot_ci(dv, sorted(dv), block=1)
         trans = collections.Counter(f"{x['led_oc']}→{x['w_oc']}" for x in xs)
         deep = [x['w_ret'] - x['stop_ret'] for x in xs if x['w_oc'] == 'STOP']
         return dict(n=len(xs), dates=len(dv), led_mean=statistics.mean(x['led_ret'] for x in xs),

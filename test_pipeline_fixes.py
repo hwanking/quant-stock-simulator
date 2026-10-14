@@ -2261,7 +2261,14 @@ section("40. 배포 전 정합성 — 교차검증 게이트 · 합성값 위장
 _snap40 = q.run_full_pipeline(SYMBOL, T_REF, b_engine=engine, rho_cutoff=0.80)
 _cc = _snap40.get('price_cross_check') or {}
 check("스냅샷에 교차검증 결과 탑재", 'passed' in _cc, str(_cc)[:80])
-check("정상 시세는 통과", _cc.get('passed') in (True, None), str(_cc.get('passed')))
+# ⚠️ 라운드 535 — 라운드 295 가 바로 아래 KQ 검사에서 가른 사유(우리 코드의 비교 수행 vs 남의 두 출처가 지금 어긋남)가 이 형제 검사에는
+#   안 닿아 있었다(R246 · 고침이 판정자 한 명에게만). 2026-10-15 07:56(장 전) 실행에서 네이버 234,500 vs 다음 232,000(1.07%)으로 붉어졌다 —
+#   전날 21:02 저녁 작업에서는 둘이 234,500 으로 같았다(다음 쪽 값이 밤사이 바뀌었다 · 우리 코드가 아니다). 비교 수행은 위 줄이 잠그고, 어긋남은
+#   건너뜀으로 적는다(건너뜀은 통과가 아니다 · §6).
+if _cc.get('passed') in (True, None):
+    check("정상 시세는 통과", True, str(_cc.get('passed')))
+else:
+    skipped("정상 시세는 통과", f"두 출처가 지금 서로 다르다 — 우리 코드가 아니라 실시세 조건이다: {str(_cc.get('note'))[:90]}")
 _scan_src40 = _insp.getsource(q.run_screener_scan)
 check("스캐너가 교차검증 게이트를 적용",
       "price_cross_check" in _scan_src40 and "continue" in _scan_src40)
@@ -44308,6 +44315,31 @@ check("④ R533·R534 산출물 — 둘 다 블라인드를 안 읽은 판 · R5
       and set(_a534.get('results') or {}) <= {'train', 'valid'} and _a534.get('results')
       and '손절 쪽 추정은 낙관적' in _doc534 and '채점 규칙도 비용 가정도 안 바꾼다' in _doc534,
       str((_a533.get('blind_read'), {q: (_a533['results'].get(q) or {}).get('verdict') for q in ('E1', 'E2')}, list(_a534.get('results') or {}))))
+# ⑤ R535 — 워커식 손절 따라가기: 손으로 만든 분봉 다섯 갈래 · 블라인드 안 읽음 · 구간이 0 폭으로 무너지지 않는다(첫 실행이 20거래일 덩어리를
+#    듬성한 기준일에 써서 무너졌다 · 등록대로 기준일 하나가 한 덩어리)
+_m535 = _load512('worker_stop_r535')
+
+
+def _b512(o, h, l, c):
+    return dict(o=o, h=h, l=l, c=c)
+
+
+_cs512 = [([[_b512(100, 100.5, 94, 99)], [_b512(99, 111, 98, 110)]], ('TARGET', 110)),
+          ([[_b512(100, 100, 94, 94.5)], [_b512(94.5, 120, 94, 119)]], ('STOP', 94.5)),
+          ([[_b512(100, 111, 90, 92)]], ('TARGET', 110)),
+          ([[_b512(112, 113, 111, 112.5)]], ('TARGET', 112)),
+          ([[_b512(100, 101, 99, 100.5)], [_b512(100.5, 102, 99.5, 101)]], ('OPEN', 101))]
+_ok512 = all(_m535.simulate(d, 100.0, 110.0, 95.0)[0] == e[0] and abs(_m535.simulate(d, 100.0, 110.0, 95.0)[1] - e[1]) < 1e-9
+             for d, e in _cs512)
+_a535 = _js512.load(_io512.open(_os.path.join(PROJ, 'data', 'worker_stop_r535.json'), encoding='utf-8'))
+_cis512 = [((_a535['results'][sp].get(k) or {}).get('diff_ci95'), (_a535['results'][sp].get(k) or {}).get('dates'))
+           for sp in _a535.get('results') or {} for k in ('all', 'buyzone')]
+_src535 = open(_os.path.join(PROJ, 'scripts', 'worker_stop_r535.py'), encoding='utf-8').read()
+check("⑤ R535 — 꼬리면 안 팔고 뒤에 목표 · 분 종가가 선 아래면 그 종가 · 같은 분이면 목표 먼저 · 갭 상승 목표는 시가 · 없으면 마지막 종가(손으로 "
+      "만든 다섯 갈래) · 블라인드 안 읽은 판 · 날짜 둘 이상인 칸의 구간이 0 폭이 아니다 · 기준일 하나가 한 덩어리(block=1)",
+      _ok512 and _a535.get('blind_read') is False and _cis512
+      and all(ci and (d or 0) >= 2 and ci[1] > ci[0] for ci, d in _cis512) and 'block=1' in _src535,
+      str(_cis512))
 # ─── §512 끝 ───
 
 

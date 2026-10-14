@@ -1,0 +1,104 @@
+{
+ "made": "2026-10-15T07:24:42",
+ "prereg": "docs/PREREG_R535_WORKER_STOP.md",
+ "blind_read": false,
+ "rows_considered": 10124,
+ "counts": {
+  "잼": 9899,
+  "20거래일 중 분봉 없는 날": 206,
+  "분봉 파일 없음": 19
+ },
+ "horizon": 20,
+ "buyzone": 58,
+ "results": {
+  "train": {
+   "all": {
+    "n": 6905,
+    "dates": 50,
+    "led_mean": 0.8477538015930485,
+    "w_mean": 0.9871458037822252,
+    "diff_mean_by_date": -0.016507445860583912,
+    "diff_ci95": [
+     -0.17722899564852096,
+     0.08695224877068665
+    ],
+    "transitions": {
+     "TARGET→TARGET": 4417,
+     "STOP→STOP": 2240,
+     "OPEN→OPEN": 167,
+     "STOP→TARGET": 68,
+     "STOP→OPEN": 8,
+     "TARGET→STOP": 4,
+     "TARGET→OPEN": 1
+    },
+    "stop_depth_mean": -0.25532365499192217,
+    "stop_depth_p05": -1.0322580645161228
+   },
+   "buyzone": {
+    "n": 3018,
+    "dates": 35,
+    "led_mean": 1.0673293571901923,
+    "w_mean": 1.2035267548234996,
+    "diff_mean_by_date": -0.14046886460657443,
+    "diff_ci95": [
+     -0.5854223636250175,
+     0.11406895650453547
+    ],
+    "transitions": {
+     "TARGET→TARGET": 1955,
+     "STOP→STOP": 970,
+     "OPEN→OPEN": 66,
+     "STOP→TARGET": 23,
+     "TARGET→STOP": 3,
+     "TARGET→OPEN": 1
+    },
+    "stop_depth_mean": -0.25132317588801045,
+    "stop_depth_p05": -1.1499192969544154
+   }
+  },
+  "valid": {
+   "all": {
+    "n": 2994,
+    "dates": 21,
+    "led_mean": 0.12903807615230461,
+    "w_mean": 0.2784249397284353,
+    "diff_mean_by_date": 0.13612347540293818,
+    "diff_ci95": [
+     0.05008131959154858,
+     0.23995767983766042
+    ],
+    "transitions": {
+     "TARGET→TARGET": 1638,
+     "STOP→STOP": 1052,
+     "OPEN→OPEN": 271,
+     "STOP→TARGET": 28,
+     "STOP→OPEN": 4,
+     "TARGET→STOP": 1
+    },
+    "stop_depth_mean": -0.4583110053136843,
+    "stop_depth_p05": -2.034516243379225
+   },
+   "buyzone": {
+    "n": 1320,
+    "dates": 15,
+    "led_mean": -0.49714393939393936,
+    "w_mean": -0.3291415962016398,
+    "diff_mean_by_date": 0.12178730699209048,
+    "diff_ci95": [
+     -0.1467725593966199,
+     0.4188409430480873
+    ],
+    "transitions": {
+     "TARGET→TARGET": 697,
+     "STOP→STOP": 498,
+     "OPEN→OPEN": 111,
+     "STOP→TARGET": 10,
+     "STOP→OPEN": 4
+    },
+    "stop_depth_mean": -0.4651374967839251,
+    "stop_depth_p05": -2.2328340606709425
+   }
+  }
+ },
+ "seconds": 119.6
+}
