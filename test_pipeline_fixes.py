@@ -44298,6 +44298,16 @@ check("③ R532 산출물 — 블라인드를 안 읽은 판(blind_read=False ·
                                                 for x in [(_art512['results'][q].get('wall') or {}) for q in ('Q1', 'Q2', 'Q3')])
       and all(isinstance(v, str) and v.startswith(('R0 접음', '(가)', '(나)', '(다)')) for v in _vd512.values())
       and '(다) 접음' in open(_os.path.join(PROJ, 'docs', 'RESULT_R532_INTRADAY_COST_WALL.md'), encoding='utf-8').read(), str(_vd512))
+_a533 = _js512.load(_io512.open(_os.path.join(PROJ, 'data', 'minute_study_r533.json'), encoding='utf-8'))
+_a534 = _js512.load(_io512.open(_os.path.join(PROJ, 'data', 'exit_fill_r534.json'), encoding='utf-8'))
+_doc534 = open(_os.path.join(PROJ, 'docs', 'RESULT_R533_R534_ETF_INTRADAY_AND_EXIT_FILLS.md'), encoding='utf-8').read()
+check("④ R533·R534 산출물 — 둘 다 블라인드를 안 읽은 판 · R533 판정 둘이 등록한 갈래 중 하나 · R534 는 학습·검증만(블라인드 칸 없음) · "
+      "결과 문서가 손절 추정이 낙관적이라는 것과 규칙·비용을 안 바꾼다는 것을 적는다",
+      _a533.get('blind_read') is False and _a534.get('blind_read') is False
+      and all(str((_a533['results'].get(q) or {}).get('verdict', '')).startswith(('R0 접음', '(가)', '(나)', '(다)')) for q in ('E1', 'E2'))
+      and set(_a534.get('results') or {}) <= {'train', 'valid'} and _a534.get('results')
+      and '손절 쪽 추정은 낙관적' in _doc534 and '채점 규칙도 비용 가정도 안 바꾼다' in _doc534,
+      str((_a533.get('blind_read'), {q: (_a533['results'].get(q) or {}).get('verdict') for q in ('E1', 'E2')}, list(_a534.get('results') or {}))))
 # ─── §512 끝 ───
 
 

@@ -1,0 +1,275 @@
+{
+ "made": "2026-10-15T01:15:55",
+ "prereg": "docs/PREREG_R533_ETF_INTRADAY.md",
+ "blind_read": false,
+ "codes": 6,
+ "codes_with_bars": 6,
+ "days": 143,
+ "normal_days": 141,
+ "abnormal_days": [
+  "2025-11-13",
+  "2026-01-02"
+ ],
+ "first_day": "2025-09-26",
+ "last_day": "2026-04-30",
+ "etf_days_liquid": 504,
+ "bad_lines": 0,
+ "blind_lines_dropped": 4264,
+ "cost_wall": 0.03,
+ "cost_ops": 0.21,
+ "z_bonf": 2.25,
+ "results": {
+  "E1": {
+   "wall": {
+    "train": {
+     "n_dates": 61,
+     "mean": 0.06317977538449566,
+     "ci95": [
+      -0.25938220711940657,
+      0.46147862241271914
+     ],
+     "z": 0.3309334372183876,
+     "trades": 244,
+     "median_trade": -0.03,
+     "share_pos": 0.48770491803278687
+    },
+    "valid": {
+     "n_dates": 60,
+     "mean": -0.216511887750951,
+     "ci95": [
+      -0.42212919253113956,
+      -0.0145404000991272
+     ],
+     "z": -2.07232356812933,
+     "trades": 260,
+     "median_trade": -0.10270792973865792,
+     "share_pos": 0.46153846153846156
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   },
+   "ops": {
+    "train": {
+     "n_dates": 61,
+     "mean": -0.11682022461550431,
+     "ci95": [
+      -0.43938220711940656,
+      0.2814786224127192
+     ],
+     "z": -0.6119002201790043,
+     "trades": 244,
+     "median_trade": -0.21,
+     "share_pos": 0.4344262295081967
+    },
+    "valid": {
+     "n_dates": 60,
+     "mean": -0.39651188775095103,
+     "ci95": [
+      -0.6021291925311396,
+      -0.1945404000991272
+     ],
+     "z": -3.7951769695663655,
+     "trades": 260,
+     "median_trade": -0.2827079297386579,
+     "share_pos": 0.4230769230769231
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   },
+   "verdict": "(다) 접음",
+   "self_gross": {
+    "train": {
+     "n_dates": 61,
+     "mean": 0.09317977538449566,
+     "ci95": [
+      -0.22938220711940654,
+      0.49147862241271917
+     ],
+     "z": 0.4880723801179529,
+     "trades": 244,
+     "median_trade": 0.0,
+     "share_pos": 0.4918032786885246
+    },
+    "valid": {
+     "n_dates": 60,
+     "mean": -0.18651188775095104,
+     "ci95": [
+      -0.3921291925311396,
+      0.015459599900872752
+     ],
+     "z": -1.7851813345564918,
+     "trades": 260,
+     "median_trade": -0.07270792973865792,
+     "share_pos": 0.46923076923076923
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   }
+  },
+  "E2": {
+   "wall": {
+    "train": {
+     "n_dates": 53,
+     "mean": -0.001368101018421021,
+     "ci95": [
+      -0.06413217182291106,
+      0.06863707754432243
+     ],
+     "z": -0.04021876471339959,
+     "trades": 128,
+     "median_trade": 0.027595953003952706,
+     "share_pos": 0.5390625
+    },
+    "valid": {
+     "n_dates": 51,
+     "mean": -0.018182594931850243,
+     "ci95": [
+      -0.05142066194906331,
+      0.018454470950034975
+     ],
+     "z": -1.041207737619495,
+     "trades": 149,
+     "median_trade": -0.03,
+     "share_pos": 0.48322147651006714
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   },
+   "ops": {
+    "train": {
+     "n_dates": 53,
+     "mean": -0.181368101018421,
+     "ci95": [
+      -0.24413217182291103,
+      -0.11136292245567754
+     ],
+     "z": -5.331770741457906,
+     "trades": 128,
+     "median_trade": -0.1524040469960473,
+     "share_pos": 0.2734375
+    },
+    "valid": {
+     "n_dates": 51,
+     "mean": -0.1981825949318502,
+     "ci95": [
+      -0.23142066194906327,
+      -0.161545529049965
+     ],
+     "z": -11.348723990055618,
+     "trades": 149,
+     "median_trade": -0.21,
+     "share_pos": 0.28187919463087246
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   },
+   "verdict": "(다) 접음",
+   "self_gross": {
+    "train": {
+     "n_dates": 53,
+     "mean": 0.02863189898157899,
+     "ci95": [
+      -0.03413217182291105,
+      0.09863707754432244
+     ],
+     "z": 0.8417065647440186,
+     "trades": 128,
+     "median_trade": 0.057595953003952705,
+     "share_pos": 0.5625
+    },
+    "valid": {
+     "n_dates": 51,
+     "mean": 0.011817405068149775,
+     "ci95": [
+      -0.021420661949063287,
+      0.04845447095003499
+     ],
+     "z": 0.6767116377865269,
+     "trades": 149,
+     "median_trade": 0.0,
+     "share_pos": 0.48322147651006714
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   },
+   "compare_gross": {
+    "train": {
+     "n_dates": 46,
+     "mean": 0.015388704115681998,
+     "ci95": [
+      -0.06449960498407922,
+      0.08441859899094113
+     ],
+     "z": 0.3920428591689825,
+     "trades": 98,
+     "median_trade": 0.024055595728045276,
+     "share_pos": 0.5102040816326531
+    },
+    "valid": {
+     "n_dates": 41,
+     "mean": -0.04779821236135992,
+     "ci95": [
+      -0.1298736387109738,
+      0.03007062808943774
+     ],
+     "z": -1.039745487732845,
+     "trades": 107,
+     "median_trade": 0.0,
+     "share_pos": 0.4672897196261682
+    },
+    "blind": {
+     "n_dates": 0,
+     "mean": null,
+     "ci95": null,
+     "z": null,
+     "trades": 0,
+     "median_trade": null,
+     "share_pos": null
+    }
+   }
+  }
+ },
+ "seconds": 1.6
+}
